@@ -1,0 +1,28 @@
+# ignore backup files
+*~
+
+# ignore vi swapfiles
+.*.swp
+
+# ignore compiled python
+*pyc
+
+# ignore some backup files
+*bak
+
+# ignore some c files
+*\.o
+*\.d
+
+# ignore dropbox files
+.dropbox.attr
+
+# ignore directories
+Debug
+
+*.lst
+*.elf
+*.map
+*.user
+.vs
+MiSTer

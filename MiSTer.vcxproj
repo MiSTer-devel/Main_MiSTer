@@ -1,0 +1,101 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{C1D6BEA2-1469-4FBC-8A27-A82BDE9041AC}</ProjectGuid>
+    <Keyword>MakeFileProj</Keyword>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Makefile</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v140</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <NMakeBuildCommandLine>git.lnk ./build.sh</NMakeBuildCommandLine>
+    <NMakeOutput>MiSTer</NMakeOutput>
+    <NMakeCleanCommandLine>git.lnk ./clean.sh</NMakeCleanCommandLine>
+    <NMakePreprocessorDefinitions>WIN32;VDATE="000000";_FILE_OFFSET_BITS=64;_LARGEFILE64_SOURCE;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <NMakeIncludeSearchPath>c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\libc\usr\include;$(NMakeIncludeSearchPath)</NMakeIncludeSearchPath>
+    <OutDir>$(TEMP)</OutDir>
+    <IntDir>$(TEMP)</IntDir>
+    <AdditionalOptions>
+    </AdditionalOptions>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="archie.c" />
+    <ClCompile Include="boot.c" />
+    <ClCompile Include="config.c" />
+    <ClCompile Include="file_io.c" />
+    <ClCompile Include="fdd.c" />
+    <ClCompile Include="fpga_io.c" />
+    <ClCompile Include="hardware.c" />
+    <ClCompile Include="hdd.c" />
+    <ClCompile Include="ikbd.c" />
+    <ClCompile Include="ini_parser.c" />
+    <ClCompile Include="input.c" />
+    <ClCompile Include="main.c" />
+    <ClCompile Include="menu.c" />
+    <ClCompile Include="mist_cfg.c" />
+    <ClCompile Include="osd.c" />
+    <ClCompile Include="spi.c" />
+    <ClCompile Include="state.c" />
+    <ClCompile Include="tos.c" />
+    <ClCompile Include="user_io.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="archie.h" />
+    <ClInclude Include="boot.h" />
+    <ClInclude Include="charrom.h" />
+    <ClInclude Include="config.h" />
+    <ClInclude Include="debug.h" />
+    <ClInclude Include="errors.h" />
+    <ClInclude Include="file_io.h" />
+    <ClInclude Include="fdd.h" />
+    <ClInclude Include="fpga_base_addr_ac5.h" />
+    <ClInclude Include="fpga_io.h" />
+    <ClInclude Include="fpga_manager.h" />
+    <ClInclude Include="fpga_nic301.h" />
+    <ClInclude Include="fpga_reset_manager.h" />
+    <ClInclude Include="fpga_system_manager.h" />
+    <ClInclude Include="hardware.h" />
+    <ClInclude Include="hdd.h" />
+    <ClInclude Include="hdd_internal.h" />
+    <ClInclude Include="ikbd.h" />
+    <ClInclude Include="ini_parser.h" />
+    <ClInclude Include="input.h" />
+    <ClInclude Include="keycodes.h" />
+    <ClInclude Include="logo.h" />
+    <ClInclude Include="menu.h" />
+    <ClInclude Include="mist_cfg.h" />
+    <ClInclude Include="osd.h" />
+    <ClInclude Include="spi.h" />
+    <ClInclude Include="state.h" />
+    <ClInclude Include="tos.h" />
+    <ClInclude Include="user_io.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="build.sh" />
+    <None Include="clean.sh" />
+    <None Include="Makefile" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
