@@ -518,7 +518,11 @@ int ScanDirectory(char* path, unsigned long mode, char *extension, unsigned char
 			}
 			else if (de->d_type == DT_REG)
 			{
+				//skip non-selectable files
 				if (!strcasecmp(de->d_name, "menu.rbf")) continue;
+				if (!strcasecmp(de->d_name, "boot.rom")) continue;
+				if (!strcasecmp(de->d_name, "boot.vhd")) continue;
+
 				if (extlen > 0)
 				{
 					int len = strlen(de->d_name);

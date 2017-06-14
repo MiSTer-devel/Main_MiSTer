@@ -140,6 +140,7 @@ static void user_io_read_core_name()
 void user_io_detect_core_type()
 {
 	char *name;
+	char mainpath[32];
 	core_name[0] = 0;
 
 	core_type = (fpga_core_id() & 0xFF);
@@ -218,12 +219,20 @@ void user_io_detect_core_type()
 			}
 
 			// check if there's a <core>.rom present
-			strcpy(name + strlen(name) - 3, "ROM");
-			user_io_file_tx(name, 0);
+			sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
+			if (!user_io_file_tx(mainpath, 0))
+			{
+				strcpy(name + strlen(name) - 3, "ROM");
+				user_io_file_tx(name, 0);
+			}
 
 			// check if there's a <core>.vhd present
-			strcpy(name + strlen(name) - 3, "VHD");
-			user_io_file_mount(name);
+			sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
+			if (!user_io_file_mount(mainpath))
+			{
+				strcpy(name + strlen(name) - 3, "VHD");
+				user_io_file_mount(name);
+			}
 		}
 
 		// release reset
@@ -561,7 +570,7 @@ void user_io_set_index(unsigned char index)
 	DisableFpga();
 }
 
-void user_io_file_mount(char *name)
+int user_io_file_mount(char *name)
 {
 	int writable = FileCanWrite(name);
 
@@ -570,7 +579,7 @@ void user_io_file_mount(char *name)
 	{
 		sd_image.size = 0;
 		printf("Failed to open file %s\n", name);
-		return;
+		return 0;
 	}
 
 	printf("Mount %s as %s\n", name, writable ? "read-write" : "read-only");
@@ -594,14 +603,15 @@ void user_io_file_mount(char *name)
 
 	// notify core of possible sd image change
 	spi_uio_cmd8(UIO_SET_SDSTAT, 0);
+	return 1;
 }
 
-void user_io_file_tx(char* name, unsigned char index)
+int user_io_file_tx(char* name, unsigned char index)
 {
 	fileTYPE f;
 	static uint8_t buf[512];
 
-	if (!FileOpen(&f, name)) return;
+	if (!FileOpen(&f, name)) return 0;
 
 	unsigned long bytes2send = f.size;
 
@@ -650,6 +660,7 @@ void user_io_file_tx(char* name, unsigned char index)
 	DisableFpga();
 
 	iprintf("\n");
+	return 1;
 }
 
 // 8 bit cores have a config string telling the firmware how
