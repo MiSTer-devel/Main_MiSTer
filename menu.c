@@ -259,9 +259,9 @@ static void SelectFile(char* pFileExt, unsigned char Options, unsigned char Menu
 	{ // if different from the current one go to the root directory and init entry buffer
 		SelectedPath[0] = 0;
 
-		// for 8 bit cores try to 
-		if ((user_io_core_type() == CORE_TYPE_8BIT) && chdir) {
-			strcpy(SelectedPath, user_io_get_core_name());
+		if(((user_io_core_type() == CORE_TYPE_8BIT) || (user_io_core_type() == CORE_TYPE_MINIMIG2)) && chdir)
+		{
+			strcpy(SelectedPath, (user_io_core_type() == CORE_TYPE_MINIMIG2) ? "Amiga" : user_io_get_core_name());
 			ScanDirectory(SelectedPath, SCAN_INIT, pFileExt, Options);
 			if (!nDirEntries)
 			{
@@ -2129,7 +2129,7 @@ void HandleUI(void)
 				else
 				{
 					df[menusub].status = 0;
-					SelectFile("ADF", SCAN_DIR, MENU_FILE_SELECTED, MENU_MAIN1, 0);
+					SelectFile("ADF", SCAN_DIR, MENU_FILE_SELECTED, MENU_MAIN1, 1);
 				}
 			}
 			else if (menusub == 4)	// Toggle floppy turbo
@@ -2630,25 +2630,17 @@ void HandleUI(void)
 			else if (menusub == 2)
 			{
 				config.memory = ((config.memory + 0x10) & 0x30) | (config.memory & ~0x30);
-				//                if ((config.memory & 0x30) == 0x30)
-				//					config.memory -= 0x30;
-				//				if (!(config.disable_ar3 & 0x01)&&(config.memory & 0x20))
-				//                    config.memory &= ~0x30;
 				menustate = MENU_SETTINGS_MEMORY1;
 				ConfigMemory(config.memory);
 			}
 			else if (menusub == 3)
 			{
-				SelectFile("ROM", 0, MENU_ROMFILE_SELECTED, MENU_SETTINGS_MEMORY1, 0);
+				SelectFile("ROM", 0, MENU_ROMFILE_SELECTED, MENU_SETTINGS_MEMORY1, 1);
 			}
 			else if (menusub == 4)
 			{
 				config.memory ^= 0x40;
 				ConfigMemory(config.memory);
-				//if (!(config.disable_ar3 & 0x01)||(config.memory & 0x20))
-				//  config.disable_ar3 |= 0x01;
-				//else
-				//  config.disable_ar3 &= 0xFE;
 				menustate = MENU_SETTINGS_MEMORY1;
 			}
 			else if (menusub == 5)
@@ -2691,6 +2683,7 @@ void HandleUI(void)
 		menumask = 0x21;	// b00100001 - On/off & exit enabled by default...
 		if (config.enable_ide)
 			menumask |= 0x0a;  // b00001010 - HD0 and HD1 type
+		OsdWrite(0, "", 0, 0);
 		strcpy(s, "   A600/A1200 IDE : ");
 		strcat(s, config.enable_ide ? "on " : "off");
 		OsdWrite(1, s, menusub == 0, 0);
@@ -2705,7 +2698,7 @@ void HandleUI(void)
 		if (config.hardfile[0].present)
 		{
 			strcpy(s, "                                ");
-			strncpy(&s[14], config.hardfile[0].long_name, 15);
+			strncpy(&s[7], config.hardfile[0].long_name, 21);
 		}
 		else
 			strcpy(s, "       ** file not found **");
@@ -2724,7 +2717,7 @@ void HandleUI(void)
 		OsdWrite(6, s, config.enable_ide ? (menusub == 3) : 0, config.enable_ide == 0);
 		if (config.hardfile[1].present) {
 			strcpy(s, "                                ");
-			strncpy(&s[14], config.hardfile[1].long_name, 15);
+			strncpy(&s[7], config.hardfile[1].long_name, 21);
 		}
 		else
 			strcpy(s, "       ** file not found **");
@@ -2737,7 +2730,6 @@ void HandleUI(void)
 		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 5, 0);
 
 		menustate = MENU_SETTINGS_HARDFILE2;
-
 		break;
 
 	case MENU_SETTINGS_HARDFILE2:
@@ -2766,7 +2758,7 @@ void HandleUI(void)
 			}
 			else if (menusub == 2)
 			{
-				SelectFile("HDF", 0, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 0);
+				SelectFile("HDF", 0, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
 			}
 			else if (menusub == 3)
 			{
@@ -2786,7 +2778,7 @@ void HandleUI(void)
 			}
 			else if (menusub == 4)
 			{
-				SelectFile("HDF", 0, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 0);
+				SelectFile("HDF", 0, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
 			}
 			else if (menusub == 5) // return to previous menu
 			{

@@ -564,7 +564,6 @@ void user_io_set_index(unsigned char index)
 void user_io_file_mount(char *name)
 {
 	int writable = FileCanWrite(name);
-	printf("Mount %s as %s\n", name, writable ? "read-write" : "read-only");
 
 	int ret = FileOpenEx(&sd_image, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 	if (!ret)
@@ -573,6 +572,8 @@ void user_io_file_mount(char *name)
 		printf("Failed to open file %s\n", name);
 		return;
 	}
+
+	printf("Mount %s as %s\n", name, writable ? "read-write" : "read-only");
 
 	// send mounted image size first then notify about mounting
 	EnableIO();

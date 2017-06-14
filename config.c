@@ -152,7 +152,8 @@ char UploadKickstart(char *name)
 char UploadActionReplay()
 {
 	fileTYPE file;
-	if (FileOpen(&file, "HRTMON.ROM")) {
+	if(FileOpen(&file, "Amiga/HRTMON.ROM") || FileOpen(&file, "HRTMON.ROM"))
+	{
 		int adr, data;
 		puts("Uploading HRTmon ROM... ");
 		SendFileV2(&file, NULL, 0, 0xa10000, (file.size + 511) >> 9);
