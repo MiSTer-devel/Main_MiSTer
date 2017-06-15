@@ -173,7 +173,6 @@ void user_io_detect_core_type()
 		break;
 
 	case CORE_TYPE_MINIMIG2:
-		OsdSetSize(16);
 		puts("Identified Minimig V2 core");
 		break;
 

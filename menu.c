@@ -694,12 +694,18 @@ void HandleUI(void)
 		menumask = 0;
 		OsdDisable();
 		menustate = MENU_NONE2;
+		OsdSetSize(8);
 		break;
 
 	case MENU_NONE2:
 		if (menu)
 		{
-			if (user_io_core_type() == CORE_TYPE_MINIMIG2)
+			if (StateKeyboardModifiers() & 0x44) //Alt+Menu
+			{
+				OsdSetSize(16);
+				SelectFile("RBF", 0, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_NONE1, 0);
+			}
+			else if (user_io_core_type() == CORE_TYPE_MINIMIG2)
 				menustate = MENU_MAIN1;
 			else if (user_io_core_type() == CORE_TYPE_MIST)
 				menustate = MENU_MIST_MAIN1;
@@ -714,7 +720,9 @@ void HandleUI(void)
 					SelectFile("RBF", 0, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_FIRMWARE1, 0);
 				}
 				else
+				{
 					menustate = MENU_8BIT_MAIN1;
+				}
 			}
 			menusub = 0;
 			OsdClear();
@@ -727,6 +735,7 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_ARCHIE_MAIN1: {
+		OsdSetSize(8);
 		menumask = 0x3f;
 		OsdSetTitle("ARCHIE", 0);
 
@@ -1325,7 +1334,8 @@ void HandleUI(void)
 		OsdWrite(m++, s, 0, 0);
 		siprintf(s, "   %4x %4x %4x %4x ", keys_ps2[0], keys_ps2[1], keys_ps2[2], keys_ps2[3]);// keys_ps2[4], keys_ps2[5]);
 		OsdWrite(m++, s, 0, 0);
-		if ((mod & 1) && menu) { // Ctrl+ESC
+		if ((mod & 0x11) && menu) // Ctrl+ESC
+		{
 			menustate = MENU_8BIT_SYSTEM1;
 			menusub = 2;
 		}
@@ -1572,6 +1582,7 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_MIST_MAIN1:
+		OsdSetSize(8);
 		menumask = 0xff;
 		OsdSetTitle("Mist", 0);
 
@@ -2026,6 +2037,7 @@ void HandleUI(void)
 		/* minimig main menu                                              */
 		/******************************************************************/
 	case MENU_MAIN1:
+		OsdSetSize(16);
 		menumask = 0xFF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
 		OsdSetTitle("Minimig", OSD_ARROW_RIGHT);
 		helptext = helptexts[HELPTEXT_MAIN];
