@@ -3586,7 +3586,7 @@ static void set_text(const char *message, unsigned char code)
 		OsdWrite(l++, s, 0, 0);
 	}
 
-	while (l <= 7) OsdWrite(l++, "", 0, 0);
+	while (l <= OsdGetSize()-1) OsdWrite(l++, "", 0, 0);
 }
 
 /*  Error Message */

@@ -14,7 +14,7 @@
 
 static void spi_en(uint32_t mask, uint32_t en)
 {
-	uint32_t gpo = fpga_gpo_read();
+	uint32_t gpo = fpga_gpo_read() | 0x80000000;
 	fpga_gpo_write(en ? gpo | mask : gpo & ~mask);
 }
 

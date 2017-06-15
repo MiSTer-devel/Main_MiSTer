@@ -17,4 +17,4 @@ binary
 put MiSTer /media/fat/MiSTer
 EOF
 
-plink root@192.168.1.75 -pw 1 'PATH=/media/fat:$PATH;MiSTer >/dev/ttyS0 2>/dev/ttyS0 </dev/null &'
+plink root@192.168.1.75 -pw 1 'sync;PATH=/media/fat:$PATH;MiSTer >/dev/ttyS0 2>/dev/ttyS0 </dev/null &'

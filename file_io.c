@@ -13,6 +13,7 @@
 #include <linux/magic.h>
 #include "osd.h"
 #include "fpga_io.h"
+#include "menu.h"
 
 int nDirEntries = 0;
 struct dirent DirItem[1000];
@@ -357,6 +358,7 @@ int isPathMounted(int n)
 			printf("%s is FS: 0x%08X\n", path, fs_stat.f_type);
 			if (fs_stat.f_type != EXT4_SUPER_MAGIC)
 			{
+				printf("%s is not EXT2/3/4.\n", path);
 				return 1;
 			}
 		}
@@ -381,20 +383,26 @@ int isUSBMounted()
 
 void FindStorage(void)
 {
+	char str[128];
 	printf("Looking for root device...\n");
 	device = 0;
 	FileLoad("device.bin", &device, sizeof(int));
 	orig_device = device;
 
-	if (device)
+	if(device && !isUSBMounted())
 	{
 		printf("Waiting for USB...\n");
 		int btn = 0;
 		int done = 0;
-		for (int i = 0; i < 10; i++)
+		for (int i = 30; i >= 0; i--)
 		{
-			if (isUSBMounted()) done = 1;
-			if (done) break;
+			sprintf(str, "\n\n     Waiting for USB...\n\n             %d   \n", i);
+			InfoMessage(str);
+			if (isUSBMounted())
+			{
+				done = 1;
+				break;
+			}
 
 			for (int i = 0; i < 10; i++)
 			{
@@ -402,15 +410,23 @@ void FindStorage(void)
 				if (btn)
 				{
 					printf("Button has been pressed %d\n", btn);
+					InfoMessage("\n\n         Canceled!\n");
+					usleep(500000);
 					device = 0;
 					done = 1;
 					break;
 				}
 				usleep(100000);
 			}
+			if (done) break;
 		}
 
-		if (!done) device = 0;
+		if (!done)
+		{
+			InfoMessage("\n\n     No USB storage found\n   Falling back to SD card\n");
+			usleep(2000000);
+			device = 0;
+		}
 	}
 
 	if (device)
