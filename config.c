@@ -260,15 +260,15 @@ unsigned char LoadConfiguration(char *filename)
 		filename = configfilename;
 	}
 
-	fileTYPE file;
 	// load configuration data
-	if (FileOpen(&file, filename)) {
-		FileClose(&file);
+	int size = FileLoadConfig(filename, 0, 0);
+	if(size>0)
+	{
 		BootPrint("Opened configuration file\n");
-		printf("Configuration file size: %s, %lu\n", file.name, file.size);
-		if (file.size == sizeof(config))
+		printf("Configuration file size: %s, %lu\n", filename, size);
+		if (size == sizeof(config))
 		{
-			if (FileLoad(filename, &tmpconf, sizeof(tmpconf)))
+			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
 			{
 				// check file id and version
 				if (strncmp(tmpconf.id, config_id, sizeof(config.id)) == 0) {
@@ -288,7 +288,7 @@ unsigned char LoadConfiguration(char *filename)
 			}
 			else printf("Cannot load configuration file\n");
 		}
-		else printf("Wrong configuration file size: %lu (expected: %lu)\n", file.size, sizeof(config));
+		else printf("Wrong configuration file size: %lu (expected: %lu)\n", size, sizeof(config));
 	}
 	if (!result) {
 		BootPrint("Can not open configuration file!\n");
@@ -489,5 +489,5 @@ unsigned char SaveConfiguration(char *filename)
 		// use slot-based filename if none provided
 		filename = configfilename;
 	}
-	return FileSave(filename, &config, sizeof(config));
+	return FileSaveConfig(filename, &config, sizeof(config));
 }

@@ -211,7 +211,7 @@ void user_io_detect_core_type()
 		{
 			iprintf("Loading config %s\n", name);
 			unsigned long status = 0;
-			if (FileLoad(name, &status, 4))
+			if (FileLoadConfig(name, &status, 4))
 			{
 				iprintf("Found config\n");
 				user_io_8bit_set_status(status, 0xffffffff);

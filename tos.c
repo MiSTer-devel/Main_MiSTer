@@ -1121,8 +1121,6 @@ unsigned long tos_system_ctrl(void)
 
 void tos_config_init(void)
 {
-	fileTYPE file;
-
 	// set default values
 	config.system_ctrl = TOS_MEMCONFIG_4M | TOS_CONTROL_BLITTER;
 	memcpy(config.tos_img, "TOS.IMG", 12);
@@ -1132,14 +1130,14 @@ void tos_config_init(void)
 	config.video_adjust[0] = config.video_adjust[1] = 0;
 
 	// try to load config
-	if (FileOpen(&file, CONFIG_FILENAME))
+	int size = FileLoadConfig(CONFIG_FILENAME, 0, 0);
+	if (size>0)
 	{
-		tos_debugf("Configuration file size: %lu (should be %lu)", file.size, sizeof(tos_config_t));
-		if (file.size == sizeof(tos_config_t))
+		tos_debugf("Configuration file size: %lu (should be %lu)", size, sizeof(tos_config_t));
+		if (size == sizeof(tos_config_t))
 		{
-			FileReadAdv(&file, &config, file.size);
+			FileLoadConfig(CONFIG_FILENAME, &config, size);
 		}
-		FileClose(&file);
 	}
 
 	// ethernet is auto detected later
@@ -1149,5 +1147,5 @@ void tos_config_init(void)
 // save configuration
 void tos_config_save(void)
 {
-	FileSave(CONFIG_FILENAME, &config, sizeof(tos_config_t));
+	FileSaveConfig(CONFIG_FILENAME, &config, sizeof(tos_config_t));
 }

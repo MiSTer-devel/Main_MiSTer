@@ -55,11 +55,15 @@ unsigned long FileReadSec(fileTYPE *file, void *pBuffer);
 unsigned long FileWriteAdv(fileTYPE *file, void *pBuffer, unsigned long length);
 unsigned long FileWriteSec(fileTYPE *file, void *pBuffer);
 
-
 int FileCanWrite(char *name);
 
-unsigned char FileSave(char *name, void *pBuffer, int size);
-int FileLoad(char *name, void *pBuffer, int size);
+int FileSave(char *name, void *pBuffer, int size);
+int FileLoad(char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
+
+//save/load from config dir
+#define CONFIG_DIR "config"
+int FileSaveConfig(char *name, void *pBuffer, int size);
+int FileLoadConfig(char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 
 void AdjustDirectory(char *path);
 int ScanDirectory(char* path, unsigned long mode, char *extension, unsigned char options);

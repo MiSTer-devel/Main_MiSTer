@@ -107,7 +107,7 @@ char *archie_get_floppy_name(char i)
 
 void archie_save_config(void)
 {
-	FileSave(CONFIG_FILENAME, &config, sizeof(config));
+	FileSaveConfig(CONFIG_FILENAME, &config, sizeof(config));
 }
 
 void archie_send_file(unsigned char id, char *name)
@@ -252,7 +252,6 @@ static void archie_kbd_reset(void)
 
 void archie_init(void)
 {
-	fileTYPE file;
 	char i;
 
 	archie_debugf("init");
@@ -262,15 +261,15 @@ void archie_init(void)
 	strcpy(config.rom_img, "RISCOS.ROM");
 
 	// try to load config from card
-	if (FileOpen(&file, CONFIG_FILENAME))
+	int size = FileLoadConfig(CONFIG_FILENAME, 0, 0);
+	if (size>0)
 	{
-		if (file.size == sizeof(archie_config_t))
+		if (size == sizeof(archie_config_t))
 		{
-			FileReadAdv(&file, &config, sizeof(archie_config_t));
+			FileLoadConfig(CONFIG_FILENAME, &config, sizeof(archie_config_t));
 		}
 		else
-			archie_debugf("Unexpected config size %d != %d", file.size, sizeof(archie_config_t));
-		FileClose(&file);
+			archie_debugf("Unexpected config size %d != %d", size, sizeof(archie_config_t));
 	}
 	else
 		archie_debugf("No %s config found", CONFIG_FILENAME);

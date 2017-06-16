@@ -1116,7 +1116,7 @@ void HandleUI(void)
 					char *filename = user_io_create_config_name();
 					unsigned long status = user_io_8bit_set_status(0, 0);
 					iprintf("Saving config to %s\n", filename);
-					FileSave(filename, &status, 4);
+					FileSaveConfig(filename, &status, 4);
 					menustate = MENU_8BIT_MAIN1;
 					menusub = 0;
 				}
@@ -2390,7 +2390,7 @@ void HandleUI(void)
 				char *filename = user_io_create_config_name();
 				unsigned long status = user_io_8bit_set_status(0, 0xffffffff);
 				iprintf("Saving config to %s\n", filename);
-				FileSave(filename, &status, 4);
+				FileSaveConfig(filename, &status, 4);
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
 			}

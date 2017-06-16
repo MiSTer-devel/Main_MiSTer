@@ -14,6 +14,7 @@
 #include "osd.h"
 #include "fpga_io.h"
 #include "menu.h"
+#include "errno.h"
 
 int nDirEntries = 0;
 struct dirent DirItem[1000];
@@ -203,8 +204,7 @@ unsigned long FileWriteSec(fileTYPE *file, void *pBuffer)
 	return FileWriteAdv(file, pBuffer, 512);
 }
 
-
-unsigned char FileSave(char *name, void *pBuffer, int size)
+int FileSave(char *name, void *pBuffer, int size)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);
 	int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
@@ -215,14 +215,22 @@ unsigned char FileSave(char *name, void *pBuffer, int size)
 	}
 
 	int ret = write(fd, pBuffer, size);
+	close(fd);
+
 	if (ret < 0)
 	{
 		printf("FileSave(write) File:%s, error: %d.\n", full_path, ret);
 		return 0;
 	}
 
-	close(fd);
-	return 1;
+	return ret;
+}
+
+int FileSaveConfig(char *name, void *pBuffer, int size)
+{
+	char path[256] = { CONFIG_DIR"/" };
+	strcat(path, name);
+	return FileSave(path, pBuffer, size);
 }
 
 int FileLoad(char *name, void *pBuffer, int size)
@@ -240,18 +248,33 @@ int FileLoad(char *name, void *pBuffer, int size)
 	if (ret < 0)
 	{
 		printf("FileLoad(fstat) File:%s, error: %d.\n", full_path, ret);
-		return -1;
-	}
-
-	ret = read(fd, pBuffer, size ? size : st.st_size);
-	if (ret < 0)
-	{
-		printf("FileLoad(write) File:%s, error: %d.\n", full_path, ret);
+		close(fd);
 		return 0;
 	}
 
+	if (!pBuffer)
+	{
+		close(fd);
+		return (int)st.st_size;
+	}
+
+	ret = read(fd, pBuffer, size ? size : st.st_size);
 	close(fd);
+
+	if (ret < 0)
+	{
+		printf("FileLoad(read) File:%s, error: %d.\n", full_path, ret);
+		return 0;
+	}
+
 	return ret;
+}
+
+int FileLoadConfig(char *name, void *pBuffer, int size)
+{
+	char path[256] = { CONFIG_DIR"/" };
+	strcat(path, name);
+	return FileLoad(path, pBuffer, size);
 }
 
 int FileCanWrite(char *name)
@@ -437,6 +460,11 @@ void FindStorage(void)
 	{
 		printf("Using SD card as a root device\n");
 	}
+
+	sprintf(full_path, "%s/"CONFIG_DIR, getRootDir());
+	DIR* dir = opendir(full_path);
+	if (dir) closedir(dir);
+	else if (ENOENT == errno) mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
 }
 
 int de_cmp(const void *e1, const void *e2)

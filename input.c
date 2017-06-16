@@ -461,7 +461,7 @@ void finish_map_setting()
 
 	char name[32];
 	sprintf(name, "input_%04x_%04x.map", input[mapping_dev].vid, input[mapping_dev].pid);
-	FileSave(name, &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+	FileSaveConfig(name, &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 }
 
 uint16_t get_map_vid()
@@ -640,7 +640,7 @@ static void input_cb(struct input_event *ev, int dev)
 	{
 		char name[32];
 		sprintf(name, "input_%04x_%04x.map", input[dev].vid, input[dev].pid);
-		if (!FileLoad(name, &input[dev].map, sizeof(input[dev].map)))
+		if (!FileLoadConfig(name, &input[dev].map, sizeof(input[dev].map)))
 		{
 			memset(&input[dev].map, 0, sizeof(input[dev].map));
 		}
