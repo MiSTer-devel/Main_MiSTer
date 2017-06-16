@@ -29,7 +29,7 @@ void FileClose(fileTYPE *file)
 
 static char full_path[1200];
 
-unsigned char FileOpenEx(fileTYPE *file, const char *name, int mode)
+int FileOpenEx(fileTYPE *file, const char *name, int mode)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);
 
@@ -63,12 +63,12 @@ unsigned char FileOpenEx(fileTYPE *file, const char *name, int mode)
 	return 1;
 }
 
-unsigned char FileOpen(fileTYPE *file, const char *name)
+int FileOpen(fileTYPE *file, const char *name)
 {
 	return FileOpenEx(file, name, O_RDONLY);
 }
 
-unsigned char FileNextSector(fileTYPE *file)
+int FileNextSector(fileTYPE *file)
 {
 	__off64_t newoff = lseek64(file->fd, file->offset + 512, SEEK_SET);
 	if (newoff != file->offset + 512)
@@ -82,7 +82,7 @@ unsigned char FileNextSector(fileTYPE *file)
 	return 1;
 }
 
-unsigned char FileSeek(fileTYPE *file, __off64_t offset, unsigned long origin)
+int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 {
 	__off64_t newoff = lseek64(file->fd, offset, origin);
 	if(newoff<0)
@@ -95,7 +95,7 @@ unsigned char FileSeek(fileTYPE *file, __off64_t offset, unsigned long origin)
 	return 1;
 }
 
-unsigned char FileSeekLBA(fileTYPE *file, uint32_t offset)
+int FileSeekLBA(fileTYPE *file, uint32_t offset)
 {
 	__off64_t off64 = offset;
 	off64 <<= 9;
@@ -103,12 +103,12 @@ unsigned char FileSeekLBA(fileTYPE *file, uint32_t offset)
 }
 
 // Read. MiST compatible. Avoid to use it.
-unsigned char FileRead(fileTYPE *file, void *pBuffer)
+int FileRead(fileTYPE *file, void *pBuffer)
 {
 	return FileReadEx(file, pBuffer, 1);
 }
 
-unsigned char FileReadEx(fileTYPE *file, void *pBuffer, unsigned long nSize)
+int FileReadEx(fileTYPE *file, void *pBuffer, int nSize)
 {
 	static uint8_t tmpbuff[512];
 
@@ -148,7 +148,7 @@ unsigned char FileReadEx(fileTYPE *file, void *pBuffer, unsigned long nSize)
 }
 
 // Write. MiST compatible. Avoid to use it.
-unsigned char FileWrite(fileTYPE *file, void *pBuffer)
+int FileWrite(fileTYPE *file, void *pBuffer)
 {
 	if (!FileSeek(file, file->offset, SEEK_SET))
 	{
@@ -167,7 +167,7 @@ unsigned char FileWrite(fileTYPE *file, void *pBuffer)
 }
 
 // Read with offset advancing
-unsigned long FileReadAdv(fileTYPE *file, void *pBuffer, unsigned long length)
+int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
 {
 	ssize_t ret = read(file->fd, pBuffer, length);
 	if (ret < 0)
@@ -180,13 +180,13 @@ unsigned long FileReadAdv(fileTYPE *file, void *pBuffer, unsigned long length)
 	return ret;
 }
 
-unsigned long FileReadSec(fileTYPE *file, void *pBuffer)
+int FileReadSec(fileTYPE *file, void *pBuffer)
 {
 	return FileReadAdv(file, pBuffer, 512);
 }
 
 // Write with offset advancing
-unsigned long FileWriteAdv(fileTYPE *file, void *pBuffer, unsigned long length)
+int FileWriteAdv(fileTYPE *file, void *pBuffer, int length)
 {
 	int ret = write(file->fd, pBuffer, length);
 	if (ret < 0)
@@ -199,7 +199,7 @@ unsigned long FileWriteAdv(fileTYPE *file, void *pBuffer, unsigned long length)
 	return ret;
 }
 
-unsigned long FileWriteSec(fileTYPE *file, void *pBuffer)
+int FileWriteSec(fileTYPE *file, void *pBuffer)
 {
 	return FileWriteAdv(file, pBuffer, 512);
 }
@@ -524,7 +524,7 @@ void AdjustDirectory(char *path)
 	}
 }
 
-int ScanDirectory(char* path, unsigned long mode, char *extension, unsigned char options)
+int ScanDirectory(char* path, int mode, char *extension, int options)
 {
 	int extlen = strlen(extension);
 	//printf("scan dir\n");

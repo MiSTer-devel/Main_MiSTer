@@ -32,28 +32,28 @@ extern int iFirstEntry;
 #define SCAN_DIR   1 // include subdirectories
 
 void FindStorage();
-int getStorage(int from_setting);
+int  getStorage(int from_setting);
 void setStorage(int dev);
-int isUSBMounted();
+int  isUSBMounted();
 
-unsigned char FileOpenEx(fileTYPE *file, const char *name, int mode);
-unsigned char FileOpen(fileTYPE *file, const char *name);
+int  FileOpenEx(fileTYPE *file, const char *name, int mode);
+int  FileOpen(fileTYPE *file, const char *name);
 void FileClose(fileTYPE *file);
 
-unsigned char FileSeek(fileTYPE *file, __off64_t offset, unsigned long origin);
-unsigned char FileSeekLBA(fileTYPE *file, uint32_t offset);
+int FileSeek(fileTYPE *file, __off64_t offset, int origin);
+int FileSeekLBA(fileTYPE *file, uint32_t offset);
 
 //MiST compatible functions. Avoid to use them.
-unsigned char FileRead(fileTYPE *file, void *pBuffer);
-unsigned char FileReadEx(fileTYPE *file, void *pBuffer, unsigned long nSize);
-unsigned char FileWrite(fileTYPE *file, void *pBuffer);
-unsigned char FileNextSector(fileTYPE *file);
+int FileRead(fileTYPE *file, void *pBuffer);
+int FileReadEx(fileTYPE *file, void *pBuffer, int nSize);
+int FileWrite(fileTYPE *file, void *pBuffer);
+int FileNextSector(fileTYPE *file);
 
 //New functions.
-unsigned long FileReadAdv(fileTYPE *file, void *pBuffer, unsigned long length);
-unsigned long FileReadSec(fileTYPE *file, void *pBuffer);
-unsigned long FileWriteAdv(fileTYPE *file, void *pBuffer, unsigned long length);
-unsigned long FileWriteSec(fileTYPE *file, void *pBuffer);
+int FileReadAdv(fileTYPE *file, void *pBuffer, int length);
+int FileReadSec(fileTYPE *file, void *pBuffer);
+int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
+int FileWriteSec(fileTYPE *file, void *pBuffer);
 
 int FileCanWrite(char *name);
 
@@ -66,7 +66,7 @@ int FileSaveConfig(char *name, void *pBuffer, int size);
 int FileLoadConfig(char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 
 void AdjustDirectory(char *path);
-int ScanDirectory(char* path, unsigned long mode, char *extension, unsigned char options);
+int ScanDirectory(char* path, int mode, char *extension, int options);
 
 char *make_name(char *short_name);
 char *getRootDir();
