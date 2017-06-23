@@ -595,6 +595,8 @@ int fpga_get_buttons()
 void reboot(int cold)
 {
 	sync();
+	fpga_core_reset(1);
+
 	if(cold) writel(0, &reset_regs->tstscratch);
 	writel(2, &reset_regs->ctrl);
 	while (1);
@@ -615,6 +617,8 @@ char *getappname()
 void app_restart()
 {
 	sync();
+	fpga_core_reset(1);
+
 	char *appname = getappname();
 	printf("restarting the %s\n", appname);
 	execve(appname, NULL, NULL);
@@ -623,13 +627,18 @@ void app_restart()
 	reboot(0);
 }
 
-
-void fpga_core_reset(int run)
+void fpga_core_reset(int reset)
 {
-	fpga_gpo_write(run ? fpga_gpo_read() | 0x40000000 : fpga_gpo_read() & ~0x40000000);
+	uint32_t gpo = fpga_gpo_read() & ~0xC0000000;
+	fpga_gpo_write(reset ? gpo | 0x40000000 : gpo | 0x80000000);
 }
 
-int fpga_ready()
+int is_fpga_ready(int quick)
 {
+	if (quick)
+	{
+		return (fpga_gpi_read() >= 0);
+	}
+
 	return fpgamgr_test_fpga_ready();
 }

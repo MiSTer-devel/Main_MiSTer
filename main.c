@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
 #include "string.h"
@@ -110,12 +111,20 @@ int main(int argc, char *argv[])
 	uint8_t mmc_ok = 0;
 
 	fpga_io_init();
+	fpga_gpo_write(0);
 
 	DISKLED_OFF;
 
 	iprintf("\nMinimig by Dennis van Weeren");
 	iprintf("\nARM Controller by Jakub Bednarski\n\n");
 	iprintf("Version %s\n\n", version + 5);
+
+	if (!is_fpga_ready(1))
+	{
+		printf("\nGPI[31]==1. FPGA is uninitialized or incompatible core loaded.\n");
+		printf("Quitting. Bye bye...\n");
+		exit(0);
+	}
 
 	FindStorage();
 
@@ -125,16 +134,15 @@ int main(int argc, char *argv[])
 
 	while(1)
 	{
-		//printf("fpga_ready:%d\n", fpga_ready());
-		if(!fpga_ready())
+		if(!is_fpga_ready(1))
 		{
 			printf("FPGA is not ready. JTAG uploading?\n");
 			printf("Waiting for FPGA to be ready...\n");
 
-			//reset GPO to default value
-			fpga_gpo_write(0);
+			//enable reset in advance
+			fpga_core_reset(1);
 
-			while (!fpga_ready())
+			while (!is_fpga_ready(0))
 			{
 				sleep(1);
 			}
