@@ -540,7 +540,7 @@ uint32_t fpga_gpo_read()
 	return gpo_copy; //readl((void*)(SOCFPGA_MGR_ADDRESS + 0x10));
 }
 
-uint32_t fpga_gpi_read()
+int fpga_gpi_read()
 {
 	return readl((void*)(SOCFPGA_MGR_ADDRESS + 0x14));
 }

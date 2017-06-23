@@ -14,7 +14,7 @@ int fpga_io_init();
 
 void fpga_gpo_write(uint32_t value);
 uint32_t fpga_gpo_read();
-uint32_t fpga_gpi_read();
+int fpga_gpi_read();
 
 void fpga_set_led(uint32_t on);
 int  fpga_get_buttons();
