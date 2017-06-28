@@ -901,6 +901,11 @@ void HandleUI(void)
 
 					s[0] = ' ';
 					substrcpy(s + 1, p, 1);
+
+					char *end = s + strlen(s) - 1;
+					while ((end > s+1) && (*end == ' ')) end--;
+					*(end + 1) = 0;
+
 					strcat(s, ":");
 					l = 28 - l - strlen(s);
 					while (l--) strcat(s, " ");
