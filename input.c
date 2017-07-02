@@ -463,11 +463,13 @@ static char *get_map_name(int dev)
 	return name;
 }
 
-void finish_map_setting()
+void finish_map_setting(int dismiss)
 {
 	mapping = 0;
 	if (mapping_dev<0) return;
-	FileSaveConfig(get_map_name(mapping_dev), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+	
+	if(dismiss)	input[mapping_dev].has_map = 0;
+	else FileSaveConfig(get_map_name(mapping_dev), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 }
 
 uint16_t get_map_vid()
@@ -550,6 +552,8 @@ static void input_cb(struct input_event *ev, int dev)
 	static char keys[6] = { 0,0,0,0,0,0 };
 	static unsigned char mouse_btn = 0;
 
+	int map_skip = (mapping && ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0);
+
 	switch (ev->type)
 	{
 	case EV_KEY:
@@ -575,7 +579,7 @@ static void input_cb(struct input_event *ev, int dev)
 			}
 
 			int key = (ev->code < (sizeof(ev2usb) / sizeof(ev2usb[0]))) ? ev2usb[ev->code] : NONE;
-			if ((key != NONE))
+			if ((key != NONE) && !map_skip)
 			{
 				if (ev->value > 1)
 				{
@@ -651,7 +655,7 @@ static void input_cb(struct input_event *ev, int dev)
 	//joystick
 	if (mapping && (mapping_dev >=0 || ev->value))
 	{
-		if (ev->type == EV_KEY && ev->value <= 1 && ev->code >= BTN_JOYSTICK)
+		if ((ev->type == EV_KEY && ev->value <= 1 && ev->code >= BTN_JOYSTICK))
 		{
 			if (mapping_dev < 0) mapping_dev = dev;
 			if (mapping_dev == dev && mapping_button < mapping_count)
@@ -675,6 +679,11 @@ static void input_cb(struct input_event *ev, int dev)
 					key_mapped = 0;
 				}
 			}
+		}
+
+		if (map_skip && mapping_button < mapping_count && ev->value == 1)
+		{
+			mapping_button++;
 		}
 	}
 	else

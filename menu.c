@@ -1114,6 +1114,17 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 1:
+				if (is_minimig())
+				{
+					joy_bcount = 7;
+					strcpy(joy_bnames[0], "Red");
+					strcpy(joy_bnames[1], "Blue");
+					strcpy(joy_bnames[2], "Yellow");
+					strcpy(joy_bnames[3], "Green");
+					strcpy(joy_bnames[4], "Right Front");
+					strcpy(joy_bnames[5], "Left Front");
+					strcpy(joy_bnames[6], "Pause");
+				}
 				start_map_setting(joy_bcount ? joy_bcount+5 : 9);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
@@ -1224,13 +1235,14 @@ void HandleUI(void)
 		OsdWrite(3, s, 0, 0);
 		if (get_map_button())
 		{
-			OsdWrite(OsdGetSize() - 1, "           finish", menusub == 0, 0);
-			if (get_map_button()<9) sprintf(s, "   Joystick ID: %04x:%04x", get_map_vid(), get_map_pid());
+			OsdWrite(OsdGetSize() - 1, "    finish (SPACE - skip)", menusub == 0, 0);
+			sprintf(s, "   Joystick ID: %04x:%04x", get_map_vid(), get_map_pid());
 			OsdWrite(5, s, 0, 0);
 		}
+
 		if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 5 : 9))
 		{
-			finish_map_setting();
+			finish_map_setting(menu);
 			menustate = is_menu_core() ? MENU_FIRMWARE1 : MENU_8BIT_SYSTEM1;
 			menusub = 1;
 		}
