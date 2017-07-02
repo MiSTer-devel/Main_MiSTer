@@ -117,29 +117,6 @@ int ini_putline(char* line)
 	return ini_pt;
 }
 
-char *get_core_name()
-{
-	switch (user_io_core_type())
-	{
-	case CORE_TYPE_MINIMIG2:
-		return "MINIMIG";
-
-	case CORE_TYPE_PACE:
-		return "PACE";
-
-	case CORE_TYPE_MIST:
-		return "ST";
-
-	case CORE_TYPE_ARCHIE:
-		return "ARCHIE";
-
-	case CORE_TYPE_8BIT:
-		return user_io_get_core_name();
-	}
-
-	return "";
-}
-
 //// ini_get_section() ////
 int ini_get_section(const ini_cfg_t* cfg, char* buf)
 {
@@ -177,7 +154,7 @@ int ini_get_section(const ini_cfg_t* cfg, char* buf)
 		}
 	}
 
-	if (!strcasecmp(buf, get_core_name())) return cfg->sections[0].id;
+	if (!strcasecmp(buf, user_io_get_core_name_ex())) return cfg->sections[0].id;
 
 	return INI_SECTION_INVALID_ID;
 }
@@ -271,7 +248,7 @@ void ini_parse(const ini_cfg_t* cfg)
 	int section = INI_SECTION_INVALID_ID;
 	int line_status;
 
-	ini_parser_debugf("Start INI parser for core \"%s\".", get_core_name());
+	ini_parser_debugf("Start INI parser for core \"%s\".", user_io_get_core_name_ex());
 
 	memset(&ini_file, 0, sizeof(ini_file));
 	if (!FileOpen(&ini_file, cfg->filename))

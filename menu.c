@@ -157,6 +157,9 @@ char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "BUTTON OSD" };
 
+char joy_bnames[12][32];
+int  joy_bcount = 0;
+
 
 enum HelpText_Message { HELPTEXT_NONE, HELPTEXT_MAIN, HELPTEXT_HARDFILE, HELPTEXT_CHIPSET, HELPTEXT_MEMORY, HELPTEXT_VIDEO };
 const char *helptexts[] = {
@@ -817,6 +820,7 @@ void HandleUI(void)
 		int old_osd_size = OsdGetSize();
 		while (1)
 		{
+			joy_bcount = 0;
 			selentry = 0;
 			entry = 0;
 			menumask = 0;
@@ -845,7 +849,7 @@ void HandleUI(void)
 				unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
 
 				p = user_io_8bit_get_string(i);
-				//	  iprintf("Option %d: %s\n", i-1, p);
+				printf("Option %d: %s\n", i-1, p);
 
 				// check for 'F'ile or 'S'D image strings
 				if (p && ((p[0] == 'F') || (p[0] == 'S'))) {
@@ -928,17 +932,29 @@ void HandleUI(void)
 				}
 
 				// check for 'V'ersion strings
-				if (p && (p[0] == 'V')) {
-
-					// p[1] is not used but kept for future use
-					char x = p[1];
-
+				if (p && (p[0] == 'V'))
+				{
 					// get version string
 					strcpy(s, OsdCoreName());
 					strcat(s, " ");
 					substrcpy(s + strlen(s), p, 1);
 					OsdCoreNameSet(s);
 				}
+
+				if (p && (p[0] == 'J'))
+				{
+					// joystick button names.
+					for (int n = 0; n < 12; n++)
+					{
+						substrcpy(joy_bnames[n], p, n+1);
+						printf("joy_bname = %s\n", joy_bnames[n]);
+						if(!joy_bnames[n][0]) break;
+						joy_bcount++;
+					}
+
+					printf("joy_bcount = %d\n", joy_bcount);
+				}
+
 				i++;
 			} while (p);
 
@@ -1096,7 +1112,7 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 1:
-				start_map_setting();
+				start_map_setting(joy_bcount ? joy_bcount+5 : 9);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;
@@ -1180,7 +1196,21 @@ void HandleUI(void)
 		break;
 
 	case MENU_JOYDIGMAP1:
-		if(get_map_button()<9) sprintf(s, "       Press: %s", joy_button_map[get_map_button()]);
+		p = 0;
+		if (get_map_button() < 4)
+		{
+			p = joy_button_map[get_map_button()];
+		}
+		else if(joy_bcount)
+		{
+			p = (get_map_button() < joy_bcount + 4) ? joy_bnames[get_map_button() - 4] : joy_button_map[8];
+		}
+		else
+		{
+			p = (get_map_button() < 9) ? joy_button_map[get_map_button()] : "";
+		}
+
+		sprintf(s, "       Press: %s", p);
 		OsdWrite(3, s, 0, 0);
 		if (get_map_button())
 		{
@@ -1188,10 +1218,10 @@ void HandleUI(void)
 			if (get_map_button()<9) sprintf(s, "   Joystick ID: %04x:%04x", get_map_vid(), get_map_pid());
 			OsdWrite(5, s, 0, 0);
 		}
-		if (select || menu || get_map_button()>=9)
+		if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 5 : 9))
 		{
 			finish_map_setting();
-			menustate = MENU_8BIT_SYSTEM1;
+			menustate = is_menu_core() ? MENU_FIRMWARE1 : MENU_8BIT_SYSTEM1;
 			menusub = 1;
 		}
 		break;
@@ -3159,8 +3189,6 @@ void HandleUI(void)
 		helptext = helptexts[HELPTEXT_NONE];
 		parentstate = menustate;
 
-		menumask = 3;
-
 		OsdSetTitle("FW & Core", 0);
 		//OsdWrite(0, "", 0, 0);
 		siprintf(s, "   ARM  s/w ver. %s", version + 5);
@@ -3169,39 +3197,42 @@ void HandleUI(void)
 
 		if (is_menu_core())
 		{
+			menumask = 3;
 			OsdWrite(2, "", 0, 0);
 			if (getStorage(0))
 			{
 				OsdWrite(3, "      Using USB storage", 0, 0);
-				OsdWrite(5, "      Switch to SD card", menusub == 0, 0);
+				OsdWrite(4, "      Switch to SD card", menusub == 0, 0);
 			}
 			else
 			{
 				if (getStorage(1))
 				{
 					OsdWrite(3, " No USB found, using SD card", 0, 0);
-					OsdWrite(5, "      Switch to SD card", menusub == 0, 0);
+					OsdWrite(4, "      Switch to SD card", menusub == 0, 0);
 				}
 				else
 				{
 					OsdWrite(3, "        Using SD card", 0, 0);
-					OsdWrite(5, "    Switch to USB storage", menusub == 0, !isUSBMounted());
+					OsdWrite(4, "    Switch to USB storage", menusub == 0, !isUSBMounted());
 				}
 			}
-			OsdWrite(4, "", 0, 0);
-			OsdWrite(6, "", 0, 0);
-			OsdWrite(7,  "           NOTE:", 0, 0);
-			OsdWrite(8,  "  USB storage takes longer", 0, 0);
-			OsdWrite(9,  "     time to initialize", 0, 0);
-			OsdWrite(10, "       upon cold boot.", 0, 0);
-			OsdWrite(11, "  Use OSD or USER button to", 0, 0);
-			OsdWrite(12, "     cancel USB waiting", 0, 0);
-			OsdWrite(13, "     and use SD instead.", 0, 0);
-			OsdWrite(14, "", 0, 0);
+			OsdWrite(5, "", 0, 0);
+			OsdWrite(6,  "           NOTE:", 0, 0);
+			OsdWrite(7,  "  USB storage takes longer", 0, 0);
+			OsdWrite(8,  "     time to initialize", 0, 0);
+			OsdWrite(9, "       upon cold boot.", 0, 0);
+			OsdWrite(10, "  Use OSD or USER button to", 0, 0);
+			OsdWrite(11, "     cancel USB waiting", 0, 0);
+			OsdWrite(12, "     and use SD instead.", 0, 0);
+			OsdWrite(13, "", 0, 0);
+			OsdWrite(14, "   Define joystick buttons", menusub == 1, 0);
+			OsdWrite(15, "", 0, 0);
 			menustate = MENU_STORAGE;
 		}
 		else
 		{
+			menumask = 3;
 			OsdWrite(2, "", 0, 0);
 			OsdWrite(3, "", 0, 0);
 			int len = strlen(OsdCoreName());
@@ -3217,13 +3248,13 @@ void HandleUI(void)
 			OsdWrite(5, "", 0, 0);
 			OsdWrite(6, "      Change FPGA core", menusub == 0, 0);
 			for (int i = 7; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+			OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 1, 0);
 			menustate = MENU_FIRMWARE2;
 		}
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 1, 0);
 		break;
 
 	case MENU_STORAGE:
-		if (menu || ((menusub == 1) && select))
+		if (menu)
 		{
 			switch (user_io_core_type()) {
 			case CORE_TYPE_MIST:
@@ -3242,12 +3273,21 @@ void HandleUI(void)
 		}
 		else if (select)
 		{
-			if (menusub == 0)
+			switch (menusub)
 			{
-				if(getStorage(1) || isUSBMounted())
+			case 0:
+				if (getStorage(1) || isUSBMounted())
 				{
 					setStorage(!getStorage(1));
 				}
+				break;
+			case 1:
+				joy_bcount = 1;
+				strcpy(joy_bnames[0], "Select");
+				start_map_setting(6);
+				menustate = MENU_JOYDIGMAP;
+				menusub = 0;
+				break;
 			}
 		}
 		break;

@@ -54,6 +54,7 @@ void spi_uio_cmd_cont(uint8_t cmd);
 void spi_uio_cmd(uint8_t cmd);
 void spi_uio_cmd8(uint8_t cmd, uint8_t parm);
 void spi_uio_cmd8_cont(uint8_t cmd, uint8_t parm);
+void spi_uio_cmd16(uint8_t cmd, uint16_t parm);
 void spi_uio_cmd32(uint8_t cmd, uint32_t parm, int wide);
 
 #endif // SPI_H

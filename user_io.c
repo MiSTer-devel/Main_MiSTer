@@ -119,6 +119,29 @@ char *user_io_get_core_name()
 	return core_name;
 }
 
+char *user_io_get_core_name_ex()
+{
+	switch (user_io_core_type())
+	{
+	case CORE_TYPE_MINIMIG2:
+		return "MINIMIG";
+
+	case CORE_TYPE_PACE:
+		return "PACE";
+
+	case CORE_TYPE_MIST:
+		return "ST";
+
+	case CORE_TYPE_ARCHIE:
+		return "ARCHIE";
+
+	case CORE_TYPE_8BIT:
+		return core_name;
+	}
+
+	return "";
+}
+
 char is_menu_core()
 {
 	return !strcasecmp(core_name, "MENU");
@@ -278,7 +301,7 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 	}
 }
 
-void user_io_digital_joystick(unsigned char joystick, unsigned char map)
+void user_io_digital_joystick(unsigned char joystick, uint16_t map)
 {
 	uint8_t state = map;
 	// "only" 6 joysticks are supported
@@ -325,13 +348,13 @@ void user_io_digital_joystick(unsigned char joystick, unsigned char map)
 	// but only for joystick 1 and 2
 	if ((core_type == CORE_TYPE_MIST) && (joystick < 2))
 	{
-		ikbd_joystick(joystick, map);
+		ikbd_joystick(joystick, (uint8_t)map);
 		return;
 	}
 
 	// every other core else uses this
 	// (even MIST, joystick 3 and 4 were introduced later)
-	spi_uio_cmd8((joystick < 2) ? (UIO_JOYSTICK0 + joystick) : ((UIO_JOYSTICK2 + joystick - 2)), map);
+	spi_uio_cmd16((joystick < 2) ? (UIO_JOYSTICK0 + joystick) : ((UIO_JOYSTICK2 + joystick - 2)), map);
 }
 
 static char dig2ana(char min, char max)
@@ -341,7 +364,7 @@ static char dig2ana(char min, char max)
 	return 0;
 }
 
-void user_io_joystick(unsigned char joystick, unsigned char map)
+void user_io_joystick(unsigned char joystick, uint16_t map)
 {
 	// digital joysticks also send analog signals
 	user_io_digital_joystick(joystick, map);

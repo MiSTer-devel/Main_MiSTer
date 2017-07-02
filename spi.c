@@ -227,6 +227,13 @@ void spi_uio_cmd8(uint8_t cmd, uint8_t parm)
 	DisableIO();
 }
 
+void spi_uio_cmd16(uint8_t cmd, uint16_t parm)
+{
+	spi_uio_cmd_cont(cmd);
+	spi_w(parm);
+	DisableIO();
+}
+
 void spi_uio_cmd32(uint8_t cmd, uint32_t parm, int wide)
 {
 	EnableIO();

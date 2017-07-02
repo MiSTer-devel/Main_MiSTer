@@ -14,7 +14,7 @@ int  toggle_kbdled(int mask);
 int input_poll(int getchar);
 
 
-void start_map_setting();
+void start_map_setting(int cnt);
 int  get_map_button();
 void finish_map_setting();
 uint16_t get_map_vid();

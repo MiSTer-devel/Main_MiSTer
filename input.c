@@ -438,15 +438,17 @@ int toggle_kbdled(int mask)
 	return state;
 }
 
-int mapping = 0;
-int mapping_button;
-int mapping_dev;
+static int mapping = 0;
+static int mapping_button;
+static int mapping_dev;
+static int mapping_count;
 
-void start_map_setting()
+void start_map_setting(int cnt)
 {
 	mapping_button = 0;
 	mapping = 1;
 	mapping_dev = -1;
+	mapping_count = cnt;
 }
 
 int  get_map_button()
@@ -454,14 +456,18 @@ int  get_map_button()
 	return mapping_button;
 }
 
+static char *get_map_name(int dev)
+{
+	static char name[128];
+	sprintf(name, "%s_input_%04x_%04x.map", user_io_get_core_name_ex(), input[dev].vid, input[dev].pid);
+	return name;
+}
+
 void finish_map_setting()
 {
 	mapping = 0;
 	if (mapping_dev<0) return;
-
-	char name[32];
-	sprintf(name, "input_%04x_%04x.map", input[mapping_dev].vid, input[mapping_dev].pid);
-	FileSaveConfig(name, &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+	FileSaveConfig(get_map_name(mapping_dev), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 }
 
 uint16_t get_map_vid()
@@ -479,14 +485,14 @@ uint16_t get_map_pid()
 #define KEY_EMU_UP    (KEY_MAX+3)
 #define KEY_EMU_DOWN  (KEY_MAX+4)
 
-static char joy[2] = { 0 };
+static uint16_t joy[2] = { 0 };
 static void input_cb(struct input_event *ev, int dev);
 
-static void joy_digital(int num, uint16_t mask, char press)
+static void joy_digital(int num, uint16_t mask, char press, int bnum)
 {
 	if (num < 2)
 	{
-		if (user_io_osd_is_visible() || (mask == JOY_OSD))
+		if (user_io_osd_is_visible() || (bnum == 16))
 		{
 			memset(joy, 0, sizeof(joy));
 			struct input_event ev;
@@ -522,11 +528,8 @@ static void joy_digital(int num, uint16_t mask, char press)
 				ev.code = KEY_BACKSPACE;
 				break;
 
-			case JOY_OSD:
-				ev.code = KEY_F12;
-				break;
 			default:
-				ev.code = 0;
+				ev.code = (bnum == 16) ? KEY_F12 : 0;
 			}
 
 			input_cb(&ev, 0);
@@ -638,9 +641,7 @@ static void input_cb(struct input_event *ev, int dev)
 
 	if (!input[dev].has_map)
 	{
-		char name[32];
-		sprintf(name, "input_%04x_%04x.map", input[dev].vid, input[dev].pid);
-		if (!FileLoadConfig(name, &input[dev].map, sizeof(input[dev].map)))
+		if (!FileLoadConfig(get_map_name(dev), &input[dev].map, sizeof(input[dev].map)))
 		{
 			memset(&input[dev].map, 0, sizeof(input[dev].map));
 		}
@@ -653,7 +654,7 @@ static void input_cb(struct input_event *ev, int dev)
 		if (ev->type == EV_KEY && ev->value <= 1 && ev->code >= BTN_JOYSTICK)
 		{
 			if (mapping_dev < 0) mapping_dev = dev;
-			if (mapping_dev == dev && mapping_button < 9)
+			if (mapping_dev == dev && mapping_button < mapping_count)
 			{
 				if (ev->value)
 				{
@@ -664,7 +665,7 @@ static void input_cb(struct input_event *ev, int dev)
 
 					if (!found)
 					{
-						input[dev].map[mapping_button] = ev->code;
+						input[dev].map[(mapping_button == (mapping_count-1)) ? 16 : mapping_button] = ev->code;
 						key_mapped = 1;
 					}
 				}
@@ -687,11 +688,11 @@ static void input_cb(struct input_event *ev, int dev)
 			{
 				if (first_joystick < 0) first_joystick = dev;
 
-				for (int i = 0; i < 9; i++)
+				for (int i = 0; i <= 16; i++)
 				{
 					if (ev->code == input[dev].map[i])
 					{
-						joy_digital((first_joystick == dev) ? 0 : 1, 1<<i, ev->value);
+						joy_digital((first_joystick == dev) ? 0 : 1, 1<<i, ev->value, i);
 						return;
 					}
 				}
@@ -704,7 +705,7 @@ static void input_cb(struct input_event *ev, int dev)
 			if (first_joystick < 0) break;
 
 			// TODO:
-			// 1) add analog axis mapping (input[dev].map[16], input[dev].map[17])
+			// 1) add analog axis mapping
 			// 2) enable invertion
 
 			if (ev->code == 0) // x

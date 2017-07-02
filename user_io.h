@@ -72,7 +72,6 @@
 #define JOY_BTN2        0x20
 #define JOY_BTN3        0x40
 #define JOY_BTN4        0x80
-#define JOY_OSD         0x100
 #define JOY_MOVE        (JOY_RIGHT|JOY_LEFT|JOY_UP|JOY_DOWN)
 
 #define BUTTON1         0x01
@@ -164,6 +163,7 @@ char user_io_dip_switch1(void);
 char user_io_serial_status(serial_status_t *, uint8_t);
 int  user_io_file_mount(char *name);
 char *user_io_get_core_name();
+char *user_io_get_core_name_ex();
 char is_menu_core();
 
 // io controllers interface for FPGA ethernet emulation using usb ethernet
@@ -177,11 +177,11 @@ void user_io_eth_receive_tx_frame(uint8_t *, uint16_t);
 void user_io_mouse(unsigned char b, int16_t x, int16_t y);
 void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned short pid);
 char* user_io_create_config_name();
-void user_io_digital_joystick(unsigned char, unsigned char);
+void user_io_digital_joystick(unsigned char, uint16_t);
 void user_io_analog_joystick(unsigned char, char, char);
 char user_io_osd_is_visible();
 void user_io_send_buttons(char);
-void user_io_joystick(unsigned char joystick, unsigned char map);
+void user_io_joystick(unsigned char joystick, uint16_t map);
 
 void user_io_key_remap(char *);
 void add_modifiers(uint8_t mod, uint16_t* keys_ps2);
