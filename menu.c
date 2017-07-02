@@ -1077,25 +1077,27 @@ void HandleUI(void)
 		helptext = helptexts[HELPTEXT_MAIN];
 		m = 0;
 		if (user_io_core_type() == CORE_TYPE_MINIMIG2) m = 1;
-		menumask = m ? 0x3f : 0x7f; // 5 selections + Exit
+		menumask = m ? 0x7f : 0xff;
 		OsdSetTitle("System", OSD_ARROW_LEFT);
 		menustate = MENU_8BIT_SYSTEM2;
 		parentstate = MENU_8BIT_SYSTEM1;
-		OsdWrite(0, "", 0, 0);
-		OsdWrite(1, " Firmware & Core           \x16", menusub == 0, 0);
+		if (OsdIsBig) OsdWrite(0, "", 0, 0);
+		OsdWrite(OsdIsBig ? 1 : 0, " Firmware & Core           \x16", menusub == 0, 0);
 		if(OsdIsBig) OsdWrite(2, "", 0, 0);
-		OsdWrite(OsdIsBig ? 3 : 2, " Define joystick buttons", menusub == 1, 0);
-		OsdWrite(OsdIsBig ? 4 : 3, " Keyboard Test", menusub == 2, 0);
+		OsdWrite(OsdIsBig ? 3 : 1, " Define joystick buttons", menusub == 1, 0);
+		OsdWrite(OsdIsBig ? 4 : 2, " Keyboard Test", menusub == 2, 0);
 		if (OsdIsBig) OsdWrite(5, "", 0, 0);
-		OsdWrite(OsdIsBig ? 6 : 4, m ? " Reset" : " Reset settings", menusub == 3, 0);
+		OsdWrite(OsdIsBig ? 6 : 3, m ? " Reset" : " Reset settings", menusub == 3, 0);
 		if (m)
-			OsdWrite(OsdIsBig ? 7 : 5, "", 0, 0);
+			OsdWrite(OsdIsBig ? 7 : 4, "", 0, 0);
 		else
-			OsdWrite(OsdIsBig ? 7 : 5, " Save settings", menusub == 4, 0); // Minimig saves settings elsewhere
+			OsdWrite(OsdIsBig ? 7 : 4, " Save settings", menusub == 4, 0); // Minimig saves settings elsewhere
 		if (OsdIsBig) OsdWrite(8, "", 0, 0);
-		OsdWrite(OsdIsBig ? 9 : 6, " About", menusub == (5 - m), 0);
-		if(OsdIsBig) for (int i = 10; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == (6 - m), 0);
+		OsdWrite(OsdIsBig ? 9 : 5, " Cold reset", menusub == (5 - m), 0);
+		if (OsdIsBig) OsdWrite(10, "", 0, 0);
+		OsdWrite(OsdIsBig ? 11 : 6, " About", menusub == (6 - m), 0);
+		if(OsdIsBig) for (int i = 12; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == (7 - m), 0);
 		break;
 
 	case MENU_8BIT_SYSTEM2:
@@ -1128,8 +1130,7 @@ void HandleUI(void)
 			case 4:
 				if (m)
 				{
-					menustate = MENU_8BIT_ABOUT1;
-					menusub = 0;
+					reboot(1);
 				}
 				else
 				{
@@ -1144,6 +1145,15 @@ void HandleUI(void)
 				break;
 			case 5:
 				if (m) {
+					menustate = MENU_8BIT_ABOUT1;
+					menusub = 0;
+				}
+				else {
+					reboot(1);
+				}
+				break;
+			case 6:
+				if (m) {
 					menustate = MENU_NONE1;
 					menusub = 0;
 				}
@@ -1153,7 +1163,7 @@ void HandleUI(void)
 					menusub = 0;
 				}
 				break;
-			case 6:
+			case 7:
 				// Exit
 				menustate = MENU_NONE1;
 				menusub = 0;
@@ -1253,24 +1263,11 @@ void HandleUI(void)
 		OsdDrawLogo(4, 4, 1);
 		OsdDrawLogo(5, 5, 1);
 		ScrollText(OsdIsBig ? 13 : 6, "                                 MiST by Till Harbaum, based on Minimig by Dennis van Weeren and other projects. MiST hardware and software is distributed under the terms of the GNU General Public License version 3. MiST FPGA cores are the work of their respective authors under individual licensing.", 0, 0, 0, 0);
-		// menu key closes menu
-		if (menu) {
+
+		if (menu | select | left)
+		{
 			menustate = MENU_8BIT_SYSTEM1;
-			menusub = 5-m;
-		}
-		if (select) {
-			//iprintf("Selected", 0);
-			if (menusub == 0) {
-				menustate = MENU_8BIT_SYSTEM1;
-				menusub = 5-m;
-			}
-		}
-		else {
-			if (left)
-			{
-				menustate = MENU_8BIT_SYSTEM1;
-				menusub = 5-m;
-			}
+			menusub = 6-m;
 		}
 		break;
 
