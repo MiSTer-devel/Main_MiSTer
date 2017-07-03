@@ -15,7 +15,8 @@ int input_poll(int getchar);
 
 
 void start_map_setting(int cnt);
-int  get_map_button();
+int get_map_button();
+int get_map_type();
 void finish_map_setting(int dismiss);
 uint16_t get_map_vid();
 uint16_t get_map_pid();

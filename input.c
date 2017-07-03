@@ -369,15 +369,15 @@ static int check_devs()
 			/*
 			else if ( event->mask & IN_MODIFY )
 			{
-			result = 1;
-			if ( event->mask & IN_ISDIR )
-			{
-			printf( "The directory %s was modified.\n", event->name );
-			}
-			else
-			{
-			printf( "The file %s was modified.\n", event->name );
-			}
+				result = 1;
+				if ( event->mask & IN_ISDIR )
+				{
+					printf( "The directory %s was modified.\n", event->name );
+				}
+				else
+				{
+					printf( "The file %s was modified.\n", event->name );
+				}
 			}
 			*/
 		}
@@ -441,6 +441,7 @@ int toggle_kbdled(int mask)
 static int mapping = 0;
 static int mapping_button;
 static int mapping_dev;
+static int mapping_type;
 static int mapping_count;
 
 void start_map_setting(int cnt)
@@ -448,12 +449,18 @@ void start_map_setting(int cnt)
 	mapping_button = 0;
 	mapping = 1;
 	mapping_dev = -1;
+	mapping_type = 1;
 	mapping_count = cnt;
 }
 
-int  get_map_button()
+int get_map_button()
 {
 	return mapping_button;
+}
+
+int get_map_type()
+{
+	return mapping_type;
 }
 
 static char *get_map_name(int dev)
@@ -487,14 +494,15 @@ uint16_t get_map_pid()
 #define KEY_EMU_UP    (KEY_MAX+3)
 #define KEY_EMU_DOWN  (KEY_MAX+4)
 
-static uint16_t joy[2] = { 0 };
 static void input_cb(struct input_event *ev, int dev);
 
 static void joy_digital(int num, uint16_t mask, char press, int bnum)
 {
+	static uint16_t joy[2] = { 0 };
+
 	if (num < 2)
 	{
-		if (user_io_osd_is_visible() || (bnum == 16))
+		if (user_io_osd_is_visible() || (bnum == 17))
 		{
 			memset(joy, 0, sizeof(joy));
 			struct input_event ev;
@@ -531,7 +539,7 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 				break;
 
 			default:
-				ev.code = (bnum == 16) ? KEY_F12 : 0;
+				ev.code = (bnum == 17) ? KEY_F12 : 0;
 			}
 
 			input_cb(&ev, 0);
@@ -540,8 +548,19 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 		{
 			if (press) joy[num] |= (char)mask;
 			else joy[num] &= ~(char)mask;
-			user_io_joystick(num, joy[num]);
+			user_io_digital_joystick(num, joy[num]);
 		}
+	}
+}
+
+static void joy_analog(int num, int axis, int offset)
+{
+	static int pos[2][2] = { 0 };
+
+	if (num < 2)
+	{
+		pos[num][axis] = offset;
+		user_io_analog_joystick(num, (char)(pos[num][0]), (char)(pos[num][1]));
 	}
 }
 
@@ -551,77 +570,24 @@ static void input_cb(struct input_event *ev, int dev)
 	static uint8_t modifiers = 0;
 	static char keys[6] = { 0,0,0,0,0,0 };
 	static unsigned char mouse_btn = 0;
+	static int kbd_toggle = 0;
 
-	int map_skip = (mapping && ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0);
+	// repeat events won'tbe processed
+	if (ev->type == EV_KEY && ev->value > 1) return;
 
+	int map_skip   = (mapping && ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0 && mapping_type);
+	int map_cancel = (mapping && ev->type == EV_KEY && ev->code == 1);
+
+	//mouse
 	switch (ev->type)
 	{
 	case EV_KEY:
+		if (ev->code >= 272 && ev->code <= 279)
 		{
-			if (ev->code == 272)
-			{
-				if (ev->value <= 1)
-				{
-					mouse_btn = (mouse_btn & ~1) | ev->value;
-					user_io_mouse(mouse_btn, 0, 0);
-				}
-				return;
-			}
-
-			if (ev->code == 273)
-			{
-				if (ev->value <= 1)
-				{
-					mouse_btn = (mouse_btn & ~2) | (ev->value << 1);
-					user_io_mouse(mouse_btn, 0, 0);
-				}
-				return;
-			}
-
-			int key = (ev->code < (sizeof(ev2usb) / sizeof(ev2usb[0]))) ? ev2usb[ev->code] : NONE;
-			if ((key != NONE) && !map_skip)
-			{
-				if (ev->value > 1)
-				{
-					return;
-				}
-
-				if (key & MODMASK)
-				{
-					modifiers = (ev->value) ? modifiers | (uint8_t)(key >> 8) : modifiers & ~(uint8_t)(key >> 8);
-				}
-				else
-				{
-					if (ev->value)
-					{
-						int found = 0;
-						for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++) if (keys[i] == (uint8_t)key) found = 1;
-
-						if (!found)
-						{
-							for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++)
-							{
-								if (!keys[i])
-								{
-									keys[i] = (uint8_t)key;
-									break;
-								}
-							}
-						}
-					}
-					else
-					{
-						for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++) if (keys[i] == (uint8_t)key) keys[i] = 0;
-					}
-
-					int j = 0;
-					for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++) if (keys[i]) keys[j++] = keys[i];
-					while (j < (sizeof(keys) / sizeof(keys[0]))) keys[j++] = 0;
-				}
-
-				user_io_kbd(modifiers, keys, input[dev].vid, input[dev].pid);
-				return;
-			}
+			unsigned char mask = 1 << (ev->code - 272);
+			mouse_btn = (ev->value) ? mouse_btn | mask : mouse_btn & ~mask;
+			user_io_mouse(mouse_btn, 0, 0);
+			return;
 		}
 		break;
 
@@ -641,7 +607,6 @@ static void input_cb(struct input_event *ev, int dev)
 		}
 		break;
 	}
-	
 
 	if (!input[dev].has_map)
 	{
@@ -652,38 +617,52 @@ static void input_cb(struct input_event *ev, int dev)
 		input[dev].has_map = 1;
 	}
 
-	//joystick
-	if (mapping && (mapping_dev >=0 || ev->value))
+	//joystick mapping
+	if (mapping && (mapping_dev >=0 || ev->value) && !map_cancel)
 	{
-		if ((ev->type == EV_KEY && ev->value <= 1 && ev->code >= BTN_JOYSTICK))
+		if (ev->type == EV_KEY)
 		{
-			if (mapping_dev < 0) mapping_dev = dev;
-			if (mapping_dev == dev && mapping_button < mapping_count)
+			if ((mapping_dev < 0) || ((ev->code >= BTN_JOYSTICK) ? mapping_type : !mapping_type))
 			{
-				if (ev->value)
+				if (mapping_dev < 0)
 				{
-					if(!mapping_button) memset(&input[dev].map, 0, sizeof(input[dev].map));
+					mapping_dev = dev;
+					mapping_type = (ev->code >= BTN_JOYSTICK) ? 1 : 0;
+				}
 
-					int found = 0;
-					for (int i = 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
-
-					if (!found)
+				if (mapping_dev == dev && mapping_button < mapping_count)
+				{
+					if (ev->value)
 					{
-						input[dev].map[(mapping_button == (mapping_count-1)) ? 16 : mapping_button] = ev->code;
-						key_mapped = 1;
+						if (!mapping_button) memset(&input[dev].map, 0, sizeof(input[dev].map));
+
+						int found = 0;
+						for (int i = 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
+
+						if (!found)
+						{
+							input[dev].map[(mapping_button == (mapping_count - 1)) ? 16 + mapping_type : mapping_button] = ev->code;
+							key_mapped = 1;
+						}
+					}
+					else
+					{
+						if (key_mapped) mapping_button++;
+						key_mapped = 0;
 					}
 				}
-				else
-				{
-					if(key_mapped) mapping_button++;
-					key_mapped = 0;
-				}
+
+				return;
 			}
 		}
 
-		if (map_skip && mapping_button < mapping_count && ev->value == 1)
+		if (map_skip && mapping_button < mapping_count)
 		{
-			mapping_button++;
+			if (ev->value == 1)
+			{
+				mapping_button++;
+			}
+			return;
 		}
 	}
 	else
@@ -691,19 +670,88 @@ static void input_cb(struct input_event *ev, int dev)
 		key_mapped = 0;
 		switch (ev->type)
 		{
-		//buttons, digital directions
 		case EV_KEY:
-			if (ev->value <= 1)
+			//joystick buttons, digital directions
+			if (ev->code >= BTN_JOYSTICK)
 			{
 				if (first_joystick < 0) first_joystick = dev;
 
-				for (int i = 0; i <= 16; i++)
+				for (int i = 0; i <= 17; i++)
 				{
 					if (ev->code == input[dev].map[i])
 					{
 						joy_digital((first_joystick == dev) ? 0 : 1, 1<<i, ev->value, i);
 						return;
 					}
+				}
+				return;
+			}
+			// keyboard
+			else
+			{
+				if(!user_io_osd_is_visible() && ((user_io_get_kbdemu() != EMU_JOY0) || (user_io_get_kbdemu() != EMU_JOY1)))
+				{
+					if (!kbd_toggle)
+					{
+						for (int i = 0; i <= 15; i++)
+						{
+							if (ev->code == input[dev].map[i])
+							{
+								joy_digital((user_io_get_kbdemu() != EMU_JOY0) ? 0 : 1, 1 << i, ev->value, i);
+								return;
+							}
+						}
+					}
+
+					if (ev->code == input[dev].map[16])
+					{
+						if (ev->value) kbd_toggle = !kbd_toggle;
+						return;
+					}
+				}
+				else
+				{
+					kbd_toggle = 0;
+				}
+
+				int key = (ev->code < (sizeof(ev2usb) / sizeof(ev2usb[0]))) ? ev2usb[ev->code] : NONE;
+				if(key != NONE)
+				{
+					if (key & MODMASK)
+					{
+						modifiers = (ev->value) ? modifiers | (uint8_t)(key >> 8) : modifiers & ~(uint8_t)(key >> 8);
+					}
+					else
+					{
+						if (ev->value)
+						{
+							int found = 0;
+							for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++) if (keys[i] == (uint8_t)key) found = 1;
+
+							if (!found)
+							{
+								for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++)
+								{
+									if (!keys[i])
+									{
+										keys[i] = (uint8_t)key;
+										break;
+									}
+								}
+							}
+						}
+						else
+						{
+							for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++) if (keys[i] == (uint8_t)key) keys[i] = 0;
+						}
+
+						int j = 0;
+						for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++) if (keys[i]) keys[j++] = keys[i];
+						while (j < (sizeof(keys) / sizeof(keys[0]))) keys[j++] = 0;
+					}
+
+					user_io_kbd(modifiers, keys, input[dev].vid, input[dev].pid);
+					return;
 				}
 			}
 			break;
@@ -721,7 +769,7 @@ static void input_cb(struct input_event *ev, int dev)
 			{
 				int offset = 0;
 				if (ev->value < 127 || ev->value>129) offset = ev->value - 128;
-				//joy_analog((first_joystick == dev) ? 0 : 1, 0, offset);
+				joy_analog((first_joystick == dev) ? 0 : 1, 0, offset);
 				return;
 			}
 
@@ -729,7 +777,7 @@ static void input_cb(struct input_event *ev, int dev)
 			{
 				int offset = 0;
 				if (ev->value < 127 || ev->value>129) offset = ev->value - 128;
-				//joy_analog((first_joystick == dev) ? 0 : 1, 1, offset);
+				joy_analog((first_joystick == dev) ? 0 : 1, 1, offset);
 				return;
 			}
 			break;
@@ -858,7 +906,7 @@ int input_poll(int getchar)
 									if (ev.code == 60) break; //ps3 accel axis
 									if (ev.code == 59) break; //ps3 accel axis
 
-															   //reduce spam on PS3 gamepad
+									//reduce flood from PS3 gamepad
 									if (input[i].vid == 0x054c && input[i].pid == 0x0268)
 									{
 										if (ev.code <= 5 && ev.value > 118 && ev.value < 138) break;
@@ -871,7 +919,6 @@ int input_poll(int getchar)
 									printf("Input event: type=%d, code=%d(%x), value=%d(%x)\n", ev.type, ev.code, ev.code, ev.value, ev.value);
 								}
 							}
-
 
 							input_cb(&ev, i);
 

@@ -32,7 +32,6 @@ unsigned char key_remap_table[MAX_REMAP][2];
 fileTYPE sd_image;
 
 // mouse and keyboard emulation state
-typedef enum { EMU_NONE, EMU_MOUSE, EMU_JOY0, EMU_JOY1 } emu_mode_t;
 static emu_mode_t emu_mode = EMU_NONE;
 static unsigned char emu_state = 0;
 static unsigned long emu_timer = 0;
@@ -362,15 +361,6 @@ static char dig2ana(char min, char max)
 	if (min && !max) return -128;
 	if (max && !min) return  127;
 	return 0;
-}
-
-void user_io_joystick(unsigned char joystick, uint16_t map)
-{
-	// digital joysticks also send analog signals
-	user_io_digital_joystick(joystick, map);
-	user_io_analog_joystick(joystick,
-		dig2ana(map&JOY_LEFT, map&JOY_RIGHT),
-		dig2ana(map&JOY_UP, map&JOY_DOWN));
 }
 
 // transmit serial/rs232 data into core
@@ -1386,7 +1376,7 @@ static unsigned char is_emu_key(unsigned char c, unsigned alt) {
 		0x61, JOY_BTN2
 	};
 
-	if (emu_mode == EMU_NONE) return 0;
+	if (emu_mode != EMU_MOUSE) return 0;
 
 	if (alt)
 	{
@@ -1679,9 +1669,9 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 		}
 
 		// modifier keys are used as buttons in emu mode
-		if (emu_mode != EMU_NONE && !osd_is_visible)
+		if (emu_mode == EMU_MOUSE && !osd_is_visible)
 		{
-			char last_btn = emu_state & (JOY_BTN1 | JOY_BTN2 | JOY_BTN3 | JOY_BTN4);
+			char last_btn = emu_state & (JOY_BTN1 | JOY_BTN2);
 			if (keyrah != 2)
 			{
 				if (m & (1 << EMU_BTN1)) emu_state |= JOY_BTN1;
@@ -1689,29 +1679,15 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 				if (m & (1 << EMU_BTN2)) emu_state |= JOY_BTN2;
 				else                  emu_state &= ~JOY_BTN2;
 			}
-			if (m & (1 << EMU_BTN3)) emu_state |= JOY_BTN3;
-			else                  emu_state &= ~JOY_BTN3;
-			if (m & (1 << EMU_BTN4)) emu_state |= JOY_BTN4;
-			else                  emu_state &= ~JOY_BTN4;
 
 			// check if state of mouse buttons has changed
 			// (on a mouse only two buttons are supported)
 			if ((last_btn  & (JOY_BTN1 | JOY_BTN2)) != (emu_state & (JOY_BTN1 | JOY_BTN2)))
 			{
-				if (emu_mode == EMU_MOUSE)
-				{
-					unsigned char b;
-					if (emu_state & JOY_BTN1) b |= 1;
-					if (emu_state & JOY_BTN2) b |= 2;
-					user_io_mouse(b, 0, 0);
-				}
-			}
-
-			// check if state of joystick buttons has changed
-			if (last_btn != (emu_state & (JOY_BTN1 | JOY_BTN2 | JOY_BTN3 | JOY_BTN4)))
-			{
-				if (emu_mode == EMU_JOY0) user_io_joystick(joystick_renumber(0), emu_state);
-				if (emu_mode == EMU_JOY1) user_io_joystick(joystick_renumber(1), emu_state);
+				unsigned char b;
+				if (emu_state & JOY_BTN1) b |= 1;
+				if (emu_state & JOY_BTN2) b |= 2;
+				user_io_mouse(b, 0, 0);
 			}
 		}
 
@@ -1723,8 +1699,8 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 				// Do we have a downstroke on a modifier key?
 				if ((m & (1 << i)) && !(modifier & (1 << i)))
 				{
-					// shift keys are used for mouse joystick emulation in emu mode
-					if (((i != EMU_BTN1) && (i != EMU_BTN2) && (i != EMU_BTN3) && (i != EMU_BTN4)) || (emu_mode == EMU_NONE))
+					// shift keys are used for mouse emulation in emu mode
+					if (((i != EMU_BTN1) && (i != EMU_BTN2)) || (emu_mode != EMU_MOUSE))
 					{
 						if (modifier_keycode(i) != MISS) send_keycode(modifier_keycode(i));
 					}
@@ -1732,7 +1708,7 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 
 				if (!(m & (1 << i)) && (modifier & (1 << i)))
 				{
-					if (((i != EMU_BTN1) && (i != EMU_BTN2) && (i != EMU_BTN3) && (i != EMU_BTN4)) || (emu_mode == EMU_NONE))
+					if (((i != EMU_BTN1) && (i != EMU_BTN2)) || (emu_mode != EMU_MOUSE))
 					{
 						if (modifier_keycode(i) != MISS) send_keycode(BREAK | modifier_keycode(i));
 					}
@@ -1778,8 +1754,6 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 						if (is_emu_key(pressed[i], keyrah) && !osd_is_visible)
 						{
 							emu_state &= ~is_emu_key(pressed[i], keyrah);
-							if (emu_mode == EMU_JOY0) user_io_joystick(joystick_renumber(0), emu_state);
-							if (emu_mode == EMU_JOY1) user_io_joystick(joystick_renumber(1), emu_state);
 							if (keyrah == 2)
 							{
 								unsigned char b;
@@ -1834,10 +1808,6 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 						{
 							emu_state |= is_emu_key(k[i], keyrah);
 
-							// joystick emulation is also affected by the presence of
-							// usb joysticks
-							if (emu_mode == EMU_JOY0) user_io_joystick(joystick_renumber(0), emu_state);
-							if (emu_mode == EMU_JOY1) user_io_joystick(joystick_renumber(1), emu_state);
 							if (keyrah == 2)
 							{
 								unsigned char b;
@@ -1987,4 +1957,9 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 
 	printf("0\n", name, ext, 0);
 	return 0;
+}
+
+emu_mode_t user_io_get_kbdemu()
+{
+	return emu_mode;
 }

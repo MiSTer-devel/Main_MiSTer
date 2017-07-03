@@ -155,7 +155,7 @@ char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE FAST",
 const char *config_cd32pad_msg[] = { "OFF", "ON" };
 char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
-char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "BUTTON OSD" };
+char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -1224,19 +1224,21 @@ void HandleUI(void)
 		}
 		else if(joy_bcount)
 		{
-			p = (get_map_button() < joy_bcount + 4) ? joy_bnames[get_map_button() - 4] : joy_button_map[8];
+			p = (get_map_button() < joy_bcount + 4) ? joy_bnames[get_map_button() - 4] : joy_button_map[8+get_map_type()];
 		}
 		else
 		{
-			p = (get_map_button() < 9) ? joy_button_map[get_map_button()] : "";
+			p = (get_map_button() < 8) ? joy_button_map[get_map_button()] : joy_button_map[8 + get_map_type()];
 		}
 
 		sprintf(s, "       Press: %s", p);
 		OsdWrite(3, s, 0, 0);
 		if (get_map_button())
 		{
-			OsdWrite(OsdGetSize() - 1, "    finish (SPACE - skip)", menusub == 0, 0);
-			sprintf(s, "   Joystick ID: %04x:%04x", get_map_vid(), get_map_pid());
+			if(get_map_type()) OsdWrite(OsdGetSize() - 1, "    finish (SPACE - skip)", menusub == 0, 0);
+			else OsdWrite(OsdGetSize() - 1, "", 0, 0);
+
+			sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
 			OsdWrite(5, s, 0, 0);
 		}
 

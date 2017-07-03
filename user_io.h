@@ -134,6 +134,7 @@
 #define UIO_PRIORITY_KEYBOARD 0 
 #define UIO_PRIORITY_GAMEPAD  1
 
+typedef enum { EMU_NONE, EMU_MOUSE, EMU_JOY0, EMU_JOY1 } emu_mode_t;
 
 // serial status data type returned from the core 
 typedef struct {
@@ -166,6 +167,8 @@ char *user_io_get_core_name();
 char *user_io_get_core_name_ex();
 char is_menu_core();
 
+emu_mode_t user_io_get_kbdemu();
+
 // io controllers interface for FPGA ethernet emulation using usb ethernet
 // devices attached to the io controller (ethernec emulation)
 void user_io_eth_send_mac(uint8_t *);
@@ -181,7 +184,6 @@ void user_io_digital_joystick(unsigned char, uint16_t);
 void user_io_analog_joystick(unsigned char, char, char);
 char user_io_osd_is_visible();
 void user_io_send_buttons(char);
-void user_io_joystick(unsigned char joystick, uint16_t map);
 
 void user_io_key_remap(char *);
 void add_modifiers(uint8_t mod, uint16_t* keys_ps2);
