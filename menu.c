@@ -531,6 +531,7 @@ void HandleUI(void)
 	static long helptext_timer;
 	static const char *helptext;
 	static char helpstate = 0;
+	static char drive_num = 0;
 	uint8_t keys[6] = { 0,0,0,0,0,0 };
 	uint16_t keys_ps2[6] = { 0,0,0,0,0,0 };
 
@@ -849,7 +850,7 @@ void HandleUI(void)
 				unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
 
 				p = user_io_8bit_get_string(i);
-				printf("Option %d: %s\n", i-1, p);
+				//printf("Option %d: %s\n", i-1, p);
 
 				// check for 'F'ile or 'S'D image strings
 				if (p && ((p[0] == 'F') || (p[0] == 'S'))) {
@@ -1020,6 +1021,8 @@ void HandleUI(void)
 				}
 				else if ((p[0] == 'F') || (p[0] == 'S'))
 				{
+					drive_num = 0;
+					if (p[1] >= '0' && p[1] <= '3') drive_num = p[1] - '0';
 					static char ext[13];
 					substrcpy(ext, p, 1);
 					while (strlen(ext) < 3) strcat(ext, " ");
@@ -1069,7 +1072,7 @@ void HandleUI(void)
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
 		iprintf("Image selected: %s\n", SelectedPath);
 		user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
-		user_io_file_mount(SelectedPath);
+		user_io_file_mount(drive_num, SelectedPath);
 		menustate = MENU_NONE1;
 		break;
 
@@ -3257,7 +3260,7 @@ void HandleUI(void)
 			*s2++ = 0;
 			OsdWrite(4, s, 0, 0);
 			OsdWrite(5, "", 0, 0);
-			OsdWrite(6, "      Change FPGA core", menusub == 0, 0);
+			OsdWrite(6, "       Change FPGA core", menusub == 0, 0);
 			for (int i = 7; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
 			OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 1, 0);
 			menustate = MENU_FIRMWARE2;

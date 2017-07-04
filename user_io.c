@@ -29,7 +29,7 @@ unsigned char key_remap_table[MAX_REMAP][2];
 
 #define BREAK  0x8000
 
-fileTYPE sd_image;
+fileTYPE sd_image[4] = { 0 };
 
 // mouse and keyboard emulation state
 static emu_mode_t emu_mode = EMU_NONE;
@@ -75,7 +75,7 @@ void user_io_init()
 {
 	// no sd card image selected, SD card accesses will go directly
 	// to the card
-	sd_image.size = 0;
+	memset(sd_image, 0, sizeof(sd_image));
 
 	// mark remap table as unused
 	memset(key_remap_table, 0, sizeof(key_remap_table));
@@ -249,10 +249,11 @@ void user_io_detect_core_type()
 
 			// check if there's a <core>.vhd present
 			sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
-			if (!user_io_file_mount(mainpath))
+			user_io_set_index(0);
+			if (!user_io_file_mount(0, mainpath))
 			{
 				strcpy(name + strlen(name) - 3, "VHD");
-				user_io_file_mount(name);
+				user_io_file_mount(0, name);
 			}
 		}
 
@@ -414,9 +415,9 @@ static uint8_t CID[16] = { 0x3e, 0x00, 0x00, 0x34, 0x38, 0x32, 0x44, 0x00, 0x00,
 // set SD card info in FPGA (CSD, CID)
 void user_io_sd_set_config(void)
 {
-	CSD[6] = (uint8_t)(sd_image.size >> 9);
-	CSD[7] = (uint8_t)(sd_image.size >> 17);
-	CSD[8] = (uint8_t)(sd_image.size >> 25);
+	CSD[6] = (uint8_t)(sd_image[0].size >> 9);
+	CSD[7] = (uint8_t)(sd_image[0].size >> 17);
+	CSD[8] = (uint8_t)(sd_image[0].size >> 25);
 
 	// forward it to the FPGA
 	spi_uio_cmd_cont(UIO_SET_SDCONF);
@@ -582,39 +583,39 @@ void user_io_set_index(unsigned char index)
 	DisableFpga();
 }
 
-int user_io_file_mount(char *name)
+int user_io_file_mount(int num, char *name)
 {
 	int writable = FileCanWrite(name);
 
-	int ret = FileOpenEx(&sd_image, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+	int ret = FileOpenEx(&sd_image[num], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 	if (!ret)
 	{
-		sd_image.size = 0;
+		sd_image[num].size = 0;
 		printf("Failed to open file %s\n", name);
 		return 0;
 	}
 
-	printf("Mount %s as %s\n", name, writable ? "read-write" : "read-only");
+	printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", num);
 
 	// send mounted image size first then notify about mounting
 	EnableIO();
 	spi8(UIO_SET_SDINFO);
 	if (io_ver)
 	{
-		spi_w((uint16_t)(sd_image.size));
-		spi_w((uint16_t)(sd_image.size>>16));
-		spi_w((uint16_t)(sd_image.size>>32));
-		spi_w((uint16_t)(sd_image.size>>48));
+		spi_w((uint16_t)(sd_image[num].size));
+		spi_w((uint16_t)(sd_image[num].size>>16));
+		spi_w((uint16_t)(sd_image[num].size>>32));
+		spi_w((uint16_t)(sd_image[num].size>>48));
 	}
 	else
 	{
-		spi32le(sd_image.size);
-		spi32le(sd_image.size>>32);
+		spi32le(sd_image[num].size);
+		spi32le(sd_image[num].size>>32);
 	}
 	DisableIO();
 
 	// notify core of possible sd image change
-	spi_uio_cmd8(UIO_SET_SDSTAT, 0);
+	spi_uio_cmd8(UIO_SET_SDSTAT, 1<<num);
 	return 1;
 }
 
@@ -952,8 +953,8 @@ void user_io_poll()
 
 		// sd card emulation
 		{
-			static char buffer[512];
-			static uint32_t buffer_lba = 0xffffffff;
+			static char buffer[4][512];
+			static uint64_t buffer_lba[4] = { -1,-1,-1,-1 };
 			uint32_t lba;
 			uint16_t c = user_io_sd_get_status(&lba);
 			//if(c&3) printf("user_io_sd_get_status: cmd=%02x, lba=%08x\n", c, lba);
@@ -995,66 +996,78 @@ void user_io_poll()
 					using_sdhc = 1;
 				}
 
-				if ((c & 0x03) == 0x02)
+				if(c & 0x3802)
 				{
+					int disk = 3;
+					if (c & 0x0002) disk = 0;
+					else if (c & 0x0800) disk = 1;
+					else if (c & 0x1000) disk = 2;
+
 					// only write if the inserted card is not sdhc or
 					// if the core uses sdhc
 					if(c & 0x04)
 					{
-						uint8_t wr_buf[512];
-						//iprintf("SD WR %d\n", lba);
+						//printf("SD WR %d on %d\n", lba, disk);
 
-						// if we write the sector stored in the read buffer, then
-						// update the read buffer with the new contents
-						if (buffer_lba == lba) memcpy(buffer, wr_buf, 512);
-
-						buffer_lba = 0xffffffff;
+						buffer_lba[disk] = lba;
 
 						// Fetch sector data from FPGA ...
 						spi_uio_cmd_cont(UIO_SECTOR_WR);
-						spi_block_read(wr_buf, fio_size);
+						spi_block_read(buffer[disk], fio_size);
 						DisableIO();
 
 						// ... and write it to disk
 						diskled_on();
 
-						if (sd_image.size)
+						int done = 0;
+
+						if (sd_image[disk].size)
 						{
-							if (FileSeekLBA(&sd_image, lba))
+							if (FileSeekLBA(&sd_image[disk], lba))
 							{
-								FileWriteSec(&sd_image, wr_buf);
+								if (FileWriteSec(&sd_image[disk], buffer[disk])) done = 1;
 							}
 						}
+
+						if (!done) buffer_lba[disk] = -1;
 					}
 				}
-
-				if ((c & 0x03) == 0x01)
+				else
+				if (c & 0x0701)
 				{
-					//iprintf("SD RD %d\n", lba);
+					int disk = 3;
+					if (c & 0x0001) disk = 0;
+					else if (c & 0x0100) disk = 1;
+					else if (c & 0x0200) disk = 2;
 
-					// are we using a file as the sd card image?
-					// (C64 floppy does that ...)
-					if (buffer_lba != lba)
+					//printf("SD RD %d on %d\n", lba, disk);
+
+					int done = 0;
+
+					if (buffer_lba[disk] != lba)
 					{
 						diskled_on();
 
-						if (sd_image.size)
+						if (sd_image[disk].size)
 						{
-							if (FileSeekLBA(&sd_image, lba))
+							if (FileSeekLBA(&sd_image[disk], lba))
 							{
-								FileReadSec(&sd_image, buffer);
+								if (FileReadSec(&sd_image[disk], buffer[disk]))
+								{
+									done = 1;
+								}
 							}
 						}
-						buffer_lba = lba;
+						if (done) buffer_lba[disk] = lba;
 					}
 
-					if(buffer_lba == lba)
+					if(buffer_lba[disk] == lba)
 					{
 						//hexdump(buffer, 32, 0);
 
 						// data is now stored in buffer. send it to fpga
 						spi_uio_cmd_cont(UIO_SECTOR_RD);
-						spi_block_write(buffer, fio_size);
+						spi_block_write(buffer[disk], fio_size);
 						DisableIO();
 
 						// the end of this transfer acknowledges the FPGA internal
@@ -1065,14 +1078,18 @@ void user_io_poll()
 					// for the next request already
 					diskled_on();
 
-					if (sd_image.size)
+					done = 0;
+					if (sd_image[disk].size)
 					{
-						if (FileSeekLBA(&sd_image, lba + 1))
+						if (FileSeekLBA(&sd_image[disk], lba + 1))
 						{
-							FileReadSec(&sd_image, buffer);
+							if (FileReadSec(&sd_image[disk], buffer[disk]))
+							{
+								done = 1;
+							}
 						}
 					}
-					buffer_lba = lba + 1;
+					if(done) buffer_lba[disk] = lba + 1;
 				}
 			}
 
