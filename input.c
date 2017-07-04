@@ -689,7 +689,7 @@ static void input_cb(struct input_event *ev, int dev)
 			// keyboard
 			else
 			{
-				if(!user_io_osd_is_visible() && ((user_io_get_kbdemu() != EMU_JOY0) || (user_io_get_kbdemu() != EMU_JOY1)))
+				if(!user_io_osd_is_visible() && ((user_io_get_kbdemu() == EMU_JOY0) || (user_io_get_kbdemu() == EMU_JOY1)))
 				{
 					if (!kbd_toggle)
 					{
