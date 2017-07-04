@@ -615,7 +615,7 @@ int user_io_file_mount(int num, char *name)
 	DisableIO();
 
 	// notify core of possible sd image change
-	spi_uio_cmd8(UIO_SET_SDSTAT, 1<<num);
+	spi_uio_cmd8(UIO_SET_SDSTAT, (1<<num) | (writable ? 0 : 0x80));
 	return 1;
 }
 
