@@ -108,6 +108,7 @@
 #define CONF_CSYNC              0x08
 #define CONF_FORCED_SCANDOUBLER 0x10
 #define CONF_YPBPR              0x20
+#define CONF_AUDIO_48K          0x40
 
 // core type value should be unlikely to be returned by broken cores
 #define CORE_TYPE_UNKNOWN   0x55
