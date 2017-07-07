@@ -546,8 +546,8 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 		}
 		else
 		{
-			if (press) joy[num] |= (char)mask;
-			else joy[num] &= ~(char)mask;
+			if (press) joy[num] |= mask;
+			else joy[num] &= ~mask;
 			user_io_digital_joystick(num, joy[num]);
 		}
 	}
@@ -697,7 +697,7 @@ static void input_cb(struct input_event *ev, int dev)
 						{
 							if (ev->code == input[dev].map[i])
 							{
-								joy_digital((user_io_get_kbdemu() != EMU_JOY0) ? 0 : 1, 1 << i, ev->value, i);
+								joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 1 << i, ev->value, i);
 								return;
 							}
 						}

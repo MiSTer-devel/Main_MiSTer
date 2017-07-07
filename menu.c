@@ -948,12 +948,12 @@ void HandleUI(void)
 					for (int n = 0; n < 12; n++)
 					{
 						substrcpy(joy_bnames[n], p, n+1);
-						printf("joy_bname = %s\n", joy_bnames[n]);
+						//printf("joy_bname = %s\n", joy_bnames[n]);
 						if(!joy_bnames[n][0]) break;
 						joy_bcount++;
 					}
 
-					printf("joy_bcount = %d\n", joy_bcount);
+					//printf("joy_bcount = %d\n", joy_bcount);
 				}
 
 				i++;

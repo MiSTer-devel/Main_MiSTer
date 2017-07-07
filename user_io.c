@@ -159,6 +159,59 @@ static void user_io_read_core_name()
 	iprintf("Core name is \"%s\"\n", core_name);
 }
 
+static void set_kbd_led(unsigned char led, bool on)
+{
+	if (led & HID_LED_CAPS_LOCK)
+	{
+		if (!(keyboard_leds & KBD_LED_CAPS_CONTROL)) set_kbdled(led, on);
+		caps_status = on;
+	}
+
+	if (led & HID_LED_NUM_LOCK)
+	{
+		if (!(keyboard_leds & KBD_LED_NUM_CONTROL)) set_kbdled(led, on);
+		num_status = on;
+	}
+
+	if (led & HID_LED_SCROLL_LOCK)
+	{
+		if (!(keyboard_leds & KBD_LED_SCRL_CONTROL)) set_kbdled(led, on);
+		scrl_status = on;
+	}
+}
+
+static int joy_force = 0;
+
+static void parse_config()
+{
+	// check if core has a config string
+	core_type_8bit_with_config_string = (user_io_8bit_get_string(0) != NULL);
+
+	// set core name. This currently only sets a name for the 8 bit cores
+	user_io_read_core_name();
+
+	joy_force = 0;
+	if (core_type_8bit_with_config_string)
+	{
+		int i = 2;
+		char *p;
+		do {
+			p = user_io_8bit_get_string(i);
+			printf("*** %d: %s\n", i, p);
+			if (i && p && p[0])
+			{
+				if (p[0] == 'J' && p[1] == '1')
+				{
+					joy_force = 1;
+					emu_mode = EMU_JOY0;
+					set_kbd_led(HID_LED_NUM_LOCK, true);
+				}
+			}
+			i++;
+		} while (p);
+	}
+}
+
 void user_io_detect_core_type()
 {
 	char *name;
@@ -218,11 +271,7 @@ void user_io_detect_core_type()
 		// SD card implementation
 		user_io_sd_set_config();
 
-		// check if core has a config string
-		core_type_8bit_with_config_string = (user_io_8bit_get_string(0) != NULL);
-
-		// set core name. This currently only sets a name for the 8 bit cores
-		user_io_read_core_name();
+		parse_config();
 
 		// send a reset
 		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
@@ -774,27 +823,6 @@ void user_io_send_buttons(char force)
 	{
 		old_video_mode = mist_cfg.video_mode;
 		spi_uio_cmd8(UIO_SET_VIDEO, old_video_mode);
-	}
-}
-
-static void set_kbd_led(unsigned char led, bool on)
-{
-	if (led & HID_LED_CAPS_LOCK)
-	{
-		if (!(keyboard_leds & KBD_LED_CAPS_CONTROL)) set_kbdled(led, on);
-		caps_status = on;
-	}
-
-	if (led & HID_LED_NUM_LOCK)
-	{
-		if (!(keyboard_leds & KBD_LED_NUM_CONTROL)) set_kbdled(led, on);
-		num_status = on;
-	}
-
-	if (led & HID_LED_SCROLL_LOCK)
-	{
-		if (!(keyboard_leds & KBD_LED_SCRL_CONTROL)) set_kbdled(led, on);
-		scrl_status = on;
 	}
 }
 
@@ -1862,7 +1890,7 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 								switch (code ^ NUM_LOCK_TOGGLE)
 								{
 								case 1:
-									emu_mode = EMU_MOUSE;
+									if(!joy_force) emu_mode = EMU_MOUSE;
 									break;
 
 								case 2:
@@ -1874,11 +1902,12 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 									break;
 
 								case 4:
-									emu_mode = EMU_NONE;
+									if (!joy_force) emu_mode = EMU_NONE;
 									break;
 
 								default:
-									emu_mode = (emu_mode + 1) & 3;
+									if (joy_force) emu_mode = (emu_mode == EMU_JOY0) ? EMU_JOY1 : EMU_JOY0;
+									else emu_mode = (emu_mode + 1) & 3;
 									break;
 								}
 								if(emu_mode == EMU_MOUSE || emu_mode == EMU_JOY0) set_kbd_led(HID_LED_NUM_LOCK, true);
