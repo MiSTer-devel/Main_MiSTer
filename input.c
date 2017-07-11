@@ -10,6 +10,8 @@
 #include <sys/sysinfo.h>
 #include "input.h"
 #include "user_io.h"
+#include "menu.h"
+#include "hardware.h"
 
 #define NUMDEV 10
 
@@ -496,12 +498,48 @@ uint16_t get_map_pid()
 
 static void input_cb(struct input_event *ev, int dev);
 
+static int kbd_toggle = 0;
+static uint16_t joy[2] = { 0 }, joy_prev[2] = { 0 };
+static uint16_t autofire[2] = { 0 };
+static uint32_t af_delay[2] = { 50, 50 };
+
 static void joy_digital(int num, uint16_t mask, char press, int bnum)
 {
-	static uint16_t joy[2] = { 0 };
-
 	if (num < 2)
 	{
+		if (!user_io_osd_is_visible() && ((bnum == 17) || (bnum == 16)) && joy[num])
+		{
+			uint16_t amask = joy[num] & 0xFFF0;
+			if(press)
+			{
+				if (amask)
+				{
+					if (autofire[num] & amask) autofire[num] &= ~amask;
+					else autofire[num] |= amask;
+
+					InfoMessage((autofire[num] & amask) ? "\n\n          Auto fire\n             ON" :
+						"\n\n          Auto fire\n             OFF");
+				}
+				else
+				{
+					if (joy[num] & 1) af_delay[num] = 50;
+					else if (joy[num] & 2) af_delay[num] = 100;
+					else if (joy[num] & 4) af_delay[num] = 200;
+					else af_delay[num] = 500;
+					static char str[256];
+					sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num] * 2);
+					InfoMessage(str);
+				}
+			}
+			return;
+		}
+
+		if (bnum == 16)
+		{
+			if(press) kbd_toggle = !kbd_toggle;
+			return;
+		}
+
 		if (user_io_osd_is_visible() || (bnum == 17))
 		{
 			memset(joy, 0, sizeof(joy));
@@ -548,7 +586,7 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 		{
 			if (press) joy[num] |= mask;
 			else joy[num] &= ~mask;
-			user_io_digital_joystick(num, joy[num]);
+			//user_io_digital_joystick(num, joy[num]);
 		}
 	}
 }
@@ -570,7 +608,6 @@ static void input_cb(struct input_event *ev, int dev)
 	static uint8_t modifiers = 0;
 	static char keys[6] = { 0,0,0,0,0,0 };
 	static unsigned char mouse_btn = 0;
-	static int kbd_toggle = 0;
 
 	// repeat events won'tbe processed
 	if (ev->type == EV_KEY && ev->value > 1) return;
@@ -705,7 +742,7 @@ static void input_cb(struct input_event *ev, int dev)
 
 					if (ev->code == input[dev].map[16])
 					{
-						if (ev->value) kbd_toggle = !kbd_toggle;
+						joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 0, ev->value, 16);
 						return;
 					}
 				}
@@ -811,7 +848,7 @@ static void getVidPid(int num, uint16_t* vid, uint16_t* pid)
 	*pid = read_hex(name);
 }
 
-int input_poll(int getchar)
+int input_test(int getchar)
 {
 	static struct pollfd pool[NUMDEV + 1];
 	static char   cur_leds = 0;
@@ -1009,4 +1046,43 @@ int input_poll(int getchar)
 	}
 
 	return 0;
+}
+
+int input_poll(int getchar)
+{
+	static int af[2] = { 0 };
+	static uint32_t time[2] = { 0 };
+
+	int ret = input_test(getchar);
+	if (getchar) return ret;
+
+	for (int i = 0; i < 2; i++)
+	{
+		if (!time[i]) time[i] = GetTimer(af_delay[i]);
+		int send = 0;
+
+		if (joy[i] != joy_prev[i])
+		{
+			if ((joy[i] ^ joy_prev[i]) & autofire[i])
+			{
+				time[i] = GetTimer(af_delay[i]);
+				af[i] = 0;
+			}
+
+			send = 1;
+			joy_prev[i] = joy[i];
+		}
+
+		if (CheckTimer(time[i]))
+		{
+			time[i] = GetTimer(af_delay[i]);
+			af[i] = !af[i];
+			if(joy[i] & autofire[i]) send = 1;
+		}
+
+		if (send)
+		{
+			user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i]);
+		}
+	}
 }

@@ -573,21 +573,6 @@ void HandleUI(void)
 	case KEY_LALT | KEY_UPSTROKE:
 		lalt = false;
 		break;
-		/*
-	case KEY_KP0:
-		if (StateKeyboardModifiers() == 5) //lAlt+lctrl
-		{
-			if (menustate == MENU_NONE2 || menustate == MENU_INFO)
-			{
-				config_autofire++;
-				config_autofire &= 3;
-				ConfigAutofire(config_autofire, 3);
-				InfoMessage(config_autofire_msg[config_autofire]);
-			}
-		}
-		break;
-		*/
-
 	case KEY_MENU:
 		menu = true;
 		OsdKeySet(KEY_MENU | KEY_UPSTROKE);
@@ -3642,8 +3627,7 @@ static void set_text(const char *message, unsigned char code)
 		// line full or line break
 		if ((i == 29) || (*message == '\n') || !*message)
 		{
-
-			s[i] = 0;
+			s[--i] = 0;
 			OsdWrite(l++, s, 0, 0);
 			i = 0;  // start next line
 		}
@@ -3655,7 +3639,7 @@ static void set_text(const char *message, unsigned char code)
 		OsdWrite(l++, s, 0, 0);
 	}
 
-	while (l <= OsdGetSize()-1) OsdWrite(l++, "", 0, 0);
+	while (l <= 7) OsdWrite(l++, "", 0, 0);
 }
 
 /*  Error Message */
