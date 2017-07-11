@@ -352,46 +352,13 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 
 void user_io_digital_joystick(unsigned char joystick, uint16_t map)
 {
-	uint8_t state = map;
-	// "only" 6 joysticks are supported
 	if (joystick >= 6) return;
 
-	// the physical joysticks (db9 ports at the right device side)
-	// as well as the joystick emulation are renumbered if usb joysticks
-	// are present in the system. The USB joystick(s) replace joystick 1
-	// and 0 and the physical joysticks are "shifted up". 
-	// Since the primary joystick is in port 1 the first usb joystick 
-	// becomes joystick 1 and only the second one becomes joystick 0
-	// (mouse port)
-
-	StateJoySet(state, joystick == 0 ? 1 : 0);
-	if (joystick == 1)
+	if (is_minimig())
 	{
-		//StateJoyUpdateTurboStructure(0);
-		//map = (unsigned char) StateJoyStructureState(0) & 0xFF;
-	}
-	else if (joystick == 0)
-	{// WARNING: 0 is the second joystick, either USB or DB9
-	 //StateJoyUpdateTurboStructure(1);
-	 //map = (unsigned char) StateJoyStructureState(1) & 0xFF;
-	}
-
-	// if osd is open control it via joystick
-	if (osd_is_visible)
-	{
-		static const uint8_t joy2kbd[] = {
-			OSDCTRLMENU, OSDCTRLMENU, OSDCTRLMENU, OSDCTRLSELECT,
-			OSDCTRLUP, OSDCTRLDOWN, OSDCTRLLEFT, OSDCTRLRIGHT };
-
-		// iprintf("joy to osd\n");
-
-		//    OsdKeySet(0x80 | usb2ami[pressed[i]]);
-
+		if (joystick < 2) spi_uio_cmd16(UIO_JOYSTICK0 + joystick, map);
 		return;
 	}
-
-	//  iprintf("j%d: %x\n", joystick, map);
-
 
 	// atari ST handles joystick 0 and 1 through the ikbd emulated by the io controller
 	// but only for joystick 1 and 2
@@ -401,16 +368,7 @@ void user_io_digital_joystick(unsigned char joystick, uint16_t map)
 		return;
 	}
 
-	// every other core else uses this
-	// (even MIST, joystick 3 and 4 were introduced later)
-	spi_uio_cmd16((joystick < 2) ? (UIO_JOYSTICK0 + joystick) : ((UIO_JOYSTICK2 + joystick - 2)), map);
-}
-
-static char dig2ana(char min, char max)
-{
-	if (min && !max) return -128;
-	if (max && !min) return  127;
-	return 0;
+	spi_uio_cmd16((joystick < 2) ? (UIO_JOYSTICK0 + joystick) : (UIO_JOYSTICK2 + joystick - 2), map);
 }
 
 // transmit serial/rs232 data into core
@@ -551,38 +509,6 @@ void user_io_eth_send_rx_frame(uint8_t *s, uint16_t len)
 	spi_write(s, len, 0);
 	spi8(0);     // one additional byte to allow fpga to store the previous one
 	DisableIO();
-}
-
-// the physical joysticks (db9 ports at the right device side)
-// as well as the joystick emulation are renumbered if usb joysticks
-// are present in the system. The USB joystick(s) replace joystick 1
-// and 0 and the physical joysticks are "shifted up". 
-//
-// Since the primary joystick is in port 1 the first usb joystick 
-// becomes joystick 1 and only the second one becomes joystick 0
-// (mouse port)
-
-static uint8_t joystick_renumber(uint8_t j)
-{
-	uint8_t usb_sticks = 0; //hid_get_joysticks();
-
-							// no usb sticks present: no changes are being made
-	if (!usb_sticks) return j;
-
-	if (j == 0) {
-		// if usb joysticks are present, then physical joystick 0 (mouse port)
-		// becomes becomes 2,3,...
-		j = usb_sticks + 1;
-	}
-	else {
-		// if one usb joystick is present, then physical joystick 1 (joystick port)
-		// becomes physical joystick 0 (mouse) port. If more than 1 usb joystick
-		// is present it becomes 2,3,...
-		if (usb_sticks == 1) j = 0;
-		else                j = usb_sticks;
-	}
-
-	return j;
 }
 
 // 16 byte fifo for amiga key codes to limit max key rate sent into the core
@@ -938,7 +864,7 @@ void user_io_poll()
 					mouse_pos[Y] = 0;
 				}
 
-				spi8(mouse_flags & 0x03);
+				spi8(mouse_flags & 0x07);
 				DisableIO();
 
 				// reset flags
@@ -1391,7 +1317,7 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y)
 	{
 		mouse_pos[X] += x;
 		mouse_pos[Y] += y;
-		mouse_flags |= 0x80 | (b & 3);
+		mouse_flags |= 0x80 | (b & 7);
 	}
 
 	// 8 bit core expects ps2 like data
@@ -1399,7 +1325,7 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y)
 	{
 		mouse_pos[X] += x;
 		mouse_pos[Y] -= y;  // ps2 y axis is reversed over usb
-		mouse_flags |= 0x08 | (b & 3);
+		mouse_flags |= 0x08 | (b & 7);
 	}
 
 	// send mouse data as mist expects it

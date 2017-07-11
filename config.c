@@ -15,7 +15,7 @@
 #include "config.h"
 #include "user_io.h"
 
-configTYPE config;
+configTYPE config = { 0 };
 char configfilename[32];
 char DebugMode = 0;
 unsigned char romkey[3072];
@@ -480,6 +480,7 @@ void ApplyConfiguration(char reloadkickstart)
 	}
 
 	ConfigVideo(config.filter.hires, config.filter.lores, config.scanlines);
+	ConfigAutofire(config.autofire, 0xC);
 }
 
 //// SaveConfiguration() ////

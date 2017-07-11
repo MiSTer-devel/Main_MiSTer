@@ -573,19 +573,20 @@ void HandleUI(void)
 	case KEY_LALT | KEY_UPSTROKE:
 		lalt = false;
 		break;
+		/*
 	case KEY_KP0:
-		if (ctrl && lalt)
+		if (StateKeyboardModifiers() == 5) //lAlt+lctrl
 		{
 			if (menustate == MENU_NONE2 || menustate == MENU_INFO)
 			{
 				config_autofire++;
 				config_autofire &= 3;
-				ConfigAutofire(config_autofire);
-				if (menustate == MENU_NONE2 || menustate == MENU_INFO)
-					InfoMessage(config_autofire_msg[config_autofire]);
+				ConfigAutofire(config_autofire, 3);
+				InfoMessage(config_autofire_msg[config_autofire]);
 			}
 		}
 		break;
+		*/
 
 	case KEY_MENU:
 		menu = true;
@@ -1120,12 +1121,12 @@ void HandleUI(void)
 				if (is_minimig())
 				{
 					joy_bcount = 7;
-					strcpy(joy_bnames[0], "Red");
+					strcpy(joy_bnames[0], "Red/Fire");
 					strcpy(joy_bnames[1], "Blue");
 					strcpy(joy_bnames[2], "Yellow");
 					strcpy(joy_bnames[3], "Green");
-					strcpy(joy_bnames[4], "Right Front");
-					strcpy(joy_bnames[5], "Left Front");
+					strcpy(joy_bnames[4], "Right Trigger");
+					strcpy(joy_bnames[5], "Left Trigger");
 					strcpy(joy_bnames[6], "Pause");
 				}
 				start_map_setting(joy_bcount ? joy_bcount+5 : 9);
@@ -2530,25 +2531,29 @@ void HandleUI(void)
 		strcpy(s, "       Turbo : ");
 		strcat(s, config_turbo_msg[(config.cpu >> 2) & 0x03]);
 		OsdWrite(2, s, menusub == 1, 0);
+		OsdWrite(3, "", 0, 0);
 		strcpy(s, "       Video : ");
 		strcat(s, config.chipset & CONFIG_NTSC ? "NTSC" : "PAL");
-		OsdWrite(3, s, menusub == 2, 0);
+		OsdWrite(4, s, menusub == 2, 0);
 		strcpy(s, "     Chipset : ");
 		strcat(s, config_chipset_msg[(config.chipset >> 2) & 7]);
-		OsdWrite(4, s, menusub == 3, 0);
+		OsdWrite(5, s, menusub == 3, 0);
+		OsdWrite(6, "", 0, 0);
 		strcpy(s, "     CD32Pad : ");
 		strcat(s, config_cd32pad_msg[(config.autofire >> 2) & 1]);
-		OsdWrite(5, s, menusub == 4, 0);
-		OsdWrite(6, "", 0, 0);
-		for (int i = 7; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 5, 0);
+		OsdWrite(7, s, menusub == 4, 0);
+		strcpy(s, "    Joy Swap : ");
+		strcat(s, (config.autofire & 0x8)? "ON" : "OFF");
+		OsdWrite(8, s, menusub == 5, 0);
+		for (int i = 9; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 6, 0);
 
 		menustate = MENU_SETTINGS_CHIPSET2;
 		break;
 
 	case MENU_SETTINGS_CHIPSET2:
 
-		if (down && menusub < 5)
+		if (down && menusub < 6)
 		{
 			menusub++;
 			menustate = MENU_SETTINGS_CHIPSET1;
@@ -2607,12 +2612,17 @@ void HandleUI(void)
 			}
 			else if (menusub == 4)
 			{
-				//config.autofire = ((((config.autofire >> 2) + 1) & 1) << 2) || (config.autofire & 3);
-				config.autofire = (config.autofire + 4) & 0x7;
+				config.autofire ^= 0x4;
 				menustate = MENU_SETTINGS_CHIPSET1;
-				ConfigAutofire(config.autofire);
+				ConfigAutofire(config.autofire, 0x4);
 			}
 			else if (menusub == 5)
+			{
+				config.autofire ^= 0x8;
+				menustate = MENU_SETTINGS_CHIPSET1;
+				ConfigAutofire(config.autofire, 0x8);
+			}
+			else if (menusub == 6)
 			{
 				menustate = MENU_MAIN1;
 				menusub = 6;

@@ -119,7 +119,7 @@ void ConfigCPU(unsigned char cpu);
 void ConfigChipset(unsigned char chipset);
 void ConfigFloppy(unsigned char drives, unsigned char speed);
 void ConfigIDE(unsigned char gayle, unsigned char master, unsigned char slave);
-void ConfigAutofire(unsigned char autofire);
+void ConfigAutofire(unsigned char autofire, unsigned char mask);
 unsigned char OsdGetCtrl(void);
 void OsdDisableMenuButton(unsigned char disable);
 unsigned char GetASCIIKey(unsigned char c);

@@ -554,9 +554,11 @@ void ConfigIDE(unsigned char gayle, unsigned char master, unsigned char slave)
 	spi_osd_cmd8(OSD_CMD_HDD, (slave ? 4 : 0) | (master ? 2 : 0) | (gayle ? 1 : 0));
 }
 
-void ConfigAutofire(unsigned char autofire)
+void ConfigAutofire(unsigned char autofire, unsigned char mask)
 {
-	spi_osd_cmd8(OSD_CMD_JOY, autofire & 0x07);
+	uint16_t param = mask;
+	param = (param << 8) | autofire;
+	spi_osd_cmd16(OSD_CMD_JOY, param);
 }
 
 static unsigned char disable_menu = 0;
