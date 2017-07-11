@@ -32,7 +32,7 @@ const ini_var_t mist_ini_vars[] = {
 	{ "KEY_MENU_AS_RGUI", (void*)(&(mist_cfg.key_menu_as_rgui)), UINT8, 0, 1, 1 },
 	{ "KEY_REMAP", (void*)user_io_key_remap, CUSTOM_HANDLER, 0, 0, 1 },
 	{ "VIDEO_MODE", (void*)(&(mist_cfg.video_mode)), UINT8, 0, 9, 1 },
-	{ "AUDIO_48K", (void*)(&(mist_cfg.audio_48k)), UINT8, 0, 1, 1 },
+	{ "HDMI_AUDIO_96K", (void*)(&(mist_cfg.hdmi_audio_96k)), UINT8, 0, 1, 1 },
 };
 
 // mist ini config

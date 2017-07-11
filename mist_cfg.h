@@ -21,7 +21,7 @@ typedef struct {
 	uint8_t csync;
 	uint8_t vga_scaler;
 	uint8_t video_mode;
-	uint8_t audio_48k;
+	uint8_t hdmi_audio_96k;
 } mist_cfg_t;
 
 
