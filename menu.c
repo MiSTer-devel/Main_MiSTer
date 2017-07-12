@@ -3286,10 +3286,7 @@ void HandleUI(void)
 			switch (menusub)
 			{
 			case 0:
-				if (getStorage(1) || isUSBMounted())
-				{
-					setStorage(!getStorage(1));
-				}
+				if (getStorage(1) || isUSBMounted()) setStorage(!getStorage(1));
 				break;
 			case 1:
 				start_map_setting(0);
@@ -3297,9 +3294,8 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
-				joy_bcount = 1;
-				strcpy(joy_bnames[0], "Select");
-				start_map_setting(6);
+				joy_bcount = 0;
+				start_map_setting(9);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;

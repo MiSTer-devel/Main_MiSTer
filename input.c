@@ -470,10 +470,11 @@ int get_map_type()
 	return mapping_type;
 }
 
-static char *get_map_name(int dev)
+static char *get_map_name(int dev, int def)
 {
 	static char name[128];
-	sprintf(name, "%s_input_%04x_%04x.map", user_io_get_core_name_ex(), input[dev].vid, input[dev].pid);
+	if (def || is_menu_core()) sprintf(name, "input_%04x_%04x.map", input[dev].vid, input[dev].pid);
+	else sprintf(name, "%s_input_%04x_%04x.map", user_io_get_core_name_ex(), input[dev].vid, input[dev].pid);
 	return name;
 }
 
@@ -497,7 +498,7 @@ void finish_map_setting(int dismiss)
 	else
 	{
 		if (dismiss) input[mapping_dev].has_map = 0;
-		else FileSaveConfig(get_map_name(mapping_dev), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+		else FileSaveConfig(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 	}
 }
 
@@ -668,9 +669,12 @@ static void input_cb(struct input_event *ev, int dev)
 
 	if (!input[dev].has_map)
 	{
-		if (!FileLoadConfig(get_map_name(dev), &input[dev].map, sizeof(input[dev].map)))
+		if (!FileLoadConfig(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
-			memset(&input[dev].map, 0, sizeof(input[dev].map));
+			if (is_menu_core() || !FileLoadConfig(get_map_name(dev, 1), &input[dev].map, sizeof(input[dev].map)))
+			{
+				memset(&input[dev].map, 0, sizeof(input[dev].map));
+			}
 		}
 		input[dev].has_map = 1;
 	}
