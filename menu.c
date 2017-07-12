@@ -532,6 +532,7 @@ void HandleUI(void)
 	static const char *helptext;
 	static char helpstate = 0;
 	static char drive_num = 0;
+	static char flag;
 	uint8_t keys[6] = { 0,0,0,0,0,0 };
 	uint16_t keys_ps2[6] = { 0,0,0,0,0,0 };
 
@@ -1235,7 +1236,7 @@ void HandleUI(void)
 		{
 			finish_map_setting(menu);
 			menustate = is_menu_core() ? MENU_FIRMWARE1 : MENU_8BIT_SYSTEM1;
-			menusub = 1;
+			menusub = is_menu_core() ? 2 : 1;
 		}
 		break;
 
@@ -3198,7 +3199,7 @@ void HandleUI(void)
 		helptext = helptexts[HELPTEXT_NONE];
 		parentstate = menustate;
 
-		OsdSetTitle("FW & Core", 0);
+		OsdSetTitle(is_menu_core() ? "Settings" : "FW & Core", 0);
 		//OsdWrite(0, "", 0, 0);
 		siprintf(s, "   ARM  s/w ver. %s", version + 5);
 		OsdWrite(0, "", 0, 0);
@@ -3206,7 +3207,7 @@ void HandleUI(void)
 
 		if (is_menu_core())
 		{
-			menumask = 3;
+			menumask = 7;
 			OsdWrite(2, "", 0, 0);
 			if (getStorage(0))
 			{
@@ -3232,11 +3233,11 @@ void HandleUI(void)
 			OsdWrite(8,  "     time to initialize", 0, 0);
 			OsdWrite(9, "       upon cold boot.", 0, 0);
 			OsdWrite(10, "  Use OSD or USER button to", 0, 0);
-			OsdWrite(11, "     cancel USB waiting", 0, 0);
-			OsdWrite(12, "     and use SD instead.", 0, 0);
+			OsdWrite(11, "     cancel USB waiting.", 0, 0);
+			OsdWrite(12, "", 0, 0);
 			OsdWrite(13, "", 0, 0);
-			OsdWrite(14, "   Define joystick buttons", menusub == 1, 0);
-			OsdWrite(15, "", 0, 0);
+			OsdWrite(14, "       Remap keyboard", menusub == 1, 0);
+			OsdWrite(15, "   Define joystick buttons", menusub == 2, 0);
 			menustate = MENU_STORAGE;
 		}
 		else
@@ -3291,6 +3292,11 @@ void HandleUI(void)
 				}
 				break;
 			case 1:
+				start_map_setting(0);
+				menustate = MENU_KBDMAP;
+				menusub = 0;
+				break;
+			case 2:
 				joy_bcount = 1;
 				strcpy(joy_bnames[0], "Select");
 				start_map_setting(6);
@@ -3298,6 +3304,46 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			}
+		}
+		break;
+
+	case MENU_KBDMAP:
+		helptext = 0;
+		menumask = 1;
+		OsdSetTitle("Keyboard", 0);
+		menustate = MENU_KBDMAP1;
+		parentstate = MENU_KBDMAP;
+		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, "           cancel", menusub == 0, 0);
+		flag = 0;
+		break;
+
+	case MENU_KBDMAP1:
+		if(!get_map_button())
+		{
+			OsdWrite(3, "     Press key to remap", 0, 0);
+			s[0] = 0;
+			if(flag)
+			{ 
+				sprintf(s, "  on keyboard ID: %04x:%04x", get_map_vid(), get_map_pid());
+			}
+			OsdWrite(5, s, 0, 0);
+		}
+		else
+		{
+			flag = 1;
+			sprintf(s, "   Press key to map %02X to", get_map_button() & 0xFF);
+			OsdWrite(3, s, 0, 0);
+			OsdWrite(5, "      on any keyboard", 0, 0);
+		}
+
+		OsdWrite(OsdGetSize() - 1, "           finish", menusub == 0, 0);
+
+		if (select || menu)
+		{
+			finish_map_setting(menu);
+			menustate = MENU_FIRMWARE1;
+			menusub = 1;
 		}
 		break;
 

@@ -19,9 +19,13 @@ typedef struct
 {
 	uint16_t vid, pid;
 	char     led;
-	char     has_map;
 	char     last_l, last_r, last_u, last_d;
+
+	char     has_map;
 	uint32_t map[32];
+
+	char     has_kbdmap;
+	uint8_t  kbdmap[256];
 }  devInput;
 
 static devInput input[NUMDEV] = {0};
@@ -445,19 +449,20 @@ static int mapping_button;
 static int mapping_dev;
 static int mapping_type;
 static int mapping_count;
+static uint8_t mapping_key;
 
 void start_map_setting(int cnt)
 {
 	mapping_button = 0;
 	mapping = 1;
 	mapping_dev = -1;
-	mapping_type = 1;
+	mapping_type = cnt ? 1 : 2;
 	mapping_count = cnt;
 }
 
 int get_map_button()
 {
-	return mapping_button;
+	return (mapping_type == 2) ? mapping_key : mapping_button;
 }
 
 int get_map_type()
@@ -472,13 +477,28 @@ static char *get_map_name(int dev)
 	return name;
 }
 
+static char *get_kbdmap_name(int dev)
+{
+	static char name[128];
+	sprintf(name, "kbd_%04x_%04x.map", input[dev].vid, input[dev].pid);
+	return name;
+}
+
 void finish_map_setting(int dismiss)
 {
 	mapping = 0;
 	if (mapping_dev<0) return;
 	
-	if(dismiss)	input[mapping_dev].has_map = 0;
-	else FileSaveConfig(get_map_name(mapping_dev), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+	if (mapping_type == 2)
+	{
+		if (dismiss) input[mapping_dev].has_kbdmap = 0;
+		else FileSaveConfig(get_kbdmap_name(mapping_dev), &input[mapping_dev].kbdmap, sizeof(input[mapping_dev].kbdmap));
+	}
+	else
+	{
+		if (dismiss) input[mapping_dev].has_map = 0;
+		else FileSaveConfig(get_map_name(mapping_dev), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+	}
 }
 
 uint16_t get_map_vid()
@@ -609,11 +629,12 @@ static void input_cb(struct input_event *ev, int dev)
 	static char keys[6] = { 0,0,0,0,0,0 };
 	static unsigned char mouse_btn = 0;
 
-	// repeat events won'tbe processed
+	// repeat events won't be processed
 	if (ev->type == EV_KEY && ev->value > 1) return;
 
-	int map_skip   = (mapping && ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0 && mapping_type);
-	int map_cancel = (mapping && ev->type == EV_KEY && ev->code == 1);
+	int map_skip = (ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0 && mapping_type==1);
+	int cancel   = (ev->type == EV_KEY && ev->code == 1);
+	int enter    = (ev->type == EV_KEY && ev->code == 28);
 
 	//mouse
 	switch (ev->type)
@@ -654,17 +675,36 @@ static void input_cb(struct input_event *ev, int dev)
 		input[dev].has_map = 1;
 	}
 
-	//joystick mapping
-	if (mapping && (mapping_dev >=0 || ev->value) && !map_cancel)
+	//mapping
+	if (mapping && (mapping_dev >=0 || ev->value) && !cancel && !enter)
 	{
 		if (ev->type == EV_KEY)
 		{
-			if ((mapping_dev < 0) || ((ev->code >= BTN_JOYSTICK) ? mapping_type : !mapping_type))
+			if (mapping_type == 2)
+			{
+				if (ev->value && ev->code < 256)
+				{
+					if(mapping_dev < 0)
+					{
+						mapping_dev = dev;
+						mapping_key = 0;
+					}
+
+					if (!mapping_key) mapping_key = ev->code;
+					else
+					{
+						input[dev].kbdmap[mapping_key] = ev->code;
+						mapping_key = 0;
+					}
+				}
+				return;
+			}
+			else if ((mapping_dev < 0) || ((ev->code >= 256) ? mapping_type : !mapping_type))
 			{
 				if (mapping_dev < 0)
 				{
 					mapping_dev = dev;
-					mapping_type = (ev->code >= BTN_JOYSTICK) ? 1 : 0;
+					mapping_type = (ev->code >= 256) ? 1 : 0;
 				}
 
 				if (mapping_dev == dev && mapping_button < mapping_count)
@@ -695,10 +735,7 @@ static void input_cb(struct input_event *ev, int dev)
 
 		if (map_skip && mapping_button < mapping_count)
 		{
-			if (ev->value == 1)
-			{
-				mapping_button++;
-			}
+			if (ev->value == 1) mapping_button++;
 			return;
 		}
 	}
@@ -709,7 +746,7 @@ static void input_cb(struct input_event *ev, int dev)
 		{
 		case EV_KEY:
 			//joystick buttons, digital directions
-			if (ev->code >= BTN_JOYSTICK)
+			if (ev->code >= 256)
 			{
 				if (first_joystick < 0) first_joystick = dev;
 
@@ -751,7 +788,18 @@ static void input_cb(struct input_event *ev, int dev)
 					kbd_toggle = 0;
 				}
 
-				int key = (ev->code < (sizeof(ev2usb) / sizeof(ev2usb[0]))) ? ev2usb[ev->code] : NONE;
+
+				if (!input[dev].has_kbdmap)
+				{
+					if (!FileLoadConfig(get_kbdmap_name(dev), &input[dev].kbdmap, sizeof(input[dev].kbdmap)))
+					{
+						memset(&input[dev].kbdmap, 0, sizeof(input[dev].kbdmap));
+					}
+					input[dev].has_kbdmap = 1;
+				}
+
+				int key = input[dev].kbdmap[ev->code] ? input[dev].kbdmap[ev->code] : ev->code;
+				key = (key < (sizeof(ev2usb) / sizeof(ev2usb[0]))) ? ev2usb[key] : NONE;
 				if(key != NONE)
 				{
 					if (key & MODMASK)
