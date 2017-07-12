@@ -24,6 +24,9 @@ typedef struct
 	char     has_map;
 	uint32_t map[32];
 
+	char     has_mmap;
+	uint32_t mmap[32];
+
 	char     has_kbdmap;
 	uint8_t  kbdmap[256];
 }  devInput;
@@ -499,6 +502,7 @@ void finish_map_setting(int dismiss)
 	{
 		if (dismiss) input[mapping_dev].has_map = 0;
 		else FileSaveConfig(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+		if(is_menu_core()) input[mapping_dev].has_mmap = 0;
 	}
 }
 
@@ -523,6 +527,13 @@ static int kbd_toggle = 0;
 static uint16_t joy[2] = { 0 }, joy_prev[2] = { 0 };
 static uint16_t autofire[2] = { 0 };
 static uint32_t af_delay[2] = { 50, 50 };
+
+static unsigned char mouse_btn = 0;
+static int mouse_emu = 0;
+static int mouse_emu_x = 0;
+static int mouse_emu_y = 0;
+
+static uint32_t mouse_timer = 0;
 
 static void joy_digital(int num, uint16_t mask, char press, int bnum)
 {
@@ -628,7 +639,6 @@ static void input_cb(struct input_event *ev, int dev)
 	static int key_mapped = 0;
 	static uint8_t modifiers = 0;
 	static char keys[6] = { 0,0,0,0,0,0 };
-	static unsigned char mouse_btn = 0;
 
 	// repeat events won't be processed
 	if (ev->type == EV_KEY && ev->value > 1) return;
@@ -673,10 +683,20 @@ static void input_cb(struct input_event *ev, int dev)
 		{
 			if (is_menu_core() || !FileLoadConfig(get_map_name(dev, 1), &input[dev].map, sizeof(input[dev].map)))
 			{
-				memset(&input[dev].map, 0, sizeof(input[dev].map));
+				memset(input[dev].map, 0, sizeof(input[dev].map));
 			}
+			input[dev].map[8] = 0; // clear mouse emu button
 		}
 		input[dev].has_map = 1;
+	}
+
+	if (!input[dev].has_mmap)
+	{
+		if (!FileLoadConfig(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
+		{
+			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
+		}
+		input[dev].has_mmap = 1;
 	}
 
 	//mapping
@@ -715,7 +735,7 @@ static void input_cb(struct input_event *ev, int dev)
 				{
 					if (ev->value)
 					{
-						if (!mapping_button) memset(&input[dev].map, 0, sizeof(input[dev].map));
+						if (!mapping_button) memset(input[dev].map, 0, sizeof(input[dev].map));
 
 						int found = 0;
 						for (int i = 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
@@ -754,13 +774,59 @@ static void input_cb(struct input_event *ev, int dev)
 			{
 				if (first_joystick < 0) first_joystick = dev;
 
-				for (int i = 0; i <= 17; i++)
+				if (mouse_emu)
 				{
-					if (ev->code == input[dev].map[i])
+					for (int i = 0; i <= 6; i++)
 					{
-						joy_digital((first_joystick == dev) ? 0 : 1, 1<<i, ev->value, i);
-						return;
+						if (ev->code == input[dev].mmap[i])
+						{
+							switch (i)
+							{
+							case 0:
+								mouse_emu_x = ev->value ? 10 : 0;
+								break;
+							case 1:
+								mouse_emu_x = ev->value ? -10 : 0;
+								break;
+							case 2:
+								mouse_emu_y = ev->value ? 10 : 0;
+								break;
+							case 3:
+								mouse_emu_y = ev->value ? -10 : 0;
+								break;
+
+							default:
+								mouse_btn = ev->value ? mouse_btn | 1<<(i-4) : mouse_btn & ~(1<<(i-4));
+								user_io_mouse(mouse_btn, 0, 0);
+								break;
+							}
+							return;
+						}
 					}
+				}
+				else
+				{
+					for (int i = 0; i <= 17; i++)
+					{
+						if (ev->code == input[dev].map[i])
+						{
+							joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+							return;
+						}
+					}
+				}
+
+				if (ev->code == input[dev].mmap[8])
+				{
+					mouse_emu = ev->value;
+					printf("mouse_emu = %d\n", mouse_emu);
+
+					mouse_timer = 0;
+					mouse_btn   = 0;
+					mouse_emu_x = 0;
+					mouse_emu_y = 0;
+					joy[0] = 0;
+					joy[1] = 0;
 				}
 				return;
 			}
@@ -797,7 +863,7 @@ static void input_cb(struct input_event *ev, int dev)
 				{
 					if (!FileLoadConfig(get_kbdmap_name(dev), &input[dev].kbdmap, sizeof(input[dev].kbdmap)))
 					{
-						memset(&input[dev].kbdmap, 0, sizeof(input[dev].kbdmap));
+						memset(input[dev].kbdmap, 0, sizeof(input[dev].kbdmap));
 					}
 					input[dev].has_kbdmap = 1;
 				}
@@ -847,27 +913,48 @@ static void input_cb(struct input_event *ev, int dev)
 
 		//analog joystick
 		case EV_ABS:
-			// skip if first joystick is not defined.
-			if (first_joystick < 0) break;
-
-			// TODO:
-			// 1) add analog axis mapping
-			// 2) enable invertion
-
-			if (ev->code == 0) // x
+			if (mouse_emu)
 			{
-				int offset = 0;
-				if (ev->value < 127 || ev->value>129) offset = ev->value - 128;
-				joy_analog((first_joystick == dev) ? 0 : 1, 0, offset);
-				return;
+				if (ev->code == 0) // x
+				{
+					mouse_emu_x = 0;
+					if (ev->value < 127 || ev->value>129) mouse_emu_x = ev->value - 128;
+					mouse_emu_x /= 10;
+					return;
+				}
+
+				if (ev->code == 1) // y
+				{
+					mouse_emu_y = 0;
+					if (ev->value < 127 || ev->value>129) mouse_emu_y = ev->value - 128;
+					mouse_emu_y /= 10;
+					return;
+				}
 			}
-
-			if (ev->code == 1) // y
+			else
 			{
-				int offset = 0;
-				if (ev->value < 127 || ev->value>129) offset = ev->value - 128;
-				joy_analog((first_joystick == dev) ? 0 : 1, 1, offset);
-				return;
+				// skip if first joystick is not defined.
+				if (first_joystick < 0) break;
+
+				// TODO:
+				// 1) add analog axis mapping
+				// 2) enable invertion
+
+				if (ev->code == 0) // x
+				{
+					int offset = 0;
+					if (ev->value < 127 || ev->value>129) offset = ev->value - 128;
+					joy_analog((first_joystick == dev) ? 0 : 1, 0, offset);
+					return;
+				}
+
+				if (ev->code == 1) // y
+				{
+					int offset = 0;
+					if (ev->value < 127 || ev->value>129) offset = ev->value - 128;
+					joy_analog((first_joystick == dev) ? 0 : 1, 1, offset);
+					return;
+				}
 			}
 			break;
 		}
@@ -1012,7 +1099,7 @@ int input_test(int getchar)
 							input_cb(&ev, i);
 
 							//sumulate digital directions from analog
-							if (ev.type == EV_ABS)
+							if (ev.type == EV_ABS && !(ev.code<=1 && mouse_emu))
 							{
 								// some pads use axis 16 for L/R PAD, axis 17 for U/D PAD
 								// emulate PAD on axis 0/1
@@ -1108,33 +1195,44 @@ int input_poll(int getchar)
 	int ret = input_test(getchar);
 	if (getchar) return ret;
 
-	for (int i = 0; i < 2; i++)
+	if (mouse_emu)
 	{
-		if (!time[i]) time[i] = GetTimer(af_delay[i]);
-		int send = 0;
-
-		if (joy[i] != joy_prev[i])
+		if (!mouse_timer || CheckTimer(mouse_timer))
 		{
-			if ((joy[i] ^ joy_prev[i]) & autofire[i])
+			user_io_mouse(mouse_btn, mouse_emu_x, mouse_emu_y);
+			mouse_timer = GetTimer(20);
+		}
+	}
+	else
+	{
+		for (int i = 0; i < 2; i++)
+		{
+			if (!time[i]) time[i] = GetTimer(af_delay[i]);
+			int send = 0;
+
+			if (joy[i] != joy_prev[i])
 			{
-				time[i] = GetTimer(af_delay[i]);
-				af[i] = 0;
+				if ((joy[i] ^ joy_prev[i]) & autofire[i])
+				{
+					time[i] = GetTimer(af_delay[i]);
+					af[i] = 0;
+				}
+
+				send = 1;
+				joy_prev[i] = joy[i];
 			}
 
-			send = 1;
-			joy_prev[i] = joy[i];
-		}
+			if (CheckTimer(time[i]))
+			{
+				time[i] = GetTimer(af_delay[i]);
+				af[i] = !af[i];
+				if (joy[i] & autofire[i]) send = 1;
+			}
 
-		if (CheckTimer(time[i]))
-		{
-			time[i] = GetTimer(af_delay[i]);
-			af[i] = !af[i];
-			if(joy[i] & autofire[i]) send = 1;
-		}
-
-		if (send)
-		{
-			user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i]);
+			if (send)
+			{
+				user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i]);
+			}
 		}
 	}
 }

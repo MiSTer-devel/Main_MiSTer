@@ -3294,8 +3294,13 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
-				joy_bcount = 0;
-				start_map_setting(9);
+				joy_bcount = 5;
+				strcpy(joy_bnames[0], "Button 1");
+				strcpy(joy_bnames[1], "Button 2");
+				strcpy(joy_bnames[2], "Button 3");
+				strcpy(joy_bnames[3], "Button 4");
+				strcpy(joy_bnames[4], "Mouse Emu");
+				start_map_setting(10);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;
