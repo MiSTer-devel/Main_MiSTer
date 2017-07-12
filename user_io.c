@@ -925,32 +925,6 @@ void user_io_poll()
 					user_io_sd_set_config();
 				}
 
-				// check if system is trying to access a sdhc card from 
-				// a sd/mmc setup
-
-				// check if an SDHC card is inserted
-				static char using_sdhc = 1;
-
-				// SD request and 
-				if ((c & 0x03) && !(c & 0x04))
-				{
-					if (using_sdhc)
-					{
-						// we have not been using sdhc so far? 
-						// -> complain!
-						ErrorMessage(" This core does not support\n"
-							" SDHC cards. Using them may\n"
-							" lead to data corruption.\n\n"
-							" Please use an SD card <2GB!", 0);
-						using_sdhc = 0;
-					}
-				}
-				else
-				{
-					// SDHC request from core is always ok
-					using_sdhc = 1;
-				}
-
 				if(c & 0x3802)
 				{
 					int disk = 3;
@@ -1013,7 +987,12 @@ void user_io_poll()
 								}
 							}
 						}
-						if (done) buffer_lba[disk] = lba;
+
+						//Even after error we have to provide the block to the core
+						//Give an empty block.
+						if (!done) memset(buffer[disk], 0, sizeof(buffer[disk]));
+
+						buffer_lba[disk] = lba;
 					}
 
 					if(buffer_lba[disk] == lba)
@@ -1024,9 +1003,6 @@ void user_io_poll()
 						spi_uio_cmd_cont(UIO_SECTOR_RD);
 						spi_block_write(buffer[disk], fio_size);
 						DisableIO();
-
-						// the end of this transfer acknowledges the FPGA internal
-						// sd card emulation
 					}
 
 					// just load the next sector now, so it may be prefetched
