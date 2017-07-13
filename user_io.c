@@ -141,13 +141,16 @@ char *user_io_get_core_name_ex()
 	return "";
 }
 
+static int is_menu_type = 0;
 char is_menu_core()
 {
-	return !strcasecmp(core_name, "MENU");
+	if (!is_menu_type) is_menu_type = strcasecmp(core_name, "MENU") ? 2 : 1;
+	return (is_menu_type == 1);
 }
 
 static void user_io_read_core_name()
 {
+	is_menu_type = 0;
 	core_name[0] = 0;
 
 	if (user_io_is_8bit_with_config_string())
@@ -1088,7 +1091,7 @@ void user_io_poll()
 				}
 
 				// collect movement info and send at predefined rate
-				if (!(ps2_mouse[0] == 0x08 && ps2_mouse[1] == 0 && ps2_mouse[2] == 0))
+				if (is_menu_core() && !(ps2_mouse[0] == 0x08 && ps2_mouse[1] == 0 && ps2_mouse[2] == 0))
 					iprintf("PS2 MOUSE: %x %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2]);
 
 				spi_uio_cmd_cont(UIO_MOUSE);
