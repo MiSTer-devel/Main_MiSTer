@@ -1048,9 +1048,10 @@ static void getVidPid(int num, uint16_t* vid, uint16_t* pid)
 	*pid = read_hex(name);
 }
 
+static struct pollfd pool[NUMDEV + 1];
+
 int input_test(int getchar)
 {
-	static struct pollfd pool[NUMDEV + 1];
 	static char   cur_leds = 0;
 	static int    state = 0;
 
@@ -1352,4 +1353,32 @@ int input_poll(int getchar)
 			user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i]);
 		}
 	}
+}
+
+int is_key_pressed(int key)
+{
+	unsigned char bits[(KEY_MAX + 7) / 8];
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (pool[i].fd > 0)
+		{
+			unsigned long evbit = 0;
+			if (ioctl(pool[i].fd, EVIOCGBIT(0, sizeof(evbit)), &evbit) >= 0)
+			{
+				if (evbit & (1 << EV_KEY))
+				{
+					memset(bits, 0, sizeof(bits));
+					if (ioctl(pool[i].fd, EVIOCGKEY(sizeof(bits)), &bits) >= 0)
+					{
+						if (bits[key / 8] & (1 << (key % 8)))
+						{
+							return 1;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return 0;
 }

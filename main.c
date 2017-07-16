@@ -23,7 +23,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <unistd.h>
 #include <stdio.h>
 #include "string.h"
-#include "errors.h"
 #include "hardware.h"
 #include "file_io.h"
 #include "osd.h"
@@ -39,27 +38,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "boot.h"
 
 const char version[] = { "$VER:HPS" VDATE };
-
-unsigned char Error;
-
-void FatalError(unsigned long error)
-{
-	unsigned long i;
-
-	iprintf("Fatal error: %lu\n", error);
-
-	while (1)
-	{
-		for (i = 0; i < error; i++)
-		{
-			DISKLED_ON;
-			WaitTimer(250);
-			DISKLED_OFF;
-			WaitTimer(250);
-		}
-		WaitTimer(1000);
-	}
-}
 
 void HandleDisk(void)
 {

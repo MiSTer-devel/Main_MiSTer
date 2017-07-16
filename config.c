@@ -4,7 +4,6 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include "errors.h"
 #include "hardware.h"
 #include "boot.h"
 #include "file_io.h"
@@ -14,6 +13,7 @@
 #include "menu.h"
 #include "config.h"
 #include "user_io.h"
+#include "input.h"
 
 configTYPE config = { 0 };
 char configfilename[32];
@@ -296,8 +296,8 @@ unsigned char LoadConfiguration(char *filename)
 		// set default configuration
 		memset((void*)&config, 0, sizeof(config));  // Finally found default config bug - params were reversed!
 		strncpy(config.id, config_id, sizeof(config.id));
-		strcpy(config.kickstart, "KICK.ROM");
-		config.memory = 0x15;
+		strcpy(config.kickstart, "Amiga/KICK.ROM");
+		config.memory = 0x11;
 		config.cpu = 0;
 		config.chipset = 0;
 		config.floppy.speed = CONFIG_FLOPPY2X;
@@ -310,47 +310,32 @@ unsigned char LoadConfiguration(char *filename)
 		config.hardfile[1].long_name[0] = 0;
 		config.hardfile[1].enabled = 1;  // Default is access to entire SD card
 		updatekickstart = true;
-		BootPrint("Defaults set\n");
+		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
 
 	// print config to boot screen
-	char cfg_str[41];
-	siprintf(cfg_str, "CPU:     %s", config_cpu_msg[config.cpu & 0x03]); BootPrintEx(cfg_str);
-	siprintf(cfg_str, "Chipset: %s", config_chipset_msg[(config.chipset >> 2) & 7]); BootPrintEx(cfg_str);
-	siprintf(cfg_str, "Memory:  CHIP: %s  FAST: %s  SLOW: %s", config_memory_chip_msg[(config.memory >> 0) & 0x03], config_memory_fast_msg[(config.memory >> 4) & 0x03], config_memory_slow_msg[(config.memory >> 2) & 0x03]); BootPrintEx(cfg_str);
+	char cfg_str[256];
+	siprintf(cfg_str, "CPU: %s, Chipset: %s, ChipRAM: %s, FastRAM: %s, SlowRAM: %s",
+			config_cpu_msg[config.cpu & 0x03], config_chipset_msg[(config.chipset >> 2) & 7],
+			config_memory_chip_msg[(config.memory >> 0) & 0x03], config_memory_fast_msg[(config.memory >> 4) & 0x03], config_memory_slow_msg[(config.memory >> 2) & 0x03]
+			);
+	BootPrintEx(cfg_str);
 
-	// wait up to 3 seconds for keyboard to appear. If it appears wait another
-	// two seconds for the user to press a key
-	/*
-	int8_t keyboard_present = 0;
-	for(i=0;i<3;i++) {
-	unsigned long to = GetTimer(1000);
-	//while(!CheckTimer(to)) usb_poll();
-
-	// check if keyboard just appeared
-	if(!keyboard_present && hid_keyboard_present()) {
-	// BootPrintEx("Press F1 for NTSC, F2 for PAL");
-	keyboard_present = 1;
-	i = 0;
-	}
-	}
-	*/
-
-	key = OsdGetCtrl();
-	if (key == KEY_F1) {
-		// BootPrintEx("Forcing NTSC video ...");
-		// force NTSC mode if F1 pressed
+	input_poll(0);
+	if (is_key_pressed(59))
+	{
+		BootPrintEx("Forcing NTSC video ...");
+		//force NTSC mode if F1 pressed
 		config.chipset |= CONFIG_NTSC;
 	}
-
-	if (key == KEY_F2) {
-		// BootPrintEx("Forcing PAL video ...");
+	else if (is_key_pressed(60))
+	{
+		BootPrintEx("Forcing PAL video ...");
 		// force PAL mode if F2 pressed
 		config.chipset &= ~CONFIG_NTSC;
 	}
 
 	ApplyConfiguration(updatekickstart);
-
 	return(result);
 }
 
@@ -447,10 +432,16 @@ void ApplyConfiguration(char reloadkickstart)
 		DisableOsd();
 		if (!UploadKickstart(config.kickstart))
 		{
-			strcpy(config.kickstart, "KICK.ROM");
+			strcpy(config.kickstart, "Amiga/KICK.ROM");
 			if (!UploadKickstart(config.kickstart))
 			{
-				FatalError(6);
+				strcpy(config.kickstart, "KICK.ROM");
+				if (!UploadKickstart(config.kickstart))
+				{
+					BootPrintEx("No Kickstart loaded. Press F12 for settings.");
+					BootPrintEx("** Halted! **");
+					return;
+				}
 			}
 		}
 		EnableOsd();

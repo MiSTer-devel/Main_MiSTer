@@ -30,7 +30,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <fcntl.h>
 #include "stdio.h"
 #include "string.h"
-#include "errors.h"
 #include "file_io.h"
 #include "osd.h"
 #include "state.h"
@@ -139,15 +138,16 @@ const char *config_tos_mem[] = { "512 kB", "1 MB", "2 MB", "4 MB", "8 MB", "14 M
 const char *config_tos_wrprot[] = { "none", "A:", "B:", "A: and B:" };
 const char *config_tos_usb[] = { "none", "control", "debug", "serial", "parallel", "midi" };
 
+const char *config_memory_chip_msg[] = { "512kb", "1mb", "1.5mb", "2mb" };
+const char *config_memory_slow_msg[] = { "none", "512kb", "1mb", "1.5mb" };
+const char *config_memory_fast_msg[] = { "none", "2mb", "4mb","24mb","24mb" };
+
 const char *config_filter_msg[] = { "none", "HORIZONTAL", "VERTICAL", "H+V" };
-const char *config_memory_chip_msg[] = { "0.5 MB", "1.0 MB", "1.5 MB", "2.0 MB" };
-const char *config_memory_slow_msg[] = { "none  ", "0.5 MB", "1.0 MB", "1.5 MB" };
 const char *config_scanlines_msg[] = { "off", "dim", "black" };
 const char *config_ar_msg[] = { "4:3", "16:9" };
 const char *config_blank_msg[] = { "Blank", "Blank+" };
 const char *config_dither_msg[] = { "off", "SPT", "RND", "S+R" };
-const char *config_memory_fast_msg[] = { "none  ", "2.0 MB", "4.0 MB","24.0 MB","24.0 MB" };
-const char *config_cpu_msg[] = { "68000 ", "68010", "-----","68020" };
+const char *config_cpu_msg[] = { "68000", "68010", "-----","68020" };
 const char *config_hdf_msg[] = { "Disabled", "Hardfile (disk img)", "MMC/SD card", "MMC/SD partition 1", "MMC/SD partition 2", "MMC/SD partition 3", "MMC/SD partition 4" };
 const char *config_chipset_msg[] = { "OCS-A500", "OCS-A1000", "ECS", "---", "---", "---", "AGA", "---" };
 const char *config_turbo_msg[] = { "none", "CHIPRAM", "KICK", "BOTH" };
@@ -1266,7 +1266,7 @@ void HandleUI(void)
 		OsdDrawLogo(3, 3, 1);
 		OsdDrawLogo(4, 4, 1);
 		OsdDrawLogo(5, 5, 1);
-		ScrollText(OsdIsBig ? 13 : 6, "                                 MiST by Till Harbaum, based on Minimig by Dennis van Weeren and other projects. MiST hardware and software is distributed under the terms of the GNU General Public License version 3. MiST FPGA cores are the work of their respective authors under individual licensing.", 0, 0, 0, 0);
+		ScrollText(OsdIsBig ? 13 : 6, "                                 MiSTer by Sorgelig, based on MiST by Till Harbaum and Minimig by Dennis van Weeren and other projects. MiSTer hardware and software is distributed under the terms of the GNU General Public License version 3. MiSTer FPGA cores are the work of their respective authors under individual licensing.", 0, 0, 0, 0);
 
 		if (menu | select | left)
 		{

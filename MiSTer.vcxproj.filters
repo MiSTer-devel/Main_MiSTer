@@ -85,9 +85,6 @@
     <ClInclude Include="debug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="errors.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="fdd.h">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -24,19 +24,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // 2010-01-09   - support for variable number of tracks
 
 #include <stdio.h>
-#include "errors.h"
 #include "hardware.h"
 #include "file_io.h"
 #include "fdd.h"
 #include "config.h"
 #include "debug.h"
 #include "fpga_io.h"
+#include "menu.h"
 
 unsigned char drives = 0; // number of active drives reported by FPGA (may change only during reset)
 adfTYPE *pdfx;            // drive select pointer
 adfTYPE df[4];            // drive 0 information structure
 
 static uint8_t sector_buffer[512];
+
+unsigned char Error;
 
 #define TRACK_SIZE 12668
 #define HEADER_SIZE 0x40

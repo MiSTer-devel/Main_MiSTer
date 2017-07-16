@@ -12,7 +12,7 @@ int  get_kbdled(int mask);
 int  toggle_kbdled(int mask);
 
 int input_poll(int getchar);
-
+int is_key_pressed(int key);
 
 void start_map_setting(int cnt);
 int get_map_button();

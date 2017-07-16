@@ -17,7 +17,6 @@
 #include "spi.h"
 #include "mist_cfg.h"
 #include "tos.h"
-#include "errors.h"
 #include "input.h"
 #include "fpga_io.h"
 #include "file_io.h"

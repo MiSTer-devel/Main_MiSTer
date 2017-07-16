@@ -447,16 +447,12 @@ void BootInit()
 
 	WaitTimer(500);
 	char rtl_ver[45];
-	siprintf(rtl_ver, "**** MINIMIG-AGA%s v%d.%d.%d for MiST ****", ver_beta ? " BETA" : "", ver_major, ver_minor, ver_minion);
+	siprintf(rtl_ver, "MINIMIG-AGA%s v%d.%d.%d by Rok Krajnc. MiSTer port by Sorgelig.", ver_beta ? " BETA" : "", ver_major, ver_minor, ver_minion);
 	BootPrintEx(rtl_ver);
 	BootPrintEx(" ");
-	BootPrintEx("MINIMIG-AGA for MiST by Rok Krajnc (rok.krajnc@gmail.com)");
 	BootPrintEx("Original Minimig by Dennis van Weeren");
 	BootPrintEx("Updates by Jakub Bednarski, Tobias Gubener, Sascha Boing, A.M. Robinson & others");
-	BootPrintEx("MiST by Till Harbaum (till@harbaum.org)");
-	BootPrintEx("For updates & code see https://github.com/rkrajnc/minimig-mist");
 	BootPrintEx(" ");
-	WaitTimer(1000);
 
 	//eject all disk
 	df[0].status = 0;
@@ -473,7 +469,6 @@ void BootInit()
 //// BootPrint() ////
 void BootPrintEx(char * str)
 {
-	char buf[2];
 	unsigned char i, j;
 	unsigned char len;
 

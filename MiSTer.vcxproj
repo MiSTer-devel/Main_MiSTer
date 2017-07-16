@@ -65,7 +65,6 @@
     <ClInclude Include="charrom.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="debug.h" />
-    <ClInclude Include="errors.h" />
     <ClInclude Include="file_io.h" />
     <ClInclude Include="fdd.h" />
     <ClInclude Include="fpga_base_addr_ac5.h" />

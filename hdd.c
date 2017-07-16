@@ -22,7 +22,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <stdio.h>
 #include <string.h>
-#include "errors.h"
 #include "hardware.h"
 #include "file_io.h"
 #include "hdd.h"
