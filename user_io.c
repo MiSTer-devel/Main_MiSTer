@@ -22,19 +22,12 @@
 #include "file_io.h"
 #include "config.h"
 
-// up to 16 key can be remapped
-#define MAX_REMAP  16
-unsigned char key_remap_table[MAX_REMAP][2];
-
 #define BREAK  0x8000
 
 fileTYPE sd_image[4] = { 0 };
 
 // mouse and keyboard emulation state
 static emu_mode_t emu_mode = EMU_NONE;
-static unsigned char emu_state = 0;
-static unsigned long emu_timer = 0;
-#define EMU_MOUSE_FREQ 5
 
 // keep state over core type and its capabilities
 static unsigned char core_type = CORE_TYPE_UNKNOWN;
@@ -72,13 +65,7 @@ char user_io_osd_is_visible()
 
 void user_io_init()
 {
-	// no sd card image selected, SD card accesses will go directly
-	// to the card
 	memset(sd_image, 0, sizeof(sd_image));
-
-	// mark remap table as unused
-	memset(key_remap_table, 0, sizeof(key_remap_table));
-
 	ikbd_init();
 }
 
@@ -199,13 +186,13 @@ static void parse_config()
 		char *p;
 		do {
 			p = user_io_8bit_get_string(i);
-			printf("*** %d: %s\n", i, p);
 			if (i && p && p[0])
 			{
 				if (p[0] == 'J' && p[1] == '1')
 				{
 					joy_force = 1;
 					emu_mode = EMU_JOY0;
+					input_notify_mode();
 					set_kbd_led(HID_LED_NUM_LOCK, true);
 				}
 			}
@@ -794,30 +781,6 @@ void user_io_poll()
 
 	user_io_send_buttons(0);
 
-	// mouse movement emulation is continous 
-	if (emu_mode == EMU_MOUSE)
-	{
-		if (CheckTimer(emu_timer))
-		{
-			emu_timer = GetTimer(EMU_MOUSE_FREQ);
-
-			if (emu_state & JOY_MOVE)
-			{
-				unsigned char b = 0;
-				int16_t x = 0, y = 0;
-				if ((emu_state & (JOY_LEFT | JOY_RIGHT)) == JOY_LEFT)  x = -1;
-				if ((emu_state & (JOY_LEFT | JOY_RIGHT)) == JOY_RIGHT) x = +1;
-				if ((emu_state & (JOY_UP | JOY_DOWN)) == JOY_UP)    y = -1;
-				if ((emu_state & (JOY_UP | JOY_DOWN)) == JOY_DOWN)  y = +1;
-
-				if (emu_state & JOY_BTN1) b |= 1;
-				if (emu_state & JOY_BTN2) b |= 2;
-
-				user_io_mouse(b, x, y);
-			}
-		}
-	}
-
 	if (core_type == CORE_TYPE_MINIMIG2)
 	{
 		kbd_fifo_poll();
@@ -1311,36 +1274,6 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y)
 	if (core_type == CORE_TYPE_ARCHIE) archie_mouse(b, x, y);
 }
 
-// check if this is a key that's supposed to be suppressed
-// when emulation is active
-static unsigned char is_emu_key(unsigned char c, unsigned alt) {
-	static const unsigned char m[] = { JOY_RIGHT, JOY_LEFT, JOY_DOWN, JOY_UP };
-	static const unsigned char m2[] =
-	{
-		0x5A, JOY_DOWN,
-		0x5C, JOY_LEFT,
-		0x5D, JOY_DOWN,
-		0x5E, JOY_RIGHT,
-		0x60, JOY_UP,
-		0x5F, JOY_BTN1,
-		0x61, JOY_BTN2
-	};
-
-	if (emu_mode != EMU_MOUSE) return 0;
-
-	if (alt)
-	{
-		for (int i = 0; i<(sizeof(m2) / sizeof(m2[0])); i += 2) if (c == m2[i]) return m2[i + 1];
-	}
-	else
-	{
-		// direction keys R/L/D/U
-		if (c >= 0x4f && c <= 0x52) return m[c - 0x4f];
-	}
-
-	return 0;
-}
-
 /* usb modifer bits:
 0     1     2    3    4     5     6    7
 LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI
@@ -1563,13 +1496,11 @@ static void keyrah_trans(unsigned char *m, unsigned char *k)
 void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned short pid)
 {
 	char keyrah = KEYRAH_ID ? 1 : 0;
-	if (emu_mode == EMU_MOUSE) keyrah <<= 1;
-
 	if (keyrah) keyrah_trans(&m, k);
 
 	unsigned short reset_m = m;
 	for (char i = 0; i<6; i++) if (k[i] == 0x4c) reset_m |= 0x100;
-	check_reset(reset_m, KEYRAH_ID ? 1 : mist_cfg.reset_combo);
+	check_reset(reset_m, keyrah ? 1 : mist_cfg.reset_combo);
 
 	if ((core_type == CORE_TYPE_MINIMIG2) ||
 		(core_type == CORE_TYPE_MIST) ||
@@ -1584,63 +1515,6 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 		uint16_t keycodes_ps2[6] = { 0,0,0,0,0,0 };
 		char i, j;
 
-		// remap keycodes if requested
-		for (i = 0; (i<6) && k[i]; i++)
-		{
-			for (j = 0; j<MAX_REMAP; j++)
-			{
-				if (key_remap_table[j][0] == k[i])
-				{
-					k[i] = key_remap_table[j][1];
-					break;
-				}
-			}
-		}
-
-		// remap modifiers to each other if requested
-		//  bit  0     1      2    3    4     5      6    7
-		//  key  LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI
-		if (false)
-		{ // (disabled until we configure it via INI)
-			uint8_t default_mod_mapping[8] =
-			{
-				0x1,
-				0x2,
-				0x4,
-				0x8,
-				0x10,
-				0x20,
-				0x40,
-				0x80
-			};
-			uint8_t modifiers = 0;
-			for (i = 0; i<8; i++) if (m & (0x01 << i))  modifiers |= default_mod_mapping[i];
-			m = modifiers;
-		}
-
-		// modifier keys are used as buttons in emu mode
-		if (emu_mode == EMU_MOUSE && !osd_is_visible)
-		{
-			char last_btn = emu_state & (JOY_BTN1 | JOY_BTN2);
-			if (keyrah != 2)
-			{
-				if (m & (1 << EMU_BTN1)) emu_state |= JOY_BTN1;
-				else                  emu_state &= ~JOY_BTN1;
-				if (m & (1 << EMU_BTN2)) emu_state |= JOY_BTN2;
-				else                  emu_state &= ~JOY_BTN2;
-			}
-
-			// check if state of mouse buttons has changed
-			// (on a mouse only two buttons are supported)
-			if ((last_btn  & (JOY_BTN1 | JOY_BTN2)) != (emu_state & (JOY_BTN1 | JOY_BTN2)))
-			{
-				unsigned char b;
-				if (emu_state & JOY_BTN1) b |= 1;
-				if (emu_state & JOY_BTN2) b |= 2;
-				user_io_mouse(b, 0, 0);
-			}
-		}
-
 		// handle modifier keys
 		if (m != modifier && !osd_is_visible)
 		{
@@ -1649,19 +1523,12 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 				// Do we have a downstroke on a modifier key?
 				if ((m & (1 << i)) && !(modifier & (1 << i)))
 				{
-					// shift keys are used for mouse emulation in emu mode
-					if (((i != EMU_BTN1) && (i != EMU_BTN2)) || (emu_mode != EMU_MOUSE))
-					{
-						if (modifier_keycode(i) != MISS) send_keycode(modifier_keycode(i));
-					}
+					if (modifier_keycode(i) != MISS) send_keycode(modifier_keycode(i));
 				}
 
 				if (!(m & (1 << i)) && (modifier & (1 << i)))
 				{
-					if (((i != EMU_BTN1) && (i != EMU_BTN2)) || (emu_mode != EMU_MOUSE))
-					{
-						if (modifier_keycode(i) != MISS) send_keycode(BREAK | modifier_keycode(i));
-					}
+					if (modifier_keycode(i) != MISS) send_keycode(BREAK | modifier_keycode(i));
 				}
 			}
 
@@ -1698,24 +1565,9 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 						if (osd_is_visible) OsdKeySet(0x80 | usb2amiga(pressed[i]));
 					}
 
-					if (!key_used_by_osd(code))
+					if (!key_used_by_osd(code) && !(code & CAPS_LOCK_TOGGLE) && !(code & NUM_LOCK_TOGGLE))
 					{
-						// iprintf("Key is not used by OSD\n");
-						if (is_emu_key(pressed[i], keyrah) && !osd_is_visible)
-						{
-							emu_state &= ~is_emu_key(pressed[i], keyrah);
-							if (keyrah == 2)
-							{
-								unsigned char b;
-								if (emu_state & JOY_BTN1) b |= 1;
-								if (emu_state & JOY_BTN2) b |= 2;
-								user_io_mouse(b, 0, 0);
-							}
-						}
-						else if (!(code & CAPS_LOCK_TOGGLE) && !(code & NUM_LOCK_TOGGLE))
-						{
-							send_keycode(BREAK | code);
-						}
+						send_keycode(BREAK | code);
 					}
 				}
 			}
@@ -1753,73 +1605,56 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 					// redirected to the OSD
 					if (!key_used_by_osd(code))
 					{
-						// iprintf("Key is not used by OSD\n");
-						if (is_emu_key(k[i], keyrah) && !osd_is_visible)
+						if (code & CAPS_LOCK_TOGGLE)
 						{
-							emu_state |= is_emu_key(k[i], keyrah);
+							// send alternating make and break codes for caps lock
+							send_keycode((code & 0xff) | (caps_lock_toggle ? BREAK : 0));
+							caps_lock_toggle = !caps_lock_toggle;
 
-							if (keyrah == 2)
-							{
-								unsigned char b;
-								if (emu_state & JOY_BTN1) b |= 1;
-								if (emu_state & JOY_BTN2) b |= 2;
-								user_io_mouse(b, 0, 0);
-							}
+							set_kbd_led(HID_LED_CAPS_LOCK, caps_lock_toggle);
 						}
-						else if (!(code & CAPS_LOCK_TOGGLE) && !(code & NUM_LOCK_TOGGLE))
+						else
+						if (code & NUM_LOCK_TOGGLE)
 						{
-							send_keycode(code);
+							// num lock has four states indicated by leds:
+							// all off: normal
+							// num lock on, scroll lock on: mouse emu
+							// num lock on, scroll lock off: joy0 emu
+							// num lock off, scroll lock on: joy1 emu
+
+							switch (code ^ NUM_LOCK_TOGGLE)
+							{
+							case 1:
+								if(!joy_force) emu_mode = EMU_MOUSE;
+								break;
+
+							case 2:
+								emu_mode = EMU_JOY0;
+								break;
+
+							case 3:
+								emu_mode = EMU_JOY1;
+								break;
+
+							case 4:
+								if (!joy_force) emu_mode = EMU_NONE;
+								break;
+
+							default:
+								if (joy_force) emu_mode = (emu_mode == EMU_JOY0) ? EMU_JOY1 : EMU_JOY0;
+								else emu_mode = (emu_mode + 1) & 3;
+								break;
+							}
+							input_notify_mode();
+							if(emu_mode == EMU_MOUSE || emu_mode == EMU_JOY0) set_kbd_led(HID_LED_NUM_LOCK, true);
+							else set_kbd_led(HID_LED_NUM_LOCK, false);
+
+							if(emu_mode == EMU_MOUSE || emu_mode == EMU_JOY1) set_kbd_led(HID_LED_SCROLL_LOCK, true);
+							else set_kbd_led(HID_LED_SCROLL_LOCK, false);
 						}
 						else
 						{
-							if (code & CAPS_LOCK_TOGGLE)
-							{
-								// send alternating make and break codes for caps lock
-								send_keycode((code & 0xff) | (caps_lock_toggle ? BREAK : 0));
-								caps_lock_toggle = !caps_lock_toggle;
-
-								set_kbd_led(HID_LED_CAPS_LOCK, caps_lock_toggle);
-							}
-
-							if (code & NUM_LOCK_TOGGLE)
-							{
-								// num lock has four states indicated by leds:
-								// all off: normal
-								// num lock on, scroll lock on: mouse emu
-								// num lock on, scroll lock off: joy0 emu
-								// num lock off, scroll lock on: joy1 emu
-
-								if (emu_mode == EMU_MOUSE) emu_timer = GetTimer(EMU_MOUSE_FREQ);
-
-								switch (code ^ NUM_LOCK_TOGGLE)
-								{
-								case 1:
-									if(!joy_force) emu_mode = EMU_MOUSE;
-									break;
-
-								case 2:
-									emu_mode = EMU_JOY0;
-									break;
-
-								case 3:
-									emu_mode = EMU_JOY1;
-									break;
-
-								case 4:
-									if (!joy_force) emu_mode = EMU_NONE;
-									break;
-
-								default:
-									if (joy_force) emu_mode = (emu_mode == EMU_JOY0) ? EMU_JOY1 : EMU_JOY0;
-									else emu_mode = (emu_mode + 1) & 3;
-									break;
-								}
-								if(emu_mode == EMU_MOUSE || emu_mode == EMU_JOY0) set_kbd_led(HID_LED_NUM_LOCK, true);
-								else set_kbd_led(HID_LED_NUM_LOCK, false);
-
-								if(emu_mode == EMU_MOUSE || emu_mode == EMU_JOY1) set_kbd_led(HID_LED_SCROLL_LOCK, true);
-								else set_kbd_led(HID_LED_SCROLL_LOCK, false);
-							}
+							send_keycode(code);
 						}
 					}
 				}
@@ -1862,29 +1697,6 @@ void add_modifiers(uint8_t mod, uint16_t* keys_ps2)
 		}
 		offset <<= 1;
 		index++;
-	}
-}
-
-void user_io_key_remap(char *s)
-{
-	// s is a string containing two comma separated hex numbers
-	if ((strlen(s) != 5) && (s[2] != ','))
-	{
-		ini_parser_debugf("malformed entry %s", s);
-		return;
-	}
-
-	char i;
-	for (i = 0; i<MAX_REMAP; i++)
-	{
-		if (!key_remap_table[i][0])
-		{
-			key_remap_table[i][0] = strtol(s, NULL, 16);
-			key_remap_table[i][1] = strtol(s + 3, NULL, 16);
-
-			ini_parser_debugf("key remap entry %d = %02x,%02x", i, key_remap_table[i][0], key_remap_table[i][1]);
-			return;
-		}
 	}
 }
 

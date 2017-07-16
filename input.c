@@ -530,6 +530,8 @@ static uint32_t af_delay[2] = { 50, 50 };
 
 static unsigned char mouse_btn = 0;
 static int mouse_emu = 0;
+static int kbd_mouse_emu = 0;
+static int mouse_sniper = 0;
 static int mouse_emu_x = 0;
 static int mouse_emu_y = 0;
 
@@ -576,6 +578,13 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 		{
 			if (press)
 			{
+				mouse_sniper = 0;
+				mouse_timer = 0;
+				mouse_btn = 0;
+				mouse_emu_x = 0;
+				mouse_emu_y = 0;
+				user_io_mouse(0, 0, 0);
+
 				mouse_emu ^= 2;
 				InfoMessage((mouse_emu & 2) ? "\n\n       Mouse mode lock\n             ON" :
 					"\n\n       Mouse mode lock\n             OFF");
@@ -800,20 +809,19 @@ static void input_cb(struct input_event *ev, int dev)
 					{
 						if (ev->code == input[dev].mmap[i])
 						{
-							int val = (mouse_emu == 3) ? 2 : 10;
 							switch (i)
 							{
 							case 8:
-								mouse_emu_x = ev->value ?  val : 0;
+								mouse_emu_x = ev->value ?  10 : 0;
 								break;
 							case 9:
-								mouse_emu_x = ev->value ? -val : 0;
+								mouse_emu_x = ev->value ? -10 : 0;
 								break;
 							case 10:
-								mouse_emu_y = ev->value ?  val : 0;
+								mouse_emu_y = ev->value ?  10 : 0;
 								break;
 							case 11:
-								mouse_emu_y = ev->value ? -val : 0;
+								mouse_emu_y = ev->value ? -10 : 0;
 								break;
 
 							default:
@@ -861,17 +869,22 @@ static void input_cb(struct input_event *ev, int dev)
 					return;
 				}
 
-
 				if (ev->code == input[dev].mmap[15])
 				{
 					mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
 					printf("mouse_emu = %d\n", mouse_emu);
-
-					mouse_timer = 0;
-					mouse_btn   = 0;
-					mouse_emu_x = 0;
-					mouse_emu_y = 0;
-					user_io_mouse(0, 0, 0);
+					if (mouse_emu & 2)
+					{
+						mouse_sniper = ev->value;
+					}
+					else
+					{
+						mouse_timer = 0;
+						mouse_btn = 0;
+						mouse_emu_x = 0;
+						mouse_emu_y = 0;
+						user_io_mouse(0, 0, 0);
+					}
 				}
 				return;
 			}
@@ -903,6 +916,61 @@ static void input_cb(struct input_event *ev, int dev)
 					kbd_toggle = 0;
 				}
 
+				if (!user_io_osd_is_visible() && (user_io_get_kbdemu() == EMU_MOUSE))
+				{
+					if (kbd_mouse_emu)
+					{
+						for (int i = 8; i <= 14; i++)
+						{
+							if (ev->code == input[dev].mmap[i])
+							{
+								switch (i)
+								{
+								case 8:
+									mouse_emu_x = ev->value ?  10 : 0;
+									break;
+								case 9:
+									mouse_emu_x = ev->value ? -10 : 0;
+									break;
+								case 10:
+									mouse_emu_y = ev->value ?  10 : 0;
+									break;
+								case 11:
+									mouse_emu_y = ev->value ? -10 : 0;
+									break;
+
+								default:
+									mouse_btn = ev->value ? mouse_btn | 1 << (i - 12) : mouse_btn & ~(1 << (i - 12));
+									user_io_mouse(mouse_btn, 0, 0);
+									break;
+								}
+								return;
+							}
+						}
+
+						if (ev->code == input[dev].mmap[15])
+						{
+							mouse_sniper = ev->value;
+							return;
+						}
+					}
+
+					if (ev->code == input[dev].map[16])
+					{
+						if (ev->value)
+						{
+							kbd_mouse_emu = !kbd_mouse_emu;
+							printf("kbd_mouse_emu = %d\n", kbd_mouse_emu);
+
+							mouse_timer = 0;
+							mouse_btn = 0;
+							mouse_emu_x = 0;
+							mouse_emu_y = 0;
+							user_io_mouse(0, 0, 0);
+						}
+						return;
+					}
+				}
 
 				if (!input[dev].has_kbdmap)
 				{
@@ -967,13 +1035,6 @@ static void input_cb(struct input_event *ev, int dev)
 						mouse_emu_x = 0;
 						if (ev->value < 127 || ev->value>129) mouse_emu_x = ev->value - 128;
 						mouse_emu_x /= 12;
-						if (mouse_emu == 3 && mouse_emu_x > 0) mouse_emu_x = 2;
-						if (mouse_emu == 3 && mouse_emu_x < 0) mouse_emu_x = -2;
-						/*
-						mouse_emu_x = 0;
-						if (ev->value < 127) mouse_emu_x = -1;
-							else if(ev->value > 129) mouse_emu_x = 1;
-							*/
 						return;
 					}
 
@@ -982,13 +1043,6 @@ static void input_cb(struct input_event *ev, int dev)
 						mouse_emu_y = 0;
 						if (ev->value < 127 || ev->value>129) mouse_emu_y = ev->value - 128;
 						mouse_emu_y /= 12;
-						if (mouse_emu == 3 && mouse_emu_y > 0) mouse_emu_y = 2;
-						if (mouse_emu == 3 && mouse_emu_y < 0) mouse_emu_y = -2;
-						/*
-						mouse_emu_y = 0;
-						if (ev->value < 127) mouse_emu_y = -1;
-							else if (ev->value > 129) mouse_emu_y = 1;
-							*/
 						return;
 					}
 				}
@@ -1264,66 +1318,30 @@ int input_poll(int getchar)
 
 	static int prev_dx = 0;
 	static int prev_dy = 0;
-	/*
-	static int cx = 0;
-	static int cy = 0;
-	*/
 
-	if (mouse_emu)
+	if (mouse_emu || ((user_io_get_kbdemu() == EMU_MOUSE) && kbd_mouse_emu))
 	{
-		/*
-		if (!mouse_emu_x || (prev_dx > 0 && mouse_emu_x < 0) || (prev_dx < 0 && mouse_emu_x>0)) cx = 0;
-		if (!mouse_emu_y || (prev_dx > 0 && mouse_emu_y < 0) || (prev_dx < 0 && mouse_emu_y>0)) cy = 0;
-		*/
-
 		if((prev_dx || mouse_emu_x || prev_dy || mouse_emu_y) && (!mouse_timer || CheckTimer(mouse_timer)))
 		{
 			mouse_timer = GetTimer(20);
-			user_io_mouse(mouse_btn, mouse_emu_x, mouse_emu_y);
-			/*
-			if (mouse_emu_x)
-			{
-				cx++;
-				if (cx && !(cx % 10))
-				{
-					if (mouse_emu_x < 0)
-					{
-						mouse_emu_x -= 2;
-						if (mouse_emu_x < -32) mouse_emu_x = -32;
-					}
 
-					if (mouse_emu_x > 0)
-					{
-						mouse_emu_x += 2;
-						if (mouse_emu_x > 32)  mouse_emu_x = 32;
-					}
-				}
+			int dx = mouse_emu_x;
+			int dy = mouse_emu_y;
+			if (mouse_sniper)
+			{
+				if (dx > 2) dx = 2;
+				if (dx < -2) dx = -2;
+				if (dy > 2) dy = 2;
+				if (dy < -2) dy = -2;
 			}
 
-			if (mouse_emu_y)
-			{
-				cy++;
-				if (cy && !(cy % 10))
-				{
-					if (mouse_emu_y < 0)
-					{
-						mouse_emu_y -= 2;
-						if (mouse_emu_y < -32) mouse_emu_y = -32;
-					}
-
-					if (mouse_emu_y > 0)
-					{
-						mouse_emu_y += 2;
-						if (mouse_emu_y > 32)  mouse_emu_y = 32;
-					}
-				}
-			}
-			*/
-			//printf("mouse_emu %d, %d, %d\n", mouse_btn, mouse_emu_x, mouse_emu_y);
+			user_io_mouse(mouse_btn, dx, dy);
 			prev_dx = mouse_emu_x;
 			prev_dy = mouse_emu_y;
 		}
 	}
+
+	if (!mouse_emu_x && !mouse_emu_y) mouse_timer = 0;
 
 	for (int i = 0; i < 2; i++)
 	{
@@ -1382,4 +1400,16 @@ int is_key_pressed(int key)
 	}
 
 	return 0;
+}
+
+void input_notify_mode()
+{
+	//reset mouse parameters on any mode switch
+	kbd_mouse_emu = 1;
+	mouse_sniper = 0;
+	mouse_timer = 0;
+	mouse_btn = 0;
+	mouse_emu_x = 0;
+	mouse_emu_y = 0;
+	user_io_mouse(0, 0, 0);
 }

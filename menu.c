@@ -1109,7 +1109,18 @@ void HandleUI(void)
 			p = (get_map_button() < 8) ? joy_button_map[get_map_button()] : joy_button_map[8 + get_map_type()];
 		}
 
-		sprintf(s, "       Press: %s", p);
+
+		{
+			s[0] = 0;
+			int len = (30-(strlen(p)+7))/2;
+			while (len > 0)
+			{
+				strcat(s, " ");
+				len--;
+			}
+		}
+		strcat(s, "Press: ");
+		strcat(s, p);
 		OsdWrite(3, s, 0, 0);
 		if (get_map_button())
 		{
@@ -2885,7 +2896,7 @@ void HandleUI(void)
 				strcpy(joy_bnames[8], "L.MOUSE");
 				strcpy(joy_bnames[9], "R.MOUSE");
 				strcpy(joy_bnames[10], "M.MOUSE");
-				strcpy(joy_bnames[11], "Mouse Emu");
+				strcpy(joy_bnames[11], "Mouse Emu/Sniper");
 				start_map_setting(17);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;

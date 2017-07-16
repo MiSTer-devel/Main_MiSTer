@@ -11,6 +11,7 @@ void set_kbdled(int mask, int state);
 int  get_kbdled(int mask);
 int  toggle_kbdled(int mask);
 
+void input_notify_mode();
 int input_poll(int getchar);
 int is_key_pressed(int key);
 
