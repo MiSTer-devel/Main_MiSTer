@@ -800,19 +800,20 @@ static void input_cb(struct input_event *ev, int dev)
 					{
 						if (ev->code == input[dev].mmap[i])
 						{
+							int val = (mouse_emu == 3) ? 2 : 10;
 							switch (i)
 							{
 							case 8:
-								mouse_emu_x = ev->value ? 10 : 0;
+								mouse_emu_x = ev->value ?  val : 0;
 								break;
 							case 9:
-								mouse_emu_x = ev->value ? -10 : 0;
+								mouse_emu_x = ev->value ? -val : 0;
 								break;
 							case 10:
-								mouse_emu_y = ev->value ? 10 : 0;
+								mouse_emu_y = ev->value ?  val : 0;
 								break;
 							case 11:
-								mouse_emu_y = ev->value ? -10 : 0;
+								mouse_emu_y = ev->value ? -val : 0;
 								break;
 
 							default:
