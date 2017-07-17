@@ -1306,6 +1306,8 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 		0x105, // lctrl+lalt+del
 	};
 
+	if (useKeys >= (sizeof(combo) / sizeof(combo[0]))) useKeys = 0;
+
 	if ((modifiers & ~2) == combo[useKeys])
 	{
 		if (modifiers & 2) // with lshift - MiST reset

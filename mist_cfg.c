@@ -28,7 +28,7 @@ const ini_var_t mist_ini_vars[] = {
 	{ "FORCED_SCANDOUBLER", (void*)(&(mist_cfg.forced_scandoubler)), UINT8, 0, 1, 1 },
 	{ "VGA_SCALER", (void*)(&(mist_cfg.vga_scaler)), UINT8, 0, 1, 1 },
 	{ "KEYRAH_MODE", (void*)(&(mist_cfg.keyrah_mode)), UINT32, 0, 0xFFFFFFFF, 1 },
-	{ "RESET_COMBO", (void*)(&(mist_cfg.reset_combo)), UINT8, 0, 2, 1 },
+	{ "RESET_COMBO", (void*)(&(mist_cfg.reset_combo)), UINT8, 0, 3, 1 },
 	{ "KEY_MENU_AS_RGUI", (void*)(&(mist_cfg.key_menu_as_rgui)), UINT8, 0, 1, 1 },
 	{ "VIDEO_MODE", (void*)(&(mist_cfg.video_mode)), UINT8, 0, 9, 1 },
 	{ "HDMI_AUDIO_96K", (void*)(&(mist_cfg.hdmi_audio_96k)), UINT8, 0, 1, 1 },

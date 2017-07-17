@@ -37,6 +37,8 @@ typedef struct
 static devInput input[NUMDEV] = {0};
 static int first_joystick = -1;
 
+#define FN      0x10000
+
 #define LCTRL   0x0100
 #define LSHIFT  0x0200
 #define LALT    0x0400
@@ -136,7 +138,7 @@ static int ev2usb[] =
 	0x63, //83  KEY_KPDOT		
 	NONE, //84  ???				
 	NONE, //85  KEY_ZENKAKU		
-	NONE, //86  KEY_102ND		
+	FN,   //86  KEY_102ND		
 	0x44, //87  KEY_F11			
 	0x45, //88  KEY_F12			
 	NONE, //89  KEY_RO			
@@ -244,7 +246,7 @@ static int ev2usb[] =
 	NONE, //191 KEY_F21			
 	NONE, //192 KEY_F22			
 	NONE, //193 KEY_F23			
-	NONE, //194 KEY_F24			
+	RCTRL, //194 KEY_F24			
 	NONE, //195 ???				
 	NONE, //196 ???				
 	NONE, //197 ???				
@@ -554,75 +556,32 @@ static char kr_fn_table[] =
 	0x37, 0x63, //KP.
 	0x28, 0x58  //KP Enter
 };
-/*
-static void keyrah_trans(unsigned char *m, unsigned char *k)
+
+static int keyrah_trans(int key, int press)
 {
-	static char keyrah_fn_state = 0;
-	char fn = 0;
-	char empty = 1;
-	char rctrl = 0;
-	int i = 0;
-	while (i<6)
+	static int fn = 0;
+
+	if (key == 0x53) return 0x68;
+	if (key == 0x47) return 0x69;
+	if (key == 0x49) return 0x6b; // workaround!
+
+	if (key == FN)
 	{
-		if ((k[i] == 0x64) || (k[i] == 0x32))
+		if (!press && fn == 1) menu_key_set(KEY_AMI_MENU);
+		fn = press ? 1 : 0;
+		return 0;
+	}
+	else if (fn)
+	{
+		fn |= 2;
+		for (int n = 0; n<(sizeof(kr_fn_table) / (2 * sizeof(kr_fn_table[0]))); n++)
 		{
-			if (k[i] == 0x64) fn = 1;
-			if (k[i] == 0x32) rctrl = 1;
-			for (int n = i; n<5; n++) k[n] = k[n + 1];
-			k[5] = 0;
-		}
-		else
-		{
-			if (k[i]) empty = 0;
-			i++;
+			if ((key&255) == kr_fn_table[n * 2]) return kr_fn_table[(n * 2) + 1];
 		}
 	}
 
-	if (fn)
-	{
-		for (i = 0; i<6; i++)
-		{
-			for (int n = 0; n<(sizeof(kr_fn_table) / (2 * sizeof(kr_fn_table[0]))); n++)
-			{
-				if (k[i] == kr_fn_table[n * 2]) k[i] = kr_fn_table[(n * 2) + 1];
-			}
-		}
-	}
-	else
-	{
-		// free these keys for core usage
-		for (i = 0; i<6; i++)
-		{
-			if (k[i] == 0x53) k[i] = 0x68;
-			if (k[i] == 0x47) k[i] = 0x69;
-			if (k[i] == 0x49) k[i] = 0x6b; // workaround!
-		}
-	}
-
-	*m = rctrl ? (*m) | 0x10 : (*m) & ~0x10;
-	if (fn)
-	{
-		keyrah_fn_state |= 1;
-		if (*m || !empty) keyrah_fn_state |= 2;
-	}
-	else
-	{
-		if (keyrah_fn_state == 1)
-		{
-			if (core_type == CORE_TYPE_MINIMIG2)
-			{
-				send_keycode(KEY_MENU);
-				send_keycode(BREAK | KEY_MENU);
-			}
-			else
-			{
-				OsdKeySet(KEY_MENU);
-			}
-		}
-		keyrah_fn_state = 0;
-	}
+	return key;
 }
-*/
 
 #define KEY_EMU_LEFT  (KEY_MAX+1)
 #define KEY_EMU_RIGHT (KEY_MAX+2)
@@ -1098,21 +1057,23 @@ static void input_cb(struct input_event *ev, int dev)
 					//Keyrah v2: USB\VID_18D8&PID_0002\A600/A1200_MULTIMEDIA_EXTENSION_VERSION
 					int keyrah = (mist_cfg.keyrah_mode && (((((uint32_t)input[dev].vid) << 16) | input[dev].pid) == mist_cfg.keyrah_mode));
 
-					//if (keyrah) keyrah_trans(&m, k);
-
-					unsigned short reset_m = mod >> 8;
-					if (key == 0x4c) reset_m |= 0x100;
-					user_io_check_reset(reset_m, keyrah ? 1 : mist_cfg.reset_combo);
-
-					if (key & MODMASK)
+					if (keyrah)	key = keyrah_trans(key, ev->value);
+					if (key & 0xffff)
 					{
-						if (ev->value) mod |= key;
-						else mod &= ~key;
-					}
-					key = (mod & MODMASK) | (key & ~MODMASK);
+						unsigned short reset_m = mod >> 8;
+						if (key == 0x4c) reset_m |= 0x100;
+						user_io_check_reset(reset_m, (keyrah && !mist_cfg.reset_combo) ? 1 : mist_cfg.reset_combo);
 
-					menu_mod_set(mod >> 8);
-					user_io_kbd((uint16_t)key, ev->value);
+						if (key & MODMASK)
+						{
+							if (ev->value) mod |= key;
+							else mod &= ~key;
+						}
+						key = (mod & MODMASK) | (key & ~MODMASK);
+
+						menu_mod_set(mod >> 8);
+						user_io_kbd((uint16_t)key, ev->value);
+					}
 					return;
 				}
 			}
