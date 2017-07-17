@@ -231,12 +231,18 @@ void SetConfigurationFilename(int config)
 //// ConfigurationExists() ////
 unsigned char ConfigurationExists(char *filename)
 {
-	if (!filename) {
+	char path[256] = { CONFIG_DIR"/" };
+
+	if (!filename)
+	{
 		// use slot-based filename if none provided
 		filename = configfilename;
 	}
+	
+	strcat(path, filename);
+
 	fileTYPE f;
-	if(FileOpen(&f, filename))
+	if(FileOpen(&f, path))
 	{
 		FileClose(&f);
 		return(1);

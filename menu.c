@@ -1897,7 +1897,7 @@ void HandleUI(void)
 				OsdDisable();
 				SetConfigurationFilename(menusub);
 				LoadConfiguration(NULL);
-				//				OsdReset(RESET_NORMAL);
+				OsdReset();
 				menustate = MENU_NONE1;
 			}
 			else
