@@ -55,7 +55,6 @@
     <ClCompile Include="mist_cfg.c" />
     <ClCompile Include="osd.c" />
     <ClCompile Include="spi.c" />
-    <ClCompile Include="state.c" />
     <ClCompile Include="tos.c" />
     <ClCompile Include="user_io.c" />
   </ItemGroup>
@@ -85,7 +84,6 @@
     <ClInclude Include="mist_cfg.h" />
     <ClInclude Include="osd.h" />
     <ClInclude Include="spi.h" />
-    <ClInclude Include="state.h" />
     <ClInclude Include="tos.h" />
     <ClInclude Include="user_io.h" />
   </ItemGroup>

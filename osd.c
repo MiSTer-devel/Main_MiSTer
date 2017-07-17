@@ -45,20 +45,7 @@ as rotated copies of the first 128 entries.  -- AMR
 #include "logo.h"
 #include "user_io.h"
 #include "hardware.h"
-
-
-// conversion table of Amiga keyboard scan codes to ASCII codes
-const char keycode_table[128] =
-{
-	0,'1','2','3','4','5','6','7','8','9','0',  0,  0,  0,  0,  0,
-	'Q','W','E','R','T','Y','U','I','O','P',  0,  0,  0,  0,  0,  0,
-	'A','S','D','F','G','H','J','K','L',  0,  0,  0,  0,  0,  0,  0,
-	0,'Z','X','C','V','B','N','M',  0,  0,  0,  0,  0,  0,  0,  0,
-	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
-};
+#include "config.h"
 
 static int osd_size = 8;
 
@@ -509,9 +496,12 @@ void OsdDisable(void)
 		spi_osd_cmd8(OSD_CMD_OSD, 0x00);
 }
 
-void OsdReset(unsigned char boot)
+void OsdReset()
 {
 	spi_osd_cmd8(OSD_CMD_RST, 0x01);
+
+	ConfigIDE(config.enable_ide, config.hardfile[0].present && config.hardfile[0].enabled, config.hardfile[1].present && config.hardfile[1].enabled);
+
 	spi_osd_cmd8(OSD_CMD_RST, 0x00);
 }
 
@@ -561,79 +551,6 @@ void ConfigAutofire(unsigned char autofire, unsigned char mask)
 	spi_osd_cmd16(OSD_CMD_JOY, param);
 }
 
-static unsigned char disable_menu = 0;
-
-// get key status
-unsigned char OsdGetCtrl(void)
-{
-	static unsigned char c2;
-	static unsigned long delay;
-	static unsigned long repeat;
-	static unsigned char repeat2;
-	unsigned char c1, c;
-
-	c1 = OsdKeyGet();
-
-	// OsdKeyGet permanently returns the last key event. 
-
-	// generate normal "key-pressed" event
-	c = 0;
-	if (c1 != c2)
-		c = c1;
-
-	c2 = c1;
-	// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
-	if (!user_io_osd_is_visible() && is_menu_core())
-		c = KEY_MENU;
-
-	// generate repeat "key-pressed" events
-	if ((c1 & KEY_UPSTROKE) || (!c1))
-		repeat = GetTimer(REPEATDELAY);
-	else if (CheckTimer(repeat)) {
-		repeat = GetTimer(REPEATRATE);
-		if (c1 == KEY_UP || c1 == KEY_DOWN)
-			c = c1;
-		repeat2++;
-		if (repeat2 == 2)
-		{
-			repeat2 = 0;
-			if (c1 == KEY_PGUP || c1 == KEY_PGDN || c1 == KEY_LEFT || c1 == KEY_RIGHT || GetASCIIKey(c1))
-				c = c1;
-		}
-	}
-
-	// currently no key pressed
-	if (!c)
-	{
-		static unsigned char last_but = 0;
-		if (!disable_menu)
-		{
-			unsigned char but = user_io_menu_button();
-			if (!but && last_but) c = KEY_MENU;
-			last_but = but;
-		}
-		else
-		{
-			last_but = 0;
-		}
-	}
-
-	return(c);
-}
-
-void OsdDisableMenuButton(unsigned char disable)
-{
-	disable_menu = disable;
-}
-
-unsigned char GetASCIIKey(unsigned char keycode)
-{
-	if (keycode & KEY_UPSTROKE)
-		return 0;
-
-	return keycode_table[keycode & 0x7F];
-}
-
 void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert)
 {
 	// this function is called periodically when a string longer than the window is displayed.
@@ -678,19 +595,6 @@ void ScrollReset()
 	scroll_timer = GetTimer(SCROLL_DELAY); // set timer to start name scrolling after predefined time delay
 	scroll_offset = 0; // start scrolling from the start
 }
-
-/* the Atari core handles OSD keys competely inside the core */
-static unsigned char osd_key;
-
-void OsdKeySet(unsigned char c) {
-	//  iprintf("OSD enqueue: %x\n", c);
-	osd_key = c;
-}
-
-unsigned char OsdKeyGet() {
-	return osd_key;
-}
-
 
 /* core currently loaded */
 static char lastcorename[261 + 10] = "CORE";

@@ -56,9 +56,6 @@
     <ClCompile Include="spi.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="state.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="tos.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -140,9 +137,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="spi.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="state.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="tos.h">

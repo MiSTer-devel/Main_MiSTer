@@ -7,8 +7,6 @@
 
 #include "hardware.h"
 #include "osd.h"
-#include "state.h"
-#include "state.h"
 #include "user_io.h"
 #include "archie.h"
 #include "debug.h"
@@ -21,6 +19,7 @@
 #include "fpga_io.h"
 #include "file_io.h"
 #include "config.h"
+#include "menu.h"
 
 #define BREAK  0x8000
 
@@ -1298,7 +1297,7 @@ unsigned short keycode(unsigned char in)
 
 extern configTYPE config;
 
-void check_reset(unsigned short modifiers, char useKeys)
+void user_io_check_reset(unsigned short modifiers, char useKeys)
 {
 	unsigned short combo[] =
 	{
@@ -1317,8 +1316,7 @@ void check_reset(unsigned short modifiers, char useKeys)
 		switch (core_type)
 		{
 		case CORE_TYPE_MINIMIG2:
-			ConfigIDE(config.enable_ide, config.hardfile[0].present && config.hardfile[0].enabled, config.hardfile[1].present && config.hardfile[1].enabled);
-			OsdReset(RESET_NORMAL);
+			OsdReset();
 			break;
 
 		case CORE_TYPE_8BIT:
@@ -1386,149 +1384,42 @@ static char key_used_by_osd(unsigned short s)
 	return((core_type == CORE_TYPE_MIST) || (core_type == CORE_TYPE_ARCHIE) || (core_type == CORE_TYPE_8BIT));
 }
 
-static char kr_fn_table[] =
+void user_io_kbd(uint16_t key, int press)
 {
-	0x54, 0x48, // pause/break
-	0x55, 0x46, // prnscr
-	0x50, 0x4a, // home
-	0x4f, 0x4d, // end
-	0x52, 0x4b, // pgup
-	0x51, 0x4e, // pgdown
-	0x3a, 0x44, // f11
-	0x3b, 0x45, // f12
-
-	0x3c, 0x6c, // EMU_MOUSE
-	0x3d, 0x6d, // EMU_JOY0
-	0x3e, 0x6e, // EMU_JOY1
-	0x3f, 0x6f, // EMU_NONE
-
-				//Emulate keypad for A600 
-	0x1E, 0x59, //KP1
-	0x1F, 0x5A, //KP2
-	0x20, 0x5B, //KP3
-	0x21, 0x5C, //KP4
-	0x22, 0x5D, //KP5
-	0x23, 0x5E, //KP6
-	0x24, 0x5F, //KP7
-	0x25, 0x60, //KP8
-	0x26, 0x61, //KP9
-	0x27, 0x62, //KP0
-	0x2D, 0x56, //KP-
-	0x2E, 0x57, //KP+
-	0x31, 0x55, //KP*
-	0x2F, 0x68, //KP(
-	0x30, 0x69, //KP)
-	0x37, 0x63, //KP.
-	0x28, 0x58  //KP Enter
-};
-
-static void keyrah_trans(unsigned char *m, unsigned char *k)
-{
-	static char keyrah_fn_state = 0;
-	char fn = 0;
-	char empty = 1;
-	char rctrl = 0;
-	int i = 0;
-	while (i<6)
-	{
-		if ((k[i] == 0x64) || (k[i] == 0x32))
-		{
-			if (k[i] == 0x64) fn = 1;
-			if (k[i] == 0x32) rctrl = 1;
-			for (int n = i; n<5; n++) k[n] = k[n + 1];
-			k[5] = 0;
-		}
-		else
-		{
-			if (k[i]) empty = 0;
-			i++;
-		}
-	}
-
-	if (fn)
-	{
-		for (i = 0; i<6; i++)
-		{
-			for (int n = 0; n<(sizeof(kr_fn_table) / (2 * sizeof(kr_fn_table[0]))); n++)
-			{
-				if (k[i] == kr_fn_table[n * 2]) k[i] = kr_fn_table[(n * 2) + 1];
-			}
-		}
-	}
-	else
-	{
-		// free these keys for core usage
-		for (i = 0; i<6; i++)
-		{
-			if (k[i] == 0x53) k[i] = 0x68;
-			if (k[i] == 0x47) k[i] = 0x69;
-			if (k[i] == 0x49) k[i] = 0x6b; // workaround!
-		}
-	}
-
-	*m = rctrl ? (*m) | 0x10 : (*m) & ~0x10;
-	if (fn)
-	{
-		keyrah_fn_state |= 1;
-		if (*m || !empty) keyrah_fn_state |= 2;
-	}
-	else
-	{
-		if (keyrah_fn_state == 1)
-		{
-			if (core_type == CORE_TYPE_MINIMIG2)
-			{
-				send_keycode(KEY_MENU);
-				send_keycode(BREAK | KEY_MENU);
-			}
-			else
-			{
-				OsdKeySet(KEY_MENU);
-			}
-		}
-		keyrah_fn_state = 0;
-	}
-}
-
-//Keyrah v2: USB\VID_18D8&PID_0002\A600/A1200_MULTIMEDIA_EXTENSION_VERSION
-#define KEYRAH_ID (mist_cfg.keyrah_mode && (((((uint32_t)vid)<<16) | pid) == mist_cfg.keyrah_mode))
-
-void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned short pid)
-{
-	char keyrah = KEYRAH_ID ? 1 : 0;
-	if (keyrah) keyrah_trans(&m, k);
-
-	unsigned short reset_m = m;
-	for (char i = 0; i<6; i++) if (k[i] == 0x4c) reset_m |= 0x100;
-	check_reset(reset_m, keyrah ? 1 : mist_cfg.reset_combo);
-
 	if ((core_type == CORE_TYPE_MINIMIG2) ||
 		(core_type == CORE_TYPE_MIST) ||
 		(core_type == CORE_TYPE_ARCHIE) ||
 		(core_type == CORE_TYPE_8BIT))
 	{
-		//iprintf("KBD: %d\n", m);
-		//hexdump(k, 6, 0);
+		uint8_t m = key >> 8;
+		uint8_t k = key & 0xFF;
 
-		static unsigned char modifier = 0, pressed[6] = { 0,0,0,0,0,0 };
-		char keycodes[6] = { 0,0,0,0,0,0 };
-		uint16_t keycodes_ps2[6] = { 0,0,0,0,0,0 };
-		char i, j;
+		static unsigned char modifier = 0;
 
 		// handle modifier keys
-		if (m != modifier && !osd_is_visible)
+		if (m != modifier)
 		{
-			for (i = 0; i<8; i++)
+			for (int i = 0; i<8; i++)
 			{
+				uint16_t code = modifier_keycode(i);
+
 				// Do we have a downstroke on a modifier key?
 				if ((m & (1 << i)) && !(modifier & (1 << i)))
 				{
-					if (modifier_keycode(i) != MISS) send_keycode(modifier_keycode(i));
+					if (code != MISS)
+					{
+						if (is_menu_core()) printf("keycode(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "",  code & 255, code & 255);
+						if(!osd_is_visible) send_keycode(code);
+					}
 				}
 
 				if (!(m & (1 << i)) && (modifier & (1 << i)))
 				{
-					if (modifier_keycode(i) != MISS) send_keycode(BREAK | modifier_keycode(i));
+					if (code != MISS)
+					{
+						if (is_menu_core()) printf("keycode(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
+						if (!osd_is_visible) send_keycode(BREAK | code);
+					}
 				}
 			}
 
@@ -1537,32 +1428,23 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 
 		// check if there are keys in the pressed list which aren't 
 		// reported anymore
-		for (i = 0; i<6; i++)
+		if (k)
 		{
-			unsigned short code = keycode(pressed[i]);
-
-			if (pressed[i] && code != MISS)
+			uint16_t code = keycode(k);
+			if (!press)
 			{
-				//iprintf("key 0x%X break: 0x%X\n", pressed[i], code);
+				if (is_menu_core()) printf("keycode(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				for (j = 0; j<6 && pressed[i] != k[j]; j++);
-
-				// don't send break for caps lock
-				if (j == 6)
+				if (code != MISS)
 				{
-					// If OSD is visible, then all keys are sent into the OSD
-					// using Amiga key codes since the OSD itself uses Amiga key codes
-					// for historical reasons. If the OSD is invisble then only
-					// those keys marked for OSD in the core specific table are
-					// sent for OSD handling.
 					if (code & OSD_OPEN)
 					{
-						OsdKeySet(0x80 | KEY_MENU);
+						menu_key_set(KEY_AMI_UPSTROKE | KEY_AMI_MENU);
 					}
 					else
 					{
 						// special OSD key handled internally 
-						if (osd_is_visible) OsdKeySet(0x80 | usb2amiga(pressed[i]));
+						if (osd_is_visible) menu_key_set(KEY_AMI_UPSTROKE | usb2amiga(k));
 					}
 
 					if (!key_used_by_osd(code) && !(code & CAPS_LOCK_TOGGLE) && !(code & NUM_LOCK_TOGGLE))
@@ -1571,21 +1453,12 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 					}
 				}
 			}
-		}
-
-		for (i = 0; i<6; i++)
-		{
-			unsigned short code = keycode(k[i]);
-
-			if (k[i] && (k[i] <= KEYCODE_MAX) && code != MISS)
+			else
 			{
-				// check if this key is already in the list of pressed keys
-				for (j = 0; j<6 && k[i] != pressed[j]; j++);
+				if (is_menu_core()) printf("keycode(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				if (j == 6)
+				if ((k <= KEYCODE_MAX) && code != MISS)
 				{
-					//iprintf("key 0x%X make: 0x%X\n", k[i], code);
-
 					// If OSD is visible, then all keys are sent into the OSD
 					// using Amiga key codes since the OSD itself uses Amiga key codes
 					// for historical reasons. If the OSD is invisble then only
@@ -1593,12 +1466,15 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 					// sent for OSD handling.
 					if (code & OSD_OPEN)
 					{
-						OsdKeySet(KEY_MENU);
+						menu_key_set(KEY_AMI_MENU);
 					}
 					else
 					{
 						// special OSD key handled internally 
-						if (osd_is_visible) OsdKeySet(usb2amiga(k[i]));
+						if (osd_is_visible)
+						{
+							menu_key_set(usb2amiga(k));
+						}
 					}
 
 					// no further processing of any key that is currently 
@@ -1613,8 +1489,7 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 
 							set_kbd_led(HID_LED_CAPS_LOCK, caps_lock_toggle);
 						}
-						else
-						if (code & NUM_LOCK_TOGGLE)
+						else if (code & NUM_LOCK_TOGGLE)
 						{
 							// num lock has four states indicated by leds:
 							// all off: normal
@@ -1625,7 +1500,7 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 							switch (code ^ NUM_LOCK_TOGGLE)
 							{
 							case 1:
-								if(!joy_force) emu_mode = EMU_MOUSE;
+								if (!joy_force) emu_mode = EMU_MOUSE;
 								break;
 
 							case 2:
@@ -1646,10 +1521,10 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 								break;
 							}
 							input_notify_mode();
-							if(emu_mode == EMU_MOUSE || emu_mode == EMU_JOY0) set_kbd_led(HID_LED_NUM_LOCK, true);
+							if (emu_mode == EMU_MOUSE || emu_mode == EMU_JOY0) set_kbd_led(HID_LED_NUM_LOCK, true);
 							else set_kbd_led(HID_LED_NUM_LOCK, false);
 
-							if(emu_mode == EMU_MOUSE || emu_mode == EMU_JOY1) set_kbd_led(HID_LED_SCROLL_LOCK, true);
+							if (emu_mode == EMU_MOUSE || emu_mode == EMU_JOY1) set_kbd_led(HID_LED_SCROLL_LOCK, true);
 							else set_kbd_led(HID_LED_SCROLL_LOCK, false);
 						}
 						else
@@ -1660,43 +1535,6 @@ void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned
 				}
 			}
 		}
-
-		for (i = 0; i<6; i++)
-		{
-			pressed[i] = k[i];
-			keycodes[i] = pressed[i]; // send raw USB code, not amiga - keycode(pressed[i]);
-			keycodes_ps2[i] = keycode(pressed[i]);
-		}
-		StateKeyboardSet(m, keycodes, keycodes_ps2);
-	}
-}
-
-/* translates a USB modifiers into scancodes */
-void add_modifiers(uint8_t mod, uint16_t* keys_ps2)
-{
-	uint8_t i;
-	uint8_t offset = 1;
-	uint8_t index = 0;
-	while (offset)
-	{
-		if (mod&offset)
-		{
-			uint16_t ps2_value = modifier_keycode(index);
-			if (ps2_value != MISS)
-			{
-				if (ps2_value & EXT) ps2_value = (0xE000 | (ps2_value & 0xFF));
-				for (i = 0; i<4; i++)
-				{
-					if (keys_ps2[i] == 0)
-					{
-						keys_ps2[i] = ps2_value;
-						break;
-					}
-				}
-			}
-		}
-		offset <<= 1;
-		index++;
 	}
 }
 

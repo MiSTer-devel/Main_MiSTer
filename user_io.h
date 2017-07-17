@@ -179,7 +179,7 @@ void user_io_eth_receive_tx_frame(uint8_t *, uint16_t);
 
 // hooks from the usb layer
 void user_io_mouse(unsigned char b, int16_t x, int16_t y);
-void user_io_kbd(unsigned char m, unsigned char *k, unsigned short vid, unsigned short pid);
+void user_io_kbd(uint16_t key, int press);
 char* user_io_create_config_name();
 void user_io_digital_joystick(unsigned char, uint16_t);
 void user_io_analog_joystick(unsigned char, char, char);
@@ -190,5 +190,7 @@ void add_modifiers(uint8_t mod, uint16_t* keys_ps2);
 
 void user_io_set_index(unsigned char index);
 unsigned char user_io_ext_idx(char *, char*);
+
+void user_io_check_reset(unsigned short modifiers, char useKeys);
 
 #endif // USER_IO_H

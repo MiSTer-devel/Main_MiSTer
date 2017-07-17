@@ -689,7 +689,7 @@ int ScanDirectory(char* path, int mode, char *extension, int options)
 		}
 		else
 		{
-			printf("dir scan for key: %x/%c\n", mode, mode);
+			//printf("dir scan for key: %x/%c\n", mode, mode);
 			mode = toupper(mode);
 			if ((mode >= '0' && mode <= '9') || (mode >= 'A' && mode <= 'Z'))
 			{

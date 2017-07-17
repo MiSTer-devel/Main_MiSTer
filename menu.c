@@ -32,7 +32,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "string.h"
 #include "file_io.h"
 #include "osd.h"
-#include "state.h"
 #include "fdd.h"
 #include "hdd.h"
 #include "hardware.h"
@@ -130,9 +129,7 @@ enum MENU
 	MENU_8BIT_SYSTEM1,
 	MENU_8BIT_SYSTEM2,
 	MENU_8BIT_ABOUT1,
-	MENU_8BIT_ABOUT2,
-	MENU_8BIT_KEYTEST1,
-	MENU_8BIT_KEYTEST2
+	MENU_8BIT_ABOUT2
 };
 
 unsigned char menustate = MENU_NONE1;
@@ -405,6 +402,86 @@ char* get_keycode_table()
 	return   " PS/2";
 }
 
+// conversion table of Amiga keyboard scan codes to ASCII codes
+const uint8_t keycode_table[128] =
+{
+	0,'1','2','3','4','5','6','7','8','9','0',  0,  0,  0,  0,  0,
+	'Q','W','E','R','T','Y','U','I','O','P',  0,  0,  0,  0,  0,  0,
+	'A','S','D','F','G','H','J','K','L',  0,  0,  0,  0,  0,  0,  0,
+	0,'Z','X','C','V','B','N','M',  0,  0,  0,  0,  0,  0,  0,  0,
+	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
+	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  0,  0,
+	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
+};
+
+static uint8_t GetASCIIKey(unsigned char keycode)
+{
+	if (keycode & KEY_AMI_UPSTROKE)
+		return 0;
+
+	return keycode_table[keycode & 0x7F];
+}
+
+/* the Atari core handles OSD keys competely inside the core */
+static unsigned char menu_key = 0;
+static unsigned char menu_mod = 0;
+
+void menu_key_set(unsigned char c)
+{
+	//iprintf("OSD enqueue: %x\n", c);
+	menu_key = c;
+}
+
+void menu_mod_set(uint8_t m)
+{
+	menu_mod = m;
+}
+
+// get key status
+static uint8_t menu_key_get(void)
+{
+	static unsigned char c2;
+	static unsigned long delay;
+	static unsigned long repeat;
+	static unsigned char repeat2;
+	unsigned char c1, c;
+
+	c1 = menu_key;
+
+	// OsdKeyGet permanently returns the last key event. 
+
+	// generate normal "key-pressed" event
+	c = 0;
+	if (c1 != c2) c = c1;
+	c2 = c1;
+
+	// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
+	if (!user_io_osd_is_visible() && is_menu_core()) c = KEY_AMI_MENU;
+
+	// generate repeat "key-pressed" events
+	if ((c1 & KEY_AMI_UPSTROKE) || (!c1))
+	{
+		repeat = GetTimer(REPEATDELAY);
+	}
+	else if (CheckTimer(repeat))
+	{
+		repeat = GetTimer(REPEATRATE);
+		if (GetASCIIKey(c1)) c = c1;
+	}
+
+	// currently no key pressed
+	if (!c)
+	{
+		static unsigned char last_but = 0;
+		unsigned char but = user_io_menu_button();
+		if (!but && last_but) c = KEY_AMI_MENU;
+		last_but = but;
+	}
+
+	return(c);
+}
+
 void HandleUI(void)
 {
 	char *p;
@@ -413,8 +490,6 @@ void HandleUI(void)
 	uint8_t mod;
 	unsigned long len;
 	static hardfileTYPE t_hardfile[2]; // temporary copy of former hardfile configuration
-	static unsigned char ctrl = false;
-	static unsigned char lalt = false;
 	char enable;
 	static long helptext_timer;
 	static const char *helptext;
@@ -424,19 +499,10 @@ void HandleUI(void)
 	uint8_t keys[6] = { 0,0,0,0,0,0 };
 	uint16_t keys_ps2[6] = { 0,0,0,0,0,0 };
 
-	mist_joystick_t joy0, joy1;
-
-	/* check joystick status */
-	char joy_string[32];
-	char joy_string2[32];
 	char usb_id[64];
 
-	// update turbo status for joysticks
-	//StateTurboUpdate(0);
-	//StateTurboUpdate(1);
-
 	// get user control codes
-	c = OsdGetCtrl();
+	c = menu_key_get();
 
 	// decode and set events
 	menu = false;
@@ -450,21 +516,9 @@ void HandleUI(void)
 
 	switch (c)
 	{
-	case KEY_CTRL:
-		ctrl = true;
-		break;
-	case KEY_CTRL | KEY_UPSTROKE:
-		ctrl = false;
-		break;
-	case KEY_LALT:
-		lalt = true;
-		break;
-	case KEY_LALT | KEY_UPSTROKE:
-		lalt = false;
-		break;
-	case KEY_MENU:
+	case KEY_AMI_MENU:
 		menu = true;
-		OsdKeySet(KEY_MENU | KEY_UPSTROKE);
+		menu_key_set(KEY_AMI_MENU | KEY_AMI_UPSTROKE);
 		break;
 
 		// Within the menu the esc key acts as the menu key. problem:
@@ -472,31 +526,31 @@ void HandleUI(void)
 		// break code for the ESC key when the key is released will 
 		// reach the core which never saw the make code. Simple solution:
 		// react on break code instead of make code
-	case KEY_ESC | KEY_UPSTROKE:
+	case KEY_AMI_ESC | KEY_AMI_UPSTROKE:
 		if (menustate != MENU_NONE2)
 			menu = true;
 		break;
-	case KEY_ENTER:
-	case KEY_SPACE:
+	case KEY_AMI_ENTER:
+	case KEY_AMI_SPACE:
 		select = true;
 		break;
-	case KEY_UP:
+	case KEY_AMI_UP:
 		up = true;
 		break;
-	case KEY_DOWN:
+	case KEY_AMI_DOWN:
 		down = true;
 		break;
-	case KEY_LEFT:
+	case KEY_AMI_LEFT:
 		left = true;
 		break;
-	case KEY_RIGHT:
+	case KEY_AMI_RIGHT:
 		right = true;
 		break;
-	case KEY_KPPLUS:
+	case KEY_AMI_KPPLUS:
 	case 0x0c: // =/+
 		plus = true;
 		break;
-	case KEY_KPMINUS:
+	case KEY_AMI_KPMINUS:
 	case 0x0b: // -/_
 		minus = true;
 		break;
@@ -579,7 +633,7 @@ void HandleUI(void)
 	case MENU_NONE2:
 		if (menu)
 		{
-			if (StateKeyboardModifiers() & 0x44) //Alt+Menu
+			if (menu_mod & 0x44) //Alt+Menu
 			{
 				OsdSetSize(16);
 				SelectFile("RBF", 0, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_NONE1, 0);
@@ -955,7 +1009,7 @@ void HandleUI(void)
 		helptext = helptexts[HELPTEXT_MAIN];
 		m = 0;
 		if (user_io_core_type() == CORE_TYPE_MINIMIG2) m = 1;
-		menumask = m ? 0x7f : 0xff;
+		menumask = m ? 0x7b : 0xfb;
 		OsdSetTitle("System", OSD_ARROW_LEFT);
 		menustate = MENU_8BIT_SYSTEM2;
 		parentstate = MENU_8BIT_SYSTEM1;
@@ -963,7 +1017,7 @@ void HandleUI(void)
 		OsdWrite(OsdIsBig ? 1 : 0, " Firmware & Core           \x16", menusub == 0, 0);
 		if(OsdIsBig) OsdWrite(2, "", 0, 0);
 		OsdWrite(OsdIsBig ? 3 : 1, " Define joystick buttons", menusub == 1, 0);
-		OsdWrite(OsdIsBig ? 4 : 2, " Keyboard Test", menusub == 2, 0);
+		OsdWrite(OsdIsBig ? 4 : 2, "", 0, 0);
 		if (OsdIsBig) OsdWrite(5, "", 0, 0);
 		OsdWrite(OsdIsBig ? 6 : 3, m ? " Reset" : " Reset settings", menusub == 3, 0);
 		if (m)
@@ -1008,9 +1062,6 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
-				// Keyboard test
-				menustate = MENU_8BIT_KEYTEST1;
-				menusub = 0;
 				break;
 			case 3:
 				menustate = MENU_RESET1;
@@ -1174,42 +1225,6 @@ void HandleUI(void)
 		}
 		break;
 
-
-	case MENU_8BIT_KEYTEST1:
-		helptext = helptexts[HELPTEXT_NONE];
-		menumask = 1;
-		OsdSetTitle("Keyboard", 0);
-		menustate = MENU_8BIT_KEYTEST2;
-		parentstate = MENU_8BIT_KEYTEST1;
-		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_COMBO_EXIT, menusub == 0, 0);
-		break;
-
-	case MENU_8BIT_KEYTEST2:
-		m = OsdIsBig ? 4 : 0;
-		StateKeyboardPressed(keys);
-		OsdWrite(m++, "       USB scancodes", 0, 0);
-		siprintf(s, "     %2x   %2x   %2x   %2x", keys[0], keys[1], keys[2], keys[3]); // keys[4], keys[5]);
-		OsdWrite(m++, s, 0, 0);
-		mod = StateKeyboardModifiers();
-		strcpy(usb_id, "                      ");
-		siprintbinary(usb_id, sizeof(mod), &mod);
-		siprintf(s, "    mod keys - %s ", usb_id);
-		OsdWrite(m++, s, 0, 0);
-		m++;
-		uint16_t keys_ps2[6] = { 0,0,0,0,0,0 };
-		StateKeyboardPressedPS2(keys_ps2);
-		add_modifiers(mod, keys_ps2);
-		siprintf(s, "      %s scancodes", get_keycode_table());
-		OsdWrite(m++, s, 0, 0);
-		siprintf(s, "   %4x %4x %4x %4x ", keys_ps2[0], keys_ps2[1], keys_ps2[2], keys_ps2[3]);// keys_ps2[4], keys_ps2[5]);
-		OsdWrite(m++, s, 0, 0);
-		if ((mod & 0x11) && menu) // Ctrl+ESC
-		{
-			menustate = MENU_8BIT_SYSTEM1;
-			menusub = 2;
-		}
-		break;
 
 		/******************************************************************/
 		/* mist main menu                                                 */
@@ -1817,7 +1832,7 @@ void HandleUI(void)
 			else if (menusub == 11)
 				menustate = MENU_NONE1;
 		}
-		else if (c == KEY_BACK) // eject all floppies
+		else if (c == KEY_AMI_BACK) // eject all floppies
 		{
 			for (i = 0; i <= drives; i++)
 				df[i].status = 0;
@@ -1913,25 +1928,25 @@ void HandleUI(void)
 
 		ScrollLongName(); // scrolls file name if longer than display line
 
-		if (c == KEY_HOME)
+		if (c == KEY_AMI_HOME)
 		{
 			ScanDirectory(SelectedPath, SCAN_INIT, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
 		}
 
-		if (c == KEY_BACK)
+		if (c == KEY_AMI_BACK)
 		{
 			changeDir("..");
 			menustate = MENU_FILE_SELECT1;
 		}
 
-		if ((c == KEY_PGUP) || (c == KEY_LEFT))
+		if ((c == KEY_AMI_PGUP) || (c == KEY_AMI_LEFT))
 		{
 			ScanDirectory(SelectedPath, SCAN_PREV_PAGE, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
 		}
 
-		if ((c == KEY_PGDN) || (c == KEY_RIGHT))
+		if ((c == KEY_AMI_PGDN) || (c == KEY_AMI_RIGHT))
 		{
 			ScanDirectory(SelectedPath, SCAN_NEXT_PAGE, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
@@ -1949,7 +1964,7 @@ void HandleUI(void)
 			menustate = MENU_FILE_SELECT1;
 		}
 
-		if ((i = GetASCIIKey(c)))
+		if ((i = GetASCIIKey(c))>1)
 		{ 
 			// find an entry beginning with given character
 			ScanDirectory(SelectedPath, i, fs_pFileExt, fs_Options);
@@ -2011,11 +2026,13 @@ void HandleUI(void)
 
 		if (select && menusub == 0)
 		{
-			if (m) {
+			if (m)
+			{
 				menustate = MENU_NONE1;
-				OsdReset(RESET_NORMAL);
+				OsdReset();
 			}
-			else {
+			else
+			{
 				char *filename = user_io_create_config_name();
 				unsigned long status = user_io_8bit_set_status(0, 0xffffffff);
 				iprintf("Saving config to %s\n", filename);
@@ -2569,9 +2586,7 @@ void HandleUI(void)
 
 				if (menustate == MENU_HARDFILE_CHANGED2)
 				{
-					ConfigIDE(config.enable_ide, config.hardfile[0].present && config.hardfile[0].enabled, config.hardfile[1].present && config.hardfile[1].enabled);
-					OsdReset(RESET_NORMAL);
-
+					OsdReset();
 					menustate = MENU_NONE1;
 				}
 			}

@@ -12,6 +12,9 @@
 #include "user_io.h"
 #include "menu.h"
 #include "hardware.h"
+#include "mist_cfg.h"
+#include "fpga_io.h"
+#include "osd.h"
 
 #define NUMDEV 10
 
@@ -516,6 +519,111 @@ uint16_t get_map_pid()
 	return input[mapping_dev].pid;
 }
 
+static char kr_fn_table[] =
+{
+	0x54, 0x48, // pause/break
+	0x55, 0x46, // prnscr
+	0x50, 0x4a, // home
+	0x4f, 0x4d, // end
+	0x52, 0x4b, // pgup
+	0x51, 0x4e, // pgdown
+	0x3a, 0x44, // f11
+	0x3b, 0x45, // f12
+
+	0x3c, 0x6c, // EMU_MOUSE
+	0x3d, 0x6d, // EMU_JOY0
+	0x3e, 0x6e, // EMU_JOY1
+	0x3f, 0x6f, // EMU_NONE
+
+				//Emulate keypad for A600 
+	0x1E, 0x59, //KP1
+	0x1F, 0x5A, //KP2
+	0x20, 0x5B, //KP3
+	0x21, 0x5C, //KP4
+	0x22, 0x5D, //KP5
+	0x23, 0x5E, //KP6
+	0x24, 0x5F, //KP7
+	0x25, 0x60, //KP8
+	0x26, 0x61, //KP9
+	0x27, 0x62, //KP0
+	0x2D, 0x56, //KP-
+	0x2E, 0x57, //KP+
+	0x31, 0x55, //KP*
+	0x2F, 0x68, //KP(
+	0x30, 0x69, //KP)
+	0x37, 0x63, //KP.
+	0x28, 0x58  //KP Enter
+};
+/*
+static void keyrah_trans(unsigned char *m, unsigned char *k)
+{
+	static char keyrah_fn_state = 0;
+	char fn = 0;
+	char empty = 1;
+	char rctrl = 0;
+	int i = 0;
+	while (i<6)
+	{
+		if ((k[i] == 0x64) || (k[i] == 0x32))
+		{
+			if (k[i] == 0x64) fn = 1;
+			if (k[i] == 0x32) rctrl = 1;
+			for (int n = i; n<5; n++) k[n] = k[n + 1];
+			k[5] = 0;
+		}
+		else
+		{
+			if (k[i]) empty = 0;
+			i++;
+		}
+	}
+
+	if (fn)
+	{
+		for (i = 0; i<6; i++)
+		{
+			for (int n = 0; n<(sizeof(kr_fn_table) / (2 * sizeof(kr_fn_table[0]))); n++)
+			{
+				if (k[i] == kr_fn_table[n * 2]) k[i] = kr_fn_table[(n * 2) + 1];
+			}
+		}
+	}
+	else
+	{
+		// free these keys for core usage
+		for (i = 0; i<6; i++)
+		{
+			if (k[i] == 0x53) k[i] = 0x68;
+			if (k[i] == 0x47) k[i] = 0x69;
+			if (k[i] == 0x49) k[i] = 0x6b; // workaround!
+		}
+	}
+
+	*m = rctrl ? (*m) | 0x10 : (*m) & ~0x10;
+	if (fn)
+	{
+		keyrah_fn_state |= 1;
+		if (*m || !empty) keyrah_fn_state |= 2;
+	}
+	else
+	{
+		if (keyrah_fn_state == 1)
+		{
+			if (core_type == CORE_TYPE_MINIMIG2)
+			{
+				send_keycode(KEY_MENU);
+				send_keycode(BREAK | KEY_MENU);
+			}
+			else
+			{
+				OsdKeySet(KEY_MENU);
+			}
+		}
+		keyrah_fn_state = 0;
+	}
+}
+*/
+
 #define KEY_EMU_LEFT  (KEY_MAX+1)
 #define KEY_EMU_RIGHT (KEY_MAX+2)
 #define KEY_EMU_UP    (KEY_MAX+3)
@@ -985,40 +1093,26 @@ static void input_cb(struct input_event *ev, int dev)
 				key = (key < (sizeof(ev2usb) / sizeof(ev2usb[0]))) ? ev2usb[key] : NONE;
 				if(key != NONE)
 				{
+					static uint16_t mod = 0;
+
+					//Keyrah v2: USB\VID_18D8&PID_0002\A600/A1200_MULTIMEDIA_EXTENSION_VERSION
+					int keyrah = (mist_cfg.keyrah_mode && (((((uint32_t)input[dev].vid) << 16) | input[dev].pid) == mist_cfg.keyrah_mode));
+
+					//if (keyrah) keyrah_trans(&m, k);
+
+					unsigned short reset_m = mod >> 8;
+					if (key == 0x4c) reset_m |= 0x100;
+					user_io_check_reset(reset_m, keyrah ? 1 : mist_cfg.reset_combo);
+
 					if (key & MODMASK)
 					{
-						modifiers = (ev->value) ? modifiers | (uint8_t)(key >> 8) : modifiers & ~(uint8_t)(key >> 8);
+						if (ev->value) mod |= key;
+						else mod &= ~key;
 					}
-					else
-					{
-						if (ev->value)
-						{
-							int found = 0;
-							for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++) if (keys[i] == (uint8_t)key) found = 1;
+					key = (mod & MODMASK) | (key & ~MODMASK);
 
-							if (!found)
-							{
-								for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++)
-								{
-									if (!keys[i])
-									{
-										keys[i] = (uint8_t)key;
-										break;
-									}
-								}
-							}
-						}
-						else
-						{
-							for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++) if (keys[i] == (uint8_t)key) keys[i] = 0;
-						}
-
-						int j = 0;
-						for (int i = 0; i < (sizeof(keys) / sizeof(keys[0])); i++) if (keys[i]) keys[j++] = keys[i];
-						while (j < (sizeof(keys) / sizeof(keys[0]))) keys[j++] = 0;
-					}
-
-					user_io_kbd(modifiers, keys, input[dev].vid, input[dev].pid);
+					menu_mod_set(mod >> 8);
+					user_io_kbd((uint16_t)key, ev->value);
 					return;
 				}
 			}
@@ -1181,7 +1275,7 @@ int input_test(int getchar)
 								{
 									//keyboard, buttons
 								case EV_KEY:
-									printf("Input event: type=EV_KEY, code=%d(%x), value=%d\n", ev.code, ev.code, ev.value);
+									if(ev.value<=1) printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d\n", ev.code, ev.code, ev.value);
 									break;
 
 									//mouse
@@ -1210,7 +1304,7 @@ int input_test(int getchar)
 									break;
 
 								default:
-									printf("Input event: type=%d, code=%d(%x), value=%d(%x)\n", ev.type, ev.code, ev.code, ev.value, ev.value);
+									printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x)\n", ev.type, ev.code, ev.code, ev.value, ev.value);
 								}
 							}
 

@@ -3,6 +3,9 @@
 
 #include "osd.h"
 
+#ifndef KEYCODES_H
+#define KEYCODES_H
+
 #define MISS  0xff
 #define KEYCODE_MAX (0x6f)
 
@@ -128,7 +131,7 @@ const unsigned short usb2ami[] = {
 	0x0f,  // 62: KP 0
 	0x3c,  // 63: KP .
 	0x30,  // 64: Europe 2
-	KEY_MENU | OSD,  // 65: App
+	0x69 | OSD,  // 65: App
 	MISS,  // 66: Power
 	MISS,  // 67: KP =
 	0x5a,  // 68: KP (
@@ -502,3 +505,5 @@ const unsigned short usb2archie[] = {
 	MISS, //  6e: F19
 	MISS, //  6f: F20
 };
+
+#endif
