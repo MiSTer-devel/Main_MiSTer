@@ -36,10 +36,10 @@ static struct {
 	fileTYPE file;
 	unsigned char sides;
 	unsigned char spt;
-} fdd_image[2];
+} fdd_image[2] = { 0 };
 
 // one harddisk
-fileTYPE hdd_image[2];
+fileTYPE hdd_image[2] = { 0 };
 unsigned long hdd_direct = 0;
 
 static unsigned char dma_buffer[512];
@@ -613,7 +613,7 @@ static void tos_clr() {
 extern unsigned char charfont[256][8];
 
 static void tos_font_load() {
-	fileTYPE file;
+	fileTYPE file = { 0 };
 	if (FileOpen(&file, "SYSTEM.FNT")) {
 		if (file.size == 4096) {
 			int i;
@@ -645,8 +645,9 @@ static void tos_font_load() {
 	}
 }
 
-void tos_load_cartridge(char *name) {
-	fileTYPE file;
+void tos_load_cartridge(char *name)
+{
+	fileTYPE file = { 0 };
 
 	if (name)
 		strncpy(config.cart_img, name, 11);
@@ -693,8 +694,9 @@ char tos_cartridge_is_inserted() {
 	return config.cart_img[0];
 }
 
-void tos_upload(char *name) {
-	fileTYPE file;
+void tos_upload(char *name)
+{
+	fileTYPE file = { 0 };
 
 	// set video offset in fpga
 	tos_set_video_adjust(0, 0);

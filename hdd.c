@@ -36,7 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SWAPW(a) ((((a)<<8)&0xff00)|(((a)>>8)&0x00ff))
 
 // hardfile structure
-hdfTYPE hdf[2];
+hdfTYPE hdf[2] = { 0 };
 
 static uint8_t sector_buffer[512];
 
@@ -685,11 +685,11 @@ unsigned char HardFileSeek(hdfTYPE *pHDF, unsigned long lba)
 	return FileSeekLBA(&pHDF->file, lba);
 }
 
-
 // OpenHardfile()
 unsigned char OpenHardfile(unsigned char unit)
 {
 	unsigned long time;
+	printf("\nChecking HDD %d\n", unit);
 
 	switch (config.hardfile[unit].enabled)
 	{
@@ -701,25 +701,26 @@ unsigned char OpenHardfile(unsigned char unit)
 			if(FileOpenEx(&hdf[unit].file, config.hardfile[unit].long_name, FileCanWrite(config.hardfile[unit].long_name) ? O_RDWR : O_RDONLY))
 			{
 				GetHardfileGeometry(&hdf[unit]);
-				hdd_debugf("HARDFILE %d:", unit);
-				hdd_debugf("file: \"%.8s.%.3s\"", hdf[unit].file.name, &hdf[unit].file.name[8]);
-				hdd_debugf("size: %lu (%lu MB)", hdf[unit].file.size, hdf[unit].file.size >> 20);
-				hdd_debugf("CHS: %u.%u.%u", hdf[unit].cylinders, hdf[unit].heads, hdf[unit].sectors);
-				hdd_debugf(" (%lu MB)", ((((unsigned long)hdf[unit].cylinders) * hdf[unit].heads * hdf[unit].sectors) >> 11));
-				time = GetTimer(0);
-				time = GetTimer(0) - time;
-				hdd_debugf("Hardfile indexed in %lu ms", time >> 16);
+				printf("HARDFILE %d%s:\n", unit, (config.hardfile[unit].enabled&HDF_SYNTHRDB) ? " (with fake RDB)" : "");
+				printf("file: \"%s\"\n", hdf[unit].file.name);
+				printf("size: %lu (%lu MB)\n", hdf[unit].file.size, hdf[unit].file.size >> 20);
+				printf("CHS: %u/%u/%u", hdf[unit].cylinders, hdf[unit].heads, hdf[unit].sectors);
+				printf(" (%lu MB), ", ((((unsigned long)hdf[unit].cylinders) * hdf[unit].heads * hdf[unit].sectors) >> 11));
 				if (config.hardfile[unit].enabled & HDF_SYNTHRDB) {
 					hdf[unit].offset = -(hdf[unit].heads*hdf[unit].sectors);
 				}
 				else {
 					hdf[unit].offset = 0;
 				}
+				printf("Offset: %d\n\n", hdf[unit].offset);
 				config.hardfile[unit].present = 1;
 				return 1;
 			}
 		}
 	}
+
+	FileClose(&hdf[unit].file);
+	printf("HDD %d: not present\n\n", unit);
 	config.hardfile[unit].present = 0;
 	return 0;
 }
@@ -728,7 +729,7 @@ unsigned char OpenHardfile(unsigned char unit)
 unsigned char GetHDFFileType(char *filename)
 {
 	uint8_t type = HDF_FILETYPE_NOTFOUND;
-	fileTYPE rdbfile;
+	fileTYPE rdbfile = { 0 };
 
 	if(FileOpen(&rdbfile, filename))
 	{

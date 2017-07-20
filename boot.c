@@ -174,7 +174,7 @@ void BootClearScreen(int adr, int size)
 //// BootUploadLogo() ////
 void BootUploadLogo()
 {
-	fileTYPE file;
+	fileTYPE file = { 0 };
 	int x, y;
 	int i = 0;
 	int adr;
@@ -235,7 +235,7 @@ void BootUploadLogo()
 //// BootUploadBall() ////
 void BootUploadBall()
 {
-	fileTYPE file;
+	fileTYPE file = { 0 };
 	int x;
 	int i = 0;
 	int adr;
@@ -267,7 +267,7 @@ void BootUploadBall()
 //// BootUploadCopper() ////
 void BootUploadCopper()
 {
-	fileTYPE file;
+	fileTYPE file = { 0 };
 	int x;
 	int i = 0;
 	int adr;
@@ -461,8 +461,7 @@ void BootInit()
 	df[3].status = 0;
 
 	config.kickstart[0] = 0;
-	SetConfigurationFilename(0); // Use default config
-	LoadConfiguration(0);  // Use slot-based config filename
+	LoadConfiguration(0);
 }
 
 

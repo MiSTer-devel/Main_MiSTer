@@ -18,7 +18,7 @@ typedef struct
 
 static archie_config_t config;
 
-fileTYPE floppy[MAX_FLOPPY];
+fileTYPE floppy[MAX_FLOPPY] = { 0 };
 
 #define ARCHIE_FILE_TX         0x53
 #define ARCHIE_FILE_TX_DAT     0x54
@@ -114,7 +114,7 @@ void archie_send_file(unsigned char id, char *name)
 {
 	archie_debugf("Sending file with id %d", id);
 
-	fileTYPE file;
+	fileTYPE file = { 0 };
 	if (!FileOpen(&file, name)) return;
 
 	// prepare transmission of new file

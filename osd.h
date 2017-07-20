@@ -72,7 +72,6 @@ void OsdClear(void);
 void OsdEnable(unsigned char mode);
 void OsdDisable(void);
 void OsdWaitVBL(void);
-void OsdReset();
 void ConfigFilter(unsigned char lores, unsigned char hires);
 void OsdReconfig(); // Reset to Chameleon core.
 					// deprecated functions from Minimig 1
@@ -83,7 +82,6 @@ void ConfigMemory(unsigned char memory);
 void ConfigCPU(unsigned char cpu);
 void ConfigChipset(unsigned char chipset);
 void ConfigFloppy(unsigned char drives, unsigned char speed);
-void ConfigIDE(unsigned char gayle, unsigned char master, unsigned char slave);
 void ConfigAutofire(unsigned char autofire, unsigned char mask);
 void OSD_PrintText(unsigned char line, char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert);
 void OsdWriteDoubleSize(unsigned char n, char *s, unsigned char pass);

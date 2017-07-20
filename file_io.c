@@ -23,7 +23,11 @@ int iFirstEntry = 0;
 
 void FileClose(fileTYPE *file)
 {
-	if (file->fd > 0) close(file->fd);
+	if (file->fd > 0)
+	{
+		//printf("closing %d\n", file->fd);
+		close(file->fd);
+	}
 	file->fd = -1;
 }
 
@@ -40,7 +44,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode)
 	strcpy(file->name, p+1);
 
 	file->fd = open(full_path, mode);
-	if (file->fd < 0)
+	if (file->fd <= 0)
 	{
 		printf("FileOpenEx(open) File:%s, error: %d.\n", full_path, file->fd);
 		file->fd = -1;
@@ -52,6 +56,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode)
 	if ( ret < 0)
 	{
 		printf("FileOpenEx(fstat) File:%s, error: %d.\n", full_path, ret);
+		file->fd = -1;
 		return 0;
 	}
 
@@ -59,7 +64,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode)
 	file->offset = 0;
 	file->mode = mode;
 
-	//	printf("opened %s, size %lu\n", full_path, file->size);
+	//printf("opened %s, size %lu\n", full_path, file->size);
 	return 1;
 }
 

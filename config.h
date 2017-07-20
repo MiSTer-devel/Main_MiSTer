@@ -42,9 +42,8 @@ extern char DebugMode;
 
 char UploadKickstart(char *name);
 char UploadActionReplay();
-void SetConfigurationFilename(int config);	// Set configuration filename by slot number
-unsigned char LoadConfiguration(char *filename);	// Can supply NULL to use filename previously set by slot number
-unsigned char SaveConfiguration(char *filename);	// Can supply NULL to use filename previously set by slot number
-unsigned char ConfigurationExists(char *filename);
+unsigned char LoadConfiguration(int num);	// Can supply NULL to use filename previously set by slot number
+unsigned char SaveConfiguration(int num);	// Can supply NULL to use filename previously set by slot number
+unsigned char ConfigurationExists(int num);
 void ApplyConfiguration(char reloadkickstart);
-
+void MinimigReset();

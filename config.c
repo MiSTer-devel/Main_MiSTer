@@ -16,7 +16,6 @@
 #include "input.h"
 
 configTYPE config = { 0 };
-char configfilename[32];
 char DebugMode = 0;
 unsigned char romkey[3072];
 
@@ -67,7 +66,7 @@ void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, in
 //// UploadKickstart() ////
 char UploadKickstart(char *name)
 {
-	fileTYPE file;
+	fileTYPE file = { 0 };
 	int keysize = 0;
 
 	BootPrint("Checking for Amiga Forever key file:");
@@ -151,7 +150,7 @@ char UploadKickstart(char *name)
 //// UploadActionReplay() ////
 char UploadActionReplay()
 {
-	fileTYPE file;
+	fileTYPE file = { 0 };
 	if(FileOpen(&file, "Amiga/HRTMON.ROM") || FileOpen(&file, "HRTMON.ROM"))
 	{
 		int adr, data;
@@ -217,31 +216,19 @@ char UploadActionReplay()
 	return(0);
 }
 
-
-//// SetConfigurationFilename() ////
-void SetConfigurationFilename(int config)
-{
-	if (config)
-		siprintf(configfilename, "MINIMIG%d.CFG", config);
-	else
-		strcpy(configfilename, "MINIMIG.CFG");
-}
+#define SET_CONFIG_NAME(str,num) \
+	if (num) sprintf(str, "MINIMIG%d.CFG", num); \
+		else strcpy(str, "MINIMIG.CFG");
 
 
 //// ConfigurationExists() ////
-unsigned char ConfigurationExists(char *filename)
+unsigned char ConfigurationExists(int num)
 {
-	char path[256] = { CONFIG_DIR"/" };
+	static char path[256];
+	strcpy(path, CONFIG_DIR"/");
+	SET_CONFIG_NAME((path+strlen(path)), num);
 
-	if (!filename)
-	{
-		// use slot-based filename if none provided
-		filename = configfilename;
-	}
-	
-	strcat(path, filename);
-
-	fileTYPE f;
+	fileTYPE f = { 0 };
 	if(FileOpen(&f, path))
 	{
 		FileClose(&f);
@@ -250,9 +237,8 @@ unsigned char ConfigurationExists(char *filename)
 	return(0);
 }
 
-
 //// LoadConfiguration() ////
-unsigned char LoadConfiguration(char *filename)
+unsigned char LoadConfiguration(int num)
 {
 	static const char config_id[] = "MNMGCFG0";
 	char updatekickstart = 0;
@@ -260,11 +246,8 @@ unsigned char LoadConfiguration(char *filename)
 	unsigned char key, i;
 	static configTYPE tmpconf;
 
-	if (!filename)
-	{
-		// use slot-based filename if none provided
-		filename = configfilename;
-	}
+	static char filename[256];
+	SET_CONFIG_NAME(filename, num);
 
 	// load configuration data
 	int size = FileLoadConfig(filename, 0, 0);
@@ -310,11 +293,9 @@ unsigned char LoadConfiguration(char *filename)
 		config.floppy.drives = 1;
 		config.enable_ide = 0;
 		config.hardfile[0].enabled = 1;
-		strcpy(config.hardfile[0].long_name, "HARDFILE1.HDF");
 		config.hardfile[0].long_name[0] = 0;
-		strcpy(config.hardfile[1].long_name, "HARDFILE2.HDF");
+		config.hardfile[1].enabled = 1;
 		config.hardfile[1].long_name[0] = 0;
-		config.hardfile[1].enabled = 1;  // Default is access to entire SD card
 		updatekickstart = true;
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
@@ -345,6 +326,19 @@ unsigned char LoadConfiguration(char *filename)
 	return(result);
 }
 
+void IDE_setup()
+{
+	OpenHardfile(0);
+	OpenHardfile(1);
+	spi_osd_cmd8(OSD_CMD_HDD, ((config.hardfile[1].present && config.hardfile[1].enabled) ? 4 : 0) | ((config.hardfile[0].present && config.hardfile[0].enabled) ? 2 : 0) | (config.enable_ide ? 1 : 0));
+}
+
+void MinimigReset()
+{
+	spi_osd_cmd8(OSD_CMD_RST, 0x01);
+	IDE_setup();
+	spi_osd_cmd8(OSD_CMD_RST, 0x00);
+}
 
 //// ApplyConfiguration() ////
 void ApplyConfiguration(char reloadkickstart)
@@ -361,36 +355,7 @@ void ApplyConfiguration(char reloadkickstart)
 	}
 
 	// Whether or not we uploaded a kickstart image we now need to set various parameters from the config.
-	if (OpenHardfile(0)) {
-		switch (hdf[0].type) {
-			// Customise message for SD card acces
-		case (HDF_FILE | HDF_SYNTHRDB) :
-			printf("\nHardfile 0 (with fake RDB): %s\n", hdf[0].file.name);
-			break;
-		case HDF_FILE:
-			printf("\nHardfile 0: %s\n", hdf[0].file.name);
-			break;
-		}
-		printf("CHS: %u.%u.%u\n", hdf[0].cylinders, hdf[0].heads, hdf[0].sectors);
-		printf("Size: %lu MB\n", ((((unsigned long)hdf[0].cylinders) * hdf[0].heads * hdf[0].sectors) >> 11));
-		printf("Offset: %ld\n", hdf[0].offset);
-	}
-
-	if (OpenHardfile(1)) {
-		switch (hdf[1].type) {
-		case (HDF_FILE | HDF_SYNTHRDB) :
-			printf("\nHardfile 1 (with fake RDB): %s\n", hdf[1].file.name);
-			break;
-		case HDF_FILE:
-			printf("\nHardfile 1: %s\n", hdf[1].file.name);
-			break;
-		}
-		printf("CHS: %u.%u.%u\n", hdf[1].cylinders, hdf[1].heads, hdf[1].sectors);
-		printf("Size: %lu MB\n", ((((unsigned long)hdf[1].cylinders) * hdf[1].heads * hdf[1].sectors) >> 11));
-		printf("Offset: %ld\n", hdf[1].offset);
-	}
-
-	ConfigIDE(config.enable_ide, config.hardfile[0].present && config.hardfile[0].enabled, config.hardfile[1].present && config.hardfile[1].enabled);
+	IDE_setup();
 
 	printf("CPU clock     : %s\n", config.chipset & 0x01 ? "turbo" : "normal");
 	printf("Chip RAM size : %s\n", config_memory_chip_msg[config.memory & 0x03]);
@@ -481,11 +446,10 @@ void ApplyConfiguration(char reloadkickstart)
 }
 
 //// SaveConfiguration() ////
-unsigned char SaveConfiguration(char *filename)
+unsigned char SaveConfiguration(int num)
 {
-	if (!filename) {
-		// use slot-based filename if none provided
-		filename = configfilename;
-	}
+	static char filename[256];
+	SET_CONFIG_NAME(filename, num);
+
 	return FileSaveConfig(filename, &config, sizeof(config));
 }

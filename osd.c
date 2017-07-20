@@ -496,14 +496,6 @@ void OsdDisable(void)
 		spi_osd_cmd8(OSD_CMD_OSD, 0x00);
 }
 
-void OsdReset()
-{
-	spi_osd_cmd8(OSD_CMD_RST, 0x01);
-
-	ConfigIDE(config.enable_ide, config.hardfile[0].present && config.hardfile[0].enabled, config.hardfile[1].present && config.hardfile[1].enabled);
-
-	spi_osd_cmd8(OSD_CMD_RST, 0x00);
-}
 
 void MM1_ConfigFilter(unsigned char lores, unsigned char hires) {
 	spi_osd_cmd(MM1_OSDCMDCFGFLT | ((hires & 0x03) << 2) | (lores & 0x03));
@@ -537,11 +529,6 @@ void ConfigFloppy(unsigned char drives, unsigned char speed)
 void MM1_ConfigScanlines(unsigned char scanlines)
 {
 	spi_osd_cmd(MM1_OSDCMDCFGSCL | (scanlines & 0x0F));
-}
-
-void ConfigIDE(unsigned char gayle, unsigned char master, unsigned char slave)
-{
-	spi_osd_cmd8(OSD_CMD_HDD, (slave ? 4 : 0) | (master ? 2 : 0) | (gayle ? 1 : 0));
 }
 
 void ConfigAutofire(unsigned char autofire, unsigned char mask)

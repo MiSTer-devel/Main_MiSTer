@@ -584,7 +584,7 @@ int user_io_file_mount(int num, char *name)
 
 int user_io_file_tx(char* name, unsigned char index)
 {
-	fileTYPE f;
+	fileTYPE f = { 0 };
 	static uint8_t buf[512];
 
 	if (!FileOpen(&f, name)) return 0;
@@ -1318,7 +1318,7 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 		switch (core_type)
 		{
 		case CORE_TYPE_MINIMIG2:
-			OsdReset();
+			MinimigReset();
 			break;
 
 		case CORE_TYPE_8BIT:
