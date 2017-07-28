@@ -456,15 +456,34 @@ uint16_t user_io_sd_get_status(uint32_t *lba)
 }
 
 // read 8 bit keyboard LEDs status from FPGA
-uint8_t user_io_kbdled_get_status(void)
+uint16_t user_io_kbdled_get_status(void)
 {
-	uint8_t c;
+	uint16_t c;
 
 	spi_uio_cmd_cont(UIO_GET_KBD_LED);
-	c = spi_in();
+	c = spi_w(0);
 	DisableIO();
 
 	return c;
+}
+
+uint8_t user_io_ps2_ctl(uint8_t *kbd_ctl, uint8_t *mouse_ctl)
+{
+	uint16_t c;
+	uint8_t res = 0;
+
+	spi_uio_cmd_cont(UIO_PS2_CTL);
+
+	c = spi_w(0);
+	if (kbd_ctl) *kbd_ctl = (uint8_t)c;
+	res |= ((c >> 8) & 1);
+
+	c = spi_w(0);
+	if (mouse_ctl) *mouse_ctl = (uint8_t)c;
+	res |= ((c >> 7) & 2);
+
+	DisableIO();
+	return res;
 }
 
 // read 32 bit ethernet status word from FPGA
@@ -749,6 +768,12 @@ void __inline diskled_on()
 	diskled_is_on = 1;
 }
 
+void kbd_reply(char code)
+{
+	printf("kbd_reply = 0x%02X\n", code);
+	spi_uio_cmd8(UIO_KEYBOARD, code);
+}
+
 void user_io_poll()
 {
 	if ((core_type != CORE_TYPE_MINIMIG2) &&
@@ -845,10 +870,10 @@ void user_io_poll()
 
 	if (core_type == CORE_TYPE_8BIT)
 	{
+		/*
 		unsigned char c = 1, f, p = 0;
 
 		// check for serial data to be sent
-
 		// check for incoming serial data. this is directly forwarded to the
 		// arm rs232 and mixes with debug output.
 		spi_uio_cmd_cont(UIO_SIO_IN);
@@ -869,6 +894,7 @@ void user_io_poll()
 			iprintf("\033[0m");
 		}
 		DisableIO();
+		*/
 
 		// sd card emulation
 		{
@@ -1141,10 +1167,78 @@ void user_io_poll()
 
 	if (core_type == CORE_TYPE_ARCHIE) archie_poll();
 
+	static uint8_t use_ps2ctl = 0;
+	static uint8_t leds = 0;
+	if(use_ps2ctl)
+	{
+		static uint8_t kbd_cmd = 0;
+		static uint8_t kbd_byte = 0;
+
+		leds |= (KBD_LED_FLAG_STATUS | KBD_LED_CAPS_CONTROL);
+
+		uint8_t kbd_ctl, mouse_ctl;
+		uint8_t ps2ctl = user_io_ps2_ctl(&kbd_ctl, &mouse_ctl);
+
+		if (ps2ctl & 1)
+		{
+			printf("kbd_ctl = 0x%02X\n", kbd_ctl);
+			if (!kbd_byte)
+			{
+				kbd_cmd = kbd_ctl;
+				switch (kbd_cmd)
+				{
+				case 0xff:
+					kbd_reply(0xFA);
+					kbd_reply(0xAA);
+					break;
+
+				case 0xf4:
+				case 0xf5:
+				case 0xfa:
+					kbd_reply(0xFA);
+					break;
+
+				case 0xed:
+					kbd_reply(0xFA);
+					kbd_byte++;
+					break;
+
+				default:
+					kbd_reply(0xFE);
+					break;
+				}
+			}
+			else
+			{
+				switch (kbd_cmd)
+				{
+				case 0xed:
+					kbd_reply(0xFA);
+					kbd_byte = 0;
+
+					if (kbd_ctl & 4) leds |= KBD_LED_CAPS_STATUS;
+						else leds &= ~KBD_LED_CAPS_STATUS;
+
+					break;
+
+				default:
+					kbd_byte = 0;
+					break;
+				}
+			}
+		}
+	}
+
 	if (CheckTimer(led_timer))
 	{
 		led_timer = GetTimer(LED_FREQ);
-		uint8_t leds = user_io_kbdled_get_status();
+		if (!use_ps2ctl)
+		{
+			uint16_t s = user_io_kbdled_get_status();
+			if(s & 0x100) use_ps2ctl = 1;
+			if (!use_ps2ctl) leds = (uint8_t)s;
+		}
+
 		if ((leds & KBD_LED_FLAG_MASK) != KBD_LED_FLAG_STATUS) leds = 0;
 
 		if ((keyboard_leds & KBD_LED_CAPS_MASK) != (leds & KBD_LED_CAPS_MASK))

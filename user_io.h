@@ -53,6 +53,7 @@
 #define UIO_SET_STATUS2 0x1e  // 32bit status
 #define UIO_GET_KBD_LED 0x1f  // keyboard LEDs control
 #define UIO_SET_VIDEO   0x20  // set HDMI video mode 0: 1280x720p60(TV), 1: 1280x1024p60(PC), 2-255: reserved
+#define UIO_PS2_CTL     0x21  // get PS2 control from supported cores
 
 // codes as used by 8bit (atari 800, zx81) via SS2
 #define UIO_GET_STATUS  0x50
