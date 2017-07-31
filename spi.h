@@ -29,6 +29,7 @@ void spi24(uint32_t parm);
 void spi32(uint32_t parm);
 void spi32le(uint32_t parm);
 void spi_n(uint8_t value, uint16_t cnt);
+uint32_t spi32w(uint32_t parm);
 
 /* block transfer functions */
 void spi_block_read(uint8_t *addr, int wide);

@@ -20,6 +20,7 @@
 #include "file_io.h"
 #include "config.h"
 #include "menu.h"
+#include "x86.h"
 
 #define BREAK  0x8000
 
@@ -133,9 +134,17 @@ char is_menu_core()
 	return (is_menu_type == 1);
 }
 
+static int is_x86_type = 0;
+char is_x86_core()
+{
+	if (!is_x86_type) is_x86_type = strcasecmp(core_name, "AO486") ? 2 : 1;
+	return (is_x86_type == 1);
+}
+
 static void user_io_read_core_name()
 {
 	is_menu_type = 0;
+	is_x86_type  = 0;
 	core_name[0] = 0;
 
 	if (user_io_is_8bit_with_config_string())
@@ -276,21 +285,46 @@ void user_io_detect_core_type()
 				user_io_8bit_set_status(status, 0xffffffff);
 			}
 
-			// check if there's a <core>.rom present
-			sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
-			if (!user_io_file_tx(mainpath, 0))
+			// check for multipart rom
+			sprintf(mainpath, "%s/boot0.rom", user_io_get_core_name());
+			if (user_io_file_tx(mainpath, 0))
 			{
-				strcpy(name + strlen(name) - 3, "ROM");
-				user_io_file_tx(name, 0);
+				sprintf(mainpath, "%s/boot1.rom", user_io_get_core_name());
+				if (user_io_file_tx(mainpath, 0x40))
+				{
+					sprintf(mainpath, "%s/boot2.rom", user_io_get_core_name());
+					if (user_io_file_tx(mainpath, 0x80))
+					{
+						sprintf(mainpath, "%s/boot3.rom", user_io_get_core_name());
+						user_io_file_tx(mainpath, 0xC0);
+					}
+				}
+			}
+			else
+			{
+				// legacy style of rom
+				sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
+				if (!user_io_file_tx(mainpath, 0))
+				{
+					strcpy(name + strlen(name) - 3, "ROM");
+					user_io_file_tx(name, 0);
+				}
 			}
 
-			// check if there's a <core>.vhd present
-			sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
-			user_io_set_index(0);
-			if (!user_io_file_mount(0, mainpath))
+			if (is_x86_core())
 			{
-				strcpy(name + strlen(name) - 3, "VHD");
-				user_io_file_mount(0, name);
+				x86_init();
+			}
+			else
+			{
+				// check if there's a <core>.vhd present
+				sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
+				user_io_set_index(0);
+				if (!user_io_file_mount(0, mainpath))
+				{
+					strcpy(name + strlen(name) - 3, "VHD");
+					user_io_file_mount(0, name);
+				}
 			}
 		}
 
@@ -613,6 +647,14 @@ int user_io_file_tx(char* name, unsigned char index)
 	/* transmit the entire file using one transfer */
 	iprintf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index&0x3F, index>>6);
 
+	if (is_x86_core())
+	{
+		printf("using DMA transfer mode\n");
+		x86_send(&f, index);
+		FileClose(&f);
+		return 1;
+	}
+
 	// set index byte (0=bios rom, 1-n=OSD entry index)
 	user_io_set_index(index);
 
@@ -654,7 +696,7 @@ int user_io_file_tx(char* name, unsigned char index)
 	spi8(0x00);
 	DisableFpga();
 
-	iprintf("\n");
+	printf("\n");
 	return 1;
 }
 
@@ -897,6 +939,11 @@ void user_io_poll()
 		*/
 
 		// sd card emulation
+		if (is_x86_core())
+		{
+			x86_poll();
+		}
+		else
 		{
 			static char buffer[4][512];
 			static uint64_t buffer_lba[4] = { -1,-1,-1,-1 };

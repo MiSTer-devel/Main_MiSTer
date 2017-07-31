@@ -132,6 +132,14 @@ void spi32(uint32_t parm)
 	spi8(parm >> 0);
 }
 
+uint32_t spi32w(uint32_t parm)
+{
+	uint32_t res;
+	res = spi_w(parm);
+	res |= (spi_w(parm>>16))<<16;
+	return res;
+}
+
 // little endian: lsb first
 void spi32le(uint32_t parm)
 {

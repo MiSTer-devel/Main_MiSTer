@@ -64,6 +64,11 @@
 #define UIO_FILE_INDEX  0x55
 #define UIO_FILE_INFO   0x56
 
+// ao486 direct memory access
+#define UIO_DMA_WRITE   0x61
+#define UIO_DMA_READ    0x62
+#define UIO_DMA_SDIO    0x63
+
 #define JOY_RIGHT       0x01
 #define JOY_LEFT        0x02
 #define JOY_DOWN        0x04
@@ -168,6 +173,7 @@ int  user_io_file_mount(int num, char *name);
 char *user_io_get_core_name();
 char *user_io_get_core_name_ex();
 char is_menu_core();
+char is_x86_core();
 
 emu_mode_t user_io_get_kbdemu();
 
