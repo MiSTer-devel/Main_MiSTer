@@ -1672,7 +1672,7 @@ void user_io_kbd(uint16_t key, int press)
 						}
 						else
 						{
-							send_keycode(code);
+							send_keycode((press == 2) ? code & ~EXT : code);
 						}
 					}
 				}

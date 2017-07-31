@@ -35,7 +35,7 @@
 #include "user_io.h"
 #include "file_io.h"
 
-#define ALT_CPU_CPU_FREQ 30000000u
+#define ALT_CPU_CPU_FREQ 90000000u
 
 #define FLOPPY_BASE      0x8800
 #define HDD_BASE         0x8840 

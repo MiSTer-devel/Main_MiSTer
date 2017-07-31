@@ -728,7 +728,7 @@ static void input_cb(struct input_event *ev, int dev)
 	static char keys[6] = { 0,0,0,0,0,0 };
 
 	// repeat events won't be processed
-	if (ev->type == EV_KEY && ev->value > 1) return;
+	if (ev->type == EV_KEY && (ev->value > 1 && !is_x86_core())) return;
 
 	int map_skip = (ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0 && mapping_type==1);
 	int cancel   = (ev->type == EV_KEY && ev->code == 1);
