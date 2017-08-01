@@ -191,47 +191,6 @@ static void crc32(uint8_t *ptr, uint32_t *crc_output)
     memcpy(crc, new_crc, sizeof(crc));
 }
 
-struct entry_t
-{
-	uint8_t type;
-	uint8_t name[15];
-
-	union args_t {
-		struct bios_t {
-			uint32_t sector;
-			uint32_t size_in_bytes;
-			uint32_t destination;
-			uint32_t crc32;
-		} bios;
-		struct hdd_t {
-			uint32_t sector;
-			uint32_t cyliders;
-			uint32_t heads;
-			uint32_t spt;
-		} hdd;
-		struct floppy_t {
-			uint32_t sector;
-		} floppy;
-		struct end_of_list_t {
-			uint32_t crc32;
-		} end_of_list;
-	} args;
-} __attribute__((packed));
-
-#define ENTRIES_COUNT 128
-static struct entry_t entries[ENTRIES_COUNT];
-
-#define TYPE_BIOS 		1
-#define TYPE_VGABIOS 	2
-#define TYPE_HDD        3
-#define TYPE_FD_1_44M	16
-#define TYPE_CRC32		127
-
-#define ENTRY_ABORT     -500
-
-static int floppy_index = -1;
-static int hdd_index    = -1;
-
 static bool floppy_is_160k = false;
 static bool floppy_is_180k = false;
 static bool floppy_is_320k = false;
@@ -241,44 +200,24 @@ static bool floppy_is_1_2m = false;
 static bool floppy_is_1_44m= true;
 static bool floppy_is_2_88m= false;
 
-static bool floppy_writeprotect = true;
+static fileTYPE fdd_image = { 0 };
+static fileTYPE hdd_image = { 0 };
 
-#define IOWR(base, reg, value) dma_set(base+(reg<<2), value)
+#define IMG_TYPE_FDD 0x800
+#define IMG_TYPE_HDD 0x000
 
-static void set_floppy(int index)
+static __inline fileTYPE *get_image(uint32_t type)
 {
-	floppy_index = index;
-	floppy_writeprotect = true;
-
-	int floppy_sd_base = (index >= 0) ? entries[floppy_index].args.floppy.sector : 0;
-
-	int floppy_media =
-		(floppy_index < 0)? 0x20 :
-		(floppy_is_160k)?   0x00 :
-		(floppy_is_180k)?   0x00 :
-		(floppy_is_320k)?   0x00 :
-		(floppy_is_360k)?   0x00 :
-		(floppy_is_720k)?   0xC0 :
-		(floppy_is_1_2m)?   0x00 :
-		(floppy_is_1_44m)?  0x80 :
-		(floppy_is_2_88m)?  0x40 :
-							0x20;
-
-	IOWR(FLOPPY_BASE, 0x0, floppy_index >= 0 ? 	1 : 0);
-	IOWR(FLOPPY_BASE, 0x1, floppy_writeprotect? 1 : 0);
-	IOWR(FLOPPY_BASE, 0x6, floppy_sd_base);
-	IOWR(FLOPPY_BASE, 0xC, floppy_media);
+	return (type == IMG_TYPE_FDD) ? &fdd_image : &hdd_image;
 }
 
-static fileTYPE sd_image = { 0 };
-
-static int img_mount(char *name)
+static int img_mount(uint32_t type, char *name)
 {
 	int writable = FileCanWrite(name);
-	int ret = FileOpenEx(&sd_image, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+	int ret = FileOpenEx(get_image(type), name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 	if (!ret)
 	{
-		sd_image.size = 0;
+		get_image(type)->size = 0;
 		printf("Failed to open file %s\n", name);
 		return 0;
 	}
@@ -287,65 +226,24 @@ static int img_mount(char *name)
 	return 1;
 }
 
-static int img_read(uint32_t lba, void *buf, uint32_t len)
+static int img_read(uint32_t type, uint32_t lba, void *buf, uint32_t len)
 {
-	if (!FileSeekLBA(&sd_image, lba)) return 0;
-	return FileReadAdv(&sd_image, buf, len);
+	if (!FileSeekLBA(get_image(type), lba)) return 0;
+	return FileReadAdv(get_image(type), buf, len);
 }
 
-static int img_write(uint32_t lba, void *buf, uint32_t len)
+static int img_write(uint32_t type, uint32_t lba, void *buf, uint32_t len)
 {
-	if (!FileSeekLBA(&sd_image, lba)) return 0;
-	return FileWriteAdv(&sd_image, buf, len);
+	if (!FileSeekLBA(get_image(type), lba)) return 0;
+	return FileWriteAdv(get_image(type), buf, len);
 }
+
+#define IOWR(base, reg, value) dma_set(base+(reg<<2), value)
 
 void x86_init()
 {
 	IOWR(PC_BUS_BASE, 0, 0x00FFF0EA);
 	IOWR(PC_BUS_BASE, 1, 0x000000F0);
-
-	//resets output
-    IOWR(PIO_OUTPUT_BASE, 0, 0x01);
-
-	if (!img_mount("ao486.vhd"))
-	{
-		return;
-	}
-
-	if (!img_read(0, entries, sizeof(entries)))
-	{
-		return;
-	}
-
-	//check crc32
-	bool crc_ok = false;
-	for(int i=0; i<ENTRIES_COUNT; i++)
-	{
-		if(entries[i].type == TYPE_CRC32)
-		{
-			uint8_t *ptr_start = (uint8_t *)entries;
-			uint32_t size = i*32;
-
-			crc32(NULL, NULL);
-			for(uint32_t j=0; j<size; j++) crc32(ptr_start + j, NULL);
-
-			uint32_t crc_calculated = 0;
-			crc32(NULL, &crc_calculated);
-
-			crc_ok = crc_calculated == entries[i].args.end_of_list.crc32;
-			break;
-		}
-	}
-
-	if(crc_ok == false)
-	{
-		printf("SD header invald\n");
-		return;
-	}
-	else
-	{
-		printf("SD header is ok\n");
-	}
 
 	//-------------------------------------------------------------------------- sound
 	/*
@@ -375,7 +273,7 @@ void x86_init()
 
 	//-------------------------------------------------------------------------- floppy
 
-	int floppy_sd_base = 0;
+	int floppy = img_mount(IMG_TYPE_FDD, "ao486/floppy.img");
 
 	/*
 	 0x00.[0]:      media present
@@ -419,7 +317,7 @@ void x86_init()
 	int floppy_wait_cycles = 200000000 / floppy_spt;
 
 	int floppy_media =
-			(floppy_index < 0)? 0x20 :
+			(!floppy)?          0x20 :
 			(floppy_is_160k)?   0x00 :
 			(floppy_is_180k)?   0x00 :
 			(floppy_is_320k)?   0x00 :
@@ -430,13 +328,13 @@ void x86_init()
 			(floppy_is_2_88m)?  0x40 :
 							    0x20;
 
-	IOWR(FLOPPY_BASE, 0x0, floppy_index >= 0? 	1 : 0);
-	IOWR(FLOPPY_BASE, 0x1, floppy_writeprotect? 1 : 0);
+	IOWR(FLOPPY_BASE, 0x0, floppy? 1 : 0);
+	IOWR(FLOPPY_BASE, 0x1, (floppy && (get_image(IMG_TYPE_FDD)->mode & O_RDWR)) ? 0 : 1);
 	IOWR(FLOPPY_BASE, 0x2, floppy_cylinders);
 	IOWR(FLOPPY_BASE, 0x3, floppy_spt);
 	IOWR(FLOPPY_BASE, 0x4, floppy_total_sectors);
 	IOWR(FLOPPY_BASE, 0x5, floppy_heads);
-	IOWR(FLOPPY_BASE, 0x6, floppy_sd_base);
+	IOWR(FLOPPY_BASE, 0x6, 0); // base LBA
 	IOWR(FLOPPY_BASE, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / ALT_CPU_CPU_FREQ)));
 	IOWR(FLOPPY_BASE, 0x8, (int)(1000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
 	IOWR(FLOPPY_BASE, 0x9, (int)(1666666.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
@@ -446,14 +344,21 @@ void x86_init()
 
 	//-------------------------------------------------------------------------- hdd
 
-	hdd_index = 2;
-	unsigned int hd_cylinders = entries[hdd_index].args.hdd.cyliders; //1-1024; 10 bits; implemented 16 bits
-	unsigned int hd_heads     = entries[hdd_index].args.hdd.heads;    //1-16;   4 bits; at least 9 heads for cmos 0x20
-	unsigned int hd_spt       = entries[hdd_index].args.hdd.spt;      //1-255;  8 bits;
+	unsigned int hd_cylinders = 0;
+	unsigned int hd_heads = 0;
+	unsigned int hd_spt = 0;
+	unsigned int hd_total_sectors = 0;
+	unsigned int hdd_sd_base = 0;
 
-	int hdd_sd_base = entries[hdd_index].args.hdd.sector;
+	int hdd = img_mount(IMG_TYPE_HDD, "ao486/hdd.vhd");
+	if (hdd)
+	{
+		hd_cylinders = 1024;
+		hd_heads = 16;
+		hd_spt = 63;
 
-	unsigned int hd_total_sectors = hd_cylinders * hd_heads * hd_spt;
+		hd_total_sectors = get_image(IMG_TYPE_HDD)->size / 512;
+	}
 
 	/*
 	0x00.[31:0]:    identify write
@@ -560,20 +465,20 @@ void x86_init()
 		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	};
 
-	for(int i=0; i<128; i++) IOWR(HDD_BASE, 0, ((unsigned int)identify[2*i+1] << 16) | (unsigned int)identify[2*i+0]);
+	for(int i=0; i<128; i++) IOWR(HDD_BASE, 0, hdd ? ((unsigned int)identify[2*i+1] << 16) | (unsigned int)identify[2*i+0] : 0);
 
 	IOWR(HDD_BASE, 1, hd_cylinders);
 	IOWR(HDD_BASE, 2, hd_heads);
 	IOWR(HDD_BASE, 3, hd_spt);
 	IOWR(HDD_BASE, 4, hd_spt * hd_heads);
 	IOWR(HDD_BASE, 5, hd_spt * hd_heads * hd_cylinders);
-	IOWR(HDD_BASE, 6, hdd_sd_base);
+	IOWR(HDD_BASE, 6, 0); // base LBA
 
-	printf("HDD:\n  hd_cylinders %d\n  hd_heads %d\n  hd_spt %d\n  hdd_sd_base %d\n\n", hd_cylinders, hd_heads, hd_spt, hdd_sd_base);
+	printf("HDD:\n  hd_cylinders %d\n  hd_heads %d\n  hd_spt %d\n  hd_total_sectors %d\n\n", hd_cylinders, hd_heads, hd_spt, hd_total_sectors);
 
 	//-------------------------------------------------------------------------- rtc
 
-	bool boot_from_floppy = true;
+	bool boot_from_floppy = floppy;
 
 	/*
     128.[26:0]: cycles in second
@@ -589,7 +494,7 @@ void x86_init()
 	bool translate_large= !translate_none && (hd_cylinders * hd_heads) <= 131072;
 	bool translate_lba  = !translate_none && !translate_large;
 
-	unsigned char translate_byte = (translate_large)? 1 : (translate_lba)? 2 : 0;
+	unsigned char translate_byte = 1; //(translate_large) ? 1 : (translate_lba) ? 2 : 0;
 
 	//rtc contents 0-127
 	unsigned int cmos[128] = {
@@ -622,15 +527,15 @@ void x86_init()
 		0x2F, //0x19: extended hd types 1/2; type 47d
 		0x00, //0x1A: extended hd types 2/2
 
-		hd_cylinders & 0xFF, 		//0x1B: hd 0 configuration 1/9; cylinders low
-		(hd_cylinders >> 8) & 0xFF, //0x1C: hd 0 configuration 2/9; cylinders high
-		hd_heads, 					//0x1D: hd 0 configuration 3/9; heads
-		0xFF, 						//0x1E: hd 0 configuration 4/9; write pre-comp low
-		0xFF, 						//0x1F: hd 0 configuration 5/9; write pre-comp high
-		0xC8, 						//0x20: hd 0 configuration 6/9; retries/bad map/heads>8
-		hd_cylinders & 0xFF, 		//0x21: hd 0 configuration 7/9; landing zone low
-		(hd_cylinders >> 8) & 0xFF, //0x22: hd 0 configuration 8/9; landing zone high
-		hd_spt, 					//0x23: hd 0 configuration 9/9; sectors/track
+		hdd ? hd_cylinders & 0xFF : 0, 		//0x1B: hd 0 configuration 1/9; cylinders low
+		hdd ? (hd_cylinders >> 8) & 0xFF : 0, //0x1C: hd 0 configuration 2/9; cylinders high
+		hdd ? hd_heads : 0, 					//0x1D: hd 0 configuration 3/9; heads
+		hdd ? 0xFF : 0, 						//0x1E: hd 0 configuration 4/9; write pre-comp low
+		hdd ? 0xFF : 0, 						//0x1F: hd 0 configuration 5/9; write pre-comp high
+		hdd ? 0xC8 : 0, 						//0x20: hd 0 configuration 6/9; retries/bad map/heads>8
+		hdd ? hd_cylinders & 0xFF : 0, 		//0x21: hd 0 configuration 7/9; landing zone low
+		hdd ? (hd_cylinders >> 8) & 0xFF : 0, //0x22: hd 0 configuration 8/9; landing zone high
+		hdd ? hd_spt : 0, 					//0x23: hd 0 configuration 9/9; sectors/track
 
 		0x00, //0x24: hd 1 configuration 1/9
 		0x00, //0x25: hd 1 configuration 2/9
@@ -685,13 +590,6 @@ void x86_init()
 	cmos[0x2F] = sum & 0xFF;
 
 	for(unsigned int i=0; i<sizeof(cmos)/sizeof(unsigned int); i++) IOWR(RTC_BASE, i, cmos[i]);
-
-	//--------------------------------------------------------------------------
-
-	set_floppy(4);
-
-	// let's go
-	IOWR(PIO_OUTPUT_BASE, 0, 0x00);
 }
 
 struct sd_param_t
@@ -712,13 +610,13 @@ void x86_poll()
 	if (sd_req == 1)
 	{
 		dma_rcvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
-		printf("Read: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
+		//printf("Read: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
-		if (sd_image.size)
+		if (get_image(sd_params.addr)->size)
 		{
 			if (sd_params.bl_cnt>0 && sd_params.bl_cnt<=4)
 			{
-				if (img_read(sd_params.lba, secbuf, sd_params.bl_cnt * 512))
+				if (img_read(sd_params.addr, sd_params.lba, secbuf, sd_params.bl_cnt * 512))
 				{
 					dma_sendbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
 					res = 1;
@@ -739,16 +637,16 @@ void x86_poll()
 	else if (sd_req == 2)
 	{
 		dma_rcvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
-		printf("Write: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
+		//printf("Write: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
-		if (sd_image.size)
+		if (get_image(sd_params.addr)->size)
 		{
 			if (sd_params.bl_cnt>0 && sd_params.bl_cnt <= 4)
 			{
-				if (sd_image.mode & O_RDWR)
+				if (get_image(sd_params.addr)->mode & O_RDWR)
 				{
 					dma_rcvbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
-					if (img_write(sd_params.lba, secbuf, sd_params.bl_cnt * 512))
+					if (img_write(sd_params.addr, sd_params.lba, secbuf, sd_params.bl_cnt * 512))
 					{
 						res = 1;
 					}

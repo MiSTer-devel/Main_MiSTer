@@ -87,6 +87,7 @@ void core_init()
 int main(int argc, char *argv[])
 {
 	fpga_io_init();
+	fpga_core_reset(1);
 	fpga_gpo_write(0);
 
 	DISKLED_OFF;
