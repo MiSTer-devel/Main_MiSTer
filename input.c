@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <fcntl.h>
-#include <linux/input.h>
 #include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -18,129 +17,97 @@
 
 #define NUMDEV 10
 
-typedef struct
-{
-	uint16_t vid, pid;
-	char     led;
-	char     last_l, last_r, last_u, last_d;
-
-	char     has_map;
-	uint32_t map[32];
-
-	char     has_mmap;
-	uint32_t mmap[32];
-
-	char     has_kbdmap;
-	uint8_t  kbdmap[256];
-}  devInput;
-
-static devInput input[NUMDEV] = {0};
-static int first_joystick = -1;
-
-#define FN      0x10000
-
-#define LCTRL   0x0100
-#define LSHIFT  0x0200
-#define LALT    0x0400
-#define LGUI    0x0800
-#define RCTRL   0x1000
-#define RSHIFT  0x2000
-#define RALT    0x4000
-#define RGUI    0x8000
-#define MODMASK 0xFF00
-#define NONE    0
-
-static int ev2usb[] =
+static int ev2amiga[] =
 {
 	NONE, //0   KEY_RESERVED	
-	0x29, //1   KEY_ESC			
-	0x1e, //2   KEY_1			
-	0x1f, //3   KEY_2			
-	0x20, //4   KEY_3			
-	0x21, //5   KEY_4			
-	0x22, //6   KEY_5			
-	0x23, //7   KEY_6			
-	0x24, //8   KEY_7			
-	0x25, //9   KEY_8			
-	0x26, //10  KEY_9			
-	0x27, //11  KEY_0			
-	0x2D, //12  KEY_MINUS		
-	0x2E, //13  KEY_EQUAL		
-	0x2A, //14  KEY_BACKSPACE	
-	0x2B, //15  KEY_TAB			
-	0x14, //16  KEY_Q			
-	0x1a, //17  KEY_W			
-	0x08, //18  KEY_E			
-	0x15, //19  KEY_R			
-	0x17, //20  KEY_T			
-	0x1c, //21  KEY_Y			
-	0x18, //22  KEY_U			
-	0x0c, //23  KEY_I			
-	0x12, //24  KEY_O			
-	0x13, //25  KEY_P			
-	0x2F, //26  KEY_LEFTBRACE	
-	0x30, //27  KEY_RIGHTBRACE	
-	0x28, //28  KEY_ENTER		
-	LCTRL, //29  KEY_LEFTCTRL	
-	0x04, //30  KEY_A			
-	0x16, //31  KEY_S			
-	0x07, //32  KEY_D			
-	0x09, //33  KEY_F			
-	0x0a, //34  KEY_G			
-	0x0b, //35  KEY_H			
-	0x0d, //36  KEY_J			
-	0x0e, //37  KEY_K			
-	0x0f, //38  KEY_L			
-	0x33, //39  KEY_SEMICOLON	
-	0x34, //40  KEY_APOSTROPHE	
-	0x35, //41  KEY_GRAVE		
-	LSHIFT, //42  KEY_LEFTSHIFT	
-	0x31, //43  KEY_BACKSLASH	
-	0x1d, //44  KEY_Z			
-	0x1b, //45  KEY_X			
-	0x06, //46  KEY_C			
-	0x19, //47  KEY_V			
-	0x05, //48  KEY_B			
-	0x11, //49  KEY_N			
-	0x10, //50  KEY_M			
-	0x36, //51  KEY_COMMA		
-	0x37, //52  KEY_DOT			
-	0x38, //53  KEY_SLASH		
-	RSHIFT, //54  KEY_RIGHTSHIFT	
-	0x55, //55  KEY_KPASTERISK	
-	LALT, //56  KEY_LEFTALT		
-	0x2C, //57  KEY_SPACE		
-	0x39, //58  KEY_CAPSLOCK	
-	0x3a, //59  KEY_F1			
-	0x3b, //60  KEY_F2			
-	0x3c, //61  KEY_F3			
-	0x3d, //62  KEY_F4			
-	0x3e, //63  KEY_F5			
-	0x3f, //64  KEY_F6			
-	0x40, //65  KEY_F7			
-	0x41, //66  KEY_F8			
-	0x42, //67  KEY_F9			
-	0x43, //68  KEY_F10			
-	0x53, //69  KEY_NUMLOCK		
-	0x47, //70  KEY_SCROLLLOCK	
-	0x5F, //71  KEY_KP7			
-	0x60, //72  KEY_KP8			
-	0x61, //73  KEY_KP9			
-	0x56, //74  KEY_KPMINUS		
-	0x5C, //75  KEY_KP4			
-	0x5D, //76  KEY_KP5			
-	0x5E, //77  KEY_KP6			
-	0x57, //78  KEY_KPPLUS		
-	0x59, //79  KEY_KP1			
-	0x5A, //80  KEY_KP2			
-	0x5B, //81  KEY_KP3			
-	0x62, //82  KEY_KP0			
-	0x63, //83  KEY_KPDOT		
+	0x45, //1   KEY_ESC			
+	0x01, //2   KEY_1			
+	0x02, //3   KEY_2			
+	0x03, //4   KEY_3			
+	0x04, //5   KEY_4			
+	0x05, //6   KEY_5			
+	0x06, //7   KEY_6			
+	0x07, //8   KEY_7			
+	0x08, //9   KEY_8			
+	0x09, //10  KEY_9			
+	0x0a, //11  KEY_0			
+	0x0b, //12  KEY_MINUS		
+	0x0c, //13  KEY_EQUAL		
+	0x41, //14  KEY_BACKSPACE	
+	0x42, //15  KEY_TAB			
+	0x10, //16  KEY_Q			
+	0x11, //17  KEY_W			
+	0x12, //18  KEY_E			
+	0x13, //19  KEY_R			
+	0x14, //20  KEY_T			
+	0x15, //21  KEY_Y			
+	0x16, //22  KEY_U			
+	0x17, //23  KEY_I			
+	0x18, //24  KEY_O			
+	0x19, //25  KEY_P			
+	0x1a, //26  KEY_LEFTBRACE	
+	0x1b, //27  KEY_RIGHTBRACE	
+	0x44, //28  KEY_ENTER		
+	0x63, //29  KEY_LEFTCTRL	
+	0x20, //30  KEY_A			
+	0x21, //31  KEY_S			
+	0x22, //32  KEY_D			
+	0x23, //33  KEY_F			
+	0x24, //34  KEY_G			
+	0x25, //35  KEY_H			
+	0x26, //36  KEY_J			
+	0x27, //37  KEY_K			
+	0x28, //38  KEY_L			
+	0x29, //39  KEY_SEMICOLON	
+	0x2a, //40  KEY_APOSTROPHE	
+	0x00, //41  KEY_GRAVE		
+	0x60, //42  KEY_LEFTSHIFT	
+	0x0d, //43  KEY_BACKSLASH	
+	0x31, //44  KEY_Z			
+	0x32, //45  KEY_X			
+	0x33, //46  KEY_C			
+	0x34, //47  KEY_V			
+	0x35, //48  KEY_B			
+	0x36, //49  KEY_N			
+	0x37, //50  KEY_M			
+	0x38, //51  KEY_COMMA		
+	0x39, //52  KEY_DOT			
+	0x3a, //53  KEY_SLASH		
+	0x61, //54  KEY_RIGHTSHIFT	
+	0x5d, //55  KEY_KPASTERISK	
+	0x64, //56  KEY_LEFTALT		
+	0x40, //57  KEY_SPACE		
+	0x62 | CAPS_TOGGLE, //58  KEY_CAPSLOCK	
+	0x50, //59  KEY_F1			
+	0x51, //60  KEY_F2			
+	0x52, //61  KEY_F3			
+	0x53, //62  KEY_F4			
+	0x54, //63  KEY_F5			
+	0x55, //64  KEY_F6			
+	0x56, //65  KEY_F7			
+	0x57, //66  KEY_F8			
+	0x58, //67  KEY_F9			
+	0x59, //68  KEY_F10			
+	NONE, //69  KEY_NUMLOCK		
+	NONE, //70  KEY_SCROLLLOCK	
+	0x3d, //71  KEY_KP7			
+	0x3e, //72  KEY_KP8			
+	0x3f, //73  KEY_KP9			
+	0x4a, //74  KEY_KPMINUS		
+	0x2d, //75  KEY_KP4			
+	0x2e, //76  KEY_KP5			
+	0x2f, //77  KEY_KP6			
+	0x5e, //78  KEY_KPPLUS		
+	0x1d, //79  KEY_KP1			
+	0x1e, //80  KEY_KP2			
+	0x1f, //81  KEY_KP3			
+	0x0f, //82  KEY_KP0			
+	0x3c, //83  KEY_KPDOT		
 	NONE, //84  ???				
 	NONE, //85  KEY_ZENKAKU		
-	FN,   //86  KEY_102ND		
-	0x44, //87  KEY_F11			
-	0x45, //88  KEY_F12			
+	NONE, //86  KEY_102ND		
+	0x5f, //87  KEY_F11			
+	NONE, //88  KEY_F12			
 	NONE, //89  KEY_RO			
 	NONE, //90  KEY_KATAKANA	
 	NONE, //91  KEY_HIRAGANA	
@@ -148,38 +115,38 @@ static int ev2usb[] =
 	NONE, //93  KEY_KATAKANA	
 	NONE, //94  KEY_MUHENKAN	
 	NONE, //95  KEY_KPJPCOMMA	
-	0x28, //96  KEY_KPENTER		
-	RCTRL, //97  KEY_RIGHTCTRL	
-	0x54, //98  KEY_KPSLASH		
+	0x43, //96  KEY_KPENTER		
+	0x63, //97  KEY_RIGHTCTRL	
+	0x5c, //98  KEY_KPSLASH		
 	NONE, //99  KEY_SYSRQ		
-	RALT, //100 KEY_RIGHTALT	
+	0x65, //100 KEY_RIGHTALT	
 	NONE, //101 KEY_LINEFEED	
-	0x4A, //102 KEY_HOME		
-	0x52, //103 KEY_UP			
-	0x4B, //104 KEY_PAGEUP		
-	0x50, //105 KEY_LEFT		
-	0x4F, //106 KEY_RIGHT		
-	0x4D, //107 KEY_END			
-	0x51, //108 KEY_DOWN		
-	0x4E, //109 KEY_PAGEDOWN	
-	0x49, //110 KEY_INSERT		
-	0x4C, //111 KEY_DELETE		
+	0x6a, //102 KEY_HOME		
+	0x4c, //103 KEY_UP			
+	NONE, //104 KEY_PAGEUP		
+	0x4f, //105 KEY_LEFT		
+	0x4e, //106 KEY_RIGHT		
+	NONE, //107 KEY_END			
+	0x4d, //108 KEY_DOWN		
+	NONE, //109 KEY_PAGEDOWN	
+	0x0d, //110 KEY_INSERT		
+	0x46, //111 KEY_DELETE		
 	NONE, //112 KEY_MACRO		
 	NONE, //113 KEY_MUTE		
 	NONE, //114 KEY_VOLUMEDOWN	
 	NONE, //115 KEY_VOLUMEUP	
 	NONE, //116 KEY_POWER		
-	0x67, //117 KEY_KPEQUAL		
+	NONE, //117 KEY_KPEQUAL		
 	NONE, //118 KEY_KPPLUSMINUS	
-	0x48, //119 KEY_PAUSE		
+	NONE, //119 KEY_PAUSE		
 	NONE, //120 KEY_SCALE		
 	NONE, //121 KEY_KPCOMMA		
 	NONE, //122 KEY_HANGEUL		
 	NONE, //123 KEY_HANJA		
 	NONE, //124 KEY_YEN			
-	LGUI, //125 KEY_LEFTMETA	
-	RGUI, //126 KEY_RIGHTMETA	
-	0x65, //127 KEY_COMPOSE		
+	0x66, //125 KEY_LEFTMETA	
+	0x67, //126 KEY_RIGHTMETA	
+	NONE, //127 KEY_COMPOSE		
 	NONE, //128 KEY_STOP		
 	NONE, //129 KEY_AGAIN		
 	NONE, //130 KEY_PROPS		
@@ -235,10 +202,10 @@ static int ev2usb[] =
 	NONE, //180 KEY_KPRIGHTPAREN
 	NONE, //181 KEY_NEW			
 	NONE, //182 KEY_REDO		
-	NONE, //183 KEY_F13			
-	NONE, //184 KEY_F14			
+	0x5a, //183 KEY_F13			
+	0x5b, //184 KEY_F14			
 	NONE, //185 KEY_F15			
-	NONE, //186 KEY_F16			
+	0x5f, //186 KEY_F16			
 	NONE, //187 KEY_F17			
 	NONE, //188 KEY_F18			
 	NONE, //189 KEY_F19			
@@ -246,7 +213,7 @@ static int ev2usb[] =
 	NONE, //191 KEY_F21			
 	NONE, //192 KEY_F22			
 	NONE, //193 KEY_F23			
-	RCTRL, //194 KEY_F24			
+	0x63, //194 KEY_F24			
 	NONE, //195 ???				
 	NONE, //196 ???				
 	NONE, //197 ???				
@@ -262,7 +229,7 @@ static int ev2usb[] =
 	NONE, //207 KEY_PLAY		
 	NONE, //208 KEY_FASTFORWARD	
 	NONE, //209 KEY_BASSBOOST	
-	0x46, //210 KEY_PRINT		
+	NONE, //210 KEY_PRINT		
 	NONE, //211 KEY_HP			
 	NONE, //212 KEY_CAMERA		
 	NONE, //213 KEY_SOUND		
@@ -310,13 +277,8 @@ static int ev2usb[] =
 	NONE  //255 ???				
 };
 
-#define OSD               0x0100     // to be used by OSD, not the core itself
-#define OSD_OPEN          0x0200     // OSD key not forwarded to core, but queued in arm controller
-#define CAPS_LOCK_TOGGLE  0x0400     // caps lock toggle behaviour
-#define NUM_LOCK_TOGGLE   0x0800
-#define EXT               0x1000
 
-static int ev2ps2[] =
+static const int ev2ps2[] =
 {
 	NONE, //0   KEY_RESERVED	
 	0x76, //1   KEY_ESC			
@@ -347,7 +309,7 @@ static int ev2ps2[] =
 	0x54, //26  KEY_LEFTBRACE	
 	0x5b, //27  KEY_RIGHTBRACE	
 	0x5a, //28  KEY_ENTER		
-	0x14, //29  KEY_LEFTCTRL	
+	LCTRL | 0x14, //29  KEY_LEFTCTRL	
 	0x1c, //30  KEY_A			
 	0x1b, //31  KEY_S			
 	0x23, //32  KEY_D			
@@ -360,7 +322,7 @@ static int ev2ps2[] =
 	0x4c, //39  KEY_SEMICOLON	
 	0x52, //40  KEY_APOSTROPHE	
 	0x0e, //41  KEY_GRAVE		
-	0x12, //42  KEY_LEFTSHIFT	
+	LSHIFT | 0x12, //42  KEY_LEFTSHIFT	
 	0x5d, //43  KEY_BACKSLASH	
 	0x1a, //44  KEY_Z			
 	0x22, //45  KEY_X			
@@ -372,9 +334,9 @@ static int ev2ps2[] =
 	0x41, //51  KEY_COMMA		
 	0x49, //52  KEY_DOT			
 	0x4a, //53  KEY_SLASH		
-	0x59, //54  KEY_RIGHTSHIFT	
+	RSHIFT | 0x59, //54  KEY_RIGHTSHIFT	
 	0x7c, //55  KEY_KPASTERISK	
-	0x11, //56  KEY_LEFTALT		
+	LALT | 0x11, //56  KEY_LEFTALT		
 	0x29, //57  KEY_SPACE		
 	0x58, //58  KEY_CAPSLOCK	
 	0x05, //59  KEY_F1			
@@ -387,8 +349,8 @@ static int ev2ps2[] =
 	0x0a, //66  KEY_F8			
 	0x01, //67  KEY_F9			
 	0x09, //68  KEY_F10			
-	0x77, //69  KEY_NUMLOCK		
-	0x7E, //70  KEY_SCROLLLOCK	
+	EMU_SWITCH_2 | 0x77, //69  KEY_NUMLOCK		
+	EMU_SWITCH_1 | 0x7E, //70  KEY_SCROLLLOCK	
 	0x6c, //71  KEY_KP7			
 	0x75, //72  KEY_KP8			
 	0x7d, //73  KEY_KP9			
@@ -406,7 +368,7 @@ static int ev2ps2[] =
 	NONE, //85  KEY_ZENKAKU		
 	NONE, //86  KEY_102ND		
 	0x78, //87  KEY_F11			
-	NONE, //88  KEY_F12			
+	OSD_OPEN, //88  KEY_F12			
 	NONE, //89  KEY_RO			
 	NONE, //90  KEY_KATAKANA	
 	NONE, //91  KEY_HIRAGANA	
@@ -415,10 +377,10 @@ static int ev2ps2[] =
 	NONE, //94  KEY_MUHENKAN	
 	NONE, //95  KEY_KPJPCOMMA	
 	EXT | 0x5a, //96  KEY_KPENTER		
-	EXT | 0x14, //97  KEY_RIGHTCTRL	
+	RCTRL | EXT | 0x14, //97  KEY_RIGHTCTRL	
 	EXT | 0x4a, //98  KEY_KPSLASH		
 	NONE, //99  KEY_SYSRQ		
-	EXT | 0x11, //100 KEY_RIGHTALT	
+	RALT | EXT | 0x11, //100 KEY_RIGHTALT	
 	NONE, //101 KEY_LINEFEED	
 	EXT | 0x6c, //102 KEY_HOME		
 	EXT | 0x75, //103 KEY_UP			
@@ -443,8 +405,8 @@ static int ev2ps2[] =
 	NONE, //122 KEY_HANGEUL		
 	NONE, //123 KEY_HANJA		
 	NONE, //124 KEY_YEN			
-	EXT | 0x1f, //125 KEY_LEFTMETA	
-	EXT | 0x27, //126 KEY_RIGHTMETA	
+	LGUI | EXT | 0x1f, //125 KEY_LEFTMETA	
+	RGUI | EXT | 0x27, //126 KEY_RIGHTMETA	
 	NONE, //127 KEY_COMPOSE		
 	NONE, //128 KEY_STOP		
 	NONE, //129 KEY_AGAIN		
@@ -505,14 +467,14 @@ static int ev2ps2[] =
 	NONE, //184 KEY_F14			
 	NONE, //185 KEY_F15			
 	NONE, //186 KEY_F16			
-	NONE, //187 KEY_F17			
-	NONE, //188 KEY_F18			
-	NONE, //189 KEY_F19			
-	NONE, //190 KEY_F20			
+	EMU_SWITCH_1 | 1, //187 KEY_F17			
+	EMU_SWITCH_1 | 2, //188 KEY_F18			
+	EMU_SWITCH_1 | 3, //189 KEY_F19			
+	EMU_SWITCH_1 | 4, //190 KEY_F20			
 	NONE, //191 KEY_F21			
 	NONE, //192 KEY_F22			
 	NONE, //193 KEY_F23			
-	NONE, //194 KEY_F24			
+	RCTRL | EXT | 0x14, //194 KEY_F24			
 	NONE, //195 ???				
 	NONE, //196 ???				
 	NONE, //197 ???				
@@ -575,6 +537,344 @@ static int ev2ps2[] =
 	NONE, //254 ???				
 	NONE  //255 ???				
 };
+
+/*
+
+// unmapped atari keys:
+// 0x63   KP (
+// 0x64   KP )
+
+// keycode translation table for atari
+const unsigned short usb2atari[] = {
+MISS,  // 00: NoEvent
+MISS,  // 01: Overrun Error
+MISS,  // 02: POST fail
+MISS,  // 03: ErrorUndefined
+0x1e,  // 04: a
+0x30,  // 05: b
+0x2e,  // 06: c
+0x20,  // 07: d
+0x12,  // 08: e
+0x21,  // 09: f
+0x22,  // 0a: g
+0x23,  // 0b: h
+0x17,  // 0c: i
+0x24,  // 0d: j
+0x25,  // 0e: k
+0x26,  // 0f: l
+0x32,  // 10: m
+0x31,  // 11: n
+0x18,  // 12: o
+0x19,  // 13: p
+0x10,  // 14: q
+0x13,  // 15: r
+0x1f,  // 16: s
+0x14,  // 17: t
+0x16,  // 18: u
+0x2f,  // 19: v
+0x11,  // 1a: w
+0x2d,  // 1b: x
+0x15,  // 1c: y
+0x2c,  // 1d: z
+0x02,  // 1e: 1
+0x03,  // 1f: 2
+0x04,  // 20: 3
+0x05,  // 21: 4
+0x06,  // 22: 5
+0x07,  // 23: 6
+0x08,  // 24: 7
+0x09,  // 25: 8
+0x0a,  // 26: 9
+0x0b,  // 27: 0
+0x1c,  // 28: Return
+0x01,  // 29: Escape
+0x0e,  // 2a: Backspace
+0x0f,  // 2b: Tab
+0x39,  // 2c: Space
+0x0c,  // 2d: -
+0x0d,  // 2e: =
+0x1a,  // 2f: [
+0x1b,  // 30: ]
+0x29,  // 31: backslash, only on us keyboard
+0x29,  // 32: Europe 1, only on int. keyboard
+0x27,  // 33: ;
+0x28,  // 34: '
+0x2b,  // 35: `
+0x33,  // 36: ,
+0x34,  // 37: .
+0x35,  // 38: /
+0x3a | CAPS_LOCK_TOGGLE,  // 39: Caps Lock
+0x3b,  // 3a: F1
+0x3c,  // 3b: F2
+0x3d,  // 3c: F3
+0x3e,  // 3d: F4
+0x3f,  // 3e: F5
+0x40,  // 3f: F6
+0x41,  // 40: F7
+0x42,  // 41: F8
+0x43,  // 42: F9
+0x44,  // 43: F10
+MISS,  // 44: F11
+OSD_OPEN,  // 45: F12
+MISS,  // 46: Print Screen
+NUM_LOCK_TOGGLE,  // 47: Scroll Lock
+MISS,  // 48: Pause
+0x52,  // 49: Insert
+0x47,  // 4a: Home
+0x62,  // 4b: Page Up
+0x53,  // 4c: Delete
+MISS,  // 4d: End
+0x61,  // 4e: Page Down
+0x4d,  // 4f: Right Arrow
+0x4b,  // 50: Left Arrow
+0x50,  // 51: Down Arrow
+0x48,  // 52: Up Arrow
+NUM_LOCK_TOGGLE,  // 53: Num Lock
+0x65,  // 54: KP /
+0x66,  // 55: KP *
+0x4a,  // 56: KP -
+0x4e,  // 57: KP +
+0x72,  // 58: KP Enter
+0x6d,  // 59: KP 1
+0x6e,  // 5a: KP 2
+0x6f,  // 5b: KP 3
+0x6a,  // 5c: KP 4
+0x6b,  // 5d: KP 5
+0x6c,  // 5e: KP 6
+0x67,  // 5f: KP 7
+0x68,  // 60: KP 8
+0x69,  // 61: KP 9
+0x70,  // 62: KP 0
+0x71,  // 63: KP .
+0x60,  // 64: Europe 2
+OSD_OPEN, // 65: App
+MISS,  // 66: Power
+MISS,  // 67: KP =
+MISS,  // 68: F13
+MISS,  // 69: F14
+MISS,  // 6a: F15
+0x52,  // 6b: insert (for keyrah)
+NUM_LOCK_TOGGLE | 1,  // 6c: F17
+NUM_LOCK_TOGGLE | 2,  // 6d: F18
+NUM_LOCK_TOGGLE | 3,  // 6e: F19
+NUM_LOCK_TOGGLE | 4   // 6f: F20
+};
+*/
+
+/*
+
+// Archimedes unmapped keys
+// Missing sterling
+// Missing kp_hash
+// Missing button_1
+// Missing button_2
+// Missing button_3
+// Missing button_4
+// Missing button_5
+
+// keycode translation table
+const unsigned short usb2archie[] = {
+MISS, // 00: NoEvent
+MISS, // 01: Overrun Error
+MISS, // 02: POST fail
+MISS, // 03: ErrorUndefined
+0x3c, // 04: a
+0x52, // 05: b
+0x50, // 06: c
+0x3e, // 07: d
+0x29, // 08: e
+0x3f, // 09: f
+0x40, // 0a: g
+0x41, // 0b: h
+0x2e, // 0c: i
+0x42, // 0d: j
+0x43, // 0e: k
+0x44, // 0f: l
+0x54, // 10: m
+0x53, // 11: n
+0x2f, // 12: o
+0x30, // 13: p
+0x27, // 14: q
+0x2a, // 15: r
+0x3d, // 16: s
+0x2b, // 17: t
+0x2d, // 18: u
+0x51, // 19: v
+0x28, // 1a: w
+0x4f, // 1b: x
+0x2c, // 1c: y
+0x4e, // 1d: z
+0x11, // 1e: 1
+0x12, // 1f: 2
+0x13, // 20: 3
+0x14, // 21: 4
+0x15, // 22: 5
+0x16, // 23: 6
+0x17, // 24: 7
+0x18, // 25: 8
+0x19, // 26: 9
+0x1a, // 27: 0
+0x47, // 28: Return
+0x00, // 29: Escape
+0x1e, // 2a: Backspace
+0x26, // 2b: Tab
+0x5f, // 2c: Space
+0x1b, // 2d: -
+0x1c, // 2e: =
+0x31, // 2f: [
+0x32, // 30: ]
+0x33, // 31: backslash (only on us keyboards)
+0x33, // 32: Europe 1 (only on international kbds)
+0x45, // 33: ;
+0x46, // 34: '
+0x10, // 35: `
+0x55, // 36: ,
+0x56, // 37: .
+0x57, // 38: /
+0x5d, // 39: Caps Lock
+0x01, // 3a: F1
+0x02, // 3b: F2
+0x03, // 3c: F3
+0x04, // 3d: F4
+0x05, // 3e: F5
+0x06, // 3f: F6
+0x07, // 40: F7
+0x08, // 41: F8
+0x09, // 42: F9
+0x0a, // 43: F10
+0x0b, // 44: F11
+0x0c, // 45: F12 - Used heavily by the archie... OSD moved to printscreen.
+//  0x0d, // 46: Print Screen
+OSD_OPEN, // 46: Print Screen
+0x0e, // 47: Scroll Lock
+0x0f, // 48: Pause
+0x1f, // 49: Insert
+0x20, // 4a: Home
+0x21, // 4b: Page Up
+0x34, // 4c: Delete
+0x35, // 4d: End
+0x36, // 4e: Page Down
+0x64, // 4f: Right Arrow
+0x62, // 50: Left Arrow
+0x63, // 51: Down Arrow
+0x59, // 52: Up Arrow
+0x22, // 53: Num Lock
+0x23, // 54: KP /
+0x24, // 55: KP *
+0x3a, // 56: KP -
+0x4b, // 57: KP +
+0x67, // 58: KP Enter
+0x5a, // 59: KP 1
+0x5b, // 5a: KP 2
+0x5c, // 5b: KP 3
+0x48, // 5c: KP 4
+0x49, // 5d: KP 5
+0x4a, // 5e: KP 6
+0x37, // 5f: KP 7
+0x38, // 60: KP 8
+0x39, // 61: KP 9
+0x65, // 62: KP 0
+0x66, // 63: KP decimal
+MISS, //  64: Europe 2
+0x72, //  65: App (maps to middle mouse button)
+MISS, //  66: Power
+MISS, //  67: KP =
+MISS, //  68: F13
+MISS, //  69: F14
+MISS, //  6a: F15
+0x1f, //  6b: insert (for keyrah)
+MISS, //  6c: F17
+MISS, //  6d: F18
+MISS, //  6e: F19
+MISS, //  6f: F20
+};
+*/
+
+/*
+unsigned short modifier_keycode(unsigned char index)
+{
+// usb modifer bits:
+//0     1     2    3    4     5     6    7
+//LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI
+
+if (core_type == CORE_TYPE_MINIMIG2)
+{
+static const unsigned short amiga_modifier[] = { 0x63, 0x60, 0x64, 0x66, 0x63, 0x61, 0x65, 0x67 };
+return amiga_modifier[index];
+}
+
+if (core_type == CORE_TYPE_MIST)
+{
+static const unsigned short atari_modifier[] = { 0x1d, 0x2a, 0x38, MISS, 0x1d, 0x36, 0x38, MISS };
+return atari_modifier[index];
+}
+
+if (core_type == CORE_TYPE_8BIT)
+{
+static const unsigned short ps2_modifier[] = { 0x14, 0x12, 0x11, EXT | 0x1f, EXT | 0x14, 0x59, EXT | 0x11, EXT | 0x27 };
+return ps2_modifier[index];
+}
+
+if (core_type == CORE_TYPE_ARCHIE)
+{
+static const unsigned short archie_modifier[] = { 0x36, 0x4c, 0x5e, MISS, 0x61, 0x58, 0x60, MISS };
+return archie_modifier[index];
+}
+
+return MISS;
+}
+*/
+
+
+uint32_t get_ps2_code(uint16_t key)
+{
+	if (key > 255) return NONE;
+	return ev2ps2[key];
+}
+
+uint32_t get_amiga_code(uint16_t key)
+{
+	if (key > 255) return NONE;
+	return ev2amiga[key];
+}
+
+uint32_t get_atari_code(uint16_t key)
+{
+	if (key > 255) return NONE;
+	return 0; // ev2atari[key];
+}
+
+uint32_t get_archie_code(uint16_t key)
+{
+	if (key > 255) return NONE;
+	return 0; // ev2archie[key];
+}
+
+static uint32_t modifier = 0;
+
+uint32_t get_key_mod()
+{
+	return modifier & MODMASK;
+}
+
+typedef struct
+{
+	uint16_t vid, pid;
+	char     led;
+	char     last_l, last_r, last_u, last_d;
+
+	char     has_map;
+	uint32_t map[32];
+
+	char     has_mmap;
+	uint32_t mmap[32];
+
+	char     has_kbdmap;
+	uint8_t  kbdmap[256];
+}  devInput;
+
+static devInput input[NUMDEV] = { 0 };
+static int first_joystick = -1;
 
 int mfd = -1;
 int mwd = -1;
@@ -789,51 +1089,51 @@ uint16_t get_map_pid()
 
 static char kr_fn_table[] =
 {
-	0x54, 0x48, // pause/break
-	0x55, 0x46, // prnscr
-	0x50, 0x4a, // home
-	0x4f, 0x4d, // end
-	0x52, 0x4b, // pgup
-	0x51, 0x4e, // pgdown
-	0x3a, 0x44, // f11
-	0x3b, 0x45, // f12
+	KEY_KPSLASH,    KEY_PAUSE,
+	KEY_KPASTERISK, KEY_PRINT,
+	KEY_LEFT,       KEY_HOME,
+	KEY_RIGHT,      KEY_END,
+	KEY_UP,         KEY_PAGEUP,
+	KEY_DOWN,       KEY_PAGEDOWN,
+	KEY_F1,         KEY_F11,
+	KEY_F2,         KEY_F12,
 
-	0x3c, 0x6c, // EMU_MOUSE
-	0x3d, 0x6d, // EMU_JOY0
-	0x3e, 0x6e, // EMU_JOY1
-	0x3f, 0x6f, // EMU_NONE
+	KEY_F3,         KEY_F17, // EMU_MOUSE
+	KEY_F4,         KEY_F18, // EMU_JOY0
+	KEY_F5,         KEY_F19, // EMU_JOY1
+	KEY_F6,         KEY_F20, // EMU_NONE
 
-				//Emulate keypad for A600 
-	0x1E, 0x59, //KP1
-	0x1F, 0x5A, //KP2
-	0x20, 0x5B, //KP3
-	0x21, 0x5C, //KP4
-	0x22, 0x5D, //KP5
-	0x23, 0x5E, //KP6
-	0x24, 0x5F, //KP7
-	0x25, 0x60, //KP8
-	0x26, 0x61, //KP9
-	0x27, 0x62, //KP0
-	0x2D, 0x56, //KP-
-	0x2E, 0x57, //KP+
-	0x31, 0x55, //KP*
-	0x2F, 0x68, //KP(
-	0x30, 0x69, //KP)
-	0x37, 0x63, //KP.
-	0x28, 0x58  //KP Enter
+    //Emulate keypad for A600 
+	KEY_1,          KEY_KP1,
+	KEY_2,          KEY_KP2,
+	KEY_3,          KEY_KP3,
+	KEY_4,          KEY_KP4,
+	KEY_5,          KEY_KP5,
+	KEY_6,          KEY_KP6,
+	KEY_7,          KEY_KP7,
+	KEY_8,          KEY_KP8,
+	KEY_9,          KEY_KP9,
+	KEY_0,          KEY_KP0,
+	KEY_MINUS,      KEY_KPMINUS,
+	KEY_EQUAL,      KEY_KPPLUS,
+	KEY_BACKSLASH,  KEY_KPASTERISK,
+	KEY_LEFTBRACE,  KEY_F13,    //KP(
+	KEY_RIGHTBRACE, KEY_F14,    //KP)
+	KEY_DOT,        KEY_KPDOT,
+	KEY_ENTER,      KEY_KPENTER
 };
 
 static int keyrah_trans(int key, int press)
 {
 	static int fn = 0;
 
-	if (key == 0x53) return 0x68;
-	if (key == 0x47) return 0x69;
-	if (key == 0x49) return 0x6b; // workaround!
+	if (key == KEY_NUMLOCK)    return KEY_F13; // numlock -> f13
+	if (key == KEY_SCROLLLOCK) return KEY_F14; // scrlock -> f14
+	if (key == KEY_INSERT)     return KEY_F16; // insert -> f16. workaround!
 
-	if (key == FN)
+	if (key == KEY_102ND)
 	{
-		if (!press && fn == 1) menu_key_set(KEY_AMI_MENU);
+		if (!press && fn == 1) menu_key_set(KEY_F12);
 		fn = press ? 1 : 0;
 		return 0;
 	}
@@ -987,94 +1287,11 @@ static void joy_analog(int num, int axis, int offset)
 	}
 }
 
-static int input_cb_x86(struct input_event *ev, int dev)
-{
-	if(user_io_osd_is_visible() || ev->type != EV_KEY || !is_x86_core() || ev->code>255) return 0;
-
-	int code = ev2ps2[ev->code];
-	if (code == NONE) return 0;
-
-	//pause
-	if ((code & 0xff) == 0xE1)
-	{
-		// pause does not have a break code
-		if (ev->value != 1)
-		{
-			// Pause key sends E11477E1F014E077
-			static const unsigned char c[] = { 0xe1, 0x14, 0x77, 0xe1, 0xf0, 0x14, 0xf0, 0x77, 0x00 };
-			const unsigned char *p = c;
-
-			spi_uio_cmd_cont(UIO_KEYBOARD);
-
-			printf("PS2 PAUSE CODE: ");
-			while (*p)
-			{
-				printf("%x ", *p);
-				spi8(*p++);
-			}
-			printf("\n");
-
-			DisableIO();
-		}
-	}
-	// print screen
-	else if ((code & 0xff) == 0xE2)
-	{
-		if (ev->value <= 1)
-		{
-			static const unsigned char c[2][8] = { 
-				{ 0xE0, 0xF0, 0x7C, 0xE0, 0xF0, 0x12, 0x00, 0x00 },
-				{ 0xE0, 0x12, 0xE0, 0x7C, 0x00, 0x00, 0x00, 0x00 }
-			};
-
-			const unsigned char *p = c[ev->value];
-
-			spi_uio_cmd_cont(UIO_KEYBOARD);
-
-			printf("PS2 PRINT CODE: ");
-			while (*p)
-			{
-				printf("%x ", *p);
-				spi8(*p++);
-			}
-			printf("\n");
-
-			DisableIO();
-		}
-	}
-	else
-	{
-		spi_uio_cmd_cont(UIO_KEYBOARD);
-		/*
-		iprintf("PS2 KBD ");
-		if (code & EXT)   iprintf("e0 ");
-		if (code & BREAK) iprintf("f0 ");
-		iprintf("%x\n", code & 0xff);
-		*/
-
-		// prepend extended code flag if required
-		if (code & EXT) spi8(0xe0);
-
-		// prepend break code if required
-		if (!ev->value) spi8(0xf0);
-
-		// send code itself
-		spi8(code & 0xff);
-
-		DisableIO();
-	}
-
-	return 1;
-}
-
 static void input_cb(struct input_event *ev, int dev)
 {
 	static int key_mapped = 0;
 	static uint8_t modifiers = 0;
 	static char keys[6] = { 0,0,0,0,0,0 };
-
-	// repeat events won't be processed
-	if (ev->type == EV_KEY && ev->value > 1) return;
 
 	int map_skip = (ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0 && mapping_type==1);
 	int cancel   = (ev->type == EV_KEY && ev->code == 1);
@@ -1086,9 +1303,12 @@ static void input_cb(struct input_event *ev, int dev)
 	case EV_KEY:
 		if (ev->code >= 272 && ev->code <= 279)
 		{
-			unsigned char mask = 1 << (ev->code - 272);
-			mouse_btn = (ev->value) ? mouse_btn | mask : mouse_btn & ~mask;
-			user_io_mouse(mouse_btn, 0, 0);
+			if (ev->value <= 1)
+			{
+				unsigned char mask = 1 << (ev->code - 272);
+				mouse_btn = (ev->value) ? mouse_btn | mask : mouse_btn & ~mask;
+				user_io_mouse(mouse_btn, 0, 0);
+			}
 			return;
 		}
 		break;
@@ -1148,7 +1368,7 @@ static void input_cb(struct input_event *ev, int dev)
 		{
 			if (mapping_type == 2)
 			{
-				if (ev->value && ev->code < 256)
+				if (ev->value == 1 && ev->code < 256)
 				{
 					if(mapping_dev < 0)
 					{
@@ -1175,7 +1395,7 @@ static void input_cb(struct input_event *ev, int dev)
 
 				if (mapping_dev == dev && mapping_button < mapping_count)
 				{
-					if (ev->value)
+					if (ev->value == 1)
 					{
 						if (!mapping_button) memset(input[dev].map, 0, sizeof(input[dev].map));
 
@@ -1188,7 +1408,7 @@ static void input_cb(struct input_event *ev, int dev)
 							key_mapped = 1;
 						}
 					}
-					else
+					else if(ev->value == 0)
 					{
 						if (key_mapped) mapping_button++;
 						key_mapped = 0;
@@ -1250,7 +1470,7 @@ static void input_cb(struct input_event *ev, int dev)
 					{
 						if (ev->code == input[dev].map[i])
 						{
-							joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+							if(ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
 							return;
 						}
 					}
@@ -1261,7 +1481,7 @@ static void input_cb(struct input_event *ev, int dev)
 					{
 						if (ev->code == input[dev].map[i])
 						{
-							joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+							if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
 							return;
 						}
 					}
@@ -1270,7 +1490,7 @@ static void input_cb(struct input_event *ev, int dev)
 					{
 						if (ev->code == input[dev].mmap[i])
 						{
-							joy_digital((first_joystick == dev) ? 0 : 1, 1 << (i - 8), ev->value, i - 8);
+							if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << (i - 8), ev->value, i - 8);
 							return;
 						}
 					}
@@ -1278,11 +1498,11 @@ static void input_cb(struct input_event *ev, int dev)
 
 				if (ev->code == input[dev].map[17])
 				{
-					joy_digital((first_joystick == dev) ? 0 : 1, 0, ev->value, 17);
+					if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 0, ev->value, 17);
 					return;
 				}
 
-				if (ev->code == input[dev].mmap[15])
+				if (ev->code == input[dev].mmap[15] && (ev->value <= 1))
 				{
 					mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
 					printf("mouse_emu = %d\n", mouse_emu);
@@ -1312,7 +1532,7 @@ static void input_cb(struct input_event *ev, int dev)
 						{
 							if (ev->code == input[dev].map[i])
 							{
-								joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 1 << i, ev->value, i);
+								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 1 << i, ev->value, i);
 								return;
 							}
 						}
@@ -1320,7 +1540,7 @@ static void input_cb(struct input_event *ev, int dev)
 
 					if (ev->code == input[dev].map[16])
 					{
-						joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 0, ev->value, 16);
+						if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 0, ev->value, 16);
 						return;
 					}
 				}
@@ -1363,14 +1583,14 @@ static void input_cb(struct input_event *ev, int dev)
 
 						if (ev->code == input[dev].mmap[15])
 						{
-							mouse_sniper = ev->value;
+							if (ev->value <= 1) mouse_sniper = ev->value;
 							return;
 						}
 					}
 
 					if (ev->code == input[dev].map[16])
 					{
-						if (ev->value)
+						if (ev->value == 1)
 						{
 							kbd_mouse_emu = !kbd_mouse_emu;
 							printf("kbd_mouse_emu = %d\n", kbd_mouse_emu);
@@ -1394,34 +1614,27 @@ static void input_cb(struct input_event *ev, int dev)
 					input[dev].has_kbdmap = 1;
 				}
 
-				int key = input[dev].kbdmap[ev->code] ? input[dev].kbdmap[ev->code] : ev->code;
-				key = (key < (sizeof(ev2usb) / sizeof(ev2usb[0]))) ? ev2usb[key] : NONE;
-				if(key != NONE)
-				{
-					static uint16_t mod = 0;
+				static uint16_t mod = 0;
 
-					//Keyrah v2: USB\VID_18D8&PID_0002\A600/A1200_MULTIMEDIA_EXTENSION_VERSION
-					int keyrah = (mist_cfg.keyrah_mode && (((((uint32_t)input[dev].vid) << 16) | input[dev].pid) == mist_cfg.keyrah_mode));
+				//  replace MENU key by RGUI to allow using Right Amiga on reduced keyboards
+				// (it also disables the use of Menu for OSD)
+				uint16_t code = ev->code;
+				if (mist_cfg.key_menu_as_rgui && code == 139) code = 126;
 
-					if (keyrah)	key = keyrah_trans(key, ev->value);
-					if (key & 0xffff)
-					{
-						unsigned short reset_m = mod >> 8;
-						if (key == 0x4c) reset_m |= 0x100;
-						user_io_check_reset(reset_m, (keyrah && !mist_cfg.reset_combo) ? 1 : mist_cfg.reset_combo);
+				//Keyrah v2: USB\VID_18D8&PID_0002\A600/A1200_MULTIMEDIA_EXTENSION_VERSION
+				int keyrah = (mist_cfg.keyrah_mode && (((((uint32_t)input[dev].vid) << 16) | input[dev].pid) == mist_cfg.keyrah_mode));
+				if (keyrah) code = keyrah_trans(code, ev->value);
 
-						if (key & MODMASK)
-						{
-							if (ev->value) mod |= key;
-							else mod &= ~key;
-						}
-						key = (mod & MODMASK) | (key & ~MODMASK);
+				uint32_t ps2code = get_ps2_code(code);
+				if (ev->value) modifier |= ps2code;
+				else modifier &= ~ps2code;
 
-						menu_mod_set(mod >> 8);
-						user_io_kbd((uint16_t)key, ev->value);
-					}
-					return;
-				}
+				uint16_t reset_m = (modifier & MODMASK) >> 8;
+				if (code == 111) reset_m |= 0x100;
+				user_io_check_reset(reset_m, (keyrah && !mist_cfg.reset_combo) ? 1 : mist_cfg.reset_combo);
+
+				user_io_kbd(code, ev->value);
+				return;
 			}
 			break;
 
@@ -1615,8 +1828,7 @@ int input_test(int getchar)
 								}
 							}
 
-							
-							if(!input_cb_x86(&ev, i)) input_cb(&ev, i);
+							input_cb(&ev, i);
 
 							//sumulate digital directions from analog
 							if (ev.type == EV_ABS && !(ev.code<=1 && mouse_emu && !user_io_osd_is_visible()))
