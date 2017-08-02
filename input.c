@@ -389,7 +389,7 @@ static const int ev2ps2[] =
 	EXT | 0x74, //106 KEY_RIGHT		
 	EXT | 0x69, //107 KEY_END			
 	EXT | 0x72, //108 KEY_DOWN		
-	EXT | 0x7d, //109 KEY_PAGEDOWN	
+	EXT | 0x7a, //109 KEY_PAGEDOWN	
 	EXT | 0x70, //110 KEY_INSERT		
 	EXT | 0x71, //111 KEY_DELETE		
 	NONE, //112 KEY_MACRO		
