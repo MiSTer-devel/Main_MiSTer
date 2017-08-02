@@ -1509,6 +1509,8 @@ static void send_keycode(unsigned short key, int press)
 
 void user_io_mouse(unsigned char b, int16_t x, int16_t y)
 {
+	if (osd_is_visible) return;
+
 	// send mouse data as minimig expects it
 	if (core_type == CORE_TYPE_MINIMIG2)
 	{
