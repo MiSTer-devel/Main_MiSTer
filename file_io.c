@@ -478,7 +478,7 @@ int de_cmp(const void *e1, const void *e2)
 	const struct dirent *de2 = e2;
 
 	if ((de1->d_type == DT_DIR) && !strcmp(de1->d_name, "..")) return -1;
-	if ((de2->d_type == DT_DIR) && !strcmp(de1->d_name, "..")) return  1;
+	if ((de2->d_type == DT_DIR) && !strcmp(de2->d_name, "..")) return  1;
 
 	if ((de1->d_type == DT_DIR) && (de2->d_type == DT_REG)) return -1;
 	if ((de1->d_type == DT_REG) && (de2->d_type == DT_DIR)) return  1;
@@ -723,7 +723,7 @@ int ScanDirectory(char* path, int mode, char *extension, int options)
 				if (found >= 0)
 				{
 					iSelectedEntry = found;
-					if (iSelectedEntry + (OsdGetSize() / 2) - 1 >= nDirEntries) iFirstEntry = nDirEntries - OsdGetSize();
+					if (iSelectedEntry + (OsdGetSize() / 2) >= nDirEntries) iFirstEntry = nDirEntries - OsdGetSize();
 						else iFirstEntry = iSelectedEntry - (OsdGetSize()/2) + 1;
 					if (iFirstEntry < 0) iFirstEntry = 0;
 				}
