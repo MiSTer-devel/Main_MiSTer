@@ -805,6 +805,12 @@ void kbd_reply(char code)
 	spi_uio_cmd8(UIO_KEYBOARD, code);
 }
 
+void mouse_reply(char code)
+{
+	printf("mouse_reply = 0x%02X\n", code);
+	spi_uio_cmd8(UIO_MOUSE, code);
+}
+
 static uint8_t use_ps2ctl = 0;
 
 void user_io_poll()
@@ -1208,9 +1214,6 @@ void user_io_poll()
 	static uint8_t leds = 0;
 	if(use_ps2ctl)
 	{
-		static uint8_t kbd_cmd = 0;
-		static uint8_t kbd_byte = 0;
-
 		leds |= (KBD_LED_FLAG_STATUS | KBD_LED_CAPS_CONTROL);
 
 		uint8_t kbd_ctl, mouse_ctl;
@@ -1218,11 +1221,14 @@ void user_io_poll()
 
 		if (ps2ctl & 1)
 		{
+			static uint8_t cmd = 0;
+			static uint8_t byte = 0;
+
 			printf("kbd_ctl = 0x%02X\n", kbd_ctl);
-			if (!kbd_byte)
+			if (!byte)
 			{
-				kbd_cmd = kbd_ctl;
-				switch (kbd_cmd)
+				cmd = kbd_ctl;
+				switch (cmd)
 				{
 				case 0xff:
 					kbd_reply(0xFA);
@@ -1237,7 +1243,7 @@ void user_io_poll()
 
 				case 0xed:
 					kbd_reply(0xFA);
-					kbd_byte++;
+					byte++;
 					break;
 
 				default:
@@ -1247,11 +1253,11 @@ void user_io_poll()
 			}
 			else
 			{
-				switch (kbd_cmd)
+				switch (cmd)
 				{
 				case 0xed:
 					kbd_reply(0xFA);
-					kbd_byte = 0;
+					byte = 0;
 
 					if (kbd_ctl & 4) leds |= KBD_LED_CAPS_STATUS;
 						else leds &= ~KBD_LED_CAPS_STATUS;
@@ -1259,7 +1265,63 @@ void user_io_poll()
 					break;
 
 				default:
-					kbd_byte = 0;
+					byte = 0;
+					break;
+				}
+			}
+		}
+
+		if (ps2ctl & 2)
+		{
+			static uint8_t cmd = 0;
+			static uint8_t byte = 0;
+
+			printf("mouse_ctl = 0x%02X\n", mouse_ctl);
+			if (!byte)
+			{
+				cmd = mouse_ctl;
+				switch (cmd)
+				{
+				case 0xe8:
+				case 0xf3:
+					mouse_reply(0xFA);
+					byte++;
+					break;
+
+				case 0xf2:
+					mouse_reply(0xFA);
+					mouse_reply(0x00);
+					break;
+
+				case 0xe6:
+				case 0xf4:
+				case 0xf5:
+					mouse_reply(0xFA);
+					break;
+
+				case 0xff:
+					mouse_reply(0xFA);
+					mouse_reply(0xAA);
+					mouse_reply(0x00);
+					break;
+
+				default:
+					//mouse_reply(0xFE);
+					break;
+				}
+			}
+			else
+			{
+				switch (cmd)
+				{
+				case 0xf3:
+				case 0xe8:
+					mouse_reply(0xFA);
+					byte = 0;
+					break;
+
+				default:
+					byte = 0;
 					break;
 				}
 			}
