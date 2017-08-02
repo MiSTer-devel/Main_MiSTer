@@ -23,6 +23,8 @@ void ShowSplash();
 void HideSplash();
 void EjectAllFloppies();
 
+unsigned long getStatus(char *opt, unsigned long status);
+
 void menu_key_set(uint32_t c);
 void menu_mod_set(uint32_t m);
 

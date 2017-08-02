@@ -29,7 +29,8 @@ extern int iFirstEntry;
 #define SCAN_SET_ITEM    3 // find exact item
 
 // options flags
-#define SCAN_DIR   1 // include subdirectories
+#define SCAN_DIR    1 // include subdirectories
+#define SCAN_UMOUNT 2 // include subdirectories
 
 void FindStorage();
 int  getStorage(int from_setting);

@@ -34,6 +34,7 @@
 #include "spi.h"
 #include "user_io.h"
 #include "file_io.h"
+#include "fpga_io.h"
 
 #define ALT_CPU_CPU_FREQ 90000000u
 
@@ -45,6 +46,17 @@
 #define PIT_BASE         0x8880 
 #define RTC_BASE         0x8c00 
 #define SD_BASE          0x0A00 
+
+#define CFG_VER          1
+
+typedef struct
+{
+	uint32_t ver;
+	char fdd_name[1024];
+	char hdd_name[1024];
+} x86_config;
+
+static x86_config config;
 
 static uint8_t dma_sdio(int status)
 {
@@ -202,6 +214,7 @@ static bool floppy_is_2_88m= false;
 
 static fileTYPE fdd_image = { 0 };
 static fileTYPE hdd_image = { 0 };
+static bool boot_from_floppy = 1;
 
 #define IMG_TYPE_FDD 0x800
 #define IMG_TYPE_HDD 0x000
@@ -213,6 +226,8 @@ static __inline fileTYPE *get_image(uint32_t type)
 
 static int img_mount(uint32_t type, char *name)
 {
+	FileClose(get_image(type));
+
 	int writable = FileCanWrite(name);
 	int ret = FileOpenEx(get_image(type), name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 	if (!ret)
@@ -240,8 +255,88 @@ static int img_write(uint32_t type, uint32_t lba, void *buf, uint32_t len)
 
 #define IOWR(base, reg, value) dma_set(base+(reg<<2), value)
 
+static int fdd_set(char* filename)
+{
+	int floppy = img_mount(IMG_TYPE_FDD, filename);
+
+	/*
+	0x00.[0]:      media present
+	0x01.[0]:      media writeprotect
+	0x02.[7:0]:    media cylinders
+	0x03.[7:0]:    media sectors per track
+	0x04.[31:0]:   media total sector count
+	0x05.[1:0]:    media heads
+	0x06.[31:0]:   media sd base
+	0x07.[15:0]:   media wait cycles: 200000 us / spt
+	0x08.[15:0]:   media wait rate 0: 1000 us
+	0x09.[15:0]:   media wait rate 1: 1666 us
+	0x0A.[15:0]:   media wait rate 2: 2000 us
+	0x0B.[15:0]:   media wait rate 3: 500 us
+	0x0C.[7:0]:    media type: 8'h20 none; 8'h00 old; 8'hC0 720k; 8'h80 1_44M; 8'h40 2_88M
+	*/
+
+	int floppy_cylinders = (floppy_is_2_88m || floppy_is_1_44m || floppy_is_1_2m || floppy_is_720k) ? 80 : 40;
+	int floppy_spt =
+		(floppy_is_160k) ? 8 :
+		(floppy_is_180k) ? 9 :
+		(floppy_is_320k) ? 8 :
+		(floppy_is_360k) ? 9 :
+		(floppy_is_720k) ? 9 :
+		(floppy_is_1_2m) ? 15 :
+		(floppy_is_1_44m) ? 18 :
+		(floppy_is_2_88m) ? 36 :
+		0;
+	int floppy_total_sectors =
+		(floppy_is_160k) ? 320 :
+		(floppy_is_180k) ? 360 :
+		(floppy_is_320k) ? 640 :
+		(floppy_is_360k) ? 720 :
+		(floppy_is_720k) ? 1440 :
+		(floppy_is_1_2m) ? 2400 :
+		(floppy_is_1_44m) ? 2880 :
+		(floppy_is_2_88m) ? 5760 :
+		0;
+	int floppy_heads = (floppy_is_160k || floppy_is_180k) ? 1 : 2;
+
+	int floppy_wait_cycles = 200000000 / floppy_spt;
+
+	int floppy_media =
+		(!floppy) ? 0x20 :
+		(floppy_is_160k) ? 0x00 :
+		(floppy_is_180k) ? 0x00 :
+		(floppy_is_320k) ? 0x00 :
+		(floppy_is_360k) ? 0x00 :
+		(floppy_is_720k) ? 0xC0 :
+		(floppy_is_1_2m) ? 0x00 :
+		(floppy_is_1_44m) ? 0x80 :
+		(floppy_is_2_88m) ? 0x40 :
+		0x20;
+
+	IOWR(FLOPPY_BASE, 0x0, floppy ? 1 : 0);
+	IOWR(FLOPPY_BASE, 0x1, (floppy && (get_image(IMG_TYPE_FDD)->mode & O_RDWR)) ? 0 : 1);
+	IOWR(FLOPPY_BASE, 0x2, floppy_cylinders);
+	IOWR(FLOPPY_BASE, 0x3, floppy_spt);
+	IOWR(FLOPPY_BASE, 0x4, floppy_total_sectors);
+	IOWR(FLOPPY_BASE, 0x5, floppy_heads);
+	IOWR(FLOPPY_BASE, 0x6, 0); // base LBA
+	IOWR(FLOPPY_BASE, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY_BASE, 0x8, (int)(1000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY_BASE, 0x9, (int)(1666666.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY_BASE, 0xA, (int)(2000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY_BASE, 0xB, (int)(500000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY_BASE, 0xC, floppy_media);
+
+	return floppy;
+}
+
 void x86_init()
 {
+	user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+	fpga_core_reset(1);
+	usleep(10000);
+	fpga_gpo_write(0);
+	spi_uio_cmd(0);
+
 	IOWR(PC_BUS_BASE, 0, 0x00FFF0EA);
 	IOWR(PC_BUS_BASE, 1, 0x000000F0);
 
@@ -273,75 +368,8 @@ void x86_init()
 
 	//-------------------------------------------------------------------------- floppy
 
-	int floppy = img_mount(IMG_TYPE_FDD, "ao486/floppy.img");
-
-	/*
-	 0x00.[0]:      media present
-	 0x01.[0]:      media writeprotect
-	 0x02.[7:0]:    media cylinders
-	 0x03.[7:0]:    media sectors per track
-	 0x04.[31:0]:   media total sector count
-	 0x05.[1:0]:    media heads
-	 0x06.[31:0]:   media sd base
-	 0x07.[15:0]:   media wait cycles: 200000 us / spt
-     0x08.[15:0]:   media wait rate 0: 1000 us
-     0x09.[15:0]:   media wait rate 1: 1666 us
-     0x0A.[15:0]:   media wait rate 2: 2000 us
-     0x0B.[15:0]:   media wait rate 3: 500 us
-	 0x0C.[7:0]:    media type: 8'h20 none; 8'h00 old; 8'hC0 720k; 8'h80 1_44M; 8'h40 2_88M
-	*/
-
-	int floppy_cylinders = (floppy_is_2_88m || floppy_is_1_44m || floppy_is_1_2m || floppy_is_720k)? 80 : 40;
-	int floppy_spt       =
-			(floppy_is_160k)?  8 :
-			(floppy_is_180k)?  9 :
-			(floppy_is_320k)?  8 :
-			(floppy_is_360k)?  9 :
-			(floppy_is_720k)?  9 :
-			(floppy_is_1_2m)?  15 :
-			(floppy_is_1_44m)? 18 :
-			(floppy_is_2_88m)? 36 :
-			    			   0;
-	int floppy_total_sectors =
-			(floppy_is_160k)?  320 :
-			(floppy_is_180k)?  360 :
-			(floppy_is_320k)?  640 :
-			(floppy_is_360k)?  720 :
-			(floppy_is_720k)?  1440 :
-			(floppy_is_1_2m)?  2400 :
-			(floppy_is_1_44m)? 2880 :
-			(floppy_is_2_88m)? 5760 :
-							   0;
-	int floppy_heads = (floppy_is_160k || floppy_is_180k)? 1 : 2;
-
-	int floppy_wait_cycles = 200000000 / floppy_spt;
-
-	int floppy_media =
-			(!floppy)?          0x20 :
-			(floppy_is_160k)?   0x00 :
-			(floppy_is_180k)?   0x00 :
-			(floppy_is_320k)?   0x00 :
-			(floppy_is_360k)?   0x00 :
-			(floppy_is_720k)?   0xC0 :
-			(floppy_is_1_2m)?   0x00 :
-			(floppy_is_1_44m)?  0x80 :
-			(floppy_is_2_88m)?  0x40 :
-							    0x20;
-
-	IOWR(FLOPPY_BASE, 0x0, floppy? 1 : 0);
-	IOWR(FLOPPY_BASE, 0x1, (floppy && (get_image(IMG_TYPE_FDD)->mode & O_RDWR)) ? 0 : 1);
-	IOWR(FLOPPY_BASE, 0x2, floppy_cylinders);
-	IOWR(FLOPPY_BASE, 0x3, floppy_spt);
-	IOWR(FLOPPY_BASE, 0x4, floppy_total_sectors);
-	IOWR(FLOPPY_BASE, 0x5, floppy_heads);
-	IOWR(FLOPPY_BASE, 0x6, 0); // base LBA
-	IOWR(FLOPPY_BASE, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0x8, (int)(1000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0x9, (int)(1666666.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0xA, (int)(2000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0xB, (int)(500000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0xC, floppy_media);
-
+	int floppy = fdd_set(config.fdd_name);
+	
 	//-------------------------------------------------------------------------- hdd
 
 	unsigned int hd_cylinders = 0;
@@ -350,7 +378,7 @@ void x86_init()
 	unsigned int hd_total_sectors = 0;
 	unsigned int hdd_sd_base = 0;
 
-	int hdd = img_mount(IMG_TYPE_HDD, "ao486/hdd.vhd");
+	int hdd = img_mount(IMG_TYPE_HDD, config.hdd_name);
 	if (hdd)
 	{
 		hd_cylinders = 1024;
@@ -478,8 +506,6 @@ void x86_init()
 
 	//-------------------------------------------------------------------------- rtc
 
-	bool boot_from_floppy = floppy;
-
 	/*
     128.[26:0]: cycles in second
     129.[12:0]: cycles in 122.07031 us
@@ -590,6 +616,8 @@ void x86_init()
 	cmos[0x2F] = sum & 0xFF;
 
 	for(unsigned int i=0; i<sizeof(cmos)/sizeof(unsigned int); i++) IOWR(RTC_BASE, i, cmos[i]);
+
+	user_io_8bit_set_status(0, UIO_STATUS_RESET);
 }
 
 struct sd_param_t
@@ -668,4 +696,39 @@ void x86_poll()
 
 		dma_sdio(res ? 1 : 2);
 	}
+}
+
+void x86_set_image(int num, char *filename)
+{
+	if (num == 2)
+	{
+		strcpy(config.hdd_name, filename);
+	}
+
+	if (num == 0)
+	{
+		strcpy(config.fdd_name, filename);
+		fdd_set(filename);
+	}
+}
+
+void x86_config_save()
+{
+	config.ver = CFG_VER;
+	FileSaveConfig("ao486sys.cfg", &config, sizeof(config));
+}
+
+void x86_config_load()
+{
+	static x86_config tmp;
+	memset(&config, 0, sizeof(config));
+	if (FileLoadConfig("ao486sys.cfg", &tmp, sizeof(tmp)) && (tmp.ver == CFG_VER))
+	{
+		memcpy(&config, &tmp, sizeof(config));
+	}
+}
+
+void x86_set_fdd_boot(uint32_t boot)
+{
+	boot_from_floppy = (boot != 0);
 }

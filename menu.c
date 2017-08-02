@@ -46,6 +46,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdbool.h>
 #include "mist_cfg.h"
 #include "input.h"
+#include "x86.h"
 
 /*menu states*/
 enum MENU
@@ -269,7 +270,7 @@ static void SelectFile(char* pFileExt, unsigned char Options, unsigned char Menu
 	iprintf("%s - %s\n", pFileExt, fs_pFileExt);
 	AdjustDirectory(SelectedPath);
 
-	if (strncmp(pFileExt, fs_pFileExt, 12) != 0) // check desired file extension
+	if (strncmp(pFileExt, fs_pFileExt, 12) != 0 || !strlen(SelectedPath)) // check desired file extension
 	{ // if different from the current one go to the root directory and init entry buffer
 		SelectedPath[0] = 0;
 
@@ -808,7 +809,11 @@ void HandleUI(void)
 				}
 
 				// check for 'O'ption strings
-				if (p && (p[0] == 'O')) {
+				if (p && (p[0] == 'O'))
+				{
+					//option handled by ARM
+					if (p[1] == 'X') p++;
+
 					unsigned long x = getStatus(p, status);
 
 					// get currently active option
@@ -945,15 +950,26 @@ void HandleUI(void)
 					static char ext[13];
 					substrcpy(ext, p, 1);
 					while (strlen(ext) < 3) strcat(ext, " ");
-					SelectFile(ext, SCAN_DIR,
+					SelectFile(ext, SCAN_DIR | ((p[0] == 'S') ? SCAN_UMOUNT : 0),
 						(p[0] == 'F') ? MENU_8BIT_MAIN_FILE_SELECTED : MENU_8BIT_MAIN_IMAGE_SELECTED,
 						MENU_8BIT_MAIN1, 1);
 				}
 				else if (p[0] == 'O')
 				{
+					int byarm = 0;
+					if (p[1] == 'X')
+					{
+						byarm = 1;
+						p++;
+					}
+
 					unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
 					unsigned long x = getStatus(p, status) + 1;
 
+					if (byarm && is_x86_core())
+					{
+						if (p[1] == '2') x86_set_fdd_boot(!(x&1));
+					}
 					// check if next value available
 					substrcpy(s, p, 2 + x);
 					if (!strlen(s)) x = 0;
@@ -966,12 +982,20 @@ void HandleUI(void)
 				{
 					// determine which status bit is affected
 					unsigned long mask = 1 << getIdx(p);
-					unsigned long status = user_io_8bit_set_status(0, 0);
+					if (mask == 1 && is_x86_core())
+					{
+						x86_init();
+						menustate = MENU_NONE1;
+					}
+					else
+					{
+						unsigned long status = user_io_8bit_set_status(0, 0);
 
-					user_io_8bit_set_status(status ^ mask, mask);
-					user_io_8bit_set_status(status, mask);
+						user_io_8bit_set_status(status ^ mask, mask);
+						user_io_8bit_set_status(status, mask);
+						menustate = MENU_8BIT_MAIN1;
+					}
 
-					menustate = MENU_8BIT_MAIN1;
 				}
 			}
 		}
@@ -990,9 +1014,16 @@ void HandleUI(void)
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
 		iprintf("Image selected: %s\n", SelectedPath);
-		user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
-		user_io_file_mount(drive_num, SelectedPath);
-		menustate = MENU_NONE1;
+		if (is_x86_core())
+		{
+			x86_set_image(drive_num, SelectedPath);
+		}
+		else
+		{
+			user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
+			user_io_file_mount(drive_num, SelectedPath);
+		}
+		menustate = SelectedPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
 		break;
 
 	case MENU_8BIT_SYSTEM1:
@@ -1069,6 +1100,7 @@ void HandleUI(void)
 					unsigned long status = user_io_8bit_set_status(0, 0);
 					iprintf("Saving config to %s\n", filename);
 					FileSaveConfig(filename, &status, 4);
+					if (is_x86_core()) x86_config_save();
 					menustate = MENU_8BIT_MAIN1;
 					menusub = 0;
 				}
@@ -1932,8 +1964,14 @@ void HandleUI(void)
 
 		if (c == KEY_BACKSPACE)
 		{
-			changeDir("..");
-			menustate = MENU_FILE_SELECT1;
+			if (fs_Options & SCAN_UMOUNT)
+			{
+				for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+				OsdWrite(OsdGetSize() / 2, "   Unmounting the image", 0, 0);
+				usleep(1500000);
+				SelectedPath[0] = 0;
+				menustate = fs_MenuSelect;
+			}
 		}
 
 		if ((c == KEY_PAGEUP) || (c == KEY_LEFT))

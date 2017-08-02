@@ -180,12 +180,6 @@ static int joy_force = 0;
 
 static void parse_config()
 {
-	// check if core has a config string
-	core_type_8bit_with_config_string = (user_io_8bit_get_string(0) != NULL);
-
-	// set core name. This currently only sets a name for the 8 bit cores
-	user_io_read_core_name();
-
 	joy_force = 0;
 	if (core_type_8bit_with_config_string)
 	{
@@ -201,6 +195,19 @@ static void parse_config()
 					emu_mode = EMU_JOY0;
 					input_notify_mode();
 					set_kbd_led(HID_LED_NUM_LOCK, true);
+				}
+
+				if (p[0] == 'O' && p[1] == 'X')
+				{
+					unsigned long status = user_io_8bit_set_status(0, 0);
+					printf("found OX option: %s, 0x%08X\n", p, status);
+
+					unsigned long x = getStatus(p+1, status);
+
+					if (is_x86_core())
+					{
+						if (p[2] == '2') x86_set_fdd_boot(!(x&1));
+					}
 				}
 			}
 			i++;
@@ -266,8 +273,11 @@ void user_io_detect_core_type()
 		// forward SD card config to core in case it uses the local
 		// SD card implementation
 		user_io_sd_set_config();
+		// check if core has a config string
+		core_type_8bit_with_config_string = (user_io_8bit_get_string(0) != NULL);
 
-		parse_config();
+		// set core name. This currently only sets a name for the 8 bit cores
+		user_io_read_core_name();
 
 		// send a reset
 		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
@@ -283,6 +293,7 @@ void user_io_detect_core_type()
 				iprintf("Found config\n");
 				user_io_8bit_set_status(status, 0xffffffff);
 			}
+			parse_config();
 
 			// check for multipart rom
 			sprintf(mainpath, "%s/boot0.rom", user_io_get_core_name());
@@ -312,6 +323,7 @@ void user_io_detect_core_type()
 
 			if (is_x86_core())
 			{
+				x86_config_load();
 				x86_init();
 			}
 			else
