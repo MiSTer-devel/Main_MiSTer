@@ -295,32 +295,6 @@ void user_io_detect_core_type()
 			}
 			parse_config();
 
-			// check for multipart rom
-			sprintf(mainpath, "%s/boot0.rom", user_io_get_core_name());
-			if (user_io_file_tx(mainpath, 0))
-			{
-				sprintf(mainpath, "%s/boot1.rom", user_io_get_core_name());
-				if (user_io_file_tx(mainpath, 0x40))
-				{
-					sprintf(mainpath, "%s/boot2.rom", user_io_get_core_name());
-					if (user_io_file_tx(mainpath, 0x80))
-					{
-						sprintf(mainpath, "%s/boot3.rom", user_io_get_core_name());
-						user_io_file_tx(mainpath, 0xC0);
-					}
-				}
-			}
-			else
-			{
-				// legacy style of rom
-				sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
-				if (!user_io_file_tx(mainpath, 0))
-				{
-					strcpy(name + strlen(name) - 3, "ROM");
-					user_io_file_tx(name, 0);
-				}
-			}
-
 			if (is_x86_core())
 			{
 				x86_config_load();
@@ -328,6 +302,32 @@ void user_io_detect_core_type()
 			}
 			else
 			{
+				// check for multipart rom
+				sprintf(mainpath, "%s/boot0.rom", user_io_get_core_name());
+				if (user_io_file_tx(mainpath, 0))
+				{
+					sprintf(mainpath, "%s/boot1.rom", user_io_get_core_name());
+					if (user_io_file_tx(mainpath, 0x40))
+					{
+						sprintf(mainpath, "%s/boot2.rom", user_io_get_core_name());
+						if (user_io_file_tx(mainpath, 0x80))
+						{
+							sprintf(mainpath, "%s/boot3.rom", user_io_get_core_name());
+							user_io_file_tx(mainpath, 0xC0);
+						}
+					}
+				}
+				else
+				{
+					// legacy style of rom
+					sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
+					if (!user_io_file_tx(mainpath, 0))
+					{
+						strcpy(name + strlen(name) - 3, "ROM");
+						user_io_file_tx(name, 0);
+					}
+				}
+
 				// check if there's a <core>.vhd present
 				sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
 				user_io_set_index(0);
@@ -636,14 +636,6 @@ int user_io_file_tx(char* name, unsigned char index)
 	/* transmit the entire file using one transfer */
 	iprintf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index&0x3F, index>>6);
 
-	if (is_x86_core())
-	{
-		printf("using DMA transfer mode\n");
-		x86_send(&f, index);
-		FileClose(&f);
-		return 1;
-	}
-
 	// set index byte (0=bios rom, 1-n=OSD entry index)
 	user_io_set_index(index);
 
@@ -781,6 +773,7 @@ void user_io_send_buttons(char force)
 		key_map = map;
 		spi_uio_cmd8(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
+		if ((key_map & BUTTON2) && is_x86_core) x86_init();
 	}
 
 	if (old_video_mode != mist_cfg.video_mode)
