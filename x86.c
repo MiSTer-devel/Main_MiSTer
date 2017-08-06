@@ -30,6 +30,7 @@
 #include <inttypes.h>
 #include <stdbool.h> 
 #include <fcntl.h>
+#include <time.h>
 
 #include "spi.h"
 #include "user_io.h"
@@ -377,6 +378,11 @@ static int fdd_set(char* filename)
 	return floppy;
 }
 
+static uint8_t bin2bcd(unsigned val)
+{
+	return ((val / 10) << 4) + (val % 10);
+}
+
 void x86_init()
 {
 	user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
@@ -567,18 +573,21 @@ void x86_init()
 
 	unsigned char translate_byte = 1; //(translate_large) ? 1 : (translate_lba) ? 2 : 0;
 
+	time_t t = time(NULL);
+	struct tm tm = *localtime(&t);
+
 	//rtc contents 0-127
 	uint32_t tmp[128] = {
-		0x00, //0x00: SEC BCD
+		bin2bcd(tm.tm_sec), //0x00: SEC BCD
 		0x00, //0x01: ALARM SEC BCD
-		0x00, //0x02: MIN BCD
+		bin2bcd(tm.tm_min), //0x02: MIN BCD
 		0x00, //0x03: ALARM MIN BCD
-		0x12, //0x04: HOUR BCD 24h
+		bin2bcd(tm.tm_hour), //0x04: HOUR BCD 24h
 		0x12, //0x05: ALARM HOUR BCD 24h
-		0x01, //0x06: DAY OF WEEK Sunday=1
-		0x03, //0x07: DAY OF MONTH BCD from 1
-		0x11, //0x08: MONTH BCD from 1
-		0x13, //0x09: YEAR BCD
+		tm.tm_wday+1, //0x06: DAY OF WEEK Sunday=1
+		bin2bcd(tm.tm_mday), //0x07: DAY OF MONTH BCD from 1
+		bin2bcd(tm.tm_mon+1), //0x08: MONTH BCD from 1
+		bin2bcd((tm.tm_year<117) ? 17 : tm.tm_year-100), //0x09: YEAR BCD
 		0x26, //0x0A: REG A
 		0x02, //0x0B: REG B
 		0x00, //0x0C: REG C

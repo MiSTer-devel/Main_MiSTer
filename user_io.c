@@ -1292,6 +1292,13 @@ void user_io_poll()
 					mouse_reply(0xFA);
 					break;
 
+				case 0xe9:
+					mouse_reply(0xFA);
+					mouse_reply(0x00);
+					mouse_reply(0x00);
+					mouse_reply(0x00);
+					break;
+
 				case 0xff:
 					mouse_reply(0xFA);
 					mouse_reply(0xAA);
@@ -1299,7 +1306,7 @@ void user_io_poll()
 					break;
 
 				default:
-					//mouse_reply(0xFE);
+					mouse_reply(0xFE);
 					break;
 				}
 			}
