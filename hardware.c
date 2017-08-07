@@ -56,7 +56,7 @@ unsigned long GetTimer(unsigned long offset)
 
   	clock_gettime(CLOCK_BOOTTIME, &tp);
 
-	int64_t res;
+	uint64_t res;
 
 	res = tp.tv_sec;
 	res *= 1000;
