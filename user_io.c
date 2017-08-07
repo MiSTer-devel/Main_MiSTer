@@ -10,7 +10,6 @@
 #include "user_io.h"
 #include "archie.h"
 #include "debug.h"
-#include "keycodes.h"
 #include "ikbd.h"
 #include "spi.h"
 #include "mist_cfg.h"
@@ -20,6 +19,7 @@
 #include "file_io.h"
 #include "config.h"
 #include "menu.h"
+#include "x86.h"
 
 #define BREAK  0x8000
 
@@ -133,9 +133,17 @@ char is_menu_core()
 	return (is_menu_type == 1);
 }
 
+static int is_x86_type = 0;
+char is_x86_core()
+{
+	if (!is_x86_type) is_x86_type = strcasecmp(core_name, "AO486") ? 2 : 1;
+	return (is_x86_type == 1);
+}
+
 static void user_io_read_core_name()
 {
 	is_menu_type = 0;
+	is_x86_type  = 0;
 	core_name[0] = 0;
 
 	if (user_io_is_8bit_with_config_string())
@@ -172,12 +180,6 @@ static int joy_force = 0;
 
 static void parse_config()
 {
-	// check if core has a config string
-	core_type_8bit_with_config_string = (user_io_8bit_get_string(0) != NULL);
-
-	// set core name. This currently only sets a name for the 8 bit cores
-	user_io_read_core_name();
-
 	joy_force = 0;
 	if (core_type_8bit_with_config_string)
 	{
@@ -193,6 +195,19 @@ static void parse_config()
 					emu_mode = EMU_JOY0;
 					input_notify_mode();
 					set_kbd_led(HID_LED_NUM_LOCK, true);
+				}
+
+				if (p[0] == 'O' && p[1] == 'X')
+				{
+					unsigned long status = user_io_8bit_set_status(0, 0);
+					printf("found OX option: %s, 0x%08X\n", p, status);
+
+					unsigned long x = getStatus(p+1, status);
+
+					if (is_x86_core())
+					{
+						if (p[2] == '2') x86_set_fdd_boot(!(x&1));
+					}
 				}
 			}
 			i++;
@@ -258,8 +273,11 @@ void user_io_detect_core_type()
 		// forward SD card config to core in case it uses the local
 		// SD card implementation
 		user_io_sd_set_config();
+		// check if core has a config string
+		core_type_8bit_with_config_string = (user_io_8bit_get_string(0) != NULL);
 
-		parse_config();
+		// set core name. This currently only sets a name for the 8 bit cores
+		user_io_read_core_name();
 
 		// send a reset
 		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
@@ -275,22 +293,49 @@ void user_io_detect_core_type()
 				iprintf("Found config\n");
 				user_io_8bit_set_status(status, 0xffffffff);
 			}
+			parse_config();
 
-			// check if there's a <core>.rom present
-			sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
-			if (!user_io_file_tx(mainpath, 0))
+			if (is_x86_core())
 			{
-				strcpy(name + strlen(name) - 3, "ROM");
-				user_io_file_tx(name, 0);
+				x86_config_load();
+				x86_init();
 			}
-
-			// check if there's a <core>.vhd present
-			sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
-			user_io_set_index(0);
-			if (!user_io_file_mount(0, mainpath))
+			else
 			{
-				strcpy(name + strlen(name) - 3, "VHD");
-				user_io_file_mount(0, name);
+				// check for multipart rom
+				sprintf(mainpath, "%s/boot0.rom", user_io_get_core_name());
+				if (user_io_file_tx(mainpath, 0))
+				{
+					sprintf(mainpath, "%s/boot1.rom", user_io_get_core_name());
+					if (user_io_file_tx(mainpath, 0x40))
+					{
+						sprintf(mainpath, "%s/boot2.rom", user_io_get_core_name());
+						if (user_io_file_tx(mainpath, 0x80))
+						{
+							sprintf(mainpath, "%s/boot3.rom", user_io_get_core_name());
+							user_io_file_tx(mainpath, 0xC0);
+						}
+					}
+				}
+				else
+				{
+					// legacy style of rom
+					sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
+					if (!user_io_file_tx(mainpath, 0))
+					{
+						strcpy(name + strlen(name) - 3, "ROM");
+						user_io_file_tx(name, 0);
+					}
+				}
+
+				// check if there's a <core>.vhd present
+				sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
+				user_io_set_index(0);
+				if (!user_io_file_mount(0, mainpath))
+				{
+					strcpy(name + strlen(name) - 3, "VHD");
+					user_io_file_mount(0, name);
+				}
 			}
 		}
 
@@ -298,28 +343,6 @@ void user_io_detect_core_type()
 		user_io_8bit_set_status(0, UIO_STATUS_RESET);
 		break;
 	}
-}
-
-unsigned short usb2amiga(unsigned  char k)
-{
-	//  replace MENU key by RGUI to allow using Right Amiga on reduced keyboards
-	// (it also disables the use of Menu for OSD)
-	if (mist_cfg.key_menu_as_rgui && k == 0x65)
-	{
-		return 0x67;
-	}
-	return usb2ami[k];
-}
-
-unsigned short usb2ps2code(unsigned char k)
-{
-	//  replace MENU key by RGUI e.g. to allow using RGUI on reduced keyboards without physical key
-	// (it also disables the use of Menu for OSD)
-	if (mist_cfg.key_menu_as_rgui && k == 0x65)
-	{
-		return EXT | 0x27;
-	}
-	return usb2ps2[k];
 }
 
 void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
@@ -456,15 +479,34 @@ uint16_t user_io_sd_get_status(uint32_t *lba)
 }
 
 // read 8 bit keyboard LEDs status from FPGA
-uint8_t user_io_kbdled_get_status(void)
+uint16_t user_io_kbdled_get_status(void)
 {
-	uint8_t c;
+	uint16_t c;
 
 	spi_uio_cmd_cont(UIO_GET_KBD_LED);
-	c = spi_in();
+	c = spi_w(0);
 	DisableIO();
 
 	return c;
+}
+
+uint8_t user_io_ps2_ctl(uint8_t *kbd_ctl, uint8_t *mouse_ctl)
+{
+	uint16_t c;
+	uint8_t res = 0;
+
+	spi_uio_cmd_cont(UIO_PS2_CTL);
+
+	c = spi_w(0);
+	if (kbd_ctl) *kbd_ctl = (uint8_t)c;
+	res |= ((c >> 8) & 1);
+
+	c = spi_w(0);
+	if (mouse_ctl) *mouse_ctl = (uint8_t)c;
+	res |= ((c >> 7) & 2);
+
+	DisableIO();
+	return res;
 }
 
 // read 32 bit ethernet status word from FPGA
@@ -635,7 +677,7 @@ int user_io_file_tx(char* name, unsigned char index)
 	spi8(0x00);
 	DisableFpga();
 
-	iprintf("\n");
+	printf("\n");
 	return 1;
 }
 
@@ -731,6 +773,7 @@ void user_io_send_buttons(char force)
 		key_map = map;
 		spi_uio_cmd8(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
+		if ((key_map & BUTTON2) && is_x86_core) x86_init();
 	}
 
 	if (old_video_mode != mist_cfg.video_mode)
@@ -748,6 +791,20 @@ void __inline diskled_on()
 	diskled_timer = GetTimer(50);
 	diskled_is_on = 1;
 }
+
+void kbd_reply(char code)
+{
+	printf("kbd_reply = 0x%02X\n", code);
+	spi_uio_cmd8(UIO_KEYBOARD, code);
+}
+
+void mouse_reply(char code)
+{
+	printf("mouse_reply = 0x%02X\n", code);
+	spi_uio_cmd8(UIO_MOUSE, code);
+}
+
+static uint8_t use_ps2ctl = 0;
 
 void user_io_poll()
 {
@@ -845,10 +902,10 @@ void user_io_poll()
 
 	if (core_type == CORE_TYPE_8BIT)
 	{
+		/*
 		unsigned char c = 1, f, p = 0;
 
 		// check for serial data to be sent
-
 		// check for incoming serial data. this is directly forwarded to the
 		// arm rs232 and mixes with debug output.
 		spi_uio_cmd_cont(UIO_SIO_IN);
@@ -869,8 +926,14 @@ void user_io_poll()
 			iprintf("\033[0m");
 		}
 		DisableIO();
+		*/
 
 		// sd card emulation
+		if (is_x86_core())
+		{
+			x86_poll();
+		}
+		else
 		{
 			static char buffer[4][512];
 			static uint64_t buffer_lba[4] = { -1,-1,-1,-1 };
@@ -1141,10 +1204,140 @@ void user_io_poll()
 
 	if (core_type == CORE_TYPE_ARCHIE) archie_poll();
 
+	static uint8_t leds = 0;
+	if(use_ps2ctl)
+	{
+		leds |= (KBD_LED_FLAG_STATUS | KBD_LED_CAPS_CONTROL);
+
+		uint8_t kbd_ctl, mouse_ctl;
+		uint8_t ps2ctl = user_io_ps2_ctl(&kbd_ctl, &mouse_ctl);
+
+		if (ps2ctl & 1)
+		{
+			static uint8_t cmd = 0;
+			static uint8_t byte = 0;
+
+			printf("kbd_ctl = 0x%02X\n", kbd_ctl);
+			if (!byte)
+			{
+				cmd = kbd_ctl;
+				switch (cmd)
+				{
+				case 0xff:
+					kbd_reply(0xFA);
+					kbd_reply(0xAA);
+					break;
+
+				case 0xf4:
+				case 0xf5:
+				case 0xfa:
+					kbd_reply(0xFA);
+					break;
+
+				case 0xed:
+					kbd_reply(0xFA);
+					byte++;
+					break;
+
+				default:
+					kbd_reply(0xFE);
+					break;
+				}
+			}
+			else
+			{
+				switch (cmd)
+				{
+				case 0xed:
+					kbd_reply(0xFA);
+					byte = 0;
+
+					if (kbd_ctl & 4) leds |= KBD_LED_CAPS_STATUS;
+						else leds &= ~KBD_LED_CAPS_STATUS;
+
+					break;
+
+				default:
+					byte = 0;
+					break;
+				}
+			}
+		}
+
+		if (ps2ctl & 2)
+		{
+			static uint8_t cmd = 0;
+			static uint8_t byte = 0;
+
+			printf("mouse_ctl = 0x%02X\n", mouse_ctl);
+			if (!byte)
+			{
+				cmd = mouse_ctl;
+				switch (cmd)
+				{
+				case 0xe8:
+				case 0xf3:
+					mouse_reply(0xFA);
+					byte++;
+					break;
+
+				case 0xf2:
+					mouse_reply(0xFA);
+					mouse_reply(0x00);
+					break;
+
+				case 0xe6:
+				case 0xf4:
+				case 0xf5:
+					mouse_reply(0xFA);
+					break;
+
+				case 0xe9:
+					mouse_reply(0xFA);
+					mouse_reply(0x00);
+					mouse_reply(0x00);
+					mouse_reply(0x00);
+					break;
+
+				case 0xff:
+					mouse_reply(0xFA);
+					mouse_reply(0xAA);
+					mouse_reply(0x00);
+					break;
+
+				default:
+					mouse_reply(0xFE);
+					break;
+				}
+			}
+			else
+			{
+				switch (cmd)
+				{
+				case 0xf3:
+				case 0xe8:
+					mouse_reply(0xFA);
+					byte = 0;
+					break;
+
+				default:
+					byte = 0;
+					break;
+				}
+			}
+		}
+	}
+
 	if (CheckTimer(led_timer))
 	{
 		led_timer = GetTimer(LED_FREQ);
-		uint8_t leds = user_io_kbdled_get_status();
+		if (!use_ps2ctl)
+		{
+			uint16_t s = user_io_kbdled_get_status();
+			if(s & 0x100) use_ps2ctl = 1;
+			if (!use_ps2ctl) leds = (uint8_t)s;
+		}
+
 		if ((leds & KBD_LED_FLAG_MASK) != KBD_LED_FLAG_STATUS) leds = 0;
 
 		if ((keyboard_leds & KBD_LED_CAPS_MASK) != (leds & KBD_LED_CAPS_MASK))
@@ -1175,12 +1368,36 @@ char user_io_user_button()
 	return((!user_io_menu_button() && (fpga_get_buttons() & BUTTON_USR)) ? 1 : 0);
 }
 
-static void send_keycode(unsigned short code)
+static void send_keycode(unsigned short key, int press)
 {
 	if (core_type == CORE_TYPE_MINIMIG2)
 	{
-		// amiga has "break" marker in msb
-		if (code & BREAK) code = (code & 0xff) | 0x80;
+		if (press > 1) return;
+
+		uint32_t code = get_amiga_code(key);
+		if (code == NONE) return;
+
+		if (code & CAPS_TOGGLE)
+		{
+			if (press = 1)
+			{
+				// send alternating make and break codes for caps lock
+				if(caps_lock_toggle) code |= 0x80;
+				caps_lock_toggle = !caps_lock_toggle;
+				set_kbd_led(HID_LED_CAPS_LOCK, caps_lock_toggle);
+			}
+			else
+			{
+				return;
+			}
+		}
+		else
+		{
+			// amiga has "break" marker in msb
+			if (!press) code |= 0x80;
+		}
+
+		code &= 0xff;
 
 		// send immediately if possible
 		if (CheckTimer(kbd_timer) && (kbd_fifo_w == kbd_fifo_r))
@@ -1191,67 +1408,109 @@ static void send_keycode(unsigned short code)
 		{
 			kbd_fifo_enqueue(code);
 		}
+		return;
 	}
 
 	if (core_type == CORE_TYPE_MIST)
 	{
+		if (press > 1) return;
+
+		uint32_t code = get_atari_code(key);
+		if (code == NONE) return;
+
 		// atari has "break" marker in msb
-		if (code & BREAK) code = (code & 0xff) | 0x80;
+		if (!press) code = (code & 0xff) | 0x80;
 		ikbd_keyboard(code);
+		return;
 	}
 
 	if (core_type == CORE_TYPE_8BIT)
 	{
-		// send ps2 keycodes for those cores that prefer ps2
-		spi_uio_cmd_cont(UIO_KEYBOARD);
+		uint32_t code = get_ps2_code(key);
+		if (code == NONE) return;
 
-		// "pause" has a complex code 
-		if ((code & 0xff) == 0x77)
+		//pause
+		if ((code & 0xff) == 0xE1)
 		{
 			// pause does not have a break code
-			if (!(code & BREAK))
+			if (press != 1)
 			{
 				// Pause key sends E11477E1F014E077
-				static const unsigned char c[] = {
-					0xe1, 0x14, 0x77, 0xe1, 0xf0, 0x14, 0xf0, 0x77, 0x00 };
+				static const unsigned char c[] = { 0xe1, 0x14, 0x77, 0xe1, 0xf0, 0x14, 0xf0, 0x77, 0x00 };
 				const unsigned char *p = c;
 
-				iprintf("PS2 KBD ");
+				spi_uio_cmd_cont(UIO_KEYBOARD);
+
+				printf("PS2 PAUSE CODE: ");
 				while (*p)
 				{
-					iprintf("%x ", *p);
+					printf("%x ", *p);
 					spi8(*p++);
 				}
-				iprintf("\n");
+				printf("\n");
+
+				DisableIO();
+			}
+		}
+		// print screen
+		else if ((code & 0xff) == 0xE2)
+		{
+			if (press <= 1)
+			{
+				static const unsigned char c[2][8] = {
+					{ 0xE0, 0xF0, 0x7C, 0xE0, 0xF0, 0x12, 0x00, 0x00 },
+					{ 0xE0, 0x12, 0xE0, 0x7C, 0x00, 0x00, 0x00, 0x00 }
+				};
+
+				const unsigned char *p = c[press];
+
+				spi_uio_cmd_cont(UIO_KEYBOARD);
+
+				printf("PS2 PRINT CODE: ");
+				while (*p)
+				{
+					printf("%x ", *p);
+					spi8(*p++);
+				}
+				printf("\n");
+
+				DisableIO();
 			}
 		}
 		else
 		{
-			/*
-			iprintf("PS2 KBD ");
-			if (code & EXT)   iprintf("e0 ");
-			if (code & BREAK) iprintf("f0 ");
-			iprintf("%x\n", code & 0xff);
-			*/
+			if (press > 1 && !use_ps2ctl) return;
+
+			spi_uio_cmd_cont(UIO_KEYBOARD);
 
 			// prepend extended code flag if required
 			if (code & EXT) spi8(0xe0);
 
 			// prepend break code if required
-			if (code & BREAK) spi8(0xf0);
+			if (!press) spi8(0xf0);
 
 			// send code itself
 			spi8(code & 0xff);
-		}
 
-		DisableIO();
+			DisableIO();
+		}
 	}
 
-	if (core_type == CORE_TYPE_ARCHIE) archie_kbd(code);
+	if (core_type == CORE_TYPE_ARCHIE)
+	{
+		if (press > 1) return;
+
+		uint32_t code = get_archie_code(key);
+		if (code == NONE) return;
+
+		archie_kbd(code);
+	}
 }
 
 void user_io_mouse(unsigned char b, int16_t x, int16_t y)
 {
+	if (osd_is_visible) return;
+
 	// send mouse data as minimig expects it
 	if (core_type == CORE_TYPE_MINIMIG2)
 	{
@@ -1281,19 +1540,6 @@ LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI
 #define EMU_BTN2  (1+(keyrah*4))  // left shift
 #define EMU_BTN3  (2+(keyrah*4))  // left alt
 #define EMU_BTN4  (3+(keyrah*4))  // left gui (usually windows key)
-
-unsigned short keycode(unsigned char in)
-{
-	if (core_type == CORE_TYPE_MINIMIG2) return usb2amiga(in);
-
-	// atari st and the 8 bit core (currently only used for atari 800)
-	// use the same key codes
-	if (core_type == CORE_TYPE_MIST) return usb2atari[in];
-	if (core_type == CORE_TYPE_ARCHIE) return usb2archie[in];
-	if (core_type == CORE_TYPE_8BIT) return usb2ps2code(in);
-
-	return MISS;
-}
 
 extern configTYPE config;
 
@@ -1332,58 +1578,19 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 	}
 }
 
-unsigned short modifier_keycode(unsigned char index)
-{
-	/* usb modifer bits:
-	0     1     2    3    4     5     6    7
-	LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI
-	*/
-
-	if (core_type == CORE_TYPE_MINIMIG2)
-	{
-		static const unsigned short amiga_modifier[] = { 0x63, 0x60, 0x64, 0x66, 0x63, 0x61, 0x65, 0x67 };
-		return amiga_modifier[index];
-	}
-
-	if (core_type == CORE_TYPE_MIST)
-	{
-		static const unsigned short atari_modifier[] = { 0x1d, 0x2a, 0x38, MISS, 0x1d, 0x36, 0x38, MISS };
-		return atari_modifier[index];
-	}
-
-	if (core_type == CORE_TYPE_8BIT)
-	{
-		static const unsigned short ps2_modifier[] = { 0x14, 0x12, 0x11, EXT | 0x1f, EXT | 0x14, 0x59, EXT | 0x11, EXT | 0x27 };
-		return ps2_modifier[index];
-	}
-
-	if (core_type == CORE_TYPE_ARCHIE)
-	{
-		static const unsigned short archie_modifier[] = { 0x36, 0x4c, 0x5e, MISS, 0x61, 0x58, 0x60, MISS };
-		return archie_modifier[index];
-	}
-
-	return MISS;
-}
-
 void user_io_osd_key_enable(char on)
 {
 	iprintf("OSD is now %s\n", on ? "visible" : "invisible");
 	osd_is_visible = on;
 }
 
-static char key_used_by_osd(unsigned short s)
+static char key_used_by_osd(uint32_t s)
 {
 	// this key is only used to open the OSD and has no keycode
-	if ((s & OSD_OPEN) && !(s & 0xff))  return true;
+	if (s & OSD_OPEN) return 1;
 
 	// no keys are suppressed if the OSD is inactive
-	if (!osd_is_visible) return false;
-
-	// in atari mode eat all keys if the OSD is online,
-	// else none as it's up to the core to forward keys
-	// to the OSD
-	return((core_type == CORE_TYPE_MIST) || (core_type == CORE_TYPE_ARCHIE) || (core_type == CORE_TYPE_8BIT));
+	return osd_is_visible;
 }
 
 void user_io_kbd(uint16_t key, int press)
@@ -1393,105 +1600,37 @@ void user_io_kbd(uint16_t key, int press)
 		(core_type == CORE_TYPE_ARCHIE) ||
 		(core_type == CORE_TYPE_8BIT))
 	{
-		uint8_t m = key >> 8;
-		uint8_t k = key & 0xFF;
-
-		static unsigned char modifier = 0;
-
-		// handle modifier keys
-		if (m != modifier)
+		if (key)
 		{
-			for (int i = 0; i<8; i++)
-			{
-				uint16_t code = modifier_keycode(i);
-
-				// Do we have a downstroke on a modifier key?
-				if ((m & (1 << i)) && !(modifier & (1 << i)))
-				{
-					if (code != MISS)
-					{
-						if (is_menu_core()) printf("keycode(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "",  code & 255, code & 255);
-						if(!osd_is_visible) send_keycode(code);
-					}
-				}
-
-				if (!(m & (1 << i)) && (modifier & (1 << i)))
-				{
-					if (code != MISS)
-					{
-						if (is_menu_core()) printf("keycode(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
-						if (!osd_is_visible) send_keycode(BREAK | code);
-					}
-				}
-			}
-
-			modifier = m;
-		}
-
-		// check if there are keys in the pressed list which aren't 
-		// reported anymore
-		if (k)
-		{
-			uint16_t code = keycode(k);
+			uint32_t code = get_ps2_code(key);
 			if (!press)
 			{
-				if (is_menu_core()) printf("keycode(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
+				if (is_menu_core()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				if (code != MISS)
+				if (code & OSD_OPEN) menu_key_set(UPSTROKE | KEY_F12);
+				else if (osd_is_visible) menu_key_set(UPSTROKE | key);
+				else
 				{
-					if (code & OSD_OPEN)
-					{
-						menu_key_set(KEY_AMI_UPSTROKE | KEY_AMI_MENU);
-					}
-					else
-					{
-						// special OSD key handled internally 
-						if (osd_is_visible) menu_key_set(KEY_AMI_UPSTROKE | usb2amiga(k));
-					}
-
-					if (!key_used_by_osd(code) && !(code & CAPS_LOCK_TOGGLE) && !(code & NUM_LOCK_TOGGLE))
-					{
-						send_keycode(BREAK | code);
-					}
+					send_keycode(key, press);
 				}
 			}
 			else
 			{
-				if (is_menu_core()) printf("keycode(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
+				if (is_menu_core()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				if ((k <= KEYCODE_MAX) && code != MISS)
+				if (code & OSD_OPEN)
 				{
-					// If OSD is visible, then all keys are sent into the OSD
-					// using Amiga key codes since the OSD itself uses Amiga key codes
-					// for historical reasons. If the OSD is invisble then only
-					// those keys marked for OSD in the core specific table are
-					// sent for OSD handling.
-					if (code & OSD_OPEN)
+					if (press == 1) menu_key_set(KEY_F12);
+				}
+				else if (osd_is_visible)
+				{
+					if (press == 1) menu_key_set(key);
+				}
+				else
+				{
+					if ((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl))
 					{
-						menu_key_set(KEY_AMI_MENU);
-					}
-					else
-					{
-						// special OSD key handled internally 
-						if (osd_is_visible)
-						{
-							menu_key_set(usb2amiga(k));
-						}
-					}
-
-					// no further processing of any key that is currently 
-					// redirected to the OSD
-					if (!key_used_by_osd(code))
-					{
-						if (code & CAPS_LOCK_TOGGLE)
-						{
-							// send alternating make and break codes for caps lock
-							send_keycode((code & 0xff) | (caps_lock_toggle ? BREAK : 0));
-							caps_lock_toggle = !caps_lock_toggle;
-
-							set_kbd_led(HID_LED_CAPS_LOCK, caps_lock_toggle);
-						}
-						else if (code & NUM_LOCK_TOGGLE)
+						if (press == 1)
 						{
 							// num lock has four states indicated by leds:
 							// all off: normal
@@ -1499,7 +1638,7 @@ void user_io_kbd(uint16_t key, int press)
 							// num lock on, scroll lock off: joy0 emu
 							// num lock off, scroll lock on: joy1 emu
 
-							switch (code ^ NUM_LOCK_TOGGLE)
+							switch (code & 0xff)
 							{
 							case 1:
 								if (!joy_force) emu_mode = EMU_MOUSE;
@@ -1529,10 +1668,10 @@ void user_io_kbd(uint16_t key, int press)
 							if (emu_mode == EMU_MOUSE || emu_mode == EMU_JOY1) set_kbd_led(HID_LED_SCROLL_LOCK, true);
 							else set_kbd_led(HID_LED_SCROLL_LOCK, false);
 						}
-						else
-						{
-							send_keycode(code);
-						}
+					}
+					else
+					{
+						send_keycode(key, press);
 					}
 				}
 			}

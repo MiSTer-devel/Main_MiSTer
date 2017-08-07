@@ -65,6 +65,9 @@
     <ClCompile Include="file_io.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="x86.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="archie.h">
@@ -121,9 +124,6 @@
     <ClInclude Include="input.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="keycodes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="logo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -146,6 +146,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="file_io.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="x86.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -86,8 +86,6 @@ void core_init()
 
 int main(int argc, char *argv[])
 {
-	uint8_t mmc_ok = 0;
-
 	fpga_io_init();
 	fpga_gpo_write(0);
 

@@ -57,6 +57,7 @@
     <ClCompile Include="spi.c" />
     <ClCompile Include="tos.c" />
     <ClCompile Include="user_io.c" />
+    <ClCompile Include="x86.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="archie.h" />
@@ -78,7 +79,6 @@
     <ClInclude Include="ikbd.h" />
     <ClInclude Include="ini_parser.h" />
     <ClInclude Include="input.h" />
-    <ClInclude Include="keycodes.h" />
     <ClInclude Include="logo.h" />
     <ClInclude Include="menu.h" />
     <ClInclude Include="mist_cfg.h" />
@@ -86,6 +86,7 @@
     <ClInclude Include="spi.h" />
     <ClInclude Include="tos.h" />
     <ClInclude Include="user_io.h" />
+    <ClInclude Include="x86.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="build.sh" />

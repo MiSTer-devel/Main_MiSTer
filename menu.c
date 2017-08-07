@@ -46,6 +46,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdbool.h>
 #include "mist_cfg.h"
 #include "input.h"
+#include "x86.h"
 
 /*menu states*/
 enum MENU
@@ -269,7 +270,7 @@ static void SelectFile(char* pFileExt, unsigned char Options, unsigned char Menu
 	iprintf("%s - %s\n", pFileExt, fs_pFileExt);
 	AdjustDirectory(SelectedPath);
 
-	if (strncmp(pFileExt, fs_pFileExt, 12) != 0) // check desired file extension
+	if (strncmp(pFileExt, fs_pFileExt, 12) != 0 || !strlen(SelectedPath)) // check desired file extension
 	{ // if different from the current one go to the root directory and init entry buffer
 		SelectedPath[0] = 0;
 
@@ -415,52 +416,42 @@ const uint8_t keycode_table[128] =
 	0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
 };
 
-static uint8_t GetASCIIKey(unsigned char keycode)
+static uint8_t GetASCIIKey(uint32_t keycode)
 {
-	if (keycode & KEY_AMI_UPSTROKE)
+	if (keycode & UPSTROKE)
 		return 0;
 
-	return keycode_table[keycode & 0x7F];
+	return keycode_table[get_amiga_code(keycode & 0xFFFF) & 0x7F];
 }
 
 /* the Atari core handles OSD keys competely inside the core */
-static unsigned char menu_key = 0;
-static unsigned char menu_mod = 0;
+static uint32_t menu_key = 0;
 
-void menu_key_set(unsigned char c)
+void menu_key_set(uint32_t c)
 {
-	//iprintf("OSD enqueue: %x\n", c);
+	//printf("OSD enqueue: %x\n", c);
 	menu_key = c;
 }
 
-void menu_mod_set(uint8_t m)
-{
-	menu_mod = m;
-}
-
 // get key status
-static uint8_t menu_key_get(void)
+static uint32_t menu_key_get(void)
 {
-	static unsigned char c2;
+	static uint32_t c2;
 	static unsigned long delay;
 	static unsigned long repeat;
 	static unsigned char repeat2;
-	unsigned char c1, c;
+	uint32_t c1, c;
 
 	c1 = menu_key;
-
-	// OsdKeyGet permanently returns the last key event. 
-
-	// generate normal "key-pressed" event
 	c = 0;
 	if (c1 != c2) c = c1;
 	c2 = c1;
 
 	// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
-	if (!user_io_osd_is_visible() && is_menu_core()) c = KEY_AMI_MENU;
+	if (!user_io_osd_is_visible() && is_menu_core()) c = KEY_F12;
 
 	// generate repeat "key-pressed" events
-	if ((c1 & KEY_AMI_UPSTROKE) || (!c1))
+	if ((c1 & UPSTROKE) || (!c1))
 	{
 		repeat = GetTimer(REPEATDELAY);
 	}
@@ -475,10 +466,9 @@ static uint8_t menu_key_get(void)
 	{
 		static unsigned char last_but = 0;
 		unsigned char but = user_io_menu_button();
-		if (!but && last_but) c = KEY_AMI_MENU;
+		if (!but && last_but) c = KEY_F12;
 		last_but = but;
 	}
-
 	return(c);
 }
 
@@ -486,7 +476,7 @@ void HandleUI(void)
 {
 	char *p;
 	char s[40];
-	unsigned char i, c, m, up, down, select, menu, right, left, plus, minus;
+	unsigned char i, m, up, down, select, menu, right, left, plus, minus;
 	uint8_t mod;
 	unsigned long len;
 	static hardfileTYPE t_hardfile[2]; // temporary copy of former hardfile configuration
@@ -502,7 +492,7 @@ void HandleUI(void)
 	char usb_id[64];
 
 	// get user control codes
-	c = menu_key_get();
+	uint32_t c = menu_key_get();
 
 	// decode and set events
 	menu = false;
@@ -516,9 +506,9 @@ void HandleUI(void)
 
 	switch (c)
 	{
-	case KEY_AMI_MENU:
+	case KEY_F12:
 		menu = true;
-		menu_key_set(KEY_AMI_MENU | KEY_AMI_UPSTROKE);
+		menu_key_set(KEY_F12 | UPSTROKE);
 		break;
 
 		// Within the menu the esc key acts as the menu key. problem:
@@ -526,35 +516,35 @@ void HandleUI(void)
 		// break code for the ESC key when the key is released will 
 		// reach the core which never saw the make code. Simple solution:
 		// react on break code instead of make code
-	case KEY_AMI_ESC | KEY_AMI_UPSTROKE:
+	case KEY_ESC | UPSTROKE:
 		if (menustate != MENU_NONE2)
 			menu = true;
 		break;
-	case KEY_AMI_ENTER:
-	case KEY_AMI_SPACE:
+	case KEY_ENTER:
+	case KEY_SPACE:
 		select = true;
 		break;
-	case KEY_AMI_UP:
+	case KEY_UP:
 		up = true;
 		break;
-	case KEY_AMI_DOWN:
+	case KEY_DOWN:
 		down = true;
 		break;
-	case KEY_AMI_LEFT:
+	case KEY_LEFT:
 		left = true;
 		break;
-	case KEY_AMI_RIGHT:
+	case KEY_RIGHT:
 		right = true;
 		break;
-	case KEY_AMI_KPPLUS:
-	case 0x0c: // =/+
+	case KEY_KPPLUS:
+	case KEY_EQUAL: // =/+
 		plus = true;
 		break;
-	case KEY_AMI_KPMINUS:
-	case 0x0b: // -/_
+	case KEY_KPMINUS:
+	case KEY_MINUS: // -/_
 		minus = true;
 		break;
-
+/*
 	case 0x01: // 1: 1280x720 mode
 		if (user_io_osd_is_visible) mist_cfg.video_mode = 0;
 		break;
@@ -562,6 +552,7 @@ void HandleUI(void)
 	case 0x02: // 2: 1280x1024 mode
 		if (user_io_osd_is_visible) mist_cfg.video_mode = 1;
 		break;
+*/
 	}
 
 	if (menu || select || up || down || left || right)
@@ -633,7 +624,7 @@ void HandleUI(void)
 	case MENU_NONE2:
 		if (menu)
 		{
-			if (menu_mod & 0x44) //Alt+Menu
+			if (get_key_mod() & (LALT|RALT)) //Alt+Menu
 			{
 				OsdSetSize(16);
 				SelectFile("RBF", 0, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_NONE1, 0);
@@ -818,7 +809,11 @@ void HandleUI(void)
 				}
 
 				// check for 'O'ption strings
-				if (p && (p[0] == 'O')) {
+				if (p && (p[0] == 'O'))
+				{
+					//option handled by ARM
+					if (p[1] == 'X') p++;
+
 					unsigned long x = getStatus(p, status);
 
 					// get currently active option
@@ -955,15 +950,26 @@ void HandleUI(void)
 					static char ext[13];
 					substrcpy(ext, p, 1);
 					while (strlen(ext) < 3) strcat(ext, " ");
-					SelectFile(ext, SCAN_DIR,
+					SelectFile(ext, SCAN_DIR | ((p[0] == 'S') ? SCAN_UMOUNT : 0),
 						(p[0] == 'F') ? MENU_8BIT_MAIN_FILE_SELECTED : MENU_8BIT_MAIN_IMAGE_SELECTED,
 						MENU_8BIT_MAIN1, 1);
 				}
 				else if (p[0] == 'O')
 				{
+					int byarm = 0;
+					if (p[1] == 'X')
+					{
+						byarm = 1;
+						p++;
+					}
+
 					unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
 					unsigned long x = getStatus(p, status) + 1;
 
+					if (byarm && is_x86_core())
+					{
+						if (p[1] == '2') x86_set_fdd_boot(!(x&1));
+					}
 					// check if next value available
 					substrcpy(s, p, 2 + x);
 					if (!strlen(s)) x = 0;
@@ -976,12 +982,20 @@ void HandleUI(void)
 				{
 					// determine which status bit is affected
 					unsigned long mask = 1 << getIdx(p);
-					unsigned long status = user_io_8bit_set_status(0, 0);
+					if (mask == 1 && is_x86_core())
+					{
+						x86_init();
+						menustate = MENU_NONE1;
+					}
+					else
+					{
+						unsigned long status = user_io_8bit_set_status(0, 0);
 
-					user_io_8bit_set_status(status ^ mask, mask);
-					user_io_8bit_set_status(status, mask);
+						user_io_8bit_set_status(status ^ mask, mask);
+						user_io_8bit_set_status(status, mask);
+						menustate = MENU_8BIT_MAIN1;
+					}
 
-					menustate = MENU_8BIT_MAIN1;
 				}
 			}
 		}
@@ -1000,9 +1014,16 @@ void HandleUI(void)
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
 		iprintf("Image selected: %s\n", SelectedPath);
-		user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
-		user_io_file_mount(drive_num, SelectedPath);
-		menustate = MENU_NONE1;
+		if (is_x86_core())
+		{
+			x86_set_image(drive_num, SelectedPath);
+		}
+		else
+		{
+			user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
+			user_io_file_mount(drive_num, SelectedPath);
+		}
+		menustate = SelectedPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
 		break;
 
 	case MENU_8BIT_SYSTEM1:
@@ -1079,6 +1100,7 @@ void HandleUI(void)
 					unsigned long status = user_io_8bit_set_status(0, 0);
 					iprintf("Saving config to %s\n", filename);
 					FileSaveConfig(filename, &status, 4);
+					if (is_x86_core()) x86_config_save();
 					menustate = MENU_8BIT_MAIN1;
 					menusub = 0;
 				}
@@ -1832,7 +1854,7 @@ void HandleUI(void)
 			else if (menusub == 11)
 				menustate = MENU_NONE1;
 		}
-		else if (c == KEY_AMI_BACK) // eject all floppies
+		else if (c == KEY_BACKSPACE) // eject all floppies
 		{
 			for (i = 0; i <= drives; i++)
 				df[i].status = 0;
@@ -1934,25 +1956,31 @@ void HandleUI(void)
 
 		ScrollLongName(); // scrolls file name if longer than display line
 
-		if (c == KEY_AMI_HOME)
+		if (c == KEY_HOME)
 		{
 			ScanDirectory(SelectedPath, SCAN_INIT, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
 		}
 
-		if (c == KEY_AMI_BACK)
+		if (c == KEY_BACKSPACE)
 		{
-			changeDir("..");
-			menustate = MENU_FILE_SELECT1;
+			if (fs_Options & SCAN_UMOUNT)
+			{
+				for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+				OsdWrite(OsdGetSize() / 2, "   Unmounting the image", 0, 0);
+				usleep(1500000);
+				SelectedPath[0] = 0;
+				menustate = fs_MenuSelect;
+			}
 		}
 
-		if ((c == KEY_AMI_PGUP) || (c == KEY_AMI_LEFT))
+		if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
 		{
 			ScanDirectory(SelectedPath, SCAN_PREV_PAGE, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
 		}
 
-		if ((c == KEY_AMI_PGDN) || (c == KEY_AMI_RIGHT))
+		if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
 		{
 			ScanDirectory(SelectedPath, SCAN_NEXT_PAGE, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
