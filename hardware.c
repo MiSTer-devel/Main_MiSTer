@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <time.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdint.h>
 #include "hardware.h"
 #include "user_io.h"
 
@@ -52,9 +53,10 @@ void hexdump(void *data, uint16_t size, uint16_t offset)
 unsigned long GetTimer(unsigned long offset)
 {
 	struct timespec tp;
-	clock_gettime(CLOCK_BOOTTIME, &tp);
 
-	unsigned long long res;
+  	clock_gettime(CLOCK_BOOTTIME, &tp);
+
+	uint64_t res;
 
 	res = tp.tv_sec;
 	res *= 1000;
