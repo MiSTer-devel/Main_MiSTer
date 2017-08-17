@@ -1607,21 +1607,20 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu_core()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				if (code & OSD_OPEN) menu_key_set(UPSTROKE | KEY_F12);
-				else if (osd_is_visible) menu_key_set(UPSTROKE | key);
-				else
+				if (osd_is_visible)
 				{
-					send_keycode(key, press);
+					if(key == KEY_MENU) menu_key_set(UPSTROKE | KEY_F12);
+						else menu_key_set(UPSTROKE | key);
 				}
+
+				//don't block depress so keys won't stick in core if pressed before OSD.
+				send_keycode(key, press);
 			}
 			else
 			{
 				if (is_menu_core()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				if (code & OSD_OPEN)
-				{
-					if (press == 1) menu_key_set(KEY_F12);
-				}
+				if (((key == KEY_F12) && (!is_x86_core() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU) menu_key_set(KEY_F12);
 				else if (osd_is_visible)
 				{
 					if (press == 1) menu_key_set(key);

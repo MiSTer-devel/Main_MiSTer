@@ -368,7 +368,7 @@ static const int ev2ps2[] =
 	NONE, //85  KEY_ZENKAKU		
 	NONE, //86  KEY_102ND		
 	0x78, //87  KEY_F11			
-	OSD_OPEN, //88  KEY_F12			
+	0x07, //88  KEY_F12			
 	NONE, //89  KEY_RO			
 	NONE, //90  KEY_KATAKANA	
 	NONE, //91  KEY_HIRAGANA	
@@ -1133,7 +1133,7 @@ static int keyrah_trans(int key, int press)
 
 	if (key == KEY_102ND)
 	{
-		if (!press && fn == 1) menu_key_set(KEY_F12);
+		if (!press && fn == 1) menu_key_set(KEY_MENU);
 		fn = press ? 1 : 0;
 		return 0;
 	}
@@ -1262,7 +1262,7 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 				break;
 
 			default:
-				ev.code = (bnum == 17) ? KEY_F12 : 0;
+				ev.code = (bnum == 17) ? KEY_MENU : 0;
 			}
 
 			input_cb(&ev, 0);
