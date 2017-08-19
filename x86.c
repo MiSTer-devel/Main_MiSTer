@@ -143,73 +143,6 @@ static int load_bios(char* name, uint8_t index)
 	return 1;
 }
 
-static void crc32(uint8_t *ptr, uint32_t *crc_output)
-{
-    static uint8_t crc[32];
-
-    //do nothing
-    if(ptr != NULL && crc_output != NULL) return;
-
-    //initialize
-    if(ptr == NULL && crc_output == NULL)
-	{
-    	for(int i=0; i<32; i++) crc[i] = 1;
-    	return;
-    }
-
-    //output
-    if(ptr == NULL && crc_output != NULL)
-	{
-    	*crc_output = 0;
-		for(int i=0; i<32; i++)
-		{
-			(*crc_output) |= crc[i] << (31-i);
-		}
-		(*crc_output) = ~(*crc_output);
-		return;
-    }
-
-    uint8_t in[8];
-    for(int j=0; j<8; j++) in[j] = ((*ptr) >> j) & 1;
-
-    uint8_t new_crc[32];
-
-	new_crc[31] = in[2] ^ crc[23] ^ crc[29];
-	new_crc[30] = in[0] ^ in[3] ^ crc[22] ^ crc[28] ^ crc[31];
-	new_crc[29] = in[0] ^ in[1] ^ in[4] ^ crc[21] ^ crc[27] ^ crc[30] ^ crc[31];
-	new_crc[28] = in[1] ^ in[2] ^ in[5] ^ crc[20] ^ crc[26] ^ crc[29] ^ crc[30];
-	new_crc[27] = in[0] ^ in[2] ^ in[3] ^ in[6] ^ crc[19] ^ crc[25] ^ crc[28] ^ crc[29] ^ crc[31];
-	new_crc[26] = in[1] ^ in[3] ^ in[4] ^ in[7] ^ crc[18] ^ crc[24] ^ crc[27] ^ crc[28] ^ crc[30];
-	new_crc[25] = in[4] ^ in[5] ^ crc[17] ^ crc[26] ^ crc[27];
-	new_crc[24] = in[0] ^ in[5] ^ in[6] ^ crc[16] ^ crc[25] ^ crc[26] ^ crc[31];
-	new_crc[23] = in[1] ^ in[6] ^ in[7] ^ crc[15] ^ crc[24] ^ crc[25] ^ crc[30];
-	new_crc[22] = in[7] ^ crc[14] ^ crc[24];
-	new_crc[21] = in[2] ^ crc[13] ^ crc[29];
-	new_crc[20] = in[3] ^ crc[12] ^ crc[28];
-	new_crc[19] = in[0] ^ in[4] ^ crc[11] ^ crc[27] ^ crc[31];
-	new_crc[18] = in[0] ^ in[1] ^ in[5] ^ crc[10] ^ crc[26] ^ crc[30] ^ crc[31];
-	new_crc[17] = in[1] ^ in[2] ^ in[6] ^ crc[9] ^ crc[25] ^ crc[29] ^ crc[30];
-	new_crc[16] = in[2] ^ in[3] ^ in[7] ^ crc[8] ^ crc[24] ^ crc[28] ^ crc[29];
-	new_crc[15] = in[0] ^ in[2] ^ in[3] ^ in[4] ^ crc[7] ^ crc[27] ^ crc[28] ^ crc[29] ^ crc[31];
-	new_crc[14] = in[0] ^ in[1] ^ in[3] ^ in[4] ^ in[5] ^ crc[6] ^ crc[26] ^ crc[27] ^ crc[28] ^ crc[30] ^ crc[31];
-	new_crc[13] = in[0] ^ in[1] ^ in[2] ^ in[4] ^ in[5] ^ in[6] ^ crc[5] ^ crc[25] ^ crc[26] ^ crc[27] ^ crc[29] ^ crc[30] ^ crc[31];
-	new_crc[12] = in[1] ^ in[2] ^ in[3] ^ in[5] ^ in[6] ^ in[7] ^ crc[4] ^ crc[24] ^ crc[25] ^ crc[26] ^ crc[28] ^ crc[29] ^ crc[30];
-	new_crc[11] = in[3] ^ in[4] ^ in[6] ^ in[7] ^ crc[3] ^ crc[24] ^ crc[25] ^ crc[27] ^ crc[28];
-	new_crc[10] = in[2] ^ in[4] ^ in[5] ^ in[7] ^ crc[2] ^ crc[24] ^ crc[26] ^ crc[27] ^ crc[29];
-	new_crc[9] = in[2] ^ in[3] ^ in[5] ^ in[6] ^ crc[1] ^ crc[25] ^ crc[26] ^ crc[28] ^ crc[29];
-	new_crc[8] = in[3] ^ in[4] ^ in[6] ^ in[7] ^ crc[0] ^ crc[24] ^ crc[25] ^ crc[27] ^ crc[28];
-	new_crc[7] = in[0] ^ in[2] ^ in[4] ^ in[5] ^ in[7] ^ crc[24] ^ crc[26] ^ crc[27] ^ crc[29] ^ crc[31];
-	new_crc[6] = in[0] ^ in[1] ^ in[2] ^ in[3] ^ in[5] ^ in[6] ^ crc[25] ^ crc[26] ^ crc[28] ^ crc[29] ^ crc[30] ^ crc[31];
-	new_crc[5] = in[0] ^ in[1] ^ in[2] ^ in[3] ^ in[4] ^ in[6] ^ in[7] ^ crc[24] ^ crc[25] ^ crc[27] ^ crc[28] ^ crc[29] ^ crc[30] ^ crc[31];
-	new_crc[4] = in[1] ^ in[3] ^ in[4] ^ in[5] ^ in[7] ^ crc[24] ^ crc[26] ^ crc[27] ^ crc[28] ^ crc[30];
-	new_crc[3] = in[0] ^ in[4] ^ in[5] ^ in[6] ^ crc[25] ^ crc[26] ^ crc[27] ^ crc[31];
-	new_crc[2] = in[0] ^ in[1] ^ in[5] ^ in[6] ^ in[7] ^ crc[24] ^ crc[25] ^ crc[26] ^ crc[30] ^ crc[31];
-	new_crc[1] = in[0] ^ in[1] ^ in[6] ^ in[7] ^ crc[24] ^ crc[25] ^ crc[30] ^ crc[31];
-	new_crc[0] = in[1] ^ in[7] ^ crc[24] ^ crc[30];
-
-    memcpy(crc, new_crc, sizeof(crc));
-}
-
 static bool floppy_is_160k = false;
 static bool floppy_is_180k = false;
 static bool floppy_is_320k = false;
@@ -464,13 +397,13 @@ static int hdd_set(uint32_t num)
 		512,											//word 21 cache size
 		4,												//word 22 number of ecc bytes
 		0,0,0,0,										//words 23..26 firmware revision
-		('A' << 8) | 'O',								//words 27..46 model number
-		(' ' << 8) | 'H',
-		('a' << 8) | 'r',
-		('d' << 8) | 'd',
-		('r' << 8) | 'i',
-		('v' << 8) | 'e',
-		(('0' + (char)num) << 8) | ' ',
+		(' ' << 8) | ' ',								//words 27..46 model number
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
 		(' ' << 8) | ' ',
 		(' ' << 8) | ' ',
 		(' ' << 8) | ' ',
@@ -532,6 +465,16 @@ static int hdd_set(uint32_t num)
 		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	};
+
+	if (hdd[num].present)
+	{
+		char *name = get_image(hdd[num].type)->name;
+		for (int i = 0; i < 20; i++)
+		{
+			if (*name) identify[27 + i] = ((*name++) << 8) | 0x20;
+			if (*name) identify[27 + i] = (identify[27 + i] & 0xFF00) | (*name++);
+		}
+	}
 
 	for (int i = 0; i<128; i++) IOWR(hdd[num].base, 0, hdd[num].present ? ((unsigned int)identify[2 * i + 1] << 16) | (unsigned int)identify[2 * i + 0] : 0);
 
