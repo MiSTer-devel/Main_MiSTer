@@ -39,22 +39,25 @@
 
 #define ALT_CPU_CPU_FREQ 90000000u
 
-#define FLOPPY_BASE      0x8800
-#define HDD_BASE         0x8840 
-#define PC_BUS_BASE      0x88a0 
-#define PIO_OUTPUT_BASE  0x8860 
-#define SOUND_BASE       0x9000 
-#define PIT_BASE         0x8880 
-#define RTC_BASE         0x8c00 
-#define SD_BASE          0x0A00 
+#define FLOPPY0_BASE     0x8800
+#define HDD0_BASE        0x8840
+#define FLOPPY1_BASE     0x9800
+#define HDD1_BASE        0x9840
+#define PC_BUS_BASE      0x88a0
+#define PIO_OUTPUT_BASE  0x8860
+#define SOUND_BASE       0x9000
+#define PIT_BASE         0x8880
+#define RTC_BASE         0x8c00
+#define SD_BASE          0x0A00
 
-#define CFG_VER          1
+#define CFG_VER          2
 
 typedef struct
 {
 	uint32_t ver;
 	char fdd_name[1024];
-	char hdd_name[1024];
+	char hdd0_name[1024];
+	char hdd1_name[1024];
 } x86_config;
 
 static x86_config config;
@@ -219,16 +222,27 @@ static bool floppy_is_2_88m= false;
 
 #define CMOS_FDD_TYPE ((floppy_is_2_88m) ? 0x50 : (floppy_is_1_44m || floppy_is_1_68m) ? 0x40 : (floppy_is_720k) ? 0x30 : (floppy_is_1_2m) ? 0x20 : 0x10)
 
-static fileTYPE fdd_image = { 0 };
-static fileTYPE hdd_image = { 0 };
+static fileTYPE fdd_image0 = { 0 };
+static fileTYPE fdd_image1 = { 0 };
+static fileTYPE hdd_image0 = { 0 };
+static fileTYPE hdd_image1 = { 0 };
 static bool boot_from_floppy = 1;
 
-#define IMG_TYPE_FDD 0x800
-#define IMG_TYPE_HDD 0x000
+#define IMG_TYPE_FDD0 0x0800
+#define IMG_TYPE_FDD1 0x1800
+
+#define IMG_TYPE_HDD0 0x0000
+#define IMG_TYPE_HDD1 0x1000
 
 static __inline fileTYPE *get_image(uint32_t type)
 {
-	return (type == IMG_TYPE_FDD) ? &fdd_image : &hdd_image;
+	switch (type)
+	{
+		case IMG_TYPE_HDD0: return &hdd_image0;
+		case IMG_TYPE_HDD1: return &hdd_image1;
+		case IMG_TYPE_FDD0: return &fdd_image0;
+	}
+	return &fdd_image1;
 }
 
 static int img_mount(uint32_t type, char *name)
@@ -295,8 +309,8 @@ static int fdd_set(char* filename)
 	floppy_is_1_68m = false;
 	floppy_is_2_88m = false;
 
-	int floppy = img_mount(IMG_TYPE_FDD, filename);
-	uint32_t size = get_image(IMG_TYPE_FDD)->size/512;
+	int floppy = img_mount(IMG_TYPE_FDD0, filename);
+	uint32_t size = get_image(IMG_TYPE_FDD0)->size/512;
 	if (floppy && size)
 	{
 		if (size >= 5760) floppy_is_2_88m = true;
@@ -360,22 +374,181 @@ static int fdd_set(char* filename)
 		(floppy_is_2_88m) ? 0x40 :
 		0x20;
 
-	IOWR(FLOPPY_BASE, 0x0, floppy ? 1 : 0);
-	IOWR(FLOPPY_BASE, 0x1, (floppy && (get_image(IMG_TYPE_FDD)->mode & O_RDWR)) ? 0 : 1);
-	IOWR(FLOPPY_BASE, 0x2, floppy_cylinders);
-	IOWR(FLOPPY_BASE, 0x3, floppy_spt);
-	IOWR(FLOPPY_BASE, 0x4, floppy_total_sectors);
-	IOWR(FLOPPY_BASE, 0x5, floppy_heads);
-	IOWR(FLOPPY_BASE, 0x6, 0); // base LBA
-	IOWR(FLOPPY_BASE, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0x8, (int)(1000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0x9, (int)(1666666.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0xA, (int)(2000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0xB, (int)(500000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY_BASE, 0xC, floppy_media);
+	IOWR(FLOPPY0_BASE, 0x0, floppy ? 1 : 0);
+	IOWR(FLOPPY0_BASE, 0x1, (floppy && (get_image(IMG_TYPE_FDD0)->mode & O_RDWR)) ? 0 : 1);
+	IOWR(FLOPPY0_BASE, 0x2, floppy_cylinders);
+	IOWR(FLOPPY0_BASE, 0x3, floppy_spt);
+	IOWR(FLOPPY0_BASE, 0x4, floppy_total_sectors);
+	IOWR(FLOPPY0_BASE, 0x5, floppy_heads);
+	IOWR(FLOPPY0_BASE, 0x6, 0); // base LBA
+	IOWR(FLOPPY0_BASE, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY0_BASE, 0x8, (int)(1000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY0_BASE, 0x9, (int)(1666666.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY0_BASE, 0xA, (int)(2000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY0_BASE, 0xB, (int)(500000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY0_BASE, 0xC, floppy_media);
 
 	//cmos_set(0x10, CMOS_FDD_TYPE);
 	return floppy;
+}
+
+typedef struct
+{
+	uint32_t type;
+	uint32_t base;
+	uint32_t hd_cylinders;
+	uint32_t hd_heads;
+	uint32_t hd_spt;
+	uint32_t hd_total_sectors;
+	uint32_t present;
+	char*    name;
+} hdd_config;
+
+static hdd_config hdd[2] = {
+	{ IMG_TYPE_HDD0, HDD0_BASE, 0, 0, 0, 0, 0, config.hdd0_name },
+	{ IMG_TYPE_HDD1, HDD1_BASE, 0, 0, 0, 0, 0, config.hdd1_name }
+};
+
+static int hdd_set(uint32_t num)
+{
+	hdd[num].hd_cylinders = 0;
+	hdd[num].hd_heads = 0;
+	hdd[num].hd_spt = 0;
+	hdd[num].hd_total_sectors = 0;
+
+	hdd[num].present = img_mount(hdd[num].type, hdd[num].name);
+	if (hdd[num].present)
+	{
+		hdd[num].hd_heads = 16;
+		hdd[num].hd_spt = 63;
+		hdd[num].hd_cylinders = get_image(hdd[num].type)->size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
+
+		if (hdd[num].hd_cylinders > 131071) hdd[num].hd_spt = 255;
+		else if (hdd[num].hd_cylinders > 65535) hdd[num].hd_spt = 127;
+
+		hdd[num].hd_cylinders = get_image(hdd[num].type)->size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
+
+		if (hdd[num].hd_cylinders > 65535) hdd[num].hd_cylinders = 65535;
+
+		hdd[num].hd_total_sectors = hdd[num].hd_spt*hdd[num].hd_heads*hdd[num].hd_cylinders;
+	}
+
+	/*
+	0x00.[31:0]:    identify write
+	0x01.[16:0]:    media cylinders
+	0x02.[4:0]:     media heads
+	0x03.[8:0]:     media spt
+	0x04.[13:0]:    media sectors per cylinder = spt * heads
+	0x05.[31:0]:    media sectors total
+	0x06.[31:0]:    media sd base
+	*/
+
+	uint32_t identify[256] =
+	{
+		0x0040, 										//word 0
+		hdd[num].hd_cylinders, 	                        //word 1
+		0x0000,											//word 2 reserved
+		hdd[num].hd_heads,								//word 3
+		(uint16_t)(512 * hdd[num].hd_spt),				//word 4
+		512,											//word 5
+		hdd[num].hd_spt,								//word 6
+		0x0000,											//word 7 vendor specific
+		0x0000,											//word 8 vendor specific
+		0x0000,											//word 9 vendor specific
+		('A' << 8) | 'O',								//word 10
+		('H' << 8) | 'D',								//word 11
+		('0' << 8) | '0',								//word 12
+		('0' << 8) | '0',								//word 13
+		('0' << 8) | ' ',								//word 14
+		(' ' << 8) | ' ',								//word 15
+		(' ' << 8) | ' ',								//word 16
+		(' ' << 8) | ' ',								//word 17
+		(' ' << 8) | ' ',								//word 18
+		(' ' << 8) | ' ',								//word 19
+		3,   											//word 20 buffer type
+		512,											//word 21 cache size
+		4,												//word 22 number of ecc bytes
+		0,0,0,0,										//words 23..26 firmware revision
+		('A' << 8) | 'O',								//words 27..46 model number
+		(' ' << 8) | 'H',
+		('a' << 8) | 'r',
+		('d' << 8) | 'd',
+		('r' << 8) | 'i',
+		('v' << 8) | 'e',
+		(('0' + (char)num) << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		(' ' << 8) | ' ',
+		16,												//word 47 max multiple sectors
+		1,												//word 48 dword io
+		1 << 9,											//word 49 lba supported
+		0x0000,											//word 50 reserved
+		0x0200,											//word 51 pio timing
+		0x0200,											//word 52 pio timing
+		0x0007,											//word 53 valid fields
+		hdd[num].hd_cylinders, 	//word 54
+		hdd[num].hd_heads,								//word 55
+		hdd[num].hd_spt,								//word 56
+		hdd[num].hd_total_sectors & 0xFFFF,				//word 57
+		hdd[num].hd_total_sectors >> 16,				//word 58
+		0x0000,											//word 59 multiple sectors
+		hdd[num].hd_total_sectors & 0xFFFF,				//word 60
+		hdd[num].hd_total_sectors >> 16,				//word 61
+		0x0000,											//word 62 single word dma modes
+		0x0000,											//word 63 multiple word dma modes
+		0x0000,											//word 64 pio modes
+		120,120,120,120,								//word 65..68
+		0,0,0,0,0,0,0,0,0,0,0,							//word 69..79
+		0x007E,											//word 80 ata modes
+		0x0000,											//word 81 minor version number
+		1 << 14,  										//word 82 supported commands
+		(1 << 14) | (1 << 13) | (1 << 12) | (1 << 10),	//word 83
+		1 << 14,	    								//word 84
+		1 << 14,	 	    							//word 85
+		(1 << 14) | (1 << 13) | (1 << 12) | (1 << 10),	//word 86
+		1 << 14,	    								//word 87
+		0x0000,											//word 88
+		0,0,0,0,										//word 89..92
+		1 | (1 << 14) | 0x2000,							//word 93
+		0,0,0,0,0,0,									//word 94..99
+		hdd[num].hd_total_sectors & 0xFFFF,				//word 100
+		hdd[num].hd_total_sectors >> 16,				//word 101
+		0,												//word 102
+		0,												//word 103
+
+		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,//word 104..127
+
+		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,				//word 128..255
+		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	};
+
+	for (int i = 0; i<128; i++) IOWR(hdd[num].base, 0, hdd[num].present ? ((unsigned int)identify[2 * i + 1] << 16) | (unsigned int)identify[2 * i + 0] : 0);
+
+	IOWR(hdd[num].base, 1, hdd[num].hd_cylinders);
+	IOWR(hdd[num].base, 2, hdd[num].hd_heads);
+	IOWR(hdd[num].base, 3, hdd[num].hd_spt);
+	IOWR(hdd[num].base, 4, hdd[num].hd_spt * hdd[num].hd_heads);
+	IOWR(hdd[num].base, 5, hdd[num].hd_spt * hdd[num].hd_heads * hdd[num].hd_cylinders);
+	IOWR(hdd[num].base, 6, 0); // base LBA
+
+	printf("HDD%d:\n  present %d\n  hd_cylinders %d\n  hd_heads %d\n  hd_spt %d\n  hd_total_sectors %d\n\n", num, hdd[num].present, hdd[num].hd_cylinders, hdd[num].hd_heads, hdd[num].hd_spt, hdd[num].hd_total_sectors);
+	return hdd[num].present;
 }
 
 static uint8_t bin2bcd(unsigned val)
@@ -425,137 +598,8 @@ void x86_init()
 	
 	//-------------------------------------------------------------------------- hdd
 
-	unsigned int hd_cylinders = 0;
-	unsigned int hd_heads = 0;
-	unsigned int hd_spt = 0;
-	unsigned int hd_total_sectors = 0;
-	unsigned int hdd_sd_base = 0;
-
-	int hdd = img_mount(IMG_TYPE_HDD, config.hdd_name);
-	if (hdd)
-	{
-		hd_cylinders = 1024;
-		hd_heads = 16;
-		hd_spt = 63;
-
-		hd_total_sectors = get_image(IMG_TYPE_HDD)->size / 512;
-	}
-
-	/*
-	0x00.[31:0]:    identify write
-	0x01.[16:0]:    media cylinders
-	0x02.[4:0]:     media heads
-	0x03.[8:0]:     media spt
-	0x04.[13:0]:    media sectors per cylinder = spt * heads
-	0x05.[31:0]:    media sectors total
-	0x06.[31:0]:    media sd base
-	*/
-
-	uint32_t identify[256] = 
-	{
-		0x0040, 										//word 0
-		(hd_cylinders > 16383)? 16383 : hd_cylinders, 	//word 1
-		0x0000,											//word 2 reserved
-		hd_heads,										//word 3
-		(uint16_t)(512 * hd_spt),					    //word 4
-		512,											//word 5
-		hd_spt,											//word 6
-		0x0000,											//word 7 vendor specific
-		0x0000,											//word 8 vendor specific
-		0x0000,											//word 9 vendor specific
-		('A' << 8) | 'O',								//word 10
-		('H' << 8) | 'D',								//word 11
-		('0' << 8) | '0',								//word 12
-		('0' << 8) | '0',								//word 13
-		('0' << 8) | ' ',								//word 14
-		(' ' << 8) | ' ',								//word 15
-		(' ' << 8) | ' ',								//word 16
-		(' ' << 8) | ' ',								//word 17
-		(' ' << 8) | ' ',								//word 18
-		(' ' << 8) | ' ',								//word 19
-		3,   											//word 20 buffer type
-		512,											//word 21 cache size
-		4,												//word 22 number of ecc bytes
-		0,0,0,0,										//words 23..26 firmware revision
-		('A' << 8) | 'O',								//words 27..46 model number
-		(' ' << 8) | 'H',
-		('a' << 8) | 'r',
-		('d' << 8) | 'd',
-		('r' << 8) | 'i',
-		('v' << 8) | 'e',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		16,												//word 47 max multiple sectors
-		1,												//word 48 dword io
-		1<<9,											//word 49 lba supported
-		0x0000,											//word 50 reserved
-		0x0200,											//word 51 pio timing
-		0x0200,											//word 52 pio timing
-		0x0007,											//word 53 valid fields
-		(hd_cylinders > 16383)? 16383 : hd_cylinders, 	//word 54
-		hd_heads,										//word 55
-		hd_spt,											//word 56
-		hd_total_sectors & 0xFFFF,						//word 57
-		hd_total_sectors >> 16,							//word 58
-		0x0000,											//word 59 multiple sectors
-		hd_total_sectors & 0xFFFF,						//word 60
-		hd_total_sectors >> 16,							//word 61
-		0x0000,											//word 62 single word dma modes
-		0x0000,											//word 63 multiple word dma modes
-		0x0000,											//word 64 pio modes
-		120,120,120,120,								//word 65..68
-		0,0,0,0,0,0,0,0,0,0,0,							//word 69..79
-		0x007E,											//word 80 ata modes
-		0x0000,											//word 81 minor version number
-		1<<14,  										//word 82 supported commands
-		(1<<14) | (1<<13) | (1<<12) | (1<<10),			//word 83
-		1<<14,	    									//word 84
-		1<<14,	 	    								//word 85
-		(1<<14) | (1<<13) | (1<<12) | (1<<10),			//word 86
-		1<<14,	    									//word 87
-		0x0000,											//word 88
-		0,0,0,0,										//word 89..92
-		1 | (1<<14) | 0x2000,							//word 93
-		0,0,0,0,0,0,									//word 94..99
-		hd_total_sectors & 0xFFFF,						//word 100
-		hd_total_sectors >> 16,							//word 101
-		0,												//word 102
-		0,												//word 103
-
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,//word 104..127
-
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,				//word 128..255
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	};
-
-	for(int i=0; i<128; i++) IOWR(HDD_BASE, 0, hdd ? ((unsigned int)identify[2*i+1] << 16) | (unsigned int)identify[2*i+0] : 0);
-
-	IOWR(HDD_BASE, 1, hd_cylinders);
-	IOWR(HDD_BASE, 2, hd_heads);
-	IOWR(HDD_BASE, 3, hd_spt);
-	IOWR(HDD_BASE, 4, hd_spt * hd_heads);
-	IOWR(HDD_BASE, 5, hd_spt * hd_heads * hd_cylinders);
-	IOWR(HDD_BASE, 6, 0); // base LBA
-
-	printf("HDD:\n  hd_cylinders %d\n  hd_heads %d\n  hd_spt %d\n  hd_total_sectors %d\n\n", hd_cylinders, hd_heads, hd_spt, hd_total_sectors);
+	hdd_set(0);
+	hdd_set(1);
 
 	//-------------------------------------------------------------------------- rtc
 
@@ -566,12 +610,16 @@ void x86_init()
 
 	IOWR(RTC_BASE, 128, (int)(1000000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
 	IOWR(RTC_BASE, 129, (int)(122070.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-
+/*
 	bool translate_none = hd_cylinders <= 1024 && hd_heads <= 16 && hd_spt <= 63;
 	bool translate_large= !translate_none && (hd_cylinders * hd_heads) <= 131072;
 	bool translate_lba  = !translate_none && !translate_large;
 
-	unsigned char translate_byte = 1; //(translate_large) ? 1 : (translate_lba) ? 2 : 0;
+	unsigned char translate_byte = (translate_large) ? 1 : (translate_lba) ? 2 : 0;
+*/
+
+	unsigned char translate_byte1 = 1;
+	unsigned char translate_byte2 = 1;
 
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
@@ -597,7 +645,7 @@ void x86_init()
 
 		CMOS_FDD_TYPE, //0x10: floppy drive type; 0-none, 1-360K, 2-1.2M, 3-720K, 4-1.44M, 5-2.88M
 		0x00, //0x11: configuration bits; not used
-		0xF0, //0x12: hard disk types; 0-none, 1:E-type, F-type 16+
+		(hdd[0].present ? 0xF0 : 0x00) | (hdd[1].present ? 0x0F : 0x00), //0x12: hard disk types; 0-none, 1:E-type, F-type 16+
 		0x00, //0x13: advanced configuration bits; not used
 		0x0D, //0x14: equipment bits
 		0x80, //0x15: base memory in 1k LSB
@@ -605,27 +653,27 @@ void x86_init()
 		0x00, //0x17: memory size above 1m in 1k LSB
 		0xFC, //0x18: memory size above 1m in 1k MSB
 		0x2F, //0x19: extended hd types 1/2; type 47d
-		0x00, //0x1A: extended hd types 2/2
+		0x2F, //0x1A: extended hd types 2/2
 
-		hdd ? hd_cylinders & 0xFF : 0, 		//0x1B: hd 0 configuration 1/9; cylinders low
-		hdd ? (hd_cylinders >> 8) & 0xFF : 0, //0x1C: hd 0 configuration 2/9; cylinders high
-		hdd ? hd_heads : 0, 					//0x1D: hd 0 configuration 3/9; heads
-		hdd ? 0xFF : 0, 						//0x1E: hd 0 configuration 4/9; write pre-comp low
-		hdd ? 0xFF : 0, 						//0x1F: hd 0 configuration 5/9; write pre-comp high
-		hdd ? 0xC8 : 0, 						//0x20: hd 0 configuration 6/9; retries/bad map/heads>8
-		hdd ? hd_cylinders & 0xFF : 0, 		//0x21: hd 0 configuration 7/9; landing zone low
-		hdd ? (hd_cylinders >> 8) & 0xFF : 0, //0x22: hd 0 configuration 8/9; landing zone high
-		hdd ? hd_spt : 0, 					//0x23: hd 0 configuration 9/9; sectors/track
+		hdd[0].present ? hdd[0].hd_cylinders & 0xFF : 0, 		//0x1B: hd 0 configuration 1/9; cylinders low
+		hdd[0].present ? (hdd[0].hd_cylinders >> 8) & 0xFF : 0, //0x1C: hd 0 configuration 2/9; cylinders high
+		hdd[0].present ? hdd[0].hd_heads : 0, 					//0x1D: hd 0 configuration 3/9; heads
+		hdd[0].present ? 0xFF : 0, 								//0x1E: hd 0 configuration 4/9; write pre-comp low
+		hdd[0].present ? 0xFF : 0, 								//0x1F: hd 0 configuration 5/9; write pre-comp high
+		hdd[0].present ? 0xC8 : 0, 								//0x20: hd 0 configuration 6/9; retries/bad map/heads>8
+		hdd[0].present ? hdd[0].hd_cylinders & 0xFF : 0, 		//0x21: hd 0 configuration 7/9; landing zone low
+		hdd[0].present ? (hdd[0].hd_cylinders >> 8) & 0xFF : 0, //0x22: hd 0 configuration 8/9; landing zone high
+		hdd[0].present ? hdd[0].hd_spt : 0, 					//0x23: hd 0 configuration 9/9; sectors/track          
 
-		0x00, //0x24: hd 1 configuration 1/9
-		0x00, //0x25: hd 1 configuration 2/9
-		0x00, //0x26: hd 1 configuration 3/9
-		0x00, //0x27: hd 1 configuration 4/9
-		0x00, //0x28: hd 1 configuration 5/9
-		0x00, //0x29: hd 1 configuration 6/9
-		0x00, //0x2A: hd 1 configuration 7/9
-		0x00, //0x2B: hd 1 configuration 8/9
-		0x00, //0x2C: hd 1 configuration 9/9
+		hdd[1].present ? hdd[1].hd_cylinders & 0xFF : 0, 		//0x24: hd 1 configuration 1/9; cylinders low
+		hdd[1].present ? (hdd[1].hd_cylinders >> 8) & 0xFF : 0, //0x25: hd 1 configuration 2/9; cylinders high
+		hdd[1].present ? hdd[1].hd_heads : 0, 					//0x26: hd 1 configuration 3/9; heads
+		hdd[1].present ? 0xFF : 0, 								//0x27: hd 1 configuration 4/9; write pre-comp low
+		hdd[1].present ? 0xFF : 0, 								//0x28: hd 1 configuration 5/9; write pre-comp high
+		hdd[1].present ? 0xC8 : 0, 								//0x29: hd 1 configuration 6/9; retries/bad map/heads>8
+		hdd[1].present ? hdd[1].hd_cylinders & 0xFF : 0, 		//0x2A: hd 1 configuration 7/9; landing zone low
+		hdd[1].present ? (hdd[1].hd_cylinders >> 8) & 0xFF : 0, //0x2B: hd 1 configuration 8/9; landing zone high
+		hdd[1].present ? hdd[1].hd_spt : 0, 					//0x2C: hd 1 configuration 9/9; sectors/track          
 
 		(boot_from_floppy)? 0x20u : 0x00u, //0x2D: boot sequence
 
@@ -644,9 +692,9 @@ void x86_init()
 		0x00, //0x36: ?
 		0x20, //0x37: IBM PS/2 century
 
-		0x00, 			//0x38: eltorito boot sequence; not used
-		translate_byte, //0x39: ata translation policy 1/2
-		0x00, 			//0x3A: ata translation policy 2/2
+		0x00, 			 //0x38: eltorito boot sequence; not used
+		translate_byte1, //0x39: ata translation policy 1/2
+		translate_byte2, //0x3A: ata translation policy 2/2
 
 		0x00, //0x3B: ?
 		0x00, //0x3C: ?
@@ -756,15 +804,20 @@ void x86_poll()
 
 void x86_set_image(int num, char *filename)
 {
-	if (num == 2)
+	switch (num)
 	{
-		strcpy(config.hdd_name, filename);
-	}
-
-	if (num == 0)
-	{
+	case 0:
 		strcpy(config.fdd_name, filename);
 		fdd_set(filename);
+		break;
+
+	case 2:
+		strcpy(config.hdd0_name, filename);
+		break;
+
+	case 3:
+		strcpy(config.hdd1_name, filename);
+		break;
 	}
 }
 
