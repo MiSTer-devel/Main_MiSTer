@@ -423,13 +423,8 @@ static int hdd_set(uint32_t num)
 		hdd[num].hd_spt = 63;
 		hdd[num].hd_cylinders = get_image(hdd[num].type)->size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
 
-		if (hdd[num].hd_cylinders > 131071) hdd[num].hd_spt = 255;
-		else if (hdd[num].hd_cylinders > 65535) hdd[num].hd_spt = 127;
-
-		hdd[num].hd_cylinders = get_image(hdd[num].type)->size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
-
-		if (hdd[num].hd_cylinders > 65535) hdd[num].hd_cylinders = 65535;
-
+		//Maximum 8GB images are supported.
+		if (hdd[num].hd_cylinders > 16383) hdd[num].hd_cylinders = 16383;
 		hdd[num].hd_total_sectors = hdd[num].hd_spt*hdd[num].hd_heads*hdd[num].hd_cylinders;
 	}
 
@@ -496,7 +491,7 @@ static int hdd_set(uint32_t num)
 		0x0200,											//word 51 pio timing
 		0x0200,											//word 52 pio timing
 		0x0007,											//word 53 valid fields
-		hdd[num].hd_cylinders, 	//word 54
+		hdd[num].hd_cylinders, 							//word 54
 		hdd[num].hd_heads,								//word 55
 		hdd[num].hd_spt,								//word 56
 		hdd[num].hd_total_sectors & 0xFFFF,				//word 57
@@ -610,16 +605,9 @@ void x86_init()
 
 	IOWR(RTC_BASE, 128, (int)(1000000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
 	IOWR(RTC_BASE, 129, (int)(122070.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-/*
-	bool translate_none = hd_cylinders <= 1024 && hd_heads <= 16 && hd_spt <= 63;
-	bool translate_large= !translate_none && (hd_cylinders * hd_heads) <= 131072;
-	bool translate_lba  = !translate_none && !translate_large;
 
-	unsigned char translate_byte = (translate_large) ? 1 : (translate_lba) ? 2 : 0;
-*/
-
-	unsigned char translate_byte1 = 1;
-	unsigned char translate_byte2 = 1;
+	unsigned char translate_mode = 1; //LBA
+	translate_mode = (translate_mode << 6) | (translate_mode << 4) | (translate_mode << 2) | translate_mode;
 
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
@@ -645,35 +633,35 @@ void x86_init()
 
 		CMOS_FDD_TYPE, //0x10: floppy drive type; 0-none, 1-360K, 2-1.2M, 3-720K, 4-1.44M, 5-2.88M
 		0x00, //0x11: configuration bits; not used
-		(hdd[0].present ? 0xF0 : 0x00) | (hdd[1].present ? 0x0F : 0x00), //0x12: hard disk types; 0-none, 1:E-type, F-type 16+
+		0x00, //0x12: hard disk types; 0-none, 1:E-type, F-type 16+ (unused)
 		0x00, //0x13: advanced configuration bits; not used
 		0x0D, //0x14: equipment bits
 		0x80, //0x15: base memory in 1k LSB
 		0x02, //0x16: base memory in 1k MSB
 		0x00, //0x17: memory size above 1m in 1k LSB
 		0xFC, //0x18: memory size above 1m in 1k MSB
-		0x2F, //0x19: extended hd types 1/2; type 47d
-		0x2F, //0x1A: extended hd types 2/2
+		0x00, //0x19: extended hd types 1/2; type 47d (unused)
+		0x00, //0x1A: extended hd types 2/2 (unused)
 
-		hdd[0].present ? hdd[0].hd_cylinders & 0xFF : 0, 		//0x1B: hd 0 configuration 1/9; cylinders low
-		hdd[0].present ? (hdd[0].hd_cylinders >> 8) & 0xFF : 0, //0x1C: hd 0 configuration 2/9; cylinders high
-		hdd[0].present ? hdd[0].hd_heads : 0, 					//0x1D: hd 0 configuration 3/9; heads
-		hdd[0].present ? 0xFF : 0, 								//0x1E: hd 0 configuration 4/9; write pre-comp low
-		hdd[0].present ? 0xFF : 0, 								//0x1F: hd 0 configuration 5/9; write pre-comp high
-		hdd[0].present ? 0xC8 : 0, 								//0x20: hd 0 configuration 6/9; retries/bad map/heads>8
-		hdd[0].present ? hdd[0].hd_cylinders & 0xFF : 0, 		//0x21: hd 0 configuration 7/9; landing zone low
-		hdd[0].present ? (hdd[0].hd_cylinders >> 8) & 0xFF : 0, //0x22: hd 0 configuration 8/9; landing zone high
-		hdd[0].present ? hdd[0].hd_spt : 0, 					//0x23: hd 0 configuration 9/9; sectors/track          
-
-		hdd[1].present ? hdd[1].hd_cylinders & 0xFF : 0, 		//0x24: hd 1 configuration 1/9; cylinders low
-		hdd[1].present ? (hdd[1].hd_cylinders >> 8) & 0xFF : 0, //0x25: hd 1 configuration 2/9; cylinders high
-		hdd[1].present ? hdd[1].hd_heads : 0, 					//0x26: hd 1 configuration 3/9; heads
-		hdd[1].present ? 0xFF : 0, 								//0x27: hd 1 configuration 4/9; write pre-comp low
-		hdd[1].present ? 0xFF : 0, 								//0x28: hd 1 configuration 5/9; write pre-comp high
-		hdd[1].present ? 0xC8 : 0, 								//0x29: hd 1 configuration 6/9; retries/bad map/heads>8
-		hdd[1].present ? hdd[1].hd_cylinders & 0xFF : 0, 		//0x2A: hd 1 configuration 7/9; landing zone low
-		hdd[1].present ? (hdd[1].hd_cylinders >> 8) & 0xFF : 0, //0x2B: hd 1 configuration 8/9; landing zone high
-		hdd[1].present ? hdd[1].hd_spt : 0, 					//0x2C: hd 1 configuration 9/9; sectors/track          
+		//these hd parameters aren't used anymore
+		0x00, //0x1B: hd 0 configuration 1/9; cylinders low
+		0x00, //0x1C: hd 0 configuration 2/9; cylinders high
+		0x00, //0x1D: hd 0 configuration 3/9; heads
+		0x00, //0x1E: hd 0 configuration 4/9; write pre-comp low
+		0x00, //0x1F: hd 0 configuration 5/9; write pre-comp high
+		0x00, //0x20: hd 0 configuration 6/9; retries/bad map/heads>8
+		0x00, //0x21: hd 0 configuration 7/9; landing zone low
+		0x00, //0x22: hd 0 configuration 8/9; landing zone high
+		0x00, //0x23: hd 0 configuration 9/9; sectors/track          
+		0x00, //0x24: hd 1 configuration 1/9; cylinders low
+		0x00, //0x25: hd 1 configuration 2/9; cylinders high
+		0x00, //0x26: hd 1 configuration 3/9; heads
+		0x00, //0x27: hd 1 configuration 4/9; write pre-comp low
+		0x00, //0x28: hd 1 configuration 5/9; write pre-comp high
+		0x00, //0x29: hd 1 configuration 6/9; retries/bad map/heads>8
+		0x00, //0x2A: hd 1 configuration 7/9; landing zone low
+		0x00, //0x2B: hd 1 configuration 8/9; landing zone high
+		0x00, //0x2C: hd 1 configuration 9/9; sectors/track          
 
 		(boot_from_floppy)? 0x20u : 0x00u, //0x2D: boot sequence
 
@@ -692,9 +680,9 @@ void x86_init()
 		0x00, //0x36: ?
 		0x20, //0x37: IBM PS/2 century
 
-		0x00, 			 //0x38: eltorito boot sequence; not used
-		translate_byte1, //0x39: ata translation policy 1/2
-		translate_byte2, //0x3A: ata translation policy 2/2
+		0x00, 		    //0x38: eltorito boot sequence; not used
+		translate_mode, //0x39: ata translation policy 1-4
+		0x00,           //0x3A: ata translation policy 5-8
 
 		0x00, //0x3B: ?
 		0x00, //0x3C: ?
