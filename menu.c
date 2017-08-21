@@ -1966,7 +1966,7 @@ void HandleUI(void)
 		{
 			if (fs_Options & SCAN_UMOUNT)
 			{
-				for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+				for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
 				OsdWrite(OsdGetSize() / 2, "   Unmounting the image", 0, 0);
 				usleep(1500000);
 				SelectedPath[0] = 0;
