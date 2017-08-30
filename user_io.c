@@ -595,12 +595,15 @@ int user_io_file_mount(int num, char *name)
 	int ret = FileOpenEx(&sd_image[num], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 	if (!ret)
 	{
+		writable = 0;
 		sd_image[num].size = 0;
 		printf("Failed to open file %s\n", name);
-		return 0;
+		printf("Eject image from %d slot\n", num);
 	}
-
-	printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", num);
+	else
+	{
+		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", num);
+	}
 
 	// send mounted image size first then notify about mounting
 	EnableIO();
@@ -621,7 +624,7 @@ int user_io_file_mount(int num, char *name)
 
 	// notify core of possible sd image change
 	spi_uio_cmd8(UIO_SET_SDSTAT, (1<<num) | (writable ? 0 : 0x80));
-	return 1;
+	return ret ? 1 : 0;
 }
 
 int user_io_file_tx(char* name, unsigned char index)
