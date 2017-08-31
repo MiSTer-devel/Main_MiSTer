@@ -20,6 +20,7 @@
 #include "config.h"
 #include "menu.h"
 #include "x86.h"
+#include "tzx2wav.h"
 
 #define BREAK  0x8000
 
@@ -656,20 +657,32 @@ int user_io_file_tx(char* name, unsigned char index)
 	spi8(0xff);
 	DisableFpga();
 
-	while (bytes2send)
+	if (strlen(f.name) > 4 && !strcasecmp(f.name + strlen(f.name) - 4, ".tzx"))
 	{
-		iprintf(".");
-
-		uint16_t chunk = (bytes2send>512) ? 512 : bytes2send;
-
-		FileReadSec(&f, buf);
-
+		printf("Processing TZX...\n");
+		
 		EnableFpga();
 		spi8(UIO_FILE_TX_DAT);
-		spi_write(buf, chunk, fio_size);
+		tzx2csw(&f);
 		DisableFpga();
+	}
+	else
+	{
+		while (bytes2send)
+		{
+			iprintf(".");
 
-		bytes2send -= chunk;
+			uint16_t chunk = (bytes2send > 512) ? 512 : bytes2send;
+
+			FileReadSec(&f, buf);
+
+			EnableFpga();
+			spi8(UIO_FILE_TX_DAT);
+			spi_write(buf, chunk, fio_size);
+			DisableFpga();
+
+			bytes2send -= chunk;
+		}
 	}
 
 	FileClose(&f);

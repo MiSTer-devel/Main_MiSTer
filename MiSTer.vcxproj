@@ -56,6 +56,7 @@
     <ClCompile Include="osd.c" />
     <ClCompile Include="spi.c" />
     <ClCompile Include="tos.c" />
+    <ClCompile Include="tzx2wav.c" />
     <ClCompile Include="user_io.c" />
     <ClCompile Include="x86.c" />
   </ItemGroup>
@@ -85,6 +86,7 @@
     <ClInclude Include="osd.h" />
     <ClInclude Include="spi.h" />
     <ClInclude Include="tos.h" />
+    <ClInclude Include="tzx2wav.h" />
     <ClInclude Include="user_io.h" />
     <ClInclude Include="x86.h" />
   </ItemGroup>

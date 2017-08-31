@@ -68,6 +68,9 @@
     <ClCompile Include="x86.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="tzx2wav.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="archie.h">
@@ -149,6 +152,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="x86.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="tzx2wav.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
