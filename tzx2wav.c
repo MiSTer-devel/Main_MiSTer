@@ -2,7 +2,7 @@
 // TZX to VAV Converter v0.2 for Bloodshed Dev-C++ compiler        //
 // (C) 2005-2006 Francisco Javier Crespo <tzx2wav@ya.com>          //
 //                                                                 //
-// MiSTer adaptation                                               //
+// MiSTer adaptation (CSW v1 only)                                 //
 // (C) 2017 Francisco Javier Crespo <tzx2wav@ya.com>               //
 //                                                                 //
 // Originally based on source code from these works:               //
@@ -21,45 +21,38 @@
 #include "spi.h"
 
 // Computer entries
-
-const char hwid_01_01[] = "ZX Spectrum 16k";
-const char hwid_01_02[] = "ZX Spectrum 48k, Plus";
-const char hwid_01_03[] = "ZX Spectrum 48k Issue 1";
-const char hwid_01_04[] = "ZX Spectrum 128k (Sinclair)";
-const char hwid_01_05[] = "ZX Spectrum 128k +2 (Grey case)";
-const char hwid_01_06[] = "ZX Spectrum 128k +2A, +3";
-const char hwid_01_07[] = "Timex Sinclair TC-2048";
-const char hwid_01_08[] = "Timex Sinclair TS-2068";
-const char hwid_01_09[] = "Pentagon 128";
-const char hwid_01_10[] = "Sam Coupe";
-const char hwid_01_11[] = "Didaktik M";
-const char hwid_01_12[] = "Didaktik Gama";
-const char hwid_01_13[] = "ZX-81 with 1k RAM";
-const char hwid_01_14[] = "ZX-81 with 16k RAM or more";
-const char hwid_01_15[] = "ZX Spectrum 128k, Spanish version";
-const char hwid_01_16[] = "ZX Spectrum, Arabic version";
-const char hwid_01_17[] = "TK 90-X";
-const char hwid_01_18[] = "TK 95";
-const char hwid_01_19[] = "Byte";
-const char hwid_01_20[] = "Elwro";
-const char hwid_01_21[] = "ZS Scorpion";
-const char hwid_01_22[] = "Amstrad CPC 464";
-const char hwid_01_23[] = "Amstrad CPC 664";
-const char hwid_01_24[] = "Amstrad CPC 6128";
-const char hwid_01_25[] = "Amstrad CPC 464+";
-const char hwid_01_26[] = "Amstrad CPC 6128+";
-const char hwid_01_27[] = "Jupiter ACE";
-const char hwid_01_28[] = "Enterprise";
-const char hwid_01_29[] = "Commodore 64";
-const char hwid_01_30[] = "Commodore 128";
-
-const char *hwids_01[30] =
-{ hwid_01_01, hwid_01_02, hwid_01_03, hwid_01_04, hwid_01_05, hwid_01_06,
-hwid_01_07, hwid_01_08, hwid_01_09, hwid_01_10, hwid_01_11, hwid_01_12,
-hwid_01_13, hwid_01_14, hwid_01_15, hwid_01_16, hwid_01_17, hwid_01_18,
-hwid_01_19, hwid_01_20, hwid_01_21, hwid_01_22, hwid_01_23, hwid_01_24,
-hwid_01_25, hwid_01_26, hwid_01_27, hwid_01_28, hwid_01_29, hwid_01_30 };
-
+const char *hwids_01[] = {
+	"ZX Spectrum 16k",
+	"ZX Spectrum 48k, Plus",
+	"ZX Spectrum 48k Issue 1",
+	"ZX Spectrum 128k (Sinclair)",
+	"ZX Spectrum 128k +2 (Grey case)",
+	"ZX Spectrum 128k +2A, +3",
+	"Timex Sinclair TC-2048",
+	"Timex Sinclair TS-2068",
+	"Pentagon 128",
+	"Sam Coupe",
+	"Didaktik M",
+	"Didaktik Gama",
+	"ZX-81 with 1k RAM",
+	"ZX-81 with 16k RAM or more",
+	"ZX Spectrum 128k, Spanish version",
+	"ZX Spectrum, Arabic version",
+	"TK 90-X",
+	"TK 95",
+	"Byte",
+	"Elwro",
+	"ZS Scorpion",
+	"Amstrad CPC 464",
+	"Amstrad CPC 664",
+	"Amstrad CPC 6128",
+	"Amstrad CPC 464+",
+	"Amstrad CPC 6128+",
+	"Jupiter ACE"
+	"Enterprise",
+	"Commodore 64",
+	"Commodore 128"
+};
 
 const char *build= "20060225";
 
@@ -77,16 +70,8 @@ const char *build= "20060225";
 
 // Other defines ...
 
-#define SGNLOW    0
-#define SGNHIGH   1
+unsigned int freq = 44100;  // Default Sample Frequency
 
-unsigned int sgn;  // Sign of the wave being played
-unsigned int freq = 44100;              // Default Sample Frequency
-
-int prvi;
-int n,m;
-int num;
-unsigned char *d;
 unsigned char *mem = 0; // File in Memory
 int pos;                // Position in File
 int curr;               // Current block that is playing
@@ -121,19 +106,14 @@ int sb_bit;             // should we play bit 0 or 1 ?
 char databyte;          // Current Byte to be replayed of the data
 signed short jump;      // Relative Jump 
 int not_rec;            // Some blocks were not recognised ??
-int files=0;            // Number of Files on the command line
 int starting=1;         // starting block
 int ending=0;           // ending block
 
 int pages=0;            // Waiting after each page of the info ?
 int expand=0;           // Expand Groups ?
 int draw=1;             // Local flag for outputing a line when in a group
-int mode128=0;          // Are we working in 128k mode ? (for Stop in 48k block)
 
-int nfreq=0;            // Did we choose new frequency with /freq switch ?
-char k;
 int speed;
-int x,last,lastlen;
 
 int loop_start=0;       // Position of the last Loop Start block
 int loop_count=0;       // Counter of the Loop
@@ -159,8 +139,6 @@ char tstr4[255];
 char spdstr[255];
 char pstr[255];
 
-int numt, nump, t2;
-
 static void core_write(void *buf, int size)
 {
 	char *addr = (char*)buf;
@@ -169,25 +147,6 @@ static void core_write(void *buf, int size)
 		spi8(*addr++);
 		oflen++;
 	}
-}
-
-/////////////////////////////////////////////////
-// Garbage collector and error handling routines
-/////////////////////////////////////////////////
-
-void GarbageCollector(void)
-{
-	if (mem != NULL)
-	{
-		free(mem);
-		mem = 0;
-	}
-}
-
-static void Error(char *errstr)
-{
-	GarbageCollector();
-	printf("\n-- Error: %s\n", errstr);
 }
 
 ///////////////////////////////
@@ -355,8 +314,8 @@ void PlayC64TurboByte(char byte)
 void GetC64ROMName(char *name, unsigned char *data)
 {
 	char d;
-
-	for (n = 0; n < 16; n++)
+	int n = 0;
+	for (; n < 16; n++)
 	{
 		d = data[14 + n];
 		if (d < 32 || d>125)
@@ -370,8 +329,8 @@ void GetC64ROMName(char *name, unsigned char *data)
 void GetC64StandardTurboTapeName(char *name, unsigned char *data)
 {
 	char d;
-
-	for (n = 0; n < 16; n++)
+	int n = 0;
+	for (; n < 16; n++)
 	{
 		d = data[15 + n];
 		if (d < 32 || d>125)
@@ -887,7 +846,7 @@ void Analyse_ID28(void)  // Select Block
 	num_sel = data[2];
 	printf("    Select :\n");
 	data += 3;
-	for (n = 0; n < num_sel; n++)
+	for (int n = 0; n < num_sel; n++)
 	{
 		jump = (signed short)(data[0] + data[1] * 256);
 		jumparray[n] = jump;
@@ -898,7 +857,7 @@ void Analyse_ID28(void)  // Select Block
 
 	//no interactive shell. choose 1.
 	PauseWave(200);
-	k = 1;
+	int k = 1;
 
 	/*
 	printf(">> Press the number!\n");
@@ -917,15 +876,8 @@ void Analyse_ID28(void)  // Select Block
 
 void Analyse_ID2A(void)  // Stop the tape if in 48k mode
 {
-	if (mode128)
-	{
-		if (draw) printf("    Stop the tape only in 48k mode!\n");
-	}
-	else
-	{
-		if (draw) printf("    Stop the tape in 48k mode!\n");
-		PauseWave(3000);
-	}
+	if (draw) printf("    Stop the tape in 48k mode!\n");
+	PauseWave(3000);
 }
 
 void Analyse_ID30(void)  // Description
@@ -1027,22 +979,18 @@ void Analyse_Unknown(void)  // Unknown blocks
 
 int tzx2csw(fileTYPE *f)
 {
-	nfreq = 44100;
+	freq = 44100;
 	starting = 1;
 	ending = 0;
 	expand = 0;
-	mode128 = 0;
 	skippause = 0;
 	inv = 0;
 	oflen = 0;
 
-	if (nfreq) freq = nfreq;
-
 	mem = (unsigned char *)malloc(f->size);
 	if (mem == NULL)
 	{
-		Error("Not enough memory to load the file!");
-		GarbageCollector();
+		printf("\n-- Not enough memory to load the file!");
 		return 0;
 	}
 
@@ -1052,16 +1000,16 @@ int tzx2csw(fileTYPE *f)
 
 	if (strcmp((const char*)mem, "ZXTape!"))
 	{
-		Error("File is not in ZXTape format!");
-		GarbageCollector();
+		printf("\n-- File is not in ZXTape format!");
+		free(mem);
 		return 0;
 	}
 
 	printf("\nZXTape file revision %d.%02d\n", mem[8], mem[9]);
 	if (!mem[8])
 	{
-		Error("Development versions of ZXTape format are not supported!");
-		GarbageCollector();
+		printf("\n-- Development versions of ZXTape format are not supported!");
+		free(mem);
 		return 0;
 	}
 
@@ -1131,8 +1079,8 @@ int tzx2csw(fileTYPE *f)
 	{
 		if (starting > numblocks)
 		{
-			Error("Invalid Starting Block");
-			GarbageCollector();
+			printf("\n-- Invalid Starting Block");
+			free(mem);
 			return 0;
 		}
 		curr = starting - 1;
@@ -1142,8 +1090,8 @@ int tzx2csw(fileTYPE *f)
 	{
 		if (ending > numblocks || ending < starting)
 		{
-			Error("Invalid Ending Block");
-			GarbageCollector();
+			printf("\n-- Invalid Ending Block");
+			free(mem);
 			return 0;
 		}
 		numblocks = ending;
@@ -1387,6 +1335,6 @@ int tzx2csw(fileTYPE *f)
 
 	PauseWave(200);  // Finish always with 200 ms of pause after the last block
 	printf("\n%d bytes sent to the core.\n", oflen);
-	GarbageCollector();
+	free(mem);
 	return 1;
 }
