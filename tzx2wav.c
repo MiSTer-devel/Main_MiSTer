@@ -54,7 +54,7 @@ const char *hwids_01[] = {
 	"Commodore 128"
 };
 
-const char *build= "20060225";
+static const char *build= "20060225";
 
 #define MAJREV 1        // Major revision of the format this program supports
 #define MINREV 13       // Minor revision of the format this program supports
@@ -70,74 +70,74 @@ const char *build= "20060225";
 
 // Other defines ...
 
-unsigned int freq = 44100;  // Default Sample Frequency
+static unsigned int freq = 44100;  // Default Sample Frequency
 
-unsigned char *mem = 0; // File in Memory
-int pos;                // Position in File
-int curr;               // Current block that is playing
-int numblocks;          // Total Num. of blocks
-unsigned long oflen;    // Length of output file
-int block[2048];        // Array of Block starts
-double cycle;           // Frequency / 3500000 (Z80 clock)
+static unsigned char *mem = 0; // File in Memory
+static int pos;                // Position in File
+static int curr;               // Current block that is playing
+static int numblocks;          // Total Num. of blocks
+static unsigned long oflen;    // Length of output file
+static int block[2048];        // Array of Block starts
+static double cycle;           // Frequency / 3500000 (Z80 clock)
 
-int cpc=0;              // Amstrad CPC tape ?
-int sam=0;              // SAM Coupe tape ?
+static int cpc=0;              // Amstrad CPC tape ?
+static int sam=0;              // SAM Coupe tape ?
 
-int id;                 // Current Block ID
-int pilot;              // Len of Pilot signal (in hp's)
-int sb_pilot;           // Pilot pulse
-int sb_sync1;           // Sync first half-period (hp)
-int sb_sync2;           // Sync second
-int sb_bit0;            // Bit-0
-int sb_bit1;            // Bit-1
-int sb_pulse;           // Pulse in Sequence of pulses and direct recording block
-int lastbyte;           // How many bits are in last byte of data ?
-int pause_ms;              // Pause after current block (in milliseconds)
-int skippause=0;        // Overrides pause value in last TZX block
+static int id;                 // Current Block ID
+static int pilot;              // Len of Pilot signal (in hp's)
+static int sb_pilot;           // Pilot pulse
+static int sb_sync1;           // Sync first half-period (hp)
+static int sb_sync2;           // Sync second
+static int sb_bit0;            // Bit-0
+static int sb_bit1;            // Bit-1
+static int sb_pulse;           // Pulse in Sequence of pulses and direct recording block
+static int lastbyte;           // How many bits are in last byte of data ?
+static int pause_ms;              // Pause after current block (in milliseconds)
+static int skippause=0;        // Overrides pause value in last TZX block
 
-int singlepulse;        // Flag to activate single pulse waves
-int manchester;         // Flag to activate manchester encoded waves
+static int singlepulse;        // Flag to activate single pulse waves
+static int manchester;         // Flag to activate manchester encoded waves
 
-unsigned char *data;    // Data to be played
-int datalen;            // Len of ^^^
-int datapos;            // Position in ^^^
-int bitcount;           // How many bits to play in current byte ?
-int sb_bit;             // should we play bit 0 or 1 ?
-char databyte;          // Current Byte to be replayed of the data
-signed short jump;      // Relative Jump 
-int not_rec;            // Some blocks were not recognised ??
-int starting=1;         // starting block
-int ending=0;           // ending block
+static unsigned char *data;    // Data to be played
+static int datalen;            // Len of ^^^
+static int datapos;            // Position in ^^^
+static int bitcount;           // How many bits to play in current byte ?
+static int sb_bit;             // should we play bit 0 or 1 ?
+static char databyte;          // Current Byte to be replayed of the data
+static signed short jump;      // Relative Jump 
+static int not_rec;            // Some blocks were not recognised ??
+static int starting=1;         // starting block
+static int ending=0;           // ending block
 
-int pages=0;            // Waiting after each page of the info ?
-int expand=0;           // Expand Groups ?
-int draw=1;             // Local flag for outputing a line when in a group
+static int pages=0;            // Waiting after each page of the info ?
+static int expand=0;           // Expand Groups ?
+static int draw=1;             // Local flag for outputing a line when in a group
 
-int speed;
+static int speed;
 
-int loop_start=0;       // Position of the last Loop Start block
-int loop_count=0;       // Counter of the Loop
-int call_pos=0;         // Position of the last Call Sequence block
-int call_num=0;         // Number of Calls in the last Call Sequence block
-int call_cur=0;         // Current Call to be made
-int num_sel;            // Number of Selections in the Select block
-int jumparray[256];     // Array of all possible jumps in Select block
+static int loop_start=0;       // Position of the last Loop Start block
+static int loop_count=0;       // Counter of the Loop
+static int call_pos=0;         // Position of the last Call Sequence block
+static int call_num=0;         // Number of Calls in the last Call Sequence block
+static int call_cur=0;         // Current Call to be made
+static int num_sel;            // Number of Selections in the Select block
+static int jumparray[256];     // Array of all possible jumps in Select block
 
-int sb_bit0_f, sb_bit0_s, sb_bit1_f, sb_bit1_s, xortype, sb_finishbyte_f,
+static int sb_bit0_f, sb_bit0_s, sb_bit1_f, sb_bit1_s, xortype, sb_finishbyte_f,
     sb_finishbyte_s, sb_finishdata_f, sb_finishdata_s, num_lead_in, xorvalue;
-int trailing, sb_trailing;
-char lead_in_byte;
-int endian;
-char add_bit;
+static int trailing, sb_trailing;
+static char lead_in_byte;
+static int endian;
+static char add_bit;
 
-int inv = 0;
+static int inv = 0;
 
-char tstr[255];
-char tstr2[255];
-char tstr3[255];
-char tstr4[255];
-char spdstr[255];
-char pstr[255];
+static char tstr[255];
+static char tstr2[255];
+static char tstr3[255];
+static char tstr4[255];
+static char spdstr[255];
+static char pstr[255];
 
 static void core_write(void *buf, int size)
 {
