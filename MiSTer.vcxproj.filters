@@ -71,6 +71,9 @@
     <ClCompile Include="tzx2wav.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="DiskImage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="archie.h">
@@ -155,6 +158,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="tzx2wav.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DiskImage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

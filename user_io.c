@@ -21,6 +21,7 @@
 #include "menu.h"
 #include "x86.h"
 #include "tzx2wav.h"
+#include "DiskImage.h"
 
 #define BREAK  0x8000
 
@@ -591,9 +592,18 @@ void user_io_set_index(unsigned char index)
 
 int user_io_file_mount(int num, char *name)
 {
-	int writable = FileCanWrite(name);
+	int writable = 0;
+	int ret = 0;
+	if (x2trd_ext_supp(name))
+	{
+		ret = x2trd(name, sd_image+num);
+	}
+	else
+	{
+		writable = FileCanWrite(name);
+		ret = FileOpenEx(&sd_image[num], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+	}
 
-	int ret = FileOpenEx(&sd_image[num], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 	if (!ret)
 	{
 		writable = 0;

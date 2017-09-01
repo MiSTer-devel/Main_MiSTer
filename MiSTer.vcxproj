@@ -42,6 +42,7 @@
     <ClCompile Include="archie.c" />
     <ClCompile Include="boot.c" />
     <ClCompile Include="config.c" />
+    <ClCompile Include="DiskImage.cpp" />
     <ClCompile Include="file_io.c" />
     <ClCompile Include="fdd.c" />
     <ClCompile Include="fpga_io.c" />
@@ -66,6 +67,7 @@
     <ClInclude Include="charrom.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="debug.h" />
+    <ClInclude Include="DiskImage.h" />
     <ClInclude Include="file_io.h" />
     <ClInclude Include="fdd.h" />
     <ClInclude Include="fpga_base_addr_ac5.h" />
