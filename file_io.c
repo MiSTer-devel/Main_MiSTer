@@ -10,16 +10,20 @@
 #include <dirent.h>
 #include <ctype.h>
 #include <sys/vfs.h>
+#include <sys/mman.h>
 #include <linux/magic.h>
 #include "osd.h"
 #include "fpga_io.h"
 #include "menu.h"
 #include "errno.h"
+#include "DiskImage.h"
 
 int nDirEntries = 0;
 struct dirent DirItem[1000];
 int iSelectedEntry = 0;       // selected entry index
 int iFirstEntry = 0;
+
+static char full_path[1200];
 
 void FileClose(fileTYPE *file)
 {
@@ -27,23 +31,30 @@ void FileClose(fileTYPE *file)
 	{
 		//printf("closing %d\n", file->fd);
 		close(file->fd);
+		if (file->type == 1)
+		{
+			if (file->name[0] == '/')
+			{
+				shm_unlink(file->name);
+			}
+			file->type = 0;
+		}
 	}
 	file->fd = -1;
 }
 
-static char full_path[1200];
-
 int FileOpenEx(fileTYPE *file, const char *name, int mode)
 {
-	sprintf(full_path, "%s/%s", getRootDir(), name);
+	sprintf(full_path, "%s/%s", (mode == -1) ? "" : getRootDir(), name);
 
 	FileClose(file);
 	file->mode = 0;
+	file->type = 0;
 
 	char *p = strrchr(full_path, '/');
-	strcpy(file->name, p+1);
+	strcpy(file->name, (mode == -1) ? full_path : p+1);
 
-	file->fd = open(full_path, mode);
+	file->fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode);
 	if (file->fd <= 0)
 	{
 		printf("FileOpenEx(open) File:%s, error: %d.\n", full_path, file->fd);
@@ -51,18 +62,28 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode)
 		return 0;
 	}
 
-	struct stat64 st;
-	int ret = fstat64(file->fd, &st);
-	if ( ret < 0)
+	if (mode == -1)
 	{
-		printf("FileOpenEx(fstat) File:%s, error: %d.\n", full_path, ret);
-		file->fd = -1;
-		return 0;
+		file->type = 1;
+		file->size = 0;
+		file->offset = 0;
+		file->mode = O_CREAT | O_RDWR | O_TRUNC;
 	}
+	else
+	{
+		struct stat64 st;
+		int ret = fstat64(file->fd, &st);
+		if (ret < 0)
+		{
+			printf("FileOpenEx(fstat) File:%s, error: %d.\n", full_path, ret);
+			FileClose(file);
+			return 0;
+		}
 
-	file->size = st.st_size;
-	file->offset = 0;
-	file->mode = mode;
+		file->size = st.st_size;
+		file->offset = 0;
+		file->mode = mode;
+	}
 
 	//printf("opened %s, size %lu\n", full_path, file->size);
 	return 1;
@@ -298,34 +319,6 @@ int FileCanWrite(char *name)
 	return ((st.st_mode & S_IWUSR) != 0);
 }
 
-char *make_name(char *short_name)
-{
-	static char name[16];
-	memset(name, 0, sizeof(name));
-	memcpy(name, short_name, 8);
-	memcpy(name + 10, short_name + 8, 3);
-
-	for (int i = 7; i >= 0; i--)
-	{
-		if (name[i] <= 0x20) name[i] = 0;
-		else break;
-	}
-
-	for (int i = 12; i >= 10; i--)
-	{
-		if (name[i] <= 0x20) name[i] = 0;
-		else break;
-	}
-
-	if (strlen(name + 10))
-	{
-		strcat(name, ".");
-		strcat(name, name + 10);
-	}
-
-	return name;
-}
-
 static int device = 0;
 static int usbnum = 0;
 char *getRootDir()
@@ -334,6 +327,12 @@ char *getRootDir()
 	if(!device) return "/media/fat";
 	sprintf(dev, "/media/usb%d", usbnum);
 	return dev;
+}
+
+char *getFullPath(char *name)
+{
+	sprintf(full_path, "%s/%s", getRootDir(), name);
+	return full_path;
 }
 
 void setStorage(int dev)
@@ -531,7 +530,16 @@ void AdjustDirectory(char *path)
 
 int ScanDirectory(char* path, int mode, char *extension, int options)
 {
+	int has_trd = 0;
+	char *ext = extension;
+	while (*ext)
+	{
+		if (!strncasecmp(ext, "TRD", 3)) has_trd = 1;
+		ext += 3;
+	}
+
 	int extlen = strlen(extension);
+
 	//printf("scan dir\n");
 
 	if (mode == SCAN_INIT)
@@ -576,8 +584,9 @@ int ScanDirectory(char* path, int mode, char *extension, int options)
 				{
 					int len = strlen(de->d_name);
 					char *ext = extension;
-					int found = 0;
-					while(*ext)
+					int found = (has_trd && x2trd_ext_supp(de->d_name));
+
+					while(!found && *ext)
 					{
 						char e[5];
 						memcpy(e+1, ext, 3);

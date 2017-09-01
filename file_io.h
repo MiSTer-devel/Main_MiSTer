@@ -6,10 +6,15 @@
 #include <fcntl.h>
 #include "spi.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct
 {
 	int       fd;
 	int       mode;
+	int       type;
 	__off64_t size;
 	__off64_t offset;
 	char      name[261];
@@ -69,7 +74,11 @@ int FileLoadConfig(char *name, void *pBuffer, int size); // supply pBuffer = 0 t
 void AdjustDirectory(char *path);
 int ScanDirectory(char* path, int mode, char *extension, int options);
 
-char *make_name(char *short_name);
 char *getRootDir();
+char *getFullPath(char *name);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
