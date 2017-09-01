@@ -4,7 +4,7 @@
 
 #ifdef __cplusplus
 
-enum TDiskImageType { DIT_UNK, DIT_TRD, DIT_SCL, DIT_FDI, DIT_TD0, DIT_UDI, DIT_HOB, DIT_FDD };
+enum TDiskImageType { DIT_UNK, DIT_SCL, DIT_FDI, DIT_TD0, DIT_UDI, DIT_HOB, DIT_FDD };
 
 struct VGFIND_TRACK
 {
@@ -53,9 +53,7 @@ class TDiskImage
    unsigned int FTrackLength[256][256];
    unsigned char* FTracksPtr[256][256][2];
 
-   unsigned char FFileName[4096];
    TDiskImageType FType;
-   unsigned char Fdefbuf[16384];
 
    unsigned short MakeVGCRC(unsigned char *data, unsigned long length);
 public:
@@ -65,8 +63,6 @@ public:
    bool DiskPresent;
    unsigned char MaxTrack;
    unsigned char MaxSide;
-
-   bool AddBOOT;
 
    TDiskImage();
    ~TDiskImage();
@@ -81,22 +77,15 @@ public:
    void ApplySectorCRC(VGFIND_SECTOR vgfs);
 
 
-   void FlushImage();
    void Open(const char *filename, bool ReadOnly);
-   char* GetDiskFileName() {return (char*)FFileName; }
 
-   void readTRD(int hfile, bool readonly);
    void writeTRD(int hfile);
+
    void readSCL(int hfile, bool readonly);
-   void writeSCL(int hfile);
    void readFDI(int hfile, bool readonly);
-   void writeFDI(int hfile);
    void readUDI(int hfile, bool readonly);
-   void writeUDI(int hfile);
    void readTD0(int hfile, bool readonly);
-   void writeTD0(int hfile);
    void readFDD(int hfile, bool readonly);
-   void writeFDD(int hfile);
    void readHOB(int hfile);
 
    void formatTRDOS(unsigned int tracks, unsigned int sides);
