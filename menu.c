@@ -186,7 +186,7 @@ const char *helptexts[] = {
 
 // one screen width
 const char* HELPTEXT_SPACER = "                                ";
-char helptext_custom[320];
+char helptext_custom[1024];
 
 const char* scanlines[] = { "Off","25%","50%","75%" };
 const char* stereo[] = { "Mono","Stereo" };
