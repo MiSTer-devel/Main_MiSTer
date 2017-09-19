@@ -4,6 +4,7 @@
 #include <inttypes.h>
 #include <stdbool.h> 
 #include <fcntl.h>
+#include <time.h>
 
 #include "hardware.h"
 #include "osd.h"
@@ -831,6 +832,12 @@ void mouse_reply(char code)
 }
 
 static uint8_t use_ps2ctl = 0;
+static unsigned long rtc_timer = 0;
+
+void user_io_rtc_reset()
+{
+	rtc_timer = 0;
+}
 
 void user_io_poll()
 {
@@ -917,6 +924,35 @@ void user_io_poll()
 				// reset flags
 				mouse_flags = 0;
 			}
+		}
+
+		if (!rtc_timer || CheckTimer(rtc_timer))
+		{
+			printf("Update RTC\n");
+
+			// Update once per minute should be enough
+			rtc_timer = GetTimer(60000);
+
+			time_t t = time(NULL);
+			struct tm tm = *localtime(&t);
+
+			uint8_t rtc[8];
+			rtc[0] = (tm.tm_sec % 10)  | ((tm.tm_sec  / 10)<<4);
+			rtc[1] = (tm.tm_min % 10)  | ((tm.tm_min  / 10)<<4);
+			rtc[2] = (tm.tm_hour % 10) | ((tm.tm_hour / 10)<<4);
+			rtc[3] = (tm.tm_mday % 10) | ((tm.tm_mday / 10)<<4);
+
+			rtc[4] = ((tm.tm_mon+1) % 10) | (((tm.tm_mon+1) / 10) << 4);
+			rtc[5] = (tm.tm_year % 10) | (((tm.tm_year / 10) % 10) << 4);
+			rtc[6] = tm.tm_wday;
+			rtc[7] = 0x40;
+
+			spi_uio_cmd_cont(UIO_RTC);
+			spi_w((rtc[1] << 8) | rtc[0]);
+			spi_w((rtc[3] << 8) | rtc[2]);
+			spi_w((rtc[5] << 8) | rtc[4]);
+			spi_w((rtc[7] << 8) | rtc[6]);
+			DisableIO();
 		}
 	}
 

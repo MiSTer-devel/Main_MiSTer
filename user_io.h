@@ -54,6 +54,7 @@
 #define UIO_GET_KBD_LED 0x1f  // keyboard LEDs control
 #define UIO_SET_VIDEO   0x20  // set HDMI video mode 0: 1280x720p60(TV), 1: 1280x1024p60(PC), 2-255: reserved
 #define UIO_PS2_CTL     0x21  // get PS2 control from supported cores
+#define UIO_RTC         0x22  // transmit RTC data to core
 
 // codes as used by 8bit (atari 800, zx81) via SS2
 #define UIO_GET_STATUS  0x50
@@ -199,5 +200,7 @@ void user_io_set_index(unsigned char index);
 unsigned char user_io_ext_idx(char *, char*);
 
 void user_io_check_reset(unsigned short modifiers, char useKeys);
+
+void user_io_rtc_reset();
 
 #endif // USER_IO_H

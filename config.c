@@ -338,6 +338,7 @@ void MinimigReset()
 	spi_osd_cmd8(OSD_CMD_RST, 0x01);
 	IDE_setup();
 	spi_osd_cmd8(OSD_CMD_RST, 0x00);
+	user_io_rtc_reset();
 }
 
 //// ApplyConfiguration() ////
