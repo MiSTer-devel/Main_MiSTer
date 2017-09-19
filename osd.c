@@ -235,7 +235,7 @@ void OsdWriteOffset(unsigned char n, char *s, unsigned char invert, unsigned cha
 	// send all characters in string to OSD
 	while (1)
 	{
-		if (i == 0)
+		if (i == 0 && (n < osd_size))
 		{	// Render sidestripe
 			unsigned char j;
 			unsigned char tmp[8];
