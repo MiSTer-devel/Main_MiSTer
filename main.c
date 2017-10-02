@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
 
 		// 8 bit cores can also have a ui if a valid config string can be read from it
 		case CORE_TYPE_8BIT:
-			if(user_io_is_8bit_with_config_string()) HandleUI();
+			HandleUI();
 			break;
 
 		// Archie core will get its own treatment one day ...
