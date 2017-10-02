@@ -143,10 +143,18 @@ char is_x86_core()
 	return (is_x86_type == 1);
 }
 
+static int is_no_type = 0;
+char has_menu()
+{
+	if (!is_no_type) is_no_type = core_name[0] ? 1 : 2;
+	return (is_no_type == 1);
+}
+
 static void user_io_read_core_name()
 {
 	is_menu_type = 0;
 	is_x86_type  = 0;
+	is_no_type   = 0;
 	core_name[0] = 0;
 
 	if (user_io_is_8bit_with_config_string())
@@ -1701,7 +1709,7 @@ void user_io_kbd(uint16_t key, int press)
 
 				if (osd_is_visible)
 				{
-					if(key == KEY_MENU) menu_key_set(UPSTROKE | KEY_F12);
+					if(key == KEY_MENU && has_menu()) menu_key_set(UPSTROKE | KEY_F12);
 						else menu_key_set(UPSTROKE | key);
 				}
 
@@ -1712,7 +1720,7 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu_core()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				if (((key == KEY_F12) && (!is_x86_core() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU) menu_key_set(KEY_F12);
+				if (has_menu() && (((key == KEY_F12) && (!is_x86_core() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
 				else if (osd_is_visible)
 				{
 					if (press == 1) menu_key_set(key);

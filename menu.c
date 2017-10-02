@@ -462,7 +462,7 @@ static uint32_t menu_key_get(void)
 	}
 
 	// currently no key pressed
-	if (!c)
+	if (!c && has_menu())
 	{
 		static unsigned char last_but = 0;
 		unsigned char but = user_io_menu_button();

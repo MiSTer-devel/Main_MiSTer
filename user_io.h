@@ -175,6 +175,7 @@ char *user_io_get_core_name();
 char *user_io_get_core_name_ex();
 char is_menu_core();
 char is_x86_core();
+char has_menu();
 
 emu_mode_t user_io_get_kbdemu();
 
