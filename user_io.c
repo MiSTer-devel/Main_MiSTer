@@ -421,9 +421,9 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 {
 	if (core_type == CORE_TYPE_8BIT)
 	{
-		uint16_t pos = valueX;
+		uint16_t pos = valueY;
 		spi_uio_cmd8_cont(UIO_ASTICK, joystick);
-		if(io_ver) spi_w((pos<<8) | (uint8_t)(valueY));
+		if(io_ver) spi_w((pos<<8) | (uint8_t)(valueX));
 		else
 		{
 			spi8(valueX);
