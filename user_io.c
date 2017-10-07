@@ -144,8 +144,11 @@ char is_x86_core()
 }
 
 static int is_no_type = 0;
+static int disable_osd = 0;
 char has_menu()
 {
+	if (disable_osd) return 0;
+
 	if (!is_no_type) is_no_type = core_name[0] ? 1 : 2;
 	return (is_no_type == 1);
 }
@@ -200,12 +203,23 @@ static void parse_config()
 			p = user_io_8bit_get_string(i);
 			if (i && p && p[0])
 			{
-				if (p[0] == 'J' && p[1] == '1')
+				if (p[0] == 'J')
 				{
-					joy_force = 1;
-					emu_mode = EMU_JOY0;
-					input_notify_mode();
-					set_kbd_led(HID_LED_NUM_LOCK, true);
+					if (p[1] == '1')
+					{
+						joy_force = 1;
+						emu_mode = EMU_JOY0;
+						input_notify_mode();
+						set_kbd_led(HID_LED_NUM_LOCK, true);
+					}
+
+					joy_bcount = 0;
+					for (int n = 0; n < 12; n++)
+					{
+						substrcpy(joy_bnames[n], p, n + 1);
+						if (!joy_bnames[n][0]) break;
+						joy_bcount++;
+					}
 				}
 
 				if (p[0] == 'O' && p[1] == 'X')
@@ -219,6 +233,21 @@ static void parse_config()
 					{
 						if (p[2] == '2') x86_set_fdd_boot(!(x&1));
 					}
+				}
+
+				if (p[0] == 'X')
+				{
+					disable_osd = 1;
+				}
+
+				if (p[0] == 'V')
+				{
+					// get version string
+					char s[40];
+					strcpy(s, OsdCoreName());
+					strcat(s, " ");
+					substrcpy(s + strlen(s), p, 1);
+					OsdCoreNameSet(s);
 				}
 			}
 			i++;
@@ -258,6 +287,7 @@ void user_io_detect_core_type()
 	char *name;
 	char mainpath[32];
 	core_name[0] = 0;
+	disable_osd = 0;
 
 	core_type = (fpga_core_id() & 0xFF);
 	fio_size = fpga_get_fio_size();
@@ -324,6 +354,8 @@ void user_io_detect_core_type()
 		name = user_io_create_config_name();
 		if(strlen(name) > 0)
 		{
+			OsdCoreNameSet(user_io_get_core_name());
+
 			iprintf("Loading config %s\n", name);
 			unsigned long status = 0;
 			if (FileLoadConfig(name, &status, 4))
@@ -1707,11 +1739,8 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu_core()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				if (osd_is_visible)
-				{
-					if(key == KEY_MENU && has_menu()) menu_key_set(UPSTROKE | KEY_F12);
-						else menu_key_set(UPSTROKE | key);
-				}
+				if (key == KEY_MENU) key = KEY_F12;
+				if (osd_is_visible) menu_key_set(UPSTROKE | key);
 
 				//don't block depress so keys won't stick in core if pressed before OSD.
 				send_keycode(key, press);
@@ -1720,7 +1749,7 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu_core()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				if (has_menu() && (((key == KEY_F12) && (!is_x86_core() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
+				if ((has_menu() || (get_key_mod() & (LALT | RALT | RGUI | LGUI)))  && (((key == KEY_F12) && (!is_x86_core() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
 				else if (osd_is_visible)
 				{
 					if (press == 1) menu_key_set(key);
@@ -1770,6 +1799,7 @@ void user_io_kbd(uint16_t key, int press)
 					}
 					else
 					{
+						if(key == KEY_MENU) key = KEY_F12;
 						send_keycode(key, press);
 					}
 				}

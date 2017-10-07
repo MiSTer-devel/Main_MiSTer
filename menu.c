@@ -302,7 +302,7 @@ static void SelectFile(char* pFileExt, unsigned char Options, unsigned char Menu
 }
 
 
-static void substrcpy(char *d, char *s, char idx) {
+void substrcpy(char *d, char *s, char idx) {
 	char p = 0;
 
 	while (*s) {
@@ -645,7 +645,14 @@ void HandleUI(void)
 				}
 				else
 				{
-					menustate = MENU_8BIT_MAIN1;
+					if (get_key_mod() & (LGUI | RGUI)) //Alt+Menu
+					{
+						menustate = MENU_8BIT_SYSTEM1;
+					}
+					else
+					{
+						menustate = MENU_8BIT_MAIN1;
+					}
 				}
 			}
 			menusub = 0;
@@ -1040,11 +1047,11 @@ void HandleUI(void)
 		OsdWrite(OsdIsBig ? 3 : 1, " Define joystick buttons", menusub == 1, 0);
 		OsdWrite(OsdIsBig ? 4 : 2, "", 0, 0);
 		if (OsdIsBig) OsdWrite(5, "", 0, 0);
-		OsdWrite(OsdIsBig ? 6 : 3, m ? " Reset" : " Reset settings", menusub == 3, 0);
+		OsdWrite(OsdIsBig ? 6 : 3, m ? " Reset" : " Reset settings", menusub == 3, !has_menu());
 		if (m)
 			OsdWrite(OsdIsBig ? 7 : 4, "", 0, 0);
 		else
-			OsdWrite(OsdIsBig ? 7 : 4, " Save settings", menusub == 4, 0); // Minimig saves settings elsewhere
+			OsdWrite(OsdIsBig ? 7 : 4, " Save settings", menusub == 4, !has_menu()); // Minimig saves settings elsewhere
 		if (OsdIsBig) OsdWrite(8, "", 0, 0);
 		OsdWrite(OsdIsBig ? 9 : 5, " Cold reset", menusub == (5 - m), 0);
 		if (OsdIsBig) OsdWrite(10, "", 0, 0);
@@ -1085,8 +1092,11 @@ void HandleUI(void)
 			case 2:
 				break;
 			case 3:
-				menustate = MENU_RESET1;
-				menusub = 1;
+				if (has_menu())
+				{
+					menustate = MENU_RESET1;
+					menusub = 1;
+				}
 				break;
 			case 4:
 				if (m)
@@ -1095,14 +1105,17 @@ void HandleUI(void)
 				}
 				else
 				{
-					// Save settings
-					char *filename = user_io_create_config_name();
-					unsigned long status = user_io_8bit_set_status(0, 0);
-					iprintf("Saving config to %s\n", filename);
-					FileSaveConfig(filename, &status, 4);
-					if (is_x86_core()) x86_config_save();
-					menustate = MENU_8BIT_MAIN1;
-					menusub = 0;
+					if (has_menu())
+					{
+						// Save settings
+						char *filename = user_io_create_config_name();
+						unsigned long status = user_io_8bit_set_status(0, 0);
+						iprintf("Saving config to %s\n", filename);
+						FileSaveConfig(filename, &status, 4);
+						if (is_x86_core()) x86_config_save();
+						menustate = MENU_8BIT_MAIN1;
+						menusub = 0;
+					}
 				}
 				break;
 			case 5:
@@ -1149,8 +1162,11 @@ void HandleUI(void)
 					menustate = MENU_ARCHIE_MAIN1;
 					break;
 				case CORE_TYPE_8BIT:
-					menusub = 0;
-					menustate = MENU_8BIT_MAIN1;
+					if (has_menu())
+					{
+						menusub = 0;
+						menustate = MENU_8BIT_MAIN1;
+					}
 					break;
 				}
 			}
