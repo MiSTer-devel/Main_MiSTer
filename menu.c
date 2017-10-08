@@ -462,7 +462,7 @@ static uint32_t menu_key_get(void)
 	}
 
 	// currently no key pressed
-	if (!c && has_menu())
+	if (!c)
 	{
 		static unsigned char last_but = 0;
 		unsigned char but = user_io_menu_button();
@@ -645,7 +645,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					if (get_key_mod() & (LGUI | RGUI)) //Alt+Menu
+					if ((get_key_mod() & (LGUI | RGUI)) || !has_menu()) //Alt+Menu
 					{
 						menustate = MENU_8BIT_SYSTEM1;
 					}
