@@ -149,7 +149,7 @@ char has_menu()
 {
 	if (disable_osd) return 0;
 
-	if (!is_no_type) is_no_type = core_name[0] ? 1 : 2;
+	if (!is_no_type) is_no_type = user_io_get_core_name_ex()[0] ? 1 : 2;
 	return (is_no_type == 1);
 }
 
@@ -951,44 +951,52 @@ void user_io_poll()
 			// has ps2 mouse data been updated in the meantime
 			if (mouse_flags & 0x80)
 			{
-				spi_uio_cmd_cont(UIO_MOUSE);
+				if (!osd_is_visible)
+				{
+					spi_uio_cmd_cont(UIO_MOUSE);
 
-				// ----- X axis -------
-				if (mouse_pos[X] < -128)
-				{
-					spi8(-128);
-					mouse_pos[X] += 128;
-				}
-				else if (mouse_pos[X] > 127)
-				{
-					spi8(127);
-					mouse_pos[X] -= 127;
+					// ----- X axis -------
+					if (mouse_pos[X] < -128)
+					{
+						spi8(-128);
+						mouse_pos[X] += 128;
+					}
+					else if (mouse_pos[X] > 127)
+					{
+						spi8(127);
+						mouse_pos[X] -= 127;
+					}
+					else
+					{
+						spi8(mouse_pos[X]);
+						mouse_pos[X] = 0;
+					}
+
+					// ----- Y axis -------
+					if (mouse_pos[Y] < -128)
+					{
+						spi8(-128);
+						mouse_pos[Y] += 128;
+					}
+					else if (mouse_pos[Y] > 127)
+					{
+						spi8(127);
+						mouse_pos[Y] -= 127;
+					}
+					else
+					{
+						spi8(mouse_pos[Y]);
+						mouse_pos[Y] = 0;
+					}
+
+					spi8(mouse_flags & 0x07);
+					DisableIO();
 				}
 				else
 				{
-					spi8(mouse_pos[X]);
 					mouse_pos[X] = 0;
-				}
-
-				// ----- Y axis -------
-				if (mouse_pos[Y] < -128)
-				{
-					spi8(-128);
-					mouse_pos[Y] += 128;
-				}
-				else if (mouse_pos[Y] > 127)
-				{
-					spi8(127);
-					mouse_pos[Y] -= 127;
-				}
-				else
-				{
-					spi8(mouse_pos[Y]);
 					mouse_pos[Y] = 0;
 				}
-
-				spi8(mouse_flags & 0x07);
-				DisableIO();
 
 				// reset flags
 				mouse_flags = 0;
@@ -1191,7 +1199,7 @@ void user_io_poll()
 				{
 					// min possible value + overflow flag
 					ps2_mouse[0] |= 0x40;
-					ps2_mouse[1] = -128;
+					ps2_mouse[1] = 1; // -255
 				}
 				else if (mouse_pos[X] > 255)
 				{
@@ -1211,7 +1219,7 @@ void user_io_poll()
 				{
 					// min possible value + overflow flag
 					ps2_mouse[0] |= 0x80;
-					ps2_mouse[2] = -128;
+					ps2_mouse[2] = 1; // -255;
 				}
 				else if (mouse_pos[Y] > 255)
 				{
@@ -1226,13 +1234,16 @@ void user_io_poll()
 
 				// collect movement info and send at predefined rate
 				if (is_menu_core() && !(ps2_mouse[0] == 0x08 && ps2_mouse[1] == 0 && ps2_mouse[2] == 0))
-					iprintf("PS2 MOUSE: %x %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2]);
+					printf("PS2 MOUSE: %x %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2]);
 
-				spi_uio_cmd_cont(UIO_MOUSE);
-				spi8(ps2_mouse[0]);
-				spi8(ps2_mouse[1]);
-				spi8(ps2_mouse[2]);
-				DisableIO();
+				if (!osd_is_visible)
+				{
+					spi_uio_cmd_cont(UIO_MOUSE);
+					spi8(ps2_mouse[0]);
+					spi8(ps2_mouse[1]);
+					spi8(ps2_mouse[2]);
+					DisableIO();
+				}
 
 				// reset counters
 				mouse_flags = 0;
@@ -1641,8 +1652,6 @@ static void send_keycode(unsigned short key, int press)
 
 void user_io_mouse(unsigned char b, int16_t x, int16_t y)
 {
-	if (osd_is_visible) return;
-
 	// send mouse data as minimig expects it
 	if (core_type == CORE_TYPE_MINIMIG2)
 	{
