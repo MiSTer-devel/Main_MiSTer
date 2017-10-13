@@ -5,6 +5,7 @@
 #include "menu.h"
 #include "archie.h"
 #include "debug.h"
+#include "user_io.h"
 
 #define MAX_FLOPPY  4
 
@@ -74,35 +75,34 @@ static unsigned long hold_off_timer;
 
 static char sector_buffer[1024];
 
-static void nice_name(char *dest, char *src)
-{
-	char *c;
-
-	// copy and append nul
-	strncpy(dest, src, 8);
-	for (c = dest + 7; *c == ' '; c--); c++;
-	*c++ = '.';
-	strncpy(c, src + 8, 3);
-	for (c += 2; *c == ' '; c--); c++;
-	*c++ = '\0';
-}
-
-static char buffer[17];  // local buffer to assemble file name (8+.+3+\0)
-
 char *archie_get_rom_name(void)
 {
-	nice_name(buffer, config.rom_img);
-	return buffer;
+	char *p = strrchr(config.rom_img, '/');
+	if (!p) p = config.rom_img; else p++;
+
+	return p;
 }
 
 char *archie_get_floppy_name(char i)
 {
-	if (!floppy[i].size)
-		strcpy(buffer, "* no disk *");
-	else
-		nice_name(buffer, floppy[i].name);
+	if (!floppy[i].size)  return "* no disk *";
 
-	return buffer;
+	char *p = strrchr(floppy[i].name, '/');
+	if (!p) p = floppy[i].name; else p++;
+
+	return p;
+}
+
+void archie_set_ar(char i)
+{
+	if (i) config.system_ctrl |= 1;
+	else config.system_ctrl &= ~1;
+	user_io_8bit_set_status((i ? -1 : 0), 2);
+}
+
+char archie_get_ar()
+{
+	return config.system_ctrl & 1;
 }
 
 void archie_save_config(void)
@@ -200,6 +200,8 @@ char archie_floppy_is_inserted(char i)
 void archie_set_rom(char *name)
 {
 	if (!name) return;
+	
+	printf("archie_set_rom(%s)\n", name);
 
 	// save file name
 	strcpy(config.rom_img, name);
@@ -215,7 +217,7 @@ static void archie_kbd_enqueue(unsigned char state, unsigned char byte)
 		return;
 	}
 
-	archie_debugf("KBD ENQUEUE %x (%x)", byte, state);
+	//archie_debugf("KBD ENQUEUE %x (%x)", byte, state);
 	tx_queue[tx_queue_wptr][0] = state;
 	tx_queue[tx_queue_wptr][1] = byte;
 	tx_queue_wptr = QUEUE_NEXT(tx_queue_wptr);
@@ -223,7 +225,7 @@ static void archie_kbd_enqueue(unsigned char state, unsigned char byte)
 
 static void archie_kbd_tx(unsigned char state, unsigned char byte)
 {
-	archie_debugf("KBD TX %x (%x)", byte, state);
+	//archie_debugf("KBD TX %x (%x)", byte, state);
 	spi_uio_cmd_cont(0x05);
 	spi8(byte);
 	DisableIO();
@@ -258,7 +260,7 @@ void archie_init(void)
 
 	// set config defaults
 	config.system_ctrl = 0;
-	strcpy(config.rom_img, "RISCOS.ROM");
+	strcpy(config.rom_img, "Archie/RISCOS.ROM");
 
 	// try to load config from card
 	int size = FileLoadConfig(CONFIG_FILENAME, 0, 0);
@@ -274,17 +276,19 @@ void archie_init(void)
 	else
 		archie_debugf("No %s config found", CONFIG_FILENAME);
 
+	archie_set_ar(archie_get_ar());
+
 	// upload rom file
 	archie_set_rom(config.rom_img);
 
 	// upload ext file
-	archie_send_file(0x02, "RISCOS.EXT");
+	//archie_send_file(0x02, "RISCOS.EXT");
 
 	// try to open default floppies
 	for (i = 0; i<MAX_FLOPPY; i++)
 	{
-		char fdc_name[] = "FLOPPY0.ADF";
-		fdc_name[6] = '0' + i;
+		char fdc_name[] = "Archie/FLOPPY0.ADF";
+		fdc_name[13] = '0' + i;
 		if (FileOpen(&floppy[i], fdc_name))
 			archie_debugf("Inserted floppy %d with %d bytes", i, floppy[i].size);
 		else
@@ -299,7 +303,7 @@ void archie_init(void)
 
 void archie_kbd(unsigned short code)
 {
-	archie_debugf("KBD key code %x", code);
+	//archie_debugf("KBD key code %x", code);
 
 	// don't send anything yet if we are still in reset state
 	if (kbd_state <= STATE_RAK2)
@@ -322,9 +326,9 @@ void archie_kbd(unsigned short code)
 	archie_kbd_send(STATE_WAIT4ACK2, prefix | (code & 0x0f));
 }
 
-void archie_mouse(unsigned char b, char x, char y)
+void archie_mouse(unsigned char b, int16_t x, int16_t y)
 {
-	archie_debugf("KBD MOUSE X:%d Y:%d B:%d", x, y, b);
+	//archie_debugf("KBD MOUSE X:%d Y:%d B:%d", x, y, b);
 
 	// max values -64 .. 63
 	mouse_x += x;
@@ -386,7 +390,6 @@ static void archie_check_queue(void)
 
 void archie_handle_kbd(void)
 {
-
 #ifdef HOLD_OFF_TIME
 	if ((kbd_state == STATE_HOLD_OFF) && CheckTimer(hold_off_timer)) {
 		archie_debugf("KBD resume after hold off");
@@ -412,7 +415,7 @@ void archie_handle_kbd(void)
 	{
 		if (CheckTimer(ack_timeout))
 		{
-			archie_debugf("KBD timeout in reset state");
+			//archie_debugf("KBD timeout in reset state");
 
 			archie_kbd_send(STATE_RAK1, HRST);
 			ack_timeout = GetTimer(20);  // 20ms timeout
@@ -425,7 +428,7 @@ void archie_handle_kbd(void)
 		unsigned char data = spi_in();
 		DisableIO();
 
-		archie_debugf("KBD RX %x", data);
+		//archie_debugf("KBD RX %x", data);
 
 		switch (data) {
 			// arm requests reset
@@ -518,10 +521,9 @@ void archie_handle_kbd(void)
 		DisableIO();
 }
 
-static unsigned char fdc_buffer[1024];
-
 void archie_handle_fdc(void)
 {
+	static uint8_t buffer[1024];
 	static unsigned char old_status[4] = { 0,0,0,0 };
 	unsigned char status[4];
 
@@ -550,6 +552,7 @@ void archie_handle_fdc(void)
 			{
 				if (status[0] & 2)
 				{
+					printf("p0\n");
 					int floppy_map = status[3] >> 4;
 					int side = (status[2] & 0x80) ? 0 : 1;
 					int track = status[2] & 0x7f;
@@ -563,11 +566,15 @@ void archie_handle_fdc(void)
 						if (floppy_map == (0x0f ^ (1 << i)))
 							floppy_index = i;
 
+					printf("p1\n");
+
 					if (floppy_index < 0)
 						archie_x_debugf("DIO: unexpected floppy_map %x", floppy_map);
 					else
 					{
 						fileTYPE *f = &floppy[floppy_index];
+
+						printf("p2\n");
 
 						archie_x_debugf("DIO: floppy %d sector read SD%d T%d S%d -> %ld",
 							floppy_index, side, track, sector, lba);
@@ -577,15 +584,13 @@ void archie_handle_fdc(void)
 						else {
 							DISKLED_ON;
 							// read two consecutive sectors 
-							FileSeek(f, lba, SEEK_SET);
-							FileRead(f, fdc_buffer);
-							FileNextSector(f);
-							FileRead(f, fdc_buffer + 512);
+							FileSeekLBA(f, lba);
+							FileReadAdv(f, buffer, 1024);
 							DISKLED_OFF;
 
 							EnableFpga();
 							spi8(ARCHIE_FDC_TX_DATA);
-							spi_write(fdc_buffer, 1024, 0);
+							spi_write(buffer, 1024, 0);
 							DisableFpga();
 						}
 					}

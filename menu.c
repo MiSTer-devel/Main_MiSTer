@@ -274,9 +274,9 @@ static void SelectFile(char* pFileExt, unsigned char Options, unsigned char Menu
 	{ // if different from the current one go to the root directory and init entry buffer
 		SelectedPath[0] = 0;
 
-		if(((user_io_core_type() == CORE_TYPE_8BIT) || (user_io_core_type() == CORE_TYPE_MINIMIG2)) && chdir)
+		if(((user_io_core_type() == CORE_TYPE_8BIT) || (user_io_core_type() == CORE_TYPE_MINIMIG2) || (user_io_core_type() == CORE_TYPE_ARCHIE)) && chdir)
 		{
-			strcpy(SelectedPath, (user_io_core_type() == CORE_TYPE_MINIMIG2) ? "Amiga" : user_io_get_core_name());
+			strcpy(SelectedPath, (user_io_core_type() == CORE_TYPE_MINIMIG2) ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name());
 			ScanDirectory(SelectedPath, SCAN_INIT, pFileExt, Options);
 			if (!nDirEntries)
 			{
@@ -666,29 +666,42 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_ARCHIE_MAIN1: {
-		OsdSetSize(8);
-		menumask = 0x3f;
+		OsdSetSize(16);
+		menumask = 0xff;
 		OsdSetTitle("ARCHIE", 0);
 
+		OsdWrite(0, "", 0, 0);
+
 		strcpy(s, " Floppy 0: ");
-		strcat(s, archie_get_floppy_name(0));
-		OsdWrite(0, s, menusub == 0, 0);
+		strncat(s, archie_get_floppy_name(0),27);
+		OsdWrite(1, s, menusub == 0, 0);
 
 		strcpy(s, " Floppy 1: ");
-		strcat(s, archie_get_floppy_name(1));
-		OsdWrite(1, s, menusub == 1, 0);
-
-		strcpy(s, " OS ROM: ");
-		strcat(s, archie_get_rom_name());
-		OsdWrite(2, s, menusub == 2, 0);
+		strncat(s, archie_get_floppy_name(1), 27);
+		OsdWrite(2, s, menusub == 1, 0);
 
 		OsdWrite(3, "", 0, 0);
 
+		strcpy(s, " OS ROM: ");
+		strcat(s, archie_get_rom_name());
+		OsdWrite(4, s, menusub == 2, 0);
+
+		OsdWrite(5, "", 0, 0);
+
+		strcpy(s, " Aspect ratio:      ");
+		strcat(s, archie_get_ar() ? "16:9" : " 4:3");
+		OsdWrite(6, s, menusub == 3, 0);
+		OsdWrite(7, " Define joystick buttons", menusub == 4, 0);
+
+		OsdWrite(8, "", 0, 0);
+
 		// the following is exactly like the atatri st core
-		OsdWrite(4, " Firmware & Core           \x16", menusub == 3, 0);
-		OsdWrite(5, " Save config                ", menusub == 4, 0);
-		OsdWrite(6, "", 0, 0);
-		OsdWrite(7, STD_EXIT, menusub == 5, 0);
+		OsdWrite(9, " Firmware & Core           \x16", menusub == 5, 0);
+		OsdWrite(10, " Save config                ", menusub == 6, 0);
+
+		for (int i = 11; i<15; i++) OsdWrite(i, "", 0, 0);
+
+		OsdWrite(15, STD_EXIT, menusub == 7, 0);
 		menustate = MENU_ARCHIE_MAIN2;
 		parentstate = MENU_ARCHIE_MAIN1;
 	} break;
@@ -713,17 +726,30 @@ void HandleUI(void)
 				SelectFile("ROM", 0, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1, 1);
 				break;
 
-			case 3:  // Firmware submenu
+			case 3:
+				archie_set_ar(!archie_get_ar());
+				menustate = MENU_ARCHIE_MAIN1;
+				break;
+
+			case 4:
+				joy_bcount = 1;
+				strcpy(joy_bnames[0], "Fire");
+				start_map_setting(joy_bcount ? joy_bcount + 5 : 9);
+				menustate = MENU_JOYDIGMAP;
+				menusub = 0;
+				break;
+
+			case 5:  // Firmware submenu
 				menustate = MENU_FIRMWARE1;
 				menusub = 1;
 				break;
 
-			case 4:  // Save config
+			case 6:  // Save config
 				menustate = MENU_NONE1;
 				archie_save_config();
 				break;
 
-			case 5:  // Exit
+			case 7:  // Exit
 				menustate = MENU_NONE1;
 				break;
 			}
@@ -1223,8 +1249,21 @@ void HandleUI(void)
 		if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 5 : 9))
 		{
 			finish_map_setting(menu);
-			menustate = is_menu_core() ? MENU_FIRMWARE1 : MENU_8BIT_SYSTEM1;
-			menusub = is_menu_core() ? 2 : 1;
+			if (is_menu_core())
+			{
+				menustate = MENU_FIRMWARE1;
+				menusub = 2;
+			}
+			else if (is_archie())
+			{
+				menustate = MENU_ARCHIE_MAIN1;
+				menusub = 4;
+			}
+			else
+			{
+				menustate = MENU_8BIT_SYSTEM1;
+				menusub = 1;
+			}
 		}
 		break;
 
@@ -3022,7 +3061,7 @@ void HandleUI(void)
 				menustate = MENU_MIST_MAIN1;
 				break;
 			case CORE_TYPE_ARCHIE:
-				menusub = 3;
+				menusub = 5;
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 			default:
@@ -3042,7 +3081,7 @@ void HandleUI(void)
 					menustate = MENU_MIST_MAIN1;
 					break;
 				case CORE_TYPE_ARCHIE:
-					menusub = 3;
+					menusub = 5;
 					menustate = MENU_ARCHIE_MAIN1;
 					break;
 				default:

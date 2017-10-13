@@ -81,6 +81,11 @@ char is_minimig()
 	return(core_type == CORE_TYPE_MINIMIG2);
 }
 
+char is_archie()
+{
+	return(core_type == CORE_TYPE_ARCHIE);
+}
+
 char* user_io_create_config_name()
 {
 	static char str[40];
@@ -1646,6 +1651,30 @@ static void send_keycode(unsigned short key, int press)
 		uint32_t code = get_archie_code(key);
 		if (code == NONE) return;
 
+		//WIN+...
+		if (get_key_mod() & (RGUI | LGUI))
+		{
+			switch(code)
+			{
+				case 0x00: code = 0xf;  //ESC = BRAKE
+					break;
+
+				case 0x11: code = 0x73; // 1 = Mouse extra 1
+					break;
+
+				case 0x12: code = 0x74; // 2 = Mouse extra 2
+					break;
+
+				case 0x13: code = 0x25; // 3 = KP#
+					break;
+			}
+		}
+
+		if (code == 0 && (get_key_mod() & (RGUI | LGUI)))
+		{
+			code = 0xF;
+		}
+		if (!press) code |= 0x8000;
 		archie_kbd(code);
 	}
 }
@@ -1758,14 +1787,14 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu_core()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI)))  && (((key == KEY_F12) && (!is_x86_core() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
+				if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI)))  && (((key == KEY_F12) && ((!is_x86_core() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
 				else if (osd_is_visible)
 				{
 					if (press == 1) menu_key_set(key);
 				}
 				else
 				{
-					if ((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl))
+					if ((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl && !is_archie()))
 					{
 						if (press == 1)
 						{
