@@ -1499,6 +1499,35 @@ void user_io_poll()
 		keyboard_leds = leds;
 	}
 
+	static uint32_t res_timer = 0;
+	if(!res_timer || CheckTimer(res_timer))
+	{
+		res_timer = GetTimer(2000); // every 2 sec
+
+		static uint8_t nres = 0;
+		spi_uio_cmd_cont(UIO_GET_VRES);
+		uint8_t res = spi_in();
+		if (nres != res)
+		{
+			nres = res;
+			uint32_t width  = spi_w(0) | (spi_w(0) << 16);
+			uint32_t height = spi_w(0) | (spi_w(0) << 16);
+			uint32_t htime  = spi_w(0) | (spi_w(0) << 16);
+			uint32_t vtime  = spi_w(0) | (spi_w(0) << 16);
+			uint32_t ptime  = spi_w(0) | (spi_w(0) << 16);
+
+			float vrate = 100000000;
+			vrate /= vtime;
+			float hrate = 100000;
+			hrate /= htime;
+
+			float prate = width*100;
+			prate /= ptime;
+
+			printf("\033[1;33mINFO: Video resolution: %u x %u, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, hrate, vrate, prate);
+		}
+		DisableIO();
+	}
 }
 
 char user_io_dip_switch1()

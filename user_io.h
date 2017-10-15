@@ -55,6 +55,7 @@
 #define UIO_SET_VIDEO   0x20  // set HDMI video mode 0: 1280x720p60(TV), 1: 1280x1024p60(PC), 2-255: reserved
 #define UIO_PS2_CTL     0x21  // get PS2 control from supported cores
 #define UIO_RTC         0x22  // transmit RTC data to core
+#define UIO_GET_VRES    0x23  // get video resolution
 
 // codes as used by 8bit (atari 800, zx81) via SS2
 #define UIO_GET_STATUS  0x50
