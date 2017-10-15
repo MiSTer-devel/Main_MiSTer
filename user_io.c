@@ -871,6 +871,13 @@ void user_io_send_buttons(char force)
 
 	if ((map != key_map) || force)
 	{
+		if (is_archie())
+		{
+			if ((key_map & BUTTON2) && !(map & BUTTON2))
+			{
+				fpga_load_rbf("Archie.rbf");
+			}
+		}
 		key_map = map;
 		spi_uio_cmd8(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
@@ -1766,6 +1773,7 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 			MinimigReset();
 			break;
 
+		case CORE_TYPE_ARCHIE:
 		case CORE_TYPE_8BIT:
 			kbd_reset = 1;
 			break;
