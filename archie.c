@@ -137,7 +137,7 @@ void archie_send_file(unsigned char id, char *name)
 
 		EnableFpga();
 		spi8(ARCHIE_FILE_TX_DAT);
-		spi_block_write(sector_buffer, 0);
+		spi_block_write(sector_buffer, 1);
 		DisableFpga();
 
 		// still bytes to send? read next sector
@@ -538,21 +538,20 @@ void archie_handle_fdc(void)
 
 	if (memcmp(status, old_status, 4) != 0)
 	{
-		archie_x_debugf("status changed to %x %x %x %x",
-			status[0], status[1], status[2], status[3]);
+		//archie_x_debugf("status changed to %x %x %x %x", status[0], status[1], status[2], status[3]);
 		memcpy(old_status, status, 4);
 
 		// top four bits must be magic marker 1010
 		if (((status[0] & 0xf0) == 0xa0) && (status[0] & 1))
 		{
-			archie_x_debugf("DIO: BUSY with commmand %lx", status[1]);
+			//archie_x_debugf("status changed to %x %x %x %x", status[0], status[1], status[2], status[3]);
+			//archie_x_debugf("DIO: BUSY with commmand %lx", status[1]);
 
 			// check for read sector command
 			if ((status[1] & 0xe0) == 0x80)
 			{
 				if (status[0] & 2)
 				{
-					printf("p0\n");
 					int floppy_map = status[3] >> 4;
 					int side = (status[2] & 0x80) ? 0 : 1;
 					int track = status[2] & 0x7f;
@@ -566,15 +565,11 @@ void archie_handle_fdc(void)
 						if (floppy_map == (0x0f ^ (1 << i)))
 							floppy_index = i;
 
-					printf("p1\n");
-
 					if (floppy_index < 0)
 						archie_x_debugf("DIO: unexpected floppy_map %x", floppy_map);
 					else
 					{
 						fileTYPE *f = &floppy[floppy_index];
-
-						printf("p2\n");
 
 						archie_x_debugf("DIO: floppy %d sector read SD%d T%d S%d -> %ld",
 							floppy_index, side, track, sector, lba);
