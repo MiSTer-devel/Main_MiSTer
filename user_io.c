@@ -1103,12 +1103,11 @@ void user_io_poll()
 						DisableIO();
 
 						// ... and write it to disk
-						diskled_on();
-
 						int done = 0;
 
 						if (sd_image[disk].size)
 						{
+							diskled_on();
 							if (FileSeekLBA(&sd_image[disk], lba))
 							{
 								if (FileWriteSec(&sd_image[disk], buffer[disk])) done = 1;
@@ -1132,10 +1131,9 @@ void user_io_poll()
 
 					if (buffer_lba[disk] != lba)
 					{
-						diskled_on();
-
 						if (sd_image[disk].size)
 						{
+							diskled_on();
 							if (FileSeekLBA(&sd_image[disk], lba))
 							{
 								if (FileReadSec(&sd_image[disk], buffer[disk]))
@@ -1164,11 +1162,10 @@ void user_io_poll()
 
 					// just load the next sector now, so it may be prefetched
 					// for the next request already
-					diskled_on();
-
 					done = 0;
 					if (sd_image[disk].size)
 					{
+						diskled_on();
 						if (FileSeekLBA(&sd_image[disk], lba + 1))
 						{
 							if (FileReadSec(&sd_image[disk], buffer[disk]))
