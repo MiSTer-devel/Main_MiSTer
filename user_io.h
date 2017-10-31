@@ -56,6 +56,7 @@
 #define UIO_PS2_CTL     0x21  // get PS2 control from supported cores
 #define UIO_RTC         0x22  // transmit RTC data to core
 #define UIO_GET_VRES    0x23  // get video resolution
+#define UIO_TIMESTAMP   0x24  // transmit seconds since Unix epoch
 
 // codes as used by 8bit (atari 800, zx81) via SS2
 #define UIO_GET_STATUS  0x50

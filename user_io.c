@@ -261,30 +261,44 @@ static void parse_config()
 }
 
 //MSM6242B layout
-void send_rtc()
+void send_rtc(int type)
 {
 	printf("Update RTC\n");
 
 	time_t t = time(NULL);
-	struct tm tm = *localtime(&t);
 
-	uint8_t rtc[8];
-	rtc[0] = (tm.tm_sec % 10) | ((tm.tm_sec / 10) << 4);
-	rtc[1] = (tm.tm_min % 10) | ((tm.tm_min / 10) << 4);
-	rtc[2] = (tm.tm_hour % 10) | ((tm.tm_hour / 10) << 4);
-	rtc[3] = (tm.tm_mday % 10) | ((tm.tm_mday / 10) << 4);
+	if (type & 1)
+	{
+		struct tm tm = *localtime(&t);
 
-	rtc[4] = ((tm.tm_mon + 1) % 10) | (((tm.tm_mon + 1) / 10) << 4);
-	rtc[5] = (tm.tm_year % 10) | (((tm.tm_year / 10) % 10) << 4);
-	rtc[6] = tm.tm_wday;
-	rtc[7] = 0x40;
+		uint8_t rtc[8];
+		rtc[0] = (tm.tm_sec % 10) | ((tm.tm_sec / 10) << 4);
+		rtc[1] = (tm.tm_min % 10) | ((tm.tm_min / 10) << 4);
+		rtc[2] = (tm.tm_hour % 10) | ((tm.tm_hour / 10) << 4);
+		rtc[3] = (tm.tm_mday % 10) | ((tm.tm_mday / 10) << 4);
 
-	spi_uio_cmd_cont(UIO_RTC);
-	spi_w((rtc[1] << 8) | rtc[0]);
-	spi_w((rtc[3] << 8) | rtc[2]);
-	spi_w((rtc[5] << 8) | rtc[4]);
-	spi_w((rtc[7] << 8) | rtc[6]);
-	DisableIO();
+		rtc[4] = ((tm.tm_mon + 1) % 10) | (((tm.tm_mon + 1) / 10) << 4);
+		rtc[5] = (tm.tm_year % 10) | (((tm.tm_year / 10) % 10) << 4);
+		rtc[6] = tm.tm_wday;
+		rtc[7] = 0x40;
+
+		spi_uio_cmd_cont(UIO_RTC);
+		spi_w((rtc[1] << 8) | rtc[0]);
+		spi_w((rtc[3] << 8) | rtc[2]);
+		spi_w((rtc[5] << 8) | rtc[4]);
+		spi_w((rtc[7] << 8) | rtc[6]);
+		DisableIO();
+	}
+
+	if (type & 2)
+	{
+		t += t - mktime(gmtime(&t));
+
+		spi_uio_cmd_cont(UIO_TIMESTAMP);
+		spi_w(t);
+		spi_w(t >> 16);
+		DisableIO();
+	}
 }
 
 void user_io_detect_core_type()
@@ -414,7 +428,7 @@ void user_io_detect_core_type()
 			}
 		}
 
-		send_rtc();
+		send_rtc(3);
 
 		// release reset
 		user_io_8bit_set_status(0, UIO_STATUS_RESET);
@@ -1020,7 +1034,7 @@ void user_io_poll()
 		{
 			// Update once per minute should be enough
 			rtc_timer = GetTimer(60000);
-			send_rtc();
+			send_rtc(1);
 		}
 	}
 
