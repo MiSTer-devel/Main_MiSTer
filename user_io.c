@@ -917,13 +917,13 @@ void __inline diskled_on()
 void kbd_reply(char code)
 {
 	printf("kbd_reply = 0x%02X\n", code);
-	spi_uio_cmd8(UIO_KEYBOARD, code);
+	spi_uio_cmd16(UIO_KEYBOARD, 0xFF00 | code);
 }
 
 void mouse_reply(char code)
 {
 	printf("mouse_reply = 0x%02X\n", code);
-	spi_uio_cmd8(UIO_MOUSE, code);
+	spi_uio_cmd16(UIO_MOUSE, 0xFF00 | code);
 }
 
 static uint8_t use_ps2ctl = 0;
@@ -1394,6 +1394,12 @@ void user_io_poll()
 					kbd_reply(0xAA);
 					break;
 
+				case 0xf2:
+					kbd_reply(0xFA);
+					kbd_reply(0xAB);
+					kbd_reply(0x83);
+					break;
+
 				case 0xf4:
 				case 0xf5:
 				case 0xfa:
@@ -1453,8 +1459,11 @@ void user_io_poll()
 					break;
 
 				case 0xe6:
+				case 0xea:
+				case 0xf0:
 				case 0xf4:
 				case 0xf5:
+				case 0xf6:
 					mouse_reply(0xFA);
 					break;
 
