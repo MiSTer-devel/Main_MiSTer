@@ -2100,9 +2100,12 @@ int input_test(int getchar)
 
 								// axis ranges vary per USB controller: some have 0-255, others -32768-32767 etc.
 								int16_t mid_axis = 127;
-								if (input[i].vid == 0x045e && input[i].pid == 0x028e) mid_axis = -1; // 8BitDo NES30 Retro Receiver
-                                if (input[i].vid == 0x0403 && input[i].pid == 0x97c1) mid_axis = 0; // Retrode 
-								
+								if (input[i].vid == 0x045e && input[i].pid == 0x028e) mid_axis = -1;  // 8BitDo NES30 Retro Receiver
+                                if (input[i].vid == 0x0403 && input[i].pid == 0x97c1) mid_axis = 0;   // Retrode 
+								if (input[i].vid == 0x4d8 && input[i].pid == 0xf947) mid_axis = 2047; // 2600-Daptor II 
+								if (input[i].vid == 0x4d8 && input[i].pid == 0xf421) mid_axis = 2047; // NeoGeo-Daptor 
+								if (input[i].vid == 0x4d8 && input[i].pid == 0xf627) mid_axis = 0;    // Vision-Daptor 
+
 								char l, r, u, d;
 								l = r = u = d = 0;
 								uint16_t offset = 0;
