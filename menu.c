@@ -627,7 +627,7 @@ void HandleUI(void)
 			if (get_key_mod() & (LALT|RALT)) //Alt+Menu
 			{
 				OsdSetSize(16);
-				SelectFile("RBF", 0, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_NONE1, 0);
+				SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_NONE1, 0);
 			}
 			else if (user_io_core_type() == CORE_TYPE_MINIMIG2)
 				menustate = MENU_MAIN1;
@@ -641,7 +641,7 @@ void HandleUI(void)
 				{
 					OsdSetSize(16);
 					OsdCoreNameSet("");
-					SelectFile("RBF", 0, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_FIRMWARE1, 0);
+					SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_FIRMWARE1, 0);
 				}
 				else
 				{
@@ -3072,7 +3072,7 @@ void HandleUI(void)
 		}
 		else if (select) {
 			if (menusub == 0) {
-				SelectFile("RBF", 0, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_FIRMWARE1, 0);
+				SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_FIRMWARE1, 0);
 			}
 			else if (menusub == 1) {
 				switch (user_io_core_type()) {
@@ -3284,7 +3284,14 @@ void PrintDirectory(void)
 				s[28] = 22;
 			}
 
-			strncpy(s + 1, DirItem[k].d_name, len); // display only name
+			if((DirItem[k].d_type == DT_DIR) && (fs_Options & SCAN_SDIR) && (DirItem[k].d_name[0] == '_'))
+			{
+				strncpy(s + 1, DirItem[k].d_name+1, len-1);
+			}
+			else
+			{
+				strncpy(s + 1, DirItem[k].d_name, len); // display only name
+			}
 
 			if (DirItem[k].d_type == DT_DIR) // mark directory with suffix
 			{

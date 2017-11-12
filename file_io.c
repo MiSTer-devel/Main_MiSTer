@@ -571,7 +571,12 @@ int ScanDirectory(char* path, int mode, char *extension, int options)
 				{
 					if(!strlen(path)) continue;
 				}
-				if (!(options & SCAN_DIR)) continue;
+
+				if (!(options & SCAN_DIR))
+				{
+					if (de->d_name[0] != '_' && strcmp(de->d_name, "..")) continue;
+					if (!(options & SCAN_SDIR)) continue;
+				}
 			}
 			else if (de->d_type == DT_REG)
 			{
