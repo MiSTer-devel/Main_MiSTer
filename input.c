@@ -2101,6 +2101,7 @@ int input_test(int getchar)
 								// axis ranges vary per USB controller: some have 0-255, others -32768-32767 etc.
 								int16_t mid_axis = 127;
 								if (input[i].vid == 0x045e && input[i].pid == 0x028e) mid_axis = -1; // 8BitDo NES30 Retro Receiver
+                                if (input[i].vid == 0x0403 && input[i].pid == 0x97c1) mid_axis = 0; // Retrode 
 								
 								char l, r, u, d;
 								l = r = u = d = 0;
@@ -2114,6 +2115,7 @@ int input_test(int getchar)
 
 								if(ev.code == 0 || ev.code == extra_axis || ev.code == 16) // x
 								{
+                                    
 									if ((ev.code < 16) ? ev.value < mid_axis - 64  : ev.value == -1) l = 1;
 									if ((ev.code < 16) ? ev.value > mid_axis + 64 : ev.value ==  1) r = 1;
 
@@ -2140,6 +2142,9 @@ int input_test(int getchar)
 
 								if (ev.code == base_y_axis || ev.code == 5 || ev.code == 17) // y
 								{
+                                    // override specific to x axis
+                                    if (input[i].vid == 0x046d && input[i].pid == 0xc21f) mid_axis = -129; // Logitech F710
+                                    
 									if ((ev.code < 16) ? ev.value < mid_axis - 64  : ev.value == -1) u = 1;
 									if ((ev.code < 16) ? ev.value > mid_axis + 64 : ev.value ==  1) d = 1;
 
