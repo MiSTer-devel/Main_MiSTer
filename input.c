@@ -2076,9 +2076,11 @@ int input_test(int getchar)
 
 									//reduce flood from PS3 gamepad
 									if (input[i].vid == 0x054c && input[i].pid == 0x0268)
-									{
-										if (ev.code <= 5 && ev.value > 118 && ev.value < 138) break;
-									}
+									{ if (ev.code <= 5 && ev.value > 118 && ev.value < 138) break; }
+
+									//aliexpress USB encoder floods messages
+									if (input[i].vid == 0x0079 && input[i].pid == 0x0006)
+									{ if (ev.code == 2) break; }
 
 									printf("Input event: type=EV_ABS, Axis=%d, Offset:=%d\n", ev.code, ev.value);
 									break;
@@ -2096,16 +2098,24 @@ int input_test(int getchar)
 								// some pads use axis 16 for L/R PAD, axis 17 for U/D PAD
 								// emulate PAD on axis 0/1
 
+								// axis ranges vary per USB controller: some have 0-255, others -32768-32767 etc.
+								int16_t mid_axis = 127;
+								if (input[i].vid == 0x045e && input[i].pid == 0x028e) mid_axis = -1; // 8BitDo NES30 Retro Receiver
+								
 								char l, r, u, d;
 								l = r = u = d = 0;
 								uint16_t offset = 0;
 								if (ev.code < 16) offset += 4;
 								if (ev.code < 2)  offset += 4;
 
-								if(ev.code == 0 || ev.code == 2 || ev.code == 16) // x
+								uint16_t extra_axis = 2;
+								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) extra_axis = 0; // AliExpress USB encoder PCB floods axis 2
+
+
+								if(ev.code == 0 || ev.code == extra_axis || ev.code == 16) // x
 								{
-									if ((ev.code < 16) ? ev.value < 64  : ev.value == -1) l = 1;
-									if ((ev.code < 16) ? ev.value > 192 : ev.value ==  1) r = 1;
+									if ((ev.code < 16) ? ev.value < mid_axis - 64  : ev.value == -1) l = 1;
+									if ((ev.code < 16) ? ev.value > mid_axis + 64 : ev.value ==  1) r = 1;
 
 									ev.type = EV_KEY;
 									if (input[i].last_l != l)
@@ -2125,10 +2135,13 @@ int input_test(int getchar)
 									}
 								}
 
-								if (ev.code == 1 || ev.code == 5 || ev.code == 17) // y
+								uint16_t base_y_axis = 1;
+								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) base_y_axis = 3; // AliExpress USB encoder PCB
+
+								if (ev.code == base_y_axis || ev.code == 5 || ev.code == 17) // y
 								{
-									if ((ev.code < 16) ? ev.value < 64  : ev.value == -1) u = 1;
-									if ((ev.code < 16) ? ev.value > 192 : ev.value ==  1) d = 1;
+									if ((ev.code < 16) ? ev.value < mid_axis - 64  : ev.value == -1) u = 1;
+									if ((ev.code < 16) ? ev.value > mid_axis + 64 : ev.value ==  1) d = 1;
 
 									ev.type = EV_KEY;
 									if (input[i].last_u != u)
