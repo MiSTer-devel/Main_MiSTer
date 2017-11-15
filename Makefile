@@ -22,7 +22,7 @@ LFLAGS  = -lc -lstdc++ -lrt
 
 $(PRJ): $(OBJ)
 	@$(info $@)
-	@$(LD) $(LFLAGS) -o $@ $+
+	@$(LD) -o $@ $+ $(LFLAGS)
 	@cp $@ $@.elf
 	@$(STRIP) $@
 
