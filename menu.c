@@ -510,6 +510,17 @@ void HandleUI(void)
 		menu = true;
 		menu_key_set(KEY_F12 | UPSTROKE);
 		break;
+	case KEY_F1:
+		if (is_menu_core())
+		{
+			unsigned long status = (user_io_8bit_set_status(0, 0)>>1)&7;
+			if (status == 5) status = 0;
+				else status++;
+			status <<= 1;
+			user_io_8bit_set_status(status, 0xE);
+			FileSaveConfig(user_io_create_config_name(), &status, 4);
+		}
+		break;
 
 		// Within the menu the esc key acts as the menu key. problem:
 		// if the menu is left with a press of ESC, then the follwing
