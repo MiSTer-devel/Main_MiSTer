@@ -22,6 +22,7 @@ typedef struct {
 	uint8_t vga_scaler;
 	uint8_t video_mode;
 	uint8_t hdmi_audio_96k;
+        uint8_t dvi;
 } mist_cfg_t;
 
 

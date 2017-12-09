@@ -882,6 +882,7 @@ void user_io_send_buttons(char force)
 	if (mist_cfg.ypbpr) map |= CONF_YPBPR;
 	if (mist_cfg.forced_scandoubler) map |= CONF_FORCED_SCANDOUBLER;
 	if (mist_cfg.hdmi_audio_96k) map |= CONF_AUDIO_48K;
+        if (mist_cfg.dvi) map |= CONF_DVI;
 
 	if ((map != key_map) || force)
 	{
