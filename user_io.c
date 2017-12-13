@@ -868,8 +868,11 @@ char old_video_mode = -1;
 
 void user_io_send_buttons(char force)
 {
-	static unsigned char key_map = 0;
-	unsigned char map = 0;
+	static unsigned short key_map = 0;
+	unsigned short map = 0;
+
+	map = mist_cfg.video_mode;
+	map = (map << CONF_RES_SHIFT) & CONF_RES_MASK;
 
 	int btn = fpga_get_buttons();
 
@@ -881,7 +884,8 @@ void user_io_send_buttons(char force)
 	if (mist_cfg.csync) map |= CONF_CSYNC;
 	if (mist_cfg.ypbpr) map |= CONF_YPBPR;
 	if (mist_cfg.forced_scandoubler) map |= CONF_FORCED_SCANDOUBLER;
-	if (mist_cfg.hdmi_audio_96k) map |= CONF_AUDIO_48K;
+	if (mist_cfg.hdmi_audio_96k) map |= CONF_AUDIO_96K;
+	if (mist_cfg.dvi) map |= CONF_DVI;
 
 	if ((map != key_map) || force)
 	{
@@ -893,15 +897,9 @@ void user_io_send_buttons(char force)
 			}
 		}
 		key_map = map;
-		spi_uio_cmd8(UIO_BUT_SW, map);
+		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
 		if ((key_map & BUTTON2) && is_x86_core()) x86_init();
-	}
-
-	if (old_video_mode != mist_cfg.video_mode)
-	{
-		old_video_mode = mist_cfg.video_mode;
-		spi_uio_cmd8(UIO_SET_VIDEO, old_video_mode);
 	}
 }
 
@@ -1928,4 +1926,61 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 emu_mode_t user_io_get_kbdemu()
 {
 	return emu_mode;
+}
+
+void parse_video_mode()
+{
+	char *cfg = mist_cfg.video_conf;
+	uint32_t items[32];
+
+	mist_cfg.video_mode = 0;
+
+	int cnt = 0;
+	while (*cfg)
+	{
+		char *next;
+		uint32_t val = strtoul(cfg, &next, 0);
+		if (cfg == next || (*next !=',' && *next))
+		{
+			printf("Error parsing video_mode parameter: ""%s""\n", mist_cfg.video_conf);
+			return;
+		}
+
+		if (cnt < 32) items[cnt] = val;
+		if (*next == ',') next++;
+		cfg = next;
+		cnt++;
+	}
+
+	if (cnt == 1)
+	{
+		mist_cfg.video_mode = items[0];
+		printf("Set predefined video_mode to %d\n", mist_cfg.video_mode);
+		return;
+	}
+
+	if (cnt < 21 || cnt > 32)
+	{
+		printf("Incorrect amount of items in video_mode parameter: %d\n", cnt);
+		return;
+	}
+
+	if (items[0])
+	{
+		printf("Incorrect video_mode parameter\n");
+		return;
+	}
+
+	spi_uio_cmd_cont(UIO_SET_VIDEO);
+	for (int i = 1; i <= 8; i++) spi_w(items[i]);
+	for (int i = 9; i < cnt; i++)
+	{
+		if (i & 1) spi_w(items[i]);
+		else
+		{
+			spi_w(items[i]);
+			spi_w(items[i] >> 16);
+		};
+	}
+	DisableIO();
 }

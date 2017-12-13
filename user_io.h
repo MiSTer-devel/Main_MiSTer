@@ -52,7 +52,7 @@
 #define UIO_SET_SDINFO  0x1d  // send info about mounted image
 #define UIO_SET_STATUS2 0x1e  // 32bit status
 #define UIO_GET_KBD_LED 0x1f  // keyboard LEDs control
-#define UIO_SET_VIDEO   0x20  // set HDMI video mode 0: 1280x720p60(TV), 1: 1280x1024p60(PC), 2-255: reserved
+#define UIO_SET_VIDEO   0x20
 #define UIO_PS2_CTL     0x21  // get PS2 control from supported cores
 #define UIO_RTC         0x22  // transmit RTC data to core
 #define UIO_GET_VRES    0x23  // get video resolution
@@ -117,7 +117,10 @@
 #define CONF_CSYNC              0x08
 #define CONF_FORCED_SCANDOUBLER 0x10
 #define CONF_YPBPR              0x20
-#define CONF_AUDIO_48K          0x40
+#define CONF_AUDIO_96K          0x40
+#define CONF_DVI                0x80
+#define CONF_RES_MASK           0x700
+#define CONF_RES_SHIFT          8
 
 // core type value should be unlikely to be returned by broken cores
 #define CORE_TYPE_UNKNOWN   0x55
@@ -197,6 +200,7 @@ void user_io_digital_joystick(unsigned char, uint16_t);
 void user_io_analog_joystick(unsigned char, char, char);
 char user_io_osd_is_visible();
 void user_io_send_buttons(char);
+void parse_video_mode();
 
 void add_modifiers(uint8_t mod, uint16_t* keys_ps2);
 

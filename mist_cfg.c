@@ -7,13 +7,13 @@
 #include "mist_cfg.h"
 #include "user_io.h"
 
+mist_cfg_t mist_cfg;
+
 void mist_ini_parse()
 {
 	memset(&mist_cfg, 0, sizeof(mist_cfg));
 	ini_parse(&mist_ini_cfg);
 }
-
-mist_cfg_t mist_cfg = { 0 };
 
 // mist ini sections
 const ini_section_t mist_ini_sections[] =
@@ -30,8 +30,9 @@ const ini_var_t mist_ini_vars[] = {
 	{ "KEYRAH_MODE", (void*)(&(mist_cfg.keyrah_mode)), UINT32, 0, 0xFFFFFFFF, 1 },
 	{ "RESET_COMBO", (void*)(&(mist_cfg.reset_combo)), UINT8, 0, 3, 1 },
 	{ "KEY_MENU_AS_RGUI", (void*)(&(mist_cfg.key_menu_as_rgui)), UINT8, 0, 1, 1 },
-	{ "VIDEO_MODE", (void*)(&(mist_cfg.video_mode)), UINT8, 0, 9, 1 },
+	{ "VIDEO_MODE", (void*)(mist_cfg.video_conf), STRING, 0, sizeof(mist_cfg.video_conf)-1, 1 },
 	{ "HDMI_AUDIO_96K", (void*)(&(mist_cfg.hdmi_audio_96k)), UINT8, 0, 1, 1 },
+	{ "DVI_MODE", (void*)(&(mist_cfg.dvi)), UINT8, 0, 1, 1 },
 };
 
 // mist ini config

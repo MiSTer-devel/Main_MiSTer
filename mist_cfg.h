@@ -20,14 +20,14 @@ typedef struct {
 	uint8_t ypbpr;
 	uint8_t csync;
 	uint8_t vga_scaler;
-	uint8_t video_mode;
 	uint8_t hdmi_audio_96k;
+	uint8_t dvi;
+	uint8_t video_mode;
+	char video_conf[1024];
 } mist_cfg_t;
-
 
 //// functions ////
 void mist_ini_parse();
-
 
 //// global variables ////
 extern const ini_cfg_t mist_ini_cfg;

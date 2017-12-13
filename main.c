@@ -62,6 +62,7 @@ void core_init()
 	user_io_detect_core_type();
 
 	mist_ini_parse();
+	parse_video_mode();
 	user_io_send_buttons(1);
 
 	if (user_io_core_type() == CORE_TYPE_MINIMIG2)
