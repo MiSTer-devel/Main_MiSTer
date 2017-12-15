@@ -1933,7 +1933,7 @@ int getPLL(double Fout, uint32_t *M, uint32_t *K, uint32_t *C)
 	uint32_t c = 1;
 	while ((Fout*c) < 400) c++;
 
-	printf("Calculate PLL for %.2f MHz:\n",Fout);
+	printf("Calculate PLL for %.3f MHz:\n",Fout);
 
 	while (1)
 	{
@@ -1979,52 +1979,67 @@ uint32_t getPLLdiv(uint32_t div)
 	return ((div / 2) << 8) | (div / 2);
 }
 
-void parse_video_mode()
+struct
+{
+	uint32_t vpar[8];
+	double Fpix;
+} vmodes[8] =
+{
+	{ {1280, 110, 40,  220, 720,  5,  5, 20}, 74.25  },
+	{ {1024, 24,  136, 160, 768,  3,  6, 29}, 65     },
+	{ {720,  16,  62,  60,  480,  9,  6, 30}, 27     },
+	{ {720,  12,  64,  68,  576,  5,  5, 39}, 27     },
+	{ {1280, 48,  112, 248, 1024, 1,  3, 38}, 108    },
+	{ {800,  40,  128, 88,  600,  1,  4, 23}, 40     },
+	{ {640,  16,  96,  48,  480,  10, 2, 33}, 25.175 },
+	{ {1280, 440, 40,  220, 720,  5,  5, 20}, 74.25  }
+};
+
+uint32_t vitems[32];
+
+static int parse_custom_video_mode()
 {
 	char *cfg = mist_cfg.video_conf;
-	uint32_t items[32];
-
-	mist_cfg.video_mode = 0;
 
 	int cnt = 0;
 	while (*cfg)
 	{
 		char *next;
-		if (cnt == 9 && items[0] == 1)
+		if (cnt == 9 && vitems[0] == 1)
 		{
 			double Fout = strtod(cfg, &next);
 			if (cfg == next || (Fout < 20.f || Fout > 200.f))
 			{
 				printf("Error parsing video_mode parameter: ""%s""\n", mist_cfg.video_conf);
-				return;
+				return 0;
 			}
 
 			uint32_t M, K, C;
-			if (!getPLL(Fout, &M, &K, &C)) return;
+			if (!getPLL(Fout, &M, &K, &C)) return 0;
 
-			items[9]  = 4;
-			items[10] = getPLLdiv(M);
-			items[11] = 3;
-			items[12] = 0x10000;
-			items[13] = 5;
-			items[14] = getPLLdiv(C);
-			items[15] = 9;
-			items[16] = 2;
-			items[17] = 8;
-			items[18] = 7;
-			items[19] = 7;
-			items[20] = K;
+			vitems[9] = 4;
+			vitems[10] = getPLLdiv(M);
+			vitems[11] = 3;
+			vitems[12] = 0x10000;
+			vitems[13] = 5;
+			vitems[14] = getPLLdiv(C);
+			vitems[15] = 9;
+			vitems[16] = 2;
+			vitems[17] = 8;
+			vitems[18] = 7;
+			vitems[19] = 7;
+			vitems[20] = K;
 			break;
 		}
 
 		uint32_t val = strtoul(cfg, &next, 0);
-		if (cfg == next || (*next !=',' && *next))
+		if (cfg == next || (*next != ',' && *next))
 		{
 			printf("Error parsing video_mode parameter: ""%s""\n", mist_cfg.video_conf);
-			return;
+			return 0;
 		}
 
-		if (cnt < 32) items[cnt] = val;
+		if (cnt < 32) vitems[cnt] = val;
 		if (*next == ',') next++;
 		cfg = next;
 		cnt++;
@@ -2032,21 +2047,54 @@ void parse_video_mode()
 
 	if (cnt == 1)
 	{
-		mist_cfg.video_mode = items[0];
-		printf("Set predefined video_mode to %d\n", mist_cfg.video_mode);
-		return;
+		printf("Set predefined video_mode to %d\n", vitems[0]);
+		return vitems[0];
 	}
 
-	if ((items[0]==0 && cnt < 21) || (items[0]==1 && cnt < 9))
+	if ((vitems[0] == 0 && cnt < 21) || (vitems[0] == 1 && cnt < 9))
 	{
 		printf("Incorrect amount of items in video_mode parameter: %d\n", cnt);
-		return;
+		return 0;
 	}
 
-	if (items[0]>1)
+	if (vitems[0] > 1)
 	{
 		printf("Incorrect video_mode parameter\n");
-		return;
+		return 0;
+	}
+
+	return -1;
+}
+
+void parse_video_mode()
+{
+	// always 0. Use custom parameters.
+	mist_cfg.video_mode = 0;
+
+	int mode = parse_custom_video_mode();
+	if (mode >= 0)
+	{
+		if (mode >= 8) mode = 0;
+		for (int i = 0; i < 8; i++)
+		{
+			vitems[i + 1] = vmodes[mode].vpar[i];
+		}
+
+		uint32_t M, K, C;
+		getPLL(vmodes[mode].Fpix, &M, &K, &C);
+
+		vitems[9] = 4;
+		vitems[10] = getPLLdiv(M);
+		vitems[11] = 3;
+		vitems[12] = 0x10000;
+		vitems[13] = 5;
+		vitems[14] = getPLLdiv(C);
+		vitems[15] = 9;
+		vitems[16] = 2;
+		vitems[17] = 8;
+		vitems[18] = 7;
+		vitems[19] = 7;
+		vitems[20] = K;
 	}
 
 	printf("Send HDMI parameters:\n");
@@ -2054,20 +2102,21 @@ void parse_video_mode()
 	printf("video: ");
 	for (int i = 1; i <= 8; i++)
 	{
-		spi_w(items[i]);
-		printf("%d, ", items[i]);
+		spi_w(vitems[i]);
+		printf("%d, ", vitems[i]);
 	}
 	printf("\nPLL: ");
 	for (int i = 9; i < 21; i++)
 	{
-		printf("0x%X, ", items[i]);
-		if (i & 1) spi_w(items[i]);
+		printf("0x%X, ", vitems[i]);
+		if (i & 1) spi_w(vitems[i]);
 		else
 		{
-			spi_w(items[i]);
-			spi_w(items[i] >> 16);
-		};
+			spi_w(vitems[i]);
+			spi_w(vitems[i] >> 16);
+		}
 	}
+
 	printf("\n");
 	DisableIO();
 }
