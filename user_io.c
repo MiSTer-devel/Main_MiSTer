@@ -1928,6 +1928,57 @@ emu_mode_t user_io_get_kbdemu()
 	return emu_mode;
 }
 
+int getPLL(double Fout, uint32_t *M, uint32_t *K, uint32_t *C)
+{
+	uint32_t c = 1;
+	while ((Fout*c) < 400) c++;
+
+	printf("Calculate PLL for %.2f MHz:\n",Fout);
+
+	while (1)
+	{
+		printf("C=%d, ", c);
+		*C = c;
+
+		double fvco = Fout*c;
+		printf("Fvco=%f, ", fvco);
+
+		uint32_t m = (uint32_t)(fvco / 50);
+		printf("M=%d, ", m);
+		*M = m;
+
+		double ko = ((fvco / 50) - m);
+		printf("K_orig=%f, ", ko);
+
+		uint32_t k = (uint32_t)(ko * 4294967296);
+		if (!k) k = 1;
+		printf("K=%u. ", k);
+		*K = k;
+
+		if (ko && (ko <= 0.05f || ko >= 0.95f))
+		{
+			if (fvco > 1500.f)
+			{
+				printf("Fvco > 1500MHz. Cannot calculate PLL parameters!");
+				return 0;
+			}
+			printf("K_orig is outside desired range try next C0\n");
+			c++;
+		}
+		else
+		{
+			printf("\n");
+			return 1;
+		}
+	}
+}
+
+uint32_t getPLLdiv(uint32_t div)
+{
+	if (div & 1) return 0x20000 | (((div / 2)+1) << 8) | (div / 2);
+	return ((div / 2) << 8) | (div / 2);
+}
+
 void parse_video_mode()
 {
 	char *cfg = mist_cfg.video_conf;
@@ -1939,6 +1990,33 @@ void parse_video_mode()
 	while (*cfg)
 	{
 		char *next;
+		if (cnt == 9 && items[0] == 1)
+		{
+			double Fout = strtod(cfg, &next);
+			if (cfg == next || (Fout < 20.f || Fout > 200.f))
+			{
+				printf("Error parsing video_mode parameter: ""%s""\n", mist_cfg.video_conf);
+				return;
+			}
+
+			uint32_t M, K, C;
+			if (!getPLL(Fout, &M, &K, &C)) return;
+
+			items[9]  = 4;
+			items[10] = getPLLdiv(M);
+			items[11] = 3;
+			items[12] = 0x10000;
+			items[13] = 5;
+			items[14] = getPLLdiv(C);
+			items[15] = 9;
+			items[16] = 2;
+			items[17] = 8;
+			items[18] = 7;
+			items[19] = 7;
+			items[20] = K;
+			break;
+		}
+
 		uint32_t val = strtoul(cfg, &next, 0);
 		if (cfg == next || (*next !=',' && *next))
 		{
@@ -1959,22 +2037,30 @@ void parse_video_mode()
 		return;
 	}
 
-	if (cnt < 21 || cnt > 32)
+	if ((items[0]==0 && cnt < 21) || (items[0]==1 && cnt < 9))
 	{
 		printf("Incorrect amount of items in video_mode parameter: %d\n", cnt);
 		return;
 	}
 
-	if (items[0])
+	if (items[0]>1)
 	{
 		printf("Incorrect video_mode parameter\n");
 		return;
 	}
 
+	printf("Send HDMI parameters:\n");
 	spi_uio_cmd_cont(UIO_SET_VIDEO);
-	for (int i = 1; i <= 8; i++) spi_w(items[i]);
-	for (int i = 9; i < cnt; i++)
+	printf("video: ");
+	for (int i = 1; i <= 8; i++)
 	{
+		spi_w(items[i]);
+		printf("%d, ", items[i]);
+	}
+	printf("\nPLL: ");
+	for (int i = 9; i < 21; i++)
+	{
+		printf("0x%X, ", items[i]);
 		if (i & 1) spi_w(items[i]);
 		else
 		{
@@ -1982,5 +2068,6 @@ void parse_video_mode()
 			spi_w(items[i] >> 16);
 		};
 	}
+	printf("\n");
 	DisableIO();
 }
