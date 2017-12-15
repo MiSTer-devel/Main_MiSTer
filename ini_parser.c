@@ -16,7 +16,6 @@
 //// defines ////
 #define INI_EOT                 4 // End-Of-Transmission
 
-#define INI_BUF_SIZE            512
 #define INI_LINE_SIZE           256
 
 #define INI_SECTION_START       '['
@@ -30,94 +29,41 @@
 #define CHAR_IS_ALPHA_UPPER(c)  (((c) >= 'A') && ((c) <= 'Z'))
 #define CHAR_IS_ALPHA(c)        (CHAR_IS_ALPHA_LOWER(c) || CHAR_IS_ALPHA_UPPER(c))
 #define CHAR_IS_ALPHANUM(c)     (CHAR_IS_ALPHA_LOWER(c) || CHAR_IS_ALPHA_UPPER(c) || CHAR_IS_NUM(c))
-#define CHAR_IS_SPECIAL(c)      (((c) == '[') || ((c) == ']') || ((c) == '-') || ((c) == '_') || ((c) == ',') || ((c) == '='))
+#define CHAR_IS_SPECIAL(c)      (((c) == '[') || ((c) == ']') || ((c) == '-') || ((c) == '_') || ((c) == ',') || ((c) == '.') || ((c) == '='))
 #define CHAR_IS_VALID(c)        (CHAR_IS_ALPHANUM(c) || CHAR_IS_SPECIAL(c))
-#define CHAR_IS_WHITESPACE(c)   (((c) == ' ') || ((c) == '\t') || ((c) == '\r') || ((c) == '\n'))
 #define CHAR_IS_SPACE(c)        (((c) == ' ') || ((c) == '\t'))
 #define CHAR_IS_LINEEND(c)      (((c) == '\n'))
 #define CHAR_IS_COMMENT(c)      (((c) == ';'))
 #define CHAR_IS_QUOTE(c)        (((c) == '"'))
 
-
 fileTYPE ini_file;
-static uint8_t buf[512];
 
 int ini_pt = 0;
-
-//// ini_getch() ////
 char ini_getch()
 {
-	if ((ini_pt & 0x3ff) == 0x200)
-	{
-		// reload buffer
-		FileReadSec(&ini_file, buf);
-	}
-
+	static uint8_t buf[512];
+	if (!(ini_pt & 0x1ff)) FileReadSec(&ini_file, buf);
 	if (ini_pt >= ini_file.size) return 0;
-		else return buf[(ini_pt++) & 0x1ff];
+	return buf[(ini_pt++) & 0x1ff];
 }
 
-//// ini_putch() ////
-int ini_putch(char c)
-{
-	static int ini_pt = 0;
-
-	buf[ini_pt++] = c;
-
-	if ((ini_pt % 0x3ff) == 0x200)
-	{
-		// write buffer
-		ini_pt = 0;
-	}
-	return ini_pt;
-}
-
-
-//// ini_findch() ////
-char ini_findch(char c)
-{
-	char t;
-	do {
-		t = ini_getch();
-	} while ((t != 0) && (t != c));
-	return t;
-}
-
-
-//// ini_getline() ////
 int ini_getline(char* line)
 {
-	char c;
-	char ignore = 0;
-	char literal = 0;
+	char c, ignore = 0, skip = 1;
 	int i = 0;
 
-	while (i<(INI_LINE_SIZE - 1)) {
-		c = ini_getch();
-		if ((!c) || CHAR_IS_LINEEND(c)) break;
-		else if (CHAR_IS_QUOTE(c)) literal ^= 1;
-		else if (CHAR_IS_COMMENT(c) && !ignore && !literal) ignore++;
-		else if (literal) line[i++] = c;
-		else if (CHAR_IS_VALID(c) && !ignore) line[i++] = c;
+	while(c = ini_getch())
+	{
+		if (!CHAR_IS_SPACE(c)) skip = 0;
+		if (i >= (INI_LINE_SIZE - 1) || CHAR_IS_COMMENT(c)) ignore = 1;
+
+		if (CHAR_IS_LINEEND(c)) break;
+		if (CHAR_IS_VALID(c) && !ignore && !skip) line[i++] = c;
 	}
 	line[i] = '\0';
-	return c == 0 ? INI_EOT : literal ? 1 : 0;
+	return c == 0 ? INI_EOT : 0;
 }
 
-
-//// ini_putline() ////
-int ini_putline(char* line)
-{
-	int ini_pt, i = 0;
-
-	while (i<(INI_LINE_SIZE - 1)) {
-		if (!line[i]) break;
-		ini_pt = ini_putch(line[i++]);
-	}
-	return ini_pt;
-}
-
-//// ini_get_section() ////
 int ini_get_section(const ini_cfg_t* cfg, char* buf)
 {
 	int i = 0;
@@ -159,8 +105,6 @@ int ini_get_section(const ini_cfg_t* cfg, char* buf)
 	return INI_SECTION_INVALID_ID;
 }
 
-
-//// ini_get_var() ////
 void* ini_get_var(const ini_cfg_t* cfg, int cur_section, char* buf)
 {
 	int i = 0, j = 0;
@@ -241,8 +185,6 @@ void* ini_get_var(const ini_cfg_t* cfg, int cur_section, char* buf)
 	return (void*)0;
 }
 
-
-//// ini_parse() ////
 void ini_parse(const ini_cfg_t* cfg)
 {
 	char line[INI_LINE_SIZE] = { 0 };
@@ -262,85 +204,27 @@ void ini_parse(const ini_cfg_t* cfg)
 
 	ini_pt = 0;
 
-	// preload buffer
-	FileReadSec(&ini_file, buf);
-
 	// parse ini
 	while (1)
 	{
 		// get line
 		line_status = ini_getline(line);
 		ini_parser_debugf("line(%d): \"%s\".", line_status, line);
-		// if valid line
-		if (line_status != 1)
+
+		if (line[0] == INI_SECTION_START)
 		{
-			if (line[0] == INI_SECTION_START)
-			{
-				// if first char in line is INI_SECTION_START, get section
-				section = ini_get_section(cfg, line);
-			}
-			else
-			{
-				// otherwise this is a variable, get it
-				ini_get_var(cfg, section, line);
-			}
+			// if first char in line is INI_SECTION_START, get section
+			section = ini_get_section(cfg, line);
 		}
+		else
+		{
+			// otherwise this is a variable, get it
+			ini_get_var(cfg, section, line);
+		}
+
 		// if end of file, stop
 		if (line_status == INI_EOT) break;
 	}
 
 	FileClose(&ini_file);
-}
-
-//// ini_save() ////
-void ini_save(const ini_cfg_t* cfg)
-{
-	// Not fully implemented yet.
-
-	/*
-	int section, var, ini_pt;
-	char line[INI_LINE_SIZE] = { 0 };
-
-	// open ini file
-	ini_parser_debugf("Can't open file %s !", cfg->filename);
-	return;
-
-	// loop over sections
-	for (section = 0; section<cfg->nsections; section++) {
-		ini_parser_debugf("writing section %s ...", cfg->sections[section].name);
-		siprintf(line, "[%s]\n", cfg->sections[section].name);
-		ini_pt = ini_putline(line);
-		// loop over vars
-		for (var = 0; var<cfg->nvars; var++) {
-			if (cfg->vars[var].section_id == cfg->sections[section].id) {
-				ini_parser_debugf("writing var %s", cfg->vars[var].name);
-				switch (cfg->vars[var].type) {
-				case UINT8:
-				case UINT16:
-				case UINT32:
-					siprintf(line, "%s=%u\n", cfg->vars[var].name, *(uint32_t*)(cfg->vars[var].var));
-					break;
-				case INT8:
-				case INT16:
-				case INT32:
-					siprintf(line, "%s=%d\n", cfg->vars[var].name, *(int32_t*)(cfg->vars[var].var));
-					break;
-				case FLOAT:
-					siprintf(line, "%s=%f\n", cfg->vars[var].name, *(float*)(cfg->vars[var].var));
-					break;
-				case STRING:
-					siprintf(line, "%s=\"%s\"\n", cfg->vars[var].name, (char*)(cfg->vars[var].var));
-					break;
-				}
-				ini_pt = ini_putline(line);
-			}
-		}
-	}
-
-	// in case the buffer is not written yet, write it now
-	if (ini_pt)
-	{
-		//fwrite(buf, sizeof(char), ini_pt, ini_fp);
-	}
-	*/
 }
