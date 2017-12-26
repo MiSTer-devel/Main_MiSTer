@@ -1342,28 +1342,6 @@ void user_io_poll()
 			DISKLED_OFF;
 		}
 		*/
-
-		if (is_menu_core())
-		{
-			if (!rtc_timer || CheckTimer(rtc_timer))
-			{
-				rtc_timer = GetTimer(1000);
-
-				time_t t = time(NULL);
-				struct tm tm = *localtime(&t);
-
-				char str[64];
-				sprintf(str, "  MiSTer   ");
-				if (tm.tm_year >= 117)
-				{
-					strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%Y.%m.%d %H:%M:%S", &tm);
-				}
-
-				OsdWrite(16, "", 1, 0);
-				OsdWrite(17, str, 1, 0);
-				OsdWrite(18, "", 1, 0);
-			}
-		}
 	}
 
 	if (core_type == CORE_TYPE_ARCHIE) archie_poll();

@@ -28,6 +28,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <inttypes.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <time.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <ifaddrs.h>
 #include "stdio.h"
 #include "string.h"
 #include "file_io.h"
@@ -470,6 +475,35 @@ static uint32_t menu_key_get(void)
 		last_but = but;
 	}
 	return(c);
+}
+
+char* getIP()
+{
+	struct ifaddrs *ifaddr, *ifa;
+	int family, s;
+	static char host[NI_MAXHOST];
+
+	if (getifaddrs(&ifaddr) == -1)
+	{
+		printf("getifaddrs: error\n");
+		return NULL;
+	}
+
+	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
+	{
+		if (ifa->ifa_addr == NULL) continue;
+
+		s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+
+		if ((strcmp(ifa->ifa_name, "eth0") == 0) && (ifa->ifa_addr->sa_family == AF_INET))
+		{
+			freeifaddrs(ifaddr);
+			return host;
+		}
+	}
+
+	freeifaddrs(ifaddr);
+	return NULL;
 }
 
 void HandleUI(void)
@@ -3138,6 +3172,38 @@ void HandleUI(void)
 		/******************************************************************/
 	default:
 		break;
+	}
+
+	if (is_menu_core())
+	{
+		static unsigned long rtc_timer = 0;
+
+		if (!rtc_timer || CheckTimer(rtc_timer))
+		{
+			rtc_timer = GetTimer(1000);
+			char str[64] = { 0 };
+			sprintf(str, "  MiSTer   ");
+
+			if (menustate == MENU_STORAGE)
+			{
+				char *ip = getIP();
+				if (ip) sprintf(str + strlen(str), "IP: %s", ip);
+				else sprintf(str + strlen(str), "     No network");
+			}
+			else
+			{
+				time_t t = time(NULL);
+				struct tm tm = *localtime(&t);
+				if (tm.tm_year >= 117)
+				{
+					strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%Y.%m.%d %H:%M:%S", &tm);
+				}
+			}
+
+			OsdWrite(16, "", 1, 0);
+			OsdWrite(17, str, 1, 0);
+			OsdWrite(18, "", 1, 0);
+		}
 	}
 }
 
