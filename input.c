@@ -1793,9 +1793,11 @@ static void input_cb(struct input_event *ev, int dev)
 					input[dev].has_kbdmap = 1;
 				}
 
+				uint16_t code = ev->code;
+				if (code < 256 && input[dev].kbdmap[code]) code = input[dev].kbdmap[code];
+
 				//  replace MENU key by RGUI to allow using Right Amiga on reduced keyboards
 				// (it also disables the use of Menu for OSD)
-				uint16_t code = ev->code;
 				if (mist_cfg.key_menu_as_rgui && code == 139) code = 126;
 
 				//Keyrah v2: USB\VID_18D8&PID_0002\A600/A1200_MULTIMEDIA_EXTENSION_VERSION
