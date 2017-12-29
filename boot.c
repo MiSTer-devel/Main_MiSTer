@@ -435,6 +435,7 @@ void BootInit()
 
 	//default video config till real config loaded.
 	ConfigVideo(0,0, 0x40);
+	ConfigAudio(0);
 
 	WaitTimer(100);
 

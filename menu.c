@@ -173,6 +173,7 @@ const char *config_cd32pad_msg[] = { "OFF", "ON" };
 char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
+const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -1867,14 +1868,14 @@ void HandleUI(void)
 		OsdWrite(5, s, menusub == 4, 0);
 		OsdWrite(6, "", 0, 0);
 
-		OsdWrite(7, "  Hard disk settings \x16", menusub == 5, 0);
-		OsdWrite(8, "    chipset settings \x16", menusub == 6, 0);
-		OsdWrite(9, "     memory settings \x16", menusub == 7, 0);
-		OsdWrite(10, "      video settings \x16", menusub == 8, 0);
+		OsdWrite(7,  " Hard disk", menusub == 5, 0);
+		OsdWrite(8,  " Chipset", menusub == 6, 0);
+		OsdWrite(9,  " Memory", menusub == 7, 0);
+		OsdWrite(10, " Audio & Video", menusub == 8, 0);
 		OsdWrite(11, "", 0, 0);
 
-		OsdWrite(12, "    save configuration", menusub == 9, 0);
-		OsdWrite(13, "    load configuration", menusub == 10, 0);
+		OsdWrite(12, " Save configuration", menusub == 9, 0);
+		OsdWrite(13, " Load configuration", menusub == 10, 0);
 		OsdWrite(14, "", 0, 0);
 
 		OsdWrite(15, STD_EXIT, menusub == 11, 0);
@@ -2795,7 +2796,7 @@ void HandleUI(void)
 		/* video settings menu                                            */
 		/******************************************************************/
 	case MENU_SETTINGS_VIDEO1:
-		menumask = 0xf;
+		menumask = 0x1f;
 		parentstate = menustate;
 		helptext = 0; // helptexts[HELPTEXT_VIDEO];
 
@@ -2812,9 +2813,11 @@ void HandleUI(void)
 		strcat(s, config_ar_msg[(config.scanlines >> 4) & 1]);
 		OsdWrite(4, s, menusub == 2, 0);
 		OsdWrite(5, "", 0, 0);
-		OsdWrite(6, "", 0, 0);
+		strcpy(s, "  Stereo mix    : ");
+		strcat(s, config_stereo_msg[config.audio & 3]);
+		OsdWrite(6, s, menusub == 3, 0);
 		for (int i = 7; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 3, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 4, 0);
 
 		menustate = MENU_SETTINGS_VIDEO2;
 		break;
@@ -2845,6 +2848,12 @@ void HandleUI(void)
 				ConfigVideo(config.filter.hires, config.filter.lores, config.scanlines);
 			}
 			else if (menusub == 3)
+			{
+				config.audio = (config.audio + 1) & 3;
+				menustate = MENU_SETTINGS_VIDEO1;
+				ConfigAudio(config.audio);
+			}
+			else if (menusub == 4)
 			{
 				menustate = MENU_MAIN1;
 				menusub = 8;

@@ -443,6 +443,7 @@ void ApplyConfiguration(char reloadkickstart)
 	}
 
 	ConfigVideo(config.filter.hires, config.filter.lores, config.scanlines);
+	ConfigAudio(config.audio);
 	ConfigAutofire(config.autofire, 0xC);
 }
 

@@ -40,6 +40,7 @@
 #define OSD_CMD_FLP       0x44
 #define OSD_CMD_HDD       0x54
 #define OSD_CMD_JOY       0x64
+#define OSD_CMD_AUD       0x74
 #define OSD_CMD_OSD_WR    0x0c
 #define OSD_CMD_WR        0x1c
 #define OSD_CMD_VERSION   0x88
@@ -78,6 +79,7 @@ void OsdReconfig(); // Reset to Chameleon core.
 void MM1_ConfigFilter(unsigned char lores, unsigned char hires);
 void MM1_ConfigScanlines(unsigned char scanlines);
 void ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines);
+void ConfigAudio(unsigned char audio);
 void ConfigMemory(unsigned char memory);
 void ConfigCPU(unsigned char cpu);
 void ConfigChipset(unsigned char chipset);

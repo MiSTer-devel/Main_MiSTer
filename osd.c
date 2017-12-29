@@ -506,6 +506,11 @@ void ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlin
 	spi_osd_cmd16(OSD_CMD_VID, (((scanlines >> 6) & 0x03) << 10) | (((scanlines >> 4) & 0x03) << 8) | (((scanlines >> 2) & 0x03) << 6) | ((hires & 0x03) << 4) | ((lores & 0x03) << 2) | (scanlines & 0x03));
 }
 
+void ConfigAudio(unsigned char audio)
+{
+	spi_osd_cmd8(OSD_CMD_AUD, audio);
+}
+
 void ConfigMemory(unsigned char memory)
 {
 	spi_osd_cmd8(OSD_CMD_MEM, memory);

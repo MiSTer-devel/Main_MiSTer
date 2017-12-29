@@ -31,7 +31,7 @@ typedef struct
 	unsigned char disable_ar3;
 	unsigned char enable_ide;
 	unsigned char scanlines;
-	unsigned char pad1;
+	unsigned char audio;
 	hardfileTYPE  hardfile[2];
 	unsigned char cpu;
 	unsigned char autofire;
