@@ -691,7 +691,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					if ((get_key_mod() & (LGUI | RGUI)) || !has_menu()) //Alt+Menu
+					if (((get_key_mod() & (LGUI | RGUI)) && !is_x86_core()) || !has_menu()) //Alt+Menu
 					{
 						menustate = MENU_8BIT_SYSTEM1;
 					}
