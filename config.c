@@ -70,7 +70,7 @@ char UploadKickstart(char *name)
 	int keysize = 0;
 
 	BootPrint("Checking for Amiga Forever key file:");
-	if (FileOpen(&file, "ROM.KEY")) {
+	if (FileOpen(&file, "Amiga/ROM.KEY") || FileOpen(&file, "ROM.KEY")) {
 		keysize = file.size;
 		if (file.size<sizeof(romkey))
 		{
