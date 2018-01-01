@@ -447,7 +447,7 @@ void BootInit()
 	BootCustomInit();
 
 	WaitTimer(500);
-	char rtl_ver[45];
+	char rtl_ver[128];
 	siprintf(rtl_ver, "MINIMIG-AGA%s v%d.%d.%d by Rok Krajnc. MiSTer port by Sorgelig.", ver_beta ? " BETA" : "", ver_major, ver_minor, ver_minion);
 	BootPrintEx(rtl_ver);
 	BootPrintEx(" ");
