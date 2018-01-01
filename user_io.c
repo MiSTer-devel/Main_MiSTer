@@ -371,6 +371,10 @@ void user_io_detect_core_type()
 
 		// try to load config
 		name = user_io_create_config_name();
+		mist_ini_parse();
+		parse_video_mode();
+		user_io_send_buttons(1);
+
 		if(strlen(name) > 0)
 		{
 			OsdCoreNameSet(user_io_get_core_name());
