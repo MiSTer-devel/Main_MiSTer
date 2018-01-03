@@ -58,10 +58,7 @@
 #define UIO_GET_VRES    0x23  // get video resolution
 #define UIO_TIMESTAMP   0x24  // transmit seconds since Unix epoch
 
-// codes as used by 8bit (atari 800, zx81) via SS2
-#define UIO_GET_STATUS  0x50
-#define UIO_SECTOR_SND  0x51
-#define UIO_SECTOR_RCV  0x52
+// codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
 #define UIO_FILE_TX_DAT 0x54
 #define UIO_FILE_INDEX  0x55
