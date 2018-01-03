@@ -475,7 +475,7 @@ void ikbd_poll(void) {
 					if (ikbd.mouse.but & (2 >> i)) state |= 0x80;
 
 					if (state != ikbd.joy[i].prev) {
-						//	    iprintf("JOY%d: %x\n", i, state);
+						// printf("JOY%d: %x\n", i, state);
 						enqueue(0xfe + i);
 						enqueue(state);
 						ikbd.joy[i].prev = state;
@@ -503,7 +503,7 @@ void ikbd_poll(void) {
 						else if (ikbd.mouse.y >  127) y = 127;
 						else                         y = ikbd.mouse.y;
 
-						//	    iprintf("RMOUSE: %x %x %x\n", b, x&0xff, y&0xff);
+						// printf("RMOUSE: %x %x %x\n", b, x&0xff, y&0xff);
 						enqueue(0xf8 | b);
 						enqueue(x & 0xff);
 						enqueue(y & 0xff);

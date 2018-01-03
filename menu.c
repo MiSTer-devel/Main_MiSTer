@@ -273,7 +273,7 @@ static void SelectFile(char* pFileExt, unsigned char Options, unsigned char Menu
 {
 	// this function displays file selection menu
 
-	iprintf("%s - %s\n", pFileExt, fs_pFileExt);
+	printf("%s - %s\n", pFileExt, fs_pFileExt);
 	AdjustDirectory(SelectedPath);
 
 	if (strncmp(pFileExt, fs_pFileExt, 12) != 0 || !strlen(SelectedPath)) // check desired file extension
@@ -296,7 +296,7 @@ static void SelectFile(char* pFileExt, unsigned char Options, unsigned char Menu
 		}
 	}
 
-	iprintf("pFileExt = %3s\n", pFileExt);
+	printf("pFileExt = %3s\n", pFileExt);
 	strcpy(fs_pFileExt, pFileExt);
 	fs_ExtLen = strlen(fs_pFileExt);
 	//  fs_pFileExt = pFileExt;
@@ -387,7 +387,7 @@ unsigned long getStatusMask(char *opt) {
 
 	if (idx2>idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
 
-	//iprintf("grtStatusMask %d %d %x\n", idx1, idx2, x);
+	//printf("grtStatusMask %d %d %x\n", idx1, idx2, x);
 
 	return x << idx1;
 }
@@ -509,6 +509,20 @@ char* getIP()
 
 void HandleUI(void)
 {
+	switch (user_io_core_type())
+	{
+	case CORE_TYPE_MIST:
+	case CORE_TYPE_MINIMIG2:
+	case CORE_TYPE_8BIT:
+	case CORE_TYPE_ARCHIE:
+		break;
+
+	default:
+		// No UI in unknown cores.
+		return;
+	}
+
+
 	char *p;
 	char s[40];
 	unsigned char i, m, up, down, select, menu, right, left, plus, minus;
@@ -978,7 +992,7 @@ void HandleUI(void)
 		parentstate = MENU_8BIT_MAIN1;
 
 		// set helptext with core display on top of basic info
-		siprintf(helptext_custom, HELPTEXT_SPACER);
+		sprintf(helptext_custom, HELPTEXT_SPACER);
 		strcat(helptext_custom, OsdCoreName());
 		strcat(helptext_custom, helptexts[HELPTEXT_MAIN]);
 		helptext = helptext_custom;
@@ -1086,13 +1100,13 @@ void HandleUI(void)
 		break;
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
-		iprintf("File selected: %s\n", SelectedPath);
+		printf("File selected: %s\n", SelectedPath);
 		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
 		menustate = MENU_NONE1;
 		break;
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
-		iprintf("Image selected: %s\n", SelectedPath);
+		printf("Image selected: %s\n", SelectedPath);
 		if (is_x86_core())
 		{
 			x86_set_image(drive_num, SelectedPath);
@@ -1182,7 +1196,7 @@ void HandleUI(void)
 						// Save settings
 						char *filename = user_io_create_config_name();
 						unsigned long status = user_io_8bit_set_status(0, 0);
-						iprintf("Saving config to %s\n", filename);
+						printf("Saving config to %s\n", filename);
 						FileSaveConfig(filename, &status, 4);
 						if (is_x86_core()) x86_config_save();
 						menustate = MENU_8BIT_MAIN1;
@@ -1503,7 +1517,7 @@ void HandleUI(void)
 			}
 			else if ((menusub == 4) || (!tos_get_direct_hdd() && (menusub == 5))) {
 				char disk_idx = menusub - (tos_get_direct_hdd() ? 1 : 2);
-				iprintf("Select image for disk %d\n", disk_idx);
+				printf("Select image for disk %d\n", disk_idx);
 
 				if (tos_disk_is_inserted(disk_idx)) {
 					tos_insert_disk(disk_idx, NULL);
@@ -1526,7 +1540,7 @@ void HandleUI(void)
 			tos_insert_disk(menusub, SelectedPath);
 		else {
 			char disk_idx = menusub - (tos_get_direct_hdd() ? 1 : 2);
-			iprintf("Insert image for disk %d\n", disk_idx);
+			printf("Insert image for disk %d\n", disk_idx);
 			tos_insert_disk(disk_idx, SelectedPath);
 		}
 		menustate = MENU_MIST_STORAGE1;
@@ -1746,10 +1760,10 @@ void HandleUI(void)
 
 		OsdWrite(3, "", 0, 0);
 
-		siprintf(s, " Horizontal:  %d", tos_get_video_adjust(0));
+		sprintf(s, " Horizontal:  %d", tos_get_video_adjust(0));
 		OsdWrite(4, s, menusub == 2, 0);
 
-		siprintf(s, " Vertical:    %d", tos_get_video_adjust(1));
+		sprintf(s, " Vertical:    %d", tos_get_video_adjust(1));
 		OsdWrite(5, s, menusub == 3, 0);
 
 		OsdWrite(6, "", 0, 0);
@@ -1864,7 +1878,7 @@ void HandleUI(void)
 				OsdWrite(i+1, s, menusub == i, (i>drives) || (i>config.floppy.drives));
 			}
 		}
-		siprintf(s, " Floppy disk turbo : %s", config.floppy.speed ? "on" : "off");
+		sprintf(s, " Floppy disk turbo : %s", config.floppy.speed ? "on" : "off");
 		OsdWrite(5, s, menusub == 4, 0);
 		OsdWrite(6, "", 0, 0);
 
@@ -2170,7 +2184,7 @@ void HandleUI(void)
 			{
 				char *filename = user_io_create_config_name();
 				unsigned long status = user_io_8bit_set_status(0, 0xffffffff);
-				iprintf("Saving config to %s\n", filename);
+				printf("Saving config to %s\n", filename);
 				FileSaveConfig(filename, &status, 4);
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
@@ -2953,7 +2967,7 @@ void HandleUI(void)
 
 		OsdSetTitle(is_menu_core() ? "Settings" : "FW & Core", 0);
 		//OsdWrite(0, "", 0, 0);
-		siprintf(s, "   ARM  s/w ver. %s", version + 5);
+		sprintf(s, "   ARM  s/w ver. %s", version + 5);
 		OsdWrite(0, "", 0, 0);
 		OsdWrite(1, s, 0, 0);
 
@@ -3480,7 +3494,7 @@ static void set_text(const char *message, unsigned char code)
 
 	if (code && (l <= 7))
 	{
-		siprintf(s, " Code: #%d", code);
+		sprintf(s, " Code: #%d", code);
 		OsdWrite(l++, s, 0, 0);
 	}
 

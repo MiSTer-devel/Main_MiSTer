@@ -23,6 +23,9 @@
 #include "x86.h"
 #include "tzx2wav.h"
 #include "DiskImage.h"
+#include "boot.h"
+#include "fdd.h"
+#include "hdd.h"
 
 #define BREAK  0x8000
 
@@ -63,12 +66,6 @@ static char osd_is_visible = false;
 char user_io_osd_is_visible()
 {
 	return osd_is_visible;
-}
-
-void user_io_init()
-{
-	memset(sd_image, 0, sizeof(sd_image));
-	ikbd_init();
 }
 
 unsigned char user_io_core_type()
@@ -117,9 +114,6 @@ char *user_io_get_core_name_ex()
 	{
 	case CORE_TYPE_MINIMIG2:
 		return "MINIMIG";
-
-	case CORE_TYPE_PACE:
-		return "PACE";
 
 	case CORE_TYPE_MIST:
 		return "ST";
@@ -171,7 +165,7 @@ static void user_io_read_core_name()
 		if (p && p[0]) strcpy(core_name, p);
 	}
 
-	iprintf("Core name is \"%s\"\n", core_name);
+	printf("Core name is \"%s\"\n", core_name);
 }
 
 static void set_kbd_led(unsigned char led, bool on)
@@ -301,12 +295,16 @@ void send_rtc(int type)
 	}
 }
 
-void user_io_detect_core_type()
+void user_io_init()
 {
 	char *name;
 	char mainpath[32];
 	core_name[0] = 0;
 	disable_osd = 0;
+
+	memset(sd_image, 0, sizeof(sd_image));
+	ikbd_init();
+	tos_config_init();
 
 	core_type = (fpga_core_id() & 0xFF);
 	fio_size = fpga_get_fio_size();
@@ -314,7 +312,6 @@ void user_io_detect_core_type()
 
 	if ((core_type != CORE_TYPE_DUMB) &&
 		(core_type != CORE_TYPE_MINIMIG2) &&
-		(core_type != CORE_TYPE_PACE) &&
 		(core_type != CORE_TYPE_MIST) &&
 		(core_type != CORE_TYPE_ARCHIE) &&
 		(core_type != CORE_TYPE_8BIT))
@@ -327,34 +324,8 @@ void user_io_detect_core_type()
 	spi_init(core_type != CORE_TYPE_UNKNOWN);
 	OsdSetSize(8);
 
-	switch (core_type)
+	if (core_type == CORE_TYPE_8BIT)
 	{
-	case CORE_TYPE_UNKNOWN:
-		iprintf("Unable to identify core (%x)!\n", core_type);
-		break;
-
-	case CORE_TYPE_DUMB:
-		puts("Identified core without user interface");
-		break;
-
-	case CORE_TYPE_MINIMIG2:
-		puts("Identified Minimig V2 core");
-		break;
-
-	case CORE_TYPE_PACE:
-		puts("Identified PACE core");
-		break;
-
-	case CORE_TYPE_MIST:
-		puts("Identified MiST core");
-		break;
-
-	case CORE_TYPE_ARCHIE:
-		puts("Identified Archimedes core");
-		archie_init();
-		break;
-
-	case CORE_TYPE_8BIT:
 		puts("Identified 8BIT core");
 
 		// forward SD card config to core in case it uses the local
@@ -368,22 +339,49 @@ void user_io_detect_core_type()
 
 		// send a reset
 		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+	}
 
+	mist_ini_parse();
+	parse_video_mode();
+	user_io_send_buttons(1);
+
+	switch (core_type)
+	{
+	case CORE_TYPE_UNKNOWN:
+		printf("Unable to identify core (%x)!\n", core_type);
+		break;
+
+	case CORE_TYPE_DUMB:
+		puts("Identified core without user interface");
+		break;
+
+	case CORE_TYPE_MINIMIG2:
+		puts("Identified Minimig V2 core");
+		BootInit();
+		break;
+
+	case CORE_TYPE_MIST:
+		puts("Identified MiST core");
+		tos_upload(NULL);
+		break;
+
+	case CORE_TYPE_ARCHIE:
+		puts("Identified Archimedes core");
+		archie_init();
+		break;
+
+	case CORE_TYPE_8BIT:
 		// try to load config
 		name = user_io_create_config_name();
-		mist_ini_parse();
-		parse_video_mode();
-		user_io_send_buttons(1);
-
 		if(strlen(name) > 0)
 		{
 			OsdCoreNameSet(user_io_get_core_name());
 
-			iprintf("Loading config %s\n", name);
+			printf("Loading config %s\n", name);
 			unsigned long status = 0;
 			if (FileLoadConfig(name, &status, 4))
 			{
-				iprintf("Found config\n");
+				printf("Found config\n");
 				user_io_8bit_set_status(status, 0xffffffff);
 			}
 			parse_config();
@@ -741,7 +739,7 @@ int user_io_file_tx(char* name, unsigned char index)
 	unsigned long bytes2send = f.size;
 
 	/* transmit the entire file using one transfer */
-	iprintf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index&0x3F, index>>6);
+	printf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index&0x3F, index>>6);
 
 	// set index byte (0=bios rom, 1-n=OSD entry index)
 	user_io_set_index(index);
@@ -773,7 +771,7 @@ int user_io_file_tx(char* name, unsigned char index)
 	{
 		while (bytes2send)
 		{
-			iprintf(".");
+			printf(".");
 
 			uint16_t chunk = (bytes2send > 512) ? 512 : bytes2send;
 
@@ -820,7 +818,7 @@ char *user_io_8bit_get_string(char index)
 		return NULL;
 	}
 
-	//  iprintf("String: ");
+	//  printf("String: ");
 	while ((i != 0) && (i != 0xff) && (j<sizeof(buffer)))
 	{
 		if (i == ';') {
@@ -832,12 +830,12 @@ char *user_io_8bit_get_string(char index)
 				buffer[j++] = i;
 		}
 
-		//    iprintf("%c", i);
+		//  printf("%c", i);
 		i = spi_in();
 	}
 
 	DisableIO();
-	//  iprintf("\n");
+	//  printf("\n");
 
 	// if this was the last string in the config string list, then it still
 	// needs to be terminated
@@ -939,7 +937,6 @@ void user_io_rtc_reset()
 void user_io_poll()
 {
 	if ((core_type != CORE_TYPE_MINIMIG2) &&
-		(core_type != CORE_TYPE_PACE) &&
 		(core_type != CORE_TYPE_MIST) &&
 		(core_type != CORE_TYPE_ARCHIE) &&
 		(core_type != CORE_TYPE_8BIT))
@@ -969,6 +966,19 @@ void user_io_poll()
 
 	if (core_type == CORE_TYPE_MINIMIG2)
 	{
+		//HDD & FDD query
+		unsigned char  c1, c2;
+		EnableFpga();
+		uint16_t tmp = spi_w(0);
+		c1 = (uint8_t)(tmp >> 8); // cmd request and drive number
+		c2 = (uint8_t)tmp;      // track number
+		spi_w(0);
+		spi_w(0);
+		DisableFpga();
+		HandleFDD(c1, c2);
+		HandleHDD(c1, c2);
+		UpdateDriveStatus();
+
 		kbd_fifo_poll();
 
 		// frequently check mouse for events
@@ -1058,18 +1068,18 @@ void user_io_poll()
 		// status byte is 1000000A with A=1 if data is available
 		if ((f = spi_in(0)) == 0x81)
 		{
-			iprintf("\033[1;36m");
+			printf("\033[1;36m");
 
 			// character 0xff is returned if FPGA isn't configured
 			while ((f == 0x81) && (c != 0xff) && (c != 0x00) && (p < 8))
 			{
 				c = spi_in();
-				if (c != 0xff && c != 0x00) iprintf("%c", c);
+				if (c != 0xff && c != 0x00) printf("%c", c);
 
 				f = spi_in();
 				p++;
 			}
-			iprintf("\033[0m");
+			printf("\033[0m");
 		}
 		DisableIO();
 		*/
@@ -1094,7 +1104,7 @@ void user_io_poll()
 				// check if core requests configuration
 				if (c & 0x08)
 				{
-					iprintf("core requests SD config\n");
+					printf("core requests SD config\n");
 					user_io_sd_set_config();
 				}
 
@@ -1787,7 +1797,7 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 
 void user_io_osd_key_enable(char on)
 {
-	iprintf("OSD is now %s\n", on ? "visible" : "invisible");
+	printf("OSD is now %s\n", on ? "visible" : "invisible");
 	osd_is_visible = on;
 }
 

@@ -27,9 +27,9 @@ fileTYPE floppy[MAX_FLOPPY] = { 0 };
 #define ARCHIE_FDC_TX_DATA     0x56
 #define ARCHIE_FDC_SET_STATUS  0x57
 
-#define archie_debugf(a, ...) iprintf("\033[1;31mARCHIE: " a "\033[0m\n", ##__VA_ARGS__)
+#define archie_debugf(a, ...) printf("\033[1;31mARCHIE: " a "\033[0m\n", ##__VA_ARGS__)
 // #define archie_debugf(a, ...)
-#define archie_x_debugf(a, ...) iprintf("\033[1;32mARCHIE: " a "\033[0m\n", ##__VA_ARGS__)
+#define archie_x_debugf(a, ...) printf("\033[1;32mARCHIE: " a "\033[0m\n", ##__VA_ARGS__)
 
 enum state {
 	STATE_HRST, STATE_RAK1, STATE_RAK2, STATE_IDLE,
@@ -125,11 +125,11 @@ void archie_send_file(unsigned char id, char *name)
 
 	unsigned long time = GetTimer(0);
 
-	iprintf("[");
+	printf("[");
 
 	unsigned short i, blocks = file.size / 512;
 	for (i = 0; i<blocks; i++) {
-		if (!(i & 127)) iprintf("*");
+		if (!(i & 127)) printf("*");
 
 		DISKLED_ON;
 		FileRead(&file, sector_buffer);
@@ -141,12 +141,11 @@ void archie_send_file(unsigned char id, char *name)
 		DisableFpga();
 
 		// still bytes to send? read next sector
-		if (i != blocks - 1)
-			FileNextSector(&file);
+		if (i != blocks - 1) FileNextSector(&file);
 	}
 
 	FileClose(&file);
-	iprintf("]\n");
+	printf("]\n");
 
 	time = GetTimer(0) - time;
 	archie_debugf("Uploaded in %lu ms", time >> 20);

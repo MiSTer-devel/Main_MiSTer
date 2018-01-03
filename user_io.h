@@ -125,7 +125,6 @@
 // core type value should be unlikely to be returned by broken cores
 #define CORE_TYPE_UNKNOWN   0x55
 #define CORE_TYPE_DUMB      0xa0   // core without any io controller interaction
-#define CORE_TYPE_PACE      0xa2   // core from pacedev.net (joystick only)
 #define CORE_TYPE_MIST      0xa3   // mist atari st core   
 #define CORE_TYPE_8BIT      0xa4   // atari 800/c64 like core
 #define CORE_TYPE_MINIMIG2  0xa5   // new Minimig with AGA
@@ -159,7 +158,6 @@ typedef struct {
 } __attribute__((packed)) serial_status_t;
 
 void user_io_init();
-void user_io_detect_core_type();
 unsigned char user_io_core_type();
 char is_minimig();
 char is_archie();

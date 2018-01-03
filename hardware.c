@@ -36,14 +36,14 @@ void hexdump(void *data, uint16_t size, uint16_t offset)
 	if (!size) return;
 
 	while (size>0) {
-		iprintf("%04x: ", n + offset);
+		printf("%04x: ", n + offset);
 
 		b2c = (size>16) ? 16 : size;
-		for (i = 0; i<b2c; i++)      iprintf("%02x ", 0xff & ptr[i]);
-		iprintf("  ");
-		for (i = 0; i<(16 - b2c); i++) iprintf("   ");
-		for (i = 0; i<b2c; i++)      iprintf("%c", isprint(ptr[i]) ? ptr[i] : '.');
-		iprintf("\n");
+		for (i = 0; i<b2c; i++) printf("%02x ", 0xff & ptr[i]);
+		printf("  ");
+		for (i = 0; i<(16 - b2c); i++) printf("   ");
+		for (i = 0; i<b2c; i++) printf("%c", isprint(ptr[i]) ? ptr[i] : '.');
+		printf("\n");
 		ptr += b2c;
 		size -= b2c;
 		n += b2c;

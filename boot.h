@@ -39,5 +39,7 @@ void BootInit();
 void BootPrintEx(char * str);
 void BootHome();
 
+#define BootPrint(text) printf("%s\n", text)
+
 #endif // __BOOT_H__
 

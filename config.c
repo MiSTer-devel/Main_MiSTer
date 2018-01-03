@@ -24,8 +24,8 @@ void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, in
 	static uint8_t buf[512];
 	int i, j;
 	unsigned int keyidx = 0;
-	iprintf("File size: %dkB\n", size >> 1);
-	iprintf("[");
+	printf("File size: %dkB\n", size >> 1);
+	printf("[");
 	if (keysize)
 	{
 		// read header
@@ -33,7 +33,7 @@ void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, in
 	}
 	for (i = 0; i<size; i++)
 	{
-		if (!(i & 31)) iprintf("*");
+		if (!(i & 31)) printf("*");
 		FileReadAdv(file, buf, 512);
 		if (keysize)
 		{
@@ -60,7 +60,7 @@ void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, in
 		}
 		DisableOsd();
 	}
-	iprintf("]\n");
+	printf("]\n");
 }
 
 //// UploadKickstart() ////
@@ -302,7 +302,7 @@ unsigned char LoadConfiguration(int num)
 
 	// print config to boot screen
 	char cfg_str[256];
-	siprintf(cfg_str, "CPU: %s, Chipset: %s, ChipRAM: %s, FastRAM: %s, SlowRAM: %s",
+	sprintf(cfg_str, "CPU: %s, Chipset: %s, ChipRAM: %s, FastRAM: %s, SlowRAM: %s",
 			config_cpu_msg[config.cpu & 0x03], config_chipset_msg[(config.chipset >> 2) & 7],
 			config_memory_chip_msg[(config.memory >> 0) & 0x03], config_memory_fast_msg[(config.memory >> 4) & 0x03], config_memory_slow_msg[(config.memory >> 2) & 0x03]
 			);
@@ -380,7 +380,7 @@ void ApplyConfiguration(char reloadkickstart)
 		BootPrint("*           when using large hardfiles.           *");  // AMR
 		BootPrint("***************************************************");
 	}
-	iprintf("Bootloading is complete.\n");
+	printf("Bootloading is complete.\n");
 #endif
 
 	printf("\nExiting bootloader...\n");

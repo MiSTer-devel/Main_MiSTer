@@ -590,9 +590,12 @@ void ScrollReset()
 
 /* core currently loaded */
 static char lastcorename[261 + 10] = "CORE";
-void OsdCoreNameSet(const char* str) {
-	siprintf(lastcorename, "%s", str);
+void OsdCoreNameSet(const char* str)
+{
+	sprintf(lastcorename, "%s", str);
 }
-char* OsdCoreName() {
+
+char* OsdCoreName()
+{
 	return lastcorename;
 }

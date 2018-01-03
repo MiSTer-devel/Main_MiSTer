@@ -81,7 +81,7 @@ char tos_get_video_adjust(char axis) {
 }
 
 static void mist_memory_set_address(unsigned long a, unsigned char s, char rw) {
-	//  iprintf("set addr = %x, %d, %d\n", a, s, rw);
+	//  printf("set addr = %x, %d, %d\n", a, s, rw);
 
 	a |= rw ? 0x1000000 : 0;
 	a >>= 1;
@@ -291,7 +291,7 @@ static void handle_acsi(unsigned char *buffer) {
 						buffer[14];
 
 					length = 256 * buffer[16] + buffer[17];
-					//	  iprintf("READ(10) %d, %d\n", lba, length);
+					// printf("READ(10) %d, %d\n", lba, length);
 				}
 
 				if (lba + length <= blocks) {
@@ -332,7 +332,7 @@ static void handle_acsi(unsigned char *buffer) {
 
 					length = 256 * buffer[16] + buffer[17];
 
-					//	  iprintf("WRITE(10) %d, %d\n", lba, length);
+					// printf("WRITE(10) %d, %d\n", lba, length);
 				}
 
 				if (lba + length <= blocks) {
@@ -491,21 +491,21 @@ static void handle_fdc(unsigned char *buffer) {
 		else if ((fdc_cmd & 0xc0) == 0xc0) {
 			char msg[32];
 
-			if ((fdc_cmd & 0xe0) == 0xc0) iprintf("READ ADDRESS\n");
+			if ((fdc_cmd & 0xe0) == 0xc0) printf("READ ADDRESS\n");
 
 			if ((fdc_cmd & 0xf0) == 0xe0) {
-				iprintf("READ TRACK %d SIDE %d\n", fdc_track, drv_side);
-				siprintf(msg, "RD TRK %d S %d", fdc_track, drv_side);
+				printf("READ TRACK %d SIDE %d\n", fdc_track, drv_side);
+				sprintf(msg, "RD TRK %d S %d", fdc_track, drv_side);
 				InfoMessage(msg);
 			}
 
 			if ((fdc_cmd & 0xf0) == 0xf0) {
-				iprintf("WRITE TRACK %d SIDE %d\n", fdc_track, drv_side);
-				siprintf(msg, "WR TRK %d S %d", fdc_track, drv_side);
+				printf("WRITE TRACK %d SIDE %d\n", fdc_track, drv_side);
+				sprintf(msg, "WR TRK %d S %d", fdc_track, drv_side);
 				InfoMessage(msg);
 			}
 
-			iprintf("scnt = %d\n", scnt);
+			printf("scnt = %d\n", scnt);
 
 			dma_ack(0x00);
 		}
@@ -792,7 +792,7 @@ void tos_upload(char *name)
 							ok = j;
 
 				if (ok >= 0) {
-					iprintf("Failed in block %d/%x (%x != %x)\n", i, ok, 0xff & buffer[ok], 0xff & b2[ok]);
+					printf("Failed in block %d/%x (%x != %x)\n", i, ok, 0xff & buffer[ok], 0xff & b2[ok]);
 
 					hexdump(buffer, 512, 0);
 					puts("");
@@ -810,11 +810,11 @@ void tos_upload(char *name)
 								ok = j;
 
 					if (ok >= 0) {
-						iprintf("Re-read failed in block %d/%x (%x != %x)\n", i, ok, 0xff & buffer[ok], 0xff & b2[ok]);
+						printf("Re-read failed in block %d/%x (%x != %x)\n", i, ok, 0xff & buffer[ok], 0xff & b2[ok]);
 						hexdump(buffer, 512, 0);
 					}
 					else
-						iprintf("Re-read ok!\n");
+						printf("Re-read ok!\n");
 
 					for (;;);
 				}
@@ -822,7 +822,7 @@ void tos_upload(char *name)
 				if (i != blocks - 1)
 					FileNextSector(&file);
 			}
-			iprintf("Verify: %s\n", ok ? "ok" : "failed");
+			printf("Verify: %s\n", ok ? "ok" : "failed");
 		}
 #endif
 
@@ -924,7 +924,7 @@ void tos_poll() {
 }
 
 void tos_update_sysctrl(unsigned long n) {
-	//  iprintf(">>>>>>>>>>>> set sys %x, eth is %s\n", n, (n&TOS_CONTROL_ETHERNET)?"on":"off");
+	//  printf(">>>>>>>>>>>> set sys %x, eth is %s\n", n, (n&TOS_CONTROL_ETHERNET)?"on":"off");
 
 	// some of the usb drivers also call this without knowing which
 	// core is running. So make sure this only happens if the Atari ST (MIST)

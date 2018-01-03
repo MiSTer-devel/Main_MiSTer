@@ -448,7 +448,7 @@ void BootInit()
 
 	WaitTimer(500);
 	char rtl_ver[128];
-	siprintf(rtl_ver, "MINIMIG-AGA%s v%d.%d.%d by Rok Krajnc. MiSTer port by Sorgelig.", ver_beta ? " BETA" : "", ver_major, ver_minor, ver_minion);
+	sprintf(rtl_ver, "MINIMIG-AGA%s v%d.%d.%d by Rok Krajnc. MiSTer port by Sorgelig.", ver_beta ? " BETA" : "", ver_major, ver_minor, ver_minion);
 	BootPrintEx(rtl_ver);
 	BootPrintEx(" ");
 	BootPrintEx("Original Minimig by Dennis van Weeren");
@@ -472,8 +472,8 @@ void BootPrintEx(char * str)
 	unsigned char i, j;
 	unsigned char len;
 
-	iprintf(str);
-	iprintf("\n");
+	printf(str);
+	printf("\n");
 
 	len = strlen(str);
 	len = (len>80) ? 80 : len;

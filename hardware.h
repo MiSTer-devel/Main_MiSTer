@@ -4,10 +4,6 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-#define iprintf(...)  printf(__VA_ARGS__) 
-#define siprintf(...) sprintf(__VA_ARGS__) 
-#define BootPrint(text) iprintf("%s\n", text)
-
 unsigned long GetTimer(unsigned long offset);
 unsigned long CheckTimer(unsigned long t);
 void WaitTimer(unsigned long time);
