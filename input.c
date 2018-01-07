@@ -1639,7 +1639,7 @@ static void input_cb(struct input_event *ev, int dev)
 					if (!mapping_key) mapping_key = ev->code;
 					else
 					{
-						input[dev].kbdmap[mapping_key] = ev->code;
+						input[mapping_dev].kbdmap[mapping_key] = ev->code;
 						mapping_key = 0;
 					}
 				}
