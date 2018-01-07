@@ -462,13 +462,11 @@ void OSD_PrintText(unsigned char line, char *text, unsigned long start, unsigned
 void OsdClear(void)
 {
 	// select buffer to write to
-	if (!is_minimig())
-		spi_osd_cmd_cont(MM1_OSDCMDWRITE | 0x18);
-	else
-		spi_osd_cmd32_cont(OSD_CMD_OSD_WR, 0x18);
+	if (!is_minimig()) spi_osd_cmd_cont(MM1_OSDCMDWRITE);
+	else spi_osd_cmd32_cont(OSD_CMD_OSD_WR, 0);
 
 	// clear buffer
-	spi_n(0x00, OSDLINELEN * OSDNLINE);
+	spi_n(0x00, OSDLINELEN * OsdGetSize());
 
 	// deselect OSD SPI device
 	DisableOsd();
