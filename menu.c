@@ -478,9 +478,10 @@ static uint32_t menu_key_get(void)
 	return(c);
 }
 
-char* getIP()
+static char netType;
+char* getNet()
 {
-	struct ifaddrs *ifaddr, *ifa;
+	struct ifaddrs *ifaddr, *ifa, *ifae = 0, *ifaw = 0;
 	int family, s;
 	static char host[NI_MAXHOST];
 
@@ -494,17 +495,32 @@ char* getIP()
 	{
 		if (ifa->ifa_addr == NULL) continue;
 
-		s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+		if ((strcmp(ifa->ifa_name, "eth0") == 0)     && (ifa->ifa_addr->sa_family == AF_INET)) ifae = ifa;
+		if ((strncmp(ifa->ifa_name, "wlan", 4) == 0) && (ifa->ifa_addr->sa_family == AF_INET)) ifaw = ifa;
+	}
 
-		if ((strcmp(ifa->ifa_name, "eth0") == 0) && (ifa->ifa_addr->sa_family == AF_INET))
-		{
-			freeifaddrs(ifaddr);
-			return host;
-		}
+	ifa = 0;
+	netType = 0;
+	if (ifaw)
+	{
+		ifa = ifaw;
+		netType = 2;
+	}
+
+	if (ifae)
+	{
+		ifa = ifae;
+		netType = 1;
+	}
+
+	if (ifa)
+	{
+		strcpy(host, "IP: ");
+		getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host+strlen(host), NI_MAXHOST-strlen(host), NULL, 0, NI_NUMERICHOST);
 	}
 
 	freeifaddrs(ifaddr);
-	return NULL;
+	return ifa ? host : 0;
 }
 
 void HandleUI(void)
@@ -3206,12 +3222,11 @@ void HandleUI(void)
 			rtc_timer = GetTimer(1000);
 			char str[64] = { 0 };
 			sprintf(str, "  MiSTer   ");
+			char *net = getNet();
 
 			if (menustate == MENU_STORAGE)
 			{
-				char *ip = getIP();
-				if (ip) sprintf(str + strlen(str), "IP: %s", ip);
-				else sprintf(str + strlen(str), "     No network");
+				strcat(str, net ? net : "    no network");
 			}
 			else
 			{
@@ -3222,6 +3237,8 @@ void HandleUI(void)
 					strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%Y.%m.%d %H:%M:%S", &tm);
 				}
 			}
+
+			if (net) str[9] = 0x1b + netType;
 
 			OsdWrite(16, "", 1, 0);
 			OsdWrite(17, str, 1, 0);

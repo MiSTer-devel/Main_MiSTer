@@ -44,7 +44,7 @@
 #if 1
 // ikbd debug output in red
 #define IKBD_DEBUG
-#define ikbd_debugf(a, ...) printf("\033[1;31mIKBD: " a "\033[0m\n", ##__VA_ARGS__)
+#define ikbd_debugf(a, ...) printf("\033[1;32mIKBD: " a "\033[0m\n", ##__VA_ARGS__)
 #else
 #define ikbd_debugf(...)
 #endif
