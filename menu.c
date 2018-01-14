@@ -3234,7 +3234,7 @@ void HandleUI(void)
 				struct tm tm = *localtime(&t);
 				if (tm.tm_year >= 117)
 				{
-					strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%Y.%m.%d %H:%M:%S", &tm);
+					strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%b %d %a %H:%M:%S", &tm);
 				}
 			}
 
