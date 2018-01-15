@@ -494,6 +494,7 @@ char* getNet()
 	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
 	{
 		if (ifa->ifa_addr == NULL) continue;
+		if (!memcmp(ifa->ifa_addr->sa_data, "\x00\x00\xa9\xfe", 4)) continue; // 169.254.x.x
 
 		if ((strcmp(ifa->ifa_name, "eth0") == 0)     && (ifa->ifa_addr->sa_family == AF_INET)) ifae = ifa;
 		if ((strncmp(ifa->ifa_name, "wlan", 4) == 0) && (ifa->ifa_addr->sa_family == AF_INET)) ifaw = ifa;
