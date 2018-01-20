@@ -1822,7 +1822,11 @@ void user_io_kbd(uint16_t key, int press)
 
 							default:
 								if (joy_force) emu_mode = (emu_mode == EMU_JOY0) ? EMU_JOY1 : EMU_JOY0;
-								else emu_mode = (emu_mode + 1) & 3;
+								else
+								{
+									emu_mode = (emu_mode + 1) & 3;
+									if(mist_cfg.kbd_nomouse && emu_mode == EMU_MOUSE) emu_mode = (emu_mode + 1) & 3;
+								}
 								break;
 							}
 							input_notify_mode();

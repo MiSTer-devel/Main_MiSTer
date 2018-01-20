@@ -33,6 +33,7 @@ const ini_var_t mist_ini_vars[] = {
 	{ "VIDEO_MODE", (void*)(mist_cfg.video_conf), STRING, 0, sizeof(mist_cfg.video_conf)-1, 1 },
 	{ "HDMI_AUDIO_96K", (void*)(&(mist_cfg.hdmi_audio_96k)), UINT8, 0, 1, 1 },
 	{ "DVI_MODE", (void*)(&(mist_cfg.dvi)), UINT8, 0, 1, 1 },
+	{ "KBD_NOMOUSE", (void*)(&(mist_cfg.kbd_nomouse)), UINT8, 0, 1, 1 },
 };
 
 // mist ini config
