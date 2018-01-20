@@ -168,6 +168,27 @@ static void user_io_read_core_name()
 	printf("Core name is \"%s\"\n", core_name);
 }
 
+static void set_emu_leds()
+{
+	uint8_t emu_led = 0;
+	switch (emu_mode)
+	{
+	case EMU_JOY0:
+		emu_led = 0x20;
+		break;
+
+	case EMU_JOY1:
+		emu_led = 0x40;
+		break;
+
+	case EMU_MOUSE:
+		emu_led = 0x60;
+		break;
+	}
+
+	spi_uio_cmd16(UIO_LEDS, 0x6000 | emu_led);
+}
+
 static void set_kbd_led(unsigned char led, bool on)
 {
 	if (led & HID_LED_CAPS_LOCK)
@@ -210,6 +231,7 @@ static void parse_config()
 						emu_mode = EMU_JOY0;
 						input_notify_mode();
 						set_kbd_led(HID_LED_NUM_LOCK, true);
+						set_emu_leds();
 					}
 
 					joy_bcount = 0;
@@ -1809,6 +1831,8 @@ void user_io_kbd(uint16_t key, int press)
 
 							if (emu_mode == EMU_MOUSE || emu_mode == EMU_JOY1) set_kbd_led(HID_LED_SCROLL_LOCK, true);
 							else set_kbd_led(HID_LED_SCROLL_LOCK, false);
+
+							set_emu_leds();
 						}
 					}
 					else
