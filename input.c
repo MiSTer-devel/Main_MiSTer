@@ -1131,6 +1131,8 @@ typedef struct
 
 	char     has_kbdmap;
 	uint8_t  kbdmap[256];
+
+	int      accx, accy;
 }  devInput;
 
 static devInput input[NUMDEV] = { 0 };
@@ -1575,15 +1577,26 @@ static void input_cb(struct input_event *ev, int dev)
 
 	case EV_REL:
 		{
+			int msval;
+			if (!mist_cfg.mouse_throttle) mist_cfg.mouse_throttle = 1;
+
 			switch (ev->code)
 			{
 			case 0:
-				//printf("Mouse PosX: %d\n", ev->value);
-				user_io_mouse(mouse_btn, ev->value, 0);
+				input[dev].accx += ev->value;
+				msval = input[dev].accx / mist_cfg.mouse_throttle;
+				input[dev].accx -= msval * mist_cfg.mouse_throttle;
+
+				//printf("Mouse PosX: %d\n", msval);
+				user_io_mouse(mouse_btn, msval, 0);
 				return;
 			case 1:
-				//printf("Mouse PosY: %d\n", ev->value);
-				user_io_mouse(mouse_btn, 0, ev->value);
+				input[dev].accy += ev->value;
+				msval = input[dev].accy / mist_cfg.mouse_throttle;
+				input[dev].accy -= msval * mist_cfg.mouse_throttle;
+
+				//printf("Mouse PosY: %d\n", msval);
+				user_io_mouse(mouse_btn, 0, msval);
 				return;
 			}
 		}

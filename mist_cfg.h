@@ -24,6 +24,7 @@ typedef struct {
 	uint8_t dvi;
 	uint8_t video_mode;
 	uint8_t kbd_nomouse;
+	uint8_t mouse_throttle;
 	char video_conf[1024];
 } mist_cfg_t;
 
