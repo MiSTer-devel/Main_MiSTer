@@ -320,7 +320,7 @@ void send_rtc(int type)
 void user_io_init()
 {
 	char *name;
-	char mainpath[32];
+	char mainpath[64];
 	core_name[0] = 0;
 	disable_osd = 0;
 
@@ -437,7 +437,11 @@ void user_io_init()
 					if (!user_io_file_tx(mainpath, 0))
 					{
 						strcpy(name + strlen(name) - 3, "ROM");
-						user_io_file_tx(name, 0);
+						if (!user_io_file_tx(name, 0))
+						{
+							sprintf(mainpath, "bootrom/%s", name);
+							user_io_file_tx(mainpath, 0);
+						}
 					}
 				}
 
