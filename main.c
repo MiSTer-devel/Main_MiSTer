@@ -57,7 +57,9 @@ int main(int argc, char *argv[])
 	DISKLED_OFF;
 
 	printf("\nMinimig by Dennis van Weeren");
-	printf("\nARM Controller by Jakub Bednarski\n\n");
+	printf("\nARM Controller by Jakub Bednarski");
+	printf("\nMiSTer code by Sorgelig\n\n");
+
 	printf("Version %s\n\n", version + 5);
 
 	if (!is_fpga_ready(1))

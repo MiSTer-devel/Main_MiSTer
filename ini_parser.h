@@ -32,6 +32,7 @@ typedef struct {
 
 typedef struct {
 	const char* filename;
+	const char* filename_alt;
 	const ini_section_t* sections;
 	const ini_var_t* vars;
 	int nsections;

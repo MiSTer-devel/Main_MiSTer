@@ -39,6 +39,7 @@ const ini_var_t ini_vars[] = {
 
 // mist ini config
 const ini_cfg_t ini_cfg = {
+	"MiSTer.ini",
 	CONFIG_DIR"/MiSTer.ini",
 	ini_sections,
 	ini_vars,

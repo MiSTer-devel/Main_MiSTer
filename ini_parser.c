@@ -196,11 +196,13 @@ void ini_parse(const ini_cfg_t* cfg)
 	memset(&ini_file, 0, sizeof(ini_file));
 	if (!FileOpen(&ini_file, cfg->filename))
 	{
-		ini_parser_debugf("Can't open file %s !", cfg->filename);
-		return;
+		if (!FileOpen(&ini_file, cfg->filename_alt))
+		{
+			return;
+		}
+		else ini_parser_debugf("Opened file %s with size %d bytes.", cfg->filename_alt, ini_file.size);
 	}
-
-	ini_parser_debugf("Opened file %s with size %d bytes.", cfg->filename, ini_file.size);
+	else ini_parser_debugf("Opened file %s with size %d bytes.", cfg->filename, ini_file.size);
 
 	ini_pt = 0;
 
