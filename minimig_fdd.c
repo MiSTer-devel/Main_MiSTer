@@ -26,8 +26,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include "hardware.h"
 #include "file_io.h"
-#include "fdd.h"
-#include "config.h"
+#include "minimig_fdd.h"
+#include "minimig_config.h"
 #include "debug.h"
 #include "fpga_io.h"
 #include "menu.h"

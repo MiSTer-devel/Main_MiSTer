@@ -1,8 +1,8 @@
 // hdd.h
 
 
-#ifndef __HDD_H__
-#define __HDD_H__
+#ifndef __MINIMIG_HDD_H__
+#define __MINIMIG_HDD_H__
 
 
 // defines

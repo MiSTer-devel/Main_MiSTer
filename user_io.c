@@ -11,21 +11,21 @@
 #include "user_io.h"
 #include "archie.h"
 #include "debug.h"
-#include "ikbd.h"
+#include "st_ikbd.h"
 #include "spi.h"
-#include "mist_cfg.h"
-#include "tos.h"
+#include "cfg.h"
+#include "st_tos.h"
 #include "input.h"
 #include "fpga_io.h"
 #include "file_io.h"
-#include "config.h"
+#include "minimig_config.h"
 #include "menu.h"
 #include "x86.h"
 #include "tzx2wav.h"
 #include "DiskImage.h"
-#include "boot.h"
-#include "fdd.h"
-#include "hdd.h"
+#include "minimig_boot.h"
+#include "minimig_fdd.h"
+#include "minimig_hdd.h"
 
 #define BREAK  0x8000
 
@@ -363,7 +363,7 @@ void user_io_init()
 		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 	}
 
-	mist_ini_parse();
+	MiSTer_ini_parse();
 	parse_video_mode();
 	user_io_send_buttons(1);
 
@@ -895,7 +895,7 @@ void user_io_send_buttons(char force)
 	static unsigned short key_map = 0;
 	unsigned short map = 0;
 
-	map = mist_cfg.video_mode;
+	map = cfg.video_mode;
 	map = (map << CONF_RES_SHIFT) & CONF_RES_MASK;
 
 	int btn = fpga_get_buttons();
@@ -904,12 +904,12 @@ void user_io_send_buttons(char force)
 	else if(btn & BUTTON_USR) map |= BUTTON2;
 	if (kbd_reset) map |= BUTTON2;
 
-	if (mist_cfg.vga_scaler) map |= CONF_VGA_SCALER;
-	if (mist_cfg.csync) map |= CONF_CSYNC;
-	if (mist_cfg.ypbpr) map |= CONF_YPBPR;
-	if (mist_cfg.forced_scandoubler) map |= CONF_FORCED_SCANDOUBLER;
-	if (mist_cfg.hdmi_audio_96k) map |= CONF_AUDIO_96K;
-	if (mist_cfg.dvi) map |= CONF_DVI;
+	if (cfg.vga_scaler) map |= CONF_VGA_SCALER;
+	if (cfg.csync) map |= CONF_CSYNC;
+	if (cfg.ypbpr) map |= CONF_YPBPR;
+	if (cfg.forced_scandoubler) map |= CONF_FORCED_SCANDOUBLER;
+	if (cfg.hdmi_audio_96k) map |= CONF_AUDIO_96K;
+	if (cfg.dvi) map |= CONF_DVI;
 
 	if ((map != key_map) || force)
 	{
@@ -1825,7 +1825,7 @@ void user_io_kbd(uint16_t key, int press)
 								else
 								{
 									emu_mode = (emu_mode + 1) & 3;
-									if(mist_cfg.kbd_nomouse && emu_mode == EMU_MOUSE) emu_mode = (emu_mode + 1) & 3;
+									if(cfg.kbd_nomouse && emu_mode == EMU_MOUSE) emu_mode = (emu_mode + 1) & 3;
 								}
 								break;
 							}
@@ -1948,18 +1948,18 @@ uint32_t vitems[32];
 
 static int parse_custom_video_mode()
 {
-	char *cfg = mist_cfg.video_conf;
+	char *vcfg = cfg.video_conf;
 
 	int cnt = 0;
-	while (*cfg)
+	while (*vcfg)
 	{
 		char *next;
 		if (cnt == 9 && vitems[0] == 1)
 		{
-			double Fout = strtod(cfg, &next);
-			if (cfg == next || (Fout < 20.f || Fout > 200.f))
+			double Fout = strtod(vcfg, &next);
+			if (vcfg == next || (Fout < 20.f || Fout > 200.f))
 			{
-				printf("Error parsing video_mode parameter: ""%s""\n", mist_cfg.video_conf);
+				printf("Error parsing video_mode parameter: ""%s""\n", cfg.video_conf);
 				return 0;
 			}
 
@@ -1981,16 +1981,16 @@ static int parse_custom_video_mode()
 			break;
 		}
 
-		uint32_t val = strtoul(cfg, &next, 0);
-		if (cfg == next || (*next != ',' && *next))
+		uint32_t val = strtoul(vcfg, &next, 0);
+		if (vcfg == next || (*next != ',' && *next))
 		{
-			printf("Error parsing video_mode parameter: ""%s""\n", mist_cfg.video_conf);
+			printf("Error parsing video_mode parameter: ""%s""\n", cfg.video_conf);
 			return 0;
 		}
 
 		if (cnt < 32) vitems[cnt] = val;
 		if (*next == ',') next++;
-		cfg = next;
+		vcfg = next;
 		cnt++;
 	}
 
@@ -2018,7 +2018,7 @@ static int parse_custom_video_mode()
 void parse_video_mode()
 {
 	// always 0. Use custom parameters.
-	mist_cfg.video_mode = 0;
+	cfg.video_mode = 0;
 
 	int mode = parse_custom_video_mode();
 	if (mode >= 0)

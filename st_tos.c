@@ -4,11 +4,11 @@
 
 #include "hardware.h"
 #include "menu.h"
-#include "tos.h"
+#include "st_tos.h"
 #include "file_io.h"
 #include "debug.h"
 #include "user_io.h"
-#include "ikbd.h"
+#include "st_ikbd.h"
 #include "fpga_io.h"
 
 #define CONFIG_FILENAME  "MIST.CFG"

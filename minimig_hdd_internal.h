@@ -1,5 +1,5 @@
-#ifndef HDD_INTERNAL_H
-#define HDD_INTERNAL_H
+#ifndef __MINIMIG_HDD_INTERNAL_H__
+#define __MINIMIG_HDD_INTERNAL_H__
 
 // Structure definitions for RDB emulation.
 // For hardfiles that have no RDB information, we'll just create a single-partition RDB and Part block

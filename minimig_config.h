@@ -1,3 +1,7 @@
+
+#ifndef __MINIMIG_CONFIG_H__
+#define __MINIMIG_CONFIG_H__
+
 #include "file_io.h"
 
 typedef struct
@@ -47,3 +51,5 @@ unsigned char SaveConfiguration(int num);	// Can supply NULL to use filename pre
 unsigned char ConfigurationExists(int num);
 void ApplyConfiguration(char reloadkickstart);
 void MinimigReset();
+
+#endif

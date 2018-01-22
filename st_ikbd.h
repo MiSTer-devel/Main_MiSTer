@@ -1,5 +1,5 @@
-#ifndef IKBD_H
-#define IKBD_H
+#ifndef __ST_IKBD_H__
+#define __ST_IKBD_H__
 
 void ikbd_init(void);
 void ikbd_poll(void);

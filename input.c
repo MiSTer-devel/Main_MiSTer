@@ -11,7 +11,7 @@
 #include "user_io.h"
 #include "menu.h"
 #include "hardware.h"
-#include "mist_cfg.h"
+#include "cfg.h"
 #include "fpga_io.h"
 #include "osd.h"
 
@@ -1578,22 +1578,22 @@ static void input_cb(struct input_event *ev, int dev)
 	case EV_REL:
 		{
 			int msval;
-			if (!mist_cfg.mouse_throttle) mist_cfg.mouse_throttle = 1;
+			if (!cfg.mouse_throttle) cfg.mouse_throttle = 1;
 
 			switch (ev->code)
 			{
 			case 0:
 				input[dev].accx += ev->value;
-				msval = input[dev].accx / mist_cfg.mouse_throttle;
-				input[dev].accx -= msval * mist_cfg.mouse_throttle;
+				msval = input[dev].accx / cfg.mouse_throttle;
+				input[dev].accx -= msval * cfg.mouse_throttle;
 
 				//printf("Mouse PosX: %d\n", msval);
 				user_io_mouse(mouse_btn, msval, 0);
 				return;
 			case 1:
 				input[dev].accy += ev->value;
-				msval = input[dev].accy / mist_cfg.mouse_throttle;
-				input[dev].accy -= msval * mist_cfg.mouse_throttle;
+				msval = input[dev].accy / cfg.mouse_throttle;
+				input[dev].accy -= msval * cfg.mouse_throttle;
 
 				//printf("Mouse PosY: %d\n", msval);
 				user_io_mouse(mouse_btn, 0, msval);
@@ -1811,10 +1811,10 @@ static void input_cb(struct input_event *ev, int dev)
 
 				//  replace MENU key by RGUI to allow using Right Amiga on reduced keyboards
 				// (it also disables the use of Menu for OSD)
-				if (mist_cfg.key_menu_as_rgui && code == 139) code = 126;
+				if (cfg.key_menu_as_rgui && code == 139) code = 126;
 
 				//Keyrah v2: USB\VID_18D8&PID_0002\A600/A1200_MULTIMEDIA_EXTENSION_VERSION
-				int keyrah = (mist_cfg.keyrah_mode && (((((uint32_t)input[dev].vid) << 16) | input[dev].pid) == mist_cfg.keyrah_mode));
+				int keyrah = (cfg.keyrah_mode && (((((uint32_t)input[dev].vid) << 16) | input[dev].pid) == cfg.keyrah_mode));
 				if (keyrah) code = keyrah_trans(code, ev->value);
 
 				uint32_t ps2code = get_ps2_code(code);
@@ -1823,7 +1823,7 @@ static void input_cb(struct input_event *ev, int dev)
 
 				uint16_t reset_m = (modifier & MODMASK) >> 8;
 				if (code == 111) reset_m |= 0x100;
-				user_io_check_reset(reset_m, (keyrah && !mist_cfg.reset_combo) ? 1 : mist_cfg.reset_combo);
+				user_io_check_reset(reset_m, (keyrah && !cfg.reset_combo) ? 1 : cfg.reset_combo);
 
 				if(!user_io_osd_is_visible() && ((user_io_get_kbdemu() == EMU_JOY0) || (user_io_get_kbdemu() == EMU_JOY1)))
 				{

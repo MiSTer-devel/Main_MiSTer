@@ -1,9 +1,9 @@
-// mist_cfg.h
+// cfg.h
 // 2015, rok.krajnc@gmail.com
+// 2017+, Sorgelig
 
-
-#ifndef __MIST_CFG_H__
-#define __MIST_CFG_H__
+#ifndef __CFG_H__
+#define __CFG_H__
 
 
 //// includes ////
@@ -26,15 +26,14 @@ typedef struct {
 	uint8_t kbd_nomouse;
 	uint8_t mouse_throttle;
 	char video_conf[1024];
-} mist_cfg_t;
+} cfg_t;
 
 //// functions ////
-void mist_ini_parse();
+void MiSTer_ini_parse();
 
 //// global variables ////
-extern const ini_cfg_t mist_ini_cfg;
-extern mist_cfg_t mist_cfg;
+extern const ini_cfg_t ini_cfg;
+extern cfg_t cfg;
 
 
-#endif // __MIST_CFG_H__
-
+#endif // __CFG_H__

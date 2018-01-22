@@ -3,8 +3,8 @@
 // 2014, rok.krajnc@gmail.com
 
 
-#ifndef __BOOT_H__
-#define __BOOT_H__
+#ifndef __MINIMIG_BOOT_H__
+#define __MINIMIG_BOOT_H__
 
 
 //// defines ////

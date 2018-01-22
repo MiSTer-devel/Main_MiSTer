@@ -14,25 +14,10 @@
     <ClCompile Include="archie.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="boot.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="config.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="fdd.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="fpga_io.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="hardware.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="hdd.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ikbd.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ini_parser.c">
@@ -47,16 +32,10 @@
     <ClCompile Include="menu.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="mist_cfg.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="osd.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="spi.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="tos.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="user_io.c">
@@ -74,24 +53,36 @@
     <ClCompile Include="DiskImage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="cfg.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="minimig_boot.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="minimig_config.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="minimig_fdd.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="minimig_hdd.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="st_ikbd.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="st_tos.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="archie.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="boot.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="charrom.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="debug.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="fdd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fpga_base_addr_ac5.h">
@@ -115,15 +106,6 @@
     <ClInclude Include="hardware.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="hdd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="hdd_internal.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ikbd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ini_parser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -136,16 +118,10 @@
     <ClInclude Include="menu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="mist_cfg.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="osd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="spi.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="tos.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="user_io.h">
@@ -161,6 +137,30 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DiskImage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cfg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="minimig_boot.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="minimig_config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="minimig_fdd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="minimig_hdd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="minimig_hdd_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="st_ikbd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="st_tos.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

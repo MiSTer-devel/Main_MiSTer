@@ -45,7 +45,7 @@ as rotated copies of the first 128 entries.  -- AMR
 #include "logo.h"
 #include "user_io.h"
 #include "hardware.h"
-#include "config.h"
+#include "minimig_config.h"
 
 static int osd_size = 8;
 

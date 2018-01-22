@@ -5,13 +5,13 @@
 
 #include "string.h"
 #include "stdio.h"
-#include "boot.h"
+#include "minimig_boot.h"
 #include "hardware.h"
 #include "osd.h"
 #include "spi.h"
 #include "file_io.h"
-#include "config.h"
-#include "fdd.h"
+#include "minimig_config.h"
+#include "minimig_fdd.h"
 
 static uint8_t buffer[1024];
 

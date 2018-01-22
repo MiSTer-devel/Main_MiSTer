@@ -24,10 +24,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <string.h>
 #include "hardware.h"
 #include "file_io.h"
-#include "hdd.h"
-#include "hdd_internal.h"
+#include "minimig_hdd.h"
+#include "minimig_hdd_internal.h"
 #include "menu.h"
-#include "config.h"
+#include "minimig_config.h"
 #include "debug.h"
 #include "fpga_io.h"
 

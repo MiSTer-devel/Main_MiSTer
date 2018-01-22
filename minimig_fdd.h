@@ -1,5 +1,5 @@
-#ifndef FDD_H
-#define FDD_H
+#ifndef __MINIMIG_FDD_H__
+#define __MINIMIG_FDD_H__
 
 #include "file_io.h"
 

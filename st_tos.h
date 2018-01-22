@@ -1,5 +1,5 @@
-#ifndef TOS_H
-#define TOS_H
+#ifndef __ST_TOS_H__
+#define __ST_TOS_H__
 
 #include "file_io.h"
 

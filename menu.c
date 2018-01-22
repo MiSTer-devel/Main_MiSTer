@@ -37,19 +37,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "string.h"
 #include "file_io.h"
 #include "osd.h"
-#include "fdd.h"
-#include "hdd.h"
+#include "minimig_fdd.h"
+#include "minimig_hdd.h"
 #include "hardware.h"
-#include "config.h"
+#include "minimig_config.h"
 #include "menu.h"
 #include "user_io.h"
-#include "tos.h"
+#include "st_tos.h"
 #include "debug.h"
-#include "boot.h"
+#include "minimig_boot.h"
 #include "archie.h"
 #include "fpga_io.h"
 #include <stdbool.h>
-#include "mist_cfg.h"
+#include "cfg.h"
 #include "input.h"
 #include "x86.h"
 
@@ -623,11 +623,11 @@ void HandleUI(void)
 		break;
 /*
 	case 0x01: // 1: 1280x720 mode
-		if (user_io_osd_is_visible) mist_cfg.video_mode = 0;
+		if (user_io_osd_is_visible) cfg.video_mode = 0;
 		break;
 
 	case 0x02: // 2: 1280x1024 mode
-		if (user_io_osd_is_visible) mist_cfg.video_mode = 1;
+		if (user_io_osd_is_visible) cfg.video_mode = 1;
 		break;
 */
 	}

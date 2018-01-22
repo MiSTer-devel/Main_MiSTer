@@ -5,13 +5,13 @@
 #include <stdbool.h>
 
 #include "hardware.h"
-#include "boot.h"
+#include "minimig_boot.h"
 #include "file_io.h"
 #include "osd.h"
-#include "fdd.h"
-#include "hdd.h"
+#include "minimig_fdd.h"
+#include "minimig_hdd.h"
 #include "menu.h"
-#include "config.h"
+#include "minimig_config.h"
 #include "user_io.h"
 #include "input.h"
 

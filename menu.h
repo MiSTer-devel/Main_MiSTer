@@ -1,7 +1,7 @@
 #ifndef MENU_H
 #define MENU_H
 
-#include "fdd.h" // for adfTYPE definition
+#include "minimig_fdd.h" // for adfTYPE definition
 
 // UI strings, used by boot messages
 extern const char *config_filter_msg[];
