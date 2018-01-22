@@ -338,7 +338,7 @@ char *getFullPath(char *name)
 void setStorage(int dev)
 {
 	device = 0;
-	FileSave("device.bin", &dev, sizeof(int));
+	FileSave(CONFIG_DIR"/device.bin", &dev, sizeof(int));
 	app_restart();
 }
 
@@ -413,7 +413,7 @@ void FindStorage(void)
 	char str[128];
 	printf("Looking for root device...\n");
 	device = 0;
-	FileLoad("device.bin", &device, sizeof(int));
+	FileLoad(CONFIG_DIR"/device.bin", &device, sizeof(int));
 	orig_device = device;
 
 	if(device && !isUSBMounted())
