@@ -960,6 +960,8 @@ void user_io_rtc_reset()
 	rtc_timer = 0;
 }
 
+static int coldreset_req = 0;
+
 void user_io_poll()
 {
 	if ((core_type != CORE_TYPE_MINIMIG2) &&
@@ -1500,6 +1502,24 @@ void user_io_poll()
 		}
 		DisableIO();
 	}
+
+	static int prev_coldreset_req = 0;
+	static uint32_t reset_timer = 0;
+	if (!prev_coldreset_req && coldreset_req)
+	{
+		reset_timer = GetTimer(1000);
+	}
+
+	if (!coldreset_req && prev_coldreset_req)
+	{
+		fpga_load_rbf("menu.rbf");
+	}
+
+	prev_coldreset_req = coldreset_req;
+	if (reset_timer && CheckTimer(reset_timer))
+	{
+		reboot(1);
+	}
 }
 
 char user_io_dip_switch1()
@@ -1727,11 +1747,11 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 
 	if ((modifiers & ~2) == combo[useKeys])
 	{
-		if (modifiers & 2) // with lshift - MiST reset
+		if (modifiers & 2) // with lshift - cold reset
 		{
-			reboot(1);
+			coldreset_req = 1;
 		}
-
+		else
 		switch (core_type)
 		{
 		case CORE_TYPE_MINIMIG2:
@@ -1746,6 +1766,7 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 	}
 	else
 	{
+		coldreset_req = 0;
 		kbd_reset = 0;
 	}
 }
