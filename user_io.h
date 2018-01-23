@@ -207,4 +207,6 @@ void user_io_check_reset(unsigned short modifiers, char useKeys);
 
 void user_io_rtc_reset();
 
+void parse_video_mode();
+
 #endif // USER_IO_H

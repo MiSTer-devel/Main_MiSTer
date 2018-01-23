@@ -452,7 +452,7 @@ int fpga_load_rbf(char *name)
 	int ret = 0;
 
 	printf("Loading RBF: %s\n", name);
-	sprintf(path, "%s/%s", getRootDir(), name);
+	sprintf(path, "%s/%s", !strcasecmp(name, "menu.rbf") ? getStorageDir(0) : getRootDir(), name);
 
 #ifdef REBOOT_ON_RBF_LOAD
 	do_bridge(0);

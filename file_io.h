@@ -75,6 +75,7 @@ int FileLoadConfig(char *name, void *pBuffer, int size); // supply pBuffer = 0 t
 void AdjustDirectory(char *path);
 int ScanDirectory(char* path, int mode, char *extension, int options);
 
+char *getStorageDir(int dev);
 char *getRootDir();
 char *getFullPath(char *name);
 

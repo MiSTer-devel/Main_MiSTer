@@ -17,6 +17,9 @@
 #include "menu.h"
 #include "errno.h"
 #include "DiskImage.h"
+#include "user_io.h"
+#include "cfg.h"
+#include "input.h"
 
 int nDirEntries = 0;
 struct dirent DirItem[1000];
@@ -321,12 +324,17 @@ int FileCanWrite(char *name)
 
 static int device = 0;
 static int usbnum = 0;
+char *getStorageDir(int dev)
+{
+	static char path[32];
+	if (!dev) return "/media/fat";
+	sprintf(path, "/media/usb%d", usbnum);
+	return path;
+}
+
 char *getRootDir()
 {
-	static char dev[16];
-	if(!device) return "/media/fat";
-	sprintf(dev, "/media/usb%d", usbnum);
-	return dev;
+	return getStorageDir(device);
 }
 
 char *getFullPath(char *name)
@@ -339,7 +347,7 @@ void setStorage(int dev)
 {
 	device = 0;
 	FileSave(CONFIG_DIR"/device.bin", &dev, sizeof(int));
-	app_restart();
+	fpga_load_rbf("menu.rbf");
 }
 
 static int orig_device = 0;
@@ -418,12 +426,19 @@ void FindStorage(void)
 
 	if(device && !isUSBMounted())
 	{
+		int saveddev = device;
+		device = 0;
+		MiSTer_ini_parse();
+		device = saveddev;
+		parse_video_mode();
+		user_io_send_buttons(1);
+
 		printf("Waiting for USB...\n");
 		int btn = 0;
 		int done = 0;
 		for (int i = 30; i >= 0; i--)
 		{
-			sprintf(str, "\n\n     Waiting for USB...\n\n             %d   \n", i);
+			sprintf(str, "\n     Waiting for USB...\n\n             %d   \n\n\n  OSD/USER or ESC to cancel", i);
 			InfoMessage(str);
 			if (isUSBMounted())
 			{
@@ -434,13 +449,13 @@ void FindStorage(void)
 			for (int i = 0; i < 10; i++)
 			{
 				btn = fpga_get_buttons();
+				if (!btn) btn = input_poll(1);
 				if (btn)
 				{
 					printf("Button has been pressed %d\n", btn);
 					InfoMessage("\n\n         Canceled!\n");
 					usleep(500000);
-					device = 0;
-					done = 1;
+					setStorage(0);
 					break;
 				}
 				usleep(100000);
@@ -452,7 +467,7 @@ void FindStorage(void)
 		{
 			InfoMessage("\n\n     No USB storage found\n   Falling back to SD card\n");
 			usleep(2000000);
-			device = 0;
+			setStorage(0);
 		}
 	}
 
