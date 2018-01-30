@@ -495,10 +495,6 @@ void OsdDisable(void)
 }
 
 
-void MM1_ConfigFilter(unsigned char lores, unsigned char hires) {
-	spi_osd_cmd(MM1_OSDCMDCFGFLT | ((hires & 0x03) << 2) | (lores & 0x03));
-}
-
 void ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines)
 {
 	spi_osd_cmd16(OSD_CMD_VID, (((scanlines >> 6) & 0x03) << 10) | (((scanlines >> 4) & 0x03) << 8) | (((scanlines >> 2) & 0x03) << 6) | ((hires & 0x03) << 4) | ((lores & 0x03) << 2) | (scanlines & 0x03));
@@ -527,11 +523,6 @@ void ConfigChipset(unsigned char chipset)
 void ConfigFloppy(unsigned char drives, unsigned char speed)
 {
 	spi_osd_cmd8(OSD_CMD_FLP, ((drives & 0x03) << 2) | (speed & 0x03));
-}
-
-void MM1_ConfigScanlines(unsigned char scanlines)
-{
-	spi_osd_cmd(MM1_OSDCMDCFGSCL | (scanlines & 0x0F));
 }
 
 void ConfigAutofire(unsigned char autofire, unsigned char mask)

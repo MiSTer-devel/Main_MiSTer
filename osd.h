@@ -71,12 +71,7 @@ void OsdWriteOffset(unsigned char n, char *s, unsigned char inver, unsigned char
 void OsdClear(void);
 void OsdEnable(unsigned char mode);
 void OsdDisable(void);
-void OsdWaitVBL(void);
 void ConfigFilter(unsigned char lores, unsigned char hires);
-void OsdReconfig(); // Reset to Chameleon core.
-					// deprecated functions from Minimig 1
-void MM1_ConfigFilter(unsigned char lores, unsigned char hires);
-void MM1_ConfigScanlines(unsigned char scanlines);
 void ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines);
 void ConfigAudio(unsigned char audio);
 void ConfigMemory(unsigned char memory);
@@ -85,8 +80,6 @@ void ConfigChipset(unsigned char chipset);
 void ConfigFloppy(unsigned char drives, unsigned char speed);
 void ConfigAutofire(unsigned char autofire, unsigned char mask);
 void OSD_PrintText(unsigned char line, char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert);
-void OsdWriteDoubleSize(unsigned char n, char *s, unsigned char pass);
-//void OsdDrawLogo(unsigned char n, char row);
 void OsdDrawLogo(unsigned char n, char row, char superimpose);
 void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert);
 void ScrollReset();

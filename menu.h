@@ -27,7 +27,6 @@ void EjectAllFloppies();
 unsigned long getStatus(char *opt, unsigned long status);
 
 void menu_key_set(uint32_t c);
-void menu_mod_set(uint32_t m);
 
 void substrcpy(char *d, char *s, char idx);
 extern char joy_bnames[12][32];
