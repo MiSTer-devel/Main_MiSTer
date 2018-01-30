@@ -19,6 +19,7 @@ void PrintDirectory(void);
 void ScrollLongName(void);
 void ErrorMessage(const char *message, unsigned char code);
 void InfoMessage(char *message);
+void InfoMessageEx(char *message, int timeout);
 void ShowSplash();
 void HideSplash();
 void EjectAllFloppies();

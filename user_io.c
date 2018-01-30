@@ -29,6 +29,9 @@
 
 #define BREAK  0x8000
 
+uint8_t vol_att = 0;
+unsigned long vol_set_timeout = 0;
+
 fileTYPE sd_image[4] = { 0 };
 
 // mouse and keyboard emulation state
@@ -365,6 +368,9 @@ void user_io_init()
 
 	MiSTer_ini_parse();
 	parse_video_mode();
+	FileLoadConfig("Volume.dat", &vol_att, 1);
+	vol_att &= 0x1F;
+	spi_uio_cmd8(UIO_AUDVOL, vol_att);
 	user_io_send_buttons(1);
 
 	switch (core_type)
@@ -1520,6 +1526,12 @@ void user_io_poll()
 	{
 		reboot(1);
 	}
+
+	if (vol_set_timeout && CheckTimer(vol_set_timeout))
+	{
+		vol_set_timeout = 0;
+		FileSaveConfig("Volume.dat", &vol_att, 1);
+	}
 }
 
 char user_io_dip_switch1()
@@ -1786,8 +1798,56 @@ static char key_used_by_osd(uint32_t s)
 	return osd_is_visible;
 }
 
+void set_volume()
+{
+	vol_set_timeout = GetTimer(1000);
+
+	spi_uio_cmd8(UIO_AUDVOL, vol_att);
+	if (vol_att & 0x10)
+	{
+		InfoMessageEx("\n\n         Audio muted", 1000);
+	}
+	else
+	{
+		char str[64];
+		memset(str, 0, sizeof(str));
+
+		int vol = vol_att & 0xf;
+		sprintf(str, "\n\n       Volume %ddb\n       ", -3*vol);
+		if(vol<15) memset(str + strlen(str), 0x7f, 15-vol);
+		InfoMessageEx(str, 1000);
+	}
+}
+
 void user_io_kbd(uint16_t key, int press)
 {
+	if (key == KEY_MUTE)
+	{
+		if (press == 1 && !is_menu_core())
+		{
+			vol_att ^= 0x10;
+			set_volume();
+		}
+	}
+	else
+	if (key == KEY_VOLUMEDOWN)
+	{
+		if (press && !is_menu_core())
+		{
+			if((vol_att & 0xF) < 15 && !(vol_att & 0x10)) vol_att += 1;
+			set_volume();
+		}
+	}
+	else
+	if (key == KEY_VOLUMEUP)
+	{
+		if (press && !is_menu_core())
+		{
+			if(vol_att & 0xF && !(vol_att & 0x10)) vol_att -= 1;
+			set_volume();
+		}
+	}
+	else
 	if ((core_type == CORE_TYPE_MINIMIG2) ||
 		(core_type == CORE_TYPE_MIST) ||
 		(core_type == CORE_TYPE_ARCHIE) ||

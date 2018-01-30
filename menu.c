@@ -3543,6 +3543,12 @@ void InfoMessage(char *message)
 	menustate = MENU_INFO;
 }
 
+void InfoMessageEx(char *message, int timeout)
+{
+	InfoMessage(message);
+	menu_timer = GetTimer(timeout);
+}
+
 void EjectAllFloppies()
 {
 	char i;

@@ -58,6 +58,7 @@
 #define UIO_GET_VRES    0x23  // get video resolution
 #define UIO_TIMESTAMP   0x24  // transmit seconds since Unix epoch
 #define UIO_LEDS        0x25  // control on-board LEDs
+#define UIO_AUDVOL      0x26  // Digital volume as a number of bits to shift to the right
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
