@@ -1813,8 +1813,8 @@ void set_volume()
 		memset(str, 0, sizeof(str));
 
 		int vol = vol_att & 0xf;
-		sprintf(str, "\n\n       Volume %ddb\n       ", -3*vol);
-		if(vol<15) memset(str + strlen(str), 0x7f, 15-vol);
+		sprintf(str, "\n\n       Volume %d dB\n       ", -3*vol);
+		memset(str + strlen(str), 0x7f, 16-vol);
 		InfoMessageEx(str, 1000);
 	}
 }
@@ -1823,7 +1823,7 @@ void user_io_kbd(uint16_t key, int press)
 {
 	if (key == KEY_MUTE)
 	{
-		if (press == 1 && !is_menu_core())
+		if (press == 1 && !osd_is_visible && !is_menu_core())
 		{
 			vol_att ^= 0x10;
 			set_volume();
@@ -1832,18 +1832,20 @@ void user_io_kbd(uint16_t key, int press)
 	else
 	if (key == KEY_VOLUMEDOWN)
 	{
-		if (press && !is_menu_core())
+		if (press && !osd_is_visible && !is_menu_core())
 		{
-			if((vol_att & 0xF) < 15 && !(vol_att & 0x10)) vol_att += 1;
+			if(vol_att & 0x10) vol_att ^= 0x10;
+			else if((vol_att & 0xF) < 15) vol_att += 1;
 			set_volume();
 		}
 	}
 	else
 	if (key == KEY_VOLUMEUP)
 	{
-		if (press && !is_menu_core())
+		if (press && !osd_is_visible && !is_menu_core())
 		{
-			if(vol_att & 0xF && !(vol_att & 0x10)) vol_att -= 1;
+			if (vol_att & 0x10) vol_att ^= 0x10;
+			else if(vol_att & 0xF) vol_att -= 1;
 			set_volume();
 		}
 	}
