@@ -74,6 +74,9 @@
     <ClCompile Include="st_tos.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="brightness.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="archie.h">
@@ -161,6 +164,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="st_tos.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="brightness.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

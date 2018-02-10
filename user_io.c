@@ -26,6 +26,7 @@
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
+#include "brightness.h"
 
 #define BREAK  0x8000
 
@@ -1847,6 +1848,24 @@ void user_io_kbd(uint16_t key, int press)
 			if (vol_att & 0x10) vol_att ^= 0x10;
 			else if(vol_att & 0xF) vol_att -= 1;
 			set_volume();
+		}
+	}
+	else
+	if (key == 0xBE)
+	{
+		if (press)
+		{
+			setBrightness(BRIGHTNESS_DOWN, 0);
+			vol_set_timeout = GetTimer(1000);
+		}
+	}
+	else
+	if (key == 0xBF)
+	{
+		if (press)
+		{
+			setBrightness(BRIGHTNESS_UP, 0);
+			vol_set_timeout = GetTimer(1000);
 		}
 	}
 	else
