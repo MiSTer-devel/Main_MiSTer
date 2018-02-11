@@ -52,6 +52,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "cfg.h"
 #include "input.h"
 #include "x86.h"
+#include "battery.h"
 
 /*menu states*/
 enum MENU
@@ -524,6 +525,91 @@ char* getNet()
 	return ifa ? host : 0;
 }
 
+static long sysinfo_timer;
+void infowrite(int pos, char* txt)
+{
+	char str[40];
+	memset(str, 0x20, 29);
+	int len = strlen(txt);
+	if (len > 27) len = 27;
+	if(len) strncpy(str + 1+ ((27-len)/2), txt, len);
+	str[0] = 0x83;
+	str[28] = 0x83;
+	str[29] = 0;
+	OsdWrite(pos, str, 0, 0);
+}
+
+void printSysInfo()
+{
+	if (!sysinfo_timer || CheckTimer(sysinfo_timer))
+	{
+		sysinfo_timer = GetTimer(2000);
+		struct battery_data_t bat;
+		int hasbat = getBattery(0, &bat);
+		int n = 9;
+
+		char str[40];
+		OsdWrite(n++, "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82", 0, 0);
+		if (!hasbat)
+		{
+			infowrite(n++, "");
+		}
+
+		memset(str, 0, sizeof(str));
+		char *net = getNet();
+		if (net)
+		{
+			str[strlen(str)] = 0x1b + netType;
+			strcat(str, " ");
+		}
+		strcat(str, net ? net : "No network");
+		infowrite(n++, str);
+
+		if (hasbat)
+		{
+			infowrite(n++, "");
+			sprintf(str, "\x1F ");
+			if (bat.capacity == -1) strcat(str, "n/a");
+			else sprintf(str + strlen(str), "%d%%", bat.capacity);
+			if (bat.current != -1) sprintf(str + strlen(str), " %dmAh", bat.current);
+			if (bat.voltage != -1) sprintf(str + strlen(str), " %d.%dV", bat.voltage / 1000, (bat.voltage / 100) % 10);
+
+			infowrite(n++, str);
+
+			str[0] = 0;
+			if (bat.load_current > 0)
+			{
+				sprintf(str + strlen(str), " \x12 %dmA", bat.load_current);
+				if (bat.time != -1)
+				{
+					if (bat.time < 90) sprintf(str + strlen(str), ", ETA: %dm", bat.time);
+					else sprintf(str + strlen(str), ", ETA: %dh%02dm", bat.time / 60, bat.time % 60);
+				}
+			}
+			else if (bat.load_current < -1)
+			{
+				sprintf(str + strlen(str), " \x13 %dmA", -bat.load_current);
+				if (bat.time != -1)
+				{
+					if (bat.time < 90) sprintf(str + strlen(str), ", ETA: %dm", bat.time);
+					else sprintf(str + strlen(str), ", ETA: %dh%02dm", bat.time / 60, bat.time % 60);
+				}
+			}
+			else
+			{
+				strcat(str, "Not charging");
+			}
+			infowrite(n++, str);
+		}
+		else
+		{
+			infowrite(n++, "");
+			infowrite(n++, "");
+		}
+		OsdWrite(n++, "\x85\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x84", 0, 0);
+	}
+}
+
 void HandleUI(void)
 {
 	switch (user_io_core_type())
@@ -621,15 +707,6 @@ void HandleUI(void)
 	case KEY_MINUS: // -/_
 		minus = true;
 		break;
-/*
-	case 0x01: // 1: 1280x720 mode
-		if (user_io_osd_is_visible) cfg.video_mode = 0;
-		break;
-
-	case 0x02: // 2: 1280x1024 mode
-		if (user_io_osd_is_visible) cfg.video_mode = 1;
-		break;
-*/
 	}
 
 	if (menu || select || up || down || left || right)
@@ -1146,21 +1223,18 @@ void HandleUI(void)
 		parentstate = MENU_8BIT_SYSTEM1;
 		if (OsdIsBig) OsdWrite(0, "", 0, 0);
 		OsdWrite(OsdIsBig ? 1 : 0, " Firmware & Core           \x16", menusub == 0, 0);
-		if(OsdIsBig) OsdWrite(2, "", 0, 0);
-		OsdWrite(OsdIsBig ? 3 : 1, " Define joystick buttons", menusub == 1, 0);
-		OsdWrite(OsdIsBig ? 4 : 2, "", 0, 0);
-		if (OsdIsBig) OsdWrite(5, "", 0, 0);
-		OsdWrite(OsdIsBig ? 6 : 3, m ? " Reset" : " Reset settings", menusub == 3, !has_menu());
+		OsdWrite(OsdIsBig ? 2 : 1, " Define joystick buttons   \x16", menusub == 1, 0);
+		OsdWrite(OsdIsBig ? 3 : 2, "", 0, 0);
+		OsdWrite(OsdIsBig ? 4 : 3, m ? " Reset" : " Reset settings", menusub == 3, !has_menu());
 		if (m)
-			OsdWrite(OsdIsBig ? 7 : 4, "", 0, 0);
+			OsdWrite(OsdIsBig ? 5 : 4, "", 0, 0);
 		else
-			OsdWrite(OsdIsBig ? 7 : 4, " Save settings", menusub == 4, !has_menu()); // Minimig saves settings elsewhere
-		if (OsdIsBig) OsdWrite(8, "", 0, 0);
-		OsdWrite(OsdIsBig ? 9 : 5, " Cold reset", menusub == (5 - m), 0);
-		if (OsdIsBig) OsdWrite(10, "", 0, 0);
-		OsdWrite(OsdIsBig ? 11 : 6, " About", menusub == (6 - m), 0);
-		if(OsdIsBig) for (int i = 12; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+			OsdWrite(OsdIsBig ? 5 : 4, " Save settings", menusub == 4, !has_menu()); // Minimig saves settings elsewhere
+		if (OsdIsBig) OsdWrite(6, "", 0, 0);
+		OsdWrite(OsdIsBig ? 7 : 5, " Cold reset", menusub == (5 - m), 0);
+		OsdWrite(OsdIsBig ? 8 : 6, " About", menusub == (6 - m), 0);
 		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == (7 - m), 0);
+		sysinfo_timer = 0;
 		break;
 
 	case MENU_8BIT_SYSTEM2:
@@ -1274,6 +1348,8 @@ void HandleUI(void)
 				}
 			}
 		}
+
+		if (OsdIsBig) printSysInfo();
 		break;
 
 	case MENU_JOYDIGMAP:
@@ -3011,16 +3087,12 @@ void HandleUI(void)
 				}
 			}
 			OsdWrite(5, "", 0, 0);
-			OsdWrite(6,  "           NOTE:", 0, 0);
-			OsdWrite(7,  "  USB storage takes longer", 0, 0);
-			OsdWrite(8,  "     time to initialize", 0, 0);
-			OsdWrite(9, "       upon cold boot.", 0, 0);
-			OsdWrite(10, "  Use OSD or USER button to", 0, 0);
-			OsdWrite(11, "     cancel USB waiting.", 0, 0);
-			OsdWrite(12, "", 0, 0);
-			OsdWrite(13, "", 0, 0);
-			OsdWrite(14, "       Remap keyboard", menusub == 1, 0);
-			OsdWrite(15, "   Define joystick buttons", menusub == 2, 0);
+			OsdWrite(6, " Remap keyboard            \x16", menusub == 1, 0);
+			OsdWrite(7, " Define joystick buttons   \x16", menusub == 2, 0);
+			OsdWrite(8, "", 0, 0);
+			OsdWrite(15, "", 0, 0);
+			sysinfo_timer = 0;
+
 			menustate = MENU_STORAGE;
 		}
 		else
@@ -3096,6 +3168,7 @@ void HandleUI(void)
 				break;
 			}
 		}
+		printSysInfo();
 		break;
 
 	case MENU_KBDMAP:
@@ -3223,23 +3296,15 @@ void HandleUI(void)
 			rtc_timer = GetTimer(1000);
 			char str[64] = { 0 };
 			sprintf(str, "  MiSTer   ");
-			char *net = getNet();
 
-			if (menustate == MENU_STORAGE)
+			time_t t = time(NULL);
+			struct tm tm = *localtime(&t);
+			if (tm.tm_year >= 117)
 			{
-				strcat(str, net ? net : "    no network");
-			}
-			else
-			{
-				time_t t = time(NULL);
-				struct tm tm = *localtime(&t);
-				if (tm.tm_year >= 117)
-				{
-					strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%b %d %a %H:%M:%S", &tm);
-				}
+				strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%b %d %a %H:%M:%S", &tm);
 			}
 
-			if (net) str[9] = 0x1b + netType;
+			if (getNet()) str[9] = 0x1b + netType;
 
 			OsdWrite(16, "", 1, 0);
 			OsdWrite(17, str, 1, 0);

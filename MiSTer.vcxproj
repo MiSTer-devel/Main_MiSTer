@@ -40,6 +40,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="archie.c" />
+    <ClCompile Include="battery.c" />
     <ClCompile Include="brightness.c" />
     <ClCompile Include="cfg.c" />
     <ClCompile Include="DiskImage.cpp" />
@@ -64,6 +65,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="archie.h" />
+    <ClInclude Include="battery.h" />
     <ClInclude Include="brightness.h" />
     <ClInclude Include="cfg.h" />
     <ClInclude Include="charrom.h" />
