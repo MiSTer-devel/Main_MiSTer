@@ -479,9 +479,9 @@ static uint32_t menu_key_get(void)
 	return(c);
 }
 
-static char netType;
-char* getNet()
+char* getNet(int spec)
 {
+	int netType = 0;
 	struct ifaddrs *ifaddr, *ifa, *ifae = 0, *ifaw = 0;
 	int family, s;
 	static char host[NI_MAXHOST];
@@ -503,26 +503,26 @@ char* getNet()
 
 	ifa = 0;
 	netType = 0;
-	if (ifaw)
-	{
-		ifa = ifaw;
-		netType = 2;
-	}
-
-	if (ifae)
+	if (ifae && (!spec || spec == 1))
 	{
 		ifa = ifae;
 		netType = 1;
 	}
 
-	if (ifa)
+	if (ifaw && (!spec || spec == 2))
 	{
-		strcpy(host, "IP: ");
-		getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host+strlen(host), NI_MAXHOST-strlen(host), NULL, 0, NI_NUMERICHOST);
+		ifa = ifaw;
+		netType = 2;
 	}
 
+	if (spec && ifa)
+	{
+		strcpy(host, "IP: ");
+		getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host + strlen(host), NI_MAXHOST - strlen(host), NULL, 0, NI_NUMERICHOST);
+	}
+	
 	freeifaddrs(ifaddr);
-	return ifa ? host : 0;
+	return spec ? (ifa ? host : 0) : (char*)netType;
 }
 
 static long sysinfo_timer;
@@ -555,19 +555,27 @@ void printSysInfo()
 			infowrite(n++, "");
 		}
 
-		memset(str, 0, sizeof(str));
-		char *net = getNet();
+		int j = 0;
+		char *net;
+		net = getNet(1);
 		if (net)
 		{
-			str[strlen(str)] = 0x1b + netType;
-			strcat(str, " ");
+			sprintf(str, "\x1c %s", net);
+			infowrite(n++, str);
+			j++;
 		}
-		strcat(str, net ? net : "No network");
-		infowrite(n++, str);
+		net = getNet(2);
+		if (net)
+		{
+			sprintf(str, "\x1d %s", net);
+			infowrite(n++, str);
+			j++;
+		}
+		if (!j) infowrite(n++, "No network");
+		if (j<2) infowrite(n++, "");
 
 		if (hasbat)
 		{
-			infowrite(n++, "");
 			sprintf(str, "\x1F ");
 			if (bat.capacity == -1) strcat(str, "n/a");
 			else sprintf(str + strlen(str), "%d%%", bat.capacity);
@@ -3304,7 +3312,8 @@ void HandleUI(void)
 				strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%b %d %a %H:%M:%S", &tm);
 			}
 
-			if (getNet()) str[9] = 0x1b + netType;
+			int netType = (int)getNet(0);
+			if (netType) str[9] = 0x1b + netType;
 
 			OsdWrite(16, "", 1, 0);
 			OsdWrite(17, str, 1, 0);
