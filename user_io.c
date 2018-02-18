@@ -411,7 +411,8 @@ void user_io_init()
 			if (FileLoadConfig(name, &status, 4))
 			{
 				printf("Found config\n");
-				user_io_8bit_set_status(status, 0xffffffff);
+				status &= ~UIO_STATUS_RESET;
+				user_io_8bit_set_status(status, 0xffffffff & ~UIO_STATUS_RESET);
 			}
 			parse_config();
 
