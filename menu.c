@@ -989,8 +989,8 @@ void HandleUI(void)
 					selentry++;
 				}
 
-				// check for 'T'oggle strings
-				if (p && (p[0] == 'T')) {
+				// check for 'T'oggle and 'R'eset (toggle and then close menu) strings
+				if (p && ((p[0] == 'T') || (p[0] == 'R'))) {
 
 					s[0] = ' ';
 					substrcpy(s + 1, p, 1);
@@ -1172,7 +1172,7 @@ void HandleUI(void)
 
 					menustate = MENU_8BIT_MAIN1;
 				}
-				else if (p[0] == 'T')
+				else if ((p[0] == 'T') || (p[0] == 'R'))
 				{
 					// determine which status bit is affected
 					unsigned long mask = 1 << getIdx(p);
@@ -1188,6 +1188,7 @@ void HandleUI(void)
 						user_io_8bit_set_status(status ^ mask, mask);
 						user_io_8bit_set_status(status, mask);
 						menustate = MENU_8BIT_MAIN1;
+						if (p[0] == 'R') menustate = MENU_NONE1;
 					}
 
 				}
