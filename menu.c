@@ -929,7 +929,7 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_8BIT_MAIN1: {
-		int entry;
+		int entry = 0;
 		int selentry;
 
 		int old_osd_size = OsdGetSize();
@@ -1080,6 +1080,13 @@ void HandleUI(void)
 			OsdSetSize(16);
 			if (old_osd_size == OsdGetSize()) break;
 			old_osd_size = OsdGetSize();
+		}
+
+		if (!entry)
+		{
+			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 0;
+			break;
 		}
 
 		// exit row
