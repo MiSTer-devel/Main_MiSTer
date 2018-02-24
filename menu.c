@@ -1077,7 +1077,7 @@ void HandleUI(void)
 				i++;
 			} while (p);
 
-			OsdSetSize(entry > 7 ? 16 : 8);
+			OsdSetSize(16);
 			if (old_osd_size == OsdGetSize()) break;
 			old_osd_size = OsdGetSize();
 		}
