@@ -23,6 +23,7 @@ typedef struct {
 	uint8_t hdmi_audio_96k;
 	uint8_t dvi;
 	uint8_t video_mode;
+	uint8_t vsync_auto;
 	uint8_t kbd_nomouse;
 	uint8_t mouse_throttle;
 	char video_conf[1024];

@@ -59,6 +59,7 @@
 #define UIO_TIMESTAMP   0x24  // transmit seconds since Unix epoch
 #define UIO_LEDS        0x25  // control on-board LEDs
 #define UIO_AUDVOL      0x26  // Digital volume as a number of bits to shift to the right
+#define UIO_SETHEIGHT   0x27  // Set scaled vertical resolution (to reduce scaling artefacts)
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53

@@ -970,6 +970,8 @@ void user_io_rtc_reset()
 
 static int coldreset_req = 0;
 
+int adjust_video_mode(uint32_t vtime);
+
 void user_io_poll()
 {
 	if ((core_type != CORE_TYPE_MINIMIG2) &&
@@ -1482,7 +1484,11 @@ void user_io_poll()
 	}
 
 	static uint32_t res_timer = 0;
-	if(!res_timer || CheckTimer(res_timer))
+	if (!res_timer)
+	{
+		res_timer = GetTimer(1000); // initial wait
+	}
+	else if(CheckTimer(res_timer))
 	{
 		res_timer = GetTimer(2000); // every 2 sec
 
@@ -1497,16 +1503,30 @@ void user_io_poll()
 			uint32_t htime  = spi_w(0) | (spi_w(0) << 16);
 			uint32_t vtime  = spi_w(0) | (spi_w(0) << 16);
 			uint32_t ptime  = spi_w(0) | (spi_w(0) << 16);
+			uint32_t vtimeh = spi_w(0) | (spi_w(0) << 16);
+			DisableIO();
 
 			float vrate = 100000000;
-			vrate /= vtime;
+			if(vtime) vrate /= vtime; else vrate = 0;
 			float hrate = 100000;
-			hrate /= htime;
+			if (htime) hrate /= htime; else hrate = 0;
 
 			float prate = width*100;
 			prate /= ptime;
 
 			printf("\033[1;33mINFO: Video resolution: %u x %u, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, hrate, vrate, prate);
+			printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
+
+			if (vtime && vtimeh && cfg.vsync_auto)
+			{
+				static uint32_t oldvtime = 0;
+				if (oldvtime != vtime)
+				{
+					oldvtime = vtime;
+					nres--;
+					adjust_video_mode(vtime);
+				}
+			}
 		}
 		DisableIO();
 	}
@@ -1984,24 +2004,49 @@ emu_mode_t user_io_get_kbdemu()
 	return emu_mode;
 }
 
-int getPLL(double Fout, uint32_t *M, uint32_t *K, uint32_t *C)
+struct
+{
+	uint32_t vpar[8];
+	double Fpix;
+} vmodes[] =
+{
+	{ { 1280, 110,  40, 220,  720,  5,  5, 20 }, 74.25 },
+	{ { 1024,  24, 136, 160,  768,  3,  6, 29 }, 65 },
+	{ { 720,  16,  62,  60,  480,  9,  6, 30 }, 27 },
+	{ { 720,  12,  64,  68,  576,  5,  5, 39 }, 27 },
+	{ { 1280,  48, 112, 248, 1024,  1,  3, 38 }, 108 },
+	{ { 800,  40, 128,  88,  600,  1,  4, 23 }, 40 },
+	{ { 640,  16,  96,  48,  480, 10,  2, 33 }, 25.175 },
+	{ { 1280, 440,  40, 220,  720,  5,  5, 20 }, 74.25 },
+	{ { 1920,  88,  44, 148, 1080,  4,  5, 36 }, 148.5 },
+	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5 },
+};
+#define VMODES_NUM (sizeof(vmodes) / sizeof(vmodes[0]))
+
+static uint32_t vitems[32];
+
+static uint32_t getPLLdiv(uint32_t div)
+{
+	if (div & 1) return 0x20000 | (((div / 2) + 1) << 8) | (div / 2);
+	return ((div / 2) << 8) | (div / 2);
+}
+
+static int setPLL(double Fout)
 {
 	uint32_t c = 1;
 	while ((Fout*c) < 400) c++;
 
-	printf("Calculate PLL for %.3f MHz:\n",Fout);
+	printf("Calculate PLL for %.4f MHz:\n",Fout);
 
 	while (1)
 	{
 		printf("C=%d, ", c);
-		*C = c;
 
 		double fvco = Fout*c;
 		printf("Fvco=%f, ", fvco);
 
 		uint32_t m = (uint32_t)(fvco / 50);
 		printf("M=%d, ", m);
-		*M = m;
 
 		double ko = ((fvco / 50) - m);
 		printf("K_orig=%f, ", ko);
@@ -2009,7 +2054,6 @@ int getPLL(double Fout, uint32_t *M, uint32_t *K, uint32_t *C)
 		uint32_t k = (uint32_t)(ko * 4294967296);
 		if (!k) k = 1;
 		printf("K=%u. ", k);
-		*K = k;
 
 		if (ko && (ko <= 0.05f || ko >= 0.95f))
 		{
@@ -2024,34 +2068,50 @@ int getPLL(double Fout, uint32_t *M, uint32_t *K, uint32_t *C)
 		else
 		{
 			printf("\n");
+
+			vitems[9]  = 4;
+			vitems[10] = getPLLdiv(m);
+			vitems[11] = 3;
+			vitems[12] = 0x10000;
+			vitems[13] = 5;
+			vitems[14] = getPLLdiv(c);
+			vitems[15] = 9;
+			vitems[16] = 2;
+			vitems[17] = 8;
+			vitems[18] = 7;
+			vitems[19] = 7;
+			vitems[20] = k;
+
 			return 1;
 		}
 	}
 }
 
-uint32_t getPLLdiv(uint32_t div)
+static int setVideo()
 {
-	if (div & 1) return 0x20000 | (((div / 2)+1) << 8) | (div / 2);
-	return ((div / 2) << 8) | (div / 2);
+	printf("Send HDMI parameters:\n");
+	spi_uio_cmd_cont(UIO_SET_VIDEO);
+	printf("video: ");
+	for (int i = 1; i <= 8; i++)
+	{
+		spi_w(vitems[i]);
+		printf("%d, ", vitems[i]);
+	}
+	printf("\nPLL: ");
+	for (int i = 9; i < 21; i++)
+	{
+		printf("0x%X, ", vitems[i]);
+		if (i & 1) spi_w(vitems[i]);
+		else
+		{
+			spi_w(vitems[i]);
+			spi_w(vitems[i] >> 16);
+		}
+	}
+
+	printf("\n");
+	DisableIO();
 }
-
-struct
-{
-	uint32_t vpar[8];
-	double Fpix;
-} vmodes[8] =
-{
-	{ {1280, 110, 40,  220, 720,  5,  5, 20}, 74.25  },
-	{ {1024, 24,  136, 160, 768,  3,  6, 29}, 65     },
-	{ {720,  16,  62,  60,  480,  9,  6, 30}, 27     },
-	{ {720,  12,  64,  68,  576,  5,  5, 39}, 27     },
-	{ {1280, 48,  112, 248, 1024, 1,  3, 38}, 108    },
-	{ {800,  40,  128, 88,  600,  1,  4, 23}, 40     },
-	{ {640,  16,  96,  48,  480,  10, 2, 33}, 25.175 },
-	{ {1280, 440, 40,  220, 720,  5,  5, 20}, 74.25  }
-};
-
-uint32_t vitems[32];
 
 static int parse_custom_video_mode()
 {
@@ -2063,28 +2123,14 @@ static int parse_custom_video_mode()
 		char *next;
 		if (cnt == 9 && vitems[0] == 1)
 		{
-			double Fout = strtod(vcfg, &next);
-			if (vcfg == next || (Fout < 20.f || Fout > 200.f))
+			double Fpix = strtod(vcfg, &next);
+			if (vcfg == next || (Fpix < 20.f || Fpix > 200.f))
 			{
 				printf("Error parsing video_mode parameter: ""%s""\n", cfg.video_conf);
 				return 0;
 			}
 
-			uint32_t M, K, C;
-			if (!getPLL(Fout, &M, &K, &C)) return 0;
-
-			vitems[9] = 4;
-			vitems[10] = getPLLdiv(M);
-			vitems[11] = 3;
-			vitems[12] = 0x10000;
-			vitems[13] = 5;
-			vitems[14] = getPLLdiv(C);
-			vitems[15] = 9;
-			vitems[16] = 2;
-			vitems[17] = 8;
-			vitems[18] = 7;
-			vitems[19] = 7;
-			vitems[20] = K;
+			if (!setPLL(Fpix)) return 0;
 			break;
 		}
 
@@ -2130,49 +2176,30 @@ void parse_video_mode()
 	int mode = parse_custom_video_mode();
 	if (mode >= 0)
 	{
-		if (mode >= 8) mode = 0;
+		if (mode >= VMODES_NUM) mode = 0;
 		for (int i = 0; i < 8; i++)
 		{
 			vitems[i + 1] = vmodes[mode].vpar[i];
 		}
 
-		uint32_t M, K, C;
-		getPLL(vmodes[mode].Fpix, &M, &K, &C);
-
-		vitems[9] = 4;
-		vitems[10] = getPLLdiv(M);
-		vitems[11] = 3;
-		vitems[12] = 0x10000;
-		vitems[13] = 5;
-		vitems[14] = getPLLdiv(C);
-		vitems[15] = 9;
-		vitems[16] = 2;
-		vitems[17] = 8;
-		vitems[18] = 7;
-		vitems[19] = 7;
-		vitems[20] = K;
+		setPLL(vmodes[mode].Fpix);
 	}
+	setVideo();
+}
 
-	printf("Send HDMI parameters:\n");
-	spi_uio_cmd_cont(UIO_SET_VIDEO);
-	printf("video: ");
-	for (int i = 1; i <= 8; i++)
+int adjust_video_mode(uint32_t vtime)
+{
+	printf("Adjust VSync.\n");
+
+	double Fpix = 100 * (vitems[1] + vitems[2] + vitems[3] + vitems[4]) * (vitems[5] + vitems[6] + vitems[7] + vitems[8]);
+	Fpix /= vtime;
+	if (Fpix < 20.f || Fpix > 200.f)
 	{
-		spi_w(vitems[i]);
-		printf("%d, ", vitems[i]);
-	}
-	printf("\nPLL: ");
-	for (int i = 9; i < 21; i++)
-	{
-		printf("0x%X, ", vitems[i]);
-		if (i & 1) spi_w(vitems[i]);
-		else
-		{
-			spi_w(vitems[i]);
-			spi_w(vitems[i] >> 16);
-		}
+		printf("Estimated Fpix(%.4f MHz) is outside supported range. Canceling auto-adjust.\n", Fpix);
+		return 0;
 	}
 
-	printf("\n");
-	DisableIO();
+	setPLL(Fpix);
+	setVideo();
+	user_io_send_buttons(1);
 }
