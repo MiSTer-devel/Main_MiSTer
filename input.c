@@ -1446,8 +1446,9 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 					if (autofire[num] & amask) autofire[num] &= ~amask;
 					else autofire[num] |= amask;
 
-					InfoMessage((autofire[num] & amask) ? "\n\n          Auto fire\n             ON" :
-						"\n\n          Auto fire\n             OFF");
+					if(hasAPI1_5()) Info((autofire[num] & amask) ? "\n Auto fire: ON" : "\n Auto fire: OFF", 16, 3);
+					else InfoMessage((autofire[num] & amask) ? "\n\n          Auto fire\n             ON" :
+						                "\n\n          Auto fire\n             OFF");
 				}
 				else
 				{
@@ -1456,8 +1457,17 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 					else if (joy[num] & 4) af_delay[num] = 200;
 					else af_delay[num] = 500;
 					static char str[256];
-					sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num] * 2);
-					InfoMessage(str);
+
+					if (hasAPI1_5())
+					{
+						sprintf(str, "\n Auto fire period: %d ms", af_delay[num] * 2);
+						Info(str, 27, 3);
+					}
+					else
+					{
+						sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num] * 2);
+						InfoMessage(str);
+					}
 				}
 			}
 			return;

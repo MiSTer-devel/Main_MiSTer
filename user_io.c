@@ -65,7 +65,7 @@ bool scrl_status = 0;
 
 // set by OSD code to suppress forwarding of those keys to the core which
 // may be in use by an active OSD
-static char osd_is_visible = false;
+static char osd_is_visible = 0;
 
 char user_io_osd_is_visible()
 {
@@ -968,6 +968,12 @@ void user_io_rtc_reset()
 	rtc_timer = 0;
 }
 
+static int api1_5 = 0;
+int hasAPI1_5()
+{
+	return api1_5;
+}
+
 static int coldreset_req = 0;
 
 int adjust_video_mode(uint32_t vtime);
@@ -998,6 +1004,7 @@ uint32_t show_video_info(int force)
 		printf("\033[1;33mINFO: Video resolution: %u x %u, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, hrate, vrate, prate);
 		printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
 
+		if (vtimeh) api1_5 = 1;
 		if (vtime && vtimeh) return vtime;
 	}
 	else
@@ -1825,24 +1832,26 @@ static char key_used_by_osd(uint32_t s)
 	return osd_is_visible;
 }
 
-void set_volume()
+static void set_volume()
 {
 	vol_set_timeout = GetTimer(1000);
 
 	spi_uio_cmd8(UIO_AUDVOL, vol_att);
 	if (vol_att & 0x10)
 	{
-		InfoMessageEx("\n\n         Audio muted", 1000);
+		InfoEx("\n \x8d Mute", 8, 3, 1000);
 	}
 	else
 	{
-		char str[64];
+		char str[32];
 		memset(str, 0, sizeof(str));
 
 		int vol = vol_att & 0xf;
-		sprintf(str, "\n\n       Volume %d dB\n       ", -3*vol);
-		memset(str + strlen(str), 0x7f, 16-vol);
-		InfoMessageEx(str, 1000);
+		sprintf(str, "\n \x8d ");
+		char *bar = str + strlen(str);
+		memset(bar, 0x8C, 16);
+		memset(bar, 0x7f, 16 - vol);
+		InfoEx(str, 20, 3, 1000);
 	}
 }
 
@@ -1850,7 +1859,7 @@ void user_io_kbd(uint16_t key, int press)
 {
 	if (key == KEY_MUTE)
 	{
-		if (press == 1 && !osd_is_visible && !is_menu_core())
+		if (press == 1 && hasAPI1_5() && !osd_is_visible && !is_menu_core())
 		{
 			vol_att ^= 0x10;
 			set_volume();
@@ -1859,7 +1868,7 @@ void user_io_kbd(uint16_t key, int press)
 	else
 	if (key == KEY_VOLUMEDOWN)
 	{
-		if (press && !osd_is_visible && !is_menu_core())
+		if (press && hasAPI1_5() && !osd_is_visible && !is_menu_core())
 		{
 			if(vol_att & 0x10) vol_att ^= 0x10;
 			else if((vol_att & 0xF) < 15) vol_att += 1;
@@ -1869,7 +1878,7 @@ void user_io_kbd(uint16_t key, int press)
 	else
 	if (key == KEY_VOLUMEUP)
 	{
-		if (press && !osd_is_visible && !is_menu_core())
+		if (press && hasAPI1_5() && !osd_is_visible && !is_menu_core())
 		{
 			if (vol_att & 0x10) vol_att ^= 0x10;
 			else if(vol_att & 0xF) vol_att -= 1;
@@ -1879,20 +1888,12 @@ void user_io_kbd(uint16_t key, int press)
 	else
 	if (key == 0xBE)
 	{
-		if (press)
-		{
-			setBrightness(BRIGHTNESS_DOWN, 0);
-			vol_set_timeout = GetTimer(1000);
-		}
+		if (press) setBrightness(BRIGHTNESS_DOWN, 0);
 	}
 	else
 	if (key == 0xBF)
 	{
-		if (press)
-		{
-			setBrightness(BRIGHTNESS_UP, 0);
-			vol_set_timeout = GetTimer(1000);
-		}
+		if (press) setBrightness(BRIGHTNESS_UP, 0);
 	}
 	else
 	if ((core_type == CORE_TYPE_MINIMIG2) ||

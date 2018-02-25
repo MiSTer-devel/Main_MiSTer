@@ -20,9 +20,10 @@ void ScrollLongName(void);
 void ErrorMessage(const char *message, unsigned char code);
 void InfoMessage(char *message);
 void InfoMessageEx(char *message, int timeout);
+void InfoEx(char *message, int width, int height, int timeout);
+void Info(char *message, int width, int height);
 void ShowSplash();
 void HideSplash();
-void EjectAllFloppies();
 
 unsigned long getStatus(char *opt, unsigned long status);
 

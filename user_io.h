@@ -210,5 +210,6 @@ void user_io_check_reset(unsigned short modifiers, char useKeys);
 void user_io_rtc_reset();
 
 void parse_video_mode();
+int hasAPI1_5();
 
 #endif // USER_IO_H

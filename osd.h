@@ -45,6 +45,7 @@
 #define OSD_CMD_VERSION   0x88
 
 #define DISABLE_KEYBOARD 0x02        // disable keyboard while OSD is active
+#define OSD_INFO         0x04        // display info
 
 #define REPEATDELAY      500         // repeat delay in 1ms units
 #define REPEATRATE       50          // repeat rate in 1ms units
@@ -70,6 +71,7 @@ void OsdWrite(unsigned char n, char *s, unsigned char inver, unsigned char stipp
 void OsdWriteOffset(unsigned char n, char *s, unsigned char inver, unsigned char stipple, char offset, char leftchar); // Used for scrolling "Exit" text downwards...
 void OsdClear(void);
 void OsdEnable(unsigned char mode);
+void InfoEnable(int x, int y, int width, int height);
 void OsdDisable(void);
 void ConfigFilter(unsigned char lores, unsigned char hires);
 void ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines);
@@ -80,6 +82,7 @@ void ConfigChipset(unsigned char chipset);
 void ConfigFloppy(unsigned char drives, unsigned char speed);
 void ConfigAutofire(unsigned char autofire, unsigned char mask);
 void OSD_PrintText(unsigned char line, char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert);
+void OSD_PrintInfo(char *message, int width, int height, int frame);
 void OsdDrawLogo(unsigned char n, char row, char superimpose);
 void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert);
 void ScrollReset();

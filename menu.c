@@ -3630,13 +3630,19 @@ void InfoMessageEx(char *message, int timeout)
 	menu_timer = GetTimer(timeout);
 }
 
-void EjectAllFloppies()
+void InfoEx(char *message, int width, int height, int timeout)
 {
-	char i;
-	for (i = 0; i<drives; i++)
-		df[i].status = 0;
+	if (!user_io_osd_is_visible())
+	{
+		OSD_PrintInfo(message, width, height, 0);
+		InfoEnable(20, 10, width, height);
 
-	// harddisk
-	config.hardfile[0].present = 0;
-	config.hardfile[1].present = 0;
+		menu_timer = GetTimer(timeout);
+		menustate = MENU_INFO;
+	}
+}
+
+void Info(char *message, int width, int height)
+{
+	InfoEx(message, width, height, 2000);
 }
