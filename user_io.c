@@ -976,6 +976,9 @@ int hasAPI1_5()
 
 static int coldreset_req = 0;
 
+static uint32_t vitems[32];
+double Fpix = 0;
+
 int adjust_video_mode(uint32_t vtime);
 uint32_t show_video_info(int force)
 {
@@ -1005,6 +1008,18 @@ uint32_t show_video_info(int force)
 		printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
 
 		if (vtimeh) api1_5 = 1;
+		if (hasAPI1_5() && cfg.video_info)
+		{
+			static char str[128];
+			float vrateh = 100000000;
+			if (vtimeh) vrateh /= vtimeh; else vrateh = 0;
+			sprintf(str, "\n %4dx%-4d %6.2fKHz %4.1fHz" \
+						 "\n \x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81" \
+						 "\n %4dx%-4d %6.2fMHz %4.1fHz",
+						 width, height, hrate, vrate, vitems[1], vitems[5], Fpix, vrateh);
+			InfoEx(str, 28, 5, cfg.video_info*1000);
+		}
+
 		if (vtime && vtimeh) return vtime;
 	}
 	else
@@ -1535,7 +1550,7 @@ void user_io_poll()
 	{
 		res_timer = GetTimer(500);
 		uint32_t vtime = show_video_info(0);
-		if (vtime && cfg.vsync_auto)
+		if (vtime && cfg.vsync_adjust)
 		{
 			adjust_video_mode(vtime);
 			usleep(100000);
@@ -2029,8 +2044,6 @@ struct
 };
 #define VMODES_NUM (sizeof(vmodes) / sizeof(vmodes[0]))
 
-static uint32_t vitems[32];
-
 static uint32_t getPLLdiv(uint32_t div)
 {
 	if (div & 1) return 0x20000 | (((div / 2) + 1) << 8) | (div / 2);
@@ -2039,6 +2052,8 @@ static uint32_t getPLLdiv(uint32_t div)
 
 static int setPLL(double Fout)
 {
+	Fpix = Fout;
+
 	uint32_t c = 1;
 	while ((Fout*c) < 400) c++;
 
