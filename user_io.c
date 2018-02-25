@@ -971,6 +971,42 @@ void user_io_rtc_reset()
 static int coldreset_req = 0;
 
 int adjust_video_mode(uint32_t vtime);
+uint32_t show_video_info(int force)
+{
+	static uint8_t nres = 0;
+	spi_uio_cmd_cont(UIO_GET_VRES);
+	uint8_t res = spi_in();
+	if ((nres != res) || force)
+	{
+		nres = res;
+		uint32_t width  = spi_w(0) | (spi_w(0) << 16);
+		uint32_t height = spi_w(0) | (spi_w(0) << 16);
+		uint32_t htime  = spi_w(0) | (spi_w(0) << 16);
+		uint32_t vtime  = spi_w(0) | (spi_w(0) << 16);
+		uint32_t ptime  = spi_w(0) | (spi_w(0) << 16);
+		uint32_t vtimeh = spi_w(0) | (spi_w(0) << 16);
+		DisableIO();
+
+		float vrate = 100000000;
+		if (vtime) vrate /= vtime; else vrate = 0;
+		float hrate = 100000;
+		if (htime) hrate /= htime; else hrate = 0;
+
+		float prate = width * 100;
+		prate /= ptime;
+
+		printf("\033[1;33mINFO: Video resolution: %u x %u, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, hrate, vrate, prate);
+		printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
+
+		if (vtime && vtimeh) return vtime;
+	}
+	else
+	{
+		DisableIO();
+	}
+
+	return 0;
+}
 
 void user_io_poll()
 {
@@ -1486,49 +1522,18 @@ void user_io_poll()
 	static uint32_t res_timer = 0;
 	if (!res_timer)
 	{
-		res_timer = GetTimer(1000); // initial wait
+		res_timer = GetTimer(1000);
 	}
 	else if(CheckTimer(res_timer))
 	{
-		res_timer = GetTimer(2000); // every 2 sec
-
-		static uint8_t nres = 0;
-		spi_uio_cmd_cont(UIO_GET_VRES);
-		uint8_t res = spi_in();
-		if (nres != res)
+		res_timer = GetTimer(500);
+		uint32_t vtime = show_video_info(0);
+		if (vtime && cfg.vsync_auto)
 		{
-			nres = res;
-			uint32_t width  = spi_w(0) | (spi_w(0) << 16);
-			uint32_t height = spi_w(0) | (spi_w(0) << 16);
-			uint32_t htime  = spi_w(0) | (spi_w(0) << 16);
-			uint32_t vtime  = spi_w(0) | (spi_w(0) << 16);
-			uint32_t ptime  = spi_w(0) | (spi_w(0) << 16);
-			uint32_t vtimeh = spi_w(0) | (spi_w(0) << 16);
-			DisableIO();
-
-			float vrate = 100000000;
-			if(vtime) vrate /= vtime; else vrate = 0;
-			float hrate = 100000;
-			if (htime) hrate /= htime; else hrate = 0;
-
-			float prate = width*100;
-			prate /= ptime;
-
-			printf("\033[1;33mINFO: Video resolution: %u x %u, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, hrate, vrate, prate);
-			printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
-
-			if (vtime && vtimeh && cfg.vsync_auto)
-			{
-				static uint32_t oldvtime = 0;
-				if (oldvtime != vtime)
-				{
-					oldvtime = vtime;
-					nres--;
-					adjust_video_mode(vtime);
-				}
-			}
+			adjust_video_mode(vtime);
+			usleep(100000);
+			show_video_info(1);
 		}
-		DisableIO();
 	}
 
 	static int prev_coldreset_req = 0;
