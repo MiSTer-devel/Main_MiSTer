@@ -18,10 +18,10 @@ void HandleUI(void);
 void PrintDirectory(void);
 void ScrollLongName(void);
 void ErrorMessage(const char *message, unsigned char code);
-void InfoMessage(char *message);
-void InfoMessageEx(char *message, int timeout);
-void InfoEx(char *message, int width, int height, int timeout);
-void Info(char *message, int width, int height);
+void InfoMessage(const char *message);
+void InfoMessageEx(const char *message, int timeout);
+void InfoEx(const char *message, int width, int height, int timeout);
+void Info(const char *message, int width, int height);
 void ShowSplash();
 void HideSplash();
 

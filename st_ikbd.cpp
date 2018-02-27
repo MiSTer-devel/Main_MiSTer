@@ -314,11 +314,14 @@ void ikbd_handler_reset(void) {
 }
 
 // ---- list of supported ikbd commands ----
-struct {
+struct ikbd_command_handler_t {
 	unsigned char code;
 	unsigned char length;
 	void(*handler)(void);
-} ikbd_command_handler[] = {
+};
+	
+ikbd_command_handler_t ikbd_command_handler[] =
+{
 	{ 0x07, 2, ikbd_handler_mouse_button_action },
 	{ 0x08, 1, ikbd_handler_set_relative_mouse_pos },
 	{ 0x09, 5, ikbd_handler_set_abs_mouse_pos },

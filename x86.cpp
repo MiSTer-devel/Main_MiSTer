@@ -109,7 +109,7 @@ static void dma_rcvbuf(uint32_t address, uint32_t length, uint32_t *data)
 	DisableFpga();
 }
 
-static int load_bios(char* name, uint8_t index)
+static int load_bios(const char* name, uint8_t index)
 {
 	fileTYPE f = { 0 };
 	static uint32_t buf[128];
@@ -563,7 +563,7 @@ void x86_init()
 		0x00, //0x03: ALARM MIN BCD
 		bin2bcd(tm.tm_hour), //0x04: HOUR BCD 24h
 		0x12, //0x05: ALARM HOUR BCD 24h
-		tm.tm_wday+1, //0x06: DAY OF WEEK Sunday=1
+		(uint32_t)tm.tm_wday+1, //0x06: DAY OF WEEK Sunday=1
 		bin2bcd(tm.tm_mday), //0x07: DAY OF MONTH BCD from 1
 		bin2bcd(tm.tm_mon+1), //0x08: MONTH BCD from 1
 		bin2bcd((tm.tm_year<117) ? 17 : tm.tm_year-100), //0x09: YEAR BCD
@@ -574,7 +574,7 @@ void x86_init()
 		0x00, //0x0E: REG E - POST status
 		0x00, //0x0F: REG F - shutdown status
 
-		CMOS_FDD_TYPE, //0x10: floppy drive type; 0-none, 1-360K, 2-1.2M, 3-720K, 4-1.44M, 5-2.88M
+		(uint32_t)CMOS_FDD_TYPE, //0x10: floppy drive type; 0-none, 1-360K, 2-1.2M, 3-720K, 4-1.44M, 5-2.88M
 		0x00, //0x11: configuration bits; not used
 		0x00, //0x12: hard disk types; 0-none, 1:E-type, F-type 16+ (unused)
 		0x00, //0x13: advanced configuration bits; not used

@@ -151,7 +151,7 @@ extern adfTYPE df[4];
 
 extern configTYPE config;
 
-extern const char version[];
+extern const char *version;
 const char *config_tos_mem[] = { "512 kB", "1 MB", "2 MB", "4 MB", "8 MB", "14 MB", "--", "--" };
 const char *config_tos_wrprot[] = { "none", "A:", "B:", "A: and B:" };
 const char *config_tos_usb[] = { "none", "control", "debug", "serial", "parallel", "midi" };
@@ -169,11 +169,11 @@ const char *config_cpu_msg[] = { "68000", "68010", "-----","68020" };
 const char *config_hdf_msg[] = { "Disabled", "Hardfile (disk img)", "MMC/SD card", "MMC/SD partition 1", "MMC/SD partition 2", "MMC/SD partition 3", "MMC/SD partition 4" };
 const char *config_chipset_msg[] = { "OCS-A500", "OCS-A1000", "ECS", "---", "---", "---", "AGA", "---" };
 const char *config_turbo_msg[] = { "none", "CHIPRAM", "KICK", "BOTH" };
-char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE FAST", "        AUTOFIRE MEDIUM", "        AUTOFIRE SLOW" };
+const char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE FAST", "        AUTOFIRE MEDIUM", "        AUTOFIRE SLOW" };
 const char *config_cd32pad_msg[] = { "OFF", "ON" };
-char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
-char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
-char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
+const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
+const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
+const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 
 char joy_bnames[12][32];
@@ -270,7 +270,7 @@ int changeDir(char *dir)
 	return 1;
 }
 
-static void SelectFile(char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel, char chdir)
+static void SelectFile(const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel, char chdir)
 {
 	// this function displays file selection menu
 
@@ -393,7 +393,7 @@ unsigned long getStatusMask(char *opt) {
 	return x << idx1;
 }
 
-char* get_keycode_table()
+const char* get_keycode_table()
 {
 	switch (user_io_core_type())
 	{
@@ -526,7 +526,7 @@ char* getNet(int spec)
 }
 
 static long sysinfo_timer;
-void infowrite(int pos, char* txt)
+static void infowrite(int pos, const char* txt)
 {
 	char str[40];
 	memset(str, 0x20, 29);
@@ -635,7 +635,7 @@ void HandleUI(void)
 
 	char *p;
 	char s[40];
-	unsigned char i, m, up, down, select, menu, right, left, plus, minus;
+	unsigned char m, up, down, select, menu, right, left, plus, minus;
 	uint8_t mod;
 	unsigned long len;
 	static hardfileTYPE t_hardfile[2]; // temporary copy of former hardfile configuration
@@ -958,7 +958,7 @@ void HandleUI(void)
 			}
 
 			// add options as requested by core
-			i = 2;
+			int i = 2;
 			do {
 				char* pos;
 				unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
@@ -1378,59 +1378,61 @@ void HandleUI(void)
 		break;
 
 	case MENU_JOYDIGMAP1:
-		p = 0;
-		if (get_map_button() < 4)
 		{
-			p = joy_button_map[get_map_button()];
-		}
-		else if(joy_bcount)
-		{
-			p = (get_map_button() < joy_bcount + 4) ? joy_bnames[get_map_button() - 4] : joy_button_map[8+get_map_type()];
-		}
-		else
-		{
-			p = (get_map_button() < 8) ? joy_button_map[get_map_button()] : joy_button_map[8 + get_map_type()];
-		}
-
-
-		{
-			s[0] = 0;
-			int len = (30-(strlen(p)+7))/2;
-			while (len > 0)
+			const char* p = 0;
+			if (get_map_button() < 4)
 			{
-				strcat(s, " ");
-				len--;
+				p = joy_button_map[get_map_button()];
 			}
-		}
-		strcat(s, "Press: ");
-		strcat(s, p);
-		OsdWrite(3, s, 0, 0);
-		if (get_map_button())
-		{
-			if(get_map_type()) OsdWrite(OsdGetSize() - 1, "    finish (SPACE - skip)", menusub == 0, 0);
-			else OsdWrite(OsdGetSize() - 1, "", 0, 0);
-
-			sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
-			OsdWrite(5, s, 0, 0);
-		}
-
-		if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 5 : 9))
-		{
-			finish_map_setting(menu);
-			if (is_menu_core())
+			else if (joy_bcount)
 			{
-				menustate = MENU_FIRMWARE1;
-				menusub = 2;
-			}
-			else if (is_archie())
-			{
-				menustate = MENU_ARCHIE_MAIN1;
-				menusub = 4;
+				p = (get_map_button() < joy_bcount + 4) ? joy_bnames[get_map_button() - 4] : joy_button_map[8 + get_map_type()];
 			}
 			else
 			{
-				menustate = MENU_8BIT_SYSTEM1;
-				menusub = 1;
+				p = (get_map_button() < 8) ? joy_button_map[get_map_button()] : joy_button_map[8 + get_map_type()];
+			}
+
+
+			{
+				s[0] = 0;
+				int len = (30 - (strlen(p) + 7)) / 2;
+				while (len > 0)
+				{
+					strcat(s, " ");
+					len--;
+				}
+			}
+			strcat(s, "Press: ");
+			strcat(s, p);
+			OsdWrite(3, s, 0, 0);
+			if (get_map_button())
+			{
+				if (get_map_type()) OsdWrite(OsdGetSize() - 1, "    finish (SPACE - skip)", menusub == 0, 0);
+				else OsdWrite(OsdGetSize() - 1, "", 0, 0);
+
+				sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
+				OsdWrite(5, s, 0, 0);
+			}
+
+			if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 5 : 9))
+			{
+				finish_map_setting(menu);
+				if (is_menu_core())
+				{
+					menustate = MENU_FIRMWARE1;
+					menusub = 2;
+				}
+				else if (is_archie())
+				{
+					menustate = MENU_ARCHIE_MAIN1;
+					menusub = 4;
+				}
+				else
+				{
+					menustate = MENU_8BIT_SYSTEM1;
+					menusub = 1;
+				}
 			}
 		}
 		break;
@@ -1566,7 +1568,7 @@ void HandleUI(void)
 		menumask = tos_get_direct_hdd() ? 0x3f : 0x7f;
 		OsdSetTitle("Storage", 0);
 		// entries for both floppies
-		for (i = 0; i<2; i++) {
+		for (int i = 0; i<2; i++) {
 			strcpy(s, " A: ");
 			strcat(s, tos_get_disk_name(i));
 			s[1] = 'A' + i;
@@ -1581,7 +1583,7 @@ void HandleUI(void)
 		strcpy(s, " ACSI0 direct SD: ");
 		strcat(s, tos_get_direct_hdd() ? "on" : "off");
 		OsdWrite(4, s, menusub == 3, 0);
-		for (i = 0; i<2; i++) {
+		for (int i = 0; i<2; i++) {
 			strcpy(s, " ACSI0: ");
 			s[5] = '0' + i;
 
@@ -1940,7 +1942,7 @@ void HandleUI(void)
 		// We display a line for each drive that's active
 		// in the config file, but grey out any that the FPGA doesn't think are active.
 		// We also print a help text in place of the last drive if it's inactive.
-		for (i = 0; i < 4; i++)
+		for (int i = 0; i < 4; i++)
 		{
 			if (i == config.floppy.drives + 1)
 				OsdWrite(i+1, " KP +/- to add/remove drives", 0, 1);
@@ -2079,9 +2081,7 @@ void HandleUI(void)
 		}
 		else if (c == KEY_BACKSPACE) // eject all floppies
 		{
-			for (i = 0; i <= drives; i++)
-				df[i].status = 0;
-
+			for (int i = 0; i <= drives; i++) df[i].status = 0;
 			menustate = MENU_MAIN1;
 		}
 		else if (right)
@@ -2221,11 +2221,14 @@ void HandleUI(void)
 			menustate = MENU_FILE_SELECT1;
 		}
 
-		if ((i = GetASCIIKey(c))>1)
-		{ 
-			// find an entry beginning with given character
-			ScanDirectory(SelectedPath, i, fs_pFileExt, fs_Options);
-			menustate = MENU_FILE_SELECT1;
+		{
+			int i;
+			if ((i = GetASCIIKey(c)) > 1)
+			{
+				// find an entry beginning with given character
+				ScanDirectory(SelectedPath, i, fs_pFileExt, fs_Options);
+				menustate = MENU_FILE_SELECT1;
+			}
 		}
 
 		if (select)
@@ -3366,72 +3369,6 @@ void ScrollLongName(void)
 	ScrollText(iSelectedEntry-iFirstEntry, DirItem[iSelectedEntry].d_name, 2, len, max_len, 1);
 }
 
-char* GetDiskInfo(char* lfn, long len)
-{
-	// extracts disk number substring form file name
-	// if file name contains "X of Y" substring where X and Y are one or two digit number
-	// then the number substrings are extracted and put into the temporary buffer for further processing
-	// comparision is case sensitive
-
-	short i, k;
-	static char info[] = "XX/XX"; // temporary buffer
-	static char template[4] = " of "; // template substring to search for
-	char *ptr1, *ptr2, c;
-	unsigned char cmp;
-
-	if (len > 20) // scan only names which can't be fully displayed
-	{
-		for (i = (unsigned short)len - 1 - sizeof(template); i > 0; i--) // scan through the file name starting from its end
-		{
-			ptr1 = &lfn[i]; // current start position
-			ptr2 = template;
-			cmp = 0;
-			for (k = 0; k < sizeof(template); k++) // scan through template
-			{
-				cmp |= *ptr1++ ^ *ptr2++; // compare substrings' characters one by one
-				if (cmp)
-					break; // stop further comparing if difference already found
-			}
-
-			if (!cmp) // match found
-			{
-				k = i - 1; // no need to check if k is valid since i is greater than zero
-
-				c = lfn[k]; // get the first character to the left of the matched template substring
-				if (c >= '0' && c <= '9') // check if a digit
-				{
-					info[1] = c; // copy to buffer
-					info[0] = ' '; // clear previous character
-					k--; // go to the preceding character
-					if (k >= 0) // check if index is valid
-					{
-						c = lfn[k];
-						if (c >= '0' && c <= '9') // check if a digit
-							info[0] = c; // copy to buffer
-					}
-
-					k = i + sizeof(template); // get first character to the right of the mached template substring
-					c = lfn[k]; // no need to check if index is valid
-					if (c >= '0' && c <= '9') // check if a digit
-					{
-						info[3] = c; // copy to buffer
-						info[4] = ' '; // clear next char
-						k++; // go to the followwing character
-						if (k < len) // check if index is valid
-						{
-							c = lfn[k];
-							if (c >= '0' && c <= '9') // check if a digit
-								info[4] = c; // copy to buffer
-						}
-						return info;
-					}
-				}
-			}
-		}
-	}
-	return NULL;
-}
-
 // print directory contents
 void PrintDirectory(void)
 {
@@ -3610,7 +3547,7 @@ void ErrorMessage(const char *message, unsigned char code)
 	OsdEnable(0); // do not disable KEYBOARD
 }
 
-void InfoMessage(char *message)
+void InfoMessage(const char *message)
 {
 	if (menustate != MENU_INFO)
 	{
@@ -3624,13 +3561,13 @@ void InfoMessage(char *message)
 	menustate = MENU_INFO;
 }
 
-void InfoMessageEx(char *message, int timeout)
+void InfoMessageEx(const char *message, int timeout)
 {
 	InfoMessage(message);
 	menu_timer = GetTimer(timeout);
 }
 
-void InfoEx(char *message, int width, int height, int timeout)
+void InfoEx(const char *message, int width, int height, int timeout)
 {
 	if (!user_io_osd_is_visible())
 	{
@@ -3642,7 +3579,7 @@ void InfoEx(char *message, int width, int height, int timeout)
 	}
 }
 
-void Info(char *message, int width, int height)
+void Info(const char *message, int width, int height)
 {
 	InfoEx(message, width, height, 2000);
 }

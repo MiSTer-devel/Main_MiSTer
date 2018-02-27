@@ -82,21 +82,21 @@
 
 unsigned long tos_system_ctrl(void);
 
-void tos_upload(char *);
+void tos_upload(const char *);
 void tos_poll();
 void tos_update_sysctrl(unsigned long);
 char *tos_get_disk_name(char);
 char tos_disk_is_inserted(char index);
-void tos_insert_disk(char i, char *name);
+void tos_insert_disk(char i, const char *name);
 void tos_eject_all();
-void tos_select_hdd_image(char i, char *name);
+void tos_select_hdd_image(char i, const char *name);
 void tos_set_direct_hdd(char on);
 char tos_get_direct_hdd();
 void tos_reset(char cold);
 char *tos_get_image_name();
 char *tos_get_cartridge_name();
 char tos_cartridge_is_inserted();
-void tos_load_cartridge(char *);
+void tos_load_cartridge(const char *);
 
 void tos_set_video_adjust(char axis, char value);
 char tos_get_video_adjust(char axis);

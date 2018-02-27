@@ -179,7 +179,7 @@ void BootUploadLogo()
 	int i = 0;
 	int adr;
 
-	if (FileOpen(&file, "Amiga/"LOGO_FILE) || FileOpen(&file, LOGO_FILE)) {
+	if (FileOpen(&file, "Amiga/" LOGO_FILE) || FileOpen(&file, LOGO_FILE)) {
 		FileReadSec(&file, buffer);
 		mem_upload_init(SCREEN_BPL1 + LOGO_OFFSET);
 		adr = SCREEN_BPL1 + LOGO_OFFSET;
@@ -240,7 +240,7 @@ void BootUploadBall()
 	int i = 0;
 	int adr;
 
-	if (FileOpen(&file, "Amiga/"BALL_FILE) || FileOpen(&file, BALL_FILE))
+	if (FileOpen(&file, "Amiga/" BALL_FILE) || FileOpen(&file, BALL_FILE))
 	{
 		FileReadSec(&file, buffer);
 		mem_upload_init(BALL_ADDRESS);
@@ -272,7 +272,7 @@ void BootUploadCopper()
 	int i = 0;
 	int adr;
 
-	if (FileOpen(&file, "Amiga/"COPPER_FILE) || FileOpen(&file, COPPER_FILE))
+	if (FileOpen(&file, "Amiga/" COPPER_FILE) || FileOpen(&file, COPPER_FILE))
 	{
 		FileReadSec(&file, buffer);
 		mem_upload_init(COPPER_ADDRESS);
@@ -467,7 +467,7 @@ void BootInit()
 
 
 //// BootPrint() ////
-void BootPrintEx(char * str)
+void BootPrintEx(const char * str)
 {
 	unsigned char i, j;
 	unsigned char len;

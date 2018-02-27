@@ -6,10 +6,6 @@
 #include <fcntl.h>
 #include "spi.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct
 {
 	int       fd;
@@ -62,25 +58,21 @@ int FileReadSec(fileTYPE *file, void *pBuffer);
 int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
 int FileWriteSec(fileTYPE *file, void *pBuffer);
 
-int FileCanWrite(char *name);
+int FileCanWrite(const char *name);
 
-int FileSave(char *name, void *pBuffer, int size);
-int FileLoad(char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
+int FileSave(const char *name, void *pBuffer, int size);
+int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 
 //save/load from config dir
 #define CONFIG_DIR "config"
-int FileSaveConfig(char *name, void *pBuffer, int size);
-int FileLoadConfig(char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
+int FileSaveConfig(const char *name, void *pBuffer, int size);
+int FileLoadConfig(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 
 void AdjustDirectory(char *path);
-int ScanDirectory(char* path, int mode, char *extension, int options);
+int ScanDirectory(const char* path, int mode, const char *extension, int options);
 
-char *getStorageDir(int dev);
-char *getRootDir();
-char *getFullPath(char *name);
-
-#ifdef __cplusplus
-}
-#endif
+const char *getStorageDir(int dev);
+const char *getRootDir();
+const char *getFullPath(const char *name);
 
 #endif

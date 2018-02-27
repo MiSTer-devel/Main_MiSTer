@@ -139,9 +139,9 @@ static char tstr4[255];
 static char spdstr[255];
 static char pstr[255];
 
-static void core_write(void *buf, int size)
+static void core_write(const void *buf, int size)
 {
-	char *addr = (char*)buf;
+	const char *addr = (const char*)buf;
 	while (size--)
 	{
 		spi8(*addr++);

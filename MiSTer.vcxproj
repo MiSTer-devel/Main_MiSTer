@@ -39,29 +39,29 @@
   <ItemDefinitionGroup>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="archie.c" />
-    <ClCompile Include="battery.c" />
-    <ClCompile Include="brightness.c" />
-    <ClCompile Include="cfg.c" />
+    <ClCompile Include="archie.cpp" />
+    <ClCompile Include="battery.cpp" />
+    <ClCompile Include="brightness.cpp" />
+    <ClCompile Include="cfg.cpp" />
     <ClCompile Include="DiskImage.cpp" />
-    <ClCompile Include="file_io.c" />
-    <ClCompile Include="fpga_io.c" />
-    <ClCompile Include="hardware.c" />
-    <ClCompile Include="ini_parser.c" />
-    <ClCompile Include="input.c" />
-    <ClCompile Include="main.c" />
-    <ClCompile Include="menu.c" />
-    <ClCompile Include="minimig_boot.c" />
-    <ClCompile Include="minimig_config.c" />
-    <ClCompile Include="minimig_fdd.c" />
-    <ClCompile Include="minimig_hdd.c" />
-    <ClCompile Include="osd.c" />
-    <ClCompile Include="spi.c" />
-    <ClCompile Include="st_ikbd.c" />
-    <ClCompile Include="st_tos.c" />
-    <ClCompile Include="tzx2wav.c" />
-    <ClCompile Include="user_io.c" />
-    <ClCompile Include="x86.c" />
+    <ClCompile Include="file_io.cpp" />
+    <ClCompile Include="fpga_io.cpp" />
+    <ClCompile Include="hardware.cpp" />
+    <ClCompile Include="ini_parser.cpp" />
+    <ClCompile Include="input.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="menu.cpp" />
+    <ClCompile Include="minimig_boot.cpp" />
+    <ClCompile Include="minimig_config.cpp" />
+    <ClCompile Include="minimig_fdd.cpp" />
+    <ClCompile Include="minimig_hdd.cpp" />
+    <ClCompile Include="osd.cpp" />
+    <ClCompile Include="spi.cpp" />
+    <ClCompile Include="st_ikbd.cpp" />
+    <ClCompile Include="st_tos.cpp" />
+    <ClCompile Include="tzx2wav.cpp" />
+    <ClCompile Include="user_io.cpp" />
+    <ClCompile Include="x86.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="archie.h" />

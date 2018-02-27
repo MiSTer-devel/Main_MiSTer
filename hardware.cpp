@@ -31,7 +31,7 @@ void hexdump(void *data, uint16_t size, uint16_t offset)
 {
 	uint8_t i, b2c;
 	uint16_t n = 0;
-	char *ptr = data;
+	char *ptr = (char*)data;
 
 	if (!size) return;
 

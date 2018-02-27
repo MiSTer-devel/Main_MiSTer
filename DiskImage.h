@@ -1,8 +1,9 @@
 #ifndef __DISKIMAGE_H
 #define __DISKIMAGE_H
+
 //-----------------------------------------------------------------------------
 
-#ifdef __cplusplus
+#include "file_io.h"
 
 enum TDiskImageType { DIT_UNK, DIT_SCL, DIT_FDI, DIT_TD0, DIT_UDI, DIT_HOB, DIT_FDD };
 
@@ -184,12 +185,8 @@ struct TRDOS_DIR_ELEMENT        // 16 bytes
 };
 #pragma pack()
 
-#else
-
-int x2trd(char *name, fileTYPE *f);
-int x2trd_ext_supp(char *name);
-
-#endif
+int x2trd(const char *name, fileTYPE *f);
+int x2trd_ext_supp(const char *name);
 
 //-----------------------------------------------------------------------------
 #endif

@@ -19,7 +19,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define _GNU_SOURCE
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -30,7 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "input.h"
 #include "fpga_io.h"
 
-const char version[] = { "$VER:HPS" VDATE };
+const char *version = "$VER:HPS" VDATE;
 
 int main(int argc, char *argv[])
 {

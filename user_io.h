@@ -83,9 +83,6 @@
 #define JOY_BTN4        0x80
 #define JOY_MOVE        (JOY_RIGHT|JOY_LEFT|JOY_UP|JOY_DOWN)
 
-#define BUTTON1         0x01
-#define BUTTON2         0x02
-
 // virtual gamepad buttons
 #define JOY_A      JOY_BTN1
 #define JOY_B      JOY_BTN2
@@ -113,12 +110,15 @@
 #define KBD_LED_FLAG_MASK     0xC0
 #define KBD_LED_FLAG_STATUS   0x40
 
-#define CONF_VGA_SCALER         0x04
-#define CONF_CSYNC              0x08
-#define CONF_FORCED_SCANDOUBLER 0x10
-#define CONF_YPBPR              0x20
-#define CONF_AUDIO_96K          0x40
-#define CONF_DVI                0x80
+
+#define BUTTON1                 0b00000001
+#define BUTTON2                 0b00000010
+#define CONF_VGA_SCALER         0b00000100
+#define CONF_CSYNC              0b00001000
+#define CONF_FORCED_SCANDOUBLER 0b00010000
+#define CONF_YPBPR              0b00100000
+#define CONF_AUDIO_96K          0b01000000
+#define CONF_DVI                0b10000000
 #define CONF_RES_MASK           0x700
 #define CONF_RES_SHIFT          8
 
@@ -146,7 +146,10 @@
 #define UIO_PRIORITY_KEYBOARD 0 
 #define UIO_PRIORITY_GAMEPAD  1
 
-typedef enum { EMU_NONE, EMU_MOUSE, EMU_JOY0, EMU_JOY1 } emu_mode_t;
+#define EMU_NONE  0
+#define EMU_MOUSE 1
+#define EMU_JOY0  2
+#define EMU_JOY1  3
 
 // serial status data type returned from the core 
 typedef struct {
@@ -176,12 +179,12 @@ char user_io_dip_switch1(void);
 char user_io_serial_status(serial_status_t *, uint8_t);
 int  user_io_file_mount(int num, char *name);
 char *user_io_get_core_name();
-char *user_io_get_core_name_ex();
+const char *user_io_get_core_name_ex();
 char is_menu_core();
 char is_x86_core();
 char has_menu();
 
-emu_mode_t user_io_get_kbdemu();
+int user_io_get_kbdemu();
 
 // io controllers interface for FPGA ethernet emulation using usb ethernet
 // devices attached to the io controller (ethernec emulation)

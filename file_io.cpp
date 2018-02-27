@@ -233,7 +233,7 @@ int FileWriteSec(fileTYPE *file, void *pBuffer)
 	return FileWriteAdv(file, pBuffer, 512);
 }
 
-int FileSave(char *name, void *pBuffer, int size)
+int FileSave(const char *name, void *pBuffer, int size)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);
 	int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
@@ -255,14 +255,14 @@ int FileSave(char *name, void *pBuffer, int size)
 	return ret;
 }
 
-int FileSaveConfig(char *name, void *pBuffer, int size)
+int FileSaveConfig(const char *name, void *pBuffer, int size)
 {
 	char path[256] = { CONFIG_DIR"/" };
 	strcat(path, name);
 	return FileSave(path, pBuffer, size);
 }
 
-int FileLoad(char *name, void *pBuffer, int size)
+int FileLoad(const char *name, void *pBuffer, int size)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);
 	int fd = open(full_path, O_RDONLY);
@@ -299,14 +299,14 @@ int FileLoad(char *name, void *pBuffer, int size)
 	return ret;
 }
 
-int FileLoadConfig(char *name, void *pBuffer, int size)
+int FileLoadConfig(const char *name, void *pBuffer, int size)
 {
 	char path[256] = { CONFIG_DIR"/" };
 	strcat(path, name);
 	return FileLoad(path, pBuffer, size);
 }
 
-int FileCanWrite(char *name)
+int FileCanWrite(const char *name)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);
 
@@ -324,7 +324,7 @@ int FileCanWrite(char *name)
 
 static int device = 0;
 static int usbnum = 0;
-char *getStorageDir(int dev)
+const char *getStorageDir(int dev)
 {
 	static char path[32];
 	if (!dev) return "/media/fat";
@@ -332,12 +332,12 @@ char *getStorageDir(int dev)
 	return path;
 }
 
-char *getRootDir()
+const char *getRootDir()
 {
 	return getStorageDir(device);
 }
 
-char *getFullPath(char *name)
+const char *getFullPath(const char *name)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);
 	return full_path;
@@ -480,7 +480,7 @@ void FindStorage(void)
 		printf("Using SD card as a root device\n");
 	}
 
-	sprintf(full_path, "%s/"CONFIG_DIR, getRootDir());
+	sprintf(full_path, "%s/" CONFIG_DIR, getRootDir());
 	DIR* dir = opendir(full_path);
 	if (dir) closedir(dir);
 	else if (ENOENT == errno) mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
@@ -488,8 +488,8 @@ void FindStorage(void)
 
 int de_cmp(const void *e1, const void *e2)
 {
-	const struct dirent *de1 = e1;
-	const struct dirent *de2 = e2;
+	const struct dirent *de1 = (struct dirent *)e1;
+	const struct dirent *de2 = (struct dirent *)e2;
 
 	if ((de1->d_type == DT_DIR) && !strcmp(de1->d_name, "..")) return -1;
 	if ((de2->d_type == DT_DIR) && !strcmp(de2->d_name, "..")) return  1;
@@ -543,10 +543,10 @@ void AdjustDirectory(char *path)
 	}
 }
 
-int ScanDirectory(char* path, int mode, char *extension, int options)
+int ScanDirectory(const char* path, int mode, const char *extension, int options)
 {
 	int has_trd = 0;
-	char *ext = extension;
+	const char *ext = extension;
 	while (*ext)
 	{
 		if (!strncasecmp(ext, "TRD", 3)) has_trd = 1;
@@ -603,7 +603,7 @@ int ScanDirectory(char* path, int mode, char *extension, int options)
 				if (extlen > 0)
 				{
 					int len = strlen(de->d_name);
-					char *ext = extension;
+					const char *ext = extension;
 					int found = (has_trd && x2trd_ext_supp(de->d_name));
 
 					while(!found && *ext)

@@ -3002,7 +3002,7 @@ unsigned unpack_lzh(unsigned char *src, unsigned size, unsigned char *buf)
 }
 
 //--------------------------------------------------------------------------
-extern "C" int x2trd(char *name, fileTYPE *f)
+int x2trd(const char *name, fileTYPE *f)
 {
 	TDiskImage *img = new TDiskImage;
 	img->Open(getFullPath(name), true);
@@ -3033,7 +3033,7 @@ extern "C" int x2trd(char *name, fileTYPE *f)
 	return 1;
 }
 
-extern "C" int x2trd_ext_supp(char *name)
+int x2trd_ext_supp(const char *name)
 {
 	const char *ext = "";
 	if (strlen(name) > 4) ext = name + strlen(name) - 4;

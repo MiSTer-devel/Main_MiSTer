@@ -11,73 +11,73 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="archie.c">
+    <ClCompile Include="archie.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="fpga_io.c">
+    <ClCompile Include="fpga_io.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="hardware.c">
+    <ClCompile Include="hardware.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ini_parser.c">
+    <ClCompile Include="ini_parser.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="input.c">
+    <ClCompile Include="input.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="main.c">
+    <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="menu.c">
+    <ClCompile Include="menu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="osd.c">
+    <ClCompile Include="osd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="spi.c">
+    <ClCompile Include="spi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="user_io.c">
+    <ClCompile Include="user_io.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="file_io.c">
+    <ClCompile Include="file_io.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="x86.c">
+    <ClCompile Include="x86.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="tzx2wav.c">
+    <ClCompile Include="tzx2wav.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="DiskImage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="cfg.c">
+    <ClCompile Include="cfg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="minimig_boot.c">
+    <ClCompile Include="minimig_boot.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="minimig_config.c">
+    <ClCompile Include="minimig_config.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="minimig_fdd.c">
+    <ClCompile Include="minimig_fdd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="minimig_hdd.c">
+    <ClCompile Include="minimig_hdd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="st_ikbd.c">
+    <ClCompile Include="st_ikbd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="st_tos.c">
+    <ClCompile Include="st_tos.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="brightness.c">
+    <ClCompile Include="brightness.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="battery.c">
+    <ClCompile Include="battery.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

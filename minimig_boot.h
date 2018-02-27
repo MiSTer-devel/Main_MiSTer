@@ -36,7 +36,7 @@
 
 //// functions ////
 void BootInit();
-void BootPrintEx(char * str);
+void BootPrintEx(const char * str);
 void BootHome();
 
 #define BootPrint(text) printf("%s\n", text)

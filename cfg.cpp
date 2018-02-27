@@ -27,7 +27,7 @@ const ini_var_t ini_vars[] = {
 	{ "COMPOSITE_SYNC", (void*)(&(cfg.csync)), UINT8, 0, 1, 1 },
 	{ "FORCED_SCANDOUBLER", (void*)(&(cfg.forced_scandoubler)), UINT8, 0, 1, 1 },
 	{ "VGA_SCALER", (void*)(&(cfg.vga_scaler)), UINT8, 0, 1, 1 },
-	{ "KEYRAH_MODE", (void*)(&(cfg.keyrah_mode)), UINT32, 0, 0xFFFFFFFF, 1 },
+	{ "KEYRAH_MODE", (void*)(&(cfg.keyrah_mode)), UINT32, 0, (int)0xFFFFFFFF, 1 },
 	{ "RESET_COMBO", (void*)(&(cfg.reset_combo)), UINT8, 0, 3, 1 },
 	{ "KEY_MENU_AS_RGUI", (void*)(&(cfg.key_menu_as_rgui)), UINT8, 0, 1, 1 },
 	{ "VIDEO_MODE", (void*)(cfg.video_conf), STRING, 0, sizeof(cfg.video_conf)-1, 1 },

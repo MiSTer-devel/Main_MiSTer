@@ -118,7 +118,7 @@ static void mist_memory_read(char *data, unsigned long words) {
 	DisableFpga();
 }
 
-static void mist_memory_write(char *data, unsigned long words) {
+static void mist_memory_write(unsigned char *data, unsigned long words) {
 	EnableFpga();
 	spi8(MIST_WRITE_MEMORY);
 
@@ -130,7 +130,7 @@ static void mist_memory_write(char *data, unsigned long words) {
 	DisableFpga();
 }
 
-static void mist_memory_read_block(char *data) {
+static void mist_memory_read_block(unsigned char *data) {
 	EnableFpga();
 	spi8(MIST_READ_MEMORY);
 
@@ -139,7 +139,7 @@ static void mist_memory_read_block(char *data) {
 	DisableFpga();
 }
 
-static void mist_memory_write_block(char *data) {
+static void mist_memory_write_block(unsigned char *data) {
 	EnableFpga();
 	spi8(MIST_WRITE_MEMORY);
 
@@ -533,7 +533,7 @@ static void mist_get_dmastate() {
 #define COLORS   20
 #define PLANES   4
 
-static void tos_write(char *str);
+static void tos_write(const char *str);
 static void tos_color_test() {
 	unsigned short buffer[COLORS][PLANES];
 
@@ -546,7 +546,7 @@ static void tos_color_test() {
 
 		for (i = 0; i<16; i++) {
 			mist_memory_set_address(VIDEO_BASE_ADDRESS + (16 * y + i) * 160, 1, 0);
-			mist_memory_write((char*)buffer, COLORS*PLANES);
+			mist_memory_write((unsigned char*)buffer, COLORS*PLANES);
 		}
 	}
 
@@ -570,7 +570,7 @@ static void tos_color_test() {
 #endif
 }
 
-static void tos_write(char *str) {
+static void tos_write(const char *str) {
 	static int y = 0;
 	int l;
 
@@ -584,12 +584,13 @@ static void tos_write(char *str) {
 	// as dma works in 16 bytes chunks only
 	int c = (strlen(str) + 15) & ~15;
 	{
-		char *buffer = malloc(c);
+		unsigned char *buffer = (unsigned char*)malloc(c);
 
 		// 16 pixel lines
 		for (l = 0; l<16; l++)
 		{
-			char *p = str, *f = buffer;
+			const char *p = str;
+			unsigned char *f = buffer;
 			while (*p)	*f++ = font[16 * *p++ + l];
 			while (f < buffer + c) *f++ = font[16 * ' ' + l];
 
@@ -645,7 +646,7 @@ static void tos_font_load() {
 	}
 }
 
-void tos_load_cartridge(char *name)
+void tos_load_cartridge(const char *name)
 {
 	fileTYPE file = { 0 };
 
@@ -655,7 +656,7 @@ void tos_load_cartridge(char *name)
 	// upload cartridge 
 	if (config.cart_img[0] && FileOpen(&file, config.cart_img)) {
 		int i;
-		char buffer[512];
+		unsigned char buffer[512];
 
 		tos_debugf("%s:\n  size = %d", config.cart_img, file.size);
 
@@ -694,7 +695,7 @@ char tos_cartridge_is_inserted() {
 	return config.cart_img[0];
 }
 
-void tos_upload(char *name)
+void tos_upload(const char *name)
 {
 	fileTYPE file = { 0 };
 
@@ -722,7 +723,7 @@ void tos_upload(char *name)
 	// upload and verify tos image
 	if (FileOpen(&file, config.tos_img)) {
 		int i;
-		char buffer[512];
+		unsigned char buffer[512];
 		unsigned long time;
 		unsigned long tos_base = TOS_BASE_ADDRESS_192k;
 
@@ -989,7 +990,7 @@ char tos_disk_is_inserted(char index) {
 	return hdd_image[index - 2].size != 0;
 }
 
-void tos_select_hdd_image(char i, char *name)
+void tos_select_hdd_image(char i, const char *name)
 {
 	tos_debugf("Select ACSI%c image %s", '0' + i, name);
 
@@ -1014,7 +1015,7 @@ void tos_select_hdd_image(char i, char *name)
 	mist_set_control(config.system_ctrl);
 }
 
-void tos_insert_disk(char i, char *name)
+void tos_insert_disk(char i, const char *name)
 {
 	if (i > 1)
 	{

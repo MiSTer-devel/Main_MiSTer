@@ -1229,7 +1229,7 @@ static int check_devs()
 	return result;
 }
 
-static void INThandler()
+static void INThandler(int code)
 {
 	printf("\nExiting...\n");
 

@@ -281,7 +281,7 @@ void spi_read(uint8_t *addr, uint16_t len, int wide)
 	}
 }
 
-void spi_write(uint8_t *addr, uint16_t len, int wide)
+void spi_write(const uint8_t *addr, uint16_t len, int wide)
 {
 	if (wide)
 	{
@@ -301,12 +301,12 @@ void spi_block_read(uint8_t *addr, int wide)
 	spi_read(addr, 512, wide);
 }
 
-void spi_block_write(uint8_t *addr, int wide)
+void spi_block_write(const uint8_t *addr, int wide)
 {
 	spi_write(addr, 512, wide);
 }
 
-void spi_block_write_16be(uint16_t *addr)
+void spi_block_write_16be(const uint16_t *addr)
 {
 	uint16_t len = 256;
 	uint16_t tmp;

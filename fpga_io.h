@@ -28,7 +28,7 @@ int is_fpga_ready(int quick);
 int fpga_get_fio_size();
 int fpga_get_io_version();
 
-int fpga_load_rbf(char *name);
+int fpga_load_rbf(const char *name);
 
 void reboot(int cold);
 void app_restart();

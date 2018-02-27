@@ -11,7 +11,7 @@
 //// type definitions ////
 typedef struct {
 	int id;
-	char* name;
+	const char* name;
 } ini_section_t;
 
 typedef enum {
@@ -22,7 +22,7 @@ typedef enum {
 typedef void custom_handler_t(char*);
 
 typedef struct {
-	char* name;
+	const char* name;
 	void* var;
 	ini_vartypes_t type;
 	int min;

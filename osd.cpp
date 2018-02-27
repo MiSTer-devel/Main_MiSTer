@@ -141,7 +141,7 @@ static void rotatechar(unsigned char *in, unsigned char *out)
 
 #define OSDHEIGHT (osd_size*8)
 
-void OsdSetTitle(char *s, int a)
+void OsdSetTitle(const char *s, int a)
 {
 	// Compose the title, condensing character gaps
 	arrow = a;
@@ -198,13 +198,13 @@ void OsdSetTitle(char *s, int a)
 	}
 }
 
-void OsdWrite(unsigned char n, char *s, unsigned char invert, unsigned char stipple)
+void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple)
 {
 	OsdWriteOffset(n, s, invert, stipple, 0, 0);
 }
 
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
-void OsdWriteOffset(unsigned char n, char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar)
+void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar)
 {
 	//printf("OsdWriteOffset(%d)\n", n);
 	unsigned short i;
@@ -392,7 +392,7 @@ void OsdDrawLogo(unsigned char n, char row, char superimpose)
 }
 
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
-void OSD_PrintText(unsigned char line, char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert)
+void OSD_PrintText(unsigned char line, const char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert)
 {
 	// line : OSD line number (0-7)
 	// text : pointer to null-terminated string
@@ -461,7 +461,7 @@ void OSD_PrintText(unsigned char line, char *text, unsigned long start, unsigned
 #define INFO_MAXW 32
 #define INFO_MAXH 16
 
-void OSD_PrintInfo(char *message, int width, int height, int frame)
+void OSD_PrintInfo(const char *message, int width, int height, int frame)
 {
 	static char str[INFO_MAXW * INFO_MAXH];
 

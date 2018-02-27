@@ -66,9 +66,9 @@
 #include <inttypes.h>
 
 /*functions*/
-void OsdSetTitle(char *s, int arrow);	// arrow > 0 = display right arrow in bottom right, < 0 = display left arrow
-void OsdWrite(unsigned char n, char *s, unsigned char inver, unsigned char stipple);
-void OsdWriteOffset(unsigned char n, char *s, unsigned char inver, unsigned char stipple, char offset, char leftchar); // Used for scrolling "Exit" text downwards...
+void OsdSetTitle(const char *s, int arrow);	// arrow > 0 = display right arrow in bottom right, < 0 = display left arrow
+void OsdWrite(unsigned char n, const char *s, unsigned char inver, unsigned char stipple);
+void OsdWriteOffset(unsigned char n, const char *s, unsigned char inver, unsigned char stipple, char offset, char leftchar); // Used for scrolling "Exit" text downwards...
 void OsdClear(void);
 void OsdEnable(unsigned char mode);
 void InfoEnable(int x, int y, int width, int height);
@@ -81,8 +81,8 @@ void ConfigCPU(unsigned char cpu);
 void ConfigChipset(unsigned char chipset);
 void ConfigFloppy(unsigned char drives, unsigned char speed);
 void ConfigAutofire(unsigned char autofire, unsigned char mask);
-void OSD_PrintText(unsigned char line, char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert);
-void OSD_PrintInfo(char *message, int width, int height, int frame);
+void OSD_PrintText(unsigned char line, const char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert);
+void OSD_PrintInfo(const char *message, int width, int height, int frame);
 void OsdDrawLogo(unsigned char n, char row, char superimpose);
 void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert);
 void ScrollReset();

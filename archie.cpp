@@ -73,9 +73,9 @@ static unsigned char flags;
 static unsigned long hold_off_timer;
 #endif
 
-static char sector_buffer[1024];
+static uint8_t sector_buffer[1024];
 
-char *archie_get_rom_name(void)
+const char *archie_get_rom_name(void)
 {
 	char *p = strrchr(config.rom_img, '/');
 	if (!p) p = config.rom_img; else p++;
@@ -83,7 +83,7 @@ char *archie_get_rom_name(void)
 	return p;
 }
 
-char *archie_get_floppy_name(char i)
+const char *archie_get_floppy_name(char i)
 {
 	if (!floppy[i].size)  return "* no disk *";
 
@@ -229,7 +229,7 @@ static void archie_kbd_tx(unsigned char state, unsigned char byte)
 	spi8(byte);
 	DisableIO();
 
-	kbd_state = state;
+	kbd_state = (enum state)state;
 	ack_timeout = GetTimer(10);  // 10ms timeout
 }
 

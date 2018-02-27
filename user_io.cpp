@@ -5,6 +5,7 @@
 #include <stdbool.h> 
 #include <fcntl.h>
 #include <time.h>
+#include <limits.h>
 
 #include "hardware.h"
 #include "osd.h"
@@ -36,7 +37,7 @@ unsigned long vol_set_timeout = 0;
 fileTYPE sd_image[4] = { 0 };
 
 // mouse and keyboard emulation state
-static emu_mode_t emu_mode = EMU_NONE;
+static int emu_mode = EMU_NONE;
 
 // keep state over core type and its capabilities
 static unsigned char core_type = CORE_TYPE_UNKNOWN;
@@ -112,7 +113,7 @@ char *user_io_get_core_name()
 	return core_name;
 }
 
-char *user_io_get_core_name_ex()
+const char *user_io_get_core_name_ex()
 {
 	switch (user_io_core_type())
 	{
@@ -968,67 +969,10 @@ void user_io_rtc_reset()
 	rtc_timer = 0;
 }
 
-static int api1_5 = 0;
-int hasAPI1_5()
-{
-	return api1_5;
-}
-
 static int coldreset_req = 0;
 
-static uint32_t vitems[32];
-double Fpix = 0;
-
-int adjust_video_mode(uint32_t vtime);
-uint32_t show_video_info(int force)
-{
-	static uint8_t nres = 0;
-	spi_uio_cmd_cont(UIO_GET_VRES);
-	uint8_t res = spi_in();
-	if ((nres != res) || force)
-	{
-		nres = res;
-		uint32_t width  = spi_w(0) | (spi_w(0) << 16);
-		uint32_t height = spi_w(0) | (spi_w(0) << 16);
-		uint32_t htime  = spi_w(0) | (spi_w(0) << 16);
-		uint32_t vtime  = spi_w(0) | (spi_w(0) << 16);
-		uint32_t ptime  = spi_w(0) | (spi_w(0) << 16);
-		uint32_t vtimeh = spi_w(0) | (spi_w(0) << 16);
-		DisableIO();
-
-		float vrate = 100000000;
-		if (vtime) vrate /= vtime; else vrate = 0;
-		float hrate = 100000;
-		if (htime) hrate /= htime; else hrate = 0;
-
-		float prate = width * 100;
-		prate /= ptime;
-
-		printf("\033[1;33mINFO: Video resolution: %u x %u, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, hrate, vrate, prate);
-		printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
-
-		if (vtimeh) api1_5 = 1;
-		if (hasAPI1_5() && cfg.video_info)
-		{
-			static char str[128];
-			float vrateh = 100000000;
-			if (vtimeh) vrateh /= vtimeh; else vrateh = 0;
-			sprintf(str, "\n %4dx%-4d %6.2fKHz %4.1fHz" \
-						 "\n \x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81" \
-						 "\n %4dx%-4d %6.2fMHz %4.1fHz",
-						 width, height, hrate, vrate, vitems[1], vitems[5], Fpix, vrateh);
-			InfoEx(str, 28, 5, cfg.video_info*1000);
-		}
-
-		if (vtime && vtimeh) return vtime;
-	}
-	else
-	{
-		DisableIO();
-	}
-
-	return 0;
-}
+static int adjust_video_mode(uint32_t vtime);
+static uint32_t show_video_info(int force);
 
 void user_io_poll()
 {
@@ -1187,8 +1131,8 @@ void user_io_poll()
 		}
 		else
 		{
-			static char buffer[4][512];
-			static uint64_t buffer_lba[4] = { -1,-1,-1,-1 };
+			static uint8_t buffer[4][512];
+			static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 			uint32_t lba;
 			uint16_t c = user_io_sd_get_status(&lba);
 			//if(c&3) printf("user_io_sd_get_status: cmd=%02x, lba=%08x\n", c, lba);
@@ -2020,16 +1964,18 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 	return 0;
 }
 
-emu_mode_t user_io_get_kbdemu()
+int user_io_get_kbdemu()
 {
 	return emu_mode;
 }
 
-struct
+struct vmode_t
 {
 	uint32_t vpar[8];
 	double Fpix;
-} vmodes[] =
+};
+
+vmode_t vmodes[] =
 {
 	{ { 1280, 110,  40, 220,  720,  5,  5, 20 }, 74.25 },
 	{ { 1024,  24, 136, 160,  768,  3,  6, 29 }, 65 },
@@ -2043,6 +1989,9 @@ struct
 	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5 },
 };
 #define VMODES_NUM (sizeof(vmodes) / sizeof(vmodes[0]))
+
+static uint32_t vitems[32];
+double Fpix = 0;
 
 static uint32_t getPLLdiv(uint32_t div)
 {
@@ -2208,7 +2157,7 @@ void parse_video_mode()
 	setVideo();
 }
 
-int adjust_video_mode(uint32_t vtime)
+static int adjust_video_mode(uint32_t vtime)
 {
 	printf("Adjust VSync.\n");
 
@@ -2223,4 +2172,60 @@ int adjust_video_mode(uint32_t vtime)
 	setPLL(Fpix);
 	setVideo();
 	user_io_send_buttons(1);
+}
+
+static int api1_5 = 0;
+static uint32_t show_video_info(int force)
+{
+	static uint8_t nres = 0;
+	spi_uio_cmd_cont(UIO_GET_VRES);
+	uint8_t res = spi_in();
+	if ((nres != res) || force)
+	{
+		nres = res;
+		uint32_t width = spi_w(0) | (spi_w(0) << 16);
+		uint32_t height = spi_w(0) | (spi_w(0) << 16);
+		uint32_t htime = spi_w(0) | (spi_w(0) << 16);
+		uint32_t vtime = spi_w(0) | (spi_w(0) << 16);
+		uint32_t ptime = spi_w(0) | (spi_w(0) << 16);
+		uint32_t vtimeh = spi_w(0) | (spi_w(0) << 16);
+		DisableIO();
+
+		float vrate = 100000000;
+		if (vtime) vrate /= vtime; else vrate = 0;
+		float hrate = 100000;
+		if (htime) hrate /= htime; else hrate = 0;
+
+		float prate = width * 100;
+		prate /= ptime;
+
+		printf("\033[1;33mINFO: Video resolution: %u x %u, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, hrate, vrate, prate);
+		printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
+
+		if (vtimeh) api1_5 = 1;
+		if (hasAPI1_5() && cfg.video_info)
+		{
+			static char str[128];
+			float vrateh = 100000000;
+			if (vtimeh) vrateh /= vtimeh; else vrateh = 0;
+			sprintf(str, "\n  %4dx%-4d %6.2fKHz %4.1fHz" \
+				"\n \x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81" \
+				"\n  %4dx%-4d %6.2fMHz %4.1fHz",
+				width, height, hrate, vrate, vitems[1], vitems[5], Fpix, vrateh);
+			InfoEx(str, 30, 5, cfg.video_info * 1000);
+		}
+
+		if (vtime && vtimeh) return vtime;
+	}
+	else
+	{
+		DisableIO();
+	}
+
+	return 0;
+}
+
+int hasAPI1_5()
+{
+	return api1_5;
 }
