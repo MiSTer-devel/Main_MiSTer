@@ -24,8 +24,12 @@ typedef struct
 	char          name[1024]; /*floppy name*/
 } adfTYPE;
 
+extern unsigned char drives;
+extern adfTYPE df[4];
+
 void UpdateDriveStatus(void);
 void HandleFDD(unsigned char c1, unsigned char c2);
+void InsertFloppy(adfTYPE *drive, char* path);
 
 #endif
 

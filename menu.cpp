@@ -23,7 +23,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // 2010-01-09   - support for variable number of tracks
 // 2016-06-01   - improvements to 8-bit menu
 
-//#include "stdbool.h"
 #include <stdlib.h>
 #include <inttypes.h>
 #include <ctype.h>
@@ -143,15 +142,11 @@ unsigned char menustate = MENU_NONE1;
 unsigned char parentstate;
 unsigned char menusub = 0;
 unsigned char menusub_last = 0; //for when we allocate it dynamically and need to know last row
-unsigned int menumask = 0; // Used to determine which rows are selectable...
+unsigned int  menumask = 0; // Used to determine which rows are selectable...
 unsigned long menu_timer = 0;
 
-extern unsigned char drives;
-extern adfTYPE df[4];
-
-extern configTYPE config;
-
 extern const char *version;
+
 const char *config_tos_mem[] = { "512 kB", "1 MB", "2 MB", "4 MB", "8 MB", "14 MB", "--", "--" };
 const char *config_tos_wrprot[] = { "none", "A:", "B:", "A: and B:" };
 const char *config_tos_usb[] = { "none", "control", "debug", "serial", "parallel", "midi" };
@@ -160,7 +155,6 @@ const char *config_memory_chip_msg[] = { "512kb", "1mb", "1.5mb", "2mb" };
 const char *config_memory_slow_msg[] = { "none", "512kb", "1mb", "1.5mb" };
 const char *config_memory_fast_msg[] = { "none", "2mb", "4mb","24mb","24mb" };
 
-const char *config_filter_msg[] = { "none", "HORIZONTAL", "VERTICAL", "H+V" };
 const char *config_scanlines_msg[] = { "off", "dim", "black" };
 const char *config_ar_msg[] = { "4:3", "16:9" };
 const char *config_blank_msg[] = { "Blank", "Blank+" };
@@ -179,9 +173,9 @@ const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 char joy_bnames[12][32];
 int  joy_bcount = 0;
 
-
 enum HelpText_Message { HELPTEXT_NONE, HELPTEXT_MAIN, HELPTEXT_HARDFILE, HELPTEXT_CHIPSET, HELPTEXT_MEMORY, HELPTEXT_VIDEO };
-const char *helptexts[] = {
+const char *helptexts[] =
+{
 	0,
 	"                                Welcome to MiSTer!  Use the cursor keys to navigate the menus.  Use space bar or enter to select an item.  Press Esc or F12 to exit the menus.  Joystick emulation on the numeric keypad can be toggled with the numlock or scrlock key, while pressing Ctrl-Alt-0 (numeric keypad) toggles autofire mode.",
 	"                                Minimig can emulate an A600/A1200 IDE harddisk interface.  The emulation can make use of Minimig-style hardfiles (complete disk images) or UAE-style hardfiles (filesystem images with no partition table).",
@@ -208,7 +202,8 @@ unsigned char fs_Options;
 unsigned char fs_MenuSelect;
 unsigned char fs_MenuCancel;
 
-char* GetExt(char *ext) {
+char* GetExt(char *ext)
+{
 	static char extlist[32];
 	char *p = extlist;
 
@@ -309,7 +304,8 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 }
 
 
-void substrcpy(char *d, char *s, char idx) {
+void substrcpy(char *d, char *s, char idx)
+{
 	char p = 0;
 
 	while (*s) {
@@ -351,16 +347,18 @@ void siprintbinary(char* buffer, size_t const size, void const * const ptr)
 	return;
 }
 
-unsigned char getIdx(char *opt) {
+unsigned char getIdx(char *opt)
+{
 	if ((opt[1] >= '0') && (opt[1] <= '9')) return opt[1] - '0';
 	if ((opt[1] >= 'A') && (opt[1] <= 'V')) return opt[1] - 'A' + 10;
 	return 0; // basically 0 cannot be valid because used as a reset. Thus can be used as a error.
 }
 
-unsigned long getStatus(char *opt, unsigned long status) {
+unsigned int getStatus(char *opt, unsigned int status)
+{
 	char idx1 = getIdx(opt);
 	char idx2 = getIdx(opt + 1);
-	unsigned long x = (status & (1 << idx1)) ? 1 : 0;
+	unsigned int x = (status & (1 << idx1)) ? 1 : 0;
 
 	if (idx2>idx1) {
 		x = status >> idx1;
@@ -370,7 +368,8 @@ unsigned long getStatus(char *opt, unsigned long status) {
 	return x;
 }
 
-unsigned long setStatus(char *opt, unsigned long status, unsigned long value) {
+unsigned int setStatus(char *opt, unsigned int status, unsigned int value)
+{
 	unsigned char idx1 = getIdx(opt);
 	unsigned char idx2 = getIdx(opt + 1);
 	unsigned long x = 1;
@@ -381,10 +380,11 @@ unsigned long setStatus(char *opt, unsigned long status, unsigned long value) {
 	return (status & ~x) | ((value << idx1) & x);
 }
 
-unsigned long getStatusMask(char *opt) {
+unsigned int getStatusMask(char *opt)
+{
 	char idx1 = getIdx(opt);
 	char idx2 = getIdx(opt + 1);
-	unsigned long x = 1;
+	unsigned int x = 1;
 
 	if (idx2>idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
 
@@ -434,7 +434,7 @@ static uint8_t GetASCIIKey(uint32_t keycode)
 /* the Atari core handles OSD keys competely inside the core */
 static uint32_t menu_key = 0;
 
-void menu_key_set(uint32_t c)
+void menu_key_set(unsigned int c)
 {
 	//printf("OSD enqueue: %x\n", c);
 	menu_key = c;
@@ -3450,46 +3450,6 @@ void _strncpy(char* pStr1, const char* pStr2, size_t nCount)
 
 	while (nCount--)
 		*pStr1++ = ' '; // fill remaining space with spaces
-}
-
-// insert floppy image pointed to to by global <file> into <drive>
-void InsertFloppy(adfTYPE *drive, char* path)
-{
-	int writable = FileCanWrite(path);
-
-	if (!FileOpenEx(&drive->file, path, writable ? O_RDWR | O_SYNC : O_RDONLY))
-	{
-		return;
-	}
-
-	unsigned char i, j;
-	unsigned long tracks;
-
-	// calculate number of tracks in the ADF image file
-	tracks = drive->file.size / (512 * 11);
-	if (tracks > MAX_TRACKS)
-	{
-		menu_debugf("UNSUPPORTED ADF SIZE!!! Too many tracks: %lu\n", tracks);
-		tracks = MAX_TRACKS;
-	}
-	drive->tracks = (unsigned char)tracks;
-
-	strcpy(drive->name, path);
-
-	// initialize the rest of drive struct
-	drive->status = DSK_INSERTED;
-	if(writable) // read-only attribute
-		drive->status |= DSK_WRITABLE;
-
-	drive->sector_offset = 0;
-	drive->track = 0;
-	drive->track_prev = -1;
-
-	menu_debugf("Inserting floppy: \"%s\"\n", path);
-	menu_debugf("file writable: %d\n", writable);
-	menu_debugf("file size: %lu (%lu KB)\n", drive->file.size, drive->file.size >> 10);
-	menu_debugf("drive tracks: %u\n", drive->tracks);
-	menu_debugf("drive status: 0x%02X\n", drive->status);
 }
 
 static void set_text(const char *message, unsigned char code)

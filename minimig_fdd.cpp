@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // 2010-01-09   - support for variable number of tracks
 
 #include <stdio.h>
+#include <string.h>
 #include "hardware.h"
 #include "file_io.h"
 #include "minimig_fdd.h"
@@ -630,3 +631,42 @@ void HandleFDD(unsigned char c1, unsigned char c2)
 	}
 }
 
+// insert floppy image pointed to to by global <file> into <drive>
+void InsertFloppy(adfTYPE *drive, char* path)
+{
+	int writable = FileCanWrite(path);
+
+	if (!FileOpenEx(&drive->file, path, writable ? O_RDWR | O_SYNC : O_RDONLY))
+	{
+		return;
+	}
+
+	unsigned char i, j;
+	unsigned long tracks;
+
+	// calculate number of tracks in the ADF image file
+	tracks = drive->file.size / (512 * 11);
+	if (tracks > MAX_TRACKS)
+	{
+		menu_debugf("UNSUPPORTED ADF SIZE!!! Too many tracks: %lu\n", tracks);
+		tracks = MAX_TRACKS;
+	}
+	drive->tracks = (unsigned char)tracks;
+
+	strcpy(drive->name, path);
+
+	// initialize the rest of drive struct
+	drive->status = DSK_INSERTED;
+	if (writable) // read-only attribute
+		drive->status |= DSK_WRITABLE;
+
+	drive->sector_offset = 0;
+	drive->track = 0;
+	drive->track_prev = -1;
+
+	menu_debugf("Inserting floppy: \"%s\"\n", path);
+	menu_debugf("file writable: %d\n", writable);
+	menu_debugf("file size: %lu (%lu KB)\n", drive->file.size, drive->file.size >> 10);
+	menu_debugf("drive tracks: %u\n", drive->tracks);
+	menu_debugf("drive status: 0x%02X\n", drive->status);
+}
