@@ -782,6 +782,10 @@ void HandleUI(void)
 		OsdSetSize(8);
 		break;
 
+	case MENU_INFO:
+		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
+		// fall through
+	case MENU_ERROR:
 	case MENU_NONE2:
 		if (menu)
 		{
@@ -3279,26 +3283,6 @@ void HandleUI(void)
 		break;
 
 		/******************************************************************/
-		/* error message menu                                             */
-		/******************************************************************/
-	case MENU_ERROR:
-		if (menu)
-			menustate = MENU_NONE1;
-		break;
-
-		/******************************************************************/
-		/* popup info menu                                                */
-		/******************************************************************/
-	case MENU_INFO:
-
-		if (menu)
-			menustate = MENU_NONE1;
-		else if (CheckTimer(menu_timer))
-			menustate = MENU_NONE1;
-
-		break;
-
-		/******************************************************************/
 		/* we should never come here                                      */
 		/******************************************************************/
 	default:
@@ -3547,7 +3531,7 @@ void ErrorMessage(const char *message, unsigned char code)
 	OsdEnable(0); // do not disable KEYBOARD
 }
 
-void InfoMessage(const char *message)
+void InfoMessage(const char *message, int timeout)
 {
 	if (menustate != MENU_INFO)
 	{
@@ -3557,29 +3541,18 @@ void InfoMessage(const char *message)
 
 	set_text(message, 0);
 
-	menu_timer = GetTimer(2000);
+	menu_timer = GetTimer(timeout);
 	menustate = MENU_INFO;
 }
 
-void InfoMessageEx(const char *message, int timeout)
-{
-	InfoMessage(message);
-	menu_timer = GetTimer(timeout);
-}
-
-void InfoEx(const char *message, int width, int height, int timeout)
+void Info(const char *message, int timeout, int width, int height, int frame)
 {
 	if (!user_io_osd_is_visible())
 	{
-		OSD_PrintInfo(message, width, height, 0);
+		OSD_PrintInfo(message, &width, &height, frame);
 		InfoEnable(20, 10, width, height);
 
 		menu_timer = GetTimer(timeout);
 		menustate = MENU_INFO;
 	}
-}
-
-void Info(const char *message, int width, int height)
-{
-	InfoEx(message, width, height, 2000);
 }

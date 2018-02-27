@@ -1798,7 +1798,7 @@ static void set_volume()
 	spi_uio_cmd8(UIO_AUDVOL, vol_att);
 	if (vol_att & 0x10)
 	{
-		InfoEx("\n \x8d Mute", 8, 3, 1000);
+		Info("\x8d Mute", 1000);
 	}
 	else
 	{
@@ -1806,11 +1806,11 @@ static void set_volume()
 		memset(str, 0, sizeof(str));
 
 		int vol = vol_att & 0xf;
-		sprintf(str, "\n \x8d ");
+		sprintf(str, "\x8d ");
 		char *bar = str + strlen(str);
 		memset(bar, 0x8C, 16);
 		memset(bar, 0x7f, 16 - vol);
-		InfoEx(str, 20, 3, 1000);
+		Info(str, 1000);
 	}
 }
 
@@ -2208,11 +2208,11 @@ static uint32_t show_video_info(int force)
 			static char str[128];
 			float vrateh = 100000000;
 			if (vtimeh) vrateh /= vtimeh; else vrateh = 0;
-			sprintf(str, "\n  %4dx%-4d %6.2fKHz %4.1fHz" \
-				"\n \x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81" \
-				"\n  %4dx%-4d %6.2fMHz %4.1fHz",
+			sprintf(str, "%4dx%-4d %6.2fKHz %4.1fHz\n" \
+				         "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n" \
+				         "%4dx%-4d %6.2fMHz %4.1fHz",
 				width, height, hrate, vrate, vitems[1], vitems[5], Fpix, vrateh);
-			InfoEx(str, 30, 5, cfg.video_info * 1000);
+			Info(str, cfg.video_info * 1000);
 		}
 
 		if (vtime && vtimeh) return vtime;

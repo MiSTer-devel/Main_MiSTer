@@ -1446,7 +1446,7 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 					if (autofire[num] & amask) autofire[num] &= ~amask;
 					else autofire[num] |= amask;
 
-					if(hasAPI1_5()) Info((autofire[num] & amask) ? "\n Auto fire: ON" : "\n Auto fire: OFF", 16, 3);
+					if(hasAPI1_5()) Info((autofire[num] & amask) ? "Auto fire: ON" : "Auto fire: OFF");
 					else InfoMessage((autofire[num] & amask) ? "\n\n          Auto fire\n             ON" :
 						                "\n\n          Auto fire\n             OFF");
 				}
@@ -1460,8 +1460,8 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 
 					if (hasAPI1_5())
 					{
-						sprintf(str, "\n Auto fire period: %d ms", af_delay[num] * 2);
-						Info(str, 27, 3);
+						sprintf(str, "Auto fire period: %d ms", af_delay[num] * 2);
+						Info(str);
 					}
 					else
 					{
@@ -1491,7 +1491,8 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 				user_io_mouse(0, 0, 0);
 
 				mouse_emu ^= 2;
-				InfoMessage((mouse_emu & 2) ? "\n\n       Mouse mode lock\n             ON" :
+				if (hasAPI1_5()) Info((mouse_emu & 2) ? "Mouse mode ON" : "Mouse mode OFF");
+				else InfoMessage((mouse_emu & 2) ? "\n\n       Mouse mode lock\n             ON" :
 					"\n\n       Mouse mode lock\n             OFF");
 			}
 			return;

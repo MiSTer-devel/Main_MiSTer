@@ -461,59 +461,70 @@ void OSD_PrintText(unsigned char line, const char *text, unsigned long start, un
 #define INFO_MAXW 32
 #define INFO_MAXH 16
 
-void OSD_PrintInfo(const char *message, int width, int height, int frame)
+void OSD_PrintInfo(const char *message, int *width, int *height, int frame)
 {
 	static char str[INFO_MAXW * INFO_MAXH];
-
-	if (!width || !height) return;
-
 	memset(str, ' ', sizeof(str));
-	if (width > INFO_MAXW) width = INFO_MAXW;
-	if (height > INFO_MAXH) height = INFO_MAXH;
 
-	int x = 0, y = 0;
+	// calc height/width if none provided. Add frame to calculated size.
+	// no frame will be added if width and height are provided.
+	int calc = !*width || !*height || frame;
+
+	int maxw = 0;
+	int x = calc ? 1 : 0;
+	int y = calc ? 1 : 0;
 	while (*message)
 	{
 		char c = *message++;
 		if (c == 0xD) continue;
 		if (c == 0xA)
 		{
-			x = 0;
+			x = calc ? 1 : 0;
 			y++;
 			continue;
 		}
 
 		if (x < INFO_MAXW && y < INFO_MAXH) str[(y*INFO_MAXW) + x] = c;
+
 		x++;
+		if (x > maxw) maxw = x;
 	}
+
+	int w = !calc ? *width + 2 : maxw+1;
+	if (w > INFO_MAXW) w = INFO_MAXW;
+	*width = w;
+
+	int h = !calc ? *height + 2 : y+2;
+	if (h > INFO_MAXH) h = INFO_MAXH;
+	*height = h;
 
 	if (frame)
 	{
 		frame = (frame - 1) * 6;
-		for (x = 1; x < width - 1; x++)
+		for (x = 1; x < w - 1; x++)
 		{
 			str[(0 * INFO_MAXW) + x] = 0x81+frame;
-			str[((height - 1)*INFO_MAXW) + x] = 0x81 + frame;
+			str[((h - 1)*INFO_MAXW) + x] = 0x81 + frame;
 		}
-		for (y = 1; y < height - 1; y++)
+		for (y = 1; y < h - 1; y++)
 		{
 			str[(y * INFO_MAXW)] = 0x83 + frame;
-			str[(y * INFO_MAXW) + width - 1] = 0x83 + frame;
+			str[(y * INFO_MAXW) + w - 1] = 0x83 + frame;
 		}
 		str[0] = 0x80 + frame;
-		str[width - 1] = 0x82 + frame;
-		str[(height - 1)*INFO_MAXW] = 0x85 + frame;
-		str[((height - 1)*INFO_MAXW) + width - 1] = 0x84 + frame;
+		str[w - 1] = 0x82 + frame;
+		str[(h - 1)*INFO_MAXW] = 0x85 + frame;
+		str[((h - 1)*INFO_MAXW) + w - 1] = 0x84 + frame;
 	}
 
-	for (y = 0; y < height; y++)
+	for (y = 0; y < h; y++)
 	{
 		if (!is_minimig())
 			spi_osd_cmd_cont(MM1_OSDCMDWRITE | y);
 		else
 			spi_osd_cmd32_cont(OSD_CMD_OSD_WR, y);
 
-		for (x = 0; x < width; x++)
+		for (x = 0; x < w; x++)
 		{
 			const unsigned char *p = charfont[str[(y*INFO_MAXW) + x]];
 			for (int i = 0; i < 8; i++) spi8(*p++);

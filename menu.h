@@ -18,12 +18,8 @@ void HandleUI(void);
 void PrintDirectory(void);
 void ScrollLongName(void);
 void ErrorMessage(const char *message, unsigned char code);
-void InfoMessage(const char *message);
-void InfoMessageEx(const char *message, int timeout);
-void InfoEx(const char *message, int width, int height, int timeout);
-void Info(const char *message, int width, int height);
-void ShowSplash();
-void HideSplash();
+void InfoMessage(const char *message, int timeout = 2000);
+void Info(const char *message, int timeout = 2000, int width = 0, int height = 0, int frame = 0);
 
 unsigned long getStatus(char *opt, unsigned long status);
 
