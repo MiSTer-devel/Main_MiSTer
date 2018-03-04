@@ -1494,7 +1494,7 @@ void user_io_poll()
 	{
 		res_timer = GetTimer(500);
 		uint32_t vtime = show_video_info(0);
-		if (vtime && cfg.vsync_adjust)
+		if (vtime && cfg.vsync_adjust && !is_menu_core())
 		{
 			adjust_video_mode(vtime);
 			usleep(100000);
