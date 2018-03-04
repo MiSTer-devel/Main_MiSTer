@@ -17,7 +17,6 @@ OBJ = $(SRC:.c=.o) $(SRC2:.cpp=.o)
 DEP = $(SRC:.c=.d) $(SRC2:.cpp=.d)
 
 CFLAGS  = $(DFLAGS) -c -O2 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
-CFLAGS2 = $(CFLAGS) -std=gnu99
 LFLAGS  = -lc -lstdc++ -lrt
 
 $(PRJ): $(OBJ)
@@ -32,7 +31,7 @@ clean:
 
 %.o: %.c
 	@$(info $<)
-	@$(CC) $(CFLAGS2) -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+	@$(CC) $(CFLAGS) -std=gnu99 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 %.o: %.cpp
 	@$(info $<)
