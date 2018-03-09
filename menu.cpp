@@ -827,10 +827,10 @@ void HandleUI(void)
 		/* archimedes main menu                                           */
 		/******************************************************************/
 
-	case MENU_ARCHIE_MAIN1: {
-		menumask = 0xff;
-		OsdSetTitle("ARCHIE", 0);
+	case MENU_ARCHIE_MAIN1:
+		OsdSetTitle(user_io_get_core_name(), OSD_ARROW_RIGHT);
 
+		menumask = 0x3f;
 		OsdWrite(0, "", 0, 0);
 
 		strcpy(s, " Floppy 0: ");
@@ -850,22 +850,26 @@ void HandleUI(void)
 		OsdWrite(5, "", 0, 0);
 
 		strcpy(s, " Aspect ratio:      ");
-		strcat(s, archie_get_ar() ? "16:9" : " 4:3");
+		strcat(s, archie_get_ar() ? "16:9" : "4:3");
 		OsdWrite(6, s, menusub == 3, 0);
-		OsdWrite(7, " Define joystick buttons", menusub == 4, 0);
 
-		OsdWrite(8, "", 0, 0);
+		OsdWrite(7, "", 0, 0);
 
-		// the following is exactly like the atatri st core
-		OsdWrite(9, " Firmware & Core           \x16", menusub == 5, 0);
-		OsdWrite(10, " Save config                ", menusub == 6, 0);
+		sprintf(s, " Stereo mix:        %s", config_stereo_msg[archie_get_amix()]);
+		OsdWrite(8, s, menusub == 4, 0);
 
-		for (int i = 11; i<15; i++) OsdWrite(i, "", 0, 0);
+		for (int i = 9; i<15; i++) OsdWrite(i, "", 0, 0);
 
-		OsdWrite(15, STD_EXIT, menusub == 7, 0);
+		OsdWrite(15, STD_EXIT, menusub == 5, 0);
 		menustate = MENU_ARCHIE_MAIN2;
 		parentstate = MENU_ARCHIE_MAIN1;
-	} break;
+
+		// set helptext with core display on top of basic info
+		sprintf(helptext_custom, HELPTEXT_SPACER);
+		strcat(helptext_custom, OsdCoreName());
+		strcat(helptext_custom, helptexts[HELPTEXT_MAIN]);
+		helptext = helptext_custom;
+		break;
 
 	case MENU_ARCHIE_MAIN2:
 		// menu key closes menu
@@ -893,27 +897,20 @@ void HandleUI(void)
 				break;
 
 			case 4:
-				joy_bcount = 1;
-				strcpy(joy_bnames[0], "Fire");
-				start_map_setting(joy_bcount ? joy_bcount + 5 : 9);
-				menustate = MENU_JOYDIGMAP;
-				menusub = 0;
+				archie_set_amix(archie_get_amix()+1);
+				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 5:  // Firmware submenu
-				menustate = MENU_FIRMWARE1;
-				menusub = 1;
-				break;
-
-			case 6:  // Save config
-				menustate = MENU_NONE1;
-				archie_save_config();
-				break;
-
-			case 7:  // Exit
+			case 5:  // Exit
 				menustate = MENU_NONE1;
 				break;
 			}
+		}
+
+		if (right)
+		{
+			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 0;
 		}
 		break;
 
@@ -1232,7 +1229,7 @@ void HandleUI(void)
 		OsdWrite(OsdIsBig ? 1 : 0, " Firmware & Core           \x16", menusub == 0, 0);
 		OsdWrite(OsdIsBig ? 2 : 1, " Define joystick buttons   \x16", menusub == 1, 0);
 		OsdWrite(OsdIsBig ? 3 : 2, "", 0, 0);
-		OsdWrite(OsdIsBig ? 4 : 3, m ? " Reset" : " Reset settings", menusub == 3, 0);
+		OsdWrite(OsdIsBig ? 4 : 3, m ? " Reset" : " Reset settings", menusub == 3, user_io_core_type() == CORE_TYPE_ARCHIE);
 		if (m)
 			OsdWrite(OsdIsBig ? 5 : 4, "", 0, 0);
 		else
@@ -1276,8 +1273,11 @@ void HandleUI(void)
 			case 2:
 				break;
 			case 3:
-				menustate = MENU_RESET1;
-				menusub = 1;
+				if (user_io_core_type() != CORE_TYPE_ARCHIE)
+				{
+					menustate = MENU_RESET1;
+					menusub = 1;
+				}
 				break;
 			case 4:
 				if (m)
@@ -1287,13 +1287,22 @@ void HandleUI(void)
 				else
 				{
 					// Save settings
-					char *filename = user_io_create_config_name();
-					unsigned long status = user_io_8bit_set_status(0, 0);
-					printf("Saving config to %s\n", filename);
-					FileSaveConfig(filename, &status, 4);
-					if (is_x86_core()) x86_config_save();
 					menustate = MENU_8BIT_MAIN1;
 					menusub = 0;
+
+					if (user_io_core_type() == CORE_TYPE_ARCHIE)
+					{
+						archie_save_config();
+						menustate = MENU_ARCHIE_MAIN1;
+					}
+					else
+					{
+						char *filename = user_io_create_config_name();
+						unsigned long status = user_io_8bit_set_status(0, 0);
+						printf("Saving config to %s\n", filename);
+						FileSaveConfig(filename, &status, 4);
+						if (is_x86_core()) x86_config_save();
+					}
 				}
 				break;
 			case 5:
@@ -1336,7 +1345,7 @@ void HandleUI(void)
 					menustate = MENU_MIST_MAIN1;
 					break;
 				case CORE_TYPE_ARCHIE:
-					menusub = 3;
+					menusub = 0;
 					menustate = MENU_ARCHIE_MAIN1;
 					break;
 				case CORE_TYPE_8BIT:
@@ -1405,11 +1414,6 @@ void HandleUI(void)
 				{
 					menustate = MENU_FIRMWARE1;
 					menusub = 2;
-				}
-				else if (is_archie())
-				{
-					menustate = MENU_ARCHIE_MAIN1;
-					menusub = 4;
 				}
 				else
 				{

@@ -164,7 +164,6 @@ void user_io_init();
 unsigned char user_io_core_type();
 char is_minimig();
 char is_archie();
-char user_io_is_8bit_with_config_string();
 void user_io_poll();
 char user_io_menu_button();
 char user_io_button_dip_switch1();

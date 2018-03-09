@@ -105,6 +105,17 @@ char archie_get_ar()
 	return config.system_ctrl & 1;
 }
 
+void archie_set_amix(char i)
+{
+	config.system_ctrl = (config.system_ctrl & ~0b110) | ((i & 3)<<1);
+	user_io_8bit_set_status(config.system_ctrl << 1, 0b1100);
+}
+
+char archie_get_amix()
+{
+	return (config.system_ctrl>>1) & 3;
+}
+
 void archie_save_config(void)
 {
 	FileSaveConfig(CONFIG_FILENAME, &config, sizeof(config));
@@ -276,6 +287,7 @@ void archie_init(void)
 		archie_debugf("No %s config found", CONFIG_FILENAME);
 
 	archie_set_ar(archie_get_ar());
+	archie_set_amix(archie_get_amix());
 
 	// upload rom file
 	archie_set_rom(config.rom_img);

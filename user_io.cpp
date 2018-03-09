@@ -41,7 +41,6 @@ static int emu_mode = EMU_NONE;
 
 // keep state over core type and its capabilities
 static unsigned char core_type = CORE_TYPE_UNKNOWN;
-static char core_type_8bit_with_config_string = 0;
 
 static int fio_size = 0;
 static int io_ver = 0;
@@ -99,11 +98,6 @@ char* user_io_create_config_name()
 		strcat(str, ".CFG");
 	}
 	return str;
-}
-
-char user_io_is_8bit_with_config_string()
-{
-	return core_type_8bit_with_config_string;
 }
 
 static char core_name[16 + 1];  // max 16 bytes for core name
@@ -164,11 +158,9 @@ static void user_io_read_core_name()
 	is_no_type   = 0;
 	core_name[0] = 0;
 
-	if (user_io_is_8bit_with_config_string())
-	{
-		char *p = user_io_8bit_get_string(0);  // get core name
-		if (p && p[0]) strcpy(core_name, p);
-	}
+	// get core name
+	char *p = user_io_8bit_get_string(0);
+	if (p && p[0]) strcpy(core_name, p);
 
 	printf("Core name is \"%s\"\n", core_name);
 }
@@ -219,66 +211,70 @@ static int joy_force = 0;
 
 static void parse_config()
 {
+	int i = 0;
+	char *p;
+
 	joy_force = 0;
-	if (core_type_8bit_with_config_string)
-	{
-		int i = 2;
-		char *p;
-		do {
-			p = user_io_8bit_get_string(i);
-			if (i && p && p[0])
+
+	do {
+		p = user_io_8bit_get_string(i);
+		printf("get cfgstring %d = %s\n", i, p);
+		if (!i && p && p[0])
+		{
+			OsdCoreNameSet(p);
+		}
+		if (i>=2 && p && p[0])
+		{
+			if (p[0] == 'J')
 			{
-				if (p[0] == 'J')
+				if (p[1] == '1')
 				{
-					if (p[1] == '1')
-					{
-						joy_force = 1;
-						emu_mode = EMU_JOY0;
-						input_notify_mode();
-						set_kbd_led(HID_LED_NUM_LOCK, true);
-						set_emu_leds();
-					}
-
-					joy_bcount = 0;
-					for (int n = 0; n < 12; n++)
-					{
-						substrcpy(joy_bnames[n], p, n + 1);
-						if (!joy_bnames[n][0]) break;
-						joy_bcount++;
-					}
+					joy_force = 1;
+					emu_mode = EMU_JOY0;
+					input_notify_mode();
+					set_kbd_led(HID_LED_NUM_LOCK, true);
+					set_emu_leds();
 				}
 
-				if (p[0] == 'O' && p[1] == 'X')
+				joy_bcount = 0;
+				for (int n = 0; n < 12; n++)
 				{
-					unsigned long status = user_io_8bit_set_status(0, 0);
-					printf("found OX option: %s, 0x%08X\n", p, status);
-
-					unsigned long x = getStatus(p+1, status);
-
-					if (is_x86_core())
-					{
-						if (p[2] == '2') x86_set_fdd_boot(!(x&1));
-					}
-				}
-
-				if (p[0] == 'X')
-				{
-					disable_osd = 1;
-				}
-
-				if (p[0] == 'V')
-				{
-					// get version string
-					char s[40];
-					strcpy(s, OsdCoreName());
-					strcat(s, " ");
-					substrcpy(s + strlen(s), p, 1);
-					OsdCoreNameSet(s);
+					substrcpy(joy_bnames[n], p, n + 1);
+					if (!joy_bnames[n][0]) break;
+					joy_bcount++;
 				}
 			}
-			i++;
-		} while (p);
-	}
+
+			if (p[0] == 'O' && p[1] == 'X')
+			{
+				unsigned long status = user_io_8bit_set_status(0, 0);
+				printf("found OX option: %s, 0x%08X\n", p, status);
+
+				unsigned long x = getStatus(p+1, status);
+
+				if (is_x86_core())
+				{
+					if (p[2] == '2') x86_set_fdd_boot(!(x&1));
+				}
+			}
+
+			if (p[0] == 'X')
+			{
+				disable_osd = 1;
+			}
+
+			if (p[0] == 'V')
+			{
+				// get version string
+				char s[40];
+				strcpy(s, OsdCoreName());
+				strcat(s, " ");
+				substrcpy(s + strlen(s), p, 1);
+				OsdCoreNameSet(s);
+			}
+		}
+		i++;
+	} while (p || i<3);
 }
 
 //MSM6242B layout
@@ -358,8 +354,6 @@ void user_io_init()
 		// forward SD card config to core in case it uses the local
 		// SD card implementation
 		user_io_sd_set_config();
-		// check if core has a config string
-		core_type_8bit_with_config_string = (user_io_8bit_get_string(0) != NULL);
 
 		// set core name. This currently only sets a name for the 8 bit cores
 		user_io_read_core_name();
@@ -398,6 +392,8 @@ void user_io_init()
 	case CORE_TYPE_ARCHIE:
 		puts("Identified Archimedes core");
 		archie_init();
+		user_io_read_core_name();
+		parse_config();
 		break;
 
 	case CORE_TYPE_8BIT:
