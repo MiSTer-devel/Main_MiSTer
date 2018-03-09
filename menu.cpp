@@ -790,10 +790,7 @@ void HandleUI(void)
 		if (menu)
 		{
 			if (get_key_mod() & (LALT|RALT)) //Alt+Menu
-			{
-				OsdSetSize(16);
 				SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_NONE1, 0);
-			}
 			else if (user_io_core_type() == CORE_TYPE_MINIMIG2)
 				menustate = MENU_MAIN1;
 			else if (user_io_core_type() == CORE_TYPE_MIST)
@@ -804,13 +801,12 @@ void HandleUI(void)
 				// the "menu" core is special in jumps directly to the core selection menu
 				if (is_menu_core())
 				{
-					OsdSetSize(16);
 					OsdCoreNameSet("");
 					SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_FIRMWARE1, 0);
 				}
 				else
 				{
-					if (((get_key_mod() & (LGUI | RGUI)) && !is_x86_core()) || !has_menu()) //Alt+Menu
+					if ((get_key_mod() & (LGUI | RGUI)) && !is_x86_core() && has_menu()) //Win+Menu
 					{
 						menustate = MENU_8BIT_SYSTEM1;
 					}
@@ -820,6 +816,7 @@ void HandleUI(void)
 					}
 				}
 			}
+			OsdSetSize(16);
 			menusub = 0;
 			OsdClear();
 			OsdEnable(DISABLE_KEYBOARD);
@@ -831,7 +828,6 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_ARCHIE_MAIN1: {
-		OsdSetSize(16);
 		menumask = 0xff;
 		OsdSetTitle("ARCHIE", 0);
 
@@ -936,155 +932,147 @@ void HandleUI(void)
 		int entry = 0;
 		int selentry;
 
-		int old_osd_size = OsdGetSize();
-		while (1)
-		{
-			joy_bcount = 0;
-			selentry = 0;
-			entry = 0;
-			menumask = 0;
-			p = user_io_get_core_name();
-			if (!p[0]) OsdSetTitle("8BIT", OSD_ARROW_RIGHT);
-			else      OsdSetTitle(p, OSD_ARROW_RIGHT);
+		joy_bcount = 0;
+		selentry = 0;
+		entry = 0;
+		menumask = 0;
+		p = user_io_get_core_name();
+		if (!p[0]) OsdSetTitle("8BIT", OSD_ARROW_RIGHT);
+		else      OsdSetTitle(p, OSD_ARROW_RIGHT);
 
-			if (!p[0]) OsdCoreNameSet("8BIT");
-			else      OsdCoreNameSet(p);
+		if (!p[0]) OsdCoreNameSet("8BIT");
+		else      OsdCoreNameSet(p);
 
-			// check if there's a file type supported
-			p = user_io_8bit_get_string(1);
-			if (p && strlen(p)) {
+		// check if there's a file type supported
+		p = user_io_8bit_get_string(1);
+		if (p && strlen(p)) {
+			entry++;
+			selentry++;
+			menumask = 1;
+			strcpy(s, " Load *.");
+			strcat(s, GetExt(p));
+			OsdWrite(0, s, menusub == 0, 0);
+		}
+
+		// add options as requested by core
+		int i = 2;
+		do {
+			char* pos;
+			unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
+
+			p = user_io_8bit_get_string(i);
+			//printf("Option %d: %s\n", i-1, p);
+
+			// check for 'F'ile or 'S'D image strings
+			if (p && ((p[0] == 'F') || (p[0] == 'S'))) {
+				substrcpy(s, p, 2);
+				if (strlen(s)) {
+					strcpy(s, " ");
+					substrcpy(s + 1, p, 2);
+					strcat(s, " *.");
+				}
+				else {
+					if (p[0] == 'F') strcpy(s, " Load *.");
+					else            strcpy(s, " Mount *.");
+				}
+				pos = s + strlen(s);
+				substrcpy(pos, p, 1);
+				strcpy(pos, GetExt(pos));
+				OsdWrite(entry, s, menusub == selentry, 0);
+
+				// add bit in menu mask
+				menumask = (menumask << 1) | 1;
 				entry++;
 				selentry++;
-				menumask = 1;
-				strcpy(s, " Load *.");
-				strcat(s, GetExt(p));
-				OsdWrite(0, s, menusub == 0, 0);
 			}
 
-			// add options as requested by core
-			int i = 2;
-			do {
-				char* pos;
-				unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
+			// check for 'T'oggle and 'R'eset (toggle and then close menu) strings
+			if (p && ((p[0] == 'T') || (p[0] == 'R'))) {
 
-				p = user_io_8bit_get_string(i);
-				//printf("Option %d: %s\n", i-1, p);
+				s[0] = ' ';
+				substrcpy(s + 1, p, 1);
+				OsdWrite(entry, s, menusub == selentry, 0);
 
-				// check for 'F'ile or 'S'D image strings
-				if (p && ((p[0] == 'F') || (p[0] == 'S'))) {
-					substrcpy(s, p, 2);
-					if (strlen(s)) {
-						strcpy(s, " ");
-						substrcpy(s + 1, p, 2);
-						strcat(s, " *.");
-					}
-					else {
-						if (p[0] == 'F') strcpy(s, " Load *.");
-						else            strcpy(s, " Mount *.");
-					}
-					pos = s + strlen(s);
-					substrcpy(pos, p, 1);
-					strcpy(pos, GetExt(pos));
-					OsdWrite(entry, s, menusub == selentry, 0);
+				// add bit in menu mask
+				menumask = (menumask << 1) | 1;
+				entry++;
+				selentry++;
+			}
 
-					// add bit in menu mask
-					menumask = (menumask << 1) | 1;
-					entry++;
-					selentry++;
-				}
+			// check for 'O'ption strings
+			if (p && (p[0] == 'O'))
+			{
+				//option handled by ARM
+				if (p[1] == 'X') p++;
 
-				// check for 'T'oggle and 'R'eset (toggle and then close menu) strings
-				if (p && ((p[0] == 'T') || (p[0] == 'R'))) {
+				unsigned long x = getStatus(p, status);
 
-					s[0] = ' ';
-					substrcpy(s + 1, p, 1);
-					OsdWrite(entry, s, menusub == selentry, 0);
-
-					// add bit in menu mask
-					menumask = (menumask << 1) | 1;
-					entry++;
-					selentry++;
-				}
-
-				// check for 'O'ption strings
-				if (p && (p[0] == 'O'))
-				{
-					//option handled by ARM
-					if (p[1] == 'X') p++;
-
-					unsigned long x = getStatus(p, status);
-
-					// get currently active option
+				// get currently active option
+				substrcpy(s, p, 2 + x);
+				char l = strlen(s);
+				if (!l) {
+					// option's index is outside of available values.
+					// reset to 0.
+					x = 0;
+					user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
 					substrcpy(s, p, 2 + x);
-					char l = strlen(s);
-					if (!l) {
-						// option's index is outside of available values.
-						// reset to 0.
-						x = 0;
-						user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
-						substrcpy(s, p, 2 + x);
-						l = strlen(s);
-					}
-
-					s[0] = ' ';
-					substrcpy(s + 1, p, 1);
-
-					char *end = s + strlen(s) - 1;
-					while ((end > s+1) && (*end == ' ')) end--;
-					*(end + 1) = 0;
-
-					strcat(s, ":");
-					l = 28 - l - strlen(s);
-					while (l--) strcat(s, " ");
-
-					substrcpy(s + strlen(s), p, 2 + x);
-
-					OsdWrite(entry, s, menusub == selentry, 0);
-
-					// add bit in menu mask
-					menumask = (menumask << 1) | 1;
-					entry++;
-					selentry++;
+					l = strlen(s);
 				}
 
-				// delimiter
-				if (p && (p[0] == '-'))
+				s[0] = ' ';
+				substrcpy(s + 1, p, 1);
+
+				char *end = s + strlen(s) - 1;
+				while ((end > s+1) && (*end == ' ')) end--;
+				*(end + 1) = 0;
+
+				strcat(s, ":");
+				l = 28 - l - strlen(s);
+				while (l--) strcat(s, " ");
+
+				substrcpy(s + strlen(s), p, 2 + x);
+
+				OsdWrite(entry, s, menusub == selentry, 0);
+
+				// add bit in menu mask
+				menumask = (menumask << 1) | 1;
+				entry++;
+				selentry++;
+			}
+
+			// delimiter
+			if (p && (p[0] == '-'))
+			{
+				OsdWrite(entry, "", 0, 0);
+				entry++;
+			}
+
+			// check for 'V'ersion strings
+			if (p && (p[0] == 'V'))
+			{
+				// get version string
+				strcpy(s, OsdCoreName());
+				strcat(s, " ");
+				substrcpy(s + strlen(s), p, 1);
+				OsdCoreNameSet(s);
+			}
+
+			if (p && (p[0] == 'J'))
+			{
+				// joystick button names.
+				for (int n = 0; n < 12; n++)
 				{
-					OsdWrite(entry, "", 0, 0);
-					entry++;
+					substrcpy(joy_bnames[n], p, n+1);
+					//printf("joy_bname = %s\n", joy_bnames[n]);
+					if(!joy_bnames[n][0]) break;
+					joy_bcount++;
 				}
 
-				// check for 'V'ersion strings
-				if (p && (p[0] == 'V'))
-				{
-					// get version string
-					strcpy(s, OsdCoreName());
-					strcat(s, " ");
-					substrcpy(s + strlen(s), p, 1);
-					OsdCoreNameSet(s);
-				}
+				//printf("joy_bcount = %d\n", joy_bcount);
+			}
 
-				if (p && (p[0] == 'J'))
-				{
-					// joystick button names.
-					for (int n = 0; n < 12; n++)
-					{
-						substrcpy(joy_bnames[n], p, n+1);
-						//printf("joy_bname = %s\n", joy_bnames[n]);
-						if(!joy_bnames[n][0]) break;
-						joy_bcount++;
-					}
-
-					//printf("joy_bcount = %d\n", joy_bcount);
-				}
-
-				i++;
-			} while (p);
-
-			OsdSetSize(16);
-			if (old_osd_size == OsdGetSize()) break;
-			old_osd_size = OsdGetSize();
-		}
+			i++;
+		} while (p);
 
 		if (!entry)
 		{
@@ -1244,11 +1232,11 @@ void HandleUI(void)
 		OsdWrite(OsdIsBig ? 1 : 0, " Firmware & Core           \x16", menusub == 0, 0);
 		OsdWrite(OsdIsBig ? 2 : 1, " Define joystick buttons   \x16", menusub == 1, 0);
 		OsdWrite(OsdIsBig ? 3 : 2, "", 0, 0);
-		OsdWrite(OsdIsBig ? 4 : 3, m ? " Reset" : " Reset settings", menusub == 3, !has_menu());
+		OsdWrite(OsdIsBig ? 4 : 3, m ? " Reset" : " Reset settings", menusub == 3, 0);
 		if (m)
 			OsdWrite(OsdIsBig ? 5 : 4, "", 0, 0);
 		else
-			OsdWrite(OsdIsBig ? 5 : 4, " Save settings", menusub == 4, !has_menu()); // Minimig saves settings elsewhere
+			OsdWrite(OsdIsBig ? 5 : 4, " Save settings", menusub == 4, 0);
 		if (OsdIsBig) OsdWrite(6, "", 0, 0);
 		OsdWrite(OsdIsBig ? 7 : 5, " Cold reset", menusub == (5 - m), 0);
 		OsdWrite(OsdIsBig ? 8 : 6, " About", menusub == (6 - m), 0);
@@ -1288,11 +1276,8 @@ void HandleUI(void)
 			case 2:
 				break;
 			case 3:
-				if (has_menu())
-				{
-					menustate = MENU_RESET1;
-					menusub = 1;
-				}
+				menustate = MENU_RESET1;
+				menusub = 1;
 				break;
 			case 4:
 				if (m)
@@ -1301,17 +1286,14 @@ void HandleUI(void)
 				}
 				else
 				{
-					if (has_menu())
-					{
-						// Save settings
-						char *filename = user_io_create_config_name();
-						unsigned long status = user_io_8bit_set_status(0, 0);
-						printf("Saving config to %s\n", filename);
-						FileSaveConfig(filename, &status, 4);
-						if (is_x86_core()) x86_config_save();
-						menustate = MENU_8BIT_MAIN1;
-						menusub = 0;
-					}
+					// Save settings
+					char *filename = user_io_create_config_name();
+					unsigned long status = user_io_8bit_set_status(0, 0);
+					printf("Saving config to %s\n", filename);
+					FileSaveConfig(filename, &status, 4);
+					if (is_x86_core()) x86_config_save();
+					menustate = MENU_8BIT_MAIN1;
+					menusub = 0;
 				}
 				break;
 			case 5:
@@ -1358,11 +1340,8 @@ void HandleUI(void)
 					menustate = MENU_ARCHIE_MAIN1;
 					break;
 				case CORE_TYPE_8BIT:
-					if (has_menu())
-					{
-						menusub = 0;
-						menustate = MENU_8BIT_MAIN1;
-					}
+					menusub = 0;
+					menustate = MENU_8BIT_MAIN1;
 					break;
 				}
 			}
@@ -1935,7 +1914,6 @@ void HandleUI(void)
 		/* minimig main menu                                              */
 		/******************************************************************/
 	case MENU_MAIN1:
-		OsdSetSize(16);
 		menumask = 0xFF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
 		OsdSetTitle("Minimig", OSD_ARROW_RIGHT);
 		helptext = helptexts[HELPTEXT_MAIN];
