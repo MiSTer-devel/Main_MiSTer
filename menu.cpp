@@ -2671,7 +2671,7 @@ void HandleUI(void)
 			}
 			else if (menusub == 2)
 			{
-				SelectFile("HDF", 0, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
+				SelectFile("HDF", SCAN_DIR, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
 			}
 			else if (menusub == 3)
 			{
@@ -2691,7 +2691,7 @@ void HandleUI(void)
 			}
 			else if (menusub == 4)
 			{
-				SelectFile("HDF", 0, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
+				SelectFile("HDF", SCAN_DIR, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
 			}
 			else if (menusub == 5) // return to previous menu
 			{
