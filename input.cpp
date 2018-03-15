@@ -919,169 +919,18 @@ NUM_LOCK_TOGGLE | 2,  // 6d: F18
 NUM_LOCK_TOGGLE | 3,  // 6e: F19
 NUM_LOCK_TOGGLE | 4   // 6f: F20
 };
-*/
 
-/*
-
-// Archimedes unmapped keys
-// Missing sterling
-// Missing kp_hash
-// Missing button_1
-// Missing button_2
-// Missing button_3
-// Missing button_4
-// Missing button_5
-
-// keycode translation table
-const unsigned short usb2archie[] = {
-MISS, // 00: NoEvent
-MISS, // 01: Overrun Error
-MISS, // 02: POST fail
-MISS, // 03: ErrorUndefined
-0x3c, // 04: a
-0x52, // 05: b
-0x50, // 06: c
-0x3e, // 07: d
-0x29, // 08: e
-0x3f, // 09: f
-0x40, // 0a: g
-0x41, // 0b: h
-0x2e, // 0c: i
-0x42, // 0d: j
-0x43, // 0e: k
-0x44, // 0f: l
-0x54, // 10: m
-0x53, // 11: n
-0x2f, // 12: o
-0x30, // 13: p
-0x27, // 14: q
-0x2a, // 15: r
-0x3d, // 16: s
-0x2b, // 17: t
-0x2d, // 18: u
-0x51, // 19: v
-0x28, // 1a: w
-0x4f, // 1b: x
-0x2c, // 1c: y
-0x4e, // 1d: z
-0x11, // 1e: 1
-0x12, // 1f: 2
-0x13, // 20: 3
-0x14, // 21: 4
-0x15, // 22: 5
-0x16, // 23: 6
-0x17, // 24: 7
-0x18, // 25: 8
-0x19, // 26: 9
-0x1a, // 27: 0
-0x47, // 28: Return
-0x00, // 29: Escape
-0x1e, // 2a: Backspace
-0x26, // 2b: Tab
-0x5f, // 2c: Space
-0x1b, // 2d: -
-0x1c, // 2e: =
-0x31, // 2f: [
-0x32, // 30: ]
-0x33, // 31: backslash (only on us keyboards)
-0x33, // 32: Europe 1 (only on international kbds)
-0x45, // 33: ;
-0x46, // 34: '
-0x10, // 35: `
-0x55, // 36: ,
-0x56, // 37: .
-0x57, // 38: /
-0x5d, // 39: Caps Lock
-0x01, // 3a: F1
-0x02, // 3b: F2
-0x03, // 3c: F3
-0x04, // 3d: F4
-0x05, // 3e: F5
-0x06, // 3f: F6
-0x07, // 40: F7
-0x08, // 41: F8
-0x09, // 42: F9
-0x0a, // 43: F10
-0x0b, // 44: F11
-0x0c, // 45: F12 - Used heavily by the archie... OSD moved to printscreen.
-//  0x0d, // 46: Print Screen
-OSD_OPEN, // 46: Print Screen
-0x0e, // 47: Scroll Lock
-0x0f, // 48: Pause
-0x1f, // 49: Insert
-0x20, // 4a: Home
-0x21, // 4b: Page Up
-0x34, // 4c: Delete
-0x35, // 4d: End
-0x36, // 4e: Page Down
-0x64, // 4f: Right Arrow
-0x62, // 50: Left Arrow
-0x63, // 51: Down Arrow
-0x59, // 52: Up Arrow
-0x22, // 53: Num Lock
-0x23, // 54: KP /
-0x24, // 55: KP *
-0x3a, // 56: KP -
-0x4b, // 57: KP +
-0x67, // 58: KP Enter
-0x5a, // 59: KP 1
-0x5b, // 5a: KP 2
-0x5c, // 5b: KP 3
-0x48, // 5c: KP 4
-0x49, // 5d: KP 5
-0x4a, // 5e: KP 6
-0x37, // 5f: KP 7
-0x38, // 60: KP 8
-0x39, // 61: KP 9
-0x65, // 62: KP 0
-0x66, // 63: KP decimal
-MISS, //  64: Europe 2
-0x72, //  65: App (maps to middle mouse button)
-MISS, //  66: Power
-MISS, //  67: KP =
-MISS, //  68: F13
-MISS, //  69: F14
-MISS, //  6a: F15
-0x1f, //  6b: insert (for keyrah)
-MISS, //  6c: F17
-MISS, //  6d: F18
-MISS, //  6e: F19
-MISS, //  6f: F20
-};
-*/
-
-/*
 unsigned short modifier_keycode(unsigned char index)
 {
 // usb modifer bits:
 //0     1     2    3    4     5     6    7
 //LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI
 
-if (core_type == CORE_TYPE_MINIMIG2)
-{
-static const unsigned short amiga_modifier[] = { 0x63, 0x60, 0x64, 0x66, 0x63, 0x61, 0x65, 0x67 };
-return amiga_modifier[index];
-}
-
 if (core_type == CORE_TYPE_MIST)
 {
 static const unsigned short atari_modifier[] = { 0x1d, 0x2a, 0x38, MISS, 0x1d, 0x36, 0x38, MISS };
 return atari_modifier[index];
 }
-
-if (core_type == CORE_TYPE_8BIT)
-{
-static const unsigned short ps2_modifier[] = { 0x14, 0x12, 0x11, EXT | 0x1f, EXT | 0x14, 0x59, EXT | 0x11, EXT | 0x27 };
-return ps2_modifier[index];
-}
-
-if (core_type == CORE_TYPE_ARCHIE)
-{
-static const unsigned short archie_modifier[] = { 0x36, 0x4c, 0x5e, MISS, 0x61, 0x58, 0x60, MISS };
-return archie_modifier[index];
-}
-
-return MISS;
 }
 */
 
@@ -1415,6 +1264,10 @@ static int keyrah_trans(int key, int press)
 #define KEY_EMU_RIGHT (KEY_MAX+2)
 #define KEY_EMU_UP    (KEY_MAX+3)
 #define KEY_EMU_DOWN  (KEY_MAX+4)
+
+#define KEY_EMU_LT    (KEY_EMU_LEFT+16)
+#define KEY_EMU_RT    (KEY_EMU_LEFT+17)
+
 
 static void input_cb(struct input_event *ev, int dev);
 
@@ -1786,7 +1639,7 @@ static void input_cb(struct input_event *ev, int dev)
 					return;
 				}
 
-				if (ev->code == input[dev].mmap[15] && (ev->value <= 1))
+				if (ev->code == input[dev].mmap[15] && (ev->value <= 1) && ((!(mouse_emu & 1)) ^ (!ev->value)))
 				{
 					mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
 					printf("mouse_emu = %d\n", mouse_emu);
@@ -1926,12 +1779,18 @@ static void input_cb(struct input_event *ev, int dev)
 		case EV_ABS:
 			if (!user_io_osd_is_visible())
 			{
+				int value = ev->value;
+				if (input[dev].vid == 0x045e && input[dev].pid == 0x028e) // 8BitDo Retro Receiver
+				{
+					value = (value + 32768)>>8;
+				}
+
 				if (mouse_emu)
 				{
 					if (ev->code == 0) // x
 					{
 						mouse_emu_x = 0;
-						if (ev->value < 127 || ev->value>129) mouse_emu_x = ev->value - 128;
+						if (value < 127 || value>129) mouse_emu_x = value - 128;
 						mouse_emu_x /= 12;
 						return;
 					}
@@ -1939,7 +1798,7 @@ static void input_cb(struct input_event *ev, int dev)
 					if (ev->code == 1) // y
 					{
 						mouse_emu_y = 0;
-						if (ev->value < 127 || ev->value>129) mouse_emu_y = ev->value - 128;
+						if (value < 127 || value>129) mouse_emu_y = value - 128;
 						mouse_emu_y /= 12;
 						return;
 					}
@@ -1956,7 +1815,7 @@ static void input_cb(struct input_event *ev, int dev)
 					if (ev->code == 0) // x
 					{
 						int offset = 0;
-						if (ev->value < 127 || ev->value>129) offset = ev->value - 128;
+						if (value < 127 || value>129) offset = value - 128;
 						joy_analog((first_joystick == dev) ? 0 : 1, 0, offset);
 						return;
 					}
@@ -1964,7 +1823,7 @@ static void input_cb(struct input_event *ev, int dev)
 					if (ev->code == 1) // y
 					{
 						int offset = 0;
-						if (ev->value < 127 || ev->value>129) offset = ev->value - 128;
+						if (value < 127 || value>129) offset = value - 128;
 						joy_analog((first_joystick == dev) ? 0 : 1, 1, offset);
 						return;
 					}
@@ -2122,13 +1981,16 @@ int input_test(int getchar)
 								// some pads use axis 16 for L/R PAD, axis 17 for U/D PAD
 								// emulate PAD on axis 0/1
 
-								// axis ranges vary per USB controller: some have 0-255, others -32768-32767 etc.
-								int16_t mid_axis = 127;
-								if (input[i].vid == 0x045e && input[i].pid == 0x028e) mid_axis = -1;  // 8BitDo NES30 Retro Receiver
-                                if (input[i].vid == 0x0403 && input[i].pid == 0x97c1) mid_axis = 0;   // Retrode 
+								// axis ranges vary per USB controller: some have 0-255, others -32768..+32767 etc.
+								int mid_axis = 127;
+								if (input[i].vid == 0x045e && input[i].pid == 0x028e) mid_axis = 0;   // 8BitDo Retro Receiver (-1, but doesn't matter here)
+                                if (input[i].vid == 0x0403 && input[i].pid == 0x97c1) mid_axis = 0;   // Retrode
 								if (input[i].vid == 0x4d8 && input[i].pid == 0xf947) mid_axis = 2047; // 2600-Daptor II 
 								if (input[i].vid == 0x4d8 && input[i].pid == 0xf421) mid_axis = 2047; // NeoGeo-Daptor 
 								if (input[i].vid == 0x4d8 && input[i].pid == 0xf627) mid_axis = 0;    // Vision-Daptor 
+
+								int treshold = 64;
+								if (input[i].vid == 0x045e && input[i].pid == 0x028e) treshold = 16384;  // 8BitDo Retro Receiver
 
 								char l, r, u, d;
 								l = r = u = d = 0;
@@ -2137,14 +1999,13 @@ int input_test(int getchar)
 								if (ev.code < 2)  offset += 4;
 
 								uint16_t extra_axis = 2;
-								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) extra_axis = 0; // AliExpress USB encoder PCB floods axis 2
-
+								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) extra_axis = 0;  // AliExpress USB encoder PCB floods axis 2
+								if (input[i].vid == 0x045e && input[i].pid == 0x028e) extra_axis = 3;  // 8BitDo Retro Receiver
 
 								if(ev.code == 0 || ev.code == extra_axis || ev.code == 16) // x
 								{
-                                    
-									if ((ev.code < 16) ? ev.value < mid_axis - 64  : ev.value == -1) l = 1;
-									if ((ev.code < 16) ? ev.value > mid_axis + 64 : ev.value ==  1) r = 1;
+									if ((ev.code < 16) ? ev.value < mid_axis - treshold : ev.value == -1) l = 1;
+									if ((ev.code < 16) ? ev.value > mid_axis + treshold : ev.value ==  1) r = 1;
 
 									ev.type = EV_KEY;
 									if (input[i].last_l != l)
@@ -2167,13 +2028,16 @@ int input_test(int getchar)
 								uint16_t base_y_axis = 1;
 								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) base_y_axis = 3; // AliExpress USB encoder PCB
 
-								if (ev.code == base_y_axis || ev.code == 5 || ev.code == 17) // y
+								extra_axis = 5;
+								if (input[i].vid == 0x045e && input[i].pid == 0x028e) extra_axis = 4;  // 8BitDo Retro Receiver
+
+								if (ev.code == base_y_axis || ev.code == extra_axis || ev.code == 17) // y
 								{
                                     // override specific to x axis
                                     if (input[i].vid == 0x046d && input[i].pid == 0xc21f) mid_axis = -129; // Logitech F710
                                     
-									if ((ev.code < 16) ? ev.value < mid_axis - 64  : ev.value == -1) u = 1;
-									if ((ev.code < 16) ? ev.value > mid_axis + 64 : ev.value ==  1) d = 1;
+									if ((ev.code < 16) ? ev.value < mid_axis - treshold : ev.value == -1) u = 1;
+									if ((ev.code < 16) ? ev.value > mid_axis + treshold : ev.value ==  1) d = 1;
 
 									ev.type = EV_KEY;
 									if (input[i].last_u != u)
@@ -2190,6 +2054,24 @@ int input_test(int getchar)
 										ev.value = d;
 										input_cb(&ev, i);
 										input[i].last_d = d;
+									}
+								}
+
+								if (input[i].vid == 0x045e && input[i].pid == 0x028e)  // 8BitDo Retro Receiver
+								{
+									ev.type = EV_KEY;
+									if (ev.code == 2)
+									{
+										ev.code = KEY_EMU_LT;
+										ev.value = (ev.value == 255) ? 1 : 0;
+										input_cb(&ev, i);
+									}
+
+									if (ev.code == 5)
+									{
+										ev.code = KEY_EMU_RT;
+										ev.value = (ev.value == 255) ? 1 : 0;
+										input_cb(&ev, i);
 									}
 								}
 							}
