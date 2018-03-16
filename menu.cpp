@@ -1226,7 +1226,7 @@ void HandleUI(void)
 		menustate = MENU_8BIT_SYSTEM2;
 		parentstate = MENU_8BIT_SYSTEM1;
 		if (OsdIsBig) OsdWrite(0, "", 0, 0);
-		OsdWrite(OsdIsBig ? 1 : 0, " Firmware & Core           \x16", menusub == 0, 0);
+		OsdWrite(OsdIsBig ? 1 : 0, " Core                      \x16", menusub == 0, 0);
 		OsdWrite(OsdIsBig ? 2 : 1, " Define joystick buttons   \x16", menusub == 1, 0);
 		OsdWrite(OsdIsBig ? 3 : 2, "", 0, 0);
 		OsdWrite(OsdIsBig ? 4 : 3, m ? " Reset" : " Reset settings", menusub == 3, user_io_core_type() == CORE_TYPE_ARCHIE);
@@ -1250,8 +1250,7 @@ void HandleUI(void)
 		if (select) {
 			switch (menusub) {
 			case 0:
-				// Firmware submenu
-				menustate = MENU_FIRMWARE1;
+				SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_8BIT_SYSTEM1, 0);
 				menusub = 0;
 				break;
 			case 1:
@@ -1425,19 +1424,19 @@ void HandleUI(void)
 		break;
 
 	case MENU_8BIT_ABOUT1:
+		OsdSetSize(16);
 		menumask = 0;
 		helptext = helptexts[HELPTEXT_NONE];
 		OsdSetTitle("About", 0);
 		menustate = MENU_8BIT_ABOUT2;
 		parentstate = MENU_8BIT_ABOUT1;
-		for (int i = 5; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		for (int i = 5; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
 		OsdDrawLogo(0, 0, 1);
 		OsdDrawLogo(1, 1, 1);
 		OsdDrawLogo(2, 2, 1);
 		OsdDrawLogo(3, 3, 1);
 		OsdDrawLogo(4, 4, 1);
 		OsdDrawLogo(5, 5, 1);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 0, 0);
 		StarsInit();
 		ScrollReset();
 		break;
@@ -1450,12 +1449,30 @@ void HandleUI(void)
 		OsdDrawLogo(3, 3, 1);
 		OsdDrawLogo(4, 4, 1);
 		OsdDrawLogo(5, 5, 1);
-		ScrollText(OsdIsBig ? 13 : 6, "                                 MiSTer by Sorgelig, based on MiST by Till Harbaum and Minimig by Dennis van Weeren and other projects. MiSTer hardware and software is distributed under the terms of the GNU General Public License version 3. MiSTer FPGA cores are the work of their respective authors under individual licensing.", 0, 0, 0, 0);
 
+
+		sprintf(s, "   ARM  s/w ver. %s", version + 5);
+		OsdWrite(12, s, 0, 0);
+
+		s[0] = 0;
+		if (user_io_core_type() != CORE_TYPE_MINIMIG2)
+		{
+			int len = strlen(OsdCoreName());
+			if (len > 30) len = 30;
+			int sp = (30 - len) / 2;
+			for (int i = 0; i < sp; i++) strcat(s, " ");
+			char *s2 = s + strlen(s);
+			char *s3 = OsdCoreName();
+			for (int i = 0; i < len; i++) *s2++ = *s3++;
+			*s2++ = 0;
+		}
+		OsdWrite(13, s, 0, 0);
+
+		ScrollText(15, "                                 MiSTer by Sorgelig, based on MiST by Till Harbaum and Minimig by Dennis van Weeren and other projects. MiSTer hardware and software is distributed under the terms of the GNU General Public License version 3. MiSTer FPGA cores are the work of their respective authors under individual licensing.", 0, 0, 0, 0);
 		if (menu | select | left)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
-			menusub = 6-m;
+			menusub = 6 - m;
 		}
 		break;
 
