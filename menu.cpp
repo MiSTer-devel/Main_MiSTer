@@ -441,6 +441,7 @@ void menu_key_set(unsigned int c)
 }
 
 // get key status
+static int hold_cnt = 0;
 static uint32_t menu_key_get(void)
 {
 	static uint32_t c2;
@@ -451,7 +452,11 @@ static uint32_t menu_key_get(void)
 
 	c1 = menu_key;
 	c = 0;
-	if (c1 != c2) c = c1;
+	if (c1 != c2)
+	{
+		c = c1;
+		hold_cnt = 1;
+	}
 	c2 = c1;
 
 	// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
@@ -460,12 +465,17 @@ static uint32_t menu_key_get(void)
 	// generate repeat "key-pressed" events
 	if ((c1 & UPSTROKE) || (!c1))
 	{
+		hold_cnt = 0;
 		repeat = GetTimer(REPEATDELAY);
 	}
 	else if (CheckTimer(repeat))
 	{
 		repeat = GetTimer(REPEATRATE);
-		if (GetASCIIKey(c1)) c = c1;
+		if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 5)))
+		{
+			c = c1;
+			hold_cnt++;
+		}
 	}
 
 	// currently no key pressed
@@ -640,6 +650,7 @@ void HandleUI(void)
 	unsigned long len;
 	static hardfileTYPE t_hardfile[2]; // temporary copy of former hardfile configuration
 	char enable;
+	static int reboot_req = 0;
 	static long helptext_timer;
 	static const char *helptext;
 	static char helpstate = 0;
@@ -1218,37 +1229,40 @@ void HandleUI(void)
 		break;
 
 	case MENU_8BIT_SYSTEM1:
+		OsdSetSize(16);
 		helptext = helptexts[HELPTEXT_MAIN];
+		reboot_req = 0;
 		m = 0;
-		if (user_io_core_type() == CORE_TYPE_MINIMIG2) m = 1;
-		menumask = m ? 0x7b : 0xfb;
+		menumask = 0xfb;
+		if (user_io_core_type() == CORE_TYPE_MINIMIG2)
+		{
+			m = 1;
+			menumask &= ~0x10;
+		}
+
 		OsdSetTitle("System", OSD_ARROW_LEFT);
 		menustate = MENU_8BIT_SYSTEM2;
 		parentstate = MENU_8BIT_SYSTEM1;
-		if (OsdIsBig) OsdWrite(0, "", 0, 0);
-		OsdWrite(OsdIsBig ? 1 : 0, " Core                      \x16", menusub == 0, 0);
-		OsdWrite(OsdIsBig ? 2 : 1, " Define joystick buttons   \x16", menusub == 1, 0);
-		OsdWrite(OsdIsBig ? 3 : 2, "", 0, 0);
-		OsdWrite(OsdIsBig ? 4 : 3, m ? " Reset" : " Reset settings", menusub == 3, user_io_core_type() == CORE_TYPE_ARCHIE);
-		if (m)
-			OsdWrite(OsdIsBig ? 5 : 4, "", 0, 0);
-		else
-			OsdWrite(OsdIsBig ? 5 : 4, " Save settings", menusub == 4, 0);
-		if (OsdIsBig) OsdWrite(6, "", 0, 0);
-		OsdWrite(OsdIsBig ? 7 : 5, " Cold reset", menusub == (5 - m), 0);
-		OsdWrite(OsdIsBig ? 8 : 6, " About", menusub == (6 - m), 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == (7 - m), 0);
+		OsdWrite(0, "", 0, 0);
+		OsdWrite(1, " Core                      \x16", menusub == 0, 0);
+		OsdWrite(2, " Define joystick buttons   \x16", menusub == 1, 0);
+		OsdWrite(3, "", 0, 0);
+		OsdWrite(4, m ? " Reset the core" : " Reset settings", menusub == 3, user_io_core_type() == CORE_TYPE_ARCHIE);
+		OsdWrite(5, m ? "" : " Save settings", menusub == 4, 0);
+		OsdWrite(6, "", 0, 0);
+		OsdWrite(7, " Reboot (hold \x16 cold reboot)", menusub == 5, 0);
+		OsdWrite(8, " About", menusub == 6, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 7, 0);
 		sysinfo_timer = 0;
 		break;
 
 	case MENU_8BIT_SYSTEM2:
-		m = 0;
-		if (user_io_core_type() == CORE_TYPE_MINIMIG2) m = 1;
-		// menu key closes menu
-		if (menu)
-			menustate = MENU_NONE1;
-		if (select) {
-			switch (menusub) {
+		if (menu) menustate = MENU_NONE1;
+
+		if (select)
+		{
+			switch (menusub)
+			{
 			case 0:
 				SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_8BIT_SYSTEM1, 0);
 				menusub = 0;
@@ -1279,50 +1293,39 @@ void HandleUI(void)
 				}
 				break;
 			case 4:
-				if (m)
+				// Save settings
+				menustate = MENU_8BIT_MAIN1;
+				menusub = 0;
+
+				if (user_io_core_type() == CORE_TYPE_ARCHIE)
 				{
-					reboot(1);
+					archie_save_config();
+					menustate = MENU_ARCHIE_MAIN1;
 				}
 				else
 				{
-					// Save settings
-					menustate = MENU_8BIT_MAIN1;
-					menusub = 0;
-
-					if (user_io_core_type() == CORE_TYPE_ARCHIE)
-					{
-						archie_save_config();
-						menustate = MENU_ARCHIE_MAIN1;
-					}
-					else
-					{
-						char *filename = user_io_create_config_name();
-						unsigned long status = user_io_8bit_set_status(0, 0);
-						printf("Saving config to %s\n", filename);
-						FileSaveConfig(filename, &status, 4);
-						if (is_x86_core()) x86_config_save();
-					}
+					char *filename = user_io_create_config_name();
+					unsigned long status = user_io_8bit_set_status(0, 0);
+					printf("Saving config to %s\n", filename);
+					FileSaveConfig(filename, &status, 4);
+					if (is_x86_core()) x86_config_save();
 				}
 				break;
 			case 5:
-				if (m) {
-					menustate = MENU_8BIT_ABOUT1;
-					menusub = 0;
-				}
-				else {
-					reboot(1);
+				{
+					reboot_req = 1;
+
+					int off = hold_cnt/3;
+					if (off > 5) reboot(1);
+
+					sprintf(s, " Cold Reboot");
+					p = s + 5 - off;
+					OsdWrite(7, p, menusub == 5, 0);
 				}
 				break;
 			case 6:
-				if (m) {
-					menustate = MENU_NONE1;
-					menusub = 0;
-				}
-				else {
-					// About logo
-					menustate = MENU_8BIT_ABOUT1;
-					menusub = 0;
-				}
+				menustate = MENU_8BIT_ABOUT1;
+				menusub = 0;
 				break;
 			case 7:
 				// Exit
@@ -1331,31 +1334,32 @@ void HandleUI(void)
 				break;
 			}
 		}
-		else {
-			if (left) {
-				// go back to core requesting this menu
-				switch (user_io_core_type()) {
-				case CORE_TYPE_MINIMIG2:
-					menusub = 0;
-					menustate = MENU_MAIN1;
-					break;
-				case CORE_TYPE_MIST:
-					menusub = 5;
-					menustate = MENU_MIST_MAIN1;
-					break;
-				case CORE_TYPE_ARCHIE:
-					menusub = 0;
-					menustate = MENU_ARCHIE_MAIN1;
-					break;
-				case CORE_TYPE_8BIT:
-					menusub = 0;
-					menustate = MENU_8BIT_MAIN1;
-					break;
-				}
+		else if (left)
+		{
+			// go back to core requesting this menu
+			switch (user_io_core_type()) {
+			case CORE_TYPE_MINIMIG2:
+				menusub = 0;
+				menustate = MENU_MAIN1;
+				break;
+			case CORE_TYPE_MIST:
+				menusub = 5;
+				menustate = MENU_MIST_MAIN1;
+				break;
+			case CORE_TYPE_ARCHIE:
+				menusub = 0;
+				menustate = MENU_ARCHIE_MAIN1;
+				break;
+			case CORE_TYPE_8BIT:
+				menusub = 0;
+				menustate = MENU_8BIT_MAIN1;
+				break;
 			}
 		}
 
-		if (OsdIsBig) printSysInfo();
+		if(!hold_cnt && reboot_req) fpga_load_rbf("menu.rbf");
+
+		printSysInfo();
 		break;
 
 	case MENU_JOYDIGMAP:
@@ -1468,7 +1472,7 @@ void HandleUI(void)
 		}
 		OsdWrite(13, s, 0, 0);
 
-		ScrollText(15, "                                 MiSTer by Sorgelig, based on MiST by Till Harbaum and Minimig by Dennis van Weeren and other projects. MiSTer hardware and software is distributed under the terms of the GNU General Public License version 3. MiSTer FPGA cores are the work of their respective authors under individual licensing.", 0, 0, 0, 0);
+		ScrollText(15, "                                 MiSTer by Sorgelig, based on MiST by Till Harbaum, Minimig by Dennis van Weeren and other projects. MiSTer hardware and software is distributed under the terms of the GNU General Public License version 3. MiSTer FPGA cores are the work of their respective authors under individual licensing.", 0, 0, 0, 0);
 		if (menu | select | left)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
