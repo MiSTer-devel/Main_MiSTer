@@ -1267,6 +1267,7 @@ static int keyrah_trans(int key, int press)
 
 #define KEY_EMU_LT    (KEY_EMU_LEFT+16)
 #define KEY_EMU_RT    (KEY_EMU_LEFT+17)
+#define KEY_EMU_PS    (KEY_EMU_LEFT+18)
 
 
 static void input_cb(struct input_event *ev, int dev);
@@ -2071,6 +2072,16 @@ int input_test(int getchar)
 									{
 										ev.code = KEY_EMU_RT;
 										ev.value = (ev.value == 255) ? 1 : 0;
+										input_cb(&ev, i);
+									}
+								}
+
+								if (input[i].vid == 0x2dc8 && input[i].pid == 0x3100)  // 8BitDo Retro Receiver (Select+Left)
+								{
+									ev.type = EV_KEY;
+									if (ev.code == 9)
+									{
+										ev.code = KEY_EMU_PS;
 										input_cb(&ev, i);
 									}
 								}
