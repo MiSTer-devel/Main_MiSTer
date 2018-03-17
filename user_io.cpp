@@ -1778,20 +1778,18 @@ void user_io_osd_key_enable(char on)
 	osd_is_visible = on;
 }
 
-static char key_used_by_osd(uint32_t s)
-{
-	// this key is only used to open the OSD and has no keycode
-	if (s & OSD_OPEN) return 1;
-
-	// no keys are suppressed if the OSD is inactive
-	return osd_is_visible;
-}
-
-static void set_volume()
+static void set_volume(int cmd)
 {
 	vol_set_timeout = GetTimer(1000);
 
+	vol_att &= 0x17;
+	if(!cmd) vol_att ^= 0x10;
+	else if (vol_att & 0x10) vol_att &= 0xF;
+	else if (cmd < 0 && vol_att < 7) vol_att += 1;
+	else if (cmd > 0 && vol_att > 0) vol_att -= 1;
+
 	spi_uio_cmd8(UIO_AUDVOL, vol_att);
+
 	if (vol_att & 0x10)
 	{
 		Info("\x8d Mute", 1000);
@@ -1801,11 +1799,10 @@ static void set_volume()
 		char str[32];
 		memset(str, 0, sizeof(str));
 
-		int vol = vol_att & 0xf;
 		sprintf(str, "\x8d ");
 		char *bar = str + strlen(str);
-		memset(bar, 0x8C, 16);
-		memset(bar, 0x7f, 16 - vol);
+		memset(bar, 0x8C, 8);
+		memset(bar, 0x7f, 8 - vol_att);
 		Info(str, 1000);
 	}
 }
@@ -1814,31 +1811,17 @@ void user_io_kbd(uint16_t key, int press)
 {
 	if (key == KEY_MUTE)
 	{
-		if (press == 1 && hasAPI1_5() && !osd_is_visible && !is_menu_core())
-		{
-			vol_att ^= 0x10;
-			set_volume();
-		}
+		if (press == 1 && hasAPI1_5() && !osd_is_visible && !is_menu_core()) set_volume(0);
 	}
 	else
 	if (key == KEY_VOLUMEDOWN)
 	{
-		if (press && hasAPI1_5() && !osd_is_visible && !is_menu_core())
-		{
-			if(vol_att & 0x10) vol_att ^= 0x10;
-			else if((vol_att & 0xF) < 15) vol_att += 1;
-			set_volume();
-		}
+		if (press && hasAPI1_5() && !osd_is_visible && !is_menu_core()) set_volume(-1);
 	}
 	else
 	if (key == KEY_VOLUMEUP)
 	{
-		if (press && hasAPI1_5() && !osd_is_visible && !is_menu_core())
-		{
-			if (vol_att & 0x10) vol_att ^= 0x10;
-			else if(vol_att & 0xF) vol_att -= 1;
-			set_volume();
-		}
+		if (press && hasAPI1_5() && !osd_is_visible && !is_menu_core()) set_volume(1);
 	}
 	else
 	if (key == 0xBE)
