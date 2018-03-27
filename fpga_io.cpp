@@ -405,8 +405,7 @@ static void do_bridge(uint32_t enable)
 	}
 }
 
-#ifdef REBOOT_ON_RBF_LOAD
-static int save_core_name(char *name)
+static int make_env(const char *name, char *cfg)
 {
 	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return -1;
 
@@ -419,6 +418,7 @@ static int save_core_name(char *name)
 	}
 
 	volatile char* str = (volatile char*)buf;
+	memset((void*)str, 0, 0x1000);
 
 	*str++ = 0x21;
 	*str++ = 0x43;
@@ -437,27 +437,31 @@ static int save_core_name(char *name)
 	}
 
 	*str++ = '"';
-	*str++ = 0;
-	*str++ = 0;
-	*str++ = 0;
-	*str++ = 0;
+	*str++ = '\n';
+	FileLoad(cfg, (void*)str, 0);
 	munmap(buf, 0x1000);
 	return 0;
 }
-#endif
 
 int fpga_load_rbf(const char *name)
 {
-	char path[512];
+	static char path[1024];
 	int ret = 0;
+
+	if (!getStorage(0)) // multiboot is only on SD card.
+	{
+		strcpy(path, name);
+		strcpy(path + strlen(path) - 3, "txt");
+		if (FileLoad(path, 0, 0))
+		{
+			make_env(name, path);
+			do_bridge(0);
+			reboot(0);
+		}
+	}
 
 	printf("Loading RBF: %s\n", name);
 	sprintf(path, "%s/%s", !strcasecmp(name, "menu.rbf") ? getStorageDir(0) : getRootDir(), name);
-
-#ifdef REBOOT_ON_RBF_LOAD
-	do_bridge(0);
-	ret = save_core_name(name);
-#else
 
 	int rbf = open(path, O_RDONLY);
 	if (rbf < 0)
@@ -509,7 +513,6 @@ int fpga_load_rbf(const char *name)
 	}
 	close(rbf);
 	app_restart();
-#endif
 
 	return ret;
 }
@@ -597,7 +600,7 @@ void reboot(int cold)
 	sync();
 	fpga_core_reset(1);
 
-	if(cold) writel(0, &reset_regs->tstscratch);
+	writel(cold ? 0 : 0x1, &reset_regs->tstscratch);
 	writel(2, &reset_regs->ctrl);
 	while (1);
 }
