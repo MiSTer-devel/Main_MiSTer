@@ -543,7 +543,7 @@ void AdjustDirectory(char *path)
 	}
 }
 
-int ScanDirectory(const char* path, int mode, const char *extension, int options)
+int ScanDirectory(const char* path, int mode, const char *extension, int options, const char *prefix)
 {
 	int has_trd = 0;
 	const char *ext = extension;
@@ -600,6 +600,9 @@ int ScanDirectory(const char* path, int mode, const char *extension, int options
 				if (!strcasecmp(de->d_name, "boot.rom")) continue;
 				if (!strcasecmp(de->d_name, "boot.vhd")) continue;
 
+				//check the prefix if given
+				if (prefix && strncasecmp(prefix, de->d_name, strlen(prefix))) continue;
+
 				if (extlen > 0)
 				{
 					int len = strlen(de->d_name);
@@ -646,6 +649,7 @@ int ScanDirectory(const char* path, int mode, const char *extension, int options
 		if (!nDirEntries) return 0;
 
 		qsort(DirItem, nDirEntries, sizeof(struct dirent), de_cmp);
+		return nDirEntries;
 	}
 	else
 	{

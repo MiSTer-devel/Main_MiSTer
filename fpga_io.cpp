@@ -405,7 +405,7 @@ static void do_bridge(uint32_t enable)
 	}
 }
 
-static int make_env(const char *name, char *cfg)
+static int make_env(const char *name, const char *cfg)
 {
 	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return -1;
 
@@ -443,21 +443,16 @@ static int make_env(const char *name, char *cfg)
 	return 0;
 }
 
-int fpga_load_rbf(const char *name)
+int fpga_load_rbf(const char *name, const char *cfg)
 {
 	static char path[1024];
 	int ret = 0;
 
-	if (!getStorage(0)) // multiboot is only on SD card.
+	if(cfg)
 	{
-		strcpy(path, name);
-		strcpy(path + strlen(path) - 3, "txt");
-		if (FileLoad(path, 0, 0))
-		{
-			make_env(name, path);
-			do_bridge(0);
-			reboot(0);
-		}
+		make_env(name, cfg);
+		do_bridge(0);
+		reboot(0);
 	}
 
 	printf("Loading RBF: %s\n", name);

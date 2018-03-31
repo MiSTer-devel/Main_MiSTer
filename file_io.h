@@ -33,6 +33,8 @@ extern int iFirstEntry;
 #define SCAN_DIR    1 // include subdirectories
 #define SCAN_UMOUNT 2 // include subdirectories
 #define SCAN_SDIR   4 // include subdirectories
+#define SCAN_ROOT   8
+#define SCAN_HERE   16
 
 void FindStorage();
 int  getStorage(int from_setting);
@@ -69,7 +71,7 @@ int FileSaveConfig(const char *name, void *pBuffer, int size);
 int FileLoadConfig(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 
 void AdjustDirectory(char *path);
-int ScanDirectory(const char* path, int mode, const char *extension, int options);
+int ScanDirectory(const char* path, int mode, const char *extension, int options, const char *prefix = NULL);
 
 const char *getStorageDir(int dev);
 const char *getRootDir();

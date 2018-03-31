@@ -98,7 +98,9 @@ enum MENU
 	MENU_SAVECONFIG_2,
 	MENU_FIRMWARE1,
 	MENU_FIRMWARE2,
-	MENU_FIRMWARE_CORE_FILE_SELECTED,
+	MENU_FIRMWARE_CORE_FILE_SELECTED1,
+	MENU_FIRMWARE_CORE_FILE_SELECTED2,
+	MENU_FIRMWARE_CORE_FILE_CANCELED,
 	MENU_ERROR,
 	MENU_INFO,
 	MENU_STORAGE,
@@ -218,7 +220,10 @@ char* GetExt(char *ext)
 	return extlist + 1;
 }
 
-char SelectedPath[1024] = { 0 };
+static char SelectedRBF[1024] = { 0 };
+static char SelectedDir[1024] = { 0 };
+static char SelectedPath[1024] = { 0 };
+
 int changeDir(char *dir)
 {
 	char curdir[128];
@@ -265,18 +270,18 @@ int changeDir(char *dir)
 	return 1;
 }
 
-static void SelectFile(const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel, char chdir)
+static void SelectFile(const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel, char chdir, char *prefix = NULL)
 {
 	// this function displays file selection menu
 
 	printf("%s - %s\n", pFileExt, fs_pFileExt);
 	AdjustDirectory(SelectedPath);
 
-	if (strncmp(pFileExt, fs_pFileExt, 12) != 0 || !strlen(SelectedPath)) // check desired file extension
+	if (strncmp(pFileExt, fs_pFileExt, 12) != 0 || !strlen(SelectedPath) || (Options & (SCAN_ROOT|SCAN_HERE))) // check desired file extension
 	{ // if different from the current one go to the root directory and init entry buffer
-		SelectedPath[0] = 0;
+		if(!(Options & SCAN_HERE)) SelectedPath[0] = 0;
 
-		if(((user_io_core_type() == CORE_TYPE_8BIT) || (user_io_core_type() == CORE_TYPE_MINIMIG2) || (user_io_core_type() == CORE_TYPE_ARCHIE)) && chdir)
+		if(((user_io_core_type() == CORE_TYPE_8BIT) || (user_io_core_type() == CORE_TYPE_MINIMIG2) || (user_io_core_type() == CORE_TYPE_ARCHIE)) && chdir && !(Options & (SCAN_ROOT|SCAN_HERE)))
 		{
 			strcpy(SelectedPath, (user_io_core_type() == CORE_TYPE_MINIMIG2) ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name());
 			ScanDirectory(SelectedPath, SCAN_INIT, pFileExt, Options);
@@ -289,6 +294,7 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 		else
 		{
 			ScanDirectory(SelectedPath, SCAN_INIT, pFileExt, Options);
+			Options &= ~(SCAN_ROOT|SCAN_HERE);
 		}
 	}
 
@@ -661,6 +667,8 @@ void HandleUI(void)
 
 	char usb_id[64];
 
+	static char	cp_MenuCancel;
+
 	// get user control codes
 	uint32_t c = menu_key_get();
 
@@ -801,7 +809,7 @@ void HandleUI(void)
 		if (menu)
 		{
 			if (get_key_mod() & (LALT|RALT)) //Alt+Menu
-				SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_NONE1, 0);
+				SelectFile("RBF", SCAN_SDIR | SCAN_ROOT, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_NONE1, 0);
 			else if (user_io_core_type() == CORE_TYPE_MINIMIG2)
 				menustate = MENU_MAIN1;
 			else if (user_io_core_type() == CORE_TYPE_MIST)
@@ -813,7 +821,7 @@ void HandleUI(void)
 				if (is_menu_core())
 				{
 					OsdCoreNameSet("");
-					SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_FIRMWARE1, 0);
+					SelectFile("RBF", SCAN_SDIR | SCAN_ROOT, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_FIRMWARE1, 0);
 				}
 				else
 				{
@@ -1264,7 +1272,7 @@ void HandleUI(void)
 			switch (menusub)
 			{
 			case 0:
-				SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_8BIT_SYSTEM1, 0);
+				SelectFile("RBF", SCAN_SDIR | SCAN_ROOT, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_8BIT_SYSTEM1, 0);
 				menusub = 0;
 				break;
 			case 1:
@@ -2249,7 +2257,12 @@ void HandleUI(void)
 			{
 				if (nDirEntries)
 				{
-					if(strlen(SelectedPath)) strcat(SelectedPath, "/");
+					SelectedDir[0] = 0;
+					if (strlen(SelectedPath))
+					{
+						strcpy(SelectedDir, SelectedPath);
+						strcat(SelectedPath, "/");
+					}
 					strcat(SelectedPath, DirItem[iSelectedEntry].d_name);
 
 					menustate = fs_MenuSelect;
@@ -3255,7 +3268,7 @@ void HandleUI(void)
 		}
 		else if (select) {
 			if (menusub == 0) {
-				SelectFile("RBF", SCAN_SDIR, MENU_FIRMWARE_CORE_FILE_SELECTED, MENU_FIRMWARE1, 0);
+				SelectFile("RBF", SCAN_SDIR | SCAN_ROOT, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_FIRMWARE1, 0);
 			}
 			else if (menusub == 1) {
 				switch (user_io_core_type()) {
@@ -3276,13 +3289,52 @@ void HandleUI(void)
 		}
 		break;
 
-	case MENU_FIRMWARE_CORE_FILE_SELECTED:
+	case MENU_FIRMWARE_CORE_FILE_SELECTED1:
+		menustate = MENU_NONE1;
+		strcpy(SelectedRBF, SelectedPath);
+		if (!getStorage(0)) // multiboot is only on SD card.
+		{
+			SelectedPath[strlen(SelectedPath) - 4] = 0;
+			int off = strlen(SelectedDir);
+			if (off) off++;
+			int fnum = ScanDirectory(SelectedDir, SCAN_INIT, "TXT", 0, SelectedPath + off);
+			if (fnum)
+			{
+				if (fnum == 1)
+				{
+					//Check if the only choice is <core>.txt
+					strcat(SelectedPath, ".txt");
+					if (FileLoad(SelectedPath, 0, 0))
+					{
+						menustate = MENU_FIRMWARE_CORE_FILE_SELECTED2;
+						break;
+					}
+				}
+
+				strcpy(SelectedPath, SelectedRBF);
+				AdjustDirectory(SelectedPath);
+				cp_MenuCancel = fs_MenuCancel;
+				fs_Options = 0;
+				fs_MenuSelect = MENU_FIRMWARE_CORE_FILE_SELECTED2;
+				fs_MenuCancel = MENU_FIRMWARE_CORE_FILE_CANCELED;
+				menustate = MENU_FILE_SELECT1;
+				break;
+			}
+		}
+
 		// close OSD now as the new core may not even have one
 		OsdDisable();
+		fpga_load_rbf(SelectedRBF);
+		break;
 
-		fpga_load_rbf(SelectedPath);
-
+	case MENU_FIRMWARE_CORE_FILE_SELECTED2:
+		OsdDisable();
+		fpga_load_rbf(SelectedRBF, SelectedPath);
 		menustate = MENU_NONE1;
+		break;
+
+	case MENU_FIRMWARE_CORE_FILE_CANCELED:
+		SelectFile("RBF", SCAN_SDIR | SCAN_HERE, MENU_FIRMWARE_CORE_FILE_SELECTED1, cp_MenuCancel, 0);
 		break;
 
 		/******************************************************************/
