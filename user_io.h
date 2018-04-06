@@ -60,6 +60,7 @@
 #define UIO_LEDS        0x25  // control on-board LEDs
 #define UIO_AUDVOL      0x26  // Digital volume as a number of bits to shift to the right
 #define UIO_SETHEIGHT   0x27  // Set scaled vertical resolution (to reduce scaling artefacts)
+#define UIO_GETUARTFLG  0x28  // Get UART_FLG_*
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -110,7 +111,6 @@
 #define KBD_LED_FLAG_MASK     0xC0
 #define KBD_LED_FLAG_STATUS   0x40
 
-
 #define BUTTON1                 0b00000001
 #define BUTTON2                 0b00000010
 #define CONF_VGA_SCALER         0b00000100
@@ -129,6 +129,17 @@
 #define CORE_TYPE_8BIT      0xa4   // atari 800/c64 like core
 #define CORE_TYPE_MINIMIG2  0xa5   // new Minimig with AGA
 #define CORE_TYPE_ARCHIE    0xa6   // Acorn Archimedes
+
+#define UART_FLG_PPP        0x0001
+#define UART_FLG_TERM       0x0002
+#define UART_FLG_RTSCTS     0x0004
+#define UART_FLG_DTRDSR     0x0008
+#define UART_FLG_DSRDCD     0x0010
+#define UART_FLG_9600       0x0100
+#define UART_FLG_19200      0x0200
+#define UART_FLG_38400      0x0400
+#define UART_FLG_57600      0x0800
+#define UART_FLG_115200     0x1000
 
 // user io status bits (currently only used by 8bit)
 #define UIO_STATUS_RESET   0x01
@@ -184,6 +195,7 @@ char is_x86_core();
 char has_menu();
 
 int user_io_get_kbdemu();
+uint32_t user_io_get_uart_mode();
 
 // io controllers interface for FPGA ethernet emulation using usb ethernet
 // devices attached to the io controller (ethernec emulation)

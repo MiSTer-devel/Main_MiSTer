@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/socket.h>
 #include <netdb.h>
 #include <ifaddrs.h>
+#include <sys/stat.h>
 #include "stdio.h"
 #include "string.h"
 #include "file_io.h"
@@ -171,6 +172,7 @@ const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
+const char *config_uart_msg[] = { "   None", "    PPP", "Console" };
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -1239,22 +1241,41 @@ void HandleUI(void)
 	case MENU_8BIT_SYSTEM1:
 		OsdSetSize(16);
 		helptext = helptexts[HELPTEXT_MAIN];
-		reboot_req = 0;
-		m = 0;
 		menumask = 0xfb;
+		reboot_req = 0;
+
+		OsdSetTitle("System", OSD_ARROW_LEFT);
+		menustate = MENU_8BIT_SYSTEM2;
+		parentstate = MENU_8BIT_SYSTEM1;
+		
+		s[0] = 0;
+		m = 0;
+		if(user_io_get_uart_mode())
+		{
+			int mode = 0;
+			struct stat filestat;
+			if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
+			if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
+			
+			menumask |= 4;
+			sprintf(s, " UART connection     %s", config_uart_msg[mode]);
+			OsdWrite(2, s, menusub == 2, 0);
+		}
+		else
+		{
+			OsdWrite(m++, "", 0, 0);
+		}
+
+		OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
+		OsdWrite(m++, " Define joystick buttons   \x16", menusub == 1, 0);
+		OsdWrite(3, "", 0, 0);
+
+		m = 0;
 		if (user_io_core_type() == CORE_TYPE_MINIMIG2)
 		{
 			m = 1;
 			menumask &= ~0x10;
 		}
-
-		OsdSetTitle("System", OSD_ARROW_LEFT);
-		menustate = MENU_8BIT_SYSTEM2;
-		parentstate = MENU_8BIT_SYSTEM1;
-		OsdWrite(0, "", 0, 0);
-		OsdWrite(1, " Core                      \x16", menusub == 0, 0);
-		OsdWrite(2, " Define joystick buttons   \x16", menusub == 1, 0);
-		OsdWrite(3, "", 0, 0);
 		OsdWrite(4, m ? " Reset the core" : " Reset settings", menusub == 3, user_io_core_type() == CORE_TYPE_ARCHIE);
 		OsdWrite(5, m ? "" : " Save settings", menusub == 4, 0);
 		OsdWrite(6, "", 0, 0);
@@ -1292,6 +1313,20 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
+				{
+					int mode = 0;
+					struct stat filestat;
+					if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
+					if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
+					mode++;
+					if (mode > 3) mode = 0;
+					sprintf(s, "uartmode %d", mode);
+					system(s);
+					menustate = MENU_8BIT_SYSTEM1;
+
+					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
+					FileSaveConfig(s, &mode, 4);
+				}
 				break;
 			case 3:
 				if (user_io_core_type() != CORE_TYPE_ARCHIE)

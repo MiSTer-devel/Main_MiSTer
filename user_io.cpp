@@ -63,6 +63,12 @@ bool caps_status = 0;
 bool num_status = 0;
 bool scrl_status = 0;
 
+static uint32_t uart_mode;
+uint32_t user_io_get_uart_mode()
+{
+	return uart_mode;
+}
+
 // set by OSD code to suppress forwarding of those keys to the core which
 // may be in use by an active OSD
 static char osd_is_visible = 0;
@@ -280,7 +286,7 @@ static void parse_config()
 //MSM6242B layout
 void send_rtc(int type)
 {
-	printf("Update RTC\n");
+	//printf("Update RTC\n");
 
 	time_t t = time(NULL);
 
@@ -467,6 +473,22 @@ void user_io_init()
 		user_io_8bit_set_status(0, UIO_STATUS_RESET);
 		break;
 	}
+
+	spi_uio_cmd_cont(UIO_GETUARTFLG);
+	uart_mode = spi_w(0);
+	DisableIO();
+
+	uint32_t mode = 0;
+	if (uart_mode)
+	{
+		sprintf(mainpath, "uartmode.%s", user_io_get_core_name_ex());
+		FileLoadConfig(mainpath, &mode, 4);
+		if (mode > 3) mode = 0;
+	}
+
+	char cmd[32];
+	sprintf(cmd, "uartmode %d", mode);
+	system(cmd);
 }
 
 void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
