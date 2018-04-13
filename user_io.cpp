@@ -1348,7 +1348,7 @@ void user_io_poll()
 	if (core_type == CORE_TYPE_ARCHIE) archie_poll();
 
 	static uint8_t leds = 0;
-	if(use_ps2ctl)
+	if(use_ps2ctl && core_type != CORE_TYPE_MINIMIG2)
 	{
 		leds |= (KBD_LED_FLAG_STATUS | KBD_LED_CAPS_CONTROL);
 
@@ -2001,62 +2001,89 @@ static uint32_t getPLLdiv(uint32_t div)
 	return ((div / 2) << 8) | (div / 2);
 }
 
-static int setPLL(double Fout)
+static int findPLLpar(double Fout, uint32_t *pc, uint32_t *pm, double *pko)
 {
-	Fpix = Fout;
-
 	uint32_t c = 1;
 	while ((Fout*c) < 400) c++;
 
-	printf("Calculate PLL for %.4f MHz:\n",Fout);
-
 	while (1)
 	{
-		printf("C=%d, ", c);
-
 		double fvco = Fout*c;
-		printf("Fvco=%f, ", fvco);
-
 		uint32_t m = (uint32_t)(fvco / 50);
-		printf("M=%d, ", m);
-
 		double ko = ((fvco / 50) - m);
-		printf("K_orig=%f, ", ko);
 
-		uint32_t k = (uint32_t)(ko * 4294967296);
-		if (!k) k = 1;
-		printf("K=%u. ", k);
+		fvco = ko + m;
+		fvco *= 50.f;
 
 		if (ko && (ko <= 0.05f || ko >= 0.95f))
 		{
+			printf("Fvco=%f, C=%d, M=%d, K=%f ", fvco, c, m, ko);
 			if (fvco > 1500.f)
 			{
-				printf("Fvco > 1500MHz. Cannot calculate PLL parameters!");
+				printf("-> No exact parameters found\n");
 				return 0;
 			}
-			printf("K_orig is outside desired range try next C0\n");
+			printf("-> K is outside allowed range\n");
 			c++;
 		}
 		else
 		{
-			printf("\n");
-
-			vitems[9]  = 4;
-			vitems[10] = getPLLdiv(m);
-			vitems[11] = 3;
-			vitems[12] = 0x10000;
-			vitems[13] = 5;
-			vitems[14] = getPLLdiv(c);
-			vitems[15] = 9;
-			vitems[16] = 2;
-			vitems[17] = 8;
-			vitems[18] = 7;
-			vitems[19] = 7;
-			vitems[20] = k;
-
+			*pc = c;
+			*pm = m;
+			*pko = ko;
 			return 1;
 		}
 	}
+}
+
+static void setPLL(double Fout)
+{
+	double fvco, ko;
+	uint32_t m, c;
+
+	printf("Calculate PLL for %.4f MHz:\n", Fout);
+
+	if (!findPLLpar(Fout, &c, &m, &ko))
+	{
+		c = 1;
+		while ((Fout*c) < 400) c++;
+
+		fvco = Fout*c;
+		m = (uint32_t)(fvco / 50);
+		ko = ((fvco / 50) - m);
+
+		//Make sure K is in allowed range.
+		if (ko <= 0.05f)
+		{
+			ko = 0;
+		}
+		else if (ko >= 0.95f)
+		{
+			m++;
+			ko = 0;
+		}
+	}
+
+	uint32_t k = ko ? (uint32_t)(ko * 4294967296) : 1;
+
+	fvco = ko + m;
+	fvco *= 50.f;
+	Fpix = fvco / c;
+
+	printf("Fvco=%f, C=%d, M=%d, K=%f(%u) -> Fpix=%f\n", fvco, c, m, ko, k, Fpix);
+
+	vitems[9]  = 4;
+	vitems[10] = getPLLdiv(m);
+	vitems[11] = 3;
+	vitems[12] = 0x10000;
+	vitems[13] = 5;
+	vitems[14] = getPLLdiv(c);
+	vitems[15] = 9;
+	vitems[16] = 2;
+	vitems[17] = 8;
+	vitems[18] = 7;
+	vitems[19] = 7;
+	vitems[20] = k;
 }
 
 static int setVideo()
@@ -2102,7 +2129,7 @@ static int parse_custom_video_mode()
 				return 0;
 			}
 
-			if (!setPLL(Fpix)) return 0;
+			setPLL(Fpix);
 			break;
 		}
 
