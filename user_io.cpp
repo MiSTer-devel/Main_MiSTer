@@ -171,46 +171,65 @@ static void user_io_read_core_name()
 	printf("Core name is \"%s\"\n", core_name);
 }
 
-static void set_emu_leds()
-{
-	uint8_t emu_led = 0;
-	switch (emu_mode)
-	{
-	case EMU_JOY0:
-		emu_led = 0x20;
-		break;
-
-	case EMU_JOY1:
-		emu_led = 0x40;
-		break;
-
-	case EMU_MOUSE:
-		emu_led = 0x60;
-		break;
-	}
-
-	spi_uio_cmd16(UIO_LEDS, 0x6000 | emu_led);
-}
-
-static void set_kbd_led(unsigned char led, bool on)
+static void set_kbd_led(int led, int state)
 {
 	if (led & HID_LED_CAPS_LOCK)
 	{
-		if (!(keyboard_leds & KBD_LED_CAPS_CONTROL)) set_kbdled(led, on);
-		caps_status = on;
+		caps_status = state&HID_LED_CAPS_LOCK;
+		if (!(keyboard_leds & KBD_LED_CAPS_CONTROL)) set_kbdled(led&HID_LED_CAPS_LOCK, caps_status);
 	}
 
 	if (led & HID_LED_NUM_LOCK)
 	{
-		if (!(keyboard_leds & KBD_LED_NUM_CONTROL)) set_kbdled(led, on);
-		num_status = on;
+		num_status = state&HID_LED_NUM_LOCK;
+		if (!(keyboard_leds & KBD_LED_NUM_CONTROL)) set_kbdled(led&HID_LED_NUM_LOCK, num_status);
 	}
 
 	if (led & HID_LED_SCROLL_LOCK)
 	{
-		if (!(keyboard_leds & KBD_LED_SCRL_CONTROL)) set_kbdled(led, on);
-		scrl_status = on;
+		scrl_status = state&HID_LED_SCROLL_LOCK;
+		if (!(keyboard_leds & KBD_LED_SCRL_CONTROL)) set_kbdled(led&HID_LED_SCROLL_LOCK, scrl_status);
 	}
+}
+
+static void set_emu_mode(int mode)
+{
+	uint8_t emu_led;
+	emu_mode = mode;
+
+	switch (emu_mode)
+	{
+	case EMU_JOY0:
+		emu_led = 0x20;
+		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_NUM_LOCK);
+		Info("Kbd mode: Joystick 1", 1000);
+		break;
+
+	case EMU_JOY1:
+		emu_led = 0x40;
+		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_SCROLL_LOCK);
+		Info("Kbd mode: Joystick 2", 1000);
+		break;
+
+	case EMU_MOUSE:
+		emu_led = 0x60;
+		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK);
+		Info("Kbd mode: Mouse", 1000);
+		break;
+
+	default:
+		emu_led = 0;
+		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, 0);
+		Info("Kbd mode: Normal", 1000);
+	}
+
+	spi_uio_cmd16(UIO_LEDS, 0x6000 | emu_led);
+	input_notify_mode();
+}
+
+int user_io_get_kbdemu()
+{
+	return emu_mode;
 }
 
 static int joy_force = 0;
@@ -236,10 +255,7 @@ static void parse_config()
 				if (p[1] == '1')
 				{
 					joy_force = 1;
-					emu_mode = EMU_JOY0;
-					input_notify_mode();
-					set_kbd_led(HID_LED_NUM_LOCK, true);
-					set_emu_leds();
+					set_emu_mode(EMU_JOY0);
 				}
 
 				joy_bcount = 0;
@@ -1500,6 +1516,7 @@ void user_io_poll()
 
 		if ((keyboard_leds & KBD_LED_SCRL_MASK) != (leds & KBD_LED_SCRL_MASK))
 			set_kbdled(HID_LED_SCROLL_LOCK, (leds & KBD_LED_SCRL_CONTROL) ? leds & KBD_LED_SCRL_STATUS : scrl_status);
+
 		keyboard_leds = leds;
 	}
 
@@ -1889,7 +1906,8 @@ void user_io_kbd(uint16_t key, int press)
 					{
 						if (press == 1)
 						{
-							// num lock has four states indicated by leds:
+							int mode = emu_mode;
+
 							// all off: normal
 							// num lock on, scroll lock on: mouse emu
 							// num lock on, scroll lock off: joy0 emu
@@ -1898,38 +1916,31 @@ void user_io_kbd(uint16_t key, int press)
 							switch (code & 0xff)
 							{
 							case 1:
-								if (!joy_force) emu_mode = EMU_MOUSE;
+								if (!joy_force) mode = EMU_MOUSE;
 								break;
 
 							case 2:
-								emu_mode = EMU_JOY0;
+								mode = EMU_JOY0;
 								break;
 
 							case 3:
-								emu_mode = EMU_JOY1;
+								mode = EMU_JOY1;
 								break;
 
 							case 4:
-								if (!joy_force) emu_mode = EMU_NONE;
+								if (!joy_force) mode = EMU_NONE;
 								break;
 
 							default:
-								if (joy_force) emu_mode = (emu_mode == EMU_JOY0) ? EMU_JOY1 : EMU_JOY0;
+								if (joy_force) mode = (mode == EMU_JOY0) ? EMU_JOY1 : EMU_JOY0;
 								else
 								{
-									emu_mode = (emu_mode + 1) & 3;
-									if(cfg.kbd_nomouse && emu_mode == EMU_MOUSE) emu_mode = (emu_mode + 1) & 3;
+									mode = (mode + 1) & 3;
+									if(cfg.kbd_nomouse && mode == EMU_MOUSE) mode = (mode + 1) & 3;
 								}
 								break;
 							}
-							input_notify_mode();
-							if (emu_mode == EMU_MOUSE || emu_mode == EMU_JOY0) set_kbd_led(HID_LED_NUM_LOCK, true);
-							else set_kbd_led(HID_LED_NUM_LOCK, false);
-
-							if (emu_mode == EMU_MOUSE || emu_mode == EMU_JOY1) set_kbd_led(HID_LED_SCROLL_LOCK, true);
-							else set_kbd_led(HID_LED_SCROLL_LOCK, false);
-
-							set_emu_leds();
+							set_emu_mode(mode);
 						}
 					}
 					else
@@ -1963,11 +1974,6 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 
 	printf("0\n", name, ext, 0);
 	return 0;
-}
-
-int user_io_get_kbdemu()
-{
-	return emu_mode;
 }
 
 struct vmode_t
