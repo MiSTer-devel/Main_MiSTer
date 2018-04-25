@@ -350,16 +350,15 @@ static int hdd_set(uint32_t num)
 	hdd[num].hd_total_sectors = 0;
 
 	hdd[num].present = img_mount(hdd[num].type, hdd[num].name);
-	if (hdd[num].present)
-	{
-		hdd[num].hd_heads = 16;
-		hdd[num].hd_spt = 63;
-		hdd[num].hd_cylinders = get_image(hdd[num].type)->size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
+	if (!hdd[num].present) return 0;
 
-		//Maximum 8GB images are supported.
-		if (hdd[num].hd_cylinders > 16383) hdd[num].hd_cylinders = 16383;
-		hdd[num].hd_total_sectors = hdd[num].hd_spt*hdd[num].hd_heads*hdd[num].hd_cylinders;
-	}
+	hdd[num].hd_heads = 16;
+	hdd[num].hd_spt = 63;
+	hdd[num].hd_cylinders = get_image(hdd[num].type)->size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
+
+	//Maximum 8GB images are supported.
+	if (hdd[num].hd_cylinders > 16383) hdd[num].hd_cylinders = 16383;
+	hdd[num].hd_total_sectors = hdd[num].hd_spt*hdd[num].hd_heads*hdd[num].hd_cylinders;
 
 	/*
 	0x00.[31:0]:    identify write
