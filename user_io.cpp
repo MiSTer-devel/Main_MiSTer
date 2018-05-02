@@ -2123,13 +2123,14 @@ static int parse_custom_video_mode()
 {
 	char *vcfg = cfg.video_conf;
 
+	int khz = 0;
 	int cnt = 0;
 	while (*vcfg)
 	{
 		char *next;
 		if (cnt == 9 && vitems[0] == 1)
 		{
-			double Fpix = strtod(vcfg, &next);
+			double Fpix = khz ? strtoul(vcfg, &next, 0)/1000.f : strtod(vcfg, &next);
 			if (vcfg == next || (Fpix < 20.f || Fpix > 200.f))
 			{
 				printf("Error parsing video_mode parameter: ""%s""\n", cfg.video_conf);
@@ -2147,6 +2148,11 @@ static int parse_custom_video_mode()
 			return 0;
 		}
 
+		if (!cnt && val >= 100)
+		{
+			vitems[cnt++] = 1;
+			khz = 1;
+		}
 		if (cnt < 32) vitems[cnt] = val;
 		if (*next == ',') next++;
 		vcfg = next;
