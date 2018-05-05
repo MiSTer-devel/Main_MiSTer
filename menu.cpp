@@ -1140,7 +1140,7 @@ void HandleUI(void)
 				while (1)
 				{
 					p = user_io_8bit_get_string(i++);
-					if (!p || p[0] == '-') continue;
+					if (!p || p[0] < 'A') continue;
 					if (entry == menusub) break;
 					entry++;
 				}
