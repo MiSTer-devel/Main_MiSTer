@@ -19,7 +19,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // 2009-11-22 - read/write multiple implemented
 
-
 #include <stdio.h>
 #include <string.h>
 #include "hardware.h"
@@ -31,16 +30,52 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "debug.h"
 #include "fpga_io.h"
 
+#define CMD_IDECMD  0x04
+#define CMD_IDEDAT  0x08
+
+#define CMD_IDE_REGS_RD   0x80
+#define CMD_IDE_REGS_WR   0x90
+#define CMD_IDE_DATA_WR   0xA0
+#define CMD_IDE_DATA_RD   0xB0
+#define CMD_IDE_STATUS_WR 0xF0
+
+#define IDE_STATUS_END  0x80
+#define IDE_STATUS_IRQ  0x10
+#define IDE_STATUS_RDY  0x08
+#define IDE_STATUS_REQ  0x04
+#define IDE_STATUS_ERR  0x01
+
+#define ACMD_RECALIBRATE                  0x10
+#define ACMD_DIAGNOSTIC                   0x90
+#define ACMD_IDENTIFY_DEVICE              0xEC
+#define ACMD_INITIALIZE_DEVICE_PARAMETERS 0x91
+#define ACMD_READ_SECTORS                 0x20
+#define ACMD_WRITE_SECTORS                0x30
+#define ACMD_READ_MULTIPLE                0xC4
+#define ACMD_WRITE_MULTIPLE               0xC5
+#define ACMD_SET_MULTIPLE_MODE            0xC6
 
 #define SWAP(a)  ((((a)&0x000000ff)<<24)|(((a)&0x0000ff00)<<8)|(((a)&0x00ff0000)>>8)|(((a)&0xff000000)>>24))
 #define SWAPW(a) ((((a)<<8)&0xff00)|(((a)>>8)&0x00ff))
 
 // hardfile structure
+typedef struct
+{
+	int             type; // are we using a file, the entire SD card or a partition on the SD card?
+	fileTYPE        file;
+	unsigned short  cylinders;
+	unsigned short  heads;
+	unsigned short  sectors;
+	unsigned short  sectors_per_block;
+	unsigned short  partition; // partition no.
+	long            offset; // if a partition, the lba offset of the partition.  Can be negative if we've synthesized an RDB.
+} hdfTYPE;
+
 hdfTYPE hdf[2] = { 0 };
 
 static uint8_t sector_buffer[512];
 
-unsigned char GetDiskStatus(void)
+static unsigned char GetDiskStatus(void)
 {
 	unsigned char status;
 
@@ -157,7 +192,7 @@ static void FakeRDB(int unit, int block)
 
 // IdentifiyDevice()
 // builds Identify Device struct
-void IdentifyDevice(unsigned short *pBuffer, unsigned char unit)
+static void IdentifyDevice(unsigned short *pBuffer, unsigned char unit)
 {
 	char *p, i, x;
 	unsigned long total_sectors = hdf[unit].cylinders * hdf[unit].heads * hdf[unit].sectors;
@@ -201,14 +236,14 @@ void IdentifyDevice(unsigned short *pBuffer, unsigned char unit)
 
 
 // chs2lba()
-unsigned long chs2lba(unsigned short cylinder, unsigned char head, unsigned short sector, unsigned char unit)
+static unsigned long chs2lba(unsigned short cylinder, unsigned char head, unsigned short sector, unsigned char unit)
 {
 	return(cylinder * hdf[unit].heads + head) * hdf[unit].sectors + sector - 1;
 }
 
 
 // WriteTaskFile()
-void WriteTaskFile(unsigned char error, unsigned char sector_count, unsigned char sector_number, unsigned char cylinder_low, unsigned char cylinder_high, unsigned char drive_head)
+static void WriteTaskFile(unsigned char error, unsigned char sector_count, unsigned char sector_number, unsigned char cylinder_low, unsigned char cylinder_high, unsigned char drive_head)
 {
 	EnableFpga();
 
@@ -229,7 +264,7 @@ void WriteTaskFile(unsigned char error, unsigned char sector_count, unsigned cha
 
 
 // WriteStatus()
-void WriteStatus(unsigned char status)
+static void WriteStatus(unsigned char status)
 {
 	EnableFpga();
 	spi_w((CMD_IDE_STATUS_WR<<8) | status);
@@ -299,6 +334,11 @@ static void ATA_SetMultipleMode(unsigned char* tfr, unsigned char unit)
 	WriteStatus(IDE_STATUS_END | IDE_STATUS_IRQ);
 }
 
+// HardFileSeek()
+static unsigned char HardFileSeek(hdfTYPE *pHDF, unsigned long lba)
+{
+	return FileSeekLBA(&pHDF->file, lba);
+}
 
 // ATA_ReadSectors()
 static void ATA_ReadSectors(unsigned char* tfr, unsigned short sector, unsigned short cylinder, unsigned char head, unsigned char unit, unsigned short sector_count)
@@ -635,7 +675,7 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 
 // GetHardfileGeometry()
 // this function comes from WinUAE, should return the same CHS as WinUAE
-void GetHardfileGeometry(hdfTYPE *pHDF)
+static void GetHardfileGeometry(hdfTYPE *pHDF)
 {
 	unsigned long total = 0;
 	unsigned long i, head, cyl, spt;
@@ -678,12 +718,6 @@ void GetHardfileGeometry(hdfTYPE *pHDF)
 	pHDF->sectors = (unsigned short)spt;
 }
 
-
-// HardFileSeek()
-unsigned char HardFileSeek(hdfTYPE *pHDF, unsigned long lba)
-{
-	return FileSeekLBA(&pHDF->file, lba);
-}
 
 // OpenHardfile()
 unsigned char OpenHardfile(unsigned char unit)
