@@ -55,6 +55,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define ACMD_WRITE_MULTIPLE               0xC5
 #define ACMD_SET_MULTIPLE_MODE            0xC6
 
+#define HDF_ENABLED   1
+#define HDF_RDB       2
+
 #define SWAP(a)  ((((a)&0x000000ff)<<24)|(((a)&0x0000ff00)<<8)|(((a)&0x00ff0000)>>8)|(((a)&0xff000000)>>24))
 #define SWAPW(a) ((((a)<<8)&0xff00)|(((a)>>8)&0x00ff))
 
@@ -198,31 +201,43 @@ static void IdentifyDevice(unsigned short *pBuffer, unsigned char unit)
 	unsigned long total_sectors = hdf[unit].cylinders * hdf[unit].heads * hdf[unit].sectors;
 	memset(pBuffer, 0, 512);
 
-	switch (hdf[unit].type) {
-	case HDF_FILE | HDF_SYNTHRDB:
-	case HDF_FILE:
+	if(hdf[unit].type)
+	{
 		pBuffer[0] = 1 << 6; // hard disk
 		pBuffer[1] = hdf[unit].cylinders; // cyl count
 		pBuffer[3] = hdf[unit].heads; // head count
 		pBuffer[6] = hdf[unit].sectors; // sectors per track
 										// FIXME - can get serial no from card itself.
-		memcpy((char*)&pBuffer[10], "MiSTMiniMigHardfile ", 20); // serial number - byte swapped
+		memcpy((char*)&pBuffer[10], "MiniMigHardfile0000 ", 20); // serial number - byte swapped
 		memcpy((char*)&pBuffer[23], ".100    ", 8); // firmware version - byte swapped
 		p = (char*)&pBuffer[27];
-		// FIXME - likewise the model name can be fetched from the card.
-		if (hdf[unit].type & HDF_SYNTHRDB) {
+
+		if (!(hdf[unit].type & HDF_RDB))
+		{
 			memcpy(p, "DON'T                                   ", 40);
-			p += 8;
+			p += 7;
 			memcpy(p, "REPARTITION!    ", 16);
 		}
-		else {
-			memcpy(p, "YAQUBE                                  ", 40); // model name - byte swapped
-			p += 8;
-			for (i = 0; (x = config.hardfile[unit].long_name[i]) && i < 16; i++) // copy file name as model name
-				p[i] = x;
+		else
+		{
+			memcpy(p, "MiSTer                                  ", 40); // model name - byte swapped
+			p += 7;
+			char *s = strrchr(config.hardfile[unit].long_name, '/');
+			if (s) s++;
+			else s = config.hardfile[unit].long_name;
+
+			i = strlen(s);
+			if (i > 32) s += i - 32;
+			for (i = 0; (x = s[i]) && i < 16; i++) p[i] = x; // copy file name as model name
 		}
-		// SwapBytes((char*)&pBuffer[27], 40); //not for 68000
-		break;
+
+		p = (char*)&pBuffer[27];
+		for (i = 0; i < 40; i += 2) 
+		{
+			char c = p[i];
+			p[i] = p[i + 1];
+			p[i + 1] = c;
+		}
 	}
 
 	pBuffer[47] = 0x8010; // maximum sectors per block in Read/Write Multiple command
@@ -335,7 +350,7 @@ static void ATA_SetMultipleMode(unsigned char* tfr, unsigned char unit)
 }
 
 // HardFileSeek()
-static unsigned char HardFileSeek(hdfTYPE *pHDF, unsigned long lba)
+static int HardFileSeek(hdfTYPE *pHDF, unsigned long lba)
 {
 	return FileSeekLBA(&pHDF->file, lba);
 }
@@ -351,12 +366,12 @@ static void ATA_ReadSectors(unsigned char* tfr, unsigned short sector, unsigned 
 	sector_count = tfr[2];
 	if (sector_count == 0) sector_count = 0x100;
 	hdd_debugf("IDE%d: read %d.%d.%d, %d", unit, cylinder, head, sector, sector_count);
-	switch (hdf[unit].type) {
-	case HDF_FILE | HDF_SYNTHRDB:
-	case HDF_FILE:
+	if(hdf[unit].type)
+	{
 		lba = chs2lba(cylinder, head, sector, unit);
 		if (hdf[unit].file.size) HardFileSeek(&hdf[unit], (lba + hdf[unit].offset) < 0 ? 0 : lba + hdf[unit].offset);
-		while (sector_count) {
+		while (sector_count)
+		{
 			// decrease sector count
 			if (sector_count != 1) {
 				if (sector == hdf[unit].sectors) {
@@ -376,7 +391,7 @@ static void ATA_ReadSectors(unsigned char* tfr, unsigned short sector, unsigned 
 			WriteStatus(IDE_STATUS_RDY); // pio in (class 1) command type
 
 			// sector outside limit (fake rdb header) or to be modified sector of first partition
-			if (((lba + hdf[unit].offset)<0) || ((unit == 0) && (hdf[unit].type == HDF_FILE | HDF_SYNTHRDB) && (lba == 0)))
+			if (((lba + hdf[unit].offset)<0) || ((unit == 0) && !(hdf[unit].type & HDF_RDB) && (lba == 0)))
 			{
 				if ((lba + hdf[unit].offset)<0)
 				{
@@ -421,7 +436,6 @@ static void ATA_ReadSectors(unsigned char* tfr, unsigned short sector, unsigned 
 			lba++;
 			sector_count--; // decrease sector count
 		}
-		break;
 	}
 }
 
@@ -450,25 +464,32 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 		unit = tfr[6] & 0x10 ? 1 : 0; // master/slave selection
 		if (0) hdd_debugf("IDE%d: %02X.%02X.%02X.%02X.%02X.%02X.%02X.%02X", unit, tfr[0], tfr[1], tfr[2], tfr[3], tfr[4], tfr[5], tfr[6], tfr[7]);
 
-		if ((tfr[7] & 0xF0) == ACMD_RECALIBRATE) {
+		if ((tfr[7] & 0xF0) == ACMD_RECALIBRATE)
+		{
 			ATA_Recalibrate(tfr, unit);
 		}
-		else if (tfr[7] == ACMD_DIAGNOSTIC) {
+		else if (tfr[7] == ACMD_DIAGNOSTIC)
+		{
 			ATA_Diagnostic(tfr);
 		}
-		else if (tfr[7] == ACMD_IDENTIFY_DEVICE) {
+		else if (tfr[7] == ACMD_IDENTIFY_DEVICE)
+		{
 			ATA_IdentifyDevice(tfr, unit);
 		}
-		else if (tfr[7] == ACMD_INITIALIZE_DEVICE_PARAMETERS) {
+		else if (tfr[7] == ACMD_INITIALIZE_DEVICE_PARAMETERS)
+		{
 			ATA_Initialize(tfr, unit);
 		}
-		else if (tfr[7] == ACMD_SET_MULTIPLE_MODE) {
+		else if (tfr[7] == ACMD_SET_MULTIPLE_MODE)
+		{
 			ATA_SetMultipleMode(tfr, unit);
 		}
-		else if (tfr[7] == ACMD_READ_SECTORS) {
+		else if (tfr[7] == ACMD_READ_SECTORS)
+		{
 			ATA_ReadSectors(tfr, sector, cylinder, head, unit, sector_count);
 		}
-		else if (tfr[7] == ACMD_READ_MULTIPLE) {
+		else if (tfr[7] == ACMD_READ_MULTIPLE)
+		{
 			// Read Multiple Sectors (multiple sector transfer per IRQ)
 			long lba;
 			WriteStatus(IDE_STATUS_RDY); // pio in (class 1) command type
@@ -479,15 +500,15 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 			if (sector_count == 0) sector_count = 0x100;
 			hdd_debugf("IDE%d: read_multi %d.%d.%d, %d", unit, cylinder, head, sector, sector_count);
 
-			switch (hdf[unit].type) {
-			case HDF_FILE | HDF_SYNTHRDB:
-			case HDF_FILE:
+			if(hdf[unit].type) 
+			{
 				lba = chs2lba(cylinder, head, sector, unit);
 				if (hdf[unit].file.size) HardFileSeek(&hdf[unit], (lba + hdf[unit].offset) < 0 ? 0 : lba + hdf[unit].offset);
+
 				// FIXME - READM could cross the fake RDB -> real disk boundary.
 				// FIXME - but first we should make some attempt to generate fake RGB in multiple mode.
-
-				while (sector_count) {
+				while (sector_count)
+				{
 					while (!(GetDiskStatus() & CMD_IDECMD)); // wait for empty sector buffer
 					block_count = sector_count;
 					if (block_count > hdf[unit].sectors_per_block) block_count = hdf[unit].sectors_per_block;
@@ -516,7 +537,8 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 									cylinder++;
 								}
 							}
-							else {
+							else
+							{
 								sector++;
 							}
 						}
@@ -526,11 +548,11 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 					//WriteTaskFile(0, 0, sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
 				}
 				//WriteTaskFile(0, 0, sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
-				break;
 			}
 			WriteStatus(IDE_STATUS_END);
 		}
-		else if (tfr[7] == ACMD_WRITE_SECTORS) {
+		else if (tfr[7] == ACMD_WRITE_SECTORS)
+		{
 			// write sectors
 			WriteStatus(IDE_STATUS_REQ); // pio out (class 2) command type
 			sector = tfr[3];
@@ -541,7 +563,8 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 			long lba = chs2lba(cylinder, head, sector, unit);
 			//if (hdf[unit].type>=HDF_CARDPART0)
 			lba += hdf[unit].offset;
-			if (hdf[unit].file.size) {
+			if (hdf[unit].file.size)
+			{
 				// File size will be 0 in direct card modes
 				HardFileSeek(&hdf[unit], (lba>-1) ? lba : 0);
 			}
@@ -584,21 +607,16 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 					WriteStatus(IDE_STATUS_END | IDE_STATUS_IRQ);
 				}
 
-				switch (hdf[unit].type)
+				if(hdf[unit].type)
 				{
-				case HDF_FILE | HDF_SYNTHRDB:
-				case HDF_FILE:
 					// Don't attempt to write to fake RDB
-					if (hdf[unit].file.size && (lba>-1))
-					{
-						FileWriteSec(&hdf[unit].file, sector_buffer);
-					}
+					if (hdf[unit].file.size && (lba>-1)) FileWriteSec(&hdf[unit].file, sector_buffer);
 					lba++;
-					break;
 				}
 			}
 		}
-		else if (tfr[7] == ACMD_WRITE_MULTIPLE) {
+		else if (tfr[7] == ACMD_WRITE_MULTIPLE)
+		{
 			// write sectors
 			WriteStatus(IDE_STATUS_REQ); // pio out (class 2) command type
 			sector = tfr[3];
@@ -609,26 +627,34 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 			long lba = chs2lba(cylinder, head, sector, unit);
 			//if (hdf[unit].type>=HDF_CARDPART0)
 			lba += hdf[unit].offset;
-			if (hdf[unit].file.size) {
+			if (hdf[unit].file.size)
+			{
 				// File size will be 0 in direct card modes
 				HardFileSeek(&hdf[unit], (lba>-1) ? lba : 0);
 			}
-			while (sector_count) {
+
+			while (sector_count)
+			{
 				block_count = sector_count;
 				if (block_count > hdf[unit].sectors_per_block) block_count = hdf[unit].sectors_per_block;
-				while (block_count) {
+				while (block_count)
+				{
 					while (!(GetDiskStatus() & CMD_IDEDAT)); // wait for full write buffer
 															 // decrease sector count
-					if (sector_count != 1) {
-						if (sector == hdf[unit].sectors) {
+					if (sector_count != 1)
+					{
+						if (sector == hdf[unit].sectors)
+						{
 							sector = 1;
 							head++;
-							if (head == hdf[unit].heads) {
+							if (head == hdf[unit].heads)
+							{
 								head = 0;
 								cylinder++;
 							}
 						}
-						else {
+						else
+						{
 							sector++;
 						}
 					}
@@ -639,30 +665,27 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 					spi_w(0);
 					spi_block_read_16be((uint16_t*)sector_buffer);
 					DisableFpga();
-					switch (hdf[unit].type)
+					if(hdf[unit].type)
 					{
-					case HDF_FILE | HDF_SYNTHRDB:
-					case HDF_FILE:
-						if (hdf[unit].file.size && (lba>-1))
-						{
-							FileWriteSec(&hdf[unit].file, sector_buffer);
-						}
+						if (hdf[unit].file.size && (lba>-1)) FileWriteSec(&hdf[unit].file, sector_buffer);
 						lba++;
-						break;
 					}
 					block_count--;  // decrease block count
 					sector_count--; // decrease sector count
 				}
 				WriteTaskFile(0, tfr[2], sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
-				if (sector_count) {
+				if (sector_count)
+				{
 					WriteStatus(IDE_STATUS_IRQ);
 				}
-				else {
+				else
+				{
 					WriteStatus(IDE_STATUS_END | IDE_STATUS_IRQ);
 				}
 			}
 		}
-		else {
+		else
+		{
 			hdd_debugf("Unknown ATA command");
 			hdd_debugf("IDE%d: %02X.%02X.%02X.%02X.%02X.%02X.%02X.%02X", unit, tfr[0], tfr[1], tfr[2], tfr[3], tfr[4], tfr[5], tfr[6], tfr[7]);
 			WriteTaskFile(0x04, tfr[2], tfr[3], tfr[4], tfr[5], tfr[6]);
@@ -672,43 +695,72 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 	}
 }
 
-
-// GetHardfileGeometry()
-// this function comes from WinUAE, should return the same CHS as WinUAE
-static void GetHardfileGeometry(hdfTYPE *pHDF)
+static void SetHardfileGeometry(hdfTYPE *pHDF)
 {
-	unsigned long total = 0;
-	unsigned long i, head, cyl, spt;
-	unsigned long sptt[] = { 63, 127, 255, 0 };
+	struct RigidDiskBlock *rdb = (struct RigidDiskBlock *)sector_buffer;
+	uint8_t flg = 0;
 
-	switch (pHDF->type) {
-	case (HDF_FILE | HDF_SYNTHRDB) :
-		if (pHDF->file.size == 0) return;
-		total = pHDF->file.size / 512;
-		pHDF->heads = 1;
-		pHDF->sectors = 32;
-		pHDF->cylinders = total / 32 + 1;  // Add a cylinder for the fake RDB.
-		return;
-	case HDF_FILE:
-		if (pHDF->file.size == 0) return;
-		total = pHDF->file.size / 512;
-		break;
+	for (int i = 0; i<16; ++i)
+	{
+		if (!FileReadSec(&pHDF->file, sector_buffer)) break;
+		for (int i = 0; i < 512; i++) flg |= sector_buffer[i];
+
+		if (rdb->rdb_ID == 0x4B534452)
+		{
+			pHDF->offset = 0;
+			pHDF->heads = SWAP(rdb->rdb_Heads);
+			pHDF->sectors = SWAP(rdb->rdb_Sectors);
+			pHDF->cylinders = SWAP(rdb->rdb_Cylinders);
+			pHDF->type |= HDF_RDB;
+			if (pHDF->sectors > 255)
+			{
+				printf("ATTN: Too many sectors per track %d.", pHDF->sectors);
+				if (pHDF->sectors & 1)
+				{
+					printf(" Odd number of sectors, Cannot translate. Give up! 8-E\n");
+					return;
+				}
+
+				if (pHDF->sectors > 511)
+				{
+					printf(" Really, too many! Give up! 8-E\n");
+					return;
+				}
+
+				if (pHDF->heads > 8)
+				{
+					printf(" Too many heads (%d). Cannot translate. Give up! 8-E\n", pHDF->heads);
+					return;
+				}
+
+				printf(" Translate: sectors %d->%d, heads %d->%d.\n", pHDF->sectors, pHDF->sectors/2, pHDF->heads, pHDF->heads*2);
+
+				pHDF->sectors /= 2;
+				pHDF->heads *= 2;
+			}
+			return;
+		}
 	}
 
-	for (i = 0; sptt[i] != 0; i++) {
+	unsigned long head, cyl, spt;
+	unsigned long sptt[] = { 63, 127, 255, 0 };
+	uint32_t total = pHDF->file.size / 512;
+
+	for (int i = 0; sptt[i] != 0; i++)
+	{
 		spt = sptt[i];
-		for (head = 4; head <= 16; head++) {
+		for (head = 4; head <= 16; head++)
+		{
 			cyl = total / (head * spt);
-			if (total <= 1024 * 1024) {
+			if (total <= 1024 * 1024)
+			{
 				if (cyl <= 1023) break;
 			}
-			else {
-				if (cyl < 16383)
-					break;
-				if (cyl < 32767 && head >= 5)
-					break;
-				if (cyl <= 65535)  // Should there some head constraint here?
-					break;
+			else
+			{
+				if (cyl < 16383) break;
+				if (cyl < 32767 && head >= 5) break;
+				if (cyl <= 65535) break; // Should there some head constraint here?
 			}
 		}
 		if (head <= 16) break;
@@ -716,8 +768,15 @@ static void GetHardfileGeometry(hdfTYPE *pHDF)
 	pHDF->cylinders = (unsigned short)cyl;
 	pHDF->heads = (unsigned short)head;
 	pHDF->sectors = (unsigned short)spt;
-}
+	pHDF->offset = -(pHDF->heads * pHDF->sectors);
 
+	if (!flg)
+	{
+		printf("Empty image? Use it as a blank RDB.\n");
+		pHDF->offset = 0;
+		pHDF->type |= HDF_RDB;
+	}
+}
 
 // OpenHardfile()
 unsigned char OpenHardfile(unsigned char unit)
@@ -725,31 +784,21 @@ unsigned char OpenHardfile(unsigned char unit)
 	unsigned long time;
 	printf("\nChecking HDD %d\n", unit);
 
-	switch (config.hardfile[unit].enabled)
+	hdf[unit].type = 0;
+	if(config.hardfile[unit].enabled && config.hardfile[unit].long_name[0])
 	{
-	case HDF_FILE | HDF_SYNTHRDB:
-	case HDF_FILE:
-		hdf[unit].type = config.hardfile[unit].enabled;
-		if (config.hardfile[unit].long_name[0])
+		if(FileOpenEx(&hdf[unit].file, config.hardfile[unit].long_name, FileCanWrite(config.hardfile[unit].long_name) ? O_RDWR : O_RDONLY))
 		{
-			if(FileOpenEx(&hdf[unit].file, config.hardfile[unit].long_name, FileCanWrite(config.hardfile[unit].long_name) ? O_RDWR : O_RDONLY))
-			{
-				GetHardfileGeometry(&hdf[unit]);
-				printf("HARDFILE %d%s:\n", unit, (config.hardfile[unit].enabled&HDF_SYNTHRDB) ? " (with fake RDB)" : "");
-				printf("file: \"%s\"\n", hdf[unit].file.name);
-				printf("size: %lu (%lu MB)\n", hdf[unit].file.size, hdf[unit].file.size >> 20);
-				printf("CHS: %u/%u/%u", hdf[unit].cylinders, hdf[unit].heads, hdf[unit].sectors);
-				printf(" (%lu MB), ", ((((unsigned long)hdf[unit].cylinders) * hdf[unit].heads * hdf[unit].sectors) >> 11));
-				if (config.hardfile[unit].enabled & HDF_SYNTHRDB) {
-					hdf[unit].offset = -(hdf[unit].heads*hdf[unit].sectors);
-				}
-				else {
-					hdf[unit].offset = 0;
-				}
-				printf("Offset: %d\n\n", hdf[unit].offset);
-				config.hardfile[unit].present = 1;
-				return 1;
-			}
+			hdf[unit].type = HDF_ENABLED;
+			SetHardfileGeometry(&hdf[unit]);
+			printf("HARDFILE %d%s:\n", unit, (hdf[unit].type & HDF_RDB) ? " (RDB)" : "");
+			printf("file: \"%s\"\n", hdf[unit].file.name);
+			printf("size: %llu (%llu MB)\n", hdf[unit].file.size, hdf[unit].file.size >> 20);
+			printf("CHS: %u/%u/%u", hdf[unit].cylinders, hdf[unit].heads, hdf[unit].sectors);
+			printf(" (%lu MB), ", ((((unsigned long)hdf[unit].cylinders) * hdf[unit].heads * hdf[unit].sectors) >> 11));
+			printf("Offset: %d\n\n", hdf[unit].offset);
+			config.hardfile[unit].present = 1;
+			return 1;
 		}
 	}
 
@@ -757,44 +806,4 @@ unsigned char OpenHardfile(unsigned char unit)
 	printf("HDD %d: not present\n\n", unit);
 	config.hardfile[unit].present = 0;
 	return 0;
-}
-
-// GetHDFFileType()
-unsigned char GetHDFFileType(char *filename)
-{
-	uint8_t type = HDF_FILETYPE_NOTFOUND;
-	fileTYPE rdbfile = { 0 };
-
-	if(FileOpen(&rdbfile, filename))
-	{
-		type = HDF_FILETYPE_UNKNOWN;
-		for (int i = 0; i<16; ++i)
-		{
-			FileReadSec(&rdbfile, sector_buffer);
-			if (sector_buffer[0] == 'R' && sector_buffer[1] == 'D' && sector_buffer[2] == 'S' && sector_buffer[3] == 'K')
-			{
-				type = HDF_FILETYPE_RDB;
-				break;
-			}
-			if (sector_buffer[0] == 'D' && sector_buffer[1] == 'O' && sector_buffer[2] == 'S')
-			{
-				type = HDF_FILETYPE_DOS;
-				break;
-			}
-			if (sector_buffer[0] == 'P' && sector_buffer[1] == 'F' && sector_buffer[2] == 'S')
-			{
-				type = HDF_FILETYPE_DOS;
-				break;
-			}
-			if (sector_buffer[0] == 'S' && sector_buffer[1] == 'F' && sector_buffer[2] == 'S')
-			{
-				type = HDF_FILETYPE_DOS;
-				break;
-			}
-		}
-
-		FileClose(&rdbfile);
-	}
-
-	return type;
 }
