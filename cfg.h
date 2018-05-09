@@ -27,6 +27,7 @@ typedef struct {
 	uint8_t vsync_adjust;
 	uint8_t kbd_nomouse;
 	uint8_t mouse_throttle;
+	uint8_t bootscreen;
 	char video_conf[1024];
 } cfg_t;
 

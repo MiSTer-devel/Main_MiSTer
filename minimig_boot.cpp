@@ -12,6 +12,7 @@
 #include "file_io.h"
 #include "minimig_config.h"
 #include "minimig_fdd.h"
+#include "cfg.h"
 
 static uint8_t buffer[1024];
 
@@ -433,27 +434,30 @@ void BootInit()
 	spi8(rstval);
 	DisableOsd();
 
-	//default video config till real config loaded.
-	ConfigVideo(0,0, 0x40);
-	ConfigAudio(0);
+	if (cfg.bootscreen)
+	{
+		//default video config till real config loaded.
+		ConfigVideo(0, 0, 0x40);
+		ConfigAudio(0);
 
-	WaitTimer(100);
+		WaitTimer(100);
 
-	BootEnableMem();
-	BootClearScreen(SCREEN_ADDRESS, SCREEN_MEM_SIZE);
-	BootUploadLogo();
-	BootUploadBall();
-	BootUploadCopper();
-	BootCustomInit();
+		BootEnableMem();
+		BootClearScreen(SCREEN_ADDRESS, SCREEN_MEM_SIZE);
+		BootUploadLogo();
+		BootUploadBall();
+		BootUploadCopper();
+		BootCustomInit();
 
-	WaitTimer(500);
-	char rtl_ver[128];
-	sprintf(rtl_ver, "MINIMIG-AGA%s v%d.%d.%d by Rok Krajnc. MiSTer port by Sorgelig.", ver_beta ? " BETA" : "", ver_major, ver_minor, ver_minion);
-	BootPrintEx(rtl_ver);
-	BootPrintEx(" ");
-	BootPrintEx("Original Minimig by Dennis van Weeren");
-	BootPrintEx("Updates by Jakub Bednarski, Tobias Gubener, Sascha Boing, A.M. Robinson & others");
-	BootPrintEx(" ");
+		WaitTimer(500);
+		char rtl_ver[128];
+		sprintf(rtl_ver, "MINIMIG-AGA%s v%d.%d.%d by Rok Krajnc. MiSTer port by Sorgelig.", ver_beta ? " BETA" : "", ver_major, ver_minor, ver_minion);
+		BootPrintEx(rtl_ver);
+		BootPrintEx(" ");
+		BootPrintEx("Original Minimig by Dennis van Weeren");
+		BootPrintEx("Updates by Jakub Bednarski, Tobias Gubener, Sascha Boing, A.M. Robinson & others");
+		BootPrintEx(" ");
+	}
 
 	//eject all disk
 	df[0].status = 0;
