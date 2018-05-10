@@ -31,8 +31,8 @@ extern int iFirstEntry;
 
 // options flags
 #define SCAN_DIR    1 // include subdirectories
-#define SCAN_UMOUNT 2 // include subdirectories
-#define SCAN_SDIR   4 // include subdirectories
+#define SCAN_UMOUNT 2
+#define SCAN_SDIR   4
 #define SCAN_ROOT   8
 #define SCAN_HERE   16
 

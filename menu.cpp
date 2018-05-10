@@ -71,8 +71,6 @@ enum MENU
 	MENU_SETTINGS1,
 	MENU_SETTINGS2,
 	MENU_ROMFILE_SELECTED,
-	MENU_ROMFILE_SELECTED1,
-	MENU_ROMFILE_SELECTED2,
 	MENU_SETTINGS_VIDEO1,
 	MENU_SETTINGS_VIDEO2,
 	MENU_SETTINGS_MEMORY1,
@@ -86,9 +84,6 @@ enum MENU
 	MENU_HARDFILE_SELECT1,
 	MENU_HARDFILE_SELECT2,
 	MENU_HARDFILE_SELECTED,
-	MENU_HARDFILE_EXIT,
-	MENU_HARDFILE_CHANGED1,
-	MENU_HARDFILE_CHANGED2,
 	MENU_LOADCONFIG_1,
 	MENU_LOADCONFIG_2,
 	MENU_SAVECONFIG_1,
@@ -2193,7 +2188,6 @@ void HandleUI(void)
 			{
 				OsdDisable();
 				LoadConfiguration(menusub);
-				MinimigReset();
 				menustate = MENU_NONE1;
 			}
 			else
@@ -2551,7 +2545,7 @@ void HandleUI(void)
 		}
 		else if (left)
 		{
-			menustate = MENU_SETTINGS_VIDEO1;
+			menustate = MENU_SETTINGS_HARDFILE1;
 			menusub = 0;
 		}
 		break;
@@ -2567,23 +2561,23 @@ void HandleUI(void)
 		OsdSetTitle("Memory", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 
 		OsdWrite(0, "", 0, 0);
-		strcpy(s, "      CHIP  : ");
+		strcpy(s, " CHIP  : ");
 		strcat(s, config_memory_chip_msg[config.memory & 0x03]);
 		OsdWrite(1, s, menusub == 0, 0);
-		strcpy(s, "      SLOW  : ");
+		strcpy(s, " SLOW  : ");
 		strcat(s, config_memory_slow_msg[config.memory >> 2 & 0x03]);
 		OsdWrite(2, s, menusub == 1, 0);
-		strcpy(s, "      FAST  : ");
+		strcpy(s, " FAST  : ");
 		strcat(s, config_memory_fast_msg[config.memory >> 4 & 0x03]);
 		OsdWrite(3, s, menusub == 2, 0);
 
 		OsdWrite(4, "", 0, 0);
 
-		strcpy(s, "      ROM   : ");
-		strncat(s, config.kickstart, 15);
+		strcpy(s, " ROM   : ");
+		strncat(s, config.kickstart, 25);
 		OsdWrite(5, s, menusub == 3, 0);
 
-		strcpy(s, "      HRTmon: ");
+		strcpy(s, " HRTmon: ");
 		strcat(s, (config.memory & 0x40) ? "enabled " : "disabled");
 		OsdWrite(6, s, menusub == 4, 0);
 
@@ -2600,19 +2594,16 @@ void HandleUI(void)
 			{
 				config.memory = ((config.memory + 1) & 0x03) | (config.memory & ~0x03);
 				menustate = MENU_SETTINGS_MEMORY1;
-				ConfigMemory(config.memory);
 			}
 			else if (menusub == 1)
 			{
 				config.memory = ((config.memory + 4) & 0x0C) | (config.memory & ~0x0C);
 				menustate = MENU_SETTINGS_MEMORY1;
-				ConfigMemory(config.memory);
 			}
 			else if (menusub == 2)
 			{
 				config.memory = ((config.memory + 0x10) & 0x30) | (config.memory & ~0x30);
 				menustate = MENU_SETTINGS_MEMORY1;
-				ConfigMemory(config.memory);
 			}
 			else if (menusub == 3)
 			{
@@ -2621,7 +2612,6 @@ void HandleUI(void)
 			else if (menusub == 4)
 			{
 				config.memory ^= 0x40;
-				ConfigMemory(config.memory);
 				menustate = MENU_SETTINGS_MEMORY1;
 			}
 			else if (menusub == 5)
@@ -2648,6 +2638,11 @@ void HandleUI(void)
 		}
 		break;
 
+	case MENU_ROMFILE_SELECTED:
+		SetKickstart(SelectedPath);
+		menustate = MENU_SETTINGS_MEMORY1;
+		break;
+
 		/******************************************************************/
 		/* hardfile settings menu                                         */
 		/******************************************************************/
@@ -2658,7 +2653,7 @@ void HandleUI(void)
 		// not on rejection.
 	case MENU_SETTINGS_HARDFILE1:
 		helptext = helptexts[HELPTEXT_HARDFILE];
-		OsdSetTitle("Harddisks", 0);
+		OsdSetTitle("Harddisks", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 
 		parentstate = menustate;
 		menumask = 0x21;	// b00100001 - On/off & exit enabled by default...
@@ -2673,14 +2668,14 @@ void HandleUI(void)
 		strcpy(s, " Master : ");
 		strcat(s, config.hardfile[0].enabled ? "Enabled" : "Disabled");
 		OsdWrite(3, s, config.enable_ide ? (menusub == 1) : 0, config.enable_ide == 0);
-		if (config.hardfile[0].present)
+		if (config.hardfile[0].filename[0])
 		{
 			strcpy(s, "                                ");
-			strncpy(&s[7], config.hardfile[0].long_name, 21);
+			strncpy(&s[7], config.hardfile[0].filename, 21);
 		}
 		else
 		{
-			strcpy(s, "       ** file not found **");
+			strcpy(s, "       ** not selected **");
 		}
 		enable = config.enable_ide && config.hardfile[0].enabled;
 		if (enable) menumask |= 0x04;	// Make hardfile selectable
@@ -2690,14 +2685,14 @@ void HandleUI(void)
 		strcpy(s, "  Slave : ");
 		strcat(s, config.hardfile[1].enabled ? "Enabled" : "Disabled");
 		OsdWrite(6, s, config.enable_ide ? (menusub == 3) : 0, config.enable_ide == 0);
-		if (config.hardfile[1].present)
+		if (config.hardfile[1].filename[0])
 		{
 			strcpy(s, "                                ");
-			strncpy(&s[7], config.hardfile[1].long_name, 21);
+			strncpy(&s[7], config.hardfile[1].filename, 21);
 		}
 		else
 		{
-			strcpy(s, "       ** file not found **");
+			strcpy(s, "       ** not selected **");
 		}
 		enable = config.enable_ide && config.hardfile[1].enabled;
 		if (enable) menumask |= 0x10;	// Make hardfile selectable
@@ -2724,7 +2719,7 @@ void HandleUI(void)
 			}
 			else if (menusub == 2)
 			{
-				SelectFile("HDF", SCAN_DIR, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
+				SelectFile("HDFVHDIMGDSK", SCAN_DIR | SCAN_UMOUNT, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
 			}
 			else if (menusub == 3)
 			{
@@ -2733,17 +2728,29 @@ void HandleUI(void)
 			}
 			else if (menusub == 4)
 			{
-				SelectFile("HDF", SCAN_DIR, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
+				SelectFile("HDFVHDIMGDSK", SCAN_DIR | SCAN_UMOUNT, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
 			}
 			else if (menusub == 5) // return to previous menu
 			{
-				menustate = MENU_HARDFILE_EXIT;
+				menustate = MENU_MAIN1;
+				menusub = 5;
 			}
 		}
 
 		if (menu) // return to previous menu
 		{
-			menustate = MENU_HARDFILE_EXIT;
+			menustate = MENU_MAIN1;
+			menusub = 5;
+		}
+		else if (right)
+		{
+			menustate = MENU_SETTINGS_CHIPSET1;
+			menusub = 0;
+		}
+		else if (left)
+		{
+			menustate = MENU_SETTINGS_VIDEO1;
+			menusub = 0;
 		}
 		break;
 
@@ -2753,95 +2760,22 @@ void HandleUI(void)
 	case MENU_HARDFILE_SELECTED:
 		if (menusub == 2) // master drive selected
 		{
-			// Read RDB from selected drive and determine type...
-			memcpy((void*)config.hardfile[0].long_name, SelectedPath, sizeof(config.hardfile[0].long_name));
-			config.hardfile[0].present = 1;
+			int len = strlen(SelectedPath);
+			if (len > sizeof(config.hardfile[0].filename) - 1) len = sizeof(config.hardfile[0].filename) - 1;
+			if(len) memcpy(config.hardfile[0].filename, SelectedPath, len);
+			config.hardfile[0].filename[len] = 0;
 			menustate = MENU_SETTINGS_HARDFILE1;
 		}
 		else
 		if (menusub == 4) // slave drive selected
 		{
-			memcpy((void*)config.hardfile[1].long_name, SelectedPath, sizeof(config.hardfile[1].long_name));
-			config.hardfile[1].present = 1;
+			int len = strlen(SelectedPath);
+			if (len > sizeof(config.hardfile[1].filename) - 1) len = sizeof(config.hardfile[1].filename) - 1;
+			if (len) memcpy(config.hardfile[1].filename, SelectedPath, len);
+			config.hardfile[1].filename[len] = 0;
 			menustate = MENU_SETTINGS_HARDFILE1;
 		}
 		break;
-
-		// check if hardfile configuration has changed
-	case MENU_HARDFILE_EXIT:
-		if (memcmp(config.hardfile, t_hardfile, sizeof(t_hardfile)) != 0)
-		{
-			menustate = MENU_HARDFILE_CHANGED1;
-			menusub = 1;
-		}
-		else
-		{
-			menustate = MENU_MAIN1;
-			menusub = 5;
-		}
-
-		break;
-
-		// hardfile configuration has changed, ask user if he wants to use the new settings
-	case MENU_HARDFILE_CHANGED1:
-		menumask = 0x03;
-		parentstate = menustate;
-		OsdSetTitle("Confirm", 0);
-
-		OsdWrite(0, "", 0, 0);
-		OsdWrite(1, "    Changing configuration", 0, 0);
-		OsdWrite(2, "      requires reset.", 0, 0);
-		OsdWrite(3, "", 0, 0);
-		OsdWrite(4, "       Reset Minimig?", 0, 0);
-		OsdWrite(5, "", 0, 0);
-		OsdWrite(6, "             yes", menusub == 0, 0);
-		OsdWrite(7, "             no", menusub == 1, 0);
-
-		for (int i = 8; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
-
-		menustate = MENU_HARDFILE_CHANGED2;
-		break;
-
-	case MENU_HARDFILE_CHANGED2:
-		if (select)
-		{
-			if (menusub == 0) // yes
-			{
-				// FIXME - waiting for user-confirmation increases the window of opportunity for file corruption!
-
-				if ((config.hardfile[0].enabled != t_hardfile[0].enabled)
-					|| (strcmp(config.hardfile[0].long_name, t_hardfile[0].long_name) != 0))
-				{
-					OpenHardfile(0);
-				}
-				if (config.hardfile[1].enabled != t_hardfile[1].enabled
-					|| (strcmp(config.hardfile[1].long_name, t_hardfile[1].long_name) != 0))
-				{
-					OpenHardfile(1);
-				}
-
-				if (menustate == MENU_HARDFILE_CHANGED2)
-				{
-					MinimigReset();
-					menustate = MENU_NONE1;
-				}
-			}
-			else if (menusub == 1) // no
-			{
-				memcpy(config.hardfile, t_hardfile, sizeof(t_hardfile)); // restore configuration
-				menustate = MENU_MAIN1;
-				menusub = 3;
-			}
-		}
-
-		if (menu)
-		{
-			memcpy(config.hardfile, t_hardfile, sizeof(t_hardfile)); // restore configuration
-			menustate = MENU_MAIN1;
-			menusub = 3;
-		}
-		break;
-
 
 		/******************************************************************/
 		/* video settings menu                                            */
@@ -2853,21 +2787,20 @@ void HandleUI(void)
 
 		OsdSetTitle("Video", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 		OsdWrite(0, "", 0, 0);
-		OsdWrite(1, "", 0, 0);
 		strcpy(s, "  Scanlines     : ");
 		strcat(s, config_scanlines_msg[config.scanlines & 0x3]);
-		OsdWrite(2, s, menusub == 0, 0);
+		OsdWrite(1, s, menusub == 0, 0);
 		strcpy(s, "  Video area by : ");
 		strcat(s, config_blank_msg[(config.scanlines >> 6) & 3]);
-		OsdWrite(3, s, menusub == 1, 0);
+		OsdWrite(2, s, menusub == 1, 0);
 		strcpy(s, "  Aspect Ratio  : ");
 		strcat(s, config_ar_msg[(config.scanlines >> 4) & 1]);
-		OsdWrite(4, s, menusub == 2, 0);
-		OsdWrite(5, "", 0, 0);
+		OsdWrite(3, s, menusub == 2, 0);
+		OsdWrite(4, "", 0, 0);
 		strcpy(s, "  Stereo mix    : ");
 		strcat(s, config_stereo_msg[config.audio & 3]);
-		OsdWrite(6, s, menusub == 3, 0);
-		for (int i = 7; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(5, s, menusub == 3, 0);
+		for (int i = 6; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
 		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 4, 0);
 
 		menustate = MENU_SETTINGS_VIDEO2;
@@ -2879,8 +2812,7 @@ void HandleUI(void)
 			if (menusub == 0)
 			{
 				config.scanlines = ((config.scanlines + 1) & 0x03) | (config.scanlines & 0xfc);
-				if ((config.scanlines & 0x03) > 2)
-					config.scanlines = config.scanlines & 0xfc;
+				if ((config.scanlines & 0x03) > 2) config.scanlines = config.scanlines & 0xfc;
 				menustate = MENU_SETTINGS_VIDEO1;
 				ConfigVideo(config.filter.hires, config.filter.lores, config.scanlines);
 			}
@@ -2918,80 +2850,13 @@ void HandleUI(void)
 		}
 		else if (right)
 		{
-			menustate = MENU_SETTINGS_CHIPSET1;
+			menustate = MENU_SETTINGS_HARDFILE1;
 			menusub = 0;
 		}
 		else if (left)
 		{
 			menustate = MENU_SETTINGS_MEMORY1;
 			menusub = 0;
-		}
-		break;
-
-		/******************************************************************/
-		/* rom file selected menu                                         */
-		/******************************************************************/
-	case MENU_ROMFILE_SELECTED:
-		menusub = 1;
-		menustate = MENU_ROMFILE_SELECTED1;
-		// no break intended
-
-	case MENU_ROMFILE_SELECTED1:
-		menumask = 0x03;
-		parentstate = menustate;
-		OsdSetTitle("Confirm", 0);
-		OsdWrite(0, "", 0, 0);
-		OsdWrite(1, "       Reload Kickstart?", 0, 0);
-		OsdWrite(2, "", 0, 0);
-		OsdWrite(3, "              yes", menusub == 0, 0);
-		OsdWrite(4, "              no", menusub == 1, 0);
-		OsdWrite(5, "", 0, 0);
-		OsdWrite(6, "", 0, 0);
-		OsdWrite(7, "", 0, 0);
-		for (int i = 8; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
-
-		menustate = MENU_ROMFILE_SELECTED2;
-		break;
-
-	case MENU_ROMFILE_SELECTED2:
-		if (select)
-		{
-			if (menusub == 0)
-			{
-				memcpy((void*)config.kickstart, SelectedPath, sizeof(config.kickstart));
-				// reset bootscreen cursor position
-				BootHome();
-				OsdDisable();
-				EnableOsd();
-				spi8(OSD_CMD_RST);
-				rstval = (SPI_RST_CPU | SPI_CPU_HLT);
-				spi8(rstval);
-				DisableOsd();
-				UploadKickstart(config.kickstart);
-				EnableOsd();
-				spi8(OSD_CMD_RST);
-				rstval = (SPI_RST_USR | SPI_RST_CPU);
-				spi8(rstval);
-				DisableOsd();
-				EnableOsd();
-				spi8(OSD_CMD_RST);
-				rstval = 0;
-				spi8(rstval);
-				DisableOsd();
-
-				menustate = MENU_NONE1;
-			}
-			else if (menusub == 1)
-			{
-				menustate = MENU_SETTINGS_MEMORY1;
-				menusub = 2;
-			}
-		}
-
-		if (menu)
-		{
-			menustate = MENU_SETTINGS_MEMORY1;
-			menusub = 2;
 		}
 		break;
 

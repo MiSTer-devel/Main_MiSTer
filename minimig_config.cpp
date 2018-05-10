@@ -16,13 +16,11 @@
 #include "input.h"
 
 configTYPE config = { 0 };
-char DebugMode = 0;
 unsigned char romkey[3072];
 
-void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, int size)
+static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, int size)
 {
 	static uint8_t buf[512];
-	int i, j;
 	unsigned int keyidx = 0;
 	printf("File size: %dkB\n", size >> 1);
 	printf("[");
@@ -31,14 +29,16 @@ void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, in
 		// read header
 		FileReadAdv(file, buf, 0xb);
 	}
-	for (i = 0; i<size; i++)
+
+	for (int i = 0; i<size; i++)
 	{
 		if (!(i & 31)) printf("*");
 		FileReadAdv(file, buf, 512);
+
 		if (keysize)
 		{
 			// decrypt ROM
-			for (j = 0; j<512; j++)
+			for (int j = 0; j<512; j++)
 			{
 				buf[j] ^= key[keyidx++];
 				if (keyidx >= keysize) keyidx -= keysize;
@@ -51,7 +51,7 @@ void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, in
 		spi8(adr & 0xff); adr = adr >> 8;
 		spi8(adr & 0xff); adr = adr >> 8;
 		spi8(adr & 0xff); adr = adr >> 8;
-		for (j = 0; j<512; j = j + 4)
+		for (int j = 0; j<512; j = j + 4)
 		{
 			spi8(buf[j + 0]);
 			spi8(buf[j + 1]);
@@ -60,11 +60,11 @@ void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, in
 		}
 		DisableOsd();
 	}
+
 	printf("]\n");
 }
 
-//// UploadKickstart() ////
-char UploadKickstart(char *name)
+static char UploadKickstart(char *name)
 {
 	fileTYPE file = { 0 };
 	int keysize = 0;
@@ -146,9 +146,7 @@ char UploadKickstart(char *name)
 	return(0);
 }
 
-
-//// UploadActionReplay() ////
-char UploadActionReplay()
+static char UploadActionReplay()
 {
 	fileTYPE file = { 0 };
 	if(FileOpen(&file, "Amiga/HRTMON.ROM") || FileOpen(&file, "HRTMON.ROM"))
@@ -220,8 +218,6 @@ char UploadActionReplay()
 	if (num) sprintf(str, "MINIMIG%d.CFG", num); \
 		else strcpy(str, "MINIMIG.CFG");
 
-
-//// ConfigurationExists() ////
 unsigned char ConfigurationExists(int num)
 {
 	static char path[256];
@@ -237,7 +233,86 @@ unsigned char ConfigurationExists(int num)
 	return(0);
 }
 
-//// LoadConfiguration() ////
+static int force_reload_kickstart = 0;
+static void ApplyConfiguration(char reloadkickstart)
+{
+	if (force_reload_kickstart) reloadkickstart = 1;
+	force_reload_kickstart = 0;
+
+	ConfigCPU(config.cpu);
+
+	if (!reloadkickstart)
+	{
+		ConfigChipset(config.chipset);
+		ConfigFloppy(config.floppy.drives, config.floppy.speed);
+	}
+
+	printf("CPU clock     : %s\n", config.chipset & 0x01 ? "turbo" : "normal");
+	printf("Chip RAM size : %s\n", config_memory_chip_msg[config.memory & 0x03]);
+	printf("Slow RAM size : %s\n", config_memory_slow_msg[config.memory >> 2 & 0x03]);
+	printf("Fast RAM size : %s\n", config_memory_fast_msg[config.memory >> 4 & 0x03]);
+
+	printf("Floppy drives : %u\n", config.floppy.drives + 1);
+	printf("Floppy speed  : %s\n", config.floppy.speed ? "fast" : "normal");
+
+	printf("\n");
+
+	printf("\nA600/A1200 IDE is %s.\n", config.enable_ide ? "enabled" : "disabled");
+	if (config.enable_ide)
+	{
+		printf("Master HDD is %s.\n", config.hardfile[0].enabled ? "enabled" : "disabled");
+		printf("Slave HDD is %s.\n", config.hardfile[1].enabled ? "enabled" : "disabled");
+	}
+
+	rstval = SPI_CPU_HLT;
+	spi_osd_cmd8(OSD_CMD_RST, rstval);
+	spi_osd_cmd8(OSD_CMD_HDD, (config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0));
+
+	ConfigMemory(config.memory);
+	ConfigCPU(config.cpu);
+
+	ConfigChipset(config.chipset);
+	ConfigFloppy(config.floppy.drives, config.floppy.speed);
+
+	if (config.memory & 0x40) UploadActionReplay();
+
+	if (reloadkickstart)
+	{
+		printf("Reloading kickstart ...\n");
+		rstval |= (SPI_RST_CPU | SPI_CPU_HLT);
+		spi_osd_cmd8(OSD_CMD_RST, rstval);
+		if (!UploadKickstart(config.kickstart))
+		{
+			strcpy(config.kickstart, "Amiga/KICK.ROM");
+			if (!UploadKickstart(config.kickstart))
+			{
+				strcpy(config.kickstart, "KICK.ROM");
+				if (!UploadKickstart(config.kickstart))
+				{
+					BootPrintEx("No Kickstart loaded. Press F12 for settings.");
+					BootPrintEx("** Halted! **");
+					return;
+				}
+			}
+		}
+		rstval |= (SPI_RST_USR | SPI_RST_CPU);
+		spi_osd_cmd8(OSD_CMD_RST, rstval);
+	}
+	else
+	{
+		printf("Resetting ...\n");
+		rstval |= (SPI_RST_USR | SPI_RST_CPU);
+		spi_osd_cmd8(OSD_CMD_RST, rstval);
+	}
+
+	rstval = 0;
+	spi_osd_cmd8(OSD_CMD_RST, rstval);
+
+	ConfigVideo(config.filter.hires, config.filter.lores, config.scanlines);
+	ConfigAudio(config.audio);
+	ConfigAutofire(config.autofire, 0xC);
+}
+
 unsigned char LoadConfiguration(int num)
 {
 	static const char config_id[] = "MNMGCFG0";
@@ -293,9 +368,9 @@ unsigned char LoadConfiguration(int num)
 		config.floppy.drives = 1;
 		config.enable_ide = 0;
 		config.hardfile[0].enabled = 1;
-		config.hardfile[0].long_name[0] = 0;
+		config.hardfile[0].filename[0] = 0;
 		config.hardfile[1].enabled = 1;
-		config.hardfile[1].long_name[0] = 0;
+		config.hardfile[1].filename[0] = 0;
 		updatekickstart = true;
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
@@ -326,132 +401,25 @@ unsigned char LoadConfiguration(int num)
 	return(result);
 }
 
-void IDE_setup()
-{
-	OpenHardfile(0);
-	OpenHardfile(1);
-	spi_osd_cmd8(OSD_CMD_HDD, ((config.hardfile[1].present && config.hardfile[1].enabled) ? 4 : 0) | ((config.hardfile[0].present && config.hardfile[0].enabled) ? 2 : 0) | (config.enable_ide ? 1 : 0));
-}
-
-void MinimigReset()
-{
-	spi_osd_cmd8(OSD_CMD_RST, 0x01);
-	IDE_setup();
-	spi_osd_cmd8(OSD_CMD_RST, 0x00);
-	user_io_rtc_reset();
-}
-
-//// ApplyConfiguration() ////
-void ApplyConfiguration(char reloadkickstart)
-{
-	ConfigCPU(config.cpu);
-
-	if (reloadkickstart)
-	{
-
-	}
-	else {
-		ConfigChipset(config.chipset);
-		ConfigFloppy(config.floppy.drives, config.floppy.speed);
-	}
-
-	// Whether or not we uploaded a kickstart image we now need to set various parameters from the config.
-	IDE_setup();
-
-	printf("CPU clock     : %s\n", config.chipset & 0x01 ? "turbo" : "normal");
-	printf("Chip RAM size : %s\n", config_memory_chip_msg[config.memory & 0x03]);
-	printf("Slow RAM size : %s\n", config_memory_slow_msg[config.memory >> 2 & 0x03]);
-	printf("Fast RAM size : %s\n", config_memory_fast_msg[config.memory >> 4 & 0x03]);
-
-	printf("Floppy drives : %u\n", config.floppy.drives + 1);
-	printf("Floppy speed  : %s\n", config.floppy.speed ? "fast" : "normal");
-
-	printf("\n");
-
-	printf("\nA600/A1200 IDE HDC is %s.\n", config.enable_ide ? "enabled" : "disabled");
-	printf("Master HDD is %s.\n", config.hardfile[0].present ? config.hardfile[0].enabled ? "enabled" : "disabled" : "not present");
-	printf("Slave HDD is %s.\n", config.hardfile[1].present ? config.hardfile[1].enabled ? "enabled" : "disabled" : "not present");
-
-#if 0
-	if (cluster_size < 64) {
-		BootPrint("\n***************************************************");
-		BootPrint("*  It's recommended to reformat your memory card  *");
-		BootPrint("*   using 32 KB clusters to improve performance   *");
-		BootPrint("*           when using large hardfiles.           *");  // AMR
-		BootPrint("***************************************************");
-	}
-	printf("Bootloading is complete.\n");
-#endif
-
-	printf("\nExiting bootloader...\n");
-
-	ConfigMemory(config.memory);
-	ConfigCPU(config.cpu);
-
-	ConfigChipset(config.chipset);
-	ConfigFloppy(config.floppy.drives, config.floppy.speed);
-
-	if (reloadkickstart)
-	{
-		UploadActionReplay();
-
-		printf("Reloading kickstart ...\n");
-		WaitTimer(1000);
-		EnableOsd();
-		spi8(OSD_CMD_RST);
-		rstval |= (SPI_RST_CPU | SPI_CPU_HLT);
-		spi8(rstval);
-		DisableOsd();
-		if (!UploadKickstart(config.kickstart))
-		{
-			strcpy(config.kickstart, "Amiga/KICK.ROM");
-			if (!UploadKickstart(config.kickstart))
-			{
-				strcpy(config.kickstart, "KICK.ROM");
-				if (!UploadKickstart(config.kickstart))
-				{
-					BootPrintEx("No Kickstart loaded. Press F12 for settings.");
-					BootPrintEx("** Halted! **");
-					return;
-				}
-			}
-		}
-		EnableOsd();
-		spi8(OSD_CMD_RST);
-		rstval |= (SPI_RST_USR | SPI_RST_CPU);
-		spi8(rstval);
-		DisableOsd();
-		EnableOsd();
-		spi8(OSD_CMD_RST);
-		rstval = 0;
-		spi8(rstval);
-		DisableOsd();
-	}
-	else
-	{
-		printf("Resetting ...\n");
-		EnableOsd();
-		spi8(OSD_CMD_RST);
-		rstval |= (SPI_RST_USR | SPI_RST_CPU);
-		spi8(rstval);
-		DisableOsd();
-		EnableOsd();
-		spi8(OSD_CMD_RST);
-		rstval = 0;
-		spi8(rstval);
-		DisableOsd();
-	}
-
-	ConfigVideo(config.filter.hires, config.filter.lores, config.scanlines);
-	ConfigAudio(config.audio);
-	ConfigAutofire(config.autofire, 0xC);
-}
-
-//// SaveConfiguration() ////
 unsigned char SaveConfiguration(int num)
 {
 	static char filename[256];
 	SET_CONFIG_NAME(filename, num);
 
 	return FileSaveConfig(filename, &config, sizeof(config));
+}
+
+void MinimigReset()
+{
+	ApplyConfiguration(0);
+	user_io_rtc_reset();
+}
+
+void SetKickstart(char *name)
+{
+	int len = strlen(name);
+	if (len > (sizeof(config.kickstart) - 1)) len = sizeof(config.kickstart) - 1;
+	memcpy(config.kickstart, name, len);
+	config.kickstart[len] = 0;
+	force_reload_kickstart = 1;
 }

@@ -18,9 +18,9 @@ typedef struct
 
 typedef struct
 {
-	unsigned char enabled;	// 0: Disabled, 1: Hard file, 2: MMC (entire card), 3-6: Partition 1-4 of MMC card
-	unsigned char present;
-	char long_name[1024];
+	unsigned char enabled;
+	unsigned char reserved;
+	char filename[1024];
 } hardfileTYPE;
 
 typedef struct
@@ -42,14 +42,12 @@ typedef struct
 } configTYPE;
 
 extern configTYPE config;
-extern char DebugMode;
 
-char UploadKickstart(char *name);
-char UploadActionReplay();
-unsigned char LoadConfiguration(int num);	// Can supply NULL to use filename previously set by slot number
-unsigned char SaveConfiguration(int num);	// Can supply NULL to use filename previously set by slot number
+unsigned char LoadConfiguration(int num);
+unsigned char SaveConfiguration(int num);
 unsigned char ConfigurationExists(int num);
-void ApplyConfiguration(char reloadkickstart);
+
 void MinimigReset();
+void SetKickstart(char *name);
 
 #endif

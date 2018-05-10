@@ -42,7 +42,6 @@ void BootHome()
 	bootscreen_adr = 0x80000 + /*120*/112 * 640 / 8;
 }
 
-//// boot font ////
 static const char boot_font[96][8] =
 {
 	{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  // SPACE
@@ -143,9 +142,7 @@ static const char boot_font[96][8] =
 	{ 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0x00 }   //
 };
 
-
-//// BootEnableMem() ////
-void BootEnableMem()
+static void BootEnableMem()
 {
 	// TEMP enable 1MB memory
 	spi_osd_cmd8(OSD_CMD_MEM, 0x5);
@@ -158,8 +155,7 @@ void BootEnableMem()
 	//while ((read32(REG_SYS_STAT_ADR) & 0x2));
 }
 
-//// BootClearScreen() ////
-void BootClearScreen(int adr, int size)
+static void BootClearScreen(int adr, int size)
 {
 	int i;
 	mem_upload_init(adr);
@@ -171,9 +167,7 @@ void BootClearScreen(int adr, int size)
 	mem_upload_fini();
 }
 
-
-//// BootUploadLogo() ////
-void BootUploadLogo()
+static void BootUploadLogo()
 {
 	fileTYPE file = { 0 };
 	int x, y;
@@ -232,9 +226,7 @@ void BootUploadLogo()
 	}
 }
 
-
-//// BootUploadBall() ////
-void BootUploadBall()
+static void BootUploadBall()
 {
 	fileTYPE file = { 0 };
 	int x;
@@ -264,9 +256,7 @@ void BootUploadBall()
 	}
 }
 
-
-//// BootUploadCopper() ////
-void BootUploadCopper()
+static void BootUploadCopper()
 {
 	fileTYPE file = { 0 };
 	int x;
@@ -306,9 +296,7 @@ void BootUploadCopper()
 	}
 }
 
-
-//// BootCustomInit() ////
-void BootCustomInit()
+static void BootCustomInit()
 {
 	//move.w #$0000,$dff1fc  ; FMODE, slow fetch mode for AGA compatibility
 	mem_upload_init(0xdff1fc);
@@ -410,9 +398,6 @@ void BootCustomInit()
 	mem_upload_fini();
 }
 
-extern adfTYPE df[4];
-
-//// BootInit() ////
 void BootInit()
 {
 	puts("Running minimig setup");
@@ -459,18 +444,10 @@ void BootInit()
 		BootPrintEx(" ");
 	}
 
-	//eject all disk
-	df[0].status = 0;
-	df[1].status = 0;
-	df[2].status = 0;
-	df[3].status = 0;
-
 	config.kickstart[0] = 0;
 	LoadConfiguration(0);
 }
 
-
-//// BootPrint() ////
 void BootPrintEx(const char * str)
 {
 	unsigned char i, j;
@@ -497,4 +474,3 @@ void BootPrintEx(const char * str)
 		bootscreen_adr += 640 / 8;
 	}
 }
-
