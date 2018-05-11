@@ -264,12 +264,12 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 		else if (n == (osd_size-1) && (arrowmask & OSD_ARROW_LEFT)) {	// Draw initial arrow
 			unsigned char b;
 
-			spi24(0x00);
+			spi24((invert<<16)| (invert << 8) |invert);
 			p = &charfont[0x10][0];
-			for (b = 0; b<8; b++) spi8(*p++ << offset);
+			for (b = 0; b<8; b++) spi8((*p++ << offset) ^ invert);
 			p = &charfont[0x14][0];
-			for (b = 0; b<8; b++) spi8(*p++ << offset);
-			spi24(0x00);
+			for (b = 0; b<8; b++) spi8((*p++ << offset) ^ invert);
+			spi24((invert << 16) | (invert << 8) | invert);
 			spi_n(invert, 2);
 			i += 24;
 			arrowmask &= ~OSD_ARROW_LEFT;
@@ -316,12 +316,12 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	if (n == (osd_size-1) && (arrowmask & OSD_ARROW_RIGHT))
 	{	// Draw final arrow if needed
 		unsigned char c;
-		spi24(0x00);
+		spi24((invert << 16) | (invert << 8) | invert);
 		p = &charfont[0x15][0];
-		for (c = 0; c<8; c++) spi8(*p++ << offset);
+		for (c = 0; c<8; c++) spi8((*p++ << offset) ^ invert);
 		p = &charfont[0x11][0];
-		for (c = 0; c<8; c++) spi8(*p++ << offset);
-		spi24(0x00);
+		for (c = 0; c<8; c++) spi8((*p++ << offset) ^ invert);
+		spi24((invert << 16) | (invert << 8) | invert);
 		i += 22;
 	}
 
