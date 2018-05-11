@@ -608,6 +608,10 @@ int ScanDirectory(const char* path, int mode, const char *extension, int options
 					int len = strlen(de->d_name);
 					const char *ext = extension;
 					int found = (has_trd && x2trd_ext_supp(de->d_name));
+					if (!found && is_minimig() && !memcmp(extension, "HDF", 3))
+					{
+						found = !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".iso");
+					}
 
 					while(!found && *ext)
 					{
