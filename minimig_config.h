@@ -36,7 +36,7 @@ typedef struct
 	unsigned char enable_ide;
 	unsigned char scanlines;
 	unsigned char audio;
-	hardfileTYPE  hardfile[2];
+	hardfileTYPE  hardfile[4];
 	unsigned char cpu;
 	unsigned char autofire;
 } configTYPE;

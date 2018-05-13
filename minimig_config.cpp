@@ -15,6 +15,24 @@
 #include "user_io.h"
 #include "input.h"
 
+typedef struct
+{
+	char          id[8];
+	unsigned long version;
+	char          kickstart[1024];
+	filterTYPE    filter;
+	unsigned char memory;
+	unsigned char chipset;
+	floppyTYPE    floppy;
+	unsigned char disable_ar3;
+	unsigned char enable_ide;
+	unsigned char scanlines;
+	unsigned char audio;
+	hardfileTYPE  hardfile[2];
+	unsigned char cpu;
+	unsigned char autofire;
+} configTYPE_old;
+
 configTYPE config = { 0 };
 unsigned char romkey[3072];
 
@@ -257,16 +275,18 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	printf("\n");
 
-	printf("\nA600/A1200 IDE is %s.\n", config.enable_ide ? "enabled" : "disabled");
+	printf("\nIDE state: %s.\n", config.enable_ide ? "enabled" : "disabled");
 	if (config.enable_ide)
 	{
-		printf("Master HDD is %s.\n", config.hardfile[0].enabled ? "enabled" : "disabled");
-		printf("Slave HDD is %s.\n", config.hardfile[1].enabled ? "enabled" : "disabled");
+		printf("Primary Master HDD is %s.\n", config.hardfile[0].enabled ? "enabled" : "disabled");
+		printf("Primary Slave HDD is %s.\n", config.hardfile[1].enabled ? "enabled" : "disabled");
+		printf("Secondary Master HDD is %s.\n", config.hardfile[2].enabled ? "enabled" : "disabled");
+		printf("Secondary Slave HDD is %s.\n", config.hardfile[3].enabled ? "enabled" : "disabled");
 	}
 
 	rstval = SPI_CPU_HLT;
 	spi_osd_cmd8(OSD_CMD_RST, rstval);
-	spi_osd_cmd8(OSD_CMD_HDD, (config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0));
+	spi_osd_cmd8(OSD_CMD_HDD, (config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
 
 	ConfigMemory(config.memory);
 	ConfigCPU(config.cpu);
@@ -319,7 +339,6 @@ unsigned char LoadConfiguration(int num)
 	char updatekickstart = 0;
 	char result = 0;
 	unsigned char key, i;
-	static configTYPE tmpconf;
 
 	static char filename[256];
 	SET_CONFIG_NAME(filename, num);
@@ -332,6 +351,7 @@ unsigned char LoadConfiguration(int num)
 		printf("Configuration file size: %s, %lu\n", filename, size);
 		if (size == sizeof(config))
 		{
+			static configTYPE tmpconf;
 			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
 			{
 				// check file id and version
@@ -344,6 +364,34 @@ unsigned char LoadConfiguration(int num)
 							updatekickstart = true;
 						}
 						memcpy((void*)&config, (void*)&tmpconf, sizeof(config));
+						result = 1; // We successfully loaded the config.
+					}
+					else BootPrint("Config file sanity check failed!\n");
+				}
+				else BootPrint("Wrong configuration file format!\n");
+			}
+			else printf("Cannot load configuration file\n");
+		}
+		else if (size == sizeof(configTYPE_old))
+		{
+			static configTYPE_old tmpconf;
+			printf("Old Configuration file.\n");
+			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
+			{
+				// check file id and version
+				if (strncmp(tmpconf.id, config_id, sizeof(config.id)) == 0) {
+					// A few more sanity checks...
+					if (tmpconf.floppy.drives <= 4) {
+						// If either the old config and new config have a different kickstart file,
+						// or this is the first boot, we need to upload a kickstart image.
+						if (strcmp(tmpconf.kickstart, config.kickstart) != 0) {
+							updatekickstart = true;
+						}
+						memcpy((void*)&config, (void*)&tmpconf, sizeof(config));
+						config.cpu = tmpconf.cpu;
+						config.autofire = tmpconf.autofire;
+						memset(&config.hardfile[2], 0, sizeof(config.hardfile[2]));
+						memset(&config.hardfile[3], 0, sizeof(config.hardfile[3]));
 						result = 1; // We successfully loaded the config.
 					}
 					else BootPrint("Config file sanity check failed!\n");

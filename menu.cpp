@@ -646,7 +646,6 @@ void HandleUI(void)
 	unsigned char m, up, down, select, menu, right, left, plus, minus;
 	uint8_t mod;
 	unsigned long len;
-	static hardfileTYPE t_hardfile[2]; // temporary copy of former hardfile configuration
 	char enable;
 	static int reboot_req = 0;
 	static long helptext_timer;
@@ -2086,8 +2085,6 @@ void HandleUI(void)
 			}
 			else if (menusub == 5)	// Go to harddrives page.
 			{
-				t_hardfile[0] = config.hardfile[0];
-				t_hardfile[1] = config.hardfile[1];
 				menustate = MENU_SETTINGS_HARDFILE1;
 				menusub = 0;
 			}
@@ -2656,51 +2653,40 @@ void HandleUI(void)
 		OsdSetTitle("Harddisks", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 
 		parentstate = menustate;
-		menumask = 0x21;	// b00100001 - On/off & exit enabled by default...
-		if (config.enable_ide)
-			menumask |= 0x0a;  // b00001010 - HD0 and HD1 type
+		menumask = 0x201;	                      // b001000000001 - On/off & exit enabled by default...
+		if (config.enable_ide) menumask |= 0xAA;  // b010101010 - HD0/1/2/3 type
 		OsdWrite(0, "", 0, 0);
-		strcpy(s, "   A600/A1200 IDE : ");
-		strcat(s, config.enable_ide ? "on " : "off");
+		strcpy(s, " A600/A1200 IDE : ");
+		strcat(s, config.enable_ide ? "On " : "Off");
 		OsdWrite(1, s, menusub == 0, 0);
 		OsdWrite(2, "", 0, 0);
 
-		strcpy(s, " Master : ");
-		strcat(s, config.hardfile[0].enabled ? "Enabled" : "Disabled");
-		OsdWrite(3, s, config.enable_ide ? (menusub == 1) : 0, config.enable_ide == 0);
-		if (config.hardfile[0].filename[0])
 		{
-			strcpy(s, "                                ");
-			strncpy(&s[7], config.hardfile[0].filename, 21);
+			int n = 3, m = 1, t = 4;
+			for (int i = 0; i < 4; i++)
+			{
+				strcpy(s, (i & 2) ? " Secondary " : " Primary ");
+				strcat(s, (i & 1) ? "Slave: " : "Master: ");
+				strcat(s, config.hardfile[i].enabled ? "Enabled" : "Disabled");
+				OsdWrite(n++, s, config.enable_ide ? (menusub == m++) : 0, config.enable_ide == 0);
+				if (config.hardfile[i].filename[0])
+				{
+					strcpy(s, "                                ");
+					strncpy(&s[7], config.hardfile[i].filename, 21);
+				}
+				else
+				{
+					strcpy(s, "       ** not selected **");
+				}
+				enable = config.enable_ide && config.hardfile[i].enabled;
+				if (enable) menumask |= t;	// Make hardfile selectable
+				OsdWrite(n++, s, menusub == m++, enable == 0);
+				t <<= 2;
+				OsdWrite(n++, "", 0, 0);
+			}
 		}
-		else
-		{
-			strcpy(s, "       ** not selected **");
-		}
-		enable = config.enable_ide && config.hardfile[0].enabled;
-		if (enable) menumask |= 0x04;	// Make hardfile selectable
-		OsdWrite(4, s, enable ? (menusub == 2) : 0, enable == 0);
 
-		OsdWrite(5, "", 0, 0);
-		strcpy(s, "  Slave : ");
-		strcat(s, config.hardfile[1].enabled ? "Enabled" : "Disabled");
-		OsdWrite(6, s, config.enable_ide ? (menusub == 3) : 0, config.enable_ide == 0);
-		if (config.hardfile[1].filename[0])
-		{
-			strcpy(s, "                                ");
-			strncpy(&s[7], config.hardfile[1].filename, 21);
-		}
-		else
-		{
-			strcpy(s, "       ** not selected **");
-		}
-		enable = config.enable_ide && config.hardfile[1].enabled;
-		if (enable) menumask |= 0x10;	// Make hardfile selectable
-		OsdWrite(7, s, enable ? (menusub == 4) : 0, enable == 0);
-
-		for (int i = 8; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 5, 0);
-
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 9, 0);
 		menustate = MENU_SETTINGS_HARDFILE2;
 		break;
 
@@ -2712,25 +2698,20 @@ void HandleUI(void)
 				config.enable_ide = (config.enable_ide == 0);
 				menustate = MENU_SETTINGS_HARDFILE1;
 			}
-			if (menusub == 1)
+			else if (menusub < 9)
 			{
-				config.hardfile[0].enabled = config.hardfile[0].enabled ? 0 : 1;
-				menustate = MENU_SETTINGS_HARDFILE1;
+				if(menusub&1)
+				{
+					int num = (menusub - 1) / 2;
+					config.hardfile[num].enabled = config.hardfile[num].enabled ? 0 : 1;
+					menustate = MENU_SETTINGS_HARDFILE1;
+				}
+				else
+				{
+					SelectFile("HDFVHDIMGDSK", SCAN_DIR | SCAN_UMOUNT, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
+				}
 			}
-			else if (menusub == 2)
-			{
-				SelectFile("HDFVHDIMGDSK", SCAN_DIR | SCAN_UMOUNT, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
-			}
-			else if (menusub == 3)
-			{
-				config.hardfile[1].enabled = config.hardfile[1].enabled ? 0 : 1;
-				menustate = MENU_SETTINGS_HARDFILE1;
-			}
-			else if (menusub == 4)
-			{
-				SelectFile("HDFVHDIMGDSK", SCAN_DIR | SCAN_UMOUNT, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
-			}
-			else if (menusub == 5) // return to previous menu
+			else if (menusub == 9) // return to previous menu
 			{
 				menustate = MENU_MAIN1;
 				menusub = 5;
@@ -2758,21 +2739,12 @@ void HandleUI(void)
 		/* hardfile selected menu                                         */
 		/******************************************************************/
 	case MENU_HARDFILE_SELECTED:
-		if (menusub == 2) // master drive selected
 		{
+			int num = (menusub - 2) / 2;
 			int len = strlen(SelectedPath);
-			if (len > sizeof(config.hardfile[0].filename) - 1) len = sizeof(config.hardfile[0].filename) - 1;
-			if(len) memcpy(config.hardfile[0].filename, SelectedPath, len);
-			config.hardfile[0].filename[len] = 0;
-			menustate = MENU_SETTINGS_HARDFILE1;
-		}
-		else
-		if (menusub == 4) // slave drive selected
-		{
-			int len = strlen(SelectedPath);
-			if (len > sizeof(config.hardfile[1].filename) - 1) len = sizeof(config.hardfile[1].filename) - 1;
-			if (len) memcpy(config.hardfile[1].filename, SelectedPath, len);
-			config.hardfile[1].filename[len] = 0;
+			if (len > sizeof(config.hardfile[num].filename) - 1) len = sizeof(config.hardfile[num].filename) - 1;
+			if(len) memcpy(config.hardfile[num].filename, SelectedPath, len);
+			config.hardfile[num].filename[len] = 0;
 			menustate = MENU_SETTINGS_HARDFILE1;
 		}
 		break;

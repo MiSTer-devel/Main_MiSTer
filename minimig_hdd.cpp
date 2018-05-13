@@ -71,7 +71,7 @@ typedef struct
 	long            offset; // if a partition, the lba offset of the partition.  Can be negative if we've synthesized an RDB.
 } hdfTYPE;
 
-hdfTYPE hdf[2] = { 0 };
+static hdfTYPE hdf[4] = { 0 };
 
 static uint8_t sector_buffer[512];
 
@@ -161,7 +161,8 @@ static void FakeRDB(int unit, int block)
 		pb->pb_Next = 0xffffffff;
 		pb->pb_Flags = 0x1; // bootable
 		pb->pb_DevFlags = 0;
-		strcpy(pb->pb_DriveName, unit ? "1HD\003" : "0HD\003");  // "DH0"/"DH1" BCPL string
+		strcpy(pb->pb_DriveName, "0HD\003");  // "DHx" BCPL string
+		pb->pb_DriveName[0] = unit + '0';
 		pb->pb_Environment.de_TableSize = 0x10;
 		pb->pb_Environment.de_SizeBlock = 0x80;
 		pb->pb_Environment.de_Surfaces = hdf[unit].heads;
@@ -213,7 +214,7 @@ static void IdentifyDevice(unsigned short *pBuffer, unsigned char unit)
 		else
 		{
 			memcpy(p, "MiSTer                                  ", 40); // model name - byte swapped
-			p += 7;
+			p += 8;
 			char *s = strrchr(config.hardfile[unit].filename, '/');
 			if (s) s++;
 			else s = config.hardfile[unit].filename;
@@ -618,7 +619,7 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 {
 	if (c1 & CMD_IDECMD)
 	{
-		unsigned char  unit;
+		unsigned char  unit = 0;
 		unsigned char  tfr[8];
 		DISKLED_ON;
 
@@ -626,11 +627,19 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 		spi_w(CMD_IDE_REGS_RD<<8); // read task file registers
 		spi_w(0);
 		spi_w(0);
-		for (int i = 0; i < 8; i++) tfr[i] = (uint8_t)spi_w(0);
+
+		//printf("SPI:");
+		for (int i = 0; i < 8; i++)
+		{
+			uint16_t tmp = spi_w(0);
+			tfr[i] = (uint8_t)tmp;
+			if (i == 6) unit = ((tmp >> 7) & 2) | ((tmp >> 4) & 1);
+			//printf(" %03X", tmp);
+		}
+		//printf(" -> unit: %d\n", unit);
 		DisableFpga();
 
-		unit = tfr[6] & 0x10 ? 1 : 0; // master/slave selection
-		if (0) hdd_debugf("IDE%d: %02X.%02X.%02X.%02X.%02X.%02X.%02X.%02X", unit, tfr[0], tfr[1], tfr[2], tfr[3], tfr[4], tfr[5], tfr[6], tfr[7]);
+		//printf("IDE%d: %02X.%02X.%02X.%02X.%02X.%02X.%02X.%02X\n", unit, tfr[0], tfr[1], tfr[2], tfr[3], tfr[4], tfr[5], tfr[6], tfr[7]);
 
 		if ((tfr[7] & 0xF0) == ACMD_RECALIBRATE)       ATA_Recalibrate(tfr, unit);
 		else if (tfr[7] == ACMD_DIAGNOSTIC)            ATA_Diagnostic(tfr);
@@ -643,8 +652,7 @@ void HandleHDD(unsigned char c1, unsigned char c2)
 		else if (tfr[7] == ACMD_WRITE_MULTIPLE)        ATA_WriteMultiple(tfr, unit);
 		else
 		{
-			hdd_debugf("Unknown ATA command");
-			hdd_debugf("IDE%d: %02X.%02X.%02X.%02X.%02X.%02X.%02X.%02X", unit, tfr[0], tfr[1], tfr[2], tfr[3], tfr[4], tfr[5], tfr[6], tfr[7]);
+			printf("Unknown ATA command: IDE%d: %02X.%02X.%02X.%02X.%02X.%02X.%02X.%02X\n", unit, tfr[0], tfr[1], tfr[2], tfr[3], tfr[4], tfr[5], tfr[6], tfr[7]);
 			WriteTaskFile(0x04, tfr[2], tfr[3], tfr[4], tfr[5], tfr[6]);
 			WriteStatus(IDE_STATUS_END | IDE_STATUS_IRQ | IDE_STATUS_ERR);
 		}
