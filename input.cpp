@@ -1999,11 +1999,12 @@ int input_test(int getchar)
 								if (ev.code < 16) offset += 4;
 								if (ev.code < 2)  offset += 4;
 
+								uint16_t base_axis = !user_io_get_joy_transl() ? 0 : ~ev.code;
 								uint16_t extra_axis = 2;
 								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) extra_axis = 0;  // AliExpress USB encoder PCB floods axis 2
 								if (input[i].vid == 0x045e && input[i].pid == 0x028e) extra_axis = 3;  // 8BitDo Retro Receiver
 
-								if(ev.code == 0 || ev.code == extra_axis || ev.code == 16) // x
+								if(ev.code == base_axis || ev.code == extra_axis || ev.code == 16) // x
 								{
 									if ((ev.code < 16) ? ev.value < mid_axis - treshold : ev.value == -1) l = 1;
 									if ((ev.code < 16) ? ev.value > mid_axis + treshold : ev.value ==  1) r = 1;
@@ -2026,13 +2027,13 @@ int input_test(int getchar)
 									}
 								}
 
-								uint16_t base_y_axis = 1;
-								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) base_y_axis = 3; // AliExpress USB encoder PCB
+								base_axis = !user_io_get_joy_transl() ? 1 : ~ev.code;
+								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) base_axis = 3; // AliExpress USB encoder PCB
 
 								extra_axis = 5;
 								if (input[i].vid == 0x045e && input[i].pid == 0x028e) extra_axis = 4;  // 8BitDo Retro Receiver
 
-								if (ev.code == base_y_axis || ev.code == extra_axis || ev.code == 17) // y
+								if (ev.code == base_axis || ev.code == extra_axis || ev.code == 17) // y
 								{
                                     // override specific to x axis
                                     if (input[i].vid == 0x046d && input[i].pid == 0xc21f) mid_axis = -129; // Logitech F710
@@ -2160,6 +2161,7 @@ int input_poll(int getchar)
 		if (!time[i]) time[i] = GetTimer(af_delay[i]);
 		int send = 0;
 
+		int newdir = ((joy[i] & 0xF) != (joy_prev[i] & 0xF));
 		if (joy[i] != joy_prev[i])
 		{
 			if ((joy[i] ^ joy_prev[i]) & autofire[i])
@@ -2181,7 +2183,7 @@ int input_poll(int getchar)
 
 		if (send)
 		{
-			user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i]);
+			user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i], newdir);
 		}
 	}
 }

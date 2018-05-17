@@ -204,11 +204,11 @@ uint32_t user_io_eth_get_status(void);
 void user_io_eth_send_rx_frame(uint8_t *, uint16_t);
 void user_io_eth_receive_tx_frame(uint8_t *, uint16_t);
 
-// hooks from the usb layer
 void user_io_mouse(unsigned char b, int16_t x, int16_t y);
 void user_io_kbd(uint16_t key, int press);
 char* user_io_create_config_name();
-void user_io_digital_joystick(unsigned char, uint16_t);
+int user_io_get_joy_transl();
+void user_io_digital_joystick(unsigned char, uint16_t, int);
 void user_io_analog_joystick(unsigned char, char, char);
 char user_io_osd_is_visible();
 void user_io_send_buttons(char);

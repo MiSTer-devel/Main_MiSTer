@@ -234,6 +234,17 @@ int user_io_get_kbdemu()
 
 static int joy_force = 0;
 
+// Analog/Digital Joystick translation
+// 0 - translate Analog to Digital (default)
+// 1 - translate Digital to Analog
+// 2 - do not translate
+static int joy_transl = 0;
+
+int user_io_get_joy_transl()
+{
+	return joy_transl;
+}
+
 static void parse_config()
 {
 	int i = 0;
@@ -252,7 +263,12 @@ static void parse_config()
 		{
 			if (p[0] == 'J')
 			{
-				if (p[1] == '1')
+				int n = 1;
+				if (p[1] == 'D') { joy_transl = 0; n++;	}
+				if (p[1] == 'A') { joy_transl = 1; n++; }
+				if (p[1] == 'N') { joy_transl = 2; n++; }
+
+				if (p[n] == '1')
 				{
 					joy_force = 1;
 					set_emu_mode(EMU_JOY0);
@@ -511,9 +527,8 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 {
 	if (core_type == CORE_TYPE_8BIT)
 	{
-		uint16_t pos = valueY;
 		spi_uio_cmd8_cont(UIO_ASTICK, joystick);
-		if(io_ver) spi_w((pos<<8) | (uint8_t)(valueX));
+		if(io_ver) spi_w((valueY<<8) | (uint8_t)(valueX));
 		else
 		{
 			spi8(valueX);
@@ -523,25 +538,27 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 	}
 }
 
-void user_io_digital_joystick(unsigned char joystick, uint16_t map)
+void user_io_digital_joystick(unsigned char joystick, uint16_t map, int newdir)
 {
-	if (joystick >= 6) return;
-
 	if (is_minimig())
 	{
-		if (joystick < 2) spi_uio_cmd16(UIO_JOYSTICK0 + joystick, map);
+		spi_uio_cmd16(UIO_JOYSTICK0 + joystick, map);
 		return;
 	}
 
 	// atari ST handles joystick 0 and 1 through the ikbd emulated by the io controller
 	// but only for joystick 1 and 2
-	if ((core_type == CORE_TYPE_MIST) && (joystick < 2))
+	if (core_type == CORE_TYPE_MIST)
 	{
 		ikbd_joystick(joystick, (uint8_t)map);
 		return;
 	}
 
-	spi_uio_cmd16((joystick < 2) ? (UIO_JOYSTICK0 + joystick) : (UIO_JOYSTICK2 + joystick - 2), map);
+	spi_uio_cmd16(UIO_JOYSTICK0 + joystick, map);
+	if (joy_transl == 1 && newdir)
+	{
+		user_io_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
+	}
 }
 
 // transmit serial/rs232 data into core
@@ -1742,25 +1759,28 @@ static void send_keycode(unsigned short key, int press)
 
 void user_io_mouse(unsigned char b, int16_t x, int16_t y)
 {
-	// send mouse data as minimig expects it
-	if (core_type == CORE_TYPE_MINIMIG2)
+	switch (core_type)
 	{
+	case CORE_TYPE_MINIMIG2:
 		mouse_pos[X] += x;
 		mouse_pos[Y] += y;
 		mouse_flags |= 0x80 | (b & 7);
-	}
+		return;
 
-	// 8 bit core expects ps2 like data
-	if (core_type == CORE_TYPE_8BIT)
-	{
+	case CORE_TYPE_8BIT:
 		mouse_pos[X] += x;
 		mouse_pos[Y] -= y;  // ps2 y axis is reversed over usb
 		mouse_flags |= 0x08 | (b & 7);
-	}
+		return;
 
-	// send mouse data as mist expects it
-	if (core_type == CORE_TYPE_MIST) ikbd_mouse(b, x, y);
-	if (core_type == CORE_TYPE_ARCHIE) archie_mouse(b, x, y);
+	case CORE_TYPE_MIST:
+		ikbd_mouse(b, x, y);
+		return;
+
+	case CORE_TYPE_ARCHIE:
+		archie_mouse(b, x, y);
+		return;
+	}
 }
 
 /* usb modifer bits:
