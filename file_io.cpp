@@ -598,7 +598,6 @@ int ScanDirectory(const char* path, int mode, const char *extension, int options
 				//skip non-selectable files
 				if (!strcasecmp(de->d_name, "menu.rbf")) continue;
 				if (!strcasecmp(de->d_name, "boot.rom")) continue;
-				if (!strcasecmp(de->d_name, "boot.vhd")) continue;
 
 				//check the prefix if given
 				if (prefix && strncasecmp(prefix, de->d_name, strlen(prefix))) continue;
