@@ -88,14 +88,14 @@ static unsigned char GetDiskStatus(void)
 	return status;
 }
 
-static void RDBChecksum(unsigned long *p)
+static void RDBChecksum(uint32_t *p)
 {
-	unsigned long count = p[1];
-	unsigned long c2;
-	long result = 0;
+	uint32_t count = SWAP(p[1]);
+	uint32_t result = 0;
 	p[2] = 0;
-	for (c2 = 0; c2<count; ++c2) result += p[c2];
-	p[2] = (unsigned long)-result;
+	for (uint32_t i = 0; i<count; ++i) result += SWAP(p[i]);
+	result = 0 - result;
+	p[2] = SWAP(result);
 }
 
 // if the HDF file doesn't have a RigidDiskBlock, we synthesize one
@@ -106,84 +106,75 @@ static void FakeRDB(int unit, int block)
 	memset(sector_buffer, 0, 512);
 
 	// if we're asked for LBA 0 we create an RDSK block, and if LBA 1, a PART block
-	switch (block) {
-	case 0: {
-		// RDB
-		hdd_debugf("FAKE: RDB");
-		struct RigidDiskBlock *rdb = (struct RigidDiskBlock *)sector_buffer;
-		rdb->rdb_ID = 'R' << 24 | 'D' << 16 | 'S' << 8 | 'K';
-		rdb->rdb_Summedlongs = 0x40;
-		rdb->rdb_HostID = 0x07;
-		rdb->rdb_BlockBytes = 0x200;
-		rdb->rdb_Flags = 0x12;                 // (Disk ID valid, no LUNs after this one)
-		rdb->rdb_BadBlockList = 0xffffffff;    // We don't provide a bad block list
-		rdb->rdb_PartitionList = 1;
-		rdb->rdb_FileSysHeaderList = 0xffffffff;
-		rdb->rdb_DriveInit = 0xffffffff;
-		rdb->rdb_Reserved1[0] = 0xffffffff;
-		rdb->rdb_Reserved1[1] = 0xffffffff;
-		rdb->rdb_Reserved1[2] = 0xffffffff;
-		rdb->rdb_Reserved1[3] = 0xffffffff;
-		rdb->rdb_Reserved1[4] = 0xffffffff;
-		rdb->rdb_Reserved1[5] = 0xffffffff;
-		rdb->rdb_Cylinders = hdf[unit].cylinders;
-		rdb->rdb_Sectors = hdf[unit].sectors;
-		rdb->rdb_Heads = hdf[unit].heads;
-		rdb->rdb_Interleave = 1;
-		rdb->rdb_Park = rdb->rdb_Cylinders;
-		rdb->rdb_WritePreComp = rdb->rdb_Cylinders;
-		rdb->rdb_ReducedWrite = rdb->rdb_Cylinders;
-		rdb->rdb_StepRate = 3;
-		rdb->rdb_RDBBlocksLo = 0;
-		rdb->rdb_RDBBlocksHi = 1;
-		rdb->rdb_LoCylinder = 1;
-		rdb->rdb_HiCylinder = rdb->rdb_Cylinders - 1;
-		rdb->rdb_CylBlocks = rdb->rdb_Heads * rdb->rdb_Sectors;
-		rdb->rdb_AutoParkSeconds = 0;
-		rdb->rdb_HighRDSKBlock = 1;
-		strcpy(rdb->rdb_DiskVendor, "Do not ");
-		strcpy(rdb->rdb_DiskProduct, "repartition!");
-		// swap byte order of strings to be able to "unswap" them after checksum
-		unsigned long *p = (unsigned long*)rdb;
-		for (i = 0; i<(8 + 16) / 4; i++) p[40 + i] = SWAP(p[40 + i]);
-		RDBChecksum((unsigned long *)rdb);
-		// swap byte order of first 0x40 long values
-		for (i = 0; i<0x40; i++) p[i] = SWAP(p[i]);
-		break;
-	}
-	case 1: {
-		// Partition
-		hdd_debugf("FAKE: Partition");
-		struct PartitionBlock *pb = (struct PartitionBlock *)sector_buffer;
-		pb->pb_ID = 'P' << 24 | 'A' << 16 | 'R' << 8 | 'T';
-		pb->pb_Summedlongs = 0x40;
-		pb->pb_HostID = 0x07;
-		pb->pb_Next = 0xffffffff;
-		pb->pb_Flags = 0x1; // bootable
-		pb->pb_DevFlags = 0;
-		strcpy(pb->pb_DriveName, "0HD\003");  // "DHx" BCPL string
-		pb->pb_DriveName[0] = unit + '0';
-		pb->pb_Environment.de_TableSize = 0x10;
-		pb->pb_Environment.de_SizeBlock = 0x80;
-		pb->pb_Environment.de_Surfaces = hdf[unit].heads;
-		pb->pb_Environment.de_SectorPerBlock = 1;
-		pb->pb_Environment.de_BlocksPerTrack = hdf[unit].sectors;
-		pb->pb_Environment.de_Reserved = 2;
-		pb->pb_Environment.de_LowCyl = 1;
-		pb->pb_Environment.de_HighCyl = hdf[unit].cylinders - 1;
-		pb->pb_Environment.de_NumBuffers = 30;
-		pb->pb_Environment.de_MaxTransfer = 0xffffff;
-		pb->pb_Environment.de_Mask = 0x7ffffffe;
-		pb->pb_Environment.de_DosType = 0x444f5301;
-		RDBChecksum((unsigned long *)pb);
-		// swap byte order of first 0x40 entries
-		unsigned long *p = (unsigned long*)pb;
-		for (i = 0; i<0x40; i++) p[i] = SWAP(p[i]);
-		break;
-	}
-	default: {
-		break;
-	}
+	switch (block)
+	{
+		case 0: {
+			// RDB
+			struct RigidDiskBlock *rdb = (struct RigidDiskBlock *)sector_buffer;
+			rdb->rdb_ID = 'R' << 24 | 'D' << 16 | 'S' << 8 | 'K';
+			rdb->rdb_Summedlongs = 0x40;
+			rdb->rdb_HostID = 0x07;
+			rdb->rdb_BlockBytes = 0x200;
+			rdb->rdb_Flags = 0x12;                 // (Disk ID valid, no LUNs after this one)
+			rdb->rdb_BadBlockList = 0xffffffff;    // We don't provide a bad block list
+			rdb->rdb_PartitionList = 1;
+			rdb->rdb_FileSysHeaderList = 0xffffffff;
+			rdb->rdb_DriveInit = 0xffffffff;
+			rdb->rdb_Reserved1[0] = 0xffffffff;
+			rdb->rdb_Reserved1[1] = 0xffffffff;
+			rdb->rdb_Reserved1[2] = 0xffffffff;
+			rdb->rdb_Reserved1[3] = 0xffffffff;
+			rdb->rdb_Reserved1[4] = 0xffffffff;
+			rdb->rdb_Reserved1[5] = 0xffffffff;
+			rdb->rdb_Cylinders = hdf[unit].cylinders;
+			rdb->rdb_Sectors = hdf[unit].sectors;
+			rdb->rdb_Heads = hdf[unit].heads;
+			rdb->rdb_Interleave = 1;
+			rdb->rdb_Park = rdb->rdb_Cylinders;
+			rdb->rdb_WritePreComp = rdb->rdb_Cylinders;
+			rdb->rdb_ReducedWrite = rdb->rdb_Cylinders;
+			rdb->rdb_StepRate = 3;
+			rdb->rdb_RDBBlocksLo = 0;
+			rdb->rdb_RDBBlocksHi = 1;
+			rdb->rdb_LoCylinder = 1;
+			rdb->rdb_HiCylinder = rdb->rdb_Cylinders - 1;
+			rdb->rdb_CylBlocks = rdb->rdb_Heads * rdb->rdb_Sectors;
+			rdb->rdb_AutoParkSeconds = 0;
+			rdb->rdb_HighRDSKBlock = 1;
+			strcpy(rdb->rdb_DiskVendor, "DON'T   REPARTITION!    0.00");
+			uint32_t *p = (uint32_t*)(sector_buffer);
+			for (int i = 0; i < 40; i++) p[i] = SWAP(p[i]);
+			RDBChecksum(p);
+			break;
+		}
+		case 1: {
+			// Partition
+			struct PartitionBlock *pb = (struct PartitionBlock *)sector_buffer;
+			pb->pb_ID = 'P' << 24 | 'A' << 16 | 'R' << 8 | 'T';
+			pb->pb_Summedlongs = 0x40;
+			pb->pb_HostID = 0x07;
+			pb->pb_Next = 0xffffffff;
+			pb->pb_Flags = 0x1; // bootable
+			pb->pb_DevFlags = 0;
+			strcpy(pb->pb_DriveName, "0HD\003");  // "DHx" BCPL string
+			pb->pb_DriveName[0] = unit + '0';
+			pb->pb_Environment.de_TableSize = 0x10;
+			pb->pb_Environment.de_SizeBlock = 0x80;
+			pb->pb_Environment.de_Surfaces = hdf[unit].heads;
+			pb->pb_Environment.de_SectorPerBlock = 1;
+			pb->pb_Environment.de_BlocksPerTrack = hdf[unit].sectors;
+			pb->pb_Environment.de_Reserved = 2;
+			pb->pb_Environment.de_LowCyl = 1;
+			pb->pb_Environment.de_HighCyl = hdf[unit].cylinders - 1;
+			pb->pb_Environment.de_NumBuffers = 30;
+			pb->pb_Environment.de_MaxTransfer = 0xffffff;
+			pb->pb_Environment.de_Mask = 0x7ffffffe;
+			pb->pb_Environment.de_DosType = 0x444f5301;
+			uint32_t *p = (uint32_t*)(sector_buffer);
+			for (int i = 0; i < 64; i++) p[i] = SWAP(p[i]);
+			RDBChecksum(p);
+			break;
+		}
 	}
 }
 
@@ -202,17 +193,16 @@ static void IdentifyDevice(unsigned short *pBuffer, unsigned char unit)
 		pBuffer[6] = hdf[unit].sectors; // sectors per track
 										// FIXME - can get serial no from card itself.
 		memcpy((char*)&pBuffer[10], "MiniMigHardfile0000 ", 20); // serial number - byte swapped
-		memcpy((char*)&pBuffer[23], ".100    ", 8); // firmware version - byte swapped
 		p = (char*)&pBuffer[27];
 
 		if (hdf[unit].offset < 0)
 		{
-			memcpy(p, "DON'T                                   ", 40);
-			p += 7;
-			memcpy(p, "REPARTITION!    ", 16);
+			memcpy((char*)&pBuffer[23], ".000    ", 8); // firmware version - byte swapped
+			memcpy(p, "DON'T   REPARTITION!                    ", 40);
 		}
 		else
 		{
+			memcpy((char*)&pBuffer[23], ".100    ", 8); // firmware version - byte swapped
 			memcpy(p, "MiSTer                                  ", 40); // model name - byte swapped
 			p += 8;
 			char *s = strrchr(config.hardfile[unit].filename, '/');
@@ -445,8 +435,6 @@ static void ATA_ReadMultiple(unsigned char* tfr, unsigned char unit)
 	{
 		if (hdf[unit].file.size) HardFileSeek(&hdf[unit], (lba + hdf[unit].offset) < 0 ? 0 : lba + hdf[unit].offset);
 
-		// FIXME - READM could cross the fake RDB -> real disk boundary.
-		// FIXME - but first we should make some attempt to generate fake RGB in multiple mode.
 		while (sector_count)
 		{
 			while (!(GetDiskStatus() & CMD_IDECMD)); // wait for empty sector buffer
@@ -457,7 +445,14 @@ static void ATA_ReadMultiple(unsigned char* tfr, unsigned char unit)
 			{
 				if (hdf[unit].file.size)
 				{
-					FileReadSec(&hdf[unit].file, sector_buffer);
+					if ((lba + hdf[unit].offset)<0)
+					{
+						FakeRDB(unit, lba);
+					}
+					else
+					{
+						FileReadSec(&hdf[unit].file, sector_buffer);
+					}
 					SendSector();
 				}
 				if (sector_count != 1)
@@ -477,6 +472,7 @@ static void ATA_ReadMultiple(unsigned char* tfr, unsigned char unit)
 						sector++;
 					}
 				}
+				lba++;
 				sector_count--;
 			}
 			WriteTaskFile(0, tfr[2], sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
@@ -738,8 +734,15 @@ static void SetHardfileGeometry(hdfTYPE *pHDF, int isHDF)
 
 	if (isHDF && flg)
 	{
+		//use UAE settings.
+		pHDF->heads = 1;
+		pHDF->sectors = 32;
+
+		int spc = pHDF->heads * pHDF->sectors;
+		pHDF->cylinders = pHDF->file.size / (512 * spc) + 1;
+		pHDF->offset = -spc;
+
 		printf("No RDB header found in HDF image. Assume it's image of single partition. Use Virtual RDB header.\n");
-		pHDF->offset = -(pHDF->heads * pHDF->sectors);
 	}
 	else
 	{
