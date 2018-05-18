@@ -523,11 +523,24 @@ void user_io_init()
 	system(cmd);
 }
 
+static int joyswap = 0;
+void user_io_set_joyswap(int swap)
+{
+	joyswap = swap;
+}
+
+int user_io_get_joyswap()
+{
+	return joyswap;
+}
+
 void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 {
+	uint8_t joy = (!joyswap) ? joystick : joystick ? 0 : 1;
+
 	if (core_type == CORE_TYPE_8BIT)
 	{
-		spi_uio_cmd8_cont(UIO_ASTICK, joystick);
+		spi_uio_cmd8_cont(UIO_ASTICK, joy);
 		if(io_ver) spi_w((valueY<<8) | (uint8_t)(valueX));
 		else
 		{
@@ -540,9 +553,11 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 
 void user_io_digital_joystick(unsigned char joystick, uint16_t map, int newdir)
 {
+	uint8_t joy = (!joyswap) ? joystick : joystick ? 0 : 1;
+
 	if (is_minimig())
 	{
-		spi_uio_cmd16(UIO_JOYSTICK0 + joystick, map);
+		spi_uio_cmd16(UIO_JOYSTICK0 + joy, map);
 		return;
 	}
 
@@ -550,11 +565,11 @@ void user_io_digital_joystick(unsigned char joystick, uint16_t map, int newdir)
 	// but only for joystick 1 and 2
 	if (core_type == CORE_TYPE_MIST)
 	{
-		ikbd_joystick(joystick, (uint8_t)map);
+		ikbd_joystick(joy, (uint8_t)map);
 		return;
 	}
 
-	spi_uio_cmd16(UIO_JOYSTICK0 + joystick, map);
+	spi_uio_cmd16(UIO_JOYSTICK0 + joy, map);
 	if (joy_transl == 1 && newdir)
 	{
 		user_io_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
