@@ -61,6 +61,8 @@ int main(int argc, char *argv[])
 
 	printf("Version %s\n\n", version + 5);
 
+	if (argc > 1) printf("Core path: %s\n", argv[1]);
+
 	if (!is_fpga_ready(1))
 	{
 		printf("\nGPI[31]==1. FPGA is uninitialized or incompatible core loaded.\n");
@@ -69,7 +71,7 @@ int main(int argc, char *argv[])
 	}
 
 	FindStorage();
-	user_io_init();
+	user_io_init((argc > 1) ? argv[1] : "");
 
 	while(1)
 	{

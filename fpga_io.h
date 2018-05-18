@@ -31,7 +31,7 @@ int fpga_get_io_version();
 int fpga_load_rbf(const char *name, const char *cfg = NULL);
 
 void reboot(int cold);
-void app_restart();
+void app_restart(const char *path);
 char *getappname();
 
 #endif

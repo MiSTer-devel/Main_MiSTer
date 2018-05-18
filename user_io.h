@@ -171,7 +171,7 @@ typedef struct {
 	uint8_t fifo_stat;       // space in cores input fifo
 } __attribute__((packed)) serial_status_t;
 
-void user_io_init();
+void user_io_init(const char *path);
 unsigned char user_io_core_type();
 char is_minimig();
 char is_archie();
@@ -227,5 +227,8 @@ void user_io_rtc_reset();
 
 void parse_video_mode();
 int hasAPI1_5();
+
+const char* get_rbf_dir();
+const char* get_rbf_name();
 
 #endif // USER_IO_H

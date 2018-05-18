@@ -262,12 +262,10 @@ int changeDir(char *dir)
 	return 1;
 }
 
+// this function displays file selection menu
 static void SelectFile(const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel, char chdir, char *prefix = NULL)
 {
-	// this function displays file selection menu
-
 	printf("%s - %s\n", pFileExt, fs_pFileExt);
-	AdjustDirectory(SelectedPath);
 
 	if (strncmp(pFileExt, fs_pFileExt, 12) != 0 || !strlen(SelectedPath) || (Options & (SCAN_ROOT|SCAN_HERE))) // check desired file extension
 	{ // if different from the current one go to the root directory and init entry buffer
@@ -288,6 +286,10 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 			ScanDirectory(SelectedPath, SCAN_INIT, pFileExt, Options);
 			Options &= ~(SCAN_ROOT|SCAN_HERE);
 		}
+	}
+	else
+	{
+		AdjustDirectory(SelectedPath);
 	}
 
 	printf("pFileExt = %3s\n", pFileExt);
@@ -799,8 +801,17 @@ void HandleUI(void)
 	case MENU_NONE2:
 		if (menu)
 		{
-			if (get_key_mod() & (LALT|RALT)) //Alt+Menu
-				SelectFile("RBF", SCAN_SDIR | SCAN_ROOT, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_NONE1, 0);
+			OsdSetSize(16);
+			if(!is_menu_core() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
+			{
+				strcpy(SelectedPath, get_rbf_dir());
+				if (strlen(get_rbf_name()))
+				{
+					strcat(SelectedPath,"/");
+					strcat(SelectedPath, get_rbf_name());
+				}
+				SelectFile("RBF", SCAN_SDIR | SCAN_HERE, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_NONE1, 0);
+			}
 			else if (user_io_core_type() == CORE_TYPE_MINIMIG2)
 				menustate = MENU_MAIN1;
 			else if (user_io_core_type() == CORE_TYPE_MIST)
@@ -826,7 +837,6 @@ void HandleUI(void)
 					}
 				}
 			}
-			OsdSetSize(16);
 			menusub = 0;
 			OsdClear();
 			OsdEnable(DISABLE_KEYBOARD);

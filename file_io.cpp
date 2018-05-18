@@ -517,20 +517,24 @@ int de_cmp(const void *e1, const void *e2)
 	return strcasecmp(de1->d_name, de2->d_name);
 }
 
-void AdjustDirectory(char *path)
+static int get_stmode(const char *path)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), path);
-
 	struct stat64 st;
-	int ret = stat64(full_path, &st);
-	if (ret < 0)
+	return (stat64(full_path, &st) < 0) ? 0 : st.st_mode;
+}
+
+void AdjustDirectory(char *path)
+{
+	int stmode = get_stmode(path);
+	if (!stmode)
 	{
-		printf("AdjustDirectory(stat) path:%s, error: %d.\n", full_path, ret);
+		printf("AdjustDirectory(stat) path:%s, error.\n", path);
 		path[0] = 0;
 		return;
 	}
 
-	if (st.st_mode & S_IFDIR) return;
+	if (stmode & S_IFDIR) return;
 
 	char *p = strrchr(path, '/');
 	if (p)
@@ -543,8 +547,10 @@ void AdjustDirectory(char *path)
 	}
 }
 
-int ScanDirectory(const char* path, int mode, const char *extension, int options, const char *prefix)
+int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix)
 {
+	static char file_name[1024];
+
 	int has_trd = 0;
 	const char *ext = extension;
 	while (*ext)
@@ -559,6 +565,28 @@ int ScanDirectory(const char* path, int mode, const char *extension, int options
 
 	if (mode == SCAN_INIT)
 	{
+		file_name[0] = 0;
+		if (get_stmode(path) & S_IFREG)
+		{
+			char *p = strrchr(path, '/');
+			if (p)
+			{
+				strcpy(file_name, p + 1);
+				*p = 0;
+			}
+			else
+			{
+				strcpy(file_name, path);
+				path[0] = 0;
+			}
+		}
+
+		if (!(get_stmode(path) & S_IFDIR))
+		{
+			path[0] = 0;
+			file_name[0] = 0;
+		}
+
 		sprintf(full_path, "%s/%s", getRootDir(), path);
 		printf("Start to scan dir: %s\n", full_path);
 
@@ -652,6 +680,20 @@ int ScanDirectory(const char* path, int mode, const char *extension, int options
 		if (!nDirEntries) return 0;
 
 		qsort(DirItem, nDirEntries, sizeof(struct dirent), de_cmp);
+		if (file_name[0])
+		{
+			for (int i = 0; i < nDirEntries; i++)
+			{
+				if (!strcmp(file_name, DirItem[i].d_name))
+				{
+					iSelectedEntry = i;
+					if (iSelectedEntry + (OsdGetSize() / 2) - 1 >= nDirEntries) iFirstEntry = nDirEntries - OsdGetSize();
+					else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
+					if (iFirstEntry < 0) iFirstEntry = 0;
+					break;
+				}
+			}
+		}
 		return nDirEntries;
 	}
 	else

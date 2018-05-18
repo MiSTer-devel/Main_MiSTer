@@ -507,7 +507,7 @@ int fpga_load_rbf(const char *name, const char *cfg)
 		}
 	}
 	close(rbf);
-	app_restart();
+	app_restart(!strcasecmp(name, "menu.rbf") ? NULL : path);
 
 	return ret;
 }
@@ -612,14 +612,14 @@ char *getappname()
 	return dest;
 }
 
-void app_restart()
+void app_restart(const char *path)
 {
 	sync();
 	fpga_core_reset(1);
 
 	char *appname = getappname();
 	printf("restarting the %s\n", appname);
-	execve(appname, NULL, NULL);
+	execl(appname, appname, path, NULL);
 
 	printf("Something went wrong. Rebooting...\n");
 	reboot(0);

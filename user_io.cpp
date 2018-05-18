@@ -29,7 +29,7 @@
 #include "minimig_hdd.h"
 #include "brightness.h"
 
-#define BREAK  0x8000
+static char core_path[1024];
 
 uint8_t vol_att = 0;
 unsigned long vol_set_timeout = 0;
@@ -356,10 +356,33 @@ void send_rtc(int type)
 	}
 }
 
-void user_io_init()
+const char* get_rbf_dir()
+{
+	static char str[1024];
+
+	const char *root = getRootDir();
+	int len = strlen(root);
+	if (!strlen(core_path) || strncmp(root, core_path, len)) return "";
+
+	strcpy(str, core_path + len + 1);
+	char *p = strrchr(str, '/');
+	if (!p) return "";
+	*p = 0;
+	return str;
+}
+
+const char* get_rbf_name()
+{
+	if (!strlen(core_path)) return "";
+	char *p = strrchr(core_path, '/');
+	if (!p) return core_path;
+	return p+1;
+}
+
+void user_io_init(const char *path)
 {
 	char *name;
-	char mainpath[64];
+	static char mainpath[512];
 	core_name[0] = 0;
 	disable_osd = 0;
 
@@ -367,6 +390,7 @@ void user_io_init()
 	ikbd_init();
 	tos_config_init();
 
+	strcpy(core_path, path);
 	core_type = (fpga_core_id() & 0xFF);
 	fio_size = fpga_get_fio_size();
 	io_ver = fpga_get_io_version();
@@ -480,21 +504,29 @@ void user_io_init()
 					if (!user_io_file_tx(mainpath, 0))
 					{
 						strcpy(name + strlen(name) - 3, "ROM");
-						if (!user_io_file_tx(name, 0))
+						sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
+						if (!get_rbf_dir()[0] || !user_io_file_tx(mainpath, 0))
 						{
-							sprintf(mainpath, "bootrom/%s", name);
-							user_io_file_tx(mainpath, 0);
+							if (!user_io_file_tx(name, 0))
+							{
+								sprintf(mainpath, "bootrom/%s", name);
+								user_io_file_tx(mainpath, 0);
+							}
 						}
 					}
 				}
 
-				// check if there's a <core>.vhd present
+				// check if vhd present
 				sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
 				user_io_set_index(0);
 				if (!user_io_file_mount(0, mainpath))
 				{
 					strcpy(name + strlen(name) - 3, "VHD");
-					user_io_file_mount(0, name);
+					sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
+					if (!get_rbf_dir()[0] || !user_io_file_mount(0, mainpath))
+					{
+						user_io_file_mount(0, name);
+					}
 				}
 			}
 		}
@@ -996,7 +1028,8 @@ void user_io_send_buttons(char force)
 		{
 			if ((key_map & BUTTON2) && !(map & BUTTON2))
 			{
-				fpga_load_rbf("Archie.rbf");
+				const char *name = get_rbf_name();
+				fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			}
 		}
 		key_map = map;
