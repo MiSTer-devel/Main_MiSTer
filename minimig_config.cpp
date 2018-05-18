@@ -423,6 +423,12 @@ unsigned char LoadConfiguration(int num)
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
 
+	for (int i = 0; i < 4; i++)
+	{
+		df[i].status = 0;
+		FileClose(&df[i].file);
+	}
+
 	// print config to boot screen
 	char cfg_str[256];
 	sprintf(cfg_str, "CPU: %s, Chipset: %s, ChipRAM: %s, FastRAM: %s, SlowRAM: %s",

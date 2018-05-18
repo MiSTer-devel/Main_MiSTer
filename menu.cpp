@@ -2077,6 +2077,7 @@ void HandleUI(void)
 				if (df[menusub].status & DSK_INSERTED) // eject selected floppy
 				{
 					df[menusub].status = 0;
+					FileClose(&df[menusub].file);
 					menustate = MENU_MAIN1;
 				}
 				else
