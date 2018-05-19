@@ -413,10 +413,6 @@ void user_io_init(const char *path)
 	{
 		puts("Identified 8BIT core");
 
-		// forward SD card config to core in case it uses the local
-		// SD card implementation
-		user_io_sd_set_config();
-
 		// set core name. This currently only sets a name for the 8 bit cores
 		user_io_read_core_name();
 
@@ -670,8 +666,12 @@ void user_io_sd_set_config(void)
 	spi8(1); //SDHC permanently
 
 	DisableIO();
-
-	//  hexdump(data, sizeof(data), 0);
+/*
+	printf("SD CID\n");
+	hexdump(CID, sizeof(CID), 0);
+	printf("SD CSD\n");
+	hexdump(CSD, sizeof(CSD), 0);
+*/
 }
 
 // read 8+32 bit sd card status word from FPGA
@@ -839,6 +839,8 @@ int user_io_file_mount(int num, char *name)
 	{
 		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", num);
 	}
+
+	user_io_sd_set_config();
 
 	// send mounted image size first then notify about mounting
 	EnableIO();

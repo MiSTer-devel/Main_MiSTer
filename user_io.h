@@ -184,7 +184,6 @@ void user_io_serial_tx(char *, uint16_t);
 char *user_io_8bit_get_string(char);
 unsigned long user_io_8bit_set_status(unsigned long, unsigned long);
 int  user_io_file_tx(char *, unsigned char);
-void user_io_sd_set_config(void);
 char user_io_dip_switch1(void);
 char user_io_serial_status(serial_status_t *, uint8_t);
 int  user_io_file_mount(int num, char *name);
