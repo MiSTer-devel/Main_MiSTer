@@ -14,6 +14,7 @@
 #include "cfg.h"
 #include "fpga_io.h"
 #include "osd.h"
+#include "errno.h"
 
 #define NUMDEV 10
 
@@ -1270,7 +1271,7 @@ static int keyrah_trans(int key, int press)
 #define KEY_EMU_PS    (KEY_EMU_LEFT+18)
 
 
-static void input_cb(struct input_event *ev, int dev);
+static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev);
 
 static int kbd_toggle = 0;
 static uint16_t joy[2] = { 0 }, joy_prev[2] = { 0 };
@@ -1392,7 +1393,7 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 				ev.code = (bnum == 17) ? KEY_MENU : 0;
 			}
 
-			input_cb(&ev, 0);
+			input_cb(&ev, 0, 0);
 		}
 		else
 		{
@@ -1414,7 +1415,7 @@ static void joy_analog(int num, int axis, int offset)
 	}
 }
 
-static void input_cb(struct input_event *ev, int dev)
+static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	static int key_mapped = 0;
 	static uint8_t modifiers = 0;
@@ -1780,53 +1781,56 @@ static void input_cb(struct input_event *ev, int dev)
 		case EV_ABS:
 			if (!user_io_osd_is_visible())
 			{
-				int value = ev->value;
-				if (input[dev].vid == 0x045e && input[dev].pid == 0x028e) // 8BitDo Retro Receiver
+				if (ev->code <= 1)
 				{
-					value = (value + 32768)>>8;
-				}
+					//convert to 0..255 range
+					int value = ((ev->value - absinfo->minimum) * 256) / (absinfo->maximum - absinfo->minimum + 1);
+					//printf("ABS: axis %d = %d -> %d\n", ev->code, ev->value, value);
 
-				if (mouse_emu)
-				{
-					if (ev->code == 0) // x
+					if (mouse_emu)
 					{
-						mouse_emu_x = 0;
-						if (value < 127 || value>129) mouse_emu_x = value - 128;
-						mouse_emu_x /= 12;
-						return;
+						if (ev->code == 0) // x
+						{
+							mouse_emu_x = 0;
+							if (value < 127 || value>129) mouse_emu_x = value - 128;
+							mouse_emu_x /= 12;
+							return;
+						}
+
+						if (ev->code == 1) // y
+						{
+							mouse_emu_y = 0;
+							if (value < 127 || value>129) mouse_emu_y = value - 128;
+							mouse_emu_y /= 12;
+							return;
+						}
 					}
-
-					if (ev->code == 1) // y
+					else
 					{
-						mouse_emu_y = 0;
-						if (value < 127 || value>129) mouse_emu_y = value - 128;
-						mouse_emu_y /= 12;
-						return;
-					}
-				}
-				else
-				{
-					// skip if first joystick is not defined.
-					if (first_joystick < 0) break;
+						// skip if first joystick is not defined.
+						if (first_joystick < 0) break;
 
-					// TODO:
-					// 1) add analog axis mapping
-					// 2) enable invertion
+						// TODO:
+						// 1) add analog axis mapping
+						// 2) enable invertion
 
-					if (ev->code == 0) // x
-					{
-						int offset = 0;
-						if (value < 127 || value>129) offset = value - 128;
-						joy_analog((first_joystick == dev) ? 0 : 1, 0, offset);
-						return;
-					}
+						if (ev->code == 0) // x
+						{
+							int offset = 0;
+							if (value < 127 || value>129) offset = value - 128;
+							//printf("analog_x = %d\n", offset);
+							joy_analog((first_joystick == dev) ? 0 : 1, 0, offset);
+							return;
+						}
 
-					if (ev->code == 1) // y
-					{
-						int offset = 0;
-						if (value < 127 || value>129) offset = value - 128;
-						joy_analog((first_joystick == dev) ? 0 : 1, 1, offset);
-						return;
+						if (ev->code == 1) // y
+						{
+							int offset = 0;
+							if (value < 127 || value>129) offset = value - 128;
+							//printf("analog_y = %d\n", offset);
+							joy_analog((first_joystick == dev) ? 0 : 1, 1, offset);
+							return;
+						}
 					}
 				}
 			}
@@ -1867,6 +1871,7 @@ int input_test(int getchar)
 {
 	static char   cur_leds = 0;
 	static int    state = 0;
+	struct input_absinfo absinfo;
 
 	char devname[20];
 	struct input_event ev;
@@ -1933,6 +1938,15 @@ int input_test(int getchar)
 						}
 						else
 						{
+							if (ev.type == EV_ABS)
+							{
+								int len = ioctl(pool[i].fd, EVIOCGABS(ev.code), &absinfo);
+								if (len < 0)
+								{
+									memset(&absinfo, 0, sizeof(absinfo));
+								}
+							}
+
 							if (is_menu_core())
 							{
 								switch (ev.type)
@@ -1966,7 +1980,11 @@ int input_test(int getchar)
 									if (input[i].vid == 0x0079 && input[i].pid == 0x0006)
 									{ if (ev.code == 2) break; }
 
-									printf("Input event: type=EV_ABS, Axis=%d, Offset:=%d\n", ev.code, ev.value);
+									printf("Input event: type=EV_ABS, Axis=%d, Offset:=%d.", ev.code, ev.value);
+									printf(" ABS_INFO: min = %d max = %d", absinfo.minimum, absinfo.maximum);
+									if (absinfo.fuzz) printf(" fuzz = %d", absinfo.fuzz);
+									if (absinfo.resolution) printf(" res = %d", absinfo.resolution);
+									printf("\n");
 									break;
 
 								default:
@@ -1974,7 +1992,7 @@ int input_test(int getchar)
 								}
 							}
 
-							input_cb(&ev, i);
+							input_cb(&ev, &absinfo, i);
 
 							//sumulate digital directions from analog
 							if (ev.type == EV_ABS && !(ev.code<=1 && mouse_emu && !user_io_osd_is_visible()))
@@ -1983,15 +2001,9 @@ int input_test(int getchar)
 								// emulate PAD on axis 0/1
 
 								// axis ranges vary per USB controller: some have 0-255, others -32768..+32767 etc.
-								int mid_axis = 127;
-								if (input[i].vid == 0x045e && input[i].pid == 0x028e) mid_axis = 0;   // 8BitDo Retro Receiver (-1, but doesn't matter here)
-                                if (input[i].vid == 0x0403 && input[i].pid == 0x97c1) mid_axis = 0;   // Retrode
-								if (input[i].vid == 0x4d8 && input[i].pid == 0xf947) mid_axis = 2047; // 2600-Daptor II 
-								if (input[i].vid == 0x4d8 && input[i].pid == 0xf421) mid_axis = 2047; // NeoGeo-Daptor 
-								if (input[i].vid == 0x4d8 && input[i].pid == 0xf627) mid_axis = 0;    // Vision-Daptor 
-
-								int treshold = 64;
-								if (input[i].vid == 0x045e && input[i].pid == 0x028e) treshold = 16384;  // 8BitDo Retro Receiver
+								int range = absinfo.maximum - absinfo.minimum + 1;
+								int center = absinfo.minimum + (range/2);
+								int treshold = range/4;
 
 								char l, r, u, d;
 								l = r = u = d = 0;
@@ -2006,15 +2018,15 @@ int input_test(int getchar)
 
 								if(ev.code == base_axis || ev.code == extra_axis || ev.code == 16) // x
 								{
-									if ((ev.code < 16) ? ev.value < mid_axis - treshold : ev.value == -1) l = 1;
-									if ((ev.code < 16) ? ev.value > mid_axis + treshold : ev.value ==  1) r = 1;
+									if ((ev.code < 16) ? ev.value < center - treshold : ev.value == -1) l = 1;
+									if ((ev.code < 16) ? ev.value > center + treshold : ev.value ==  1) r = 1;
 
 									ev.type = EV_KEY;
 									if (input[i].last_l != l)
 									{
 										ev.code = KEY_EMU_LEFT + offset;
 										ev.value = l;
-										input_cb(&ev, i);
+										input_cb(&ev, &absinfo, i);
 										input[i].last_l = l;
 									}
 
@@ -2022,7 +2034,7 @@ int input_test(int getchar)
 									{
 										ev.code = KEY_EMU_RIGHT + offset;
 										ev.value = r;
-										input_cb(&ev, i);
+										input_cb(&ev, &absinfo, i);
 										input[i].last_r = r;
 									}
 								}
@@ -2035,18 +2047,18 @@ int input_test(int getchar)
 
 								if (ev.code == base_axis || ev.code == extra_axis || ev.code == 17) // y
 								{
-                                    // override specific to x axis
-                                    if (input[i].vid == 0x046d && input[i].pid == 0xc21f) mid_axis = -129; // Logitech F710
+                                    // override specific to x axis. Negative value as a center??
+                                    if (input[i].vid == 0x046d && input[i].pid == 0xc21f) center = -129; // Logitech F710
                                     
-									if ((ev.code < 16) ? ev.value < mid_axis - treshold : ev.value == -1) u = 1;
-									if ((ev.code < 16) ? ev.value > mid_axis + treshold : ev.value ==  1) d = 1;
+									if ((ev.code < 16) ? ev.value < center - treshold : ev.value == -1) u = 1;
+									if ((ev.code < 16) ? ev.value > center + treshold : ev.value ==  1) d = 1;
 
 									ev.type = EV_KEY;
 									if (input[i].last_u != u)
 									{
 										ev.code = KEY_EMU_UP + offset;
 										ev.value = u;
-										input_cb(&ev, i);
+										input_cb(&ev, &absinfo, i);
 										input[i].last_u = u;
 									}
 
@@ -2054,7 +2066,7 @@ int input_test(int getchar)
 									{
 										ev.code = KEY_EMU_DOWN + offset;
 										ev.value = d;
-										input_cb(&ev, i);
+										input_cb(&ev, &absinfo, i);
 										input[i].last_d = d;
 									}
 								}
@@ -2066,14 +2078,14 @@ int input_test(int getchar)
 									{
 										ev.code = KEY_EMU_LT;
 										ev.value = (ev.value == 255) ? 1 : 0;
-										input_cb(&ev, i);
+										input_cb(&ev, &absinfo, i);
 									}
 
 									if (ev.code == 5)
 									{
 										ev.code = KEY_EMU_RT;
 										ev.value = (ev.value == 255) ? 1 : 0;
-										input_cb(&ev, i);
+										input_cb(&ev, &absinfo, i);
 									}
 								}
 
@@ -2083,7 +2095,7 @@ int input_test(int getchar)
 									if (ev.code == 9)
 									{
 										ev.code = KEY_EMU_PS;
-										input_cb(&ev, i);
+										input_cb(&ev, &absinfo, i);
 									}
 								}
 							}
