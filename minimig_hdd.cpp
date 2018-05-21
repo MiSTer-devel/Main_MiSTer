@@ -88,14 +88,18 @@ static unsigned char GetDiskStatus(void)
 	return status;
 }
 
-static void RDBChecksum(uint32_t *p)
+static uint32_t RDBChecksum(uint32_t *p, int set)
 {
 	uint32_t count = SWAP(p[1]);
 	uint32_t result = 0;
-	p[2] = 0;
+	if(set) p[2] = 0;
+
 	for (uint32_t i = 0; i<count; ++i) result += SWAP(p[i]);
+	if (!set) return result;
+
 	result = 0 - result;
 	p[2] = SWAP(result);
+	return 0;
 }
 
 // if the HDF file doesn't have a RigidDiskBlock, we synthesize one
@@ -144,7 +148,7 @@ static void FakeRDB(int unit, int block)
 			strcpy(rdb->rdb_DiskVendor, "DON'T   REPARTITION!    0.00");
 			uint32_t *p = (uint32_t*)(sector_buffer);
 			for (int i = 0; i < 40; i++) p[i] = SWAP(p[i]);
-			RDBChecksum(p);
+			RDBChecksum(p, 1);
 			break;
 		}
 		case 1: {
@@ -172,7 +176,7 @@ static void FakeRDB(int unit, int block)
 			pb->pb_Environment.de_DosType = 0x444f5301;
 			uint32_t *p = (uint32_t*)(sector_buffer);
 			for (int i = 0; i < 64; i++) p[i] = SWAP(p[i]);
-			RDBChecksum(p);
+			RDBChecksum(p, 1);
 			break;
 		}
 	}
@@ -483,6 +487,60 @@ static void ATA_ReadMultiple(unsigned char* tfr, unsigned char unit)
 	WriteStatus(IDE_STATUS_END);
 }
 
+static void GetRDBGeometry(hdfTYPE *pHDF)
+{
+	struct RigidDiskBlock *rdb = (struct RigidDiskBlock *)sector_buffer;
+	pHDF->heads = SWAP(rdb->rdb_Heads);
+	pHDF->sectors = SWAP(rdb->rdb_Sectors);
+	pHDF->cylinders = SWAP(rdb->rdb_Cylinders);
+	if (pHDF->sectors > 255)
+	{
+		printf("ATTN: Too many sectors per track %d.", pHDF->sectors);
+		if (pHDF->sectors & 1)
+		{
+			printf(" Odd number of sectors, Cannot translate. Give up! 8-E\n");
+			return;
+		}
+
+		if (pHDF->sectors > 511)
+		{
+			printf(" Really, too many! Give up! 8-E\n");
+			return;
+		}
+
+		if (pHDF->heads > 8)
+		{
+			printf(" Too many heads (%d). Cannot translate. Give up! 8-E\n", pHDF->heads);
+			return;
+		}
+
+		printf(" Translate: sectors %d->%d, heads %d->%d.\n", pHDF->sectors, pHDF->sectors / 2, pHDF->heads, pHDF->heads * 2);
+
+		pHDF->sectors /= 2;
+		pHDF->heads *= 2;
+	}
+}
+
+static void write_sector(int unit, uint32_t lba)
+{
+	// Write RDB header, grab the CHS!
+	if (lba < 16 && (*(uint32_t*)sector_buffer) == 0x4B534452)
+	{
+		printf("Writing RDB header, LBA=%d: ", lba);
+		uint32_t sum = RDBChecksum((uint32_t*)sector_buffer, 0);
+		if (sum)
+		{
+			printf("Checksumm is incorrect(0x%08X)! Ignore the RDB parameters.\n", sum);
+		}
+		else
+		{
+			GetRDBGeometry(&hdf[unit]);
+			printf("Using new CHS: %u/%u/%u (%lu MB)\n", hdf[unit].cylinders, hdf[unit].heads, hdf[unit].sectors, ((((unsigned long)hdf[unit].cylinders) * hdf[unit].heads * hdf[unit].sectors) >> 11));
+		}
+	}
+	FileWriteSec(&hdf[unit].file, sector_buffer);
+}
+
 static void ATA_WriteSectors(unsigned char* tfr, unsigned char unit)
 {
 	WriteStatus(IDE_STATUS_REQ); // pio out (class 2) command type
@@ -537,7 +595,7 @@ static void ATA_WriteSectors(unsigned char* tfr, unsigned char unit)
 			}
 
 			// Don't attempt to write to fake RDB
-			if (hdf[unit].file.size && (lba > -1)) FileWriteSec(&hdf[unit].file, sector_buffer);
+			if (hdf[unit].file.size && (lba > -1)) write_sector(unit, lba);
 			lba++;
 		}
 	}
@@ -592,7 +650,7 @@ static void ATA_WriteMultiple(unsigned char* tfr, unsigned char unit)
 				}
 				//WriteTaskFile(0, tfr[2], sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
 				RecvSector();
-				if (hdf[unit].file.size && (lba > -1)) FileWriteSec(&hdf[unit].file, sector_buffer);
+				if (hdf[unit].file.size && (lba > -1)) write_sector(unit, lba);
 				lba++;
 
 				block_count--;  // decrease block count
@@ -671,36 +729,7 @@ static void SetHardfileGeometry(hdfTYPE *pHDF, int isHDF)
 		if (rdb->rdb_ID == 0x4B534452)
 		{
 			printf("Found RDB header -> native Amiga image.\n");
-
-			pHDF->heads = SWAP(rdb->rdb_Heads);
-			pHDF->sectors = SWAP(rdb->rdb_Sectors);
-			pHDF->cylinders = SWAP(rdb->rdb_Cylinders);
-			if (pHDF->sectors > 255)
-			{
-				printf("ATTN: Too many sectors per track %d.", pHDF->sectors);
-				if (pHDF->sectors & 1)
-				{
-					printf(" Odd number of sectors, Cannot translate. Give up! 8-E\n");
-					return;
-				}
-
-				if (pHDF->sectors > 511)
-				{
-					printf(" Really, too many! Give up! 8-E\n");
-					return;
-				}
-
-				if (pHDF->heads > 8)
-				{
-					printf(" Too many heads (%d). Cannot translate. Give up! 8-E\n", pHDF->heads);
-					return;
-				}
-
-				printf(" Translate: sectors %d->%d, heads %d->%d.\n", pHDF->sectors, pHDF->sectors/2, pHDF->heads, pHDF->heads*2);
-
-				pHDF->sectors /= 2;
-				pHDF->heads *= 2;
-			}
+			GetRDBGeometry(pHDF);
 			return;
 		}
 	}
