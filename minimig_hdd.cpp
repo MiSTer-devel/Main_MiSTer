@@ -24,7 +24,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "hardware.h"
 #include "file_io.h"
 #include "minimig_hdd.h"
-#include "minimig_hdd_internal.h"
 #include "menu.h"
 #include "minimig_config.h"
 #include "debug.h"
@@ -63,7 +62,7 @@ typedef struct
 {
 	int             enabled;
 	fileTYPE        file;
-	unsigned short  cylinders;
+	unsigned long   cylinders;
 	unsigned short  heads;
 	unsigned short  sectors;
 	unsigned short  sectors_per_block;
@@ -493,31 +492,45 @@ static void GetRDBGeometry(hdfTYPE *pHDF)
 	pHDF->heads = SWAP(rdb->rdb_Heads);
 	pHDF->sectors = SWAP(rdb->rdb_Sectors);
 	pHDF->cylinders = SWAP(rdb->rdb_Cylinders);
-	if (pHDF->sectors > 255)
+	if (pHDF->sectors > 255 || pHDF->heads > 16)
 	{
-		printf("ATTN: Too many sectors per track %d.", pHDF->sectors);
-		if (pHDF->sectors & 1)
+		printf("ATTN: Illegal CHS value(s).");
+		if (!(pHDF->sectors & 1) && (pHDF->sectors < 512) && (pHDF->heads <= 8))
 		{
-			printf(" Odd number of sectors, Cannot translate. Give up! 8-E\n");
+			printf(" Translate: sectors %d->%d, heads %d->%d.\n", pHDF->sectors, pHDF->sectors / 2, pHDF->heads, pHDF->heads * 2);
+			pHDF->sectors /= 2;
+			pHDF->heads *= 2;
 			return;
 		}
 
-		if (pHDF->sectors > 511)
+		printf(" DANGEROUS: Cannot translate to legal CHS values. Re-calculate the CHS.\n");
+
+		uint32_t head, cyl, spt;
+		uint32_t sptt[] = { 63, 127, 255, 0 };
+		uint32_t total = pHDF->file.size / 512;
+		for (int i = 0; sptt[i] != 0; i++)
 		{
-			printf(" Really, too many! Give up! 8-E\n");
-			return;
+			spt = sptt[i];
+			for (head = 4; head <= 16; head++)
+			{
+				cyl = total / (head * spt);
+				if (total <= 1024 * 1024)
+				{
+					if (cyl <= 1023) break;
+				}
+				else
+				{
+					if (cyl  < 16383) 				break;
+					if (cyl  < 32767 && head >= 5) 	break;
+					if (cyl <= 65536)				break;
+				}
+			}
+			if (head <= 16) break;
 		}
 
-		if (pHDF->heads > 8)
-		{
-			printf(" Too many heads (%d). Cannot translate. Give up! 8-E\n", pHDF->heads);
-			return;
-		}
-
-		printf(" Translate: sectors %d->%d, heads %d->%d.\n", pHDF->sectors, pHDF->sectors / 2, pHDF->heads, pHDF->heads * 2);
-
-		pHDF->sectors /= 2;
-		pHDF->heads *= 2;
+		pHDF->cylinders = cyl;
+		pHDF->heads     = (unsigned short)head;
+		pHDF->sectors   = (unsigned short)spt;
 	}
 }
 
@@ -752,12 +765,12 @@ static void SetHardfileGeometry(hdfTYPE *pHDF, int isHDF)
 			{
 				if (cyl < 16383) break;
 				if (cyl < 32767 && head >= 5) break;
-				if (cyl <= 65535) break; // Should there some head constraint here?
+				if (cyl <= 65536) break; // Should there some head constraint here?
 			}
 		}
 		if (head <= 16) break;
 	}
-	pHDF->cylinders = (unsigned short)cyl;
+	pHDF->cylinders = cyl;
 	pHDF->heads = (unsigned short)head;
 	pHDF->sectors = (unsigned short)spt;
 
@@ -804,5 +817,32 @@ unsigned char OpenHardfile(unsigned char unit)
 
 	// close opened before.
 	FileClose(&hdf[unit].file);
+	return 0;
+}
+
+int checkHDF(const char* name, struct RigidDiskBlock **rdb)
+{
+	fileTYPE file = { 0 };
+
+	*rdb = NULL;
+	if (FileOpenEx(&file, name, O_RDONLY))
+	{
+		*rdb = (struct RigidDiskBlock *)sector_buffer;
+		for (int i = 0; i<16; ++i)
+		{
+			if (!FileReadSec(&file, sector_buffer)) break;
+			if ((*rdb)->rdb_ID == 0x4B534452)
+			{
+				FileClose(&file);
+				(*rdb)->rdb_Heads = SWAP((*rdb)->rdb_Heads);
+				(*rdb)->rdb_Sectors = SWAP((*rdb)->rdb_Sectors);
+				(*rdb)->rdb_Cylinders = SWAP((*rdb)->rdb_Cylinders);
+				return ((*rdb)->rdb_Heads <= 16 && (*rdb)->rdb_Sectors <= 255 && (*rdb)->rdb_Cylinders <= 65536);
+			}
+		}
+
+		FileClose(&file);
+		return 1; // non-HDF file
+	}
 	return 0;
 }

@@ -84,6 +84,8 @@ enum MENU
 	MENU_HARDFILE_SELECT1,
 	MENU_HARDFILE_SELECT2,
 	MENU_HARDFILE_SELECTED,
+	MENU_HARDFILE_SELECTED2,
+	MENU_HARDFILE_SELECTED3,
 	MENU_LOADCONFIG_1,
 	MENU_LOADCONFIG_2,
 	MENU_SAVECONFIG_1,
@@ -641,7 +643,8 @@ void HandleUI(void)
 		// No UI in unknown cores.
 		return;
 	}
-
+	
+	struct RigidDiskBlock *rdb;
 
 	char *p;
 	char s[40];
@@ -2049,7 +2052,7 @@ void HandleUI(void)
 		OsdWrite(5, s, menusub == 4, 0);
 		OsdWrite(6, "", 0, 0);
 
-		OsdWrite(7,  " Hard disk", menusub == 5, 0);
+		OsdWrite(7,  " Hard disks", menusub == 5, 0);
 		OsdWrite(8,  " Chipset", menusub == 6, 0);
 		OsdWrite(9,  " Memory", menusub == 7, 0);
 		OsdWrite(10, " Audio & Video", menusub == 8, 0);
@@ -2764,6 +2767,56 @@ void HandleUI(void)
 			if (len > sizeof(config.hardfile[num].filename) - 1) len = sizeof(config.hardfile[num].filename) - 1;
 			if(len) memcpy(config.hardfile[num].filename, SelectedPath, len);
 			config.hardfile[num].filename[len] = 0;
+			menustate = checkHDF(config.hardfile[num].filename, &rdb) ? MENU_SETTINGS_HARDFILE1 : MENU_HARDFILE_SELECTED2;
+		}
+		break;
+
+	case MENU_HARDFILE_SELECTED2:
+		m = 0;
+		menumask = 0x1;
+		if (!rdb)
+		{
+			OsdWrite(m++, "", 0, 0);
+			OsdWrite(m++, "", 0, 0);
+			OsdWrite(m++, "", 0, 0);
+			OsdWrite(m++, "", 0, 0);
+			OsdWrite(m++, "", 0, 0);
+			OsdWrite(m++, "    Cannot open the file", 0, 0);
+		}
+		else
+		{
+			OsdWrite(m++, "", 0, 0);
+			OsdWrite(m++, "      !! DANGEROUS !!", 0, 0);
+			OsdWrite(m++, "", 0, 0);
+			OsdWrite(m++, " RDB has illegal CHS values:", 0, 0);
+			sprintf(s,    "   Cylinders: %d", rdb->rdb_Cylinders);
+			OsdWrite(m++, s, 0, 0);
+			sprintf(s,    "   Heads:     %d", rdb->rdb_Heads);
+			OsdWrite(m++, s, 0, 0);
+			sprintf(s,    "   Sectors:   %d", rdb->rdb_Sectors);
+			OsdWrite(m++, s, 0, 0);
+			OsdWrite(m++, "", 0, 0);
+			OsdWrite(m++, " Max legal values:", 0, 0);
+			OsdWrite(m++, "   C:65536, H:16, S:255", 0, 0);
+			OsdWrite(m++, "", 0, 0);
+			OsdWrite(m++, "  Some functions won't work", 0, 0);
+			OsdWrite(m++, "  correctly and may corrupt", 0, 0);
+			OsdWrite(m++, "         the data!", 0, 0);
+		}
+		OsdWrite(m++, "", 0, 0);
+		OsdWrite(m++,     "            OK", 1, 0);
+		while (m < OsdGetSize()) OsdWrite(m++, "", 0, 0);
+
+		menusub_last = menusub;
+		menusub = 0;
+		menustate = MENU_HARDFILE_SELECTED3;
+		break;
+
+	case MENU_HARDFILE_SELECTED3:
+		if (select || menu)
+		{
+			menusub = menusub_last;
+			parentstate = menustate;
 			menustate = MENU_SETTINGS_HARDFILE1;
 		}
 		break;
