@@ -646,6 +646,7 @@ void HandleUI(void)
 	
 	struct RigidDiskBlock *rdb;
 
+	static char opensave;
 	char *p;
 	char s[40];
 	unsigned char m, up, down, select, menu, right, left, plus, minus;
@@ -1141,6 +1142,7 @@ void HandleUI(void)
 			}
 			else
 			{
+				static char ext[13];
 				char fs_present;
 				p = user_io_8bit_get_string(1);
 				fs_present = p && strlen(p);
@@ -1159,21 +1161,24 @@ void HandleUI(void)
 				if(!menusub && fs_present)
 				{
 					// use a local copy of "p" since SelectFile will destroy the buffer behind it
-					static char ext[13];
 					strncpy(ext, p, 13);
 					while (strlen(ext) < 3) strcat(ext, " ");
 					SelectFile(ext, SCAN_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1, 1);
 				}
-				else if ((p[0] == 'F') || (p[0] == 'S'))
+				else if (p[0] == 'F')
+				{
+					opensave = (p[1] == 'S');
+					substrcpy(ext, p, 1);
+					while (strlen(ext) < 3) strcat(ext, " ");
+					SelectFile(ext, SCAN_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1, 1);
+				}
+				else if (p[0] == 'S')
 				{
 					drive_num = 0;
 					if (p[1] >= '0' && p[1] <= '3') drive_num = p[1] - '0';
-					static char ext[13];
 					substrcpy(ext, p, 1);
 					while (strlen(ext) < 3) strcat(ext, " ");
-					SelectFile(ext, SCAN_DIR | ((p[0] == 'S') ? SCAN_UMOUNT : 0),
-						(p[0] == 'F') ? MENU_8BIT_MAIN_FILE_SELECTED : MENU_8BIT_MAIN_IMAGE_SELECTED,
-						MENU_8BIT_MAIN1, 1);
+					SelectFile(ext, SCAN_DIR | SCAN_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1, 1);
 				}
 				else if (p[0] == 'O')
 				{
@@ -1230,7 +1235,7 @@ void HandleUI(void)
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
 		printf("File selected: %s\n", SelectedPath);
-		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
+		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1), opensave);
 		menustate = MENU_NONE1;
 		break;
 
@@ -1243,7 +1248,7 @@ void HandleUI(void)
 		else
 		{
 			user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
-			user_io_file_mount(drive_num, SelectedPath);
+			user_io_file_mount(SelectedPath, drive_num);
 		}
 		menustate = SelectedPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
 		break;

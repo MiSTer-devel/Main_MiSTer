@@ -480,7 +480,7 @@ void user_io_init(const char *path)
 			{
 				// check for multipart rom
 				sprintf(mainpath, "%s/boot0.rom", user_io_get_core_name());
-				if (user_io_file_tx(mainpath, 0))
+				if (user_io_file_tx(mainpath))
 				{
 					sprintf(mainpath, "%s/boot1.rom", user_io_get_core_name());
 					if (user_io_file_tx(mainpath, 0x40))
@@ -497,16 +497,16 @@ void user_io_init(const char *path)
 				{
 					// legacy style of rom
 					sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
-					if (!user_io_file_tx(mainpath, 0))
+					if (!user_io_file_tx(mainpath))
 					{
 						strcpy(name + strlen(name) - 3, "ROM");
 						sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
-						if (!get_rbf_dir()[0] || !user_io_file_tx(mainpath, 0))
+						if (!get_rbf_dir()[0] || !user_io_file_tx(mainpath))
 						{
-							if (!user_io_file_tx(name, 0))
+							if (!user_io_file_tx(name))
 							{
 								sprintf(mainpath, "bootrom/%s", name);
-								user_io_file_tx(mainpath, 0);
+								user_io_file_tx(mainpath);
 							}
 						}
 					}
@@ -515,13 +515,13 @@ void user_io_init(const char *path)
 				// check if vhd present
 				sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
 				user_io_set_index(0);
-				if (!user_io_file_mount(0, mainpath))
+				if (!user_io_file_mount(mainpath))
 				{
 					strcpy(name + strlen(name) - 3, "VHD");
 					sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
-					if (!get_rbf_dir()[0] || !user_io_file_mount(0, mainpath))
+					if (!get_rbf_dir()[0] || !user_io_file_mount(mainpath))
 					{
-						user_io_file_mount(0, name);
+						user_io_file_mount(name);
 					}
 				}
 			}
@@ -814,30 +814,30 @@ void user_io_set_index(unsigned char index)
 	DisableFpga();
 }
 
-int user_io_file_mount(int num, char *name)
+int user_io_file_mount(char *name, unsigned char index)
 {
 	int writable = 0;
 	int ret = 0;
 	if (x2trd_ext_supp(name))
 	{
-		ret = x2trd(name, sd_image+num);
+		ret = x2trd(name, sd_image+ index);
 	}
 	else
 	{
 		writable = FileCanWrite(name);
-		ret = FileOpenEx(&sd_image[num], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+		ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 	}
 
 	if (!ret)
 	{
 		writable = 0;
-		sd_image[num].size = 0;
+		sd_image[index].size = 0;
 		printf("Failed to open file %s\n", name);
-		printf("Eject image from %d slot\n", num);
+		printf("Eject image from %d slot\n", index);
 	}
 	else
 	{
-		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", num);
+		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", index);
 	}
 
 	user_io_sd_set_config();
@@ -847,27 +847,27 @@ int user_io_file_mount(int num, char *name)
 	spi8(UIO_SET_SDINFO);
 	if (io_ver)
 	{
-		spi_w((uint16_t)(sd_image[num].size));
-		spi_w((uint16_t)(sd_image[num].size>>16));
-		spi_w((uint16_t)(sd_image[num].size>>32));
-		spi_w((uint16_t)(sd_image[num].size>>48));
+		spi_w((uint16_t)(sd_image[index].size));
+		spi_w((uint16_t)(sd_image[index].size>>16));
+		spi_w((uint16_t)(sd_image[index].size>>32));
+		spi_w((uint16_t)(sd_image[index].size>>48));
 	}
 	else
 	{
-		spi32le(sd_image[num].size);
-		spi32le(sd_image[num].size>>32);
+		spi32le(sd_image[index].size);
+		spi32le(sd_image[index].size>>32);
 	}
 	DisableIO();
 
 	// notify core of possible sd image change
-	spi_uio_cmd8(UIO_SET_SDSTAT, (1<<num) | (writable ? 0 : 0x80));
+	spi_uio_cmd8(UIO_SET_SDSTAT, (1<< index) | (writable ? 0 : 0x80));
 	return ret ? 1 : 0;
 }
 
-int user_io_file_tx(char* name, unsigned char index)
+int user_io_file_tx(char* name, unsigned char index, char opensave)
 {
 	fileTYPE f = { 0 };
-	static uint8_t buf[512];
+	static uint8_t buf[1024];
 
 	if (!FileOpen(&f, name)) return 0;
 
@@ -922,6 +922,13 @@ int user_io_file_tx(char* name, unsigned char index)
 	}
 
 	FileClose(&f);
+
+	if (opensave)
+	{
+		strcpy((char*)buf, name);
+		strcpy((char*)buf + strlen(name) - 4, ".sav");
+		user_io_file_mount((char*)buf);
+	}
 
 	// signal end of transmission
 	EnableFpga();
@@ -1272,7 +1279,7 @@ void user_io_poll()
 						// ... and write it to disk
 						int done = 0;
 
-						if (sd_image[disk].size)
+						if ((sd_image[disk].size>>9)>lba)
 						{
 							diskled_on();
 							if (FileSeekLBA(&sd_image[disk], lba))
