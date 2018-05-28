@@ -1,5 +1,6 @@
 /*
 Copyright 2008, 2009 Jakub Bednarski
+Copyright 2017, 2018 Sorgelig
 
 This file is part of Minimig
 
@@ -18,6 +19,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 // 2009-11-22 - read/write multiple implemented
+// 2018-05-13 - 4xIDE implemented
+// 2018-05-xx - Use RDB CHS values if valid
+// 2018-05-29 - LBA mode implemented
 
 #include <stdio.h>
 #include <string.h>
@@ -227,6 +231,7 @@ static void IdentifyDevice(unsigned short *pBuffer, unsigned char unit)
 	}
 
 	pBuffer[47] = 0x8010; // maximum sectors per block in Read/Write Multiple command
+	pBuffer[49] = 1<<9;   // LBA support
 	pBuffer[53] = 1;
 	pBuffer[54] = hdf[unit].cylinders;
 	pBuffer[55] = hdf[unit].heads;
@@ -237,11 +242,28 @@ static void IdentifyDevice(unsigned short *pBuffer, unsigned char unit)
 
 static uint32_t chs2lba(unsigned short cylinder, unsigned char head, unsigned short sector, unsigned char unit)
 {
-	uint32_t lba = cylinder;
-	lba *= hdf[unit].heads;
-	lba += head;
-	lba *= hdf[unit].sectors;
-	return lba + sector - 1;
+	unsigned char uselba = head & 0x40;
+	head &= 0xF;
+
+	uint32_t lba;
+
+	if (uselba)
+	{
+		lba = (head << 24) | (cylinder << 8) | sector;
+	}
+	else
+	{
+		lba = cylinder;
+		lba *= hdf[unit].heads;
+		lba += head;
+		lba *= hdf[unit].sectors;
+		lba = lba + sector - 1;
+
+	}
+
+	//printf("IDE%d chs2lba(%s: %d,%d,%d) -> %d\n", unit, uselba ? "LBA" : "CHS", cylinder, head, sector, lba);
+
+	return lba;
 }
 
 static void WriteTaskFile(unsigned char error, unsigned char sector_count, unsigned char sector_number, unsigned char cylinder_low, unsigned char cylinder_high, unsigned char drive_head)
@@ -263,6 +285,18 @@ static void WriteTaskFile(unsigned char error, unsigned char sector_count, unsig
 	DisableFpga();
 }
 
+static void WriteTaskFileEx(unsigned char error, unsigned char sector_count, unsigned char sector_number, unsigned short cylinder, unsigned char drive_head, uint32_t lba)
+{
+	if (drive_head & 0x40)
+	{
+		WriteTaskFile(error, sector_count, (unsigned char)lba, (unsigned char)(lba>>8), (unsigned char)(lba >> 16), (drive_head&0xF0)|((unsigned char)(lba >> 24)&0xF));
+	}
+	else
+	{
+		WriteTaskFile(error, sector_count, sector_number, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), drive_head);
+	}
+}
+
 static void WriteStatus(unsigned char status)
 {
 	EnableFpga();
@@ -276,7 +310,7 @@ static void ATA_Recalibrate(unsigned char* tfr, unsigned char unit)
 {
 	// Recalibrate 0x10-0x1F (class 3 command: no data)
 	hdd_debugf("IDE%d: Recalibrate", unit);
-	WriteTaskFile(0, 0, 1, 0, 0, tfr[6] & 0xF0);
+	WriteTaskFileEx(0, 0, 1, 0, tfr[6] & 0xF0, 0);
 	WriteStatus(IDE_STATUS_END | IDE_STATUS_IRQ);
 }
 
@@ -351,7 +385,7 @@ static void RecvSector()
 static void ATA_ReadSectors(unsigned char* tfr, unsigned char unit)
 {
 	// Read Sectors (0x20)
-	long lba;
+	long lba, nextlba;
 	unsigned short sector = tfr[3];
 	unsigned short cylinder = tfr[4] | (tfr[5] << 8);
 	unsigned short head = tfr[6] & 0x0F;
@@ -359,12 +393,13 @@ static void ATA_ReadSectors(unsigned char* tfr, unsigned char unit)
 	if (sector_count == 0) sector_count = 0x100;
 	hdd_debugf("IDE%d: read %d.%d.%d, %d", unit, cylinder, head, sector, sector_count);
 
-	if(hdf[unit].enabled && ((lba = chs2lba(cylinder, head, sector, unit))>=0))
+	if(hdf[unit].enabled && ((lba = chs2lba(cylinder, tfr[6], sector, unit))>=0))
 	{
+		nextlba = lba;
+
 		if (hdf[unit].file.size) HardFileSeek(&hdf[unit], (lba + hdf[unit].offset) < 0 ? 0 : lba + hdf[unit].offset);
 		while (sector_count)
 		{
-			// decrease sector count
 			if (sector_count != 1) {
 				if (sector == hdf[unit].sectors) {
 					sector = 1;
@@ -377,9 +412,10 @@ static void ATA_ReadSectors(unsigned char* tfr, unsigned char unit)
 				else {
 					sector++;
 				}
+				nextlba++;
 			}
 
-			WriteTaskFile(0, tfr[2], sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
+			WriteTaskFileEx(0, tfr[2], sector, cylinder, (tfr[6] & 0xF0) | head, nextlba);
 			WriteStatus(IDE_STATUS_RDY); // pio in (class 1) command type
 
 			// sector outside limit (fake rdb header) or to be modified sector of first partition
@@ -426,7 +462,7 @@ static void ATA_ReadMultiple(unsigned char* tfr, unsigned char unit)
 {
 	WriteStatus(IDE_STATUS_RDY); // pio in (class 1) command type
 
-	long lba;
+	long lba, nextlba;
 	unsigned short sector = tfr[3];
 	unsigned short cylinder = tfr[4] | (tfr[5] << 8);
 	unsigned short head = tfr[6] & 0x0F;
@@ -434,10 +470,11 @@ static void ATA_ReadMultiple(unsigned char* tfr, unsigned char unit)
 	if (sector_count == 0) sector_count = 0x100;
 	hdd_debugf("IDE%d: read_multi %d.%d.%d, %d", unit, cylinder, head, sector, sector_count);
 
-	if (hdf[unit].enabled && ((lba = chs2lba(cylinder, head, sector, unit)) >= 0))
+	if (hdf[unit].enabled && ((lba = chs2lba(cylinder, tfr[6], sector, unit)) >= 0))
 	{
-		if (hdf[unit].file.size) HardFileSeek(&hdf[unit], (lba + hdf[unit].offset) < 0 ? 0 : lba + hdf[unit].offset);
+		nextlba = lba;
 
+		if (hdf[unit].file.size) HardFileSeek(&hdf[unit], (lba + hdf[unit].offset) < 0 ? 0 : lba + hdf[unit].offset);
 		while (sector_count)
 		{
 			while (!(GetDiskStatus() & CMD_IDECMD)); // wait for empty sector buffer
@@ -474,14 +511,13 @@ static void ATA_ReadMultiple(unsigned char* tfr, unsigned char unit)
 					{
 						sector++;
 					}
+					nextlba++;
 				}
 				lba++;
 				sector_count--;
 			}
-			WriteTaskFile(0, tfr[2], sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
-			//WriteTaskFile(0, 0, sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
+			WriteTaskFileEx(0, tfr[2], sector, cylinder, (tfr[6] & 0xF0) | head, nextlba);
 		}
-		//WriteTaskFile(0, 0, sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
 	}
 	WriteStatus(IDE_STATUS_END);
 }
@@ -558,15 +594,17 @@ static void ATA_WriteSectors(unsigned char* tfr, unsigned char unit)
 {
 	WriteStatus(IDE_STATUS_REQ); // pio out (class 2) command type
 
-	long lba;
+	long lba, nextlba;
 	unsigned short sector = tfr[3];
 	unsigned short cylinder = tfr[4] | (tfr[5] << 8);
 	unsigned short head = tfr[6] & 0x0F;
 	unsigned short sector_count = tfr[2];
 	if (sector_count == 0) sector_count = 0x100;
 
-	if (hdf[unit].enabled && ((lba = chs2lba(cylinder, head, sector, unit)) >= 0))
+	if (hdf[unit].enabled && ((lba = chs2lba(cylinder, tfr[6], sector, unit)) >= 0))
 	{
+		nextlba = lba;
+
 		lba += hdf[unit].offset;
 		if (hdf[unit].file.size)
 		{
@@ -594,8 +632,9 @@ static void ATA_WriteSectors(unsigned char* tfr, unsigned char unit)
 				{
 					sector++;
 				}
+				nextlba++;
 			}
-			WriteTaskFile(0, tfr[2], sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
+			WriteTaskFileEx(0, tfr[2], sector, cylinder, (tfr[6] & 0xF0) | head, nextlba);
 			RecvSector();
 			sector_count--; // decrease sector count
 			if (sector_count)
@@ -619,16 +658,17 @@ static void ATA_WriteMultiple(unsigned char* tfr, unsigned char unit)
 	// write sectors
 	WriteStatus(IDE_STATUS_REQ); // pio out (class 2) command type
 
-	long lba;
+	long lba, nextlba;
 	unsigned short sector = tfr[3];
 	unsigned short cylinder = tfr[4] | (tfr[5] << 8);
 	unsigned short head = tfr[6] & 0x0F;
 	unsigned short sector_count = tfr[2];
 	if (sector_count == 0) sector_count = 0x100;
 
-	if (hdf[unit].enabled && ((lba = chs2lba(cylinder, head, sector, unit)) >= 0))
+	if (hdf[unit].enabled && ((lba = chs2lba(cylinder, tfr[6], sector, unit)) >= 0))
 	{
-		//if (hdf[unit].type>=HDF_CARDPART0)
+		nextlba = lba;
+
 		lba += hdf[unit].offset;
 		if (hdf[unit].file.size)
 		{
@@ -660,8 +700,8 @@ static void ATA_WriteMultiple(unsigned char* tfr, unsigned char unit)
 					{
 						sector++;
 					}
+					nextlba++;
 				}
-				//WriteTaskFile(0, tfr[2], sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
 				RecvSector();
 				if (hdf[unit].file.size && (lba > -1)) write_sector(unit, lba);
 				lba++;
@@ -669,7 +709,7 @@ static void ATA_WriteMultiple(unsigned char* tfr, unsigned char unit)
 				block_count--;  // decrease block count
 				sector_count--; // decrease sector count
 			}
-			WriteTaskFile(0, tfr[2], sector, (unsigned char)cylinder, (unsigned char)(cylinder >> 8), (tfr[6] & 0xF0) | head);
+			WriteTaskFileEx(0, tfr[2], sector, cylinder, (tfr[6] & 0xF0) | head, nextlba);
 			if (sector_count)
 			{
 				WriteStatus(IDE_STATUS_IRQ);
