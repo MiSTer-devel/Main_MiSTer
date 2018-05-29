@@ -5,6 +5,8 @@
 // For hardfiles that have no RDB information, we'll just create a single-partition RDB and Part block
 // on blocks 0 and 1.  All other blocks within the first cylinder will be translated into the hardfile
 
+#define RDB_MAGIC 0x4B534452 // "RDSK"
+
 struct RigidDiskBlock {
 	unsigned long   rdb_ID;	// "RDSK"
 	unsigned long   rdb_Summedlongs; // 0x40

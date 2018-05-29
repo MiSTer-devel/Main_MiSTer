@@ -6,8 +6,8 @@
 #include "minimig_hdd_internal.h"
 
 // functions
-void HandleHDD(unsigned char c1, unsigned char c2);
-unsigned char OpenHardfile(unsigned char unit);
+void HandleHDD(uint8_t c1, uint8_t c2);
+uint8_t OpenHardfile(uint8_t unit);
 int checkHDF(const char* name, struct RigidDiskBlock **rdb);
 
 #endif // __HDD_H__
