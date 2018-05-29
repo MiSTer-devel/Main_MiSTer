@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #include "hardware.h"
 #include "minimig_boot.h"
@@ -232,23 +234,61 @@ static char UploadActionReplay()
 	return(0);
 }
 
-#define SET_CONFIG_NAME(str,num) \
-	if (num) sprintf(str, "MINIMIG%d.CFG", num); \
-		else strcpy(str, "MINIMIG.CFG");
-
-unsigned char ConfigurationExists(int num)
+static char* GetConfigurationName(int num)
 {
-	static char path[256];
-	strcpy(path, CONFIG_DIR"/");
-	SET_CONFIG_NAME((path+strlen(path)), num);
+	static char path[128];
+	sprintf(path, "%s/%s", getRootDir(), CONFIG_DIR);
 
-	fileTYPE f = { 0 };
-	if(FileOpen(&f, path))
+	DIR *d;
+	struct dirent *dir;
+	d = opendir(path);
+	if (d)
 	{
-		FileClose(&f);
-		return(1);
+		if(num) sprintf(path, "minimig%d", num);
+		else sprintf(path, "minimig.cfg", num);
+
+		while ((dir = readdir(d)) != NULL)
+		{
+			int len = strlen(dir->d_name);
+			if (len>10 && !strncasecmp(dir->d_name, path, strlen(path)) && !strcasecmp(dir->d_name+len-4, ".cfg"))
+			{
+				closedir(d);
+				strcpy(path, dir->d_name);
+				return path;
+			}
+		}
+		closedir(d);
 	}
-	return(0);
+
+	return NULL;
+}
+
+unsigned char SaveConfiguration(int num)
+{
+	const char *filename = GetConfigurationName(num);
+	if (!filename)
+	{
+		static char name[32];
+		if (num) sprintf(name, "minimig%d.cfg", num);
+		else sprintf(name, "minimig.cfg");
+
+		filename = name;
+	}
+
+	return FileSaveConfig(filename, &config, sizeof(config));
+}
+
+const char* GetConfigDisplayName(int num)
+{
+	char *filename = GetConfigurationName(num);
+	if (!filename) return NULL;
+
+	filename[strlen(filename) - 4] = 0;
+	char *p = strchr(filename, '_');
+
+	if (p) return p+1;
+
+	return "";
 }
 
 static int force_reload_kickstart = 0;
@@ -340,12 +380,11 @@ unsigned char LoadConfiguration(int num)
 	char result = 0;
 	unsigned char key, i;
 
-	static char filename[256];
-	SET_CONFIG_NAME(filename, num);
+	const char *filename = GetConfigurationName(num);
 
 	// load configuration data
-	int size = FileLoadConfig(filename, 0, 0);
-	if(size>0)
+	int size;
+	if(filename && (size = FileLoadConfig(filename, 0, 0))>0)
 	{
 		BootPrint("Opened configuration file\n");
 		printf("Configuration file size: %s, %lu\n", filename, size);
@@ -453,14 +492,6 @@ unsigned char LoadConfiguration(int num)
 
 	ApplyConfiguration(updatekickstart);
 	return(result);
-}
-
-unsigned char SaveConfiguration(int num)
-{
-	static char filename[256];
-	SET_CONFIG_NAME(filename, num);
-
-	return FileSaveConfig(filename, &config, sizeof(config));
 }
 
 void MinimigReset()

@@ -45,7 +45,7 @@ extern configTYPE config;
 
 unsigned char LoadConfiguration(int num);
 unsigned char SaveConfiguration(int num);
-unsigned char ConfigurationExists(int num);
+const char* GetConfigDisplayName(int num);
 
 void MinimigReset();
 void SetKickstart(char *name);

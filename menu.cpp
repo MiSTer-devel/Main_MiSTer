@@ -2166,36 +2166,28 @@ void HandleUI(void)
 
 	case MENU_LOADCONFIG_1:
 		helptext = helptexts[HELPTEXT_NONE];
-		if (parentstate != menustate)	// First run?
+		if (parentstate != menustate)
 		{
-			menumask = 0x200;
-			if (ConfigurationExists(0)) menumask |= 0x001;
-			if (ConfigurationExists(1)) menumask |= 0x002;
-			if (ConfigurationExists(2)) menumask |= 0x004;
-			if (ConfigurationExists(3)) menumask |= 0x008;
-			if (ConfigurationExists(4)) menumask |= 0x010;
-			if (ConfigurationExists(5)) menumask |= 0x020;
-			if (ConfigurationExists(6)) menumask |= 0x040;
-			if (ConfigurationExists(7)) menumask |= 0x080;
-			if (ConfigurationExists(8)) menumask |= 0x100;
+			menumask = 0x400;
+			for (int i = 0; i < 10; i++) if (GetConfigDisplayName(i)) menumask |= 1<<i;
 		}
 		parentstate = menustate;
-		OsdSetTitle("Load", 0);
+		OsdSetTitle("Load config", 0);
 
 		OsdWrite(0, "", 0, 0);
 		OsdWrite(1, "", 0, 0);
-		OsdWrite(2, "          Default", menusub == 0, (menumask & 1) == 0);
+		OsdWrite(2, " Default", menusub == 0, (menumask & 1) == 0);
 		OsdWrite(3, "", 0, 0);
-		OsdWrite(4, "          1", menusub == 1, (menumask & 2) == 0);
-		OsdWrite(5, "          2", menusub == 2, (menumask & 4) == 0);
-		OsdWrite(6, "          3", menusub == 3, (menumask & 8) == 0);
-		OsdWrite(7, "          4", menusub == 4, (menumask & 0x10) == 0);
-		OsdWrite(8, "          5", menusub == 5, (menumask & 0x20) == 0);
-		OsdWrite(9, "          6", menusub == 6, (menumask & 0x40) == 0);
-		OsdWrite(10, "          7", menusub == 7, (menumask & 0x80) == 0);
-		OsdWrite(11, "          8", menusub == 8, (menumask & 0x100) == 0);
-		for (int i = 12; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 9, 0);
+		for (int i = 1; i < 10; i++)
+		{
+			static char name[64];
+			sprintf(name, " %d ", i);
+			if (menumask & (1 << i)) strcat(name, GetConfigDisplayName(i));
+			OsdWrite(3+i, name, menusub == i, !(menumask & (1 << i)));
+		}
+
+		for (int i = 13; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 10, 0);
 
 		menustate = MENU_LOADCONFIG_2;
 		break;
@@ -2208,7 +2200,7 @@ void HandleUI(void)
 		}
 		else if (select)
 		{
-			if (menusub<9)
+			if (menusub<10)
 			{
 				OsdDisable();
 				LoadConfiguration(menusub);
@@ -2379,70 +2371,44 @@ void HandleUI(void)
 
 	case MENU_SAVECONFIG_1:
 		helptext = helptexts[HELPTEXT_NONE];
-		menumask = 0x3ff;
+		menumask = 0x7ff;
 		parentstate = menustate;
-		OsdSetTitle("Save", 0);
+		OsdSetTitle("Save config", 0);
 
 		OsdWrite(0, "", 0, 0);
 		OsdWrite(1, "", 0, 0);
-		OsdWrite(2, "        Default", menusub == 0, 0);
+		OsdWrite(2, " Default", menusub == 0, 0);
 		OsdWrite(3, "", 0, 0);
-		OsdWrite(4,  "        1", menusub == 1, 0);
-		OsdWrite(5,  "        2", menusub == 2, 0);
-		OsdWrite(6,  "        3", menusub == 3, 0);
-		OsdWrite(7,  "        4", menusub == 4, 0);
-		OsdWrite(8,  "        5", menusub == 5, 0);
-		OsdWrite(9,  "        6", menusub == 6, 0);
-		OsdWrite(10, "        7", menusub == 7, 0);
-		OsdWrite(11, "        8", menusub == 8, 0);
-		for (int i = 12; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 9, 0);
+
+		for (int i = 1; i < 10; i++)
+		{
+			static char name[64];
+			sprintf(name, " %d ", i);
+			const char *cfgname = GetConfigDisplayName(i);
+			if (cfgname) strcat(name, GetConfigDisplayName(i));
+			OsdWrite(3 + i, name, menusub == i, !(menumask & (1 << i)));
+		}
+
+		for (int i = 13; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 10, 0);
 
 		menustate = MENU_SAVECONFIG_2;
 		break;
 
 	case MENU_SAVECONFIG_2:
-
-		if (menu)
+		if (select)
 		{
+			if (menusub<10) SaveConfiguration(menusub);
 			menustate = MENU_MAIN1;
 			menusub = 9;
 		}
-
-		else if (up)
-		{
-			if (menusub > 0)
-				menusub--;
-			menustate = MENU_SAVECONFIG_1;
-		}
-		else if (down)
-		{
-			//            if (menusub < 3)
-			if (menusub < 9)
-				menusub++;
-			menustate = MENU_SAVECONFIG_1;
-		}
-		else if (select)
-		{
-			if (menusub<9)
-			{
-				SaveConfiguration(menusub);
-				menustate = MENU_NONE1;
-			}
-			else
-			{
-				menustate = MENU_MAIN1;
-				menusub = 9;
-			}
-		}
+		else
 		if (menu) // exit menu
 		{
 			menustate = MENU_MAIN1;
 			menusub = 9;
 		}
 		break;
-
-
 
 		/******************************************************************/
 		/* chipset settings menu                                          */
