@@ -162,17 +162,15 @@ void OsdSetTitle(const char *s, int a)
 					zeros = 0;
 					titlebuffer[outp++] = nc;
 				}
-				else if (zeros == 0)
+				else if (zeros == 0 || (c == ' ' && zeros < 5))
 				{
 					titlebuffer[outp++] = 0;
-					zeros = 1;
+					zeros++;
 				}
-				if (outp>63)
-					break;
+				if (outp>sizeof(titlebuffer)) break;
 			}
 		}
-		else
-			break;
+		else break;
 	}
 	for (i = outp; i<OSDHEIGHT; i++)
 	{
@@ -183,8 +181,7 @@ void OsdSetTitle(const char *s, int a)
 	int c = (OSDHEIGHT - 1 - outp) / 2;
 	memmove(titlebuffer + c, titlebuffer, outp);
 
-	for (i = 0; i<c; ++i)
-		titlebuffer[i] = 0;
+	for (i = 0; i<c; ++i) titlebuffer[i] = 0;
 
 	// Finally rotate it.
 	for (i = 0; i<OSDHEIGHT; i += 8)
