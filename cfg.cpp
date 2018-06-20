@@ -39,6 +39,7 @@ const ini_var_t ini_vars[] = {
 	{ "KBD_NOMOUSE", (void*)(&(cfg.kbd_nomouse)), UINT8, 0, 1, 1 },
 	{ "MOUSE_THROTTLE", (void*)(&(cfg.mouse_throttle)), UINT8, 1, 100, 1 },
 	{ "BOOTSCREEN", (void*)(&(cfg.bootscreen)), UINT8, 0, 1, 1 },
+	{ "VOLUMECTL", (void*)(&(cfg.volumectl)), UINT8, 0, 1, 1 },
 };
 
 // mist ini config

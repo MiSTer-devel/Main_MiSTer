@@ -424,6 +424,7 @@ void user_io_init(const char *path)
 	parse_video_mode();
 	FileLoadConfig("Volume.dat", &vol_att, 1);
 	vol_att &= 0x1F;
+	if (!cfg.volumectl) vol_att = 0;
 	spi_uio_cmd8(UIO_AUDVOL, vol_att);
 	user_io_send_buttons(1);
 
@@ -1896,6 +1897,8 @@ void user_io_osd_key_enable(char on)
 
 static void set_volume(int cmd)
 {
+	if (!cfg.volumectl) return;
+
 	vol_set_timeout = GetTimer(1000);
 
 	vol_att &= 0x17;

@@ -28,6 +28,7 @@ typedef struct {
 	uint8_t kbd_nomouse;
 	uint8_t mouse_throttle;
 	uint8_t bootscreen;
+	uint8_t volumectl;
 	char video_conf[1024];
 } cfg_t;
 
