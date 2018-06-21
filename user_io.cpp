@@ -1663,11 +1663,11 @@ static void send_keycode(unsigned short key, int press)
 
 		if (code & CAPS_TOGGLE)
 		{
-			if (press = 1)
+			if (press)
 			{
 				// send alternating make and break codes for caps lock
 				if(caps_lock_toggle) code |= 0x80;
-				caps_lock_toggle = !caps_lock_toggle;
+				caps_lock_toggle ^= HID_LED_CAPS_LOCK;
 				set_kbd_led(HID_LED_CAPS_LOCK, caps_lock_toggle);
 			}
 			else
