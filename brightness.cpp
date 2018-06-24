@@ -107,7 +107,7 @@ static int spi_open(int speed, int mode)
 	return -1;
 }
 
-static int spi_close()
+static void spi_close()
 {
 	if(spiFd >= 0) close(spiFd);
 	spiFd = -1;

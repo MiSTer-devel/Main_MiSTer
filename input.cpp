@@ -2198,6 +2198,8 @@ int input_poll(int getchar)
 			user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i], newdir);
 		}
 	}
+
+	return 0;
 }
 
 int is_key_pressed(int key)

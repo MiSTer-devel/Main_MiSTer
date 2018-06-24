@@ -2121,6 +2121,9 @@ static int findPLLpar(double Fout, uint32_t *pc, uint32_t *pm, double *pko)
 			return 1;
 		}
 	}
+
+	//will never reach here
+	return 0;
 }
 
 static void setPLL(double Fout)
@@ -2173,7 +2176,7 @@ static void setPLL(double Fout)
 	vitems[20] = k;
 }
 
-static int setVideo()
+static void setVideo()
 {
 	printf("Send HDMI parameters:\n");
 	spi_uio_cmd_cont(UIO_SET_VIDEO);

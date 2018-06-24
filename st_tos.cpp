@@ -1126,9 +1126,9 @@ void tos_config_init(void)
 {
 	// set default values
 	config.system_ctrl = TOS_MEMCONFIG_4M | TOS_CONTROL_BLITTER;
-	memcpy(config.tos_img, "TOS.IMG", 12);
+	strcpy(config.tos_img, "TOS.IMG");
 	config.cart_img[0] = 0;
-	memcpy(config.acsi_img[0], "HARDDISK.HD", 12);
+	strcpy(config.acsi_img[0], "HARDDISK.HD");
 	config.acsi_img[1][0] = 0;
 	config.video_adjust[0] = config.video_adjust[1] = 0;
 
