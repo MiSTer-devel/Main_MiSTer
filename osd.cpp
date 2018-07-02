@@ -75,7 +75,6 @@ void framebuffer_clear()
 
 void framebuffer_plot(int x, int y)
 {
-	y = (y * osd_size) / 8;
 	framebuffer[y / 8][x] |= (1 << (y & 7));
 }
 
@@ -85,7 +84,7 @@ void StarsInit()
 	for (int i = 0; i<64; ++i)
 	{
 		stars[i].x = (rand() % 228) << 4;	// X centre
-		stars[i].y = (rand() % 56) << 4;	// Y centre
+		stars[i].y = (rand() % 128) << 4;	// Y centre
 		stars[i].dx = -(rand() & 7) - 3;
 		stars[i].dy = 0;
 	}
@@ -99,10 +98,10 @@ void StarsUpdate()
 		stars[i].x += stars[i].dx;
 		stars[i].y += stars[i].dy;
 		if ((stars[i].x<0) || (stars[i].x>(228 << 4)) ||
-			(stars[i].y<0) || (stars[i].y>(56 << 4)))
+			(stars[i].y<0) || (stars[i].y>(128 << 4)))
 		{
 			stars[i].x = 228 << 4;
-			stars[i].y = (rand() % 56) << 4;
+			stars[i].y = (rand() % 128) << 4;
 			stars[i].dx = -(rand() & 7) - 3;
 			stars[i].dy = 0;
 		}
@@ -195,13 +194,13 @@ void OsdSetTitle(const char *s, int a)
 	}
 }
 
-void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple)
+void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char usebg)
 {
-	OsdWriteOffset(n, s, invert, stipple, 0, 0);
+	OsdWriteOffset(n, s, invert, stipple, 0, 0, usebg);
 }
 
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
-void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar)
+void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar, char usebg)
 {
 	//printf("OsdWriteOffset(%d)\n", n);
 	unsigned short i;
@@ -297,7 +296,8 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 				unsigned char c;
 				p = &charfont[b][0];
 				for (c = 0; c<8; c++) {
-					spi8(((*p++ << offset)&stipplemask) ^ invert);
+					char bg = usebg ? framebuffer[n][i+c-22] : 0;
+					spi8((((*p++ << offset)&stipplemask) ^ invert) | bg);
 					stipplemask ^= stipple;
 				}
 				i += 8;
@@ -307,7 +307,8 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 
 	for (; i < linelimit; i++) // clear end of line
 	{
-		spi8(invert);
+		char bg = usebg ? framebuffer[n][i-22] : 0;
+		spi8(invert | bg);
 	}
 
 	if (n == (osd_size-1) && (arrowmask & OSD_ARROW_RIGHT))
