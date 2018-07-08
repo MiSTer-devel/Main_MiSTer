@@ -655,11 +655,17 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 						e[0] = '.';
 						e[4] = 0;
 						int l = strlen(e);
-						if((len>l) && !strncasecmp(de->d_name + len - l, e, l))
+						if (len > l)
 						{
+							char *p = de->d_name + len - l;
 							found = 1;
-							break;
+							for (int i = 0; i < l; i++)
+							{
+								if (e[i] == '?') continue;
+								if (tolower(e[i]) != tolower(p[i])) found = 0;
+							}
 						}
+						if (found) break;
 
 						if (strlen(ext) < 3) break;
 						ext += 3;

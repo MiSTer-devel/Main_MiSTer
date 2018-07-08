@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <limits.h>
+#include <ctype.h>
 
 #include "hardware.h"
 #include "osd.h"
@@ -880,13 +881,13 @@ int user_io_file_tx(char* name, unsigned char index, char opensave)
 	// set index byte (0=bios rom, 1-n=OSD entry index)
 	user_io_set_index(index);
 
-	// send directory entry (for alpha amstrad core)
-	//EnableFpga();
-	//spi8(UIO_FILE_INFO);
-	//spi_write((void*)(DirEntry + sort_table[iSelectedEntry]), sizeof(DIRENTRY));
-	//DisableFpga();
-
-	//  hexdump(DirEntry+sort_table[iSelectedEntry], sizeof(DIRENTRY), 0);
+	int len = strlen(f.name);
+	char *p = f.name + len - 4;
+	EnableFpga();
+	spi8(UIO_FILE_INFO);
+	spi_w(toupper(p[0]) << 8 | toupper(p[1]));
+	spi_w(toupper(p[2]) << 8 | toupper(p[3]));
+	DisableFpga();
 
 	// prepare transmission of new file
 	EnableFpga();
