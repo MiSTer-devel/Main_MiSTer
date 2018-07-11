@@ -521,14 +521,18 @@ void user_io_init(const char *path)
 
 				if (is_cpc_core())
 				{
-					sprintf(mainpath, "%s/boot.eZZ", user_io_get_core_name());
-					user_io_file_tx(mainpath, 0x40);
-					sprintf(mainpath, "%s/boot.eZ0", user_io_get_core_name());
-					user_io_file_tx(mainpath, 0x40);
-					for (int i = 0; i < 256; i++)
+					for (int m = 0; m < 3; m++)
 					{
-						sprintf(mainpath, "%s/boot.e%02X", user_io_get_core_name(), i);
-						user_io_file_tx(mainpath, 0x40);
+						const char *model = !m ? "" : (m == 1) ? "0" : "1";
+						sprintf(mainpath, "%s/boot%s.eZZ", user_io_get_core_name(), model);
+						user_io_file_tx(mainpath, 0x40 * (m + 1),0,1);
+						sprintf(mainpath, "%s/boot%s.eZ0", user_io_get_core_name(), model);
+						user_io_file_tx(mainpath, 0x40 * (m + 1),0,1);
+						for (int i = 0; i < 256; i++)
+						{
+							sprintf(mainpath, "%s/boot%s.e%02X", user_io_get_core_name(), model, i);
+							user_io_file_tx(mainpath, 0x40 * (m + 1),0,1);
+						}
 					}
 				}
 
@@ -884,12 +888,12 @@ int user_io_file_mount(char *name, unsigned char index)
 	return ret ? 1 : 0;
 }
 
-int user_io_file_tx(char* name, unsigned char index, char opensave)
+int user_io_file_tx(char* name, unsigned char index, char opensave, char mute)
 {
 	fileTYPE f = { 0 };
 	static uint8_t buf[1024];
 
-	if (!FileOpen(&f, name)) return 0;
+	if (!FileOpen(&f, name, mute)) return 0;
 
 	unsigned long bytes2send = f.size;
 
