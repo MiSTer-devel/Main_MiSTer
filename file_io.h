@@ -41,8 +41,8 @@ int  getStorage(int from_setting);
 void setStorage(int dev);
 int  isUSBMounted();
 
-int  FileOpenEx(fileTYPE *file, const char *name, int mode);
-int  FileOpen(fileTYPE *file, const char *name);
+int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0);
+int  FileOpen(fileTYPE *file, const char *name, char mute = 0);
 void FileClose(fileTYPE *file);
 
 int FileSeek(fileTYPE *file, __off64_t offset, int origin);

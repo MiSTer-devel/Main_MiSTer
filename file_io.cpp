@@ -46,7 +46,7 @@ void FileClose(fileTYPE *file)
 	file->fd = -1;
 }
 
-int FileOpenEx(fileTYPE *file, const char *name, int mode)
+int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 {
 	sprintf(full_path, "%s/%s", (mode == -1) ? "" : getRootDir(), name);
 
@@ -60,7 +60,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode)
 	file->fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode);
 	if (file->fd <= 0)
 	{
-		printf("FileOpenEx(open) File:%s, error: %d.\n", full_path, file->fd);
+		if(!mute) printf("FileOpenEx(open) File:%s, error: %d.\n", full_path, file->fd);
 		file->fd = -1;
 		return 0;
 	}
@@ -78,7 +78,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode)
 		int ret = fstat64(file->fd, &st);
 		if (ret < 0)
 		{
-			printf("FileOpenEx(fstat) File:%s, error: %d.\n", full_path, ret);
+			if (!mute) printf("FileOpenEx(fstat) File:%s, error: %d.\n", full_path, ret);
 			FileClose(file);
 			return 0;
 		}
@@ -92,9 +92,9 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode)
 	return 1;
 }
 
-int FileOpen(fileTYPE *file, const char *name)
+int FileOpen(fileTYPE *file, const char *name, char mute)
 {
-	return FileOpenEx(file, name, O_RDONLY);
+	return FileOpenEx(file, name, O_RDONLY, mute);
 }
 
 int FileNextSector(fileTYPE *file)
