@@ -36,6 +36,7 @@ uint8_t vol_att = 0;
 unsigned long vol_set_timeout = 0;
 
 fileTYPE sd_image[4] = { 0 };
+static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 
 // mouse and keyboard emulation state
 static int emu_mode = EMU_NONE;
@@ -852,6 +853,8 @@ int user_io_file_mount(char *name, unsigned char index)
 		ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 	}
 
+	buffer_lba[index] = ULLONG_MAX;
+
 	if (!ret)
 	{
 		writable = 0;
@@ -1264,7 +1267,6 @@ void user_io_poll()
 		else
 		{
 			static uint8_t buffer[4][512];
-			static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 			uint32_t lba;
 			uint16_t c = user_io_sd_get_status(&lba);
 			//if(c&3) printf("user_io_sd_get_status: cmd=%02x, lba=%08x\n", c, lba);
