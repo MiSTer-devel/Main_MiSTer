@@ -194,6 +194,11 @@ void OsdSetTitle(const char *s, int a)
 	}
 }
 
+void OsdSetArrow(int a)
+{
+	arrow = a;
+}
+
 void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char usebg)
 {
 	OsdWriteOffset(n, s, invert, stipple, 0, 0, usebg);

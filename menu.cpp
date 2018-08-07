@@ -629,6 +629,38 @@ void printSysInfo()
 	}
 }
 
+int  firstmenu = 0;
+int  adjvisible;
+char lastrow[256];
+
+void MenuWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, int arrow = 0)
+{
+	int row = n - firstmenu;
+
+	if (row < 0)
+	{
+		if (invert) adjvisible = row;
+		return;
+	}
+
+	if (row >= OsdGetSize())
+	{
+		if (invert) adjvisible = row - OsdGetSize() + 1;
+		return;
+	}
+
+	if (row == (OsdGetSize() - 1))
+	{
+		int len = strlen(s);
+		if (len > 255) len = 255;
+		memcpy(lastrow, s, len);
+		lastrow[len] = 0;
+	}
+
+	OsdSetArrow(arrow);
+	OsdWriteOffset(row, s, invert, stipple, 0, (row == 0 && firstmenu) ? 17 : (row == (OsdGetSize()-1) && !arrow) ? 16 : 0, 0);
+}
+
 void HandleUI(void)
 {
 	switch (user_io_core_type())
@@ -734,8 +766,7 @@ void HandleUI(void)
 
 	if (menu || select || up || down || left || right)
 	{
-		if (helpstate)
-			OsdWrite(OsdGetSize()-1, STD_EXIT, (menumask - ((1 << (menusub + 1)) - 1)) <= 0, 0); // Redraw the Exit line...
+		if (helpstate) OsdWrite(OsdGetSize()-1, STD_EXIT, (menumask - ((1 << (menusub + 1)) - 1)) <= 0, 0); // Redraw the Exit line...
 		helpstate = 0;
 		helptext_timer = GetTimer(HELPTEXT_DELAY);
 	}
@@ -747,7 +778,7 @@ void HandleUI(void)
 			if (CheckTimer(helptext_timer))
 			{
 				helptext_timer = GetTimer(FRAME_DELAY);
-				OsdWriteOffset(OsdGetSize() - 1, STD_EXIT, 0, 0, helpstate, 0);
+				OsdWriteOffset(OsdGetSize() - 1, (menustate == MENU_8BIT_MAIN2) ? lastrow : STD_EXIT, 0, 0, helpstate, 0);
 				++helpstate;
 			}
 		}
@@ -757,7 +788,9 @@ void HandleUI(void)
 			++helpstate;
 		}
 		else
-			ScrollText(OsdGetSize()-1, helptext, 0, 0, 0, 0);
+		{
+			ScrollText(OsdGetSize() - 1, helptext, 0, 0, 0, 0);
+		}
 	}
 
 	// Standardised menu up/down.
@@ -769,16 +802,18 @@ void HandleUI(void)
 		if (down && (menumask >= (1 << (menusub + 1))))	// Any active entries left?
 		{
 			do
+			{
 				menusub++;
-			while ((menumask & (1 << menusub)) == 0);
+			} while ((menumask & (1 << menusub)) == 0);
 			menustate = parentstate;
 		}
 
-		if (up && menusub > 0 && (menumask << (OsdGetSize() - menusub)))
+		if (up && menusub > 0)
 		{
 			do
+			{
 				--menusub;
-			while ((menumask & (1 << menusub)) == 0);
+			} while ((menumask & (1 << menusub)) == 0);
 			menustate = parentstate;
 		}
 	}
@@ -796,6 +831,7 @@ void HandleUI(void)
 		OsdDisable();
 		menustate = MENU_NONE2;
 		OsdSetSize(8);
+		firstmenu = 0;
 		break;
 
 	case MENU_INFO:
@@ -959,138 +995,155 @@ void HandleUI(void)
 
 	case MENU_8BIT_MAIN1: {
 		int entry = 0;
-		int selentry;
+		while(1)
+		{
+			adjvisible = 0;
+			entry = 0;
+			int selentry = 0;
+			joy_bcount = 0;
+			menumask = 0;
+			p = user_io_get_core_name();
+			if (!p[0]) OsdCoreNameSet("8BIT");
+			else      OsdCoreNameSet(p);
 
-		joy_bcount = 0;
-		selentry = 0;
-		entry = 0;
-		menumask = 0;
-		p = user_io_get_core_name();
-		if (!p[0]) OsdSetTitle("8BIT", OSD_ARROW_RIGHT);
-		else      OsdSetTitle(p, OSD_ARROW_RIGHT);
+			OsdSetTitle(OsdCoreName(), 0);
 
-		if (!p[0]) OsdCoreNameSet("8BIT");
-		else      OsdCoreNameSet(p);
-
-		// add options as requested by core
-		int i = 2;
-		do {
-			char* pos;
-			unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
-
-			p = user_io_8bit_get_string(i);
-			//printf("Option %d: %s\n", i-1, p);
-
-			// check for 'F'ile or 'S'D image strings
-			if (p && ((p[0] == 'F') || (p[0] == 'S'))) {
-				substrcpy(s, p, 2);
-				if (strlen(s)) {
-					strcpy(s, " ");
-					substrcpy(s + 1, p, 2);
-					strcat(s, " *.");
-				}
-				else {
-					if (p[0] == 'F') strcpy(s, " Load *.");
-					else            strcpy(s, " Mount *.");
-				}
-				pos = s + strlen(s);
-				substrcpy(pos, p, 1);
-				strcpy(pos, GetExt(pos));
-				OsdWrite(entry, s, menusub == selentry, 0);
-
-				// add bit in menu mask
-				menumask = (menumask << 1) | 1;
-				entry++;
-				selentry++;
-			}
-
-			// check for 'T'oggle and 'R'eset (toggle and then close menu) strings
-			if (p && ((p[0] == 'T') || (p[0] == 'R'))) {
-
-				s[0] = ' ';
-				substrcpy(s + 1, p, 1);
-				OsdWrite(entry, s, menusub == selentry, 0);
-
-				// add bit in menu mask
-				menumask = (menumask << 1) | 1;
-				entry++;
-				selentry++;
-			}
-
-			// check for 'O'ption strings
-			if (p && (p[0] == 'O'))
+			// add options as requested by core
+			int i = 2;
+			do
 			{
-				//option handled by ARM
-				if (p[1] == 'X') p++;
+				char* pos;
+				unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
 
-				unsigned long x = getStatus(p, status);
+				p = user_io_8bit_get_string(i++);
+				//printf("Option %d: %s\n", i-1, p);
 
-				// get currently active option
-				substrcpy(s, p, 2 + x);
-				char l = strlen(s);
-				if (!l) {
-					// option's index is outside of available values.
-					// reset to 0.
-					x = 0;
-					user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
-					substrcpy(s, p, 2 + x);
-					l = strlen(s);
-				}
-
-				s[0] = ' ';
-				substrcpy(s + 1, p, 1);
-
-				char *end = s + strlen(s) - 1;
-				while ((end > s+1) && (*end == ' ')) end--;
-				*(end + 1) = 0;
-
-				strcat(s, ":");
-				l = 28 - l - strlen(s);
-				while (l--) strcat(s, " ");
-
-				substrcpy(s + strlen(s), p, 2 + x);
-
-				OsdWrite(entry, s, menusub == selentry, 0);
-
-				// add bit in menu mask
-				menumask = (menumask << 1) | 1;
-				entry++;
-				selentry++;
-			}
-
-			// delimiter
-			if (p && (p[0] == '-'))
-			{
-				OsdWrite(entry, "", 0, 0);
-				entry++;
-			}
-
-			// check for 'V'ersion strings
-			if (p && (p[0] == 'V'))
-			{
-				// get version string
-				strcpy(s, OsdCoreName());
-				strcat(s, " ");
-				substrcpy(s + strlen(s), p, 1);
-				OsdCoreNameSet(s);
-			}
-
-			if (p && (p[0] == 'J'))
-			{
-				// joystick button names.
-				for (int n = 0; n < 12; n++)
+				// check for 'F'ile or 'S'D image strings
+				if (p && ((p[0] == 'F') || (p[0] == 'S')))
 				{
-					substrcpy(joy_bnames[n], p, n+1);
-					//printf("joy_bname = %s\n", joy_bnames[n]);
-					if(!joy_bnames[n][0]) break;
-					joy_bcount++;
+					substrcpy(s, p, 2);
+					if (strlen(s))
+					{
+						strcpy(s, " ");
+						substrcpy(s + 1, p, 2);
+						strcat(s, " *.");
+					}
+					else
+					{
+						if (p[0] == 'F') strcpy(s, " Load *.");
+						else            strcpy(s, " Mount *.");
+					}
+					pos = s + strlen(s);
+					substrcpy(pos, p, 1);
+					strcpy(pos, GetExt(pos));
+					MenuWrite(entry, s, menusub == selentry, 0);
+
+					// add bit in menu mask
+					menumask = (menumask << 1) | 1;
+					entry++;
+					selentry++;
 				}
 
-				//printf("joy_bcount = %d\n", joy_bcount);
-			}
+				// check for 'T'oggle and 'R'eset (toggle and then close menu) strings
+				if (p && ((p[0] == 'T') || (p[0] == 'R')))
+				{
 
-			i++;
-		} while (p);
+					s[0] = ' ';
+					substrcpy(s + 1, p, 1);
+					MenuWrite(entry, s, menusub == selentry, 0);
+
+					// add bit in menu mask
+					menumask = (menumask << 1) | 1;
+					entry++;
+					selentry++;
+				}
+
+				// check for 'O'ption strings
+				if (p && (p[0] == 'O'))
+				{
+					//option handled by ARM
+					if (p[1] == 'X') p++;
+
+					unsigned long x = getStatus(p, status);
+
+					// get currently active option
+					substrcpy(s, p, 2 + x);
+					char l = strlen(s);
+					if (!l)
+					{
+						// option's index is outside of available values.
+						// reset to 0.
+						x = 0;
+						user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
+						substrcpy(s, p, 2 + x);
+						l = strlen(s);
+					}
+
+					s[0] = ' ';
+					substrcpy(s + 1, p, 1);
+
+					char *end = s + strlen(s) - 1;
+					while ((end > s + 1) && (*end == ' ')) end--;
+					*(end + 1) = 0;
+
+					strcat(s, ":");
+					l = 28 - l - strlen(s);
+					while (l--) strcat(s, " ");
+
+					substrcpy(s + strlen(s), p, 2 + x);
+
+					MenuWrite(entry, s, menusub == selentry, 0);
+
+					// add bit in menu mask
+					menumask = (menumask << 1) | 1;
+					entry++;
+					selentry++;
+				}
+
+				// delimiter
+				if (p && (p[0] == '-'))
+				{
+					MenuWrite(entry, "", 0, 0);
+					entry++;
+				}
+
+				// check for 'V'ersion strings
+				if (p && (p[0] == 'V'))
+				{
+					// get version string
+					strcpy(s, OsdCoreName());
+					strcat(s, " ");
+					substrcpy(s + strlen(s), p, 1);
+					OsdCoreNameSet(s);
+				}
+
+				if (p && (p[0] == 'J'))
+				{
+					// joystick button names.
+					for (int n = 0; n < 12; n++)
+					{
+						substrcpy(joy_bnames[n], p, n + 1);
+						//printf("joy_bname = %s\n", joy_bnames[n]);
+						if (!joy_bnames[n][0]) break;
+						joy_bcount++;
+					}
+
+					//printf("joy_bcount = %d\n", joy_bcount);
+				}
+			} while (p);
+
+			if (!entry) break;
+
+			for (; entry < OsdGetSize() - 1; entry++) MenuWrite(entry, "", 0, 0);
+
+			// exit row
+			MenuWrite(entry, STD_EXIT, menusub == selentry, 0, OSD_ARROW_RIGHT);
+			menusub_last = selentry;
+			menumask = (menumask << 1) | 1;
+
+			if (!adjvisible) break;
+			firstmenu += adjvisible;
+		}
 
 		if (!entry)
 		{
@@ -1099,15 +1152,8 @@ void HandleUI(void)
 			break;
 		}
 
-		// exit row
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == selentry, 0);
-		menusub_last = selentry;
-		menumask = (menumask << 1) | 1;
-
-		for (; entry<OsdGetSize() - 1; entry++) OsdWrite(entry, "", 0, 0);
-
+		parentstate = menustate;
 		menustate = MENU_8BIT_MAIN2;
-		parentstate = MENU_8BIT_MAIN1;
 
 		// set helptext with core display on top of basic info
 		sprintf(helptext_custom, HELPTEXT_SPACER);
