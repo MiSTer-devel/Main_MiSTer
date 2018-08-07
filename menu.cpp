@@ -972,17 +972,6 @@ void HandleUI(void)
 		if (!p[0]) OsdCoreNameSet("8BIT");
 		else      OsdCoreNameSet(p);
 
-		// check if there's a file type supported
-		p = user_io_8bit_get_string(1);
-		if (p && strlen(p)) {
-			entry++;
-			selentry++;
-			menumask = 1;
-			strcpy(s, " Load *.");
-			strcat(s, GetExt(p));
-			OsdWrite(0, s, menusub == 0, 0);
-		}
-
 		// add options as requested by core
 		int i = 2;
 		do {
