@@ -920,7 +920,7 @@ int user_io_file_tx(char* name, unsigned char index, char opensave, char mute)
 	spi8(0xff);
 	DisableFpga();
 
-	if (strlen(f.name) > 4 && !strcasecmp(f.name + strlen(f.name) - 4, ".tzx"))
+	if (strlen(f.name) > 4 && (!strcasecmp(f.name + strlen(f.name) - 4, ".tzx") || !strcasecmp(f.name + strlen(f.name) - 4, ".cdt")))
 	{
 		printf("Processing TZX...\n");
 		

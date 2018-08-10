@@ -204,7 +204,7 @@ void PauseWave(unsigned int pause_ms)
 	// Waits for "pause" milliseconds
 
 	int p;
-	if ((!skippause) || (curr != (numblocks - 1)))
+	if (curr && ((!skippause) || (curr != (numblocks - 1))))
 	{
 		p = (unsigned int)((((float)pause_ms)*freq) / 1000.0);
 		PlayWave(p);
