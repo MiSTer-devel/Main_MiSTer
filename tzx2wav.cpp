@@ -70,6 +70,8 @@ static const char *build= "20060225";
 
 // Other defines ...
 
+#define LOAMP     0x26      // Low Level Amplitude  (-3 dB)
+#define HIAMP     0xDA      // High Level Amplitude (-3 dB)
 static unsigned int freq = 44100;  // Default Sample Frequency
 
 static unsigned char *mem = 0; // File in Memory
@@ -153,6 +155,9 @@ static void core_write(const void *buf, int size)
 // CSW v1.01 handling routines
 ///////////////////////////////
 
+static int amp, cswamp;
+static unsigned int cswlen;
+
 void CSW1_Init(void)
 {
 	// Official CSW format documentation at:
@@ -168,20 +173,31 @@ void CSW1_Init(void)
 	core_write(&CompType, 1);   // Compression Type
 	core_write(&inv, 1);        // Polarity
 	core_write(&Reserved, 3);   // Reserved bytes
+
+	cswamp = LOAMP;
+	cswlen = 0;
 }
 
 void CSW1_Write(unsigned int samples)
 {
-	if (samples < 256)
+	if (cswamp == amp)
 	{
-		core_write(&samples, 1);
+		cswlen += samples;
+		return;
+	}
+	if (cswlen < 256)
+	{
+		core_write(&cswlen, 1);
 	}
 	else
 	{
 		int zero = 0;
 		core_write(&zero, 1);
-		core_write(&samples, 4);
+		core_write(&cswlen, 4);
 	}
+
+	cswamp = amp;
+	cswlen = samples;
 }
 
 //////////////////////////////////
@@ -194,6 +210,15 @@ unsigned int Samples(unsigned int n)
 	return ((unsigned int)(0.5 + (cycle*(double)n)));
 }
 
+void ToggleAmp(void)
+{
+	// Toggles the sign of the wave
+	// WHOLE CONCEPT TO BE RECODED IN ToggleSgn();
+
+	if (amp == LOAMP) amp = HIAMP;
+	else amp = LOAMP;
+}
+
 void PlayWave(unsigned int len)
 {
 	CSW1_Write(len);
@@ -204,10 +229,20 @@ void PauseWave(unsigned int pause_ms)
 	// Waits for "pause" milliseconds
 
 	int p;
-	if (curr && ((!skippause) || (curr != (numblocks - 1))))
+	if (((!skippause) || (curr != (numblocks - 1))))
 	{
+		if (!curr && pause_ms > 2000) pause_ms = 2000;
 		p = (unsigned int)((((float)pause_ms)*freq) / 1000.0);
 		PlayWave(p);
+	}
+}
+
+void PlayFinish()
+{
+	if (cswlen)
+	{
+		ToggleAmp();
+		CSW1_Write(0);
 	}
 }
 
@@ -218,7 +253,9 @@ void PauseWave(unsigned int pause_ms)
 void PlayC64(unsigned int len)
 {
 	PlayWave(len);
+	ToggleAmp();
 	PlayWave(len);
+	ToggleAmp();
 }
 
 void PlayC64ROMByte(char byte, int finish)
@@ -647,6 +684,7 @@ void Analyse_ID12(void)  // Pure Tone
 	while (pilot)
 	{
 		PlayWave(sb_pilot);
+        ToggleAmp();
 		pilot--;
 	}
 }
@@ -659,6 +697,7 @@ void Analyse_ID13(void)  // Sequence of Pulses
 	{
 		sb_pulse = Samples(Get2(&data[0]));
 		PlayWave(sb_pulse);
+        ToggleAmp();
 		pilot--;
 		data += 2;
 	}
@@ -699,6 +738,8 @@ void Analyse_ID15(void)  // Direct Recording
 		databyte = data[datapos];
 		while (bitcount)
 		{
+			if (databyte & 0x80) amp = HIAMP;
+			else amp = LOAMP;
 			PlayWave(sb_pulse);
 			databyte <<= 1;
 			bitcount--;
@@ -706,6 +747,7 @@ void Analyse_ID15(void)  // Direct Recording
 		datalen--;
 		datapos++;
 	}
+	ToggleAmp();
 	if (pause_ms) PauseWave(pause_ms);
 }
 
@@ -756,15 +798,18 @@ void Analyse_ID17(void)  // C64 Turbo Tape Data Block
 void Analyse_ID20(void)  // Pause or Stop the Tape command
 {
 	pause_ms = Get2(&data[0]);
+	amp = LOAMP;
 	if (pause_ms)
 	{
 		if (draw) printf("    Pause                 Length: %2.3fs\n", ((float)pause_ms) / 1000.0);
 		PauseWave(pause_ms);
+		amp = LOAMP;
 	}
 	else
 	{
 		if (draw) printf("    Stop the tape command!\n");
 		PauseWave(2000); // 2 seconds of pause in "Stop Tape" wave output
+		amp = LOAMP;
 	}
 }
 
@@ -858,6 +903,7 @@ void Analyse_ID28(void)  // Select Block
 	//no interactive shell. choose 1.
 	PauseWave(200);
 	int k = 1;
+	amp = LOAMP;
 
 	/*
 	printf(">> Press the number!\n");
@@ -878,6 +924,7 @@ void Analyse_ID2A(void)  // Stop the tape if in 48k mode
 {
 	if (draw) printf("    Stop the tape in 48k mode!\n");
 	PauseWave(3000);
+    amp=LOAMP;
 }
 
 void Analyse_ID30(void)  // Description
@@ -1101,6 +1148,7 @@ int tzx2csw(fileTYPE *f)
 	printf(" file using %d Hz frequency ...\n\n", freq);
 
 	CSW1_Init();
+	amp = LOAMP;
 
 	singlepulse = 0;
 	manchester = 0;
@@ -1189,15 +1237,18 @@ int tzx2csw(fileTYPE *f)
 				while (pilot)  // Play PILOT TONE
 				{
 					PlayWave(sb_pilot);
+					ToggleAmp();
 					pilot--;
 				}
 				if (sb_sync1)  // Play first SYNC pulse
 				{
 					PlayWave(sb_sync1);
+					ToggleAmp();
 				}
 				if (sb_sync2)  // Play second SYNC pulse
 				{
 					PlayWave(sb_sync2);
+					ToggleAmp();
 				}
 				datapos = 0;
 				while (datalen)  // Play actual DATA
@@ -1210,9 +1261,11 @@ int tzx2csw(fileTYPE *f)
 						if (databyte & 0x80) sb_bit = sb_bit1;
 						else sb_bit = sb_bit0;
 						PlayWave(sb_bit);   // Play first pulse of the bit
+						ToggleAmp();
 						if (!singlepulse)
 						{
 							PlayWave(sb_bit); // Play second pulse of the bit
+							ToggleAmp();
 						}
 						databyte <<= 1;
 						bitcount--;
@@ -1226,6 +1279,7 @@ int tzx2csw(fileTYPE *f)
 				if (pause_ms)
 				{
 					PauseWave(1);
+					amp = LOAMP;
 					if (pause_ms > 1) PauseWave(pause_ms - 1);
 				}
 			}
@@ -1248,6 +1302,7 @@ int tzx2csw(fileTYPE *f)
 				sb_finishdata_s = Samples(sb_finishdata_s);
 				sb_trailing = Samples(sb_trailing);
 				num_lead_in = 0;
+				amp = LOAMP;        // This might be just opposite !!!!
 				while (pilot)     // Play PILOT TONE
 				{
 					PlayC64(sb_pilot);
@@ -1283,7 +1338,9 @@ int tzx2csw(fileTYPE *f)
 				if (pause_ms)
 				{
 					PauseWave(pause_ms / 2);
+					ToggleAmp();
 					PauseWave((pause_ms / 2) + (pause_ms % 2));
+					ToggleAmp();
 				}
 			}
 		}
@@ -1297,6 +1354,7 @@ int tzx2csw(fileTYPE *f)
 			{
 				sb_bit1 = Samples(sb_bit1);
 				sb_bit0 = Samples(sb_bit0);
+				amp = LOAMP;           // This might be just opposite !!!!
 				while (num_lead_in)  // Play Lead In bytes
 				{
 					bitcount = 8;
@@ -1325,7 +1383,9 @@ int tzx2csw(fileTYPE *f)
 				if (pause_ms)
 				{
 					PauseWave(pause_ms / 2);
+					ToggleAmp();
 					PauseWave((pause_ms / 2) + (pause_ms % 2));
+					ToggleAmp();
 				}
 			}
 		}
@@ -1334,6 +1394,7 @@ int tzx2csw(fileTYPE *f)
 	} // This is the main loop end
 
 	PauseWave(200);  // Finish always with 200 ms of pause after the last block
+	PlayFinish();
 	printf("\n%d bytes sent to the core.\n", oflen);
 	free(mem);
 	return 1;
