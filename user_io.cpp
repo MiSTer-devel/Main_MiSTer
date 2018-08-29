@@ -2062,22 +2062,40 @@ void user_io_kbd(uint16_t key, int press)
 unsigned char user_io_ext_idx(char *name, char* ext)
 {
 	unsigned char idx = 0;
-	int len = strlen(ext);
 	printf("Subindex of \"%s\" in \"%s\": ", name, ext);
 
-	while ((len>3) && *ext)
+	char *p = strrchr(name, '.');
+	if (p)
 	{
-		if (!strncasecmp(name + strlen(name) - 3, ext, 3))
+		p++;
+		char e[4] = "   ";
+		for (int i = 0; i < 3; i++)
 		{
-			printf("%d\n", idx);
-			return idx;
+			if (!*p) break;
+			e[i] = *p++;
 		}
-		if (strlen(ext) <= 3) break;
-		idx++;
-		ext += 3;
+
+		while (*ext)
+		{
+			int found = 1;
+			for (int i = 0; i < 3; i++)
+			{
+				if (ext[i] != '?' && (toupper(ext[i]) != toupper(e[i]))) found = 0;
+			}
+
+			if (found)
+			{
+				printf("%d\n", idx);
+				return idx;
+			}
+
+			if (strlen(ext) <= 3) break;
+			idx++;
+			ext += 3;
+		}
 	}
 
-	printf("0\n", name, ext, 0);
+	printf("not found! use 0\n", name, ext, 0);
 	return 0;
 }
 

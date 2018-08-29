@@ -206,6 +206,7 @@ char* GetExt(char *ext)
 	while (*ext) {
 		strcpy(p, ",");
 		strncat(p, ext, 3);
+		while (*(p + strlen(p) - 1) == ' ') *(p + strlen(p) - 1) = 0;
 		if (strlen(ext) <= 3) break;
 		ext += 3;
 		p += strlen(p);
