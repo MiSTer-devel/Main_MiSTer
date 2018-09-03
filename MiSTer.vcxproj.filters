@@ -80,6 +80,9 @@
     <ClCompile Include="battery.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sxmlc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="archie.h">
@@ -173,6 +176,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="battery.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sxmlc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

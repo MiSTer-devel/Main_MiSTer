@@ -8,7 +8,7 @@ unsigned long GetTimer(unsigned long offset);
 unsigned long CheckTimer(unsigned long t);
 void WaitTimer(unsigned long time);
 
-void hexdump(void *data, uint16_t size, uint16_t offset);
+void hexdump(void *data, uint16_t size, uint16_t offset = 0);
 
 // minimig reset stuff
 #define SPI_RST_USR         0x1

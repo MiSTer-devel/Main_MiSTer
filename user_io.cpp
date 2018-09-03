@@ -29,6 +29,7 @@
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
 #include "brightness.h"
+#include "sxmlc.h"
 
 static char core_path[1024];
 
@@ -152,6 +153,11 @@ char is_x86_core()
 char is_cpc_core()
 {
 	return !strcasecmp(core_name, "amstrad");
+}
+
+char is_zx81_core()
+{
+	return !strcasecmp(core_name, "zx81");
 }
 
 static int is_no_type = 0;
@@ -891,6 +897,288 @@ int user_io_file_mount(char *name, unsigned char index)
 	return ret ? 1 : 0;
 }
 
+static unsigned char col_attr[1025];
+static int col_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
+{
+	static int in_border = 0;
+	static int in_color = 0;
+	static int in_bright = 0;
+	static int in_entry = 0;
+	static int in_line = 0;
+	static int in_paper = 0;
+	static int in_ink = 0;
+	static int end = 0;
+	static int start = 0;
+	static int line = 0;
+
+	static char tmp[8];
+
+	switch (evt)
+	{
+	case XML_EVENT_START_NODE:
+		if (!strcasecmp(node->tag, "colourisation"))
+		{
+			in_border = 0;
+			in_color = 0;
+			in_bright = 0;
+			in_entry = 0;
+			in_line = 0;
+			in_paper = 0;
+			in_ink = 0;
+		}
+
+		if (!strcasecmp(node->tag, "border")) in_border = 1;
+		if (!strcasecmp(node->tag, "colour")) in_color = 1;
+		if (!strcasecmp(node->tag, "bright")) in_bright = 1;
+
+		if (!strcasecmp(node->tag, "entry"))
+		{
+			int ncode = -1;
+			int ncnt = -1;
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "code")) ncode = atoi(node->attributes[i].value);
+				if (!strcasecmp(node->attributes[i].name, "quantity")) ncnt = atoi(node->attributes[i].value);
+			}
+
+			in_entry = 0;
+			if (ncode >= 0 && ncode <= 127)
+			{
+				start = ncode;
+				if (ncnt < 1) ncnt = 1;
+				end = start + ncnt;
+				if (end > 128) end = 128;
+				memset(tmp, 0, sizeof(tmp));
+				in_entry = 1;
+			}
+		}
+
+		if (!strcasecmp(node->tag, "line"))
+		{
+			int nline = -1;
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "index")) nline = atoi(node->attributes[i].value);
+			}
+
+			in_line = 0;
+			if (nline >= 0 && nline <= 7)
+			{
+				line = nline;
+				if (in_entry) tmp[line] = 0;
+				in_line = 1;
+			}
+		}
+
+		if (!strcasecmp(node->tag, "paper")) in_paper = 1;
+		if (!strcasecmp(node->tag, "ink"))   in_ink = 1;
+		break;
+
+	case XML_EVENT_END_NODE:
+		if (!strcasecmp(node->tag, "border")) in_border = 0;
+		if (!strcasecmp(node->tag, "colour")) in_color = 0;
+		if (!strcasecmp(node->tag, "bright")) in_bright = 0;
+		if (!strcasecmp(node->tag, "line"))   in_line = 0;
+		if (!strcasecmp(node->tag, "paper"))  in_paper = 0;
+		if (!strcasecmp(node->tag, "ink"))    in_ink = 0;
+		if (!strcasecmp(node->tag, "entry"))
+		{
+			if (in_entry)
+			{
+				for (int i = start; i < end; i++) memcpy(&col_attr[i * 8], tmp, 8);
+			}
+			in_entry = 0;
+		}
+		break;
+
+	case XML_EVENT_TEXT:
+		if (in_border && in_color)  col_attr[1024] = (char)((col_attr[1024] & 8) | (atoi(text) & 7));
+		if (in_border && in_bright) col_attr[1024] = (char)((col_attr[1024] & 7) | ((atoi(text) & 1) << 3));
+
+		if (in_entry && in_line && in_ink   && in_color)  tmp[line] = (char)((tmp[line] & 0xF8) | (atoi(text) & 7));
+		if (in_entry && in_line && in_ink   && in_bright) tmp[line] = (char)((tmp[line] & 0xF7) | ((atoi(text) & 1) << 3));
+		if (in_entry && in_line && in_paper && in_color)  tmp[line] = (char)((tmp[line] & 0x8F) | ((atoi(text) & 7) << 4));
+		if (in_entry && in_line && in_paper && in_bright) tmp[line] = (char)((tmp[line] & 0x7F) | ((atoi(text) & 1) << 7));
+		break;
+
+	case XML_EVENT_ERROR:
+		printf("XML parse: %s: ERROR %d\n", text, n);
+		break;
+	default:
+		break;
+	}
+
+	return true;
+}
+
+static const unsigned char defchars[512] = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0xF0, 0xF0, 0xF0, 0x00, 0x00, 0x00, 0x00,
+	0x0F, 0x0F, 0x0F, 0x0F, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
+	0x0F, 0x0F, 0x0F, 0x0F, 0xF0, 0xF0, 0xF0, 0xF0, 0xFF, 0xFF, 0xFF, 0xFF, 0xF0, 0xF0, 0xF0, 0xF0,
+	0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0x00, 0x00, 0x00, 0x00, 0xAA, 0x55, 0xAA, 0x55,
+	0xAA, 0x55, 0xAA, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x1C, 0x22, 0x78, 0x20, 0x20, 0x7E, 0x00, 0x00, 0x08, 0x3E, 0x28, 0x3E, 0x0A, 0x3E, 0x08,
+	0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x10, 0x00, 0x00, 0x3C, 0x42, 0x04, 0x08, 0x00, 0x08, 0x00,
+	0x00, 0x04, 0x08, 0x08, 0x08, 0x08, 0x04, 0x00, 0x00, 0x20, 0x10, 0x10, 0x10, 0x10, 0x20, 0x00,
+	0x00, 0x00, 0x10, 0x08, 0x04, 0x08, 0x10, 0x00, 0x00, 0x00, 0x04, 0x08, 0x10, 0x08, 0x04, 0x00,
+	0x00, 0x00, 0x00, 0x3E, 0x00, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x08, 0x08, 0x3E, 0x08, 0x08, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14, 0x08, 0x3E, 0x08, 0x14, 0x00,
+	0x00, 0x00, 0x02, 0x04, 0x08, 0x10, 0x20, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x10, 0x10, 0x20,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x08, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x18, 0x18, 0x00,
+	0x00, 0x3C, 0x46, 0x4A, 0x52, 0x62, 0x3C, 0x00, 0x00, 0x18, 0x28, 0x08, 0x08, 0x08, 0x3E, 0x00,
+	0x00, 0x3C, 0x42, 0x02, 0x3C, 0x40, 0x7E, 0x00, 0x00, 0x3C, 0x42, 0x0C, 0x02, 0x42, 0x3C, 0x00,
+	0x00, 0x08, 0x18, 0x28, 0x48, 0x7E, 0x08, 0x00, 0x00, 0x7E, 0x40, 0x7C, 0x02, 0x42, 0x3C, 0x00,
+	0x00, 0x3C, 0x40, 0x7C, 0x42, 0x42, 0x3C, 0x00, 0x00, 0x7E, 0x02, 0x04, 0x08, 0x10, 0x10, 0x00,
+	0x00, 0x3C, 0x42, 0x3C, 0x42, 0x42, 0x3C, 0x00, 0x00, 0x3C, 0x42, 0x42, 0x3E, 0x02, 0x3C, 0x00,
+	0x00, 0x3C, 0x42, 0x42, 0x7E, 0x42, 0x42, 0x00, 0x00, 0x7C, 0x42, 0x7C, 0x42, 0x42, 0x7C, 0x00,
+	0x00, 0x3C, 0x42, 0x40, 0x40, 0x42, 0x3C, 0x00, 0x00, 0x78, 0x44, 0x42, 0x42, 0x44, 0x78, 0x00,
+	0x00, 0x7E, 0x40, 0x7C, 0x40, 0x40, 0x7E, 0x00, 0x00, 0x7E, 0x40, 0x7C, 0x40, 0x40, 0x40, 0x00,
+	0x00, 0x3C, 0x42, 0x40, 0x4E, 0x42, 0x3C, 0x00, 0x00, 0x42, 0x42, 0x7E, 0x42, 0x42, 0x42, 0x00,
+	0x00, 0x3E, 0x08, 0x08, 0x08, 0x08, 0x3E, 0x00, 0x00, 0x02, 0x02, 0x02, 0x42, 0x42, 0x3C, 0x00,
+	0x00, 0x44, 0x48, 0x70, 0x48, 0x44, 0x42, 0x00, 0x00, 0x40, 0x40, 0x40, 0x40, 0x40, 0x7E, 0x00,
+	0x00, 0x42, 0x66, 0x5A, 0x42, 0x42, 0x42, 0x00, 0x00, 0x42, 0x62, 0x52, 0x4A, 0x46, 0x42, 0x00,
+	0x00, 0x3C, 0x42, 0x42, 0x42, 0x42, 0x3C, 0x00, 0x00, 0x7C, 0x42, 0x42, 0x7C, 0x40, 0x40, 0x00,
+	0x00, 0x3C, 0x42, 0x42, 0x52, 0x4A, 0x3C, 0x00, 0x00, 0x7C, 0x42, 0x42, 0x7C, 0x44, 0x42, 0x00,
+	0x00, 0x3C, 0x40, 0x3C, 0x02, 0x42, 0x3C, 0x00, 0x00, 0xFE, 0x10, 0x10, 0x10, 0x10, 0x10, 0x00,
+	0x00, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3C, 0x00, 0x00, 0x42, 0x42, 0x42, 0x42, 0x24, 0x18, 0x00,
+	0x00, 0x42, 0x42, 0x42, 0x42, 0x5A, 0x24, 0x00, 0x00, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x00,
+	0x00, 0x82, 0x44, 0x28, 0x10, 0x10, 0x10, 0x00, 0x00, 0x7E, 0x04, 0x08, 0x10, 0x20, 0x7E, 0x00
+};
+
+
+static int chr_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
+{
+	static int in_entry = 0;
+	static int in_line = 0;
+	static int code = 0;
+	static int line = 0;
+
+	switch (evt)
+	{
+	case XML_EVENT_START_NODE:
+		if (!strcasecmp(node->tag, "definition"))
+		{
+			in_entry = 0;
+			in_line = 0;
+			code = 0;
+			line = 0;
+		}
+
+		if (!strcasecmp(node->tag, "entry"))
+		{
+			int ncode = -1;
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "code")) ncode = atoi(node->attributes[i].value);
+			}
+
+			in_entry = 0;
+			if (ncode >= 0 && ncode <= 63)
+			{
+				code = ncode;
+				in_entry = 1;
+			}
+
+			if (ncode >= 128 && ncode <= 191)
+			{
+				code = ncode - 64;
+				in_entry = 1;
+			}
+		}
+
+		if (!strcasecmp(node->tag, "line"))
+		{
+			int nline = -1;
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "index")) nline = atoi(node->attributes[i].value);
+			}
+
+			in_line = 0;
+			if (nline >= 0 && nline <= 7)
+			{
+				line = nline;
+				in_line = 1;
+			}
+		}
+		break;
+
+	case XML_EVENT_END_NODE:
+		if (!strcasecmp(node->tag, "line"))  in_line = 0;
+		if (!strcasecmp(node->tag, "entry")) in_entry = 0;
+		break;
+
+	case XML_EVENT_TEXT:
+		if (in_entry && in_line)
+		{
+			unsigned char tmp = 0;
+			if (strlen(text) >= 8)
+			{
+				for (int i = 0; i < 8; i++) tmp = (tmp << 1) | ((text[i] == '1') ? 1 : 0);
+				if (code >= 64) tmp = ~tmp;
+			}
+			col_attr[code * 8 + line] = tmp;
+			in_line = 0;
+		}
+		break;
+
+	case XML_EVENT_ERROR:
+		printf("XML parse: %s: ERROR %d\n", text, n);
+		break;
+	default:
+		break;
+	}
+
+	return true;
+}
+
+static void send_pcolchr(char* name, unsigned char index, int type)
+{
+	static char full_path[1024];
+
+	sprintf(full_path, "%s/%s", getRootDir(), name);
+
+	char *p = strrchr(full_path, '.');
+	if (!p) p = full_path + strlen(full_path);
+	strcpy(p, type ? ".chr" : ".col");
+	
+	if (type)
+	{
+		memcpy(col_attr, defchars, sizeof(defchars));
+		memcpy(col_attr+sizeof(defchars), defchars, sizeof(defchars));
+	}
+	else memset(col_attr, 0, sizeof(col_attr));
+
+	SAX_Callbacks sax;
+	SAX_Callbacks_init(&sax);
+	sax.all_event = type ? chr_parse : col_parse;
+	if (XMLDoc_parse_file_SAX(full_path, &sax, 0))
+	{
+		printf("Send additional file %s\n", full_path);
+
+		//hexdump(col_attr, sizeof(col_attr));
+
+		user_io_set_index(index);
+
+		EnableFpga();
+		spi8(UIO_FILE_TX);
+		spi8(0xff);
+		DisableFpga();
+
+		EnableFpga();
+		spi8(UIO_FILE_TX_DAT);
+		spi_write(col_attr, type ? 1024 : 1025, fio_size);
+		DisableFpga();
+
+		// signal end of transmission
+		EnableFpga();
+		spi8(UIO_FILE_TX);
+		spi8(0x00);
+		DisableFpga();
+	}
+}
+
 int user_io_file_tx(char* name, unsigned char index, char opensave, char mute)
 {
 	fileTYPE f = { 0 };
@@ -901,7 +1189,7 @@ int user_io_file_tx(char* name, unsigned char index, char opensave, char mute)
 	unsigned long bytes2send = f.size;
 
 	/* transmit the entire file using one transfer */
-	printf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index&0x3F, index>>6);
+	printf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index & 0x3F, index >> 6);
 
 	// set index byte (0=bios rom, 1-n=OSD entry index)
 	user_io_set_index(index);
@@ -923,7 +1211,7 @@ int user_io_file_tx(char* name, unsigned char index, char opensave, char mute)
 	if (strlen(f.name) > 4 && (!strcasecmp(f.name + strlen(f.name) - 4, ".tzx") || !strcasecmp(f.name + strlen(f.name) - 4, ".cdt")))
 	{
 		printf("Processing TZX...\n");
-		
+
 		EnableFpga();
 		spi8(UIO_FILE_TX_DAT);
 		tzx2csw(&f);
@@ -953,7 +1241,9 @@ int user_io_file_tx(char* name, unsigned char index, char opensave, char mute)
 	if (opensave)
 	{
 		strcpy((char*)buf, name);
-		strcpy((char*)buf + strlen(name) - 4, ".sav");
+		char *p = strrchr((char*)buf, '.');
+		if (!p) p = (char*)buf + strlen(name);
+		strcpy(p, ".sav");
 		user_io_file_mount((char*)buf);
 	}
 
@@ -962,8 +1252,13 @@ int user_io_file_tx(char* name, unsigned char index, char opensave, char mute)
 	spi8(UIO_FILE_TX);
 	spi8(0x00);
 	DisableFpga();
-
 	printf("\n");
+
+	if (is_zx81_core() && index)
+	{
+		send_pcolchr(name, (index & 0x1F) | 0x20, 0);
+		send_pcolchr(name, (index & 0x1F) | 0x60, 1);
+	}
 	return 1;
 }
 

@@ -59,6 +59,7 @@
     <ClCompile Include="spi.cpp" />
     <ClCompile Include="st_ikbd.cpp" />
     <ClCompile Include="st_tos.cpp" />
+    <ClCompile Include="sxmlc.c" />
     <ClCompile Include="tzx2wav.cpp" />
     <ClCompile Include="user_io.cpp" />
     <ClCompile Include="x86.cpp" />
@@ -92,6 +93,7 @@
     <ClInclude Include="spi.h" />
     <ClInclude Include="st_ikbd.h" />
     <ClInclude Include="st_tos.h" />
+    <ClInclude Include="sxmlc.h" />
     <ClInclude Include="tzx2wav.h" />
     <ClInclude Include="user_io.h" />
     <ClInclude Include="x86.h" />
