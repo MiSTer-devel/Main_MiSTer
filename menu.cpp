@@ -33,6 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <netdb.h>
 #include <ifaddrs.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include "stdio.h"
 #include "string.h"
 #include "file_io.h"
@@ -91,7 +92,6 @@ enum MENU
 	MENU_SAVECONFIG_1,
 	MENU_SAVECONFIG_2,
 	MENU_FIRMWARE1,
-	MENU_FIRMWARE2,
 	MENU_FIRMWARE_CORE_FILE_SELECTED1,
 	MENU_FIRMWARE_CORE_FILE_SELECTED2,
 	MENU_FIRMWARE_CORE_FILE_CANCELED,
@@ -1604,7 +1604,7 @@ void HandleUI(void)
 				break;
 
 			case 5:  // Firmware submenu
-				menustate = MENU_FIRMWARE1;
+				//menustate = MENU_FIRMWARE1;
 				menusub = 0;
 				break;
 
@@ -2891,65 +2891,47 @@ void HandleUI(void)
 		helptext = helptexts[HELPTEXT_NONE];
 		parentstate = menustate;
 
-		OsdSetTitle(is_menu_core() ? "Settings" : "FW & Core", 0);
-		//OsdWrite(0, "", 0, 0);
+		OsdSetTitle("System Settings", 0);
 		sprintf(s, "   ARM  s/w ver. %s", version + 5);
-		OsdWrite(0, "", 0, 0);
-		OsdWrite(1, s, 0, 0);
+		OsdWrite(0, s, 0, 0);
 
-		if (is_menu_core())
 		{
-			menumask = 7;
-			OsdWrite(2, "", 0, 0);
-			if (getStorage(0))
+			uint64_t avail = 0;
+			struct statvfs buf;
+			memset(&buf, 0, sizeof(buf));
+			if (!statvfs(getRootDir(), &buf)) avail = buf.f_bsize * buf.f_bavail;
+			if(avail < (10ull*1024*1024*1024)) sprintf(s, "   Available space: %llumb", avail / (1024 * 1024));
+			else sprintf(s, "   Available space: %llugb", avail / (1024 * 1024 * 1024));
+			OsdWrite(3, s, 0, 0);
+		}
+		menumask = 7;
+		OsdWrite(1, "", 0, 0);
+		if (getStorage(0))
+		{
+			OsdWrite(2, "        Storage: USB", 0, 0);
+			OsdWrite(4, "      Switch to SD card", menusub == 0, 0);
+		}
+		else
+		{
+			if (getStorage(1))
 			{
-				OsdWrite(3, "      Using USB storage", 0, 0);
+				OsdWrite(2, " No USB found, using SD card", 0, 0);
 				OsdWrite(4, "      Switch to SD card", menusub == 0, 0);
 			}
 			else
 			{
-				if (getStorage(1))
-				{
-					OsdWrite(3, " No USB found, using SD card", 0, 0);
-					OsdWrite(4, "      Switch to SD card", menusub == 0, 0);
-				}
-				else
-				{
-					OsdWrite(3, "        Using SD card", 0, 0);
-					OsdWrite(4, "    Switch to USB storage", menusub == 0, !isUSBMounted());
-				}
+				OsdWrite(2, "      Storage: SD card", 0, 0);
+				OsdWrite(4, "        Switch to USB", menusub == 0, !isUSBMounted());
 			}
-			OsdWrite(5, "", 0, 0);
-			OsdWrite(6, " Remap keyboard            \x16", menusub == 1, 0);
-			OsdWrite(7, " Define joystick buttons   \x16", menusub == 2, 0);
-			OsdWrite(8, "", 0, 0);
-			OsdWrite(15, "", 0, 0);
-			sysinfo_timer = 0;
+		}
+		OsdWrite(5, "", 0, 0);
+		OsdWrite(6, " Remap keyboard            \x16", menusub == 1, 0);
+		OsdWrite(7, " Define joystick buttons   \x16", menusub == 2, 0);
+		OsdWrite(8, "", 0, 0);
+		OsdWrite(15, "", 0, 0);
+		sysinfo_timer = 0;
 
-			menustate = MENU_STORAGE;
-		}
-		else
-		{
-			menumask = 3;
-			OsdWrite(2, "", 0, 0);
-			OsdWrite(3, "", 0, 0);
-			int len = strlen(OsdCoreName());
-			if (len > 30) len = 30;
-			int sp = (30 - len) / 2;
-			s[0] = 0;
-			for (int i = 0; i < sp; i++) strcat(s, " ");
-			char *s2 = s + strlen(s);
-			char *s3 = OsdCoreName();
-			for (int i = 0; i < len; i++) *s2++ = *s3++;
-			*s2++ = 0;
-			OsdWrite(4, s, 0, 0);
-			OsdWrite(5, "", 0, 0);
-			OsdWrite(6, "       Change FPGA core", menusub == 0, 0);
-			for (int i = 7; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-			OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 1, 0);
-			menustate = MENU_FIRMWARE2;
-		}
-		break;
+		menustate = MENU_STORAGE;
 
 	case MENU_STORAGE:
 		if (menu)
@@ -3041,47 +3023,6 @@ void HandleUI(void)
 			finish_map_setting(menu);
 			menustate = MENU_FIRMWARE1;
 			menusub = 1;
-		}
-		break;
-
-	case MENU_FIRMWARE2:
-		if (menu) {
-			switch (user_io_core_type()) {
-			case CORE_TYPE_MIST:
-				menusub = 5;
-				menustate = MENU_MIST_MAIN1;
-				break;
-			case CORE_TYPE_ARCHIE:
-				menusub = 5;
-				menustate = MENU_ARCHIE_MAIN1;
-				break;
-			default:
-				menusub = 0;
-				menustate = (is_menu_core()) ? MENU_NONE1 : MENU_8BIT_SYSTEM1;
-				break;
-			}
-		}
-		else if (select) {
-			if (menusub == 0) {
-
-				SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_FIRMWARE1);
-			}
-			else if (menusub == 1) {
-				switch (user_io_core_type()) {
-				case CORE_TYPE_MIST:
-					menusub = 5;
-					menustate = MENU_MIST_MAIN1;
-					break;
-				case CORE_TYPE_ARCHIE:
-					menusub = 5;
-					menustate = MENU_ARCHIE_MAIN1;
-					break;
-				default:
-					menusub = 0;
-					menustate = (is_menu_core()) ? MENU_NONE1 : MENU_8BIT_SYSTEM1;
-					break;
-				}
-			}
 		}
 		break;
 
