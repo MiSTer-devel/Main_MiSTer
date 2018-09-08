@@ -257,48 +257,47 @@ int changeDir(char *dir)
 		strcat(SelectedPath, dir);
 	}
 
-	ScanDirectory(SelectedPath, SCAN_INIT, fs_pFileExt, fs_Options);
+	ScanDirectory(SelectedPath, SCANF_INIT, fs_pFileExt, fs_Options);
 	if(curdir[0])
 	{
-		ScanDirectory(SelectedPath, SCAN_SET_ITEM, curdir, fs_Options);
+		ScanDirectory(SelectedPath, SCANF_SET_ITEM, curdir, fs_Options);
 	}
 	return 1;
 }
 
+#define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name())
+
 // this function displays file selection menu
-static void SelectFile(const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel, char chdir, char *prefix = NULL)
+static void SelectFile(const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
-	printf("%s - %s\n", pFileExt, fs_pFileExt);
+	printf("pFileExt = %s\n", pFileExt);
 
-	if (strncmp(pFileExt, fs_pFileExt, 12) != 0 || !strlen(SelectedPath) || (Options & (SCAN_ROOT|SCAN_HERE))) // check desired file extension
-	{ // if different from the current one go to the root directory and init entry buffer
-		if(!(Options & SCAN_HERE)) SelectedPath[0] = 0;
-
-		if(((user_io_core_type() == CORE_TYPE_8BIT) || (user_io_core_type() == CORE_TYPE_MINIMIG2) || (user_io_core_type() == CORE_TYPE_ARCHIE)) && chdir && !(Options & (SCAN_ROOT|SCAN_HERE)))
+	if (Options & SCANO_CORES)
+	{
+		strcpy(SelectedPath, get_rbf_dir());
+		if (strlen(get_rbf_name()))
 		{
-			strcpy(SelectedPath, (user_io_core_type() == CORE_TYPE_MINIMIG2) ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name());
-			ScanDirectory(SelectedPath, SCAN_INIT, pFileExt, Options);
-			if (!nDirEntries)
-			{
-				SelectedPath[0] = 0;
-				ScanDirectory(SelectedPath, SCAN_INIT, pFileExt, Options);
-			}
+			strcat(SelectedPath, "/");
+			strcat(SelectedPath, get_rbf_name());
 		}
-		else
-		{
-			ScanDirectory(SelectedPath, SCAN_INIT, pFileExt, Options);
-			Options &= ~(SCAN_ROOT|SCAN_HERE);
-		}
+		pFileExt = "RBF";
 	}
 	else
 	{
-		AdjustDirectory(SelectedPath);
+		if (strncasecmp(HomeDir, SelectedPath, strlen(HomeDir))) strcpy(SelectedPath, HomeDir);
 	}
 
-	printf("pFileExt = %3s\n", pFileExt);
+	ScanDirectory(SelectedPath, SCANF_INIT, pFileExt, Options);
+	if (!flist_nDirEntries())
+	{
+		SelectedPath[0] = 0;
+		ScanDirectory(SelectedPath, SCANF_INIT, pFileExt, Options);
+	}
+
+	AdjustDirectory(SelectedPath);
+
 	strcpy(fs_pFileExt, pFileExt);
 	fs_ExtLen = strlen(fs_pFileExt);
-	//  fs_pFileExt = pFileExt;
 	fs_Options = Options;
 	fs_MenuSelect = MenuSelect;
 	fs_MenuCancel = MenuCancel;
@@ -394,23 +393,6 @@ unsigned int getStatusMask(char *opt)
 	//printf("grtStatusMask %d %d %x\n", idx1, idx2, x);
 
 	return x << idx1;
-}
-
-const char* get_keycode_table()
-{
-	switch (user_io_core_type())
-	{
-	case CORE_TYPE_MINIMIG2:
-		return "Amiga";
-
-	case CORE_TYPE_MIST:
-		return "  ST";
-
-	case CORE_TYPE_ARCHIE:
-		return "Archie";
-	}
-
-	return   " PS/2";
 }
 
 // conversion table of Amiga keyboard scan codes to ASCII codes
@@ -845,26 +827,16 @@ void HandleUI(void)
 			OsdSetSize(16);
 			if(!is_menu_core() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
 			{
-				strcpy(SelectedPath, get_rbf_dir());
-				if (strlen(get_rbf_name()))
-				{
-					strcat(SelectedPath,"/");
-					strcat(SelectedPath, get_rbf_name());
-				}
-				SelectFile("RBF", SCAN_SDIR | SCAN_HERE, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_NONE1, 0);
+				SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_NONE1);
 			}
-			else if (user_io_core_type() == CORE_TYPE_MINIMIG2)
-				menustate = MENU_MAIN1;
-			else if (user_io_core_type() == CORE_TYPE_MIST)
-				menustate = MENU_MIST_MAIN1;
-			else if (user_io_core_type() == CORE_TYPE_ARCHIE)
-				menustate = MENU_ARCHIE_MAIN1;
+			else if (user_io_core_type() == CORE_TYPE_MINIMIG2) menustate = MENU_MAIN1;
+			else if (user_io_core_type() == CORE_TYPE_MIST) menustate = MENU_MIST_MAIN1;
+			else if (user_io_core_type() == CORE_TYPE_ARCHIE) menustate = MENU_ARCHIE_MAIN1;
 			else {
-				// the "menu" core is special in jumps directly to the core selection menu
 				if (is_menu_core())
 				{
 					OsdCoreNameSet("");
-					SelectFile("RBF", SCAN_SDIR | SCAN_ROOT, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_FIRMWARE1, 0);
+					SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_FIRMWARE1);
 				}
 				else
 				{
@@ -948,11 +920,11 @@ void HandleUI(void)
 					menustate = MENU_ARCHIE_MAIN1;
 				}
 				else
-					SelectFile("ADF", SCAN_DIR, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1, 1);
+					SelectFile("ADF", SCANO_DIR, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				break;
 
 			case 2:  // Load ROM
-				SelectFile("ROM", 0, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1, 1);
+				SelectFile("ROM", 0, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				break;
 
 			case 3:
@@ -1193,20 +1165,12 @@ void HandleUI(void)
 					entry++;
 				}
 
-				// entry 0 = file selector
-				if(!menusub && fs_present)
-				{
-					// use a local copy of "p" since SelectFile will destroy the buffer behind it
-					strncpy(ext, p, 13);
-					while (strlen(ext) < 3) strcat(ext, " ");
-					SelectFile(ext, SCAN_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1, 1);
-				}
-				else if (p[0] == 'F')
+				if (p[0] == 'F')
 				{
 					opensave = (p[1] == 'S');
 					substrcpy(ext, p, 1);
 					while (strlen(ext) < 3) strcat(ext, " ");
-					SelectFile(ext, SCAN_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1, 1);
+					SelectFile(ext, SCANO_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
 				}
 				else if (p[0] == 'S')
 				{
@@ -1214,7 +1178,7 @@ void HandleUI(void)
 					if (p[1] >= '0' && p[1] <= '3') drive_num = p[1] - '0';
 					substrcpy(ext, p, 1);
 					while (strlen(ext) < 3) strcat(ext, " ");
-					SelectFile(ext, SCAN_DIR | SCAN_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1, 1);
+					SelectFile(ext, SCANO_DIR | SCANO_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
 				}
 				else if (p[0] == 'O')
 				{
@@ -1344,7 +1308,7 @@ void HandleUI(void)
 			switch (menusub)
 			{
 			case 0:
-				SelectFile("RBF", SCAN_SDIR | SCAN_ROOT, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_8BIT_SYSTEM1, 0);
+				SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_8BIT_SYSTEM1);
 				menusub = 0;
 				break;
 			case 1:
@@ -1616,7 +1580,7 @@ void HandleUI(void)
 					menustate = MENU_MIST_MAIN1;
 				}
 				else
-					SelectFile("ST ", SCAN_DIR, MENU_MIST_MAIN_FILE_SELECTED, MENU_MIST_MAIN1, 0);
+					SelectFile("ST ", SCANO_DIR, MENU_MIST_MAIN_FILE_SELECTED, MENU_MIST_MAIN1);
 				break;
 
 			case 1:
@@ -1706,7 +1670,7 @@ void HandleUI(void)
 					menustate = MENU_MIST_STORAGE1;
 				}
 				else
-					SelectFile("ST ", SCAN_DIR, MENU_MIST_STORAGE_FILE_SELECTED, MENU_MIST_STORAGE1, 0);
+					SelectFile("ST ", SCANO_DIR, MENU_MIST_STORAGE_FILE_SELECTED, MENU_MIST_STORAGE1);
 			}
 			else if (menusub == 2) {
 				// remove current write protect bits and increase by one
@@ -1731,7 +1695,7 @@ void HandleUI(void)
 					menustate = MENU_MIST_STORAGE1;
 				}
 				else
-					SelectFile("HD ", 0, MENU_MIST_STORAGE_FILE_SELECTED, MENU_MIST_STORAGE1, 0);
+					SelectFile("HD ", 0, MENU_MIST_STORAGE_FILE_SELECTED, MENU_MIST_STORAGE1);
 
 			}
 			else if (tos_get_direct_hdd() ? (menusub == 5) : (menusub == 6)) {
@@ -1812,7 +1776,7 @@ void HandleUI(void)
 			} break;
 
 			case 2:  // TOS
-				SelectFile("IMG", 0, MENU_MIST_SYSTEM_FILE_SELECTED, MENU_MIST_SYSTEM1, 0);
+				SelectFile("IMG", 0, MENU_MIST_SYSTEM_FILE_SELECTED, MENU_MIST_SYSTEM1);
 				break;
 
 			case 3:  // Cart
@@ -1822,7 +1786,9 @@ void HandleUI(void)
 					menustate = MENU_MIST_SYSTEM1;
 				}
 				else
-					SelectFile("IMG", 0, MENU_MIST_SYSTEM_FILE_SELECTED, MENU_MIST_SYSTEM1, 0);
+				{
+					SelectFile("IMG", 0, MENU_MIST_SYSTEM_FILE_SELECTED, MENU_MIST_SYSTEM1);
+				}
 				break;
 
 			case 4:
@@ -2132,7 +2098,7 @@ void HandleUI(void)
 				else
 				{
 					df[menusub].status = 0;
-					SelectFile("ADF", SCAN_DIR, MENU_FILE_SELECTED, MENU_MAIN1, 1);
+					SelectFile("ADF", SCANO_DIR, MENU_FILE_SELECTED, MENU_MAIN1);
 				}
 			}
 			else if (menusub == 4)	// Toggle floppy turbo
@@ -2267,13 +2233,13 @@ void HandleUI(void)
 
 		if (c == KEY_HOME)
 		{
-			ScanDirectory(SelectedPath, SCAN_INIT, fs_pFileExt, fs_Options);
+			ScanDirectory(SelectedPath, SCANF_INIT, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
 		}
 
 		if (c == KEY_BACKSPACE)
 		{
-			if (fs_Options & SCAN_UMOUNT)
+			if (fs_Options & SCANO_UMOUNT)
 			{
 				for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
 				OsdWrite(OsdGetSize() / 2, "   Unmounting the image", 0, 0);
@@ -2285,25 +2251,25 @@ void HandleUI(void)
 
 		if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
 		{
-			ScanDirectory(SelectedPath, SCAN_PREV_PAGE, fs_pFileExt, fs_Options);
+			ScanDirectory(SelectedPath, SCANF_PREV_PAGE, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
 		}
 
 		if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
 		{
-			ScanDirectory(SelectedPath, SCAN_NEXT_PAGE, fs_pFileExt, fs_Options);
+			ScanDirectory(SelectedPath, SCANF_NEXT_PAGE, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
 		}
 
 		if (down) // scroll down one entry
 		{
-			ScanDirectory(SelectedPath, SCAN_NEXT, fs_pFileExt, fs_Options);
+			ScanDirectory(SelectedPath, SCANF_NEXT, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
 		}
 
 		if (up) // scroll up one entry
 		{
-			ScanDirectory(SelectedPath, SCAN_PREV, fs_pFileExt, fs_Options);
+			ScanDirectory(SelectedPath, SCANF_PREV, fs_pFileExt, fs_Options);
 			menustate = MENU_FILE_SELECT1;
 		}
 
@@ -2319,14 +2285,14 @@ void HandleUI(void)
 
 		if (select)
 		{
-			if(DirItem[iSelectedEntry].d_type == DT_DIR)
+			if(flist_SelectedItem()->d_type == DT_DIR)
 			{
-				changeDir(DirItem[iSelectedEntry].d_name);
+				changeDir(flist_SelectedItem()->d_name);
 				menustate = MENU_FILE_SELECT1;
 			}
 			else
 			{
-				if (nDirEntries)
+				if (flist_nDirEntries())
 				{
 					SelectedDir[0] = 0;
 					if (strlen(SelectedPath))
@@ -2334,7 +2300,7 @@ void HandleUI(void)
 						strcpy(SelectedDir, SelectedPath);
 						strcat(SelectedPath, "/");
 					}
-					strcat(SelectedPath, DirItem[iSelectedEntry].d_name);
+					strcat(SelectedPath, flist_SelectedItem()->d_name);
 
 					menustate = fs_MenuSelect;
 				}
@@ -2343,6 +2309,18 @@ void HandleUI(void)
 
 		if (menu)
 		{
+			if (flist_nDirEntries() && flist_SelectedItem()->d_type != DT_DIR)
+			{
+				SelectedDir[0] = 0;
+				if (strlen(SelectedPath))
+				{
+					strcpy(SelectedDir, SelectedPath);
+					strcat(SelectedPath, "/");
+				}
+				strcat(SelectedPath, flist_SelectedItem()->d_name);
+			}
+
+			if (!strcasecmp(fs_pFileExt, "RBF")) SelectedPath[0] = 0;
 			menustate = fs_MenuCancel;
 		}
 
@@ -2628,7 +2606,7 @@ void HandleUI(void)
 			}
 			else if (menusub == 3)
 			{
-				SelectFile("ROM", 0, MENU_ROMFILE_SELECTED, MENU_SETTINGS_MEMORY1, 1);
+				SelectFile("ROM", 0, MENU_ROMFILE_SELECTED, MENU_SETTINGS_MEMORY1);
 			}
 			else if (menusub == 4)
 			{
@@ -2732,7 +2710,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					SelectFile("HDFVHDIMGDSK", SCAN_DIR | SCAN_UMOUNT, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1, 1);
+					SelectFile("HDFVHDIMGDSK", SCANO_DIR | SCANO_UMOUNT, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1);
 				}
 			}
 			else if (menusub == 9) // return to previous menu
@@ -3085,7 +3063,8 @@ void HandleUI(void)
 		}
 		else if (select) {
 			if (menusub == 0) {
-				SelectFile("RBF", SCAN_SDIR | SCAN_ROOT, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_FIRMWARE1, 0);
+
+				SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_FIRMWARE1);
 			}
 			else if (menusub == 1) {
 				switch (user_io_core_type()) {
@@ -3114,7 +3093,7 @@ void HandleUI(void)
 			SelectedPath[strlen(SelectedPath) - 4] = 0;
 			int off = strlen(SelectedDir);
 			if (off) off++;
-			int fnum = ScanDirectory(SelectedDir, SCAN_INIT, "TXT", 0, SelectedPath + off);
+			int fnum = ScanDirectory(SelectedDir, SCANF_INIT, "TXT", 0, SelectedPath + off);
 			if (fnum)
 			{
 				if (fnum == 1)
@@ -3151,7 +3130,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_FIRMWARE_CORE_FILE_CANCELED:
-		SelectFile("RBF", SCAN_SDIR | SCAN_HERE, MENU_FIRMWARE_CORE_FILE_SELECTED1, cp_MenuCancel, 0);
+		SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, cp_MenuCancel);
 		break;
 
 		/******************************************************************/
@@ -3196,8 +3175,8 @@ void ScrollLongName(void)
 	static int len;
 	int max_len;
 
-	len = strlen(DirItem[iSelectedEntry].d_name); // get name length
-	if (DirItem[iSelectedEntry].d_type == DT_REG) // if a file
+	len = strlen(flist_SelectedItem()->d_name); // get name length
+	if (flist_SelectedItem()->d_type == DT_REG) // if a file
 	{
 		if (fs_ExtLen <= 3)
 		{
@@ -3214,15 +3193,15 @@ void ScrollLongName(void)
 			e[0] = '.';
 			e[4] = 0;
 			int l = strlen(e);
-			if ((len>l) && !strncasecmp(DirItem[iSelectedEntry].d_name + len - l, e, l)) len -= l;
+			if ((len>l) && !strncasecmp(flist_SelectedItem()->d_name + len - l, e, l)) len -= l;
 		}
 	}
 
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
-	if (DirItem[iSelectedEntry].d_type == DT_DIR)
+	if (flist_SelectedItem()->d_type == DT_DIR)
 		max_len = 25; // number of directory name characters to display
 
-	ScrollText(iSelectedEntry-iFirstEntry, DirItem[iSelectedEntry].d_name, 2, len, max_len, 1);
+	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->d_name, 2, len, max_len, 1);
 }
 
 // print directory contents
@@ -3240,13 +3219,13 @@ void PrintDirectory(void)
 	{
 		char leftchar = 0;
 		memset(s, ' ', 32); // clear line buffer
-		if (i < nDirEntries)
+		if (i < flist_nDirEntries())
 		{
-			k = iFirstEntry + i;
+			k = flist_iFirstEntry() + i;
 
-			len = strlen(DirItem[k].d_name); // get name length
+			len = strlen(flist_DirItem(k)->d_name); // get name length
 
-			if (!(DirItem[k].d_type == DT_DIR)) // if a file
+			if (!(flist_DirItem(k)->d_type == DT_DIR)) // if a file
 			{
 				if (fs_ExtLen <= 3)
 				{
@@ -3263,7 +3242,7 @@ void PrintDirectory(void)
 					e[0] = '.';
 					e[4] = 0;
 					int l = strlen(e);
-					if ((len>l) && !strncasecmp(DirItem[k].d_name + len - l, e, l))
+					if ((len>l) && !strncasecmp(flist_DirItem(k)->d_name + len - l, e, l))
 					{
 						len -= l;
 					}
@@ -3276,18 +3255,18 @@ void PrintDirectory(void)
 				s[28] = 22;
 			}
 
-			if((DirItem[k].d_type == DT_DIR) && (fs_Options & SCAN_SDIR) && (DirItem[k].d_name[0] == '_'))
+			if((flist_DirItem(k)->d_type == DT_DIR) && (fs_Options & SCANO_CORES) && (flist_DirItem(k)->d_name[0] == '_'))
 			{
-				strncpy(s + 1, DirItem[k].d_name+1, len-1);
+				strncpy(s + 1, flist_DirItem(k)->d_name+1, len-1);
 			}
 			else
 			{
-				strncpy(s + 1, DirItem[k].d_name, len); // display only name
+				strncpy(s + 1, flist_DirItem(k)->d_name, len); // display only name
 			}
 
-			if (DirItem[k].d_type == DT_DIR) // mark directory with suffix
+			if (flist_DirItem(k)->d_type == DT_DIR) // mark directory with suffix
 			{
-				if (!strcmp(DirItem[k].d_name, ".."))
+				if (!strcmp(flist_DirItem(k)->d_name, ".."))
 				{
 					strcpy(&s[19], " <UP-DIR>");
 				}
@@ -3298,15 +3277,15 @@ void PrintDirectory(void)
 			}
 
 			if (!i && k) leftchar = 17;
-			if ((i == OsdGetSize() - 1) && (k < nDirEntries - 1)) leftchar = 16;
+			if ((i == OsdGetSize() - 1) && (k < flist_nDirEntries() - 1)) leftchar = 16;
 		}
 		else
 		{
-			if (i == 0 && nDirEntries == 0) // selected directory is empty
+			if (i == 0 && flist_nDirEntries() == 0) // selected directory is empty
 				strcpy(s, "          No files!");
 		}
 
-		OsdWriteOffset(i, s, i == (iSelectedEntry - iFirstEntry), 0, 0, leftchar);
+		OsdWriteOffset(i, s, i == (flist_iSelectedEntry() - flist_iFirstEntry()), 0, 0, leftchar);
 	}
 }
 

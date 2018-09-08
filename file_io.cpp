@@ -22,7 +22,7 @@
 #include "input.h"
 
 int nDirEntries = 0;
-struct dirent DirItem[1000];
+struct dirent DirItem[10000];
 int iSelectedEntry = 0;       // selected entry index
 int iFirstEntry = 0;
 
@@ -563,10 +563,11 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 	//printf("scan dir\n");
 
-	if (mode == SCAN_INIT)
+	if (mode == SCANF_INIT)
 	{
 		file_name[0] = 0;
-		if (get_stmode(path) & S_IFREG)
+		int stmode = get_stmode(path);
+		if (!(stmode & S_IFDIR))
 		{
 			char *p = strrchr(path, '/');
 			if (p)
@@ -579,6 +580,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				strcpy(file_name, path);
 				path[0] = 0;
 			}
+
+			if (!(stmode & S_IFREG)) file_name[0] = 0;
 		}
 
 		if (!(get_stmode(path) & S_IFDIR))
@@ -602,7 +605,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 
 		struct dirent *de;
-		while(nDirEntries < 1000)
+		while(nDirEntries < (sizeof(DirItem)/sizeof(DirItem[0])))
 		{
 			de = readdir(d);
 			if (de == NULL) break;
@@ -615,10 +618,10 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					if(!strlen(path)) continue;
 				}
 
-				if (!(options & SCAN_DIR))
+				if (!(options & SCANO_DIR))
 				{
 					if (de->d_name[0] != '_' && strcmp(de->d_name, "..")) continue;
-					if (!(options & SCAN_SDIR)) continue;
+					if (!(options & SCANO_CORES)) continue;
 				}
 			}
 			else if (de->d_type == DT_REG)
@@ -707,7 +710,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		if (nDirEntries == 0) // directory is empty so there is no point in searching for any entry
 			return 0;
 
-		if (mode == SCAN_NEXT)
+		if (mode == SCANF_NEXT)
 		{
 			if(iSelectedEntry + 1 < nDirEntries) // scroll within visible items
 			{
@@ -716,7 +719,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 			return 0;
 		}
-		else if (mode == SCAN_PREV)
+		else if (mode == SCANF_PREV)
 		{
 			if (iSelectedEntry > 0) // scroll within visible items
 			{
@@ -725,7 +728,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 			return 0;
 		}
-		else if (mode == SCAN_NEXT_PAGE)
+		else if (mode == SCANF_NEXT_PAGE)
 		{
 			if (iSelectedEntry < iFirstEntry + OsdGetSize() - 1)
 			{
@@ -749,7 +752,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 			return 0;
 		}
-		else if (mode == SCAN_PREV_PAGE)
+		else if (mode == SCANF_PREV_PAGE)
 		{
 			if(iSelectedEntry != iFirstEntry)
 			{
@@ -762,7 +765,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry = iFirstEntry;
 			}
 		}
-		else if (mode == SCAN_SET_ITEM)
+		else if (mode == SCANF_SET_ITEM)
 		{
 			for (int i = 0; i < nDirEntries; i++)
 			{
@@ -816,4 +819,29 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	}
 
 	return 0;
+}
+
+int flist_nDirEntries()
+{
+	return nDirEntries;
+}
+
+int flist_iFirstEntry()
+{
+	return iFirstEntry;
+}
+
+int flist_iSelectedEntry()
+{
+	return iSelectedEntry;
+}
+
+dirent* flist_DirItem(int n)
+{
+	return &DirItem[n];
+}
+
+dirent* flist_SelectedItem()
+{
+	return &DirItem[iSelectedEntry];
 }

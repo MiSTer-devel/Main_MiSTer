@@ -16,25 +16,24 @@ typedef struct
 	char      name[261];
 }  fileTYPE;
 
-extern int nDirEntries;
-extern struct dirent DirItem[1000];
-extern int iSelectedEntry;
-extern int iFirstEntry;
+int flist_nDirEntries();
+int flist_iFirstEntry();
+int flist_iSelectedEntry();
+dirent* flist_DirItem(int n);
+dirent* flist_SelectedItem();
 
 // scanning flags
-#define SCAN_INIT        0 // start search from beginning of directory
-#define SCAN_NEXT        1 // find next file in directory
-#define SCAN_PREV       -1 // find previous file in directory
-#define SCAN_NEXT_PAGE   2 // find next 8 files in directory
-#define SCAN_PREV_PAGE  -2 // find previous 8 files in directory
-#define SCAN_SET_ITEM    3 // find exact item
+#define SCANF_INIT       0 // start search from beginning of directory
+#define SCANF_NEXT       1 // find next file in directory
+#define SCANF_PREV      -1 // find previous file in directory
+#define SCANF_NEXT_PAGE  2 // find next 16 files in directory
+#define SCANF_PREV_PAGE -2 // find previous 16 files in directory
+#define SCANF_SET_ITEM   3 // find exact item
 
 // options flags
-#define SCAN_DIR    1 // include subdirectories
-#define SCAN_UMOUNT 2
-#define SCAN_SDIR   4
-#define SCAN_ROOT   8
-#define SCAN_HERE   16
+#define SCANO_DIR        1 // include subdirectories
+#define SCANO_UMOUNT     2 // allow backspace key
+#define SCANO_CORES      4 // only include subdirectories with prefix '_'
 
 void FindStorage();
 int  getStorage(int from_setting);
