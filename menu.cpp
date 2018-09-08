@@ -2221,7 +2221,7 @@ void HandleUI(void)
 		/******************************************************************/
 	case MENU_FILE_SELECT1:
 		helptext = helptexts[HELPTEXT_NONE];
-		OsdSetTitle("Select", 0);
+		OsdSetTitle((fs_Options & SCANO_CORES) ? "Cores" : "Select", 0);
 		PrintDirectory();
 		menustate = MENU_FILE_SELECT2;
 		break;
