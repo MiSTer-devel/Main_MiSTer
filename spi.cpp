@@ -210,16 +210,17 @@ void spi_osd_cmd32le(uint8_t cmd, uint32_t parm)
 }
 
 /* User_io related SPI functions */
-void spi_uio_cmd_cont(uint8_t cmd)
+uint8_t spi_uio_cmd_cont(uint8_t cmd)
 {
 	EnableIO();
-	spi8(cmd);
+	return spi_b(cmd);
 }
 
-void spi_uio_cmd(uint8_t cmd)
+uint8_t spi_uio_cmd(uint8_t cmd)
 {
-	spi_uio_cmd_cont(cmd);
+	uint8_t res = spi_uio_cmd_cont(cmd);
 	DisableIO();
+	return res;
 }
 
 void spi_uio_cmd8_cont(uint8_t cmd, uint8_t parm)

@@ -1554,6 +1554,21 @@ void user_io_poll()
 		DisableIO();
 		*/
 
+		static u_int8_t last_status_change = 0;
+		char stchg = spi_uio_cmd_cont(UIO_GET_STATUS);
+		if ((stchg & 0xF0) == 0xA0 && last_status_change != (stchg & 0xF))
+		{
+			last_status_change = (stchg & 0xF);
+			uint32_t st = spi32w(0);
+			DisableIO();
+			user_io_8bit_set_status(st, ~UIO_STATUS_RESET);
+			//printf("** new status from core: %08X\n", st);
+		}
+		else
+		{
+			DisableIO();
+		}
+
 		// sd card emulation
 		if (is_x86_core())
 		{
