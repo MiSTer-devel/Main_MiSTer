@@ -100,6 +100,8 @@ enum MENU
 	MENU_STORAGE,
 	MENU_JOYDIGMAP,
 	MENU_JOYDIGMAP1,
+	MENU_JOYKBDMAP,
+	MENU_JOYKBDMAP1,
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
 
@@ -456,7 +458,7 @@ static uint32_t menu_key_get(void)
 	else if (CheckTimer(repeat))
 	{
 		repeat = GetTimer(REPEATRATE);
-		if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 5)))
+		if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 6)))
 		{
 			c = c1;
 			hold_cnt++;
@@ -541,7 +543,7 @@ void printSysInfo()
 		sysinfo_timer = GetTimer(2000);
 		struct battery_data_t bat;
 		int hasbat = getBattery(0, &bat);
-		int n = 9;
+		int n = 10;
 
 		char str[40];
 		OsdWrite(n++, "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82", 0, 0);
@@ -1255,8 +1257,8 @@ void HandleUI(void)
 
 	case MENU_8BIT_SYSTEM1:
 		OsdSetSize(16);
-		helptext = helptexts[HELPTEXT_MAIN];
-		menumask = 0xfb;
+		helptext = 0;
+		menumask = 0xf7;
 		reboot_req = 0;
 
 		OsdSetTitle("System", OSD_ARROW_LEFT);
@@ -1272,9 +1274,9 @@ void HandleUI(void)
 			if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
 			if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
 			
-			menumask |= 4;
+			menumask |= 8;
 			sprintf(s, " UART connection     %s", config_uart_msg[mode]);
-			OsdWrite(2, s, menusub == 2, 0);
+			OsdWrite(3, s, menusub == 3, 0);
 		}
 		else
 		{
@@ -1283,20 +1285,20 @@ void HandleUI(void)
 
 		OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
 		OsdWrite(m++, " Define joystick buttons   \x16", menusub == 1, 0);
-		OsdWrite(3, "", 0, 0);
+		OsdWrite(m++, " Joystick -> Keyboard map  \x16", menusub == 2, 0);
+		OsdWrite(4, "", 0, 0);
 
 		m = 0;
 		if (user_io_core_type() == CORE_TYPE_MINIMIG2)
 		{
 			m = 1;
-			menumask &= ~0x10;
+			menumask &= ~0x20;
 		}
-		OsdWrite(4, m ? " Reset the core" : " Reset settings", menusub == 3, user_io_core_type() == CORE_TYPE_ARCHIE);
-		OsdWrite(5, m ? "" : " Save settings", menusub == 4, 0);
-		OsdWrite(6, "", 0, 0);
-		OsdWrite(7, " Reboot (hold \x16 cold reboot)", menusub == 5, 0);
-		OsdWrite(8, " About", menusub == 6, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 7, 0);
+		OsdWrite(5, m ? " Reset the core" : " Reset settings", menusub == 4, user_io_core_type() == CORE_TYPE_ARCHIE);
+		OsdWrite(6, m ? "" : " Save settings", menusub == 5, 0);
+		OsdWrite(7, "", 0, 0);
+		OsdWrite(8, " Reboot (hold \x16 cold reboot)", menusub == 6, 0);
+		OsdWrite(9, " About", menusub == 7, 0);
 		sysinfo_timer = 0;
 		break;
 
@@ -1328,6 +1330,11 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
+				start_map_setting(-1);
+				menustate = MENU_JOYKBDMAP;
+				menusub = 0;
+				break;
+			case 3:
 				{
 					int mode = 0;
 					struct stat filestat;
@@ -1343,14 +1350,14 @@ void HandleUI(void)
 					FileSaveConfig(s, &mode, 4);
 				}
 				break;
-			case 3:
+			case 4:
 				if (user_io_core_type() != CORE_TYPE_ARCHIE)
 				{
 					menustate = MENU_RESET1;
 					menusub = 1;
 				}
 				break;
-			case 4:
+			case 5:
 				// Save settings
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
@@ -1369,7 +1376,7 @@ void HandleUI(void)
 					if (is_x86_core()) x86_config_save();
 				}
 				break;
-			case 5:
+			case 6:
 				{
 					reboot_req = 1;
 
@@ -1378,16 +1385,11 @@ void HandleUI(void)
 
 					sprintf(s, " Cold Reboot");
 					p = s + 5 - off;
-					OsdWrite(7, p, menusub == 5, 0);
+					OsdWrite(8, p, menusub == 6, 0);
 				}
 				break;
-			case 6:
-				menustate = MENU_8BIT_ABOUT1;
-				menusub = 0;
-				break;
 			case 7:
-				// Exit
-				menustate = MENU_NONE1;
+				menustate = MENU_8BIT_ABOUT1;
 				menusub = 0;
 				break;
 			}
@@ -1427,7 +1429,7 @@ void HandleUI(void)
 		menustate = MENU_JOYDIGMAP1;
 		parentstate = MENU_JOYDIGMAP;
 		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, "           cancel", menusub == 0, 0);
+		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
 		break;
 
 	case MENU_JOYDIGMAP1:
@@ -1485,6 +1487,38 @@ void HandleUI(void)
 		}
 		break;
 
+	case MENU_JOYKBDMAP:
+		helptext = 0;
+		menumask = 1;
+		OsdSetTitle("Joy -> Kbd map", 0);
+		menustate = MENU_JOYKBDMAP1;
+		parentstate = MENU_JOYKBDMAP;
+		for (int i = 0; i < 12; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(12, " It will be cleared when you", 0, 0);
+		OsdWrite(13, "      load the new core.", 0, 0);
+		OsdWrite(14, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, "           Finish", menusub == 0, 0);
+		break;
+
+	case MENU_JOYKBDMAP1:
+		if (!get_map_button())
+		{
+			OsdWrite(3, "    Press joystick button", 0, 0);
+		}
+		else
+		{
+			OsdWrite(3, "    Press key on keyboard", 0, 0);
+			OsdWrite(OsdGetSize() - 1, " Enter \x16 Finish, Esc \x16 Clear", menusub == 0, 0);
+		}
+
+		if (select || menu)
+		{
+			finish_map_setting(menu);
+			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 2;
+		}
+		break;
+
 	case MENU_8BIT_ABOUT1:
 		OsdSetSize(16);
 		menumask = 0;
@@ -1529,7 +1563,7 @@ void HandleUI(void)
 		if (menu | select | left)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
-			menusub = 6 - m;
+			menusub = 7 - m;
 		}
 		break;
 
@@ -2374,7 +2408,7 @@ void HandleUI(void)
 		if (menu || (select && (menusub == 1))) // exit menu
 		{
 			menustate = MENU_8BIT_SYSTEM1;
-			menusub = 3;
+			menusub = 4;
 		}
 		break;
 
@@ -2892,8 +2926,9 @@ void HandleUI(void)
 		parentstate = menustate;
 
 		OsdSetTitle("System Settings", 0);
+		OsdWrite(0, "", 0, 0);
 		sprintf(s, "   ARM  s/w ver. %s", version + 5);
-		OsdWrite(0, s, 0, 0);
+		OsdWrite(1, s, 0, 0);
 
 		{
 			uint64_t avail = 0;
@@ -2902,33 +2937,32 @@ void HandleUI(void)
 			if (!statvfs(getRootDir(), &buf)) avail = buf.f_bsize * buf.f_bavail;
 			if(avail < (10ull*1024*1024*1024)) sprintf(s, "   Available space: %llumb", avail / (1024 * 1024));
 			else sprintf(s, "   Available space: %llugb", avail / (1024 * 1024 * 1024));
-			OsdWrite(3, s, 0, 0);
+			OsdWrite(4, s, 0, 0);
 		}
 		menumask = 7;
-		OsdWrite(1, "", 0, 0);
+		OsdWrite(2, "", 0, 0);
 		if (getStorage(0))
 		{
-			OsdWrite(2, "        Storage: USB", 0, 0);
-			OsdWrite(4, "      Switch to SD card", menusub == 0, 0);
+			OsdWrite(3, "        Storage: USB", 0, 0);
+			OsdWrite(5, "      Switch to SD card", menusub == 0, 0);
 		}
 		else
 		{
 			if (getStorage(1))
 			{
-				OsdWrite(2, " No USB found, using SD card", 0, 0);
-				OsdWrite(4, "      Switch to SD card", menusub == 0, 0);
+				OsdWrite(3, " No USB found, using SD card", 0, 0);
+				OsdWrite(5, "      Switch to SD card", menusub == 0, 0);
 			}
 			else
 			{
-				OsdWrite(2, "      Storage: SD card", 0, 0);
-				OsdWrite(4, "        Switch to USB", menusub == 0, !isUSBMounted());
+				OsdWrite(3, "      Storage: SD card", 0, 0);
+				OsdWrite(5, "        Switch to USB", menusub == 0, !isUSBMounted());
 			}
 		}
-		OsdWrite(5, "", 0, 0);
-		OsdWrite(6, " Remap keyboard            \x16", menusub == 1, 0);
-		OsdWrite(7, " Define joystick buttons   \x16", menusub == 2, 0);
-		OsdWrite(8, "", 0, 0);
-		OsdWrite(15, "", 0, 0);
+		OsdWrite(6, "", 0, 0);
+		OsdWrite(7, " Remap keyboard            \x16", menusub == 1, 0);
+		OsdWrite(8, " Define joystick buttons   \x16", menusub == 2, 0);
+		OsdWrite(9, "", 0, 0);
 		sysinfo_timer = 0;
 
 		menustate = MENU_STORAGE;

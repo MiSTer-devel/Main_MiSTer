@@ -978,6 +978,7 @@ typedef struct
 
 	char     has_mmap;
 	uint32_t mmap[32];
+	uint16_t jkmap[1024];
 
 	char     has_kbdmap;
 	uint8_t  kbdmap[256];
@@ -1142,7 +1143,7 @@ void start_map_setting(int cnt)
 	mapping_button = 0;
 	mapping = 1;
 	mapping_dev = -1;
-	mapping_type = cnt ? 1 : 2;
+	mapping_type = (cnt<0) ? 3 : cnt ? 1 : 2;
 	mapping_count = cnt;
 }
 
@@ -1175,17 +1176,21 @@ void finish_map_setting(int dismiss)
 {
 	mapping = 0;
 	if (mapping_dev<0) return;
-	
+
 	if (mapping_type == 2)
 	{
 		if (dismiss) input[mapping_dev].has_kbdmap = 0;
 		else FileSaveConfig(get_kbdmap_name(mapping_dev), &input[mapping_dev].kbdmap, sizeof(input[mapping_dev].kbdmap));
 	}
+	else if (mapping_type == 3)
+	{
+		if (dismiss) memset(input[mapping_dev].jkmap, 0, sizeof(input[mapping_dev].jkmap));
+	}
 	else
 	{
 		if (dismiss) input[mapping_dev].has_map = 0;
 		else FileSaveConfig(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
-		if(is_menu_core()) input[mapping_dev].has_mmap = 0;
+		if (is_menu_core()) input[mapping_dev].has_mmap = 0;
 	}
 }
 
@@ -1524,6 +1529,25 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 				return;
 			}
+			else if (mapping_type == 3)
+			{
+				if (!mapping_button)
+				{
+					if (ev->code >= 256)
+					{
+						if (mapping_dev < 0) mapping_dev = dev;
+						if (mapping_dev == dev && ev->code < 1024) mapping_button = ev->code;
+					}
+				}
+				else
+				{
+					if (ev->code < 256 && mapping_dev >= 0)
+					{
+						input[mapping_dev].jkmap[mapping_button] = ev->code;
+						mapping_button = 0;
+					}
+				}
+			}
 			else if ((mapping_dev < 0) || ((ev->code >= 256) ? mapping_type : !mapping_type))
 			{
 				if (mapping_dev < 0)
@@ -1558,7 +1582,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 		}
 
-		if (map_skip && mapping_button < mapping_count)
+		if (mapping_type <= 1 && map_skip && mapping_button < mapping_count)
 		{
 			if (ev->value == 1) mapping_button++;
 			return;
@@ -1570,6 +1594,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		switch (ev->type)
 		{
 		case EV_KEY:
+
+			if (ev->code < 1024 && input[dev].jkmap[ev->code]) ev->code = input[dev].jkmap[ev->code];
+
 			//joystick buttons, digital directions
 			if (ev->code >= 256)
 			{
