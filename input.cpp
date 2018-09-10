@@ -1595,7 +1595,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 		case EV_KEY:
 
-			if (ev->code < 1024 && input[dev].jkmap[ev->code]) ev->code = input[dev].jkmap[ev->code];
+			if (ev->code < 1024 && input[dev].jkmap[ev->code] && !user_io_osd_is_visible()) ev->code = input[dev].jkmap[ev->code];
 
 			//joystick buttons, digital directions
 			if (ev->code >= 256)
