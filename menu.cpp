@@ -183,6 +183,9 @@ const char *helptexts[] =
 	0
 };
 
+const char *info_top = "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82";
+const char *info_bottom = "\x85\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x84";
+
 // one screen width
 const char* HELPTEXT_SPACER = "                                ";
 char helptext_custom[1024];
@@ -546,7 +549,7 @@ void printSysInfo()
 		int n = 10;
 
 		char str[40];
-		OsdWrite(n++, "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82", 0, 0);
+		OsdWrite(n++, info_top, 0, 0);
 		if (!hasbat)
 		{
 			infowrite(n++, "");
@@ -610,7 +613,7 @@ void printSysInfo()
 		{
 			infowrite(n++, "");
 		}
-		OsdWrite(n++, "\x85\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x84", 0, 0);
+		OsdWrite(n++, info_bottom, 0, 0);
 	}
 }
 
@@ -1285,7 +1288,7 @@ void HandleUI(void)
 
 		OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
 		OsdWrite(m++, " Define joystick buttons   \x16", menusub == 1, 0);
-		OsdWrite(m++, " Joystick -> Keyboard map  \x16", menusub == 2, 0);
+		OsdWrite(m++, " Button/Key remap for game \x16", menusub == 2, 0);
 		OsdWrite(4, "", 0, 0);
 
 		m = 0;
@@ -1448,16 +1451,14 @@ void HandleUI(void)
 				p = (get_map_button() < 8) ? joy_button_map[get_map_button()] : joy_button_map[8 + get_map_type()];
 			}
 
-
+			s[0] = 0;
+			int len = (30 - (strlen(p) + 7)) / 2;
+			while (len > 0)
 			{
-				s[0] = 0;
-				int len = (30 - (strlen(p) + 7)) / 2;
-				while (len > 0)
-				{
-					strcat(s, " ");
-					len--;
-				}
+				strcat(s, " ");
+				len--;
 			}
+
 			strcat(s, "Press: ");
 			strcat(s, p);
 			OsdWrite(3, s, 0, 0);
@@ -1490,24 +1491,49 @@ void HandleUI(void)
 	case MENU_JOYKBDMAP:
 		helptext = 0;
 		menumask = 1;
-		OsdSetTitle("Joy -> Kbd map", 0);
 		menustate = MENU_JOYKBDMAP1;
 		parentstate = MENU_JOYKBDMAP;
-		for (int i = 0; i < 12; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(12, " It will be cleared when you", 0, 0);
-		OsdWrite(13, "      load the new core.", 0, 0);
-		OsdWrite(14, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, "           Finish", menusub == 0, 0);
+
+		OsdSetTitle("Button/Key remap", 0);
+		for (int i = 0; i < 5; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(5, info_top, 0, 0);
+		infowrite(6, "Supported mapping:");
+		infowrite( 7, "");
+		infowrite( 8, "Button -> Key");
+		infowrite( 9, "Button -> Button same pad");
+		infowrite(10, "Key -> Key");
+		infowrite(11, "");
+		infowrite(12, "It will be cleared when you");
+		infowrite(13, "load the new core");
+		OsdWrite(14, info_bottom, 0, 0);
+		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
 		break;
 
 	case MENU_JOYKBDMAP1:
 		if (!get_map_button())
 		{
-			OsdWrite(3, "    Press joystick button", 0, 0);
+			OsdWrite(1, " Press button/key to change", 0, 0);
+			if (get_map_vid())
+			{
+				OsdWrite(2, "", 0, 0);
+				sprintf(s, "    on device %04x:%04x", get_map_vid(), get_map_pid());
+				OsdWrite(3, s, 0, 0);
+			}
 		}
 		else
 		{
-			OsdWrite(3, "    Press key on keyboard", 0, 0);
+			if (get_map_button() <= 256)
+			{
+				OsdWrite(1, "     Press key to map to", 0, 0);
+				OsdWrite(2, "", 0, 0);
+				OsdWrite(3, "        on a keyboard", 0, 0);
+			}
+			else
+			{
+				OsdWrite(1, "   Press button to map to", 0, 0);
+				OsdWrite(2, "      on the same pad", 0, 0);
+				OsdWrite(3, "    or key on a keyboard", 0, 0);
+			}
 			OsdWrite(OsdGetSize() - 1, " Enter \x16 Finish, Esc \x16 Clear", menusub == 0, 0);
 		}
 
@@ -3038,7 +3064,7 @@ void HandleUI(void)
 			s[0] = 0;
 			if(flag)
 			{ 
-				sprintf(s, "  on keyboard ID: %04x:%04x", get_map_vid(), get_map_pid());
+				sprintf(s, "    on keyboard %04x:%04x", get_map_vid(), get_map_pid());
 			}
 			OsdWrite(5, s, 0, 0);
 		}

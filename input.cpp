@@ -1196,12 +1196,12 @@ void finish_map_setting(int dismiss)
 
 uint16_t get_map_vid()
 {
-	return input[mapping_dev].vid;
+	return (mapping_dev >= 0) ? input[mapping_dev].vid : 0;
 }
 
 uint16_t get_map_pid()
 {
-	return input[mapping_dev].pid;
+	return (mapping_dev >= 0) ? input[mapping_dev].pid : 0;
 }
 
 static char kr_fn_table[] =
@@ -1531,18 +1531,17 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			else if (mapping_type == 3)
 			{
-				if (!mapping_button)
+				if (ev->value == 1)
 				{
-					if (ev->code >= 256)
+					if (!mapping_button)
 					{
 						if (mapping_dev < 0) mapping_dev = dev;
 						if (mapping_dev == dev && ev->code < 1024) mapping_button = ev->code;
 					}
-				}
-				else
-				{
-					if (ev->code < 256 && mapping_dev >= 0)
+					else if (mapping_dev >= 0 && (ev->code<256 || mapping_dev == dev))
 					{
+						// Technically it's hard to map the key to button as keyboards
+						// are all the same while joysticks are personalized and numbered.
 						input[mapping_dev].jkmap[mapping_button] = ev->code;
 						mapping_button = 0;
 					}
@@ -1594,7 +1593,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		switch (ev->type)
 		{
 		case EV_KEY:
-
 			if (ev->code < 1024 && input[dev].jkmap[ev->code] && !user_io_osd_is_visible()) ev->code = input[dev].jkmap[ev->code];
 
 			//joystick buttons, digital directions
