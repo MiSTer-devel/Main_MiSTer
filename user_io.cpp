@@ -492,35 +492,38 @@ void user_io_init(const char *path)
 			}
 			else
 			{
-				// check for multipart rom
-				sprintf(mainpath, "%s/boot0.rom", user_io_get_core_name());
-				if (!is_cpc_core() && user_io_file_tx(mainpath))
+				if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 				{
-					sprintf(mainpath, "%s/boot1.rom", user_io_get_core_name());
-					if (user_io_file_tx(mainpath, 0x40))
+					// check for multipart rom
+					sprintf(mainpath, "%s/boot0.rom", user_io_get_core_name());
+					if (!is_cpc_core() && user_io_file_tx(mainpath))
 					{
-						sprintf(mainpath, "%s/boot2.rom", user_io_get_core_name());
-						if (user_io_file_tx(mainpath, 0x80))
+						sprintf(mainpath, "%s/boot1.rom", user_io_get_core_name());
+						if (user_io_file_tx(mainpath, 0x40))
 						{
-							sprintf(mainpath, "%s/boot3.rom", user_io_get_core_name());
-							user_io_file_tx(mainpath, 0xC0);
+							sprintf(mainpath, "%s/boot2.rom", user_io_get_core_name());
+							if (user_io_file_tx(mainpath, 0x80))
+							{
+								sprintf(mainpath, "%s/boot3.rom", user_io_get_core_name());
+								user_io_file_tx(mainpath, 0xC0);
+							}
 						}
 					}
-				}
-				else
-				{
-					// legacy style of rom
-					sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
-					if (!user_io_file_tx(mainpath))
+					else
 					{
-						strcpy(name + strlen(name) - 3, "ROM");
-						sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
-						if (!get_rbf_dir()[0] || !user_io_file_tx(mainpath))
+						// legacy style of rom
+						sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
+						if (!user_io_file_tx(mainpath))
 						{
-							if (!user_io_file_tx(name))
+							strcpy(name + strlen(name) - 3, "ROM");
+							sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
+							if (!get_rbf_dir()[0] || !user_io_file_tx(mainpath))
 							{
-								sprintf(mainpath, "bootrom/%s", name);
-								user_io_file_tx(mainpath);
+								if (!user_io_file_tx(name))
+								{
+									sprintf(mainpath, "bootrom/%s", name);
+									user_io_file_tx(mainpath);
+								}
 							}
 						}
 					}
@@ -1133,7 +1136,7 @@ static int chr_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const i
 	return true;
 }
 
-static void send_pcolchr(char* name, unsigned char index, int type)
+static void send_pcolchr(const char* name, unsigned char index, int type)
 {
 	static char full_path[1024];
 
@@ -1179,7 +1182,7 @@ static void send_pcolchr(char* name, unsigned char index, int type)
 	}
 }
 
-int user_io_file_tx(char* name, unsigned char index, char opensave, char mute)
+int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = { 0 };
 	static uint8_t buf[1024];
@@ -1187,6 +1190,17 @@ int user_io_file_tx(char* name, unsigned char index, char opensave, char mute)
 	if (!FileOpen(&f, name, mute)) return 0;
 
 	unsigned long bytes2send = f.size;
+
+	if (composite)
+	{
+		if (!FileReadSec(&f, buf)) return 0;
+		if (memcmp(buf, "MiSTer", 6)) return 0;
+
+		uint32_t off = 16 + *(uint32_t*)(((uint8_t*)buf) + 12);
+		bytes2send -= off;
+
+		FileSeek(&f, off, SEEK_SET);
+	}
 
 	/* transmit the entire file using one transfer */
 	printf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index & 0x3F, index >> 6);

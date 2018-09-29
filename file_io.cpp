@@ -48,7 +48,15 @@ void FileClose(fileTYPE *file)
 
 int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 {
-	sprintf(full_path, "%s/%s", (mode == -1) ? "" : getRootDir(), name);
+	const char *root = getRootDir();
+	if (strncasecmp(getRootDir(), name, strlen(root)))
+	{
+		sprintf(full_path, "%s/%s", (mode == -1) ? "" : root, name);
+	}
+	else
+	{
+		sprintf(full_path, name);
+	}
 
 	FileClose(file);
 	file->mode = 0;

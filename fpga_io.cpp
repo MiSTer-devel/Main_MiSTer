@@ -491,6 +491,13 @@ int fpga_load_rbf(const char *name, const char *cfg)
 				}
 				else
 				{
+					void *p = buf;
+					__off64_t sz = st.st_size;
+					if (!memcmp(buf, "MiSTer", 6))
+					{
+						sz = *(uint32_t*)(((uint8_t*)buf) + 12);
+						p = (void*)(((uint8_t*)buf) + 16);
+					}
 					do_bridge(0);
 					ret = socfpga_load(buf, st.st_size);
 					if (ret)
