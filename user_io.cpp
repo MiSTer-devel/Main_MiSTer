@@ -484,7 +484,6 @@ void user_io_init(const char *path)
 		parse_config();
         break;
 
-
 	case CORE_TYPE_8BIT:
 		// try to load config
 		name = user_io_create_config_name();
