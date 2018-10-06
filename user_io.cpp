@@ -12,6 +12,7 @@
 #include "osd.h"
 #include "user_io.h"
 #include "archie.h"
+#include "sharpmz.h"
 #include "debug.h"
 #include "st_ikbd.h"
 #include "spi.h"
@@ -96,6 +97,10 @@ char is_archie()
 	return(core_type == CORE_TYPE_ARCHIE);
 }
 
+char is_sharpmz()
+{
+	return(core_type == CORE_TYPE_SHARPMZ);
+}
 char* user_io_create_config_name()
 {
 	static char str[40];
@@ -128,6 +133,9 @@ const char *user_io_get_core_name_ex()
 
 	case CORE_TYPE_ARCHIE:
 		return "ARCHIE";
+
+    case CORE_TYPE_SHARPMZ:
+		return "SHARPMZ";
 
 	case CORE_TYPE_8BIT:
 		return core_name;
@@ -412,7 +420,8 @@ void user_io_init(const char *path)
 		(core_type != CORE_TYPE_MINIMIG2) &&
 		(core_type != CORE_TYPE_MIST) &&
 		(core_type != CORE_TYPE_ARCHIE) &&
-		(core_type != CORE_TYPE_8BIT))
+		(core_type != CORE_TYPE_8BIT) &&
+        (core_type != CORE_TYPE_SHARPMZ))
 	{
 		core_type = CORE_TYPE_UNKNOWN;
 		fio_size = 0;
@@ -467,6 +476,13 @@ void user_io_init(const char *path)
 		user_io_read_core_name();
 		parse_config();
 		break;
+
+    case CORE_TYPE_SHARPMZ:
+		puts("Identified Sharp MZ Series core");
+        sharpmz_init();
+		user_io_read_core_name();
+		parse_config();
+        break;
 
 	case CORE_TYPE_8BIT:
 		// try to load config
@@ -1423,6 +1439,7 @@ void user_io_poll()
 	if ((core_type != CORE_TYPE_MINIMIG2) &&
 		(core_type != CORE_TYPE_MIST) &&
 		(core_type != CORE_TYPE_ARCHIE) &&
+		(core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
 	{
 		return;  // no user io for the installed core
@@ -1786,6 +1803,7 @@ void user_io_poll()
 	}
 
 	if (core_type == CORE_TYPE_ARCHIE) archie_poll();
+	if (core_type == CORE_TYPE_SHARPMZ) sharpmz_poll();
 
 	static uint8_t leds = 0;
 	if(use_ps2ctl && core_type != CORE_TYPE_MINIMIG2)
@@ -2162,6 +2180,29 @@ static void send_keycode(unsigned short key, int press)
 		if (!press) code |= 0x8000;
 		archie_kbd(code);
 	}
+
+	if (core_type == CORE_TYPE_SHARPMZ)
+	{
+		uint32_t code = get_ps2_code(key);
+		if (code == NONE) return;
+
+		{
+			if (press > 1 && !use_ps2ctl) return;
+
+			spi_uio_cmd_cont(UIO_KEYBOARD);
+
+			// prepend extended code flag if required
+			if (code & EXT) spi8(0xe0);
+
+			// prepend break code if required
+			if (!press) spi8(0xf0);
+
+			// send code itself
+			spi8(code & 0xff);
+
+			DisableIO();
+		}
+	}
 }
 
 void user_io_mouse(unsigned char b, int16_t x, int16_t y)
@@ -2305,6 +2346,7 @@ void user_io_kbd(uint16_t key, int press)
 	if ((core_type == CORE_TYPE_MINIMIG2) ||
 		(core_type == CORE_TYPE_MIST) ||
 		(core_type == CORE_TYPE_ARCHIE) ||
+		(core_type == CORE_TYPE_SHARPMZ) ||
 		(core_type == CORE_TYPE_8BIT))
 	{
 		if (key)
