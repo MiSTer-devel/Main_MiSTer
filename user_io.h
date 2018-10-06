@@ -130,7 +130,6 @@
 #define CORE_TYPE_8BIT      0xa4   // atari 800/c64 like core
 #define CORE_TYPE_MINIMIG2  0xa5   // new Minimig with AGA
 #define CORE_TYPE_ARCHIE    0xa6   // Acorn Archimedes
-#define CORE_TYPE_SHARPMZ   0xa7   // Sharp MZ Series
 
 #define UART_FLG_PPP        0x0001
 #define UART_FLG_TERM       0x0002
@@ -177,7 +176,6 @@ void user_io_init(const char *path);
 unsigned char user_io_core_type();
 char is_minimig();
 char is_archie();
-char is_sharpmz();
 void user_io_poll();
 char user_io_menu_button();
 char user_io_button_dip_switch1();
