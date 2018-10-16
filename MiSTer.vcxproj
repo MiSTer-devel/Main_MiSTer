@@ -56,6 +56,7 @@
     <ClCompile Include="minimig_fdd.cpp" />
     <ClCompile Include="minimig_hdd.cpp" />
     <ClCompile Include="osd.cpp" />
+    <ClCompile Include="sharpmz.cpp" />
     <ClCompile Include="spi.cpp" />
     <ClCompile Include="st_ikbd.cpp" />
     <ClCompile Include="st_tos.cpp" />
@@ -90,6 +91,7 @@
     <ClInclude Include="minimig_hdd.h" />
     <ClInclude Include="minimig_hdd_internal.h" />
     <ClInclude Include="osd.h" />
+    <ClInclude Include="sharpmz.h" />
     <ClInclude Include="spi.h" />
     <ClInclude Include="st_ikbd.h" />
     <ClInclude Include="st_tos.h" />
