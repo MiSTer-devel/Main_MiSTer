@@ -40,6 +40,7 @@ const ini_var_t ini_vars[] = {
 	{ "MOUSE_THROTTLE", (void*)(&(cfg.mouse_throttle)), UINT8, 1, 100, 1 },
 	{ "BOOTSCREEN", (void*)(&(cfg.bootscreen)), UINT8, 0, 1, 1 },
 	{ "VOLUMECTL", (void*)(&(cfg.volumectl)), UINT8, 0, 1, 1 },
+	{ "VSCALE_INTEGER", (void*)(&(cfg.vscale_integer)), UINT8, 0, 1, 1 },
 };
 
 // mist ini config

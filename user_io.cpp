@@ -2750,6 +2750,18 @@ static uint32_t show_video_info(int force)
 			Info(str, cfg.video_info * 1000);
 		}
 
+		if (cfg.vscale_integer && height && (height <= vitems[5]))
+		{
+			uint32_t mag = vitems[5] / height;
+			height *= mag;
+			printf("Set Integer V scaling: %d\n", height);
+			spi_uio_cmd16(UIO_SETHEIGHT, height);
+		}
+		else
+		{
+			spi_uio_cmd16(UIO_SETHEIGHT, 0);
+		}
+
 		if (vtime && vtimeh) return vtime;
 	}
 	else
