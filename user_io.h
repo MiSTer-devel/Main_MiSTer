@@ -62,6 +62,7 @@
 #define UIO_SETHEIGHT   0x27  // Set scaled vertical resolution (to reduce scaling artefacts)
 #define UIO_GETUARTFLG  0x28  // Get UART_FLG_*
 #define UIO_GET_STATUS  0x29  // Update status from the core
+#define UIO_SET_VIPCOEF 0x2A  // Set Scaler coefficients
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
