@@ -2586,7 +2586,7 @@ static void setPLL(double Fout)
 	vitems[20] = k;
 }
 
-static void setScaler()
+static void setScalerCoeff()
 {
 	fileTYPE f = { 0 };
 	static char filename[1024];
@@ -2642,7 +2642,7 @@ static void setScaler()
 
 static void setVideo()
 {
-	setScaler();
+	setScalerCoeff();
 
 	printf("Send HDMI parameters:\n");
 	spi_uio_cmd_cont(UIO_SET_VIDEO);
