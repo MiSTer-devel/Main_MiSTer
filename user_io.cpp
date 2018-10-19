@@ -2586,58 +2586,58 @@ static void setPLL(double Fout)
 	vitems[20] = k;
 }
 
-short scaler_coef[32][4] =
-{
-	{ -24,  176, -24,   0 },
-	{ -20,  174, -26,   0 },
-	{ -16,  169, -26,   1 },
-	{ -11,  160, -23,   2 },
-	{  -6,  147, -16,   3 },
-	{  -1,  129,  -4,   4 },
-	{   2,  109,  11,   6 },
-	{   5,   84,  32,   7 },
-	{   6,   58,  58,   6 },
-	{   7,   32,  84,   5 },
-	{   6,   11, 109,   2 },
-	{   4,   -4, 129,  -1 },
-	{   3,  -16, 147,  -6 },
-	{   2,  -23, 160, -11 },
-	{   1,  -26, 169, -16 },
-	{   0,  -26, 174, -20 },
-
-	{   0,  128,   0,   0 },
-	{  -4,  126,   6,   0 },
-	{  -8,  124,  13,  -1 },
-	{ -10,  119,  20,  -1 },
-	{ -11,  111,  30,  -2 },
-	{ -11,  103,  40,  -4 },
-	{ -10,   93,  50,  -5 },
-	{  -9,   82,  61,  -6 },
-	{  -8,   72,  72,  -8 },
-	{  -6,   61,  82,  -9 },
-	{  -5,   50,  93, -10 },
-	{  -4,   40, 103, -11 },
-	{  -2,   30, 111, -11 },
-	{  -1,   20, 119, -10 },
-	{  -1,   13, 124,  -8 },
-	{   0,    6, 126,  -4 }
-};
-
 static void setScaler()
 {
-	printf("*** Send Scaler parameters:\n");
-
-	spi_uio_cmd_cont(UIO_SET_VIPCOEF);
-	for (int i = 0; i < 32; i++)
+	fileTYPE f = { 0 };
+	static char filename[1024];
+	sprintf(filename, "%s/coeff.txt", HomeDir);
+	if (FileOpen(&f, filename))
 	{
-		for (int t = 0; t < 4; t++)
+		printf("Read scaler coefficients\n");
+		char *buf = (char*)malloc(f.size+1);
+		if (buf)
 		{
-			uint16_t data = (scaler_coef[i][t] & 0x1FF) | (((i * 4) + t) << 9);
-			printf("%d.%d.%d: %d\n", data >> 15, (data >> 11) & 0xF, (data >> 9) & 0x3, data & 0x1FF);
-			spi_w(data);
+			memset(buf, 0, f.size + 1);
+			int size;
+			if (size = FileReadAdv(&f, buf, f.size))
+			{
+				spi_uio_cmd_cont(UIO_SET_VIPCOEF);
+
+				char *end = buf + size;
+				char *pos = buf;
+				int phase = 0;
+				while (pos < end)
+				{
+					char *st = pos;
+					while ((pos < end) && *pos && (*pos != 10)) pos++;
+					*pos = 0;
+					while (*st == ' ' || *st == '\t' || *st == 13) st++;
+					if (*st == '#' || *st == ';' || !*st) pos++;
+					else
+					{
+						int c0, c1, c2, c3;
+						int n = sscanf(st, "%d,%d,%d,%d", &c0, &c1, &c2, &c3);
+						if (n == 4)
+						{
+							printf("   phase %c-%02d: %4d,%4d,%4d,%4d\n", (phase >= 16) ? 'V' : 'H', phase % 16, c0, c1, c2, c3);
+							//printf("%03X: %03X %03X %03X %03X;\n",phase*4, c0 & 0x1FF, c1 & 0x1FF, c2 & 0x1FF, c3 & 0x1FF);
+
+							spi_w((c0 & 0x1FF) | (((phase * 4) + 0) << 9));
+							spi_w((c1 & 0x1FF) | (((phase * 4) + 1) << 9));
+							spi_w((c2 & 0x1FF) | (((phase * 4) + 2) << 9));
+							spi_w((c3 & 0x1FF) | (((phase * 4) + 3) << 9));
+
+							phase++;
+							if (phase >= 32) break;
+						}
+					}
+				}
+				DisableIO();
+			}
+
+			free(buf);
 		}
 	}
-	DisableIO();
 }
 
 static void setVideo()

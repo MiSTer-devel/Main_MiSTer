@@ -234,4 +234,6 @@ int hasAPI1_5();
 const char* get_rbf_dir();
 const char* get_rbf_name();
 
+#define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name())
+
 #endif // USER_IO_H

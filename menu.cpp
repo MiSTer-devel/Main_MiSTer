@@ -271,8 +271,6 @@ int changeDir(char *dir)
 	return 1;
 }
 
-#define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name())
-
 // this function displays file selection menu
 static void SelectFile(const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
