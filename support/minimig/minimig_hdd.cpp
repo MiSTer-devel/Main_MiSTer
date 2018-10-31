@@ -25,13 +25,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <stdio.h>
 #include <string.h>
-#include "hardware.h"
-#include "file_io.h"
+#include "../../hardware.h"
+#include "../../file_io.h"
 #include "minimig_hdd.h"
-#include "menu.h"
+#include "../../menu.h"
 #include "minimig_config.h"
-#include "debug.h"
-#include "fpga_io.h"
+#include "../../debug.h"
+#include "../../fpga_io.h"
 
 #define CMD_IDECMD                 0x04
 #define CMD_IDEDAT                 0x08

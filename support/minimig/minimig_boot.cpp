@@ -6,13 +6,13 @@
 #include "string.h"
 #include "stdio.h"
 #include "minimig_boot.h"
-#include "hardware.h"
-#include "osd.h"
-#include "spi.h"
-#include "file_io.h"
+#include "../../hardware.h"
+#include "../../osd.h"
+#include "../../spi.h"
+#include "../../file_io.h"
 #include "minimig_config.h"
 #include "minimig_fdd.h"
-#include "cfg.h"
+#include "../../cfg.h"
 
 static uint8_t buffer[1024];
 

@@ -2,7 +2,7 @@
 #ifndef __MINIMIG_CONFIG_H__
 #define __MINIMIG_CONFIG_H__
 
-#include "file_io.h"
+#include "../../file_io.h"
 
 typedef struct
 {
