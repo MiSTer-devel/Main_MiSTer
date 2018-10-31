@@ -1347,7 +1347,7 @@ void HandleUI(void)
 					strcpy(joy_bnames[5], "Left Trigger");
 					strcpy(joy_bnames[6], "Pause");
 				}
-				start_map_setting(joy_bcount ? joy_bcount+5 : 9);
+				start_map_setting(joy_bcount ? joy_bcount+4 : 8);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;
@@ -1476,7 +1476,7 @@ void HandleUI(void)
 			}
 			else if (joy_bcount)
 			{
-				p = (get_map_button() < joy_bcount + 4) ? joy_bnames[get_map_button() - 4] : joy_button_map[8 + get_map_type()];
+				p = (is_menu_core() && get_map_button() == joy_bcount + 3) ? joy_button_map[8 + get_map_type()] : joy_bnames[get_map_button() - 4];
 			}
 			else
 			{
@@ -1503,7 +1503,7 @@ void HandleUI(void)
 				OsdWrite(5, s, 0, 0);
 			}
 
-			if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 5 : 9))
+			if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8))
 			{
 				finish_map_setting(menu);
 				if (is_menu_core())
@@ -3062,18 +3062,18 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
-				joy_bcount = 12;
-				strcpy(joy_bnames[0], "BUTTON 1");
-				strcpy(joy_bnames[1], "BUTTON 2");
-				strcpy(joy_bnames[2], "BUTTON 3");
-				strcpy(joy_bnames[3], "BUTTON 4");
-				strcpy(joy_bnames[4], "RIGHT (Alt/M)");
-				strcpy(joy_bnames[5], "LEFT (Alt/M)");
-				strcpy(joy_bnames[6], "DOWN (Alt/M)");
-				strcpy(joy_bnames[7], "UP (Alt/M)");
-				strcpy(joy_bnames[8], "L.MOUSE");
-				strcpy(joy_bnames[9], "R.MOUSE");
-				strcpy(joy_bnames[10], "M.MOUSE");
+				joy_bcount = 13;
+				strcpy(joy_bnames[0], "Btn 1 (OK/Enter)");
+				strcpy(joy_bnames[1], "Btn 2 (ESC/Back)");
+				strcpy(joy_bnames[2], "Btn 3 (Backspace)");
+				strcpy(joy_bnames[3], "Btn 4");
+				strcpy(joy_bnames[4], "RIGHT (Alt/Mouse)");
+				strcpy(joy_bnames[5], "LEFT (Alt/Mouse)");
+				strcpy(joy_bnames[6], "DOWN (Alt/Mouse)");
+				strcpy(joy_bnames[7], "UP (Alt/Mouse)");
+				strcpy(joy_bnames[8], "Mouse Left Btn");
+				strcpy(joy_bnames[9], "Mouse Right Btn");
+				strcpy(joy_bnames[10], "Mouse Middle Btn");
 				strcpy(joy_bnames[11], "Mouse Emu/Sniper");
 				start_map_setting(17);
 				menustate = MENU_JOYDIGMAP;
