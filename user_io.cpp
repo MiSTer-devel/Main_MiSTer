@@ -12,7 +12,7 @@
 #include "osd.h"
 #include "user_io.h"
 #include "archie.h"
-#include "sharpmz.h"
+
 #include "debug.h"
 #include "st_ikbd.h"
 #include "spi.h"

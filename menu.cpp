@@ -45,7 +45,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "debug.h"
 #include "support.h"
 #include "archie.h"
-#include "sharpmz.h"
 #include "fpga_io.h"
 #include <stdbool.h>
 #include "cfg.h"
