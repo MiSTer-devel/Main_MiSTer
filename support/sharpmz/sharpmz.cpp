@@ -35,7 +35,7 @@
 #include <sys/stat.h>
 #include "../../hardware.h"
 #include "../../fpga_io.h"
-#include "../../sharpmz.h"
+#include "sharpmz.h"
 #include "../../osd.h"
 #include "../../menu.h"
 #include "../../debug.h"

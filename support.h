@@ -6,3 +6,6 @@
 
 // SharpMz support
 #include "support/sharpmz/sharpmz.h"
+
+// Archie support
+#include "support/archie/archie.h"

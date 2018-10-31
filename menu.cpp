@@ -44,7 +44,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "st_tos.h"
 #include "debug.h"
 #include "support.h"
-#include "archie.h"
 #include "fpga_io.h"
 #include <stdbool.h>
 #include "cfg.h"

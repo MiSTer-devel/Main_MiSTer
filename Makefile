@@ -16,11 +16,13 @@ PRJ = MiSTer
 SRC = $(wildcard *.c)
 SRC2 = $(wildcard *.cpp)
 MINIMIG_SRC	= $(wildcard ./support/minimig/*.cpp)
+SHARPMZ_SRC	= $(wildcard ./support/sharpmz/*.cpp)
+ARCHIE_SRC	= $(wildcard ./support/archie/*.cpp)
 
-VPATH	= ./:./support/minimig
+VPATH	= ./:./support/minimig:./support/sharpmz:./support/archie
 
-OBJ	= $(SRC:.c=.o) $(SRC2:.cpp=.o) $(MINIMIG_SRC:.cpp=.o)
-DEP	= $(SRC:.c=.d) $(SRC2:.cpp=.d) $(MINIMIG_SRC:.cpp=.d)
+OBJ	= $(SRC:.c=.o) $(SRC2:.cpp=.o) $(MINIMIG_SRC:.cpp=.o) $(SHARPMZ_SRC:.cpp=.o) $(ARCHIE_SRC:.cpp=.o)
+DEP	= $(SRC:.c=.d) $(SRC2:.cpp=.d) $(MINIMIG_SRC:.cpp=.d) $(SHARPMZ_SRC:.cpp=.d) $(ARCHIE_SRC:.cpp=.d)
 
 CFLAGS	= $(DFLAGS) -c -O3 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
 LFLAGS	= -lc -lstdc++ -lrt
