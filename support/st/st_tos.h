@@ -1,7 +1,7 @@
 #ifndef __ST_TOS_H__
 #define __ST_TOS_H__
 
-#include "file_io.h"
+#include "../../file_io.h"
 
 // FPGA spi cmommands
 #define MIST_INVALID      0x00

@@ -11,22 +11,19 @@
 #include "hardware.h"
 #include "osd.h"
 #include "user_io.h"
-
 #include "debug.h"
-#include "st_ikbd.h"
 #include "spi.h"
 #include "cfg.h"
-#include "st_tos.h"
 #include "input.h"
 #include "fpga_io.h"
 #include "file_io.h"
 #include "menu.h"
-#include "x86.h"
-#include "tzx2wav.h"
 #include "DiskImage.h"
-#include "support.h"
 #include "brightness.h"
 #include "sxmlc.h"
+#include "tzx2wav.h"
+
+#include "support.h"
 
 static char core_path[1024];
 

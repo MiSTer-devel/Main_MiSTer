@@ -3,6 +3,7 @@
 SHELL = /bin/bash -o pipefail
 
 # using gcc version 5.4.1 20161213 (Linaro GCC 5.4-2017.01-rc2)
+# This is the location of the linaro compiler in the wsbu/toolchain-linaro docker container
 BASE    = /opt/linaro/bin/arm-linux-gnueabihf
 
 CC      = $(BASE)-gcc
@@ -18,11 +19,13 @@ SRC2 = $(wildcard *.cpp)
 MINIMIG_SRC	= $(wildcard ./support/minimig/*.cpp)
 SHARPMZ_SRC	= $(wildcard ./support/sharpmz/*.cpp)
 ARCHIE_SRC	= $(wildcard ./support/archie/*.cpp)
+ST_SRC	= $(wildcard ./support/st/*.cpp)
+X86_SRC	= $(wildcard ./support/x86/*.cpp)
 
-VPATH	= ./:./support/minimig:./support/sharpmz:./support/archie
+VPATH	= ./:./support/minimig:./support/sharpmz:./support/archie:./support/st:./support/x86
 
-OBJ	= $(SRC:.c=.o) $(SRC2:.cpp=.o) $(MINIMIG_SRC:.cpp=.o) $(SHARPMZ_SRC:.cpp=.o) $(ARCHIE_SRC:.cpp=.o)
-DEP	= $(SRC:.c=.d) $(SRC2:.cpp=.d) $(MINIMIG_SRC:.cpp=.d) $(SHARPMZ_SRC:.cpp=.d) $(ARCHIE_SRC:.cpp=.d)
+OBJ	= $(SRC:.c=.o) $(SRC2:.cpp=.o) $(MINIMIG_SRC:.cpp=.o) $(SHARPMZ_SRC:.cpp=.o) $(ARCHIE_SRC:.cpp=.o) $(ST_SRC:.cpp=.o) $(X86_SRC:.cpp=.o)
+DEP	= $(SRC:.c=.d) $(SRC2:.cpp=.d) $(MINIMIG_SRC:.cpp=.d) $(SHARPMZ_SRC:.cpp=.d) $(ARCHIE_SRC:.cpp=.d) $(ST_SRC:.cpp=.d) $(X86_SRC:.cpp=.d)
 
 CFLAGS	= $(DFLAGS) -c -O3 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
 LFLAGS	= -lc -lstdc++ -lrt
@@ -36,6 +39,12 @@ $(PRJ): $(OBJ)
 clean:
 	rm -f *.d *.o *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
 	rm -rf obj .vs DTAR* x64
+
+cleanall:
+	rm -rf *.d *.o *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
+	rm -rf obj .vs DTAR* x64
+	find . -name '*.o' -delete
+	find . -name '*.d' -delete
 
 %.o: %.c
 	@$(info $<)

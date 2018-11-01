@@ -34,22 +34,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <ifaddrs.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <stdbool.h>
 #include "stdio.h"
 #include "string.h"
+
 #include "file_io.h"
 #include "osd.h"
 #include "hardware.h"
 #include "menu.h"
 #include "user_io.h"
-#include "st_tos.h"
 #include "debug.h"
-#include "support.h"
 #include "fpga_io.h"
-#include <stdbool.h>
 #include "cfg.h"
 #include "input.h"
-#include "x86.h"
 #include "battery.h"
+
+#include "support.h"
 
 /*menu states*/
 enum MENU
