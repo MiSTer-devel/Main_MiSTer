@@ -1566,7 +1566,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 						if (!found)
 						{
-							input[dev].map[(mapping_button == (mapping_count - 1)) ? 16 + mapping_type : mapping_button] = ev->code;
+							input[dev].map[(mapping_button == (mapping_count - 1) && is_menu_core()) ? 16 + mapping_type : mapping_button] = ev->code;
 							key_mapped = 1;
 						}
 					}
@@ -1600,87 +1600,112 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			{
 				if (first_joystick < 0) first_joystick = dev;
 
-				if (mouse_emu && !user_io_osd_is_visible())
+				if (user_io_osd_is_visible())
 				{
-					for (int i = 8; i <= 14; i++)
+					if (ev->value <= 1)
 					{
-						if (ev->code == input[dev].mmap[i])
+						for (int i = 0; i <= 11; i++)
 						{
-							switch (i)
+							if (ev->code == input[dev].mmap[i])
 							{
-							case 8:
-								mouse_emu_x = ev->value ?  10 : 0;
-								break;
-							case 9:
-								mouse_emu_x = ev->value ? -10 : 0;
-								break;
-							case 10:
-								mouse_emu_y = ev->value ?  10 : 0;
-								break;
-							case 11:
-								mouse_emu_y = ev->value ? -10 : 0;
-								break;
-
-							default:
-								mouse_btn = ev->value ? mouse_btn | 1<<(i-12) : mouse_btn & ~(1<<(i-12));
-								user_io_mouse(mouse_btn, 0, 0);
-								break;
+								int n = i;
+								if (n >= 8) n -= 8;
+								joy_digital(0, 1 << n, ev->value, n);
+								return;
 							}
-							return;
 						}
-					}
 
-					for (int i = 0; i <= (is_menu_core() ? 7 : 15); i++)
-					{
-						if (ev->code == input[dev].map[i])
+						if (ev->code == input[dev].mmap[17])
 						{
-							if(ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+							joy_digital(0, 0, ev->value, 17);
 							return;
 						}
 					}
 				}
 				else
 				{
-					for (int i = 0; i <= (is_menu_core() ? 7 : 15); i++)
+					if (mouse_emu)
 					{
-						if (ev->code == input[dev].map[i])
+						for (int i = 8; i <= 14; i++)
 						{
-							if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
-							return;
-						}
-					}
+							if (ev->code == input[dev].mmap[i])
+							{
+								switch (i)
+								{
+								case 8:
+									mouse_emu_x = ev->value ? 10 : 0;
+									break;
+								case 9:
+									mouse_emu_x = ev->value ? -10 : 0;
+									break;
+								case 10:
+									mouse_emu_y = ev->value ? 10 : 0;
+									break;
+								case 11:
+									mouse_emu_y = ev->value ? -10 : 0;
+									break;
 
-					for (int i = 8; i <= 11; i++)
-					{
-						if (ev->code == input[dev].mmap[i])
+								default:
+									mouse_btn = ev->value ? mouse_btn | 1 << (i - 12) : mouse_btn & ~(1 << (i - 12));
+									user_io_mouse(mouse_btn, 0, 0);
+									break;
+								}
+								return;
+							}
+						}
+
+						for (int i = 0; i <= 15; i++)
 						{
-							if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << (i - 8), ev->value, i - 8);
-							return;
+							if (ev->code == input[dev].map[i])
+							{
+								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+								return;
+							}
 						}
-					}
-				}
-
-				if (ev->code == input[dev].map[17])
-				{
-					if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 0, ev->value, 17);
-					return;
-				}
-
-				if (ev->code == input[dev].mmap[15] && (ev->value <= 1) && ((!(mouse_emu & 1)) ^ (!ev->value)))
-				{
-					mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
-					printf("mouse_emu = %d\n", mouse_emu);
-					if (mouse_emu & 2)
-					{
-						mouse_sniper = ev->value;
 					}
 					else
 					{
-						mouse_timer = 0;
-						mouse_btn = 0;
-						mouse_emu_x = 0;
-						mouse_emu_y = 0;
-						user_io_mouse(0, 0, 0);
+						for (int i = 0; i <= 15; i++)
+						{
+							if (ev->code == input[dev].map[i])
+							{
+								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+								return;
+							}
+						}
+
+						for (int i = 8; i <= 11; i++)
+						{
+							if (ev->code == input[dev].mmap[i])
+							{
+								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << (i - 8), ev->value, i - 8);
+								return;
+							}
+						}
+					}
+
+					if (ev->code == input[dev].mmap[17])
+					{
+						if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 0, ev->value, 17);
+						return;
+					}
+
+					if (ev->code == input[dev].mmap[15] && (ev->value <= 1) && ((!(mouse_emu & 1)) ^ (!ev->value)))
+					{
+						mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
+						printf("mouse_emu = %d\n", mouse_emu);
+						if (mouse_emu & 2)
+						{
+							mouse_sniper = ev->value;
+						}
+						else
+						{
+							mouse_timer = 0;
+							mouse_btn = 0;
+							mouse_emu_x = 0;
+							mouse_emu_y = 0;
+							user_io_mouse(0, 0, 0);
+						}
 					}
 				}
 				return;
