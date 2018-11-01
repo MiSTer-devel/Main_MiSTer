@@ -11,7 +11,24 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="archie.cpp">
+    <None Include="build.sh" />
+    <None Include="Makefile" />
+    <None Include="clean.sh" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="battery.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="brightness.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="cfg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DiskImage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="file_io.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="fpga_io.cpp">
@@ -38,63 +55,63 @@
     <ClCompile Include="spi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="user_io.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="file_io.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="x86.cpp">
+    <ClCompile Include="sxmlc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="tzx2wav.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="DiskImage.cpp">
+    <ClCompile Include="user_io.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="cfg.cpp">
+    <ClCompile Include="support\archie\archie.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="minimig_boot.cpp">
+    <ClCompile Include="support\minimig\minimig_boot.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="minimig_config.cpp">
+    <ClCompile Include="support\minimig\minimig_config.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="minimig_fdd.cpp">
+    <ClCompile Include="support\minimig\minimig_fdd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="minimig_hdd.cpp">
+    <ClCompile Include="support\minimig\minimig_hdd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="st_ikbd.cpp">
+    <ClCompile Include="support\sharpmz\sharpmz.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="st_tos.cpp">
+    <ClCompile Include="support\st\st_ikbd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="brightness.cpp">
+    <ClCompile Include="support\st\st_tos.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="battery.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="sxmlc.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="sharpmz.cpp">
+    <ClCompile Include="support\x86\x86.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="archie.h">
+    <ClInclude Include="battery.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="brightness.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cfg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="charrom.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="debug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DiskImage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="file_io.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fpga_base_addr_ac5.h">
@@ -136,61 +153,47 @@
     <ClInclude Include="spi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="user_io.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="file_io.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="x86.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="tzx2wav.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DiskImage.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="cfg.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="minimig_boot.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="minimig_config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="minimig_fdd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="minimig_hdd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="minimig_hdd_internal.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="st_ikbd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="st_tos.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="brightness.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="battery.h">
+    <ClInclude Include="support.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="sxmlc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="sharpmz.h">
+    <ClInclude Include="tzx2wav.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="build.sh" />
-    <None Include="Makefile" />
-    <None Include="clean.sh" />
+    <ClInclude Include="user_io.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\archie\archie.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_boot.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_fdd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_hdd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_hdd_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\sharpmz\sharpmz.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_ikbd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_tos.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\x86\x86.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
