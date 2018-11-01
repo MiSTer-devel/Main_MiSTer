@@ -1,7 +1,7 @@
 #ifndef ARCHIE_H
 #define ARCHIE_H
 
-#include "file_io.h"
+#include "../../file_io.h"
 
 void archie_init(void);
 void archie_poll(void);

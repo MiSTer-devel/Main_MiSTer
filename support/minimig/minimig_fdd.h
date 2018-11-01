@@ -1,7 +1,7 @@
 #ifndef __MINIMIG_FDD_H__
 #define __MINIMIG_FDD_H__
 
-#include "file_io.h"
+#include "../../file_io.h"
 
 // floppy disk interface defs
 #define CMD_RDTRK 0x01

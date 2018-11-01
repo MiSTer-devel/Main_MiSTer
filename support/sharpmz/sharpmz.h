@@ -31,7 +31,7 @@
 #ifndef SHARPMZ_H
 #define SHARPMZ_H
 
-#include "file_io.h"
+#include "../../file_io.h"
 
 // Defaults.
 //

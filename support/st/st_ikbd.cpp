@@ -27,10 +27,10 @@ M1 tank platoon/A_385        fixed
 #include <stdio.h>
 #include <string.h>
 
-#include "user_io.h"
-#include "spi.h"
+#include "../../user_io.h"
+#include "../../spi.h"
 #include "st_ikbd.h"
-#include "debug.h"
+#include "../../debug.h"
 
 #define IKBD_AUTO_MS   20
 

@@ -1,11 +1,11 @@
 #include "stdio.h"
 #include "string.h"
-#include "hardware.h"
-#include "fpga_io.h"
-#include "menu.h"
+#include "../../hardware.h"
+#include "../../fpga_io.h"
+#include "../../menu.h"
 #include "archie.h"
-#include "debug.h"
-#include "user_io.h"
+#include "../../debug.h"
+#include "../../user_io.h"
 
 #define MAX_FLOPPY  4
 

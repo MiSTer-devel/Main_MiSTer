@@ -32,10 +32,10 @@
 #include <fcntl.h>
 #include <time.h>
 
-#include "spi.h"
-#include "user_io.h"
-#include "file_io.h"
-#include "fpga_io.h"
+#include "../../spi.h"
+#include "../../user_io.h"
+#include "../../file_io.h"
+#include "../../fpga_io.h"
 
 #define ALT_CPU_CPU_FREQ 90000000u
 

@@ -38,23 +38,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "string.h"
 #include "file_io.h"
 #include "osd.h"
-#include "minimig_fdd.h"
-#include "minimig_hdd.h"
 #include "hardware.h"
-#include "minimig_config.h"
 #include "menu.h"
 #include "user_io.h"
-#include "st_tos.h"
 #include "debug.h"
-#include "minimig_boot.h"
-#include "archie.h"
-#include "sharpmz.h"
 #include "fpga_io.h"
 #include <stdbool.h>
 #include "cfg.h"
 #include "input.h"
-#include "x86.h"
 #include "battery.h"
+
+#include "support.h"
 
 /*menu states*/
 enum MENU

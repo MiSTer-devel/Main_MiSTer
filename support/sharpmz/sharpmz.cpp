@@ -33,13 +33,13 @@
 #include "malloc.h"
 #include <fcntl.h>
 #include <sys/stat.h>
-#include "hardware.h"
-#include "fpga_io.h"
+#include "../../hardware.h"
+#include "../../fpga_io.h"
 #include "sharpmz.h"
-#include "osd.h"
-#include "menu.h"
-#include "debug.h"
-#include "user_io.h"
+#include "../../osd.h"
+#include "../../menu.h"
+#include "../../debug.h"
+#include "../../user_io.h"
 
 #define sharpmz_debugf(a, ...)
 //#define sharpmz_debugf(a, ...) printf("\033[1;31mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)

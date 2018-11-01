@@ -6,16 +6,16 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-#include "hardware.h"
+#include "../../hardware.h"
 #include "minimig_boot.h"
-#include "file_io.h"
-#include "osd.h"
+#include "../../file_io.h"
+#include "../../osd.h"
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
-#include "menu.h"
+#include "../../menu.h"
 #include "minimig_config.h"
-#include "user_io.h"
-#include "input.h"
+#include "../../user_io.h"
+#include "../../input.h"
 
 typedef struct
 {
