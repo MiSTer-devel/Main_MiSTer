@@ -587,7 +587,7 @@ void user_io_init(const char *path)
 	{
 		sprintf(mainpath, "uartmode.%s", user_io_get_core_name_ex());
 		FileLoadConfig(mainpath, &mode, 4);
-		if (mode > 3) mode = 0;
+		if (mode > 5) mode = 0;
 	}
 
 	char cmd[32];

@@ -161,7 +161,7 @@ const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
-const char *config_uart_msg[] = { "   None", "    PPP", "Console" };
+const char *config_uart_msg[] = { "       None", "        PPP", "    Console", "    USBMIDI", "USBMIDI-38K" };
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -1277,9 +1277,11 @@ void HandleUI(void)
 			struct stat filestat;
 			if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
 			if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
+			if (!stat("/tmp/uartmode3", &filestat)) mode = 3;
+			if (!stat("/tmp/uartmode4", &filestat)) mode = 4;
 			
 			menumask |= 8;
-			sprintf(s, " UART connection     %s", config_uart_msg[mode]);
+			sprintf(s, " UART connection %s", config_uart_msg[mode]);
 			OsdWrite(3, s, menusub == 3, 0);
 		}
 		else
@@ -1356,8 +1358,13 @@ void HandleUI(void)
 					struct stat filestat;
 					if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
 					if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
-					mode++;
-					if (mode > 3) mode = 0;
+					if (!stat("/tmp/uartmode3", &filestat)) mode = 3;
+                                        if (!stat("/tmp/uartmode4", &filestat)) mode = 4;
+                                        mode++;
+                                        if (mode == 3 || mode == 4) 
+                                                if (stat("/dev/midi", &filestat) != 0)
+                                                        mode = 0;
+                                        if (mode > 5) mode = 0;
 					sprintf(s, "uartmode %d", mode);
 					system(s);
 					menustate = MENU_8BIT_SYSTEM1;
