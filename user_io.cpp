@@ -2579,11 +2579,27 @@ static void setPLL(double Fout)
 	vitems[20] = k;
 }
 
-static void setScalerCoeff()
+static char scaler_flt_cfg[1024] = { 0 };
+static char new_scaler = 0;
+
+static void setScaler()
 {
 	fileTYPE f = { 0 };
 	static char filename[1024];
-	sprintf(filename, "%s/coeff.txt", HomeDir);
+
+	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
+	{
+		DisableIO();
+		return;
+	}
+	else
+	{
+		new_scaler = 1;
+		spi8(scaler_flt_cfg[0]);
+		DisableIO();
+	}
+
+	sprintf(filename, "coeff/%s", scaler_flt_cfg+1);
 	if (FileOpen(&f, filename))
 	{
 		printf("Read scaler coefficients\n");
@@ -2594,7 +2610,7 @@ static void setScalerCoeff()
 			int size;
 			if (size = FileReadAdv(&f, buf, f.size))
 			{
-				spi_uio_cmd_cont(UIO_SET_VIPCOEF);
+				spi_uio_cmd_cont(UIO_SET_FLTCOEF);
 
 				char *end = buf + size;
 				char *pos = buf;
@@ -2633,9 +2649,42 @@ static void setScalerCoeff()
 	}
 }
 
+int user_io_get_scaler_flt()
+{
+	return new_scaler ? scaler_flt_cfg[0] : -1;
+}
+
+char* user_io_get_scaler_coeff()
+{
+	return scaler_flt_cfg + 1;
+}
+
+void user_io_set_scaler_flt(int n)
+{
+	scaler_flt_cfg[0] = (char)n;
+	FileSaveConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg));
+	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt_cfg[0]);
+}
+
+void user_io_set_scaler_coeff(char *name)
+{
+	strcpy(scaler_flt_cfg + 1, name);
+	FileSaveConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg));
+	setScaler();
+}
+
+static void loadScalerCfg()
+{
+	if (!FileLoadConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
+	{
+		memset(scaler_flt_cfg, 0, sizeof(scaler_flt_cfg));
+	}
+}
+
 static void setVideo()
 {
-	setScalerCoeff();
+	loadScalerCfg();
+	setScaler();
 
 	printf("Send HDMI parameters:\n");
 	spi_uio_cmd_cont(UIO_SET_VIDEO);

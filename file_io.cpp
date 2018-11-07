@@ -330,6 +330,16 @@ int FileCanWrite(const char *name)
 	return ((st.st_mode & S_IWUSR) != 0);
 }
 
+uint32_t getFileType(const char *name)
+{
+	sprintf(full_path, "%s/%s", getRootDir(), name);
+
+	struct stat64 st;
+	if (stat64(full_path, &st)) return 0;
+
+	return st.st_mode;
+}
+
 static int device = 0;
 static int usbnum = 0;
 const char *getStorageDir(int dev)

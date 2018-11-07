@@ -34,6 +34,7 @@ dirent* flist_SelectedItem();
 #define SCANO_DIR        1 // include subdirectories
 #define SCANO_UMOUNT     2 // allow backspace key
 #define SCANO_CORES      4 // only include subdirectories with prefix '_'
+#define SCANO_COEFF      8
 
 void FindStorage();
 int  getStorage(int from_setting);
@@ -75,5 +76,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 const char *getStorageDir(int dev);
 const char *getRootDir();
 const char *getFullPath(const char *name);
+
+uint32_t getFileType(const char *name);
 
 #endif
