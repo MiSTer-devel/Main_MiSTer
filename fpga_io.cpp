@@ -602,6 +602,8 @@ void reboot(int cold)
 	sync();
 	fpga_core_reset(1);
 
+	usleep(500000);
+
 	writel(cold ? 0 : 0x1, &reset_regs->tstscratch);
 	writel(2, &reset_regs->ctrl);
 	while (1);
