@@ -2590,16 +2590,16 @@ static void setScaler()
 	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
 	{
 		DisableIO();
-		return;
+		sprintf(filename, "%s/coeff.txt", HomeDir);
 	}
 	else
 	{
 		new_scaler = 1;
 		spi8(scaler_flt_cfg[0]);
 		DisableIO();
+		sprintf(filename, COEFF_DIR"/%s", scaler_flt_cfg + 1);
 	}
 
-	sprintf(filename, "coeff/%s", scaler_flt_cfg+1);
 	if (FileOpen(&f, filename))
 	{
 		printf("Read scaler coefficients\n");

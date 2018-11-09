@@ -79,4 +79,6 @@ const char *getFullPath(const char *name);
 
 uint32_t getFileType(const char *name);
 
+#define COEFF_DIR "filters"
+
 #endif

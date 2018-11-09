@@ -1334,7 +1334,7 @@ void HandleUI(void)
 				if (strlen(user_io_get_scaler_coeff())) strncat(s, user_io_get_scaler_coeff(), 22);
 				else strcat(s, "<none>");
 
-				OsdWrite(n++, s, menusub == 5, user_io_get_scaler_flt() != 4 || !S_ISDIR(getFileType("coeff")));
+				OsdWrite(n++, s, menusub == 5, user_io_get_scaler_flt() != 4 || !S_ISDIR(getFileType(COEFF_DIR)));
 				OsdWrite(n++);
 			}
 
@@ -1423,7 +1423,7 @@ void HandleUI(void)
 			case 5:
 				if (user_io_get_scaler_flt() == 4)
 				{
-					sprintf(SelectedPath, "coeff/%s", user_io_get_scaler_coeff());
+					sprintf(SelectedPath, COEFF_DIR"/%s", user_io_get_scaler_coeff());
 					SelectFile(0, SCANO_COEFF, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
