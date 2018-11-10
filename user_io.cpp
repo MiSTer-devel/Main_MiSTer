@@ -1192,6 +1192,73 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 	}
 }
 
+void user_io_prune_sav(void)
+{
+	int ret = 0;
+	char name[1200];
+	uint8_t remove = 1;
+
+	ret = FileLoadConfig("last_save.dir", name, 1200);
+	if (!ret || strnlen(name, 1200) < 5)
+		return;
+
+	fileTYPE f;
+	ret = FileOpenEx(&f, name, O_RDONLY, 1);
+	if (!ret)
+		return;
+
+	char buf = 0;
+	while (FileReadAdv(&f, (void *) &buf, 1) > 0) {
+		if (buf != 0) {
+			remove = 0;
+			break;
+		}
+	}
+
+	FileClose(&f);
+
+	if (remove) {
+		printf("Pruning unused sav file: %s\n", name);
+		FileRemove(name, 0, 1);
+	}
+
+	FileSaveConfig("last_save.dir", (void *) "\0", 1);
+}
+
+void user_io_create_sav(char *name, size_t size_kb)
+{
+	int ret = 0;
+
+	uint8_t one_kb[1024];
+	memset(one_kb, 0, 1024);
+
+	fileTYPE f;
+	ret = FileOpenEx(&f, name, O_CREAT | O_EXCL | O_RDWR, 1);
+	if (!ret)
+		return;
+
+	printf("Creating %s of size %ldKB\n", name, size_kb);
+
+
+	for (int x = 0; x < size_kb; x++)
+	{
+		ret = FileWriteAdv(&f, one_kb, 1024);
+		if (ret <= 0)
+			break;
+	}
+
+	FileClose(&f);
+
+	if (ret <= 0) {
+		printf("Unable to create %s\n", name);
+		FileRemove(name, 0, 1);
+		return;
+	}
+
+	// Save path of new file in case it needs pruning
+	FileSaveConfig("last_save.dir", (void *) name, strlen(name) + 1);
+}
+
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = { 0 };
@@ -1262,12 +1329,20 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	FileClose(&f);
 
+	// Prune the last .sav file if it was not used
+	user_io_prune_sav();
+
 	if (opensave)
 	{
 		strcpy((char*)buf, name);
 		char *p = strrchr((char*)buf, '.');
 		if (!p) p = (char*)buf + strlen(name);
 		strcpy(p, ".sav");
+
+		// Create a blank .sav file in case it is needed
+		// Destruction of existing files is protected by the O_EXCL flag
+		user_io_create_sav((char *)buf, 128);
+
 		user_io_file_mount((char*)buf);
 	}
 

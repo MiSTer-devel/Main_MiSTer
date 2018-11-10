@@ -61,6 +61,8 @@ int FileWriteSec(fileTYPE *file, void *pBuffer);
 
 int FileCanWrite(const char *name);
 
+int FileRemove(const char *name, int mode, char mute = 0);
+
 int FileSave(const char *name, void *pBuffer, int size);
 int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 

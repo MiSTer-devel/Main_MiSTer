@@ -330,6 +330,27 @@ int FileCanWrite(const char *name)
 	return ((st.st_mode & S_IWUSR) != 0);
 }
 
+int FileRemove(const char *name, int mode, char mute)
+{
+	const char *root = getRootDir();
+	if (strncasecmp(getRootDir(), name, strlen(root)))
+	{
+		sprintf(full_path, "%s/%s", (mode == -1) ? "" : root, name);
+	}
+	else
+	{
+		sprintf(full_path, name);
+	}
+
+	if (!FileCanWrite(name))
+		return 0;
+
+	int ret = remove(full_path);
+	if (!mute) printf("Removing file %s. Success: %d\n", name, ret == 0 ? 1 : 0);
+
+	return ret != 0 ? 0 : 1;
+}
+
 static int device = 0;
 static int usbnum = 0;
 const char *getStorageDir(int dev)
