@@ -971,7 +971,7 @@ typedef struct
 {
 	uint16_t vid, pid;
 	char     led;
-	char     last_l, last_r, last_u, last_d;
+	char     last_x, last_y; // last x & y axis bitmasks for each alternative directional control scheme (DPAD, Analog pad etc.)
 
 	char     has_map;
 	uint32_t map[32];
@@ -1917,6 +1917,42 @@ static void getVidPid(int num, uint16_t* vid, uint16_t* pid)
 
 static struct pollfd pool[NUMDEV + 1];
 
+// Translate axis values to key events of specific codes.
+// Only binary key press /release logic is supported, any value not 0 is considered
+// a key press, value 0 is key release.
+static void send_axis_key_event(int dev, int code1, int code2, int value1, int value2, int last1, int last2) {
+	struct input_event ev;
+	//note: key events do not require input_absinfo values
+
+	ev.type = EV_KEY;
+	//send key releases first
+	// value1 unset but previously set
+	if (!value1 && last1) {
+		ev.code = code1;
+		ev.value = 0;
+		input_cb(&ev, 0, dev);
+	}
+	// value2 unset but previously set
+	if (!value2 && last2) {
+		ev.code = code2;
+		ev.value = 0;
+		input_cb(&ev, 0, dev);
+	}
+	//send key presses afterwards, but only if previously not set
+	if (value1 && !last1)
+	{
+		ev.code = code1;
+		ev.value = 1;
+		input_cb(&ev, 0, dev);
+	} else //either one or another, not both directions at the same time
+	if (value2 && !last2)
+	{
+		ev.code = code2;
+		ev.value = 1;
+		input_cb(&ev, 0, dev);
+	}
+}
+
 int input_test(int getchar)
 {
 	static char   cur_leds = 0;
@@ -2058,8 +2094,12 @@ int input_test(int getchar)
 								char l, r, u, d;
 								l = r = u = d = 0;
 								uint16_t offset = 0;
+								char offset_mask1, offset_mask2;
+
 								if (ev.code < 16) offset += 4;
 								if (ev.code < 2)  offset += 4;
+								offset_mask1 = (1 << (offset >> 1)); // 01XX
+								offset_mask2 = (2 << (offset >> 1)); // 10XX
 
 								uint16_t base_axis = !user_io_get_joy_transl() ? 0 : ~ev.code;
 								uint16_t extra_axis = 2;
@@ -2071,21 +2111,13 @@ int input_test(int getchar)
 									if ((ev.code < 16) ? ev.value < center - treshold : ev.value == -1) l = 1;
 									if ((ev.code < 16) ? ev.value > center + treshold : ev.value ==  1) r = 1;
 
-									ev.type = EV_KEY;
-									if (input[i].last_l != l)
-									{
-										ev.code = KEY_EMU_LEFT + offset;
-										ev.value = l;
-										input_cb(&ev, &absinfo, i);
-										input[i].last_l = l;
-									}
-
-									if (input[i].last_r != r)
-									{
-										ev.code = KEY_EMU_RIGHT + offset;
-										ev.value = r;
-										input_cb(&ev, &absinfo, i);
-										input[i].last_r = r;
+									// left or right pressed or now released but previously pressed (for specific controller offset)
+									if (l || r || (input[i].last_x & (offset_mask1 | offset_mask2))) {
+										send_axis_key_event(i, KEY_EMU_LEFT + offset, KEY_EMU_RIGHT + offset, l, r, input[i].last_x & offset_mask1, input[i].last_x & offset_mask2);
+										if (l) input[i].last_x |= offset_mask1;
+										else input[i].last_x &= ~offset_mask1;
+										if (r) input[i].last_x |= offset_mask2;
+										else input[i].last_x &= ~offset_mask2;
 									}
 								}
 
@@ -2103,21 +2135,13 @@ int input_test(int getchar)
 									if ((ev.code < 16) ? ev.value < center - treshold : ev.value == -1) u = 1;
 									if ((ev.code < 16) ? ev.value > center + treshold : ev.value ==  1) d = 1;
 
-									ev.type = EV_KEY;
-									if (input[i].last_u != u)
-									{
-										ev.code = KEY_EMU_UP + offset;
-										ev.value = u;
-										input_cb(&ev, &absinfo, i);
-										input[i].last_u = u;
-									}
-
-									if (input[i].last_d != d)
-									{
-										ev.code = KEY_EMU_DOWN + offset;
-										ev.value = d;
-										input_cb(&ev, &absinfo, i);
-										input[i].last_d = d;
+									// up or down pressed or now released but previously pressed (for specific controller offset)
+									if (u || d || (input[i].last_y & (offset_mask1 | offset_mask2))) {
+										send_axis_key_event(i, KEY_EMU_UP + offset, KEY_EMU_DOWN + offset, u, d,  input[i].last_y & offset_mask1, input[i].last_y & offset_mask2);
+										if (u) input[i].last_y |= offset_mask1;
+										else input[i].last_y &= ~offset_mask1;
+										if (d) input[i].last_y |= offset_mask2;
+										else input[i].last_y &= ~offset_mask2;
 									}
 								}
 
