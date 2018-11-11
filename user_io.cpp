@@ -1225,24 +1225,28 @@ void user_io_prune_sav(void)
 	FileSaveConfig("last_save.dir", (void *) "\0", 1);
 }
 
-void user_io_create_sav(char *name, size_t size_kb)
+void user_io_create_sav(char *name, uint8_t power_of_two)
 {
 	int ret = 0;
-
 	uint8_t one_kb[1024];
 	memset(one_kb, 0, 1024);
+
+	// Limit size from 1024 bytes to 64 bit max
+	if (power_of_two > 63) power_of_two = 63;
+	if (power_of_two < 10) power_of_two = 10;
+
+	uint64_t size = (uint64_t) (1 << power_of_two) / 1024;
 
 	fileTYPE f;
 	ret = FileOpenEx(&f, name, O_CREAT | O_EXCL | O_RDWR, 1);
 	if (!ret)
 		return;
 
-	printf("Creating %s of size %ldKB\n", name, size_kb);
+	printf("Creating %s of size %ldKB\n", name, size);
 
-
-	for (int x = 0; x < size_kb; x++)
+	for (int x = 0; x < size; x++)
 	{
-		ret = FileWriteAdv(&f, one_kb, 1024);
+		ret = FileWriteAdv(&f, one_kb, sizeof(one_kb));
 		if (ret <= 0)
 			break;
 	}
@@ -1341,7 +1345,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 		// Create a blank .sav file in case it is needed
 		// Destruction of existing files is protected by the O_EXCL flag
-		user_io_create_sav((char *)buf, 128);
+		user_io_create_sav((char *)buf, (uint8_t) opensave);
 
 		user_io_file_mount((char*)buf);
 	}

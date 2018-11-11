@@ -1173,7 +1173,18 @@ void HandleUI(void)
 
 				if (p[0] == 'F')
 				{
-					opensave = (p[1] == 'S');
+					if (p[1] == 'S') {
+						if (p[2] >= '0' && p[2] <= '9' && p[3] >= '0' && p[3] <= '9') {
+							char sav_size_str[3];
+							snprintf(sav_size_str, 3, "%c%c", p[2], p[3]);
+							opensave = (uint8_t) strtol(sav_size_str, NULL, 10);
+							if (opensave <= 0) opensave = 17;
+						} else {
+							// Default is 128kb ( 1 << 17 ) which maintains compatibility
+							// with existing cores that save (NES, SMS, TG16).
+							opensave = 17;
+						}
+					}
 					substrcpy(ext, p, 1);
 					while (strlen(ext) < 3) strcat(ext, " ");
 					SelectFile(ext, SCANO_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
