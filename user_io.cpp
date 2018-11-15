@@ -2590,15 +2590,13 @@ static void setScaler()
 	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
 	{
 		DisableIO();
-		sprintf(filename, "%s/coeff.txt", HomeDir);
+		return;
 	}
-	else
-	{
-		new_scaler = 1;
-		spi8(scaler_flt_cfg[0]);
-		DisableIO();
-		sprintf(filename, COEFF_DIR"/%s", scaler_flt_cfg + 1);
-	}
+
+	new_scaler = 1;
+	spi8(scaler_flt_cfg[0]);
+	DisableIO();
+	sprintf(filename, COEFF_DIR"/%s", scaler_flt_cfg + 1);
 
 	if (FileOpen(&f, filename))
 	{
@@ -2664,6 +2662,7 @@ void user_io_set_scaler_flt(int n)
 	scaler_flt_cfg[0] = (char)n;
 	FileSaveConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg));
 	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt_cfg[0]);
+	spi_uio_cmd(UIO_SET_FLTCOEF);
 }
 
 void user_io_set_scaler_coeff(char *name)
@@ -2671,6 +2670,7 @@ void user_io_set_scaler_coeff(char *name)
 	strcpy(scaler_flt_cfg + 1, name);
 	FileSaveConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg));
 	setScaler();
+	user_io_send_buttons(1);
 }
 
 static void loadScalerCfg()

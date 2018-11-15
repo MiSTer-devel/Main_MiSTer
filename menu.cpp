@@ -165,7 +165,7 @@ const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "       None", "        PPP", "    Console", "    USBMIDI", "USBMIDI-38K" };
-const char *config_scaler_msg[] = { "Nearest Neighbor","Bilinear","Sharp Bilinear","Bicubic","Custom" };
+const char *config_scaler_msg[] = { "Internal","Custom" };
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -1326,7 +1326,7 @@ void HandleUI(void)
 			{
 				menumask |= 0x30;
 				OsdWrite(n++, " HDMI Scaler:");
-				sprintf(s, " \x16 Filter - %s", config_scaler_msg[user_io_get_scaler_flt()]);
+				sprintf(s, " \x16 Filter - %s", config_scaler_msg[user_io_get_scaler_flt() ? 1 : 0]);
 				OsdWrite(n++, s, menusub == 4);
 
 				memset(s, 0, sizeof(s));
@@ -1334,7 +1334,7 @@ void HandleUI(void)
 				if (strlen(user_io_get_scaler_coeff())) strncat(s, user_io_get_scaler_coeff(), 22);
 				else strcat(s, "<none>");
 
-				OsdWrite(n++, s, menusub == 5, user_io_get_scaler_flt() != 4 || !S_ISDIR(getFileType(COEFF_DIR)));
+				OsdWrite(n++, s, menusub == 5, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
 				OsdWrite(n++);
 			}
 
@@ -1416,12 +1416,12 @@ void HandleUI(void)
 				}
 				break;
 			case 4:
-				user_io_set_scaler_flt((user_io_get_scaler_flt() < 4) ? user_io_get_scaler_flt() + 1 : 0);
+				user_io_set_scaler_flt(user_io_get_scaler_flt() ? 0 : 1);
 				menustate = MENU_8BIT_SYSTEM1;
 				break;
 
 			case 5:
-				if (user_io_get_scaler_flt() == 4)
+				if (user_io_get_scaler_flt())
 				{
 					sprintf(SelectedPath, COEFF_DIR"/%s", user_io_get_scaler_coeff());
 					SelectFile(0, SCANO_COEFF, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
