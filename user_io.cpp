@@ -858,7 +858,7 @@ void user_io_set_index(unsigned char index)
 	DisableFpga();
 }
 
-int user_io_file_mount(char *name, unsigned char index)
+int user_io_file_mount(char *name, unsigned char index, char pre)
 {
 	int writable = 0;
 	int ret = 0;
@@ -876,10 +876,18 @@ int user_io_file_mount(char *name, unsigned char index)
 
 	if (!ret)
 	{
-		writable = 0;
 		sd_image[index].size = 0;
 		printf("Failed to open file %s\n", name);
-		printf("Eject image from %d slot\n", index);
+		if (pre)
+		{
+			writable = 1;
+			printf("Will be created upon write\n");
+		}
+		else
+		{
+			writable = 0;
+			printf("Eject image from %d slot\n", index);
+		}
 	}
 	else
 	{
@@ -891,17 +899,26 @@ int user_io_file_mount(char *name, unsigned char index)
 	// send mounted image size first then notify about mounting
 	EnableIO();
 	spi8(UIO_SET_SDINFO);
+
+	__off64_t size = sd_image[index].size;
+	if (!ret && pre)
+	{
+		size = -1;
+		sd_image[index].type = 2;
+		strcpy(sd_image[index].path, name);
+	}
+
 	if (io_ver)
 	{
-		spi_w((uint16_t)(sd_image[index].size));
-		spi_w((uint16_t)(sd_image[index].size>>16));
-		spi_w((uint16_t)(sd_image[index].size>>32));
-		spi_w((uint16_t)(sd_image[index].size>>48));
+		spi_w((uint16_t)(size));
+		spi_w((uint16_t)(size>>16));
+		spi_w((uint16_t)(size>>32));
+		spi_w((uint16_t)(size>>48));
 	}
 	else
 	{
-		spi32le(sd_image[index].size);
-		spi32le(sd_image[index].size>>32);
+		spi32le(size);
+		spi32le(size>>32);
 	}
 	DisableIO();
 
@@ -1268,7 +1285,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		char *p = strrchr((char*)buf, '.');
 		if (!p) p = (char*)buf + strlen(name);
 		strcpy(p, ".sav");
-		user_io_file_mount((char*)buf);
+		user_io_file_mount((char*)buf, 0, 1);
 	}
 
 	// signal end of transmission
@@ -1630,6 +1647,7 @@ void user_io_poll()
 					{
 						//printf("SD WR %d on %d\n", lba, disk);
 
+						int done = 0;
 						buffer_lba[disk] = lba;
 
 						// Fetch sector data from FPGA ...
@@ -1637,15 +1655,43 @@ void user_io_poll()
 						spi_block_read(buffer[disk], fio_size);
 						DisableIO();
 
-						// ... and write it to disk
-						int done = 0;
 
-						if ((sd_image[disk].size>>9)>lba)
+						if (sd_image[disk].type == 2 && !lba)
 						{
-							diskled_on();
-							if (FileSeekLBA(&sd_image[disk], lba))
+							//Create the file
+							if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
 							{
-								if (FileWriteSec(&sd_image[disk], buffer[disk])) done = 1;
+								diskled_on();
+								if (FileWriteSec(&sd_image[disk], buffer[disk]))
+								{
+									sd_image[disk].size = 512;
+									done = 1;
+								}
+							}
+							else
+							{
+								printf("Error in creating file: %s\n", sd_image[disk].path);
+							}
+						}
+						else
+						{
+							// ... and write it to disk
+							__off64_t size = sd_image[disk].size>>9;
+							if (size && size>=lba)
+							{
+								diskled_on();
+								if (FileSeekLBA(&sd_image[disk], lba))
+								{
+									if (FileWriteSec(&sd_image[disk], buffer[disk]))
+									{
+										done = 1;
+										if (size == lba)
+										{
+											size++;
+											sd_image[disk].size = size << 9;
+										}
+									}
+								}
 							}
 						}
 
@@ -1681,7 +1727,6 @@ void user_io_poll()
 						//Even after error we have to provide the block to the core
 						//Give an empty block.
 						if (!done) memset(buffer[disk], 0, sizeof(buffer[disk]));
-
 						buffer_lba[disk] = lba;
 					}
 
@@ -1710,6 +1755,11 @@ void user_io_poll()
 						}
 					}
 					if(done) buffer_lba[disk] = lba + 1;
+
+					if (sd_image[disk].type == 2)
+					{
+						buffer_lba[disk] = -1;
+					}
 				}
 			}
 

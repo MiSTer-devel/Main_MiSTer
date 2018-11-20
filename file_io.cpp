@@ -65,7 +65,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	char *p = strrchr(full_path, '/');
 	strcpy(file->name, (mode == -1) ? full_path : p+1);
 
-	file->fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode);
+	file->fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
 	if (file->fd <= 0)
 	{
 		if(!mute) printf("FileOpenEx(open) File:%s, error: %d.\n", full_path, file->fd);
@@ -98,6 +98,15 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 
 	//printf("opened %s, size %lu\n", full_path, file->size);
 	return 1;
+}
+
+__off64_t FileGetSize(fileTYPE *file)
+{
+	if (file->fd <= 0) return 0;
+
+	struct stat64 st;
+	int ret = fstat64(file->fd, &st);
+	return (ret < 0) ? 0 : st.st_size;
 }
 
 int FileOpen(fileTYPE *file, const char *name, char mute)
