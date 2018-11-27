@@ -1755,7 +1755,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						}
 					}
 
-					if (ev->code == input[dev].map[16])
+					if (ev->code == input[dev].mmap[16])
 					{
 						if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 0, ev->value, 16);
 						return;
