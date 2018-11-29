@@ -152,6 +152,13 @@ char is_x86_core()
 	return (is_x86_type == 1);
 }
 
+static int is_snes_type = 0;
+char is_snes_core()
+{
+	if (!is_snes_type) is_snes_type = strcasecmp(core_name, "SNES") ? 2 : 1;
+	return (is_snes_type == 1);
+}
+
 char is_cpc_core()
 {
 	return !strcasecmp(core_name, "amstrad");
@@ -1260,6 +1267,17 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	}
 	else
 	{
+		if (is_snes_core())
+		{
+			printf("Load SNES ROM.\n");
+			uint8_t* buf = snes_get_header(&f);
+			hexdump(buf, 16, 0);
+			EnableFpga();
+			spi8(UIO_FILE_TX_DAT);
+			spi_write(buf, 512, fio_size);
+			DisableFpga();
+		}
+
 		while (bytes2send)
 		{
 			printf(".");

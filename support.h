@@ -16,3 +16,6 @@
 
 // X86  support
 #include "support/x86/x86.h"
+
+// SNES  support
+#include "support/snes/snes.h"
