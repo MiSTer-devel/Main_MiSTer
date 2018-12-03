@@ -164,9 +164,9 @@ const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
-const char *config_uart_msg[] = { "       None", "        PPP", "    Console", "    USBMIDI", "USBMIDI-38K" };
+const char *config_uart_msg[] = { "    None", "     PPP", " Console", "    MIDI", "MIDI-38K" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
-
+const char *config_softsynth_msg[] = {"      MUNT", "FluidSynth", "       UDP"};
 char joy_bnames[12][32];
 int  joy_bcount = 0;
 
@@ -201,6 +201,44 @@ unsigned char fs_ExtLen = 0;
 unsigned char fs_Options;
 unsigned char fs_MenuSelect;
 unsigned char fs_MenuCancel;
+
+int GetUARTMode()
+{
+        struct stat filestat;
+        if (!stat("/tmp/uartmode1", &filestat)) return 1;
+        if (!stat("/tmp/uartmode2", &filestat)) return 2;
+        if (!stat("/tmp/uartmode3", &filestat)) return 3;
+        if (!stat("/tmp/uartmode4", &filestat)) return 4;
+        return 0;
+}
+
+int GetSoftSynthMode()
+{
+        struct stat filestat;
+        if (!stat("/tmp/ML_MUNT",   &filestat)) return 0;
+        if (!stat("/tmp/ML_FSYNTH", &filestat)) return 1;
+        if (!stat("/tmp/ML_UDP",    &filestat)) return 2;
+        return 0;
+}
+
+void SetSoftSynthMode(int mode)
+{
+        switch (mode)
+        {
+                case 0: system("echo 1 > /tmp/ML_MUNT"); 
+                        remove("/tmp/ML_FSYNTH");
+                        remove("/tmp/ML_UDP");
+                break;
+                case 1: system("echo 1 > /tmp/ML_FSYNTH");
+                        remove("/tmp/ML_MUNT");
+                        remove("/tmp/ML_UDP");
+                break;  
+                case 2: system("echo 1 > /tmp/ML_UDP");
+                        remove("/tmp/ML_MUNT");
+                        remove("/tmp/ML_FSYNTH");
+                break;
+        }
+}      
 
 char* GetExt(char *ext)
 {
@@ -1281,7 +1319,7 @@ void HandleUI(void)
 		{
 			OsdSetSize(16);
 			helptext = 0;
-			menumask = 0x7C7;
+			menumask = 0xfd7; //0X7C7
 			reboot_req = 0;
 
 			OsdSetTitle("System", OSD_ARROW_LEFT);
@@ -1292,16 +1330,15 @@ void HandleUI(void)
 			m = 0;
 			if (user_io_get_uart_mode())
 			{
-				int mode = 0;
 				struct stat filestat;
-				if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
-				if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
-				if (!stat("/tmp/uartmode3", &filestat)) mode = 3;
-				if (!stat("/tmp/uartmode4", &filestat)) mode = 4;
-
+				int mode = GetUARTMode();
 				menumask |= 8;
-				sprintf(s, " UART connection %s", config_uart_msg[mode]);
-				OsdWrite(3, s, menusub == 3, 0);
+                                sprintf(s, " UART connection    %s", config_uart_msg[mode]);
+                                OsdWrite(3, s, menusub == 3, 0);
+                                sprintf(s, " Softsynth        %s", ((mode == 3 || mode == 4) 
+                                        && stat("/dev/midi", &filestat) != 0)?
+                                                config_softsynth_msg[GetSoftSynthMode()]:"       N/A"); 
+                                OsdWrite(4, s, menusub == 4 , 0);
 			}
 			else
 			{
@@ -1311,7 +1348,7 @@ void HandleUI(void)
 			OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
 			OsdWrite(m++, " Define joystick buttons   \x16", menusub == 1, 0);
 			OsdWrite(m++, " Button/Key remap for game \x16", menusub == 2, 0);
-			OsdWrite(4, "", 0, 0);
+			//OsdWrite(4, "", 0, 0);
 
 			m = 0;
 			if (user_io_core_type() == CORE_TYPE_MINIMIG2)
@@ -1395,17 +1432,12 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 3:
-				{
-					int mode = 0;
-					struct stat filestat;
-					if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
-					if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
-					if (!stat("/tmp/uartmode3", &filestat)) mode = 3;
-                                        if (!stat("/tmp/uartmode4", &filestat)) mode = 4;
-                                        mode++;
-                                        if (mode == 3 || mode == 4) 
-                                                if (stat("/dev/midi", &filestat) != 0)
-                                                        mode = 0;
+				{       
+					int mode = GetUARTMode();
+					mode++;
+                                        //if (mode == 3 || mode == 4) 
+                                        //        if (stat("/dev/midi", &filestat) != 0)
+                                        //                mode = 0;
                                         if (mode > 5) mode = 0;
 					sprintf(s, "uartmode %d", mode);
 					system(s);
@@ -1415,10 +1447,34 @@ void HandleUI(void)
 					FileSaveConfig(s, &mode, 4);
 				}
 				break;
+			case 4: 
+                                {
+                                        int mode = GetUARTMode(); 
+                                        if(mode == 3 or mode == 4)
+                                        {
+                                                struct stat filestat;
+                                                int softsynth = GetSoftSynthMode();
+                                                softsynth++;
+                                                //if(softsynth == 0 || softsynth == 1)
+                                                //      if (stat("/dev/pcmC0D0p", &filestat) != 0)
+                                                //              softsynth = 2;
+                                                if (softsynth > 2) softsynth = 0;
+                                                 
+                                                SetSoftSynthMode(softsynth);
+                                         
+                                                sprintf(s, "uartmode %d", 0);
+                                                system(s);
+                                                sprintf(s, "uartmode %d", mode);
+                                                system(s);
+                                        }
+                                        menustate = MENU_8BIT_SYSTEM1;
+                                }
+                                break;
+                        /*        				
 			case 4:
 				user_io_set_scaler_flt(user_io_get_scaler_flt() ? 0 : 1);
 				menustate = MENU_8BIT_SYSTEM1;
-				break;
+				break; */
 
 			case 5:
 				if (user_io_get_scaler_flt())
