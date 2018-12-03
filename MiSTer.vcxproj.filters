@@ -91,6 +91,9 @@
     <ClCompile Include="support\x86\x86.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="support\snes\snes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -193,6 +196,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="support\x86\x86.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\snes\snes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -62,7 +62,8 @@
 #define UIO_SETHEIGHT   0x27  // Set scaled vertical resolution (to reduce scaling artefacts)
 #define UIO_GETUARTFLG  0x28  // Get UART_FLG_*
 #define UIO_GET_STATUS  0x29  // Update status from the core
-#define UIO_SET_VIPCOEF 0x2A  // Set Scaler coefficients
+#define UIO_SET_FLTCOEF 0x2A  // Set Scaler polyphase coefficients
+#define UIO_SET_FLTNUM  0x2B  // Set Scaler predefined filter
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -188,13 +189,14 @@ void user_io_serial_tx(char *, uint16_t);
 char *user_io_8bit_get_string(char);
 unsigned long user_io_8bit_set_status(unsigned long, unsigned long);
 int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
-int  user_io_file_mount(char *name, unsigned char index = 0);
+int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
 char user_io_dip_switch1(void);
 char user_io_serial_status(serial_status_t *, uint8_t);
 char *user_io_get_core_name();
 const char *user_io_get_core_name_ex();
 char is_menu_core();
 char is_x86_core();
+char is_snes_core();
 char has_menu();
 
 int user_io_get_kbdemu();
@@ -233,6 +235,11 @@ int hasAPI1_5();
 
 const char* get_rbf_dir();
 const char* get_rbf_name();
+
+int user_io_get_scaler_flt();
+char* user_io_get_scaler_coeff();
+void user_io_set_scaler_flt(int n);
+void user_io_set_scaler_coeff(char *name);
 
 #define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name())
 

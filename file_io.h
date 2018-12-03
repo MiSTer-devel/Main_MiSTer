@@ -13,6 +13,7 @@ typedef struct
 	int       type;
 	__off64_t size;
 	__off64_t offset;
+	char      path[1024];
 	char      name[261];
 }  fileTYPE;
 
@@ -34,6 +35,7 @@ dirent* flist_SelectedItem();
 #define SCANO_DIR        1 // include subdirectories
 #define SCANO_UMOUNT     2 // allow backspace key
 #define SCANO_CORES      4 // only include subdirectories with prefix '_'
+#define SCANO_COEFF      8
 
 void FindStorage();
 int  getStorage(int from_setting);
@@ -43,6 +45,8 @@ int  isUSBMounted();
 int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0);
 int  FileOpen(fileTYPE *file, const char *name, char mute = 0);
 void FileClose(fileTYPE *file);
+
+__off64_t FileGetSize(fileTYPE *file);
 
 int FileSeek(fileTYPE *file, __off64_t offset, int origin);
 int FileSeekLBA(fileTYPE *file, uint32_t offset);
@@ -75,5 +79,9 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 const char *getStorageDir(int dev);
 const char *getRootDir();
 const char *getFullPath(const char *name);
+
+uint32_t getFileType(const char *name);
+
+#define COEFF_DIR "filters"
 
 #endif

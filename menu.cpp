@@ -127,6 +127,9 @@ enum MENU
 	MENU_8BIT_MAIN_IMAGE_SELECTED,
 	MENU_8BIT_SYSTEM1,
 	MENU_8BIT_SYSTEM2,
+	MENU_COEFF_FILE_SELECTED,
+	MENU_8BIT_INFO,
+	MENU_8BIT_INFO2,
 	MENU_8BIT_ABOUT1,
 	MENU_8BIT_ABOUT2
 };
@@ -162,6 +165,7 @@ const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "       None", "        PPP", "    Console", "    USBMIDI", "USBMIDI-38K" };
+const char *config_scaler_msg[] = { "Internal","Custom" };
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -279,6 +283,10 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 			strcat(SelectedPath, get_rbf_name());
 		}
 		pFileExt = "RBF";
+	}
+	else if (Options & SCANO_COEFF)
+	{
+		pFileExt = "TXT";
 	}
 	else
 	{
@@ -539,7 +547,7 @@ void printSysInfo()
 		sysinfo_timer = GetTimer(2000);
 		struct battery_data_t bat;
 		int hasbat = getBattery(0, &bat);
-		int n = 10;
+		int n = is_menu_core() ? 10 : 5;
 
 		char str[40];
 		OsdWrite(n++, info_top, 0, 0);
@@ -614,7 +622,7 @@ int  firstmenu = 0;
 int  adjvisible;
 char lastrow[256];
 
-void MenuWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, int arrow = 0)
+void MenuWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple = 0, int arrow = 0)
 {
 	int row = n - firstmenu;
 
@@ -867,7 +875,7 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_ARCHIE_MAIN1:
-		OsdSetTitle(user_io_get_core_name(), OSD_ARROW_RIGHT);
+		OsdSetTitle(user_io_get_core_name(), OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		menumask = 0x3f;
 		OsdWrite(0, "", 0, 0);
@@ -957,6 +965,11 @@ void HandleUI(void)
 		if (right)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 0;
+		}
+		else if (left)
+		{
+			menustate = MENU_8BIT_INFO;
 			menusub = 0;
 		}
 		break;
@@ -1116,7 +1129,7 @@ void HandleUI(void)
 			for (; entry < OsdGetSize() - 1; entry++) MenuWrite(entry, "", 0, 0);
 
 			// exit row
-			MenuWrite(entry, STD_EXIT, menusub == selentry, 0, OSD_ARROW_RIGHT);
+			MenuWrite(entry, STD_EXIT, menusub == selentry, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 			menusub_last = selentry;
 			menumask = (menumask << 1) | 1;
 
@@ -1237,6 +1250,11 @@ void HandleUI(void)
 			menustate = MENU_8BIT_SYSTEM1;
 			menusub = 0;
 		}
+		else if (left)
+		{
+			menustate = MENU_8BIT_INFO;
+			menusub = 0;
+		}
 		break;
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
@@ -1260,52 +1278,76 @@ void HandleUI(void)
 		break;
 
 	case MENU_8BIT_SYSTEM1:
-		OsdSetSize(16);
-		helptext = 0;
-		menumask = 0xf7;
-		reboot_req = 0;
-
-		OsdSetTitle("System", OSD_ARROW_LEFT);
-		menustate = MENU_8BIT_SYSTEM2;
-		parentstate = MENU_8BIT_SYSTEM1;
-		
-		s[0] = 0;
-		m = 0;
-		if(user_io_get_uart_mode())
 		{
-			int mode = 0;
-			struct stat filestat;
-			if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
-			if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
-			if (!stat("/tmp/uartmode3", &filestat)) mode = 3;
-			if (!stat("/tmp/uartmode4", &filestat)) mode = 4;
-			
-			menumask |= 8;
-			sprintf(s, " UART connection %s", config_uart_msg[mode]);
-			OsdWrite(3, s, menusub == 3, 0);
-		}
-		else
-		{
-			OsdWrite(m++, "", 0, 0);
-		}
+			OsdSetSize(16);
+			helptext = 0;
+			menumask = 0x7C7;
+			reboot_req = 0;
 
-		OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
-		OsdWrite(m++, " Define joystick buttons   \x16", menusub == 1, 0);
-		OsdWrite(m++, " Button/Key remap for game \x16", menusub == 2, 0);
-		OsdWrite(4, "", 0, 0);
+			OsdSetTitle("System", OSD_ARROW_LEFT);
+			menustate = MENU_8BIT_SYSTEM2;
+			parentstate = MENU_8BIT_SYSTEM1;
 
-		m = 0;
-		if (user_io_core_type() == CORE_TYPE_MINIMIG2)
-		{
-			m = 1;
-			menumask &= ~0x20;
+			s[0] = 0;
+			m = 0;
+			if (user_io_get_uart_mode())
+			{
+				int mode = 0;
+				struct stat filestat;
+				if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
+				if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
+				if (!stat("/tmp/uartmode3", &filestat)) mode = 3;
+				if (!stat("/tmp/uartmode4", &filestat)) mode = 4;
+
+				menumask |= 8;
+				sprintf(s, " UART connection %s", config_uart_msg[mode]);
+				OsdWrite(3, s, menusub == 3, 0);
+			}
+			else
+			{
+				OsdWrite(m++, "", 0, 0);
+			}
+
+			OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
+			OsdWrite(m++, " Define joystick buttons   \x16", menusub == 1, 0);
+			OsdWrite(m++, " Button/Key remap for game \x16", menusub == 2, 0);
+			OsdWrite(4, "", 0, 0);
+
+			m = 0;
+			if (user_io_core_type() == CORE_TYPE_MINIMIG2)
+			{
+				m = 1;
+				menumask &= ~0x80;
+			}
+
+			OsdWrite(5);
+			int n = 6;
+			if (user_io_get_scaler_flt() >= 0)
+			{
+				menumask |= 0x30;
+				OsdWrite(n++, " HDMI Scaler:");
+				sprintf(s, " \x16 Filter - %s", config_scaler_msg[user_io_get_scaler_flt() ? 1 : 0]);
+				OsdWrite(n++, s, menusub == 4);
+
+				memset(s, 0, sizeof(s));
+				strcpy(s, " \x16 ");
+				if (strlen(user_io_get_scaler_coeff())) strncat(s, user_io_get_scaler_coeff(), 22);
+				else strcat(s, "<none>");
+
+				OsdWrite(n++, s, menusub == 5, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
+				OsdWrite(n++);
+			}
+
+			OsdWrite(n++, m ? " Reset the core" : " Reset settings", menusub == 6, user_io_core_type() == CORE_TYPE_ARCHIE);
+			OsdWrite(n++, m ? "" : " Save settings", menusub == 7, 0);
+			OsdWrite(n++);
+			OsdWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 8);
+			OsdWrite(n++, " About", menusub == 9);
+
+			while(n < 15) OsdWrite(n++);
+			OsdWrite(15, STD_EXIT, menusub == 10);
+			sysinfo_timer = 0;
 		}
-		OsdWrite(5, m ? " Reset the core" : " Reset settings", menusub == 4, user_io_core_type() == CORE_TYPE_ARCHIE);
-		OsdWrite(6, m ? "" : " Save settings", menusub == 5, 0);
-		OsdWrite(7, "", 0, 0);
-		OsdWrite(8, " Reboot (hold \x16 cold reboot)", menusub == 6, 0);
-		OsdWrite(9, " About", menusub == 7, 0);
-		sysinfo_timer = 0;
 		break;
 
 	case MENU_8BIT_SYSTEM2:
@@ -1374,6 +1416,19 @@ void HandleUI(void)
 				}
 				break;
 			case 4:
+				user_io_set_scaler_flt(user_io_get_scaler_flt() ? 0 : 1);
+				menustate = MENU_8BIT_SYSTEM1;
+				break;
+
+			case 5:
+				if (user_io_get_scaler_flt())
+				{
+					sprintf(SelectedPath, COEFF_DIR"/%s", user_io_get_scaler_coeff());
+					SelectFile(0, SCANO_COEFF, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
+				}
+				break;
+
+			case 6:
 				if (user_io_core_type() != CORE_TYPE_ARCHIE)
 				{
 					menustate = MENU_RESET1;
@@ -1385,7 +1440,7 @@ void HandleUI(void)
                     menusub   = 0;
 				}
 				break;
-			case 5:
+			case 7:
 				// Save settings
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
@@ -1408,7 +1463,7 @@ void HandleUI(void)
 					if (is_x86_core()) x86_config_save();
 				}
 				break;
-			case 6:
+			case 8:
 				{
 					reboot_req = 1;
 
@@ -1420,9 +1475,12 @@ void HandleUI(void)
 					OsdWrite(8, p, menusub == 6, 0);
 				}
 				break;
-			case 7:
+			case 9:
 				menustate = MENU_8BIT_ABOUT1;
 				menusub = 0;
+				break;
+			default:
+				menustate = MENU_NONE1;
 				break;
 			}
 		}
@@ -1454,8 +1512,63 @@ void HandleUI(void)
 		}
 
 		if(!hold_cnt && reboot_req) fpga_load_rbf("menu.rbf");
+		break;
 
+	case MENU_COEFF_FILE_SELECTED:
+		{
+			char *p = strrchr(SelectedPath, '/');
+			if (!p) user_io_set_scaler_coeff(SelectedPath);
+			else user_io_set_scaler_coeff(p+1);
+			menustate = MENU_8BIT_SYSTEM1;
+		}
+		break;
+
+	case MENU_8BIT_INFO:
+		OsdSetSize(16);
+		helptext = 0;
+		menumask = 1;
+		menustate = MENU_8BIT_INFO2;
+		parentstate = MENU_8BIT_INFO;
+		OsdSetTitle("System", OSD_ARROW_RIGHT);
+
+		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(3, "         Information");
+		OsdWrite(15, STD_EXIT, menusub == 0, 0, OSD_ARROW_RIGHT);
+		break;
+
+	case MENU_8BIT_INFO2:
 		printSysInfo();
+		if (select || menu)
+		{
+			menustate = MENU_NONE1;
+			break;
+		}
+		else if (right)
+		{
+			// go back to core requesting this menu
+			switch (user_io_core_type()) {
+			case CORE_TYPE_MINIMIG2:
+				menusub = 0;
+				menustate = MENU_MAIN1;
+				break;
+			case CORE_TYPE_MIST:
+				menusub = 5;
+				menustate = MENU_MIST_MAIN1;
+				break;
+			case CORE_TYPE_ARCHIE:
+				menusub = 0;
+				menustate = MENU_ARCHIE_MAIN1;
+				break;
+			case CORE_TYPE_8BIT:
+				menusub = 0;
+				menustate = MENU_8BIT_MAIN1;
+				break;
+			case CORE_TYPE_SHARPMZ:
+				menusub = menusub_last;
+				menustate = sharpmz_default_ui_state();
+				break;
+			}
+		}
 		break;
 
 	case MENU_JOYDIGMAP:
@@ -2088,7 +2201,7 @@ void HandleUI(void)
 		/******************************************************************/
 	case MENU_MAIN1:
 		menumask = 0xFF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
-		OsdSetTitle("Minimig", OSD_ARROW_RIGHT);
+		OsdSetTitle("Minimig", OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 		helptext = helptexts[HELPTEXT_MAIN];
 
 		OsdWrite(0, "", 0, 0);
@@ -2241,6 +2354,11 @@ void HandleUI(void)
 		else if (right)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 0;
+		}
+		else if (left)
+		{
+			menustate = MENU_8BIT_INFO;
 			menusub = 0;
 		}
 		break;

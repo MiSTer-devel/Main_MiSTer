@@ -152,6 +152,13 @@ char is_x86_core()
 	return (is_x86_type == 1);
 }
 
+static int is_snes_type = 0;
+char is_snes_core()
+{
+	if (!is_snes_type) is_snes_type = strcasecmp(core_name, "SNES") ? 2 : 1;
+	return (is_snes_type == 1);
+}
+
 char is_cpc_core()
 {
 	return !strcasecmp(core_name, "amstrad");
@@ -858,7 +865,7 @@ void user_io_set_index(unsigned char index)
 	DisableFpga();
 }
 
-int user_io_file_mount(char *name, unsigned char index)
+int user_io_file_mount(char *name, unsigned char index, char pre)
 {
 	int writable = 0;
 	int ret = 0;
@@ -876,10 +883,18 @@ int user_io_file_mount(char *name, unsigned char index)
 
 	if (!ret)
 	{
-		writable = 0;
 		sd_image[index].size = 0;
 		printf("Failed to open file %s\n", name);
-		printf("Eject image from %d slot\n", index);
+		if (pre)
+		{
+			writable = 1;
+			printf("Will be created upon write\n");
+		}
+		else
+		{
+			writable = 0;
+			printf("Eject image from %d slot\n", index);
+		}
 	}
 	else
 	{
@@ -891,17 +906,26 @@ int user_io_file_mount(char *name, unsigned char index)
 	// send mounted image size first then notify about mounting
 	EnableIO();
 	spi8(UIO_SET_SDINFO);
+
+	__off64_t size = sd_image[index].size;
+	if (!ret && pre)
+	{
+		size = -1;
+		sd_image[index].type = 2;
+		strcpy(sd_image[index].path, name);
+	}
+
 	if (io_ver)
 	{
-		spi_w((uint16_t)(sd_image[index].size));
-		spi_w((uint16_t)(sd_image[index].size>>16));
-		spi_w((uint16_t)(sd_image[index].size>>32));
-		spi_w((uint16_t)(sd_image[index].size>>48));
+		spi_w((uint16_t)(size));
+		spi_w((uint16_t)(size>>16));
+		spi_w((uint16_t)(size>>32));
+		spi_w((uint16_t)(size>>48));
 	}
 	else
 	{
-		spi32le(sd_image[index].size);
-		spi32le(sd_image[index].size>>32);
+		spi32le(size);
+		spi32le(size>>32);
 	}
 	DisableIO();
 
@@ -1243,6 +1267,17 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	}
 	else
 	{
+		if (is_snes_core())
+		{
+			printf("Load SNES ROM.\n");
+			uint8_t* buf = snes_get_header(&f);
+			hexdump(buf, 16, 0);
+			EnableFpga();
+			spi8(UIO_FILE_TX_DAT);
+			spi_write(buf, 512, fio_size);
+			DisableFpga();
+		}
+
 		while (bytes2send)
 		{
 			printf(".");
@@ -1268,7 +1303,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		char *p = strrchr((char*)buf, '.');
 		if (!p) p = (char*)buf + strlen(name);
 		strcpy(p, ".sav");
-		user_io_file_mount((char*)buf);
+		user_io_file_mount((char*)buf, 0, 1);
 	}
 
 	// signal end of transmission
@@ -1630,6 +1665,7 @@ void user_io_poll()
 					{
 						//printf("SD WR %d on %d\n", lba, disk);
 
+						int done = 0;
 						buffer_lba[disk] = lba;
 
 						// Fetch sector data from FPGA ...
@@ -1637,15 +1673,43 @@ void user_io_poll()
 						spi_block_read(buffer[disk], fio_size);
 						DisableIO();
 
-						// ... and write it to disk
-						int done = 0;
 
-						if ((sd_image[disk].size>>9)>lba)
+						if (sd_image[disk].type == 2 && !lba)
 						{
-							diskled_on();
-							if (FileSeekLBA(&sd_image[disk], lba))
+							//Create the file
+							if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
 							{
-								if (FileWriteSec(&sd_image[disk], buffer[disk])) done = 1;
+								diskled_on();
+								if (FileWriteSec(&sd_image[disk], buffer[disk]))
+								{
+									sd_image[disk].size = 512;
+									done = 1;
+								}
+							}
+							else
+							{
+								printf("Error in creating file: %s\n", sd_image[disk].path);
+							}
+						}
+						else
+						{
+							// ... and write it to disk
+							__off64_t size = sd_image[disk].size>>9;
+							if (size && size>=lba)
+							{
+								diskled_on();
+								if (FileSeekLBA(&sd_image[disk], lba))
+								{
+									if (FileWriteSec(&sd_image[disk], buffer[disk]))
+									{
+										done = 1;
+										if (size == lba)
+										{
+											size++;
+											sd_image[disk].size = size << 9;
+										}
+									}
+								}
 							}
 						}
 
@@ -1681,7 +1745,6 @@ void user_io_poll()
 						//Even after error we have to provide the block to the core
 						//Give an empty block.
 						if (!done) memset(buffer[disk], 0, sizeof(buffer[disk]));
-
 						buffer_lba[disk] = lba;
 					}
 
@@ -1710,6 +1773,11 @@ void user_io_poll()
 						}
 					}
 					if(done) buffer_lba[disk] = lba + 1;
+
+					if (sd_image[disk].type == 2)
+					{
+						buffer_lba[disk] = -1;
+					}
 				}
 			}
 
@@ -2579,11 +2647,25 @@ static void setPLL(double Fout)
 	vitems[20] = k;
 }
 
-static void setScalerCoeff()
+static char scaler_flt_cfg[1024] = { 0 };
+static char new_scaler = 0;
+
+static void setScaler()
 {
 	fileTYPE f = { 0 };
 	static char filename[1024];
-	sprintf(filename, "%s/coeff.txt", HomeDir);
+
+	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
+	{
+		DisableIO();
+		return;
+	}
+
+	new_scaler = 1;
+	spi8(scaler_flt_cfg[0]);
+	DisableIO();
+	sprintf(filename, COEFF_DIR"/%s", scaler_flt_cfg + 1);
+
 	if (FileOpen(&f, filename))
 	{
 		printf("Read scaler coefficients\n");
@@ -2594,7 +2676,7 @@ static void setScalerCoeff()
 			int size;
 			if (size = FileReadAdv(&f, buf, f.size))
 			{
-				spi_uio_cmd_cont(UIO_SET_VIPCOEF);
+				spi_uio_cmd_cont(UIO_SET_FLTCOEF);
 
 				char *end = buf + size;
 				char *pos = buf;
@@ -2633,9 +2715,44 @@ static void setScalerCoeff()
 	}
 }
 
+int user_io_get_scaler_flt()
+{
+	return new_scaler ? scaler_flt_cfg[0] : -1;
+}
+
+char* user_io_get_scaler_coeff()
+{
+	return scaler_flt_cfg + 1;
+}
+
+void user_io_set_scaler_flt(int n)
+{
+	scaler_flt_cfg[0] = (char)n;
+	FileSaveConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg));
+	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt_cfg[0]);
+	spi_uio_cmd(UIO_SET_FLTCOEF);
+}
+
+void user_io_set_scaler_coeff(char *name)
+{
+	strcpy(scaler_flt_cfg + 1, name);
+	FileSaveConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg));
+	setScaler();
+	user_io_send_buttons(1);
+}
+
+static void loadScalerCfg()
+{
+	if (!FileLoadConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
+	{
+		memset(scaler_flt_cfg, 0, sizeof(scaler_flt_cfg));
+	}
+}
+
 static void setVideo()
 {
-	setScalerCoeff();
+	loadScalerCfg();
+	setScaler();
 
 	printf("Send HDMI parameters:\n");
 	spi_uio_cmd_cont(UIO_SET_VIDEO);
