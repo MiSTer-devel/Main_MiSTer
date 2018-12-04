@@ -55,10 +55,12 @@ static unsigned long mouse_timer;
 
 #define LED_FREQ 100   // 100 ms
 static unsigned long led_timer;
-char keyboard_leds = 0;
-bool caps_status = 0;
-bool num_status = 0;
-bool scrl_status = 0;
+static char keyboard_leds = 0;
+static bool caps_status = 0;
+static bool num_status = 0;
+static bool scrl_status = 0;
+
+static char minimig_adjust = 0;
 
 static uint32_t uart_mode;
 uint32_t user_io_get_uart_mode()
@@ -511,36 +513,28 @@ void user_io_init(const char *path)
 			{
 				if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 				{
-					// check for multipart rom
-					sprintf(mainpath, "%s/boot0.rom", user_io_get_core_name());
-					if (!is_cpc_core() && user_io_file_tx(mainpath))
+					if (!is_cpc_core())
 					{
-						sprintf(mainpath, "%s/boot1.rom", user_io_get_core_name());
-						if (user_io_file_tx(mainpath, 0x40))
+						// check for multipart rom
+						for (char i = 0; i < 4; i++)
 						{
-							sprintf(mainpath, "%s/boot2.rom", user_io_get_core_name());
-							if (user_io_file_tx(mainpath, 0x80))
-							{
-								sprintf(mainpath, "%s/boot3.rom", user_io_get_core_name());
-								user_io_file_tx(mainpath, 0xC0);
-							}
+							sprintf(mainpath, "%s/boot%i.rom", user_io_get_core_name(), i);
+							user_io_file_tx(mainpath, i<<6);
 						}
 					}
-					else
+
+					// legacy style of rom
+					sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
+					if (!user_io_file_tx(mainpath))
 					{
-						// legacy style of rom
-						sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
-						if (!user_io_file_tx(mainpath))
+						strcpy(name + strlen(name) - 3, "ROM");
+						sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
+						if (!get_rbf_dir()[0] || !user_io_file_tx(mainpath))
 						{
-							strcpy(name + strlen(name) - 3, "ROM");
-							sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
-							if (!get_rbf_dir()[0] || !user_io_file_tx(mainpath))
+							if (!user_io_file_tx(name))
 							{
-								if (!user_io_file_tx(name))
-								{
-									sprintf(mainpath, "bootrom/%s", name);
-									user_io_file_tx(mainpath);
-								}
+								sprintf(mainpath, "bootrom/%s", name);
+								user_io_file_tx(mainpath);
 							}
 						}
 					}
@@ -824,7 +818,7 @@ static unsigned short kbd_fifo[KBD_FIFO_SIZE];
 static unsigned char kbd_fifo_r = 0, kbd_fifo_w = 0;
 static long kbd_timer = 0;
 
-static void kbd_fifo_minimig_send(unsigned short code)
+static void kbd_fifo_minimig_send(uint32_t code)
 {
 	spi_uio_cmd8((code&OSD) ? UIO_KBD_OSD : UIO_KEYBOARD, code & 0xff);
 	kbd_timer = GetTimer(10);  // next key after 10ms earliest
@@ -2032,12 +2026,15 @@ void user_io_poll()
 	else if(CheckTimer(res_timer))
 	{
 		res_timer = GetTimer(500);
-		uint32_t vtime = show_video_info(0);
-		if (vtime && cfg.vsync_adjust && !is_menu_core())
+		if (!minimig_adjust)
 		{
-			adjust_video_mode(vtime);
-			usleep(100000);
-			show_video_info(1);
+			uint32_t vtime = show_video_info(0);
+			if (vtime && cfg.vsync_adjust && !is_menu_core())
+			{
+				adjust_video_mode(vtime);
+				usleep(100000);
+				show_video_info(1);
+			}
 		}
 	}
 
@@ -2081,6 +2078,19 @@ char user_io_user_button()
 	return((!user_io_menu_button() && (fpga_get_buttons() & BUTTON_USR)) ? 1 : 0);
 }
 
+static void adjust_vsize(char force);
+static void store_vsize();
+void user_io_minimig_set_adjust(char n)
+{
+	if (minimig_adjust & !n) store_vsize();
+	minimig_adjust = n;
+}
+
+char user_io_minimig_get_adjust()
+{
+	return minimig_adjust;
+}
+
 static void send_keycode(unsigned short key, int press)
 {
 	if (core_type == CORE_TYPE_MINIMIG2)
@@ -2111,6 +2121,23 @@ static void send_keycode(unsigned short key, int press)
 		}
 
 		code &= 0xff;
+		if (minimig_adjust)
+		{
+			if (code == 0x44)
+			{
+				store_vsize();
+				return;
+			}
+
+			if (code == 0x45)
+			{
+				Info("Canceled");
+				minimig_adjust = 0;
+				adjust_vsize(1);
+				return;
+			}
+			code |= OSD;
+		}
 
 		// send immediately if possible
 		if (CheckTimer(kbd_timer) && (kbd_fifo_w == kbd_fifo_r))
@@ -2875,9 +2902,119 @@ static int adjust_video_mode(uint32_t vtime)
 	user_io_send_buttons(1);
 }
 
+typedef struct
+{
+	uint32_t mode;
+	uint32_t hpos;
+	uint32_t vpos;
+	uint32_t reserved;
+} vmode_adjust_t;
+
+vmode_adjust_t vmodes_adj[64] = { 0 };
+
+static void adjust_vsize(char force)
+{
+	static uint16_t nres = 0;
+	spi_uio_cmd_cont(UIO_GET_VMODE);
+	uint16_t res = spi_w(0);
+	if ((res & 0x8000) && (nres != res || force))
+	{
+		nres = res;
+		uint16_t scr_hsize = spi_w(0);
+		uint16_t scr_vsize = spi_w(0);
+		DisableIO();
+
+		printf("\033[1;37mVMODE: resolution: %u x %u, mode: %u\033[0m\n", scr_hsize, scr_vsize, res & 255);
+
+		static int loaded = 0;
+		if (~loaded)
+		{
+			FileLoadConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
+			loaded = 1;
+		}
+
+		uint32_t mode = scr_hsize | (scr_vsize << 12) | ((res & 0xFF) << 24);
+		if (mode)
+		{
+			int applied = 0;
+			int empty = -1;
+			for (int i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
+			{
+				if (vmodes_adj[i].mode == mode)
+				{
+					spi_uio_cmd_cont(UIO_SET_VPOS);
+					spi_w(vmodes_adj[i].hpos >> 16);
+					spi_w(vmodes_adj[i].hpos);
+					spi_w(vmodes_adj[i].vpos >> 16);
+					spi_w(vmodes_adj[i].vpos);
+					printf("\033[1;37mVMODE: set positions: [%u-%u, %u-%u]\033[0m\n", vmodes_adj[i].hpos >> 16, (uint16_t)vmodes_adj[i].hpos, vmodes_adj[i].vpos >> 16, (uint16_t)vmodes_adj[i].vpos);
+					DisableIO();
+					return;
+				}
+			}
+			printf("\033[1;37mVMODE: preset not found.\033[0m\n");
+			spi_uio_cmd_cont(UIO_SET_VPOS); spi_w(0); spi_w(0); spi_w(0); spi_w(0);
+			DisableIO();
+		}
+	}
+	else
+	{
+		DisableIO();
+	}
+}
+
+static void store_vsize()
+{
+	Info("Stored");
+	minimig_adjust = 0;
+
+	spi_uio_cmd_cont(UIO_GET_VMODE);
+	uint16_t res = spi_w(0);
+	uint16_t scr_hsize = spi_w(0);
+	uint16_t scr_vsize = spi_w(0);
+	uint16_t scr_hbl_l = spi_w(0);
+	uint16_t scr_hbl_r = spi_w(0);
+	uint16_t scr_vbl_t = spi_w(0);
+	uint16_t scr_vbl_b = spi_w(0);
+	DisableIO();
+
+	printf("\033[1;37mVMODE: store position: [%u-%u, %u-%u]\033[0m\n", scr_hbl_l, scr_hbl_r, scr_vbl_t, scr_vbl_b);
+
+	uint32_t mode = scr_hsize | (scr_vsize << 12) | ((res & 0xFF) << 24);
+	if (mode)
+	{
+		int applied = 0;
+		int empty = -1;
+		for (int i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
+		{
+			if (vmodes_adj[i].mode == mode)
+			{
+				vmodes_adj[i].hpos = (scr_hbl_l << 16) | scr_hbl_r;
+				vmodes_adj[i].vpos = (scr_vbl_t << 16) | scr_vbl_b;
+				applied = 1;
+			}
+			if (empty < 0 && !vmodes_adj[i].mode) empty = i;
+		}
+
+		if (!applied && empty >= 0)
+		{
+			vmodes_adj[empty].mode = mode;
+			vmodes_adj[empty].hpos = (scr_hbl_l << 16) | scr_hbl_r;
+			vmodes_adj[empty].vpos = (scr_vbl_t << 16) | scr_vbl_b;
+			applied = 1;
+		}
+
+		if (applied)
+		{
+			FileSaveConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
+		}
+	}
+}
+
 static int api1_5 = 0;
 static uint32_t show_video_info(int force)
 {
+	uint32_t ret = 0;
 	static uint8_t nres = 0;
 	spi_uio_cmd_cont(UIO_GET_VRES);
 	uint8_t res = spi_in();
@@ -2928,13 +3065,14 @@ static uint32_t show_video_info(int force)
 			spi_uio_cmd16(UIO_SETHEIGHT, 0);
 		}
 
-		if (vtime && vtimeh) return vtime;
+		if (vtime && vtimeh) ret = vtime;
 	}
 	else
 	{
 		DisableIO();
 	}
 
+	adjust_vsize(0);
 	return 0;
 }
 

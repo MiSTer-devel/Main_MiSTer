@@ -2200,11 +2200,9 @@ void HandleUI(void)
 		/* minimig main menu                                              */
 		/******************************************************************/
 	case MENU_MAIN1:
-		menumask = 0xFF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
+		menumask = 0x1FF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
 		OsdSetTitle("Minimig", OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 		helptext = helptexts[HELPTEXT_MAIN];
-
-		OsdWrite(0, "", 0, 0);
 
 		// floppy drive info
 		// We display a line for each drive that's active
@@ -2213,7 +2211,7 @@ void HandleUI(void)
 		for (int i = 0; i < 4; i++)
 		{
 			if (i == config.floppy.drives + 1)
-				OsdWrite(i+1, " KP +/- to add/remove drives", 0, 1);
+				OsdWrite(i, " KP +/- to add/remove drives", 0, 1);
 			else
 			{
 				strcpy(s, " dfx: ");
@@ -2253,24 +2251,25 @@ void HandleUI(void)
 				}
 				else
 					strcpy(s, "");
-				OsdWrite(i+1, s, menusub == i, (i>drives) || (i>config.floppy.drives));
+				OsdWrite(i, s, menusub == i, (i>drives) || (i>config.floppy.drives));
 			}
 		}
 		sprintf(s, " Floppy disk turbo : %s", config.floppy.speed ? "on" : "off");
-		OsdWrite(5, s, menusub == 4, 0);
-		OsdWrite(6, "", 0, 0);
+		OsdWrite(4, s, menusub == 4, 0);
+		OsdWrite(5, "", 0, 0);
 
-		OsdWrite(7,  " Hard disks", menusub == 5, 0);
-		OsdWrite(8,  " Chipset", menusub == 6, 0);
-		OsdWrite(9,  " Memory", menusub == 7, 0);
-		OsdWrite(10, " Audio & Video", menusub == 8, 0);
-		OsdWrite(11, "", 0, 0);
+		OsdWrite(6,  " Hard disks", menusub == 5, 0);
+		OsdWrite(7,  " Chipset", menusub == 6, 0);
+		OsdWrite(8,  " Memory", menusub == 7, 0);
+		OsdWrite(9, " Audio & Video", menusub == 8, 0);
+		OsdWrite(10, "", 0, 0);
 
-		OsdWrite(12, " Save configuration", menusub == 9, 0);
-		OsdWrite(13, " Load configuration", menusub == 10, 0);
-		OsdWrite(14, "", 0, 0);
+		OsdWrite(11, " Save configuration", menusub == 9, 0);
+		OsdWrite(12, " Load configuration", menusub == 10, 0);
+		OsdWrite(13, "", 0, 0);
+		OsdWrite(14, user_io_minimig_get_adjust() ? " Finish screen adjusting" : " Adjust screen position", menusub == 11, 0);
 
-		OsdWrite(15, STD_EXIT, menusub == 11, 0);
+		OsdWrite(15, STD_EXIT, menusub == 12, 0);
 
 		menustate = MENU_MAIN2;
 		parentstate = MENU_MAIN1;
@@ -2344,6 +2343,11 @@ void HandleUI(void)
 				menustate = MENU_LOADCONFIG_1;
 			}
 			else if (menusub == 11)
+			{
+				menustate = MENU_NONE1;
+				user_io_minimig_set_adjust(!user_io_minimig_get_adjust());
+			}
+			else if (menusub == 12)
 				menustate = MENU_NONE1;
 		}
 		else if (c == KEY_BACKSPACE) // eject all floppies
