@@ -1456,6 +1456,7 @@ static int coldreset_req = 0;
 
 static int adjust_video_mode(uint32_t vtime);
 static uint32_t show_video_info(int force);
+static uint32_t res_timer = 0;
 
 void user_io_poll()
 {
@@ -2018,7 +2019,6 @@ void user_io_poll()
 		keyboard_leds = leds;
 	}
 
-	static uint32_t res_timer = 0;
 	if (!res_timer)
 	{
 		res_timer = GetTimer(1000);
@@ -2126,12 +2126,14 @@ static void send_keycode(unsigned short key, int press)
 			if (code == 0x44)
 			{
 				store_vsize();
+				res_timer = 0;
 				return;
 			}
 
 			if (code == 0x45)
 			{
 				Info("Canceled");
+				res_timer = 0;
 				minimig_adjust = 0;
 				adjust_vsize(1);
 				return;
