@@ -41,6 +41,7 @@ const ini_var_t ini_vars[] = {
 	{ "BOOTSCREEN", (void*)(&(cfg.bootscreen)), UINT8, 0, 1, 1 },
 	{ "VOLUMECTL", (void*)(&(cfg.volumectl)), UINT8, 0, 1, 1 },
 	{ "VSCALE_INTEGER", (void*)(&(cfg.vscale_integer)), UINT8, 0, 1, 1 },
+	{ "VSCALE_BORDER", (void*)(&(cfg.vscale_border)), UINT8, 0, 100, 1 },
 };
 
 // mist ini config

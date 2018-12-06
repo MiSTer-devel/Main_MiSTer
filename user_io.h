@@ -64,6 +64,8 @@
 #define UIO_GET_STATUS  0x29  // Update status from the core
 #define UIO_SET_FLTCOEF 0x2A  // Set Scaler polyphase coefficients
 #define UIO_SET_FLTNUM  0x2B  // Set Scaler predefined filter
+#define UIO_GET_VMODE   0x2C  // Get video mode parameters
+#define UIO_SET_VPOS    0x2D  // Set video positions
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -240,6 +242,9 @@ int user_io_get_scaler_flt();
 char* user_io_get_scaler_coeff();
 void user_io_set_scaler_flt(int n);
 void user_io_set_scaler_coeff(char *name);
+
+void user_io_minimig_set_adjust(char n);
+char user_io_minimig_get_adjust();
 
 #define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name())
 

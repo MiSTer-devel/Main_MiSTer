@@ -30,6 +30,7 @@ typedef struct {
 	uint8_t bootscreen;
 	uint8_t volumectl;
 	uint8_t vscale_integer;
+	uint8_t vscale_border;
 	char video_conf[1024];
 } cfg_t;
 
