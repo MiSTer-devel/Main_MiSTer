@@ -3055,7 +3055,15 @@ static uint32_t show_video_info(int force)
 			Info(str, cfg.video_info * 1000);
 		}
 
-		if (cfg.vscale_integer && height && (height <= vitems[5]))
+		if (cfg.vscale_border && height && (height <= vitems[5]))
+		{
+			uint32_t border = cfg.vscale_border * 2;
+			if ((border + 100) > vitems[5]) border = vitems[5] - 100;
+			height = vitems[5] - border;
+			printf("Set vertical scaling to : %d\n", height);
+			spi_uio_cmd16(UIO_SETHEIGHT, height);
+		}
+		else if (cfg.vscale_integer && height && (height <= vitems[5]))
 		{
 			uint32_t mag = vitems[5] / height;
 			height *= mag;
