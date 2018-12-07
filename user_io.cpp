@@ -2754,10 +2754,12 @@ char* user_io_get_scaler_coeff()
 	return scaler_flt_cfg + 1;
 }
 
+static char scaler_cfg[128] = { 0 };
+
 void user_io_set_scaler_flt(int n)
 {
 	scaler_flt_cfg[0] = (char)n;
-	FileSaveConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg));
+	FileSaveConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg));
 	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt_cfg[0]);
 	spi_uio_cmd(UIO_SET_FLTCOEF);
 }
@@ -2765,14 +2767,15 @@ void user_io_set_scaler_flt(int n)
 void user_io_set_scaler_coeff(char *name)
 {
 	strcpy(scaler_flt_cfg + 1, name);
-	FileSaveConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg));
+	FileSaveConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg));
 	setScaler();
 	user_io_send_buttons(1);
 }
 
 static void loadScalerCfg()
 {
-	if (!FileLoadConfig("scaler.cfg", &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
+	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name_ex());
+	if (!FileLoadConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
 	{
 		memset(scaler_flt_cfg, 0, sizeof(scaler_flt_cfg));
 	}
