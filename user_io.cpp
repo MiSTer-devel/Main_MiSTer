@@ -3086,7 +3086,7 @@ static uint32_t show_video_info(int force)
 	}
 
 	adjust_vsize(0);
-	return 0;
+	return ret;
 }
 
 int hasAPI1_5()
