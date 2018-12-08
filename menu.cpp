@@ -2200,9 +2200,11 @@ void HandleUI(void)
 		/* minimig main menu                                              */
 		/******************************************************************/
 	case MENU_MAIN1:
-		menumask = 0x1FF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
+		menumask = 0xFF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
 		OsdSetTitle("Minimig", OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 		helptext = helptexts[HELPTEXT_MAIN];
+
+		OsdWrite(0, "", 0, 0);
 
 		// floppy drive info
 		// We display a line for each drive that's active
@@ -2211,7 +2213,7 @@ void HandleUI(void)
 		for (int i = 0; i < 4; i++)
 		{
 			if (i == config.floppy.drives + 1)
-				OsdWrite(i, " KP +/- to add/remove drives", 0, 1);
+				OsdWrite(i+1, " KP +/- to add/remove drives", 0, 1);
 			else
 			{
 				strcpy(s, " dfx: ");
@@ -2251,25 +2253,24 @@ void HandleUI(void)
 				}
 				else
 					strcpy(s, "");
-				OsdWrite(i, s, menusub == i, (i>drives) || (i>config.floppy.drives));
+				OsdWrite(i+1, s, menusub == i, (i>drives) || (i>config.floppy.drives));
 			}
 		}
 		sprintf(s, " Floppy disk turbo : %s", config.floppy.speed ? "on" : "off");
-		OsdWrite(4, s, menusub == 4, 0);
-		OsdWrite(5, "", 0, 0);
+		OsdWrite(5, s, menusub == 4, 0);
+		OsdWrite(6, "", 0, 0);
 
-		OsdWrite(6,  " Hard disks", menusub == 5, 0);
-		OsdWrite(7,  " Chipset", menusub == 6, 0);
-		OsdWrite(8,  " Memory", menusub == 7, 0);
-		OsdWrite(9, " Audio & Video", menusub == 8, 0);
-		OsdWrite(10, "", 0, 0);
+		OsdWrite(7,  " Hard disks", menusub == 5, 0);
+		OsdWrite(8,  " Chipset", menusub == 6, 0);
+		OsdWrite(9,  " Memory", menusub == 7, 0);
+		OsdWrite(10, " Audio & Video", menusub == 8, 0);
+		OsdWrite(11, "", 0, 0);
 
-		OsdWrite(11, " Save configuration", menusub == 9, 0);
-		OsdWrite(12, " Load configuration", menusub == 10, 0);
-		OsdWrite(13, "", 0, 0);
-		OsdWrite(14, user_io_minimig_get_adjust() ? " Finish screen adjusting" : " Adjust screen position", menusub == 11, 0);
+		OsdWrite(12, " Save configuration", menusub == 9, 0);
+		OsdWrite(13, " Load configuration", menusub == 10, 0);
+		OsdWrite(14, "", 0, 0);
 
-		OsdWrite(15, STD_EXIT, menusub == 12, 0);
+		OsdWrite(15, STD_EXIT, menusub == 11, 0);
 
 		menustate = MENU_MAIN2;
 		parentstate = MENU_MAIN1;
@@ -2343,11 +2344,6 @@ void HandleUI(void)
 				menustate = MENU_LOADCONFIG_1;
 			}
 			else if (menusub == 11)
-			{
-				menustate = MENU_NONE1;
-				user_io_minimig_set_adjust(!user_io_minimig_get_adjust());
-			}
-			else if (menusub == 12)
 				menustate = MENU_NONE1;
 		}
 		else if (c == KEY_BACKSPACE) // eject all floppies
@@ -2649,24 +2645,24 @@ void HandleUI(void)
 		OsdSetTitle("Chipset", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 
 		OsdWrite(0, "", 0, 0);
-		strcpy(s, "         CPU : ");
+		strcpy(s, " CPU      : ");
 		strcat(s, config_cpu_msg[config.cpu & 0x03]);
 		OsdWrite(1, s, menusub == 0, 0);
-		strcpy(s, "       Turbo : ");
+		strcpy(s, " Turbo    : ");
 		strcat(s, config_turbo_msg[(config.cpu >> 2) & 0x03]);
 		OsdWrite(2, s, menusub == 1, 0);
 		OsdWrite(3, "", 0, 0);
-		strcpy(s, "       Video : ");
+		strcpy(s, " Video    : ");
 		strcat(s, config.chipset & CONFIG_NTSC ? "NTSC" : "PAL");
 		OsdWrite(4, s, menusub == 2, 0);
-		strcpy(s, "     Chipset : ");
+		strcpy(s, " Chipset  : ");
 		strcat(s, config_chipset_msg[(config.chipset >> 2) & 7]);
 		OsdWrite(5, s, menusub == 3, 0);
 		OsdWrite(6, "", 0, 0);
-		strcpy(s, "     CD32Pad : ");
+		strcpy(s, " CD32Pad  : ");
 		strcat(s, config_cd32pad_msg[(config.autofire >> 2) & 1]);
 		OsdWrite(7, s, menusub == 4, 0);
-		strcpy(s, "    Joy Swap : ");
+		strcpy(s, " Joy Swap : ");
 		strcat(s, (config.autofire & 0x8)? "ON" : "OFF");
 		OsdWrite(8, s, menusub == 5, 0);
 		for (int i = 9; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
@@ -2781,23 +2777,23 @@ void HandleUI(void)
 		OsdSetTitle("Memory", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 
 		OsdWrite(0, "", 0, 0);
-		strcpy(s, " CHIP  : ");
+		strcpy(s, " CHIP   : ");
 		strcat(s, config_memory_chip_msg[config.memory & 0x03]);
 		OsdWrite(1, s, menusub == 0, 0);
-		strcpy(s, " SLOW  : ");
+		strcpy(s, " SLOW   : ");
 		strcat(s, config_memory_slow_msg[config.memory >> 2 & 0x03]);
 		OsdWrite(2, s, menusub == 1, 0);
-		strcpy(s, " FAST  : ");
+		strcpy(s, " FAST   : ");
 		strcat(s, config_memory_fast_msg[config.memory >> 4 & 0x03]);
 		OsdWrite(3, s, menusub == 2, 0);
 
 		OsdWrite(4, "", 0, 0);
 
-		strcpy(s, " ROM   : ");
-		strncat(s, config.kickstart, 25);
+		strcpy(s, " ROM    : ");
+		strncat(s, config.kickstart, 24);
 		OsdWrite(5, s, menusub == 3, 0);
 
-		strcpy(s, " HRTmon: ");
+		strcpy(s, " HRTmon : ");
 		strcat(s, (config.memory & 0x40) ? "enabled " : "disabled");
 		OsdWrite(6, s, menusub == 4, 0);
 
@@ -3026,27 +3022,35 @@ void HandleUI(void)
 		/* video settings menu                                            */
 		/******************************************************************/
 	case MENU_SETTINGS_VIDEO1:
-		menumask = 0x1f;
+		menumask = 0x3f;
 		parentstate = menustate;
 		helptext = 0; // helptexts[HELPTEXT_VIDEO];
 
 		OsdSetTitle("Video", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 		OsdWrite(0, "", 0, 0);
-		strcpy(s, "  Scanlines     : ");
+		strcpy(s, " Scanlines      : ");
 		strcat(s, config_scanlines_msg[config.scanlines & 0x3]);
 		OsdWrite(1, s, menusub == 0, 0);
-		strcpy(s, "  Video area by : ");
+		strcpy(s, " Video area by  : ");
 		strcat(s, config_blank_msg[(config.scanlines >> 6) & 3]);
 		OsdWrite(2, s, menusub == 1, 0);
-		strcpy(s, "  Aspect Ratio  : ");
+		strcpy(s, " Aspect Ratio   : ");
 		strcat(s, config_ar_msg[(config.scanlines >> 4) & 1]);
 		OsdWrite(3, s, menusub == 2, 0);
 		OsdWrite(4, "", 0, 0);
-		strcpy(s, "  Stereo mix    : ");
+		strcpy(s, " Stereo mix     : ");
 		strcat(s, config_stereo_msg[config.audio & 3]);
 		OsdWrite(5, s, menusub == 3, 0);
-		for (int i = 6; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 4, 0);
+		OsdWrite(6, "", 0, 0);
+		OsdWrite(7, "", 0, 0);
+		OsdWrite(8, user_io_minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 4, 0);
+		OsdWrite(9, "", 0, 0);
+		OsdWrite(10, "", 0, 0);
+		OsdWrite(11, "", 0, 0);
+		OsdWrite(12, "", 0, 0);
+		OsdWrite(13, "", 0, 0);
+		OsdWrite(14, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 5, 0);
 
 		menustate = MENU_SETTINGS_VIDEO2;
 		break;
@@ -3082,6 +3086,11 @@ void HandleUI(void)
 				ConfigAudio(config.audio);
 			}
 			else if (menusub == 4)
+			{
+				menustate = MENU_NONE1;
+				user_io_minimig_set_adjust(!user_io_minimig_get_adjust());
+			}
+			else if (menusub == 5)
 			{
 				menustate = MENU_MAIN1;
 				menusub = 8;
