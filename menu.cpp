@@ -1347,6 +1347,7 @@ void HandleUI(void)
 			else
 			{
 				OsdWrite(m++, "", 0, 0);
+				OsdWrite(4, "", 0, 0);
 			}
 
 			OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
