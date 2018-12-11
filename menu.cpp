@@ -1319,20 +1319,21 @@ void HandleUI(void)
 		{
 			OsdSetSize(16);
 			helptext = 0;
-			menumask = 0xfd7; //0X7C7
+			menumask = 0xf87;
 			reboot_req = 0;
-
+			
 			OsdSetTitle("System", OSD_ARROW_LEFT);
 			menustate = MENU_8BIT_SYSTEM2;
 			parentstate = MENU_8BIT_SYSTEM1;
 
 			s[0] = 0;
 			m = 0;
+			
 			if (user_io_get_uart_mode())
 			{
 				struct stat filestat;
 				int mode = GetUARTMode();
-				menumask |= 8;
+				menumask |= 0x18;
                                 sprintf(s, " UART connection    %s", config_uart_msg[mode]);
                                 OsdWrite(3, s, menusub == 3, 0);
                                 sprintf(s, " Softsynth        %s", ((mode == 3 || mode == 4) 
@@ -1348,41 +1349,40 @@ void HandleUI(void)
 			OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
 			OsdWrite(m++, " Define joystick buttons   \x16", menusub == 1, 0);
 			OsdWrite(m++, " Button/Key remap for game \x16", menusub == 2, 0);
-			//OsdWrite(4, "", 0, 0);
 
 			m = 0;
 			if (user_io_core_type() == CORE_TYPE_MINIMIG2)
 			{
 				m = 1;
-				menumask &= ~0x80;
+				menumask &= ~0x100;
 			}
 
 			OsdWrite(5);
 			int n = 6;
 			if (user_io_get_scaler_flt() >= 0)
 			{
-				menumask |= 0x30;
+				menumask |= 0x60;
 				OsdWrite(n++, " HDMI Scaler:");
 				sprintf(s, " \x16 Filter - %s", config_scaler_msg[user_io_get_scaler_flt() ? 1 : 0]);
-				OsdWrite(n++, s, menusub == 4);
+				OsdWrite(n++, s, menusub == 5);
 
 				memset(s, 0, sizeof(s));
 				strcpy(s, " \x16 ");
 				if (strlen(user_io_get_scaler_coeff())) strncat(s, user_io_get_scaler_coeff(), 22);
 				else strcat(s, "<none>");
 
-				OsdWrite(n++, s, menusub == 5, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
+				OsdWrite(n++, s, menusub == 6, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
 				OsdWrite(n++);
 			}
 
-			OsdWrite(n++, m ? " Reset the core" : " Reset settings", menusub == 6, user_io_core_type() == CORE_TYPE_ARCHIE);
-			OsdWrite(n++, m ? "" : " Save settings", menusub == 7, 0);
+			OsdWrite(n++, m ? " Reset the core" : " Reset settings", menusub == 7, user_io_core_type() == CORE_TYPE_ARCHIE);
+			OsdWrite(n++, m ? "" : " Save settings", menusub == 8, 0);
 			OsdWrite(n++);
-			OsdWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 8);
-			OsdWrite(n++, " About", menusub == 9);
+			OsdWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 9);
+			OsdWrite(n++, " About", menusub == 10);
 
 			while(n < 15) OsdWrite(n++);
-			OsdWrite(15, STD_EXIT, menusub == 10);
+			OsdWrite(15, STD_EXIT, menusub == 11);
 			sysinfo_timer = 0;
 		}
 		break;
@@ -1470,13 +1470,13 @@ void HandleUI(void)
                                         menustate = MENU_8BIT_SYSTEM1;
                                 }
                                 break;
-                        /*        				
-			case 4:
+                                				
+			case 5:
 				user_io_set_scaler_flt(user_io_get_scaler_flt() ? 0 : 1);
 				menustate = MENU_8BIT_SYSTEM1;
-				break; */
+				break; 
 
-			case 5:
+			case 6:
 				if (user_io_get_scaler_flt())
 				{
 					sprintf(SelectedPath, COEFF_DIR"/%s", user_io_get_scaler_coeff());
@@ -1484,7 +1484,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 6:
+			case 7:
 				if (user_io_core_type() != CORE_TYPE_ARCHIE)
 				{
 					menustate = MENU_RESET1;
@@ -1496,7 +1496,7 @@ void HandleUI(void)
                     menusub   = 0;
 				}
 				break;
-			case 7:
+			case 8:
 				// Save settings
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
@@ -1519,7 +1519,7 @@ void HandleUI(void)
 					if (is_x86_core()) x86_config_save();
 				}
 				break;
-			case 8:
+			case 9:
 				{
 					reboot_req = 1;
 
@@ -1531,7 +1531,7 @@ void HandleUI(void)
 					OsdWrite(8, p, menusub == 6, 0);
 				}
 				break;
-			case 9:
+			case 10:
 				menustate = MENU_8BIT_ABOUT1;
 				menusub = 0;
 				break;
