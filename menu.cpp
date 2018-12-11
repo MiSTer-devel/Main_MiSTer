@@ -1327,8 +1327,7 @@ void HandleUI(void)
 			parentstate = MENU_8BIT_SYSTEM1;
 
 			s[0] = 0;
-			m = 0;
-			
+			m = 0;			
 			if (user_io_get_uart_mode())
 			{
 				struct stat filestat;
