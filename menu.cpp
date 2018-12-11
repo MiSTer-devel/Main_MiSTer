@@ -1335,10 +1335,14 @@ void HandleUI(void)
 				menumask |= 0x18;
                                 sprintf(s, " UART connection    %s", config_uart_msg[mode]);
                                 OsdWrite(3, s, menusub == 3, 0);
-                                sprintf(s, " Softsynth        %s", ((mode == 3 || mode == 4) 
-                                        && stat("/dev/midi", &filestat) != 0)?
-                                                config_softsynth_msg[GetSoftSynthMode()]:"       N/A"); 
-                                OsdWrite(4, s, menusub == 4 , 0);
+                                
+                                if((mode == 3 || mode == 4) && stat("/dev/midi", &filestat) != 0)
+                                {
+                                	sprintf(s, " Softsynth        %s", config_softsynth_msg[GetSoftSynthMode()]); 
+                                	OsdWrite(4, s, menusub == 4 , 0);
+                                }
+                                else
+					OsdWrite(4," Softsynth               N/A", menusub == 4 , 1);				                                
 			}
 			else
 			{
