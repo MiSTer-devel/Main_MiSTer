@@ -1213,7 +1213,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = { 0 };
-	static uint8_t buf[1024];
+	static uint8_t buf[4096];
 
 	if (!FileOpen(&f, name, mute)) return 0;
 
@@ -1261,7 +1261,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	}
 	else
 	{
-		if (is_snes_core())
+		if (is_snes_core() && bytes2send)
 		{
 			printf("Load SNES ROM.\n");
 			uint8_t* buf = snes_get_header(&f);
@@ -1270,15 +1270,21 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			spi8(UIO_FILE_TX_DAT);
 			spi_write(buf, 512, fio_size);
 			DisableFpga();
+
+			if (bytes2send & 512)
+			{
+				bytes2send -= 512;
+				FileReadSec(&f, buf);
+			}
 		}
 
 		while (bytes2send)
 		{
 			printf(".");
 
-			uint16_t chunk = (bytes2send > 512) ? 512 : bytes2send;
+			uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
-			FileReadSec(&f, buf);
+			FileReadAdv(&f, buf, chunk);
 
 			EnableFpga();
 			spi8(UIO_FILE_TX_DAT);
@@ -3086,7 +3092,7 @@ static uint32_t show_video_info(int force)
 	}
 
 	adjust_vsize(0);
-	return 0;
+	return ret;
 }
 
 int hasAPI1_5()
