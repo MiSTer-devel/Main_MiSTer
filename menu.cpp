@@ -99,6 +99,8 @@ enum MENU
 	MENU_JOYKBDMAP1,
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
+	MENU_SCRIPTS,
+	MENU_SCRIPTS1,
 
 	// Mist/atari specific pages
 	MENU_MIST_MAIN1,
@@ -170,6 +172,16 @@ const char *config_softsynth_msg[] = {"       UDP", "      MUNT", "FluidSynth"};
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
+
+#define script_line_length 1024
+#define script_lines 50
+FILE *script_pipe;
+int script_file;
+char script_command[script_line_length];
+int script_line;
+char script_output[script_lines][script_line_length];
+char script_line_output[script_line_length];
+bool script_exited;
 
 enum HelpText_Message { HELPTEXT_NONE, HELPTEXT_MAIN, HELPTEXT_HARDFILE, HELPTEXT_CHIPSET, HELPTEXT_MEMORY, HELPTEXT_VIDEO };
 const char *helptexts[] =
@@ -3188,7 +3200,7 @@ void HandleUI(void)
 			else sprintf(s, "   Available space: %llugb", avail / (1024 * 1024 * 1024));
 			OsdWrite(4, s, 0, 0);
 		}
-		menumask = 7;
+		menumask = 15;
 		OsdWrite(2, "", 0, 0);
 		if (getStorage(0))
 		{
@@ -3211,7 +3223,7 @@ void HandleUI(void)
 		OsdWrite(6, "", 0, 0);
 		OsdWrite(7, " Remap keyboard            \x16", menusub == 1, 0);
 		OsdWrite(8, " Define joystick buttons   \x16", menusub == 2, 0);
-		OsdWrite(9, "", 0, 0);
+		OsdWrite(9, " Scripts                   \x16", menusub == 3, 0);
 		sysinfo_timer = 0;
 
 		menustate = MENU_STORAGE;
@@ -3264,11 +3276,72 @@ void HandleUI(void)
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;
+			case 3:
+				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
+				break;
 			}
 		}
 		printSysInfo();
 		break;
 
+	case MENU_SCRIPTS:
+		helptext = 0;
+		menumask = 1;
+		menusub = 0;
+		OsdSetTitle(flist_SelectedItem()->d_name, 0);
+		menustate = MENU_SCRIPTS1;
+		parentstate = MENU_SCRIPTS;
+		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
+		for (int i = 0; i < script_lines; i++) strcpy(script_output[i], "");
+		script_line=0;
+		script_exited = false;
+		script_pipe=popen(getFullPath(SelectedPath), "r");
+		script_file = fileno(script_pipe);
+		fcntl(script_file, F_SETFL, O_NONBLOCK);
+		break;
+
+	case MENU_SCRIPTS1:
+		if (!script_exited)
+		{
+			if (!feof(script_pipe)) {
+				if (fgets(script_line_output, script_line_length, script_pipe) != NULL)
+				{
+					script_line_output[strcspn(script_line_output, "\n")] = 0;
+					if (script_line < OsdGetSize() - 1)
+					{
+						strcpy(script_output[script_line++], script_line_output);
+					}
+					else
+					{
+						strcpy(script_output[script_line], script_line_output);
+						for (int i = 0; i < script_line; i++) strcpy(script_output[i], script_output[i+1]);
+					};
+					for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, script_output[i], 0, 0);
+				};
+			}
+			else {
+				pclose(script_pipe);
+				script_exited=true;
+				OsdWrite(OsdGetSize() - 1, "             OK", menusub == 0, 0);
+			};
+		};		
+		if (select || menu)
+		{
+			if (!script_exited)
+			{
+				strcpy(script_command, "killall ");
+				strcat(script_command, flist_SelectedItem()->d_name);
+				system(script_command);
+				pclose(script_pipe);
+				script_exited=true;
+			};
+			menustate = MENU_FIRMWARE1;
+			menusub = 3;
+		}
+		break;
+
+		
 	case MENU_KBDMAP:
 		helptext = 0;
 		menumask = 1;
