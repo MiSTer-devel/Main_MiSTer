@@ -177,6 +177,13 @@ uint8_t* snes_get_header(fileTYPE *f)
 				{	//DSP4
 					hdr[1] |= 0xB0;
 				}
+				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0xf6)
+				{
+					//ST010
+					hdr[1] |= 0x88;
+					if(buf[addr + RomSize] < 10) hdr[1] |= 0x20; // ST011
+					//ramsz = 2;
+				}
 
 				//CX4 4
 				if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0xf3)
