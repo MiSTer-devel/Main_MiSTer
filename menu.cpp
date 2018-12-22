@@ -513,7 +513,7 @@ static uint32_t menu_key_get(void)
 	else if (CheckTimer(repeat))
 	{
 		repeat = GetTimer(REPEATRATE);
-		if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 6)))
+		if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 8)))
 		{
 			c = c1;
 			hold_cnt++;
@@ -732,6 +732,7 @@ void HandleUI(void)
 	static char helpstate = 0;
 	static char drive_num = 0;
 	static char flag;
+	static int cr = 0;
 	uint8_t keys[6] = { 0,0,0,0,0,0 };
 	uint16_t keys_ps2[6] = { 0,0,0,0,0,0 };
 
@@ -1389,6 +1390,8 @@ void HandleUI(void)
 			OsdWrite(n++, m ? " Reset the core" : " Reset settings", menusub == 7, user_io_core_type() == CORE_TYPE_ARCHIE);
 			OsdWrite(n++, m ? "" : " Save settings", menusub == 8, 0);
 			OsdWrite(n++);
+
+			cr = n;
 			OsdWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 9);
 			OsdWrite(n++, " About", menusub == 10);
 
@@ -1537,7 +1540,7 @@ void HandleUI(void)
 
 					sprintf(s, " Cold Reboot");
 					p = s + 5 - off;
-					OsdWrite(8, p, menusub == 6, 0);
+					OsdWrite(cr, p, menusub == 8, 0);
 				}
 				break;
 			case 10:
