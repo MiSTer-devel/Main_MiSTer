@@ -166,7 +166,7 @@ const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
-const char *config_uart_msg[] = { "    None", "     PPP", " Console", "    MIDI", "MIDI-38K" };
+const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "    MLINK", "MLINK-38K" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_softsynth_msg[] = {"       UDP", "      MUNT", "FluidSynth"};
 
@@ -1347,7 +1347,7 @@ void HandleUI(void)
 				struct stat filestat;
 				int mode = GetUARTMode();
 				menumask |= 0x18;
-                                sprintf(s, " UART connection    %s", config_uart_msg[mode]);
+                                sprintf(s, " UART connection   %s", config_uart_msg[mode]);
                                 OsdWrite(3, s, menusub == 3, 0);
                                 sprintf(s, " Softsynth        %s", config_softsynth_msg[GetSoftSynthMode()]); 	
 				OsdWrite(4, s, menusub == 4 , (mode == 3 || mode == 4) && stat("/dev/midi", &filestat)?0:1);       
