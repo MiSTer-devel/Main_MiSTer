@@ -31,6 +31,7 @@ typedef struct {
 	uint8_t volumectl;
 	uint8_t vscale_mode;
 	uint8_t vscale_border;
+	uint8_t rbf_hide_datecode;
 	char video_conf[1024];
 } cfg_t;
 

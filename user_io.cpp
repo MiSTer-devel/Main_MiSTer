@@ -2440,6 +2440,12 @@ void user_io_kbd(uint16_t key, int press)
 		if (press) setBrightness(BRIGHTNESS_UP, 0);
 	}
 	else
+	if (key == KEY_F2 && osd_is_visible)
+	{
+		if (press == 1) cfg.rbf_hide_datecode = !cfg.rbf_hide_datecode;
+		PrintDirectory();
+	}
+	else
 	if ((core_type == CORE_TYPE_MINIMIG2) ||
 		(core_type == CORE_TYPE_MIST) ||
 		(core_type == CORE_TYPE_ARCHIE) ||
