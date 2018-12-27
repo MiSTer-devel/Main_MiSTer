@@ -1,4 +1,3 @@
-
 # makefile to fail if any command in pipe is failed.
 SHELL = /bin/bash -o pipefail
 
@@ -8,6 +7,12 @@ BASE    = arm-linux-gnueabihf
 CC      = $(BASE)-gcc
 LD      = $(CC)
 STRIP   = $(BASE)-strip
+
+ifeq ($(V),1)
+	Q :=
+else
+	Q := @
+endif
 
 INCLUDE	= -I./
 INCLUDE	+= -I./support/minimig
@@ -34,35 +39,35 @@ CFLAGS	= $(DFLAGS) -Wall -Wextra -c -O3
 LFLAGS	= -lc -lstdc++ -lrt
 
 $(PRJ): $(OBJ)
-	@$(info $@)
-	@$(LD) -o $@ $+ $(LFLAGS)
-	@cp $@ $@.elf
-	@$(STRIP) $@
+	$(Q)$(info $@)
+	$(Q)$(LD) -o $@ $+ $(LFLAGS)
+	$(Q)cp $@ $@.elf
+	$(Q)$(STRIP) $@
 
 clean:
-	rm -f *.d *.o *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
-	rm -rf obj .vs DTAR* x64
+	$(Q)rm -f *.d *.o *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
+	$(Q)rm -rf obj .vs DTAR* x64
 
 cleanall:
-	rm -rf *.d *.o *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
-	rm -rf obj .vs DTAR* x64
-	find . -name '*.o' -delete
-	find . -name '*.d' -delete
+	$(Q)rm -rf $(OBJ) $(DEP) *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
+	$(Q)rm -rf obj .vs DTAR* x64
+	$(Q)find . -name '*.o' -delete
+	$(Q)find . -name '*.d' -delete
 
 %.o: %.c
-	@$(info $<)
-	@$(CC) $(CFLAGS) -std=gnu99 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+	$(Q)$(info $<)
+	$(Q)$(CC) $(CFLAGS) -std=gnu99 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 %.o: %.cpp
-	@$(info $<)
-	@$(CC) $(CFLAGS) -std=gnu++14 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+	$(Q)$(info $<)
+	$(Q)$(CC) $(CFLAGS) -std=gnu++14 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 -include $(DEP)
 %.d: %.c
-	@$(CC) $(DFLAGS) -MM $< -MT $@ -MT $*.o -MF $@ 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+	$(Q)$(CC) $(DFLAGS) -MM $< -MT $@ -MT $*.o -MF $@ 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 %.d: %.cpp
-	@$(CC) $(DFLAGS) -MM $< -MT $@ -MT $*.o -MF $@ 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+	$(Q)$(CC) $(DFLAGS) -MM $< -MT $@ -MT $*.o -MF $@ 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 # Ensure correct time stamp
 main.o: $(filter-out main.o, $(OBJ))
