@@ -1,12 +1,34 @@
 # makefile to fail if any command in pipe is failed.
 SHELL = /bin/bash -o pipefail
 
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+current_dir := $(dir $(mkfile_path))
+
+DFLAGS =
+CFLAGS =
+LFLAGS =
+
+ifdef BUILD_CLANG
+CC    := clang
+LD    := clang
+STRIP := llvm-strip
+
+# https://snapshots.linaro.org/components/toolchain/binaries/5.4-2017.01-rc2/arm-linux-gnueabihf/
+GCCROOT     := $(current_dir)/../gcc-linaro-5.4.1-2017.01-rc2-x86_64_arm-linux-gnueabihf
+SYSROOT     := $(GCCROOT)/arm-linux-gnueabihf/libc
+CROSS_FLAGS := --target=arm-linux-gnueabihf -mcpu=cortex-a9
+CROSS_FLAGS += --sysroot=$(SYSROOT) --gcc-toolchain=$(GCCROOT)
+
+DFLAGS += $(CROSS_FLAGS)
+LFLAGS += $(CROSS_FLAGS) -fuse-ld=lld
+else
 # using gcc version 5.4.1 20161213 (Linaro GCC 5.4-2017.01-rc2)
 BASE    = arm-linux-gnueabihf
 
 CC      = $(BASE)-gcc
 LD      = $(CC)
 STRIP   = $(BASE)-strip
+endif
 
 ifeq ($(V),1)
 	Q :=
@@ -32,8 +54,9 @@ VPATH	= ./:./support/minimig:./support/sharpmz:./support/archie:./support/st:./s
 OBJ	= $(SRC:.c=.o) $(SRC2:.cpp=.o) $(MINIMIG_SRC:.cpp=.o) $(SHARPMZ_SRC:.cpp=.o) $(ARCHIE_SRC:.cpp=.o) $(ST_SRC:.cpp=.o) $(X86_SRC:.cpp=.o) $(SNES_SRC:.cpp=.o)
 DEP	= $(SRC:.c=.d) $(SRC2:.cpp=.d) $(MINIMIG_SRC:.cpp=.d) $(SHARPMZ_SRC:.cpp=.d) $(ARCHIE_SRC:.cpp=.d) $(ST_SRC:.cpp=.d) $(X86_SRC:.cpp=.d)	$(SNES_SRC:.cpp=.d)
 
-CFLAGS	= $(DFLAGS) -c -O3 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
-LFLAGS	= -lc -lstdc++ -lrt
+DFLAGS	+= $(INCLUDE)
+CFLAGS	+= $(DFLAGS) -c -O3 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
+LFLAGS	+= -lc -lstdc++ -lrt
 
 $(PRJ): $(OBJ)
 	$(Q)$(info $@)
