@@ -24,13 +24,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <inttypes.h>
-#include <stdbool.h> 
 #include <fcntl.h>
 #include <time.h>
+
+#include <cinttypes>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "../../spi.h"
 #include "../../user_io.h"
@@ -72,16 +72,6 @@ static uint8_t dma_sdio(int status)
 	return res;
 }
 
-static uint32_t dma_get(uint32_t address)
-{
-	EnableFpga();
-	spi8(UIO_DMA_READ);
-	spi32w(address);
-	uint32_t res = spi32w(0);
-	DisableFpga();
-	return res;
-}
-
 static void dma_set(uint32_t address, uint32_t data)
 {
 	EnableFpga();
@@ -111,7 +101,7 @@ static void dma_rcvbuf(uint32_t address, uint32_t length, uint32_t *data)
 
 static int load_bios(const char* name, uint8_t index)
 {
-	fileTYPE f = { 0 };
+	fileTYPE f = {};
 	static uint32_t buf[128];
 
 	if (!FileOpen(&f, name)) return 0;
@@ -155,10 +145,10 @@ static bool floppy_is_2_88m= false;
 
 #define CMOS_FDD_TYPE ((floppy_is_2_88m) ? 0x50 : (floppy_is_1_44m || floppy_is_1_68m) ? 0x40 : (floppy_is_720k) ? 0x30 : (floppy_is_1_2m) ? 0x20 : 0x10)
 
-static fileTYPE fdd_image0 = { 0 };
-static fileTYPE fdd_image1 = { 0 };
-static fileTYPE hdd_image0 = { 0 };
-static fileTYPE hdd_image1 = { 0 };
+static fileTYPE fdd_image0 = {};
+static fileTYPE fdd_image1 = {};
+static fileTYPE hdd_image0 = {};
+static fileTYPE hdd_image1 = {};
 static bool boot_from_floppy = 1;
 
 #define IMG_TYPE_FDD0 0x0800
@@ -210,25 +200,6 @@ static int img_write(uint32_t type, uint32_t lba, void *buf, uint32_t len)
 #define IOWR(base, reg, value) dma_set(base+(reg<<2), value)
 
 static uint32_t cmos[128];
-
-void cmos_set(int addr, uint8_t val)
-{
-	if (addr >= sizeof(cmos)) return;
-
-	cmos[addr] = val;
-	return;
-
-	uint16_t sum = 0;
-	for (int i = 0x10; i <= 0x2D; i++) sum += cmos[i];
-
-	cmos[0x2E] = sum >> 8;
-	cmos[0x2F] = sum & 0xFF;
-
-	IOWR(RTC_BASE, addr, cmos[addr]);
-
-	IOWR(RTC_BASE, 0x2E, cmos[0x2E]);
-	IOWR(RTC_BASE, 0x2F, cmos[0x2F]);
-}
 
 static int fdd_set(char* filename)
 {
@@ -321,7 +292,6 @@ static int fdd_set(char* filename)
 	IOWR(FLOPPY0_BASE, 0xB, (int)(500000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
 	IOWR(FLOPPY0_BASE, 0xC, floppy_media);
 
-	//cmos_set(0x10, CMOS_FDD_TYPE);
 	return floppy;
 }
 
@@ -661,7 +631,7 @@ struct sd_param_t
 	uint32_t bl_cnt;
 };
 
-static struct sd_param_t sd_params = { 0 };
+static struct sd_param_t sd_params = {};
 
 void x86_poll()
 {

@@ -1,10 +1,5 @@
 #include "file_io.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <inttypes.h>
-#include <stdbool.h>
-#include <string.h>
+
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -12,19 +7,26 @@
 #include <sys/vfs.h>
 #include <sys/mman.h>
 #include <linux/magic.h>
+
+#include <cerrno>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
 #include "osd.h"
 #include "fpga_io.h"
 #include "menu.h"
-#include "errno.h"
 #include "DiskImage.h"
 #include "user_io.h"
 #include "cfg.h"
 #include "input.h"
+#include "spi.h"
 
-int nDirEntries = 0;
+std::size_t nDirEntries = 0;
 struct dirent DirItem[10000];
-int iSelectedEntry = 0;       // selected entry index
-int iFirstEntry = 0;
+std::size_t iSelectedEntry = 0;  // selected entry index
+std::size_t iFirstEntry = 0;
 
 static char full_path[1200];
 
@@ -55,7 +57,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	}
 	else
 	{
-		sprintf(full_path, name);
+		sprintf(full_path, "%s", name);
 	}
 
 	FileClose(file);
@@ -718,7 +720,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		qsort(DirItem, nDirEntries, sizeof(struct dirent), de_cmp);
 		if (file_name[0])
 		{
-			for (int i = 0; i < nDirEntries; i++)
+			for (std::size_t i = 0; i < nDirEntries; i++)
 			{
 				if (!strcmp(file_name, DirItem[i].d_name))
 				{
@@ -794,7 +796,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 		else if (mode == SCANF_SET_ITEM)
 		{
-			for (int i = 0; i < nDirEntries; i++)
+			for (std::size_t i = 0; i < nDirEntries; i++)
 			{
 				if((DirItem[i].d_type == DT_DIR) && !strcmp(DirItem[i].d_name, extension))
 				{
@@ -813,7 +815,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if ((mode >= '0' && mode <= '9') || (mode >= 'A' && mode <= 'Z'))
 			{
 				int found = -1;
-				for (int i = iSelectedEntry+1; i < nDirEntries; i++)
+				for (std::size_t i = iSelectedEntry+1; i < nDirEntries; i++)
 				{
 					if (toupper(DirItem[i].d_name[0]) == mode)
 					{
@@ -824,7 +826,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 				if (found < 0)
 				{
-					for (int i = 0; i < nDirEntries; i++)
+					for (std::size_t i = 0; i < nDirEntries; i++)
 					{
 						if (toupper(DirItem[i].d_name[0]) == mode)
 						{

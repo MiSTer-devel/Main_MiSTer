@@ -1,10 +1,10 @@
 // config.c
 
-#include <stdio.h>
-#include <string.h>
-#include <stdbool.h>
 #include <sys/stat.h>
 #include <dirent.h>
+
+#include <cstdio>
+#include <cstring>
 
 #include "../../hardware.h"
 #include "minimig_boot.h"
@@ -16,6 +16,7 @@
 #include "minimig_config.h"
 #include "../../user_io.h"
 #include "../../input.h"
+#include "../../spi.h"
 
 typedef struct
 {
@@ -35,13 +36,14 @@ typedef struct
 	unsigned char autofire;
 } configTYPE_old;
 
-configTYPE config = { 0 };
+configTYPE config = {};
 unsigned char romkey[3072];
 
-static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, int size)
+static void SendFileV2(fileTYPE* file, unsigned char* key, std::size_t keysize, std::size_t address, std::size_t size)
 {
 	static uint8_t buf[512];
-	unsigned int keyidx = 0;
+	std::size_t keyidx = 0;
+
 	printf("File size: %dkB\n", size >> 1);
 	printf("[");
 	if (keysize)
@@ -50,7 +52,7 @@ static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int addr
 		FileReadAdv(file, buf, 0xb);
 	}
 
-	for (int i = 0; i<size; i++)
+	for (std::size_t i = 0; i<size; i++)
 	{
 		if (!(i & 31)) printf("*");
 		FileReadAdv(file, buf, 512);
@@ -58,14 +60,14 @@ static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int addr
 		if (keysize)
 		{
 			// decrypt ROM
-			for (int j = 0; j<512; j++)
+			for (std::size_t j = 0; j<512; j++)
 			{
 				buf[j] ^= key[keyidx++];
 				if (keyidx >= keysize) keyidx -= keysize;
 			}
 		}
 		EnableOsd();
-		unsigned int adr = address + i * 512;
+		std::size_t adr = address + i * 512;
 		spi8(OSD_CMD_WR);
 		spi8(adr & 0xff); adr = adr >> 8;
 		spi8(adr & 0xff); adr = adr >> 8;
@@ -86,7 +88,7 @@ static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int addr
 
 static char UploadKickstart(char *name)
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	int keysize = 0;
 
 	BootPrint("Checking for Amiga Forever key file:");
@@ -168,7 +170,7 @@ static char UploadKickstart(char *name)
 
 static char UploadActionReplay()
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	if(FileOpen(&file, "Amiga/HRTMON.ROM") || FileOpen(&file, "HRTMON.ROM"))
 	{
 		int adr, data;
@@ -245,7 +247,7 @@ static char* GetConfigurationName(int num)
 	if (d)
 	{
 		if(num) sprintf(path, "minimig%d", num);
-		else sprintf(path, "minimig.cfg", num);
+		else sprintf(path, "minimig.cfg");
 
 		while ((dir = readdir(d)) != NULL)
 		{
@@ -378,16 +380,15 @@ unsigned char LoadConfiguration(int num)
 	static const char config_id[] = "MNMGCFG0";
 	char updatekickstart = 0;
 	char result = 0;
-	unsigned char key, i;
 
 	const char *filename = GetConfigurationName(num);
 
 	// load configuration data
-	int size;
+	std::size_t size;
 	if(filename && (size = FileLoadConfig(filename, 0, 0))>0)
 	{
 		BootPrint("Opened configuration file\n");
-		printf("Configuration file size: %s, %lu\n", filename, size);
+		printf("Configuration file size: %s, %zu\n", filename, size);
 		if (size == sizeof(config))
 		{
 			static configTYPE tmpconf;
@@ -439,7 +440,7 @@ unsigned char LoadConfiguration(int num)
 			}
 			else printf("Cannot load configuration file\n");
 		}
-		else printf("Wrong configuration file size: %lu (expected: %lu)\n", size, sizeof(config));
+		else printf("Wrong configuration file size: %zu (expected: %zu)\n", size, sizeof(config));
 	}
 	if (!result) {
 		BootPrint("Can not open configuration file!\n");
@@ -502,7 +503,7 @@ void MinimigReset()
 
 void SetKickstart(char *name)
 {
-	int len = strlen(name);
+	std::size_t len = strlen(name);
 	if (len > (sizeof(config.kickstart) - 1)) len = sizeof(config.kickstart) - 1;
 	memcpy(config.kickstart, name, len);
 	config.kickstart[len] = 0;

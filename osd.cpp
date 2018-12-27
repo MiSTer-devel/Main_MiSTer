@@ -34,9 +34,11 @@ as rotated copies of the first 128 entries.  -- AMR
 */
 
 #include <time.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
+
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "osd.h"
 #include "spi.h"
@@ -48,7 +50,7 @@ as rotated copies of the first 128 entries.  -- AMR
 
 #include "support.h"
 
-static int osd_size = 8;
+static std::size_t osd_size = 8;
 
 void OsdSetSize(int n)
 {
@@ -145,9 +147,9 @@ void OsdSetTitle(const char *s, int a)
 {
 	// Compose the title, condensing character gaps
 	arrow = a;
-	int zeros = 0;
-	int i = 0, j = 0;
-	int outp = 0;
+	std::size_t zeros = 0;
+	std::size_t i = 0, j = 0;
+	std::size_t outp = 0;
 	while (1)
 	{
 		int c = s[i++];
@@ -178,7 +180,7 @@ void OsdSetTitle(const char *s, int a)
 	}
 
 	// Now centre it:
-	int c = (OSDHEIGHT - 1 - outp) / 2;
+	std::size_t c = (OSDHEIGHT - 1 - outp) / 2;
 	memmove(titlebuffer + c, titlebuffer, outp);
 
 	for (i = 0; i<c; ++i) titlebuffer[i] = 0;
@@ -245,7 +247,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			if (leftchar)
 			{
 				unsigned char tmp2[8];
-				memcpy(tmp2, charfont[leftchar], 8);
+				memcpy(tmp2, charfont[static_cast<std::size_t>(leftchar)], 8);
 				rotatechar(tmp2, tmp);
 				p = tmp;
 			}
@@ -338,8 +340,10 @@ void OsdDrawLogo(unsigned char n, char row, char superimpose)
 	unsigned short i;
 	const unsigned char *p;
 	int linelimit = OSDLINELEN;
-
 	int mag = (osd_size / 8);
+
+	(void)superimpose;
+
 	n = n * mag;
 
 	// select buffer and line to write to
@@ -355,7 +359,7 @@ void OsdDrawLogo(unsigned char n, char row, char superimpose)
 	for (int k = 0; k < mag; k++)
 	{
 		unsigned char bt = 0;
-		const unsigned char *lp = logodata[row];
+		const unsigned char *lp = logodata[static_cast<std::size_t>(row)];
 		int bytes = sizeof(logodata[0]);
 		if (row >= (sizeof(logodata) / sizeof(logodata[0]))) lp = 0;
 
@@ -441,20 +445,20 @@ void OSD_PrintText(unsigned char line, const char *text, unsigned long start, un
 
 	if (offset) {
 		width -= 8 - offset;
-		p = &charfont[*text++][offset];
+		p = &charfont[static_cast<std::size_t>(*text++)][offset];
 		for (; offset < 8; offset++)
 			spi8(*p++^invert);
 	}
 
 	while (width > 8) {
 		unsigned char b;
-		p = &charfont[*text++][0];
+		p = &charfont[static_cast<std::size_t>(*text++)][0];
 		for (b = 0; b<8; b++) spi8(*p++^invert);
 		width -= 8;
 	}
 
 	if (width) {
-		p = &charfont[*text++][0];
+		p = &charfont[static_cast<std::size_t>(*text++)][0];
 		while (width--)
 			spi8(*p++^invert);
 	}
@@ -530,7 +534,7 @@ void OSD_PrintInfo(const char *message, int *width, int *height, int frame)
 
 		for (x = 0; x < w; x++)
 		{
-			const unsigned char *p = charfont[str[(y*INFO_MAXW) + x]];
+			const unsigned char *p = charfont[static_cast<std::size_t>(str[(y*INFO_MAXW) + x])];
 			for (int i = 0; i < 8; i++) spi8(*p++);
 		}
 
@@ -655,7 +659,7 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 		if (off+len > max_len) // scroll name if longer than display size
 		{
 			// reset scroll position if it exceeds predefined maximum
-			if (scroll_offset >= (len + BLANKSPACE) << 3) scroll_offset = 0;
+			if (scroll_offset >= static_cast<unsigned long>(len + BLANKSPACE) << 3) scroll_offset = 0;
 
 			offset = scroll_offset >> 3; // get new starting character of the name (scroll_offset is no longer in 2 pixel unit)
 			len -= offset; // remaining number of characters in the name

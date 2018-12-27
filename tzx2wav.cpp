@@ -54,8 +54,6 @@ const char *hwids_01[] = {
 	"Commodore 128"
 };
 
-static const char *build= "20060225";
-
 #define MAJREV 1        // Major revision of the format this program supports
 #define MINREV 13       // Minor revision of the format this program supports
 
@@ -111,7 +109,6 @@ static int not_rec;            // Some blocks were not recognised ??
 static int starting=1;         // starting block
 static int ending=0;           // ending block
 
-static int pages=0;            // Waiting after each page of the info ?
 static int expand=0;           // Expand Groups ?
 static int draw=1;             // Local flag for outputing a line when in a group
 
@@ -135,9 +132,6 @@ static char add_bit;
 static int inv = 0;
 
 static char tstr[255];
-static char tstr2[255];
-static char tstr3[255];
-static char tstr4[255];
 static char spdstr[255];
 static char pstr[255];
 
@@ -1395,7 +1389,7 @@ int tzx2csw(fileTYPE *f)
 
 	PauseWave(200);  // Finish always with 200 ms of pause after the last block
 	PlayFinish();
-	printf("\n%d bytes sent to the core.\n", oflen);
+	printf("\n%lu bytes sent to the core.\n", oflen);
 	free(mem);
 	return 1;
 }

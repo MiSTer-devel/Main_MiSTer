@@ -23,8 +23,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // 2018-05-xx - Use RDB CHS values if valid
 // 2018-05-29 - LBA mode implemented
 
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
+
 #include "../../hardware.h"
 #include "../../file_io.h"
 #include "minimig_hdd.h"
@@ -32,6 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "minimig_config.h"
 #include "../../debug.h"
 #include "../../fpga_io.h"
+#include "../../spi.h"
 
 #define CMD_IDECMD                 0x04
 #define CMD_IDEDAT                 0x08
@@ -81,7 +83,7 @@ typedef struct
 	uint16_t sector_count;
 } hdfTYPE;
 
-static hdfTYPE HDF[4] = { 0 };
+static hdfTYPE HDF[4] = {};
 static uint8_t sector_buffer[512];
 
 static void CalcGeometry(hdfTYPE *hdf)
@@ -205,7 +207,6 @@ static uint32_t RDBChecksum(uint32_t *p, int set)
 // if the HDF file doesn't have a RigidDiskBlock, we synthesize one
 static void FakeRDB(hdfTYPE *hdf)
 {
-	int i;
 	// start by clearing the sector buffer
 	memset(sector_buffer, 0, 512);
 
@@ -285,7 +286,8 @@ static void FakeRDB(hdfTYPE *hdf)
 // builds Identify Device struct
 static void IdentifyDevice(uint16_t *pBuffer, hdfTYPE *hdf)
 {
-	char *p, i, x;
+	char *p, x;
+	std::size_t i;
 	uint32_t total_sectors = hdf->cylinders * hdf->heads * hdf->sectors;
 	memset(pBuffer, 0, 512);
 
@@ -367,6 +369,8 @@ static void WriteStatus(uint8_t status)
 
 static void ATA_Recalibrate(uint8_t* tfr, hdfTYPE *hdf)
 {
+	(void)hdf;
+
 	// Recalibrate 0x10-0x1F (class 3 command: no data)
 	hdd_debugf("IDE%d: Recalibrate", hdf->unit);
 	WriteTaskFile(0, 0, tfr[6] & 0x40 ? 0 : 1, 0, 0, tfr[6] & 0xF0);
@@ -375,6 +379,9 @@ static void ATA_Recalibrate(uint8_t* tfr, hdfTYPE *hdf)
 
 static void ATA_Diagnostic(uint8_t* tfr, hdfTYPE *hdf)
 {
+	(void)tfr;
+	(void)hdf;
+
 	// Execute Drive Diagnostic (0x90)
 	hdd_debugf("IDE: Drive Diagnostic");
 	WriteTaskFile(1, 0, 0, 0, 0, 0);
@@ -383,7 +390,6 @@ static void ATA_Diagnostic(uint8_t* tfr, hdfTYPE *hdf)
 
 static void ATA_IdentifyDevice(uint8_t* tfr, hdfTYPE *hdf)
 {
-	int i;
 	// Identify Device (0xec)
 	hdd_debugf("IDE%d: Identify Device", hdf->unit);
 	IdentifyDevice((uint16_t*)sector_buffer, hdf);
@@ -400,6 +406,8 @@ static void ATA_IdentifyDevice(uint8_t* tfr, hdfTYPE *hdf)
 
 static void ATA_Initialize(uint8_t* tfr, hdfTYPE *hdf)
 {
+	(void)hdf;
+
 	// Initialize Device Parameters (0x91)
 	hdd_debugf("Initialize Device Parameters");
 	hdd_debugf("IDE%d: %02X.%02X.%02X.%02X.%02X.%02X.%02X.%02X", hdf->unit, tfr[0], tfr[1], tfr[2], tfr[3], tfr[4], tfr[5], tfr[6], tfr[7]);
@@ -535,7 +543,7 @@ static void WriteSector(hdfTYPE *hdf)
 		else
 		{
 			GetRDBGeometry(hdf);
-			printf("Using new CHS: %u/%u/%u (%lu MB)\n", hdf->cylinders, hdf->heads, hdf->sectors, ((((uint32_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
+			printf("Using new CHS: %u/%u/%u (%u MB)\n", hdf->cylinders, hdf->heads, hdf->sectors, ((((uint32_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
 		}
 	}
 	FileWriteSec(&hdf->file, sector_buffer);
@@ -660,6 +668,8 @@ static void ATA_WriteMultiple(uint8_t* tfr, hdfTYPE *hdf)
 
 void HandleHDD(uint8_t c1, uint8_t c2)
 {
+	(void)c2;
+
 	if (c1 & CMD_IDECMD)
 	{
 		uint8_t  unit = 0;
@@ -727,7 +737,7 @@ uint8_t OpenHardfile(uint8_t unit)
 				SetHardfileGeometry(hdf, !strcasecmp(".hdf", config.hardfile[unit].filename + strlen(config.hardfile[unit].filename) - 4));
 				printf("size: %llu (%llu MB)\n", hdf->file.size, hdf->file.size >> 20);
 				printf("CHS: %u/%u/%u", hdf->cylinders, hdf->heads, hdf->sectors);
-				printf(" (%lu MB), ", ((((uint32_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
+				printf(" (%u MB), ", ((((uint32_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
 				printf("Offset: %d\n", hdf->offset);
 				return 1;
 			}
@@ -742,7 +752,7 @@ uint8_t OpenHardfile(uint8_t unit)
 
 int checkHDF(const char* name, struct RigidDiskBlock **rdb)
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 
 	*rdb = NULL;
 	if (FileOpenEx(&file, name, O_RDONLY))

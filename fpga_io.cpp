@@ -1,14 +1,17 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
-#include <errno.h>
 #include <signal.h>
 #include <ctype.h>
 #include <termios.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+
+#include <cerrno>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
 #include "fpga_io.h"
 #include "file_io.h"
 
@@ -129,25 +132,6 @@ static int fpgamgr_test_fpga_ready(void)
 		return 0;
 
 	return 1;
-}
-
-/* Poll until FPGA is ready to be accessed or timeout occurred */
-static int fpgamgr_poll_fpga_ready(void)
-{
-	unsigned long i;
-
-	/* If FPGA is blank, wait till WD invoke warm reset */
-	for (i = 0; i < FPGA_TIMEOUT_CNT; i++) {
-		/* check for init done signal */
-		if (!is_fpgamgr_initdone_high())
-			continue;
-		/* check again to avoid false glitches */
-		if (!is_fpgamgr_initdone_high())
-			continue;
-		return 1;
-	}
-
-	return 0;
 }
 
 /* Start the FPGA programming by initialize the FPGA Manager */
@@ -431,7 +415,7 @@ static int make_env(const char *name, const char *cfg)
 	*str++ = '=';
 	*str++ = '"';
 
-	for (int i = 0; i < strlen(name); i++)
+	for (std::size_t i = 0; i < strlen(name); i++)
 	{
 		*str++ = name[i];
 	}
@@ -479,14 +463,14 @@ int fpga_load_rbf(const char *name, const char *cfg)
 			void *buf = malloc(st.st_size);
 			if (!buf)
 			{
-				printf("Couldn't allocate %d bytes.\n", st.st_size);
+				printf("Couldn't allocate %" PRIu64 " bytes.\n", st.st_size);
 				ret = -1;
 			}
 			else
 			{
 				if (read(rbf, buf, st.st_size)<st.st_size)
 				{
-					printf("Couldn't read file \n", st.st_size);
+					printf("Couldn't read file %s\n", name);
 					ret = -1;
 				}
 				else

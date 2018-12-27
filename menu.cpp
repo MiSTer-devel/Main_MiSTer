@@ -23,8 +23,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // 2010-01-09   - support for variable number of tracks
 // 2016-06-01   - improvements to 8-bit menu
 
-#include <stdlib.h>
-#include <inttypes.h>
 #include <ctype.h>
 #include <fcntl.h>
 #include <time.h>
@@ -34,6 +32,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <ifaddrs.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+
+#include <cinttypes>
+#include <cstddef>
+#include <cstdlib>
+
 #include "stdio.h"
 #include "string.h"
 #include "file_io.h"
@@ -43,7 +46,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "user_io.h"
 #include "debug.h"
 #include "fpga_io.h"
-#include <stdbool.h>
 #include "cfg.h"
 #include "input.h"
 #include "battery.h"
@@ -250,13 +252,13 @@ int changeDir(char *dir)
 		if (p)
 		{
 			*p = 0;
-			int len = strlen(p+1);
+			std::size_t len = strlen(p+1);
 			if (len > sizeof(curdir) - 1) len = sizeof(curdir) - 1;
 			strncpy(curdir, p+1, len);
 		}
 		else
 		{
-			int len = strlen(SelectedPath);
+			std::size_t len = strlen(SelectedPath);
 			if (len > sizeof(curdir) - 1) len = sizeof(curdir) - 1;
 			strncpy(curdir, SelectedPath, len);
 			SelectedPath[0] = 0;
@@ -355,7 +357,9 @@ void siprintbinary(char* buffer, size_t const size, void const * const ptr)
 	unsigned char *b = (unsigned char*)ptr;
 	unsigned char byte;
 	int i, j;
-	memset(buffer, '\0', sizeof(buffer));
+
+	memset(buffer, '\0', size);
+
 	for (i = size - 1; i >= 0; i--)
 	{
 		for (j = 0; j<8; j++)
@@ -448,9 +452,7 @@ static int hold_cnt = 0;
 static uint32_t menu_key_get(void)
 {
 	static uint32_t c2;
-	static unsigned long delay;
 	static unsigned long repeat;
-	static unsigned char repeat2;
 	uint32_t c1, c;
 
 	c1 = menu_key;
@@ -496,7 +498,6 @@ char* getNet(int spec)
 {
 	int netType = 0;
 	struct ifaddrs *ifaddr, *ifa, *ifae = 0, *ifaw = 0;
-	int family, s;
 	static char host[NI_MAXHOST];
 
 	if (getifaddrs(&ifaddr) == -1)
@@ -678,14 +679,12 @@ void HandleUI(void)
 		return;
 	}
 	
-	struct RigidDiskBlock *rdb;
+	struct RigidDiskBlock *rdb = nullptr;
 
 	static char opensave;
 	char *p;
 	char s[40];
-	unsigned char m, up, down, select, menu, right, left, plus, minus;
-	uint8_t mod;
-	unsigned long len;
+	unsigned char m = 0, up, down, select, menu, right, left, plus, minus;
 	char enable;
 	static int reboot_req = 0;
 	static long helptext_timer;
@@ -694,11 +693,6 @@ void HandleUI(void)
 	static char drive_num = 0;
 	static char flag;
 	static int cr = 0;
-	uint8_t keys[6] = { 0,0,0,0,0,0 };
-	uint16_t keys_ps2[6] = { 0,0,0,0,0,0 };
-
-	char usb_id[64];
-
 	static char	cp_MenuCancel;
 
 	// get user control codes
@@ -914,7 +908,7 @@ void HandleUI(void)
 		OsdWrite(6, s, menusub == 3, 0);
 
 		OsdWrite(7, "", 0, 0);
-		sprintf(s, " Stereo mix:        %s", config_stereo_msg[archie_get_amix()]);
+		sprintf(s, " Stereo mix:        %s", config_stereo_msg[static_cast<std::size_t>(archie_get_amix())]);
 		OsdWrite(8, s, menusub == 4, 0);
 
 		OsdWrite(9, "", 0, 0);
@@ -928,7 +922,7 @@ void HandleUI(void)
 		parentstate = MENU_ARCHIE_MAIN1;
 
 		// set helptext with core display on top of basic info
-		sprintf(helptext_custom, HELPTEXT_SPACER);
+		sprintf(helptext_custom, "%s", HELPTEXT_SPACER);
 		strcat(helptext_custom, OsdCoreName());
 		strcat(helptext_custom, helptexts[HELPTEXT_MAIN]);
 		helptext = helptext_custom;
@@ -1161,7 +1155,7 @@ void HandleUI(void)
 		menustate = MENU_8BIT_MAIN2;
 
 		// set helptext with core display on top of basic info
-		sprintf(helptext_custom, HELPTEXT_SPACER);
+		sprintf(helptext_custom, "%s", HELPTEXT_SPACER);
 		strcat(helptext_custom, OsdCoreName());
 		strcat(helptext_custom, helptexts[HELPTEXT_MAIN]);
 		helptext = helptext_custom;
@@ -2113,7 +2107,7 @@ void HandleUI(void)
 			case 3: {
 				unsigned long chipset = (tos_system_ctrl() >> 23) + 1;
 				if (chipset == 4) chipset = 0;
-				tos_update_sysctrl(tos_system_ctrl() & ~(TOS_CONTROL_STE | TOS_CONTROL_MSTE) |
+				tos_update_sysctrl((tos_system_ctrl() & ~(TOS_CONTROL_STE | TOS_CONTROL_MSTE)) |
 					(chipset << 23));
 				menustate = MENU_MIST_VIDEO1;
 			} break;
@@ -2176,7 +2170,7 @@ void HandleUI(void)
 		// use left/right to adjust video position
 		if (left || right) {
 			if ((menusub == 2) || (menusub == 3)) {
-				if (left && (tos_get_video_adjust(menusub - 2) > -100))
+				if (left && (static_cast<signed char>(tos_get_video_adjust(menusub - 2)) > -100))
 					tos_set_video_adjust(menusub - 2, -1);
 
 				if (right && (tos_get_video_adjust(menusub - 2) < 100))
@@ -2239,7 +2233,7 @@ void HandleUI(void)
 					if (df[i].status & DSK_INSERTED) // floppy disk is inserted
 					{
 						char *p;
-						if (p = strrchr(df[i].name, '/'))
+						if ((p = strrchr(df[i].name, '/')))
 						{
 							p++;
 						}
@@ -2974,7 +2968,7 @@ void HandleUI(void)
 	case MENU_HARDFILE_SELECTED:
 		{
 			int num = (menusub - 2) / 2;
-			int len = strlen(SelectedPath);
+			std::size_t len = strlen(SelectedPath);
 			if (len > sizeof(config.hardfile[num].filename) - 1) len = sizeof(config.hardfile[num].filename) - 1;
 			if(len) memcpy(config.hardfile[num].filename, SelectedPath, len);
 			config.hardfile[num].filename[len] = 0;
@@ -3000,11 +2994,11 @@ void HandleUI(void)
 			OsdWrite(m++, "      !! DANGEROUS !!", 0, 0);
 			OsdWrite(m++, "", 0, 0);
 			OsdWrite(m++, " RDB has illegal CHS values:", 0, 0);
-			sprintf(s,    "   Cylinders: %d", rdb->rdb_Cylinders);
+			sprintf(s,    "   Cylinders: %lu", rdb->rdb_Cylinders);
 			OsdWrite(m++, s, 0, 0);
-			sprintf(s,    "   Heads:     %d", rdb->rdb_Heads);
+			sprintf(s,    "   Heads:     %lu", rdb->rdb_Heads);
 			OsdWrite(m++, s, 0, 0);
-			sprintf(s,    "   Sectors:   %d", rdb->rdb_Sectors);
+			sprintf(s,    "   Sectors:   %lu", rdb->rdb_Sectors);
 			OsdWrite(m++, s, 0, 0);
 			OsdWrite(m++, "", 0, 0);
 			OsdWrite(m++, " Max legal values:", 0, 0);
@@ -3555,7 +3549,7 @@ void _strncpy(char* pStr1, const char* pStr2, size_t nCount)
 static void set_text(const char *message, unsigned char code)
 {
 	char s[40];
-	char i = 0, l = 1;
+	std::size_t i = 0, l = 1;
 
 	OsdWrite(0, "", 0, 0);
 

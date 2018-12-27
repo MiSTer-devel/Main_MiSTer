@@ -28,11 +28,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-#include "stdio.h"
-#include "string.h"
-#include "malloc.h"
+#include <malloc.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+
+#include <cstdio>
+#include <cstring>
+
 #include "../../hardware.h"
 #include "../../fpga_io.h"
 #include "sharpmz.h"
@@ -40,6 +42,7 @@
 #include "../../menu.h"
 #include "../../debug.h"
 #include "../../user_io.h"
+#include "../../spi.h"
 
 #define sharpmz_debugf(a, ...)
 //#define sharpmz_debugf(a, ...) printf("\033[1;31mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
@@ -61,7 +64,7 @@ int sharpmz_file_write(fileTYPE *file, const char *fileName)
 
     sprintf(fullPath, "%s/%s/%s", getRootDir(), SHARPMZ_CORE_NAME, fileName);
 
-    file->mode = O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO;
+    file->mode = O_WRONLY | O_CREAT | O_TRUNC | O_SYNC | S_IRWXU | S_IRWXG | S_IRWXO;
     file->type = 0;
 
     file->fd = open(fullPath, file->mode);
@@ -141,7 +144,7 @@ void sharpmz_reset(unsigned long preResetSleep, unsigned long postResetSleep)
 //
 int sharpmz_reset_config(short setStatus)
 {
-    char i;
+    std::size_t i;
     char buf[1024];
 
     // Setup config defaults.
@@ -249,7 +252,7 @@ int sharpmz_reload_config(short setStatus)
 //
 void sharpmz_init(void)
 {
-    char i;
+    std::size_t i;
 
     sharpmz_debugf("Sharp MZ Series Initialisation");
 
@@ -1249,7 +1252,7 @@ void sharpmz_set_fdc_rom_enabled(short machineModel, short on, short setStatus)
 //
 short sharpmz_get_custom_rom_enabled(short machineModel, short romType)
 {
-    short romEnabled;
+    short romEnabled = 0;
 
     machineModel &= 0x07;
     romType      &= 0x07;
@@ -1488,7 +1491,7 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
     unsigned int   actualReadSize;
     unsigned long  time = GetTimer(0);
     unsigned short i;
-    fileTYPE       file = { 0 };
+    fileTYPE       file = {};
 
     // If a prefix is given (ie. core directory), prepend it before use.
     //
@@ -1570,8 +1573,8 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
 short sharpmz_read_ram(const char *memDumpFile, short bank)
 {
     unsigned int  actualWriteSize;
-    fileTYPE      file = { 0 };
- 
+    fileTYPE      file = {};
+
     // Open the memory image debug file for writing.
     if (!sharpmz_file_write(&file, memDumpFile))
     {
@@ -1581,7 +1584,7 @@ short sharpmz_read_ram(const char *memDumpFile, short bank)
 
     // Depending on the bank, or all banks, loop until request is complete.
     //
-    for(unsigned int mb=(bank == SHARPMZ_MEMBANK_ALL ? 0 : bank); mb <= (bank == SHARPMZ_MEMBANK_ALL ? SHARPMZ_MEMBANK_MAXBANKS-1 : bank); mb++)
+    for(int mb=(bank == SHARPMZ_MEMBANK_ALL ? 0 : bank); mb <= (bank == SHARPMZ_MEMBANK_ALL ? SHARPMZ_MEMBANK_MAXBANKS-1 : bank); mb++)
     {
         // Skip bank 1, as SYSROM spans two physical banks 0 and 1.
         if(mb == 1) mb = SHARPMZ_MEMBANK_SYSRAM;
@@ -1633,7 +1636,7 @@ short sharpmz_read_tape_header(const char *tapeFile)
 
     // Handle for the MZF file to be processed.
     //
-    fileTYPE file = { 0 };
+    fileTYPE file = {};
 
     // Try and open the tape file, exit if it cannot be opened.
     //
@@ -1670,7 +1673,7 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
 
     // Handle for the MZF file to be processed.
     //
-    fileTYPE file = { 0 };
+    fileTYPE file = {};
 
     // Try and open the tape file, exit if it cannot be opened.
     //
@@ -1861,7 +1864,7 @@ short sharpmz_save_tape_from_cmt(const char *tapeFile)
 
     // Handle for the MZF file to be written.
     //
-    fileTYPE file = { 0 };
+    fileTYPE file = {};
 
     // Read the header, then data, but limit data size to the 'file size' stored in the header.
     //
@@ -1941,6 +1944,8 @@ short sharpmz_save_tape_from_cmt(const char *tapeFile)
 //
 void sharpmz_select_file(const char* pFileExt, unsigned char Options, char *fs_pFileExt, char chdir, char *SelectedPath)
 {
+    (void)chdir;
+
     sharpmz_debugf("pFileExt = %s\n", pFileExt);
 
     if (strncasecmp(SHARPMZ_CORE_NAME, SelectedPath, strlen(SHARPMZ_CORE_NAME))) strcpy(SelectedPath, SHARPMZ_CORE_NAME);
@@ -1967,13 +1972,13 @@ int sharpmz_default_ui_state(void)
 // code base and to limit common code case size.
 // The same general programming structure is maintained to enable easier changes.
 //
-int sharpmz_ui(int idleState,              int idle2State,              int systemState,              int selectFile,
-               unsigned char *parentstate, unsigned char *menustate,    unsigned char *menusub,       unsigned char *menusub_last,
-               unsigned int  *menumask,    char          *selectedPath, const char    **helptext,     char          *helptext_custom,
-               unsigned char *fs_ExtLen,   unsigned char *fs_Options,   unsigned char *fs_MenuSelect, unsigned char *fs_MenuCancel,
-               char          *fs_pFileExt,
-               unsigned char menu,         unsigned char select,        unsigned char up,             unsigned char down,
-               unsigned char left,         unsigned char right,         unsigned char plus,           unsigned char minus)
+void sharpmz_ui(int idleState,             int idle2State,              int systemState,              int selectFile,
+                unsigned char *parentstate, unsigned char *menustate,    unsigned char *menusub,       unsigned char *menusub_last,
+                unsigned int  *menumask,    char          *selectedPath, const char    **helptext,     char          *helptext_custom,
+                unsigned char *fs_ExtLen,   unsigned char *fs_Options,   unsigned char *fs_MenuSelect, unsigned char *fs_MenuCancel,
+                char          *fs_pFileExt,
+                unsigned char menu,         unsigned char select,        unsigned char up,             unsigned char down,
+                unsigned char left,         unsigned char right,         unsigned char plus,           unsigned char minus)
 {
     // Locals - original variables are generally all lower case, variables specific to this method are capitalised on change of word.
     //
@@ -1992,7 +1997,9 @@ int sharpmz_ui(int idleState,              int idle2State,              int syst
     short        itemCount;
     char         sBuf[40];
     char        *fileName;
-    
+
+    (void)plus;
+    (void)minus;
 
     // Idle2 state (MENU_NONE2) is our main hook, when the HandleUI state machine reaches this state, if the menu key is pressed,
     // we takeover control in this method.

@@ -193,7 +193,11 @@ int getBattery(int quick, struct battery_data_t *data)
 
 	data->capacity = getReg(0x0D, 0, 100);
 	data->load_current = getReg(0x0A, -5000, 5000);
-	if (quick) return 1;
+	if (quick)
+	{
+		smbus_close();
+		return 1;
+	}
 
 	data->time = 0;
 	if (data->load_current > 0)  data->time = getReg(0x13, 1, 999);
@@ -208,5 +212,6 @@ int getBattery(int quick, struct battery_data_t *data)
 	data->cell[3] = getReg(0x3C, 1000, 5000);
 	*/
 
+	smbus_close();
 	return 1;
 }

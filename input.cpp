@@ -1,12 +1,16 @@
-#include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/inotify.h>
 #include <sys/poll.h>
 #include <sys/sysinfo.h>
+
+#include <cerrno>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
 #include "input.h"
 #include "user_io.h"
 #include "menu.h"
@@ -14,7 +18,6 @@
 #include "cfg.h"
 #include "fpga_io.h"
 #include "osd.h"
-#include "errno.h"
 
 #define NUMDEV 10
 
@@ -475,7 +478,7 @@ static const int ev2ps2[] =
 	NONE, //191 KEY_F21			
 	NONE, //192 KEY_F22			
 	NONE, //193 KEY_F23			
-	0x5D, //194 U-mlaut on DE mapped to \
+	0x5D, //194 U-mlaut on DE mapped to
 	NONE, //195 ???				
 	NONE, //196 ???				
 	NONE, //197 ???				
@@ -986,7 +989,7 @@ typedef struct
 	int      accx, accy;
 }  devInput;
 
-static devInput input[NUMDEV] = { 0 };
+static devInput input[NUMDEV] = {};
 static int first_joystick = -1;
 
 int mfd = -1;
@@ -1082,6 +1085,8 @@ static int check_devs()
 
 static void INThandler(int code)
 {
+	(void)code;
+
 	printf("\nExiting...\n");
 
 	if (mwd >= 0) inotify_rm_watch(mfd, mwd);
@@ -1257,7 +1262,7 @@ static int keyrah_trans(int key, int press)
 	else if (fn)
 	{
 		fn |= 2;
-		for (int n = 0; n<(sizeof(kr_fn_table) / (2 * sizeof(kr_fn_table[0]))); n++)
+		for (std::size_t n = 0; n<(sizeof(kr_fn_table) / (2 * sizeof(kr_fn_table[0]))); n++)
 		{
 			if ((key&255) == kr_fn_table[n * 2]) return kr_fn_table[(n * 2) + 1];
 		}
@@ -1411,7 +1416,7 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 
 static void joy_analog(int num, int axis, int offset)
 {
-	static int pos[2][2] = { 0 };
+	static int pos[2][2] = {};
 
 	if (num < 2)
 	{
@@ -1423,8 +1428,6 @@ static void joy_analog(int num, int axis, int offset)
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	static int key_mapped = 0;
-	static uint8_t modifiers = 0;
-	static char keys[6] = { 0,0,0,0,0,0 };
 
 	int map_skip = (ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0 && mapping_type==1);
 	int cancel   = (ev->type == EV_KEY && ev->code == 1);

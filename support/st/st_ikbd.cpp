@@ -375,23 +375,24 @@ void ikbd_reset(void) {
 // process inout from atari core into ikbd
 void ikbd_handle_input(unsigned char cmd) {
 	// store byte in buffer
-	ikbd.buffer.byte[ikbd.buffer.size++] = cmd;
+	ikbd.buffer.byte[static_cast<std::size_t>(ikbd.buffer.size++)] = cmd;
 
 	// check if there's a known command in the buffer
-	char c;
+	std::size_t c;
 	for (c = 0; ikbd_command_handler[c].length &&
-		(ikbd_command_handler[c].code != ikbd.buffer.command.code); c++);
+		(ikbd_command_handler[c].code != ikbd.buffer.command.code); c++)
+		;
 
-		// not a valid command? -> flush buffer
-		if (!ikbd_command_handler[c].length)
+	// not a valid command? -> flush buffer
+	if (!ikbd_command_handler[c].length)
+		ikbd.buffer.size = 0;
+	else {
+		// valid command and enough bytes?
+		if (ikbd_command_handler[c].length == ikbd.buffer.size) {
+			ikbd_command_handler[c].handler();
 			ikbd.buffer.size = 0;
-		else {
-			// valid command and enough bytes?
-			if (ikbd_command_handler[c].length == ikbd.buffer.size) {
-				ikbd_command_handler[c].handler();
-				ikbd.buffer.size = 0;
-			}
 		}
+	}
 }
 
 // advance the ikbd time by one second
@@ -445,7 +446,7 @@ static void ikbd_update_time()
 void ikbd_poll(void) {
 #ifdef IKBD_DEBUG
 	static unsigned long xtimer = 0;
-	static int last_cnt = 0;
+	static unsigned int last_cnt = 0;
 	if (CheckTimer(xtimer)) {
 		xtimer = GetTimer(2000);
 		if (ikbd.tx_cnt != last_cnt) {
@@ -469,7 +470,7 @@ void ikbd_poll(void) {
 
 			/* --------- joystick ---------- */
 			if (ikbd.state & IKBD_STATE_JOYSTICK_EVENT_REPORTING) {
-				char i;
+				std::size_t i;
 				for (i = 0; i<2; i++) {
 					unsigned char state = ikbd.joy[i].state;
 

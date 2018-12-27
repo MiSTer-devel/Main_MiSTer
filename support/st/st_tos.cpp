@@ -1,6 +1,6 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
 
 #include "../../hardware.h"
 #include "../../menu.h"
@@ -10,6 +10,7 @@
 #include "../../user_io.h"
 #include "st_ikbd.h"
 #include "../../fpga_io.h"
+#include "../../spi.h"
 
 #define CONFIG_FILENAME  "MIST.CFG"
 
@@ -36,10 +37,10 @@ static struct {
 	fileTYPE file;
 	unsigned char sides;
 	unsigned char spt;
-} fdd_image[2] = { 0 };
+} fdd_image[2] = {};
 
 // one harddisk
-fileTYPE hdd_image[2] = { 0 };
+fileTYPE hdd_image[2] = {};
 unsigned long hdd_direct = 0;
 
 static unsigned char dma_buffer[512];
@@ -67,7 +68,7 @@ static const char *acsi_cmd_name(int cmd) {
 }
 
 void tos_set_video_adjust(char axis, char value) {
-	config.video_adjust[axis] += value;
+	config.video_adjust[static_cast<std::size_t>(axis)] += value;
 
 	EnableFpga();
 	spi8(MIST_SET_VADJ);
@@ -77,7 +78,7 @@ void tos_set_video_adjust(char axis, char value) {
 }
 
 char tos_get_video_adjust(char axis) {
-	return config.video_adjust[axis];
+	return config.video_adjust[static_cast<std::size_t>(axis)];
 }
 
 static void mist_memory_set_address(unsigned long a, unsigned char s, char rw) {
@@ -102,19 +103,6 @@ static void mist_set_control(unsigned long ctrl) {
 	spi8((ctrl >> 16) & 0xff);
 	spi8((ctrl >> 8) & 0xff);
 	spi8((ctrl >> 0) & 0xff);
-	DisableFpga();
-}
-
-static void mist_memory_read(char *data, unsigned long words) {
-	EnableFpga();
-	spi8(MIST_READ_MEMORY);
-
-	// transmitted bytes must be multiple of 2 (-> words)
-	while (words--) {
-		*data++ = spi_in();
-		*data++ = spi_in();
-	}
-
 	DisableFpga();
 }
 
@@ -162,6 +150,8 @@ void mist_memory_set(char data, unsigned long words) {
 
 // enable direct sd card access on acsi0
 void tos_set_direct_hdd(char on) {
+	(void)on;
+
 	config.sd_direct = 0;
 
 	tos_debugf("ACSI: disable direct sd access");
@@ -210,7 +200,7 @@ static void handle_acsi(unsigned char *buffer) {
 	if (user_io_dip_switch1()) {
 		tos_debugf("ACSI: target %d.%d, \"%s\" (%02x)", target, device, acsi_cmd_name(cmd), cmd);
 		tos_debugf("ACSI: lba %lu (%lx), length %u", lba, lba, length);
-		tos_debugf("DMA: scnt %u, addr %p", scnt, dma_address);
+		tos_debugf("DMA: scnt %u, addr %p", scnt, reinterpret_cast<void*>(dma_address));
 
 		if (buffer[20] == 0xa5) {
 			tos_debugf("DMA: fifo %d/%d %x %s",
@@ -308,7 +298,7 @@ static void handle_acsi(unsigned char *buffer) {
 					asc[target] = 0x00;
 				}
 				else {
-					tos_debugf("ACSI: read (%d+%d) exceeds device limits (%d)",
+					tos_debugf("ACSI: read (%lu+%d) exceeds device limits (%lu)",
 						lba, length, blocks);
 					dma_ack(0x02);
 					asc[target] = 0x21;
@@ -348,7 +338,7 @@ static void handle_acsi(unsigned char *buffer) {
 					asc[target] = 0x00;
 				}
 				else {
-					tos_debugf("ACSI: write (%d+%d) exceeds device limits (%d)",
+					tos_debugf("ACSI: write (%lu+%d) exceeds device limits (%lu)",
 						lba, length, blocks);
 					dma_ack(0x02);
 					asc[target] = 0x21;
@@ -380,7 +370,7 @@ static void handle_acsi(unsigned char *buffer) {
 
 		case 0x1a: // mode sense
 			if (device == 0) {
-				tos_debugf("ACSI: mode sense, blocks = %u", blocks);
+				tos_debugf("ACSI: mode sense, blocks = %lu", blocks);
 				bzero(dma_buffer, 512);
 				dma_buffer[3] = 8;            // size of extent descriptor list
 				dma_buffer[5] = blocks >> 16;
@@ -430,7 +420,6 @@ static void handle_fdc(unsigned char *buffer) {
 	unsigned char fdc_cmd = buffer[4];
 	unsigned char fdc_track = buffer[5];
 	unsigned char fdc_sector = buffer[6];
-	unsigned char fdc_data = buffer[7];
 	unsigned char drv_sel = 3 - ((buffer[8] >> 2) & 3);
 	unsigned char drv_side = 1 - ((buffer[8] >> 1) & 1);
 
@@ -453,7 +442,7 @@ static void handle_fdc(unsigned char *buffer) {
 				tos_debugf("FDC %s req %d sec (%c, SD:%d, T:%d, S:%d = %d) -> %p",
 					(fdc_cmd & 0x10) ? "multi" : "single", scnt,
 					'A' + drv_sel - 1, drv_side, fdc_track, fdc_sector, offset,
-					dma_address);
+					reinterpret_cast<void*>(dma_address));
 			}
 
 			while (scnt) {
@@ -534,41 +523,6 @@ static void mist_get_dmastate() {
 #define PLANES   4
 
 static void tos_write(const char *str);
-static void tos_color_test() {
-	unsigned short buffer[COLORS][PLANES];
-
-	int y;
-	for (y = 0; y<13; y++) {
-		int i, j;
-		for (i = 0; i<COLORS; i++)
-			for (j = 0; j<PLANES; j++)
-				buffer[i][j] = ((y + i) & (1 << j)) ? 0xffff : 0x0000;
-
-		for (i = 0; i<16; i++) {
-			mist_memory_set_address(VIDEO_BASE_ADDRESS + (16 * y + i) * 160, 1, 0);
-			mist_memory_write((unsigned char*)buffer, COLORS*PLANES);
-		}
-	}
-
-#if 1
-	mist_memory_set_address(VIDEO_BASE_ADDRESS, 1, 0);
-	mist_memory_set(0xf0, 40);
-
-	mist_memory_set_address(VIDEO_BASE_ADDRESS + 80, 1, 0);
-	mist_memory_set(0x55, 40);
-
-	mist_memory_set_address(VIDEO_BASE_ADDRESS + 160, 1, 0);
-	mist_memory_set(0x0f, 40);
-
-#if 1
-	tos_write("");
-	tos_write("AAAAAAAABBBBBBBBCCCCCCCCDDDDDDDDEEEEEEEEFFFFFFFFGGGGGGGGHHHHHHHHIIIIIIIIJJJJJJJJ");
-	tos_write("ABCDEFGHIJHKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJHKLMNOPQRSTUVWXYZ0123456789");
-#endif
-
-	//  for(;;);
-#endif
-}
 
 static void tos_write(const char *str) {
 	static int y = 0;
@@ -614,7 +568,7 @@ static void tos_clr() {
 extern unsigned char charfont[256][8];
 
 static void tos_font_load() {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	if (FileOpen(&file, "SYSTEM.FNT")) {
 		if (file.size == 4096) {
 			int i;
@@ -648,7 +602,7 @@ static void tos_font_load() {
 
 void tos_load_cartridge(const char *name)
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 
 	if (name)
 		strncpy(config.cart_img, name, 11);
@@ -658,7 +612,7 @@ void tos_load_cartridge(const char *name)
 		int i;
 		unsigned char buffer[512];
 
-		tos_debugf("%s:\n  size = %d", config.cart_img, file.size);
+		tos_debugf("%s:\n  size = %lld", config.cart_img, file.size);
 
 		int blocks = file.size / 512;
 		tos_debugf("  blocks = %d", blocks);
@@ -697,7 +651,7 @@ char tos_cartridge_is_inserted() {
 
 void tos_upload(const char *name)
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 
 	// set video offset in fpga
 	tos_set_video_adjust(0, 0);
@@ -727,7 +681,7 @@ void tos_upload(const char *name)
 		unsigned long time;
 		unsigned long tos_base = TOS_BASE_ADDRESS_192k;
 
-		tos_debugf("TOS.IMG:\n  size = %d", file.size);
+		tos_debugf("TOS.IMG:\n  size = %lld", file.size);
 
 		if (file.size >= 256 * 1024)
 			tos_base = TOS_BASE_ADDRESS_256k;
@@ -737,7 +691,7 @@ void tos_upload(const char *name)
 		int blocks = file.size / 512;
 		tos_debugf("  blocks = %d", blocks);
 
-		tos_debugf("  address = $%08x", tos_base);
+		tos_debugf("  address = $%08lx", tos_base);
 
 		// clear first 16k
 		mist_memory_set_address(0, 16384 / 512, 0);
@@ -828,7 +782,7 @@ void tos_upload(const char *name)
 #endif
 
 		time = GetTimer(0) - time;
-		tos_debugf("TOS.IMG uploaded in %lu ms (%d kB/s / %d kBit/s)",
+		tos_debugf("TOS.IMG uploaded in %lu ms (%lld kB/s / %lld kBit/s)",
 			time >> 20, file.size / (time >> 20), 8 * file.size / (time >> 20));
 
 	}
@@ -889,16 +843,6 @@ void tos_upload(const char *name)
 	mist_set_control(config.system_ctrl);
 }
 
-static unsigned long get_long(char *buffer, int offset) {
-	unsigned long retval = 0;
-	int i;
-
-	for (i = 0; i<4; i++)
-		retval = (retval << 8) + *(unsigned char*)(buffer + offset + i);
-
-	return retval;
-}
-
 void tos_poll() {
 	// 1 == button not pressed, 2 = 1 sec exceeded, else timer running
 	static unsigned long timer = 1;
@@ -941,18 +885,21 @@ static void nice_name(char *dest, char *src) {
 
 	// copy and append nul
 	strncpy(dest, src, 8);
-	for (c = dest + 7; *c == ' '; c--); c++;
+	for (c = dest + 7; *c == ' '; c--)
+		;
+	c++;
 	*c++ = '.';
 	strncpy(c, src + 8, 3);
-	for (c += 2; *c == ' '; c--); c++;
+	for (c += 2; *c == ' '; c--)
+		;
+	c++;
 	*c++ = '\0';
 }
 
 static char buffer[17];  // local buffer to assemble file name (8+3+2)
 
-char *tos_get_disk_name(char index) {
+char *tos_get_disk_name(std::size_t index) {
 	fileTYPE file;
-	char *c;
 
 	if (index <= 1)
 		file = fdd_image[index].file;
@@ -983,14 +930,14 @@ char *tos_get_cartridge_name() {
 	return buffer;
 }
 
-char tos_disk_is_inserted(char index) {
+char tos_disk_is_inserted(std::size_t index) {
 	if (index <= 1)
 		return (fdd_image[index].file.size != 0);
 
 	return hdd_image[index - 2].size != 0;
 }
 
-void tos_select_hdd_image(char i, const char *name)
+void tos_select_hdd_image(std::size_t i, const char *name)
 {
 	tos_debugf("Select ACSI%c image %s", '0' + i, name);
 
@@ -1015,7 +962,7 @@ void tos_select_hdd_image(char i, const char *name)
 	mist_set_control(config.system_ctrl);
 }
 
-void tos_insert_disk(char i, const char *name)
+void tos_insert_disk(std::size_t i, const char *name)
 {
 	if (i > 1)
 	{
@@ -1136,7 +1083,7 @@ void tos_config_init(void)
 	int size = FileLoadConfig(CONFIG_FILENAME, 0, 0);
 	if (size>0)
 	{
-		tos_debugf("Configuration file size: %lu (should be %lu)", size, sizeof(tos_config_t));
+		tos_debugf("Configuration file size: %u (should be %u)", size, sizeof(tos_config_t));
 		if (size == sizeof(tos_config_t))
 		{
 			FileLoadConfig(CONFIG_FILENAME, &config, size);

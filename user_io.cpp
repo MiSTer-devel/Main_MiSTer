@@ -1,12 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <inttypes.h>
-#include <stdbool.h> 
 #include <fcntl.h>
 #include <time.h>
 #include <limits.h>
 #include <ctype.h>
+
+#include <cinttypes>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "hardware.h"
 #include "osd.h"
@@ -30,7 +31,7 @@ static char core_path[1024];
 uint8_t vol_att = 0;
 unsigned long vol_set_timeout = 0;
 
-fileTYPE sd_image[4] = { 0 };
+fileTYPE sd_image[4] = {};
 static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 
 // mouse and keyboard emulation state
@@ -310,7 +311,7 @@ static void parse_config()
 			if (p[0] == 'O' && p[1] == 'X')
 			{
 				unsigned long status = user_io_8bit_set_status(0, 0);
-				printf("found OX option: %s, 0x%08X\n", p, status);
+				printf("found OX option: %s, 0x%08lX\n", p, status);
 
 				unsigned long x = getStatus(p+1, status);
 
@@ -944,6 +945,8 @@ static int col_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const i
 
 	static char tmp[8];
 
+	(void)sd;
+
 	switch (evt)
 	{
 	case XML_EVENT_START_NODE:
@@ -1085,6 +1088,8 @@ static int chr_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const i
 	static int code = 0;
 	static int line = 0;
 
+	(void)sd;
+
 	switch (evt)
 	{
 	case XML_EVENT_START_NODE:
@@ -1212,7 +1217,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
-	fileTYPE f = { 0 };
+	fileTYPE f = {};
 	static uint8_t buf[4096];
 
 	if (!FileOpen(&f, name, mute)) return 0;
@@ -2350,7 +2355,7 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 
 	if (useKeys >= (sizeof(combo) / sizeof(combo[0]))) useKeys = 0;
 
-	if ((modifiers & ~2) == combo[useKeys])
+	if ((modifiers & ~2) == combo[static_cast<std::size_t>(useKeys)])
 	{
 		if (modifiers & 2) // with lshift - cold reset
 		{
@@ -2564,7 +2569,7 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 		}
 	}
 
-	printf("not found! use 0\n", name, ext, 0);
+	printf("not found! use 0\n");
 	return 0;
 }
 
@@ -2693,7 +2698,7 @@ static char new_scaler = 0;
 
 static void setScaler()
 {
-	fileTYPE f = { 0 };
+	fileTYPE f = {};
 	static char filename[1024];
 
 	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
@@ -2715,7 +2720,7 @@ static void setScaler()
 		{
 			memset(buf, 0, f.size + 1);
 			int size;
-			if (size = FileReadAdv(&f, buf, f.size))
+			if ((size = FileReadAdv(&f, buf, f.size)))
 			{
 				spi_uio_cmd_cont(UIO_SET_FLTCOEF);
 
@@ -2888,7 +2893,7 @@ void parse_video_mode()
 	// always 0. Use custom parameters.
 	cfg.video_mode = 0;
 
-	int mode = parse_custom_video_mode();
+	unsigned int mode = parse_custom_video_mode();
 	if (mode >= 0)
 	{
 		if (mode >= VMODES_NUM) mode = 0;
@@ -2917,6 +2922,8 @@ static int adjust_video_mode(uint32_t vtime)
 	setPLL(Fpix);
 	setVideo();
 	user_io_send_buttons(1);
+
+	return 1;
 }
 
 typedef struct
@@ -2927,7 +2934,7 @@ typedef struct
 	uint32_t reserved;
 } vmode_adjust_t;
 
-vmode_adjust_t vmodes_adj[64] = { 0 };
+vmode_adjust_t vmodes_adj[64] = {};
 
 static void adjust_vsize(char force)
 {
@@ -2953,9 +2960,7 @@ static void adjust_vsize(char force)
 		uint32_t mode = scr_hsize | (scr_vsize << 12) | ((res & 0xFF) << 24);
 		if (mode)
 		{
-			int applied = 0;
-			int empty = -1;
-			for (int i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
+			for (unsigned int i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
 			{
 				if (vmodes_adj[i].mode == mode)
 				{
@@ -3002,7 +3007,7 @@ static void store_vsize()
 	{
 		int applied = 0;
 		int empty = -1;
-		for (int i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
+		for (std::size_t i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
 		{
 			if (vmodes_adj[i].mode == mode)
 			{

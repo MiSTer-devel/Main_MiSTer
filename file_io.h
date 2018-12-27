@@ -4,7 +4,8 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
-#include "spi.h"
+
+#include <cinttypes>
 
 typedef struct
 {

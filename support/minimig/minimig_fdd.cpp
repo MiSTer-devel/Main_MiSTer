@@ -23,8 +23,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //              - fixed sector header generation
 // 2010-01-09   - support for variable number of tracks
 
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
+
 #include "../../hardware.h"
 #include "../../file_io.h"
 #include "minimig_fdd.h"
@@ -32,10 +33,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "../../debug.h"
 #include "../../fpga_io.h"
 #include "../../menu.h"
+#include "../../spi.h"
 
 unsigned char drives = 0; // number of active drives reported by FPGA (may change only during reset)
 adfTYPE *pdfx;            // drive select pointer
-adfTYPE df[4] = { 0 };    // drive information structure
+adfTYPE df[4] = {};       // drive information structure
 
 static uint8_t sector_buffer[512];
 
@@ -77,7 +79,7 @@ void SendSector(unsigned char *pData, unsigned char sector, unsigned char track,
 
 	x = sector >> 1 & 0x55;
 	checksum[2] = x;
-	y = 11 - sector >> 1 & 0x55;
+	y = (11 - sector) >> 1 & 0x55;
 	checksum[3] = y;
 	spi_w(B2W(x, y));
 
@@ -281,7 +283,7 @@ void ReadTrack(adfTYPE *drive)
 unsigned char FindSync(adfTYPE *drive)
 // reads data from fifo till it finds sync word or fifo is empty and dma inactive (so no more data is expected)
 {
-	unsigned char  c1, c2, c3, c4;
+	unsigned char  c1, c2;
 	unsigned short n;
 	uint16_t tmp;
 
@@ -641,7 +643,6 @@ void InsertFloppy(adfTYPE *drive, char* path)
 		return;
 	}
 
-	unsigned char i, j;
 	unsigned long tracks;
 
 	// calculate number of tracks in the ADF image file

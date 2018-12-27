@@ -1,11 +1,13 @@
-#include "stdio.h"
-#include "string.h"
+#include <cstdio>
+#include <cstring>
+
 #include "../../hardware.h"
 #include "../../fpga_io.h"
 #include "../../menu.h"
 #include "archie.h"
 #include "../../debug.h"
 #include "../../user_io.h"
+#include "../../spi.h"
 
 #define MAX_FLOPPY  4
 
@@ -19,7 +21,7 @@ typedef struct
 
 static archie_config_t config;
 
-fileTYPE floppy[MAX_FLOPPY] = { 0 };
+fileTYPE floppy[MAX_FLOPPY] = {};
 
 #define ARCHIE_FILE_TX         0x53
 #define ARCHIE_FILE_TX_DAT     0x54
@@ -83,7 +85,7 @@ const char *archie_get_rom_name(void)
 	return p;
 }
 
-const char *archie_get_floppy_name(char i)
+const char *archie_get_floppy_name(std::size_t i)
 {
 	if (!floppy[i].size)  return "* no disk *";
 
@@ -125,7 +127,7 @@ void archie_send_file(unsigned char id, char *name)
 {
 	archie_debugf("Sending file with id %d", id);
 
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	if (!FileOpen(&file, name)) return;
 
 	// prepare transmission of new file
@@ -184,7 +186,7 @@ void archie_fdc_set_status(void)
 	DisableFpga();
 }
 
-void archie_set_floppy(char i, char *name)
+void archie_set_floppy(std::size_t i, char *name)
 {
 	if (!name)
 	{
@@ -202,7 +204,7 @@ void archie_set_floppy(char i, char *name)
 	archie_fdc_set_status();
 }
 
-char archie_floppy_is_inserted(char i)
+char archie_floppy_is_inserted(std::size_t i)
 {
 	return(floppy[i].size != 0);
 }
@@ -264,7 +266,7 @@ static void archie_kbd_reset(void)
 
 void archie_init(void)
 {
-	char i;
+	std::size_t i;
 
 	archie_debugf("init");
 
@@ -301,7 +303,7 @@ void archie_init(void)
 		char fdc_name[] = "Archie/FLOPPY0.ADF";
 		fdc_name[13] = '0' + i;
 		if (FileOpen(&floppy[i], fdc_name))
-			archie_debugf("Inserted floppy %d with %d bytes", i, floppy[i].size);
+			archie_debugf("Inserted floppy %d with %" PRIu64 " bytes", i, floppy[i].size);
 		else
 			floppy[i].size = 0;
 	}

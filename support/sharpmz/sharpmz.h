@@ -459,7 +459,7 @@ char                  *sharpmz_get_next_filename(char);
 void                   sharpmz_clear_filelist(void);
 void                   sharpmz_select_file(const char*, unsigned char, char *, char, char *);
 int                    sharpmz_default_ui_state(void);
-int                    sharpmz_ui(int, int, int, int,
+void                   sharpmz_ui(int, int, int, int,
                                   unsigned char *, unsigned char *, unsigned char *, unsigned char *,
                                   unsigned int *,  char *,          const char **,   char *, 
                                   unsigned char *, unsigned char *, unsigned char *, unsigned char *,
