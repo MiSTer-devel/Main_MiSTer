@@ -2440,6 +2440,12 @@ void user_io_kbd(uint16_t key, int press)
 		if (press) setBrightness(BRIGHTNESS_UP, 0);
 	}
 	else
+	if (key == KEY_F2 && osd_is_visible)
+	{
+		if (press == 1) cfg.rbf_hide_datecode = !cfg.rbf_hide_datecode;
+		PrintDirectory();
+	}
+	else
 	if ((core_type == CORE_TYPE_MINIMIG2) ||
 		(core_type == CORE_TYPE_MIST) ||
 		(core_type == CORE_TYPE_ARCHIE) ||
@@ -2804,7 +2810,7 @@ static void setVideo()
 	for (int i = 9; i < 21; i++)
 	{
 		printf("0x%X, ", vitems[i]);
-		if (i & 1) spi_w(vitems[i]);
+		if (i & 1) spi_w(vitems[i] | ((i==9 && cfg.vsync_adjust==2) ? 0x8000 : 0));
 		else
 		{
 			spi_w(vitems[i]);
@@ -2898,7 +2904,7 @@ void parse_video_mode()
 
 static int adjust_video_mode(uint32_t vtime)
 {
-	printf("Adjust VSync.\n");
+	printf("Adjust VSync(%d).\n", cfg.vsync_adjust);
 
 	double Fpix = 100 * (vitems[1] + vitems[2] + vitems[3] + vitems[4]) * (vitems[5] + vitems[6] + vitems[7] + vitems[8]);
 	Fpix /= vtime;

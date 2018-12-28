@@ -3550,6 +3550,9 @@ void PrintDirectory(void)
 				}
 			}
 
+			//not full check but should be enough.
+			if (cfg.rbf_hide_datecode && len > 9 && !strncmp(flist_DirItem(k)->d_name + len - 9, "_20", 3)) len -= 9;
+
 			if (len > 28)
 			{
 				len = 27; // trim display length if longer than 30 characters
