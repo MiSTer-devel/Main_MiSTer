@@ -168,7 +168,7 @@ const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUT
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "    MLINK", "MLINK-38K" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
-const char *config_softsynth_msg[] = {"       UDP", "      MUNT", "FluidSynth"};
+const char *config_softsynth_msg[] = {"       TCP", "       UDP", "      MUNT", "FluidSynth"};
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -225,30 +225,31 @@ int GetUARTMode()
         return 0;
 }
 
-int GetSoftSynthMode()
+int GetMidiLinkMode()
 {
         struct stat filestat;
-        if (!stat("/tmp/ML_UDP",    &filestat)) return 0;
-        if (!stat("/tmp/ML_MUNT",   &filestat)) return 1;
-        if (!stat("/tmp/ML_FSYNTH", &filestat)) return 2;
+        if (!stat("/tmp/ML_TCP",    &filestat)) return 0;
+        if (!stat("/tmp/ML_UDP",    &filestat)) return 1;
+        if (!stat("/tmp/ML_MUNT",   &filestat)) return 2;
+        if (!stat("/tmp/ML_FSYNTH", &filestat)) return 3;
         return 0;
 }
 
-void SetSoftSynthMode(int mode)
+void SetMidiLinkMode(int mode)
 {
+	remove("/tmp/ML_FSYNTH");
+	remove("/tmp/ML_MUNT");
+        remove("/tmp/ML_UDP");
+        remove("/tmp/ML_TCP");
         switch (mode)
         {
-        	case 0: system("echo 1 > /tmp/ML_UDP");
-                        remove("/tmp/ML_MUNT");
-                        remove("/tmp/ML_FSYNTH");
+        	case 0: system("echo 1 > /tmp/ML_TCP");
+        	break;
+        	case 1: system("echo 1 > /tmp/ML_UDP");
                 break;
-                case 1: system("echo 1 > /tmp/ML_MUNT"); 
-                        remove("/tmp/ML_FSYNTH");
-                        remove("/tmp/ML_UDP");
+                case 2: system("echo 1 > /tmp/ML_MUNT"); 
                 break;
-                case 2: system("echo 1 > /tmp/ML_FSYNTH");
-                        remove("/tmp/ML_MUNT");
-                        remove("/tmp/ML_UDP");
+                case 3: system("echo 1 > /tmp/ML_FSYNTH");  
                 break;  
         }
 }      
@@ -1349,7 +1350,7 @@ void HandleUI(void)
 				menumask |= 0x18;
                                 sprintf(s, " UART connection   %s", config_uart_msg[mode]);
                                 OsdWrite(3, s, menusub == 3, 0);
-                                sprintf(s, " Softsynth        %s", config_softsynth_msg[GetSoftSynthMode()]); 	
+                                sprintf(s, " MidiLink         %s", config_softsynth_msg[GetMidiLinkMode()]); 	
 				OsdWrite(4, s, menusub == 4 , (mode == 3 || mode == 4) && stat("/dev/midi", &filestat)?0:1);       
                         }        
 			else
@@ -1467,13 +1468,13 @@ void HandleUI(void)
                                         if(mode == 3 or mode == 4)
                                         {
                                                 struct stat filestat;
-                                                int softsynth = GetSoftSynthMode();
-                                                if ((stat("/dev/snd/pcmC0D0p", &filestat) == 0))
-							softsynth++;
+                                                int midilink = GetMidiLinkMode();
+                                                if ((stat("/dev/snd/pcmC0D0p", &filestat) == 0) || midilink == 0)
+							midilink++;
 						else 
-							softsynth = 0;
-                                                if (softsynth > 2) softsynth = 0;
-                                                SetSoftSynthMode(softsynth);
+							midilink = 0;
+                                                if (midilink > 3) midilink = 0;
+                                                SetMidiLinkMode(midilink);
                                                 sprintf(s, "uartmode %d", 0);
                                                 system(s);
                                                 sprintf(s, "uartmode %d", mode);
