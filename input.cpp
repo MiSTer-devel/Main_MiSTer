@@ -1283,7 +1283,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 static int kbd_toggle = 0;
 static uint16_t joy[2] = { 0 }, joy_prev[2] = { 0 };
 static uint16_t autofire[2] = { 0 };
-static uint32_t af_delay[2] = { 50, 50 };
+static int af_delay[2] = { 50, 50 };
 
 static unsigned char mouse_btn = 0;
 static int mouse_emu = 0;
@@ -1296,6 +1296,8 @@ static uint32_t mouse_timer = 0;
 
 static void joy_digital(int num, uint16_t mask, char press, int bnum)
 {
+	static char str[128];
+
 	if (num < 2)
 	{
 		if (!user_io_osd_is_visible() && ((bnum == 17) || (bnum == 16)) && joy[num])
@@ -1308,16 +1310,28 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 					if (autofire[num] & amask) autofire[num] &= ~amask;
 					else autofire[num] |= amask;
 
-					if(hasAPI1_5()) Info((autofire[num] & amask) ? "Auto fire: ON" : "Auto fire: OFF");
+					if (hasAPI1_5())
+					{
+						if(autofire[num] & amask) sprintf(str, "Auto fire: %d ms", af_delay[num] * 2);
+						else sprintf(str, "Auto fire: OFF");
+						Info(str);
+					}
 					else InfoMessage((autofire[num] & amask) ? "\n\n          Auto fire\n             ON" :
 						                "\n\n          Auto fire\n             OFF");
 				}
 				else
 				{
-					if (joy[num] & 1) af_delay[num] = 50;
-					else if (joy[num] & 2) af_delay[num] = 100;
-					else if (joy[num] & 4) af_delay[num] = 200;
-					else af_delay[num] = 500;
+					if (joy[num] & 9)
+					{
+						 af_delay[num] += 25 << ((joy[num] & 1) ? 1 : 0);
+						 if (af_delay[num] > 500) af_delay[num] = 500;
+					}
+					else
+					{
+						af_delay[num] -= 25 << ((joy[num] & 2) ? 1 : 0);
+						if (af_delay[num] < 25) af_delay[num] = 25;
+					}
+
 					static char str[256];
 
 					if (hasAPI1_5())
