@@ -2564,7 +2564,7 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 		}
 	}
 
-	printf("not found! use 0\n", name, ext, 0);
+	printf("not found! use 0\n");
 	return 0;
 }
 

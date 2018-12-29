@@ -486,7 +486,7 @@ int fpga_load_rbf(const char *name, const char *cfg)
 			{
 				if (read(rbf, buf, st.st_size)<st.st_size)
 				{
-					printf("Couldn't read file \n", st.st_size);
+					printf("Couldn't read file %s\n", name);
 					ret = -1;
 				}
 				else
