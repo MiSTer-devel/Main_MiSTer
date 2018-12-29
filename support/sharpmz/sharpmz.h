@@ -157,10 +157,6 @@
 #define CMT_READBIT                       7    // Receive bit from MZ.
 #define CMT_MOTOR                         8    // Motor on/off.
 
-// Names of the supported machines.
-//
-static const char *MZMACHINES[MAX_MZMACHINES] = { "MZ80K", "MZ80C", "MZ1200", "MZ80A", "MZ700", "MZ800", "MZ80B", "MZ2000" };
-
 // Default load addresses of roms.
 //
 static const unsigned int MZLOADADDR[MAX_IMAGE_TYPES][MAX_MZMACHINES]  =
@@ -459,11 +455,11 @@ char                  *sharpmz_get_next_filename(char);
 void                   sharpmz_clear_filelist(void);
 void                   sharpmz_select_file(const char*, unsigned char, char *, char, char *);
 int                    sharpmz_default_ui_state(void);
-void                   sharpmz_ui(int, int, int, int,
-                                  unsigned char *, unsigned char *, unsigned char *, unsigned char *,
-                                  unsigned int *,  char *,          const char **,   char *, 
-                                  unsigned char *, unsigned char *, unsigned char *, unsigned char *,
-                                  char *,
-                                  unsigned char,   unsigned char,   unsigned char,   unsigned char,
-                                  unsigned char,   unsigned char,   unsigned char,   unsigned char);
+void sharpmz_ui(int      idleState,    int      idle2State,    int        systemState,    int      selectFile,
+                uint32_t *parentstate, uint32_t *menustate,    uint32_t   *menusub,       uint32_t *menusub_last,
+				uint32_t *menumask,    char     *selectedPath, const char **helptext,     char     *helptext_custom,
+				uint32_t *fs_ExtLen,   uint32_t *fs_Options,   uint32_t   *fs_MenuSelect, uint32_t *fs_MenuCancel,
+                char     *fs_pFileExt,
+                unsigned char menu,    unsigned char select,   unsigned char up,          unsigned char down,
+                unsigned char left,    unsigned char right,    unsigned char plus,        unsigned char minus);
 #endif // SHARPMZ_H

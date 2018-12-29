@@ -632,7 +632,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 
 		struct dirent *de;
-		while(nDirEntries < (sizeof(DirItem)/sizeof(DirItem[0])))
+		while(nDirEntries < (int)(sizeof(DirItem)/sizeof(DirItem[0])))
 		{
 			de = readdir(d);
 			if (de == NULL) break;

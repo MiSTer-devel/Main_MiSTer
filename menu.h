@@ -18,7 +18,7 @@ void ErrorMessage(const char *message, unsigned char code);
 void InfoMessage(const char *message, int timeout = 2000);
 void Info(const char *message, int timeout = 2000, int width = 0, int height = 0, int frame = 0);
 
-unsigned int getStatus(char *opt, unsigned int status);
+uint32_t getStatus(char *opt, uint32_t status);
 void substrcpy(char *d, char *s, char idx);
 
 extern char joy_bnames[12][32];

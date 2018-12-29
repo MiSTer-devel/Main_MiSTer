@@ -189,7 +189,7 @@ char user_io_user_button();
 void user_io_osd_key_enable(char);
 void user_io_serial_tx(char *, uint16_t);
 char *user_io_8bit_get_string(char);
-unsigned long user_io_8bit_set_status(unsigned long, unsigned long);
+uint32_t user_io_8bit_set_status(uint32_t, uint32_t);
 int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
 int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
 char user_io_dip_switch1(void);

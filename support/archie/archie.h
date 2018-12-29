@@ -15,8 +15,8 @@ char archie_floppy_is_inserted(char i);
 void archie_save_config(void);
 
 void archie_set_ar(char i);
-char archie_get_ar();
+int  archie_get_ar();
 void archie_set_amix(char i);
-char archie_get_amix();
+int  archie_get_amix();
 
 #endif // ARCHIE_H

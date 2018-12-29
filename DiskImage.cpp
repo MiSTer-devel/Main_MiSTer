@@ -832,7 +832,7 @@ bool TDiskImage::FindSector(unsigned char CYL, unsigned char SIDE,
 	unsigned int TrackOffset = FromOffset;
 
 	bool FirstFind = true;
-	unsigned int FirstPos;
+	unsigned int FirstPos = 0;
 
 	// ѕоиск адресной метки требуемого сектора...
 	bool ADFOUND = false;
@@ -2829,7 +2829,7 @@ int GetByte(void)     /* get one byte */
 
 	while (getlen <= 8)
 	{
-		if ((i = readChar()) == -1) i = 0;
+		if ((int)(i = readChar()) == -1) i = 0;
 		getbuf |= i << (8 - getlen);
 		getlen += 8;
 	}

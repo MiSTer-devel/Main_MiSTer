@@ -100,7 +100,7 @@ void archie_set_ar(char i)
 	user_io_8bit_set_status((i ? -1 : 0), 2);
 }
 
-char archie_get_ar()
+int archie_get_ar()
 {
 	return config.system_ctrl & 1;
 }
@@ -111,7 +111,7 @@ void archie_set_amix(char i)
 	user_io_8bit_set_status(config.system_ctrl << 1, 0b1100);
 }
 
-char archie_get_amix()
+int archie_get_amix()
 {
 	return (config.system_ctrl>>1) & 3;
 }
