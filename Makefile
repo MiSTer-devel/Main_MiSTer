@@ -28,7 +28,7 @@ OBJ	= $(SRC:.c=.o) $(SRC2:.cpp=.o) $(MINIMIG_SRC:.cpp=.o) $(SHARPMZ_SRC:.cpp=.o)
 DEP	= $(SRC:.c=.d) $(SRC2:.cpp=.d) $(MINIMIG_SRC:.cpp=.d) $(SHARPMZ_SRC:.cpp=.d) $(ARCHIE_SRC:.cpp=.d) $(ST_SRC:.cpp=.d) $(X86_SRC:.cpp=.d)	$(SNES_SRC:.cpp=.d)
 
 DFLAGS	= $(INCLUDE)
-CFLAGS	= $(DFLAGS) -c -O3 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
+CFLAGS	= $(DFLAGS) -Wall -Wextra -c -O3 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
 LFLAGS	= -lc -lstdc++ -lrt
 
 $(PRJ): $(OBJ)
