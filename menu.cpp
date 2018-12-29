@@ -3331,7 +3331,9 @@ void HandleUI(void)
 				strcpy(SelectedPath, SelectedRBF);
 				AdjustDirectory(SelectedPath);
 				cp_MenuCancel = fs_MenuCancel;
-				fs_Options = 0;
+				strcpy(fs_pFileExt, "TXT");
+				fs_ExtLen = 3;
+				fs_Options = SCANO_CORES;
 				fs_MenuSelect = MENU_FIRMWARE_CORE_FILE_SELECTED2;
 				fs_MenuCancel = MENU_FIRMWARE_CORE_FILE_CANCELED;
 				menustate = MENU_FILE_SELECT1;
@@ -3470,8 +3472,12 @@ void PrintDirectory(void)
 				}
 			}
 
-			//not full check but should be enough.
-			if (cfg.rbf_hide_datecode && len > 9 && !strncmp(flist_DirItem(k)->d_name + len - 9, "_20", 3)) len -= 9;
+			char *p = 0;
+			if ((fs_Options & SCANO_CORES) && len > 9 && !strncmp(flist_DirItem(k)->d_name + len - 9, "_20", 3))
+			{
+				p = flist_DirItem(k)->d_name + len - 6;
+				len -= 9;
+			}
 
 			if (len > 28)
 			{
@@ -3497,6 +3503,26 @@ void PrintDirectory(void)
 				else
 				{
 					strcpy(&s[22], " <DIR>");
+				}
+			}
+			else if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES))
+			{
+				if (p)
+				{
+					int n = 19;
+					s[n++] = ' ';
+					s[n++] = p[0];
+					s[n++] = p[1];
+					s[n++] = '.';
+					s[n++] = p[2];
+					s[n++] = p[3];
+					s[n++] = '.';
+					s[n++] = p[4];
+					s[n++] = p[5];
+				}
+				else
+				{
+					strcpy(&s[19], " --.--.--");
 				}
 			}
 
