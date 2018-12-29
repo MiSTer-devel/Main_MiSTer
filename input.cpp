@@ -475,7 +475,7 @@ static const int ev2ps2[] =
 	NONE, //191 KEY_F21			
 	NONE, //192 KEY_F22			
 	NONE, //193 KEY_F23			
-	0x5D, //194 U-mlaut on DE mapped to \
+	0x5D, //194 U-mlaut on DE mapped to
 	NONE, //195 ???				
 	NONE, //196 ???				
 	NONE, //197 ???				
