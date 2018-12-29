@@ -1967,13 +1967,13 @@ int sharpmz_default_ui_state(void)
 // code base and to limit common code case size.
 // The same general programming structure is maintained to enable easier changes.
 //
-int sharpmz_ui(int idleState,              int idle2State,              int systemState,              int selectFile,
-               unsigned char *parentstate, unsigned char *menustate,    unsigned char *menusub,       unsigned char *menusub_last,
-               unsigned int  *menumask,    char          *selectedPath, const char    **helptext,     char          *helptext_custom,
-               unsigned char *fs_ExtLen,   unsigned char *fs_Options,   unsigned char *fs_MenuSelect, unsigned char *fs_MenuCancel,
-               char          *fs_pFileExt,
-               unsigned char menu,         unsigned char select,        unsigned char up,             unsigned char down,
-               unsigned char left,         unsigned char right,         unsigned char plus,           unsigned char minus)
+void sharpmz_ui(int idleState,             int idle2State,              int systemState,              int selectFile,
+                unsigned char *parentstate, unsigned char *menustate,    unsigned char *menusub,       unsigned char *menusub_last,
+                unsigned int  *menumask,    char          *selectedPath, const char    **helptext,     char          *helptext_custom,
+                unsigned char *fs_ExtLen,   unsigned char *fs_Options,   unsigned char *fs_MenuSelect, unsigned char *fs_MenuCancel,
+                char          *fs_pFileExt,
+                unsigned char menu,         unsigned char select,        unsigned char up,             unsigned char down,
+                unsigned char left,         unsigned char right,         unsigned char plus,           unsigned char minus)
 {
     // Locals - original variables are generally all lower case, variables specific to this method are capitalised on change of word.
     //

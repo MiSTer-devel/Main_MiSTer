@@ -678,12 +678,12 @@ void HandleUI(void)
 		return;
 	}
 	
-	struct RigidDiskBlock *rdb;
+	struct RigidDiskBlock *rdb = nullptr;
 
 	static char opensave;
 	char *p;
 	char s[40];
-	unsigned char m, up, down, select, menu, right, left, plus, minus;
+	unsigned char m = 0, up, down, select, menu, right, left, plus, minus;
 	uint8_t mod;
 	unsigned long len;
 	char enable;
