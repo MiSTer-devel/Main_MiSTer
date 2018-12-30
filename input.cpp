@@ -1283,6 +1283,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 static int kbd_toggle = 0;
 static uint16_t joy[2] = { 0 }, joy_prev[2] = { 0 };
 static uint16_t autofire[2] = { 0 };
+static uint16_t autofirecodes[2][16] = { 0 };
 static int af_delay[2] = { 50, 50 };
 
 static unsigned char mouse_btn = 0;
@@ -1294,37 +1295,67 @@ static int mouse_emu_y = 0;
 
 static uint32_t mouse_timer = 0;
 
-static void joy_digital(int num, uint16_t mask, char press, int bnum)
+static void joy_digital(int num, uint16_t mask, uint16_t code, char press, int bnum)
 {
 	static char str[128];
+	static uint16_t lastcode[2], lastmask[2];
 
 	if (num < 2)
 	{
-		if (!user_io_osd_is_visible() && ((bnum == 17) || (bnum == 16)) && joy[num])
+		if (bnum != 17 && bnum != 16)
 		{
-			uint16_t amask = joy[num] & 0xFFF0;
-			if(press)
+			if (press)
 			{
-				if (amask)
+				lastcode[num] = code;
+				lastmask[num] = mask;
+			}
+			else
+			{
+				lastcode[num] = 0;
+				lastmask[num] = 0;
+			}
+		}
+		else if (!user_io_osd_is_visible())
+		{
+			if (lastcode[num])
+			{
+				if (press)
 				{
-					if (autofire[num] & amask) autofire[num] &= ~amask;
-					else autofire[num] |= amask;
+					int found = 0;
+					int zero = -1;
+					for (int i = 0; i < 16; i++)
+					{
+						if (!autofirecodes[num][i]) zero = i;
+						if (autofirecodes[num][i] == lastcode[num])
+						{
+							found = 1;
+							autofirecodes[num][i] = 0;
+							break;
+						}
+					}
+
+					if (!found && zero >= 0) autofirecodes[num][zero] = lastcode[num];
+					autofire[num] = !found ? autofire[num] | lastmask[num] : autofire[num] & ~lastmask[num];
 
 					if (hasAPI1_5())
 					{
-						if(autofire[num] & amask) sprintf(str, "Auto fire: %d ms", af_delay[num] * 2);
+						if (!found) sprintf(str, "Auto fire: %d ms", af_delay[num] * 2);
 						else sprintf(str, "Auto fire: OFF");
 						Info(str);
 					}
-					else InfoMessage((autofire[num] & amask) ? "\n\n          Auto fire\n             ON" :
-						                "\n\n          Auto fire\n             OFF");
+					else InfoMessage((!found) ? "\n\n          Auto fire\n             ON" :
+						"\n\n          Auto fire\n             OFF");
 				}
-				else
+				return;
+			}
+			else if(joy[num] &0xF)
+			{
+				if (press)
 				{
 					if (joy[num] & 9)
 					{
-						 af_delay[num] += 25 << ((joy[num] & 1) ? 1 : 0);
-						 if (af_delay[num] > 500) af_delay[num] = 500;
+						af_delay[num] += 25 << ((joy[num] & 1) ? 1 : 0);
+						if (af_delay[num] > 500) af_delay[num] = 500;
 					}
 					else
 					{
@@ -1345,8 +1376,8 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 						InfoMessage(str);
 					}
 				}
+				return;
 			}
-			return;
 		}
 
 		if (bnum == 16)
@@ -1421,6 +1452,13 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 			if (press) joy[num] |= mask;
 			else joy[num] &= ~mask;
 			//user_io_digital_joystick(num, joy[num]);
+
+			if (code)
+			{
+				int found = 0;
+				for (int i = 0; i < 16; i++) if (autofirecodes[num][i] == code) found = 1;
+				if (found) autofire[num] = press ? autofire[num] | mask : autofire[num] & ~mask;
+			}
 		}
 	}
 }
@@ -1443,6 +1481,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int map_skip = (ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0 && mapping_type==1);
 	int cancel   = (ev->type == EV_KEY && ev->code == 1);
 	int enter    = (ev->type == EV_KEY && ev->code == 28);
+	int origcode = ev->code;
 
 	//mouse
 	switch (ev->type)
@@ -1624,14 +1663,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							{
 								int n = i;
 								if (n >= 8) n -= 8;
-								joy_digital(0, 1 << n, ev->value, n);
+								joy_digital(0, 1 << n, 0, ev->value, n);
 								return;
 							}
 						}
 
 						if (ev->code == input[dev].mmap[17])
 						{
-							joy_digital(0, 0, ev->value, 17);
+							joy_digital(0, 0, 0, ev->value, 17);
 							return;
 						}
 					}
@@ -1672,7 +1711,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == input[dev].map[i])
 							{
-								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, 0, ev->value, i);
 								return;
 							}
 						}
@@ -1683,7 +1722,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == input[dev].map[i])
 							{
-								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+								if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
+								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, origcode, ev->value, i);
 								return;
 							}
 						}
@@ -1692,7 +1732,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == input[dev].mmap[i])
 							{
-								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << (i - 8), ev->value, i - 8);
+								if (origcode == ev->code) origcode = 0; // prevent autofire for original dpad
+								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << (i - 8), origcode, ev->value, i - 8);
 								return;
 							}
 						}
@@ -1700,7 +1741,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 					if (ev->code == input[dev].mmap[17])
 					{
-						if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 0, ev->value, 17);
+						if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 0, 0, ev->value, 17);
 						return;
 					}
 
@@ -1763,7 +1804,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == input[dev].map[i])
 							{
-								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 1 << i, ev->value, i);
+								if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
+								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 1 << i, origcode, ev->value, i);
 								return;
 							}
 						}
@@ -1771,7 +1813,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 					if (ev->code == input[dev].mmap[16])
 					{
-						if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 0, ev->value, 16);
+						if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 0, 0, ev->value, 16);
 						return;
 					}
 				}
