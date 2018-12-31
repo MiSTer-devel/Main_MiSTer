@@ -7,15 +7,18 @@
 #include <fcntl.h>
 #include "spi.h"
 
+struct fileZipArchive;
+
 typedef struct
 {
-	FILE     *filp;
-	int       mode;
-	int       type;
-	__off64_t size;
-	__off64_t offset;
-	char      path[1024];
-	char      name[261];
+	FILE           *filp;
+	int             mode;
+	int             type;
+	fileZipArchive *zip;
+	__off64_t       size;
+	__off64_t       offset;
+	char            path[1024];
+	char            name[261];
 }  fileTYPE;
 
 int flist_nDirEntries();
@@ -65,6 +68,7 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
 int FileWriteSec(fileTYPE *file, void *pBuffer);
 
 int FileCanWrite(const char *name);
+void FileGenerateSavePath(const char *name, const char* extension, char* out_name, int length);
 
 int FileSave(const char *name, void *pBuffer, int size);
 int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
