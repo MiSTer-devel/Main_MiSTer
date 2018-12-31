@@ -120,7 +120,7 @@ static unsigned long scroll_offset = 0; // file/dir name scrolling position
 static unsigned long scroll_timer = 0;  // file/dir name scrolling timer
 
 static int arrow;
-static unsigned char titlebuffer[128];
+static unsigned char titlebuffer[256];
 
 static void rotatechar(unsigned char *in, unsigned char *out)
 {
@@ -151,7 +151,7 @@ void OsdSetTitle(const char *s, int a)
 	while (1)
 	{
 		int c = s[i++];
-		if (c && (outp<OSDHEIGHT))
+		if (c && (outp<OSDHEIGHT-8))
 		{
 			unsigned char *p = &charfont[c][0];
 			for (j = 0; j<8; ++j)
