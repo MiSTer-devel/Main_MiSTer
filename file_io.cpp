@@ -36,10 +36,10 @@ static char full_path[1200];
 
 void FileClose(fileTYPE *file)
 {
-	if (file->fd > 0)
+	if (file->filp)
 	{
-		//printf("closing %d\n", file->fd);
-		close(file->fd);
+		//printf("closing %p\n", file->filp);
+		fclose(file->filp);
 		if (file->type == 1)
 		{
 			if (file->name[0] == '/')
@@ -49,7 +49,7 @@ void FileClose(fileTYPE *file)
 			file->type = 0;
 		}
 	}
-	file->fd = -1;
+	file->filp = nullptr;
 }
 
 int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
@@ -71,11 +71,19 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	char *p = strrchr(full_path, '/');
 	strcpy(file->name, (mode == -1) ? full_path : p+1);
 
-	file->fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
-	if (file->fd <= 0)
+	int fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
+	if (fd <= 0)
 	{
-		if(!mute) printf("FileOpenEx(open) File:%s, error: %d.\n", full_path, file->fd);
-		file->fd = -1;
+		if(!mute) printf("FileOpenEx(open) File:%s, error: %s.\n", full_path, strerror(errno));
+		return 0;
+	}
+
+	const char *fmode = mode & O_RDWR ? "w+" : "r";
+	file->filp = fdopen(fd, fmode);
+	if (!file->filp)
+	{
+		if(!mute) printf("FileOpenEx(fdopen) File:%s, error: %s.\n", full_path, strerror(errno));
+		close(fd);
 		return 0;
 	}
 
@@ -89,7 +97,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	else
 	{
 		struct stat64 st;
-		int ret = fstat64(file->fd, &st);
+		int ret = fstat64(fd, &st);
 		if (ret < 0)
 		{
 			if (!mute) printf("FileOpenEx(fstat) File:%s, error: %d.\n", full_path, ret);
@@ -108,10 +116,10 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 
 __off64_t FileGetSize(fileTYPE *file)
 {
-	if (file->fd <= 0) return 0;
+	if (!file->filp) return 0;
 
 	struct stat64 st;
-	int ret = fstat64(file->fd, &st);
+	int ret = fstat64(fileno(file->filp), &st);
 	return (ret < 0) ? 0 : st.st_size;
 }
 
@@ -122,11 +130,11 @@ int FileOpen(fileTYPE *file, const char *name, char mute)
 
 int FileNextSector(fileTYPE *file)
 {
-	__off64_t newoff = lseek64(file->fd, file->offset + 512, SEEK_SET);
+	__off64_t newoff = lseek64(fileno(file->filp), file->offset + 512, SEEK_SET);
 	if (newoff != file->offset + 512)
 	{
 		//printf("Fail to seek to next sector. File: %s.\n", file->name);
-		lseek64(file->fd, file->offset, SEEK_SET);
+		lseek64(fileno(file->filp), file->offset, SEEK_SET);
 		return 0;
 	}
 
@@ -136,7 +144,7 @@ int FileNextSector(fileTYPE *file)
 
 int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 {
-	__off64_t newoff = lseek64(file->fd, offset, origin);
+	__off64_t newoff = lseek64(fileno(file->filp), offset, origin);
 	if(newoff<0)
 	{
 		printf("Fail to seek the file.\n");
@@ -174,7 +182,7 @@ int FileReadEx(fileTYPE *file, void *pBuffer, int nSize)
 	{
 		for (int i = 0; i < nSize; i++)
 		{
-			int ret = read(file->fd, tmpbuff, 512);
+			int ret = fread(tmpbuff, 512, 1, file->filp);
 			if (ret < 0)
 			{
 				printf("FileRead error(%d).\n", ret);
@@ -188,7 +196,7 @@ int FileReadEx(fileTYPE *file, void *pBuffer, int nSize)
 	}
 	else
 	{
-		int ret = read(file->fd, pBuffer, nSize * 512);
+		int ret = fread(pBuffer, nSize, 512, file->filp);
 		if (ret < 0)
 		{
 			printf("FileRead error(%d).\n", ret);
@@ -208,7 +216,7 @@ int FileWrite(fileTYPE *file, void *pBuffer)
 		return 0;
 	}
 
-	int ret = write(file->fd, pBuffer, 512);
+	int ret = fwrite(pBuffer, 512, 1, file->filp);
 	if (ret < 0)
 	{
 		printf("FileWrite error(%d).\n", ret);
@@ -221,7 +229,7 @@ int FileWrite(fileTYPE *file, void *pBuffer)
 // Read with offset advancing
 int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
 {
-	ssize_t ret = read(file->fd, pBuffer, length);
+	ssize_t ret = fread(pBuffer, length, 1, file->filp);
 	if (ret < 0)
 	{
 		printf("FileReadAdv error(%d).\n", ret);
@@ -240,7 +248,7 @@ int FileReadSec(fileTYPE *file, void *pBuffer)
 // Write with offset advancing
 int FileWriteAdv(fileTYPE *file, void *pBuffer, int length)
 {
-	int ret = write(file->fd, pBuffer, length);
+	int ret = fwrite(pBuffer, length, 1, file->filp);
 	if (ret < 0)
 	{
 		printf("FileWriteAdv error(%d).\n", ret);

@@ -1,6 +1,7 @@
 #ifndef _FAT16_H_INCLUDED
 #define _FAT16_H_INCLUDED
 
+#include <stdio.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -8,7 +9,7 @@
 
 typedef struct
 {
-	int       fd;
+	FILE     *filp;
 	int       mode;
 	int       type;
 	__off64_t size;
