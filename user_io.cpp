@@ -1304,10 +1304,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	if (opensave)
 	{
-		strcpy((char*)buf, name);
-		char *p = strrchr((char*)buf, '.');
-		if (!p) p = (char*)buf + strlen(name);
-		strcpy(p, ".sav");
+		FileGenerateSavePath(name, "sav", (char*)buf, sizeof(buf));
 		user_io_file_mount((char*)buf, 0, 1);
 	}
 

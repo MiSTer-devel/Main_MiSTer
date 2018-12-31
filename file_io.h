@@ -65,6 +65,7 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
 int FileWriteSec(fileTYPE *file, void *pBuffer);
 
 int FileCanWrite(const char *name);
+void FileGenerateSavePath(const char *name, const char* extension, char* out_name, int length);
 
 int FileSave(const char *name, void *pBuffer, int size);
 int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
