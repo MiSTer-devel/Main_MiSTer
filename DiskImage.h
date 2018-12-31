@@ -80,7 +80,7 @@ public:
 
    void Open(const char *filename, bool ReadOnly);
 
-   void writeTRD(int hfile);
+   void writeTRD(fileTYPE *hfile);
 
    void readSCL(int hfile, bool readonly);
    void readFDI(int hfile, bool readonly);
