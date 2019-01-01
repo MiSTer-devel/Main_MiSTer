@@ -660,7 +660,7 @@ void HandleUI(void)
 
 	static char opensave;
 	char *p;
-	char s[40];
+	static char s[256];
 	unsigned char m = 0, up, down, select, menu, right, left, plus, minus;
 	char enable;
 	static int reboot_req = 0;
@@ -1298,7 +1298,10 @@ void HandleUI(void)
 			}
 
 			OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
-			OsdWrite(m++, " Define joystick buttons   \x16", menusub == 1, 0);
+			sprintf(s, " Define %s buttons      ", is_menu_core() ? "System" : user_io_get_core_name_ex());
+			s[27] = '\x16';
+			s[28] = 0;
+			OsdWrite(m++, s, menusub == 1, 0);
 			OsdWrite(m++, " Button/Key remap for game \x16", menusub == 2, 0);
 			OsdWrite(4, "", 0, 0);
 
