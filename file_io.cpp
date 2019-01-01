@@ -12,6 +12,8 @@
 #include <sys/vfs.h>
 #include <sys/mman.h>
 #include <linux/magic.h>
+#include <algorithm>
+#include <vector>
 #include "osd.h"
 #include "fpga_io.h"
 #include "menu.h"
@@ -21,8 +23,9 @@
 #include "cfg.h"
 #include "input.h"
 
-int nDirEntries = 0;
-struct dirent DirItem[10000];
+typedef std::vector<dirent> DirentVector;
+
+DirentVector DirItem;
 int iSelectedEntry = 0;       // selected entry index
 int iFirstEntry = 0;
 
@@ -513,36 +516,36 @@ void FindStorage(void)
 	else if (ENOENT == errno) mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
 }
 
-int de_cmp(const void *e1, const void *e2)
+struct DirentComp
 {
-	const struct dirent *de1 = (struct dirent *)e1;
-	const struct dirent *de2 = (struct dirent *)e2;
-
-	if ((de1->d_type == DT_DIR) && !strcmp(de1->d_name, "..")) return -1;
-	if ((de2->d_type == DT_DIR) && !strcmp(de2->d_name, "..")) return  1;
-
-	if ((de1->d_type == DT_DIR) && (de2->d_type == DT_REG)) return -1;
-	if ((de1->d_type == DT_REG) && (de2->d_type == DT_DIR)) return  1;
-
-	if ((de1->d_type == DT_REG) && (de2->d_type == DT_REG))
+	bool operator()(const dirent& de1, const dirent& de2)
 	{
-		int len1 = strlen(de1->d_name);
-		int len2 = strlen(de2->d_name);
-		if ((len1 > 4) && (de1->d_name[len1 - 4] == '.')) len1 -= 4;
-		if ((len2 > 4) && (de2->d_name[len2 - 4] == '.')) len2 -= 4;
+		if ((de1.d_type == DT_DIR) && !strcmp(de1.d_name, "..")) return true;
+		if ((de2.d_type == DT_DIR) && !strcmp(de2.d_name, "..")) return false;
 
-		int len = (len1 < len2) ? len1 : len2;
-		int ret = strncasecmp(de1->d_name, de2->d_name, len);
-		if (!ret)
+		if ((de1.d_type == DT_DIR) && (de2.d_type == DT_REG)) return true;
+		if ((de1.d_type == DT_REG) && (de2.d_type == DT_DIR)) return false;
+
+		if ((de1.d_type == DT_REG) && (de2.d_type == DT_REG))
 		{
-			return len1 - len2;
+			int len1 = strlen(de1.d_name);
+			int len2 = strlen(de2.d_name);
+			if ((len1 > 4) && (de1.d_name[len1 - 4] == '.')) len1 -= 4;
+			if ((len2 > 4) && (de2.d_name[len2 - 4] == '.')) len2 -= 4;
+
+			int len = (len1 < len2) ? len1 : len2;
+			int ret = strncasecmp(de1.d_name, de2.d_name, len);
+			if (!ret)
+			{
+				return len1 < len2;
+			}
+
+			return ret < 0;
 		}
 
-		return ret;
+		return strcasecmp(de1.d_name, de2.d_name) < 0;
 	}
-
-	return strcasecmp(de1->d_name, de2->d_name);
-}
+};
 
 static int get_stmode(const char *path)
 {
@@ -622,7 +625,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 		iFirstEntry = 0;
 		iSelectedEntry = 0;
-		nDirEntries = 0;
+		DirItem.clear();
 
 		DIR *d = opendir(full_path);
 		if (!d)
@@ -632,11 +635,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 
 		struct dirent *de;
-		while(nDirEntries < (int)(sizeof(DirItem)/sizeof(DirItem[0])))
+		while((de = readdir(d)))
 		{
-			de = readdir(d);
-			if (de == NULL) break;
-
 			if (de->d_type == DT_DIR)
 			{
 				if (!strcmp(de->d_name, ".")) continue;
@@ -707,39 +707,38 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			{
 				continue;
 			}
-			memcpy(&DirItem[nDirEntries], de, sizeof(struct dirent));
-			nDirEntries++;
+			DirItem.push_back(*de);
 		}
 		closedir(d);
 
-		printf("Got %d dir entries\n", nDirEntries);
-		if (!nDirEntries) return 0;
+		printf("Got %d dir entries\n", flist_nDirEntries());
+		if (!flist_nDirEntries()) return 0;
 
-		qsort(DirItem, nDirEntries, sizeof(struct dirent), de_cmp);
+		std::sort(DirItem.begin(), DirItem.end(), DirentComp());
 		if (file_name[0])
 		{
-			for (int i = 0; i < nDirEntries; i++)
+			for (int i = 0; i < flist_nDirEntries(); i++)
 			{
 				if (!strcmp(file_name, DirItem[i].d_name))
 				{
 					iSelectedEntry = i;
-					if (iSelectedEntry + (OsdGetSize() / 2) - 1 >= nDirEntries) iFirstEntry = nDirEntries - OsdGetSize();
+					if (iSelectedEntry + (OsdGetSize() / 2) - 1 >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
 					else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
 					if (iFirstEntry < 0) iFirstEntry = 0;
 					break;
 				}
 			}
 		}
-		return nDirEntries;
+		return flist_nDirEntries();
 	}
 	else
 	{
-		if (nDirEntries == 0) // directory is empty so there is no point in searching for any entry
+		if (flist_nDirEntries() == 0) // directory is empty so there is no point in searching for any entry
 			return 0;
 
 		if (mode == SCANF_NEXT)
 		{
-			if(iSelectedEntry + 1 < nDirEntries) // scroll within visible items
+			if(iSelectedEntry + 1 < flist_nDirEntries()) // scroll within visible items
 			{
 				iSelectedEntry++;
 				if (iSelectedEntry > iFirstEntry + OsdGetSize() - 1) iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
@@ -760,21 +759,21 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if (iSelectedEntry < iFirstEntry + OsdGetSize() - 1)
 			{
 				iSelectedEntry = iFirstEntry + OsdGetSize() - 1;
-				if (iSelectedEntry >= nDirEntries) iSelectedEntry = nDirEntries - 1;
+				if (iSelectedEntry >= flist_nDirEntries()) iSelectedEntry = flist_nDirEntries() - 1;
 			}
 			else
 			{
 				iSelectedEntry += OsdGetSize();
 				iFirstEntry += OsdGetSize();
-				if (iSelectedEntry >= nDirEntries)
+				if (iSelectedEntry >= flist_nDirEntries())
 				{
-					iSelectedEntry = nDirEntries - 1;
+					iSelectedEntry = flist_nDirEntries() - 1;
 					iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
 					if (iFirstEntry < 0) iFirstEntry = 0;
 				}
-				else if (iFirstEntry + OsdGetSize() > nDirEntries)
+				else if (iFirstEntry + OsdGetSize() > flist_nDirEntries())
 				{
-					iFirstEntry = nDirEntries - OsdGetSize();
+					iFirstEntry = flist_nDirEntries() - OsdGetSize();
 				}
 			}
 			return 0;
@@ -794,12 +793,12 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 		else if (mode == SCANF_SET_ITEM)
 		{
-			for (int i = 0; i < nDirEntries; i++)
+			for (int i = 0; i < flist_nDirEntries(); i++)
 			{
 				if((DirItem[i].d_type == DT_DIR) && !strcmp(DirItem[i].d_name, extension))
 				{
 					iSelectedEntry = i;
-					if (iSelectedEntry + (OsdGetSize() / 2) - 1 >= nDirEntries) iFirstEntry = nDirEntries - OsdGetSize();
+					if (iSelectedEntry + (OsdGetSize() / 2) - 1 >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
 					else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
 					if (iFirstEntry < 0) iFirstEntry = 0;
 					break;
@@ -813,7 +812,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if ((mode >= '0' && mode <= '9') || (mode >= 'A' && mode <= 'Z'))
 			{
 				int found = -1;
-				for (int i = iSelectedEntry+1; i < nDirEntries; i++)
+				for (int i = iSelectedEntry+1; i < flist_nDirEntries(); i++)
 				{
 					if (toupper(DirItem[i].d_name[0]) == mode)
 					{
@@ -824,7 +823,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 				if (found < 0)
 				{
-					for (int i = 0; i < nDirEntries; i++)
+					for (int i = 0; i < flist_nDirEntries(); i++)
 					{
 						if (toupper(DirItem[i].d_name[0]) == mode)
 						{
@@ -837,7 +836,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				if (found >= 0)
 				{
 					iSelectedEntry = found;
-					if (iSelectedEntry + (OsdGetSize() / 2) >= nDirEntries) iFirstEntry = nDirEntries - OsdGetSize();
+					if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
 						else iFirstEntry = iSelectedEntry - (OsdGetSize()/2) + 1;
 					if (iFirstEntry < 0) iFirstEntry = 0;
 				}
@@ -850,7 +849,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 int flist_nDirEntries()
 {
-	return nDirEntries;
+	return DirItem.size();
 }
 
 int flist_iFirstEntry()
