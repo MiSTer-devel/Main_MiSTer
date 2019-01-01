@@ -95,6 +95,8 @@ int main(int argc, char *argv[])
 		user_io_poll();
 		input_poll(0);
 		HandleUI();
+		// Sleep for low CPU usage
+		usleep(500);
 	}
 	return 0;
 }
