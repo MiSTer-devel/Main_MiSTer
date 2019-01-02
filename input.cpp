@@ -475,7 +475,7 @@ static const int ev2ps2[] =
 	NONE, //191 KEY_F21			
 	NONE, //192 KEY_F22			
 	NONE, //193 KEY_F23			
-	0x5D, //194 U-mlaut on DE mapped to \
+	0x5D, //194 U-mlaut on DE mapped to backslash
 	NONE, //195 ???				
 	NONE, //196 ???				
 	NONE, //197 ???				
@@ -986,7 +986,7 @@ typedef struct
 	int      accx, accy;
 }  devInput;
 
-static devInput input[NUMDEV] = { 0 };
+static devInput input[NUMDEV] = {};
 static int first_joystick = -1;
 
 int mfd = -1;
@@ -1082,6 +1082,8 @@ static int check_devs()
 
 static void INThandler(int code)
 {
+	(void)code;
+
 	printf("\nExiting...\n");
 
 	if (mwd >= 0) inotify_rm_watch(mfd, mwd);
@@ -1257,7 +1259,7 @@ static int keyrah_trans(int key, int press)
 	else if (fn)
 	{
 		fn |= 2;
-		for (int n = 0; n<(sizeof(kr_fn_table) / (2 * sizeof(kr_fn_table[0]))); n++)
+		for (uint32_t n = 0; n<(sizeof(kr_fn_table) / (2 * sizeof(kr_fn_table[0]))); n++)
 		{
 			if ((key&255) == kr_fn_table[n * 2]) return kr_fn_table[(n * 2) + 1];
 		}
@@ -1281,7 +1283,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 static int kbd_toggle = 0;
 static uint16_t joy[2] = { 0 }, joy_prev[2] = { 0 };
 static uint16_t autofire[2] = { 0 };
-static uint32_t af_delay[2] = { 50, 50 };
+static uint16_t autofirecodes[2][16] = { 0 };
+static int af_delay[2] = { 50, 50 };
 
 static unsigned char mouse_btn = 0;
 static int mouse_emu = 0;
@@ -1292,30 +1295,74 @@ static int mouse_emu_y = 0;
 
 static uint32_t mouse_timer = 0;
 
-static void joy_digital(int num, uint16_t mask, char press, int bnum)
+static void joy_digital(int num, uint16_t mask, uint16_t code, char press, int bnum)
 {
+	static char str[128];
+	static uint16_t lastcode[2], lastmask[2];
+
 	if (num < 2)
 	{
-		if (!user_io_osd_is_visible() && ((bnum == 17) || (bnum == 16)) && joy[num])
+		if (bnum != 17 && bnum != 16)
 		{
-			uint16_t amask = joy[num] & 0xFFF0;
-			if(press)
+			if (press)
 			{
-				if (amask)
+				lastcode[num] = code;
+				lastmask[num] = mask;
+			}
+			else
+			{
+				lastcode[num] = 0;
+				lastmask[num] = 0;
+			}
+		}
+		else if (!user_io_osd_is_visible())
+		{
+			if (lastcode[num])
+			{
+				if (press)
 				{
-					if (autofire[num] & amask) autofire[num] &= ~amask;
-					else autofire[num] |= amask;
+					int found = 0;
+					int zero = -1;
+					for (int i = 0; i < 16; i++)
+					{
+						if (!autofirecodes[num][i]) zero = i;
+						if (autofirecodes[num][i] == lastcode[num])
+						{
+							found = 1;
+							autofirecodes[num][i] = 0;
+							break;
+						}
+					}
 
-					if(hasAPI1_5()) Info((autofire[num] & amask) ? "Auto fire: ON" : "Auto fire: OFF");
-					else InfoMessage((autofire[num] & amask) ? "\n\n          Auto fire\n             ON" :
-						                "\n\n          Auto fire\n             OFF");
+					if (!found && zero >= 0) autofirecodes[num][zero] = lastcode[num];
+					autofire[num] = !found ? autofire[num] | lastmask[num] : autofire[num] & ~lastmask[num];
+
+					if (hasAPI1_5())
+					{
+						if (!found) sprintf(str, "Auto fire: %d ms", af_delay[num] * 2);
+						else sprintf(str, "Auto fire: OFF");
+						Info(str);
+					}
+					else InfoMessage((!found) ? "\n\n          Auto fire\n             ON" :
+						"\n\n          Auto fire\n             OFF");
 				}
-				else
+				return;
+			}
+			else if(joy[num] &0xF)
+			{
+				if (press)
 				{
-					if (joy[num] & 1) af_delay[num] = 50;
-					else if (joy[num] & 2) af_delay[num] = 100;
-					else if (joy[num] & 4) af_delay[num] = 200;
-					else af_delay[num] = 500;
+					if (joy[num] & 9)
+					{
+						af_delay[num] += 25 << ((joy[num] & 1) ? 1 : 0);
+						if (af_delay[num] > 500) af_delay[num] = 500;
+					}
+					else
+					{
+						af_delay[num] -= 25 << ((joy[num] & 2) ? 1 : 0);
+						if (af_delay[num] < 25) af_delay[num] = 25;
+					}
+
 					static char str[256];
 
 					if (hasAPI1_5())
@@ -1329,8 +1376,8 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 						InfoMessage(str);
 					}
 				}
+				return;
 			}
-			return;
 		}
 
 		if (bnum == 16)
@@ -1405,6 +1452,13 @@ static void joy_digital(int num, uint16_t mask, char press, int bnum)
 			if (press) joy[num] |= mask;
 			else joy[num] &= ~mask;
 			//user_io_digital_joystick(num, joy[num]);
+
+			if (code)
+			{
+				int found = 0;
+				for (int i = 0; i < 16; i++) if (autofirecodes[num][i] == code) found = 1;
+				if (found) autofire[num] = press ? autofire[num] | mask : autofire[num] & ~mask;
+			}
 		}
 	}
 }
@@ -1423,12 +1477,11 @@ static void joy_analog(int num, int axis, int offset)
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	static int key_mapped = 0;
-	static uint8_t modifiers = 0;
-	static char keys[6] = { 0,0,0,0,0,0 };
 
 	int map_skip = (ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0 && mapping_type==1);
 	int cancel   = (ev->type == EV_KEY && ev->code == 1);
 	int enter    = (ev->type == EV_KEY && ev->code == 28);
+	int origcode = ev->code;
 
 	//mouse
 	switch (ev->type)
@@ -1610,14 +1663,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							{
 								int n = i;
 								if (n >= 8) n -= 8;
-								joy_digital(0, 1 << n, ev->value, n);
+								joy_digital(0, 1 << n, 0, ev->value, n);
 								return;
 							}
 						}
 
 						if (ev->code == input[dev].mmap[17])
 						{
-							joy_digital(0, 0, ev->value, 17);
+							joy_digital(0, 0, 0, ev->value, 17);
 							return;
 						}
 					}
@@ -1658,7 +1711,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == input[dev].map[i])
 							{
-								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, 0, ev->value, i);
 								return;
 							}
 						}
@@ -1669,7 +1722,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == input[dev].map[i])
 							{
-								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, ev->value, i);
+								if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
+								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, origcode, ev->value, i);
 								return;
 							}
 						}
@@ -1678,7 +1732,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == input[dev].mmap[i])
 							{
-								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << (i - 8), ev->value, i - 8);
+								if (origcode == ev->code) origcode = 0; // prevent autofire for original dpad
+								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << (i - 8), origcode, ev->value, i - 8);
 								return;
 							}
 						}
@@ -1686,7 +1741,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 					if (ev->code == input[dev].mmap[17])
 					{
-						if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 0, ev->value, 17);
+						if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 0, 0, ev->value, 17);
 						return;
 					}
 
@@ -1749,7 +1804,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == input[dev].map[i])
 							{
-								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 1 << i, ev->value, i);
+								if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
+								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 1 << i, origcode, ev->value, i);
 								return;
 							}
 						}
@@ -1757,7 +1813,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 					if (ev->code == input[dev].mmap[16])
 					{
-						if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 0, ev->value, 16);
+						if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 0, 0, ev->value, 16);
 						return;
 					}
 				}

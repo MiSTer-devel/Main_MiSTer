@@ -52,7 +52,7 @@ int ini_getline(char* line)
 	char c, ignore = 0, skip = 1;
 	int i = 0;
 
-	while(c = ini_getch())
+	while((c = ini_getch()))
 	{
 		if (!CHAR_IS_SPACE(c)) skip = 0;
 		if (i >= (INI_LINE_SIZE - 1) || CHAR_IS_COMMENT(c)) ignore = 1;
@@ -200,9 +200,9 @@ void ini_parse(const ini_cfg_t* cfg)
 		{
 			return;
 		}
-		else ini_parser_debugf("Opened file %s with size %d bytes.", cfg->filename_alt, ini_file.size);
+		else ini_parser_debugf("Opened file %s with size %llu bytes.", cfg->filename_alt, ini_file.size);
 	}
-	else ini_parser_debugf("Opened file %s with size %d bytes.", cfg->filename, ini_file.size);
+	else ini_parser_debugf("Opened file %s with size %llu bytes.", cfg->filename, ini_file.size);
 
 	ini_pt = 0;
 

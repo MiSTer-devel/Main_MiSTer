@@ -120,7 +120,7 @@ static unsigned long scroll_offset = 0; // file/dir name scrolling position
 static unsigned long scroll_timer = 0;  // file/dir name scrolling timer
 
 static int arrow;
-static unsigned char titlebuffer[128];
+static unsigned char titlebuffer[256];
 
 static void rotatechar(unsigned char *in, unsigned char *out)
 {
@@ -139,19 +139,19 @@ static void rotatechar(unsigned char *in, unsigned char *out)
 	}
 }
 
-#define OSDHEIGHT (osd_size*8)
+#define OSDHEIGHT (uint)(osd_size*8)
 
 void OsdSetTitle(const char *s, int a)
 {
 	// Compose the title, condensing character gaps
 	arrow = a;
 	int zeros = 0;
-	int i = 0, j = 0;
-	int outp = 0;
+	uint i = 0, j = 0;
+	uint outp = 0;
 	while (1)
 	{
 		int c = s[i++];
-		if (c && (outp<OSDHEIGHT))
+		if (c && (outp<OSDHEIGHT-8))
 		{
 			unsigned char *p = &charfont[c][0];
 			for (j = 0; j<8; ++j)
@@ -178,7 +178,7 @@ void OsdSetTitle(const char *s, int a)
 	}
 
 	// Now centre it:
-	int c = (OSDHEIGHT - 1 - outp) / 2;
+	uint c = (OSDHEIGHT - 1 - outp) / 2;
 	memmove(titlebuffer + c, titlebuffer, outp);
 
 	for (i = 0; i<c; ++i) titlebuffer[i] = 0;
@@ -245,7 +245,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			if (leftchar)
 			{
 				unsigned char tmp2[8];
-				memcpy(tmp2, charfont[leftchar], 8);
+				memcpy(tmp2, charfont[(uint)leftchar], 8);
 				rotatechar(tmp2, tmp);
 				p = tmp;
 			}
@@ -333,14 +333,14 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	DisableOsd();
 }
 
-void OsdDrawLogo(unsigned char n, char row, char superimpose)
+void OsdDrawLogo(int row)
 {
 	unsigned short i;
 	const unsigned char *p;
 	int linelimit = OSDLINELEN;
 
 	int mag = (osd_size / 8);
-	n = n * mag;
+	uint n = row * mag;
 
 	// select buffer and line to write to
 	if (!is_minimig())
@@ -357,7 +357,7 @@ void OsdDrawLogo(unsigned char n, char row, char superimpose)
 		unsigned char bt = 0;
 		const unsigned char *lp = logodata[row];
 		int bytes = sizeof(logodata[0]);
-		if (row >= (sizeof(logodata) / sizeof(logodata[0]))) lp = 0;
+		if ((uint)row >= (sizeof(logodata) / sizeof(logodata[0]))) lp = 0;
 
 		char *bg = framebuffer[n + k];
 
@@ -441,20 +441,20 @@ void OSD_PrintText(unsigned char line, const char *text, unsigned long start, un
 
 	if (offset) {
 		width -= 8 - offset;
-		p = &charfont[*text++][offset];
+		p = &charfont[(uint)(*text++)][offset];
 		for (; offset < 8; offset++)
 			spi8(*p++^invert);
 	}
 
 	while (width > 8) {
 		unsigned char b;
-		p = &charfont[*text++][0];
+		p = &charfont[(uint)(*text++)][0];
 		for (b = 0; b<8; b++) spi8(*p++^invert);
 		width -= 8;
 	}
 
 	if (width) {
-		p = &charfont[*text++][0];
+		p = &charfont[(uint)(*text++)][0];
 		while (width--)
 			spi8(*p++^invert);
 	}
@@ -530,7 +530,7 @@ void OSD_PrintInfo(const char *message, int *width, int *height, int frame)
 
 		for (x = 0; x < w; x++)
 		{
-			const unsigned char *p = charfont[str[(y*INFO_MAXW) + x]];
+			const unsigned char *p = charfont[(uint)str[(y*INFO_MAXW) + x]];
 			for (int i = 0; i < 8; i++) spi8(*p++);
 		}
 
@@ -655,7 +655,7 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 		if (off+len > max_len) // scroll name if longer than display size
 		{
 			// reset scroll position if it exceeds predefined maximum
-			if (scroll_offset >= (len + BLANKSPACE) << 3) scroll_offset = 0;
+			if (scroll_offset >= (uint)(len + BLANKSPACE) << 3) scroll_offset = 0;
 
 			offset = scroll_offset >> 3; // get new starting character of the name (scroll_offset is no longer in 2 pixel unit)
 			len -= offset; // remaining number of characters in the name

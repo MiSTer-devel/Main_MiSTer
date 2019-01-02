@@ -245,7 +245,7 @@ static char* GetConfigurationName(int num)
 	if (d)
 	{
 		if(num) sprintf(path, "minimig%d", num);
-		else sprintf(path, "minimig.cfg", num);
+		else sprintf(path, "minimig.cfg");
 
 		while ((dir = readdir(d)) != NULL)
 		{

@@ -135,11 +135,13 @@ static int smbus_open(int dev_address)
 	return 1;
 }
 
+/*
 static void smbus_close()
 {
 	if(i2c_handle > 0) close(i2c_handle);
 	i2c_handle = -1;
 }
+*/
 
 static int smbus_get(int address, short *data)
 {

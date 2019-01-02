@@ -23,7 +23,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <unistd.h>
 #include <stdio.h>
 #include <sched.h>
-#include "string.h"
+#include <inttypes.h>
+#include <ctype.h>
+#include <string.h>
 #include "menu.h"
 #include "user_io.h"
 #include "input.h"

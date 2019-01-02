@@ -84,7 +84,7 @@ void ConfigFloppy(unsigned char drives, unsigned char speed);
 void ConfigAutofire(unsigned char autofire, unsigned char mask);
 void OSD_PrintText(unsigned char line, const char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert);
 void OSD_PrintInfo(const char *message, int *width, int *height, int frame = 0);
-void OsdDrawLogo(unsigned char n, char row, char superimpose);
+void OsdDrawLogo(int row);
 void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert);
 void ScrollReset();
 void StarsInit();

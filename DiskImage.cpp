@@ -832,7 +832,7 @@ bool TDiskImage::FindSector(unsigned char CYL, unsigned char SIDE,
 	unsigned int TrackOffset = FromOffset;
 
 	bool FirstFind = true;
-	unsigned int FirstPos;
+	unsigned int FirstPos = 0;
 
 	// ѕоиск адресной метки требуемого сектора...
 	bool ADFOUND = false;
@@ -1394,7 +1394,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 		{
 			if (rsize < fdiOFF)
 			{
-				delete tracksinfo;
+				delete[] tracksinfo;
 				delete ptr;
 				ShowError(ERR_CORRUPT);
 				return;
@@ -1405,7 +1405,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 
 			if (rsize < fdiOFFdata + tracksinfo[trk*(MaxSide + 1) + side].DataOffset)
 			{
-				delete tracksinfo;
+				delete[] tracksinfo;
 				delete ptr;
 				ShowError(ERR_CORRUPT);
 				return;
@@ -1424,7 +1424,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 
 				if (rsize < fdiOFFdata + tracksinfo[trk*(MaxSide + 1) + side].DataOffset + tracksinfo[trk*(MaxSide + 1) + side].SectorsInfo[isec].SectorOffset)
 				{
-					delete tracksinfo;
+					delete[] tracksinfo;
 					delete ptr;
 					ShowError(ERR_CORRUPT);
 					return;
@@ -1475,7 +1475,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 
 			if (trkdatalen + SecCount*(3 + 2) > 6250)    // 3x4E & 2x00 per sec checking
 			{
-				delete tracksinfo;
+				delete[] tracksinfo;
 				delete ptr;
 				for (int t = 0; t < 256; t++)
 					for (int s = 0; s < 256; s++)
@@ -1640,7 +1640,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 			}
 		}
 
-	delete tracksinfo;
+	delete[] tracksinfo;
 	delete ptr;
 	ReadOnly = readonly;
 	FType = DIT_FDI;
@@ -2829,7 +2829,7 @@ int GetByte(void)     /* get one byte */
 
 	while (getlen <= 8)
 	{
-		if ((i = readChar()) == -1) i = 0;
+		if ((int)(i = readChar()) == -1) i = 0;
 		getbuf |= i << (8 - getlen);
 		getlen += 8;
 	}

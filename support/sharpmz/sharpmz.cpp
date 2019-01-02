@@ -41,6 +41,10 @@
 #include "../../debug.h"
 #include "../../user_io.h"
 
+// Names of the supported machines.
+//
+static const char *MZMACHINES[MAX_MZMACHINES] = { "MZ80K", "MZ80C", "MZ1200", "MZ80A", "MZ700", "MZ800", "MZ80B", "MZ2000" };
+
 #define sharpmz_debugf(a, ...)
 //#define sharpmz_debugf(a, ...) printf("\033[1;31mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
 #define sharpmz__x_debugf(a, ...)
@@ -61,7 +65,7 @@ int sharpmz_file_write(fileTYPE *file, const char *fileName)
 
     sprintf(fullPath, "%s/%s/%s", getRootDir(), SHARPMZ_CORE_NAME, fileName);
 
-    file->mode = O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO;
+    file->mode = O_WRONLY | O_CREAT | O_TRUNC | O_SYNC | S_IRWXU | S_IRWXG | S_IRWXO;
     file->type = 0;
 
     file->fd = open(fullPath, file->mode);
@@ -141,7 +145,7 @@ void sharpmz_reset(unsigned long preResetSleep, unsigned long postResetSleep)
 //
 int sharpmz_reset_config(short setStatus)
 {
-    char i;
+    int i;
     char buf[1024];
 
     // Setup config defaults.
@@ -1967,13 +1971,13 @@ int sharpmz_default_ui_state(void)
 // code base and to limit common code case size.
 // The same general programming structure is maintained to enable easier changes.
 //
-int sharpmz_ui(int idleState,              int idle2State,              int systemState,              int selectFile,
-               unsigned char *parentstate, unsigned char *menustate,    unsigned char *menusub,       unsigned char *menusub_last,
-               unsigned int  *menumask,    char          *selectedPath, const char    **helptext,     char          *helptext_custom,
-               unsigned char *fs_ExtLen,   unsigned char *fs_Options,   unsigned char *fs_MenuSelect, unsigned char *fs_MenuCancel,
-               char          *fs_pFileExt,
-               unsigned char menu,         unsigned char select,        unsigned char up,             unsigned char down,
-               unsigned char left,         unsigned char right,         unsigned char plus,           unsigned char minus)
+void sharpmz_ui(int      idleState,    int      idle2State,    int        systemState,    int      selectFile,
+                uint32_t *parentstate, uint32_t *menustate,    uint32_t   *menusub,       uint32_t *menusub_last,
+				uint32_t *menumask,    char     *selectedPath, const char **helptext,     char     *helptext_custom,
+				uint32_t *fs_ExtLen,   uint32_t *fs_Options,   uint32_t   *fs_MenuSelect, uint32_t *fs_MenuCancel,
+                char     *fs_pFileExt,
+                unsigned char menu,    unsigned char select,   unsigned char up,          unsigned char down,
+                unsigned char left,    unsigned char right,    unsigned char plus,        unsigned char minus)
 {
     // Locals - original variables are generally all lower case, variables specific to this method are capitalised on change of word.
     //

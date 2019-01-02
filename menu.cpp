@@ -136,12 +136,12 @@ enum MENU
 	MENU_8BIT_ABOUT2
 };
 
-unsigned char menustate = MENU_NONE1;
-unsigned char parentstate;
-unsigned char menusub = 0;
-unsigned char menusub_last = 0; //for when we allocate it dynamically and need to know last row
-unsigned int  menumask = 0; // Used to determine which rows are selectable...
-unsigned long menu_timer = 0;
+uint32_t menustate = MENU_NONE1;
+uint32_t parentstate;
+uint32_t menusub = 0;
+uint32_t menusub_last = 0; //for when we allocate it dynamically and need to know last row
+uint32_t menumask = 0; // Used to determine which rows are selectable...
+uint32_t menu_timer = 0;
 
 extern const char *version;
 
@@ -210,10 +210,10 @@ unsigned char config_autofire = 0;
 
 // file selection menu variables
 char fs_pFileExt[13] = "xxx";
-unsigned char fs_ExtLen = 0;
-unsigned char fs_Options;
-unsigned char fs_MenuSelect;
-unsigned char fs_MenuCancel;
+uint32_t fs_ExtLen = 0;
+uint32_t fs_Options;
+uint32_t fs_MenuSelect;
+uint32_t fs_MenuCancel;
 
 int GetUARTMode()
 {
@@ -290,13 +290,13 @@ int changeDir(char *dir)
 		if (p)
 		{
 			*p = 0;
-			int len = strlen(p+1);
+			uint32_t len = strlen(p+1);
 			if (len > sizeof(curdir) - 1) len = sizeof(curdir) - 1;
 			strncpy(curdir, p+1, len);
 		}
 		else
 		{
-			int len = strlen(SelectedPath);
+			uint32_t len = strlen(SelectedPath);
 			if (len > sizeof(curdir) - 1) len = sizeof(curdir) - 1;
 			strncpy(curdir, SelectedPath, len);
 			SelectedPath[0] = 0;
@@ -388,25 +388,6 @@ void substrcpy(char *d, char *s, char idx)
 #define HELPTEXT_DELAY 10000
 #define FRAME_DELAY 150
 
-// prints input as a string of binary (on/off) values
-// assumes big endian, returns using special characters (checked box/unchecked box)
-void siprintbinary(char* buffer, size_t const size, void const * const ptr)
-{
-	unsigned char *b = (unsigned char*)ptr;
-	unsigned char byte;
-	int i, j;
-	memset(buffer, '\0', sizeof(buffer));
-	for (i = size - 1; i >= 0; i--)
-	{
-		for (j = 0; j<8; j++)
-		{
-			byte = (b[i] >> j) & 1;
-			buffer[j] = byte ? '\x1a' : '\x19';
-		}
-	}
-	return;
-}
-
 unsigned char getIdx(char *opt)
 {
 	if ((opt[1] >= '0') && (opt[1] <= '9')) return opt[1] - '0';
@@ -414,11 +395,11 @@ unsigned char getIdx(char *opt)
 	return 0; // basically 0 cannot be valid because used as a reset. Thus can be used as a error.
 }
 
-unsigned int getStatus(char *opt, unsigned int status)
+uint32_t getStatus(char *opt, uint32_t status)
 {
 	char idx1 = getIdx(opt);
 	char idx2 = getIdx(opt + 1);
-	unsigned int x = (status & (1 << idx1)) ? 1 : 0;
+	uint32_t x = (status & (1 << idx1)) ? 1 : 0;
 
 	if (idx2>idx1) {
 		x = status >> idx1;
@@ -428,11 +409,11 @@ unsigned int getStatus(char *opt, unsigned int status)
 	return x;
 }
 
-unsigned int setStatus(char *opt, unsigned int status, unsigned int value)
+uint32_t setStatus(char *opt, uint32_t status, uint32_t value)
 {
 	unsigned char idx1 = getIdx(opt);
 	unsigned char idx2 = getIdx(opt + 1);
-	unsigned long x = 1;
+	uint32_t x = 1;
 
 	if (idx2>idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
 	x = x << idx1;
@@ -440,11 +421,11 @@ unsigned int setStatus(char *opt, unsigned int status, unsigned int value)
 	return (status & ~x) | ((value << idx1) & x);
 }
 
-unsigned int getStatusMask(char *opt)
+uint32_t getStatusMask(char *opt)
 {
 	char idx1 = getIdx(opt);
 	char idx2 = getIdx(opt + 1);
-	unsigned int x = 1;
+	uint32_t x = 1;
 
 	if (idx2>idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
 
@@ -488,9 +469,7 @@ static int hold_cnt = 0;
 static uint32_t menu_key_get(void)
 {
 	static uint32_t c2;
-	static unsigned long delay;
 	static unsigned long repeat;
-	static unsigned char repeat2;
 	uint32_t c1, c;
 
 	c1 = menu_key;
@@ -536,7 +515,6 @@ char* getNet(int spec)
 {
 	int netType = 0;
 	struct ifaddrs *ifaddr, *ifa, *ifae = 0, *ifaw = 0;
-	int family, s;
 	static char host[NI_MAXHOST];
 
 	if (getifaddrs(&ifaddr) == -1)
@@ -718,14 +696,12 @@ void HandleUI(void)
 		return;
 	}
 	
-	struct RigidDiskBlock *rdb;
+	struct RigidDiskBlock *rdb = nullptr;
 
 	static char opensave;
 	char *p;
-	char s[40];
-	unsigned char m, up, down, select, menu, right, left, plus, minus;
-	uint8_t mod;
-	unsigned long len;
+	static char s[256];
+	unsigned char m = 0, up, down, select, menu, right, left, plus, minus;
 	char enable;
 	static int reboot_req = 0;
 	static long helptext_timer;
@@ -734,10 +710,6 @@ void HandleUI(void)
 	static char drive_num = 0;
 	static char flag;
 	static int cr = 0;
-	uint8_t keys[6] = { 0,0,0,0,0,0 };
-	uint16_t keys_ps2[6] = { 0,0,0,0,0,0 };
-
-	char usb_id[64];
 
 	static char	cp_MenuCancel;
 
@@ -842,12 +814,12 @@ void HandleUI(void)
 	// Also set parentstate to the appropriate menustate.
 	if (menumask)
 	{
-		if (down && (menumask >= (1 << (menusub + 1))))	// Any active entries left?
+		if (down && (menumask >= ((uint32_t)1 << (menusub + 1))))	// Any active entries left?
 		{
 			do
 			{
 				menusub++;
-			} while ((menumask & (1 << menusub)) == 0);
+			} while ((menumask & ((uint32_t)1 << menusub)) == 0);
 			menustate = parentstate;
 		}
 
@@ -856,7 +828,7 @@ void HandleUI(void)
 			do
 			{
 				--menusub;
-			} while ((menumask & (1 << menusub)) == 0);
+			} while ((menumask & ((uint32_t)1 << menusub)) == 0);
 			menustate = parentstate;
 		}
 	}
@@ -867,7 +839,13 @@ void HandleUI(void)
     // only updating values in this function as necessary.
     //
     if (user_io_core_type() == CORE_TYPE_SHARPMZ)
-        sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_8BIT_SYSTEM1, MENU_FILE_SELECT1, &parentstate, &menustate, &menusub, &menusub_last, &menumask, SelectedPath, &helptext, helptext_custom, &fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel, fs_pFileExt, menu, select, up, down, left, right, plus, minus);
+        sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_8BIT_SYSTEM1, MENU_FILE_SELECT1,
+			       &parentstate, &menustate, &menusub, &menusub_last,
+			       &menumask, SelectedPath, &helptext, helptext_custom,
+			       &fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel,
+			       fs_pFileExt,
+			       menu, select, up, down,
+			       left, right, plus, minus);
 
 	// Switch to current menu screen
 	switch (menustate)
@@ -1044,7 +1022,7 @@ void HandleUI(void)
 		{
 			adjvisible = 0;
 			entry = 0;
-			int selentry = 0;
+			uint32_t selentry = 0;
 			joy_bcount = 0;
 			menumask = 0;
 			p = user_io_get_core_name();
@@ -1223,11 +1201,9 @@ void HandleUI(void)
 			else
 			{
 				static char ext[13];
-				char fs_present;
 				p = user_io_8bit_get_string(1);
-				fs_present = p && strlen(p);
 
-				int entry = 0;
+				uint32_t entry = 0;
 				int i = 1;
 				while (1)
 				{
@@ -1360,7 +1336,10 @@ void HandleUI(void)
 			}
 
 			OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
-			OsdWrite(m++, " Define joystick buttons   \x16", menusub == 1, 0);
+			sprintf(s, " Define %s buttons      ", is_menu_core() ? "System" : user_io_get_core_name_ex());
+			s[27] = '\x16';
+			s[28] = 0;
+			OsdWrite(m++, s, menusub == 1, 0);
 			OsdWrite(m++, " Button/Key remap for game \x16", menusub == 2, 0);
 
 			m = 0;
@@ -1774,11 +1753,11 @@ void HandleUI(void)
 
 	case MENU_8BIT_ABOUT2:
 		StarsUpdate();
-		OsdDrawLogo(0, 0, 1);
-		OsdDrawLogo(1, 1, 1);
-		OsdDrawLogo(2, 2, 1);
-		OsdDrawLogo(3, 3, 1);
-		OsdDrawLogo(4, 4, 1);
+		OsdDrawLogo(0);
+		OsdDrawLogo(1);
+		OsdDrawLogo(2);
+		OsdDrawLogo(3);
+		OsdDrawLogo(4);
 
 		sprintf(s, "   ARM  s/w ver. %s", version + 5);
 		OsdWrite(10, s, 0, 0, 1);
@@ -1904,7 +1883,7 @@ void HandleUI(void)
 		menumask = tos_get_direct_hdd() ? 0x3f : 0x7f;
 		OsdSetTitle("Storage", 0);
 		// entries for both floppies
-		for (int i = 0; i<2; i++) {
+		for (uint32_t i = 0; i<2; i++) {
 			strcpy(s, " A: ");
 			strcat(s, tos_get_disk_name(i));
 			s[1] = 'A' + i;
@@ -1919,7 +1898,7 @@ void HandleUI(void)
 		strcpy(s, " ACSI0 direct SD: ");
 		strcat(s, tos_get_direct_hdd() ? "on" : "off");
 		OsdWrite(4, s, menusub == 3, 0);
-		for (int i = 0; i<2; i++) {
+		for (uint32_t i = 0; i<2; i++) {
 			strcpy(s, " ACSI0: ");
 			s[5] = '0' + i;
 
@@ -2168,8 +2147,7 @@ void HandleUI(void)
 			case 3: {
 				unsigned long chipset = (tos_system_ctrl() >> 23) + 1;
 				if (chipset == 4) chipset = 0;
-				tos_update_sysctrl(tos_system_ctrl() & ~(TOS_CONTROL_STE | TOS_CONTROL_MSTE) |
-					(chipset << 23));
+				tos_update_sysctrl((tos_system_ctrl() & ~(TOS_CONTROL_STE | TOS_CONTROL_MSTE)) | (chipset << 23));
 				menustate = MENU_MIST_VIDEO1;
 			} break;
 
@@ -2231,10 +2209,10 @@ void HandleUI(void)
 		// use left/right to adjust video position
 		if (left || right) {
 			if ((menusub == 2) || (menusub == 3)) {
-				if (left && (tos_get_video_adjust(menusub - 2) > -100))
+				if (left && ((signed char)(tos_get_video_adjust(menusub - 2)) > -100))
 					tos_set_video_adjust(menusub - 2, -1);
 
-				if (right && (tos_get_video_adjust(menusub - 2) < 100))
+				if (right && ((signed char)(tos_get_video_adjust(menusub - 2)) < 100))
 					tos_set_video_adjust(menusub - 2, +1);
 
 				menustate = MENU_MIST_VIDEO_ADJUST1;
@@ -2294,7 +2272,7 @@ void HandleUI(void)
 					if (df[i].status & DSK_INSERTED) // floppy disk is inserted
 					{
 						char *p;
-						if (p = strrchr(df[i].name, '/'))
+						if ((p = strrchr(df[i].name, '/')))
 						{
 							p++;
 						}
@@ -2322,7 +2300,7 @@ void HandleUI(void)
 				}
 				else
 					strcpy(s, "");
-				OsdWrite(i+1, s, menusub == i, (i>drives) || (i>config.floppy.drives));
+				OsdWrite(i+1, s, menusub == (uint32_t)i, (i>drives) || (i>config.floppy.drives));
 			}
 		}
 		sprintf(s, " Floppy disk turbo : %s", config.floppy.speed ? "on" : "off");
@@ -2455,7 +2433,7 @@ void HandleUI(void)
 		OsdWrite(1, "", 0, 0);
 		OsdWrite(2, " Default", menusub == 0, (menumask & 1) == 0);
 		OsdWrite(3, "", 0, 0);
-		for (int i = 1; i < 10; i++)
+		for (uint i = 1; i < 10; i++)
 		{
 			static char name[64];
 			sprintf(name, " %d ", i);
@@ -2675,7 +2653,7 @@ void HandleUI(void)
 		OsdWrite(2, " Default", menusub == 0, 0);
 		OsdWrite(3, "", 0, 0);
 
-		for (int i = 1; i < 10; i++)
+		for (uint i = 1; i < 10; i++)
 		{
 			static char name[64];
 			sprintf(name, " %d ", i);
@@ -2950,8 +2928,8 @@ void HandleUI(void)
 		OsdWrite(2, "", 0, 0);
 
 		{
-			int n = 3, m = 1, t = 4;
-			for (int i = 0; i < 4; i++)
+			uint n = 3, m = 1, t = 4;
+			for (uint i = 0; i < 4; i++)
 			{
 				strcpy(s, (i & 2) ? " Secondary " : " Primary ");
 				strcat(s, (i & 1) ? "Slave: " : "Master: ");
@@ -3029,7 +3007,7 @@ void HandleUI(void)
 	case MENU_HARDFILE_SELECTED:
 		{
 			int num = (menusub - 2) / 2;
-			int len = strlen(SelectedPath);
+			uint len = strlen(SelectedPath);
 			if (len > sizeof(config.hardfile[num].filename) - 1) len = sizeof(config.hardfile[num].filename) - 1;
 			if(len) memcpy(config.hardfile[num].filename, SelectedPath, len);
 			config.hardfile[num].filename[len] = 0;
@@ -3055,11 +3033,11 @@ void HandleUI(void)
 			OsdWrite(m++, "      !! DANGEROUS !!", 0, 0);
 			OsdWrite(m++, "", 0, 0);
 			OsdWrite(m++, " RDB has illegal CHS values:", 0, 0);
-			sprintf(s,    "   Cylinders: %d", rdb->rdb_Cylinders);
+			sprintf(s,    "   Cylinders: %lu", rdb->rdb_Cylinders);
 			OsdWrite(m++, s, 0, 0);
-			sprintf(s,    "   Heads:     %d", rdb->rdb_Heads);
+			sprintf(s,    "   Heads:     %lu", rdb->rdb_Heads);
 			OsdWrite(m++, s, 0, 0);
-			sprintf(s,    "   Sectors:   %d", rdb->rdb_Sectors);
+			sprintf(s,    "   Sectors:   %lu", rdb->rdb_Sectors);
 			OsdWrite(m++, s, 0, 0);
 			OsdWrite(m++, "", 0, 0);
 			OsdWrite(m++, " Max legal values:", 0, 0);
@@ -3411,7 +3389,9 @@ void HandleUI(void)
 				strcpy(SelectedPath, SelectedRBF);
 				AdjustDirectory(SelectedPath);
 				cp_MenuCancel = fs_MenuCancel;
-				fs_Options = 0;
+				strcpy(fs_pFileExt, "TXT");
+				fs_ExtLen = 3;
+				fs_Options = SCANO_CORES;
 				fs_MenuSelect = MENU_FIRMWARE_CORE_FILE_SELECTED2;
 				fs_MenuCancel = MENU_FIRMWARE_CORE_FILE_CANCELED;
 				menustate = MENU_FILE_SELECT1;
@@ -3550,8 +3530,12 @@ void PrintDirectory(void)
 				}
 			}
 
-			//not full check but should be enough.
-			if (cfg.rbf_hide_datecode && len > 9 && !strncmp(flist_DirItem(k)->d_name + len - 9, "_20", 3)) len -= 9;
+			char *p = 0;
+			if ((fs_Options & SCANO_CORES) && len > 9 && !strncmp(flist_DirItem(k)->d_name + len - 9, "_20", 3))
+			{
+				p = flist_DirItem(k)->d_name + len - 6;
+				len -= 9;
+			}
 
 			if (len > 28)
 			{
@@ -3577,6 +3561,26 @@ void PrintDirectory(void)
 				else
 				{
 					strcpy(&s[22], " <DIR>");
+				}
+			}
+			else if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES))
+			{
+				if (p)
+				{
+					int n = 19;
+					s[n++] = ' ';
+					s[n++] = p[0];
+					s[n++] = p[1];
+					s[n++] = '.';
+					s[n++] = p[2];
+					s[n++] = p[3];
+					s[n++] = '.';
+					s[n++] = p[4];
+					s[n++] = p[5];
+				}
+				else
+				{
+					strcpy(&s[19], " --.--.--");
 				}
 			}
 
@@ -3610,7 +3614,7 @@ void _strncpy(char* pStr1, const char* pStr2, size_t nCount)
 static void set_text(const char *message, unsigned char code)
 {
 	char s[40];
-	char i = 0, l = 1;
+	int i = 0, l = 1;
 
 	OsdWrite(0, "", 0, 0);
 

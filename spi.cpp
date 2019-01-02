@@ -53,6 +53,7 @@ uint16_t spi_w(uint16_t word)
 
 void spi_init(int enable)
 {
+	(void)enable;
 	printf("Init SPI.\n");
 }
 

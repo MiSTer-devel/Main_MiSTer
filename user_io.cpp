@@ -30,7 +30,7 @@ static char core_path[1024];
 uint8_t vol_att = 0;
 unsigned long vol_set_timeout = 0;
 
-fileTYPE sd_image[4] = { 0 };
+fileTYPE sd_image[4] = {};
 static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 
 // mouse and keyboard emulation state
@@ -309,7 +309,7 @@ static void parse_config()
 
 			if (p[0] == 'O' && p[1] == 'X')
 			{
-				unsigned long status = user_io_8bit_set_status(0, 0);
+				uint32_t status = user_io_8bit_set_status(0, 0);
 				printf("found OX option: %s, 0x%08X\n", p, status);
 
 				unsigned long x = getStatus(p+1, status);
@@ -931,6 +931,8 @@ int user_io_file_mount(char *name, unsigned char index, char pre)
 static unsigned char col_attr[1025];
 static int col_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
+	(void)sd;
+
 	static int in_border = 0;
 	static int in_color = 0;
 	static int in_bright = 0;
@@ -1080,6 +1082,8 @@ static const unsigned char defchars[512] = {
 
 static int chr_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
+	(void)sd;
+
 	static int in_entry = 0;
 	static int in_line = 0;
 	static int code = 0;
@@ -1212,7 +1216,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
-	fileTYPE f = { 0 };
+	fileTYPE f = {};
 	static uint8_t buf[4096];
 
 	if (!FileOpen(&f, name, mute)) return 0;
@@ -1293,6 +1297,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 			bytes2send -= chunk;
 		}
+		printf("\n");
 	}
 
 	FileClose(&f);
@@ -1370,9 +1375,9 @@ char *user_io_8bit_get_string(char index)
 	return buffer;
 }
 
-unsigned long user_io_8bit_set_status(unsigned long new_status, unsigned long mask)
+uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask)
 {
-	static unsigned long status = 0;
+	static uint32_t status = 0;
 
 	// if mask is 0 just return the current status 
 	if (mask) {
@@ -2350,7 +2355,7 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 
 	if (useKeys >= (sizeof(combo) / sizeof(combo[0]))) useKeys = 0;
 
-	if ((modifiers & ~2) == combo[useKeys])
+	if ((modifiers & ~2) == combo[(uint)useKeys])
 	{
 		if (modifiers & 2) // with lshift - cold reset
 		{
@@ -2564,7 +2569,7 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 		}
 	}
 
-	printf("not found! use 0\n", name, ext, 0);
+	printf("not found! use 0\n");
 	return 0;
 }
 
@@ -2693,7 +2698,7 @@ static char new_scaler = 0;
 
 static void setScaler()
 {
-	fileTYPE f = { 0 };
+	fileTYPE f = {};
 	static char filename[1024];
 
 	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
@@ -2715,7 +2720,7 @@ static void setScaler()
 		{
 			memset(buf, 0, f.size + 1);
 			int size;
-			if (size = FileReadAdv(&f, buf, f.size))
+			if ((size = FileReadAdv(&f, buf, f.size)))
 			{
 				spi_uio_cmd_cont(UIO_SET_FLTCOEF);
 
@@ -2891,7 +2896,7 @@ void parse_video_mode()
 	int mode = parse_custom_video_mode();
 	if (mode >= 0)
 	{
-		if (mode >= VMODES_NUM) mode = 0;
+		if ((uint)mode >= VMODES_NUM) mode = 0;
 		for (int i = 0; i < 8; i++)
 		{
 			vitems[i + 1] = vmodes[mode].vpar[i];
@@ -2917,6 +2922,7 @@ static int adjust_video_mode(uint32_t vtime)
 	setPLL(Fpix);
 	setVideo();
 	user_io_send_buttons(1);
+	return 1;
 }
 
 typedef struct
@@ -2927,7 +2933,7 @@ typedef struct
 	uint32_t reserved;
 } vmode_adjust_t;
 
-vmode_adjust_t vmodes_adj[64] = { 0 };
+vmode_adjust_t vmodes_adj[64] = {};
 
 static void adjust_vsize(char force)
 {
@@ -2953,9 +2959,7 @@ static void adjust_vsize(char force)
 		uint32_t mode = scr_hsize | (scr_vsize << 12) | ((res & 0xFF) << 24);
 		if (mode)
 		{
-			int applied = 0;
-			int empty = -1;
-			for (int i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
+			for (uint i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
 			{
 				if (vmodes_adj[i].mode == mode)
 				{
@@ -3002,7 +3006,7 @@ static void store_vsize()
 	{
 		int applied = 0;
 		int empty = -1;
-		for (int i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
+		for (int i = 0; (uint)i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
 		{
 			if (vmodes_adj[i].mode == mode)
 			{
