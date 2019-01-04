@@ -35,22 +35,13 @@ const char *version = "$VER:HPS" VDATE;
 
 int main(int argc, char *argv[])
 {
-	/*
-	//placeholder for CPU1 dedicated process
-	if (!fork())
-	{
-		cpu_set_t set;
-		CPU_ZERO(&set);
-		CPU_SET(1, &set);
-		sched_setaffinity(0, sizeof(set), &set);
-
-		while (1)
-		{
-			sleep(2);
-			printf("Tick\n");
-		}
-	}
-	*/
+	// Always pin main worker process to core #1 as core #0 is the
+	// hardware interrupt handler in Linux.  This reduces idle latency
+	// in the main loop by about 6-7x.
+	cpu_set_t set;
+	CPU_ZERO(&set);
+	CPU_SET(1, &set);
+	sched_setaffinity(0, sizeof(set), &set);
 
 	fpga_io_init();
 	fpga_gpo_write(0);
