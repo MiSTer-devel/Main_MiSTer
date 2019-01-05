@@ -2161,6 +2161,7 @@ int input_test(int getchar)
 								uint16_t extra_axis = 2;
 								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) extra_axis = 0;  // AliExpress USB encoder PCB floods axis 2
 								if (input[i].vid == 0x045e && input[i].pid == 0x028e) extra_axis = 3;  // 8BitDo Retro Receiver
+								if (input[i].vid == 0x046d && input[i].pid == 0xc21f) extra_axis = 3;  // Logitech F710
 
 								if(ev.code == base_axis || ev.code == extra_axis || ev.code == 16) // x
 								{
@@ -2182,6 +2183,7 @@ int input_test(int getchar)
 
 								extra_axis = 5;
 								if (input[i].vid == 0x045e && input[i].pid == 0x028e) extra_axis = 4;  // 8BitDo Retro Receiver
+								if (input[i].vid == 0x046d && input[i].pid == 0xc21f) extra_axis = 4;  // Logitech F710
 
 								if (ev.code == base_axis || ev.code == extra_axis || ev.code == 17) // y
 								{
@@ -2201,7 +2203,8 @@ int input_test(int getchar)
 									}
 								}
 
-								if (input[i].vid == 0x045e && input[i].pid == 0x028e)  // 8BitDo Retro Receiver
+								if ((input[i].vid == 0x045e && input[i].pid == 0x028e) ||  // 8BitDo Retro Receiver
+									(input[i].vid == 0x046d && input[i].pid == 0xc21f))    // Logitech F710
 								{
 									ev.type = EV_KEY;
 									if (ev.code == 2)
