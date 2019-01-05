@@ -106,6 +106,9 @@
     <ClCompile Include="lib\libco\libco.c">
       <Filter>Source Files\lib</Filter>
     </ClCompile>
+    <ClCompile Include="scheduler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -218,6 +221,9 @@
     </ClInclude>
     <ClInclude Include="lib\libco\settings.h">
       <Filter>Header Files\lib</Filter>
+    </ClInclude>
+    <ClInclude Include="scheduler.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
