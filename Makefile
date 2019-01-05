@@ -10,7 +10,8 @@ LD      = $(CC)
 STRIP   = $(BASE)-strip
 
 INCLUDE	= -I./
-INCLUDE	= -I./support/minimig
+INCLUDE	+= -I./support/minimig
+INCLUDE	+= -I./3pp/libco
 
 PRJ = MiSTer
 SRC = $(wildcard *.c)
@@ -21,11 +22,12 @@ ARCHIE_SRC	= $(wildcard ./support/archie/*.cpp)
 ST_SRC	= $(wildcard ./support/st/*.cpp)
 X86_SRC	= $(wildcard ./support/x86/*.cpp)
 SNES_SRC	= $(wildcard ./support/snes/*.cpp)
+LIBCO_SRC	= 3pp/libco/arm.c
 
 VPATH	= ./:./support/minimig:./support/sharpmz:./support/archie:./support/st:./support/x86:./support/snes
 
-OBJ	= $(SRC:.c=.o) $(SRC2:.cpp=.o) $(MINIMIG_SRC:.cpp=.o) $(SHARPMZ_SRC:.cpp=.o) $(ARCHIE_SRC:.cpp=.o) $(ST_SRC:.cpp=.o) $(X86_SRC:.cpp=.o) $(SNES_SRC:.cpp=.o)
-DEP	= $(SRC:.c=.d) $(SRC2:.cpp=.d) $(MINIMIG_SRC:.cpp=.d) $(SHARPMZ_SRC:.cpp=.d) $(ARCHIE_SRC:.cpp=.d) $(ST_SRC:.cpp=.d) $(X86_SRC:.cpp=.d)	$(SNES_SRC:.cpp=.d)
+OBJ	= $(SRC:.c=.o) $(SRC2:.cpp=.o) $(MINIMIG_SRC:.cpp=.o) $(SHARPMZ_SRC:.cpp=.o) $(ARCHIE_SRC:.cpp=.o) $(ST_SRC:.cpp=.o) $(X86_SRC:.cpp=.o) $(SNES_SRC:.cpp=.o) $(LIBCO_SRC:.c=.o)
+DEP	= $(SRC:.c=.d) $(SRC2:.cpp=.d) $(MINIMIG_SRC:.cpp=.d) $(SHARPMZ_SRC:.cpp=.d) $(ARCHIE_SRC:.cpp=.d) $(ST_SRC:.cpp=.d) $(X86_SRC:.cpp=.d) $(SNES_SRC:.cpp=.d) $(LIBCO_SRC:.c=.d)
 
 DFLAGS	= $(INCLUDE)
 CFLAGS	= $(DFLAGS) -Wall -Wextra -c -O3 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"

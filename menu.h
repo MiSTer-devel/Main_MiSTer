@@ -1,6 +1,8 @@
 #ifndef MENU_H
 #define MENU_H
 
+#include <inttypes.h>
+
 // UI strings, used by boot messages
 extern const char *config_memory_chip_msg[];
 extern const char *config_memory_slow_msg[];
