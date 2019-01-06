@@ -1190,8 +1190,8 @@ void finish_map_setting(int dismiss)
 	}
 	else
 	{
-		if (dismiss) input[mapping_dev].has_map = 0;
-		else FileSaveConfig(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+		for (int i = 0; i < NUMDEV; i++) input[i].has_map = 0;
+		if (!dismiss) FileSaveConfig(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 		if (is_menu_core()) input[mapping_dev].has_mmap = 0;
 	}
 }
@@ -1545,8 +1545,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			input[dev].map[13] = 0;
 			input[dev].map[14] = 0;
 			input[dev].map[15] = 0;
+			input[dev].has_map++;
 		}
-		input[dev].has_map = 1;
+		input[dev].has_map++;
 	}
 
 	if (!input[dev].has_mmap)
@@ -1715,6 +1716,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								return;
 							}
 						}
+					}
+					else if (input[dev].has_map == 2)
+					{
+						if (ev->value == 1) joy_digital(0, 0, 0, 3, 17);
+						return;
 					}
 					else
 					{

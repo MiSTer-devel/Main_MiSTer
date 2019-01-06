@@ -26,4 +26,6 @@ void substrcpy(char *d, char *s, char idx);
 extern char joy_bnames[12][32];
 extern int  joy_bcount;
 
+void open_joystick_setup();
+
 #endif
