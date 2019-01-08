@@ -609,7 +609,7 @@ int user_io_get_joyswap()
 
 void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 {
-	uint8_t joy = (!joyswap) ? joystick : joystick ? 0 : 1;
+	uint8_t joy = (joystick>1 || !joyswap) ? joystick : joystick^1;
 
 	if (core_type == CORE_TYPE_8BIT)
 	{
@@ -626,13 +626,7 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 
 void user_io_digital_joystick(unsigned char joystick, uint16_t map, int newdir)
 {
-	uint8_t joy = (!joyswap) ? joystick : joystick ? 0 : 1;
-
-	if (is_minimig())
-	{
-		spi_uio_cmd16(UIO_JOYSTICK0 + joy, map);
-		return;
-	}
+	uint8_t joy = (joystick>1 || !joyswap) ? joystick : joystick ^ 1;
 
 	// atari ST handles joystick 0 and 1 through the ikbd emulated by the io controller
 	// but only for joystick 1 and 2
@@ -642,8 +636,9 @@ void user_io_digital_joystick(unsigned char joystick, uint16_t map, int newdir)
 		return;
 	}
 
-	spi_uio_cmd16(UIO_JOYSTICK0 + joy, map);
-	if (joy_transl == 1 && newdir)
+	spi_uio_cmd16((joy < 2) ? (UIO_JOYSTICK0 + joy) : (UIO_JOYSTICK2 + joy - 2), map);
+
+	if (!is_minimig() && joy_transl == 1 && newdir)
 	{
 		user_io_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
 	}

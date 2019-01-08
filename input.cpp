@@ -17,6 +17,7 @@
 #include "errno.h"
 
 #define NUMDEV 10
+#define NUMPLAYERS 6
 
 static int ev2amiga[] =
 {
@@ -970,24 +971,24 @@ uint32_t get_key_mod()
 typedef struct
 {
 	uint16_t vid, pid;
-	char     led;
-	char     last_x, last_y; // last x & y axis bitmasks for each alternative directional control scheme (DPAD, Analog pad etc.)
+	uint8_t  led;
+	uint8_t  last_x, last_y; // last x & y axis bitmasks for each alternative directional control scheme (DPAD, Analog pad etc.)
 
-	char     has_map;
+	uint8_t  num;
+	uint8_t  has_map;
 	uint32_t map[32];
 
-	char     has_mmap;
+	uint8_t  has_mmap;
 	uint32_t mmap[32];
 	uint16_t jkmap[1024];
 
-	char     has_kbdmap;
+	uint8_t  has_kbdmap;
 	uint8_t  kbdmap[256];
 
 	int      accx, accy;
 }  devInput;
 
 static devInput input[NUMDEV] = {};
-static int first_joystick = -1;
 
 int mfd = -1;
 int mwd = -1;
@@ -1281,10 +1282,10 @@ static int keyrah_trans(int key, int press)
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev);
 
 static int kbd_toggle = 0;
-static uint16_t joy[2] = { 0 }, joy_prev[2] = { 0 };
-static uint16_t autofire[2] = { 0 };
-static uint16_t autofirecodes[2][16] = { 0 };
-static int af_delay[2] = { 50, 50 };
+static uint16_t joy[NUMPLAYERS] = {}, joy_prev[NUMPLAYERS] = {};
+static uint16_t autofire[NUMPLAYERS] = {};
+static uint16_t autofirecodes[NUMPLAYERS][16] = {};
+static int af_delay[NUMPLAYERS] = {};
 
 static unsigned char mouse_btn = 0;
 static int mouse_emu = 0;
@@ -1295,88 +1296,92 @@ static int mouse_emu_y = 0;
 
 static uint32_t mouse_timer = 0;
 
-static void joy_digital(int num, uint16_t mask, uint16_t code, char press, int bnum)
+static void joy_digital(int jnum, uint16_t mask, uint16_t code, char press, int bnum)
 {
 	static char str[128];
-	static uint16_t lastcode[2], lastmask[2];
+	static uint16_t lastcode[NUMPLAYERS], lastmask[NUMPLAYERS];
+	int num = jnum - 1;
 
-	if (num < 2)
+	if (num < NUMPLAYERS)
 	{
-		if (bnum != 17 && bnum != 16)
+		if (jnum)
 		{
-			if (press)
-			{
-				lastcode[num] = code;
-				lastmask[num] = mask;
-			}
-			else
-			{
-				lastcode[num] = 0;
-				lastmask[num] = 0;
-			}
-		}
-		else if (!user_io_osd_is_visible())
-		{
-			if (lastcode[num])
+			if (bnum != 17 && bnum != 16)
 			{
 				if (press)
 				{
-					int found = 0;
-					int zero = -1;
-					for (int i = 0; i < 16; i++)
+					lastcode[num] = code;
+					lastmask[num] = mask;
+				}
+				else
+				{
+					lastcode[num] = 0;
+					lastmask[num] = 0;
+				}
+			}
+			else if (!user_io_osd_is_visible())
+			{
+				if (lastcode[num])
+				{
+					if (press)
 					{
-						if (!autofirecodes[num][i]) zero = i;
-						if (autofirecodes[num][i] == lastcode[num])
+						int found = 0;
+						int zero = -1;
+						for (int i = 0; i < 16; i++)
 						{
-							found = 1;
-							autofirecodes[num][i] = 0;
-							break;
+							if (!autofirecodes[num][i]) zero = i;
+							if (autofirecodes[num][i] == lastcode[num])
+							{
+								found = 1;
+								autofirecodes[num][i] = 0;
+								break;
+							}
+						}
+
+						if (!found && zero >= 0) autofirecodes[num][zero] = lastcode[num];
+						autofire[num] = !found ? autofire[num] | lastmask[num] : autofire[num] & ~lastmask[num];
+
+						if (hasAPI1_5())
+						{
+							if (!found) sprintf(str, "Auto fire: %d ms", af_delay[num] * 2);
+							else sprintf(str, "Auto fire: OFF");
+							Info(str);
+						}
+						else InfoMessage((!found) ? "\n\n          Auto fire\n             ON" :
+							"\n\n          Auto fire\n             OFF");
+					}
+					return;
+				}
+				else if (joy[num] & 0xF)
+				{
+					if (press)
+					{
+						if (joy[num] & 9)
+						{
+							af_delay[num] += 25 << ((joy[num] & 1) ? 1 : 0);
+							if (af_delay[num] > 500) af_delay[num] = 500;
+						}
+						else
+						{
+							af_delay[num] -= 25 << ((joy[num] & 2) ? 1 : 0);
+							if (af_delay[num] < 25) af_delay[num] = 25;
+						}
+
+						static char str[256];
+
+						if (hasAPI1_5())
+						{
+							sprintf(str, "Auto fire period: %d ms", af_delay[num] * 2);
+							Info(str);
+						}
+						else
+						{
+							sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num] * 2);
+							InfoMessage(str);
 						}
 					}
-
-					if (!found && zero >= 0) autofirecodes[num][zero] = lastcode[num];
-					autofire[num] = !found ? autofire[num] | lastmask[num] : autofire[num] & ~lastmask[num];
-
-					if (hasAPI1_5())
-					{
-						if (!found) sprintf(str, "Auto fire: %d ms", af_delay[num] * 2);
-						else sprintf(str, "Auto fire: OFF");
-						Info(str);
-					}
-					else InfoMessage((!found) ? "\n\n          Auto fire\n             ON" :
-						"\n\n          Auto fire\n             OFF");
+					return;
 				}
-				return;
-			}
-			else if(joy[num] &0xF)
-			{
-				if (press)
-				{
-					if (joy[num] & 9)
-					{
-						af_delay[num] += 25 << ((joy[num] & 1) ? 1 : 0);
-						if (af_delay[num] > 500) af_delay[num] = 500;
-					}
-					else
-					{
-						af_delay[num] -= 25 << ((joy[num] & 2) ? 1 : 0);
-						if (af_delay[num] < 25) af_delay[num] = 25;
-					}
-
-					static char str[256];
-
-					if (hasAPI1_5())
-					{
-						sprintf(str, "Auto fire period: %d ms", af_delay[num] * 2);
-						Info(str);
-					}
-					else
-					{
-						sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num] * 2);
-						InfoMessage(str);
-					}
-				}
-				return;
 			}
 		}
 
@@ -1447,7 +1452,7 @@ static void joy_digital(int num, uint16_t mask, uint16_t code, char press, int b
 
 			input_cb(&ev, 0, 0);
 		}
-		else
+		else if(jnum)
 		{
 			if (press) joy[num] |= mask;
 			else joy[num] &= ~mask;
@@ -1465,10 +1470,11 @@ static void joy_digital(int num, uint16_t mask, uint16_t code, char press, int b
 
 static void joy_analog(int num, int axis, int offset)
 {
-	static int pos[2][2] = { 0 };
+	static int pos[NUMPLAYERS][2] = {};
 
-	if (num < 2)
+	if (num > 0 && num < NUMPLAYERS+1)
 	{
+		num--;
 		pos[num][axis] = offset;
 		user_io_analog_joystick(num, (char)(pos[num][0]), (char)(pos[num][1]));
 	}
@@ -1652,7 +1658,24 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			//joystick buttons, digital directions
 			if (ev->code >= 256)
 			{
-				if (first_joystick < 0) first_joystick = dev;
+				if (!input[dev].num)
+				{
+					for (uint8_t num = 1; num < NUMDEV + 1; num++)
+					{
+						int found = 0;
+						for (int i = 0; i < NUMDEV; i++)
+						{
+							found = (input[i].num == num);
+							if (found) break;
+						}
+
+						if (!found)
+						{
+							input[dev].num = num;
+							break;
+						}
+					}
+				}
 
 				if (user_io_osd_is_visible())
 				{
@@ -1712,7 +1735,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == input[dev].map[i])
 							{
-								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, 0, ev->value, i);
+								if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, 0, ev->value, i);
 								return;
 							}
 						}
@@ -1729,7 +1752,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							if (ev->code == input[dev].map[i])
 							{
 								if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
-								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << i, origcode, ev->value, i);
+								if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, origcode, ev->value, i);
 								return;
 							}
 						}
@@ -1739,7 +1762,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							if (ev->code == input[dev].mmap[i])
 							{
 								if (origcode == ev->code) origcode = 0; // prevent autofire for original dpad
-								if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 1 << (i - 8), origcode, ev->value, i - 8);
+								if (ev->value <= 1) joy_digital(input[dev].num, 1 << (i - 8), origcode, ev->value, i - 8);
 								return;
 							}
 						}
@@ -1747,7 +1770,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 					if (ev->code == input[dev].mmap[17])
 					{
-						if (ev->value <= 1) joy_digital((first_joystick == dev) ? 0 : 1, 0, 0, ev->value, 17);
+						if (ev->value <= 1) joy_digital(input[dev].num, 0, 0, ev->value, 17);
 						return;
 					}
 
@@ -1811,7 +1834,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							if (ev->code == input[dev].map[i])
 							{
 								if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
-								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 1 << i, origcode, ev->value, i);
+								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 1 : 2, 1 << i, origcode, ev->value, i);
 								return;
 							}
 						}
@@ -1819,7 +1842,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 					if (ev->code == input[dev].mmap[16])
 					{
-						if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 0 : 1, 0, 0, ev->value, 16);
+						if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 1 : 2, 0, 0, ev->value, 16);
 						return;
 					}
 				}
@@ -1920,7 +1943,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					else
 					{
 						// skip if first joystick is not defined.
-						if (first_joystick < 0) break;
+						if (!input[dev].num) break;
 
 						// TODO:
 						// 1) add analog axis mapping
@@ -1931,7 +1954,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							int offset = 0;
 							if (value < 127 || value>129) offset = value - 128;
 							//printf("analog_x = %d\n", offset);
-							joy_analog((first_joystick == dev) ? 0 : 1, 0, offset);
+							joy_analog(input[dev].num, 0, offset);
 							return;
 						}
 
@@ -1940,7 +1963,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							int offset = 0;
 							if (value < 127 || value>129) offset = value - 128;
 							//printf("analog_y = %d\n", offset);
-							joy_analog((first_joystick == dev) ? 0 : 1, 1, offset);
+							joy_analog(input[dev].num, 1, offset);
 							return;
 						}
 					}
@@ -2101,12 +2124,12 @@ int input_test(int getchar)
 								{
 									//keyboard, buttons
 								case EV_KEY:
-									printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d\n", ev.code, ev.code, ev.value);
+									printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
 									break;
 
 									//mouse
 								case EV_REL:
-									printf("Input event: type=EV_REL, Axis=%d, Offset:=%d\n", ev.code, ev.value);
+									printf("Input event: type=EV_REL, Axis=%d, Offset:=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
 									break;
 
 								case EV_SYN:
@@ -2128,7 +2151,7 @@ int input_test(int getchar)
 									if (input[i].vid == 0x0079 && input[i].pid == 0x0006)
 									{ if (ev.code == 2) break; }
 
-									printf("Input event: type=EV_ABS, Axis=%d, Offset:=%d.", ev.code, ev.value);
+									printf("Input event: type=EV_ABS, Axis=%d, Offset:=%d, jnum=%d, ID:%04x:%04x.", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
 									printf(" ABS_INFO: min = %d max = %d", absinfo.minimum, absinfo.maximum);
 									if (absinfo.fuzz) printf(" fuzz = %d", absinfo.fuzz);
 									if (absinfo.resolution) printf(" res = %d", absinfo.resolution);
@@ -2136,7 +2159,7 @@ int input_test(int getchar)
 									break;
 
 								default:
-									printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x)\n", ev.type, ev.code, ev.code, ev.value, ev.value);
+									printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x), jnum=%d, ID:%04x:%04x\n", ev.type, ev.code, ev.code, ev.value, ev.value, input[i].num, input[i].vid, input[i].pid);
 								}
 							}
 
@@ -2165,9 +2188,9 @@ int input_test(int getchar)
 
 								uint16_t base_axis = !user_io_get_joy_transl() ? 0 : ~ev.code;
 								uint16_t extra_axis = 2;
-								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) extra_axis = 0;  // AliExpress USB encoder PCB floods axis 2
 								if (input[i].vid == 0x045e && input[i].pid == 0x028e) extra_axis = 3;  // 8BitDo Retro Receiver
 								if (input[i].vid == 0x046d && input[i].pid == 0xc21f) extra_axis = 3;  // Logitech F710
+								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) extra_axis = 0;  // AliExpress USB encoder PCB floods axis 2
 
 								if(ev.code == base_axis || ev.code == extra_axis || ev.code == 16) // x
 								{
@@ -2185,11 +2208,11 @@ int input_test(int getchar)
 								}
 
 								base_axis = !user_io_get_joy_transl() ? 1 : ~ev.code;
-								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) base_axis = 3; // AliExpress USB encoder PCB
 
 								extra_axis = 5;
 								if (input[i].vid == 0x045e && input[i].pid == 0x028e) extra_axis = 4;  // 8BitDo Retro Receiver
 								if (input[i].vid == 0x046d && input[i].pid == 0xc21f) extra_axis = 4;  // Logitech F710
+								if (input[i].vid == 0x0079 && input[i].pid == 0x0006) extra_axis = 3;  // AliExpress USB encoder PCB
 
 								if (ev.code == base_axis || ev.code == extra_axis || ev.code == 17) // y
 								{
@@ -2274,8 +2297,8 @@ int input_test(int getchar)
 
 int input_poll(int getchar)
 {
-	static int af[2] = { 0 };
-	static uint32_t time[2] = { 0 };
+	static int af[NUMPLAYERS] = {};
+	static uint32_t time[NUMPLAYERS] = {};
 
 	int ret = input_test(getchar);
 	if (getchar) return ret;
@@ -2307,8 +2330,10 @@ int input_poll(int getchar)
 
 	if (!mouse_emu_x && !mouse_emu_y) mouse_timer = 0;
 
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < NUMPLAYERS; i++)
 	{
+		if (!af_delay[i]) af_delay[i] = 50;
+
 		if (!time[i]) time[i] = GetTimer(af_delay[i]);
 		int send = 0;
 
