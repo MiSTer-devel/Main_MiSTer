@@ -1624,11 +1624,11 @@ void HandleUI(void)
 	case MENU_JOYDIGMAP:
 		helptext = 0;
 		menumask = 1;
-		OsdSetTitle("Joystick", 0);
+		OsdSetTitle("Define buttons", 0);
 		menustate = MENU_JOYDIGMAP1;
 		parentstate = MENU_JOYDIGMAP;
 		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
+		OsdWrite(OsdGetSize() - 1, "         ESC \x16 Cancel", menusub == 0, 0);
 		break;
 
 	case MENU_JOYDIGMAP1:
@@ -1660,7 +1660,7 @@ void HandleUI(void)
 			OsdWrite(3, s, 0, 0);
 			if (get_map_button())
 			{
-				if (get_map_type()) OsdWrite(OsdGetSize() - 1, "    finish (SPACE - skip)", menusub == 0, 0);
+				if (get_map_type()) OsdWrite(OsdGetSize() - 1, " Enter \x16 Finish, Space \x16 Skip", menusub == 0, 0);
 				else OsdWrite(OsdGetSize() - 1, "", 0, 0);
 
 				sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
@@ -3448,6 +3448,16 @@ void HandleUI(void)
 			OsdWrite(18, "", 1, 0);
 		}
 	}
+}
+
+void open_joystick_setup()
+{
+	OsdSetSize(16);
+	menusub = 0;
+	OsdClear();
+	OsdEnable(DISABLE_KEYBOARD);
+	start_map_setting(joy_bcount ? joy_bcount + 4 : 8);
+	menustate = MENU_JOYDIGMAP;
 }
 
 void ScrollLongName(void)

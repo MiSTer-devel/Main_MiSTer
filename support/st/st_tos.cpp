@@ -36,10 +36,10 @@ static struct {
 	fileTYPE file;
 	unsigned char sides;
 	unsigned char spt;
-} fdd_image[2] = { 0 };
+} fdd_image[2] = {};
 
 // one harddisk
-fileTYPE hdd_image[2] = { 0 };
+fileTYPE hdd_image[2] = {};
 unsigned long hdd_direct = 0;
 
 static unsigned char dma_buffer[512];
@@ -66,7 +66,7 @@ static const char *acsi_cmd_name(int cmd) {
 	return cmdname[cmd];
 }
 
-void tos_set_video_adjust(char axis, char value) {
+void tos_set_video_adjust(int axis, char value) {
 	config.video_adjust[axis] += value;
 
 	EnableFpga();
@@ -76,7 +76,7 @@ void tos_set_video_adjust(char axis, char value) {
 	DisableFpga();
 }
 
-char tos_get_video_adjust(char axis) {
+char tos_get_video_adjust(int axis) {
 	return config.video_adjust[axis];
 }
 
@@ -105,6 +105,7 @@ static void mist_set_control(unsigned long ctrl) {
 	DisableFpga();
 }
 
+/*
 static void mist_memory_read(char *data, unsigned long words) {
 	EnableFpga();
 	spi8(MIST_READ_MEMORY);
@@ -117,6 +118,7 @@ static void mist_memory_read(char *data, unsigned long words) {
 
 	DisableFpga();
 }
+*/
 
 static void mist_memory_write(unsigned char *data, unsigned long words) {
 	EnableFpga();
@@ -162,6 +164,7 @@ void mist_memory_set(char data, unsigned long words) {
 
 // enable direct sd card access on acsi0
 void tos_set_direct_hdd(char on) {
+	(void)on;
 	config.sd_direct = 0;
 
 	tos_debugf("ACSI: disable direct sd access");
@@ -208,12 +211,12 @@ static void handle_acsi(unsigned char *buffer) {
 	if (length == 0) length = 256;
 
 	if (user_io_dip_switch1()) {
-		tos_debugf("ACSI: target %d.%d, \"%s\" (%02x)", target, device, acsi_cmd_name(cmd), cmd);
+		tos_debugf("ACSI: target %u.%u, \"%s\" (%02x)", target, device, acsi_cmd_name(cmd), cmd);
 		tos_debugf("ACSI: lba %lu (%lx), length %u", lba, lba, length);
-		tos_debugf("DMA: scnt %u, addr %p", scnt, dma_address);
+		tos_debugf("DMA: scnt %u, addr %X", scnt, dma_address);
 
 		if (buffer[20] == 0xa5) {
-			tos_debugf("DMA: fifo %d/%d %x %s",
+			tos_debugf("DMA: fifo %u/%u %x %s",
 				(buffer[21] >> 4) & 0x0f, buffer[21] & 0x0f,
 				buffer[22], (buffer[2] & 1) ? "OUT" : "IN");
 			tos_debugf("DMA stat=%x, mode=%x, fdc_irq=%d, acsi_irq=%d",
@@ -308,7 +311,7 @@ static void handle_acsi(unsigned char *buffer) {
 					asc[target] = 0x00;
 				}
 				else {
-					tos_debugf("ACSI: read (%d+%d) exceeds device limits (%d)",
+					tos_debugf("ACSI: read (%lu+%u) exceeds device limits (%lu)",
 						lba, length, blocks);
 					dma_ack(0x02);
 					asc[target] = 0x21;
@@ -348,7 +351,7 @@ static void handle_acsi(unsigned char *buffer) {
 					asc[target] = 0x00;
 				}
 				else {
-					tos_debugf("ACSI: write (%d+%d) exceeds device limits (%d)",
+					tos_debugf("ACSI: write (%lu+%u) exceeds device limits (%lu)",
 						lba, length, blocks);
 					dma_ack(0x02);
 					asc[target] = 0x21;
@@ -380,7 +383,7 @@ static void handle_acsi(unsigned char *buffer) {
 
 		case 0x1a: // mode sense
 			if (device == 0) {
-				tos_debugf("ACSI: mode sense, blocks = %u", blocks);
+				tos_debugf("ACSI: mode sense, blocks = %lu", blocks);
 				bzero(dma_buffer, 512);
 				dma_buffer[3] = 8;            // size of extent descriptor list
 				dma_buffer[5] = blocks >> 16;
@@ -430,7 +433,7 @@ static void handle_fdc(unsigned char *buffer) {
 	unsigned char fdc_cmd = buffer[4];
 	unsigned char fdc_track = buffer[5];
 	unsigned char fdc_sector = buffer[6];
-	unsigned char fdc_data = buffer[7];
+	//unsigned char fdc_data = buffer[7];
 	unsigned char drv_sel = 3 - ((buffer[8] >> 2) & 3);
 	unsigned char drv_side = 1 - ((buffer[8] >> 1) & 1);
 
@@ -450,7 +453,7 @@ static void handle_fdc(unsigned char *buffer) {
 			offset += fdc_sector - 1;
 
 			if (user_io_dip_switch1()) {
-				tos_debugf("FDC %s req %d sec (%c, SD:%d, T:%d, S:%d = %d) -> %p",
+				tos_debugf("FDC %s req %d sec (%c, SD:%d, T:%d, S:%d = %d) -> %X",
 					(fdc_cmd & 0x10) ? "multi" : "single", scnt,
 					'A' + drv_sel - 1, drv_side, fdc_track, fdc_sector, offset,
 					dma_address);
@@ -534,6 +537,7 @@ static void mist_get_dmastate() {
 #define PLANES   4
 
 static void tos_write(const char *str);
+/*
 static void tos_color_test() {
 	unsigned short buffer[COLORS][PLANES];
 
@@ -569,6 +573,7 @@ static void tos_color_test() {
 	//  for(;;);
 #endif
 }
+*/
 
 static void tos_write(const char *str) {
 	static int y = 0;
@@ -614,7 +619,7 @@ static void tos_clr() {
 extern unsigned char charfont[256][8];
 
 static void tos_font_load() {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	if (FileOpen(&file, "SYSTEM.FNT")) {
 		if (file.size == 4096) {
 			int i;
@@ -648,7 +653,7 @@ static void tos_font_load() {
 
 void tos_load_cartridge(const char *name)
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 
 	if (name)
 		strncpy(config.cart_img, name, 11);
@@ -658,7 +663,7 @@ void tos_load_cartridge(const char *name)
 		int i;
 		unsigned char buffer[512];
 
-		tos_debugf("%s:\n  size = %d", config.cart_img, file.size);
+		tos_debugf("%s:\n  size = %llu", config.cart_img, file.size);
 
 		int blocks = file.size / 512;
 		tos_debugf("  blocks = %d", blocks);
@@ -697,7 +702,7 @@ char tos_cartridge_is_inserted() {
 
 void tos_upload(const char *name)
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 
 	// set video offset in fpga
 	tos_set_video_adjust(0, 0);
@@ -727,7 +732,7 @@ void tos_upload(const char *name)
 		unsigned long time;
 		unsigned long tos_base = TOS_BASE_ADDRESS_192k;
 
-		tos_debugf("TOS.IMG:\n  size = %d", file.size);
+		tos_debugf("TOS.IMG:\n  size = %llu", file.size);
 
 		if (file.size >= 256 * 1024)
 			tos_base = TOS_BASE_ADDRESS_256k;
@@ -737,7 +742,7 @@ void tos_upload(const char *name)
 		int blocks = file.size / 512;
 		tos_debugf("  blocks = %d", blocks);
 
-		tos_debugf("  address = $%08x", tos_base);
+		tos_debugf("  address = $%08lx", tos_base);
 
 		// clear first 16k
 		mist_memory_set_address(0, 16384 / 512, 0);
@@ -828,7 +833,7 @@ void tos_upload(const char *name)
 #endif
 
 		time = GetTimer(0) - time;
-		tos_debugf("TOS.IMG uploaded in %lu ms (%d kB/s / %d kBit/s)",
+		tos_debugf("TOS.IMG uploaded in %lu ms (%llu kB/s / %llu kBit/s)",
 			time >> 20, file.size / (time >> 20), 8 * file.size / (time >> 20));
 
 	}
@@ -851,9 +856,9 @@ void tos_upload(const char *name)
 		// try to open both floppies
 		int i;
 		for (i = 0; i<2; i++) {
-			char msg[] = "Found floppy disk image for drive X: ";
+			//char msg[] = "Found floppy disk image for drive X: ";
 			char name[] = "DISK_A.ST";
-			msg[34] = name[5] = 'A' + i;
+			//msg[34] = name[5] = 'A' + i;
 
 			tos_insert_disk(i, name);
 		}
@@ -889,6 +894,7 @@ void tos_upload(const char *name)
 	mist_set_control(config.system_ctrl);
 }
 
+/*
 static unsigned long get_long(char *buffer, int offset) {
 	unsigned long retval = 0;
 	int i;
@@ -898,6 +904,7 @@ static unsigned long get_long(char *buffer, int offset) {
 
 	return retval;
 }
+*/
 
 void tos_poll() {
 	// 1 == button not pressed, 2 = 1 sec exceeded, else timer running
@@ -950,9 +957,8 @@ static void nice_name(char *dest, char *src) {
 
 static char buffer[17];  // local buffer to assemble file name (8+3+2)
 
-char *tos_get_disk_name(char index) {
+char *tos_get_disk_name(int index) {
 	fileTYPE file;
-	char *c;
 
 	if (index <= 1)
 		file = fdd_image[index].file;
@@ -983,14 +989,14 @@ char *tos_get_cartridge_name() {
 	return buffer;
 }
 
-char tos_disk_is_inserted(char index) {
+char tos_disk_is_inserted(int index) {
 	if (index <= 1)
 		return (fdd_image[index].file.size != 0);
 
 	return hdd_image[index - 2].size != 0;
 }
 
-void tos_select_hdd_image(char i, const char *name)
+void tos_select_hdd_image(int i, const char *name)
 {
 	tos_debugf("Select ACSI%c image %s", '0' + i, name);
 
@@ -1015,7 +1021,7 @@ void tos_select_hdd_image(char i, const char *name)
 	mist_set_control(config.system_ctrl);
 }
 
-void tos_insert_disk(char i, const char *name)
+void tos_insert_disk(int i, const char *name)
 {
 	if (i > 1)
 	{
@@ -1136,7 +1142,7 @@ void tos_config_init(void)
 	int size = FileLoadConfig(CONFIG_FILENAME, 0, 0);
 	if (size>0)
 	{
-		tos_debugf("Configuration file size: %lu (should be %lu)", size, sizeof(tos_config_t));
+		tos_debugf("Configuration file size: %u (should be %u)", size, sizeof(tos_config_t));
 		if (size == sizeof(tos_config_t))
 		{
 			FileLoadConfig(CONFIG_FILENAME, &config, size);

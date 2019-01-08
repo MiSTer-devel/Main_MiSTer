@@ -72,6 +72,7 @@ static uint8_t dma_sdio(int status)
 	return res;
 }
 
+/*
 static uint32_t dma_get(uint32_t address)
 {
 	EnableFpga();
@@ -81,6 +82,7 @@ static uint32_t dma_get(uint32_t address)
 	DisableFpga();
 	return res;
 }
+*/
 
 static void dma_set(uint32_t address, uint32_t data)
 {
@@ -111,7 +113,7 @@ static void dma_rcvbuf(uint32_t address, uint32_t length, uint32_t *data)
 
 static int load_bios(const char* name, uint8_t index)
 {
-	fileTYPE f = { 0 };
+	fileTYPE f = {};
 	static uint32_t buf[128];
 
 	if (!FileOpen(&f, name)) return 0;
@@ -155,10 +157,10 @@ static bool floppy_is_2_88m= false;
 
 #define CMOS_FDD_TYPE ((floppy_is_2_88m) ? 0x50 : (floppy_is_1_44m || floppy_is_1_68m) ? 0x40 : (floppy_is_720k) ? 0x30 : (floppy_is_1_2m) ? 0x20 : 0x10)
 
-static fileTYPE fdd_image0 = { 0 };
-static fileTYPE fdd_image1 = { 0 };
-static fileTYPE hdd_image0 = { 0 };
-static fileTYPE hdd_image1 = { 0 };
+static fileTYPE fdd_image0 = {};
+static fileTYPE fdd_image1 = {};
+static fileTYPE hdd_image0 = {};
+static fileTYPE hdd_image1 = {};
 static bool boot_from_floppy = 1;
 
 #define IMG_TYPE_FDD0 0x0800
@@ -210,8 +212,8 @@ static int img_write(uint32_t type, uint32_t lba, void *buf, uint32_t len)
 #define IOWR(base, reg, value) dma_set(base+(reg<<2), value)
 
 static uint32_t cmos[128];
-
-void cmos_set(int addr, uint8_t val)
+/*
+static void cmos_set(uint addr, uint8_t val)
 {
 	if (addr >= sizeof(cmos)) return;
 
@@ -229,6 +231,7 @@ void cmos_set(int addr, uint8_t val)
 	IOWR(RTC_BASE, 0x2E, cmos[0x2E]);
 	IOWR(RTC_BASE, 0x2F, cmos[0x2F]);
 }
+*/
 
 static int fdd_set(char* filename)
 {
@@ -661,7 +664,7 @@ struct sd_param_t
 	uint32_t bl_cnt;
 };
 
-static struct sd_param_t sd_params = { 0 };
+static struct sd_param_t sd_params = {};
 
 void x86_poll()
 {

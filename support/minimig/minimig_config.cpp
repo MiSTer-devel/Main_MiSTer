@@ -35,7 +35,7 @@ typedef struct
 	unsigned char autofire;
 } configTYPE_old;
 
-configTYPE config = { 0 };
+configTYPE config = { };
 unsigned char romkey[3072];
 
 static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, int size)
@@ -61,7 +61,7 @@ static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int addr
 			for (int j = 0; j<512; j++)
 			{
 				buf[j] ^= key[keyidx++];
-				if (keyidx >= keysize) keyidx -= keysize;
+				if ((int)keyidx >= keysize) keyidx -= keysize;
 			}
 		}
 		EnableOsd();
@@ -86,7 +86,7 @@ static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int addr
 
 static char UploadKickstart(char *name)
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	int keysize = 0;
 
 	BootPrint("Checking for Amiga Forever key file:");
@@ -168,7 +168,7 @@ static char UploadKickstart(char *name)
 
 static char UploadActionReplay()
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	if(FileOpen(&file, "Amiga/HRTMON.ROM") || FileOpen(&file, "HRTMON.ROM"))
 	{
 		int adr, data;
@@ -378,7 +378,6 @@ unsigned char LoadConfiguration(int num)
 	static const char config_id[] = "MNMGCFG0";
 	char updatekickstart = 0;
 	char result = 0;
-	unsigned char key, i;
 
 	const char *filename = GetConfigurationName(num);
 
@@ -387,7 +386,7 @@ unsigned char LoadConfiguration(int num)
 	if(filename && (size = FileLoadConfig(filename, 0, 0))>0)
 	{
 		BootPrint("Opened configuration file\n");
-		printf("Configuration file size: %s, %lu\n", filename, size);
+		printf("Configuration file size: %s, %d\n", filename, size);
 		if (size == sizeof(config))
 		{
 			static configTYPE tmpconf;
@@ -439,7 +438,7 @@ unsigned char LoadConfiguration(int num)
 			}
 			else printf("Cannot load configuration file\n");
 		}
-		else printf("Wrong configuration file size: %lu (expected: %lu)\n", size, sizeof(config));
+		else printf("Wrong configuration file size: %d (expected: %u)\n", size, sizeof(config));
 	}
 	if (!result) {
 		BootPrint("Can not open configuration file!\n");
@@ -502,7 +501,7 @@ void MinimigReset()
 
 void SetKickstart(char *name)
 {
-	int len = strlen(name);
+	uint len = strlen(name);
 	if (len > (sizeof(config.kickstart) - 1)) len = sizeof(config.kickstart) - 1;
 	memcpy(config.kickstart, name, len);
 	config.kickstart[len] = 0;

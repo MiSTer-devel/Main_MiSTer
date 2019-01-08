@@ -1,6 +1,8 @@
 #ifndef MENU_H
 #define MENU_H
 
+#include <inttypes.h>
+
 // UI strings, used by boot messages
 extern const char *config_memory_chip_msg[];
 extern const char *config_memory_slow_msg[];
@@ -23,5 +25,7 @@ void substrcpy(char *d, char *s, char idx);
 
 extern char joy_bnames[12][32];
 extern int  joy_bcount;
+
+void open_joystick_setup();
 
 #endif

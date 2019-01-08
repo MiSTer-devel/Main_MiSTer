@@ -609,7 +609,7 @@ int user_io_get_joyswap()
 
 void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 {
-	uint8_t joy = (!joyswap) ? joystick : joystick ? 0 : 1;
+	uint8_t joy = (joystick>1 || !joyswap) ? joystick : joystick^1;
 
 	if (core_type == CORE_TYPE_8BIT)
 	{
@@ -626,13 +626,7 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 
 void user_io_digital_joystick(unsigned char joystick, uint16_t map, int newdir)
 {
-	uint8_t joy = (!joyswap) ? joystick : joystick ? 0 : 1;
-
-	if (is_minimig())
-	{
-		spi_uio_cmd16(UIO_JOYSTICK0 + joy, map);
-		return;
-	}
+	uint8_t joy = (joystick>1 || !joyswap) ? joystick : joystick ^ 1;
 
 	// atari ST handles joystick 0 and 1 through the ikbd emulated by the io controller
 	// but only for joystick 1 and 2
@@ -642,8 +636,9 @@ void user_io_digital_joystick(unsigned char joystick, uint16_t map, int newdir)
 		return;
 	}
 
-	spi_uio_cmd16(UIO_JOYSTICK0 + joy, map);
-	if (joy_transl == 1 && newdir)
+	spi_uio_cmd16((joy < 2) ? (UIO_JOYSTICK0 + joy) : (UIO_JOYSTICK2 + joy - 2), map);
+
+	if (!is_minimig() && joy_transl == 1 && newdir)
 	{
 		user_io_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
 	}
@@ -2473,8 +2468,8 @@ void user_io_kbd(uint16_t key, int press)
 			else
 			{
 				if (is_menu_core()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
-
-				if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI)))  && (((key == KEY_F12) && ((!is_x86_core() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
+				if (!osd_is_visible && !is_menu_core() && key == KEY_MENU && press == 3) open_joystick_setup();
+				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86_core() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
 				else if (osd_is_visible)
 				{
 					if (press == 1) menu_key_set(key);

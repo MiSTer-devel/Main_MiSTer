@@ -35,7 +35,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 unsigned char drives = 0; // number of active drives reported by FPGA (may change only during reset)
 adfTYPE *pdfx;            // drive select pointer
-adfTYPE df[4] = { 0 };    // drive information structure
+adfTYPE df[4] = {};    // drive information structure
 
 static uint8_t sector_buffer[512];
 
@@ -71,13 +71,13 @@ void SendSector(unsigned char *pData, unsigned char sector, unsigned char track,
 	// odd bits of header
 	x = 0x55;
 	checksum[0] = x;
-	y = track >> 1 & 0x55;
+	y = (track >> 1) & 0x55;
 	checksum[1] = y;
 	spi_w(B2W(x,y));
 
-	x = sector >> 1 & 0x55;
+	x = (sector >> 1) & 0x55;
 	checksum[2] = x;
-	y = 11 - sector >> 1 & 0x55;
+	y = ((11 - sector) >> 1) & 0x55;
 	checksum[3] = y;
 	spi_w(B2W(x, y));
 
@@ -90,7 +90,7 @@ void SendSector(unsigned char *pData, unsigned char sector, unsigned char track,
 
 	x = sector & 0x55;
 	checksum[2] ^= x;
-	y = 11 - sector & 0x55;
+	y = (11 - sector) & 0x55;
 	checksum[3] ^= y;
 	spi_w(B2W(x, y));
 
@@ -135,8 +135,8 @@ void SendSector(unsigned char *pData, unsigned char sector, unsigned char track,
 	p = pData;
 	while (i--)
 	{
-		x = *p++ >> 1 | 0xAA;
-		y = *p++ >> 1 | 0xAA;
+		x = (*p++ >> 1) | 0xAA;
+		y = (*p++ >> 1) | 0xAA;
 		spi_w(B2W(x, y));
 	}
 
@@ -166,7 +166,7 @@ void ReadTrack(adfTYPE *drive)
 	unsigned char status;
 	unsigned char track;
 	unsigned short dsksync;
-	unsigned short dsklen;
+	//unsigned short dsklen;
 	uint16_t tmp;
 	//unsigned short n;
 
@@ -201,7 +201,7 @@ void ReadTrack(adfTYPE *drive)
 	status = (uint8_t)(tmp>>8); // read request signal
 	track = (uint8_t)tmp; // track number (cylinder & head)
 	dsksync = spi_w(0); // disk sync
-	dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
+	//dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
 	DisableFpga();
 
 	if (track >= drive->tracks)
@@ -218,7 +218,7 @@ void ReadTrack(adfTYPE *drive)
 		status = (uint8_t)(tmp >> 8); // read request signal
 		track = (uint8_t)tmp; // track number (cylinder & head)
 		dsksync = spi_w(0); // disk sync
-		dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
+		//dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
 
 		if (track >= drive->tracks)
 			track = drive->tracks - 1;
@@ -281,7 +281,7 @@ void ReadTrack(adfTYPE *drive)
 unsigned char FindSync(adfTYPE *drive)
 // reads data from fifo till it finds sync word or fifo is empty and dma inactive (so no more data is expected)
 {
-	unsigned char  c1, c2, c3, c4;
+	unsigned char  c1, c2;
 	unsigned short n;
 	uint16_t tmp;
 
@@ -641,7 +641,6 @@ void InsertFloppy(adfTYPE *drive, char* path)
 		return;
 	}
 
-	unsigned char i, j;
 	unsigned long tracks;
 
 	// calculate number of tracks in the ADF image file

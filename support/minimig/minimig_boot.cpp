@@ -169,7 +169,7 @@ static void BootClearScreen(int adr, int size)
 
 static void BootUploadLogo()
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	int x, y;
 	int i = 0;
 	int adr;
@@ -228,7 +228,7 @@ static void BootUploadLogo()
 
 static void BootUploadBall()
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	int x;
 	int i = 0;
 	int adr;
@@ -258,7 +258,7 @@ static void BootUploadBall()
 
 static void BootUploadCopper()
 {
-	fileTYPE file = { 0 };
+	fileTYPE file = {};
 	int x;
 	int i = 0;
 	int adr;

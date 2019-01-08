@@ -22,8 +22,11 @@
 #include "user_io.h"
 #include "cfg.h"
 #include "input.h"
+#include "scheduler.h"
 
 typedef std::vector<dirent> DirentVector;
+
+static const size_t YieldIterations = 128;
 
 DirentVector DirItem;
 int iSelectedEntry = 0;       // selected entry index
@@ -520,6 +523,11 @@ struct DirentComp
 {
 	bool operator()(const dirent& de1, const dirent& de2)
 	{
+		if (++iterations % YieldIterations == 0)
+		{
+			scheduler_yield();
+		}
+
 		if ((de1.d_type == DT_DIR) && !strcmp(de1.d_name, "..")) return true;
 		if ((de2.d_type == DT_DIR) && !strcmp(de2.d_name, "..")) return false;
 
@@ -545,6 +553,8 @@ struct DirentComp
 
 		return strcasecmp(de1.d_name, de2.d_name) < 0;
 	}
+
+	size_t iterations = 0;
 };
 
 static int get_stmode(const char *path)
@@ -635,8 +645,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 
 		struct dirent *de;
-		while((de = readdir(d)))
+		for (size_t i = 0; (de = readdir(d)); i++)
 		{
+			if (0 < i && i % YieldIterations == 0)
+			{
+				scheduler_yield();
+			}
+
 			if (de->d_type == DT_DIR)
 			{
 				if (!strcmp(de->d_name, ".")) continue;

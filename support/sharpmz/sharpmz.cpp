@@ -253,7 +253,7 @@ int sharpmz_reload_config(short setStatus)
 //
 void sharpmz_init(void)
 {
-    char i;
+    int i;
 
     sharpmz_debugf("Sharp MZ Series Initialisation");
 
@@ -1253,7 +1253,7 @@ void sharpmz_set_fdc_rom_enabled(short machineModel, short on, short setStatus)
 //
 short sharpmz_get_custom_rom_enabled(short machineModel, short romType)
 {
-    short romEnabled;
+    short romEnabled = 0;
 
     machineModel &= 0x07;
     romType      &= 0x07;
@@ -1492,7 +1492,7 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
     unsigned int   actualReadSize;
     unsigned long  time = GetTimer(0);
     unsigned short i;
-    fileTYPE       file = { 0 };
+    fileTYPE       file = {};
 
     // If a prefix is given (ie. core directory), prepend it before use.
     //
@@ -1528,7 +1528,7 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
     sharpmz_debugf("[");
     for (i = 0; i < image.loadSize; i += actualReadSize)
     {
-        if (!(i & 127)) sharpmz_debugf("*");
+		if (!(i & 127)) { sharpmz_debugf("*"); }
 
         // Work out size of data block to read.
         int readSize = (image.loadSize - i >= 512 ? 512 : image.loadSize - i);
@@ -1574,7 +1574,7 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
 short sharpmz_read_ram(const char *memDumpFile, short bank)
 {
     unsigned int  actualWriteSize;
-    fileTYPE      file = { 0 };
+    fileTYPE      file = {};
  
     // Open the memory image debug file for writing.
     if (!sharpmz_file_write(&file, memDumpFile))
@@ -1585,7 +1585,7 @@ short sharpmz_read_ram(const char *memDumpFile, short bank)
 
     // Depending on the bank, or all banks, loop until request is complete.
     //
-    for(unsigned int mb=(bank == SHARPMZ_MEMBANK_ALL ? 0 : bank); mb <= (bank == SHARPMZ_MEMBANK_ALL ? SHARPMZ_MEMBANK_MAXBANKS-1 : bank); mb++)
+    for(unsigned int mb=(bank == SHARPMZ_MEMBANK_ALL ? 0 : bank); mb <= (uint)(bank == SHARPMZ_MEMBANK_ALL ? SHARPMZ_MEMBANK_MAXBANKS-1 : bank); mb++)
     {
         // Skip bank 1, as SYSROM spans two physical banks 0 and 1.
         if(mb == 1) mb = SHARPMZ_MEMBANK_SYSRAM;
@@ -1603,7 +1603,7 @@ short sharpmz_read_ram(const char *memDumpFile, short bank)
         sharpmz_debugf("[");
         for (unsigned long j = 0; j < MZBANKSIZE[mb] or actualWriteSize == 0; j += actualWriteSize)
         {
-            if (!(j & 127)) sharpmz_debugf("*");
+			if (!(j & 127)) { sharpmz_debugf("*"); }
 
             spi_read(sector_buffer, 512, 0);
 
@@ -1637,7 +1637,7 @@ short sharpmz_read_tape_header(const char *tapeFile)
 
     // Handle for the MZF file to be processed.
     //
-    fileTYPE file = { 0 };
+    fileTYPE file = {};
 
     // Try and open the tape file, exit if it cannot be opened.
     //
@@ -1668,13 +1668,13 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
 {
     unsigned int  actualReadSize;
     unsigned long time = GetTimer(0);
-    char          fileName[17];
+    //char          fileName[17];
 
     //sharpmz_debugf("Sending tape file:%s to emulator ram", tapeFile);
 
     // Handle for the MZF file to be processed.
     //
-    fileTYPE file = { 0 };
+    fileTYPE file = {};
 
     // Try and open the tape file, exit if it cannot be opened.
     //
@@ -1692,10 +1692,12 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
     // Some sanity checks.
     //
     if(tapeHeader.dataType == 0 || tapeHeader.dataType > 5) return(4);
+	/*
     for(int i=0; i < 17; i++)
     {
         fileName[i] = tapeHeader.fileName[i] == 0x0d ? 0x00 : tapeHeader.fileName[i];
     }
+	*/
 
     // Debug output to indicate the file loaded and information about the tape image.
     //
@@ -1756,7 +1758,7 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
     sharpmz_debugf("[");
     for (unsigned short i = 0; i < tapeHeader.fileSize; i += actualReadSize)
     {
-        if (!(i & 127)) sharpmz_debugf("*");
+		if (!(i & 127)) { sharpmz_debugf("*"); }
 
         DISKLED_ON;
         actualReadSize = sharpmz_file_read(&file, sector_buffer, 512);
@@ -1865,7 +1867,7 @@ short sharpmz_save_tape_from_cmt(const char *tapeFile)
 
     // Handle for the MZF file to be written.
     //
-    fileTYPE file = { 0 };
+    fileTYPE file = {};
 
     // Read the header, then data, but limit data size to the 'file size' stored in the header.
     //
@@ -1946,6 +1948,7 @@ short sharpmz_save_tape_from_cmt(const char *tapeFile)
 void sharpmz_select_file(const char* pFileExt, unsigned char Options, char *fs_pFileExt, char chdir, char *SelectedPath)
 {
     sharpmz_debugf("pFileExt = %s\n", pFileExt);
+	(void)chdir;
 
     if (strncasecmp(SHARPMZ_CORE_NAME, SelectedPath, strlen(SHARPMZ_CORE_NAME))) strcpy(SelectedPath, SHARPMZ_CORE_NAME);
 
@@ -1991,17 +1994,19 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
     static short scrollPos                = 0;
     static short volumeDir                = 0;
     int          menuItem;
-    int          subItem;
+	uint32_t     subItem;
     short        romEnabled;
     short        itemCount;
     char         sBuf[40];
     char        *fileName;
     
+	(void)plus;
+	(void)minus;
 
     // Idle2 state (MENU_NONE2) is our main hook, when the HandleUI state machine reaches this state, if the menu key is pressed,
     // we takeover control in this method.
     //
-    if(*menustate == idle2State && menu)
+    if(*menustate == (uint32_t)idle2State && menu)
     {
         OsdSetSize(16);
         *menusub = 0;
