@@ -35,7 +35,7 @@ OBJ	= $(SRC:.c=.c.o) $(SRC2:.cpp=.cpp.o) $(MINIMIG_SRC:.cpp=.cpp.o) $(SHARPMZ_SR
 DEP	= $(SRC:.c=.cpp.d) $(SRC2:.cpp=.cpp.d) $(MINIMIG_SRC:.cpp=.cpp.d) $(SHARPMZ_SRC:.cpp=.cpp.d) $(ARCHIE_SRC:.cpp=.cpp.d) $(ST_SRC:.cpp=.cpp.d) $(X86_SRC:.cpp=.cpp.d) $(SNES_SRC:.cpp=.cpp.d) $(LIBCO_SRC:.c=.c.d)
 
 DFLAGS	= $(INCLUDE) -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
-CFLAGS	= $(DFLAGS) -Wall -Wextra -c -O3
+CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -c -O3
 LFLAGS	= -lc -lstdc++ -lrt
 
 $(PRJ): $(OBJ)
@@ -45,8 +45,9 @@ $(PRJ): $(OBJ)
 	$(Q)$(STRIP) $@
 
 clean:
-	$(Q)rm -f *.d *.o *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
+	$(Q)rm -f *.elf *.map *.lst *.user *~ $(PRJ)
 	$(Q)rm -rf obj .vs DTAR* x64
+	$(Q)find . \( -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -exec rm -f {} \;
 
 cleanall:
 	$(Q)rm -rf $(OBJ) $(DEP) *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
