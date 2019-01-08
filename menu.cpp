@@ -1448,7 +1448,9 @@ void HandleUI(void)
                                         {
                                                 struct stat filestat;
                                                 int midilink = GetMidiLinkMode();
-                                                if ((stat("/dev/snd/pcmC0D0p", &filestat) == 0) || midilink == 0)
+                                                if ((stat("/dev/snd/pcmC0D0p", &filestat) == 0) ||
+                                                    (stat("/etc/asound.conf", &filestat) == 0 ) || 
+                                                     midilink == 0)
 							midilink++;
 						else 
 							midilink = 0;
