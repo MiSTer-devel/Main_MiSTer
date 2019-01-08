@@ -166,7 +166,7 @@ void ReadTrack(adfTYPE *drive)
 	unsigned char status;
 	unsigned char track;
 	unsigned short dsksync;
-	unsigned short dsklen;
+	//unsigned short dsklen;
 	uint16_t tmp;
 	//unsigned short n;
 
@@ -201,7 +201,7 @@ void ReadTrack(adfTYPE *drive)
 	status = (uint8_t)(tmp>>8); // read request signal
 	track = (uint8_t)tmp; // track number (cylinder & head)
 	dsksync = spi_w(0); // disk sync
-	dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
+	//dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
 	DisableFpga();
 
 	if (track >= drive->tracks)
@@ -218,7 +218,7 @@ void ReadTrack(adfTYPE *drive)
 		status = (uint8_t)(tmp >> 8); // read request signal
 		track = (uint8_t)tmp; // track number (cylinder & head)
 		dsksync = spi_w(0); // disk sync
-		dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
+		//dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
 
 		if (track >= drive->tracks)
 			track = drive->tracks - 1;
@@ -281,7 +281,7 @@ void ReadTrack(adfTYPE *drive)
 unsigned char FindSync(adfTYPE *drive)
 // reads data from fifo till it finds sync word or fifo is empty and dma inactive (so no more data is expected)
 {
-	unsigned char  c1, c2, c3, c4;
+	unsigned char  c1, c2;
 	unsigned short n;
 	uint16_t tmp;
 
@@ -641,7 +641,6 @@ void InsertFloppy(adfTYPE *drive, char* path)
 		return;
 	}
 
-	unsigned char i, j;
 	unsigned long tracks;
 
 	// calculate number of tracks in the ADF image file

@@ -375,10 +375,11 @@ void ikbd_reset(void) {
 // process inout from atari core into ikbd
 void ikbd_handle_input(unsigned char cmd) {
 	// store byte in buffer
-	ikbd.buffer.byte[ikbd.buffer.size++] = cmd;
+	unsigned char *byte = ikbd.buffer.byte;
+	byte[(int)(ikbd.buffer.size++)] = cmd;
 
 	// check if there's a known command in the buffer
-	char c;
+	int c;
 	for (c = 0; ikbd_command_handler[c].length &&
 		(ikbd_command_handler[c].code != ikbd.buffer.command.code); c++);
 
@@ -445,7 +446,7 @@ static void ikbd_update_time()
 void ikbd_poll(void) {
 #ifdef IKBD_DEBUG
 	static unsigned long xtimer = 0;
-	static int last_cnt = 0;
+	static unsigned int last_cnt = 0;
 	if (CheckTimer(xtimer)) {
 		xtimer = GetTimer(2000);
 		if (ikbd.tx_cnt != last_cnt) {
@@ -469,7 +470,7 @@ void ikbd_poll(void) {
 
 			/* --------- joystick ---------- */
 			if (ikbd.state & IKBD_STATE_JOYSTICK_EVENT_REPORTING) {
-				char i;
+				int i;
 				for (i = 0; i<2; i++) {
 					unsigned char state = ikbd.joy[i].state;
 
@@ -599,7 +600,7 @@ void ikbd_keyboard(unsigned char code) {
 	enqueue(code);
 }
 
-void ikbd_mouse(unsigned char b, char x, char y) {
+void ikbd_mouse(unsigned char b, signed char x, signed char y) {
 
 	// honour reversal of y axis
 	if (ikbd.state & IKBD_STATE_MOUSE_Y_BOTTOM)
