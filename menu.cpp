@@ -166,8 +166,9 @@ const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
-const char *config_uart_msg[] = { "       None", "        PPP", "    Console", "    USBMIDI", "USBMIDI-38K" };
+const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "    MLINK", "MLINK-38K" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
+const char *config_softsynth_msg[] = {"       TCP", "       UDP", "      MUNT", "FluidSynth"};
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -213,6 +214,45 @@ uint32_t fs_ExtLen = 0;
 uint32_t fs_Options;
 uint32_t fs_MenuSelect;
 uint32_t fs_MenuCancel;
+
+int GetUARTMode()
+{
+        struct stat filestat;
+        if (!stat("/tmp/uartmode1", &filestat)) return 1;
+        if (!stat("/tmp/uartmode2", &filestat)) return 2;
+        if (!stat("/tmp/uartmode3", &filestat)) return 3;
+        if (!stat("/tmp/uartmode4", &filestat)) return 4;
+        return 0;
+}
+
+int GetMidiLinkMode()
+{
+        struct stat filestat;
+        if (!stat("/tmp/ML_TCP",    &filestat)) return 0;
+        if (!stat("/tmp/ML_UDP",    &filestat)) return 1;
+        if (!stat("/tmp/ML_MUNT",   &filestat)) return 2;
+        if (!stat("/tmp/ML_FSYNTH", &filestat)) return 3;
+        return 0;
+}
+
+void SetMidiLinkMode(int mode)
+{
+	remove("/tmp/ML_FSYNTH");
+	remove("/tmp/ML_MUNT");
+        remove("/tmp/ML_UDP");
+        remove("/tmp/ML_TCP");
+        switch (mode)
+        {
+        	case 0: system("echo 1 > /tmp/ML_TCP");
+        	break;
+        	case 1: system("echo 1 > /tmp/ML_UDP");
+                break;
+                case 2: system("echo 1 > /tmp/ML_MUNT"); 
+                break;
+                case 3: system("echo 1 > /tmp/ML_FSYNTH");  
+                break;  
+        }
+}      
 
 char* GetExt(char *ext)
 {
@@ -1270,31 +1310,29 @@ void HandleUI(void)
 		{
 			OsdSetSize(16);
 			helptext = 0;
-			menumask = 0x7C7;
+			menumask = 0xf87;
 			reboot_req = 0;
-
+			
 			OsdSetTitle("System", OSD_ARROW_LEFT);
 			menustate = MENU_8BIT_SYSTEM2;
 			parentstate = MENU_8BIT_SYSTEM1;
 
 			s[0] = 0;
-			m = 0;
+			m = 0;			
 			if (user_io_get_uart_mode())
 			{
-				int mode = 0;
 				struct stat filestat;
-				if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
-				if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
-				if (!stat("/tmp/uartmode3", &filestat)) mode = 3;
-				if (!stat("/tmp/uartmode4", &filestat)) mode = 4;
-
-				menumask |= 8;
-				sprintf(s, " UART connection %s", config_uart_msg[mode]);
-				OsdWrite(3, s, menusub == 3, 0);
-			}
+				int mode = GetUARTMode();
+				menumask |= 0x18;
+                                sprintf(s, " UART connection   %s", config_uart_msg[mode]);
+                                OsdWrite(3, s, menusub == 3, 0);
+                                sprintf(s, " MidiLink         %s", config_softsynth_msg[GetMidiLinkMode()]); 	
+				OsdWrite(4, s, menusub == 4 , (mode == 3 || mode == 4) && stat("/dev/midi", &filestat)?0:1);       
+                        }        
 			else
 			{
 				OsdWrite(m++, "", 0, 0);
+				OsdWrite(4, "", 0, 0);
 			}
 
 			OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
@@ -1303,42 +1341,42 @@ void HandleUI(void)
 			s[28] = 0;
 			OsdWrite(m++, s, menusub == 1, 0);
 			OsdWrite(m++, " Button/Key remap for game \x16", menusub == 2, 0);
-			OsdWrite(4, "", 0, 0);
 
 			m = 0;
 			if (user_io_core_type() == CORE_TYPE_MINIMIG2)
 			{
 				m = 1;
-				menumask &= ~0x80;
+				menumask &= ~0x100;
 			}
 
 			OsdWrite(5);
 			int n = 6;
 			if (user_io_get_scaler_flt() >= 0)
 			{
-				menumask |= 0x30;
+				menumask |= 0x60;
 				OsdWrite(n++, " HDMI Scaler:");
 				sprintf(s, " \x16 Filter - %s", config_scaler_msg[user_io_get_scaler_flt() ? 1 : 0]);
-				OsdWrite(n++, s, menusub == 4);
+				OsdWrite(n++, s, menusub == 5);
 
 				memset(s, 0, sizeof(s));
 				strcpy(s, " \x16 ");
 				if (strlen(user_io_get_scaler_coeff())) strncat(s, user_io_get_scaler_coeff(), 22);
 				else strcat(s, "<none>");
 
-				OsdWrite(n++, s, menusub == 5, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
+				OsdWrite(n++, s, menusub == 6, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
 				OsdWrite(n++);
 			}
 
-			OsdWrite(n++, m ? " Reset the core" : " Reset settings", menusub == 6, user_io_core_type() == CORE_TYPE_ARCHIE);
-			OsdWrite(n++, m ? "" : " Save settings", menusub == 7, 0);
+			OsdWrite(n++, m ? " Reset the core" : " Reset settings", menusub == 7, user_io_core_type() == CORE_TYPE_ARCHIE);
+			OsdWrite(n++, m ? "" : " Save settings", menusub == 8, 0);
 			OsdWrite(n++);
+
 			cr = n;
-			OsdWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 8);
-			OsdWrite(n++, " About", menusub == 9);
+			OsdWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 9);
+			OsdWrite(n++, " About", menusub == 10);
 
 			while(n < 15) OsdWrite(n++);
-			OsdWrite(15, STD_EXIT, menusub == 10);
+			OsdWrite(15, STD_EXIT, menusub == 11);
 			sysinfo_timer = 0;
 		}
 		break;
@@ -1388,17 +1426,12 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 3:
-				{
-					int mode = 0;
-					struct stat filestat;
-					if (!stat("/tmp/uartmode1", &filestat)) mode = 1;
-					if (!stat("/tmp/uartmode2", &filestat)) mode = 2;
-					if (!stat("/tmp/uartmode3", &filestat)) mode = 3;
-                                        if (!stat("/tmp/uartmode4", &filestat)) mode = 4;
-                                        mode++;
-                                        if (mode == 3 || mode == 4) 
-                                                if (stat("/dev/midi", &filestat) != 0)
-                                                        mode = 0;
+				{       
+					int mode = GetUARTMode();
+					mode++;
+                                        //if (mode == 3 || mode == 4) 
+                                        //        if (stat("/dev/midi", &filestat) != 0)
+                                        //                mode = 0;
                                         if (mode > 5) mode = 0;
 					sprintf(s, "uartmode %d", mode);
 					system(s);
@@ -1408,12 +1441,36 @@ void HandleUI(void)
 					FileSaveConfig(s, &mode, 4);
 				}
 				break;
-			case 4:
+			case 4: 
+                                {
+                                        int mode = GetUARTMode(); 
+                                        if(mode == 3 or mode == 4)
+                                        {
+                                                struct stat filestat;
+                                                int midilink = GetMidiLinkMode();
+                                                if ((stat("/dev/snd/pcmC0D0p", &filestat) == 0) ||
+                                                    (stat("/etc/asound.conf", &filestat) == 0 ) || 
+                                                     midilink == 0)
+							midilink++;
+						else 
+							midilink = 0;
+                                                if (midilink > 3) midilink = 0;
+                                                SetMidiLinkMode(midilink);
+                                                sprintf(s, "uartmode %d", 0);
+                                                system(s);
+                                                sprintf(s, "uartmode %d", mode);
+                                                system(s);
+                                        }
+                                        menustate = MENU_8BIT_SYSTEM1;
+                                }
+                                break;
+                                				
+			case 5:
 				user_io_set_scaler_flt(user_io_get_scaler_flt() ? 0 : 1);
 				menustate = MENU_8BIT_SYSTEM1;
-				break;
+				break; 
 
-			case 5:
+			case 6:
 				if (user_io_get_scaler_flt())
 				{
 					sprintf(SelectedPath, COEFF_DIR"/%s", user_io_get_scaler_coeff());
@@ -1421,7 +1478,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 6:
+			case 7:
 				if (user_io_core_type() != CORE_TYPE_ARCHIE)
 				{
 					menustate = MENU_RESET1;
@@ -1433,7 +1490,7 @@ void HandleUI(void)
                     menusub   = 0;
 				}
 				break;
-			case 7:
+			case 8:
 				// Save settings
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
@@ -1456,7 +1513,7 @@ void HandleUI(void)
 					if (is_x86_core()) x86_config_save();
 				}
 				break;
-			case 8:
+			case 9:
 				{
 					reboot_req = 1;
 
@@ -1468,7 +1525,7 @@ void HandleUI(void)
 					OsdWrite(cr, p, menusub == 8, 0);
 				}
 				break;
-			case 9:
+			case 10:
 				menustate = MENU_8BIT_ABOUT1;
 				menusub = 0;
 				break;
