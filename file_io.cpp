@@ -1035,7 +1035,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	if (mode == SCANF_INIT)
 	{
 		file_name[0] = 0;
-		if (!isPathDirectory(path))
+		if (isPathRegularFile(path))
 		{
 			char *p = strrchr(path, '/');
 			if (p)
@@ -1048,8 +1048,6 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				strcpy(file_name, path);
 				path[0] = 0;
 			}
-
-			if (!isPathRegularFile(path)) file_name[0] = 0;
 		}
 
 		if (!isPathDirectory(path))
