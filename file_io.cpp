@@ -26,7 +26,11 @@
 #include "miniz_zip.h"
 #include "scheduler.h"
 
-typedef std::vector<dirent> DirentVector;
+using namespace std;
+
+#define MIN(a,b) (((a)<(b)) ? (a) : (b))
+
+typedef vector<dirent> DirentVector;
 
 static const size_t YieldIterations = 128;
 
@@ -44,24 +48,24 @@ struct fileZipArchive
 	__off64_t                         offset;
 };
 
-static bool FileIsZipped(const std::string& path, std::string* zip_path, std::string* file_path)
+static bool FileIsZipped(const string& path, string* zip_path, string* file_path)
 {
-	const std::string zipext(".zip");
+	const string zipext(".zip");
 	auto it = std::search(path.begin(), path.end(),
 						  zipext.begin(), zipext.end(),
-						  [](char ch1, char ch2) { return std::toupper(ch1) == std::toupper(ch2); });
+						  [](char ch1, char ch2) { return toupper(ch1) == toupper(ch2); });
 
 	if (it != path.end())
 	{
 		if (zip_path)
 		{
-			*zip_path = std::string(path.begin(), it + zipext.length());
+			*zip_path = string(path.begin(), it + zipext.length());
 		}
 		if (file_path)
 		{
 			if ((it + zipext.length()) < path.end())
 			{
-				*file_path = std::string(it + zipext.length() + 1, path.end());
+				*file_path = string(it + zipext.length() + 1, path.end());
 			}
 			else
 			{
@@ -75,20 +79,19 @@ static bool FileIsZipped(const std::string& path, std::string* zip_path, std::st
 
 static int get_stmode(const char *path)
 {
-	sprintf(full_path, "%s/%s", getRootDir(), path);
 	struct stat64 st;
 	return (stat64(path, &st) < 0) ? 0 : st.st_mode;
 }
 
-static bool isPathDirectory(const std::string& path)
+static bool isPathDirectory(const string& path)
 {
-	std::string full_path{path};
+	string full_path{path};
 	if (full_path[0] != '/')
 	{
-		full_path = std::string(getRootDir()) + "/" + path;
+		full_path = string(getRootDir()) + "/" + path;
 	}
 
-	std::string zip_path, file_path;
+	string zip_path, file_path;
 	if (FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		mz_zip_archive z{};
@@ -127,10 +130,10 @@ static bool isPathDirectory(const std::string& path)
 	}
 	else
 	{
-		int stmode = get_stmode(path.c_str());
+		int stmode = get_stmode(full_path.c_str());
 		if (!stmode)
 		{
-			printf("isPathDirectory(stat) path:%s, error:%s.\n", path.c_str(), strerror(errno));
+			printf("isPathDirectory(stat) path:%s, error:%s.\n", full_path.c_str(), strerror(errno));
 			return false;
 		}
 
@@ -140,15 +143,15 @@ static bool isPathDirectory(const std::string& path)
 	return false;
 }
 
-static bool isPathRegularFile(const std::string& path)
+static bool isPathRegularFile(const string& path)
 {
-	std::string full_path{path};
+	string full_path{path};
 	if (full_path[0] != '/')
 	{
-		full_path = std::string(getRootDir()) + "/" + path;
+		full_path = string(getRootDir()) + "/" + path;
 	}
 
-	std::string zip_path, file_path;
+	string zip_path, file_path;
 	if (FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		mz_zip_archive z{};
@@ -184,10 +187,10 @@ static bool isPathRegularFile(const std::string& path)
 	}
 	else
 	{
-		int stmode = get_stmode(path.c_str());
+		int stmode = get_stmode(full_path.c_str());
 		if (!stmode)
 		{
-			printf("isPathDirectory(stat) path:%s, error:%s.\n", path.c_str(), strerror(errno));
+			printf("isPathDirectory(stat) path:%s, error:%s.\n", full_path.c_str(), strerror(errno));
 			return false;
 		}
 
@@ -243,7 +246,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	file->mode = 0;
 	file->type = 0;
 
-	std::string zip_path, file_path;
+	string zip_path, file_path;
 	if (FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		if (mode & O_RDWR || mode & O_WRONLY)
@@ -430,7 +433,7 @@ int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 		char buf[512];
 		while (file->zip->offset < offset)
 		{
-			const size_t want_len = std::min((__off64_t)sizeof(buf), offset - file->zip->offset);
+			const size_t want_len = MIN((__off64_t)sizeof(buf), offset - file->zip->offset);
 			const size_t read_len = mz_zip_reader_extract_iter_read(file->zip->iter, buf, want_len);
 			file->zip->offset += read_len;
 			if (read_len < want_len)
@@ -757,7 +760,7 @@ void FileGenerateSavePath(const char *name, const char* extension, char* out_nam
 	const char *d = strrchr(name, '.');
 	if (d)
 	{
-		const int l = std::min(d - name, length);
+		const int l = MIN(d - name, length);
 		strncpy(out_name, name, l);
 		out_name[l] = '\0';
 	}
@@ -1074,7 +1077,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		sprintf(full_path, "%s/%s", getRootDir(), path);
 		printf("Start to scan %sdir: %s\n", is_zipped ? "zipped " : "", full_path);
 
-		std::string zip_path, file_path_in_zip;
+		string zip_path, file_path_in_zip;
 		FileIsZipped(full_path, &zip_path, &file_path_in_zip);
 
 		iFirstEntry = 0;
