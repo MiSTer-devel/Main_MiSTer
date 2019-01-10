@@ -354,11 +354,11 @@ int FileNextSector(fileTYPE *file)
 {
 	if (file->filp)
 	{
-		__off64_t newoff = lseek64(fileno(file->filp), file->offset + 512, SEEK_SET);
+		__off64_t newoff = fseeko64(file->filp, file->offset + 512, SEEK_SET);
 		if (newoff != file->offset + 512)
 		{
 			//printf("Fail to seek to next sector. File: %s.\n", file->name);
-			lseek64(fileno(file->filp), file->offset, SEEK_SET);
+			fseeko64(file->filp, file->offset, SEEK_SET);
 			return 0;
 		}
 
@@ -381,7 +381,7 @@ int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 {
 	if (file->filp)
 	{
-		offset = lseek64(fileno(file->filp), offset, origin);
+		offset = fseeko64(file->filp, offset, origin);
 		if(offset<0)
 		{
 			printf("Fail to seek the file.\n");
@@ -466,7 +466,7 @@ int FileReadEx(fileTYPE *file, void *pBuffer, int nSize)
 		{
 			if (file->filp)
 			{
-				int ret = fread(tmpbuff, 512, 1, file->filp);
+				int ret = fread(tmpbuff, 1, 512, file->filp);
 				if (ret < 0)
 				{
 					printf("FileRead error(%d).\n", ret);
@@ -500,7 +500,7 @@ int FileReadEx(fileTYPE *file, void *pBuffer, int nSize)
 	{
 		if (file->filp)
 		{
-			int ret = fread(pBuffer, nSize, 512, file->filp);
+			int ret = fread(pBuffer, 1, nSize*512, file->filp);
 			if (ret < 0)
 			{
 				printf("FileRead error(%d).\n", ret);
@@ -544,7 +544,7 @@ int FileWrite(fileTYPE *file, void *pBuffer)
 
 	if (file->filp)
 	{
-		int ret = fwrite(pBuffer, 512, 1, file->filp);
+		int ret = fwrite(pBuffer, 1, 512, file->filp);
 		if (ret < 0)
 		{
 			printf("FileWrite error(%d).\n", ret);
@@ -572,7 +572,7 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
 
 	if (file->filp)
 	{
-		ret = fread(pBuffer, length, 1, file->filp);
+		ret = fread(pBuffer, 1, length, file->filp);
 		if (ret < 0)
 		{
 			printf("FileReadAdv error(%d).\n", ret);
@@ -612,7 +612,7 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length)
 
 	if (file->filp)
 	{
-		ret = fwrite(pBuffer, length, 1, file->filp);
+		ret = fwrite(pBuffer, 1, length, file->filp);
 		fflush(file->filp);
 
 		if (ret < 0)
