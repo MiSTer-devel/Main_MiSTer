@@ -30,7 +30,7 @@
     <NMakeOutput>MiSTer</NMakeOutput>
     <NMakeCleanCommandLine>git.lnk ./clean.sh</NMakeCleanCommandLine>
     <NMakePreprocessorDefinitions>__arm__;__GNUC__;__USE_GNU ;_GNU_SOURCE;VDATE="000000";_FILE_OFFSET_BITS=64;_LARGEFILE64_SOURCE;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
-    <NMakeIncludeSearchPath>c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\libc\usr\include;c:\Work\Git\opt\gcc54\lib\gcc\arm-linux-gnueabihf\5.4.1\include;c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\include\c++\5.4.1;$(NMakeIncludeSearchPath);lib\libco</NMakeIncludeSearchPath>
+    <NMakeIncludeSearchPath>c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\libc\usr\include;c:\Work\Git\opt\gcc54\lib\gcc\arm-linux-gnueabihf\5.4.1\include;c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\include\c++\5.4.1;$(NMakeIncludeSearchPath);lib\libco;lib\miniz</NMakeIncludeSearchPath>
     <OutDir>$(TEMP)</OutDir>
     <IntDir>$(TEMP)</IntDir>
     <AdditionalOptions>
@@ -59,6 +59,10 @@
     <ClCompile Include="input.cpp" />
     <ClCompile Include="lib\libco\arm.c" />
     <ClCompile Include="lib\libco\libco.c" />
+    <ClCompile Include="lib\miniz\miniz.c" />
+    <ClCompile Include="lib\miniz\miniz_tdef.c" />
+    <ClCompile Include="lib\miniz\miniz_tinfl.c" />
+    <ClCompile Include="lib\miniz\miniz_zip.c" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="menu.cpp" />
     <ClCompile Include="osd.cpp" />
@@ -97,6 +101,11 @@
     <ClInclude Include="input.h" />
     <ClInclude Include="lib\libco\libco.h" />
     <ClInclude Include="lib\libco\settings.h" />
+    <ClInclude Include="lib\miniz\miniz.h" />
+    <ClInclude Include="lib\miniz\miniz_common.h" />
+    <ClInclude Include="lib\miniz\miniz_tdef.h" />
+    <ClInclude Include="lib\miniz\miniz_tinfl.h" />
+    <ClInclude Include="lib\miniz\miniz_zip.h" />
     <ClInclude Include="logo.h" />
     <ClInclude Include="menu.h" />
     <ClInclude Include="osd.h" />

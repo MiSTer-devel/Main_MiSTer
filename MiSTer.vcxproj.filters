@@ -9,11 +9,17 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
-    <Filter Include="Header Files\lib">
+    <Filter Include="Header Files\libco">
       <UniqueIdentifier>{0c4bf53d-7986-4434-bbd2-734da3553be9}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\lib">
+    <Filter Include="Source Files\libco">
       <UniqueIdentifier>{da657dc9-d7b4-417e-b916-6543cf17b67e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\miniz">
+      <UniqueIdentifier>{344a14d0-22c5-4d62-a89a-7f3f1e005381}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\miniz">
+      <UniqueIdentifier>{83fcb534-f976-4615-bdeb-ba80fb510f9a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -101,13 +107,25 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="lib\libco\arm.c">
-      <Filter>Source Files\lib</Filter>
+      <Filter>Source Files\libco</Filter>
     </ClCompile>
     <ClCompile Include="lib\libco\libco.c">
-      <Filter>Source Files\lib</Filter>
+      <Filter>Source Files\libco</Filter>
     </ClCompile>
     <ClCompile Include="scheduler.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\miniz\miniz.c">
+      <Filter>Source Files\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\miniz\miniz_tdef.c">
+      <Filter>Source Files\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\miniz\miniz_tinfl.c">
+      <Filter>Source Files\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\miniz\miniz_zip.c">
+      <Filter>Source Files\miniz</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -217,13 +235,28 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\libco\libco.h">
-      <Filter>Header Files\lib</Filter>
+      <Filter>Header Files\libco</Filter>
     </ClInclude>
     <ClInclude Include="lib\libco\settings.h">
-      <Filter>Header Files\lib</Filter>
+      <Filter>Header Files\libco</Filter>
     </ClInclude>
     <ClInclude Include="scheduler.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz.h">
+      <Filter>Header Files\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz_common.h">
+      <Filter>Header Files\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz_tdef.h">
+      <Filter>Header Files\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz_tinfl.h">
+      <Filter>Header Files\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz_zip.h">
+      <Filter>Header Files\miniz</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
