@@ -65,27 +65,12 @@ int sharpmz_file_write(fileTYPE *file, const char *fileName)
 
     sprintf(fullPath, "%s/%s/%s", getRootDir(), SHARPMZ_CORE_NAME, fileName);
 
-    file->mode = O_WRONLY | O_CREAT | O_TRUNC | O_SYNC | S_IRWXU | S_IRWXG | S_IRWXO;
-    file->type = 0;
-
-    file->fd = open(fullPath, file->mode);
-    if (file->fd <= 0)
+    const int mode = O_WRONLY | O_CREAT | O_TRUNC | O_SYNC | S_IRWXU | S_IRWXG | S_IRWXO;
+    ret = FileOpenEx(file, fullPath, mode);
+    if (!ret)
     {
-        sharpmz_debugf("sharpmz_file_write (open) - File:%s, error: %d.\n", fullPath, file->fd);
-        file->fd = -1;
-        return 0;
+        sharpmz_debugf("sharpmz_file_write (FileOpenEx) - File:%s, error: %d.\n", fullPath, ret);
     }
-
-    ret = fstat64(file->fd, &st);
-    if (ret < 0)
-    {
-        sharpmz_debugf("sharpmz_file_write (stat) - File:%s, error: %d.\n", fullPath, ret);
-        FileClose(file);
-        return 0;
-    }
-
-    file->size   = st.st_size;
-    file->offset = 0;
 
     // Success.
     return 1;
@@ -1437,7 +1422,7 @@ int sharpmz_file_read(fileTYPE *file, void *pBuffer, int nSize)
         return 0;
     }
 
-    int ret = read(file->fd, pBuffer, nSize);
+    int ret = FileReadAdv(file, pBuffer, nSize);
     if (ret < 0)
     {
         sharpmz_debugf("file_read error(%d).\n", ret);

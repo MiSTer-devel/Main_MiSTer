@@ -14,6 +14,7 @@
 #include <linux/magic.h>
 #include <algorithm>
 #include <vector>
+#include <string>
 #include "osd.h"
 #include "fpga_io.h"
 #include "menu.h"
@@ -22,6 +23,7 @@
 #include "user_io.h"
 #include "cfg.h"
 #include "input.h"
+#include "miniz_zip.h"
 #include "scheduler.h"
 
 typedef std::vector<dirent> DirentVector;
@@ -34,12 +36,185 @@ int iFirstEntry = 0;
 
 static char full_path[1200];
 
+struct fileZipArchive
+{
+	mz_zip_archive                    archive;
+	int                               index;
+	mz_zip_reader_extract_iter_state* iter;
+	__off64_t                         offset;
+};
+
+static bool FileIsZipped(const std::string& path, std::string* zip_path, std::string* file_path)
+{
+	const std::string zipext(".zip");
+	auto it = std::search(path.begin(), path.end(),
+						  zipext.begin(), zipext.end(),
+						  [](char ch1, char ch2) { return std::toupper(ch1) == std::toupper(ch2); });
+
+	if (it != path.end())
+	{
+		if (zip_path)
+		{
+			*zip_path = std::string(path.begin(), it + zipext.length());
+		}
+		if (file_path)
+		{
+			if ((it + zipext.length()) < path.end())
+			{
+				*file_path = std::string(it + zipext.length() + 1, path.end());
+			}
+			else
+			{
+				*file_path = {};
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+static int get_stmode(const char *path)
+{
+	sprintf(full_path, "%s/%s", getRootDir(), path);
+	struct stat64 st;
+	return (stat64(path, &st) < 0) ? 0 : st.st_mode;
+}
+
+static bool isPathDirectory(const std::string& path)
+{
+	std::string full_path{path};
+	if (full_path[0] != '/')
+	{
+		full_path = std::string(getRootDir()) + "/" + path;
+	}
+
+	std::string zip_path, file_path;
+	if (FileIsZipped(full_path, &zip_path, &file_path))
+	{
+		mz_zip_archive z{};
+		if (!mz_zip_reader_init_file(&z, zip_path.c_str(), 0))
+		{
+			printf("isPathDirectory(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path.c_str(),
+			       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
+			return false;
+		}
+
+		if (file_path.empty())
+		{
+			mz_zip_reader_end(&z);
+			return true;
+		}
+
+		// Folder names always end with a slash in the zip
+		// file central directory.
+		file_path += "/";
+		const int file_index = mz_zip_reader_locate_file(&z, file_path.c_str(), NULL, 0);
+		if (file_index < 0)
+		{
+			printf("isPathDirectory(mz_zip_reader_locate_file) Zip:%s, file:%s, error: %s\n",
+					 zip_path.c_str(), file_path.c_str(),
+					 mz_zip_get_error_string(mz_zip_get_last_error(&z)));
+			mz_zip_reader_end(&z);
+			return false;
+		}
+
+		if (mz_zip_reader_is_file_a_directory(&z, file_index))
+		{
+			mz_zip_reader_end(&z);
+			return true;
+		}
+		mz_zip_reader_end(&z);
+	}
+	else
+	{
+		int stmode = get_stmode(path.c_str());
+		if (!stmode)
+		{
+			printf("isPathDirectory(stat) path:%s, error:%s.\n", path.c_str(), strerror(errno));
+			return false;
+		}
+
+		if (stmode & S_IFDIR) return true;
+	}
+
+	return false;
+}
+
+static bool isPathRegularFile(const std::string& path)
+{
+	std::string full_path{path};
+	if (full_path[0] != '/')
+	{
+		full_path = std::string(getRootDir()) + "/" + path;
+	}
+
+	std::string zip_path, file_path;
+	if (FileIsZipped(full_path, &zip_path, &file_path))
+	{
+		mz_zip_archive z{};
+		if (!mz_zip_reader_init_file(&z, zip_path.c_str(), 0))
+		{
+			printf("isPathDirectory(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path.c_str(),
+			       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
+			return false;
+		}
+
+		if (file_path.empty())
+		{
+			mz_zip_reader_end(&z);
+			return false;
+		}
+
+		const int file_index = mz_zip_reader_locate_file(&z, file_path.c_str(), NULL, 0);
+		if (file_index < 0)
+		{
+			printf("isPathDirectory(mz_zip_reader_locate_file) Zip:%s, file:%s, error: %s\n",
+					 zip_path.c_str(), file_path.c_str(),
+					 mz_zip_get_error_string(mz_zip_get_last_error(&z)));
+			mz_zip_reader_end(&z);
+			return false;
+		}
+
+		if (!mz_zip_reader_is_file_a_directory(&z, file_index) && mz_zip_reader_is_file_supported(&z, file_index))
+		{
+			mz_zip_reader_end(&z);
+			return true;
+		}
+		mz_zip_reader_end(&z);
+	}
+	else
+	{
+		int stmode = get_stmode(path.c_str());
+		if (!stmode)
+		{
+			printf("isPathDirectory(stat) path:%s, error:%s.\n", path.c_str(), strerror(errno));
+			return false;
+		}
+
+		if (stmode & S_IFREG) return true;
+	}
+
+	return false;
+}
+
 void FileClose(fileTYPE *file)
 {
-	if (file->fd > 0)
+	if (file->zip)
 	{
-		//printf("closing %d\n", file->fd);
-		close(file->fd);
+		if (file->zip->iter)
+		{
+			mz_zip_reader_extract_iter_free(file->zip->iter);
+		}
+		mz_zip_reader_end(&file->zip->archive);
+
+		delete file->zip;
+		file->zip = nullptr;
+	}
+
+	if (file->filp)
+	{
+		//printf("closing %p\n", file->filp);
+		fclose(file->filp);
 		if (file->type == 1)
 		{
 			if (file->name[0] == '/')
@@ -49,7 +224,7 @@ void FileClose(fileTYPE *file)
 			file->type = 0;
 		}
 	}
-	file->fd = -1;
+	file->filp = nullptr;
 }
 
 int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
@@ -68,38 +243,100 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	file->mode = 0;
 	file->type = 0;
 
-	char *p = strrchr(full_path, '/');
-	strcpy(file->name, (mode == -1) ? full_path : p+1);
-
-	file->fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
-	if (file->fd <= 0)
+	std::string zip_path, file_path;
+	if (FileIsZipped(full_path, &zip_path, &file_path))
 	{
-		if(!mute) printf("FileOpenEx(open) File:%s, error: %d.\n", full_path, file->fd);
-		file->fd = -1;
-		return 0;
-	}
-
-	if (mode == -1)
-	{
-		file->type = 1;
-		file->size = 0;
-		file->offset = 0;
-		file->mode = O_CREAT | O_RDWR | O_TRUNC;
-	}
-	else
-	{
-		struct stat64 st;
-		int ret = fstat64(file->fd, &st);
-		if (ret < 0)
+		if (mode & O_RDWR || mode & O_WRONLY)
 		{
-			if (!mute) printf("FileOpenEx(fstat) File:%s, error: %d.\n", full_path, ret);
+			if(!mute) printf("FileOpenEx(mode) Zip:%s, writing to zipped files is not supported.\n",
+					 full_path);
+			return 0;
+		}
+
+		file->zip = new fileZipArchive{};
+		if (!mz_zip_reader_init_file(&file->zip->archive, zip_path.c_str(), 0))
+		{
+			if(!mute) printf("FileOpenEx(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path.c_str(),
+					 mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+			return 0;
+		}
+
+		file->zip->index = mz_zip_reader_locate_file(&file->zip->archive, file_path.c_str(), NULL, 0);
+		if (file->zip->index < 0)
+		{
+			if(!mute) printf("FileOpenEx(mz_zip_reader_locate_file) Zip:%s, file:%s, error: %s\n",
+					 zip_path.c_str(), file_path.c_str(),
+					 mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
 			FileClose(file);
 			return 0;
 		}
 
-		file->size = st.st_size;
+		mz_zip_archive_file_stat s;
+		if (!mz_zip_reader_file_stat(&file->zip->archive, file->zip->index, &s))
+		{
+			if(!mute) printf("FileOpenEx(mz_zip_reader_file_stat) Zip:%s, file:%s, error:%s\n",
+					 zip_path.c_str(), file_path.c_str(),
+					 mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+			FileClose(file);
+			return 0;
+		}
+		file->size = s.m_uncomp_size;
+
+		file->zip->iter = mz_zip_reader_extract_iter_new(&file->zip->archive, file->zip->index, 0);
+		if (!file->zip->iter)
+		{
+			if(!mute) printf("FileOpenEx(mz_zip_reader_extract_iter_new) Zip:%s, file:%s, error:%s\n",
+					 zip_path.c_str(), file_path.c_str(),
+					 mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+			FileClose(file);
+			return 0;
+		}
+		file->zip->offset = 0;
 		file->offset = 0;
 		file->mode = mode;
+	}
+	else
+	{
+		char *p = strrchr(full_path, '/');
+		strcpy(file->name, (mode == -1) ? full_path : p+1);
+
+		int fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
+		if (fd <= 0)
+		{
+			if(!mute) printf("FileOpenEx(open) File:%s, error: %s.\n", full_path, strerror(errno));
+			return 0;
+		}
+		const char *fmode = mode & O_RDWR ? "w+" : "r";
+		file->filp = fdopen(fd, fmode);
+		if (!file->filp)
+		{
+			if(!mute) printf("FileOpenEx(fdopen) File:%s, error: %s.\n", full_path, strerror(errno));
+			close(fd);
+			return 0;
+		}
+
+		if (mode == -1)
+		{
+			file->type = 1;
+			file->size = 0;
+			file->offset = 0;
+			file->mode = O_CREAT | O_RDWR | O_TRUNC;
+		}
+		else
+		{
+			struct stat64 st;
+			int ret = fstat64(fileno(file->filp), &st);
+			if (ret < 0)
+			{
+				if (!mute) printf("FileOpenEx(fstat) File:%s, error: %d.\n", full_path, ret);
+				FileClose(file);
+				return 0;
+			}
+
+			file->size = st.st_size;
+			file->offset = 0;
+			file->mode = mode;
+		}
 	}
 
 	//printf("opened %s, size %lu\n", full_path, file->size);
@@ -108,11 +345,17 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 
 __off64_t FileGetSize(fileTYPE *file)
 {
-	if (file->fd <= 0) return 0;
-
-	struct stat64 st;
-	int ret = fstat64(file->fd, &st);
-	return (ret < 0) ? 0 : st.st_size;
+	if (file->filp)
+	{
+		struct stat64 st;
+		int ret = fstat64(fileno(file->filp), &st);
+		return (ret < 0) ? 0 : st.st_size;
+	}
+	else if (file->zip)
+	{
+		return file->size;
+	}
+	return 0;
 }
 
 int FileOpen(fileTYPE *file, const char *name, char mute)
@@ -122,28 +365,88 @@ int FileOpen(fileTYPE *file, const char *name, char mute)
 
 int FileNextSector(fileTYPE *file)
 {
-	__off64_t newoff = lseek64(file->fd, file->offset + 512, SEEK_SET);
-	if (newoff != file->offset + 512)
+	if (file->filp)
 	{
-		//printf("Fail to seek to next sector. File: %s.\n", file->name);
-		lseek64(file->fd, file->offset, SEEK_SET);
-		return 0;
-	}
+		__off64_t newoff = lseek64(fileno(file->filp), file->offset + 512, SEEK_SET);
+		if (newoff != file->offset + 512)
+		{
+			//printf("Fail to seek to next sector. File: %s.\n", file->name);
+			lseek64(fileno(file->filp), file->offset, SEEK_SET);
+			return 0;
+		}
 
-	file->offset = newoff;
-	return 1;
+		file->offset = newoff;
+		return 1;
+	}
+	else if (file->zip)
+	{
+		if (!FileSeek(file, file->offset + 512, SEEK_SET))
+		{
+			FileSeek(file, file->offset, SEEK_SET);
+			return 0;
+		}
+		return 1;
+	}
+	return 0;
 }
 
 int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 {
-	__off64_t newoff = lseek64(file->fd, offset, origin);
-	if(newoff<0)
+	if (file->filp)
 	{
-		printf("Fail to seek the file.\n");
+		offset = lseek64(fileno(file->filp), offset, origin);
+		if(offset<0)
+		{
+			printf("Fail to seek the file.\n");
+			return 0;
+		}
+	}
+	else if (file->zip)
+	{
+		if (origin == SEEK_CUR)
+		{
+			offset = file->zip->offset + offset;
+		}
+		else if (origin == SEEK_END)
+		{
+			offset = file->size - offset;
+		}
+
+		if (offset < file->zip->offset)
+		{
+			mz_zip_reader_extract_iter_state *iter = mz_zip_reader_extract_iter_new(&file->zip->archive, file->zip->index, 0);
+			if (!iter)
+			{
+				printf("FileSeek(mz_zip_reader_extract_iter_new) Failed to rewind iterator, error:%s\n",
+				       mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+				return 0;
+			}
+
+			mz_zip_reader_extract_iter_free(file->zip->iter);
+			file->zip->iter = iter;
+			file->zip->offset = 0;
+		}
+
+		char buf[512];
+		while (file->zip->offset < offset)
+		{
+			const size_t want_len = std::min((__off64_t)sizeof(buf), offset - file->zip->offset);
+			const size_t read_len = mz_zip_reader_extract_iter_read(file->zip->iter, buf, want_len);
+			file->zip->offset += read_len;
+			if (read_len < want_len)
+			{
+				printf("FileSeek(mz_zip_reader_extract_iter_read) Failed to advance iterator, error:%s\n",
+				       mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+				return 0;
+			}
+		}
+	}
+	else
+	{
 		return 0;
 	}
 
-	file->offset = newoff;
+	file->offset = offset;
 	return 1;
 }
 
@@ -174,10 +477,30 @@ int FileReadEx(fileTYPE *file, void *pBuffer, int nSize)
 	{
 		for (int i = 0; i < nSize; i++)
 		{
-			int ret = read(file->fd, tmpbuff, 512);
-			if (ret < 0)
+			if (file->filp)
 			{
-				printf("FileRead error(%d).\n", ret);
+				int ret = fread(tmpbuff, 512, 1, file->filp);
+				if (ret < 0)
+				{
+					printf("FileRead error(%d).\n", ret);
+					return 0;
+				}
+				i += ret;
+			}
+			else if (file->zip)
+			{
+				size_t ret = mz_zip_reader_extract_iter_read(file->zip->iter, tmpbuff, 512);
+				if (!ret)
+				{
+					printf("FileReadEx(mz_zip_reader_extract_iter_read) Failed to read, error:%s\n",
+					       mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+					return 0;
+				}
+				file->zip->offset += ret;
+			}
+			else
+			{
+				printf("FileRead error(unknown file type).\n");
 				return 0;
 			}
 
@@ -188,10 +511,34 @@ int FileReadEx(fileTYPE *file, void *pBuffer, int nSize)
 	}
 	else
 	{
-		int ret = read(file->fd, pBuffer, nSize * 512);
-		if (ret < 0)
+		if (file->filp)
 		{
-			printf("FileRead error(%d).\n", ret);
+			int ret = fread(pBuffer, nSize, 512, file->filp);
+			if (ret < 0)
+			{
+				printf("FileRead error(%d).\n", ret);
+				return 0;
+			}
+		}
+		else if (file->zip)
+		{
+			char *p = (char*)pBuffer;
+			for (int i = 0; i < nSize; i++)
+			{
+				size_t ret = mz_zip_reader_extract_iter_read(file->zip->iter, p, 512);
+				if (!ret)
+				{
+					printf("FileReadEx(mz_zip_reader_extract_iter_read) Failed to read, error:%s\n",
+					       mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+					return 0;
+				}
+				p += ret;
+				file->zip->offset += ret;
+			}
+		}
+		else
+		{
+			printf("FileRead error(unknown file type).\n");
 			return 0;
 		}
 	}
@@ -208,10 +555,23 @@ int FileWrite(fileTYPE *file, void *pBuffer)
 		return 0;
 	}
 
-	int ret = write(file->fd, pBuffer, 512);
-	if (ret < 0)
+	if (file->filp)
 	{
-		printf("FileWrite error(%d).\n", ret);
+		int ret = fwrite(pBuffer, 512, 1, file->filp);
+		if (ret < 0)
+		{
+			printf("FileWrite error(%d).\n", ret);
+			return 0;
+		}
+	}
+	else if (file->zip)
+	{
+		printf("FileWrite error(not supported for zip).\n");
+		return 0;
+	}
+	else
+	{
+		printf("FileWrite error(unknown file type).\n");
 		return 0;
 	}
 
@@ -221,11 +581,32 @@ int FileWrite(fileTYPE *file, void *pBuffer)
 // Read with offset advancing
 int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
 {
-	ssize_t ret = read(file->fd, pBuffer, length);
-	if (ret < 0)
+	ssize_t ret = 0;
+
+	if (file->filp)
 	{
-		printf("FileReadAdv error(%d).\n", ret);
-		return 0;
+		ret = fread(pBuffer, length, 1, file->filp);
+		if (ret < 0)
+		{
+			printf("FileReadAdv error(%d).\n", ret);
+			return 0;
+		}
+	}
+	else if (file->zip)
+	{
+		ret = mz_zip_reader_extract_iter_read(file->zip->iter, pBuffer, length);
+		if (!ret)
+		{
+			printf("FileReadEx(mz_zip_reader_extract_iter_read) Failed to read, error:%s\n",
+			       mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+			return 0;
+		}
+		file->zip->offset += ret;
+	}
+	else
+	{
+		printf("FileReadAdv error(unknown file type).\n");
+		return -1;
 	}
 
 	file->offset += ret;
@@ -240,10 +621,25 @@ int FileReadSec(fileTYPE *file, void *pBuffer)
 // Write with offset advancing
 int FileWriteAdv(fileTYPE *file, void *pBuffer, int length)
 {
-	int ret = write(file->fd, pBuffer, length);
-	if (ret < 0)
+	int ret;
+
+	if (file->filp)
 	{
-		printf("FileWriteAdv error(%d).\n", ret);
+		ret = fwrite(pBuffer, length, 1, file->filp);
+		if (ret < 0)
+		{
+			printf("FileWriteAdv error(%d).\n", ret);
+			return 0;
+		}
+	}
+	else if (file->zip)
+	{
+		printf("FileWriteAdv error(not supported for zip).\n");
+		return 0;
+	}
+	else
+	{
+		printf("FileWriteAdv error(unknown file type).\n");
 		return 0;
 	}
 
@@ -259,6 +655,12 @@ int FileWriteSec(fileTYPE *file, void *pBuffer)
 int FileSave(const char *name, void *pBuffer, int size)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);
+	if (!FileCanWrite(name))
+	{
+		printf("FileSave(FileCanWrite) File:%s, not writable.\n", full_path);
+		return 0;
+	}
+
 	int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0)
 	{
@@ -333,6 +735,11 @@ int FileCanWrite(const char *name)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);
 
+	if (FileIsZipped(full_path, nullptr, nullptr))
+	{
+		return 0;
+	}
+
 	struct stat64 st;
 	int ret = stat64(full_path, &st);
 	if (ret < 0)
@@ -343,6 +750,36 @@ int FileCanWrite(const char *name)
 
 	//printf("FileCanWrite: mode=%04o.\n", st.st_mode);
 	return ((st.st_mode & S_IWUSR) != 0);
+}
+
+void FileGenerateSavePath(const char *name, const char* extension, char* out_name, int length)
+{
+	const char *d = strrchr(name, '.');
+	if (d)
+	{
+		const int l = std::min(d - name, length);
+		strncpy(out_name, name, l);
+		out_name[l] = '\0';
+	}
+	else
+	{
+		strncpy(out_name, name, length);
+	}
+
+	char *z = strcasestr(out_name, ".zip");
+	if (z)
+	{
+		// Remove '.' from '.zip' so file logic won't think
+		// the file has been compressed.
+		*z = '-';
+		for (char *p = z; (p = strchr(p, '/')); )
+		{
+			*p = '-';
+		}
+	}
+
+	strncat(out_name, ".", length);
+	strncat(out_name, extension, length);
 }
 
 uint32_t getFileType(const char *name)
@@ -557,24 +994,9 @@ struct DirentComp
 	size_t iterations = 0;
 };
 
-static int get_stmode(const char *path)
-{
-	sprintf(full_path, "%s/%s", getRootDir(), path);
-	struct stat64 st;
-	return (stat64(full_path, &st) < 0) ? 0 : st.st_mode;
-}
-
 void AdjustDirectory(char *path)
 {
-	int stmode = get_stmode(path);
-	if (!stmode)
-	{
-		printf("AdjustDirectory(stat) path:%s, error.\n", path);
-		path[0] = 0;
-		return;
-	}
-
-	if (stmode & S_IFDIR) return;
+	if (isPathDirectory(path)) return;
 
 	char *p = strrchr(path, '/');
 	if (p)
@@ -585,6 +1007,20 @@ void AdjustDirectory(char *path)
 	{
 		path[0] = 0;
 	}
+}
+
+static bool IsInSameFolder(const char *folder, const char *path)
+{
+	if (strcasestr(path, folder) == path)
+	{
+		const char *subpath = path + strlen(folder) + 1;
+		if (*subpath != '\0')
+		{
+			const char *slash = strchr(subpath, '/');
+			return !slash || *(slash + 1) == '\0';
+		}
+	}
+	return false;
 }
 
 int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix)
@@ -599,6 +1035,12 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		ext += 3;
 	}
 
+	const char* is_zipped = strcasestr(path, ".zip");
+	if (is_zipped && strcasestr(is_zipped + 4, ".zip"))
+	{
+		printf("Nested zip-files are not supported: %s\n", path);
+		return 0;
+	}
 	int extlen = strlen(extension);
 
 	//printf("scan dir\n");
@@ -606,8 +1048,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	if (mode == SCANF_INIT)
 	{
 		file_name[0] = 0;
-		int stmode = get_stmode(path);
-		if (!(stmode & S_IFDIR))
+		if (!isPathDirectory(path))
 		{
 			char *p = strrchr(path, '/');
 			if (p)
@@ -621,35 +1062,78 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				path[0] = 0;
 			}
 
-			if (!(stmode & S_IFREG)) file_name[0] = 0;
+			if (!isPathRegularFile(path)) file_name[0] = 0;
 		}
 
-		if (!(get_stmode(path) & S_IFDIR))
+		if (!isPathDirectory(path))
 		{
 			path[0] = 0;
 			file_name[0] = 0;
 		}
 
 		sprintf(full_path, "%s/%s", getRootDir(), path);
-		printf("Start to scan dir: %s\n", full_path);
+		printf("Start to scan %sdir: %s\n", is_zipped ? "zipped " : "", full_path);
+
+		std::string zip_path, file_path_in_zip;
+		FileIsZipped(full_path, &zip_path, &file_path_in_zip);
 
 		iFirstEntry = 0;
 		iSelectedEntry = 0;
 		DirItem.clear();
 
-		DIR *d = opendir(full_path);
-		if (!d)
+		DIR *d = nullptr;
+		mz_zip_archive *z = nullptr;
+		if (is_zipped)
 		{
-			printf("Couldn't open dir: %s\n", full_path);
-			return 0;
+			mz_zip_archive _z = { 0 };
+			if (!mz_zip_reader_init_file(&_z, zip_path.c_str(), 0))
+			{
+				printf("Couldn't open zip file %s: %s\n", full_path, mz_zip_get_error_string(mz_zip_get_last_error(z)));
+				return 0;
+			}
+			z = new mz_zip_archive(_z);
+		}
+		else
+		{
+			d = opendir(full_path);
+			if (!d)
+			{
+				printf("Couldn't open dir: %s\n", full_path);
+				return 0;
+			}
 		}
 
-		struct dirent *de;
-		for (size_t i = 0; (de = readdir(d)); i++)
+		struct dirent *de = nullptr;
+		for (size_t i = 0; (d && (de = readdir(d)))
+				 || (z && i < mz_zip_reader_get_num_files(z)); i++)
 		{
 			if (0 < i && i % YieldIterations == 0)
 			{
 				scheduler_yield();
+			}
+
+			struct dirent _de = { 0 };
+			if (z) {
+				mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
+				if (!IsInSameFolder(file_path_in_zip.c_str(), _de.d_name))
+				{
+					continue;
+				}
+				// Remove leading folders.
+				const char* subpath = _de.d_name + file_path_in_zip.length();
+				if (*subpath == '/')
+				{
+					subpath++;
+				}
+				strcpy(_de.d_name, subpath);
+
+				_de.d_type = mz_zip_reader_is_file_a_directory(z, i) ? DT_DIR : DT_REG;
+				if (_de.d_type == DT_DIR)
+				{
+					// Remove trailing slash.
+					_de.d_name[strlen(_de.d_name) - 1] = '\0';
+				}
+				de = &_de;
 			}
 
 			if (de->d_type == DT_DIR)
@@ -680,6 +1164,12 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					int len = strlen(de->d_name);
 					const char *ext = extension;
 					int found = (has_trd && x2trd_ext_supp(de->d_name));
+					if (!found && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip"))
+					{
+						// Fake that zip-file is a directory.
+						de->d_type = DT_DIR;
+						found = 1;
+					}
 					if (!found && is_minimig() && !memcmp(extension, "HDF", 3))
 					{
 						found = !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".iso");
@@ -724,7 +1214,22 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 			DirItem.push_back(*de);
 		}
-		closedir(d);
+		if (z)
+		{
+			// Since zip files aren't actually folders the entry to
+			// exit the zip file must be added manually.
+			dirent up;
+			up.d_type = DT_DIR;
+			strcpy(up.d_name, "..");
+			DirItem.push_back(up);
+
+			mz_zip_reader_end(z);
+			delete z;
+		}
+		if (d)
+		{
+			closedir(d);
+		}
 
 		printf("Got %d dir entries\n", flist_nDirEntries());
 		if (!flist_nDirEntries()) return 0;
