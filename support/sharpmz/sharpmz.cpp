@@ -61,7 +61,6 @@ int sharpmz_file_write(fileTYPE *file, const char *fileName)
 {
     int           ret;
     char          fullPath[1024];
-    struct stat64 st;
 
     sprintf(fullPath, "%s/%s/%s", getRootDir(), SHARPMZ_CORE_NAME, fileName);
 

@@ -1085,7 +1085,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		mz_zip_archive *z = nullptr;
 		if (is_zipped)
 		{
-			mz_zip_archive _z = { 0 };
+			mz_zip_archive _z = {};
 			if (!mz_zip_reader_init_file(&_z, zip_path.c_str(), 0))
 			{
 				printf("Couldn't open zip file %s: %s\n", full_path, mz_zip_get_error_string(mz_zip_get_last_error(z)));
@@ -1112,7 +1112,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				scheduler_yield();
 			}
 
-			struct dirent _de = { 0 };
+			struct dirent _de = {};
 			if (z) {
 				mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
 				if (!IsInSameFolder(file_path_in_zip.c_str(), _de.d_name))
