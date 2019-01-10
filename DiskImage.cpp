@@ -1280,7 +1280,7 @@ void TDiskImage::readUDI(int hfile, bool ronly)
 }
 
 //-----------------------------------------------------------------------------
-void TDiskImage::writeTRD(int hfile)
+void TDiskImage::writeTRD(fileTYPE *hfile)
 {
 	VGFIND_SECTOR vgfs;
 
@@ -1295,13 +1295,13 @@ void TDiskImage::writeTRD(int hfile)
 			{
 				if (FindSector(trk, side, sec + 1, &vgfs))
 				{
-					write(hfile, vgfs.SectorPointer, 256);
+					FileWriteAdv(hfile, vgfs.SectorPointer, 256);
 					if ((!vgfs.CRCOK) || (!vgfs.vgfa.CRCOK)) printf("Warning: sector %d on track %d, side %d with BAD CRC!\n", sec + 1, trk, side);
 					if (vgfs.SectorLength != 256) printf("Warning: sector %d on track %d, side %d is non 256 bytes!\n", sec + 1, trk, side);
 				}
 				else
 				{
-					write(hfile, nullbuf, 256);
+					FileWriteAdv(hfile, nullbuf, 256);
 					printf("DANGER! Sector %d on track %d, side %d not found!\n", sec + 1, trk, side);
 				}
 			}
@@ -3014,19 +3014,10 @@ int x2trd(const char *name, fileTYPE *f)
 		return 0;
 	}
 
-	img->writeTRD(f->fd);
+	img->writeTRD(f);
 	delete(img);
 
-	struct stat64 st;
-	int ret = fstat64(f->fd, &st);
-	if (ret < 0)
-	{
-		printf("x2trd(fstat) error: %d.\n", ret);
-		FileClose(f);
-		return 0;
-	}
-
-	f->size = st.st_size;
+	f->size = FileGetSize(f);
 	FileSeekLBA(f, 0);
 	printf("x2trd: vtrd size=%llu.\n", f->size);
 
