@@ -613,6 +613,8 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length)
 	if (file->filp)
 	{
 		ret = fwrite(pBuffer, length, 1, file->filp);
+		fflush(file->filp);
+
 		if (ret < 0)
 		{
 			printf("FileWriteAdv error(%d).\n", ret);
