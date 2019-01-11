@@ -62,7 +62,7 @@ static bool FileIsZipped(char* path, char** zip_path, char** file_path)
 	return false;
 }
 
-static char* make_fullpath(char *path, int mode = 0)
+static char* make_fullpath(const char *path, int mode = 0)
 {
 	const char *root = getRootDir();
 	if (strncasecmp(getRootDir(), path, strlen(root)))
@@ -644,12 +644,6 @@ int FileWriteSec(fileTYPE *file, void *pBuffer)
 int FileSave(const char *name, void *pBuffer, int size)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);
-	if (!FileCanWrite(name))
-	{
-		printf("FileSave(FileCanWrite) File:%s, not writable.\n", full_path);
-		return 0;
-	}
-
 	int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0)
 	{
@@ -741,34 +735,38 @@ int FileCanWrite(const char *name)
 	return ((st.st_mode & S_IWUSR) != 0);
 }
 
-void FileGenerateSavePath(const char *name, const char* extension, char* out_name, int length)
+void FileGenerateSavePath(const char *name, char* out_name)
 {
-	const char *d = strrchr(name, '.');
-	if (d)
+	make_fullpath(SAVE_DIR);
+	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
+	strcat(full_path, "/");
+	strcat(full_path, HomeDir);
+	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
+
+	sprintf(out_name, "%s/%s/", SAVE_DIR, HomeDir);
+	char *fname = out_name + strlen(out_name);
+
+	const char *p = strrchr(name, '/');
+	if (p)
 	{
-		const int l = MIN(d - name, length);
-		strncpy(out_name, name, l);
-		out_name[l] = '\0';
+		strcat(fname, p+1);
 	}
 	else
 	{
-		strncpy(out_name, name, length);
+		strcat(fname, name);
 	}
 
-	char *z = strcasestr(out_name, ".zip");
-	if (z)
+	char *e = strrchr(fname, '.');
+	if (e)
 	{
-		// Remove '.' from '.zip' so file logic won't think
-		// the file has been compressed.
-		*z = '-';
-		for (char *p = z; (p = strchr(p, '/')); )
-		{
-			*p = '-';
-		}
+		strcpy(e,".sav");
+	}
+	else
+	{
+		strcat(fname, ".sav");
 	}
 
-	strncat(out_name, ".", length);
-	strncat(out_name, extension, length);
+	printf("SavePath=%s\n", out_name);
 }
 
 uint32_t getFileType(const char *name)

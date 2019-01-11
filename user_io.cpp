@@ -1299,7 +1299,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	if (opensave)
 	{
-		FileGenerateSavePath(name, "sav", (char*)buf, sizeof(buf));
+		FileGenerateSavePath(name, (char*)buf);
 		user_io_file_mount((char*)buf, 0, 1);
 	}
 
