@@ -166,9 +166,7 @@ void ReadTrack(adfTYPE *drive)
 	unsigned char status;
 	unsigned char track;
 	unsigned short dsksync;
-	//unsigned short dsklen;
 	uint16_t tmp;
-	//unsigned short n;
 
 	if (drive->track >= drive->tracks)
 	{
@@ -201,7 +199,7 @@ void ReadTrack(adfTYPE *drive)
 	status = (uint8_t)(tmp>>8); // read request signal
 	track = (uint8_t)tmp; // track number (cylinder & head)
 	dsksync = spi_w(0); // disk sync
-	//dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
+	spi_w(0); // mfm words to transfer
 	DisableFpga();
 
 	if (track >= drive->tracks)
@@ -218,7 +216,7 @@ void ReadTrack(adfTYPE *drive)
 		status = (uint8_t)(tmp >> 8); // read request signal
 		track = (uint8_t)tmp; // track number (cylinder & head)
 		dsksync = spi_w(0); // disk sync
-		//dsklen = spi_w(0) & 0x3FFF; // mfm words to transfer
+		spi_w(0); // mfm words to transfer
 
 		if (track >= drive->tracks)
 			track = drive->tracks - 1;
