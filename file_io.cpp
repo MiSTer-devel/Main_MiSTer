@@ -1035,17 +1035,18 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	if (mode == SCANF_INIT)
 	{
 		file_name[0] = 0;
-		if (isPathRegularFile(path))
+		if (!isPathDirectory(path))
 		{
+			bool isfile = isPathRegularFile(path);
 			char *p = strrchr(path, '/');
 			if (p)
 			{
-				strcpy(file_name, p + 1);
+				if (isfile) strcpy(file_name, p + 1);
 				*p = 0;
 			}
 			else
 			{
-				strcpy(file_name, path);
+				if (isfile) strcpy(file_name, path);
 				path[0] = 0;
 			}
 		}
