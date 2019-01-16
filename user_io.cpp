@@ -2807,7 +2807,7 @@ static void setVideo()
 	for (int i = 9; i < 21; i++)
 	{
 		printf("0x%X, ", vitems[i]);
-		if (i & 1) spi_w(vitems[i] | ((i==9 && cfg.vsync_adjust==2) ? 0x8000 : 0));
+		if (i & 1) spi_w(vitems[i] | ((i==9 && (is_menu_core() ? cfg.menu_pal : (cfg.vsync_adjust==2))) ? 0x8000 : 0));
 		else
 		{
 			spi_w(vitems[i]);

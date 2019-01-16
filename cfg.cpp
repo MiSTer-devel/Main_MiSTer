@@ -43,6 +43,7 @@ const ini_var_t ini_vars[] = {
 	{ "VSCALE_MODE", (void*)(&(cfg.vscale_mode)), UINT8, 0, 3, 1 },
 	{ "VSCALE_BORDER", (void*)(&(cfg.vscale_border)), UINT8, 0, 100, 1 },
 	{ "RBF_HIDE_DATECODE", (void*)(&(cfg.rbf_hide_datecode)), UINT8, 0, 1, 1 },
+	{ "MENU_PAL", (void*)(&(cfg.menu_pal)), UINT8, 0, 1, 1 },
 };
 
 // mist ini config

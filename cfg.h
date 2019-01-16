@@ -32,6 +32,7 @@ typedef struct {
 	uint8_t vscale_mode;
 	uint8_t vscale_border;
 	uint8_t rbf_hide_datecode;
+	uint8_t menu_pal;
 	char video_conf[1024];
 } cfg_t;
 
