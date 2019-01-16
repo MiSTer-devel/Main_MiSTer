@@ -1308,15 +1308,18 @@ static void joy_digital(int jnum, uint16_t mask, uint16_t code, char press, int 
 		{
 			if (bnum != 17 && bnum != 16)
 			{
-				if (press)
+				if (!(mask & 0xF))
 				{
-					lastcode[num] = code;
-					lastmask[num] = mask;
-				}
-				else
-				{
-					lastcode[num] = 0;
-					lastmask[num] = 0;
+					if (press)
+					{
+						lastcode[num] = code;
+						lastmask[num] = mask;
+					}
+					else
+					{
+						lastcode[num] = 0;
+						lastmask[num] = 0;
+					}
 				}
 			}
 			else if (!user_io_osd_is_visible())
