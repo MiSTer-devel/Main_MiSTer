@@ -2414,17 +2414,17 @@ void user_io_kbd(uint16_t key, int press)
 {
 	if (key == KEY_MUTE)
 	{
-		if (press == 1 && hasAPI1_5() && !osd_is_visible && !is_menu_core()) set_volume(0);
+		if (press == 1 && hasAPI1_5()) set_volume(0);
 	}
 	else
 	if (key == KEY_VOLUMEDOWN)
 	{
-		if (press && hasAPI1_5() && !osd_is_visible && !is_menu_core()) set_volume(-1);
+		if (press && hasAPI1_5()) set_volume(-1);
 	}
 	else
 	if (key == KEY_VOLUMEUP)
 	{
-		if (press && hasAPI1_5() && !osd_is_visible && !is_menu_core()) set_volume(1);
+		if (press && hasAPI1_5()) set_volume(1);
 	}
 	else
 	if (key == 0xBE)
