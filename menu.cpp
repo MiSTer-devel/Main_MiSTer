@@ -168,7 +168,7 @@ const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUT
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "    MLINK", "MLINK-38K" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
-const char *config_softsynth_msg[] = {"       TCP", "       UDP", "      MUNT", "FluidSynth"};
+const char *config_softsynth_msg[] = {"FluidSynth", "      MUNT", "       TCP", "       UDP"};
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -228,10 +228,10 @@ int GetUARTMode()
 int GetMidiLinkMode()
 {
         struct stat filestat;
-        if (!stat("/tmp/ML_TCP",    &filestat)) return 0;
-        if (!stat("/tmp/ML_UDP",    &filestat)) return 1;
-        if (!stat("/tmp/ML_MUNT",   &filestat)) return 2;
-        if (!stat("/tmp/ML_FSYNTH", &filestat)) return 3;
+        if (!stat("/tmp/ML_FSYNTH", &filestat)) return 0;
+        if (!stat("/tmp/ML_MUNT",   &filestat)) return 1;
+        if (!stat("/tmp/ML_TCP",    &filestat)) return 2;
+        if (!stat("/tmp/ML_UDP",    &filestat)) return 3;
         return 0;
 }
 
@@ -243,14 +243,14 @@ void SetMidiLinkMode(int mode)
         remove("/tmp/ML_TCP");
         switch (mode)
         {
-        	case 0: system("echo 1 > /tmp/ML_TCP");
+        	case 0: system("echo 1 > /tmp/ML_FSYNTH");
         	break;
-        	case 1: system("echo 1 > /tmp/ML_UDP");
+        	case 1: system("echo 1 > /tmp/ML_MUNT"); 
+        	break;
+        	case 2: system("echo 1 > /tmp/ML_TCP");
+        	break;
+        	case 3: system("echo 1 > /tmp/ML_UDP");
                 break;
-                case 2: system("echo 1 > /tmp/ML_MUNT"); 
-                break;
-                case 3: system("echo 1 > /tmp/ML_FSYNTH");  
-                break;  
         }
 }      
 
@@ -1429,9 +1429,6 @@ void HandleUI(void)
 				{       
 					int mode = GetUARTMode();
 					mode++;
-                                        //if (mode == 3 || mode == 4) 
-                                        //        if (stat("/dev/midi", &filestat) != 0)
-                                        //                mode = 0;
                                         if (mode > 5) mode = 0;
 					sprintf(s, "uartmode %d", mode);
 					system(s);
@@ -1448,12 +1445,7 @@ void HandleUI(void)
                                         {
                                                 struct stat filestat;
                                                 int midilink = GetMidiLinkMode();
-                                                if ((stat("/dev/snd/pcmC0D0p", &filestat) == 0) ||
-                                                    (stat("/etc/asound.conf", &filestat) == 0 ) || 
-                                                     midilink == 0)
-							midilink++;
-						else 
-							midilink = 0;
+						midilink++;
                                                 if (midilink > 3) midilink = 0;
                                                 SetMidiLinkMode(midilink);
                                                 sprintf(s, "uartmode %d", 0);
