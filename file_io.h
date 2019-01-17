@@ -34,6 +34,7 @@ dirent* flist_SelectedItem();
 #define SCANF_NEXT_PAGE  2 // find next 16 files in directory
 #define SCANF_PREV_PAGE -2 // find previous 16 files in directory
 #define SCANF_SET_ITEM   3 // find exact item
+#define SCANF_END        4 // find last file in directory
 
 // options flags
 #define SCANO_DIR        1 // include subdirectories
