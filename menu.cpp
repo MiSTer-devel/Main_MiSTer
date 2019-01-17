@@ -122,6 +122,9 @@ enum MENU
 	MENU_ARCHIE_MAIN2,
 	MENU_ARCHIE_MAIN_FILE_SELECTED,
 
+	MENU_UART1,
+	MENU_UART2,
+
 	// 8bit menu entries
 	MENU_8BIT_MAIN1,
 	MENU_8BIT_MAIN2,
@@ -166,9 +169,8 @@ const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
-const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "    MLINK", "MLINK-38K" };
+const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "     MIDI", " MIDI-38K" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
-const char *config_softsynth_msg[] = {"FluidSynth", "      MUNT", "       TCP", "       UDP"};
 
 char joy_bnames[12][32];
 int  joy_bcount = 0;
@@ -1279,10 +1281,10 @@ void HandleUI(void)
 			parentstate = MENU_8BIT_SYSTEM1;
 
 			int n = 0;
-			if (!user_io_get_uart_mode() || user_io_get_scaler_flt() < 0) OsdWrite(n++); //enough place to skip first line
+			OsdWrite(n++);
 
 			OsdWrite(n++, " Core                      \x16", menusub == 0, 0);
-			sprintf(s, " Define %s buttons      ", is_menu_core() ? "System" : user_io_get_core_name_ex());
+			sprintf(s, " Define %s buttons         ", is_menu_core() ? "System" : user_io_get_core_name_ex());
 			s[27] = '\x16';
 			s[28] = 0;
 			OsdWrite(n++, s, menusub == 1, 0);
@@ -1290,14 +1292,14 @@ void HandleUI(void)
 
 			if (user_io_get_uart_mode())
 			{
+				menumask |= 0x8;
 				OsdWrite(n++);
-				struct stat filestat;
-				int mode = GetUARTMode();
-				menumask |= 0x18;
-				sprintf(s, " UART connection   %s", config_uart_msg[mode]);
-				OsdWrite(n++, s, menusub == 3, 0);
-				sprintf(s, " MidiLink         %s", config_softsynth_msg[GetMidiLinkMode()]);
-				OsdWrite(n++, s, menusub == 4, (mode == 3 || mode == 4) && stat("/dev/midi", &filestat) ? 0 : 1);
+				const char *p = config_uart_msg[GetUARTMode()];
+				while (*p == ' ') p++;
+				sprintf(s, " UART mode (%s)            ",p);
+				s[27] = '\x16';
+				s[28] = 0;
+				OsdWrite(n++, s, menusub == 3);
 			}
 
 			if (user_io_get_scaler_flt() >= 0)
@@ -1387,39 +1389,14 @@ void HandleUI(void)
 				break;
 
 			case 3:
-				{       
-					uint mode = GetUARTMode() + 1;
-					if (mode > sizeof(config_uart_msg)/sizeof(config_uart_msg[0])) mode = 0;
-
-					sprintf(s, "uartmode %d", mode);
-					system(s);
-					menustate = MENU_8BIT_SYSTEM1;
-
-					mode |= GetMidiLinkMode() << 8;
-					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
-					FileSaveConfig(s, &mode, 4);
-				}
-				break;
-
-			case 4: 
 				{
-					int mode = GetUARTMode();
-					if (mode == 3 or mode == 4)
-					{
-						uint midilink = GetMidiLinkMode();
-						midilink++;
-						if (midilink > sizeof(config_softsynth_msg)/sizeof(config_softsynth_msg[0])) midilink = 0;
-						SetMidiLinkMode(midilink);
-						sprintf(s, "uartmode %d", 0);
-						system(s);
-						sprintf(s, "uartmode %d", mode);
-						system(s);
+					menustate = MENU_UART1;
 
-						mode |= GetMidiLinkMode() << 8;
-						sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
-						FileSaveConfig(s, &mode, 4);
-					}
-					menustate = MENU_8BIT_SYSTEM1;
+					struct stat filestat;
+					int mode = GetUARTMode();
+
+					//jump straght to Softsynth selection if enabled
+					menusub = ((mode != 3 && mode != 4) || !stat("/dev/midi", &filestat)) ? 0 : 2;
 				}
 				break;
                                 				
@@ -1524,6 +1501,93 @@ void HandleUI(void)
 		}
 
 		if(!hold_cnt && reboot_req) fpga_load_rbf("menu.rbf");
+		break;
+
+	case MENU_UART1:
+		{
+			helptext = 0;
+			menumask = 0x1F;
+
+			OsdSetTitle("UART mode");
+			menustate = MENU_UART2;
+			parentstate = MENU_UART1;
+
+			struct stat filestat;
+			int hasmidi = !stat("/dev/midi", &filestat);
+			int mode = GetUARTMode();
+			int midilink = GetMidiLinkMode();
+			int m = (mode != 3 && mode != 4) || hasmidi;
+
+			OsdWrite(0);
+			sprintf(s, " Connection:       %s", config_uart_msg[mode]);
+			OsdWrite(1, s, menusub == 0, 0);
+			OsdWrite(2);
+
+			sprintf(s, " MIDI link:           %s", (midilink & 2) ? "Remote" : " Local");
+			OsdWrite(3, s, menusub == 1, m);
+			sprintf(s, " Type:            %s", (midilink & 2) ? ((midilink & 1) ? "       UDP" : "       TCP") : ((midilink & 1) ? "      MUNT" : "FluidSynth"));
+			OsdWrite(4, s, menusub == 2, m);
+
+			OsdWrite(5);
+			OsdWrite(6, " Save", menusub == 3);
+
+			for (int i = 7; i < 15; i++) OsdWrite(i);
+			OsdWrite(15, STD_EXIT, menusub == 4);
+		}
+		break;
+
+	case MENU_UART2:
+		if (menu)
+		{
+			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 3;
+			break;
+		}
+
+		if (select)
+		{
+			switch (menusub)
+			{
+			case 0:
+				{
+					uint mode = GetUARTMode() + 1;
+					if (mode > sizeof(config_uart_msg) / sizeof(config_uart_msg[0])) mode = 0;
+
+					sprintf(s, "uartmode %d", mode);
+					system(s);
+					menustate = MENU_UART1;
+				}
+				break;
+
+			case 1:
+			case 2:
+				if (!m)
+				{
+					int mode = GetUARTMode();
+					SetMidiLinkMode(GetMidiLinkMode() ^ ((menusub == 1) ? 2 : 1));
+					sprintf(s, "uartmode %d", 0);
+					system(s);
+					sprintf(s, "uartmode %d", mode);
+					system(s);
+					menustate = MENU_UART1;
+				}
+				break;
+
+			case 3:
+				{
+					int mode = GetUARTMode() | (GetMidiLinkMode() << 8);
+					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
+					FileSaveConfig(s, &mode, 4);
+					menustate = MENU_8BIT_SYSTEM1;
+					menusub = 3;
+				}
+				break;
+
+			default:
+				menustate = MENU_NONE1;
+				break;
+			}
+		}
 		break;
 
 	case MENU_COEFF_FILE_SELECTED:
