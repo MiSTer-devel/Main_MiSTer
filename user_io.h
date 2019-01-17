@@ -248,4 +248,9 @@ char user_io_minimig_get_adjust();
 
 #define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name())
 
+int GetUARTMode();
+int GetMidiLinkMode();
+void SetMidiLinkMode(int mode);
+
+
 #endif // USER_IO_H

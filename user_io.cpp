@@ -7,6 +7,8 @@
 #include <time.h>
 #include <limits.h>
 #include <ctype.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
 
 #include "hardware.h"
 #include "osd.h"
@@ -403,6 +405,41 @@ const char* get_rbf_name()
 	return p+1;
 }
 
+int GetUARTMode()
+{
+	struct stat filestat;
+	if (!stat("/tmp/uartmode1", &filestat)) return 1;
+	if (!stat("/tmp/uartmode2", &filestat)) return 2;
+	if (!stat("/tmp/uartmode3", &filestat)) return 3;
+	if (!stat("/tmp/uartmode4", &filestat)) return 4;
+	return 0;
+}
+
+int GetMidiLinkMode()
+{
+	struct stat filestat;
+	if (!stat("/tmp/ML_FSYNTH", &filestat)) return 0;
+	if (!stat("/tmp/ML_MUNT", &filestat)) return 1;
+	if (!stat("/tmp/ML_TCP", &filestat)) return 2;
+	if (!stat("/tmp/ML_UDP", &filestat)) return 3;
+	return 0;
+}
+
+void SetMidiLinkMode(int mode)
+{
+	remove("/tmp/ML_FSYNTH");
+	remove("/tmp/ML_MUNT");
+	remove("/tmp/ML_UDP");
+	remove("/tmp/ML_TCP");
+	switch (mode)
+	{
+	case 0: system("echo 1 > /tmp/ML_FSYNTH"); break;
+	case 1: system("echo 1 > /tmp/ML_MUNT"); break;
+	case 2: system("echo 1 > /tmp/ML_TCP"); break;
+	case 3: system("echo 1 > /tmp/ML_UDP"); break;
+	}
+}
+
 void user_io_init(const char *path)
 {
 	char *name;
@@ -588,11 +625,13 @@ void user_io_init(const char *path)
 	{
 		sprintf(mainpath, "uartmode.%s", user_io_get_core_name_ex());
 		FileLoadConfig(mainpath, &mode, 4);
-		if (mode > 5) mode = 0;
 	}
 
 	char cmd[32];
-	sprintf(cmd, "uartmode %d", mode);
+	system("uartmode 0");
+	
+	SetMidiLinkMode((mode >> 8) & 0xFF);
+	sprintf(cmd, "uartmode %d", mode & 0xFF);
 	system(cmd);
 }
 

@@ -34,8 +34,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <ifaddrs.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
-#include "stdio.h"
-#include "string.h"
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
 #include "file_io.h"
 #include "osd.h"
 #include "hardware.h"
@@ -43,7 +44,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "user_io.h"
 #include "debug.h"
 #include "fpga_io.h"
-#include <stdbool.h>
 #include "cfg.h"
 #include "input.h"
 #include "battery.h"
@@ -214,45 +214,6 @@ uint32_t fs_ExtLen = 0;
 uint32_t fs_Options;
 uint32_t fs_MenuSelect;
 uint32_t fs_MenuCancel;
-
-int GetUARTMode()
-{
-        struct stat filestat;
-        if (!stat("/tmp/uartmode1", &filestat)) return 1;
-        if (!stat("/tmp/uartmode2", &filestat)) return 2;
-        if (!stat("/tmp/uartmode3", &filestat)) return 3;
-        if (!stat("/tmp/uartmode4", &filestat)) return 4;
-        return 0;
-}
-
-int GetMidiLinkMode()
-{
-        struct stat filestat;
-        if (!stat("/tmp/ML_FSYNTH", &filestat)) return 0;
-        if (!stat("/tmp/ML_MUNT",   &filestat)) return 1;
-        if (!stat("/tmp/ML_TCP",    &filestat)) return 2;
-        if (!stat("/tmp/ML_UDP",    &filestat)) return 3;
-        return 0;
-}
-
-void SetMidiLinkMode(int mode)
-{
-	remove("/tmp/ML_FSYNTH");
-	remove("/tmp/ML_MUNT");
-        remove("/tmp/ML_UDP");
-        remove("/tmp/ML_TCP");
-        switch (mode)
-        {
-        	case 0: system("echo 1 > /tmp/ML_FSYNTH");
-        	break;
-        	case 1: system("echo 1 > /tmp/ML_MUNT"); 
-        	break;
-        	case 2: system("echo 1 > /tmp/ML_TCP");
-        	break;
-        	case 3: system("echo 1 > /tmp/ML_UDP");
-                break;
-        }
-}      
 
 char* GetExt(char *ext)
 {
@@ -1401,6 +1362,7 @@ void HandleUI(void)
 				SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_8BIT_SYSTEM1);
 				menusub = 0;
 				break;
+
 			case 1:
 				if (is_minimig())
 				{
@@ -1417,42 +1379,49 @@ void HandleUI(void)
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;
+
 			case 2:
 				start_map_setting(-1);
 				menustate = MENU_JOYKBDMAP;
 				menusub = 0;
 				break;
+
 			case 3:
 				{       
-					int mode = GetUARTMode();
-					mode++;
-                                        if (mode > 5) mode = 0;
+					uint mode = GetUARTMode() + 1;
+					if (mode > sizeof(config_uart_msg)/sizeof(config_uart_msg[0])) mode = 0;
+
 					sprintf(s, "uartmode %d", mode);
 					system(s);
 					menustate = MENU_8BIT_SYSTEM1;
 
+					mode |= GetMidiLinkMode() << 8;
 					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
 					FileSaveConfig(s, &mode, 4);
 				}
 				break;
+
 			case 4: 
-                                {
-                                        int mode = GetUARTMode(); 
-                                        if(mode == 3 or mode == 4)
-                                        {
-                                                struct stat filestat;
-                                                int midilink = GetMidiLinkMode();
+				{
+					int mode = GetUARTMode();
+					if (mode == 3 or mode == 4)
+					{
+						uint midilink = GetMidiLinkMode();
 						midilink++;
-                                                if (midilink > 3) midilink = 0;
-                                                SetMidiLinkMode(midilink);
-                                                sprintf(s, "uartmode %d", 0);
-                                                system(s);
-                                                sprintf(s, "uartmode %d", mode);
-                                                system(s);
-                                        }
-                                        menustate = MENU_8BIT_SYSTEM1;
-                                }
-                                break;
+						if (midilink > sizeof(config_softsynth_msg)/sizeof(config_softsynth_msg[0])) midilink = 0;
+						SetMidiLinkMode(midilink);
+						sprintf(s, "uartmode %d", 0);
+						system(s);
+						sprintf(s, "uartmode %d", mode);
+						system(s);
+
+						mode |= GetMidiLinkMode() << 8;
+						sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
+						FileSaveConfig(s, &mode, 4);
+					}
+					menustate = MENU_8BIT_SYSTEM1;
+				}
+				break;
                                 				
 			case 5:
 				user_io_set_scaler_flt(user_io_get_scaler_flt() ? 0 : 1);
@@ -1479,6 +1448,7 @@ void HandleUI(void)
                     menusub   = 0;
 				}
 				break;
+
 			case 8:
 				// Save settings
 				menustate = MENU_8BIT_MAIN1;
@@ -1502,6 +1472,7 @@ void HandleUI(void)
 					if (is_x86_core()) x86_config_save();
 				}
 				break;
+
 			case 9:
 				{
 					reboot_req = 1;
@@ -1514,10 +1485,12 @@ void HandleUI(void)
 					OsdWrite(cr, p, menusub == 8, 0);
 				}
 				break;
+
 			case 10:
 				menustate = MENU_8BIT_ABOUT1;
 				menusub = 0;
 				break;
+
 			default:
 				menustate = MENU_NONE1;
 				break;
