@@ -1243,7 +1243,14 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		if (flist_nDirEntries() == 0) // directory is empty so there is no point in searching for any entry
 			return 0;
 
-		if (mode == SCANF_NEXT)
+		if (mode == SCANF_END)
+		{
+			iSelectedEntry = flist_nDirEntries() - 1;
+			iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
+			if (iFirstEntry < 0) iFirstEntry = 0;
+			return 0;
+		}
+		else if (mode == SCANF_NEXT)
 		{
 			if(iSelectedEntry + 1 < flist_nDirEntries()) // scroll within visible items
 			{

@@ -2497,6 +2497,12 @@ void HandleUI(void)
 			menustate = MENU_FILE_SELECT1;
 		}
 
+		if (c == KEY_END)
+		{
+			ScanDirectory(SelectedPath, SCANF_END, fs_pFileExt, fs_Options);
+			menustate = MENU_FILE_SELECT1;
+		}
+
 		if (c == KEY_BACKSPACE)
 		{
 			if (fs_Options & SCANO_UMOUNT)
