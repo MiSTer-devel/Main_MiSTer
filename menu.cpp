@@ -1312,35 +1312,50 @@ void HandleUI(void)
 			helptext = 0;
 			menumask = 0xf87;
 			reboot_req = 0;
-			
+
 			OsdSetTitle("System", OSD_ARROW_LEFT);
 			menustate = MENU_8BIT_SYSTEM2;
 			parentstate = MENU_8BIT_SYSTEM1;
 
-			s[0] = 0;
-			m = 0;			
-			if (user_io_get_uart_mode())
-			{
-				struct stat filestat;
-				int mode = GetUARTMode();
-				menumask |= 0x18;
-                                sprintf(s, " UART connection   %s", config_uart_msg[mode]);
-                                OsdWrite(3, s, menusub == 3, 0);
-                                sprintf(s, " MidiLink         %s", config_softsynth_msg[GetMidiLinkMode()]); 	
-				OsdWrite(4, s, menusub == 4 , (mode == 3 || mode == 4) && stat("/dev/midi", &filestat)?0:1);       
-                        }        
-			else
-			{
-				OsdWrite(m++, "", 0, 0);
-				OsdWrite(4, "", 0, 0);
-			}
+			int n = 0;
+			if (!user_io_get_uart_mode() || user_io_get_scaler_flt() < 0) OsdWrite(n++); //enough place to skip first line
 
-			OsdWrite(m++, " Core                      \x16", menusub == 0, 0);
+			OsdWrite(n++, " Core                      \x16", menusub == 0, 0);
 			sprintf(s, " Define %s buttons      ", is_menu_core() ? "System" : user_io_get_core_name_ex());
 			s[27] = '\x16';
 			s[28] = 0;
-			OsdWrite(m++, s, menusub == 1, 0);
-			OsdWrite(m++, " Button/Key remap for game \x16", menusub == 2, 0);
+			OsdWrite(n++, s, menusub == 1, 0);
+			OsdWrite(n++, " Button/Key remap for game \x16", menusub == 2, 0);
+
+			if (user_io_get_uart_mode())
+			{
+				OsdWrite(n++);
+				struct stat filestat;
+				int mode = GetUARTMode();
+				menumask |= 0x18;
+				sprintf(s, " UART connection   %s", config_uart_msg[mode]);
+				OsdWrite(n++, s, menusub == 3, 0);
+				sprintf(s, " MidiLink         %s", config_softsynth_msg[GetMidiLinkMode()]);
+				OsdWrite(n++, s, menusub == 4, (mode == 3 || mode == 4) && stat("/dev/midi", &filestat) ? 0 : 1);
+			}
+
+			if (user_io_get_scaler_flt() >= 0)
+			{
+				OsdWrite(n++);
+				menumask |= 0x60;
+				sprintf(s, " Scale Filter - %s", config_scaler_msg[user_io_get_scaler_flt() ? 1 : 0]);
+				OsdWrite(n++, s, menusub == 5);
+
+				memset(s, 0, sizeof(s));
+				s[0] = ' ';
+				if (strlen(user_io_get_scaler_coeff())) strncpy(s+1, user_io_get_scaler_coeff(),25);
+				else strcpy(s, " < none >");
+
+				while(strlen(s) < 26) strcat(s, " ");
+				strcat(s, " \x16 ");
+
+				OsdWrite(n++, s, menusub == 6, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
+			}
 
 			m = 0;
 			if (user_io_core_type() == CORE_TYPE_MINIMIG2)
@@ -1348,29 +1363,11 @@ void HandleUI(void)
 				m = 1;
 				menumask &= ~0x100;
 			}
-
-			OsdWrite(5);
-			int n = 6;
-			if (user_io_get_scaler_flt() >= 0)
-			{
-				menumask |= 0x60;
-				OsdWrite(n++, " HDMI Scaler:");
-				sprintf(s, " \x16 Filter - %s", config_scaler_msg[user_io_get_scaler_flt() ? 1 : 0]);
-				OsdWrite(n++, s, menusub == 5);
-
-				memset(s, 0, sizeof(s));
-				strcpy(s, " \x16 ");
-				if (strlen(user_io_get_scaler_coeff())) strncat(s, user_io_get_scaler_coeff(), 22);
-				else strcat(s, "<none>");
-
-				OsdWrite(n++, s, menusub == 6, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
-				OsdWrite(n++);
-			}
-
+			OsdWrite(n++);
 			OsdWrite(n++, m ? " Reset the core" : " Reset settings", menusub == 7, user_io_core_type() == CORE_TYPE_ARCHIE);
 			OsdWrite(n++, m ? "" : " Save settings", menusub == 8, 0);
-			OsdWrite(n++);
 
+			OsdWrite(n++);
 			cr = n;
 			OsdWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 9);
 			OsdWrite(n++, " About", menusub == 10);
