@@ -1506,14 +1506,14 @@ void HandleUI(void)
 	case MENU_UART1:
 		{
 			helptext = 0;
-			menumask = 0x1F;
+			menumask = 0x3F;
 
 			OsdSetTitle("UART mode");
 			menustate = MENU_UART2;
 			parentstate = MENU_UART1;
 
 			struct stat filestat;
-			int hasmidi = !stat("/dev/midi", &filestat);
+			int hasmidi = !stat("/dev/midi1", &filestat);
 			int mode = GetUARTMode();
 			int midilink = GetMidiLinkMode();
 			int m = (mode != 3 && mode != 4) || hasmidi;
@@ -1527,12 +1527,14 @@ void HandleUI(void)
 			OsdWrite(3, s, menusub == 1, m);
 			sprintf(s, " Type:            %s", (midilink & 2) ? ((midilink & 1) ? "       UDP" : "       TCP") : ((midilink & 1) ? "      MUNT" : "FluidSynth"));
 			OsdWrite(4, s, menusub == 2, m);
-
+			
 			OsdWrite(5);
-			OsdWrite(6, " Save", menusub == 3);
+			OsdWrite(6, " Reset UART Connection", menusub == 3, mode?0:1);
+			OsdWrite(7);
+			OsdWrite(8, " Save", menusub == 4);
 
-			for (int i = 7; i < 15; i++) OsdWrite(i);
-			OsdWrite(15, STD_EXIT, menusub == 4);
+			for (int i = 9; i < 15; i++) OsdWrite(i);
+			OsdWrite(15, STD_EXIT, menusub == 5);
 		}
 		break;
 
@@ -1572,8 +1574,20 @@ void HandleUI(void)
 					menustate = MENU_UART1;
 				}
 				break;
-
-			case 3:
+			case 3: 
+				{	
+					int mode = GetUARTMode();
+					if(mode != 0)
+					{
+						sprintf(s, "uartmode %d", 0);
+						system(s);
+						sprintf(s, "uartmode %d", mode);
+						system(s);
+						menustate = MENU_8BIT_SYSTEM1;
+					}
+				}
+				break;
+			case 4:
 				{
 					int mode = GetUARTMode() | (GetMidiLinkMode() << 8);
 					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
