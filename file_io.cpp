@@ -1122,6 +1122,27 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				de = &_de;
 			}
 
+			if (de->d_type == DT_LNK)
+			// Handle symbolic link type in the directory entry 
+			{
+				char *new_full_path = (char *) malloc (strlen(full_path)+strlen(de->d_name)+2);
+				sprintf(new_full_path, "%s/%s", full_path, de->d_name);
+				struct stat entrystat;
+
+				if (!stat( new_full_path, &entrystat ))
+			        {
+					if ( S_ISREG(entrystat.st_mode))
+					{
+						de->d_type = DT_REG;
+					}
+					else if (S_ISDIR(entrystat.st_mode))
+					{
+	  					de->d_type = DT_DIR;
+					}
+				}
+				free(new_full_path);
+			}
+
 			if (de->d_type == DT_DIR)
 			{
 				if (!strcmp(de->d_name, ".")) continue;
