@@ -1513,7 +1513,7 @@ void HandleUI(void)
 			parentstate = MENU_UART1;
 
 			struct stat filestat;
-			int hasmidi = (stat("/dev/midi", &filestat) == 0)?true:false;
+			int hasmidi = !stat("/dev/midi", &filestat);
 			int mode = GetUARTMode();
 			int midilink = GetMidiLinkMode();
 			int m = (mode != 3 && mode != 4) || hasmidi;
