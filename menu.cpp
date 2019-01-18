@@ -1523,13 +1523,13 @@ void HandleUI(void)
 			OsdWrite(1, s, menusub == 0, 0);
 			OsdWrite(2);
 
-			sprintf(s, " MIDI link:           %s", (midilink & 2) ? "Remote" : " Local");
+			sprintf(s, " MidiLink:            %s", (midilink & 2) ? "Remote" : " Local");
 			OsdWrite(3, s, menusub == 1, m);
 			sprintf(s, " Type:            %s", (midilink & 2) ? ((midilink & 1) ? "       UDP" : "       TCP") : ((midilink & 1) ? "      MUNT" : "FluidSynth"));
 			OsdWrite(4, s, menusub == 2, m);
 			
 			OsdWrite(5);
-			OsdWrite(6, " Reset UART Connection", menusub == 3, mode?0:1);
+			OsdWrite(6, " Reset UART connection", menusub == 3, mode?0:1);
 			OsdWrite(7);
 			OsdWrite(8, " Save", menusub == 4);
 
