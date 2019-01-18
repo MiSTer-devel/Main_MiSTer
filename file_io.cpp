@@ -1058,6 +1058,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 
 		sprintf(full_path, "%s/%s", getRootDir(), path);
+		int path_len = strlen(full_path);
+
 		printf("Start to scan %sdir: %s\n", is_zipped ? "zipped " : "", full_path);
 
 		char *zip_path, *file_path_in_zip = (char*)"";
@@ -1122,25 +1124,24 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				de = &_de;
 			}
 
-			if (de->d_type == DT_LNK)
-			// Handle symbolic link type in the directory entry 
+			// Handle (possible) symbolic link type in the directory entry 
+			if (de->d_type == DT_LNK || de->d_type == DT_REG)
 			{
-				char *new_full_path = (char *) malloc (strlen(full_path)+strlen(de->d_name)+2);
-				sprintf(new_full_path, "%s/%s", full_path, de->d_name);
+				sprintf(full_path+path_len, "/%s", de->d_name);
+
 				struct stat entrystat;
 
-				if (!stat( new_full_path, &entrystat ))
-			        {
-					if ( S_ISREG(entrystat.st_mode))
+				if (!stat(full_path, &entrystat))
+				{
+					if (S_ISREG(entrystat.st_mode))
 					{
 						de->d_type = DT_REG;
 					}
 					else if (S_ISDIR(entrystat.st_mode))
 					{
-	  					de->d_type = DT_DIR;
+						de->d_type = DT_DIR;
 					}
 				}
-				free(new_full_path);
 			}
 
 			if (de->d_type == DT_DIR)
