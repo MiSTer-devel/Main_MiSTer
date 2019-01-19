@@ -8,44 +8,45 @@ typedef struct
 {
 	unsigned char lores;
 	unsigned char hires;
-} filterTYPE;
+} mm_filterTYPE;
 
 typedef struct
 {
 	unsigned char speed;
 	unsigned char drives;
-} floppyTYPE;
+} mm_floppyTYPE;
 
 typedef struct
 {
 	unsigned char enabled;
 	unsigned char reserved;
 	char filename[1024];
-} hardfileTYPE;
+} mm_hardfileTYPE;
 
 typedef struct
 {
-	char          id[8];
-	unsigned long version;
-	char          kickstart[1024];
-	filterTYPE    filter;
-	unsigned char memory;
-	unsigned char chipset;
-	floppyTYPE    floppy;
-	unsigned char disable_ar3;
-	unsigned char enable_ide;
-	unsigned char scanlines;
-	unsigned char audio;
-	hardfileTYPE  hardfile[4];
-	unsigned char cpu;
-	unsigned char autofire;
-} configTYPE;
+	char            id[8];
+	unsigned long   version;
+	char            kickstart[1024];
+	mm_filterTYPE   filter;
+	unsigned char   memory;
+	unsigned char   chipset;
+	mm_floppyTYPE   floppy;
+	unsigned char   disable_ar3;
+	unsigned char   enable_ide;
+	unsigned char   scanlines;
+	unsigned char   audio;
+	mm_hardfileTYPE hardfile[4];
+	unsigned char   cpu;
+	unsigned char   autofire;
+	char            info[64];
+} mm_configTYPE;
 
-extern configTYPE config;
+extern mm_configTYPE minimig_config;
 
-unsigned char LoadConfiguration(int num);
-unsigned char SaveConfiguration(int num);
-const char* GetConfigDisplayName(int num);
+int minimig_LoadCfg(int num);
+int minimig_SaveCfg(int num);
+const char* minimig_GetCfgInfo(int num);
 
 void MinimigReset();
 void SetKickstart(char *name);

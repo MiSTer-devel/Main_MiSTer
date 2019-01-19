@@ -2373,8 +2373,6 @@ LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI
 #define EMU_BTN3  (2+(keyrah*4))  // left alt
 #define EMU_BTN4  (3+(keyrah*4))  // left gui (usually windows key)
 
-extern configTYPE config;
-
 void user_io_check_reset(unsigned short modifiers, char useKeys)
 {
 	unsigned short combo[] =

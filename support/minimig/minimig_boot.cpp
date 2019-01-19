@@ -444,8 +444,8 @@ void BootInit()
 		BootPrintEx(" ");
 	}
 
-	config.kickstart[0] = 0;
-	LoadConfiguration(0);
+	minimig_config.kickstart[0] = 0;
+	minimig_LoadCfg(0);
 }
 
 void BootPrintEx(const char * str)

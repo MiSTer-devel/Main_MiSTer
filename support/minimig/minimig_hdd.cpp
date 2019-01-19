@@ -309,9 +309,9 @@ static void IdentifyDevice(uint16_t *pBuffer, hdfTYPE *hdf)
 			memcpy((char*)&pBuffer[23], ".100    ", 8); // firmware version - byte swapped
 			memcpy(p, "MiSTer                                  ", 40); // model name - byte swapped
 			p += 8;
-			char *s = strrchr(config.hardfile[hdf->unit].filename, '/');
+			char *s = strrchr(minimig_config.hardfile[hdf->unit].filename, '/');
 			if (s) s++;
-			else s = config.hardfile[hdf->unit].filename;
+			else s = minimig_config.hardfile[hdf->unit].filename;
 
 			i = strlen(s);
 			if (i > 32) s += i - 32;
@@ -720,16 +720,16 @@ uint8_t OpenHardfile(uint8_t unit)
 	hdfTYPE *hdf = &HDF[unit];
 	hdf->unit = unit;
 	hdf->enabled = 0;
-	if (config.enable_ide && config.hardfile[unit].enabled)
+	if (minimig_config.enable_ide && minimig_config.hardfile[unit].enabled)
 	{
 		printf("\nChecking HDD %d\n", unit);
-		if (config.hardfile[unit].filename[0])
+		if (minimig_config.hardfile[unit].filename[0])
 		{
-			if (FileOpenEx(&hdf->file, config.hardfile[unit].filename, FileCanWrite(config.hardfile[unit].filename) ? O_RDWR : O_RDONLY))
+			if (FileOpenEx(&hdf->file, minimig_config.hardfile[unit].filename, FileCanWrite(minimig_config.hardfile[unit].filename) ? O_RDWR : O_RDONLY))
 			{
 				hdf->enabled = 1;
 				printf("file: \"%s\": ", hdf->file.name);
-				SetHardfileGeometry(hdf, !strcasecmp(".hdf", config.hardfile[unit].filename + strlen(config.hardfile[unit].filename) - 4));
+				SetHardfileGeometry(hdf, !strcasecmp(".hdf", minimig_config.hardfile[unit].filename + strlen(minimig_config.hardfile[unit].filename) - 4));
 				printf("size: %llu (%llu MB)\n", hdf->file.size, hdf->file.size >> 20);
 				printf("CHS: %u/%u/%u", hdf->cylinders, hdf->heads, hdf->sectors);
 				printf(" (%llu MB), ", ((((uint64_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));

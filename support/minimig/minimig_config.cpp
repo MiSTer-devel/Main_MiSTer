@@ -7,36 +7,36 @@
 #include <dirent.h>
 
 #include "../../hardware.h"
-#include "minimig_boot.h"
 #include "../../file_io.h"
 #include "../../osd.h"
-#include "minimig_fdd.h"
-#include "minimig_hdd.h"
 #include "../../menu.h"
-#include "minimig_config.h"
 #include "../../user_io.h"
 #include "../../input.h"
+#include "minimig_boot.h"
+#include "minimig_fdd.h"
+#include "minimig_hdd.h"
+#include "minimig_config.h"
 
 typedef struct
 {
-	char          id[8];
-	unsigned long version;
-	char          kickstart[1024];
-	filterTYPE    filter;
-	unsigned char memory;
-	unsigned char chipset;
-	floppyTYPE    floppy;
-	unsigned char disable_ar3;
-	unsigned char enable_ide;
-	unsigned char scanlines;
-	unsigned char audio;
-	hardfileTYPE  hardfile[2];
-	unsigned char cpu;
-	unsigned char autofire;
+	char            id[8];
+	unsigned long   version;
+	char            kickstart[1024];
+	mm_filterTYPE   filter;
+	unsigned char   memory;
+	unsigned char   chipset;
+	mm_floppyTYPE   floppy;
+	unsigned char   disable_ar3;
+	unsigned char   enable_ide;
+	unsigned char   scanlines;
+	unsigned char   audio;
+	mm_hardfileTYPE hardfile[2];
+	unsigned char   cpu;
+	unsigned char   autofire;
 } configTYPE_old;
 
-configTYPE config = { };
-unsigned char romkey[3072];
+mm_configTYPE minimig_config = { };
+static unsigned char romkey[3072];
 
 static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, int size)
 {
@@ -194,11 +194,11 @@ static char UploadActionReplay()
 		spi8((data >> 0) & 0xff);
 		data = 0x01; // key, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = config.enable_ide ? 1 : 0; // ide, 1 byte
+		data = minimig_config.enable_ide ? 1 : 0; // ide, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 0x01; // a1200, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = config.chipset&CONFIG_AGA ? 1 : 0; // aga, 1 byte
+		data = minimig_config.chipset&CONFIG_AGA ? 1 : 0; // aga, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 0x01; // insert, 1 byte
 		spi8((data >> 0) & 0xff);
@@ -208,7 +208,7 @@ static char UploadActionReplay()
 		spi8((data >> 0) & 0xff);
 		data = 0x00; // cd32, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = config.chipset&CONFIG_NTSC ? 1 : 0; // screenmode, 1 byte
+		data = minimig_config.chipset&CONFIG_NTSC ? 1 : 0; // screenmode, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 1; // novbr, 1 byte
 		spi8((data >> 0) & 0xff);
@@ -219,7 +219,7 @@ static char UploadActionReplay()
 		DisableOsd();
 		adr = 0xa10000 + 68;
 		spi_osd_cmd32le_cont(OSD_CMD_WR, adr);
-		data = ((config.memory & 0x3) + 1) * 512 * 1024; // maxchip, 4 bytes TODO is this correct?
+		data = ((minimig_config.memory & 0x3) + 1) * 512 * 1024; // maxchip, 4 bytes TODO is this correct?
 		spi8((data >> 24) & 0xff); spi8((data >> 16) & 0xff);
 		spi8((data >> 8) & 0xff); spi8((data >> 0) & 0xff);
 		DisableOsd();
@@ -234,60 +234,30 @@ static char UploadActionReplay()
 	return(0);
 }
 
-static char* GetConfigurationName(int num)
+static char* GetConfigurationName(int num, int chk)
 {
-	static char path[128];
-	sprintf(path, "%s/%s", getRootDir(), CONFIG_DIR);
+	static char name[128];
+	if (num) sprintf(name, CONFIG_DIR "/minimig%d.cfg", num);
+	else sprintf(name, CONFIG_DIR "/minimig.cfg");
 
-	DIR *d;
-	struct dirent *dir;
-	d = opendir(path);
-	if (d)
-	{
-		if(num) sprintf(path, "minimig%d", num);
-		else sprintf(path, "minimig.cfg");
-
-		while ((dir = readdir(d)) != NULL)
-		{
-			int len = strlen(dir->d_name);
-			if (len>10 && !strncasecmp(dir->d_name, path, strlen(path)) && !strcasecmp(dir->d_name+len-4, ".cfg"))
-			{
-				closedir(d);
-				strcpy(path, dir->d_name);
-				return path;
-			}
-		}
-		closedir(d);
-	}
-
-	return NULL;
+	if (chk && !S_ISREG(getFileType(name))) return 0;
+	return name+strlen(CONFIG_DIR)+1;
 }
 
-unsigned char SaveConfiguration(int num)
+int minimig_SaveCfg(int num)
 {
-	const char *filename = GetConfigurationName(num);
-	if (!filename)
-	{
-		static char name[32];
-		if (num) sprintf(name, "minimig%d.cfg", num);
-		else sprintf(name, "minimig.cfg");
-
-		filename = name;
-	}
-
-	return FileSaveConfig(filename, &config, sizeof(config));
+	return FileSaveConfig(GetConfigurationName(num, 0), &minimig_config, sizeof(minimig_config));
 }
 
-const char* GetConfigDisplayName(int num)
+const char* minimig_GetCfgInfo(int num)
 {
-	char *filename = GetConfigurationName(num);
+	char *filename = GetConfigurationName(num, 1);
 	if (!filename) return NULL;
 
-	filename[strlen(filename) - 4] = 0;
-	char *p = strchr(filename, '_');
+	static mm_configTYPE tmpconf;
+	memset(&tmpconf, 0, sizeof(tmpconf));
 
-	if (p) return p+1;
-
+	if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf))) return tmpconf.info;
 	return "";
 }
 
@@ -297,57 +267,57 @@ static void ApplyConfiguration(char reloadkickstart)
 	if (force_reload_kickstart) reloadkickstart = 1;
 	force_reload_kickstart = 0;
 
-	ConfigCPU(config.cpu);
+	ConfigCPU(minimig_config.cpu);
 
 	if (!reloadkickstart)
 	{
-		ConfigChipset(config.chipset);
-		ConfigFloppy(config.floppy.drives, config.floppy.speed);
+		ConfigChipset(minimig_config.chipset);
+		ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 	}
 
-	printf("CPU clock     : %s\n", config.chipset & 0x01 ? "turbo" : "normal");
-	printf("Chip RAM size : %s\n", config_memory_chip_msg[config.memory & 0x03]);
-	printf("Slow RAM size : %s\n", config_memory_slow_msg[config.memory >> 2 & 0x03]);
-	printf("Fast RAM size : %s\n", config_memory_fast_msg[config.memory >> 4 & 0x03]);
+	printf("CPU clock     : %s\n", minimig_config.chipset & 0x01 ? "turbo" : "normal");
+	printf("Chip RAM size : %s\n", config_memory_chip_msg[minimig_config.memory & 0x03]);
+	printf("Slow RAM size : %s\n", config_memory_slow_msg[minimig_config.memory >> 2 & 0x03]);
+	printf("Fast RAM size : %s\n", config_memory_fast_msg[minimig_config.memory >> 4 & 0x03]);
 
-	printf("Floppy drives : %u\n", config.floppy.drives + 1);
-	printf("Floppy speed  : %s\n", config.floppy.speed ? "fast" : "normal");
+	printf("Floppy drives : %u\n", minimig_config.floppy.drives + 1);
+	printf("Floppy speed  : %s\n", minimig_config.floppy.speed ? "fast" : "normal");
 
 	printf("\n");
 
-	printf("\nIDE state: %s.\n", config.enable_ide ? "enabled" : "disabled");
-	if (config.enable_ide)
+	printf("\nIDE state: %s.\n", minimig_config.enable_ide ? "enabled" : "disabled");
+	if (minimig_config.enable_ide)
 	{
-		printf("Primary Master HDD is %s.\n", config.hardfile[0].enabled ? "enabled" : "disabled");
-		printf("Primary Slave HDD is %s.\n", config.hardfile[1].enabled ? "enabled" : "disabled");
-		printf("Secondary Master HDD is %s.\n", config.hardfile[2].enabled ? "enabled" : "disabled");
-		printf("Secondary Slave HDD is %s.\n", config.hardfile[3].enabled ? "enabled" : "disabled");
+		printf("Primary Master HDD is %s.\n", minimig_config.hardfile[0].enabled ? "enabled" : "disabled");
+		printf("Primary Slave HDD is %s.\n", minimig_config.hardfile[1].enabled ? "enabled" : "disabled");
+		printf("Secondary Master HDD is %s.\n", minimig_config.hardfile[2].enabled ? "enabled" : "disabled");
+		printf("Secondary Slave HDD is %s.\n", minimig_config.hardfile[3].enabled ? "enabled" : "disabled");
 	}
 
 	rstval = SPI_CPU_HLT;
 	spi_osd_cmd8(OSD_CMD_RST, rstval);
-	spi_osd_cmd8(OSD_CMD_HDD, (config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
+	spi_osd_cmd8(OSD_CMD_HDD, (minimig_config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
 
-	ConfigMemory(config.memory);
-	ConfigCPU(config.cpu);
+	ConfigMemory(minimig_config.memory);
+	ConfigCPU(minimig_config.cpu);
 
-	ConfigChipset(config.chipset);
-	ConfigFloppy(config.floppy.drives, config.floppy.speed);
+	ConfigChipset(minimig_config.chipset);
+	ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 
-	if (config.memory & 0x40) UploadActionReplay();
+	if (minimig_config.memory & 0x40) UploadActionReplay();
 
 	if (reloadkickstart)
 	{
 		printf("Reloading kickstart ...\n");
 		rstval |= (SPI_RST_CPU | SPI_CPU_HLT);
 		spi_osd_cmd8(OSD_CMD_RST, rstval);
-		if (!UploadKickstart(config.kickstart))
+		if (!UploadKickstart(minimig_config.kickstart))
 		{
-			strcpy(config.kickstart, "Amiga/KICK.ROM");
-			if (!UploadKickstart(config.kickstart))
+			strcpy(minimig_config.kickstart, "Amiga/KICK.ROM");
+			if (!UploadKickstart(minimig_config.kickstart))
 			{
-				strcpy(config.kickstart, "KICK.ROM");
-				if (!UploadKickstart(config.kickstart))
+				strcpy(minimig_config.kickstart, "KICK.ROM");
+				if (!UploadKickstart(minimig_config.kickstart))
 				{
 					BootPrintEx("No Kickstart loaded. Press F12 for settings.");
 					BootPrintEx("** Halted! **");
@@ -368,18 +338,18 @@ static void ApplyConfiguration(char reloadkickstart)
 	rstval = 0;
 	spi_osd_cmd8(OSD_CMD_RST, rstval);
 
-	ConfigVideo(config.filter.hires, config.filter.lores, config.scanlines);
-	ConfigAudio(config.audio);
-	ConfigAutofire(config.autofire, 0xC);
+	ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+	ConfigAudio(minimig_config.audio);
+	ConfigAutofire(minimig_config.autofire, 0xC);
 }
 
-unsigned char LoadConfiguration(int num)
+int minimig_LoadCfg(int num)
 {
 	static const char config_id[] = "MNMGCFG0";
 	char updatekickstart = 0;
-	char result = 0;
+	int result = 0;
 
-	const char *filename = GetConfigurationName(num);
+	const char *filename = GetConfigurationName(num, 1);
 
 	// load configuration data
 	int size;
@@ -387,21 +357,21 @@ unsigned char LoadConfiguration(int num)
 	{
 		BootPrint("Opened configuration file\n");
 		printf("Configuration file size: %s, %d\n", filename, size);
-		if (size == sizeof(config))
+		if (size == sizeof(minimig_config) || size == 5152)
 		{
-			static configTYPE tmpconf;
+			static mm_configTYPE tmpconf = {};
 			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
 			{
 				// check file id and version
-				if (strncmp(tmpconf.id, config_id, sizeof(config.id)) == 0) {
+				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
 					// A few more sanity checks...
 					if (tmpconf.floppy.drives <= 4) {
 						// If either the old config and new config have a different kickstart file,
 						// or this is the first boot, we need to upload a kickstart image.
-						if (strcmp(tmpconf.kickstart, config.kickstart) != 0) {
+						if (strcmp(tmpconf.kickstart, minimig_config.kickstart) != 0) {
 							updatekickstart = true;
 						}
-						memcpy((void*)&config, (void*)&tmpconf, sizeof(config));
+						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(minimig_config));
 						result = 1; // We successfully loaded the config.
 					}
 					else BootPrint("Config file sanity check failed!\n");
@@ -417,19 +387,19 @@ unsigned char LoadConfiguration(int num)
 			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
 			{
 				// check file id and version
-				if (strncmp(tmpconf.id, config_id, sizeof(config.id)) == 0) {
+				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
 					// A few more sanity checks...
 					if (tmpconf.floppy.drives <= 4) {
 						// If either the old config and new config have a different kickstart file,
 						// or this is the first boot, we need to upload a kickstart image.
-						if (strcmp(tmpconf.kickstart, config.kickstart) != 0) {
+						if (strcmp(tmpconf.kickstart, minimig_config.kickstart) != 0) {
 							updatekickstart = true;
 						}
-						memcpy((void*)&config, (void*)&tmpconf, sizeof(config));
-						config.cpu = tmpconf.cpu;
-						config.autofire = tmpconf.autofire;
-						memset(&config.hardfile[2], 0, sizeof(config.hardfile[2]));
-						memset(&config.hardfile[3], 0, sizeof(config.hardfile[3]));
+						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(minimig_config));
+						minimig_config.cpu = tmpconf.cpu;
+						minimig_config.autofire = tmpconf.autofire;
+						memset(&minimig_config.hardfile[2], 0, sizeof(minimig_config.hardfile[2]));
+						memset(&minimig_config.hardfile[3], 0, sizeof(minimig_config.hardfile[3]));
 						result = 1; // We successfully loaded the config.
 					}
 					else BootPrint("Config file sanity check failed!\n");
@@ -438,25 +408,25 @@ unsigned char LoadConfiguration(int num)
 			}
 			else printf("Cannot load configuration file\n");
 		}
-		else printf("Wrong configuration file size: %d (expected: %u)\n", size, sizeof(config));
+		else printf("Wrong configuration file size: %d (expected: %u)\n", size, sizeof(minimig_config));
 	}
 	if (!result) {
 		BootPrint("Can not open configuration file!\n");
 		BootPrint("Setting config defaults\n");
 		// set default configuration
-		memset((void*)&config, 0, sizeof(config));  // Finally found default config bug - params were reversed!
-		strncpy(config.id, config_id, sizeof(config.id));
-		strcpy(config.kickstart, "Amiga/KICK.ROM");
-		config.memory = 0x11;
-		config.cpu = 0;
-		config.chipset = 0;
-		config.floppy.speed = CONFIG_FLOPPY2X;
-		config.floppy.drives = 1;
-		config.enable_ide = 0;
-		config.hardfile[0].enabled = 1;
-		config.hardfile[0].filename[0] = 0;
-		config.hardfile[1].enabled = 1;
-		config.hardfile[1].filename[0] = 0;
+		memset((void*)&minimig_config, 0, sizeof(minimig_config));  // Finally found default config bug - params were reversed!
+		strncpy(minimig_config.id, config_id, sizeof(minimig_config.id));
+		strcpy(minimig_config.kickstart, "Amiga/KICK.ROM");
+		minimig_config.memory = 0x11;
+		minimig_config.cpu = 0;
+		minimig_config.chipset = 0;
+		minimig_config.floppy.speed = CONFIG_FLOPPY2X;
+		minimig_config.floppy.drives = 1;
+		minimig_config.enable_ide = 0;
+		minimig_config.hardfile[0].enabled = 1;
+		minimig_config.hardfile[0].filename[0] = 0;
+		minimig_config.hardfile[1].enabled = 1;
+		minimig_config.hardfile[1].filename[0] = 0;
 		updatekickstart = true;
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
@@ -470,8 +440,8 @@ unsigned char LoadConfiguration(int num)
 	// print config to boot screen
 	char cfg_str[256];
 	sprintf(cfg_str, "CPU: %s, Chipset: %s, ChipRAM: %s, FastRAM: %s, SlowRAM: %s",
-			config_cpu_msg[config.cpu & 0x03], config_chipset_msg[(config.chipset >> 2) & 7],
-			config_memory_chip_msg[(config.memory >> 0) & 0x03], config_memory_fast_msg[(config.memory >> 4) & 0x03], config_memory_slow_msg[(config.memory >> 2) & 0x03]
+			config_cpu_msg[minimig_config.cpu & 0x03], config_chipset_msg[(minimig_config.chipset >> 2) & 7],
+			config_memory_chip_msg[(minimig_config.memory >> 0) & 0x03], config_memory_fast_msg[(minimig_config.memory >> 4) & 0x03], config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03]
 			);
 	BootPrintEx(cfg_str);
 
@@ -480,13 +450,13 @@ unsigned char LoadConfiguration(int num)
 	{
 		BootPrintEx("Forcing NTSC video ...");
 		//force NTSC mode if F1 pressed
-		config.chipset |= CONFIG_NTSC;
+		minimig_config.chipset |= CONFIG_NTSC;
 	}
 	else if (is_key_pressed(60))
 	{
 		BootPrintEx("Forcing PAL video ...");
 		// force PAL mode if F2 pressed
-		config.chipset &= ~CONFIG_NTSC;
+		minimig_config.chipset &= ~CONFIG_NTSC;
 	}
 
 	ApplyConfiguration(updatekickstart);
@@ -502,8 +472,8 @@ void MinimigReset()
 void SetKickstart(char *name)
 {
 	uint len = strlen(name);
-	if (len > (sizeof(config.kickstart) - 1)) len = sizeof(config.kickstart) - 1;
-	memcpy(config.kickstart, name, len);
-	config.kickstart[len] = 0;
+	if (len > (sizeof(minimig_config.kickstart) - 1)) len = sizeof(minimig_config.kickstart) - 1;
+	memcpy(minimig_config.kickstart, name, len);
+	minimig_config.kickstart[len] = 0;
 	force_reload_kickstart = 1;
 }
