@@ -1123,7 +1123,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				}
 				de = &_de;
 			}
-
+			else
 			// Handle (possible) symbolic link type in the directory entry 
 			if (de->d_type == DT_LNK || de->d_type == DT_REG)
 			{
