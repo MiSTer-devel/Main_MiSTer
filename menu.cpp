@@ -1163,7 +1163,7 @@ void HandleUI(void)
 			}
 			else
 			{
-				static char ext[13];
+				static char ext[256];
 				p = user_io_8bit_get_string(1);
 
 				uint32_t entry = 0;
@@ -1180,7 +1180,7 @@ void HandleUI(void)
 				{
 					opensave = (p[1] == 'S');
 					substrcpy(ext, p, 1);
-					while (strlen(ext) < 3) strcat(ext, " ");
+					while (strlen(ext) % 3) strcat(ext, " ");
 					SelectFile(ext, SCANO_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
 				}
 				else if (p[0] == 'S')
@@ -1188,7 +1188,7 @@ void HandleUI(void)
 					drive_num = 0;
 					if (p[1] >= '0' && p[1] <= '3') drive_num = p[1] - '0';
 					substrcpy(ext, p, 1);
-					while (strlen(ext) < 3) strcat(ext, " ");
+					while (strlen(ext) % 3) strcat(ext, " ");
 					SelectFile(ext, SCANO_DIR | SCANO_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
 				}
 				else if (p[0] == 'O')

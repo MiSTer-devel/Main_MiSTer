@@ -2583,6 +2583,7 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 			int found = 1;
 			for (int i = 0; i < 3; i++)
 			{
+				if (ext[i] == '*') break;
 				if (ext[i] != '?' && (toupper(ext[i]) != toupper(e[i]))) found = 0;
 			}
 

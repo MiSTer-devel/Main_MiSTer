@@ -1184,30 +1184,23 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 						found = !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".iso");
 					}
 
-					while(!found && *ext)
+					char *fext = strrchr(de->d_name, '.');
+					while(!found && *ext && fext)
 					{
-						char e[5];
-						memcpy(e+1, ext, 3);
-						if (e[3] == 0x20)
+						char e[4];
+						memcpy(e, ext, 3);
+						if (e[2] == ' ')
 						{
-							e[3] = 0;
-							if (e[2] == 0x20)
-							{
-								e[2] = 0;
-							}
+							e[2] = 0;
+							if (e[1] == ' ') e[1] = 0;
 						}
-						e[0] = '.';
-						e[4] = 0;
-						int l = strlen(e);
-						if (len > l)
+						e[3] = 0;
+						found = 1;
+						for (int i = 0; i < 3; i++)
 						{
-							char *p = de->d_name + len - l;
-							found = 1;
-							for (int i = 0; i < l; i++)
-							{
-								if (e[i] == '?') continue;
-								if (tolower(e[i]) != tolower(p[i])) found = 0;
-							}
+							if (e[i] == '*') break;
+							if (e[i] == '?' && fext[i+1]) continue;
+							if (tolower(e[i]) != tolower(fext[i + 1])) found = 0;
 						}
 						if (found) break;
 
