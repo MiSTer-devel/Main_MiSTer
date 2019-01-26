@@ -252,5 +252,7 @@ int GetUARTMode();
 int GetMidiLinkMode();
 void SetMidiLinkMode(int mode);
 
+void set_volume(int cmd);
+int  get_volume();
 
 #endif // USER_IO_H

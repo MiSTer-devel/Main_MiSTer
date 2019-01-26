@@ -2416,7 +2416,12 @@ void user_io_osd_key_enable(char on)
 	osd_is_visible = on;
 }
 
-static void set_volume(int cmd)
+int get_volume()
+{
+	return vol_att & 0x17;
+}
+
+void set_volume(int cmd)
 {
 	if (!cfg.volumectl) return;
 

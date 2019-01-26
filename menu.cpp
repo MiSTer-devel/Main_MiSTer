@@ -964,7 +964,7 @@ void HandleUI(void)
 		else if (left)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 0;
+			menusub = 1;
 		}
 		break;
 
@@ -1245,7 +1245,7 @@ void HandleUI(void)
 		else if (left)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 0;
+			menusub = 1;
 		}
 		break;
 
@@ -1616,22 +1616,46 @@ void HandleUI(void)
 	case MENU_8BIT_INFO:
 		OsdSetSize(16);
 		helptext = 0;
-		menumask = 1;
+		menumask = 3;
 		menustate = MENU_8BIT_INFO2;
-		parentstate = MENU_8BIT_INFO;
 		OsdSetTitle("System", OSD_ARROW_RIGHT);
 
-		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		if(parentstate != MENU_8BIT_INFO) for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		parentstate = MENU_8BIT_INFO;
+
 		OsdWrite(3, "         Information");
-		OsdWrite(15, STD_EXIT, menusub == 0, 0, OSD_ARROW_RIGHT);
+
+		m = get_volume();
+		strcpy(s, "      Volume: ");
+		if (m & 0x10)
+		{
+			strcat(s, "< Mute >");
+		}
+		else
+		{
+			memset(s+strlen(s), 0, 10);
+			char *bar = s + strlen(s);
+			memset(bar, 0x8C, 8);
+			memset(bar, 0x7f, 8 - m);
+		}
+
+		OsdWrite(13, s, menusub == 0, !cfg.volumectl);
+		OsdWrite(15, STD_EXIT, menusub == 1, 0, OSD_ARROW_RIGHT);
 		break;
 
 	case MENU_8BIT_INFO2:
 		printSysInfo();
-		if (select || menu)
+		if ((select && menusub == 1) || menu)
 		{
 			menustate = MENU_NONE1;
 			break;
+		}
+		else if(menusub == 0 && cfg.volumectl)
+		{
+			if (right) set_volume(1);
+			if (left) set_volume(-1);
+			if (select) set_volume(0);
+			menustate = MENU_8BIT_INFO;
 		}
 		else if (right)
 		{
@@ -2448,7 +2472,7 @@ void HandleUI(void)
 		else if (left)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 0;
+			menusub = 1;
 		}
 		break;
 

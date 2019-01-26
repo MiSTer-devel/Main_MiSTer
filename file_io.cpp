@@ -1170,7 +1170,6 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 				if (extlen > 0)
 				{
-					int len = strlen(de->d_name);
 					const char *ext = extension;
 					int found = (has_trd && x2trd_ext_supp(de->d_name));
 					if (!found && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip"))
