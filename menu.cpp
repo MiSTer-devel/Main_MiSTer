@@ -2568,88 +2568,13 @@ void HandleUI(void)
 	case MENU_FILE_SELECT2:
 		menumask = 0;
 
-		ScrollLongName(); // scrolls file name if longer than display line
-
-		if (c == KEY_HOME)
+		if (c == KEY_BACKSPACE && (fs_Options & SCANO_UMOUNT))
 		{
-			ScanDirectory(SelectedPath, SCANF_INIT, fs_pFileExt, fs_Options);
-			menustate = MENU_FILE_SELECT1;
-		}
-
-		if (c == KEY_END)
-		{
-			ScanDirectory(SelectedPath, SCANF_END, fs_pFileExt, fs_Options);
-			menustate = MENU_FILE_SELECT1;
-		}
-
-		if (c == KEY_BACKSPACE)
-		{
-			if (fs_Options & SCANO_UMOUNT)
-			{
-				for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
-				OsdWrite(OsdGetSize() / 2, "   Unmounting the image", 0, 0);
-				usleep(1500000);
-				SelectedPath[0] = 0;
-				menustate = fs_MenuSelect;
-			}
-		}
-
-		if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
-		{
-			ScanDirectory(SelectedPath, SCANF_PREV_PAGE, fs_pFileExt, fs_Options);
-			menustate = MENU_FILE_SELECT1;
-		}
-
-		if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
-		{
-			ScanDirectory(SelectedPath, SCANF_NEXT_PAGE, fs_pFileExt, fs_Options);
-			menustate = MENU_FILE_SELECT1;
-		}
-
-		if (down) // scroll down one entry
-		{
-			ScanDirectory(SelectedPath, SCANF_NEXT, fs_pFileExt, fs_Options);
-			menustate = MENU_FILE_SELECT1;
-		}
-
-		if (up) // scroll up one entry
-		{
-			ScanDirectory(SelectedPath, SCANF_PREV, fs_pFileExt, fs_Options);
-			menustate = MENU_FILE_SELECT1;
-		}
-
-		{
-			int i;
-			if ((i = GetASCIIKey(c)) > 1)
-			{
-				// find an entry beginning with given character
-				ScanDirectory(SelectedPath, i, fs_pFileExt, fs_Options);
-				menustate = MENU_FILE_SELECT1;
-			}
-		}
-
-		if (select)
-		{
-			if(flist_SelectedItem()->d_type == DT_DIR)
-			{
-				changeDir(flist_SelectedItem()->d_name);
-				menustate = MENU_FILE_SELECT1;
-			}
-			else
-			{
-				if (flist_nDirEntries())
-				{
-					SelectedDir[0] = 0;
-					if (strlen(SelectedPath))
-					{
-						strcpy(SelectedDir, SelectedPath);
-						strcat(SelectedPath, "/");
-					}
-					strcat(SelectedPath, flist_SelectedItem()->d_name);
-
-					menustate = fs_MenuSelect;
-				}
-			}
+			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
+			OsdWrite(OsdGetSize() / 2, "   Unmounting the image", 0, 0);
+			usleep(1500000);
+			SelectedPath[0] = 0;
+			menustate = fs_MenuSelect;
 		}
 
 		if (menu)
@@ -2667,6 +2592,82 @@ void HandleUI(void)
 
 			if (!strcasecmp(fs_pFileExt, "RBF")) SelectedPath[0] = 0;
 			menustate = fs_MenuCancel;
+		}
+
+		if (flist_nDirEntries())
+		{
+			ScrollLongName(); // scrolls file name if longer than display line
+
+			if (c == KEY_HOME)
+			{
+				ScanDirectory(SelectedPath, SCANF_INIT, fs_pFileExt, fs_Options);
+				menustate = MENU_FILE_SELECT1;
+			}
+
+			if (c == KEY_END)
+			{
+				ScanDirectory(SelectedPath, SCANF_END, fs_pFileExt, fs_Options);
+				menustate = MENU_FILE_SELECT1;
+			}
+
+
+			if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
+			{
+				ScanDirectory(SelectedPath, SCANF_PREV_PAGE, fs_pFileExt, fs_Options);
+				menustate = MENU_FILE_SELECT1;
+			}
+
+			if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
+			{
+				ScanDirectory(SelectedPath, SCANF_NEXT_PAGE, fs_pFileExt, fs_Options);
+				menustate = MENU_FILE_SELECT1;
+			}
+
+			if (down) // scroll down one entry
+			{
+				ScanDirectory(SelectedPath, SCANF_NEXT, fs_pFileExt, fs_Options);
+				menustate = MENU_FILE_SELECT1;
+			}
+
+			if (up) // scroll up one entry
+			{
+				ScanDirectory(SelectedPath, SCANF_PREV, fs_pFileExt, fs_Options);
+				menustate = MENU_FILE_SELECT1;
+			}
+
+			{
+				int i;
+				if ((i = GetASCIIKey(c)) > 1)
+				{
+					// find an entry beginning with given character
+					ScanDirectory(SelectedPath, i, fs_pFileExt, fs_Options);
+					menustate = MENU_FILE_SELECT1;
+				}
+			}
+
+			if (select)
+			{
+				if (flist_SelectedItem()->d_type == DT_DIR)
+				{
+					changeDir(flist_SelectedItem()->d_name);
+					menustate = MENU_FILE_SELECT1;
+				}
+				else
+				{
+					if (flist_nDirEntries())
+					{
+						SelectedDir[0] = 0;
+						if (strlen(SelectedPath))
+						{
+							strcpy(SelectedDir, SelectedPath);
+							strcat(SelectedPath, "/");
+						}
+						strcat(SelectedPath, flist_SelectedItem()->d_name);
+
+						menustate = fs_MenuSelect;
+					}
+				}
+			}
 		}
 
 		break;
