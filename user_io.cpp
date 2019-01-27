@@ -2874,7 +2874,7 @@ static int parse_custom_video_mode()
 		if (cnt == 9 && vitems[0] == 1)
 		{
 			double Fpix = khz ? strtoul(vcfg, &next, 0)/1000.f : strtod(vcfg, &next);
-			if (vcfg == next || (Fpix < 20.f || Fpix > 200.f))
+			if (vcfg == next || (Fpix < 2.f || Fpix > 300.f))
 			{
 				printf("Error parsing video_mode parameter: ""%s""\n", cfg.video_conf);
 				return 0;
