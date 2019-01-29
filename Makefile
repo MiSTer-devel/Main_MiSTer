@@ -48,12 +48,12 @@ $(PRJ): $(OBJ)
 
 clean:
 	$(Q)rm -f *.elf *.map *.lst *.user *~ $(PRJ)
-	$(Q)rm -rf obj .vs DTAR* x64
+	$(Q)rm -rf obj DTAR* x64
 	$(Q)find . \( -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -exec rm -f {} \;
 
 cleanall:
 	$(Q)rm -rf $(OBJ) $(DEP) *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
-	$(Q)rm -rf obj .vs DTAR* x64
+	$(Q)rm -rf obj DTAR* x64
 	$(Q)find . -name '*.o' -delete
 	$(Q)find . -name '*.d' -delete
 
