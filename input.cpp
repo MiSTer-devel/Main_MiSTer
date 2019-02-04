@@ -2185,7 +2185,6 @@ int input_test(int getchar)
 								char offset_mask1, offset_mask2;
 
 								if (ev.code < 16) offset += 4;
-								if (ev.code < 2)  offset += 4;
 								offset_mask1 = (1 << (offset >> 1)); // 01XX
 								offset_mask2 = (2 << (offset >> 1)); // 10XX
 
