@@ -1432,9 +1432,6 @@ void user_io_send_buttons(char force)
 	static unsigned short key_map = 0;
 	unsigned short map = 0;
 
-	map = cfg.video_mode;
-	map = (map << CONF_RES_SHIFT) & CONF_RES_MASK;
-
 	int btn = fpga_get_buttons();
 
 	if (btn & BUTTON_OSD) map |= BUTTON1;
@@ -2105,11 +2102,6 @@ void user_io_poll()
 	}
 }
 
-char user_io_dip_switch1()
-{
-	return 0;
-}
-
 char user_io_menu_button()
 {
 	return((fpga_get_buttons() & BUTTON_OSD) ? 1 : 0);
@@ -2631,7 +2623,9 @@ vmode_t vmodes[] =
 };
 #define VMODES_NUM (sizeof(vmodes) / sizeof(vmodes[0]))
 
-static uint32_t vitems[32];
+static uint32_t vitems_cur[32] = {}, vitems_def[32] = {}, vitems_pal[32] = {}, vitems_ntsc[32] = {};
+static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
+
 double Fpix = 0;
 
 static uint32_t getPLLdiv(uint32_t div)
@@ -2678,7 +2672,7 @@ static int findPLLpar(double Fout, uint32_t *pc, uint32_t *pm, double *pko)
 	return 0;
 }
 
-static void setPLL(double Fout)
+static void setPLL(double Fout, uint32_t *vitems)
 {
 	double fvco, ko;
 	uint32_t m, c;
@@ -2833,7 +2827,7 @@ static void loadScalerCfg()
 	}
 }
 
-static void setVideo()
+static void setVideo(uint32_t *vitems)
 {
 	loadScalerCfg();
 	setScaler();
@@ -2843,14 +2837,16 @@ static void setVideo()
 	printf("video: ");
 	for (int i = 1; i <= 8; i++)
 	{
+		vitems_cur[i] = vitems[i];
 		spi_w(vitems[i]);
 		printf("%d, ", vitems[i]);
 	}
 	printf("\nPLL: ");
 	for (int i = 9; i < 21; i++)
 	{
+		vitems_cur[i] = vitems[i];
 		printf("0x%X, ", vitems[i]);
-		if (i & 1) spi_w(vitems[i] | ((i==9 && (is_menu_core() ? cfg.menu_pal : (cfg.vsync_adjust==2))) ? 0x8000 : 0));
+		if (i & 1) spi_w(vitems[i] | ((i == 9 && (is_menu_core() ? cfg.menu_pal : (cfg.vsync_adjust == 2))) ? 0x8000 : 0));
 		else
 		{
 			spi_w(vitems[i]);
@@ -2862,12 +2858,11 @@ static void setVideo()
 	DisableIO();
 }
 
-static int parse_custom_video_mode()
+static int parse_custom_video_mode(char* vcfg, uint32_t *vitems)
 {
-	char *vcfg = cfg.video_conf;
-
 	int khz = 0;
 	int cnt = 0;
+	char *orig = vcfg;
 	while (*vcfg)
 	{
 		char *next;
@@ -2876,19 +2871,19 @@ static int parse_custom_video_mode()
 			double Fpix = khz ? strtoul(vcfg, &next, 0)/1000.f : strtod(vcfg, &next);
 			if (vcfg == next || (Fpix < 2.f || Fpix > 300.f))
 			{
-				printf("Error parsing video_mode parameter: ""%s""\n", cfg.video_conf);
-				return 0;
+				printf("Error parsing video_mode parameter: ""%s""\n", orig);
+				return -1;
 			}
 
-			setPLL(Fpix);
+			setPLL(Fpix, vitems);
 			break;
 		}
 
 		uint32_t val = strtoul(vcfg, &next, 0);
 		if (vcfg == next || (*next != ',' && *next))
 		{
-			printf("Error parsing video_mode parameter: ""%s""\n", cfg.video_conf);
-			return 0;
+			printf("Error parsing video_mode parameter: ""%s""\n", orig);
+			return -1;
 		}
 
 		if (!cnt && val >= 100)
@@ -2911,51 +2906,70 @@ static int parse_custom_video_mode()
 	if ((vitems[0] == 0 && cnt < 21) || (vitems[0] == 1 && cnt < 9))
 	{
 		printf("Incorrect amount of items in video_mode parameter: %d\n", cnt);
-		return 0;
+		return -1;
 	}
 
 	if (vitems[0] > 1)
 	{
 		printf("Incorrect video_mode parameter\n");
-		return 0;
+		return -1;
 	}
 
-	return -1;
+	return -2;
+}
+
+static int store_custom_video_mode(char* vcfg, uint32_t *vitems)
+{
+	int ret = parse_custom_video_mode(vcfg, vitems);
+	if (ret == -2) return 1;
+
+	uint mode = (ret < 0) ? 0 : ret;
+	if (mode >= VMODES_NUM) mode = 0;
+	for (int i = 0; i < 8; i++) vitems[i + 1] = vmodes[mode].vpar[i];
+	setPLL(vmodes[mode].Fpix, vitems);
+
+	return ret >= 0;
 }
 
 void parse_video_mode()
 {
-	// always 0. Use custom parameters.
-	cfg.video_mode = 0;
-
-	int mode = parse_custom_video_mode();
-	if (mode >= 0)
-	{
-		if ((uint)mode >= VMODES_NUM) mode = 0;
-		for (int i = 0; i < 8; i++)
-		{
-			vitems[i + 1] = vmodes[mode].vpar[i];
-		}
-
-		setPLL(vmodes[mode].Fpix);
-	}
-	setVideo();
+	vmode_def  = store_custom_video_mode(cfg.video_conf, vitems_def);
+	vmode_pal  = store_custom_video_mode(cfg.video_conf_pal, vitems_pal);
+	vmode_ntsc = store_custom_video_mode(cfg.video_conf_ntsc, vitems_ntsc);
+	setVideo(vitems_def);
 }
 
 static int adjust_video_mode(uint32_t vtime)
 {
-	printf("Adjust VSync(%d).\n", cfg.vsync_adjust);
+	printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
+
+	uint32_t *vitems = vitems_def;
+	if (vmode_pal && vmode_ntsc)
+	{
+		if (vtime > 1800000)
+		{
+			printf(", using PAL mode");
+			vitems = vitems_pal;
+		}
+		else
+		{
+			printf(", using NTSC mode");
+			vitems = vitems_ntsc;
+		}
+	}
+
+	printf(".\033[0m\n");
 
 	double Fpix = 100 * (vitems[1] + vitems[2] + vitems[3] + vitems[4]) * (vitems[5] + vitems[6] + vitems[7] + vitems[8]);
 	Fpix /= vtime;
-	if (Fpix < 20.f || Fpix > 200.f)
+	if (Fpix < 2.f || Fpix > 300.f)
 	{
 		printf("Estimated Fpix(%.4f MHz) is outside supported range. Canceling auto-adjust.\n", Fpix);
 		return 0;
 	}
 
-	setPLL(Fpix);
-	setVideo();
+	setPLL(Fpix, vitems);
+	setVideo(vitems);
 	user_io_send_buttons(1);
 	return 1;
 }
@@ -3105,11 +3119,11 @@ static uint32_t show_video_info(int force)
 			sprintf(str, "%4dx%-4d %6.2fKHz %4.1fHz\n" \
 				         "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n" \
 				         "%4dx%-4d %6.2fMHz %4.1fHz",
-				width, height, hrate, vrate, vitems[1], vitems[5], Fpix, vrateh);
+				width, height, hrate, vrate, vitems_cur[1], vitems_cur[5], Fpix, vrateh);
 			Info(str, cfg.video_info * 1000);
 		}
 
-		uint32_t scrh = vitems[5];
+		uint32_t scrh = vitems_cur[5];
 		if (height && scrh)
 		{
 			if (cfg.vscale_border)

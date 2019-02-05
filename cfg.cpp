@@ -32,6 +32,8 @@ const ini_var_t ini_vars[] = {
 	{ "RESET_COMBO", (void*)(&(cfg.reset_combo)), UINT8, 0, 3, 1 },
 	{ "KEY_MENU_AS_RGUI", (void*)(&(cfg.key_menu_as_rgui)), UINT8, 0, 1, 1 },
 	{ "VIDEO_MODE", (void*)(cfg.video_conf), STRING, 0, sizeof(cfg.video_conf)-1, 1 },
+	{ "VIDEO_MODE_PAL", (void*)(cfg.video_conf_pal), STRING, 0, sizeof(cfg.video_conf_pal) - 1, 1 },
+	{ "VIDEO_MODE_NTSC", (void*)(cfg.video_conf_ntsc), STRING, 0, sizeof(cfg.video_conf_ntsc) - 1, 1 },
 	{ "VIDEO_INFO", (void*)(&(cfg.video_info)), UINT8, 0, 10, 1 },
 	{ "VSYNC_ADJUST", (void*)(&(cfg.vsync_adjust)), UINT8, 0, 2, 1 },
 	{ "HDMI_AUDIO_96K", (void*)(&(cfg.hdmi_audio_96k)), UINT8, 0, 1, 1 },

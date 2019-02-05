@@ -124,8 +124,6 @@
 #define CONF_YPBPR              0b00100000
 #define CONF_AUDIO_96K          0b01000000
 #define CONF_DVI                0b10000000
-#define CONF_RES_MASK           0x700
-#define CONF_RES_SHIFT          8
 
 // core type value should be unlikely to be returned by broken cores
 #define CORE_TYPE_UNKNOWN   0x55
@@ -192,7 +190,6 @@ char *user_io_8bit_get_string(char);
 uint32_t user_io_8bit_set_status(uint32_t, uint32_t);
 int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
 int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
-char user_io_dip_switch1(void);
 char user_io_serial_status(serial_status_t *, uint8_t);
 char *user_io_get_core_name();
 const char *user_io_get_core_name_ex();
@@ -223,8 +220,6 @@ char user_io_osd_is_visible();
 void user_io_send_buttons(char);
 void parse_video_mode();
 
-void add_modifiers(uint8_t mod, uint16_t* keys_ps2);
-
 void user_io_set_index(unsigned char index);
 unsigned char user_io_ext_idx(char *, char*);
 
@@ -232,7 +227,6 @@ void user_io_check_reset(unsigned short modifiers, char useKeys);
 
 void user_io_rtc_reset();
 
-void parse_video_mode();
 int hasAPI1_5();
 
 const char* get_rbf_dir();

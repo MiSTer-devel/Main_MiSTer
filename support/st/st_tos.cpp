@@ -197,6 +197,11 @@ static void dma_nak(void) {
 	DisableFpga();
 }
 
+static char user_io_dip_switch1()
+{
+	return 0;
+}
+
 static void handle_acsi(unsigned char *buffer) {
 	static unsigned char asc[2] = { 0,0 };
 	unsigned char target = buffer[19] >> 5;
