@@ -143,16 +143,13 @@ void archie_send_file(unsigned char id, char *name)
 		if (!(i & 127)) printf("*");
 
 		DISKLED_ON;
-		FileRead(&file, sector_buffer);
+		FileReadSec(&file, sector_buffer);
 		DISKLED_OFF;
 
 		EnableFpga();
 		spi8(ARCHIE_FILE_TX_DAT);
 		spi_block_write(sector_buffer, 1);
 		DisableFpga();
-
-		// still bytes to send? read next sector
-		if (i != blocks - 1) FileNextSector(&file);
 	}
 
 	FileClose(&file);
