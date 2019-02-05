@@ -1528,8 +1528,6 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
         {
             spi_write(sector_buffer, actualReadSize, 0);
 
-            // Still bytes to send, then read next sector.
-            if (actualReadSize == 512) FileNextSector(&file);
         } else
         {
             // End of file, short file, so just move onto end.
@@ -1760,9 +1758,6 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
         {
             // Write the sector (or part) to the fpga memory.
             spi_write(sector_buffer, actualReadSize, 0);
-
-            // Move onto next sector of file.
-            FileNextSector(&file);
         }
     }
     sharpmz_debugf("]\n");

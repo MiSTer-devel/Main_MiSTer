@@ -231,7 +231,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	file->type = 0;
 
 	char *zip_path, *file_path;
-	if (FileIsZipped(full_path, &zip_path, &file_path))
+	if ((mode != -1) && FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		if (mode & O_RDWR || mode & O_WRONLY)
 		{
@@ -350,33 +350,6 @@ int FileOpen(fileTYPE *file, const char *name, char mute)
 	return FileOpenEx(file, name, O_RDONLY, mute);
 }
 
-int FileNextSector(fileTYPE *file)
-{
-	if (file->filp)
-	{
-		__off64_t newoff = fseeko64(file->filp, file->offset + 512, SEEK_SET);
-		if (newoff != file->offset + 512)
-		{
-			//printf("Fail to seek to next sector. File: %s.\n", file->name);
-			fseeko64(file->filp, file->offset, SEEK_SET);
-			return 0;
-		}
-
-		file->offset = newoff;
-		return 1;
-	}
-	else if (file->zip)
-	{
-		if (!FileSeek(file, file->offset + 512, SEEK_SET))
-		{
-			FileSeek(file, file->offset, SEEK_SET);
-			return 0;
-		}
-		return 1;
-	}
-	return 0;
-}
-
 int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 {
 	if (file->filp)
@@ -442,127 +415,6 @@ int FileSeekLBA(fileTYPE *file, uint32_t offset)
 	__off64_t off64 = offset;
 	off64 <<= 9;
 	return FileSeek(file, off64, SEEK_SET);
-}
-
-// Read. MiST compatible. Avoid to use it.
-int FileRead(fileTYPE *file, void *pBuffer)
-{
-	return FileReadEx(file, pBuffer, 1);
-}
-
-int FileReadEx(fileTYPE *file, void *pBuffer, int nSize)
-{
-	static uint8_t tmpbuff[512];
-
-	if (!FileSeek(file, file->offset, SEEK_SET))
-	{
-		printf("FileRead error(seek).\n");
-		return 0;
-	}
-
-	if (!pBuffer)
-	{
-		for (int i = 0; i < nSize; i++)
-		{
-			if (file->filp)
-			{
-				int ret = fread(tmpbuff, 1, 512, file->filp);
-				if (ret < 0)
-				{
-					printf("FileRead error(%d).\n", ret);
-					return 0;
-				}
-				i += ret;
-			}
-			else if (file->zip)
-			{
-				size_t ret = mz_zip_reader_extract_iter_read(file->zip->iter, tmpbuff, 512);
-				if (!ret)
-				{
-					printf("FileReadEx(mz_zip_reader_extract_iter_read) Failed to read, error:%s\n",
-					       mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
-					return 0;
-				}
-				file->zip->offset += ret;
-			}
-			else
-			{
-				printf("FileRead error(unknown file type).\n");
-				return 0;
-			}
-
-			EnableDMode();
-			spi_block_write(tmpbuff, 0);
-			DisableDMode();
-		}
-	}
-	else
-	{
-		if (file->filp)
-		{
-			int ret = fread(pBuffer, 1, nSize*512, file->filp);
-			if (ret < 0)
-			{
-				printf("FileRead error(%d).\n", ret);
-				return 0;
-			}
-		}
-		else if (file->zip)
-		{
-			char *p = (char*)pBuffer;
-			for (int i = 0; i < nSize; i++)
-			{
-				size_t ret = mz_zip_reader_extract_iter_read(file->zip->iter, p, 512);
-				if (!ret)
-				{
-					printf("FileReadEx(mz_zip_reader_extract_iter_read) Failed to read, error:%s\n",
-					       mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
-					return 0;
-				}
-				p += ret;
-				file->zip->offset += ret;
-			}
-		}
-		else
-		{
-			printf("FileRead error(unknown file type).\n");
-			return 0;
-		}
-	}
-
-	return 1;
-}
-
-// Write. MiST compatible. Avoid to use it.
-int FileWrite(fileTYPE *file, void *pBuffer)
-{
-	if (!FileSeek(file, file->offset, SEEK_SET))
-	{
-		printf("FileWrite error(seek).\n");
-		return 0;
-	}
-
-	if (file->filp)
-	{
-		int ret = fwrite(pBuffer, 1, 512, file->filp);
-		if (ret < 0)
-		{
-			printf("FileWrite error(%d).\n", ret);
-			return 0;
-		}
-	}
-	else if (file->zip)
-	{
-		printf("FileWrite error(not supported for zip).\n");
-		return 0;
-	}
-	else
-	{
-		printf("FileWrite error(unknown file type).\n");
-		return 0;
-	}
-
-	return 1;
 }
 
 // Read with offset advancing

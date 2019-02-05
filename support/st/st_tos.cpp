@@ -306,7 +306,7 @@ static void handle_acsi(unsigned char *buffer) {
 					DISKLED_ON;
 					while (length) {
 						FileSeekLBA(&hdd_image[target], lba++);
-						FileRead(&hdd_image[target], dma_buffer);
+						FileReadSec(&hdd_image[target], dma_buffer);
 						//	    hexdump(dma_buffer, 32, 0);
 						mist_memory_write_block(dma_buffer);
 						length--;
@@ -348,7 +348,7 @@ static void handle_acsi(unsigned char *buffer) {
 					while (length) {
 						mist_memory_read_block(dma_buffer);
 						FileSeekLBA(&hdd_image[target], lba++);
-						FileWrite(&hdd_image[target], dma_buffer);
+						FileWriteSec(&hdd_image[target], dma_buffer);
 						length--;
 					}
 					DISKLED_OFF;
@@ -474,7 +474,7 @@ static void handle_fdc(unsigned char *buffer) {
 
 					if ((fdc_cmd & 0xe0) == 0x80) {
 						// read from disk ...
-						FileRead(&fdd_image[drv_sel - 1].file, dma_buffer);
+						FileReadSec(&fdd_image[drv_sel - 1].file, dma_buffer);
 						// ... and copy to ram
 						mist_memory_write_block(dma_buffer);
 					}
@@ -482,7 +482,7 @@ static void handle_fdc(unsigned char *buffer) {
 						// read from ram ...
 						mist_memory_read_block(dma_buffer);
 						// ... and write to disk
-						FileWrite(&(fdd_image[drv_sel - 1].file), dma_buffer);
+						FileWriteSec(&(fdd_image[drv_sel - 1].file), dma_buffer);
 					}
 
 					DISKLED_OFF;
@@ -629,12 +629,13 @@ static void tos_font_load() {
 		if (file.size == 4096) {
 			int i;
 			for (i = 0; i<4; i++) {
-				FileRead(&file, font + i * 512);
-				FileNextSector(&file);
+				FileReadSec(&file, font + i * 512);
 			}
 
 			return;
 		}
+
+		FileClose(&file);
 	}
 
 	// if we couldn't load something, then just convert the 
@@ -676,17 +677,16 @@ void tos_load_cartridge(const char *name)
 
 		DISKLED_ON;
 		for (i = 0; i<blocks; i++) {
-			FileRead(&file, buffer);
+			FileReadSec(&file, buffer);
 
 			if (!(i & 0x7f))
 				mist_memory_set_address(CART_BASE_ADDRESS + 512 * i, 128, 0);
 
 			mist_memory_write_block(buffer);
-
-			if (i != blocks - 1)
-				FileNextSector(&file);
 		}
 		DISKLED_OFF;
+
+		FileClose(&file);
 
 		tos_debugf("%s uploaded", config.cart_img);
 		return;
@@ -757,7 +757,7 @@ void tos_upload(const char *name)
 		tos_debugf("Uploading ...");
 
 		for (i = 0; i<blocks; i++) {
-			FileRead(&file, buffer);
+			FileReadSec(&file, buffer);
 
 			// copy first 8 bytes to address 0 as well
 			if (i == 0) {
@@ -776,9 +776,6 @@ void tos_upload(const char *name)
 				mist_memory_set_address(tos_base + i * 512, 128, 0);
 
 			mist_memory_write_block(buffer);
-
-			if (i != blocks - 1)
-				FileNextSector(&file);
 		}
 
 #if 1
@@ -793,7 +790,7 @@ void tos_upload(const char *name)
 				if (!(i & 0x7f))
 					mist_memory_set_address(tos_base + i * 512, 128, 1);
 
-				FileRead(&file, b2);
+				FileReadSec(&file, b2);
 				mist_memory_read_block(buffer);
 
 				ok = -1;
@@ -829,9 +826,6 @@ void tos_upload(const char *name)
 
 					for (;;);
 				}
-
-				if (i != blocks - 1)
-					FileNextSector(&file);
 			}
 			printf("Verify: %s\n", ok ? "ok" : "failed");
 		}
@@ -840,6 +834,8 @@ void tos_upload(const char *name)
 		time = GetTimer(0) - time;
 		tos_debugf("TOS.IMG uploaded in %lu ms (%llu kB/s / %llu kBit/s)",
 			time >> 20, file.size / (time >> 20), 8 * file.size / (time >> 20));
+
+		FileClose(&file);
 
 	}
 	else {
