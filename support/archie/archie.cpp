@@ -573,28 +573,25 @@ void archie_handle_fdc(void)
 						if (floppy_map == (0x0f ^ (1 << i)))
 							floppy_index = i;
 
-					if (floppy_index < 0)
-						archie_x_debugf("DIO: unexpected floppy_map %x", floppy_map);
+					if (floppy_index < 0) archie_x_debugf("DIO: unexpected floppy_map %x", floppy_map);
 					else
 					{
 						fileTYPE *f = &floppy[floppy_index];
 
-						archie_x_debugf("DIO: floppy %d sector read SD%d T%d S%d -> %ld",
-							floppy_index, side, track, sector, lba);
+						//archie_x_debugf("DIO: floppy %d sector read SD%d T%d S%d -> %ld", floppy_index, side, track, sector, lba);
 
-						if (!f->size)
-							archie_x_debugf("DIO: floppy not inserted. Core should not do this!!");
+						if (!f->size) archie_x_debugf("DIO: floppy not inserted. Core should not do this!!");
 						else {
 							DISKLED_ON;
 							// read two consecutive sectors 
 							FileSeekLBA(f, lba);
 							FileReadAdv(f, buffer, 1024);
-							DISKLED_OFF;
 
 							EnableFpga();
 							spi8(ARCHIE_FDC_TX_DATA);
 							spi_write(buffer, 1024, 0);
 							DisableFpga();
+							DISKLED_OFF;
 						}
 					}
 				}
