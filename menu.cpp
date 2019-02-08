@@ -474,7 +474,7 @@ static uint32_t menu_key_get(void)
 	return(c);
 }
 
-char* getNet(int spec)
+static char* getNet(int spec)
 {
 	int netType = 0;
 	struct ifaddrs *ifaddr, *ifa, *ifae = 0, *ifaw = 0;
@@ -533,7 +533,7 @@ static void infowrite(int pos, const char* txt)
 	OsdWrite(pos, str, 0, 0);
 }
 
-void printSysInfo()
+static void printSysInfo()
 {
 	if (!sysinfo_timer || CheckTimer(sysinfo_timer))
 	{
@@ -611,11 +611,11 @@ void printSysInfo()
 	}
 }
 
-int  firstmenu = 0;
-int  adjvisible;
-char lastrow[256];
+static int  firstmenu = 0;
+static int  adjvisible;
+static char lastrow[256];
 
-void MenuWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple = 0, int arrow = 0)
+static void MenuWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple = 0, int arrow = 0)
 {
 	int row = n - firstmenu;
 
@@ -983,6 +983,8 @@ void HandleUI(void)
 		int entry = 0;
 		while(1)
 		{
+			if (!menusub) firstmenu = 0;
+
 			adjvisible = 0;
 			entry = 0;
 			uint32_t selentry = 0;
