@@ -871,7 +871,7 @@ void HandleUI(void)
 	case MENU_ARCHIE_MAIN1:
 		OsdSetTitle(user_io_get_core_name(), OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
-		menumask = 0x3f;
+		menumask = 0x7f;
 		OsdWrite(0, "", 0, 0);
 
 		strcpy(s, " Floppy 0: ");
