@@ -1923,6 +1923,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				{
 					//convert to 0..255 range
 					int value = ((ev->value - absinfo->minimum) * 256) / (absinfo->maximum - absinfo->minimum + 1);
+					value = (value < 127 || value>129) ? value - 128 : 0;
+					if (value < -127) value = -127;
 					//printf("ABS: axis %d = %d -> %d\n", ev->code, ev->value, value);
 
 					if (mouse_emu)
@@ -1930,7 +1932,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (ev->code == 0) // x
 						{
 							mouse_emu_x = 0;
-							if (value < 127 || value>129) mouse_emu_x = value - 128;
+							if (value < -1 || value>1) mouse_emu_x = value;
 							mouse_emu_x /= 12;
 							return;
 						}
@@ -1938,7 +1940,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (ev->code == 1) // y
 						{
 							mouse_emu_y = 0;
-							if (value < 127 || value>129) mouse_emu_y = value - 128;
+							if (value < -1 || value>1) mouse_emu_y = value;
 							mouse_emu_y /= 12;
 							return;
 						}
@@ -1955,7 +1957,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (ev->code == 0) // x
 						{
 							int offset = 0;
-							if (value < 127 || value>129) offset = value - 128;
+							if (value < -1 || value>1) offset = value;
 							//printf("analog_x = %d\n", offset);
 							joy_analog(input[dev].num, 0, offset);
 							return;
@@ -1964,7 +1966,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (ev->code == 1) // y
 						{
 							int offset = 0;
-							if (value < 127 || value>129) offset = value - 128;
+							if (value < -1 || value>1) offset = value;
 							//printf("analog_y = %d\n", offset);
 							joy_analog(input[dev].num, 1, offset);
 							return;
