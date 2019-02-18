@@ -1487,9 +1487,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 {
 	static int key_mapped = 0;
 
-	int map_skip = (ev->type == EV_KEY && ev->code == 57 && mapping_dev >= 0 && mapping_type==1);
-	int cancel   = (ev->type == EV_KEY && ev->code == 1);
-	int enter    = (ev->type == EV_KEY && ev->code == 28);
+	if (ev->type == EV_KEY && mapping && mapping_type == 3 && ev->code == input[dev].mmap[17]) ev->code = KEY_ENTER;
+
+	int map_skip = (ev->type == EV_KEY && ev->code == KEY_SPACE && mapping_dev >= 0 && mapping_type==1);
+	int cancel   = (ev->type == EV_KEY && ev->code == KEY_ESC);
+	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER);
 	int origcode = ev->code;
 
 	//mouse
