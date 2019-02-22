@@ -405,13 +405,20 @@ const char* get_rbf_name()
 	return p+1;
 }
 
+void MakeFile(const char * filename, const char * data)
+{
+        FILE * file;
+        file = fopen(filename, "w");
+        fwrite(data, strlen(data), 1, file);
+        fclose(file);
+}
+
 int GetUARTMode()
 {
 	struct stat filestat;
 	if (!stat("/tmp/uartmode1", &filestat)) return 1;
 	if (!stat("/tmp/uartmode2", &filestat)) return 2;
 	if (!stat("/tmp/uartmode3", &filestat)) return 3;
-	if (!stat("/tmp/uartmode4", &filestat)) return 4;
 	return 0;
 }
 
@@ -427,17 +434,18 @@ int GetMidiLinkMode()
 
 void SetMidiLinkMode(int mode)
 {
-	remove("/tmp/ML_FSYNTH");
-	remove("/tmp/ML_MUNT");
-	remove("/tmp/ML_UDP");
-	remove("/tmp/ML_TCP");
-	switch (mode)
-	{
-	case 0: system("echo 1 > /tmp/ML_FSYNTH"); break;
-	case 1: system("echo 1 > /tmp/ML_MUNT"); break;
-	case 2: system("echo 1 > /tmp/ML_TCP"); break;
-	case 3: system("echo 1 > /tmp/ML_UDP"); break;
-	}
+        MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
+        remove("/tmp/ML_FSYNTH");
+        remove("/tmp/ML_MUNT");
+        remove("/tmp/ML_UDP");
+        remove("/tmp/ML_TCP");
+        switch (mode)
+        {
+        case 0: MakeFile("/tmp/ML_FSYNTH", ""); break;
+        case 1: MakeFile("/tmp/ML_MUNT", ""); break;
+        case 2: MakeFile("/tmp/ML_TCP", ""); break;
+        case 3: MakeFile("/tmp/ML_UDP", ""); break;
+        }
 }
 
 void user_io_init(const char *path)
