@@ -698,9 +698,7 @@ void HandleUI(void)
 	case KEY_F1:
 		if (is_menu_core())
 		{
-			unsigned long status = (user_io_8bit_set_status(0, 0)>>1)&7;
-			if (status == 5) status = 0;
-				else status++;
+			unsigned long status = ((user_io_8bit_set_status(0, 0)>>1)&7)+1;
 			status <<= 1;
 			user_io_8bit_set_status(status, 0xE);
 			FileSaveConfig(user_io_create_config_name(), &status, 4);
