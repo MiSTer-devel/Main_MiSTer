@@ -1650,11 +1650,9 @@ void HandleUI(void)
 			menustate = MENU_NONE1;
 			break;
 		}
-		else if(menusub == 0 && cfg.volumectl)
+		else if(menusub == 0 && (right || left || select))
 		{
-			if (right) set_volume(1);
-			if (left) set_volume(-1);
-			if (select) set_volume(0);
+			set_volume(right ? 1 : left ? -1 : 0);
 			menustate = MENU_8BIT_INFO;
 		}
 		else if (right)
