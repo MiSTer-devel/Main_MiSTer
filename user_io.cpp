@@ -957,7 +957,6 @@ int user_io_file_mount(char *name, unsigned char index, char pre)
 	__off64_t size = sd_image[index].size;
 	if (!ret && pre)
 	{
-		size = -1;
 		sd_image[index].type = 2;
 		strcpy(sd_image[index].path, name);
 	}
