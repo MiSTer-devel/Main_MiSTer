@@ -566,6 +566,47 @@ int FileLoadConfig(const char *name, void *pBuffer, int size)
 	return FileLoad(path, pBuffer, size);
 }
 
+int FileLoadLastCore()
+{
+	if (cfg.lastcoreboot)
+	{
+		char path[256] = { CONFIG_DIR"/" };
+		strcat(path, "lastcore.dat");
+		sprintf(full_path, "%s/%s", getRootDir(), path);
+		FILE *fd = fopen(full_path, "r");
+		if (!fd)
+		{	
+			printf("Error open lastcore.dat\n");
+			return 0;
+		}
+		fseek(fd, 0L, SEEK_END);
+		long size = ftell(fd);
+
+		fseek(fd, 0L, SEEK_SET);
+		char *lastcore = (char*)malloc(size + 1);
+		memset(lastcore, 0, size + 1);
+				
+		int ret = fread(lastcore, sizeof(char), size, fd);
+		fclose(fd);
+		if (ret == size)
+		{
+			fpga_load_rbf(lastcore);
+			return 1;
+		}
+		else
+		{
+			printf("Error reading lastcore.dat, bytes: %d <> %d, name: %s\n", ret, size, lastcore);
+		}
+		
+	}
+	else
+	{
+		printf("lastcoreboot = 0 or not defined\n");
+	}
+
+	return 0;
+}
+
 int FileCanWrite(const char *name)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);

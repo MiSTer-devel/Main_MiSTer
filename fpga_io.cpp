@@ -516,7 +516,8 @@ int fpga_load_rbf(const char *name, const char *cfg)
 		}
 	}
 	close(rbf);
-	app_restart(!strcasecmp(name, "menu.rbf") ? NULL : path);
+	FileSaveConfig("lastcore.dat", (char*)name, strlen(name));
+	app_restart(!strcasecmp(name, "menu.rbf") ? "menu.rbf" : path);
 
 	return ret;
 }

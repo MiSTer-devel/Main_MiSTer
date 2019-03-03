@@ -74,6 +74,8 @@ int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 t
 int FileSaveConfig(const char *name, void *pBuffer, int size);
 int FileLoadConfig(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 
+int FileLoadLastCore();
+
 void AdjustDirectory(char *path);
 int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix = NULL);
 
