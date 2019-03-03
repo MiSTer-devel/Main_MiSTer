@@ -182,7 +182,6 @@ char is_archie();
 char is_sharpmz();
 void user_io_poll();
 char user_io_menu_button();
-char user_io_button_dip_switch1();
 char user_io_user_button();
 void user_io_osd_key_enable(char);
 void user_io_serial_tx(char *, uint16_t);
@@ -197,6 +196,8 @@ char is_menu_core();
 char is_x86_core();
 char is_snes_core();
 char has_menu();
+
+const char *get_image_name(int i);
 
 int user_io_get_kbdemu();
 uint32_t user_io_get_uart_mode();

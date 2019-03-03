@@ -8,10 +8,7 @@ void archie_poll(void);
 void archie_kbd(unsigned short code);
 void archie_mouse(unsigned char b, int16_t x, int16_t y);
 const char *archie_get_rom_name(void);
-const char *archie_get_floppy_name(int b);
 void archie_set_rom(char *);
-void archie_set_floppy(int i, char *);
-char archie_floppy_is_inserted(int i);
 void archie_save_config(void);
 
 void archie_set_ar(char i);

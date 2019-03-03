@@ -873,11 +873,11 @@ void HandleUI(void)
 		OsdWrite(0, "", 0, 0);
 
 		strcpy(s, " Floppy 0: ");
-		strncat(s, archie_get_floppy_name(0),27);
+		strncat(s, get_image_name(0) ? get_image_name(0) : "* no disk *",27);
 		OsdWrite(1, s, menusub == 0, 0);
 
 		strcpy(s, " Floppy 1: ");
-		strncat(s, archie_get_floppy_name(1), 27);
+		strncat(s, get_image_name(1) ? get_image_name(1) : "* no disk *", 27);
 		OsdWrite(2, s, menusub == 1, 0);
 
 		OsdWrite(3, "", 0, 0);
@@ -921,12 +921,7 @@ void HandleUI(void)
 			switch (menusub) {
 			case 0:  // Floppy 0
 			case 1:  // Floppy 1
-				if (archie_floppy_is_inserted(menusub)) {
-					archie_set_floppy(menusub, NULL);
-					menustate = MENU_ARCHIE_MAIN1;
-				}
-				else
-					SelectFile("ADF", SCANO_DIR, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
+				SelectFile("ADF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				break;
 
 			case 2:  // Load ROM
@@ -967,8 +962,8 @@ void HandleUI(void)
 		break;
 
 	case MENU_ARCHIE_MAIN_FILE_SELECTED: // file successfully selected
-		if (menusub == 0) archie_set_floppy(0, SelectedPath);
-		if (menusub == 1) archie_set_floppy(1, SelectedPath);
+		if (menusub == 0) user_io_file_mount(SelectedPath, 0);
+		if (menusub == 1) user_io_file_mount(SelectedPath, 1);
 		if (menusub == 2) archie_set_rom(SelectedPath);
 		menustate = MENU_ARCHIE_MAIN1;
 		break;
