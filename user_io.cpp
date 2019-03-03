@@ -530,6 +530,7 @@ void user_io_init(const char *path)
 
 	case CORE_TYPE_ARCHIE:
 		puts("Identified Archimedes core");
+		send_rtc(1);
 		archie_init();
 		user_io_read_core_name();
 		parse_config();

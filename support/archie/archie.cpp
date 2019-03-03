@@ -156,6 +156,7 @@ static void archie_kbd_reset(void)
 void archie_init(void)
 {
 	archie_debugf("init");
+	user_io_8bit_set_status(1, UIO_STATUS_RESET);
 
 	// set config defaults
 	config.system_ctrl = 0;
@@ -183,6 +184,9 @@ void archie_init(void)
 
 	// upload ext file
 	user_io_file_tx("Archie/RISCOS.EXT", 2);
+	user_io_file_tx("Archie/CMOS.DAT", 3);
+
+	user_io_8bit_set_status(0, UIO_STATUS_RESET);
 
 /*
 	int i;
@@ -260,7 +264,6 @@ void archie_mouse(unsigned char b, int16_t x, int16_t y)
 	// ignore mouse buttons if key scanning is disabled
 	if (flags & FLAG_SCAN_ENABLED)
 	{
-		static const uint8_t remap[] = { 0, 2, 1 };
 		static unsigned char buts = 0;
 		uint8_t s;
 
@@ -272,7 +275,7 @@ void archie_mouse(unsigned char b, int16_t x, int16_t y)
 			{
 				unsigned char prefix = (b&mask) ? KDDA : KUDA;
 				archie_kbd_send(STATE_WAIT4ACK1, prefix | 0x07);
-				archie_kbd_send(STATE_WAIT4ACK2, prefix | remap[s]);
+				archie_kbd_send(STATE_WAIT4ACK2, prefix | s);
 			}
 		}
 		buts = b;
