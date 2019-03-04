@@ -6,6 +6,7 @@
 #include "archie.h"
 #include "../../debug.h"
 #include "../../user_io.h"
+#include "../../input.h"
 
 #define CONFIG_FILENAME  "ARCHIE.CFG"
 
@@ -81,6 +82,17 @@ void archie_set_ar(char i)
 int archie_get_ar()
 {
 	return config.system_ctrl & 1;
+}
+
+static int mswap = 0;
+void archie_set_mswap(char i)
+{
+	mswap = i;
+}
+
+int archie_get_mswap()
+{
+	return mswap;
 }
 
 void archie_set_amix(char i)
@@ -264,6 +276,7 @@ void archie_mouse(unsigned char b, int16_t x, int16_t y)
 	// ignore mouse buttons if key scanning is disabled
 	if (flags & FLAG_SCAN_ENABLED)
 	{
+		static const uint8_t remap[] = { 0, 2, 1 };
 		static unsigned char buts = 0;
 		uint8_t s;
 
@@ -275,7 +288,7 @@ void archie_mouse(unsigned char b, int16_t x, int16_t y)
 			{
 				unsigned char prefix = (b&mask) ? KDDA : KUDA;
 				archie_kbd_send(STATE_WAIT4ACK1, prefix | 0x07);
-				archie_kbd_send(STATE_WAIT4ACK2, prefix | s);
+				archie_kbd_send(STATE_WAIT4ACK2, prefix | ((!mswap ^ !(get_key_mod() & (RGUI|LGUI))) ? s : remap[s]));
 			}
 		}
 		buts = b;

@@ -869,7 +869,7 @@ void HandleUI(void)
 	case MENU_ARCHIE_MAIN1:
 		OsdSetTitle(user_io_get_core_name(), OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
-		menumask = 0x7f;
+		menumask = 0xff;
 		OsdWrite(0, "", 0, 0);
 
 		strcpy(s, " Floppy 0: ");
@@ -888,21 +888,23 @@ void HandleUI(void)
 
 		OsdWrite(5, "", 0, 0);
 
-		strcpy(s, " Aspect ratio:      ");
+		strcpy(s, " Aspect ratio:       ");
 		strcat(s, archie_get_ar() ? "16:9" : "4:3");
 		OsdWrite(6, s, menusub == 3, 0);
 
 		OsdWrite(7, "", 0, 0);
-		sprintf(s, " Stereo mix:        %s", config_stereo_msg[archie_get_amix()]);
+		sprintf(s, " Stereo mix:         %s", config_stereo_msg[archie_get_amix()]);
 		OsdWrite(8, s, menusub == 4, 0);
 
 		OsdWrite(9, "", 0, 0);
-		sprintf(s, " Swap joysticks:    %s", user_io_get_joyswap() ? "Yes" : "No");
+		sprintf(s, " Swap joysticks:     %s", user_io_get_joyswap() ? "Yes" : "No");
 		OsdWrite(10, s, menusub == 5, 0);
+		sprintf(s, " Swap mouse btn 2/3: %s", archie_get_mswap() ? "Yes" : "No");
+		OsdWrite(11, s, menusub == 6, 0);
 
-		for (int i = 11; i<15; i++) OsdWrite(i, "", 0, 0);
+		for (int i = 12; i<15; i++) OsdWrite(i, "", 0, 0);
 
-		OsdWrite(15, STD_EXIT, menusub == 6, 0);
+		OsdWrite(15, STD_EXIT, menusub == 7, 0);
 		menustate = MENU_ARCHIE_MAIN2;
 		parentstate = MENU_ARCHIE_MAIN1;
 
@@ -943,7 +945,12 @@ void HandleUI(void)
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 6:  // Exit
+			case 6:
+				archie_set_mswap(!archie_get_mswap());
+				menustate = MENU_ARCHIE_MAIN1;
+				break;
+
+			case 7:  // Exit
 				menustate = MENU_NONE1;
 				break;
 			}

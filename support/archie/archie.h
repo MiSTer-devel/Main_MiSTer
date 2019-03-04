@@ -15,5 +15,7 @@ void archie_set_ar(char i);
 int  archie_get_ar();
 void archie_set_amix(char i);
 int  archie_get_amix();
+void archie_set_mswap(char i);
+int  archie_get_mswap();
 
 #endif // ARCHIE_H
