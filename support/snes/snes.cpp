@@ -149,6 +149,18 @@ uint8_t* snes_get_header(fileTYPE *f)
 				uint8_t ramsz = buf[addr + RamSize];
 				if (ramsz >= 0x08) ramsz = 0;
 
+				//re-calc rom size
+				uint8_t romsz = 15;
+				size--;
+				if (!(size & 0xFF000000))
+				{
+					while (!(size & 0x1000000))
+					{
+						romsz--;
+						size <<= 1;
+					}
+				}
+
 				//Rom type: 0-Low, 1-High, 2-ExHigh
 				hdr[1] = (addr == 0x00ffc0) ? 1 : (addr == 0x40ffc0) ? 2 : 0;
 
@@ -194,7 +206,7 @@ uint8_t* snes_get_header(fileTYPE *f)
 				//SDD1 5
 				if (buf[addr + Mapper] == 0x32 && (buf[addr + RomType] == 0x43 || buf[addr + RomType] == 0x45))
 				{
-					hdr[1] |= 0x50;
+					if (romsz < 14) hdr[1] |= 0x50; // except Star Ocean un-SDD1
 				}
 
 				//SA1 6
@@ -222,17 +234,6 @@ uint8_t* snes_get_header(fileTYPE *f)
 					hdr[3] |= 1;
 				}
 
-				//re-calc rom size
-				uint8_t romsz = 15;
-				size--;
-				if (!(size & 0xFF000000))
-				{
-					while (!(size & 0x1000000))
-					{
-						romsz--;
-						size <<= 1;
-					}
-				}
 				hdr[0] = (ramsz << 4) | romsz;
 				printf("Size from header: 0x%X, calculated size: 0x%X\n", buf[addr + RomSize], romsz);
 			}
