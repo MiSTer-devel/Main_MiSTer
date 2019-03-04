@@ -195,7 +195,7 @@ void archie_init(void)
 	archie_set_rom(config.rom_img);
 
 	// upload ext file
-	user_io_file_tx("Archie/RISCOS.EXT", 2);
+	//user_io_file_tx("Archie/RISCOS.EXT", 2);
 	user_io_file_tx("Archie/CMOS.DAT", 3);
 
 	user_io_8bit_set_status(0, UIO_STATUS_RESET);
