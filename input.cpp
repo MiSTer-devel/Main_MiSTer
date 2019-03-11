@@ -2154,6 +2154,10 @@ int input_test(int getchar)
 									if (input[i].vid == 0x054c && input[i].pid == 0x0268)
 									{ if (ev.code <= 5 && ev.value > 118 && ev.value < 138) break; }
 
+									//reduce flood from PS3/PS4 gamepads via 8bitdo retro receiver
+									if (input[i].vid == 0x2dc8 && input[i].pid == 0x3100)
+									{ if (ev.code <= 5 && ev.value > 118 && ev.value < 138) break; }
+
 									//aliexpress USB encoder floods messages
 									if (input[i].vid == 0x0079 && input[i].pid == 0x0006)
 									{ if (ev.code == 2) break; }
