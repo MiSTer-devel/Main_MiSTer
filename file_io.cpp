@@ -737,7 +737,6 @@ void FindStorage(void)
 	{
 		int saveddev = device;
 		device = 0;
-		MiSTer_ini_parse();
 		device = saveddev;
 		parse_video_mode();
 		user_io_send_buttons(1);

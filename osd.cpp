@@ -200,13 +200,13 @@ void OsdSetArrow(int a)
 	arrow = a;
 }
 
-void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char usebg)
+void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char usebg, int maxinv)
 {
-	OsdWriteOffset(n, s, invert, stipple, 0, 0, usebg);
+	OsdWriteOffset(n, s, invert, stipple, 0, 0, usebg, maxinv);
 }
 
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
-void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar, char usebg)
+void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar, char usebg, int maxinv)
 {
 	//printf("OsdWriteOffset(%d)\n", n);
 	unsigned short i;
@@ -237,6 +237,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	// send all characters in string to OSD
 	while (1)
 	{
+		if (invert && i / 8 >= maxinv) invert = 0;
 		if (i == 0 && (n < osd_size))
 		{	// Render sidestripe
 			unsigned char j;

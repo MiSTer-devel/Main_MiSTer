@@ -47,6 +47,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "cfg.h"
 #include "input.h"
 #include "battery.h"
+#include "bootcore.h"
 
 #include "support.h"
 
@@ -643,6 +644,26 @@ static void MenuWrite(unsigned char n, const char *s, unsigned char invert, unsi
 	OsdWriteOffset(row, s, invert, stipple, 0, (row == 0 && firstmenu) ? 17 : (row == (OsdGetSize()-1) && !arrow) ? 16 : 0, 0);
 }
 
+const char* get_rbf_name_bootcore(char *str)
+{
+	if (!strlen(cfg.bootcore)) return "";
+	char *p = strrchr(str, '/');
+	if (!p) return str;
+	
+	char *spl = strrchr(p + 1, '.');
+	if (spl && !strcmp(spl, ".rbf"))
+	{
+		*spl = 0;
+	}
+	else
+	{
+		return NULL;
+	}
+	return p + 1;
+
+
+}
+
 void HandleUI(void)
 {
 	switch (user_io_core_type())
@@ -688,6 +709,11 @@ void HandleUI(void)
 	right = false;
 	plus = false;
 	minus = false;
+
+	if (c && c != KEY_F12 && cfg.bootcore[0] != '\0')
+	{
+		cfg.bootcore[0] = '\0';
+	}
 
 	switch (c)
 	{
@@ -3556,8 +3582,35 @@ void HandleUI(void)
 
 		if (!rtc_timer || CheckTimer(rtc_timer))
 		{
-			rtc_timer = GetTimer(1000);
+			rtc_timer = GetTimer(cfg.bootcore[0] != '\0' ? 100 : 1000);
 			char str[64] = { 0 };
+			char straux[64];
+
+			if (cfg.bootcore[0] != '\0')
+			{				
+				if (btimeout >= 10)
+				{
+					sprintf(str, " Bootcore -> %s", bootcoretype);
+					OsdWrite(13, str, 0, 0);
+					strcpy(straux, cfg.bootcore);
+					sprintf(str, " %s", get_rbf_name_bootcore(straux));
+					PrintFileName(str, 14, (32 * btimeout) / cfg.bootcore_timeout);
+					sprintf(str, "   Press any key to cancel");
+					OsdWrite(15, str, 0, 0);
+					btimeout--;
+					if (btimeout < 10)
+					{
+						OsdWrite(13, "", 0, 0);
+						strcpy(straux, cfg.bootcore);
+						sprintf(str, " %s", get_rbf_name_bootcore(straux));
+						PrintFileName(str, 14, 0);
+						sprintf(str, "           Loading...");
+						OsdWrite(15, str, 1, 0);
+						fpga_load_rbf(cfg.bootcore);
+					}
+				}				
+			}
+
 			sprintf(str, "  MiSTer   ");
 
 			time_t t = time(NULL);
@@ -3622,6 +3675,54 @@ void ScrollLongName(void)
 		max_len = 25; // number of directory name characters to display
 
 	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->d_name, 2, len, max_len, 1);
+}
+
+void PrintFileName(char *name, int row, int maxinv)
+{
+	int len;
+
+	char s[40];	
+	s[32] = 0; // set temporary string length to OSD line length
+
+	len = strlen(name); // get name length
+	memset(s, ' ', 32); // clear line buffer
+	char *p = 0;
+	if ((fs_Options & SCANO_CORES) && len > 9 && !strncmp(name + len - 9, "_20", 3))
+	{
+		p = name + len - 6;
+		len -= 9;
+	}
+
+	if (len > 28)
+	{
+		len = 27; // trim display length if longer than 30 characters
+		s[28] = 22;
+	}
+	strncpy(s + 1, name, len); // display only name
+
+	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES))
+	{
+		if (p)
+		{
+			int n = 19;
+			s[n++] = ' ';
+			s[n++] = p[0];
+			s[n++] = p[1];
+			s[n++] = '.';
+			s[n++] = p[2];
+			s[n++] = p[3];
+			s[n++] = '.';
+			s[n++] = p[4];
+			s[n++] = p[5];
+		}
+		else
+		{
+			strcpy(&s[19], " --.--.--");
+		}
+	}
+
+	OsdWrite(row, s, 1, 0, 0, maxinv);
+
 }
 
 // print directory contents

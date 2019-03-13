@@ -516,7 +516,7 @@ int fpga_load_rbf(const char *name, const char *cfg)
 		}
 	}
 	close(rbf);
-	app_restart(!strcasecmp(name, "menu.rbf") ? NULL : path);
+	app_restart(!strcasecmp(name, "menu.rbf") ? "menu.rbf" : path);
 
 	return ret;
 }
