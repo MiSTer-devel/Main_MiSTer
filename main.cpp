@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "input.h"
 #include "fpga_io.h"
 #include "scheduler.h"
+#include "bootcore.h"
 
 const char *version = "$VER:HPS" VDATE;
 
@@ -65,6 +66,7 @@ int main(int argc, char *argv[])
 	}
 
 	FindStorage();
+	bootcore_init(argc > 1 ? argv[1] : "");		
 	user_io_init((argc > 1) ? argv[1] : "");
 
 	scheduler_init();

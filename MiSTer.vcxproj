@@ -49,6 +49,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="battery.cpp" />
+    <ClCompile Include="bootcore.cpp" />
     <ClCompile Include="brightness.cpp" />
     <ClCompile Include="cfg.cpp" />
     <ClCompile Include="DiskImage.cpp" />
@@ -84,6 +85,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h" />
+    <ClInclude Include="bootcore.h" />
     <ClInclude Include="brightness.h" />
     <ClInclude Include="cfg.h" />
     <ClInclude Include="charrom.h" />
