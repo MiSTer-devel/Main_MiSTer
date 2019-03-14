@@ -230,6 +230,9 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	file->mode = 0;
 	file->type = 0;
 
+	char *p = strrchr(full_path, '/');
+	strcpy(file->name, (mode == -1) ? full_path : p + 1);
+
 	char *zip_path, *file_path;
 	if ((mode != -1) && FileIsZipped(full_path, &zip_path, &file_path))
 	{
@@ -284,9 +287,6 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	}
 	else
 	{
-		char *p = strrchr(full_path, '/');
-		strcpy(file->name, (mode == -1) ? full_path : p+1);
-
 		int fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
 		if (fd <= 0)
 		{
