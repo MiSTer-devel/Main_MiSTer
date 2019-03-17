@@ -213,7 +213,7 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y);
 void user_io_kbd(uint16_t key, int press);
 char* user_io_create_config_name();
 int user_io_get_joy_transl();
-void user_io_digital_joystick(unsigned char, uint16_t, int);
+void user_io_digital_joystick(unsigned char, uint32_t, int);
 void user_io_analog_joystick(unsigned char, char, char);
 void user_io_set_joyswap(int swap);
 int user_io_get_joyswap();

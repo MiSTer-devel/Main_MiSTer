@@ -74,7 +74,6 @@ void OsdClear(void);
 void OsdEnable(unsigned char mode);
 void InfoEnable(int x, int y, int width, int height);
 void OsdDisable(void);
-void ConfigFilter(unsigned char lores, unsigned char hires);
 void ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines);
 void ConfigAudio(unsigned char audio);
 void ConfigMemory(unsigned char memory);

@@ -311,7 +311,7 @@ static void parse_config()
 				}
 
 				joy_bcount = 0;
-				for (int n = 0; n < 12; n++)
+				for (int n = 0; n < 28; n++)
 				{
 					substrcpy(joy_bnames[n], p, n + 1);
 					if (!joy_bnames[n][0]) break;
@@ -340,7 +340,7 @@ static void parse_config()
 			if (p[0] == 'V')
 			{
 				// get version string
-				char s[40];
+				char s[128];
 				strcpy(s, OsdCoreName());
 				strcat(s, " ");
 				substrcpy(s + strlen(s), p, 1);
@@ -681,7 +681,7 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 	}
 }
 
-void user_io_digital_joystick(unsigned char joystick, uint16_t map, int newdir)
+void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
 {
 	uint8_t joy = (joystick>1 || !joyswap) ? joystick : joystick ^ 1;
 
@@ -693,7 +693,10 @@ void user_io_digital_joystick(unsigned char joystick, uint16_t map, int newdir)
 		return;
 	}
 
-	spi_uio_cmd16((joy < 2) ? (UIO_JOYSTICK0 + joy) : (UIO_JOYSTICK2 + joy - 2), map);
+	spi_uio_cmd_cont((joy < 2) ? (UIO_JOYSTICK0 + joy) : (UIO_JOYSTICK2 + joy - 2));
+	spi_w(map);
+	if(joy_bcount>12) spi_w(map>>16);
+	DisableIO();
 
 	if (!is_minimig() && joy_transl == 1 && newdir)
 	{

@@ -168,12 +168,13 @@ const char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE 
 const char *config_cd32pad_msg[] = { "OFF", "ON" };
 const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
-const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD" };
+const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD", "     Stick X: Tilt RIGHT", "     Stick Y: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
+const char *joy_ana_map[] = { "     Stick 1: Tilt RIGHT", "     Stick 1: Tilt DOWN", "     Stick 2: Tilt RIGHT", "     Stick 2: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "     MIDI" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
 
-char joy_bnames[12][32];
+char joy_bnames[32][32];
 int  joy_bcount = 0;
 
 #define script_line_length 1024
@@ -1134,7 +1135,7 @@ void HandleUI(void)
 				if (p && (p[0] == 'J'))
 				{
 					// joystick button names.
-					for (int n = 0; n < 12; n++)
+					for (int n = 0; n < 28; n++)
 					{
 						substrcpy(joy_bnames[n], p, n + 1);
 						//printf("joy_bname = %s\n", joy_bnames[n]);
@@ -1724,31 +1725,51 @@ void HandleUI(void)
 	case MENU_JOYDIGMAP1:
 		{
 			const char* p = 0;
-			if (get_map_button() < 4)
+			if (get_map_button() < 0)
+			{
+				strcpy(s, joy_ana_map[get_map_button() + 4]);
+			}
+			else if (get_map_button() < 4)
 			{
 				p = joy_button_map[get_map_button()];
 			}
 			else if (joy_bcount)
 			{
-				p = (is_menu_core() && get_map_button() == joy_bcount + 3) ? joy_button_map[8 + get_map_type()] : joy_bnames[get_map_button() - 4];
+				p = joy_bnames[get_map_button() - 4];
+				if (is_menu_core())
+				{
+					if (get_map_type()) joy_bcount = 17;
+					if (get_map_button() == 16) p = joy_button_map[8 + get_map_type()];
+				}
 			}
 			else
 			{
 				p = (get_map_button() < 8) ? joy_button_map[get_map_button()] : joy_button_map[8 + get_map_type()];
 			}
 
-			s[0] = 0;
-			int len = (30 - (strlen(p) + 7)) / 2;
-			while (len > 0)
+			if (get_map_button() >= 0)
 			{
-				strcat(s, " ");
-				len--;
+				if (is_menu_core() && get_map_button() > 16)
+				{
+					strcpy(s, joy_button_map[10 + get_map_button() - 17]);
+				}
+				else
+				{
+					s[0] = 0;
+					int len = (30 - (strlen(p) + 7)) / 2;
+					while (len > 0)
+					{
+						strcat(s, " ");
+						len--;
+					}
+
+					strcat(s, "Press: ");
+					strcat(s, p);
+				}
 			}
 
-			strcat(s, "Press: ");
-			strcat(s, p);
 			OsdWrite(3, s, 0, 0);
-			if (get_map_button())
+			if (get_map_vid() || get_map_pid())
 			{
 				if (get_map_type()) OsdWrite(OsdGetSize() - 1, " Enter \x16 Finish, Space \x16 Skip", menusub == 0, 0);
 				else OsdWrite(OsdGetSize() - 1, "", 0, 0);
@@ -3409,7 +3430,7 @@ void HandleUI(void)
 				strcpy(joy_bnames[9], "Mouse Right Btn");
 				strcpy(joy_bnames[10], "Mouse Middle Btn");
 				strcpy(joy_bnames[11], "Mouse Emu/Sniper");
-				start_map_setting(17);
+				start_map_setting(21);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;
