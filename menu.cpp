@@ -1714,12 +1714,16 @@ void HandleUI(void)
 
 	case MENU_JOYDIGMAP:
 		helptext = 0;
-		menumask = 1;
+		menumask = 0;
 		OsdSetTitle("Define buttons", 0);
 		menustate = MENU_JOYDIGMAP1;
 		parentstate = MENU_JOYDIGMAP;
-		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, "         ESC \x16 Cancel", menusub == 0, 0);
+		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
+
+		OsdWrite(10, "       Esc   -> Cancel", 0, 0);
+		OsdWrite(11, "       Enter -> Cancel", 0, 0);
+		OsdWrite(12, "       Space -> Skip", 0, 0);
+
 		break;
 
 	case MENU_JOYDIGMAP1:
@@ -1771,10 +1775,12 @@ void HandleUI(void)
 			OsdWrite(3, s, 0, 0);
 			if (get_map_vid() || get_map_pid())
 			{
-				if (get_map_type()) OsdWrite(OsdGetSize() - 1, " Enter \x16 Finish, Space \x16 Skip", menusub == 0, 0);
-				else OsdWrite(OsdGetSize() - 1, "", 0, 0);
-
 				sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
+				if (get_map_button() > 0)
+				{
+					OsdWrite(11, "       Enter -> Finish", 0, 0);
+					if(!get_map_type()) OsdWrite(12);
+				}
 				OsdWrite(5, s, 0, 0);
 			}
 

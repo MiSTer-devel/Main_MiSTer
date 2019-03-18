@@ -2235,18 +2235,19 @@ int input_test(int getchar)
 								//printf("last_state=%d, axis_state=%d\n", last_state, axis_state);
 								if (last_state != axis_state)
 								{
+									uint16_t ecode = ev.code<<1;
 									ev.type = EV_KEY;
 									if (last_state)
 									{
 										ev.value = 0;
-										ev.code = KEY_EMU + (ev.code * 2) + last_state - 1;
+										ev.code = KEY_EMU + ecode + last_state - 1;
 										input_cb(&ev, 0, i);
 									}
 
 									if (axis_state)
 									{
 										ev.value = 1;
-										ev.code = KEY_EMU + (ev.code * 2) + axis_state - 1;
+										ev.code = KEY_EMU + ecode + axis_state - 1;
 										input_cb(&ev, 0, i);
 									}
 								}
