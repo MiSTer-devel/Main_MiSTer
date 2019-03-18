@@ -2469,6 +2469,8 @@ void set_volume(int cmd)
 
 void user_io_kbd(uint16_t key, int press)
 {
+	if(is_menu_core()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
+
 	if (key == KEY_MUTE)
 	{
 		if (press == 1 && hasAPI1_5()) set_volume(0);
