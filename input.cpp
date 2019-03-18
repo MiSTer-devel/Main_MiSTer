@@ -1580,6 +1580,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	//mapping
 	if (mapping && (mapping_dev >=0 || ev->value) && !cancel && !enter)
 	{
+		if (is_menu_core()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
+
 		if (ev->type == EV_KEY && mapping_button>=0)
 		{
 			if (mapping_type == 2)
@@ -2235,19 +2237,19 @@ int input_test(int getchar)
 								//printf("last_state=%d, axis_state=%d\n", last_state, axis_state);
 								if (last_state != axis_state)
 								{
-									uint16_t ecode = ev.code<<1;
+									uint16_t ecode = KEY_EMU + (ev.code << 1) - 1;
 									ev.type = EV_KEY;
 									if (last_state)
 									{
 										ev.value = 0;
-										ev.code = KEY_EMU + ecode + last_state - 1;
+										ev.code = ecode + last_state;
 										input_cb(&ev, 0, i);
 									}
 
 									if (axis_state)
 									{
 										ev.value = 1;
-										ev.code = KEY_EMU + ecode + axis_state - 1;
+										ev.code = ecode + axis_state;
 										input_cb(&ev, 0, i);
 									}
 								}
