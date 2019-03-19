@@ -1143,6 +1143,7 @@ static int mapping_count;
 static uint8_t mapping_key;
 
 static uint32_t tmp_axis[4];
+static int tmp_axis_n = 0;
 
 void start_map_setting(int cnt)
 {
@@ -1151,8 +1152,9 @@ void start_map_setting(int cnt)
 	mapping_dev = -1;
 	mapping_type = (cnt<0) ? 3 : cnt ? 1 : 2;
 	mapping_count = cnt;
+	tmp_axis_n = 0;
 
-	if (mapping_type <= 1 && is_menu_core()) mapping_button = -4;
+	if (mapping_type <= 1 && is_menu_core()) mapping_button = -6;
 	memset(tmp_axis, 0, sizeof(tmp_axis));
 }
 
@@ -1655,6 +1657,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 		}
 
+		//Define min-0-max analogs
 		int idx = 0;
 		if (is_menu_core())
 		{
@@ -1670,27 +1673,79 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				case -1: idx = AXIS2_Y; break;
 			}
 
-			if (mapping_dev == dev || (mapping_dev <0 && mapping_button<0))
+			if (mapping_dev == dev || (mapping_dev < 0 && mapping_button < 0))
 			{
-				if (ev->type == EV_ABS && idx)
+				int max = 0, min=0;
+
+				if (ev->type == EV_ABS)
+				{
+					max = (ev->value == absinfo->maximum);
+					min = (ev->value == absinfo->minimum);
+					printf("min=%d,max=%d\n", min, max);
+				}
+
+				//check DPAD horz
+				if (mapping_button == -6)
+				{
+					if (ev->type == EV_ABS && max)
+					{
+						if (mapping_dev < 0) mapping_dev = dev;
+						mapping_type = 1;
+
+						if (absinfo->maximum > 2)
+						{
+							tmp_axis[tmp_axis_n++] = ev->code | 0x20000;
+							mapping_button++;
+						}
+						else
+						{
+							//Standard DPAD event
+							mapping_button += 2;
+						}
+					}
+					else if (ev->type == EV_KEY && ev->value == 1)
+					{
+						//DPAD uses simple button events
+						if (!map_skip)
+						{
+							mapping_button += 2;
+							if (mapping_dev < 0) mapping_dev = dev;
+							if (ev->code < 256)
+							{
+								// keyboard, skip stick 1/2
+								mapping_button += 4;
+								mapping_type = 0;
+							}
+						}
+					}
+				}
+				//check DPAD vert
+				else if (mapping_button == -5)
+				{
+					if (ev->type == EV_ABS && max && absinfo->maximum > 1 && ev->code != (tmp_axis[0] & 0xFFFF))
+					{
+						tmp_axis[tmp_axis_n++] = ev->code | 0x20000;
+						mapping_button++;
+					}
+				}
+				//Sticks
+				else if (ev->type == EV_ABS && idx)
 				{
 					if (mapping_dev < 0) mapping_dev = dev;
 
-					int threshold = (absinfo->maximum - absinfo->minimum) / 10;
-					int max = ev->value > (absinfo->maximum - threshold);
-					//int min = ev->value < (absinfo->minimum + threshold);
-
-					if (idx && max) //(min || max))
+					if (idx && max && absinfo->maximum > 2)
 					{
 						if (mapping_button < 0)
 						{
 							int found = 0;
-							for (int i = 0; i < idx-AXIS1_X; i++) if (ev->code == (tmp_axis[i]&0xFFFF)) found = 1;
+							for (int i = 0; i < tmp_axis_n; i++) if (ev->code == (tmp_axis[i] & 0xFFFF)) found = 1;
 							if (!found)
 							{
-								tmp_axis[idx - AXIS1_X] = ev->code | 0x20000;
+								mapping_type = 1;
+								tmp_axis[tmp_axis_n++] = ev->code | 0x20000;
 								//if (min) tmp_axis[idx - AXIS1_X] |= 0x10000;
 								mapping_button++;
+								if (tmp_axis_n >= 4) mapping_button = 0;
 							}
 						}
 						else
@@ -1711,12 +1766,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			if (ev->value == 1)
 			{
-				if (idx)
-				{
-					if (mapping_button < 0) tmp_axis[idx - AXIS1_X] = 0;
-					else if (mapping_dev >= 0) input[mapping_dev].map[idx] = 0;
-				}
+				if (idx && mapping_dev >= 0) input[mapping_dev].map[idx] = 0;
 				mapping_button++;
+				if (mapping_button < 0 && (mapping_button&1)) mapping_button++;
 			}
 		}
 
@@ -2144,7 +2196,7 @@ int input_test(int getchar)
 								return ev.code;
 							}
 						}
-						else
+						else if(ev.type)
 						{
 							if (ev.type == EV_ABS)
 							{
@@ -2157,14 +2209,41 @@ int input_test(int getchar)
 
 							if (is_menu_core())
 							{
+								/*
+								if (mapping && mapping_type <= 1 && !(ev.type==EV_KEY && ev.value>1))
+								{
+									static char str[64], str2[64];
+									OsdWrite(12, "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81");
+									sprintf(str, "     VID=%04X PID=%04X", input[i].vid, input[i].pid);
+									OsdWrite(13, str);
+
+									sprintf(str, "Type=%d Code=%d Value=%d", ev.type, ev.code, ev.value);
+									str2[0] = 0;
+									int len = (29 - (strlen(str))) / 2;
+									while (len-- > 0) strcat(str2, " ");
+									strcat(str2, str);
+									OsdWrite(14, str2);
+
+									str2[0] = 0;
+									if (ev.type == EV_ABS)
+									{
+										sprintf(str, "Min=%d Max=%d", absinfo.minimum, absinfo.maximum);
+										int len = (29 - (strlen(str))) / 2;
+										while (len-- > 0) strcat(str2, " ");
+										strcat(str2, str);
+									}
+									OsdWrite(15, str2);
+								}
+								*/
+
 								switch (ev.type)
 								{
-									//keyboard, buttons
+								//keyboard, buttons
 								case EV_KEY:
 									printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
 									break;
 
-									//mouse
+								//mouse
 								case EV_REL:
 									printf("Input event: type=EV_REL, Axis=%d, Offset:=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
 									break;
@@ -2173,7 +2252,7 @@ int input_test(int getchar)
 								case EV_MSC:
 									break;
 
-									//analog joystick
+								//analog joystick
 								case EV_ABS:
 									if (ev.code == 62) break;
 									if (ev.code == 61) break; //ps3 accel axis
@@ -2210,13 +2289,13 @@ int input_test(int getchar)
 							input_cb(&ev, &absinfo, i);
 
 							//sumulate digital directions from analog
-							if (ev.type == EV_ABS)
+							if (ev.type == EV_ABS && !(mapping && mapping_type<=1 && mapping_button<-4))
 							{
 								uint8_t axis_state = 0;
-								if (absinfo.maximum == 1 && absinfo.minimum == -1)
+								if ((absinfo.maximum == 1 && absinfo.minimum == -1) || (absinfo.maximum == 2 && absinfo.minimum == 0))
 								{
-									if (ev.value == -1) axis_state = 1;
-									if (ev.value == 1) axis_state = 2;
+									if (ev.value == absinfo.minimum) axis_state = 1;
+									if (ev.value == absinfo.maximum) axis_state = 2;
 								}
 								else
 								{

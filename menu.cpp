@@ -169,7 +169,7 @@ const char *config_cd32pad_msg[] = { "OFF", "ON" };
 const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "BUTTON OSD", "     Stick X: Tilt RIGHT", "     Stick Y: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
-const char *joy_ana_map[] = { "     Stick 1: Tilt RIGHT", "     Stick 1: Tilt DOWN", "     Stick 2: Tilt RIGHT", "     Stick 2: Tilt DOWN" };
+const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "     Stick 1: Tilt RIGHT", "     Stick 1: Tilt DOWN", "     Stick 2: Tilt RIGHT", "     Stick 2: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "     MIDI" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
@@ -1719,11 +1719,9 @@ void HandleUI(void)
 		menustate = MENU_JOYDIGMAP1;
 		parentstate = MENU_JOYDIGMAP;
 		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
-
-		OsdWrite(10, "       Esc   -> Cancel", 0, 0);
-		OsdWrite(11, "       Enter -> Cancel", 0, 0);
-		OsdWrite(12, "       Space -> Skip", 0, 0);
-
+		OsdWrite(8, "       Esc   -> Cancel", 0, 0);
+		OsdWrite(9, "       Enter -> Cancel", 0, 0);
+		OsdWrite(10,"       Space -> Skip", 0, 0);
 		break;
 
 	case MENU_JOYDIGMAP1:
@@ -1731,7 +1729,7 @@ void HandleUI(void)
 			const char* p = 0;
 			if (get_map_button() < 0)
 			{
-				strcpy(s, joy_ana_map[get_map_button() + 4]);
+				strcpy(s, joy_ana_map[get_map_button() + 6]);
 			}
 			else if (get_map_button() < 4)
 			{
@@ -1778,8 +1776,8 @@ void HandleUI(void)
 				sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
 				if (get_map_button() > 0)
 				{
-					OsdWrite(11, "       Enter -> Finish", 0, 0);
-					if(!get_map_type()) OsdWrite(12);
+					OsdWrite(9, "       Enter -> Finish", 0, 0);
+					if(!get_map_type()) OsdWrite(10);
 				}
 				OsdWrite(5, s, 0, 0);
 			}
