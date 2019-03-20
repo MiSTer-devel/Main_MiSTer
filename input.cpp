@@ -2286,7 +2286,7 @@ int input_test(int getchar)
 								}
 							}
 
-							//8bitdo PSC receiver
+							//Menu combo on 8BitDo receiver in PSC mode
 							if (input[i].vid == 0x054c && input[i].pid == 0x0cda && ev.type == EV_KEY)
 							{
 								if (ev.code == 164) ev.code = KEY_MENU;
@@ -2338,6 +2338,14 @@ int input_test(int getchar)
 										ev.code = ecode + axis_state;
 										input_cb(&ev, 0, i);
 									}
+								}
+
+								// Menu button on 8BitDo Receiver in D-Input mode
+								if (ev.code == 9 && input[i].vid == 0x2dc8 && (input[i].pid == 0x3100 || input[i].pid == 0x3104))
+								{
+									ev.type = EV_KEY;
+									ev.code = KEY_EMU + (ev.code << 1);
+									input_cb(&ev, &absinfo, i);
 								}
 							}
 						}
