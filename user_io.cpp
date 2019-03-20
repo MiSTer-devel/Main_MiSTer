@@ -500,6 +500,7 @@ void user_io_init(const char *path)
 		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 	}
 
+	MiSTer_ini_parse();
 	parse_video_mode();
 	FileLoadConfig("Volume.dat", &vol_att, 1);
 	vol_att &= 0x1F;
