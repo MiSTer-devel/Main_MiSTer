@@ -96,6 +96,7 @@ enum MENU
 	MENU_STORAGE,
 	MENU_JOYDIGMAP,
 	MENU_JOYDIGMAP1,
+	MENU_JOYDIGMAP2,
 	MENU_JOYKBDMAP,
 	MENU_JOYKBDMAP1,
 	MENU_KBDMAP,
@@ -1773,13 +1774,25 @@ void HandleUI(void)
 			OsdWrite(3, s, 0, 0);
 			if (get_map_vid() || get_map_pid())
 			{
-				sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
-				if (get_map_button() > 0)
+				if (!is_menu_core() && get_map_type() && !has_default_map())
 				{
-					OsdWrite(9, "       Enter -> Finish", 0, 0);
-					if(!get_map_type()) OsdWrite(10);
+					for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
+					OsdWrite(6, "   You need to define this");
+					OsdWrite(7, " joystick in Menu core first");
+					OsdWrite(9, "      Press ESC/Enter");
+					finish_map_setting(1);
+					menustate = MENU_JOYDIGMAP2;
 				}
-				OsdWrite(5, s, 0, 0);
+				else
+				{
+					sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
+					if (get_map_button() > 0)
+					{
+						OsdWrite(9, "       Enter -> Finish", 0, 0);
+						if (!get_map_type()) OsdWrite(10);
+					}
+					OsdWrite(5, s, 0, 0);
+				}
 			}
 
 			if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8))
@@ -1796,6 +1809,14 @@ void HandleUI(void)
 					menusub = 1;
 				}
 			}
+		}
+		break;
+
+	case MENU_JOYDIGMAP2:
+		if (select || menu)
+		{
+			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 1;
 		}
 		break;
 

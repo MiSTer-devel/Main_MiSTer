@@ -1211,12 +1211,17 @@ void finish_map_setting(int dismiss)
 
 uint16_t get_map_vid()
 {
-	return (mapping_dev >= 0) ? input[mapping_dev].vid : 0;
+	return (mapping && mapping_dev >= 0) ? input[mapping_dev].vid : 0;
 }
 
 uint16_t get_map_pid()
 {
-	return (mapping_dev >= 0) ? input[mapping_dev].pid : 0;
+	return (mapping && mapping_dev >= 0) ? input[mapping_dev].pid : 0;
+}
+
+int has_default_map()
+{
+	return (mapping_dev >= 0) ? (input[mapping_dev].has_mmap == 1) : 0;
 }
 
 static char kr_fn_table[] =
@@ -1575,8 +1580,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		if (!FileLoadConfig(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 		{
 			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
+			input[dev].has_mmap++;
 		}
-		input[dev].has_mmap = 1;
+		input[dev].has_mmap++;
 	}
 
 	//mapping
@@ -1879,13 +1885,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							}
 						}
 					}
-					else if (input[dev].has_map == 2)
-					{
-						if (ev->value == 1) joy_digital(0, 0, 0, 3, BTN_OSD);
-						return;
-					}
 					else
 					{
+						if (input[dev].has_map == 2)
+						{
+							Info("This joystick is not defined\n    Using default map");
+							input[dev].has_map = 1;
+						}
+
 						for (uint i = 0; i < BTN_NUM; i++)
 						{
 							if (ev->code == input[dev].map[i])
