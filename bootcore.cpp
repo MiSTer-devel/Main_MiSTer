@@ -161,13 +161,7 @@ char *findCore(const char *name, char *coreName, int indent)
 }
 
 void bootcore_init(const char *path)
-{
-	MiSTer_ini_parse();
-	if (cfg.bootcore[0] == '\0')
-	{
-		return;
-	}
-
+{	
 	char *auxpointer;
 	char auxstr[256];
 	char bootcore[256];
