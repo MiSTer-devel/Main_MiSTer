@@ -24,6 +24,7 @@
 #include "brightness.h"
 #include "sxmlc.h"
 #include "tzx2wav.h"
+#include "bootcore.h"
 
 #include "support.h"
 
@@ -501,6 +502,10 @@ void user_io_init(const char *path)
 	}
 
 	MiSTer_ini_parse();
+	if (cfg.bootcore[0] != '\0')
+	{
+		bootcore_init(path);
+	}
 	parse_video_mode();
 	FileLoadConfig("Volume.dat", &vol_att, 1);
 	vol_att &= 0x1F;
