@@ -1171,8 +1171,8 @@ int get_map_type()
 static char *get_map_name(int dev, int def)
 {
 	static char name[128];
-	if (def || is_menu_core()) sprintf(name, "input_%04x_%04x.map", input[dev].vid, input[dev].pid);
-	else sprintf(name, "%s_input_%04x_%04x.map", user_io_get_core_name_ex(), input[dev].vid, input[dev].pid);
+	if (def || is_menu_core()) sprintf(name, "input_%04x_%04x_v2.map", input[dev].vid, input[dev].pid);
+	else sprintf(name, "%s_input_%04x_%04x_v2.map", user_io_get_core_name_ex(), input[dev].vid, input[dev].pid);
 	return name;
 }
 
@@ -1566,6 +1566,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			if (is_menu_core() || !FileLoadConfig(get_map_name(dev, 1), &input[dev].map, sizeof(input[dev].map)))
 			{
 				memset(input[dev].map, 0, sizeof(input[dev].map));
+				input[dev].has_map++;
 			}
 
 			//remove system controls from default map
@@ -1890,6 +1891,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (input[dev].has_map == 2)
 						{
 							Info("This joystick is not defined\n    Using default map");
+							input[dev].has_map = 1;
+						}
+
+						if (input[dev].has_map == 3)
+						{
+							Info("This joystick is not defined");
 							input[dev].has_map = 1;
 						}
 
