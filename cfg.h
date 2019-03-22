@@ -37,6 +37,7 @@ typedef struct {
 	char video_conf[1024];
 	char video_conf_pal[1024];
 	char video_conf_ntsc[1024];
+	char font[1024];
 } cfg_t;
 
 //// functions ////

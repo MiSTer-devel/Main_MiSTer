@@ -459,6 +459,8 @@ void SetMidiLinkMode(int mode)
         }
 }
 
+extern unsigned char charfont[256][8];
+
 void user_io_init(const char *path)
 {
 	char *name;
@@ -507,6 +509,7 @@ void user_io_init(const char *path)
 		bootcore_init(path);
 	}
 	parse_video_mode();
+	if(strlen(cfg.font)) FileLoad(cfg.font, &charfont, sizeof(charfont));
 	FileLoadConfig("Volume.dat", &vol_att, 1);
 	vol_att &= 0x1F;
 	if (!cfg.volumectl) vol_att = 0;

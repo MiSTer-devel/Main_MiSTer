@@ -48,6 +48,7 @@ const ini_var_t ini_vars[] = {
 	{ "MENU_PAL", (void*)(&(cfg.menu_pal)), UINT8, 0, 1, 1 },
 	{ "BOOTCORE", (void*)(&(cfg.bootcore)), STRING, 0, sizeof(cfg.bootcore) - 1, 1 },
 	{ "BOOTCORE_TIMEOUT", (void*)(&(cfg.bootcore_timeout)), INT16, 10, 30, 1 },
+	{ "FONT", (void*)(&(cfg.font)), STRING, 0, sizeof(cfg.font) - 1, 1 },
 };
 
 // mist ini config
