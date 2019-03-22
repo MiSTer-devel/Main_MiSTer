@@ -27,9 +27,12 @@
 #define CHAR_IS_NUM(c)          (((c) >= '0') && ((c) <= '9'))
 #define CHAR_IS_ALPHA_LOWER(c)  (((c) >= 'a') && ((c) <= 'z'))
 #define CHAR_IS_ALPHA_UPPER(c)  (((c) >= 'A') && ((c) <= 'Z'))
-#define CHAR_IS_ALPHA(c)        (CHAR_IS_ALPHA_LOWER(c) || CHAR_IS_ALPHA_UPPER(c))
 #define CHAR_IS_ALPHANUM(c)     (CHAR_IS_ALPHA_LOWER(c) || CHAR_IS_ALPHA_UPPER(c) || CHAR_IS_NUM(c))
-#define CHAR_IS_SPECIAL(c)      (((c) == '[') || ((c) == ']') || ((c) == '-') || ((c) == '_') || ((c) == ',') || ((c) == '.') || ((c) == '=') || ((c) == '/') || ((c) == '(') || ((c) == ')'))
+#define CHAR_IS_SPECIAL(c)      (((c) == '[') || ((c) == ']') || ((c) == '(') || ((c) == ')') || \
+                                 ((c) == '-') || ((c) == '+') || ((c) == '/') || ((c) == '=') || \
+                                 ((c) == '#') || ((c) == '$') || ((c) == '@') || ((c) == '_') || \
+                                 ((c) == ',') || ((c) == '.') || ((c) == '!'))
+
 #define CHAR_IS_VALID(c)        (CHAR_IS_ALPHANUM(c) || CHAR_IS_SPECIAL(c))
 #define CHAR_IS_SPACE(c)        (((c) == ' ') || ((c) == '\t'))
 #define CHAR_IS_LINEEND(c)      (((c) == '\n'))
