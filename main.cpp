@@ -32,7 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "fpga_io.h"
 #include "scheduler.h"
 
-const char *version = "$VER:HPS" VDATE;
+const char *version = "$VER:" VDATE;
 
 int main(int argc, char *argv[])
 {

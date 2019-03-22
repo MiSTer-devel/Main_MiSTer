@@ -1897,7 +1897,7 @@ void HandleUI(void)
 		OsdDrawLogo(3);
 		OsdDrawLogo(4);
 
-		sprintf(s, "   ARM  s/w ver. %s", version + 5);
+		sprintf(s, "       HPS s/w v%s", version + 5);
 		OsdWrite(10, s, 0, 0, 1);
 
 		s[0] = 0;
@@ -3371,7 +3371,7 @@ void HandleUI(void)
 
 		OsdSetTitle("System Settings", 0);
 		OsdWrite(0, "", 0, 0);
-		sprintf(s, "   ARM  s/w ver. %s", version + 5);
+		sprintf(s, "       HPS s/w v%s", version + 5);
 		OsdWrite(1, s, 0, 0);
 
 		{
