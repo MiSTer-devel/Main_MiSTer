@@ -130,6 +130,9 @@
     <ClCompile Include="bootcore.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="charrom.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">

@@ -52,6 +52,7 @@
     <ClCompile Include="bootcore.cpp" />
     <ClCompile Include="brightness.cpp" />
     <ClCompile Include="cfg.cpp" />
+    <ClCompile Include="charrom.cpp" />
     <ClCompile Include="DiskImage.cpp" />
     <ClCompile Include="file_io.cpp" />
     <ClCompile Include="fpga_io.cpp" />
