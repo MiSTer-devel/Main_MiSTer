@@ -1686,9 +1686,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 				if (ev->type == EV_ABS)
 				{
-					max = (ev->value == absinfo->maximum);
-					min = (ev->value == absinfo->minimum);
-					printf("min=%d,max=%d\n", min, max);
+					int threshold = (absinfo->maximum - absinfo->minimum) / 10;
+
+					max = (ev->value >= (absinfo->maximum - threshold));
+					min = (ev->value <= (absinfo->minimum + threshold));
+					printf("threshold=%d, min=%d, max=%d\n", threshold, min, max);
 				}
 
 				//check DPAD horz
