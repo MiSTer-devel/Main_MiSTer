@@ -1504,9 +1504,17 @@ static void joy_analog(int num, int axis, int offset)
 	}
 }
 
+static int ps3_sel = 0;
+int is_ps3_sel()
+{
+	return ps3_sel;
+}
+
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	static int key_mapped = 0;
+
+	if (ev->type == EV_KEY && input[dev].vid == 0x054c && input[dev].pid == 0x0268 && ev->code == 0x13a) ps3_sel = ev->value;
 
 	if (ev->type == EV_KEY && mapping && mapping_type == 3 && ev->code == input[dev].mmap[17]) ev->code = KEY_ENTER;
 
@@ -2275,13 +2283,17 @@ int input_test(int getchar)
 									if (ev.code == 60) break; //ps3 accel axis
 									if (ev.code == 59) break; //ps3 accel axis
 
-									//reduce flood from PS3 gamepad
-									if (input[i].vid == 0x054c && input[i].pid == 0x0268)
-									{ if (ev.code <= 5 && ev.value > 118 && ev.value < 138) break; }
+									//reduce flood from DUALSHOCK 3/4
+									if (input[i].vid == 0x054c && (input[i].pid == 0x0268 || input[i].pid == 0x05c4 || input[i].pid == 0x09cc))
+									{
+										if (ev.code <= 5 && ev.value > 118 && ev.value < 138) break;
+									}
 
 									//aliexpress USB encoder floods messages
 									if (input[i].vid == 0x0079 && input[i].pid == 0x0006)
-									{ if (ev.code == 2) break; }
+									{
+										if (ev.code == 2) break;
+									}
 
 									printf("Input event: type=EV_ABS, Axis=%d, Offset:=%d, jnum=%d, ID:%04x:%04x.", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
 									printf(" ABS_INFO: min = %d max = %d", absinfo.minimum, absinfo.maximum);

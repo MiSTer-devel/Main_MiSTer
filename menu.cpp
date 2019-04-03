@@ -103,6 +103,7 @@ enum MENU
 	MENU_KBDMAP1,
 	MENU_SCRIPTS,
 	MENU_SCRIPTS1,
+	MENU_BTPAIR,
 
 	// Mist/atari specific pages
 	MENU_MIST_MAIN1,
@@ -469,9 +470,20 @@ static uint32_t menu_key_get(void)
 	// currently no key pressed
 	if (!c)
 	{
+		static unsigned long longpress = 0, longpress_consumed = 0;
 		static unsigned char last_but = 0;
 		unsigned char but = user_io_menu_button();
-		if (!but && last_but) c = KEY_F12;
+
+		if (but && !last_but) longpress = GetTimer(3000);
+		if (but && CheckTimer(longpress) && !longpress_consumed)
+		{
+			longpress_consumed = 1;
+			menustate = MENU_BTPAIR;
+		}
+
+		if (!but && last_but && !longpress_consumed) c = KEY_F12;
+
+		if (!but) longpress_consumed = 0;
 		last_but = but;
 	}
 	return(c);
@@ -662,8 +674,6 @@ const char* get_rbf_name_bootcore(char *str)
 		return NULL;
 	}
 	return p + 1;
-
-
 }
 
 void HandleUI(void)
@@ -730,6 +740,13 @@ void HandleUI(void)
 			status <<= 1;
 			user_io_8bit_set_status(status, 0xE);
 			FileSaveConfig(user_io_create_config_name(), &status, 4);
+		}
+		break;
+
+	case KEY_F11:
+		if (user_io_osd_is_visible())
+		{
+			menustate = MENU_BTPAIR;
 		}
 		break;
 
@@ -3467,19 +3484,25 @@ void HandleUI(void)
 		printSysInfo();
 		break;
 
+	case MENU_BTPAIR:
+		OsdSetSize(16);
+		OsdEnable(DISABLE_KEYBOARD);
+		parentstate = MENU_BTPAIR;
+		//fall through
+
 	case MENU_SCRIPTS:
 		helptext = 0;
 		menumask = 1;
 		menusub = 0;
-		OsdSetTitle(flist_SelectedItem()->d_name, 0);
+		OsdSetTitle((parentstate == MENU_BTPAIR) ? "BT Pairing" : flist_SelectedItem()->d_name, 0);
 		menustate = MENU_SCRIPTS1;
-		parentstate = MENU_SCRIPTS;
+		if (parentstate != MENU_BTPAIR) parentstate = MENU_SCRIPTS;
 		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
 		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
 		for (int i = 0; i < script_lines; i++) strcpy(script_output[i], "");
 		script_line=0;
 		script_exited = false;
-		script_pipe=popen(getFullPath(SelectedPath), "r");
+		script_pipe=popen((parentstate != MENU_BTPAIR) ? getFullPath(SelectedPath) : is_ps3_sel() ? "/usr/sbin/btpair sixaxis" : "/usr/sbin/btpair", "r");
 		script_file = fileno(script_pipe);
 		fcntl(script_file, F_SETFL, O_NONBLOCK);
 		break;
@@ -3491,7 +3514,7 @@ void HandleUI(void)
 				if (fgets(script_line_output, script_line_length, script_pipe) != NULL)
 				{
 					script_line_output[strcspn(script_line_output, "\n")] = 0;
-					if (script_line < OsdGetSize() - 1)
+					if (script_line < OsdGetSize() - 2)
 					{
 						strcpy(script_output[script_line++], script_line_output);
 					}
@@ -3500,7 +3523,7 @@ void HandleUI(void)
 						strcpy(script_output[script_line], script_line_output);
 						for (int i = 0; i < script_line; i++) strcpy(script_output[i], script_output[i+1]);
 					};
-					for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, script_output[i], 0, 0);
+					for (int i = 0; i < OsdGetSize() - 2; i++) OsdWrite(i, script_output[i], 0, 0);
 				};
 			}
 			else {
@@ -3508,23 +3531,31 @@ void HandleUI(void)
 				script_exited=true;
 				OsdWrite(OsdGetSize() - 1, "             OK", menusub == 0, 0);
 			};
-		};		
-		if (select || menu)
+		};
+
+		if (select || (script_exited && menu))
 		{
 			if (!script_exited)
 			{
 				strcpy(script_command, "killall ");
-				strcat(script_command, flist_SelectedItem()->d_name);
+				strcat(script_command, (parentstate == MENU_BTPAIR) ? "btpair" : flist_SelectedItem()->d_name);
 				system(script_command);
 				pclose(script_pipe);
-				script_exited=true;
+				script_exited = true;
 			};
-			menustate = MENU_FIRMWARE1;
-			menusub = 3;
+
+			if (parentstate == MENU_BTPAIR)
+			{
+				menustate = MENU_NONE1;
+			}
+			else
+			{
+				menustate = MENU_FIRMWARE1;
+				menusub = 3;
+			}
 		}
 		break;
 
-		
 	case MENU_KBDMAP:
 		helptext = 0;
 		menumask = 1;
@@ -3960,4 +3991,9 @@ void Info(const char *message, int timeout, int width, int height, int frame)
 		menu_timer = GetTimer(timeout);
 		menustate = MENU_INFO;
 	}
+}
+
+void menu_bt_pair()
+{
+	menustate = MENU_BTPAIR;
 }
