@@ -1505,6 +1505,7 @@ static void joy_analog(int num, int axis, int offset)
 }
 
 static int ds_ver = 0;
+static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
@@ -1518,13 +1519,13 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int origcode = ev->code;
 
 	//mouse
-	if(ev->type == EV_KEY && ev->code >= 272 && ev->code <= 279)
+	if(ev->type == EV_KEY && ev->code >= 272 && ev->code <= 274)
 	{
 		if (ev->value <= 1)
 		{
 			unsigned char mask = 1 << (ev->code - 272);
 			
-			//DS4: touchpad button to left/right mouse button depending on mouse_emu button
+			//DS4: touchpad button to left/right mouse button according to mouse_emu button
 			if (ds_ver && ev->code == 272)
 			{
 				mask = 1 << (mouse_emu & 1);
@@ -1904,6 +1905,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (ev->code == input[dev].mmap[15] && (ev->value <= 1) && ((!(mouse_emu & 1)) ^ (!ev->value)))
 					{
 						mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
+						if (ds_ver == 4) ds_mouse_emu = mouse_emu & 1;
 						printf("mouse_emu = %d\n", mouse_emu);
 						if (mouse_emu & 2)
 						{
@@ -2360,16 +2362,18 @@ int input_test(int getchar)
 				{
 					if (is_menu_core()) printf("Combined mouse event: dx=%d, dy=%d\n", data[1], data[2]);
 
-					int xval, yval;
-					if (!cfg.mouse_throttle) cfg.mouse_throttle = 1;
+					int xval, yval, throttle = 1;
+
+					if (cfg.mouse_throttle) throttle = cfg.mouse_throttle;
+					if (ds_mouse_emu) throttle *= 4;
 
 					accx += data[1];
-					xval = accx / cfg.mouse_throttle;
-					accx -= xval * cfg.mouse_throttle;
+					xval = accx / throttle;
+					accx -= xval * throttle;
 
 					accy -= data[2];
-					yval = accy / cfg.mouse_throttle;
-					accy -= yval * cfg.mouse_throttle;
+					yval = accy / throttle;
+					accy -= yval * throttle;
 
 					user_io_mouse(mouse_btn, xval, yval);
 				}
