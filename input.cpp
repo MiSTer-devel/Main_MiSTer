@@ -1510,6 +1510,8 @@ int is_ps3_sel()
 	return ps3_sel;
 }
 
+static int ds_ver = 0;
+
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	static int key_mapped = 0;
@@ -1524,47 +1526,23 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int origcode = ev->code;
 
 	//mouse
-	switch (ev->type)
+	if(ev->type == EV_KEY && ev->code >= 272 && ev->code <= 279)
 	{
-	case EV_KEY:
-		if (ev->code >= 272 && ev->code <= 279)
+		if (ev->value <= 1)
 		{
-			if (ev->value <= 1)
+			unsigned char mask = 1 << (ev->code - 272);
+			
+			//DS4: touchpad button to left/right mouse button depending on mouse_emu button
+			if (ds_ver && ev->code == 272)
 			{
-				unsigned char mask = 1 << (ev->code - 272);
-				mouse_btn = (ev->value) ? mouse_btn | mask : mouse_btn & ~mask;
-				user_io_mouse(mouse_btn, 0, 0);
+				mask = 1 << (mouse_emu & 1);
+				if (!ev->value) mask = 3;
 			}
-			return;
+
+			mouse_btn = (ev->value) ? mouse_btn | mask : mouse_btn & ~mask;
+			user_io_mouse(mouse_btn, 0, 0);
 		}
-		break;
-
-	case EV_REL:
-		{
-			int msval;
-			if (!cfg.mouse_throttle) cfg.mouse_throttle = 1;
-
-			switch (ev->code)
-			{
-			case 0:
-				input[dev].accx += ev->value;
-				msval = input[dev].accx / cfg.mouse_throttle;
-				input[dev].accx -= msval * cfg.mouse_throttle;
-
-				//printf("Mouse PosX: %d\n", msval);
-				user_io_mouse(mouse_btn, msval, 0);
-				return;
-			case 1:
-				input[dev].accy += ev->value;
-				msval = input[dev].accy / cfg.mouse_throttle;
-				input[dev].accy -= msval * cfg.mouse_throttle;
-
-				//printf("Mouse PosY: %d\n", msval);
-				user_io_mouse(mouse_btn, 0, msval);
-				return;
-			}
-		}
-		break;
+		return;
 	}
 
 	if (!input[dev].has_map)
@@ -2149,7 +2127,7 @@ static void getVidPid(int num, uint16_t* vid, uint16_t* pid)
 	*pid = read_hex(name);
 }
 
-static struct pollfd pool[NUMDEV + 1];
+static struct pollfd pool[NUMDEV + 2];
 
 int input_test(int getchar)
 {
@@ -2162,9 +2140,15 @@ int input_test(int getchar)
 
 	if (state == 0)
 	{
+		memset(pool, -1, sizeof(pool));
+
 		signal(SIGINT, INThandler);
 		pool[NUMDEV].fd = set_watch();
 		pool[NUMDEV].events = POLLIN;
+
+		pool[NUMDEV+1].fd = open("/dev/input/mice", O_RDONLY);
+		pool[NUMDEV+1].events = POLLIN;
+
 		state++;
 	}
 
@@ -2188,7 +2172,7 @@ int input_test(int getchar)
 
 	if (state == 2)
 	{
-		int return_value = poll(pool, NUMDEV + 1, 0);
+		int return_value = poll(pool, NUMDEV + 2, 0);
 		if (return_value < 0)
 		{
 			printf("ERR: poll\n");
@@ -2222,12 +2206,23 @@ int input_test(int getchar)
 						}
 						else if(ev.type)
 						{
+							ds_ver = 0;
+							if (input[i].vid == 0x054c)
+							{
+								if (input[i].pid == 0x0268)  ds_ver = 3;
+								if (input[i].pid == 0x05c4 || input[i].pid == 0x09cc) ds_ver = 4;
+							}
+
 							if (ev.type == EV_ABS)
 							{
-								int len = ioctl(pool[i].fd, EVIOCGABS(ev.code), &absinfo);
-								if (len < 0)
+								//Dualshock: drop accelerator and raw touchpad events
+								if (ds_ver && ev.code > 50) continue;
+
+								if (ioctl(pool[i].fd, EVIOCGABS(ev.code), &absinfo) < 0) memset(&absinfo, 0, sizeof(absinfo));
+								else
 								{
-									memset(&absinfo, 0, sizeof(absinfo));
+									//DS4: drop mapped touchpad events.
+									if (ds_ver == 4 && ev.code <= 1 && absinfo.maximum > 255) continue;
 								}
 							}
 
@@ -2267,9 +2262,8 @@ int input_test(int getchar)
 									printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
 									break;
 
-								//mouse
 								case EV_REL:
-									printf("Input event: type=EV_REL, Axis=%d, Offset:=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
+									printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
 									break;
 
 								case EV_SYN:
@@ -2278,16 +2272,8 @@ int input_test(int getchar)
 
 								//analog joystick
 								case EV_ABS:
-									if (ev.code == 62) break;
-									if (ev.code == 61) break; //ps3 accel axis
-									if (ev.code == 60) break; //ps3 accel axis
-									if (ev.code == 59) break; //ps3 accel axis
-
 									//reduce flood from DUALSHOCK 3/4
-									if (input[i].vid == 0x054c && (input[i].pid == 0x0268 || input[i].pid == 0x05c4 || input[i].pid == 0x09cc))
-									{
-										if (ev.code <= 5 && ev.value > 118 && ev.value < 138) break;
-									}
+									if (ds_ver && ev.code <= 5 && ev.value > 118 && ev.value < 138) break;
 
 									//aliexpress USB encoder floods messages
 									if (input[i].vid == 0x0079 && input[i].pid == 0x0006)
@@ -2295,7 +2281,7 @@ int input_test(int getchar)
 										if (ev.code == 2) break;
 									}
 
-									printf("Input event: type=EV_ABS, Axis=%d, Offset:=%d, jnum=%d, ID:%04x:%04x.", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
+									printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x.", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
 									printf(" ABS_INFO: min = %d max = %d", absinfo.minimum, absinfo.maximum);
 									if (absinfo.fuzz) printf(" fuzz = %d", absinfo.fuzz);
 									if (absinfo.resolution) printf(" res = %d", absinfo.resolution);
@@ -2371,6 +2357,29 @@ int input_test(int getchar)
 							}
 						}
 					}
+				}
+			}
+
+			if ((pool[NUMDEV + 1].fd >= 0) && (pool[NUMDEV + 1].revents & POLLIN))
+			{
+				int8_t data[3] = {};
+				static int accx = 0, accy = 0;
+				if (read(pool[NUMDEV + 1].fd, data, sizeof(data)))
+				{
+					if (is_menu_core()) printf("Combined mouse event: dx=%d, dy=%d\n", data[1], data[2]);
+
+					int xval, yval;
+					if (!cfg.mouse_throttle) cfg.mouse_throttle = 1;
+
+					accx += data[1];
+					xval = accx / cfg.mouse_throttle;
+					accx -= xval * cfg.mouse_throttle;
+
+					accy -= data[2];
+					yval = accy / cfg.mouse_throttle;
+					accy -= yval * cfg.mouse_throttle;
+
+					user_io_mouse(mouse_btn, xval, yval);
 				}
 			}
 		}
