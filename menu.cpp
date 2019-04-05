@@ -489,6 +489,24 @@ static uint32_t menu_key_get(void)
 	return(c);
 }
 
+static int has_bt()
+{
+	FILE *fp;
+	static char out[1035];
+
+	fp = popen("hcitool dev | grep hci0", "r");
+	if (!fp) return 0;
+
+	int ret = 0;
+	while (fgets(out, sizeof(out) - 1, fp) != NULL)
+	{
+		if (strlen(out)) ret = 1;
+	}
+
+	pclose(fp);
+	return ret;
+}
+
 static char* getNet(int spec)
 {
 	int netType = 0;
@@ -3688,17 +3706,19 @@ void HandleUI(void)
 				}				
 			}
 
-			sprintf(str, "  MiSTer   ");
+			sprintf(str, "  MiSTer    ");
 
 			time_t t = time(NULL);
 			struct tm tm = *localtime(&t);
 			if (tm.tm_year >= 117)
 			{
-				strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%b %d %a %H:%M:%S", &tm);
+				strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%b %d %a%H:%M:%S", &tm);
 			}
 
 			int netType = (int)getNet(0);
 			if (netType) str[9] = 0x1b + netType;
+			if (has_bt()) str[10] = 4;
+			str[21] = ' ';
 
 			OsdWrite(16, "", 1, 0);
 			OsdWrite(17, str, 1, 0);
