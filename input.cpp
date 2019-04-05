@@ -2220,6 +2220,21 @@ int input_test(int getchar)
 								}
 							}
 
+							//Menu combo on 8BitDo receiver in PSC mode
+							if (input[i].vid == 0x054c && input[i].pid == 0x0cda && ev.type == EV_KEY)
+							{
+								//in PSC mode these keys coming from separate virtual keyboard device
+								//so it's impossible to use joystick codes as keyboards aren't personalized
+								if (ev.code == 164) ev.code = KEY_MENU;
+								if (ev.code == 1)   ev.code = KEY_MENU;
+							}
+
+							//Menu button quirk of 8BitDo gamepad in X-Input mode
+							if (input[i].vid == 0x045e && input[i].pid == 0x02e0 && ev.type == EV_KEY)
+							{
+								if (ev.code == KEY_MENU) ev.code = BTN_MODE;
+							}
+
 							if (is_menu_core())
 							{
 								/*
@@ -2285,13 +2300,6 @@ int input_test(int getchar)
 								default:
 									printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x), jnum=%d, ID:%04x:%04x\n", ev.type, ev.code, ev.code, ev.value, ev.value, input[i].num, input[i].vid, input[i].pid);
 								}
-							}
-
-							//Menu combo on 8BitDo receiver in PSC mode
-							if (input[i].vid == 0x054c && input[i].pid == 0x0cda && ev.type == EV_KEY)
-							{
-								if (ev.code == 164) ev.code = KEY_MENU;
-								if (ev.code == 1)   ev.code = KEY_MENU;
 							}
 
 							input_cb(&ev, &absinfo, i);
