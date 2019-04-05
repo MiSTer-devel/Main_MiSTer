@@ -3502,7 +3502,7 @@ void HandleUI(void)
 		for (int i = 0; i < script_lines; i++) strcpy(script_output[i], "");
 		script_line=0;
 		script_exited = false;
-		script_pipe=popen((parentstate != MENU_BTPAIR) ? getFullPath(SelectedPath) : is_ps3_sel() ? "/usr/sbin/btpair sixaxis" : "/usr/sbin/btpair", "r");
+		script_pipe=popen((parentstate != MENU_BTPAIR) ? getFullPath(SelectedPath) : "/usr/sbin/btpair", "r");
 		script_file = fileno(script_pipe);
 		fcntl(script_file, F_SETFL, O_NONBLOCK);
 		break;

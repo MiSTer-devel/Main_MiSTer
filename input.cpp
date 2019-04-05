@@ -1504,19 +1504,11 @@ static void joy_analog(int num, int axis, int offset)
 	}
 }
 
-static int ps3_sel = 0;
-int is_ps3_sel()
-{
-	return ps3_sel;
-}
-
 static int ds_ver = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	static int key_mapped = 0;
-
-	if (ev->type == EV_KEY && input[dev].vid == 0x054c && input[dev].pid == 0x0268 && ev->code == 0x13a) ps3_sel = ev->value;
 
 	if (ev->type == EV_KEY && mapping && mapping_type == 3 && ev->code == input[dev].mmap[17]) ev->code = KEY_ENTER;
 

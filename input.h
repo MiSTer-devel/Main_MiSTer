@@ -36,7 +36,6 @@ int  toggle_kbdled(int mask);
 void input_notify_mode();
 int input_poll(int getchar);
 int is_key_pressed(int key);
-int is_ps3_sel();
 
 void start_map_setting(int cnt);
 int get_map_button();
