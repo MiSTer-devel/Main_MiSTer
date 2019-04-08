@@ -1306,6 +1306,7 @@ static uint32_t autofirecodes[NUMPLAYERS][BTN_NUM] = {};
 static int af_delay[NUMPLAYERS] = {};
 
 static unsigned char mouse_btn = 0;
+static unsigned char mice_btn = 0;
 static int mouse_emu = 0;
 static int kbd_mouse_emu = 0;
 static int mouse_sniper = 0;
@@ -1424,7 +1425,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				mouse_btn = 0;
 				mouse_emu_x = 0;
 				mouse_emu_y = 0;
-				user_io_mouse(0, 0, 0);
+				user_io_mouse(mice_btn, 0, 0);
 
 				mouse_emu ^= 2;
 				if (hasAPI1_5()) Info((mouse_emu & 2) ? "Mouse mode ON" : "Mouse mode OFF");
@@ -1509,6 +1510,13 @@ static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
+	//mouse
+	if (ev->type == EV_KEY && ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK)
+	{
+		//skip it. we use /dev/input/mice
+		return;
+	}
+
 	static int key_mapped = 0;
 
 	if (ev->type == EV_KEY && mapping && mapping_type == 3 && ev->code == input[dev].mmap[17]) ev->code = KEY_ENTER;
@@ -1517,26 +1525,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int cancel   = (ev->type == EV_KEY && ev->code == KEY_ESC);
 	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER);
 	int origcode = ev->code;
-
-	//mouse
-	if(ev->type == EV_KEY && ev->code >= 272 && ev->code <= 274)
-	{
-		if (ev->value <= 1)
-		{
-			unsigned char mask = 1 << (ev->code - 272);
-			
-			//DS4: touchpad button to left/right mouse button according to mouse_emu button
-			if (ds_ver && ev->code == 272)
-			{
-				mask = 1 << (mouse_emu & 1);
-				if (!ev->value) mask = 3;
-			}
-
-			mouse_btn = (ev->value) ? mouse_btn | mask : mouse_btn & ~mask;
-			user_io_mouse(mouse_btn, 0, 0);
-		}
-		return;
-	}
 
 	if (!input[dev].has_map)
 	{
@@ -1851,7 +1839,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - 12) : mouse_btn & ~(1 << (i - 12));
-									user_io_mouse(mouse_btn, 0, 0);
+									user_io_mouse(mouse_btn | mice_btn, 0, 0);
 									break;
 								}
 								return;
@@ -1917,7 +1905,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_btn = 0;
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
-							user_io_mouse(0, 0, 0);
+							user_io_mouse(mice_btn, 0, 0);
 						}
 					}
 				}
@@ -2005,7 +1993,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - 12) : mouse_btn & ~(1 << (i - 12));
-									user_io_mouse(mouse_btn, 0, 0);
+									user_io_mouse(mouse_btn | mice_btn, 0, 0);
 									break;
 								}
 								return;
@@ -2030,7 +2018,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_btn = 0;
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
-							user_io_mouse(0, 0, 0);
+							user_io_mouse(mice_btn, 0, 0);
 						}
 						return;
 					}
@@ -2140,9 +2128,22 @@ int input_test(int getchar)
 		pool[NUMDEV].fd = set_watch();
 		pool[NUMDEV].events = POLLIN;
 
-		pool[NUMDEV+1].fd = open("/dev/input/mice", O_RDONLY);
+		pool[NUMDEV+1].fd = open("/dev/input/mice", O_RDWR);
 		pool[NUMDEV+1].events = POLLIN;
 
+		/*
+		// enable scroll wheel reading through /dev/input/mice
+		unsigned char buffer[4];
+		static const unsigned char mousedev_imps_seq[] = { 0xf3, 200, 0xf3, 100, 0xf3, 80 };
+		if (write(pool[NUMDEV + 1].fd, mousedev_imps_seq, sizeof(mousedev_imps_seq)) != sizeof(mousedev_imps_seq))
+		{
+			printf("Cannot switch to ImPS/2 protocol(1).\n");
+		}
+		else if (read(pool[NUMDEV + 1].fd, buffer, sizeof buffer) != 1 || buffer[0] != 0xFA)
+		{
+			printf("Failed to switch to ImPS/2 protocol(2).\n");
+		}
+		*/
 		state++;
 	}
 
@@ -2364,26 +2365,31 @@ int input_test(int getchar)
 
 			if ((pool[NUMDEV + 1].fd >= 0) && (pool[NUMDEV + 1].revents & POLLIN))
 			{
-				int8_t data[3] = {};
+				uint8_t data[4] = {};
 				static int accx = 0, accy = 0;
 				if (read(pool[NUMDEV + 1].fd, data, sizeof(data)))
 				{
-					if (is_menu_core()) printf("Combined mouse event: dx=%d, dy=%d\n", data[1], data[2]);
-
 					int xval, yval, throttle = 1;
+					xval = ((data[0] & 0x10) ? -256 : 0) | data[1];
+					yval = ((data[0] & 0x20) ? -256 : 0) | data[2];
+
+					if (is_menu_core()) printf("Combined mouse event: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", data[0], xval, yval, data[3]);
 
 					if (cfg.mouse_throttle) throttle = cfg.mouse_throttle;
 					if (ds_mouse_emu) throttle *= 4;
 
-					accx += data[1];
+					accx += xval;
 					xval = accx / throttle;
 					accx -= xval * throttle;
 
-					accy -= data[2];
+					accy -= yval;
 					yval = accy / throttle;
 					accy -= yval * throttle;
 
-					user_io_mouse(mouse_btn, xval, yval);
+					mice_btn = data[0] & 7;
+					if (ds_mouse_emu) mice_btn = (mice_btn & 4) | ((mice_btn & 1)<<1);
+
+					user_io_mouse(mouse_btn | mice_btn, xval, yval);
 				}
 			}
 		}
@@ -2443,7 +2449,7 @@ int input_poll(int getchar)
 				if (dy < -2) dy = -2;
 			}
 
-			user_io_mouse(mouse_btn, dx, dy);
+			user_io_mouse(mouse_btn | mice_btn, dx, dy);
 			prev_dx = mouse_emu_x;
 			prev_dy = mouse_emu_y;
 		}
@@ -2524,5 +2530,5 @@ void input_notify_mode()
 	mouse_btn = 0;
 	mouse_emu_x = 0;
 	mouse_emu_y = 0;
-	user_io_mouse(0, 0, 0);
+	user_io_mouse(mice_btn, 0, 0);
 }
