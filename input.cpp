@@ -7,6 +7,8 @@
 #include <sys/inotify.h>
 #include <sys/poll.h>
 #include <sys/sysinfo.h>
+#include <dirent.h>
+
 #include "input.h"
 #include "user_io.h"
 #include "menu.h"
@@ -2100,12 +2102,12 @@ static uint16_t read_hex(char *filename)
 	return 0;
 }
 
-static void getVidPid(int num, uint16_t* vid, uint16_t* pid)
+static void getVidPid(char *evt, uint16_t *vid, uint16_t *pid)
 {
 	char name[256];
-	sprintf(name, "/sys/class/input/event%d/device/id/vendor", num);
+	sprintf(name, "/sys/class/input/%s/device/id/vendor", evt);
 	*vid = read_hex(name);
-	sprintf(name, "/sys/class/input/event%d/device/id/product", num);
+	sprintf(name, "/sys/class/input/%s/device/id/product", evt);
 	*pid = read_hex(name);
 }
 
@@ -2117,7 +2119,7 @@ int input_test(int getchar)
 	static int    state = 0;
 	struct input_absinfo absinfo;
 
-	char devname[20];
+	char devname[32];
 	struct input_event ev;
 
 	if (state == 0)
@@ -2150,15 +2152,32 @@ int input_test(int getchar)
 	if (state == 1)
 	{
 		printf("Open up to %d input devices.\n", NUMDEV);
-		for (int i = 0; i<NUMDEV; i++)
+
+		int n = 0;
+		DIR *d = opendir("/dev/input");
+		if (d)
 		{
-			sprintf(devname, "/dev/input/event%d", i);
-			pool[i].fd = open(devname, O_RDWR);
-			pool[i].events = POLLIN;
-			memset(&input[i], 0, sizeof(input[i]));
-			input[i].led = has_led(pool[i].fd);
-			if (pool[i].fd > 0) getVidPid(i, &input[i].vid, &input[i].pid);
-			if (pool[i].fd > 0) printf("opened %s (%04x:%04x)\n", devname, input[i].vid, input[i].pid);
+			struct dirent *de;
+			while ((de = readdir(d)))
+			{
+				if (!strncmp(de->d_name, "event", 5))
+				{
+					sprintf(devname, "/dev/input/%s", de->d_name);
+					int fd = open(devname, O_RDWR);
+					if (fd > 0)
+					{
+						pool[n].fd = fd;
+						pool[n].events = POLLIN;
+						memset(&input[n], 0, sizeof(input[n]));
+						input[n].led = has_led(pool[n].fd);
+						getVidPid(de->d_name, &input[n].vid, &input[n].pid);
+						printf("opened %d: %s (%04x:%04x)\n", n, devname, input[n].vid, input[n].pid);
+						n++;
+						if (n >= NUMDEV) break;
+					}
+				}
+			}
+			closedir(d);
 		}
 
 		cur_leds |= 0x80;
@@ -2208,10 +2227,15 @@ int input_test(int getchar)
 								if (input[i].pid == 0x05c4 || input[i].pid == 0x09cc) ds_ver = 4;
 							}
 
+							if (ds_ver == 4 && ev.type == EV_KEY)
+							{
+								if (ev.code == BTN_TOOL_FINGER || ev.code == BTN_TOUCH || ev.code == BTN_TOOL_DOUBLETAP) continue;
+							}
+
 							if (ev.type == EV_ABS)
 							{
 								//Dualshock: drop accelerator and raw touchpad events
-								if (ds_ver && ev.code > 50) continue;
+								if (ds_ver && ev.code > 40) continue;
 
 								if (ioctl(pool[i].fd, EVIOCGABS(ev.code), &absinfo) < 0) memset(&absinfo, 0, sizeof(absinfo));
 								else
