@@ -1142,7 +1142,6 @@ static int mapping_button;
 static int mapping_dev;
 static int mapping_type;
 static int mapping_count;
-static uint8_t mapping_key;
 
 static uint32_t tmp_axis[4];
 static int tmp_axis_n = 0;
@@ -1162,7 +1161,7 @@ void start_map_setting(int cnt)
 
 int get_map_button()
 {
-	return (mapping_type == 2) ? mapping_key : mapping_button;
+	return mapping_button;
 }
 
 int get_map_type()
@@ -1556,7 +1555,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	}
 
 	//mapping
-	if (mapping && (mapping_dev >=0 || ev->value) && !cancel && !enter)
+	if (mapping && (mapping_dev >=0 || ev->value) && !((mapping_type < 2 || !mapping_button) && (cancel || enter)))
 	{
 		if (is_menu_core()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 
@@ -1564,40 +1563,43 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			if (mapping_type == 2)
 			{
-				if (ev->value == 1 && ev->code < 256)
+				if (ev->code < 256)
 				{
-					if(mapping_dev < 0)
+					if (ev->value == 1)
 					{
-						mapping_dev = dev;
-						mapping_key = 0;
+						if (mapping_dev < 0)
+						{
+							mapping_dev = dev;
+							mapping_button = 0;
+						}
+
+						if (!mapping_button) mapping_button = ev->code;
 					}
 
-					if (!mapping_key) mapping_key = ev->code;
-					else
+					if (ev->value == 0 && mapping_dev >= 0 && mapping_button && mapping_button != ev->code)
 					{
-						input[mapping_dev].kbdmap[mapping_key] = ev->code;
-						mapping_key = 0;
+						input[mapping_dev].kbdmap[mapping_button] = ev->code;
+						mapping_button = 0;
 					}
 				}
 				return;
 			}
 			else if (mapping_type == 3)
 			{
-				if (ev->value == 1)
+				if (ev->value == 1 && !mapping_button)
 				{
-					if (!mapping_button)
-					{
-						if (mapping_dev < 0) mapping_dev = dev;
-						if (mapping_dev == dev && ev->code < 1024) mapping_button = ev->code;
-					}
-					else if (mapping_dev >= 0 && (ev->code<256 || mapping_dev == dev))
-					{
-						// Technically it's hard to map the key to button as keyboards
-						// are all the same while joysticks are personalized and numbered.
-						input[mapping_dev].jkmap[mapping_button] = ev->code;
-						mapping_button = 0;
-					}
+					if (mapping_dev < 0) mapping_dev = dev;
+					if (mapping_dev == dev && ev->code < 1024) mapping_button = ev->code;
 				}
+				
+				if (ev->value == 0 && mapping_dev >= 0 && (ev->code<256 || mapping_dev == dev) && mapping_button && mapping_button != ev->code)
+				{
+					// Technically it's hard to map the key to button as keyboards
+					// are all the same while joysticks are personalized and numbered.
+					input[mapping_dev].jkmap[mapping_button] = ev->code;
+					mapping_button = 0;
+				}
+				return;
 			}
 			else if ((mapping_dev < 0) || ((ev->code >= 256) ? mapping_type : !mapping_type))
 			{
@@ -1628,7 +1630,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						key_mapped = 0;
 					}
 				}
-
 				return;
 			}
 		}
@@ -2026,6 +2027,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					}
 				}
 
+				if (code == KEY_HOMEPAGE) code = KEY_MENU;
 				user_io_kbd(code, ev->value);
 				return;
 			}

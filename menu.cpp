@@ -1886,6 +1886,7 @@ void HandleUI(void)
 				sprintf(s, "    on device %04x:%04x", get_map_vid(), get_map_pid());
 				OsdWrite(3, s, 0, 0);
 			}
+			OsdWrite(OsdGetSize() - 1, " Enter \x16 Finish, Esc \x16 Clear", menusub == 0, 0);
 		}
 		else
 		{
@@ -1901,7 +1902,7 @@ void HandleUI(void)
 				OsdWrite(2, "      on the same pad", 0, 0);
 				OsdWrite(3, "    or key on a keyboard", 0, 0);
 			}
-			OsdWrite(OsdGetSize() - 1, " Enter \x16 Finish, Esc \x16 Clear", menusub == 0, 0);
+			OsdWrite(OsdGetSize() - 1);
 		}
 
 		if (select || menu)
@@ -3595,16 +3596,16 @@ void HandleUI(void)
 				sprintf(s, "    on keyboard %04x:%04x", get_map_vid(), get_map_pid());
 			}
 			OsdWrite(5, s, 0, 0);
+			OsdWrite(OsdGetSize() - 1, "           finish", menusub == 0, 0);
 		}
 		else
 		{
 			flag = 1;
-			sprintf(s, "   Press key to map %02X to", get_map_button() & 0xFF);
+			sprintf(s, "  Press key to map 0x%02X to", get_map_button() & 0xFF);
 			OsdWrite(3, s, 0, 0);
 			OsdWrite(5, "      on any keyboard", 0, 0);
+			OsdWrite(OsdGetSize() - 1);
 		}
-
-		OsdWrite(OsdGetSize() - 1, "           finish", menusub == 0, 0);
 
 		if (select || menu)
 		{
