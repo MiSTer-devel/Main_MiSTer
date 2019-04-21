@@ -1142,6 +1142,7 @@ static int mapping_button;
 static int mapping_dev;
 static int mapping_type;
 static int mapping_count;
+static int mapping_clear;
 
 static uint32_t tmp_axis[4];
 static int tmp_axis_n = 0;
@@ -1153,6 +1154,7 @@ void start_map_setting(int cnt)
 	mapping_dev = -1;
 	mapping_type = (cnt<0) ? 3 : cnt ? 1 : 2;
 	mapping_count = cnt;
+	mapping_clear = 0;
 	tmp_axis_n = 0;
 
 	if (mapping_type <= 1 && is_menu_core()) mapping_button = -6;
@@ -1167,6 +1169,11 @@ int get_map_button()
 int get_map_type()
 {
 	return mapping_type;
+}
+
+int get_map_clear()
+{
+	return mapping_clear;
 }
 
 static char *get_map_name(int dev, int def)
@@ -1536,9 +1543,16 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				memset(input[dev].map, 0, sizeof(input[dev].map));
 				input[dev].has_map++;
 			}
-
-			//remove system controls from default map
-			for (uint i = 8; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++) input[dev].map[i] = 0;
+			else
+			{
+				//copy alternative directional buttons, remove system buttons
+				for (uint i = 0; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
+				{
+					if(i < 4) input[dev].map[i] = (input[dev].map[i] << 16) | (input[dev].map[i + 8] & 0xFFFF);
+					else if(i < 8) input[dev].map[i] = input[dev].map[i] << 16;
+					else input[dev].map[i] = 0;
+				}
+			}
 			input[dev].has_map++;
 		}
 		input[dev].has_map++;
@@ -1601,30 +1615,69 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 				return;
 			}
-			else if ((mapping_dev < 0) || ((ev->code >= 256) ? mapping_type : !mapping_type))
+			else
 			{
-				if (mapping_dev < 0)
+				int clear = ev->code == KEY_F12 || ev->code == KEY_MENU || ev->code == KEY_HOMEPAGE;
+				if (mapping_dev < 0 && !clear)
 				{
 					mapping_dev = dev;
 					mapping_type = (ev->code >= 256) ? 1 : 0;
 				}
 
-				if (mapping_dev == dev && mapping_button < (is_menu_core() ? 17 : mapping_count))
+				mapping_clear = 0;
+				if (mapping_dev >= 0 && (mapping_dev == dev || clear) && mapping_button < (is_menu_core() ? 17 : mapping_count))
 				{
 					if (ev->value == 1)
 					{
-						if (!mapping_button) memset(input[dev].map, 0, sizeof(input[dev].map));
-
-						int found = 0;
-						for (int i = (is_menu_core() && mapping_button >= 8) ? 8 : 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
-
-						if (!found)
+						if (is_menu_core())
 						{
-							input[dev].map[(mapping_button == 16 && is_menu_core()) ? 16 + mapping_type : mapping_button] = ev->code;
-							key_mapped = ev->code;
+							if (mapping_dev == dev)
+							{
+								if (!mapping_button) memset(input[dev].map, 0, sizeof(input[dev].map));
+
+								int found = 0;
+								for (int i = (mapping_button >= 8) ? 8 : 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
+
+								if (!found)
+								{
+									input[dev].map[(mapping_button == 16) ? 16 + mapping_type : mapping_button] = ev->code;
+									key_mapped = ev->code;
+								}
+							}
+						}
+						else
+						{
+							if ((mapping_type && (input[dev].mmap[17] == ev->code)) || clear)
+							{
+								memset(input[mapping_dev].map, 0, sizeof(input[mapping_dev].map));
+								mapping_button = 0;
+								mapping_clear = 1;
+							}
+							else
+							{
+								if (!mapping_button)
+								{
+									for (uint i = 0; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
+									{
+										input[dev].map[i] = mapping_type ? input[dev].map[i] << 16 : 0;
+									}
+								}
+
+								int found = 0;
+								for (int i = 0; i < mapping_button; i++)
+								{
+									if ((input[dev].map[i] & 0xFFFF) == ev->code) found = 1;
+								}
+
+								if (!found)
+								{
+									input[dev].map[mapping_button] = input[dev].map[mapping_button] | (ev->code & 0xFFFF);
+									key_mapped = ev->code;
+								}
+							}
 						}
 					}
-					else if(ev->value == 0 && key_mapped == ev->code)
+					else if(mapping_dev == dev && ev->value == 0 && key_mapped == ev->code)
 					{
 						mapping_button++;
 						key_mapped = 0;
@@ -1745,7 +1798,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			if (ev->value == 1)
 			{
-				if (idx && mapping_dev >= 0) input[mapping_dev].map[idx] = 0;
+				if (idx && mapping_dev >= 0) input[mapping_dev].map[idx] = is_menu_core() ? 0 : (input[mapping_dev].map[idx] & 0xFFFF0000);
 				mapping_button++;
 				if (mapping_button < 0 && (mapping_button&1)) mapping_button++;
 			}
@@ -1848,48 +1901,22 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								return;
 							}
 						}
-
-						for (uint i = 0; i < BTN_NUM; i++)
-						{
-							if (ev->code == input[dev].map[i])
-							{
-								if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, 0, ev->value, i);
-								return;
-							}
-						}
 					}
-					else
+
+					if (input[dev].has_map >= 2)
 					{
-						if (input[dev].has_map == 2)
-						{
-							Info("This joystick is not defined\n    Using default map");
-							input[dev].has_map = 1;
-						}
+						Info((input[dev].has_map == 3) ? "This joystick is not defined" : "This joystick is not defined\n    Using default map");
+						input[dev].has_map = 1;
+					}
 
-						if (input[dev].has_map == 3)
+					for (uint i = 0; i < BTN_NUM; i++)
+					{
+						if (ev->code == (input[dev].map[i] & 0xFFFF) || ev->code == (input[dev].map[i] >> 16))
 						{
-							Info("This joystick is not defined");
-							input[dev].has_map = 1;
-						}
+							if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
+							if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, origcode, ev->value, i);
 
-						for (uint i = 0; i < BTN_NUM; i++)
-						{
-							if (ev->code == input[dev].map[i])
-							{
-								if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
-								if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, origcode, ev->value, i);
-								return;
-							}
-						}
-
-						for (int i = 8; i <= 11; i++)
-						{
-							if (ev->code == input[dev].mmap[i])
-							{
-								if (origcode == ev->code) origcode = 0; // prevent autofire for original dpad
-								if (ev->value <= 1) joy_digital(input[dev].num, 1 << (i - 8), origcode, ev->value, i - 8);
-								return;
-							}
+							// support 2 simultaneous functions for 1 button if defined in 2 sets. No return.
 						}
 					}
 
