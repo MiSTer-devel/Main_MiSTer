@@ -1682,8 +1682,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						mapping_button++;
 						key_mapped = 0;
 					}
+					return;
 				}
-				return;
 			}
 		}
 
