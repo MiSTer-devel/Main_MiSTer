@@ -18,7 +18,7 @@
 #include "osd.h"
 #include "errno.h"
 
-#define NUMDEV 10
+#define NUMDEV 20
 #define NUMPLAYERS 6
 
 static int ev2amiga[] =
@@ -988,6 +988,14 @@ typedef struct
 	uint8_t  kbdmap[256];
 
 	int      accx, accy;
+
+	int      lightgun_req;
+	int      lightgun;
+
+	int      bind;
+	char     devname[32];
+	char     uniq[32];
+	char     name[128];
 }  devInput;
 
 static devInput input[NUMDEV] = {};
@@ -1518,6 +1526,9 @@ static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
+	//check if device is a part of multifunctional device 
+	if (input[dev].bind >= 0) dev = input[dev].bind;
+
 	//mouse
 	if (ev->type == EV_KEY && ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK)
 	{
@@ -1618,16 +1629,17 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			else
 			{
 				int clear = ev->code == KEY_F12 || ev->code == KEY_MENU || ev->code == KEY_HOMEPAGE;
-				if (mapping_dev < 0 && !clear)
+				if (ev->value == 1 && mapping_dev < 0 && !clear)
 				{
 					mapping_dev = dev;
 					mapping_type = (ev->code >= 256) ? 1 : 0;
+					key_mapped = 0;
 				}
 
 				mapping_clear = 0;
 				if (mapping_dev >= 0 && (mapping_dev == dev || clear) && mapping_button < (is_menu_core() ? 17 : mapping_count))
 				{
-					if (ev->value == 1)
+					if (ev->value == 1 && !key_mapped)
 					{
 						if (is_menu_core())
 						{
@@ -1842,7 +1854,13 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 				if (ev->code == input[dev].mmap[17])
 				{
-					if (ev->value <= 1) joy_digital(input[dev].num, 0, 0, ev->value, BTN_OSD);
+					if (ev->value == 1 && input[dev].lightgun_req && !user_io_osd_is_visible())
+					{
+						input[dev].lightgun = !input[dev].lightgun;
+						Info(input[dev].lightgun ? "Light Gun mode is ON" : "Light Gun mode is OFF");
+					}
+					else if (ev->value <= 1) joy_digital(input[dev].num, 0, 0, ev->value, BTN_OSD);
+
 					return;
 				}
 
@@ -2067,9 +2085,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				// TODO: implement inversion
 
 				//convert to 0..255 range
-				int value = ((ev->value - absinfo->minimum) * 256) / (absinfo->maximum - absinfo->minimum + 1);
-				value = (value < 127 || value>129) ? value - 128 : 0;
-				if (value < -127) value = -127;
+				int value = (ev->value < absinfo->minimum) ? 0 : (ev->value > absinfo->maximum) ? 255 : 
+				            ((ev->value - absinfo->minimum) * 256) / (absinfo->maximum - absinfo->minimum + 1);
+
+				value = (value < 127 || value>129 || input[dev].lightgun) ? value - 128 : 0;
+
+				if (value < -127) value = -127; // -128 is prohibited.
 				//printf("ABS: axis %d = %d -> %d\n", ev->code, ev->value, value);
 
 				else if (ev->code == (input[dev].mmap[AXIS_MX] & 0xFFFF) && mouse_emu)
@@ -2144,11 +2165,9 @@ static struct pollfd pool[NUMDEV + 2];
 
 int input_test(int getchar)
 {
-	static char   cur_leds = 0;
-	static int    state = 0;
+	static char cur_leds = 0;
+	static int state = 0;
 	struct input_absinfo absinfo;
-
-	char devname[32];
 	struct input_event ev;
 
 	if (state == 0)
@@ -2181,6 +2200,11 @@ int input_test(int getchar)
 	if (state == 1)
 	{
 		printf("Open up to %d input devices.\n", NUMDEV);
+		for (int i = 0; i < NUMDEV; i++)
+		{
+			pool[i].fd = -1;
+			pool[i].events = 0;
+		}
 
 		int n = 0;
 		DIR *d = opendir("/dev/input");
@@ -2191,24 +2215,46 @@ int input_test(int getchar)
 			{
 				if (!strncmp(de->d_name, "event", 5))
 				{
-					sprintf(devname, "/dev/input/%s", de->d_name);
-					int fd = open(devname, O_RDWR);
+					memset(&input[n], 0, sizeof(input[n]));
+					sprintf(input[n].devname, "/dev/input/%s", de->d_name);
+					int fd = open(input[n].devname, O_RDWR);
 					if (fd > 0)
 					{
 						pool[n].fd = fd;
 						pool[n].events = POLLIN;
-						memset(&input[n], 0, sizeof(input[n]));
 						input[n].led = has_led(pool[n].fd);
 						getVidPid(de->d_name, &input[n].vid, &input[n].pid);
-						printf("opened %d: %s (%04x:%04x)\n", n, devname, input[n].vid, input[n].pid);
+						ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(input[n].uniq)), input[n].uniq);
+						ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
+						input[n].bind = -1;
+
 						n++;
 						if (n >= NUMDEV) break;
 					}
 				}
 			}
 			closedir(d);
-		}
 
+			for (int i = 0; i < n; i++)
+			{
+				if (input[i].uniq[0])
+				{
+					for (int j = 0; j < i; j++)
+					{
+						if (input[0].bind <0 && !memcmp(input[i].uniq, input[j].uniq, sizeof(input[0].uniq)))
+						{
+							input[i].bind = j;
+							break;
+						}
+					}
+				}
+			}
+
+			for (int i = 0; i < n; i++)
+			{
+				printf("opened %d(%2d): %s (%04x:%04x) \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].uniq, input[i].name);
+			}
+		}
 		cur_leds |= 0x80;
 		state++;
 	}
@@ -2225,10 +2271,7 @@ int input_test(int getchar)
 			if ((pool[NUMDEV].revents & POLLIN) && check_devs())
 			{
 				printf("Close all devices.\n");
-				for (int i = 0; i<NUMDEV; i++)
-				{
-					if (pool[i].fd >= 0) close(pool[i].fd);
-				}
+				for (int i = 0; i<NUMDEV; i++) if (pool[i].fd >= 0) close(pool[i].fd);
 				state = 1;
 				return 0;
 			}
@@ -2249,11 +2292,16 @@ int input_test(int getchar)
 						}
 						else if(ev.type)
 						{
+							int dev = i;
+							if (input[dev].bind >= 0) dev = input[dev].bind;
+
 							ds_ver = 0;
-							if (input[i].vid == 0x054c)
+							int noabs = 0;
+
+							if (input[dev].vid == 0x054c)
 							{
-								if (input[i].pid == 0x0268)  ds_ver = 3;
-								if (input[i].pid == 0x05c4 || input[i].pid == 0x09cc) ds_ver = 4;
+								if (input[dev].pid == 0x0268)  ds_ver = 3;
+								if (input[dev].pid == 0x05c4 || input[dev].pid == 0x09cc) ds_ver = 4;
 							}
 
 							if (ds_ver == 4 && ev.type == EV_KEY)
@@ -2264,18 +2312,45 @@ int input_test(int getchar)
 							if (ev.type == EV_ABS)
 							{
 								//Dualshock: drop accelerator and raw touchpad events
+								if (ds_ver == 4 && ev.code == 57)
+								{
+									input[dev].lightgun_req = (ev.value >= 0);
+								}
 								if (ds_ver && ev.code > 40) continue;
 
 								if (ioctl(pool[i].fd, EVIOCGABS(ev.code), &absinfo) < 0) memset(&absinfo, 0, sizeof(absinfo));
 								else
 								{
-									//DS4: drop mapped touchpad events.
-									if (ds_ver == 4 && ev.code <= 1 && absinfo.maximum > 255) continue;
+									//DS4 specific: touchpad as lightgun
+									if (ds_ver == 4 && ev.code <= 1)
+									{
+										if (absinfo.maximum > 255)
+										{
+											if (ev.code == 1)
+											{
+												absinfo.minimum = 300;
+												absinfo.maximum = 850;
+											}
+
+											if (ev.code == 0)
+											{
+												absinfo.minimum = 200;
+												absinfo.maximum = 1720;
+											}
+
+											//DS4: drop mapped touchpad events.
+											if (!input[dev].lightgun) continue;
+										}
+										else
+										{
+											if (input[dev].lightgun) noabs = 1;
+										}
+									}
 								}
 							}
 
 							//Menu combo on 8BitDo receiver in PSC mode
-							if (input[i].vid == 0x054c && input[i].pid == 0x0cda && ev.type == EV_KEY)
+							if (input[dev].vid == 0x054c && input[dev].pid == 0x0cda && ev.type == EV_KEY)
 							{
 								//in PSC mode these keys coming from separate virtual keyboard device
 								//so it's impossible to use joystick codes as keyboards aren't personalized
@@ -2284,7 +2359,7 @@ int input_test(int getchar)
 							}
 
 							//Menu button quirk of 8BitDo gamepad in X-Input mode
-							if (input[i].vid == 0x045e && input[i].pid == 0x02e0 && ev.type == EV_KEY)
+							if (input[dev].vid == 0x045e && input[dev].pid == 0x02e0 && ev.type == EV_KEY)
 							{
 								if (ev.code == KEY_MENU) ev.code = BTN_MODE;
 							}
@@ -2322,11 +2397,11 @@ int input_test(int getchar)
 								{
 								//keyboard, buttons
 								case EV_KEY:
-									printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
+									printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid);
 									break;
 
 								case EV_REL:
-									printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
+									printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid);
 									break;
 
 								case EV_SYN:
@@ -2339,12 +2414,12 @@ int input_test(int getchar)
 									if (ds_ver && ev.code <= 5 && ev.value > 118 && ev.value < 138) break;
 
 									//aliexpress USB encoder floods messages
-									if (input[i].vid == 0x0079 && input[i].pid == 0x0006)
+									if (input[dev].vid == 0x0079 && input[dev].pid == 0x0006)
 									{
 										if (ev.code == 2) break;
 									}
 
-									printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x.", ev.code, ev.value, input[i].num, input[i].vid, input[i].pid);
+									printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x.", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid);
 									printf(" ABS_INFO: min = %d max = %d", absinfo.minimum, absinfo.maximum);
 									if (absinfo.fuzz) printf(" fuzz = %d", absinfo.fuzz);
 									if (absinfo.resolution) printf(" res = %d", absinfo.resolution);
@@ -2352,14 +2427,14 @@ int input_test(int getchar)
 									break;
 
 								default:
-									printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x), jnum=%d, ID:%04x:%04x\n", ev.type, ev.code, ev.code, ev.value, ev.value, input[i].num, input[i].vid, input[i].pid);
+									printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x), jnum=%d, ID:%04x:%04x\n", ev.type, ev.code, ev.code, ev.value, ev.value, input[dev].num, input[dev].vid, input[dev].pid);
 								}
 							}
 
-							input_cb(&ev, &absinfo, i);
+							if(!noabs) input_cb(&ev, &absinfo, dev);
 
 							//sumulate digital directions from analog
-							if (ev.type == EV_ABS && !(mapping && mapping_type<=1 && mapping_button<-4))
+							if (ev.type == EV_ABS && !(mapping && mapping_type<=1 && mapping_button<-4) && (user_io_osd_is_visible() || !input[dev].lightgun))
 							{
 								uint8_t axis_state = 0;
 								if ((absinfo.maximum == 1 && absinfo.minimum == -1) || (absinfo.maximum == 2 && absinfo.minimum == 0))
@@ -2374,14 +2449,14 @@ int input_test(int getchar)
 									int treshold = range / 4;
 
 									int only_max = 1;
-									for (int n = 0; n < 4; n++) if (input[i].mmap[AXIS1_X + n] && ((input[i].mmap[AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
+									for (int n = 0; n < 4; n++) if (input[dev].mmap[AXIS1_X + n] && ((input[dev].mmap[AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
 
 									if (ev.value < center - treshold && !only_max) axis_state = 1;
 									if (ev.value > center + treshold) axis_state = 2;
 								}
 
-								uint8_t last_state = input[i].axis_state[ev.code & 255];
-								input[i].axis_state[ev.code & 255] = axis_state;
+								uint8_t last_state = input[dev].axis_state[ev.code & 255];
+								input[dev].axis_state[ev.code & 255] = axis_state;
 
 								//printf("last_state=%d, axis_state=%d\n", last_state, axis_state);
 								if (last_state != axis_state)
@@ -2392,23 +2467,23 @@ int input_test(int getchar)
 									{
 										ev.value = 0;
 										ev.code = ecode + last_state;
-										input_cb(&ev, 0, i);
+										input_cb(&ev, 0, dev);
 									}
 
 									if (axis_state)
 									{
 										ev.value = 1;
 										ev.code = ecode + axis_state;
-										input_cb(&ev, 0, i);
+										input_cb(&ev, 0, dev);
 									}
 								}
 
 								// Menu button on 8BitDo Receiver in D-Input mode
-								if (ev.code == 9 && input[i].vid == 0x2dc8 && (input[i].pid == 0x3100 || input[i].pid == 0x3104))
+								if (ev.code == 9 && input[dev].vid == 0x2dc8 && (input[dev].pid == 0x3100 || input[dev].pid == 0x3104))
 								{
 									ev.type = EV_KEY;
 									ev.code = KEY_EMU + (ev.code << 1);
-									input_cb(&ev, &absinfo, i);
+									input_cb(&ev, &absinfo, dev);
 								}
 							}
 						}
