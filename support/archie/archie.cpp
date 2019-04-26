@@ -96,6 +96,18 @@ int archie_get_60()
 	return config.system_ctrl & 0b1000;
 }
 
+void archie_set_afix(char i)
+{
+	if (i) config.system_ctrl |= 0b10000;
+	else config.system_ctrl &= ~0b10000;
+	user_io_8bit_set_status((i ? -1 : 0), 0b100000);
+}
+
+int archie_get_afix()
+{
+	return config.system_ctrl & 0b10000;
+}
+
 static int mswap = 0;
 void archie_set_mswap(char i)
 {
@@ -203,6 +215,7 @@ void archie_init(void)
 	archie_set_ar(archie_get_ar());
 	archie_set_amix(archie_get_amix());
 	archie_set_60(archie_get_60());
+	archie_set_afix(archie_get_afix());
 
 
 	// upload rom file

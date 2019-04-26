@@ -19,5 +19,7 @@ void archie_set_mswap(char i);
 int  archie_get_mswap();
 void archie_set_60(char i);
 int  archie_get_60();
+void archie_set_afix(char i);
+int  archie_get_afix();
 
 #endif // ARCHIE_H

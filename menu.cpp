@@ -933,7 +933,7 @@ void HandleUI(void)
 		OsdSetTitle(user_io_get_core_name(), OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		m = 0;
-		menumask = 0x1ff;
+		menumask = 0x3ff;
 		OsdWrite(m++);
 
 		strcpy(s, " Floppy 0: ");
@@ -965,16 +965,20 @@ void HandleUI(void)
 		sprintf(s, " Stereo mix:         %s", config_stereo_msg[archie_get_amix()]);
 		OsdWrite(m++, s, menusub == 5);
 
+		strcpy(s, " 25MHz audio fix:    ");
+		strcat(s, archie_get_afix() ? "Enable" : "Disable");
+		OsdWrite(m++, s, menusub == 6);
+
 		OsdWrite(m++);
 
 		sprintf(s, " Swap joysticks:     %s", user_io_get_joyswap() ? "Yes" : "No");
-		OsdWrite(m++, s, menusub == 6);
-		sprintf(s, " Swap mouse btn 2/3: %s", archie_get_mswap() ? "Yes" : "No");
 		OsdWrite(m++, s, menusub == 7);
+		sprintf(s, " Swap mouse btn 2/3: %s", archie_get_mswap() ? "Yes" : "No");
+		OsdWrite(m++, s, menusub == 8);
 
 		while(m<15) OsdWrite(m++);
 
-		OsdWrite(15, STD_EXIT, menusub == 8, 0);
+		OsdWrite(15, STD_EXIT, menusub == 9, 0);
 		menustate = MENU_ARCHIE_MAIN2;
 		parentstate = MENU_ARCHIE_MAIN1;
 
@@ -1016,16 +1020,21 @@ void HandleUI(void)
 				break;
 
 			case 6:
-				user_io_set_joyswap(!user_io_get_joyswap());
+				archie_set_afix(!archie_get_afix());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
 			case 7:
+				user_io_set_joyswap(!user_io_get_joyswap());
+				menustate = MENU_ARCHIE_MAIN1;
+				break;
+
+			case 8:
 				archie_set_mswap(!archie_get_mswap());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 8:  // Exit
+			case 9:  // Exit
 				menustate = MENU_NONE1;
 				break;
 			}
