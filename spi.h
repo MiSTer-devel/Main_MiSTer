@@ -34,9 +34,9 @@ uint32_t spi32w(uint32_t parm);
 /* block transfer functions */
 void spi_block_read(uint8_t *addr, int wide);
 void spi_read(uint8_t *addr, uint16_t len, int wide);
-void spi_block_write(uint8_t *addr, int wide);
-void spi_write(uint8_t *addr, uint16_t len, int wide);
-void spi_block_write_16be(uint16_t *addr);
+void spi_block_write(const uint8_t *addr, int wide);
+void spi_write(const uint8_t *addr, uint16_t len, int wide);
+void spi_block_write_16be(const uint16_t *addr);
 void spi_block_read_16be(uint16_t *addr);
 
 /* OSD related SPI functions */
@@ -51,8 +51,8 @@ void spi_osd_cmd32le_cont(uint8_t cmd, uint32_t parm);
 void spi_osd_cmd32le(uint8_t cmd, uint32_t parm);
 
 /* User_io related SPI functions */
-void spi_uio_cmd_cont(uint8_t cmd);
-void spi_uio_cmd(uint8_t cmd);
+uint8_t spi_uio_cmd_cont(uint8_t cmd);
+uint8_t spi_uio_cmd(uint8_t cmd);
 void spi_uio_cmd8(uint8_t cmd, uint8_t parm);
 void spi_uio_cmd8_cont(uint8_t cmd, uint8_t parm);
 void spi_uio_cmd16(uint8_t cmd, uint16_t parm);

@@ -9,89 +9,151 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
+    <Filter Include="Header Files\libco">
+      <UniqueIdentifier>{0c4bf53d-7986-4434-bbd2-734da3553be9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\libco">
+      <UniqueIdentifier>{da657dc9-d7b4-417e-b916-6543cf17b67e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\miniz">
+      <UniqueIdentifier>{344a14d0-22c5-4d62-a89a-7f3f1e005381}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\miniz">
+      <UniqueIdentifier>{83fcb534-f976-4615-bdeb-ba80fb510f9a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="archie.c">
+    <None Include="build.sh" />
+    <None Include="Makefile" />
+    <None Include="clean.sh" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="battery.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="boot.c">
+    <ClCompile Include="brightness.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="config.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="fdd.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="fpga_io.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="hardware.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="hdd.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ikbd.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ini_parser.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="input.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="main.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="menu.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="mist_cfg.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="osd.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="spi.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="tos.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="user_io.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="file_io.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="x86.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="tzx2wav.c">
+    <ClCompile Include="cfg.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="DiskImage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="file_io.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="fpga_io.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="hardware.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ini_parser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="input.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="menu.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="osd.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="spi.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sxmlc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tzx2wav.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="user_io.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\archie\archie.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_boot.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_config.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_fdd.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_hdd.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\sharpmz\sharpmz.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\st\st_ikbd.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\st\st_tos.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\x86\x86.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="support\snes\snes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\libco\arm.c">
+      <Filter>Source Files\libco</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\libco\libco.c">
+      <Filter>Source Files\libco</Filter>
+    </ClCompile>
+    <ClCompile Include="scheduler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\miniz\miniz.c">
+      <Filter>Source Files\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\miniz\miniz_tdef.c">
+      <Filter>Source Files\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\miniz\miniz_tinfl.c">
+      <Filter>Source Files\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\miniz\miniz_zip.c">
+      <Filter>Source Files\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="bootcore.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="charrom.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="archie.h">
+    <ClInclude Include="battery.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="boot.h">
+    <ClInclude Include="brightness.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cfg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="charrom.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="debug.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="fdd.h">
+    <ClInclude Include="DiskImage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="file_io.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="fpga_base_addr_ac5.h">
@@ -115,15 +177,6 @@
     <ClInclude Include="hardware.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="hdd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="hdd_internal.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ikbd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ini_parser.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -136,37 +189,83 @@
     <ClInclude Include="menu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="mist_cfg.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="osd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="spi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="tos.h">
+    <ClInclude Include="support.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="user_io.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="file_io.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="x86.h">
+    <ClInclude Include="sxmlc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="tzx2wav.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="DiskImage.h">
+    <ClInclude Include="user_io.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="build.sh" />
-    <None Include="Makefile" />
-    <None Include="clean.sh" />
+    <ClInclude Include="support\archie\archie.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_boot.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_fdd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_hdd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_hdd_internal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\sharpmz\sharpmz.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_ikbd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_tos.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\x86\x86.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\snes\snes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\libco\libco.h">
+      <Filter>Header Files\libco</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\libco\settings.h">
+      <Filter>Header Files\libco</Filter>
+    </ClInclude>
+    <ClInclude Include="scheduler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz.h">
+      <Filter>Header Files\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz_common.h">
+      <Filter>Header Files\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz_tdef.h">
+      <Filter>Header Files\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz_tinfl.h">
+      <Filter>Header Files\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\miniz\miniz_zip.h">
+      <Filter>Header Files\miniz</Filter>
+    </ClInclude>
+    <ClInclude Include="bootcore.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

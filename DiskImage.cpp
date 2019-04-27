@@ -832,7 +832,7 @@ bool TDiskImage::FindSector(unsigned char CYL, unsigned char SIDE,
 	unsigned int TrackOffset = FromOffset;
 
 	bool FirstFind = true;
-	unsigned int FirstPos;
+	unsigned int FirstPos = 0;
 
 	// ѕоиск адресной метки требуемого сектора...
 	bool ADFOUND = false;
@@ -1280,7 +1280,7 @@ void TDiskImage::readUDI(int hfile, bool ronly)
 }
 
 //-----------------------------------------------------------------------------
-void TDiskImage::writeTRD(int hfile)
+void TDiskImage::writeTRD(fileTYPE *hfile)
 {
 	VGFIND_SECTOR vgfs;
 
@@ -1295,13 +1295,13 @@ void TDiskImage::writeTRD(int hfile)
 			{
 				if (FindSector(trk, side, sec + 1, &vgfs))
 				{
-					write(hfile, vgfs.SectorPointer, 256);
+					FileWriteAdv(hfile, vgfs.SectorPointer, 256);
 					if ((!vgfs.CRCOK) || (!vgfs.vgfa.CRCOK)) printf("Warning: sector %d on track %d, side %d with BAD CRC!\n", sec + 1, trk, side);
 					if (vgfs.SectorLength != 256) printf("Warning: sector %d on track %d, side %d is non 256 bytes!\n", sec + 1, trk, side);
 				}
 				else
 				{
-					write(hfile, nullbuf, 256);
+					FileWriteAdv(hfile, nullbuf, 256);
 					printf("DANGER! Sector %d on track %d, side %d not found!\n", sec + 1, trk, side);
 				}
 			}
@@ -1394,7 +1394,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 		{
 			if (rsize < fdiOFF)
 			{
-				delete tracksinfo;
+				delete[] tracksinfo;
 				delete ptr;
 				ShowError(ERR_CORRUPT);
 				return;
@@ -1405,7 +1405,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 
 			if (rsize < fdiOFFdata + tracksinfo[trk*(MaxSide + 1) + side].DataOffset)
 			{
-				delete tracksinfo;
+				delete[] tracksinfo;
 				delete ptr;
 				ShowError(ERR_CORRUPT);
 				return;
@@ -1424,7 +1424,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 
 				if (rsize < fdiOFFdata + tracksinfo[trk*(MaxSide + 1) + side].DataOffset + tracksinfo[trk*(MaxSide + 1) + side].SectorsInfo[isec].SectorOffset)
 				{
-					delete tracksinfo;
+					delete[] tracksinfo;
 					delete ptr;
 					ShowError(ERR_CORRUPT);
 					return;
@@ -1475,7 +1475,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 
 			if (trkdatalen + SecCount*(3 + 2) > 6250)    // 3x4E & 2x00 per sec checking
 			{
-				delete tracksinfo;
+				delete[] tracksinfo;
 				delete ptr;
 				for (int t = 0; t < 256; t++)
 					for (int s = 0; s < 256; s++)
@@ -1640,7 +1640,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 			}
 		}
 
-	delete tracksinfo;
+	delete[] tracksinfo;
 	delete ptr;
 	ReadOnly = readonly;
 	FType = DIT_FDI;
@@ -2829,7 +2829,7 @@ int GetByte(void)     /* get one byte */
 
 	while (getlen <= 8)
 	{
-		if ((i = readChar()) == -1) i = 0;
+		if ((int)(i = readChar()) == -1) i = 0;
 		getbuf |= i << (8 - getlen);
 		getlen += 8;
 	}
@@ -3002,7 +3002,7 @@ unsigned unpack_lzh(unsigned char *src, unsigned size, unsigned char *buf)
 }
 
 //--------------------------------------------------------------------------
-extern "C" int x2trd(char *name, fileTYPE *f)
+int x2trd(const char *name, fileTYPE *f)
 {
 	TDiskImage *img = new TDiskImage;
 	img->Open(getFullPath(name), true);
@@ -3014,26 +3014,17 @@ extern "C" int x2trd(char *name, fileTYPE *f)
 		return 0;
 	}
 
-	img->writeTRD(f->fd);
+	img->writeTRD(f);
 	delete(img);
 
-	struct stat64 st;
-	int ret = fstat64(f->fd, &st);
-	if (ret < 0)
-	{
-		printf("x2trd(fstat) error: %d.\n", ret);
-		FileClose(f);
-		return 0;
-	}
-
-	f->size = st.st_size;
+	f->size = FileGetSize(f);
 	FileSeekLBA(f, 0);
 	printf("x2trd: vtrd size=%llu.\n", f->size);
 
 	return 1;
 }
 
-extern "C" int x2trd_ext_supp(char *name)
+int x2trd_ext_supp(const char *name)
 {
 	const char *ext = "";
 	if (strlen(name) > 4) ext = name + strlen(name) - 4;

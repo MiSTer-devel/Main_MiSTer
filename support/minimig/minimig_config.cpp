@@ -1,0 +1,479 @@
+// config.c
+
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
+#include <sys/stat.h>
+#include <dirent.h>
+
+#include "../../hardware.h"
+#include "../../file_io.h"
+#include "../../osd.h"
+#include "../../menu.h"
+#include "../../user_io.h"
+#include "../../input.h"
+#include "minimig_boot.h"
+#include "minimig_fdd.h"
+#include "minimig_hdd.h"
+#include "minimig_config.h"
+
+typedef struct
+{
+	char            id[8];
+	unsigned long   version;
+	char            kickstart[1024];
+	mm_filterTYPE   filter;
+	unsigned char   memory;
+	unsigned char   chipset;
+	mm_floppyTYPE   floppy;
+	unsigned char   disable_ar3;
+	unsigned char   enable_ide;
+	unsigned char   scanlines;
+	unsigned char   audio;
+	mm_hardfileTYPE hardfile[2];
+	unsigned char   cpu;
+	unsigned char   autofire;
+} configTYPE_old;
+
+mm_configTYPE minimig_config = { };
+static unsigned char romkey[3072];
+
+static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int address, int size)
+{
+	static uint8_t buf[512];
+	unsigned int keyidx = 0;
+	printf("File size: %dkB\n", size >> 1);
+	printf("[");
+	if (keysize)
+	{
+		// read header
+		FileReadAdv(file, buf, 0xb);
+	}
+
+	for (int i = 0; i<size; i++)
+	{
+		if (!(i & 31)) printf("*");
+		FileReadAdv(file, buf, 512);
+
+		if (keysize)
+		{
+			// decrypt ROM
+			for (int j = 0; j<512; j++)
+			{
+				buf[j] ^= key[keyidx++];
+				if ((int)keyidx >= keysize) keyidx -= keysize;
+			}
+		}
+		EnableOsd();
+		unsigned int adr = address + i * 512;
+		spi8(OSD_CMD_WR);
+		spi8(adr & 0xff); adr = adr >> 8;
+		spi8(adr & 0xff); adr = adr >> 8;
+		spi8(adr & 0xff); adr = adr >> 8;
+		spi8(adr & 0xff); adr = adr >> 8;
+		for (int j = 0; j<512; j = j + 4)
+		{
+			spi8(buf[j + 0]);
+			spi8(buf[j + 1]);
+			spi8(buf[j + 2]);
+			spi8(buf[j + 3]);
+		}
+		DisableOsd();
+	}
+
+	printf("]\n");
+}
+
+static char UploadKickstart(char *name)
+{
+	fileTYPE file = {};
+	int keysize = 0;
+
+	BootPrint("Checking for Amiga Forever key file:");
+	if (FileOpen(&file, "Amiga/ROM.KEY") || FileOpen(&file, "ROM.KEY")) {
+		keysize = file.size;
+		if (file.size<sizeof(romkey))
+		{
+			FileReadAdv(&file, romkey, keysize);
+			BootPrint("Loaded Amiga Forever key file");
+		}
+		else
+		{
+			BootPrint("Amiga Forever keyfile is too large!");
+		}
+		FileClose(&file);
+	}
+	BootPrint("Loading file: ");
+	BootPrint(name);
+
+	if (FileOpen(&file, name)) {
+		if (file.size == 0x100000) {
+			// 1MB Kickstart ROM
+			BootPrint("Uploading 1MB Kickstart ...");
+			SendFileV2(&file, NULL, 0, 0xe00000, file.size >> 10);
+			SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 10);
+			FileClose(&file);
+			return(1);
+		}
+		else if (file.size == 0x80000) {
+			// 512KB Kickstart ROM
+			BootPrint("Uploading 512KB Kickstart ...");
+			SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
+			FileClose(&file);
+			FileOpen(&file, name);
+			SendFileV2(&file, NULL, 0, 0xe00000, file.size >> 9);
+			FileClose(&file);
+			return(1);
+		}
+		else if ((file.size == 0x8000b) && keysize) {
+			// 512KB Kickstart ROM
+			BootPrint("Uploading 512 KB Kickstart (Probably Amiga Forever encrypted...)");
+			SendFileV2(&file, romkey, keysize, 0xf80000, file.size >> 9);
+			FileClose(&file);
+			FileOpen(&file, name);
+			SendFileV2(&file, romkey, keysize, 0xe00000, file.size >> 9);
+			FileClose(&file);
+			return(1);
+		}
+		else if (file.size == 0x40000) {
+			// 256KB Kickstart ROM
+			BootPrint("Uploading 256 KB Kickstart...");
+			SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
+			FileClose(&file);
+			FileOpen(&file, name); // TODO will this work
+			SendFileV2(&file, NULL, 0, 0xfc0000, file.size >> 9);
+			FileClose(&file);
+			return(1);
+		}
+		else if ((file.size == 0x4000b) && keysize) {
+			// 256KB Kickstart ROM
+			BootPrint("Uploading 256 KB Kickstart (Probably Amiga Forever encrypted...");
+			SendFileV2(&file, romkey, keysize, 0xf80000, file.size >> 9);
+			FileClose(&file);
+			FileOpen(&file, name); // TODO will this work
+			SendFileV2(&file, romkey, keysize, 0xfc0000, file.size >> 9);
+			FileClose(&file);
+			return(1);
+		}
+		else {
+			BootPrint("Unsupported ROM file size!");
+		}
+		FileClose(&file);
+	}
+	else {
+		printf("No \"%s\" file!\n", name);
+	}
+	return(0);
+}
+
+static char UploadActionReplay()
+{
+	fileTYPE file = {};
+	if(FileOpen(&file, "Amiga/HRTMON.ROM") || FileOpen(&file, "HRTMON.ROM"))
+	{
+		int adr, data;
+		puts("Uploading HRTmon ROM... ");
+		SendFileV2(&file, NULL, 0, 0xa10000, (file.size + 511) >> 9);
+		// HRTmon config
+		adr = 0xa10000 + 20;
+		spi_osd_cmd32le_cont(OSD_CMD_WR, adr);
+		data = 0x00800000; // mon_size, 4 bytes
+		spi8((data >> 24) & 0xff); spi8((data >> 16) & 0xff);
+		spi8((data >> 8) & 0xff); spi8((data >> 0) & 0xff);
+		data = 0x00; // col0h, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x5a; // col0l, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x0f; // col1h, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0xff; // col1l, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x01; // right, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x00; // keyboard, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x01; // key, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = minimig_config.enable_ide ? 1 : 0; // ide, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x01; // a1200, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = minimig_config.chipset&CONFIG_AGA ? 1 : 0; // aga, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x01; // insert, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x0f; // delay, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x01; // lview, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0x00; // cd32, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = minimig_config.chipset&CONFIG_NTSC ? 1 : 0; // screenmode, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 1; // novbr, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 0; // entered, 1 byte
+		spi8((data >> 0) & 0xff);
+		data = 1; // hexmode, 1 byte
+		spi8((data >> 0) & 0xff);
+		DisableOsd();
+		adr = 0xa10000 + 68;
+		spi_osd_cmd32le_cont(OSD_CMD_WR, adr);
+		data = ((minimig_config.memory & 0x3) + 1) * 512 * 1024; // maxchip, 4 bytes TODO is this correct?
+		spi8((data >> 24) & 0xff); spi8((data >> 16) & 0xff);
+		spi8((data >> 8) & 0xff); spi8((data >> 0) & 0xff);
+		DisableOsd();
+
+		FileClose(&file);
+		return(1);
+	}
+	else {
+		puts("\nhrtmon.rom not found!\n");
+		return(0);
+	}
+	return(0);
+}
+
+static char* GetConfigurationName(int num, int chk)
+{
+	static char name[128];
+	if (num) sprintf(name, CONFIG_DIR "/minimig%d.cfg", num);
+	else sprintf(name, CONFIG_DIR "/minimig.cfg");
+
+	if (chk && !S_ISREG(getFileType(name))) return 0;
+	return name+strlen(CONFIG_DIR)+1;
+}
+
+int minimig_SaveCfg(int num)
+{
+	return FileSaveConfig(GetConfigurationName(num, 0), &minimig_config, sizeof(minimig_config));
+}
+
+const char* minimig_GetCfgInfo(int num)
+{
+	char *filename = GetConfigurationName(num, 1);
+	if (!filename) return NULL;
+
+	static mm_configTYPE tmpconf;
+	memset(&tmpconf, 0, sizeof(tmpconf));
+
+	if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf))) return tmpconf.info;
+	return "";
+}
+
+static int force_reload_kickstart = 0;
+static void ApplyConfiguration(char reloadkickstart)
+{
+	if (force_reload_kickstart) reloadkickstart = 1;
+	force_reload_kickstart = 0;
+
+	ConfigCPU(minimig_config.cpu);
+
+	if (!reloadkickstart)
+	{
+		ConfigChipset(minimig_config.chipset);
+		ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+	}
+
+	printf("CPU clock     : %s\n", minimig_config.chipset & 0x01 ? "turbo" : "normal");
+	printf("Chip RAM size : %s\n", config_memory_chip_msg[minimig_config.memory & 0x03]);
+	printf("Slow RAM size : %s\n", config_memory_slow_msg[minimig_config.memory >> 2 & 0x03]);
+	printf("Fast RAM size : %s\n", config_memory_fast_msg[minimig_config.memory >> 4 & 0x03]);
+
+	printf("Floppy drives : %u\n", minimig_config.floppy.drives + 1);
+	printf("Floppy speed  : %s\n", minimig_config.floppy.speed ? "fast" : "normal");
+
+	printf("\n");
+
+	printf("\nIDE state: %s.\n", minimig_config.enable_ide ? "enabled" : "disabled");
+	if (minimig_config.enable_ide)
+	{
+		printf("Primary Master HDD is %s.\n", minimig_config.hardfile[0].enabled ? "enabled" : "disabled");
+		printf("Primary Slave HDD is %s.\n", minimig_config.hardfile[1].enabled ? "enabled" : "disabled");
+		printf("Secondary Master HDD is %s.\n", minimig_config.hardfile[2].enabled ? "enabled" : "disabled");
+		printf("Secondary Slave HDD is %s.\n", minimig_config.hardfile[3].enabled ? "enabled" : "disabled");
+	}
+
+	rstval = SPI_CPU_HLT;
+	spi_osd_cmd8(OSD_CMD_RST, rstval);
+	spi_osd_cmd8(OSD_CMD_HDD, (minimig_config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
+
+	ConfigMemory(minimig_config.memory);
+	ConfigCPU(minimig_config.cpu);
+
+	ConfigChipset(minimig_config.chipset);
+	ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+
+	if (minimig_config.memory & 0x40) UploadActionReplay();
+
+	if (reloadkickstart)
+	{
+		printf("Reloading kickstart ...\n");
+		rstval |= (SPI_RST_CPU | SPI_CPU_HLT);
+		spi_osd_cmd8(OSD_CMD_RST, rstval);
+		if (!UploadKickstart(minimig_config.kickstart))
+		{
+			strcpy(minimig_config.kickstart, "Amiga/KICK.ROM");
+			if (!UploadKickstart(minimig_config.kickstart))
+			{
+				strcpy(minimig_config.kickstart, "KICK.ROM");
+				if (!UploadKickstart(minimig_config.kickstart))
+				{
+					BootPrintEx("No Kickstart loaded. Press F12 for settings.");
+					BootPrintEx("** Halted! **");
+					return;
+				}
+			}
+		}
+		rstval |= (SPI_RST_USR | SPI_RST_CPU);
+		spi_osd_cmd8(OSD_CMD_RST, rstval);
+	}
+	else
+	{
+		printf("Resetting ...\n");
+		rstval |= (SPI_RST_USR | SPI_RST_CPU);
+		spi_osd_cmd8(OSD_CMD_RST, rstval);
+	}
+
+	rstval = 0;
+	spi_osd_cmd8(OSD_CMD_RST, rstval);
+
+	ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+	ConfigAudio(minimig_config.audio);
+	ConfigAutofire(minimig_config.autofire, 0xC);
+}
+
+int minimig_LoadCfg(int num)
+{
+	static const char config_id[] = "MNMGCFG0";
+	char updatekickstart = 0;
+	int result = 0;
+
+	const char *filename = GetConfigurationName(num, 1);
+
+	// load configuration data
+	int size;
+	if(filename && (size = FileLoadConfig(filename, 0, 0))>0)
+	{
+		BootPrint("Opened configuration file\n");
+		printf("Configuration file size: %s, %d\n", filename, size);
+		if (size == sizeof(minimig_config) || size == 5152)
+		{
+			static mm_configTYPE tmpconf = {};
+			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
+			{
+				// check file id and version
+				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
+					// A few more sanity checks...
+					if (tmpconf.floppy.drives <= 4) {
+						// If either the old config and new config have a different kickstart file,
+						// or this is the first boot, we need to upload a kickstart image.
+						if (strcmp(tmpconf.kickstart, minimig_config.kickstart) != 0) {
+							updatekickstart = true;
+						}
+						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(minimig_config));
+						result = 1; // We successfully loaded the config.
+					}
+					else BootPrint("Config file sanity check failed!\n");
+				}
+				else BootPrint("Wrong configuration file format!\n");
+			}
+			else printf("Cannot load configuration file\n");
+		}
+		else if (size == sizeof(configTYPE_old))
+		{
+			static configTYPE_old tmpconf;
+			printf("Old Configuration file.\n");
+			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
+			{
+				// check file id and version
+				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
+					// A few more sanity checks...
+					if (tmpconf.floppy.drives <= 4) {
+						// If either the old config and new config have a different kickstart file,
+						// or this is the first boot, we need to upload a kickstart image.
+						if (strcmp(tmpconf.kickstart, minimig_config.kickstart) != 0) {
+							updatekickstart = true;
+						}
+						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(minimig_config));
+						minimig_config.cpu = tmpconf.cpu;
+						minimig_config.autofire = tmpconf.autofire;
+						memset(&minimig_config.hardfile[2], 0, sizeof(minimig_config.hardfile[2]));
+						memset(&minimig_config.hardfile[3], 0, sizeof(minimig_config.hardfile[3]));
+						result = 1; // We successfully loaded the config.
+					}
+					else BootPrint("Config file sanity check failed!\n");
+				}
+				else BootPrint("Wrong configuration file format!\n");
+			}
+			else printf("Cannot load configuration file\n");
+		}
+		else printf("Wrong configuration file size: %d (expected: %u)\n", size, sizeof(minimig_config));
+	}
+	if (!result) {
+		BootPrint("Can not open configuration file!\n");
+		BootPrint("Setting config defaults\n");
+		// set default configuration
+		memset((void*)&minimig_config, 0, sizeof(minimig_config));  // Finally found default config bug - params were reversed!
+		strncpy(minimig_config.id, config_id, sizeof(minimig_config.id));
+		strcpy(minimig_config.kickstart, "Amiga/KICK.ROM");
+		minimig_config.memory = 0x11;
+		minimig_config.cpu = 0;
+		minimig_config.chipset = 0;
+		minimig_config.floppy.speed = CONFIG_FLOPPY2X;
+		minimig_config.floppy.drives = 1;
+		minimig_config.enable_ide = 0;
+		minimig_config.hardfile[0].enabled = 1;
+		minimig_config.hardfile[0].filename[0] = 0;
+		minimig_config.hardfile[1].enabled = 1;
+		minimig_config.hardfile[1].filename[0] = 0;
+		updatekickstart = true;
+		BootPrintEx(">>> No config found. Using defaults. <<<");
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		df[i].status = 0;
+		FileClose(&df[i].file);
+	}
+
+	// print config to boot screen
+	char cfg_str[256];
+	sprintf(cfg_str, "CPU: %s, Chipset: %s, ChipRAM: %s, FastRAM: %s, SlowRAM: %s",
+			config_cpu_msg[minimig_config.cpu & 0x03], config_chipset_msg[(minimig_config.chipset >> 2) & 7],
+			config_memory_chip_msg[(minimig_config.memory >> 0) & 0x03], config_memory_fast_msg[(minimig_config.memory >> 4) & 0x03], config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03]
+			);
+	BootPrintEx(cfg_str);
+
+	input_poll(0);
+	if (is_key_pressed(59))
+	{
+		BootPrintEx("Forcing NTSC video ...");
+		//force NTSC mode if F1 pressed
+		minimig_config.chipset |= CONFIG_NTSC;
+	}
+	else if (is_key_pressed(60))
+	{
+		BootPrintEx("Forcing PAL video ...");
+		// force PAL mode if F2 pressed
+		minimig_config.chipset &= ~CONFIG_NTSC;
+	}
+
+	ApplyConfiguration(updatekickstart);
+	return(result);
+}
+
+void MinimigReset()
+{
+	ApplyConfiguration(0);
+	user_io_rtc_reset();
+}
+
+void SetKickstart(char *name)
+{
+	uint len = strlen(name);
+	if (len > (sizeof(minimig_config.kickstart) - 1)) len = sizeof(minimig_config.kickstart) - 1;
+	memcpy(minimig_config.kickstart, name, len);
+	minimig_config.kickstart[len] = 0;
+	force_reload_kickstart = 1;
+}

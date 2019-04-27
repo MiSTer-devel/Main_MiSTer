@@ -4,15 +4,11 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-#define iprintf(...)  printf(__VA_ARGS__) 
-#define siprintf(...) sprintf(__VA_ARGS__) 
-#define BootPrint(text) iprintf("%s\n", text)
-
 unsigned long GetTimer(unsigned long offset);
 unsigned long CheckTimer(unsigned long t);
 void WaitTimer(unsigned long time);
 
-void hexdump(void *data, uint16_t size, uint16_t offset);
+void hexdump(void *data, uint16_t size, uint16_t offset = 0);
 
 // minimig reset stuff
 #define SPI_RST_USR         0x1

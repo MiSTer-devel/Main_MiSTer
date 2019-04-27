@@ -40,9 +40,11 @@ int is_key_pressed(int key);
 void start_map_setting(int cnt);
 int get_map_button();
 int get_map_type();
+int get_map_clear();
 void finish_map_setting(int dismiss);
 uint16_t get_map_vid();
 uint16_t get_map_pid();
+int has_default_map();
 
 uint32_t get_key_mod();
 uint32_t get_ps2_code(uint16_t key);

@@ -11,7 +11,7 @@
 //// type definitions ////
 typedef struct {
 	int id;
-	char* name;
+	const char* name;
 } ini_section_t;
 
 typedef enum {
@@ -22,7 +22,7 @@ typedef enum {
 typedef void custom_handler_t(char*);
 
 typedef struct {
-	char* name;
+	const char* name;
 	void* var;
 	ini_vartypes_t type;
 	int min;
@@ -32,6 +32,7 @@ typedef struct {
 
 typedef struct {
 	const char* filename;
+	const char* filename_alt;
 	const ini_section_t* sections;
 	const ini_var_t* vars;
 	int nsections;
@@ -41,7 +42,6 @@ typedef struct {
 
 //// functions ////
 void ini_parse(const ini_cfg_t* cfg);
-void ini_save(const ini_cfg_t* cfg);
 
 #endif // __INI_PARSER_H__
 

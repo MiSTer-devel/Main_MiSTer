@@ -52,16 +52,22 @@
 #define UIO_SET_SDINFO  0x1d  // send info about mounted image
 #define UIO_SET_STATUS2 0x1e  // 32bit status
 #define UIO_GET_KBD_LED 0x1f  // keyboard LEDs control
-#define UIO_SET_VIDEO   0x20  // set HDMI video mode 0: 1280x720p60(TV), 1: 1280x1024p60(PC), 2-255: reserved
+#define UIO_SET_VIDEO   0x20
 #define UIO_PS2_CTL     0x21  // get PS2 control from supported cores
 #define UIO_RTC         0x22  // transmit RTC data to core
 #define UIO_GET_VRES    0x23  // get video resolution
 #define UIO_TIMESTAMP   0x24  // transmit seconds since Unix epoch
+#define UIO_LEDS        0x25  // control on-board LEDs
+#define UIO_AUDVOL      0x26  // Digital volume as a number of bits to shift to the right
+#define UIO_SETHEIGHT   0x27  // Set scaled vertical resolution (to reduce scaling artefacts)
+#define UIO_GETUARTFLG  0x28  // Get UART_FLG_*
+#define UIO_GET_STATUS  0x29  // Update status from the core
+#define UIO_SET_FLTCOEF 0x2A  // Set Scaler polyphase coefficients
+#define UIO_SET_FLTNUM  0x2B  // Set Scaler predefined filter
+#define UIO_GET_VMODE   0x2C  // Get video mode parameters
+#define UIO_SET_VPOS    0x2D  // Set video positions
 
-// codes as used by 8bit (atari 800, zx81) via SS2
-#define UIO_GET_STATUS  0x50
-#define UIO_SECTOR_SND  0x51
-#define UIO_SECTOR_RCV  0x52
+// codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
 #define UIO_FILE_TX_DAT 0x54
 #define UIO_FILE_INDEX  0x55
@@ -82,9 +88,6 @@
 #define JOY_BTN3        0x40
 #define JOY_BTN4        0x80
 #define JOY_MOVE        (JOY_RIGHT|JOY_LEFT|JOY_UP|JOY_DOWN)
-
-#define BUTTON1         0x01
-#define BUTTON2         0x02
 
 // virtual gamepad buttons
 #define JOY_A      JOY_BTN1
@@ -113,20 +116,34 @@
 #define KBD_LED_FLAG_MASK     0xC0
 #define KBD_LED_FLAG_STATUS   0x40
 
-#define CONF_VGA_SCALER         0x04
-#define CONF_CSYNC              0x08
-#define CONF_FORCED_SCANDOUBLER 0x10
-#define CONF_YPBPR              0x20
-#define CONF_AUDIO_48K          0x40
+#define BUTTON1                 0b00000001
+#define BUTTON2                 0b00000010
+#define CONF_VGA_SCALER         0b00000100
+#define CONF_CSYNC              0b00001000
+#define CONF_FORCED_SCANDOUBLER 0b00010000
+#define CONF_YPBPR              0b00100000
+#define CONF_AUDIO_96K          0b01000000
+#define CONF_DVI                0b10000000
 
 // core type value should be unlikely to be returned by broken cores
 #define CORE_TYPE_UNKNOWN   0x55
 #define CORE_TYPE_DUMB      0xa0   // core without any io controller interaction
-#define CORE_TYPE_PACE      0xa2   // core from pacedev.net (joystick only)
 #define CORE_TYPE_MIST      0xa3   // mist atari st core   
 #define CORE_TYPE_8BIT      0xa4   // atari 800/c64 like core
 #define CORE_TYPE_MINIMIG2  0xa5   // new Minimig with AGA
 #define CORE_TYPE_ARCHIE    0xa6   // Acorn Archimedes
+#define CORE_TYPE_SHARPMZ   0xa7   // Sharp MZ Series
+
+#define UART_FLG_PPP        0x0001
+#define UART_FLG_TERM       0x0002
+#define UART_FLG_RTSCTS     0x0004
+#define UART_FLG_DTRDSR     0x0008
+#define UART_FLG_DSRDCD     0x0010
+#define UART_FLG_9600       0x0100
+#define UART_FLG_19200      0x0200
+#define UART_FLG_38400      0x0400
+#define UART_FLG_57600      0x0800
+#define UART_FLG_115200     0x1000
 
 // user io status bits (currently only used by 8bit)
 #define UIO_STATUS_RESET   0x01
@@ -144,7 +161,10 @@
 #define UIO_PRIORITY_KEYBOARD 0 
 #define UIO_PRIORITY_GAMEPAD  1
 
-typedef enum { EMU_NONE, EMU_MOUSE, EMU_JOY0, EMU_JOY1 } emu_mode_t;
+#define EMU_NONE  0
+#define EMU_MOUSE 1
+#define EMU_JOY0  2
+#define EMU_JOY1  3
 
 // serial status data type returned from the core 
 typedef struct {
@@ -155,32 +175,32 @@ typedef struct {
 	uint8_t fifo_stat;       // space in cores input fifo
 } __attribute__((packed)) serial_status_t;
 
-void user_io_init();
-void user_io_detect_core_type();
+void user_io_init(const char *path);
 unsigned char user_io_core_type();
 char is_minimig();
 char is_archie();
-char user_io_is_8bit_with_config_string();
+char is_sharpmz();
 void user_io_poll();
 char user_io_menu_button();
-char user_io_button_dip_switch1();
 char user_io_user_button();
 void user_io_osd_key_enable(char);
 void user_io_serial_tx(char *, uint16_t);
 char *user_io_8bit_get_string(char);
-unsigned long user_io_8bit_set_status(unsigned long, unsigned long);
-int  user_io_file_tx(char *, unsigned char);
-void user_io_sd_set_config(void);
-char user_io_dip_switch1(void);
+uint32_t user_io_8bit_set_status(uint32_t, uint32_t);
+int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
+int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
 char user_io_serial_status(serial_status_t *, uint8_t);
-int  user_io_file_mount(int num, char *name);
 char *user_io_get_core_name();
-char *user_io_get_core_name_ex();
+const char *user_io_get_core_name_ex();
 char is_menu_core();
 char is_x86_core();
+char is_snes_core();
 char has_menu();
 
-emu_mode_t user_io_get_kbdemu();
+const char *get_image_name(int i);
+
+int user_io_get_kbdemu();
+uint32_t user_io_get_uart_mode();
 
 // io controllers interface for FPGA ethernet emulation using usb ethernet
 // devices attached to the io controller (ethernec emulation)
@@ -189,16 +209,17 @@ uint32_t user_io_eth_get_status(void);
 void user_io_eth_send_rx_frame(uint8_t *, uint16_t);
 void user_io_eth_receive_tx_frame(uint8_t *, uint16_t);
 
-// hooks from the usb layer
 void user_io_mouse(unsigned char b, int16_t x, int16_t y);
 void user_io_kbd(uint16_t key, int press);
 char* user_io_create_config_name();
-void user_io_digital_joystick(unsigned char, uint16_t);
+int user_io_get_joy_transl();
+void user_io_digital_joystick(unsigned char, uint32_t, int);
 void user_io_analog_joystick(unsigned char, char, char);
+void user_io_set_joyswap(int swap);
+int user_io_get_joyswap();
 char user_io_osd_is_visible();
 void user_io_send_buttons(char);
-
-void add_modifiers(uint8_t mod, uint16_t* keys_ps2);
+void parse_video_mode();
 
 void user_io_set_index(unsigned char index);
 unsigned char user_io_ext_idx(char *, char*);
@@ -206,5 +227,27 @@ unsigned char user_io_ext_idx(char *, char*);
 void user_io_check_reset(unsigned short modifiers, char useKeys);
 
 void user_io_rtc_reset();
+
+int hasAPI1_5();
+
+const char* get_rbf_dir();
+const char* get_rbf_name();
+
+int user_io_get_scaler_flt();
+char* user_io_get_scaler_coeff();
+void user_io_set_scaler_flt(int n);
+void user_io_set_scaler_coeff(char *name);
+
+void user_io_minimig_set_adjust(char n);
+char user_io_minimig_get_adjust();
+
+#define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name())
+
+int GetUARTMode();
+int GetMidiLinkMode();
+void SetMidiLinkMode(int mode);
+
+void set_volume(int cmd);
+int  get_volume();
 
 #endif // USER_IO_H
