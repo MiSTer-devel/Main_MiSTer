@@ -104,6 +104,8 @@ enum MENU
 	MENU_SCRIPTS,
 	MENU_SCRIPTS1,
 	MENU_BTPAIR,
+	MENU_WMPAIR,
+	MENU_WMPAIR1,
 
 	// Mist/atari specific pages
 	MENU_MIST_MAIN1,
@@ -507,6 +509,35 @@ static int has_bt()
 	return ret;
 }
 
+static int toggle_wminput()
+{
+	if (access("/bin/wminput", F_OK) < 0 || access("/media/fat/linux/wiimote.cfg", F_OK) < 0) return -1;
+
+	FILE *fp;
+	static char out[1035];
+
+	fp = popen("pidof wminput", "r");
+	if (!fp) return -1;
+
+	int ret = -1;
+	if (fgets(out, sizeof(out) - 1, fp) != NULL)
+	{
+		if (strlen(out))
+		{
+			system("killall wminput");
+			ret = 0;
+		}
+	}
+	else
+	{
+		system("wminput --daemon --config /media/fat/linux/wiimote.cfg &");
+		ret = 1;
+	}
+
+	pclose(fp);
+	return ret;
+}
+
 static char* getNet(int spec)
 {
 	int netType = 0;
@@ -765,6 +796,13 @@ void HandleUI(void)
 		if (user_io_osd_is_visible())
 		{
 			menustate = MENU_BTPAIR;
+		}
+		break;
+
+	case KEY_F10:
+		if (user_io_osd_is_visible())
+		{
+			menustate = MENU_WMPAIR;
 		}
 		break;
 
@@ -3537,6 +3575,29 @@ void HandleUI(void)
 		}
 		printSysInfo();
 		break;
+
+	case MENU_WMPAIR:
+		{
+			OsdSetTitle("Wiimote", 0);
+			int res = toggle_wminput();
+			menu_timer = GetTimer(2000);
+			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
+			if (res < 0)       OsdWrite(7, "    Cannot enable Wiimote");
+			else if (res == 0) OsdWrite(7, "       Wiimote disabled");
+			else
+			{
+				OsdWrite(7, "       Wiimote enabled");
+				OsdWrite(9, "    Press 1+2 to connect");
+				menu_timer = GetTimer(3000);
+			}
+			menustate = MENU_WMPAIR1;
+		}
+		//fall through
+
+	case MENU_WMPAIR1:
+		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
+		break;
+
 
 	case MENU_BTPAIR:
 		OsdSetSize(16);
