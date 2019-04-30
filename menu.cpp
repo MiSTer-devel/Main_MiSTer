@@ -101,6 +101,8 @@ enum MENU
 	MENU_JOYKBDMAP1,
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
+	MENU_SCRIPTS_PRE,
+	MENU_SCRIPTS_PRE1,
 	MENU_SCRIPTS,
 	MENU_SCRIPTS1,
 	MENU_BTPAIR,
@@ -3569,7 +3571,8 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 3:
-				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
+				menustate = MENU_SCRIPTS_PRE;
+				menusub = 0;
 				break;
 			}
 		}
@@ -3598,6 +3601,46 @@ void HandleUI(void)
 		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
 		break;
 
+	case MENU_SCRIPTS_PRE:
+		OsdSetTitle("Warning!!!", 0);
+		helptext = 0;
+		menumask = 3;
+		m = 0;
+		OsdWrite(m++);
+		OsdWrite(m++, "         Attention:");
+		OsdWrite(m++, " This is dangerous operation!");
+		OsdWrite(m++);
+		OsdWrite(m++, " Script has control over the");
+		OsdWrite(m++, " whole system and may damage");
+		OsdWrite(m++, " the files or settings, then");
+		OsdWrite(m++, " MiSTer won't boot, so you");
+		OsdWrite(m++, " will have to re-format the");
+		OsdWrite(m++, " SD card and fill with files");
+		OsdWrite(m++, " in order to use it again.");
+		OsdWrite(m++);
+		OsdWrite(m++);
+		OsdWrite(m++, " Do you want to continue?");
+		OsdWrite(m++, "           No", menusub == 0);
+		OsdWrite(m++, "           Yes", menusub == 1);
+		menustate = MENU_SCRIPTS_PRE1;
+		parentstate = MENU_SCRIPTS_PRE;
+		break;
+
+	case MENU_SCRIPTS_PRE1:
+		if (menu) menustate = MENU_FIRMWARE1;
+		else if (select)
+		{
+			switch (menusub)
+			{
+			case 0:
+				menustate = MENU_FIRMWARE1;
+				break;
+			case 1:
+				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
+				break;
+			}
+		}
+		break;
 
 	case MENU_BTPAIR:
 		OsdSetSize(16);
