@@ -970,11 +970,15 @@ uint32_t get_key_mod()
 	return modifier & MODMASK;
 }
 
+#define QUIRK_DS4TOUCH 1
+#define QUIRK_WIIMOTE  2
+
 typedef struct
 {
 	uint16_t vid, pid;
 	uint8_t  led;
-	uint8_t  axis_state[256];
+	uint8_t  axis_edge[256];
+	int8_t   axis_pos[256];
 
 	uint8_t  num;
 	uint8_t  has_map;
@@ -988,6 +992,7 @@ typedef struct
 	uint8_t  kbdmap[256];
 
 	int      accx, accy;
+	int      quirk;
 
 	int      lightgun_req;
 	int      lightgun;
@@ -1526,6 +1531,8 @@ static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
+	int sub_dev = dev;
+
 	//check if device is a part of multifunctional device 
 	if (input[dev].bind >= 0) dev = input[dev].bind;
 
@@ -2082,18 +2089,39 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		case EV_ABS:
 			if (!user_io_osd_is_visible())
 			{
-				// TODO: implement inversion
+				int dead = 2;
+				if (input[dev].quirk == QUIRK_WIIMOTE)
+				{
+					if(ev->code == 3 || ev->code == 4) dead = 10;
+				}
 
-				//convert to 0..255 range
-				int value = (ev->value < absinfo->minimum) ? 0 : (ev->value > absinfo->maximum) ? 255 : 
-				            ((ev->value - absinfo->minimum) * 256) / (absinfo->maximum - absinfo->minimum + 1);
+				int value = ev->value;
+				if (ev->value < absinfo->minimum) value = absinfo->minimum;
+				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
 
-				value = (value < 127 || value>129 || input[dev].lightgun) ? value - 128 : 0;
+				// normalize to -range/2...+range/2
+				value = value - (absinfo->minimum + absinfo->maximum) / 2;
+				int hrange = (absinfo->maximum - absinfo->minimum) / 2;
 
-				if (value < -127) value = -127; // -128 is prohibited.
-				//printf("ABS: axis %d = %d -> %d\n", ev->code, ev->value, value);
+				if (ev->code > 1 || !input[dev].lightgun) //lightgun has no dead zone
+				{
+					// check the dead-zone and remove it from the range
+					hrange -= dead;
+					if (value < -dead) value += dead;
+					else if (value > dead) value -= dead;
+					else value = 0;
+				}
 
-				else if (ev->code == (input[dev].mmap[AXIS_MX] & 0xFFFF) && mouse_emu)
+				value = (value * 127) / hrange;
+
+				//final check to eliminate additive error
+				if (value < -127) value = -127;
+				else if (value > 127) value = 127;
+
+				if (input[sub_dev].axis_pos[ev->code & 0xFF] == (int8_t)value) break;
+				input[sub_dev].axis_pos[ev->code & 0xFF] = (int8_t)value;
+
+				if (ev->code == (input[dev].mmap[AXIS_MX] & 0xFFFF) && mouse_emu)
 				{
 					mouse_emu_x = 0;
 					if (value < -1 || value>1) mouse_emu_x = value;
@@ -2107,7 +2135,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					mouse_emu_y /= 12;
 					return;
 				}
-				else if (ev->code == (input[dev].mmap[AXIS_X] & 0xFFFF))
+				else if (ev->code == (input[dev].mmap[AXIS_X] & 0xFFFF) || (ev->code == 0 && input[dev].lightgun))
 				{
 					// skip if first joystick is not defined.
 					if (!input[dev].num) break;
@@ -2118,7 +2146,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					joy_analog(input[dev].num, 0, offset);
 					return;
 				}
-				else if (ev->code == (input[dev].mmap[AXIS_Y] & 0xFFFF))
+				else if (ev->code == (input[dev].mmap[AXIS_Y] & 0xFFFF) || (ev->code == 1 && input[dev].lightgun))
 				{
 					// skip if first joystick is not defined.
 					if (!input[dev].num) break;
@@ -2227,6 +2255,16 @@ int input_test(int getchar)
 						ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(input[n].uniq)), input[n].uniq);
 						ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
 						input[n].bind = -1;
+						if (strcasestr(input[n].name, "Wiimote"))
+						{
+							input[n].quirk = QUIRK_WIIMOTE;
+							input[n].lightgun = 1;
+						}
+
+						if (input[n].vid == 0x054c && (input[n].pid == 0x05c4 || input[n].pid == 0x09cc) && strcasestr(input[n].name, "Touchpad"))
+						{
+							input[n].quirk = QUIRK_DS4TOUCH;
+						}
 
 						n++;
 						if (n >= NUMDEV) break;
@@ -2252,7 +2290,7 @@ int input_test(int getchar)
 
 			for (int i = 0; i < n; i++)
 			{
-				printf("opened %d(%2d): %s (%04x:%04x) \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].uniq, input[i].name);
+				printf("opened %d(%2d): %s (%04x:%04x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].quirk, input[i].uniq, input[i].name);
 			}
 		}
 		cur_leds |= 0x80;
@@ -2312,7 +2350,7 @@ int input_test(int getchar)
 							if (ev.type == EV_ABS)
 							{
 								//Dualshock: drop accelerator and raw touchpad events
-								if (ds_ver == 4 && ev.code == 57)
+								if (input[i].quirk == QUIRK_DS4TOUCH && ev.code == 57)
 								{
 									input[dev].lightgun_req = (ev.value >= 0);
 								}
@@ -2324,27 +2362,35 @@ int input_test(int getchar)
 									//DS4 specific: touchpad as lightgun
 									if (ds_ver == 4 && ev.code <= 1)
 									{
-										if (absinfo.maximum > 255)
+										if (input[i].quirk == QUIRK_DS4TOUCH)
 										{
+											if (!input[dev].lightgun || user_io_osd_is_visible()) continue;
+
 											if (ev.code == 1)
 											{
 												absinfo.minimum = 300;
 												absinfo.maximum = 850;
 											}
-
-											if (ev.code == 0)
+											else if (ev.code == 0)
 											{
 												absinfo.minimum = 200;
 												absinfo.maximum = 1720;
 											}
-
-											//DS4: drop mapped touchpad events.
-											if (!input[dev].lightgun) continue;
+											else continue;
 										}
 										else
 										{
 											if (input[dev].lightgun) noabs = 1;
 										}
+									}
+								}
+
+								if (input[i].quirk == QUIRK_WIIMOTE)
+								{
+									if (ev.code == 3 || ev.code == 4)
+									{
+										absinfo.minimum = 30;
+										absinfo.maximum = 225;
 									}
 								}
 							}
@@ -2431,16 +2477,25 @@ int input_test(int getchar)
 								}
 							}
 
-							if(!noabs) input_cb(&ev, &absinfo, dev);
+							if (input[i].quirk == QUIRK_WIIMOTE && ev.type == EV_ABS)
+							{
+								if (ev.code <= 1 && user_io_osd_is_visible())
+								{
+									// don't pass IR tracking to OSD
+									continue;
+								}
+							}
+
+							if(!noabs) input_cb(&ev, &absinfo, i);
 
 							//sumulate digital directions from analog
-							if (ev.type == EV_ABS && !(mapping && mapping_type<=1 && mapping_button<-4) && (user_io_osd_is_visible() || !input[dev].lightgun))
+							if (ev.type == EV_ABS && !(mapping && mapping_type<=1 && mapping_button<-4) && (user_io_osd_is_visible() || !(ev.code<=1 && input[dev].lightgun)))
 							{
-								uint8_t axis_state = 0;
+								uint8_t axis_edge = 0;
 								if ((absinfo.maximum == 1 && absinfo.minimum == -1) || (absinfo.maximum == 2 && absinfo.minimum == 0))
 								{
-									if (ev.value == absinfo.minimum) axis_state = 1;
-									if (ev.value == absinfo.maximum) axis_state = 2;
+									if (ev.value == absinfo.minimum) axis_edge = 1;
+									if (ev.value == absinfo.maximum) axis_edge = 2;
 								}
 								else
 								{
@@ -2451,15 +2506,15 @@ int input_test(int getchar)
 									int only_max = 1;
 									for (int n = 0; n < 4; n++) if (input[dev].mmap[AXIS1_X + n] && ((input[dev].mmap[AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
 
-									if (ev.value < center - treshold && !only_max) axis_state = 1;
-									if (ev.value > center + treshold) axis_state = 2;
+									if (ev.value < center - treshold && !only_max) axis_edge = 1;
+									if (ev.value > center + treshold) axis_edge = 2;
 								}
 
-								uint8_t last_state = input[dev].axis_state[ev.code & 255];
-								input[dev].axis_state[ev.code & 255] = axis_state;
+								uint8_t last_state = input[dev].axis_edge[ev.code & 255];
+								input[dev].axis_edge[ev.code & 255] = axis_edge;
 
-								//printf("last_state=%d, axis_state=%d\n", last_state, axis_state);
-								if (last_state != axis_state)
+								//printf("last_state=%d, axis_edge=%d\n", last_state, axis_edge);
+								if (last_state != axis_edge)
 								{
 									uint16_t ecode = KEY_EMU + (ev.code << 1) - 1;
 									ev.type = EV_KEY;
@@ -2467,14 +2522,14 @@ int input_test(int getchar)
 									{
 										ev.value = 0;
 										ev.code = ecode + last_state;
-										input_cb(&ev, 0, dev);
+										input_cb(&ev, 0, i);
 									}
 
-									if (axis_state)
+									if (axis_edge)
 									{
 										ev.value = 1;
-										ev.code = ecode + axis_state;
-										input_cb(&ev, 0, dev);
+										ev.code = ecode + axis_edge;
+										input_cb(&ev, 0, i);
 									}
 								}
 
@@ -2483,7 +2538,7 @@ int input_test(int getchar)
 								{
 									ev.type = EV_KEY;
 									ev.code = KEY_EMU + (ev.code << 1);
-									input_cb(&ev, &absinfo, dev);
+									input_cb(&ev, &absinfo, i);
 								}
 							}
 						}
