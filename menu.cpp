@@ -2008,7 +2008,7 @@ void HandleUI(void)
 		OsdDrawLogo(3);
 		OsdDrawLogo(4);
 
-		sprintf(s, "       HPS s/w v%s", version + 5);
+		sprintf(s, "       MiSTer v%s", version + 5);
 		OsdWrite(10, s, 0, 0, 1);
 
 		s[0] = 0;
@@ -3482,7 +3482,17 @@ void HandleUI(void)
 
 		OsdSetTitle("System Settings", 0);
 		OsdWrite(0, "", 0, 0);
-		sprintf(s, "       HPS s/w v%s", version + 5);
+		sprintf(s, "       MiSTer v%s", version + 5);
+		{
+			char str[8] = {};
+			FILE *f = fopen("/MiSTer.version", "r");
+			if (f)
+			{
+				if (fread(str, 6, 1, f)) sprintf(s, " MiSTer v%s,  OS v%s", version + 5, str);
+				fclose(f);
+			}
+		}
+
 		OsdWrite(1, s, 0, 0);
 
 		{
