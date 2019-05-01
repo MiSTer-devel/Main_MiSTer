@@ -972,6 +972,8 @@ uint32_t get_key_mod()
 
 #define QUIRK_DS4TOUCH 1
 #define QUIRK_WIIMOTE  2
+#define QUIRK_DS3      3
+#define QUIRK_DS4      4
 
 typedef struct
 {
@@ -1526,7 +1528,6 @@ static void joy_analog(int num, int axis, int offset)
 	}
 }
 
-static int ds_ver = 0;
 static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
@@ -1948,7 +1949,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (ev->code == input[dev].mmap[15] && (ev->value <= 1) && ((!(mouse_emu & 1)) ^ (!ev->value)))
 					{
 						mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
-						if (ds_ver == 4) ds_mouse_emu = mouse_emu & 1;
+						if (input[sub_dev].quirk == QUIRK_DS4) ds_mouse_emu = mouse_emu & 1;
 						printf("mouse_emu = %d\n", mouse_emu);
 						if (mouse_emu & 2)
 						{
@@ -2089,10 +2090,17 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		case EV_ABS:
 			if (!user_io_osd_is_visible())
 			{
-				int dead = 2;
-				if (input[dev].quirk == QUIRK_WIIMOTE)
+				int hrange = (absinfo->maximum - absinfo->minimum) / 2;
+				int dead = hrange/63;
+
+				if (input[sub_dev].quirk == QUIRK_WIIMOTE)
 				{
 					if(ev->code == 3 || ev->code == 4) dead = 10;
+				}
+
+				if (input[sub_dev].quirk == QUIRK_DS3 || input[sub_dev].quirk == QUIRK_DS4)
+				{
+					dead = 10;
 				}
 
 				int value = ev->value;
@@ -2101,7 +2109,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 				// normalize to -range/2...+range/2
 				value = value - (absinfo->minimum + absinfo->maximum) / 2;
-				int hrange = (absinfo->maximum - absinfo->minimum) / 2;
 
 				if (ev->code > 1 || !input[dev].lightgun) //lightgun has no dead zone
 				{
@@ -2261,9 +2268,17 @@ int input_test(int getchar)
 							input[n].lightgun = 1;
 						}
 
-						if (input[n].vid == 0x054c && (input[n].pid == 0x05c4 || input[n].pid == 0x09cc) && strcasestr(input[n].name, "Touchpad"))
+						if (input[n].vid == 0x054c)
 						{
-							input[n].quirk = QUIRK_DS4TOUCH;
+							if (input[n].pid == 0x0268)  input[n].quirk = QUIRK_DS3;
+							else if (input[n].pid == 0x05c4 || input[n].pid == 0x09cc)
+							{
+								input[n].quirk = QUIRK_DS4;
+								if (strcasestr(input[n].name, "Touchpad"))
+								{
+									input[n].quirk = QUIRK_DS4TOUCH;
+								}
+							}
 						}
 
 						n++;
@@ -2333,16 +2348,9 @@ int input_test(int getchar)
 							int dev = i;
 							if (input[dev].bind >= 0) dev = input[dev].bind;
 
-							ds_ver = 0;
 							int noabs = 0;
 
-							if (input[dev].vid == 0x054c)
-							{
-								if (input[dev].pid == 0x0268)  ds_ver = 3;
-								if (input[dev].pid == 0x05c4 || input[dev].pid == 0x09cc) ds_ver = 4;
-							}
-
-							if (ds_ver == 4 && ev.type == EV_KEY)
+							if (input[i].quirk == QUIRK_DS4TOUCH && ev.type == EV_KEY)
 							{
 								if (ev.code == BTN_TOOL_FINGER || ev.code == BTN_TOUCH || ev.code == BTN_TOOL_DOUBLETAP) continue;
 							}
@@ -2354,34 +2362,36 @@ int input_test(int getchar)
 								{
 									input[dev].lightgun_req = (ev.value >= 0);
 								}
-								if (ds_ver && ev.code > 40) continue;
+
+								if ((input[i].quirk == QUIRK_DS4TOUCH || input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code > 40)
+								{
+									continue;
+								}
 
 								if (ioctl(pool[i].fd, EVIOCGABS(ev.code), &absinfo) < 0) memset(&absinfo, 0, sizeof(absinfo));
 								else
 								{
 									//DS4 specific: touchpad as lightgun
-									if (ds_ver == 4 && ev.code <= 1)
+									if (input[i].quirk == QUIRK_DS4TOUCH && ev.code <= 1)
 									{
-										if (input[i].quirk == QUIRK_DS4TOUCH)
-										{
-											if (!input[dev].lightgun || user_io_osd_is_visible()) continue;
+										if (!input[dev].lightgun || user_io_osd_is_visible()) continue;
 
-											if (ev.code == 1)
-											{
-												absinfo.minimum = 300;
-												absinfo.maximum = 850;
-											}
-											else if (ev.code == 0)
-											{
-												absinfo.minimum = 200;
-												absinfo.maximum = 1720;
-											}
-											else continue;
-										}
-										else
+										if (ev.code == 1)
 										{
-											if (input[dev].lightgun) noabs = 1;
+											absinfo.minimum = 300;
+											absinfo.maximum = 850;
 										}
+										else if (ev.code == 0)
+										{
+											absinfo.minimum = 200;
+											absinfo.maximum = 1720;
+										}
+										else continue;
+									}
+
+									if (input[i].quirk == QUIRK_DS4 && ev.code <= 1)
+									{
+										if (input[dev].lightgun) noabs = 1;
 									}
 								}
 
@@ -2457,7 +2467,10 @@ int input_test(int getchar)
 								//analog joystick
 								case EV_ABS:
 									//reduce flood from DUALSHOCK 3/4
-									if (ds_ver && ev.code <= 5 && ev.value > 118 && ev.value < 138) break;
+									if ((input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code <= 5 && ev.value > 118 && ev.value < 138)
+									{
+										break;
+									}
 
 									//aliexpress USB encoder floods messages
 									if (input[dev].vid == 0x0079 && input[dev].pid == 0x0006)
