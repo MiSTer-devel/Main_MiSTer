@@ -532,7 +532,7 @@ static int toggle_wminput()
 	}
 	else
 	{
-		system("wminput --daemon --config /media/fat/linux/wiimote.cfg &");
+		system("taskset 1 wminput --daemon --config /media/fat/linux/wiimote.cfg &");
 		ret = 1;
 	}
 
