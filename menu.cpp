@@ -3612,6 +3612,11 @@ void HandleUI(void)
 		break;
 
 	case MENU_SCRIPTS_PRE:
+		if (cfg.script_hide_warn) {
+			SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
+			break;
+		}
+
 		OsdSetTitle("Warning!!!", 0);
 		helptext = 0;
 		menumask = 3;
