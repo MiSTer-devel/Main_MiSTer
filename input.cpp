@@ -1662,6 +1662,18 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								{
 									input[dev].map[(mapping_button == 16) ? 16 + mapping_type : mapping_button] = ev->code;
 									key_mapped = ev->code;
+
+									//check if analog stick has been used for mouse
+									if (mapping_button == 9 || mapping_button == 11)
+									{
+										if (input[dev].map[mapping_button] >= KEY_EMU &&
+											input[dev].map[mapping_button - 1] >= KEY_EMU &&
+											(input[dev].map[mapping_button - 1] - input[dev].map[mapping_button] == 1) && // same axis
+											absinfo)
+										{
+											input[dev].map[AXIS_MX + (mapping_button - 9)/2] = ((input[dev].map[mapping_button] - KEY_EMU)/2) | 0x20000;
+										}
+									}
 								}
 							}
 						}
@@ -1891,6 +1903,20 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							joy_digital(0, 0, 0, ev->value, BTN_OSD);
 							return;
+						}
+
+						if (input[dev].mmap[AXIS_X])
+						{
+							uint16_t key = KEY_EMU + ((uint16_t)input[dev].mmap[AXIS_X]*2);
+							if (ev->code == (key + 1)) joy_digital(0, 1 << 0, 0, ev->value, 0);
+							if (ev->code == key) joy_digital(0, 1 << 1, 0, ev->value, 1);
+						}
+
+						if (input[dev].mmap[AXIS_Y])
+						{
+							uint16_t key = KEY_EMU + ((uint16_t)input[dev].mmap[AXIS_Y]*2);
+							if (ev->code == (key + 1)) joy_digital(0, 1 << 2, 0, ev->value, 2);
+							if (ev->code == key) joy_digital(0, 1 << 3, 0, ev->value, 3);
 						}
 					}
 				}
@@ -2504,6 +2530,7 @@ int input_test(int getchar)
 							//sumulate digital directions from analog
 							if (ev.type == EV_ABS && !(mapping && mapping_type<=1 && mapping_button<-4) && (user_io_osd_is_visible() || !(ev.code<=1 && input[dev].lightgun)))
 							{
+								input_absinfo *pai = 0;
 								uint8_t axis_edge = 0;
 								if ((absinfo.maximum == 1 && absinfo.minimum == -1) || (absinfo.maximum == 2 && absinfo.minimum == 0))
 								{
@@ -2512,6 +2539,7 @@ int input_test(int getchar)
 								}
 								else
 								{
+									pai = &absinfo;
 									int range = absinfo.maximum - absinfo.minimum + 1;
 									int center = absinfo.minimum + (range / 2);
 									int treshold = range / 4;
@@ -2535,14 +2563,14 @@ int input_test(int getchar)
 									{
 										ev.value = 0;
 										ev.code = ecode + last_state;
-										input_cb(&ev, 0, i);
+										input_cb(&ev, pai, i);
 									}
 
 									if (axis_edge)
 									{
 										ev.value = 1;
 										ev.code = ecode + axis_edge;
-										input_cb(&ev, 0, i);
+										input_cb(&ev, pai, i);
 									}
 								}
 
@@ -2551,7 +2579,7 @@ int input_test(int getchar)
 								{
 									ev.type = EV_KEY;
 									ev.code = KEY_EMU + (ev.code << 1);
-									input_cb(&ev, &absinfo, i);
+									input_cb(&ev, pai, i);
 								}
 							}
 						}

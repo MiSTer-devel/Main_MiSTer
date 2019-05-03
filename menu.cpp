@@ -1850,7 +1850,7 @@ void HandleUI(void)
 				p = joy_bnames[get_map_button() - 4];
 				if (is_menu_core())
 				{
-					if (get_map_type()) joy_bcount = 17;
+					if (get_map_type()) joy_bcount = 15;
 					if (get_map_button() == 16) p = joy_button_map[8 + get_map_type()];
 				}
 			}
@@ -3568,15 +3568,15 @@ void HandleUI(void)
 				strcpy(joy_bnames[1], "Btn 2 (ESC/Back)");
 				strcpy(joy_bnames[2], "Btn 3 (Backspace)");
 				strcpy(joy_bnames[3], "Btn 4");
-				strcpy(joy_bnames[4], "RIGHT (Alt/Mouse)");
-				strcpy(joy_bnames[5], "LEFT (Alt/Mouse)");
-				strcpy(joy_bnames[6], "DOWN (Alt/Mouse)");
-				strcpy(joy_bnames[7], "UP (Alt/Mouse)");
+				strcpy(joy_bnames[4], "Mouse Move RIGHT");
+				strcpy(joy_bnames[5], "Mouse Move LEFT");
+				strcpy(joy_bnames[6], "Mouse Move DOWN");
+				strcpy(joy_bnames[7], "Mouse Move UP");
 				strcpy(joy_bnames[8], "Mouse Left Btn");
 				strcpy(joy_bnames[9], "Mouse Right Btn");
 				strcpy(joy_bnames[10], "Mouse Middle Btn");
 				strcpy(joy_bnames[11], "Mouse Emu/Sniper");
-				start_map_setting(21);
+				start_map_setting(19);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;
