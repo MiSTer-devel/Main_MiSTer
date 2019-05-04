@@ -97,6 +97,8 @@ enum MENU
 	MENU_JOYDIGMAP,
 	MENU_JOYDIGMAP1,
 	MENU_JOYDIGMAP2,
+	MENU_JOYDIGMAP3,
+	MENU_JOYDIGMAP4,
 	MENU_JOYKBDMAP,
 	MENU_JOYKBDMAP1,
 	MENU_KBDMAP,
@@ -726,6 +728,8 @@ const char* get_rbf_name_bootcore(char *str)
 	}
 	return p + 1;
 }
+
+static int joymap_first = 0;
 
 void HandleUI(void)
 {
@@ -1506,6 +1510,7 @@ void HandleUI(void)
 				start_map_setting(joy_bcount ? joy_bcount+4 : 8);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
+				joymap_first = 1;
 				break;
 
 			case 2:
@@ -1811,7 +1816,7 @@ void HandleUI(void)
 
 	case MENU_JOYDIGMAP:
 		helptext = 0;
-		menumask = 0;
+		menumask = 1;
 		OsdSetTitle("Define buttons", 0);
 		menustate = MENU_JOYDIGMAP1;
 		parentstate = MENU_JOYDIGMAP;
@@ -1819,11 +1824,6 @@ void HandleUI(void)
 		OsdWrite(7, "          Esc \x16 Cancel");
 		OsdWrite(8, "        Enter \x16 Finish");
 		OsdWrite(9, "        Space \x16 Skip");
-		if (!is_menu_core())
-		{
-			OsdWrite(13, "  You may define 2 sets of");
-			OsdWrite(14, " buttons on the same gamepad");
-		}
 		break;
 
 	case MENU_JOYDIGMAP1:
@@ -1833,6 +1833,7 @@ void HandleUI(void)
 				OsdWrite(3);
 				OsdWrite(4, "           Clearing");
 				OsdWrite(5);
+				joymap_first = 1;
 				break;
 			}
 
@@ -1905,7 +1906,13 @@ void HandleUI(void)
 				}
 			}
 
-			if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8))
+			if (!is_menu_core() && (get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8) || (select & get_map_vid() & get_map_pid())) && joymap_first && get_map_type())
+			{
+				finish_map_setting(0);
+				menustate = MENU_JOYDIGMAP3;
+				menusub = 0;
+			}
+			else if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8))
 			{
 				finish_map_setting(menu);
 				if (is_menu_core())
@@ -1927,6 +1934,44 @@ void HandleUI(void)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
 			menusub = 1;
+		}
+		break;
+
+	case MENU_JOYDIGMAP3:
+		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
+		m = 6;
+		menumask = 3;
+		OsdWrite(m++, "    Do you want to setup");
+		OsdWrite(m++, "    alternative buttons?");
+		OsdWrite(m++, "           No", menusub == 0);
+		OsdWrite(m++, "           Yes", menusub == 1);
+		parentstate = menustate;
+		menustate = MENU_JOYDIGMAP4;
+		break;
+
+	case MENU_JOYDIGMAP4:
+		if (menu)
+		{
+			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 1;
+			break;
+		}
+		else if (select)
+		{
+			switch (menusub)
+			{
+			case 0:
+				menustate = MENU_8BIT_SYSTEM1;
+				menusub = 1;
+				break;
+
+			case 1:
+				start_map_setting(joy_bcount ? joy_bcount + 4 : 8, 1);
+				menustate = MENU_JOYDIGMAP;
+				menusub = 0;
+				joymap_first = 0;
+				break;
+			}
 		}
 		break;
 
@@ -3885,6 +3930,7 @@ void open_joystick_setup()
 	OsdEnable(DISABLE_KEYBOARD);
 	start_map_setting(joy_bcount ? joy_bcount + 4 : 8);
 	menustate = MENU_JOYDIGMAP;
+	joymap_first = 1;
 }
 
 void ScrollLongName(void)

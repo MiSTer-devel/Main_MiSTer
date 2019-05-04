@@ -1154,26 +1154,34 @@ int toggle_kbdled(int mask)
 
 static int mapping = 0;
 static int mapping_button;
-static int mapping_dev;
+static int mapping_dev = -1;
 static int mapping_type;
 static int mapping_count;
 static int mapping_clear;
+static int mapping_set;
 
 static uint32_t tmp_axis[4];
 static int tmp_axis_n = 0;
 
-void start_map_setting(int cnt)
+void start_map_setting(int cnt, int set)
 {
 	mapping_button = 0;
 	mapping = 1;
-	mapping_dev = -1;
-	mapping_type = (cnt<0) ? 3 : cnt ? 1 : 2;
+	mapping_set = set;
+	if (!mapping_set)
+	{
+		mapping_dev = -1;
+		mapping_type = (cnt < 0) ? 3 : cnt ? 1 : 2;
+	}
 	mapping_count = cnt;
 	mapping_clear = 0;
 	tmp_axis_n = 0;
 
 	if (mapping_type <= 1 && is_menu_core()) mapping_button = -6;
 	memset(tmp_axis, 0, sizeof(tmp_axis));
+
+	//un-stick the enter key
+	user_io_kbd(KEY_ENTER, 0);
 }
 
 int get_map_button()
@@ -1223,9 +1231,6 @@ void finish_map_setting(int dismiss)
 	else
 	{
 		for (int i = 0; i < NUMDEV; i++) input[i].has_map = 0;
-
-		if (mapping_button < 0) mapping_button = 0;
-		if (!is_menu_core()) for (uint i = mapping_button; i < BTN_NUM; i++) input[mapping_dev].map[i] = 0;
 
 		if (!dismiss) FileSaveConfig(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 		if (is_menu_core()) input[mapping_dev].has_mmap = 0;
@@ -1564,12 +1569,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			else
 			{
-				//copy alternative directional buttons, remove system buttons
-				for (uint i = 0; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
+				for (uint i = 8; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
 				{
-					if(i < 4) input[dev].map[i] = (input[dev].map[i] << 16) | (input[dev].map[i + 8] & 0xFFFF);
-					else if(i < 8) input[dev].map[i] = input[dev].map[i] << 16;
-					else input[dev].map[i] = 0;
+					input[dev].map[i] = 0;
 				}
 			}
 			input[dev].has_map++;
@@ -1691,19 +1693,21 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								{
 									for (uint i = 0; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
 									{
-										input[dev].map[i] = mapping_type ? input[dev].map[i] << 16 : 0;
+										input[dev].map[i] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
 									}
 								}
 
 								int found = 0;
 								for (int i = 0; i < mapping_button; i++)
 								{
-									if ((input[dev].map[i] & 0xFFFF) == ev->code) found = 1;
+									if (mapping_set && (input[dev].map[i] >> 16) == ev->code) found = 1;
+									if (!mapping_set && (input[dev].map[i] & 0xFFFF) == ev->code) found = 1;
 								}
 
 								if (!found)
 								{
-									input[dev].map[mapping_button] = input[dev].map[mapping_button] | (ev->code & 0xFFFF);
+									if (mapping_set) input[dev].map[mapping_button] = (input[dev].map[mapping_button] & 0xFFFF) | (ev->code << 16);
+									else input[dev].map[mapping_button] = (input[dev].map[mapping_button] & 0xFFFF0000) | ev->code;
 									key_mapped = ev->code;
 								}
 							}
@@ -1830,7 +1834,15 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			if (ev->value == 1)
 			{
-				if (idx && mapping_dev >= 0) input[mapping_dev].map[idx] = is_menu_core() ? 0 : (input[mapping_dev].map[idx] & 0xFFFF0000);
+				if (mapping_dev >= 0)
+				{
+					if (idx) input[mapping_dev].map[idx] = 0;
+					else if (mapping_button > 0)
+					{
+						if (is_menu_core()) input[mapping_dev].map[mapping_button] = 0;
+						else input[mapping_dev].map[mapping_button] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
+					}
+				}
 				mapping_button++;
 				if (mapping_button < 0 && (mapping_button&1)) mapping_button++;
 			}
