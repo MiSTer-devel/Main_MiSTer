@@ -970,10 +970,15 @@ uint32_t get_key_mod()
 	return modifier & MODMASK;
 }
 
-#define QUIRK_DS4TOUCH 1
-#define QUIRK_WIIMOTE  2
-#define QUIRK_DS3      3
-#define QUIRK_DS4      4
+enum QUIRK
+{
+	QUIRK_NONE = 0,
+	QUIRK_CWIID,
+	QUIRK_WIIMOTE,
+	QUIRK_DS3,
+	QUIRK_DS4,
+	QUIRK_DS4TOUCH,
+};
 
 typedef struct
 {
@@ -2131,7 +2136,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				int hrange = (absinfo->maximum - absinfo->minimum) / 2;
 				int dead = hrange/63;
 
-				if (input[sub_dev].quirk == QUIRK_WIIMOTE)
+				if (input[sub_dev].quirk == QUIRK_CWIID)
 				{
 					if(ev->code == 3 || ev->code == 4) dead = 10;
 				}
@@ -2291,6 +2296,8 @@ int input_test(int getchar)
 					memset(&input[n], 0, sizeof(input[n]));
 					sprintf(input[n].devname, "/dev/input/%s", de->d_name);
 					int fd = open(input[n].devname, O_RDWR);
+					printf("open(%s): %d\n", input[n].devname, fd);
+
 					if (fd > 0)
 					{
 						pool[n].fd = fd;
@@ -2302,7 +2309,7 @@ int input_test(int getchar)
 						input[n].bind = -1;
 						if (strcasestr(input[n].name, "Wiimote"))
 						{
-							input[n].quirk = QUIRK_WIIMOTE;
+							input[n].quirk = QUIRK_CWIID;
 							input[n].lightgun = 1;
 						}
 
@@ -2319,6 +2326,26 @@ int input_test(int getchar)
 							}
 						}
 
+						if (input[n].vid == 0x057e && (input[n].pid == 0x0306 || input[n].pid == 0x0330))
+						{
+							if (strcasestr(input[n].name, "Accelerometer"))
+							{
+								// don't use Accelerometer
+								close(pool[n].fd);
+								continue;
+							}
+							else if (strcasestr(input[n].name, "Motion Plus"))
+							{
+								// don't use Accelerometer
+								close(pool[n].fd);
+								continue;
+							}
+							else
+							{
+								input[n].quirk = QUIRK_WIIMOTE;
+							}
+						}
+
 						n++;
 						if (n >= NUMDEV) break;
 					}
@@ -2328,11 +2355,12 @@ int input_test(int getchar)
 
 			for (int i = 0; i < n; i++)
 			{
+				input[i].bind = i;
 				if (input[i].uniq[0])
 				{
 					for (int j = 0; j < i; j++)
 					{
-						if (input[0].bind <0 && !memcmp(input[i].uniq, input[j].uniq, sizeof(input[0].uniq)))
+						if (!memcmp(input[i].uniq, input[j].uniq, sizeof(input[0].uniq)))
 						{
 							input[i].bind = j;
 							break;
@@ -2395,6 +2423,12 @@ int input_test(int getchar)
 
 							if (ev.type == EV_ABS)
 							{
+								if (input[i].quirk == QUIRK_WIIMOTE)
+								{
+									//nunchuck accel events
+									if(ev.code >= 3 && ev.code <= 5) continue;
+								}
+
 								//Dualshock: drop accelerator and raw touchpad events
 								if (input[i].quirk == QUIRK_DS4TOUCH && ev.code == 57)
 								{
@@ -2431,9 +2465,36 @@ int input_test(int getchar)
 									{
 										if (input[dev].lightgun) noabs = 1;
 									}
+
+									if (input[i].quirk == QUIRK_WIIMOTE)
+									{
+										input[dev].lightgun = 0;
+										if (absinfo.maximum == 1023 || absinfo.maximum == 767)
+										{
+											if (user_io_osd_is_visible()) continue;
+											if (ev.code == 16)
+											{
+												ev.value = absinfo.maximum - ev.value;
+												ev.code = 0;
+												input[dev].lightgun = 1;
+											}
+											else if (ev.code == 17)
+											{
+												ev.code = 1;
+												input[dev].lightgun = 1;
+											}
+											// other 3 IR tracking aren't used
+											else continue;
+										}
+										else if (absinfo.maximum == 62)
+										{
+											//LT/RT analog
+											continue;
+										}
+									}
 								}
 
-								if (input[i].quirk == QUIRK_WIIMOTE)
+								if (input[i].quirk == QUIRK_CWIID)
 								{
 									if (ev.code == 3 || ev.code == 4)
 									{
@@ -2491,11 +2552,11 @@ int input_test(int getchar)
 								{
 								//keyboard, buttons
 								case EV_KEY:
-									printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid);
+									printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
 									break;
 
 								case EV_REL:
-									printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x\n", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid);
+									printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
 									break;
 
 								case EV_SYN:
@@ -2516,7 +2577,7 @@ int input_test(int getchar)
 										if (ev.code == 2) break;
 									}
 
-									printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x.", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid);
+									printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d.", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
 									printf(" ABS_INFO: min = %d max = %d", absinfo.minimum, absinfo.maximum);
 									if (absinfo.fuzz) printf(" fuzz = %d", absinfo.fuzz);
 									if (absinfo.resolution) printf(" res = %d", absinfo.resolution);
@@ -2524,11 +2585,11 @@ int input_test(int getchar)
 									break;
 
 								default:
-									printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x), jnum=%d, ID:%04x:%04x\n", ev.type, ev.code, ev.code, ev.value, ev.value, input[dev].num, input[dev].vid, input[dev].pid);
+									printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x), jnum=%d, ID:%04x:%04x:%02d\n", ev.type, ev.code, ev.code, ev.value, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
 								}
 							}
 
-							if (input[i].quirk == QUIRK_WIIMOTE && ev.type == EV_ABS)
+							if (input[i].quirk == QUIRK_CWIID && ev.type == EV_ABS)
 							{
 								if (ev.code <= 1 && user_io_osd_is_visible())
 								{
