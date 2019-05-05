@@ -2346,6 +2346,12 @@ int input_test(int getchar)
 							}
 						}
 
+						// Raphnet devices: clear uniq to prevent merging the ports
+						if (input[n].vid == 0x289b)
+						{
+							memset(input[n].uniq, 0, sizeof(input[n].uniq));
+						}
+
 						n++;
 						if (n >= NUMDEV) break;
 					}
@@ -2353,6 +2359,7 @@ int input_test(int getchar)
 			}
 			closedir(d);
 
+			// merge multifunctional devices using uniq field
 			for (int i = 0; i < n; i++)
 			{
 				input[i].bind = i;
