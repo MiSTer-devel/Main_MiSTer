@@ -314,7 +314,7 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 
 		// we look inside codes/NES or codes/Gameboy using the HomeDir
 		sprintf(codesdir,"codes/%s",HomeDir);
-		//printf("CODES: before: SelectedPath [%s]\n",SelectedPath);
+		printf("CODES: before: SelectedPath [%s]\n",SelectedPath);
 		// if SelectedPath isn't a substring of codes/{HomeDir} then we
 		// reset it to codes/{HomeDir}
 		if (strncasecmp(codesdir, SelectedPath, strlen(codesdir)))
@@ -324,15 +324,23 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 			strcat(codesfile,SelectedPath);
 			// assume 3 digit extension
 			//We can try to use the last name to open a zip
-			codesfile[strlen(codesfile)-3]='z';
-			codesfile[strlen(codesfile)-2]='i';
-			codesfile[strlen(codesfile)-1]='p';
+			char *pos=strrchr(codesfile,'.');
+			if (pos)
+			{
+			  printf("CODES: codesfile[%s]\n",codesfile);
+			  pos++;
+			  *pos++='z';
+			  *pos++='i';
+			  *pos++='p';
+			  *pos++=0;
+			  printf("CODES: codesfile[%s]\n",codesfile);
+			}
 		        if (getFileType(codesfile)!=0)
 				strcpy(SelectedPath,codesfile);
 			else
 				strcpy(SelectedPath,codesdir);
 		}
-		//printf("CODES: SelectedPath [%s]\n",SelectedPath);
+		printf("CODES: SelectedPath [%s]\n",SelectedPath);
 	}
 	else
 	{
