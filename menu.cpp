@@ -335,10 +335,23 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 			  *pos++=0;
 			  printf("CODES: codesfile[%s]\n",codesfile);
 			}
+			// if the file exists, load it
 		        if (getFileType(codesfile)!=0)
 				strcpy(SelectedPath,codesfile);
 			else
+			{
+			  // file doesn't exist, try pulling path apart:
+			  char codesfileroot[4096];
+			  strcpy(codesfileroot,codesdir);
+			  char *pos=strrchr(codesfile,'/');
+			  if (pos)  strcat(codesfileroot,pos);
+			  printf("CODES: codesfileroot[%s]\n",codesfileroot);
+		          if (getFileType(codesfileroot)!=0)
+				strcpy(SelectedPath,codesfileroot);
+			  else
+			 	// just load directory
 				strcpy(SelectedPath,codesdir);
+			}
 		}
 		printf("CODES: SelectedPath [%s]\n",SelectedPath);
 	}
