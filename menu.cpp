@@ -307,6 +307,33 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 	{
 		pFileExt = "TXT";
 	}
+	else if (Options & SCANO_CODES)
+	{
+		// if the FC flag is set, it sends SCANO_CODES
+		char codesdir[4096];
+
+		// we look inside codes/NES or codes/Gameboy using the HomeDir
+		sprintf(codesdir,"codes/%s",HomeDir);
+		//printf("CODES: before: SelectedPath [%s]\n",SelectedPath);
+		// if SelectedPath isn't a substring of codes/{HomeDir} then we
+		// reset it to codes/{HomeDir}
+		if (strncasecmp(codesdir, SelectedPath, strlen(codesdir)))
+		{
+			char codesfile[4096];
+			strcpy(codesfile,"codes/");
+			strcat(codesfile,SelectedPath);
+			// assume 3 digit extension
+			//We can try to use the last name to open a zip
+			codesfile[strlen(codesfile)-3]='z';
+			codesfile[strlen(codesfile)-2]='i';
+			codesfile[strlen(codesfile)-1]='p';
+		        if (getFileType(codesfile)!=0)
+				strcpy(SelectedPath,codesfile);
+			else
+				strcpy(SelectedPath,codesdir);
+		}
+		//printf("CODES: SelectedPath [%s]\n",SelectedPath);
+	}
 	else
 	{
 		if (strncasecmp(HomeDir, SelectedPath, strlen(HomeDir))) strcpy(SelectedPath, HomeDir);
@@ -1267,7 +1294,10 @@ void HandleUI(void)
 					opensave = (p[1] == 'S');
 					substrcpy(ext, p, 1);
 					while (strlen(ext) % 3) strcat(ext, " ");
-					SelectFile(ext, SCANO_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
+					if (p[1]=='C')
+						SelectFile(ext, SCANO_DIR|SCANO_CODES, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
+					else
+						SelectFile(ext, SCANO_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
 				}
 				else if (p[0] == 'S')
 				{
