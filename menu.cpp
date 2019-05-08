@@ -2936,7 +2936,8 @@ void HandleUI(void)
 		/******************************************************************/
 	case MENU_CHEATS1:
 		helptext = helptexts[HELPTEXT_NONE];
-		OsdSetTitle("Cheats", 0);
+		sprintf(s, "Cheats (%d)", cheats_loaded());
+		OsdSetTitle(s);
 		cheats_print();
 		menustate = MENU_CHEATS2;
 		parentstate = menustate;

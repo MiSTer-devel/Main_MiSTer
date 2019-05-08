@@ -27,6 +27,7 @@ static CheatVector cheats;
 
 static int iSelectedEntry = 0;
 static int iFirstEntry = 0;
+static int loaded = 0;
 
 struct CheatComp
 {
@@ -51,6 +52,7 @@ static char cheat_zip[1024] = {};
 void cheats_init(char *rom_path)
 {
 	cheats.clear();
+	loaded = 0;
 	cheat_zip[0] = 0;
 
 	if (!strcasestr(rom_path, ".zip"))
@@ -293,7 +295,8 @@ static void cheats_send()
 		if (pos >= CHEAT_SIZE) break;
 	}
 
-	printf("Cheat codes: %d\n", pos/16);
+	loaded = pos / 16;
+	printf("Cheat codes: %d\n", loaded);
 
 	user_io_set_index(255);
 
@@ -319,4 +322,9 @@ void cheats_toggle()
 {
 	cheats[iSelectedEntry].enabled = !cheats[iSelectedEntry].enabled;
 	cheats_send();
+}
+
+int cheats_loaded()
+{
+	return loaded;
 }
