@@ -10,6 +10,8 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 
+#include "lib/lodepng/lodepng.h"
+
 #include "hardware.h"
 #include "osd.h"
 #include "user_io.h"
@@ -26,6 +28,7 @@
 #include "tzx2wav.h"
 #include "bootcore.h"
 #include "charrom.h"
+#include "scalar.h"
 
 #include "support.h"
 
@@ -2479,6 +2482,40 @@ void user_io_kbd(uint16_t key, int press)
 {
 	if(is_menu_core()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 
+	// ALT - Print Screen - screen shot
+	if (key==0x63 && (get_key_mod() & (LALT | RALT | RGUI | LGUI)))
+ 	{
+ 		if (press==1)
+ 		{
+ 			printf("print key pressed - do screen shot\n");
+			mister_scalar *ms=mister_scalar_init();
+			if (ms==NULL)
+			{
+				printf("problem with scalar, maybe not a new enough version\n");
+ 				Info("Scalar not compatible");
+			}
+			unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height*3,1);	
+			mister_scalar_read(ms,outputbuf);
+			char path[1024];
+			char filename[1024];
+			//user_io_get_core_name()
+			snprintf(path,1024,"screenshot/%s",HomeDir);
+			FileGenerateScreenshotName(path,"shot",filename,1024);
+			unsigned error = lodepng_encode24_file(getFullPath(filename), outputbuf, ms->width, ms->height);
+			if(error) {
+			       	printf("error %u: %s\n", error, lodepng_error_text(error));
+			       	printf("%s", filename);
+				Info("error in saving png");
+			}
+			free(outputbuf);
+			mister_scalar_free(ms); 
+			char msg[1024];
+ 			snprintf(msg,1024,"Saving screen shot\n %s\n",filename+strlen("screenshot/"));
+ 			Info(msg);
+ 		}
+
+ 	}
+	else 
 	if (key == KEY_MUTE)
 	{
 		if (press == 1 && hasAPI1_5()) set_volume(0);

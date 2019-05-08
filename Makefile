@@ -29,12 +29,13 @@ ST_SRC	= $(wildcard ./support/st/*.cpp)
 X86_SRC	= $(wildcard ./support/x86/*.cpp)
 SNES_SRC	= $(wildcard ./support/snes/*.cpp)
 LIBCO_SRC	= lib/libco/arm.c
+LODEPNG_SRC	= lib/lodepng/lodepng.cpp
 MINIZ_SRC	= $(wildcard ./lib/miniz/*.c)
 
 VPATH	= ./:./support/minimig:./support/sharpmz:./support/archie:./support/st:./support/x86:./support/snes
 
-OBJ	= $(SRC:.c=.c.o) $(SRC2:.cpp=.cpp.o) $(MINIMIG_SRC:.cpp=.cpp.o) $(SHARPMZ_SRC:.cpp=.cpp.o) $(ARCHIE_SRC:.cpp=.cpp.o) $(ST_SRC:.cpp=.cpp.o) $(X86_SRC:.cpp=.cpp.o) $(SNES_SRC:.cpp=.cpp.o) $(LIBCO_SRC:.c=.c.o) $(MINIZ_SRC:.c=.c.o)
-DEP	= $(SRC:.c=.cpp.d) $(SRC2:.cpp=.cpp.d) $(MINIMIG_SRC:.cpp=.cpp.d) $(SHARPMZ_SRC:.cpp=.cpp.d) $(ARCHIE_SRC:.cpp=.cpp.d) $(ST_SRC:.cpp=.cpp.d) $(X86_SRC:.cpp=.cpp.d) $(SNES_SRC:.cpp=.cpp.d) $(LIBCO_SRC:.c=.c.d) $(MINIZ_SRC:.c=.c.d)
+OBJ	= $(SRC:.c=.c.o) $(SRC2:.cpp=.cpp.o) $(MINIMIG_SRC:.cpp=.cpp.o) $(SHARPMZ_SRC:.cpp=.cpp.o) $(ARCHIE_SRC:.cpp=.cpp.o) $(ST_SRC:.cpp=.cpp.o) $(X86_SRC:.cpp=.cpp.o) $(SNES_SRC:.cpp=.cpp.o) $(LIBCO_SRC:.c=.c.o) $(MINIZ_SRC:.c=.c.o) $(LODEPNG_SRC:.cpp=.cpp.o)
+DEP	= $(SRC:.c=.cpp.d) $(SRC2:.cpp=.cpp.d) $(MINIMIG_SRC:.cpp=.cpp.d) $(SHARPMZ_SRC:.cpp=.cpp.d) $(ARCHIE_SRC:.cpp=.cpp.d) $(ST_SRC:.cpp=.cpp.d) $(X86_SRC:.cpp=.cpp.d) $(SNES_SRC:.cpp=.cpp.d) $(LIBCO_SRC:.c=.c.d) $(MINIZ_SRC:.c=.c.d) $(LODEPNG_SRC:.cpp=.cpp.d)
 
 DFLAGS	= $(INCLUDE) -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
 CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -c -O3
