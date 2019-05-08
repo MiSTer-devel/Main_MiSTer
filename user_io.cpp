@@ -2492,7 +2492,7 @@ void user_io_kbd(uint16_t key, int press)
 			if (ms==NULL)
 			{
 				printf("problem with scaler, maybe not a new enough version\n");
- 				Info("Scalar not compatible");
+ 				Info("Scaler not compatible");
 			}
 			unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height*3,1);	
 			mister_scaler_read(ms,outputbuf);
