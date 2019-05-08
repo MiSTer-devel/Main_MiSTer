@@ -19,13 +19,13 @@ with help from the MiSTer contributors including Grabulosaure
 
 
 
-#include "scalar.h"
+#include "scaler.h"
 
 
 
-mister_scalar * mister_scalar_init()
+mister_scaler * mister_scaler_init()
 {
-    mister_scalar *ms =(mister_scalar *) calloc(sizeof(mister_scalar),1);
+    mister_scaler *ms =(mister_scaler *) calloc(sizeof(mister_scaler),1);
     int	 pagesize = sysconf(_SC_PAGE_SIZE);
     if (pagesize==0) pagesize=4096;
     int offset = MISTER_SCALAR_BASEADDR;
@@ -40,7 +40,7 @@ mister_scalar * mister_scalar_init()
     if (ms->map==MAP_FAILED)
     {
         printf("problem MAP_FAILED\n");
-        mister_scalar_free(ms);
+        mister_scaler_free(ms);
         return NULL;
     }
     buffer = (unsigned char *)(ms->map+ms->map_off);
@@ -49,7 +49,7 @@ mister_scalar * mister_scalar_init()
             buffer[8],buffer[9],buffer[10],buffer[11],buffer[12],buffer[13],buffer[14],buffer[15]);
     if (buffer[0]!=1 || buffer[1]!=1) {
         printf("problem\n");
-        mister_scalar_free(ms);
+        mister_scaler_free(ms);
         return NULL;
     }
     
@@ -68,14 +68,14 @@ mister_scalar * mister_scalar_init()
    return ms; 
 
 }
-void mister_scalar_free(mister_scalar *ms)
+void mister_scaler_free(mister_scaler *ms)
 {
    munmap(ms->map,ms->num_bytes+ms->map_off);
    close(ms->fd);
    free(ms);
 }
 
-int mister_scalar_read_yuv(mister_scalar *ms,int lineY,unsigned char *bufY, int lineU, unsigned char *bufU, int lineV, unsigned char *bufV) {
+int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int lineU, unsigned char *bufU, int lineV, unsigned char *bufV) {
     unsigned char *buffer;
     buffer = (unsigned char *)(ms->map+ms->map_off);
 
@@ -108,7 +108,7 @@ int mister_scalar_read_yuv(mister_scalar *ms,int lineY,unsigned char *bufY, int 
 
 }
 
-int mister_scalar_read(mister_scalar *ms,unsigned char *gbuf)
+int mister_scaler_read(mister_scaler *ms,unsigned char *gbuf)
 {
     unsigned char *buffer;
     buffer = (unsigned char *)(ms->map+ms->map_off);

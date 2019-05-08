@@ -28,7 +28,7 @@
 #include "tzx2wav.h"
 #include "bootcore.h"
 #include "charrom.h"
-#include "scalar.h"
+#include "scaler.h"
 
 #include "support.h"
 
@@ -2488,14 +2488,14 @@ void user_io_kbd(uint16_t key, int press)
  		if (press==1)
  		{
  			printf("print key pressed - do screen shot\n");
-			mister_scalar *ms=mister_scalar_init();
+			mister_scaler *ms=mister_scaler_init();
 			if (ms==NULL)
 			{
-				printf("problem with scalar, maybe not a new enough version\n");
+				printf("problem with scaler, maybe not a new enough version\n");
  				Info("Scalar not compatible");
 			}
 			unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height*3,1);	
-			mister_scalar_read(ms,outputbuf);
+			mister_scaler_read(ms,outputbuf);
 			char path[1024];
 			char filename[1024];
 			//user_io_get_core_name()
@@ -2508,7 +2508,7 @@ void user_io_kbd(uint16_t key, int press)
 				Info("error in saving png");
 			}
 			free(outputbuf);
-			mister_scalar_free(ms); 
+			mister_scaler_free(ms); 
 			char msg[1024];
  			snprintf(msg,1024,"Saving screen shot\n %s\n",filename+strlen("screenshot/"));
  			Info(msg);
