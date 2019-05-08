@@ -133,6 +133,9 @@
     <ClCompile Include="charrom.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="cheats.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -265,6 +268,9 @@
       <Filter>Header Files\miniz</Filter>
     </ClInclude>
     <ClInclude Include="bootcore.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cheats.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

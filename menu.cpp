@@ -48,6 +48,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "input.h"
 #include "battery.h"
 #include "bootcore.h"
+#include "cheats.h"
 
 #include "support.h"
 
@@ -110,6 +111,8 @@ enum MENU
 	MENU_BTPAIR,
 	MENU_WMPAIR,
 	MENU_WMPAIR1,
+	MENU_CHEATS1,
+	MENU_CHEATS2,
 
 	// Mist/atari specific pages
 	MENU_MIST_MAIN1,
@@ -761,6 +764,7 @@ void HandleUI(void)
 	static char drive_num = 0;
 	static char flag;
 	static int cr = 0;
+	static uint32_t cheatsub = 0;
 
 	static char	cp_MenuCancel;
 
@@ -1160,6 +1164,27 @@ void HandleUI(void)
 					selentry++;
 				}
 
+				// check for 'C'heats
+				if (p && (p[0] == 'C'))
+				{
+					substrcpy(s, p, 1);
+					if (strlen(s))
+					{
+						strcpy(s, " ");
+						substrcpy(s + 1, p, 1);
+					}
+					else
+					{
+						strcpy(s, " Cheats");
+					}
+					MenuWrite(entry, s, menusub == selentry, !cheats_available());
+
+					// add bit in menu mask
+					menumask = (menumask << 1) | 1;
+					entry++;
+					selentry++;
+				}
+
 				// check for 'T'oggle and 'R'eset (toggle and then close menu) strings
 				if (p && ((p[0] == 'T') || (p[0] == 'R')))
 				{
@@ -1306,7 +1331,13 @@ void HandleUI(void)
 					entry++;
 				}
 
-				if (p[0] == 'F')
+				if (p[0] == 'C' && cheats_available())
+				{
+					menustate = MENU_CHEATS1;
+					cheatsub = menusub;
+					menusub = 0;
+				}
+				else if (p[0] == 'F')
 				{
 					opensave = (p[1] == 'S');
 					substrcpy(ext, p, 1);
@@ -1363,7 +1394,6 @@ void HandleUI(void)
 						menustate = MENU_8BIT_MAIN1;
 						if (p[0] == 'R') menustate = MENU_NONE1;
 					}
-
 				}
 			}
 		}
@@ -1382,6 +1412,7 @@ void HandleUI(void)
 	case MENU_8BIT_MAIN_FILE_SELECTED:
 		printf("File selected: %s\n", SelectedPath);
 		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1), opensave);
+		cheats_init(SelectedPath);
 		menustate = MENU_NONE1;
 		break;
 
@@ -2901,6 +2932,72 @@ void HandleUI(void)
 		break;
 
 		/******************************************************************/
+		/* cheats menu                                                    */
+		/******************************************************************/
+	case MENU_CHEATS1:
+		helptext = helptexts[HELPTEXT_NONE];
+		OsdSetTitle("Cheats", 0);
+		cheats_print();
+		menustate = MENU_CHEATS2;
+		parentstate = menustate;
+		break;
+
+	case MENU_CHEATS2:
+		menumask = 0;
+
+		if (menu)
+		{
+			menustate = MENU_8BIT_MAIN1;
+			menusub = cheatsub;
+			break;
+		}
+
+		cheats_scroll_name();
+
+		if (c == KEY_HOME)
+		{
+			cheats_scan(SCANF_INIT);
+			menustate = MENU_CHEATS1;
+		}
+
+		if (c == KEY_END)
+		{
+			cheats_scan(SCANF_END);
+			menustate = MENU_CHEATS1;
+		}
+
+		if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
+		{
+			cheats_scan(SCANF_PREV_PAGE);
+			menustate = MENU_CHEATS1;
+		}
+
+		if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
+		{
+			cheats_scan(SCANF_NEXT_PAGE);
+			menustate = MENU_CHEATS1;
+		}
+
+		if (down) // scroll down one entry
+		{
+			cheats_scan(SCANF_NEXT);
+			menustate = MENU_CHEATS1;
+		}
+
+		if (up) // scroll up one entry
+		{
+			cheats_scan(SCANF_PREV);
+			menustate = MENU_CHEATS1;
+		}
+
+		if (select)
+		{
+			cheats_toggle();
+			menustate = MENU_CHEATS1;
+		}
+		break;
+
+		/******************************************************************/
 		/* reset menu                                                     */
 		/******************************************************************/
 	case MENU_RESET1:
@@ -3967,7 +4064,7 @@ void ScrollLongName(void)
 	if (flist_SelectedItem()->d_type == DT_DIR)
 		max_len = 25; // number of directory name characters to display
 
-	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->d_name, 2, len, max_len, 1);
+	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->d_name, 0, len, max_len, 1);
 }
 
 void PrintFileName(char *name, int row, int maxinv)
