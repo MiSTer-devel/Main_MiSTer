@@ -2187,7 +2187,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 				else if (ev->code == (input[dev].mmap[AXIS_X] & 0xFFFF) || (ev->code == 0 && input[dev].lightgun))
 				{
-					// skip if first joystick is not defined.
+					// skip if joystick is undefined.
 					if (!input[dev].num) break;
 
 					int offset = 0;
@@ -2198,7 +2198,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 				else if (ev->code == (input[dev].mmap[AXIS_Y] & 0xFFFF) || (ev->code == 1 && input[dev].lightgun))
 				{
-					// skip if first joystick is not defined.
+					// skip if joystick is undefined.
 					if (!input[dev].num) break;
 
 					int offset = 0;
@@ -2211,32 +2211,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			break;
 		}
 	}
-}
-
-static uint16_t read_hex(char *filename)
-{
-	FILE *in;
-	unsigned int value;
-
-	in = fopen(filename, "rb");
-	if (!in) return 0;
-
-	if (fscanf(in, "%x", &value) == 1)
-	{
-		fclose(in);
-		return (uint16_t)value;
-	}
-	fclose(in);
-	return 0;
-}
-
-static void getVidPid(char *evt, uint16_t *vid, uint16_t *pid)
-{
-	char name[256];
-	sprintf(name, "/sys/class/input/%s/device/id/vendor", evt);
-	*vid = read_hex(name);
-	sprintf(name, "/sys/class/input/%s/device/id/product", evt);
-	*pid = read_hex(name);
 }
 
 static struct pollfd pool[NUMDEV + 2];
@@ -2288,6 +2262,7 @@ int input_test(int getchar)
 		DIR *d = opendir("/dev/input");
 		if (d)
 		{
+			struct input_id id;
 			struct dirent *de;
 			while ((de = readdir(d)))
 			{
@@ -2303,11 +2278,16 @@ int input_test(int getchar)
 						pool[n].fd = fd;
 						pool[n].events = POLLIN;
 						input[n].led = has_led(pool[n].fd);
-						getVidPid(de->d_name, &input[n].vid, &input[n].pid);
+
+						memset(&id, 0, sizeof(id));
+						ioctl(pool[n].fd, EVIOCGID, &id);
+						input[n].vid = id.vendor;
+						input[n].pid = id.product;
+
 						ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(input[n].uniq)), input[n].uniq);
 						ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
 						input[n].bind = -1;
-						if (strcasestr(input[n].name, "Wiimote"))
+						if (strcasestr(input[n].name, "Wiimote") && input[n].vid == 1 && input[n].pid == 1)
 						{
 							input[n].quirk = QUIRK_CWIID;
 							input[n].lightgun = 1;
@@ -2324,6 +2304,13 @@ int input_test(int getchar)
 									input[n].quirk = QUIRK_DS4TOUCH;
 								}
 							}
+						}
+
+						if (input[n].vid == 0x0079 && input[n].pid == 0x1802)
+						{
+							strcpy(input[n].uniq, "Mayflash 1802");
+							input[n].lightgun = 1;
+							input[n].num = 2; // force mayflash mode 1/2 as second joystick.
 						}
 
 						if (input[n].vid == 0x057e && (input[n].pid == 0x0306 || input[n].pid == 0x0330))
@@ -2584,10 +2571,10 @@ int input_test(int getchar)
 										if (ev.code == 2) break;
 									}
 
-									printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d.", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
-									printf(" ABS_INFO: min = %d max = %d", absinfo.minimum, absinfo.maximum);
-									if (absinfo.fuzz) printf(" fuzz = %d", absinfo.fuzz);
-									if (absinfo.resolution) printf(" res = %d", absinfo.resolution);
+									printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d,", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
+									printf(" abs_min = %d, abs_max = %d", absinfo.minimum, absinfo.maximum);
+									if (absinfo.fuzz) printf(", fuzz = %d", absinfo.fuzz);
+									if (absinfo.resolution) printf(", res = %d", absinfo.resolution);
 									printf("\n");
 									break;
 
@@ -2608,7 +2595,7 @@ int input_test(int getchar)
 							if(!noabs) input_cb(&ev, &absinfo, i);
 
 							//sumulate digital directions from analog
-							if (ev.type == EV_ABS && !(mapping && mapping_type<=1 && mapping_button<-4) && (user_io_osd_is_visible() || !(ev.code<=1 && input[dev].lightgun)))
+							if (ev.type == EV_ABS && !(mapping && mapping_type<=1 && mapping_button<-4) && !(ev.code<=1 && input[dev].lightgun))
 							{
 								input_absinfo *pai = 0;
 								uint8_t axis_edge = 0;
