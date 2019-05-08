@@ -2494,6 +2494,8 @@ void user_io_kbd(uint16_t key, int press)
 				printf("problem with scaler, maybe not a new enough version\n");
  				Info("Scaler not compatible");
 			}
+			else
+			{
 			unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height*3,1);	
 			mister_scaler_read(ms,outputbuf);
 			char path[1024];
@@ -2512,6 +2514,7 @@ void user_io_kbd(uint16_t key, int press)
 			char msg[1024];
  			snprintf(msg,1024,"Saving screen shot\n %s\n",filename+strlen("screenshot/"));
  			Info(msg);
+			}
  		}
 
  	}
