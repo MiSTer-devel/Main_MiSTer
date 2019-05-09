@@ -33,8 +33,8 @@ typedef std::vector<dirent> DirentVector;
 static const size_t YieldIterations = 128;
 
 DirentVector DirItem;
-int iSelectedEntry = 0;       // selected entry index
-int iFirstEntry = 0;
+static int iSelectedEntry = 0;       // selected entry index
+static int iFirstEntry = 0;
 
 static char full_path[2100];
 

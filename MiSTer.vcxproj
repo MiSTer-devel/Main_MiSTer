@@ -53,6 +53,7 @@
     <ClCompile Include="brightness.cpp" />
     <ClCompile Include="cfg.cpp" />
     <ClCompile Include="charrom.cpp" />
+    <ClCompile Include="cheats.cpp" />
     <ClCompile Include="DiskImage.cpp" />
     <ClCompile Include="file_io.cpp" />
     <ClCompile Include="fpga_io.cpp" />
@@ -90,6 +91,7 @@
     <ClInclude Include="brightness.h" />
     <ClInclude Include="cfg.h" />
     <ClInclude Include="charrom.h" />
+    <ClInclude Include="cheats.h" />
     <ClInclude Include="debug.h" />
     <ClInclude Include="DiskImage.h" />
     <ClInclude Include="file_io.h" />

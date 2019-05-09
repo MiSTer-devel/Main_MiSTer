@@ -37,7 +37,7 @@ void input_notify_mode();
 int input_poll(int getchar);
 int is_key_pressed(int key);
 
-void start_map_setting(int cnt);
+void start_map_setting(int cnt, int set = 0);
 int get_map_button();
 int get_map_type();
 int get_map_clear();

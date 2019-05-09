@@ -241,7 +241,7 @@ void user_io_set_scaler_coeff(char *name);
 void user_io_minimig_set_adjust(char n);
 char user_io_minimig_get_adjust();
 
-#define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : user_io_get_core_name())
+#define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : is_menu_core() ? "Scripts" : user_io_get_core_name())
 
 int GetUARTMode();
 int GetMidiLinkMode();

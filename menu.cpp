@@ -48,6 +48,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "input.h"
 #include "battery.h"
 #include "bootcore.h"
+#include "cheats.h"
 
 #include "support.h"
 
@@ -97,13 +98,21 @@ enum MENU
 	MENU_JOYDIGMAP,
 	MENU_JOYDIGMAP1,
 	MENU_JOYDIGMAP2,
+	MENU_JOYDIGMAP3,
+	MENU_JOYDIGMAP4,
 	MENU_JOYKBDMAP,
 	MENU_JOYKBDMAP1,
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
+	MENU_SCRIPTS_PRE,
+	MENU_SCRIPTS_PRE1,
 	MENU_SCRIPTS,
 	MENU_SCRIPTS1,
 	MENU_BTPAIR,
+	MENU_WMPAIR,
+	MENU_WMPAIR1,
+	MENU_CHEATS1,
+	MENU_CHEATS2,
 
 	// Mist/atari specific pages
 	MENU_MIST_MAIN1,
@@ -507,6 +516,35 @@ static int has_bt()
 	return ret;
 }
 
+static int toggle_wminput()
+{
+	if (access("/bin/wminput", F_OK) < 0 || access("/media/fat/linux/wiimote.cfg", F_OK) < 0) return -1;
+
+	FILE *fp;
+	static char out[1035];
+
+	fp = popen("pidof wminput", "r");
+	if (!fp) return -1;
+
+	int ret = -1;
+	if (fgets(out, sizeof(out) - 1, fp) != NULL)
+	{
+		if (strlen(out))
+		{
+			system("killall wminput");
+			ret = 0;
+		}
+	}
+	else
+	{
+		system("taskset 1 wminput --daemon --config /media/fat/linux/wiimote.cfg &");
+		ret = 1;
+	}
+
+	pclose(fp);
+	return ret;
+}
+
 static char* getNet(int spec)
 {
 	int netType = 0;
@@ -694,6 +732,8 @@ const char* get_rbf_name_bootcore(char *str)
 	return p + 1;
 }
 
+static int joymap_first = 0;
+
 void HandleUI(void)
 {
 	switch (user_io_core_type())
@@ -724,6 +764,7 @@ void HandleUI(void)
 	static char drive_num = 0;
 	static char flag;
 	static int cr = 0;
+	static uint32_t cheatsub = 0;
 
 	static char	cp_MenuCancel;
 
@@ -765,6 +806,13 @@ void HandleUI(void)
 		if (user_io_osd_is_visible())
 		{
 			menustate = MENU_BTPAIR;
+		}
+		break;
+
+	case KEY_F10:
+		if (user_io_osd_is_visible())
+		{
+			//menustate = MENU_WMPAIR;
 		}
 		break;
 
@@ -932,42 +980,53 @@ void HandleUI(void)
 	case MENU_ARCHIE_MAIN1:
 		OsdSetTitle(user_io_get_core_name(), OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
-		menumask = 0xff;
-		OsdWrite(0, "", 0, 0);
+		m = 0;
+		menumask = 0x3ff;
+		OsdWrite(m++);
 
 		strcpy(s, " Floppy 0: ");
 		strncat(s, get_image_name(0) ? get_image_name(0) : "* no disk *",27);
-		OsdWrite(1, s, menusub == 0, 0);
+		OsdWrite(m++, s, menusub == 0);
 
 		strcpy(s, " Floppy 1: ");
 		strncat(s, get_image_name(1) ? get_image_name(1) : "* no disk *", 27);
-		OsdWrite(2, s, menusub == 1, 0);
+		OsdWrite(m++, s, menusub == 1);
 
-		OsdWrite(3, "", 0, 0);
+		OsdWrite(m++);
 
 		strcpy(s, " OS ROM: ");
 		strcat(s, archie_get_rom_name());
-		OsdWrite(4, s, menusub == 2, 0);
+		OsdWrite(m++, s, menusub == 2);
 
-		OsdWrite(5, "", 0, 0);
+		OsdWrite(m++);
 
 		strcpy(s, " Aspect ratio:       ");
 		strcat(s, archie_get_ar() ? "16:9" : "4:3");
-		OsdWrite(6, s, menusub == 3, 0);
+		OsdWrite(m++, s, menusub == 3);
 
-		OsdWrite(7, "", 0, 0);
+		strcpy(s, " Refresh rate:       ");
+		strcat(s, archie_get_60() ? "Variable" : "60Hz");
+		OsdWrite(m++, s, menusub == 4);
+
+		OsdWrite(m++);
+
 		sprintf(s, " Stereo mix:         %s", config_stereo_msg[archie_get_amix()]);
-		OsdWrite(8, s, menusub == 4, 0);
+		OsdWrite(m++, s, menusub == 5);
 
-		OsdWrite(9, "", 0, 0);
+		strcpy(s, " 25MHz audio fix:    ");
+		strcat(s, archie_get_afix() ? "Enable" : "Disable");
+		OsdWrite(m++, s, menusub == 6);
+
+		OsdWrite(m++);
+
 		sprintf(s, " Swap joysticks:     %s", user_io_get_joyswap() ? "Yes" : "No");
-		OsdWrite(10, s, menusub == 5, 0);
+		OsdWrite(m++, s, menusub == 7);
 		sprintf(s, " Swap mouse btn 2/3: %s", archie_get_mswap() ? "Yes" : "No");
-		OsdWrite(11, s, menusub == 6, 0);
+		OsdWrite(m++, s, menusub == 8);
 
-		for (int i = 12; i<15; i++) OsdWrite(i, "", 0, 0);
+		while(m<15) OsdWrite(m++);
 
-		OsdWrite(15, STD_EXIT, menusub == 7, 0);
+		OsdWrite(15, STD_EXIT, menusub == 9, 0);
 		menustate = MENU_ARCHIE_MAIN2;
 		parentstate = MENU_ARCHIE_MAIN1;
 
@@ -999,21 +1058,31 @@ void HandleUI(void)
 				break;
 
 			case 4:
-				archie_set_amix(archie_get_amix()+1);
+				archie_set_60(!archie_get_60());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
 			case 5:
-				user_io_set_joyswap(!user_io_get_joyswap());
+				archie_set_amix(archie_get_amix()+1);
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
 			case 6:
+				archie_set_afix(!archie_get_afix());
+				menustate = MENU_ARCHIE_MAIN1;
+				break;
+
+			case 7:
+				user_io_set_joyswap(!user_io_get_joyswap());
+				menustate = MENU_ARCHIE_MAIN1;
+				break;
+
+			case 8:
 				archie_set_mswap(!archie_get_mswap());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 7:  // Exit
+			case 9:  // Exit
 				menustate = MENU_NONE1;
 				break;
 			}
@@ -1088,6 +1157,27 @@ void HandleUI(void)
 					substrcpy(pos, p, 1);
 					strcpy(pos, GetExt(pos));
 					MenuWrite(entry, s, menusub == selentry, 0);
+
+					// add bit in menu mask
+					menumask = (menumask << 1) | 1;
+					entry++;
+					selentry++;
+				}
+
+				// check for 'C'heats
+				if (p && (p[0] == 'C'))
+				{
+					substrcpy(s, p, 1);
+					if (strlen(s))
+					{
+						strcpy(s, " ");
+						substrcpy(s + 1, p, 1);
+					}
+					else
+					{
+						strcpy(s, " Cheats");
+					}
+					MenuWrite(entry, s, menusub == selentry, !cheats_available());
 
 					// add bit in menu mask
 					menumask = (menumask << 1) | 1;
@@ -1241,7 +1331,13 @@ void HandleUI(void)
 					entry++;
 				}
 
-				if (p[0] == 'F')
+				if (p[0] == 'C' && cheats_available())
+				{
+					menustate = MENU_CHEATS1;
+					cheatsub = menusub;
+					menusub = 0;
+				}
+				else if (p[0] == 'F')
 				{
 					opensave = (p[1] == 'S');
 					substrcpy(ext, p, 1);
@@ -1298,7 +1394,6 @@ void HandleUI(void)
 						menustate = MENU_8BIT_MAIN1;
 						if (p[0] == 'R') menustate = MENU_NONE1;
 					}
-
 				}
 			}
 		}
@@ -1317,6 +1412,7 @@ void HandleUI(void)
 	case MENU_8BIT_MAIN_FILE_SELECTED:
 		printf("File selected: %s\n", SelectedPath);
 		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1), opensave);
+		cheats_init(SelectedPath);
 		menustate = MENU_NONE1;
 		break;
 
@@ -1445,6 +1541,7 @@ void HandleUI(void)
 				start_map_setting(joy_bcount ? joy_bcount+4 : 8);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
+				joymap_first = 1;
 				break;
 
 			case 2:
@@ -1750,7 +1847,7 @@ void HandleUI(void)
 
 	case MENU_JOYDIGMAP:
 		helptext = 0;
-		menumask = 0;
+		menumask = 1;
 		OsdSetTitle("Define buttons", 0);
 		menustate = MENU_JOYDIGMAP1;
 		parentstate = MENU_JOYDIGMAP;
@@ -1758,11 +1855,6 @@ void HandleUI(void)
 		OsdWrite(7, "          Esc \x16 Cancel");
 		OsdWrite(8, "        Enter \x16 Finish");
 		OsdWrite(9, "        Space \x16 Skip");
-		if (!is_menu_core())
-		{
-			OsdWrite(13, "  You may define 2 sets of");
-			OsdWrite(14, " buttons on the same gamepad");
-		}
 		break;
 
 	case MENU_JOYDIGMAP1:
@@ -1772,6 +1864,7 @@ void HandleUI(void)
 				OsdWrite(3);
 				OsdWrite(4, "           Clearing");
 				OsdWrite(5);
+				joymap_first = 1;
 				break;
 			}
 
@@ -1789,7 +1882,7 @@ void HandleUI(void)
 				p = joy_bnames[get_map_button() - 4];
 				if (is_menu_core())
 				{
-					if (get_map_type()) joy_bcount = 17;
+					if (get_map_type()) joy_bcount = 15;
 					if (get_map_button() == 16) p = joy_button_map[8 + get_map_type()];
 				}
 			}
@@ -1844,7 +1937,13 @@ void HandleUI(void)
 				}
 			}
 
-			if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8))
+			if (!is_menu_core() && (get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8) || (select & get_map_vid() & get_map_pid())) && joymap_first && get_map_type())
+			{
+				finish_map_setting(0);
+				menustate = MENU_JOYDIGMAP3;
+				menusub = 0;
+			}
+			else if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8))
 			{
 				finish_map_setting(menu);
 				if (is_menu_core())
@@ -1866,6 +1965,44 @@ void HandleUI(void)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
 			menusub = 1;
+		}
+		break;
+
+	case MENU_JOYDIGMAP3:
+		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
+		m = 6;
+		menumask = 3;
+		OsdWrite(m++, "    Do you want to setup");
+		OsdWrite(m++, "    alternative buttons?");
+		OsdWrite(m++, "           No", menusub == 0);
+		OsdWrite(m++, "           Yes", menusub == 1);
+		parentstate = menustate;
+		menustate = MENU_JOYDIGMAP4;
+		break;
+
+	case MENU_JOYDIGMAP4:
+		if (menu)
+		{
+			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 1;
+			break;
+		}
+		else if (select)
+		{
+			switch (menusub)
+			{
+			case 0:
+				menustate = MENU_8BIT_SYSTEM1;
+				menusub = 1;
+				break;
+
+			case 1:
+				start_map_setting(joy_bcount ? joy_bcount + 4 : 8, 1);
+				menustate = MENU_JOYDIGMAP;
+				menusub = 0;
+				joymap_first = 0;
+				break;
+			}
 		}
 		break;
 
@@ -1947,7 +2084,7 @@ void HandleUI(void)
 		OsdDrawLogo(3);
 		OsdDrawLogo(4);
 
-		sprintf(s, "       HPS s/w v%s", version + 5);
+		sprintf(s, "       MiSTer v%s", version + 5);
 		OsdWrite(10, s, 0, 0, 1);
 
 		s[0] = 0;
@@ -2795,6 +2932,73 @@ void HandleUI(void)
 		break;
 
 		/******************************************************************/
+		/* cheats menu                                                    */
+		/******************************************************************/
+	case MENU_CHEATS1:
+		helptext = helptexts[HELPTEXT_NONE];
+		sprintf(s, "Cheats (%d)", cheats_loaded());
+		OsdSetTitle(s);
+		cheats_print();
+		menustate = MENU_CHEATS2;
+		parentstate = menustate;
+		break;
+
+	case MENU_CHEATS2:
+		menumask = 0;
+
+		if (menu)
+		{
+			menustate = MENU_8BIT_MAIN1;
+			menusub = cheatsub;
+			break;
+		}
+
+		cheats_scroll_name();
+
+		if (c == KEY_HOME)
+		{
+			cheats_scan(SCANF_INIT);
+			menustate = MENU_CHEATS1;
+		}
+
+		if (c == KEY_END)
+		{
+			cheats_scan(SCANF_END);
+			menustate = MENU_CHEATS1;
+		}
+
+		if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
+		{
+			cheats_scan(SCANF_PREV_PAGE);
+			menustate = MENU_CHEATS1;
+		}
+
+		if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
+		{
+			cheats_scan(SCANF_NEXT_PAGE);
+			menustate = MENU_CHEATS1;
+		}
+
+		if (down) // scroll down one entry
+		{
+			cheats_scan(SCANF_NEXT);
+			menustate = MENU_CHEATS1;
+		}
+
+		if (up) // scroll up one entry
+		{
+			cheats_scan(SCANF_PREV);
+			menustate = MENU_CHEATS1;
+		}
+
+		if (select)
+		{
+			cheats_toggle();
+			menustate = MENU_CHEATS1;
+		}
+		break;
+
+		/******************************************************************/
 		/* reset menu                                                     */
 		/******************************************************************/
 	case MENU_RESET1:
@@ -3421,7 +3625,17 @@ void HandleUI(void)
 
 		OsdSetTitle("System Settings", 0);
 		OsdWrite(0, "", 0, 0);
-		sprintf(s, "       HPS s/w v%s", version + 5);
+		sprintf(s, "       MiSTer v%s", version + 5);
+		{
+			char str[8] = {};
+			FILE *f = fopen("/MiSTer.version", "r");
+			if (f)
+			{
+				if (fread(str, 6, 1, f)) sprintf(s, " MiSTer v%s,  OS v%s", version + 5, str);
+				fclose(f);
+			}
+		}
+
 		OsdWrite(1, s, 0, 0);
 
 		{
@@ -3497,24 +3711,88 @@ void HandleUI(void)
 				strcpy(joy_bnames[1], "Btn 2 (ESC/Back)");
 				strcpy(joy_bnames[2], "Btn 3 (Backspace)");
 				strcpy(joy_bnames[3], "Btn 4");
-				strcpy(joy_bnames[4], "RIGHT (Alt/Mouse)");
-				strcpy(joy_bnames[5], "LEFT (Alt/Mouse)");
-				strcpy(joy_bnames[6], "DOWN (Alt/Mouse)");
-				strcpy(joy_bnames[7], "UP (Alt/Mouse)");
+				strcpy(joy_bnames[4], "Mouse Move RIGHT");
+				strcpy(joy_bnames[5], "Mouse Move LEFT");
+				strcpy(joy_bnames[6], "Mouse Move DOWN");
+				strcpy(joy_bnames[7], "Mouse Move UP");
 				strcpy(joy_bnames[8], "Mouse Left Btn");
 				strcpy(joy_bnames[9], "Mouse Right Btn");
 				strcpy(joy_bnames[10], "Mouse Middle Btn");
 				strcpy(joy_bnames[11], "Mouse Emu/Sniper");
-				start_map_setting(21);
+				start_map_setting(19);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;
 			case 3:
-				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
+				menustate = MENU_SCRIPTS_PRE;
+				menusub = 0;
 				break;
 			}
 		}
 		printSysInfo();
+		break;
+
+	case MENU_WMPAIR:
+		{
+			OsdSetTitle("Wiimote", 0);
+			int res = toggle_wminput();
+			menu_timer = GetTimer(2000);
+			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
+			if (res < 0)       OsdWrite(7, "    Cannot enable Wiimote");
+			else if (res == 0) OsdWrite(7, "       Wiimote disabled");
+			else
+			{
+				OsdWrite(7, "       Wiimote enabled");
+				OsdWrite(9, "    Press 1+2 to connect");
+				menu_timer = GetTimer(3000);
+			}
+			menustate = MENU_WMPAIR1;
+		}
+		//fall through
+
+	case MENU_WMPAIR1:
+		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
+		break;
+
+	case MENU_SCRIPTS_PRE:
+		OsdSetTitle("Warning!!!", 0);
+		helptext = 0;
+		menumask = 3;
+		m = 0;
+		OsdWrite(m++);
+		OsdWrite(m++, "         Attention:");
+		OsdWrite(m++, " This is dangerous operation!");
+		OsdWrite(m++);
+		OsdWrite(m++, " Script has control over the");
+		OsdWrite(m++, " whole system and may damage");
+		OsdWrite(m++, " the files or settings, then");
+		OsdWrite(m++, " MiSTer won't boot, so you");
+		OsdWrite(m++, " will have to re-format the");
+		OsdWrite(m++, " SD card and fill with files");
+		OsdWrite(m++, " in order to use it again.");
+		OsdWrite(m++);
+		OsdWrite(m++);
+		OsdWrite(m++, " Do you want to continue?");
+		OsdWrite(m++, "           No", menusub == 0);
+		OsdWrite(m++, "           Yes", menusub == 1);
+		menustate = MENU_SCRIPTS_PRE1;
+		parentstate = MENU_SCRIPTS_PRE;
+		break;
+
+	case MENU_SCRIPTS_PRE1:
+		if (menu) menustate = MENU_FIRMWARE1;
+		else if (select)
+		{
+			switch (menusub)
+			{
+			case 0:
+				menustate = MENU_FIRMWARE1;
+				break;
+			case 1:
+				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
+				break;
+			}
+		}
 		break;
 
 	case MENU_BTPAIR:
@@ -3750,6 +4028,7 @@ void open_joystick_setup()
 	OsdEnable(DISABLE_KEYBOARD);
 	start_map_setting(joy_bcount ? joy_bcount + 4 : 8);
 	menustate = MENU_JOYDIGMAP;
+	joymap_first = 1;
 }
 
 void ScrollLongName(void)
@@ -3786,7 +4065,7 @@ void ScrollLongName(void)
 	if (flist_SelectedItem()->d_type == DT_DIR)
 		max_len = 25; // number of directory name characters to display
 
-	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->d_name, 2, len, max_len, 1);
+	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->d_name, 0, len, max_len, 1);
 }
 
 void PrintFileName(char *name, int row, int maxinv)

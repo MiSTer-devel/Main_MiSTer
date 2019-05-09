@@ -397,7 +397,7 @@ void OsdDrawLogo(int row)
 }
 
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
-void OSD_PrintText(unsigned char line, const char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert)
+void OSD_PrintText(unsigned char line, const char *hdr, const char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert)
 {
 	// line : OSD line number (0-7)
 	// text : pointer to null-terminated string
@@ -419,45 +419,53 @@ void OSD_PrintText(unsigned char line, const char *text, unsigned long start, un
 		invert = 0xff;
 
 	p = &titlebuffer[(osd_size - 1 - line) * 8];
-	if (start>2) {
+	if (start>2)
+	{
 		spi16(0xffff);
 		start -= 2;
 	}
 
 	i = start>16 ? 16 : start;
-	for (j = 0; j<(i / 2); ++j)
-		spi_n(255 ^ *p++, 2);
+	for (j = 0; j<(i / 2); ++j) spi_n(255 ^ *p++, 2);
 
-	if (i & 1)
-		spi8(255 ^ *p);
+	if (i & 1) spi8(255 ^ *p);
 	start -= i;
 
-	if (start>2) {
+	if (start>2)
+	{
 		spi16(0xffff);
 		start -= 2;
 	}
 
-	while (start--)
-		spi8(0x00);
+	while (start--) spi8(0x00);
 
-	if (offset) {
+	while(*hdr)
+	{
+		width -= 8;
+		p = charfont[(uint)(*hdr++)];
+		for (int i=0; i < 8; i++) spi8(*p++^invert);
+	}
+
+	if (offset)
+	{
 		width -= 8 - offset;
 		p = &charfont[(uint)(*text++)][offset];
 		for (; offset < 8; offset++)
 			spi8(*p++^invert);
 	}
 
-	while (width > 8) {
+	while (width > 8)
+	{
 		unsigned char b;
 		p = &charfont[(uint)(*text++)][0];
 		for (b = 0; b<8; b++) spi8(*p++^invert);
 		width -= 8;
 	}
 
-	if (width) {
+	if (width)
+	{
 		p = &charfont[(uint)(*text++)][0];
-		while (width--)
-			spi8(*p++^invert);
+		while (width--) spi8(*p++^invert);
 	}
 
 	DisableOsd();
@@ -640,12 +648,21 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 
 #define BLANKSPACE 10 // number of spaces between the end and start of repeated name
 
-	char s[40];
+	char s[40], hdr[40];
 	long offset;
 	if (!max_len) max_len = 30;
 
 	if (str && str[0] && CheckTimer(scroll_timer)) // scroll if long name and timer delay elapsed
 	{
+		hdr[0] = 0;
+		if (off)
+		{
+			strncpy(hdr, str, off);
+			hdr[off] = 0;
+			str += off;
+			if (len > off) len -= off;
+		}
+
 		scroll_timer = GetTimer(SCROLL_DELAY2); // reset scroll timer to repeat delay
 
 		scroll_offset++; // increase scroll position (1 pixel unit)
@@ -653,7 +670,7 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 
 		if (!len) len = strlen(str); // get name length
 
-		if (off+len > max_len) // scroll name if longer than display size
+		if (off+2+len > max_len) // scroll name if longer than display size
 		{
 			// reset scroll position if it exceeds predefined maximum
 			if (scroll_offset >= (uint)(len + BLANKSPACE) << 3) scroll_offset = 0;
@@ -668,7 +685,7 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 				strncpy(s + len + BLANKSPACE, str, max_len - len - BLANKSPACE); // repeat the name after its end and predefined number of blank space
 			}
 
-			OSD_PrintText(n, s, 22, (max_len - 1) << 3, (scroll_offset & 0x7), invert); // OSD print function with pixel precision
+			OSD_PrintText(n, hdr, s, 22, (max_len - 1) << 3, (scroll_offset & 0x7), invert); // OSD print function with pixel precision
 		}
 	}
 }
