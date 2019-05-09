@@ -810,9 +810,9 @@ void HandleUI(void)
 		break;
 
 	case KEY_F10:
-		if (user_io_osd_is_visible())
+		if (user_io_osd_is_visible() && !access("/bin/wminput", F_OK))
 		{
-			//menustate = MENU_WMPAIR;
+			menustate = MENU_WMPAIR;
 		}
 		break;
 
