@@ -71,7 +71,7 @@ static char* make_fullpath(const char *path, int mode = 0)
 	}
 	else
 	{
-		sprintf(full_path, path);
+		sprintf(full_path, "%s",path);
 	}
 
 	return full_path;
@@ -586,6 +586,50 @@ int FileCanWrite(const char *name)
 	//printf("FileCanWrite: mode=%04o.\n", st.st_mode);
 	return ((st.st_mode & S_IWUSR) != 0);
 }
+
+
+//http://nion.modprobe.de/blog/archives/357-Recursive-directory-creation.html
+static void mkdirs(const char *dir) {
+        char tmp[256];
+        char *p = NULL;
+        size_t len;
+
+        snprintf(tmp, sizeof(tmp),"%s",dir);
+        len = strlen(tmp);
+        if(tmp[len - 1] == '/')
+                tmp[len - 1] = 0;
+        for(p = tmp + 1; *p; p++)
+                if(*p == '/') {
+                        *p = 0;
+                        mkdir(tmp, S_IRWXU);
+                        *p = '/';
+                }
+        mkdir(tmp, S_IRWXU);
+}
+
+void FileGenerateScreenshotName(const char *path, const char *postfix,char *buffer, int buflen)
+{
+	int curnum=1;
+	int done=false;
+	// create the full path, ie: /media/fat/screenshot/NES/
+	mkdirs(getFullPath(path));
+	// create 
+	do
+	{
+		snprintf(buffer,buflen,"%s/%s_%04d.png",path,postfix,curnum);
+		if (getFileType(buffer)==0)
+		{
+			done=true;
+		}
+		else
+		{
+			curnum++;
+		}
+
+
+	} while(curnum<10000 && done==false);
+}
+
 
 void FileGenerateSavePath(const char *name, char* out_name)
 {
