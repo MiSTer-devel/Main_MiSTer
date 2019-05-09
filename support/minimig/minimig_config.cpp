@@ -83,6 +83,7 @@ static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int addr
 
 	printf("]\n");
 }
+ 
 
 static char UploadKickstart(char *name)
 {
@@ -115,6 +116,28 @@ static char UploadKickstart(char *name)
 			FileClose(&file);
 			return(1);
 		}
+		else if (file.size == 8203) {
+		        // Cloanto encrypted A1000 boot ROM
+		        BootPrint("Uploading encrypted A1000 boot ROM");
+			SendFileV2(&file, romkey, keysize, 0xf80000, file.size >> 9);
+			FileClose(&file);
+			//clear tag (write 0 to $fc0000) to force bootrom to load Kickstart from disk
+			//and not use one which was already there.
+			spi_osd_cmd32le_cont(OSD_CMD_WR, 0xfc0000);
+			spi8(0x00);spi8(0x00);
+			DisableOsd();
+			return(1);
+		  }
+		else if (file.size == 0x2000) {
+		        // 8KB A1000 boot ROM
+		        BootPrint("Uploading A1000 boot ROM");
+		        SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
+			FileClose(&file);
+			spi_osd_cmd32le_cont(OSD_CMD_WR, 0xfc0000);
+			spi8(0x00);spi8(0x00);
+			DisableOsd();
+			return(1);
+		  }
 		else if (file.size == 0x80000) {
 			// 512KB Kickstart ROM
 			BootPrint("Uploading 512KB Kickstart ...");
