@@ -17,10 +17,7 @@ with help from the MiSTer contributors including Grabulosaure
 #include <sys/mman.h>
 #include <err.h>
 
-
-
 #include "scaler.h"
-
 
 
 mister_scaler * mister_scaler_init()
@@ -28,10 +25,10 @@ mister_scaler * mister_scaler_init()
     mister_scaler *ms =(mister_scaler *) calloc(sizeof(mister_scaler),1);
     int	 pagesize = sysconf(_SC_PAGE_SIZE);
     if (pagesize==0) pagesize=4096;
-    int offset = MISTER_SCALAR_BASEADDR;
+    int offset = MISTER_SCALER_BASEADDR;
     int	map_start = offset & ~(pagesize - 1);
     ms->map_off = offset - map_start;
-    ms->num_bytes=MISTER_SCALAR_BUFFERSIZE;
+    ms->num_bytes=MISTER_SCALER_BUFFERSIZE;
     //printf("map_start = %d map_off=%d offset=%d\n",map_start,ms->map_off,offset);
 
     unsigned char *buffer;
@@ -68,6 +65,7 @@ mister_scaler * mister_scaler_init()
    return ms; 
 
 }
+
 void mister_scaler_free(mister_scaler *ms)
 {
    munmap(ms->map,ms->num_bytes+ms->map_off);
@@ -75,7 +73,8 @@ void mister_scaler_free(mister_scaler *ms)
    free(ms);
 }
 
-int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int lineU, unsigned char *bufU, int lineV, unsigned char *bufV) {
+int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int lineU, unsigned char *bufU, int lineV, unsigned char *bufV)
+{
     unsigned char *buffer;
     buffer = (unsigned char *)(ms->map+ms->map_off);
 
@@ -84,28 +83,29 @@ int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int 
     unsigned char *outbufy;
     unsigned char *outbufU;
     unsigned char *outbufV;
-    for (int  y=0; y< ms->height ; y++) {
-          pixbuf=&buffer[ms->header + y*ms->line];
-          outbufy=&bufY[y*(lineY)];
-          outbufU=&bufU[y*(lineU)];
-          outbufV=&bufV[y*(lineV)];
-          for (int x = 0; x < ms->width ; x++) { 
-		 int R,G,B;
-            R = *pixbuf++;
-            G = *pixbuf++;
-            B = *pixbuf++;
-            int Y  =      (0.257 * R) + (0.504 * G) + (0.098 * B) + 16;
-            int  U = -(0.148 * R) - (0.291 * G) + (0.439 * B) + 128;
-            int V =  (0.439 * R) - (0.368 * G) - (0.071 * B) + 128;
+    for (int  y=0; y< ms->height ; y++)
+	{
+        pixbuf=&buffer[ms->header + y*ms->line];
+        outbufy=&bufY[y*(lineY)];
+        outbufU=&bufU[y*(lineU)];
+        outbufV=&bufV[y*(lineV)];
+        for (int x = 0; x < ms->width ; x++)
+		{ 
+			int R,G,B;
+			R = *pixbuf++;
+			G = *pixbuf++;
+			B = *pixbuf++;
+			int Y =  (0.257 * R) + (0.504 * G) + (0.098 * B) + 16;
+			int U = -(0.148 * R) - (0.291 * G) + (0.439 * B) + 128;
+			int V =  (0.439 * R) - (0.368 * G) - (0.071 * B) + 128;
 
-            *outbufy++ = Y;
-            *outbufU++ = U;
-            *outbufV++ = V;
-          }
+			*outbufy++ = Y;
+			*outbufU++ = U;
+			*outbufV++ = V;
+        }
     }
     
     return 0;
-
 }
 
 int mister_scaler_read(mister_scaler *ms,unsigned char *gbuf)

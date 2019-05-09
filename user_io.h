@@ -250,4 +250,6 @@ void SetMidiLinkMode(int mode);
 void set_volume(int cmd);
 int  get_volume();
 
+void user_io_store_filename(char *filename);
+
 #endif // USER_IO_H

@@ -1411,6 +1411,7 @@ void HandleUI(void)
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
 		printf("File selected: %s\n", SelectedPath);
+		user_io_store_filename(SelectedPath);
 		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1), opensave);
 		cheats_init(SelectedPath);
 		menustate = MENU_NONE1;

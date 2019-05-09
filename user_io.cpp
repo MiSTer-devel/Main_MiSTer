@@ -69,6 +69,17 @@ static bool scrl_status = 0;
 
 static char minimig_adjust = 0;
 
+static char last_filename[1024] = {};
+void user_io_store_filename(char *filename)
+{
+	char *p = strrchr(filename, '/');
+	if (p) strcpy(last_filename, p + 1);
+	else strcpy(last_filename, filename);
+
+	p = strrchr(last_filename, '.');
+	if (p) *p = 0;
+}
+
 const char *get_image_name(int i)
 {
 	if (!sd_image[i].size)  return NULL;
@@ -2482,42 +2493,39 @@ void user_io_kbd(uint16_t key, int press)
 {
 	if(is_menu_core()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 
-	// ALT - Print Screen - screen shot
-	if (key==0x63 && (get_key_mod() & (LALT | RALT | RGUI | LGUI)))
- 	{
- 		if (press==1)
- 		{
- 			printf("print key pressed - do screen shot\n");
-			mister_scaler *ms=mister_scaler_init();
-			if (ms==NULL)
+	// Win+PrnScr or Alt/Win+ScrLk - screen shot
+	if ((key == KEY_SYSRQ && (get_key_mod() & (RGUI | LGUI))) || (key == KEY_SCROLLLOCK && (get_key_mod() & (LALT | RALT | RGUI | LGUI))))
+	{
+		if (press == 1)
+		{
+			printf("print key pressed - do screen shot\n");
+			mister_scaler *ms = mister_scaler_init();
+			if (ms == NULL)
 			{
 				printf("problem with scaler, maybe not a new enough version\n");
- 				Info("Scaler not compatible");
+				Info("Scaler not compatible");
 			}
 			else
 			{
-			unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height*3,1);	
-			mister_scaler_read(ms,outputbuf);
-			char path[1024];
-			char filename[1024];
-			//user_io_get_core_name()
-			snprintf(path,1024,"screenshot/%s",HomeDir);
-			FileGenerateScreenshotName(path,"shot",filename,1024);
-			unsigned error = lodepng_encode24_file(getFullPath(filename), outputbuf, ms->width, ms->height);
-			if(error) {
-			       	printf("error %u: %s\n", error, lodepng_error_text(error));
-			       	printf("%s", filename);
-				Info("error in saving png");
+				unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 3, 1);
+				mister_scaler_read(ms, outputbuf);
+				static char filename[1024];
+				FileGenerateScreenshotName(last_filename, filename, 1024);
+				unsigned error = lodepng_encode24_file(getFullPath(filename), outputbuf, ms->width, ms->height);
+				if (error) {
+					printf("error %u: %s\n", error, lodepng_error_text(error));
+					printf("%s", filename);
+					Info("error in saving png");
+				}
+				free(outputbuf);
+				mister_scaler_free(ms);
+				char msg[1024];
+				snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
+				Info(msg);
 			}
-			free(outputbuf);
-			mister_scaler_free(ms); 
-			char msg[1024];
- 			snprintf(msg,1024,"Saving screen shot\n %s\n",filename+strlen("screenshot/"));
- 			Info(msg);
-			}
- 		}
+		}
 
- 	}
+	}
 	else 
 	if (key == KEY_MUTE)
 	{
@@ -2550,11 +2558,6 @@ void user_io_kbd(uint16_t key, int press)
 		PrintDirectory();
 	}
 	else
-	if ((core_type == CORE_TYPE_MINIMIG2) ||
-		(core_type == CORE_TYPE_MIST) ||
-		(core_type == CORE_TYPE_ARCHIE) ||
-		(core_type == CORE_TYPE_SHARPMZ) ||
-		(core_type == CORE_TYPE_8BIT))
 	{
 		if (key)
 		{

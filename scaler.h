@@ -3,6 +3,8 @@ Copyright 2019 alanswx
 with help from the MiSTer contributors including Grabulosaure 
 */
 
+#ifndef SCALER_H
+#define SCALER_H
 
 typedef struct {
    int header;
@@ -16,12 +18,12 @@ typedef struct {
    int fd;
 } mister_scaler;
 
-
-#define MISTER_SCALAR_BASEADDR     536870912 
-#define MISTER_SCALAR_BUFFERSIZE   2048*3*1024
-
+#define MISTER_SCALER_BASEADDR     0x20000000
+#define MISTER_SCALER_BUFFERSIZE   2048*3*1024
 
 mister_scaler *mister_scaler_init();
 int mister_scaler_read(mister_scaler *,unsigned char *buffer);
 int mister_scaler_read_yuv(mister_scaler *ms,int,unsigned char *y,int, unsigned char *U,int, unsigned char *V);
 void mister_scaler_free(mister_scaler *);
+
+#endif

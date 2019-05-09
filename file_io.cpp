@@ -587,57 +587,40 @@ int FileCanWrite(const char *name)
 	return ((st.st_mode & S_IWUSR) != 0);
 }
 
-
-//http://nion.modprobe.de/blog/archives/357-Recursive-directory-creation.html
-static void mkdirs(const char *dir) {
-        char tmp[256];
-        char *p = NULL;
-        size_t len;
-
-        snprintf(tmp, sizeof(tmp),"%s",dir);
-        len = strlen(tmp);
-        if(tmp[len - 1] == '/')
-                tmp[len - 1] = 0;
-        for(p = tmp + 1; *p; p++)
-                if(*p == '/') {
-                        *p = 0;
-                        mkdir(tmp, S_IRWXU);
-                        *p = '/';
-                }
-        mkdir(tmp, S_IRWXU);
-}
-
-void FileGenerateScreenshotName(const char *path, const char *postfix,char *buffer, int buflen)
+static void create_path(const char *base_dir, const char* sub_dir)
 {
-	int curnum=1;
-	int done=false;
-	// create the full path, ie: /media/fat/screenshot/NES/
-	mkdirs(getFullPath(path));
-	// create 
-	do
-	{
-		snprintf(buffer,buflen,"%s/%s_%04d.png",path,postfix,curnum);
-		if (getFileType(buffer)==0)
-		{
-			done=true;
-		}
-		else
-		{
-			curnum++;
-		}
-
-
-	} while(curnum<10000 && done==false);
+	make_fullpath(base_dir);
+	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
+	strcat(full_path, "/");
+	strcat(full_path, sub_dir);
+	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
 }
 
+void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
+{
+	create_path(SCREENSHOT_DIR, HomeDir);
+
+	time_t t = time(NULL);
+	struct tm tm = *localtime(&t);
+	char datecode[32] = {};
+	if (tm.tm_year >= 119) // 2019 or up considered valid time
+	{
+		strftime(datecode, 31, "%Y%m%d_%H%M%S", &tm);
+		snprintf(out_name, buflen, "%s/%s/%s-%s.png", SCREENSHOT_DIR, HomeDir, datecode, name[0] ? name : SCREENSHOT_DEFAULT);
+	}
+	else
+	{
+		for (int i = 1; i < 10000; i++)
+		{
+			snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d.png", SCREENSHOT_DIR, HomeDir, name[0] ? name : SCREENSHOT_DEFAULT, i);
+			if (!getFileType(out_name)) return;
+		}
+	}
+}
 
 void FileGenerateSavePath(const char *name, char* out_name)
 {
-	make_fullpath(SAVE_DIR);
-	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
-	strcat(full_path, "/");
-	strcat(full_path, HomeDir);
-	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
+	create_path(SAVE_DIR, HomeDir);
 
 	sprintf(out_name, "%s/%s/", SAVE_DIR, HomeDir);
 	char *fname = out_name + strlen(out_name);
