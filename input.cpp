@@ -1750,7 +1750,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 				if (ev->type == EV_ABS)
 				{
-					int threshold = (absinfo->maximum - absinfo->minimum) / 10;
+					int threshold = (absinfo->maximum - absinfo->minimum) / 5;
 
 					max = (ev->value >= (absinfo->maximum - threshold));
 					min = (ev->value <= (absinfo->minimum + threshold));
@@ -2484,6 +2484,11 @@ int input_test(int getchar)
 										{
 											//LT/RT analog
 											continue;
+										}
+										else if(ev.code & 1)
+										{
+											//Y axes on wiimote and accessories are inverted
+											ev.value = -ev.value;
 										}
 									}
 								}
