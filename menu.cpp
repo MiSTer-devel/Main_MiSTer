@@ -765,6 +765,7 @@ void HandleUI(void)
 	static char flag;
 	static int cr = 0;
 	static uint32_t cheatsub = 0;
+	static uint8_t card_cid[32];
 
 	static char	cp_MenuCancel;
 
@@ -3725,8 +3726,30 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 3:
-				menustate = MENU_SCRIPTS_PRE;
-				menusub = 0;
+				{
+					uint8_t confirm[32] = {};
+					int match = 0;
+					int fd = open("/sys/block/mmcblk0/device/cid", O_RDONLY);
+					if (fd >= 0)
+					{
+						int ret = read(fd, card_cid, 32);
+						close(fd);
+						if (ret == 32)
+						{
+							if (FileLoadConfig("script_confirm", confirm, 32))
+							{
+								match = !memcmp(card_cid, confirm, 32);
+							}
+						}
+					}
+
+					if(match) SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
+					else
+					{
+						menustate = MENU_SCRIPTS_PRE;
+						menusub = 0;
+					}
+				}
 				break;
 			}
 		}
@@ -3758,7 +3781,7 @@ void HandleUI(void)
 	case MENU_SCRIPTS_PRE:
 		OsdSetTitle("Warning!!!", 0);
 		helptext = 0;
-		menumask = 3;
+		menumask = 7;
 		m = 0;
 		OsdWrite(m++);
 		OsdWrite(m++, "         Attention:");
@@ -3772,10 +3795,10 @@ void HandleUI(void)
 		OsdWrite(m++, " SD card and fill with files");
 		OsdWrite(m++, " in order to use it again.");
 		OsdWrite(m++);
-		OsdWrite(m++);
-		OsdWrite(m++, " Do you want to continue?");
-		OsdWrite(m++, "           No", menusub == 0);
-		OsdWrite(m++, "           Yes", menusub == 1);
+		OsdWrite(m++, "  Do you want to continue?");
+		OsdWrite(m++, "            No", menusub == 0);
+		OsdWrite(m++, "            Yes", menusub == 1);
+		OsdWrite(m++, "  Yes, and don't ask again", menusub == 2);
 		menustate = MENU_SCRIPTS_PRE1;
 		parentstate = MENU_SCRIPTS_PRE;
 		break;
@@ -3789,6 +3812,11 @@ void HandleUI(void)
 			case 0:
 				menustate = MENU_FIRMWARE1;
 				break;
+
+			case 2:
+				FileSaveConfig("script_confirm", card_cid, 32);
+				// fall through
+
 			case 1:
 				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
 				break;
