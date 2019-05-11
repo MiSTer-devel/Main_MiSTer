@@ -1414,7 +1414,7 @@ void HandleUI(void)
 		printf("File selected: %s\n", SelectedPath);
 		user_io_store_filename(SelectedPath);
 		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1), opensave);
-		cheats_init(SelectedPath);
+		if(user_io_use_cheats()) cheats_init(SelectedPath, user_io_get_file_crc());
 		menustate = MENU_NONE1;
 		break;
 

@@ -11,7 +11,6 @@
 #include <sys/statvfs.h>
 
 #include "lib/lodepng/lodepng.h"
-
 #include "hardware.h"
 #include "osd.h"
 #include "user_io.h"
@@ -29,6 +28,7 @@
 #include "bootcore.h"
 #include "charrom.h"
 #include "scaler.h"
+#include "miniz.h"
 
 #include "support.h"
 
@@ -297,6 +297,8 @@ int user_io_get_joy_transl()
 	return joy_transl;
 }
 
+static int use_cheats = 0;
+
 static void parse_config()
 {
 	int i = 0;
@@ -361,6 +363,11 @@ static void parse_config()
 				strcat(s, " ");
 				substrcpy(s + strlen(s), p, 1);
 				OsdCoreNameSet(s);
+			}
+
+			if (p[0] == 'C')
+			{
+				use_cheats = 1;
 			}
 		}
 		i++;
@@ -1290,6 +1297,17 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 	}
 }
 
+static uint32_t file_crc;
+uint32_t user_io_get_file_crc()
+{
+	return file_crc;
+}
+
+int user_io_use_cheats()
+{
+	return use_cheats;
+}
+
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = {};
@@ -1351,12 +1369,16 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			spi_write(buf, 512, fio_size);
 			DisableFpga();
 
+			//strip original SNES ROM header if present (not used)
 			if (bytes2send & 512)
 			{
 				bytes2send -= 512;
 				FileReadSec(&f, buf);
 			}
 		}
+
+		file_crc = 0;
+		uint32_t skip = bytes2send & 0x3FF; // skip possible header up to 1023 bytes
 
 		while (bytes2send)
 		{
@@ -1372,8 +1394,16 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			DisableFpga();
 
 			bytes2send -= chunk;
+
+			if (skip >= chunk) skip -= chunk;
+			else
+			{
+				file_crc = crc32(file_crc, buf + skip, chunk - skip);
+				skip = 0;
+			}
 		}
 		printf("\n");
+		printf("CRC32: %08X\n", file_crc);
 	}
 
 	FileClose(&f);

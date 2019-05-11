@@ -188,6 +188,7 @@ void user_io_serial_tx(char *, uint16_t);
 char *user_io_8bit_get_string(char);
 uint32_t user_io_8bit_set_status(uint32_t, uint32_t);
 int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
+uint32_t user_io_get_file_crc();
 int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
 char user_io_serial_status(serial_status_t *, uint8_t);
 char *user_io_get_core_name();
@@ -251,5 +252,6 @@ void set_volume(int cmd);
 int  get_volume();
 
 void user_io_store_filename(char *filename);
+int user_io_use_cheats();
 
 #endif // USER_IO_H
