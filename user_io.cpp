@@ -314,8 +314,12 @@ static void parse_config()
 		{
 			OsdCoreNameSet(p);
 		}
+
 		if (i>=2 && p && p[0])
 		{
+			//skip Disable/Hide masks
+			while((p[0] == 'H' || p[0] == 'D') && strlen(p)>=2) p += 2;
+
 			if (p[0] == 'J')
 			{
 				int n = 1;

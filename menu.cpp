@@ -766,6 +766,7 @@ void HandleUI(void)
 	static int cr = 0;
 	static uint32_t cheatsub = 0;
 	static uint8_t card_cid[32];
+	static uint32_t hdmask = 0;
 
 	static char	cp_MenuCancel;
 
@@ -1113,6 +1114,10 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_8BIT_MAIN1: {
+		spi_uio_cmd_cont(UIO_GET_OSDMASK);
+		hdmask = spi_w(0);
+		DisableIO();
+
 		int entry = 0;
 		while(1)
 		{
@@ -1139,138 +1144,154 @@ void HandleUI(void)
 				p = user_io_8bit_get_string(i++);
 				//printf("Option %d: %s\n", i-1, p);
 
-				// check for 'F'ile or 'S'D image strings
-				if (p && ((p[0] == 'F') || (p[0] == 'S')))
+				if (p)
 				{
-					substrcpy(s, p, 2);
-					if (strlen(s))
+					int h = 0, d = 0;
+
+					//Hide or Disable flag
+					while((p[0] == 'H' || p[0] == 'D') && strlen(p)>2)
 					{
-						strcpy(s, " ");
-						substrcpy(s + 1, p, 2);
-						strcat(s, " *.");
-					}
-					else
-					{
-						if (p[0] == 'F') strcpy(s, " Load *.");
-						else            strcpy(s, " Mount *.");
-					}
-					pos = s + strlen(s);
-					substrcpy(pos, p, 1);
-					strcpy(pos, GetExt(pos));
-					MenuWrite(entry, s, menusub == selentry, 0);
-
-					// add bit in menu mask
-					menumask = (menumask << 1) | 1;
-					entry++;
-					selentry++;
-				}
-
-				// check for 'C'heats
-				if (p && (p[0] == 'C'))
-				{
-					substrcpy(s, p, 1);
-					if (strlen(s))
-					{
-						strcpy(s, " ");
-						substrcpy(s + 1, p, 1);
-					}
-					else
-					{
-						strcpy(s, " Cheats");
-					}
-					MenuWrite(entry, s, menusub == selentry, !cheats_available());
-
-					// add bit in menu mask
-					menumask = (menumask << 1) | 1;
-					entry++;
-					selentry++;
-				}
-
-				// check for 'T'oggle and 'R'eset (toggle and then close menu) strings
-				if (p && ((p[0] == 'T') || (p[0] == 'R')))
-				{
-
-					s[0] = ' ';
-					substrcpy(s + 1, p, 1);
-					MenuWrite(entry, s, menusub == selentry, 0);
-
-					// add bit in menu mask
-					menumask = (menumask << 1) | 1;
-					entry++;
-					selentry++;
-				}
-
-				// check for 'O'ption strings
-				if (p && (p[0] == 'O'))
-				{
-					//option handled by ARM
-					if (p[1] == 'X') p++;
-
-					unsigned long x = getStatus(p, status);
-
-					// get currently active option
-					substrcpy(s, p, 2 + x);
-					char l = strlen(s);
-					if (!l)
-					{
-						// option's index is outside of available values.
-						// reset to 0.
-						x = 0;
-						user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
-						substrcpy(s, p, 2 + x);
-						l = strlen(s);
+						int flg = (hdmask & (1<<getIdx(p))) ? 1 : 0;
+						if (p[0] == 'H') h = flg; else d = flg;
+						p += 2;
 					}
 
-					s[0] = ' ';
-					substrcpy(s + 1, p, 1);
-
-					char *end = s + strlen(s) - 1;
-					while ((end > s + 1) && (*end == ' ')) end--;
-					*(end + 1) = 0;
-
-					strcat(s, ":");
-					l = 28 - l - strlen(s);
-					while (l--) strcat(s, " ");
-
-					substrcpy(s + strlen(s), p, 2 + x);
-
-					MenuWrite(entry, s, menusub == selentry, 0);
-
-					// add bit in menu mask
-					menumask = (menumask << 1) | 1;
-					entry++;
-					selentry++;
-				}
-
-				// delimiter
-				if (p && (p[0] == '-'))
-				{
-					MenuWrite(entry, "", 0, 0);
-					entry++;
-				}
-
-				// check for 'V'ersion strings
-				if (p && (p[0] == 'V'))
-				{
-					// get version string
-					strcpy(s, OsdCoreName());
-					strcat(s, " ");
-					substrcpy(s + strlen(s), p, 1);
-					OsdCoreNameSet(s);
-				}
-
-				if (p && (p[0] == 'J'))
-				{
-					// joystick button names.
-					for (int n = 0; n < 28; n++)
+					if (!h)
 					{
-						substrcpy(joy_bnames[n], p, n + 1);
-						//printf("joy_bname = %s\n", joy_bnames[n]);
-						if (!joy_bnames[n][0]) break;
-						joy_bcount++;
+						// check for 'F'ile or 'S'D image strings
+						if ((p[0] == 'F') || (p[0] == 'S'))
+						{
+							substrcpy(s, p, 2);
+							if (strlen(s))
+							{
+								strcpy(s, " ");
+								substrcpy(s + 1, p, 2);
+								strcat(s, " *.");
+							}
+							else
+							{
+								if (p[0] == 'F') strcpy(s, " Load *.");
+								else             strcpy(s, " Mount *.");
+							}
+							pos = s + strlen(s);
+							substrcpy(pos, p, 1);
+							strcpy(pos, GetExt(pos));
+							MenuWrite(entry, s, menusub == selentry, d);
+
+							// add bit in menu mask
+							menumask = (menumask << 1) | 1;
+							entry++;
+							selentry++;
+						}
+
+						// check for 'C'heats
+						if (p[0] == 'C')
+						{
+							substrcpy(s, p, 1);
+							if (strlen(s))
+							{
+								strcpy(s, " ");
+								substrcpy(s + 1, p, 1);
+							}
+							else
+							{
+								strcpy(s, " Cheats");
+							}
+							MenuWrite(entry, s, menusub == selentry, !cheats_available() || d);
+
+							// add bit in menu mask
+							menumask = (menumask << 1) | 1;
+							entry++;
+							selentry++;
+						}
+
+						// check for 'T'oggle and 'R'eset (toggle and then close menu) strings
+						if ((p[0] == 'T') || (p[0] == 'R'))
+						{
+
+							s[0] = ' ';
+							substrcpy(s + 1, p, 1);
+							MenuWrite(entry, s, menusub == selentry, d);
+
+							// add bit in menu mask
+							menumask = (menumask << 1) | 1;
+							entry++;
+							selentry++;
+						}
+
+						// check for 'O'ption strings
+						if (p[0] == 'O')
+						{
+							//option handled by ARM
+							if (p[1] == 'X') p++;
+
+							unsigned long x = getStatus(p, status);
+
+							// get currently active option
+							substrcpy(s, p, 2 + x);
+							char l = strlen(s);
+							if (!l)
+							{
+								// option's index is outside of available values.
+								// reset to 0.
+								x = 0;
+								user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
+								substrcpy(s, p, 2 + x);
+								l = strlen(s);
+							}
+
+							s[0] = ' ';
+							substrcpy(s + 1, p, 1);
+
+							char *end = s + strlen(s) - 1;
+							while ((end > s + 1) && (*end == ' ')) end--;
+							*(end + 1) = 0;
+
+							strcat(s, ":");
+							l = 28 - l - strlen(s);
+							while (l--) strcat(s, " ");
+
+							substrcpy(s + strlen(s), p, 2 + x);
+
+							MenuWrite(entry, s, menusub == selentry, d);
+
+							// add bit in menu mask
+							menumask = (menumask << 1) | 1;
+							entry++;
+							selentry++;
+						}
+
+						// delimiter
+						if (p[0] == '-')
+						{
+							MenuWrite(entry, "", 0, 0);
+							entry++;
+						}
 					}
 
-					//printf("joy_bcount = %d\n", joy_bcount);
+					// check for 'V'ersion strings
+					if (p[0] == 'V')
+					{
+						// get version string
+						strcpy(s, OsdCoreName());
+						strcat(s, " ");
+						substrcpy(s + strlen(s), p, 1);
+						OsdCoreNameSet(s);
+					}
+
+					if (p[0] == 'J')
+					{
+						// joystick button names.
+						for (int n = 0; n < 28; n++)
+						{
+							substrcpy(joy_bnames[n], p, n + 1);
+							//printf("joy_bname = %s\n", joy_bnames[n]);
+							if (!joy_bnames[n][0]) break;
+							joy_bcount++;
+						}
+
+						//printf("joy_bcount = %d\n", joy_bcount);
+					}
 				}
 			} while (p);
 
@@ -1322,78 +1343,95 @@ void HandleUI(void)
 				static char ext[256];
 				p = user_io_8bit_get_string(1);
 
+				int h = 0, d = 0;
 				uint32_t entry = 0;
 				int i = 1;
 				while (1)
 				{
 					p = user_io_8bit_get_string(i++);
-					if (!p || p[0] < 'A') continue;
+					if (!p) continue;
+				
+					h = 0;
+					d = 0;
+
+					//Hide or Disable flag
+					while ((p[0] == 'H' || p[0] == 'D') && strlen(p) > 2)
+					{
+						int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
+						if (p[0] == 'H') h = flg; else d = flg;
+						p += 2;
+					}
+
+					if (h || p[0] < 'A') continue;
 					if (entry == menusub) break;
 					entry++;
 				}
 
-				if (p[0] == 'C' && cheats_available())
+				if (!d)
 				{
-					menustate = MENU_CHEATS1;
-					cheatsub = menusub;
-					menusub = 0;
-				}
-				else if (p[0] == 'F')
-				{
-					opensave = (p[1] == 'S');
-					substrcpy(ext, p, 1);
-					while (strlen(ext) % 3) strcat(ext, " ");
-					SelectFile(ext, SCANO_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
-				}
-				else if (p[0] == 'S')
-				{
-					drive_num = 0;
-					if (p[1] >= '0' && p[1] <= '3') drive_num = p[1] - '0';
-					substrcpy(ext, p, 1);
-					while (strlen(ext) % 3) strcat(ext, " ");
-					SelectFile(ext, SCANO_DIR | SCANO_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
-				}
-				else if (p[0] == 'O')
-				{
-					int byarm = 0;
-					if (p[1] == 'X')
+					if (p[0] == 'C' && cheats_available())
 					{
-						byarm = 1;
-						p++;
+						menustate = MENU_CHEATS1;
+						cheatsub = menusub;
+						menusub = 0;
 					}
-
-					unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
-					unsigned long x = getStatus(p, status) + 1;
-
-					if (byarm && is_x86_core())
+					else if (p[0] == 'F')
 					{
-						if (p[1] == '2') x86_set_fdd_boot(!(x&1));
+						opensave = (p[1] == 'S');
+						substrcpy(ext, p, 1);
+						while (strlen(ext) % 3) strcat(ext, " ");
+						SelectFile(ext, SCANO_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
 					}
-					// check if next value available
-					substrcpy(s, p, 2 + x);
-					if (!strlen(s)) x = 0;
-
-					user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
-
-					menustate = MENU_8BIT_MAIN1;
-				}
-				else if ((p[0] == 'T') || (p[0] == 'R'))
-				{
-					// determine which status bit is affected
-					unsigned long mask = 1 << getIdx(p);
-					if (mask == 1 && is_x86_core())
+					else if (p[0] == 'S')
 					{
-						x86_init();
-						menustate = MENU_NONE1;
+						drive_num = 0;
+						if (p[1] >= '0' && p[1] <= '3') drive_num = p[1] - '0';
+						substrcpy(ext, p, 1);
+						while (strlen(ext) % 3) strcat(ext, " ");
+						SelectFile(ext, SCANO_DIR | SCANO_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
 					}
-					else
+					else if (p[0] == 'O')
 					{
-						unsigned long status = user_io_8bit_set_status(0, 0);
+						int byarm = 0;
+						if (p[1] == 'X')
+						{
+							byarm = 1;
+							p++;
+						}
 
-						user_io_8bit_set_status(status ^ mask, mask);
-						user_io_8bit_set_status(status, mask);
+						unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
+						unsigned long x = getStatus(p, status) + 1;
+
+						if (byarm && is_x86_core())
+						{
+							if (p[1] == '2') x86_set_fdd_boot(!(x & 1));
+						}
+						// check if next value available
+						substrcpy(s, p, 2 + x);
+						if (!strlen(s)) x = 0;
+
+						user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
+
 						menustate = MENU_8BIT_MAIN1;
-						if (p[0] == 'R') menustate = MENU_NONE1;
+					}
+					else if ((p[0] == 'T') || (p[0] == 'R'))
+					{
+						// determine which status bit is affected
+						unsigned long mask = 1 << getIdx(p);
+						if (mask == 1 && is_x86_core())
+						{
+							x86_init();
+							menustate = MENU_NONE1;
+						}
+						else
+						{
+							unsigned long status = user_io_8bit_set_status(0, 0);
+
+							user_io_8bit_set_status(status ^ mask, mask);
+							user_io_8bit_set_status(status, mask);
+							menustate = MENU_8BIT_MAIN1;
+							if (p[0] == 'R') menustate = MENU_NONE1;
+						}
 					}
 				}
 			}

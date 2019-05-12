@@ -66,6 +66,7 @@
 #define UIO_SET_FLTNUM  0x2B  // Set Scaler predefined filter
 #define UIO_GET_VMODE   0x2C  // Get video mode parameters
 #define UIO_SET_VPOS    0x2D  // Set video positions
+#define UIO_GET_OSDMASK 0x2E  // Get mask
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
