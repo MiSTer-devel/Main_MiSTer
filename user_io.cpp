@@ -29,6 +29,7 @@
 #include "charrom.h"
 #include "scaler.h"
 #include "miniz.h"
+#include "cheats.h"
 
 #include "support.h"
 
@@ -622,6 +623,9 @@ void user_io_init(const char *path)
 							}
 						}
 					}
+
+					// cheats for boot file
+					if (user_io_use_cheats()) cheats_init("", user_io_get_file_crc());
 				}
 
 				if (is_cpc_core())
