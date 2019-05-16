@@ -3208,9 +3208,9 @@ static int api1_5 = 0;
 static uint32_t show_video_info(int force)
 {
 	uint32_t ret = 0;
-	static uint8_t nres = 0;
+	static uint16_t nres = 0;
 	spi_uio_cmd_cont(UIO_GET_VRES);
-	uint8_t res = spi_in();
+	uint16_t res = spi_w(0);
 	if ((nres != res) || force)
 	{
 		nres = res;
@@ -3230,19 +3230,21 @@ static uint32_t show_video_info(int force)
 		float prate = width * 100;
 		prate /= ptime;
 
-		printf("\033[1;33mINFO: Video resolution: %u x %u, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, hrate, vrate, prate);
+		printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, (res & 0x100) ? "i" : "", hrate, vrate, prate);
 		printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
 
 		if (vtimeh) api1_5 = 1;
 		if (hasAPI1_5() && cfg.video_info)
 		{
-			static char str[128];
+			static char str[128], res1[16], res2[16];
 			float vrateh = 100000000;
 			if (vtimeh) vrateh /= vtimeh; else vrateh = 0;
-			sprintf(str, "%4dx%-4d %6.2fKHz %4.1fHz\n" \
+			sprintf(res1, "%dx%d%s", width, height, (res & 0x100) ? "i" : "");
+			sprintf(res2, "%dx%d", v_cur.item[1], v_cur.item[5]);
+			sprintf(str, "%9s %6.2fKHz %4.1fHz\n" \
 				         "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n" \
-				         "%4dx%-4d %6.2fMHz %4.1fHz",
-				width, height, hrate, vrate, v_cur.item[1], v_cur.item[5], v_cur.Fpix, vrateh);
+				         "%9s %6.2fMHz %4.1fHz",
+				res1,  hrate, vrate, res2, v_cur.Fpix, vrateh);
 			Info(str, cfg.video_info * 1000);
 		}
 
