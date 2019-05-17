@@ -1152,7 +1152,7 @@ void HandleUI(void)
 					while((p[0] == 'H' || p[0] == 'D') && strlen(p)>2)
 					{
 						int flg = (hdmask & (1<<getIdx(p))) ? 1 : 0;
-						if (p[0] == 'H') h = flg; else d = flg;
+						if (p[0] == 'H') h |= flg; else d |= flg;
 						p += 2;
 					}
 
@@ -1358,7 +1358,7 @@ void HandleUI(void)
 					while ((p[0] == 'H' || p[0] == 'D') && strlen(p) > 2)
 					{
 						int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
-						if (p[0] == 'H') h = flg; else d = flg;
+						if (p[0] == 'H') h |= flg; else d |= flg;
 						p += 2;
 					}
 
