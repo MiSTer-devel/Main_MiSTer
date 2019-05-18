@@ -2949,7 +2949,7 @@ static void loadScalerCfg()
 	}
 }
 
-static void setVideo(vmode_custom_t *v)
+static void setVideo(vmode_custom_t *v, double Fpix)
 {
 	loadScalerCfg();
 	setScaler();
@@ -2960,24 +2960,28 @@ static void setVideo(vmode_custom_t *v)
 	for (int i = 1; i <= 8; i++)
 	{
 		v_cur.item[i] = v->item[i];
-		spi_w(v->item[i]);
-		printf("%d, ", v->item[i]);
+		spi_w(v_cur.item[i]);
+		printf("%d, ", v_cur.item[i]);
 	}
+
+	for (int i = 9; i < 21; i++) v_cur.item[i] = v->item[i];
+	v_cur.Fpix = v->Fpix;
+
+	if(Fpix) setPLL(Fpix, &v_cur);
+
 	printf("\nPLL: ");
 	for (int i = 9; i < 21; i++)
 	{
-		v_cur.item[i] = v->item[i];
-		printf("0x%X, ", v->item[i]);
-		if (i & 1) spi_w(v->item[i] | ((i == 9 && (is_menu_core() ? cfg.menu_pal : (cfg.vsync_adjust == 2))) ? 0x8000 : 0));
+		printf("0x%X, ", v_cur.item[i]);
+		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && (is_menu_core() ? cfg.menu_pal : (Fpix && cfg.vsync_adjust == 2))) ? 0x8000 : 0));
 		else
 		{
-			spi_w(v->item[i]);
-			spi_w(v->item[i] >> 16);
+			spi_w(v_cur.item[i]);
+			spi_w(v_cur.item[i] >> 16);
 		}
 	}
 
-	v_cur.Fpix = v->Fpix;
-	printf("Fpix=%f\n", v->Fpix);
+	printf("Fpix=%f\n", v_cur.Fpix);
 	DisableIO();
 }
 
@@ -3059,40 +3063,62 @@ void parse_video_mode()
 	vmode_def  = store_custom_video_mode(cfg.video_conf, &v_def);
 	vmode_pal  = store_custom_video_mode(cfg.video_conf_pal, &v_pal);
 	vmode_ntsc = store_custom_video_mode(cfg.video_conf_ntsc, &v_ntsc);
-	setVideo(&v_def);
+	setVideo(&v_def, 0);
 }
 
 static int adjust_video_mode(uint32_t vtime)
 {
 	printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
 
+	int adjust = 1;
 	vmode_custom_t *v = &v_def;
-	if (vmode_pal && vmode_ntsc)
+	if (vmode_pal || vmode_ntsc)
 	{
 		if (vtime > 1800000)
 		{
-			printf(", using PAL mode");
-			v = &v_pal;
+			if (vmode_pal)
+			{
+				printf(", using PAL mode");
+				v = &v_pal;
+			}
+			else
+			{
+				printf(", PAL mode cannot be used. Using predefined NTSC mode");
+				v = &v_ntsc;
+				adjust = 0;
+			}
 		}
 		else
 		{
-			printf(", using NTSC mode");
-			v = &v_ntsc;
+			if (vmode_ntsc)
+			{
+				printf(", using NTSC mode");
+				v = &v_ntsc;
+			}
+			else
+			{
+				printf(", NTSC mode cannot be used. Using predefined PAL mode");
+				v = &v_pal;
+				adjust = 0;
+			}
 		}
 	}
 
 	printf(".\033[0m\n");
 
-	double Fpix = 100 * (v->item[1] + v->item[2] + v->item[3] + v->item[4]) * (v->item[5] + v->item[6] + v->item[7] + v->item[8]);
-	Fpix /= vtime;
-	if (Fpix < 2.f || Fpix > 300.f)
+	double Fpix = 0;
+	if (adjust)
 	{
-		printf("Estimated Fpix(%.4f MHz) is outside supported range. Canceling auto-adjust.\n", Fpix);
-		return 0;
+		Fpix = 100 * (v->item[1] + v->item[2] + v->item[3] + v->item[4]) * (v->item[5] + v->item[6] + v->item[7] + v->item[8]);
+		Fpix /= vtime;
+		if (Fpix < 2.f || Fpix > 300.f)
+		{
+			printf("Estimated Fpix(%.4f MHz) is outside supported range. Canceling auto-adjust.\n", Fpix);
+			Fpix = 0;
+		}
 	}
 
-	setPLL(Fpix, v);
-	setVideo(v);
+	setVideo(v, Fpix);
 	user_io_send_buttons(1);
 	return 1;
 }
