@@ -111,6 +111,9 @@ enum MENU
 	MENU_BTPAIR,
 	MENU_WMPAIR,
 	MENU_WMPAIR1,
+	MENU_LGCAL,
+	MENU_LGCAL1,
+	MENU_LGCAL2,
 	MENU_CHEATS1,
 	MENU_CHEATS2,
 
@@ -734,6 +737,12 @@ const char* get_rbf_name_bootcore(char *str)
 
 static int joymap_first = 0;
 
+static int wm_x = 0;
+static int wm_y = 0;
+static int wm_ok = 0;
+static int wm_side = 0;
+static uint16_t wm_pos[4] = {};
+
 void HandleUI(void)
 {
 	switch (user_io_core_type())
@@ -815,6 +824,10 @@ void HandleUI(void)
 		if (user_io_osd_is_visible() && !access("/bin/wminput", F_OK))
 		{
 			menustate = MENU_WMPAIR;
+		}
+		else if(input_has_lightgun())
+		{
+			menustate = MENU_LGCAL;
 		}
 		break;
 
@@ -3816,6 +3829,49 @@ void HandleUI(void)
 		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
 		break;
 
+	case MENU_LGCAL:
+		helptext = 0;
+		OsdSetTitle("Wiimote Calibration", 0);
+		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
+		OsdWrite(9, "  Point Wiimote to the edge");
+		OsdWrite(10, "     of screen and press");
+		OsdWrite(11, "   the button B to confirm");
+		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
+		wm_ok = 0;
+		wm_side = 0;
+		memset(wm_pos, 0, sizeof(wm_pos));
+		menustate = MENU_LGCAL1;
+		menusub = 0;
+		break;
+
+	case MENU_LGCAL1:
+		if (wm_side < 4) wm_pos[wm_side] = (wm_side < 2) ? wm_y : wm_x;
+		sprintf(s, "           %c%04d%c", (wm_side == 0) ? 17 : 32, (wm_side == 0) ? wm_y : wm_pos[0], (wm_side == 0) ? 16 : 32);
+		OsdWrite(0, s);
+		sprintf(s, "%c%04d%c                 %c%04d%c", (wm_side == 2) ? 17 : 32, (wm_side == 2) ? wm_x : wm_pos[2], (wm_side == 2) ? 16 : 32,
+		                                                (wm_side == 3) ? 17 : 32, (wm_side == 3) ? wm_x : wm_pos[3], (wm_side == 3) ? 16 : 32);
+		OsdWrite(7, s);
+		sprintf(s, "           %c%04d%c", (wm_side == 1) ? 17 : 32, (wm_side == 1) ? wm_y : wm_pos[1], (wm_side == 1) ? 16 : 32);
+		OsdWrite(13, s);
+		if (menu || select) menustate = MENU_NONE1;
+
+		if (wm_ok == 1)
+		{
+			wm_ok = 0;
+			wm_side++;
+		}
+
+		if (wm_ok == 2)
+		{
+			wm_ok = 0;
+			if (wm_side == 4)
+			{
+				input_lightgun_cal(wm_pos);
+				menustate = MENU_NONE1;
+			}
+		}
+		break;
+
 	case MENU_SCRIPTS_PRE:
 		OsdSetTitle("Warning!!!", 0);
 		helptext = 0;
@@ -4377,4 +4433,24 @@ void Info(const char *message, int timeout, int width, int height, int frame)
 void menu_bt_pair()
 {
 	menustate = MENU_BTPAIR;
+}
+
+int menu_lightgun_cb(uint16_t type, uint16_t code, int value)
+{
+	if (type == EV_ABS)
+	{
+		if (code == 0 && value) wm_x = value;
+		if (code == 1 && value != 1023) wm_y = value;
+	}
+
+	if (type == EV_KEY)
+	{
+		if (code == 0x131 && menustate == MENU_LGCAL1)
+		{
+			if (value == 1) wm_ok = 1;
+			if (value == 0) wm_ok = 2;
+			return 1;
+		}
+	}
+	return 0;
 }
