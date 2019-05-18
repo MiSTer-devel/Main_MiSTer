@@ -36,6 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/statvfs.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <sched.h>
 #include <string.h>
 #include "file_io.h"
 #include "osd.h"
@@ -3880,6 +3881,11 @@ void HandleUI(void)
 		for (int i = 0; i < script_lines; i++) strcpy(script_output[i], "");
 		script_line=0;
 		script_exited = false;
+		cpu_set_t set;
+		CPU_ZERO(&set);
+		CPU_SET(0, &set);
+		CPU_SET(1, &set);
+		sched_setaffinity(0, sizeof(set), &set);
 		script_pipe=popen((parentstate != MENU_BTPAIR) ? getFullPath(SelectedPath) : "/usr/sbin/btpair", "r");
 		script_file = fileno(script_pipe);
 		fcntl(script_file, F_SETFL, O_NONBLOCK);
@@ -3906,6 +3912,10 @@ void HandleUI(void)
 			}
 			else {
 				pclose(script_pipe);
+				cpu_set_t set;
+				CPU_ZERO(&set);
+				CPU_SET(1, &set);
+				sched_setaffinity(0, sizeof(set), &set);
 				script_exited=true;
 				OsdWrite(OsdGetSize() - 1, "             OK", menusub == 0, 0);
 			};
@@ -3919,6 +3929,10 @@ void HandleUI(void)
 				strcat(script_command, (parentstate == MENU_BTPAIR) ? "btpair" : flist_SelectedItem()->d_name);
 				system(script_command);
 				pclose(script_pipe);
+				cpu_set_t set;
+				CPU_ZERO(&set);
+				CPU_SET(1, &set);
+				sched_setaffinity(0, sizeof(set), &set);
 				script_exited = true;
 			};
 
