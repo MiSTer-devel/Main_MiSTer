@@ -44,11 +44,14 @@ typedef struct
 
 extern mm_configTYPE minimig_config;
 
-int minimig_LoadCfg(int num);
-int minimig_SaveCfg(int num);
-const char* minimig_GetCfgInfo(int num);
+int minimig_cfg_load(int num);
+int minimig_cfg_save(int num);
+const char* minimig_get_cfg_info(int num);
 
-void MinimigReset();
-void SetKickstart(char *name);
+void minimig_reset();
+void minimig_set_kickstart(char *name);
+
+void minimig_set_adjust(char n);
+char minimig_get_adjust();
 
 #endif

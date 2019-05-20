@@ -25,6 +25,7 @@
 #include "input.h"
 #include "miniz_zip.h"
 #include "scheduler.h"
+#include "video.h"
 
 #define MIN(a,b) (((a)<(b)) ? (a) : (b))
 
@@ -766,7 +767,7 @@ void FindStorage(void)
 		device = 0;
 		MiSTer_ini_parse();
 		device = saveddev;
-		parse_video_mode();
+		video_mode_load();
 		user_io_send_buttons(1);
 
 		printf("Waiting for USB...\n");

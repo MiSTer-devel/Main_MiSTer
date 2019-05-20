@@ -67,6 +67,8 @@
 #define UIO_GET_VMODE   0x2C  // Get video mode parameters
 #define UIO_SET_VPOS    0x2D  // Set video positions
 #define UIO_GET_OSDMASK 0x2E  // Get mask
+#define UIO_SET_FBUF    0x2F  // Set frame buffer for HPS output
+#define UIO_WAIT_VSYNC  0x30  // Wait for VSync
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -222,7 +224,6 @@ void user_io_set_joyswap(int swap);
 int user_io_get_joyswap();
 char user_io_osd_is_visible();
 void user_io_send_buttons(char);
-void parse_video_mode();
 
 void user_io_set_index(unsigned char index);
 unsigned char user_io_ext_idx(char *, char*);
@@ -231,18 +232,8 @@ void user_io_check_reset(unsigned short modifiers, char useKeys);
 
 void user_io_rtc_reset();
 
-int hasAPI1_5();
-
 const char* get_rbf_dir();
 const char* get_rbf_name();
-
-int user_io_get_scaler_flt();
-char* user_io_get_scaler_coeff();
-void user_io_set_scaler_flt(int n);
-void user_io_set_scaler_coeff(char *name);
-
-void user_io_minimig_set_adjust(char n);
-char user_io_minimig_get_adjust();
 
 #define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : is_menu_core() ? "Scripts" : user_io_get_core_name())
 

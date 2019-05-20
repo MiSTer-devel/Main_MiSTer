@@ -8,6 +8,7 @@
 #include <sys/poll.h>
 #include <sys/sysinfo.h>
 #include <dirent.h>
+#include <errno.h>
 
 #include "input.h"
 #include "user_io.h"
@@ -16,7 +17,7 @@
 #include "cfg.h"
 #include "fpga_io.h"
 #include "osd.h"
-#include "errno.h"
+#include "video.h"
 
 #define NUMDEV 20
 #define NUMPLAYERS 6

@@ -50,6 +50,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "battery.h"
 #include "bootcore.h"
 #include "cheats.h"
+#include "video.h"
 
 #include "support.h"
 
@@ -1517,22 +1518,22 @@ void HandleUI(void)
 				OsdWrite(n++, s, menusub == 3);
 			}
 
-			if (user_io_get_scaler_flt() >= 0)
+			if (video_get_scaler_flt() >= 0)
 			{
 				OsdWrite(n++);
 				menumask |= 0x60;
-				sprintf(s, " Scale Filter - %s", config_scaler_msg[user_io_get_scaler_flt() ? 1 : 0]);
+				sprintf(s, " Scale Filter - %s", config_scaler_msg[video_get_scaler_flt() ? 1 : 0]);
 				OsdWrite(n++, s, menusub == 5);
 
 				memset(s, 0, sizeof(s));
 				s[0] = ' ';
-				if (strlen(user_io_get_scaler_coeff())) strncpy(s+1, user_io_get_scaler_coeff(),25);
+				if (strlen(video_get_scaler_coeff())) strncpy(s+1, video_get_scaler_coeff(),25);
 				else strcpy(s, " < none >");
 
 				while(strlen(s) < 26) strcat(s, " ");
 				strcat(s, " \x16 ");
 
-				OsdWrite(n++, s, menusub == 6, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
+				OsdWrite(n++, s, menusub == 6, !video_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
 			}
 
 			m = 0;
@@ -1617,14 +1618,14 @@ void HandleUI(void)
 				break;
                                 				
 			case 5:
-				user_io_set_scaler_flt(user_io_get_scaler_flt() ? 0 : 1);
+				video_set_scaler_flt(video_get_scaler_flt() ? 0 : 1);
 				menustate = MENU_8BIT_SYSTEM1;
 				break; 
 
 			case 6:
-				if (user_io_get_scaler_flt())
+				if (video_get_scaler_flt())
 				{
-					sprintf(SelectedPath, COEFF_DIR"/%s", user_io_get_scaler_coeff());
+					sprintf(SelectedPath, COEFF_DIR"/%s", video_get_scaler_coeff());
 					SelectFile(0, SCANO_COEFF, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
@@ -1823,8 +1824,8 @@ void HandleUI(void)
 	case MENU_COEFF_FILE_SELECTED:
 		{
 			char *p = strrchr(SelectedPath, '/');
-			if (!p) user_io_set_scaler_coeff(SelectedPath);
-			else user_io_set_scaler_coeff(p+1);
+			if (!p) video_set_scaler_coeff(SelectedPath);
+			else video_set_scaler_coeff(p+1);
 			menustate = MENU_8BIT_SYSTEM1;
 		}
 		break;
@@ -2810,7 +2811,7 @@ void HandleUI(void)
 		OsdWrite(m++, " Startup config:");
 		for (uint i = 0; i < 10; i++)
 		{
-			const char *info = minimig_GetCfgInfo(i);
+			const char *info = minimig_get_cfg_info(i);
 			static char name[128];
 
 			if (info)
@@ -2852,7 +2853,7 @@ void HandleUI(void)
 			if (menusub<10)
 			{
 				OsdDisable();
-				minimig_LoadCfg(menusub);
+				minimig_cfg_load(menusub);
 				menustate = MENU_NONE1;
 			}
 			else
@@ -3085,7 +3086,7 @@ void HandleUI(void)
 			if (m)
 			{
 				menustate = MENU_NONE1;
-				MinimigReset();
+				minimig_reset();
 			}
             else if(m == 2)
             {
@@ -3121,7 +3122,7 @@ void HandleUI(void)
 		OsdWrite(m++, " Startup config:");
 		for (uint i = 0; i < 10; i++)
 		{
-			const char *info = minimig_GetCfgInfo(i);
+			const char *info = minimig_get_cfg_info(i);
 			static char name[128];
 
 			if (info)
@@ -3180,7 +3181,7 @@ void HandleUI(void)
 			strncat(minimig_config.info, p, sizeof(minimig_config.info) - strlen(minimig_config.info) - 1);
 			minimig_config.info[sizeof(minimig_config.info) - 1] = 0;
 			
-			if (menusub<10) minimig_SaveCfg(menusub);
+			if (menusub<10) minimig_cfg_save(menusub);
 			menustate = MENU_MAIN1;
 			menusub = 9;
 		}
@@ -3411,7 +3412,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ROMFILE_SELECTED:
-		SetKickstart(SelectedPath);
+		minimig_set_kickstart(SelectedPath);
 		menustate = MENU_SETTINGS_MEMORY1;
 		break;
 
@@ -3599,7 +3600,7 @@ void HandleUI(void)
 		OsdWrite(5, s, menusub == 3, 0);
 		OsdWrite(6, "", 0, 0);
 		OsdWrite(7, "", 0, 0);
-		OsdWrite(8, user_io_minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 4, 0);
+		OsdWrite(8, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 4, 0);
 		OsdWrite(9, "", 0, 0);
 		OsdWrite(10, "", 0, 0);
 		OsdWrite(11, "", 0, 0);
@@ -3644,7 +3645,7 @@ void HandleUI(void)
 			else if (menusub == 4)
 			{
 				menustate = MENU_NONE1;
-				user_io_minimig_set_adjust(!user_io_minimig_get_adjust());
+				minimig_set_adjust(minimig_get_adjust() ? 0 : 1);
 			}
 			else if (menusub == 5)
 			{

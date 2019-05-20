@@ -445,7 +445,7 @@ void BootInit()
 	}
 
 	minimig_config.kickstart[0] = 0;
-	minimig_LoadCfg(0);
+	minimig_cfg_load(0);
 }
 
 void BootPrintEx(const char * str)
