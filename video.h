@@ -11,4 +11,7 @@ void  video_mode_adjust();
 
 int   hasAPI1_5();
 
+void video_fb_enable(int enable);
+int video_fb_state();
+
 #endif // VIDEO_H

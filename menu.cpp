@@ -833,6 +833,11 @@ void HandleUI(void)
 		}
 		break;
 
+	//debug
+	case KEY_F9:
+		video_fb_enable(!video_fb_state());
+		break;
+
 		// Within the menu the esc key acts as the menu key. problem:
 		// if the menu is left with a press of ESC, then the follwing
 		// break code for the ESC key when the key is released will 

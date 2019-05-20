@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <sys/mman.h>
 
 #include "hardware.h"
 #include "user_io.h"
@@ -12,6 +13,14 @@
 #include "video.h"
 
 #include "support.h"
+
+#define FB_SIZE (1024*1024*8) // 8MB x 3
+#define FB_ADDR (0x20000000 + (32*1024*1024)) // 512mb + 32mb(Core's fb)
+static volatile uint16_t *fb_base = 0;
+static int fb_enabled = 0;
+static int fb_fmt = 0;
+static int fb_width = 0;
+static int fb_height = 0;
 
 struct vmode_t
 {
@@ -163,7 +172,7 @@ static void setScaler()
 
 	if (FileOpen(&f, filename))
 	{
-		printf("Read scaler coefficients\n");
+		//printf("Read scaler coefficients\n");
 		char *buf = (char*)malloc(f.size+1);
 		if (buf)
 		{
@@ -189,7 +198,7 @@ static void setScaler()
 						int n = sscanf(st, "%d,%d,%d,%d", &c0, &c1, &c2, &c3);
 						if (n == 4)
 						{
-							printf("   phase %c-%02d: %4d,%4d,%4d,%4d\n", (phase >= 16) ? 'V' : 'H', phase % 16, c0, c1, c2, c3);
+							//printf("   phase %c-%02d: %4d,%4d,%4d,%4d\n", (phase >= 16) ? 'V' : 'H', phase % 16, c0, c1, c2, c3);
 							//printf("%03X: %03X %03X %03X %03X;\n",phase*4, c0 & 0x1FF, c1 & 0x1FF, c2 & 0x1FF, c3 & 0x1FF);
 
 							spi_w((c0 & 0x1FF) | (((phase * 4) + 0) << 9));
@@ -356,8 +365,28 @@ static int store_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	return ret >= 0;
 }
 
+static void fb_init()
+{
+	if (!fb_base)
+	{
+		static int fd;
+		fb_base = 0;
+
+		if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return;
+
+		fb_base = (uint16_t*)mmap(0, FB_SIZE*3, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FB_ADDR);
+		if (fb_base == (void *)-1)
+		{
+			printf("Unable to mmap FB!\n");
+			fb_base = 0;
+			close(fd);
+		}
+	}
+}
+
 void video_mode_load()
 {
+	fb_init();
 	vmode_def  = store_custom_video_mode(cfg.video_conf, &v_def);
 	vmode_pal  = store_custom_video_mode(cfg.video_conf_pal, &v_pal);
 	vmode_ntsc = store_custom_video_mode(cfg.video_conf_ntsc, &v_ntsc);
@@ -365,6 +394,11 @@ void video_mode_load()
 }
 
 static int api1_5 = 0;
+int hasAPI1_5()
+{
+	return api1_5;
+}
+
 static uint32_t show_video_info(int force)
 {
 	uint32_t ret = 0;
@@ -427,7 +461,7 @@ static uint32_t show_video_info(int force)
 
 			if(cfg.vscale_border || cfg.vscale_mode)
 			{
-				printf("*** Set vertical scaling to : %d\n", scrh);
+				printf("Set vertical scaling to : %d\n", scrh);
 				spi_uio_cmd16(UIO_SETHEIGHT, scrh);
 			}
 			else
@@ -509,7 +543,65 @@ void video_mode_adjust()
 	}
 }
 
-int hasAPI1_5()
+static void fill_fb()
 {
-	return api1_5;
+	int pos = 0;
+	for (int y = 0; y < fb_height; y++)
+	{
+		int base_color = (y / 32) & 7;
+		for (int x = 0; x < fb_width; x++)
+		{
+			int gray = (32 * x) / fb_width;
+			uint16_t color = 0;
+			if (base_color & 1) color |= gray;
+			if (base_color & 2) color |= gray << 5;
+			if (base_color & 4) color |= gray << 10;
+			fb_base[pos++] = color;
+		}
+	}
+}
+
+void video_fb_enable(int enable)
+{
+	if (fb_base)
+	{
+		int res = spi_uio_cmd_cont(UIO_SET_FBUF);
+		if (res)
+		{
+			if (enable)
+			{
+				fb_width  = (v_cur.item[1] >= 1440) ? v_cur.item[1] / 2 : v_cur.item[1];
+				fb_height = (v_cur.item[5] >= 1080) ? v_cur.item[5] / 2 : v_cur.item[5];
+
+				printf("Switch to HPS frame buffer (%dx%d)\n", fb_width, fb_height);
+				spi_w(0x8000 | (fb_fmt & 3) << 12); // enable flag, format, fixed height
+				spi_w((uint16_t)FB_ADDR); // base address low word
+				spi_w(FB_ADDR >> 16);     // base address high word
+				spi_w(fb_width);          // frame width
+				spi_w(fb_height);         // frame height
+				spi_w(0);                 // Aspect ratio X (0 - full screen)
+				spi_w(0);                 // Aspect ratio Y (0 - full screen)
+
+				fill_fb();
+			}
+			else
+			{
+				printf("Switch to core frame buffer\n");
+				spi_w(0); // enable flag
+			}
+			fb_enabled = enable;
+		}
+		else
+		{
+			printf("Core doesn't support HPS frame buffer\n");
+		}
+
+		DisableIO();
+	}
+
+}
+
+int video_fb_state()
+{
+	return fb_enabled;
 }
