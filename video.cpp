@@ -14,13 +14,21 @@
 
 #include "support.h"
 
-#define FB_SIZE (1024*1024*8) // 8MB x 3
-#define FB_ADDR (0x20000000 + (32*1024*1024)) // 512mb + 32mb(Core's fb)
-static volatile uint16_t *fb_base = 0;
+#define FB_SIZE  (1024*1024*8)                 // 8MB x 3
+#define FB_ADDR  (0x20000000 + (32*1024*1024)) // 512mb + 32mb(Core's fb)
+#define FB_FMT   2                             // 0 - 16bit, 1 - 24bit(not supported), 2 - 32bit
+#define FB_HDRSZ (256/(FB_FMT+2))
+
+#if(FB_FMT == 2)
+	static volatile uint32_t *fb_base = 0;
+#else
+	static volatile uint16_t *fb_base = 0;
+#endif
+
 static int fb_enabled = 0;
-static int fb_fmt = 0;
 static int fb_width = 0;
 static int fb_height = 0;
+static int fb_stride = 0;
 
 struct vmode_t
 {
@@ -374,7 +382,11 @@ static void fb_init()
 
 		if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return;
 
-		fb_base = (uint16_t*)mmap(0, FB_SIZE*3, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FB_ADDR);
+#if(FB_FMT == 2)
+		fb_base = (volatile uint32_t*)mmap(0, FB_SIZE * 3, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FB_ADDR);
+#else
+		fb_base = (volatile uint16_t*)mmap(0, FB_SIZE * 3, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FB_ADDR);
+#endif
 		if (fb_base == (void *)-1)
 		{
 			printf("Unable to mmap FB!\n");
@@ -548,14 +560,23 @@ static void fill_fb()
 	int pos = 0;
 	for (int y = 0; y < fb_height; y++)
 	{
+		pos = y * fb_stride + FB_HDRSZ;
 		int base_color = (y / 32) & 7;
 		for (int x = 0; x < fb_width; x++)
 		{
+#if(FB_FMT == 2)
+			int gray = (256 * x) / fb_width;
+			uint32_t color = 0;
+			if (base_color & 1) color |= gray;
+			if (base_color & 2) color |= gray << 8;
+			if (base_color & 4) color |= gray << 16;
+#else
 			int gray = (32 * x) / fb_width;
 			uint16_t color = 0;
 			if (base_color & 1) color |= gray;
 			if (base_color & 2) color |= gray << 5;
 			if (base_color & 4) color |= gray << 10;
+#endif
 			fb_base[pos++] = color;
 		}
 	}
@@ -573,14 +594,21 @@ void video_fb_enable(int enable)
 				fb_width  = (v_cur.item[1] >= 1440) ? v_cur.item[1] / 2 : v_cur.item[1];
 				fb_height = (v_cur.item[5] >= 1080) ? v_cur.item[5] / 2 : v_cur.item[5];
 
-				printf("Switch to HPS frame buffer (%dx%d)\n", fb_width, fb_height);
-				spi_w(0x8000 | (fb_fmt & 3) << 12); // enable flag, format, fixed height
-				spi_w((uint16_t)FB_ADDR); // base address low word
-				spi_w(FB_ADDR >> 16);     // base address high word
-				spi_w(fb_width);          // frame width
-				spi_w(fb_height);         // frame height
-				spi_w(0);                 // Aspect ratio X (0 - full screen)
-				spi_w(0);                 // Aspect ratio Y (0 - full screen)
+				printf("Switch to HPS frame buffer\n");
+				spi_w(0x8000 | (FB_FMT & 3) << 12); // enable flag, format, fixed height
+				spi_w((uint16_t)FB_ADDR);           // base address low word
+				spi_w(FB_ADDR >> 16);               // base address high word
+				spi_w(fb_width-1);                  // frame width
+				spi_w(fb_height-1);                 // frame height
+				spi_w(0);                           // Aspect ratio X/Y (0 - full screen)
+
+#if(FB_FMT == 2)
+				fb_stride = (((fb_width * 4 + 255) / 256) * 256)/4;
+#else
+				fb_stride = (((fb_width * 2 + 255) / 256) * 256)/2;
+#endif
+
+				printf("HPS frame buffer: %dx%d, stride = %d items\n", fb_width, fb_height, fb_stride);
 
 				fill_fb();
 			}
