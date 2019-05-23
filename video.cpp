@@ -11,13 +11,14 @@
 #include "file_io.h"
 #include "menu.h"
 #include "video.h"
+#include "input.h"
 
 #include "support.h"
 
-#define FB_SIZE  (1024*1024*8)                 // 8MB x 3
+#define FB_SIZE  (1024*1024*8)                 // 8MB
 #define FB_ADDR  (0x20000000 + (32*1024*1024)) // 512mb + 32mb(Core's fb)
 #define FB_FMT   2                             // 0 - 16bit, 1 - 24bit(not supported), 2 - 32bit
-#define FB_HDRSZ (256/(FB_FMT+2))
+#define FB_RxB   1
 
 #if(FB_FMT == 2)
 	static volatile uint32_t *fb_base = 0;
@@ -29,6 +30,8 @@ static int fb_enabled = 0;
 static int fb_width = 0;
 static int fb_height = 0;
 static int fb_stride = 0;
+static int fb_num = 0;
+static int menu_bg = 0;
 
 struct vmode_t
 {
@@ -264,6 +267,8 @@ static void loadScalerCfg()
 	}
 }
 
+static char fb_reset_cmd[128] = {};
+
 static void set_video(vmode_custom_t *v, double Fpix)
 {
 	loadScalerCfg();
@@ -288,7 +293,7 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	for (int i = 9; i < 21; i++)
 	{
 		printf("0x%X, ", v_cur.item[i]);
-		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && (is_menu_core() ? cfg.menu_pal : (Fpix && cfg.vsync_adjust == 2))) ? 0x8000 : 0));
+		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust == 2 && !is_menu_core()) ? 0x8000 : 0));
 		else
 		{
 			spi_w(v_cur.item[i]);
@@ -298,6 +303,19 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 	printf("Fpix=%f\n", v_cur.Fpix);
 	DisableIO();
+
+	if (cfg.fb_size < 1) cfg.fb_size = 1;
+	else if (cfg.fb_size == 3) cfg.fb_size = 2;
+	else if (cfg.fb_size > 4) cfg.fb_size = 4;
+
+	fb_width = v_cur.item[1] / cfg.fb_size;
+	fb_height = v_cur.item[5] / cfg.fb_size;
+	fb_stride = ((fb_width * (FB_FMT ? 4 : 2)) + 255) & ~255;
+
+	if (fb_enabled) video_fb_enable(1, fb_num);
+
+	sprintf(fb_reset_cmd, "taskset 1 echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", FB_FMT ? 8888 : 1555, FB_RxB, fb_width, fb_height, fb_stride);
+	system(fb_reset_cmd);
 }
 
 static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
@@ -377,10 +395,8 @@ static void fb_init()
 {
 	if (!fb_base)
 	{
-		static int fd;
-		fb_base = 0;
-
-		if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return;
+		int fd = open("/dev/mem", O_RDWR | O_SYNC);
+		if (fd == -1) return;
 
 #if(FB_FMT == 2)
 		fb_base = (volatile uint32_t*)mmap(0, FB_SIZE * 3, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FB_ADDR);
@@ -391,9 +407,10 @@ static void fb_init()
 		{
 			printf("Unable to mmap FB!\n");
 			fb_base = 0;
-			close(fd);
 		}
+		close(fd);
 	}
+	spi_uio_cmd16(UIO_SET_FBUF, 0);
 }
 
 void video_mode_load()
@@ -555,81 +572,268 @@ void video_mode_adjust()
 	}
 }
 
-static void fill_fb()
-{
-	int pos = 0;
-	for (int y = 0; y < fb_height; y++)
-	{
-		pos = y * fb_stride + FB_HDRSZ;
-		int base_color = (y / 32) & 7;
-		for (int x = 0; x < fb_width; x++)
-		{
-#if(FB_FMT == 2)
-			int gray = (256 * x) / fb_width;
-			uint32_t color = 0;
-			if (base_color & 1) color |= gray;
-			if (base_color & 2) color |= gray << 8;
-			if (base_color & 4) color |= gray << 16;
-#else
-			int gray = (32 * x) / fb_width;
-			uint16_t color = 0;
-			if (base_color & 1) color |= gray;
-			if (base_color & 2) color |= gray << 5;
-			if (base_color & 4) color |= gray << 10;
-#endif
-			fb_base[pos++] = color;
-		}
-	}
-}
-
-void video_fb_enable(int enable)
+void video_fb_enable(int enable, int n)
 {
 	if (fb_base)
 	{
 		int res = spi_uio_cmd_cont(UIO_SET_FBUF);
 		if (res)
 		{
+			if (is_menu_core() && !enable && menu_bg)
+			{
+				enable = 1;
+				n = 1;
+			}
+
 			if (enable)
 			{
-				fb_width  = (v_cur.item[1] >= 1440) ? v_cur.item[1] / 2 : v_cur.item[1];
-				fb_height = (v_cur.item[5] >= 1080) ? v_cur.item[5] / 2 : v_cur.item[5];
+				uint32_t fb_addr = FB_ADDR + (FB_SIZE*n);
+				fb_num = n;
 
 				printf("Switch to HPS frame buffer\n");
-				spi_w(0x8000 | (FB_FMT & 3) << 12); // enable flag, format, fixed height
-				spi_w((uint16_t)FB_ADDR);           // base address low word
-				spi_w(FB_ADDR >> 16);               // base address high word
-				spi_w(fb_width-1);                  // frame width
-				spi_w(fb_height-1);                 // frame height
-				spi_w(0);                           // Aspect ratio X/Y (0 - full screen)
+				spi_w((FB_FMT << 1) | (FB_RxB << 3) | 1); // format, enable flag
+				spi_w((uint16_t)fb_addr); // base address low word
+				spi_w(fb_addr >> 16);     // base address high word
+				spi_w(fb_width);          // frame width
+				spi_w(fb_height);         // frame height
+				spi_w(0);                 // scaled left
+				spi_w(v_cur.item[1] - 1); // scaled right
+				spi_w(0);                 // scaled top
+				spi_w(v_cur.item[5] - 1); // scaled bottom
 
-#if(FB_FMT == 2)
-				fb_stride = (((fb_width * 4 + 255) / 256) * 256)/4;
-#else
-				fb_stride = (((fb_width * 2 + 255) / 256) * 256)/2;
-#endif
-
-				printf("HPS frame buffer: %dx%d, stride = %d items\n", fb_width, fb_height, fb_stride);
-
-				fill_fb();
+				printf("HPS frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_stride);
+				if (!fb_num)
+				{
+					system(fb_reset_cmd);
+					input_switch(0);
+				}
+				else
+				{
+					input_switch(1);
+				}
 			}
 			else
 			{
 				printf("Switch to core frame buffer\n");
 				spi_w(0); // enable flag
+				input_switch(1);
 			}
+
 			fb_enabled = enable;
 		}
 		else
 		{
 			printf("Core doesn't support HPS frame buffer\n");
+			input_switch(1);
 		}
 
 		DisableIO();
 	}
-
 }
 
 int video_fb_state()
 {
+	if (is_menu_core())
+	{
+		return fb_enabled && !fb_num;
+	}
+
 	return fb_enabled;
+}
+
+static void draw_checkers()
+{
+	volatile uint32_t* buf = fb_base + (FB_SIZE / 4);
+	int stride = fb_stride / (FB_FMT + 2);
+
+	uint32_t col1 = 0xCCCCCC;
+	uint32_t col2 = 0x888888;
+	int sz = 16;
+
+	int pos = 0;
+	for (int y = 0; y < fb_height; y++)
+	{
+		int c1 = (y / sz) & 1;
+		pos = y * stride;
+		for (int x = 0; x < fb_width; x++)
+		{
+			int c2 = c1 ^ ((x / sz) & 1);
+			buf[pos++] = c2 ? col2 : col1;
+		}
+	}
+}
+
+static void draw_hbars1()
+{
+	volatile uint32_t* buf = fb_base + (FB_SIZE / 4);
+	int stride = fb_stride / (FB_FMT + 2);
+	int old_base = 0;
+	int gray = 255;
+
+	for (int y = 0; y < fb_height; y++)
+	{
+		int pos = y * stride;
+		int base_color = 7-((7 * y) / fb_height);
+		if (old_base != base_color)
+		{
+			gray = 255;
+			old_base = base_color;
+		}
+
+		for (int x = 0; x < fb_width; x++)
+		{
+			uint32_t color = 0;
+			if (base_color & 4) color |= gray;
+			if (base_color & 2) color |= gray << 8;
+			if (base_color & 1) color |= gray << 16;
+			buf[pos++] = color;
+		}
+
+		gray -= 3;
+		if (gray < 0) gray = 0;
+	}
+}
+
+static void draw_hbars2()
+{
+	volatile uint32_t* buf = fb_base + (FB_SIZE / 4);
+	int stride = fb_stride / (FB_FMT + 2);
+
+	for (int y = 0; y < fb_height; y++)
+	{
+		int pos = y * stride;
+		int base_color = ((14 * y) / fb_height);
+		int inv = base_color & 1;
+		base_color >>= 1;
+		base_color = (inv ? base_color : 6 - base_color) + 1;
+		for (int x = 0; x < fb_width; x++)
+		{
+			int gray = (256 * x) / fb_width;
+			if (inv) gray = 255 - gray;
+			uint32_t color = 0;
+			if (base_color & 4) color |= gray;
+			if (base_color & 2) color |= gray << 8;
+			if (base_color & 1) color |= gray << 16;
+			buf[pos++] = color;
+		}
+	}
+}
+
+static void draw_vbars1()
+{
+	volatile uint32_t* buf = fb_base + (FB_SIZE / 4);
+	int stride = fb_stride / (FB_FMT + 2);
+
+	for (int y = 0; y < fb_height; y++)
+	{
+		int pos = y * stride;
+		int old_base = 0;
+		int gray = 255;
+		for (int x = 0; x < fb_width; x++)
+		{
+			int base_color = 7-((7 * x) / fb_width);
+			if (old_base != base_color)
+			{
+				gray = 255;
+				old_base = base_color;
+			}
+			uint32_t color = 0;
+			if (base_color & 4) color |= gray;
+			if (base_color & 2) color |= gray << 8;
+			if (base_color & 1) color |= gray << 16;
+			buf[pos++] = color;
+			gray -= 2;
+			if (gray < 0) gray = 0;
+		}
+	}
+}
+
+static void draw_vbars2()
+{
+	volatile uint32_t* buf = fb_base + (FB_SIZE / 4);
+	int stride = fb_stride / (FB_FMT + 2);
+
+	for (int y = 0; y < fb_height; y++)
+	{
+		int pos = y * stride;
+		for (int x = 0; x < fb_width; x++)
+		{
+			int gray = 255 - ((256 * y) / fb_height);
+			int base_color = ((14 * x) / fb_width);
+			int inv = base_color & 1;
+			base_color >>= 1;
+			base_color = (inv ? base_color : 6 - base_color) + 1;
+
+			if (inv) gray = 255 - gray;
+			uint32_t color = 0;
+			if (base_color & 4) color |= gray;
+			if (base_color & 2) color |= gray << 8;
+			if (base_color & 1) color |= gray << 16;
+			buf[pos++] = color;
+		}
+	}
+}
+
+static void draw_spectrum()
+{
+	volatile uint32_t* buf = fb_base + (FB_SIZE / 4);
+	int stride = fb_stride / (FB_FMT + 2);
+
+	for (int y = 0; y < fb_height; y++)
+	{
+		int pos = y * stride;
+		int blue = ((256 * y) / fb_height);
+		for (int x = 0; x < fb_width; x++)
+		{
+			int red = ((256 * x) / fb_width) - blue / 2;
+			int green = 255 - red - blue / 2;
+			if (red < 0) red = 0;
+			if (green < 0) green = 0;
+
+			buf[pos++] = (red<<16) | (green<<8) | blue;
+		}
+	}
+}
+
+static void draw_black()
+{
+	volatile uint32_t* buf = fb_base + (FB_SIZE / 4);
+	int stride = fb_stride / (FB_FMT + 2);
+
+	for (int y = 0; y < fb_height; y++)
+	{
+		int pos = y * stride;
+		for (int x = 0; x < fb_width; x++) buf[pos++] = 0;
+	}
+}
+
+void video_menu_bg(int n)
+{
+	menu_bg = n;
+	video_fb_enable(0);
+
+	switch (n)
+	{
+	case 1:
+		draw_checkers();
+		break;
+	case 2:
+		draw_hbars1();
+		break;
+	case 3:
+		draw_hbars2();
+		break;
+	case 4:
+		draw_vbars1();
+		break;
+	case 5:
+		draw_vbars2();
+		break;
+	case 6:
+		draw_spectrum();
+		break;
+	case 7:
+		draw_black();
+		break;
+	}
 }

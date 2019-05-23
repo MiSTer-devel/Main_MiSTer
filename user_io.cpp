@@ -593,6 +593,12 @@ void user_io_init(const char *path)
 			}
 			parse_config();
 
+			if (is_menu_core())
+			{
+				user_io_8bit_set_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
+				video_menu_bg((status >> 1) & 7);
+			}
+
 			if (is_x86_core())
 			{
 				x86_config_load();
@@ -1533,6 +1539,7 @@ void user_io_send_buttons(char force)
 			if ((key_map & BUTTON2) && !(map & BUTTON2))
 			{
 				const char *name = get_rbf_name();
+				OsdDisable();
 				fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			}
 		}
@@ -2162,6 +2169,7 @@ void user_io_poll()
 
 	if (!coldreset_req && prev_coldreset_req)
 	{
+		OsdDisable();
 		fpga_load_rbf("menu.rbf");
 	}
 
@@ -2468,6 +2476,7 @@ void user_io_osd_key_enable(char on)
 {
 	printf("OSD is now %s\n", on ? "visible" : "invisible");
 	osd_is_visible = on;
+	input_switch(-1);
 }
 
 int get_volume()
@@ -2644,7 +2653,7 @@ void user_io_kbd(uint16_t key, int press)
 					else
 					{
 						if(key == KEY_MENU) key = KEY_F12;
-						send_keycode(key, press);
+						if(input_state()) send_keycode(key, press);
 					}
 				}
 			}

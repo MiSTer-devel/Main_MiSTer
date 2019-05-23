@@ -13,6 +13,7 @@ void MiSTer_ini_parse()
 {
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.bootscreen = 1;
+	cfg.fb_size = 1;
 	ini_parse(&ini_cfg);
 }
 
@@ -50,6 +51,7 @@ const ini_var_t ini_vars[] = {
 	{ "BOOTCORE", (void*)(&(cfg.bootcore)), STRING, 0, sizeof(cfg.bootcore) - 1, 1 },
 	{ "BOOTCORE_TIMEOUT", (void*)(&(cfg.bootcore_timeout)), INT16, 10, 30, 1 },
 	{ "FONT", (void*)(&(cfg.font)), STRING, 0, sizeof(cfg.font) - 1, 1 },
+	{ "FB_SIZE", (void*)(&(cfg.fb_size)), UINT8, 1, 4, 1 },
 };
 
 // mist ini config

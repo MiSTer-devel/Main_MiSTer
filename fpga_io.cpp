@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include "fpga_io.h"
 #include "file_io.h"
+#include "input.h"
 
 #include "fpga_base_addr_ac5.h"
 #include "fpga_manager.h"
@@ -627,6 +628,8 @@ void app_restart(const char *path)
 {
 	sync();
 	fpga_core_reset(1);
+
+	input_switch(0);
 
 	char *appname = getappname();
 	printf("restarting the %s\n", appname);

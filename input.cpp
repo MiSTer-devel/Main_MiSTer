@@ -1171,6 +1171,8 @@ static int mapping_set;
 static uint32_t tmp_axis[4];
 static int tmp_axis_n = 0;
 
+static int grabbed = 1;
+
 void start_map_setting(int cnt, int set)
 {
 	mapping_button = 0;
@@ -1372,6 +1374,11 @@ static uint32_t mouse_timer = 0;
 #define BTN_TGL 100
 #define BTN_OSD 101
 
+static void mouse_cb(unsigned char b, int16_t x, int16_t y)
+{
+	if (grabbed) user_io_mouse(b, x, y);
+}
+
 static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum)
 {
 	static char str[128];
@@ -1479,7 +1486,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				mouse_btn = 0;
 				mouse_emu_x = 0;
 				mouse_emu_y = 0;
-				user_io_mouse(mice_btn, 0, 0);
+				mouse_cb(mice_btn, 0, 0);
 
 				mouse_emu ^= 2;
 				if (hasAPI1_5()) Info((mouse_emu & 2) ? "Mouse mode ON" : "Mouse mode OFF");
@@ -1551,7 +1558,7 @@ static void joy_analog(int num, int axis, int offset)
 {
 	static int pos[NUMPLAYERS][2] = {};
 
-	if (num > 0 && num < NUMPLAYERS+1)
+	if (grabbed && num > 0 && num < NUMPLAYERS+1)
 	{
 		num--;
 		pos[num][axis] = offset;
@@ -1985,7 +1992,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - 12) : mouse_btn & ~(1 << (i - 12));
-									user_io_mouse(mouse_btn | mice_btn, 0, 0);
+									mouse_cb(mouse_btn | mice_btn, 0, 0);
 									break;
 								}
 								return;
@@ -2025,7 +2032,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_btn = 0;
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
-							user_io_mouse(mice_btn, 0, 0);
+							mouse_cb(mice_btn, 0, 0);
 						}
 					}
 				}
@@ -2113,7 +2120,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - 12) : mouse_btn & ~(1 << (i - 12));
-									user_io_mouse(mouse_btn | mice_btn, 0, 0);
+									mouse_cb(mouse_btn | mice_btn, 0, 0);
 									break;
 								}
 								return;
@@ -2138,7 +2145,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_btn = 0;
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
-							user_io_mouse(mice_btn, 0, 0);
+							mouse_cb(mice_btn, 0, 0);
 						}
 						return;
 					}
@@ -2365,6 +2372,8 @@ int input_test(int getchar)
 							memset(input[n].uniq, 0, sizeof(input[n].uniq));
 						}
 
+						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
+
 						n++;
 						if (n >= NUMDEV) break;
 					}
@@ -2410,7 +2419,11 @@ int input_test(int getchar)
 			if ((pool[NUMDEV].revents & POLLIN) && check_devs())
 			{
 				printf("Close all devices.\n");
-				for (int i = 0; i<NUMDEV; i++) if (pool[i].fd >= 0) close(pool[i].fd);
+				for (int i = 0; i < NUMDEV; i++) if (pool[i].fd >= 0)
+				{
+					ioctl(pool[i].fd, EVIOCGRAB, 0);
+					close(pool[i].fd);
+				}
 				state = 1;
 				return 0;
 			}
@@ -2737,7 +2750,7 @@ int input_test(int getchar)
 					mice_btn = data[0] & 7;
 					if (ds_mouse_emu) mice_btn = (mice_btn & 4) | ((mice_btn & 1)<<1);
 
-					user_io_mouse(mouse_btn | mice_btn, xval, yval);
+					mouse_cb(mouse_btn | mice_btn, xval, yval);
 				}
 			}
 		}
@@ -2797,7 +2810,7 @@ int input_poll(int getchar)
 				if (dy < -2) dy = -2;
 			}
 
-			user_io_mouse(mouse_btn | mice_btn, dx, dy);
+			mouse_cb(mouse_btn | mice_btn, dx, dy);
 			prev_dx = mouse_emu_x;
 			prev_dy = mouse_emu_y;
 		}
@@ -2832,7 +2845,7 @@ int input_poll(int getchar)
 			if (joy[i] & autofire[i]) send = 1;
 		}
 
-		if (send)
+		if (grabbed && send)
 		{
 			user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i], newdir);
 		}
@@ -2878,5 +2891,21 @@ void input_notify_mode()
 	mouse_btn = 0;
 	mouse_emu_x = 0;
 	mouse_emu_y = 0;
-	user_io_mouse(mice_btn, 0, 0);
+	mouse_cb(mice_btn, 0, 0);
+}
+
+void input_switch(int grab)
+{
+	if (grab >= 0) grabbed = grab;
+	printf("input_switch(%d), grabbed = %d\n", grab, grabbed);
+
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (pool[i].fd >= 0) ioctl(pool[i].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
+	}
+}
+
+int input_state()
+{
+	return grabbed;
 }
