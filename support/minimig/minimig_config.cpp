@@ -116,7 +116,7 @@ static char UploadKickstart(char *name)
 			FileClose(&file);
 			return(1);
 		}
-		else if (file.size == 8203) {
+		else if ((file.size == 8203) && keysize) {
 		        // Cloanto encrypted A1000 boot ROM
 		        BootPrint("Uploading encrypted A1000 boot ROM");
 			SendFileV2(&file, romkey, keysize, 0xf80000, file.size >> 9);
