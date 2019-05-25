@@ -9,9 +9,11 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+
 #include "fpga_io.h"
 #include "file_io.h"
 #include "input.h"
+#include "osd.h"
 
 #include "fpga_base_addr_ac5.h"
 #include "fpga_manager.h"
@@ -448,6 +450,7 @@ static int make_env(const char *name, const char *cfg)
 
 int fpga_load_rbf(const char *name, const char *cfg)
 {
+	OsdDisable();
 	static char path[1024];
 	int ret = 0;
 

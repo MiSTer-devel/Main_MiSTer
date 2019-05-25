@@ -4083,12 +4083,10 @@ void HandleUI(void)
 		}
 
 		// close OSD now as the new core may not even have one
-		OsdDisable();
 		fpga_load_rbf(SelectedRBF);
 		break;
 
 	case MENU_CORE_FILE_SELECTED2:
-		OsdDisable();
 		fpga_load_rbf(SelectedRBF, SelectedPath);
 		menustate = MENU_NONE1;
 		break;

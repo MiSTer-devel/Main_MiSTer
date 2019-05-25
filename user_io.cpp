@@ -1539,7 +1539,6 @@ void user_io_send_buttons(char force)
 			if ((key_map & BUTTON2) && !(map & BUTTON2))
 			{
 				const char *name = get_rbf_name();
-				OsdDisable();
 				fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			}
 		}
@@ -2169,7 +2168,6 @@ void user_io_poll()
 
 	if (!coldreset_req && prev_coldreset_req)
 	{
-		OsdDisable();
 		fpga_load_rbf("menu.rbf");
 	}
 
