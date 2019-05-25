@@ -90,13 +90,13 @@ enum MENU
 	MENU_LOADCONFIG_2,
 	MENU_SAVECONFIG_1,
 	MENU_SAVECONFIG_2,
-	MENU_FIRMWARE1,
-	MENU_FIRMWARE_CORE_FILE_SELECTED1,
-	MENU_FIRMWARE_CORE_FILE_SELECTED2,
-	MENU_FIRMWARE_CORE_FILE_CANCELED,
+	MENU_SYSTEM1,
+	MENU_SYSTEM2,
+	MENU_CORE_FILE_SELECTED1,
+	MENU_CORE_FILE_SELECTED2,
+	MENU_CORE_FILE_CANCELED,
 	MENU_ERROR,
 	MENU_INFO,
-	MENU_STORAGE,
 	MENU_JOYDIGMAP,
 	MENU_JOYDIGMAP1,
 	MENU_JOYDIGMAP2,
@@ -463,7 +463,7 @@ static uint32_t menu_key_get(void)
 	c2 = c1;
 
 	// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
-	if (!user_io_osd_is_visible() && is_menu_core()) c = KEY_F12;
+	if (!user_io_osd_is_visible() && !video_fb_state() && is_menu_core()) c = KEY_F12;
 
 	// generate repeat "key-pressed" events
 	if ((c1 & UPSTROKE) || (!c1))
@@ -804,6 +804,7 @@ void HandleUI(void)
 	case KEY_F12:
 		menu = true;
 		menu_key_set(KEY_F12 | UPSTROKE);
+		video_fb_enable(0);
 		break;
 	case KEY_F1:
 		if (is_menu_core())
@@ -812,6 +813,7 @@ void HandleUI(void)
 			status <<= 1;
 			user_io_8bit_set_status(status, 0xE);
 			FileSaveConfig(user_io_create_config_name(), &status, 4);
+			video_menu_bg((status >> 1) & 7);
 		}
 		break;
 
@@ -833,9 +835,9 @@ void HandleUI(void)
 		}
 		break;
 
-	//debug
 	case KEY_F9:
 		video_fb_enable(!video_fb_state());
+		if(video_fb_state() || !is_menu_core()) menustate = MENU_NONE1;
 		break;
 
 		// Within the menu the esc key acts as the menu key. problem:
@@ -966,7 +968,7 @@ void HandleUI(void)
 			OsdSetSize(16);
 			if(!is_menu_core() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
 			{
-				SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_NONE1);
+				SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_NONE1);
 			}
 			else if (user_io_core_type() == CORE_TYPE_MINIMIG2) menustate = MENU_MAIN1;
 			else if (user_io_core_type() == CORE_TYPE_MIST) menustate = MENU_MIST_MAIN1;
@@ -975,7 +977,7 @@ void HandleUI(void)
 				if (is_menu_core())
 				{
 					OsdCoreNameSet("");
-					SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_FIRMWARE1);
+					SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_SYSTEM1);
 				}
 				else
 				{
@@ -1582,7 +1584,7 @@ void HandleUI(void)
 			switch (menusub)
 			{
 			case 0:
-				SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, MENU_8BIT_SYSTEM1);
+				SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_8BIT_SYSTEM1);
 				menusub = 0;
 				break;
 
@@ -2008,7 +2010,7 @@ void HandleUI(void)
 				finish_map_setting(menu);
 				if (is_menu_core())
 				{
-					menustate = MENU_FIRMWARE1;
+					menustate = MENU_SYSTEM1;
 					menusub = 2;
 				}
 				else
@@ -3679,7 +3681,13 @@ void HandleUI(void)
 		/******************************************************************/
 		/* firmware menu */
 		/******************************************************************/
-	case MENU_FIRMWARE1:
+	case MENU_SYSTEM1:
+		if (video_fb_state())
+		{
+			menustate = MENU_NONE1;
+			break;
+		}
+
 		helptext = helptexts[HELPTEXT_NONE];
 		parentstate = menustate;
 
@@ -3733,25 +3741,14 @@ void HandleUI(void)
 		OsdWrite(9, " Scripts                   \x16", menusub == 3, 0);
 		sysinfo_timer = 0;
 
-		menustate = MENU_STORAGE;
+		menustate = MENU_SYSTEM2;
 
-	case MENU_STORAGE:
+	case MENU_SYSTEM2:
 		if (menu)
 		{
-			switch (user_io_core_type()) {
-			case CORE_TYPE_MIST:
-				menusub = 5;
-				menustate = MENU_MIST_MAIN1;
-				break;
-			case CORE_TYPE_ARCHIE:
-				menusub = 3;
-				menustate = MENU_ARCHIE_MAIN1;
-				break;
-			default:
-				menusub = 0;
-				menustate = MENU_NONE1;
-				break;
-			}
+			OsdCoreNameSet("");
+			SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_SYSTEM1);
+			break;
 		}
 		else if (select)
 		{
@@ -3801,7 +3798,7 @@ void HandleUI(void)
 						}
 					}
 
-					if(match) SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
+					if(match) SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_SYSTEM1);
 					else
 					{
 						menustate = MENU_SCRIPTS_PRE;
@@ -3905,13 +3902,13 @@ void HandleUI(void)
 		break;
 
 	case MENU_SCRIPTS_PRE1:
-		if (menu) menustate = MENU_FIRMWARE1;
+		if (menu) menustate = MENU_SYSTEM1;
 		else if (select)
 		{
 			switch (menusub)
 			{
 			case 0:
-				menustate = MENU_FIRMWARE1;
+				menustate = MENU_SYSTEM1;
 				break;
 
 			case 2:
@@ -3919,7 +3916,7 @@ void HandleUI(void)
 				// fall through
 
 			case 1:
-				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_FIRMWARE1);
+				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_SYSTEM1);
 				break;
 			}
 		}
@@ -4004,7 +4001,7 @@ void HandleUI(void)
 			}
 			else
 			{
-				menustate = MENU_FIRMWARE1;
+				menustate = MENU_SYSTEM1;
 				menusub = 3;
 			}
 		}
@@ -4045,12 +4042,12 @@ void HandleUI(void)
 		if (select || menu)
 		{
 			finish_map_setting(menu);
-			menustate = MENU_FIRMWARE1;
+			menustate = MENU_SYSTEM1;
 			menusub = 1;
 		}
 		break;
 
-	case MENU_FIRMWARE_CORE_FILE_SELECTED1:
+	case MENU_CORE_FILE_SELECTED1:
 		menustate = MENU_NONE1;
 		strcpy(SelectedRBF, SelectedPath);
 		if (!getStorage(0)) // multiboot is only on SD card.
@@ -4067,7 +4064,7 @@ void HandleUI(void)
 					strcat(SelectedPath, ".txt");
 					if (FileLoad(SelectedPath, 0, 0))
 					{
-						menustate = MENU_FIRMWARE_CORE_FILE_SELECTED2;
+						menustate = MENU_CORE_FILE_SELECTED2;
 						break;
 					}
 				}
@@ -4078,8 +4075,8 @@ void HandleUI(void)
 				strcpy(fs_pFileExt, "TXT");
 				fs_ExtLen = 3;
 				fs_Options = SCANO_CORES;
-				fs_MenuSelect = MENU_FIRMWARE_CORE_FILE_SELECTED2;
-				fs_MenuCancel = MENU_FIRMWARE_CORE_FILE_CANCELED;
+				fs_MenuSelect = MENU_CORE_FILE_SELECTED2;
+				fs_MenuCancel = MENU_CORE_FILE_CANCELED;
 				menustate = MENU_FILE_SELECT1;
 				break;
 			}
@@ -4090,14 +4087,14 @@ void HandleUI(void)
 		fpga_load_rbf(SelectedRBF);
 		break;
 
-	case MENU_FIRMWARE_CORE_FILE_SELECTED2:
+	case MENU_CORE_FILE_SELECTED2:
 		OsdDisable();
 		fpga_load_rbf(SelectedRBF, SelectedPath);
 		menustate = MENU_NONE1;
 		break;
 
-	case MENU_FIRMWARE_CORE_FILE_CANCELED:
-		SelectFile(0, SCANO_CORES, MENU_FIRMWARE_CORE_FILE_SELECTED1, cp_MenuCancel);
+	case MENU_CORE_FILE_CANCELED:
+		SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, cp_MenuCancel);
 		break;
 
 		/******************************************************************/

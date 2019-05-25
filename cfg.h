@@ -34,6 +34,7 @@ typedef struct {
 	uint8_t rbf_hide_datecode;
 	uint8_t menu_pal;
 	int16_t bootcore_timeout;
+	uint8_t fb_size;
 	char bootcore[256];
 	char video_conf[1024];
 	char video_conf_pal[1024];

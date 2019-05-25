@@ -5,7 +5,7 @@ SHELL = /bin/bash -o pipefail
 BASE    = arm-linux-gnueabihf
 
 CC      = $(BASE)-gcc
-LD      = $(CC)
+LD      = $(BASE)-ld
 STRIP   = $(BASE)-strip
 
 ifeq ($(V),1)
@@ -22,6 +22,7 @@ INCLUDE	+= -I./lib/miniz
 PRJ = MiSTer
 SRC = $(wildcard *.c)
 SRC2 = $(wildcard *.cpp)
+IMG = $(wildcard *.png)
 MINIMIG_SRC	= $(wildcard ./support/minimig/*.cpp)
 SHARPMZ_SRC	= $(wildcard ./support/sharpmz/*.cpp)
 ARCHIE_SRC	= $(wildcard ./support/archie/*.cpp)
@@ -32,18 +33,20 @@ LIBCO_SRC	= lib/libco/arm.c
 LODEPNG_SRC	= lib/lodepng/lodepng.cpp
 MINIZ_SRC	= $(wildcard ./lib/miniz/*.c)
 
+IMLIB2_LIB  = -Llib/imlib2 -lfreetype -lbz2 -lpng16 -lz -lImlib2
+
 VPATH	= ./:./support/minimig:./support/sharpmz:./support/archie:./support/st:./support/x86:./support/snes
 
-OBJ	= $(SRC:.c=.c.o) $(SRC2:.cpp=.cpp.o) $(MINIMIG_SRC:.cpp=.cpp.o) $(SHARPMZ_SRC:.cpp=.cpp.o) $(ARCHIE_SRC:.cpp=.cpp.o) $(ST_SRC:.cpp=.cpp.o) $(X86_SRC:.cpp=.cpp.o) $(SNES_SRC:.cpp=.cpp.o) $(LIBCO_SRC:.c=.c.o) $(MINIZ_SRC:.c=.c.o) $(LODEPNG_SRC:.cpp=.cpp.o)
+OBJ	= $(SRC:.c=.c.o) $(SRC2:.cpp=.cpp.o) $(IMG:.png=.png.o) $(MINIMIG_SRC:.cpp=.cpp.o) $(SHARPMZ_SRC:.cpp=.cpp.o) $(ARCHIE_SRC:.cpp=.cpp.o) $(ST_SRC:.cpp=.cpp.o) $(X86_SRC:.cpp=.cpp.o) $(SNES_SRC:.cpp=.cpp.o) $(LIBCO_SRC:.c=.c.o) $(MINIZ_SRC:.c=.c.o) $(LODEPNG_SRC:.cpp=.cpp.o)
 DEP	= $(SRC:.c=.cpp.d) $(SRC2:.cpp=.cpp.d) $(MINIMIG_SRC:.cpp=.cpp.d) $(SHARPMZ_SRC:.cpp=.cpp.d) $(ARCHIE_SRC:.cpp=.cpp.d) $(ST_SRC:.cpp=.cpp.d) $(X86_SRC:.cpp=.cpp.d) $(SNES_SRC:.cpp=.cpp.d) $(LIBCO_SRC:.c=.c.d) $(MINIZ_SRC:.c=.c.d) $(LODEPNG_SRC:.cpp=.cpp.d)
 
 DFLAGS	= $(INCLUDE) -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
 CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -c -O3
-LFLAGS	= -lc -lstdc++ -lrt
+LFLAGS	= -lc -lstdc++ -lrt $(IMLIB2_LIB)
 
 $(PRJ): $(OBJ)
 	$(Q)$(info $@)
-	$(Q)$(LD) -o $@ $+ $(LFLAGS)
+	$(Q)$(CC) -o $@ $+ $(LFLAGS)
 	$(Q)cp $@ $@.elf
 	$(Q)$(STRIP) $@
 
@@ -65,6 +68,10 @@ cleanall:
 %.cpp.o: %.cpp
 	$(Q)$(info $<)
 	$(Q)$(CC) $(CFLAGS) -std=gnu++14 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+
+%.png.o: %.png
+	$(Q)$(info $<)
+	$(Q)$(LD) -r -b binary -o $@ $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 -include $(DEP)
 %.c.d: %.c
