@@ -2372,6 +2372,12 @@ int input_test(int getchar)
 							memset(input[n].uniq, 0, sizeof(input[n].uniq));
 						}
 
+						//Ultimarc lightgun
+						if (input[n].vid == 0xd209 && input[n].pid == 0x1601)
+						{
+							input[n].lightgun = 1;
+						}
+
 						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
 
 						n++;
