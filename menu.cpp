@@ -804,6 +804,7 @@ void HandleUI(void)
 	case KEY_F12:
 		menu = true;
 		menu_key_set(KEY_F12 | UPSTROKE);
+		video_fb_enable(0);
 		break;
 	case KEY_F1:
 		if (is_menu_core())
@@ -834,7 +835,6 @@ void HandleUI(void)
 		}
 		break;
 
-	//debug
 	case KEY_F9:
 		video_fb_enable(!video_fb_state());
 		if(video_fb_state() || !is_menu_core()) menustate = MENU_NONE1;

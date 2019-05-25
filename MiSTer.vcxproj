@@ -107,6 +107,7 @@
     <ClInclude Include="hardware.h" />
     <ClInclude Include="ini_parser.h" />
     <ClInclude Include="input.h" />
+    <ClInclude Include="lib\imlib2\Imlib2.h" />
     <ClInclude Include="lib\libco\libco.h" />
     <ClInclude Include="lib\libco\settings.h" />
     <ClInclude Include="lib\lodepng\lodepng.h" />

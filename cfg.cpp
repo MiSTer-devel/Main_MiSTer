@@ -13,7 +13,6 @@ void MiSTer_ini_parse()
 {
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.bootscreen = 1;
-	cfg.fb_size = 1;
 	ini_parse(&ini_cfg);
 }
 

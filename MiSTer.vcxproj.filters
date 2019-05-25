@@ -291,5 +291,8 @@
     <ClInclude Include="video.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="lib\imlib2\Imlib2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
