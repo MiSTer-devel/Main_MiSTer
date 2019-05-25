@@ -190,11 +190,14 @@ uint8_t* snes_get_header(fileTYPE *f)
 					hdr[1] |= 0xB0;
 				}
 				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0xf6)
-				{
-					//ST010
+				{	//ST010
 					hdr[1] |= 0x88;
 					if(buf[addr + RomSize] < 10) hdr[1] |= 0x20; // ST011
 					//ramsz = 2;
+				}
+				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x25)
+				{	//OBC1
+					hdr[1] |= 0xC0;
 				}
 
 				//CX4 4
@@ -224,7 +227,7 @@ uint8_t* snes_get_header(fileTYPE *f)
 					hdr[1] |= 0x70;
 				}
 
-				//1..3,C..F - reserved for other mappers.
+				//1..3,D..F - reserved for other mappers.
 
 				hdr[2] = 0;
 

@@ -36,6 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/statvfs.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <sched.h>
 #include <string.h>
 #include "file_io.h"
 #include "osd.h"
@@ -49,6 +50,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "battery.h"
 #include "bootcore.h"
 #include "cheats.h"
+#include "video.h"
 
 #include "support.h"
 
@@ -111,6 +113,9 @@ enum MENU
 	MENU_BTPAIR,
 	MENU_WMPAIR,
 	MENU_WMPAIR1,
+	MENU_LGCAL,
+	MENU_LGCAL1,
+	MENU_LGCAL2,
 	MENU_CHEATS1,
 	MENU_CHEATS2,
 
@@ -734,6 +739,12 @@ const char* get_rbf_name_bootcore(char *str)
 
 static int joymap_first = 0;
 
+static int wm_x = 0;
+static int wm_y = 0;
+static int wm_ok = 0;
+static int wm_side = 0;
+static uint16_t wm_pos[4] = {};
+
 void HandleUI(void)
 {
 	switch (user_io_core_type())
@@ -816,6 +827,15 @@ void HandleUI(void)
 		{
 			menustate = MENU_WMPAIR;
 		}
+		else if(input_has_lightgun())
+		{
+			menustate = MENU_LGCAL;
+		}
+		break;
+
+	//debug
+	case KEY_F9:
+		video_fb_enable(!video_fb_state());
 		break;
 
 		// Within the menu the esc key acts as the menu key. problem:
@@ -1152,7 +1172,7 @@ void HandleUI(void)
 					while((p[0] == 'H' || p[0] == 'D') && strlen(p)>2)
 					{
 						int flg = (hdmask & (1<<getIdx(p))) ? 1 : 0;
-						if (p[0] == 'H') h = flg; else d = flg;
+						if (p[0] == 'H') h |= flg; else d |= flg;
 						p += 2;
 					}
 
@@ -1358,7 +1378,7 @@ void HandleUI(void)
 					while ((p[0] == 'H' || p[0] == 'D') && strlen(p) > 2)
 					{
 						int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
-						if (p[0] == 'H') h = flg; else d = flg;
+						if (p[0] == 'H') h |= flg; else d |= flg;
 						p += 2;
 					}
 
@@ -1503,22 +1523,22 @@ void HandleUI(void)
 				OsdWrite(n++, s, menusub == 3);
 			}
 
-			if (user_io_get_scaler_flt() >= 0)
+			if (video_get_scaler_flt() >= 0)
 			{
 				OsdWrite(n++);
 				menumask |= 0x60;
-				sprintf(s, " Scale Filter - %s", config_scaler_msg[user_io_get_scaler_flt() ? 1 : 0]);
+				sprintf(s, " Scale Filter - %s", config_scaler_msg[video_get_scaler_flt() ? 1 : 0]);
 				OsdWrite(n++, s, menusub == 5);
 
 				memset(s, 0, sizeof(s));
 				s[0] = ' ';
-				if (strlen(user_io_get_scaler_coeff())) strncpy(s+1, user_io_get_scaler_coeff(),25);
+				if (strlen(video_get_scaler_coeff())) strncpy(s+1, video_get_scaler_coeff(),25);
 				else strcpy(s, " < none >");
 
 				while(strlen(s) < 26) strcat(s, " ");
 				strcat(s, " \x16 ");
 
-				OsdWrite(n++, s, menusub == 6, !user_io_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
+				OsdWrite(n++, s, menusub == 6, !video_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
 			}
 
 			m = 0;
@@ -1603,14 +1623,14 @@ void HandleUI(void)
 				break;
                                 				
 			case 5:
-				user_io_set_scaler_flt(user_io_get_scaler_flt() ? 0 : 1);
+				video_set_scaler_flt(video_get_scaler_flt() ? 0 : 1);
 				menustate = MENU_8BIT_SYSTEM1;
 				break; 
 
 			case 6:
-				if (user_io_get_scaler_flt())
+				if (video_get_scaler_flt())
 				{
-					sprintf(SelectedPath, COEFF_DIR"/%s", user_io_get_scaler_coeff());
+					sprintf(SelectedPath, COEFF_DIR"/%s", video_get_scaler_coeff());
 					SelectFile(0, SCANO_COEFF, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
@@ -1809,8 +1829,8 @@ void HandleUI(void)
 	case MENU_COEFF_FILE_SELECTED:
 		{
 			char *p = strrchr(SelectedPath, '/');
-			if (!p) user_io_set_scaler_coeff(SelectedPath);
-			else user_io_set_scaler_coeff(p+1);
+			if (!p) video_set_scaler_coeff(SelectedPath);
+			else video_set_scaler_coeff(p+1);
 			menustate = MENU_8BIT_SYSTEM1;
 		}
 		break;
@@ -2796,7 +2816,7 @@ void HandleUI(void)
 		OsdWrite(m++, " Startup config:");
 		for (uint i = 0; i < 10; i++)
 		{
-			const char *info = minimig_GetCfgInfo(i);
+			const char *info = minimig_get_cfg_info(i);
 			static char name[128];
 
 			if (info)
@@ -2838,7 +2858,7 @@ void HandleUI(void)
 			if (menusub<10)
 			{
 				OsdDisable();
-				minimig_LoadCfg(menusub);
+				minimig_cfg_load(menusub);
 				menustate = MENU_NONE1;
 			}
 			else
@@ -3071,7 +3091,7 @@ void HandleUI(void)
 			if (m)
 			{
 				menustate = MENU_NONE1;
-				MinimigReset();
+				minimig_reset();
 			}
             else if(m == 2)
             {
@@ -3107,7 +3127,7 @@ void HandleUI(void)
 		OsdWrite(m++, " Startup config:");
 		for (uint i = 0; i < 10; i++)
 		{
-			const char *info = minimig_GetCfgInfo(i);
+			const char *info = minimig_get_cfg_info(i);
 			static char name[128];
 
 			if (info)
@@ -3166,7 +3186,7 @@ void HandleUI(void)
 			strncat(minimig_config.info, p, sizeof(minimig_config.info) - strlen(minimig_config.info) - 1);
 			minimig_config.info[sizeof(minimig_config.info) - 1] = 0;
 			
-			if (menusub<10) minimig_SaveCfg(menusub);
+			if (menusub<10) minimig_cfg_save(menusub);
 			menustate = MENU_MAIN1;
 			menusub = 9;
 		}
@@ -3397,7 +3417,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ROMFILE_SELECTED:
-		SetKickstart(SelectedPath);
+		minimig_set_kickstart(SelectedPath);
 		menustate = MENU_SETTINGS_MEMORY1;
 		break;
 
@@ -3585,7 +3605,7 @@ void HandleUI(void)
 		OsdWrite(5, s, menusub == 3, 0);
 		OsdWrite(6, "", 0, 0);
 		OsdWrite(7, "", 0, 0);
-		OsdWrite(8, user_io_minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 4, 0);
+		OsdWrite(8, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 4, 0);
 		OsdWrite(9, "", 0, 0);
 		OsdWrite(10, "", 0, 0);
 		OsdWrite(11, "", 0, 0);
@@ -3630,7 +3650,7 @@ void HandleUI(void)
 			else if (menusub == 4)
 			{
 				menustate = MENU_NONE1;
-				user_io_minimig_set_adjust(!user_io_minimig_get_adjust());
+				minimig_set_adjust(minimig_get_adjust() ? 0 : 1);
 			}
 			else if (menusub == 5)
 			{
@@ -3816,6 +3836,49 @@ void HandleUI(void)
 		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
 		break;
 
+	case MENU_LGCAL:
+		helptext = 0;
+		OsdSetTitle("Wiimote Calibration", 0);
+		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
+		OsdWrite(9, "  Point Wiimote to the edge");
+		OsdWrite(10, "     of screen and press");
+		OsdWrite(11, "   the button B to confirm");
+		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
+		wm_ok = 0;
+		wm_side = 0;
+		memset(wm_pos, 0, sizeof(wm_pos));
+		menustate = MENU_LGCAL1;
+		menusub = 0;
+		break;
+
+	case MENU_LGCAL1:
+		if (wm_side < 4) wm_pos[wm_side] = (wm_side < 2) ? wm_y : wm_x;
+		sprintf(s, "           %c%04d%c", (wm_side == 0) ? 17 : 32, (wm_side == 0) ? wm_y : wm_pos[0], (wm_side == 0) ? 16 : 32);
+		OsdWrite(0, s);
+		sprintf(s, "%c%04d%c                 %c%04d%c", (wm_side == 2) ? 17 : 32, (wm_side == 2) ? wm_x : wm_pos[2], (wm_side == 2) ? 16 : 32,
+		                                                (wm_side == 3) ? 17 : 32, (wm_side == 3) ? wm_x : wm_pos[3], (wm_side == 3) ? 16 : 32);
+		OsdWrite(7, s);
+		sprintf(s, "           %c%04d%c", (wm_side == 1) ? 17 : 32, (wm_side == 1) ? wm_y : wm_pos[1], (wm_side == 1) ? 16 : 32);
+		OsdWrite(13, s);
+		if (menu || select) menustate = MENU_NONE1;
+
+		if (wm_ok == 1)
+		{
+			wm_ok = 0;
+			wm_side++;
+		}
+
+		if (wm_ok == 2)
+		{
+			wm_ok = 0;
+			if (wm_side == 4)
+			{
+				input_lightgun_cal(wm_pos);
+				menustate = MENU_NONE1;
+			}
+		}
+		break;
+
 	case MENU_SCRIPTS_PRE:
 		OsdSetTitle("Warning!!!", 0);
 		helptext = 0;
@@ -3880,6 +3943,11 @@ void HandleUI(void)
 		for (int i = 0; i < script_lines; i++) strcpy(script_output[i], "");
 		script_line=0;
 		script_exited = false;
+		cpu_set_t set;
+		CPU_ZERO(&set);
+		CPU_SET(0, &set);
+		CPU_SET(1, &set);
+		sched_setaffinity(0, sizeof(set), &set);
 		script_pipe=popen((parentstate != MENU_BTPAIR) ? getFullPath(SelectedPath) : "/usr/sbin/btpair", "r");
 		script_file = fileno(script_pipe);
 		fcntl(script_file, F_SETFL, O_NONBLOCK);
@@ -3906,6 +3974,10 @@ void HandleUI(void)
 			}
 			else {
 				pclose(script_pipe);
+				cpu_set_t set;
+				CPU_ZERO(&set);
+				CPU_SET(1, &set);
+				sched_setaffinity(0, sizeof(set), &set);
 				script_exited=true;
 				OsdWrite(OsdGetSize() - 1, "             OK", menusub == 0, 0);
 			};
@@ -3919,6 +3991,10 @@ void HandleUI(void)
 				strcat(script_command, (parentstate == MENU_BTPAIR) ? "btpair" : flist_SelectedItem()->d_name);
 				system(script_command);
 				pclose(script_pipe);
+				cpu_set_t set;
+				CPU_ZERO(&set);
+				CPU_SET(1, &set);
+				sched_setaffinity(0, sizeof(set), &set);
 				script_exited = true;
 			};
 
@@ -4377,4 +4453,24 @@ void Info(const char *message, int timeout, int width, int height, int frame)
 void menu_bt_pair()
 {
 	menustate = MENU_BTPAIR;
+}
+
+int menu_lightgun_cb(uint16_t type, uint16_t code, int value)
+{
+	if (type == EV_ABS)
+	{
+		if (code == 0 && value) wm_x = value;
+		if (code == 1 && value != 1023) wm_y = value;
+	}
+
+	if (type == EV_KEY)
+	{
+		if (code == 0x131 && menustate == MENU_LGCAL1)
+		{
+			if (value == 1) wm_ok = 1;
+			if (value == 0) wm_ok = 2;
+			return 1;
+		}
+	}
+	return 0;
 }

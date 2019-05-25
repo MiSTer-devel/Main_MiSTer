@@ -267,12 +267,12 @@ static char* GetConfigurationName(int num, int chk)
 	return name+strlen(CONFIG_DIR)+1;
 }
 
-int minimig_SaveCfg(int num)
+int minimig_cfg_save(int num)
 {
 	return FileSaveConfig(GetConfigurationName(num, 0), &minimig_config, sizeof(minimig_config));
 }
 
-const char* minimig_GetCfgInfo(int num)
+const char* minimig_get_cfg_info(int num)
 {
 	char *filename = GetConfigurationName(num, 1);
 	if (!filename) return NULL;
@@ -366,7 +366,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	ConfigAutofire(minimig_config.autofire, 0xC);
 }
 
-int minimig_LoadCfg(int num)
+int minimig_cfg_load(int num)
 {
 	static const char config_id[] = "MNMGCFG0";
 	char updatekickstart = 0;
@@ -486,17 +486,141 @@ int minimig_LoadCfg(int num)
 	return(result);
 }
 
-void MinimigReset()
+void minimig_reset()
 {
 	ApplyConfiguration(0);
 	user_io_rtc_reset();
 }
 
-void SetKickstart(char *name)
+void minimig_set_kickstart(char *name)
 {
 	uint len = strlen(name);
 	if (len > (sizeof(minimig_config.kickstart) - 1)) len = sizeof(minimig_config.kickstart) - 1;
 	memcpy(minimig_config.kickstart, name, len);
 	minimig_config.kickstart[len] = 0;
 	force_reload_kickstart = 1;
+}
+
+static char minimig_adjust = 0;
+
+typedef struct
+{
+	uint32_t mode;
+	uint32_t hpos;
+	uint32_t vpos;
+	uint32_t reserved;
+} vmode_adjust_t;
+
+vmode_adjust_t vmodes_adj[64] = {};
+
+static void adjust_vsize(char force)
+{
+	static uint16_t nres = 0;
+	spi_uio_cmd_cont(UIO_GET_VMODE);
+	uint16_t res = spi_w(0);
+	if ((res & 0x8000) && (nres != res || force))
+	{
+		nres = res;
+		uint16_t scr_hsize = spi_w(0);
+		uint16_t scr_vsize = spi_w(0);
+		DisableIO();
+
+		printf("\033[1;37mVMODE: resolution: %u x %u, mode: %u\033[0m\n", scr_hsize, scr_vsize, res & 255);
+
+		static int loaded = 0;
+		if (~loaded)
+		{
+			FileLoadConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
+			loaded = 1;
+		}
+
+		uint32_t mode = scr_hsize | (scr_vsize << 12) | ((res & 0xFF) << 24);
+		if (mode)
+		{
+			for (uint i = 0; i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
+			{
+				if (vmodes_adj[i].mode == mode)
+				{
+					spi_uio_cmd_cont(UIO_SET_VPOS);
+					spi_w(vmodes_adj[i].hpos >> 16);
+					spi_w(vmodes_adj[i].hpos);
+					spi_w(vmodes_adj[i].vpos >> 16);
+					spi_w(vmodes_adj[i].vpos);
+					printf("\033[1;37mVMODE: set positions: [%u-%u, %u-%u]\033[0m\n", vmodes_adj[i].hpos >> 16, (uint16_t)vmodes_adj[i].hpos, vmodes_adj[i].vpos >> 16, (uint16_t)vmodes_adj[i].vpos);
+					DisableIO();
+					return;
+				}
+			}
+			printf("\033[1;37mVMODE: preset not found.\033[0m\n");
+			spi_uio_cmd_cont(UIO_SET_VPOS); spi_w(0); spi_w(0); spi_w(0); spi_w(0);
+			DisableIO();
+		}
+	}
+	else
+	{
+		DisableIO();
+	}
+}
+
+static void store_vsize()
+{
+	Info("Stored");
+	minimig_adjust = 0;
+
+	spi_uio_cmd_cont(UIO_GET_VMODE);
+	uint16_t res = spi_w(0);
+	uint16_t scr_hsize = spi_w(0);
+	uint16_t scr_vsize = spi_w(0);
+	uint16_t scr_hbl_l = spi_w(0);
+	uint16_t scr_hbl_r = spi_w(0);
+	uint16_t scr_vbl_t = spi_w(0);
+	uint16_t scr_vbl_b = spi_w(0);
+	DisableIO();
+
+	printf("\033[1;37mVMODE: store position: [%u-%u, %u-%u]\033[0m\n", scr_hbl_l, scr_hbl_r, scr_vbl_t, scr_vbl_b);
+
+	uint32_t mode = scr_hsize | (scr_vsize << 12) | ((res & 0xFF) << 24);
+	if (mode)
+	{
+		int applied = 0;
+		int empty = -1;
+		for (int i = 0; (uint)i < sizeof(vmodes_adj) / sizeof(vmodes_adj[0]); i++)
+		{
+			if (vmodes_adj[i].mode == mode)
+			{
+				vmodes_adj[i].hpos = (scr_hbl_l << 16) | scr_hbl_r;
+				vmodes_adj[i].vpos = (scr_vbl_t << 16) | scr_vbl_b;
+				applied = 1;
+			}
+			if (empty < 0 && !vmodes_adj[i].mode) empty = i;
+		}
+
+		if (!applied && empty >= 0)
+		{
+			vmodes_adj[empty].mode = mode;
+			vmodes_adj[empty].hpos = (scr_hbl_l << 16) | scr_hbl_r;
+			vmodes_adj[empty].vpos = (scr_vbl_t << 16) | scr_vbl_b;
+			applied = 1;
+		}
+
+		if (applied)
+		{
+			FileSaveConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
+		}
+	}
+}
+
+// 0 - disable
+// 1 - enable
+// 2 - cancel
+void minimig_set_adjust(char n)
+{
+	if (minimig_adjust && !n) store_vsize();
+	minimig_adjust = (n == 1) ? 1 : 0;
+	if (n == 2) adjust_vsize(1);
+}
+
+char minimig_get_adjust()
+{
+	return minimig_adjust;
 }

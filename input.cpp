@@ -8,6 +8,7 @@
 #include <sys/poll.h>
 #include <sys/sysinfo.h>
 #include <dirent.h>
+#include <errno.h>
 
 #include "input.h"
 #include "user_io.h"
@@ -16,7 +17,7 @@
 #include "cfg.h"
 #include "fpga_io.h"
 #include "osd.h"
-#include "errno.h"
+#include "video.h"
 
 #define NUMDEV 20
 #define NUMPLAYERS 6
@@ -998,6 +999,8 @@ typedef struct
 	uint8_t  has_kbdmap;
 	uint8_t  kbdmap[256];
 
+	uint16_t guncal[4];
+
 	int      accx, accy;
 	int      quirk;
 
@@ -1240,6 +1243,24 @@ void finish_map_setting(int dismiss)
 		if (!dismiss) FileSaveConfig(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 		if (is_menu_core()) input[mapping_dev].has_mmap = 0;
 	}
+}
+
+void input_lightgun_cal(uint16_t *cal)
+{
+	FileSaveConfig("wiimote_cal.cfg", cal, 4 * sizeof(uint16_t));
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (input[i].quirk == QUIRK_WIIMOTE) memcpy(input[i].guncal, cal, sizeof(input[i].guncal));
+	}
+}
+
+int input_has_lightgun()
+{
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (input[i].quirk == QUIRK_WIIMOTE) return 1;
+	}
+	return 0;
 }
 
 uint16_t get_map_vid()
@@ -2330,6 +2351,11 @@ int input_test(int getchar)
 							else
 							{
 								input[n].quirk = QUIRK_WIIMOTE;
+								input[n].guncal[0] = 0;
+								input[n].guncal[1] = 767;
+								input[n].guncal[2] = 1;
+								input[n].guncal[3] = 1023;
+								FileLoadConfig("wiimote_cal.cfg", input[n].guncal, 4 * sizeof(uint16_t));
 							}
 						}
 
@@ -2465,7 +2491,6 @@ int input_test(int getchar)
 										input[dev].lightgun = 0;
 										if (absinfo.maximum == 1023 || absinfo.maximum == 767)
 										{
-											if (user_io_osd_is_visible()) continue;
 											if (ev.code == 16)
 											{
 												ev.value = absinfo.maximum - ev.value;
@@ -2594,6 +2619,33 @@ int input_test(int getchar)
 								{
 									// don't pass IR tracking to OSD
 									continue;
+								}
+							}
+
+							if (ev.type == EV_ABS && input[i].quirk == QUIRK_WIIMOTE && input[dev].lightgun)
+							{
+								menu_lightgun_cb(ev.type, ev.code, ev.value);
+
+								// don't pass IR tracking to OSD
+								if (user_io_osd_is_visible()) continue;
+
+								if (!ev.code)
+								{
+									absinfo.minimum = input[i].guncal[2];
+									absinfo.maximum = input[i].guncal[3];
+								}
+								else
+								{
+									absinfo.minimum = input[i].guncal[0];
+									absinfo.maximum = input[i].guncal[1];
+								}
+							}
+
+							if (ev.type == EV_KEY && user_io_osd_is_visible())
+							{
+								if (input[i].quirk == QUIRK_WIIMOTE)
+								{
+									if (menu_lightgun_cb(ev.type, ev.code, ev.value)) continue;
 								}
 							}
 
