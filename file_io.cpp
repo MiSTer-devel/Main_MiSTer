@@ -322,20 +322,21 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 				FileClose(file);
 				return 0;
 			}
-			if ((st.st_rdev != 0) && (st.st_size == 0))  //for special files we need an ioctl call to get the correct size
-			  {
-			  unsigned long long blksize;
-			  int ret = ioctl(fd, BLKGETSIZE64, &blksize);
-			  if (ret  < 0 )
-			    {
-			      if (!mute) printf("FileOpenEx(ioctl) File:%s, error: %d.\n", full_path, ret);
-			      FileClose(file);
-			      return 0;
-			    }
-			  file->size = blksize;
-			  }
-			else
-			  file->size = st.st_size;
+
+			file->size = st.st_size;
+			if (st.st_rdev && !st.st_size)  //for special files we need an ioctl call to get the correct size
+			{
+				unsigned long long blksize;
+				int ret = ioctl(fd, BLKGETSIZE64, &blksize);
+				if (ret < 0)
+				{
+					if (!mute) printf("FileOpenEx(ioctl) File:%s, error: %d.\n", full_path, ret);
+					FileClose(file);
+					return 0;
+				}
+				file->size = blksize;
+			}
+
 			file->offset = 0;
 			file->mode = mode;
 		}
@@ -350,8 +351,17 @@ __off64_t FileGetSize(fileTYPE *file)
 	if (file->filp)
 	{
 		struct stat64 st;
-		int ret = fstat64(fileno(file->filp), &st);
-		return (ret < 0) ? 0 : st.st_size;
+		if (fstat64(fileno(file->filp), &st) < 0) return 0;
+
+		if (st.st_rdev && !st.st_size)  //for special files we need an ioctl call to get the correct size
+		{
+			unsigned long long blksize;
+			int ret = ioctl(fileno(file->filp), BLKGETSIZE64, &blksize);
+			if (ret < 0) return 0;
+			return blksize;
+		}
+
+		return st.st_size;
 	}
 	else if (file->zip)
 	{
