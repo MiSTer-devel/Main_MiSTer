@@ -59,6 +59,7 @@ static char caps_lock_toggle = 0;
 #define Y 1
 #define MOUSE_FREQ 20   // 20 ms -> 50hz
 static int16_t mouse_pos[2] = { 0, 0 };
+static int16_t mouse_wheel = 0;
 static uint8_t mouse_flags = 0;
 static unsigned long mouse_timer;
 
@@ -1966,22 +1967,25 @@ void user_io_poll()
 					ps2_mouse[2] = mouse_pos[Y];
 				}
 
+				int16_t ps2_wheel = mouse_wheel;
+				if (ps2_wheel > 63) ps2_wheel = 63;
+				else if (ps2_wheel < -63) ps2_wheel = -63;
+
 				// collect movement info and send at predefined rate
-				if (is_menu_core() && !(ps2_mouse[0] == 0x08 && ps2_mouse[1] == 0 && ps2_mouse[2] == 0))
-					printf("PS2 MOUSE: %x %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2]);
+				if (is_menu_core()) printf("PS2 MOUSE: %x %d %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2], ps2_wheel);
 
 				if (!osd_is_visible)
 				{
 					spi_uio_cmd_cont(UIO_MOUSE);
-					spi8(ps2_mouse[0]);
-					spi8(ps2_mouse[1]);
-					spi8(ps2_mouse[2]);
+					spi_w(ps2_mouse[0] | ((ps2_wheel&127)<<8));
+					spi_w(ps2_mouse[1]);
+					spi_w(ps2_mouse[2]);
 					DisableIO();
 				}
 
 				// reset counters
 				mouse_flags = 0;
-				mouse_pos[X] = mouse_pos[Y] = 0;
+				mouse_pos[X] = mouse_pos[Y] = mouse_wheel = 0;
 			}
 		}
 	}
@@ -2398,7 +2402,7 @@ static void send_keycode(unsigned short key, int press)
 	}
 }
 
-void user_io_mouse(unsigned char b, int16_t x, int16_t y)
+void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 {
 	switch (core_type)
 	{
@@ -2411,6 +2415,7 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y)
 	case CORE_TYPE_8BIT:
 		mouse_pos[X] += x;
 		mouse_pos[Y] -= y;  // ps2 y axis is reversed over usb
+		mouse_wheel += w;
 		mouse_flags |= 0x08 | (b & 7);
 		return;
 

@@ -19,7 +19,7 @@
 #include "osd.h"
 #include "video.h"
 
-#define NUMDEV 20
+#define NUMDEV 30
 #define NUMPLAYERS 6
 
 static int ev2amiga[] =
@@ -985,6 +985,7 @@ typedef struct
 {
 	uint16_t vid, pid;
 	uint8_t  led;
+	uint8_t  mouse;
 	uint8_t  axis_edge[256];
 	int8_t   axis_pos[256];
 
@@ -1374,9 +1375,9 @@ static uint32_t mouse_timer = 0;
 #define BTN_TGL 100
 #define BTN_OSD 101
 
-static void mouse_cb(unsigned char b, int16_t x, int16_t y)
+static void mouse_cb(unsigned char b, int16_t x = 0, int16_t y = 0, int16_t w = 0)
 {
-	if (grabbed) user_io_mouse(b, x, y);
+	if (grabbed) user_io_mouse(b, x, y, w);
 }
 
 static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum)
@@ -1486,7 +1487,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				mouse_btn = 0;
 				mouse_emu_x = 0;
 				mouse_emu_y = 0;
-				mouse_cb(mice_btn, 0, 0);
+				mouse_cb(mice_btn);
 
 				mouse_emu ^= 2;
 				if (hasAPI1_5()) Info((mouse_emu & 2) ? "Mouse mode ON" : "Mouse mode OFF");
@@ -1992,7 +1993,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - 12) : mouse_btn & ~(1 << (i - 12));
-									mouse_cb(mouse_btn | mice_btn, 0, 0);
+									mouse_cb(mouse_btn | mice_btn);
 									break;
 								}
 								return;
@@ -2032,7 +2033,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_btn = 0;
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
-							mouse_cb(mice_btn, 0, 0);
+							mouse_cb(mice_btn);
 						}
 					}
 				}
@@ -2120,7 +2121,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - 12) : mouse_btn & ~(1 << (i - 12));
-									mouse_cb(mouse_btn | mice_btn, 0, 0);
+									mouse_cb(mouse_btn | mice_btn);
 									break;
 								}
 								return;
@@ -2145,7 +2146,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_btn = 0;
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
-							mouse_cb(mice_btn, 0, 0);
+							mouse_cb(mice_btn);
 						}
 						return;
 					}
@@ -2241,7 +2242,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	}
 }
 
-static struct pollfd pool[NUMDEV + 2];
+static struct pollfd pool[NUMDEV + 1];
 
 int input_test(int getchar)
 {
@@ -2257,23 +2258,6 @@ int input_test(int getchar)
 		signal(SIGINT, INThandler);
 		pool[NUMDEV].fd = set_watch();
 		pool[NUMDEV].events = POLLIN;
-
-		pool[NUMDEV+1].fd = open("/dev/input/mice", O_RDWR);
-		pool[NUMDEV+1].events = POLLIN;
-
-		/*
-		// enable scroll wheel reading through /dev/input/mice
-		unsigned char buffer[4];
-		static const unsigned char mousedev_imps_seq[] = { 0xf3, 200, 0xf3, 100, 0xf3, 80 };
-		if (write(pool[NUMDEV + 1].fd, mousedev_imps_seq, sizeof(mousedev_imps_seq)) != sizeof(mousedev_imps_seq))
-		{
-			printf("Cannot switch to ImPS/2 protocol(1).\n");
-		}
-		else if (read(pool[NUMDEV + 1].fd, buffer, sizeof buffer) != 1 || buffer[0] != 0xFA)
-		{
-			printf("Failed to switch to ImPS/2 protocol(2).\n");
-		}
-		*/
 		state++;
 	}
 
@@ -2294,12 +2278,12 @@ int input_test(int getchar)
 			struct dirent *de;
 			while ((de = readdir(d)))
 			{
-				if (!strncmp(de->d_name, "event", 5))
+				if (!strncmp(de->d_name, "event", 5) || !strncmp(de->d_name, "mouse", 5))
 				{
 					memset(&input[n], 0, sizeof(input[n]));
 					sprintf(input[n].devname, "/dev/input/%s", de->d_name);
 					int fd = open(input[n].devname, O_RDWR);
-					printf("open(%s): %d\n", input[n].devname, fd);
+					//printf("open(%s): %d\n", input[n].devname, fd);
 
 					if (fd > 0)
 					{
@@ -2315,6 +2299,23 @@ int input_test(int getchar)
 						ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(input[n].uniq)), input[n].uniq);
 						ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
 						input[n].bind = -1;
+						input[n].mouse = !strncmp(de->d_name, "mouse", 5);
+
+						// enable scroll wheel reading
+						if (input[n].mouse)
+						{
+							unsigned char buffer[4];
+							static const unsigned char mousedev_imps_seq[] = { 0xf3, 200, 0xf3, 100, 0xf3, 80 };
+							if (write(pool[n].fd, mousedev_imps_seq, sizeof(mousedev_imps_seq)) != sizeof(mousedev_imps_seq))
+							{
+								printf("Cannot switch %s to ImPS/2 protocol(1)\n", input[n].devname);
+							}
+							else if (read(pool[n].fd, buffer, sizeof buffer) != 1 || buffer[0] != 0xFA)
+							{
+								printf("Failed to switch %s to ImPS/2 protocol(2)\n", input[n].devname);
+							}
+						}
+
 						if (strcasestr(input[n].name, "Wiimote") && input[n].vid == 1 && input[n].pid == 1)
 						{
 							input[n].quirk = QUIRK_CWIID;
@@ -2347,12 +2348,14 @@ int input_test(int getchar)
 							{
 								// don't use Accelerometer
 								close(pool[n].fd);
+								pool[n].fd = -1;
 								continue;
 							}
 							else if (strcasestr(input[n].name, "Motion Plus"))
 							{
 								// don't use Accelerometer
 								close(pool[n].fd);
+								pool[n].fd = -1;
 								continue;
 							}
 							else
@@ -2391,7 +2394,7 @@ int input_test(int getchar)
 			for (int i = 0; i < n; i++)
 			{
 				input[i].bind = i;
-				if (input[i].uniq[0])
+				if (input[i].uniq[0] && !input[i].mouse)
 				{
 					for (int j = 0; j < i; j++)
 					{
@@ -2402,6 +2405,50 @@ int input_test(int getchar)
 						}
 					}
 				}
+			}
+
+			//mouseX to eventX mapping
+			FILE *f = fopen("/proc/bus/input/devices", "r");
+			if (f)
+			{
+				static char str[256];
+				while (fgets(str, sizeof(str) - 1, f))
+				{
+					if (!strncmp(str, "H: Handlers=", 12))
+					{
+						for (int i = 0; i < n; i++) if(input[i].mouse)
+						{
+							char *mname = strrchr(input[i].devname, '/');
+							if (mname)
+							{
+								mname++;
+								if (strstr(str + 12, mname))
+								{
+									for (int j = 0; j < n; j++) if (!input[j].mouse)
+									{
+										char *ename = strrchr(input[j].devname, '/');
+										if (ename)
+										{
+											ename++;
+											if (strstr(str + 12, ename))
+											{
+												input[i].bind = j;
+												input[i].vid = input[j].vid;
+												input[i].pid = input[j].pid;
+												input[i].quirk = input[j].quirk;
+												memcpy(input[i].name, input[j].name, sizeof(input[i].name));
+												memcpy(input[i].uniq, input[j].uniq, sizeof(input[i].uniq));
+												break;
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
+				fclose(f);
 			}
 
 			for (int i = 0; i < n; i++)
@@ -2438,325 +2485,338 @@ int input_test(int getchar)
 			{
 				if ((pool[i].fd >= 0) && (pool[i].revents & POLLIN))
 				{
-					memset(&ev, 0, sizeof(ev));
-					if (read(pool[i].fd, &ev, sizeof(ev)) == sizeof(ev))
+					if (!input[i].mouse)
 					{
-						if (getchar)
+						memset(&ev, 0, sizeof(ev));
+						if (read(pool[i].fd, &ev, sizeof(ev)) == sizeof(ev))
 						{
-							if (ev.type == EV_KEY && ev.value >= 1)
+							if (getchar)
 							{
-								return ev.code;
+								if (ev.type == EV_KEY && ev.value >= 1)
+								{
+									return ev.code;
+								}
 							}
-						}
-						else if(ev.type)
-						{
-							int dev = i;
-							if (input[dev].bind >= 0) dev = input[dev].bind;
-
-							int noabs = 0;
-
-							if (input[i].quirk == QUIRK_DS4TOUCH && ev.type == EV_KEY)
+							else if (ev.type)
 							{
-								if (ev.code == BTN_TOOL_FINGER || ev.code == BTN_TOUCH || ev.code == BTN_TOOL_DOUBLETAP) continue;
-							}
+								int dev = i;
+								if (input[dev].bind >= 0) dev = input[dev].bind;
 
-							if (ev.type == EV_ABS)
-							{
-								if (input[i].quirk == QUIRK_WIIMOTE)
+								int noabs = 0;
+
+								if (input[i].quirk == QUIRK_DS4TOUCH && ev.type == EV_KEY)
 								{
-									//nunchuck accel events
-									if(ev.code >= 3 && ev.code <= 5) continue;
+									if (ev.code == BTN_TOOL_FINGER || ev.code == BTN_TOUCH || ev.code == BTN_TOOL_DOUBLETAP) continue;
 								}
 
-								//Dualshock: drop accelerator and raw touchpad events
-								if (input[i].quirk == QUIRK_DS4TOUCH && ev.code == 57)
+								if (ev.type == EV_ABS)
 								{
-									input[dev].lightgun_req = (ev.value >= 0);
-								}
-
-								if ((input[i].quirk == QUIRK_DS4TOUCH || input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code > 40)
-								{
-									continue;
-								}
-
-								if (ioctl(pool[i].fd, EVIOCGABS(ev.code), &absinfo) < 0) memset(&absinfo, 0, sizeof(absinfo));
-								else
-								{
-									//DS4 specific: touchpad as lightgun
-									if (input[i].quirk == QUIRK_DS4TOUCH && ev.code <= 1)
-									{
-										if (!input[dev].lightgun || user_io_osd_is_visible()) continue;
-
-										if (ev.code == 1)
-										{
-											absinfo.minimum = 300;
-											absinfo.maximum = 850;
-										}
-										else if (ev.code == 0)
-										{
-											absinfo.minimum = 200;
-											absinfo.maximum = 1720;
-										}
-										else continue;
-									}
-
-									if (input[i].quirk == QUIRK_DS4 && ev.code <= 1)
-									{
-										if (input[dev].lightgun) noabs = 1;
-									}
-
 									if (input[i].quirk == QUIRK_WIIMOTE)
 									{
-										input[dev].lightgun = 0;
-										if (absinfo.maximum == 1023 || absinfo.maximum == 767)
+										//nunchuck accel events
+										if (ev.code >= 3 && ev.code <= 5) continue;
+									}
+
+									//Dualshock: drop accelerator and raw touchpad events
+									if (input[i].quirk == QUIRK_DS4TOUCH && ev.code == 57)
+									{
+										input[dev].lightgun_req = (ev.value >= 0);
+									}
+
+									if ((input[i].quirk == QUIRK_DS4TOUCH || input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code > 40)
+									{
+										continue;
+									}
+
+									if (ioctl(pool[i].fd, EVIOCGABS(ev.code), &absinfo) < 0) memset(&absinfo, 0, sizeof(absinfo));
+									else
+									{
+										//DS4 specific: touchpad as lightgun
+										if (input[i].quirk == QUIRK_DS4TOUCH && ev.code <= 1)
 										{
-											if (ev.code == 16)
+											if (!input[dev].lightgun || user_io_osd_is_visible()) continue;
+
+											if (ev.code == 1)
 											{
-												ev.value = absinfo.maximum - ev.value;
-												ev.code = 0;
-												input[dev].lightgun = 1;
+												absinfo.minimum = 300;
+												absinfo.maximum = 850;
 											}
-											else if (ev.code == 17)
+											else if (ev.code == 0)
 											{
-												ev.code = 1;
-												input[dev].lightgun = 1;
+												absinfo.minimum = 200;
+												absinfo.maximum = 1720;
 											}
-											// other 3 IR tracking aren't used
 											else continue;
 										}
-										else if (absinfo.maximum == 62)
+
+										if (input[i].quirk == QUIRK_DS4 && ev.code <= 1)
 										{
-											//LT/RT analog
-											continue;
+											if (input[dev].lightgun) noabs = 1;
 										}
-										else if(ev.code & 1)
+
+										if (input[i].quirk == QUIRK_WIIMOTE)
 										{
-											//Y axes on wiimote and accessories are inverted
-											ev.value = -ev.value;
+											input[dev].lightgun = 0;
+											if (absinfo.maximum == 1023 || absinfo.maximum == 767)
+											{
+												if (ev.code == 16)
+												{
+													ev.value = absinfo.maximum - ev.value;
+													ev.code = 0;
+													input[dev].lightgun = 1;
+												}
+												else if (ev.code == 17)
+												{
+													ev.code = 1;
+													input[dev].lightgun = 1;
+												}
+												// other 3 IR tracking aren't used
+												else continue;
+											}
+											else if (absinfo.maximum == 62)
+											{
+												//LT/RT analog
+												continue;
+											}
+											else if (ev.code & 1)
+											{
+												//Y axes on wiimote and accessories are inverted
+												ev.value = -ev.value;
+											}
+										}
+									}
+
+									if (input[i].quirk == QUIRK_CWIID)
+									{
+										if (ev.code == 3 || ev.code == 4)
+										{
+											absinfo.minimum = 30;
+											absinfo.maximum = 225;
 										}
 									}
 								}
 
-								if (input[i].quirk == QUIRK_CWIID)
+								//Menu combo on 8BitDo receiver in PSC mode
+								if (input[dev].vid == 0x054c && input[dev].pid == 0x0cda && ev.type == EV_KEY)
 								{
-									if (ev.code == 3 || ev.code == 4)
-									{
-										absinfo.minimum = 30;
-										absinfo.maximum = 225;
-									}
+									//in PSC mode these keys coming from separate virtual keyboard device
+									//so it's impossible to use joystick codes as keyboards aren't personalized
+									if (ev.code == 164) ev.code = KEY_MENU;
+									if (ev.code == 1)   ev.code = KEY_MENU;
 								}
-							}
 
-							//Menu combo on 8BitDo receiver in PSC mode
-							if (input[dev].vid == 0x054c && input[dev].pid == 0x0cda && ev.type == EV_KEY)
-							{
-								//in PSC mode these keys coming from separate virtual keyboard device
-								//so it's impossible to use joystick codes as keyboards aren't personalized
-								if (ev.code == 164) ev.code = KEY_MENU;
-								if (ev.code == 1)   ev.code = KEY_MENU;
-							}
-
-							//Menu button quirk of 8BitDo gamepad in X-Input mode
-							if (input[dev].vid == 0x045e && input[dev].pid == 0x02e0 && ev.type == EV_KEY)
-							{
-								if (ev.code == KEY_MENU) ev.code = BTN_MODE;
-							}
-
-							if (is_menu_core())
-							{
-								/*
-								if (mapping && mapping_type <= 1 && !(ev.type==EV_KEY && ev.value>1))
+								//Menu button quirk of 8BitDo gamepad in X-Input mode
+								if (input[dev].vid == 0x045e && input[dev].pid == 0x02e0 && ev.type == EV_KEY)
 								{
-									static char str[64], str2[64];
-									OsdWrite(12, "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81");
-									sprintf(str, "     VID=%04X PID=%04X", input[i].vid, input[i].pid);
-									OsdWrite(13, str);
+									if (ev.code == KEY_MENU) ev.code = BTN_MODE;
+								}
 
-									sprintf(str, "Type=%d Code=%d Value=%d", ev.type, ev.code, ev.value);
-									str2[0] = 0;
-									int len = (29 - (strlen(str))) / 2;
-									while (len-- > 0) strcat(str2, " ");
-									strcat(str2, str);
-									OsdWrite(14, str2);
-
-									str2[0] = 0;
-									if (ev.type == EV_ABS)
+								if (is_menu_core())
+								{
+									/*
+									if (mapping && mapping_type <= 1 && !(ev.type==EV_KEY && ev.value>1))
 									{
-										sprintf(str, "Min=%d Max=%d", absinfo.minimum, absinfo.maximum);
+										static char str[64], str2[64];
+										OsdWrite(12, "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81");
+										sprintf(str, "     VID=%04X PID=%04X", input[i].vid, input[i].pid);
+										OsdWrite(13, str);
+
+										sprintf(str, "Type=%d Code=%d Value=%d", ev.type, ev.code, ev.value);
+										str2[0] = 0;
 										int len = (29 - (strlen(str))) / 2;
 										while (len-- > 0) strcat(str2, " ");
 										strcat(str2, str);
+										OsdWrite(14, str2);
+
+										str2[0] = 0;
+										if (ev.type == EV_ABS)
+										{
+											sprintf(str, "Min=%d Max=%d", absinfo.minimum, absinfo.maximum);
+											int len = (29 - (strlen(str))) / 2;
+											while (len-- > 0) strcat(str2, " ");
+											strcat(str2, str);
+										}
+										OsdWrite(15, str2);
 									}
-									OsdWrite(15, str2);
-								}
-								*/
+									*/
 
-								switch (ev.type)
-								{
-								//keyboard, buttons
-								case EV_KEY:
-									printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
-									break;
-
-								case EV_REL:
-									printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
-									break;
-
-								case EV_SYN:
-								case EV_MSC:
-									break;
-
-								//analog joystick
-								case EV_ABS:
-									//reduce flood from DUALSHOCK 3/4
-									if ((input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code <= 5 && ev.value > 118 && ev.value < 138)
+									switch (ev.type)
 									{
+										//keyboard, buttons
+									case EV_KEY:
+										printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
 										break;
+
+									case EV_REL:
+										printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
+										break;
+
+									case EV_SYN:
+									case EV_MSC:
+										break;
+
+										//analog joystick
+									case EV_ABS:
+										//reduce flood from DUALSHOCK 3/4
+										if ((input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code <= 5 && ev.value > 118 && ev.value < 138)
+										{
+											break;
+										}
+
+										//aliexpress USB encoder floods messages
+										if (input[dev].vid == 0x0079 && input[dev].pid == 0x0006)
+										{
+											if (ev.code == 2) break;
+										}
+
+										printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d,", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
+										printf(" abs_min = %d, abs_max = %d", absinfo.minimum, absinfo.maximum);
+										if (absinfo.fuzz) printf(", fuzz = %d", absinfo.fuzz);
+										if (absinfo.resolution) printf(", res = %d", absinfo.resolution);
+										printf("\n");
+										break;
+
+									default:
+										printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x), jnum=%d, ID:%04x:%04x:%02d\n", ev.type, ev.code, ev.code, ev.value, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
 									}
-
-									//aliexpress USB encoder floods messages
-									if (input[dev].vid == 0x0079 && input[dev].pid == 0x0006)
-									{
-										if (ev.code == 2) break;
-									}
-
-									printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d,", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
-									printf(" abs_min = %d, abs_max = %d", absinfo.minimum, absinfo.maximum);
-									if (absinfo.fuzz) printf(", fuzz = %d", absinfo.fuzz);
-									if (absinfo.resolution) printf(", res = %d", absinfo.resolution);
-									printf("\n");
-									break;
-
-								default:
-									printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x), jnum=%d, ID:%04x:%04x:%02d\n", ev.type, ev.code, ev.code, ev.value, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
 								}
-							}
 
-							if (input[i].quirk == QUIRK_CWIID && ev.type == EV_ABS)
-							{
-								if (ev.code <= 1 && user_io_osd_is_visible())
+								if (input[i].quirk == QUIRK_CWIID && ev.type == EV_ABS)
 								{
+									if (ev.code <= 1 && user_io_osd_is_visible())
+									{
+										// don't pass IR tracking to OSD
+										continue;
+									}
+								}
+
+								if (ev.type == EV_ABS && input[i].quirk == QUIRK_WIIMOTE && input[dev].lightgun)
+								{
+									menu_lightgun_cb(ev.type, ev.code, ev.value);
+
 									// don't pass IR tracking to OSD
-									continue;
-								}
-							}
+									if (user_io_osd_is_visible()) continue;
 
-							if (ev.type == EV_ABS && input[i].quirk == QUIRK_WIIMOTE && input[dev].lightgun)
-							{
-								menu_lightgun_cb(ev.type, ev.code, ev.value);
-
-								// don't pass IR tracking to OSD
-								if (user_io_osd_is_visible()) continue;
-
-								if (!ev.code)
-								{
-									absinfo.minimum = input[i].guncal[2];
-									absinfo.maximum = input[i].guncal[3];
-								}
-								else
-								{
-									absinfo.minimum = input[i].guncal[0];
-									absinfo.maximum = input[i].guncal[1];
-								}
-							}
-
-							if (ev.type == EV_KEY && user_io_osd_is_visible())
-							{
-								if (input[i].quirk == QUIRK_WIIMOTE)
-								{
-									if (menu_lightgun_cb(ev.type, ev.code, ev.value)) continue;
-								}
-							}
-
-							if(!noabs) input_cb(&ev, &absinfo, i);
-
-							//sumulate digital directions from analog
-							if (ev.type == EV_ABS && !(mapping && mapping_type<=1 && mapping_button<-4) && !(ev.code<=1 && input[dev].lightgun))
-							{
-								input_absinfo *pai = 0;
-								uint8_t axis_edge = 0;
-								if ((absinfo.maximum == 1 && absinfo.minimum == -1) || (absinfo.maximum == 2 && absinfo.minimum == 0))
-								{
-									if (ev.value == absinfo.minimum) axis_edge = 1;
-									if (ev.value == absinfo.maximum) axis_edge = 2;
-								}
-								else
-								{
-									pai = &absinfo;
-									int range = absinfo.maximum - absinfo.minimum + 1;
-									int center = absinfo.minimum + (range / 2);
-									int treshold = range / 4;
-
-									int only_max = 1;
-									for (int n = 0; n < 4; n++) if (input[dev].mmap[AXIS1_X + n] && ((input[dev].mmap[AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
-
-									if (ev.value < center - treshold && !only_max) axis_edge = 1;
-									if (ev.value > center + treshold) axis_edge = 2;
-								}
-
-								uint8_t last_state = input[dev].axis_edge[ev.code & 255];
-								input[dev].axis_edge[ev.code & 255] = axis_edge;
-
-								//printf("last_state=%d, axis_edge=%d\n", last_state, axis_edge);
-								if (last_state != axis_edge)
-								{
-									uint16_t ecode = KEY_EMU + (ev.code << 1) - 1;
-									ev.type = EV_KEY;
-									if (last_state)
+									if (!ev.code)
 									{
-										ev.value = 0;
-										ev.code = ecode + last_state;
-										input_cb(&ev, pai, i);
+										absinfo.minimum = input[i].guncal[2];
+										absinfo.maximum = input[i].guncal[3];
 									}
-
-									if (axis_edge)
+									else
 									{
-										ev.value = 1;
-										ev.code = ecode + axis_edge;
-										input_cb(&ev, pai, i);
+										absinfo.minimum = input[i].guncal[0];
+										absinfo.maximum = input[i].guncal[1];
 									}
 								}
 
-								// Menu button on 8BitDo Receiver in D-Input mode
-								if (ev.code == 9 && input[dev].vid == 0x2dc8 && (input[dev].pid == 0x3100 || input[dev].pid == 0x3104))
+								if (ev.type == EV_KEY && user_io_osd_is_visible())
 								{
-									ev.type = EV_KEY;
-									ev.code = KEY_EMU + (ev.code << 1);
-									input_cb(&ev, pai, i);
+									if (input[i].quirk == QUIRK_WIIMOTE)
+									{
+										if (menu_lightgun_cb(ev.type, ev.code, ev.value)) continue;
+									}
+								}
+
+								if (!noabs) input_cb(&ev, &absinfo, i);
+
+								//sumulate digital directions from analog
+								if (ev.type == EV_ABS && !(mapping && mapping_type <= 1 && mapping_button < -4) && !(ev.code <= 1 && input[dev].lightgun))
+								{
+									input_absinfo *pai = 0;
+									uint8_t axis_edge = 0;
+									if ((absinfo.maximum == 1 && absinfo.minimum == -1) || (absinfo.maximum == 2 && absinfo.minimum == 0))
+									{
+										if (ev.value == absinfo.minimum) axis_edge = 1;
+										if (ev.value == absinfo.maximum) axis_edge = 2;
+									}
+									else
+									{
+										pai = &absinfo;
+										int range = absinfo.maximum - absinfo.minimum + 1;
+										int center = absinfo.minimum + (range / 2);
+										int treshold = range / 4;
+
+										int only_max = 1;
+										for (int n = 0; n < 4; n++) if (input[dev].mmap[AXIS1_X + n] && ((input[dev].mmap[AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
+
+										if (ev.value < center - treshold && !only_max) axis_edge = 1;
+										if (ev.value > center + treshold) axis_edge = 2;
+									}
+
+									uint8_t last_state = input[dev].axis_edge[ev.code & 255];
+									input[dev].axis_edge[ev.code & 255] = axis_edge;
+
+									//printf("last_state=%d, axis_edge=%d\n", last_state, axis_edge);
+									if (last_state != axis_edge)
+									{
+										uint16_t ecode = KEY_EMU + (ev.code << 1) - 1;
+										ev.type = EV_KEY;
+										if (last_state)
+										{
+											ev.value = 0;
+											ev.code = ecode + last_state;
+											input_cb(&ev, pai, i);
+										}
+
+										if (axis_edge)
+										{
+											ev.value = 1;
+											ev.code = ecode + axis_edge;
+											input_cb(&ev, pai, i);
+										}
+									}
+
+									// Menu button on 8BitDo Receiver in D-Input mode
+									if (ev.code == 9 && input[dev].vid == 0x2dc8 && (input[dev].pid == 0x3100 || input[dev].pid == 0x3104))
+									{
+										ev.type = EV_KEY;
+										ev.code = KEY_EMU + (ev.code << 1);
+										input_cb(&ev, pai, i);
+									}
 								}
 							}
 						}
 					}
-				}
-			}
+					else
+					{
+						uint8_t data[4] = {};
+						static int accx = 0, accy = 0;
+						if (read(pool[i].fd, data, sizeof(data)))
+						{
+							int edev = i;
+							int dev = i;
+							if (input[i].bind >= 0) edev = input[i].bind; // mouse to event
+							if (input[edev].bind >= 0) dev = input[edev].bind; // event to base device
 
-			if ((pool[NUMDEV + 1].fd >= 0) && (pool[NUMDEV + 1].revents & POLLIN))
-			{
-				uint8_t data[4] = {};
-				static int accx = 0, accy = 0;
-				if (read(pool[NUMDEV + 1].fd, data, sizeof(data)))
-				{
-					int xval, yval, throttle = 1;
-					xval = ((data[0] & 0x10) ? -256 : 0) | data[1];
-					yval = ((data[0] & 0x20) ? -256 : 0) | data[2];
+							if (input[i].quirk == QUIRK_DS4TOUCH && input[dev].lightgun)
+							{
+								//disable DS4 mouse in lightgun mode
+								continue;
+							}
 
-					if (is_menu_core()) printf("Combined mouse event: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", data[0], xval, yval, data[3]);
+							int xval, yval, throttle = 1;
+							xval = ((data[0] & 0x10) ? -256 : 0) | data[1];
+							yval = ((data[0] & 0x20) ? -256 : 0) | data[2];
 
-					if (cfg.mouse_throttle) throttle = cfg.mouse_throttle;
-					if (ds_mouse_emu) throttle *= 4;
+							if (is_menu_core()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, data[0], xval, yval, (int8_t)data[3]);
 
-					accx += xval;
-					xval = accx / throttle;
-					accx -= xval * throttle;
+							if (cfg.mouse_throttle) throttle = cfg.mouse_throttle;
+							if (ds_mouse_emu) throttle *= 4;
 
-					accy -= yval;
-					yval = accy / throttle;
-					accy -= yval * throttle;
+							accx += xval;
+							xval = accx / throttle;
+							accx -= xval * throttle;
 
-					mice_btn = data[0] & 7;
-					if (ds_mouse_emu) mice_btn = (mice_btn & 4) | ((mice_btn & 1)<<1);
+							accy -= yval;
+							yval = accy / throttle;
+							accy -= yval * throttle;
 
-					mouse_cb(mouse_btn | mice_btn, xval, yval);
+							mice_btn = data[0] & 7;
+							if (ds_mouse_emu) mice_btn = (mice_btn & 4) | ((mice_btn & 1) << 1);
+
+							mouse_cb(mouse_btn | mice_btn, xval, yval, (int8_t)data[3]);
+						}
+					}
 				}
 			}
 		}
@@ -2897,7 +2957,7 @@ void input_notify_mode()
 	mouse_btn = 0;
 	mouse_emu_x = 0;
 	mouse_emu_y = 0;
-	mouse_cb(mice_btn, 0, 0);
+	mouse_cb(mice_btn);
 }
 
 void input_switch(int grab)
