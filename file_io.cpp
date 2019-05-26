@@ -11,6 +11,8 @@
 #include <ctype.h>
 #include <sys/vfs.h>
 #include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <sys/mount.h>
 #include <linux/magic.h>
 #include <algorithm>
 #include <vector>
@@ -320,14 +322,26 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 				FileClose(file);
 				return 0;
 			}
-
-			file->size = st.st_size;
+			if ((st.st_rdev != 0) && (st.st_size == 0))  //for special files we need an ioctl call to get the correct size
+			  {
+			  unsigned long long blksize;
+			  int ret = ioctl(fd, BLKGETSIZE64, &blksize);
+			  if (ret  < 0 )
+			    {
+			      if (!mute) printf("FileOpenEx(ioctl) File:%s, error: %d.\n", full_path, ret);
+			      FileClose(file);
+			      return 0;
+			    }
+			  file->size = blksize;
+			  }
+			else
+			  file->size = st.st_size;
 			file->offset = 0;
 			file->mode = mode;
 		}
 	}
 
-	//printf("opened %s, size %lu\n", full_path, file->size);
+	//printf("opened %s, size %llu\n", full_path, file->size);
 	return 1;
 }
 
