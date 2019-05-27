@@ -2576,7 +2576,7 @@ int input_test(int getchar)
 
 	if (state == 2)
 	{
-		int return_value = poll(pool, NUMDEV + 1, 0);
+		int return_value = poll(pool, NUMDEV + 1, (is_menu_core() && video_fb_state()) ? 500 : 0);
 		if (return_value < 0)
 		{
 			printf("ERR: poll\n");
