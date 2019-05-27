@@ -3945,7 +3945,19 @@ void HandleUI(void)
 		CPU_SET(0, &set);
 		CPU_SET(1, &set);
 		sched_setaffinity(0, sizeof(set), &set);
-		script_pipe=popen((parentstate != MENU_BTPAIR) ? getFullPath(SelectedPath) : "/usr/sbin/btpair", "r");
+		if (cfg.scripts_old_gui) {
+			script_pipe=popen((parentstate != MENU_BTPAIR) ? getFullPath(SelectedPath) : "/usr/sbin/btpair", "r");
+		}
+		else {
+				strcpy(script_command, "kill -n 19 $(ps -A | grep \"[a]getty --nohostname -L tty0 xterm$\" | grep -oE \"^ *[0-9]+\")");
+				system(script_command);
+				strcpy(script_command, "/sbin/agetty --skip-login --login-program ");
+				strcat(script_command, (parentstate != MENU_BTPAIR) ? getFullPath(SelectedPath) : "/usr/sbin/btpair");
+				strcat(script_command, " --nohostname -L tty0 xterm");
+				script_pipe=popen(script_command, "r");
+				OsdDisable();
+				video_fb_enable(1);
+		};
 		script_file = fileno(script_pipe);
 		fcntl(script_file, F_SETFL, O_NONBLOCK);
 		break;
@@ -3954,7 +3966,7 @@ void HandleUI(void)
 		if (!script_exited)
 		{
 			if (!feof(script_pipe)) {
-				if (fgets(script_line_output, script_line_length, script_pipe) != NULL)
+				if ((fgets(script_line_output, script_line_length, script_pipe) != NULL) && cfg.scripts_old_gui)
 				{
 					script_line_output[strcspn(script_line_output, "\n")] = 0;
 					if (script_line < OsdGetSize() - 2)
@@ -3971,6 +3983,12 @@ void HandleUI(void)
 			}
 			else {
 				pclose(script_pipe);
+				if (!cfg.scripts_old_gui) {
+					strcpy(script_command, "kill -n 18 $(ps -A | grep \"[a]getty --nohostname -L tty0 xterm$\" | grep -oE \"^ *[0-9]+\")");
+					system(script_command);
+					video_fb_enable(0);
+					OsdEnable(0);
+				};
 				cpu_set_t set;
 				CPU_ZERO(&set);
 				CPU_SET(1, &set);
@@ -3980,7 +3998,7 @@ void HandleUI(void)
 			};
 		};
 
-		if (select || (script_exited && menu))
+		if (select || (script_exited && menu) || (script_exited && (!cfg.scripts_old_gui)))
 		{
 			if (!script_exited)
 			{
@@ -3988,13 +4006,19 @@ void HandleUI(void)
 				strcat(script_command, (parentstate == MENU_BTPAIR) ? "btpair" : flist_SelectedItem()->d_name);
 				system(script_command);
 				pclose(script_pipe);
+				if (!cfg.scripts_old_gui) {
+					strcpy(script_command, "kill -n 18 $(ps -A | grep \"[a]getty --nohostname -L tty0 xterm$\" | grep -oE \"^ *[0-9]+\")");
+					system(script_command);
+					video_fb_enable(0);
+					OsdEnable(0);
+				};
 				cpu_set_t set;
 				CPU_ZERO(&set);
 				CPU_SET(1, &set);
 				sched_setaffinity(0, sizeof(set), &set);
 				script_exited = true;
 			};
-
+			
 			if (parentstate == MENU_BTPAIR)
 			{
 				menustate = MENU_NONE1;

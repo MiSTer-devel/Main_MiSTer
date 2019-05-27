@@ -51,6 +51,7 @@ const ini_var_t ini_vars[] = {
 	{ "BOOTCORE_TIMEOUT", (void*)(&(cfg.bootcore_timeout)), INT16, 10, 30, 1 },
 	{ "FONT", (void*)(&(cfg.font)), STRING, 0, sizeof(cfg.font) - 1, 1 },
 	{ "FB_SIZE", (void*)(&(cfg.fb_size)), UINT8, 1, 4, 1 },
+	{ "SCRIPTS_OLD_GUI", (void*)(&(cfg.scripts_old_gui)), UINT8, 0, 1, 1 },
 };
 
 // mist ini config
