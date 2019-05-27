@@ -57,5 +57,6 @@ void input_lightgun_cal(uint16_t *cal);
 
 void input_switch(int grab);
 int input_state();
+void input_uinp_destroy();
 
 #endif

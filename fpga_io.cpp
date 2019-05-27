@@ -633,6 +633,7 @@ void app_restart(const char *path)
 	fpga_core_reset(1);
 
 	input_switch(0);
+	input_uinp_destroy();
 
 	char *appname = getappname();
 	printf("restarting the %s\n", appname);
