@@ -3952,8 +3952,8 @@ void HandleUI(void)
 			ttypid = fork();
 			if (!ttypid)
 			{
-				system("/sbin/agetty -a root -l /tmp/script --nohostname -L tty2 xterm");
-				exit(0);
+				execl("/sbin/agetty", "/sbin/agetty", "-a", "root", "-l", "/tmp/script", "--nohostname", "-L", "tty2", "xterm", NULL);
+				exit(0); //should never be reached
 			}
 		}
 		else

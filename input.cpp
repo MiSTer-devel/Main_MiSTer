@@ -1420,22 +1420,52 @@ void input_uinp_destroy()
 	}
 }
 
+static unsigned long uinp_repeat = 0;
+static struct input_event uinp_ev;
 static void uinp_send_key(uint16_t key, int press)
 {
 	if (uinp_fd > 0)
 	{
-		static struct input_event event;
+		if (!uinp_ev.value && press)
+		{
+			uinp_repeat = GetTimer(REPEATDELAY);
+		}
 
-		memset(&event, 0, sizeof(event));
-		gettimeofday(&event.time, NULL);
-		event.type = EV_KEY;
-		event.code = key;
-		event.value = press ? 1 : 0;
-		write(uinp_fd, &event, sizeof(event));
-		event.type = EV_SYN;
-		event.code = SYN_REPORT;
-		event.value = 0;
-		write(uinp_fd, &event, sizeof(event));
+		memset(&uinp_ev, 0, sizeof(uinp_ev));
+		gettimeofday(&uinp_ev.time, NULL);
+		uinp_ev.type = EV_KEY;
+		uinp_ev.code = key;
+		uinp_ev.value = press;
+		write(uinp_fd, &uinp_ev, sizeof(uinp_ev));
+
+		static struct input_event ev;
+		ev.time = uinp_ev.time;
+		ev.type = EV_SYN;
+		ev.code = SYN_REPORT;
+		ev.value = 0;
+		write(uinp_fd, &ev, sizeof(ev));
+	}
+}
+
+static void uinp_check_key()
+{
+	if (uinp_fd > 0)
+	{
+		if (!grabbed)
+		{
+			if (uinp_ev.value && CheckTimer(uinp_repeat))
+			{
+				uinp_repeat = GetTimer(REPEATRATE);
+				uinp_send_key(uinp_ev.code, 2);
+			}
+		}
+		else
+		{
+			if (uinp_ev.value)
+			{
+				uinp_send_key(uinp_ev.code, 0);
+			}
+		}
 	}
 }
 
@@ -2970,6 +3000,8 @@ int input_poll(int getchar)
 
 	int ret = input_test(getchar);
 	if (getchar) return ret;
+
+	uinp_check_key();
 
 	static int prev_dx = 0;
 	static int prev_dy = 0;
