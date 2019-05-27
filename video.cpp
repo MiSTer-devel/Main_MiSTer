@@ -5,6 +5,8 @@
 #include <sys/mman.h>
 #include <linux/fb.h>
 #include <errno.h>
+#include <sys/ioctl.h>
+#include <linux/vt.h>
 
 #include "hardware.h"
 #include "user_io.h"
@@ -1009,4 +1011,22 @@ void video_menu_bg(int n)
 	}
 
 	video_fb_enable(0);
+}
+
+int video_chvt(int num)
+{
+	static int cur_vt = 0;
+	if (num)
+	{
+		cur_vt = num;
+		int fd;
+		if ((fd = open("/dev/tty0", O_RDONLY)) >= 0)
+		{
+			if (ioctl(fd, VT_ACTIVATE, cur_vt)) printf("ioctl VT_ACTIVATE fails\n");
+			if (ioctl(fd, VT_WAITACTIVE, cur_vt)) printf("ioctl VT_WAITACTIVE fails\n");
+			close(fd);
+		}
+	}
+
+	return cur_vt ? cur_vt : 1;
 }

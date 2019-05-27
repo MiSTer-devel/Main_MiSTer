@@ -28,8 +28,6 @@ extern char joy_bnames[32][32];
 extern int  joy_bcount;
 
 void open_joystick_setup();
-void menu_bt_pair();
-
 int menu_lightgun_cb(uint16_t type, uint16_t code, int value);
 
 #endif

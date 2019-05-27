@@ -38,6 +38,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include <sched.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <libgen.h>
+
 #include "file_io.h"
 #include "osd.h"
 #include "hardware.h"
@@ -110,6 +114,8 @@ enum MENU
 	MENU_SCRIPTS_PRE1,
 	MENU_SCRIPTS,
 	MENU_SCRIPTS1,
+	MENU_SCRIPTS_FB,
+	MENU_SCRIPTS_FB2,
 	MENU_BTPAIR,
 	MENU_WMPAIR,
 	MENU_WMPAIR1,
@@ -760,7 +766,7 @@ void HandleUI(void)
 		// No UI in unknown cores.
 		return;
 	}
-	
+
 	struct RigidDiskBlock *rdb = nullptr;
 
 	static char opensave;
@@ -778,6 +784,7 @@ void HandleUI(void)
 	static uint32_t cheatsub = 0;
 	static uint8_t card_cid[32];
 	static uint32_t hdmask = 0;
+	static pid_t ttypid = 0;
 
 	static char	cp_MenuCancel;
 
@@ -799,80 +806,88 @@ void HandleUI(void)
 		cfg.bootcore[0] = '\0';
 	}
 
-	switch (c)
+	//prevent OSD control while script is executing on framebuffer
+	if (!video_fb_state() || video_chvt(0) != 2)
 	{
-	case KEY_F12:
-		menu = true;
-		menu_key_set(KEY_F12 | UPSTROKE);
-		video_fb_enable(0);
-		break;
-	case KEY_F1:
-		if (is_menu_core())
+		switch (c)
 		{
-			unsigned long status = ((user_io_8bit_set_status(0, 0)>>1)&7)+1;
-			status <<= 1;
-			user_io_8bit_set_status(status, 0xE);
-			FileSaveConfig(user_io_create_config_name(), &status, 4);
-			video_menu_bg((status >> 1) & 7);
-		}
-		break;
-
-	case KEY_F11:
-		if (user_io_osd_is_visible())
-		{
-			menustate = MENU_BTPAIR;
-		}
-		break;
-
-	case KEY_F10:
-		if (user_io_osd_is_visible() && !access("/bin/wminput", F_OK))
-		{
-			menustate = MENU_WMPAIR;
-		}
-		else if(input_has_lightgun())
-		{
-			menustate = MENU_LGCAL;
-		}
-		break;
-
-	case KEY_F9:
-		video_fb_enable(!video_fb_state());
-		if(video_fb_state() || !is_menu_core()) menustate = MENU_NONE1;
-		break;
-
-		// Within the menu the esc key acts as the menu key. problem:
-		// if the menu is left with a press of ESC, then the follwing
-		// break code for the ESC key when the key is released will 
-		// reach the core which never saw the make code. Simple solution:
-		// react on break code instead of make code
-	case KEY_ESC | UPSTROKE:
-		if (menustate != MENU_NONE2)
+		case KEY_F12:
 			menu = true;
-		break;
-	case KEY_ENTER:
-	case KEY_SPACE:
-		select = true;
-		break;
-	case KEY_UP:
-		up = true;
-		break;
-	case KEY_DOWN:
-		down = true;
-		break;
-	case KEY_LEFT:
-		left = true;
-		break;
-	case KEY_RIGHT:
-		right = true;
-		break;
-	case KEY_KPPLUS:
-	case KEY_EQUAL: // =/+
-		plus = true;
-		break;
-	case KEY_KPMINUS:
-	case KEY_MINUS: // -/_
-		minus = true;
-		break;
+			menu_key_set(KEY_F12 | UPSTROKE);
+			video_fb_enable(0);
+			break;
+
+		case KEY_F1:
+			if (is_menu_core())
+			{
+				unsigned long status = ((user_io_8bit_set_status(0, 0) >> 1) & 7) + 1;
+				status <<= 1;
+				user_io_8bit_set_status(status, 0xE);
+				FileSaveConfig(user_io_create_config_name(), &status, 4);
+				video_menu_bg((status >> 1) & 7);
+			}
+			break;
+
+		case KEY_F11:
+			if (user_io_osd_is_visible())
+			{
+				menustate = MENU_BTPAIR;
+			}
+			break;
+
+		case KEY_F10:
+			if (user_io_osd_is_visible() && !access("/bin/wminput", F_OK))
+			{
+				menustate = MENU_WMPAIR;
+			}
+			else if (input_has_lightgun())
+			{
+				menustate = MENU_LGCAL;
+			}
+			break;
+
+		case KEY_F9:
+			if (is_menu_core() && cfg.fb_terminal)
+			{
+				video_chvt(1);
+				video_fb_enable(!video_fb_state());
+				if (video_fb_state()) menustate = MENU_NONE1;
+			}
+			break;
+
+			// Within the menu the esc key acts as the menu key. problem:
+			// if the menu is left with a press of ESC, then the follwing
+			// break code for the ESC key when the key is released will 
+			// reach the core which never saw the make code. Simple solution:
+			// react on break code instead of make code
+		case KEY_ESC | UPSTROKE:
+			if (menustate != MENU_NONE2) menu = true;
+			break;
+		case KEY_ENTER:
+		case KEY_SPACE:
+			select = true;
+			break;
+		case KEY_UP:
+			up = true;
+			break;
+		case KEY_DOWN:
+			down = true;
+			break;
+		case KEY_LEFT:
+			left = true;
+			break;
+		case KEY_RIGHT:
+			right = true;
+			break;
+		case KEY_KPPLUS:
+		case KEY_EQUAL: // =/+
+			plus = true;
+			break;
+		case KEY_KPMINUS:
+		case KEY_MINUS: // -/_
+			minus = true;
+			break;
+		}
 	}
 
 	if (menu || select || up || down || left || right)
@@ -3688,6 +3703,7 @@ void HandleUI(void)
 			break;
 		}
 
+		OsdSetSize(16);
 		helptext = helptexts[HELPTEXT_NONE];
 		parentstate = menustate;
 
@@ -3798,7 +3814,7 @@ void HandleUI(void)
 						}
 					}
 
-					if(match) SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_SYSTEM1);
+					if(match) SelectFile("SH", SCANO_DIR, MENU_SCRIPTS_FB, MENU_SYSTEM1);
 					else
 					{
 						menustate = MENU_SCRIPTS_PRE;
@@ -3916,8 +3932,54 @@ void HandleUI(void)
 				// fall through
 
 			case 1:
-				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS, MENU_SYSTEM1);
+				SelectFile("SH", SCANO_DIR, MENU_SCRIPTS_FB, MENU_SYSTEM1);
 				break;
+			}
+		}
+		break;
+
+	case MENU_SCRIPTS_FB:
+		if (cfg.fb_terminal)
+		{
+			menustate = MENU_SCRIPTS_FB2;
+			OsdDisable();
+			video_chvt(2);
+			video_fb_enable(1);
+			static char cmd[1024 * 2];
+			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\ncd $(dirname %s)\n%s\necho \"Press any key to continue\"\n", getFullPath(SelectedPath), getFullPath(SelectedPath));
+			unlink("/tmp/script");
+			FileSave("/tmp/script", cmd, strlen(cmd), 1);
+			ttypid = fork();
+			if (!ttypid)
+			{
+				system("/sbin/agetty -a root -l /tmp/script --nohostname -L tty2 xterm");
+				exit(0);
+			}
+		}
+		else
+		{
+			menustate = MENU_SCRIPTS;
+		}
+		break;
+
+	case MENU_SCRIPTS_FB2:
+		if (ttypid)
+		{
+			if (waitpid(ttypid, 0, WNOHANG) > 0)
+			{
+				ttypid = 0;
+				user_io_osd_key_enable(1);
+			}
+		}
+		else
+		{
+			if (c & UPSTROKE)
+			{
+				video_fb_enable(0);
+				menustate = MENU_SYSTEM1;
+				menusub = 3;
+				OsdClear();
+				OsdEnable(DISABLE_KEYBOARD);
 			}
 		}
 		break;
@@ -4443,11 +4505,6 @@ void Info(const char *message, int timeout, int width, int height, int frame)
 		menu_timer = GetTimer(timeout);
 		menustate = MENU_INFO;
 	}
-}
-
-void menu_bt_pair()
-{
-	menustate = MENU_BTPAIR;
 }
 
 int menu_lightgun_cb(uint16_t type, uint16_t code, int value)
