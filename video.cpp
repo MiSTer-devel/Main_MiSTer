@@ -853,27 +853,89 @@ void video_menu_bg(int n)
 	menu_bg = n;
 	if (n)
 	{
+		printf("**** BG DEBUG START ****\n");
+		printf("n = %d\n", n);
+
+		Imlib_Load_Error error;
+		static Imlib_Image logo = 0;
+		if (!logo)
+		{
+			unlink("/tmp/logo.png");
+			if (FileSave("/tmp/logo.png", _binary_logo_png_start, _binary_logo_png_end - _binary_logo_png_start, 1))
+			{
+				while(1)
+				{
+					error = IMLIB_LOAD_ERROR_NONE;
+					if ((logo = imlib_load_image_with_error_return("/tmp/logo.png", &error))) break;
+					else
+					{
+						if (error != IMLIB_LOAD_ERROR_NO_LOADER_FOR_FILE_FORMAT)
+						{
+							printf("logo.png error = %d\n", error);
+							break;
+						}
+					}
+					vs_wait();
+				};
+			}
+			else
+			{
+				printf("Fail to save to /tmp/logo.png\n");
+			}
+			unlink("/tmp/logo.png");
+			printf("Logo = %p\n", logo);
+		}
+
+
 		menu_bgn = (menu_bgn == 1) ? 2 : 1;
 
 		static Imlib_Image menubg = 0;
 		static Imlib_Image bg1 = 0, bg2 = 0;
 		if (!bg1) bg1 = imlib_create_image_using_data(fb_width_full, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 1)));
+		if (!bg1) printf("Warning: bg1 is 0\n");
 		if (!bg2) bg2 = imlib_create_image_using_data(fb_width_full, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 2)));
+		if (!bg2) printf("Warning: bg2 is 0\n");
 
 		Imlib_Image *bg = (menu_bgn == 1) ? &bg1 : &bg2;
+		//printf("*bg = %p\n", *bg);
 
 		switch (n)
 		{
 		case 1:
 			if (menubg || FileExists("menu.png") || FileExists("menu.jpg"))
 			{
-				if (!menubg) menubg = imlib_load_image_immediately(getFullPath("menu.png"));
-				if (!menubg) menubg = imlib_load_image_immediately(getFullPath("menu.jpg"));
+				if (!menubg)
+				{
+					if (!menubg && FileExists("menu.png"))
+					{
+						error = IMLIB_LOAD_ERROR_NONE;
+						menubg = imlib_load_image_with_error_return(getFullPath("menu.png"), &error);
+						if (!menubg)
+						{
+							printf("menu.png error = %d\n", error);
+						}
+					}
+
+					if (!menubg && FileExists("menu.jpg"))
+					{
+						error = IMLIB_LOAD_ERROR_NONE;
+						menubg = imlib_load_image_with_error_return(getFullPath("menu.jpg"), &error);
+						if (!menubg)
+						{
+							printf("menu.jpg error = %d\n", error);
+						}
+					}
+
+					printf("menubg = %p\n", menubg);
+				}
+
 				if (menubg)
 				{
 					imlib_context_set_image(menubg);
 					int src_w = imlib_image_get_width();
 					int src_h = imlib_image_get_height();
+					printf("menubg: src_w=%d, src_h=%d\n", src_w, src_h);
+
 					if (*bg)
 					{
 						imlib_context_set_image(*bg);
@@ -885,7 +947,15 @@ void video_menu_bg(int n)
 						);
 						break;
 					}
+					else
+					{
+						printf("*bg = 0!\n");
+					}
 				}
+			}
+			else
+			{
+				printf("Neither menu.png nor menu.jpg found!\n");
 			}
 			draw_checkers();
 			break;
@@ -909,22 +979,13 @@ void video_menu_bg(int n)
 			break;
 		}
 
-		static Imlib_Image logo = 0;
-		if (!logo)
-		{
-			unlink("/tmp/logo.png");
-			if (FileSave("/tmp/logo.png", _binary_logo_png_start, _binary_logo_png_end - _binary_logo_png_start, 1))
-			{
-				logo = imlib_load_image_immediately("/tmp/logo.png");
-				unlink("/tmp/logo.png");
-			}
-		}
 		if (logo)
 		{
 			imlib_context_set_image(logo);
 
 			int src_w = imlib_image_get_width();
 			int src_h = imlib_image_get_height();
+			printf("logo: src_w=%d, src_h=%d\n", src_w, src_h);
 
 			if (*bg)
 			{
@@ -936,10 +997,15 @@ void video_menu_bg(int n)
 					fb_width*2 / 7, src_h*fb_width*2 / (src_w * 7) //int destination_width, int destination_height
 				);
 			}
+			else
+			{
+				printf("*bg = 0!\n");
+			}
 		}
 
 		//test the fb driver
 		vs_wait();
+		printf("**** BG DEBUG END ****\n");
 	}
 
 	video_fb_enable(0);
