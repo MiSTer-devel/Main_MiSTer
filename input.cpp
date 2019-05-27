@@ -1134,13 +1134,7 @@ static char has_led(int fd)
 		return 0;
 	}
 
-	if (test_bit(EV_LED, evtype_b))
-	{
-		printf("has LEDs.\n");
-		return 1;
-	}
-
-	return 0;
+	return test_bit(EV_LED, evtype_b) ? 1 : 0;
 }
 
 static char leds_state = 0;
@@ -2274,7 +2268,6 @@ int input_test(int getchar)
 		DIR *d = opendir("/dev/input");
 		if (d)
 		{
-			struct input_id id;
 			struct dirent *de;
 			while ((de = readdir(d)))
 			{
@@ -2289,17 +2282,22 @@ int input_test(int getchar)
 					{
 						pool[n].fd = fd;
 						pool[n].events = POLLIN;
-						input[n].led = has_led(pool[n].fd);
-
-						memset(&id, 0, sizeof(id));
-						ioctl(pool[n].fd, EVIOCGID, &id);
-						input[n].vid = id.vendor;
-						input[n].pid = id.product;
-
-						ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(input[n].uniq)), input[n].uniq);
-						ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
-						input[n].bind = -1;
 						input[n].mouse = !strncmp(de->d_name, "mouse", 5);
+
+						if (!input[n].mouse)
+						{
+							struct input_id id;
+							memset(&id, 0, sizeof(id));
+							ioctl(pool[n].fd, EVIOCGID, &id);
+							input[n].vid = id.vendor;
+							input[n].pid = id.product;
+
+							ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(input[n].uniq)), input[n].uniq);
+							ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
+							input[n].led = has_led(pool[n].fd);
+						}
+
+						input[n].bind = -1;
 
 						// enable scroll wheel reading
 						if (input[n].mouse)
@@ -2462,7 +2460,7 @@ int input_test(int getchar)
 
 	if (state == 2)
 	{
-		int return_value = poll(pool, NUMDEV + 2, 0);
+		int return_value = poll(pool, NUMDEV + 1, 0);
 		if (return_value < 0)
 		{
 			printf("ERR: poll\n");
