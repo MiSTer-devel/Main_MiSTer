@@ -1974,7 +1974,7 @@ void user_io_poll()
 				else if (ps2_wheel < -63) ps2_wheel = -63;
 
 				// collect movement info and send at predefined rate
-				if (is_menu_core()) printf("PS2 MOUSE: %x %d %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2], ps2_wheel);
+				if (is_menu_core() && !video_fb_state()) printf("PS2 MOUSE: %x %d %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2], ps2_wheel);
 
 				if (!osd_is_visible)
 				{
@@ -2595,7 +2595,7 @@ void user_io_kbd(uint16_t key, int press)
 			uint32_t code = get_ps2_code(key);
 			if (!press)
 			{
-				if (is_menu_core()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
+				if (is_menu_core() && !video_fb_state()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
 				if (key == KEY_MENU) key = KEY_F12;
 				if (osd_is_visible) menu_key_set(UPSTROKE | key);
@@ -2605,7 +2605,7 @@ void user_io_kbd(uint16_t key, int press)
 			}
 			else
 			{
-				if (is_menu_core()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
+				if (is_menu_core() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 				if (!osd_is_visible && !is_menu_core() && key == KEY_MENU && press == 3) open_joystick_setup();
 				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86_core() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
 				else if (osd_is_visible)

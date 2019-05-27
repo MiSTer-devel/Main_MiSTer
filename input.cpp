@@ -2609,7 +2609,7 @@ int input_test(int getchar)
 									if (ev.code == KEY_MENU) ev.code = BTN_MODE;
 								}
 
-								if (is_menu_core())
+								if (is_menu_core() && !video_fb_state())
 								{
 									/*
 									if (mapping && mapping_type <= 1 && !(ev.type==EV_KEY && ev.value>1))
@@ -2796,7 +2796,7 @@ int input_test(int getchar)
 							xval = ((data[0] & 0x10) ? -256 : 0) | data[1];
 							yval = ((data[0] & 0x20) ? -256 : 0) | data[2];
 
-							if (is_menu_core()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, data[0], xval, yval, (int8_t)data[3]);
+							if (is_menu_core() && !video_fb_state()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, data[0], xval, yval, (int8_t)data[3]);
 
 							if (cfg.mouse_throttle) throttle = cfg.mouse_throttle;
 							if (ds_mouse_emu) throttle *= 4;
