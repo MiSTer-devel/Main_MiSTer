@@ -117,7 +117,7 @@ static int ev2amiga[] =
 	0x3c, //83  KEY_KPDOT		
 	NONE, //84  ???				
 	NONE, //85  KEY_ZENKAKU		
-	NONE, //86  KEY_102ND		
+	0x30, //86  KEY_102ND, '<' on most keyboards
 	0x5f, //87  KEY_F11			
 	NONE, //88  KEY_F12			
 	NONE, //89  KEY_RO			
@@ -135,12 +135,12 @@ static int ev2amiga[] =
 	NONE, //101 KEY_LINEFEED	
 	0x6a, //102 KEY_HOME		
 	0x4c, //103 KEY_UP			
-	NONE, //104 KEY_PAGEUP		
+	0x5b, //104 KEY_PAGEUP
 	0x4f, //105 KEY_LEFT		
 	0x4e, //106 KEY_RIGHT		
 	NONE, //107 KEY_END			
 	0x4d, //108 KEY_DOWN		
-	NONE, //109 KEY_PAGEDOWN	
+	0x5a, //109 KEY_PAGEDOWN
 	0x0d, //110 KEY_INSERT		
 	0x46, //111 KEY_DELETE		
 	NONE, //112 KEY_MACRO		
@@ -225,7 +225,7 @@ static int ev2amiga[] =
 	NONE, //191 KEY_F21			
 	NONE, //192 KEY_F22			
 	NONE, //193 KEY_F23			
-	0x63, //194 KEY_F24			
+	0x2b, //194 # on German keyboard, was 0x63 (CTRL on Amiga), 194 KEY_F24
 	NONE, //195 ???				
 	NONE, //196 ???				
 	NONE, //197 ???				
