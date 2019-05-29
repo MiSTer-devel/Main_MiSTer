@@ -1049,40 +1049,61 @@ void video_cmd(char *cmd)
 	if (video_fb_state())
 	{
 		int accept = 0;
-		if (!strncmp(cmd, "fb_cmd0 ", 8))
+		int fmt = 0, rb = 0, div = -1, width = -1, height = -1;
+		uint16_t hmin, hmax, vmin, vmax;
+		if (sscanf(cmd, "fb_cmd0 %d %d %d", &fmt, &rb, &div) == 3)
 		{
-			int fmt, rb, div;
-			if (sscanf(cmd + 8, "%d %d %d", &fmt, &rb, &div) == 3)
+			if (div >= 1 && div <= 4)
 			{
-				if ((fmt == 1555 || fmt == 565 || fmt == 8888) && (rb == 0 || rb == 1) && (div == 1 || div == 2 || div == 4))
-				{
-					int width = v_cur.item[1] / div;
-					int height = v_cur.item[5] / div;
-					int stride = ((width * ((fmt == 8888) ? 4 : 2)) + 255) & ~255;
-
-					printf("fb_cmd: new mode: %dx%d color=%d stride=%d\n", width, height, fmt, stride);
-
-					int sc_fmt = (fmt == 1555) ? 0 : (fmt == 565) ? 3 : 2;
-
-					spi_uio_cmd_cont(UIO_SET_FBUF);
-					spi_w((sc_fmt << 1) | (rb << 3) | 1); // format, enable flag
-					spi_w((uint16_t)FB_ADDR); // base address low word
-					spi_w(FB_ADDR >> 16);     // base address high word
-					spi_w(width);             // frame width
-					spi_w(height);            // frame height
-					spi_w(0);                 // scaled left
-					spi_w(v_cur.item[1] - 1); // scaled right
-					spi_w(0);                 // scaled top
-					spi_w(v_cur.item[5] - 1); // scaled bottom
-					DisableIO();
-
-					sprintf(cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", fmt, rb, width, height, stride);
-					system(cmd);
-					accept = 1;
-				}
+				width = v_cur.item[1] / div;
+				height = v_cur.item[5] / div;
+				hmin = vmin = 0;
+				hmax = v_cur.item[1] - 1;
+				vmax = v_cur.item[5] - 1;
+				accept = 1;
 			}
 		}
 
-		if (!accept) printf("video_cmd: unknown command or format.");
+		if (sscanf(cmd, "fb_cmd1 %d %d %d %d", &fmt, &rb, &width, &height) == 4)
+		{
+			if (width < 120 || width > (int)v_cur.item[1]) width = v_cur.item[1];
+			if (height < 120 || height > (int)v_cur.item[5]) height = v_cur.item[5];
+
+			div = 1;
+			while ((width*(div + 1)) <= (int)v_cur.item[1] && (height*(div + 1)) <= (int)v_cur.item[5]) div++;
+
+			hmin = (uint16_t)((v_cur.item[1] - (width * div)) / 2);
+			vmin = (uint16_t)((v_cur.item[5] - (height * div)) / 2);
+			hmax = hmin + (width * div) - 1;
+			vmax = vmin + (height * div) - 1;
+			accept = 1;
+		}
+
+		if (accept && (fmt == 1555 || fmt == 565 || fmt == 8888) && (rb == 0 || rb == 1))
+		{
+			int stride = ((width * ((fmt == 8888) ? 4 : 2)) + 255) & ~255;
+			int sc_fmt = (fmt == 1555) ? 0 : (fmt == 565) ? 3 : 2;
+
+			printf("fb_cmd: new mode: %dx%d => %dx%d color=%d stride=%d\n", width, height, hmax - hmin + 1, vmax - vmin + 1, fmt, stride);
+
+			spi_uio_cmd_cont(UIO_SET_FBUF);
+			spi_w((sc_fmt << 1) | (rb << 3) | 1); // format, enable flag
+			spi_w((uint16_t)FB_ADDR); // base address low word
+			spi_w(FB_ADDR >> 16);     // base address high word
+			spi_w(width);             // frame width
+			spi_w(height);            // frame height
+			spi_w(hmin);              // scaled left
+			spi_w(hmax);              // scaled right
+			spi_w(vmin);              // scaled top
+			spi_w(vmax);              // scaled bottom
+			DisableIO();
+
+			sprintf(cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", fmt, rb, width, height, stride);
+			system(cmd);
+		}
+		else
+		{
+			printf("video_cmd: unknown command or format.\n");
+		}
 	}
 }
