@@ -806,6 +806,39 @@ void HandleUI(void)
 		cfg.bootcore[0] = '\0';
 	}
 
+	if (is_menu_core())
+	{
+		static int menu_visible = 1;
+		static unsigned long timeout = 0;
+		if (!video_fb_state() && video_bg_has_picture())
+		{
+			if (timeout && menu_visible && CheckTimer(timeout))
+			{
+				menu_visible = 0;
+				spi_osd_cmd(MM1_OSDCMDDISABLE);
+			}
+
+			if (c || menustate != MENU_FILE_SELECT2)
+			{
+				timeout = 0;
+				if (!menu_visible)
+				{
+					c = 0;
+					menu_visible = 1;
+					spi_osd_cmd(MM1_OSDCMDWRITE | 8);
+					spi_osd_cmd(MM1_OSDCMDENABLE);
+				}
+			}
+
+			if (!timeout) timeout = GetTimer(120000);
+		}
+		else
+		{
+			timeout = 0;
+			menu_visible = 1;
+		}
+	}
+
 	//prevent OSD control while script is executing on framebuffer
 	if (!video_fb_state() || video_chvt(0) != 2)
 	{

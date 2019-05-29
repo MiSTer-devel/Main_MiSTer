@@ -854,9 +854,11 @@ static void vs_wait()
 	printf("vs_wait(us): %llu\n", t2 - t1);
 }
 
+static int bg_has_picture = 0;
 extern uint8_t  _binary_logo_png_start[], _binary_logo_png_end[];
 void video_menu_bg(int n)
 {
+	bg_has_picture = 0;
 	menu_bg = n;
 	if (n)
 	{
@@ -952,6 +954,7 @@ void video_menu_bg(int n)
 							0, 0,               //int destination_x, int destination_y,
 							fb_width, fb_height //int destination_width, int destination_height
 						);
+						bg_has_picture = 1;
 						break;
 					}
 					else
@@ -1016,6 +1019,11 @@ void video_menu_bg(int n)
 	}
 
 	video_fb_enable(0);
+}
+
+int video_bg_has_picture()
+{
+	return bg_has_picture;
 }
 
 int video_chvt(int num)
