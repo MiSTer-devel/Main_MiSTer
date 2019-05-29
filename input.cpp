@@ -2373,7 +2373,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	}
 }
 
-static struct pollfd pool[NUMDEV + 1];
+#define CMD_FIFO "/dev/MiSTer_cmd"
+
+static struct pollfd pool[NUMDEV + 2];
 
 int input_test(int getchar)
 {
@@ -2390,6 +2392,12 @@ int input_test(int getchar)
 		signal(SIGINT, INThandler);
 		pool[NUMDEV].fd = set_watch();
 		pool[NUMDEV].events = POLLIN;
+
+		unlink(CMD_FIFO);
+		mkfifo(CMD_FIFO, 0666);
+
+		pool[NUMDEV+1].fd = open(CMD_FIFO, O_RDONLY | O_NONBLOCK);
+		pool[NUMDEV+1].events = POLLIN;
 		state++;
 	}
 
@@ -2606,7 +2614,7 @@ int input_test(int getchar)
 
 	if (state == 2)
 	{
-		int return_value = poll(pool, NUMDEV + 1, (is_menu_core() && video_fb_state()) ? 500 : 0);
+		int return_value = poll(pool, NUMDEV + 2, (is_menu_core() && video_fb_state()) ? 500 : 0);
 		if (return_value < 0)
 		{
 			printf("ERR: poll\n");
@@ -2961,6 +2969,18 @@ int input_test(int getchar)
 							mouse_cb(mouse_btn | mice_btn, xval, yval, (int8_t)data[3]);
 						}
 					}
+				}
+			}
+
+			if ((pool[NUMDEV + 1].fd >= 0) && (pool[NUMDEV + 1].revents & POLLIN))
+			{
+				static char cmd[1024];
+				int len = read(pool[NUMDEV + 1].fd, cmd, sizeof(cmd) - 1);
+				if (len)
+				{
+					cmd[len] = 0;
+					printf("MiSTer_cmd: %s\n", cmd);
+					if (!strncmp(cmd, "fb_cmd", 6)) video_cmd(cmd);
 				}
 			}
 		}

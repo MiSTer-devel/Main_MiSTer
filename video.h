@@ -15,5 +15,6 @@ void video_fb_enable(int enable, int n = 0);
 int video_fb_state();
 void video_menu_bg(int n);
 int video_chvt(int num);
+void video_cmd(char *cmd);
 
 #endif // VIDEO_H

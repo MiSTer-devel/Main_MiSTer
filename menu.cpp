@@ -820,11 +820,10 @@ void HandleUI(void)
 		case KEY_F1:
 			if (is_menu_core())
 			{
-				unsigned long status = ((user_io_8bit_set_status(0, 0) >> 1) & 7) + 1;
-				status <<= 1;
+				unsigned long status = (user_io_8bit_set_status(0, 0)+ 2) & 0xE;
 				user_io_8bit_set_status(status, 0xE);
 				FileSaveConfig(user_io_create_config_name(), &status, 4);
-				video_menu_bg((status >> 1) & 7);
+				video_menu_bg(status >> 1);
 			}
 			break;
 

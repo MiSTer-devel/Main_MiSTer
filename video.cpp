@@ -7,6 +7,10 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <linux/vt.h>
+#include <fcntl.h> 
+#include <sys/stat.h> 
+#include <sys/types.h> 
+#include <unistd.h> 
 
 #include "hardware.h"
 #include "user_io.h"
@@ -633,6 +637,7 @@ void video_fb_enable(int enable, int n)
 		}
 
 		DisableIO();
+		if (is_menu_core()) user_io_8bit_set_status((fb_enabled && !fb_num) ? 0x160 : 0, 0x1E0);
 	}
 }
 
@@ -1029,4 +1034,47 @@ int video_chvt(int num)
 	}
 
 	return cur_vt ? cur_vt : 1;
+}
+
+void video_cmd(char *cmd)
+{
+	if (video_fb_state())
+	{
+		int accept = 0;
+		if (!strncmp(cmd, "fb_cmd0 ", 8))
+		{
+			int fmt, rb, div;
+			if (sscanf(cmd + 8, "%d %d %d", &fmt, &rb, &div) == 3)
+			{
+				if ((fmt == 1555 || fmt == 565 || fmt == 8888) && (rb == 0 || rb == 1) && (div == 1 || div == 2 || div == 4))
+				{
+					int width = v_cur.item[1] / div;
+					int height = v_cur.item[5] / div;
+					int stride = ((width * ((fmt == 8888) ? 4 : 2)) + 255) & ~255;
+
+					printf("fb_cmd: new mode: %dx%d color=%d stride=%d\n", width, height, fmt, stride);
+
+					int sc_fmt = (fmt == 1555) ? 0 : (fmt == 565) ? 3 : 2;
+
+					spi_uio_cmd_cont(UIO_SET_FBUF);
+					spi_w((sc_fmt << 1) | (rb << 3) | 1); // format, enable flag
+					spi_w((uint16_t)FB_ADDR); // base address low word
+					spi_w(FB_ADDR >> 16);     // base address high word
+					spi_w(width);             // frame width
+					spi_w(height);            // frame height
+					spi_w(0);                 // scaled left
+					spi_w(v_cur.item[1] - 1); // scaled right
+					spi_w(0);                 // scaled top
+					spi_w(v_cur.item[5] - 1); // scaled bottom
+					DisableIO();
+
+					sprintf(cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", fmt, rb, width, height, stride);
+					system(cmd);
+					accept = 1;
+				}
+			}
+		}
+
+		if (!accept) printf("video_cmd: unknown command or format.");
+	}
 }
