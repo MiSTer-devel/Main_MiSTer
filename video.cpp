@@ -26,15 +26,24 @@
 
 #define FB_SIZE  (1024*1024*8/4)               // 8MB
 #define FB_ADDR  (0x20000000 + (32*1024*1024)) // 512mb + 32mb(Core's fb)
-#define FB_FMT   2                             // 0 - 16bit, 1 - 24bit(not supported), 2 - 32bit
-#define FB_RxB   1
 
-#if(FB_FMT == 2)
-	static volatile uint32_t *fb_base = 0;
-#else
-	static volatile uint16_t *fb_base = 0;
-#endif
+/*
+--  [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
+--  [3]   : 0=16bits 565 1=16bits 1555
+--  [4]   : 0=RGB  1=BGR (for 16/24/32 modes)
+--  [5]   : TBD
+*/
 
+#define FB_FMT_565  0b00100
+#define FB_FMT_1555 0b01100
+#define FB_FMT_888  0b00101
+#define FB_FMT_8888 0b00110
+#define FB_FMT_PAL8 0b00011
+#define FB_FMT_RxB  0b10000
+#define FB_EN       0x8000
+
+
+static volatile uint32_t *fb_base = 0;
 static int fb_enabled = 0;
 static int fb_width = 0;
 static int fb_width_full = 0;
@@ -280,7 +289,6 @@ static void loadScalerCfg()
 }
 
 static char fb_reset_cmd[128] = {};
-
 static void set_video(vmode_custom_t *v, double Fpix)
 {
 	loadScalerCfg();
@@ -322,12 +330,12 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 	fb_width = v_cur.item[1] / cfg.fb_size;
 	fb_height = v_cur.item[5] / cfg.fb_size;
-	fb_stride = ((fb_width * (FB_FMT ? 4 : 2)) + 255) & ~255;
-	fb_width_full = fb_stride / (FB_FMT + 2);
+	fb_stride = ((fb_width * 4) + 255) & ~255;
+	fb_width_full = fb_stride / 4;
 
 	if (fb_enabled) video_fb_enable(1, fb_num);
 
-	sprintf(fb_reset_cmd, "taskset 1 echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", FB_FMT ? 8888 : 1555, FB_RxB, fb_width, fb_height, fb_stride);
+	sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_stride);
 	system(fb_reset_cmd);
 }
 
@@ -596,11 +604,11 @@ void video_fb_enable(int enable, int n)
 
 			if (enable)
 			{
-				uint32_t fb_addr = FB_ADDR + (FB_SIZE * 4 * n);
+				uint32_t fb_addr = FB_ADDR + (FB_SIZE * 4 * n) + (n ? 0 : 4096);
 				fb_num = n;
 
 				printf("Switch to HPS frame buffer\n");
-				spi_w((FB_FMT << 1) | (FB_RxB << 3) | 1); // format, enable flag
+				spi_w((uint16_t)(FB_EN | FB_FMT_RxB | FB_FMT_8888)); // format, enable flag
 				spi_w((uint16_t)fb_addr); // base address low word
 				spi_w(fb_addr >> 16);     // base address high word
 				spi_w(fb_width);          // frame width
@@ -654,7 +662,6 @@ int video_fb_state()
 static void draw_checkers()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
-	int stride = fb_stride / (FB_FMT + 2);
 
 	uint32_t col1 = 0x888888;
 	uint32_t col2 = 0x666666;
@@ -664,7 +671,7 @@ static void draw_checkers()
 	for (int y = 0; y < fb_height; y++)
 	{
 		int c1 = (y / sz) & 1;
-		pos = y * stride;
+		pos = y * fb_width_full;
 		for (int x = 0; x < fb_width; x++)
 		{
 			int c2 = c1 ^ ((x / sz) & 1);
@@ -676,7 +683,6 @@ static void draw_checkers()
 static void draw_hbars1()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
-	int stride = fb_stride / (FB_FMT + 2);
 	int old_base = 0;
 	int gray = 255;
 	int sz = fb_height/7;
@@ -684,7 +690,7 @@ static void draw_hbars1()
 
 	for (int y = 0; y < fb_height; y++)
 	{
-		int pos = y * stride;
+		int pos = y * fb_width_full;
 		int base_color = ((7 * y) / fb_height)+1;
 		if (old_base != base_color)
 		{
@@ -711,11 +717,10 @@ static void draw_hbars1()
 static void draw_hbars2()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
-	int stride = fb_stride / (FB_FMT + 2);
 
 	for (int y = 0; y < fb_height; y++)
 	{
-		int pos = y * stride;
+		int pos = y * fb_width_full;
 		int base_color = ((14 * y) / fb_height);
 		int inv = base_color & 1;
 		base_color >>= 1;
@@ -736,13 +741,12 @@ static void draw_hbars2()
 static void draw_vbars1()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
-	int stride = fb_stride / (FB_FMT + 2);
 	int sz = fb_width / 7;
 	int stp = 0;
 
 	for (int y = 0; y < fb_height; y++)
 	{
-		int pos = y * stride;
+		int pos = y * fb_width_full;
 		int old_base = 0;
 		int gray = 255;
 		for (int x = 0; x < fb_width; x++)
@@ -771,11 +775,10 @@ static void draw_vbars1()
 static void draw_vbars2()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
-	int stride = fb_stride / (FB_FMT + 2);
 
 	for (int y = 0; y < fb_height; y++)
 	{
-		int pos = y * stride;
+		int pos = y * fb_width_full;
 		for (int x = 0; x < fb_width; x++)
 		{
 			int gray = ((256 * y) / fb_height);
@@ -797,11 +800,10 @@ static void draw_vbars2()
 static void draw_spectrum()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
-	int stride = fb_stride / (FB_FMT + 2);
 
 	for (int y = 0; y < fb_height; y++)
 	{
-		int pos = y * stride;
+		int pos = y * fb_width_full;
 		int blue = ((256 * y) / fb_height);
 		for (int x = 0; x < fb_width; x++)
 		{
@@ -818,11 +820,10 @@ static void draw_spectrum()
 static void draw_black()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
-	int stride = fb_stride / (FB_FMT + 2);
 
 	for (int y = 0; y < fb_height; y++)
 	{
-		int pos = y * stride;
+		int pos = y * fb_width_full;
 		for (int x = 0; x < fb_width; x++) buf[pos++] = 0;
 	}
 }
@@ -1064,6 +1065,19 @@ void video_cmd(char *cmd)
 			}
 		}
 
+		if (sscanf(cmd, "fb_cmd2 %d %d %d", &fmt, &rb, &div) == 3)
+		{
+			if (div >= 1 && div <= 4)
+			{
+				width = v_cur.item[1] / div;
+				height = v_cur.item[5] / div;
+				hmin = vmin = 0;
+				hmax = v_cur.item[1] - 1;
+				vmax = v_cur.item[5] - 1;
+				accept = 1;
+			}
+		}
+
 		if (sscanf(cmd, "fb_cmd1 %d %d %d %d", &fmt, &rb, &width, &height) == 4)
 		{
 			if (width < 120 || width > (int)v_cur.item[1]) width = v_cur.item[1];
@@ -1079,27 +1093,70 @@ void video_cmd(char *cmd)
 			accept = 1;
 		}
 
-		if (accept && (fmt == 1555 || fmt == 565 || fmt == 8888) && (rb == 0 || rb == 1))
-		{
-			int stride = ((width * ((fmt == 8888) ? 4 : 2)) + 255) & ~255;
-			int sc_fmt = (fmt == 1555) ? 0 : (fmt == 565) ? 3 : 2;
+		int bpp = 0;
+		int sc_fmt = 0;
 
+		if (accept)
+		{
+			switch (fmt)
+			{
+			case 8888:
+				bpp = 4;
+				sc_fmt = FB_FMT_8888;
+				break;
+
+			case 1555:
+				bpp = 2;
+				sc_fmt = FB_FMT_1555;
+				break;
+
+			case 565:
+				bpp = 2;
+				sc_fmt = FB_FMT_565;
+				break;
+
+			case 8:
+				bpp = 1;
+				sc_fmt = FB_FMT_PAL8;
+				rb = 0;
+				break;
+
+			default:
+				accept = 0;
+			}
+		}
+
+		if (rb)
+		{
+			sc_fmt |= FB_FMT_RxB;
+			rb = 1;
+		}
+
+		if(accept)
+		{
+			int stride = ((width * bpp) + 255) & ~255;
 			printf("fb_cmd: new mode: %dx%d => %dx%d color=%d stride=%d\n", width, height, hmax - hmin + 1, vmax - vmin + 1, fmt, stride);
 
+			uint32_t addr = FB_ADDR + 4096;
+
 			spi_uio_cmd_cont(UIO_SET_FBUF);
-			spi_w((sc_fmt << 1) | (rb << 3) | 1); // format, enable flag
-			spi_w((uint16_t)FB_ADDR); // base address low word
-			spi_w(FB_ADDR >> 16);     // base address high word
-			spi_w(width);             // frame width
-			spi_w(height);            // frame height
-			spi_w(hmin);              // scaled left
-			spi_w(hmax);              // scaled right
-			spi_w(vmin);              // scaled top
-			spi_w(vmax);              // scaled bottom
+			spi_w(FB_EN | sc_fmt); // format, enable flag
+			spi_w((uint16_t)addr); // base address low word
+			spi_w(addr >> 16);     // base address high word
+			spi_w(width);          // frame width
+			spi_w(height);         // frame height
+			spi_w(hmin);           // scaled left
+			spi_w(hmax);           // scaled right
+			spi_w(vmin);           // scaled top
+			spi_w(vmax);           // scaled bottom
 			DisableIO();
 
-			sprintf(cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", fmt, rb, width, height, stride);
-			system(cmd);
+			if (cmd[6] != '2')
+			{
+				static char cmd[256];
+				sprintf(cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", fmt, rb, width, height, stride);
+				system(cmd);
+			}
 		}
 		else
 		{
