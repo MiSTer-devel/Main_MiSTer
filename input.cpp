@@ -2396,7 +2396,7 @@ int input_test(int getchar)
 		unlink(CMD_FIFO);
 		mkfifo(CMD_FIFO, 0666);
 
-		pool[NUMDEV+1].fd = open(CMD_FIFO, O_RDONLY | O_NONBLOCK);
+		pool[NUMDEV+1].fd = open(CMD_FIFO, O_RDWR | O_NONBLOCK);
 		pool[NUMDEV+1].events = POLLIN;
 		state++;
 	}
