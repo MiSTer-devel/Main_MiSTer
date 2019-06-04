@@ -1709,7 +1709,7 @@ void user_io_poll()
 		tos_poll();
 	}
 
-	if (core_type == CORE_TYPE_8BIT)
+	if (core_type == CORE_TYPE_8BIT && !is_menu_core())
 	{
 		/*
 		unsigned char c = 1, f, p = 0;
@@ -1758,7 +1758,7 @@ void user_io_poll()
 	{
 		x86_poll();
 	}
-	else if (core_type == CORE_TYPE_8BIT || core_type == CORE_TYPE_ARCHIE)
+	else if ((core_type == CORE_TYPE_8BIT || core_type == CORE_TYPE_ARCHIE) && !is_menu_core())
 	{
 		static uint8_t buffer[4][512];
 		uint32_t lba;
@@ -1912,7 +1912,7 @@ void user_io_poll()
 		}
 	}
 
-	if (core_type == CORE_TYPE_8BIT)
+	if (core_type == CORE_TYPE_8BIT && !is_menu_core())
 	{
 		// frequently check ps2 mouse for events
 		if (CheckTimer(mouse_timer))
@@ -2129,7 +2129,7 @@ void user_io_poll()
 		}
 	}
 
-	if (CheckTimer(led_timer))
+	if (CheckTimer(led_timer) && !is_menu_core())
 	{
 		led_timer = GetTimer(LED_FREQ);
 		if (!use_ps2ctl)
@@ -2615,7 +2615,7 @@ void user_io_kbd(uint16_t key, int press)
 				}
 				else
 				{
-					if ((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl && !is_archie()))
+					if (((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl && !is_archie())) && !is_menu_core())
 					{
 						if (press == 1)
 						{
