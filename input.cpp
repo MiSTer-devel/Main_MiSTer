@@ -2061,7 +2061,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					return;
 				}
 
-				if (user_io_osd_is_visible())
+				if (user_io_osd_is_visible() || video_fb_state())
 				{
 					if (ev->value <= 1)
 					{
@@ -2614,7 +2614,7 @@ int input_test(int getchar)
 
 	if (state == 2)
 	{
-		int return_value = poll(pool, NUMDEV + 2, (is_menu_core() && video_fb_state()) ? 500 : 0);
+		int return_value = poll(pool, NUMDEV + 2, (is_menu_core() && video_fb_state()) ? 25 : 0);
 		if (return_value < 0)
 		{
 			printf("ERR: poll\n");
