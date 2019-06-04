@@ -53,6 +53,7 @@ const ini_var_t ini_vars[] = {
 	{ "FONT", (void*)(&(cfg.font)), STRING, 0, sizeof(cfg.font) - 1, 1 },
 	{ "FB_SIZE", (void*)(&(cfg.fb_size)), UINT8, 1, 4, 1 },
 	{ "FB_TERMINAL", (void*)(&(cfg.fb_terminal)), UINT8, 0, 1, 1 },
+	{ "OSD_TIMEOUT", (void*)(&(cfg.osd_timeout)), INT16, 5, 3600, 1 },
 };
 
 // mist ini config

@@ -597,7 +597,8 @@ void user_io_init(const char *path)
 			if (is_menu_core())
 			{
 				user_io_8bit_set_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
-				video_menu_bg((status >> 1) & 7);
+				if (cfg.fb_terminal) video_menu_bg((status >> 1) & 7);
+				else user_io_8bit_set_status(0, 0xE);
 			}
 			else
 			{

@@ -810,12 +810,21 @@ void HandleUI(void)
 	{
 		static int menu_visible = 1;
 		static unsigned long timeout = 0;
-		if (!video_fb_state() && video_bg_has_picture())
+		if (!video_fb_state() && cfg.fb_terminal)
 		{
-			if (timeout && menu_visible && CheckTimer(timeout))
+			if (timeout && CheckTimer(timeout))
 			{
-				menu_visible = 0;
-				spi_osd_cmd(MM1_OSDCMDDISABLE);
+				timeout = 0;
+				if (menu_visible)
+				{
+					menu_visible = 0;
+					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1, 1);
+					spi_osd_cmd(MM1_OSDCMDDISABLE);
+				}
+				else
+				{
+					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1, 2);
+				}
 			}
 
 			if (c || menustate != MENU_FILE_SELECT2)
@@ -825,12 +834,17 @@ void HandleUI(void)
 				{
 					c = 0;
 					menu_visible = 1;
+					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1);
 					spi_osd_cmd(MM1_OSDCMDWRITE | 8);
 					spi_osd_cmd(MM1_OSDCMDENABLE);
 				}
 			}
 
-			if (!timeout) timeout = GetTimer(120000);
+			if (!timeout)
+			{
+				if (!cfg.osd_timeout) cfg.osd_timeout = 30;
+				timeout = GetTimer(cfg.osd_timeout*1000);
+			}
 		}
 		else
 		{
@@ -851,7 +865,7 @@ void HandleUI(void)
 			break;
 
 		case KEY_F1:
-			if (is_menu_core())
+			if (is_menu_core() && cfg.fb_terminal)
 			{
 				unsigned long status = (user_io_8bit_set_status(0, 0)+ 2) & 0xE;
 				user_io_8bit_set_status(status, 0xE);

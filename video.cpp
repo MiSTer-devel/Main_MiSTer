@@ -857,7 +857,7 @@ static void vs_wait()
 
 static int bg_has_picture = 0;
 extern uint8_t  _binary_logo_png_start[], _binary_logo_png_end[];
-void video_menu_bg(int n)
+void video_menu_bg(int n, int idle)
 {
 	bg_has_picture = 0;
 	menu_bg = n;
@@ -909,6 +909,21 @@ void video_menu_bg(int n)
 		Imlib_Image *bg = (menu_bgn == 1) ? &bg1 : &bg2;
 		//printf("*bg = %p\n", *bg);
 
+		static Imlib_Image curtain = 0;
+		if (!curtain)
+		{
+			curtain = imlib_create_image(fb_width, fb_height);
+			imlib_context_set_image(curtain);
+			imlib_image_set_has_alpha(1);
+
+			uint32_t *data = imlib_image_get_data();
+			int sz = fb_width * fb_height;
+			for (int i = 0; i < sz; i++)
+			{
+				*data++ = 0x9F000000;
+			}
+		}
+
 		switch (n)
 		{
 		case 1:
@@ -949,7 +964,7 @@ void video_menu_bg(int n)
 					if (*bg)
 					{
 						imlib_context_set_image(*bg);
-						imlib_blend_image_onto_image(menubg, 255,
+						imlib_blend_image_onto_image(menubg, 0,
 							0, 0,               //int source_x, int source_y,
 							src_w, src_h,       //int source_width, int source_height,
 							0, 0,               //int destination_x, int destination_y,
@@ -990,7 +1005,7 @@ void video_menu_bg(int n)
 			break;
 		}
 
-		if (logo)
+		if (logo && !idle)
 		{
 			imlib_context_set_image(logo);
 
@@ -1001,7 +1016,7 @@ void video_menu_bg(int n)
 			if (*bg)
 			{
 				imlib_context_set_image(*bg);
-				imlib_blend_image_onto_image(logo, 255,
+				imlib_blend_image_onto_image(logo, 1,
 					0, 0,         //int source_x, int source_y,
 					src_w, src_h, //int source_width, int source_height,
 					0, 0,         //int destination_x, int destination_y,
@@ -1012,6 +1027,24 @@ void video_menu_bg(int n)
 			{
 				printf("*bg = 0!\n");
 			}
+		}
+
+		if (curtain && idle > 1)
+		{
+			if (*bg)
+			{
+				imlib_context_set_image(*bg);
+				imlib_blend_image_onto_image(curtain, 1,
+					0, 0,                //int source_x, int source_y,
+					fb_width, fb_height, //int source_width, int source_height,
+					0, 0,                //int destination_x, int destination_y,
+					fb_width, fb_height  //int destination_width, int destination_height
+				);
+			}
+		}
+		else
+		{
+			printf("curtain = 0!\n");
 		}
 
 		//test the fb driver
