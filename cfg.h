@@ -34,7 +34,6 @@ typedef struct {
 	uint8_t rbf_hide_datecode;
 	uint8_t menu_pal;
 	int16_t bootcore_timeout;
-	uint8_t bootcore_quiet;
 	uint8_t fb_size;
 	uint8_t fb_terminal;
 	uint16_t osd_timeout;
