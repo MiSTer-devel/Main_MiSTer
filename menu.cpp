@@ -469,7 +469,16 @@ static uint32_t menu_key_get(void)
 	c2 = c1;
 
 	// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
-	if (!user_io_osd_is_visible() && !video_fb_state() && is_menu_core()) c = KEY_F12;
+	if (!cfg.bootcore_quiet)
+	{
+		if (!user_io_osd_is_visible() && !video_fb_state() && is_menu_core()) c = KEY_F12;
+	}
+	else
+	{
+		// Enable key events in OSD
+		user_io_osd_key_enable(1);
+	}
+	
 
 	// generate repeat "key-pressed" events
 	if ((c1 & UPSTROKE) || (!c1))
@@ -804,6 +813,11 @@ void HandleUI(void)
 	if (c && c != KEY_F12 && cfg.bootcore[0] != '\0')
 	{
 		cfg.bootcore[0] = '\0';
+	}
+	else if (c && cfg.bootcore_quiet) 
+	{
+		cfg.bootcore_quiet = 0;
+		menu = true;
 	}
 
 	if (is_menu_core())
@@ -4262,6 +4276,13 @@ void HandleUI(void)
 			OsdWrite(16, "", 1, 0);
 			OsdWrite(17, str, 1, 0);
 			OsdWrite(18, "", 1, 0);
+
+			// Override and hide OSD but countdown still happens
+			if (cfg.bootcore_quiet)
+			{
+				menustate = MENU_NONE1;
+				OsdClear();
+			}
 		}
 	}
 }
