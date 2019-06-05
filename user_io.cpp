@@ -1538,6 +1538,7 @@ void user_io_send_buttons(char force)
 	if (kbd_reset) map |= BUTTON2;
 
 	if (cfg.vga_scaler) map |= CONF_VGA_SCALER;
+	if (cfg.vga_sog) map |= CONF_VGA_SOG;
 	if (cfg.csync) map |= CONF_CSYNC;
 	if (cfg.ypbpr) map |= CONF_YPBPR;
 	if (cfg.forced_scandoubler) map |= CONF_FORCED_SCANDOUBLER;
