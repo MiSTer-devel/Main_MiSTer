@@ -36,10 +36,10 @@
 
 static char core_path[1024];
 
-uint8_t vol_att = 0;
+static uint8_t vol_att = 0;
 unsigned long vol_set_timeout = 0;
 
-fileTYPE sd_image[4] = {};
+static fileTYPE sd_image[4] = {};
 static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 
 // mouse and keyboard emulation state
@@ -380,7 +380,7 @@ static void parse_config()
 }
 
 //MSM6242B layout
-void send_rtc(int type)
+static void send_rtc(int type)
 {
 	//printf("Update RTC\n");
 
@@ -1514,18 +1514,27 @@ uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask)
 	return status;
 }
 
-char kbd_reset = 0;
-char old_video_mode = -1;
+static char cur_btn = 0;
+char user_io_menu_button()
+{
+	return (cur_btn & BUTTON_OSD) ? 1 : 0;
+}
 
+char user_io_user_button()
+{
+	return (cur_btn & BUTTON_USR) ? 1 : 0;
+}
+
+static char kbd_reset = 0;
 void user_io_send_buttons(char force)
 {
 	static unsigned short key_map = 0;
 	unsigned short map = 0;
 
-	int btn = fpga_get_buttons();
+	cur_btn = fpga_get_buttons();
 
-	if (btn & BUTTON_OSD) map |= BUTTON1;
-	else if(btn & BUTTON_USR) map |= BUTTON2;
+	if (user_io_menu_button()) map |= BUTTON1;
+	if (user_io_user_button()) map |= BUTTON2;
 	if (kbd_reset) map |= BUTTON2;
 
 	if (cfg.vga_scaler) map |= CONF_VGA_SCALER;
@@ -1553,8 +1562,8 @@ void user_io_send_buttons(char force)
 	}
 }
 
-uint32_t diskled_timer = 0;
-uint32_t diskled_is_on = 0;
+static uint32_t diskled_timer = 0;
+static uint32_t diskled_is_on = 0;
 void __inline diskled_on()
 {
 	DISKLED_ON;
@@ -1562,13 +1571,13 @@ void __inline diskled_on()
 	diskled_is_on = 1;
 }
 
-void kbd_reply(char code)
+static void kbd_reply(char code)
 {
 	printf("kbd_reply = 0x%02X\n", code);
 	spi_uio_cmd16(UIO_KEYBOARD, 0xFF00 | code);
 }
 
-void mouse_reply(char code)
+static void mouse_reply(char code)
 {
 	printf("mouse_reply = 0x%02X\n", code);
 	spi_uio_cmd16(UIO_MOUSE, 0xFF00 | code);
@@ -2189,16 +2198,6 @@ void user_io_poll()
 		vol_set_timeout = 0;
 		FileSaveConfig("Volume.dat", &vol_att, 1);
 	}
-}
-
-char user_io_menu_button()
-{
-	return((fpga_get_buttons() & BUTTON_OSD) ? 1 : 0);
-}
-
-char user_io_user_button()
-{
-	return((!user_io_menu_button() && (fpga_get_buttons() & BUTTON_USR)) ? 1 : 0);
 }
 
 static void send_keycode(unsigned short key, int press)

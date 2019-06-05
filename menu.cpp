@@ -162,12 +162,12 @@ enum MENU
 	MENU_8BIT_ABOUT2
 };
 
-uint32_t menustate = MENU_NONE1;
-uint32_t parentstate;
-uint32_t menusub = 0;
-uint32_t menusub_last = 0; //for when we allocate it dynamically and need to know last row
-uint32_t menumask = 0; // Used to determine which rows are selectable...
-uint32_t menu_timer = 0;
+static uint32_t menustate = MENU_NONE1;
+static uint32_t parentstate;
+static uint32_t menusub = 0;
+static uint32_t menusub_last = 0; //for when we allocate it dynamically and need to know last row
+static uint32_t menumask = 0; // Used to determine which rows are selectable...
+static uint32_t menu_timer = 0;
 
 extern const char *version;
 
@@ -201,16 +201,16 @@ int  joy_bcount = 0;
 
 #define script_line_length 1024
 #define script_lines 50
-FILE *script_pipe;
-int script_file;
-char script_command[script_line_length];
-int script_line;
-char script_output[script_lines][script_line_length];
-char script_line_output[script_line_length];
-bool script_exited;
+static FILE *script_pipe;
+static int script_file;
+static char script_command[script_line_length];
+static int script_line;
+static char script_output[script_lines][script_line_length];
+static char script_line_output[script_line_length];
+static bool script_exited;
 
 enum HelpText_Message { HELPTEXT_NONE, HELPTEXT_MAIN, HELPTEXT_HARDFILE, HELPTEXT_CHIPSET, HELPTEXT_MEMORY, HELPTEXT_VIDEO };
-const char *helptexts[] =
+static const char *helptexts[] =
 {
 	0,
 	"                                Welcome to MiSTer!  Use the cursor keys to navigate the menus.  Use space bar or enter to select an item.  Press Esc or F12 to exit the menus.  Joystick emulation on the numeric keypad can be toggled with the numlock or scrlock key, while pressing Ctrl-Alt-0 (numeric keypad) toggles autofire mode.",
@@ -221,27 +221,25 @@ const char *helptexts[] =
 	0
 };
 
-const char *info_top = "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82";
-const char *info_bottom = "\x85\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x84";
+static const char *info_top = "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82";
+static const char *info_bottom = "\x85\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x84";
 
 // one screen width
-const char* HELPTEXT_SPACER = "                                ";
-char helptext_custom[1024];
+static const char* HELPTEXT_SPACER = "                                ";
+static char helptext_custom[1024];
 
 const char* scanlines[] = { "Off","25%","50%","75%" };
 const char* stereo[] = { "Mono","Stereo" };
 const char* atari_chipset[] = { "ST","STE","MegaSTE","STEroids" };
 
-unsigned char config_autofire = 0;
-
 // file selection menu variables
-char fs_pFileExt[13] = "xxx";
-uint32_t fs_ExtLen = 0;
-uint32_t fs_Options;
-uint32_t fs_MenuSelect;
-uint32_t fs_MenuCancel;
+static char fs_pFileExt[13] = "xxx";
+static uint32_t fs_ExtLen = 0;
+static uint32_t fs_Options;
+static uint32_t fs_MenuSelect;
+static uint32_t fs_MenuCancel;
 
-char* GetExt(char *ext)
+static char* GetExt(char *ext)
 {
 	static char extlist[32];
 	char *p = extlist;
@@ -262,7 +260,7 @@ static char SelectedRBF[1024] = { 0 };
 static char SelectedDir[1024] = { 0 };
 static char SelectedPath[1024] = { 0 };
 
-int changeDir(char *dir)
+static int changeDir(char *dir)
 {
 	char curdir[128];
 	memset(curdir, 0, sizeof(curdir));
@@ -375,7 +373,7 @@ void substrcpy(char *d, char *s, char idx)
 #define HELPTEXT_DELAY 10000
 #define FRAME_DELAY 150
 
-unsigned char getIdx(char *opt)
+static unsigned char getIdx(char *opt)
 {
 	if ((opt[1] >= '0') && (opt[1] <= '9')) return opt[1] - '0';
 	if ((opt[1] >= 'A') && (opt[1] <= 'V')) return opt[1] - 'A' + 10;
@@ -422,7 +420,7 @@ uint32_t getStatusMask(char *opt)
 }
 
 // conversion table of Amiga keyboard scan codes to ASCII codes
-const uint8_t keycode_table[128] =
+static const uint8_t keycode_table[128] =
 {
 	0,'1','2','3','4','5','6','7','8','9','0',  0,  0,  0,  0,  0,
 	'Q','W','E','R','T','Y','U','I','O','P',  0,  0,  0,  0,  0,  0,
@@ -785,6 +783,7 @@ void HandleUI(void)
 	static uint8_t card_cid[32];
 	static uint32_t hdmask = 0;
 	static pid_t ttypid = 0;
+	static int has_fb_terminal = 0;
 
 	static char	cp_MenuCancel;
 
@@ -801,10 +800,7 @@ void HandleUI(void)
 	plus = false;
 	minus = false;
 
-	if (c && c != KEY_F12 && cfg.bootcore[0] != '\0')
-	{
-		cfg.bootcore[0] = '\0';
-	}
+	if (c && c != KEY_F12 && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
 
 	if (is_menu_core())
 	{
@@ -893,11 +889,15 @@ void HandleUI(void)
 			break;
 
 		case KEY_F9:
-			if (is_menu_core() && cfg.fb_terminal)
+			if ((is_menu_core() || ((get_key_mod() & (LALT | RALT)) && (get_key_mod() & (LCTRL | RCTRL))) || has_fb_terminal) && cfg.fb_terminal)
 			{
 				video_chvt(1);
 				video_fb_enable(!video_fb_state());
-				if (video_fb_state()) menustate = MENU_NONE1;
+				if (video_fb_state())
+				{
+					menustate = MENU_NONE1;
+					has_fb_terminal = 1;
+				}
 			}
 			break;
 
