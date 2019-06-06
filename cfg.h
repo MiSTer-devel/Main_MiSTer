@@ -36,6 +36,7 @@ typedef struct {
 	int16_t bootcore_timeout;
 	uint8_t fb_size;
 	uint8_t fb_terminal;
+	uint8_t disable_autofire;
 	uint16_t osd_timeout;
 	char bootcore[256];
 	char video_conf[1024];

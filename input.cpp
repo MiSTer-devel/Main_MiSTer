@@ -1500,7 +1500,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 					}
 				}
 			}
-			else if (!user_io_osd_is_visible())
+			else if (!user_io_osd_is_visible() && !cfg.disable_autofire)
 			{
 				if (lastcode[num])
 				{
