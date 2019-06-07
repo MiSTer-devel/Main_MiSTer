@@ -1100,6 +1100,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					char *fext = strrchr(de->d_name, '.');
 					while(!found && *ext && fext)
 					{
+						fext++;
 						char e[4];
 						memcpy(e, ext, 3);
 						if (e[2] == ' ')
@@ -1107,13 +1108,17 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 							e[2] = 0;
 							if (e[1] == ' ') e[1] = 0;
 						}
+
 						e[3] = 0;
 						found = 1;
-						for (int i = 0; i < 3; i++)
+						for (int i = 0; i < 4; i++)
 						{
 							if (e[i] == '*') break;
-							if (e[i] == '?' && fext[i+1]) continue;
-							if (tolower(e[i]) != tolower(fext[i + 1])) found = 0;
+							if (e[i] == '?' && fext[i]) continue;
+
+							if (tolower(e[i]) != tolower(fext[i])) found = 0;
+
+							if (!e[i] || !found) break;
 						}
 						if (found) break;
 
