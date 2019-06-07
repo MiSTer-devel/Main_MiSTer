@@ -2201,7 +2201,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (code == 111) reset_m |= 0x100;
 				user_io_check_reset(reset_m, (keyrah && !cfg.reset_combo) ? 1 : cfg.reset_combo);
 
-				if(!user_io_osd_is_visible() && ((user_io_get_kbdemu() == EMU_JOY0) || (user_io_get_kbdemu() == EMU_JOY1)))
+				if(!user_io_osd_is_visible() && ((user_io_get_kbdemu() == EMU_JOY0) || (user_io_get_kbdemu() == EMU_JOY1)) && !video_fb_state())
 				{
 					if (!kbd_toggle)
 					{
@@ -2978,9 +2978,11 @@ int input_test(int getchar)
 				int len = read(pool[NUMDEV + 1].fd, cmd, sizeof(cmd) - 1);
 				if (len)
 				{
+					if (cmd[len - 1] == '\n') cmd[len - 1] = 0;
 					cmd[len] = 0;
 					printf("MiSTer_cmd: %s\n", cmd);
 					if (!strncmp(cmd, "fb_cmd", 6)) video_cmd(cmd);
+					else if (!strncmp(cmd, "load_core ", 10)) fpga_load_rbf(cmd + 10);
 				}
 			}
 		}
