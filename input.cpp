@@ -1000,6 +1000,8 @@ typedef struct
 	uint8_t  has_map;
 	uint32_t map[32];
 
+	uint8_t  osd_combo;
+
 	uint8_t  has_mmap;
 	uint32_t mmap[32];
 	uint16_t jkmap[1024];
@@ -1474,7 +1476,7 @@ static void mouse_cb(unsigned char b, int16_t x = 0, int16_t y = 0, int16_t w = 
 	if (grabbed) user_io_mouse(b, x, y, w);
 }
 
-static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum)
+static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
 {
 	static char str[128];
 	static uint32_t lastcode[NUMPLAYERS], lastmask[NUMPLAYERS];
@@ -1484,7 +1486,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 	{
 		if (jnum)
 		{
-			if (bnum != BTN_OSD && bnum != BTN_TGL)
+			if (bnum != BTN_OSD && bnum != BTN_TGL && !dont_save)
 			{
 				if (!(mask & 0xF))
 				{
@@ -1500,7 +1502,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 					}
 				}
 			}
-			else if (!user_io_osd_is_visible())
+			else if (bnum == BTN_OSD && !user_io_osd_is_visible())
 			{
 				if (lastcode[num])
 				{
@@ -1878,6 +1880,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							}
 						}
 					}
+					//combo for osd button
+					if (ev->value == 1 && key_mapped && key_mapped != ev->code && is_menu_core() && mapping_button == 16 && mapping_type)
+					{
+						input[dev].map[18] = ev->code;
+						printf("Set combo: %x + %x\n", input[dev].map[17], input[dev].map[18]);
+					}
 					else if(mapping_dev == dev && ev->value == 0 && key_mapped == ev->code)
 					{
 						mapping_button++;
@@ -1906,15 +1914,15 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 			if (mapping_dev == dev || (mapping_dev < 0 && mapping_button < 0))
 			{
-				int max = 0, min=0;
+				int max = 0; // , min = 0;
 
 				if (ev->type == EV_ABS)
 				{
 					int threshold = (absinfo->maximum - absinfo->minimum) / 5;
 
 					max = (ev->value >= (absinfo->maximum - threshold));
-					min = (ev->value <= (absinfo->minimum + threshold));
-					printf("threshold=%d, min=%d, max=%d\n", threshold, min, max);
+					//min = (ev->value <= (absinfo->minimum + threshold));
+					//printf("threshold=%d, min=%d, max=%d\n", threshold, min, max);
 				}
 
 				//check DPAD horz
@@ -2049,17 +2057,28 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					}
 				}
 
+				int old_combo = input[dev].osd_combo;
+
 				if (ev->code == input[dev].mmap[17])
 				{
+					if (ev->value) input[dev].osd_combo |= 1;
+						else input[dev].osd_combo &= ~1;
+
 					if (ev->value == 1 && input[dev].lightgun_req && !user_io_osd_is_visible())
 					{
 						input[dev].lightgun = !input[dev].lightgun;
 						Info(input[dev].lightgun ? "Light Gun mode is ON" : "Light Gun mode is OFF");
 					}
-					else if (ev->value <= 1) joy_digital(input[dev].num, 0, 0, ev->value, BTN_OSD);
-
-					return;
+					else if (ev->value <= 1 && !input[dev].mmap[18]) joy_digital(input[dev].num, 0, 0, ev->value, BTN_OSD);
 				}
+
+				if (input[dev].mmap[18] && ev->code == input[dev].mmap[18])
+				{
+					if (ev->value) input[dev].osd_combo |= 2;
+						else input[dev].osd_combo &= ~2;
+				}
+
+				if ((old_combo == 3) != (input[dev].osd_combo == 3)) joy_digital(input[dev].num, 0, 0, (input[dev].osd_combo == 3) ? 1 : 0, BTN_OSD);
 
 				if (user_io_osd_is_visible() || video_fb_state())
 				{
@@ -2074,12 +2093,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								joy_digital(0, 1 << n, 0, ev->value, n);
 								return;
 							}
-						}
-
-						if (ev->code == input[dev].mmap[17])
-						{
-							joy_digital(0, 0, 0, ev->value, BTN_OSD);
-							return;
 						}
 
 						if (input[dev].mmap[AXIS_X])
@@ -2143,7 +2156,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (ev->code == (input[dev].map[i] & 0xFFFF) || ev->code == (input[dev].map[i] >> 16))
 						{
 							if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
-							if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, origcode, ev->value, i);
+							if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, origcode, ev->value, i, (ev->code == input[dev].mmap[17] || ev->code == input[dev].mmap[18]));
 
 							// support 2 simultaneous functions for 1 button if defined in 2 sets. No return.
 						}

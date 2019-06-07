@@ -1982,6 +1982,7 @@ void HandleUI(void)
 
 	case MENU_JOYDIGMAP1:
 		{
+			int line_info = 0;
 			if (get_map_clear())
 			{
 				OsdWrite(3);
@@ -2006,7 +2007,15 @@ void HandleUI(void)
 				if (is_menu_core())
 				{
 					if (get_map_type()) joy_bcount = 15;
-					if (get_map_button() == 16) p = joy_button_map[8 + get_map_type()];
+					if (get_map_button() == 16)
+					{
+						p = joy_button_map[8 + get_map_type()];
+						if (get_map_type())
+						{
+							OsdWrite(12, "   Allowed 2-buttons combo");
+							line_info = 1;
+						}
+					}
 				}
 			}
 			else
@@ -2037,6 +2046,8 @@ void HandleUI(void)
 
 			OsdWrite(3, s, 0, 0);
 			OsdWrite(4);
+			if (!line_info) OsdWrite(12);
+
 			if (get_map_vid() || get_map_pid())
 			{
 				if (!is_menu_core() && get_map_type() && !has_default_map())
