@@ -1704,6 +1704,8 @@ static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
+	static uint16_t last_axis = 0;
+
 	int sub_dev = dev;
 
 	//check if device is a part of multifunctional device 
@@ -1842,7 +1844,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					{
 						if (is_menu_core())
 						{
-							if (mapping_dev == dev)
+							if (mapping_dev == dev && !(!mapping_button && last_axis && ((ev->code == last_axis) || (ev->code == last_axis + 1))))
 							{
 								if (!mapping_button) memset(input[dev].map, 0, sizeof(input[dev].map));
 								input[dev].osd_combo = 0;
@@ -1916,6 +1918,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						mapping_button++;
 						key_mapped = 0;
 					}
+					
+					if(!ev->value && mapping_dev == dev && ((ev->code == last_axis) || (ev->code == last_axis+1)))
+					{
+						last_axis = 0;
+					}
 					return;
 				}
 			}
@@ -1953,6 +1960,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				//check DPAD horz
 				if (mapping_button == -6)
 				{
+					last_axis = 0;
 					if (ev->type == EV_ABS && max)
 					{
 						if (mapping_dev < 0) mapping_dev = dev;
@@ -2012,6 +2020,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								//if (min) tmp_axis[idx - AXIS1_X] |= 0x10000;
 								mapping_button++;
 								if (tmp_axis_n >= 4) mapping_button = 0;
+								last_axis = KEY_EMU + (ev->code << 1);
 							}
 						}
 						else
@@ -2041,6 +2050,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						else input[mapping_dev].map[mapping_button] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
 					}
 				}
+				last_axis = 0;
 				mapping_button++;
 				if (mapping_button < 0 && (mapping_button&1)) mapping_button++;
 			}
