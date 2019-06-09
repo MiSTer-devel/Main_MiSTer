@@ -1360,7 +1360,7 @@ static int keyrah_trans(int key, int press)
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev);
 
 static int kbd_toggle = 0;
-static uint32_t joy[NUMPLAYERS] = {}, joy_prev[NUMPLAYERS] = {};
+static uint32_t joy[NUMPLAYERS] = {};
 static uint32_t autofire[NUMPLAYERS] = {};
 static uint32_t autofirecodes[NUMPLAYERS][BTN_NUM] = {};
 static int af_delay[NUMPLAYERS] = {};
@@ -3032,6 +3032,7 @@ int input_poll(int getchar)
 {
 	static int af[NUMPLAYERS] = {};
 	static uint32_t time[NUMPLAYERS] = {};
+	static uint32_t joy_prev[NUMPLAYERS] = {};
 
 	int ret = input_test(getchar);
 	if (getchar) return ret;
@@ -3098,6 +3099,18 @@ int input_poll(int getchar)
 			{
 				user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i], newdir);
 			}
+		}
+	}
+
+	if (!grabbed || user_io_osd_is_visible())
+	{
+		for (int i = 0; i < NUMPLAYERS; i++)
+		{
+			if(joy[i]) user_io_digital_joystick(i, 0, 1);
+
+			joy[i] = 0;
+			af[i] = 0;
+			autofire[i] = 0;
 		}
 	}
 
