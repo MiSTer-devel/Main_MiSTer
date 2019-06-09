@@ -1754,7 +1754,26 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			input[dev].has_mmap++;
 		}
 		input[dev].has_mmap++;
+		if (!input[dev].mmap[18]) input[dev].mmap[18] = input[dev].mmap[17];
 	}
+
+	int old_combo = input[dev].osd_combo;
+
+	if (ev->code == input[dev].mmap[18])
+	{
+		if (ev->value) input[dev].osd_combo |= 2;
+		else input[dev].osd_combo &= ~2;
+	}
+
+	if (ev->code == input[dev].mmap[17])
+	{
+		if (ev->value) input[dev].osd_combo |= 1;
+		else input[dev].osd_combo &= ~1;
+	}
+
+	int osd_event = 0;
+	if (old_combo != 3 && input[dev].osd_combo == 3) osd_event = 1;
+	else if (old_combo == 3 && input[dev].osd_combo != 3) osd_event = 2;
 
 	//mapping
 	if (mapping && (mapping_dev >=0 || ev->value) && !((mapping_type < 2 || !mapping_button) && (cancel || enter)))
@@ -1816,13 +1835,17 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				mapping_clear = 0;
 				if (mapping_dev >= 0 && (mapping_dev == dev || clear) && mapping_button < (is_menu_core() ? 17 : mapping_count))
 				{
-					if (ev->value == 1 && !key_mapped)
+					if (is_menu_core()) osd_event = 0;
+					if (osd_event) key_mapped = 0;
+
+					if ((ev->value == 1 && !key_mapped) || osd_event == 1)
 					{
 						if (is_menu_core())
 						{
 							if (mapping_dev == dev)
 							{
 								if (!mapping_button) memset(input[dev].map, 0, sizeof(input[dev].map));
+								input[dev].osd_combo = 0;
 
 								int found = 0;
 								for (int i = (mapping_button >= 8) ? 8 : 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
@@ -1830,6 +1853,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								if (!found)
 								{
 									input[dev].map[(mapping_button == 16) ? 16 + mapping_type : mapping_button] = ev->code;
+									input[dev].map[18] = input[dev].map[17];
+
 									key_mapped = ev->code;
 
 									//check if analog stick has been used for mouse
@@ -1848,7 +1873,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						}
 						else
 						{
-							if ((mapping_type && (input[dev].mmap[17] == ev->code)) || clear)
+							if ((mapping_type && osd_event == 1) || clear)
 							{
 								memset(input[mapping_dev].map, 0, sizeof(input[mapping_dev].map));
 								mapping_button = 0;
@@ -2057,28 +2082,19 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					}
 				}
 
-				int old_combo = input[dev].osd_combo;
-
-				if (ev->code == input[dev].mmap[17])
+				if (input[dev].lightgun_req && !user_io_osd_is_visible())
 				{
-					if (ev->value) input[dev].osd_combo |= 1;
-						else input[dev].osd_combo &= ~1;
-
-					if (ev->value == 1 && input[dev].lightgun_req && !user_io_osd_is_visible())
+					if (osd_event == 1)
 					{
 						input[dev].lightgun = !input[dev].lightgun;
 						Info(input[dev].lightgun ? "Light Gun mode is ON" : "Light Gun mode is OFF");
 					}
-					else if (ev->value <= 1 && !input[dev].mmap[18]) joy_digital(input[dev].num, 0, 0, ev->value, BTN_OSD);
 				}
-
-				if (input[dev].mmap[18] && ev->code == input[dev].mmap[18])
+				else
 				{
-					if (ev->value) input[dev].osd_combo |= 2;
-						else input[dev].osd_combo &= ~2;
+					if (osd_event == 1) joy_digital(input[dev].num, 0, 0, 1, BTN_OSD);
+					if (osd_event == 2) joy_digital(input[dev].num, 0, 0, 0, BTN_OSD);
 				}
-
-				if ((old_combo == 3) != (input[dev].osd_combo == 3)) joy_digital(input[dev].num, 0, 0, (input[dev].osd_combo == 3) ? 1 : 0, BTN_OSD);
 
 				if (user_io_osd_is_visible() || video_fb_state())
 				{
