@@ -1098,9 +1098,9 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					}
 
 					char *fext = strrchr(de->d_name, '.');
+					if(fext) fext++;
 					while(!found && *ext && fext)
 					{
-						fext++;
 						char e[4];
 						memcpy(e, ext, 3);
 						if (e[2] == ' ')
