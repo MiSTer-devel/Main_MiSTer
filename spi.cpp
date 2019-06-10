@@ -72,14 +72,28 @@ void DisableFpga()
 	spi_en(SSPI_FPGA_EN, 0);
 }
 
+static int osd_target = OSD_ALL;
+
+void EnableOsd_on(int target)
+{
+	if (!(target & OSD_ALL)) target = OSD_ALL;
+	osd_target = target;
+}
+
 void EnableOsd()
 {
-	spi_en(SSPI_OSD_EN, 1);
+	if (!(osd_target & OSD_ALL)) osd_target = OSD_ALL;
+
+	uint32_t mask = SSPI_OSD_EN | SSPI_IO_EN | SSPI_FPGA_EN;
+	if (osd_target & OSD_HDMI) mask &= ~SSPI_FPGA_EN;
+	if (osd_target & OSD_VGA) mask &= ~SSPI_IO_EN;
+
+	spi_en(mask, 1);
 }
 
 void DisableOsd()
 {
-	spi_en(SSPI_OSD_EN, 0);
+	spi_en(SSPI_OSD_EN | SSPI_IO_EN | SSPI_FPGA_EN, 0);
 }
 
 void EnableIO()

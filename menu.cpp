@@ -1013,10 +1013,39 @@ void HandleUI(void)
 	case MENU_NONE1:
 		helptext = helptexts[HELPTEXT_NONE];
 		menumask = 0;
-		OsdDisable();
 		menustate = MENU_NONE2;
-		OsdSetSize(8);
 		firstmenu = 0;
+
+		if (video_fb_state())
+		{
+			EnableOsd_on(OSD_VGA);
+			OsdSetSize(16);
+			OsdSetTitle("Information");
+			int n = 0;
+			OsdWrite(n++);
+			OsdWrite(n++);
+			OsdWrite(n++);
+			OsdWrite(n++);
+			OsdWrite(n++, "  If you see this, then you");
+			OsdWrite(n++, "  need to modify MiSTer.ini");
+			OsdWrite(n++);
+			OsdWrite(n++, " Either disable framebuffer:");
+			OsdWrite(n++, "       fb_terminal=0");
+			OsdWrite(n++);
+			OsdWrite(n++, "  or enable scaler on VGA:");
+			OsdWrite(n++, "       vga_scaler=1");
+			for (; n < OsdGetSize(); n++) OsdWrite(n);
+			OsdEnable(0);
+			EnableOsd_on(OSD_HDMI);
+			OsdDisable();
+			EnableOsd_on(OSD_ALL);
+		}
+		else
+		{
+			OsdDisable();
+		}
+
+		OsdSetSize(8);
 		break;
 
 	case MENU_INFO:

@@ -3,6 +3,10 @@
 
 #include <inttypes.h>
 
+#define OSD_HDMI 1
+#define OSD_VGA  2
+#define OSD_ALL  (OSD_VGA|OSD_HDMI)
+
 /* main init functions */
 void spi_init(int enable);
 
@@ -40,6 +44,7 @@ void spi_block_write_16be(const uint16_t *addr);
 void spi_block_read_16be(uint16_t *addr);
 
 /* OSD related SPI functions */
+void EnableOsd_on(int target);
 void spi_osd_cmd_cont(uint8_t cmd);
 void spi_osd_cmd(uint8_t cmd);
 void spi_osd_cmd8_cont(uint8_t cmd, uint8_t parm);
