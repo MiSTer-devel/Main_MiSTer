@@ -741,6 +741,35 @@ const char* get_rbf_name_bootcore(char *str)
 	return p + 1;
 }
 
+static void vga_nag()
+{
+	if (video_fb_state())
+	{
+		EnableOsd_on(OSD_VGA);
+		OsdSetSize(16);
+		OsdSetTitle("Information");
+		int n = 0;
+		OsdWrite(n++);
+		OsdWrite(n++);
+		OsdWrite(n++);
+		OsdWrite(n++);
+		OsdWrite(n++, "  If you see this, then you");
+		OsdWrite(n++, "  need to modify MiSTer.ini");
+		OsdWrite(n++);
+		OsdWrite(n++, " Either disable framebuffer:");
+		OsdWrite(n++, "       fb_terminal=0");
+		OsdWrite(n++);
+		OsdWrite(n++, "  or enable scaler on VGA:");
+		OsdWrite(n++, "       vga_scaler=1");
+		for (; n < OsdGetSize(); n++) OsdWrite(n);
+		OsdEnable(0);
+		EnableOsd_on(OSD_HDMI);
+	}
+
+	OsdDisable();
+	EnableOsd_on(OSD_ALL);
+}
+
 static int joymap_first = 0;
 
 static int wm_x = 0;
@@ -1015,36 +1044,7 @@ void HandleUI(void)
 		menumask = 0;
 		menustate = MENU_NONE2;
 		firstmenu = 0;
-
-		if (video_fb_state())
-		{
-			EnableOsd_on(OSD_VGA);
-			OsdSetSize(16);
-			OsdSetTitle("Information");
-			int n = 0;
-			OsdWrite(n++);
-			OsdWrite(n++);
-			OsdWrite(n++);
-			OsdWrite(n++);
-			OsdWrite(n++, "  If you see this, then you");
-			OsdWrite(n++, "  need to modify MiSTer.ini");
-			OsdWrite(n++);
-			OsdWrite(n++, " Either disable framebuffer:");
-			OsdWrite(n++, "       fb_terminal=0");
-			OsdWrite(n++);
-			OsdWrite(n++, "  or enable scaler on VGA:");
-			OsdWrite(n++, "       vga_scaler=1");
-			for (; n < OsdGetSize(); n++) OsdWrite(n);
-			OsdEnable(0);
-			EnableOsd_on(OSD_HDMI);
-			OsdDisable();
-			EnableOsd_on(OSD_ALL);
-		}
-		else
-		{
-			OsdDisable();
-		}
-
+		vga_nag();
 		OsdSetSize(8);
 		break;
 
@@ -4027,14 +4027,15 @@ void HandleUI(void)
 	case MENU_SCRIPTS_FB:
 		if (cfg.fb_terminal)
 		{
+			static char cmd[1024 * 2];
+			const char *path = getFullPath(SelectedPath);
 			menustate = MENU_SCRIPTS_FB2;
-			OsdDisable();
 			video_chvt(2);
 			video_fb_enable(1);
-			static char cmd[1024 * 2];
-			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\ncd $(dirname %s)\n%s\necho \"Press any key to continue\"\n", getFullPath(SelectedPath), getFullPath(SelectedPath));
+			vga_nag();
+			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\ncd $(dirname %s)\n%s\necho \"Press any key to continue\"\n", path, path);
 			unlink("/tmp/script");
-			FileSave("/tmp/script", cmd, strlen(cmd), 1);
+			FileSave("/tmp/script", cmd, strlen(cmd));
 			ttypid = fork();
 			if (!ttypid)
 			{

@@ -71,8 +71,8 @@ void FileGenerateSavePath(const char *name, char* out_name);
 #define SCREENSHOT_DEFAULT "screen"
 void FileGenerateScreenshotName(const char *name, char *out_name, int buflen);
 
-int FileSave(const char *name, void *pBuffer, int size, int sys = 0);
-int FileLoad(const char *name, void *pBuffer, int size, int sys = 0); // supply pBuffer = 0 to get the file size without loading
+int FileSave(const char *name, void *pBuffer, int size);
+int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 
 //save/load from config dir
 #define CONFIG_DIR "config"

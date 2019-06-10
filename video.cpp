@@ -871,7 +871,7 @@ void video_menu_bg(int n, int idle)
 		if (!logo)
 		{
 			unlink("/tmp/logo.png");
-			if (FileSave("/tmp/logo.png", _binary_logo_png_start, _binary_logo_png_end - _binary_logo_png_start, 1))
+			if (FileSave("/tmp/logo.png", _binary_logo_png_start, _binary_logo_png_end - _binary_logo_png_start))
 			{
 				while(1)
 				{

@@ -518,9 +518,9 @@ int FileWriteSec(fileTYPE *file, void *pBuffer)
 	return FileWriteAdv(file, pBuffer, 512);
 }
 
-int FileSave(const char *name, void *pBuffer, int size, int sys)
+int FileSave(const char *name, void *pBuffer, int size)
 {
-	if(!sys) sprintf(full_path, "%s/%s", getRootDir(), name);
+	if(name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
 	else strcpy(full_path, name);
 
 	int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
@@ -549,9 +549,9 @@ int FileSaveConfig(const char *name, void *pBuffer, int size)
 	return FileSave(path, pBuffer, size);
 }
 
-int FileLoad(const char *name, void *pBuffer, int size, int sys)
+int FileLoad(const char *name, void *pBuffer, int size)
 {
-	if (!sys) sprintf(full_path, "%s/%s", getRootDir(), name);
+	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
 	else strcpy(full_path, name);
 
 	int fd = open(full_path, O_RDONLY);
