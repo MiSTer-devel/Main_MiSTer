@@ -1502,7 +1502,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 					}
 				}
 			}
-			else if (bnum == BTN_OSD && !user_io_osd_is_visible())
+			else if ((bnum == BTN_OSD || bnum == BTN_TGL) && !user_io_osd_is_visible())
 			{
 				if (lastcode[num])
 				{
