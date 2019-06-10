@@ -70,9 +70,6 @@
     <ClCompile Include="sxmlc.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="tzx2wav.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="user_io.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -211,9 +208,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="sxmlc.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="tzx2wav.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="user_io.h">

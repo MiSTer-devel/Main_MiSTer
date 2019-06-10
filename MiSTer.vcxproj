@@ -84,7 +84,6 @@
     <ClCompile Include="support\st\st_tos.cpp" />
     <ClCompile Include="support\x86\x86.cpp" />
     <ClCompile Include="sxmlc.c" />
-    <ClCompile Include="tzx2wav.cpp" />
     <ClCompile Include="user_io.cpp" />
     <ClCompile Include="video.cpp" />
   </ItemGroup>
@@ -135,7 +134,6 @@
     <ClInclude Include="support\st\st_tos.h" />
     <ClInclude Include="support\x86\x86.h" />
     <ClInclude Include="sxmlc.h" />
-    <ClInclude Include="tzx2wav.h" />
     <ClInclude Include="user_io.h" />
     <ClInclude Include="video.h" />
   </ItemGroup>

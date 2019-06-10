@@ -24,7 +24,6 @@
 #include "DiskImage.h"
 #include "brightness.h"
 #include "sxmlc.h"
-#include "tzx2wav.h"
 #include "bootcore.h"
 #include "charrom.h"
 #include "scaler.h"
@@ -1366,63 +1365,51 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	spi8(0xff);
 	DisableFpga();
 
-	if (strlen(f.name) > 4 && (!strcasecmp(f.name + strlen(f.name) - 4, ".tzx") || !strcasecmp(f.name + strlen(f.name) - 4, ".cdt")))
+	if (is_snes_core() && bytes2send)
 	{
-		printf("Processing TZX...\n");
+		printf("Load SNES ROM.\n");
+		uint8_t* buf = snes_get_header(&f);
+		hexdump(buf, 16, 0);
+		EnableFpga();
+		spi8(UIO_FILE_TX_DAT);
+		spi_write(buf, 512, fio_size);
+		DisableFpga();
+
+		//strip original SNES ROM header if present (not used)
+		if (bytes2send & 512)
+		{
+			bytes2send -= 512;
+			FileReadSec(&f, buf);
+		}
+	}
+
+	file_crc = 0;
+	uint32_t skip = bytes2send & 0x3FF; // skip possible header up to 1023 bytes
+
+	while (bytes2send)
+	{
+		printf(".");
+
+		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+
+		FileReadAdv(&f, buf, chunk);
 
 		EnableFpga();
 		spi8(UIO_FILE_TX_DAT);
-		tzx2csw(&f);
+		spi_write(buf, chunk, fio_size);
 		DisableFpga();
-	}
-	else
-	{
-		if (is_snes_core() && bytes2send)
+
+		bytes2send -= chunk;
+
+		if (skip >= chunk) skip -= chunk;
+		else
 		{
-			printf("Load SNES ROM.\n");
-			uint8_t* buf = snes_get_header(&f);
-			hexdump(buf, 16, 0);
-			EnableFpga();
-			spi8(UIO_FILE_TX_DAT);
-			spi_write(buf, 512, fio_size);
-			DisableFpga();
-
-			//strip original SNES ROM header if present (not used)
-			if (bytes2send & 512)
-			{
-				bytes2send -= 512;
-				FileReadSec(&f, buf);
-			}
+			file_crc = crc32(file_crc, buf + skip, chunk - skip);
+			skip = 0;
 		}
-
-		file_crc = 0;
-		uint32_t skip = bytes2send & 0x3FF; // skip possible header up to 1023 bytes
-
-		while (bytes2send)
-		{
-			printf(".");
-
-			uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
-
-			FileReadAdv(&f, buf, chunk);
-
-			EnableFpga();
-			spi8(UIO_FILE_TX_DAT);
-			spi_write(buf, chunk, fio_size);
-			DisableFpga();
-
-			bytes2send -= chunk;
-
-			if (skip >= chunk) skip -= chunk;
-			else
-			{
-				file_crc = crc32(file_crc, buf + skip, chunk - skip);
-				skip = 0;
-			}
-		}
-		printf("\n");
-		printf("CRC32: %08X\n", file_crc);
 	}
+	printf("\n");
+	printf("CRC32: %08X\n", file_crc);
 
 	FileClose(&f);
 
