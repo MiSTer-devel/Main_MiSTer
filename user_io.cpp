@@ -1325,6 +1325,24 @@ int user_io_use_cheats()
 	return use_cheats;
 }
 
+static void check_status_change()
+{
+	static u_int8_t last_status_change = 0;
+	char stchg = spi_uio_cmd_cont(UIO_GET_STATUS);
+	if ((stchg & 0xF0) == 0xA0 && last_status_change != (stchg & 0xF))
+	{
+		last_status_change = (stchg & 0xF);
+		uint32_t st = spi32w(0);
+		DisableIO();
+		user_io_8bit_set_status(st, ~UIO_STATUS_RESET);
+		//printf("** new status from core: %08X\n", st);
+	}
+	else
+	{
+		DisableIO();
+	}
+}
+
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = {};
@@ -1408,6 +1426,10 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			skip = 0;
 		}
 	}
+
+	// check if core requests some change while downloading
+	check_status_change();
+
 	printf("\n");
 	printf("CRC32: %08X\n", file_crc);
 
@@ -1734,20 +1756,7 @@ void user_io_poll()
 		DisableIO();
 		*/
 
-		static u_int8_t last_status_change = 0;
-		char stchg = spi_uio_cmd_cont(UIO_GET_STATUS);
-		if ((stchg & 0xF0) == 0xA0 && last_status_change != (stchg & 0xF))
-		{
-			last_status_change = (stchg & 0xF);
-			uint32_t st = spi32w(0);
-			DisableIO();
-			user_io_8bit_set_status(st, ~UIO_STATUS_RESET);
-			//printf("** new status from core: %08X\n", st);
-		}
-		else
-		{
-			DisableIO();
-		}
+		check_status_change();
 	}
 
 	// sd card emulation
