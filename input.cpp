@@ -1486,9 +1486,9 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 	{
 		if (jnum)
 		{
-			if (bnum != BTN_OSD && bnum != BTN_TGL && !dont_save)
+			if (bnum != BTN_OSD && bnum != BTN_TGL)
 			{
-				if (!(mask & 0xF))
+				if (!dont_save)
 				{
 					if (press)
 					{
@@ -1502,11 +1502,11 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 					}
 				}
 			}
-			else if ((bnum == BTN_OSD || bnum == BTN_TGL) && !user_io_osd_is_visible())
+			else
 			{
-				if (lastcode[num])
+				if (!user_io_osd_is_visible() && press)
 				{
-					if (press)
+					if (lastcode[num] && lastmask[num])
 					{
 						int found = 0;
 						int zero = -1;
@@ -1532,21 +1532,19 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 						}
 						else InfoMessage((!found) ? "\n\n          Auto fire\n             ON" :
 							"\n\n          Auto fire\n             OFF");
+
+						return;
 					}
-					return;
-				}
-				else if (joy[num] & 0xF)
-				{
-					if (press)
+					else if (lastmask[num] & 0xF)
 					{
-						if (joy[num] & 9)
+						if (lastmask[num] & 9)
 						{
-							af_delay[num] += 25 << ((joy[num] & 1) ? 1 : 0);
+							af_delay[num] += 25 << ((lastmask[num] & 1) ? 1 : 0);
 							if (af_delay[num] > 500) af_delay[num] = 500;
 						}
 						else
 						{
-							af_delay[num] -= 25 << ((joy[num] & 2) ? 1 : 0);
+							af_delay[num] -= 25 << ((lastmask[num] & 2) ? 1 : 0);
 							if (af_delay[num] < 25) af_delay[num] = 25;
 						}
 
@@ -1562,8 +1560,9 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 							sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num] * 2);
 							InfoMessage(str);
 						}
+
+						return;
 					}
-					return;
 				}
 			}
 		}
@@ -1852,7 +1851,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								int found = 0;
 								for (int i = (mapping_button >= 8) ? 8 : 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
 
-								if (!found)
+								if (!found || (mapping_button == 16 && mapping_type))
 								{
 									input[dev].map[(mapping_button == 16) ? 16 + mapping_type : mapping_button] = ev->code;
 									input[dev].map[18] = input[dev].map[17];
