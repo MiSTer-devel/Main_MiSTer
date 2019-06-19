@@ -192,8 +192,8 @@ uint8_t* snes_get_header(fileTYPE *f)
 				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0xf6)
 				{	//ST010
 					hdr[1] |= 0x88;
+					ramsz = 1;
 					if(buf[addr + RomSize] < 10) hdr[1] |= 0x20; // ST011
-					//ramsz = 2;
 				}
 				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x25)
 				{	//OBC1
