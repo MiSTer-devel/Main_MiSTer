@@ -200,6 +200,18 @@ uint8_t* snes_get_header(fileTYPE *f)
 					hdr[1] |= 0xC0;
 				}
 
+				if (buf[addr + Mapper] == 0x3a && (buf[addr + RomType] == 0xf5 || buf[addr + RomType] == 0xf9)) {
+					//SPC7110
+					hdr[1] |= 0xD0;
+					if(buf[addr + RomType] == 0xf9) hdr[1] |= 0x08; // with RTC
+				}
+
+				if (buf[addr + Mapper] == 0x35 && buf[addr + RomType] == 0x55)
+				{
+					//S-RTC (+ExHigh)
+					hdr[1] |= 0x08;
+				}
+
 				//CX4 4
 				if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0xf3)
 				{
@@ -227,7 +239,7 @@ uint8_t* snes_get_header(fileTYPE *f)
 					hdr[1] |= 0x70;
 				}
 
-				//1..3,D..F - reserved for other mappers.
+				//1..3,E..F - reserved for other mappers.
 
 				hdr[2] = 0;
 
