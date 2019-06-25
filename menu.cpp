@@ -2247,8 +2247,9 @@ void HandleUI(void)
 		OsdDrawLogo(3);
 		OsdDrawLogo(4);
 
+		OsdWrite(10, "      www.MiSTerFPGA.org");
 		sprintf(s, "       MiSTer v%s", version + 5);
-		OsdWrite(10, s, 0, 0, 1);
+		OsdWrite(12, s, 0, 0, 1);
 
 		s[0] = 0;
 		if (user_io_core_type() != CORE_TYPE_MINIMIG2)
@@ -2262,11 +2263,9 @@ void HandleUI(void)
 			for (int i = 0; i < len; i++) *s2++ = *s3++;
 			*s2++ = 0;
 		}
-		OsdWrite(11, s, 0, 0, 1);
-		OsdWrite(12, "", 0, 0, 1);
-		ScrollText(13, "                                 MiSTer by Sorgelig, based on MiST by Till Harbaum, Minimig by Dennis van Weeren and other projects. MiSTer hardware and software is distributed under the terms of the GNU General Public License version 3. MiSTer FPGA cores are the work of their respective authors under individual licensing.", 0, 0, 0, 0);
+		OsdWrite(13, s, 0, 0, 1);
 		OsdWrite(14, "", 0, 0, 1);
-		OsdWrite(15, "", 0, 0, 1);
+		ScrollText(15, "                                 MiSTer by Sorgelig, based on MiST by Till Harbaum, Minimig by Dennis van Weeren and other projects. MiSTer hardware and software is distributed under the terms of the GNU General Public License version 3. MiSTer FPGA cores are the work of their respective authors under individual licensing. Go to www.MiSTerFPGA.org for more details.", 0, 0, 0, 0);
 
 		if (menu | select | left)
 		{

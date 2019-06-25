@@ -4,9 +4,6 @@
 #ifndef FPGAIO_H
 #define FPGAIO_H
 
-#define DISKLED_ON  fpga_set_led(1)
-#define DISKLED_OFF fpga_set_led(0)
-
 #define BUTTON_OSD  1
 #define BUTTON_USR  2
 

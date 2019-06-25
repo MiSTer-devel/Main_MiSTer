@@ -1574,9 +1574,9 @@ void user_io_send_buttons(char force)
 
 static uint32_t diskled_timer = 0;
 static uint32_t diskled_is_on = 0;
-void __inline diskled_on()
+void diskled_on()
 {
-	DISKLED_ON;
+	fpga_set_led(1);
 	diskled_timer = GetTimer(50);
 	diskled_is_on = 1;
 }
@@ -1910,12 +1910,6 @@ void user_io_poll()
 				}
 			}
 		}
-
-		if(diskled_is_on && CheckTimer(diskled_timer))
-		{
-			DISKLED_OFF;
-			diskled_is_on = 0;
-		}
 	}
 
 	if (core_type == CORE_TYPE_8BIT && !is_menu_core())
@@ -2194,6 +2188,12 @@ void user_io_poll()
 	{
 		vol_set_timeout = 0;
 		FileSaveConfig("Volume.dat", &vol_att, 1);
+	}
+
+	if (diskled_is_on && CheckTimer(diskled_timer))
+	{
+		fpga_set_led(0);
+		diskled_is_on = 0;
 	}
 }
 

@@ -2655,18 +2655,12 @@ int input_test(int getchar)
 		state++;
 	}
 
-	static unsigned long led_to = 0;
-
 	if (state == 2)
 	{
-		int timeout = 0, extrapoll = 2;
-		if (is_menu_core() && video_fb_state())
-		{
-			timeout = 25;
-			if (pool[NUMDEV + 2].fd > 0) extrapoll = 3;
-		}
+		int timeout = 0;
+		if (is_menu_core() && video_fb_state()) timeout = 25;
 
-		int return_value = poll(pool, NUMDEV + extrapoll, timeout);
+		int return_value = poll(pool, NUMDEV + 3, timeout);
 		if (return_value < 0)
 		{
 			printf("ERR: poll\n");
@@ -3040,23 +3034,9 @@ int input_test(int getchar)
 
 			if ((pool[NUMDEV + 2].fd >= 0) && (pool[NUMDEV + 2].revents & POLLPRI))
 			{
-				//printf("revents = %x\n", pool[NUMDEV + 2].revents);
-				pool[NUMDEV + 2].revents = 0;
-
 				static char status[16];
-				int len = read(pool[NUMDEV + 2].fd, status, sizeof(status) - 1);
+				if (read(pool[NUMDEV + 2].fd, status, sizeof(status) - 1) && status[0] != '0') DISKLED_ON;
 				lseek(pool[NUMDEV + 2].fd, 0, SEEK_SET);
-				if (len)
-				{
-					status[len] = 0;
-					//printf("led: %s", status);
-					if (status[0] != '0' && is_menu_core() && video_fb_state())
-					{
-						//printf("led: on\n");
-						if (!led_to) user_io_8bit_set_status(0x80, 0x80);
-						led_to = GetTimer(40);
-					}
-				}
 			}
 		}
 
@@ -3083,13 +3063,6 @@ int input_test(int getchar)
 				}
 			}
 		}
-	}
-
-	if (led_to && CheckTimer(led_to))
-	{
-		//printf("led: off\n");
-		led_to = 0;
-		user_io_8bit_set_status(0, 0x80);
 	}
 
 	return 0;

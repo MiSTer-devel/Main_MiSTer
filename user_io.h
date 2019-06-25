@@ -248,4 +248,8 @@ int  get_volume();
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();
 
+void diskled_on();
+#define DISKLED_ON  diskled_on()
+#define DISKLED_OFF void()
+
 #endif // USER_IO_H
