@@ -840,14 +840,15 @@ void HandleUI(void)
 			if (timeout && CheckTimer(timeout))
 			{
 				timeout = 0;
-				if (menu_visible)
+				if (menu_visible > 0)
 				{
 					menu_visible = 0;
 					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1, 1);
 					spi_osd_cmd(MM1_OSDCMDDISABLE);
 				}
-				else
+				else if (!menu_visible)
 				{
+					menu_visible--;
 					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1, 2);
 				}
 			}
@@ -855,7 +856,7 @@ void HandleUI(void)
 			if (c || menustate != MENU_FILE_SELECT2)
 			{
 				timeout = 0;
-				if (!menu_visible)
+				if (menu_visible <= 0)
 				{
 					c = 0;
 					menu_visible = 1;
@@ -868,7 +869,7 @@ void HandleUI(void)
 			if (!timeout)
 			{
 				if (!cfg.osd_timeout) cfg.osd_timeout = 30;
-				timeout = GetTimer(cfg.osd_timeout*1000);
+				timeout = GetTimer(cfg.osd_timeout * 1000);
 			}
 		}
 		else

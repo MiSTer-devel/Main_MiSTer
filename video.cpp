@@ -1029,9 +1029,9 @@ void video_menu_bg(int n, int idle)
 			}
 		}
 
-		if (curtain && idle > 1)
+		if (curtain)
 		{
-			if (*bg)
+			if (idle > 1 && *bg)
 			{
 				imlib_context_set_image(*bg);
 				imlib_blend_image_onto_image(curtain, 1,
