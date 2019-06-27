@@ -4254,6 +4254,7 @@ void HandleUI(void)
 	if (is_menu_core())
 	{
 		static unsigned long rtc_timer = 0;
+		static int init_wait = 0;
 
 		if (!rtc_timer || CheckTimer(rtc_timer))
 		{
@@ -4286,19 +4287,27 @@ void HandleUI(void)
 				}				
 			}
 
-			sprintf(str, "  MiSTer    ");
-
-			time_t t = time(NULL);
-			struct tm tm = *localtime(&t);
-			if (tm.tm_year >= 117)
+			if (init_wait < 1)
 			{
-				strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%b %d %a%H:%M:%S", &tm);
+				sprintf(str, "       www.MiSTerFPGA.org       ");
+				init_wait++;
 			}
+			else
+			{
+				sprintf(str, "  MiSTer    ");
 
-			int netType = (int)getNet(0);
-			if (netType) str[9] = 0x1b + netType;
-			if (has_bt()) str[10] = 4;
-			str[21] = ' ';
+				time_t t = time(NULL);
+				struct tm tm = *localtime(&t);
+				if (tm.tm_year >= 117)
+				{
+					strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%b %d %a%H:%M:%S", &tm);
+				}
+
+				int netType = (int)getNet(0);
+				if (netType) str[9] = 0x1b + netType;
+				if (has_bt()) str[10] = 4;
+				str[21] = ' ';
+			}
 
 			OsdWrite(16, "", 1, 0);
 			OsdWrite(17, str, 1, 0);
