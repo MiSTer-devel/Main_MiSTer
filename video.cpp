@@ -517,13 +517,13 @@ static uint32_t show_video_info(int force)
 		}
 
 		if (vtime && vtimeh) ret = vtime;
+		minimig_set_adjust(2);
 	}
 	else
 	{
 		DisableIO();
 	}
 
-	minimig_set_adjust(2);
 	return ret;
 }
 
