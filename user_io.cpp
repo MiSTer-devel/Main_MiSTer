@@ -214,6 +214,7 @@ static void user_io_read_core_name()
 	is_menu_type = 0;
 	is_x86_type  = 0;
 	is_no_type   = 0;
+	is_snes_type = 0;
 	core_name[0] = 0;
 
 	// get core name
