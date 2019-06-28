@@ -178,11 +178,11 @@ typedef struct _XMLNode {
 	SXML_CHAR* text;			/* Text inside the node */
 	XMLAttribute* attributes;
 	int n_attributes;
-	
+
 	struct _XMLNode* father;	/* NULL if root */
 	struct _XMLNode** children;
 	int n_children;
-	
+
 	TagType tag_type;	/* Node type ('TAG_FATHER', 'TAG_SELF' or 'TAG_END') */
 	int active;		/* 'true' to tell that node is active and should be displayed by 'XMLDoc_print' */
 

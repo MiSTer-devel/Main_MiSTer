@@ -96,7 +96,7 @@ char* loadLastcore()
 	sprintf(full_path, "%s/%s", getRootDir(), path);
 	FILE *fd = fopen(full_path, "r");
 	if (!fd)
-	{		
+	{
 		return NULL;
 	}
 	fseek(fd, 0L, SEEK_END);
@@ -113,7 +113,7 @@ char* loadLastcore()
 	}
 	delete[] lastcore;
 	return NULL;
-	
+
 }
 
 char *findCore(const char *name, char *coreName, int indent)
@@ -149,7 +149,7 @@ char *findCore(const char *name, char *coreName, int indent)
 				spl = strrchr(path, '.');
 				if (spl && !strcmp(spl, ".rbf"))
 				{
-					closedir(dir);				
+					closedir(dir);
 					return path;
 				}
 			}
@@ -161,7 +161,7 @@ char *findCore(const char *name, char *coreName, int indent)
 }
 
 void bootcore_init(const char *path)
-{	
+{
 	char *auxpointer;
 	char auxstr[256];
 	char bootcore[256];
@@ -170,9 +170,9 @@ void bootcore_init(const char *path)
 	cfg.bootcore_timeout = cfg.bootcore_timeout * 10;
 	btimeout = cfg.bootcore_timeout;
 	strcpy(bootcore, cfg.bootcore);
-	
+
 	is_lastcore = (!strcmp(cfg.bootcore, "lastcore") || !strcmp(cfg.bootcore, "lastexactcore"));
-	
+
 	if (is_lastcore)
 	{
 		strcpy(bootcoretype, cfg.bootcore);
@@ -187,7 +187,7 @@ void bootcore_init(const char *path)
 	{
 		strcpy(bootcoretype, isExactcoreName(cfg.bootcore) ? "exactcorename" : "corename");
 	}
-			
+
 	auxpointer = findCore(rootdir, bootcore, 0);
 	if (auxpointer != NULL)
 	{
@@ -207,7 +207,7 @@ void bootcore_init(const char *path)
 				{
 					fpga_load_rbf(bootcore);
 				}
-				
+
 				strcpy(cfg.bootcore, strcmp(bootcore, "menu.rbf") ? bootcore : "");
 				return;
 			}
@@ -216,7 +216,7 @@ void bootcore_init(const char *path)
 
 	if (is_lastcore && path[0] != '\0')
 	{
-		
+
 		strcpy(auxstr, path);
 		auxpointer = !strcmp(cfg.bootcore, "lastexactcore") ? getcoreExactName(auxstr) : getcoreName(auxstr);
 
@@ -229,6 +229,6 @@ void bootcore_init(const char *path)
 		}
 	}
 	strcpy(cfg.bootcore, "");
-	
+
 }
 

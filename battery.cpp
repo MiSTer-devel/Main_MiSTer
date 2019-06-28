@@ -3,25 +3,25 @@
  * battery.c
  * display pi-top battery status
  *
- * Copyright 2016, 2017  rricharz 
+ * Copyright 2016, 2017  rricharz
  * MiSTer port. Copyright 2018 Sorgelig
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  * MA 02110-1301, USA.
- * 
- * 
+ *
+ *
  */
 
 #include <time.h>
@@ -33,7 +33,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/ioctl.h>
-#include <linux/types.h> 
+#include <linux/types.h>
 #include "battery.h"
 
 #define MAX_COUNT       20                     // Maximum number of trials
@@ -52,7 +52,7 @@
 
 #define I2C_SMBUS_QUICK		    0
 #define I2C_SMBUS_BYTE		    1
-#define I2C_SMBUS_BYTE_DATA	    2 
+#define I2C_SMBUS_BYTE_DATA	    2
 #define I2C_SMBUS_WORD_DATA	    3
 #define I2C_SMBUS_PROC_CALL	    4
 #define I2C_SMBUS_BLOCK_DATA	    5
@@ -62,7 +62,7 @@
 
 // SMBus messages
 
-#define I2C_SMBUS_BLOCK_MAX	32	/* As specified in SMBus standard */	
+#define I2C_SMBUS_BLOCK_MAX	32	/* As specified in SMBus standard */
 #define I2C_SMBUS_I2C_BLOCK_MAX	32	/* Not specified but we use same structure */
 
 // Structures used in the ioctl() calls
@@ -82,7 +82,7 @@ struct i2c_smbus_ioctl_data
   uint8_t command;
   int size;
   union i2c_smbus_data *data;
-}; 
+};
 
 static int i2c_smbus_access (int fd, char rw, uint8_t command, int size, union i2c_smbus_data *data)
 {
@@ -93,7 +93,7 @@ static int i2c_smbus_access (int fd, char rw, uint8_t command, int size, union i
   args.size       = size;
   args.data       = data;
   return ioctl (fd, I2C_SMBUS, &args);
-} 
+}
 
 static int i2c_smbus_write_quick(int fd, uint8_t value)
 {
@@ -129,7 +129,7 @@ static int smbus_open(int dev_address)
 			close(fd);
 			return 0;
 		}
-		
+
 		i2c_handle = fd;
 	}
 	return 1;
@@ -161,7 +161,7 @@ static int getReg(int reg, int min, int max)
 	{
 		if (smbus_get(reg, &value))
 		{
-			if ((value > max) || (value < min)) value = -1; // out of limits	
+			if ((value > max) || (value < min)) value = -1; // out of limits
 		}
 		usleep(SLEEP_TIME);
 	}

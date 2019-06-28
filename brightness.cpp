@@ -1,6 +1,6 @@
 /*
  * brightness.c
- * 
+ *
  * Copyright 2016  rricharz
  * MiSTer port. Copyright 2018 Sorgelig
  *
@@ -8,18 +8,18 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  * MA 02110-1301, USA.
- * 
- * 
+ *
+ *
  */
 
 #include <stdint.h>
@@ -101,7 +101,7 @@ static int spi_open(int speed, int mode)
 	{
 		printf ("SPI Mode Change failure: %s\n", strerror (errno));
 	}
-	
+
 	close(fd);
 	fd = -1;
 	return -1;
@@ -145,9 +145,9 @@ static int analyze(unsigned char data)
 	parity			= (data & PARITYMASK) != 0;
 	brightness		= (data & BRIGHTNESSMASK) >> 3;
 	shutdown		= (data & SHUTDOWNMASK) != 0;
-	
+
 	// printf("lid = %d, screen = %d, parity = %d, shutdown = %d, brightness = %d\n", lidbit, screenoffbit, parity, shutdown, brightness);
-	
+
 	return (parity7(data) == parity);
 }
 
@@ -162,20 +162,20 @@ static int calculate()
 	if (shutdown) data += SHUTDOWNMASK;
 	if (screenoffbit) data += SCREENOFFMASK;
 	if (parity7(data & 3)) data += LIDBITMASK;		// parity ofthe two state bits
-	return data;		
+	return data;
 }
 
 void setBrightness(int cmd, int val)
 {
 	unsigned char data, new_data;
 	int count, ok;
-	
+
 	if (spi_open(9600, 0) < 0)
 	{
 		printf("Cannot initialize spi driver\n");
 		return;
 	}
-	 
+
 	// send 0xFF and receive current status of pi-top-hub
 	count = 0;
 	data = 0xff;
@@ -188,7 +188,7 @@ void setBrightness(int cmd, int val)
 	}
 	while ((!ok) && (count++ < MAXCOUNT));
 	// printf("count = %d\n", count);
-	
+
 	if (ok)
 	{
 		printf("Brighntess receiving: 0x%X - ", data);
@@ -196,7 +196,7 @@ void setBrightness(int cmd, int val)
 		//force to 0 as set to 1 if rebooted while in screenbitoff=0
 		//the state is stored on pi-top-hub, but isn't reinitialised on reboot
 		screenoffbit=0;
-		if(cmd == BRIGHTNESS_UP) 
+		if(cmd == BRIGHTNESS_UP)
 		{
 			brightness++;
 		}
@@ -216,11 +216,11 @@ void setBrightness(int cmd, int val)
 
 		printf("Requested brightness = %d, ", brightness);
         printf("Requested off = %d\n", screenoffbit);
-		
+
 		// calculate data to send
-		shutdown = 0;		
+		shutdown = 0;
 		new_data = calculate();
-				
+
 		// send new data until accepted
 		count = 0;
 		data = new_data;

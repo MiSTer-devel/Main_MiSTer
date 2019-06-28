@@ -70,10 +70,10 @@ public:
 
    bool FindTrack(unsigned char CYL, unsigned char SIDE, VGFIND_TRACK *vgft);
    bool FindADMark(unsigned char CYL, unsigned char SIDE,
-                   unsigned int FromOffset, 
+                   unsigned int FromOffset,
                    VGFIND_ADM *vgfa);
    bool FindSector(unsigned char CYL, unsigned char SIDE,
-                   unsigned char SECT, 
+                   unsigned char SECT,
                    VGFIND_SECTOR *vgfs, unsigned int FromOffset=0);
    void ApplySectorCRC(VGFIND_SECTOR vgfs);
 
@@ -123,7 +123,7 @@ struct TD0_MAIN_HEADER          // 12 bytes
 struct TD0_INFO_DATA             // 10 байт без строки коментария...
 {
    unsigned short CRC;          // +0:  CRC для структуры COMMENT_DATA (без байтов CRC)
-   unsigned short strLen;       // +2:  Длина строки коментария 
+   unsigned short strLen;       // +2:  Длина строки коментария
    unsigned char Year;          // +4:  Дата создания - год (1900 + X)
    unsigned char Month;         // +5:  Дата создания - месяц (Январь=0, Февраль=1,...)
    unsigned char Day;           // +6:  Дата создания - число
@@ -146,7 +146,7 @@ struct TD0_SECT_HEADER          // 8 bytes
    unsigned short DataLength;
 };
 
-struct FDD_MAIN_HEADER 
+struct FDD_MAIN_HEADER
 {
     char ID[30];                /* сигнатура */
     unsigned char MaxTracks;    /* число треков (цилиндров) */

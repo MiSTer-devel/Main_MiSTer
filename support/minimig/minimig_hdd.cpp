@@ -319,7 +319,7 @@ static void IdentifyDevice(uint16_t *pBuffer, hdfTYPE *hdf)
 		}
 
 		p = (char*)&pBuffer[27];
-		for (i = 0; i < 40; i += 2) 
+		for (i = 0; i < 40; i += 2)
 		{
 			char c = p[i];
 			p[i] = p[i + 1];

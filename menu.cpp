@@ -594,7 +594,7 @@ static char* getNet(int spec)
 		strcpy(host, "IP: ");
 		getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host + strlen(host), NI_MAXHOST - strlen(host), NULL, 0, NI_NUMERICHOST);
 	}
-	
+
 	freeifaddrs(ifaddr);
 	return spec ? (ifa ? host : 0) : (char*)netType;
 }
@@ -728,7 +728,7 @@ const char* get_rbf_name_bootcore(char *str)
 	if (!strlen(cfg.bootcore)) return "";
 	char *p = strrchr(str, '/');
 	if (!p) return str;
-	
+
 	char *spl = strrchr(p + 1, '.');
 	if (spl && !strcmp(spl, ".rbf"))
 	{
@@ -933,7 +933,7 @@ void HandleUI(void)
 
 			// Within the menu the esc key acts as the menu key. problem:
 			// if the menu is left with a press of ESC, then the follwing
-			// break code for the ESC key when the key is released will 
+			// break code for the ESC key when the key is released will
 			// reach the core which never saw the make code. Simple solution:
 			// react on break code instead of make code
 		case KEY_ESC | UPSTROKE:
@@ -1463,7 +1463,7 @@ void HandleUI(void)
 				{
 					p = user_io_8bit_get_string(i++);
 					if (!p) continue;
-				
+
 					h = 0;
 					d = 0;
 
@@ -1714,11 +1714,11 @@ void HandleUI(void)
 					menusub = ((mode != 3 && mode != 4) || !stat("/dev/midi", &filestat)) ? 0 : 2;
 				}
 				break;
-                                				
+
 			case 5:
 				video_set_scaler_flt(video_get_scaler_flt() ? 0 : 1);
 				menustate = MENU_8BIT_SYSTEM1;
-				break; 
+				break;
 
 			case 6:
 				if (video_get_scaler_flt())
@@ -1842,7 +1842,7 @@ void HandleUI(void)
 			OsdWrite(3, s, menusub == 1, m);
 			sprintf(s, " Type:            %s", (midilink & 2) ? ((midilink & 1) ? "       UDP" : "       TCP") : ((midilink & 1) ? "      MUNT" : "FluidSynth"));
 			OsdWrite(4, s, menusub == 2, m);
-			
+
 			OsdWrite(5);
 			OsdWrite(6, " Reset UART connection", menusub == 3, mode?0:1);
 			OsdWrite(7);
@@ -1889,8 +1889,8 @@ void HandleUI(void)
 					menustate = MENU_UART1;
 				}
 				break;
-			case 3: 
-				{	
+			case 3:
+				{
 					int mode = GetUARTMode();
 					if(mode != 0)
 					{
@@ -2448,7 +2448,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_MIST_STORAGE_FILE_SELECTED: // file successfully selected
-										  // floppy/hdd      
+										  // floppy/hdd
 		if (menusub < 2)
 			tos_insert_disk(menusub, SelectedPath);
 		else {
@@ -3288,7 +3288,7 @@ void HandleUI(void)
 
 			strncat(minimig_config.info, p, sizeof(minimig_config.info) - strlen(minimig_config.info) - 1);
 			minimig_config.info[sizeof(minimig_config.info) - 1] = 0;
-			
+
 			if (menusub<10) minimig_cfg_save(menusub);
 			menustate = MENU_MAIN1;
 			menusub = 9;
@@ -4173,7 +4173,7 @@ void HandleUI(void)
 			OsdWrite(3, "     Press key to remap", 0, 0);
 			s[0] = 0;
 			if(flag)
-			{ 
+			{
 				sprintf(s, "    on keyboard %04x:%04x", get_map_vid(), get_map_pid());
 			}
 			OsdWrite(5, s, 0, 0);
@@ -4263,7 +4263,7 @@ void HandleUI(void)
 			char straux[64];
 
 			if (cfg.bootcore[0] != '\0')
-			{				
+			{
 				if (btimeout >= 10)
 				{
 					sprintf(str, " Bootcore -> %s", bootcoretype);
@@ -4284,7 +4284,7 @@ void HandleUI(void)
 						OsdWrite(15, str, 1, 0);
 						fpga_load_rbf(cfg.bootcore);
 					}
-				}				
+				}
 			}
 
 			if (init_wait < 1)
@@ -4368,7 +4368,7 @@ void PrintFileName(char *name, int row, int maxinv)
 {
 	int len;
 
-	char s[40];	
+	char s[40];
 	s[32] = 0; // set temporary string length to OSD line length
 
 	len = strlen(name); // get name length

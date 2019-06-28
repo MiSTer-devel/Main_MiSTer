@@ -1,17 +1,17 @@
 /*
  * Copyright (c) 2014, Aleksander Osman
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * 
+ *
  * * Redistributions of source code must retain the above copyright notice, this
  *   list of conditions and the following disclaimer.
- * 
+ *
  * * Redistributions in binary form must reproduce the above copyright notice,
  *   this list of conditions and the following disclaimer in the documentation
  *   and/or other materials provided with the distribution.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include <stdbool.h> 
+#include <stdbool.h>
 #include <fcntl.h>
 #include <time.h>
 
@@ -535,7 +535,7 @@ void x86_init()
 	//-------------------------------------------------------------------------- floppy
 
 	fdd_set(config.fdd_name);
-	
+
 	//-------------------------------------------------------------------------- hdd
 
 	hdd_set(0);
@@ -597,7 +597,7 @@ void x86_init()
 		0x00, //0x20: hd 0 configuration 6/9; retries/bad map/heads>8
 		0x00, //0x21: hd 0 configuration 7/9; landing zone low
 		0x00, //0x22: hd 0 configuration 8/9; landing zone high
-		0x00, //0x23: hd 0 configuration 9/9; sectors/track          
+		0x00, //0x23: hd 0 configuration 9/9; sectors/track
 		0x00, //0x24: hd 1 configuration 1/9; cylinders low
 		0x00, //0x25: hd 1 configuration 2/9; cylinders high
 		0x00, //0x26: hd 1 configuration 3/9; heads
@@ -606,7 +606,7 @@ void x86_init()
 		0x00, //0x29: hd 1 configuration 6/9; retries/bad map/heads>8
 		0x00, //0x2A: hd 1 configuration 7/9; landing zone low
 		0x00, //0x2B: hd 1 configuration 8/9; landing zone high
-		0x00, //0x2C: hd 1 configuration 9/9; sectors/track          
+		0x00, //0x2C: hd 1 configuration 9/9; sectors/track
 
 		(boot_from_floppy)? 0x20u : 0x00u, //0x2D: boot sequence
 

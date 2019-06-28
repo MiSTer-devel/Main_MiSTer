@@ -7,10 +7,10 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <linux/vt.h>
-#include <fcntl.h> 
-#include <sys/stat.h> 
-#include <sys/types.h> 
-#include <unistd.h> 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "hardware.h"
 #include "user_io.h"
@@ -846,7 +846,7 @@ static void vs_wait()
 		close(fb);
 		return;
 	}
-	
+
 	t1 = getus();
 	ioctl(fb, FBIO_WAITFORVSYNC, &zero);
 	t2 = getus();

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include <stdbool.h> 
+#include <stdbool.h>
 #include <fcntl.h>
 #include <time.h>
 #include <limits.h>
@@ -693,7 +693,7 @@ void user_io_init(const char *path)
 
 	char cmd[32];
 	system("uartmode 0");
-	
+
 	SetMidiLinkMode((mode >> 8) & 0xFF);
 	sprintf(cmd, "uartmode %d", mode & 0xFF);
 	system(cmd);
@@ -1277,7 +1277,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 	char *p = strrchr(full_path, '.');
 	if (!p) p = full_path + strlen(full_path);
 	strcpy(p, type ? ".chr" : ".col");
-	
+
 	if (type)
 	{
 		memcpy(col_attr, defchars, sizeof(defchars));
@@ -1509,7 +1509,7 @@ uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask)
 {
 	static uint32_t status = 0;
 
-	// if mask is 0 just return the current status 
+	// if mask is 0 just return the current status
 	if (mask) {
 		// keep everything not masked
 		status &= ~mask;
@@ -1624,7 +1624,7 @@ void user_io_poll()
 
 		// check for incoming serial data. this is directly forwarded to the
 		// arm rs232 and mixes with debug output. Useful for debugging only of
-		// e.g. the diagnostic cartridge    
+		// e.g. the diagnostic cartridge
 		spi_uio_cmd_cont(UIO_SERIAL_IN);
 		while (spi_in())
 		{
@@ -1924,7 +1924,7 @@ void user_io_poll()
 			{
 				unsigned char ps2_mouse[3];
 
-				// PS2 format: 
+				// PS2 format:
 				// YOvfl, XOvfl, dy8, dx8, 1, mbtn, rbtn, lbtn
 				// dx[7:0]
 				// dy[7:0]
@@ -2554,7 +2554,7 @@ void user_io_kbd(uint16_t key, int press)
 		}
 
 	}
-	else 
+	else
 	if (key == KEY_MUTE)
 	{
 		if (press == 1 && hasAPI1_5()) set_volume(0);

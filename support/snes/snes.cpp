@@ -245,7 +245,7 @@ uint8_t* snes_get_header(fileTYPE *f)
 
 				//PAL Regions
 				if ((buf[addr + CartRegion] >= 0x02 && buf[addr + CartRegion] <= 0x0C) || buf[addr + CartRegion] == 0x11)
-				{	
+				{
 					hdr[3] |= 1;
 				}
 

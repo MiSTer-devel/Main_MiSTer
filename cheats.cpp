@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include <stdbool.h> 
+#include <stdbool.h>
 #include <limits.h>
 #include <ctype.h>
 #include <vector>
@@ -247,7 +247,7 @@ void cheats_scroll_name()
 	name[1] = cheats[iSelectedEntry].enabled ? 0x1a : 0x1b;
 	name[2] = 32;
 	strcpy(name + 3, cheats[iSelectedEntry].name);
-		
+
 	len = strlen(name); // get name length
 	if (len > 3 && !strncasecmp(name + len - 3, ".gg", 3)) len -= 3;
 

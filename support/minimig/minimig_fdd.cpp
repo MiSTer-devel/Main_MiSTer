@@ -159,7 +159,7 @@ void SendGap(void)
 
 // read a track from disk
 void ReadTrack(adfTYPE *drive)
-{ 
+{
 	// track number is updated in drive struct before calling this function
 
 	unsigned char sector;

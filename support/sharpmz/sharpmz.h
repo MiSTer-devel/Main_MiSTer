@@ -7,8 +7,8 @@
 //                  This module is an extension to the MiSTer control program. It adds extensions to
 //                  the menu system and additional I/O control specific to the Sharp MZ series
 //                  emulation.
-//                                                         
-// Credits:         
+//
+// Credits:
 // Copyright:       (c) 2018 Philip Smart <philip.smart@net2net.org>
 //
 // History:         July 2018      - Initial module written.
@@ -137,12 +137,12 @@
 #define REGISTER_FDCROM                   7
 #define REGISTER_8                        8
 #define REGISTER_9                        9
-#define REGISTER_10                      10 
-#define REGISTER_11                      11 
-#define REGISTER_12                      12 
+#define REGISTER_10                      10
+#define REGISTER_11                      11
+#define REGISTER_12                      12
 #define REGISTER_13                      13
 #define REGISTER_DEBUG                   14
-#define REGISTER_DEBUG2                  15 
+#define REGISTER_DEBUG2                  15
 #define MAX_REGISTERS                    16
 
 // Numeric id of bit for a given CMT register flag.
@@ -171,7 +171,7 @@ static const unsigned int MZLOADADDR[MAX_IMAGE_TYPES][MAX_MZMACHINES]  =
 
 // Default size of roms.
 //
-static const unsigned int MZLOADSIZE[MAX_IMAGE_TYPES][MAX_MZMACHINES] = 
+static const unsigned int MZLOADSIZE[MAX_IMAGE_TYPES][MAX_MZMACHINES] =
                                            {
                                              { 0x1000,  0x1000,  0x1000,   0x1000,  0x1000,  0x1000,  0x0800,  0x0800 },     // MROM
                                              { 0x1000,  0x1000,  0x1000,   0x1000,  0x1000,  0x1000,  0x0800,  0x0800 },     // MROM 80C
@@ -191,7 +191,7 @@ const char *SHARPMZ_FAST_TAPE[]          = { "Off", "2x", "4x", "8x", "16x", "32
                                              "Off", "2x", "4x", "8x", "16x", "Off", "Off", "Off"
                                            };
 const char *SHARPMZ_CPU_SPEED[]          = { "2MHz",   "4MHz", "8MHz",  "16MHz", "32MHz", "64MHz",  "2MHz",   "2MHz",
-                                             "3.5MHz", "7MHz", "14MHz", "28MHz", "56MHz", "112MHz", "3.5MHz", "3.5MHz", 
+                                             "3.5MHz", "7MHz", "14MHz", "28MHz", "56MHz", "112MHz", "3.5MHz", "3.5MHz",
                                              "4MHz",   "8MHz", "16MHz", "32MHz", "64MHz", "4MHz",   "4MHz",   "4MHz"
                                            };
 const char *SHARPMZ_TAPE_BUTTONS[]       = { "Off", "Play", "Record", "Auto" };
@@ -213,7 +213,7 @@ const char *SHARPMZ_MACHINE_MODEL[]      = { "MZ80K", "MZ80C", "MZ1200", "MZ80A"
 const char *SHARPMZ_DEBUG_ENABLE[]       = { "Off", "On" };
 const char *SHARPMZ_DEBUG_LEDS[]         = { "Off", "On" };
 const char *SHARPMZ_DEBUG_LEDS_BANK[]    = { "T80",    "I/O",      "IOCTL",    "Config",   "MZ80C I",  "MZ80C II", "MZ80B I", "MZ80B II" };
-const char *SHARPMZ_DEBUG_LEDS_SUBBANK[] = { "Auto",   "A7-0",     "A15-8",    "DI",       "Signals",  "",         "",        "", 
+const char *SHARPMZ_DEBUG_LEDS_SUBBANK[] = { "Auto",   "A7-0",     "A15-8",    "DI",       "Signals",  "",         "",        "",
                                              "Auto",   "Video",    "PS2Key",   "Signals",  "",         "",         "",        "",
                                              "Auto",   "A23-16",   "A15-8",    "A7-0",     "Signals",  "",         "",        "",
                                              "Auto",   "Config 1", "Config 2", "Config 3", "Config 4", "Config 5", "",        "",
@@ -344,7 +344,7 @@ enum SHARPMZ_MENU
 	MENU_SHARPMZ_ROMS2                             = 0xb5,
 	MENU_SHARPMZ_ROM_FILE_SELECTED                 = 0xb6,
     MENU_SHARPMZ_DEBUG1                            = 0xb7,
-    MENU_SHARPMZ_DEBUG2                            = 0xb8 
+    MENU_SHARPMZ_DEBUG2                            = 0xb8
 };
 
 // Prototypes.
@@ -396,7 +396,7 @@ void                   sharpmz_set_machine_model(short, short);
 void                   sharpmz_set_cpu_speed(short, short);
 void                   sharpmz_set_audio_source(short, short);
 void                   sharpmz_set_audio_volume(short, short);
-void                   sharpmz_set_audio_mute(short, short);    
+void                   sharpmz_set_audio_mute(short, short);
 void                   sharpmz_set_debug_enable(short, short);
 void                   sharpmz_set_debug_leds(short, short);
 void                   sharpmz_set_debug_leds_bank(short, short);

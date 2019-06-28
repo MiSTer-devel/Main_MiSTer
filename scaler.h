@@ -1,6 +1,6 @@
 /*
 Copyright 2019 alanswx
-with help from the MiSTer contributors including Grabulosaure 
+with help from the MiSTer contributors including Grabulosaure
 */
 
 #ifndef SCALER_H

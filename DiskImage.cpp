@@ -2084,7 +2084,7 @@ void TDiskImage::readSCL(int hfile, bool readonly)
 	for (i = 0; i < FileCount; i++)
 	{
 		if (TRK >= (MaxTrack + 1)*(MaxSide + 1)) break;      // disk full ?
-		
+
 		memcpy(&trdosde, fileinfo[i], 14);
 
 		trdosde.FirstSec = SEC;

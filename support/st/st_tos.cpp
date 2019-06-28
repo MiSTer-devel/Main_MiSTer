@@ -283,7 +283,7 @@ static void handle_acsi(unsigned char *buffer) {
 				dma_buffer[2] = 0x05;
 				dma_buffer[12] = asc[target];
 			}
-			mist_memory_write(dma_buffer, 9); // 18 bytes      
+			mist_memory_write(dma_buffer, 9); // 18 bytes
 			dma_ack(0x00);
 			asc[target] = 0x00;
 			break;
@@ -376,7 +376,7 @@ static void handle_acsi(unsigned char *buffer) {
 			dma_buffer[4] = length - 5;                            // len
 			memcpy(dma_buffer + 8, "MIST    ", 8);                // Vendor
 			memcpy(dma_buffer + 16, "                ", 16);       // Clear device entry
-			if (hdd_direct && target == 0) memcpy(dma_buffer + 16, "SD DIRECT", 9);// Device 
+			if (hdd_direct && target == 0) memcpy(dma_buffer + 16, "SD DIRECT", 9);// Device
 			else                          memcpy(dma_buffer + 16, hdd_image[target].name, 11);
 			memcpy(dma_buffer + 32, "ATH ", 4);                    // Product revision
 			memcpy(dma_buffer + 36, VDATE "  ", 8);                // Serial number
@@ -405,7 +405,7 @@ static void handle_acsi(unsigned char *buffer) {
 			}
 			break;
 
-#if 0      
+#if 0
 		case 0x1f: // ICD command?
 			tos_debugf("ACSI: ICD command %s ($%02x)",
 				acsi_cmd_name(buffer[10] & 0x1f), buffer[10] & 0x1f);
@@ -424,7 +424,7 @@ static void handle_acsi(unsigned char *buffer) {
 	else {
 		tos_debugf("ACSI: Request for unsupported target");
 
-		// tell acsi state machine that io controller is done 
+		// tell acsi state machine that io controller is done
 		// but don't generate a acsi irq
 		dma_nak();
 	}
@@ -590,7 +590,7 @@ static void tos_write(const char *str) {
 		return;
 	}
 
-	// get next higher multiple of 16 for string length 
+	// get next higher multiple of 16 for string length
 	// as dma works in 16 bytes chunks only
 	int c = (strlen(str) + 15) & ~15;
 	{
@@ -638,7 +638,7 @@ static void tos_font_load() {
 		FileClose(&file);
 	}
 
-	// if we couldn't load something, then just convert the 
+	// if we couldn't load something, then just convert the
 	// built-on OSD font, so we see at least something
 	unsigned char c, l, n;
 	// copy 128 chars
@@ -664,7 +664,7 @@ void tos_load_cartridge(const char *name)
 	if (name)
 		strncpy(config.cart_img, name, 11);
 
-	// upload cartridge 
+	// upload cartridge
 	if (config.cart_img[0] && FileOpen(&file, config.cart_img)) {
 		int i;
 		unsigned char buffer[512];

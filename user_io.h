@@ -48,7 +48,7 @@
 #define UIO_SET_SDCONF  0x19  // send SD card configuration (CSD, CID)
 #define UIO_ASTICK      0x1a
 #define UIO_SIO_IN      0x1b  // serial in
-#define UIO_SET_SDSTAT  0x1c  // set sd card status 
+#define UIO_SET_SDSTAT  0x1c  // set sd card status
 #define UIO_SET_SDINFO  0x1d  // send info about mounted image
 #define UIO_SET_STATUS2 0x1e  // 32bit status
 #define UIO_GET_KBD_LED 0x1f  // keyboard LEDs control
@@ -106,7 +106,7 @@
 #define JOY_L3     0x4000
 #define JOY_R3     0x8000
 
-// keyboard LEDs control 
+// keyboard LEDs control
 #define KBD_LED_CAPS_CONTROL  0x01
 #define KBD_LED_CAPS_STATUS   0x02
 #define KBD_LED_CAPS_MASK     (KBD_LED_CAPS_CONTROL | KBD_LED_CAPS_STATUS)
@@ -133,7 +133,7 @@
 // core type value should be unlikely to be returned by broken cores
 #define CORE_TYPE_UNKNOWN   0x55
 #define CORE_TYPE_DUMB      0xa0   // core without any io controller interaction
-#define CORE_TYPE_MIST      0xa3   // mist atari st core   
+#define CORE_TYPE_MIST      0xa3   // mist atari st core
 #define CORE_TYPE_8BIT      0xa4   // atari 800/c64 like core
 #define CORE_TYPE_MINIMIG2  0xa5   // new Minimig with AGA
 #define CORE_TYPE_ARCHIE    0xa6   // Acorn Archimedes
@@ -163,7 +163,7 @@
 #define UIO_PARITY_MARK  3
 #define UIO_PARITY_SPACE 4
 
-#define UIO_PRIORITY_KEYBOARD 0 
+#define UIO_PRIORITY_KEYBOARD 0
 #define UIO_PRIORITY_GAMEPAD  1
 
 #define EMU_NONE  0
@@ -171,7 +171,7 @@
 #define EMU_JOY0  2
 #define EMU_JOY1  3
 
-// serial status data type returned from the core 
+// serial status data type returned from the core
 typedef struct {
 	uint32_t bitrate;        // 300, 600 ... 115200
 	uint8_t datasize;        // 5,6,7,8 ...

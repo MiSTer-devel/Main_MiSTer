@@ -319,7 +319,7 @@ struct ikbd_command_handler_t {
 	unsigned char length;
 	void(*handler)(void);
 };
-	
+
 ikbd_command_handler_t ikbd_command_handler[] =
 {
 	{ 0x07, 2, ikbd_handler_mouse_button_action },

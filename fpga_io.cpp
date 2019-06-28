@@ -135,7 +135,7 @@ static int fpgamgr_test_fpga_ready(void)
 }
 
 /*
-// Poll until FPGA is ready to be accessed or timeout occurred 
+// Poll until FPGA is ready to be accessed or timeout occurred
 static int fpgamgr_poll_fpga_ready(void)
 {
 	unsigned long i;

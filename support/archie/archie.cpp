@@ -138,7 +138,7 @@ void archie_save_config(void)
 void archie_set_rom(char *name)
 {
 	if (!name) return;
-	
+
 	printf("archie_set_rom(%s)\n", name);
 
 	// save file name
