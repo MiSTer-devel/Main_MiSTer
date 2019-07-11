@@ -797,6 +797,7 @@ void HandleUI(void)
 	struct RigidDiskBlock *rdb = nullptr;
 
 	static char opensave;
+	static char ioctl_index;
 	char *p;
 	static char s[256];
 	unsigned char m = 0, up, down, select, menu, right, left, plus, minus;
@@ -1490,7 +1491,17 @@ void HandleUI(void)
 					}
 					else if (p[0] == 'F')
 					{
-						opensave = (p[1] == 'S');
+						opensave = 0;
+						ioctl_index = menusub + 1;
+						int idx = 1;
+
+						if (p[1] == 'S')
+						{
+							opensave = 1;
+							idx++;
+						}
+
+						if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
 						SelectFile(ext, SCANO_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
@@ -1564,7 +1575,7 @@ void HandleUI(void)
 	case MENU_8BIT_MAIN_FILE_SELECTED:
 		printf("File selected: %s\n", SelectedPath);
 		user_io_store_filename(SelectedPath);
-		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1), opensave);
+		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | ioctl_index, opensave);
 		if(user_io_use_cheats()) cheats_init(SelectedPath, user_io_get_file_crc());
 		menustate = MENU_NONE1;
 		break;
