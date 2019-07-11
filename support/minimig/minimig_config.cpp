@@ -301,7 +301,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	printf("CPU clock     : %s\n", minimig_config.chipset & 0x01 ? "turbo" : "normal");
 	printf("Chip RAM size : %s\n", config_memory_chip_msg[minimig_config.memory & 0x03]);
 	printf("Slow RAM size : %s\n", config_memory_slow_msg[minimig_config.memory >> 2 & 0x03]);
-	printf("Fast RAM size : %s\n", config_memory_fast_msg[minimig_config.memory >> 4 & 0x03]);
+	printf("Fast RAM size : %s\n", config_memory_fast_msg[((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5)]);
 
 	printf("Floppy drives : %u\n", minimig_config.floppy.drives + 1);
 	printf("Floppy speed  : %s\n", minimig_config.floppy.speed ? "fast" : "normal");
@@ -464,7 +464,7 @@ int minimig_cfg_load(int num)
 	char cfg_str[256];
 	sprintf(cfg_str, "CPU: %s, Chipset: %s, ChipRAM: %s, FastRAM: %s, SlowRAM: %s",
 			config_cpu_msg[minimig_config.cpu & 0x03], config_chipset_msg[(minimig_config.chipset >> 2) & 7],
-			config_memory_chip_msg[(minimig_config.memory >> 0) & 0x03], config_memory_fast_msg[(minimig_config.memory >> 4) & 0x03], config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03]
+			config_memory_chip_msg[(minimig_config.memory >> 0) & 0x03], config_memory_fast_msg[((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5)], config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03]
 			);
 	BootPrintEx(cfg_str);
 
