@@ -1567,7 +1567,7 @@ short sharpmz_read_ram(const char *memDumpFile, short bank)
 
     // Depending on the bank, or all banks, loop until request is complete.
     //
-    for(unsigned int mb=(bank == SHARPMZ_MEMBANK_ALL ? 0 : bank); mb <= (uint)(bank == SHARPMZ_MEMBANK_ALL ? SHARPMZ_MEMBANK_MAXBANKS-1 : bank); mb++)
+    for(unsigned int mb=(bank == SHARPMZ_MEMBANK_ALL ? 0 : bank); mb <= (unsigned int)(bank == SHARPMZ_MEMBANK_ALL ? SHARPMZ_MEMBANK_MAXBANKS-1 : bank); mb++)
     {
         // Skip bank 1, as SYSROM spans two physical banks 0 and 1.
         if(mb == 1) mb = SHARPMZ_MEMBANK_SYSRAM;
