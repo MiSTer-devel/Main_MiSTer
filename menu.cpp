@@ -177,7 +177,7 @@ const char *config_tos_usb[] = { "none", "control", "debug", "serial", "parallel
 
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M"   };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
-const char *config_memory_fast_msg[] = { "none", "2M",   "4M",   "24M", "56M" };
+const char *config_memory_fast_msg[] = { "none", "2M",   "4M",   "25M", "58M", "293M", "327M" };
 
 const char *config_scanlines_msg[] = { "off", "dim", "black" };
 const char *config_ar_msg[] = { "4:3", "16:9" };
@@ -3473,7 +3473,10 @@ void HandleUI(void)
 		strcat(s, (minimig_config.memory & 0x40) ? "enabled " : "disabled");
 		OsdWrite(6, s, menusub == 4, 0);
 
-		for (int i = 7; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(7, "", 0, 0);
+		OsdWrite(8, ((minimig_config.memory & 0x80) && !(minimig_config.memory & 0x10)) ? "  ** 64MB SDRAM REQUIRED **" : "", 0, 0);
+
+		for (int i = 9; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
 		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 5, 0);
 
 		menustate = MENU_SETTINGS_MEMORY2;
@@ -3489,8 +3492,9 @@ void HandleUI(void)
 			}
 			else if (menusub == 1)
 			{
-				uint8_t c = (minimig_config.memory & 0x80) ? 0 : ((minimig_config.memory & 0x30) + 0x10);
-				minimig_config.memory = (c & 0x30) | ((c<<1) & 0x80) | (minimig_config.memory & ~0xB0);
+				uint8_t c = (((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5))+1;
+				if (c > 6) c = 0;
+				minimig_config.memory = ((c<<4) & 0x30) | ((c<<5) & 0x80) | (minimig_config.memory & ~0xB0);
 				menustate = MENU_SETTINGS_MEMORY1;
 			}
 			else if (menusub == 2)

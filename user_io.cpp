@@ -1558,14 +1558,17 @@ void user_io_send_buttons(char force)
 
 	if ((map != key_map) || force)
 	{
-		if (is_archie())
+		if (is_archie() && (key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			if ((key_map & BUTTON2) && !(map & BUTTON2))
-			{
-				const char *name = get_rbf_name();
-				fpga_load_rbf(name[0] ? name : "Archie.rbf");
-			}
+			const char *name = get_rbf_name();
+			fpga_load_rbf(name[0] ? name : "Archie.rbf");
 		}
+
+		if (is_minimig() && (key_map & BUTTON2) && !(map & BUTTON2))
+		{
+			minimig_reset();
+		}
+
 		key_map = map;
 		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
