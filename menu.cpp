@@ -1574,10 +1574,25 @@ void HandleUI(void)
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
 		printf("File selected: %s\n", SelectedPath);
-		user_io_store_filename(SelectedPath);
-		user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | ioctl_index, opensave);
-		if(user_io_use_cheats()) cheats_init(SelectedPath, user_io_get_file_crc());
-		menustate = MENU_NONE1;
+		if (is_neogeo_core())
+		{
+			if (!neogeo_romset_tx(SelectedPath))
+			{
+				OsdSetTitle("Message", 0);
+				OsdEnable(0); // do not disable keyboard
+				menu_timer = GetTimer(2000);
+				menustate = MENU_INFO;
+			} else {
+				menustate = MENU_NONE1;
+			}
+		}
+		else
+		{
+			user_io_store_filename(SelectedPath);
+			user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | ioctl_index, opensave);
+			if (user_io_use_cheats()) cheats_init(SelectedPath, user_io_get_file_crc());
+			menustate = MENU_NONE1;
+		}
 		break;
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
@@ -1591,6 +1606,21 @@ void HandleUI(void)
 			user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
 			user_io_file_mount(SelectedPath, drive_num);
 		}
+
+		if (is_neogeo_core())
+		{
+			// ElectronAsh.
+			strcpy(SelectedPath + strlen(SelectedPath) - 3, "CUE");
+			printf("Checking for presence of CUE file %s\n", SelectedPath);
+			if (user_io_file_mount(SelectedPath, 1))
+			{
+				printf("CUE file found and mounted.\n");
+				parse_cue_file();
+				char str[2] = "";
+				neogeo_romset_tx(str);
+			}
+		}
+
 		menustate = SelectedPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
 		break;
 

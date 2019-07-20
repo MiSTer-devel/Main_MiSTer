@@ -182,9 +182,6 @@ typedef struct {
 
 void user_io_init(const char *path);
 unsigned char user_io_core_type();
-char is_minimig();
-char is_archie();
-char is_sharpmz();
 void user_io_poll();
 char user_io_menu_button();
 char user_io_user_button();
@@ -198,9 +195,6 @@ int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
 char user_io_serial_status(serial_status_t *, uint8_t);
 char *user_io_get_core_name();
 const char *user_io_get_core_name_ex();
-char is_menu_core();
-char is_x86_core();
-char is_snes_core();
 char has_menu();
 
 const char *get_image_name(int i);
@@ -236,8 +230,6 @@ void user_io_rtc_reset();
 const char* get_rbf_dir();
 const char* get_rbf_name();
 
-#define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : is_menu_core() ? "Scripts" : user_io_get_core_name())
-
 int GetUARTMode();
 int GetMidiLinkMode();
 void SetMidiLinkMode(int mode);
@@ -251,5 +243,17 @@ int user_io_use_cheats();
 void diskled_on();
 #define DISKLED_ON  diskled_on()
 #define DISKLED_OFF void()
+
+void parse_cue_file(void);
+
+char is_minimig();
+char is_archie();
+char is_sharpmz();
+char is_menu_core();
+char is_x86_core();
+char is_snes_core();
+char is_neogeo_core();
+
+#define HomeDir (is_minimig() ? "Amiga" : is_archie() ? "Archie" : is_menu_core() ? "Scripts" : user_io_get_core_name())
 
 #endif // USER_IO_H

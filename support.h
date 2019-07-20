@@ -19,3 +19,6 @@
 
 // SNES  support
 #include "support/snes/snes.h"
+
+// NeoGeo  support
+#include "support/neogeo/loader.h"

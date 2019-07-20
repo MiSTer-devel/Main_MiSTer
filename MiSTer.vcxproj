@@ -78,6 +78,8 @@
     <ClCompile Include="support\minimig\minimig_config.cpp" />
     <ClCompile Include="support\minimig\minimig_fdd.cpp" />
     <ClCompile Include="support\minimig\minimig_hdd.cpp" />
+    <ClCompile Include="support\neogeo\graphics.cpp" />
+    <ClCompile Include="support\neogeo\loader.cpp" />
     <ClCompile Include="support\sharpmz\sharpmz.cpp" />
     <ClCompile Include="support\snes\snes.cpp" />
     <ClCompile Include="support\st\st_ikbd.cpp" />
@@ -128,6 +130,8 @@
     <ClInclude Include="support\minimig\minimig_fdd.h" />
     <ClInclude Include="support\minimig\minimig_hdd.h" />
     <ClInclude Include="support\minimig\minimig_hdd_internal.h" />
+    <ClInclude Include="support\neogeo\graphics.h" />
+    <ClInclude Include="support\neogeo\loader.h" />
     <ClInclude Include="support\sharpmz\sharpmz.h" />
     <ClInclude Include="support\snes\snes.h" />
     <ClInclude Include="support\st\st_ikbd.h" />
