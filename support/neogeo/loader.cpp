@@ -43,7 +43,8 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 
 	if (!bytes2send) return 0;
 
-	strcpy(name_buf, "/media/fat/NeoGeo/");
+	strcpy(name_buf, getRootDir());
+	strcpy(name_buf, "/NeoGeo/");
 	if (strlen(romset)) {
 		strcat(name_buf, romset);
 		strcat(name_buf, "/");
@@ -227,8 +228,6 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 							file_type = NEO_FILE_FIX;
 						else if (file_type == 'C')
 							file_type = NEO_FILE_SPR;
-						else if (file_type == 'M')
-							file_type = NEO_FILE_8BIT;
 						else
 							file_type = NEO_FILE_RAW;
 					}
