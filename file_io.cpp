@@ -28,6 +28,7 @@
 #include "miniz_zip.h"
 #include "scheduler.h"
 #include "video.h"
+#include "support.h"
 
 #define MIN(a,b) (((a)<(b)) ? (a) : (b))
 
@@ -949,19 +950,37 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	if (mode == SCANF_INIT)
 	{
 		file_name[0] = 0;
-		if (!isPathDirectory(path))
+		if (is_neogeo_core() && !(options & (SCANO_CORES | SCANO_UMOUNT)))
 		{
-			bool isfile = isPathRegularFile(path);
-			char *p = strrchr(path, '/');
-			if (p)
+			neogeo_scan_xml();
+			uint32_t len = strlen(HomeDir);
+			if (strlen(path) > len)
 			{
-				if (isfile) strcpy(file_name, p + 1);
-				*p = 0;
+				path[len] = 0;
+				dirent *nde = neogeo_set_altname(path + len + 1);
+				file_name[0] = 0;
+				if (nde)
+				{
+					strcpy(file_name, nde->d_name);
+				}
 			}
-			else
+		}
+		else
+		{
+			if (!isPathDirectory(path))
 			{
-				if (isfile) strcpy(file_name, path);
-				path[0] = 0;
+				bool isfile = isPathRegularFile(path);
+				char *p = strrchr(path, '/');
+				if (p)
+				{
+					if (isfile) strcpy(file_name, p + 1);
+					*p = 0;
+				}
+				else
+				{
+					if (isfile) strcpy(file_name, path);
+					path[0] = 0;
+				}
 			}
 		}
 
@@ -1058,82 +1077,95 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				}
 			}
 
-			if (de->d_type == DT_DIR)
+			if (is_neogeo_core() && !(options & (SCANO_CORES | SCANO_UMOUNT)))
 			{
+				if (de->d_type != DT_DIR) continue;
 				if (!strcmp(de->d_name, ".")) continue;
-				if (!strcmp(de->d_name, ".."))
-				{
-					if(!strlen(path)) continue;
-				}
+				if (!strcmp(de->d_name, "..")) continue;
 
-				if (!(options & SCANO_DIR))
-				{
-					if (de->d_name[0] != '_' && strcmp(de->d_name, "..")) continue;
-					if (!(options & SCANO_CORES)) continue;
-				}
-			}
-			else if (de->d_type == DT_REG)
-			{
-				//skip non-selectable files
-				if (!strcasecmp(de->d_name, "menu.rbf")) continue;
-				if (!strncasecmp(de->d_name, "menu_20",7)) continue;
-				if (!strcasecmp(de->d_name, "boot.rom")) continue;
-
-				//check the prefix if given
-				if (prefix && strncasecmp(prefix, de->d_name, strlen(prefix))) continue;
-
-				if (extlen > 0)
-				{
-					const char *ext = extension;
-					int found = (has_trd && x2trd_ext_supp(de->d_name));
-					if (!found && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip"))
-					{
-						// Fake that zip-file is a directory.
-						de->d_type = DT_DIR;
-						found = 1;
-					}
-					if (!found && is_minimig() && !memcmp(extension, "HDF", 3))
-					{
-						found = !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".iso");
-					}
-
-					char *fext = strrchr(de->d_name, '.');
-					if(fext) fext++;
-					while(!found && *ext && fext)
-					{
-						char e[4];
-						memcpy(e, ext, 3);
-						if (e[2] == ' ')
-						{
-							e[2] = 0;
-							if (e[1] == ' ') e[1] = 0;
-						}
-
-						e[3] = 0;
-						found = 1;
-						for (int i = 0; i < 4; i++)
-						{
-							if (e[i] == '*') break;
-							if (e[i] == '?' && fext[i]) continue;
-
-							if (tolower(e[i]) != tolower(fext[i])) found = 0;
-
-							if (!e[i] || !found) break;
-						}
-						if (found) break;
-
-						if (strlen(ext) < 3) break;
-						ext += 3;
-					}
-					if (!found) continue;
-				}
+				dirent *nde = neogeo_set_altname(de->d_name);
+				if(nde) DirItem.push_back(*nde);
 			}
 			else
 			{
-				continue;
+				if (de->d_type == DT_DIR)
+				{
+					if (!strcmp(de->d_name, ".")) continue;
+					if (!strcmp(de->d_name, ".."))
+					{
+						if (!strlen(path)) continue;
+					}
+
+					if (!(options & SCANO_DIR))
+					{
+						if (de->d_name[0] != '_' && strcmp(de->d_name, "..")) continue;
+						if (!(options & SCANO_CORES)) continue;
+					}
+				}
+				else if (de->d_type == DT_REG)
+				{
+					//skip non-selectable files
+					if (!strcasecmp(de->d_name, "menu.rbf")) continue;
+					if (!strncasecmp(de->d_name, "menu_20", 7)) continue;
+					if (!strcasecmp(de->d_name, "boot.rom")) continue;
+
+					//check the prefix if given
+					if (prefix && strncasecmp(prefix, de->d_name, strlen(prefix))) continue;
+
+					if (extlen > 0)
+					{
+						const char *ext = extension;
+						int found = (has_trd && x2trd_ext_supp(de->d_name));
+						if (!found && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip"))
+						{
+							// Fake that zip-file is a directory.
+							de->d_type = DT_DIR;
+							found = 1;
+						}
+						if (!found && is_minimig() && !memcmp(extension, "HDF", 3))
+						{
+							found = !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".iso");
+						}
+
+						char *fext = strrchr(de->d_name, '.');
+						if (fext) fext++;
+						while (!found && *ext && fext)
+						{
+							char e[4];
+							memcpy(e, ext, 3);
+							if (e[2] == ' ')
+							{
+								e[2] = 0;
+								if (e[1] == ' ') e[1] = 0;
+							}
+
+							e[3] = 0;
+							found = 1;
+							for (int i = 0; i < 4; i++)
+							{
+								if (e[i] == '*') break;
+								if (e[i] == '?' && fext[i]) continue;
+
+								if (tolower(e[i]) != tolower(fext[i])) found = 0;
+
+								if (!e[i] || !found) break;
+							}
+							if (found) break;
+
+							if (strlen(ext) < 3) break;
+							ext += 3;
+						}
+						if (!found) continue;
+					}
+				}
+				else
+				{
+					continue;
+				}
+				DirItem.push_back(*de);
 			}
-			DirItem.push_back(*de);
 		}
+
 		if (z)
 		{
 			// Since zip files aren't actually folders the entry to
@@ -1146,6 +1178,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			mz_zip_reader_end(z);
 			delete z;
 		}
+
 		if (d)
 		{
 			closedir(d);

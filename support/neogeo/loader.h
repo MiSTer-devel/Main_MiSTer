@@ -7,3 +7,6 @@
 
 extern bool checked_ok;
 int neogeo_romset_tx(char* name);
+int neogeo_scan_xml();
+dirent *neogeo_set_altname(char *name);
+const char *neogeo_get_name(uint32_t num);

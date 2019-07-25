@@ -25,9 +25,10 @@ void neogeo_osd_progress(const char* name, unsigned int progress) {
 	memset(progress_buf, ' ', 30);
 	memcpy(progress_buf, name, strlen(name));
 	for (unsigned int i = 0; i < progress; i++)
-		progress_buf[12 + i] = '#';
+		progress_buf[12 + i] = 0x7f;
 	progress_buf[30] = 0;
 
+	OsdWrite(OsdGetSize() - 2);
 	OsdWrite(OsdGetSize() - 1, progress_buf, 0);
 }
 
@@ -121,6 +122,94 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 	DisableFpga();
 
 	return 1;
+}
+
+struct rom_info
+{
+	char name[16];
+	char altname[256];
+};
+
+static rom_info roms[1000];
+static uint32_t rom_cnt = 0;
+
+static int xml_scan(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
+{
+	(void)(sd);
+
+	switch (evt)
+	{
+	case XML_EVENT_START_NODE:
+		if (!strcasecmp(node->tag, "romset") && (rom_cnt < (sizeof(roms) / sizeof(roms[0]))))
+		{
+			memset(&roms[rom_cnt], 0, sizeof(rom_info));
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "name"))
+				{
+					strncpy(roms[rom_cnt].name, node->attributes[i].value, sizeof(roms[rom_cnt].name) - 1);
+					strncpy(roms[rom_cnt].altname, node->attributes[i].value, sizeof(roms[rom_cnt].name) - 1);
+				}
+			}
+
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "altname"))
+				{
+					memset(roms[rom_cnt].altname, 0, sizeof(roms[rom_cnt].altname));
+					strncpy(roms[rom_cnt].altname, node->attributes[i].value, sizeof(roms[rom_cnt].altname) - 1);
+				}
+			}
+			rom_cnt++;
+		}
+		break;
+
+	case XML_EVENT_END_NODE:
+		break;
+
+	case XML_EVENT_ERROR:
+		printf("XML parse: %s: ERROR %d\n", text, n);
+		break;
+	default:
+		break;
+	}
+
+	return true;
+}
+
+int neogeo_scan_xml()
+{
+	static char full_path[1024];
+	sprintf(full_path, "%s/neogeo/romsets.xml", getRootDir());
+	SAX_Callbacks sax;
+	SAX_Callbacks_init(&sax);
+
+	rom_cnt = 0;
+	sax.all_event = xml_scan;
+	XMLDoc_parse_file_SAX(full_path, &sax, 0);
+	return rom_cnt;
+}
+
+dirent *neogeo_set_altname(char *name)
+{
+	static dirent de;
+	for (uint32_t i = 0; i < rom_cnt; i++)
+	{
+		if (!strcasecmp(name, roms[i].name))
+		{
+			memcpy(de.d_name, roms[i].altname, sizeof(de.d_name));
+			de.d_ino = i;
+			de.d_type = DT_REG;
+			return &de;
+		}
+	}
+	return NULL;
+}
+
+const char *neogeo_get_name(uint32_t num)
+{
+	if (num < rom_cnt) return roms[num].name;
+	return "";
 }
 
 static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
@@ -286,11 +375,8 @@ int neogeo_romset_tx(char* name) {
 
 	// Look for the romset's file list in romsets.xml
 	if (!(system_type & 2)) {
-		// Get romset name from path (which should point to a .p1 or .ep1 file)
+		// Get romset name from path
 		char *p = strrchr(name, '/');
-		if (!p) return 0;
-		*p = 0;
-		p = strrchr(name, '/');
 		if (!p) return 0;
 		strncpy(romset, p + 1, strlen(p + 1));
 

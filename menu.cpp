@@ -3125,7 +3125,14 @@ void HandleUI(void)
 							strcpy(SelectedDir, SelectedPath);
 							strcat(SelectedPath, "/");
 						}
-						strcat(SelectedPath, flist_SelectedItem()->d_name);
+						if (is_neogeo_core())
+						{
+							strcat(SelectedPath, neogeo_get_name(flist_SelectedItem()->d_ino));
+						}
+						else
+						{
+							strcat(SelectedPath, flist_SelectedItem()->d_name);
+						}
 
 						menustate = fs_MenuSelect;
 					}
