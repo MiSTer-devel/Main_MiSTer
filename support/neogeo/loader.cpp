@@ -42,11 +42,8 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 	uint8_t buf[4096];	// Same in user_io_file_tx
 	uint8_t buf_out[4096];
 	static char name_buf[256];
-	unsigned long bytes2send = size;
 	struct timespec ts1, ts2;	// DEBUG PROFILING
 	long us_acc = 0;	// DEBUG PROFILING
-
-	if (!bytes2send) return 0;
 
 	strcpy(name_buf, getRootDir());
 	strcpy(name_buf, "/NeoGeo/");
@@ -57,6 +54,11 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 	strcat(name_buf, name);
 
 	if (!FileOpen(&f, name_buf, 0)) return 0;
+	if (!size) size = f.size;
+	if (!size) return 0;
+
+	unsigned long bytes2send = size;
+
 
 	FileSeek(&f, offset, SEEK_SET);
 
@@ -320,22 +322,59 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 		}
 		if (in_correct_romset) {
 			if (!strcasecmp(node->tag, "file")) {
+				file_offset = 0;
+				file_size = 0;
+				file_type = NEO_FILE_RAW;
+				file_index = 0;
+
+				int use_index = 0;
+				for (int i = 0; i < node->n_attributes; i++) {
+					if (!strcasecmp(node->attributes[i].name, "index")) use_index = 1;
+				}
+
+				printf("using index = %d\n", use_index);
+
 				for (int i = 0; i < node->n_attributes; i++) {
 					if (!strcasecmp(node->attributes[i].name, "name"))
 						strncpy(file_name, node->attributes[i].value, 16);
 
-					if (!strcasecmp(node->attributes[i].name, "type")) {
-						file_type = *node->attributes[i].value;
-						if (file_type == 'S')
-							file_type = NEO_FILE_FIX;
-						else if (file_type == 'C')
-							file_type = NEO_FILE_SPR;
-						else
-							file_type = NEO_FILE_RAW;
+					if (use_index) {
+						if (!strcasecmp(node->attributes[i].name, "index"))
+						{
+							file_index = atoi(node->attributes[i].value);
+							if (file_index >= 64 || file_index == 15) file_type = NEO_FILE_SPR;
+							else if (file_index == 2 || file_index == 8) file_type = NEO_FILE_FIX;
+						}
 					}
+					else
+					{
+						if (!strcasecmp(node->attributes[i].name, "type")) {
+							switch (*node->attributes[i].value)
+							{
+							case 'C':
+								file_index = 15;
+								file_type = NEO_FILE_SPR;
+								break;
 
-					if (!strcasecmp(node->attributes[i].name, "index"))
-						file_index = atoi(node->attributes[i].value);
+							case 'M':
+								file_index = 9;
+								break;
+
+							case 'P':
+								file_index = 4;
+								break;
+
+							case 'S':
+								file_index = 8;
+								file_type = NEO_FILE_FIX;
+								break;
+
+							case 'V':
+								file_index = 16;
+								break;
+							}
+						}
+					}
 
 					if (!strcasecmp(node->attributes[i].name, "offset"))
 						file_offset = strtol(node->attributes[i].value, NULL, 0);
