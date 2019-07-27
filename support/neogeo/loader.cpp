@@ -13,24 +13,24 @@
 #include "../../menu.h"
 
 bool checked_ok;
-static char pchar[] = { 0x20, 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
+static char pchar[] = { 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
 static void neogeo_osd_progress(const char* name, unsigned int progress)
 {
 	static char progress_buf[64];
 	memset(progress_buf, ' ', sizeof(progress_buf));
 
 	// OSD width - width of white bar on the left - max width of file name = 32 - 2 - 11 - 1 = 18
-	progress = (progress * 126) >> 8;
-	if (progress >= 126) progress = 126;
+	progress = (progress * 108) >> 8;
+	if (progress > 108) progress = 108;
 
-	char c = pchar[progress % 7];
-	progress /= 7;
+	char c = pchar[progress % 6];
+	progress /= 6;
 
 	strcpy(progress_buf, name);
 	char *buf = progress_buf + strlen(progress_buf);
 	*buf++ = ' ';
 
-	for (unsigned int i = 0; i < progress; i++) buf[1 + i] = (i < (progress-1)) ? 0x7F : c;
+	for (unsigned int i = 0; i <= progress; i++) buf[1 + i] = (i < progress) ? 0x7F : c;
 	buf[19] = 0;
 
 	Info(progress_buf);
@@ -62,7 +62,7 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 
 	FileSeek(&f, offset, SEEK_SET);
 
-	printf("Loading %s (offset %lu, size %lu, type %u) with index 0x%02X\n", name, offset, bytes2send, neo_file_type, index);
+	printf("Loading %s (offset %lu, size %lu, type %u) with index %u\n", name, offset, bytes2send, neo_file_type, index);
 
 	// Put pairs of bitplanes in the correct order for the core
 	if (neo_file_type == NEO_FILE_SPR && index != 15) index ^= 1;
