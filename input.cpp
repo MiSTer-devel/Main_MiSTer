@@ -3200,7 +3200,7 @@ void input_notify_mode()
 void input_switch(int grab)
 {
 	if (grab >= 0) grabbed = grab;
-	printf("input_switch(%d), grabbed = %d\n", grab, grabbed);
+	//printf("input_switch(%d), grabbed = %d\n", grab, grabbed);
 
 	for (int i = 0; i < NUMDEV; i++)
 	{

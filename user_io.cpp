@@ -2906,7 +2906,7 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 
 void user_io_osd_key_enable(char on)
 {
-	printf("OSD is now %s\n", on ? "visible" : "invisible");
+	//printf("OSD is now %s\n", on ? "visible" : "invisible");
 	osd_is_visible = on;
 	input_switch(-1);
 }
