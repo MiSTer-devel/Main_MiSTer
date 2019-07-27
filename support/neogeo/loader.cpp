@@ -300,11 +300,13 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	static char file_type = 0;
 	static unsigned long int file_offset = 0, file_size = 0;
 	static unsigned char hw_type = 0, use_pcm = 0;
+	static int file_cnt = 0;
 
 	switch (evt)
 	{
 	case XML_EVENT_START_NODE:
 		if (!strcasecmp(node->tag, "romset")) {
+			file_cnt = 0;
 			for (int i = 0; i < node->n_attributes; i++) {
 				if (!strcasecmp(node->attributes[i].name, "name")) {
 					if (!strcasecmp(node->attributes[i].value, romset)) {
@@ -383,17 +385,29 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 						file_size = strtol(node->attributes[i].value, NULL, 0);
 				}
 				in_file = 1;
+				file_cnt++;
 			}
 		}
 		break;
 
 	case XML_EVENT_END_NODE:
 		if (in_correct_romset) {
-			if (!strcasecmp(node->tag, "romset")) {
-					printf("Setting cart hardware type to %u\n", hw_type);
-					user_io_8bit_set_status(((uint32_t)hw_type & 3) << 24, 0x03000000);
-					printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
-					user_io_8bit_set_status(((uint32_t)use_pcm & 1) << 26, 0x04000000);
+			if (!strcasecmp(node->tag, "romset"))
+			{
+				if (!file_cnt)
+				{
+					printf("No parts specified. Trying to load known files:\n");
+					neogeo_file_tx(romset, "prom", NEO_FILE_RAW, 4, 0, 0);
+					neogeo_file_tx(romset, "srom", NEO_FILE_FIX, 8, 0, 0);
+					neogeo_file_tx(romset, "crom0", NEO_FILE_SPR, 15, 0, 0);
+					neogeo_file_tx(romset, "m1rom", NEO_FILE_RAW, 9, 0, 0);
+					neogeo_file_tx(romset, "vroma0", NEO_FILE_RAW, 16, 0, 0);
+					neogeo_file_tx(romset, "vromb0", NEO_FILE_RAW, 48, 0, 0);
+				}
+				printf("Setting cart hardware type to %u\n", hw_type);
+				user_io_8bit_set_status(((uint32_t)hw_type & 3) << 24, 0x03000000);
+				printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
+				user_io_8bit_set_status(((uint32_t)use_pcm & 1) << 26, 0x04000000);
 				return 0;
 			} else if (!strcasecmp(node->tag, "file")) {
 				if (in_file)
