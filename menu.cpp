@@ -1576,15 +1576,9 @@ void HandleUI(void)
 		printf("File selected: %s\n", SelectedPath);
 		if (fs_Options & SCANO_NEOGEO)
 		{
-			if (!neogeo_romset_tx(SelectedPath))
-			{
-				OsdSetTitle("Message", 0);
-				OsdEnable(0); // do not disable keyboard
-				menu_timer = GetTimer(2000);
-				menustate = MENU_INFO;
-			} else {
-				menustate = MENU_NONE1;
-			}
+			menustate = MENU_NONE1;
+			HandleUI();
+			neogeo_romset_tx(SelectedPath);
 		}
 		else
 		{

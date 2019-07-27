@@ -4,7 +4,6 @@
 // (C) 2019 Sean 'furrtek' Gonsalves
 
 #include "graphics.h"
-#include "../../spi.h"
 
 void spr_convert(uint8_t* buf_in, uint8_t* buf_out, unsigned int size)
 {
@@ -25,13 +24,13 @@ void spr_convert(uint8_t* buf_in, uint8_t* buf_out, unsigned int size)
 	[(40 41) (00 01) (42 43) (02 03)]
 	[(44 45) (04 05) (46 47) (06 07)]...
 	Word interleaving is done on the FPGA side to mix the two C ROMs data (even/odd)
-	
+
 	In:  FEDCBA9876 54321 0
 	Out: FEDCBA9876 15432 0
 	*/
 	for (unsigned int i = 0; i < size; i++)
 		buf_out[i] = buf_in[(i & 0xFFC0) | (i & 1) | ((i >> 1) & 0x1E) | (((i & 2) ^ 2) << 4)];
-	
+
 	/*
 	0 <- 20
 	1 <- 21
@@ -42,13 +41,38 @@ void spr_convert(uint8_t* buf_in, uint8_t* buf_out, unsigned int size)
 	6 <- 02
 	7 <- 03
 	...
-	
+
 	00 -> 02
 	01 -> 03
 	02 -> 06
 	03 -> 07
 	...
 	*/
+}
+
+void spr_convert_dbl(uint8_t* buf_in, uint8_t* buf_out, unsigned int size)
+{
+	/*
+	In C ROMs, a word provides two bitplanes for an 8-pixel wide line
+	They're used in pairs to provide 32 bits at once (all four bitplanes)
+	For one sprite tile, bytes are used like this: ([...] represents one 8-pixel wide line)
+	ROM
+	[  42 43  ][  02 03  ][  40 41  ][  00 01  ]
+	[  46 47  ][  06 07  ][  44 45  ][  04 05  ]
+	[  4A 4B  ][  0A 0B  ][  48 49  ][  08 09  ]
+	[  4E 4F  ][  0E 0F  ][  4C 4D  ][  0C 0D  ]
+	[  52 53  ][  12 13  ][  50 51  ][  10 11  ]
+	...					  ...
+	The data read for a given tile line (16 pixels) is always the same, only the rendering order of the pixels can change
+	To take advantage of the SDRAM burst read feature, the data can be loaded so that all 16 pixels of a tile
+	line can be read sequentially: () are 16-bit words, [] is the 4-word burst read
+	[(40 41) (00 01) (42 43) (02 03)]
+	[(44 45) (04 05) (46 47) (06 07)]...
+	This is consolidated version of C ROM with both parts in one.
+
+	*/
+	for (unsigned int i = 0; i < size; i++)
+		buf_out[i] = buf_in[(i & 0xFF80) | ((i ^ 2) & 3) | ((i >> 1) & 0x3C) | (((i & 4) ^ 4) << 4)];
 }
 
 void fix_convert(uint8_t* buf_in, uint8_t* buf_out, unsigned int size)
@@ -69,7 +93,7 @@ void fix_convert(uint8_t* buf_in, uint8_t* buf_out, unsigned int size)
 	line can be read sequentially: () are 16-bit words, [] is the 2-word burst read
 	[(10 18) (00 08)]
 	[(11 19) (01 09)]...
-	
+
 	In:  FEDCBA9876543210
 	Out: FEDCBA9876510432
 	*/

@@ -10,26 +10,30 @@
 #include "../../sxmlc.h"
 #include "../../user_io.h"
 #include "../../osd.h"
+#include "../../menu.h"
 
 bool checked_ok;
-
-void neogeo_osd_progress(const char* name, unsigned int progress) {
-	char progress_buf[30 + 1];
+static char pchar[] = { 0x20, 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
+static void neogeo_osd_progress(const char* name, unsigned int progress)
+{
+	static char progress_buf[64];
+	memset(progress_buf, ' ', sizeof(progress_buf));
 
 	// OSD width - width of white bar on the left - max width of file name = 32 - 2 - 11 - 1 = 18
-	progress = (progress * 18) >> 8;
-	if (progress >= 18) progress = 18;
+	progress = (progress * 126) >> 8;
+	if (progress >= 126) progress = 126;
 
-	// ##############################
-	// NNNNNNNNNNN-PPPPPPPPPPPPPPPPPP
-	memset(progress_buf, ' ', 30);
-	memcpy(progress_buf, name, strlen(name));
-	for (unsigned int i = 0; i < progress; i++)
-		progress_buf[12 + i] = 0x7f;
-	progress_buf[30] = 0;
+	char c = pchar[progress % 7];
+	progress /= 7;
 
-	OsdWrite(OsdGetSize() - 2);
-	OsdWrite(OsdGetSize() - 1, progress_buf, 0);
+	strcpy(progress_buf, name);
+	char *buf = progress_buf + strlen(progress_buf);
+	*buf++ = ' ';
+
+	for (unsigned int i = 0; i < progress; i++) buf[1 + i] = (i < (progress-1)) ? 0x7F : c;
+	buf[19] = 0;
+
+	Info(progress_buf);
 }
 
 int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_type, unsigned char index, unsigned long offset, unsigned long size)
@@ -59,7 +63,7 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 	printf("Loading %s (offset %lu, size %lu, type %u) with index 0x%02X\n", name, offset, bytes2send, neo_file_type, index);
 
 	// Put pairs of bitplanes in the correct order for the core
-	if (neo_file_type == NEO_FILE_SPR) index ^= 1;
+	if (neo_file_type == NEO_FILE_SPR && index != 15) index ^= 1;
 	// set index byte
 	user_io_set_index(index);
 
@@ -68,6 +72,8 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 	spi8(UIO_FILE_TX);
 	spi8(0xff);
 	DisableFpga();
+
+	int progress = -1;
 
 	while (bytes2send)
 	{
@@ -87,7 +93,10 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 			if (neo_file_type == NEO_FILE_FIX)
 				fix_convert(buf, buf_out, sizeof(buf_out));
 			else if (neo_file_type == NEO_FILE_SPR)
-				spr_convert(buf, buf_out, sizeof(buf_out));
+			{
+				if(index == 15) spr_convert_dbl(buf, buf_out, sizeof(buf_out));
+					else spr_convert(buf, buf_out, sizeof(buf_out));
+			}
 
 			clock_gettime(CLOCK_REALTIME, &ts1);	// DEBUG PROFILING
 				spi_write(buf_out, chunk, 1);
@@ -102,8 +111,12 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 		}
 
 		DisableFpga();
-
-		neogeo_osd_progress(name, 256 - ((bytes2send << 8) / size));
+		int new_progress = 256 - ((((uint64_t)bytes2send) << 8)/size);
+		if (progress != new_progress)
+		{
+			progress = new_progress;
+			neogeo_osd_progress(name, progress);
+		}
 		bytes2send -= chunk;
 	}
 
@@ -243,7 +256,7 @@ static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 						else {
 							printf("Missing %s\n", full_path);
 							sprintf(full_path, "Missing %s !", node->attributes[i].value);
-							OsdWrite(OsdGetSize() - 1, full_path, 0);
+							Info(full_path);
 							return false;
 						}
 					}
