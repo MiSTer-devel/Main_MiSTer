@@ -398,7 +398,10 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				{
 					printf("No parts specified. Trying to load known files:\n");
 					neogeo_file_tx(romset, "prom", NEO_FILE_RAW, 4, 0, 0);
+					neogeo_file_tx(romset, "p1rom", NEO_FILE_RAW, 4, 0, 0);
+					neogeo_file_tx(romset, "p2rom", NEO_FILE_RAW, 6, 0, 0);
 					neogeo_file_tx(romset, "srom", NEO_FILE_FIX, 8, 0, 0);
+					neogeo_file_tx(romset, "sfix", NEO_FILE_FIX, 2, 0, 0);
 					neogeo_file_tx(romset, "crom0", NEO_FILE_SPR, 15, 0, 0);
 					neogeo_file_tx(romset, "m1rom", NEO_FILE_RAW, 9, 0, 0);
 					neogeo_file_tx(romset, "vroma0", NEO_FILE_RAW, 16, 0, 0);
