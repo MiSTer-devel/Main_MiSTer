@@ -950,7 +950,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	if (mode == SCANF_INIT)
 	{
 		file_name[0] = 0;
-		if (is_neogeo_core() && !(options & (SCANO_CORES | SCANO_UMOUNT)))
+		if (options & SCANO_NEOGEO)
 		{
 			neogeo_scan_xml();
 			uint32_t len = strlen(HomeDir);
@@ -1077,7 +1077,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				}
 			}
 
-			if (is_neogeo_core() && !(options & (SCANO_CORES | SCANO_UMOUNT)))
+			if (options & SCANO_NEOGEO)
 			{
 				if (de->d_type != DT_DIR) continue;
 				if (!strcmp(de->d_name, ".")) continue;

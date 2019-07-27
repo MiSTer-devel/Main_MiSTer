@@ -1504,7 +1504,7 @@ void HandleUI(void)
 						if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
-						SelectFile(ext, SCANO_DIR, MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
+						SelectFile(ext, SCANO_DIR | (is_neogeo_core() ? SCANO_NEOGEO : 0), MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
 					}
 					else if (p[0] == 'S')
 					{
@@ -1574,7 +1574,7 @@ void HandleUI(void)
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
 		printf("File selected: %s\n", SelectedPath);
-		if (is_neogeo_core())
+		if (fs_Options & SCANO_NEOGEO)
 		{
 			if (!neogeo_romset_tx(SelectedPath))
 			{
@@ -3125,7 +3125,8 @@ void HandleUI(void)
 							strcpy(SelectedDir, SelectedPath);
 							strcat(SelectedPath, "/");
 						}
-						if (is_neogeo_core())
+
+						if (fs_Options & SCANO_NEOGEO)
 						{
 							strcat(SelectedPath, neogeo_get_name(flist_SelectedItem()->d_ino));
 						}

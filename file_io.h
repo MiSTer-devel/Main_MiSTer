@@ -41,6 +41,7 @@ dirent* flist_SelectedItem();
 #define SCANO_UMOUNT     2 // allow backspace key
 #define SCANO_CORES      4 // only include subdirectories with prefix '_'
 #define SCANO_COEFF      8
+#define SCANO_NEOGEO     16
 
 void FindStorage();
 int  getStorage(int from_setting);
