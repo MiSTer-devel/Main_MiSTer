@@ -54,7 +54,7 @@ int neogeo_file_tx(const char* romset, const char* name, unsigned char neo_file_
 	strcat(name_buf, name);
 
 	if (!FileOpen(&f, name_buf, 0)) return 0;
-	if (!size) size = f.size;
+	if (!size && offset < f.size) size = f.size - offset;
 	if (!size) return 0;
 
 	unsigned long bytes2send = size;
@@ -347,7 +347,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	static int in_file = 0;
 	static unsigned char file_index = 0;
 	static char file_type = 0;
-	static unsigned long int file_offset = 0, file_size = 0;
+	static unsigned long int file_offset = 0, file_size = 0, vromb_offset = 0;
 	static unsigned char hw_type = 0, use_pcm = 0;
 	static int file_cnt = 0;
 
@@ -356,10 +356,13 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	case XML_EVENT_START_NODE:
 		if (!strcasecmp(node->tag, "romset")) {
 			file_cnt = 0;
+			vromb_offset = 0;
+			use_pcm = 1;
+			hw_type = 0;
 			if (!romsets) in_correct_romset = 1;
 			for (int i = 0; i < node->n_attributes; i++) {
-				if (romsets && !strcasecmp(node->attributes[i].name, "name")) {
-					if (!strcasecmp(node->attributes[i].value, romset)) {
+				if (!strcasecmp(node->attributes[i].name, "name")) {
+					if (!romsets || !strcasecmp(node->attributes[i].value, romset)) {
 						printf("Romset %s found !\n", romset);
 						in_correct_romset = 1;
 					} else {
@@ -369,6 +372,9 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 					hw_type = atoi(node->attributes[i].value);
 				} else if (!strcasecmp(node->attributes[i].name, "pcm")) {
 					use_pcm = atoi(node->attributes[i].value);
+				} else if (!strcasecmp(node->attributes[i].name, "vromb_offset")) {
+					vromb_offset = strtoul(node->attributes[i].value, NULL, 0);
+					use_pcm = 0;
 				}
 			}
 		}
@@ -454,8 +460,16 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 					neogeo_file_tx(romset, "sfix", NEO_FILE_FIX, 2, 0, 0);
 					neogeo_file_tx(romset, "crom0", NEO_FILE_SPR, 15, 0, 0);
 					neogeo_file_tx(romset, "m1rom", NEO_FILE_RAW, 9, 0, 0);
-					neogeo_file_tx(romset, "vroma0", NEO_FILE_RAW, 16, 0, 0);
-					neogeo_file_tx(romset, "vromb0", NEO_FILE_RAW, 48, 0, 0);
+					if (vromb_offset)
+					{
+						neogeo_file_tx(romset, "vroma0", NEO_FILE_RAW, 16, 0, vromb_offset);
+						neogeo_file_tx(romset, "vroma0", NEO_FILE_RAW, 48, vromb_offset, 0);
+					}
+					else
+					{
+						neogeo_file_tx(romset, "vroma0", NEO_FILE_RAW, 16, 0, 0);
+						if(!use_pcm) neogeo_file_tx(romset, "vromb0", NEO_FILE_RAW, 48, 0, 0);
+					}
 				}
 				printf("Setting cart hardware type to %u\n", hw_type);
 				user_io_8bit_set_status(((uint32_t)hw_type & 3) << 24, 0x03000000);
