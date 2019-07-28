@@ -598,8 +598,7 @@ int FileLoadConfig(const char *name, void *pBuffer, int size)
 
 int FileExists(const char *name)
 {
-	sprintf(full_path, "%s/%s", getRootDir(), name);
-	return !access(full_path, F_OK);
+	return !access(make_fullpath(name), F_OK);
 }
 
 int FileCanWrite(const char *name)
@@ -950,32 +949,20 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	if (mode == SCANF_INIT)
 	{
 		file_name[0] = 0;
-		if (options & SCANO_NEOGEO)
+		if (options & SCANO_NEOGEO) neogeo_scan_xml();
+
+		if ((options & SCANO_NOENTER) || !isPathDirectory(path))
 		{
-			neogeo_scan_xml();
-			uint32_t len = strlen(HomeDir);
-			if (strlen(path) > len)
+			char *p = strrchr(path, '/');
+			if (p)
 			{
-				path[len] = 0;
-				strcpy(file_name, path + len + 1);
+				strcpy(file_name, p + 1);
+				*p = 0;
 			}
-		}
-		else
-		{
-			if (!isPathDirectory(path))
+			else
 			{
-				bool isfile = isPathRegularFile(path);
-				char *p = strrchr(path, '/');
-				if (p)
-				{
-					if (isfile) strcpy(file_name, p + 1);
-					*p = 0;
-				}
-				else
-				{
-					if (isfile) strcpy(file_name, path);
-					path[0] = 0;
-				}
+				strcpy(file_name, path);
+				path[0] = 0;
 			}
 		}
 
@@ -989,6 +976,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		int path_len = strlen(full_path);
 
 		printf("Start to scan %sdir: %s\n", is_zipped ? "zipped " : "", full_path);
+		printf("Position on item: %s\n", file_name);
 
 		char *zip_path, *file_path_in_zip = (char*)"";
 		FileIsZipped(full_path, &zip_path, &file_path_in_zip);
@@ -1076,17 +1064,23 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			{
 				if (de->d_type != DT_DIR) continue;
 				if (!strcmp(de->d_name, ".")) continue;
-				if (!strcmp(de->d_name, "..")) continue;
+				if (!strcmp(de->d_name, ".."))
+				{
+					if (!strlen(path)) continue;
+				}
+
+				direntext_t dext = { *de, 0, "" };
+				memcpy(dext.altname, de->d_name, sizeof(dext.altname));
 
 				full_path[path_len] = 0;
 				char *altname = neogeo_get_altname(full_path, de->d_name);
 				if (altname)
 				{
-					direntext_t dext = { *de, 0, "" };
 					dext.de.d_type = DT_REG;
 					memcpy(dext.altname, altname, sizeof(dext.altname));
-					DirItem.push_back(dext);
 				}
+
+				DirItem.push_back(dext);
 			}
 			else
 			{

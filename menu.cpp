@@ -325,9 +325,10 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 	{
 		pFileExt = "TXT";
 	}
-	else
+	else if (strncasecmp(HomeDir, SelectedPath, strlen(HomeDir)))
 	{
-		if (strncasecmp(HomeDir, SelectedPath, strlen(HomeDir))) strcpy(SelectedPath, HomeDir);
+		Options &= ~SCANO_NOENTER;
+		strcpy(SelectedPath, HomeDir);
 	}
 
 	ScanDirectory(SelectedPath, SCANF_INIT, pFileExt, Options);
@@ -341,7 +342,7 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 
 	strcpy(fs_pFileExt, pFileExt);
 	fs_ExtLen = strlen(fs_pFileExt);
-	fs_Options = Options;
+	fs_Options = Options & ~SCANO_NOENTER;
 	fs_MenuSelect = MenuSelect;
 	fs_MenuCancel = MenuCancel;
 
@@ -1504,7 +1505,7 @@ void HandleUI(void)
 						if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
-						SelectFile(ext, SCANO_DIR | (is_neogeo_core() ? SCANO_NEOGEO : 0), MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
+						SelectFile(ext, SCANO_DIR | (is_neogeo_core() ? SCANO_NEOGEO | SCANO_NOENTER : 0), MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
 					}
 					else if (p[0] == 'S')
 					{

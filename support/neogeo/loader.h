@@ -5,7 +5,6 @@
 #define NEO_FILE_FIX 2
 #define NEO_FILE_SPR 3
 
-extern bool checked_ok;
 int neogeo_romset_tx(char* name);
 int neogeo_scan_xml();
 char *neogeo_get_altname(char *path, char *name);

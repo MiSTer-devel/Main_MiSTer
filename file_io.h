@@ -49,6 +49,7 @@ direntext_t* flist_SelectedItem();
 #define SCANO_CORES      4 // only include subdirectories with prefix '_'
 #define SCANO_COEFF      8
 #define SCANO_NEOGEO     16
+#define SCANO_NOENTER    32
 
 void FindStorage();
 int  getStorage(int from_setting);
