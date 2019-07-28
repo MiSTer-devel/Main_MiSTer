@@ -21,11 +21,18 @@ typedef struct
 	char            name[261];
 }  fileTYPE;
 
+struct direntext_t
+{
+	dirent de;
+	int  cookie;
+	char altname[256];
+};
+
 int flist_nDirEntries();
 int flist_iFirstEntry();
 int flist_iSelectedEntry();
-dirent* flist_DirItem(int n);
-dirent* flist_SelectedItem();
+direntext_t* flist_DirItem(int n);
+direntext_t* flist_SelectedItem();
 
 // scanning flags
 #define SCANF_INIT       0 // start search from beginning of directory

@@ -3036,7 +3036,7 @@ void HandleUI(void)
 
 		if (menu)
 		{
-			if (flist_nDirEntries() && flist_SelectedItem()->d_type != DT_DIR)
+			if (flist_nDirEntries() && flist_SelectedItem()->de.d_type != DT_DIR)
 			{
 				SelectedDir[0] = 0;
 				if (strlen(SelectedPath))
@@ -3044,7 +3044,7 @@ void HandleUI(void)
 					strcpy(SelectedDir, SelectedPath);
 					strcat(SelectedPath, "/");
 				}
-				strcat(SelectedPath, flist_SelectedItem()->d_name);
+				strcat(SelectedPath, flist_SelectedItem()->de.d_name);
 			}
 
 			if (!strcasecmp(fs_pFileExt, "RBF")) SelectedPath[0] = 0;
@@ -3104,9 +3104,9 @@ void HandleUI(void)
 
 			if (select)
 			{
-				if (flist_SelectedItem()->d_type == DT_DIR)
+				if (flist_SelectedItem()->de.d_type == DT_DIR)
 				{
-					changeDir(flist_SelectedItem()->d_name);
+					changeDir(flist_SelectedItem()->de.d_name);
 					menustate = MENU_FILE_SELECT1;
 				}
 				else
@@ -3120,15 +3120,7 @@ void HandleUI(void)
 							strcat(SelectedPath, "/");
 						}
 
-						if (fs_Options & SCANO_NEOGEO)
-						{
-							strcat(SelectedPath, neogeo_get_name(flist_SelectedItem()->d_ino));
-						}
-						else
-						{
-							strcat(SelectedPath, flist_SelectedItem()->d_name);
-						}
-
+						strcat(SelectedPath, flist_SelectedItem()->de.d_name);
 						menustate = fs_MenuSelect;
 					}
 				}
@@ -4129,7 +4121,7 @@ void HandleUI(void)
 		helptext = 0;
 		menumask = 1;
 		menusub = 0;
-		OsdSetTitle((parentstate == MENU_BTPAIR) ? "BT Pairing" : flist_SelectedItem()->d_name, 0);
+		OsdSetTitle((parentstate == MENU_BTPAIR) ? "BT Pairing" : flist_SelectedItem()->de.d_name, 0);
 		menustate = MENU_SCRIPTS1;
 		if (parentstate != MENU_BTPAIR) parentstate = MENU_SCRIPTS;
 		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
@@ -4182,7 +4174,7 @@ void HandleUI(void)
 			if (!script_exited)
 			{
 				strcpy(script_command, "killall ");
-				strcat(script_command, (parentstate == MENU_BTPAIR) ? "btpair" : flist_SelectedItem()->d_name);
+				strcat(script_command, (parentstate == MENU_BTPAIR) ? "btpair" : flist_SelectedItem()->de.d_name);
 				system(script_command);
 				pclose(script_pipe);
 				cpu_set_t set;
@@ -4383,8 +4375,8 @@ void ScrollLongName(void)
 	static int len;
 	int max_len;
 
-	len = strlen(flist_SelectedItem()->d_name); // get name length
-	if (flist_SelectedItem()->d_type == DT_REG) // if a file
+	len = strlen(flist_SelectedItem()->altname); // get name length
+	if (flist_SelectedItem()->de.d_type == DT_REG) // if a file
 	{
 		if (fs_ExtLen <= 3)
 		{
@@ -4401,15 +4393,15 @@ void ScrollLongName(void)
 			e[0] = '.';
 			e[4] = 0;
 			int l = strlen(e);
-			if ((len>l) && !strncasecmp(flist_SelectedItem()->d_name + len - l, e, l)) len -= l;
+			if ((len>l) && !strncasecmp(flist_SelectedItem()->altname + len - l, e, l)) len -= l;
 		}
 	}
 
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
-	if (flist_SelectedItem()->d_type == DT_DIR)
+	if (flist_SelectedItem()->de.d_type == DT_DIR)
 		max_len = 25; // number of directory name characters to display
 
-	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->d_name, 0, len, max_len, 1);
+	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
 }
 
 void PrintFileName(char *name, int row, int maxinv)
@@ -4479,9 +4471,9 @@ void PrintDirectory(void)
 		{
 			k = flist_iFirstEntry() + i;
 
-			len = strlen(flist_DirItem(k)->d_name); // get name length
+			len = strlen(flist_DirItem(k)->altname); // get name length
 
-			if (!(flist_DirItem(k)->d_type == DT_DIR)) // if a file
+			if (!(flist_DirItem(k)->de.d_type == DT_DIR)) // if a file
 			{
 				if (fs_ExtLen <= 3)
 				{
@@ -4498,7 +4490,7 @@ void PrintDirectory(void)
 					e[0] = '.';
 					e[4] = 0;
 					int l = strlen(e);
-					if ((len>l) && !strncasecmp(flist_DirItem(k)->d_name + len - l, e, l))
+					if ((len>l) && !strncasecmp(flist_DirItem(k)->altname + len - l, e, l))
 					{
 						len -= l;
 					}
@@ -4506,9 +4498,9 @@ void PrintDirectory(void)
 			}
 
 			char *p = 0;
-			if ((fs_Options & SCANO_CORES) && len > 9 && !strncmp(flist_DirItem(k)->d_name + len - 9, "_20", 3))
+			if ((fs_Options & SCANO_CORES) && len > 9 && !strncmp(flist_DirItem(k)->altname + len - 9, "_20", 3))
 			{
-				p = flist_DirItem(k)->d_name + len - 6;
+				p = flist_DirItem(k)->altname + len - 6;
 				len -= 9;
 			}
 
@@ -4518,18 +4510,18 @@ void PrintDirectory(void)
 				s[28] = 22;
 			}
 
-			if((flist_DirItem(k)->d_type == DT_DIR) && (fs_Options & SCANO_CORES) && (flist_DirItem(k)->d_name[0] == '_'))
+			if((flist_DirItem(k)->de.d_type == DT_DIR) && (fs_Options & SCANO_CORES) && (flist_DirItem(k)->altname[0] == '_'))
 			{
-				strncpy(s + 1, flist_DirItem(k)->d_name+1, len-1);
+				strncpy(s + 1, flist_DirItem(k)->altname+1, len-1);
 			}
 			else
 			{
-				strncpy(s + 1, flist_DirItem(k)->d_name, len); // display only name
+				strncpy(s + 1, flist_DirItem(k)->altname, len); // display only name
 			}
 
-			if (flist_DirItem(k)->d_type == DT_DIR) // mark directory with suffix
+			if (flist_DirItem(k)->de.d_type == DT_DIR) // mark directory with suffix
 			{
-				if (!strcmp(flist_DirItem(k)->d_name, ".."))
+				if (!strcmp(flist_DirItem(k)->altname, ".."))
 				{
 					strcpy(&s[19], " <UP-DIR>");
 				}

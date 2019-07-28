@@ -192,6 +192,43 @@ static int xml_scan(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 	return true;
 }
 
+static int xml_get_altname(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
+{
+	char* altname = (char*)sd->user;
+
+	switch (evt)
+	{
+	case XML_EVENT_START_NODE:
+		if (!strcasecmp(node->tag, "romset") && (rom_cnt < (sizeof(roms) / sizeof(roms[0]))))
+		{
+			memset(&roms[rom_cnt], 0, sizeof(rom_info));
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "name")) strncpy(altname, node->attributes[i].value, 255);
+			}
+
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "altname")) strncpy(altname, node->attributes[i].value, 255);
+			}
+			rom_cnt++;
+		}
+		break;
+
+	case XML_EVENT_END_NODE:
+		break;
+
+	case XML_EVENT_ERROR:
+		printf("XML parse: %s: ERROR %d\n", text, n);
+		break;
+	default:
+		break;
+	}
+
+	return true;
+}
+
+
 int neogeo_scan_xml()
 {
 	static char full_path[1024];
@@ -205,28 +242,35 @@ int neogeo_scan_xml()
 	return rom_cnt;
 }
 
-dirent *neogeo_set_altname(char *name)
+char *neogeo_get_altname(char *path, char *name)
 {
-	static dirent de;
+	static char full_path[1024];
+	strcpy(full_path, path);
+	strcat(full_path, "/");
+	strcat(full_path, name);
+	strcat(full_path, "/romset.xml");
+
+	if (!access(full_path, F_OK))
+	{
+		static char altname[256];
+		altname[0] = 0;
+
+		SAX_Callbacks sax;
+		SAX_Callbacks_init(&sax);
+
+		sax.all_event = xml_get_altname;
+		XMLDoc_parse_file_SAX(full_path, &sax, &altname);
+		if (*altname) return altname;
+	}
+
 	for (uint32_t i = 0; i < rom_cnt; i++)
 	{
-		if (!strcasecmp(name, roms[i].name))
-		{
-			memcpy(de.d_name, roms[i].altname, sizeof(de.d_name));
-			de.d_ino = i;
-			de.d_type = DT_REG;
-			return &de;
-		}
+		if (!strcasecmp(name, roms[i].name)) return roms[i].altname;
 	}
 	return NULL;
 }
 
-const char *neogeo_get_name(uint32_t num)
-{
-	if (num < rom_cnt) return roms[num].name;
-	return "";
-}
-
+static int romsets = 0;
 static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 	const char* romset = (const char*)sd->user;
@@ -236,8 +280,13 @@ static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 	switch (evt)
 	{
 	case XML_EVENT_START_NODE:
+		if (!strcasecmp(node->tag, "romsets")) romsets = 1;
+
 		if (!strcasecmp(node->tag, "romset")) {
-			if (!strcasecmp(node->attributes[0].value, romset)) {
+			if (!romsets) {
+				in_correct_romset = 1;
+			}
+			else if (!strcasecmp(node->attributes[0].value, romset)) {
 				printf("Romset %s found !\n", romset);
 				in_correct_romset = 1;
 			}
@@ -307,8 +356,9 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	case XML_EVENT_START_NODE:
 		if (!strcasecmp(node->tag, "romset")) {
 			file_cnt = 0;
+			if (!romsets) in_correct_romset = 1;
 			for (int i = 0; i < node->n_attributes; i++) {
-				if (!strcasecmp(node->attributes[i].name, "name")) {
+				if (romsets && !strcasecmp(node->attributes[i].name, "name")) {
 					if (!strcasecmp(node->attributes[i].value, romset)) {
 						printf("Romset %s found !\n", romset);
 						in_correct_romset = 1;
@@ -449,11 +499,16 @@ int neogeo_romset_tx(char* name) {
 		if (!p) return 0;
 		strncpy(romset, p + 1, strlen(p + 1));
 
-		sprintf(full_path, "%s/neogeo/romsets.xml", getRootDir());
+		sprintf(full_path, "%s/%s/romset.xml", getRootDir(), name);
+		if (access(full_path, F_OK)) sprintf(full_path, "%s/neogeo/romsets.xml", getRootDir());
+
+		printf("xml for %s: %s\n", name, full_path);
+
 		SAX_Callbacks sax;
 		SAX_Callbacks_init(&sax);
 
 		checked_ok = false;
+		romsets = 0;
 		sax.all_event = xml_check_files;
 		XMLDoc_parse_file_SAX(full_path, &sax, romset);
 		if (!checked_ok) return 0;
