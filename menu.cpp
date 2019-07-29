@@ -325,7 +325,7 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 	{
 		pFileExt = "TXT";
 	}
-	else if (strncasecmp(HomeDir, SelectedPath, strlen(HomeDir)))
+	else if (strncasecmp(HomeDir, SelectedPath, strlen(HomeDir)) || !strcasecmp(HomeDir, SelectedPath))
 	{
 		Options &= ~SCANO_NOENTER;
 		strcpy(SelectedPath, HomeDir);

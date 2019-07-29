@@ -131,7 +131,7 @@ static int neogeo_file_tx(const char* path, const char* name, unsigned char neo_
 
 struct rom_info
 {
-	char name[16];
+	char name[256];
 	char altname[256];
 };
 
@@ -152,8 +152,11 @@ static int xml_scan(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 			{
 				if (!strcasecmp(node->attributes[i].name, "name"))
 				{
-					strncpy(roms[rom_cnt].name, node->attributes[i].value, sizeof(roms[rom_cnt].name) - 1);
-					strncpy(roms[rom_cnt].altname, node->attributes[i].value, sizeof(roms[rom_cnt].name) - 1);
+					if (strchr(node->attributes[i].value, ','))
+						snprintf(roms[rom_cnt].name, sizeof(roms[rom_cnt].name) - 1, ",%s,", node->attributes[i].value);
+					else
+						strncpy(roms[rom_cnt].name, node->attributes[i].value, sizeof(roms[rom_cnt].name) - 1);
+					strcpy(roms[rom_cnt].altname, "No name");
 				}
 			}
 
@@ -189,9 +192,8 @@ static int xml_get_altname(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 	switch (evt)
 	{
 	case XML_EVENT_START_NODE:
-		if (!strcasecmp(node->tag, "romset") && (rom_cnt < (sizeof(roms) / sizeof(roms[0]))))
+		if (!strcasecmp(node->tag, "romset"))
 		{
-			memset(&roms[rom_cnt], 0, sizeof(rom_info));
 			for (int i = 0; i < node->n_attributes; i++)
 			{
 				if (!strcasecmp(node->attributes[i].name, "name")) strncpy(altname, node->attributes[i].value, 255);
@@ -201,7 +203,6 @@ static int xml_get_altname(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 			{
 				if (!strcasecmp(node->attributes[i].name, "altname")) strncpy(altname, node->attributes[i].value, 255);
 			}
-			rom_cnt++;
 		}
 		break;
 
@@ -225,6 +226,7 @@ int neogeo_scan_xml()
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
 
+	memset(roms, 0, sizeof(roms));
 	rom_cnt = 0;
 	sax.all_event = xml_scan;
 	XMLDoc_parse_file_SAX(full_path, &sax, 0);
@@ -252,11 +254,40 @@ char *neogeo_get_altname(char *path, char *name)
 		if (*altname) return altname;
 	}
 
+	sprintf(full_path, ",%s,", name);
 	for (uint32_t i = 0; i < rom_cnt; i++)
 	{
-		if (!strcasecmp(name, roms[i].name)) return roms[i].altname;
+		if (roms[i].name[0] == ',')
+		{
+			char *p = strcasestr(roms[i].name, full_path);
+			if (p)
+			{
+				if(p == roms[i].name) return roms[i].altname;
+
+				sprintf(full_path, "%s (%s)", roms[i].altname, name);
+				return full_path;
+			}
+		}
+		else if (!strcasecmp(name, roms[i].name))
+		{
+			return roms[i].altname;
+		}
 	}
 	return NULL;
+}
+
+static int has_name(const char *nameset, const char *name)
+{
+	if (strchr(nameset, ','))
+	{
+		static char set[256], nm[32];
+		snprintf(set, sizeof(set) - 1, ",%s,", nameset);
+		snprintf(nm, sizeof(nm) - 1, ",%s,", name);
+
+		return strcasestr(set, nm) ? 1 : 0;
+	}
+
+	return !strcasecmp(nameset, name);
 }
 
 static int checked_ok;
@@ -283,7 +314,7 @@ static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 			{
 				in_correct_romset = 1;
 			}
-			else if (!strcasecmp(node->attributes[0].value, romset))
+			else if (has_name(node->attributes[0].value, romset))
 			{
 				printf("Romset %s found !\n", romset);
 				in_correct_romset = 1;
@@ -373,8 +404,8 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 			hw_type = 0;
 			if (!romsets) in_correct_romset = 1;
 			for (int i = 0; i < node->n_attributes; i++) {
-				if (!strcasecmp(node->attributes[i].name, "name")) {
-					if (!romsets || !strcasecmp(node->attributes[i].value, romset)) {
+				if (romsets && !strcasecmp(node->attributes[i].name, "name")) {
+					if (has_name(node->attributes[i].value, romset)) {
 						printf("Romset %s found !\n", romset);
 						in_correct_romset = 1;
 					} else {
