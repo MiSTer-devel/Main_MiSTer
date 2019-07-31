@@ -1063,7 +1063,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if (options & SCANO_NEOGEO)
 			{
 				if (de->d_type != DT_DIR) continue;
-				if (!strcmp(de->d_name, ".")) continue;
+				// skip hidden folders
+				if (!strncasecmp(de->d_name, ".", 1) && strcmp(de->d_name, "..")) continue;
 				if (!strcmp(de->d_name, ".."))
 				{
 					if (!strlen(path)) continue;
@@ -1086,7 +1087,10 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			{
 				if (de->d_type == DT_DIR)
 				{
-					if (!strcmp(de->d_name, ".")) continue;
+					// skip hidden folder
+					if (!strncasecmp(de->d_name, ".", 1) && strcmp(de->d_name, "..")) continue;
+					// skip System Volume Information folder
+					if (!strcmp(de->d_name, "System Volume Information")) continue;
 					if (!strcmp(de->d_name, ".."))
 					{
 						if (!strlen(path)) continue;
@@ -1100,6 +1104,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				}
 				else if (de->d_type == DT_REG)
 				{
+					// skip hidden files
+					if (!strncasecmp(de->d_name, ".", 1)) continue;
 					//skip non-selectable files
 					if (!strcasecmp(de->d_name, "menu.rbf")) continue;
 					if (!strncasecmp(de->d_name, "menu_20", 7)) continue;
