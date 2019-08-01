@@ -1063,11 +1063,14 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if (options & SCANO_NEOGEO)
 			{
 				if (de->d_type != DT_DIR) continue;
-				// skip hidden folders
-				if (!strncasecmp(de->d_name, ".", 1) && strcmp(de->d_name, "..")) continue;
 				if (!strcmp(de->d_name, ".."))
 				{
 					if (!strlen(path)) continue;
+				}
+				else
+				{
+					// skip hidden folders
+					if (!strncasecmp(de->d_name, ".", 1)) continue;
 				}
 
 				direntext_t dext = { *de, 0, "" };
@@ -1087,13 +1090,16 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			{
 				if (de->d_type == DT_DIR)
 				{
-					// skip hidden folder
-					if (!strncasecmp(de->d_name, ".", 1) && strcmp(de->d_name, "..")) continue;
 					// skip System Volume Information folder
 					if (!strcmp(de->d_name, "System Volume Information")) continue;
 					if (!strcmp(de->d_name, ".."))
 					{
 						if (!strlen(path)) continue;
+					}
+					else
+					{
+						// skip hidden folder
+						if (!strncasecmp(de->d_name, ".", 1)) continue;
 					}
 
 					if (!(options & SCANO_DIR))
