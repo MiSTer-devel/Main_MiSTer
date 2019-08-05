@@ -142,9 +142,6 @@
     <ClCompile Include="video.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="support\neogeo\graphics.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="support\neogeo\loader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -292,9 +289,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\imlib2\Imlib2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\neogeo\graphics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="support\neogeo\loader.h">

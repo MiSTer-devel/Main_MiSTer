@@ -5,12 +5,93 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <time.h>   // clock_gettime, CLOCK_REALTIME
-#include "graphics.h"
+#include <sys/mman.h>
 #include "loader.h"
 #include "../../sxmlc.h"
 #include "../../user_io.h"
 #include "../../osd.h"
 #include "../../menu.h"
+
+static inline void spr_convert(uint16_t* buf_in, uint16_t* buf_out, uint32_t size)
+{
+	/*
+	In C ROMs, a word provides two bitplanes for an 8-pixel wide line
+	They're used in pairs to provide 32 bits at once (all four bitplanes)
+	For one sprite tile, bytes are used like this: ([...] represents one 8-pixel wide line)
+	Even ROM					Odd ROM
+	[  40 41  ][  00 01  ]		[  42 43  ][  02 03  ]
+	[  44 45  ][  04 05  ]  	[  46 47  ][  06 07  ]
+	[  48 49  ][  08 09  ]  	[  4A 4B  ][  0A 0B  ]
+	[  4C 4D  ][  0C 0D  ]  	[  4E 4F  ][  0E 0F  ]
+	[  50 51  ][  10 11  ]  	[  52 53  ][  12 13  ]
+	...							...
+	The data read for a given tile line (16 pixels) is always the same, only the rendering order of the pixels can change
+	To take advantage of the SDRAM burst read feature, the data can be loaded so that all 16 pixels of a tile
+	line can be read sequentially: () are 16-bit words, [] is the 4-word burst read
+	[(40 41) (00 01) (42 43) (02 03)]
+	[(44 45) (04 05) (46 47) (06 07)]...
+	Word interleaving is done on the FPGA side to mix the two C ROMs data (even/odd)
+
+	In:  FEDCBA9876 54321 0
+	Out: FEDCBA9876 15432 0
+	*/
+
+	for (uint32_t i = 0; i < size; i++) buf_out[i] = buf_in[(i & ~0x1F) | ((i >> 1) & 0xF) | (((i & 1) ^ 1) << 4)];
+
+	/*
+	0 <- 20
+	1 <- 21
+	2 <- 00
+	3 <- 01
+	4 <- 22
+	5 <- 23
+	6 <- 02
+	7 <- 03
+	...
+
+	00 -> 02
+	01 -> 03
+	02 -> 06
+	03 -> 07
+	...
+	*/
+}
+
+static inline void spr_convert_skp(uint16_t* buf_in, uint16_t* buf_out, uint32_t size)
+{
+	for (uint32_t i = 0; i < size; i++) buf_out[i << 1] = buf_in[(i & ~0x1F) | ((i >> 1) & 0xF) | (((i & 1) ^ 1) << 4)];
+}
+
+static inline void spr_convert_dbl(uint16_t* buf_in, uint16_t* buf_out, uint32_t size)
+{
+	for (uint32_t i = 0; i < size; i++) buf_out[i] = buf_in[(i & ~0x3F) | ((i ^ 1) & 1) | ((i >> 1) & 0x1E) | (((i & 2) ^ 2) << 4)];
+}
+
+static void fix_convert(uint8_t* buf_in, uint8_t* buf_out, uint32_t size)
+{
+	/*
+	In S ROMs, a byte provides two pixels
+	For one fix tile, bytes are used like this: ([...] represents a pair of pixels)
+	[10][18][00][08]
+	[11][19][01][09]
+	[12][1A][02][0A]
+	[13][1B][03][0B]
+	[14][1C][04][0C]
+	[15][1D][05][0D]
+	[16][1E][06][0E]
+	[17][1F][07][0F]
+	The data read for a given tile line (8 pixels) is always the same
+	To take advantage of the SDRAM burst read feature, the data can be loaded so that all 8 pixels of a tile
+	line can be read sequentially: () are 16-bit words, [] is the 2-word burst read
+	[(10 18) (00 08)]
+	[(11 19) (01 09)]...
+
+	In:  FEDCBA9876543210
+	Out: FEDCBA9876510432
+	*/
+	for (uint32_t i = 0; i < size; i++) buf_out[i] = buf_in[(i & ~0x1F) | ((i >> 2) & 7) | ((i & 1) << 3) | (((i & 2) << 3) ^ 0x10)];
+}
+
 
 static char pchar[] = { 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
 static void neogeo_osd_progress(const char* name, unsigned int progress)
@@ -35,24 +116,22 @@ static void neogeo_osd_progress(const char* name, unsigned int progress)
 	Info(progress_buf);
 }
 
-static int neogeo_file_tx(const char* path, const char* name, unsigned char neo_file_type, unsigned char index, unsigned long offset, unsigned long size)
+static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_file_type, uint8_t index, uint32_t offset, uint32_t size)
 {
 	fileTYPE f = {};
 	uint8_t buf[4096];	// Same in user_io_file_tx
 	uint8_t buf_out[4096];
 	static char name_buf[1024];
-	struct timespec ts1, ts2;	// DEBUG PROFILING
-	long us_acc = 0;	// DEBUG PROFILING
 
 	sprintf(name_buf, "%s/%s", path, name);
 	if (!FileOpen(&f, name_buf, 0)) return 0;
 	if (!size && offset < f.size) size = f.size - offset;
 	if (!size) return 0;
 
-	unsigned long bytes2send = size;
+	uint32_t bytes2send = size;
 
 	FileSeek(&f, offset, SEEK_SET);
-	printf("Loading %s (offset %lu, size %lu, type %u) with index %u\n", name, offset, bytes2send, neo_file_type, index);
+	printf("Loading %s (offset %u, size %u, type %u) with index %u\n", name, offset, bytes2send, neo_file_type, index);
 
 	// Put pairs of bitplanes in the correct order for the core
 	if (neo_file_type == NEO_FILE_SPR && index != 15) index ^= 1;
@@ -76,34 +155,28 @@ static int neogeo_file_tx(const char* path, const char* name, unsigned char neo_
 		EnableFpga();
 		spi8(UIO_FILE_TX_DAT);
 
-		if (neo_file_type == NEO_FILE_RAW) {
+		if (neo_file_type == NEO_FILE_RAW)
+		{
 			spi_write(buf, chunk, 1);
-		} else if (neo_file_type == NEO_FILE_8BIT) {
+		}
+		else if (neo_file_type == NEO_FILE_8BIT)
+		{
 			spi_write(buf, chunk, 0);
-		} else {
-
-			if (neo_file_type == NEO_FILE_FIX)
-				fix_convert(buf, buf_out, sizeof(buf_out));
+		}
+		else
+		{
+			if (neo_file_type == NEO_FILE_FIX) fix_convert(buf, buf_out, sizeof(buf_out));
 			else if (neo_file_type == NEO_FILE_SPR)
 			{
-				if(index == 15) spr_convert_dbl(buf, buf_out, sizeof(buf_out));
-					else spr_convert(buf, buf_out, sizeof(buf_out));
+				if (index == 15) spr_convert_dbl((uint16_t*)buf, (uint16_t*)buf_out, sizeof(buf_out)/2);
+				else spr_convert((uint16_t*)buf, (uint16_t*)buf_out, sizeof(buf_out)/2);
 			}
 
-			clock_gettime(CLOCK_REALTIME, &ts1);	// DEBUG PROFILING
-				spi_write(buf_out, chunk, 1);
-			clock_gettime(CLOCK_REALTIME, &ts2);	// DEBUG PROFILING
-
-			if (ts2.tv_nsec < ts1.tv_nsec) {	// DEBUG PROFILING
-				ts2.tv_nsec += 1000000000;
-				ts2.tv_sec--;
-			}
-
-			us_acc += ((ts2.tv_nsec - ts1.tv_nsec) / 1000);	// DEBUG PROFILING
+			spi_write(buf_out, chunk, 1);
 		}
 
 		DisableFpga();
-		int new_progress = 256 - ((((uint64_t)bytes2send) << 8)/size);
+		int new_progress = 256 - ((((uint64_t)bytes2send) << 8) / size);
 		if (progress != new_progress)
 		{
 			progress = new_progress;
@@ -111,12 +184,6 @@ static int neogeo_file_tx(const char* path, const char* name, unsigned char neo_
 		}
 		bytes2send -= chunk;
 	}
-
-	// DEBUG PROFILING
-	printf("Gfx spi_write us total: %09ld\n", us_acc);
-	// mslug all C ROMs:
-	// spr_convert: 37680*4 = 150720us = 0.150s
-	// spi_write: 2300766*4 = 9203064us = 9.2s !
 
 	FileClose(&f);
 
@@ -126,7 +193,214 @@ static int neogeo_file_tx(const char* path, const char* name, unsigned char neo_
 	spi8(0x00);
 	DisableFpga();
 
-	return 1;
+	return size;
+}
+
+static uint8_t loadbuf[1024 * 1024];
+static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t index, uint32_t offset, uint32_t size)
+{
+	fileTYPE f = {};
+	static char name_buf[1024];
+
+	sprintf(name_buf, "%s/%s", path, name);
+	if (!FileOpen(&f, name_buf, 0)) return 0;
+	if (!size && offset < f.size) size = f.size - offset;
+	if (!size)
+	{
+		FileClose(&f);
+		return 0;
+	}
+
+	int memfd = open("/dev/mem", O_RDWR | O_SYNC);
+	if (memfd == -1)
+	{
+		printf("Unable to open /dev/mem!\n");
+		FileClose(&f);
+		return 0;
+	}
+
+	size *= 2;
+
+	FileSeek(&f, offset, SEEK_SET);
+	printf("CROM %s (offset %u, size %u) with index %u\n", name, offset, size, index);
+
+	// Put pairs of bitplanes in the correct order for the core
+	int progress = -1;
+
+	uint32_t remain = size;
+	uint32_t map_addr = 0x38000000 + (((index - 64) >> 1) * 1024 * 1024);
+
+	while (remain)
+	{
+		uint32_t partsz = remain;
+		if (partsz > 1024 * 1024) partsz = 1024 * 1024;
+
+		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
+		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
+		if (base == (void *)-1)
+		{
+			printf("Unable to mmap (0x%X, %d)!\n", map_addr, partsz);
+			close(memfd);
+			FileClose(&f);
+			return 0;
+		}
+
+		FileReadAdv(&f, loadbuf, partsz/2);
+		spr_convert_skp((uint16_t*)loadbuf, ((uint16_t*)base) + ((index ^ 1) & 1), partsz / 4);
+
+		int new_progress = 256 - ((((uint64_t)(remain - partsz)) << 8) / size);
+		if (progress != new_progress)
+		{
+			progress = new_progress;
+			neogeo_osd_progress(name, progress);
+		}
+
+		munmap(base, partsz);
+		remain -= partsz;
+		map_addr += partsz;
+	}
+
+	close(memfd);
+	FileClose(&f);
+
+	return map_addr - 0x38000000;
+}
+
+static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_file_type, uint8_t index, uint32_t offset, uint32_t size)
+{
+	fileTYPE f = {};
+	static char name_buf[1024];
+
+	sprintf(name_buf, "%s/%s", path, name);
+	if (!FileOpen(&f, name_buf, 0)) return 0;
+	if (!size && offset < f.size) size = f.size - offset;
+	if (!size)
+	{
+		FileClose(&f);
+		return 0;
+	}
+
+	int memfd = open("/dev/mem", O_RDWR | O_SYNC);
+	if (memfd == -1)
+	{
+		printf("Unable to open /dev/mem!\n");
+		FileClose(&f);
+		return 0;
+	}
+
+	FileSeek(&f, offset, SEEK_SET);
+	printf("ROM %s (offset %u, size %u, type %u) with index %u\n", name, offset, size, neo_file_type, index);
+
+	int progress = -1;
+
+	uint32_t remain = size;
+	uint32_t map_addr = 0x30000000 + (((index >= 16) && (index < 64)) ? (index - 16) * 0x80000 : (index == 9) ? 0x2000000 : 0x8000000);
+
+	while (remain)
+	{
+		uint32_t partsz = remain;
+		if (partsz > 1024 * 1024) partsz = 1024 * 1024;
+
+		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
+		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
+		if (base == (void *)-1)
+		{
+			printf("Unable to mmap (0x%X, %d)!\n", map_addr, partsz);
+			close(memfd);
+			FileClose(&f);
+			return 0;
+		}
+
+		if (neo_file_type == NEO_FILE_FIX)
+		{
+			FileReadAdv(&f, loadbuf, partsz);
+			fix_convert(loadbuf, (uint8_t*)base, partsz);
+		}
+		else if (neo_file_type == NEO_FILE_SPR)
+		{
+			FileReadAdv(&f, loadbuf, partsz);
+			spr_convert_dbl((uint16_t*)loadbuf, (uint16_t*)base, partsz / 2);
+		}
+		else
+		{
+			FileReadAdv(&f, base, partsz);
+		}
+
+		int new_progress = 256 - ((((uint64_t)(remain-partsz)) << 8) / size);
+		if (progress != new_progress)
+		{
+			progress = new_progress;
+			neogeo_osd_progress(name, progress);
+		}
+		munmap(base, partsz);
+		remain -= partsz;
+		map_addr += partsz;
+	}
+
+	close(memfd);
+	FileClose(&f);
+
+	return size;
+}
+
+static void notify_core(uint8_t index, uint32_t size)
+{
+	user_io_set_index(10);
+
+	EnableFpga();
+	spi8(UIO_FILE_TX);
+	spi8(0xff);
+	DisableFpga();
+
+	char memcp = !(index == 9 || (index >= 16 && index < 64));
+	printf("notify_core(%d,%d): memcp = %d\n", index, size, memcp);
+
+	EnableFpga();
+	spi8(UIO_FILE_TX_DAT);
+	spi_w(index);
+	spi_w((uint16_t)size);
+	spi_w(size >> 16);
+	spi_w(memcp); //copy flag
+	spi_w(0);
+	DisableFpga();
+
+	EnableFpga();
+	spi8(UIO_FILE_TX);
+	spi8(0x00);
+	DisableFpga();
+}
+
+static uint32_t crom_sz = 0;
+static uint32_t neogeo_tx(const char* path, const char* name, uint8_t neo_file_type, int8_t index, uint32_t offset, uint32_t size)
+{
+	/*
+	if (index >= 0) neogeo_file_tx(path, name, neo_file_type, index, offset, size);
+	return 0;
+	*/
+
+	uint32_t sz = 0;
+
+	if (index >= 64)
+	{
+		sz = load_crom_to_mem(path, name, index, offset, size);
+		if (sz > crom_sz) crom_sz = sz;
+		return sz;
+	}
+
+	if (crom_sz)
+	{
+		sz = crom_sz;
+		notify_core(15, crom_sz);
+		crom_sz = 0;
+	}
+
+	if (index >= 0)
+	{
+		sz = load_rom_to_mem(path, name, neo_file_type, index, offset, size);
+		if (sz) notify_core(index, sz);
+	}
+
+	return sz;
 }
 
 struct rom_info
@@ -433,7 +707,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 					if (!strcasecmp(node->attributes[i].name, "index")) use_index = 1;
 				}
 
-				printf("using index = %d\n", use_index);
+				//printf("using index = %d\n", use_index);
 
 				for (int i = 0; i < node->n_attributes; i++) {
 					if (!strcasecmp(node->attributes[i].name, "name"))
@@ -496,23 +770,24 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				if (!file_cnt)
 				{
 					printf("No parts specified. Trying to load known files:\n");
-					neogeo_file_tx(path, "prom", NEO_FILE_RAW, 4, 0, 0);
-					neogeo_file_tx(path, "p1rom", NEO_FILE_RAW, 4, 0, 0);
-					neogeo_file_tx(path, "p2rom", NEO_FILE_RAW, 6, 0, 0);
-					neogeo_file_tx(path, "srom", NEO_FILE_FIX, 8, 0, 0);
-					neogeo_file_tx(path, "crom0", NEO_FILE_SPR, 15, 0, 0);
-					neogeo_file_tx(path, "m1rom", NEO_FILE_RAW, 9, 0, 0);
+					neogeo_tx(path, "prom", NEO_FILE_RAW, 4, 0, 0);
+					neogeo_tx(path, "p1rom", NEO_FILE_RAW, 4, 0, 0);
+					neogeo_tx(path, "p2rom", NEO_FILE_RAW, 6, 0, 0);
+					neogeo_tx(path, "srom", NEO_FILE_FIX, 8, 0, 0);
+					neogeo_tx(path, "crom0", NEO_FILE_SPR, 15, 0, 0);
+					neogeo_tx(path, "m1rom", NEO_FILE_RAW, 9, 0, 0);
 					if (vromb_offset)
 					{
-						neogeo_file_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, vromb_offset);
-						neogeo_file_tx(path, "vroma0", NEO_FILE_RAW, 48, vromb_offset, 0);
+						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, vromb_offset);
+						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 48, vromb_offset, 0);
 					}
 					else
 					{
-						neogeo_file_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, 0);
-						if(!use_pcm) neogeo_file_tx(path, "vromb0", NEO_FILE_RAW, 48, 0, 0);
+						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, 0);
+						if(!use_pcm) neogeo_tx(path, "vromb0", NEO_FILE_RAW, 48, 0, 0);
 					}
 				}
+
 				printf("Setting cart hardware type to %u\n", hw_type);
 				user_io_8bit_set_status(((uint32_t)hw_type & 3) << 24, 0x03000000);
 				printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
@@ -520,7 +795,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				return 0;
 			} else if (!strcasecmp(node->tag, "file")) {
 				if (in_file)
-					neogeo_file_tx(path, file_name, file_type, file_index, file_offset, file_size);
+					neogeo_tx(path, file_name, file_type, file_index, file_offset, file_size);
 				in_file = 0;
 			}
 		}
@@ -550,6 +825,8 @@ int neogeo_romset_tx(char* name)
 
 	user_io_8bit_set_status(1, 1);	// Maintain reset
 
+	crom_sz = 0;
+
 	// Look for the romset's file list in romsets.xml
 	if (!(system_type & 2))
 	{
@@ -578,24 +855,27 @@ int neogeo_romset_tx(char* name)
 			sprintf(full_path, "%s/uni-bios.rom", HomeDir);
 			if (FileExists(full_path)) {
 				// Autoload Unibios for cart systems if present
-				neogeo_file_tx(HomeDir, "uni-bios.rom", NEO_FILE_RAW, 0, 0, 0x20000);
+				neogeo_tx(HomeDir, "uni-bios.rom", NEO_FILE_RAW, 0, 0, 0x20000);
 			} else {
 				// Otherwise load normal system roms
 				if (system_type == 0)
-					neogeo_file_tx(HomeDir, "neo-epo.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
+					neogeo_tx(HomeDir, "neo-epo.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
 				else
-					neogeo_file_tx(HomeDir, "sp-s2.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
+					neogeo_tx(HomeDir, "sp-s2.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
 			}
 		} else if (system_type == 2) {
 			// NeoGeo CD
-			neogeo_file_tx(HomeDir, "top-sp1.bin", NEO_FILE_RAW, 0, 0, 0x80000);
+			neogeo_tx(HomeDir, "top-sp1.bin", NEO_FILE_RAW, 0, 0, 0x80000);
 		} else {
 			// NeoGeo CDZ
-			neogeo_file_tx(HomeDir, "neocd.bin", NEO_FILE_RAW, 0, 0, 0x80000);
+			neogeo_tx(HomeDir, "neocd.bin", NEO_FILE_RAW, 0, 0, 0x80000);
 		}
 	}
 
-	if (!(system_type & 2))	neogeo_file_tx(HomeDir, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0x10000);
+	//flush CROM if any.
+	neogeo_tx(NULL, NULL, 0, -1, 0, 0);
+
+	if (!(system_type & 2))	neogeo_tx(HomeDir, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0x10000);
 	neogeo_file_tx(HomeDir, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
 
 	if (!strcmp(romset, "kof95"))
