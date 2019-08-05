@@ -142,7 +142,7 @@ static bool isPathDirectory(char *path)
 
 	return false;
 }
-
+/*
 static bool isPathRegularFile(char *path)
 {
 	make_fullpath(path);
@@ -195,7 +195,7 @@ static bool isPathRegularFile(char *path)
 
 	return false;
 }
-
+*/
 void FileClose(fileTYPE *file)
 {
 	if (file->zip)
