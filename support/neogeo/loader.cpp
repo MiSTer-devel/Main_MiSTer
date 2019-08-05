@@ -100,8 +100,8 @@ static void neogeo_osd_progress(const char* name, unsigned int progress)
 	memset(progress_buf, ' ', sizeof(progress_buf));
 
 	// OSD width - width of white bar on the left - max width of file name = 32 - 2 - 11 - 1 = 18
-	progress = (progress * 108) >> 8;
-	if (progress > 108) progress = 108;
+	progress = (progress * 60) >> 8;
+	if (progress > 60) progress = 60;
 
 	char c = pchar[progress % 6];
 	progress /= 6;
@@ -111,7 +111,7 @@ static void neogeo_osd_progress(const char* name, unsigned int progress)
 	*buf++ = ' ';
 
 	for (unsigned int i = 0; i <= progress; i++) buf[1 + i] = (i < progress) ? 0x7F : c;
-	buf[19] = 0;
+	buf[11] = 0;
 
 	Info(progress_buf);
 }
@@ -185,6 +185,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 		bytes2send -= chunk;
 	}
 
+	neogeo_osd_progress(name, 256);
 	FileClose(&f);
 
 	// signal end of transmission
@@ -259,6 +260,8 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 		remain -= partsz;
 		map_addr += partsz;
 	}
+
+	neogeo_osd_progress(name, 256);
 
 	close(memfd);
 	FileClose(&f);
