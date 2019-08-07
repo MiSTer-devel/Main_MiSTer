@@ -269,7 +269,7 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 	return map_addr - 0x38000000;
 }
 
-static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_file_type, uint8_t index, uint32_t offset, uint32_t size)
+static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_file_type, uint8_t index, uint32_t offset, uint32_t size, uint32_t expand)
 {
 	fileTYPE f = {};
 	static char name_buf[1024];
@@ -292,17 +292,24 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 	}
 
 	FileSeek(&f, offset, SEEK_SET);
-	printf("ROM %s (offset %u, size %u, type %u) with index %u\n", name, offset, size, neo_file_type, index);
+	printf("ROM %s (offset %u, size %u, exp %u, type %u) with index %u\n", name, offset, size, expand, neo_file_type, index);
 
 	int progress = -1;
 
+	uint32_t remainf = size;
+
+	if(expand) size = expand;
 	uint32_t remain = size;
+
 	uint32_t map_addr = 0x30000000 + (((index >= 16) && (index < 64)) ? (index - 16) * 0x80000 : (index == 9) ? 0x2000000 : 0x8000000);
 
 	while (remain)
 	{
 		uint32_t partsz = remain;
 		if (partsz > 1024 * 1024) partsz = 1024 * 1024;
+
+		uint32_t partszf = remainf;
+		if (partszf > 1024 * 1024) partszf = 1024 * 1024;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
 		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
@@ -316,17 +323,20 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 
 		if (neo_file_type == NEO_FILE_FIX)
 		{
-			FileReadAdv(&f, loadbuf, partsz);
+			memset(loadbuf, 0, partsz);
+			if (partszf) FileReadAdv(&f, loadbuf, partszf);
 			fix_convert(loadbuf, (uint8_t*)base, partsz);
 		}
 		else if (neo_file_type == NEO_FILE_SPR)
 		{
-			FileReadAdv(&f, loadbuf, partsz);
+			memset(loadbuf, 0, partsz);
+			if (partszf) FileReadAdv(&f, loadbuf, partszf);
 			spr_convert_dbl((uint16_t*)loadbuf, (uint16_t*)base, partsz / 2);
 		}
 		else
 		{
-			FileReadAdv(&f, base, partsz);
+			memset(base, ((index>=16) && (index<64)) ? 8 : 0, partsz);
+			if (partszf) FileReadAdv(&f, base, partszf);
 		}
 
 		int new_progress = 256 - ((((uint64_t)(remain-partsz)) << 8) / size);
@@ -374,7 +384,7 @@ static void notify_core(uint8_t index, uint32_t size)
 }
 
 static uint32_t crom_sz = 0;
-static uint32_t neogeo_tx(const char* path, const char* name, uint8_t neo_file_type, int8_t index, uint32_t offset, uint32_t size)
+static uint32_t neogeo_tx(const char* path, const char* name, uint8_t neo_file_type, int8_t index, uint32_t offset, uint32_t size, uint32_t expand = 0)
 {
 	/*
 	if (index >= 0) neogeo_file_tx(path, name, neo_file_type, index, offset, size);
@@ -399,7 +409,7 @@ static uint32_t neogeo_tx(const char* path, const char* name, uint8_t neo_file_t
 
 	if (index >= 0)
 	{
-		sz = load_rom_to_mem(path, name, neo_file_type, index, offset, size);
+		sz = load_rom_to_mem(path, name, neo_file_type, index, offset, size, expand);
 		if (sz) notify_core(index, sz);
 	}
 
@@ -654,6 +664,8 @@ static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 	return true;
 }
 
+#define VROM_SIZE  (16 * 1024 * 1024)
+
 static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 	static char file_name[16 + 1] { "" };
@@ -664,6 +676,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	static unsigned long int file_offset = 0, file_size = 0, vromb_offset = 0;
 	static unsigned char hw_type = 0, use_pcm = 0;
 	static int file_cnt = 0;
+	static int vrom_mirror = 1;
 
 	const char* path = (const char*)sd->user;
 	if (!path) return 0;
@@ -677,6 +690,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 		if (!strcasecmp(node->tag, "romset")) {
 			file_cnt = 0;
 			vromb_offset = 0;
+			vrom_mirror = 1;
 			use_pcm = 1;
 			hw_type = 0;
 			if (!romsets) in_correct_romset = 1;
@@ -695,6 +709,8 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				} else if (!strcasecmp(node->attributes[i].name, "vromb_offset")) {
 					vromb_offset = strtoul(node->attributes[i].value, NULL, 0);
 					use_pcm = 0;
+				} else if (!strcasecmp(node->attributes[i].name, "vrom_mirror")) {
+					vrom_mirror = strtoul(node->attributes[i].value, NULL, 0);
 				}
 			}
 		}
@@ -781,13 +797,13 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 					neogeo_tx(path, "m1rom", NEO_FILE_RAW, 9, 0, 0);
 					if (vromb_offset)
 					{
-						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, vromb_offset);
-						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 48, vromb_offset, 0);
+						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, vromb_offset, vrom_mirror ? 0 : VROM_SIZE);
+						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 48, vromb_offset, 0, vrom_mirror ? 0 : VROM_SIZE);
 					}
 					else
 					{
-						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, 0);
-						if(!use_pcm) neogeo_tx(path, "vromb0", NEO_FILE_RAW, 48, 0, 0);
+						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, 0, vrom_mirror ? 0 : VROM_SIZE);
+						if(!use_pcm) neogeo_tx(path, "vromb0", NEO_FILE_RAW, 48, 0, 0, vrom_mirror ? 0 : VROM_SIZE);
 					}
 				}
 
@@ -796,9 +812,19 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
 				user_io_8bit_set_status(((uint32_t)use_pcm & 1) << 26, 0x04000000);
 				return 0;
-			} else if (!strcasecmp(node->tag, "file")) {
+			}
+			else if (!strcasecmp(node->tag, "file"))
+			{
 				if (in_file)
-					neogeo_tx(path, file_name, file_type, file_index, file_offset, file_size);
+				{
+					uint32_t expand = 0;
+					if (!vrom_mirror && file_index >= 16 && file_index < 64)
+					{
+						expand = VROM_SIZE - (((file_index - 16) * 0x80000) & 0xFFFFFF);
+					}
+
+					neogeo_tx(path, file_name, file_type, file_index, file_offset, file_size, expand);
+				}
 				in_file = 0;
 			}
 		}
