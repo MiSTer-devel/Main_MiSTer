@@ -92,26 +92,27 @@ static void fix_convert(uint8_t* buf_in, uint8_t* buf_out, uint32_t size)
 	for (uint32_t i = 0; i < size; i++) buf_out[i] = buf_in[(i & ~0x1F) | ((i >> 2) & 7) | ((i & 1) << 3) | (((i & 2) << 3) ^ 0x10)];
 }
 
-
 static char pchar[] = { 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
+
+#define PROGRESS_CNT    10
+#define PROGRESS_CHARS  (sizeof(pchar)/sizeof(pchar[0]))
+#define PROGRESS_MAX    ((PROGRESS_CHARS*PROGRESS_CNT)-1)
+
 static void neogeo_osd_progress(const char* name, unsigned int progress)
 {
 	static char progress_buf[64];
 	memset(progress_buf, ' ', sizeof(progress_buf));
 
-	// OSD width - width of white bar on the left - max width of file name = 32 - 2 - 11 - 1 = 18
-	progress = (progress * 60) >> 8;
-	if (progress > 60) progress = 60;
-
-	char c = pchar[progress % 6];
-	progress /= 6;
+	if (progress > PROGRESS_MAX) progress = PROGRESS_MAX;
+	char c = pchar[progress % PROGRESS_CHARS];
+	progress /= PROGRESS_CHARS;
 
 	strcpy(progress_buf, name);
 	char *buf = progress_buf + strlen(progress_buf);
 	*buf++ = ' ';
 
-	for (unsigned int i = 0; i <= progress; i++) buf[1 + i] = (i < progress) ? 0x7F : c;
-	buf[11] = 0;
+	for (unsigned int i = 0; i <= progress; i++) buf[i] = (i < progress) ? 0x7F : c;
+	buf[PROGRESS_CNT] = 0;
 
 	Info(progress_buf);
 }
@@ -176,7 +177,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 		}
 
 		DisableFpga();
-		int new_progress = 256 - ((((uint64_t)bytes2send) << 8) / size);
+		int new_progress = PROGRESS_MAX - ((((uint64_t)bytes2send)*PROGRESS_MAX) / size);
 		if (progress != new_progress)
 		{
 			progress = new_progress;
@@ -185,7 +186,6 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 		bytes2send -= chunk;
 	}
 
-	neogeo_osd_progress(name, 256);
 	FileClose(&f);
 
 	// signal end of transmission
@@ -249,7 +249,7 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 		FileReadAdv(&f, loadbuf, partsz/2);
 		spr_convert_skp((uint16_t*)loadbuf, ((uint16_t*)base) + ((index ^ 1) & 1), partsz / 4);
 
-		int new_progress = 256 - ((((uint64_t)(remain - partsz)) << 8) / size);
+		int new_progress = PROGRESS_MAX - ((((uint64_t)(remain - partsz))*PROGRESS_MAX) / size);
 		if (progress != new_progress)
 		{
 			progress = new_progress;
@@ -260,8 +260,6 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 		remain -= partsz;
 		map_addr += partsz;
 	}
-
-	neogeo_osd_progress(name, 256);
 
 	close(memfd);
 	FileClose(&f);
@@ -339,7 +337,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 			if (partszf) FileReadAdv(&f, base, partszf);
 		}
 
-		int new_progress = 256 - ((((uint64_t)(remain-partsz)) << 8) / size);
+		int new_progress = PROGRESS_MAX - ((((uint64_t)(remain - partsz))*PROGRESS_MAX) / size);
 		if (progress != new_progress)
 		{
 			progress = new_progress;
