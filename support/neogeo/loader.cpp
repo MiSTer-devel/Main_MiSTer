@@ -354,6 +354,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 	return size;
 }
 
+#define ALIGN_1MB ((1024*1024)-1)
 static void notify_core(uint8_t index, uint32_t size)
 {
 	user_io_set_index(10);
@@ -363,6 +364,7 @@ static void notify_core(uint8_t index, uint32_t size)
 	spi8(0xff);
 	DisableFpga();
 
+	if (index == 4 || index == 6) size = (size + ALIGN_1MB) & ~ALIGN_1MB;
 	char memcp = !(index == 9 || (index >= 16 && index < 64));
 	printf("notify_core(%d,%d): memcp = %d\n", index, size, memcp);
 
