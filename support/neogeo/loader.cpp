@@ -662,8 +662,43 @@ static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 	return true;
 }
 
-#define VROM_SIZE  (16 * 1024 * 1024)
+static uint32_t set_config(uint32_t new_config, uint32_t mask)
+{
+	static uint32_t config = 0;
+	if (mask) config = (config & ~mask) | (new_config & mask);
+	return config;
+}
 
+static void notify_conf()
+{
+	user_io_set_index(10);
+
+	EnableFpga();
+	spi8(UIO_FILE_TX);
+	spi8(0xff);
+	DisableFpga();
+
+	uint32_t conf = set_config(0, 0);
+	printf("notify_conf(0x%X)\n", conf);
+
+	EnableFpga();
+	spi8(UIO_FILE_TX_DAT);
+	spi_w(0x8000);
+	spi_w((uint16_t)conf);
+	spi_w(conf >> 16);
+	spi_w(0);
+	spi_w(0);
+	DisableFpga();
+
+	EnableFpga();
+	spi8(UIO_FILE_TX);
+	spi8(0x00);
+	DisableFpga();
+}
+
+//hw: Special cart chip. 0 = None, 1 = PRO-CT0, 2 = Link MCU, 3 = NEO-CMC(042) Bankswitching
+
+#define VROM_SIZE  (16 * 1024 * 1024)
 static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 	static char file_name[16 + 1] { "" };
@@ -672,7 +707,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	static unsigned char file_index = 0;
 	static char file_type = 0;
 	static unsigned long int file_offset = 0, file_size = 0, vromb_offset = 0;
-	static unsigned char hw_type = 0, use_pcm = 0;
+	static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0;
 	static int file_cnt = 0;
 	static int vrom_mirror = 1;
 
@@ -691,6 +726,9 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 			vrom_mirror = 1;
 			use_pcm = 1;
 			hw_type = 0;
+			pvc = 0;
+			sma = 0;
+
 			if (!romsets) in_correct_romset = 1;
 			for (int i = 0; i < node->n_attributes; i++) {
 				if (romsets && !strcasecmp(node->attributes[i].name, "name")) {
@@ -700,14 +738,24 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 					} else {
 						in_correct_romset = 0;
 					}
-				} else if (!strcasecmp(node->attributes[i].name, "hw")) {
+				}
+				else if (!strcasecmp(node->attributes[i].name, "hw")) {
 					hw_type = atoi(node->attributes[i].value);
-				} else if (!strcasecmp(node->attributes[i].name, "pcm")) {
+				}
+				else if (!strcasecmp(node->attributes[i].name, "pvc")) {
+					pvc = atoi(node->attributes[i].value);
+				}
+				else if (!strcasecmp(node->attributes[i].name, "sma")) {
+					sma = atoi(node->attributes[i].value);
+				}
+				else if (!strcasecmp(node->attributes[i].name, "pcm")) {
 					use_pcm = atoi(node->attributes[i].value);
-				} else if (!strcasecmp(node->attributes[i].name, "vromb_offset")) {
+				}
+				else if (!strcasecmp(node->attributes[i].name, "vromb_offset")) {
 					vromb_offset = strtoul(node->attributes[i].value, NULL, 0);
 					use_pcm = 0;
-				} else if (!strcasecmp(node->attributes[i].name, "vrom_mirror")) {
+				}
+				else if (!strcasecmp(node->attributes[i].name, "vrom_mirror")) {
 					vrom_mirror = strtoul(node->attributes[i].value, NULL, 0);
 				}
 			}
@@ -801,14 +849,19 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 					else
 					{
 						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, 0, vrom_mirror ? 0 : VROM_SIZE);
-						if(!use_pcm) neogeo_tx(path, "vromb0", NEO_FILE_RAW, 48, 0, 0, vrom_mirror ? 0 : VROM_SIZE);
+						if (!use_pcm) neogeo_tx(path, "vromb0", NEO_FILE_RAW, 48, 0, 0, vrom_mirror ? 0 : VROM_SIZE);
 					}
 				}
 
-				printf("Setting cart hardware type to %u\n", hw_type);
-				user_io_8bit_set_status(((uint32_t)hw_type & 3) << 24, 0x03000000);
+				printf("Setting cart gfx special chip to %u\n", hw_type);
+				set_config((hw_type & 0xF) << 24, 0xF << 24);
+
+				if(pvc) set_config(2 << 20, 0x7 << 20);
+				else if(sma) set_config(((2+sma) & 0x7) << 20, 0x7 << 20);
+				printf("Setting cart prom special chip to %u\n", (set_config(0, 0) >> 20) & 0x7);
+
 				printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
-				user_io_8bit_set_status(((uint32_t)use_pcm & 1) << 26, 0x04000000);
+				set_config((use_pcm & 1) << 23, 1 << 23);
 				return 0;
 			}
 			else if (!strcasecmp(node->tag, "file"))
@@ -853,6 +906,7 @@ int neogeo_romset_tx(char* name)
 	user_io_8bit_set_status(1, 1);	// Maintain reset
 
 	crom_sz = 0;
+	set_config(0, -1);
 
 	// Look for the romset's file list in romsets.xml
 	if (!(system_type & 2))
@@ -908,26 +962,23 @@ int neogeo_romset_tx(char* name)
 	if (!strcmp(romset, "kof95"))
 	{
 		printf("Enabled sprite gfx gap hack for kof95\n");
-		user_io_8bit_set_status(0x10000000, 0x30000000);
+		set_config(1 << 28, 0xF << 28);
 	}
 	else if (!strcmp(romset, "whp"))
 	{
 		printf("Enabled sprite gfx gap hack for whp\n");
-		user_io_8bit_set_status(0x20000000, 0x30000000);
+		set_config(2 << 28, 0xF << 28);
 	}
 	else if (!strcmp(romset, "kizuna"))
 	{
 		printf("Enabled sprite gfx gap hack for kizuna\n");
-		user_io_8bit_set_status(0x30000000, 0x30000000);
-	}
-	else
-	{
-		user_io_8bit_set_status(0x00000000, 0x30000000);
+		set_config(3 << 28, 0xF << 28);
 	}
 
 	FileGenerateSavePath((system_type & 2) ? "ngcd" : name, (char*)full_path);
 	user_io_file_mount((char*)full_path, 2, 1);
 
+	notify_conf();
 	user_io_8bit_set_status(0, 1);	// Release reset
 
 	return 1;
