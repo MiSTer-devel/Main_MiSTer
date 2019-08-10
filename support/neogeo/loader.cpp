@@ -698,8 +698,6 @@ static void notify_conf()
 	DisableFpga();
 }
 
-//hw: Special cart chip. 0 = None, 1 = PRO-CT0, 2 = Link MCU, 3 = NEO-CMC(042) Bankswitching
-
 #define VROM_SIZE  (16 * 1024 * 1024)
 static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
@@ -709,7 +707,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	static unsigned char file_index = 0;
 	static char file_type = 0;
 	static unsigned long int file_offset = 0, file_size = 0, vromb_offset = 0;
-	static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0;
+	static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0;
 	static int file_cnt = 0;
 	static int vrom_mirror = 1;
 
@@ -730,6 +728,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 			hw_type = 0;
 			pvc = 0;
 			sma = 0;
+			cmc = 0;
 
 			if (!romsets) in_correct_romset = 1;
 			for (int i = 0; i < node->n_attributes; i++) {
@@ -741,14 +740,20 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 						in_correct_romset = 0;
 					}
 				}
-				else if (!strcasecmp(node->attributes[i].name, "hw")) {
-					hw_type = atoi(node->attributes[i].value);
+				else if (!strcasecmp(node->attributes[i].name, "ct0")) {
+					if (atoi(node->attributes[i].value)) hw_type = 1;
+				}
+				else if (!strcasecmp(node->attributes[i].name, "link")) {
+					if (atoi(node->attributes[i].value)) hw_type = 2;
 				}
 				else if (!strcasecmp(node->attributes[i].name, "pvc")) {
 					pvc = atoi(node->attributes[i].value);
 				}
 				else if (!strcasecmp(node->attributes[i].name, "sma")) {
 					sma = atoi(node->attributes[i].value);
+				}
+				else if (!strcasecmp(node->attributes[i].name, "cmc")) {
+					cmc = atoi(node->attributes[i].value);
 				}
 				else if (!strcasecmp(node->attributes[i].name, "pcm")) {
 					use_pcm = atoi(node->attributes[i].value);
@@ -855,8 +860,11 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 					}
 				}
 
-				printf("Setting cart gfx special chip to %u\n", hw_type);
-				set_config((hw_type & 0xF) << 24, 0xF << 24);
+				printf("Setting cart special chip (legacy) to %u\n", hw_type);
+				set_config((hw_type & 3) << 24, 3 << 24);
+
+				printf("Setting CMC chip to %u\n", cmc);
+				set_config((cmc & 3) << 26, 3 << 26);
 
 				if(pvc) set_config(2 << 20, 0x7 << 20);
 				else if(sma) set_config(((2+sma) & 0x7) << 20, 0x7 << 20);
