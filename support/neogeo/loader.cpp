@@ -384,7 +384,7 @@ static void notify_core(uint8_t index, uint32_t size)
 }
 
 static uint32_t crom_sz = 0;
-static uint32_t neogeo_tx(const char* path, const char* name, uint8_t neo_file_type, int8_t index, uint32_t offset, uint32_t size, uint32_t expand = 0)
+static uint32_t neogeo_tx(const char* path, const char* name, uint8_t neo_file_type, int16_t index, uint32_t offset, uint32_t size, uint32_t expand = 0)
 {
 	/*
 	if (index >= 0) neogeo_file_tx(path, name, neo_file_type, index, offset, size);
