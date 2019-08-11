@@ -1607,7 +1607,7 @@ void HandleUI(void)
 			// ElectronAsh.
 			strcpy(SelectedPath + strlen(SelectedPath) - 3, "CUE");
 			printf("Checking for presence of CUE file %s\n", SelectedPath);
-			if (user_io_file_mount(SelectedPath, 1))
+			if (user_io_file_mount(SelectedPath, 2))
 			{
 				printf("CUE file found and mounted.\n");
 				parse_cue_file();

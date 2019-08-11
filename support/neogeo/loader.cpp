@@ -984,11 +984,11 @@ int neogeo_romset_tx(char* name)
 		printf("Enabled sprite gfx gap hack for kizuna\n");
 		set_config(3 << 28, 0xF << 28);
 	}
+	notify_conf();
 
 	FileGenerateSavePath((system_type & 2) ? "ngcd" : name, (char*)full_path);
-	user_io_file_mount((char*)full_path, 2, 1);
+	user_io_file_mount((char*)full_path, 0, 1);
 
-	notify_conf();
 	user_io_8bit_set_status(0, 1);	// Release reset
 
 	return 1;

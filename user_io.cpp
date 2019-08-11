@@ -1701,8 +1701,8 @@ int cue_pt = 0;
 char cue_getch()
 {
 	static uint8_t buf[512];
-	if (!(cue_pt & 0x1ff)) FileReadSec(&sd_image[1], buf);
-	if (cue_pt >= sd_image[1].size) return 0;
+	if (!(cue_pt & 0x1ff)) FileReadSec(&sd_image[2], buf);
+	if (cue_pt >= sd_image[2].size) return 0;
 	return buf[(cue_pt++) & 0x1ff];
 }
 
@@ -2158,7 +2158,7 @@ void user_io_poll()
 				//printf("SD RD %d on %d, WIDE=%d\n", lba, disk, fio_size);
 
 				int done = 0;
-				if (is_neogeo_core())
+				if (disk && is_neogeo_core())
 				{
 					uint32_t offset = 0;
 
