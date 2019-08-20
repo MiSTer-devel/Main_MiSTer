@@ -55,6 +55,7 @@ const ini_var_t ini_vars[] = {
 	{ "FB_SIZE", (void*)(&(cfg.fb_size)), UINT8, 1, 4, 1 },
 	{ "FB_TERMINAL", (void*)(&(cfg.fb_terminal)), UINT8, 0, 1, 1 },
 	{ "OSD_TIMEOUT", (void*)(&(cfg.osd_timeout)), INT16, 5, 3600, 1 },
+	{ "DIRECT_VIDEO", (void*)(&(cfg.direct_video)), UINT8, 0, 1, 1 },
 };
 
 // mist ini config

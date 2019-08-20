@@ -1652,7 +1652,7 @@ void HandleUI(void)
 				OsdWrite(n++, s, menusub == 3);
 			}
 
-			if (video_get_scaler_flt() >= 0)
+			if (video_get_scaler_flt() >= 0 && !cfg.direct_video)
 			{
 				OsdWrite(n++);
 				menumask |= 0x60;
