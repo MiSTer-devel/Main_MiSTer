@@ -119,17 +119,18 @@
 #define KBD_LED_FLAG_MASK     0xC0
 #define KBD_LED_FLAG_STATUS   0x40
 
-#define BUTTON1                 0b00000000001
-#define BUTTON2                 0b00000000010
-#define CONF_VGA_SCALER         0b00000000100
-#define CONF_CSYNC              0b00000001000
-#define CONF_FORCED_SCANDOUBLER 0b00000010000
-#define CONF_YPBPR              0b00000100000
-#define CONF_AUDIO_96K          0b00001000000
-#define CONF_DVI                0b00010000000
-#define CONF_HDMI_LIMITED       0b00100000000
-#define CONF_VGA_SOG            0b01000000000
-#define CONF_DIRECT_VIDEO       0b10000000000
+#define BUTTON1                 0b0000000000000001
+#define BUTTON2                 0b0000000000000010
+#define CONF_VGA_SCALER         0b0000000000000100
+#define CONF_CSYNC              0b0000000000001000
+#define CONF_FORCED_SCANDOUBLER 0b0000000000010000
+#define CONF_YPBPR              0b0000000000100000
+#define CONF_AUDIO_96K          0b0000000001000000
+#define CONF_DVI                0b0000000010000000
+#define CONF_HDMI_LIMITED1      0b0000000100000000
+#define CONF_VGA_SOG            0b0000001000000000
+#define CONF_DIRECT_VIDEO       0b0000010000000000
+#define CONF_HDMI_LIMITED2      0b0000100000000000
 
 // core type value should be unlikely to be returned by broken cores
 #define CORE_TYPE_UNKNOWN   0x55

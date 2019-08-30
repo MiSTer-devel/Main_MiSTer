@@ -40,7 +40,7 @@ const ini_var_t ini_vars[] = {
 	{ "VSYNC_ADJUST", (void*)(&(cfg.vsync_adjust)), UINT8, 0, 2, 1 },
 	{ "HDMI_AUDIO_96K", (void*)(&(cfg.hdmi_audio_96k)), UINT8, 0, 1, 1 },
 	{ "DVI_MODE", (void*)(&(cfg.dvi)), UINT8, 0, 1, 1 },
-	{ "HDMI_LIMITED", (void*)(&(cfg.hdmi_limited)), UINT8, 0, 1, 1 },
+	{ "HDMI_LIMITED", (void*)(&(cfg.hdmi_limited)), UINT8, 0, 2, 1 },
 	{ "KBD_NOMOUSE", (void*)(&(cfg.kbd_nomouse)), UINT8, 0, 1, 1 },
 	{ "MOUSE_THROTTLE", (void*)(&(cfg.mouse_throttle)), UINT8, 1, 100, 1 },
 	{ "BOOTSCREEN", (void*)(&(cfg.bootscreen)), UINT8, 0, 1, 1 },
