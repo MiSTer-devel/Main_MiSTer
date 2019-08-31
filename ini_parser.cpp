@@ -31,7 +31,7 @@
 #define CHAR_IS_SPECIAL(c)      (((c) == '[') || ((c) == ']') || ((c) == '(') || ((c) == ')') || \
                                  ((c) == '-') || ((c) == '+') || ((c) == '/') || ((c) == '=') || \
                                  ((c) == '#') || ((c) == '$') || ((c) == '@') || ((c) == '_') || \
-                                 ((c) == ',') || ((c) == '.') || ((c) == '!'))
+                                 ((c) == ',') || ((c) == '.') || ((c) == '!') || ((c) == '*'))
 
 #define CHAR_IS_VALID(c)        (CHAR_IS_ALPHANUM(c) || CHAR_IS_SPECIAL(c))
 #define CHAR_IS_SPACE(c)        (((c) == ' ') || ((c) == '\t'))
@@ -77,12 +77,16 @@ int ini_get_section(const ini_cfg_t* cfg, char* buf)
 	}
 	else buf++;
 
+	int wc_pos = -1;
 	// get section stop marker
 	while (1) {
 		if (buf[i] == INI_SECTION_END) {
 			buf[i] = '\0';
 			break;
 		}
+
+		if (buf[i] == '*') wc_pos = i;
+
 		i++;
 		if (i >= INI_LINE_SIZE) {
 			return INI_SECTION_INVALID_ID;
@@ -103,7 +107,7 @@ int ini_get_section(const ini_cfg_t* cfg, char* buf)
 		}
 	}
 
-	if (!strcasecmp(buf, user_io_get_core_name_ex())) return cfg->sections[0].id;
+	if ((wc_pos>=0) ? !strncasecmp(buf, user_io_get_core_name_ex(), wc_pos) : !strcasecmp(buf, user_io_get_core_name_ex())) return cfg->sections[0].id;
 
 	return INI_SECTION_INVALID_ID;
 }
