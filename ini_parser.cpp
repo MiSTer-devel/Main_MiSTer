@@ -131,7 +131,7 @@ void* ini_get_var(const ini_cfg_t* cfg, int cur_section, char* buf)
 
 	// parse var
 	for (j = 0; j<cfg->nvars; j++) {
-		if ((!strcasecmp(buf, cfg->vars[j].name)) && (cfg->vars[j].section_id == cur_section)) var_id = j;
+		if (!strcasecmp(buf, cfg->vars[j].name) && cur_section) var_id = j;
 	}
 
 	// get data

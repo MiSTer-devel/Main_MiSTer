@@ -27,7 +27,6 @@ typedef struct {
 	ini_vartypes_t type;
 	int min;
 	int max;
-	int section_id;
 } ini_var_t;
 
 typedef struct {
