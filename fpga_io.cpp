@@ -423,7 +423,7 @@ static int make_env(const char *name, const char *cfg)
 	}
 
 	volatile char* str = (volatile char*)buf;
-	memset((void*)str, 0, 0x1000);
+	memset((void*)str, 0, 0xF00);
 
 	*str++ = 0x21;
 	*str++ = 0x43;

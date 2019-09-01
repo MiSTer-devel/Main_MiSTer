@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <sys/mman.h>
 
 #include "lib/lodepng/lodepng.h"
 #include "hardware.h"
@@ -68,6 +69,8 @@ static char keyboard_leds = 0;
 static bool caps_status = 0;
 static bool num_status = 0;
 static bool scrl_status = 0;
+
+static uint16_t sdram_cfg = 0;
 
 typedef struct
 {
@@ -514,6 +517,11 @@ const char* get_rbf_name()
 	return p+1;
 }
 
+const char* get_rbf_path()
+{
+	return core_path;
+}
+
 void MakeFile(const char * filename, const char * data)
 {
         FILE * file;
@@ -557,6 +565,49 @@ void SetMidiLinkMode(int mode)
         }
 }
 
+static uint16_t sdram_sz(int sz)
+{
+	int res = 0;
+
+	int fd;
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
+
+	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
+	if (buf == (void *)-1)
+	{
+		printf("Unable to mmap(/dev/mem)\n");
+		close(fd);
+		return 0;
+	}
+
+	volatile uint8_t* par = (volatile uint8_t*)buf;
+	par += 0xF00;
+	if (sz >= 0)
+	{
+		*par++ = 0x12;
+		*par++ = 0x57;
+		*par++ = (uint8_t)(sz>>8);
+		*par++ = (uint8_t)sz;
+	}
+	else
+	{
+		if ((par[0] == 0x12) && (par[1] == 0x57))
+		{
+			res = 0x8000 | (par[2]<<8) | par[3];
+			if(res & 0x4000) printf("*** Debug phase: %d\n", (res & 0x100) ? (res & 0xFF) : -(res & 0xFF));
+			else printf("*** Found SDRAM config: %d\n", res & 7);
+		}
+		else if(!is_menu_core())
+		{
+			printf("*** SDRAM config not found\n");
+		}
+	}
+
+	munmap(buf, 0x1000);
+	close(fd);
+	return res;
+}
+
 void user_io_init(const char *path)
 {
 	char *name;
@@ -565,8 +616,6 @@ void user_io_init(const char *path)
 	disable_osd = 0;
 
 	memset(sd_image, 0, sizeof(sd_image));
-	ikbd_init();
-	tos_config_init();
 
 	strcpy(core_path, path);
 	core_type = (fpga_core_id() & 0xFF);
@@ -594,6 +643,8 @@ void user_io_init(const char *path)
 
 		// set core name. This currently only sets a name for the 8 bit cores
 		user_io_read_core_name();
+
+		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 
 		// send a reset
 		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
@@ -625,16 +676,20 @@ void user_io_init(const char *path)
 
 	case CORE_TYPE_MINIMIG2:
 		puts("Identified Minimig V2 core");
+		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 		BootInit();
 		break;
 
 	case CORE_TYPE_MIST:
 		puts("Identified MiST core");
+		ikbd_init();
+		tos_config_init();
 		tos_upload(NULL);
 		break;
 
 	case CORE_TYPE_ARCHIE:
 		puts("Identified Archimedes core");
+		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 		send_rtc(1);
 		archie_init();
 		user_io_read_core_name();
@@ -1637,9 +1692,18 @@ void user_io_send_buttons(char force)
 
 	if ((map != key_map) || force)
 	{
+		const char *name = get_rbf_path();
+		if (name[0] && (get_key_mod() & (LGUI | LSHIFT)) == (LGUI | LSHIFT) && (key_map & BUTTON2) && !(map & BUTTON2))
+		{
+			uint16_t sz = sdram_sz(-1);
+			if (sz & 0x4000) sz++;
+			else sz = 0x4000;
+			sdram_sz(sz);
+			fpga_load_rbf(name);
+		}
+
 		if (is_archie() && (key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			const char *name = get_rbf_name();
 			fpga_load_rbf(name[0] ? name : "Archie.rbf");
 		}
 
@@ -2591,6 +2655,37 @@ void user_io_poll()
 	}
 	else if(CheckTimer(res_timer))
 	{
+		if (is_menu_core())
+		{
+			static int got_cfg = 0;
+			if (!got_cfg)
+			{
+				spi_uio_cmd_cont(UIO_GET_OSDMASK);
+				sdram_cfg = spi_w(0);
+				DisableIO();
+
+				if (sdram_cfg & 0x8000)
+				{
+					got_cfg = 1;
+					printf("*** Got SDRAM module type: %d\n", sdram_cfg & 7);
+					switch (user_io_get_sdram_cfg() & 7)
+					{
+					case 7:
+						sdram_sz(3);
+						break;
+					case 3:
+						sdram_sz(2);
+						break;
+					case 1:
+						sdram_sz(1);
+						break;
+					default:
+						sdram_sz(0);
+					}
+				}
+			}
+		}
+
 		res_timer = GetTimer(500);
 		if (!minimig_get_adjust())
 		{
@@ -3134,4 +3229,9 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 
 	printf("not found! use 0\n");
 	return 0;
+}
+
+uint16_t user_io_get_sdram_cfg()
+{
+	return sdram_cfg;
 }

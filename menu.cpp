@@ -4335,7 +4335,7 @@ void HandleUI(void)
 			}
 			else
 			{
-				sprintf(str, "  MiSTer    ");
+				sprintf(str, " MiSTer      ");
 
 				time_t t = time(NULL);
 				struct tm tm = *localtime(&t);
@@ -4345,9 +4345,28 @@ void HandleUI(void)
 				}
 
 				int netType = (int)getNet(0);
-				if (netType) str[9] = 0x1b + netType;
-				if (has_bt()) str[10] = 4;
-				str[21] = ' ';
+				if (netType) str[8] = 0x1b + netType;
+				if (has_bt()) str[9] = 4;
+				if (user_io_get_sdram_cfg() & 0x8000)
+				{
+					switch (user_io_get_sdram_cfg() & 7)
+					{
+					case 7:
+						str[10] = 0x95;
+						break;
+					case 3:
+						str[10] = 0x94;
+						break;
+					case 1:
+						str[10] = 0x93;
+						break;
+					default:
+						str[10] = 0x92;
+						break;
+					}
+				}
+
+				str[22] = ' ';
 			}
 
 			OsdWrite(16, "", 1, 0);
