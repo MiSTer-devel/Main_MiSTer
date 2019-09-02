@@ -1631,7 +1631,9 @@ void user_io_send_buttons(char force)
 	if (cfg.forced_scandoubler) map |= CONF_FORCED_SCANDOUBLER;
 	if (cfg.hdmi_audio_96k) map |= CONF_AUDIO_96K;
 	if (cfg.dvi) map |= CONF_DVI;
-	if (cfg.hdmi_limited) map |= CONF_HDMI_LIMITED;
+	if (cfg.hdmi_limited & 1) map |= CONF_HDMI_LIMITED1;
+	if (cfg.hdmi_limited & 2) map |= CONF_HDMI_LIMITED2;
+	if (cfg.direct_video) map |= CONF_DIRECT_VIDEO;
 
 	if ((map != key_map) || force)
 	{

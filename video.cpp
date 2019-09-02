@@ -433,6 +433,11 @@ static void fb_init()
 void video_mode_load()
 {
 	fb_init();
+	if (cfg.direct_video && cfg.vsync_adjust)
+	{
+		printf("Disabling vsync_adjust because of enabled direct video.\n");
+		cfg.vsync_adjust = 0;
+	}
 	vmode_def  = store_custom_video_mode(cfg.video_conf, &v_def);
 	vmode_pal  = store_custom_video_mode(cfg.video_conf_pal, &v_pal);
 	vmode_ntsc = store_custom_video_mode(cfg.video_conf_ntsc, &v_ntsc);

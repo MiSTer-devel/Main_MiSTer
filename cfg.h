@@ -24,6 +24,7 @@ typedef struct {
 	uint8_t hdmi_audio_96k;
 	uint8_t dvi;
 	uint8_t hdmi_limited;
+	uint8_t direct_video;
 	uint8_t video_info;
 	uint8_t vsync_adjust;
 	uint8_t kbd_nomouse;
