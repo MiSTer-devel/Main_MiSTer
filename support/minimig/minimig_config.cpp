@@ -299,9 +299,23 @@ static void ApplyConfiguration(char reloadkickstart)
 	}
 
 	printf("CPU clock     : %s\n", minimig_config.chipset & 0x01 ? "turbo" : "normal");
-	printf("Chip RAM size : %s\n", config_memory_chip_msg[minimig_config.memory & 0x03]);
-	printf("Slow RAM size : %s\n", config_memory_slow_msg[minimig_config.memory >> 2 & 0x03]);
-	printf("Fast RAM size : %s\n", config_memory_fast_msg[((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5)]);
+	uint8_t memcfg = minimig_config.memory;
+	if (!(sdram_sz() & 2))
+	{
+		uint8_t fastram_sz = ((memcfg >> 4) & 0x03) | ((memcfg & 0x80) >> 5);
+		switch (fastram_sz)
+		{
+		case 4:
+		case 6:
+			printf("Warning: config requires >=64MB but <=32MB is installed. Lowering down memory config.\n");
+			fastram_sz--;
+			memcfg = ((fastram_sz << 4) & 0x30) | ((fastram_sz << 5) & 0x80) | (memcfg & ~0xB0);
+		}
+	}
+
+	printf("Chip RAM size : %s\n", config_memory_chip_msg[memcfg & 0x03]);
+	printf("Slow RAM size : %s\n", config_memory_slow_msg[memcfg >> 2 & 0x03]);
+	printf("Fast RAM size : %s\n", config_memory_fast_msg[((memcfg >> 4) & 0x03) | ((memcfg & 0x80) >> 5)]);
 
 	printf("Floppy drives : %u\n", minimig_config.floppy.drives + 1);
 	printf("Floppy speed  : %s\n", minimig_config.floppy.speed ? "fast" : "normal");
@@ -321,7 +335,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	spi_osd_cmd8(OSD_CMD_RST, rstval);
 	spi_osd_cmd8(OSD_CMD_HDD, (minimig_config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
 
-	ConfigMemory(minimig_config.memory);
+	ConfigMemory(memcfg);
 	ConfigCPU(minimig_config.cpu);
 
 	ConfigChipset(minimig_config.chipset);

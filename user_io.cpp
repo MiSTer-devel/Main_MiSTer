@@ -565,7 +565,7 @@ void SetMidiLinkMode(int mode)
         }
 }
 
-static uint16_t sdram_sz(int sz)
+uint16_t sdram_sz(int sz)
 {
 	int res = 0;
 
