@@ -506,6 +506,26 @@ static int xml_get_altname(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 	return true;
 }
 
+static void parse_xml(const char* filename, const SAX_Callbacks* sax, void* user)
+{
+	fileTYPE f = {};
+	if(FileOpen(&f, filename) && f.size)
+	{
+		void *buf = malloc(f.size+1); // plus null;
+		if (buf)
+		{
+			int size = FileReadAdv(&f, buf, f.size);
+			if (size)
+			{
+				char *bufc = (char*)buf;
+				bufc[size] = 0;
+				XMLDoc_parse_buffer_SAX(bufc, filename, sax, user);
+			}
+			free(buf);
+		}
+	}
+}
+
 int neogeo_scan_xml()
 {
 	static char full_path[1024];
@@ -516,19 +536,19 @@ int neogeo_scan_xml()
 	memset(roms, 0, sizeof(roms));
 	rom_cnt = 0;
 	sax.all_event = xml_scan;
-	XMLDoc_parse_file_SAX(full_path, &sax, 0);
+	parse_xml(full_path, &sax, 0);
 	return rom_cnt;
 }
 
-char *neogeo_get_altname(char *path, char *name)
+char *neogeo_get_altname(char *path, direntext_t *de)
 {
 	static char full_path[1024];
 	strcpy(full_path, path);
 	strcat(full_path, "/");
-	strcat(full_path, name);
+	strcat(full_path, de->de.d_name);
 	strcat(full_path, "/romset.xml");
 
-	if (!access(full_path, F_OK))
+	if (FileExists(full_path))
 	{
 		static char altname[256];
 		altname[0] = 0;
@@ -537,11 +557,11 @@ char *neogeo_get_altname(char *path, char *name)
 		SAX_Callbacks_init(&sax);
 
 		sax.all_event = xml_get_altname;
-		XMLDoc_parse_file_SAX(full_path, &sax, &altname);
+		parse_xml(full_path, &sax, &altname);
 		if (*altname) return altname;
 	}
 
-	sprintf(full_path, ",%s,", name);
+	sprintf(full_path, ",%s,", de->altname);
 	for (uint32_t i = 0; i < rom_cnt; i++)
 	{
 		if (roms[i].name[0] == ',')
@@ -551,11 +571,11 @@ char *neogeo_get_altname(char *path, char *name)
 			{
 				if(p == roms[i].name) return roms[i].altname;
 
-				sprintf(full_path, "%s (%s)", roms[i].altname, name);
+				sprintf(full_path, "%s (%s)", roms[i].altname, de->altname);
 				return full_path;
 			}
 		}
-		else if (!strcasecmp(name, roms[i].name))
+		else if (!strcasecmp(de->altname, roms[i].name))
 		{
 			return roms[i].altname;
 		}
@@ -577,6 +597,24 @@ static int has_name(const char *nameset, const char *name)
 	return !strcasecmp(nameset, name);
 }
 
+static const char* get_romset(const char *path)
+{
+	static char romset[32];
+	if (!path) return 0;
+
+	const char* p = strrchr(path, '/');
+	if (!p) return 0;
+
+	p++;
+	int len = strlen(p);
+	if (len > 4 && !strcasecmp(p + len - 4, ".zip")) len -= 4;
+	if (len > 31) len = 31;
+	memcpy(romset, p, len);
+
+	romset[len] = 0;
+	return romset;
+}
+
 static int checked_ok;
 static int romsets = 0;
 static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
@@ -585,10 +623,8 @@ static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 	static char full_path[1024];
 
 	const char* path = (const char*)sd->user;
-	if (!path) return 0;
-	const char* romset = strrchr(path, '/');
+	const char* romset = get_romset(path);
 	if (!romset) return 0;
-	romset++;
 
 	switch (evt)
 	{
@@ -712,10 +748,8 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	static int vrom_mirror = 1;
 
 	const char* path = (const char*)sd->user;
-	if (!path) return 0;
-	const char* romset = strrchr(path, '/');
+	const char* romset = get_romset(path);
 	if (!romset) return 0;
-	romset++;
 
 	switch (evt)
 	{
@@ -922,7 +956,7 @@ int neogeo_romset_tx(char* name)
 	if (!(system_type & 2))
 	{
 		sprintf(full_path, "%s/%s/romset.xml", getRootDir(), name);
-		if (access(full_path, F_OK)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
+		if (!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
 
 		printf("xml for %s: %s\n", name, full_path);
 
@@ -932,11 +966,11 @@ int neogeo_romset_tx(char* name)
 		checked_ok = false;
 		romsets = 0;
 		sax.all_event = xml_check_files;
-		XMLDoc_parse_file_SAX(full_path, &sax, name);
+		parse_xml(full_path, &sax, name);
 		if (!checked_ok) return 0;
 
 		sax.all_event = xml_load_files;
-		XMLDoc_parse_file_SAX(full_path, &sax, name);
+		parse_xml(full_path, &sax, name);
 	}
 
 	// Load system ROMs

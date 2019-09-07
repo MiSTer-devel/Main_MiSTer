@@ -142,8 +142,8 @@ static bool isPathDirectory(char *path)
 
 	return false;
 }
-/*
-static bool isPathRegularFile(char *path)
+
+static bool isPathRegularFile(const char *path)
 {
 	make_fullpath(path);
 
@@ -153,8 +153,8 @@ static bool isPathRegularFile(char *path)
 		mz_zip_archive z{};
 		if (!mz_zip_reader_init_file(&z, zip_path, 0))
 		{
-			printf("isPathRegularFile(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path,
-			       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
+			//printf("isPathRegularFile(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path,
+			//       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
 			return false;
 		}
 
@@ -167,9 +167,9 @@ static bool isPathRegularFile(char *path)
 		const int file_index = mz_zip_reader_locate_file(&z, file_path, NULL, 0);
 		if (file_index < 0)
 		{
-			printf("isPathRegularFile(mz_zip_reader_locate_file) Zip:%s, file:%s, error: %s\n",
-					 zip_path, file_path,
-					 mz_zip_get_error_string(mz_zip_get_last_error(&z)));
+			//printf("isPathRegularFile(mz_zip_reader_locate_file) Zip:%s, file:%s, error: %s\n",
+			//		 zip_path, file_path,
+			//		 mz_zip_get_error_string(mz_zip_get_last_error(&z)));
 			mz_zip_reader_end(&z);
 			return false;
 		}
@@ -183,19 +183,12 @@ static bool isPathRegularFile(char *path)
 	}
 	else
 	{
-		int stmode = get_stmode(full_path);
-		if (!stmode)
-		{
-			printf("isPathRegularFile(stat) path:%s, error:%s.\n", full_path, strerror(errno));
-			return false;
-		}
-
-		if (stmode & S_IFREG) return true;
+		if (get_stmode(full_path) & S_IFREG) return true;
 	}
 
 	return false;
 }
-*/
+
 void FileClose(fileTYPE *file)
 {
 	if (file->zip)
@@ -471,7 +464,7 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
 	else
 	{
 		printf("FileReadAdv error(unknown file type).\n");
-		return -1;
+		return 0;
 	}
 
 	file->offset += ret;
@@ -598,7 +591,7 @@ int FileLoadConfig(const char *name, void *pBuffer, int size)
 
 int FileExists(const char *name)
 {
-	return !access(make_fullpath(name), F_OK);
+	return isPathRegularFile(name);
 }
 
 int FileCanWrite(const char *name)
@@ -927,6 +920,7 @@ static bool IsInSameFolder(const char *folder, const char *path)
 int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix)
 {
 	static char file_name[1024];
+	static char full_path[1024];
 
 	int has_trd = 0;
 	const char *ext = extension;
@@ -936,12 +930,6 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		ext += 3;
 	}
 
-	const char* is_zipped = strcasestr(path, ".zip");
-	if (is_zipped && strcasestr(is_zipped + 4, ".zip"))
-	{
-		printf("Nested zip-files are not supported: %s\n", path);
-		return 0;
-	}
 	int extlen = strlen(extension);
 
 	//printf("scan dir\n");
@@ -974,6 +962,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 		sprintf(full_path, "%s/%s", getRootDir(), path);
 		int path_len = strlen(full_path);
+
+		const char* is_zipped = strcasestr(full_path, ".zip");
+		if (is_zipped && strcasestr(is_zipped + 4, ".zip"))
+		{
+			printf("Nested zip-files are not supported: %s\n", full_path);
+			return 0;
+		}
 
 		printf("Start to scan %sdir: %s\n", is_zipped ? "zipped " : "", full_path);
 		printf("Position on item: %s\n", file_name);
@@ -1062,6 +1057,11 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 			if (options & SCANO_NEOGEO)
 			{
+				if (de->d_type == DT_REG && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip"))
+				{
+					de->d_type = DT_DIR;
+				}
+
 				if (de->d_type != DT_DIR) continue;
 				if (!strcmp(de->d_name, ".."))
 				{
@@ -1075,9 +1075,10 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 				direntext_t dext = { *de, 0, "" };
 				memcpy(dext.altname, de->d_name, sizeof(dext.altname));
+				if (!strcasecmp(dext.altname + strlen(dext.altname) - 4, ".zip")) dext.altname[strlen(dext.altname) - 4] = 0;
 
 				full_path[path_len] = 0;
-				char *altname = neogeo_get_altname(full_path, de->d_name);
+				char *altname = neogeo_get_altname(full_path, &dext);
 				if (altname)
 				{
 					dext.de.d_type = DT_REG;
