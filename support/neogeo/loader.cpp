@@ -354,6 +354,9 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 	return size;
 }
 
+static uint32_t crom_sz_max = 0;
+static uint32_t crom_start = 0;
+
 #define ALIGN_1MB ((1024*1024)-1)
 static void notify_core(uint8_t index, uint32_t size)
 {
@@ -367,6 +370,11 @@ static void notify_core(uint8_t index, uint32_t size)
 	if (index == 4 || index == 6) size = (size + ALIGN_1MB) & ~ALIGN_1MB;
 	char memcp = !(index == 9 || (index >= 16 && index < 64));
 	printf("notify_core(%d,%d): memcp = %d\n", index, size, memcp);
+
+	if (index == 15 && size > crom_sz_max) crom_sz_max = size;
+	if (index == 4) crom_start = 0x200000 + size;
+	if (index == 5) crom_start = 0x280000 + size;
+	if (index == 6) crom_start = 0x300000 + size;
 
 	EnableFpga();
 	spi8(UIO_FILE_TX_DAT);
@@ -949,6 +957,8 @@ int neogeo_romset_tx(char* name)
 
 	user_io_8bit_set_status(1, 1);	// Maintain reset
 
+	crom_sz_max = 0;
+	crom_start = 0;
 	crom_sz = 0;
 	set_config(0, -1);
 
@@ -1002,6 +1012,15 @@ int neogeo_romset_tx(char* name)
 
 	if (!(system_type & 2))	neogeo_tx(HomeDir, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0x10000);
 	neogeo_file_tx(HomeDir, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
+
+	if (crom_start < 0x300000) crom_start = 0x300000;
+	uint32_t crom_max = crom_start + crom_sz_max;
+	uint16_t ram_sz = sdram_sz() & 3;
+	if ((ram_sz == 2 && crom_max > 0x4000000) || (ram_sz == 1 && crom_max > 0x2000000) || !ram_sz)
+	{
+		Info("Not enough memory!\nGraphics will be corrupted");
+		sleep(2);
+	}
 
 	if (!strcmp(romset, "kof95"))
 	{
