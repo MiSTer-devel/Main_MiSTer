@@ -108,7 +108,11 @@ static void neogeo_osd_progress(const char* name, unsigned int progress)
 	char c = pchar[progress % PROGRESS_CHARS];
 	progress /= PROGRESS_CHARS;
 
-	strcpy(progress_buf, name);
+	const char* p = strrchr(name, '/');
+	if (p) p++;
+	else p = name;
+
+	strcpy(progress_buf, p);
 	char *buf = progress_buf + strlen(progress_buf);
 	*buf++ = ' ';
 
