@@ -937,8 +937,6 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	if (mode == SCANF_INIT)
 	{
 		file_name[0] = 0;
-		if (options & SCANO_NEOGEO) neogeo_scan_xml();
-
 		if ((options & SCANO_NOENTER) || !isPathDirectory(path))
 		{
 			char *p = strrchr(path, '/');
@@ -959,6 +957,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			path[0] = 0;
 			file_name[0] = 0;
 		}
+
+		if (options & SCANO_NEOGEO) neogeo_scan_xml(path);
 
 		sprintf(full_path, "%s/%s", getRootDir(), path);
 		int path_len = strlen(full_path);

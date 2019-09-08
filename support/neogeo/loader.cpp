@@ -548,10 +548,12 @@ static void parse_xml(const char* filename, const SAX_Callbacks* sax, void* user
 	}
 }
 
-int neogeo_scan_xml()
+int neogeo_scan_xml(char *path)
 {
 	static char full_path[1024];
-	sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
+	sprintf(full_path, "%s/romsets.xml", path);
+	if(!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
+
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
 
@@ -980,8 +982,14 @@ int neogeo_romset_tx(char* name)
 	if (!(system_type & 2))
 	{
 		sprintf(full_path, "%s/%s/romset.xml", getRootDir(), name);
-		if (!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
-
+		if (!FileExists(full_path))
+		{
+			strcpy(full_path, name);
+			char *p = strrchr(full_path, '/');
+			if (p) *p = 0;
+			strcat(full_path, "/romsets.xml");
+			if (!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
+		}
 		printf("xml for %s: %s\n", name, full_path);
 
 		SAX_Callbacks sax;
