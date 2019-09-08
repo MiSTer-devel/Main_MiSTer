@@ -198,13 +198,26 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 	return size;
 }
 
+static void make_path(const char *root, const char *name, char *path)
+{
+	strcpy(path, root);
+	while(!memcmp(name, "../", 3))
+	{
+		name += 3;
+		char *p = strrchr(path, '/');
+		if (p) *p = 0;
+	}
+	strcat(path, "/");
+	strcat(path, name);
+}
+
 static uint8_t loadbuf[1024 * 1024];
 static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t index, uint32_t offset, uint32_t size)
 {
 	fileTYPE f = {};
 	static char name_buf[1024];
 
-	sprintf(name_buf, "%s/%s", path, name);
+	make_path(path, name, name_buf);
 	if (!FileOpen(&f, name_buf, 0)) return 0;
 	if (!size && offset < f.size) size = f.size - offset;
 	if (!size)
@@ -273,7 +286,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 	fileTYPE f = {};
 	static char name_buf[1024];
 
-	sprintf(name_buf, "%s/%s", path, name);
+	make_path(path, name, name_buf);
 	if (!FileOpen(&f, name_buf, 0)) return 0;
 	if (!size && offset < f.size) size = f.size - offset;
 	if (!size)
@@ -664,7 +677,7 @@ static int xml_check_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, c
 				{
 					if (!strcasecmp(node->attributes[i].name, "name"))
 					{
-						sprintf(full_path, "%s/%s", path, node->attributes[i].value);
+						make_path(path, node->attributes[i].value, full_path);
 						if (FileExists(full_path))
 						{
 							printf("Found %s\n", full_path);
@@ -746,7 +759,7 @@ static void notify_conf()
 #define VROM_SIZE  (16 * 1024 * 1024)
 static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
-	static char file_name[16 + 1] { "" };
+	static char file_name[256] = {};
 	static int in_correct_romset = 0;
 	static int in_file = 0;
 	static unsigned char file_index = 0;
@@ -826,7 +839,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 
 				for (int i = 0; i < node->n_attributes; i++) {
 					if (!strcasecmp(node->attributes[i].name, "name"))
-						strncpy(file_name, node->attributes[i].value, 16);
+						strncpy(file_name, node->attributes[i].value, sizeof(file_name)-1);
 
 					if (use_index) {
 						if (!strcasecmp(node->attributes[i].name, "index"))
@@ -1023,21 +1036,6 @@ int neogeo_romset_tx(char* name)
 		sleep(2);
 	}
 
-	if (!strcmp(romset, "kof95"))
-	{
-		printf("Enabled sprite gfx gap hack for kof95\n");
-		set_config(1 << 28, 0xF << 28);
-	}
-	else if (!strcmp(romset, "whp"))
-	{
-		printf("Enabled sprite gfx gap hack for whp\n");
-		set_config(2 << 28, 0xF << 28);
-	}
-	else if (!strcmp(romset, "kizuna"))
-	{
-		printf("Enabled sprite gfx gap hack for kizuna\n");
-		set_config(3 << 28, 0xF << 28);
-	}
 	notify_conf();
 
 	FileGenerateSavePath((system_type & 2) ? "ngcd" : name, (char*)full_path);
