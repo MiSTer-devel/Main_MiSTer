@@ -47,6 +47,7 @@ static int emu_mode = EMU_NONE;
 
 // keep state over core type and its capabilities
 static unsigned char core_type = CORE_TYPE_UNKNOWN;
+static unsigned char dual_sdr = 0;
 
 static int fio_size = 0;
 static int io_ver = 0;
@@ -608,6 +609,11 @@ uint16_t sdram_sz(int sz)
 	return res;
 }
 
+int user_io_is_dualsdr()
+{
+	return dual_sdr;
+}
+
 void user_io_init(const char *path)
 {
 	char *name;
@@ -621,6 +627,12 @@ void user_io_init(const char *path)
 	core_type = (fpga_core_id() & 0xFF);
 	fio_size = fpga_get_fio_size();
 	io_ver = fpga_get_io_version();
+
+	if (core_type == CORE_TYPE_8BIT2)
+	{
+		dual_sdr = 1;
+		core_type = CORE_TYPE_8BIT;
+	}
 
 	if ((core_type != CORE_TYPE_DUMB) &&
 		(core_type != CORE_TYPE_MINIMIG2) &&

@@ -605,6 +605,12 @@ int fpga_get_buttons()
 	return (gpi >> 29) & 3;
 }
 
+int fpga_get_io_type()
+{
+	fpga_gpo_write(fpga_gpo_read() | 0x80000000);
+	return (fpga_gpi_read() >> 28) & 1;
+}
+
 void reboot(int cold)
 {
 	sync();

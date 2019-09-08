@@ -9,6 +9,7 @@
 #include "loader.h"
 #include "../../sxmlc.h"
 #include "../../user_io.h"
+#include "../../fpga_io.h"
 #include "../../osd.h"
 #include "../../menu.h"
 
@@ -1016,7 +1017,7 @@ int neogeo_romset_tx(char* name)
 	if (crom_start < 0x300000) crom_start = 0x300000;
 	uint32_t crom_max = crom_start + crom_sz_max;
 	uint16_t ram_sz = sdram_sz() & 3;
-	if ((ram_sz == 2 && crom_max > 0x4000000) || (ram_sz == 1 && crom_max > 0x2000000) || !ram_sz)
+	if ((!user_io_is_dualsdr() || !fpga_get_io_type()) && ((ram_sz == 2 && crom_max > 0x4000000) || (ram_sz == 1 && crom_max > 0x2000000) || !ram_sz))
 	{
 		Info("Not enough memory!\nGraphics will be corrupted");
 		sleep(2);

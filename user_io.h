@@ -137,10 +137,11 @@
 #define CORE_TYPE_UNKNOWN   0x55
 #define CORE_TYPE_DUMB      0xa0   // core without any io controller interaction
 #define CORE_TYPE_MIST      0xa3   // mist atari st core
-#define CORE_TYPE_8BIT      0xa4   // atari 800/c64 like core
+#define CORE_TYPE_8BIT      0xa4   // generic core
 #define CORE_TYPE_MINIMIG2  0xa5   // new Minimig with AGA
 #define CORE_TYPE_ARCHIE    0xa6   // Acorn Archimedes
 #define CORE_TYPE_SHARPMZ   0xa7   // Sharp MZ Series
+#define CORE_TYPE_8BIT2     0xa8   // generic core using dual SDRAM
 
 #define UART_FLG_PPP        0x0001
 #define UART_FLG_TERM       0x0002
@@ -236,6 +237,7 @@ const char* get_rbf_name();
 const char* get_rbf_path();
 
 uint16_t sdram_sz(int sz = -1);
+int user_io_is_dualsdr();
 
 int GetUARTMode();
 int GetMidiLinkMode();
