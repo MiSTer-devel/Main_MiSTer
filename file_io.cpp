@@ -1062,7 +1062,11 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					de->d_type = DT_DIR;
 				}
 
-				if (de->d_type != DT_DIR) continue;
+				if (strcasecmp(de->d_name + strlen(de->d_name) - 4, ".neo"))
+				{
+					if (de->d_type != DT_DIR) continue;
+				}
+
 				if (!strcmp(de->d_name, ".."))
 				{
 					if (!strlen(path)) continue;
