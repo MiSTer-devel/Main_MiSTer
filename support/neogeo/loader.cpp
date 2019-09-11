@@ -305,7 +305,7 @@ static inline void spr_bswap(uint32_t* buf, uint32_t size)
 	for (uint32_t i = 0; i < size; i++) buf[i] = (buf[i] & 0xFF0000FF) | ((buf[i] & 0xFF00) << 8) | ((buf[i] & 0xFF0000) >> 8);
 }
 
-static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_file_type, uint8_t index, uint32_t offset, uint32_t size, uint32_t expand, int swap)
+static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_file_type, uint8_t index, uint32_t offset, uint32_t size, uint32_t expand, int swap, uint32_t addr)
 {
 	fileTYPE f = {};
 	static char name_buf[1024];
@@ -328,7 +328,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 	}
 
 	FileSeek(&f, offset, SEEK_SET);
-	printf("ROM %s (offset %u, size %u, exp %u, type %u) with index %u\n", name, offset, size, expand, neo_file_type, index);
+	printf("ROM %s (offset %u, size %u, exp %u, type %u, addr %u) with index %u\n", name, offset, size, expand, neo_file_type, addr, index);
 
 	int progress = -1;
 
@@ -337,7 +337,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 	if(expand) size = expand;
 	uint32_t remain = size;
 
-	uint32_t map_addr = 0x30000000 + (((index >= 16) && (index < 64)) ? (index - 16) * 0x80000 : (index == 9) ? 0x2000000 : 0x8000000);
+	uint32_t map_addr = 0x30000000 + (addr ? addr : ((index >= 16) && (index < 64)) ? (index - 16) * 0x80000 : (index == 9) ? 0x2000000 : 0x8000000);
 
 	while (remain)
 	{
@@ -456,7 +456,11 @@ static uint32_t neogeo_tx(const char* path, const char* name, uint8_t neo_file_t
 
 	if (index >= 0)
 	{
-		sz = load_rom_to_mem(path, name, neo_file_type, index, offset, size, expand, swap);
+		sz = load_rom_to_mem(path, name, neo_file_type, index, offset, size, expand, swap, 0);
+
+		//multipart prom
+		if (!strcasecmp(name, "prom") && index == 4) sz += load_rom_to_mem(path, "prom1", neo_file_type, index, offset, size, expand, swap, sz);
+
 		if (sz) notify_core(index, sz);
 	}
 
