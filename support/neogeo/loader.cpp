@@ -1180,7 +1180,7 @@ int neogeo_romset_tx(char* name)
 	//flush CROM if any.
 	neogeo_tx(NULL, NULL, 0, -1, 0, 0);
 
-	if (!(system_type & 2))	neogeo_tx(HomeDir, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0x10000);
+	if (!(system_type & 2))	neogeo_tx(HomeDir, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0);
 	neogeo_file_tx(HomeDir, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
 
 	if (crom_start < 0x300000) crom_start = 0x300000;
