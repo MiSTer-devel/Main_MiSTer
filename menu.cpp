@@ -2127,11 +2127,12 @@ void HandleUI(void)
 				}
 				else
 				{
-					if (strlen(get_joystick_alias(get_map_vid(), get_map_pid()).c_str()) == 0) { //JOYSTICK_ALIAS_NONE
+                    p = get_joystick_alias(get_map_vid(), get_map_pid()).c_str();
+					if (strlen(p) == 0) { //JOYSTICK_ALIAS_NONE
 						sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
 					}
 					else {
-						sprintf(s, " %s", get_joystick_alias(get_map_vid(), get_map_pid()).c_str());
+						sprintf(s, " %s", p);
 					}
 					if (get_map_button() > 0)
 					{
