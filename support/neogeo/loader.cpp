@@ -1109,6 +1109,10 @@ int neogeo_romset_tx(char* name)
 	system_type = (user_io_8bit_set_status(0, 0) >> 1) & 3;
 	printf("System type: %u\n", system_type);
 
+	spi_uio_cmd_cont(UIO_GET_OSDMASK);
+	uint16_t mask = spi_w(0);
+	DisableIO();
+
 	user_io_8bit_set_status(1, 1);	// Maintain reset
 
 	crom_sz_max = 0;
@@ -1158,7 +1162,7 @@ int neogeo_romset_tx(char* name)
 		// Not loading the special 'debug' romset
 		if (!(system_type & 2)) {
 			sprintf(full_path, "%s/uni-bios.rom", HomeDir);
-			if (FileExists(full_path)) {
+			if (!(mask & 0x8000) && FileExists(full_path)) {
 				// Autoload Unibios for cart systems if present
 				neogeo_tx(HomeDir, "uni-bios.rom", NEO_FILE_RAW, 0, 0, 0x20000);
 			} else {
