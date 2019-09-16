@@ -609,6 +609,49 @@ uint16_t sdram_sz(int sz)
 	return res;
 }
 
+uint16_t altcfg(int alt)
+{
+	int res = 0;
+
+	int fd;
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
+
+	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
+	if (buf == (void *)-1)
+	{
+		printf("Unable to mmap(/dev/mem)\n");
+		close(fd);
+		return 0;
+	}
+
+	volatile uint8_t* par = (volatile uint8_t*)buf;
+	par += 0xF04;
+	if (alt >= 0)
+	{
+		*par++ = 0x34;
+		*par++ = 0x99;
+		*par++ = 0xBA;
+		*par++ = (uint8_t)alt;
+		printf("** altcfg(%d)\n", alt);
+	}
+	else
+	{
+		if ((par[0] == 0x34) && (par[1] == 0x99) && (par[2] == 0xBA))
+		{
+			res = par[3];
+			printf("** altcfg: got cfg %d\n", res);
+		}
+		else
+		{
+			printf("** altcfg: no cfg\n");
+		}
+	}
+
+	munmap(buf, 0x1000);
+	close(fd);
+	return res;
+}
+
 int user_io_is_dualsdr()
 {
 	return dual_sdr;
@@ -1704,6 +1747,15 @@ void user_io_send_buttons(char force)
 
 	if ((map != key_map) || force)
 	{
+		if ((key_map & (BUTTON1 | BUTTON2)) == BUTTON2 && (map & (BUTTON1 | BUTTON2)) == (BUTTON1 | BUTTON2) && is_menu_core())
+		{
+			if (FileExists(ini_cfg.filename_alt))
+			{
+				altcfg(altcfg() ? 0 : 1);
+				fpga_load_rbf("menu.rbf");
+			}
+		}
+
 		const char *name = get_rbf_path();
 		if (name[0] && (get_key_mod() & (LGUI | LSHIFT)) == (LGUI | LSHIFT) && (key_map & BUTTON2) && !(map & BUTTON2))
 		{

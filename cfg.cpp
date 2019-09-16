@@ -14,7 +14,7 @@ void MiSTer_ini_parse()
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.bootscreen = 1;
 	cfg.fb_terminal = 1;
-	ini_parse(&ini_cfg);
+	ini_parse(&ini_cfg, altcfg());
 }
 
 // mist ini sections
@@ -61,7 +61,7 @@ const ini_var_t ini_vars[] = {
 // mist ini config
 const ini_cfg_t ini_cfg = {
 	"MiSTer.ini",
-	CONFIG_DIR"/MiSTer.ini",
+	"MiSTer_alt.ini",
 	ini_sections,
 	ini_vars,
 	(int)(sizeof(ini_sections) / sizeof(ini_section_t)),
