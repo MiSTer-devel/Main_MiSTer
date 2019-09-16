@@ -16,8 +16,6 @@
 #define VID_RETROLINK       0x0079
 #define VID_SONY            0x054c
 
-
-
 /*****************************************************************************/
 
 // name known joysticks

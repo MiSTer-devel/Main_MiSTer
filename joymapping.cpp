@@ -13,44 +13,37 @@ This file contains lookup information on known controllers
 
 static const char * JOYSTICK_ALIAS_NONE    = "";
 static const char * JOYSTICK_ALIAS_5200_DAPTOR2   = "5200-daptor";
-const char * JOYSTICK_ALIAS_8BITDO_SFC30   = "8BitDo SFC30";
-const char * JOYSTICK_ALIAS_8BITDO_FC30    = "8BitDo FC30";
-const char * JOYSTICK_ALIAS_8BITDO_SN30PRO = "8BitDo SN30 pro";
+static const char * JOYSTICK_ALIAS_8BITDO_SFC30   = "8BitDo SFC30";
+static const char * JOYSTICK_ALIAS_8BITDO_FC30    = "8BitDo FC30";
+static const char * JOYSTICK_ALIAS_8BITDO_SN30PRO = "8BitDo SN30 pro";
 
-const char * JOYSTICK_ALIAS_ATARI_DAPTOR2  = "2600-daptor II";
-const char * JOYSTICK_ALIAS_BLISSTER       = "BlisSTer";
-const char * JOYSTICK_ALIAS_CHEAP_SNES     = "SNES Generic Pad";
-const char * JOYSTICK_ALIAS_DS3            = "Sony Dual Shock 3";
-const char * JOYSTICK_ALIAS_DS4            = "Sony Dual Shock 4";
-const char * JOYSTICK_ALIAS_HORI_FC4       = "Hori Fighter Commander 4";
-const char * JOYSTICK_ALIAS_HORI_FC4_PS3   = "Hori Fighter Cmdr 4 (PS3)";
-const char * JOYSTICK_ALIAS_HORI_FC4_PS4   = "Hori Fighter Cmdr 4 (PS4)";
-const char * JOYSTICK_ALIAS_HORI_VLX       = "Hori RAP Premium VLX";
-const char * JOYSTICK_ALIAS_IBUFALLO_SNES  = "iBuffalo SFC BSGP801";
-const char * JOYSTICK_ALIAS_IBUFALLO_NES   = "iBuffalo FC BGCFC801";
-const char * JOYSTICK_ALIAS_PS_ADAPTER_    = "PlayStation USB adapter";
-const char * JOYSTICK_ALIAS_QANBA_Q4RAF    = "Qanba Q4RAF";
-const char * JOYSTICK_ALIAS_RETROLINK_GC   = "Retrolink N64/GC";
-const char * JOYSTICK_ALIAS_RETROLINK_NES  = "Retrolink NES";
-const char * JOYSTICK_ALIAS_RETRO_FREAK    = "Retro Freak gamepad";
-const char * JOYSTICK_ALIAS_ROYDS_EX       = "ROYDS Stick.EX";
-const char * JOYSTICK_ALIAS_SPEEDLINK_COMP = "Speedlink Competition Pro";
-const char * JOYSTICK_ALIAS_SWITCH_PRO     = "Nintendo Switch Pro";
-const char * JOYSTICK_ALIAS_NEOGEO_DAPTOR  = "NEOGEO-daptor";
-const char *JOYSTICK_ALIAS_NEOGEO_X       = "NEOGEO X Arcade Stick";
-const char * JOYSTICK_ALIAS_VISION_DAPTOR  = "Vision-daptor";
-const char * JOYSTICK_ALIAS_WIIMOTE        = "Nintendo WiiMote";
-const char * JOYSTICK_ALIAS_WIIU           = "Nintendo Wii U";
+static const char * JOYSTICK_ALIAS_ATARI_DAPTOR2  = "2600-daptor II";
+static const char * JOYSTICK_ALIAS_BLISSTER       = "BlisSTer";
+static const char * JOYSTICK_ALIAS_CHEAP_SNES     = "SNES Generic Pad";
+static const char * JOYSTICK_ALIAS_DS3            = "Sony Dual Shock 3";
+static const char * JOYSTICK_ALIAS_DS4            = "Sony Dual Shock 4";
+static const char * JOYSTICK_ALIAS_HORI_FC4       = "Hori Fighter Commander 4";
+static const char * JOYSTICK_ALIAS_HORI_FC4_PS3   = "Hori Fighter Cmdr 4 (PS3)";
+static const char * JOYSTICK_ALIAS_HORI_FC4_PS4   = "Hori Fighter Cmdr 4 (PS4)";
+static const char * JOYSTICK_ALIAS_HORI_VLX       = "Hori RAP Premium VLX";
+static const char * JOYSTICK_ALIAS_IBUFALLO_SNES  = "iBuffalo SFC BSGP801";
+static const char * JOYSTICK_ALIAS_IBUFALLO_NES   = "iBuffalo FC BGCFC801";
+static const char * JOYSTICK_ALIAS_PS_ADAPTER_    = "PlayStation USB adapter";
+static const char * JOYSTICK_ALIAS_QANBA_Q4RAF    = "Qanba Q4RAF";
+static const char * JOYSTICK_ALIAS_RETROLINK_GC   = "Retrolink N64/GC";
+static const char * JOYSTICK_ALIAS_RETROLINK_NES  = "Retrolink NES";
+static const char * JOYSTICK_ALIAS_RETRO_FREAK    = "Retro Freak gamepad";
+static const char * JOYSTICK_ALIAS_ROYDS_EX       = "ROYDS Stick.EX";
+static const char * JOYSTICK_ALIAS_SPEEDLINK_COMP = "Speedlink Competition Pro";
+static const char * JOYSTICK_ALIAS_SWITCH_PRO     = "Nintendo Switch Pro";
+static const char * JOYSTICK_ALIAS_NEOGEO_DAPTOR  = "NEOGEO-daptor";
+static const char *JOYSTICK_ALIAS_NEOGEO_X       = "NEOGEO X Arcade Stick";
+static const char * JOYSTICK_ALIAS_VISION_DAPTOR  = "Vision-daptor";
+static const char * JOYSTICK_ALIAS_WIIMOTE        = "Nintendo WiiMote";
+static const char * JOYSTICK_ALIAS_WIIU           = "Nintendo Wii U";
 
 
 /*****************************************************************************/
-
-/*const char *get_joystick_name(uint16_t vid, uint16_t pid) {
-    // return "TEST OUTPUT";                        // <- works
-    // return JOYSTICK_ALIAS_HORI_FC4.c_str();      // <- works
-    //return get_joystick_alias(vid, pid).c_str();  // <- doesn't woprk if returns a std::string
-    return get_joystick_alias(vid, pid);            // <- works if returns a const char *
-}*/
 
 const char *get_joystick_alias( uint16_t vid, uint16_t pid ) {
 
@@ -93,8 +86,7 @@ const char *get_joystick_alias( uint16_t vid, uint16_t pid ) {
                 case 0x0084: return JOYSTICK_ALIAS_HORI_FC4_PS4;
                 case 0x0085: return JOYSTICK_ALIAS_HORI_FC4_PS3;
                 case 0x0086: return JOYSTICK_ALIAS_HORI_FC4;
-                
-                case 0x05c4: return JOYSTICK_ALIAS_DS4;
+                case 0x0070: return JOYSTICK_ALIAS_HORI_VLX;
             }
             break;
         // ----
