@@ -177,7 +177,7 @@ const char *config_tos_usb[] = { "none", "control", "debug", "serial", "parallel
 
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M"   };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
-const char *config_memory_fast_msg[] = { "none", "2M",   "4M",   "25M", "58M", "293M", "327M" };
+const char *config_memory_fast_msg[] = { "none", "2M",   "4M",   "24M", "56M", "280M", "312M" };
 
 const char *config_scanlines_msg[] = { "off", "dim", "black" };
 const char *config_ar_msg[] = { "4:3", "16:9" };
@@ -3506,7 +3506,7 @@ void HandleUI(void)
 		OsdWrite(6, s, menusub == 4, 0);
 
 		OsdWrite(7, "", 0, 0);
-		OsdWrite(8, ((minimig_config.memory & 0x80) && !(minimig_config.memory & 0x10)) ? "  ** 64MB SDRAM REQUIRED **" : "", 0, 0);
+		OsdWrite(8, ((minimig_config.memory & 0x80) && !(minimig_config.memory & 0x10) && !(sdram_sz() & 2)) ? "  ** 64MB SDRAM REQUIRED **" : "", 0, 0);
 
 		for (int i = 9; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
 		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 5, 0);
@@ -4342,7 +4342,7 @@ void HandleUI(void)
 			}
 			else
 			{
-				sprintf(str, "  MiSTer    ");
+				sprintf(str, " MiSTer      ");
 
 				time_t t = time(NULL);
 				struct tm tm = *localtime(&t);
@@ -4352,9 +4352,28 @@ void HandleUI(void)
 				}
 
 				int netType = (int)getNet(0);
-				if (netType) str[9] = 0x1b + netType;
-				if (has_bt()) str[10] = 4;
-				str[21] = ' ';
+				if (netType) str[8] = 0x1b + netType;
+				if (has_bt()) str[9] = 4;
+				if (user_io_get_sdram_cfg() & 0x8000)
+				{
+					switch (user_io_get_sdram_cfg() & 7)
+					{
+					case 7:
+						str[10] = 0x95;
+						break;
+					case 3:
+						str[10] = 0x94;
+						break;
+					case 1:
+						str[10] = 0x93;
+						break;
+					default:
+						str[10] = 0x92;
+						break;
+					}
+				}
+
+				str[22] = ' ';
 			}
 
 			OsdWrite(16, "", 1, 0);
