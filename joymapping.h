@@ -21,8 +21,8 @@
 /*****************************************************************************/
 
 // name known joysticks
-std::string get_joystick_alias( uint16_t vid, uint16_t pid );
+const char *get_joystick_alias( uint16_t vid, uint16_t pid );
 
 /*****************************************************************************/
 
-#endif // JOYMAPPING_H
+#endif // JOYMAPPING_H 

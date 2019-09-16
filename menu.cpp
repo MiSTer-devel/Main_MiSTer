@@ -2127,7 +2127,7 @@ void HandleUI(void)
 				}
 				else
 				{
-                    p = get_joystick_alias(get_map_vid(), get_map_pid()).c_str();
+					p = get_joystick_alias(get_map_vid(), get_map_pid());
 					if (strlen(p) == 0) { //JOYSTICK_ALIAS_NONE
 						sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
 					}
