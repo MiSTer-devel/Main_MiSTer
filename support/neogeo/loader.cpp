@@ -471,6 +471,7 @@ struct rom_info
 {
 	char name[256];
 	char altname[256];
+	char hide;
 };
 
 static rom_info roms[1000];
@@ -504,6 +505,10 @@ static int xml_scan(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 				{
 					memset(roms[rom_cnt].altname, 0, sizeof(roms[rom_cnt].altname));
 					strncpy(roms[rom_cnt].altname, node->attributes[i].value, sizeof(roms[rom_cnt].altname) - 1);
+				}
+				else if (!strcasecmp(node->attributes[i].name, "hide"))
+				{
+					roms[rom_cnt].hide = 1;
 				}
 			}
 			rom_cnt++;
@@ -638,6 +643,7 @@ char *neogeo_get_altname(char *path, direntext_t *de)
 			char *p = strcasestr(roms[i].name, full_path);
 			if (p)
 			{
+				if (roms[i].hide) return (char*)-1;
 				if(p == roms[i].name) return roms[i].altname;
 
 				sprintf(full_path, "%s (%s)", roms[i].altname, de->altname);
@@ -646,6 +652,7 @@ char *neogeo_get_altname(char *path, direntext_t *de)
 		}
 		else if (!strcasecmp(de->altname, roms[i].name))
 		{
+			if (roms[i].hide) return (char*)-1;
 			return roms[i].altname;
 		}
 	}

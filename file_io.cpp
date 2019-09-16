@@ -1085,6 +1085,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				char *altname = neogeo_get_altname(full_path, &dext);
 				if (altname)
 				{
+					if (altname == (char*)-1) continue;
+
 					dext.de.d_type = DT_REG;
 					memcpy(dext.altname, altname, sizeof(dext.altname));
 				}
