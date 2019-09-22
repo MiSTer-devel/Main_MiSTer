@@ -69,6 +69,7 @@
 #define UIO_GET_OSDMASK 0x2E  // Get mask
 #define UIO_SET_FBUF    0x2F  // Set frame buffer for HPS output
 #define UIO_WAIT_VSYNC  0x30  // Wait for VSync
+#define UIO_SET_MEMSZ   0x31  // Send memory size to the core
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -136,10 +137,11 @@
 #define CORE_TYPE_UNKNOWN   0x55
 #define CORE_TYPE_DUMB      0xa0   // core without any io controller interaction
 #define CORE_TYPE_MIST      0xa3   // mist atari st core
-#define CORE_TYPE_8BIT      0xa4   // atari 800/c64 like core
+#define CORE_TYPE_8BIT      0xa4   // generic core
 #define CORE_TYPE_MINIMIG2  0xa5   // new Minimig with AGA
 #define CORE_TYPE_ARCHIE    0xa6   // Acorn Archimedes
 #define CORE_TYPE_SHARPMZ   0xa7   // Sharp MZ Series
+#define CORE_TYPE_8BIT2     0xa8   // generic core using dual SDRAM
 
 #define UART_FLG_PPP        0x0001
 #define UART_FLG_TERM       0x0002
@@ -221,6 +223,7 @@ void user_io_set_joyswap(int swap);
 int user_io_get_joyswap();
 char user_io_osd_is_visible();
 void user_io_send_buttons(char);
+uint16_t user_io_get_sdram_cfg();
 
 void user_io_set_index(unsigned char index);
 unsigned char user_io_ext_idx(char *, char*);
@@ -231,6 +234,10 @@ void user_io_rtc_reset();
 
 const char* get_rbf_dir();
 const char* get_rbf_name();
+const char* get_rbf_path();
+
+uint16_t sdram_sz(int sz = -1);
+int user_io_is_dualsdr();
 
 int GetUARTMode();
 int GetMidiLinkMode();

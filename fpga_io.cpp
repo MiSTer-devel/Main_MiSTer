@@ -423,7 +423,7 @@ static int make_env(const char *name, const char *cfg)
 	}
 
 	volatile char* str = (volatile char*)buf;
-	memset((void*)str, 0, 0x1000);
+	memset((void*)str, 0, 0xF00);
 
 	*str++ = 0x21;
 	*str++ = 0x43;
@@ -603,6 +603,12 @@ int fpga_get_buttons()
 	int gpi = fpga_gpi_read();
 	if (gpi < 0) gpi = 0; // FPGA is not in user mode. Ignore the data;
 	return (gpi >> 29) & 3;
+}
+
+int fpga_get_io_type()
+{
+	fpga_gpo_write(fpga_gpo_read() | 0x80000000);
+	return (fpga_gpi_read() >> 28) & 1;
 }
 
 void reboot(int cold)
