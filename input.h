@@ -46,9 +46,6 @@ uint16_t get_map_vid();
 uint16_t get_map_pid();
 int has_default_map();
 
-int map_snes2neogeo(int dev);
-int map_snes2md(int dev);
-
 uint32_t get_key_mod();
 uint32_t get_ps2_code(uint16_t key);
 uint32_t get_amiga_code(uint16_t key);

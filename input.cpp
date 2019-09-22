@@ -24,8 +24,8 @@
 #include "fpga_io.h"
 #include "osd.h"
 #include "video.h"
+#include "joymapping.h"
 
-#define NUMDEV 30
 #define NUMPLAYERS 6
 #define UINPUT_NAME "MiSTer virtual input"
 
@@ -988,41 +988,6 @@ enum QUIRK
 	QUIRK_DS4TOUCH,
 };
 
-typedef struct
-{
-	uint16_t vid, pid;
-	uint8_t  led;
-	uint8_t  mouse;
-	uint8_t  axis_edge[256];
-	int8_t   axis_pos[256];
-
-	uint8_t  num;
-	uint8_t  has_map;
-	uint32_t map[32];
-
-	uint8_t  osd_combo;
-
-	uint8_t  has_mmap;
-	uint32_t mmap[32];
-	uint16_t jkmap[1024];
-
-	uint8_t  has_kbdmap;
-	uint8_t  kbdmap[256];
-
-	uint16_t guncal[4];
-
-	int      accx, accy;
-	int      quirk;
-
-	int      lightgun_req;
-	int      lightgun;
-
-	int      bind;
-	char     devname[32];
-	char     uniq[32];
-	char     name[128];
-}  devInput;
-
 static devInput input[NUMDEV] = {};
 
 #define BTN_NUM (sizeof(devInput::map) / sizeof(devInput::map[0]))
@@ -1268,90 +1233,11 @@ int convert_from_snes_mapping(int dev) {
     const char *core_name = user_io_get_core_name_ex();
     
     if(!strcmp(core_name, "NEOGEO"))
-        return map_snes2neogeo(dev);
+        return map_snes2neogeo(input, dev);
     
     if(!strcmp(core_name, "Genesis"))
-        return map_snes2md(dev);
+        return map_snes2md(input, dev);
     
-    return 1;
-}
-
-int map_snes2neogeo(int dev) {
-    /*
-       converts a SNES USB gamepad map into a NG map
-       we try to keep the same physical layout between SNES and NG gamepads
-       i.e.:
-              SNES              X         NG:            D
-                     Sel Sta  Y   A              Sel   C   B
-                                B                Sta     A
-    # SNES
-    SNES_A = 4
-    SNES_B = 5
-    SNES_X = 6
-    SNES_Y = 7
-    SNES_L = 8
-    SNES_R = 9
-    SNES_SELECT = 10
-    SNES_START = 11
-    # NEOGEO gamepad
-    NG_A = 4
-    NG_B = 5
-    NG_C = 6
-    NG_D = 7
-    NG_SELECT = 8
-    NG_START = 9
-    */
-    uint32_t val;
-    // switch A and B
-    val = input[dev].map[4];
-    input[dev].map[4] = input[dev].map[5];
-    input[dev].map[5] = val;
-    // switch X and Y
-    val = input[dev].map[6];
-    input[dev].map[6] = input[dev].map[7];
-    input[dev].map[7] = val;
-    // reassign Start and Select
-    input[dev].map[8] = input[dev].map[10];
-    input[dev].map[9] = input[dev].map[11];
-    //blank out the rest
-    input[dev].map[10] = 0;
-    input[dev].map[11] = 0;
-    return 1;
-}
-
-int map_snes2md(int dev) {
-    /*
-    '''convert a SNES USB gamepad map into a MD/Genesis map
-       we try to keep the same physical layout between SNES and MD gamepads
-       i.e.:
-                                                                 Z
-              SNES          L   X   R      MD:        Mode     Y   C
-                     Sel Sta  Y   A              Sta         X   B
-                                B                              A
-      to support fighting games out of the box, we will map C to R and Z to L
-    # Genesis/Megadrive gamepad
-    MD_A = 4
-    MD_B = 5
-    MD_C = 6
-    MD_START = 7
-    MD_MODE = 8
-    MD_X = 9
-    MD_Y = 10
-    MD_Z = 11
-    */
-    uint32_t val;
-    // switch A and B
-    val = input[dev].map[4];
-    input[dev].map[4] = input[dev].map[5];
-    input[dev].map[5] = val;
-    // set C to R
-    val = input[dev].map[6];
-    input[dev].map[6] = input[dev].map[9];  // C      <- SNES_R
-    input[dev].map[9] = input[dev].map[7];  // X      <- SNES_Y
-    input[dev].map[7] = input[dev].map[11]; // START  <- SNES_START
-    input[dev].map[11] = input[dev].map[8]; // Z      <- SNES_L
-    input[dev].map[8] = input[dev].map[10]; // MODE   <- SNES_SELECT
-    input[dev].map[10] = val;               // Y      <- SNES_X
     return 1;
 }
 

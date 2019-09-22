@@ -16,10 +16,53 @@
 #define VID_RETROLINK       0x0079
 #define VID_SONY            0x054c
 
+#define NUMDEV 30
+
+typedef struct
+{
+	uint16_t vid, pid;
+	uint8_t  led;
+	uint8_t  mouse;
+	uint8_t  axis_edge[256];
+	int8_t   axis_pos[256];
+
+	uint8_t  num;
+	uint8_t  has_map;
+	uint32_t map[32];
+
+	uint8_t  osd_combo;
+
+	uint8_t  has_mmap;
+	uint32_t mmap[32];
+	uint16_t jkmap[1024];
+
+	uint8_t  has_kbdmap;
+	uint8_t  kbdmap[256];
+
+	uint16_t guncal[4];
+
+	int      accx, accy;
+	int      quirk;
+
+	int      lightgun_req;
+	int      lightgun;
+
+	int      bind;
+	char     devname[32];
+	char     uniq[32];
+	char     name[128];
+} devInput;
+
 /*****************************************************************************/
 
 // name known joysticks
 const char *get_joystick_alias( uint16_t vid, uint16_t pid );
+
+/*****************************************************************************/
+
+// mapping for different cores from known SNES layout
+int map_snes2neogeo (devInput (&input)[NUMDEV], int dev);
+int map_snes2md     (devInput (&input)[NUMDEV], int dev);
 
 /*****************************************************************************/
 
