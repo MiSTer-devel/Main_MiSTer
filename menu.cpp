@@ -2133,7 +2133,7 @@ void HandleUI(void)
 						sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
 					}
 					else {
-						sprintf(s, "%*s", (30-len)/2 + ((len % 2 == 0) ? 1 : 0) + len, p);
+						sprintf(s, "%*s", (29-len)/2 + ((len % 2 == 0) ? 1 : 0) + len, p);
 					}
 					if (get_map_button() > 0)
 					{

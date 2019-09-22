@@ -129,6 +129,9 @@ const char *get_joystick_alias( uint16_t vid, uint16_t pid ) {
         case 0x1F4F:
             if(pid==0x0003) return JOYSTICK_ALIAS_ROYDS_EX;
             break;
+        case 0x2dc8:
+            if(pid==0xab21) return JOYSTICK_ALIAS_8BITDO_FC30;
+            break;
         default:
             break;
     }
