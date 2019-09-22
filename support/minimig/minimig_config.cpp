@@ -300,18 +300,6 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	printf("CPU clock     : %s\n", minimig_config.chipset & 0x01 ? "turbo" : "normal");
 	uint8_t memcfg = minimig_config.memory;
-	if (!(sdram_sz() & 2))
-	{
-		uint8_t fastram_sz = ((memcfg >> 4) & 0x03) | ((memcfg & 0x80) >> 5);
-		switch (fastram_sz)
-		{
-		case 4:
-		case 6:
-			printf("Warning: config requires >=64MB but <=32MB is installed. Lowering down memory config.\n");
-			fastram_sz--;
-			memcfg = ((fastram_sz << 4) & 0x30) | ((fastram_sz << 5) & 0x80) | (memcfg & ~0xB0);
-		}
-	}
 
 	printf("Chip RAM size : %s\n", config_memory_chip_msg[memcfg & 0x03]);
 	printf("Slow RAM size : %s\n", config_memory_slow_msg[memcfg >> 2 & 0x03]);
