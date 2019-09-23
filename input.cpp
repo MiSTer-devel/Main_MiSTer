@@ -1238,6 +1238,27 @@ int convert_from_snes_mapping(int dev) {
     if(!strcmp(core_name, "Genesis"))
         return map_snes2md(input, dev);
     
+    if(!strcmp(core_name, "GAMEBOY"))
+        return map_snes2gb(input, dev);
+    
+    if(!strcmp(core_name, "NES"))
+        return map_snes2gb(input, dev);
+    
+    if(!strcmp(core_name, "TGFX16"))
+        return map_snes2pce(input, dev);
+    
+    if(!strcmp(core_name, "C64"))
+        return map_snes2c64(input, dev);
+
+    if(!strcmp(core_name, "CPC"))
+        return map_snes2c64(input, dev); // same as c64
+    
+    if(!strcmp(core_name, "APPLEII"))
+        return map_snes2apple2(input, dev);
+    
+    if(!strcmp(core_name, "AO486"))
+        return map_snes2apple2(input, dev); //same as apple2
+    
     return 1;
 }
 

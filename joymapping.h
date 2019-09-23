@@ -17,6 +17,7 @@
 #define VID_SONY            0x054c
 
 #define NUMDEV 30
+#define NUMBUTTONS 32
 
 typedef struct
 {
@@ -28,12 +29,12 @@ typedef struct
 
 	uint8_t  num;
 	uint8_t  has_map;
-	uint32_t map[32];
+	uint32_t map[NUMBUTTONS];
 
 	uint8_t  osd_combo;
 
 	uint8_t  has_mmap;
-	uint32_t mmap[32];
+	uint32_t mmap[NUMBUTTONS];
 	uint16_t jkmap[1024];
 
 	uint8_t  has_kbdmap;
@@ -63,6 +64,11 @@ const char *get_joystick_alias( uint16_t vid, uint16_t pid );
 // mapping for different cores from known SNES layout
 int map_snes2neogeo (devInput (&input)[NUMDEV], int dev);
 int map_snes2md     (devInput (&input)[NUMDEV], int dev);
+int map_snes2gb     (devInput (&input)[NUMDEV], int dev);
+int map_snes2pce    (devInput (&input)[NUMDEV], int dev);
+int map_snes2sms    (devInput (&input)[NUMDEV], int dev);
+int map_snes2c64    (devInput (&input)[NUMDEV], int dev);
+int map_snes2apple2 (devInput (&input)[NUMDEV], int dev);
 
 /*****************************************************************************/
 

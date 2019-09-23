@@ -188,7 +188,7 @@ int map_snes2neogeo(devInput (&input)[NUMDEV], int dev) {
 
 int map_snes2md(devInput (&input)[NUMDEV], int dev) {
     /*
-    '''convert a SNES USB gamepad map into a MD/Genesis map
+       convert a SNES USB gamepad map into a MD/Genesis map
        we try to keep the same physical layout between SNES and MD gamepads
        i.e.:
                                                                  Z
@@ -222,3 +222,100 @@ int map_snes2md(devInput (&input)[NUMDEV], int dev) {
     return 1;
 }
 
+/*****************************************************************************/
+
+int map_snes2gb(devInput (&input)[NUMDEV], int dev) {
+    /*convert a SNES map into a GB map
+       we try to keep the same physical layout between SNES and GB gamepads
+       i.e.:
+              SNES          L   X   R      NES/GB: 
+                     Sel Sta  Y   A              Sel Sta     A
+                                B                          B
+    */
+    // A and B keep current positions
+    // assign select and start
+    input[dev].map[6] = input[dev].map[10]; // SELECT   <- SNES_SELECT
+    input[dev].map[7] = input[dev].map[11]; // START  <- SNES_START
+    // blank rest of the map
+    for(int i=0; i < NUMBUTTONS-7; i++)
+        input[dev].map[7+i] = 0;
+    return 1;
+}
+
+/*****************************************************************************/
+
+int map_snes2pce(devInput (&input)[NUMDEV], int dev) {
+    /*convert a SNES map into a PCE map
+       we try to keep the same physical layout between SNES and PCE gamepads
+       i.e.:
+                                                                 VI
+              SNES          L   X   R      PCE:                V    I
+                     Sel Sta  Y   A              Sel  Run   IV   II
+                                B                             III
+      this layout conversion is awkward as we need to support 2 buttons; we will assign III to R and IV to L
+      in  other words, we make the front diamond correspond to the top buttons instead of the lower buttons as in the GEN case
+    # PCE gamepad
+    PCE_I = 4
+    PCE_II = 5
+    PCE_SELECT = 6
+    PCE_RUN = 7
+    PCE_III= 8
+    PCE_IV = 9
+    PCE_V = 10
+    PCE_VI = 11
+    */
+    uint32_t val;
+    // PCE_I is same as SNES_A and PCE_II same as SNES_B
+    val = input[dev].map[6];
+    input[dev].map[6] = input[dev].map[10]; //  PCE_SELECT <- SNES_SELECT
+    input[dev].map[10] = input[dev].map[7]; //  PCE_V      <- SNES_Y
+    input[dev].map[7] = input[dev].map[11]; //  PCE_RUN    <- SNES_START
+    input[dev].map[11] = val;              //  PCE_VI     <- SNES_X
+    //input[dev].map[8] - remains same
+    return 1;
+}
+
+/*****************************************************************************/
+
+int map_snes2sms(devInput (&input)[NUMDEV], int dev) {
+    // SNES to SMS conversion, simple pad with 3 buttons, 
+    // but differnet layout to SNES:  Pause  I  II
+    uint32_t val;
+    val = input[dev].map[4];
+    input[dev].map[4] = input[dev].map[5];  // SMS_II     <- SNES_B
+    input[dev].map[5] = val;                // SMS_I      <- SNES A
+    input[dev].map[6] = input[dev].map[11]; // SMS_PAUSE <- SNES_START
+    // blank rest of the map
+    for(int i=0; i < NUMBUTTONS-6; i++)
+        input[dev].map[6+i] = 0;
+    return 1;
+}
+
+/*****************************************************************************/
+
+int map_snes2c64(devInput (&input)[NUMDEV], int dev) {
+    // conversion with 3 buttons, also works for many cores
+    uint32_t val;
+    val = input[dev].map[4];
+    input[dev].map[4] = input[dev].map[5]; // SNES_B
+    input[dev].map[5] = val;               // SNES A
+    input[dev].map[6] = input[dev].map[7]; // SNES_Y
+    // blank rest of the map
+    for(int i=0; i < NUMBUTTONS-6; i++)
+        input[dev].map[6+i] = 0;
+    return 1;
+}
+
+/*****************************************************************************/
+
+int map_snes2apple2(devInput (&input)[NUMDEV], int dev) {
+    // conversion with 2 buttons, also works for many cores
+    uint32_t val;
+    val = input[dev].map[4];
+    input[dev].map[4] = input[dev].map[5]; // SNES_B
+    input[dev].map[5] = val;               // SNES A
+    // blank rest of the map
+    for(int i=0; i < NUMBUTTONS-5; i++)
+        input[dev].map[5+i] = 0;
+    return 1;
+}
