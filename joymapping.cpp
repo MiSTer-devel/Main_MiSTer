@@ -176,8 +176,8 @@ int map_snes2neogeo(devInput (&input)[NUMDEV], int dev) {
     input[dev].map[6] = input[dev].map[7];
     input[dev].map[7] = val;
     // reassign Start and Select
-    input[dev].map[8] = input[dev].map[10];
-    input[dev].map[9] = input[dev].map[11];
+    input[dev].map[8] = input[dev].map[11];
+    input[dev].map[9] = input[dev].map[10];
     //blank out the rest
     input[dev].map[10] = 0;
     input[dev].map[11] = 0;
