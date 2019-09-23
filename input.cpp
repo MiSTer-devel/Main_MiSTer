@@ -1253,7 +1253,7 @@ int convert_from_snes_mapping(int dev) {
     if(!strcmp(core_name, "CPC"))
         return map_snes2c64(input, dev); // same as c64
     
-    if(!strcmp(core_name, "APPLEII"))
+    if(!strcmp(core_name, "Apple-II"))
         return map_snes2apple2(input, dev);
     
     if(!strcmp(core_name, "AO486"))

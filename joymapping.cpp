@@ -265,13 +265,18 @@ int map_snes2pce(devInput (&input)[NUMDEV], int dev) {
     PCE_VI = 11
     */
     uint32_t val;
+    uint32_t val2;
     // PCE_I is same as SNES_A and PCE_II same as SNES_B
-    val = input[dev].map[6];
-    input[dev].map[6] = input[dev].map[10]; //  PCE_SELECT <- SNES_SELECT
-    input[dev].map[10] = input[dev].map[7]; //  PCE_V      <- SNES_Y
-    input[dev].map[7] = input[dev].map[11]; //  PCE_RUN    <- SNES_START
-    input[dev].map[11] = val;              //  PCE_VI     <- SNES_X
-    //input[dev].map[8] - remains same
+    //input[dev].map[4] = input[dev].map[SNES_A];
+    //input[dev].map[5] = input[dev].map[SNES_B];
+    val = input[dev].map[6];  // X
+    val2 = input[dev].map[7]; // Y
+    input[dev].map[6] = input[dev].map[SNES_SELECT];
+    input[dev].map[7] = input[dev].map[SNES_START]; //PCE_RUN
+    input[dev].map[8] = input[dev].map[SNES_R];     //PCE_III
+    input[dev].map[9] = input[dev].map[SNES_L];     //PCE_IV
+    input[dev].map[10] = val2; //PCE_V
+    input[dev].map[11] = val;  //PCE_VI
     return 1;
 }
 

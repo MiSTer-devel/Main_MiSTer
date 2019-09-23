@@ -19,6 +19,15 @@
 #define NUMDEV 30
 #define NUMBUTTONS 32
 
+#define SNES_A 4
+#define SNES_B 5
+#define SNES_X 6
+#define SNES_Y 7
+#define SNES_L 8
+#define SNES_R 9
+#define SNES_SELECT 10
+#define SNES_START 11
+
 typedef struct
 {
 	uint16_t vid, pid;
