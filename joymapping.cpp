@@ -237,7 +237,7 @@ int map_snes2gb(devInput (&input)[NUMDEV], int dev) {
     input[dev].map[6] = input[dev].map[10]; // SELECT   <- SNES_SELECT
     input[dev].map[7] = input[dev].map[11]; // START  <- SNES_START
     // blank rest of the map
-    for(int i=0; i < NUMBUTTONS-7; i++)
+    for(int i=1; i < NUMBUTTONS-7; i++)
         input[dev].map[7+i] = 0;
     return 1;
 }
@@ -286,7 +286,7 @@ int map_snes2sms(devInput (&input)[NUMDEV], int dev) {
     input[dev].map[5] = val;                // SMS_I      <- SNES A
     input[dev].map[6] = input[dev].map[11]; // SMS_PAUSE <- SNES_START
     // blank rest of the map
-    for(int i=0; i < NUMBUTTONS-6; i++)
+    for(int i=1; i < NUMBUTTONS-6; i++)
         input[dev].map[6+i] = 0;
     return 1;
 }
@@ -301,7 +301,7 @@ int map_snes2c64(devInput (&input)[NUMDEV], int dev) {
     input[dev].map[5] = val;               // SNES A
     input[dev].map[6] = input[dev].map[7]; // SNES_Y
     // blank rest of the map
-    for(int i=0; i < NUMBUTTONS-6; i++)
+    for(int i=1; i < NUMBUTTONS-6; i++)
         input[dev].map[6+i] = 0;
     return 1;
 }
@@ -315,7 +315,7 @@ int map_snes2apple2(devInput (&input)[NUMDEV], int dev) {
     input[dev].map[4] = input[dev].map[5]; // SNES_B
     input[dev].map[5] = val;               // SNES A
     // blank rest of the map
-    for(int i=0; i < NUMBUTTONS-5; i++)
+    for(int i=1; i < NUMBUTTONS-5; i++)
         input[dev].map[5+i] = 0;
     return 1;
 }
