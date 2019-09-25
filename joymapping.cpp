@@ -156,38 +156,38 @@ int map_joystick(const char *core_name, devInput (&input)[NUMDEV], int dev) {
     const char *expected_joy_type = get_core_joystick_type(core_name);
     
     if(!strcmp(expected_joy_type, "NEOGEO"))
-        return map_snes2neogeo(input, dev);
+        return map_menu2neogeo(input, dev);
     
     if(!strcmp(expected_joy_type, "Genesis"))
-        return map_snes2md(input, dev);
+        return map_menu2md(input, dev);
     
     if(!strcmp(expected_joy_type, "GAMEBOY"))
-        return map_snes2gb(input, dev);
+        return map_menu2gb(input, dev);
     
     if(!strcmp(expected_joy_type, "NES"))
-        return map_snes2gb(input, dev);
+        return map_menu2gb(input, dev);
     
     if(!strcmp(expected_joy_type, "TGFX16"))
-        return map_snes2pce(input, dev);
+        return map_menu2pce(input, dev);
     
     if(!strcmp(expected_joy_type, "C64"))
-        return map_snes2c64(input, dev);
+        return map_menu2c64(input, dev);
 
     if(!strcmp(expected_joy_type, "CPC"))
-        return map_snes2c64(input, dev); // same as c64
+        return map_menu2c64(input, dev); // same as c64
     
     if(!strcmp(expected_joy_type, "Apple-II"))
-        return map_snes2apple2(input, dev);
+        return map_menu2apple2(input, dev);
     
     if(!strcmp(expected_joy_type, "AO486"))
-        return map_snes2apple2(input, dev); //same as apple2
+        return map_menu2apple2(input, dev); //same as apple2
     
     //TODO = custom mapping that relies on config file
     
     return 1; //report success but apply no mapping
 }
 
-int map_snes2neogeo(devInput (&input)[NUMDEV], int dev) {
+int map_menu2neogeo(devInput (&input)[NUMDEV], int dev) {
     /*
        converts a SNES USB gamepad map into a NG map
        we try to keep the same physical layout between SNES and NG gamepads
@@ -232,7 +232,7 @@ int map_snes2neogeo(devInput (&input)[NUMDEV], int dev) {
 
 /*****************************************************************************/
 
-int map_snes2md(devInput (&input)[NUMDEV], int dev) {
+int map_menu2md(devInput (&input)[NUMDEV], int dev) {
     /*
        convert a SNES USB gamepad map into a MD/Genesis map
        we try to keep the same physical layout between SNES and MD gamepads
@@ -270,7 +270,7 @@ int map_snes2md(devInput (&input)[NUMDEV], int dev) {
 
 /*****************************************************************************/
 
-int map_snes2gb(devInput (&input)[NUMDEV], int dev) {
+int map_menu2gb(devInput (&input)[NUMDEV], int dev) {
     /*convert a SNES map into a GB map
        we try to keep the same physical layout between SNES and GB gamepads
        i.e.:
@@ -290,7 +290,7 @@ int map_snes2gb(devInput (&input)[NUMDEV], int dev) {
 
 /*****************************************************************************/
 
-int map_snes2pce(devInput (&input)[NUMDEV], int dev) {
+int map_menu2pce(devInput (&input)[NUMDEV], int dev) {
     /*convert a SNES map into a PCE map
        we try to keep the same physical layout between SNES and PCE gamepads
        i.e.:
@@ -328,7 +328,7 @@ int map_snes2pce(devInput (&input)[NUMDEV], int dev) {
 
 /*****************************************************************************/
 
-int map_snes2sms(devInput (&input)[NUMDEV], int dev) {
+int map_menu2sms(devInput (&input)[NUMDEV], int dev) {
     // SNES to SMS conversion, simple pad with 3 buttons, 
     // but differnet layout to SNES:  Pause  I  II
     uint32_t val;
@@ -344,7 +344,7 @@ int map_snes2sms(devInput (&input)[NUMDEV], int dev) {
 
 /*****************************************************************************/
 
-int map_snes2c64(devInput (&input)[NUMDEV], int dev) {
+int map_menu2c64(devInput (&input)[NUMDEV], int dev) {
     // conversion with 3 buttons, also works for many cores
     uint32_t val;
     val = input[dev].map[4];
@@ -359,7 +359,7 @@ int map_snes2c64(devInput (&input)[NUMDEV], int dev) {
 
 /*****************************************************************************/
 
-int map_snes2apple2(devInput (&input)[NUMDEV], int dev) {
+int map_menu2apple2(devInput (&input)[NUMDEV], int dev) {
     // conversion with 2 buttons, also works for many cores
     uint32_t val;
     val = input[dev].map[4];

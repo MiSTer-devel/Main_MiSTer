@@ -79,13 +79,13 @@ const char *get_core_joystick_type(const char *core_name);
 int map_joystick (const char *core_name, devInput (&input)[NUMDEV], int dev);
 
 // mapping for different cores from known SNES layout
-int map_snes2neogeo (devInput (&input)[NUMDEV], int dev);
-int map_snes2md     (devInput (&input)[NUMDEV], int dev);
-int map_snes2gb     (devInput (&input)[NUMDEV], int dev);
-int map_snes2pce    (devInput (&input)[NUMDEV], int dev);
-int map_snes2sms    (devInput (&input)[NUMDEV], int dev);
-int map_snes2c64    (devInput (&input)[NUMDEV], int dev);
-int map_snes2apple2 (devInput (&input)[NUMDEV], int dev);
+int map_menu2neogeo (devInput (&input)[NUMDEV], int dev);
+int map_menu2md     (devInput (&input)[NUMDEV], int dev);
+int map_menu2gb     (devInput (&input)[NUMDEV], int dev);
+int map_menu2pce    (devInput (&input)[NUMDEV], int dev);
+int map_menu2sms    (devInput (&input)[NUMDEV], int dev);
+int map_menu2c64    (devInput (&input)[NUMDEV], int dev);
+int map_menu2apple2 (devInput (&input)[NUMDEV], int dev);
 
 /*****************************************************************************/
 
