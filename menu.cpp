@@ -3924,8 +3924,8 @@ void HandleUI(void)
 				strcpy(joy_bnames[7], "Mouse Move UP");
 				strcpy(joy_bnames[8], "Left Trigger / L");
 				strcpy(joy_bnames[9], "Right Trigger / R");
-				strcpy(joy_bnames[10], "Select / Middle Trigger");
-				strcpy(joy_bnames[11], "Start / Mouse Emu / Sniper");
+				strcpy(joy_bnames[10], "Select/Middle Trigr");
+				strcpy(joy_bnames[11], "Start/Mse. Emu/Snipe");
 				start_map_setting(19);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;

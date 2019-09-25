@@ -19,6 +19,7 @@ static const char * JOYSTICK_ALIAS_5200_DAPTOR2   = "5200-daptor";
 static const char * JOYSTICK_ALIAS_8BITDO_SFC30   = "8BitDo SFC30";
 static const char * JOYSTICK_ALIAS_8BITDO_FC30    = "8BitDo FC30";
 static const char * JOYSTICK_ALIAS_8BITDO_SN30PRO = "8BitDo SN30 pro";
+static const char * JOYSTICK_ALIAS_8BITDO_M30     = "8BitDo M30 BT";
 
 static const char * JOYSTICK_ALIAS_ATARI_DAPTOR2  = "2600-daptor II";
 static const char * JOYSTICK_ALIAS_BLISSTER       = "BlisSTer";
@@ -98,6 +99,9 @@ const char *get_joystick_alias( uint16_t vid, uint16_t pid ) {
             break;
         case 0x0411:
             if(pid==0x00C6) return JOYSTICK_ALIAS_IBUFALLO_NES;
+            break;
+        case 0x045e:
+            if(pid==0x028e) return JOYSTICK_ALIAS_8BITDO_M30;
             break;
         case 0x0583:
             if(pid==0x2060) return JOYSTICK_ALIAS_IBUFALLO_SNES;
