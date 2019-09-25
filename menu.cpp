@@ -3914,18 +3914,18 @@ void HandleUI(void)
 				break;
 			case 2:
 				joy_bcount = 13;
-				strcpy(joy_bnames[0], "Btn 1 (OK/Enter)");
-				strcpy(joy_bnames[1], "Btn 2 (ESC/Back)");
-				strcpy(joy_bnames[2], "Btn 3 (Backspace)");
-				strcpy(joy_bnames[3], "Btn 4");
+				strcpy(joy_bnames[0], "Btn 1 (OK/Enter/A)");
+				strcpy(joy_bnames[1], "Btn 2 (ESC/Back/B)");
+				strcpy(joy_bnames[2], "Btn 3 (Backspace/X)");
+				strcpy(joy_bnames[3], "Btn 4 (Y)");
 				strcpy(joy_bnames[4], "Mouse Move RIGHT");
 				strcpy(joy_bnames[5], "Mouse Move LEFT");
 				strcpy(joy_bnames[6], "Mouse Move DOWN");
 				strcpy(joy_bnames[7], "Mouse Move UP");
-				strcpy(joy_bnames[8], "Mouse Left Btn");
-				strcpy(joy_bnames[9], "Mouse Right Btn");
-				strcpy(joy_bnames[10], "Mouse Middle Btn");
-				strcpy(joy_bnames[11], "Mouse Emu/Sniper");
+				strcpy(joy_bnames[8], "Left Trigger / L");
+				strcpy(joy_bnames[9], "Right Trigger / R");
+				strcpy(joy_bnames[10], "Select / Middle Trigger");
+				strcpy(joy_bnames[11], "Start / Mouse Emu / Sniper");
 				start_map_setting(19);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;

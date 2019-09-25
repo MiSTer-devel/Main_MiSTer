@@ -1186,14 +1186,6 @@ static char *get_map_name(int dev, int def)
 	return name;
 }
 
-static char *get_map_name_snes(int dev)
-// used to grab a better default mapping from SNES mappings
-{
-	static char name[128];
-    sprintf(name, "SNES_input_%04x_%04x_v2.map", input[dev].vid, input[dev].pid);
-	return name;
-}
-
 static char *get_kbdmap_name(int dev)
 {
 	static char name[128];
@@ -1224,42 +1216,13 @@ void finish_map_setting(int dismiss)
 	}
 }
 
-int convert_from_snes_mapping(int dev) {
-    //attempts to map from SNES config file
+int convert_from_menu_mapping(int dev) {
+    //attempts to map from Menu joystick config file
     //returns: 0 if failed to map or 1 if success
-    if(!FileLoadConfig(get_map_name_snes(dev), &input[dev].map, sizeof(input[dev].map))) {
+    if(!FileLoadConfig(get_map_name(dev, 1), &input[dev].map, sizeof(input[dev].map))) {
         return 0;
     }
-    const char *core_name = user_io_get_core_name_ex();
-    
-    if(!strcmp(core_name, "NEOGEO"))
-        return map_snes2neogeo(input, dev);
-    
-    if(!strcmp(core_name, "Genesis"))
-        return map_snes2md(input, dev);
-    
-    if(!strcmp(core_name, "GAMEBOY"))
-        return map_snes2gb(input, dev);
-    
-    if(!strcmp(core_name, "NES"))
-        return map_snes2gb(input, dev);
-    
-    if(!strcmp(core_name, "TGFX16"))
-        return map_snes2pce(input, dev);
-    
-    if(!strcmp(core_name, "C64"))
-        return map_snes2c64(input, dev);
-
-    if(!strcmp(core_name, "CPC"))
-        return map_snes2c64(input, dev); // same as c64
-    
-    if(!strcmp(core_name, "Apple-II"))
-        return map_snes2apple2(input, dev);
-    
-    if(!strcmp(core_name, "AO486"))
-        return map_snes2apple2(input, dev); //same as apple2
-    
-    return 1;
+    return map_joystick (user_io_get_core_name_ex(), input, dev);
 }
 
 void input_lightgun_cal(uint16_t *cal)
@@ -1741,7 +1704,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	{
 		if (!FileLoadConfig(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
-			if(!convert_from_snes_mapping(dev)) {
+			if(!convert_from_menu_mapping(dev)) {
                 if (is_menu_core() || !FileLoadConfig(get_map_name(dev, 1), &input[dev].map, sizeof(input[dev].map)))
                 {
                     // nothing found so blank out everything

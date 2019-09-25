@@ -6,10 +6,13 @@ This file contains lookup information on known controllers
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <string.h>
 
 #include "joymapping.h"
 
 /*****************************************************************************/
+
+// TODO = move to a file lookup table or individual config files
 
 static const char * JOYSTICK_ALIAS_NONE    = "";
 static const char * JOYSTICK_ALIAS_5200_DAPTOR2   = "5200-daptor";
@@ -140,6 +143,45 @@ const char *get_joystick_alias( uint16_t vid, uint16_t pid ) {
     return JOYSTICK_ALIAS_NONE;
 }
 
+const char *get_core_joystick_type( const char *core_name) {
+    return core_name; // no translation for now
+}
+
+int map_joystick(const char *core_name, devInput (&input)[NUMDEV], int dev) {
+    
+    const char *expected_joy_type = get_core_joystick_type(core_name);
+    
+    if(!strcmp(expected_joy_type, "NEOGEO"))
+        return map_snes2neogeo(input, dev);
+    
+    if(!strcmp(expected_joy_type, "Genesis"))
+        return map_snes2md(input, dev);
+    
+    if(!strcmp(expected_joy_type, "GAMEBOY"))
+        return map_snes2gb(input, dev);
+    
+    if(!strcmp(expected_joy_type, "NES"))
+        return map_snes2gb(input, dev);
+    
+    if(!strcmp(expected_joy_type, "TGFX16"))
+        return map_snes2pce(input, dev);
+    
+    if(!strcmp(expected_joy_type, "C64"))
+        return map_snes2c64(input, dev);
+
+    if(!strcmp(expected_joy_type, "CPC"))
+        return map_snes2c64(input, dev); // same as c64
+    
+    if(!strcmp(expected_joy_type, "Apple-II"))
+        return map_snes2apple2(input, dev);
+    
+    if(!strcmp(expected_joy_type, "AO486"))
+        return map_snes2apple2(input, dev); //same as apple2
+    
+    //TODO = custom mapping that relies on config file
+    
+    return 1; //report success but apply no mapping
+}
 
 int map_snes2neogeo(devInput (&input)[NUMDEV], int dev) {
     /*
@@ -271,10 +313,10 @@ int map_snes2pce(devInput (&input)[NUMDEV], int dev) {
     //input[dev].map[5] = input[dev].map[SNES_B];
     val = input[dev].map[6];  // X
     val2 = input[dev].map[7]; // Y
-    input[dev].map[6] = input[dev].map[SNES_SELECT];
-    input[dev].map[7] = input[dev].map[SNES_START]; //PCE_RUN
-    input[dev].map[8] = input[dev].map[SNES_R];     //PCE_III
-    input[dev].map[9] = input[dev].map[SNES_L];     //PCE_IV
+    input[dev].map[6] = input[dev].map[MENU_JOY_SELECT];
+    input[dev].map[7] = input[dev].map[MENU_JOY_START]; //PCE_RUN
+    input[dev].map[8] = input[dev].map[MENU_JOY_R];     //PCE_III
+    input[dev].map[9] = input[dev].map[MENU_JOY_L];     //PCE_IV
     input[dev].map[10] = val2; //PCE_V
     input[dev].map[11] = val;  //PCE_VI
     return 1;

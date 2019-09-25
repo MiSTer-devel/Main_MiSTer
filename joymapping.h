@@ -19,14 +19,16 @@
 #define NUMDEV 30
 #define NUMBUTTONS 32
 
-#define SNES_A 4
-#define SNES_B 5
-#define SNES_X 6
-#define SNES_Y 7
-#define SNES_L 8
-#define SNES_R 9
-#define SNES_SELECT 10
-#define SNES_START 11
+//Defined as per main menu USB joypad mapping, see menu.cpp
+#define MENU_JOY_A       4
+#define MENU_JOY_B       5
+#define MENU_JOY_X       6
+#define MENU_JOY_Y       7
+#define MENU_JOY_L      12  // menu.cpp skips 4 buttons for mouse directions
+#define MENU_JOY_R      13
+#define MENU_JOY_SELECT 14
+#define MENU_JOY_START  15
+
 
 typedef struct
 {
@@ -69,6 +71,12 @@ typedef struct
 const char *get_joystick_alias( uint16_t vid, uint16_t pid );
 
 /*****************************************************************************/
+
+// defines what kind of physical joystick is used by a core (for automatic default mapping)
+const char *get_core_joystick_type(const char *core_name);
+
+//apply mapping
+int map_joystick (const char *core_name, devInput (&input)[NUMDEV], int dev);
 
 // mapping for different cores from known SNES layout
 int map_snes2neogeo (devInput (&input)[NUMDEV], int dev);
