@@ -1245,7 +1245,11 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry++;
 				if (iSelectedEntry > iFirstEntry + OsdGetSize() - 1) iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
 			}
-			return 0;
+            else
+            {
+                ScanDirectory(path, SCANF_INIT, extension, options, prefix); // jump to first visible item
+            }
+            return 0;
 		}
 		else if (mode == SCANF_PREV)
 		{
@@ -1254,7 +1258,11 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry--;
 				if (iSelectedEntry < iFirstEntry) iFirstEntry = iSelectedEntry;
 			}
-			return 0;
+            else
+            {
+                ScanDirectory(path, SCANF_END, extension, options, prefix); // jump to last visible item
+            }
+            return 0;
 		}
 		else if (mode == SCANF_NEXT_PAGE)
 		{
