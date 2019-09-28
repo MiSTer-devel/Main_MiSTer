@@ -1231,7 +1231,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		if (flist_nDirEntries() == 0) // directory is empty so there is no point in searching for any entry
 			return 0;
 
-		if (mode == SCANF_END)
+		if (mode == SCANF_END || (mode == SCANF_PREV && iSelectedEntry <= 0))
 		{
 			iSelectedEntry = flist_nDirEntries() - 1;
 			iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
@@ -1247,7 +1247,9 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
             else
             {
-                ScanDirectory(path, SCANF_INIT, extension, options, prefix); // jump to first visible item
+				// jump to first visible item
+				iFirstEntry = 0;
+				iSelectedEntry = 0;
             }
             return 0;
 		}
@@ -1258,10 +1260,6 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry--;
 				if (iSelectedEntry < iFirstEntry) iFirstEntry = iSelectedEntry;
 			}
-            else
-            {
-                ScanDirectory(path, SCANF_END, extension, options, prefix); // jump to last visible item
-            }
             return 0;
 		}
 		else if (mode == SCANF_NEXT_PAGE)
