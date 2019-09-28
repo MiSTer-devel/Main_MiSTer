@@ -1003,21 +1003,39 @@ void HandleUI(void)
 	// Also set parentstate to the appropriate menustate.
 	if (menumask)
 	{
-		if (down && (menumask >= ((uint32_t)1 << (menusub + 1))))	// Any active entries left?
+		if (down)
 		{
-			do
-			{
-				menusub++;
-			} while ((menumask & ((uint32_t)1 << menusub)) == 0);
-			menustate = parentstate;
+            if((menumask >= ((uint32_t)1 << (menusub + 1))))	// Any active entries left?
+            {
+			    do
+			    {
+				    menusub++;
+			    } while ((menumask & ((uint32_t)1 << menusub)) == 0);
+            }
+            else
+            {
+                menusub = 0; // jump to first item
+            }
+
+            menustate = parentstate;
 		}
 
-		if (up && menusub > 0)
+		if (up)
 		{
-			do
-			{
-				--menusub;
-			} while ((menumask & ((uint32_t)1 << menusub)) == 0);
+            if (menusub > 0)
+            { 
+			    do
+			    {
+				    --menusub;
+			    } while ((menumask & ((uint32_t)1 << menusub)) == 0);
+            }
+            else
+            {
+                do
+                {
+                    menusub++;
+                } while ((menumask & ((uint32_t)(~0) << (menusub + 1))) != 0); // jump to last item
+            }
 			menustate = parentstate;
 		}
 	}
