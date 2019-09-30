@@ -1034,7 +1034,7 @@ void HandleUI(void)
                 do
                 {
                     menusub++;
-                } while ((menumask & ((uint32_t)(~0) << (menusub + 1))) != 0); // jump to last item
+                } while ((menumask >> (menusub + 1)) > 0); // jump to last item
             }
 			menustate = parentstate;
 		}
