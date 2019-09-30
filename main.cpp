@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
 	}
 
 	FindStorage();
-	user_io_init((argc > 1) ? argv[1] : "");
+	user_io_init((argc > 1) ? argv[1] : "",(argc > 2) ? argv[2] : "");
 
 	scheduler_init();
 	scheduler_run();

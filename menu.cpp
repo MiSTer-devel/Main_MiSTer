@@ -319,7 +319,7 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 			strcat(SelectedPath, "/");
 			strcat(SelectedPath, get_rbf_name());
 		}
-		pFileExt = "RBF";
+		pFileExt = "RBFXML";
 	}
 	else if (Options & SCANO_COEFF)
 	{
@@ -4271,9 +4271,20 @@ void HandleUI(void)
 				break;
 			}
 		}
-
-		// close OSD now as the new core may not even have one
-		fpga_load_rbf(SelectedRBF);
+		if (!strcasecmp(".xml",&(SelectedRBF[strlen(SelectedRBF) - 4]))) 
+		{
+			char rbfname[4096];
+			char rbfpath[4096];
+			fprintf(stderr,"XML FILE LOADED - write code\n");
+			// find the RBF file from the XML
+			arcade_scan_xml_for_rbf(SelectedRBF,rbfname);
+			fprintf(stderr,"XML rbf: [%s]\n",rbfname);
+			sprintf(rbfpath,"arcade/%s",rbfname);
+			fpga_load_rbf(getFullPath(rbfpath),NULL,SelectedRBF);
+		}
+		else
+			// close OSD now as the new core may not even have one
+			fpga_load_rbf(SelectedRBF);
 		break;
 
 	case MENU_CORE_FILE_SELECTED2:

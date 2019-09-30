@@ -182,7 +182,7 @@ typedef struct {
 	uint8_t fifo_stat;       // space in cores input fifo
 } __attribute__((packed)) serial_status_t;
 
-void user_io_init(const char *path);
+void user_io_init(const char *path, const char *xml);
 unsigned char user_io_core_type();
 void user_io_poll();
 char user_io_menu_button();
@@ -192,6 +192,13 @@ void user_io_serial_tx(char *, uint16_t);
 char *user_io_8bit_get_string(char);
 uint32_t user_io_8bit_set_status(uint32_t, uint32_t);
 int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
+
+int user_io_file_tx_start(const char *name,unsigned char index=0);
+int user_io_file_tx_body(const uint8_t *buf,uint16_t chunk);
+int user_io_file_tx_body_filepart(const char *name,int start=0, int len=0);
+int user_io_file_tx_finish();
+
+
 uint32_t user_io_get_file_crc();
 int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
 char user_io_serial_status(serial_status_t *, uint8_t);

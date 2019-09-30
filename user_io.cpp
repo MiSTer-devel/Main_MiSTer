@@ -557,12 +557,16 @@ void SetMidiLinkMode(int mode)
         }
 }
 
-void user_io_init(const char *path)
+void user_io_init(const char *path, const char *xml)
 {
 	char *name;
 	static char mainpath[512];
 	core_name[0] = 0;
 	disable_osd = 0;
+
+	if (strlen(xml)) {
+		printf("USER_IO_INIT got XML: [%s]\n",xml);
+	}
 
 	memset(sd_image, 0, sizeof(sd_image));
 	ikbd_init();
@@ -711,6 +715,12 @@ void user_io_init(const char *path)
 						// cheats for boot file
 						if (user_io_use_cheats()) cheats_init("", user_io_get_file_crc());
 					}
+
+                                        /* AJS -- NOT SURE THIS IS THE BEST PLACE */
+	                                if (strlen(xml)) {
+		                                printf("USER_IO_INIT got XML: [%s]\n",xml);
+						arcade_send_rom(xml);
+	                                }
 
 					if (is_cpc_core())
 					{
@@ -1419,6 +1429,84 @@ static void check_status_change()
 	{
 		DisableIO();
 	}
+}
+
+int user_io_file_tx_start(const char *name,unsigned char index)
+{
+	// set index byte (0=bios rom, 1-n=OSD entry index)
+	user_io_set_index(index);
+
+	int len = strlen(name);
+	const char *p = name + len - 4;
+	EnableFpga();
+	spi8(UIO_FILE_INFO);
+	spi_w(toupper(p[0]) << 8 | toupper(p[1]));
+	spi_w(toupper(p[2]) << 8 | toupper(p[3]));
+	DisableFpga();
+
+	// prepare transmission of new file
+	EnableFpga();
+	spi8(UIO_FILE_TX);
+	spi8(0xff);
+	DisableFpga();
+
+	file_crc = 0;
+	return 1;
+}
+int user_io_file_tx_body(const uint8_t *buf,uint16_t chunk)
+{
+	printf(".");
+
+	EnableFpga();
+	spi8(UIO_FILE_TX_DAT);
+	spi_write(buf, chunk, fio_size);
+	DisableFpga();
+
+	file_crc = crc32(file_crc, buf  ,chunk );
+
+	return 1;
+}
+int user_io_file_tx_body_filepart(const char *name,int start, int len)
+{
+	char mute=0;
+	fileTYPE f = {};
+	static uint8_t buf[4096];
+	if (!FileOpen(&f, name, mute)) return 0;
+	if (start) FileSeek(&f, start, SEEK_SET);
+	unsigned long bytes2send = f.size;
+	if (len>0 && len < bytes2send) bytes2send=len;
+	/* transmit the entire file using one transfer */
+	printf("Selected file %s with %lu bytes to send  \n", name, bytes2send);
+	while (bytes2send)
+	{
+		printf(".");
+
+		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+
+		FileReadAdv(&f, buf, chunk);
+		user_io_file_tx_body(buf,chunk);
+
+		bytes2send -= chunk;
+	}
+
+
+	return 1;
+}
+int user_io_file_tx_finish()
+{
+	// check if core requests some change while downloading
+	check_status_change();
+
+	printf("\n");
+	printf("CRC32: %08X\n", file_crc);
+
+	// signal end of transmission
+	EnableFpga();
+	spi8(UIO_FILE_TX);
+	spi8(0x00);
+	DisableFpga();
+	printf("\n");
+	return 1;
 }
 
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
