@@ -1468,40 +1468,26 @@ int user_io_file_tx_body(const uint8_t *buf,uint16_t chunk)
 }
 int user_io_file_tx_body_filepart(const char *name,int start, int len)
 {
-	printf("AJS 1\n");
 	char mute=0;
-	printf("AJS 2\n");
 	fileTYPE f = {};
-	printf("AJS 3\n");
 	static uint8_t buf[4096];
-	printf("AJS 4 - FileOpen name [%s] mute [%c] \n",name,mute);
 	if (!FileOpen(&f, name, mute)) return 0;
-	printf("AJS 5\n");
 	if (start) FileSeek(&f, start, SEEK_SET);
-	printf("AJS 6\n");
 	unsigned long bytes2send = f.size;
-	printf("AJS 7\n");
 	if (len>0 && len < bytes2send) bytes2send=len;
-	printf("AJS 8\n");
 	/* transmit the entire file using one transfer */
 	printf("Selected file %s with %lu bytes to send  \n", name, bytes2send);
-	printf("AJS 9\n");
 	while (bytes2send)
 	{
-	printf("AJS 10\n");
 		printf(".");
 
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
-	printf("AJS 11\n");
 		FileReadAdv(&f, buf, chunk);
-	printf("AJS 12\n");
 		user_io_file_tx_body(buf,chunk);
-	printf("AJS 13\n");
 
 		bytes2send -= chunk;
 	}
-	printf("AJS 14\n");
 
 
 	return 1;

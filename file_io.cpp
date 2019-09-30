@@ -228,31 +228,23 @@ void FileClose(fileTYPE *file)
 
 int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 {
-printf("2AJS 1[%s]\n",name);
 	make_fullpath((char*)name, mode);
-printf("2AJS 2 [%s]\n",name);
-printf("2AJS 2 [%s]\n",full_path);
 	FileClose(file);
-printf("AJS 3\n");
 	file->mode = 0;
 	file->type = 0;
 
 	char *p = strrchr(full_path, '/');
-printf("AJS 4\n");
 	strcpy(file->name, (mode == -1) ? full_path : p + 1);
-printf("AJS 5\n");
 
 	char *zip_path, *file_path;
 	if ((mode != -1) && FileIsZipped(full_path, &zip_path, &file_path))
 	{
-printf("AJS 6\n");
 		if (mode & O_RDWR || mode & O_WRONLY)
 		{
 			if(!mute) printf("FileOpenEx(mode) Zip:%s, writing to zipped files is not supported.\n",
 					 full_path);
 			return 0;
 		}
-printf("AJS 7\n");
 
 		file->zip = new fileZipArchive{};
 		if (!mz_zip_reader_init_file(&file->zip->archive, zip_path, 0))
@@ -261,7 +253,6 @@ printf("AJS 7\n");
 					 mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
 			return 0;
 		}
-printf("AJS 8\n");
 
 		file->zip->index = mz_zip_reader_locate_file(&file->zip->archive, file_path, NULL, 0);
 		if (file->zip->index < 0)
