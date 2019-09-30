@@ -1,6 +1,8 @@
 #include <string.h>
 #include "sxmlc.h"
 
+#include "../../user_io.h"
+
 
 
 static int xml_scan(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
@@ -36,25 +38,43 @@ static int xml_scan(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 
         return true;
 }
+/*
+user_io.h:int user_io_file_tx_start(const char *name,unsigned char index=0);
+user_io.h:int user_io_file_tx_body(const uint8_t *buf,uint16_t chunk);
+user_io.h:int user_io_file_tx_body_filepart(const char *name,int start=0, int len=0);
+user_io.h:int user_io_file_tx_finish();
+*/
 
 static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 #define kBigTextSize 4096
-	char bigtext[kBigTextSize];
-	char zipname[kBigTextSize];
+	static char zipname[kBigTextSize];
+	static char bigtext[kBigTextSize];
+	static char action[kBigTextSize];
+	//zipname[0]=0;
         (void)(sd);
 
         switch (evt)
         {
         case XML_EVENT_START_NODE:
 		bigtext[0]=0;
+		action[0]=0;
 		printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
                 for (int i = 0; i < node->n_attributes; i++)
                         {
 			   printf("attribute %d name [%s] value [%s]\n",i,node->attributes[i].name,node->attributes[i].value);
-			   if (!strcasecmp(node->attributes[i].name,"zip"))
+			   if (!strcasecmp(node->attributes[i].name,"zip") && !strcasecmp(node->tag,"rom"))
 			   {
 				   strcpy(zipname,node->attributes[i].value);
+				   printf("found zip: [%s]\n",zipname);
+			   }
+			   if (!strcasecmp(node->attributes[i].name,"name") && !strcasecmp(node->tag,"rom"))
+			   {
+				   user_io_file_tx_start(node->attributes[i].value);
+			   }
+			   if (!strcasecmp(node->attributes[i].name,"action") && !strcasecmp(node->tag,"part"))
+			   {
+				   strcpy(action,node->attributes[i].value);
 			   }
                         }
 
@@ -70,8 +90,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		{
 			char fname[4096];
 			printf("bigtext [%s]\n",bigtext);
-			sprintf(fname,"%s/%s",zipname,bigtext);
+			printf("zipname [%s]\n",zipname);
+			sprintf(fname,"arcade/mame/%s/%s",zipname,bigtext);
 			printf("user_io_file_tx_body_filepart(const char *name[%s],int start[], int len[])\n",fname);
+			//user_io_file_tx_body_filepart(getFullPath(fname),0,0);
+			user_io_file_tx_body_filepart(fname,0,0);
 		}
                 break;
 
@@ -144,6 +167,7 @@ int arcade_send_rom(const char *xml)
 
         sax.all_event = xml_send_rom;
         XMLDoc_parse_file_SAX(xml, &sax, 0);
+	user_io_file_tx_finish();
         return 0;
 }
 
