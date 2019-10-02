@@ -862,6 +862,8 @@ void user_io_init(const char *path)
 		break;
 	}
 
+	OsdRotation((cfg.osd_rotate == 1) ? 3 : (cfg.osd_rotate == 2) ? 1 : 0);
+
 	spi_uio_cmd_cont(UIO_GETUARTFLG);
 	uart_mode = spi_w(0);
 	DisableIO();

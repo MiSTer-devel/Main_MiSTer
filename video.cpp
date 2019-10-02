@@ -892,6 +892,12 @@ void video_menu_bg(int n, int idle)
 					}
 					vs_wait();
 				};
+
+				if (cfg.osd_rotate)
+				{
+					imlib_context_set_image(logo);
+					imlib_image_orientate(cfg.osd_rotate == 1 ? 3 : 1);
+				}
 			}
 			else
 			{
@@ -1016,7 +1022,33 @@ void video_menu_bg(int n, int idle)
 
 			int src_w = imlib_image_get_width();
 			int src_h = imlib_image_get_height();
+
 			printf("logo: src_w=%d, src_h=%d\n", src_w, src_h);
+
+			int dst_w, dst_h;
+			int dst_x, dst_y;
+			if (cfg.osd_rotate)
+			{
+				dst_h = fb_height / 2;
+				dst_w = src_w * dst_h / src_h;
+				if (cfg.osd_rotate == 1)
+				{
+					dst_x = 0;
+					dst_y = fb_height - dst_h;
+				}
+				else
+				{
+					dst_x = fb_width - dst_w;
+					dst_y = 0;
+				}
+			}
+			else
+			{
+				dst_x = 0;
+				dst_y = 0;
+				dst_w = fb_width * 2 / 7;
+				dst_h = src_h * dst_w / src_w;
+			}
 
 			if (*bg)
 			{
@@ -1024,8 +1056,8 @@ void video_menu_bg(int n, int idle)
 				imlib_blend_image_onto_image(logo, 1,
 					0, 0,         //int source_x, int source_y,
 					src_w, src_h, //int source_width, int source_height,
-					0, 0,         //int destination_x, int destination_y,
-					fb_width*2 / 7, src_h*fb_width*2 / (src_w * 7) //int destination_width, int destination_height
+					dst_x, dst_y, //int destination_x, int destination_y,
+					dst_w, dst_h  //int destination_width, int destination_height
 				);
 			}
 			else

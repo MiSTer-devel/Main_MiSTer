@@ -73,6 +73,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char inver, unsigne
 void OsdClear(void);
 void OsdEnable(unsigned char mode);
 void InfoEnable(int x, int y, int width, int height);
+void OsdRotation(uint8_t rotate);
 void OsdDisable(void);
 void ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines);
 void ConfigAudio(unsigned char audio);

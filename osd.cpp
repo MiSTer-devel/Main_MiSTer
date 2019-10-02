@@ -593,6 +593,18 @@ void InfoEnable(int x, int y, int width, int height)
 	DisableOsd();
 }
 
+void OsdRotation(uint8_t rotate)
+{
+	if (is_minimig()) return;
+	spi_osd_cmd_cont(MM1_OSDCMDDISABLE);
+	spi_w(0);
+	spi_w(0);
+	spi_w(0);
+	spi_w(0);
+	spi_w(rotate);
+	DisableOsd();
+}
+
 // disable displaying of OSD
 void OsdDisable(void)
 {
