@@ -766,19 +766,20 @@ void user_io_init(const char *path)
 			OsdCoreNameSet(user_io_get_core_name());
 
 			printf("Loading config %s\n", name);
-			unsigned long status = 0;
-			if (FileLoadConfig(name, &status, 4))
+			uint32_t status[2] = { 0, 0 };
+			if (FileLoadConfig(name, status, 8))
 			{
-				printf("Found config\n");
-				status &= ~UIO_STATUS_RESET;
-				user_io_8bit_set_status(status, 0xffffffff & ~UIO_STATUS_RESET);
+				printf("Found config: %08X-%08X\n", status[0], status[1]);
+				status[0] &= ~UIO_STATUS_RESET;
+				user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
+				user_io_8bit_set_status(status[1], 0xffffffff, 1);
 			}
 			parse_config();
 
 			if (is_menu_core())
 			{
 				user_io_8bit_set_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
-				if (cfg.fb_terminal) video_menu_bg((status >> 1) & 7);
+				if (cfg.fb_terminal) video_menu_bg((status[0] >> 1) & 7);
 				else user_io_8bit_set_status(0, 0xE);
 			}
 			else
@@ -1522,10 +1523,11 @@ static void check_status_change()
 	if ((stchg & 0xF0) == 0xA0 && last_status_change != (stchg & 0xF))
 	{
 		last_status_change = (stchg & 0xF);
-		uint32_t st = spi32w(0);
+		uint32_t st0 = spi32w(0);
+		uint32_t st1 = spi32w(0);
 		DisableIO();
-		user_io_8bit_set_status(st, ~UIO_STATUS_RESET);
-		//printf("** new status from core: %08X\n", st);
+		user_io_8bit_set_status(st0, ~UIO_STATUS_RESET, 0);
+		user_io_8bit_set_status(st1, 0xFFFFFFFF, 1);
 	}
 	else
 	{
@@ -1695,22 +1697,33 @@ char *user_io_8bit_get_string(char index)
 	return buffer;
 }
 
-uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask)
+uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask, int ex)
 {
-	static uint32_t status = 0;
+	static uint32_t status[2] = { 0, 0 };
+	if (ex) ex = 1;
 
 	// if mask is 0 just return the current status
 	if (mask) {
 		// keep everything not masked
-		status &= ~mask;
+		status[ex] &= ~mask;
 		// updated masked bits
-		status |= new_status & mask;
+		status[ex] |= new_status & mask;
 
-		if(!io_ver)	spi_uio_cmd8(UIO_SET_STATUS, status);
-		spi_uio_cmd32(UIO_SET_STATUS2, status, io_ver);
+		if (!io_ver)
+		{
+			spi_uio_cmd8(UIO_SET_STATUS, status[0]);
+			spi_uio_cmd32(UIO_SET_STATUS2, status[0], 0);
+		}
+		else
+		{
+			spi_uio_cmd_cont(UIO_SET_STATUS2);
+			spi32w(status[0]);
+			spi32w(status[1]);
+			DisableIO();
+		}
 	}
 
-	return status;
+	return status[ex];
 }
 
 static char cur_btn = 0;

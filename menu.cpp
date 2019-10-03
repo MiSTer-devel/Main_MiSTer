@@ -1023,7 +1023,7 @@ void HandleUI(void)
 		if (up)
 		{
             if (menusub > 0)
-            { 
+            {
 			    do
 			    {
 				    --menusub;
@@ -1272,7 +1272,6 @@ void HandleUI(void)
 			do
 			{
 				char* pos;
-				unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
 
 				p = user_io_8bit_get_string(i++);
 				//printf("Option %d: %s\n", i-1, p);
@@ -1339,7 +1338,7 @@ void HandleUI(void)
 						}
 
 						// check for 'T'oggle and 'R'eset (toggle and then close menu) strings
-						if ((p[0] == 'T') || (p[0] == 'R'))
+						if ((p[0] == 'T') || (p[0] == 'R') || (p[0] == 't') || (p[0] == 'r'))
 						{
 
 							s[0] = ' ';
@@ -1353,12 +1352,15 @@ void HandleUI(void)
 						}
 
 						// check for 'O'ption strings
-						if (p[0] == 'O')
+						if ((p[0] == 'O') || (p[0] == 'o'))
 						{
+							int ex = (p[0] == 'o');
+							uint32_t status = user_io_8bit_set_status(0, 0, ex);  // 0,0 gets status
+
 							//option handled by ARM
 							if (p[1] == 'X') p++;
 
-							unsigned long x = getStatus(p, status);
+							uint32_t x = getStatus(p, status);
 
 							// get currently active option
 							substrcpy(s, p, 2 + x);
@@ -1368,7 +1370,7 @@ void HandleUI(void)
 								// option's index is outside of available values.
 								// reset to 0.
 								x = 0;
-								user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
+								//user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
 								substrcpy(s, p, 2 + x);
 								l = strlen(s);
 							}
@@ -1533,8 +1535,10 @@ void HandleUI(void)
 						while (strlen(ext) % 3) strcat(ext, " ");
 						SelectFile(ext, SCANO_DIR | SCANO_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
 					}
-					else if (p[0] == 'O')
+					else if ((p[0] == 'O') || (p[0] == 'o'))
 					{
+						int ex = (p[0] == 'o');
+
 						int byarm = 0;
 						if (p[1] == 'X')
 						{
@@ -1542,8 +1546,8 @@ void HandleUI(void)
 							p++;
 						}
 
-						unsigned long status = user_io_8bit_set_status(0, 0);  // 0,0 gets status
-						unsigned long x = getStatus(p, status) + 1;
+						uint32_t status = user_io_8bit_set_status(0, 0, ex);  // 0,0 gets status
+						uint32_t x = getStatus(p, status) + 1;
 
 						if (byarm && is_x86_core())
 						{
@@ -1553,14 +1557,16 @@ void HandleUI(void)
 						substrcpy(s, p, 2 + x);
 						if (!strlen(s)) x = 0;
 
-						user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
+						user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff, ex);
 
 						menustate = MENU_8BIT_MAIN1;
 					}
-					else if ((p[0] == 'T') || (p[0] == 'R'))
+					else if ((p[0] == 'T') || (p[0] == 'R') || (p[0] == 't') || (p[0] == 'r'))
 					{
+						int ex = (p[0] == 't') || (p[0] == 'r');
+
 						// determine which status bit is affected
-						unsigned long mask = 1 << getIdx(p);
+						uint32_t mask = 1 << getIdx(p);
 						if (mask == 1 && is_x86_core())
 						{
 							x86_init();
@@ -1568,10 +1574,10 @@ void HandleUI(void)
 						}
 						else
 						{
-							unsigned long status = user_io_8bit_set_status(0, 0);
+							uint32_t status = user_io_8bit_set_status(0, 0, ex);
 
-							user_io_8bit_set_status(status ^ mask, mask);
-							user_io_8bit_set_status(status, mask);
+							user_io_8bit_set_status(status ^ mask, mask, ex);
+							user_io_8bit_set_status(status, mask, ex);
 							menustate = MENU_8BIT_MAIN1;
 							if (p[0] == 'R') menustate = MENU_NONE1;
 						}
@@ -1812,9 +1818,9 @@ void HandleUI(void)
 				else
 				{
 					char *filename = user_io_create_config_name();
-					unsigned long status = user_io_8bit_set_status(0, 0);
+					uint32_t status[2] = { user_io_8bit_set_status(0, 0, 0), user_io_8bit_set_status(0, 0, 1) };
 					printf("Saving config to %s\n", filename);
-					FileSaveConfig(filename, &status, 4);
+					FileSaveConfig(filename, status, 8);
 					if (is_x86_core()) x86_config_save();
 				}
 				break;
@@ -3258,9 +3264,9 @@ void HandleUI(void)
 			else
 			{
 				char *filename = user_io_create_config_name();
-				unsigned long status = user_io_8bit_set_status(0, 0xffffffff);
+				uint32_t status[2] = { user_io_8bit_set_status(0, 0xffffffff, 0), user_io_8bit_set_status(0, 0xffffffff, 1) };
 				printf("Saving config to %s\n", filename);
-				FileSaveConfig(filename, &status, 4);
+				FileSaveConfig(filename, status, 8);
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
 			}
