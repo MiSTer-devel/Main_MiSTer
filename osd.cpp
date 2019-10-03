@@ -595,8 +595,15 @@ void InfoEnable(int x, int y, int width, int height)
 
 void OsdRotation(uint8_t rotate)
 {
-	if (is_minimig()) return;
-	spi_osd_cmd_cont(MM1_OSDCMDDISABLE);
+	if (!is_minimig())
+	{
+		spi_osd_cmd_cont(MM1_OSDCMDDISABLE);
+	}
+	else
+	{
+		spi_osd_cmd_cont(OSD_CMD_OSD);
+		spi8(0);
+	}
 	spi_w(0);
 	spi_w(0);
 	spi_w(0);
