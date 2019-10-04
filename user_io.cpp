@@ -1155,14 +1155,23 @@ int user_io_file_mount(char *name, unsigned char index, char pre)
 {
 	int writable = 0;
 	int ret = 0;
-	if (x2trd_ext_supp(name))
+
+	if (!strcasecmp(user_io_get_core_name_ex(), "apple-ii"))
 	{
-		ret = x2trd(name, sd_image+ index);
+		ret = dsk2nib(name, sd_image + index);
 	}
-	else
+
+	if (!ret)
 	{
-		writable = FileCanWrite(name);
-		ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+		if (x2trd_ext_supp(name))
+		{
+			ret = x2trd(name, sd_image + index);
+		}
+		else
+		{
+			writable = FileCanWrite(name);
+			ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+		}
 	}
 
 	buffer_lba[index] = ULLONG_MAX;
