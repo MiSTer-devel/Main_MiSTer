@@ -18,11 +18,13 @@ INCLUDE	= -I./
 INCLUDE	+= -I./support/minimig
 INCLUDE	+= -I./lib/libco
 INCLUDE	+= -I./lib/miniz
+INCLUDE	+= -I./lib/base64-simple
 
 PRJ = MiSTer
 C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/miniz/*.c) \
-          lib/libco/arm.c
+          lib/libco/arm.c \
+          lib/base64-simple/libbase64simple.c
 
 CPP_SRC = $(wildcard *.cpp) \
           $(wildcard ./support/minimig/*.cpp) \
