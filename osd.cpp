@@ -226,10 +226,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 		stipple = 0;
 
 	// select buffer and line to write to
-	if (!is_minimig())
-		spi_osd_cmd_cont(MM1_OSDCMDWRITE | n);
-	else
-		spi_osd_cmd32_cont(OSD_CMD_OSD_WR, n);
+	spi_osd_cmd_cont(OSD_CMD_WRITE | n);
 
 	if (invert)	invert = 255;
 
@@ -293,11 +290,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 
 				// send new line number to OSD
 				DisableOsd();
-
-				if (!is_minimig())
-					spi_osd_cmd_cont(MM1_OSDCMDWRITE | n);
-				else
-					spi_osd_cmd32_cont(OSD_CMD_OSD_WR, n);
+				spi_osd_cmd_cont(OSD_CMD_WRITE | n);
 			}
 			else if (i<(linelimit - 8)) { // normal character
 				unsigned char c;
@@ -344,14 +337,7 @@ void OsdDrawLogo(int row)
 	uint n = row * mag;
 
 	// select buffer and line to write to
-	if (!is_minimig())
-	{
-		spi_osd_cmd_cont(MM1_OSDCMDWRITE | n);
-	}
-	else
-	{
-		spi_osd_cmd32_cont(OSD_CMD_OSD_WR, n);
-	}
+	spi_osd_cmd_cont(OSD_CMD_WRITE | n);
 
 	for (int k = 0; k < mag; k++)
 	{
@@ -410,13 +396,9 @@ void OSD_PrintText(unsigned char line, const char *hdr, const char *text, unsign
 	int i, j;
 
 	// select buffer and line to write to
-	if (!is_minimig())
-		spi_osd_cmd_cont(MM1_OSDCMDWRITE | line);
-	else
-		spi_osd_cmd32_cont(OSD_CMD_OSD_WR, line);
+	spi_osd_cmd_cont(OSD_CMD_WRITE | line);
 
-	if (invert)
-		invert = 0xff;
+	if (invert) invert = 0xff;
 
 	p = &titlebuffer[(osd_size - 1 - line) * 8];
 	if (start>2)
@@ -532,10 +514,7 @@ void OSD_PrintInfo(const char *message, int *width, int *height, int frame)
 
 	for (y = 0; y < h; y++)
 	{
-		if (!is_minimig())
-			spi_osd_cmd_cont(MM1_OSDCMDWRITE | y);
-		else
-			spi_osd_cmd32_cont(OSD_CMD_OSD_WR, y);
+		spi_osd_cmd_cont(OSD_CMD_WRITE | y);
 
 		for (x = 0; x < w; x++)
 		{
@@ -550,14 +529,8 @@ void OSD_PrintInfo(const char *message, int *width, int *height, int frame)
 // clear OSD frame buffer
 void OsdClear(void)
 {
-	// select buffer to write to
-	if (!is_minimig()) spi_osd_cmd_cont(MM1_OSDCMDWRITE);
-	else spi_osd_cmd32_cont(OSD_CMD_OSD_WR, 0);
-
-	// clear buffer
+	spi_osd_cmd_cont(OSD_CMD_WRITE);
 	spi_n(0x00, OSDLINELEN * OsdGetSize());
-
-	// deselect OSD SPI device
 	DisableOsd();
 }
 
@@ -565,27 +538,14 @@ void OsdClear(void)
 void OsdEnable(unsigned char mode)
 {
 	user_io_osd_key_enable(mode & DISABLE_KEYBOARD);
-
 	mode &= DISABLE_KEYBOARD;
-
-	if (!is_minimig()) spi_osd_cmd(MM1_OSDCMDENABLE | mode);
-	else spi_osd_cmd8(OSD_CMD_OSD, 0x01 | mode);
+	spi_osd_cmd(OSD_CMD_ENABLE | mode);
 }
 
 void InfoEnable(int x, int y, int width, int height)
 {
 	user_io_osd_key_enable(0);
-
-	if (!is_minimig())
-	{
-		spi_osd_cmd_cont(MM1_OSDCMDENABLE | OSD_INFO);
-	}
-	else
-	{
-		spi_osd_cmd_cont(OSD_CMD_OSD);
-		spi8(1 | OSD_INFO);
-	}
-
+	spi_osd_cmd_cont(OSD_CMD_ENABLE | OSD_INFO);
 	spi_w(x);
 	spi_w(y);
 	spi_w(width);
@@ -595,15 +555,7 @@ void InfoEnable(int x, int y, int width, int height)
 
 void OsdRotation(uint8_t rotate)
 {
-	if (!is_minimig())
-	{
-		spi_osd_cmd_cont(MM1_OSDCMDDISABLE);
-	}
-	else
-	{
-		spi_osd_cmd_cont(OSD_CMD_OSD);
-		spi8(0);
-	}
+	spi_osd_cmd_cont(OSD_CMD_DISABLE);
 	spi_w(0);
 	spi_w(0);
 	spi_w(0);
@@ -616,11 +568,7 @@ void OsdRotation(uint8_t rotate)
 void OsdDisable(void)
 {
 	user_io_osd_key_enable(0);
-
-	if (!is_minimig())
-		spi_osd_cmd(MM1_OSDCMDDISABLE);
-	else
-		spi_osd_cmd8(OSD_CMD_OSD, 0x00);
+	spi_osd_cmd(OSD_CMD_DISABLE);
 }
 
 
