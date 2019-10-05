@@ -150,7 +150,6 @@
 #define CORE_TYPE_DUMB      0xa0   // core without any io controller interaction
 #define CORE_TYPE_MIST      0xa3   // mist atari st core
 #define CORE_TYPE_8BIT      0xa4   // generic core
-#define CORE_TYPE_MINIMIG2  0xa5   // new Minimig with AGA
 #define CORE_TYPE_ARCHIE    0xa6   // Acorn Archimedes
 #define CORE_TYPE_SHARPMZ   0xa7   // Sharp MZ Series
 #define CORE_TYPE_8BIT2     0xa8   // generic core using dual SDRAM

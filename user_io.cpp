@@ -171,11 +171,6 @@ unsigned char user_io_core_type()
 	return core_type;
 }
 
-char is_minimig()
-{
-	return(core_type == CORE_TYPE_MINIMIG2);
-}
-
 char is_archie()
 {
 	return(core_type == CORE_TYPE_ARCHIE);
@@ -210,9 +205,6 @@ const char *user_io_get_core_name_ex()
 {
 	switch (user_io_core_type())
 	{
-	case CORE_TYPE_MINIMIG2:
-		return "MINIMIG";
-
 	case CORE_TYPE_MIST:
 		return "ST";
 
@@ -271,6 +263,13 @@ char is_neogeo_core()
 	return (is_neogeo_type == 1);
 }
 
+static int is_minimig_type = 0;
+char is_minimig()
+{
+	if (!is_minimig_type) is_minimig_type = strcasecmp(core_name, "minimig") ? 2 : 1;
+	return (is_minimig_type == 1);
+}
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -290,6 +289,7 @@ static void user_io_read_core_name()
 	is_cpc_type = 0;
 	is_zx81_type = 0;
 	is_neogeo_type = 0;
+	is_minimig_type = 0;
 	core_name[0] = 0;
 
 	// get core name
@@ -678,7 +678,6 @@ void user_io_init(const char *path)
 	}
 
 	if ((core_type != CORE_TYPE_DUMB) &&
-		(core_type != CORE_TYPE_MINIMIG2) &&
 		(core_type != CORE_TYPE_MIST) &&
 		(core_type != CORE_TYPE_ARCHIE) &&
 		(core_type != CORE_TYPE_8BIT) &&
@@ -698,7 +697,6 @@ void user_io_init(const char *path)
 
 		// set core name. This currently only sets a name for the 8 bit cores
 		user_io_read_core_name();
-
 		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 
 		// send a reset
@@ -727,12 +725,6 @@ void user_io_init(const char *path)
 
 	case CORE_TYPE_DUMB:
 		puts("Identified core without user interface");
-		break;
-
-	case CORE_TYPE_MINIMIG2:
-		puts("Identified Minimig V2 core");
-		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
-		BootInit();
 		break;
 
 	case CORE_TYPE_MIST:
@@ -784,7 +776,12 @@ void user_io_init(const char *path)
 			}
 			else
 			{
-				if (is_x86_core())
+				if (is_minimig())
+				{
+					puts("Identified Minimig V2 core");
+					BootInit();
+				}
+				else if (is_x86_core())
 				{
 					x86_config_load();
 					x86_init();
@@ -2061,8 +2058,7 @@ void cd_generate_toc(uint16_t req_type, uint8_t *buffer)
 
 void user_io_poll()
 {
-	if ((core_type != CORE_TYPE_MINIMIG2) &&
-		(core_type != CORE_TYPE_MIST) &&
+	if ((core_type != CORE_TYPE_MIST) &&
 		(core_type != CORE_TYPE_ARCHIE) &&
 		(core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
@@ -2090,7 +2086,7 @@ void user_io_poll()
 
 	user_io_send_buttons(0);
 
-	if (core_type == CORE_TYPE_MINIMIG2)
+	if (is_minimig())
 	{
 		//HDD & FDD query
 		unsigned char  c1, c2;
@@ -2581,7 +2577,7 @@ void user_io_poll()
 	if (core_type == CORE_TYPE_SHARPMZ) sharpmz_poll();
 
 	static uint8_t leds = 0;
-	if(use_ps2ctl && core_type != CORE_TYPE_MINIMIG2)
+	if(use_ps2ctl && !is_minimig())
 	{
 		leds |= (KBD_LED_FLAG_STATUS | KBD_LED_CAPS_CONTROL);
 
@@ -2814,7 +2810,7 @@ void user_io_poll()
 
 static void send_keycode(unsigned short key, int press)
 {
-	if (core_type == CORE_TYPE_MINIMIG2)
+	if (is_minimig())
 	{
 		if (press > 1) return;
 
@@ -3020,17 +3016,20 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 {
 	switch (core_type)
 	{
-	case CORE_TYPE_MINIMIG2:
-		mouse_pos[X] += x;
-		mouse_pos[Y] += y;
-		mouse_flags |= 0x80 | (b & 7);
-		return;
-
 	case CORE_TYPE_8BIT:
-		mouse_pos[X] += x;
-		mouse_pos[Y] -= y;  // ps2 y axis is reversed over usb
-		mouse_wheel += w;
-		mouse_flags |= 0x08 | (b & 7);
+		if (is_minimig())
+		{
+			mouse_pos[X] += x;
+			mouse_pos[Y] += y;
+			mouse_flags |= 0x80 | (b & 7);
+		}
+		else
+		{
+			mouse_pos[X] += x;
+			mouse_pos[Y] -= y;  // ps2 y axis is reversed over usb
+			mouse_wheel += w;
+			mouse_flags |= 0x08 | (b & 7);
+		}
 		return;
 
 	case CORE_TYPE_MIST:
@@ -3072,13 +3071,10 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 		else
 		switch (core_type)
 		{
-		case CORE_TYPE_MINIMIG2:
-			minimig_reset();
-			break;
-
 		case CORE_TYPE_ARCHIE:
 		case CORE_TYPE_8BIT:
-			kbd_reset = 1;
+			if(is_minimig()) minimig_reset();
+			else kbd_reset = 1;
 			break;
 		}
 	}

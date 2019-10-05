@@ -784,7 +784,6 @@ void HandleUI(void)
 	switch (user_io_core_type())
 	{
 	case CORE_TYPE_MIST:
-	case CORE_TYPE_MINIMIG2:
 	case CORE_TYPE_8BIT:
 	case CORE_TYPE_SHARPMZ:
 	case CORE_TYPE_ARCHIE:
@@ -1081,7 +1080,6 @@ void HandleUI(void)
 			{
 				SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_NONE1);
 			}
-			else if (user_io_core_type() == CORE_TYPE_MINIMIG2) menustate = MENU_MAIN1;
 			else if (user_io_core_type() == CORE_TYPE_MIST) menustate = MENU_MIST_MAIN1;
 			else if (user_io_core_type() == CORE_TYPE_ARCHIE) menustate = MENU_ARCHIE_MAIN1;
 			else {
@@ -1089,6 +1087,10 @@ void HandleUI(void)
 				{
 					OsdCoreNameSet("");
 					SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_SYSTEM1);
+				}
+				else if (is_minimig())
+				{
+					menustate = MENU_MAIN1;
 				}
 				else
 				{
@@ -1695,7 +1697,7 @@ void HandleUI(void)
 			}
 
 			m = 0;
-			if (user_io_core_type() == CORE_TYPE_MINIMIG2)
+			if (is_minimig())
 			{
 				m = 1;
 				menumask &= ~0x100;
@@ -1852,10 +1854,6 @@ void HandleUI(void)
 		{
 			// go back to core requesting this menu
 			switch (user_io_core_type()) {
-			case CORE_TYPE_MINIMIG2:
-				menusub = 0;
-				menustate = MENU_MAIN1;
-				break;
 			case CORE_TYPE_MIST:
 				menusub = 5;
 				menustate = MENU_MIST_MAIN1;
@@ -1865,8 +1863,16 @@ void HandleUI(void)
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 			case CORE_TYPE_8BIT:
-				menusub = 0;
-				menustate = MENU_8BIT_MAIN1;
+				if (is_minimig())
+				{
+					menusub = 0;
+					menustate = MENU_MAIN1;
+				}
+				else
+				{
+					menusub = 0;
+					menustate = MENU_8BIT_MAIN1;
+				}
 				break;
 			case CORE_TYPE_SHARPMZ:
 				menusub   = menusub_last;
@@ -2033,11 +2039,8 @@ void HandleUI(void)
 		else if (right)
 		{
 			// go back to core requesting this menu
-			switch (user_io_core_type()) {
-			case CORE_TYPE_MINIMIG2:
-				menusub = 0;
-				menustate = MENU_MAIN1;
-				break;
+			switch (user_io_core_type())
+			{
 			case CORE_TYPE_MIST:
 				menusub = 5;
 				menustate = MENU_MIST_MAIN1;
@@ -2047,8 +2050,16 @@ void HandleUI(void)
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 			case CORE_TYPE_8BIT:
-				menusub = 0;
-				menustate = MENU_8BIT_MAIN1;
+				if (is_minimig())
+				{
+					menusub = 0;
+					menustate = MENU_MAIN1;
+				}
+				else
+				{
+					menusub = 0;
+					menustate = MENU_8BIT_MAIN1;
+				}
 				break;
 			case CORE_TYPE_SHARPMZ:
 				menusub = menusub_last;
@@ -2313,7 +2324,6 @@ void HandleUI(void)
 		OsdWrite(12, s, 0, 0, 1);
 
 		s[0] = 0;
-		if (user_io_core_type() != CORE_TYPE_MINIMIG2)
 		{
 			int len = strlen(OsdCoreName());
 			if (len > 30) len = 30;
@@ -3226,7 +3236,7 @@ void HandleUI(void)
 		/******************************************************************/
 	case MENU_RESET1:
 		m = 0;
-		if (user_io_core_type() == CORE_TYPE_MINIMIG2) m = 1;
+		if (is_minimig()) m = 1;
 		helptext = helptexts[HELPTEXT_NONE];
 		OsdSetTitle("Reset", 0);
 		menumask = 0x03;	// Yes / No
@@ -3246,7 +3256,7 @@ void HandleUI(void)
 
 	case MENU_RESET2:
 		m = 0;
-		if (user_io_core_type() == CORE_TYPE_MINIMIG2) m = 1;
+		if (is_minimig()) m = 1;
 		if (user_io_core_type() == CORE_TYPE_SHARPMZ)  m = 2;
 
 		if (select && menusub == 0)
