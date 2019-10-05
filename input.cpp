@@ -2575,6 +2575,12 @@ int input_test(int getchar)
 						{
 							input[n].lightgun = 1;
 						}
+						
+						//Arduino Leonardo lightgun
+						if (input[n].vid == 0x2341 && input[n].pid == 0x8036)
+						{
+							input[n].lightgun = 1;
+						}
 
 						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
 
@@ -2660,17 +2666,13 @@ int input_test(int getchar)
 		int timeout = 0;
 		if (is_menu_core() && video_fb_state()) timeout = 25;
 
-		while (1)
+		int return_value = poll(pool, NUMDEV + 3, timeout);
+		if (return_value < 0)
 		{
-			int return_value = poll(pool, NUMDEV + 3, timeout);
-			if (!return_value) break;
-
-			if (return_value < 0)
-			{
-				printf("ERR: poll\n");
-				break;
-			}
-
+			printf("ERR: poll\n");
+		}
+		else if (return_value > 0)
+		{
 			if ((pool[NUMDEV].revents & POLLIN) && check_devs())
 			{
 				printf("Close all devices.\n");
@@ -2683,7 +2685,7 @@ int input_test(int getchar)
 				return 0;
 			}
 
-			for (int i = 0; i < NUMDEV; i++)
+			for (int i = 0; i<NUMDEV; i++)
 			{
 				if ((pool[i].fd >= 0) && (pool[i].revents & POLLIN))
 				{
@@ -2701,8 +2703,6 @@ int input_test(int getchar)
 							}
 							else if (ev.type)
 							{
-								if (ev.type == EV_KEY && ev.value > 1) continue;
-
 								int dev = i;
 								if (input[dev].bind >= 0) dev = input[dev].bind;
 
@@ -3049,7 +3049,7 @@ int input_test(int getchar)
 		if (cur_leds != leds_state)
 		{
 			cur_leds = leds_state;
-			for (int i = 0; i < NUMDEV; i++)
+			for (int i = 0; i<NUMDEV; i++)
 			{
 				if (input[i].led)
 				{
