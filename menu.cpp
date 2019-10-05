@@ -2877,13 +2877,13 @@ void HandleUI(void)
 		else if (plus && (minimig_config.floppy.drives<3))
 		{
 			minimig_config.floppy.drives++;
-			ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 			menustate = MENU_MAIN1;
 		}
 		else if (minus && (minimig_config.floppy.drives>0))
 		{
 			minimig_config.floppy.drives--;
-			ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 			menustate = MENU_MAIN1;
 		}
 		else if (select)
@@ -2905,7 +2905,7 @@ void HandleUI(void)
 			else if (menusub == 4)	// Toggle floppy turbo
 			{
 				minimig_config.floppy.speed ^= 1;
-				ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+				minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 				menustate = MENU_MAIN1;
 			}
 			else if (menusub == 5)	// Go to harddrives page.
@@ -3419,7 +3419,7 @@ void HandleUI(void)
 				_config_cpu += 1;
 				if (_config_cpu == 0x02) _config_cpu += 1;
 				minimig_config.cpu = (minimig_config.cpu & 0xfc) | (_config_cpu & 0x3);
-				ConfigCPU(minimig_config.cpu);
+				minimig_ConfigCPU(minimig_config.cpu);
 			}
 			else if (menusub == 1)
 			{
@@ -3427,13 +3427,13 @@ void HandleUI(void)
 				int _config_turbo = (minimig_config.cpu >> 2) & 0x3;
 				_config_turbo += 1;
 				minimig_config.cpu = (minimig_config.cpu & 0x3) | ((_config_turbo & 0x3) << 2);
-				ConfigCPU(minimig_config.cpu);
+				minimig_ConfigCPU(minimig_config.cpu);
 			}
 			else if (menusub == 2)
 			{
 				minimig_config.chipset ^= CONFIG_NTSC;
 				menustate = MENU_SETTINGS_CHIPSET1;
-				ConfigChipset(minimig_config.chipset);
+				minimig_ConfigChipset(minimig_config.chipset);
 			}
 			else if (menusub == 3)
 			{
@@ -3453,19 +3453,19 @@ void HandleUI(void)
 				}
 
 				menustate = MENU_SETTINGS_CHIPSET1;
-				ConfigChipset(minimig_config.chipset);
+				minimig_ConfigChipset(minimig_config.chipset);
 			}
 			else if (menusub == 4)
 			{
 				minimig_config.autofire ^= 0x4;
 				menustate = MENU_SETTINGS_CHIPSET1;
-				ConfigAutofire(minimig_config.autofire, 0x4);
+				minimig_ConfigAutofire(minimig_config.autofire, 0x4);
 			}
 			else if (menusub == 5)
 			{
 				minimig_config.autofire ^= 0x8;
 				menustate = MENU_SETTINGS_CHIPSET1;
-				ConfigAutofire(minimig_config.autofire, 0x8);
+				minimig_ConfigAutofire(minimig_config.autofire, 0x8);
 			}
 			else if (menusub == 6)
 			{
@@ -3790,27 +3790,27 @@ void HandleUI(void)
 				minimig_config.scanlines = ((minimig_config.scanlines + 1) & 0x03) | (minimig_config.scanlines & 0xfc);
 				if ((minimig_config.scanlines & 0x03) > 2) minimig_config.scanlines = minimig_config.scanlines & 0xfc;
 				menustate = MENU_SETTINGS_VIDEO1;
-				ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+				minimig_ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
 			}
 			else if (menusub == 1)
 			{
 				minimig_config.scanlines &= ~0x80;
 				minimig_config.scanlines ^= 0x40;
 				menustate = MENU_SETTINGS_VIDEO1;
-				ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+				minimig_ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
 			}
 			else if (menusub == 2)
 			{
 				minimig_config.scanlines &= ~0x20; // reserved for auto-ar
 				minimig_config.scanlines ^= 0x10;
 				menustate = MENU_SETTINGS_VIDEO1;
-				ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+				minimig_ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
 			}
 			else if (menusub == 3)
 			{
 				minimig_config.audio = (minimig_config.audio + 1) & 3;
 				menustate = MENU_SETTINGS_VIDEO1;
-				ConfigAudio(minimig_config.audio);
+				minimig_ConfigAudio(minimig_config.audio);
 			}
 			else if (menusub == 4)
 			{

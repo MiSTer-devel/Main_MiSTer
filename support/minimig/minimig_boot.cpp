@@ -7,7 +7,7 @@
 #include "stdio.h"
 #include "minimig_boot.h"
 #include "../../hardware.h"
-#include "../../osd.h"
+#include "../../user_io.h"
 #include "../../spi.h"
 #include "../../file_io.h"
 #include "minimig_config.h"
@@ -18,12 +18,12 @@ static uint8_t buffer[1024];
 
 static void mem_upload_init(unsigned long addr)
 {
-	spi_osd_cmd32le_cont(OSD_CMD_WR, addr);
+	spi_uio_cmd32le_cont(UIO_MM2_WR, addr);
 }
 
 static void mem_upload_fini()
 {
-	DisableOsd();
+	DisableIO();
 }
 
 static void mem_write16(unsigned short x)
@@ -145,14 +145,7 @@ static const char boot_font[96][8] =
 static void BootEnableMem()
 {
 	// TEMP enable 1MB memory
-	spi_osd_cmd8(OSD_CMD_MEM, 0x5);
-	//EnableOsd();
-	//spi8(OSD_CMD_RST);
-	//rstval = (SPI_CPU_HLT | SPI_RST_CPU);
-	//spi8(rstval);
-	//DisableOsd();
-	//SPIN(); SPIN(); SPIN(); SPIN();
-	//while ((read32(REG_SYS_STAT_ADR) & 0x2));
+	spi_uio_cmd8(UIO_MM2_MEM, 0x5);
 }
 
 static void BootClearScreen(int adr, int size)
@@ -402,28 +395,14 @@ void BootInit()
 {
 	puts("Running minimig setup");
 
-	EnableOsd();
-	spi8(OSD_CMD_VERSION);
-	char ver_beta = spi_b(0xff);
-	char ver_major = spi_b(0xff);
-	char ver_minor = spi_b(0xff);
-	char ver_minion = spi_b(0xff);
-	DisableOsd();
-	spi8(OSD_CMD_RST);
-	rstval = (SPI_RST_USR | SPI_RST_CPU | SPI_CPU_HLT);
-	spi8(rstval);
-	DisableOsd();
-	EnableOsd();
-	spi8(OSD_CMD_RST);
-	rstval = (SPI_RST_CPU | SPI_CPU_HLT);
-	spi8(rstval);
-	DisableOsd();
+	spi_uio_cmd8(UIO_MM2_RST, SPI_RST_USR | SPI_RST_CPU | SPI_CPU_HLT);
+	spi_uio_cmd8(UIO_MM2_RST, SPI_RST_CPU | SPI_CPU_HLT);
 
 	if (cfg.bootscreen)
 	{
 		//default video config till real config loaded.
-		ConfigVideo(0, 0, 0x40);
-		ConfigAudio(0);
+		minimig_ConfigVideo(0, 0, 0x40);
+		minimig_ConfigAudio(0);
 
 		WaitTimer(100);
 
@@ -435,9 +414,7 @@ void BootInit()
 		BootCustomInit();
 
 		WaitTimer(500);
-		char rtl_ver[128];
-		sprintf(rtl_ver, "MINIMIG-AGA%s v%d.%d.%d by Rok Krajnc. MiSTer port by Sorgelig.", ver_beta ? " BETA" : "", ver_major, ver_minor, ver_minion);
-		BootPrintEx(rtl_ver);
+		BootPrintEx("Minimig-AGA by Rok Krajnc. MiSTer port by Sorgelig.");
 		BootPrintEx(" ");
 		BootPrintEx("Original Minimig by Dennis van Weeren");
 		BootPrintEx("Updates by Jakub Bednarski, Tobias Gubener, Sascha Boing, A.M. Robinson & others");

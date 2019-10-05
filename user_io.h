@@ -82,6 +82,18 @@
 #define UIO_DMA_READ    0x62
 #define UIO_DMA_SDIO    0x63
 
+// ---- Minimig v2 constants -------
+#define UIO_MM2_WR      0xF0 //0x1c
+#define UIO_MM2_RST     0xF1 //0x08
+#define UIO_MM2_AUD     0xF2 //0x74
+#define UIO_MM2_CHIP    0xF3 //0x04
+#define UIO_MM2_CPU     0xF4 //0x14
+#define UIO_MM2_MEM     0xF5 //0x24
+#define UIO_MM2_VID     0xF6 //0x34
+#define UIO_MM2_FLP     0xF7 //0x44
+#define UIO_MM2_HDD     0xF8 //0x54
+#define UIO_MM2_JOY     0xF9 //0x64
+
 #define JOY_RIGHT       0x01
 #define JOY_LEFT        0x02
 #define JOY_DOWN        0x04

@@ -571,44 +571,6 @@ void OsdDisable(void)
 	spi_osd_cmd(OSD_CMD_DISABLE);
 }
 
-
-void ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines)
-{
-	spi_osd_cmd16(OSD_CMD_VID, (((scanlines >> 6) & 0x03) << 10) | (((scanlines >> 4) & 0x03) << 8) | (((scanlines >> 2) & 0x03) << 6) | ((hires & 0x03) << 4) | ((lores & 0x03) << 2) | (scanlines & 0x03));
-}
-
-void ConfigAudio(unsigned char audio)
-{
-	spi_osd_cmd8(OSD_CMD_AUD, audio);
-}
-
-void ConfigMemory(unsigned char memory)
-{
-	spi_osd_cmd8(OSD_CMD_MEM, memory);
-}
-
-void ConfigCPU(unsigned char cpu)
-{
-	spi_osd_cmd8(OSD_CMD_CPU, cpu & 0x0f);
-}
-
-void ConfigChipset(unsigned char chipset)
-{
-	spi_osd_cmd8(OSD_CMD_CHIP, chipset & 0x1f);
-}
-
-void ConfigFloppy(unsigned char drives, unsigned char speed)
-{
-	spi_osd_cmd8(OSD_CMD_FLP, ((drives & 0x03) << 2) | (speed & 0x03));
-}
-
-void ConfigAutofire(unsigned char autofire, unsigned char mask)
-{
-	uint16_t param = mask;
-	param = (param << 8) | autofire;
-	spi_osd_cmd16(OSD_CMD_JOY, param);
-}
-
 void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert)
 {
 	// this function is called periodically when a string longer than the window is displayed.

@@ -8,7 +8,6 @@
 
 #include "../../hardware.h"
 #include "../../file_io.h"
-#include "../../osd.h"
 #include "../../menu.h"
 #include "../../user_io.h"
 #include "../../input.h"
@@ -64,9 +63,9 @@ static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int addr
 				if ((int)keyidx >= keysize) keyidx -= keysize;
 			}
 		}
-		EnableOsd();
+		EnableIO();
 		unsigned int adr = address + i * 512;
-		spi8(OSD_CMD_WR);
+		spi8(UIO_MM2_WR);
 		spi8(adr & 0xff); adr = adr >> 8;
 		spi8(adr & 0xff); adr = adr >> 8;
 		spi8(adr & 0xff); adr = adr >> 8;
@@ -78,7 +77,7 @@ static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int addr
 			spi8(buf[j + 2]);
 			spi8(buf[j + 3]);
 		}
-		DisableOsd();
+		DisableIO();
 	}
 
 	printf("]\n");
@@ -123,9 +122,9 @@ static char UploadKickstart(char *name)
 			FileClose(&file);
 			//clear tag (write 0 to $fc0000) to force bootrom to load Kickstart from disk
 			//and not use one which was already there.
-			spi_osd_cmd32le_cont(OSD_CMD_WR, 0xfc0000);
+			spi_uio_cmd32le_cont(UIO_MM2_WR, 0xfc0000);
 			spi8(0x00);spi8(0x00);
-			DisableOsd();
+			DisableIO();
 			return(1);
 		  }
 		else if (file.size == 0x2000) {
@@ -133,9 +132,9 @@ static char UploadKickstart(char *name)
 		        BootPrint("Uploading A1000 boot ROM");
 		        SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
 			FileClose(&file);
-			spi_osd_cmd32le_cont(OSD_CMD_WR, 0xfc0000);
+			spi_uio_cmd32le_cont(UIO_MM2_WR, 0xfc0000);
 			spi8(0x00);spi8(0x00);
-			DisableOsd();
+			DisableIO();
 			return(1);
 		  }
 		else if (file.size == 0x80000) {
@@ -199,7 +198,7 @@ static char UploadActionReplay()
 		SendFileV2(&file, NULL, 0, 0xa10000, (file.size + 511) >> 9);
 		// HRTmon config
 		adr = 0xa10000 + 20;
-		spi_osd_cmd32le_cont(OSD_CMD_WR, adr);
+		spi_uio_cmd32le_cont(UIO_MM2_WR, adr);
 		data = 0x00800000; // mon_size, 4 bytes
 		spi8((data >> 24) & 0xff); spi8((data >> 16) & 0xff);
 		spi8((data >> 8) & 0xff); spi8((data >> 0) & 0xff);
@@ -239,13 +238,13 @@ static char UploadActionReplay()
 		spi8((data >> 0) & 0xff);
 		data = 1; // hexmode, 1 byte
 		spi8((data >> 0) & 0xff);
-		DisableOsd();
+		DisableIO();
 		adr = 0xa10000 + 68;
-		spi_osd_cmd32le_cont(OSD_CMD_WR, adr);
+		spi_uio_cmd32le_cont(UIO_MM2_WR, adr);
 		data = ((minimig_config.memory & 0x3) + 1) * 512 * 1024; // maxchip, 4 bytes TODO is this correct?
 		spi8((data >> 24) & 0xff); spi8((data >> 16) & 0xff);
 		spi8((data >> 8) & 0xff); spi8((data >> 0) & 0xff);
-		DisableOsd();
+		DisableIO();
 
 		FileClose(&file);
 		return(1);
@@ -290,12 +289,12 @@ static void ApplyConfiguration(char reloadkickstart)
 	if (force_reload_kickstart) reloadkickstart = 1;
 	force_reload_kickstart = 0;
 
-	ConfigCPU(minimig_config.cpu);
+	minimig_ConfigCPU(minimig_config.cpu);
 
 	if (!reloadkickstart)
 	{
-		ConfigChipset(minimig_config.chipset);
-		ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+		minimig_ConfigChipset(minimig_config.chipset);
+		minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 	}
 
 	printf("CPU clock     : %s\n", minimig_config.chipset & 0x01 ? "turbo" : "normal");
@@ -320,14 +319,14 @@ static void ApplyConfiguration(char reloadkickstart)
 	}
 
 	rstval = SPI_CPU_HLT;
-	spi_osd_cmd8(OSD_CMD_RST, rstval);
-	spi_osd_cmd8(OSD_CMD_HDD, (minimig_config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
+	spi_uio_cmd8(UIO_MM2_RST, rstval);
+	spi_uio_cmd8(UIO_MM2_HDD, (minimig_config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
 
-	ConfigMemory(memcfg);
-	ConfigCPU(minimig_config.cpu);
+	minimig_ConfigMemory(memcfg);
+	minimig_ConfigCPU(minimig_config.cpu);
 
-	ConfigChipset(minimig_config.chipset);
-	ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+	minimig_ConfigChipset(minimig_config.chipset);
+	minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 
 	if (minimig_config.memory & 0x40) UploadActionReplay();
 
@@ -335,7 +334,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	{
 		printf("Reloading kickstart ...\n");
 		rstval |= (SPI_RST_CPU | SPI_CPU_HLT);
-		spi_osd_cmd8(OSD_CMD_RST, rstval);
+		spi_uio_cmd8(UIO_MM2_RST, rstval);
 		if (!UploadKickstart(minimig_config.kickstart))
 		{
 			strcpy(minimig_config.kickstart, "Amiga/KICK.ROM");
@@ -351,21 +350,21 @@ static void ApplyConfiguration(char reloadkickstart)
 			}
 		}
 		rstval |= (SPI_RST_USR | SPI_RST_CPU);
-		spi_osd_cmd8(OSD_CMD_RST, rstval);
+		spi_uio_cmd8(UIO_MM2_RST, rstval);
 	}
 	else
 	{
 		printf("Resetting ...\n");
 		rstval |= (SPI_RST_USR | SPI_RST_CPU);
-		spi_osd_cmd8(OSD_CMD_RST, rstval);
+		spi_uio_cmd8(UIO_MM2_RST, rstval);
 	}
 
 	rstval = 0;
-	spi_osd_cmd8(OSD_CMD_RST, rstval);
+	spi_uio_cmd8(UIO_MM2_RST, rstval);
 
-	ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
-	ConfigAudio(minimig_config.audio);
-	ConfigAutofire(minimig_config.autofire, 0xC);
+	minimig_ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+	minimig_ConfigAudio(minimig_config.audio);
+	minimig_ConfigAutofire(minimig_config.autofire, 0xC);
 }
 
 int minimig_cfg_load(int num)
@@ -625,4 +624,41 @@ void minimig_set_adjust(char n)
 char minimig_get_adjust()
 {
 	return minimig_adjust;
+}
+
+void minimig_ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines)
+{
+	spi_uio_cmd16(UIO_MM2_VID, (((scanlines >> 6) & 0x03) << 10) | (((scanlines >> 4) & 0x03) << 8) | (((scanlines >> 2) & 0x03) << 6) | ((hires & 0x03) << 4) | ((lores & 0x03) << 2) | (scanlines & 0x03));
+}
+
+void minimig_ConfigAudio(unsigned char audio)
+{
+	spi_uio_cmd8(UIO_MM2_AUD, audio);
+}
+
+void minimig_ConfigMemory(unsigned char memory)
+{
+	spi_uio_cmd8(UIO_MM2_MEM, memory);
+}
+
+void minimig_ConfigCPU(unsigned char cpu)
+{
+	spi_uio_cmd8(UIO_MM2_CPU, cpu & 0x0f);
+}
+
+void minimig_ConfigChipset(unsigned char chipset)
+{
+	spi_uio_cmd8(UIO_MM2_CHIP, chipset & 0x1f);
+}
+
+void minimig_ConfigFloppy(unsigned char drives, unsigned char speed)
+{
+	spi_uio_cmd8(UIO_MM2_FLP, ((drives & 0x03) << 2) | (speed & 0x03));
+}
+
+void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask)
+{
+	uint16_t param = mask;
+	param = (param << 8) | autofire;
+	spi_uio_cmd16(UIO_MM2_JOY, param);
 }
