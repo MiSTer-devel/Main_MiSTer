@@ -156,6 +156,7 @@ enum MENU
 	MENU_8BIT_SYSTEM1,
 	MENU_8BIT_SYSTEM2,
 	MENU_COEFF_FILE_SELECTED,
+	MENU_GAMMA_FILE_SELECTED,
 	MENU_8BIT_INFO,
 	MENU_8BIT_INFO2,
 	MENU_8BIT_ABOUT1,
@@ -195,6 +196,7 @@ const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Pres
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "     MIDI" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
+const char *config_gamma_msg[] = { "Off","On" };
 
 char joy_bnames[32][32];
 int  joy_bcount = 0;
@@ -321,7 +323,7 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 		}
 		pFileExt = "RBF";
 	}
-	else if (Options & SCANO_COEFF)
+	else if (Options & SCANO_TXT)
 	{
 		pFileExt = "TXT";
 	}
@@ -479,7 +481,7 @@ static uint32_t menu_key_get(void)
 	else if (CheckTimer(repeat))
 	{
 		repeat = GetTimer(REPEATRATE);
-		if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 9)))
+		if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 11)))
 		{
 			c = c1;
 			hold_cnt++;
@@ -696,7 +698,7 @@ static int  firstmenu = 0;
 static int  adjvisible;
 static char lastrow[256];
 
-static void MenuWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple = 0, int arrow = 0)
+static void MenuWrite(unsigned char n, const char *s = "", unsigned char invert = 0, unsigned char stipple = 0, int arrow = 0)
 {
 	int row = n - firstmenu;
 
@@ -1649,71 +1651,100 @@ void HandleUI(void)
 		{
 			OsdSetSize(16);
 			helptext = 0;
-			menumask = 0xf87;
 			reboot_req = 0;
 
-			OsdSetTitle("System", OSD_ARROW_LEFT);
+			OsdSetTitle("System", 0);
 			menustate = MENU_8BIT_SYSTEM2;
 			parentstate = MENU_8BIT_SYSTEM1;
+			int n;
 
-			int n = 0;
-			OsdWrite(n++);
-
-			OsdWrite(n++, " Core                      \x16", menusub == 0, 0);
-			sprintf(s, " Define %s buttons         ", is_menu_core() ? "System" : user_io_get_core_name_ex());
-			s[27] = '\x16';
-			s[28] = 0;
-			OsdWrite(n++, s, menusub == 1, 0);
-			OsdWrite(n++, " Button/Key remap for game \x16", menusub == 2, 0);
-
-			if (user_io_get_uart_mode())
+			while(1)
 			{
-				menumask |= 0x8;
-				OsdWrite(n++);
-				const char *p = config_uart_msg[GetUARTMode()];
-				while (*p == ' ') p++;
-				sprintf(s, " UART mode (%s)            ",p);
+				n = 0;
+				menumask = 0x3e07;
+
+				if (!menusub) firstmenu = 0;
+				adjvisible = 0;
+
+				MenuWrite(n++);
+				MenuWrite(n++, " Core                      \x16", menusub == 0, 0);
+				sprintf(s, " Define %s buttons         ", is_menu_core() ? "System" : user_io_get_core_name_ex());
 				s[27] = '\x16';
 				s[28] = 0;
-				OsdWrite(n++, s, menusub == 3);
+				MenuWrite(n++, s, menusub == 1, 0);
+				MenuWrite(n++, " Button/Key remap for game \x16", menusub == 2, 0);
+
+				if (user_io_get_uart_mode())
+				{
+					menumask |= 0x8;
+					MenuWrite(n++);
+					const char *p = config_uart_msg[GetUARTMode()];
+					while (*p == ' ') p++;
+					sprintf(s, " UART mode (%s)            ",p);
+					s[27] = '\x16';
+					s[28] = 0;
+					MenuWrite(n++, s, menusub == 3);
+				}
+
+				if (video_get_scaler_flt() >= 0 && !cfg.direct_video)
+				{
+					MenuWrite(n++);
+					menumask |= 0x60;
+					sprintf(s, " Scale Filter - %s", config_scaler_msg[video_get_scaler_flt() ? 1 : 0]);
+					MenuWrite(n++, s, menusub == 5);
+
+					memset(s, 0, sizeof(s));
+					s[0] = ' ';
+					if (strlen(video_get_scaler_coeff())) strncpy(s+1, video_get_scaler_coeff(),25);
+					else strcpy(s, " < none >");
+
+					while(strlen(s) < 26) strcat(s, " ");
+					strcat(s, " \x16 ");
+
+					MenuWrite(n++, s, menusub == 6, !video_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
+				}
+
+				if (video_get_gamma_en() >=0 && !cfg.direct_video)
+				{
+					MenuWrite(n++);
+					menumask |= 0x180;
+					sprintf(s, " Gamma Correction - %s", config_gamma_msg[video_get_gamma_en() ? 1 : 0]);
+					MenuWrite(n++, s, menusub == 7);
+
+					memset(s, 0, sizeof(s));
+					s[0] = ' ';
+					if (strlen(video_get_gamma_curve())) strncpy(s+1, video_get_gamma_curve(),25);
+					else strcpy(s, " < none >");
+
+					while(strlen(s) < 26) strcat(s, " ");
+					strcat(s, " \x16 ");
+
+					MenuWrite(n++, s, menusub == 8, !video_get_gamma_en() || !S_ISDIR(getFileType(GAMMA_DIR)));
+				}
+
+				m = 0;
+				if (is_minimig())
+				{
+					m = 1;
+					menumask &= ~0x400;
+				}
+				MenuWrite(n++);
+				MenuWrite(n++, m ? " Reset the core" : " Reset settings", menusub == 9, user_io_core_type() == CORE_TYPE_ARCHIE);
+				MenuWrite(n++, m ? "" : " Save settings", menusub == 10, 0);
+
+				MenuWrite(n++);
+				cr = n;
+				MenuWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 11);
+				MenuWrite(n++, " About", menusub == 12);
+
+				while(n < OsdGetSize() - 1) MenuWrite(n++);
+				MenuWrite(n++, STD_EXIT, menusub == 13, 0, OSD_ARROW_LEFT);
+				sysinfo_timer = 0;
+
+				if (!adjvisible) break;
+				firstmenu += adjvisible;
 			}
 
-			if (video_get_scaler_flt() >= 0 && !cfg.direct_video)
-			{
-				OsdWrite(n++);
-				menumask |= 0x60;
-				sprintf(s, " Scale Filter - %s", config_scaler_msg[video_get_scaler_flt() ? 1 : 0]);
-				OsdWrite(n++, s, menusub == 5);
-
-				memset(s, 0, sizeof(s));
-				s[0] = ' ';
-				if (strlen(video_get_scaler_coeff())) strncpy(s+1, video_get_scaler_coeff(),25);
-				else strcpy(s, " < none >");
-
-				while(strlen(s) < 26) strcat(s, " ");
-				strcat(s, " \x16 ");
-
-				OsdWrite(n++, s, menusub == 6, !video_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
-			}
-
-			m = 0;
-			if (is_minimig())
-			{
-				m = 1;
-				menumask &= ~0x100;
-			}
-			OsdWrite(n++);
-			OsdWrite(n++, m ? " Reset the core" : " Reset settings", menusub == 7, user_io_core_type() == CORE_TYPE_ARCHIE);
-			OsdWrite(n++, m ? "" : " Save settings", menusub == 8, 0);
-
-			OsdWrite(n++);
-			cr = n;
-			OsdWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 9);
-			OsdWrite(n++, " About", menusub == 10);
-
-			while(n < 15) OsdWrite(n++);
-			OsdWrite(15, STD_EXIT, menusub == 11);
-			sysinfo_timer = 0;
 		}
 		break;
 
@@ -1786,11 +1817,22 @@ void HandleUI(void)
 				if (video_get_scaler_flt())
 				{
 					sprintf(SelectedPath, COEFF_DIR"/%s", video_get_scaler_coeff());
-					SelectFile(0, SCANO_COEFF, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
+					SelectFile(0, SCANO_TXT, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
-
 			case 7:
+				video_set_gamma_en(video_get_gamma_en() ? 0 : 1);
+				menustate = MENU_8BIT_SYSTEM1;
+				break;
+
+			case 8:
+				if (video_get_gamma_en())
+				{
+					sprintf(SelectedPath, GAMMA_DIR"/%s", video_get_gamma_curve());
+					SelectFile(0, SCANO_TXT, MENU_GAMMA_FILE_SELECTED, MENU_8BIT_SYSTEM1);
+				}
+				break;
+			case 9:
 				if (user_io_core_type() != CORE_TYPE_ARCHIE)
 				{
 					menustate = MENU_RESET1;
@@ -1803,7 +1845,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 8:
+			case 10:
 				// Save settings
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
@@ -1827,7 +1869,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 9:
+			case 11:
 				{
 					reboot_req = 1;
 
@@ -1836,11 +1878,11 @@ void HandleUI(void)
 
 					sprintf(s, " Cold Reboot");
 					p = s + 5 - off;
-					OsdWrite(cr, p, menusub == 8, 0);
+					MenuWrite(cr, p, menusub == 11, 0);
 				}
 				break;
 
-			case 10:
+			case 12:
 				menustate = MENU_8BIT_ABOUT1;
 				menusub = 0;
 				break;
@@ -1993,7 +2035,14 @@ void HandleUI(void)
 			menustate = MENU_8BIT_SYSTEM1;
 		}
 		break;
-
+	case MENU_GAMMA_FILE_SELECTED:
+		{
+			char *p = strrchr(SelectedPath, '/');
+			if (!p) video_set_gamma_curve(SelectedPath);
+			else video_set_gamma_curve(p+1);
+			menustate = MENU_8BIT_SYSTEM1;
+		}
+		break;
 	case MENU_8BIT_INFO:
 		OsdSetSize(16);
 		helptext = 0;
