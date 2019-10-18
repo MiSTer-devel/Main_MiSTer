@@ -70,6 +70,8 @@
 #define UIO_SET_FBUF    0x2F  // Set frame buffer for HPS output
 #define UIO_WAIT_VSYNC  0x30  // Wait for VSync
 #define UIO_SET_MEMSZ   0x31  // Send memory size to the core
+#define UIO_SET_GAMMA   0x32  // Enable/disable Gamma correction
+#define UIO_SET_GAMCURV 0x33  // Set Gamma curve
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
