@@ -1817,7 +1817,7 @@ void HandleUI(void)
 				if (video_get_scaler_flt())
 				{
 					sprintf(SelectedPath, COEFF_DIR"/%s", video_get_scaler_coeff());
-					SelectFile(0, SCANO_TXT, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
+					SelectFile(0, SCANO_DIR | SCANO_TXT, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
 			case 7:
@@ -1829,7 +1829,7 @@ void HandleUI(void)
 				if (video_get_gamma_en())
 				{
 					sprintf(SelectedPath, GAMMA_DIR"/%s", video_get_gamma_curve());
-					SelectFile(0, SCANO_TXT, MENU_GAMMA_FILE_SELECTED, MENU_8BIT_SYSTEM1);
+					SelectFile(0, SCANO_DIR | SCANO_TXT, MENU_GAMMA_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
 			case 9:
@@ -2029,17 +2029,17 @@ void HandleUI(void)
 
 	case MENU_COEFF_FILE_SELECTED:
 		{
-			char *p = strrchr(SelectedPath, '/');
+			char *p = strcasestr(SelectedPath, COEFF_DIR"/");
 			if (!p) video_set_scaler_coeff(SelectedPath);
-			else video_set_scaler_coeff(p+1);
+			else video_set_scaler_coeff(p + strlen(COEFF_DIR) + 1);
 			menustate = MENU_8BIT_SYSTEM1;
 		}
 		break;
 	case MENU_GAMMA_FILE_SELECTED:
 		{
-			char *p = strrchr(SelectedPath, '/');
+			char *p = strcasestr(SelectedPath, GAMMA_DIR"/");
 			if (!p) video_set_gamma_curve(SelectedPath);
-			else video_set_gamma_curve(p+1);
+			else video_set_gamma_curve(p + strlen(GAMMA_DIR) + 1);
 			menustate = MENU_8BIT_SYSTEM1;
 		}
 		break;

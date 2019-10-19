@@ -368,7 +368,7 @@ char* video_get_gamma_curve()
 	return gamma_cfg + 1;
 }
 
-static char gamma_cfg_path[128] = { 0 };
+static char gamma_cfg_path[1024] = { 0 };
 
 void video_set_gamma_en(int n)
 {
