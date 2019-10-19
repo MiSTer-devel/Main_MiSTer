@@ -6,6 +6,11 @@ void  video_set_scaler_flt(int n);
 char* video_get_scaler_coeff();
 void  video_set_scaler_coeff(char *name);
 
+int   video_get_gamma_en();
+void  video_set_gamma_en(int n);
+char* video_get_gamma_curve();
+void  video_set_gamma_curve(char *name);
+
 void  video_mode_load();
 void  video_mode_adjust();
 

@@ -14,7 +14,7 @@ void MiSTer_ini_parse()
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.bootscreen = 1;
 	cfg.fb_terminal = 1;
-	ini_parse(&ini_cfg);
+	ini_parse(&ini_cfg, altcfg());
 }
 
 // mist ini sections
@@ -56,12 +56,13 @@ const ini_var_t ini_vars[] = {
 	{ "FB_TERMINAL", (void*)(&(cfg.fb_terminal)), UINT8, 0, 1 },
 	{ "OSD_TIMEOUT", (void*)(&(cfg.osd_timeout)), INT16, 5, 3600 },
 	{ "DIRECT_VIDEO", (void*)(&(cfg.direct_video)), UINT8, 0, 1 },
+	{ "OSD_ROTATE", (void*)(&(cfg.osd_rotate)), UINT8, 0, 2 },
 };
 
 // mist ini config
 const ini_cfg_t ini_cfg = {
 	"MiSTer.ini",
-	CONFIG_DIR"/MiSTer.ini",
+	"MiSTer_alt.ini",
 	ini_sections,
 	ini_vars,
 	(int)(sizeof(ini_sections) / sizeof(ini_section_t)),

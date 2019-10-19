@@ -190,38 +190,17 @@ void spi_osd_cmd8(uint8_t cmd, uint8_t parm)
 	DisableOsd();
 }
 
-void spi_osd_cmd16(uint8_t cmd, uint16_t parm)
+void spi_uio_cmd32le_cont(uint8_t cmd, uint32_t parm)
 {
-	EnableOsd();
-	spi8(cmd);
-	spi_w(parm);
-	DisableOsd();
-}
-
-void spi_osd_cmd32_cont(uint8_t cmd, uint32_t parm)
-{
-	EnableOsd();
-	spi8(cmd);
-	spi32(parm);
-}
-
-void spi_osd_cmd32(uint8_t cmd, uint32_t parm)
-{
-	spi_osd_cmd32_cont(cmd, parm);
-	DisableOsd();
-}
-
-void spi_osd_cmd32le_cont(uint8_t cmd, uint32_t parm)
-{
-	EnableOsd();
+	EnableIO();
 	spi8(cmd);
 	spi32le(parm);
 }
 
-void spi_osd_cmd32le(uint8_t cmd, uint32_t parm)
+void spi_uio_cmd32le(uint8_t cmd, uint32_t parm)
 {
-	spi_osd_cmd32le_cont(cmd, parm);
-	DisableOsd();
+	spi_uio_cmd32le_cont(cmd, parm);
+	DisableIO();
 }
 
 /* User_io related SPI functions */

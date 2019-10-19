@@ -192,7 +192,7 @@ void* ini_get_var(const ini_cfg_t* cfg, int cur_section, char* buf)
 	return (void*)0;
 }
 
-void ini_parse(const ini_cfg_t* cfg)
+void ini_parse(const ini_cfg_t* cfg, int alt)
 {
 	char line[INI_LINE_SIZE] = { 0 };
 	int section = INI_SECTION_INVALID_ID;
@@ -201,13 +201,9 @@ void ini_parse(const ini_cfg_t* cfg)
 	ini_parser_debugf("Start INI parser for core \"%s\".", user_io_get_core_name_ex());
 
 	memset(&ini_file, 0, sizeof(ini_file));
-	if (!FileOpen(&ini_file, cfg->filename))
+	if (!FileOpen(&ini_file, alt ? cfg->filename_alt : cfg->filename))
 	{
-		if (!FileOpen(&ini_file, cfg->filename_alt))
-		{
-			return;
-		}
-		else ini_parser_debugf("Opened file %s with size %llu bytes.", cfg->filename_alt, ini_file.size);
+		return;
 	}
 	else ini_parser_debugf("Opened file %s with size %llu bytes.", cfg->filename, ini_file.size);
 

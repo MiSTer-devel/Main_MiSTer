@@ -456,6 +456,7 @@ int fpga_load_rbf(const char *name, const char *cfg)
 
 	if(cfg)
 	{
+		fpga_core_reset(1);
 		make_env(name, cfg);
 		do_bridge(0);
 		reboot(0);
@@ -492,6 +493,7 @@ int fpga_load_rbf(const char *name, const char *cfg)
 			}
 			else
 			{
+				fpga_core_reset(1);
 				if (read(rbf, buf, st.st_size)<st.st_size)
 				{
 					printf("Couldn't read file %s\n", name);

@@ -47,7 +47,7 @@ direntext_t* flist_SelectedItem();
 #define SCANO_DIR        1 // include subdirectories
 #define SCANO_UMOUNT     2 // allow backspace key
 #define SCANO_CORES      4 // only include subdirectories with prefix '_'
-#define SCANO_COEFF      8
+#define SCANO_TXT        8
 #define SCANO_NEOGEO     16
 #define SCANO_NOENTER    32
 
@@ -98,5 +98,6 @@ const char *getFullPath(const char *name);
 uint32_t getFileType(const char *name);
 
 #define COEFF_DIR "filters"
+#define GAMMA_DIR "gamma"
 
 #endif

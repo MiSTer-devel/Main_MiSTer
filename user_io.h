@@ -70,6 +70,8 @@
 #define UIO_SET_FBUF    0x2F  // Set frame buffer for HPS output
 #define UIO_WAIT_VSYNC  0x30  // Wait for VSync
 #define UIO_SET_MEMSZ   0x31  // Send memory size to the core
+#define UIO_SET_GAMMA   0x32  // Enable/disable Gamma correction
+#define UIO_SET_GAMCURV 0x33  // Set Gamma curve
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -81,6 +83,18 @@
 #define UIO_DMA_WRITE   0x61
 #define UIO_DMA_READ    0x62
 #define UIO_DMA_SDIO    0x63
+
+// ---- Minimig v2 constants -------
+#define UIO_MM2_WR      0xF0 //0x1c
+#define UIO_MM2_RST     0xF1 //0x08
+#define UIO_MM2_AUD     0xF2 //0x74
+#define UIO_MM2_CHIP    0xF3 //0x04
+#define UIO_MM2_CPU     0xF4 //0x14
+#define UIO_MM2_MEM     0xF5 //0x24
+#define UIO_MM2_VID     0xF6 //0x34
+#define UIO_MM2_FLP     0xF7 //0x44
+#define UIO_MM2_HDD     0xF8 //0x54
+#define UIO_MM2_JOY     0xF9 //0x64
 
 #define JOY_RIGHT       0x01
 #define JOY_LEFT        0x02
@@ -138,7 +152,6 @@
 #define CORE_TYPE_DUMB      0xa0   // core without any io controller interaction
 #define CORE_TYPE_MIST      0xa3   // mist atari st core
 #define CORE_TYPE_8BIT      0xa4   // generic core
-#define CORE_TYPE_MINIMIG2  0xa5   // new Minimig with AGA
 #define CORE_TYPE_ARCHIE    0xa6   // Acorn Archimedes
 #define CORE_TYPE_SHARPMZ   0xa7   // Sharp MZ Series
 #define CORE_TYPE_8BIT2     0xa8   // generic core using dual SDRAM
@@ -192,7 +205,7 @@ char user_io_user_button();
 void user_io_osd_key_enable(char);
 void user_io_serial_tx(char *, uint16_t);
 char *user_io_8bit_get_string(char);
-uint32_t user_io_8bit_set_status(uint32_t, uint32_t);
+uint32_t user_io_8bit_set_status(uint32_t, uint32_t, int ex = 0);
 int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
 uint32_t user_io_get_file_crc();
 int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
@@ -238,6 +251,7 @@ const char* get_rbf_path();
 
 uint16_t sdram_sz(int sz = -1);
 int user_io_is_dualsdr();
+uint16_t altcfg(int alt = -1);
 
 int GetUARTMode();
 int GetMidiLinkMode();

@@ -1085,6 +1085,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				char *altname = neogeo_get_altname(full_path, &dext);
 				if (altname)
 				{
+					if (altname == (char*)-1) continue;
+
 					dext.de.d_type = DT_REG;
 					memcpy(dext.altname, altname, sizeof(dext.altname));
 				}
@@ -1229,7 +1231,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		if (flist_nDirEntries() == 0) // directory is empty so there is no point in searching for any entry
 			return 0;
 
-		if (mode == SCANF_END)
+		if (mode == SCANF_END || (mode == SCANF_PREV && iSelectedEntry <= 0))
 		{
 			iSelectedEntry = flist_nDirEntries() - 1;
 			iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
@@ -1243,7 +1245,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry++;
 				if (iSelectedEntry > iFirstEntry + OsdGetSize() - 1) iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
 			}
-			return 0;
+            else
+            {
+				// jump to first visible item
+				iFirstEntry = 0;
+				iSelectedEntry = 0;
+            }
+            return 0;
 		}
 		else if (mode == SCANF_PREV)
 		{
@@ -1252,7 +1260,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry--;
 				if (iSelectedEntry < iFirstEntry) iFirstEntry = iSelectedEntry;
 			}
-			return 0;
+            return 0;
 		}
 		else if (mode == SCANF_NEXT_PAGE)
 		{

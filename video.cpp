@@ -288,9 +288,119 @@ static void loadScalerCfg()
 	}
 }
 
+static char gamma_cfg[1024] = { 0 };
+static char has_gamma = 0;
+
+static void setGamma()
+{
+	fileTYPE f = {};
+	static char filename[1024];
+
+	if (!spi_uio_cmd_cont(UIO_SET_GAMMA))
+	{
+		DisableIO();
+		return;
+	}
+
+	has_gamma = 1;
+	spi8(0);
+	DisableIO();
+	sprintf(filename, GAMMA_DIR"/%s", gamma_cfg + 1);
+
+	if (FileOpen(&f, filename))
+	{
+		char *buf = (char*)malloc(f.size+1);
+		if (buf)
+		{
+			memset(buf, 0, f.size + 1);
+			int size;
+			if ((size = FileReadAdv(&f, buf, f.size)))
+			{
+				spi_uio_cmd_cont(UIO_SET_GAMCURV);
+
+				char *end = buf + size;
+				char *pos = buf;
+				int index = 0;
+				while (pos < end)
+				{
+					char *st = pos;
+					while ((pos < end) && *pos && (*pos != 10)) pos++;
+					*pos = 0;
+					while (*st == ' ' || *st == '\t' || *st == 13) st++;
+					if (*st == '#' || *st == ';' || !*st) pos++;
+					else
+					{
+						int c0, c1, c2;
+						int n = sscanf(st, "%d,%d,%d", &c0, &c1, &c2);
+						if (n == 1)
+						{
+							c1 = c0;
+							c2 = c0;
+							n = 3;
+						}
+
+						if (n == 3)
+						{
+							spi_w((index << 8) | (c0 & 0xFF));
+							spi_w((index << 8) | (c1 & 0xFF));
+							spi_w((index << 8) | (c2 & 0xFF));
+
+							index++;
+							if (index >= 256) break;
+						}
+					}
+				}
+				DisableIO();
+				spi_uio_cmd8(UIO_SET_GAMMA, gamma_cfg[0]);
+			}
+
+			free(buf);
+		}
+	}
+}
+int video_get_gamma_en()
+{
+	return has_gamma ? gamma_cfg[0] : -1;
+}
+
+char* video_get_gamma_curve()
+{
+	return gamma_cfg + 1;
+}
+
+static char gamma_cfg_path[1024] = { 0 };
+
+void video_set_gamma_en(int n)
+{
+	gamma_cfg[0] = (char)n;
+	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
+	setGamma();
+}
+
+void video_set_gamma_curve(char *name)
+{
+	strcpy(gamma_cfg + 1, name);
+	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
+	setGamma();
+	user_io_send_buttons(1);
+}
+
+static void loadGammaCfg()
+{
+	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name_ex());
+	if (!FileLoadConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg) - 1) || gamma_cfg[0]>1)
+	{
+		memset(gamma_cfg, 0, sizeof(gamma_cfg));
+	}
+}
+
+
 static char fb_reset_cmd[128] = {};
 static void set_video(vmode_custom_t *v, double Fpix)
 {
+	loadGammaCfg();
+	setGamma();
+
 	loadScalerCfg();
 	setScaler();
 
@@ -892,6 +1002,12 @@ void video_menu_bg(int n, int idle)
 					}
 					vs_wait();
 				};
+
+				if (cfg.osd_rotate)
+				{
+					imlib_context_set_image(logo);
+					imlib_image_orientate(cfg.osd_rotate == 1 ? 3 : 1);
+				}
 			}
 			else
 			{
@@ -1016,7 +1132,33 @@ void video_menu_bg(int n, int idle)
 
 			int src_w = imlib_image_get_width();
 			int src_h = imlib_image_get_height();
+
 			printf("logo: src_w=%d, src_h=%d\n", src_w, src_h);
+
+			int dst_w, dst_h;
+			int dst_x, dst_y;
+			if (cfg.osd_rotate)
+			{
+				dst_h = fb_height / 2;
+				dst_w = src_w * dst_h / src_h;
+				if (cfg.osd_rotate == 1)
+				{
+					dst_x = 0;
+					dst_y = fb_height - dst_h;
+				}
+				else
+				{
+					dst_x = fb_width - dst_w;
+					dst_y = 0;
+				}
+			}
+			else
+			{
+				dst_x = 0;
+				dst_y = 0;
+				dst_w = fb_width * 2 / 7;
+				dst_h = src_h * dst_w / src_w;
+			}
 
 			if (*bg)
 			{
@@ -1024,8 +1166,8 @@ void video_menu_bg(int n, int idle)
 				imlib_blend_image_onto_image(logo, 1,
 					0, 0,         //int source_x, int source_y,
 					src_w, src_h, //int source_width, int source_height,
-					0, 0,         //int destination_x, int destination_y,
-					fb_width*2 / 7, src_h*fb_width*2 / (src_w * 7) //int destination_width, int destination_height
+					dst_x, dst_y, //int destination_x, int destination_y,
+					dst_w, dst_h  //int destination_width, int destination_height
 				);
 			}
 			else
