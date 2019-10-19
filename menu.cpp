@@ -55,7 +55,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "bootcore.h"
 #include "cheats.h"
 #include "video.h"
-#include "joymapping.h"
 #include "support.h"
 
 /*menu states*/
@@ -2211,14 +2210,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					p = get_joystick_alias(get_map_vid(), get_map_pid());
-                    int len = (int)strlen(p);
-    				if (len == 0) { //JOYSTICK_ALIAS_NONE
-						sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
-					}
-					else {
-						sprintf(s, "%*s", (29-len)/2 + ((len % 2 == 0) ? 1 : 0) + len, p);
-					}
+					sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
 					if (get_map_button() > 0)
 					{
 						if (!get_map_type()) OsdWrite(9);

@@ -8,14 +8,6 @@
 #include <inttypes.h>
 #include <string>
 
-// VID of vendors who are consistent
-#define VID_8BITDO          0x1235
-#define VID_DAPTOR          0x04D8
-#define VID_HORI            0x0f0d
-#define VID_NINTENDO        0x057e
-#define VID_RETROLINK       0x0079
-#define VID_SONY            0x054c
-
 #define NUMDEV 30
 #define NUMBUTTONS 32
 
@@ -28,7 +20,6 @@
 #define MENU_JOY_R      13
 #define MENU_JOY_SELECT 14
 #define MENU_JOY_START  15
-
 
 typedef struct
 {
@@ -64,29 +55,5 @@ typedef struct
 	char     uniq[32];
 	char     name[128];
 } devInput;
-
-/*****************************************************************************/
-
-// name known joysticks
-const char *get_joystick_alias( uint16_t vid, uint16_t pid );
-
-/*****************************************************************************/
-
-// defines what kind of physical joystick is used by a core (for automatic default mapping)
-const char *get_core_joystick_type(const char *core_name);
-
-//apply mapping
-int map_joystick (const char *core_name, devInput (&input)[NUMDEV], int dev);
-
-// mapping for different cores from known SNES layout
-int map_menu2neogeo (devInput (&input)[NUMDEV], int dev);
-int map_menu2md     (devInput (&input)[NUMDEV], int dev);
-int map_menu2gb     (devInput (&input)[NUMDEV], int dev);
-int map_menu2pce    (devInput (&input)[NUMDEV], int dev);
-int map_menu2sms    (devInput (&input)[NUMDEV], int dev);
-int map_menu2c64    (devInput (&input)[NUMDEV], int dev);
-int map_menu2apple2 (devInput (&input)[NUMDEV], int dev);
-
-/*****************************************************************************/
 
 #endif // JOYMAPPING_H 
