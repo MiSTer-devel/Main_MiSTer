@@ -195,10 +195,34 @@ char* user_io_create_config_name()
 }
 
 static char core_name[16 + 1];  // max 16 bytes for core name
+static char core_dir[1024];
+
+static char filepath_store[1024];
+
+char *user_io_make_filepath(const char *path, const char *filename)
+{
+	snprintf(filepath_store, 1024, "%s/%s", path, filename);
+
+	return filepath_store;
+}
+
+void user_io_set_core_name(const char *name)
+{
+	strncpy(core_name, name, 17);
+	strncpy(core_dir, name, 1024);
+	prefixGameDir(core_dir, 1024);
+
+	printf("Core name set to \"%s\"\n", core_name);
+}
 
 char *user_io_get_core_name()
 {
 	return core_name;
+}
+
+char *user_io_get_core_path(void)
+{
+	return core_dir;
 }
 
 const char *user_io_get_core_name_ex()
@@ -295,6 +319,9 @@ static void user_io_read_core_name()
 	// get core name
 	char *p = user_io_8bit_get_string(0);
 	if (p && p[0]) strcpy(core_name, p);
+
+	strncpy(core_dir, !strcasecmp(p, "minimig") ? "Amiga" : core_name, 1024);
+	prefixGameDir(core_dir, 1024);
 
 	printf("Core name is \"%s\"\n", core_name);
 }
@@ -738,6 +765,7 @@ void user_io_init(const char *path)
 		puts("Identified Archimedes core");
 		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 		send_rtc(1);
+		user_io_set_core_name("Archie");
 		archie_init();
 		user_io_read_core_name();
 		parse_config();
@@ -745,6 +773,7 @@ void user_io_init(const char *path)
 
     case CORE_TYPE_SHARPMZ:
 		puts("Identified Sharp MZ Series core");
+		user_io_set_core_name("sharpmz");
         sharpmz_init();
 		user_io_read_core_name();
 		parse_config();
@@ -795,13 +824,13 @@ void user_io_init(const char *path)
 							// check for multipart rom
 							for (char i = 0; i < 4; i++)
 							{
-								sprintf(mainpath, "%s/boot%i.rom", user_io_get_core_name(), i);
+								sprintf(mainpath, "%s/boot%i.rom", user_io_get_core_path(), i);
 								user_io_file_tx(mainpath, i << 6);
 							}
 						}
 
 						// legacy style of rom
-						sprintf(mainpath, "%s/boot.rom", user_io_get_core_name());
+						sprintf(mainpath, "%s/boot.rom", user_io_get_core_path());
 						if (!user_io_file_tx(mainpath))
 						{
 							strcpy(name + strlen(name) - 3, "ROM");
@@ -825,20 +854,20 @@ void user_io_init(const char *path)
 						for (int m = 0; m < 3; m++)
 						{
 							const char *model = !m ? "" : (m == 1) ? "0" : "1";
-							sprintf(mainpath, "%s/boot%s.eZZ", user_io_get_core_name(), model);
+							sprintf(mainpath, "%s/boot%s.eZZ", user_io_get_core_path(), model);
 							user_io_file_tx(mainpath, 0x40 * (m + 1), 0, 1);
-							sprintf(mainpath, "%s/boot%s.eZ0", user_io_get_core_name(), model);
+							sprintf(mainpath, "%s/boot%s.eZ0", user_io_get_core_path(), model);
 							user_io_file_tx(mainpath, 0x40 * (m + 1), 0, 1);
 							for (int i = 0; i < 256; i++)
 							{
-								sprintf(mainpath, "%s/boot%s.e%02X", user_io_get_core_name(), model, i);
+								sprintf(mainpath, "%s/boot%s.e%02X", user_io_get_core_path(), model, i);
 								user_io_file_tx(mainpath, 0x40 * (m + 1), 0, 1);
 							}
 						}
 					}
 
 					// check if vhd present
-					sprintf(mainpath, "%s/boot.vhd", user_io_get_core_name());
+					sprintf(mainpath, "%s/boot.vhd", user_io_get_core_path());
 					user_io_set_index(0);
 					if (!user_io_file_mount(mainpath))
 					{
