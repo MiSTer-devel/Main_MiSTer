@@ -500,8 +500,8 @@ void x86_init()
 {
 	user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 
-	load_bios("ao486/boot0.rom", 0);
-	load_bios("ao486/boot1.rom", 1);
+	load_bios(user_io_make_filepath(HomeDir, "boot0.rom"), 0);
+	load_bios(user_io_make_filepath(HomeDir, "boot1.rom"), 1);
 
 	IOWR(PC_BUS_BASE, 0, 0x00FFF0EA);
 	IOWR(PC_BUS_BASE, 1, 0x000000F0);
