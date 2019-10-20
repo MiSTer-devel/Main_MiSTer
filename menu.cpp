@@ -55,7 +55,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "bootcore.h"
 #include "cheats.h"
 #include "video.h"
-
 #include "support.h"
 
 /*menu states*/
@@ -191,12 +190,16 @@ const char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE 
 const char *config_cd32pad_msg[] = { "OFF", "ON" };
 const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
-const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON 1", "BUTTON 2", "BUTTON 3", "BUTTON 4", "KBD TOGGLE", "MENU", "     Stick X: Tilt RIGHT", "     Stick Y: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
-const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "     Stick 1: Tilt RIGHT", "     Stick 1: Tilt DOWN", "     Stick 2: Tilt RIGHT", "     Stick 2: Tilt DOWN" };
+const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "     Stick X: Tilt RIGHT", "     Stick Y: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
+const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "     MIDI" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_gamma_msg[] = { "Off","On" };
+
+#define DPAD_NAMES 4
+#define DPAD_BUTTON_NAMES 12  //DPAD_NAMES + 6 buttons + start/select
+
 
 char joy_bnames[32][32];
 int  joy_bcount = 0;
@@ -2147,22 +2150,22 @@ void HandleUI(void)
 			{
 				strcpy(s, joy_ana_map[get_map_button() + 6]);
 			}
-			else if (get_map_button() < 4)
+			else if (get_map_button() < DPAD_NAMES)
 			{
 				p = joy_button_map[get_map_button()];
 			}
 			else if (joy_bcount)
 			{
-				p = joy_bnames[get_map_button() - 4];
+				p = joy_bnames[get_map_button() - DPAD_NAMES];
 				if (is_menu_core())
 				{
 					if (get_map_type()) joy_bcount = 15;
 					if (get_map_button() == 16)
 					{
-						p = joy_button_map[8 + get_map_type()];
+						p = joy_button_map[DPAD_BUTTON_NAMES + get_map_type()];
 						if (get_map_type())
 						{
-							OsdWrite(12, "   Allowed 2-buttons combo");
+							OsdWrite(12, "   (can use 2-button combo)");
 							line_info = 1;
 						}
 					}
@@ -2170,14 +2173,14 @@ void HandleUI(void)
 			}
 			else
 			{
-				p = (get_map_button() < 8) ? joy_button_map[get_map_button()] : joy_button_map[8 + get_map_type()];
+				p = (get_map_button() < DPAD_BUTTON_NAMES) ? joy_button_map[get_map_button()] : joy_button_map[DPAD_BUTTON_NAMES + get_map_type()];
 			}
 
 			if (get_map_button() >= 0)
 			{
 				if (is_menu_core() && get_map_button() > 16)
 				{
-					strcpy(s, joy_button_map[10 + get_map_button() - 17]);
+					strcpy(s, joy_button_map[14 + get_map_button() - 17]);
 				}
 				else
 				{
@@ -3986,20 +3989,24 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
-				joy_bcount = 13;
-				strcpy(joy_bnames[0], "Btn 1 (OK/Enter)");
-				strcpy(joy_bnames[1], "Btn 2 (ESC/Back)");
-				strcpy(joy_bnames[2], "Btn 3 (Backspace)");
-				strcpy(joy_bnames[3], "Btn 4");
-				strcpy(joy_bnames[4], "Mouse Move RIGHT");
-				strcpy(joy_bnames[5], "Mouse Move LEFT");
-				strcpy(joy_bnames[6], "Mouse Move DOWN");
-				strcpy(joy_bnames[7], "Mouse Move UP");
-				strcpy(joy_bnames[8], "Mouse Left Btn");
-				strcpy(joy_bnames[9], "Mouse Right Btn");
-				strcpy(joy_bnames[10], "Mouse Middle Btn");
-				strcpy(joy_bnames[11], "Mouse Emu/Sniper");
-				start_map_setting(19);
+				joy_bcount = 16;
+				strcpy(joy_bnames[0], "Btn A (OK/Enter)");
+				strcpy(joy_bnames[1], "Btn B (ESC/Back)");
+				strcpy(joy_bnames[2], "Btn X (Backspace");
+				strcpy(joy_bnames[3], "Btn Y ");
+				strcpy(joy_bnames[4], "Btn L (Z)");
+				strcpy(joy_bnames[5], "Btn R (C)");
+				strcpy(joy_bnames[6], "Btn Select");
+				strcpy(joy_bnames[7], "Btn Start");
+				strcpy(joy_bnames[8], "Mouse Move RIGHT");
+				strcpy(joy_bnames[9], "Mouse Move LEFT");
+				strcpy(joy_bnames[10], "Mouse Move DOWN");
+				strcpy(joy_bnames[11], "Mouse Move UP");
+				strcpy(joy_bnames[12], "Mouse Left Btn");
+				strcpy(joy_bnames[13], "Mouse Right Btn");
+				strcpy(joy_bnames[14], "Mouse Middle Btn");
+				strcpy(joy_bnames[15], "Mouse Emu / Sniper");
+				start_map_setting(joy_bcount+4); // plus dpad
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;
