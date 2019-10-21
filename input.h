@@ -29,6 +29,10 @@
 
 #define UPSTROKE     0x400000
 
+#define BUTTON_IDX_OSD     16
+#define BUTTON_DPAD_COUNT  12 // dpad + 8 buttons
+
+
 void set_kbdled(int mask, int state);
 int  get_kbdled(int mask);
 int  toggle_kbdled(int mask);
