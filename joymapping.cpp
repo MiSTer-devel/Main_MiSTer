@@ -41,8 +41,8 @@ int map_joystick(const char *core_name, devInput (&input)[NUMDEV], int dev) {
 	for (int i=0; i<joy_bcount; i++) {
 		int new_index = i+DPAD_COUNT;
 		std::string button_name = joy_bnames[i];
-		if (button_name.find('(') != std::string::npos) {
-			button_name.substr(0, button_name.find('('));
+		if (button_name.find("(") != std::string::npos) {
+			button_name = button_name.substr(0, button_name.find("("));
 		}
 		const char*btn_name = button_name.c_str();
 		printf("  ...mapping button %s\n", btn_name);
@@ -120,8 +120,8 @@ int map_joystick(const char *core_name, devInput (&input)[NUMDEV], int dev) {
 			continue;
 		}
 		//nothing found so just map by position
-		printf("     (using default map by position)");
-		new_map[new_index] = input[dev].map[i];
+		printf("     [no mapping found, using default map by position]\n");
+		new_map[new_index] = input[dev].map[new_index];
 	}
 	//finally swap result map into input map
 	for (int i=0; i<NUMBUTTONS; i++) {
