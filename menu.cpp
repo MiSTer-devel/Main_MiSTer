@@ -56,6 +56,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "cheats.h"
 #include "video.h"
 #include "support.h"
+#include "joymapping.h"
 
 /*menu states*/
 enum MENU
@@ -3990,14 +3991,14 @@ void HandleUI(void)
 				break;
 			case 2:
 				joy_bcount = 16;
-				strcpy(joy_bnames[0], "Btn A (OK/Enter)");
-				strcpy(joy_bnames[1], "Btn B (ESC/Back)");
-				strcpy(joy_bnames[2], "Btn X (Backspace");
-				strcpy(joy_bnames[3], "Btn Y ");
-				strcpy(joy_bnames[4], "Btn L (Z)");
-				strcpy(joy_bnames[5], "Btn R (C)");
-				strcpy(joy_bnames[6], "Btn Select");
-				strcpy(joy_bnames[7], "Btn Start");
+				strcpy(joy_bnames[MENU_JOY_A - DPAD_NAMES], "Btn A (OK/Enter)");
+				strcpy(joy_bnames[MENU_JOY_B - DPAD_NAMES], "Btn B (ESC/Back)");
+				strcpy(joy_bnames[MENU_JOY_X - DPAD_NAMES], "Btn X (Backspace");
+				strcpy(joy_bnames[MENU_JOY_Y - DPAD_NAMES], "Btn Y ");
+				strcpy(joy_bnames[MENU_JOY_L - DPAD_NAMES], "Btn L (Z)");
+				strcpy(joy_bnames[MENU_JOY_R - DPAD_NAMES], "Btn R (C)");
+				strcpy(joy_bnames[MENU_JOY_SELECT - DPAD_NAMES], "Btn Select");
+				strcpy(joy_bnames[MENU_JOY_START  - DPAD_NAMES], "Btn Start");
 				strcpy(joy_bnames[8], "Mouse Move RIGHT");
 				strcpy(joy_bnames[9], "Mouse Move LEFT");
 				strcpy(joy_bnames[10], "Mouse Move DOWN");
@@ -4006,7 +4007,7 @@ void HandleUI(void)
 				strcpy(joy_bnames[13], "Mouse Right Btn");
 				strcpy(joy_bnames[14], "Mouse Middle Btn");
 				strcpy(joy_bnames[15], "Mouse Emu / Sniper");
-				start_map_setting(joy_bcount+4); // plus dpad
+				start_map_setting(joy_bcount + DPAD_NAMES);
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;

@@ -1,5 +1,5 @@
 /*****************************************************************************/
-// Knowledge base of known joystick controllers
+// Handle mapping of various joystick controllers
 /*****************************************************************************/
 
 #ifndef JOYMAPPING_H
@@ -16,10 +16,10 @@
 #define MENU_JOY_B       5
 #define MENU_JOY_X       6
 #define MENU_JOY_Y       7
-#define MENU_JOY_L      12  // menu.cpp skips 4 buttons for mouse directions
-#define MENU_JOY_R      13
-#define MENU_JOY_SELECT 14
-#define MENU_JOY_START  15
+#define MENU_JOY_L       8  // menu.cpp skips 4 buttons for mouse directions
+#define MENU_JOY_R       9
+#define MENU_JOY_SELECT 10
+#define MENU_JOY_START  11
 
 typedef struct
 {
@@ -55,5 +55,11 @@ typedef struct
 	char     uniq[32];
 	char     name[128];
 } devInput;
+
+/*****************************************************************************/
+
+int map_joystick(const char *core_name, devInput (&input)[NUMDEV], int dev);
+
+/*****************************************************************************/
 
 #endif // JOYMAPPING_H 

@@ -1216,6 +1216,15 @@ void finish_map_setting(int dismiss)
 	}
 }
 
+int convert_from_menu_mapping(int dev) {
+	//attempts to map from Menu joystick config file
+	//returns: 0 if failed to map or 1 if success
+	if(!FileLoadConfig(get_map_name(dev, 1), &input[dev].map, sizeof(input[dev].map))) {
+		return 0;
+	}
+	return map_joystick (user_io_get_core_name_ex(), input, dev);
+}
+
 void input_lightgun_cal(uint16_t *cal)
 {
 	FileSaveConfig("wiimote_cal.cfg", cal, 4 * sizeof(uint16_t));
@@ -1695,17 +1704,19 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	{
 		if (!FileLoadConfig(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
-			if (is_menu_core() || !FileLoadConfig(get_map_name(dev, 1), &input[dev].map, sizeof(input[dev].map)))
-			{
-				// nothing found so blank out everything
-				memset(input[dev].map, 0, sizeof(input[dev].map));
-				input[dev].has_map++;
-			}
-			else
-			{
-				for (uint i = 8; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
+			if(!convert_from_menu_mapping(dev)) {
+				if (is_menu_core() || !FileLoadConfig(get_map_name(dev, 1), &input[dev].map, sizeof(input[dev].map)))
 				{
-					input[dev].map[i] = 0;
+					// nothing found so blank out everything
+					memset(input[dev].map, 0, sizeof(input[dev].map));
+					input[dev].has_map++;
+				}
+				else
+				{
+					for (uint i = 8; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
+					{
+						input[dev].map[i] = 0;
+					}
 				}
 			}
 			input[dev].has_map++;
