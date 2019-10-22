@@ -55,8 +55,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "bootcore.h"
 #include "cheats.h"
 #include "video.h"
-#include "support.h"
 #include "joymapping.h"
+
+#include "support.h"
 
 /*menu states*/
 enum MENU
@@ -200,10 +201,6 @@ const char *config_gamma_msg[] = { "Off","On" };
 
 #define DPAD_NAMES 4
 #define DPAD_BUTTON_NAMES 12  //DPAD_NAMES + 6 buttons + start/select
-
-
-char joy_bnames[32][32];
-int  joy_bcount = 0;
 
 #define script_line_length 1024
 #define script_lines 50
@@ -1783,12 +1780,12 @@ void HandleUI(void)
 				if (is_minimig())
 				{
 					joy_bcount = 7;
-					strcpy(joy_bnames[0], "Red/Fire");
-					strcpy(joy_bnames[1], "Blue");
-					strcpy(joy_bnames[2], "Yellow");
-					strcpy(joy_bnames[3], "Green");
-					strcpy(joy_bnames[4], "Right Trigger");
-					strcpy(joy_bnames[5], "Left Trigger");
+					strcpy(joy_bnames[0], "A(Red/Fire)");
+					strcpy(joy_bnames[1], "B(Blue)");
+					strcpy(joy_bnames[2], "C(Yellow)");
+					strcpy(joy_bnames[3], "D(Green)");
+					strcpy(joy_bnames[4], "RT");
+					strcpy(joy_bnames[5], "LT");
 					strcpy(joy_bnames[6], "Pause");
 				}
 				start_map_setting(joy_bcount ? joy_bcount+4 : 8);
@@ -2163,8 +2160,8 @@ void HandleUI(void)
 				p = joy_bnames[get_map_button() - DPAD_NAMES];
 				if (is_menu_core())
 				{
-					if (get_map_type()) joy_bcount = 15;
-					if (get_map_button() == 16)
+					if (get_map_type()) joy_bcount = 19;
+					if (get_map_button() == SYS_BTN_OSD_KTGL)
 					{
 						p = joy_button_map[DPAD_BUTTON_NAMES + get_map_type()];
 						if (get_map_type())
@@ -2182,9 +2179,9 @@ void HandleUI(void)
 
 			if (get_map_button() >= 0)
 			{
-				if (is_menu_core() && get_map_button() > 16)
+				if (is_menu_core() && get_map_button() > SYS_BTN_OSD_KTGL)
 				{
-					strcpy(s, joy_button_map[14 + get_map_button() - 17]);
+					strcpy(s, joy_button_map[(get_map_button() - SYS_BTN_OSD_KTGL - 1) + DPAD_BUTTON_NAMES + 2]);
 				}
 				else
 				{
@@ -3993,24 +3990,24 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
-				joy_bcount = 16;
-				strcpy(joy_bnames[MENU_JOY_A - DPAD_NAMES], "Btn A (OK/Enter)");
-				strcpy(joy_bnames[MENU_JOY_B - DPAD_NAMES], "Btn B (ESC/Back)");
-				strcpy(joy_bnames[MENU_JOY_X - DPAD_NAMES], "Btn X (Backspace");
-				strcpy(joy_bnames[MENU_JOY_Y - DPAD_NAMES], "Btn Y ");
-				strcpy(joy_bnames[MENU_JOY_L - DPAD_NAMES], "Btn L (Z)");
-				strcpy(joy_bnames[MENU_JOY_R - DPAD_NAMES], "Btn R (C)");
-				strcpy(joy_bnames[MENU_JOY_SELECT - DPAD_NAMES], "Btn Select");
-				strcpy(joy_bnames[MENU_JOY_START  - DPAD_NAMES], "Btn Start");
-				strcpy(joy_bnames[8], "Mouse Move RIGHT");
-				strcpy(joy_bnames[9], "Mouse Move LEFT");
-				strcpy(joy_bnames[10], "Mouse Move DOWN");
-				strcpy(joy_bnames[11], "Mouse Move UP");
-				strcpy(joy_bnames[12], "Mouse Left Btn");
-				strcpy(joy_bnames[13], "Mouse Right Btn");
-				strcpy(joy_bnames[14], "Mouse Middle Btn");
-				strcpy(joy_bnames[15], "Mouse Emu / Sniper");
-				start_map_setting(joy_bcount + DPAD_NAMES);
+				strcpy(joy_bnames[SYS_BTN_A - DPAD_NAMES], "A (OK/Enter)");
+				strcpy(joy_bnames[SYS_BTN_B - DPAD_NAMES], "B (ESC/Back)");
+				strcpy(joy_bnames[SYS_BTN_X - DPAD_NAMES], "X (Backspace)");
+				strcpy(joy_bnames[SYS_BTN_Y - DPAD_NAMES], "Y");
+				strcpy(joy_bnames[SYS_BTN_L - DPAD_NAMES], "L");
+				strcpy(joy_bnames[SYS_BTN_R - DPAD_NAMES], "R");
+				strcpy(joy_bnames[SYS_BTN_SELECT - DPAD_NAMES], "Select");
+				strcpy(joy_bnames[SYS_BTN_START  - DPAD_NAMES], "Start");
+				strcpy(joy_bnames[SYS_MS_RIGHT - DPAD_NAMES], "Mouse Move RIGHT");
+				strcpy(joy_bnames[SYS_MS_LEFT - DPAD_NAMES], "Mouse Move LEFT");
+				strcpy(joy_bnames[SYS_MS_DOWN - DPAD_NAMES], "Mouse Move DOWN");
+				strcpy(joy_bnames[SYS_MS_UP - DPAD_NAMES], "Mouse Move UP");
+				strcpy(joy_bnames[SYS_MS_BTN_L - DPAD_NAMES], "Mouse Btn Left");
+				strcpy(joy_bnames[SYS_MS_BTN_R - DPAD_NAMES], "Mouse Btn Right");
+				strcpy(joy_bnames[SYS_MS_BTN_M - DPAD_NAMES], "Mouse Btn Middle");
+				strcpy(joy_bnames[SYS_MS_BTN_EMU - DPAD_NAMES], "Mouse Emu / Sniper");
+				joy_bcount = 16+1; //buttons + OSD/KTGL button
+				start_map_setting(joy_bcount + 6); // + dpad + Analog X/Y
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
 				break;

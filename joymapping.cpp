@@ -1,8 +1,7 @@
-/*  
+/*
 This file contains lookup information on known controllers
 */
 
-#include <string>
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -16,119 +15,193 @@ This file contains lookup information on known controllers
 #define DPAD_COUNT 4
 
 /*****************************************************************************/
+static void trim(char * s)
+{
+	char *p = s;
+	int l = strlen(p);
+	if (!l) return;
 
-int swap_face_buttons(const char *core_name) {
-	//flags cores where B A should be swapped to A B and Y X to X Y (SNES vs. Genesis/NG)
-	return    (!strcmp(core_name, "Genesis") 
-			|| !strcmp(core_name, "NEOGEO")
-			|| !strcmp(core_name, "SMS"));
+	while (p[l - 1] == ' ') p[--l] = 0;
+	while (*p && (*p == ' ')) ++p, --l;
+
+	memmove(s, p, l + 1);
 }
 
-int map_joystick(const char *core_name, devInput (&input)[NUMDEV], int dev) {
+static void get_buttons()
+{
+	int i = 2;
+	char *p;
+
+	memset(joy_bnames, 0, sizeof(joy_bnames));
+	joy_bcount = 0;
+
+	while(1)
+	{
+		p = user_io_8bit_get_string(i);
+		if (!p) break;
+
+		if (p[0] == 'J')
+		{
+			for (int n = 0; n < 28; n++)
+			{
+				substrcpy(joy_bnames[n], p, n + 1);
+				if (!joy_bnames[n][0]) break;
+
+				printf("joy_bname[%d] = %s\n", n, joy_bnames[n]);
+
+				char *sstr = strchr(joy_bnames[n], '(');
+				if (sstr) *sstr = 0;
+				trim(joy_bnames[n]);
+
+				if (!joy_bnames[n][0]) break;
+				joy_bcount++;
+			}
+			break;
+		}
+		i++;
+	}
+}
+
+static int has_X_button()
+{
+	for (int i = 0; i < joy_bcount; i++)
+	{
+		if (!strcasecmp(joy_bnames[i], "X")) return 1;
+	}
+	return 0;
+}
+
+static int is_fire(char* name)
+{
+	if (!strncasecmp(name, "fire", 4) || !strncasecmp(name, "button", 6))
+	{
+		if (!strcasecmp(name, "fire") || strchr(name, '1')) return 1;
+		if (strchr(name, '2')) return 2;
+		if (strchr(name, '3')) return 3;
+		if (strchr(name, '4')) return 4;
+	}
+
+	return 0;
+}
+
+void map_joystick(uint32_t *map, uint32_t *mmap)
+{
+	static char mapinfo[1024];
+	strcpy(mapinfo, "This joystick is not defined.\nDefault map:");
 	/*
 	attemps to centrally defined core joy mapping to the joystick declaredy by a core config string
 	we use the names declared by core with some special handling for specific edge cases
-	
+
 	Input button order is "virtual SNES" i.e.:
 		A, B, X, Y, L, R, Select, Start
 	*/
-	uint32_t new_map[NUMBUTTONS];
-	// first copy directions (not really needed but helps keep things consistent)
-	for(int i=0; i<DPAD_COUNT; i++) {
-		new_map[i] = input[dev].map[i];
+	get_buttons();
+
+	map[SYS_BTN_RIGHT] = mmap[SYS_BTN_RIGHT] & 0xFFFF;
+	map[SYS_BTN_LEFT]  = mmap[SYS_BTN_LEFT]  & 0xFFFF;
+	map[SYS_BTN_DOWN]  = mmap[SYS_BTN_DOWN]  & 0xFFFF;
+	map[SYS_BTN_UP]    = mmap[SYS_BTN_UP]    & 0xFFFF;
+
+	if (mmap[SYS_AXIS_X])
+	{
+		uint32_t key = KEY_EMU + (((uint16_t)mmap[SYS_AXIS_X]) << 1);
+		map[SYS_BTN_LEFT] = (key << 16) | map[SYS_BTN_LEFT];
+		map[SYS_BTN_RIGHT] = ((key+1) << 16) | map[SYS_BTN_RIGHT];
 	}
+
+	if (mmap[SYS_AXIS_Y])
+	{
+		uint32_t key = KEY_EMU + (((uint16_t)mmap[SYS_AXIS_Y]) << 1);
+		map[SYS_BTN_UP] = (key << 16) | map[SYS_BTN_UP];
+		map[SYS_BTN_DOWN] = ((key + 1) << 16) | map[SYS_BTN_DOWN];
+	}
+
 	// loop through core requested buttons and construct result map
-	for (int i=0; i<joy_bcount; i++) {
-		int new_index = i+DPAD_COUNT;
-		std::string button_name = joy_bnames[i];
-		if (button_name.find("(") != std::string::npos) {
-			button_name = button_name.substr(0, button_name.find("("));
+	for (int i=0; i<joy_bcount; i++)
+	{
+		int idx = i+DPAD_COUNT;
+		char *btn_name = joy_bnames[i];
+
+		strcat(mapinfo, "\n* btn ");
+		strcat(mapinfo, btn_name);
+
+		if(!strcasecmp(btn_name, "A")
+		|| !strcasecmp(btn_name, "Jump")
+		|| is_fire(btn_name) == 1
+		|| !strcasecmp(btn_name, "Button I"))
+		{
+			map[idx] = mmap[SYS_BTN_A];
+			strcat(mapinfo, " -> A");
 		}
-		const char*btn_name = button_name.c_str();
-		printf("  ...mapping button %s\n", btn_name);
-		if(!strcmp(btn_name, "A") 
-		|| !strcmp(btn_name, "Fire")
-		|| !strcmp(btn_name, "Jump")
-		|| !strcmp(btn_name, "Fire1")
-		|| !strcmp(btn_name, "Fire 1") 
-		|| !strcmp(btn_name, "Button 1") 
-		|| !strcmp(btn_name, "Button I")) {
-			if(swap_face_buttons(core_name)) {
-				new_map[new_index] = input[dev].map[MENU_JOY_B];
-			} else {
-				new_map[new_index] = input[dev].map[MENU_JOY_A];
-			}
-			continue;
+
+		else if(!strcasecmp(btn_name, "B")
+		|| is_fire(btn_name) == 2
+		|| !strcasecmp(btn_name, "Button II"))
+		{
+			map[idx] = mmap[SYS_BTN_B];
+			strcat(mapinfo, " -> B");
 		}
-		if(!strcmp(btn_name, "B") 
-		|| !strcmp(btn_name, "Fire2")
-		|| !strcmp(btn_name, "Fire 2") 
-		|| !strcmp(btn_name, "Button 2") 
-		|| !strcmp(btn_name, "Button II")) {
-			if(swap_face_buttons(core_name)) {
-				new_map[new_index] = input[dev].map[MENU_JOY_A];
-			} else {
-				new_map[new_index] = input[dev].map[MENU_JOY_B];
-			}
-			continue;
+
+		else if(!strcasecmp(btn_name, "X")
+		|| (!strcasecmp(btn_name, "C") && !has_X_button())
+		|| is_fire(btn_name) == 3
+		|| !strcasecmp(btn_name, "Button III"))
+		{
+			map[idx] = mmap[SYS_BTN_X];
+			strcat(mapinfo, " -> X");
 		}
-		if(!strcmp(btn_name, "X") 
-		|| !strcmp(btn_name, "Fire3")
-		|| !strcmp(btn_name, "Fire 3") 
-		|| !strcmp(btn_name, "Button 3") 
-		|| !strcmp(btn_name, "Button III")) {
-			if(swap_face_buttons(core_name)) {
-				new_map[new_index] = input[dev].map[MENU_JOY_Y];
-			} else {
-				new_map[new_index] = input[dev].map[MENU_JOY_X];
-			}
-			continue;
+
+		else if(!strcasecmp(btn_name, "Y")
+		|| !strcasecmp(btn_name, "D")
+		|| is_fire(btn_name) == 4
+		|| !strcasecmp(btn_name, "Button IV"))
+		{
+			map[idx] = mmap[SYS_BTN_Y];
+			strcat(mapinfo, " -> Y");
 		}
-		if(!strcmp(btn_name, "Y") 
-		|| !strcmp(btn_name, "Button IV")) {
-			if(swap_face_buttons(core_name)) {
-				new_map[new_index] = input[dev].map[MENU_JOY_X];
-			} else {
-				new_map[new_index] = input[dev].map[MENU_JOY_Y];
-			}
-			continue;
-		}
+
 		// Genesis C and Z  and TG16 V and VI
-		if(!strcmp(btn_name, "C")
-		|| !strcmp(btn_name, "Button V")
-		|| !strcmp(btn_name, "Coin")
-		) {
-			new_map[new_index] = input[dev].map[MENU_JOY_R];
-			continue;
+		else if(!strcasecmp(btn_name, "R")
+		|| !strcasecmp(btn_name, "C")
+		|| !strcasecmp(btn_name, "RT")
+		|| !strcasecmp(btn_name, "Button V")
+		|| !strcasecmp(btn_name, "Coin"))
+		{
+			map[idx] = mmap[SYS_BTN_R];
+			strcat(mapinfo, " -> R");
 		}
-		if(!strcmp(btn_name, "Z")
-		|| !strcmp(btn_name, "Button VI")
-		|| !strcmp(btn_name, "ABC")) {
-			new_map[new_index] = input[dev].map[MENU_JOY_L];
-			continue;
+
+		else if(!strcasecmp(btn_name, "L")
+		|| !strcasecmp(btn_name, "Z")
+		|| !strcasecmp(btn_name, "LT")
+		|| !strcasecmp(btn_name, "Button VI"))
+		{
+			map[idx] = mmap[SYS_BTN_L];
+			strcat(mapinfo, " -> L");
 		}
-		if(!strcmp(btn_name, "Select") 
-		|| !strcmp(btn_name, "Game Select")) {
-			new_map[new_index] = input[dev].map[MENU_JOY_SELECT];
-			continue;
+
+		else if(!strcasecmp(btn_name, "Select")
+		|| !strcasecmp(btn_name, "Mode")
+		|| !strcasecmp(btn_name, "Game Select")
+		|| !strcasecmp(btn_name, "Start 2P"))
+		{
+			map[idx] = mmap[SYS_BTN_SELECT];
+			strcat(mapinfo, " -> Select");
 		}
-		if(!strcmp(btn_name, "Start") 
-		|| !strcmp(btn_name, "Run")
-		|| !strcmp(btn_name, "Pause")
-		|| !strcmp(btn_name, "Start 1P")) {
-			new_map[new_index] = input[dev].map[MENU_JOY_START];
-			continue;
+
+		else if(!strcasecmp(btn_name, "Start")
+		|| !strcasecmp(btn_name, "Run")
+		|| !strcasecmp(btn_name, "Pause")
+		|| !strcasecmp(btn_name, "Start 1P"))
+		{
+			map[idx] = mmap[SYS_BTN_START];
+			strcat(mapinfo, " -> Start");
 		}
-		//nothing found so just map by position
-		printf("     [no mapping found, using default map by position]\n");
-		new_map[new_index] = input[dev].map[new_index];
-	}
-	//finally swap result map into input map
-	for (int i=0; i<NUMBUTTONS; i++) {
-		if (i<joy_bcount+DPAD_COUNT) 
-			input[dev].map[i] = new_map[i];
 		else
-			input[dev].map[i] = 0;
+		{
+			strcat(mapinfo, " -> <undefined>");
+		}
 	}
-	return 1; //success
+
+	Info(mapinfo, 4000);
 }
