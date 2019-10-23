@@ -205,6 +205,15 @@ void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned cha
 	OsdWriteOffset(n, s, invert, stipple, 0, 0, usebg, maxinv);
 }
 
+void OsdWriteDelay(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char usebg, int maxinv)
+{
+	if (s && s[0] && CheckTimer(scroll_timer)) // scroll if long name and timer delay elapsed
+	{
+		OsdWrite(n, s, invert, stipple, usebg, maxinv);
+		scroll_timer = GetTimer(SCROLL_DELAY2); // reset scroll timer to repeat delay
+	}
+}
+
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
 void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar, char usebg, int maxinv)
 {

@@ -2200,7 +2200,44 @@ void HandleUI(void)
 
 			OsdWrite(3, s, 0, 0);
 			OsdWrite(4);
-			if (!line_info) OsdWrite(12);
+			
+			if (!line_info) {
+				if(is_menu_core() && joy_bcount && get_map_button() < DPAD_BUTTON_NAMES)
+				{
+					p = joy_bnames[get_map_button() - DPAD_NAMES];
+					// draw an on-screen gamepad to help with central button mapping
+					OsdWrite(10, "  \x86 L1\x88               \x86 R1\x88  ");
+					if (!strcmp(p, "L"))	OsdWriteDelay(10, "  \x86 \x1b \x88               \x86 R1\x88  ");
+					if (!strcmp(p, "R"))	OsdWriteDelay(10, "  \x86 L1\x88               \x86 \x1b \x88  ");
+					OsdWrite(11, " \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88");
+					OsdWrite(12, " \x83   U                 X   \x83");
+					if (!strcmp(p, "UP"))			OsdWriteDelay(12, " \x83   \x1b                 X   \x83");
+					if (!strcmp(p, "X (Backspace)"))OsdWriteDelay(12, " \x83   U                 \x1b   \x83");
+					OsdWrite(13, " \x83 L \x1b R  Sel Start  Y   A \x83");
+					if (!strcmp(p, "A (OK/Enter)"))	OsdWriteDelay(13, " \x83 L \x1b R  Sel Start  Y   \x1b \x83");
+					if (!strcmp(p, "Y"))			OsdWriteDelay(13, " \x83 L \x1b R  Sel Start  \x1b   A \x83");
+					if (!strcmp(p, "LEFT"))			OsdWriteDelay(13, " \x83 \x1b \x1b R  Sel Start  \x1b   A \x83");
+					if (!strcmp(p, "RIGHT"))		OsdWriteDelay(13, " \x83 L \x1b \x1b  Sel Start  \x1b   A \x83");
+					if (!strcmp(p, "Select"))		OsdWriteDelay(13, " \x83 L \x1b R   \x1b  Start  Y   A \x83");
+					if (!strcmp(p, "Start"))		OsdWriteDelay(13, " \x83 L \x1b R  Sel   \x1b    Y   A \x83");
+					OsdWrite(14, " \x83   D   \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88   B   \x83");
+					if (!strcmp(p, "DOWN"))			OsdWrite(14, " \x83   \x1b   \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88   B   \x83");
+					if (!strcmp(p, "B (ESC/Back)"))	OsdWrite(14, " \x83   D   \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88   \x1b   \x83");
+					OsdWrite(15, " \x8b\x81\x81\x81\x81\x81\x81\x81\x8a         \x8b\x81\x81\x81\x81\x81\x81\x81\x8a");
+				} else {
+					if(is_menu_core()){
+						//clear all gamepad gfx
+						OsdWrite(10);
+						OsdWrite(11);
+						OsdWrite(12);
+						OsdWrite(13);
+						OsdWrite(14);
+						OsdWrite(15);
+					} else {
+						OsdWrite(12);
+					}
+				}
+			}
 
 			if (get_map_vid() || get_map_pid())
 			{
