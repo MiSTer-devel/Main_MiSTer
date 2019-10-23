@@ -11,6 +11,7 @@ This file contains lookup information on known controllers
 #include "menu.h"
 #include "input.h"
 #include "user_io.h"
+#include "cfg.h"
 
 #define DPAD_COUNT 4
 
@@ -27,37 +28,78 @@ static void trim(char * s)
 	memmove(s, p, l + 1);
 }
 
+static char joy_nnames[NUMBUTTONS][32];
+static char joy_pnames[NUMBUTTONS][32];
+static int defaults = 0;
+
 static void get_buttons()
 {
 	int i = 2;
 	char *p;
 
 	memset(joy_bnames, 0, sizeof(joy_bnames));
+	memset(joy_nnames, 0, sizeof(joy_nnames));
+	memset(joy_pnames, 0, sizeof(joy_pnames));
 	joy_bcount = 0;
+	defaults = 0;
 
 	while(1)
 	{
 		p = user_io_8bit_get_string(i);
 		if (!p) break;
 
+		// this option used as default name map (unless jn/jp is supplied)
 		if (p[0] == 'J')
 		{
-			for (int n = 0; n < 28; n++)
+			for (int n = 0; n < NUMBUTTONS - DPAD_COUNT; n++)
 			{
 				substrcpy(joy_bnames[n], p, n + 1);
 				if (!joy_bnames[n][0]) break;
 
 				printf("joy_bname[%d] = %s\n", n, joy_bnames[n]);
 
-				char *sstr = strchr(joy_bnames[n], '(');
+				memcpy(joy_nnames[n], joy_bnames[n], sizeof(joy_nnames[0]));
+				char *sstr = strchr(joy_nnames[n], '(');
 				if (sstr) *sstr = 0;
-				trim(joy_bnames[n]);
+				trim(joy_nnames[n]);
 
-				if (!joy_bnames[n][0]) break;
+				if (!joy_nnames[n][0]) break;
 				joy_bcount++;
 			}
-			break;
+			printf("\n");
 		}
+
+		// - supports empty name to skip the button from default map
+		// - only base button names must be used (ABXYLR Start Select)
+		if (p[0] == 'j')
+		{
+			// name default map
+			if (p[1] == 'n')
+			{
+				memset(joy_nnames, 0, sizeof(joy_nnames));
+				for (int n = 0; n < joy_bcount; n++)
+				{
+					substrcpy(joy_nnames[n], p, n + 1);
+					trim(joy_nnames[n]);
+					if (joy_nnames[n][0]) printf("joy_nname[%d] = %s\n", n, joy_nnames[n]);
+				}
+				printf("\n");
+			}
+
+			// positional default map
+			if (p[1] == 'p')
+			{
+				defaults = cfg.gamepad_defaults;
+				for (int n = 0; n < joy_bcount; n++)
+				{
+					substrcpy(joy_pnames[n], p, n + 1);
+					trim(joy_pnames[n]);
+					if (joy_pnames[n][0]) printf("joy_pname[%d] = %s\n", n, joy_pnames[n]);
+				}
+				printf("\n");
+			}
+		}
+
 		i++;
 	}
 }
@@ -66,7 +108,7 @@ static int has_X_button()
 {
 	for (int i = 0; i < joy_bcount; i++)
 	{
-		if (!strcasecmp(joy_bnames[i], "X")) return 1;
+		if (!strcasecmp(joy_nnames[i], "X")) return 1;
 	}
 	return 0;
 }
@@ -87,7 +129,6 @@ static int is_fire(char* name)
 void map_joystick(uint32_t *map, uint32_t *mmap)
 {
 	static char mapinfo[1024];
-	strcpy(mapinfo, "This joystick is not defined.\nDefault map:");
 	/*
 	attemps to centrally defined core joy mapping to the joystick declaredy by a core config string
 	we use the names declared by core with some special handling for specific edge cases
@@ -96,6 +137,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		A, B, X, Y, L, R, Select, Start
 	*/
 	get_buttons();
+	sprintf(mapinfo, "Default (%s) map:", defaults ? "pos" : "name");
 
 	map[SYS_BTN_RIGHT] = mmap[SYS_BTN_RIGHT] & 0xFFFF;
 	map[SYS_BTN_LEFT]  = mmap[SYS_BTN_LEFT]  & 0xFFFF;
@@ -120,10 +162,9 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 	for (int i=0; i<joy_bcount; i++)
 	{
 		int idx = i+DPAD_COUNT;
-		char *btn_name = joy_bnames[i];
+		char *btn_name = defaults ? joy_pnames[i] : joy_nnames[i];
 
-		strcat(mapinfo, "\n* btn ");
-		strcat(mapinfo, btn_name);
+		strcat(mapinfo, "\n ");
 
 		if(!strcasecmp(btn_name, "A")
 		|| !strcasecmp(btn_name, "Jump")
@@ -131,7 +172,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button I"))
 		{
 			map[idx] = mmap[SYS_BTN_A];
-			strcat(mapinfo, " -> A");
+			strcat(mapinfo, "[A]");
 		}
 
 		else if(!strcasecmp(btn_name, "B")
@@ -139,7 +180,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button II"))
 		{
 			map[idx] = mmap[SYS_BTN_B];
-			strcat(mapinfo, " -> B");
+			strcat(mapinfo, "[B]");
 		}
 
 		else if(!strcasecmp(btn_name, "X")
@@ -148,7 +189,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button III"))
 		{
 			map[idx] = mmap[SYS_BTN_X];
-			strcat(mapinfo, " -> X");
+			strcat(mapinfo, "[X]");
 		}
 
 		else if(!strcasecmp(btn_name, "Y")
@@ -157,7 +198,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button IV"))
 		{
 			map[idx] = mmap[SYS_BTN_Y];
-			strcat(mapinfo, " -> Y");
+			strcat(mapinfo, "[Y]");
 		}
 
 		// Genesis C and Z  and TG16 V and VI
@@ -168,7 +209,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Coin"))
 		{
 			map[idx] = mmap[SYS_BTN_R];
-			strcat(mapinfo, " -> R");
+			strcat(mapinfo, "[R]");
 		}
 
 		else if(!strcasecmp(btn_name, "L")
@@ -177,7 +218,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button VI"))
 		{
 			map[idx] = mmap[SYS_BTN_L];
-			strcat(mapinfo, " -> L");
+			strcat(mapinfo, "[L]");
 		}
 
 		else if(!strcasecmp(btn_name, "Select")
@@ -186,7 +227,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Start 2P"))
 		{
 			map[idx] = mmap[SYS_BTN_SELECT];
-			strcat(mapinfo, " -> Select");
+			strcat(mapinfo, "[\x96]");
 		}
 
 		else if(!strcasecmp(btn_name, "Start")
@@ -195,13 +236,15 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Start 1P"))
 		{
 			map[idx] = mmap[SYS_BTN_START];
-			strcat(mapinfo, " -> Start");
+			strcat(mapinfo, "[\x16]");
 		}
-		else
+
+		if (map[idx])
 		{
-			strcat(mapinfo, " -> <undefined>");
+			strcat(mapinfo, ": ");
+			strcat(mapinfo, joy_bnames[i]);
 		}
 	}
 
-	Info(mapinfo, 4000);
+	Info(mapinfo, 6000);
 }
