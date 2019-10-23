@@ -1217,6 +1217,12 @@ int get_map_clear()
 	return mapping_clear;
 }
 
+static uint32_t osd_timer = 0;
+int get_map_cancel()
+{
+	return (mapping && !is_menu_core() && osd_timer && CheckTimer(osd_timer));
+}
+
 static char *get_map_name(int dev, int def)
 {
 	static char name[128];
@@ -1767,15 +1773,41 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	}
 
 	int osd_event = 0;
-	if (old_combo != 3 && input[dev].osd_combo == 3) osd_event = 1;
-	else if (old_combo == 3 && input[dev].osd_combo != 3) osd_event = 2;
+	if (old_combo != 3 && input[dev].osd_combo == 3)
+	{
+		osd_event = 1;
+		if (mapping && !is_menu_core()) osd_timer = GetTimer(1000);
+	}
+	else if (old_combo == 3 && input[dev].osd_combo != 3)
+	{
+		osd_event = 2;
+		if (mapping && !is_menu_core())
+		{
+			if (CheckTimer(osd_timer))
+			{
+				cancel = 1;
+				ev->code = KEY_ESC;
+				ev->value = 0;
+			}
+			else
+			{
+				map_skip = 1;
+				ev->value = 1;
+			}
+		}
+		osd_timer = 0;
+	}
 
 	//mapping
-	if (mapping && (mapping_dev >=0 || ev->value) && !((mapping_type < 2 || !mapping_button) && (cancel || enter)))
+	if (mapping && (mapping_dev >= 0 || ev->value) && !((mapping_type < 2 || !mapping_button) && (cancel || enter)))
 	{
-		if (is_menu_core()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
+		if (is_menu_core())
+		{
+			spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
+			osd_event = 0;
+		}
 
-		if (ev->type == EV_KEY && mapping_button>=0)
+		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
 		{
 			if (mapping_type == 2)
 			{
@@ -1830,10 +1862,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				mapping_clear = 0;
 				if (mapping_dev >= 0 && (mapping_dev == dev || clear) && mapping_button < (is_menu_core() ? (SYS_BTN_OSD_KTGL+1) : mapping_count))
 				{
-					if (is_menu_core()) osd_event = 0;
-					if (osd_event) key_mapped = 0;
-
-					if ((ev->value == 1 && !key_mapped) || osd_event == 1)
+					if (ev->value == 1 && !key_mapped)
 					{
 						if (is_menu_core())
 						{
@@ -1868,7 +1897,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						}
 						else
 						{
-							if ((mapping_type && osd_event == 1) || clear)
+							if (clear)
 							{
 								memset(input[mapping_dev].map, 0, sizeof(input[mapping_dev].map));
 								mapping_button = 0;

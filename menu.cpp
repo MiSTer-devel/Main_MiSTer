@@ -2129,9 +2129,18 @@ void HandleUI(void)
 		menustate = MENU_JOYDIGMAP1;
 		parentstate = MENU_JOYDIGMAP;
 		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
-		OsdWrite(7, "          Esc \x16 Cancel");
-		OsdWrite(8, "        Enter \x16 Finish");
-		OsdWrite(9, "        Space \x16 Skip");
+		if (is_menu_core())
+		{
+			OsdWrite(7, "        Space \x16 Skip");
+			OsdWrite(8, "          Esc \x16 Cancel");
+			OsdWrite(9, "        Enter \x16 Finish");
+		}
+		else
+		{
+			OsdWrite(7, "   Space/Menu \x16 Skip");
+			OsdWrite(8, "    Menu-hold \x16 Cancel");
+			OsdWrite(9, "        Enter \x16 Finish");
+		}
 		break;
 
 	case MENU_JOYDIGMAP1:
@@ -2143,6 +2152,14 @@ void HandleUI(void)
 				OsdWrite(4, "           Clearing");
 				OsdWrite(5);
 				joymap_first = 1;
+				break;
+			}
+
+			if (get_map_cancel())
+			{
+				OsdWrite(3);
+				OsdWrite(4, "           Canceling");
+				OsdWrite(5);
 				break;
 			}
 
@@ -2221,7 +2238,7 @@ void HandleUI(void)
 						if (!get_map_type()) OsdWrite(9);
 					}
 					OsdWrite(5, s);
-					if (!is_menu_core()) OsdWrite(10, "     Menu/F12 \x16 Clear all");
+					if (!is_menu_core()) OsdWrite(10, "          F12 \x16 Clear all");
 				}
 			}
 
