@@ -820,6 +820,8 @@ void HandleUI(void)
 	static uint32_t hdmask = 0;
 	static pid_t ttypid = 0;
 	static int has_fb_terminal = 0;
+	static unsigned long flash_timer = 0;
+	static int flash_state = 0;
 
 	static char	cp_MenuCancel;
 
@@ -2128,6 +2130,8 @@ void HandleUI(void)
 		OsdSetTitle("Define buttons", 0);
 		menustate = MENU_JOYDIGMAP1;
 		parentstate = MENU_JOYDIGMAP;
+		flash_timer = 0;
+		flash_state = 0;
 		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
 		if (is_menu_core())
 		{
@@ -2217,43 +2221,58 @@ void HandleUI(void)
 
 			OsdWrite(3, s, 0, 0);
 			OsdWrite(4);
-			
-			if (!line_info) {
-				if(is_menu_core() && joy_bcount && get_map_button() < DPAD_BUTTON_NAMES)
+
+			if(is_menu_core() && joy_bcount && get_map_button() >= SYS_BTN_RIGHT && get_map_button() <= SYS_BTN_START)
+			{
+				// draw an on-screen gamepad to help with central button mapping
+				if (!flash_timer || CheckTimer(flash_timer))
 				{
-					p = joy_bnames[get_map_button() - DPAD_NAMES];
-					// draw an on-screen gamepad to help with central button mapping
-					OsdWrite(10, "  \x86 L1\x88               \x86 R1\x88  ");
-					if (!strcmp(p, "L"))	OsdWriteDelay(10, "  \x86 \x1b \x88               \x86 R1\x88  ");
-					if (!strcmp(p, "R"))	OsdWriteDelay(10, "  \x86 L1\x88               \x86 \x1b \x88  ");
-					OsdWrite(11, " \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88");
-					OsdWrite(12, " \x83   U                 X   \x83");
-					if (!strcmp(p, "UP"))			OsdWriteDelay(12, " \x83   \x1b                 X   \x83");
-					if (!strcmp(p, "X (Backspace)"))OsdWriteDelay(12, " \x83   U                 \x1b   \x83");
-					OsdWrite(13, " \x83 L \x1b R  Sel Start  Y   A \x83");
-					if (!strcmp(p, "A (OK/Enter)"))	OsdWriteDelay(13, " \x83 L \x1b R  Sel Start  Y   \x1b \x83");
-					if (!strcmp(p, "Y"))			OsdWriteDelay(13, " \x83 L \x1b R  Sel Start  \x1b   A \x83");
-					if (!strcmp(p, "LEFT"))			OsdWriteDelay(13, " \x83 \x1b \x1b R  Sel Start  \x1b   A \x83");
-					if (!strcmp(p, "RIGHT"))		OsdWriteDelay(13, " \x83 L \x1b \x1b  Sel Start  \x1b   A \x83");
-					if (!strcmp(p, "Select"))		OsdWriteDelay(13, " \x83 L \x1b R   \x1b  Start  Y   A \x83");
-					if (!strcmp(p, "Start"))		OsdWriteDelay(13, " \x83 L \x1b R  Sel   \x1b    Y   A \x83");
-					OsdWrite(14, " \x83   D   \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88   B   \x83");
-					if (!strcmp(p, "DOWN"))			OsdWrite(14, " \x83   \x1b   \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88   B   \x83");
-					if (!strcmp(p, "B (ESC/Back)"))	OsdWrite(14, " \x83   D   \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88   \x1b   \x83");
-					OsdWrite(15, " \x8b\x81\x81\x81\x81\x81\x81\x81\x8a         \x8b\x81\x81\x81\x81\x81\x81\x81\x8a");
-				} else {
-					if(is_menu_core()){
-						//clear all gamepad gfx
-						OsdWrite(10);
-						OsdWrite(11);
-						OsdWrite(12);
-						OsdWrite(13);
-						OsdWrite(14);
-						OsdWrite(15);
-					} else {
-						OsdWrite(12);
+					flash_timer = GetTimer(100);
+					if (flash_state)
+					{
+						switch (get_map_button())
+						{
+							case SYS_BTN_L:      OsdWrite(10, "  \x86   \x88               \x86 R \x88  "); break;
+							case SYS_BTN_R:      OsdWrite(10, "  \x86 L \x88               \x86   \x88  "); break;
+							case SYS_BTN_UP:     OsdWrite(12, " \x83                     X   \x83");        break;
+							case SYS_BTN_X:      OsdWrite(12, " \x83   U                     \x83");        break;
+							case SYS_BTN_A:      OsdWrite(13, " \x83 L \x1b R  Sel Start  Y     \x83");     break;
+							case SYS_BTN_Y:      OsdWrite(13, " \x83 L \x1b R  Sel Start      A \x83");     break;
+							case SYS_BTN_LEFT:   OsdWrite(13, " \x83   \x1b R  Sel Start  Y   A \x83");     break;
+							case SYS_BTN_RIGHT:  OsdWrite(13, " \x83 L \x1b    Sel Start  Y   A \x83");     break;
+							case SYS_BTN_SELECT: OsdWrite(13, " \x83 L \x1b R      Start  Y   A \x83");     break;
+							case SYS_BTN_START:  OsdWrite(13, " \x83 L \x1b R  Sel        Y   A \x83");     break;
+							case SYS_BTN_DOWN:   OsdWrite(14, " \x83       \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88   B   \x83"); break;
+							case SYS_BTN_B:      OsdWrite(14, " \x83   D   \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88       \x83"); break;
+						}
 					}
+					else
+					{
+						OsdWrite(10, "  \x86 L \x88               \x86 R \x88  ");
+						OsdWrite(11, " \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88");
+						OsdWrite(12, " \x83   U                 X   \x83");
+						OsdWrite(13, " \x83 L \x1b R  Sel Start  Y   A \x83");
+						OsdWrite(14, " \x83   D   \x86\x81\x81\x81\x81\x81\x81\x81\x81\x81\x88   B   \x83");
+						OsdWrite(15, " \x8b\x81\x81\x81\x81\x81\x81\x81\x8a         \x8b\x81\x81\x81\x81\x81\x81\x81\x8a");
+					}
+					flash_state = !flash_state;
 				}
+			}
+			else
+			{
+				if(flash_timer)
+				{
+					//clear all gamepad gfx
+					OsdWrite(10);
+					OsdWrite(11);
+					OsdWrite(12);
+					OsdWrite(13);
+					OsdWrite(14);
+					OsdWrite(15);
+					flash_timer = 0;
+				}
+
+				if (!line_info) OsdWrite(12);
 			}
 
 			if (get_map_vid() || get_map_pid())

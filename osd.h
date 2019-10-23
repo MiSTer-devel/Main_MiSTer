@@ -24,7 +24,6 @@ void OsdSetTitle(const char *s, int arrow = 0);	// arrow > 0 = display right arr
 void OsdSetArrow(int arrow);
 void OsdWrite(unsigned char n, const char *s="", unsigned char inver=0, unsigned char stipple=0, char usebg = 0, int maxinv = 32);
 void OsdWriteOffset(unsigned char n, const char *s, unsigned char inver, unsigned char stipple, char offset, char leftchar, char usebg = 0, int maxinv = 32); // Used for scrolling "Exit" text downwards...
-void OsdWriteDelay(unsigned char n, const char *s="", unsigned char inver=0, unsigned char stipple=0, char usebg = 0, int maxinv = 32); //same as OsdWrite but with a certain delay. Used for "blinking" text lines
 void OsdClear(void);
 void OsdEnable(unsigned char mode);
 void InfoEnable(int x, int y, int width, int height);
