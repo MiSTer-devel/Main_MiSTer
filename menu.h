@@ -24,9 +24,6 @@ void Info(const char *message, int timeout = 2000, int width = 0, int height = 0
 uint32_t getStatus(char *opt, uint32_t status);
 void substrcpy(char *d, char *s, char idx);
 
-extern char joy_bnames[32][32];
-extern int  joy_bcount;
-
 void open_joystick_setup();
 int menu_lightgun_cb(uint16_t type, uint16_t code, int value);
 

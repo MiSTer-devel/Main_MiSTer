@@ -47,7 +47,7 @@ direntext_t* flist_SelectedItem();
 #define SCANO_DIR        1 // include subdirectories
 #define SCANO_UMOUNT     2 // allow backspace key
 #define SCANO_CORES      4 // only include subdirectories with prefix '_'
-#define SCANO_COEFF      8
+#define SCANO_TXT        8
 #define SCANO_NEOGEO     16
 #define SCANO_NOENTER    32
 
@@ -69,6 +69,7 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length);
 int FileReadSec(fileTYPE *file, void *pBuffer);
 int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
 int FileWriteSec(fileTYPE *file, void *pBuffer);
+void FileCreatePath(char *dir);
 
 int FileExists(const char *name);
 int FileCanWrite(const char *name);
@@ -91,6 +92,8 @@ int FileLoadConfig(const char *name, void *pBuffer, int size); // supply pBuffer
 void AdjustDirectory(char *path);
 int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix = NULL);
 
+void prefixGameDir(char *dir, size_t dir_len);
+
 const char *getStorageDir(int dev);
 const char *getRootDir();
 const char *getFullPath(const char *name);
@@ -98,5 +101,7 @@ const char *getFullPath(const char *name);
 uint32_t getFileType(const char *name);
 
 #define COEFF_DIR "filters"
+#define GAMMA_DIR "gamma"
+#define GAMES_DIR "games"
 
 #endif
