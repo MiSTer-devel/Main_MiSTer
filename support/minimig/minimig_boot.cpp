@@ -401,7 +401,7 @@ void BootInit()
 	if (cfg.bootscreen)
 	{
 		//default video config till real config loaded.
-		minimig_ConfigVideo(0, 0, 0x40);
+		minimig_ConfigVideo(0x40);
 		minimig_ConfigAudio(0);
 
 		WaitTimer(100);

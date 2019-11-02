@@ -63,7 +63,7 @@ void minimig_set_kickstart(char *name);
 void minimig_set_adjust(char n);
 char minimig_get_adjust();
 
-void minimig_ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines);
+void minimig_ConfigVideo(unsigned char scanlines);
 void minimig_ConfigAudio(unsigned char audio);
 void minimig_ConfigMemory(unsigned char memory);
 void minimig_ConfigCPU(unsigned char cpu);

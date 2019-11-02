@@ -362,7 +362,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	rstval = 0;
 	spi_uio_cmd8(UIO_MM2_RST, rstval);
 
-	minimig_ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+	minimig_ConfigVideo(minimig_config.scanlines);
 	minimig_ConfigAudio(minimig_config.audio);
 	minimig_ConfigAutofire(minimig_config.autofire, 0xC);
 }
@@ -626,9 +626,9 @@ char minimig_get_adjust()
 	return minimig_adjust;
 }
 
-void minimig_ConfigVideo(unsigned char hires, unsigned char lores, unsigned char scanlines)
+void minimig_ConfigVideo(unsigned char scanlines)
 {
-	spi_uio_cmd16(UIO_MM2_VID, (((scanlines >> 6) & 0x03) << 10) | (((scanlines >> 4) & 0x03) << 8) | (((scanlines >> 2) & 0x03) << 6) | ((hires & 0x03) << 4) | ((lores & 0x03) << 2) | (scanlines & 0x03));
+	spi_uio_cmd16(UIO_MM2_VID, (((scanlines >> 6) & 0x03) << 10) | (((scanlines >> 4) & 0x03) << 8) | (scanlines & 0x07));
 }
 
 void minimig_ConfigAudio(unsigned char audio)
@@ -643,7 +643,7 @@ void minimig_ConfigMemory(unsigned char memory)
 
 void minimig_ConfigCPU(unsigned char cpu)
 {
-	spi_uio_cmd8(UIO_MM2_CPU, cpu & 0x0f);
+	spi_uio_cmd8(UIO_MM2_CPU, cpu & 0x1f);
 }
 
 void minimig_ConfigChipset(unsigned char chipset)

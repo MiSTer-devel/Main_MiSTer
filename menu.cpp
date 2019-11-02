@@ -181,7 +181,7 @@ const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M"   };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
 const char *config_memory_fast_msg[] = { "none", "2M",   "4M",   "8M", "256M", "384M", "256M" };
 
-const char *config_scanlines_msg[] = { "off", "dim", "black" };
+const char *config_scanlines_msg[] = { "Off", "HQ2x", "CRT 25%" , "CRT 50%" , "CRT 75%" };
 const char *config_ar_msg[] = { "4:3", "16:9" };
 const char *config_blank_msg[] = { "Blank", "Blank+" };
 const char *config_dither_msg[] = { "off", "SPT", "RND", "S+R" };
@@ -3505,44 +3505,52 @@ void HandleUI(void)
 		menumask = 0;
 		OsdSetTitle("Chipset", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 
-		OsdWrite(0, "", 0, 0);
-		strcpy(s, " CPU      : ");
+		m = 0;
+		OsdWrite(m++, "", 0, 0);
+		strcpy(s, " CPU            : ");
 		strcat(s, config_cpu_msg[minimig_config.cpu & 0x03]);
-		OsdWrite(1, s, menusub == 0, 0);
-		strcpy(s, " Turbo    : ");
-		strcat(s, config_turbo_msg[(minimig_config.cpu >> 2) & 0x03]);
-		OsdWrite(2, s, menusub == 1, 0);
-		OsdWrite(3, "", 0, 0);
-		strcpy(s, " Video    : ");
+		OsdWrite(m++, s, menusub == 0, 0);
+		strcpy(s, " Cache ChipRAM  : ");
+		strcat(s, (minimig_config.cpu & 4) ? "ON" : "OFF");
+		OsdWrite(m++, s, menusub == 1, 0);
+		strcpy(s, " Cache Kickstart: ");
+		strcat(s, (minimig_config.cpu & 8) ? "ON" : "OFF");
+		OsdWrite(m++, s, menusub == 2, 0);
+		strcpy(s, " D-Cache        : ");
+		strcat(s, (minimig_config.cpu & 16) ? "ON" : "OFF");
+		OsdWrite(m++, s, menusub == 3, 0);
+		OsdWrite(m++, "", 0, 0);
+		strcpy(s, " Video          : ");
 		strcat(s, minimig_config.chipset & CONFIG_NTSC ? "NTSC" : "PAL");
-		OsdWrite(4, s, menusub == 2, 0);
-		strcpy(s, " Chipset  : ");
+		OsdWrite(m++, s, menusub == 4, 0);
+		strcpy(s, " Chipset        : ");
 		strcat(s, config_chipset_msg[(minimig_config.chipset >> 2) & 7]);
-		OsdWrite(5, s, menusub == 3, 0);
-		OsdWrite(6, "", 0, 0);
-		strcpy(s, " CD32Pad  : ");
+		OsdWrite(m++, s, menusub == 5, 0);
+		OsdWrite(m++, "", 0, 0);
+		strcpy(s, " CD32 Pad       : ");
 		strcat(s, config_cd32pad_msg[(minimig_config.autofire >> 2) & 1]);
-		OsdWrite(7, s, menusub == 4, 0);
-		strcpy(s, " Joy Swap : ");
+		OsdWrite(m++, s, menusub == 6, 0);
+		strcpy(s, " Joystick Swap  : ");
 		strcat(s, (minimig_config.autofire & 0x8)? "ON" : "OFF");
-		OsdWrite(8, s, menusub == 5, 0);
-		for (int i = 9; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 6, 0);
+		OsdWrite(m++, s, menusub == 7, 0);
+		for (int i = m; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 8, 0);
 
 		menustate = MENU_SETTINGS_CHIPSET2;
 		break;
 
 	case MENU_SETTINGS_CHIPSET2:
 
-		if (down && menusub < 6)
+		if (down)
 		{
-			menusub++;
+			menusub = (menusub+1)%9;
 			menustate = MENU_SETTINGS_CHIPSET1;
 		}
 
 		if (up && menusub > 0)
 		{
-			menusub--;
+			if (menusub) menusub--;
+			else menusub = 8;
 			menustate = MENU_SETTINGS_CHIPSET1;
 		}
 
@@ -3560,18 +3568,28 @@ void HandleUI(void)
 			else if (menusub == 1)
 			{
 				menustate = MENU_SETTINGS_CHIPSET1;
-				int _config_turbo = (minimig_config.cpu >> 2) & 0x3;
-				_config_turbo += 1;
-				minimig_config.cpu = (minimig_config.cpu & 0x3) | ((_config_turbo & 0x3) << 2);
+				minimig_config.cpu ^= 4;
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
 			else if (menusub == 2)
+			{
+				menustate = MENU_SETTINGS_CHIPSET1;
+				minimig_config.cpu ^= 8;
+				minimig_ConfigCPU(minimig_config.cpu);
+			}
+			else if (menusub == 3)
+			{
+				menustate = MENU_SETTINGS_CHIPSET1;
+				minimig_config.cpu ^= 16;
+				minimig_ConfigCPU(minimig_config.cpu);
+			}
+			else if (menusub == 4)
 			{
 				minimig_config.chipset ^= CONFIG_NTSC;
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_ConfigChipset(minimig_config.chipset);
 			}
-			else if (menusub == 3)
+			else if (menusub == 5)
 			{
 				switch (minimig_config.chipset & 0x1c) {
 				case 0:
@@ -3591,19 +3609,19 @@ void HandleUI(void)
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_ConfigChipset(minimig_config.chipset);
 			}
-			else if (menusub == 4)
+			else if (menusub == 6)
 			{
 				minimig_config.autofire ^= 0x4;
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_ConfigAutofire(minimig_config.autofire, 0x4);
 			}
-			else if (menusub == 5)
+			else if (menusub == 7)
 			{
 				minimig_config.autofire ^= 0x8;
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_ConfigAutofire(minimig_config.autofire, 0x8);
 			}
-			else if (menusub == 6)
+			else if (menusub == 8)
 			{
 				menustate = MENU_MAIN1;
 				menusub = 6;
@@ -3891,8 +3909,8 @@ void HandleUI(void)
 
 		OsdSetTitle("Video", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 		OsdWrite(0, "", 0, 0);
-		strcpy(s, " Scanlines      : ");
-		strcat(s, config_scanlines_msg[minimig_config.scanlines & 0x3]);
+		strcpy(s, " Scandoubler FX : ");
+		strcat(s, config_scanlines_msg[minimig_config.scanlines & 7]);
 		OsdWrite(1, s, menusub == 0, 0);
 		strcpy(s, " Video area by  : ");
 		strcat(s, config_blank_msg[(minimig_config.scanlines >> 6) & 3]);
@@ -3923,24 +3941,24 @@ void HandleUI(void)
 		{
 			if (menusub == 0)
 			{
-				minimig_config.scanlines = ((minimig_config.scanlines + 1) & 0x03) | (minimig_config.scanlines & 0xfc);
-				if ((minimig_config.scanlines & 0x03) > 2) minimig_config.scanlines = minimig_config.scanlines & 0xfc;
+				minimig_config.scanlines = ((minimig_config.scanlines + 1) & 7) | (minimig_config.scanlines & 0xf8);
+				if ((minimig_config.scanlines & 7) > 4) minimig_config.scanlines = minimig_config.scanlines & 0xf8;
 				menustate = MENU_SETTINGS_VIDEO1;
-				minimig_ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+				minimig_ConfigVideo(minimig_config.scanlines);
 			}
 			else if (menusub == 1)
 			{
 				minimig_config.scanlines &= ~0x80;
 				minimig_config.scanlines ^= 0x40;
 				menustate = MENU_SETTINGS_VIDEO1;
-				minimig_ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+				minimig_ConfigVideo(minimig_config.scanlines);
 			}
 			else if (menusub == 2)
 			{
 				minimig_config.scanlines &= ~0x20; // reserved for auto-ar
 				minimig_config.scanlines ^= 0x10;
 				menustate = MENU_SETTINGS_VIDEO1;
-				minimig_ConfigVideo(minimig_config.filter.hires, minimig_config.filter.lores, minimig_config.scanlines);
+				minimig_ConfigVideo(minimig_config.scanlines);
 			}
 			else if (menusub == 3)
 			{
