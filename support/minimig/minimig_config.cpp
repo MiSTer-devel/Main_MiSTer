@@ -210,29 +210,29 @@ static char UploadActionReplay()
 		spi8((data >> 0) & 0xff);
 		data = 0xff; // col1l, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = 0x01; // right, 1 byte
+		data = 0xff; // right, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 0x00; // keyboard, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = 0x01; // key, 1 byte
+		data = 0xff; // key, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = minimig_config.enable_ide ? 1 : 0; // ide, 1 byte
+		data = minimig_config.enable_ide ? 0xff : 0; // ide, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = 0x01; // a1200, 1 byte
+		data = 0xff; // a1200, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = minimig_config.chipset&CONFIG_AGA ? 1 : 0; // aga, 1 byte
+		data = minimig_config.chipset&CONFIG_AGA ? 0xff : 0; // aga, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = 0x01; // insert, 1 byte
+		data = 0xff; // insert, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 0x0f; // delay, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = 0x01; // lview, 1 byte
+		data = 0xff; // lview, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 0x00; // cd32, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = minimig_config.chipset&CONFIG_NTSC ? 1 : 0; // screenmode, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = 1; // novbr, 1 byte
+		data = 0xff; // novbr, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 0; // entered, 1 byte
 		spi8((data >> 0) & 0xff);
