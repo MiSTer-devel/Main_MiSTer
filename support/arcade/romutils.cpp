@@ -33,6 +33,12 @@ unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
             // pull two characters off
 	    int val1= (*ptr % 32 + 9) % 25 * 16;
 	    ptr++;
+	    /* check to odd numbers of characters*/
+	    if (*ptr==0) {
+               int val= (ptr[-1] % 32 + 9) % 25;
+               chrs[dest++] = val;
+                break;
+            }
 	    int val2= (*ptr % 32 + 9) % 25;
 	    ptr++;
             chrs[dest++] = val1+val2;
@@ -97,8 +103,8 @@ struct arc_struct {
  *  make sure we push / pop the stack for file names, etc
  *  make sure that merged / non merged roms work
  *
- *  SORG -- make one big array, and send it to the _tx code as one shot, we can check the MD5 and put up warning as well easily
- *  SORG -- make the HEX look like a hex dump so it is easy to edit
+ *  ???? -- SORG -- make one big array, and send it to the _tx code as one shot, we can check the MD5 and put up warning as well easily
+ *  DONE -- SORG -- make the HEX look like a hex dump so it is easy to edit
  *  SORG -- get rid off uudecode stuff
  *  SORG -- part - offset / length get rid of action
  *  AJS = Here are some of the things: Mame Roms, Mame Merged Roms, Binary Sound Files, repeated chunks. Partial Rom Chunks, Flipped Rom Chunks, games that use two mame zips (maybe?), patches, extra data sitting in the releases directory
