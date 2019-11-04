@@ -1,25 +1,46 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #include "sxmlc.h"
 #include "base64simple.h"
 
 #include "../../user_io.h"
 
+#include "buffer.h"
 /*
- * https://gist.github.com/xsleonard/7341172
+ * adapted from https://gist.github.com/xsleonard/7341172
+ *
+ * hexstr_to_char will take hex strings in two types:
+ *
+ * 00 01 02
+ * 000102
+ *
+ * and return an array and a length of binary values
+ *
+ * caller must free string that is returned
+ *
  * */
-unsigned char* hexstr_to_char(const char* hexstr)
+unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
 {
     size_t len = strlen(hexstr);
-    //IF_ASSERT(len % 2 != 0)
-    //    return NULL;
-    size_t final_len = len / 2;
-    unsigned char* chrs = (unsigned char*)malloc((final_len+1) * sizeof(*chrs));
-    for (size_t i=0, j=0; j<final_len; i+=2, j++)
-        chrs[j] = (hexstr[i] % 32 + 9) % 25 * 16 + (hexstr[i+1] % 32 + 9) % 25;
-    chrs[final_len] = '\0';
+    unsigned char* chrs = (unsigned char*)malloc((len+1) * sizeof(*chrs));
+    int dest=0;
+    // point to the beginning of the array
+    const char *ptr = hexstr;
+    while (*ptr) {
+            // pull two characters off
+	    int val1= (*ptr % 32 + 9) % 25 * 16;
+	    ptr++;
+	    int val2= (*ptr % 32 + 9) % 25;
+	    ptr++;
+            chrs[dest++] = val1+val2;
+            // check to see if we have a space
+            if (*ptr == ' ') ptr++;
+    }
+    chrs[dest]=0;
+    *out_len = dest; /* dest is 0 based, so we don't need to subtract 1*/
     return chrs;
 }
 
@@ -64,11 +85,26 @@ user_io.h:int user_io_file_tx_body_filepart(const char *name,int start=0, int le
 user_io.h:int user_io_file_tx_finish();
 */
 
+
+struct arc_struct {
+	
+};
+
 /*
  * AJS - TODO:
  *  create  a structure we can pass into send_rom
  *  use dynamic allocation (realloc?) to allocate the bigtext
+ *  make sure we push / pop the stack for file names, etc
+ *  make sure that merged / non merged roms work
+ *
+ *  SORG -- make one big array, and send it to the _tx code as one shot, we can check the MD5 and put up warning as well easily
+ *  SORG -- make the HEX look like a hex dump so it is easy to edit
+ *  SORG -- get rid off uudecode stuff
+ *  SORG -- part - offset / length get rid of action
+ *  AJS = Here are some of the things: Mame Roms, Mame Merged Roms, Binary Sound Files, repeated chunks. Partial Rom Chunks, Flipped Rom Chunks, games that use two mame zips (maybe?), patches, extra data sitting in the releases directory
  */
+
+
 static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 #define kBigTextSize 4096
@@ -162,10 +198,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				else if (!strcasecmp(dtdt,"bin.hex")) 
 				{
 					printf("we have bin.hex data [%s]\n",bigtext);
-					unsigned char* binary=hexstr_to_char(bigtext);
-					int len = strlen(bigtext)/2;
+					size_t len=0;
+					unsigned char* binary=hexstr_to_char(bigtext,&len);
 					printf("len %d:\n",len);
-					for (int i=0;i<len;i++) {
+					for (size_t i=0;i<len;i++) {
 						printf(" %d ",binary[i]);
 					}
 					printf("\n");
@@ -244,8 +280,16 @@ int arcade_send_rom(const char *xml)
         SAX_Callbacks sax;
         SAX_Callbacks_init(&sax);
 
-
         sax.all_event = xml_send_rom;
+
+	// grab the file size so we can pre-allocate buffers for inline data
+        struct stat st;
+        stat(xml, &st);
+        off_t size = st.st_size;
+
+	// create the structure we use for the XML parser
+
+	// parse
         XMLDoc_parse_file_SAX(xml, &sax, 0);
         return 0;
 }
