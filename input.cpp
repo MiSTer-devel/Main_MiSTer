@@ -2596,7 +2596,8 @@ int input_test(int getchar)
 						}
 
 						// Raphnet devices: clear uniq to prevent merging the ports
-						if (input[n].vid == 0x289b)
+						// bliss-box adapters need this as well
+						if (input[n].vid == 0x289b || input[n].vid == 0x16d0)
 						{
 							memset(input[n].uniq, 0, sizeof(input[n].uniq));
 						}
