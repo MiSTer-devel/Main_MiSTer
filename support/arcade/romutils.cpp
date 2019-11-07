@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <ctype.h>
 
 #include "sxmlc.h"
 
@@ -33,7 +32,9 @@ unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
     const char *ptr = hexstr;
     while (*ptr) {
             // check to see if we have a space
-	    while (isspace(*ptr)) ptr++;
+	    while (*ptr=='\n' || *ptr=='\r' || *ptr==' ' || *ptr=='\t' || *ptr==9 /*horiz tab*/) ptr++;
+	    if (*ptr==0) break;
+
             // pull two characters off
 	    int val1= (*ptr % 32 + 9) % 25 * 16;
 	    ptr++;
