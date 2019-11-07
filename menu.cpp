@@ -2135,13 +2135,11 @@ void HandleUI(void)
 		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
 		if (is_menu_core())
 		{
-			OsdWrite(7, "        Space \x16 Undefine");
 			OsdWrite(8, "          Esc \x16 Cancel");
 			OsdWrite(9, "        Enter \x16 Finish");
 		}
 		else
 		{
-			OsdWrite(7, "   Space/Menu \x16 Undefine");
 			OsdWrite(8, "    Menu-hold \x16 Cancel");
 			OsdWrite(9, "        Enter \x16 Finish");
 		}
@@ -2167,10 +2165,13 @@ void HandleUI(void)
 				break;
 			}
 
+			if (is_menu_core() && !get_map_button()) OsdWrite(7);
+
 			const char* p = 0;
 			if (get_map_button() < 0)
 			{
 				strcpy(s, joy_ana_map[get_map_button() + 6]);
+				OsdWrite(7, "        Space \x16 Skip");
 			}
 			else if (get_map_button() < DPAD_NAMES)
 			{
@@ -2291,6 +2292,7 @@ void HandleUI(void)
 					sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
 					if (get_map_button() > 0)
 					{
+						OsdWrite(7, get_map_type() ? "   Space/Menu \x16 Undefine" : "        Space \x16 Undefine");
 						if (!get_map_type()) OsdWrite(9);
 					}
 					OsdWrite(5, s);
