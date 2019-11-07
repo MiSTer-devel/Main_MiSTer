@@ -2135,13 +2135,13 @@ void HandleUI(void)
 		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
 		if (is_menu_core())
 		{
-			OsdWrite(7, "        Space \x16 Skip/Remove");
+			OsdWrite(7, "        Space \x16 Undefine");
 			OsdWrite(8, "          Esc \x16 Cancel");
 			OsdWrite(9, "        Enter \x16 Finish");
 		}
 		else
 		{
-			OsdWrite(7, "   Space/Menu \x16 Skip/Remove");
+			OsdWrite(7, "   Space/Menu \x16 Undefine");
 			OsdWrite(8, "    Menu-hold \x16 Cancel");
 			OsdWrite(9, "        Enter \x16 Finish");
 		}
