@@ -7,7 +7,6 @@
 #include <ctype.h>
 
 #include "DiskImage.h"
-#include "file_io.h"
 
 #define ERR_OPEN        "Error: can't open source file"
 #define ERR_GETLEN      "Error: can't get file length!"
@@ -26,6 +25,186 @@
 #define STR_CREATEDISKNAME "MiSTer    "
 
 char errsect[] = "ERROR: THIS SECTOR NOT FOUND OR IN NON TR-DOS FORMAT!";
+
+enum TDiskImageType { DIT_UNK, DIT_SCL, DIT_FDI, DIT_TD0, DIT_UDI, DIT_HOB, DIT_FDD };
+
+struct VGFIND_TRACK
+{
+	unsigned char *TrackPointer;
+	unsigned char *ClkPointer;
+	unsigned int TrackLength;
+	bool FoundTrack;
+};
+
+
+struct VGFIND_ADM
+{
+	unsigned char* TrackPointer;
+	unsigned char* ClkPointer;
+	unsigned int TrackLength;
+
+	unsigned char *ADMPointer;
+	unsigned int ADMLength;
+
+	unsigned int MarkedOffsetADM;
+	unsigned int OffsetADM;
+	unsigned int OffsetEndADM;
+	bool FoundADM;
+	bool CRCOK;
+};
+
+
+struct VGFIND_SECTOR
+{
+	VGFIND_ADM vgfa;
+
+	unsigned char *SectorPointer;
+	unsigned int SectorLength;
+
+	unsigned int MarkedOffsetSector;
+	unsigned int OffsetSector;
+	unsigned int OffsetEndSector;
+	bool FoundDATA;
+	bool CRCOK;
+	unsigned char DataMarker;
+};
+
+
+class TDiskImage
+{
+	unsigned int FTrackLength[256][256];
+	unsigned char* FTracksPtr[256][256][2];
+
+	TDiskImageType FType;
+
+	unsigned short MakeVGCRC(unsigned char *data, unsigned long length);
+public:
+	bool Changed;
+
+	bool ReadOnly;
+	bool DiskPresent;
+	unsigned char MaxTrack;
+	unsigned char MaxSide;
+
+	TDiskImage();
+	~TDiskImage();
+
+	bool FindTrack(unsigned char CYL, unsigned char SIDE, VGFIND_TRACK *vgft);
+	bool FindADMark(unsigned char CYL, unsigned char SIDE,
+		unsigned int FromOffset,
+		VGFIND_ADM *vgfa);
+	bool FindSector(unsigned char CYL, unsigned char SIDE,
+		unsigned char SECT,
+		VGFIND_SECTOR *vgfs, unsigned int FromOffset = 0);
+	void ApplySectorCRC(VGFIND_SECTOR vgfs);
+
+
+	void Open(const char *filename, bool ReadOnly);
+
+	void writeTRD(fileTYPE *hfile);
+
+	void readSCL(int hfile, bool readonly);
+	void readFDI(int hfile, bool readonly);
+	void readUDI(int hfile, bool readonly);
+	void readTD0(int hfile, bool readonly);
+	void readFDD(int hfile, bool readonly);
+	void readHOB(int hfile);
+
+	void formatTRDOS(unsigned int tracks, unsigned int sides);
+
+	void ShowError(const char *str);
+};
+
+#pragma pack(1)
+struct UDI_HEADER               // 16 bytes
+{
+	unsigned char ID[4];
+	unsigned long UnpackedLength;
+	unsigned char Version;
+	unsigned char MaxCylinder;
+	unsigned char MaxSide;
+	unsigned char _zero;
+	unsigned long ExtHdrLength;
+};
+
+struct TD0_MAIN_HEADER          // 12 bytes
+{
+	char ID[2];                  // +0:  "TD" - 'Normal'; "td" - packed LZH ('New Advanced data compression')
+	unsigned char __t;           // +2:  = 0x00
+	unsigned char __1;           // +3:  ???
+	unsigned char Ver;           // +4:  Source version  (1.0 -> 10, ..., 2.1 -> 21)
+	unsigned char __2;           // +5:  ???
+	unsigned char DiskType;      // +6:  Source disk type
+	unsigned char Info;          // +7:  D7-наличие image info
+	unsigned char DataDOS;       // +8:  if(=0)'All sectors were copied', else'DOS Allocated sectors were copied'
+	unsigned char ChkdSides;     // +9:  if(=1)'One side was checked', else'Both sides were checked'
+	unsigned short CRC;          // +A:  CRC хидера TD0_MAIN_HEADER (кроме байт с CRC)
+};
+
+struct TD0_INFO_DATA             // 10 байт без строки коментария...
+{
+	unsigned short CRC;          // +0:  CRC для структуры COMMENT_DATA (без байтов CRC)
+	unsigned short strLen;       // +2:  Длина строки коментария
+	unsigned char Year;          // +4:  Дата создания - год (1900 + X)
+	unsigned char Month;         // +5:  Дата создания - месяц (Январь=0, Февраль=1,...)
+	unsigned char Day;           // +6:  Дата создания - число
+	unsigned char Hours;         // +7:  Время создания - часы
+	unsigned char Minutes;       // +8:  Время создания - минуты
+	unsigned char Seconds;       // +9:  Время создания - секунды
+};
+
+struct TD0_TRACK_HEADER         // 4 bytes
+{
+	unsigned char SectorCount;
+	unsigned char Track;
+	unsigned char Side;
+	unsigned char CRCL;
+};
+
+struct TD0_SECT_HEADER          // 8 bytes
+{
+	unsigned char ADRM[6];
+	unsigned short DataLength;
+};
+
+struct FDD_MAIN_HEADER
+{
+	char ID[30];                /* сигнатура */
+	unsigned char MaxTracks;    /* число треков (цилиндров) */
+	unsigned char MaxHeads;     /* число головок (1 или 2) */
+	long diskIndex;             /* unused */
+	long DataOffset[512 * 2];     /* смещение в файле к структурам заголовков */
+								/* треков       */
+};
+
+struct FDD_TRACK_HEADER
+{
+	unsigned char trkType;      /* unused */
+	unsigned char SectNum;      /* число секторов на треке */
+	struct
+	{
+		/* заголовок сектора */
+		unsigned char trk;     /* номер трека */
+		unsigned char side;    /* номер стороны */
+							   /* 7 бит этого байта указывает бит a */
+		unsigned char sect;    /* номер сектора */
+		unsigned char size;    /* размер сектора (код) */
+		long SectPos;          /* смещение в файле к данным сектора */
+	} sect[256];
+};
+
+
+struct TRDOS_DIR_ELEMENT        // 16 bytes
+{
+	char FileName[8];
+	char Type;
+	unsigned short Start;
+	unsigned short Length;
+	unsigned char SecLen;
+	unsigned char FirstSec;
+	unsigned char FirstTrk;
+};
+#pragma pack()
 
 static const unsigned char sbootimage[] = {
 	0x00, 0x01, 0x1a, 0x00, 0xf9, 0xc0, 0xb0, 0x22, 0x31, 0x35, 0x36, 0x31, 0x39, 0x22, 0x3a, 0xea,
@@ -2999,6 +3178,214 @@ unsigned unpack_lzh(unsigned char *src, unsigned size, unsigned char *buf)
 		}
 	}
 	return count;
+}
+//--------------------------------------------------------------------------
+
+#define VOLUME_NUMBER 254
+
+#define TRACKS 35
+#define SECTORS 16
+#define SECTOR_SIZE 256
+#define DOS_TRACK_uint8_tS (SECTORS * SECTOR_SIZE)
+
+#define RAW_TRACK_uint8_tS 0x1A00
+
+static uint8_t *target; /* Where to write in the raw_track buffer */
+
+#define write_byte(x) (*target++ = (x))
+
+static uint8_t GCR_encoding_table[64] = {
+  0x96, 0x97, 0x9A, 0x9B, 0x9D, 0x9E, 0x9F, 0xA6,
+  0xA7, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF, 0xB2, 0xB3,
+  0xB4, 0xB5, 0xB6, 0xB7, 0xB9, 0xBA, 0xBB, 0xBC,
+  0xBD, 0xBE, 0xBF, 0xCB, 0xCD, 0xCE, 0xCF, 0xD3,
+  0xD6, 0xD7, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE,
+  0xDF, 0xE5, 0xE6, 0xE7, 0xE9, 0xEA, 0xEB, 0xEC,
+  0xED, 0xEE, 0xEF, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6,
+  0xF7, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF };
+
+int	Swap_Bit[4] = { 0, 2, 1, 3 }; /* swap lower 2 bits */
+static uint8_t	GCR_buffer[256];
+static uint8_t	GCR_buffer2[86];
+
+/* physical sector no. to DOS 3.3 logical sector no. table */
+static int	Logical_Sector[16] = {
+  0x0, 0x7, 0xE, 0x6, 0xD, 0x5, 0xC, 0x4,
+  0xB, 0x3, 0xA, 0x2, 0x9, 0x1, 0x8, 0xF };
+
+static int	Logical_Sector_po[16] = {
+  0x0, 0xE, 0xD, 0xC, 0xB, 0xA, 0x9, 0x8,
+  0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1, 0xF };
+
+/*
+ * write an FM encoded value, used in writing address fields
+ */
+static void FM_encode(uint8_t data)
+{
+	write_byte((data >> 1) | 0xAA);
+	write_byte(data | 0xAA);
+}
+
+/*
+ * Write 0xFF sync bytes
+ */
+static void write_sync(int length)
+{
+	while (length--) write_byte(0xFF);
+}
+
+static void write_address_field(int volume, int track, int sector)
+{
+	/*
+	 * write address mark
+	 */
+	write_byte(0xD5);
+	write_byte(0xAA);
+	write_byte(0x96);
+
+	/*
+	 * write Volume, Track, Sector & Check-sum
+	 */
+	FM_encode(volume);
+	FM_encode(track);
+	FM_encode(sector);
+	FM_encode(volume ^ track ^ sector);
+
+	/*
+	 * write epilogue
+	 */
+	write_byte(0xDE);
+	write_byte(0xAA);
+	write_byte(0xEB);
+}
+
+/*
+ * 6-and-2 group encoding: the heart of the "nibblization" procedure
+ */
+static void encode62(uint8_t *page)
+{
+	int i, j;
+
+	/* 86 * 3 = 258, so the first two byte are encoded twice */
+	GCR_buffer2[0] = Swap_Bit[page[1] & 0x03];
+	GCR_buffer2[1] = Swap_Bit[page[0] & 0x03];
+
+	/* save higher 6 bits in GCR_buffer and lower 2 bits in GCR_buffer2 */
+	for (i = 255, j = 2; i >= 0; i--, j = j == 85 ? 0 : j + 1) {
+		GCR_buffer2[j] = (GCR_buffer2[j] << 2) | Swap_Bit[page[i] & 0x03];
+		GCR_buffer[i] = page[i] >> 2;
+	}
+
+	/* clear off higher 2 bits of GCR_buffer2 set in the last call */
+	for (i = 0; i < 86; i++)
+		GCR_buffer2[i] &= 0x3f;
+}
+
+static void write_data_field(uint8_t *page)
+{
+	int	i;
+	uint8_t	last, checksum;
+
+	encode62(page);
+
+	/* write prologue */
+	write_byte(0xD5);
+	write_byte(0xAA);
+	write_byte(0xAD);
+
+	/* write GCR encoded data */
+	for (i = 0x55, last = 0; i >= 0; --i) {
+		checksum = last ^ GCR_buffer2[i];
+		write_byte(GCR_encoding_table[checksum]);
+		last = GCR_buffer2[i];
+	}
+	for (i = 0; i < 256; ++i) {
+		checksum = last ^ GCR_buffer[i];
+		write_byte(GCR_encoding_table[checksum]);
+		last = GCR_buffer[i];
+	}
+
+	/* write checksum and epilogue */
+	write_byte(GCR_encoding_table[last]);
+	write_byte(0xDE);
+	write_byte(0xAA);
+	write_byte(0xEB);
+}
+
+int dsk2nib(const char *name, fileTYPE *f)
+{
+	int len = strlen(name);
+	int po = 0;
+
+	if (len > 3 && !strcasecmp(name + len - 3, ".po"))
+	{
+		po = 1;
+	}
+	else if (!(len > 4 && !strcasecmp(name + len - 4, ".dsk")) && !(len > 3 && !strcasecmp(name + len - 3, ".do")))
+	{
+		return 0;
+	}
+
+	static uint8_t dos_track[SECTORS * SECTOR_SIZE]; // , pro_track[SECTORS * SECTOR_SIZE];
+	static uint8_t raw_track[RAW_TRACK_uint8_tS];
+
+	fileTYPE disk_file = {};
+
+	if (!FileOpen(&disk_file, name))
+	{
+		printf("Unable to mount disk file \"%s\"\n", name);
+		return 0;
+	}
+
+	if (!FileOpenEx(f, "vtrd", -1))
+	{
+		FileClose(&disk_file);
+		printf("ERROR: fail to create /vtrd\n");
+		return 0;
+	}
+
+	/* Read, convert, and write each track */
+	for (int track = 0; track < TRACKS; ++track)
+	{
+		if (FileReadAdv(&disk_file, dos_track, DOS_TRACK_uint8_tS) != DOS_TRACK_uint8_tS)
+		{
+			printf("Unexpected end of disk data\n");
+			FileClose(&disk_file);
+			FileClose(f);
+			return 0;
+		}
+
+		target = raw_track;
+
+		for (int sector = 0; sector < SECTORS; sector++)
+		{
+			int sec = po ? Logical_Sector_po[sector] : sector;
+
+			write_sync(38);    /* Inter-sector gap */
+			write_address_field(VOLUME_NUMBER, track, sector);
+			write_sync(8);
+			write_data_field(dos_track + Logical_Sector[sec] * SECTOR_SIZE);
+		}
+
+		/* Pad rest of buffer with sync bytes */
+		while (target != &raw_track[RAW_TRACK_uint8_tS]) write_byte(0xff);
+
+		if (FileWriteAdv(f, raw_track, RAW_TRACK_uint8_tS) != RAW_TRACK_uint8_tS)
+		{
+			printf("Error writing to /vtrd file\n");
+			FileClose(&disk_file);
+			FileClose(f);
+			return 0;
+		}
+	}
+
+	FileClose(&disk_file);
+
+	f->size = FileGetSize(f);
+	FileSeekLBA(f, 0);
+	printf("dsk2nib: vtrd size=%llu.\n", f->size);
+
+	return 1;
 }
 
 //--------------------------------------------------------------------------

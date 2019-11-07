@@ -71,7 +71,7 @@ static int spi_open(int speed, int mode)
 	int fd ;
 	mode &= 3;	// Mode is 0, 1, 2 or 3
 
-	if ((fd = open ("/dev/spidev32766.0", O_RDWR)) < 0)
+	if ((fd = open ("/dev/spidev1.0", O_RDWR)) < 0)
 	{
 		printf("Unable to open SPI device: %s\n", strerror (errno));
 		return -1;

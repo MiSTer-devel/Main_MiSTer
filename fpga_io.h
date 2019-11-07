@@ -15,6 +15,7 @@ int fpga_gpi_read();
 
 void fpga_set_led(uint32_t on);
 int  fpga_get_buttons();
+int fpga_get_io_type();
 
 void fpga_core_reset(int reset);
 void fpga_core_write(uint32_t offset, uint32_t value);

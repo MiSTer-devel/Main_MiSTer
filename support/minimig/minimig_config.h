@@ -4,6 +4,15 @@
 
 #include "../../file_io.h"
 
+#define CONFIG_TURBO     1
+#define CONFIG_NTSC      2
+#define CONFIG_A1000     4
+#define CONFIG_ECS       8
+#define CONFIG_AGA       16
+
+#define CONFIG_FLOPPY1X  0
+#define CONFIG_FLOPPY2X  1
+
 typedef struct
 {
 	unsigned char lores;
@@ -53,5 +62,13 @@ void minimig_set_kickstart(char *name);
 
 void minimig_set_adjust(char n);
 char minimig_get_adjust();
+
+void minimig_ConfigVideo(unsigned char scanlines);
+void minimig_ConfigAudio(unsigned char audio);
+void minimig_ConfigMemory(unsigned char memory);
+void minimig_ConfigCPU(unsigned char cpu);
+void minimig_ConfigChipset(unsigned char chipset);
+void minimig_ConfigFloppy(unsigned char drives, unsigned char speed);
+void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask);
 
 #endif
