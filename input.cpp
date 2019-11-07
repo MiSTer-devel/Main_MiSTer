@@ -1256,7 +1256,7 @@ void finish_map_setting(int dismiss)
 	{
 		for (int i = 0; i < NUMDEV; i++) input[i].has_map = 0;
 
-		if (!dismiss) FileSaveConfig(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+		if (!dismiss) FileSaveJoymap(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 		if (is_menu_core()) input[mapping_dev].has_mmap = 0;
 	}
 }
@@ -1727,7 +1727,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].has_mmap)
 	{
-		if (!FileLoadConfig(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
+		if (!FileLoadJoymap(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 		{
 			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
 			input[dev].has_mmap++;
@@ -1738,7 +1738,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].has_map)
 	{
-		if (!FileLoadConfig(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
+		if (!FileLoadJoymap(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
 			if (!is_menu_core())
