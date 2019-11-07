@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <ctype.h>
 
 #include "sxmlc.h"
 
@@ -16,6 +17,7 @@
  * 00 01 02
  * 000102
  * 00 01 2 03
+ * 0001 0203
  *
  * and return an array and a length of binary values
  *
@@ -30,6 +32,8 @@ unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
     // point to the beginning of the array
     const char *ptr = hexstr;
     while (*ptr) {
+            // check to see if we have a space
+	    while (isspace(*ptr)) ptr++;
             // pull two characters off
 	    int val1= (*ptr % 32 + 9) % 25 * 16;
 	    ptr++;
@@ -42,8 +46,6 @@ unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
 	    int val2= (*ptr % 32 + 9) % 25;
 	    ptr++;
             chrs[dest++] = val1+val2;
-            // check to see if we have a space
-            if (*ptr == ' ') ptr++;
     }
     chrs[dest]=0;
     *out_len = dest; /* dest is 0 based, so we don't need to subtract 1*/
@@ -99,6 +101,7 @@ struct arc_struct {
 	char dtdt[kBigTextSize];
 	int offset;
 	int length;
+	int repeat;
 	buffer_data *data;
 };
 
@@ -127,8 +130,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
         case XML_EVENT_START_NODE:
 		buffer_destroy(arc_info->data);
 		arc_info->data=buffer_init(kBigTextSize);
+		arc_info->partname[0]=0;
+		arc_info->dtdt[0]=0;
 		arc_info->offset=0;
 		arc_info->length=-1;
+		arc_info->repeat=1;
 		printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
                 for (int i = 0; i < node->n_attributes; i++)
                         {
@@ -162,6 +168,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			   {
 				   arc_info->length=atoi(node->attributes[i].value);
 			   }
+			   if (!strcasecmp(node->attributes[i].name,"repeat") && !strcasecmp(node->tag,"part"))
+			   {
+				   arc_info->repeat=atoi(node->attributes[i].value);
+			   }
                         }
 
                 break;
@@ -179,20 +189,23 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		if (!strcasecmp(node->tag,"part")) 
 		{
 			char fname[kBigTextSize*2+16];
-			int start,length;
+			int start,length,repeat;
+			repeat=arc_info->repeat;
 			start=arc_info->offset;
 			length=0;
-			if (length>0) length = arc_info->length;
-			printf("data[%s]\n",arc_info->data->content);
+			if (arc_info->length>0) length = arc_info->length;
+			if (arc_info->data->length) printf("data[%s]\n",arc_info->data->content);
 			printf("partname[%s]\n",arc_info->partname);
 			printf("zipname [%s]\n",arc_info->zipname);
 			printf("offset[%d]\n",arc_info->offset);
 			printf("length[%d]\n",arc_info->length);
+			printf("repeat[%d]\n",arc_info->repeat);
 			sprintf(fname,"arcade/mame/%s/%s",arc_info->zipname,arc_info->partname);
 			//user_io_file_tx_body_filepart(getFullPath(fname),0,0);
 			if (strlen(arc_info->partname)) {
 			        printf("user_io_file_tx_body_filepart(const char *name[%s],int start[%d], int len[%d])\n",fname,start,length);
-				user_io_file_tx_body_filepart(fname,start,length);
+				for (int i=0;i<repeat;i++)
+					user_io_file_tx_body_filepart(fname,start,length);
 			}
 			else // we have binary data?
 			{
@@ -206,7 +219,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 						printf(" %d ",binary[i]);
 					}
 					printf("\n");
-				        user_io_file_tx_body(binary,len);
+					for (int i=0;i<repeat;i++)
+				       		user_io_file_tx_body(binary,len);
 					if (binary) free(binary);
 				}
 			}

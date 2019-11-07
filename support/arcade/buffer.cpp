@@ -55,6 +55,7 @@ buffer_data * buffer_init(unsigned int initial_size) {
     
     // allocate the buffer space
     buffer->content = (char *)malloc(sizeof(char) * initial_size);
+    buffer->content[0]=0;
     if (buffer->content == NULL) {
         // can't allocate the buffer, therefore we need to clean everything up
         free(buffer);
