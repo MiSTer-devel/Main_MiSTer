@@ -18,7 +18,6 @@ INCLUDE	= -I./
 INCLUDE	+= -I./support/minimig
 INCLUDE	+= -I./lib/libco
 INCLUDE	+= -I./lib/miniz
-INCLUDE	+= -I./lib/base64-simple
 
 PRJ = MiSTer
 C_SRC =   $(wildcard *.c) \
