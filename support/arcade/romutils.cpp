@@ -4,7 +4,6 @@
 #include <sys/stat.h>
 
 #include "sxmlc.h"
-#include "base64simple.h"
 
 #include "../../user_io.h"
 

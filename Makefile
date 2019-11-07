@@ -23,8 +23,7 @@ INCLUDE	+= -I./lib/base64-simple
 PRJ = MiSTer
 C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/miniz/*.c) \
-          lib/libco/arm.c \
-          lib/base64-simple/libbase64simple.c
+          lib/libco/arm.c 
 
 CPP_SRC = $(wildcard *.cpp) \
           $(wildcard ./support/minimig/*.cpp) \
