@@ -543,6 +543,14 @@ int FileSaveConfig(const char *name, void *pBuffer, int size)
 	return FileSave(path, pBuffer, size);
 }
 
+int FileSaveJoymap(const char *name, void *pBuffer, int size)
+{
+	char path[256] = { CONFIG_DIR"/inputs/" };
+	FileCreatePath(path);
+	strcat(path, name);
+	return FileSave(path, pBuffer, size);
+}
+
 int FileLoad(const char *name, void *pBuffer, int size)
 {
 	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
@@ -587,6 +595,16 @@ int FileLoadConfig(const char *name, void *pBuffer, int size)
 	char path[256] = { CONFIG_DIR"/" };
 	strcat(path, name);
 	return FileLoad(path, pBuffer, size);
+}
+
+int FileLoadJoymap(const char *name, void *pBuffer, int size)
+{
+	char path[256] = { CONFIG_DIR"/inputs/" };
+	strcat(path, name);
+	int ret = FileLoad(path, pBuffer, size);
+	if (!ret)
+		return FileLoadConfig(name, pBuffer, size);
+	return ret;
 }
 
 int FileExists(const char *name)

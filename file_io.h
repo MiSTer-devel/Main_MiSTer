@@ -88,6 +88,9 @@ int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 t
 #define CONFIG_DIR "config"
 int FileSaveConfig(const char *name, void *pBuffer, int size);
 int FileLoadConfig(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
+int FileSaveJoymap(const char *name, void *pBuffer, int size);
+int FileLoadJoymap(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
+
 
 void AdjustDirectory(char *path);
 int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix = NULL);
