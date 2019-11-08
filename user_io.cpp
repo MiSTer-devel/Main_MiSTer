@@ -692,7 +692,7 @@ void user_io_init(const char *path, const char *xml)
 	disable_osd = 0;
 
 	if (strlen(xml)) {
-		printf("USER_IO_INIT got XML: [%s]\n",xml);
+		printf("USER_IO_INIT got XML: [%s] [%s]\n",path,xml);
 	}
 
 	memset(sd_image, 0, sizeof(sd_image));
@@ -855,8 +855,10 @@ void user_io_init(const char *path, const char *xml)
 
                                         /* AJS -- NOT SURE THIS IS THE BEST PLACE */
 	                                if (strlen(xml)) {
+						//sprintf(mainpath, "%s/%s", user_io_get_core_path(), xml);
 		                                printf("USER_IO_INIT got XML: [%s]\n",xml);
-						arcade_send_rom(xml);
+		                                //printf("USER_IO_INIT got XML: [%s]\n",mainpath);
+						arcade_send_rom(getFullPath(xml));
 	                                }
 
 					if (is_cpc_core())

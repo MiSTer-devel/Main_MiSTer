@@ -322,7 +322,7 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 			strcat(SelectedPath, "/");
 			strcat(SelectedPath, get_rbf_name());
 		}
-		pFileExt = "RBFXML";
+		pFileExt = "RBFMRA";
 	}
 	else if (Options & SCANO_TXT)
 	{
@@ -4452,14 +4452,15 @@ void HandleUI(void)
 				break;
 			}
 		}
-		if (!strcasecmp(".xml",&(SelectedRBF[strlen(SelectedRBF) - 4]))) 
+		if (!strcasecmp(".mra",&(SelectedRBF[strlen(SelectedRBF) - 4]))) 
 		{
 			char rbfname[4096];
 			char rbfpath[4096];
-			fprintf(stderr,"XML FILE LOADED - write code\n");
+			fprintf(stderr,"MRA FILE LOADED - write code\n");
 			// find the RBF file from the XML
-			arcade_scan_xml_for_rbf(SelectedRBF,rbfname);
-			fprintf(stderr,"XML rbf: [%s]\n",rbfname);
+			arcade_scan_xml_for_rbf(getFullPath(SelectedRBF),rbfname);
+			fprintf(stderr,"MRA SelectedRBF: [%s]\n",SelectedRBF);
+			fprintf(stderr,"MRA rbf: [%s]\n",rbfname);
 			sprintf(rbfpath,"arcade/%s",rbfname);
 			fpga_load_rbf(getFullPath(rbfpath),NULL,SelectedRBF);
 		}
