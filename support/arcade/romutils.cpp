@@ -183,7 +183,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
                 break;
         case XML_EVENT_TEXT:
 		buffer_append(arc_info->data, text);
-		printf("XML_EVENT_TEXT: text [%s]\n",text);
+		//printf("XML_EVENT_TEXT: text [%s]\n",text);
 		break;
         case XML_EVENT_END_NODE:
 		printf("XML_EVENT_END_NODE: tag [%s]\n",node->tag );
@@ -201,7 +201,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			start=arc_info->offset;
 			length=0;
 			if (arc_info->length>0) length = arc_info->length;
-			if (arc_info->data->length) printf("data[%s]\n",arc_info->data->content);
+			//if (arc_info->data->length) printf("data[%s]\n",arc_info->data->content);
 			printf("partname[%s]\n",arc_info->partname);
 			printf("zipname [%s]\n",arc_info->zipname);
 			printf("offset[%d]\n",arc_info->offset);
@@ -218,14 +218,14 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			{
 				if (!strcasecmp(arc_info->dtdt,"bin.hex")) 
 				{
-					printf("we have bin.hex data [%s]\n",arc_info->data->content);
+					//printf("we have bin.hex data [%s]\n",arc_info->data->content);
 					size_t len=0;
 					unsigned char* binary=hexstr_to_char(arc_info->data->content,&len);
 					printf("len %d:\n",len);
-					for (size_t i=0;i<len;i++) {
-						printf(" %d ",binary[i]);
-					}
-					printf("\n");
+					//for (size_t i=0;i<len;i++) {
+					//	printf(" %d ",binary[i]);
+					//}
+					//printf("\n");
 					for (int i=0;i<repeat;i++)
 				       		user_io_file_tx_body(binary,len);
 					if (binary) free(binary);
@@ -248,6 +248,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 static int xml_scan_rbf(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 #define kBigTextSize 4096
+	static int insiderbf=0;
 	char bigtext[kBigTextSize];
 	char *rbf = (char *)sd->user;
 
@@ -255,6 +256,9 @@ static int xml_scan_rbf(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
         {
         case XML_EVENT_START_NODE:
 		bigtext[0]=0;
+		if (!strcasecmp(node->tag,"rbf")) {
+			insiderbf=1;
+		}
 		printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
                 for (int i = 0; i < node->n_attributes; i++)
                         {
@@ -263,13 +267,16 @@ static int xml_scan_rbf(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 
                 break;
         case XML_EVENT_TEXT:
+		if (insiderbf) {
 		strncat(bigtext,text,kBigTextSize-strlen(bigtext)-1);
 		printf("XML_EVENT_TEXT: text [%s]\n",text);
+		}
 		break;
         case XML_EVENT_END_NODE:
 		if (!strcasecmp(node->tag,"rbf"))
 		{
-			printf("bigtext [%s]\n",bigtext);
+			insiderbf=0;
+			//printf("bigtext [%s]\n",bigtext);
 			strncpy(rbf,bigtext,kBigTextSize);
 			printf("got rbf tag [%s]\n",rbf);
 		}
