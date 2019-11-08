@@ -103,6 +103,7 @@ struct arc_struct {
 	int offset;
 	int length;
 	int repeat;
+	int insiderom;
 	buffer_data *data;
 };
 
@@ -136,6 +137,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		arc_info->offset=0;
 		arc_info->length=-1;
 		arc_info->repeat=1;
+	   	if (!strcasecmp(node->tag,"rom"))
+			arc_info->insiderom=1;
 		printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
                 for (int i = 0; i < node->n_attributes; i++)
                         {
@@ -149,6 +152,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			   {
 				   user_io_file_tx_start(node->attributes[i].value);
 			   }
+			   if (arc_info->insiderom) {
 			   if (!strcasecmp(node->attributes[i].name,"zip") && !strcasecmp(node->tag,"part"))
 			   {
 				   strcpy(arc_info->zipname,node->attributes[i].value);
@@ -173,6 +177,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			   {
 				   arc_info->repeat=atoi(node->attributes[i].value);
 			   }
+			   }
                         }
 
                 break;
@@ -184,10 +189,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		printf("XML_EVENT_END_NODE: tag [%s]\n",node->tag );
 		if (!strcasecmp(node->tag,"rom")) {
 			user_io_file_tx_finish();
+			arc_info->insiderom=0;
 		}
 
 		//int user_io_file_tx_body_filepart(const char *name,int start, int len)
-		if (!strcasecmp(node->tag,"part")) 
+		if (!strcasecmp(node->tag,"part") && arc_info->insiderom) 
 		{
 			char fname[kBigTextSize*2+16];
 			int start,length,repeat;
