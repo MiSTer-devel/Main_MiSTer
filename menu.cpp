@@ -2285,7 +2285,7 @@ void HandleUI(void)
 					sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
 					if (get_map_button() > 0)
 					{
-						OsdWrite(7, get_map_type() ? "   Space/Menu \x16 Undefine" : "        Space \x16 Undefine");
+						OsdWrite(7, (get_map_type() && !is_menu_core()) ? "   Space/Menu \x16 Undefine" : "        Space \x16 Undefine");
 						if (!get_map_type()) OsdWrite(9);
 					}
 					OsdWrite(5, s);
