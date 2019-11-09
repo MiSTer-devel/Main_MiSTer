@@ -4580,6 +4580,84 @@ void open_joystick_setup()
 	joymap_first = 1;
 }
 
+
+/*
+ * CalculateFileNameLength
+ * 
+ * This function takes a filename and length, and returns
+ * the length. It will remove the .rbf or .mra from the length
+ * based on the fs_pFileExt global
+ *
+ * If the fs_pFileExt has multiple extensions, it will look through
+ * each to try to find a match.
+ */
+int CalculateFileNameLength(char *name,int len)
+{
+	
+	char *ext = fs_pFileExt;
+	int found=0;
+	/* find the extension on the end of the name*/
+        char *fext = strrchr(name, '.');
+	/* we want to push past the period*/
+        if (fext) fext++;
+	/* the default length is the whole string */
+	len = strlen(name); // get name length
+
+	/* walk through each extension and see if it matches */
+        while (!found && *ext && fext)
+        {
+             char e[4];
+             memcpy(e, ext, 3);
+             if (e[2] == ' ')
+             {
+                 e[2] = 0;
+                 if (e[1] == ' ') e[1] = 0;
+             }
+
+             e[3] = 0;
+             found = 1;
+             for (int i = 0; i < 4; i++)
+             {
+                  if (e[i] == '*') break;
+                  if (e[i] == '?' && fext[i]) continue;
+
+                  if (tolower(e[i]) != tolower(fext[i])) found = 0;
+
+                  if (!e[i] || !found) break;
+             }
+             if (found) break;
+
+             if (strlen(ext) < 3) break;
+             ext += 3;
+       }
+
+       /* if we haven't found a match, then the answer is the full length of the string */
+       if (!found) return len;
+
+       /* we have a match, now we need to handle extensions that are less than 3 characters */
+       char e[5];
+       memcpy(e + 1, ext, 3);
+       /* 0x20 is a space in ascii*/
+       if (e[3] == 0x20)
+       {
+           e[3] = 0;
+           if (e[2] == 0x20)
+           {
+               e[2] = 0;
+           }
+       }
+       e[0] = '.';
+       e[4] = 0;
+       int l = strlen(e);
+
+       if ((len>l) && !strncasecmp(name + len - l, e, l)) len -= l;
+
+       //printf("len: %d l: %d str[%s] e[%s] ext[%s]\n",len,l,name,e,ext);
+       return len;
+
+}
+
+
 void ScrollLongName(void)
 {
 	// this function is called periodically when file selection window is displayed
@@ -4591,23 +4669,7 @@ void ScrollLongName(void)
 	len = strlen(flist_SelectedItem()->altname); // get name length
 	if (flist_SelectedItem()->de.d_type == DT_REG) // if a file
 	{
-		if (fs_ExtLen <= 3)
-		{
-			char e[5];
-			memcpy(e + 1, fs_pFileExt, 3);
-			if (e[3] == 0x20)
-			{
-				e[3] = 0;
-				if (e[2] == 0x20)
-				{
-					e[2] = 0;
-				}
-			}
-			e[0] = '.';
-			e[4] = 0;
-			int l = strlen(e);
-			if ((len>l) && !strncasecmp(flist_SelectedItem()->altname + len - l, e, l)) len -= l;
-		}
+		len=CalculateFileNameLength(flist_SelectedItem()->altname,len);
 	}
 
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
@@ -4616,6 +4678,8 @@ void ScrollLongName(void)
 
 	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
 }
+
+
 
 void PrintFileName(char *name, int row, int maxinv)
 {
@@ -4688,26 +4752,7 @@ void PrintDirectory(void)
 
 			if (!(flist_DirItem(k)->de.d_type == DT_DIR)) // if a file
 			{
-				if (fs_ExtLen <= 3)
-				{
-					char e[5];
-					memcpy(e + 1, fs_pFileExt, 3);
-					if (e[3] == 0x20)
-					{
-						e[3] = 0;
-						if (e[2] == 0x20)
-						{
-							e[2] = 0;
-						}
-					}
-					e[0] = '.';
-					e[4] = 0;
-					int l = strlen(e);
-					if ((len>l) && !strncasecmp(flist_DirItem(k)->altname + len - l, e, l))
-					{
-						len -= l;
-					}
-				}
+				len=CalculateFileNameLength(flist_DirItem(k)->altname,len);
 			}
 
 			char *p = 0;
