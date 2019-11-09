@@ -16,6 +16,13 @@
 #include "minimig_hdd.h"
 #include "minimig_config.h"
 
+const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M" };
+const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
+const char *config_memory_fast_msg[][8] = { { "none", "2M", "4M", "8M", "8M",    "8M",    "8M",   "8M" } ,
+											{ "none", "2M", "4M", "8M", "256M", "384M", "256M", "256M" } };
+const char *config_cpu_msg[] = { "68000", "68010", "-----","68020" };
+const char *config_chipset_msg[] = { "OCS-A500", "OCS-A1000", "ECS", "---", "---", "---", "AGA", "---" };
+
 typedef struct
 {
 	char            id[8];
@@ -302,7 +309,7 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	printf("Chip RAM size : %s\n", config_memory_chip_msg[memcfg & 0x03]);
 	printf("Slow RAM size : %s\n", config_memory_slow_msg[memcfg >> 2 & 0x03]);
-	printf("Fast RAM size : %s\n", config_memory_fast_msg[((memcfg >> 4) & 0x03) | ((memcfg & 0x80) >> 5)]);
+	printf("Fast RAM size : %s\n", config_memory_fast_msg[(minimig_config.cpu >> 1) & 1][((memcfg >> 4) & 0x03) | ((memcfg & 0x80) >> 5)]);
 
 	printf("Floppy drives : %u\n", minimig_config.floppy.drives + 1);
 	printf("Floppy speed  : %s\n", minimig_config.floppy.speed ? "fast" : "normal");
@@ -464,9 +471,9 @@ int minimig_cfg_load(int num)
 	// print config to boot screen
 	char cfg_str[256];
 	sprintf(cfg_str, "CPU: %s, Chipset: %s, ChipRAM: %s, FastRAM: %s, SlowRAM: %s",
-			config_cpu_msg[minimig_config.cpu & 0x03], config_chipset_msg[(minimig_config.chipset >> 2) & 7],
-			config_memory_chip_msg[(minimig_config.memory >> 0) & 0x03], config_memory_fast_msg[((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5)], config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03]
-			);
+		config_cpu_msg[minimig_config.cpu & 0x03], config_chipset_msg[(minimig_config.chipset >> 2) & 7],
+		config_memory_chip_msg[(minimig_config.memory >> 0) & 0x03], config_memory_fast_msg[(minimig_config.cpu >> 1) & 1][((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5)], config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03]
+	);
 	BootPrintEx(cfg_str);
 
 	input_poll(0);

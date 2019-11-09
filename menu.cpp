@@ -177,17 +177,10 @@ const char *config_tos_mem[] = { "512 kB", "1 MB", "2 MB", "4 MB", "8 MB", "14 M
 const char *config_tos_wrprot[] = { "none", "A:", "B:", "A: and B:" };
 const char *config_tos_usb[] = { "none", "control", "debug", "serial", "parallel", "midi" };
 
-const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M"   };
-const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
-const char *config_memory_fast_msg[] = { "none", "2M",   "4M",   "8M", "256M", "384M", "256M" };
-
 const char *config_scanlines_msg[] = { "Off", "HQ2x", "CRT 25%" , "CRT 50%" , "CRT 75%" };
 const char *config_ar_msg[] = { "4:3", "16:9" };
 const char *config_blank_msg[] = { "Blank", "Blank+" };
 const char *config_dither_msg[] = { "off", "SPT", "RND", "S+R" };
-const char *config_cpu_msg[] = { "68000", "68010", "-----","68020" };
-const char *config_chipset_msg[] = { "OCS-A500", "OCS-A1000", "ECS", "---", "---", "---", "AGA", "---" };
-const char *config_turbo_msg[] = { "none", "CHIPRAM", "KICK", "BOTH" };
 const char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE FAST", "        AUTOFIRE MEDIUM", "        AUTOFIRE SLOW" };
 const char *config_cd32pad_msg[] = { "OFF", "ON" };
 const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
@@ -2994,7 +2987,7 @@ void HandleUI(void)
 		OsdWrite(6, "", 0, 0);
 
 		OsdWrite(7,  " Hard disks", menusub == 5, 0);
-		OsdWrite(8,  " Chipset", menusub == 6, 0);
+		OsdWrite(8,  " CPU & Chipset", menusub == 6, 0);
 		OsdWrite(9,  " Memory", menusub == 7, 0);
 		OsdWrite(10, " Audio & Video", menusub == 8, 0);
 		OsdWrite(11, "", 0, 0);
@@ -3474,7 +3467,7 @@ void HandleUI(void)
 					minimig_config.hardfile[2].enabled ||
 					minimig_config.hardfile[3].enabled)) ? "/HD" : "",
 				config_memory_chip_msg[minimig_config.memory & 0x03],
-				config_memory_fast_msg[((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory&0x80) >> 5)],
+				config_memory_fast_msg[(minimig_config.cpu>>1) & 1][((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory&0x80) >> 5)],
 				((minimig_config.memory >> 2) & 0x03) ? "+" : "",
 				((minimig_config.memory >> 2) & 0x03) ? config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03] : "",
 				(minimig_config.memory & 0x40) ? " HRT" : ""
@@ -3520,7 +3513,7 @@ void HandleUI(void)
 		OsdWrite(m++, s, menusub == 2, 0);
 		strcpy(s, " D-Cache        : ");
 		strcat(s, (minimig_config.cpu & 16) ? "ON" : "OFF");
-		OsdWrite(m++, s, menusub == 3, 0);
+		OsdWrite(m++, s, menusub == 3, !(minimig_config.cpu & 0xC));
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " Video          : ");
 		strcat(s, minimig_config.chipset & CONFIG_NTSC ? "NTSC" : "PAL");
@@ -3579,7 +3572,7 @@ void HandleUI(void)
 				minimig_config.cpu ^= 8;
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
-			else if (menusub == 3)
+			else if (menusub == 3 && (minimig_config.cpu & 0xC))
 			{
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_config.cpu ^= 16;
@@ -3662,7 +3655,7 @@ void HandleUI(void)
 		strcat(s, config_memory_chip_msg[minimig_config.memory & 0x03]);
 		OsdWrite(1, s, menusub == 0, 0);
 		strcpy(s, " FAST   : ");
-		strcat(s, config_memory_fast_msg[((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory&0x80) >> 5)]);
+		strcat(s, config_memory_fast_msg[(minimig_config.cpu>>1) & 1][((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory&0x80) >> 5)]);
 		OsdWrite(2, s, menusub == 1, 0);
 		strcpy(s, " SLOW   : ");
 		strcat(s, config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03]);
@@ -3696,6 +3689,7 @@ void HandleUI(void)
 			{
 				uint8_t c = (((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5))+1;
 				if (c > 5) c = 0;
+				if (!(minimig_config.cpu & 2) && c > 3) c = 0;
 				minimig_config.memory = ((c<<4) & 0x30) | ((c<<5) & 0x80) | (minimig_config.memory & ~0xB0);
 				menustate = MENU_SETTINGS_MEMORY1;
 			}

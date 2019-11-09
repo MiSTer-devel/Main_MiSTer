@@ -13,6 +13,12 @@
 #define CONFIG_FLOPPY1X  0
 #define CONFIG_FLOPPY2X  1
 
+extern const char *config_memory_chip_msg[];
+extern const char *config_memory_slow_msg[];
+extern const char *config_memory_fast_msg[][8];
+extern const char *config_cpu_msg[];
+extern const char *config_chipset_msg[];
+
 typedef struct
 {
 	unsigned char lores;
