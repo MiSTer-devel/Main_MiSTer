@@ -100,6 +100,8 @@ struct arc_struct {
 	char zipname[kBigTextSize];
 	char partname[kBigTextSize];
 	char dtdt[kBigTextSize];
+	char romname[kBigTextSize];
+	int romindex;
 	int offset;
 	int length;
 	int repeat;
@@ -138,7 +140,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		arc_info->length=-1;
 		arc_info->repeat=1;
 	   	if (!strcasecmp(node->tag,"rom"))
+		{
 			arc_info->insiderom=1;
+			arc_info->romname[0]=0;
+			arc_info->romindex=0;
+		}
 		printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
                 for (int i = 0; i < node->n_attributes; i++)
                         {
@@ -150,7 +156,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			   }
 			   if (!strcasecmp(node->attributes[i].name,"name") && !strcasecmp(node->tag,"rom"))
 			   {
-				   user_io_file_tx_start(node->attributes[i].value);
+				   strcpy(arc_info->romname,node->attributes[i].value);
+			   }
+			   if (!strcasecmp(node->attributes[i].name,"index") && !strcasecmp(node->tag,"rom"))
+			   {
+				   arc_info->romindex=atoi(node->attributes[i].value);
 			   }
 			   if (arc_info->insiderom) {
 			   if (!strcasecmp(node->attributes[i].name,"zip") && !strcasecmp(node->tag,"part"))
@@ -180,6 +190,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			   }
                         }
 
+	   	if (!strcasecmp(node->tag,"rom")) 
+		{
+		   user_io_file_tx_start(arc_info->romname,arc_info->romindex);
+		}
                 break;
         case XML_EVENT_TEXT:
 		buffer_append(arc_info->data, text);
@@ -188,7 +202,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
         case XML_EVENT_END_NODE:
 		printf("XML_EVENT_END_NODE: tag [%s]\n",node->tag );
 		if (!strcasecmp(node->tag,"rom")) {
-			user_io_file_tx_finish();
+			if (arc_info->insiderom) user_io_file_tx_finish();
 			arc_info->insiderom=0;
 		}
 
