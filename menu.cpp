@@ -4582,7 +4582,7 @@ void open_joystick_setup()
 
 
 /*
- * CalculateFileNameLength
+ * CalculateFileNameLengthWithoutExtension
  * 
  * This function takes a filename and length, and returns
  * the length. It will remove the .rbf or .mra from the length
@@ -4591,17 +4591,17 @@ void open_joystick_setup()
  * If the fs_pFileExt has multiple extensions, it will look through
  * each to try to find a match.
  */
-int CalculateFileNameLength(char *name,int len)
+int CalculateFileNameLengthWithoutExtension(char *name,char *possibleextensions)
 {
 	
-	char *ext = fs_pFileExt;
+	char *ext = possibleextensions;
 	int found=0;
+	/* the default length is the whole string */
+	int len = strlen(name);
 	/* find the extension on the end of the name*/
         char *fext = strrchr(name, '.');
-	/* we want to push past the period*/
+	/* we want to push past the period - and just have rbf instead of .rbf*/
         if (fext) fext++;
-	/* the default length is the whole string */
-	len = strlen(name); // get name length
 
 	/* walk through each extension and see if it matches */
         while (!found && *ext && fext)
@@ -4669,7 +4669,7 @@ void ScrollLongName(void)
 	len = strlen(flist_SelectedItem()->altname); // get name length
 	if (flist_SelectedItem()->de.d_type == DT_REG) // if a file
 	{
-		len=CalculateFileNameLength(flist_SelectedItem()->altname,len);
+		len=CalculateFileNameLengthWithoutExtension(flist_SelectedItem()->altname,fs_pFileExt);
 	}
 
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
@@ -4752,7 +4752,7 @@ void PrintDirectory(void)
 
 			if (!(flist_DirItem(k)->de.d_type == DT_DIR)) // if a file
 			{
-				len=CalculateFileNameLength(flist_DirItem(k)->altname,len);
+				len=CalculateFileNameLengthWithoutExtension(flist_DirItem(k)->altname,fs_pFileExt);
 			}
 
 			char *p = 0;

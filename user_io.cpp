@@ -693,11 +693,13 @@ void user_io_init(const char *path, const char *xml)
 
 	if (strlen(xml)) {
 		printf("USER_IO_INIT got XML: [%s] [%s]\n",path,xml);
+		strcpy(core_path, xml);
+	} else {
+		strcpy(core_path, path);
 	}
 
 	memset(sd_image, 0, sizeof(sd_image));
 
-	strcpy(core_path, path);
 	core_type = (fpga_core_id() & 0xFF);
 	fio_size = fpga_get_fio_size();
 	io_ver = fpga_get_io_version();
