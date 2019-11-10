@@ -1709,6 +1709,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	//check if device is a part of multifunctional device
 	if (input[dev].bind >= 0) dev = input[dev].bind;
 
+	if (ev->type == EV_KEY && !ev->code) return;
+
 	//mouse
 	if (ev->type == EV_KEY && ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK)
 	{
@@ -1760,16 +1762,19 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	int old_combo = input[dev].osd_combo;
 
-	if (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 2])
+	if (ev->type == EV_KEY)
 	{
-		if (ev->value) input[dev].osd_combo |= 2;
-		else input[dev].osd_combo &= ~2;
-	}
+		if (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 2])
+		{
+			if (ev->value) input[dev].osd_combo |= 2;
+			else input[dev].osd_combo &= ~2;
+		}
 
-	if (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1])
-	{
-		if (ev->value) input[dev].osd_combo |= 1;
-		else input[dev].osd_combo &= ~1;
+		if (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1])
+		{
+			if (ev->value) input[dev].osd_combo |= 1;
+			else input[dev].osd_combo &= ~1;
+		}
 	}
 
 	int osd_event = 0;
