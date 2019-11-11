@@ -3108,7 +3108,7 @@ void HandleUI(void)
 		OsdWrite(m++, " Startup config:");
 		for (uint i = 0; i < 10; i++)
 		{
-			const char *info = minimig_get_cfg_info(i);
+			const char *info = minimig_get_cfg_info(i, menusub != i);
 			static char name[128];
 
 			if (info)
@@ -3118,9 +3118,10 @@ void HandleUI(void)
 				char *p = strchr(name, '\n');
 				if (p) *p = 0;
 				OsdWrite(m++, name, menusub == i);
+
 				if (menusub == i && p)
 				{
-					sprintf(name, "  %s", strchr(info, '\n')+1);
+					sprintf(name, "  %s", strchr(info, '\n') + 1);
 					OsdWrite(m++, name, 1, !(menumask & (1 << i)));
 				}
 			}
@@ -3419,7 +3420,7 @@ void HandleUI(void)
 		OsdWrite(m++, " Startup config:");
 		for (uint i = 0; i < 10; i++)
 		{
-			const char *info = minimig_get_cfg_info(i);
+			const char *info = minimig_get_cfg_info(i, menusub != i);
 			static char name[128];
 
 			if (info)
@@ -3456,7 +3457,8 @@ void HandleUI(void)
 	case MENU_SAVECONFIG_2:
 		if (select)
 		{
-			sprintf(minimig_config.info, "%s/%s/%s%s %s+%s%s%s%s\n",
+			int fastcfg = ((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5);
+			sprintf(minimig_config.info, "%s/%s/%s%s %s%s%s%s%s%s\n",
 				config_cpu_msg[minimig_config.cpu & 0x03] + 2,
 				config_chipset_msg[(minimig_config.chipset >> 2) & 7],
 				minimig_config.chipset & CONFIG_NTSC ? "N" : "P",
@@ -3465,7 +3467,8 @@ void HandleUI(void)
 					minimig_config.hardfile[2].enabled ||
 					minimig_config.hardfile[3].enabled)) ? "/HD" : "",
 				config_memory_chip_msg[minimig_config.memory & 0x03],
-				config_memory_fast_msg[(minimig_config.cpu>>1) & 1][((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory&0x80) >> 5)],
+				fastcfg ? "+" : "",
+				fastcfg ? config_memory_fast_msg[(minimig_config.cpu>>1) & 1][fastcfg] : "",
 				((minimig_config.memory >> 2) & 0x03) ? "+" : "",
 				((minimig_config.memory >> 2) & 0x03) ? config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03] : "",
 				(minimig_config.memory & 0x40) ? " HRT" : ""

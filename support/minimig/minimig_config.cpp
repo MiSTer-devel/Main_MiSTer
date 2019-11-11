@@ -278,7 +278,7 @@ int minimig_cfg_save(int num)
 	return FileSaveConfig(GetConfigurationName(num, 0), &minimig_config, sizeof(minimig_config));
 }
 
-const char* minimig_get_cfg_info(int num)
+const char* minimig_get_cfg_info(int num, int label)
 {
 	char *filename = GetConfigurationName(num, 1);
 	if (!filename) return NULL;
@@ -286,7 +286,11 @@ const char* minimig_get_cfg_info(int num)
 	static mm_configTYPE tmpconf;
 	memset(&tmpconf, 0, sizeof(tmpconf));
 
-	if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf))) return tmpconf.info;
+	if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
+	{
+		return (label && !tmpconf.kickstart[sizeof(tmpconf.kickstart)-1] && tmpconf.label[0]) ? tmpconf.label : tmpconf.info;
+	}
+
 	return "";
 }
 
