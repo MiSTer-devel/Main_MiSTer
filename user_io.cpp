@@ -12,6 +12,8 @@
 #include <sys/mman.h>
 
 #include "lib/lodepng/lodepng.h"
+#include "md5.h"
+
 #include "hardware.h"
 #include "osd.h"
 #include "user_io.h"
@@ -1584,6 +1586,11 @@ static void check_status_change()
 	}
 }
 
+#define DEBUG_ROM_BINARY 0
+#if DEBUG_ROM_BINARY
+FILE *rombinary;
+#endif
+
 int user_io_file_tx_start(const char *name,unsigned char index)
 {
 	// set index byte (0=bios rom, 1-n=OSD entry index)
@@ -1604,22 +1611,31 @@ int user_io_file_tx_start(const char *name,unsigned char index)
 	DisableFpga();
 
 	file_crc = 0;
+#if DEBUG_ROM_BINARY
+	rombinary=fopen("/media/fat/this.rom","wb");
+#endif
 	return 1;
 }
-int user_io_file_tx_body(const uint8_t *buf,uint16_t chunk)
+int user_io_file_tx_body(const uint8_t *buf,uint16_t chunk,struct MD5Context *md5context)
 {
 	printf(".");
 
 	EnableFpga();
 	spi8(UIO_FILE_TX_DAT);
+
 	spi_write(buf, chunk, fio_size);
 	DisableFpga();
 
 	file_crc = crc32(file_crc, buf  ,chunk );
+	printf("md5 chunk size: %d\n",chunk);
+	if (md5context) MD5Update (md5context, buf,chunk);
+#if DEBUG_ROM_BINARY
+	fwrite(buf,1,chunk,rombinary);
+#endif
 
 	return 1;
 }
-int user_io_file_tx_body_filepart(const char *name,int start, int len)
+int user_io_file_tx_body_filepart(const char *name,int start, int len,struct MD5Context *md5context)
 {
 	char mute=0;
 	fileTYPE f = {};
@@ -1637,7 +1653,8 @@ int user_io_file_tx_body_filepart(const char *name,int start, int len)
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
-		user_io_file_tx_body(buf,chunk);
+		user_io_file_tx_body(buf,chunk,md5context);
+
 
 		bytes2send -= chunk;
 	}
@@ -1652,6 +1669,9 @@ int user_io_file_tx_finish()
 
 	printf("\n");
 	printf("CRC32: %08X\n", file_crc);
+#if DEBUG_ROM_BINARY
+	fclose(rombinary);
+#endif
 
 	// signal end of transmission
 	EnableFpga();

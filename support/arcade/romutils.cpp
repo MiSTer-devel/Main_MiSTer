@@ -6,8 +6,12 @@
 #include "sxmlc.h"
 
 #include "../../user_io.h"
+#include "../../menu.h"
 
 #include "buffer.h"
+
+
+#include "md5.h"
 /*
  * adapted from https://gist.github.com/xsleonard/7341172
  *
@@ -97,6 +101,7 @@ user_io.h:int user_io_file_tx_finish();
 
 #define kBigTextSize 4096
 struct arc_struct {
+	char md5[kBigTextSize];
 	char zipname[kBigTextSize];
 	char partname[kBigTextSize];
 	char dtdt[kBigTextSize];
@@ -107,8 +112,8 @@ struct arc_struct {
 	int repeat;
 	int insiderom;
 	buffer_data *data;
+        struct MD5Context context;
 };
-
 /*
  * AJS - TODO:
  *  DONE -- create  a structure we can pass into send_rom
@@ -144,6 +149,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->insiderom=1;
 			arc_info->romname[0]=0;
 			arc_info->romindex=0;
+			arc_info->md5[0]=0;
+                	MD5Init (&arc_info->context);
 		}
 		printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
                 for (int i = 0; i < node->n_attributes; i++)
@@ -157,6 +164,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			   if (!strcasecmp(node->attributes[i].name,"name") && !strcasecmp(node->tag,"rom"))
 			   {
 				   strcpy(arc_info->romname,node->attributes[i].value);
+			   }
+			   if (!strcasecmp(node->attributes[i].name,"md5") && !strcasecmp(node->tag,"rom"))
+			   {
+				   strcpy(arc_info->md5,node->attributes[i].value);
 			   }
 			   if (!strcasecmp(node->attributes[i].name,"index") && !strcasecmp(node->tag,"rom"))
 			   {
@@ -202,7 +213,32 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
         case XML_EVENT_END_NODE:
 		printf("XML_EVENT_END_NODE: tag [%s]\n",node->tag );
 		if (!strcasecmp(node->tag,"rom")) {
-			if (arc_info->insiderom) user_io_file_tx_finish();
+			if (arc_info->insiderom) 
+			{
+			        unsigned char checksum[16];
+				int checksumsame=1;
+				char *md5=arc_info->md5;
+				user_io_file_tx_finish();
+                		MD5Final (checksum, &arc_info->context);
+				printf("md5[%s]\n",arc_info->md5);
+				printf("md5-calc[");
+                		for (int i = 0; i < 16; i++)
+                		{
+					char hex[10];
+					snprintf(hex,10,"%02x", (unsigned int) checksum[i]);
+                        		printf ("%02x", (unsigned int) checksum[i]);
+					if (md5[0]!=hex[0] || md5[1]!=hex[1]) {
+						checksumsame=0;
+					}
+					md5+=2;
+                		}
+                		printf ("]\n");
+				if (checksumsame==0) 
+				{
+					printf("mismatch\n");
+					Info("md5 mismatch");
+				}
+			}
 			arc_info->insiderom=0;
 		}
 
@@ -225,8 +261,9 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			//user_io_file_tx_body_filepart(getFullPath(fname),0,0);
 			if (strlen(arc_info->partname)) {
 			        printf("user_io_file_tx_body_filepart(const char *name[%s],int start[%d], int len[%d])\n",fname,start,length);
-				for (int i=0;i<repeat;i++)
-					user_io_file_tx_body_filepart(fname,start,length);
+				for (int i=0;i<repeat;i++) {
+					user_io_file_tx_body_filepart(fname,start,length,&arc_info->context);
+				}
 			}
 			else // we have binary data?
 			{
@@ -235,13 +272,15 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					//printf("we have bin.hex data [%s]\n",arc_info->data->content);
 					size_t len=0;
 					unsigned char* binary=hexstr_to_char(arc_info->data->content,&len);
-					printf("len %d:\n",len);
+					//printf("len %d:\n",len);
 					//for (size_t i=0;i<len;i++) {
 					//	printf(" %d ",binary[i]);
 					//}
 					//printf("\n");
-					for (int i=0;i<repeat;i++)
-				       		user_io_file_tx_body(binary,len);
+					for (int i=0;i<repeat;i++) {
+				       		user_io_file_tx_body(binary,len,&arc_info->context);
+                				//MD5Update (&arc_info->context,binary,len);
+					}
 					if (binary) free(binary);
 				}
 			}
