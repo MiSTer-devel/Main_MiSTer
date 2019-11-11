@@ -211,10 +211,8 @@ static const char *helptexts[] =
 	0,
 	"                                Welcome to MiSTer! Use the cursor keys to navigate the menus. Use space bar or enter to select an item. Press Esc or F12 to exit the menus. Joystick emulation on the numeric keypad can be toggled with the numlock or scrlock key, while pressing Ctrl-Alt-0 (numeric keypad) toggles autofire mode.",
 	"                                Minimig can emulate an A600/A1200 IDE harddisk interface. The emulation can make use of Minimig-style hardfiles (complete disk images) or UAE-style hardfiles (filesystem images with no partition table).",
-	"                                Minimig's processor core can emulate a 68000 or 68020 processor (though the 68020 mode is still experimental.) If you're running software built for 68000, there's no advantage to using the 68020 mode, since the 68000 emulation runs just as fast.",
-	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 384 megabytes of Fast RAM. To use the HRTmon feature you will need a file on the SD card named hrtmon.rom.",
-	"                                Minimig's video features include a blur filter, to simulate the poorer picture quality on older monitors, and also scanline generation to simulate the appearance of a screen with low vertical resolution.",
-	0
+	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600) or 68020 (maximum performance) processor with transparent cache.",
+	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 384 megabytes of Fast RAM (8MB max for 68000 mode). To use the HRTmon feature you will need a file on the SD card named hrtmon.rom.",
 };
 
 static const char *info_top = "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82";
@@ -3497,8 +3495,9 @@ void HandleUI(void)
 		/******************************************************************/
 	case MENU_SETTINGS_CHIPSET1:
 		helptext = helptexts[HELPTEXT_CHIPSET];
-		menumask = 0;
+		menumask = 0xff;
 		OsdSetTitle("Chipset", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
+		parentstate = menustate;
 
 		m = 0;
 		OsdWrite(m++, "", 0, 0);
@@ -3507,84 +3506,59 @@ void HandleUI(void)
 		OsdWrite(m++, s, menusub == 0, 0);
 		strcpy(s, " Cache ChipRAM  : ");
 		strcat(s, (minimig_config.cpu & 4) ? "ON" : "OFF");
-		OsdWrite(m++, s, menusub == 1, 0);
+		OsdWrite(m++, s, menusub == 1, !(minimig_config.cpu & 0x2));
 		strcpy(s, " Cache Kickstart: ");
 		strcat(s, (minimig_config.cpu & 8) ? "ON" : "OFF");
-		OsdWrite(m++, s, menusub == 2, 0);
+		OsdWrite(m++, s, menusub == 2, !(minimig_config.cpu & 0x2));
 		strcpy(s, " D-Cache        : ");
 		strcat(s, (minimig_config.cpu & 16) ? "ON" : "OFF");
-		OsdWrite(m++, s, menusub == 3, !(minimig_config.cpu & 0xC));
+		OsdWrite(m++, s, menusub == 3, !(minimig_config.cpu & 0xC) || !(minimig_config.cpu & 0x2));
 		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " Video          : ");
-		strcat(s, minimig_config.chipset & CONFIG_NTSC ? "NTSC" : "PAL");
-		OsdWrite(m++, s, menusub == 4, 0);
 		strcpy(s, " Chipset        : ");
 		strcat(s, config_chipset_msg[(minimig_config.chipset >> 2) & 7]);
-		OsdWrite(m++, s, menusub == 5, 0);
+		OsdWrite(m++, s, menusub == 4, 0);
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " CD32 Pad       : ");
 		strcat(s, config_cd32pad_msg[(minimig_config.autofire >> 2) & 1]);
-		OsdWrite(m++, s, menusub == 6, 0);
+		OsdWrite(m++, s, menusub == 5, 0);
 		strcpy(s, " Joystick Swap  : ");
 		strcat(s, (minimig_config.autofire & 0x8)? "ON" : "OFF");
-		OsdWrite(m++, s, menusub == 7, 0);
+		OsdWrite(m++, s, menusub == 6, 0);
 		for (int i = m; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 8, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 7, 0);
 
 		menustate = MENU_SETTINGS_CHIPSET2;
 		break;
 
 	case MENU_SETTINGS_CHIPSET2:
 
-		if (down)
-		{
-			menusub = (menusub+1)%9;
-			menustate = MENU_SETTINGS_CHIPSET1;
-		}
-
-		if (up && menusub > 0)
-		{
-			if (menusub) menusub--;
-			else menusub = 8;
-			menustate = MENU_SETTINGS_CHIPSET1;
-		}
-
 		if (select)
 		{
 			if (menusub == 0)
 			{
 				menustate = MENU_SETTINGS_CHIPSET1;
-				int _config_cpu = minimig_config.cpu & 0x3;
-				_config_cpu += 1;
-				if (_config_cpu == 0x02) _config_cpu += 1;
-				minimig_config.cpu = (minimig_config.cpu & 0xfc) | (_config_cpu & 0x3);
+				minimig_config.cpu = (minimig_config.cpu & 0xfc) | ((minimig_config.cpu & 1) ? 0 : 3);
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
-			else if (menusub == 1)
+			else if (menusub == 1 && (minimig_config.cpu & 0x2))
 			{
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_config.cpu ^= 4;
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
-			else if (menusub == 2)
+			else if (menusub == 2 && (minimig_config.cpu & 0x2))
 			{
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_config.cpu ^= 8;
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
-			else if (menusub == 3 && (minimig_config.cpu & 0xC))
+			else if (menusub == 3 && (minimig_config.cpu & 0xC) && (minimig_config.cpu & 0x2))
 			{
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_config.cpu ^= 16;
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
 			else if (menusub == 4)
-			{
-				minimig_config.chipset ^= CONFIG_NTSC;
-				menustate = MENU_SETTINGS_CHIPSET1;
-				minimig_ConfigChipset(minimig_config.chipset);
-			}
-			else if (menusub == 5)
 			{
 				switch (minimig_config.chipset & 0x1c) {
 				case 0:
@@ -3604,19 +3578,19 @@ void HandleUI(void)
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_ConfigChipset(minimig_config.chipset);
 			}
-			else if (menusub == 6)
+			else if (menusub == 5)
 			{
 				minimig_config.autofire ^= 0x4;
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_ConfigAutofire(minimig_config.autofire, 0x4);
 			}
-			else if (menusub == 7)
+			else if (menusub == 6)
 			{
 				minimig_config.autofire ^= 0x8;
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_ConfigAutofire(minimig_config.autofire, 0x8);
 			}
-			else if (menusub == 8)
+			else if (menusub == 7)
 			{
 				menustate = MENU_MAIN1;
 				menusub = 6;
@@ -3899,35 +3873,36 @@ void HandleUI(void)
 		/* video settings menu                                            */
 		/******************************************************************/
 	case MENU_SETTINGS_VIDEO1:
-		menumask = 0x3f;
+		menumask = 0x7f;
 		parentstate = menustate;
 		helptext = 0; // helptexts[HELPTEXT_VIDEO];
 
+		m = 0;
 		OsdSetTitle("Video", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
-		OsdWrite(0, "", 0, 0);
+
+		OsdWrite(m++);
+		strcpy(s, " TV Standard    : ");
+		strcat(s, minimig_config.chipset & CONFIG_NTSC ? "NTSC" : "PAL");
+		OsdWrite(m++, s, menusub == 0, 0);
+		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " Scandoubler FX : ");
 		strcat(s, config_scanlines_msg[minimig_config.scanlines & 7]);
-		OsdWrite(1, s, menusub == 0, 0);
+		OsdWrite(m++, s, menusub == 1, 0);
 		strcpy(s, " Video area by  : ");
 		strcat(s, config_blank_msg[(minimig_config.scanlines >> 6) & 3]);
-		OsdWrite(2, s, menusub == 1, 0);
+		OsdWrite(m++, s, menusub == 2, 0);
 		strcpy(s, " Aspect Ratio   : ");
 		strcat(s, config_ar_msg[(minimig_config.scanlines >> 4) & 1]);
-		OsdWrite(3, s, menusub == 2, 0);
-		OsdWrite(4, "", 0, 0);
+		OsdWrite(m++, s, menusub == 3, 0);
+		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " Stereo mix     : ");
 		strcat(s, config_stereo_msg[minimig_config.audio & 3]);
-		OsdWrite(5, s, menusub == 3, 0);
-		OsdWrite(6, "", 0, 0);
-		OsdWrite(7, "", 0, 0);
-		OsdWrite(8, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 4, 0);
-		OsdWrite(9, "", 0, 0);
-		OsdWrite(10, "", 0, 0);
-		OsdWrite(11, "", 0, 0);
-		OsdWrite(12, "", 0, 0);
-		OsdWrite(13, "", 0, 0);
-		OsdWrite(14, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 5, 0);
+		OsdWrite(m++, s, menusub == 4, 0);
+		OsdWrite(m++, "", 0, 0);
+		OsdWrite(m++, "", 0, 0);
+		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 5, 0);
+		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 6, 0);
 
 		menustate = MENU_SETTINGS_VIDEO2;
 		break;
@@ -3935,39 +3910,41 @@ void HandleUI(void)
 	case MENU_SETTINGS_VIDEO2:
 		if (select)
 		{
+			menustate = MENU_SETTINGS_VIDEO1;
 			if (menusub == 0)
 			{
-				minimig_config.scanlines = ((minimig_config.scanlines + 1) & 7) | (minimig_config.scanlines & 0xf8);
-				if ((minimig_config.scanlines & 7) > 4) minimig_config.scanlines = minimig_config.scanlines & 0xf8;
-				menustate = MENU_SETTINGS_VIDEO1;
-				minimig_ConfigVideo(minimig_config.scanlines);
+				minimig_config.chipset ^= CONFIG_NTSC;
+				minimig_ConfigChipset(minimig_config.chipset);
 			}
 			else if (menusub == 1)
 			{
-				minimig_config.scanlines &= ~0x80;
-				minimig_config.scanlines ^= 0x40;
-				menustate = MENU_SETTINGS_VIDEO1;
+				minimig_config.scanlines = ((minimig_config.scanlines + 1) & 7) | (minimig_config.scanlines & 0xf8);
+				if ((minimig_config.scanlines & 7) > 4) minimig_config.scanlines = minimig_config.scanlines & 0xf8;
 				minimig_ConfigVideo(minimig_config.scanlines);
 			}
 			else if (menusub == 2)
 			{
-				minimig_config.scanlines &= ~0x20; // reserved for auto-ar
-				minimig_config.scanlines ^= 0x10;
-				menustate = MENU_SETTINGS_VIDEO1;
+				minimig_config.scanlines &= ~0x80;
+				minimig_config.scanlines ^= 0x40;
 				minimig_ConfigVideo(minimig_config.scanlines);
 			}
 			else if (menusub == 3)
 			{
-				minimig_config.audio = (minimig_config.audio + 1) & 3;
-				menustate = MENU_SETTINGS_VIDEO1;
-				minimig_ConfigAudio(minimig_config.audio);
+				minimig_config.scanlines &= ~0x20; // reserved for auto-ar
+				minimig_config.scanlines ^= 0x10;
+				minimig_ConfigVideo(minimig_config.scanlines);
 			}
 			else if (menusub == 4)
+			{
+				minimig_config.audio = (minimig_config.audio + 1) & 3;
+				minimig_ConfigAudio(minimig_config.audio);
+			}
+			else if (menusub == 5)
 			{
 				menustate = MENU_NONE1;
 				minimig_set_adjust(minimig_get_adjust() ? 0 : 1);
 			}
-			else if (menusub == 5)
+			else if (menusub == 6)
 			{
 				menustate = MENU_MAIN1;
 				menusub = 8;
