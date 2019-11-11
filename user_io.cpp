@@ -1627,7 +1627,6 @@ int user_io_file_tx_body(const uint8_t *buf,uint16_t chunk,struct MD5Context *md
 	DisableFpga();
 
 	file_crc = crc32(file_crc, buf  ,chunk );
-	printf("md5 chunk size: %d\n",chunk);
 	if (md5context) MD5Update (md5context, buf,chunk);
 #if DEBUG_ROM_BINARY
 	fwrite(buf,1,chunk,rombinary);
