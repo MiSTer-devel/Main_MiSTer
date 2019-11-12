@@ -247,20 +247,19 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			else
 				sprintf(fname,"arcade/mame/%s/%s",arc_info->zipname,arc_info->partname);
 
-			// we should check file not found error for the zip
-			//
-			if (strlen(arc_info->partname) && !FileExists(fname))
-			{
-				printf("%s does not exist\n",fname);
-				snprintf(arc_info->error_msg,kBigTextSize,"%s does not exist",fname);
-			}
 
 
 			//user_io_file_tx_body_filepart(getFullPath(fname),0,0);
 			if (strlen(arc_info->partname)) {
 			        printf("user_io_file_tx_body_filepart(const char *name[%s],int start[%d], int len[%d])\n",fname,start,length);
 				for (int i=0;i<repeat;i++) {
-					user_io_file_tx_body_filepart(fname,start,length,&arc_info->context);
+					int result=user_io_file_tx_body_filepart(fname,start,length,&arc_info->context);
+					// we should check file not found error for the zip
+					if (result==0)
+					{
+						printf("%s does not exist\n",fname);
+						snprintf(arc_info->error_msg,kBigTextSize,"%s does not exist",fname);
+					}
 				}
 			}
 			else // we have binary data?
