@@ -8,6 +8,7 @@
 #include "sxmlc.h"
 
 #include "../../user_io.h"
+#include "../../file_io.h"
 #include "../../menu.h"
 
 #include "buffer.h"
@@ -72,17 +73,23 @@ user_io.h:int user_io_file_tx_finish();
 struct arc_struct {
 	char md5[kBigTextSize];
 	char zipname[kBigTextSize];
+	char partzipname[kBigTextSize];
 	char partname[kBigTextSize];
 	char dtdt[kBigTextSize];
 	char romname[kBigTextSize];
+	char error_msg[kBigTextSize];
 	int romindex;
 	int offset;
 	int length;
 	int repeat;
 	int insiderom;
+	int validrom0;
 	buffer_data *data;
         struct MD5Context context;
 };
+
+char global_error_msg[kBigTextSize];
+
 /*
  * AJS - TODO:
  *  DONE -- create  a structure we can pass into send_rom
@@ -121,14 +128,13 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->md5[0]=0;
                 	MD5Init (&arc_info->context);
 		}
-		printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
+		//printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
                 for (int i = 0; i < node->n_attributes; i++)
                         {
-			   printf("attribute %d name [%s] value [%s]\n",i,node->attributes[i].name,node->attributes[i].value);
+			   //printf("attribute %d name [%s] value [%s]\n",i,node->attributes[i].name,node->attributes[i].value);
 			   if (!strcasecmp(node->attributes[i].name,"zip") && !strcasecmp(node->tag,"rom"))
 			   {
 				   strcpy(arc_info->zipname,node->attributes[i].value);
-				   printf("found zip: [%s]\n",arc_info->zipname);
 			   }
 			   if (!strcasecmp(node->attributes[i].name,"name") && !strcasecmp(node->tag,"rom"))
 			   {
@@ -143,30 +149,31 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				   arc_info->romindex=atoi(node->attributes[i].value);
 			   }
 			   if (arc_info->insiderom) {
-			   if (!strcasecmp(node->attributes[i].name,"zip") && !strcasecmp(node->tag,"part"))
-			   {
-				   strcpy(arc_info->zipname,node->attributes[i].value);
-			   }
-			   if (!strcasecmp(node->attributes[i].name,"name") && !strcasecmp(node->tag,"part"))
-			   {
+			   	arc_info->partzipname[0]=0;
+			   	if (!strcasecmp(node->attributes[i].name,"zip") && !strcasecmp(node->tag,"part"))
+			   	{
+				   strcpy(arc_info->partzipname,node->attributes[i].value);
+			   	}
+			   	if (!strcasecmp(node->attributes[i].name,"name") && !strcasecmp(node->tag,"part"))
+			   	{
 				   strcpy(arc_info->partname,node->attributes[i].value);
-			   }
-			   if (!strcasecmp(node->attributes[i].name,"dt:dt") && !strcasecmp(node->tag,"part"))
-			   {
+			   	}
+			   	if (!strcasecmp(node->attributes[i].name,"dt:dt") && !strcasecmp(node->tag,"part"))
+			   	{
 				   strcpy(arc_info->dtdt,node->attributes[i].value);
-			   }
-			   if (!strcasecmp(node->attributes[i].name,"offset") && !strcasecmp(node->tag,"part"))
-			   {
+			   	}
+			   	if (!strcasecmp(node->attributes[i].name,"offset") && !strcasecmp(node->tag,"part"))
+			   	{
 				   arc_info->offset=atoi(node->attributes[i].value);
-			   }
-			   if (!strcasecmp(node->attributes[i].name,"length") && !strcasecmp(node->tag,"part"))
-			   {
+			   	}
+			   	if (!strcasecmp(node->attributes[i].name,"length") && !strcasecmp(node->tag,"part"))
+			   	{
 				   arc_info->length=atoi(node->attributes[i].value);
-			   }
-			   if (!strcasecmp(node->attributes[i].name,"repeat") && !strcasecmp(node->tag,"part"))
-			   {
+			   	}
+			   	if (!strcasecmp(node->attributes[i].name,"repeat") && !strcasecmp(node->tag,"part"))
+			   	{
 				   arc_info->repeat=atoi(node->attributes[i].value);
-			   }
+			   	}
 			   }
                         }
 
@@ -180,7 +187,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		//printf("XML_EVENT_TEXT: text [%s]\n",text);
 		break;
         case XML_EVENT_END_NODE:
-		printf("XML_EVENT_END_NODE: tag [%s]\n",node->tag );
+		//printf("XML_EVENT_END_NODE: tag [%s]\n",node->tag );
 		if (!strcasecmp(node->tag,"rom")) {
 			if (arc_info->insiderom) 
 			{
@@ -206,6 +213,16 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				{
 					printf("mismatch\n");
 					Info("md5 mismatch");
+					if (!strlen(arc_info->error_msg))
+						snprintf(arc_info->error_msg,kBigTextSize,"md5 mismatch for rom %d",arc_info->romindex);
+				}
+				else 
+				{
+					if (arc_info->romindex==0)
+					{
+						arc_info->validrom0=1;
+						arc_info->error_msg[0]=0;
+					}
 				}
 			}
 			arc_info->insiderom=0;
@@ -220,13 +237,25 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			start=arc_info->offset;
 			length=0;
 			if (arc_info->length>0) length = arc_info->length;
-			//if (arc_info->data->length) printf("data[%s]\n",arc_info->data->content);
-			printf("partname[%s]\n",arc_info->partname);
-			printf("zipname [%s]\n",arc_info->zipname);
-			printf("offset[%d]\n",arc_info->offset);
-			printf("length[%d]\n",arc_info->length);
-			printf("repeat[%d]\n",arc_info->repeat);
-			sprintf(fname,"arcade/mame/%s/%s",arc_info->zipname,arc_info->partname);
+			//printf("partname[%s]\n",arc_info->partname);
+			//printf("zipname [%s]\n",arc_info->zipname);
+			//printf("offset[%d]\n",arc_info->offset);
+			//printf("length[%d]\n",arc_info->length);
+			//printf("repeat[%d]\n",arc_info->repeat);
+			if (strlen(arc_info->partzipname))
+				sprintf(fname,"arcade/mame/%s/%s",arc_info->partzipname,arc_info->partname);
+			else
+				sprintf(fname,"arcade/mame/%s/%s",arc_info->zipname,arc_info->partname);
+
+			// we should check file not found error for the zip
+			//
+			if (strlen(arc_info->partname) && !FileExists(fname))
+			{
+				printf("%s does not exist\n",fname);
+				snprintf(arc_info->error_msg,kBigTextSize,"%s does not exist",fname);
+			}
+
+
 			//user_io_file_tx_body_filepart(getFullPath(fname),0,0);
 			if (strlen(arc_info->partname)) {
 			        printf("user_io_file_tx_body_filepart(const char *name[%s],int start[%d], int len[%d])\n",fname,start,length);
@@ -248,7 +277,6 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					//printf("\n");
 					for (int i=0;i<repeat;i++) {
 				       		user_io_file_tx_body(binary,len,&arc_info->context);
-                				//MD5Update (&arc_info->context,binary,len);
 					}
 					if (binary) free(binary);
 				}
@@ -260,6 +288,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 
         case XML_EVENT_ERROR:
                 printf("XML parse: %s: ERROR %d\n", text, n);
+		snprintf(arc_info->error_msg,kBigTextSize,"XML parse: %s: ERROR %d\n", text, n);
                 break;
         default:
                 break;
@@ -299,7 +328,7 @@ static int xml_scan_rbf(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			insiderbf=0;
 			//printf("bigtext [%s]\n",bigtext);
 			strncpy(rbf,bigtext,kBigTextSize);
-			printf("got rbf tag [%s]\n",rbf);
+			//printf("got rbf tag [%s]\n",rbf);
 		}
 		printf("XML_EVENT_END_NODE: tag [%s]\n",node->tag );
                 break;
@@ -325,9 +354,16 @@ int arcade_send_rom(const char *xml)
 	// create the structure we use for the XML parser
 	struct arc_struct arc_info;
 	arc_info.data=buffer_init(kBigTextSize);
+	arc_info.error_msg[0]=0;
+	arc_info.validrom0=0;
 
 	// parse
         XMLDoc_parse_file_SAX(xml, &sax, &arc_info);
+	if (arc_info.validrom0==0 && strlen(arc_info.error_msg))
+	{
+		strcpy(global_error_msg,arc_info.error_msg);
+		printf("arcade_send_rom: pretty error: [%s]\n",global_error_msg);
+	}
 	buffer_destroy(arc_info.data);
         return 0;
 }
