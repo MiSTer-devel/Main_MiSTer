@@ -212,7 +212,6 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				if (checksumsame==0) 
 				{
 					printf("mismatch\n");
-					Info("md5 mismatch");
 					if (!strlen(arc_info->error_msg))
 						snprintf(arc_info->error_msg,kBigTextSize,"md5 mismatch for rom %d",arc_info->romindex);
 				}
@@ -258,7 +257,9 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					if (result==0)
 					{
 						printf("%s does not exist\n",fname);
-						snprintf(arc_info->error_msg,kBigTextSize,"%s does not exist",fname);
+						snprintf(arc_info->error_msg,kBigTextSize,"%s\n"
+						"\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n"
+							       	"File Not Found",fname);
 					}
 				}
 			}
@@ -365,6 +366,17 @@ int arcade_send_rom(const char *xml)
 	}
 	buffer_destroy(arc_info.data);
         return 0;
+}
+
+int CheckArcadeError(void)
+{
+	if (global_error_msg[0]!=0) {
+		printf("ERROR: [%s]\n",global_error_msg);
+		Info(global_error_msg,1000*30);
+		global_error_msg[0]=0;
+	}
+
+	return 0;
 }
 
 int arcade_scan_xml_for_rbf(const char *xml,char *rbfname) 
