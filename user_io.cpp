@@ -2243,7 +2243,7 @@ void user_io_poll()
 	{
 		x86_poll();
 	}
-	else if ((core_type == CORE_TYPE_8BIT || core_type == CORE_TYPE_ARCHIE) && !is_menu_core())
+	else if ((core_type == CORE_TYPE_8BIT || core_type == CORE_TYPE_ARCHIE) && !is_menu_core() && !is_minimig())
 	{
 		static uint8_t buffer[4][512];
 		uint32_t lba;
@@ -2514,7 +2514,7 @@ void user_io_poll()
 		}
 	}
 
-	if (core_type == CORE_TYPE_8BIT && !is_menu_core())
+	if (core_type == CORE_TYPE_8BIT && !is_menu_core() && !is_minimig())
 	{
 		// frequently check ps2 mouse for events
 		if (CheckTimer(mouse_timer))
