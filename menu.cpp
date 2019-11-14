@@ -3498,7 +3498,7 @@ void HandleUI(void)
 		/******************************************************************/
 	case MENU_SETTINGS_CHIPSET1:
 		helptext = helptexts[HELPTEXT_CHIPSET];
-		menumask = 0xff;
+		menumask = 0xf9;
 		OsdSetTitle("Chipset", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 		parentstate = menustate;
 
@@ -3507,15 +3507,15 @@ void HandleUI(void)
 		strcpy(s, " CPU            : ");
 		strcat(s, config_cpu_msg[minimig_config.cpu & 0x03]);
 		OsdWrite(m++, s, menusub == 0, 0);
-		strcpy(s, " Cache ChipRAM  : ");
-		strcat(s, (minimig_config.cpu & 4) ? "ON" : "OFF");
-		OsdWrite(m++, s, menusub == 1, !(minimig_config.cpu & 0x2));
-		strcpy(s, " Cache Kickstart: ");
-		strcat(s, (minimig_config.cpu & 8) ? "ON" : "OFF");
-		OsdWrite(m++, s, menusub == 2, !(minimig_config.cpu & 0x2));
+		//strcpy(s, " Cache ChipRAM  : ");
+		//strcat(s, (minimig_config.cpu & 4) ? "ON" : "OFF");
+		//OsdWrite(m++, s, menusub == 1, !(minimig_config.cpu & 0x2));
+		//strcpy(s, " Cache Kickstart: ");
+		//strcat(s, (minimig_config.cpu & 8) ? "ON" : "OFF");
+		//OsdWrite(m++, s, menusub == 2, !(minimig_config.cpu & 0x2));
 		strcpy(s, " D-Cache        : ");
 		strcat(s, (minimig_config.cpu & 16) ? "ON" : "OFF");
-		OsdWrite(m++, s, menusub == 3, !(minimig_config.cpu & 0xC) || !(minimig_config.cpu & 0x2));
+		OsdWrite(m++, s, menusub == 3, !(minimig_config.cpu & 0x2));
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " Chipset        : ");
 		strcat(s, config_chipset_msg[(minimig_config.chipset >> 2) & 7]);
@@ -3555,7 +3555,7 @@ void HandleUI(void)
 				minimig_config.cpu ^= 8;
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
-			else if (menusub == 3 && (minimig_config.cpu & 0xC) && (minimig_config.cpu & 0x2))
+			else if (menusub == 3 && (minimig_config.cpu & 0x2))
 			{
 				menustate = MENU_SETTINGS_CHIPSET1;
 				minimig_config.cpu ^= 16;
