@@ -128,6 +128,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->md5[0]=0;
                 	MD5Init (&arc_info->context);
 		}
+	       if (!strcasecmp(node->tag,"part"))
+		  arc_info->partzipname[0]=0;
 		//printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
                 for (int i = 0; i < node->n_attributes; i++)
                         {
@@ -149,10 +151,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				   arc_info->romindex=atoi(node->attributes[i].value);
 			   }
 			   if (arc_info->insiderom) {
-			   	arc_info->partzipname[0]=0;
 			   	if (!strcasecmp(node->attributes[i].name,"zip") && !strcasecmp(node->tag,"part"))
 			   	{
 				   strcpy(arc_info->partzipname,node->attributes[i].value);
+				   //printf("found partzipname %s\n",arc_info->partzipname);
 			   	}
 			   	if (!strcasecmp(node->attributes[i].name,"name") && !strcasecmp(node->tag,"part"))
 			   	{
