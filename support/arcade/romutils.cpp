@@ -226,6 +226,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		//int user_io_file_tx_body_filepart(const char *name,int start, int len)
 		if (!strcasecmp(node->tag,"part") && arc_info->insiderom) 
 		{
+			if (arc_info->romindex==0 && arc_info->validrom0==1)
+				break;
 			char fname[kBigTextSize*2+16];
 			int start,length,repeat;
 			repeat=arc_info->repeat;
