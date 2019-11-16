@@ -75,7 +75,6 @@ struct arc_struct {
 	char zipname[kBigTextSize];
 	char partzipname[kBigTextSize];
 	char partname[kBigTextSize];
-	char dtdt[kBigTextSize];
 	char romname[kBigTextSize];
 	char error_msg[kBigTextSize];
 	int romindex;
@@ -116,7 +115,6 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		buffer_destroy(arc_info->data);
 		arc_info->data=buffer_init(kBigTextSize);
 		arc_info->partname[0]=0;
-		arc_info->dtdt[0]=0;
 		arc_info->offset=0;
 		arc_info->length=-1;
 		arc_info->repeat=1;
@@ -159,10 +157,6 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			   	if (!strcasecmp(node->attributes[i].name,"name") && !strcasecmp(node->tag,"part"))
 			   	{
 				   strcpy(arc_info->partname,node->attributes[i].value);
-			   	}
-			   	if (!strcasecmp(node->attributes[i].name,"dt:dt") && !strcasecmp(node->tag,"part"))
-			   	{
-				   strcpy(arc_info->dtdt,node->attributes[i].value);
 			   	}
 			   	if (!strcasecmp(node->attributes[i].name,"offset") && !strcasecmp(node->tag,"part"))
 			   	{
@@ -267,8 +261,6 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			}
 			else // we have binary data?
 			{
-				if (!strcasecmp(arc_info->dtdt,"bin.hex")) 
-				{
 					//printf("we have bin.hex data [%s]\n",arc_info->data->content);
 					size_t len=0;
 					unsigned char* binary=hexstr_to_char(arc_info->data->content,&len);
@@ -281,7 +273,6 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				       		user_io_file_tx_body(binary,len,&arc_info->context);
 					}
 					if (binary) free(binary);
-				}
 			}
 
 
