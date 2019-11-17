@@ -543,6 +543,14 @@ int FileSaveConfig(const char *name, void *pBuffer, int size)
 	return FileSave(path, pBuffer, size);
 }
 
+int FileSaveJoymap(const char *name, void *pBuffer, int size)
+{
+	char path[256] = { CONFIG_DIR"/inputs/" };
+	FileCreatePath(path);
+	strcat(path, name);
+	return FileSave(path, pBuffer, size);
+}
+
 int FileLoad(const char *name, void *pBuffer, int size)
 {
 	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
@@ -589,6 +597,16 @@ int FileLoadConfig(const char *name, void *pBuffer, int size)
 	return FileLoad(path, pBuffer, size);
 }
 
+int FileLoadJoymap(const char *name, void *pBuffer, int size)
+{
+	char path[256] = { CONFIG_DIR"/inputs/" };
+	strcat(path, name);
+	int ret = FileLoad(path, pBuffer, size);
+	if (!ret)
+		return FileLoadConfig(name, pBuffer, size);
+	return ret;
+}
+
 int FileExists(const char *name)
 {
 	return isPathRegularFile(name);
@@ -624,9 +642,17 @@ static void create_path(const char *base_dir, const char* sub_dir)
 	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
 }
 
+void FileCreatePath(char *dir)
+{
+	if (!isPathDirectory(dir)) {
+		make_fullpath(dir);
+		mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
+	}
+}
+
 void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 {
-	create_path(SCREENSHOT_DIR, HomeDir);
+	create_path(SCREENSHOT_DIR, CoreName);
 
 	time_t t = time(NULL);
 	struct tm tm = *localtime(&t);
@@ -634,13 +660,13 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 	if (tm.tm_year >= 119) // 2019 or up considered valid time
 	{
 		strftime(datecode, 31, "%Y%m%d_%H%M%S", &tm);
-		snprintf(out_name, buflen, "%s/%s/%s-%s.png", SCREENSHOT_DIR, HomeDir, datecode, name[0] ? name : SCREENSHOT_DEFAULT);
+		snprintf(out_name, buflen, "%s/%s/%s-%s.png", SCREENSHOT_DIR, CoreName, datecode, name[0] ? name : SCREENSHOT_DEFAULT);
 	}
 	else
 	{
 		for (int i = 1; i < 10000; i++)
 		{
-			snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d.png", SCREENSHOT_DIR, HomeDir, name[0] ? name : SCREENSHOT_DEFAULT, i);
+			snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d.png", SCREENSHOT_DIR, CoreName, name[0] ? name : SCREENSHOT_DEFAULT, i);
 			if (!getFileType(out_name)) return;
 		}
 	}
@@ -648,9 +674,9 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 
 void FileGenerateSavePath(const char *name, char* out_name)
 {
-	create_path(SAVE_DIR, HomeDir);
+	create_path(SAVE_DIR, CoreName);
 
-	sprintf(out_name, "%s/%s/", SAVE_DIR, HomeDir);
+	sprintf(out_name, "%s/%s/", SAVE_DIR, CoreName);
 	char *fname = out_name + strlen(out_name);
 
 	const char *p = strrchr(name, '/');
@@ -684,6 +710,20 @@ uint32_t getFileType(const char *name)
 	if (stat64(full_path, &st)) return 0;
 
 	return st.st_mode;
+}
+
+void prefixGameDir(char *dir, size_t dir_len)
+{
+	if (isPathDirectory(dir)) {
+		printf("Found existing: %s\n", dir);
+		return;
+	}
+
+	FileCreatePath((char *) GAMES_DIR);
+	static char temp_dir[1024];
+	snprintf(temp_dir, 1024, "%s/%s", GAMES_DIR, dir);
+	strncpy(dir, temp_dir, dir_len);
+	printf("Prefixed dir to %s\n", temp_dir);
 }
 
 static int device = 0;
@@ -1085,6 +1125,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				char *altname = neogeo_get_altname(full_path, &dext);
 				if (altname)
 				{
+					if (altname == (char*)-1) continue;
+
 					dext.de.d_type = DT_REG;
 					memcpy(dext.altname, altname, sizeof(dext.altname));
 				}
@@ -1229,7 +1271,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		if (flist_nDirEntries() == 0) // directory is empty so there is no point in searching for any entry
 			return 0;
 
-		if (mode == SCANF_END)
+		if (mode == SCANF_END || (mode == SCANF_PREV && iSelectedEntry <= 0))
 		{
 			iSelectedEntry = flist_nDirEntries() - 1;
 			iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
@@ -1243,7 +1285,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry++;
 				if (iSelectedEntry > iFirstEntry + OsdGetSize() - 1) iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
 			}
-			return 0;
+            else
+            {
+				// jump to first visible item
+				iFirstEntry = 0;
+				iSelectedEntry = 0;
+            }
+            return 0;
 		}
 		else if (mode == SCANF_PREV)
 		{
@@ -1252,7 +1300,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry--;
 				if (iSelectedEntry < iFirstEntry) iFirstEntry = iSelectedEntry;
 			}
-			return 0;
+            return 0;
 		}
 		else if (mode == SCANF_NEXT_PAGE)
 		{

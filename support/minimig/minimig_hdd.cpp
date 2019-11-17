@@ -335,6 +335,8 @@ static void IdentifyDevice(uint16_t *pBuffer, hdfTYPE *hdf)
 	pBuffer[56] = hdf->sectors;
 	pBuffer[57] = (uint16_t)total_sectors;
 	pBuffer[58] = (uint16_t)(total_sectors >> 16);
+	pBuffer[60] = (uint16_t)total_sectors;
+	pBuffer[61] = (uint16_t)(total_sectors >> 16);
 }
 
 static void WriteTaskFile(uint8_t error, uint8_t sector_count, uint8_t sector_number, uint8_t cylinder_low, uint8_t cylinder_high, uint8_t drive_head)
