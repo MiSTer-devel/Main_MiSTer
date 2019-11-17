@@ -13,6 +13,12 @@
 #define CONFIG_FLOPPY1X  0
 #define CONFIG_FLOPPY2X  1
 
+extern const char *config_memory_chip_msg[];
+extern const char *config_memory_slow_msg[];
+extern const char *config_memory_fast_msg[][8];
+extern const char *config_cpu_msg[];
+extern const char *config_chipset_msg[];
+
 typedef struct
 {
 	unsigned char lores;
@@ -36,7 +42,8 @@ typedef struct
 {
 	char            id[8];
 	unsigned long   version;
-	char            kickstart[1024];
+	char            kickstart[992];
+	char            label[32];
 	mm_filterTYPE   filter;
 	unsigned char   memory;
 	unsigned char   chipset;
@@ -55,7 +62,7 @@ extern mm_configTYPE minimig_config;
 
 int minimig_cfg_load(int num);
 int minimig_cfg_save(int num);
-const char* minimig_get_cfg_info(int num);
+const char* minimig_get_cfg_info(int num, int label);
 
 void minimig_reset();
 void minimig_set_kickstart(char *name);

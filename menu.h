@@ -3,14 +3,6 @@
 
 #include <inttypes.h>
 
-// UI strings, used by boot messages
-extern const char *config_memory_chip_msg[];
-extern const char *config_memory_slow_msg[];
-extern const char *config_memory_fast_msg[];
-extern const char *config_cpu_msg[];
-extern const char *config_hdf_msg[];
-extern const char *config_chipset_msg[];
-
 void HandleUI(void);
 void menu_key_set(unsigned int c);
 void PrintFileName(char *name, int row, int maxinv);
