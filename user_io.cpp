@@ -693,12 +693,16 @@ void user_io_init(const char *path, const char *xml)
 	core_name[0] = 0;
 	disable_osd = 0;
 
+	// we need to set the directory to where the XML file (MRA) is
+	// not the RBF. The RBF will be in arcade, which the user shouldn't
+	// browse
 	if (strlen(xml)) {
-		printf("USER_IO_INIT got XML: [%s] [%s]\n",path,xml);
-		strcpy(core_path, xml);
+		//printf("USER_IO_INIT got XML: [%s] [%s]\n",path,xml);
+		strcpy(core_path, getFullPath(xml));
 	} else {
 		strcpy(core_path, path);
 	}
+	//printf("USER_IO_INIT core_path: [%s] \n",core_path);
 
 	memset(sd_image, 0, sizeof(sd_image));
 
