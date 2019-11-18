@@ -89,21 +89,14 @@ struct arc_struct {
 
 char global_error_msg[kBigTextSize];
 
+
 /*
- * AJS - TODO:
- *  DONE -- create  a structure we can pass into send_rom
- *  DONE -- use dynamic allocation (realloc?) to allocate the bigtext
- *  -- make sure we push / pop the stack for file names, etc
- *  -- make sure that merged / non merged roms work
+ *  xml_send_rom
  *
- *  ???? -- SORG -- make one big array, and send it to the _tx code as one shot, we can check the MD5 and put up warning as well easily
- *  DONE -- SORG -- make the HEX look like a hex dump so it is easy to edit
- *  DONE -- SORG -- get rid off uudecode stuff
- *  SORG -- part - offset / length get rid of action
- *  AJS = Here are some of the things: Mame Roms, Mame Merged Roms, Binary Sound Files, repeated chunks. Partial Rom Chunks, Flipped Rom Chunks, games that use two mame zips (maybe?), patches, extra data sitting in the releases directory
- */
-
-
+ *  This is a callback from the XML parser of the MRA file
+ *
+ *  It parses the MRA, and sends commands to send rom parts to the fpga
+ * */
 static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 	struct arc_struct *arc_info = (struct arc_struct *)sd->user;
@@ -112,12 +105,19 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
         switch (evt)
         {
         case XML_EVENT_START_NODE:
+
+		/* initialization */
+
+
+		// initialize things for each tag (node):
 		buffer_destroy(arc_info->data);
 		arc_info->data=buffer_init(kBigTextSize);
 		arc_info->partname[0]=0;
 		arc_info->offset=0;
 		arc_info->length=-1;
 		arc_info->repeat=1;
+
+		/* on the beginning of a rom tag, we need to reset the state*/
 	   	if (!strcasecmp(node->tag,"rom"))
 		{
 			arc_info->insiderom=1;
@@ -126,9 +126,14 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->md5[0]=0;
                 	MD5Init (&arc_info->context);
 		}
-	       if (!strcasecmp(node->tag,"part"))
+
+		// for each part tag, we clear the partzipname since it is optional and may not appear in the part tag
+	        if (!strcasecmp(node->tag,"part"))
 		  arc_info->partzipname[0]=0;
+
+
 		//printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
+		// walk the attributes and save them in the data structure as appropriate
                 for (int i = 0; i < node->n_attributes; i++)
                         {
 			   //printf("attribute %d name [%s] value [%s]\n",i,node->attributes[i].name,node->attributes[i].value);
@@ -148,11 +153,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			   {
 				   arc_info->romindex=atoi(node->attributes[i].value);
 			   }
+			   /* these only exist if we are inside the rom tag, and in a part tag*/
 			   if (arc_info->insiderom) {
 			   	if (!strcasecmp(node->attributes[i].name,"zip") && !strcasecmp(node->tag,"part"))
 			   	{
 				   strcpy(arc_info->partzipname,node->attributes[i].value);
-				   //printf("found partzipname %s\n",arc_info->partzipname);
 			   	}
 			   	if (!strcasecmp(node->attributes[i].name,"name") && !strcasecmp(node->tag,"part"))
 			   	{
@@ -173,17 +178,25 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			   }
                         }
 
+		/* at the beginning of each rom - tell the user_io to start a new message */
 	   	if (!strcasecmp(node->tag,"rom")) 
 		{
 		   user_io_file_tx_start(arc_info->romname,arc_info->romindex);
 		}
                 break;
+
         case XML_EVENT_TEXT:
+		/* the text node is the data between tags, ie:  <part>this text</part>
+		 *
+		 * the buffer_append is part of a buffer library that will realloc automatically
+		 */
 		buffer_append(arc_info->data, text);
 		//printf("XML_EVENT_TEXT: text [%s]\n",text);
 		break;
         case XML_EVENT_END_NODE:
 		//printf("XML_EVENT_END_NODE: tag [%s]\n",node->tag );
+		
+		// At the end of a rom node (when it is closed) we need to calculate hash values and clean up
 		if (!strcasecmp(node->tag,"rom")) {
 			if (arc_info->insiderom) 
 			{
@@ -213,6 +226,9 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				}
 				else 
 				{
+					// this code sets the validerom0 and clears the message
+					// if a rom with index 0 has a correct md5. It supresses 
+					// sending any further rom0 messages
 					if (arc_info->romindex==0)
 					{
 						arc_info->validrom0=1;
@@ -223,9 +239,13 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->insiderom=0;
 		}
 
+		// At the end of a part node, send the rom part if we are inside a rom tag
 		//int user_io_file_tx_body_filepart(const char *name,int start, int len)
 		if (!strcasecmp(node->tag,"part") && arc_info->insiderom) 
 		{
+			// suppress rom0 if we already sent a valid one
+			// this is useful for merged rom sets - if the first one was valid, use it
+			// the second might not be
 			if (arc_info->romindex==0 && arc_info->validrom0==1)
 				break;
 			char fname[kBigTextSize*2+16];
