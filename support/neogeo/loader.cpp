@@ -1048,11 +1048,26 @@ void load_neo(char *path)
 		FileClose(&f);
 		if(res)
 		{
-			static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, mir = 1;
+			uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, mir = 1;
 			for (uint32_t i = 0; i < sizeof(neo_quirks) / sizeof(neo_quirks[0]); i++)
 			{
 				if (neo_quirks[i].id == hdr.NGH)
 				{
+					bool found = false;
+					switch (hdr.NGH) {
+						case 0x0251: if (hdr.PSize != 9437184) found = true; break; // (kof99 prototype vs final)
+						case 0x0253: if (hdr.PSize != 9437184) found = true;        // (garou prototype vs the different SMA chip versions) garouh needs SMA=3
+							if (hdr.Name[27] == 'A')
+								{sma = 3; cmc = 1; mir = 0; found = true;}          // (Not ideal, but their headers are otherwise identical)
+							break;
+						case 0x0256: if (hdr.PSize != 9437184) found = true; break; // (mslug3 using SMA vs normal banking)
+						case 0x0263: if (hdr.SSize != 524288) found = true; break;  // (mslug4 bootlegs vs original)
+						case 0x0268: if (hdr.PSize != 8388608) found = true; break; // (mslug5 bootlegs vs original)
+						case 0x0269: if (hdr.SSize != 524288) found = true;break;   // (svc bootlegs vs original)
+						case 0x0271: if (hdr.PSize != 9437184) found = true;break;  // (kof2003 bootlegs vs original)
+					}
+					if (found) break;
+
 					hw_type = neo_quirks[i].hw;
 					cmc = neo_quirks[i].cmc;
 					sma = neo_quirks[i].sma;
