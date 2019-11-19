@@ -1575,6 +1575,8 @@ void HandleUI(void)
 						}
 						else
 						{
+							if (mask == 1 && is_megacd_core()) mcd_set_image(0, "");
+
 							uint32_t status = user_io_8bit_set_status(0, 0, ex);
 
 							user_io_8bit_set_status(status ^ mask, mask, ex);
@@ -1620,6 +1622,10 @@ void HandleUI(void)
 		if (is_x86_core())
 		{
 			x86_set_image(drive_num, SelectedPath);
+		}
+		else if (is_megacd_core())
+		{
+			mcd_set_image(drive_num, SelectedPath);
 		}
 		else
 		{

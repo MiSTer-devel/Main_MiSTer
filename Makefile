@@ -32,6 +32,7 @@ CPP_SRC = $(wildcard *.cpp) \
           $(wildcard ./support/x86/*.cpp) \
           $(wildcard ./support/snes/*.cpp) \
           $(wildcard ./support/neogeo/*.cpp) \
+          $(wildcard ./support/megacd/*.cpp) \
           lib/lodepng/lodepng.cpp
 
 IMG =     $(wildcard *.png)
