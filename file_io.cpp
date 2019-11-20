@@ -42,6 +42,21 @@ static int iFirstEntry = 0;
 
 static char full_path[2100];
 
+fileTYPE::fileTYPE()
+{
+	filp = 0;
+	mode = 0;
+	type = 0;
+	zip = 0;
+	size = 0;
+	offset = 0;
+}
+
+int fileTYPE::opened()
+{
+	return filp || zip;
+}
+
 struct fileZipArchive
 {
 	mz_zip_archive                    archive;
@@ -200,7 +215,6 @@ void FileClose(fileTYPE *file)
 		mz_zip_reader_end(&file->zip->archive);
 
 		delete file->zip;
-		file->zip = nullptr;
 	}
 
 	if (file->filp)
@@ -216,6 +230,8 @@ void FileClose(fileTYPE *file)
 			file->type = 0;
 		}
 	}
+
+	file->zip = nullptr;
 	file->filp = nullptr;
 }
 
@@ -553,40 +569,13 @@ int FileSaveJoymap(const char *name, void *pBuffer, int size)
 
 int FileLoad(const char *name, void *pBuffer, int size)
 {
-	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
-	else strcpy(full_path, name);
+	fileTYPE f;
+	if (!FileOpen(&f, name)) return 0;
 
-	int fd = open(full_path, O_RDONLY);
-	if (fd < 0)
-	{
-		printf("FileLoad(open) File:%s, error: %d.\n", full_path, fd);
-		return 0;
-	}
+	int ret = f.size;
+	if (size) ret = FileReadAdv(&f, pBuffer, size);
 
-	struct stat64 st;
-	int ret = fstat64(fd, &st);
-	if (ret < 0)
-	{
-		printf("FileLoad(fstat) File:%s, error: %d.\n", full_path, ret);
-		close(fd);
-		return 0;
-	}
-
-	if (!pBuffer)
-	{
-		close(fd);
-		return (int)st.st_size;
-	}
-
-	ret = read(fd, pBuffer, size ? size : st.st_size);
-	close(fd);
-
-	if (ret < 0)
-	{
-		printf("FileLoad(read) File:%s, error: %d.\n", full_path, ret);
-		return 0;
-	}
-
+	FileClose(&f);
 	return ret;
 }
 

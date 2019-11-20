@@ -22,3 +22,6 @@
 
 // NeoGeo  support
 #include "support/neogeo/loader.h"
+
+// MEGACD  support
+#include "support/megacd/megacd.h"

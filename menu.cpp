@@ -1534,7 +1534,16 @@ void HandleUI(void)
 						if (p[1] >= '0' && p[1] <= '3') drive_num = p[1] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
-						SelectFile(ext, SCANO_DIR | SCANO_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
+						if (is_megacd_core())
+						{
+							int len = strlen(SelectedPath);
+							if (len > 4 && !strcasecmp(SelectedPath + len - 4, ".cue"))
+							{
+								char *p = strrchr(SelectedPath, '/');
+								if (p) *p = 0;
+							}
+						}
+						SelectFile(ext, SCANO_DIR | SCANO_UMOUNT | (is_megacd_core() ? SCANO_NOENTER : 0), MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
 					}
 					else if ((p[0] == 'O') || (p[0] == 'o'))
 					{
@@ -1575,6 +1584,8 @@ void HandleUI(void)
 						}
 						else
 						{
+							if (mask == 1 && is_megacd_core()) mcd_set_image(0, "");
+
 							uint32_t status = user_io_8bit_set_status(0, 0, ex);
 
 							user_io_8bit_set_status(status ^ mask, mask, ex);
@@ -1620,6 +1631,10 @@ void HandleUI(void)
 		if (is_x86_core())
 		{
 			x86_set_image(drive_num, SelectedPath);
+		}
+		else if (is_megacd_core())
+		{
+			mcd_set_image(drive_num, SelectedPath);
 		}
 		else
 		{
@@ -3259,9 +3274,27 @@ void HandleUI(void)
 
 			if (select)
 			{
-				if (flist_SelectedItem()->de.d_type == DT_DIR)
+				static char name[256];
+				char type = flist_SelectedItem()->de.d_type;
+				memcpy(name, flist_SelectedItem()->de.d_name, sizeof(name));
+
+				if (is_megacd_core() && type == DT_DIR && strcmp(flist_SelectedItem()->de.d_name, ".."))
 				{
-					changeDir(flist_SelectedItem()->de.d_name);
+					int len = strlen(SelectedPath);
+					strcat(SelectedPath, "/");
+					strcat(SelectedPath, name);
+					int num = ScanDirectory(SelectedPath, SCANF_INIT, fs_pFileExt, 0);
+					if (!num) SelectedPath[len] = 0;
+					else
+					{
+						type = flist_SelectedItem()->de.d_type;
+						memcpy(name, flist_SelectedItem()->de.d_name, sizeof(name));
+					}
+				}
+
+				if (type == DT_DIR)
+				{
+					changeDir(name);
 					menustate = MENU_FILE_SELECT1;
 				}
 				else
@@ -3275,7 +3308,7 @@ void HandleUI(void)
 							strcat(SelectedPath, "/");
 						}
 
-						strcat(SelectedPath, flist_SelectedItem()->de.d_name);
+						strcat(SelectedPath, name);
 						menustate = fs_MenuSelect;
 					}
 				}

@@ -75,6 +75,8 @@
     <ClCompile Include="scheduler.cpp" />
     <ClCompile Include="spi.cpp" />
     <ClCompile Include="support\archie\archie.cpp" />
+    <ClCompile Include="support\megacd\cdd.cpp" />
+    <ClCompile Include="support\megacd\megacd.cpp" />
     <ClCompile Include="support\minimig\minimig_boot.cpp" />
     <ClCompile Include="support\minimig\minimig_config.cpp" />
     <ClCompile Include="support\minimig\minimig_fdd.cpp" />
@@ -126,6 +128,7 @@
     <ClInclude Include="spi.h" />
     <ClInclude Include="support.h" />
     <ClInclude Include="support\archie\archie.h" />
+    <ClInclude Include="support\megacd\megacd.h" />
     <ClInclude Include="support\minimig\minimig_boot.h" />
     <ClInclude Include="support\minimig\minimig_config.h" />
     <ClInclude Include="support\minimig\minimig_fdd.h" />
