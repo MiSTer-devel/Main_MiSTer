@@ -37,7 +37,7 @@
 
 typedef struct
 {
-	FILE *fd;
+	fileTYPE f;
 	int offset;
 	int start;
 	int end;
@@ -49,7 +49,7 @@ typedef struct
 	int end;
 	int last;
 	track_t tracks[100];
-	FILE *sub;
+//	fileTYPE sub;
 } toc_t;
 
 typedef struct

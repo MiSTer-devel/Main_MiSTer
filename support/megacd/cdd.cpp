@@ -38,24 +38,52 @@ cdd_t::cdd_t() {
 	stat[9] = 0x4;
 }
 
+static int sgets(char *out, int sz, char **in)
+{
+	char *instr = *in;
+	int cnt = 0;
+
+	while(*instr && *instr != 10)
+	{
+		if (*instr == 13)
+		{
+			instr++;
+			continue;
+		}
+
+		if (cnt < sz - 1)
+		{
+			out[cnt++] = *instr;
+			out[cnt] = 0;
+		}
+
+		instr++;
+	}
+
+	if (*instr) instr++;
+	*in = instr;
+
+	return cnt || *instr;
+}
 
 int cdd_t::LoadCUE(const char* filename) {
-	char fname[1024 + 10];
-	char line[128];
+	static char fname[1024 + 10];
+	static char line[128];
 	char *ptr, *lptr;
-	char header[1024];
-	FILE *fd;
+	static char header[1024];
+	static char toc[100 * 1024];
 
 	strcpy(fname, filename);
 
-	if (!(fd = fopen(getFullPath(fname), "r")))
-		return -1;
+	memset(toc, 0, sizeof(toc));
+	if (!FileLoad(fname, toc, sizeof(toc) - 1)) return 1;
 
 	printf("\x1b[32mMCD: Open CUE: %s\n\x1b[0m", fname);
 
 	int mm, ss, bb, pregap = 0;
 
-	while (fgets(line, 128, fd))
+	char *buf = toc;
+	while (sgets(line, sizeof(line), &buf))
 	{
 		lptr = line;
 		while (*lptr == 0x20) lptr++;
@@ -83,9 +111,7 @@ int cdd_t::LoadCUE(const char* filename) {
 			}
 			*ptr = 0;
 
-			this->toc.tracks[this->toc.last].fd = fopen(getFullPath(fname), "r");
-			if (!this->toc.tracks[this->toc.last].fd)
-				return -1;
+			if(!FileOpen(&this->toc.tracks[this->toc.last].f, fname)) return -1;
 
 			printf("\x1b[32mMCD: Open track file: %s\n\x1b[0m", fname);
 
@@ -95,9 +121,7 @@ int cdd_t::LoadCUE(const char* filename) {
 
 			if (!strstr(lptr, "BINARY") && !strstr(lptr, "MOTOROLA"))
 			{
-				fclose(this->toc.tracks[this->toc.last].fd);
-				this->toc.tracks[this->toc.last].fd = 0;
-
+				FileClose(&this->toc.tracks[this->toc.last].f);
 				printf("\x1b[32mMCD: unsupported file: %s\n\x1b[0m", fname);
 
 				return -1;
@@ -109,14 +133,8 @@ int cdd_t::LoadCUE(const char* filename) {
 		{
 			if (bb != (this->toc.last + 1))
 			{
-				if (this->toc.tracks[this->toc.last].fd)
-				{
-					fclose(this->toc.tracks[this->toc.last].fd);
-					this->toc.tracks[this->toc.last].fd = 0;
-				}
-
+				FileClose(&this->toc.tracks[this->toc.last].f);
 				printf("\x1b[32mMCD: missing tracks: %s\n\x1b[0m", fname);
-
 				break;
 			}
 
@@ -130,20 +148,20 @@ int cdd_t::LoadCUE(const char* filename) {
 				{
 					this->sectorSize = 2352;
 
-					fseek(this->toc.tracks[0].fd, 0x10, SEEK_SET);
+					FileSeek(&this->toc.tracks[0].f, 0x10, SEEK_SET);
 				}
 
 				if (this->sectorSize)
 				{
 					this->toc.tracks[0].type = 1;
 
-					fread(header, 0x210, 1, this->toc.tracks[0].fd);
-					fseek(this->toc.tracks[0].fd, 0, SEEK_SET);
+					FileReadAdv(&this->toc.tracks[0].f, header, 0x210);
+					FileSeek(&this->toc.tracks[0].f, 0, SEEK_SET);
 				}
 			}
 			else
 			{
-				if (!this->toc.tracks[this->toc.last].fd)
+				if (!this->toc.tracks[this->toc.last].f.opened())
 				{
 					this->toc.tracks[this->toc.last - 1].end = 0;
 				}
@@ -170,9 +188,9 @@ int cdd_t::LoadCUE(const char* filename) {
 		{
 			this->toc.tracks[this->toc.last].offset += pregap * 2352;
 
-			if (!this->toc.tracks[this->toc.last].fd)
+			if (!this->toc.tracks[this->toc.last].f.opened())
 			{
-				this->toc.tracks[this->toc.last].fd = this->toc.tracks[0].fd;
+				FileOpen(&this->toc.tracks[this->toc.last].f, fname);
 				this->toc.tracks[this->toc.last].start = bb + ss * 75 + mm * 60 * 75 + pregap;
 				if (this->toc.last && !this->toc.tracks[this->toc.last - 1].end)
 				{
@@ -181,21 +199,14 @@ int cdd_t::LoadCUE(const char* filename) {
 			}
 			else
 			{
+				FileSeek(&this->toc.tracks[this->toc.last].f, 0, SEEK_SET);
+
 				this->toc.tracks[this->toc.last].start = this->toc.end + pregap;
 				this->toc.tracks[this->toc.last].offset += this->toc.end * 2352;
 
-				{
-					fseek(this->toc.tracks[this->toc.last].fd, 0, SEEK_END);
-					if (this->toc.tracks[this->toc.last].type)
-					{
-						this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((ftell(this->toc.tracks[this->toc.last].fd) + this->sectorSize - 1) / this->sectorSize);
-					}
-					else
-					{
-						this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((ftell(this->toc.tracks[this->toc.last].fd) + 2351) / 2352);
-					}
-					fseek(this->toc.tracks[this->toc.last].fd, 0, SEEK_SET);
-				}
+				int sectorSize = 2352;
+				if (this->toc.tracks[this->toc.last].type) sectorSize = this->sectorSize;
+				this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((this->toc.tracks[this->toc.last].f.size + sectorSize - 1) / sectorSize);
 
 				this->toc.tracks[this->toc.last].start += (bb + ss * 75 + mm * 60 * 75);
 				this->toc.end = this->toc.tracks[this->toc.last].end;
@@ -214,21 +225,15 @@ int cdd_t::LoadCUE(const char* filename) {
 		this->toc.tracks[this->toc.last - 1].end = this->toc.end;
 	}
 
-	if (this->toc.tracks[this->toc.last].fd)
-	{
-		fclose(this->toc.tracks[this->toc.last].fd);
-	}
-
-	fclose(fd);
-
+	FileClose(&this->toc.tracks[this->toc.last].f);
 	return 0;
 }
 
 int cdd_t::Load(const char *filename)
 {
-	char fname[1024 + 10];
-	char header[1024];
-	FILE *fd_img;
+	//char fname[1024 + 10];
+	static char header[1024];
+	fileTYPE *fd_img;
 
 	Unload();
 
@@ -236,11 +241,10 @@ int cdd_t::Load(const char *filename)
 		return (-1);
 	}
 
-	fd_img = this->toc.tracks[0].fd;
+	fd_img = &this->toc.tracks[0].f;
 
-
-	fseek(fd_img, 0, SEEK_SET);
-	fread(header, 0x10, 1, fd_img);
+	FileSeek(fd_img, 0, SEEK_SET);
+	FileReadAdv(fd_img, header, 0x10);
 
 	if (!memcmp("SEGADISCSYSTEM", header, 14))
 	{
@@ -248,7 +252,7 @@ int cdd_t::Load(const char *filename)
 	}
 	else
 	{
-		fread(header, 0x10, 1, fd_img);
+		FileReadAdv(fd_img, header, 0x10);
 		if (!memcmp("SEGADISCSYSTEM", header, 14))
 		{
 			this->sectorSize = 2352;
@@ -257,13 +261,12 @@ int cdd_t::Load(const char *filename)
 
 	if (this->sectorSize)
 	{
-		fread(header + 0x10, 0x200, 1, fd_img);
-		fseek(fd_img, 0, SEEK_SET);
+		FileReadAdv(fd_img, header + 0x10, 0x200);
+		FileSeek(fd_img, 0, SEEK_SET);
 	}
 	else
 	{
-		fclose(fd_img);
-
+		FileClose(fd_img);
 		return (-1);
 	}
 
@@ -274,8 +277,8 @@ int cdd_t::Load(const char *filename)
 		this->toc.tracks[this->toc.last].start = this->toc.end;
 		this->loaded = 1;
 
-		memcpy(&fname[strlen(fname) - 4], ".sub", 4);
-		this->toc.sub = fopen(getFullPath(fname), "r");
+		//memcpy(&fname[strlen(fname) - 4], ".sub", 4);
+		//this->toc.sub = fopen(getFullPath(fname), "r");
 
 		printf("\x1b[32mMCD: CD mounted , last track = %u\n\x1b[0m", this->toc.last);
 
@@ -291,22 +294,11 @@ void cdd_t::Unload()
 	{
 		for (int i = 0; i < this->toc.last; i++)
 		{
-			if (this->toc.tracks[i].fd)
-			{
-				if ((i > 0) && (this->toc.tracks[i].fd == this->toc.tracks[i - 1].fd))
-				{
-					i++;
-				}
-				else
-				{
-					fclose(this->toc.tracks[i].fd);
-				}
-			}
+			FileClose(&this->toc.tracks[i].f);
 		}
 
-		if (this->toc.sub) {
-			fclose(this->toc.sub);
-		}
+		//if (this->toc.sub) fclose(this->toc.sub);
+
 		this->loaded = 0;
 	}
 
@@ -347,10 +339,7 @@ void cdd_t::Update() {
 			return;
 		}
 
-		if (this->toc.sub)
-		{
-			//mcd_sub_send();
-		}
+		//if (this->toc.sub) mcd_sub_send();
 
 		if (this->toc.tracks[this->index].type)
 		{
@@ -385,9 +374,9 @@ void cdd_t::Update() {
 
 			this->isData = 0x01;
 
-			if (this->toc.tracks[this->index].fd)
+			if (this->toc.tracks[this->index].f.opened())
 			{
-				fseek(this->toc.tracks[this->index].fd, (this->toc.tracks[this->index].start * 2352) - this->toc.tracks[this->index].offset, SEEK_SET);
+				FileSeek(&this->toc.tracks[this->index].f, (this->toc.tracks[this->index].start * 2352) - this->toc.tracks[this->index].offset, SEEK_SET);
 			}
 		}
 	}
@@ -425,20 +414,17 @@ void cdd_t::Update() {
 
 		this->isData = this->toc.tracks[this->index].type;
 
-		if (this->toc.sub)
-		{
-			fseek(this->toc.sub, this->lba * 96, SEEK_SET);
-		}
+		//if (this->toc.sub) fseek(this->toc.sub, this->lba * 96, SEEK_SET);
 
 		if (this->toc.tracks[this->index].type)
 		{
 			// DATA track
-			fseek(this->toc.tracks[0].fd, this->lba * this->sectorSize, SEEK_SET);
+			FileSeek(&this->toc.tracks[0].f, this->lba * this->sectorSize, SEEK_SET);
 		}
-		else if (this->toc.tracks[this->index].fd)
+		else if (this->toc.tracks[this->index].f.opened())
 		{
 			// AUDIO track
-			fseek(this->toc.tracks[this->index].fd, (this->lba * 2352) - this->toc.tracks[this->index].offset, SEEK_SET);
+			FileSeek(&this->toc.tracks[this->index].f, (this->lba * 2352) - this->toc.tracks[this->index].offset, SEEK_SET);
 		}
 	}
 }
@@ -629,20 +615,17 @@ void cdd_t::CommandExec() {
 		if (this->toc.tracks[index].type)
 		{
 			/* DATA track */
-			fseek(this->toc.tracks[0].fd, lba_ * this->sectorSize, SEEK_SET);
+			FileSeek(&this->toc.tracks[0].f, lba_ * this->sectorSize, SEEK_SET);
 		}
-		else if (cdd.toc.tracks[index].fd)
+		else if (cdd.toc.tracks[index].f.opened())
 		{
 			/* PCM AUDIO track */
-			fseek(this->toc.tracks[index].fd, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
+			FileSeek(&this->toc.tracks[index].f, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 		}
 
 		this->audioOffset = 0;
 
-		if (this->toc.sub)
-		{
-			fseek(this->toc.sub, lba_ * 96, SEEK_SET);
-		}
+		//if (this->toc.sub) fseek(this->toc.sub, lba_ * 96, SEEK_SET);
 
 		this->isData = 1;
 
@@ -683,21 +666,17 @@ void cdd_t::CommandExec() {
 		if (this->toc.tracks[index].type)
 		{
 			// DATA track
-			fseek(this->toc.tracks[0].fd, lba_ * this->sectorSize, SEEK_SET);
-
+			FileSeek(&this->toc.tracks[0].f, lba_ * this->sectorSize, SEEK_SET);
 		}
-		else if (this->toc.tracks[index].fd)
+		else if (this->toc.tracks[index].f.opened())
 		{
 			// AUDIO track
-			fseek(this->toc.tracks[index].fd, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
+			FileSeek(&this->toc.tracks[index].f, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 		}
 
 		//this->audioOffset = 0;
 
-		if (this->toc.sub)
-		{
-			fseek(this->toc.sub, lba_ * 96, SEEK_SET);
-		}
+		//if (this->toc.sub) fseek(this->toc.sub, lba_ * 96, SEEK_SET);
 
 		this->isData = 1;
 
@@ -824,23 +803,20 @@ void cdd_t::MSFToLBA(int* lba, msf_t* msf) {
 	*lba = msf->f + msf->s * 75 + msf->m * 60 * 75;
 }
 
-
-
-
 void cdd_t::ReadData(uint8_t *buf)
 {
 	if (this->toc.tracks[this->index].type && (this->lba >= 0))
 	{
 		if (this->sectorSize == 2048)
 		{
-			fseek(this->toc.tracks[0].fd, this->lba * 2048, SEEK_SET);
+			FileSeek(&this->toc.tracks[0].f, this->lba * 2048, SEEK_SET);
 		}
 		else
 		{
-			fseek(this->toc.tracks[0].fd, this->lba * 2352 + 16, SEEK_SET);
+			FileSeek(&this->toc.tracks[0].f, this->lba * 2352 + 16, SEEK_SET);
 		}
 
-		fread(buf, 2048, 1, this->toc.tracks[0].fd);
+		FileReadAdv(&this->toc.tracks[0].f, buf, 2048);
 	}
 }
 
@@ -849,9 +825,9 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 	this->audioLength = 2352 + 2352 - this->audioOffset;
 	this->audioOffset = 2352;
 
-	if (!this->isData && this->toc.tracks[this->index].fd)
+	if (!this->isData && this->toc.tracks[this->index].f.opened())
 	{
-		fread(buf, this->audioLength, 1, this->toc.tracks[this->index].fd);
+		FileReadAdv(&this->toc.tracks[this->index].f, buf, this->audioLength);
 	}
 
 	return this->audioLength;
@@ -859,6 +835,8 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 
 void cdd_t::ReadSubcode(uint16_t* buf)
 {
+	(void)buf;
+	/*
 	uint8_t subc[96];
 	int i, j, n;
 
@@ -876,6 +854,7 @@ void cdd_t::ReadSubcode(uint16_t* buf)
 
 		buf[n] = code;
 	}
+	*/
 }
 
 
