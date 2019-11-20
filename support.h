@@ -25,3 +25,6 @@
 
 // Arcade support
 #include "support/arcade/romutils.h"
+
+// MEGACD  support
+#include "support/megacd/megacd.h"

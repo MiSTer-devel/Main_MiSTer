@@ -9,8 +9,11 @@
 
 struct fileZipArchive;
 
-typedef struct
+struct fileTYPE
 {
+	fileTYPE();
+	int opened();
+
 	FILE           *filp;
 	int             mode;
 	int             type;
@@ -19,7 +22,7 @@ typedef struct
 	__off64_t       offset;
 	char            path[1024];
 	char            name[261];
-}  fileTYPE;
+};
 
 struct direntext_t
 {

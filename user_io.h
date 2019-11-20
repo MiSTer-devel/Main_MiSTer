@@ -72,6 +72,8 @@
 #define UIO_SET_MEMSZ   0x31  // Send memory size to the core
 #define UIO_SET_GAMMA   0x32  // Enable/disable Gamma correction
 #define UIO_SET_GAMCURV 0x33  // Set Gamma curve
+#define UIO_CD_GET      0x34
+#define UIO_CD_SET      0x35
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -221,6 +223,7 @@ char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name();
 char *user_io_get_core_path();
 const char *user_io_get_core_name_ex();
+char is_megacd_core();
 char has_menu();
 
 const char *get_image_name(int i);

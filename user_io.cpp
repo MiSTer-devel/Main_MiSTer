@@ -296,6 +296,13 @@ char is_minimig()
 	return (is_minimig_type == 1);
 }
 
+static int is_megacd_type = 0;
+char is_megacd_core()
+{
+	if (!is_megacd_type) is_megacd_type = strcasecmp(core_name, "MEGACD") ? 2 : 1;
+	return (is_megacd_type == 1);
+}
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -1941,6 +1948,8 @@ void user_io_send_buttons(char force)
 			minimig_reset();
 		}
 
+		if (is_megacd_core()) mcd_set_image(0, "");
+
 		key_map = map;
 		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
@@ -2950,6 +2959,8 @@ void user_io_poll()
 		fpga_set_led(0);
 		diskled_is_on = 0;
 	}
+
+	if (is_megacd_core()) mcd_poll();
 }
 
 static void send_keycode(unsigned short key, int press)
