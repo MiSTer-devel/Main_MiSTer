@@ -4646,10 +4646,16 @@ void ScrollLongName(void)
 		len=CalculateFileNameLengthWithoutExtension(flist_SelectedItem()->altname,fs_pFileExt);
 	}
 
+
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
 	if (flist_SelectedItem()->de.d_type == DT_DIR)
 		max_len = 25; // number of directory name characters to display
 
+	// if we are in a core, we might need to resize for the fixed date string at the end
+	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES))
+		max_len=22; // __.__.__ remove that from the end
+
+	//printf("ScrollLongName: len %d max_len %d\n",len,max_len);
 	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
 }
 
