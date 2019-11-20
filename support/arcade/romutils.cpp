@@ -270,7 +270,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			else
 			{
 				if (arc_info->zipname[0]=='/')
-					sprintf(fname,"arcade/mame/%s/%s",arc_info->zipname,arc_info->partname);
+					sprintf(fname,"arcade/%s/%s",arc_info->zipname,arc_info->partname);
 				else
 					sprintf(fname,"arcade/mame/%s/%s",arc_info->zipname,arc_info->partname);
 			}
@@ -285,10 +285,13 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					// we should check file not found error for the zip
 					if (result==0)
 					{
+						int skip=0;
+						if (!strncasecmp(fname,"arcade/mame/",strlen("arcade/mame/")))
+							skip=strlen("arcade/mame/");
 						printf("%s does not exist\n",fname);
 						snprintf(arc_info->error_msg,kBigTextSize,"%s\n"
 						"\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n"
-							       	"File Not Found",fname);
+							       	"File Not Found",fname+skip);
 					}
 				}
 			}
