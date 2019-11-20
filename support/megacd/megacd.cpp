@@ -130,6 +130,10 @@ void mcd_set_image(int num, const char *filename)
 {
 	(void)num;
 
+	cdd.Unload();
+	unloaded = 1;
+	cdd.status = CD_STAT_OPEN;
+
 	if (*filename) {
 
 		if (cdd.Load(filename) > 0) {
@@ -141,11 +145,6 @@ void mcd_set_image(int num, const char *filename)
 		else {
 			cdd.status = CD_STAT_NO_DISC;
 		}
-	}
-	else {
-		cdd.Unload();
-		unloaded = 1;
-		cdd.status = CD_STAT_OPEN;
 	}
 }
 
