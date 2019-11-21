@@ -69,60 +69,6 @@ void mcd_poll()
 
 		cdd.Update();
 	}
-
-
-	//static uint8_t state = 0;
-	//
-	//if (!poll_timer || CheckTimer(poll_timer))
-	//{
-	//	if (!state) {
-	//		poll_timer = GetTimer(5 + (!adj ? 1 : 0));
-
-	//		if (++adj >= 4) adj = 0;
-
-	//		if (has_command) {
-	//			uint64_t s = cdd.GetStatus();
-	//			spi_uio_cmd_cont(UIO_CD_SET);
-	//			spi_w((s >> 0) & 0xFFFF);
-	//			spi_w((s >> 16) & 0xFFFF);
-	//			spi_w(((s >> 32) & 0x00FF) | (cdd.isData ? 0x01 << 8 : 0x00 << 8));
-	//			DisableIO();
-	//			//printf("\x1b[32mMCD: Send status, status = %02X%08X, frame = %u\n\x1b[0m", (uint32_t)(status >> 32), (uint32_t)status, frame);
-	//		}
-
-	//		frame++;
-	//	}
-	//	else {
-	//		poll_timer = GetTimer(8);
-
-	//		cdd.Update();
-
-	//		uint16_t data_in[4];
-
-	//		uint8_t req = spi_uio_cmd_cont(UIO_CD_GET);
-	//		//get the data from FPGA
-	//		data_in[0] = spi_w(0);
-	//		data_in[1] = spi_w(0);
-	//		data_in[2] = spi_w(0);
-	//		DisableIO();
-
-	//		has_command = 0;
-	//		if (req != last_req)
-	//		{
-	//			last_req = req;
-
-	//			uint64_t c = *((uint64_t*)(data_in));
-
-	//			cdd.CommandExec(c);
-
-	//			has_command = 1;
-
-	//			//printf("\x1b[32mMCD: Receive command, command = %02X%08X, frame = %u\n\x1b[0m", (uint32_t)(c >> 32), (uint32_t)c, frame);
-	//		}
-	//	}
-
-	//	state = ~state;
-	//}
 }
 
 
@@ -140,7 +86,6 @@ void mcd_set_image(int num, const char *filename)
 			loaded = 1;
 			cdd.status = cdd.loaded ? CD_STAT_STOP : CD_STAT_NO_DISC;
 			cdd.latency = 10;
-			//status = MakeStatus(CD_STAT_STOP, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0);
 		}
 		else {
 			cdd.status = CD_STAT_NO_DISC;

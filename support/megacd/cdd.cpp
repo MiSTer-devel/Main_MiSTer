@@ -60,7 +60,7 @@ static int sgets(char *out, int sz, char **in)
 		instr++;
 	}
 
-	if (*instr) instr++;
+	while (*instr && *instr == 10) instr++;
 	*in = instr;
 
 	return cnt || *instr;
