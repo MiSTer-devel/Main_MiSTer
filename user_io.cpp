@@ -2484,7 +2484,7 @@ void user_io_poll()
 
 						//Even after error we have to provide the block to the core
 						//Give an empty block.
-						if (!done) memset(buffer[disk], 0, sizeof(buffer[disk]));
+						if (!done) memset(buffer[disk], (sd_image[disk].type == 2) ? -1 : 0, sizeof(buffer[disk]));
 						buffer_lba[disk] = lba;
 					}
 
