@@ -271,14 +271,14 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (strlen(arc_info->partzipname))
 			{
 				if (arc_info->partzipname[0]=='/')
-					sprintf(fname,"arcade/%s/%s",arc_info->partzipname,arc_info->partname);
+					sprintf(fname,"arcade%s/%s",arc_info->partzipname,arc_info->partname);
 				else
 					sprintf(fname,"arcade/mame/%s/%s",arc_info->partzipname,arc_info->partname);
 			}
 			else
 			{
 				if (arc_info->zipname[0]=='/')
-					sprintf(fname,"arcade/%s/%s",arc_info->zipname,arc_info->partname);
+					sprintf(fname,"arcade%s/%s",arc_info->zipname,arc_info->partname);
 				else
 					sprintf(fname,"arcade/mame/%s/%s",arc_info->zipname,arc_info->partname);
 			}
