@@ -14,6 +14,7 @@
 #include "file_io.h"
 #include "input.h"
 #include "osd.h"
+#include "menu.h"
 
 #include "fpga_base_addr_ac5.h"
 #include "fpga_manager.h"
@@ -470,7 +471,10 @@ int fpga_load_rbf(const char *name, const char *cfg, const char *xml)
 	int rbf = open(path, O_RDONLY);
 	if (rbf < 0)
 	{
+		char error[4096];
+		snprintf(error,4096,"%s\nNot Found", name);
 		printf("Couldn't open file %s\n", path);
+		Info(error,5000);
 		return -1;
 	}
 	else

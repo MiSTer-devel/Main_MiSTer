@@ -4686,9 +4686,9 @@ void ScrollLongName(void)
 
 	// if we are in a core, we might need to resize for the fixed date string at the end
 	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES))
-		max_len=22; // __.__.__ remove that from the end
+		max_len=21; // __.__.__ remove that from the end
 
-	//printf("ScrollLongName: len %d max_len %d\n",len,max_len);
+	//printf("ScrollLongName: len %d max_len %d [%s]\n",len,max_len,flist_SelectedItem()->altname);
 	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
 }
 

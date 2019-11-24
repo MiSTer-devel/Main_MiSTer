@@ -181,6 +181,14 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		/* at the beginning of each rom - tell the user_io to start a new message */
 	   	if (!strcasecmp(node->tag,"rom")) 
 		{
+
+		   // clear an error message if we have a second rom0
+		   // this is kind of a problem - you will never see the 
+		   // error from the first rom0?
+		   //
+                   if (arc_info->romindex==0 && strlen(arc_info->zipname))
+			   arc_info->error_msg[0]=0;
+
 		   user_io_file_tx_start(arc_info->romname,arc_info->romindex);
 		}
                 break;
