@@ -1534,16 +1534,7 @@ void HandleUI(void)
 						if (p[1] >= '0' && p[1] <= '3') drive_num = p[1] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
-						if (is_megacd_core())
-						{
-							int len = strlen(SelectedPath);
-							if (len > 4 && !strcasecmp(SelectedPath + len - 4, ".cue"))
-							{
-								char *p = strrchr(SelectedPath, '/');
-								if (p) *p = 0;
-							}
-						}
-						SelectFile(ext, SCANO_DIR | SCANO_UMOUNT | (is_megacd_core() ? SCANO_NOENTER : 0), MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
+						SelectFile(ext, SCANO_DIR | SCANO_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
 					}
 					else if ((p[0] == 'O') || (p[0] == 'o'))
 					{
@@ -3284,7 +3275,7 @@ void HandleUI(void)
 					strcat(SelectedPath, "/");
 					strcat(SelectedPath, name);
 					int num = ScanDirectory(SelectedPath, SCANF_INIT, fs_pFileExt, 0);
-					if (!num) SelectedPath[len] = 0;
+					if (num != 1) SelectedPath[len] = 0;
 					else
 					{
 						type = flist_SelectedItem()->de.d_type;
