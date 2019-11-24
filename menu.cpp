@@ -4676,8 +4676,12 @@ void ScrollLongName(void)
 		max_len = 25; // number of directory name characters to display
 
 	// if we are in a core, we might need to resize for the fixed date string at the end
-	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES))
-		max_len=21; // __.__.__ remove that from the end
+	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES)) {
+              if (len > 9 && !strncmp(flist_SelectedItem()->altname+ len - 9, "_20", 3)) {
+		len -= 9;
+	      }
+              max_len=21; // __.__.__ remove that from the end
+	}
 
 	//printf("ScrollLongName: len %d max_len %d [%s]\n",len,max_len,flist_SelectedItem()->altname);
 	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
