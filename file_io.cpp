@@ -883,10 +883,13 @@ struct DirentComp
 {
 	bool operator()(const direntext_t& de1, const direntext_t& de2)
 	{
+
+#ifdef USE_SCHEDULER
 		if (++iterations % YieldIterations == 0)
 		{
 			scheduler_yield();
 		}
+#endif
 
 		if ((de1.de.d_type == DT_DIR) && !strcmp(de1.altname, "..")) return true;
 		if ((de2.de.d_type == DT_DIR) && !strcmp(de2.altname, "..")) return false;
@@ -1035,11 +1038,12 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		for (size_t i = 0; (d && (de = readdir(d)))
 				 || (z && i < mz_zip_reader_get_num_files(z)); i++)
 		{
+#ifdef USE_SCHEDULER
 			if (0 < i && i % YieldIterations == 0)
 			{
 				scheduler_yield();
 			}
-
+#endif
 			struct dirent _de = {};
 			if (z) {
 				mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
