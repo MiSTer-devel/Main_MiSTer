@@ -1823,17 +1823,13 @@ void user_io_send_buttons(char force)
 			fpga_load_rbf(name);
 		}
 
-		if (is_archie() && (key_map & BUTTON2) && !(map & BUTTON2))
+		//special reset for some cores
+		if ((key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			fpga_load_rbf(name[0] ? name : "Archie.rbf");
+			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
+			if (is_minimig()) minimig_reset();
+			if (is_megacd_core()) mcd_set_image(0, "");
 		}
-
-		if (is_minimig() && (key_map & BUTTON2) && !(map & BUTTON2))
-		{
-			minimig_reset();
-		}
-
-		if (is_megacd_core()) mcd_set_image(0, "");
 
 		key_map = map;
 		spi_uio_cmd16(UIO_BUT_SW, map);
