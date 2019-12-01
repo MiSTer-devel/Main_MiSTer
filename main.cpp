@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "input.h"
 #include "fpga_io.h"
 #include "scheduler.h"
+#include "osd.h"
 
 const char *version = "$VER:" VDATE;
 

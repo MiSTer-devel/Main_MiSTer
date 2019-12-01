@@ -324,7 +324,7 @@ static void user_io_read_core_name()
 	core_name[0] = 0;
 
 	// get core name
-	char *p = user_io_8bit_get_string(0);
+	char *p = user_io_get_confstr(0);
 	if (p && p[0]) strcpy(core_name, p);
 
 	strncpy(core_dir, !strcasecmp(p, "minimig") ? "Amiga" : core_name, 1024);
@@ -417,7 +417,7 @@ static void parse_config()
 	joy_force = 0;
 
 	do {
-		p = user_io_8bit_get_string(i);
+		p = user_io_get_confstr(i);
 		printf("get cfgstring %d = %s\n", i, p);
 		if (!i && p && p[0])
 		{
@@ -725,6 +725,7 @@ void user_io_init(const char *path)
 	spi_init(core_type != CORE_TYPE_UNKNOWN);
 	OsdSetSize(8);
 
+	user_io_read_confstr();
 	if (core_type == CORE_TYPE_8BIT)
 	{
 		puts("Identified 8BIT core");
@@ -1690,53 +1691,52 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	return 1;
 }
 
-// 8 bit cores have a config string telling the firmware how
-// to treat it
-char *user_io_8bit_get_string(char index)
+static char cfgstr[1024 * 10] = {};
+void user_io_read_confstr()
+{
+	spi_uio_cmd_cont(UIO_GET_STRING);
+
+	uint32_t j = 0;
+	while (j < sizeof(cfgstr) - 1)
+	{
+		char i = spi_in();
+		if (!i) break;
+		cfgstr[j++] = i;
+	}
+
+	cfgstr[j++] = 0;
+}
+
+char *user_io_get_confstr(int index)
 {
 	unsigned char i, lidx = 0, j = 0;
 	static char buffer[128 + 1];  // max 128 bytes per config item
-
 								  // clear buffer
 	buffer[0] = 0;
+	int pos = 0;
 
-	spi_uio_cmd_cont(UIO_GET_STRING);
-	i = spi_in();
-	// the first char returned will be 0xff if the core doesn't support
-	// config strings. atari 800 returns 0xa4 which is the status byte
-	if ((i == 0xff) || (i == 0xa4))
+	i = cfgstr[pos++];
+	while (i && (j < sizeof(buffer)))
 	{
-		DisableIO();
-		return NULL;
-	}
-
-	//  printf("String: ");
-	while ((i != 0) && (i != 0xff) && (j<sizeof(buffer)))
-	{
-		if (i == ';') {
+		if (i == ';')
+		{
 			if (lidx == index) buffer[j++] = 0;
 			lidx++;
 		}
-		else {
-			if (lidx == index)
-				buffer[j++] = i;
+		else
+		{
+			if (lidx == index) buffer[j++] = i;
 		}
 
-		//  printf("%c", i);
-		i = spi_in();
+		i = cfgstr[pos++];
 	}
-
-	DisableIO();
-	//  printf("\n");
 
 	// if this was the last string in the config string list, then it still
 	// needs to be terminated
 	if (lidx == index) buffer[j] = 0;
 
 	// also return NULL for empty strings
-	if (!buffer[0]) return NULL;
-
-	return buffer;
+	return buffer[0] ? buffer : NULL;
 }
 
 uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask, int ex)
@@ -1823,17 +1823,13 @@ void user_io_send_buttons(char force)
 			fpga_load_rbf(name);
 		}
 
-		if (is_archie() && (key_map & BUTTON2) && !(map & BUTTON2))
+		//special reset for some cores
+		if ((key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			fpga_load_rbf(name[0] ? name : "Archie.rbf");
+			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
+			if (is_minimig()) minimig_reset();
+			if (is_megacd_core()) mcd_set_image(0, "");
 		}
-
-		if (is_minimig() && (key_map & BUTTON2) && !(map & BUTTON2))
-		{
-			minimig_reset();
-		}
-
-		if (is_megacd_core()) mcd_set_image(0, "");
 
 		key_map = map;
 		spi_uio_cmd16(UIO_BUT_SW, map);

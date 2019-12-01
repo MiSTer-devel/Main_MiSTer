@@ -116,6 +116,7 @@ void StarsUpdate()
 		}
 		framebuffer_plot(stars[i].x >> 4, stars[i].y >> 4);
 	}
+	osdset = -1;
 }
 
 
@@ -702,6 +703,7 @@ void OsdUpdate()
 			spi_osd_cmd_cont(OSD_CMD_WRITE | i);
 			spi_write(osdbuf + i * 256, 256, 0);
 			DisableOsd();
+			if (is_megacd_core()) mcd_poll();
 		}
 	}
 
