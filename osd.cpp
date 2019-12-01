@@ -48,6 +48,11 @@ as rotated copies of the first 128 entries.  -- AMR
 
 #include "support.h"
 
+#define OSDLINELEN       256       // single line length in bytes
+#define OSD_CMD_WRITE    0x20      // OSD write video data command
+#define OSD_CMD_ENABLE   0x41      // OSD enable command
+#define OSD_CMD_DISABLE  0x40      // OSD disable command
+
 static int osd_size = 8;
 
 void OsdSetSize(int n)
@@ -67,6 +72,9 @@ struct star
 };
 
 struct star stars[64];
+static uint8_t osdbuf[256 * 32];
+static int  osdbufpos = 0;
+static int  osdset = 0;
 
 char framebuffer[16][256];
 void framebuffer_clear()
@@ -205,6 +213,13 @@ void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned cha
 	OsdWriteOffset(n, s, invert, stipple, 0, 0, usebg, maxinv);
 }
 
+static void osd_start(int line)
+{
+	line = line & 0x1F;
+	osdset |= 1 << line;
+	osdbufpos = line * 256;
+}
+
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
 void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar, char usebg, int maxinv)
 {
@@ -225,8 +240,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	else
 		stipple = 0;
 
-	// select buffer and line to write to
-	spi_osd_cmd_cont(OSD_CMD_WRITE | n);
+	osd_start(n);
 
 	if (invert)	invert = 255;
 
@@ -252,25 +266,41 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 				p = &titlebuffer[(osd_size - 1 - n) * 8];
 			}
 
-			spi16(0xffff);  // left white border
+			// left white border
+			osdbuf[osdbufpos++] = 0xff;
+			osdbuf[osdbufpos++] = 0xff;
 
 			for (j = 0; j < 8; j++)
-				spi_n(255 ^ *p++, 2);
+			{
+				osdbuf[osdbufpos++] = 255 ^ *p;
+				osdbuf[osdbufpos++] = 255 ^ *p++;
+			}
 
-			spi16(0xffff);  // right white border
-			spi16(0x0000);  // blue gap
+			// right white border
+			osdbuf[osdbufpos++] = 0xff;
+			osdbuf[osdbufpos++] = 0xff;
+
+			// blue gap
+			osdbuf[osdbufpos++] = 0;
+			osdbuf[osdbufpos++] = 0;
 			i += 22;
 		}
 		else if (n == (osd_size-1) && (arrowmask & OSD_ARROW_LEFT)) {	// Draw initial arrow
 			unsigned char b;
 
-			spi24((invert<<16)| (invert << 8) |invert);
+			osdbuf[osdbufpos++] = invert;
+			osdbuf[osdbufpos++] = invert;
+			osdbuf[osdbufpos++] = invert;
 			p = &charfont[0x10][0];
-			for (b = 0; b<8; b++) spi8((*p++ << offset) ^ invert);
+			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = (*p++ << offset) ^ invert;
 			p = &charfont[0x14][0];
-			for (b = 0; b<8; b++) spi8((*p++ << offset) ^ invert);
-			spi24((invert << 16) | (invert << 8) | invert);
-			spi_n(invert, 2);
+			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = (*p++ << offset) ^ invert;
+			osdbuf[osdbufpos++] = invert;
+			osdbuf[osdbufpos++] = invert;
+			osdbuf[osdbufpos++] = invert;
+			osdbuf[osdbufpos++] = invert;
+			osdbuf[osdbufpos++] = invert;
+
 			i += 24;
 			arrowmask &= ~OSD_ARROW_LEFT;
 			if (*s++ == 0) break;	// Skip 3 characters, to keep alignent the same.
@@ -283,21 +313,22 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			if (b == 0) // end of string
 				break;
 
-			else if (b == 0x0d || b == 0x0a) { // cariage return / linefeed, go to next line
-											   // increment line counter
+			else if (b == 0x0d || b == 0x0a)
+			{  // cariage return / linefeed, go to next line
+			   // increment line counter
 				if (++n >= linelimit)
 					n = 0;
 
 				// send new line number to OSD
-				DisableOsd();
-				spi_osd_cmd_cont(OSD_CMD_WRITE | n);
+				osd_start(n);
 			}
-			else if (i<(linelimit - 8)) { // normal character
+			else if (i<(linelimit - 8))
+			{  // normal character
 				unsigned char c;
 				p = &charfont[b][0];
 				for (c = 0; c<8; c++) {
 					char bg = usebg ? framebuffer[n][i+c-22] : 0;
-					spi8((((*p++ << offset)&stipplemask) ^ invert) | bg);
+					osdbuf[osdbufpos++] = (((*p++ << offset)&stipplemask) ^ invert) | bg;
 					stipplemask ^= stipple;
 				}
 				i += 8;
@@ -308,23 +339,24 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	for (; i < linelimit; i++) // clear end of line
 	{
 		char bg = usebg ? framebuffer[n][i-22] : 0;
-		spi8(invert | bg);
+		osdbuf[osdbufpos++] = invert | bg;
 	}
 
 	if (n == (osd_size-1) && (arrowmask & OSD_ARROW_RIGHT))
 	{	// Draw final arrow if needed
 		unsigned char c;
-		spi24((invert << 16) | (invert << 8) | invert);
+		osdbuf[osdbufpos++] = invert;
+		osdbuf[osdbufpos++] = invert;
+		osdbuf[osdbufpos++] = invert;
 		p = &charfont[0x15][0];
-		for (c = 0; c<8; c++) spi8((*p++ << offset) ^ invert);
+		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = (*p++ << offset) ^ invert;
 		p = &charfont[0x11][0];
-		for (c = 0; c<8; c++) spi8((*p++ << offset) ^ invert);
-		spi24((invert << 16) | (invert << 8) | invert);
+		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = (*p++ << offset) ^ invert;
+		osdbuf[osdbufpos++] = invert;
+		osdbuf[osdbufpos++] = invert;
+		osdbuf[osdbufpos++] = invert;
 		i += 22;
 	}
-
-	// deselect OSD SPI device
-	DisableOsd();
 }
 
 void OsdDrawLogo(int row)
@@ -336,8 +368,7 @@ void OsdDrawLogo(int row)
 	int mag = (osd_size / 8);
 	uint n = row * mag;
 
-	// select buffer and line to write to
-	spi_osd_cmd_cont(OSD_CMD_WRITE | n);
+	osd_start(n);
 
 	for (int k = 0; k < mag; k++)
 	{
@@ -355,10 +386,23 @@ void OsdDrawLogo(int row)
 			{
 				unsigned char j;
 				p = &titlebuffer[(osd_size - 1 - n - k) * 8];
-				spi16(0xffff);  // left white border
-				for (j = 0; j<8; j++) spi_n(255 ^ *p++, 2);
-				spi16(0xffff);  // right white border
-				spi16(0x0000);  // blue gap
+				// left white border
+				osdbuf[osdbufpos++] = 0xff;
+				osdbuf[osdbufpos++] = 0xff;
+
+				for (j = 0; j < 8; j++)
+				{
+					osdbuf[osdbufpos++] = 255 ^ *p;
+					osdbuf[osdbufpos++] = 255 ^ *p++;
+				}
+
+				// right white border
+				osdbuf[osdbufpos++] = 0xff;
+				osdbuf[osdbufpos++] = 0xff;
+
+				// blue gap
+				osdbuf[osdbufpos++] = 0;
+				osdbuf[osdbufpos++] = 0;
 				i += 22;
 			}
 
@@ -373,13 +417,10 @@ void OsdDrawLogo(int row)
 				bytes--;
 			}
 
-			spi8(bt | *bg++);
+			osdbuf[osdbufpos++] = bt | *bg++;
 			++i;
 		}
 	}
-
-	// deselect OSD SPI device
-	DisableOsd();
 }
 
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
@@ -396,61 +437,64 @@ void OSD_PrintText(unsigned char line, const char *hdr, const char *text, unsign
 	int i, j;
 
 	// select buffer and line to write to
-	spi_osd_cmd_cont(OSD_CMD_WRITE | line);
+	osd_start(line);
 
 	if (invert) invert = 0xff;
 
 	p = &titlebuffer[(osd_size - 1 - line) * 8];
 	if (start>2)
 	{
-		spi16(0xffff);
+		osdbuf[osdbufpos++] = 0xff;
+		osdbuf[osdbufpos++] = 0xff;
 		start -= 2;
 	}
 
 	i = start>16 ? 16 : start;
-	for (j = 0; j<(i / 2); ++j) spi_n(255 ^ *p++, 2);
+	for (j = 0; j<(i / 2); ++j)
+	{
+		osdbuf[osdbufpos++] = 255 ^ *p;
+		osdbuf[osdbufpos++] = 255 ^ *p++;
+	}
 
-	if (i & 1) spi8(255 ^ *p);
+	if (i & 1) osdbuf[osdbufpos++] = 255 ^ *p;
 	start -= i;
 
 	if (start>2)
 	{
-		spi16(0xffff);
+		osdbuf[osdbufpos++] = 0xff;
+		osdbuf[osdbufpos++] = 0xff;
 		start -= 2;
 	}
 
-	while (start--) spi8(0x00);
+	while (start--) osdbuf[osdbufpos++] = 0x00;
 
 	while(*hdr)
 	{
 		width -= 8;
 		p = charfont[(uint)(*hdr++)];
-		for (int i=0; i < 8; i++) spi8(*p++^invert);
+		for (int i = 0; i < 8; i++) osdbuf[osdbufpos++] = *p++ ^ invert;
 	}
 
 	if (offset)
 	{
 		width -= 8 - offset;
 		p = &charfont[(uint)(*text++)][offset];
-		for (; offset < 8; offset++)
-			spi8(*p++^invert);
+		for (; offset < 8; offset++) osdbuf[osdbufpos++] = *p++ ^ invert;
 	}
 
 	while (width > 8)
 	{
 		unsigned char b;
 		p = &charfont[(uint)(*text++)][0];
-		for (b = 0; b<8; b++) spi8(*p++^invert);
+		for (b = 0; b < 8; b++) osdbuf[osdbufpos++] = *p++ ^ invert;
 		width -= 8;
 	}
 
 	if (width)
 	{
 		p = &charfont[(uint)(*text++)][0];
-		while (width--) spi8(*p++^invert);
+		while (width--) osdbuf[osdbufpos++] = *p++ ^ invert;
 	}
-
-	DisableOsd();
 }
 
 #define INFO_MAXW 32
@@ -514,24 +558,21 @@ void OSD_PrintInfo(const char *message, int *width, int *height, int frame)
 
 	for (y = 0; y < h; y++)
 	{
-		spi_osd_cmd_cont(OSD_CMD_WRITE | y);
+		osd_start(y);
 
 		for (x = 0; x < w; x++)
 		{
 			const unsigned char *p = charfont[(uint)str[(y*INFO_MAXW) + x]];
-			for (int i = 0; i < 8; i++) spi8(*p++);
+			for (int i = 0; i < 8; i++) osdbuf[osdbufpos++] = *p++;
 		}
-
-		DisableOsd();
 	}
 }
 
 // clear OSD frame buffer
 void OsdClear(void)
 {
-	spi_osd_cmd_cont(OSD_CMD_WRITE);
-	spi_n(0x00, OSDLINELEN * OsdGetSize());
-	DisableOsd();
+	osdset = -1;
+	memset(osdbuf, 0, 16 * 256);
 }
 
 // enable displaying of OSD
@@ -565,11 +606,25 @@ void OsdRotation(uint8_t rotate)
 }
 
 // disable displaying of OSD
-void OsdDisable(void)
+void OsdDisable()
 {
 	user_io_osd_key_enable(0);
 	spi_osd_cmd(OSD_CMD_DISABLE);
 }
+
+void OsdMenuCtl(int en)
+{
+	if (en)
+	{
+		spi_osd_cmd(OSD_CMD_WRITE | 8);
+		spi_osd_cmd(OSD_CMD_ENABLE);
+	}
+	else
+	{
+		spi_osd_cmd(OSD_CMD_DISABLE);
+	}
+}
+
 
 void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert)
 {
@@ -635,4 +690,20 @@ void OsdCoreNameSet(const char* str)
 char* OsdCoreName()
 {
 	return lastcorename;
+}
+
+void OsdUpdate()
+{
+	int n = is_menu_core() ? 19 : osd_size;
+	for (int i = 0; i < n; i++)
+	{
+		if (osdset & (1 << i))
+		{
+			spi_osd_cmd_cont(OSD_CMD_WRITE | i);
+			spi_write(osdbuf + i * 256, 256, 0);
+			DisableOsd();
+		}
+	}
+
+	osdset = 0;
 }

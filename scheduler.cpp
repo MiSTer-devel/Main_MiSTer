@@ -5,6 +5,7 @@
 #include "user_io.h"
 #include "input.h"
 #include "fpga_io.h"
+#include "osd.h"
 
 static cothread_t co_scheduler = nullptr;
 static cothread_t co_poll = nullptr;
@@ -47,6 +48,7 @@ static void scheduler_co_ui(void)
 	for (;;)
 	{
 		HandleUI();
+		OsdUpdate();
 
 		scheduler_yield();
 	}
