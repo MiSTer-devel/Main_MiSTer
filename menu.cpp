@@ -844,7 +844,7 @@ void HandleUI(void)
 				{
 					menu_visible = 0;
 					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1, 1);
-					spi_osd_cmd(OSD_CMD_DISABLE);
+					OsdMenuCtl(0);
 				}
 				else if (!menu_visible)
 				{
@@ -861,8 +861,7 @@ void HandleUI(void)
 					c = 0;
 					menu_visible = 1;
 					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1);
-					spi_osd_cmd(OSD_CMD_WRITE | 8);
-					spi_osd_cmd(OSD_CMD_ENABLE);
+					OsdMenuCtl(1);
 				}
 			}
 

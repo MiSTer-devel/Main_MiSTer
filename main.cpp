@@ -87,6 +87,7 @@ int main(int argc, char *argv[])
 		user_io_poll();
 		input_poll(0);
 		HandleUI();
+		OsdUpdate();
 	}
 #endif
 	return 0;
