@@ -2556,7 +2556,7 @@ int input_test(int getchar)
 						if (input[n].vid == 0x054c)
 						{
 							if (input[n].pid == 0x0268)  input[n].quirk = QUIRK_DS3;
-							else if (input[n].pid == 0x05c4 || input[n].pid == 0x09cc)
+							else if (input[n].pid == 0x05c4 || input[n].pid == 0x09cc || input[n].pid == 0x0ba0)
 							{
 								input[n].quirk = QUIRK_DS4;
 								if (strcasestr(input[n].name, "Touchpad"))
