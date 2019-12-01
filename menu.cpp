@@ -1250,7 +1250,7 @@ void HandleUI(void)
 		spi_uio_cmd_cont(UIO_GET_OSDMASK);
 		hdmask = spi_w(0);
 		DisableIO();
-
+		user_io_read_confstr();
 		int entry = 0;
 		while(1)
 		{
@@ -1273,7 +1273,7 @@ void HandleUI(void)
 			{
 				char* pos;
 
-				p = user_io_8bit_get_string(i++);
+				p = user_io_get_confstr(i++);
 				//printf("Option %d: %s\n", i-1, p);
 
 				if (p)
@@ -1476,14 +1476,14 @@ void HandleUI(void)
 			else
 			{
 				static char ext[256];
-				p = user_io_8bit_get_string(1);
+				p = user_io_get_confstr(1);
 
 				int h = 0, d = 0;
 				uint32_t entry = 0;
 				int i = 1;
 				while (1)
 				{
-					p = user_io_8bit_get_string(i++);
+					p = user_io_get_confstr(i++);
 					if (!p) continue;
 
 					h = 0;
@@ -2475,7 +2475,7 @@ void HandleUI(void)
 		if (menu | select | left)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
-			menusub = 7 - m;
+			menusub = 12;
 		}
 		break;
 
