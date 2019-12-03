@@ -695,6 +695,9 @@ char* OsdCoreName()
 
 void OsdUpdate()
 {
+	// reset the output channel (workaround)
+	if(osdset) spi_osd_cmd(OSD_CMD_WRITE);
+
 	int n = is_menu_core() ? 19 : osd_size;
 	for (int i = 0; i < n; i++)
 	{
