@@ -11,7 +11,7 @@
 #include "megacd.h"
 
 
-int loaded = 0, unloaded = 0;
+int loaded = 0, unloaded = 0, need_reset=0;
 static uint8_t has_command = 0;
 
 void mcd_poll()
@@ -50,6 +50,11 @@ void mcd_poll()
 		data_in[1] = spi_w(0);
 		data_in[2] = spi_w(0);
 		DisableIO();
+
+		if (need_reset) {
+			need_reset = 0;
+			cdd.Reset();
+		}
 
 		uint64_t c = *((uint64_t*)(data_in));
 		cdd.SetCommand(c);
@@ -94,7 +99,7 @@ void mcd_set_image(int num, const char *filename)
 }
 
 void mcd_reset() {
-	cdd.Reset();
+	need_reset = 1;
 }
 
 
