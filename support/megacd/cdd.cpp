@@ -14,9 +14,7 @@ cdd_t cdd;
 uint32_t frame = 0;
 
 cdd_t::cdd_t() {
-	cycles = 0;
 	latency = 10;
-	type = 0;
 	loaded = 0;
 	index = 0;
 	lba = 0;
@@ -304,6 +302,28 @@ void cdd_t::Unload()
 
 	memset(&this->toc, 0x00, sizeof(this->toc));
 	this->sectorSize = 0;
+}
+
+void cdd_t::Reset() {
+	latency = 10;
+	index = 0;
+	lba = 0;
+	scanOffset = 0;
+	isData = 1;
+	status = CD_STAT_STOP;
+	audioLength = 0;
+	audioOffset = 0;
+
+	stat[0] = 0x0;
+	stat[1] = 0x0;
+	stat[2] = 0x0;
+	stat[3] = 0x0;
+	stat[4] = 0x0;
+	stat[5] = 0x0;
+	stat[6] = 0x0;
+	stat[7] = 0x0;
+	stat[8] = 0x0;
+	stat[9] = 0xF;
 }
 
 void cdd_t::Update() {

@@ -93,6 +93,10 @@ void mcd_set_image(int num, const char *filename)
 	}
 }
 
+void mcd_reset() {
+	cdd.Reset();
+}
+
 
 int cdd_t::SectorSend(uint8_t* header)
 {

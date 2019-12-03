@@ -1828,7 +1828,7 @@ void user_io_send_buttons(char force)
 		{
 			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			if (is_minimig()) minimig_reset();
-			if (is_megacd_core()) mcd_set_image(0, "");
+			if (is_megacd_core()) mcd_reset();
 		}
 
 		key_map = map;
