@@ -1575,7 +1575,15 @@ void HandleUI(void)
 						}
 						else
 						{
-							if (mask == 1 && is_megacd_core()) mcd_set_image(0, "");
+							if (is_megacd_core())
+							{
+								if (mask == 1) mcd_set_image(0, "");
+								if (mask == 2)
+								{
+									mcd_reset();
+									mask = 1;
+								}
+							}
 
 							uint32_t status = user_io_8bit_set_status(0, 0, ex);
 
@@ -1625,6 +1633,13 @@ void HandleUI(void)
 		}
 		else if (is_megacd_core())
 		{
+			uint32_t status = user_io_8bit_set_status(0, 0);
+			if (!(status & 4))
+			{
+				user_io_8bit_set_status(1, 1);
+				user_io_8bit_set_status(0, 1);
+				mcd_reset();
+			}
 			mcd_set_image(drive_num, SelectedPath);
 		}
 		else
