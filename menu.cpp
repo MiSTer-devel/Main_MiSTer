@@ -760,7 +760,6 @@ static void vga_nag()
 		OsdWrite(n++, "  or enable scaler on VGA:");
 		OsdWrite(n++, "       vga_scaler=1");
 		for (; n < OsdGetSize(); n++) OsdWrite(n);
-		OsdUpdate();
 		OsdEnable(0);
 		EnableOsd_on(OSD_HDMI);
 	}
@@ -1575,7 +1574,7 @@ void HandleUI(void)
 						}
 						else
 						{
-							if (mask == 1 && is_megacd_core()) mcd_set_image(0, "");
+							if (mask == 1 && is_megacd_core()) mcd_reset();
 
 							uint32_t status = user_io_8bit_set_status(0, 0, ex);
 
