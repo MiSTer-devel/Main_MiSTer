@@ -760,6 +760,7 @@ static void vga_nag()
 		OsdWrite(n++, "  or enable scaler on VGA:");
 		OsdWrite(n++, "       vga_scaler=1");
 		for (; n < OsdGetSize(); n++) OsdWrite(n);
+		OsdUpdate();
 		OsdEnable(0);
 		EnableOsd_on(OSD_HDMI);
 	}
