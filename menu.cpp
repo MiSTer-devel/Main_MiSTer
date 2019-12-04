@@ -4870,6 +4870,7 @@ void Info(const char *message, int timeout, int width, int height, int frame)
 
 		menu_timer = GetTimer(timeout);
 		menustate = MENU_INFO;
+		OsdUpdate();
 	}
 }
 

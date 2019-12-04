@@ -1705,6 +1705,7 @@ void user_io_read_confstr()
 	}
 
 	cfgstr[j++] = 0;
+	DisableIO();
 }
 
 char *user_io_get_confstr(int index)
