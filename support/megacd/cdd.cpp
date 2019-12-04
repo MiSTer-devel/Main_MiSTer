@@ -38,30 +38,35 @@ cdd_t::cdd_t() {
 
 static int sgets(char *out, int sz, char **in)
 {
-	char *instr = *in;
-	int cnt = 0;
-
-	while(*instr && *instr != 10)
+	*out = 0;
+	do
 	{
-		if (*instr == 13)
+		char *instr = *in;
+		int cnt = 0;
+
+		while (*instr && *instr != 10)
 		{
+			if (*instr == 13)
+			{
+				instr++;
+				continue;
+			}
+
+			if (cnt < sz - 1)
+			{
+				out[cnt++] = *instr;
+				out[cnt] = 0;
+			}
+
 			instr++;
-			continue;
 		}
 
-		if (cnt < sz - 1)
-		{
-			out[cnt++] = *instr;
-			out[cnt] = 0;
-		}
-
-		instr++;
+		if(*instr == 10) instr++;
+		*in = instr;
 	}
+	while (!*out && **in);
 
-	while (*instr && *instr == 10) instr++;
-	*in = instr;
-
-	return cnt || *instr;
+	return *out;
 }
 
 int cdd_t::LoadCUE(const char* filename) {
