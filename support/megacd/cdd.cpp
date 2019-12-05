@@ -122,7 +122,7 @@ int cdd_t::LoadCUE(const char* filename) {
 
 			this->toc.tracks[this->toc.last].offset = 0;
 
-			if (!strstr(lptr, "BINARY") && !strstr(lptr, "MOTOROLA"))
+			if (!strstr(lptr, "BINARY") && !strstr(lptr, "MOTOROLA") && !strstr(lptr, "WAVE"))
 			{
 				FileClose(&this->toc.tracks[this->toc.last].f);
 				printf("\x1b[32mMCD: unsupported file: %s\n\x1b[0m", fname);
