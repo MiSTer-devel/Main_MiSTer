@@ -1578,6 +1578,31 @@ static void check_status_change()
 	}
 }
 
+static char pchar[] = { 0x8C, 0x8F, 0x7F };
+
+#define PROGRESS_CNT    28
+#define PROGRESS_CHARS  (sizeof(pchar)/sizeof(pchar[0]))
+#define PROGRESS_MAX    ((PROGRESS_CHARS*PROGRESS_CNT)-1)
+
+static void tx_progress(const char* name, unsigned int progress)
+{
+	static char progress_buf[128];
+	memset(progress_buf, 0, sizeof(progress_buf));
+
+	if (progress > PROGRESS_MAX) progress = PROGRESS_MAX;
+	char c = pchar[progress % PROGRESS_CHARS];
+	progress /= PROGRESS_CHARS;
+
+	char *buf = progress_buf;
+	sprintf(buf, "\n\n %.27s\n ", name);
+	buf += strlen(buf);
+
+	for (unsigned int i = 0; i <= progress; i++) buf[i] = (i < progress) ? 0x7F : c;
+	buf[PROGRESS_CNT] = 0;
+
+	InfoMessage(progress_buf, 2000, "Loading");
+}
+
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = {};
@@ -1639,10 +1664,13 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	file_crc = 0;
 	uint32_t skip = bytes2send & 0x3FF; // skip possible header up to 1023 bytes
 
+	int use_progress = 1; // (bytes2send > (1024 * 1024)) ? 1 : 0;
+	int size = bytes2send;
+	int progress = -1;
+	if (use_progress) MenuHide();
+
 	while (bytes2send)
 	{
-		printf(".");
-
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
@@ -1652,6 +1680,15 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		spi_write(buf, chunk, fio_size);
 		DisableFpga();
 
+		if (use_progress)
+		{
+			int new_progress = PROGRESS_MAX - ((((uint64_t)bytes2send)*PROGRESS_MAX) / size);
+			if (progress != new_progress)
+			{
+				progress = new_progress;
+				tx_progress(f.name, progress);
+			}
+		}
 		bytes2send -= chunk;
 
 		if (skip >= chunk) skip -= chunk;
@@ -1665,7 +1702,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	// check if core requests some change while downloading
 	check_status_change();
 
-	printf("\n");
+	printf("Done.\n");
 	printf("CRC32: %08X\n", file_crc);
 
 	FileClose(&f);
