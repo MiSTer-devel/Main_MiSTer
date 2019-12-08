@@ -244,6 +244,7 @@ void user_io_send_buttons(char);
 uint16_t user_io_get_sdram_cfg();
 
 void user_io_set_index(unsigned char index);
+void user_io_set_download(unsigned char enable);
 unsigned char user_io_ext_idx(char *, char*);
 
 void user_io_check_reset(unsigned short modifiers, char useKeys);

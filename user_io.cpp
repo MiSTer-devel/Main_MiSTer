@@ -1185,6 +1185,14 @@ void user_io_set_index(unsigned char index)
 	DisableFpga();
 }
 
+void user_io_set_download(unsigned char enable)
+{
+	EnableFpga();
+	spi8(UIO_FILE_TX);
+	spi8(enable ? 0xff : 0x00);
+	DisableFpga();
+}
+
 int user_io_file_mount(char *name, unsigned char index, char pre)
 {
 	int writable = 0;
@@ -1529,11 +1537,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 		//hexdump(col_attr, sizeof(col_attr));
 
 		user_io_set_index(index);
-
-		EnableFpga();
-		spi8(UIO_FILE_TX);
-		spi8(0xff);
-		DisableFpga();
+		user_io_set_download(1);
 
 		EnableFpga();
 		spi8(UIO_FILE_TX_DAT);
@@ -1541,10 +1545,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 		DisableFpga();
 
 		// signal end of transmission
-		EnableFpga();
-		spi8(UIO_FILE_TX);
-		spi8(0x00);
-		DisableFpga();
+		user_io_set_download(0);
 	}
 }
 
@@ -1638,10 +1639,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	DisableFpga();
 
 	// prepare transmission of new file
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0xff);
-	DisableFpga();
+	user_io_set_download(1);
 
 	if (is_snes_core() && bytes2send)
 	{
@@ -1714,10 +1712,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	}
 
 	// signal end of transmission
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0x00);
-	DisableFpga();
+	user_io_set_download(0);
 	printf("\n");
 
 	if (is_zx81_core() && index)
@@ -2518,7 +2513,24 @@ void user_io_poll()
 
 						//Even after error we have to provide the block to the core
 						//Give an empty block.
-						if (!done) memset(buffer[disk], (sd_image[disk].type == 2) ? -1 : 0, sizeof(buffer[disk]));
+						if (!done)
+						{
+							if (sd_image[disk].type == 2)
+							{
+								if (is_megacd_core())
+								{
+									mcd_fill_blanksave(buffer[disk], lba);
+								}
+								else
+								{
+									memset(buffer[disk], -1, sizeof(buffer[disk]));
+								}
+							}
+							else
+							{
+								memset(buffer[disk], 0, sizeof(buffer[disk]));
+							}
+						}
 						buffer_lba[disk] = lba;
 					}
 

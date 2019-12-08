@@ -160,10 +160,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 	user_io_set_index(index);
 
 	// prepare transmission of new file
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0xff);
-	DisableFpga();
+	user_io_set_download(1);
 
 	int progress = -1;
 
@@ -209,11 +206,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 	FileClose(&f);
 
 	// signal end of transmission
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0x00);
-	DisableFpga();
-
+	user_io_set_download(0);
 	return size;
 }
 
@@ -400,11 +393,7 @@ static uint32_t crom_start = 0;
 static void notify_core(uint8_t index, uint32_t size)
 {
 	user_io_set_index(10);
-
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0xff);
-	DisableFpga();
+	user_io_set_download(1);
 
 	if (index == 4 || index == 6) size = (size + ALIGN_1MB) & ~ALIGN_1MB;
 	char memcp = !(index == 9 || (index >= 16 && index < 64));
@@ -424,10 +413,7 @@ static void notify_core(uint8_t index, uint32_t size)
 	spi_w(0);
 	DisableFpga();
 
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0x00);
-	DisableFpga();
+	user_io_set_download(0);
 }
 
 static uint32_t crom_sz = 0;
@@ -786,11 +772,7 @@ static uint32_t set_config(uint32_t new_config, uint32_t mask)
 static void notify_conf()
 {
 	user_io_set_index(10);
-
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0xff);
-	DisableFpga();
+	user_io_set_download(1);
 
 	uint32_t conf = set_config(0, 0);
 	printf("notify_conf(0x%X)\n", conf);
@@ -804,10 +786,7 @@ static void notify_conf()
 	spi_w(0);
 	DisableFpga();
 
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0x00);
-	DisableFpga();
+	user_io_set_download(0);
 }
 
 #define VROM_SIZE  (16 * 1024 * 1024)
