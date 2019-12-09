@@ -353,10 +353,7 @@ static void cheats_send()
 	user_io_set_index(255);
 
 	// prepare transmission
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0xff);
-	DisableFpga();
+	user_io_set_download(1);
 
 	EnableFpga();
 	spi8(UIO_FILE_TX_DAT);
@@ -364,10 +361,7 @@ static void cheats_send()
 	DisableFpga();
 
 	// signal end of transmission
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0x00);
-	DisableFpga();
+	user_io_set_download(0);
 }
 
 void cheats_toggle()

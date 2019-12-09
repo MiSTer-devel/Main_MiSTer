@@ -43,9 +43,10 @@ static void get_buttons()
 	joy_bcount = 0;
 	defaults = 0;
 
+	user_io_read_confstr();
 	while(1)
 	{
-		p = user_io_8bit_get_string(i);
+		p = user_io_get_confstr(i);
 		if (!p) break;
 
 		// this option used as default name map (unless jn/jp is supplied)

@@ -206,7 +206,8 @@ char user_io_menu_button();
 char user_io_user_button();
 void user_io_osd_key_enable(char);
 void user_io_serial_tx(char *, uint16_t);
-char *user_io_8bit_get_string(char);
+void user_io_read_confstr();
+char *user_io_get_confstr(int index);
 uint32_t user_io_8bit_set_status(uint32_t, uint32_t, int ex = 0);
 int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
 
@@ -223,7 +224,6 @@ char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name();
 char *user_io_get_core_path();
 const char *user_io_get_core_name_ex();
-char is_megacd_core();
 char has_menu();
 
 const char *get_image_name(int i);
@@ -251,6 +251,7 @@ void user_io_send_buttons(char);
 uint16_t user_io_get_sdram_cfg();
 
 void user_io_set_index(unsigned char index);
+void user_io_set_download(unsigned char enable);
 unsigned char user_io_ext_idx(char *, char*);
 
 void user_io_check_reset(unsigned short modifiers, char useKeys);
@@ -288,6 +289,7 @@ char is_menu_core();
 char is_x86_core();
 char is_snes_core();
 char is_neogeo_core();
+char is_megacd_core();
 
 #define HomeDir (is_menu_core() ? "Scripts" : user_io_get_core_path())
 #define CoreName (is_menu_core() ? "Scripts" : user_io_get_core_name())

@@ -70,6 +70,7 @@ public:
 	cdd_t();
 	int Load(const char *filename);
 	void Unload();
+	void Reset();
 	void Update();
 	void CommandExec();
 	int SectorSend(uint8_t* header);
@@ -82,8 +83,6 @@ private:
 	toc_t toc;
 	int index;
 	int lba;
-	uint32_t cycles;
-	int type;
 	uint16_t sectorSize;
 	int scanOffset;
 	int audioLength;
@@ -105,10 +104,6 @@ private:
 
 #define CD_SCAN_SPEED 30
 
-#define CD_DATA_IO_INDEX 2
-#define CD_SUB_IO_INDEX 3
-
-
 //cdd.cpp
 extern cdd_t cdd;
 extern uint32_t frame;
@@ -116,5 +111,7 @@ extern uint32_t frame;
 
 void mcd_poll();
 void mcd_set_image(int num, const char *filename);
+void mcd_reset();
+void mcd_fill_blanksave(uint8_t *buffer, uint32_t lba);
 
 #endif
