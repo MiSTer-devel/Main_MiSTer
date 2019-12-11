@@ -4621,6 +4621,10 @@ int CalculateFileNameLengthWithoutExtension(char *name, char *possibleextensions
 	int found = 0;
 	/* the default length is the whole string */
 	int len = strlen(name);
+
+	//do not remove ext if core supplies more than 1 extension and it's not list of cores
+	if (strlen(ext) > 3 && strcasecmp(ext, "RBFMRA")) return len;
+
 	/* find the extension on the end of the name*/
 	char *fext = strrchr(name, '.');
 	/* we want to push past the period - and just have rbf instead of .rbf*/
@@ -4695,17 +4699,20 @@ void ScrollLongName(void)
 		len=CalculateFileNameLengthWithoutExtension(flist_SelectedItem()->altname,fs_pFileExt);
 	}
 
-
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
 	if (flist_SelectedItem()->de.d_type == DT_DIR)
+	{
 		max_len = 25; // number of directory name characters to display
+	}
 
 	// if we are in a core, we might need to resize for the fixed date string at the end
-	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES)) {
-              if (len > 9 && !strncmp(flist_SelectedItem()->altname+ len - 9, "_20", 3)) {
-		len -= 9;
-	      }
-              max_len=21; // __.__.__ remove that from the end
+	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES))
+	{
+		if (len > 9 && !strncmp(flist_SelectedItem()->altname + len - 9, "_20", 3))
+		{
+			len -= 9;
+		}
+		max_len = 21; // __.__.__ remove that from the end
 	}
 
 	//printf("ScrollLongName: len %d max_len %d [%s]\n",len,max_len,flist_SelectedItem()->altname);
