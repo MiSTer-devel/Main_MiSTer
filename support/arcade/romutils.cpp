@@ -459,6 +459,12 @@ int arcade_scan_xml_for_rbf(const char *xml,char *rbfname)
 				strcpy(rbfname,entry->d_name);
         			return 0;
 			}
+			snprintf(newstring,kBigTextSize,"%s.",rbfname_fragment);
+			if (!strncasecmp(newstring,entry->d_name,strlen(newstring))) {
+        			closedir(dir);
+				strcpy(rbfname,entry->d_name);
+        			return 0;
+			}
 
                 }
         }
