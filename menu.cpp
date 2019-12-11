@@ -313,7 +313,7 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 			strcat(SelectedPath, "/");
 			strcat(SelectedPath, get_rbf_name());
 		}
-		pFileExt = "RBF";
+		pFileExt = "RBFMRA";
 	}
 	else if (Options & SCANO_TXT)
 	{
@@ -4481,9 +4481,21 @@ void HandleUI(void)
 				break;
 			}
 		}
-
-		// close OSD now as the new core may not even have one
-		fpga_load_rbf(SelectedRBF);
+		if (!strcasecmp(".mra",&(SelectedRBF[strlen(SelectedRBF) - 4]))) 
+		{
+			char rbfname[4096];
+			char rbfpath[4096];
+			fprintf(stderr,"MRA FILE LOADED - write code\n");
+			// find the RBF file from the XML
+			arcade_scan_xml_for_rbf(getFullPath(SelectedRBF),rbfname);
+			fprintf(stderr,"MRA SelectedRBF: [%s]\n",SelectedRBF);
+			fprintf(stderr,"MRA rbf: [%s]\n",rbfname);
+			sprintf(rbfpath,"arcade/%s",rbfname);
+			fpga_load_rbf(getFullPath(rbfpath),NULL,SelectedRBF);
+		}
+		else
+			// close OSD now as the new core may not even have one
+			fpga_load_rbf(SelectedRBF);
 		break;
 
 	case MENU_CORE_FILE_SELECTED2:
@@ -4597,6 +4609,84 @@ void open_joystick_setup()
 	joymap_first = 1;
 }
 
+
+/*
+ * CalculateFileNameLengthWithoutExtension
+ * 
+ * This function takes a filename and length, and returns
+ * the length. It will remove the .rbf or .mra from the length
+ * based on the fs_pFileExt global
+ *
+ * If the fs_pFileExt has multiple extensions, it will look through
+ * each to try to find a match.
+ */
+int CalculateFileNameLengthWithoutExtension(char *name,char *possibleextensions)
+{
+	
+	char *ext = possibleextensions;
+	int found=0;
+	/* the default length is the whole string */
+	int len = strlen(name);
+	/* find the extension on the end of the name*/
+        char *fext = strrchr(name, '.');
+	/* we want to push past the period - and just have rbf instead of .rbf*/
+        if (fext) fext++;
+
+	/* walk through each extension and see if it matches */
+        while (!found && *ext && fext)
+        {
+             char e[4];
+             memcpy(e, ext, 3);
+             if (e[2] == ' ')
+             {
+                 e[2] = 0;
+                 if (e[1] == ' ') e[1] = 0;
+             }
+
+             e[3] = 0;
+             found = 1;
+             for (int i = 0; i < 4; i++)
+             {
+                  if (e[i] == '*') break;
+                  if (e[i] == '?' && fext[i]) continue;
+
+                  if (tolower(e[i]) != tolower(fext[i])) found = 0;
+
+                  if (!e[i] || !found) break;
+             }
+             if (found) break;
+
+             if (strlen(ext) < 3) break;
+             ext += 3;
+       }
+
+       /* if we haven't found a match, then the answer is the full length of the string */
+       if (!found) return len;
+
+       /* we have a match, now we need to handle extensions that are less than 3 characters */
+       char e[5];
+       memcpy(e + 1, ext, 3);
+       /* 0x20 is a space in ascii*/
+       if (e[3] == 0x20)
+       {
+           e[3] = 0;
+           if (e[2] == 0x20)
+           {
+               e[2] = 0;
+           }
+       }
+       e[0] = '.';
+       e[4] = 0;
+       int l = strlen(e);
+
+       if ((len>l) && !strncasecmp(name + len - l, e, l)) len -= l;
+
+       //printf("len: %d l: %d str[%s] e[%s] ext[%s]\n",len,l,name,e,ext);
+       return len;
+
+}
+
+
 void ScrollLongName(void)
 {
 	// this function is called periodically when file selection window is displayed
@@ -4608,31 +4698,27 @@ void ScrollLongName(void)
 	len = strlen(flist_SelectedItem()->altname); // get name length
 	if (flist_SelectedItem()->de.d_type == DT_REG) // if a file
 	{
-		if (fs_ExtLen <= 3)
-		{
-			char e[5];
-			memcpy(e + 1, fs_pFileExt, 3);
-			if (e[3] == 0x20)
-			{
-				e[3] = 0;
-				if (e[2] == 0x20)
-				{
-					e[2] = 0;
-				}
-			}
-			e[0] = '.';
-			e[4] = 0;
-			int l = strlen(e);
-			if ((len>l) && !strncasecmp(flist_SelectedItem()->altname + len - l, e, l)) len -= l;
-		}
+		len=CalculateFileNameLengthWithoutExtension(flist_SelectedItem()->altname,fs_pFileExt);
 	}
+
 
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
 	if (flist_SelectedItem()->de.d_type == DT_DIR)
 		max_len = 25; // number of directory name characters to display
 
+	// if we are in a core, we might need to resize for the fixed date string at the end
+	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES)) {
+              if (len > 9 && !strncmp(flist_SelectedItem()->altname+ len - 9, "_20", 3)) {
+		len -= 9;
+	      }
+              max_len=21; // __.__.__ remove that from the end
+	}
+
+	//printf("ScrollLongName: len %d max_len %d [%s]\n",len,max_len,flist_SelectedItem()->altname);
 	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
 }
+
+
 
 void PrintFileName(char *name, int row, int maxinv)
 {
@@ -4705,26 +4791,7 @@ void PrintDirectory(void)
 
 			if (!(flist_DirItem(k)->de.d_type == DT_DIR)) // if a file
 			{
-				if (fs_ExtLen <= 3)
-				{
-					char e[5];
-					memcpy(e + 1, fs_pFileExt, 3);
-					if (e[3] == 0x20)
-					{
-						e[3] = 0;
-						if (e[2] == 0x20)
-						{
-							e[2] = 0;
-						}
-					}
-					e[0] = '.';
-					e[4] = 0;
-					int l = strlen(e);
-					if ((len>l) && !strncasecmp(flist_DirItem(k)->altname + len - l, e, l))
-					{
-						len -= l;
-					}
-				}
+				len=CalculateFileNameLengthWithoutExtension(flist_DirItem(k)->altname,fs_pFileExt);
 			}
 
 			char *p = 0;

@@ -23,5 +23,8 @@
 // NeoGeo  support
 #include "support/neogeo/loader.h"
 
+// Arcade support
+#include "support/arcade/romutils.h"
+
 // MEGACD  support
 #include "support/megacd/megacd.h"

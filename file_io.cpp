@@ -238,7 +238,6 @@ void FileClose(fileTYPE *file)
 int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 {
 	make_fullpath((char*)name, mode);
-
 	FileClose(file);
 	file->mode = 0;
 	file->type = 0;

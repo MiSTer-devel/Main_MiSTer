@@ -18,11 +18,13 @@ INCLUDE	= -I./
 INCLUDE	+= -I./support/minimig
 INCLUDE	+= -I./lib/libco
 INCLUDE	+= -I./lib/miniz
+INCLUDE	+= -I./lib/md5
 
 PRJ = MiSTer
 C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/miniz/*.c) \
-          lib/libco/arm.c
+          $(wildcard ./lib/md5/*.c) \
+          lib/libco/arm.c 
 
 CPP_SRC = $(wildcard *.cpp) \
           $(wildcard ./support/minimig/*.cpp) \
@@ -32,6 +34,7 @@ CPP_SRC = $(wildcard *.cpp) \
           $(wildcard ./support/x86/*.cpp) \
           $(wildcard ./support/snes/*.cpp) \
           $(wildcard ./support/neogeo/*.cpp) \
+          $(wildcard ./support/arcade/*.cpp) \
           $(wildcard ./support/megacd/*.cpp) \
           lib/lodepng/lodepng.cpp
 
