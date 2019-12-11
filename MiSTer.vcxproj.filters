@@ -21,6 +21,27 @@
     <Filter Include="Source Files\miniz">
       <UniqueIdentifier>{83fcb534-f976-4615-bdeb-ba80fb510f9a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\md5">
+      <UniqueIdentifier>{478f0e62-2042-41ff-8b48-b48e6b5aed88}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\md5">
+      <UniqueIdentifier>{30fe8838-348b-4aa5-b517-93cae495ce86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\support">
+      <UniqueIdentifier>{e440dc55-22b0-40b2-887d-dfd701749ea0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\support">
+      <UniqueIdentifier>{095305c7-e04b-4f03-b8d8-db2d888b449c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\imlib">
+      <UniqueIdentifier>{a5ee9c49-ce79-4665-8a6e-751bd82eff23}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\lodpng">
+      <UniqueIdentifier>{f72c7b7a-09fd-4c2f-a8cb-14e1077e8acb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\lodepng">
+      <UniqueIdentifier>{9e138a0b-53c4-4ae8-a59b-6b7bf2dcc01b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="build.sh" />
@@ -73,36 +94,6 @@
     <ClCompile Include="user_io.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="support\archie\archie.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\minimig\minimig_boot.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\minimig\minimig_config.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\minimig\minimig_fdd.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\minimig\minimig_hdd.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\sharpmz\sharpmz.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\st\st_ikbd.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\st\st_tos.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\x86\x86.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\snes\snes.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="lib\libco\arm.c">
       <Filter>Source Files\libco</Filter>
     </ClCompile>
@@ -133,26 +124,65 @@
     <ClCompile Include="cheats.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="lib\lodepng\lodepng.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="scaler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="video.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="support\neogeo\loader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="joymapping.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="lib\md5\md5.c">
+      <Filter>Source Files\md5</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\lodepng\lodepng.cpp">
+      <Filter>Source Files\lodepng</Filter>
+    </ClCompile>
+    <ClCompile Include="support\archie\archie.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
     <ClCompile Include="support\megacd\cdd.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\neogeo\loader.cpp">
+      <Filter>Source Files\support</Filter>
     </ClCompile>
     <ClCompile Include="support\megacd\megacd.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_boot.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_config.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_fdd.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_hdd.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\sharpmz\sharpmz.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\snes\snes.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\st\st_ikbd.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\st\st_tos.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\x86\x86.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\arcade\buffer.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\arcade\romutils.cpp">
+      <Filter>Source Files\support</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -216,46 +246,10 @@
     <ClInclude Include="spi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="support.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="sxmlc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="user_io.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\archie\archie.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\minimig\minimig_boot.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\minimig\minimig_config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\minimig\minimig_fdd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\minimig\minimig_hdd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\minimig\minimig_hdd_internal.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\sharpmz\sharpmz.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\st\st_ikbd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\st\st_tos.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\x86\x86.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\snes\snes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\libco\libco.h">
@@ -288,26 +282,71 @@
     <ClInclude Include="cheats.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib\lodepng\lodepng.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="scaler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="video.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib\imlib2\Imlib2.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\neogeo\loader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="joymapping.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="lib\md5\md5.h">
+      <Filter>Header Files\md5</Filter>
+    </ClInclude>
+    <ClInclude Include="support\archie\archie.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\imlib2\Imlib2.h">
+      <Filter>Header Files\imlib</Filter>
+    </ClInclude>
+    <ClInclude Include="support\neogeo\loader.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_ikbd.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_tos.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="lib\lodepng\lodepng.h">
+      <Filter>Header Files\lodpng</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_boot.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_config.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_fdd.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_hdd.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_hdd_internal.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\x86\x86.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\snes\snes.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\sharpmz\sharpmz.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
     <ClInclude Include="support\megacd\megacd.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\arcade\romutils.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\arcade\buffer.h">
+      <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

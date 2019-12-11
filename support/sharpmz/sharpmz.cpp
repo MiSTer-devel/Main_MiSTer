@@ -1955,7 +1955,7 @@ int sharpmz_default_ui_state(void)
 //
 void sharpmz_ui(int      idleState,    int      idle2State,    int        systemState,    int      selectFile,
                 uint32_t *parentstate, uint32_t *menustate,    uint32_t   *menusub,       uint32_t *menusub_last,
-				uint32_t *menumask,    char     *selectedPath, const char **helptext,     char     *helptext_custom,
+				uint64_t *menumask,    char     *selectedPath, const char **helptext,     char     *helptext_custom,
 				uint32_t *fs_ExtLen,   uint32_t *fs_Options,   uint32_t   *fs_MenuSelect, uint32_t *fs_MenuCancel,
                 char     *fs_pFileExt,
                 unsigned char menu,    unsigned char select,   unsigned char up,          unsigned char down,

@@ -693,6 +693,11 @@ int user_io_is_dualsdr()
 	return dual_sdr;
 }
 
+int user_io_get_width()
+{
+	return fio_size;
+}
+
 void user_io_init(const char *path, const char *xml)
 {
 	char *name;
@@ -703,13 +708,7 @@ void user_io_init(const char *path, const char *xml)
 	// we need to set the directory to where the XML file (MRA) is
 	// not the RBF. The RBF will be in arcade, which the user shouldn't
 	// browse
-	if (strlen(xml)) {
-		//printf("USER_IO_INIT got XML: [%s] [%s]\n",path,xml);
-		strcpy(core_path, getFullPath(xml));
-	} else {
-		strcpy(core_path, path);
-	}
-	//printf("USER_IO_INIT core_path: [%s] \n",core_path);
+	strcpy(core_path, xml ? xml : path);
 
 	memset(sd_image, 0, sizeof(sd_image));
 
@@ -825,7 +824,11 @@ void user_io_init(const char *path, const char *xml)
 			}
 			else
 			{
-				if (is_minimig())
+				if (xml)
+				{
+					arcade_send_rom(xml);
+				}
+				else if (is_minimig())
 				{
 					puts("Identified Minimig V2 core");
 					BootInit();
@@ -868,14 +871,6 @@ void user_io_init(const char *path, const char *xml)
 						// cheats for boot file
 						if (user_io_use_cheats()) cheats_init("", user_io_get_file_crc());
 					}
-
-                                        /* AJS -- NOT SURE THIS IS THE BEST PLACE */
-	                                if (strlen(xml)) {
-						//sprintf(mainpath, "%s/%s", user_io_get_core_path(), xml);
-		                                printf("USER_IO_INIT got XML: [%s]\n",xml);
-		                                //printf("USER_IO_INIT got XML: [%s]\n",mainpath);
-						arcade_send_rom(getFullPath(xml));
-	                                }
 
 					if (is_cpc_core())
 					{
@@ -1597,101 +1592,6 @@ static void check_status_change()
 	{
 		DisableIO();
 	}
-}
-
-#define DEBUG_ROM_BINARY 0
-#if DEBUG_ROM_BINARY
-FILE *rombinary;
-#endif
-
-int user_io_file_tx_start(const char *name,unsigned char index)
-{
-	// set index byte (0=bios rom, 1-n=OSD entry index)
-	user_io_set_index(index);
-
-	int len = strlen(name);
-	const char *p = name + len - 4;
-	EnableFpga();
-	spi8(UIO_FILE_INFO);
-	spi_w(toupper(p[0]) << 8 | toupper(p[1]));
-	spi_w(toupper(p[2]) << 8 | toupper(p[3]));
-	DisableFpga();
-
-	// prepare transmission of new file
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0xff);
-	DisableFpga();
-
-	file_crc = 0;
-#if DEBUG_ROM_BINARY
-	rombinary=fopen("/media/fat/this.rom","wb");
-#endif
-	return 1;
-}
-int user_io_file_tx_body(const uint8_t *buf,uint16_t chunk,struct MD5Context *md5context)
-{
-	printf(".");
-
-	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
-
-	spi_write(buf, chunk, fio_size);
-	DisableFpga();
-
-	file_crc = crc32(file_crc, buf  ,chunk );
-	if (md5context) MD5Update (md5context, buf,chunk);
-#if DEBUG_ROM_BINARY
-	fwrite(buf,1,chunk,rombinary);
-#endif
-
-	return 1;
-}
-int user_io_file_tx_body_filepart(const char *name,int start, int len,struct MD5Context *md5context)
-{
-	char mute=0;
-	fileTYPE f = {};
-	static uint8_t buf[4096];
-	if (!FileOpen(&f, name, mute)) return 0;
-	if (start) FileSeek(&f, start, SEEK_SET);
-	unsigned long bytes2send = f.size;
-	if (len>0 && len < bytes2send) bytes2send=len;
-	/* transmit the entire file using one transfer */
-	printf("Selected file %s with %lu bytes to send  \n", name, bytes2send);
-	while (bytes2send)
-	{
-		printf(".");
-
-		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
-
-		FileReadAdv(&f, buf, chunk);
-		user_io_file_tx_body(buf,chunk,md5context);
-
-
-		bytes2send -= chunk;
-	}
-
-
-	return 1;
-}
-int user_io_file_tx_finish()
-{
-	// check if core requests some change while downloading
-	check_status_change();
-
-	printf("\n");
-	printf("CRC32: %08X\n", file_crc);
-#if DEBUG_ROM_BINARY
-	fclose(rombinary);
-#endif
-
-	// signal end of transmission
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0x00);
-	DisableFpga();
-	printf("\n");
-	return 1;
 }
 
 static char pchar[] = { 0x8C, 0x8F, 0x7F };

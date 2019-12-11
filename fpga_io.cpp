@@ -528,8 +528,8 @@ int fpga_load_rbf(const char *name, const char *cfg, const char *xml)
 		}
 	}
 	close(rbf);
-	app_restart(!strcasecmp(name, "menu.rbf") ? "menu.rbf" : path,xml);
 
+	app_restart(!strcasecmp(name, "menu.rbf") ? "menu.rbf" : path, xml);
 	return ret;
 }
 
@@ -651,10 +651,7 @@ void app_restart(const char *path, const char *xml)
 
 	char *appname = getappname();
 	printf("restarting the %s\n", appname);
-	if (xml)
-		execl(appname, appname, path, xml,NULL);
-	else
-		execl(appname, appname, path, NULL);
+	execl(appname, appname, path, xml, NULL);
 
 	printf("Something went wrong. Rebooting...\n");
 	reboot(0);

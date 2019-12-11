@@ -168,7 +168,7 @@ static uint32_t menustate = MENU_NONE1;
 static uint32_t parentstate;
 static uint32_t menusub = 0;
 static uint32_t menusub_last = 0; //for when we allocate it dynamically and need to know last row
-static uint32_t menumask = 0; // Used to determine which rows are selectable...
+static uint64_t menumask = 0; // Used to determine which rows are selectable...
 static uint32_t menu_timer = 0;
 
 extern const char *version;
@@ -1003,12 +1003,12 @@ void HandleUI(void)
 	{
 		if (down)
 		{
-            if((menumask >= ((uint32_t)1 << (menusub + 1))))	// Any active entries left?
+            if((menumask >= ((uint64_t)1 << (menusub + 1))))	// Any active entries left?
             {
 			    do
 			    {
 				    menusub++;
-			    } while ((menumask & ((uint32_t)1 << menusub)) == 0);
+			    } while ((menumask & ((uint64_t)1 << menusub)) == 0);
             }
             else
             {
@@ -1025,14 +1025,14 @@ void HandleUI(void)
 			    do
 			    {
 				    --menusub;
-			    } while ((menumask & ((uint32_t)1 << menusub)) == 0);
+			    } while ((menumask & ((uint64_t)1 << menusub)) == 0);
             }
             else
             {
                 do
                 {
                     menusub++;
-                } while ((menumask & ((uint32_t)(~0) << (menusub + 1))) != 0); // jump to last item
+                } while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0); // jump to last item
             }
 			menustate = parentstate;
 		}
@@ -4481,21 +4481,16 @@ void HandleUI(void)
 				break;
 			}
 		}
-		if (!strcasecmp(".mra",&(SelectedRBF[strlen(SelectedRBF) - 4]))) 
+
+		if (!strcasecmp(".mra",&(SelectedRBF[strlen(SelectedRBF) - 4])))
 		{
-			char rbfname[4096];
-			char rbfpath[4096];
-			fprintf(stderr,"MRA FILE LOADED - write code\n");
 			// find the RBF file from the XML
-			arcade_scan_xml_for_rbf(getFullPath(SelectedRBF),rbfname);
-			fprintf(stderr,"MRA SelectedRBF: [%s]\n",SelectedRBF);
-			fprintf(stderr,"MRA rbf: [%s]\n",rbfname);
-			sprintf(rbfpath,"arcade/%s",rbfname);
-			fpga_load_rbf(getFullPath(rbfpath),NULL,SelectedRBF);
+			arcade_load(getFullPath(SelectedRBF));
 		}
 		else
-			// close OSD now as the new core may not even have one
+		{
 			fpga_load_rbf(SelectedRBF);
+		}
 		break;
 
 	case MENU_CORE_FILE_SELECTED2:
@@ -4612,7 +4607,7 @@ void open_joystick_setup()
 
 /*
  * CalculateFileNameLengthWithoutExtension
- * 
+ *
  * This function takes a filename and length, and returns
  * the length. It will remove the .rbf or .mra from the length
  * based on the fs_pFileExt global
@@ -4620,69 +4615,68 @@ void open_joystick_setup()
  * If the fs_pFileExt has multiple extensions, it will look through
  * each to try to find a match.
  */
-int CalculateFileNameLengthWithoutExtension(char *name,char *possibleextensions)
+int CalculateFileNameLengthWithoutExtension(char *name, char *possibleextensions)
 {
-	
 	char *ext = possibleextensions;
-	int found=0;
+	int found = 0;
 	/* the default length is the whole string */
 	int len = strlen(name);
 	/* find the extension on the end of the name*/
-        char *fext = strrchr(name, '.');
+	char *fext = strrchr(name, '.');
 	/* we want to push past the period - and just have rbf instead of .rbf*/
-        if (fext) fext++;
+	if (fext) fext++;
 
 	/* walk through each extension and see if it matches */
-        while (!found && *ext && fext)
-        {
-             char e[4];
-             memcpy(e, ext, 3);
-             if (e[2] == ' ')
-             {
-                 e[2] = 0;
-                 if (e[1] == ' ') e[1] = 0;
-             }
+	while (!found && *ext && fext)
+	{
+		char e[4];
+		memcpy(e, ext, 3);
+		if (e[2] == ' ')
+		{
+			e[2] = 0;
+			if (e[1] == ' ') e[1] = 0;
+		}
 
-             e[3] = 0;
-             found = 1;
-             for (int i = 0; i < 4; i++)
-             {
-                  if (e[i] == '*') break;
-                  if (e[i] == '?' && fext[i]) continue;
+		e[3] = 0;
+		found = 1;
+		for (int i = 0; i < 4; i++)
+		{
+			if (e[i] == '*') break;
+			if (e[i] == '?' && fext[i]) continue;
 
-                  if (tolower(e[i]) != tolower(fext[i])) found = 0;
+			if (tolower(e[i]) != tolower(fext[i])) found = 0;
 
-                  if (!e[i] || !found) break;
-             }
-             if (found) break;
+			if (!e[i] || !found) break;
+		}
+		if (found) break;
 
-             if (strlen(ext) < 3) break;
-             ext += 3;
-       }
+		if (strlen(ext) < 3) break;
+		ext += 3;
+	}
 
-       /* if we haven't found a match, then the answer is the full length of the string */
-       if (!found) return len;
+	/* if we haven't found a match, then the answer is the full length of the string */
+	if (!found) return len;
 
-       /* we have a match, now we need to handle extensions that are less than 3 characters */
-       char e[5];
-       memcpy(e + 1, ext, 3);
-       /* 0x20 is a space in ascii*/
-       if (e[3] == 0x20)
-       {
-           e[3] = 0;
-           if (e[2] == 0x20)
-           {
-               e[2] = 0;
-           }
-       }
-       e[0] = '.';
-       e[4] = 0;
-       int l = strlen(e);
+	/* we have a match, now we need to handle extensions that are less than 3 characters */
+	char e[5];
+	memcpy(e + 1, ext, 3);
+	/* 0x20 is a space in ascii*/
+	if (e[3] == 0x20)
+	{
+		e[3] = 0;
+		if (e[2] == 0x20)
+		{
+			e[2] = 0;
+		}
+	}
+	e[0] = '.';
+	e[4] = 0;
+	int l = strlen(e);
 
-       if ((len>l) && !strncasecmp(name + len - l, e, l)) len -= l;
+	if ((len > l) && !strncasecmp(name + len - l, e, l)) len -= l;
 
-       //printf("len: %d l: %d str[%s] e[%s] ext[%s]\n",len,l,name,e,ext);
-       return len;
+	//printf("len: %d l: %d str[%s] e[%s] ext[%s]\n",len,l,name,e,ext);
+	return len;
 
 }
 
@@ -4717,8 +4711,6 @@ void ScrollLongName(void)
 	//printf("ScrollLongName: len %d max_len %d [%s]\n",len,max_len,flist_SelectedItem()->altname);
 	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
 }
-
-
 
 void PrintFileName(char *name, int row, int maxinv)
 {

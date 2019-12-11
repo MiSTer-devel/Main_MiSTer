@@ -210,12 +210,7 @@ void user_io_read_confstr();
 char *user_io_get_confstr(int index);
 uint32_t user_io_8bit_set_status(uint32_t, uint32_t, int ex = 0);
 int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
-
-int user_io_file_tx_start(const char *name,unsigned char index=0);
-int user_io_file_tx_body(const uint8_t *buf,uint16_t chunk,struct MD5Context *md5context=NULL);
-int user_io_file_tx_body_filepart(const char *name,int start=0, int len=0,struct MD5Context *md5context=NULL);
-int user_io_file_tx_finish();
-
+int user_io_get_width();
 
 uint32_t user_io_get_file_crc();
 int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
