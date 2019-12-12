@@ -603,6 +603,8 @@ static uint32_t show_video_info(int force)
 			Info(str, cfg.video_info * 1000);
 		}
 
+		arcade_check_error();
+
 		uint32_t scrh = v_cur.item[5];
 		if (height && scrh)
 		{

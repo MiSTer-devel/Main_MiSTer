@@ -14,6 +14,7 @@
 #include "file_io.h"
 #include "input.h"
 #include "osd.h"
+#include "menu.h"
 
 #include "fpga_base_addr_ac5.h"
 #include "fpga_manager.h"
@@ -448,7 +449,7 @@ static int make_env(const char *name, const char *cfg)
 	return 0;
 }
 
-int fpga_load_rbf(const char *name, const char *cfg)
+int fpga_load_rbf(const char *name, const char *cfg, const char *xml)
 {
 	OsdDisable();
 	static char path[1024];
@@ -470,7 +471,10 @@ int fpga_load_rbf(const char *name, const char *cfg)
 	int rbf = open(path, O_RDONLY);
 	if (rbf < 0)
 	{
+		char error[4096];
+		snprintf(error,4096,"%s\nNot Found", name);
 		printf("Couldn't open file %s\n", path);
+		Info(error,5000);
 		return -1;
 	}
 	else
@@ -524,8 +528,8 @@ int fpga_load_rbf(const char *name, const char *cfg)
 		}
 	}
 	close(rbf);
-	app_restart(!strcasecmp(name, "menu.rbf") ? "menu.rbf" : path);
 
+	app_restart(!strcasecmp(name, "menu.rbf") ? "menu.rbf" : path, xml);
 	return ret;
 }
 
@@ -637,7 +641,7 @@ char *getappname()
 	return dest;
 }
 
-void app_restart(const char *path)
+void app_restart(const char *path, const char *xml)
 {
 	sync();
 	fpga_core_reset(1);
@@ -647,7 +651,7 @@ void app_restart(const char *path)
 
 	char *appname = getappname();
 	printf("restarting the %s\n", appname);
-	execl(appname, appname, path, NULL);
+	execl(appname, appname, path, xml, NULL);
 
 	printf("Something went wrong. Rebooting...\n");
 	reboot(0);

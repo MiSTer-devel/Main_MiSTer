@@ -64,6 +64,7 @@
     <ClCompile Include="lib\libco\arm.c" />
     <ClCompile Include="lib\libco\libco.c" />
     <ClCompile Include="lib\lodepng\lodepng.cpp" />
+    <ClCompile Include="lib\md5\md5.c" />
     <ClCompile Include="lib\miniz\miniz.c" />
     <ClCompile Include="lib\miniz\miniz_tdef.c" />
     <ClCompile Include="lib\miniz\miniz_tinfl.c" />
@@ -74,6 +75,8 @@
     <ClCompile Include="scaler.cpp" />
     <ClCompile Include="scheduler.cpp" />
     <ClCompile Include="spi.cpp" />
+    <ClCompile Include="support\arcade\buffer.cpp" />
+    <ClCompile Include="support\arcade\romutils.cpp" />
     <ClCompile Include="support\archie\archie.cpp" />
     <ClCompile Include="support\megacd\cdd.cpp" />
     <ClCompile Include="support\megacd\megacd.cpp" />
@@ -115,6 +118,7 @@
     <ClInclude Include="lib\libco\libco.h" />
     <ClInclude Include="lib\libco\settings.h" />
     <ClInclude Include="lib\lodepng\lodepng.h" />
+    <ClInclude Include="lib\md5\md5.h" />
     <ClInclude Include="lib\miniz\miniz.h" />
     <ClInclude Include="lib\miniz\miniz_common.h" />
     <ClInclude Include="lib\miniz\miniz_tdef.h" />
@@ -127,6 +131,8 @@
     <ClInclude Include="scheduler.h" />
     <ClInclude Include="spi.h" />
     <ClInclude Include="support.h" />
+    <ClInclude Include="support\arcade\buffer.h" />
+    <ClInclude Include="support\arcade\romutils.h" />
     <ClInclude Include="support\archie\archie.h" />
     <ClInclude Include="support\megacd\megacd.h" />
     <ClInclude Include="support\minimig\minimig_boot.h" />

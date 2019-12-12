@@ -12,6 +12,8 @@
 #include <sys/mman.h>
 
 #include "lib/lodepng/lodepng.h"
+#include "md5.h"
+
 #include "hardware.h"
 #include "osd.h"
 #include "user_io.h"
@@ -691,16 +693,25 @@ int user_io_is_dualsdr()
 	return dual_sdr;
 }
 
-void user_io_init(const char *path)
+int user_io_get_width()
+{
+	return fio_size;
+}
+
+void user_io_init(const char *path, const char *xml)
 {
 	char *name;
 	static char mainpath[512];
 	core_name[0] = 0;
 	disable_osd = 0;
 
+	// we need to set the directory to where the XML file (MRA) is
+	// not the RBF. The RBF will be in arcade, which the user shouldn't
+	// browse
+	strcpy(core_path, xml ? xml : path);
+
 	memset(sd_image, 0, sizeof(sd_image));
 
-	strcpy(core_path, path);
 	core_type = (fpga_core_id() & 0xFF);
 	fio_size = fpga_get_fio_size();
 	io_ver = fpga_get_io_version();
@@ -813,7 +824,11 @@ void user_io_init(const char *path)
 			}
 			else
 			{
-				if (is_minimig())
+				if (xml)
+				{
+					arcade_send_rom(xml);
+				}
+				else if (is_minimig())
 				{
 					puts("Identified Minimig V2 core");
 					BootInit();
