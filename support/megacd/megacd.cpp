@@ -10,8 +10,6 @@
 #include "../../hardware.h"
 #include "megacd.h"
 
-#define CD_DATA_IO_INDEX 2
-#define CD_SUB_IO_INDEX 3
 #define SAVE_IO_INDEX 5 // fake download to trigger save loading
 
 int loaded = 0, unloaded = 0, need_reset=0;
@@ -19,13 +17,14 @@ static uint8_t has_command = 0;
 
 void mcd_poll()
 {
-	static uint32_t poll_timer = 0, stat_timer = 0;
+	static uint32_t poll_timer = 0;
 	static uint8_t last_req = 255;
 	static uint8_t adj = 0;
 
-	if (!stat_timer || CheckTimer(stat_timer))
+	if (!poll_timer || CheckTimer(poll_timer))
 	{
-		stat_timer = GetTimer(15);
+		poll_timer = GetTimer(13 + (!adj ? 1 : 0));
+		if (++adj >= 3) adj = 0;
 
 		if (has_command) {
 			spi_uio_cmd_cont(UIO_CD_SET);
@@ -40,6 +39,7 @@ void mcd_poll()
 			//printf("\x1b[32mMCD: Send status, status = %04X%04X%04X, frame = %u\n\x1b[0m", (uint16_t)((s >> 32) & 0x00FF), (uint16_t)((s >> 16) & 0xFFFF), (uint16_t)((s >> 0) & 0xFFFF), frame);
 		}
 
+		cdd.Update();
 	}
 
 
@@ -61,22 +61,14 @@ void mcd_poll()
 
 		uint64_t c = *((uint64_t*)(data_in));
 		cdd.SetCommand(c);
-			cdd.CommandExec();
-			has_command = 1;
+		cdd.CommandExec();
+		has_command = 1;
 
 
 		//printf("\x1b[32mMCD: Get command, command = %04X%04X%04X, has_command = %u\n\x1b[0m", data_in[2], data_in[1], data_in[0], has_command);
 	}
 	else
 		DisableIO();
-
-	if (!poll_timer || CheckTimer(poll_timer))
-	{
-		poll_timer = GetTimer(13 + (!adj ? 1 : 0));
-		if (++adj >= 3) adj = 0;
-
-		cdd.Update();
-	}
 }
 
 static void mcd_mount_save(const char *filename)
@@ -107,6 +99,7 @@ void mcd_set_image(int num, const char *filename)
 			loaded = 1;
 			cdd.status = cdd.loaded ? CD_STAT_STOP : CD_STAT_NO_DISC;
 			cdd.latency = 10;
+			cdd.SendData = mcd_send_data;
 		}
 		else {
 			cdd.status = CD_STAT_NO_DISC;
@@ -118,22 +111,9 @@ void mcd_reset() {
 	need_reset = 1;
 }
 
-
-int cdd_t::SectorSend(uint8_t* header)
-{
-	uint8_t buf[2352+2352];
-	int len = 2352;
-
-	if (header) {
-		memcpy(buf + 12, header, 4);
-		ReadData(buf + 16);
-	}
-	else {
-		len = ReadCDDA(buf);
-	}
-
+int mcd_send_data(uint8_t* buf, int len, uint8_t index) {
 	// set index byte
-	user_io_set_index(CD_DATA_IO_INDEX);
+	user_io_set_index(index);
 
 	// prepare transmission of new file
 	user_io_set_download(1);
@@ -141,29 +121,6 @@ int cdd_t::SectorSend(uint8_t* header)
 	EnableFpga();
 	spi8(UIO_FILE_TX_DAT);
 	spi_write(buf, len, 1);
-	DisableFpga();
-
-	// signal end of transmission
-	user_io_set_download(0);
-	return 1;
-}
-
-
-int cdd_t::SubcodeSend()
-{
-	uint16_t buf[98/2];
-
-	ReadSubcode(buf);
-
-	// set index byte
-	user_io_set_index(CD_SUB_IO_INDEX);
-
-	// prepare transmission of new file
-	user_io_set_download(1);
-
-	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
-	spi_write((uint8_t*)buf, 98, 1);
 	DisableFpga();
 
 	// signal end of transmission

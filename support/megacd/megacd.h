@@ -59,6 +59,8 @@ typedef struct
 	uint8_t f;
 } msf_t;
 
+typedef int (*SendDataFunc) (uint8_t* buf, int len, uint8_t index);
+
 class cdd_t
 {
 public:
@@ -66,6 +68,7 @@ public:
 	uint8_t status;
 	uint8_t isData;
 	int loaded;
+	SendDataFunc SendData;
 
 	cdd_t();
 	int Load(const char *filename);
@@ -73,9 +76,6 @@ public:
 	void Reset();
 	void Update();
 	void CommandExec();
-	int SectorSend(uint8_t* header);
-	int SubcodeSend();
-
 	uint64_t GetStatus();
 	int SetCommand(uint64_t c);
 
@@ -92,6 +92,8 @@ private:
 	uint8_t comm[10];
 
 	int LoadCUE(const char* filename);
+	int SectorSend(uint8_t* header);
+	int SubcodeSend();
 	void ReadData(uint8_t *buf);
 	int ReadCDDA(uint8_t *buf);
 	void ReadSubcode(uint16_t* buf);
@@ -106,12 +108,12 @@ private:
 
 //cdd.cpp
 extern cdd_t cdd;
-extern uint32_t frame;
 
 
 void mcd_poll();
 void mcd_set_image(int num, const char *filename);
 void mcd_reset();
+int mcd_send_data(uint8_t* buf, int len, uint8_t index);
 void mcd_fill_blanksave(uint8_t *buffer, uint32_t lba);
 
 #endif
