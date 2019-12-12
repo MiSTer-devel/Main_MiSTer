@@ -14,10 +14,40 @@
 
 #include "buffer.h"
 
+#define kBigTextSize 1024
+struct arc_struct {
+	char md5[kBigTextSize];
+	char zipname[kBigTextSize];
+	char partzipname[kBigTextSize];
+	char partname[kBigTextSize];
+	char romname[kBigTextSize];
+	char error_msg[kBigTextSize];
+	int romindex;
+	int offset;
+	int length;
+	int repeat;
+	int insiderom;
+	int validrom0;
+	buffer_data *data;
+	struct MD5Context context;
+};
+
+char global_error_msg[kBigTextSize];
+
 #define DEBUG_ROM_BINARY 0
 #if DEBUG_ROM_BINARY
 FILE *rombinary;
 #endif
+
+static const char * get_arcade_root()
+{
+	static char path[kBigTextSize] = {};
+	if (!path[0])
+	{
+		sprintf(path, "%s/arcade", getRootDir());
+	}
+	return path;
+}
 
 static int file_tx_start(unsigned char index)
 {
@@ -33,7 +63,7 @@ static int file_tx_start(unsigned char index)
 	return 1;
 }
 
-static int file_tx_body(const uint8_t *buf, uint16_t chunk, struct MD5Context *md5context)
+static int file_tx_data(const uint8_t *buf, uint16_t chunk, struct MD5Context *md5context)
 {
 	EnableFpga();
 	spi8(UIO_FILE_TX_DAT);
@@ -49,7 +79,7 @@ static int file_tx_body(const uint8_t *buf, uint16_t chunk, struct MD5Context *m
 	return 1;
 }
 
-static int file_tx_body_filepart(const char *name, int start, int len, struct MD5Context *md5context)
+static int file_tx_file(const char *name, int start, int len, struct MD5Context *md5context)
 {
 	char mute = 0;
 	fileTYPE f = {};
@@ -59,13 +89,13 @@ static int file_tx_body_filepart(const char *name, int start, int len, struct MD
 	unsigned long bytes2send = f.size;
 	if (len > 0 && len < (int)bytes2send) bytes2send = len;
 	/* transmit the entire file using one transfer */
-	printf("Selected file %s with %lu bytes to send  \n", name, bytes2send);
+	//printf("Selected file %s with %lu bytes to send  \n", name, bytes2send);
 	while (bytes2send)
 	{
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
-		file_tx_body(buf, chunk, md5context);
+		file_tx_data(buf, chunk, md5context);
 
 		bytes2send -= chunk;
 	}
@@ -130,27 +160,6 @@ unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
 	return chrs;
 }
 
-#define kBigTextSize 1024
-struct arc_struct {
-	char md5[kBigTextSize];
-	char zipname[kBigTextSize];
-	char partzipname[kBigTextSize];
-	char partname[kBigTextSize];
-	char romname[kBigTextSize];
-	char error_msg[kBigTextSize];
-	int romindex;
-	int offset;
-	int length;
-	int repeat;
-	int insiderom;
-	int validrom0;
-	buffer_data *data;
-	struct MD5Context context;
-};
-
-char global_error_msg[kBigTextSize];
-
-
 /*
  *  xml_send_rom
  *
@@ -165,6 +174,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 
 	switch (evt)
 	{
+	case XML_EVENT_START_DOC:
+		arc_info->insiderom = 0;
+		break;
+
 	case XML_EVENT_START_NODE:
 
 		/* initialization */
@@ -314,8 +327,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			// suppress rom0 if we already sent a valid one
 			// this is useful for merged rom sets - if the first one was valid, use it
 			// the second might not be
-			if (arc_info->romindex == 0 && arc_info->validrom0 == 1)
-				break;
+			if (arc_info->romindex == 0 && arc_info->validrom0 == 1) break;
 			char fname[kBigTextSize * 2 + 16];
 			int start, length, repeat;
 			repeat = arc_info->repeat;
@@ -328,36 +340,23 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			//printf("length[%d]\n",arc_info->length);
 			//printf("repeat[%d]\n",arc_info->repeat);
 			//
-			if (strlen(arc_info->partzipname))
-			{
-				if (arc_info->partzipname[0] == '/')
-					sprintf(fname, "arcade%s/%s", arc_info->partzipname, arc_info->partname);
-				else
-					sprintf(fname, "arcade/mame/%s/%s", arc_info->partzipname, arc_info->partname);
-			}
-			else
-			{
-				if (arc_info->zipname[0] == '/')
-					sprintf(fname, "arcade%s/%s", arc_info->zipname, arc_info->partname);
-				else
-					sprintf(fname, "arcade/mame/%s/%s", arc_info->zipname, arc_info->partname);
-			}
 
 			//user_io_file_tx_body_filepart(getFullPath(fname),0,0);
-			if (strlen(arc_info->partname)) {
-				printf("user_io_file_tx_body_filepart(const char *name[%s],int start[%d], int len[%d])\n", fname, start, length);
-				for (int i = 0; i < repeat; i++) {
-					int result = file_tx_body_filepart(fname, start, length, &arc_info->context);
+			if (strlen(arc_info->partname))
+			{
+				char *zipname = (strlen(arc_info->partzipname)) ? arc_info->partzipname : arc_info->zipname;
+				sprintf(fname, (zipname[0] == '/') ? "%s%s/%s" : "%s/mame/%s/%s", get_arcade_root(), zipname, arc_info->partname);
+
+				printf("file: %s, start=%d, len=%d\n", fname, start, length);
+				for (int i = 0; i < repeat; i++)
+				{
+					int result = file_tx_file(fname, start, length, &arc_info->context);
+
 					// we should check file not found error for the zip
 					if (result == 0)
 					{
-						int skip = 0;
-						if (!strncasecmp(fname, "arcade/mame/", strlen("arcade/mame/")))
-							skip = strlen("arcade/mame/");
 						printf("%s does not exist\n", fname);
-						snprintf(arc_info->error_msg, kBigTextSize, "%s\n"
-							"\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n"
-							"File Not Found", fname + skip);
+						snprintf(arc_info->error_msg, kBigTextSize, "%s\nFile Not Found", fname + strlen(get_arcade_root()));
 					}
 				}
 			}
@@ -371,10 +370,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				//	printf(" %d ",binary[i]);
 				//}
 				//printf("\n");
-				for (int i = 0; i < repeat; i++) {
-					file_tx_body(binary, len, &arc_info->context);
+				if (binary)
+				{
+					for (int i = 0; i < repeat; i++) file_tx_data(binary, len, &arc_info->context);
+					free(binary);
 				}
-				if (binary) free(binary);
 			}
 		}
 		break;
@@ -393,38 +393,28 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 static int xml_scan_rbf(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 	static int insiderbf = 0;
-	char bigtext[kBigTextSize];
 	char *rbf = (char *)sd->user;
 
 	switch (evt)
 	{
-	case XML_EVENT_START_NODE:
-		bigtext[0] = 0;
-		if (!strcasecmp(node->tag, "rbf")) {
-			insiderbf = 1;
-		}
-		printf("XML_EVENT_START_NODE: tag [%s]\n", node->tag);
-		for (int i = 0; i < node->n_attributes; i++)
-		{
-			printf("attribute %d name [%s] value [%s]\n", i, node->attributes[i].name, node->attributes[i].value);
-		}
+	case XML_EVENT_START_DOC:
+		insiderbf = 0;
+		break;
 
+	case XML_EVENT_START_NODE:
+		if (!strcasecmp(node->tag, "rbf")) insiderbf = 1;
 		break;
+
 	case XML_EVENT_TEXT:
-		if (insiderbf) {
-			strncat(bigtext, text, kBigTextSize - strlen(bigtext) - 1);
-			printf("XML_EVENT_TEXT: text [%s]\n", text);
-		}
-		break;
-	case XML_EVENT_END_NODE:
-		if (!strcasecmp(node->tag, "rbf"))
+		if (insiderbf)
 		{
 			insiderbf = 0;
-			//printf("bigtext [%s]\n",bigtext);
-			strncpy(rbf, bigtext, kBigTextSize);
-			//printf("got rbf tag [%s]\n",rbf);
+			strncpy(rbf, text, kBigTextSize);
 		}
-		printf("XML_EVENT_END_NODE: tag [%s]\n", node->tag);
+		break;
+
+	case XML_EVENT_END_NODE:
+		insiderbf = 0;
 		break;
 
 	case XML_EVENT_ERROR:
@@ -436,7 +426,6 @@ static int xml_scan_rbf(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 
 	return true;
 }
-
 
 int arcade_send_rom(const char *xml)
 {
@@ -473,32 +462,26 @@ int arcade_check_error(void)
 	return 0;
 }
 
-int arcade_load(const char *xml)
+static const char *get_rbf(const char *xml)
 {
-	MenuHide();
-
-	char rbfname[kBigTextSize];
-	char xmlname[kBigTextSize];
-
-	strcpy(xmlname, xml);
+	static char rbfname[kBigTextSize];
 
 	rbfname[0] = 0;
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
 
 	sax.all_event = xml_scan_rbf;
-	XMLDoc_parse_file_SAX(xmlname, &sax, rbfname);
+	XMLDoc_parse_file_SAX(xml, &sax, rbfname);
 
-	printf("arcade_scan_xml_for_rbf [%s]\n", xmlname);
 	/* once we have the rbfname fragment from the MRA xml file
 	 * search the arcade folder for the match */
 	struct dirent *entry;
-	DIR *dir = NULL;
-	//printf("opendir(%s)\n",getFullPath("arcade"));
-	if (!(dir = opendir(getFullPath("arcade"))))
+	DIR *dir;
+
+	if (!(dir = opendir(get_arcade_root())))
 	{
-		printf("arcade directory not found\n");
-		return 0;
+		printf("%s directory not found\n", get_arcade_root());
+		return NULL;
 	}
 
 	int found = 0;
@@ -528,17 +511,27 @@ int arcade_load(const char *xml)
 		}
 	}
 
-	if (found) sprintf(rbfname, "%s/arcade/%s", getRootDir(), entry->d_name);
+	if (found) sprintf(rbfname, "%s/%s", get_arcade_root(), entry->d_name);
 	closedir(dir);
 
-	if (found)
+	return found ? rbfname : NULL;
+}
+
+int arcade_load(const char *xml)
+{
+	MenuHide();
+
+	printf("arcade_scan_xml_for_rbf [%s]\n", xml);
+	const char *rbf = get_rbf(xml);
+
+	if (rbf)
 	{
-		printf("MRA: %s, RBF: %s\n", xmlname, rbfname);
-		fpga_load_rbf(rbfname, NULL, xmlname);
+		printf("MRA: %s, RBF: %s\n", xml, rbf);
+		fpga_load_rbf(rbf, NULL, xml);
 	}
 	else
 	{
-		Info("No core found!");
+		Info("No rbf found!");
 	}
 
 	return 0;
