@@ -196,7 +196,7 @@ void archie_init(void)
 
 	// set config defaults
 	config.system_ctrl = 0;
-	snprintf(config.rom_img, 1024, "%s/%s", HomeDir, "RISCOS.ROM");
+	snprintf(config.rom_img, 1024, user_io_make_filepath(HomeDir, "RISCOS.ROM"));
 
 	// try to load config from card
 	int size = FileLoadConfig(CONFIG_FILENAME, 0, 0);
