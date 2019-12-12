@@ -7,11 +7,10 @@
 #include "../../file_io.h"
 #include "megacd.h"
 
+#define CD_DATA_IO_INDEX 2
+#define CD_SUB_IO_INDEX 3
 
 cdd_t cdd;
-
-
-uint32_t frame = 0;
 
 cdd_t::cdd_t() {
 	latency = 10;
@@ -23,6 +22,7 @@ cdd_t::cdd_t() {
 	status = CD_STAT_NO_DISC;
 	audioLength = 0;
 	audioOffset = 0;
+	SendData = NULL;
 
 	stat[0] = 0xB;
 	stat[1] = 0x0;
@@ -621,12 +621,12 @@ void cdd_t::CommandExec() {
 		MSFToLBA(&lba_, comm[2] * 10 + comm[3], comm[4] * 10 + comm[5],	comm[6] * 10 + comm[7]);
 		lba_ -= 150;
 
-		if (!this->latency)
+		//if (!this->latency)
 		{
 			this->latency = 11;
 		}
 
-		this->latency += abs(((lba_ - this->lba) * 120) / 270000);
+		this->latency += (abs(lba_ - this->lba) * 120) / 270000;
 
 		this->lba = lba_;
 
@@ -676,7 +676,7 @@ void cdd_t::CommandExec() {
 		MSFToLBA(&lba_, comm[2] * 10 + comm[3], comm[4] * 10 + comm[5], comm[6] * 10 + comm[7]);
 		lba_ -= 150;
 
-		this->latency = abs((lba_ - this->lba) * 120) / 270000;
+		this->latency = (abs(lba_ - this->lba) * 120) / 270000;
 
 		this->lba = lba_;
 
@@ -698,8 +698,6 @@ void cdd_t::CommandExec() {
 			// AUDIO track
 			FileSeek(&this->toc.tracks[index].f, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 		}
-
-		//this->audioOffset = 0;
 
 		//if (this->toc.sub) fseek(this->toc.sub, lba_ * 96, SEEK_SET);
 
@@ -736,7 +734,7 @@ void cdd_t::CommandExec() {
 		stat[0] = this->status;
 		this->audioOffset = 0;
 
-		printf("\x1b[32mMCD: Command RESUME, status = %X, frame = %u\n\x1b[0m", this->status, frame);
+		//printf("\x1b[32mMCD: Command RESUME, status = %X\n\x1b[0m", this->status);
 		break;
 
 	case CD_COMM_FW_SCAN:
@@ -880,6 +878,38 @@ void cdd_t::ReadSubcode(uint16_t* buf)
 		buf[n] = code;
 	}
 	*/
+}
+
+int cdd_t::SectorSend(uint8_t* header)
+{
+	uint8_t buf[2352 + 2352];
+	int len = 2352;
+
+	if (header) {
+		memcpy(buf + 12, header, 4);
+		ReadData(buf + 16);
+	}
+	else {
+		len = ReadCDDA(buf);
+	}
+
+	if (SendData)
+		return SendData(buf, len, CD_DATA_IO_INDEX);
+
+	return 0;
+}
+
+
+int cdd_t::SubcodeSend()
+{
+	uint16_t buf[98 / 2];
+
+	ReadSubcode(buf);
+
+	if (SendData)
+		return SendData((uint8_t*)buf, 98, CD_SUB_IO_INDEX);
+
+	return 0;
 }
 
 
