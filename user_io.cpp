@@ -1552,14 +1552,9 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 		//hexdump(col_attr, sizeof(col_attr));
 
 		user_io_set_index(index);
+
 		user_io_set_download(1);
-
-		EnableFpga();
-		spi8(UIO_FILE_TX_DAT);
-		spi_write(col_attr, type ? 1024 : 1025, fio_size);
-		DisableFpga();
-
-		// signal end of transmission
+		user_io_file_tx_write(col_attr, type ? 1024 : 1025);
 		user_io_set_download(0);
 	}
 }
@@ -1619,6 +1614,14 @@ static void tx_progress(const char* name, unsigned int progress)
 	InfoMessage(progress_buf, 2000, "Loading");
 }
 
+void user_io_file_tx_write(const uint8_t *addr, uint16_t len)
+{
+	EnableFpga();
+	spi8(UIO_FILE_TX_DAT);
+	spi_write(addr, len, fio_size);
+	DisableFpga();
+}
+
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = {};
@@ -1661,10 +1664,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		printf("Load SNES ROM.\n");
 		uint8_t* buf = snes_get_header(&f);
 		hexdump(buf, 16, 0);
-		EnableFpga();
-		spi8(UIO_FILE_TX_DAT);
-		spi_write(buf, 512, fio_size);
-		DisableFpga();
+		user_io_file_tx_write(buf, 512);
 
 		//strip original SNES ROM header if present (not used)
 		if (bytes2send & 512)
@@ -1682,16 +1682,36 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int progress = -1;
 	if (use_progress) MenuHide();
 
-	while (bytes2send)
+	int dosend = 1;
+	if (!strcasecmp(core_name, "GBA") && ((index >> 6) == 1 || (index >> 6) == 2))
+	{
+		fileTYPE fg = {};
+		if (!FileOpen(&fg, user_io_make_filepath(HomeDir, "goomba.rom")))
+		{
+			dosend = 0;
+			Info("Cannot open goomba.rom!");
+			sleep(1);
+		}
+		else
+		{
+			uint32_t sz = fg.size;
+			while (sz)
+			{
+				uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+				FileReadAdv(&fg, buf, chunk);
+				user_io_file_tx_write(buf, chunk);
+				sz -= chunk;
+			}
+			FileClose(&fg);
+		}
+	}
+
+	while (dosend && bytes2send)
 	{
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
-
-		EnableFpga();
-		spi8(UIO_FILE_TX_DAT);
-		spi_write(buf, chunk, fio_size);
-		DisableFpga();
+		user_io_file_tx_write(buf, chunk);
 
 		if (use_progress)
 		{

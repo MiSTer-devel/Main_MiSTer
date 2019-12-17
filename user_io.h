@@ -210,6 +210,7 @@ void user_io_read_confstr();
 char *user_io_get_confstr(int index);
 uint32_t user_io_8bit_set_status(uint32_t, uint32_t, int ex = 0);
 int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
+void user_io_file_tx_write(const uint8_t *addr, uint16_t len);
 int user_io_get_width();
 
 uint32_t user_io_get_file_crc();

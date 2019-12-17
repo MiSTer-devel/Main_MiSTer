@@ -65,11 +65,7 @@ static int file_tx_start(unsigned char index)
 
 static int file_tx_data(const uint8_t *buf, uint16_t chunk, struct MD5Context *md5context)
 {
-	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
-
-	spi_write(buf, chunk, user_io_get_width());
-	DisableFpga();
+	user_io_file_tx_write(buf, chunk);
 
 	if (md5context) MD5Update(md5context, buf, chunk);
 #if DEBUG_ROM_BINARY
