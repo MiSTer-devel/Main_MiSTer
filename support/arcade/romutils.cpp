@@ -33,19 +33,27 @@ struct arc_struct {
 };
 
 char global_error_msg[kBigTextSize];
+static char arcade_root[kBigTextSize];
 
 #define DEBUG_ROM_BINARY 0
 #if DEBUG_ROM_BINARY
 FILE *rombinary;
 #endif
 
-static const char * get_arcade_root()
+static void set_arcade_root(const char *path)
 {
-	static char path[kBigTextSize] = {};
-	if (!path[0])
-	{
-		sprintf(path, "%s/arcade", getRootDir());
-	}
+	strcpy(arcade_root, path);
+	char *p = strrchr(arcade_root, '/');
+	if (p) *p = 0;
+}
+
+static const char *get_arcade_root(const char *folder = NULL)
+{
+	static char path[kBigTextSize];
+
+	if (!folder) strcpy(path, arcade_root);
+	else sprintf(path, "%s/%s", arcade_root, folder);
+
 	return path;
 }
 
@@ -430,6 +438,8 @@ int arcade_send_rom(const char *xml)
 
 	sax.all_event = xml_send_rom;
 
+	set_arcade_root(xml);
+
 	// create the structure we use for the XML parser
 	struct arc_struct arc_info;
 	arc_info.data = buffer_init(kBigTextSize);
@@ -474,9 +484,10 @@ static const char *get_rbf(const char *xml)
 	struct dirent *entry;
 	DIR *dir;
 
-	if (!(dir = opendir(get_arcade_root())))
+	const char *dirname = get_arcade_root("cores");
+	if (!(dir = opendir(dirname)))
 	{
-		printf("%s directory not found\n", get_arcade_root());
+		printf("%s directory not found\n", dirname);
 		return NULL;
 	}
 
@@ -507,7 +518,7 @@ static const char *get_rbf(const char *xml)
 		}
 	}
 
-	if (found) sprintf(rbfname, "%s/%s", get_arcade_root(), entry->d_name);
+	if (found) sprintf(rbfname, "%s/%s", dirname, entry->d_name);
 	closedir(dir);
 
 	return found ? rbfname : NULL;
@@ -517,6 +528,7 @@ int arcade_load(const char *xml)
 {
 	MenuHide();
 
+	set_arcade_root(xml);
 	printf("arcade_scan_xml_for_rbf [%s]\n", xml);
 	const char *rbf = get_rbf(xml);
 
