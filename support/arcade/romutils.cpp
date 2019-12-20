@@ -289,7 +289,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					char hex[10];
 					snprintf(hex, 10, "%02x", (unsigned int)checksum[i]);
 					printf("%02x", (unsigned int)checksum[i]);
-					if (md5[0] != hex[0] || md5[1] != hex[1]) {
+					if (tolower(md5[0]) != tolower(hex[0]) || tolower(md5[1]) != tolower(hex[1])) {
 						checksumsame = 0;
 					}
 					md5 += 2;
