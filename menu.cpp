@@ -1080,7 +1080,7 @@ void HandleUI(void)
 				SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_NONE1);
 			}
 			else if (user_io_core_type() == CORE_TYPE_MIST) menustate = MENU_MIST_MAIN1;
-			else if (user_io_core_type() == CORE_TYPE_ARCHIE) menustate = MENU_ARCHIE_MAIN1;
+			else if (is_archie_core()) menustate = MENU_ARCHIE_MAIN1;
 			else {
 				if (is_menu_core())
 				{
@@ -1747,7 +1747,7 @@ void HandleUI(void)
 				else
 				{
 					MenuWrite(n++);
-					MenuWrite(n++, " Reset settings", menusub == 9, user_io_core_type() == CORE_TYPE_ARCHIE);
+					MenuWrite(n++, " Reset settings", menusub == 9, is_archie_core());
 					MenuWrite(n++, " Save settings", menusub == 10, 0);
 				}
 
@@ -1852,7 +1852,7 @@ void HandleUI(void)
 				}
 				break;
 			case 9:
-				if (user_io_core_type() != CORE_TYPE_ARCHIE)
+				if (!is_archie_core())
 				{
 					menustate = MENU_RESET1;
 					menusub = 1;
@@ -1869,7 +1869,7 @@ void HandleUI(void)
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
 
-				if (user_io_core_type() == CORE_TYPE_ARCHIE)
+				if (is_archie_core())
 				{
 					archie_save_config();
 					menustate = MENU_ARCHIE_MAIN1;
@@ -1928,6 +1928,11 @@ void HandleUI(void)
 				{
 					menusub = 0;
 					menustate = MENU_MAIN1;
+				}
+				else if (is_archie_core())
+				{
+					menusub = 0;
+					menustate = MENU_ARCHIE_MAIN1;
 				}
 				else
 				{
@@ -2132,6 +2137,11 @@ void HandleUI(void)
 				{
 					menusub = 0;
 					menustate = MENU_MAIN1;
+				}
+				else if (is_archie_core())
+				{
+					menusub = 0;
+					menustate = MENU_ARCHIE_MAIN1;
 				}
 				else
 				{

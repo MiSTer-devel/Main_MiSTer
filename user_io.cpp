@@ -173,11 +173,6 @@ unsigned char user_io_core_type()
 	return core_type;
 }
 
-char is_archie()
-{
-	return(core_type == CORE_TYPE_ARCHIE);
-}
-
 char is_sharpmz()
 {
 	return(core_type == CORE_TYPE_SHARPMZ);
@@ -301,6 +296,14 @@ char is_megacd_core()
 {
 	if (!is_megacd_type) is_megacd_type = strcasecmp(core_name, "MEGACD") ? 2 : 1;
 	return (is_megacd_type == 1);
+}
+
+static int is_archie_type = 0;
+char is_archie_core()
+{
+	if (core_type == CORE_TYPE_ARCHIE) return 1;
+	if (!is_archie_type) is_archie_type = strcasecmp(core_name, "ARCHIE") ? 2 : 1;
+	return (is_archie_type == 1);
 }
 
 static int is_no_type = 0;
@@ -837,6 +840,11 @@ void user_io_init(const char *path, const char *xml)
 				{
 					x86_config_load();
 					x86_init();
+				}
+				else if (is_archie_core())
+				{
+					puts("Identified Archimedes core");
+					archie_init();
 				}
 				else
 				{
@@ -1894,7 +1902,7 @@ void user_io_send_buttons(char force)
 		//special reset for some cores
 		if ((key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
+			if (is_archie_core()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			if (is_minimig()) minimig_reset();
 			if (is_megacd_core()) mcd_reset();
 		}
@@ -2604,7 +2612,7 @@ void user_io_poll()
 		}
 	}
 
-	if (core_type == CORE_TYPE_8BIT && !is_menu_core() && !is_minimig())
+	if (core_type == CORE_TYPE_8BIT && !is_menu_core() && !is_minimig() && !is_archie_core())
 	{
 		// frequently check ps2 mouse for events
 		if (CheckTimer(mouse_timer))
@@ -2692,11 +2700,11 @@ void user_io_poll()
 		send_rtc(1);
 	}
 
-	if (core_type == CORE_TYPE_ARCHIE) archie_poll();
+	if (core_type == CORE_TYPE_ARCHIE || is_archie_core()) archie_poll();
 	if (core_type == CORE_TYPE_SHARPMZ) sharpmz_poll();
 
 	static uint8_t leds = 0;
-	if(use_ps2ctl && !is_minimig())
+	if(use_ps2ctl && !is_minimig() && !is_archie_core())
 	{
 		leds |= (KBD_LED_FLAG_STATUS | KBD_LED_CAPS_CONTROL);
 
@@ -3003,6 +3011,41 @@ static void send_keycode(unsigned short key, int press)
 		return;
 	}
 
+	if (core_type == CORE_TYPE_ARCHIE || is_archie_core())
+	{
+		if (press > 1) return;
+
+		uint32_t code = get_archie_code(key);
+		if (code == NONE) return;
+
+		//WIN+...
+		if (get_key_mod() & (RGUI | LGUI))
+		{
+			switch (code)
+			{
+			case 0x00: code = 0xf;  //ESC = BRAKE
+				break;
+
+			case 0x11: code = 0x73; // 1 = Mouse extra 1
+				break;
+
+			case 0x12: code = 0x74; // 2 = Mouse extra 2
+				break;
+
+			case 0x13: code = 0x25; // 3 = KP#
+				break;
+			}
+		}
+
+		if (code == 0 && (get_key_mod() & (RGUI | LGUI)))
+		{
+			code = 0xF;
+		}
+		if (!press) code |= 0x8000;
+		archie_kbd(code);
+		return;
+	}
+
 	if (core_type == CORE_TYPE_8BIT)
 	{
 		uint32_t code = get_ps2_code(key);
@@ -3075,40 +3118,6 @@ static void send_keycode(unsigned short key, int press)
 		}
 	}
 
-	if (core_type == CORE_TYPE_ARCHIE)
-	{
-		if (press > 1) return;
-
-		uint32_t code = get_archie_code(key);
-		if (code == NONE) return;
-
-		//WIN+...
-		if (get_key_mod() & (RGUI | LGUI))
-		{
-			switch(code)
-			{
-				case 0x00: code = 0xf;  //ESC = BRAKE
-					break;
-
-				case 0x11: code = 0x73; // 1 = Mouse extra 1
-					break;
-
-				case 0x12: code = 0x74; // 2 = Mouse extra 2
-					break;
-
-				case 0x13: code = 0x25; // 3 = KP#
-					break;
-			}
-		}
-
-		if (code == 0 && (get_key_mod() & (RGUI | LGUI)))
-		{
-			code = 0xF;
-		}
-		if (!press) code |= 0x8000;
-		archie_kbd(code);
-	}
-
 	if (core_type == CORE_TYPE_SHARPMZ)
 	{
 		uint32_t code = get_ps2_code(key);
@@ -3143,6 +3152,10 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 			mouse_pos[X] += x;
 			mouse_pos[Y] += y;
 			mouse_flags |= 0x80 | (b & 7);
+		}
+		else if (is_archie_core())
+		{
+			archie_mouse(b, x, y);
 		}
 		else
 		{
@@ -3336,14 +3349,14 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu_core() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 				if (!osd_is_visible && !is_menu_core() && key == KEY_MENU && press == 3) open_joystick_setup();
-				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86_core() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
+				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86_core() && !is_archie_core()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
 				else if (osd_is_visible)
 				{
 					if (press == 1) menu_key_set(key);
 				}
 				else
 				{
-					if (((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl && !is_archie())) && !is_menu_core())
+					if (((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl && !is_archie_core())) && !is_menu_core())
 					{
 						if (press == 1)
 						{

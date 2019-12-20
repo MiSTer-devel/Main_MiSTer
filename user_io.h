@@ -279,13 +279,13 @@ void diskled_on();
 void parse_cue_file(void);
 
 char is_minimig();
-char is_archie();
 char is_sharpmz();
 char is_menu_core();
 char is_x86_core();
 char is_snes_core();
 char is_neogeo_core();
 char is_megacd_core();
+char is_archie_core();
 
 #define HomeDir (is_menu_core() ? "Scripts" : user_io_get_core_path())
 #define CoreName (is_menu_core() ? "Scripts" : user_io_get_core_name())
