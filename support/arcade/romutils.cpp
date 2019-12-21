@@ -32,7 +32,7 @@ struct arc_struct {
 	struct MD5Context context;
 };
 
-char global_error_msg[kBigTextSize];
+static char arcade_error_msg[kBigTextSize] = {};
 static char arcade_root[kBigTextSize];
 
 #define DEBUG_ROM_BINARY 0
@@ -450,22 +450,21 @@ int arcade_send_rom(const char *xml)
 	XMLDoc_parse_file_SAX(xml, &sax, &arc_info);
 	if (arc_info.validrom0 == 0 && strlen(arc_info.error_msg))
 	{
-		strcpy(global_error_msg, arc_info.error_msg);
-		printf("arcade_send_rom: pretty error: [%s]\n", global_error_msg);
+		strcpy(arcade_error_msg, arc_info.error_msg);
+		printf("arcade_send_rom: pretty error: [%s]\n", arcade_error_msg);
 	}
 	buffer_destroy(arc_info.data);
 	return 0;
 }
 
-int arcade_check_error(void)
+void arcade_check_error()
 {
-	if (global_error_msg[0] != 0) {
-		printf("ERROR: [%s]\n", global_error_msg);
-		Info(global_error_msg, 1000 * 30);
-		global_error_msg[0] = 0;
+	if (arcade_error_msg[0] != 0) {
+		printf("ERROR: [%s]\n", arcade_error_msg);
+		Info(arcade_error_msg, 1000 * 30);
+		arcade_error_msg[0] = 0;
+		sleep(3);
 	}
-
-	return 0;
 }
 
 static const char *get_rbf(const char *xml)

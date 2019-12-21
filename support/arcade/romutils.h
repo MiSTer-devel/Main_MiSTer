@@ -3,6 +3,6 @@
 
 int arcade_send_rom(const char *xml);
 int arcade_load(const char *xml);
-int arcade_check_error(void);
+void arcade_check_error();
 
 #endif
