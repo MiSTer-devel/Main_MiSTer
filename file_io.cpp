@@ -572,7 +572,7 @@ int FileLoad(const char *name, void *pBuffer, int size)
 	if (!FileOpen(&f, name)) return 0;
 
 	int ret = f.size;
-	if (size) ret = FileReadAdv(&f, pBuffer, size);
+	if (pBuffer) ret = FileReadAdv(&f, pBuffer, size ? size : f.size);
 
 	FileClose(&f);
 	return ret;
