@@ -4798,6 +4798,7 @@ void PrintDirectory(void)
 			k = flist_iFirstEntry() + i;
 
 			len = strlen(flist_DirItem(k)->altname); // get name length
+			int rbf = (len > 4 && !strcasecmp(flist_DirItem(k)->altname + len - 4, ".rbf"));
 
 			if (!(flist_DirItem(k)->de.d_type == DT_DIR)) // if a file
 			{
@@ -4837,7 +4838,7 @@ void PrintDirectory(void)
 					strcpy(&s[22], " <DIR>");
 				}
 			}
-			else if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES))
+			else if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES) && rbf)
 			{
 				if (p)
 				{
