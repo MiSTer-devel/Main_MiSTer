@@ -1281,11 +1281,14 @@ void HandleUI(void)
 				{
 					int h = 0, d = 0;
 
-					//Hide or Disable flag
-					while((p[0] == 'H' || p[0] == 'D') && strlen(p)>2)
+					//Hide or Disable flag (small letter - opposite action)
+					while((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p)>2)
 					{
 						int flg = (hdmask & (1<<getIdx(p))) ? 1 : 0;
-						if (p[0] == 'H') h |= flg; else d |= flg;
+						if (p[0] == 'H') h |= flg;
+						if (p[0] == 'h') h |= (flg ^ 1);
+						if (p[0] == 'D') d |= flg;
+						if (p[0] == 'd') d |= (flg ^ 1);
 						p += 2;
 					}
 
@@ -1397,10 +1400,12 @@ void HandleUI(void)
 							selentry++;
 						}
 
-						// delimiter
+						// delimiter, text
 						if (p[0] == '-')
 						{
-							MenuWrite(entry, "", 0, 0);
+							s[0] = ' ';
+							substrcpy(s + 1, p, 1);
+							MenuWrite(entry, s, 0, d);
 							entry++;
 						}
 					}
@@ -4953,6 +4958,7 @@ void Info(const char *message, int timeout, int width, int height, int frame)
 	{
 		OSD_PrintInfo(message, &width, &height, frame);
 		InfoEnable(20, 10, width, height);
+		OsdSetSize(16);
 
 		menu_timer = GetTimer(timeout);
 		menustate = MENU_INFO;
