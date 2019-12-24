@@ -165,7 +165,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		int idx = i+DPAD_COUNT;
 		char *btn_name = defaults ? joy_pnames[i] : joy_nnames[i];
 
-		strcat(mapinfo, "\n ");
+		int mapped = 1;
 
 		if(!strcasecmp(btn_name, "A")
 		|| !strcasecmp(btn_name, "Jump")
@@ -173,7 +173,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button I"))
 		{
 			map[idx] = mmap[SYS_BTN_A];
-			strcat(mapinfo, "[A]");
+			strcat(mapinfo, "\n[A]");
 		}
 
 		else if(!strcasecmp(btn_name, "B")
@@ -181,7 +181,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button II"))
 		{
 			map[idx] = mmap[SYS_BTN_B];
-			strcat(mapinfo, "[B]");
+			strcat(mapinfo, "\n[B]");
 		}
 
 		else if(!strcasecmp(btn_name, "X")
@@ -190,7 +190,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button III"))
 		{
 			map[idx] = mmap[SYS_BTN_X];
-			strcat(mapinfo, "[X]");
+			strcat(mapinfo, "\n[X]");
 		}
 
 		else if(!strcasecmp(btn_name, "Y")
@@ -199,7 +199,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button IV"))
 		{
 			map[idx] = mmap[SYS_BTN_Y];
-			strcat(mapinfo, "[Y]");
+			strcat(mapinfo, "\n[Y]");
 		}
 
 		// Genesis C and Z  and TG16 V and VI
@@ -210,7 +210,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Coin"))
 		{
 			map[idx] = mmap[SYS_BTN_R];
-			strcat(mapinfo, "[R]");
+			strcat(mapinfo, "\n[R]");
 		}
 
 		else if(!strcasecmp(btn_name, "L")
@@ -219,7 +219,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Button VI"))
 		{
 			map[idx] = mmap[SYS_BTN_L];
-			strcat(mapinfo, "[L]");
+			strcat(mapinfo, "\n[L]");
 		}
 
 		else if(!strcasecmp(btn_name, "Select")
@@ -228,7 +228,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Start 2P"))
 		{
 			map[idx] = mmap[SYS_BTN_SELECT];
-			strcat(mapinfo, "[\x96]");
+			strcat(mapinfo, "\n[\x96]");
 		}
 
 		else if(!strcasecmp(btn_name, "Start")
@@ -237,10 +237,12 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		|| !strcasecmp(btn_name, "Start 1P"))
 		{
 			map[idx] = mmap[SYS_BTN_START];
-			strcat(mapinfo, "[\x16]");
+			strcat(mapinfo, "\n[\x16]");
 		}
 
-		if (map[idx])
+		else mapped = 0;
+
+		if (map[idx] && mapped)
 		{
 			strcat(mapinfo, ": ");
 			strcat(mapinfo, joy_bnames[i]);
