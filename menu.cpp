@@ -1727,7 +1727,7 @@ void HandleUI(void)
 					MenuWrite(n++, s, menusub == 6, !video_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
 				}
 
-				if (video_get_gamma_en() >=0 && !cfg.direct_video)
+				if (video_get_gamma_en() >=0)
 				{
 					MenuWrite(n++);
 					menumask |= 0x180;
