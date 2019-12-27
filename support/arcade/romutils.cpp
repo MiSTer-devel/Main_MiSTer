@@ -27,6 +27,7 @@ struct arc_struct {
 	int length;
 	int repeat;
 	int insiderom;
+	int patchaddr;
 	int validrom0;
 	buffer_data *data;
 	struct MD5Context context;
@@ -35,16 +36,16 @@ struct arc_struct {
 static char arcade_error_msg[kBigTextSize] = {};
 static char arcade_root[kBigTextSize];
 
-#define DEBUG_ROM_BINARY 0
-#if DEBUG_ROM_BINARY
-FILE *rombinary;
-#endif
-
 static void set_arcade_root(const char *path)
 {
 	strcpy(arcade_root, path);
-	char *p = strrchr(arcade_root, '/');
+	char *p = strstr(arcade_root, "/_");
+	if (p) p = strchr(p + 1, '/');
+
 	if (p) *p = 0;
+	else strcpy(arcade_root, getRootDir());
+
+	printf("arcade_root %s\n", arcade_root);
 }
 
 static const char *get_arcade_root(const char *folder = NULL)
@@ -57,33 +58,49 @@ static const char *get_arcade_root(const char *folder = NULL)
 	return path;
 }
 
-static int file_tx_start(unsigned char index)
+static int      romlen = 0;
+static int      romblkl = 0;
+static uint8_t* romdata = 0;
+static uint8_t  romindex = 0;
+
+static void file_start(unsigned char index)
 {
-	// set index byte (0=bios rom, 1-n=OSD entry index)
-	user_io_set_index(index);
+	romindex = index;
+	if (romdata) free(romdata);
+	romdata = 0;
+	romlen = 0;
+	romblkl = 0;
+}
 
-	// prepare transmission of new file
-	user_io_set_download(1);
-
-#if DEBUG_ROM_BINARY
-	rombinary = fopen("/media/fat/this.rom", "wb");
-#endif
+#define BLKL (1024*1024)
+static int file_checksz(int chunk)
+{
+	if ((romlen + chunk) > romblkl)
+	{
+		romblkl += BLKL;
+		romdata = (uint8_t*)realloc(romdata, romblkl);
+		if (!romdata)
+		{
+			romblkl = 0;
+			romlen = 0;
+			return 0;
+		}
+	}
 	return 1;
 }
 
-static int file_tx_data(const uint8_t *buf, uint16_t chunk, struct MD5Context *md5context)
+static int file_data(const uint8_t *buf, uint16_t chunk, struct MD5Context *md5context)
 {
-	user_io_file_tx_write(buf, chunk);
+	if (!file_checksz(chunk)) return 0;
+
+	memcpy(romdata + romlen, buf, chunk);
+	romlen += chunk;
 
 	if (md5context) MD5Update(md5context, buf, chunk);
-#if DEBUG_ROM_BINARY
-	fwrite(buf, 1, chunk, rombinary);
-#endif
-
 	return 1;
 }
 
-static int file_tx_file(const char *name, int start, int len, struct MD5Context *md5context)
+static int file_file(const char *name, int start, int len, struct MD5Context *md5context)
 {
 	char mute = 0;
 	fileTYPE f = {};
@@ -92,32 +109,75 @@ static int file_tx_file(const char *name, int start, int len, struct MD5Context 
 	if (start) FileSeek(&f, start, SEEK_SET);
 	unsigned long bytes2send = f.size;
 	if (len > 0 && len < (int)bytes2send) bytes2send = len;
-	/* transmit the entire file using one transfer */
-	//printf("Selected file %s with %lu bytes to send  \n", name, bytes2send);
+
 	while (bytes2send)
 	{
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
-		file_tx_data(buf, chunk, md5context);
+		if (!file_data(buf, chunk, md5context))
+		{
+			FileClose(&f);
+			return 0;
+		};
 
 		bytes2send -= chunk;
 	}
 
+	FileClose(&f);
 	return 1;
 }
 
-static int file_tx_finish()
+static int file_patch(const uint8_t *buf, int offset, uint16_t len)
 {
-	printf("\n");
-#if DEBUG_ROM_BINARY
-	fclose(rombinary);
-#endif
-
-	// signal end of transmission
-	user_io_set_download(0);
+	if ((offset + len) > romlen) return 0;
+	memcpy(romdata + offset, buf, len);
 	return 1;
 }
+
+static void file_finish(int send)
+{
+	if (romlen && romdata)
+	{
+		if (send)
+		{
+			// set index byte (0=bios rom, 1-n=OSD entry index)
+			user_io_set_index(romindex);
+
+			// prepare transmission of new file
+			user_io_set_download(1);
+
+			uint8_t *data = romdata;
+			while (romlen > 0)
+			{
+				uint16_t chunk = (romlen > 4096) ? 4096 : romlen;
+				user_io_file_tx_write(data, chunk);
+
+				romlen -= chunk;
+				data += chunk;
+			}
+
+			// signal end of transmission
+			user_io_set_download(0);
+			printf("file_finish: sent to FPGA\n");
+		}
+		else
+		{
+			printf("file_finish: discard the ROM\n");
+		}
+		free(romdata);
+		romdata = 0;
+		return;
+	}
+
+	if (romdata)
+	{
+		free(romdata);
+		romdata = 0;
+	}
+	printf("file_finish: no data, discarded\n");
+}
+
 
 /*
  * adapted from https://gist.github.com/xsleonard/7341172
@@ -207,6 +267,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		if (!strcasecmp(node->tag, "part"))
 			arc_info->partzipname[0] = 0;
 
+		if (!strcasecmp(node->tag, "patch"))
+			arc_info->patchaddr = 0;
 
 		//printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
 		// walk the attributes and save them in the data structure as appropriate
@@ -230,7 +292,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				arc_info->romindex = atoi(node->attributes[i].value);
 			}
 			/* these only exist if we are inside the rom tag, and in a part tag*/
-			if (arc_info->insiderom) {
+			if (arc_info->insiderom)
+			{
 				if (!strcasecmp(node->attributes[i].name, "zip") && !strcasecmp(node->tag, "part"))
 				{
 					strcpy(arc_info->partzipname, node->attributes[i].value);
@@ -251,6 +314,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				{
 					arc_info->repeat = atoi(node->attributes[i].value);
 				}
+				if (!strcasecmp(node->attributes[i].name, "offset") && !strcasecmp(node->tag, "patch"))
+				{
+					arc_info->patchaddr = strtoul(node->attributes[i].value, NULL, 0);
+				}
 			}
 		}
 
@@ -265,7 +332,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (arc_info->romindex == 0 && strlen(arc_info->zipname))
 				arc_info->error_msg[0] = 0;
 
-			file_tx_start(arc_info->romindex);
+			file_start(arc_info->romindex);
 		}
 		break;
 
@@ -288,7 +355,6 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				unsigned char checksum[16];
 				int checksumsame = 1;
 				char *md5 = arc_info->md5;
-				file_tx_finish();
 				MD5Final(checksum, &arc_info->context);
 				printf("md5[%s]\n", arc_info->md5);
 				printf("md5-calc[");
@@ -320,6 +386,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 						arc_info->error_msg[0] = 0;
 					}
 				}
+
+				file_finish(checksumsame);
 			}
 			arc_info->insiderom = 0;
 		}
@@ -354,7 +422,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				printf("file: %s, start=%d, len=%d\n", fname, start, length);
 				for (int i = 0; i < repeat; i++)
 				{
-					int result = file_tx_file(fname, start, length, &arc_info->context);
+					int result = file_file(fname, start, length, &arc_info->context);
 
 					// we should check file not found error for the zip
 					if (result == 0)
@@ -376,9 +444,20 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				//printf("\n");
 				if (binary)
 				{
-					for (int i = 0; i < repeat; i++) file_tx_data(binary, len, &arc_info->context);
+					for (int i = 0; i < repeat; i++) file_data(binary, len, &arc_info->context);
 					free(binary);
 				}
+			}
+		}
+
+		if (!strcasecmp(node->tag, "patch") && arc_info->insiderom)
+		{
+			size_t len = 0;
+			unsigned char* binary = hexstr_to_char(arc_info->data->content, &len);
+			if (binary)
+			{
+				file_patch(binary, arc_info->patchaddr, len);
+				free(binary);
 			}
 		}
 		break;
@@ -528,7 +607,7 @@ int arcade_load(const char *xml)
 	MenuHide();
 
 	set_arcade_root(xml);
-	printf("arcade_scan_xml_for_rbf [%s]\n", xml);
+	printf("arcade_load [%s]\n", xml);
 	const char *rbf = get_rbf(xml);
 
 	if (rbf)
