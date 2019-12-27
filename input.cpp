@@ -1477,6 +1477,7 @@ static void mouse_cb(unsigned char b, int16_t x = 0, int16_t y = 0, int16_t w = 
 
 static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
 {
+	static uint32_t osdbtn = 0;
 	static char str[128];
 	static uint32_t lastcode[NUMPLAYERS], lastmask[NUMPLAYERS];
 	int num = jnum - 1;
@@ -1593,6 +1594,31 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 
 		if (user_io_osd_is_visible() || (bnum == BTN_OSD))
 		{
+			if (press)
+			{
+				osdbtn |= mask;
+				if ((osdbtn & (JOY_BTN1 | JOY_BTN2)) == (JOY_BTN1 | JOY_BTN2))
+				{
+					osdbtn |= JOY_BTN3;
+					mask = JOY_BTN3;
+				}
+			}
+			else
+			{
+				int old_osdbtn = osdbtn;
+				osdbtn &= ~mask;
+
+				if ((old_osdbtn & (JOY_BTN1 | JOY_BTN2 | JOY_BTN3)) == (JOY_BTN1 | JOY_BTN2 | JOY_BTN3))
+				{
+					mask = JOY_BTN3;
+				}
+				else if (old_osdbtn & JOY_BTN3)
+				{
+					if (!(osdbtn & (JOY_BTN1 | JOY_BTN2))) osdbtn &= ~JOY_BTN3;
+					mask = 0;
+				}
+			}
+
 			memset(joy, 0, sizeof(joy));
 			struct input_event ev;
 			ev.type = EV_KEY;
@@ -1865,7 +1891,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 
 				mapping_clear = 0;
-				if (mapping_dev >= 0 && (mapping_dev == dev || clear) && mapping_button < (is_menu_core() ? (SYS_BTN_OSD_KTGL+1) : mapping_count))
+				if (mapping_dev >= 0 && (mapping_dev == dev || clear) && mapping_button < (is_menu_core() ? (mapping_type ? SYS_BTN_CNT_ESC + 1 : SYS_BTN_OSD_KTGL + 1) : mapping_count))
 				{
 					if (ev->value == 1 && !key_mapped)
 					{
@@ -1881,8 +1907,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								if (!found || (mapping_button == SYS_BTN_OSD_KTGL && mapping_type))
 								{
-									input[dev].map[(mapping_button == SYS_BTN_OSD_KTGL) ? SYS_BTN_OSD_KTGL + mapping_type : mapping_button] = ev->code;
-									input[dev].map[SYS_BTN_OSD_KTGL + 2] = input[dev].map[SYS_BTN_OSD_KTGL + 1];
+									if (mapping_button == SYS_BTN_CNT_OK) input[dev].map[SYS_BTN_MENU_FUNC] = ev->code & 0xFFFF;
+									else if (mapping_button == SYS_BTN_CNT_ESC) input[dev].map[SYS_BTN_MENU_FUNC] = (ev->code << 16) | input[dev].map[SYS_BTN_MENU_FUNC];
+									else if (mapping_button == SYS_BTN_OSD_KTGL)
+									{
+										input[dev].map[SYS_BTN_OSD_KTGL + mapping_type] = ev->code;
+										input[dev].map[SYS_BTN_OSD_KTGL + 2] = input[dev].map[SYS_BTN_OSD_KTGL + 1];
+									}
+									else input[dev].map[mapping_button] = ev->code;
 
 									key_mapped = ev->code;
 
@@ -1961,10 +1993,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			switch (mapping_button)
 			{
-				case 21: idx = SYS_AXIS_X;  break;
-				case 22: idx = SYS_AXIS_Y;  break;
-				case 23: idx = SYS_AXIS_MX; break;
-				case 24: idx = SYS_AXIS_MY; break;
+				case 23: idx = SYS_AXIS_X;  break;
+				case 24: idx = SYS_AXIS_Y;  break;
 				case -4: idx = SYS_AXIS1_X; break;
 				case -3: idx = SYS_AXIS1_Y; break;
 				case -2: idx = SYS_AXIS2_X; break;
@@ -2073,8 +2103,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (idx) input[mapping_dev].map[idx] = 0;
 					else if (mapping_button > 0)
 					{
-						if (is_menu_core()) input[mapping_dev].map[mapping_button] = 0;
-						else input[mapping_dev].map[mapping_button] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
+						if (!is_menu_core()) input[mapping_dev].map[mapping_button] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
 					}
 				}
 				last_axis = 0;
@@ -2137,7 +2166,23 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				{
 					if (ev->value <= 1)
 					{
-						for (int i = 0; i <= SYS_BTN_Y; i++)
+						if ((input[dev].mmap[SYS_BTN_MENU_FUNC] & 0xFFFF) ?
+							(ev->code == (input[dev].mmap[SYS_BTN_MENU_FUNC] & 0xFFFF)) :
+							(ev->code == input[dev].mmap[SYS_BTN_A]))
+						{
+							joy_digital(0, JOY_BTN1, 0, ev->value, 0);
+							return;
+						}
+
+						if ((input[dev].mmap[SYS_BTN_MENU_FUNC] >> 16) ?
+							(ev->code == (input[dev].mmap[SYS_BTN_MENU_FUNC] >> 16)) :
+							(ev->code == input[dev].mmap[SYS_BTN_B]))
+						{
+							joy_digital(0, JOY_BTN2, 0, ev->value, 0);
+							return;
+						}
+
+						for (int i = 0; i < SYS_BTN_A; i++)
 						{
 							if (ev->code == input[dev].mmap[i])
 							{

@@ -2220,7 +2220,7 @@ void HandleUI(void)
 				p = joy_bnames[get_map_button() - DPAD_NAMES];
 				if (is_menu_core())
 				{
-					if (get_map_type()) joy_bcount = 19;
+					if (get_map_type()) joy_bcount = 21;
 					if (get_map_button() == SYS_BTN_OSD_KTGL)
 					{
 						p = joy_button_map[DPAD_BUTTON_NAMES + get_map_type()];
@@ -2239,9 +2239,9 @@ void HandleUI(void)
 
 			if (get_map_button() >= 0)
 			{
-				if (is_menu_core() && get_map_button() > SYS_BTN_OSD_KTGL)
+				if (is_menu_core() && get_map_button() > SYS_BTN_CNT_ESC)
 				{
-					strcpy(s, joy_button_map[(get_map_button() - SYS_BTN_OSD_KTGL - 1) + DPAD_BUTTON_NAMES + 2]);
+					strcpy(s, joy_button_map[(get_map_button() - SYS_BTN_CNT_ESC - 1) + DPAD_BUTTON_NAMES + 2]);
 				}
 				else
 				{
@@ -3237,7 +3237,8 @@ void HandleUI(void)
 		{
 			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
 			OsdWrite(OsdGetSize() / 2, "   Unmounting the image", 0, 0);
-			usleep(1500000);
+			OsdUpdate();
+			sleep(1);
 			SelectedPath[0] = 0;
 			menustate = fs_MenuSelect;
 		}
@@ -4128,9 +4129,9 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
-				strcpy(joy_bnames[SYS_BTN_A - DPAD_NAMES], "A (OK/Enter)");
-				strcpy(joy_bnames[SYS_BTN_B - DPAD_NAMES], "B (ESC/Back)");
-				strcpy(joy_bnames[SYS_BTN_X - DPAD_NAMES], "X (Backspace)");
+				strcpy(joy_bnames[SYS_BTN_A - DPAD_NAMES], "A");
+				strcpy(joy_bnames[SYS_BTN_B - DPAD_NAMES], "B");
+				strcpy(joy_bnames[SYS_BTN_X - DPAD_NAMES], "X");
 				strcpy(joy_bnames[SYS_BTN_Y - DPAD_NAMES], "Y");
 				strcpy(joy_bnames[SYS_BTN_L - DPAD_NAMES], "L");
 				strcpy(joy_bnames[SYS_BTN_R - DPAD_NAMES], "R");
@@ -4144,6 +4145,9 @@ void HandleUI(void)
 				strcpy(joy_bnames[SYS_MS_BTN_R - DPAD_NAMES], "Mouse Btn Right");
 				strcpy(joy_bnames[SYS_MS_BTN_M - DPAD_NAMES], "Mouse Btn Middle");
 				strcpy(joy_bnames[SYS_MS_BTN_EMU - DPAD_NAMES], "Mouse Emu / Sniper");
+				strcpy(joy_bnames[SYS_BTN_OSD_KTGL - DPAD_NAMES], "Menu");
+				strcpy(joy_bnames[SYS_BTN_CNT_OK - DPAD_NAMES], "Menu: OK");
+				strcpy(joy_bnames[SYS_BTN_CNT_ESC - DPAD_NAMES], "Menu: Back");
 				joy_bcount = 16+1; //buttons + OSD/KTGL button
 				start_map_setting(joy_bcount + 6); // + dpad + Analog X/Y
 				menustate = MENU_JOYDIGMAP;

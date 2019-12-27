@@ -53,6 +53,7 @@
 #define SYS_MS_BTN_M       18
 #define SYS_MS_BTN_EMU     19
 #define SYS_BTN_OSD_KTGL   20 // 20 for keyboard, 21+22 for gamepad
+#define SYS_BTN_MENU_FUNC  23
 #define SYS_AXIS1_X        24
 #define SYS_AXIS1_Y        25
 #define SYS_AXIS2_X        26
@@ -61,6 +62,9 @@
 #define SYS_AXIS_Y         29
 #define SYS_AXIS_MX        30
 #define SYS_AXIS_MY        31
+
+#define SYS_BTN_CNT_OK     21
+#define SYS_BTN_CNT_ESC    22
 
 #define KEY_EMU (KEY_MAX+1)
 
