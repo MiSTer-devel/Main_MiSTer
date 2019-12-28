@@ -584,14 +584,14 @@ int neogeo_scan_xml(char *path)
 	return rom_cnt;
 }
 
-char *neogeo_get_altname(char *path, direntext_t *de)
+char *neogeo_get_altname(char *path, char *name, char *altname)
 {
 	static char full_path[1024];
 	strcpy(full_path, path);
 	strcat(full_path, "/");
-	strcat(full_path, de->de.d_name);
+	strcat(full_path, name);
 
-	char *p = strrchr(de->de.d_name, '.');
+	char *p = strrchr(name, '.');
 	if (p && !strcasecmp(p, ".neo"))
 	{
 		static NeoFile hdr;
@@ -621,7 +621,7 @@ char *neogeo_get_altname(char *path, direntext_t *de)
 		if (*altname) return altname;
 	}
 
-	sprintf(full_path, ",%s,", de->altname);
+	sprintf(full_path, ",%s,", altname);
 	for (uint32_t i = 0; i < rom_cnt; i++)
 	{
 		if (roms[i].name[0] == ',')
@@ -632,11 +632,11 @@ char *neogeo_get_altname(char *path, direntext_t *de)
 				if (roms[i].hide) return (char*)-1;
 				if(p == roms[i].name) return roms[i].altname;
 
-				sprintf(full_path, "%s (%s)", roms[i].altname, de->altname);
+				sprintf(full_path, "%s (%s)", roms[i].altname, altname);
 				return full_path;
 			}
 		}
-		else if (!strcasecmp(de->altname, roms[i].name))
+		else if (!strcasecmp(altname, roms[i].name))
 		{
 			if (roms[i].hide) return (char*)-1;
 			return roms[i].altname;

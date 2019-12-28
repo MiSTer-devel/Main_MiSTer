@@ -56,6 +56,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "cheats.h"
 #include "video.h"
 #include "joymapping.h"
+#include "recent.h"
 
 #include "support.h"
 
@@ -125,6 +126,8 @@ enum MENU
 	MENU_LGCAL2,
 	MENU_CHEATS1,
 	MENU_CHEATS2,
+	MENU_RECENT1,
+	MENU_RECENT2,
 
 	// Mist/atari specific pages
 	MENU_MIST_MAIN1,
@@ -798,7 +801,7 @@ void HandleUI(void)
 	static char ioctl_index;
 	char *p;
 	static char s[256];
-	unsigned char m = 0, up, down, select, menu, right, left, plus, minus;
+	unsigned char m = 0, up, down, select, menu, right, left, plus, minus, recent;
 	char enable;
 	static int reboot_req = 0;
 	static long helptext_timer;
@@ -815,6 +818,10 @@ void HandleUI(void)
 	static unsigned long flash_timer = 0;
 	static int flash_state = 0;
 
+	// recent files menu state
+	static uint32_t recentsub = 0;
+	static enum MENU recentselect = MENU_NONE1;
+
 	static char	cp_MenuCancel;
 
 	// get user control codes
@@ -829,6 +836,7 @@ void HandleUI(void)
 	right = false;
 	plus = false;
 	minus = false;
+	recent = false;
 
 	if (c && c != KEY_F12 && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
 
@@ -962,6 +970,9 @@ void HandleUI(void)
 		case KEY_KPMINUS:
 		case KEY_MINUS: // -/_
 			minus = true;
+			break;
+		case KEY_GRAVE:
+			recent = true;
 			break;
 		}
 	}
@@ -1599,6 +1610,7 @@ void HandleUI(void)
 							if (p[0] == 'R') menustate = MENU_NONE1;
 						}
 					}
+
 				}
 			}
 		}
@@ -1611,6 +1623,69 @@ void HandleUI(void)
 		{
 			menustate = MENU_8BIT_INFO;
 			menusub = 1;
+		}
+		else if (recent)
+		{
+			// parse F/S options since 
+			char ext[256];
+
+			int h = 0, d = 0;
+			int i = 2;
+			p = user_io_get_confstr(i++);
+			recentselect = MENU_8BIT_MAIN1;
+			while (p)
+			{
+				h = 0;
+				d = 0;
+
+				//Hide or Disable flag
+				while ((p[0] == 'H' || p[0] == 'D') && strlen(p) > 2)
+				{
+					int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
+					if (p[0] == 'H') h |= flg; else d |= flg;
+					p += 2;
+				}
+
+				// skip hidden or disabled entries
+				if (h || d) continue;
+
+				if (p[0] == 'F') {
+					recentselect = MENU_8BIT_MAIN_FILE_SELECTED;
+					opensave = 0;
+					ioctl_index = menusub + 1;
+					int idx = 1;
+
+					if (p[1] == 'S')
+					{
+						opensave = 1;
+						idx++;
+					}
+
+					if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
+					substrcpy(ext, p, 1);
+					if (!strcasecmp(user_io_get_core_name(), "GBA") && FileExists(user_io_make_filepath(HomeDir, "goomba.rom"))) strcat(ext, "GB GBC");
+					while (strlen(ext) % 3) strcat(ext, " ");
+					strcpy(fs_pFileExt, ext);
+					fs_ExtLen = strlen(fs_pFileExt);
+
+					break;
+				}
+				else if (p[0] == 'S')
+				{
+					recentselect = MENU_8BIT_MAIN_IMAGE_SELECTED;
+
+					break;
+				}
+
+				p = user_io_get_confstr(i++);
+			}
+
+			menustate = MENU_RECENT1;
+			recentsub = menusub;
+			menusub = 0;
+			fs_Options = is_neogeo_core() ? SCANO_NEOGEO : 0;
+
+			recent_init();
 		}
 		break;
 
@@ -1629,6 +1704,8 @@ void HandleUI(void)
 			if (user_io_use_cheats()) cheats_init(SelectedPath, user_io_get_file_crc());
 			menustate = MENU_NONE1;
 		}
+
+		recent_update(SelectedDir, SelectedPath);
 		break;
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
@@ -1669,6 +1746,8 @@ void HandleUI(void)
 		}
 
 		menustate = SelectedPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
+
+		recent_update(SelectedDir, SelectedPath);
 		break;
 
 	case MENU_8BIT_SYSTEM1:
@@ -3420,6 +3499,71 @@ void HandleUI(void)
 		{
 			cheats_toggle();
 			menustate = MENU_CHEATS1;
+		}
+		break;
+
+		/******************************************************************/
+		/* last rom menu                                                    */
+		/******************************************************************/
+	case MENU_RECENT1:
+		helptext = helptexts[HELPTEXT_NONE];
+		OsdSetTitle("Recent Files");
+		recent_print();
+		menustate = MENU_RECENT2;
+		parentstate = menustate;
+		break;
+
+	case MENU_RECENT2:
+		menumask = 0;
+
+		if (menu || recent)
+		{
+			menustate = MENU_8BIT_MAIN1;
+			menusub = recentsub;
+			break;
+		}
+
+		recent_scroll_name();
+
+		if (c == KEY_HOME)
+		{
+			recent_scan(SCANF_INIT);
+			menustate = MENU_RECENT1;
+		}
+
+		if (c == KEY_END)
+		{
+			recent_scan(SCANF_END);
+			menustate = MENU_RECENT1;
+		}
+
+		if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
+		{
+			recent_scan(SCANF_PREV_PAGE);
+			menustate = MENU_RECENT1;
+		}
+
+		if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
+		{
+			recent_scan(SCANF_NEXT_PAGE);
+			menustate = MENU_RECENT1;
+		}
+
+		if (down) // scroll down one entry
+		{
+			recent_scan(SCANF_NEXT);
+			menustate = MENU_RECENT1;
+		}
+
+		if (up) // scroll up one entry
+		{
+			recent_scan(SCANF_PREV);
+			menustate = MENU_RECENT1;
+		}
+
+		if (select)
+		{
+			menustate = recent_select(SelectedDir, SelectedPath) ? recentselect : MENU_RECENT1;
 		}
 		break;
 
