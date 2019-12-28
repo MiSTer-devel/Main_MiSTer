@@ -2182,13 +2182,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							return;
 						}
 
-						// Recent Files menu
-						// FIXME: temporary pass through of select joypad button.  unsure of the best way to do this.
-						// updates here may require changes in menu.cpp to match the key mapping
-						if (ev->code == input[dev].mmap[SYS_BTN_SELECT] && !osd_event) {
+						if (ev->code == input[dev].mmap[SYS_BTN_SELECT])
+						{
 							struct input_event key_ev = *ev;
 							key_ev.code = KEY_GRAVE;
 							input_cb(&key_ev, 0, 0);
+							return;
 						}
 
 						for (int i = 0; i < SYS_BTN_A; i++)

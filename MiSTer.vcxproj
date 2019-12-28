@@ -72,6 +72,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="menu.cpp" />
     <ClCompile Include="osd.cpp" />
+    <ClCompile Include="recent.cpp" />
     <ClCompile Include="scaler.cpp" />
     <ClCompile Include="scheduler.cpp" />
     <ClCompile Include="spi.cpp" />
@@ -127,6 +128,7 @@
     <ClInclude Include="logo.h" />
     <ClInclude Include="menu.h" />
     <ClInclude Include="osd.h" />
+    <ClInclude Include="recent.h" />
     <ClInclude Include="scaler.h" />
     <ClInclude Include="scheduler.h" />
     <ClInclude Include="spi.h" />

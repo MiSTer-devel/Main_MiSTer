@@ -807,7 +807,6 @@ void HandleUI(void)
 	static long helptext_timer;
 	static const char *helptext;
 	static char helpstate = 0;
-	static char drive_num = 0;
 	static char flag;
 	static int cr = 0;
 	static uint32_t cheatsub = 0;
@@ -817,10 +816,6 @@ void HandleUI(void)
 	static int has_fb_terminal = 0;
 	static unsigned long flash_timer = 0;
 	static int flash_state = 0;
-
-	// recent files menu state
-	static uint32_t recentsub = 0;
-	static enum MENU recentselect = MENU_NONE1;
 
 	static char	cp_MenuCancel;
 
@@ -1186,16 +1181,29 @@ void HandleUI(void)
 
 	case MENU_ARCHIE_MAIN2:
 		// menu key closes menu
-		if (menu)
-			menustate = MENU_NONE1;
-		if (select) {
+		if (menu) menustate = MENU_NONE1;
+		if (recent)
+		{
+			if (menusub <= 1)
+			{
+				fs_Options = SCANO_DIR | SCANO_UMOUNT;
+				fs_MenuSelect = MENU_ARCHIE_MAIN_FILE_SELECTED;
+				fs_MenuCancel = MENU_ARCHIE_MAIN1;
+				if (recent_init(500)) menustate = MENU_RECENT1;
+			}
+		}
+
+		if (select)
+		{
 			switch (menusub) {
 			case 0:  // Floppy 0
 			case 1:  // Floppy 1
+				ioctl_index = 0;
 				SelectFile("ADF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				break;
 
 			case 2:  // Load ROM
+				ioctl_index = 1;
 				SelectFile("ROM", 0, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				break;
 
@@ -1247,9 +1255,12 @@ void HandleUI(void)
 		}
 		break;
 
-	case MENU_ARCHIE_MAIN_FILE_SELECTED: // file successfully selected
-		if (menusub == 0) user_io_file_mount(SelectedPath, 0);
-		if (menusub == 1) user_io_file_mount(SelectedPath, 1);
+	case MENU_ARCHIE_MAIN_FILE_SELECTED:
+		if (menusub <= 1)
+		{
+			recent_update(SelectedDir, SelectedPath, 500);
+			user_io_file_mount(SelectedPath, menusub);
+		}
 		if (menusub == 2) archie_set_rom(SelectedPath);
 		menustate = MENU_ARCHIE_MAIN1;
 		break;
@@ -1484,9 +1495,9 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		if (select)
+		if (select || recent)
 		{
-			if (menusub == menusub_last)
+			if (menusub == menusub_last && select)
 			{
 				menustate = MENU_NONE1;
 			}
@@ -1521,13 +1532,7 @@ void HandleUI(void)
 
 				if (!d)
 				{
-					if (p[0] == 'C' && cheats_available())
-					{
-						menustate = MENU_CHEATS1;
-						cheatsub = menusub;
-						menusub = 0;
-					}
-					else if (p[0] == 'F')
+					if (p[0] == 'F')
 					{
 						opensave = 0;
 						ioctl_index = menusub + 1;
@@ -1543,74 +1548,94 @@ void HandleUI(void)
 						substrcpy(ext, p, 1);
 						if (!strcasecmp(user_io_get_core_name(), "GBA") && FileExists(user_io_make_filepath(HomeDir, "goomba.rom"))) strcat(ext, "GB GBC");
 						while (strlen(ext) % 3) strcat(ext, " ");
-						SelectFile(ext, SCANO_DIR | (is_neogeo_core() ? SCANO_NEOGEO | SCANO_NOENTER : 0), MENU_8BIT_MAIN_FILE_SELECTED, MENU_8BIT_MAIN1);
+
+						fs_Options = SCANO_DIR | (is_neogeo_core() ? SCANO_NEOGEO | SCANO_NOENTER : 0);
+						fs_MenuSelect = MENU_8BIT_MAIN_FILE_SELECTED;
+						fs_MenuCancel = MENU_8BIT_MAIN1;
+
+						if (select) SelectFile(ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
+						else if(recent_init(ioctl_index)) menustate = MENU_RECENT1;
 					}
 					else if (p[0] == 'S')
 					{
-						drive_num = 0;
-						if (p[1] >= '0' && p[1] <= '3') drive_num = p[1] - '0';
+						ioctl_index = 0;
+						if (p[1] >= '0' && p[1] <= '3') ioctl_index = p[1] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
-						SelectFile(ext, SCANO_DIR | SCANO_UMOUNT, MENU_8BIT_MAIN_IMAGE_SELECTED, MENU_8BIT_MAIN1);
+
+						fs_Options = SCANO_DIR | SCANO_UMOUNT;
+						fs_MenuSelect = MENU_8BIT_MAIN_IMAGE_SELECTED;
+						fs_MenuCancel = MENU_8BIT_MAIN1;
+
+						if (select) SelectFile(ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
+						else if(recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
 					}
-					else if ((p[0] == 'O') || (p[0] == 'o'))
+					else if (select)
 					{
-						int ex = (p[0] == 'o');
-
-						int byarm = 0;
-						if (p[1] == 'X')
+						if (p[0] == 'C' && cheats_available())
 						{
-							byarm = 1;
-							p++;
+							menustate = MENU_CHEATS1;
+							cheatsub = menusub;
+							menusub = 0;
 						}
-
-						uint32_t status = user_io_8bit_set_status(0, 0, ex);  // 0,0 gets status
-						uint32_t x = getStatus(p, status) + 1;
-
-						if (byarm && is_x86_core())
+						else if ((p[0] == 'O') || (p[0] == 'o'))
 						{
-							if (p[1] == '2') x86_set_fdd_boot(!(x & 1));
-						}
-						// check if next value available
-						substrcpy(s, p, 2 + x);
-						if (!strlen(s)) x = 0;
+							int ex = (p[0] == 'o');
 
-						user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff, ex);
-
-						menustate = MENU_8BIT_MAIN1;
-					}
-					else if ((p[0] == 'T') || (p[0] == 'R') || (p[0] == 't') || (p[0] == 'r'))
-					{
-						int ex = (p[0] == 't') || (p[0] == 'r');
-
-						// determine which status bit is affected
-						uint32_t mask = 1 << getIdx(p);
-						if (mask == 1 && is_x86_core())
-						{
-							x86_init();
-							menustate = MENU_NONE1;
-						}
-						else
-						{
-							if (is_megacd_core())
+							int byarm = 0;
+							if (p[1] == 'X')
 							{
-								if (mask == 1) mcd_set_image(0, "");
-								if (mask == 2)
-								{
-									mcd_reset();
-									mask = 1;
-								}
+								byarm = 1;
+								p++;
 							}
 
-							uint32_t status = user_io_8bit_set_status(0, 0, ex);
+							uint32_t status = user_io_8bit_set_status(0, 0, ex);  // 0,0 gets status
+							uint32_t x = getStatus(p, status) + 1;
 
-							user_io_8bit_set_status(status ^ mask, mask, ex);
-							user_io_8bit_set_status(status, mask, ex);
+							if (byarm && is_x86_core())
+							{
+								if (p[1] == '2') x86_set_fdd_boot(!(x & 1));
+							}
+							// check if next value available
+							substrcpy(s, p, 2 + x);
+							if (!strlen(s)) x = 0;
+
+							user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff, ex);
+
 							menustate = MENU_8BIT_MAIN1;
-							if (p[0] == 'R') menustate = MENU_NONE1;
+						}
+						else if ((p[0] == 'T') || (p[0] == 'R') || (p[0] == 't') || (p[0] == 'r'))
+						{
+							int ex = (p[0] == 't') || (p[0] == 'r');
+
+							// determine which status bit is affected
+							uint32_t mask = 1 << getIdx(p);
+							if (mask == 1 && is_x86_core())
+							{
+								x86_init();
+								menustate = MENU_NONE1;
+							}
+							else
+							{
+								if (is_megacd_core())
+								{
+									if (mask == 1) mcd_set_image(0, "");
+									if (mask == 2)
+									{
+										mcd_reset();
+										mask = 1;
+									}
+								}
+
+								uint32_t status = user_io_8bit_set_status(0, 0, ex);
+
+								user_io_8bit_set_status(status ^ mask, mask, ex);
+								user_io_8bit_set_status(status, mask, ex);
+								menustate = MENU_8BIT_MAIN1;
+								if (p[0] == 'R') menustate = MENU_NONE1;
+							}
 						}
 					}
-
 				}
 			}
 		}
@@ -1623,69 +1648,6 @@ void HandleUI(void)
 		{
 			menustate = MENU_8BIT_INFO;
 			menusub = 1;
-		}
-		else if (recent)
-		{
-			// parse F/S options since 
-			char ext[256];
-
-			int h = 0, d = 0;
-			int i = 2;
-			p = user_io_get_confstr(i++);
-			recentselect = MENU_8BIT_MAIN1;
-			while (p)
-			{
-				h = 0;
-				d = 0;
-
-				//Hide or Disable flag
-				while ((p[0] == 'H' || p[0] == 'D') && strlen(p) > 2)
-				{
-					int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
-					if (p[0] == 'H') h |= flg; else d |= flg;
-					p += 2;
-				}
-
-				// skip hidden or disabled entries
-				if (h || d) continue;
-
-				if (p[0] == 'F') {
-					recentselect = MENU_8BIT_MAIN_FILE_SELECTED;
-					opensave = 0;
-					ioctl_index = menusub + 1;
-					int idx = 1;
-
-					if (p[1] == 'S')
-					{
-						opensave = 1;
-						idx++;
-					}
-
-					if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
-					substrcpy(ext, p, 1);
-					if (!strcasecmp(user_io_get_core_name(), "GBA") && FileExists(user_io_make_filepath(HomeDir, "goomba.rom"))) strcat(ext, "GB GBC");
-					while (strlen(ext) % 3) strcat(ext, " ");
-					strcpy(fs_pFileExt, ext);
-					fs_ExtLen = strlen(fs_pFileExt);
-
-					break;
-				}
-				else if (p[0] == 'S')
-				{
-					recentselect = MENU_8BIT_MAIN_IMAGE_SELECTED;
-
-					break;
-				}
-
-				p = user_io_get_confstr(i++);
-			}
-
-			menustate = MENU_RECENT1;
-			recentsub = menusub;
-			menusub = 0;
-			fs_Options = is_neogeo_core() ? SCANO_NEOGEO : 0;
-
-			recent_init();
 		}
 		break;
 
@@ -1705,14 +1667,14 @@ void HandleUI(void)
 			menustate = MENU_NONE1;
 		}
 
-		recent_update(SelectedDir, SelectedPath);
+		recent_update(SelectedDir, SelectedPath, ioctl_index);
 		break;
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
 		printf("Image selected: %s\n", SelectedPath);
 		if (is_x86_core())
 		{
-			x86_set_image(drive_num, SelectedPath);
+			x86_set_image(ioctl_index, SelectedPath);
 		}
 		else if (is_megacd_core())
 		{
@@ -1723,12 +1685,12 @@ void HandleUI(void)
 				user_io_8bit_set_status(0, 1);
 				mcd_reset();
 			}
-			mcd_set_image(drive_num, SelectedPath);
+			mcd_set_image(ioctl_index, SelectedPath);
 		}
 		else
 		{
 			user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
-			user_io_file_mount(SelectedPath, drive_num);
+			user_io_file_mount(SelectedPath, ioctl_index);
 		}
 
 		if (is_neogeo_core())
@@ -1747,7 +1709,7 @@ void HandleUI(void)
 
 		menustate = SelectedPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
 
-		recent_update(SelectedDir, SelectedPath);
+		recent_update(SelectedDir, SelectedPath, ioctl_index + 500);
 		break;
 
 	case MENU_8BIT_SYSTEM1:
@@ -3142,10 +3104,11 @@ void HandleUI(void)
 			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 			menustate = MENU_MAIN1;
 		}
-		else if (select)
+		else if (select || recent)
 		{
 			if (menusub < 4)
 			{
+				ioctl_index = 0;
 				if (df[menusub].status & DSK_INSERTED) // eject selected floppy
 				{
 					df[menusub].status = 0;
@@ -3155,52 +3118,61 @@ void HandleUI(void)
 				else
 				{
 					df[menusub].status = 0;
-					SelectFile("ADF", SCANO_DIR, MENU_FILE_SELECTED, MENU_MAIN1);
+					fs_Options = SCANO_DIR;
+					fs_MenuSelect = MENU_FILE_SELECTED;
+					fs_MenuCancel = MENU_MAIN1;
+					if(select) SelectFile("ADF", fs_Options, fs_MenuSelect, fs_MenuCancel);
+					else if (recent_init(0)) menustate = MENU_RECENT1;
 				}
 			}
-			else if (menusub == 4)	// Toggle floppy turbo
+			else if (select)
 			{
-				minimig_config.floppy.speed ^= 1;
-				minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
-				menustate = MENU_MAIN1;
+				if (menusub == 4)	// Toggle floppy turbo
+				{
+					minimig_config.floppy.speed ^= 1;
+					minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+					menustate = MENU_MAIN1;
+				}
+				else if (menusub == 5)	// Go to harddrives page.
+				{
+					menustate = MENU_SETTINGS_HARDFILE1;
+					menusub = 0;
+				}
+				else if (menusub == 6)
+				{
+					menustate = MENU_SETTINGS_CHIPSET1;
+					menusub = 0;
+				}
+				else if (menusub == 7)
+				{
+					menustate = MENU_SETTINGS_MEMORY1;
+					menusub = 0;
+				}
+				else if (menusub == 8)
+				{
+					menustate = MENU_SETTINGS_VIDEO1;
+					menusub = 0;
+				}
+				else if (menusub == 9)
+				{
+					menusub = 0;
+					menustate = MENU_SAVECONFIG_1;
+				}
+				else if (menusub == 10)
+				{
+					menusub = 0;
+					menustate = MENU_LOADCONFIG_1;
+				}
+				else if (menusub == 11)
+				{
+					menustate = MENU_NONE1;
+					minimig_reset();
+				}
+				else if (menusub == 12)
+				{
+					menustate = MENU_NONE1;
+				}
 			}
-			else if (menusub == 5)	// Go to harddrives page.
-			{
-				menustate = MENU_SETTINGS_HARDFILE1;
-				menusub = 0;
-			}
-			else if (menusub == 6)
-			{
-				menustate = MENU_SETTINGS_CHIPSET1;
-				menusub = 0;
-			}
-			else if (menusub == 7)
-			{
-				menustate = MENU_SETTINGS_MEMORY1;
-				menusub = 0;
-			}
-			else if (menusub == 8)
-			{
-				menustate = MENU_SETTINGS_VIDEO1;
-				menusub = 0;
-			}
-			else if (menusub == 9)
-			{
-				menusub = 0;
-				menustate = MENU_SAVECONFIG_1;
-			}
-			else if (menusub == 10)
-			{
-				menusub = 0;
-				menustate = MENU_LOADCONFIG_1;
-			}
-			else if (menusub == 11)
-			{
-				menustate = MENU_NONE1;
-				minimig_reset();
-			}
-			else if (menusub == 12)
-				menustate = MENU_NONE1;
 		}
 		else if (c == KEY_BACKSPACE) // eject all floppies
 		{
@@ -3219,13 +3191,11 @@ void HandleUI(void)
 		}
 		break;
 
-	case MENU_FILE_SELECTED: // file successfully selected
+	case MENU_FILE_SELECTED:
+		recent_update(SelectedDir, SelectedPath, 0);
 		InsertFloppy(&df[menusub], SelectedPath);
+		if (menusub < drives) menusub++;
 		menustate = MENU_MAIN1;
-		menusub++;
-		if (menusub > drives)
-			menusub = 6;
-
 		break;
 
 	case MENU_LOADCONFIG_1:
@@ -3337,6 +3307,11 @@ void HandleUI(void)
 
 			if (!strcasecmp(fs_pFileExt, "RBF")) SelectedPath[0] = 0;
 			menustate = fs_MenuCancel;
+		}
+
+		if (recent && recent_init((fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index))
+		{
+			menustate = MENU_RECENT1;
 		}
 
 		if (flist_nDirEntries())
@@ -3518,8 +3493,7 @@ void HandleUI(void)
 
 		if (menu || recent)
 		{
-			menustate = MENU_8BIT_MAIN1;
-			menusub = recentsub;
+			menustate = fs_MenuCancel;
 			break;
 		}
 
@@ -3563,7 +3537,7 @@ void HandleUI(void)
 
 		if (select)
 		{
-			menustate = recent_select(SelectedDir, SelectedPath) ? recentselect : MENU_RECENT1;
+			menustate = recent_select(SelectedDir, SelectedPath) ? (enum MENU)fs_MenuSelect : MENU_RECENT1;
 		}
 		break;
 
@@ -3893,6 +3867,7 @@ void HandleUI(void)
 			}
 			else if (menusub == 3)
 			{
+				ioctl_index = 1;
 				SelectFile("ROM", 0, MENU_ROMFILE_SELECTED, MENU_SETTINGS_MEMORY1);
 			}
 			else if (menusub == 4)
@@ -3980,27 +3955,37 @@ void HandleUI(void)
 		break;
 
 	case MENU_SETTINGS_HARDFILE2:
-		if (select)
+		if (select || recent)
 		{
 			if (menusub == 0)
 			{
-				minimig_config.enable_ide = (minimig_config.enable_ide == 0);
-				menustate = MENU_SETTINGS_HARDFILE1;
+				if (select)
+				{
+					minimig_config.enable_ide = (minimig_config.enable_ide == 0);
+					menustate = MENU_SETTINGS_HARDFILE1;
+				}
 			}
 			else if (menusub < 9)
 			{
 				if(menusub&1)
 				{
-					int num = (menusub - 1) / 2;
-					minimig_config.hardfile[num].enabled = minimig_config.hardfile[num].enabled ? 0 : 1;
-					menustate = MENU_SETTINGS_HARDFILE1;
+					if (select)
+					{
+						int num = (menusub - 1) / 2;
+						minimig_config.hardfile[num].enabled = minimig_config.hardfile[num].enabled ? 0 : 1;
+						menustate = MENU_SETTINGS_HARDFILE1;
+					}
 				}
 				else
 				{
-					SelectFile("HDFVHDIMGDSK", SCANO_DIR | SCANO_UMOUNT, MENU_HARDFILE_SELECTED, MENU_SETTINGS_HARDFILE1);
+					fs_Options = SCANO_DIR | SCANO_UMOUNT;
+					fs_MenuSelect = MENU_HARDFILE_SELECTED;
+					fs_MenuCancel = MENU_SETTINGS_HARDFILE1;
+					if (select) SelectFile("HDFVHDIMGDSK", fs_Options, fs_MenuSelect, fs_MenuCancel);
+					else if (recent_init(500)) menustate = MENU_RECENT1;
 				}
 			}
-			else if (menusub == 9) // return to previous menu
+			else if (menusub == 9 && select) // return to previous menu
 			{
 				menustate = MENU_MAIN1;
 				menusub = 5;
@@ -4029,6 +4014,7 @@ void HandleUI(void)
 		/******************************************************************/
 	case MENU_HARDFILE_SELECTED:
 		{
+			recent_update(SelectedDir, SelectedPath, 500);
 			int num = (menusub - 2) / 2;
 			uint len = strlen(SelectedPath);
 			if (len > sizeof(minimig_config.hardfile[num].filename) - 1) len = sizeof(minimig_config.hardfile[num].filename) - 1;

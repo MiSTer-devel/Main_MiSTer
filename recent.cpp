@@ -41,10 +41,45 @@ static int numlast = 0;
 static int iSelectedEntry = 0;
 static int iFirstEntry = 0;
 
-void recent_init()
+static int recent_available()
 {
-	recent_load();
+	return numlast;
+}
+
+static char* recent_create_config_name(int idx)
+{
+	static char str[256];
+	sprintf(str, "%s_recent_%d.cfg", user_io_get_core_name(), idx);
+	return str;
+}
+
+static void recent_load(int idx)
+{
+	// initialize recent to empty strings
+	memset(recents.data(), 0, recents.size() * sizeof(recent_rec_t));
+
+	// load the config file into memory
+	FileLoadConfig(recent_create_config_name(idx), recents.data(), recents.size() * sizeof(recent_rec_t));
+
+	for (numlast = 0; numlast < (int)recents.size() && strlen(recents[numlast].name); numlast++) {}
+
+	// init display names to file names
+	for (int i = 0; i < recent_available(); i++) memcpy(displaynames[i].name, recents[i].name, sizeof(displaynames[i].name));
+
+	if (is_neogeo_core()) {
+		for (int i = 0; i < recent_available(); i++) {
+			// update display names for neogeo neo files
+			char* altname = neogeo_get_altname(recents[i].dir, recents[i].name, recents[i].name);
+			if (altname) strcpy(displaynames[i].name, altname);
+		}
+	}
+}
+
+int recent_init(int idx)
+{
+	recent_load(idx);
 	recent_scan(SCANF_INIT);
+	return recent_available();
 }
 
 void recent_scan(int mode)
@@ -119,6 +154,15 @@ void recent_scan(int mode)
 	}
 }
 
+static const char* recent_path(char* dir, char* name)
+{
+	static std::string fullname;
+	fullname = dir;
+	fullname += '/';
+	fullname += name;
+	return fullname.c_str();
+}
+
 void recent_scroll_name()
 {
 	// this function is called periodically when file selection window is displayed
@@ -187,39 +231,6 @@ void recent_print()
 	}
 }
 
-int recent_available() 
-{
-	return numlast;
-}
-
-void recent_load()
-{
-	// initialize recent to empty strings
-	memset(recents.data(), 0, recents.size() * sizeof(recent_rec_t));
-
-	// load the config file into memory
-	FileLoadConfig(recent_create_config_name(), recents.data(), recents.size() * sizeof(recent_rec_t));
-
-	for (numlast = 0; numlast < (int)recents.size() && strlen(recents[numlast].name); numlast++) {}
-
-	// init display names to file names
-	for (int i = 0; i < recent_available(); i++) memcpy(displaynames[i].name, recents[i].name, sizeof(displaynames[i].name));
-
-	if (is_neogeo_core()) {
-		for (int i = 0; i < recent_available(); i++) {
-			// update display names for neogeo neo files
-			char* altname = neogeo_get_altname(recents[i].dir, recents[i].name, recents[i].name);
-			if (altname) strcpy(displaynames[i].name, altname);
-		}
-	}
-}
-
-void recent_save()
-{
-	// store the config file to storage
-	FileSaveConfig(recent_create_config_name(), recents.data(), recents.size() * sizeof(recent_rec_t));
-}
-
 int recent_select(char *dir, char *path)
 {
 	// copy directory and file name over
@@ -238,8 +249,10 @@ int recent_select(char *dir, char *path)
 	else return recent_available();
 }
 
-void recent_update(char* dir, char* path)
+void recent_update(char* dir, char* path, int idx)
 {
+	if (!strlen(path)) return;
+
 	if (is_neogeo_core())
 	{
 		// only support neo files for now to simplify name parsing and locating files in recent files menu
@@ -252,7 +265,7 @@ void recent_update(char* dir, char* path)
 	if (name) name++; else name = path;
 
 	// load the current state.  this is necessary because we may have started a ROM from multiple sources
-	recent_load();
+	recent_load(idx);
 
 	// update the selection
 	int indexToErase = RECENT_MAX - 1;
@@ -271,28 +284,6 @@ void recent_update(char* dir, char* path)
 	recents.erase(recents.begin() + indexToErase);
 	recents.insert(recents.begin(), rec);
 
-	// write update to storage
-	recent_save();
-}
-
-char* recent_create_config_name()
-{
-	static char str[80];
-	str[0] = 0;
-	char* p = user_io_get_core_name();
-	if (p[0])
-	{
-		strcpy(str, p);
-		strcat(str, "_recent.CFG");
-	}
-	return str;
-}
-
-const char* recent_path(char* dir, char* name)
-{
-	static std::string fullname;
-	fullname = dir;
-	fullname += '/';
-	fullname += name;
-	return fullname.c_str();
+	// store the config file to storage
+	FileSaveConfig(recent_create_config_name(idx), recents.data(), recents.size() * sizeof(recent_rec_t));
 }
