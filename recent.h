@@ -7,5 +7,6 @@ void recent_scroll_name();
 void recent_print();
 int  recent_select(char* dir, char* path);
 void recent_update(char* dir, char* path, int idx);
+void recent_clear(int idx);
 
 #endif

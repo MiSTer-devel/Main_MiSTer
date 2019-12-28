@@ -5,15 +5,9 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <ctype.h>
-#include <dirent.h>
-#include <vector>
-#include <string>
 
-#include "hardware.h"
 #include "file_io.h"
 #include "user_io.h"
-#include "fpga_io.h"
-#include "miniz_zip.h"
 #include "osd.h"
 #include "recent.h"
 #include "support.h"
@@ -31,10 +25,8 @@ struct display_name_t
 	char name[256];
 };
 
-typedef std::vector<recent_rec_t> RecentVector;
-static RecentVector recents(RECENT_MAX);
-typedef std::vector<display_name_t> RecentDisplayNameVector;
-static RecentDisplayNameVector displaynames(RECENT_MAX);
+static recent_rec_t recents[RECENT_MAX];
+static display_name_t displaynames[RECENT_MAX];
 
 static int numlast = 0;
 
@@ -56,17 +48,18 @@ static char* recent_create_config_name(int idx)
 static void recent_load(int idx)
 {
 	// initialize recent to empty strings
-	memset(recents.data(), 0, recents.size() * sizeof(recent_rec_t));
+	memset(recents, 0, sizeof(recents));
 
 	// load the config file into memory
-	FileLoadConfig(recent_create_config_name(idx), recents.data(), recents.size() * sizeof(recent_rec_t));
+	FileLoadConfig(recent_create_config_name(idx), recents, sizeof(recents));
 
-	for (numlast = 0; numlast < (int)recents.size() && strlen(recents[numlast].name); numlast++) {}
+	for (numlast = 0; numlast < (int)(sizeof(recents)/sizeof(recents[0])) && strlen(recents[numlast].name); numlast++) {}
 
 	// init display names to file names
 	for (int i = 0; i < recent_available(); i++) memcpy(displaynames[i].name, recents[i].name, sizeof(displaynames[i].name));
 
-	if (is_neogeo_core()) {
+	if (is_neogeo_core())
+	{
 		for (int i = 0; i < recent_available(); i++) {
 			// update display names for neogeo neo files
 			char* altname = neogeo_get_altname(recents[i].dir, recents[i].name, recents[i].name);
@@ -156,11 +149,9 @@ void recent_scan(int mode)
 
 static const char* recent_path(char* dir, char* name)
 {
-	static std::string fullname;
-	fullname = dir;
-	fullname += '/';
-	fullname += name;
-	return fullname.c_str();
+	static char path[1024];
+	snprintf(path, sizeof(path), "%s/%s", dir, name);
+	return path;
 }
 
 void recent_scroll_name()
@@ -269,11 +260,11 @@ void recent_update(char* dir, char* path, int idx)
 
 	// update the selection
 	int indexToErase = RECENT_MAX - 1;
-	recent_rec_t rec;
+	recent_rec_t rec = {};
 	strcpy(rec.dir, dir);
 	strcpy(rec.name, name);
 
-	for (unsigned i = 0; i < recents.size(); i++)
+	for (unsigned i = 0; i < sizeof(recents)/sizeof(recents[0]); i++)
 	{
 		if (!strcmp(recents[i].dir, dir) && !strcmp(recents[i].name, name))
 		{
@@ -281,9 +272,18 @@ void recent_update(char* dir, char* path, int idx)
 			break;
 		}
 	}
-	recents.erase(recents.begin() + indexToErase);
-	recents.insert(recents.begin(), rec);
+
+	if(indexToErase) memmove(recents + 1, recents, sizeof(recents[0])*indexToErase);
+	memcpy(recents, &rec, sizeof(recents[0]));
 
 	// store the config file to storage
-	FileSaveConfig(recent_create_config_name(idx), recents.data(), recents.size() * sizeof(recent_rec_t));
+	FileSaveConfig(recent_create_config_name(idx), recents, sizeof(recents));
+}
+
+void recent_clear(int idx)
+{
+	memset(recents, 0, sizeof(recents));
+
+	// store the config file to storage
+	FileSaveConfig(recent_create_config_name(idx), recents, sizeof(recents));
 }

@@ -3523,6 +3523,17 @@ void HandleUI(void)
 			menustate = MENU_RECENT1;
 		}
 
+		if (c == KEY_BACKSPACE)
+		{
+			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
+			OsdWrite(OsdGetSize() / 2, "    Clearing the recents", 0, 0);
+			OsdUpdate();
+			sleep(1);
+			recent_clear((fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index);
+			menustate = fs_MenuCancel;
+			break;
+		}
+
 		if (down) // scroll down one entry
 		{
 			recent_scan(SCANF_NEXT);
