@@ -41,6 +41,7 @@ typedef struct {
 	uint8_t osd_rotate;
 	uint16_t osd_timeout;
 	uint8_t gamepad_defaults;
+	uint8_t recents;
 	char bootcore[256];
 	char video_conf[1024];
 	char video_conf_pal[1024];

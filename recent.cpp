@@ -9,8 +9,9 @@
 #include "file_io.h"
 #include "user_io.h"
 #include "osd.h"
-#include "recent.h"
+#include "cfg.h"
 #include "support.h"
+#include "recent.h"
 
 #define RECENT_MAX 16
 
@@ -70,6 +71,8 @@ static void recent_load(int idx)
 
 int recent_init(int idx)
 {
+	if (!cfg.recents) return 0;
+
 	recent_load(idx);
 	recent_scan(SCANF_INIT);
 	return recent_available();
@@ -242,7 +245,7 @@ int recent_select(char *dir, char *path)
 
 void recent_update(char* dir, char* path, int idx)
 {
-	if (!strlen(path)) return;
+	if (!cfg.recents || !strlen(path)) return;
 
 	if (is_neogeo_core())
 	{
