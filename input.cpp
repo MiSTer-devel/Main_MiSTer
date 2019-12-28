@@ -1592,15 +1592,21 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 			return;
 		}
 
+		// clear OSD button state if not in the OSD.  this avoids problems where buttons are still held
+		// on OSD exit and causes combinations to match when partial buttons are pressed.
+		if (!user_io_osd_is_visible()) osdbtn = 0;
+
 		if (user_io_osd_is_visible() || (bnum == BTN_OSD))
 		{
 			if (press)
 			{
 				osdbtn |= mask;
-				if ((osdbtn & (JOY_BTN1 | JOY_BTN2)) == (JOY_BTN1 | JOY_BTN2))
-				{
-					osdbtn |= JOY_BTN3;
-					mask = JOY_BTN3;
+				if (mask & (JOY_BTN1 | JOY_BTN2)) {
+					if ((osdbtn & (JOY_BTN1 | JOY_BTN2)) == (JOY_BTN1 | JOY_BTN2))
+					{
+						osdbtn |= JOY_BTN3;
+						mask = JOY_BTN3;
+					}
 				}
 			}
 			else
@@ -1608,14 +1614,16 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				int old_osdbtn = osdbtn;
 				osdbtn &= ~mask;
 
-				if ((old_osdbtn & (JOY_BTN1 | JOY_BTN2 | JOY_BTN3)) == (JOY_BTN1 | JOY_BTN2 | JOY_BTN3))
-				{
-					mask = JOY_BTN3;
-				}
-				else if (old_osdbtn & JOY_BTN3)
-				{
-					if (!(osdbtn & (JOY_BTN1 | JOY_BTN2))) osdbtn &= ~JOY_BTN3;
-					mask = 0;
+				if (mask & (JOY_BTN1 | JOY_BTN2)) {
+					if ((old_osdbtn & (JOY_BTN1 | JOY_BTN2 | JOY_BTN3)) == (JOY_BTN1 | JOY_BTN2 | JOY_BTN3))
+					{
+						mask = JOY_BTN3;
+					}
+					else if (old_osdbtn & JOY_BTN3)
+					{
+						if (!(osdbtn & (JOY_BTN1 | JOY_BTN2))) osdbtn &= ~JOY_BTN3;
+						mask = 0;
+					}
 				}
 			}
 
