@@ -53,6 +53,7 @@ static void set_arcade_root(const char *path)
 	{
 		char *p = strrchr(mame_root, '/');
 		if (p) *p = 0;
+		else mame_root[0] = 0;
 	}
 	else
 	{
