@@ -4714,6 +4714,8 @@ void ScrollLongName(void)
 	int max_len;
 
 	len = strlen(flist_SelectedItem()->altname); // get name length
+	int rbf = (len > 4 && !strcasecmp(flist_SelectedItem()->altname + len - 4, ".rbf"));
+
 	if (flist_SelectedItem()->de.d_type == DT_REG) // if a file
 	{
 		len=CalculateFileNameLengthWithoutExtension(flist_SelectedItem()->altname,fs_pFileExt);
@@ -4726,7 +4728,7 @@ void ScrollLongName(void)
 	}
 
 	// if we are in a core, we might need to resize for the fixed date string at the end
-	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES))
+	if (!cfg.rbf_hide_datecode && (fs_Options & SCANO_CORES) && rbf)
 	{
 		if (len > 9 && !strncmp(flist_SelectedItem()->altname + len - 9, "_20", 3))
 		{
