@@ -1171,7 +1171,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				if (!strcasecmp(dext.altname + strlen(dext.altname) - 4, ".zip")) dext.altname[strlen(dext.altname) - 4] = 0;
 
 				full_path[path_len] = 0;
-				char *altname = neogeo_get_altname(full_path, &dext);
+				char *altname = neogeo_get_altname(full_path, dext.de.d_name, dext.altname);
 				if (altname)
 				{
 					if (altname == (char*)-1) continue;
