@@ -102,7 +102,7 @@ static int get_stmode(const char *path)
 	return (stat64(path, &st) < 0) ? 0 : st.st_mode;
 }
 
-static bool isPathDirectory(char *path)
+static bool isPathDirectory(const char *path)
 {
 	make_fullpath(path);
 
@@ -630,7 +630,7 @@ static void create_path(const char *base_dir, const char* sub_dir)
 	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
 }
 
-void FileCreatePath(char *dir)
+void FileCreatePath(const char *dir)
 {
 	if (!isPathDirectory(dir)) {
 		make_fullpath(dir);
@@ -700,7 +700,7 @@ uint32_t getFileType(const char *name)
 	return st.st_mode;
 }
 
-void prefixGameDir(char *dir, size_t dir_len)
+int findPrefixDir(char *dir, size_t dir_len)
 {
 	// Searches for the core's folder in the following order:
 	// /media/fat
@@ -713,7 +713,7 @@ void prefixGameDir(char *dir, size_t dir_len)
 	// it will be created in /media/fat/games/<dir>
 	if (isPathDirectory(dir)) {
 		printf("Found existing: %s\n", dir);
-		return;
+		return 1;
 	}
 
 	static char temp_dir[1024];
@@ -723,14 +723,14 @@ void prefixGameDir(char *dir, size_t dir_len)
 		if (isPathDirectory(temp_dir)) {
 			printf("Found USB dir: %s\n", temp_dir);
 			strncpy(dir, temp_dir, dir_len);
-			return;
+			return 1;
 		}
 
 		snprintf(temp_dir, 1024, "%s%d/%s/%s", "../usb", x, GAMES_DIR, dir);
 		if (isPathDirectory(temp_dir)) {
 			printf("Found USB dir: %s\n", temp_dir);
 			strncpy(dir, temp_dir, dir_len);
-			return;
+			return 1;
 		}
 	}
 
@@ -738,20 +738,37 @@ void prefixGameDir(char *dir, size_t dir_len)
 	if (isPathDirectory(temp_dir)) {
 		printf("Found CIFS dir: %s\n", temp_dir);
 		strncpy(dir, temp_dir, dir_len);
-		return;
+		return 1;
 	}
 
 	snprintf(temp_dir, 1024, "%s/%s/%s", CIFS_DIR, GAMES_DIR, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found CIFS dir: %s\n", temp_dir);
 		strncpy(dir, temp_dir, dir_len);
-		return;
+		return 1;
 	}
 
-	FileCreatePath((char *) GAMES_DIR);
 	snprintf(temp_dir, 1024, "%s/%s", GAMES_DIR, dir);
-	strncpy(dir, temp_dir, dir_len);
-	printf("Prefixed dir to %s\n", temp_dir);
+	if (isPathDirectory(temp_dir)) {
+		printf("Found dir: %s\n", temp_dir);
+		strncpy(dir, temp_dir, dir_len);
+		return 1;
+	}
+
+	return 0;
+}
+
+void prefixGameDir(char *dir, size_t dir_len)
+{
+	if (!findPrefixDir(dir, dir_len))
+	{
+		static char temp_dir[1024];
+
+		FileCreatePath(GAMES_DIR);
+		snprintf(temp_dir, 1024, "%s/%s", GAMES_DIR, dir);
+		strncpy(dir, temp_dir, dir_len);
+		printf("Prefixed dir to %s\n", temp_dir);
+	}
 }
 
 static int device = 0;

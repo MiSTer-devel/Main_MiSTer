@@ -35,6 +35,7 @@ struct arc_struct {
 
 static char arcade_error_msg[kBigTextSize] = {};
 static char arcade_root[kBigTextSize];
+static char mame_root[kBigTextSize];
 
 static void set_arcade_root(const char *path)
 {
@@ -46,14 +47,27 @@ static void set_arcade_root(const char *path)
 	else strcpy(arcade_root, getRootDir());
 
 	printf("arcade_root %s\n", arcade_root);
+
+	strcpy(mame_root, "mame");
+	if (findPrefixDir(mame_root, sizeof(mame_root)))
+	{
+		char *p = strrchr(mame_root, '/');
+		if (p) *p = 0;
+	}
+	else
+	{
+		strcpy(mame_root, arcade_root);
+	}
+
+	printf("mame_root %s\n", mame_root);
 }
 
-static const char *get_arcade_root(const char *folder = NULL)
+static const char *get_arcade_root(int rbf)
 {
 	static char path[kBigTextSize];
 
-	if (!folder) strcpy(path, arcade_root);
-	else sprintf(path, "%s/%s", arcade_root, folder);
+	if (!rbf) strcpy(path, mame_root);
+	else sprintf(path, "%s/cores", arcade_root);
 
 	return path;
 }
@@ -417,7 +431,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (strlen(arc_info->partname))
 			{
 				char *zipname = (strlen(arc_info->partzipname)) ? arc_info->partzipname : arc_info->zipname;
-				sprintf(fname, (zipname[0] == '/') ? "%s%s/%s" : "%s/mame/%s/%s", get_arcade_root(), zipname, arc_info->partname);
+				const char *root = get_arcade_root(0);
+				sprintf(fname, (zipname[0] == '/') ? "%s%s/%s" : "%s/mame/%s/%s", root, zipname, arc_info->partname);
 
 				printf("file: %s, start=%d, len=%d\n", fname, start, length);
 				for (int i = 0; i < repeat; i++)
@@ -428,7 +443,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					if (result == 0)
 					{
 						printf("%s does not exist\n", fname);
-						snprintf(arc_info->error_msg, kBigTextSize, "%s\nFile Not Found", fname + strlen(get_arcade_root()));
+						snprintf(arc_info->error_msg, kBigTextSize, "%s\nFile Not Found", fname + strlen(root));
 					}
 				}
 			}
@@ -562,7 +577,7 @@ static const char *get_rbf(const char *xml)
 	struct dirent *entry;
 	DIR *dir;
 
-	const char *dirname = get_arcade_root("cores");
+	const char *dirname = get_arcade_root(1);
 	if (!(dir = opendir(dirname)))
 	{
 		printf("%s directory not found\n", dirname);
@@ -605,15 +620,18 @@ static const char *get_rbf(const char *xml)
 int arcade_load(const char *xml)
 {
 	MenuHide();
+	static char path[kBigTextSize];
 
-	set_arcade_root(xml);
-	printf("arcade_load [%s]\n", xml);
-	const char *rbf = get_rbf(xml);
+	strcpy(path, xml);
+
+	set_arcade_root(path);
+	printf("arcade_load [%s]\n", path);
+	const char *rbf = get_rbf(path);
 
 	if (rbf)
 	{
-		printf("MRA: %s, RBF: %s\n", xml, rbf);
-		fpga_load_rbf(rbf, NULL, xml);
+		printf("MRA: %s, RBF: %s\n", path, rbf);
+		fpga_load_rbf(rbf, NULL, path);
 	}
 	else
 	{
