@@ -371,19 +371,22 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				int checksumsame = 1;
 				char *md5 = arc_info->md5;
 				MD5Final(checksum, &arc_info->context);
-				printf("md5[%s]\n", arc_info->md5);
-				printf("md5-calc[");
-				for (int i = 0; i < 16; i++)
+				if (*md5)
 				{
-					char hex[10];
-					snprintf(hex, 10, "%02x", (unsigned int)checksum[i]);
-					printf("%02x", (unsigned int)checksum[i]);
-					if (tolower(md5[0]) != tolower(hex[0]) || tolower(md5[1]) != tolower(hex[1])) {
-						checksumsame = 0;
+					printf("md5[%s]\n", arc_info->md5);
+					printf("md5-calc[");
+					for (int i = 0; i < 16; i++)
+					{
+						char hex[10];
+						snprintf(hex, 10, "%02x", (unsigned int)checksum[i]);
+						printf("%02x", (unsigned int)checksum[i]);
+						if (tolower(md5[0]) != tolower(hex[0]) || tolower(md5[1]) != tolower(hex[1])) {
+							checksumsame = 0;
+						}
+						md5 += 2;
 					}
-					md5 += 2;
+					printf("]\n");
 				}
-				printf("]\n");
 				if (checksumsame == 0)
 				{
 					printf("mismatch\n");
