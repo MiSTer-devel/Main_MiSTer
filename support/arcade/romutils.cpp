@@ -163,6 +163,7 @@ static void file_finish(int send)
 			user_io_set_download(1);
 
 			uint8_t *data = romdata;
+			int len = romlen;
 			while (romlen > 0)
 			{
 				uint16_t chunk = (romlen > 4096) ? 4096 : romlen;
@@ -174,7 +175,7 @@ static void file_finish(int send)
 
 			// signal end of transmission
 			user_io_set_download(0);
-			printf("file_finish: sent to FPGA\n");
+			printf("file_finish: %d bytes sent to FPGA\n", len);
 		}
 		else
 		{

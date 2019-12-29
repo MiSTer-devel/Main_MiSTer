@@ -1519,10 +1519,13 @@ void HandleUI(void)
 					d = 0;
 
 					//Hide or Disable flag
-					while ((p[0] == 'H' || p[0] == 'D') && strlen(p) > 2)
+					while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
 					{
 						int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
-						if (p[0] == 'H') h |= flg; else d |= flg;
+						if (p[0] == 'H') h |= flg;
+						if (p[0] == 'h') h |= (flg ^ 1);
+						if (p[0] == 'D') d |= flg;
+						if (p[0] == 'd') d |= (flg ^ 1);
 						p += 2;
 					}
 
