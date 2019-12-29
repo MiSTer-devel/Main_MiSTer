@@ -600,6 +600,11 @@ int FileExists(const char *name)
 	return isPathRegularFile(name);
 }
 
+int PathIsDir(const char *name)
+{
+	return isPathDirectory(name);
+}
+
 int FileCanWrite(const char *name)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);

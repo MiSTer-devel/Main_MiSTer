@@ -76,6 +76,7 @@ void FileCreatePath(const char *dir);
 
 int FileExists(const char *name);
 int FileCanWrite(const char *name);
+int PathIsDir(const char *name);
 
 #define SAVE_DIR "saves"
 void FileGenerateSavePath(const char *name, char* out_name);

@@ -10,7 +10,6 @@
 #include "user_io.h"
 #include "osd.h"
 #include "cfg.h"
-#include "support.h"
 #include "recent.h"
 
 #define RECENT_MAX 16
@@ -19,15 +18,11 @@ struct recent_rec_t
 {
 	char dir[1024];
 	char name[256];
-};
-
-struct display_name_t
-{
-	char name[256];
+	char label[256];
 };
 
 static recent_rec_t recents[RECENT_MAX];
-static display_name_t displaynames[RECENT_MAX];
+static char ena[RECENT_MAX];
 
 static int numlast = 0;
 
@@ -46,6 +41,13 @@ static char* recent_create_config_name(int idx)
 	return str;
 }
 
+static const char* recent_path(char* dir, char* name)
+{
+	static char path[1024];
+	snprintf(path, sizeof(path), "%s/%s", dir, name);
+	return path;
+}
+
 static void recent_load(int idx)
 {
 	// initialize recent to empty strings
@@ -56,16 +58,11 @@ static void recent_load(int idx)
 
 	for (numlast = 0; numlast < (int)(sizeof(recents)/sizeof(recents[0])) && strlen(recents[numlast].name); numlast++) {}
 
-	// init display names to file names
-	for (int i = 0; i < recent_available(); i++) memcpy(displaynames[i].name, recents[i].name, sizeof(displaynames[i].name));
-
-	if (is_neogeo_core())
+	// check the items
+	for (int i = 0; i < recent_available(); i++)
 	{
-		for (int i = 0; i < recent_available(); i++) {
-			// update display names for neogeo neo files
-			char* altname = neogeo_get_altname(recents[i].dir, recents[i].name, recents[i].name);
-			if (altname) strcpy(displaynames[i].name, altname);
-		}
+		ena[i] = FileExists(recent_path(recents[i].dir, recents[i].name));
+		if (is_neogeo_core() && !ena[i]) ena[i] = PathIsDir(recent_path(recents[i].dir, recents[i].name));
 	}
 }
 
@@ -150,13 +147,6 @@ void recent_scan(int mode)
 	}
 }
 
-static const char* recent_path(char* dir, char* name)
-{
-	static char path[1024];
-	snprintf(path, sizeof(path), "%s/%s", dir, name);
-	return path;
-}
-
 void recent_scroll_name()
 {
 	// this function is called periodically when file selection window is displayed
@@ -166,10 +156,10 @@ void recent_scroll_name()
 	static char name[256 + 4];
 
 	// don't scroll if the file doesn't exist
-	if (!FileExists(recent_path(recents[iSelectedEntry].dir, recents[iSelectedEntry].name))) return;
+	if (!ena[iSelectedEntry]) return;
 
 	name[0] = 32;
-	strcpy(name + 1, displaynames[iSelectedEntry].name);
+	strcpy(name + 1, recents[iSelectedEntry].label);
 
 	len = strlen(name); // get name length
 
@@ -195,7 +185,7 @@ void recent_print()
 			k = iFirstEntry + i;
 
 			s[0] = 32;
-			char* name = displaynames[k].name;
+			char* name = recents[k].label;
 			strcpy(s + 1, name);
 
 			len = strlen(s); // get name length
@@ -213,8 +203,7 @@ void recent_print()
 			if (!i && k) leftchar = 17;
 			if ((i == OsdGetSize() - 1) && (k < recent_available() - 1)) leftchar = 16;
 
-			// check if file exists
-			d = FileExists(recent_path(recents[k].dir, recents[k].name)) ? 0 : 1;
+			d = ena[k] ? 0 : 1;
 		}
 		else
 		{
@@ -225,11 +214,13 @@ void recent_print()
 	}
 }
 
-int recent_select(char *dir, char *path)
+int recent_select(char *dir, char *path, char *label)
 {
 	// copy directory and file name over
 	dir[0] = 0;
 	path[0] = 0;
+
+	if (!recent_available()) return 0;
 
 	if (strlen(recents[iSelectedEntry].name))
 	{
@@ -237,22 +228,15 @@ int recent_select(char *dir, char *path)
 		strcpy(path, dir);
 		strcat(path, "/");
 		strcat(path, recents[iSelectedEntry].name);
+		strcpy(label, recents[iSelectedEntry].label);
 	}
 
-	if (!FileExists(path)) return 0;
-	else return recent_available();
+	return ena[iSelectedEntry];
 }
 
-void recent_update(char* dir, char* path, int idx)
+void recent_update(char* dir, char* path, char* label, int idx)
 {
 	if (!cfg.recents || !strlen(path)) return;
-
-	if (is_neogeo_core())
-	{
-		// only support neo files for now to simplify name parsing and locating files in recent files menu
-		char* ext = strrchr(path, '.');
-		if (!ext || strcmp(ext, ".neo")) return;
-	}
 
 	// separate the path into directory and filename
 	char* name = strrchr(path, '/');
@@ -264,8 +248,9 @@ void recent_update(char* dir, char* path, int idx)
 	// update the selection
 	int indexToErase = RECENT_MAX - 1;
 	recent_rec_t rec = {};
-	strcpy(rec.dir, dir);
-	strcpy(rec.name, name);
+	strncpy(rec.dir, dir, sizeof(rec.dir));
+	strncpy(rec.name, name, sizeof(rec.name));
+	strncpy(rec.label, label ? label : name, sizeof(rec.label));
 
 	for (unsigned i = 0; i < sizeof(recents)/sizeof(recents[0]); i++)
 	{

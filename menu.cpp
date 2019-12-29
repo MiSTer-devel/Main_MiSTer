@@ -256,6 +256,7 @@ static char* GetExt(char *ext)
 static char SelectedRBF[1024] = { 0 };
 static char SelectedDir[1024] = { 0 };
 static char SelectedPath[1024] = { 0 };
+static char SelectedLabel[1024] = { 0 };
 
 static int changeDir(char *dir)
 {
@@ -1258,7 +1259,7 @@ void HandleUI(void)
 	case MENU_ARCHIE_MAIN_FILE_SELECTED:
 		if (menusub <= 1)
 		{
-			recent_update(SelectedDir, SelectedPath, 500);
+			recent_update(SelectedDir, SelectedPath, SelectedLabel, 500);
 			user_io_file_mount(SelectedPath, menusub);
 		}
 		if (menusub == 2) archie_set_rom(SelectedPath);
@@ -1667,7 +1668,7 @@ void HandleUI(void)
 			menustate = MENU_NONE1;
 		}
 
-		recent_update(SelectedDir, SelectedPath, ioctl_index);
+		recent_update(SelectedDir, SelectedPath, SelectedLabel, ioctl_index);
 		break;
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
@@ -1709,7 +1710,7 @@ void HandleUI(void)
 
 		menustate = SelectedPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
 
-		recent_update(SelectedDir, SelectedPath, ioctl_index + 500);
+		recent_update(SelectedDir, SelectedPath, SelectedLabel, ioctl_index + 500);
 		break;
 
 	case MENU_8BIT_SYSTEM1:
@@ -3192,7 +3193,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_FILE_SELECTED:
-		recent_update(SelectedDir, SelectedPath, 0);
+		recent_update(SelectedDir, SelectedPath, SelectedLabel, 0);
 		InsertFloppy(&df[menusub], SelectedPath);
 		if (menusub < drives) menusub++;
 		menustate = MENU_MAIN1;
@@ -3400,7 +3401,7 @@ void HandleUI(void)
 							strcpy(SelectedDir, SelectedPath);
 							strcat(SelectedPath, "/");
 						}
-
+						strcpy(SelectedLabel, flist_SelectedItem()->altname);
 						strcat(SelectedPath, name);
 						menustate = fs_MenuSelect;
 					}
@@ -3548,7 +3549,7 @@ void HandleUI(void)
 
 		if (select)
 		{
-			menustate = recent_select(SelectedDir, SelectedPath) ? (enum MENU)fs_MenuSelect : MENU_RECENT1;
+			menustate = recent_select(SelectedDir, SelectedPath, SelectedLabel) ? (enum MENU)fs_MenuSelect : MENU_RECENT1;
 		}
 		break;
 
@@ -4025,7 +4026,7 @@ void HandleUI(void)
 		/******************************************************************/
 	case MENU_HARDFILE_SELECTED:
 		{
-			recent_update(SelectedDir, SelectedPath, 500);
+			recent_update(SelectedDir, SelectedPath, SelectedLabel, 500);
 			int num = (menusub - 2) / 2;
 			uint len = strlen(SelectedPath);
 			if (len > sizeof(minimig_config.hardfile[num].filename) - 1) len = sizeof(minimig_config.hardfile[num].filename) - 1;
