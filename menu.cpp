@@ -2265,7 +2265,7 @@ void HandleUI(void)
 				p = joy_bnames[get_map_button() - DPAD_NAMES];
 				if (is_menu_core())
 				{
-					if (get_map_type()) joy_bcount = 21;
+					if (!get_map_type()) joy_bcount = 17;
 					if (get_map_button() == SYS_BTN_OSD_KTGL)
 					{
 						p = joy_button_map[DPAD_BUTTON_NAMES + get_map_type()];
@@ -4293,7 +4293,7 @@ void HandleUI(void)
 				strcpy(joy_bnames[SYS_BTN_OSD_KTGL - DPAD_NAMES], "Menu");
 				strcpy(joy_bnames[SYS_BTN_CNT_OK - DPAD_NAMES], "Menu: OK");
 				strcpy(joy_bnames[SYS_BTN_CNT_ESC - DPAD_NAMES], "Menu: Back");
-				joy_bcount = 16+1; //buttons + OSD/KTGL button
+				joy_bcount = 18+1; //buttons + OSD/KTGL button
 				start_map_setting(joy_bcount + 6); // + dpad + Analog X/Y
 				menustate = MENU_JOYDIGMAP;
 				menusub = 0;
