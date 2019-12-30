@@ -1911,7 +1911,10 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								input[dev].osd_combo = 0;
 
 								int found = 0;
-								for (int i = (mapping_button >= BUTTON_DPAD_COUNT) ? BUTTON_DPAD_COUNT : 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
+								if (mapping_button < SYS_BTN_CNT_OK)
+								{
+									for (int i = (mapping_button >= BUTTON_DPAD_COUNT) ? BUTTON_DPAD_COUNT : 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
+								}
 
 								if (!found || (mapping_button == SYS_BTN_OSD_KTGL && mapping_type))
 								{
