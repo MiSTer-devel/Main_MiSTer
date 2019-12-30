@@ -4879,7 +4879,7 @@ void ScrollLongName(void)
 		{
 			len -= 9;
 		}
-		max_len = 21; // __.__.__ remove that from the end
+		max_len = 20; // __.__.__ remove that from the end
 	}
 
 	//printf("ScrollLongName: len %d max_len %d [%s]\n",len,max_len,flist_SelectedItem()->altname);
@@ -5012,6 +5012,12 @@ void PrintDirectory(void)
 				else
 				{
 					strcpy(&s[19], " --.--.--");
+				}
+
+				if (len >= 19)
+				{
+					s[19] = 22;
+					s[28] = ' ';
 				}
 			}
 
