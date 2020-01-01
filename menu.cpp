@@ -360,7 +360,10 @@ void substrcpy(char *d, char *s, char idx)
 			*d++ = *s;
 
 		if (*s == ',')
+		{
+			if (p == idx) break;
 			p++;
+		}
 
 		s++;
 	}

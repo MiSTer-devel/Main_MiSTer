@@ -1641,6 +1641,24 @@ void user_io_file_tx_write(const uint8_t *addr, uint16_t len)
 	DisableFpga();
 }
 
+static void show_core_info(int info_n)
+{
+	int i = 2;
+	while (1)
+	{
+		char *p = user_io_get_confstr(i++);
+		if (!p) break;
+
+		if (p[0] == 'I')
+		{
+			static char str[256];
+			substrcpy(str, p, info_n);
+			if (strlen(str)) Info(str);
+			break;
+		}
+	}
+}
+
 static int process_ss(const char *rom_name)
 {
 	static char ss_name[1024] = {};
@@ -1931,34 +1949,26 @@ void user_io_read_confstr()
 
 char *user_io_get_confstr(int index)
 {
-	unsigned char i, lidx = 0, j = 0;
-	static char buffer[128 + 1];  // max 128 bytes per config item
-								  // clear buffer
-	buffer[0] = 0;
-	int pos = 0;
+	int lidx = 0;
+	static char buffer[(1024*2) + 1];  // max bytes per config item
 
-	i = cfgstr[pos++];
-	while (i && (j < sizeof(buffer)))
+	char *start = cfgstr;
+	while (lidx < index)
 	{
-		if (i == ';')
-		{
-			if (lidx == index) buffer[j++] = 0;
-			lidx++;
-		}
-		else
-		{
-			if (lidx == index) buffer[j++] = i;
-		}
-
-		i = cfgstr[pos++];
+		start = strchr(start, ';');
+		if (!start) return NULL;
+		start++;
+		lidx++;
 	}
 
-	// if this was the last string in the config string list, then it still
-	// needs to be terminated
-	if (lidx == index) buffer[j] = 0;
+	char *end = strchr(start, ';');
+	int len = end ? end - start : strlen(start);
+	if (!len) return NULL;
 
-	// also return NULL for empty strings
-	return buffer[0] ? buffer : NULL;
+	if ((uint32_t)len > sizeof(buffer) - 1) len = sizeof(buffer) - 1;
+	memcpy(buffer, start, len);
+	buffer[len] = 0;
+	return buffer;
 }
 
 uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask, int ex)
@@ -3005,7 +3015,8 @@ void user_io_poll()
 
 		keyboard_leds = leds;
 
-
+		uint8_t info_n = spi_uio_cmd(UIO_INFO_GET);
+		if (info_n) show_core_info(info_n);
 	}
 
 	if (!res_timer)
