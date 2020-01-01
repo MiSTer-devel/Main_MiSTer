@@ -695,6 +695,36 @@ void FileGenerateSavePath(const char *name, char* out_name)
 	printf("SavePath=%s\n", out_name);
 }
 
+void FileGenerateSavestatePath(const char *name, char* out_name)
+{
+	create_path(SAVESTATE_DIR, CoreName);
+
+	sprintf(out_name, "%s/%s/", SAVESTATE_DIR, CoreName);
+	char *fname = out_name + strlen(out_name);
+
+	const char *p = strrchr(name, '/');
+	if (p)
+	{
+		strcat(fname, p + 1);
+	}
+	else
+	{
+		strcat(fname, name);
+	}
+
+	char *e = strrchr(fname, '.');
+	if (e)
+	{
+		strcpy(e, ".ss");
+	}
+	else
+	{
+		strcat(fname, ".ss");
+	}
+
+	printf("SavestatePath=%s\n", out_name);
+}
+
 uint32_t getFileType(const char *name)
 {
 	sprintf(full_path, "%s/%s", getRootDir(), name);

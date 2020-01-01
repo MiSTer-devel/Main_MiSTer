@@ -306,6 +306,13 @@ char is_archie_core()
 	return (is_archie_type == 1);
 }
 
+static int is_gba_type = 0;
+char is_gba_core()
+{
+	if (!is_gba_type) is_gba_type = strcasecmp(core_name, "GBA") ? 2 : 1;
+	return (is_gba_type == 1);
+}
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -326,6 +333,9 @@ static void user_io_read_core_name()
 	is_zx81_type = 0;
 	is_neogeo_type = 0;
 	is_minimig_type = 0;
+	is_megacd_type = 0;
+	is_archie_type = 0;
+	is_gba_type = 0;
 	core_name[0] = 0;
 
 	// get core name
@@ -1631,6 +1641,136 @@ void user_io_file_tx_write(const uint8_t *addr, uint16_t len)
 	DisableFpga();
 }
 
+static int process_ss(const char *rom_name)
+{
+	static char ss_name[1024] = {};
+	static uint32_t ss_cnt = 0;
+	static int memfd = -1;
+
+	uint32_t map_addr = 0x3E000000;
+
+	if (rom_name)
+	{
+		FileGenerateSavestatePath(rom_name, ss_name);
+
+		if (memfd < 0)
+		{
+			memfd = open("/dev/mem", O_RDWR | O_SYNC);
+			if (memfd == -1)
+			{
+				printf("Unable to open /dev/mem!\n");
+				return 0;
+			}
+		}
+
+		ss_cnt = 0;
+		uint32_t len = 1024 * 1024;
+		uint32_t clr_addr = map_addr;
+
+		for (int i = 0; i < 16; i++)
+		{
+			void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, clr_addr);
+			if (base == (void *)-1)
+			{
+				printf("Unable to mmap (0x%X, %d)!\n", clr_addr, len);
+				close(memfd);
+				memfd = -1;
+				return 0;
+			}
+
+			memset(base, 0, len);
+			munmap(base, len);
+			clr_addr += len;
+		}
+
+		if (ss_name[0] && FileExists(ss_name))
+		{
+			void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
+			if (base == (void *)-1)
+			{
+				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
+				return 0;
+			}
+
+			fileTYPE f = {};
+			if (!FileOpen(&f, ss_name))
+			{
+				printf("Unable to open file: %s\n", ss_name);
+				munmap(base, len);
+			}
+			else
+			{
+				int ret = FileReadAdv(&f, base, len);
+				FileClose(&f);
+				*(uint32_t*)base = 1;
+				ss_cnt = 1;
+				munmap(base, len);
+				printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
+				return 1;
+			}
+		}
+
+		return 1;
+	}
+
+	if (!ss_name[0]) return 0;
+
+	static unsigned long ss_timer = 0;
+	if (ss_timer && !CheckTimer(ss_timer)) return 0;
+	ss_timer = GetTimer(1000);
+
+	if (memfd >= 0)
+	{
+		uint32_t len = 4 * 1024;
+
+		void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
+		if (base == (void *)-1)
+		{
+			printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
+			return 0;
+		}
+
+		uint32_t curcnt = ((uint32_t*)base)[0];
+		uint32_t size = ((uint32_t*)base)[1];
+		munmap(base, len);
+
+		if (curcnt > ss_cnt)
+		{
+			ss_cnt = curcnt;
+			len = 512 * 1024;
+
+			if (size) size = (size + 2) * 4;
+			if (size > 0 && size <= len)
+			{
+				OsdDisable();
+				Info("Saving the state", 500);
+
+				void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
+				if (base == (void *)-1)
+				{
+					printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
+					return 0;
+				}
+
+				fileTYPE f = {};
+				if (!FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
+				{
+					printf("Unable to create file: %s\n", ss_name);
+					munmap(base, len);
+					return 0;
+				}
+
+				int ret = FileWriteAdv(&f, base, size);
+				FileClose(&f);
+				munmap(base, len);
+				printf("Wrote %d bytes to file: %s\n", ret, ss_name);
+			}
+		}
+	}
+
+	return 1;
+}
+
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = {};
@@ -1692,26 +1832,31 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	if (use_progress) MenuHide();
 
 	int dosend = 1;
-	if (!strcasecmp(core_name, "GBA") && ((index >> 6) == 1 || (index >> 6) == 2))
+	if (is_gba_core())
 	{
-		fileTYPE fg = {};
-		if (!FileOpen(&fg, user_io_make_filepath(HomeDir, "goomba.rom")))
+		process_ss(name);
+
+		if ((index >> 6) == 1 || (index >> 6) == 2)
 		{
-			dosend = 0;
-			Info("Cannot open goomba.rom!");
-			sleep(1);
-		}
-		else
-		{
-			uint32_t sz = fg.size;
-			while (sz)
+			fileTYPE fg = {};
+			if (!FileOpen(&fg, user_io_make_filepath(HomeDir, "goomba.rom")))
 			{
-				uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
-				FileReadAdv(&fg, buf, chunk);
-				user_io_file_tx_write(buf, chunk);
-				sz -= chunk;
+				dosend = 0;
+				Info("Cannot open goomba.rom!");
+				sleep(1);
 			}
-			FileClose(&fg);
+			else
+			{
+				uint32_t sz = fg.size;
+				while (sz)
+				{
+					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					FileReadAdv(&fg, buf, chunk);
+					user_io_file_tx_write(buf, chunk);
+					sz -= chunk;
+				}
+				FileClose(&fg);
+			}
 		}
 	}
 
@@ -2859,6 +3004,8 @@ void user_io_poll()
 			set_kbdled(HID_LED_SCROLL_LOCK, (leds & KBD_LED_SCRL_CONTROL) ? leds & KBD_LED_SCRL_STATUS : scrl_status);
 
 		keyboard_leds = leds;
+
+
 	}
 
 	if (!res_timer)
@@ -2936,6 +3083,7 @@ void user_io_poll()
 	}
 
 	if (is_megacd_core()) mcd_poll();
+	process_ss(0);
 }
 
 static void send_keycode(unsigned short key, int press)

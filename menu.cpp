@@ -1550,7 +1550,7 @@ void HandleUI(void)
 
 						if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
-						if (!strcasecmp(user_io_get_core_name(), "GBA") && FileExists(user_io_make_filepath(HomeDir, "goomba.rom"))) strcat(ext, "GB GBC");
+						if (is_gba_core() && FileExists(user_io_make_filepath(HomeDir, "goomba.rom"))) strcat(ext, "GB GBC");
 						while (strlen(ext) % 3) strcat(ext, " ");
 
 						fs_Options = SCANO_DIR | (is_neogeo_core() ? SCANO_NEOGEO | SCANO_NOENTER : 0);
@@ -1636,7 +1636,7 @@ void HandleUI(void)
 								user_io_8bit_set_status(status ^ mask, mask, ex);
 								user_io_8bit_set_status(status, mask, ex);
 								menustate = MENU_8BIT_MAIN1;
-								if (p[0] == 'R') menustate = MENU_NONE1;
+								if (p[0] == 'R' || p[0] == 'r') menustate = MENU_NONE1;
 							}
 						}
 					}

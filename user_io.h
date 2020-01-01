@@ -286,6 +286,7 @@ char is_snes_core();
 char is_neogeo_core();
 char is_megacd_core();
 char is_archie_core();
+char is_gba_core();
 
 #define HomeDir (is_menu_core() ? "Scripts" : user_io_get_core_path())
 #define CoreName (is_menu_core() ? "Scripts" : user_io_get_core_name())

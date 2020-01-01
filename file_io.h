@@ -81,6 +81,9 @@ int PathIsDir(const char *name);
 #define SAVE_DIR "saves"
 void FileGenerateSavePath(const char *name, char* out_name);
 
+#define SAVESTATE_DIR "savestates"
+void FileGenerateSavestatePath(const char *name, char* out_name);
+
 #define SCREENSHOT_DIR "screenshots"
 #define SCREENSHOT_DEFAULT "screen"
 void FileGenerateScreenshotName(const char *name, char *out_name, int buflen);
