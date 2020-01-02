@@ -1700,20 +1700,6 @@ void HandleUI(void)
 			user_io_file_mount(SelectedPath, ioctl_index);
 		}
 
-		if (is_neogeo_core())
-		{
-			// ElectronAsh.
-			strcpy(SelectedPath + strlen(SelectedPath) - 3, "CUE");
-			printf("Checking for presence of CUE file %s\n", SelectedPath);
-			if (user_io_file_mount(SelectedPath, 2))
-			{
-				printf("CUE file found and mounted.\n");
-				parse_cue_file();
-				char str[2] = "";
-				neogeo_romset_tx(str);
-			}
-		}
-
 		menustate = SelectedPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
 
 		recent_update(SelectedDir, SelectedPath, SelectedLabel, ioctl_index + 500);

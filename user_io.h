@@ -277,8 +277,6 @@ void diskled_on();
 #define DISKLED_ON  diskled_on()
 #define DISKLED_OFF void()
 
-void parse_cue_file(void);
-
 char is_minimig();
 char is_sharpmz();
 char is_menu_core();
