@@ -164,7 +164,10 @@ enum MENU
 	MENU_8BIT_INFO,
 	MENU_8BIT_INFO2,
 	MENU_8BIT_ABOUT1,
-	MENU_8BIT_ABOUT2
+	MENU_8BIT_ABOUT2,
+
+	MENU_ARCADE_DIP1,
+	MENU_ARCADE_DIP2
 };
 
 static uint32_t menustate = MENU_NONE1;
@@ -820,6 +823,7 @@ void HandleUI(void)
 	static int has_fb_terminal = 0;
 	static unsigned long flash_timer = 0;
 	static int flash_state = 0;
+	static uint32_t dip_submenu;
 
 	static char	cp_MenuCancel;
 
@@ -1293,6 +1297,7 @@ void HandleUI(void)
 			else      OsdCoreNameSet(p);
 
 			OsdSetTitle(OsdCoreName(), 0);
+			dip_submenu = -1;
 
 			// add options as requested by core
 			int i = 2;
@@ -1307,15 +1312,29 @@ void HandleUI(void)
 				{
 					int h = 0, d = 0;
 
-					//Hide or Disable flag (small letter - opposite action)
-					while((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p)>2)
+					if (!strcmp(p, "DIP"))
 					{
-						int flg = (hdmask & (1<<getIdx(p))) ? 1 : 0;
-						if (p[0] == 'H') h |= flg;
-						if (p[0] == 'h') h |= (flg ^ 1);
-						if (p[0] == 'D') d |= flg;
-						if (p[0] == 'd') d |= (flg ^ 1);
-						p += 2;
+						if (arcade_sw()->dip_num)
+						{
+							dip_submenu = selentry;
+							MenuWrite(entry, " DIP Switches              \x16", menusub == selentry, 0);
+							entry++;
+							selentry++;
+							menumask = (menumask << 1) | 1;
+						}
+					}
+					else
+					{
+						//Hide or Disable flag (small letter - opposite action)
+						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
+						{
+							int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
+							if (p[0] == 'H') h |= flg;
+							if (p[0] == 'h') h |= (flg ^ 1);
+							if (p[0] == 'D') d |= flg;
+							if (p[0] == 'd') d |= (flg ^ 1);
+							p += 2;
+						}
 					}
 
 					if (!h)
@@ -1505,6 +1524,11 @@ void HandleUI(void)
 			{
 				menustate = MENU_NONE1;
 			}
+			else if (dip_submenu == menusub)
+			{
+				menustate = MENU_ARCADE_DIP1;
+				menusub = 0;
+			}
 			else
 			{
 				static char ext[256];
@@ -1513,6 +1537,7 @@ void HandleUI(void)
 				int h = 0, d = 0;
 				uint32_t entry = 0;
 				int i = 1;
+
 				while (1)
 				{
 					p = user_io_get_confstr(i++);
@@ -1521,15 +1546,18 @@ void HandleUI(void)
 					h = 0;
 					d = 0;
 
-					//Hide or Disable flag
-					while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
+					if (strcmp(p, "DIP"))
 					{
-						int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
-						if (p[0] == 'H') h |= flg;
-						if (p[0] == 'h') h |= (flg ^ 1);
-						if (p[0] == 'D') d |= flg;
-						if (p[0] == 'd') d |= (flg ^ 1);
-						p += 2;
+						//Hide or Disable flag
+						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
+						{
+							int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
+							if (p[0] == 'H') h |= flg;
+							if (p[0] == 'h') h |= (flg ^ 1);
+							if (p[0] == 'D') d |= flg;
+							if (p[0] == 'd') d |= (flg ^ 1);
+							p += 2;
+						}
 					}
 
 					if (h || p[0] < 'A') continue;
@@ -1987,6 +2015,111 @@ void HandleUI(void)
 		}
 
 		if(!hold_cnt && reboot_req) fpga_load_rbf("menu.rbf");
+		break;
+
+	case MENU_ARCADE_DIP1:
+		helptext = 0;
+		menumask = 0;
+		OsdSetTitle("DIP Switches");
+		menustate = MENU_ARCADE_DIP2;
+		parentstate = MENU_ARCADE_DIP1;
+
+		while (1)
+		{
+			int entry = 0;
+			if (!menusub) firstmenu = 0;
+
+			adjvisible = 0;
+			uint32_t selentry = 0;
+			menumask = 0;
+
+			sw_struct *sw = arcade_sw();
+
+			int n = (sw->dip_num < OsdGetSize() - 1) ? (OsdGetSize() - 1 - sw->dip_num) / 2 : 0;
+			for (; entry < n; entry++) MenuWrite(entry);
+
+			for (int i = 0; i < sw->dip_num; i++)
+			{
+				uint64_t status = sw->dip_cur & sw->dip[i].mask;
+				int m = 0;
+				for (int n = 0; n < sw->dip[i].num; n++)
+				{
+					if (status == sw->dip[i].val[n])
+					{
+						m = n;
+						break;
+					}
+				}
+
+				char l = strlen(sw->dip[i].id[m]);
+				s[0] = ' ';
+				strcpy(s + 1, sw->dip[i].name);
+
+				char *end = s + strlen(s) - 1;
+				while ((end > s + 1) && (*end == ' ')) end--;
+				*(end + 1) = 0;
+
+				strcat(s, ":");
+				l = 28 - l - strlen(s);
+				while (l--) strcat(s, " ");
+
+				strcat(s, sw->dip[i].id[m]);
+
+				MenuWrite(entry, s, menusub == selentry);
+
+				menumask = (menumask << 1) | 1;
+				entry++;
+				selentry++;
+			};
+
+			for (; entry < OsdGetSize() - 1; entry++) MenuWrite(entry, "", 0, 0);
+
+			MenuWrite(entry, "       Reset to apply", menusub == selentry);
+			menusub_last = selentry;
+			menumask = (menumask << 1) | 1;
+
+			if (!adjvisible) break;
+			firstmenu += adjvisible;
+		}
+		break;
+
+	case MENU_ARCADE_DIP2:
+		if (menu)
+		{
+			menustate = MENU_8BIT_MAIN1;
+			menusub = dip_submenu;
+			arcade_sw_save();
+		}
+
+		if (select)
+		{
+			if (menusub == menusub_last)
+			{
+				arcade_sw_save();
+				user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+				user_io_8bit_set_status(0, UIO_STATUS_RESET);
+				menustate = MENU_NONE1;
+			}
+			else
+			{
+				sw_struct *sw = arcade_sw();
+				uint64_t status = sw->dip_cur & sw->dip[menusub].mask;
+				int m = 0;
+				for (int n = 0; n < sw->dip[menusub].num; n++)
+				{
+					if (status == sw->dip[menusub].val[n])
+					{
+						m = n;
+						break;
+					}
+				}
+
+				m = (m + 1) % sw->dip[menusub].num;
+				sw->dip_cur = (sw->dip_cur & ~sw->dip[menusub].mask) | sw->dip[menusub].val[m];
+				menustate = MENU_ARCADE_DIP1;
+				arcade_sw_send();
+			}
+		}
 		break;
 
 	case MENU_UART1:
@@ -3592,6 +3725,15 @@ void HandleUI(void)
 				printf("Saving config to %s\n", filename);
 				FileSaveConfig(filename, status, 8);
 				menustate = MENU_8BIT_MAIN1;
+				if (arcade_sw()->dip_num)
+				{
+					arcade_sw()->dip_cur = arcade_sw()->dip_def;
+					arcade_sw_send();
+					arcade_sw_save();
+					user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+					user_io_8bit_set_status(0, UIO_STATUS_RESET);
+					menustate = MENU_NONE1;
+				}
 				menusub = 0;
 			}
 		}

@@ -13,6 +13,7 @@
 #include "../../lib/md5/md5.h"
 
 #include "buffer.h"
+#include "romutils.h"
 
 #define kBigTextSize 1024
 struct arc_struct {
@@ -29,6 +30,7 @@ struct arc_struct {
 	int insiderom;
 	int patchaddr;
 	int validrom0;
+	int insidesw;
 	buffer_data *data;
 	struct MD5Context context;
 };
@@ -36,6 +38,45 @@ struct arc_struct {
 static char arcade_error_msg[kBigTextSize] = {};
 static char arcade_root[kBigTextSize];
 static char mame_root[kBigTextSize];
+
+static sw_struct switches = {};
+
+sw_struct *arcade_sw()
+{
+	return &switches;
+}
+
+void arcade_sw_send()
+{
+	if (switches.dip_num)
+	{
+		user_io_set_index(254);
+		user_io_set_download(1);
+		user_io_file_tx_write((uint8_t*)&switches.dip_cur, sizeof(switches.dip_cur));
+		user_io_set_download(0);
+	}
+}
+
+void arcade_sw_save()
+{
+	if (switches.dip_saved != switches.dip_cur)
+	{
+		char path[256] = CONFIG_DIR"/dips/";
+		FileCreatePath(path);
+		strcat(path, switches.name);
+		if (FileSave(path, &switches.dip_cur, sizeof(switches.dip_cur)))
+		{
+			switches.dip_saved = switches.dip_cur;
+		}
+	}
+}
+
+void arcade_sw_load()
+{
+	char path[256] = "dips/";
+	strcat(path, switches.name);
+	FileLoadConfig(path, &switches.dip_cur, sizeof(switches.dip_cur));
+}
 
 static void set_arcade_root(const char *path)
 {
@@ -213,13 +254,13 @@ static void file_finish(int send)
 unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
 {
 	size_t len = strlen(hexstr);
-	unsigned char* chrs = (unsigned char*)malloc((len + 1) * sizeof(*chrs));
+	unsigned char* chrs = (unsigned char*)malloc(len + 1);
 	int dest = 0;
 	// point to the beginning of the array
 	const char *ptr = hexstr;
 	while (*ptr) {
 		// check to see if we have a space
-		while (*ptr == '\n' || *ptr == '\r' || *ptr == ' ' || *ptr == '\t' || *ptr == 9 /*horiz tab*/) ptr++;
+		while (*ptr == '\n' || *ptr == '\r' || *ptr == ' ' || *ptr == ',' || *ptr == '\t' || *ptr == 9 /*horiz tab*/) ptr++;
 		if (*ptr == 0) break;
 
 		// pull two characters off
@@ -256,6 +297,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 	{
 	case XML_EVENT_START_DOC:
 		arc_info->insiderom = 0;
+		arc_info->insidesw = 0;
 		break;
 
 	case XML_EVENT_START_NODE:
@@ -277,6 +319,15 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->romindex = 0;
 			arc_info->md5[0] = 0;
 			MD5Init(&arc_info->context);
+		}
+
+		if (!strcasecmp(node->tag, "switches"))
+		{
+			arc_info->insidesw = 1;
+			switches.dip_cur = 0;
+			switches.dip_def = 0;
+			switches.dip_num = 0;
+			memset(&switches.dip, 0, sizeof(switches.dip));
 		}
 
 		// for each part tag, we clear the partzipname since it is optional and may not appear in the part tag
@@ -333,6 +384,87 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				if (!strcasecmp(node->attributes[i].name, "offset") && !strcasecmp(node->tag, "patch"))
 				{
 					arc_info->patchaddr = strtoul(node->attributes[i].value, NULL, 0);
+				}
+			}
+
+			if (arc_info->insidesw)
+			{
+				if (!strcasecmp(node->tag, "switches"))
+				{
+					if (!strcasecmp(node->attributes[i].name, "default"))
+					{
+						size_t len = 0;
+						unsigned char* binary = hexstr_to_char(node->attributes[i].value, &len);
+						for (size_t i = 0; i < len; i++) switches.dip_def |= binary[i] << (i * 8);
+						free(binary);
+					}
+				}
+
+				if (!strcasecmp(node->tag, "dip"))
+				{
+					if (!strcasecmp(node->attributes[i].name, "name"))
+					{
+						snprintf(switches.dip[switches.dip_num].name, sizeof(switches.dip[switches.dip_num].name), node->attributes[i].value);
+					}
+
+					if (!strcasecmp(node->attributes[i].name, "bits"))
+					{
+						int b = 0, e = 0;
+						int num = sscanf(node->attributes[i].value, "%d,%d", &b, &e);
+						if (num <= 0 || b < 0 || b > 63 || e < 0 || e > 63 || (num == 2 && e < b))
+						{
+							printf("Invalid bits field: ""%s"" (%d, %d, %d)\n", node->attributes[i].value, num, b, e);
+						}
+						else
+						{
+							uint64_t mask = 1;
+							if (num == 1) e = b;
+							switches.dip[switches.dip_num].start = b;
+							for (int i = 0; i < (e - b); i++) mask = (mask << 1) | 1;
+							switches.dip[switches.dip_num].mask = mask << b;
+							switches.dip[switches.dip_num].size = e - b + 1;
+						}
+					}
+
+					if (!strcasecmp(node->attributes[i].name, "ids"))
+					{
+						int n = 0;
+						char *val = node->attributes[i].value;
+						while (*val && n < 32)
+						{
+							char *p = strchr(val, ',');
+							size_t len = p ? p - val : strlen(val);
+							size_t sz = len + 1;
+							if (sz > sizeof(switches.dip[0].id[0])) sz = sizeof(switches.dip[0].id[0]);
+							snprintf(switches.dip[switches.dip_num].id[n], sz, val);
+							val += len;
+							if (*val == ',') val++;
+							n++;
+						}
+						switches.dip[switches.dip_num].num = n;
+					}
+
+					if (!strcasecmp(node->attributes[i].name, "values"))
+					{
+						int n = 0;
+						char *val = node->attributes[i].value;
+						while (*val && n < 32)
+						{
+							char *endp = 0;
+							uint64_t v = strtoul(val, &endp, 0);
+							if (endp <= val)
+							{
+								printf("Invalid values field: ""%s""\n", node->attributes[i].value);
+								break;
+							}
+
+							switches.dip[switches.dip_num].val[n] = v;
+							val = endp;
+							while (*val && (*val == ' ' || *val == ',')) val++;
+							n++;
+						}
+						switches.dip[switches.dip_num].has_val = 1;
+					}
 				}
 			}
 		}
@@ -480,6 +612,22 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				free(binary);
 			}
 		}
+
+		if (!strcasecmp(node->tag, "dip"))
+		{
+			int n = switches.dip_num;
+			for (int i = 0; i < switches.dip[n].num; i++)
+			{
+				switches.dip[n].val[i] = ((switches.dip[n].has_val) ? switches.dip[n].val[i] : i) << switches.dip[n].start;
+			}
+
+			if (switches.dip_num < 63) switches.dip_num++;
+		}
+
+		if (!strcasecmp(node->tag, "switches"))
+		{
+			arc_info->insidesw = 0;
+		}
 		break;
 
 	case XML_EVENT_ERROR:
@@ -530,8 +678,22 @@ static int xml_scan_rbf(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 	return true;
 }
 
+static int arcade_type = 0;
+int is_arcade()
+{
+	return arcade_type;
+}
+
 int arcade_send_rom(const char *xml)
 {
+	arcade_type = 1;
+
+	const char *p = strrchr(xml, '/');
+	p = p ? p + 1 : xml;
+	snprintf(switches.name, sizeof(switches.name), p);
+	char *ext = strcasestr(switches.name, ".mra");
+	if (ext) strcpy(ext, ".dip");
+
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
 
@@ -553,6 +715,11 @@ int arcade_send_rom(const char *xml)
 		printf("arcade_send_rom: pretty error: [%s]\n", arcade_error_msg);
 	}
 	buffer_destroy(arc_info.data);
+
+	switches.dip_cur = switches.dip_def;
+	arcade_sw_load();
+	switches.dip_saved = switches.dip_cur;
+	arcade_sw_send();
 	return 0;
 }
 
