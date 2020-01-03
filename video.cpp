@@ -1005,7 +1005,7 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 
 static Imlib_Image load_bg()
 {
-	const char* bgdir = "backgrounds";
+	const char* bgdir = "wallpapers";
 	const char* fname = "menu.png";
 	if (!FileExists(fname))
 	{
