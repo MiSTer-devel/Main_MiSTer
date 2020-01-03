@@ -37,14 +37,16 @@ static int recent_available()
 static char* recent_create_config_name(int idx)
 {
 	static char str[256];
-	sprintf(str, "%s_recent_%d.cfg", user_io_get_core_name(), idx);
+	sprintf(str, "cores_recent.cfg");
+	if (idx >= 0) sprintf(str, "%s_recent_%d.cfg", user_io_get_core_name(), idx);
 	return str;
 }
 
 static const char* recent_path(char* dir, char* name)
 {
 	static char path[1024];
-	snprintf(path, sizeof(path), "%s/%s", dir, name);
+	if(strlen(dir)) snprintf(path, sizeof(path), "%s/%s", dir, name);
+	else snprintf(path, sizeof(path), "%s", name);
 	return path;
 }
 
@@ -62,7 +64,7 @@ static void recent_load(int idx)
 	for (int i = 0; i < recent_available(); i++)
 	{
 		ena[i] = FileExists(recent_path(recents[i].dir, recents[i].name));
-		if (is_neogeo_core() && !ena[i]) ena[i] = PathIsDir(recent_path(recents[i].dir, recents[i].name));
+		if (idx >= 0 && is_neogeo_core() && !ena[i]) ena[i] = PathIsDir(recent_path(recents[i].dir, recents[i].name));
 	}
 }
 
@@ -86,7 +88,7 @@ void recent_scan(int mode)
 	{
 		if (!recent_available()) return;
 
-		if (mode == SCANF_END)
+		if (mode == SCANF_END || (mode == SCANF_PREV && iSelectedEntry <= 0))
 		{
 			iSelectedEntry = recent_available() - 1;
 			iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
@@ -98,6 +100,12 @@ void recent_scan(int mode)
 			{
 				iSelectedEntry++;
 				if (iSelectedEntry > iFirstEntry + OsdGetSize() - 1) iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
+			}
+			else
+			{
+				// jump to first visible item
+				iFirstEntry = 0;
+				iSelectedEntry = 0;
 			}
 		}
 		else if (mode == SCANF_PREV)
@@ -225,9 +233,7 @@ int recent_select(char *dir, char *path, char *label)
 	if (strlen(recents[iSelectedEntry].name))
 	{
 		strcpy(dir, recents[iSelectedEntry].dir);
-		strcpy(path, dir);
-		strcat(path, "/");
-		strcat(path, recents[iSelectedEntry].name);
+		strcpy(path, recent_path(recents[iSelectedEntry].dir, recents[iSelectedEntry].name));
 		strcpy(label, recents[iSelectedEntry].label);
 	}
 

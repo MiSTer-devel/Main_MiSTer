@@ -1849,6 +1849,16 @@ void HandleUI(void)
             };
         }
 
+		if (recent && menusub == 0)
+		{
+			fs_Options = SCANO_CORES;
+			fs_MenuSelect = MENU_CORE_FILE_SELECTED1;
+			fs_MenuCancel = MENU_8BIT_SYSTEM1;
+
+			if (recent_init(-1)) menustate = MENU_RECENT1;
+			break;
+		}
+
 		if (select)
 		{
 			switch (menusub)
@@ -3435,7 +3445,7 @@ void HandleUI(void)
 			menustate = fs_MenuCancel;
 		}
 
-		if (recent && recent_init((fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index))
+		if (recent && recent_init((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index))
 		{
 			menustate = MENU_RECENT1;
 		}
@@ -3527,6 +3537,13 @@ void HandleUI(void)
 							strcat(SelectedPath, "/");
 						}
 						strcpy(SelectedLabel, flist_SelectedItem()->altname);
+						if (fs_Options & SCANO_CORES)
+						{
+							int len = strlen(SelectedLabel);
+							if (SelectedLabel[len - 4] == '.') SelectedLabel[len - 4] = 0;
+							char *p = strstr(SelectedLabel, "_20");
+							if (p) *p = 0;
+						}
 						strcat(SelectedPath, name);
 						menustate = fs_MenuSelect;
 					}
@@ -3608,7 +3625,7 @@ void HandleUI(void)
 		/******************************************************************/
 	case MENU_RECENT1:
 		helptext = helptexts[HELPTEXT_NONE];
-		OsdSetTitle("Recent Files");
+		OsdSetTitle((fs_Options & SCANO_CORES) ? "Recent Cores" : "Recent Files");
 		recent_print();
 		menustate = MENU_RECENT2;
 		parentstate = menustate;
@@ -3620,6 +3637,7 @@ void HandleUI(void)
 		if (menu || recent)
 		{
 			menustate = fs_MenuCancel;
+			if (is_menu_core()) menustate = MENU_FILE_SELECT1;
 			break;
 		}
 
@@ -3655,8 +3673,9 @@ void HandleUI(void)
 			OsdWrite(OsdGetSize() / 2, "    Clearing the recents", 0, 0);
 			OsdUpdate();
 			sleep(1);
-			recent_clear((fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index);
+			recent_clear((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index);
 			menustate = fs_MenuCancel;
+			if (is_menu_core()) menustate = MENU_FILE_SELECT1;
 			break;
 		}
 
@@ -4744,6 +4763,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_CORE_FILE_SELECTED1:
+		recent_update(SelectedDir, SelectedPath, SelectedLabel, -1);
 		menustate = MENU_NONE1;
 		strcpy(SelectedRBF, SelectedPath);
 		if (!getStorage(0)) // multiboot is only on SD card.
