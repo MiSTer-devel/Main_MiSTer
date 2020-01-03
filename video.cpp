@@ -970,6 +970,75 @@ static void vs_wait()
 	printf("vs_wait(us): %llu\n", t2 - t1);
 }
 
+static char *get_file_fromdir(const char* dir, int num, int *count)
+{
+	static char name[256+32];
+	name[0] = 0;
+	if(count) *count = 0;
+	DIR *d = opendir(getFullPath(dir));
+	if (d)
+	{
+		int cnt = 0;
+		struct dirent *de = readdir(d);
+		while (de)
+		{
+			int len = strlen(de->d_name);
+			if (len > 4 && (!strcasecmp(de->d_name + len - 4, ".png") || !strcasecmp(de->d_name + len - 4, ".jpg")))
+			{
+				if (num == cnt) break;
+				cnt++;
+			}
+
+			de = readdir(d);
+		}
+
+		if (de)
+		{
+			sprintf(name, "%s/%s", dir, de->d_name);
+		}
+		closedir(d);
+		if(count) *count = cnt;
+	}
+
+	return name;
+}
+
+static Imlib_Image load_bg()
+{
+	const char* bgdir = "backgrounds";
+	const char* fname = "menu.png";
+	if (!FileExists(fname))
+	{
+		fname = "menu.jpg";
+		if (!FileExists(fname)) fname = 0;
+	}
+
+	if (!fname && PathIsDir(bgdir))
+	{
+		int rndfd = open("/dev/urandom", O_RDONLY);
+		if (rndfd >= 0)
+		{
+			uint32_t rnd;
+			read(rndfd, &rnd, sizeof(rnd));
+			close(rndfd);
+
+			int count = 0;
+			get_file_fromdir(bgdir, -1, &count);
+			if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
+		}
+	}
+
+	if (fname)
+	{
+		Imlib_Load_Error error = IMLIB_LOAD_ERROR_NONE;
+		Imlib_Image img = imlib_load_image_with_error_return(getFullPath(fname), &error);
+		if (img) return img;
+		printf("Image %s loading error %d\n", fname, error);
+	}
+
+	return NULL;
+}
+
 static int bg_has_picture = 0;
 extern uint8_t  _binary_logo_png_start[], _binary_logo_png_end[];
 void video_menu_bg(int n, int idle)
@@ -1048,61 +1117,30 @@ void video_menu_bg(int n, int idle)
 		switch (n)
 		{
 		case 1:
-			if (menubg || FileExists("menu.png") || FileExists("menu.jpg"))
+			if (!menubg) menubg = load_bg();
+			if (menubg)
 			{
-				if (!menubg)
+				imlib_context_set_image(menubg);
+				int src_w = imlib_image_get_width();
+				int src_h = imlib_image_get_height();
+				printf("menubg: src_w=%d, src_h=%d\n", src_w, src_h);
+
+				if (*bg)
 				{
-					if (!menubg && FileExists("menu.png"))
-					{
-						error = IMLIB_LOAD_ERROR_NONE;
-						menubg = imlib_load_image_with_error_return(getFullPath("menu.png"), &error);
-						if (!menubg)
-						{
-							printf("menu.png error = %d\n", error);
-						}
-					}
-
-					if (!menubg && FileExists("menu.jpg"))
-					{
-						error = IMLIB_LOAD_ERROR_NONE;
-						menubg = imlib_load_image_with_error_return(getFullPath("menu.jpg"), &error);
-						if (!menubg)
-						{
-							printf("menu.jpg error = %d\n", error);
-						}
-					}
-
-					printf("menubg = %p\n", menubg);
+					imlib_context_set_image(*bg);
+					imlib_blend_image_onto_image(menubg, 0,
+						0, 0,               //int source_x, int source_y,
+						src_w, src_h,       //int source_width, int source_height,
+						0, 0,               //int destination_x, int destination_y,
+						fb_width, fb_height //int destination_width, int destination_height
+					);
+					bg_has_picture = 1;
+					break;
 				}
-
-				if (menubg)
+				else
 				{
-					imlib_context_set_image(menubg);
-					int src_w = imlib_image_get_width();
-					int src_h = imlib_image_get_height();
-					printf("menubg: src_w=%d, src_h=%d\n", src_w, src_h);
-
-					if (*bg)
-					{
-						imlib_context_set_image(*bg);
-						imlib_blend_image_onto_image(menubg, 0,
-							0, 0,               //int source_x, int source_y,
-							src_w, src_h,       //int source_width, int source_height,
-							0, 0,               //int destination_x, int destination_y,
-							fb_width, fb_height //int destination_width, int destination_height
-						);
-						bg_has_picture = 1;
-						break;
-					}
-					else
-					{
-						printf("*bg = 0!\n");
-					}
+					printf("*bg = 0!\n");
 				}
-			}
-			else
-			{
-				printf("Neither menu.png nor menu.jpg found!\n");
 			}
 			draw_checkers();
 			break;
