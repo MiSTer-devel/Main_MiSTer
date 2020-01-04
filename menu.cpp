@@ -1197,6 +1197,7 @@ void HandleUI(void)
 				fs_Options = SCANO_DIR | SCANO_UMOUNT;
 				fs_MenuSelect = MENU_ARCHIE_MAIN_FILE_SELECTED;
 				fs_MenuCancel = MENU_ARCHIE_MAIN1;
+				strcpy(fs_pFileExt, "ADF");
 				if (recent_init(500)) menustate = MENU_RECENT1;
 			}
 		}
@@ -1587,6 +1588,7 @@ void HandleUI(void)
 						fs_Options = SCANO_DIR | (is_neogeo_core() ? SCANO_NEOGEO | SCANO_NOENTER : 0);
 						fs_MenuSelect = MENU_8BIT_MAIN_FILE_SELECTED;
 						fs_MenuCancel = MENU_8BIT_MAIN1;
+						strcpy(fs_pFileExt, ext);
 
 						if (select) SelectFile(ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if(recent_init(ioctl_index)) menustate = MENU_RECENT1;
@@ -1601,6 +1603,7 @@ void HandleUI(void)
 						fs_Options = SCANO_DIR | SCANO_UMOUNT;
 						fs_MenuSelect = MENU_8BIT_MAIN_IMAGE_SELECTED;
 						fs_MenuCancel = MENU_8BIT_MAIN1;
+						strcpy(fs_pFileExt, ext);
 
 						if (select) SelectFile(ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if(recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
@@ -3257,6 +3260,7 @@ void HandleUI(void)
 					fs_Options = SCANO_DIR;
 					fs_MenuSelect = MENU_FILE_SELECTED;
 					fs_MenuCancel = MENU_MAIN1;
+					strcpy(fs_pFileExt, "ADF");
 					if(select) SelectFile("ADF", fs_Options, fs_MenuSelect, fs_MenuCancel);
 					else if (recent_init(0)) menustate = MENU_RECENT1;
 				}
@@ -4146,6 +4150,7 @@ void HandleUI(void)
 					fs_Options = SCANO_DIR | SCANO_UMOUNT;
 					fs_MenuSelect = MENU_HARDFILE_SELECTED;
 					fs_MenuCancel = MENU_SETTINGS_HARDFILE1;
+					strcpy(fs_pFileExt, "HDFVHDIMGDSK");
 					if (select) SelectFile("HDFVHDIMGDSK", fs_Options, fs_MenuSelect, fs_MenuCancel);
 					else if (recent_init(500)) menustate = MENU_RECENT1;
 				}
