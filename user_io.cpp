@@ -1955,6 +1955,18 @@ char user_io_user_button()
 	return (cur_btn & BUTTON_USR) ? 1 : 0;
 }
 
+static int vga_fb = 0;
+void set_vga_fb(int enable)
+{
+	vga_fb = enable;
+	user_io_send_buttons(1);
+}
+
+int get_vga_fb()
+{
+	return vga_fb;
+}
+
 static char kbd_reset = 0;
 void user_io_send_buttons(char force)
 {
@@ -1977,6 +1989,7 @@ void user_io_send_buttons(char force)
 	if (cfg.hdmi_limited & 1) map |= CONF_HDMI_LIMITED1;
 	if (cfg.hdmi_limited & 2) map |= CONF_HDMI_LIMITED2;
 	if (cfg.direct_video) map |= CONF_DIRECT_VIDEO;
+	if (vga_fb) map |= CONF_VGA_FB;
 
 	if ((map != key_map) || force)
 	{

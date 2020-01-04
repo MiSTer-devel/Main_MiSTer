@@ -5164,7 +5164,7 @@ void Info(const char *message, int timeout, int width, int height, int frame)
 	if (!user_io_osd_is_visible())
 	{
 		OSD_PrintInfo(message, &width, &height, frame);
-		InfoEnable(20, 10, width, height);
+		InfoEnable(20, (cfg.direct_video && get_vga_fb()) ? 30 : 10, width, height);
 		OsdSetSize(16);
 
 		menu_timer = GetTimer(timeout);

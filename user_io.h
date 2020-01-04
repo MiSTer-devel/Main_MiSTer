@@ -149,6 +149,7 @@
 #define CONF_VGA_SOG            0b0000001000000000
 #define CONF_DIRECT_VIDEO       0b0000010000000000
 #define CONF_HDMI_LIMITED2      0b0000100000000000
+#define CONF_VGA_FB             0b0001000000000000
 
 // core type value should be unlikely to be returned by broken cores
 #define CORE_TYPE_UNKNOWN   0x55
@@ -244,6 +245,8 @@ void user_io_analog_joystick(unsigned char, char, char);
 void user_io_set_joyswap(int swap);
 int user_io_get_joyswap();
 char user_io_osd_is_visible();
+void set_vga_fb(int enable);
+int get_vga_fb();
 void user_io_send_buttons(char);
 uint16_t user_io_get_sdram_cfg();
 
