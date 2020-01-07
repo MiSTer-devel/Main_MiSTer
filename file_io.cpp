@@ -235,6 +235,104 @@ void FileClose(fileTYPE *file)
 	file->filp = nullptr;
 }
 
+
+int zip_search_by_crc(mz_zip_archive *zipArchive, uint32_t crc32)
+{
+
+	for (unsigned int file_index = 0; file_index < zipArchive->m_total_files; file_index++)
+	{
+		mz_zip_archive_file_stat s;
+		if (mz_zip_reader_file_stat(zipArchive, file_index, &s))	
+		{
+			if (s.m_crc32 == crc32)
+			{
+				return file_index;
+			}	
+		}
+	}
+
+	return -1;
+}
+
+
+int FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32, int mode, char mute)
+{
+	make_fullpath((char*)name, mode);
+	FileClose(file);
+	file->mode = 0;
+	file->type = 0;
+
+	char *p = strrchr(full_path, '/');
+	strcpy(file->name, (mode == -1) ? full_path : p + 1);
+
+	char *zip_path, *file_path;
+	if ((mode != -1) && FileIsZipped(full_path, &zip_path, &file_path))
+	{
+		if (mode & O_RDWR || mode & O_WRONLY)
+		{
+			if(!mute) printf("FileOpenZip(mode) Zip:%s, writing to zipped files is not supported.\n",
+					 full_path);
+			return 0;
+		}
+
+		file->zip = new fileZipArchive{};
+		if (!mz_zip_reader_init_file(&file->zip->archive, zip_path, 0))
+		{
+			if(!mute) printf("FileOpenZip(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path,
+					 mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+			return 0;
+		}
+
+		if (crc32)
+		{
+			file->zip->index = zip_search_by_crc(&file->zip->archive, crc32);
+		}
+
+
+
+		if (file->zip->index < 0 || !crc32)
+		{
+			file->zip->index = mz_zip_reader_locate_file(&file->zip->archive, file_path, NULL, 0);
+		}
+
+		if (file->zip->index < 0)
+		{
+			if(!mute) printf("FileOpenZip(mz_zip_reader_locate_file) Zip:%s, file:%s, error: %s\n",
+					 zip_path, file_path,
+					 mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+			FileClose(file);
+			return 0;
+		}
+
+		mz_zip_archive_file_stat s;
+		if (!mz_zip_reader_file_stat(&file->zip->archive, file->zip->index, &s))
+		{
+			if(!mute) printf("FileOpenZip(mz_zip_reader_file_stat) Zip:%s, file:%s, error:%s\n",
+					 zip_path, file_path,
+					 mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+			FileClose(file);
+			return 0;
+		}
+		file->size = s.m_uncomp_size;
+
+		file->zip->iter = mz_zip_reader_extract_iter_new(&file->zip->archive, file->zip->index, 0);
+		if (!file->zip->iter)
+		{
+			if(!mute) printf("FileOpenZip(mz_zip_reader_extract_iter_new) Zip:%s, file:%s, error:%s\n",
+					 zip_path, file_path,
+					 mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
+			FileClose(file);
+			return 0;
+		}
+		file->zip->offset = 0;
+		file->offset = 0;
+		file->mode = mode;
+	} else {
+		return 0;
+	}
+	return 1;
+}
+
 int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 {
 	make_fullpath((char*)name, mode);
