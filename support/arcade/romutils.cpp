@@ -159,10 +159,9 @@ static int file_data(const uint8_t *buf, uint16_t chunk, struct MD5Context *md5c
 
 static int file_file(const char *name, uint32_t crc32, int start, int len, struct MD5Context *md5context)
 {
-	char mute = 0;
 	fileTYPE f = {};
 	static uint8_t buf[4096];
-	if (!FileOpenZip(&f, name, crc32, mute)) return 0;
+	if (!FileOpenZip(&f, name, crc32)) return 0;
 	if (start) FileSeek(&f, start, SEEK_SET);
 	unsigned long bytes2send = f.size;
 	if (len > 0 && len < (int)bytes2send) bytes2send = len;
@@ -385,7 +384,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				}
 				if (!strcasecmp(node->attributes[i].name, "crc") && !strcasecmp(node->tag, "part"))
 				{
-					arc_info->crc = (uint32_t)strtoul(node->attributes[i].value, NULL, 16); 
+					arc_info->crc = (uint32_t)strtoul(node->attributes[i].value, NULL, 16);
 				}
 				if (!strcasecmp(node->attributes[i].name, "offset") && !strcasecmp(node->tag, "patch"))
 				{
@@ -583,13 +582,13 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				} else {
 					strcpy(zipnames_list, arc_info->zipname);
 				}
-				
+
 				char *zipname = NULL;
 				char *zipptr = zipnames_list;
 				const char *root = get_arcade_root(0);
 				int result = 0;
 				while ((zipname = strsep(&zipptr, "|")) != NULL)
-				{	
+				{
 					sprintf(fname, (zipname[0] == '/') ? "%s%s/%s" : "%s/mame/%s/%s", root, zipname, arc_info->partname);
 
 					printf("file: %s, start=%d, len=%d\n", fname, start, length);
