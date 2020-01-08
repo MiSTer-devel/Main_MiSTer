@@ -31,6 +31,7 @@ struct arc_struct {
 	int patchaddr;
 	int validrom0;
 	int insidesw;
+	uint32_t crc;
 	buffer_data *data;
 	struct MD5Context context;
 };
@@ -156,12 +157,12 @@ static int file_data(const uint8_t *buf, uint16_t chunk, struct MD5Context *md5c
 	return 1;
 }
 
-static int file_file(const char *name, int start, int len, struct MD5Context *md5context)
+static int file_file(const char *name, uint32_t crc32, int start, int len, struct MD5Context *md5context)
 {
 	char mute = 0;
 	fileTYPE f = {};
 	static uint8_t buf[4096];
-	if (!FileOpen(&f, name, mute)) return 0;
+	if (!FileOpenZip(&f, name, crc32, mute)) return 0;
 	if (start) FileSeek(&f, start, SEEK_SET);
 	unsigned long bytes2send = f.size;
 	if (len > 0 && len < (int)bytes2send) bytes2send = len;
@@ -310,6 +311,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		arc_info->offset = 0;
 		arc_info->length = -1;
 		arc_info->repeat = 1;
+		arc_info->crc = 0;
 
 		/* on the beginning of a rom tag, we need to reset the state*/
 		if (!strcasecmp(node->tag, "rom"))
@@ -380,6 +382,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				if (!strcasecmp(node->attributes[i].name, "repeat") && !strcasecmp(node->tag, "part"))
 				{
 					arc_info->repeat = atoi(node->attributes[i].value);
+				}
+				if (!strcasecmp(node->attributes[i].name, "crc") && !strcasecmp(node->tag, "part"))
+				{
+					arc_info->crc = (uint32_t)strtoul(node->attributes[i].value, NULL, 16); 
 				}
 				if (!strcasecmp(node->attributes[i].name, "offset") && !strcasecmp(node->tag, "patch"))
 				{
@@ -553,8 +559,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (arc_info->romindex == 0 && arc_info->validrom0 == 1) break;
 			char fname[kBigTextSize * 2 + 16];
 			int start, length, repeat;
+			uint32_t crc32;
 			repeat = arc_info->repeat;
 			start = arc_info->offset;
+			crc32 = arc_info->crc;
 			length = 0;
 			if (arc_info->length > 0) length = arc_info->length;
 			//printf("partname[%s]\n",arc_info->partname);
@@ -567,21 +575,44 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			//user_io_file_tx_body_filepart(getFullPath(fname),0,0);
 			if (strlen(arc_info->partname))
 			{
-				char *zipname = (strlen(arc_info->partzipname)) ? arc_info->partzipname : arc_info->zipname;
-				const char *root = get_arcade_root(0);
-				sprintf(fname, (zipname[0] == '/') ? "%s%s/%s" : "%s/mame/%s/%s", root, zipname, arc_info->partname);
+				char zipnames_list[kBigTextSize];
 
-				printf("file: %s, start=%d, len=%d\n", fname, start, length);
-				for (int i = 0; i < repeat; i++)
+				if (strlen(arc_info->partzipname))
 				{
-					int result = file_file(fname, start, length, &arc_info->context);
+					strcpy(zipnames_list, arc_info->partzipname);
+				} else {
+					strcpy(zipnames_list, arc_info->zipname);
+				}
+				
+				char *zipname = NULL;
+				char *zipptr = zipnames_list;
+				const char *root = get_arcade_root(0);
+				int result = 0;
+				while ((zipname = strsep(&zipptr, "|")) != NULL)
+				{	
+					sprintf(fname, (zipname[0] == '/') ? "%s%s/%s" : "%s/mame/%s/%s", root, zipname, arc_info->partname);
 
-					// we should check file not found error for the zip
-					if (result == 0)
+					printf("file: %s, start=%d, len=%d\n", fname, start, length);
+					for (int i = 0; i < repeat; i++)
 					{
-						printf("%s does not exist\n", fname);
-						snprintf(arc_info->error_msg, kBigTextSize, "%s\nFile Not Found", fname + strlen(root));
+						result = file_file(fname, crc32, start, length, &arc_info->context);
+
+						// we should check file not found error for the zip
+						if (result == 0)
+						{
+							break;
+						}
 					}
+
+					if (result)
+					{
+						break;
+					}
+				}
+				if (result == 0)
+				{
+					printf("%s does not exist\n", arc_info->partname);
+					snprintf(arc_info->error_msg, kBigTextSize, "%s\nFile Not Found", arc_info->partname);
 				}
 			}
 			else // we have binary data?
