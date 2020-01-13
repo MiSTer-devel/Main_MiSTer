@@ -990,6 +990,7 @@ enum QUIRK
 	QUIRK_DS3,
 	QUIRK_DS4,
 	QUIRK_DS4TOUCH,
+	QUIRK_MADCATZ360,
 };
 
 typedef struct
@@ -1017,6 +1018,9 @@ typedef struct
 
 	int      accx, accy;
 	int      quirk;
+
+	int      misc_flags;
+	int      mc_a;
 
 	int      lightgun_req;
 	int      lightgun;
@@ -2677,6 +2681,12 @@ int input_test(int getchar)
 							input[n].lightgun = 1;
 						}
 
+						//Madcatz Arcade Stick 360
+						if (input[n].vid == 0x0738 && input[n].pid == 0x4758)
+						{
+							input[n].quirk = QUIRK_MADCATZ360;
+						}
+
 						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
 
 						n++;
@@ -2812,8 +2822,54 @@ int input_test(int getchar)
 									if (ev.code == BTN_TOOL_FINGER || ev.code == BTN_TOUCH || ev.code == BTN_TOOL_DOUBLETAP) continue;
 								}
 
+								if (input[i].quirk == QUIRK_MADCATZ360 && ev.type == EV_KEY)
+								{
+									if (ev.code == BTN_THUMBR) input[i].misc_flags = ev.value ? (input[i].misc_flags | 1) : (input[i].misc_flags & ~1);
+									else if (ev.code == BTN_MODE && !user_io_osd_is_visible())
+									{
+										if (input[i].misc_flags & 1)
+										{
+											if (ev.value)
+											{
+												if ((input[i].misc_flags & 0x6) == 0) input[i].misc_flags = 0x3; // X
+												else if ((input[i].misc_flags & 0x6) == 2) input[i].misc_flags = 0x5; // Y
+												else input[i].misc_flags = 0x1; // None
+
+												Info(((input[i].misc_flags & 0x6) == 2) ? "Paddle: X" :
+													((input[i].misc_flags & 0x6) == 4) ? "Paddle: Y" :
+													"Paddle: Off");
+											}
+											continue;
+										}
+									}
+								}
+
 								if (ev.type == EV_ABS)
 								{
+									if (input[i].quirk == QUIRK_MADCATZ360 && (input[i].misc_flags & 0x6))
+									{
+										//disable original analog axis to avoid conflicts
+										if (ev.code <= 1) continue;
+
+										if (ev.code == 16)
+										{
+											if (ev.value)
+											{
+												if (ev.value > 0) input[i].mc_a += 8;
+												if (ev.value < 0) input[i].mc_a -= 8;
+
+												if (input[i].mc_a > 128) input[i].mc_a = 128;
+												if (input[i].mc_a < -128) input[i].mc_a = -128;
+
+												ev.code = (input[i].misc_flags >> 2) & 1;
+												ev.value = input[i].mc_a * 256;
+												if (ev.value > 32767) ev.value = 32767;
+												//printf("** %d - %d\n", ev.code, ev.value);
+											}
+											else continue;
+										}
+									}
+
 									if (input[i].quirk == QUIRK_WIIMOTE)
 									{
 										//nunchuck accel events
