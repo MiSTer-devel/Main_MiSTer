@@ -140,6 +140,12 @@ char *user_io_make_filepath(const char *path, const char *filename)
 	return filepath_store;
 }
 
+static char ovr_name[16 + 1] = {};
+void user_io_name_override(const char* name)
+{
+	snprintf(ovr_name, sizeof(ovr_name), "%s", name);
+}
+
 void user_io_set_core_name(const char *name)
 {
 	strncpy(core_name, name, 17);
@@ -281,11 +287,15 @@ static void user_io_read_core_name()
 	core_name[0] = 0;
 
 	// get core name
-	char *p = user_io_get_confstr(0);
-	if (p && p[0]) strcpy(core_name, p);
+	if (ovr_name[0]) strcpy(core_name, ovr_name);
+	else
+	{
+		char *p = user_io_get_confstr(0);
+		if (p && p[0]) strcpy(core_name, p);
+	}
 
-	strncpy(core_dir, !strcasecmp(p, "minimig") ? "Amiga" : core_name, 1024);
-	prefixGameDir(core_dir, 1024);
+	strcpy(core_dir, !strcasecmp(core_name, "minimig") ? "Amiga" : core_name);
+	prefixGameDir(core_dir, sizeof(core_dir));
 
 	printf("Core name is \"%s\"\n", core_name);
 }
@@ -664,6 +674,7 @@ void user_io_init(const char *path, const char *xml)
 	// not the RBF. The RBF will be in arcade, which the user shouldn't
 	// browse
 	strcpy(core_path, xml ? xml : path);
+	if (xml) arcade_override_name(xml);
 
 	memset(sd_image, 0, sizeof(sd_image));
 

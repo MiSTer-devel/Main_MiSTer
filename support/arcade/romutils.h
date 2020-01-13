@@ -32,5 +32,6 @@ sw_struct *arcade_sw();
 void arcade_sw_send();
 void arcade_sw_save();
 void arcade_sw_load();
+void arcade_override_name(const char *xml);
 
 #endif

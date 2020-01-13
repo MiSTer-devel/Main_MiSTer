@@ -708,6 +708,49 @@ static int xml_scan_rbf(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 	return true;
 }
 
+static int xml_read_setname(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
+{
+	(void)(sd);
+	static int insetname = 0;
+
+	switch (evt)
+	{
+	case XML_EVENT_START_DOC:
+		insetname = 0;
+		break;
+
+	case XML_EVENT_START_NODE:
+
+		/* on the beginning of a rom tag, we need to reset the state*/
+		if (!strcasecmp(node->tag, "setname"))
+		{
+			insetname = 1;
+		}
+		break;
+
+	case XML_EVENT_TEXT:
+		if(insetname) user_io_name_override(text);
+		break;
+
+	case XML_EVENT_END_NODE:
+		if (!strcasecmp(node->tag, "setname"))
+		{
+			insetname = 0;
+			return false;
+		}
+		break;
+
+	case XML_EVENT_ERROR:
+		printf("XML parse: %s: ERROR %d\n", text, n);
+		break;
+	default:
+		break;
+	}
+
+	return true;
+}
+
+
 static int arcade_type = 0;
 int is_arcade()
 {
@@ -751,6 +794,15 @@ int arcade_send_rom(const char *xml)
 	switches.dip_saved = switches.dip_cur;
 	arcade_sw_send();
 	return 0;
+}
+
+void arcade_override_name(const char *xml)
+{
+	SAX_Callbacks sax;
+	SAX_Callbacks_init(&sax);
+
+	sax.all_event = xml_read_setname;
+	XMLDoc_parse_file_SAX(xml, &sax, NULL);
 }
 
 void arcade_check_error()

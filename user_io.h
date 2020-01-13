@@ -222,6 +222,7 @@ char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name();
 char *user_io_get_core_path();
 const char *user_io_get_core_name_ex();
+void user_io_name_override(const char* name);
 char has_menu();
 
 const char *get_image_name(int i);
