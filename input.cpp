@@ -2802,8 +2802,6 @@ int input_test(int getchar)
 							}
 							else if (ev.type)
 							{
-								if (ev.type == EV_KEY && ev.value > 1) continue;
-
 								int dev = i;
 								if (input[dev].bind >= 0) dev = input[dev].bind;
 
