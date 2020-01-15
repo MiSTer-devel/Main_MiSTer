@@ -853,7 +853,6 @@ static const char *get_rbf(const char *xml)
 			{
 				if (!lastfound[0] || strcmp(lastfound, entry->d_name) < 0)
 				{
-					printf("*** %s\n", entry->d_name);
 					strcpy(lastfound, entry->d_name);
 				}
 			}
@@ -864,7 +863,6 @@ static const char *get_rbf(const char *xml)
 			{
 				if (!lastfound[0] || strcmp(lastfound, entry->d_name) < 0)
 				{
-					printf("*** %s\n", entry->d_name);
 					strcpy(lastfound, entry->d_name);
 				}
 			}
