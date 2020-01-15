@@ -838,37 +838,43 @@ static const char *get_rbf(const char *xml)
 		return NULL;
 	}
 
-	int found = 0;
 	int len;
+	static char lastfound[256] = {};
 	while ((entry = readdir(dir)) != NULL)
 	{
 		if (entry->d_type != DT_DIR)
 		{
-			char newstring[kBigTextSize];
+			static char newstring[kBigTextSize];
 			//printf("entry name: %s\n",entry->d_name);
 
 			snprintf(newstring, kBigTextSize, "Arcade-%s", rbfname);
 			len = strlen(newstring);
 			if (!strncasecmp(newstring, entry->d_name, len) && (entry->d_name[len] == '.' || entry->d_name[len] == '_'))
 			{
-				found = 1;
-				break;
+				if (!lastfound[0] || strcmp(lastfound, entry->d_name) < 0)
+				{
+					printf("*** %s\n", entry->d_name);
+					strcpy(lastfound, entry->d_name);
+				}
 			}
 
 			snprintf(newstring, kBigTextSize, "%s", rbfname);
 			len = strlen(newstring);
 			if (!strncasecmp(newstring, entry->d_name, len) && (entry->d_name[len] == '.' || entry->d_name[len] == '_'))
 			{
-				found = 1;
-				break;
+				if (!lastfound[0] || strcmp(lastfound, entry->d_name) < 0)
+				{
+					printf("*** %s\n", entry->d_name);
+					strcpy(lastfound, entry->d_name);
+				}
 			}
 		}
 	}
 
-	if (found) sprintf(rbfname, "%s/%s", dirname, entry->d_name);
+	if (lastfound[0]) sprintf(rbfname, "%s/%s", dirname, lastfound);
 	closedir(dir);
 
-	return found ? rbfname : NULL;
+	return lastfound[0] ? rbfname : NULL;
 }
 
 int arcade_load(const char *xml)
