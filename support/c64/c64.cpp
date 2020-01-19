@@ -38,15 +38,7 @@
 #define D64_FILL_VALUE           0xA0
 #define D64_INIT_VALUE           0x00 // BAM and DIR rely on 0x00 initial value
 
-#define CHECK_SUCCESS(op) if (!(op)) { FileClose(&fd); return 0; }
-
-enum HeaderField {
-	H_Track = 0x00,
-};
-
-enum RecordField{
-	R_ = 0x00,
-};
+#define CHECK_SUCCESS(op) do { if (!(op)) { FileClose(&fd); unlink(path); return 0; } } while(0)
 
 struct FileRecord {
 	char           name[D64_BYTE_PER_STRING];
@@ -71,21 +63,6 @@ static unsigned d64_file_sector(unsigned size) {
 	return (size + D64_BYTE_PER_FILE_SECTOR - 1) / D64_BYTE_PER_FILE_SECTOR;
 }
 
-//static unsigned d64_sector(unsigned char trackNum, unsigned char sectorNum)
-//{
-//	static unsigned TrackSectorOffset[D64_TRACK_PER_DISK] = {
-//		  0, /* 1 */     21, /* 2 */     42, /* 3 */     63, /* 4 */     84, /* 5 */
-//		105, /* 6 */    126, /* 7 */    147, /* 8 */    168, /* 9 */    189, /*10 */
-//		210, /*11 */    231, /*12 */    252, /*13 */    273, /*14 */    294, /*15 */
-//		315, /*16 */    336, /*17 */    357, /*18 */    376, /*19 */    395, /*20 */
-//		414, /*21 */    433, /*22 */    452, /*23 */    471, /*24 */    490, /*25 */
-//		508, /*26 */    526, /*27 */    544, /*28 */    562, /*29 */    580, /*30 */
-//		598, /*31 */    615, /*32 */    632, /*33 */    649, /*34 */    666, /*35 */
-//	};
-//
-//	return TrackSectorOffset[trackNum - 1] + sectorNum;
-//}
-
 static unsigned d64_offset(unsigned char trackNum, unsigned char sectorNum)
 {
 	static unsigned TrackFileOffset[D64_TRACK_PER_DISK] = {
@@ -108,7 +85,7 @@ static void d64_advance_pointer(unsigned char& trackNum, unsigned char& sectorNu
 	sectorNum = (sectorNum + stride) % sectorPerTrack;
 	// 18 sectors with a stride of 10 has a common divisor of 2.  NOTE: this doesn't handle all combinations of sectorsPerTrack and stride
 	if (!(sectorPerTrack & 1) && !(stride & 1) && !(sectorNum >> 1)) sectorNum ^= 1;
-	// calling function needs to handle DIR track
+	// caller needs to handle DIR track
 	if (!sectorNum) trackNum = trackNum % D64_TRACK_PER_DISK + 1;
 }
 
@@ -118,7 +95,7 @@ static void d64_advance_dir_pointer(unsigned char& trackNum, unsigned char& sect
 
 	// don't leave current track
 	sectorNum = (sectorNum + stride) % sectorPerTrack;
-	// calling function needs to handle BAM sector
+	// caller needs to handle BAM sector
 }
 
 int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
@@ -128,7 +105,7 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 	char header[T64_BYTE_PER_HEADER];
 	char name[D64_BYTE_PER_STRING];
 
-	// remove old file early to make sure we don't use it
+	// remove old file to make sure we don't use it
 	unlink(path);
 
 	CHECK_SUCCESS(FileSeek(f, 0, SEEK_SET));
@@ -192,7 +169,7 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 	CHECK_SUCCESS(FileSeek(&fd, 0, SEEK_SET));
 
 	unsigned char bam[D64_BYTE_PER_SECTOR];
-	memset(bam, 0x00, sizeof(sector));
+	memset(bam, 0x00, sizeof(bam));
 
 	unsigned char dir[D64_BYTE_PER_DIR];
 
