@@ -32,13 +32,14 @@
 #define D64_BAM_SECTOR           0U
 #define D64_DIR_TRACK            18U
 #define D64_DIR_SECTOR           1U
-#define D64_FILE_TRACK           1U
+#define D64_FILE_TRACK           1U // 1-35
 #define D64_FILE_SECTOR          0U
 
 #define D64_FILL_VALUE           0xA0
-#define D64_INIT_VALUE           0x00 // BAM and DIR rely on 0x00 initial value
+#define D64_INIT_VALUE           0x00 // DIR relies on 0x00 initial value
 
-#define CHECK_SUCCESS(op) do { if (!(op)) { FileClose(&fd); unlink(path); return 0; } } while(0)
+// leave file for debug
+#define CHECK_SUCCESS(op) do { if (!(op)) { FileClose(&fd); /*unlink(path);*/ return 0; } } while(0)
 
 struct FileRecord {
 	char           name[D64_BYTE_PER_STRING];
@@ -159,6 +160,8 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 		}
 	}
 
+	//printf("T64: %d records\n", files.size()); for (auto r : files) printf("start: %x, size: %x, offset %x, index: %d\n", r.start, r.size, r.offset, r.index);
+
 	CHECK_SUCCESS(files.size());
 
 	CHECK_SUCCESS(FileOpenEx(&fd, path, O_CREAT | O_TRUNC | O_RDWR | O_SYNC));
@@ -169,7 +172,7 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 	CHECK_SUCCESS(FileSeek(&fd, 0, SEEK_SET));
 
 	unsigned char bam[D64_BYTE_PER_SECTOR];
-	memset(bam, 0x00, sizeof(bam));
+	memset(bam, D64_INIT_VALUE, sizeof(bam));
 
 	unsigned char dir[D64_BYTE_PER_DIR];
 
@@ -178,7 +181,7 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 		FileRecord& r = files[i];
 
 		// DIR sector
-		if (dirEntry == 0 && dirSectorNum != D64_DIR_SECTOR)
+		if (dirEntry == 0 && i != 0)
 		{
 			// set next track/sector pointer of prev node
 			CHECK_SUCCESS(FileSeek(&fd, d64_offset(dirTrackNum, dirSectorNum), SEEK_SET));
@@ -218,6 +221,7 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 			CHECK_SUCCESS(FileSeek(&fd, d64_offset(fileTrackNum, fileSectorNum), SEEK_SET));
 			d64_advance_pointer(fileTrackNum, fileSectorNum);
 			if (fileTrackNum == D64_DIR_TRACK) fileTrackNum += 1;
+			memset(sector, D64_FILL_VALUE, sizeof(sector));
 
 			unsigned cnt = std::min(D64_BYTE_PER_FILE_SECTOR, r.size - s);
 			sector[0x00] = (s + D64_BYTE_PER_FILE_SECTOR < r.size) ? fileTrackNum : 0x00;
