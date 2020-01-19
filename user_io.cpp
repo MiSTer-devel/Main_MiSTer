@@ -1251,13 +1251,13 @@ int user_io_file_mount(char *name, unsigned char index, char pre, unsigned char 
 			// mount T64
 			size = 0;
 			writable = false;
-			const char* path = "../../tmp/c64_t64_tmp.d64";
+			const char* path = "/tmp/c64_t64_tmp.d64";
 			ret = c64_convert_t64_to_d64(&sd_image[index], path);
 			FileClose(&sd_image[index]);
 
 			if (ret)
 			{
-				ret = FileOpenEx(&sd_image[index], path, O_RDONLY);
+				ret = FileOpenEx(&sd_image[index], path, O_RDONLY, 0, true);
 				size = sd_image[index].size;
 			}
 		}

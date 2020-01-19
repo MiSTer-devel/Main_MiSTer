@@ -82,10 +82,10 @@ static int FileIsZipped(char* path, char** zip_path, char** file_path)
 	return 0;
 }
 
-static char* make_fullpath(const char *path, int mode = 0)
+static char* make_fullpath(const char *path, int mode = 0, bool absolutePath = false)
 {
 	const char *root = getRootDir();
-	if (strncasecmp(getRootDir(), path, strlen(root)))
+	if (!absolutePath && strncasecmp(getRootDir(), path, strlen(root)))
 	{
 		sprintf(full_path, "%s/%s", (mode == -1) ? "" : root, path);
 	}
@@ -253,9 +253,9 @@ static int zip_search_by_crc(mz_zip_archive *zipArchive, uint32_t crc32)
 	return -1;
 }
 
-int FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32)
+int FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32, bool absolutePath)
 {
-	make_fullpath(name);
+	make_fullpath(name, 0, absolutePath);
 	FileClose(file);
 	file->mode = 0;
 	file->type = 0;
@@ -317,9 +317,9 @@ int FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32)
 	return 1;
 }
 
-int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
+int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute, bool absolutePath)
 {
-	make_fullpath((char*)name, mode);
+	make_fullpath((char*)name, mode, absolutePath);
 	FileClose(file);
 	file->mode = 0;
 	file->type = 0;
@@ -461,9 +461,9 @@ __off64_t FileGetSize(fileTYPE *file)
 	return 0;
 }
 
-int FileOpen(fileTYPE *file, const char *name, char mute)
+int FileOpen(fileTYPE *file, const char *name, char mute, bool absolutePath)
 {
-	return FileOpenEx(file, name, O_RDONLY, mute);
+	return FileOpenEx(file, name, O_RDONLY, mute, absolutePath);
 }
 
 int FileSeek(fileTYPE *file, __off64_t offset, int origin)
