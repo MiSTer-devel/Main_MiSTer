@@ -28,3 +28,6 @@
 
 // MEGACD  support
 #include "support/megacd/megacd.h"
+
+// C64 support
+#include "support/c64/c64.h"
