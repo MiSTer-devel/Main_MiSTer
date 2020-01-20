@@ -1,6 +1,6 @@
 #ifndef C64_H
 #define C64_H
 
-int c64_convert_t64_to_d64(fileTYPE* f, const char *path);
+int c64_openT64(const char *path, fileTYPE* f);
 
 #endif

@@ -3337,10 +3337,10 @@ int dsk2nib(const char *name, fileTYPE *f)
 		return 0;
 	}
 
-	if (!FileOpenEx(f, "vtrd", -1))
+	if (!FileOpenEx(f, "vdsk", -1))
 	{
 		FileClose(&disk_file);
-		printf("ERROR: fail to create /vtrd\n");
+		printf("ERROR: fail to create vdsk\n");
 		return 0;
 	}
 
@@ -3372,7 +3372,7 @@ int dsk2nib(const char *name, fileTYPE *f)
 
 		if (FileWriteAdv(f, raw_track, RAW_TRACK_uint8_tS) != RAW_TRACK_uint8_tS)
 		{
-			printf("Error writing to /vtrd file\n");
+			printf("Error writing to vdsk file\n");
 			FileClose(&disk_file);
 			FileClose(f);
 			return 0;
@@ -3383,7 +3383,7 @@ int dsk2nib(const char *name, fileTYPE *f)
 
 	f->size = FileGetSize(f);
 	FileSeekLBA(f, 0);
-	printf("dsk2nib: vtrd size=%llu.\n", f->size);
+	printf("dsk2nib: vdsk size=%llu.\n", f->size);
 
 	return 1;
 }
@@ -3394,10 +3394,10 @@ int x2trd(const char *name, fileTYPE *f)
 	TDiskImage *img = new TDiskImage;
 	img->Open(getFullPath(name), true);
 
-	if (!FileOpenEx(f, "vtrd", -1))
+	if (!FileOpenEx(f, "vdsk", -1))
 	{
 		delete img;
-		printf("ERROR: fail to create /vtrd\n");
+		printf("ERROR: fail to create vdsk\n");
 		return 0;
 	}
 
@@ -3406,7 +3406,7 @@ int x2trd(const char *name, fileTYPE *f)
 
 	f->size = FileGetSize(f);
 	FileSeekLBA(f, 0);
-	printf("x2trd: vtrd size=%llu.\n", f->size);
+	printf("x2trd: vdsk size=%llu.\n", f->size);
 
 	return 1;
 }

@@ -1191,6 +1191,7 @@ int user_io_file_mount(char *name, unsigned char index, char pre)
 {
 	int writable = 0;
 	int ret = 0;
+	int len = strlen(name);
 
 	if (!strcasecmp(user_io_get_core_name_ex(), "apple-ii"))
 	{
@@ -1202,6 +1203,11 @@ int user_io_file_mount(char *name, unsigned char index, char pre)
 		if (x2trd_ext_supp(name))
 		{
 			ret = x2trd(name, sd_image + index);
+		}
+		else if (is_c64_core() && len > 4 && !strcasecmp(name + len - 4, ".t64"))
+		{
+			writable = 0;
+			ret = c64_openT64(name, sd_image + index);
 		}
 		else
 		{
@@ -1243,26 +1249,6 @@ int user_io_file_mount(char *name, unsigned char index, char pre)
 	{
 		sd_image[index].type = 2;
 		strcpy(sd_image[index].path, name);
-	}
-
-	if (is_c64_core())
-	{
-		int len = strlen(name);
-		if(len>4 && !strcasecmp(name+len-4, ".t64"))
-		{
-			// mount T64
-			size = 0;
-			writable = false;
-			const char* path = "/tmp/c64_t64_tmp.d64";
-			ret = c64_convert_t64_to_d64(&sd_image[index], path);
-			FileClose(&sd_image[index]);
-
-			if (ret)
-			{
-				ret = FileOpenEx(&sd_image[index], path, O_RDONLY, 0);
-				size = sd_image[index].size;
-			}
-		}
 	}
 
 	if (io_ver)

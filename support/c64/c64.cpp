@@ -38,9 +38,6 @@
 #define D64_FILL_VALUE           0xA0
 #define D64_INIT_VALUE           0x00 // DIR relies on 0x00 initial value
 
-// leave file for debug
-#define CHECK_SUCCESS(op) do { if (!(op)) { FileClose(&fd); /*unlink(path);*/ return 0; } } while(0)
-
 struct FileRecord {
 	char           name[D64_BYTE_PER_STRING];
 	unsigned char  cbm;
@@ -53,7 +50,7 @@ struct FileRecord {
 static bool cmp_offset(const FileRecord& a, const FileRecord& b) { return a.offset < b.offset; }
 static bool cmp_index(const FileRecord& a, const FileRecord& b) { return a.index < b.index; }
 
-static unsigned char d64_sector_per_track(unsigned char trackNum) { 
+static unsigned char d64_sector_per_track(unsigned char trackNum) {
 	return	  (trackNum <= 17) ? 21U
 			: (trackNum <= 24) ? 19U
 			: (trackNum <= 30) ? 18U
@@ -99,22 +96,18 @@ static void d64_advance_dir_pointer(unsigned char& trackNum, unsigned char& sect
 	// caller needs to handle BAM sector
 }
 
-int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
+static int c64_convert_t64_to_d64(fileTYPE* f_in, fileTYPE* f_out)
 {
-	fileTYPE fd;
 	std::vector<FileRecord> files;
 	char header[T64_BYTE_PER_HEADER];
 	char name[D64_BYTE_PER_STRING];
 
-	// remove old file to make sure we don't use it
-	unlink(path);
-
-	CHECK_SUCCESS(FileSeek(f, 0, SEEK_SET));
+	if (!FileSeek(f_in, 0, SEEK_SET)) return 0;
 	// ignore signature
-	CHECK_SUCCESS(FileReadAdv(f, header, sizeof(header)));
-	CHECK_SUCCESS(!memcmp(header, "C64", strlen("C64")));
+	if(!FileReadAdv(f_in, header, sizeof(header))) return 0;
+	if (memcmp(header, "C64", strlen("C64"))) return 0;
 	// header
-	CHECK_SUCCESS(FileReadAdv(f, header, sizeof(header)));
+	if (!FileReadAdv(f_in, header, sizeof(header))) return 0;
 
 	unsigned short numRecords = (header[0x03] << 8) | header[0x02];
 	memcpy(name, header + 0x08, sizeof(name));
@@ -122,7 +115,7 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 	for (unsigned i = 0; i < numRecords; i++)
 	{
 		// record
-		CHECK_SUCCESS(FileReadAdv(f, header, sizeof(header)));
+		if (!FileReadAdv(f_in, header, sizeof(header))) return 0;
 		if (!header[0x00] || !header[0x01]) continue;
 
 		FileRecord r;
@@ -140,7 +133,7 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 	std::sort(files.begin(), files.end(), cmp_offset);
 	for (unsigned i = 0; i < files.size(); i++)
 	{
-		unsigned short size = (i < files.size() - 1 ? files[i + 1].offset : f->size) - files[i].offset;
+		unsigned short size = (i < files.size() - 1 ? files[i + 1].offset : f_in->size) - files[i].offset;
 		if (size < files[i].size) files[i].size = size;
 	}
 	std::sort(files.begin(), files.end(), cmp_index);
@@ -162,14 +155,12 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 
 	//printf("T64: %d records\n", files.size()); for (auto r : files) printf("start: %x, size: %x, offset %x, index: %d\n", r.start, r.size, r.offset, r.index);
 
-	CHECK_SUCCESS(files.size());
-
-	CHECK_SUCCESS(FileOpenEx(&fd, path, O_CREAT | O_TRUNC | O_RDWR | O_SYNC, 0));
+	if (!files.size()) return 0;
 
 	unsigned char sector[D64_BYTE_PER_SECTOR];
 	memset(sector, D64_INIT_VALUE, sizeof(sector));
-	for (unsigned i = 0; i < D64_SECTOR_PER_DISK; i++) CHECK_SUCCESS(FileWriteAdv(&fd, sector, sizeof(sector)));
-	CHECK_SUCCESS(FileSeek(&fd, 0, SEEK_SET));
+	for (unsigned i = 0; i < D64_SECTOR_PER_DISK; i++) if (!FileWriteAdv(f_out, sector, sizeof(sector))) return 0;
+	if (!FileSeek(f_out, 0, SEEK_SET)) return 0;
 
 	unsigned char bam[D64_BYTE_PER_SECTOR];
 	memset(bam, D64_INIT_VALUE, sizeof(bam));
@@ -184,19 +175,19 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 		if (dirEntry == 0 && i != 0)
 		{
 			// set next track/sector pointer of prev node
-			CHECK_SUCCESS(FileSeek(&fd, d64_offset(dirTrackNum, dirSectorNum), SEEK_SET));
+			if (!FileSeek(f_out, d64_offset(dirTrackNum, dirSectorNum), SEEK_SET)) return 0;
 			do d64_advance_dir_pointer(dirTrackNum, dirSectorNum); while (dirTrackNum == D64_BAM_TRACK && dirSectorNum == D64_BAM_SECTOR);
 			dir[0x00] = dirTrackNum;
 			dir[0x01] = dirSectorNum;
-			CHECK_SUCCESS(FileWriteAdv(&fd, dir, 2));
+			if (!FileWriteAdv(f_out, dir, 2)) return 0;
 
 			// check for overflow
 			bool success = dirSectorNum != D64_DIR_SECTOR;
 			if (!success) printf("T64: dir overflow on file: %d\n", i);
-			CHECK_SUCCESS(success);
+			if (!success) return 0;
 		}
 
-		CHECK_SUCCESS(FileSeek(&fd, d64_offset(dirTrackNum, dirSectorNum) + dirEntry * D64_BYTE_PER_DIR, SEEK_SET));
+		if (!FileSeek(f_out, d64_offset(dirTrackNum, dirSectorNum) + dirEntry * D64_BYTE_PER_DIR, SEEK_SET)) return 0;
 		dir[0x00] = 0x00;
 		dir[0x01] = dirEntry == 0 ? 0xFF : 0x00;
 		dir[0x02] = r.cbm;
@@ -209,16 +200,16 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 		unsigned sectorSize= d64_file_sector(files[i].size);
 		dir[0x1E] = (sectorSize >> 0) & 0xFF;
 		dir[0x1F] = (sectorSize >> 8) & 0xFF;
-		CHECK_SUCCESS(FileWriteAdv(&fd, dir, sizeof(dir)));
+		if (!FileWriteAdv(f_out, dir, sizeof(dir))) return 0;
 
 		dirEntry = (dirEntry + 1) % D64_DIR_PER_SECTOR;
 
 		// file sectors
-		CHECK_SUCCESS(FileSeek(f, r.offset, SEEK_SET));
+		if (!FileSeek(f_in, r.offset, SEEK_SET)) return 0;
 		bool writeAddress = true;
 		for (unsigned s = 0; s < r.size; s+= D64_BYTE_PER_FILE_SECTOR)
 		{
-			CHECK_SUCCESS(FileSeek(&fd, d64_offset(fileTrackNum, fileSectorNum), SEEK_SET));
+			if (!FileSeek(f_out, d64_offset(fileTrackNum, fileSectorNum), SEEK_SET)) return 0;
 			d64_advance_pointer(fileTrackNum, fileSectorNum);
 			if (fileTrackNum == D64_DIR_TRACK) fileTrackNum += 1;
 			memset(sector, D64_FILL_VALUE, sizeof(sector));
@@ -231,9 +222,9 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 				sector[0x02] = (r.start >> 0) & 0xFF;
 				sector[0x03] = (r.start >> 8) & 0xFF;
 			}
-			CHECK_SUCCESS(FileReadAdv(f, sector + (writeAddress ? 4 : 2), cnt - (writeAddress ? 2 : 0)));
 
-			CHECK_SUCCESS(FileWriteAdv(&fd, sector, sizeof(sector)));
+			if (!FileReadAdv(f_in, sector + (writeAddress ? 4 : 2), cnt - (writeAddress ? 2 : 0))) return 0;
+			if (!FileWriteAdv(f_out, sector, sizeof(sector))) return 0;
 			writeAddress = false;
 		}
 	}
@@ -272,10 +263,37 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 	memset(bam + 0xA7, D64_FILL_VALUE, 0xAA - 0xA7 + 1);
 	memset(bam + 0xAB, 0x00, 0xFF - 0xAB + 1);
 
-	CHECK_SUCCESS(FileSeek(&fd, d64_offset(D64_BAM_TRACK, D64_BAM_SECTOR), SEEK_SET));
-	CHECK_SUCCESS(FileWriteAdv(&fd, bam, sizeof(bam)));
+	if (!FileSeek(f_out, d64_offset(D64_BAM_TRACK, D64_BAM_SECTOR), SEEK_SET)) return 0;
+	if (!FileWriteAdv(f_out, bam, sizeof(bam))) return 0;
 
-	FileClose(&fd);
-
+	f_out->size = FileGetSize(f_out);
+	printf("Virtual D64 size = %llu\n", f_out->size);
 	return 1;
+}
+
+int c64_openT64(const char *path, fileTYPE* f)
+{
+	if (!FileOpenEx(f, "vdsk", -1))
+	{
+		printf("ERROR: fail to create vdsk\n");
+		return 0;
+	}
+
+	fileTYPE f_in;
+	if (!FileOpen(&f_in, path))
+	{
+		FileClose(f);
+		return 0;
+	}
+
+	int ret = c64_convert_t64_to_d64(&f_in, f);
+	FileClose(&f_in);
+
+	if (!ret)
+	{
+		printf("Failed to convert T64 (%s).\n", path);
+		FileClose(f);
+	}
+
+	return ret;
 }

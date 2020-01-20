@@ -85,7 +85,7 @@ static int FileIsZipped(char* path, char** zip_path, char** file_path)
 static char* make_fullpath(const char *path, int mode = 0)
 {
 	const char *root = getRootDir();
-	if (path[0] != '/')
+	if (strncasecmp(getRootDir(), path, strlen(root)))
 	{
 		sprintf(full_path, "%s/%s", (mode == -1) ? "" : root, path);
 	}
@@ -381,7 +381,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	}
 	else
 	{
-		int fd = (mode == -1) ? shm_open("/vtrd", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
+		int fd = (mode == -1) ? shm_open("/vdsk", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
 		if (fd <= 0)
 		{
 			if(!mute) printf("FileOpenEx(open) File:%s, error: %s.\n", full_path, strerror(errno));

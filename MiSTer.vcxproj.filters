@@ -187,6 +187,9 @@
     <ClCompile Include="recent.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="support\c64\c64.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -353,6 +356,9 @@
     </ClInclude>
     <ClInclude Include="recent.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\c64\c64.h">
+      <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
