@@ -256,6 +256,13 @@ char is_gba_core()
 	return (is_gba_type == 1);
 }
 
+static int is_c64_type = 0;
+char is_c64_core()
+{
+	if (!is_c64_type) is_c64_type = strcasecmp(core_name, "C64") ? 2 : 1;
+	return (is_c64_type == 1);
+}
+
 char is_sharpmz()
 {
 	return(core_type == CORE_TYPE_SHARPMZ);
@@ -1180,7 +1187,7 @@ void user_io_set_download(unsigned char enable)
 	DisableFpga();
 }
 
-int user_io_file_mount(char *name, unsigned char index, char pre)
+int user_io_file_mount(char *name, unsigned char index, char pre, unsigned char subindex)
 {
 	int writable = 0;
 	int ret = 0;
@@ -1236,6 +1243,24 @@ int user_io_file_mount(char *name, unsigned char index, char pre)
 	{
 		sd_image[index].type = 2;
 		strcpy(sd_image[index].path, name);
+	}
+
+	if (is_c64_core())
+	{
+		if (subindex == 1) {
+			// mount T64
+			size = 0;
+			writable = false;
+			const char* path = "/tmp/c64_t64_tmp.d64";
+			ret = c64_convert_t64_to_d64(&sd_image[index], path);
+			FileClose(&sd_image[index]);
+
+			if (ret)
+			{
+				ret = FileOpenEx(&sd_image[index], path, O_RDONLY, 0, true);
+				size = sd_image[index].size;
+			}
+		}
 	}
 
 	if (io_ver)
