@@ -164,7 +164,7 @@ int c64_convert_t64_to_d64(fileTYPE* f, const char *path)
 
 	CHECK_SUCCESS(files.size());
 
-	CHECK_SUCCESS(FileOpenEx(&fd, path, O_CREAT | O_TRUNC | O_RDWR | O_SYNC, 0, true));
+	CHECK_SUCCESS(FileOpenEx(&fd, path, O_CREAT | O_TRUNC | O_RDWR | O_SYNC, 0));
 
 	unsigned char sector[D64_BYTE_PER_SECTOR];
 	memset(sector, D64_INIT_VALUE, sizeof(sector));

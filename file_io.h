@@ -59,9 +59,9 @@ int  getStorage(int from_setting);
 void setStorage(int dev);
 int  isUSBMounted();
 
-int  FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32, bool absolutePath = false);
-int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0, bool absolutePath = false);
-int  FileOpen(fileTYPE *file, const char *name, char mute = 0, bool absolutePath = false);
+int  FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32);
+int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0);
+int  FileOpen(fileTYPE *file, const char *name, char mute = 0);
 void FileClose(fileTYPE *file);
 
 __off64_t FileGetSize(fileTYPE *file);

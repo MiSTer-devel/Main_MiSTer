@@ -1727,9 +1727,8 @@ void HandleUI(void)
 		}
 		else
 		{
-			unsigned char ioctl_subindex = user_io_ext_idx(SelectedPath, fs_pFileExt);
-			user_io_set_index(ioctl_subindex << 6 | (menusub + 1));
-			user_io_file_mount(SelectedPath, ioctl_index, 0, ioctl_subindex);
+			user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
+			user_io_file_mount(SelectedPath, ioctl_index);
 		}
 
 		menustate = SelectedPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;

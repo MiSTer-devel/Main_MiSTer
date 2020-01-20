@@ -216,7 +216,7 @@ void user_io_file_tx_write(const uint8_t *addr, uint16_t len);
 int user_io_get_width();
 
 uint32_t user_io_get_file_crc();
-int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0, unsigned char subindex = 0);
+int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
 char user_io_serial_status(serial_status_t *, uint8_t);
 char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name();

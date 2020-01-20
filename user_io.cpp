@@ -1187,7 +1187,7 @@ void user_io_set_download(unsigned char enable)
 	DisableFpga();
 }
 
-int user_io_file_mount(char *name, unsigned char index, char pre, unsigned char subindex)
+int user_io_file_mount(char *name, unsigned char index, char pre)
 {
 	int writable = 0;
 	int ret = 0;
@@ -1247,7 +1247,9 @@ int user_io_file_mount(char *name, unsigned char index, char pre, unsigned char 
 
 	if (is_c64_core())
 	{
-		if (subindex == 1) {
+		int len = strlen(name);
+		if(len>4 && !strcasecmp(name+len-4, ".t64"))
+		{
 			// mount T64
 			size = 0;
 			writable = false;
@@ -1257,7 +1259,7 @@ int user_io_file_mount(char *name, unsigned char index, char pre, unsigned char 
 
 			if (ret)
 			{
-				ret = FileOpenEx(&sd_image[index], path, O_RDONLY, 0, true);
+				ret = FileOpenEx(&sd_image[index], path, O_RDONLY, 0);
 				size = sd_image[index].size;
 			}
 		}
