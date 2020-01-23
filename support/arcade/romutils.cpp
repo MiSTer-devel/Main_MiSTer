@@ -842,7 +842,8 @@ static const char *get_rbf(const char *xml)
 	static char lastfound[256] = {};
 	while ((entry = readdir(dir)) != NULL)
 	{
-		if (entry->d_type != DT_DIR)
+		len = strlen(entry->d_name);
+		if (entry->d_type != DT_DIR && len > 4 && !strcasecmp(entry->d_name+len-4,".rbf"))
 		{
 			static char newstring[kBigTextSize];
 			//printf("entry name: %s\n",entry->d_name);
