@@ -506,28 +506,27 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (arc_info->insiderom)
 			{
 				unsigned char checksum[16];
-				int checksumsame = 1;
-				char *md5 = arc_info->md5;
 				MD5Final(checksum, &arc_info->context);
-				if (*md5)
+
+				char hex[40];
+				char *p = hex;
+				for (int i = 0; i < 16; i++)
 				{
-					printf("md5[%s]\n", arc_info->md5);
-					printf("md5-calc[");
-					for (int i = 0; i < 16; i++)
-					{
-						char hex[10];
-						snprintf(hex, 10, "%02x", (unsigned int)checksum[i]);
-						printf("%02x", (unsigned int)checksum[i]);
-						if (tolower(md5[0]) != tolower(hex[0]) || tolower(md5[1]) != tolower(hex[1])) {
-							checksumsame = 0;
-						}
-						md5 += 2;
-					}
-					printf("]\n");
+					sprintf(p, "%02x", (unsigned int)checksum[i]);
+					p += 2;
 				}
+
+				int checksumsame = !strlen(arc_info->zipname) || !strcasecmp(arc_info->md5, hex);
 				if (checksumsame == 0)
 				{
-					printf("mismatch\n");
+					printf("\n*** Checksum mismatch\n");
+					printf("    md5-orig = %s\n", arc_info->md5);
+					printf("    md5-calc = %s\n\n", hex);
+				}
+
+				checksumsame |= !strcasecmp(arc_info->md5, "none");
+				if (checksumsame == 0)
+				{
 					if (!strlen(arc_info->error_msg))
 						snprintf(arc_info->error_msg, kBigTextSize, "md5 mismatch for rom %d", arc_info->romindex);
 				}
