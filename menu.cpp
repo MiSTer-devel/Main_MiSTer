@@ -1291,7 +1291,6 @@ void HandleUI(void)
 			adjvisible = 0;
 			entry = 0;
 			uint32_t selentry = 0;
-			joy_bcount = 0;
 			menumask = 0;
 			p = user_io_get_core_name();
 			if (!p[0]) OsdCoreNameSet("8BIT");
@@ -1464,20 +1463,6 @@ void HandleUI(void)
 						strcat(s, " ");
 						substrcpy(s + strlen(s), p, 1);
 						OsdCoreNameSet(s);
-					}
-
-					if (p[0] == 'J')
-					{
-						// joystick button names.
-						for (int n = 0; n < 28; n++)
-						{
-							substrcpy(joy_bnames[n], p, n + 1);
-							//printf("joy_bname = %s\n", joy_bnames[n]);
-							if (!joy_bnames[n][0]) break;
-							joy_bcount++;
-						}
-
-						//printf("joy_bcount = %d\n", joy_bcount);
 					}
 				}
 			} while (p);
@@ -1882,6 +1867,10 @@ void HandleUI(void)
 					strcpy(joy_bnames[4], "RT");
 					strcpy(joy_bnames[5], "LT");
 					strcpy(joy_bnames[6], "Pause");
+				}
+				else
+				{
+					parse_buttons();
 				}
 				start_map_setting(joy_bcount ? joy_bcount+4 : 8);
 				menustate = MENU_JOYDIGMAP;

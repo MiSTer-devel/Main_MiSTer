@@ -7,6 +7,7 @@
 
 #include "../../sxmlc.h"
 #include "../../user_io.h"
+#include "../../input.h"
 #include "../../file_io.h"
 #include "../../menu.h"
 #include "../../fpga_io.h"
@@ -359,6 +360,17 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			{
 				arc_info->romindex = atoi(node->attributes[i].value);
 			}
+
+			if (!strcasecmp(node->attributes[i].name, "names") && !strcasecmp(node->tag, "buttons"))
+			{
+				set_ovr_buttons(node->attributes[i].value, 0);
+			}
+
+			if (!strcasecmp(node->attributes[i].name, "default") && !strcasecmp(node->tag, "buttons"))
+			{
+				set_ovr_buttons(node->attributes[i].value, 1);
+			}
+
 			/* these only exist if we are inside the rom tag, and in a part tag*/
 			if (arc_info->insiderom)
 			{

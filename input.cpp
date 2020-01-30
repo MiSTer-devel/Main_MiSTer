@@ -1795,6 +1795,10 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			input[dev].has_map++;
 		}
+		else
+		{
+			map_joystick_show(input[dev].map, input[dev].mmap);
+		}
 		input[dev].has_map++;
 	}
 
@@ -1844,6 +1848,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	//mapping
 	if (mapping && (mapping_dev >= 0 || ev->value) && !((mapping_type < 2 || !mapping_button) && (cancel || enter)))
 	{
+		int idx = 0;
+
 		if (is_menu_core())
 		{
 			spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
@@ -1997,15 +2003,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					{
 						last_axis = 0;
 					}
-					return;
 				}
 			}
 		}
-
-		//Define min-0-max analogs
-		int idx = 0;
-		if (is_menu_core())
+		else if (is_menu_core())
 		{
+			//Define min-0-max analogs
 			switch (mapping_button)
 			{
 				case 23: idx = SYS_AXIS_X;  break;
@@ -2109,22 +2112,29 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 		}
 
-		if (mapping_type <= 1 && map_skip && mapping_button < mapping_count)
+		while (mapping_type <= 1 && mapping_button < mapping_count)
 		{
-			if (ev->value == 1)
+			if (map_skip)
 			{
-				if (mapping_dev >= 0)
+				if (map_skip == 2 || ev->value == 1)
 				{
-					if (idx) input[mapping_dev].map[idx] = 0;
-					else if (mapping_button > 0)
+					if (mapping_dev >= 0)
 					{
-						if (!is_menu_core()) input[mapping_dev].map[mapping_button] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
+						if (idx) input[mapping_dev].map[idx] = 0;
+						else if (mapping_button > 0)
+						{
+							if (!is_menu_core()) input[mapping_dev].map[mapping_button] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
+						}
 					}
+					last_axis = 0;
+					mapping_button++;
+					if (mapping_button < 0 && (mapping_button & 1)) mapping_button++;
 				}
-				last_axis = 0;
-				mapping_button++;
-				if (mapping_button < 0 && (mapping_button&1)) mapping_button++;
 			}
+
+			map_skip = 0;
+			if (mapping_button >= 4 && !is_menu_core() && !strcmp(joy_bnames[mapping_button - 4], "-")) map_skip = 2;
+			if (!map_skip) break;
 		}
 
 		if (is_menu_core() && mapping_type <= 1 && mapping_dev >= 0)
@@ -3372,4 +3382,73 @@ void input_switch(int grab)
 int input_state()
 {
 	return grabbed;
+}
+
+static char ovr_buttons[1024] = {};
+static char ovr_nmap[1024] = {};
+static char ovr_pmap[1024] = {};
+
+static char *get_btn(int type)
+{
+	int i = 2;
+	while (1)
+	{
+		char *p = user_io_get_confstr(i);
+		if (!p) break;
+
+		if ((p[0] == 'J' && !type) || (p[0] == 'j' && ((p[1] == 'n' && type == 1) || (p[1] == 'p' && type == 2))))
+		{
+			p = strchr(p, ',');
+			if (!p) break;
+
+			p++;
+			if (!strlen(p)) break;
+			return p;
+		}
+
+		i++;
+	}
+	return NULL;
+}
+
+char *get_buttons(int type)
+{
+	if (type == 0 && ovr_buttons[0]) return ovr_buttons;
+	if (type == 1 && ovr_nmap[0]) return ovr_nmap;
+	if (type == 2 && ovr_pmap[0]) return ovr_pmap;
+
+	return get_btn(type);
+}
+
+void set_ovr_buttons(char *s, int type)
+{
+	switch (type)
+	{
+	case 0:
+		snprintf(ovr_buttons, sizeof(ovr_buttons), "%s", s);
+		break;
+
+	case 1:
+		snprintf(ovr_nmap, sizeof(ovr_nmap), "%s", s);
+		break;
+
+	case 2:
+		snprintf(ovr_pmap, sizeof(ovr_pmap), "%s", s);
+		break;
+	}
+}
+
+void parse_buttons()
+{
+	joy_bcount = 0;
+
+	char *str = get_buttons();
+	if (!str) return;
+
+	for (int n = 0; n < 28; n++)
+	{
+		substrcpy(joy_bnames[n], str, n);
+		if (!joy_bnames[n][0]) break;
+		joy_bcount++;
+	}
 }

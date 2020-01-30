@@ -102,4 +102,8 @@ void input_uinp_destroy();
 extern char joy_bnames[NUMBUTTONS][32];
 extern int  joy_bcount;
 
+void parse_buttons();
+char *get_buttons(int type = 0);
+void set_ovr_buttons(char *s, int type);
+
 #endif

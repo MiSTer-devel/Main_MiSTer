@@ -389,6 +389,7 @@ static void parse_config()
 	char *p;
 
 	joy_force = 0;
+	joy_bcount = 0;
 
 	do {
 		p = user_io_get_confstr(i);
@@ -414,14 +415,6 @@ static void parse_config()
 				{
 					joy_force = 1;
 					set_emu_mode(EMU_JOY0);
-				}
-
-				joy_bcount = 0;
-				for (int n = 0; n < 28; n++)
-				{
-					substrcpy(joy_bnames[n], p, n + 1);
-					if (!joy_bnames[n][0]) break;
-					joy_bcount++;
 				}
 			}
 
@@ -761,6 +754,7 @@ void user_io_init(const char *path, const char *xml)
 		archie_init();
 		user_io_read_core_name();
 		parse_config();
+		parse_buttons();
 		break;
 
     case CORE_TYPE_SHARPMZ:
@@ -769,7 +763,8 @@ void user_io_init(const char *path, const char *xml)
         sharpmz_init();
 		user_io_read_core_name();
 		parse_config();
-        break;
+		parse_buttons();
+		break;
 
 	case CORE_TYPE_8BIT:
 		// try to load config
@@ -901,6 +896,8 @@ void user_io_init(const char *path, const char *xml)
 					}
 				}
 			}
+
+			parse_buttons();
 		}
 
 		send_rtc(3);
