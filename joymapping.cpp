@@ -157,7 +157,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 	{
 		if (!strcmp(joy_bnames[i], "-")) continue;
 
-		int idx = n+DPAD_COUNT;
+		int idx = i+DPAD_COUNT;
 		char *btn_name = defaults ? joy_pnames[n] : joy_nnames[n];
 
 		int mapped = 1;
