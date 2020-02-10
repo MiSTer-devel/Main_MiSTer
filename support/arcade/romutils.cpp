@@ -152,7 +152,7 @@ static int rom_checksz(int idx, int chunk)
 	return 1;
 }
 
-static int rom_data(const uint8_t *buf, uint16_t chunk, int map, struct MD5Context *md5context)
+static int rom_data(const uint8_t *buf, int chunk, int map, struct MD5Context *md5context)
 {
 	if (md5context) MD5Update(md5context, buf, chunk);
 
@@ -247,11 +247,11 @@ static void rom_finish(int send)
 
 			// signal end of transmission
 			user_io_set_download(0);
-			printf("file_finish: %d bytes sent to FPGA\n", len);
+			printf("file_finish: 0x%X bytes sent to FPGA\n\n", len);
 		}
 		else
 		{
-			printf("file_finish: discard the ROM\n");
+			printf("file_finish: discard the ROM\n\n");
 		}
 		free(romdata);
 		romdata = 0;
@@ -263,7 +263,7 @@ static void rom_finish(int send)
 		free(romdata);
 		romdata = 0;
 	}
-	printf("file_finish: no data, discarded\n");
+	printf("file_finish: no data, discarded\n\n");
 }
 
 
@@ -353,6 +353,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->ifrom = 0;
 			arc_info->ito = 0;
 			arc_info->imap = 0;
+			arc_info->zipname[0] = 0;
 			MD5Init(&arc_info->context);
 		}
 
@@ -665,6 +666,9 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			//printf("repeat[%d]\n",arc_info->repeat);
 			//
 
+			if (unitlen == 1 || (arc_info->imap & 0xF)) printf("%6X: ", romlen[0]);
+			else printf("        ");
+
 			//user_io_file_tx_body_filepart(getFullPath(fname),0,0);
 			if (strlen(arc_info->partname))
 			{
@@ -720,6 +724,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				//	printf(" %d ",binary[i]);
 				//}
 				//printf("\n");
+				printf("data (%d bytes) from xml\n", len);
 				if (binary)
 				{
 					for (int i = 0; i < repeat; i++) rom_data(binary, len, arc_info->imap, &arc_info->context);
