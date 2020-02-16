@@ -991,6 +991,7 @@ enum QUIRK
 	QUIRK_DS4,
 	QUIRK_DS4TOUCH,
 	QUIRK_MADCATZ360,
+	QUIRK_PDSP,
 };
 
 typedef struct
@@ -1032,6 +1033,7 @@ typedef struct
 } devInput;
 
 static devInput input[NUMDEV] = {};
+static int pd_mode[NUMDEV] = {};
 
 #define BTN_NUM (sizeof(devInput::map) / sizeof(devInput::map[0]))
 
@@ -1778,7 +1780,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].has_map)
 	{
-		if (!FileLoadJoymap(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
+		if (input[dev].quirk == QUIRK_PDSP)
+		{
+			memset(input[dev].map, 0, sizeof(input[dev].map));
+			input[dev].map[SYS_BTN_A]  = 0x01220120;
+			input[dev].map[SPIN_LEFT]  = 0x123;
+			input[dev].map[SPIN_RIGHT] = 0x124;
+		}
+		else if (!FileLoadJoymap(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
 			if (!is_menu_core())
@@ -1846,7 +1855,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	}
 
 	//mapping
-	if (mapping && (mapping_dev >= 0 || ev->value) && !((mapping_type < 2 || !mapping_button) && (cancel || enter)))
+	if (mapping && (mapping_dev >= 0 || ev->value)
+		&& !((mapping_type < 2 || !mapping_button) && (cancel || enter))
+		&& input[dev].quirk != QUIRK_PDSP)
 	{
 		int idx = 0;
 
@@ -2161,8 +2172,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						int found = 0;
 						for (int i = 0; i < NUMDEV; i++)
 						{
-							found = (input[i].num == num);
-							if (found) break;
+							// paddles overlay on top of other gamepad
+							if ((input[dev].quirk != QUIRK_PDSP) || (input[i].quirk == QUIRK_PDSP))
+							{
+								found = (input[i].num == num);
+								if (found) break;
+							}
 						}
 
 						if (!found)
@@ -2171,6 +2186,15 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							break;
 						}
 					}
+				}
+
+				if (input[dev].quirk == QUIRK_PDSP)
+				{
+					if (ev->code == 0x120) pd_mode[input[dev].num] = 1;
+				}
+				else
+				{
+					pd_mode[input[dev].num] = 0;
 				}
 
 				if (input[dev].lightgun_req && !user_io_osd_is_visible())
@@ -2445,6 +2469,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		case EV_ABS:
 			if (!user_io_osd_is_visible())
 			{
+				// allow analog either from overlaid paddle or gamepad
+				if (pd_mode[input[dev].num] ^ (input[dev].quirk == QUIRK_PDSP)) break;
+
 				int hrange = (absinfo->maximum - absinfo->minimum) / 2;
 				int dead = hrange/63;
 
@@ -2695,6 +2722,12 @@ int input_test(int getchar)
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758)
 						{
 							input[n].quirk = QUIRK_MADCATZ360;
+						}
+
+						if (!strcasecmp(input[n].uniq, "MiSTer PD/SP v1"))
+						{
+							input[n].quirk = QUIRK_PDSP;
+							memset(input[n].uniq, 0, sizeof(input[n].uniq));
 						}
 
 						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
@@ -3089,7 +3122,7 @@ int input_test(int getchar)
 								if (!noabs) input_cb(&ev, &absinfo, i);
 
 								//sumulate digital directions from analog
-								if (ev.type == EV_ABS && !(mapping && mapping_type <= 1 && mapping_button < -4) && !(ev.code <= 1 && input[dev].lightgun))
+								if (ev.type == EV_ABS && !(mapping && mapping_type <= 1 && mapping_button < -4) && !(ev.code <= 1 && input[dev].lightgun) && input[dev].quirk != QUIRK_PDSP)
 								{
 									input_absinfo *pai = 0;
 									uint8_t axis_edge = 0;

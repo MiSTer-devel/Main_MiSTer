@@ -969,9 +969,12 @@ void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
 		return;
 	}
 
+	static int use32 = 0;
+	use32 |= map >> 16;
+
 	spi_uio_cmd_cont((joy < 2) ? (UIO_JOYSTICK0 + joy) : (UIO_JOYSTICK2 + joy - 2));
 	spi_w(map);
-	if(joy_bcount>12) spi_w(map>>16);
+	if(use32) spi_w(map>>16);
 	DisableIO();
 
 	if (!is_minimig() && joy_transl == 1 && newdir)

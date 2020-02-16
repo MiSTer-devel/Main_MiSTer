@@ -66,6 +66,9 @@
 #define SYS_BTN_CNT_OK     21
 #define SYS_BTN_CNT_ESC    22
 
+#define SPIN_LEFT          30
+#define SPIN_RIGHT         31
+
 #define KEY_EMU (KEY_MAX+1)
 
 void set_kbdled(int mask, int state);
