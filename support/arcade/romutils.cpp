@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <sys/mman.h>
 
 #include "../../sxmlc.h"
 #include "../../user_io.h"
@@ -35,6 +36,7 @@ struct arc_struct {
 	int ifrom;
 	int ito;
 	int imap;
+	uint32_t address;
 	uint32_t crc;
 	buffer_data *data;
 	struct MD5Context context;
@@ -222,7 +224,34 @@ static int rom_patch(const uint8_t *buf, int offset, uint16_t len)
 	return 1;
 }
 
-static void rom_finish(int send)
+static void send_to_ddr(uint32_t address, void* buf, uint32_t len)
+{
+	int memfd = open("/dev/mem", O_RDWR | O_SYNC);
+	if (memfd == -1)
+	{
+		printf("Unable to open /dev/mem!\n");
+		return;
+	}
+
+	//make sure it's in FPGA address space
+	uint32_t map_addr = 0x20000000 | address;
+
+	void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
+	if (base == (void *)-1)
+	{
+		printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
+		close(memfd);
+		return;
+	}
+
+	memcpy(base, buf, len);
+	munmap(base, len);
+
+	close(memfd);
+	return;
+}
+
+static void rom_finish(int send, uint32_t address)
 {
 	if (romlen[0] && romdata)
 	{
@@ -236,13 +265,20 @@ static void rom_finish(int send)
 
 			uint8_t *data = romdata;
 			int len = romlen[0];
-			while (romlen[0] > 0)
+			if (address)
 			{
-				uint16_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
-				user_io_file_tx_write(data, chunk);
+				send_to_ddr(address, data, len);
+			}
+			else
+			{
+				while (romlen[0] > 0)
+				{
+					uint16_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
+					user_io_file_tx_write(data, chunk);
 
-				romlen[0] -= chunk;
-				data += chunk;
+					romlen[0] -= chunk;
+					data += chunk;
+				}
 			}
 
 			// signal end of transmission
@@ -354,6 +390,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->ito = 0;
 			arc_info->imap = 0;
 			arc_info->zipname[0] = 0;
+			arc_info->address = 0;
 			MD5Init(&arc_info->context);
 		}
 
@@ -402,6 +439,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (!strcasecmp(node->attributes[i].name, "index") && !strcasecmp(node->tag, "rom"))
 			{
 				arc_info->romindex = atoi(node->attributes[i].value);
+			}
+			if (!strcasecmp(node->attributes[i].name, "address") && !strcasecmp(node->tag, "rom"))
+			{
+				arc_info->address = strtoul(node->attributes[i].value, NULL, 0);
 			}
 
 			if (!strcasecmp(node->attributes[i].name, "names") && !strcasecmp(node->tag, "buttons"))
@@ -638,7 +679,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					}
 				}
 
-				rom_finish(checksumsame);
+				rom_finish(checksumsame, arc_info->address);
 			}
 			arc_info->insiderom = 0;
 		}
