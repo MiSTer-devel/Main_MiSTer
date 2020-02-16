@@ -1423,7 +1423,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				if (!strcmp(file_name, DirItem[i].de.d_name))
 				{
 					iSelectedEntry = i;
-					if (iSelectedEntry + (OsdGetSize() / 2) - 1 >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
+					if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
 					else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
 					if (iFirstEntry < 0) iFirstEntry = 0;
 					break;
@@ -1512,7 +1512,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				if((DirItem[i].de.d_type == DT_DIR) && !strcmp(DirItem[i].altname, extension))
 				{
 					iSelectedEntry = i;
-					if (iSelectedEntry + (OsdGetSize() / 2) - 1 >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
+					if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
 					else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
 					if (iFirstEntry < 0) iFirstEntry = 0;
 					break;
@@ -1551,7 +1551,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				{
 					iSelectedEntry = found;
 					if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-						else iFirstEntry = iSelectedEntry - (OsdGetSize()/2) + 1;
+					else iFirstEntry = iSelectedEntry - (OsdGetSize()/2) + 1;
 					if (iFirstEntry < 0) iFirstEntry = 0;
 				}
 			}
