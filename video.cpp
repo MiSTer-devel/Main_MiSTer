@@ -1091,6 +1091,7 @@ static Imlib_Image load_bg()
 
 static int bg_has_picture = 0;
 extern uint8_t  _binary_logo_png_start[], _binary_logo_png_end[];
+extern uint8_t  _binary_misterkun_png_start[], _binary_misterkun_png_end[];
 void video_menu_bg(int n, int idle)
 {
 	bg_has_picture = 0;
@@ -1101,7 +1102,7 @@ void video_menu_bg(int n, int idle)
 		printf("n = %d\n", n);
 
 		Imlib_Load_Error error;
-		static Imlib_Image logo = 0;
+		static Imlib_Image logo = 0, misterkun = 0;
 		if (!logo)
 		{
 			unlink("/tmp/logo.png");
@@ -1134,6 +1135,40 @@ void video_menu_bg(int n, int idle)
 			}
 			unlink("/tmp/logo.png");
 			printf("Logo = %p\n", logo);
+		}
+		
+		if (!misterkun)
+		{
+			unlink("/tmp/misterkun.png");
+			if (FileSave("/tmp/misterkun.png", _binary_misterkun_png_start, _binary_misterkun_png_end - _binary_misterkun_png_start))
+			{
+				while(1)
+				{
+					error = IMLIB_LOAD_ERROR_NONE;
+					if ((misterkun = imlib_load_image_with_error_return("/tmp/misterkun.png", &error))) break;
+					else
+					{
+						if (error != IMLIB_LOAD_ERROR_NO_LOADER_FOR_FILE_FORMAT)
+						{
+							printf("misterkun.png error = %d\n", error);
+							break;
+						}
+					}
+					vs_wait();
+				};
+
+				if (cfg.osd_rotate)
+				{
+					imlib_context_set_image(misterkun);
+					imlib_image_orientate(cfg.osd_rotate == 1 ? 3 : 1);
+				}
+			}
+			else
+			{
+				printf("Fail to save to /tmp/misterkun.png\n");
+			}
+			unlink("/tmp/misterkun.png");
+			printf("MiSTer-kun = %p\n", misterkun);
 		}
 
 
@@ -1214,55 +1249,110 @@ void video_menu_bg(int n, int idle)
 			break;
 		}
 
-		if (logo && !idle)
+		if (!idle)
 		{
-			imlib_context_set_image(logo);
-
-			int src_w = imlib_image_get_width();
-			int src_h = imlib_image_get_height();
-
-			printf("logo: src_w=%d, src_h=%d\n", src_w, src_h);
-
-			int dst_w, dst_h;
-			int dst_x, dst_y;
-			if (cfg.osd_rotate)
+			if (logo)
 			{
-				dst_h = fb_height / 2;
-				dst_w = src_w * dst_h / src_h;
-				if (cfg.osd_rotate == 1)
+				imlib_context_set_image(logo);
+
+				int src_w = imlib_image_get_width();
+				int src_h = imlib_image_get_height();
+
+				printf("logo: src_w=%d, src_h=%d\n", src_w, src_h);
+
+				int dst_w, dst_h;
+				int dst_x, dst_y;
+				if (cfg.osd_rotate)
 				{
-					dst_x = 0;
-					dst_y = fb_height - dst_h;
+					dst_h = fb_height / 2;
+					dst_w = src_w * dst_h / src_h;
+					if (cfg.osd_rotate == 1)
+					{
+						dst_x = 0;
+						dst_y = fb_height - dst_h;
+					}
+					else
+					{
+						dst_x = fb_width - dst_w;
+						dst_y = 0;
+					}
 				}
 				else
 				{
-					dst_x = fb_width - dst_w;
+					dst_x = 0;
 					dst_y = 0;
+					dst_w = fb_width * 2 / 7;
+					dst_h = src_h * dst_w / src_w;
+				}
+
+				if (*bg)
+				{
+					if (cfg.direct_video && (v_cur.item[5] < 300)) dst_h /= 2;
+
+					imlib_context_set_image(*bg);
+					imlib_blend_image_onto_image(logo, 1,
+						0, 0,         //int source_x, int source_y,
+						src_w, src_h, //int source_width, int source_height,
+						dst_x, dst_y, //int destination_x, int destination_y,
+						dst_w, dst_h  //int destination_width, int destination_height
+					);
+				}
+				else
+				{
+					printf("*bg = 0!\n");
 				}
 			}
-			else
+			
+			if (misterkun)
 			{
-				dst_x = 0;
-				dst_y = 0;
-				dst_w = fb_width * 2 / 7;
-				dst_h = src_h * dst_w / src_w;
-			}
+				imlib_context_set_image(misterkun);
 
-			if (*bg)
-			{
-				if (cfg.direct_video && (v_cur.item[5] < 300)) dst_h /= 2;
+				int src_w = imlib_image_get_width();
+				int src_h = imlib_image_get_height();
 
-				imlib_context_set_image(*bg);
-				imlib_blend_image_onto_image(logo, 1,
-					0, 0,         //int source_x, int source_y,
-					src_w, src_h, //int source_width, int source_height,
-					dst_x, dst_y, //int destination_x, int destination_y,
-					dst_w, dst_h  //int destination_width, int destination_height
-				);
-			}
-			else
-			{
-				printf("*bg = 0!\n");
+				printf("misterkun: src_w=%d, src_h=%d\n", src_w, src_h);
+
+				int dst_w, dst_h;
+				int dst_x, dst_y;
+				if (cfg.osd_rotate)
+				{
+					dst_h = fb_height / 2;
+					dst_w = src_w * dst_h / src_h;
+					if (cfg.osd_rotate == 1)
+					{
+						dst_x = fb_width - dst_w;
+						dst_y = 0;
+					}
+					else
+					{
+						dst_x = 0;
+						dst_y = fb_height - dst_h;
+					}
+				}
+				else
+				{
+					dst_w = fb_width / 12;
+					dst_h = src_h * dst_w / src_w;
+					dst_x = fb_width - dst_w;
+					dst_y = fb_height - dst_h;
+				}
+
+				if (*bg)
+				{
+					if (cfg.direct_video && (v_cur.item[5] < 300)) dst_h /= 2;
+
+					imlib_context_set_image(*bg);
+					imlib_blend_image_onto_image(misterkun, 1,
+						0, 0,         //int source_x, int source_y,
+						src_w, src_h, //int source_width, int source_height,
+						dst_x, dst_y, //int destination_x, int destination_y,
+						dst_w, dst_h  //int destination_width, int destination_height
+					);
+				}
+				else
+				{
+					printf("*bg = 0!\n");
+				}
 			}
 		}
 
