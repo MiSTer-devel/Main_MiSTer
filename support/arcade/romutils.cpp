@@ -33,6 +33,7 @@ struct arc_struct {
 	int patchaddr;
 	int validrom0;
 	int insidesw;
+	int insideinterleave;
 	int ifrom;
 	int ito;
 	int imap;
@@ -391,6 +392,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->imap = 0;
 			arc_info->zipname[0] = 0;
 			arc_info->address = 0;
+			arc_info->insideinterleave = 0;
 			MD5Init(&arc_info->context);
 		}
 
@@ -405,6 +407,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 
 		if (!strcasecmp(node->tag, "interleave"))
 		{
+			arc_info->insideinterleave = 1;
 			arc_info->ifrom = 8; // default 8.
 			arc_info->ito = 0;
 			arc_info->imap = 0;
@@ -498,6 +501,12 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				if (!strcasecmp(node->attributes[i].name, "map") && !strcasecmp(node->tag, "part"))
 				{
 					arc_info->imap = strtoul(node->attributes[i].value, NULL, 16);
+					if (!arc_info->insideinterleave && arc_info->imap)
+					{
+						unitlen = strlen(node->attributes[i].value);
+						if (unitlen > 8) unitlen = 8;
+						for (int i = 1; i < 8; i++) romlen[i] = romlen[0];
+					}
 				}
 			}
 
@@ -772,6 +781,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					free(binary);
 				}
 			}
+
+			if (!arc_info->insideinterleave) unitlen = 1;
 		}
 
 		if (!strcasecmp(node->tag, "patch") && arc_info->insiderom)
@@ -807,6 +818,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->ito = 0;
 			arc_info->imap = 0;
 			unitlen = 1;
+			arc_info->insideinterleave = 0;
 			printf("Disable interleave\n");
 		}
 		break;
