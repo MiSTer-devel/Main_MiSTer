@@ -1033,7 +1033,6 @@ typedef struct
 } devInput;
 
 static devInput input[NUMDEV] = {};
-static int pd_mode[NUMDEV] = {};
 
 #define BTN_NUM (sizeof(devInput::map) / sizeof(devInput::map[0]))
 
@@ -2172,8 +2171,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						int found = 0;
 						for (int i = 0; i < NUMDEV; i++)
 						{
-							// paddles overlay on top of other gamepad
-							if ((input[dev].quirk != QUIRK_PDSP) || (input[i].quirk == QUIRK_PDSP))
+							// paddles/spinners overlay on top of other gamepad
+							if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
 							{
 								found = (input[i].num == num);
 								if (found) break;
@@ -2186,15 +2185,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							break;
 						}
 					}
-				}
-
-				if (input[dev].quirk == QUIRK_PDSP)
-				{
-					if (ev->code == 0x120) pd_mode[input[dev].num] = 1;
-				}
-				else
-				{
-					pd_mode[input[dev].num] = 0;
 				}
 
 				if (input[dev].lightgun_req && !user_io_osd_is_visible())
@@ -2469,8 +2459,20 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		case EV_ABS:
 			if (!user_io_osd_is_visible())
 			{
-				// allow analog either from overlaid paddle or gamepad
-				if (pd_mode[input[dev].num] ^ (input[dev].quirk == QUIRK_PDSP)) break;
+				int value = ev->value;
+				if (ev->value < absinfo->minimum) value = absinfo->minimum;
+				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
+
+				if (input[dev].quirk == QUIRK_PDSP)
+				{
+					if (input[dev].num)
+					{
+						value -= absinfo->minimum;
+						value = (value * 255) / (absinfo->maximum - absinfo->minimum);
+						user_io_analog_joystick(((input[dev].num - 1) << 4) | 7, value, 0);
+					}
+					break;
+				}
 
 				int hrange = (absinfo->maximum - absinfo->minimum) / 2;
 				int dead = hrange/63;
@@ -2484,10 +2486,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				{
 					dead = 10;
 				}
-
-				int value = ev->value;
-				if (ev->value < absinfo->minimum) value = absinfo->minimum;
-				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
 
 				// normalize to -range/2...+range/2
 				value = value - (absinfo->minimum + absinfo->maximum) / 2;

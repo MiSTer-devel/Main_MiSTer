@@ -942,7 +942,7 @@ int user_io_get_joyswap()
 
 void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 {
-	uint8_t joy = (joystick>1 || !joyswap) ? joystick : joystick^1;
+	uint8_t joy = (joystick > 1 || !joyswap) ? joystick : (joystick >= 7) ? (joystick ^ 16) : (joystick ^ 1);
 
 	if (core_type == CORE_TYPE_8BIT)
 	{
