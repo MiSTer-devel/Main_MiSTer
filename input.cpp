@@ -992,6 +992,7 @@ enum QUIRK
 	QUIRK_DS4TOUCH,
 	QUIRK_MADCATZ360,
 	QUIRK_PDSP,
+	QUIRK_PDSP_ARCADE,
 };
 
 typedef struct
@@ -1782,9 +1783,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		if (input[dev].quirk == QUIRK_PDSP)
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
-			input[dev].map[SYS_BTN_A]  = 0x01220120;
-			input[dev].map[SPIN_LEFT]  = 0x123;
-			input[dev].map[SPIN_RIGHT] = 0x124;
+			input[dev].map[SYS_BTN_A]  = 0x122;
+			input[dev].map[SPIN_LEFT]  = 0x120;
+			input[dev].map[SPIN_RIGHT] = 0x121;
 		}
 		else if (!FileLoadJoymap(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
@@ -1808,6 +1809,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			map_joystick_show(input[dev].map, input[dev].mmap);
 		}
 		input[dev].has_map++;
+
+		if (input[dev].quirk == QUIRK_PDSP_ARCADE)
+		{
+			input[dev].map[SPIN_LEFT] = 0x120;
+			input[dev].map[SPIN_RIGHT] = 0x121;
+		}
 	}
 
 	int old_combo = input[dev].osd_combo;
@@ -1865,6 +1872,17 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 			osd_event = 0;
 		}
+
+		if (input[dev].quirk == QUIRK_PDSP_ARCADE)
+		{
+			if (ev->type == EV_KEY)
+			{
+				if (ev->code == 0x120 || ev->code == 0x121) return;
+			}
+		}
+
+		// paddle axis
+		if (ev->type == EV_ABS && ev->code == 7) return;
 
 		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
 		{
@@ -2463,7 +2481,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (ev->value < absinfo->minimum) value = absinfo->minimum;
 				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
 
-				if (input[dev].quirk == QUIRK_PDSP)
+				if (ev->code == 7)
 				{
 					if (input[dev].num)
 					{
@@ -2814,6 +2832,12 @@ int input_test(int getchar)
 
 						//mr.Spinner
 						if (!strcasecmp(uniq, "MiSTer PD/SP v1")) input[n].quirk = QUIRK_PDSP;
+
+						//Arcade with mr.Spinner:
+						// 0x120  - Spin Left
+						// 0x121  - Spin Right
+						// Axis 7 - Paddle (USB USAGE 0x37 - Dial)
+						if (!strcasecmp(uniq, "MiSTer PD/SP Arcade v1")) input[n].quirk = QUIRK_PDSP_ARCADE;
 
 						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
 
