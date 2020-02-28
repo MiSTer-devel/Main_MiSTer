@@ -249,7 +249,10 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		n++;
 	}
 
-	Info(mapinfo, 6000);
+	if (cfg.controller_info)
+	{
+		Info(mapinfo, cfg.controller_info*1000);
+	}
 }
 
 static const char* get_std_name(uint16_t code, uint32_t *mmap)
@@ -283,5 +286,8 @@ void map_joystick_show(uint32_t *map, uint32_t *mmap)
 		strcat(mapinfo, joy_names[i]);
 	}
 
-	Info(mapinfo, 4000);
+	if (cfg.controller_info)
+	{
+		Info(mapinfo, cfg.controller_info * 1000);
+	}
 }

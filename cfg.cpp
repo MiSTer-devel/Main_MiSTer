@@ -14,6 +14,7 @@ void MiSTer_ini_parse()
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.bootscreen = 1;
 	cfg.fb_terminal = 1;
+	cfg.controller_info = 6;
 	ini_parse(&ini_cfg, altcfg());
 }
 
@@ -59,6 +60,7 @@ const ini_var_t ini_vars[] = {
 	{ "OSD_ROTATE", (void*)(&(cfg.osd_rotate)), UINT8, 0, 2 },
 	{ "GAMEPAD_DEFAULTS", (void*)(&(cfg.gamepad_defaults)), UINT8, 0, 1 },
 	{ "RECENTS", (void*)(&(cfg.recents)), UINT8, 0, 1 },
+	{ "CONTROLLER_INFO", (void*)(&(cfg.controller_info)), UINT8, 0, 10 },
 };
 
 // mist ini config
