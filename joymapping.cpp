@@ -246,7 +246,8 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		n++;
 	}
 
-	Info(mapinfo, 6000);
+	if (cfg.hide_controller_info < 1)
+		Info(mapinfo, 6000);
 }
 
 static const char* get_std_name(uint16_t code, uint32_t *mmap)

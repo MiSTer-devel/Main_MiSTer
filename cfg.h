@@ -21,6 +21,7 @@ typedef struct {
 	uint8_t csync;
 	uint8_t vga_scaler;
 	uint8_t vga_sog;
+	uint8_t hide_controller_info;
 	uint8_t hdmi_audio_96k;
 	uint8_t dvi;
 	uint8_t hdmi_limited;

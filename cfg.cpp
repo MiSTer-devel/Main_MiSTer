@@ -32,6 +32,7 @@ const ini_var_t ini_vars[] = {
 	{ "VGA_SOG", (void*)(&(cfg.vga_sog)), UINT8, 0, 1 },
 	{ "KEYRAH_MODE", (void*)(&(cfg.keyrah_mode)), UINT32, 0, (int)0xFFFFFFFF },
 	{ "RESET_COMBO", (void*)(&(cfg.reset_combo)), UINT8, 0, 3 },
+	{ "HIDE_CONTROLLER_INFO", (void*)(&(cfg.hide_controller_info)), UINT8, 0, 1 },
 	{ "KEY_MENU_AS_RGUI", (void*)(&(cfg.key_menu_as_rgui)), UINT8, 0, 1 },
 	{ "VIDEO_MODE", (void*)(cfg.video_conf), STRING, 0, sizeof(cfg.video_conf)-1 },
 	{ "VIDEO_MODE_PAL", (void*)(cfg.video_conf_pal), STRING, 0, sizeof(cfg.video_conf_pal) - 1 },
