@@ -828,11 +828,6 @@ int findPrefixDir(char *dir, size_t dir_len)
 	// /media/fat/games/
 	// if the core folder is not found anywhere,
 	// it will be created in /media/fat/games/<dir>
-	if (isPathDirectory(dir)) {
-		printf("Found existing: %s\n", dir);
-		return 1;
-	}
-
 	static char temp_dir[1024];
 
 	for (int x = 0; x < 6; x++) {
@@ -862,6 +857,11 @@ int findPrefixDir(char *dir, size_t dir_len)
 	if (isPathDirectory(temp_dir)) {
 		printf("Found CIFS dir: %s\n", temp_dir);
 		strncpy(dir, temp_dir, dir_len);
+		return 1;
+	}
+
+	if (isPathDirectory(dir)) {
+		printf("Found existing: %s\n", dir);
 		return 1;
 	}
 
