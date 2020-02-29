@@ -2851,8 +2851,8 @@ int input_test(int getchar)
 						// Includes other buttons and axes, works as a full featured gamepad.
 						if (strstr(uniq, "MiSTer-A1")) input[n].quirk = QUIRK_PDSP_ARCADE;
 
-						//Arduino devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
-						if (input[n].vid == 0x2341 && strlen(uniq))
+						//Arduino and Teensy devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
+						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4)) && strlen(uniq))
 						{
 							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x_%s", input[n].vid, input[n].pid, uniq);
 							char *p;
