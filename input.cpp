@@ -998,6 +998,8 @@ enum QUIRK
 typedef struct
 {
 	uint16_t vid, pid;
+	char     idstr[256];
+
 	uint8_t  led;
 	uint8_t  mouse;
 	uint8_t  axis_edge[256];
@@ -1232,15 +1234,15 @@ int get_map_cancel()
 static char *get_map_name(int dev, int def)
 {
 	static char name[128];
-	if (def || is_menu_core()) sprintf(name, "input_%04x_%04x_v3.map", input[dev].vid, input[dev].pid);
-	else sprintf(name, "%s_input_%04x_%04x_v3.map", user_io_get_core_name_ex(), input[dev].vid, input[dev].pid);
+	if (def || is_menu_core()) sprintf(name, "input_%s_v3.map", input[dev].idstr);
+	else sprintf(name, "%s_input_%s_v3.map", user_io_get_core_name_ex(), input[dev].idstr);
 	return name;
 }
 
 static char *get_kbdmap_name(int dev)
 {
 	static char name[128];
-	sprintf(name, "kbd_%04x_%04x.map", input[dev].vid, input[dev].pid);
+	sprintf(name, "kbd_%s.map", input[dev].idstr);
 	return name;
 }
 
@@ -1769,13 +1771,16 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].has_mmap)
 	{
-		if (!FileLoadJoymap(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
+		if (input[dev].quirk != QUIRK_PDSP)
 		{
-			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
-			input[dev].has_mmap++;
+			if (!FileLoadJoymap(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
+			{
+				memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
+				input[dev].has_mmap++;
+			}
+			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
 		}
 		input[dev].has_mmap++;
-		if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
 	}
 
 	if (!input[dev].has_map)
@@ -2667,6 +2672,7 @@ void mergedevs()
 				input[i].pid = input[j].pid;
 				input[i].quirk = input[j].quirk;
 				memcpy(input[i].name, input[j].name, sizeof(input[i].name));
+				memcpy(input[i].idstr, input[j].idstr, sizeof(input[i].idstr));
 				break;
 			}
 		}
@@ -2830,14 +2836,36 @@ int input_test(int getchar)
 						//Madcatz Arcade Stick 360
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
 
-						//mr.Spinner
-						if (!strcasecmp(uniq, "MiSTer PD/SP v1")) input[n].quirk = QUIRK_PDSP;
+						// mr.Spinner
+						// 0x120  - Spin Left
+						// 0x121  - Spin Right
+						// 0x122  - Button
+						// Axis 7 - Paddle (USB USAGE 0x37 - Dial)
+						// Overlays on other existing gamepads
+						if (strstr(uniq, "MiSTer-S1")) input[n].quirk = QUIRK_PDSP;
 
-						//Arcade with mr.Spinner:
+						// Arcade with spinner and/or paddle:
 						// 0x120  - Spin Left
 						// 0x121  - Spin Right
 						// Axis 7 - Paddle (USB USAGE 0x37 - Dial)
-						if (!strcasecmp(uniq, "MiSTer PD/SP Arcade v1")) input[n].quirk = QUIRK_PDSP_ARCADE;
+						// Includes other buttons and axes, works as a full featured gamepad.
+						if (strstr(uniq, "MiSTer-A1")) input[n].quirk = QUIRK_PDSP_ARCADE;
+
+						//Arduino devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
+						if (input[n].vid == 0x2341 && strlen(uniq))
+						{
+							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x_%s", input[n].vid, input[n].pid, uniq);
+							char *p;
+							while ((p = strchr(input[n].idstr, '/'))) *p = '_';
+							while ((p = strchr(input[n].idstr, ' '))) *p = '_';
+							while ((p = strchr(input[n].idstr, '*'))) *p = '_';
+							while ((p = strchr(input[n].idstr, ':'))) *p = '_';
+							strcpy(input[n].name, uniq);
+						}
+						else
+						{
+							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x", input[n].vid, input[n].pid);
+						}
 
 						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
 
