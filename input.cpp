@@ -15,6 +15,7 @@
 #include <linux/uinput.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <stdarg.h>
 
 #include "input.h"
 #include "user_io.h"
@@ -3136,23 +3137,32 @@ int input_test(int getchar)
 
 										//analog joystick
 									case EV_ABS:
-										//reduce flood from DUALSHOCK 3/4
-										if ((input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code <= 5 && ev.value > 118 && ev.value < 138)
 										{
-											break;
-										}
+											//limit the amount of EV_ABS messages, so Menu core won't be laggy
+											static unsigned long timeout = 0;
+											if (!timeout || CheckTimer(timeout))
+											{
+												timeout = GetTimer(20);
 
-										//aliexpress USB encoder floods messages
-										if (input[dev].vid == 0x0079 && input[dev].pid == 0x0006)
-										{
-											if (ev.code == 2) break;
-										}
+												//reduce flood from DUALSHOCK 3/4
+												if ((input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code <= 5 && ev.value > 118 && ev.value < 138)
+												{
+													break;
+												}
 
-										printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d,", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
-										printf(" abs_min = %d, abs_max = %d", absinfo.minimum, absinfo.maximum);
-										if (absinfo.fuzz) printf(", fuzz = %d", absinfo.fuzz);
-										if (absinfo.resolution) printf(", res = %d", absinfo.resolution);
-										printf("\n");
+												//aliexpress USB encoder floods messages
+												if (input[dev].vid == 0x0079 && input[dev].pid == 0x0006)
+												{
+													if (ev.code == 2) break;
+												}
+
+												printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d,", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
+												printf(" abs_min = %d, abs_max = %d", absinfo.minimum, absinfo.maximum);
+												if (absinfo.fuzz) printf(", fuzz = %d", absinfo.fuzz);
+												if (absinfo.resolution) printf(", res = %d", absinfo.resolution);
+												printf("\n");
+											}
+										}
 										break;
 
 									default:
