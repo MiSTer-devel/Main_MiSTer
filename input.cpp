@@ -2959,9 +2959,9 @@ int input_test(int getchar)
 												else if ((input[i].misc_flags & 0x6) == 2) input[i].misc_flags = 0x5; // Y
 												else input[i].misc_flags = 0x1; // None
 
-												Info(((input[i].misc_flags & 0x6) == 2) ? "Paddle: X" :
-													((input[i].misc_flags & 0x6) == 4) ? "Paddle: Y" :
-													"Paddle: Off");
+												Info(((input[i].misc_flags & 0x6) == 2) ? "Paddle mode" :
+													((input[i].misc_flags & 0x6) == 4) ? "Spinner mode" :
+													"Normal mode");
 											}
 											continue;
 										}
@@ -2970,30 +2970,6 @@ int input_test(int getchar)
 
 								if (ev.type == EV_ABS)
 								{
-									if (input[i].quirk == QUIRK_MADCATZ360 && (input[i].misc_flags & 0x6))
-									{
-										//disable original analog axis to avoid conflicts
-										if (ev.code <= 1) continue;
-
-										if (ev.code == 16)
-										{
-											if (ev.value)
-											{
-												if (ev.value > 0) input[i].mc_a += 8;
-												if (ev.value < 0) input[i].mc_a -= 8;
-
-												if (input[i].mc_a > 128) input[i].mc_a = 128;
-												if (input[i].mc_a < -128) input[i].mc_a = -128;
-
-												ev.code = (input[i].misc_flags >> 2) & 1;
-												ev.value = input[i].mc_a * 256;
-												if (ev.value > 32767) ev.value = 32767;
-												//printf("** %d - %d\n", ev.code, ev.value);
-											}
-											else continue;
-										}
-									}
-
 									if (input[i].quirk == QUIRK_WIIMOTE)
 									{
 										//nunchuck accel events
@@ -3067,6 +3043,40 @@ int input_test(int getchar)
 												ev.value = -ev.value;
 											}
 										}
+									}
+
+									if (input[i].quirk == QUIRK_MADCATZ360 && (input[i].misc_flags & 0x6) && (ev.code == 16) && !user_io_osd_is_visible())
+									{
+										if (ev.value)
+										{
+											if ((input[i].misc_flags & 0x6) == 2)
+											{
+												if (ev.value > 0) input[i].mc_a += 4;
+												if (ev.value < 0) input[i].mc_a -= 4;
+
+												if (input[i].mc_a > 256) input[i].mc_a = 256;
+												if (input[i].mc_a < 0)   input[i].mc_a = 0;
+
+												absinfo.maximum = 255;
+												absinfo.minimum = 0;
+												ev.code = 7;
+												ev.value = input[i].mc_a;
+											}
+											else
+											{
+												if (input[dev].num)
+												{
+													uint32_t map = joy[input[dev].num];
+													if (ev.value > 0) map |= 1 << 31;
+													if (ev.value < 0) map |= 1 << 30;
+
+													user_io_digital_joystick(input[dev].num, map, 0);
+													user_io_digital_joystick(input[dev].num, joy[input[dev].num], 0);
+												}
+												continue;
+											}
+										}
+										else continue;
 									}
 
 									if (input[i].quirk == QUIRK_CWIID)
