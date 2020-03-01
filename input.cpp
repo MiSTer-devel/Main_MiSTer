@@ -1789,9 +1789,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		if (input[dev].quirk == QUIRK_PDSP)
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
-			input[dev].map[SYS_BTN_A]  = 0x122;
-			input[dev].map[SPIN_LEFT]  = 0x120;
-			input[dev].map[SPIN_RIGHT] = 0x121;
+			input[dev].map[SYS_BTN_A]  = 0x120;
 		}
 		else if (!FileLoadJoymap(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
@@ -1815,12 +1813,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			map_joystick_show(input[dev].map, input[dev].mmap);
 		}
 		input[dev].has_map++;
-
-		if (input[dev].quirk == QUIRK_PDSP_ARCADE)
-		{
-			input[dev].map[SPIN_LEFT] = 0x120;
-			input[dev].map[SPIN_RIGHT] = 0x121;
-		}
 	}
 
 	int old_combo = input[dev].osd_combo;
@@ -1888,7 +1880,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		}
 
 		// paddle axis
-		if (ev->type == EV_ABS && ev->code == 7) return;
+		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8)) return;
 
 		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
 		{
@@ -2487,13 +2479,13 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (ev->value < absinfo->minimum) value = absinfo->minimum;
 				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
 
-				if (ev->code == 7)
+				if (ev->code == 8)
 				{
-					if (input[dev].num)
+					if (input[dev].num && input[dev].num <= NUMPLAYERS)
 					{
 						value -= absinfo->minimum;
 						value = (value * 255) / (absinfo->maximum - absinfo->minimum);
-						user_io_analog_joystick(((input[dev].num - 1) << 4) | 7, value, 0);
+						user_io_analog_joystick(((input[dev].num - 1) << 4) | 0xF, value, 0);
 					}
 					break;
 				}
@@ -2567,6 +2559,44 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					//printf("analog_y = %d\n", offset);
 					joy_analog(input[dev].num, 1, offset);
 					return;
+				}
+			}
+			break;
+
+		// spinner
+		case EV_REL:
+			if (!user_io_osd_is_visible() && ev->code == 7)
+			{
+				// paddles/spinners overlay on top of other gamepad
+				if (input[dev].quirk == QUIRK_PDSP && !input[dev].num)
+				{
+					for (uint8_t num = 1; num < NUMDEV + 1; num++)
+					{
+						int found = 0;
+						for (int i = 0; i < NUMDEV; i++)
+						{
+							if (input[dev].quirk == QUIRK_PDSP)
+							{
+								found = (input[i].num == num);
+								if (found) break;
+							}
+						}
+
+						if (!found)
+						{
+							input[dev].num = num;
+							break;
+						}
+					}
+				}
+
+				if (input[dev].num && input[dev].num <= NUMPLAYERS)
+				{
+					int value = ev->value;
+					if (ev->value < -128) value = -128;
+					else if (ev->value > 127) value = 127;
+
+					user_io_analog_joystick(((input[dev].num - 1) << 4) | 0x8F, value, 0);
 				}
 			}
 			break;
@@ -2841,17 +2871,15 @@ int input_test(int getchar)
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
 
 						// mr.Spinner
-						// 0x120  - Spin Left
-						// 0x121  - Spin Right
-						// 0x122  - Button
-						// Axis 7 - Paddle (USB USAGE 0x37 - Dial)
+						// 0x120  - Button
+						// Axis 7 - EV_REL is spinner
+						// Axis 8 - EV_ABS is Paddle
 						// Overlays on other existing gamepads
 						if (strstr(uniq, "MiSTer-S1")) input[n].quirk = QUIRK_PDSP;
 
 						// Arcade with spinner and/or paddle:
-						// 0x120  - Spin Left
-						// 0x121  - Spin Right
-						// Axis 7 - Paddle (USB USAGE 0x37 - Dial)
+						// Axis 7 - EV_REL is spinner
+						// Axis 8 - EV_ABS is Paddle
 						// Includes other buttons and axes, works as a full featured gamepad.
 						if (strstr(uniq, "MiSTer-A1")) input[n].quirk = QUIRK_PDSP_ARCADE;
 
@@ -3059,21 +3087,13 @@ int input_test(int getchar)
 
 												absinfo.maximum = 255;
 												absinfo.minimum = 0;
-												ev.code = 7;
+												ev.code = 8;
 												ev.value = input[i].mc_a;
 											}
 											else
 											{
-												if (input[dev].num)
-												{
-													uint32_t map = joy[input[dev].num];
-													if (ev.value > 0) map |= 1 << 31;
-													if (ev.value < 0) map |= 1 << 30;
-
-													user_io_digital_joystick(input[dev].num, map, 0);
-													user_io_digital_joystick(input[dev].num, joy[input[dev].num], 0);
-												}
-												continue;
+												ev.type = EV_REL;
+												ev.code = 7;
 											}
 										}
 										else continue;
@@ -3141,7 +3161,15 @@ int input_test(int getchar)
 										break;
 
 									case EV_REL:
-										printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
+										{
+											//limit the amount of EV_REL messages, so Menu core won't be laggy
+											static unsigned long timeout = 0;
+											if (!timeout || CheckTimer(timeout))
+											{
+												timeout = GetTimer(20);
+												printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
+											}
+										}
 										break;
 
 									case EV_SYN:
