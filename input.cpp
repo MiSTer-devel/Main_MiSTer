@@ -2647,6 +2647,9 @@ void mergedevs()
 	// merge multifunctional devices by id
 	for (int i = 0; i < NUMDEV; i++)
 	{
+		// Raphnet uses buggy firmware, don't merge it.
+		if (input[i].vid == 0x289B) continue;
+
 		input[i].bind = i;
 		if (input[i].id[0] && !input[i].mouse)
 		{
