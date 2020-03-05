@@ -1871,16 +1871,17 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			osd_event = 0;
 		}
 
-		if (input[dev].quirk == QUIRK_PDSP_ARCADE)
+		// paddle axis - skip from mapping
+		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8)) return;
+
+		// in alternative set, the first button can be skipped, so clear the set now
+		if (!mapping_button && mapping_set && ev->value == 1 && mapping_dev >= 0)
 		{
-			if (ev->type == EV_KEY)
+			for (uint i = 0; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
 			{
-				if (ev->code == 0x120 || ev->code == 0x121) return;
+				input[mapping_dev].map[i] &= 0x0000FFFF;
 			}
 		}
-
-		// paddle axis
-		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8)) return;
 
 		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
 		{
@@ -1926,7 +1927,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			else
 			{
-				int clear = ev->code == KEY_F12 || ev->code == KEY_MENU || ev->code == KEY_HOMEPAGE;
+				int clear = (ev->code == KEY_F12 || ev->code == KEY_MENU || ev->code == KEY_HOMEPAGE) && !is_menu_core();
 				if (ev->value == 1 && mapping_dev < 0 && !clear)
 				{
 					mapping_dev = dev;
