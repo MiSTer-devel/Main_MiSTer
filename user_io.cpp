@@ -2065,6 +2065,7 @@ void user_io_send_buttons(char force)
 		}
 
 		key_map = map;
+		if (user_io_osd_is_visible()) map &= ~BUTTON2;
 		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
 		if ((key_map & BUTTON2) && is_x86_core()) x86_init();

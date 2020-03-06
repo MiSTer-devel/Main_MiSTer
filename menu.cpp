@@ -103,11 +103,14 @@ enum MENU
 	MENU_CORE_FILE_CANCELED,
 	MENU_ERROR,
 	MENU_INFO,
+	MENU_JOYSYSMAP,
 	MENU_JOYDIGMAP,
 	MENU_JOYDIGMAP1,
 	MENU_JOYDIGMAP2,
 	MENU_JOYDIGMAP3,
 	MENU_JOYDIGMAP4,
+	MENU_JOYRESET,
+	MENU_JOYRESET1,
 	MENU_JOYKBDMAP,
 	MENU_JOYKBDMAP1,
 	MENU_KBDMAP,
@@ -512,6 +515,42 @@ static uint32_t menu_key_get(void)
 		if (!but) longpress_consumed = 0;
 		last_but = but;
 	}
+
+	if (!c)
+	{
+		static unsigned long longpress = 0, longpress_consumed = 0;
+		static unsigned char last_but = 0;
+		unsigned char but = user_io_user_button();
+
+		if (user_io_osd_is_visible())
+		{
+			if (but && !last_but) longpress = GetTimer(1500);
+			if (but && CheckTimer(longpress) && !longpress_consumed)
+			{
+				longpress_consumed = 1;
+				if (is_menu_core())
+				{
+					if (menustate == MENU_SYSTEM2 || menustate == MENU_FILE_SELECT2) menustate = MENU_JOYSYSMAP;
+				}
+				else if (get_map_vid() || get_map_pid())
+				{
+					menustate = MENU_JOYRESET;
+				}
+			}
+
+			if (!but && last_but && !longpress_consumed)
+			{
+				if (get_map_vid() || get_map_pid())
+				{
+					send_map_cmd(KEY_SPACE);
+				}
+			}
+		}
+
+		if (!but) longpress_consumed = 0;
+		last_but = but;
+	}
+
 	return(c);
 }
 
@@ -2328,6 +2367,22 @@ void HandleUI(void)
 				menustate = sharpmz_default_ui_state();
 				break;
 			}
+		}
+		break;
+
+	case MENU_JOYRESET:
+		OsdWrite(3);
+		OsdWrite(4, "       Reset to default");
+		OsdWrite(5);
+		menustate = MENU_JOYRESET1;
+		break;
+
+	case MENU_JOYRESET1:
+		if (!user_io_user_button())
+		{
+			finish_map_setting(2);
+			menustate = MENU_8BIT_SYSTEM1;
+			menusub = 1;
 		}
 		break;
 
@@ -4418,29 +4473,7 @@ void HandleUI(void)
 				menusub = 0;
 				break;
 			case 2:
-				strcpy(joy_bnames[SYS_BTN_A - DPAD_NAMES], "A");
-				strcpy(joy_bnames[SYS_BTN_B - DPAD_NAMES], "B");
-				strcpy(joy_bnames[SYS_BTN_X - DPAD_NAMES], "X");
-				strcpy(joy_bnames[SYS_BTN_Y - DPAD_NAMES], "Y");
-				strcpy(joy_bnames[SYS_BTN_L - DPAD_NAMES], "L");
-				strcpy(joy_bnames[SYS_BTN_R - DPAD_NAMES], "R");
-				strcpy(joy_bnames[SYS_BTN_SELECT - DPAD_NAMES], "Select");
-				strcpy(joy_bnames[SYS_BTN_START  - DPAD_NAMES], "Start");
-				strcpy(joy_bnames[SYS_MS_RIGHT - DPAD_NAMES], "Mouse Move RIGHT");
-				strcpy(joy_bnames[SYS_MS_LEFT - DPAD_NAMES], "Mouse Move LEFT");
-				strcpy(joy_bnames[SYS_MS_DOWN - DPAD_NAMES], "Mouse Move DOWN");
-				strcpy(joy_bnames[SYS_MS_UP - DPAD_NAMES], "Mouse Move UP");
-				strcpy(joy_bnames[SYS_MS_BTN_L - DPAD_NAMES], "Mouse Btn Left");
-				strcpy(joy_bnames[SYS_MS_BTN_R - DPAD_NAMES], "Mouse Btn Right");
-				strcpy(joy_bnames[SYS_MS_BTN_M - DPAD_NAMES], "Mouse Btn Middle");
-				strcpy(joy_bnames[SYS_MS_BTN_EMU - DPAD_NAMES], "Mouse Emu/Sniper");
-				strcpy(joy_bnames[SYS_BTN_OSD_KTGL - DPAD_NAMES], "Menu");
-				strcpy(joy_bnames[SYS_BTN_CNT_OK - DPAD_NAMES], "Menu: OK");
-				strcpy(joy_bnames[SYS_BTN_CNT_ESC - DPAD_NAMES], "Menu: Back");
-				joy_bcount = 20+1; //buttons + OSD/KTGL button
-				start_map_setting(joy_bcount + 6); // + dpad + Analog X/Y
-				menustate = MENU_JOYDIGMAP;
-				menusub = 0;
+				menustate = MENU_JOYSYSMAP;
 				break;
 			case 3:
 				{
@@ -4471,6 +4504,32 @@ void HandleUI(void)
 			}
 		}
 		printSysInfo();
+		break;
+
+	case MENU_JOYSYSMAP:
+		strcpy(joy_bnames[SYS_BTN_A - DPAD_NAMES], "A");
+		strcpy(joy_bnames[SYS_BTN_B - DPAD_NAMES], "B");
+		strcpy(joy_bnames[SYS_BTN_X - DPAD_NAMES], "X");
+		strcpy(joy_bnames[SYS_BTN_Y - DPAD_NAMES], "Y");
+		strcpy(joy_bnames[SYS_BTN_L - DPAD_NAMES], "L");
+		strcpy(joy_bnames[SYS_BTN_R - DPAD_NAMES], "R");
+		strcpy(joy_bnames[SYS_BTN_SELECT - DPAD_NAMES], "Select");
+		strcpy(joy_bnames[SYS_BTN_START - DPAD_NAMES], "Start");
+		strcpy(joy_bnames[SYS_MS_RIGHT - DPAD_NAMES], "Mouse Move RIGHT");
+		strcpy(joy_bnames[SYS_MS_LEFT - DPAD_NAMES], "Mouse Move LEFT");
+		strcpy(joy_bnames[SYS_MS_DOWN - DPAD_NAMES], "Mouse Move DOWN");
+		strcpy(joy_bnames[SYS_MS_UP - DPAD_NAMES], "Mouse Move UP");
+		strcpy(joy_bnames[SYS_MS_BTN_L - DPAD_NAMES], "Mouse Btn Left");
+		strcpy(joy_bnames[SYS_MS_BTN_R - DPAD_NAMES], "Mouse Btn Right");
+		strcpy(joy_bnames[SYS_MS_BTN_M - DPAD_NAMES], "Mouse Btn Middle");
+		strcpy(joy_bnames[SYS_MS_BTN_EMU - DPAD_NAMES], "Mouse Emu/Sniper");
+		strcpy(joy_bnames[SYS_BTN_OSD_KTGL - DPAD_NAMES], "Menu");
+		strcpy(joy_bnames[SYS_BTN_CNT_OK - DPAD_NAMES], "Menu: OK");
+		strcpy(joy_bnames[SYS_BTN_CNT_ESC - DPAD_NAMES], "Menu: Back");
+		joy_bcount = 20 + 1; //buttons + OSD/KTGL button
+		start_map_setting(joy_bcount + 6); // + dpad + Analog X/Y
+		menustate = MENU_JOYDIGMAP;
+		menusub = 0;
 		break;
 
 	case MENU_WMPAIR:

@@ -633,19 +633,12 @@ int FileSave(const char *name, void *pBuffer, int size)
 	return ret;
 }
 
-int FileSaveConfig(const char *name, void *pBuffer, int size)
+int FileDelete(const char *name)
 {
-	char path[256] = { CONFIG_DIR"/" };
-	strcat(path, name);
-	return FileSave(path, pBuffer, size);
-}
+	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
+	else strcpy(full_path, name);
 
-int FileSaveJoymap(const char *name, void *pBuffer, int size)
-{
-	char path[256] = { CONFIG_DIR"/inputs/" };
-	FileCreatePath(path);
-	strcat(path, name);
-	return FileSave(path, pBuffer, size);
+	return !unlink(name);
 }
 
 int FileLoad(const char *name, void *pBuffer, int size)
@@ -667,14 +660,18 @@ int FileLoadConfig(const char *name, void *pBuffer, int size)
 	return FileLoad(path, pBuffer, size);
 }
 
-int FileLoadJoymap(const char *name, void *pBuffer, int size)
+int FileSaveConfig(const char *name, void *pBuffer, int size)
 {
-	char path[256] = { CONFIG_DIR"/inputs/" };
+	char path[256] = { CONFIG_DIR"/" };
 	strcat(path, name);
-	int ret = FileLoad(path, pBuffer, size);
-	if (!ret)
-		return FileLoadConfig(name, pBuffer, size);
-	return ret;
+	return FileSave(path, pBuffer, size);
+}
+
+int FileDeleteConfig(const char *name)
+{
+	char path[256] = { CONFIG_DIR"/" };
+	strcat(path, name);
+	return FileDelete(path);
 }
 
 int FileExists(const char *name)

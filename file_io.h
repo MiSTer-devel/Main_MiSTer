@@ -91,14 +91,13 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen);
 
 int FileSave(const char *name, void *pBuffer, int size);
 int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
+int FileDelete(const char *name);
 
 //save/load from config dir
 #define CONFIG_DIR "config"
 int FileSaveConfig(const char *name, void *pBuffer, int size);
 int FileLoadConfig(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
-int FileSaveJoymap(const char *name, void *pBuffer, int size);
-int FileLoadJoymap(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
-
+int FileDeleteConfig(const char *name);
 
 void AdjustDirectory(char *path);
 int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix = NULL);
