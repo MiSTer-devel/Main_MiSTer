@@ -52,13 +52,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "cfg.h"
 #include "input.h"
 #include "battery.h"
-#include "bootcore.h"
 #include "cheats.h"
 #include "video.h"
 #include "joymapping.h"
 #include "recent.h"
-
 #include "support.h"
+#include "bootcore.h"
 
 /*menu states*/
 enum MENU
@@ -777,7 +776,7 @@ const char* get_rbf_name_bootcore(char *str)
 	if (!p) return str;
 
 	char *spl = strrchr(p + 1, '.');
-	if (spl && !strcmp(spl, ".rbf"))
+	if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")))
 	{
 		*spl = 0;
 	}
@@ -4909,7 +4908,7 @@ void HandleUI(void)
 						PrintFileName(str, 14, 0);
 						sprintf(str, "           Loading...");
 						OsdWrite(15, str, 1, 0);
-						fpga_load_rbf(cfg.bootcore);
+						isMraName(cfg.bootcore) ? arcade_load(getFullPath(cfg.bootcore)) : fpga_load_rbf(cfg.bootcore);
 					}
 				}
 			}

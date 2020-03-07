@@ -10,13 +10,15 @@
 #include <stdlib.h>
 #include <dirent.h>
 
+
+extern int arcade_load(const char *xml);
 int16_t btimeout;
 char bootcoretype[64];
 
 bool isExactcoreName(char *path)
 {
 	char *spl = strrchr(path, '.');
-	return (spl && !strcmp(spl, ".rbf"));
+	return (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")));
 }
 
 char *getcoreName(char *path)
@@ -103,8 +105,7 @@ char* loadLastcore()
 	long size = ftell(fd);
 
 	fseek(fd, 0L, SEEK_SET);
-	char *lastcore = new char[size + 1];
-
+	char *lastcore = new char[size + 1]();
 	int ret = fread(lastcore, sizeof(char), size, fd);
 	fclose(fd);
 	if (ret == size)
@@ -147,7 +148,7 @@ char *findCore(const char *name, char *coreName, int indent)
 			snprintf(path, 256, "%s/%s", name, entry->d_name);
 			if (strstr(path, coreName) != NULL) {
 				spl = strrchr(path, '.');
-				if (spl && !strcmp(spl, ".rbf"))
+				if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")))
 				{
 					closedir(dir);
 					return path;
@@ -205,7 +206,7 @@ void bootcore_init(const char *path)
 			{
 				if (!cfg.bootcore_timeout)
 				{
-					fpga_load_rbf(bootcore);
+					isMraName(bootcore) ? arcade_load(bootcore) : fpga_load_rbf(bootcore);
 				}
 
 				strcpy(cfg.bootcore, strcmp(bootcore, "menu.rbf") ? bootcore : "");
@@ -218,7 +219,7 @@ void bootcore_init(const char *path)
 	{
 
 		strcpy(auxstr, path);
-		auxpointer = !strcmp(cfg.bootcore, "lastexactcore") ? getcoreExactName(auxstr) : getcoreName(auxstr);
+		auxpointer = (!strcmp(cfg.bootcore, "lastexactcore") || isMraName(auxstr)) ? getcoreExactName(auxstr) : getcoreName(auxstr);
 
 		if (auxpointer != NULL)
 		{

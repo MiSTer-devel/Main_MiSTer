@@ -718,7 +718,7 @@ void user_io_init(const char *path, const char *xml)
 	MiSTer_ini_parse();
 	if (cfg.bootcore[0] != '\0')
 	{
-		bootcore_init(path);
+		bootcore_init(xml ? xml : path);
 	}
 
 	video_mode_load();
