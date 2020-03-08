@@ -1583,3 +1583,10 @@ direntext_t* flist_SelectedItem()
 {
 	return &DirItem[iSelectedEntry];
 }
+
+bool isMraName(char *path)
+{
+        char *spl = strrchr(path, '.');
+        return (spl && !strcmp(spl, ".mra"));
+}
+
