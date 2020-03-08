@@ -1177,13 +1177,12 @@ int toggle_kbdled(int mask)
 	return state;
 }
 
-#define JOYMAP_DIR  CONFIG_DIR"/inputs/"
-
+#define JOYMAP_DIR  "inputs/"
 static int load_map(const char *name, void *pBuffer, int size)
 {
 	char path[256] = { JOYMAP_DIR };
 	strcat(path, name);
-	int ret = FileLoad(path, pBuffer, size);
+	int ret = FileLoadConfig(path, pBuffer, size);
 	if (!ret) return FileLoadConfig(name, pBuffer, size);
 	return ret;
 }
@@ -1193,8 +1192,8 @@ static void delete_map(const char *name)
 	char path[256] = { JOYMAP_DIR };
 	FileCreatePath(path);
 	strcat(path, name);
-	FileDelete(name);
-	FileDelete(path);
+	FileDeleteConfig(name);
+	FileDeleteConfig(path);
 }
 
 static int save_map(const char *name, void *pBuffer, int size)
@@ -1202,8 +1201,8 @@ static int save_map(const char *name, void *pBuffer, int size)
 	char path[256] = { JOYMAP_DIR };
 	FileCreatePath(path);
 	strcat(path, name);
-	FileDelete(name);
-	return FileSave(path, pBuffer, size);
+	FileDeleteConfig(name);
+	return FileSaveConfig(path, pBuffer, size);
 }
 
 static int mapping = 0;
@@ -1820,7 +1819,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		if (input[dev].quirk == QUIRK_PDSP)
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
-			input[dev].map[SYS_BTN_A]  = 0x120;
+			input[dev].map[map_paddle_btn()] = 0x120;
 		}
 		else if (!load_map(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{

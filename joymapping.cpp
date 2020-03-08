@@ -56,7 +56,7 @@ static void read_buttons()
 			substrcpy(joy_names[n], p, n);
 			if (!joy_names[n][0]) break;
 
-			printf("joy_bname[%d] = %s\n", n, joy_names[n]);
+			printf("joy_name[%d] = %s\n", n, joy_names[n]);
 
 			memcpy(joy_nnames[n], joy_names[n], sizeof(joy_nnames[0]));
 			char *sstr = strchr(joy_nnames[n], '(');
@@ -99,15 +99,6 @@ static void read_buttons()
 		}
 		printf("\n");
 	}
-}
-
-static int has_X_button()
-{
-	for (int i = 0; i < joy_count; i++)
-	{
-		if (!strcasecmp(joy_nnames[i], "X")) return 1;
-	}
-	return 0;
 }
 
 static int is_fire(char* name)
@@ -161,31 +152,32 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		if (!strcmp(joy_names[i], "-")) continue;
 
 		int idx = i+DPAD_COUNT;
-		char *btn_name = defaults ? joy_pnames[n] : joy_nnames[n];
+		char btn_name[32];
+		strcpy(btn_name, defaults ? joy_pnames[n] : joy_nnames[n]);
+
+		char *p = strchr(btn_name, '|');
+		if (p) *p = 0;
 
 		int mapped = 1;
 
 		if(!strcasecmp(btn_name, "A")
 		|| !strcasecmp(btn_name, "Jump")
-		|| is_fire(btn_name) == 1
-		|| !strcasecmp(btn_name, "Button I"))
+		|| is_fire(btn_name) == 1)
 		{
 			map[idx] = mmap[SYS_BTN_A];
 			strcat(mapinfo, "\n[A]");
 		}
 
 		else if(!strcasecmp(btn_name, "B")
-		|| is_fire(btn_name) == 2
-		|| !strcasecmp(btn_name, "Button II"))
+		|| is_fire(btn_name) == 2)
 		{
 			map[idx] = mmap[SYS_BTN_B];
 			strcat(mapinfo, "\n[B]");
 		}
 
 		else if(!strcasecmp(btn_name, "X")
-		|| (!strcasecmp(btn_name, "C") && !has_X_button())
-		|| is_fire(btn_name) == 3
-		|| !strcasecmp(btn_name, "Button III"))
+		|| !strcasecmp(btn_name, "C")
+		|| is_fire(btn_name) == 3)
 		{
 			map[idx] = mmap[SYS_BTN_X];
 			strcat(mapinfo, "\n[X]");
@@ -193,8 +185,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 
 		else if(!strcasecmp(btn_name, "Y")
 		|| !strcasecmp(btn_name, "D")
-		|| is_fire(btn_name) == 4
-		|| !strcasecmp(btn_name, "Button IV"))
+		|| is_fire(btn_name) == 4)
 		{
 			map[idx] = mmap[SYS_BTN_Y];
 			strcat(mapinfo, "\n[Y]");
@@ -202,9 +193,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 
 		// Genesis C and Z  and TG16 V and VI
 		else if(!strcasecmp(btn_name, "R")
-		|| !strcasecmp(btn_name, "C")
 		|| !strcasecmp(btn_name, "RT")
-		|| !strcasecmp(btn_name, "Button V")
 		|| !strcasecmp(btn_name, "Coin"))
 		{
 			map[idx] = mmap[SYS_BTN_R];
@@ -212,9 +201,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		}
 
 		else if(!strcasecmp(btn_name, "L")
-		|| !strcasecmp(btn_name, "Z")
-		|| !strcasecmp(btn_name, "LT")
-		|| !strcasecmp(btn_name, "Button VI"))
+		|| !strcasecmp(btn_name, "LT"))
 		{
 			map[idx] = mmap[SYS_BTN_L];
 			strcat(mapinfo, "\n[L]");
@@ -253,6 +240,19 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 	{
 		Info(mapinfo, cfg.controller_info*1000);
 	}
+}
+
+int map_paddle_btn()
+{
+	read_buttons();
+	for (int i = 0, n = 0; i < joy_count; i++)
+	{
+		if (!strcmp(joy_names[i], "-")) continue;
+		char *p = strchr(defaults ? joy_pnames[n] : joy_nnames[n], '|');
+		if (p && !strcasecmp(p, "|P")) return i + DPAD_COUNT;
+		n++;
+	}
+	return DPAD_COUNT;
 }
 
 static const char* get_std_name(uint16_t code, uint32_t *mmap)
