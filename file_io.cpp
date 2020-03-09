@@ -663,7 +663,17 @@ int FileLoadConfig(const char *name, void *pBuffer, int size)
 
 int FileSaveConfig(const char *name, void *pBuffer, int size)
 {
-	char path[256] = { CONFIG_DIR"/" };
+	char path[256] = { CONFIG_DIR };
+	const char *p;
+	while ((p = strchr(name, '/')))
+	{
+		strcat(path, "/");
+		strncat(path, name, p - name);
+		name = ++p;
+		FileCreatePath(path);
+	}
+
+	strcat(path, "/");
 	strcat(path, name);
 	return FileSave(path, pBuffer, size);
 }
