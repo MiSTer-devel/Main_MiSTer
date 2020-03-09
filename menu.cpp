@@ -463,35 +463,47 @@ void menu_key_set(unsigned int c)
 static int hold_cnt = 0;
 static uint32_t menu_key_get(void)
 {
-	static uint32_t c2;
-	static unsigned long repeat;
-	uint32_t c1, c;
-
-	c1 = menu_key;
-	c = 0;
-	if (c1 != c2)
+	static uint32_t prev_key = 0;
+	static unsigned long db_time = 0;
+	if (prev_key != menu_key || !db_time)
 	{
-		c = c1;
-		hold_cnt = 1;
+		prev_key = menu_key;
+		db_time = GetTimer(20);
 	}
-	c2 = c1;
 
-	// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
-	if (!user_io_osd_is_visible() && !video_fb_state() && is_menu_core()) c = KEY_F12;
+	uint32_t c = 0;
+	if (CheckTimer(db_time))
+	{
+		static uint32_t c2;
+		static unsigned long repeat;
+		uint32_t c1;
 
-	// generate repeat "key-pressed" events
-	if ((c1 & UPSTROKE) || (!c1))
-	{
-		hold_cnt = 0;
-		repeat = GetTimer(REPEATDELAY);
-	}
-	else if (CheckTimer(repeat))
-	{
-		repeat = GetTimer(REPEATRATE);
-		if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 11)))
+		c1 = menu_key;
+		c = 0;
+		if (c1 != c2)
 		{
 			c = c1;
-			hold_cnt++;
+			hold_cnt = 1;
+		}
+		c2 = c1;
+
+		// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
+		if (!user_io_osd_is_visible() && !video_fb_state() && is_menu_core()) c = KEY_F12;
+
+		// generate repeat "key-pressed" events
+		if ((c1 & UPSTROKE) || (!c1))
+		{
+			hold_cnt = 0;
+			repeat = GetTimer(REPEATDELAY);
+		}
+		else if (CheckTimer(repeat))
+		{
+			repeat = GetTimer(REPEATRATE);
+			if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 11)))
+			{
+				c = c1;
+				hold_cnt++;
+			}
 		}
 	}
 
