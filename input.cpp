@@ -1966,7 +1966,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 
 				mapping_clear = 0;
-				if (mapping_dev >= 0 && (mapping_dev == dev || clear) && mapping_button < (is_menu_core() ? (mapping_type ? SYS_BTN_CNT_ESC + 1 : SYS_BTN_OSD_KTGL + 1) : mapping_count))
+				if (mapping_dev >= 0 && !map_skip && (mapping_dev == dev || clear) && mapping_button < (is_menu_core() ? (mapping_type ? SYS_BTN_CNT_ESC + 1 : SYS_BTN_OSD_KTGL + 1) : mapping_count))
 				{
 					if (ev->value == 1 && !key_mapped)
 					{
@@ -2643,8 +2643,6 @@ void send_map_cmd(int key)
 		ev.type = EV_KEY;
 		ev.code = key;
 		ev.value = 1;
-		input_cb(&ev, 0, mapping_dev);
-		ev.value = 0;
 		input_cb(&ev, 0, mapping_dev);
 	}
 }
