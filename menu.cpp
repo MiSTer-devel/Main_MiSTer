@@ -4908,16 +4908,28 @@ void HandleUI(void)
 					OsdWrite(13, str, 0, 0);
 					strcpy(straux, cfg.bootcore);
 					sprintf(str, " %s", get_rbf_name_bootcore(straux));
-					PrintFileName(str, 14, (32 * btimeout) / cfg.bootcore_timeout);
+
+					char s[40];
+					memset(s, ' ', 32); // clear line buffer
+					s[32] = 0; // set temporary string length to OSD line length
+
+					int len = strlen(str);
+					if (len > 28)
+					{
+						len = 27; // trim display length if longer than 30 characters
+						s[28] = 22;
+					}
+
+					strncpy(s + 1, str, len); // display only name
+					OsdWrite(14, s, 1, 0, 0, (32 * btimeout) / cfg.bootcore_timeout);
+
 					sprintf(str, "   Press any key to cancel");
 					OsdWrite(15, str, 0, 0);
 					btimeout--;
 					if (btimeout < 10)
 					{
 						OsdWrite(13, "", 0, 0);
-						strcpy(straux, cfg.bootcore);
-						sprintf(str, " %s", get_rbf_name_bootcore(straux));
-						PrintFileName(str, 14, 0);
+						OsdWrite(14, s, 1, 0, 0, 0);
 						sprintf(str, "           Loading...");
 						OsdWrite(15, str, 1, 0);
 						isMraName(cfg.bootcore) ? arcade_load(getFullPath(cfg.bootcore)) : fpga_load_rbf(cfg.bootcore);
@@ -4984,36 +4996,6 @@ void open_joystick_setup()
 	joymap_first = 1;
 }
 
-static int calc_name_length(const char *name, const char *ext, const char **datecode)
-{
-	*datecode = 0;
-
-	int len = strlen(name);
-	int rbf = (len > 4 && !strcasecmp(name + len - 4, ".rbf"));
-	if (rbf)
-	{
-		len -= 4;
-
-		const char *p = strstr(name, "_20");
-		if (p)
-		{
-			len = p - name;
-			p += 3;
-			if (strlen(p) < 6) p = 0;
-		}
-
-		*datecode = (p) ? p : "------";
-		return len;
-	}
-
-	//do not remove ext if core supplies more than 1 extension and it's not list of cores
-	if (strlen(ext) > 3 && strcasecmp(ext, "RBFMRA")) return len;
-
-	/* find the extension on the end of the name*/
-	const char *fext = strrchr(name, '.');
-	return fext ? fext - name : len;
-}
-
 void ScrollLongName(void)
 {
 	// this function is called periodically when file selection window is displayed
@@ -5032,49 +5014,13 @@ void ScrollLongName(void)
 
 	if (flist_SelectedItem()->de.d_type != DT_DIR) // if a file
 	{
-		const char *datecode;
-		len = calc_name_length(flist_SelectedItem()->altname, fs_pFileExt, &datecode);
-		if (!cfg.rbf_hide_datecode && datecode)
+		if (!cfg.rbf_hide_datecode && flist_SelectedItem()->datecode[0])
 		{
 			max_len = 20; // __.__.__ remove that from the end
 		}
 	}
 
 	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
-}
-
-void PrintFileName(char *name, int row, int maxinv)
-{
-	char s[40];
-
-	memset(s, ' ', 32); // clear line buffer
-	s[32] = 0; // set temporary string length to OSD line length
-
-	const char *datecode;
-	int len = calc_name_length(name, "", &datecode);
-
-	if (len > 28)
-	{
-		len = 27; // trim display length if longer than 30 characters
-		s[28] = 22;
-	}
-	strncpy(s + 1, name, len); // display only name
-
-	if (!cfg.rbf_hide_datecode && datecode)
-	{
-		int n = 19;
-		s[n++] = ' ';
-		s[n++] = datecode[0];
-		s[n++] = datecode[1];
-		s[n++] = '.';
-		s[n++] = datecode[2];
-		s[n++] = datecode[3];
-		s[n++] = '.';
-		s[n++] = datecode[4];
-		s[n++] = datecode[5];
-	}
-
-	OsdWrite(row, s, 1, 0, 0, maxinv);
 }
 
 // print directory contents
@@ -5096,13 +5042,6 @@ void PrintDirectory(void)
 		{
 			k = flist_iFirstEntry() + i;
 			len = strlen(flist_DirItem(k)->altname); // get name length
-
-			const char *datecode = 0;
-			if (flist_DirItem(k)->de.d_type != DT_DIR) // if a file
-			{
-				len = calc_name_length(flist_DirItem(k)->altname, fs_pFileExt, &datecode);
-			}
-
 			if (len > 28)
 			{
 				len = 27; // trim display length if longer than 30 characters
@@ -5118,6 +5057,7 @@ void PrintDirectory(void)
 				strncpy(s + 1, flist_DirItem(k)->altname, len); // display only name
 			}
 
+			char *datecode = flist_DirItem(k)->datecode;
 			if (flist_DirItem(k)->de.d_type == DT_DIR) // mark directory with suffix
 			{
 				if (!strcmp(flist_DirItem(k)->altname, ".."))
@@ -5129,7 +5069,7 @@ void PrintDirectory(void)
 					strcpy(&s[22], " <DIR>");
 				}
 			}
-			else if (!cfg.rbf_hide_datecode && datecode)
+			else if (!cfg.rbf_hide_datecode && datecode[0])
 			{
 				int n = 19;
 				s[n++] = ' ';

@@ -28,6 +28,7 @@ struct direntext_t
 {
 	dirent de;
 	int  cookie;
+	char datecode[16];
 	char altname[256];
 };
 
