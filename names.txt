@@ -1,0 +1,2 @@
+mycore1: My Good Core
+mycore2: My Very Good Core
