@@ -61,6 +61,8 @@ const ini_var_t ini_vars[] = {
 	{ "GAMEPAD_DEFAULTS", (void*)(&(cfg.gamepad_defaults)), UINT8, 0, 1 },
 	{ "RECENTS", (void*)(&(cfg.recents)), UINT8, 0, 1 },
 	{ "CONTROLLER_INFO", (void*)(&(cfg.controller_info)), UINT8, 0, 10 },
+	{ "REFRESH_MIN", (void*)(&(cfg.refresh_min)), UINT8, 0, 150 },
+	{ "REFRESH_MAX", (void*)(&(cfg.refresh_max)), UINT8, 0, 150 },
 };
 
 // mist ini config

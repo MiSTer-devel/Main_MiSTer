@@ -737,6 +737,19 @@ void video_mode_adjust()
 				printf("Estimated Fpix(%.4f MHz) is outside supported range. Canceling auto-adjust.\n", Fpix);
 				Fpix = 0;
 			}
+
+			uint32_t hz = 100000000 / vtime;
+			if (cfg.refresh_min && hz < cfg.refresh_min)
+			{
+				printf("Estimated frame rate (%d Hz) is less than MONITOR_HZ_MIN(%d Hz). Canceling auto-adjust.\n", hz, cfg.refresh_min);
+				Fpix = 0;
+			}
+
+			if (cfg.refresh_max && hz > cfg.refresh_max)
+			{
+				printf("Estimated frame rate (%d Hz) is more than MONITOR_HZ_MAX(%d Hz). Canceling auto-adjust.\n", hz, cfg.refresh_max);
+				Fpix = 0;
+			}
 		}
 
 		set_video(v, Fpix);
