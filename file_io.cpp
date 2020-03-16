@@ -1130,10 +1130,11 @@ static bool IsInSameFolder(const char *folder, const char *path)
 }
 
 static int names_loaded = 0;
-static void get_display_name(direntext_t *dext, const char *ext)
+static void get_display_name(direntext_t *dext, const char *ext, int options)
 {
 	static char *names = 0;
 	snprintf(dext->altname, sizeof(dext->altname), dext->de.d_name);
+	if (dext->de.d_type == DT_DIR) return;
 
 	int len = strlen(dext->altname);
 	int rbf = (len > 4 && !strcasecmp(dext->altname + len - 4, ".rbf"));
@@ -1207,7 +1208,7 @@ static void get_display_name(direntext_t *dext, const char *ext)
 	}
 
 	//do not remove ext if core supplies more than 1 extension and it's not list of cores
-	if (strlen(ext) > 3 && strcasecmp(ext, "RBFMRA")) return;
+	if (!(options & SCANO_CORES) && strlen(ext) > 3) return;
 
 	/* find the extension on the end of the name*/
 	char *fext = strrchr(dext->altname, '.');
@@ -1478,7 +1479,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 				{
 					direntext_t dext = { *de, 0, "", "" };
-					get_display_name(&dext, extension);
+					get_display_name(&dext, extension, options);
 					DirItem.push_back(dext);
 				}
 			}
@@ -1492,7 +1493,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			up.d_type = DT_DIR;
 			strcpy(up.d_name, "..");
 			direntext_t dext = { up, 0, "", "" };
-			get_display_name(&dext, extension);
+			get_display_name(&dext, extension, options);
 			DirItem.push_back(dext);
 
 			mz_zip_reader_end(z);
