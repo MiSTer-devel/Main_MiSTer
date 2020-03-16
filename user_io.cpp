@@ -725,7 +725,6 @@ void user_io_init(const char *path, const char *xml)
 	if(strlen(cfg.font)) LoadFont(cfg.font);
 	FileLoadConfig("Volume.dat", &vol_att, 1);
 	vol_att &= 0x1F;
-	if (!cfg.volumectl) vol_att = 0;
 	spi_uio_cmd8(UIO_AUDVOL, vol_att);
 	user_io_send_buttons(1);
 
@@ -3053,8 +3052,6 @@ int get_volume()
 
 void set_volume(int cmd)
 {
-	if (!cfg.volumectl) return;
-
 	vol_set_timeout = GetTimer(1000);
 
 	vol_att &= 0x17;
@@ -3122,17 +3119,17 @@ void user_io_kbd(uint16_t key, int press)
 	else
 	if (key == KEY_MUTE)
 	{
-		if (press == 1 && hasAPI1_5()) set_volume(0);
+		if (press == 1 && hasAPI1_5() && cfg.volumectl) set_volume(0);
 	}
 	else
 	if (key == KEY_VOLUMEDOWN)
 	{
-		if (press && hasAPI1_5()) set_volume(-1);
+		if (press && hasAPI1_5() && cfg.volumectl) set_volume(-1);
 	}
 	else
 	if (key == KEY_VOLUMEUP)
 	{
-		if (press && hasAPI1_5()) set_volume(1);
+		if (press && hasAPI1_5() && cfg.volumectl) set_volume(1);
 	}
 	else
 	if (key == 0xBE)
