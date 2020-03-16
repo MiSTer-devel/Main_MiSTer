@@ -58,7 +58,6 @@
     <ClCompile Include="file_io.cpp" />
     <ClCompile Include="fpga_io.cpp" />
     <ClCompile Include="hardware.cpp" />
-    <ClCompile Include="ini_parser.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="joymapping.cpp" />
     <ClCompile Include="lib\libco\arm.c" />
@@ -113,7 +112,6 @@
     <ClInclude Include="fpga_reset_manager.h" />
     <ClInclude Include="fpga_system_manager.h" />
     <ClInclude Include="hardware.h" />
-    <ClInclude Include="ini_parser.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="joymapping.h" />
     <ClInclude Include="lib\imlib2\Imlib2.h" />

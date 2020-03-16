@@ -248,6 +248,7 @@ int user_io_get_joyswap();
 char user_io_osd_is_visible();
 void set_vga_fb(int enable);
 int get_vga_fb();
+void user_io_set_ini(int ini_num);
 void user_io_send_buttons(char);
 uint16_t user_io_get_sdram_cfg();
 

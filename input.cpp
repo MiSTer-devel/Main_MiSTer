@@ -1664,6 +1664,8 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 						mask = 0;
 					}
 				}
+
+				if((mask & JOY_BTN2) && !(old_osdbtn & JOY_BTN2)) mask = 0;
 			}
 
 			memset(joy, 0, sizeof(joy));
@@ -1673,18 +1675,42 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 			switch (mask)
 			{
 			case JOY_RIGHT:
+				if (press && (osdbtn & JOY_BTN2))
+				{
+					user_io_set_ini(0);
+					osdbtn = 0;
+					return;
+				}
 				ev.code = KEY_RIGHT;
 				break;
 
 			case JOY_LEFT:
+				if (press && (osdbtn & JOY_BTN2))
+				{
+					user_io_set_ini(1);
+					osdbtn = 0;
+					return;
+				}
 				ev.code = KEY_LEFT;
 				break;
 
 			case JOY_UP:
+				if (press && (osdbtn & JOY_BTN2))
+				{
+					user_io_set_ini(2);
+					osdbtn = 0;
+					return;
+				}
 				ev.code = KEY_UP;
 				break;
 
 			case JOY_DOWN:
+				if (press && (osdbtn & JOY_BTN2))
+				{
+					user_io_set_ini(3);
+					osdbtn = 0;
+					return;
+				}
 				ev.code = KEY_DOWN;
 				break;
 

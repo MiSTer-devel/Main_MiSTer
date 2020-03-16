@@ -5,11 +5,7 @@
 #ifndef __CFG_H__
 #define __CFG_H__
 
-
-//// includes ////
 #include <inttypes.h>
-#include "ini_parser.h"
-
 
 //// type definitions ////
 typedef struct {
@@ -52,12 +48,10 @@ typedef struct {
 	char font[1024];
 } cfg_t;
 
-//// functions ////
-void MiSTer_ini_parse();
-
-//// global variables ////
-extern const ini_cfg_t ini_cfg;
 extern cfg_t cfg;
 
+//// functions ////
+void cfg_parse();
+const char* cfg_get_name(uint8_t alt);
 
 #endif // __CFG_H__
