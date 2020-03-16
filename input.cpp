@@ -1914,6 +1914,29 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		osd_timer = 0;
 	}
 
+	if (!input[dev].num && ev->type == EV_KEY && ev->code >= 256)
+	{
+		for (uint8_t num = 1; num < NUMDEV + 1; num++)
+		{
+			int found = 0;
+			for (int i = 0; i < NUMDEV; i++)
+			{
+				// paddles/spinners overlay on top of other gamepad
+				if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
+				{
+					found = (input[i].num == num);
+					if (found) break;
+				}
+			}
+
+			if (!found)
+			{
+				input[dev].num = num;
+				break;
+			}
+		}
+	}
+
 	//mapping
 	if (mapping && (mapping_dev >= 0 || ev->value)
 		&& !((mapping_type < 2 || !mapping_button) && (cancel || enter))
@@ -2237,29 +2260,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			//joystick buttons, digital directions
 			if (ev->code >= 256)
 			{
-				if (!input[dev].num)
-				{
-					for (uint8_t num = 1; num < NUMDEV + 1; num++)
-					{
-						int found = 0;
-						for (int i = 0; i < NUMDEV; i++)
-						{
-							// paddles/spinners overlay on top of other gamepad
-							if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
-							{
-								found = (input[i].num == num);
-								if (found) break;
-							}
-						}
-
-						if (!found)
-						{
-							input[dev].num = num;
-							break;
-						}
-					}
-				}
-
 				if (input[dev].lightgun_req && !user_io_osd_is_visible())
 				{
 					if (osd_event == 1)
@@ -3185,6 +3185,11 @@ int input_test(int getchar)
 									//so it's impossible to use joystick codes as keyboards aren't personalized
 									if (ev.code == 164) ev.code = KEY_MENU;
 									if (ev.code == 1)   ev.code = KEY_MENU;
+								}
+
+								if (ev.type == EV_KEY && ev.code == KEY_BACK && input[dev].num)
+								{
+									ev.code = BTN_SELECT;
 								}
 
 								//Menu button quirk of 8BitDo gamepad in X-Input mode
