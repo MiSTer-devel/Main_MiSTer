@@ -728,7 +728,6 @@ void user_io_init(const char *path, const char *xml)
 	if(strlen(cfg.font)) LoadFont(cfg.font);
 	FileLoadConfig("Volume.dat", &vol_att, 1);
 	vol_att &= 0x1F;
-	if (!cfg.volumectl) vol_att = 0;
 	spi_uio_cmd8(UIO_AUDVOL, vol_att);
 	user_io_send_buttons(1);
 
@@ -3066,8 +3065,6 @@ int get_volume()
 
 void set_volume(int cmd)
 {
-	if (!cfg.volumectl) return;
-
 	vol_set_timeout = GetTimer(1000);
 
 	vol_att &= 0x17;

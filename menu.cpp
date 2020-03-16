@@ -2327,7 +2327,7 @@ void HandleUI(void)
 			memset(bar, 0x7f, 8 - m);
 		}
 
-		OsdWrite(13, s, menusub == 0, !cfg.volumectl);
+		OsdWrite(13, s, menusub == 0);
 		OsdWrite(15, STD_EXIT, menusub == 1, 0, OSD_ARROW_RIGHT);
 		break;
 

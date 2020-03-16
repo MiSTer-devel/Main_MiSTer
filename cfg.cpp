@@ -49,7 +49,6 @@ static const ini_var_t ini_vars[] =
 	{ "KBD_NOMOUSE", (void*)(&(cfg.kbd_nomouse)), UINT8, 0, 1 },
 	{ "MOUSE_THROTTLE", (void*)(&(cfg.mouse_throttle)), UINT8, 1, 100 },
 	{ "BOOTSCREEN", (void*)(&(cfg.bootscreen)), UINT8, 0, 1 },
-	{ "VOLUMECTL", (void*)(&(cfg.volumectl)), UINT8, 0, 1 },
 	{ "VSCALE_MODE", (void*)(&(cfg.vscale_mode)), UINT8, 0, 3 },
 	{ "VSCALE_BORDER", (void*)(&(cfg.vscale_border)), UINT16, 0, 399 },
 	{ "RBF_HIDE_DATECODE", (void*)(&(cfg.rbf_hide_datecode)), UINT8, 0, 1 },
