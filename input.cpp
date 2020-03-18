@@ -1801,14 +1801,15 @@ static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
+	if (ev->type != EV_KEY && ev->type != EV_ABS && ev->type != EV_REL) return;
+	if (ev->type == EV_KEY && !ev->code) return;
+
 	static uint16_t last_axis = 0;
 
 	int sub_dev = dev;
 
 	//check if device is a part of multifunctional device
 	if (input[dev].bind >= 0) dev = input[dev].bind;
-
-	if (ev->type == EV_KEY && !ev->code) return;
 
 	//mouse
 	if (ev->type == EV_KEY && ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK)
@@ -1825,6 +1826,29 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int cancel   = (ev->type == EV_KEY && ev->code == KEY_ESC);
 	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER);
 	int origcode = ev->code;
+
+	if (!input[dev].num && ((ev->type == EV_KEY && ev->code >= 256) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
+	{
+		for (uint8_t num = 1; num < NUMDEV + 1; num++)
+		{
+			int found = 0;
+			for (int i = 0; i < NUMDEV; i++)
+			{
+				// paddles/spinners overlay on top of other gamepad
+				if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
+				{
+					found = (input[i].num == num);
+					if (found) break;
+				}
+			}
+
+			if (!found)
+			{
+				input[dev].num = num;
+				break;
+			}
+		}
+	}
 
 	if (!input[dev].has_mmap)
 	{
@@ -1846,6 +1870,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
 			input[dev].map[map_paddle_btn()] = 0x120;
+			if (cfg.controller_info)
+			{
+				char str[32];
+				sprintf(str, "P%d paddle/spinner", input[dev].num);
+				Info(str, cfg.controller_info * 1000);
+			}
 		}
 		else if (!load_map(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
@@ -1855,7 +1885,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (input[dev].has_mmap == 1)
 				{
 					// not defined try to guess the mapping
-					map_joystick(input[dev].map, input[dev].mmap);
+					map_joystick(input[dev].map, input[dev].mmap, input[dev].num);
 				}
 				else
 				{
@@ -1866,7 +1896,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		}
 		else
 		{
-			map_joystick_show(input[dev].map, input[dev].mmap);
+			map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
 		}
 		input[dev].has_map++;
 	}
@@ -1912,29 +1942,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 		}
 		osd_timer = 0;
-	}
-
-	if (!input[dev].num && ev->type == EV_KEY && ev->code >= 256)
-	{
-		for (uint8_t num = 1; num < NUMDEV + 1; num++)
-		{
-			int found = 0;
-			for (int i = 0; i < NUMDEV; i++)
-			{
-				// paddles/spinners overlay on top of other gamepad
-				if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
-				{
-					found = (input[i].num == num);
-					if (found) break;
-				}
-			}
-
-			if (!found)
-			{
-				input[dev].num = num;
-				break;
-			}
-		}
 	}
 
 	//mapping
@@ -2624,29 +2631,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		case EV_REL:
 			if (!user_io_osd_is_visible() && ev->code == 7)
 			{
-				// paddles/spinners overlay on top of other gamepad
-				if (input[dev].quirk == QUIRK_PDSP && !input[dev].num)
-				{
-					for (uint8_t num = 1; num < NUMDEV + 1; num++)
-					{
-						int found = 0;
-						for (int i = 0; i < NUMDEV; i++)
-						{
-							if (input[dev].quirk == QUIRK_PDSP)
-							{
-								found = (input[i].num == num);
-								if (found) break;
-							}
-						}
-
-						if (!found)
-						{
-							input[dev].num = num;
-							break;
-						}
-					}
-				}
-
 				if (input[dev].num && input[dev].num <= NUMPLAYERS)
 				{
 					int value = ev->value;

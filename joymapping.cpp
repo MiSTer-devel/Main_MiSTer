@@ -114,7 +114,7 @@ static int is_fire(char* name)
 	return 0;
 }
 
-void map_joystick(uint32_t *map, uint32_t *mmap)
+void map_joystick(uint32_t *map, uint32_t *mmap, int num)
 {
 	static char mapinfo[1024];
 	/*
@@ -125,7 +125,8 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		A, B, X, Y, L, R, Select, Start
 	*/
 	read_buttons();
-	sprintf(mapinfo, "Default (%s) map:", defaults ? "pos" : "name");
+	sprintf(mapinfo, "P%d map:", num);
+	if (!num) sprintf(mapinfo, "Map:");
 
 	map[SYS_BTN_RIGHT] = mmap[SYS_BTN_RIGHT] & 0xFFFF;
 	map[SYS_BTN_LEFT]  = mmap[SYS_BTN_LEFT]  & 0xFFFF;
@@ -269,18 +270,20 @@ static const char* get_std_name(uint16_t code, uint32_t *mmap)
 	return "[ ]";
 }
 
-void map_joystick_show(uint32_t *map, uint32_t *mmap)
+void map_joystick_show(uint32_t *map, uint32_t *mmap, int num)
 {
 	static char mapinfo[1024];
 	read_buttons();
-	mapinfo[0] = 0;
+
+	sprintf(mapinfo, "P%d, map:", num);
+	if(!num) sprintf(mapinfo, "Map:");
 
 	// loop through core requested buttons and construct result map
 	for (int i = 0; i < joy_count; i++)
 	{
 		if (!strcmp(joy_names[i], "-")) continue;
 
-		if(mapinfo[0]) strcat(mapinfo, "\n");
+		strcat(mapinfo, "\n");
 		strcat(mapinfo, get_std_name((uint16_t)(map[i + DPAD_COUNT]), mmap));
 		strcat(mapinfo, ": ");
 		strcat(mapinfo, joy_names[i]);
