@@ -1802,7 +1802,7 @@ static int ds_mouse_emu = 0;
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	if (ev->type != EV_KEY && ev->type != EV_ABS && ev->type != EV_REL) return;
-	if (ev->type == EV_KEY && !ev->code) return;
+	if (ev->type == EV_KEY && (!ev->code || ev->code == KEY_UNKNOWN)) return;
 
 	static uint16_t last_axis = 0;
 
