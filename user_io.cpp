@@ -2050,7 +2050,7 @@ void user_io_send_buttons(char force)
 		}
 
 		//special reset for some cores
-		if ((key_map & BUTTON2) && !(map & BUTTON2))
+		if (!user_io_osd_is_visible() && (key_map & BUTTON2) && !(map & BUTTON2))
 		{
 			if (is_archie_core()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			if (is_minimig()) minimig_reset();
