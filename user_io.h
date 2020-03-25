@@ -59,7 +59,7 @@
 #define UIO_TIMESTAMP   0x24  // transmit seconds since Unix epoch
 #define UIO_LEDS        0x25  // control on-board LEDs
 #define UIO_AUDVOL      0x26  // Digital volume as a number of bits to shift to the right
-#define UIO_SETHEIGHT   0x27  // Set scaled vertical resolution (to reduce scaling artefacts)
+#define UIO_SETHEIGHT   0x27  // Set max scaled vertical resolution
 #define UIO_GETUARTFLG  0x28  // Get UART_FLG_*
 #define UIO_GET_STATUS  0x29  // Update status from the core
 #define UIO_SET_FLTCOEF 0x2A  // Set Scaler polyphase coefficients
@@ -75,6 +75,7 @@
 #define UIO_CD_GET      0x34
 #define UIO_CD_SET      0x35
 #define UIO_INFO_GET    0x36
+#define UIO_SETWIDTH    0x37  // Set max scaled horizontal resolution
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53

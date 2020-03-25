@@ -646,30 +646,44 @@ static uint32_t show_video_info(int force)
 		}
 
 		uint32_t scrh = v_cur.item[5];
-		if (height && scrh)
+		if (scrh)
 		{
-			if (cfg.vscale_border)
-			{
-				uint32_t border = cfg.vscale_border * 2;
-				if ((border + 100) > scrh) border = scrh - 100;
-				scrh -= border;
-			}
-
-			if (cfg.vscale_mode)
+			if (cfg.vscale_mode && height)
 			{
 				uint32_t div = 1 << (cfg.vscale_mode - 1);
 				uint32_t mag = (scrh*div) / height;
 				scrh = (height * mag) / div;
-			}
-
-			if(cfg.vscale_border || cfg.vscale_mode)
-			{
 				printf("Set vertical scaling to : %d\n", scrh);
+				spi_uio_cmd16(UIO_SETHEIGHT, scrh);
+			}
+			else if(cfg.vscale_border)
+			{
+				uint32_t border = cfg.vscale_border * 2;
+				if ((border + 100) > scrh) border = scrh - 100;
+				scrh -= border;
+				printf("Set max vertical resolution to : %d\n", scrh);
 				spi_uio_cmd16(UIO_SETHEIGHT, scrh);
 			}
 			else
 			{
 				spi_uio_cmd16(UIO_SETHEIGHT, 0);
+			}
+		}
+
+		uint32_t scrw = v_cur.item[1];
+		if (scrw)
+		{
+			if (cfg.vscale_border && !(cfg.vscale_mode && height))
+			{
+				uint32_t border = cfg.vscale_border * 2;
+				if ((border + 100) > scrw) border = scrw - 100;
+				scrw -= border;
+				printf("Set max horizontal resolution to : %d\n", scrw);
+				spi_uio_cmd16(UIO_SETWIDTH, scrw);
+			}
+			else
+			{
+				spi_uio_cmd16(UIO_SETWIDTH, 0);
 			}
 		}
 
