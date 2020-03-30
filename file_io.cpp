@@ -1209,6 +1209,7 @@ static void get_display_name(direntext_t *dext, const char *ext, int options)
 
 	//do not remove ext if core supplies more than 1 extension and it's not list of cores
 	if (!(options & SCANO_CORES) && strlen(ext) > 3) return;
+	if (strchr(ext, '*') || strchr(ext, '?')) return;
 
 	/* find the extension on the end of the name*/
 	char *fext = strrchr(dext->altname, '.');
