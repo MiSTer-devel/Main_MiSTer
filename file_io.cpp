@@ -503,7 +503,7 @@ int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 			file->zip->offset = 0;
 		}
 
-		char buf[512];
+		static char buf[4*1024];
 		while (file->zip->offset < offset)
 		{
 			const size_t want_len = MIN((__off64_t)sizeof(buf), offset - file->zip->offset);
