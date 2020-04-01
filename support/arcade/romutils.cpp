@@ -197,7 +197,7 @@ static int rom_file(const char *name, uint32_t crc32, int start, int len, int ma
 	static uint8_t buf[4096];
 	if (!FileOpenZip(&f, name, crc32)) return 0;
 	if (start) FileSeek(&f, start, SEEK_SET);
-	unsigned long bytes2send = f.size;
+	unsigned long bytes2send = f.size - f.offset;
 	if (len > 0 && len < (int)bytes2send) bytes2send = len;
 
 	while (bytes2send)
