@@ -1133,7 +1133,7 @@ static int names_loaded = 0;
 static void get_display_name(direntext_t *dext, const char *ext, int options)
 {
 	static char *names = 0;
-	snprintf(dext->altname, sizeof(dext->altname), dext->de.d_name);
+	memcpy(dext->altname, dext->de.d_name, sizeof(dext->altname));
 	if (dext->de.d_type == DT_DIR) return;
 
 	int len = strlen(dext->altname);
@@ -1377,7 +1377,9 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					if (!strncasecmp(de->d_name, ".", 1)) continue;
 				}
 
-				direntext_t dext = { *de, 0, "", "" };
+				direntext_t dext;
+				memset(&dext, 0, sizeof(dext));
+				memcpy(&dext.de, de, sizeof(dext.de));
 				memcpy(dext.altname, de->d_name, sizeof(dext.altname));
 				if (!strcasecmp(dext.altname + strlen(dext.altname) - 4, ".zip")) dext.altname[strlen(dext.altname) - 4] = 0;
 
@@ -1479,7 +1481,9 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				}
 
 				{
-					direntext_t dext = { *de, 0, "", "" };
+					direntext_t dext;
+					memset(&dext, 0, sizeof(dext));
+					memcpy(&dext.de, de, sizeof(dext.de));
 					get_display_name(&dext, extension, options);
 					DirItem.push_back(dext);
 				}
@@ -1490,10 +1494,10 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		{
 			// Since zip files aren't actually folders the entry to
 			// exit the zip file must be added manually.
-			dirent up;
-			up.d_type = DT_DIR;
-			strcpy(up.d_name, "..");
-			direntext_t dext = { up, 0, "", "" };
+			direntext_t dext;
+			memset(&dext, 0, sizeof(dext));
+			dext.de.d_type = DT_DIR;
+			strcpy(dext.de.d_name, "..");
 			get_display_name(&dext, extension, options);
 			DirItem.push_back(dext);
 
