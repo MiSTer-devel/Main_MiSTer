@@ -2730,10 +2730,20 @@ void mergedevs()
 	// merge multifunctional devices by id
 	for (int i = 0; i < NUMDEV; i++)
 	{
-		// Raphnet (vid 0x289B) uses buggy firmware, don't merge it.
-        	// Also disable merging for the Mayflash adapter and Xinmo 2 player USB encoder
-		if (input[i].vid == 0x289B || input[i].vid == 0x0E8F || input[i].vid == 0x16C0) continue;
-
+		//Bypass merging of specified 2 port/player controllers
+		if (input[i].vid == 0x289B) // Raphnet uses buggy firmware, don't merge it.
+			continue;
+		else if(input[i].vid == 0x0E8F) //Vendor -Mayflash
+		{
+			if(input[i].pid == 0x3013)  //SNES controller 2 port adapter
+				continue;
+		}
+		else if(input[i].vid == 0x16C0) //Vendor - XinMo
+		{
+			if(input[i].pid == 0x05E1) //XM-10 2 player USB Encoder
+				continue;
+		}
+			
 		input[i].bind = i;
 		if (input[i].id[0] && !input[i].mouse)
 		{
