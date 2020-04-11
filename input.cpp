@@ -26,6 +26,7 @@
 #include "osd.h"
 #include "video.h"
 #include "joymapping.h"
+#include "support.h"
 
 #define NUMDEV 30
 #define NUMPLAYERS 6
@@ -2743,7 +2744,7 @@ void mergedevs()
 			if(input[i].pid == 0x05E1) //XM-10 2 player USB Encoder
 				continue;
 		}
-			
+
 		input[i].bind = i;
 		if (input[i].id[0] && !input[i].mouse)
 		{
@@ -3429,7 +3430,12 @@ int input_test(int getchar)
 					cmd[len] = 0;
 					printf("MiSTer_cmd: %s\n", cmd);
 					if (!strncmp(cmd, "fb_cmd", 6)) video_cmd(cmd);
-					else if (!strncmp(cmd, "load_core ", 10)) fpga_load_rbf(cmd + 10);
+					else if (!strncmp(cmd, "load_core ", 10))
+					{
+						len = strlen(cmd);
+						if (len > 4 && !strcasecmp(cmd + len - 4, ".mra")) arcade_load(cmd + 10);
+						else fpga_load_rbf(cmd + 10);
+					}
 				}
 			}
 
