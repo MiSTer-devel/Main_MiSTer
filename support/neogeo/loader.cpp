@@ -223,7 +223,7 @@ static void make_path(const char *root, const char *name, char *path)
 	strcat(path, name);
 }
 
-static uint8_t loadbuf[1024 * 1024];
+extern uint8_t loadbuf[];
 static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t index, uint32_t offset, uint32_t size)
 {
 	fileTYPE f = {};
@@ -260,7 +260,7 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 	while (remain)
 	{
 		uint32_t partsz = remain;
-		if (partsz > 1024 * 1024) partsz = 1024 * 1024;
+		if (partsz > LOADBUF_SZ) partsz = LOADBUF_SZ;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
 		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
@@ -335,10 +335,10 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 	while (remain)
 	{
 		uint32_t partsz = remain;
-		if (partsz > 1024 * 1024) partsz = 1024 * 1024;
+		if (partsz > LOADBUF_SZ) partsz = LOADBUF_SZ;
 
 		uint32_t partszf = remainf;
-		if (partszf > 1024 * 1024) partszf = 1024 * 1024;
+		if (partszf > LOADBUF_SZ) partszf = LOADBUF_SZ;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
 		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);

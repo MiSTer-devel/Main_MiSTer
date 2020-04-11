@@ -41,6 +41,7 @@ static int iSelectedEntry = 0;       // selected entry index
 static int iFirstEntry = 0;
 
 static char full_path[2100];
+uint8_t loadbuf[LOADBUF_SZ];
 
 fileTYPE::fileTYPE()
 {

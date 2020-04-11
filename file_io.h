@@ -113,6 +113,7 @@ const char *getFullPath(const char *name);
 uint32_t getFileType(const char *name);
 bool isMraName(char *path);
 
+#define LOADBUF_SZ (1024*1024)
 
 #define COEFF_DIR "filters"
 #define GAMMA_DIR "gamma"

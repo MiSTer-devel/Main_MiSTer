@@ -191,10 +191,10 @@ static int rom_data(const uint8_t *buf, int chunk, int map, struct MD5Context *m
 	return 1;
 }
 
+extern uint8_t loadbuf[];
 static int rom_file(const char *name, uint32_t crc32, int start, int len, int map, struct MD5Context *md5context)
 {
 	fileTYPE f = {};
-	static uint8_t buf[4096];
 	if (!FileOpenZip(&f, name, crc32)) return 0;
 	if (start) FileSeek(&f, start, SEEK_SET);
 	unsigned long bytes2send = f.size - f.offset;
@@ -202,10 +202,10 @@ static int rom_file(const char *name, uint32_t crc32, int start, int len, int ma
 
 	while (bytes2send)
 	{
-		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+		uint32_t chunk = (bytes2send > LOADBUF_SZ) ? LOADBUF_SZ : bytes2send;
 
-		FileReadAdv(&f, buf, chunk);
-		if (!rom_data(buf, chunk, map, md5context))
+		FileReadAdv(&f, loadbuf, chunk);
+		if (!rom_data(loadbuf, chunk, map, md5context))
 		{
 			FileClose(&f);
 			return 0;
