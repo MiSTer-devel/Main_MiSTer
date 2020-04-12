@@ -488,7 +488,7 @@ static uint32_t menu_key_get(void)
 		c2 = c1;
 
 		// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
-		if (!user_io_osd_is_visible() && !video_fb_state() && is_menu_core()) c = KEY_F12;
+		if (!user_io_osd_is_visible() && !video_fb_state() && is_menu()) c = KEY_F12;
 
 		// generate repeat "key-pressed" events
 		if ((c1 & UPSTROKE) || (!c1))
@@ -539,7 +539,7 @@ static uint32_t menu_key_get(void)
 			if (but && CheckTimer(longpress) && !longpress_consumed)
 			{
 				longpress_consumed = 1;
-				if (is_menu_core())
+				if (is_menu())
 				{
 					if (menustate == MENU_SYSTEM2 || menustate == MENU_FILE_SELECT2) menustate = MENU_JOYSYSMAP;
 				}
@@ -678,7 +678,7 @@ static void printSysInfo()
 		sysinfo_timer = GetTimer(2000);
 		struct battery_data_t bat;
 		int hasbat = getBattery(0, &bat);
-		int n = is_menu_core() ? 10 : 5;
+		int n = is_menu() ? 10 : 5;
 
 		char str[40];
 		OsdWrite(n++, info_top, 0, 0);
@@ -893,7 +893,7 @@ void HandleUI(void)
 
 	if (c && c != KEY_F12 && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
 
-	if (is_menu_core())
+	if (is_menu())
 	{
 		static int menu_visible = 1;
 		static unsigned long timeout = 0;
@@ -952,7 +952,7 @@ void HandleUI(void)
 			break;
 
 		case KEY_F1:
-			if (is_menu_core() && cfg.fb_terminal)
+			if (is_menu() && cfg.fb_terminal)
 			{
 				unsigned long status = (user_io_8bit_set_status(0, 0)+ 2) & 0xE;
 				user_io_8bit_set_status(status, 0xE);
@@ -980,7 +980,7 @@ void HandleUI(void)
 			break;
 
 		case KEY_F9:
-			if ((is_menu_core() || ((get_key_mod() & (LALT | RALT)) && (get_key_mod() & (LCTRL | RCTRL))) || has_fb_terminal) && cfg.fb_terminal)
+			if ((is_menu() || ((get_key_mod() & (LALT | RALT)) && (get_key_mod() & (LCTRL | RCTRL))) || has_fb_terminal) && cfg.fb_terminal)
 			{
 				video_chvt(1);
 				video_fb_enable(!video_fb_state());
@@ -1139,14 +1139,14 @@ void HandleUI(void)
 		if (menu)
 		{
 			OsdSetSize(16);
-			if(!is_menu_core() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
+			if(!is_menu() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
 			{
 				SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_NONE1);
 			}
 			else if (user_io_core_type() == CORE_TYPE_MIST) menustate = MENU_MIST_MAIN1;
-			else if (is_archie_core()) menustate = MENU_ARCHIE_MAIN1;
+			else if (is_archie()) menustate = MENU_ARCHIE_MAIN1;
 			else {
-				if (is_menu_core())
+				if (is_menu())
 				{
 					OsdCoreNameSet("");
 					SelectFile(0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_SYSTEM1);
@@ -1157,7 +1157,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					if ((get_key_mod() & (LGUI | RGUI)) && !is_x86_core() && has_menu()) //Win+Menu
+					if ((get_key_mod() & (LGUI | RGUI)) && !is_x86() && has_menu()) //Win+Menu
 					{
 						menustate = MENU_8BIT_SYSTEM1;
 					}
@@ -1617,10 +1617,10 @@ void HandleUI(void)
 
 						if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
-						if (is_gba_core() && FileExists(user_io_make_filepath(HomeDir, "goomba.rom"))) strcat(ext, "GB GBC");
+						if (is_gba() && FileExists(user_io_make_filepath(HomeDir, "goomba.rom"))) strcat(ext, "GB GBC");
 						while (strlen(ext) % 3) strcat(ext, " ");
 
-						fs_Options = SCANO_DIR | (is_neogeo_core() ? SCANO_NEOGEO | SCANO_NOENTER : 0);
+						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0);
 						fs_MenuSelect = MENU_8BIT_MAIN_FILE_SELECTED;
 						fs_MenuCancel = MENU_8BIT_MAIN1;
 						strcpy(fs_pFileExt, ext);
@@ -1665,7 +1665,7 @@ void HandleUI(void)
 							uint32_t status = user_io_8bit_set_status(0, 0, ex);  // 0,0 gets status
 							uint32_t x = getStatus(p, status) + 1;
 
-							if (byarm && is_x86_core())
+							if (byarm && is_x86())
 							{
 								if (p[1] == '2') x86_set_fdd_boot(!(x & 1));
 							}
@@ -1683,14 +1683,14 @@ void HandleUI(void)
 
 							// determine which status bit is affected
 							uint32_t mask = 1 << getIdx(p);
-							if (mask == 1 && is_x86_core())
+							if (mask == 1 && is_x86())
 							{
 								x86_init();
 								menustate = MENU_NONE1;
 							}
 							else
 							{
-								if (is_megacd_core())
+								if (is_megacd())
 								{
 									if (mask == 1) mcd_set_image(0, "");
 									if (mask == 2)
@@ -1745,11 +1745,11 @@ void HandleUI(void)
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
 		printf("Image selected: %s\n", SelectedPath);
-		if (is_x86_core())
+		if (is_x86())
 		{
 			x86_set_image(ioctl_index, SelectedPath);
 		}
-		else if (is_megacd_core())
+		else if (is_megacd())
 		{
 			uint32_t status = user_io_8bit_set_status(0, 0);
 			if (!(status & 4))
@@ -1791,7 +1791,7 @@ void HandleUI(void)
 				adjvisible = 0;
 
 				MenuWrite(n++, " Core                      \x16", menusub == 0, 0);
-				sprintf(s, " Define %s buttons         ", is_menu_core() ? "System" : user_io_get_core_name_ex());
+				sprintf(s, " Define %s buttons         ", is_menu() ? "System" : user_io_get_core_name_ex());
 				s[27] = '\x16';
 				s[28] = 0;
 				MenuWrite(n++, s, menusub == 1, 0);
@@ -1852,7 +1852,7 @@ void HandleUI(void)
 				else
 				{
 					MenuWrite(n++);
-					MenuWrite(n++, " Reset settings", menusub == 9, is_archie_core());
+					MenuWrite(n++, " Reset settings", menusub == 9, is_archie());
 					MenuWrite(n++, " Save settings", menusub == 10, 0);
 				}
 
@@ -1971,7 +1971,7 @@ void HandleUI(void)
 				}
 				break;
 			case 9:
-				if (!is_archie_core())
+				if (!is_archie())
 				{
 					menustate = MENU_RESET1;
 					menusub = 1;
@@ -1988,7 +1988,7 @@ void HandleUI(void)
 				menustate = MENU_8BIT_MAIN1;
 				menusub = 0;
 
-				if (is_archie_core())
+				if (is_archie())
 				{
 					archie_save_config();
 					menustate = MENU_ARCHIE_MAIN1;
@@ -2003,7 +2003,7 @@ void HandleUI(void)
 					uint32_t status[2] = { user_io_8bit_set_status(0, 0, 0), user_io_8bit_set_status(0, 0, 1) };
 					printf("Saving config to %s\n", filename);
 					FileSaveConfig(filename, status, 8);
-					if (is_x86_core()) x86_config_save();
+					if (is_x86()) x86_config_save();
 				}
 				break;
 
@@ -2048,7 +2048,7 @@ void HandleUI(void)
 					menusub = 0;
 					menustate = MENU_MAIN1;
 				}
-				else if (is_archie_core())
+				else if (is_archie())
 				{
 					menusub = 0;
 					menustate = MENU_ARCHIE_MAIN1;
@@ -2362,7 +2362,7 @@ void HandleUI(void)
 					menusub = 0;
 					menustate = MENU_MAIN1;
 				}
-				else if (is_archie_core())
+				else if (is_archie())
 				{
 					menusub = 0;
 					menustate = MENU_ARCHIE_MAIN1;
@@ -2406,7 +2406,7 @@ void HandleUI(void)
 		flash_timer = 0;
 		flash_state = 0;
 		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
-		if (is_menu_core())
+		if (is_menu())
 		{
 			OsdWrite(8, "          Esc \x16 Cancel");
 			OsdWrite(9, "        Enter \x16 Finish");
@@ -2438,7 +2438,7 @@ void HandleUI(void)
 				break;
 			}
 
-			if (is_menu_core() && !get_map_button()) OsdWrite(7);
+			if (is_menu() && !get_map_button()) OsdWrite(7);
 
 			const char* p = 0;
 			if (get_map_button() < 0)
@@ -2453,7 +2453,7 @@ void HandleUI(void)
 			else if (joy_bcount)
 			{
 				p = joy_bnames[get_map_button() - DPAD_NAMES];
-				if (is_menu_core())
+				if (is_menu())
 				{
 					if (!get_map_type()) joy_bcount = 17;
 					if (get_map_button() == SYS_BTN_OSD_KTGL)
@@ -2474,7 +2474,7 @@ void HandleUI(void)
 
 			if (get_map_button() >= 0)
 			{
-				if (is_menu_core() && get_map_button() > SYS_BTN_CNT_ESC)
+				if (is_menu() && get_map_button() > SYS_BTN_CNT_ESC)
 				{
 					strcpy(s, joy_button_map[(get_map_button() - SYS_BTN_CNT_ESC - 1) + DPAD_BUTTON_NAMES + 2]);
 				}
@@ -2496,7 +2496,7 @@ void HandleUI(void)
 			OsdWrite(3, s, 0, 0);
 			OsdWrite(4);
 
-			if(is_menu_core() && joy_bcount && get_map_button() >= SYS_BTN_RIGHT && get_map_button() <= SYS_BTN_START)
+			if(is_menu() && joy_bcount && get_map_button() >= SYS_BTN_RIGHT && get_map_button() <= SYS_BTN_START)
 			{
 				// draw an on-screen gamepad to help with central button mapping
 				if (!flash_timer || CheckTimer(flash_timer))
@@ -2551,7 +2551,7 @@ void HandleUI(void)
 
 			if (get_map_vid() || get_map_pid())
 			{
-				if (!is_menu_core() && get_map_type() && !has_default_map())
+				if (!is_menu() && get_map_type() && !has_default_map())
 				{
 					for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
 					OsdWrite(6, "   You need to define this");
@@ -2565,15 +2565,15 @@ void HandleUI(void)
 					sprintf(s, "   %s ID: %04x:%04x", get_map_type() ? "Joystick" : "Keyboard", get_map_vid(), get_map_pid());
 					if (get_map_button() > 0 || !joymap_first)
 					{
-						OsdWrite(7, (get_map_type() && !is_menu_core()) ? "   Space/Menu \x16 Undefine" : "        Space \x16 Undefine");
+						OsdWrite(7, (get_map_type() && !is_menu()) ? "   Space/Menu \x16 Undefine" : "        Space \x16 Undefine");
 						if (!get_map_type()) OsdWrite(9);
 					}
 					OsdWrite(5, s);
-					if (!is_menu_core()) OsdWrite(10, "          F12 \x16 Clear all");
+					if (!is_menu()) OsdWrite(10, "          F12 \x16 Clear all");
 				}
 			}
 
-			if (!is_menu_core() && (get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8) || (select & get_map_vid() & get_map_pid())) && joymap_first && get_map_type())
+			if (!is_menu() && (get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8) || (select & get_map_vid() & get_map_pid())) && joymap_first && get_map_type())
 			{
 				finish_map_setting(0);
 				menustate = MENU_JOYDIGMAP3;
@@ -2582,7 +2582,7 @@ void HandleUI(void)
 			else if (select || menu || get_map_button() >= (joy_bcount ? joy_bcount + 4 : 8))
 			{
 				finish_map_setting(menu);
-				if (is_menu_core())
+				if (is_menu())
 				{
 					menustate = MENU_SYSTEM1;
 					menusub = 2;
@@ -3566,7 +3566,7 @@ void HandleUI(void)
 				char type = flist_SelectedItem()->de.d_type;
 				memcpy(name, flist_SelectedItem()->de.d_name, sizeof(name));
 
-				if ((fs_Options & SCANO_UMOUNT) && is_megacd_core() && type == DT_DIR && strcmp(flist_SelectedItem()->de.d_name, ".."))
+				if ((fs_Options & SCANO_UMOUNT) && is_megacd() && type == DT_DIR && strcmp(flist_SelectedItem()->de.d_name, ".."))
 				{
 					int len = strlen(SelectedPath);
 					strcat(SelectedPath, "/");
@@ -3696,7 +3696,7 @@ void HandleUI(void)
 		if (menu || recent)
 		{
 			menustate = fs_MenuCancel;
-			if (is_menu_core()) menustate = MENU_FILE_SELECT1;
+			if (is_menu()) menustate = MENU_FILE_SELECT1;
 			break;
 		}
 
@@ -3734,7 +3734,7 @@ void HandleUI(void)
 			sleep(1);
 			recent_clear((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index);
 			menustate = fs_MenuCancel;
-			if (is_menu_core()) menustate = MENU_FILE_SELECT1;
+			if (is_menu()) menustate = MENU_FILE_SELECT1;
 			break;
 		}
 
@@ -4889,7 +4889,7 @@ void HandleUI(void)
 		break;
 	}
 
-	if (is_menu_core())
+	if (is_menu())
 	{
 		static unsigned long rtc_timer = 0;
 		static int init_wait = 0;

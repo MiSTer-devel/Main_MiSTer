@@ -1233,7 +1233,7 @@ void start_map_setting(int cnt, int set)
 	mapping_clear = 0;
 	tmp_axis_n = 0;
 
-	if (mapping_type <= 1 && is_menu_core()) mapping_button = -6;
+	if (mapping_type <= 1 && is_menu()) mapping_button = -6;
 	memset(tmp_axis, 0, sizeof(tmp_axis));
 
 	//un-stick the enter key
@@ -1258,13 +1258,13 @@ int get_map_clear()
 static uint32_t osd_timer = 0;
 int get_map_cancel()
 {
-	return (mapping && !is_menu_core() && osd_timer && CheckTimer(osd_timer));
+	return (mapping && !is_menu() && osd_timer && CheckTimer(osd_timer));
 }
 
 static char *get_map_name(int dev, int def)
 {
 	static char name[128];
-	if (def || is_menu_core()) sprintf(name, "input_%s_v3.map", input[dev].idstr);
+	if (def || is_menu()) sprintf(name, "input_%s_v3.map", input[dev].idstr);
 	else sprintf(name, "%s_input_%s_v3.map", user_io_get_core_name_ex(), input[dev].idstr);
 	return name;
 }
@@ -1297,7 +1297,7 @@ void finish_map_setting(int dismiss)
 
 		if (!dismiss) save_map(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 		if (dismiss == 2) delete_map(get_map_name(mapping_dev, 0));
-		if (is_menu_core()) input[mapping_dev].has_mmap = 0;
+		if (is_menu()) input[mapping_dev].has_mmap = 0;
 	}
 }
 
@@ -1881,7 +1881,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		else if (!load_map(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
-			if (!is_menu_core())
+			if (!is_menu())
 			{
 				if (input[dev].has_mmap == 1)
 				{
@@ -1923,12 +1923,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	if (old_combo != 3 && input[dev].osd_combo == 3)
 	{
 		osd_event = 1;
-		if (mapping && !is_menu_core()) osd_timer = GetTimer(1000);
+		if (mapping && !is_menu()) osd_timer = GetTimer(1000);
 	}
 	else if (old_combo == 3 && input[dev].osd_combo != 3)
 	{
 		osd_event = 2;
-		if (mapping && !is_menu_core())
+		if (mapping && !is_menu())
 		{
 			if (CheckTimer(osd_timer))
 			{
@@ -1952,7 +1952,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	{
 		int idx = 0;
 
-		if (is_menu_core())
+		if (is_menu())
 		{
 			spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 			osd_event = 0;
@@ -2014,7 +2014,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			else
 			{
-				int clear = (ev->code == KEY_F12 || ev->code == KEY_MENU || ev->code == KEY_HOMEPAGE) && !is_menu_core();
+				int clear = (ev->code == KEY_F12 || ev->code == KEY_MENU || ev->code == KEY_HOMEPAGE) && !is_menu();
 				if (ev->value == 1 && mapping_dev < 0 && !clear)
 				{
 					mapping_dev = dev;
@@ -2023,11 +2023,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 
 				mapping_clear = 0;
-				if (mapping_dev >= 0 && !map_skip && (mapping_dev == dev || clear) && mapping_button < (is_menu_core() ? (mapping_type ? SYS_BTN_CNT_ESC + 1 : SYS_BTN_OSD_KTGL + 1) : mapping_count))
+				if (mapping_dev >= 0 && !map_skip && (mapping_dev == dev || clear) && mapping_button < (is_menu() ? (mapping_type ? SYS_BTN_CNT_ESC + 1 : SYS_BTN_OSD_KTGL + 1) : mapping_count))
 				{
 					if (ev->value == 1 && !key_mapped)
 					{
-						if (is_menu_core())
+						if (is_menu())
 						{
 							if (mapping_dev == dev && !(!mapping_button && last_axis && ((ev->code == last_axis) || (ev->code == last_axis + 1))))
 							{
@@ -2102,7 +2102,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						}
 					}
 					//combo for osd button
-					if (ev->value == 1 && key_mapped && key_mapped != ev->code && is_menu_core() && mapping_button == SYS_BTN_OSD_KTGL && mapping_type)
+					if (ev->value == 1 && key_mapped && key_mapped != ev->code && is_menu() && mapping_button == SYS_BTN_OSD_KTGL && mapping_type)
 					{
 						input[dev].map[SYS_BTN_OSD_KTGL + 2] = ev->code;
 						printf("Set combo: %x + %x\n", input[dev].map[SYS_BTN_OSD_KTGL + 1], input[dev].map[SYS_BTN_OSD_KTGL + 2]);
@@ -2120,7 +2120,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 			}
 		}
-		else if (is_menu_core())
+		else if (is_menu())
 		{
 			//Define min-0-max analogs
 			switch (mapping_button)
@@ -2237,7 +2237,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (idx) input[mapping_dev].map[idx] = 0;
 						else if (mapping_button > 0)
 						{
-							if (!is_menu_core()) input[mapping_dev].map[mapping_button] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
+							if (!is_menu()) input[mapping_dev].map[mapping_button] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
 						}
 					}
 					last_axis = 0;
@@ -2247,11 +2247,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 
 			map_skip = 0;
-			if (mapping_button >= 4 && !is_menu_core() && !strcmp(joy_bnames[mapping_button - 4], "-")) map_skip = 2;
+			if (mapping_button >= 4 && !is_menu() && !strcmp(joy_bnames[mapping_button - 4], "-")) map_skip = 2;
 			if (!map_skip) break;
 		}
 
-		if (is_menu_core() && mapping_type <= 1 && mapping_dev >= 0)
+		if (is_menu() && mapping_type <= 1 && mapping_dev >= 0)
 		{
 			memcpy(&input[mapping_dev].mmap[SYS_AXIS1_X], tmp_axis, sizeof(tmp_axis));
 			memcpy(&input[mapping_dev].map[SYS_AXIS1_X], tmp_axis, sizeof(tmp_axis));
@@ -2986,7 +2986,7 @@ int input_test(int getchar)
 	if (state == 2)
 	{
 		int timeout = 0;
-		if (is_menu_core() && video_fb_state()) timeout = 25;
+		if (is_menu() && video_fb_state()) timeout = 25;
 
 		while (1)
 		{
@@ -3194,7 +3194,7 @@ int input_test(int getchar)
 									if (ev.code == KEY_MENU) ev.code = BTN_MODE;
 								}
 
-								if (is_menu_core() && !video_fb_state())
+								if (is_menu() && !video_fb_state())
 								{
 									/*
 									if (mapping && mapping_type <= 1 && !(ev.type==EV_KEY && ev.value>1))
@@ -3398,7 +3398,7 @@ int input_test(int getchar)
 							xval = ((data[0] & 0x10) ? -256 : 0) | data[1];
 							yval = ((data[0] & 0x20) ? -256 : 0) | data[2];
 
-							if (is_menu_core() && !video_fb_state()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, data[0], xval, yval, (int8_t)data[3]);
+							if (is_menu() && !video_fb_state()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, data[0], xval, yval, (int8_t)data[3]);
 
 							if (cfg.mouse_throttle) throttle = cfg.mouse_throttle;
 							if (ds_mouse_emu) throttle *= 4;

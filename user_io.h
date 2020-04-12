@@ -76,6 +76,12 @@
 #define UIO_CD_SET      0x35
 #define UIO_INFO_GET    0x36
 #define UIO_SETWIDTH    0x37  // Set max scaled horizontal resolution
+#define UIO_SETSYNC     0x38
+#define ST_WRITE_MEMORY 0x3A
+#define ST_READ_MEMORY  0x3B
+#define ST_ACK_DMA      0x3C
+#define ST_NAK_DMA      0x3D
+#define ST_GET_DMASTATE 0x3E
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -285,15 +291,17 @@ void diskled_on();
 
 char is_minimig();
 char is_sharpmz();
-char is_menu_core();
-char is_x86_core();
-char is_snes_core();
-char is_neogeo_core();
-char is_megacd_core();
-char is_archie_core();
-char is_gba_core();
+char is_menu();
+char is_x86();
+char is_snes();
+char is_neogeo();
+char is_megacd();
+char is_archie();
+char is_gba();
+char is_c64();
+char is_st();
 
-#define HomeDir (is_menu_core() ? "Scripts" : user_io_get_core_path())
-#define CoreName (is_menu_core() ? "Scripts" : user_io_get_core_name())
+#define HomeDir (is_menu() ? "Scripts" : user_io_get_core_path())
+#define CoreName (is_menu() ? "Scripts" : user_io_get_core_name())
 
 #endif // USER_IO_H

@@ -450,7 +450,7 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	for (int i = 9; i < 21; i++)
 	{
 		printf("0x%X, ", v_cur.item[i]);
-		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust == 2 && !is_menu_core()) ? 0x8000 : 0));
+		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust == 2 && !is_menu()) ? 0x8000 : 0));
 		else
 		{
 			spi_w(v_cur.item[i]);
@@ -604,7 +604,7 @@ void video_mode_load()
 static int api1_5 = 0;
 int hasAPI1_5()
 {
-	return api1_5 || is_menu_core();
+	return api1_5 || is_menu();
 }
 
 static uint32_t show_video_info(int force)
@@ -706,7 +706,7 @@ static uint32_t show_video_info(int force)
 void video_mode_adjust()
 {
 	uint32_t vtime = show_video_info(0);
-	if (vtime && cfg.vsync_adjust && !is_menu_core())
+	if (vtime && cfg.vsync_adjust && !is_menu())
 	{
 		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
 
@@ -785,7 +785,7 @@ void video_fb_enable(int enable, int n)
 		int res = spi_uio_cmd_cont(UIO_SET_FBUF);
 		if (res)
 		{
-			if (is_menu_core() && !enable && menu_bg)
+			if (is_menu() && !enable && menu_bg)
 			{
 				enable = 1;
 				n = menu_bgn;
@@ -842,13 +842,13 @@ void video_fb_enable(int enable, int n)
 
 		DisableIO();
 		if (cfg.direct_video) set_vga_fb(enable);
-		if (is_menu_core()) user_io_8bit_set_status((fb_enabled && !fb_num) ? 0x160 : 0, 0x1E0);
+		if (is_menu()) user_io_8bit_set_status((fb_enabled && !fb_num) ? 0x160 : 0, 0x1E0);
 	}
 }
 
 int video_fb_state()
 {
-	if (is_menu_core())
+	if (is_menu())
 	{
 		return fb_enabled && !fb_num;
 	}

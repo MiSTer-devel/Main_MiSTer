@@ -695,7 +695,7 @@ char* OsdCoreName()
 
 void OsdUpdate()
 {
-	int n = is_menu_core() ? 19 : osd_size;
+	int n = is_menu() ? 19 : osd_size;
 	for (int i = 0; i < n; i++)
 	{
 		if (osdset & (1 << i))
@@ -703,7 +703,7 @@ void OsdUpdate()
 			spi_osd_cmd_cont(OSD_CMD_WRITE | i);
 			spi_write(osdbuf + i * 256, 256, 0);
 			DisableOsd();
-			if (is_megacd_core()) mcd_poll();
+			if (is_megacd()) mcd_poll();
 		}
 	}
 

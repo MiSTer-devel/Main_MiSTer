@@ -64,7 +64,7 @@ static void recent_load(int idx)
 	for (int i = 0; i < recent_available(); i++)
 	{
 		ena[i] = FileExists(recent_path(recents[i].dir, recents[i].name));
-		if (idx >= 0 && is_neogeo_core() && !ena[i]) ena[i] = PathIsDir(recent_path(recents[i].dir, recents[i].name));
+		if (idx >= 0 && is_neogeo() && !ena[i]) ena[i] = PathIsDir(recent_path(recents[i].dir, recents[i].name));
 	}
 }
 

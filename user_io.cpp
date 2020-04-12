@@ -187,42 +187,42 @@ const char *user_io_get_core_name_ex()
 }
 
 static int is_menu_type = 0;
-char is_menu_core()
+char is_menu()
 {
 	if (!is_menu_type) is_menu_type = strcasecmp(core_name, "MENU") ? 2 : 1;
 	return (is_menu_type == 1);
 }
 
 static int is_x86_type = 0;
-char is_x86_core()
+char is_x86()
 {
 	if (!is_x86_type) is_x86_type = strcasecmp(core_name, "AO486") ? 2 : 1;
 	return (is_x86_type == 1);
 }
 
 static int is_snes_type = 0;
-char is_snes_core()
+char is_snes()
 {
 	if (!is_snes_type) is_snes_type = strcasecmp(core_name, "SNES") ? 2 : 1;
 	return (is_snes_type == 1);
 }
 
 static int is_cpc_type = 0;
-char is_cpc_core()
+char is_cpc()
 {
 	if (!is_cpc_type) is_cpc_type = strcasecmp(core_name, "amstrad") ? 2 : 1;
 	return (is_cpc_type == 1);
 }
 
 static int is_zx81_type = 0;
-char is_zx81_core()
+char is_zx81()
 {
 	if (!is_zx81_type) is_zx81_type = strcasecmp(core_name, "zx81") ? 2 : 1;
 	return (is_zx81_type == 1);
 }
 
 static int is_neogeo_type = 0;
-char is_neogeo_core()
+char is_neogeo()
 {
 	if (!is_neogeo_type) is_neogeo_type = strcasecmp(core_name, "neogeo") ? 2 : 1;
 	return (is_neogeo_type == 1);
@@ -236,14 +236,14 @@ char is_minimig()
 }
 
 static int is_megacd_type = 0;
-char is_megacd_core()
+char is_megacd()
 {
 	if (!is_megacd_type) is_megacd_type = strcasecmp(core_name, "MEGACD") ? 2 : 1;
 	return (is_megacd_type == 1);
 }
 
 static int is_archie_type = 0;
-char is_archie_core()
+char is_archie()
 {
 	if (core_type == CORE_TYPE_ARCHIE) return 1;
 	if (!is_archie_type) is_archie_type = strcasecmp(core_name, "ARCHIE") ? 2 : 1;
@@ -251,17 +251,24 @@ char is_archie_core()
 }
 
 static int is_gba_type = 0;
-char is_gba_core()
+char is_gba()
 {
 	if (!is_gba_type) is_gba_type = strcasecmp(core_name, "GBA") ? 2 : 1;
 	return (is_gba_type == 1);
 }
 
 static int is_c64_type = 0;
-char is_c64_core()
+char is_c64()
 {
 	if (!is_c64_type) is_c64_type = strcasecmp(core_name, "C64") ? 2 : 1;
 	return (is_c64_type == 1);
+}
+
+static int is_st_type = 0;
+char is_st()
+{
+	if (!is_st_type) is_st_type = strcasecmp(core_name, "AtariST") ? 2 : 1;
+	return (is_st_type == 1);
 }
 
 char is_sharpmz()
@@ -292,6 +299,8 @@ static void user_io_read_core_name()
 	is_megacd_type = 0;
 	is_archie_type = 0;
 	is_gba_type = 0;
+	is_c64_type = 0;
+	is_st_type = 0;
 	core_name[0] = 0;
 
 	// get core name
@@ -426,7 +435,7 @@ static void parse_config()
 
 				unsigned long x = getStatus(p+1, status);
 
-				if (is_x86_core())
+				if (is_x86())
 				{
 					if (p[2] == '2') x86_set_fdd_boot(!(x&1));
 				}
@@ -600,7 +609,7 @@ uint16_t sdram_sz(int sz)
 			if(res & 0x4000) printf("*** Debug phase: %d\n", (res & 0x100) ? (res & 0xFF) : -(res & 0xFF));
 			else printf("*** Found SDRAM config: %d\n", res & 7);
 		}
-		else if(!is_menu_core())
+		else if(!is_menu())
 		{
 			printf("*** SDRAM config not found\n");
 		}
@@ -786,7 +795,7 @@ void user_io_init(const char *path, const char *xml)
 			}
 			parse_config();
 
-			if (is_menu_core())
+			if (is_menu())
 			{
 				user_io_8bit_set_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
 				if (cfg.fb_terminal) video_menu_bg((status[0] >> 1) & 7);
@@ -803,12 +812,12 @@ void user_io_init(const char *path, const char *xml)
 					puts("Identified Minimig V2 core");
 					BootInit();
 				}
-				else if (is_x86_core())
+				else if (is_x86())
 				{
 					x86_config_load();
 					x86_init();
 				}
-				else if (is_archie_core())
+				else if (is_archie())
 				{
 					puts("Identified Archimedes core");
 					archie_init();
@@ -817,7 +826,7 @@ void user_io_init(const char *path, const char *xml)
 				{
 					if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 					{
-						if (!is_cpc_core())
+						if (!is_cpc())
 						{
 							// check for multipart rom
 							for (char i = 0; i < 4; i++)
@@ -847,7 +856,7 @@ void user_io_init(const char *path, const char *xml)
 						if (user_io_use_cheats()) cheats_init("", user_io_get_file_crc());
 					}
 
-					if (is_cpc_core())
+					if (is_cpc())
 					{
 						for (int m = 0; m < 3; m++)
 						{
@@ -1226,7 +1235,7 @@ int user_io_file_mount(char *name, unsigned char index, char pre)
 		{
 			ret = x2trd(name, sd_image + index);
 		}
-		else if (is_c64_core() && len > 4 && !strcasecmp(name + len - 4, ".t64"))
+		else if (is_c64() && len > 4 && !strcasecmp(name + len - 4, ".t64"))
 		{
 			writable = 0;
 			ret = c64_openT64(name, sd_image + index);
@@ -1816,7 +1825,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	// prepare transmission of new file
 	user_io_set_download(1);
 
-	if (is_snes_core() && bytes2send)
+	if (is_snes() && bytes2send)
 	{
 		printf("Load SNES ROM.\n");
 		uint8_t* buf = snes_get_header(&f);
@@ -1840,7 +1849,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	if (use_progress) MenuHide();
 
 	int dosend = 1;
-	if (is_gba_core())
+	if (is_gba())
 	{
 		process_ss(name);
 
@@ -1912,7 +1921,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	user_io_set_download(0);
 	printf("\n");
 
-	if (is_zx81_core() && index)
+	if (is_zx81() && index)
 	{
 		send_pcolchr(name, (index & 0x1F) | 0x20, 0);
 		send_pcolchr(name, (index & 0x1F) | 0x60, 1);
@@ -2052,16 +2061,16 @@ void user_io_send_buttons(char force)
 		//special reset for some cores
 		if (!user_io_osd_is_visible() && (key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			if (is_archie_core()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
+			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			if (is_minimig()) minimig_reset();
-			if (is_megacd_core()) mcd_reset();
+			if (is_megacd()) mcd_reset();
 		}
 
 		key_map = map;
 		if (user_io_osd_is_visible()) map &= ~BUTTON2;
 		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
-		if ((key_map & BUTTON2) && is_x86_core()) x86_init();
+		if ((key_map & BUTTON2) && is_x86()) x86_init();
 	}
 }
 
@@ -2239,7 +2248,7 @@ void user_io_poll()
 		tos_poll();
 	}
 
-	if (core_type == CORE_TYPE_8BIT && !is_menu_core())
+	if (core_type == CORE_TYPE_8BIT && !is_menu())
 	{
 		/*
 		unsigned char c = 1, f, p = 0;
@@ -2271,11 +2280,11 @@ void user_io_poll()
 	}
 
 	// sd card emulation
-	if (is_x86_core())
+	if (is_x86())
 	{
 		x86_poll();
 	}
-	else if ((core_type == CORE_TYPE_8BIT || core_type == CORE_TYPE_ARCHIE) && !is_menu_core() && !is_minimig())
+	else if ((core_type == CORE_TYPE_8BIT || core_type == CORE_TYPE_ARCHIE) && !is_menu() && !is_minimig())
 	{
 		static uint8_t buffer[4][512];
 		uint32_t lba;
@@ -2389,7 +2398,7 @@ void user_io_poll()
 					{
 						if (sd_image[disk].type == 2)
 						{
-							if (is_megacd_core())
+							if (is_megacd())
 							{
 								mcd_fill_blanksave(buffer[disk], lba);
 							}
@@ -2440,7 +2449,7 @@ void user_io_poll()
 		}
 	}
 
-	if (core_type == CORE_TYPE_8BIT && !is_menu_core() && !is_minimig() && !is_archie_core())
+	if (core_type == CORE_TYPE_8BIT && !is_menu() && !is_minimig() && !is_archie())
 	{
 		// frequently check ps2 mouse for events
 		if (CheckTimer(mouse_timer))
@@ -2503,7 +2512,7 @@ void user_io_poll()
 				else if (ps2_wheel < -63) ps2_wheel = -63;
 
 				// collect movement info and send at predefined rate
-				if (is_menu_core() && !video_fb_state()) printf("PS2 MOUSE: %x %d %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2], ps2_wheel);
+				if (is_menu() && !video_fb_state()) printf("PS2 MOUSE: %x %d %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2], ps2_wheel);
 
 				if (!osd_is_visible)
 				{
@@ -2521,18 +2530,18 @@ void user_io_poll()
 		}
 	}
 
-	if (is_neogeo_core() && (!rtc_timer || CheckTimer(rtc_timer)))
+	if (is_neogeo() && (!rtc_timer || CheckTimer(rtc_timer)))
 	{
 		// Update once per minute should be enough
 		rtc_timer = GetTimer(60000);
 		send_rtc(1);
 	}
 
-	if (core_type == CORE_TYPE_ARCHIE || is_archie_core()) archie_poll();
+	if (core_type == CORE_TYPE_ARCHIE || is_archie()) archie_poll();
 	if (core_type == CORE_TYPE_SHARPMZ) sharpmz_poll();
 
 	static uint8_t leds = 0;
-	if(use_ps2ctl && !is_minimig() && !is_archie_core())
+	if(use_ps2ctl && !is_minimig() && !is_archie())
 	{
 		leds |= (KBD_LED_FLAG_STATUS | KBD_LED_CAPS_CONTROL);
 
@@ -2664,7 +2673,7 @@ void user_io_poll()
 		}
 	}
 
-	if (CheckTimer(led_timer) && !is_menu_core())
+	if (CheckTimer(led_timer) && !is_menu())
 	{
 		led_timer = GetTimer(LED_FREQ);
 		if (!use_ps2ctl)
@@ -2697,7 +2706,7 @@ void user_io_poll()
 	}
 	else if(CheckTimer(res_timer))
 	{
-		if (is_menu_core())
+		if (is_menu())
 		{
 			static int got_cfg = 0;
 			if (!got_cfg)
@@ -2765,7 +2774,7 @@ void user_io_poll()
 		diskled_is_on = 0;
 	}
 
-	if (is_megacd_core()) mcd_poll();
+	if (is_megacd()) mcd_poll();
 	process_ss(0);
 }
 
@@ -2843,7 +2852,7 @@ static void send_keycode(unsigned short key, int press)
 		return;
 	}
 
-	if (core_type == CORE_TYPE_ARCHIE || is_archie_core())
+	if (core_type == CORE_TYPE_ARCHIE || is_archie())
 	{
 		if (press > 1) return;
 
@@ -2985,7 +2994,7 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 			mouse_pos[Y] += y;
 			mouse_flags |= 0x80 | (b & 7);
 		}
-		else if (is_archie_core())
+		else if (is_archie())
 		{
 			archie_mouse(b, x, y);
 		}
@@ -3094,7 +3103,7 @@ void set_volume(int cmd)
 
 void user_io_kbd(uint16_t key, int press)
 {
-	if(is_menu_core()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
+	if(is_menu()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 
 	// Win+PrnScr or Alt/Win+ScrLk - screen shot
 	if ((key == KEY_SYSRQ && (get_key_mod() & (RGUI | LGUI))) || (key == KEY_SCROLLLOCK && (get_key_mod() & (LALT | RALT | RGUI | LGUI))))
@@ -3167,7 +3176,7 @@ void user_io_kbd(uint16_t key, int press)
 			uint32_t code = get_ps2_code(key);
 			if (!press)
 			{
-				if (is_menu_core() && !video_fb_state()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
+				if (is_menu() && !video_fb_state()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
 				if (key == KEY_MENU) key = KEY_F12;
 				if (osd_is_visible) menu_key_set(UPSTROKE | key);
@@ -3177,16 +3186,16 @@ void user_io_kbd(uint16_t key, int press)
 			}
 			else
 			{
-				if (is_menu_core() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
-				if (!osd_is_visible && !is_menu_core() && key == KEY_MENU && press == 3) open_joystick_setup();
-				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86_core() && !is_archie_core()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
+				if (is_menu() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
+				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
+				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
 				else if (osd_is_visible)
 				{
 					if (press == 1) menu_key_set(key);
 				}
 				else
 				{
-					if (((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl && !is_archie_core())) && !is_menu_core())
+					if (((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl && !is_archie())) && !is_menu())
 					{
 						if (press == 1)
 						{
