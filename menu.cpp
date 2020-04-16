@@ -2327,7 +2327,7 @@ void HandleUI(void)
 			memset(bar, 0x7f, 8 - m);
 		}
 
-		OsdWrite(13, s, menusub == 0, !cfg.volumectl);
+		OsdWrite(13, s, menusub == 0);
 		OsdWrite(15, STD_EXIT, menusub == 1, 0, OSD_ARROW_RIGHT);
 		break;
 
@@ -2444,7 +2444,7 @@ void HandleUI(void)
 			if (get_map_button() < 0)
 			{
 				strcpy(s, joy_ana_map[get_map_button() + 6]);
-				OsdWrite(7, "        Space \x16 Skip");
+				OsdWrite(7, "   Space/User \x16 Skip");
 			}
 			else if (get_map_button() < DPAD_NAMES)
 			{

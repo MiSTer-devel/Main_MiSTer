@@ -5,11 +5,7 @@
 #ifndef __CFG_H__
 #define __CFG_H__
 
-
-//// includes ////
 #include <inttypes.h>
-#include "ini_parser.h"
-
 
 //// type definitions ////
 typedef struct {
@@ -33,7 +29,6 @@ typedef struct {
 	uint8_t kbd_nomouse;
 	uint8_t mouse_throttle;
 	uint8_t bootscreen;
-	uint8_t volumectl;
 	uint8_t vscale_mode;
 	uint16_t vscale_border;
 	uint8_t rbf_hide_datecode;
@@ -52,12 +47,10 @@ typedef struct {
 	char font[1024];
 } cfg_t;
 
-//// functions ////
-void MiSTer_ini_parse();
-
-//// global variables ////
-extern const ini_cfg_t ini_cfg;
 extern cfg_t cfg;
 
+//// functions ////
+void cfg_parse();
+const char* cfg_get_name(uint8_t alt);
 
 #endif // __CFG_H__

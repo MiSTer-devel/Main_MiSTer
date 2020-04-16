@@ -1664,6 +1664,8 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 						mask = 0;
 					}
 				}
+
+				if((mask & JOY_BTN2) && !(old_osdbtn & JOY_BTN2)) mask = 0;
 			}
 
 			memset(joy, 0, sizeof(joy));
@@ -1673,18 +1675,42 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 			switch (mask)
 			{
 			case JOY_RIGHT:
+				if (press && (osdbtn & JOY_BTN2))
+				{
+					user_io_set_ini(0);
+					osdbtn = 0;
+					return;
+				}
 				ev.code = KEY_RIGHT;
 				break;
 
 			case JOY_LEFT:
+				if (press && (osdbtn & JOY_BTN2))
+				{
+					user_io_set_ini(1);
+					osdbtn = 0;
+					return;
+				}
 				ev.code = KEY_LEFT;
 				break;
 
 			case JOY_UP:
+				if (press && (osdbtn & JOY_BTN2))
+				{
+					user_io_set_ini(2);
+					osdbtn = 0;
+					return;
+				}
 				ev.code = KEY_UP;
 				break;
 
 			case JOY_DOWN:
+				if (press && (osdbtn & JOY_BTN2))
+				{
+					user_io_set_ini(3);
+					osdbtn = 0;
+					return;
+				}
 				ev.code = KEY_DOWN;
 				break;
 
@@ -1775,14 +1801,15 @@ static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
+	if (ev->type != EV_KEY && ev->type != EV_ABS && ev->type != EV_REL) return;
+	if (ev->type == EV_KEY && (!ev->code || ev->code == KEY_UNKNOWN)) return;
+
 	static uint16_t last_axis = 0;
 
 	int sub_dev = dev;
 
 	//check if device is a part of multifunctional device
 	if (input[dev].bind >= 0) dev = input[dev].bind;
-
-	if (ev->type == EV_KEY && !ev->code) return;
 
 	//mouse
 	if (ev->type == EV_KEY && ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK)
@@ -1799,6 +1826,29 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int cancel   = (ev->type == EV_KEY && ev->code == KEY_ESC);
 	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER);
 	int origcode = ev->code;
+
+	if (!input[dev].num && ((ev->type == EV_KEY && ev->code >= 256) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
+	{
+		for (uint8_t num = 1; num < NUMDEV + 1; num++)
+		{
+			int found = 0;
+			for (int i = 0; i < NUMDEV; i++)
+			{
+				// paddles/spinners overlay on top of other gamepad
+				if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
+				{
+					found = (input[i].num == num);
+					if (found) break;
+				}
+			}
+
+			if (!found)
+			{
+				input[dev].num = num;
+				break;
+			}
+		}
+	}
 
 	if (!input[dev].has_mmap)
 	{
@@ -1820,6 +1870,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
 			input[dev].map[map_paddle_btn()] = 0x120;
+			if (cfg.controller_info)
+			{
+				char str[32];
+				sprintf(str, "P%d paddle/spinner", input[dev].num);
+				Info(str, cfg.controller_info * 1000);
+			}
 		}
 		else if (!load_map(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
@@ -1829,7 +1885,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (input[dev].has_mmap == 1)
 				{
 					// not defined try to guess the mapping
-					map_joystick(input[dev].map, input[dev].mmap);
+					map_joystick(input[dev].map, input[dev].mmap, input[dev].num);
 				}
 				else
 				{
@@ -1840,7 +1896,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		}
 		else
 		{
-			map_joystick_show(input[dev].map, input[dev].mmap);
+			map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
 		}
 		input[dev].has_map++;
 	}
@@ -2211,29 +2267,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			//joystick buttons, digital directions
 			if (ev->code >= 256)
 			{
-				if (!input[dev].num)
-				{
-					for (uint8_t num = 1; num < NUMDEV + 1; num++)
-					{
-						int found = 0;
-						for (int i = 0; i < NUMDEV; i++)
-						{
-							// paddles/spinners overlay on top of other gamepad
-							if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
-							{
-								found = (input[i].num == num);
-								if (found) break;
-							}
-						}
-
-						if (!found)
-						{
-							input[dev].num = num;
-							break;
-						}
-					}
-				}
-
 				if (input[dev].lightgun_req && !user_io_osd_is_visible())
 				{
 					if (osd_event == 1)
@@ -2598,29 +2631,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		case EV_REL:
 			if (!user_io_osd_is_visible() && ev->code == 7)
 			{
-				// paddles/spinners overlay on top of other gamepad
-				if (input[dev].quirk == QUIRK_PDSP && !input[dev].num)
-				{
-					for (uint8_t num = 1; num < NUMDEV + 1; num++)
-					{
-						int found = 0;
-						for (int i = 0; i < NUMDEV; i++)
-						{
-							if (input[dev].quirk == QUIRK_PDSP)
-							{
-								found = (input[i].num == num);
-								if (found) break;
-							}
-						}
-
-						if (!found)
-						{
-							input[dev].num = num;
-							break;
-						}
-					}
-				}
-
 				if (input[dev].num && input[dev].num <= NUMPLAYERS)
 				{
 					int value = ev->value;
@@ -2720,9 +2730,20 @@ void mergedevs()
 	// merge multifunctional devices by id
 	for (int i = 0; i < NUMDEV; i++)
 	{
-		// Raphnet uses buggy firmware, don't merge it.
-		if (input[i].vid == 0x289B) continue;
-
+		//Bypass merging of specified 2 port/player controllers
+		if (input[i].vid == 0x289B) // Raphnet uses buggy firmware, don't merge it.
+			continue;
+		else if(input[i].vid == 0x0E8F) //Vendor -Mayflash
+		{
+			if(input[i].pid == 0x3013)  //SNES controller 2 port adapter
+				continue;
+		}
+		else if(input[i].vid == 0x16C0) //Vendor - XinMo
+		{
+			if(input[i].pid == 0x05E1) //XM-10 2 player USB Encoder
+				continue;
+		}
+			
 		input[i].bind = i;
 		if (input[i].id[0] && !input[i].mouse)
 		{
@@ -3159,6 +3180,11 @@ int input_test(int getchar)
 									//so it's impossible to use joystick codes as keyboards aren't personalized
 									if (ev.code == 164) ev.code = KEY_MENU;
 									if (ev.code == 1)   ev.code = KEY_MENU;
+								}
+
+								if (ev.type == EV_KEY && ev.code == KEY_BACK && input[dev].num)
+								{
+									ev.code = BTN_SELECT;
 								}
 
 								//Menu button quirk of 8BitDo gamepad in X-Input mode
