@@ -235,6 +235,7 @@ void FileClose(fileTYPE *file)
 
 	file->zip = nullptr;
 	file->filp = nullptr;
+	file->size = 0;
 }
 
 static int zip_search_by_crc(mz_zip_archive *zipArchive, uint32_t crc32)

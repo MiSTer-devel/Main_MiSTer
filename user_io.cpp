@@ -170,9 +170,6 @@ const char *user_io_get_core_name_ex()
 {
 	switch (user_io_core_type())
 	{
-	case CORE_TYPE_MIST:
-		return "ST";
-
 	case CORE_TYPE_ARCHIE:
 		return "ARCHIE";
 
@@ -700,9 +697,7 @@ void user_io_init(const char *path, const char *xml)
 		core_type = CORE_TYPE_8BIT;
 	}
 
-	if ((core_type != CORE_TYPE_DUMB) &&
-		(core_type != CORE_TYPE_MIST) &&
-		(core_type != CORE_TYPE_ARCHIE) &&
+	if ((core_type != CORE_TYPE_ARCHIE) &&
 		(core_type != CORE_TYPE_8BIT) &&
 		(core_type != CORE_TYPE_SHARPMZ))
 	{
@@ -746,17 +741,6 @@ void user_io_init(const char *path, const char *xml)
 		printf("Unable to identify core (%x)!\n", core_type);
 		break;
 
-	case CORE_TYPE_DUMB:
-		puts("Identified core without user interface");
-		break;
-
-	case CORE_TYPE_MIST:
-		puts("Identified MiST core");
-		ikbd_init();
-		tos_config_init();
-		tos_upload(NULL);
-		break;
-
 	case CORE_TYPE_ARCHIE:
 		puts("Identified Archimedes core");
 		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
@@ -784,18 +768,26 @@ void user_io_init(const char *path, const char *xml)
 		{
 			OsdCoreNameSet(user_io_get_core_name());
 
-			printf("Loading config %s\n", name);
 			uint32_t status[2] = { 0, 0 };
-			if (FileLoadConfig(name, status, 8))
+			if (!is_st())
 			{
-				printf("Found config: %08X-%08X\n", status[0], status[1]);
-				status[0] &= ~UIO_STATUS_RESET;
-				user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
-				user_io_8bit_set_status(status[1], 0xffffffff, 1);
+				printf("Loading config %s\n", name);
+				if (FileLoadConfig(name, status, 8))
+				{
+					printf("Found config: %08X-%08X\n", status[0], status[1]);
+					status[0] &= ~UIO_STATUS_RESET;
+					user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
+					user_io_8bit_set_status(status[1], 0xffffffff, 1);
+				}
+				parse_config();
 			}
-			parse_config();
 
-			if (is_menu())
+			if (is_st())
+			{
+				tos_config_load(0);
+				tos_upload(NULL);
+			}
+			else if (is_menu())
 			{
 				user_io_8bit_set_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
 				if (cfg.fb_terminal) video_menu_bg((status[0] >> 1) & 7);
@@ -972,14 +964,6 @@ void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
 {
 	uint8_t joy = (joystick>1 || !joyswap) ? joystick : joystick ^ 1;
 
-	// atari ST handles joystick 0 and 1 through the ikbd emulated by the io controller
-	// but only for joystick 1 and 2
-	if (core_type == CORE_TYPE_MIST)
-	{
-		ikbd_joystick(joy, (uint8_t)map);
-		return;
-	}
-
 	static int use32 = 0;
 	use32 |= map >> 16;
 
@@ -992,51 +976,6 @@ void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
 	{
 		user_io_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
 	}
-}
-
-// transmit serial/rs232 data into core
-void user_io_serial_tx(char *chr, uint16_t cnt)
-{
-	spi_uio_cmd_cont(UIO_SERIAL_OUT);
-	while (cnt--) spi8(*chr++);
-	DisableIO();
-}
-
-char user_io_serial_status(serial_status_t *status_in, uint8_t status_out)
-{
-	uint8_t i, *p = (uint8_t*)status_in;
-
-	spi_uio_cmd_cont(UIO_SERIAL_STAT);
-
-	// first byte returned by core must be "magic". otherwise the
-	// core doesn't support this request
-	if (spi_b(status_out) != 0xa5)
-	{
-		DisableIO();
-		return 0;
-	}
-
-	// read the whole structure
-	for (i = 0; i<sizeof(serial_status_t); i++) *p++ = spi_in();
-
-	DisableIO();
-	return 1;
-}
-
-// transmit midi data into core
-void user_io_midi_tx(char chr)
-{
-	spi_uio_cmd8(UIO_MIDI_OUT, chr);
-}
-
-// send ethernet mac address into FPGA
-void user_io_eth_send_mac(uint8_t *mac)
-{
-	uint8_t i;
-
-	spi_uio_cmd_cont(UIO_ETH_MAC);
-	for (i = 0; i<6; i++) spi8(*mac++);
-	DisableIO();
 }
 
 static uint8_t CSD[16] = { 0xf1, 0x40, 0x40, 0x0a, 0x80, 0x7f, 0xe5, 0xe9, 0x00, 0x00, 0x59, 0x5b, 0x32, 0x00, 0x0e, 0x40 };
@@ -1131,38 +1070,6 @@ uint8_t user_io_ps2_ctl(uint8_t *kbd_ctl, uint8_t *mouse_ctl)
 	return res;
 }
 
-// read 32 bit ethernet status word from FPGA
-uint32_t user_io_eth_get_status(void)
-{
-	uint32_t s;
-
-	spi_uio_cmd_cont(UIO_ETH_STATUS);
-	s = spi_in();
-	s = (s << 8) | spi_in();
-	s = (s << 8) | spi_in();
-	s = (s << 8) | spi_in();
-	DisableIO();
-
-	return s;
-}
-
-// read ethernet frame from FPGAs ethernet tx buffer
-void user_io_eth_receive_tx_frame(uint8_t *d, uint16_t len)
-{
-	spi_uio_cmd_cont(UIO_ETH_FRM_IN);
-	while (len--) *d++ = spi_in();
-	DisableIO();
-}
-
-// write ethernet frame to FPGAs rx buffer
-void user_io_eth_send_rx_frame(uint8_t *s, uint16_t len)
-{
-	spi_uio_cmd_cont(UIO_ETH_FRM_OUT);
-	spi_write(s, len, 0);
-	spi8(0);     // one additional byte to allow fpga to store the previous one
-	DisableIO();
-}
-
 // 16 byte fifo for amiga key codes to limit max key rate sent into the core
 #define KBD_FIFO_SIZE  16   // must be power of 2
 static unsigned short kbd_fifo[KBD_FIFO_SIZE];
@@ -1218,33 +1125,45 @@ void user_io_set_download(unsigned char enable)
 	DisableFpga();
 }
 
-int user_io_file_mount(char *name, unsigned char index, char pre)
+int user_io_file_mount(const char *name, unsigned char index, char pre)
 {
 	int writable = 0;
 	int ret = 0;
 	int len = strlen(name);
 
-	if (!strcasecmp(user_io_get_core_name_ex(), "apple-ii"))
+	if (len)
 	{
-		ret = dsk2nib(name, sd_image + index);
-	}
+		if (!strcasecmp(user_io_get_core_name_ex(), "apple-ii"))
+		{
+			ret = dsk2nib(name, sd_image + index);
+		}
 
-	if (!ret)
+		if (!ret)
+		{
+			if (x2trd_ext_supp(name))
+			{
+				ret = x2trd(name, sd_image + index);
+			}
+			else if (is_c64() && len > 4 && !strcasecmp(name + len - 4, ".t64"))
+			{
+				writable = 0;
+				ret = c64_openT64(name, sd_image + index);
+			}
+			else
+			{
+				writable = FileCanWrite(name);
+				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+			}
+		}
+
+		if (!ret)
+		{
+			printf("Failed to open file %s\n", name);
+		}
+	}
+	else
 	{
-		if (x2trd_ext_supp(name))
-		{
-			ret = x2trd(name, sd_image + index);
-		}
-		else if (is_c64() && len > 4 && !strcasecmp(name + len - 4, ".t64"))
-		{
-			writable = 0;
-			ret = c64_openT64(name, sd_image + index);
-		}
-		else
-		{
-			writable = FileCanWrite(name);
-			ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
-		}
+		FileClose(&sd_image[index]);
 	}
 
 	buffer_lba[index] = ULLONG_MAX;
@@ -1252,7 +1171,6 @@ int user_io_file_mount(char *name, unsigned char index, char pre)
 	if (!ret)
 	{
 		sd_image[index].size = 0;
-		printf("Failed to open file %s\n", name);
 		if (pre)
 		{
 			writable = 1;
@@ -1982,17 +1900,20 @@ uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask, int ex)
 		// updated masked bits
 		status[ex] |= new_status & mask;
 
-		if (!io_ver)
+		if (!is_st())
 		{
-			spi_uio_cmd8(UIO_SET_STATUS, status[0]);
-			spi_uio_cmd32(UIO_SET_STATUS2, status[0], 0);
-		}
-		else
-		{
-			spi_uio_cmd_cont(UIO_SET_STATUS2);
-			spi32w(status[0]);
-			spi32w(status[1]);
-			DisableIO();
+			if (!io_ver)
+			{
+				spi_uio_cmd8(UIO_SET_STATUS, status[0]);
+				spi_uio_cmd32(UIO_SET_STATUS2, status[0], 0);
+			}
+			else
+			{
+				spi_uio_cmd_cont(UIO_SET_STATUS2);
+				spi32w(status[0]);
+				spi32w(status[1]);
+				DisableIO();
+			}
 		}
 	}
 
@@ -2128,30 +2049,11 @@ static uint32_t res_timer = 0;
 
 void user_io_poll()
 {
-	if ((core_type != CORE_TYPE_MIST) &&
-		(core_type != CORE_TYPE_ARCHIE) &&
+	if ((core_type != CORE_TYPE_ARCHIE) &&
 		(core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
 	{
 		return;  // no user io for the installed core
-	}
-
-	if (core_type == CORE_TYPE_MIST)
-	{
-		ikbd_poll();
-
-		unsigned char c = 0;
-
-		// check for incoming serial data. this is directly forwarded to the
-		// arm rs232 and mixes with debug output. Useful for debugging only of
-		// e.g. the diagnostic cartridge
-		spi_uio_cmd_cont(UIO_SERIAL_IN);
-		while (spi_in())
-		{
-			c = spi_in();
-			if (c != 0xff) putchar(c);
-		}
-		DisableIO();
 	}
 
 	user_io_send_buttons(0);
@@ -2242,40 +2144,8 @@ void user_io_poll()
 		}
 	}
 
-	if (core_type == CORE_TYPE_MIST)
-	{
-		// do some tos specific monitoring here
-		tos_poll();
-	}
-
 	if (core_type == CORE_TYPE_8BIT && !is_menu())
 	{
-		/*
-		unsigned char c = 1, f, p = 0;
-
-		// check for serial data to be sent
-		// check for incoming serial data. this is directly forwarded to the
-		// arm rs232 and mixes with debug output.
-		spi_uio_cmd_cont(UIO_SIO_IN);
-		// status byte is 1000000A with A=1 if data is available
-		if ((f = spi_in(0)) == 0x81)
-		{
-			printf("\033[1;36m");
-
-			// character 0xff is returned if FPGA isn't configured
-			while ((f == 0x81) && (c != 0xff) && (c != 0x00) && (p < 8))
-			{
-				c = spi_in();
-				if (c != 0xff && c != 0x00) printf("%c", c);
-
-				f = spi_in();
-				p++;
-			}
-			printf("\033[0m");
-		}
-		DisableIO();
-		*/
-
 		check_status_change();
 	}
 
@@ -2286,6 +2156,8 @@ void user_io_poll()
 	}
 	else if ((core_type == CORE_TYPE_8BIT || core_type == CORE_TYPE_ARCHIE) && !is_menu() && !is_minimig())
 	{
+		if (is_st()) tos_poll();
+
 		static uint8_t buffer[4][512];
 		uint32_t lba;
 		uint16_t req_type = 0;
@@ -2839,19 +2711,6 @@ static void send_keycode(unsigned short key, int press)
 		return;
 	}
 
-	if (core_type == CORE_TYPE_MIST)
-	{
-		if (press > 1) return;
-
-		uint32_t code = get_atari_code(key);
-		if (code == NONE) return;
-
-		// atari has "break" marker in msb
-		if (!press) code = (code & 0xff) | 0x80;
-		ikbd_keyboard(code);
-		return;
-	}
-
 	if (core_type == CORE_TYPE_ARCHIE || is_archie())
 	{
 		if (press > 1) return;
@@ -3005,10 +2864,6 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 			mouse_wheel += w;
 			mouse_flags |= 0x08 | (b & 7);
 		}
-		return;
-
-	case CORE_TYPE_MIST:
-		ikbd_mouse(b, x, y);
 		return;
 
 	case CORE_TYPE_ARCHIE:

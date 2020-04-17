@@ -88,7 +88,6 @@
     <ClCompile Include="support\neogeo\loader.cpp" />
     <ClCompile Include="support\sharpmz\sharpmz.cpp" />
     <ClCompile Include="support\snes\snes.cpp" />
-    <ClCompile Include="support\st\st_ikbd.cpp" />
     <ClCompile Include="support\st\st_tos.cpp" />
     <ClCompile Include="support\x86\x86.cpp" />
     <ClCompile Include="sxmlc.c" />
@@ -145,7 +144,6 @@
     <ClInclude Include="support\neogeo\loader.h" />
     <ClInclude Include="support\sharpmz\sharpmz.h" />
     <ClInclude Include="support\snes\snes.h" />
-    <ClInclude Include="support\st\st_ikbd.h" />
     <ClInclude Include="support\st\st_tos.h" />
     <ClInclude Include="support\x86\x86.h" />
     <ClInclude Include="sxmlc.h" />

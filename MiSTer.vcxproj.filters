@@ -166,9 +166,6 @@
     <ClCompile Include="support\snes\snes.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
-    <ClCompile Include="support\st\st_ikbd.cpp">
-      <Filter>Source Files\support</Filter>
-    </ClCompile>
     <ClCompile Include="support\st\st_tos.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
@@ -301,9 +298,6 @@
       <Filter>Header Files\imlib</Filter>
     </ClInclude>
     <ClInclude Include="support\neogeo\loader.h">
-      <Filter>Header Files\support</Filter>
-    </ClInclude>
-    <ClInclude Include="support\st\st_ikbd.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
     <ClInclude Include="support\st\st_tos.h">
