@@ -73,49 +73,49 @@ void tos_set_cdc_control_redirect(char mode)
 }
 */
 
-static void mist_set_control(uint32_t ctrl)
+static void set_control(uint32_t ctrl)
 {
 	spi_uio_cmd_cont(UIO_SET_STATUS2);
 	spi32w(ctrl);
 	DisableIO();
 }
 
-static void mist_memory_read(unsigned char *data, unsigned long words)
+static void memory_read(unsigned char *data, unsigned long words)
 {
-	EnableFpga();
+	EnableIO();
 	spi8(ST_READ_MEMORY);
 
 	// transmitted bytes must be multiple of 2 (-> words)
 	uint16_t *buf = (uint16_t*)data;
 	while (words--) *buf++ = spi_w(0);
 
-	DisableFpga();
+	DisableIO();
 }
 
-static void mist_memory_write(unsigned char *data, unsigned long words)
+static void memory_write(unsigned char *data, unsigned long words)
 {
-	EnableFpga();
+	EnableIO();
 	spi8(ST_WRITE_MEMORY);
 
 	uint16_t *buf = (uint16_t*)data;
 	while (words--) spi_w(*buf++);
 
-	DisableFpga();
+	DisableIO();
 }
 
 static void dma_ack(unsigned char status)
 {
-	EnableFpga();
+	EnableIO();
 	spi8(ST_ACK_DMA);
 	spi8(status);
-	DisableFpga();
+	DisableIO();
 }
 
 static void dma_nak(void)
 {
-	EnableFpga();
+	EnableIO();
 	spi8(ST_NAK_DMA);
-	DisableFpga();
+	DisableIO();
 }
 
 static void handle_acsi(unsigned char *buffer)
@@ -154,7 +154,7 @@ static void handle_acsi(unsigned char *buffer)
 				dma_buffer[3] = (blocks - 1) >> 0;
 				dma_buffer[6] = 2;  // 512 bytes per block
 
-				mist_memory_write(dma_buffer, 4);
+				memory_write(dma_buffer, 4);
 
 				dma_ack(0x00);
 				asc[target] = 0x00;
@@ -187,7 +187,7 @@ static void handle_acsi(unsigned char *buffer)
 				dma_buffer[2] = 0x05;
 				dma_buffer[12] = asc[target];
 			}
-			mist_memory_write(dma_buffer, 9); // 18 bytes
+			memory_write(dma_buffer, 9); // 18 bytes
 			dma_ack(0x00);
 			asc[target] = 0x00;
 			break;
@@ -220,7 +220,7 @@ static void handle_acsi(unsigned char *buffer)
 
 						len *= 512;
 						FileReadAdv(&hdd_image[target], buf, len);
-						mist_memory_write(buf, len / 2);
+						memory_write(buf, len / 2);
 					}
 					DISKLED_OFF;
 
@@ -269,7 +269,7 @@ static void handle_acsi(unsigned char *buffer)
 						length -= len;
 
 						len *= 512;
-						mist_memory_read(buf, len / 2);
+						memory_read(buf, len / 2);
 						FileWriteAdv(&hdd_image[target], buf, len);
 					}
 					DISKLED_OFF;
@@ -300,7 +300,7 @@ static void handle_acsi(unsigned char *buffer)
 			memcpy(dma_buffer + 32, "ATH ", 4);                  // Product revision
 			memcpy(dma_buffer + 36, VDATE "  ", 8);              // Serial number
 			if (device != 0) dma_buffer[0] = 0x7f;
-			mist_memory_write(dma_buffer, length / 2);
+			memory_write(dma_buffer, length / 2);
 			dma_ack(0x00);
 			asc[target] = 0x00;
 			break;
@@ -314,7 +314,7 @@ static void handle_acsi(unsigned char *buffer)
 				dma_buffer[6] = blocks >> 8;
 				dma_buffer[7] = blocks;
 				dma_buffer[10] = 2;           // byte 1 of block size in bytes (512)
-				mist_memory_write(dma_buffer, length / 2);
+				memory_write(dma_buffer, length / 2);
 				dma_ack(0x00);
 				asc[target] = 0x00;
 			}
@@ -349,14 +349,14 @@ static void handle_acsi(unsigned char *buffer)
 	}
 }
 
-static void mist_get_dmastate()
+static void get_dmastate()
 {
 	unsigned char buffer[16];
 
-	EnableFpga();
+	EnableIO();
 	spi8(ST_GET_DMASTATE);
 	spi_read(buffer, 16, 0);
-	DisableFpga();
+	DisableIO();
 
 	if (buffer[10] & 0x01) handle_acsi(buffer);
 }
@@ -369,10 +369,10 @@ static void fill_tx(unsigned char fill, unsigned int len, unsigned char index)
 	uint16_t wfill = (fill << 8) | fill;
 
 	len /= 2;
-	EnableFpga();
+	EnableIO();
 	spi8(UIO_FILE_TX_DAT);
 	while(len--) spi_w(wfill);
-	DisableFpga();
+	DisableIO();
 
 	user_io_set_download(0);
 }
@@ -404,7 +404,7 @@ void tos_poll()
 {
 	static unsigned long timer = 0;
 
-	mist_get_dmastate();
+	get_dmastate();
 
 	// check the user button
 	if (!user_io_osd_is_visible() && user_io_user_button())
@@ -428,7 +428,7 @@ void tos_poll()
 void tos_update_sysctrl(unsigned long n)
 {
 	config.system_ctrl = n;
-	mist_set_control(config.system_ctrl);
+	set_control(config.system_ctrl);
 }
 
 const char *tos_get_disk_name(int index)
@@ -487,7 +487,7 @@ static void tos_select_hdd_image(int i, const char *name)
 	}
 
 	// update system control
-	mist_set_control(config.system_ctrl);
+	set_control(config.system_ctrl);
 }
 
 void tos_insert_disk(int index, const char *name)
