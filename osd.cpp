@@ -704,6 +704,7 @@ void OsdUpdate()
 			spi_write(osdbuf + i * 256, 256, 0);
 			DisableOsd();
 			if (is_megacd()) mcd_poll();
+			if (is_pce()) pcecd_poll();
 		}
 	}
 

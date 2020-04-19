@@ -239,6 +239,13 @@ char is_megacd()
 	return (is_megacd_type == 1);
 }
 
+static int is_pce_type = 0;
+char is_pce()
+{
+	if (!is_pce_type) is_pce_type = strcasecmp(core_name, "TGFX16") ? 2 : 1;
+	return (is_pce_type == 1);
+}
+
 static int is_archie_type = 0;
 char is_archie()
 {
@@ -294,6 +301,7 @@ static void user_io_read_core_name()
 	is_neogeo_type = 0;
 	is_minimig_type = 0;
 	is_megacd_type = 0;
+	is_pce_type = 0;
 	is_archie_type = 0;
 	is_gba_type = 0;
 	is_c64_type = 0;
@@ -1985,6 +1993,7 @@ void user_io_send_buttons(char force)
 			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
+			if (is_pce()) pcecd_reset();
 		}
 
 		key_map = map;
@@ -2647,6 +2656,7 @@ void user_io_poll()
 	}
 
 	if (is_megacd()) mcd_poll();
+	if (is_pce()) pcecd_poll();
 	process_ss(0);
 }
 

@@ -30,3 +30,6 @@
 
 // C64 support
 #include "support/c64/c64.h"
+
+// PCECD  support
+#include "support/pcecd/pcecd.h"

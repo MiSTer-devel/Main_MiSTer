@@ -1,5 +1,5 @@
-#ifndef MEGACD_H
-#define MEGACD_H
+#ifndef PCECD_H
+#define PCECD_H
 
 
 // CDD status
@@ -20,24 +20,25 @@
 #define CD_STAT_TEST			0x0F
 
 // CDD command
-#define CD_COMM_IDLE			0x00
-#define CD_COMM_STOP			0x01
-#define CD_COMM_TOC				0x02
-#define CD_COMM_PLAY			0x03
-#define CD_COMM_SEEK			0x04
-//#define CD_COMM_OPEN			0x05
-#define CD_COMM_PAUSE			0x06
-#define CD_COMM_RESUME			0x07
-#define CD_COMM_FW_SCAN			0x08
-#define CD_COMM_RW_SCAN			0x09
-#define CD_COMM_TRACK_MOVE		0x0A
-//#define CD_COMM_NO_DISC		0x0B
-#define CD_COMM_TRAY_CLOSE		0x0C
-#define CD_COMM_TRAY_OPEN		0x0D
+#define PCECD_COMM_TESTUNIT			0x00
+#define PCECD_COMM_REQUESTSENSE		0x03
+#define PCECD_COMM_READ6			0x08
+#define PCECD_COMM_SAPSP			0xD8
+#define PCECD_COMM_SAPEP			0xD9
+#define PCECD_COMM_PAUSE			0xDA
+#define PCECD_COMM_READSUBQ			0xDD
+#define PCECD_COMM_GETDIRINFO		0xDE
+
+#define PCECD_STATE_IDLE		0
+#define PCECD_STATE_READ		1
+#define PCECD_STATE_PLAY		2
+#define PCECD_STATE_PAUSE		3
+
 
 #include "../../cd.h"
 
-class cdd_t
+
+class pcecdd_t
 {
 public:
 	uint32_t latency;
@@ -45,51 +46,59 @@ public:
 	uint8_t isData;
 	int loaded;
 	SendDataFunc SendData;
+	int has_status;
+	bool can_read_next;
 
-	cdd_t();
+	pcecdd_t();
 	int Load(const char *filename);
 	void Unload();
 	void Reset();
 	void Update();
 	void CommandExec();
-	uint64_t GetStatus();
-	int SetCommand(uint64_t c);
+	int GetStatus(uint8_t* buf);
+	int SetCommand(uint8_t* buf);
 
 private:
 	toc_t toc;
 	int index;
 	int lba;
+	int cnt;
 	uint16_t sectorSize;
 	int scanOffset;
 	int audioLength;
 	int audioOffset;
+	uint8_t state;
+	int CDDAStart;
+	int CDDAEnd;
 
-	uint8_t stat[10];
-	uint8_t comm[10];
+	uint8_t stat[2];
+	uint8_t comm[12];
+
+	uint8_t sec_buf[2352 + 2];
 
 	int LoadCUE(const char* filename);
 	int SectorSend(uint8_t* header);
-	int SubcodeSend();
 	void ReadData(uint8_t *buf);
 	int ReadCDDA(uint8_t *buf);
 	void ReadSubcode(uint16_t* buf);
 	void LBAToMSF(int lba, msf_t* msf);
 	void MSFToLBA(int* lba, msf_t* msf);
 	void MSFToLBA(int* lba, uint8_t m, uint8_t s, uint8_t f);
+	int GetTrackByLBA(int lba, toc_t* toc);
 };
 
 #define BCD(v)				 ((uint8_t)((((v)/10) << 4) | ((v)%10)))
+#define U8(v)				 ((uint8_t)(((((v)&0xF0) >> 4) * 10) + ((v)&0x0F)))
 
 #define CD_SCAN_SPEED 30
 
-//cdd.cpp
-extern cdd_t cdd;
+//pcecdd.cpp
+extern pcecdd_t pcecdd;
 
 
-void mcd_poll();
-void mcd_set_image(int num, const char *filename);
-void mcd_reset();
-int mcd_send_data(uint8_t* buf, int len, uint8_t index);
-void mcd_fill_blanksave(uint8_t *buffer, uint32_t lba);
+void pcecd_poll();
+void pcecd_set_image(int num, const char *filename);
+int pcecd_send_data(uint8_t* buf, int len, uint8_t index);
+void pcecd_reset();
 
 #endif

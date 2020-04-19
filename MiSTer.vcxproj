@@ -86,6 +86,8 @@
     <ClCompile Include="support\minimig\minimig_fdd.cpp" />
     <ClCompile Include="support\minimig\minimig_hdd.cpp" />
     <ClCompile Include="support\neogeo\loader.cpp" />
+    <ClCompile Include="support\pcecd\pcecd.cpp" />
+    <ClCompile Include="support\pcecd\pcecdd.cpp" />
     <ClCompile Include="support\sharpmz\sharpmz.cpp" />
     <ClCompile Include="support\snes\snes.cpp" />
     <ClCompile Include="support\st\st_tos.cpp" />
@@ -98,6 +100,7 @@
     <ClInclude Include="battery.h" />
     <ClInclude Include="bootcore.h" />
     <ClInclude Include="brightness.h" />
+    <ClInclude Include="cd.h" />
     <ClInclude Include="cfg.h" />
     <ClInclude Include="charrom.h" />
     <ClInclude Include="cheats.h" />
@@ -142,6 +145,7 @@
     <ClInclude Include="support\minimig\minimig_hdd.h" />
     <ClInclude Include="support\minimig\minimig_hdd_internal.h" />
     <ClInclude Include="support\neogeo\loader.h" />
+    <ClInclude Include="support\pcecd\pcecd.h" />
     <ClInclude Include="support\sharpmz\sharpmz.h" />
     <ClInclude Include="support\snes\snes.h" />
     <ClInclude Include="support\st\st_tos.h" />

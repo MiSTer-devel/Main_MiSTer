@@ -642,7 +642,7 @@ void cdd_t::CommandExec() {
 			/* DATA track */
 			FileSeek(&this->toc.tracks[0].f, lba_ * this->sectorSize, SEEK_SET);
 		}
-		else if (cdd.toc.tracks[index].f.opened())
+		else if (this->toc.tracks[index].f.opened())
 		{
 			/* PCM AUDIO track */
 			FileSeek(&this->toc.tracks[index].f, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);

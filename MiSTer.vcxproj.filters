@@ -184,6 +184,12 @@
     <ClCompile Include="support\c64\c64.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
+    <ClCompile Include="support\pcecd\pcecd.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\pcecd\pcecdd.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -346,6 +352,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="support\c64\c64.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="cd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\pcecd\pcecd.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>

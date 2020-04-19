@@ -1758,6 +1758,10 @@ void HandleUI(void)
 			}
 			mcd_set_image(ioctl_index, SelectedPath);
 		}
+		else if (is_pce())
+		{
+			pcecd_set_image(ioctl_index, SelectedPath);
+		}
 		else
 		{
 			user_io_set_index(user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | (menusub + 1));
@@ -3545,7 +3549,7 @@ void HandleUI(void)
 				char type = flist_SelectedItem()->de.d_type;
 				memcpy(name, flist_SelectedItem()->de.d_name, sizeof(name));
 
-				if ((fs_Options & SCANO_UMOUNT) && is_megacd() && type == DT_DIR && strcmp(flist_SelectedItem()->de.d_name, ".."))
+				if ((fs_Options & SCANO_UMOUNT) && (is_megacd() || is_pce()) && type == DT_DIR && strcmp(flist_SelectedItem()->de.d_name, ".."))
 				{
 					int len = strlen(SelectedPath);
 					strcat(SelectedPath, "/");
