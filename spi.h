@@ -15,8 +15,6 @@ void EnableFpga();
 void DisableFpga();
 void EnableOsd();
 void DisableOsd();
-void EnableDMode();
-void DisableDMode();
 void EnableIO();
 void DisableIO();
 

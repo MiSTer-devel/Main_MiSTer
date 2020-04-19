@@ -8,7 +8,6 @@
 #define SSPI_FPGA_EN (1<<18)
 #define SSPI_OSD_EN  (1<<19)
 #define SSPI_IO_EN   (1<<20)
-#define SSPI_DM_EN   (1<<21)
 
 #define SWAPW(a) ((((a)<<8)&0xff00)|(((a)>>8)&0x00ff))
 
@@ -104,16 +103,6 @@ void EnableIO()
 void DisableIO()
 {
 	spi_en(SSPI_IO_EN, 0);
-}
-
-void EnableDMode()
-{
-	spi_en(SSPI_DM_EN, 1);
-}
-
-void DisableDMode()
-{
-	spi_en(SSPI_DM_EN, 0);
 }
 
 uint8_t spi_in()
