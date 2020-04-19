@@ -128,7 +128,7 @@ static void handle_acsi(unsigned char *buffer)
 	unsigned char cmd = buffer[0];
 	unsigned long lba = 256 * 256 * (buffer[1] & 0x1f) +
 		256 * buffer[2] + buffer[3];
-	unsigned short length = buffer[4];
+	unsigned int length = buffer[4];
 	if (length == 0) length = 256;
 
 	if (0)
@@ -480,7 +480,7 @@ static void tos_select_hdd_image(int i, const char *name)
 	}
 	else
 	{
-		if (FileOpen(&hdd_image[i], name))
+		if (FileOpenEx(&hdd_image[i], name, (O_RDWR | O_SYNC)))
 		{
 			config.system_ctrl |= (TOS_ACSI0_ENABLE << i);
 		}
