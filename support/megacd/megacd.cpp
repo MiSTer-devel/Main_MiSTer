@@ -12,7 +12,7 @@
 
 #define SAVE_IO_INDEX 5 // fake download to trigger save loading
 
-int loaded = 0, unloaded = 0, need_reset=0;
+static int loaded = 0, unloaded = 0, need_reset=0;
 static uint8_t has_command = 0;
 
 void mcd_poll()

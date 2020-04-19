@@ -55,6 +55,8 @@ static int fb_width_full = 0;
 static int fb_height = 0;
 static int fb_stride = 0;
 static int fb_num = 0;
+static int brd_x = 0;
+static int brd_y = 0;
 
 static int menu_bg = 0;
 static int menu_bgn = 0;
@@ -448,7 +450,7 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	for (int i = 9; i < 21; i++)
 	{
 		printf("0x%X, ", v_cur.item[i]);
-		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust == 2 && !is_menu_core()) ? 0x8000 : 0));
+		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust == 2 && !is_menu()) ? 0x8000 : 0));
 		else
 		{
 			spi_w(v_cur.item[i]);
@@ -467,6 +469,9 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	fb_height = v_cur.item[5] / cfg.fb_size;
 	fb_stride = ((fb_width * 4) + 255) & ~255;
 	fb_width_full = fb_stride / 4;
+
+	brd_x = cfg.vscale_border / cfg.fb_size;;
+	brd_y = cfg.vscale_border / cfg.fb_size;;
 
 	if (fb_enabled) video_fb_enable(1, fb_num);
 
@@ -599,7 +604,7 @@ void video_mode_load()
 static int api1_5 = 0;
 int hasAPI1_5()
 {
-	return api1_5 || is_menu_core();
+	return api1_5 || is_menu();
 }
 
 static uint32_t show_video_info(int force)
@@ -701,7 +706,7 @@ static uint32_t show_video_info(int force)
 void video_mode_adjust()
 {
 	uint32_t vtime = show_video_info(0);
-	if (vtime && cfg.vsync_adjust && !is_menu_core())
+	if (vtime && cfg.vsync_adjust && !is_menu())
 	{
 		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
 
@@ -780,7 +785,7 @@ void video_fb_enable(int enable, int n)
 		int res = spi_uio_cmd_cont(UIO_SET_FBUF);
 		if (res)
 		{
-			if (is_menu_core() && !enable && menu_bg)
+			if (is_menu() && !enable && menu_bg)
 			{
 				enable = 1;
 				n = menu_bgn;
@@ -837,13 +842,13 @@ void video_fb_enable(int enable, int n)
 
 		DisableIO();
 		if (cfg.direct_video) set_vga_fb(enable);
-		if (is_menu_core()) user_io_8bit_set_status((fb_enabled && !fb_num) ? 0x160 : 0, 0x1E0);
+		if (is_menu()) user_io_8bit_set_status((fb_enabled && !fb_num) ? 0x160 : 0, 0x1E0);
 	}
 }
 
 int video_fb_state()
 {
-	if (is_menu_core())
+	if (is_menu())
 	{
 		return fb_enabled && !fb_num;
 	}
@@ -857,17 +862,16 @@ static void draw_checkers()
 
 	uint32_t col1 = 0x888888;
 	uint32_t col2 = 0x666666;
-	int sz = fb_width/128;
+	int sz = fb_width / 128;
 
-	int pos = 0;
-	for (int y = 0; y < fb_height; y++)
+	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
 		int c1 = (y / sz) & 1;
-		pos = y * fb_width_full;
-		for (int x = 0; x < fb_width; x++)
+		int pos = y * fb_width_full;
+		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
 			int c2 = c1 ^ ((x / sz) & 1);
-			buf[pos++] = c2 ? col2 : col1;
+			buf[pos + x] = c2 ? col2 : col1;
 		}
 	}
 }
@@ -875,15 +879,17 @@ static void draw_checkers()
 static void draw_hbars1()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
+	int height = fb_height - 2 * brd_y;
+
 	int old_base = 0;
 	int gray = 255;
-	int sz = fb_height/7;
+	int sz = height / 7;
 	int stp = 0;
 
-	for (int y = 0; y < fb_height; y++)
+	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
 		int pos = y * fb_width_full;
-		int base_color = ((7 * y) / fb_height)+1;
+		int base_color = ((7 * (y-brd_y)) / height) + 1;
 		if (old_base != base_color)
 		{
 			stp = sz;
@@ -892,13 +898,13 @@ static void draw_hbars1()
 
 		gray = 255 * stp / sz;
 
-		for (int x = 0; x < fb_width; x++)
+		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
 			uint32_t color = 0;
 			if (base_color & 4) color |= gray;
 			if (base_color & 2) color |= gray << 8;
 			if (base_color & 1) color |= gray << 16;
-			buf[pos++] = color;
+			buf[pos + x] = color;
 		}
 
 		stp--;
@@ -909,23 +915,25 @@ static void draw_hbars1()
 static void draw_hbars2()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
+	int height = fb_height - 2 * brd_y;
+	int width = fb_width - 2 * brd_x;
 
-	for (int y = 0; y < fb_height; y++)
+	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
 		int pos = y * fb_width_full;
-		int base_color = ((14 * y) / fb_height);
+		int base_color = ((14 * (y - brd_y)) / height);
 		int inv = base_color & 1;
 		base_color >>= 1;
 		base_color = (inv ? base_color : 6 - base_color) + 1;
-		for (int x = 0; x < fb_width; x++)
+		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
-			int gray = (256 * x) / fb_width;
+			int gray = (256 * (x - brd_x)) / width;
 			if (inv) gray = 255 - gray;
 			uint32_t color = 0;
 			if (base_color & 4) color |= gray;
 			if (base_color & 2) color |= gray << 8;
 			if (base_color & 1) color |= gray << 16;
-			buf[pos++] = color;
+			buf[pos + x] = color;
 		}
 	}
 }
@@ -933,17 +941,19 @@ static void draw_hbars2()
 static void draw_vbars1()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
-	int sz = fb_width / 7;
+	int width = fb_width - 2 * brd_x;
+
+	int sz = width / 7;
 	int stp = 0;
 
-	for (int y = 0; y < fb_height; y++)
+	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
 		int pos = y * fb_width_full;
 		int old_base = 0;
 		int gray = 255;
-		for (int x = 0; x < fb_width; x++)
+		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
-			int base_color = ((7 * x) / fb_width)+1;
+			int base_color = ((7 * (x - brd_x)) / width) + 1;
 			if (old_base != base_color)
 			{
 				stp = sz;
@@ -956,7 +966,7 @@ static void draw_vbars1()
 			if (base_color & 4) color |= gray;
 			if (base_color & 2) color |= gray << 8;
 			if (base_color & 1) color |= gray << 16;
-			buf[pos++] = color;
+			buf[pos + x] = color;
 
 			stp--;
 			if (stp < 0) stp = 0;
@@ -967,14 +977,16 @@ static void draw_vbars1()
 static void draw_vbars2()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
+	int height = fb_height - 2 * brd_y;
+	int width = fb_width - 2 * brd_x;
 
-	for (int y = 0; y < fb_height; y++)
+	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
 		int pos = y * fb_width_full;
-		for (int x = 0; x < fb_width; x++)
+		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
-			int gray = ((256 * y) / fb_height);
-			int base_color = ((14 * x) / fb_width);
+			int gray = ((256 * (y - brd_y)) / height);
+			int base_color = ((14 * (x - brd_x)) / width);
 			int inv = base_color & 1;
 			base_color >>= 1;
 			base_color = (inv ? base_color : 6 - base_color) + 1;
@@ -984,7 +996,7 @@ static void draw_vbars2()
 			if (base_color & 4) color |= gray;
 			if (base_color & 2) color |= gray << 8;
 			if (base_color & 1) color |= gray << 16;
-			buf[pos++] = color;
+			buf[pos + x] = color;
 		}
 	}
 }
@@ -992,19 +1004,21 @@ static void draw_vbars2()
 static void draw_spectrum()
 {
 	volatile uint32_t* buf = fb_base + (FB_SIZE*menu_bgn);
+	int height = fb_height - 2 * brd_y;
+	int width = fb_width - 2 * brd_x;
 
-	for (int y = 0; y < fb_height; y++)
+	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
 		int pos = y * fb_width_full;
-		int blue = ((256 * y) / fb_height);
-		for (int x = 0; x < fb_width; x++)
+		int blue = ((256 * (y - brd_y)) / height);
+		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
-			int green = ((256 * x) / fb_width) - blue / 2;
+			int green = ((256 * (x - brd_x)) / width) - blue / 2;
 			int red = 255 - green - blue / 2;
 			if (red < 0) red = 0;
 			if (green < 0) green = 0;
 
-			buf[pos++] = (red<<16) | (green<<8) | blue;
+			buf[pos + x] = (red << 16) | (green << 8) | blue;
 		}
 	}
 }
@@ -1163,7 +1177,6 @@ void video_menu_bg(int n, int idle)
 			printf("Logo = %p\n", logo);
 		}
 
-
 		menu_bgn = (menu_bgn == 1) ? 2 : 1;
 
 		static Imlib_Image menubg = 0;
@@ -1191,6 +1204,8 @@ void video_menu_bg(int n, int idle)
 			}
 		}
 
+		draw_black();
+
 		switch (n)
 		{
 		case 1:
@@ -1206,10 +1221,10 @@ void video_menu_bg(int n, int idle)
 				{
 					imlib_context_set_image(*bg);
 					imlib_blend_image_onto_image(menubg, 0,
-						0, 0,               //int source_x, int source_y,
-						src_w, src_h,       //int source_width, int source_height,
-						0, 0,               //int destination_x, int destination_y,
-						fb_width, fb_height //int destination_width, int destination_height
+						0, 0,                           //int source_x, int source_y,
+						src_w, src_h,                   //int source_width, int source_height,
+						brd_x, brd_y,                   //int destination_x, int destination_y,
+						fb_width - (brd_x * 2), fb_height - (brd_y * 2) //int destination_width, int destination_height
 					);
 					bg_has_picture = 1;
 					break;
@@ -1250,28 +1265,31 @@ void video_menu_bg(int n, int idle)
 
 			printf("logo: src_w=%d, src_h=%d\n", src_w, src_h);
 
+			int width = fb_width - (brd_x * 2);
+			int height = fb_height - (brd_y * 2);
+
 			int dst_w, dst_h;
 			int dst_x, dst_y;
 			if (cfg.osd_rotate)
 			{
-				dst_h = fb_height / 2;
+				dst_h = height / 2;
 				dst_w = src_w * dst_h / src_h;
 				if (cfg.osd_rotate == 1)
 				{
-					dst_x = 0;
-					dst_y = fb_height - dst_h;
+					dst_x = brd_x;
+					dst_y = height - dst_h;
 				}
 				else
 				{
-					dst_x = fb_width - dst_w;
-					dst_y = 0;
+					dst_x = width - dst_w;
+					dst_y = brd_y;
 				}
 			}
 			else
 			{
-				dst_x = 0;
-				dst_y = 0;
-				dst_w = fb_width * 2 / 7;
+				dst_x = brd_x;
+				dst_y = brd_y;
+				dst_w = width * 2 / 7;
 				dst_h = src_h * dst_w / src_w;
 			}
 

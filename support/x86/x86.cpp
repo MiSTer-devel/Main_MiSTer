@@ -65,50 +65,50 @@ static x86_config config;
 static uint8_t dma_sdio(int status)
 {
 	uint8_t res;
-	EnableFpga();
+	EnableIO();
 	spi8(UIO_DMA_SDIO);
 	res = spi_w((uint16_t)status);
-	DisableFpga();
+	DisableIO();
 	return res;
 }
 
 /*
 static uint32_t dma_get(uint32_t address)
 {
-	EnableFpga();
+	EnableIO();
 	spi8(UIO_DMA_READ);
 	spi32w(address);
 	uint32_t res = spi32w(0);
-	DisableFpga();
+	DisableIO();
 	return res;
 }
 */
 
 static void dma_set(uint32_t address, uint32_t data)
 {
-	EnableFpga();
+	EnableIO();
 	spi8(UIO_DMA_WRITE);
 	spi32w(address);
 	spi32w(data);
-	DisableFpga();
+	DisableIO();
 }
 
 static void dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
-	EnableFpga();
+	EnableIO();
 	spi8(UIO_DMA_WRITE);
 	spi32w(address);
 	while (length--) spi32w(*data++);
-	DisableFpga();
+	DisableIO();
 }
 
 static void dma_rcvbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
-	EnableFpga();
+	EnableIO();
 	spi8(UIO_DMA_READ);
 	spi32w(address);
 	while (length--) *data++ = spi32w(0);
-	DisableFpga();
+	DisableIO();
 }
 
 static int load_bios(const char* name, uint8_t index)
@@ -121,7 +121,7 @@ static int load_bios(const char* name, uint8_t index)
 	unsigned long bytes2send = f.size;
 	printf("BIOS %s, %lu bytes.\n", name, bytes2send);
 
-	EnableFpga();
+	EnableIO();
 	spi8(UIO_DMA_WRITE);
 	spi32w( index ? 0x80C0000 : 0x80F0000 );
 
@@ -138,7 +138,7 @@ static int load_bios(const char* name, uint8_t index)
 		uint32_t* p = buf;
 		while(chunk--) spi32w(*p++);
 	}
-	DisableFpga();
+	DisableIO();
 	FileClose(&f);
 
 	printf("\n");

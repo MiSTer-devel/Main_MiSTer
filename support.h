@@ -11,7 +11,6 @@
 #include "support/archie/archie.h"
 
 // ST (Atari) support
-#include "support/st/st_ikbd.h"
 #include "support/st/st_tos.h"
 
 // X86  support
@@ -31,3 +30,6 @@
 
 // C64 support
 #include "support/c64/c64.h"
+
+// PCECD  support
+#include "support/pcecd/pcecd.h"

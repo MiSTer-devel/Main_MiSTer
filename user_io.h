@@ -19,20 +19,12 @@
 #define UIO_KEYBOARD    0x05  // -"-
 #define UIO_KBD_OSD     0x06  // keycodes used by OSD only
 
-// codes as used by MiST (atari)
-// directions (in/out) are from an io controller view
-#define UIO_IKBD_OUT    0x02
-#define UIO_IKBD_IN     0x03
-#define UIO_SERIAL_OUT  0x04
-#define UIO_SERIAL_IN   0x05
-#define UIO_PARALLEL_IN 0x06
-#define UIO_MIDI_OUT    0x07
-#define UIO_MIDI_IN     0x08
-#define UIO_ETH_MAC     0x09
-#define UIO_ETH_STATUS  0x0a
-#define UIO_ETH_FRM_IN  0x0b
-#define UIO_ETH_FRM_OUT 0x0c
-#define UIO_SERIAL_STAT 0x0d
+// 0x08 - 0x0F - core specific
+#define ST_WRITE_MEMORY 0x08
+#define ST_READ_MEMORY  0x09
+#define ST_ACK_DMA      0x0a
+#define ST_NAK_DMA      0x0b
+#define ST_GET_DMASTATE 0x0c
 
 #define UIO_JOYSTICK2   0x10  // also used by minimig and 8 bit
 #define UIO_JOYSTICK3   0x11  // -"-
@@ -76,6 +68,7 @@
 #define UIO_CD_SET      0x35
 #define UIO_INFO_GET    0x36
 #define UIO_SETWIDTH    0x37  // Set max scaled horizontal resolution
+#define UIO_SETSYNC     0x38
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -154,8 +147,6 @@
 
 // core type value should be unlikely to be returned by broken cores
 #define CORE_TYPE_UNKNOWN   0x55
-#define CORE_TYPE_DUMB      0xa0   // core without any io controller interaction
-#define CORE_TYPE_MIST      0xa3   // mist atari st core
 #define CORE_TYPE_8BIT      0xa4   // generic core
 #define CORE_TYPE_ARCHIE    0xa6   // Acorn Archimedes
 #define CORE_TYPE_SHARPMZ   0xa7   // Sharp MZ Series
@@ -193,22 +184,12 @@
 #define EMU_JOY0  2
 #define EMU_JOY1  3
 
-// serial status data type returned from the core
-typedef struct {
-	uint32_t bitrate;        // 300, 600 ... 115200
-	uint8_t datasize;        // 5,6,7,8 ...
-	uint8_t parity;
-	uint8_t stopbits;
-	uint8_t fifo_stat;       // space in cores input fifo
-} __attribute__((packed)) serial_status_t;
-
 void user_io_init(const char *path, const char *xml);
 unsigned char user_io_core_type();
 void user_io_poll();
 char user_io_menu_button();
 char user_io_user_button();
 void user_io_osd_key_enable(char);
-void user_io_serial_tx(char *, uint16_t);
 void user_io_read_confstr();
 char *user_io_get_confstr(int index);
 uint32_t user_io_8bit_set_status(uint32_t, uint32_t, int ex = 0);
@@ -217,8 +198,7 @@ void user_io_file_tx_write(const uint8_t *addr, uint16_t len);
 int user_io_get_width();
 
 uint32_t user_io_get_file_crc();
-int  user_io_file_mount(char *name, unsigned char index = 0, char pre = 0);
-char user_io_serial_status(serial_status_t *, uint8_t);
+int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0);
 char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name();
 char *user_io_get_core_path();
@@ -230,13 +210,6 @@ const char *get_image_name(int i);
 
 int user_io_get_kbdemu();
 uint32_t user_io_get_uart_mode();
-
-// io controllers interface for FPGA ethernet emulation using usb ethernet
-// devices attached to the io controller (ethernec emulation)
-void user_io_eth_send_mac(uint8_t *);
-uint32_t user_io_eth_get_status(void);
-void user_io_eth_send_rx_frame(uint8_t *, uint16_t);
-void user_io_eth_receive_tx_frame(uint8_t *, uint16_t);
 
 void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w);
 void user_io_kbd(uint16_t key, int press);
@@ -285,15 +258,18 @@ void diskled_on();
 
 char is_minimig();
 char is_sharpmz();
-char is_menu_core();
-char is_x86_core();
-char is_snes_core();
-char is_neogeo_core();
-char is_megacd_core();
-char is_archie_core();
-char is_gba_core();
+char is_menu();
+char is_x86();
+char is_snes();
+char is_neogeo();
+char is_megacd();
+char is_pce();
+char is_archie();
+char is_gba();
+char is_c64();
+char is_st();
 
-#define HomeDir (is_menu_core() ? "Scripts" : user_io_get_core_path())
-#define CoreName (is_menu_core() ? "Scripts" : user_io_get_core_name())
+#define HomeDir (is_menu() ? "Scripts" : user_io_get_core_path())
+#define CoreName (is_menu() ? "Scripts" : user_io_get_core_name())
 
 #endif // USER_IO_H

@@ -166,9 +166,6 @@
     <ClCompile Include="support\snes\snes.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
-    <ClCompile Include="support\st\st_ikbd.cpp">
-      <Filter>Source Files\support</Filter>
-    </ClCompile>
     <ClCompile Include="support\st\st_tos.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
@@ -185,6 +182,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="support\c64\c64.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\pcecd\pcecd.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\pcecd\pcecdd.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
   </ItemGroup>
@@ -303,9 +306,6 @@
     <ClInclude Include="support\neogeo\loader.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
-    <ClInclude Include="support\st\st_ikbd.h">
-      <Filter>Header Files\support</Filter>
-    </ClInclude>
     <ClInclude Include="support\st\st_tos.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
@@ -352,6 +352,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="support\c64\c64.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="cd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\pcecd\pcecd.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>

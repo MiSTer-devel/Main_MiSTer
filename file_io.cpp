@@ -41,6 +41,7 @@ static int iSelectedEntry = 0;       // selected entry index
 static int iFirstEntry = 0;
 
 static char full_path[2100];
+uint8_t loadbuf[LOADBUF_SZ];
 
 fileTYPE::fileTYPE()
 {
@@ -234,6 +235,7 @@ void FileClose(fileTYPE *file)
 
 	file->zip = nullptr;
 	file->filp = nullptr;
+	file->size = 0;
 }
 
 static int zip_search_by_crc(mz_zip_archive *zipArchive, uint32_t crc32)
