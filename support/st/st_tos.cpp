@@ -492,7 +492,24 @@ static void tos_select_hdd_image(int i, const char *name)
 
 void tos_insert_disk(int index, const char *name)
 {
-	if (index <= 1) user_io_file_mount(name, index);
+	static int wpins = 0;
+
+	if (index <= 1)
+	{
+		user_io_file_mount(name, index);
+		if (tos_disk_is_inserted(index))
+		{
+			if (!index) wpins &= ~TOS_CONTROL_FDC_WR_PROT_A;
+			else wpins &= ~TOS_CONTROL_FDC_WR_PROT_B;
+		}
+		else
+		{
+			if (!index) wpins |= TOS_CONTROL_FDC_WR_PROT_A;
+			else wpins |= TOS_CONTROL_FDC_WR_PROT_B;
+		}
+
+		set_control(config.system_ctrl ^ (wpins & (TOS_CONTROL_FDC_WR_PROT_A | TOS_CONTROL_FDC_WR_PROT_B)));
+	}
 	else tos_select_hdd_image(index & 1, name);
 }
 
