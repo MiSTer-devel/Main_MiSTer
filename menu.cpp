@@ -1741,6 +1741,11 @@ void HandleUI(void)
 		}
 		else
 		{
+			if (is_pce())
+			{
+				pcecd_set_image(0, "");
+				pcecd_reset();
+			}
 			user_io_store_filename(SelectedPath);
 			user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | ioctl_index, opensave);
 			if (user_io_use_cheats()) cheats_init(SelectedPath, user_io_get_file_crc());
