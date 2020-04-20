@@ -49,30 +49,6 @@ static const char *acsi_cmd_name(int cmd) {
 	return cmdname[cmd];
 }
 
-/*
-int tos_get_cdc_control_redirect(void)
-{
-	return config.cdc_control_redirect;
-}
-
-void tos_set_cdc_control_redirect(char mode)
-{
-	if (mode <= CDC_REDIRECT_MIDI)
-	{
-		config.cdc_control_redirect = mode;
-
-		// core is only informed about redirections of rs232/par/midi
-		if (mode < CDC_REDIRECT_RS232)
-			mode = 0;
-		else
-			mode -= CDC_REDIRECT_RS232 - 1;
-
-		tos_update_sysctrl((tos_system_ctrl() & ~0x0c000000) |
-			(((unsigned long)mode) << 26));
-	}
-}
-*/
-
 static void set_control(uint32_t ctrl)
 {
 	spi_uio_cmd_cont(UIO_SET_STATUS2);
@@ -80,7 +56,13 @@ static void set_control(uint32_t ctrl)
 	DisableIO();
 }
 
-static void memory_read(unsigned char *data, unsigned long words)
+void tos_update_sysctrl(uint32_t ctrl)
+{
+	config.system_ctrl = ctrl;
+	set_control(config.system_ctrl);
+}
+
+static void memory_read(uint8_t *data, uint32_t words)
 {
 	EnableIO();
 	spi8(ST_READ_MEMORY);
@@ -92,7 +74,7 @@ static void memory_read(unsigned char *data, unsigned long words)
 	DisableIO();
 }
 
-static void memory_write(unsigned char *data, unsigned long words)
+static void memory_write(uint8_t *data, uint32_t words)
 {
 	EnableIO();
 	spi8(ST_WRITE_MEMORY);
@@ -103,7 +85,7 @@ static void memory_write(unsigned char *data, unsigned long words)
 	DisableIO();
 }
 
-static void dma_ack(unsigned char status)
+static void dma_ack(uint8_t status)
 {
 	EnableIO();
 	spi8(ST_ACK_DMA);
@@ -122,26 +104,25 @@ static void handle_acsi(unsigned char *buffer)
 {
 	static uint8_t buf[65536];
 
-	static unsigned char asc[2] = { 0,0 };
-	unsigned char target = buffer[10] >> 5;
-	unsigned char device = buffer[1] >> 5;
-	unsigned char cmd = buffer[0];
-	unsigned long lba = 256 * 256 * (buffer[1] & 0x1f) +
-		256 * buffer[2] + buffer[3];
-	unsigned int length = buffer[4];
+	static uint8_t asc[2] = { 0,0 };
+	uint8_t target = buffer[10] >> 5;
+	uint8_t device = buffer[1] >> 5;
+	uint8_t cmd = buffer[0];
+	uint32_t lba = 256 * 256 * (buffer[1] & 0x1f) + 256 * buffer[2] + buffer[3];
+	uint32_t length = buffer[4];
 	if (length == 0) length = 256;
 
 	if (0)
 	{
 		tos_debugf("ACSI: target %d.%d, \"%s\" (%02x)", target, device, acsi_cmd_name(cmd), cmd);
-		tos_debugf("ACSI: lba %lu (%lx), length %u", lba, lba, length);
+		tos_debugf("ACSI: lba %u (%x), length %u", lba, lba, length);
 	}
 
 	// only a harddisk on ACSI 0/1 is supported
 	// ACSI 0/1 is only supported if a image is loaded
 	if (((target < 2) && (hdd_image[target].size != 0)))
 	{
-		unsigned long blocks = hdd_image[target].size / 512;
+		uint32_t blocks = hdd_image[target].size / 512;
 
 		// only lun0 is fully supported
 		switch (cmd) {
@@ -229,7 +210,7 @@ static void handle_acsi(unsigned char *buffer)
 				}
 				else
 				{
-					tos_debugf("ACSI: read (%lu+%d) exceeds device limits (%lu)", lba, length, blocks);
+					tos_debugf("ACSI: read (%u+%d) exceeds device limits (%u)", lba, length, blocks);
 					dma_ack(0x02);
 					asc[target] = 0x21;
 				}
@@ -277,8 +258,7 @@ static void handle_acsi(unsigned char *buffer)
 					asc[target] = 0x00;
 				}
 				else {
-					tos_debugf("ACSI: write (%lu+%d) exceeds device limits (%lu)",
-						lba, length, blocks);
+					tos_debugf("ACSI: write (%u+%d) exceeds device limits (%u)", lba, length, blocks);
 					dma_ack(0x02);
 					asc[target] = 0x21;
 				}
@@ -307,7 +287,7 @@ static void handle_acsi(unsigned char *buffer)
 
 		case 0x1a: // mode sense
 			if (device == 0) {
-				tos_debugf("ACSI: mode sense, blocks = %lu", blocks);
+				tos_debugf("ACSI: mode sense, blocks = %u", blocks);
 				bzero(dma_buffer, 512);
 				dma_buffer[3] = 8;            // size of extent descriptor list
 				dma_buffer[5] = blocks >> 16;
@@ -351,7 +331,7 @@ static void handle_acsi(unsigned char *buffer)
 
 static void get_dmastate()
 {
-	unsigned char buffer[16];
+	uint8_t buffer[16];
 
 	EnableIO();
 	spi8(ST_GET_DMASTATE);
@@ -361,18 +341,16 @@ static void get_dmastate()
 	if (buffer[10] & 0x01) handle_acsi(buffer);
 }
 
-static void fill_tx(unsigned char fill, unsigned int len, unsigned char index)
+static void fill_tx(uint16_t fill, uint32_t len, int index)
 {
 	user_io_set_index(index);
 	user_io_set_download(1);
 
-	uint16_t wfill = (fill << 8) | fill;
-
 	len /= 2;
-	EnableIO();
+	EnableFpga();
 	spi8(UIO_FILE_TX_DAT);
-	while(len--) spi_w(wfill);
-	DisableIO();
+	while(len--) spi_w(fill);
+	DisableFpga();
 
 	user_io_set_download(0);
 }
@@ -381,18 +359,18 @@ void tos_load_cartridge(const char *name)
 {
 	if (name) strncpy(config.cart_img, name, 11);
 
-	// upload cartridge
-	if (config.cart_img[0] && FileExists(config.cart_img))
-	{
-		user_io_file_tx(config.cart_img, 0x02);
-		tos_debugf("%s uploaded", config.cart_img);
-		return;
-	}
-
 	// erase that ram area to remove any previously uploaded
 	// image
 	tos_debugf("Erasing cart memory");
-	fill_tx(0xff, 128 * 1024, 0x02);
+	fill_tx(0xff, 128 * 1024, 2);
+
+	// upload cartridge
+	if (config.cart_img[0] && FileExists(config.cart_img))
+	{
+		user_io_file_tx(config.cart_img, 2);
+		tos_debugf("%s uploaded", config.cart_img);
+		return;
+	}
 }
 
 char tos_cartridge_is_inserted()
@@ -423,12 +401,6 @@ void tos_poll()
 	{
 		timer = 0;
 	}
-}
-
-void tos_update_sysctrl(unsigned long n)
-{
-	config.system_ctrl = n;
-	set_control(config.system_ctrl);
 }
 
 const char *tos_get_disk_name(int index)
@@ -524,43 +496,41 @@ unsigned long tos_system_ctrl(void)
 	return config.system_ctrl;
 }
 
-static void tos_upload_mist2()
-{
-	// clear first 16k
-	tos_debugf("Clear first 16k");
-	fill_tx(0, 16 * 1024, 0x03);
-
-	// upload and verify tos image
-	int len = FileLoad(config.tos_img, 0, 0);
-	if (len)
-	{
-		tos_debugf("TOS.IMG:\n  size = %d", len);
-
-		if (len >= 256 * 1024) user_io_file_tx(config.tos_img, 0);
-		else if (len == 192 * 1024) user_io_file_tx(config.tos_img, 0x01);
-		else tos_debugf("WARNING: Unexpected TOS size!");
-	}
-	else
-	{
-		tos_debugf("Unable to find tos.img");
-		return;
-	}
-
-	tos_load_cartridge(NULL);
-
-	for (int i = 0; i < 2; i++)
-	{
-		if (FileExists(config.acsi_img[i]))
-		{
-			tos_select_hdd_image(i, config.acsi_img[i]);
-		}
-	}
-}
-
 void tos_reset(char cold)
 {
 	tos_update_sysctrl(config.system_ctrl | TOS_CONTROL_CPU_RESET);  // set reset
-	if (cold) tos_upload_mist2();
+	if (cold)
+	{
+		// clear first 16k
+		tos_debugf("Clear first 16k");
+		fill_tx(0, 16 * 1024, 3);
+
+		// upload and verify tos image
+		int len = FileLoad(config.tos_img, 0, 0);
+		if (len)
+		{
+			tos_debugf("TOS.IMG:\n  size = %d", len);
+
+			if (len >= 256 * 1024) user_io_file_tx(config.tos_img, 0);
+			else if (len == 192 * 1024) user_io_file_tx(config.tos_img, 1);
+			else tos_debugf("WARNING: Unexpected TOS size!");
+		}
+		else
+		{
+			tos_debugf("Unable to find tos.img");
+			return;
+		}
+
+		tos_load_cartridge(NULL);
+
+		for (int i = 0; i < 2; i++)
+		{
+			if (FileExists(config.acsi_img[i]))
+			{
+				tos_select_hdd_image(i, config.acsi_img[i]);
+			}
+		}
+	}
 	tos_update_sysctrl(config.system_ctrl & ~TOS_CONTROL_CPU_RESET);  // release reset
 }
 

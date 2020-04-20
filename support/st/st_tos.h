@@ -34,7 +34,7 @@
 #define TOS_CONTROL_FDC_WR_PROT_A 0x00000040
 #define TOS_CONTROL_FDC_WR_PROT_B 0x00000080
 #define TOS_CONTROL_VIDEO_COLOR   0x00000100   // input to mfp
-#define TOS_CONTROL_PAL50HZ       0x00000200   // display pal at 50hz (56 hz otherwise)
+#define TOS_CONTROL_VIDEO_AR      0x00000200   // 16:9 / 4:3
 
 // up to eight acsi devices can be enabled
 #define TOS_ACSI0_ENABLE          0x00000400
@@ -71,7 +71,7 @@ unsigned long tos_system_ctrl(void);
 
 void tos_upload(const char *);
 void tos_poll();
-void tos_update_sysctrl(unsigned long);
+void tos_update_sysctrl(uint32_t ctrl);
 char tos_disk_is_inserted(int index);
 void tos_insert_disk(int index, const char *name);
 void tos_eject_all();
@@ -81,9 +81,6 @@ const char *tos_get_image_name();
 const char *tos_get_cartridge_name();
 char tos_cartridge_is_inserted();
 void tos_load_cartridge(const char *);
-
-int tos_get_cdc_control_redirect(void);
-void tos_set_cdc_control_redirect(char mode);
 
 void tos_config_load(int slot); // slot -1 == last config
 void tos_config_save(int slot);
