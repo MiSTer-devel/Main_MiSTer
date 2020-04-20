@@ -34,7 +34,7 @@ void StarsUpdate();
 
 // get/set core currently loaded
 void OsdCoreNameSet(const char* str);
-char* OsdCoreName();
+char* OsdCoreNameGet();
 void OsdSetSize(int n);
 int OsdGetSize();
 

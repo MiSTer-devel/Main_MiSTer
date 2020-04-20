@@ -455,7 +455,7 @@ static void parse_config()
 			{
 				// get version string
 				char s[128];
-				strcpy(s, OsdCoreName());
+				strcpy(s, OsdCoreNameGet());
 				strcat(s, " ");
 				substrcpy(s + strlen(s), p, 1);
 				OsdCoreNameSet(s);

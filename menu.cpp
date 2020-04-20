@@ -1230,7 +1230,7 @@ void HandleUI(void)
 
 		// set helptext with core display on top of basic info
 		sprintf(helptext_custom, HELPTEXT_SPACER);
-		strcat(helptext_custom, OsdCoreName());
+		strcat(helptext_custom, OsdCoreNameGet());
 		strcat(helptext_custom, helptexts[HELPTEXT_MAIN]);
 		helptext = helptext_custom;
 		break;
@@ -1344,7 +1344,7 @@ void HandleUI(void)
 			if (!p[0]) OsdCoreNameSet("8BIT");
 			else      OsdCoreNameSet(p);
 
-			OsdSetTitle(OsdCoreName(), 0);
+			OsdSetTitle(OsdCoreNameGet());
 			dip_submenu = -1;
 
 			// add options as requested by core
@@ -1507,7 +1507,7 @@ void HandleUI(void)
 					if (p[0] == 'V')
 					{
 						// get version string
-						strcpy(s, OsdCoreName());
+						strcpy(s, OsdCoreNameGet());
 						strcat(s, " ");
 						substrcpy(s + strlen(s), p, 1);
 						OsdCoreNameSet(s);
@@ -1540,7 +1540,7 @@ void HandleUI(void)
 
 		// set helptext with core display on top of basic info
 		sprintf(helptext_custom, HELPTEXT_SPACER);
-		strcat(helptext_custom, OsdCoreName());
+		strcat(helptext_custom, OsdCoreNameGet());
 		strcat(helptext_custom, helptexts[HELPTEXT_MAIN]);
 		helptext = helptext_custom;
 
@@ -2741,12 +2741,12 @@ void HandleUI(void)
 
 		s[0] = 0;
 		{
-			int len = strlen(OsdCoreName());
+			int len = strlen(OsdCoreNameGet());
 			if (len > 30) len = 30;
 			int sp = (30 - len) / 2;
 			for (int i = 0; i < sp; i++) strcat(s, " ");
 			char *s2 = s + strlen(s);
-			char *s3 = OsdCoreName();
+			char *s3 = OsdCoreNameGet();
 			for (int i = 0; i < len; i++) *s2++ = *s3++;
 			*s2++ = 0;
 		}

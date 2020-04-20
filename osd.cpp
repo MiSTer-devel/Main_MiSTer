@@ -77,12 +77,12 @@ static int  osdbufpos = 0;
 static int  osdset = 0;
 
 char framebuffer[16][256];
-void framebuffer_clear()
+static void framebuffer_clear()
 {
 	memset(framebuffer, 0, sizeof(framebuffer));
 }
 
-void framebuffer_plot(int x, int y)
+static void framebuffer_plot(int x, int y)
 {
 	framebuffer[y / 8][x] |= (1 << (y & 7));
 }
@@ -221,6 +221,27 @@ static void osd_start(int line)
 	osdbufpos = line * 256;
 }
 
+static void draw_title(const unsigned char *p)
+{
+	// left white border
+	osdbuf[osdbufpos++] = 0xff;
+	osdbuf[osdbufpos++] = 0xff;
+	osdbuf[osdbufpos++] = 0xff;
+
+	for (int i = 0; i < 8; i++)
+	{
+		osdbuf[osdbufpos++] = 255 ^ *p;
+		osdbuf[osdbufpos++] = 255 ^ *p++;
+	}
+
+	// right white border
+	osdbuf[osdbufpos++] = 0xff;
+
+	// blue gap
+	osdbuf[osdbufpos++] = 0;
+	osdbuf[osdbufpos++] = 0;
+}
+
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
 void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar, char usebg, int maxinv)
 {
@@ -252,7 +273,6 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 		if (invert && i / 8 >= maxinv) invert = 0;
 		if (i == 0 && (n < osd_size))
 		{	// Render sidestripe
-			unsigned char j;
 			unsigned char tmp[8];
 
 			if (leftchar)
@@ -267,23 +287,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 				p = &titlebuffer[(osd_size - 1 - n) * 8];
 			}
 
-			// left white border
-			osdbuf[osdbufpos++] = 0xff;
-			osdbuf[osdbufpos++] = 0xff;
-
-			for (j = 0; j < 8; j++)
-			{
-				osdbuf[osdbufpos++] = 255 ^ *p;
-				osdbuf[osdbufpos++] = 255 ^ *p++;
-			}
-
-			// right white border
-			osdbuf[osdbufpos++] = 0xff;
-			osdbuf[osdbufpos++] = 0xff;
-
-			// blue gap
-			osdbuf[osdbufpos++] = 0;
-			osdbuf[osdbufpos++] = 0;
+			draw_title(p);
 			i += 22;
 		}
 		else if (n == (osd_size-1) && (arrowmask & OSD_ARROW_LEFT)) {	// Draw initial arrow
@@ -362,10 +366,6 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 
 void OsdDrawLogo(int row)
 {
-	unsigned short i;
-	const unsigned char *p;
-	int linelimit = OSDLINELEN;
-
 	int mag = (osd_size / 8);
 	uint n = row * mag;
 
@@ -380,30 +380,12 @@ void OsdDrawLogo(int row)
 
 		char *bg = framebuffer[n + k];
 
-		i = 0;
-		while(i < linelimit)
+		int i = 0;
+		while(i < OSDLINELEN)
 		{
 			if (i == 0)
 			{
-				unsigned char j;
-				p = &titlebuffer[(osd_size - 1 - n - k) * 8];
-				// left white border
-				osdbuf[osdbufpos++] = 0xff;
-				osdbuf[osdbufpos++] = 0xff;
-
-				for (j = 0; j < 8; j++)
-				{
-					osdbuf[osdbufpos++] = 255 ^ *p;
-					osdbuf[osdbufpos++] = 255 ^ *p++;
-				}
-
-				// right white border
-				osdbuf[osdbufpos++] = 0xff;
-				osdbuf[osdbufpos++] = 0xff;
-
-				// blue gap
-				osdbuf[osdbufpos++] = 0;
-				osdbuf[osdbufpos++] = 0;
+				draw_title(&titlebuffer[(osd_size - 1 - n - k) * 8]);
 				i += 22;
 			}
 
@@ -421,80 +403,6 @@ void OsdDrawLogo(int row)
 			osdbuf[osdbufpos++] = bt | *bg++;
 			++i;
 		}
-	}
-}
-
-// write a null-terminated string <s> to the OSD buffer starting at line <n>
-void OSD_PrintText(unsigned char line, const char *hdr, const char *text, unsigned long start, unsigned long width, unsigned long offset, unsigned char invert)
-{
-	// line : OSD line number (0-7)
-	// text : pointer to null-terminated string
-	// start : start position (in pixels)
-	// width : printed text length in pixels
-	// offset : scroll offset in pixels counting from the start of the string (0-7)
-	// invert : invertion flag
-
-	const unsigned char *p;
-	int i, j;
-
-	// select buffer and line to write to
-	osd_start(line);
-
-	if (invert) invert = 0xff;
-
-	p = &titlebuffer[(osd_size - 1 - line) * 8];
-	if (start>2)
-	{
-		osdbuf[osdbufpos++] = 0xff;
-		osdbuf[osdbufpos++] = 0xff;
-		start -= 2;
-	}
-
-	i = start>16 ? 16 : start;
-	for (j = 0; j<(i / 2); ++j)
-	{
-		osdbuf[osdbufpos++] = 255 ^ *p;
-		osdbuf[osdbufpos++] = 255 ^ *p++;
-	}
-
-	if (i & 1) osdbuf[osdbufpos++] = 255 ^ *p;
-	start -= i;
-
-	if (start>2)
-	{
-		osdbuf[osdbufpos++] = 0xff;
-		osdbuf[osdbufpos++] = 0xff;
-		start -= 2;
-	}
-
-	while (start--) osdbuf[osdbufpos++] = 0x00;
-
-	while(*hdr)
-	{
-		width -= 8;
-		p = charfont[(uint)(*hdr++)];
-		for (int i = 0; i < 8; i++) osdbuf[osdbufpos++] = *p++ ^ invert;
-	}
-
-	if (offset)
-	{
-		width -= 8 - offset;
-		p = &charfont[(uint)(*text++)][offset];
-		for (; offset < 8; offset++) osdbuf[osdbufpos++] = *p++ ^ invert;
-	}
-
-	while (width > 8)
-	{
-		unsigned char b;
-		p = &charfont[(uint)(*text++)][0];
-		for (b = 0; b < 8; b++) osdbuf[osdbufpos++] = *p++ ^ invert;
-		width -= 8;
-	}
-
-	if (width)
-	{
-		p = &charfont[(uint)(*text++)][0];
-		while (width--) osdbuf[osdbufpos++] = *p++ ^ invert;
 	}
 }
 
@@ -626,6 +534,52 @@ void OsdMenuCtl(int en)
 	}
 }
 
+// write a null-terminated string <s> to the OSD buffer starting at line <n>
+static void print_line(unsigned char line, const char *hdr, const char *text, unsigned long width, unsigned long offset, unsigned char invert)
+{
+	// line : OSD line number (0-7)
+	// text : pointer to null-terminated string
+	// start : start position (in pixels)
+	// width : printed text length in pixels
+	// offset : scroll offset in pixels counting from the start of the string (0-7)
+	// invert : invertion flag
+
+	const unsigned char *p;
+
+	if (invert) invert = 0xff;
+
+	// select buffer and line to write to
+	osd_start(line);
+	draw_title(&titlebuffer[(osd_size - 1 - line) * 8]);
+
+	while (*hdr)
+	{
+		width -= 8;
+		p = charfont[(uint)(*hdr++)];
+		for (int i = 0; i < 8; i++) osdbuf[osdbufpos++] = *p++ ^ invert;
+	}
+
+	if (offset)
+	{
+		width -= 8 - offset;
+		p = &charfont[(uint)(*text++)][offset];
+		for (; offset < 8; offset++) osdbuf[osdbufpos++] = *p++ ^ invert;
+	}
+
+	while (width > 8)
+	{
+		unsigned char b;
+		p = &charfont[(uint)(*text++)][0];
+		for (b = 0; b < 8; b++) osdbuf[osdbufpos++] = *p++ ^ invert;
+		width -= 8;
+	}
+
+	if (width)
+	{
+		p = &charfont[(uint)(*text++)][0];
+		while (width--) osdbuf[osdbufpos++] = *p++ ^ invert;
+	}
+}
 
 void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert)
 {
@@ -670,7 +624,7 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 				strncpy(s + len + BLANKSPACE, str, max_len - len - BLANKSPACE); // repeat the name after its end and predefined number of blank space
 			}
 
-			OSD_PrintText(n, hdr, s, 22, (max_len - 1) << 3, (scroll_offset & 0x7), invert); // OSD print function with pixel precision
+			print_line(n, hdr, s, (max_len - 1) << 3, (scroll_offset & 0x7), invert); // OSD print function with pixel precision
 		}
 	}
 }
@@ -688,7 +642,7 @@ void OsdCoreNameSet(const char* str)
 	sprintf(lastcorename, "%s", str);
 }
 
-char* OsdCoreName()
+char* OsdCoreNameGet()
 {
 	return lastcorename;
 }

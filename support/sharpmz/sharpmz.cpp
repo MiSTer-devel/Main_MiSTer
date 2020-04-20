@@ -2063,7 +2063,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
 
             // set helptext with core display on top of basic info
             sprintf(helptext_custom, "                                ");
-            strcat(helptext_custom, OsdCoreName());
+            strcat(helptext_custom, OsdCoreNameGet());
             strcat(helptext_custom, "                                ");
             strcat(helptext_custom, SHARPMZ_HELPTEXT[0]);
             *helptext = helptext_custom;
