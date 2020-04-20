@@ -19,16 +19,17 @@ pcecdd_t::pcecdd_t() {
 	lba = 0;
 	scanOffset = 0;
 	isData = 1;
-	status = CD_STAT_NO_DISC;
+	state = PCECD_STATE_NODISC;
 	audioLength = 0;
 	audioOffset = 0;
 	SendData = NULL;
 	has_status = 0;
+	data_req = false;
+	can_read_next = false;
 	CDDAStart = 0;
 	CDDAEnd = 0;
-	state = PCECD_STATE_IDLE;
 
-	stat[0] = 0xB;
+	stat[0] = 0x0;
 	stat[1] = 0x0;
 }
 
@@ -323,38 +324,21 @@ void pcecdd_t::Reset() {
 	lba = 0;
 	scanOffset = 0;
 	isData = 1;
-	status = loaded ? CD_STAT_STOP : CD_STAT_NO_DISC;
+	state = loaded ? PCECD_STATE_IDLE : PCECD_STATE_NODISC;
 	audioLength = 0;
 	audioOffset = 0;
 	has_status = 0;
+	data_req = false;
+	can_read_next = false;
 	CDDAStart = 0;
 	CDDAEnd = 0;
-	state = PCECD_STATE_IDLE;
 
-	stat[0] = 0xB;
+	stat[0] = 0x0;
 	stat[1] = 0x0;
 }
 
 void pcecdd_t::Update() {
-	/*if (this->status == CD_STAT_STOP || this->status == CD_STAT_TRAY || this->status == CD_STAT_OPEN)
-	{
-		if (this->latency > 0)
-		{
-			this->latency--;
-			return;
-		}
-		this->status = this->loaded ? CD_STAT_TOC : CD_STAT_NO_DISC;
-	}
-	else if (this->status == CD_STAT_SEEK)
-	{
-		if (this->latency > 0)
-		{
-			this->latency--;
-			return;
-		}
-		this->status = CD_STAT_PAUSE;
-	}
-	else*/ if (this->state == PCECD_STATE_READ)
+	if (this->state == PCECD_STATE_READ)
 	{
 		if (this->latency > 0)
 		{
@@ -457,68 +441,48 @@ void pcecdd_t::Update() {
 		}
 
 	}
-	//else if (this->status == CD_STAT_SCAN)
-	//{
-	//	this->lba += this->scanOffset;
-
-	//	if (this->lba >= this->toc.tracks[this->index].end)
-	//	{
-	//		this->index++;
-	//		if (this->index < this->toc.last)
-	//		{
-	//			this->lba = this->toc.tracks[this->index].start;
-	//		}
-	//		else
-	//		{
-	//			this->lba = this->toc.end;
-	//			this->status = CD_STAT_END;
-	//			this->isData = 0x01;
-	//			return;
-	//		}
-	//	}
-	//	else if (this->lba < this->toc.tracks[this->index].start)
-	//	{
-	//		if (this->index > 0)
-	//		{
-	//			this->index--;
-	//			this->lba = this->toc.tracks[this->index].end;
-	//		}
-	//		else
-	//		{
-	//			this->lba = 0;
-	//		}
-	//	}
-
-	//	this->isData = this->toc.tracks[this->index].type;
-
-	//	//if (this->toc.sub) fseek(this->toc.sub, this->lba * 96, SEEK_SET);
-
-	//	if (this->toc.tracks[this->index].type)
-	//	{
-	//		// DATA track
-	//		FileSeek(&this->toc.tracks[0].f, this->lba * this->sectorSize, SEEK_SET);
-	//	}
-	//	else if (this->toc.tracks[this->index].f.opened())
-	//	{
-	//		// AUDIO track
-	//		FileSeek(&this->toc.tracks[this->index].f, (this->lba * 2352) - this->toc.tracks[this->index].offset, SEEK_SET);
-	//	}
-	//}
 }
 
 void pcecdd_t::CommandExec() {
 	msf_t msf;
 	int lba_ = 0;
-	uint8_t buf[16];
+	static uint8_t buf[32];
 
-	memset(buf, 0, 16);
+	memset(buf, 0, 32);
 
 	switch (comm[0]) {
 	case PCECD_COMM_TESTUNIT:
-		stat[0] = 0;
-		stat[1] = 0;
-		has_status = 1;
-		printf("\x1b[32mPCECD: Command TESTUNIT\n\x1b[0m");
+		if (state == PCECD_STATE_NODISC) {
+			CommandError(SENSEKEY_NOT_READY, NSE_NO_DISC, 0, 0);
+			SendStatus(PCECD_STATUS_CHECK_COND, 0);
+		}
+		else {
+			SendStatus(PCECD_STATUS_GOOD, 0);
+		}
+
+		printf("\x1b[32mPCECD: Command TESTUNIT, state = %u\n\x1b[0m", state);
+		break;
+
+	case PCECD_COMM_REQUESTSENSE:
+		buf[0] = 18;
+		buf[1] = 0 | 0x80;
+
+		buf[2] = 0x70;
+		buf[4] = sense.key;
+		buf[9] = 0x0A;
+		buf[14] = sense.asc;
+		buf[15] = sense.ascq;
+		buf[16] = sense.fru;
+
+		sense.key = sense.asc = sense.ascq = sense.fru = 0;
+
+		SendStatus(PCECD_STATUS_GOOD, 0);
+
+		printf("\x1b[32mPCECD: Command REQUESTSENSE, key = %02X, asc = %02X, ascq = %02X, fru = %02X\n\x1b[0m", sense.key, sense.asc, sense.ascq, sense.fru);
+
+		if (SendData)
+			SendData(buf, 18+2, PCECD_DATA_IO_INDEX);
+
 		break;
 
 	case PCECD_COMM_GETDIRINFO: {
@@ -561,9 +525,7 @@ void pcecdd_t::CommandExec() {
 			break;
 		}
 
-		stat[0] = 0;
-		stat[1] = 0;
-		has_status = 1;
+		SendStatus(PCECD_STATUS_GOOD, 0);
 
 		printf("\x1b[32mPCECD: Command GETDIRINFO, [1] = %02X, [2] = %02X\n\x1b[0m", comm[1], comm[2]);
 
@@ -608,6 +570,18 @@ void pcecdd_t::CommandExec() {
 
 		printf("\x1b[32mPCECD: Command READ6, lba = %u, cnt = %u\n\x1b[0m", this->lba, this->cnt);
 	}
+		break;
+
+	case PCECD_COMM_MODESELECT6:
+		if (comm[4]) {
+			data_req = true;
+		}
+		else {
+			SendStatus(PCECD_STATUS_GOOD, 0);
+		}
+
+		printf("\x1b[32mPCECD: Command MODESELECT6, cnt = %u\n\x1b[0m", comm[4]);
+
 		break;
 
 	case PCECD_COMM_SAPSP: {
@@ -662,9 +636,7 @@ void pcecdd_t::CommandExec() {
 
 		this->lba++;
 
-		stat[0] = 0;
-		stat[1] = 0;
-		has_status = 1;
+		SendStatus(PCECD_STATUS_GOOD, 0);
 	}
 		printf("\x1b[32mPCECD: Command SAPSP, start = %i, [9] = %02X\n\x1b[0m", this->CDDAStart, comm[9]);
 		break;
@@ -697,9 +669,7 @@ void pcecdd_t::CommandExec() {
 
 		this->CDDAEnd = lba_;
 
-		stat[0] = 0;
-		stat[1] = 0;
-		has_status = 1;
+		SendStatus(PCECD_STATUS_GOOD, 0);
 	}
 		printf("\x1b[32mPCECD: Command SAPEP, end = %i, [9] = %02X\n\x1b[0m", this->CDDAEnd, comm[9]);
 		break;
@@ -707,9 +677,7 @@ void pcecdd_t::CommandExec() {
 	case PCECD_COMM_PAUSE: {
 		this->state = PCECD_STATE_PAUSE;
 
-		stat[0] = 0;
-		stat[1] = 0;
-		has_status = 1;
+		SendStatus(PCECD_STATUS_GOOD, 0);
 	}
 		printf("\x1b[32mPCECD: Command PAUSE, current lba = %i\n\x1b[0m", this->lba);
 		break;
@@ -735,9 +703,7 @@ void pcecdd_t::CommandExec() {
 		buf[10] = BCD(msf.s);
 		buf[11] = BCD(msf.f);
 
-		stat[0] = 0;
-		stat[1] = 0;
-		has_status = 1;
+		SendStatus(PCECD_STATUS_GOOD, 0);
 
 		printf("\x1b[32mPCECD: Command READSUBQ, [1] = %02X, track = %i, index = %i, lba_rel = %i, lba_abs = %i\n\x1b[0m", comm[1], this->index + 1, this->index, lba_rel, lba_);
 
@@ -752,14 +718,6 @@ void pcecdd_t::CommandExec() {
 		printf("\x1b[32mPCECD: Command undefined, [0] = %02X, [1] = %02X, [2] = %02X, [3] = %02X, [4] = %02X, [5] = %02X\n\x1b[0m", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5]);
 		break;
 	}
-
-	/*if (buf[0] || buf[1]) {
-		int len = ((int)buf[1] * 256) + buf[0] + 2;
-		if (SendData)
-			SendData(buf, len, PCECD_DATA_IO_INDEX);
-
-		printf("\x1b[32mPCECD: Send data, len = %u, [2] = %02X, [3] = %02X, [4] = %02X, [5] = %02X\n\x1b[0m", len, buf[2], buf[3], buf[4], buf[5]);
-	}*/
 }
 
 int pcecdd_t::GetStatus(uint8_t* buf) {
@@ -770,6 +728,12 @@ int pcecdd_t::GetStatus(uint8_t* buf) {
 int pcecdd_t::SetCommand(uint8_t* buf) {
 	memcpy(comm, buf, 12);
 	return 0;
+}
+
+void pcecdd_t::SendStatus(uint8_t status, uint8_t message) {
+	stat[0] = status;
+	stat[1] = message;
+	has_status = 1;
 }
 
 void pcecdd_t::LBAToMSF(int lba, msf_t* msf) {
@@ -865,7 +829,12 @@ int pcecdd_t::SectorSend(uint8_t* header)
 	return 0;
 }
 
-
+void pcecdd_t::CommandError(uint8_t key, uint8_t asc, uint8_t ascq, uint8_t fru) {
+	sense.key = key;
+	sense.asc = asc;
+	sense.ascq = ascq;
+	sense.fru = fru;
+}
 
 
 
