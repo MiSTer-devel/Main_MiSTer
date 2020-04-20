@@ -17,7 +17,7 @@ static uint8_t has_command = 0;
 void pcecd_poll()
 {
 	static uint32_t poll_timer = 0;
-	static uint8_t last_req = 255;
+	static uint8_t last_req = 0;
 	static uint8_t adj = 0;
 
 	if (!poll_timer || CheckTimer(poll_timer))
@@ -31,11 +31,22 @@ void pcecd_poll()
 
 			spi_uio_cmd_cont(UIO_CD_SET);
 			spi_w(s);
+			spi_w(0);
 			DisableIO();
 
 			pcecdd.has_status = 0;
 
 			printf("\x1b[32mPCECD: Send status = %02X, message = %02X\n\x1b[0m", s&0xFF, s >> 8);
+		}
+		else if (pcecdd.data_req) {
+			spi_uio_cmd_cont(UIO_CD_SET);
+			spi_w(0);
+			spi_w(1);
+			DisableIO();
+
+			pcecdd.data_req = false;
+
+			printf("\x1b[32mPCECD: Data request for MODESELECT6\n\x1b[0m");
 		}
 
 		pcecdd.Update();
@@ -48,26 +59,34 @@ void pcecd_poll()
 		last_req = req;
 
 		uint16_t data_in[6];
+		uint16_t data_mode;
 		data_in[0] = spi_w(0);
 		data_in[1] = spi_w(0);
 		data_in[2] = spi_w(0);
 		data_in[3] = spi_w(0);
 		data_in[4] = spi_w(0);
 		data_in[5] = spi_w(0);
+		data_mode = spi_w(0);
 		DisableIO();
 
-		if (need_reset) {
-			need_reset = 0;
-			pcecdd.Reset();
-		}
-
-		if (!((uint8_t*)data_in)[11]) {
+		
+		switch (data_mode & 0xFF)
+		{
+		case 0:
 			pcecdd.SetCommand((uint8_t*)data_in);
 			pcecdd.CommandExec();
 			has_command = 1;
-		}
-		else {
+			break;
+
+		case 1:
+			//TODO: process data
+			pcecdd.SendStatus(0, 0);
+			printf("\x1b[32mPCECD: Command MODESELECT6, received data\n\x1b[0m");
+			break;
+
+		default:
 			pcecdd.can_read_next = true;
+			break;
 		}
 
 
@@ -75,6 +94,13 @@ void pcecd_poll()
 	}
 	else
 		DisableIO();
+
+	if (need_reset) {
+		need_reset = 0;
+		pcecdd.Reset();
+		printf("\x1b[32mPCECD: Reset\n\x1b[0m");
+	}
+
 }
 
 void pcecd_reset() {
@@ -99,13 +125,13 @@ void pcecd_set_image(int num, const char *filename)
 	(void)num;
 
 	pcecdd.Unload();
-	pcecdd.status = CD_STAT_OPEN;
+	pcecdd.state = PCECD_STATE_NODISC;
 
 	if (strlen(filename)) {
 		static char path[1024];
 
 		if (pcecdd.Load(filename) > 0) {
-			pcecdd.status = pcecdd.loaded ? CD_STAT_STOP : CD_STAT_NO_DISC;
+			pcecdd.state = pcecdd.loaded ? PCECD_STATE_IDLE : PCECD_STATE_NODISC;
 			pcecdd.latency = 10;
 			pcecdd.SendData = pcecd_send_data;
 
@@ -116,14 +142,14 @@ void pcecd_set_image(int num, const char *filename)
 		}
 		else {
 			notify_mount(0);
-			pcecdd.status = CD_STAT_NO_DISC;
+			pcecdd.state = PCECD_STATE_NODISC;
 		}
 	}
 	else
 	{
 		pcecdd.Unload();
 		notify_mount(0);
-		pcecdd.status = CD_STAT_NO_DISC;
+		pcecdd.state = PCECD_STATE_NODISC;
 	}
 }
 
