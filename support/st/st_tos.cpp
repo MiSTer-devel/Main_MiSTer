@@ -12,6 +12,12 @@
 
 #define CONFIG_FILENAME  "ATARIST0.CFG"
 
+const char* tos_mem[] = { "512kb", "1mb", "2mb", "4mb", "8mb", "14mb", "--", "--" };
+const char* tos_scanlines[] = { "Off","25%","50%","75%" };
+const char* tos_stereo[] = { "Mono","Stereo" };
+const char* tos_chipset[] = { "ST","STE","MegaSTE","STEroids" };
+const char* tos_chipset_short[] = { "ST","STe","MST","ST+" };
+
 typedef struct {
 	unsigned long system_ctrl;  // system control word
 	char tos_img[1024];
@@ -62,6 +68,11 @@ void tos_update_sysctrl(uint32_t ctrl)
 	set_control(config.system_ctrl);
 }
 
+unsigned long tos_system_ctrl()
+{
+	return config.system_ctrl;
+}
+
 static void memory_read(uint8_t *data, uint32_t words)
 {
 	EnableIO();
@@ -93,7 +104,7 @@ static void dma_ack(uint8_t status)
 	DisableIO();
 }
 
-static void dma_nak(void)
+static void dma_nak()
 {
 	EnableIO();
 	spi8(ST_NAK_DMA);
@@ -491,11 +502,6 @@ void tos_eject_all()
 	for (int i = 0; i < 4; i++) tos_insert_disk(i, "");
 }
 
-unsigned long tos_system_ctrl(void)
-{
-	return config.system_ctrl;
-}
-
 void tos_reset(char cold)
 {
 	tos_update_sysctrl(config.system_ctrl | TOS_CONTROL_CPU_RESET);  // set reset
@@ -586,4 +592,50 @@ int tos_config_exists(int slot)
 	char name[64] = { CONFIG_FILENAME };
 	name[7] = '0' + slot;
 	return FileLoadConfig(name, 0, 0);
+}
+
+const char* tos_get_cfg_string(int num)
+{
+	static char str[256];
+
+	char name[64] = { CONFIG_FILENAME };
+	name[7] = '0' + num;
+
+	static tos_config_t tmp;
+	memset(&tmp, 0, sizeof(tmp));
+
+	int len = FileLoadConfig(name, 0, 0);
+	if (len == sizeof(tos_config_t))
+	{
+		FileLoadConfig(name, &tmp, sizeof(tos_config_t));
+
+		memset(str, 0, sizeof(str));
+		strcat(str, tos_mem[(tmp.system_ctrl >> 1) & 7]);
+		strcat(str, " ");
+		if (tmp.acsi_img[0][0]) strcat(str, "H0 ");
+		if (tmp.acsi_img[1][0]) strcat(str, "H1 ");
+		if (tmp.cart_img[0]) strcat(str, "CR ");
+		strcat(str, tos_chipset_short[(tmp.system_ctrl >> 23) & 3]);
+		strcat(str, " ");
+		if (!((tmp.system_ctrl >> 23) & 3) && (tmp.system_ctrl & TOS_CONTROL_BLITTER)) strcat(str, "B ");
+		if (tmp.system_ctrl & TOS_CONTROL_VIKING) strcat(str, "V ");
+		if (tmp.system_ctrl & TOS_CONTROL_VIDEO_AR) strcat(str, "W ");
+		strcat(str, (tmp.system_ctrl & TOS_CONTROL_VIDEO_COLOR) ? "C " : "M ");
+		if (!(tmp.system_ctrl & TOS_CONTROL_BORDER)) strcat(str, "F ");
+		int sl = (tmp.system_ctrl >> 20) & 3;
+		if (sl) sprintf(str + strlen(str), "S%d ", sl);
+		strcat(str, (tmp.system_ctrl & TOS_CONTROL_STEREO) ? "AS " : "AM ");
+
+		if (tmp.tos_img[0])
+		{
+			char *p = strrchr(tmp.tos_img, '/');
+			if (!p) p = tmp.tos_img; else p++;
+			int len = strlen(p);
+			if (len >= 4) len -= 4;
+			memcpy(str + strlen(str), p, len);
+		}
+		return str;
+	}
+
+	return "< empty slot >";
 }

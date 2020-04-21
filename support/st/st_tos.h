@@ -67,8 +67,14 @@
 
 #define TOS_CONTROL_BORDER        0x20000000
 
-unsigned long tos_system_ctrl(void);
+extern const char* tos_mem[];
+extern const char* tos_scanlines[];
+extern const char* tos_stereo[];
+extern const char* tos_chipset[];
 
+const char* tos_get_cfg_string(int num);
+
+unsigned long tos_system_ctrl();
 void tos_upload(const char *);
 void tos_poll();
 void tos_update_sysctrl(uint32_t ctrl);
