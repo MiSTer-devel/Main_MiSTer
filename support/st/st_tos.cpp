@@ -557,16 +557,12 @@ void tos_config_load(int slot)
 	tos_eject_all();
 
 	new_slot = (slot == -1) ? last_slot : slot;
+	memset(&config, 0, sizeof(config));
 
 	// set default values
-	config.system_ctrl = TOS_MEMCONFIG_4M | TOS_CONTROL_BLITTER | TOS_CONTROL_VIDEO_COLOR;
+	config.system_ctrl = TOS_MEMCONFIG_1M | TOS_CONTROL_VIDEO_COLOR | TOS_CONTROL_BORDER;
 	strcpy(config.tos_img, user_io_get_core_path());
 	strcat(config.tos_img, "/TOS.IMG");
-	config.cart_img[0] = 0;
-	strcpy(config.acsi_img[0], "HARDDISK.VHD");
-	config.acsi_img[1][0] = 0;
-	config.video_adjust[0] = config.video_adjust[1] = 0;
-	config.cdc_control_redirect = 0;
 
 	// try to load config
 	name[7] = '0' + new_slot;

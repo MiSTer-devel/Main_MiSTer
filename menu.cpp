@@ -3092,13 +3092,16 @@ void HandleUI(void)
 
 		m = 0;
 		OsdWrite(m++);
-		OsdWrite(m++);
-		OsdWrite(m++);
+		OsdWrite(m++, " Startup config:");
 		for (uint32_t i = 0; i < 9; i++)
 		{
-			snprintf(s, 29, " %s", tos_get_cfg_string(i));
+			snprintf(s, 29, "  %s", (menumask & (1 << i)) ? tos_get_cfg_string(i) : "");
 			OsdWrite(m++, s, menusub == i, !(menumask & (1<<i)));
-			if(!i) OsdWrite(m++);
+			if (!i)
+			{
+				OsdWrite(m++);
+				OsdWrite(m++, " Other configs:");
+			}
 		}
 
 		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
@@ -3139,13 +3142,16 @@ void HandleUI(void)
 
 		m = 0;
 		OsdWrite(m++);
-		OsdWrite(m++);
-		OsdWrite(m++);
+		OsdWrite(m++, " Startup config:");
 		for (uint32_t i = 0; i < 9; i++)
 		{
 			snprintf(s, 29, "  %s", tos_get_cfg_string(i));
 			OsdWrite(m++, s, menusub == i, !(menumask & (1 << i)));
-			if (!i) OsdWrite(m++);
+			if (!i)
+			{
+				OsdWrite(m++);
+				OsdWrite(m++, " Other configs:");
+			}
 		}
 
 		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
