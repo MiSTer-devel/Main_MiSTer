@@ -55,8 +55,11 @@ static const char *acsi_cmd_name(int cmd) {
 	return cmdname[cmd];
 }
 
+static int uart_mode = 0;
 static void set_control(uint32_t ctrl)
 {
+	ctrl = uart_mode ? (ctrl | TOS_CONTROL_REDIR0) : (ctrl & ~TOS_CONTROL_REDIR0);
+
 	spi_uio_cmd_cont(UIO_SET_STATUS2);
 	spi32w(ctrl);
 	DisableIO();
@@ -71,6 +74,12 @@ void tos_update_sysctrl(uint32_t ctrl)
 unsigned long tos_system_ctrl()
 {
 	return config.system_ctrl;
+}
+
+void tos_uart_mode(int enable)
+{
+	uart_mode = enable;
+	set_control(config.system_ctrl);
 }
 
 static void memory_read(uint8_t *data, uint32_t words)

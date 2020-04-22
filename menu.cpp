@@ -2239,8 +2239,7 @@ void HandleUI(void)
 					uint mode = GetUARTMode() + 1;
 					if (mode > sizeof(config_uart_msg) / sizeof(config_uart_msg[0])) mode = 0;
 
-					sprintf(s, "uartmode %d", mode);
-					system(s);
+					SetUARTMode(mode);
 					menustate = MENU_UART1;
 				}
 				break;
@@ -2251,10 +2250,8 @@ void HandleUI(void)
 				{
 					int mode = GetUARTMode();
 					SetMidiLinkMode(GetMidiLinkMode() ^ ((menusub == 1) ? 2 : 1));
-					sprintf(s, "uartmode %d", 0);
-					system(s);
-					sprintf(s, "uartmode %d", mode);
-					system(s);
+					SetUARTMode(0);
+					SetUARTMode(mode);
 					menustate = MENU_UART1;
 				}
 				break;
@@ -2263,10 +2260,8 @@ void HandleUI(void)
 					int mode = GetUARTMode();
 					if(mode != 0)
 					{
-						sprintf(s, "uartmode %d", 0);
-						system(s);
-						sprintf(s, "uartmode %d", mode);
-						system(s);
+						SetUARTMode(0);
+						SetUARTMode(mode);
 						menustate = MENU_8BIT_SYSTEM1;
 					}
 				}

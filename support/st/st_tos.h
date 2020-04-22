@@ -92,4 +92,6 @@ void tos_config_load(int slot); // slot -1 == last config
 void tos_config_save(int slot);
 int tos_config_exists(int slot);
 
+void tos_uart_mode(int enable);
+
 #endif
