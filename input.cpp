@@ -816,6 +816,51 @@ static int ev2archie[] =
 	NONE  //255 ???
 };
 
+// jammasd have shifted keys: when 1P start is kept pressed, it acts as a shift key,
+// outputting other key signals. Example: 1P start + 2P start = KEY_ESC
+static char jammasd2joy[35][3] =
+{ // key,      player, button_remap
+    {KEY_5,         1, 0}, // 1P coin
+    {KEY_1,         1, 0}, // 1P start (shift key)
+    {KEY_UP,        1, 0}, // 1P up
+    {KEY_DOWN,      1, 0}, // 1P down
+    {KEY_LEFT,      1, 0}, // 1P left
+    {KEY_RIGHT,     1, 0}, // 1P right
+    {KEY_LEFTCTRL,  1, 0}, // 1P 1
+    {KEY_LEFTALT,   1, 0}, // 1P 2
+    {KEY_SPACE,     1, 0}, // 1P 3
+    {KEY_LEFTSHIFT, 1, 0}, // 1P 4
+    {KEY_Z,         1, 0}, // 1P 5
+    {KEY_X,         1, 0}, // 1P 6
+    {KEY_C,         1, 0}, // 1P 7
+    {KEY_V,         1, 0}, // 1P 8
+    {KEY_9,         1, 0}, // Test
+    {KEY_F2,        1, 0}, // service
+
+    {KEY_6,         2, KEY_5},         // 2P coin
+    {KEY_2,         2, KEY_1},         // 2P start
+    {KEY_R,         2, KEY_UP},        // 2P up
+    {KEY_F,         2, KEY_DOWN},      // 2P down
+    {KEY_D,         2, KEY_LEFT},      // 2P left
+    {KEY_G,         2, KEY_RIGHT},     // 2P right
+    {KEY_A,         2, KEY_LEFTCTRL},  // 2P 1
+    {KEY_S,         2, KEY_LEFTALT},   // 2P 2
+    {KEY_Q,         2, KEY_SPACE},     // 2P 3
+    {KEY_W,         2, KEY_LEFTSHIFT}, // 2P 4
+    {KEY_I,         2, KEY_Z},         // 2P 5
+    {KEY_K,         2, KEY_X},         // 2P 6
+    {KEY_J,         2, KEY_C},         // 2P 7
+    {KEY_L,         2, KEY_V},         // 2P 8
+
+    {KEY_BACKSPACE, 1, 0},    // 1P up shifted
+    {KEY_P,         1, 0},    // 1P down shifted
+    {KEY_ENTER,     1, 0},    // 1P left shifted
+    {KEY_TAB,       1, 0},    // 1P right shifted
+    // {KEY_5,         1, 4}, // 1P 1 shifted (defined above)
+    // {KEY_6,         1, 5}, // 1P 2 shifted (defined above)
+    {KEY_ESC,       2, KEY_1} // 2P start shifted
+};
+
 uint32_t get_ps2_code(uint16_t key)
 {
 	if (key > 255) return NONE;
@@ -2296,6 +2341,25 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				//Keyrah v2: USB\VID_18D8&PID_0002\A600/A1200_MULTIMEDIA_EXTENSION_VERSION
 				int keyrah = (cfg.keyrah_mode && (((((uint32_t)input[dev].vid) << 16) | input[dev].pid) == cfg.keyrah_mode));
 				if (keyrah) code = keyrah_trans(code, ev->value);
+
+				//JammaSD: jamma to usb adapter (keyboard input handling 2 players)
+				if (input[dev].vid == 0x04D8 && input[dev].pid == 0xF3AD)
+				{
+					for (uint i = 0; i < 35; i++)
+					{
+						if (jammasd2joy[i][0] == ev->code)
+						{
+							// if input is from player 2, use the corresponding keycode of player 1
+							if (jammasd2joy[i][1] == 2) code = jammasd2joy[i][2];
+
+							for (uint j = 0; j < BTN_NUM; j++)
+							{
+								if (input[dev].map[j] == code) joy_digital(jammasd2joy[i][1], 1 << j, 0, ev->value, j);
+							}
+						}
+					}
+					return;
+				}
 
 				uint32_t ps2code = get_ps2_code(code);
 				if (ev->value) modifier |= ps2code;
