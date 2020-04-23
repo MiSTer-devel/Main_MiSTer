@@ -66,6 +66,7 @@
 #define TOS_CONTROL_VIKING        0x10000000   // Viking graphics card
 
 #define TOS_CONTROL_BORDER        0x20000000
+#define TOS_CONTROL_MDE60         0x40000000
 
 extern const char* tos_mem[];
 extern const char* tos_scanlines[];

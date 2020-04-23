@@ -2880,7 +2880,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_SYSTEM1:
-		menumask = 0x3fff;
+		menumask = 0x7fff;
 		OsdSetTitle("Config", 0);
 		m = 0;
 
@@ -2927,21 +2927,26 @@ void HandleUI(void)
 		else                                             strcat(s, "Mono");
 		OsdWrite(m++, s, menusub == 9);
 
+		strcpy(s, " Mono 60Hz: ");
+		if (tos_system_ctrl() & TOS_CONTROL_MDE60) strcat(s, "On");
+		else                                       strcat(s, "Off");
+		OsdWrite(m++, s, menusub == 10);
+
 		strcpy(s, " Border:    ");
 		if (tos_system_ctrl() & TOS_CONTROL_BORDER) strcat(s, "Visible");
 		else                                        strcat(s, "Full");
-		OsdWrite(m++, s, menusub == 10);
+		OsdWrite(m++, s, menusub == 11);
 
 		strcpy(s, " Scanlines: ");
 		strcat(s, tos_scanlines[(tos_system_ctrl() >> 20) & 3]);
-		OsdWrite(m++, s, menusub == 11);
+		OsdWrite(m++, s, menusub == 12);
 
 		strcpy(s, " YM-Audio:  ");
 		strcat(s, tos_stereo[(tos_system_ctrl() & TOS_CONTROL_STEREO) ? 1 : 0]);
-		OsdWrite(m++, s, menusub == 12);
+		OsdWrite(m++, s, menusub == 13);
 
 		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
-		OsdWrite(15, STD_EXIT, menusub == 13);
+		OsdWrite(15, STD_EXIT, menusub == 14);
 
 		parentstate = menustate;
 		menustate = MENU_ST_SYSTEM2;
@@ -3026,11 +3031,16 @@ void HandleUI(void)
 				break;
 
 			case 10:
-				tos_update_sysctrl(tos_system_ctrl() ^ TOS_CONTROL_BORDER);
+				tos_update_sysctrl(tos_system_ctrl() ^ TOS_CONTROL_MDE60);
 				menustate = MENU_ST_SYSTEM1;
 				break;
 
 			case 11:
+				tos_update_sysctrl(tos_system_ctrl() ^ TOS_CONTROL_BORDER);
+				menustate = MENU_ST_SYSTEM1;
+				break;
+
+			case 12:
 				{
 					// next scanline state
 					int scan = ((tos_system_ctrl() >> 20) + 1) & 3;
@@ -3039,13 +3049,13 @@ void HandleUI(void)
 				}
 				break;
 
-			case 12:
+			case 13:
 				tos_update_sysctrl(tos_system_ctrl() ^ TOS_CONTROL_STEREO);
 				menustate = MENU_ST_SYSTEM1;
 				break;
 
 
-			case 13:
+			case 14:
 				menustate = MENU_ST_MAIN1;
 				menusub = 4;
 				if (need_reset) tos_reset(1);

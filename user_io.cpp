@@ -556,7 +556,7 @@ int GetUARTMode()
 	return 0;
 }
 
-int SetUARTMode(int mode)
+void SetUARTMode(int mode)
 {
 	if (is_st()) tos_uart_mode(mode != 3);
 	MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
