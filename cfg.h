@@ -40,6 +40,8 @@ typedef struct {
 	uint16_t osd_timeout;
 	uint8_t gamepad_defaults;
 	uint8_t recents;
+	uint16_t jammasd_vid;
+	uint16_t jammasd_pid;
 	char bootcore[256];
 	char video_conf[1024];
 	char video_conf_pal[1024];

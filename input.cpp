@@ -852,6 +852,7 @@ enum QUIRK
 	QUIRK_MADCATZ360,
 	QUIRK_PDSP,
 	QUIRK_PDSP_ARCADE,
+	QUIRK_JAMMASD,
 };
 
 typedef struct
@@ -2635,6 +2636,49 @@ void mergedevs()
 	}
 }
 
+// jammasd have shifted keys: when 1P start is kept pressed, it acts as a shift key,
+// outputting other key signals. Example: 1P start + 2P start = KEY_ESC
+// Shifted keys are passed as normal keyboard keys.
+static struct
+{
+	uint16_t key;
+	uint16_t player;
+	uint16_t btn;
+} jammasd2joy[] =
+{
+	{KEY_5,         1, 0x120}, // 1P coin
+	{KEY_1,         1, 0x121}, // 1P start (shift key)
+	{KEY_UP,        1, 0x122}, // 1P up
+	{KEY_DOWN,      1, 0x123}, // 1P down
+	{KEY_LEFT,      1, 0x124}, // 1P left
+	{KEY_RIGHT,     1, 0x125}, // 1P right
+	{KEY_LEFTCTRL,  1, 0x126}, // 1P 1
+	{KEY_LEFTALT,   1, 0x127}, // 1P 2
+	{KEY_SPACE,     1, 0x128}, // 1P 3
+	{KEY_LEFTSHIFT, 1, 0x129}, // 1P 4
+	{KEY_Z,         1, 0x12A}, // 1P 5
+	{KEY_X,         1, 0x12B}, // 1P 6
+	{KEY_C,         1, 0x12C}, // 1P 7
+	{KEY_V,         1, 0x12D}, // 1P 8
+	{KEY_9,         1, 0x12E}, // Test
+	{KEY_F2,        1, 0x12F}, // service
+
+	{KEY_6,         2, 0x120}, // 2P coin
+	{KEY_2,         2, 0x121}, // 2P start
+	{KEY_R,         2, 0x122}, // 2P up
+	{KEY_F,         2, 0x123}, // 2P down
+	{KEY_D,         2, 0x124}, // 2P left
+	{KEY_G,         2, 0x125}, // 2P right
+	{KEY_A,         2, 0x126}, // 2P 1
+	{KEY_S,         2, 0x127}, // 2P 2
+	{KEY_Q,         2, 0x128}, // 2P 3
+	{KEY_W,         2, 0x129}, // 2P 4
+	{KEY_I,         2, 0x12A}, // 2P 5
+	{KEY_K,         2, 0x12B}, // 2P 6
+	{KEY_J,         2, 0x12C}, // 2P 7
+	{KEY_L,         2, 0x12D}, // 2P 8
+};
+
 int input_test(int getchar)
 {
 	static char cur_leds = 0;
@@ -2804,6 +2848,12 @@ int input_test(int getchar)
 						// Axis 8 - EV_ABS is Paddle
 						// Includes other buttons and axes, works as a full featured gamepad.
 						if (strstr(uniq, "MiSTer-A1")) input[n].quirk = QUIRK_PDSP_ARCADE;
+
+						//JammaSD
+						if (cfg.jammasd_vid && cfg.jammasd_pid && input[n].vid == cfg.jammasd_vid && input[n].pid == cfg.jammasd_pid)
+						{
+							input[n].quirk = QUIRK_JAMMASD;
+						}
 
 						//Arduino and Teensy devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
 						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4)) && strlen(uniq))
@@ -3027,6 +3077,20 @@ int input_test(int getchar)
 										{
 											absinfo.minimum = 30;
 											absinfo.maximum = 225;
+										}
+									}
+								}
+
+								if (input[dev].quirk == QUIRK_JAMMASD && ev.type == EV_KEY)
+								{
+									input[dev].num = 0;
+									for (uint32_t i = 0; i <= sizeof(jammasd2joy) / sizeof(jammasd2joy[0]); i++)
+									{
+										if (jammasd2joy[i].key == ev.code)
+										{
+											ev.code = jammasd2joy[i].btn;
+											input[dev].num = jammasd2joy[i].player;
+											break;
 										}
 									}
 								}
