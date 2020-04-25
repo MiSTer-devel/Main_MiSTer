@@ -72,6 +72,7 @@ int pcecdd_t::LoadCUE(const char* filename) {
 	static char line[128];
 	char *ptr, *lptr;
 	static char toc[100 * 1024];
+	int hdr = 0;
 
 	strcpy(fname, filename);
 
@@ -114,6 +115,9 @@ int pcecdd_t::LoadCUE(const char* filename) {
 			if(!FileOpen(&this->toc.tracks[this->toc.last].f, fname)) return -1;
 
 			printf("\x1b[32mPCECD: Open track file: %s\n\x1b[0m", fname);
+
+			int len = strlen(fname);
+			hdr = (len > 4 && !strcasecmp(fname + len - 4, ".wav")) ? 44 : 0;
 
 			pregap = 0;
 
@@ -196,12 +200,11 @@ int pcecdd_t::LoadCUE(const char* filename) {
 		else if ((sscanf(lptr, "INDEX 01 %02d:%02d:%02d", &mm, &ss, &bb) == 3) ||
 			(sscanf(lptr, "INDEX 1 %02d:%02d:%02d", &mm, &ss, &bb) == 3))
 		{
-			this->toc.tracks[this->toc.last].offset = pregap * this->toc.tracks[this->toc.last].sector_size;
-
 			if (!this->toc.tracks[this->toc.last].f.opened())
 			{
 				FileOpen(&this->toc.tracks[this->toc.last].f, fname);
 				this->toc.tracks[this->toc.last].start = bb + ss * 75 + mm * 60 * 75 + pregap;
+				this->toc.tracks[this->toc.last].offset = (pregap * this->toc.tracks[this->toc.last].sector_size) - hdr;
 				if (this->toc.last && !this->toc.tracks[this->toc.last - 1].end)
 				{
 					this->toc.tracks[this->toc.last - 1].end = this->toc.tracks[this->toc.last].start;
@@ -212,8 +215,8 @@ int pcecdd_t::LoadCUE(const char* filename) {
 				FileSeek(&this->toc.tracks[this->toc.last].f, 0, SEEK_SET);
 
 				this->toc.tracks[this->toc.last].start = this->toc.end + pregap;
-				this->toc.tracks[this->toc.last].offset += this->toc.tracks[this->toc.last].start * this->toc.tracks[this->toc.last].sector_size;
-				this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((this->toc.tracks[this->toc.last].f.size + this->toc.tracks[this->toc.last].sector_size - 1) / this->toc.tracks[this->toc.last].sector_size);
+				this->toc.tracks[this->toc.last].offset = (this->toc.tracks[this->toc.last].start * this->toc.tracks[this->toc.last].sector_size) - hdr;
+				this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((this->toc.tracks[this->toc.last].f.size - hdr + this->toc.tracks[this->toc.last].sector_size - 1) / this->toc.tracks[this->toc.last].sector_size);
 
 				this->toc.tracks[this->toc.last].start += (bb + ss * 75 + mm * 60 * 75);
 				this->toc.end = this->toc.tracks[this->toc.last].end;
@@ -232,7 +235,7 @@ int pcecdd_t::LoadCUE(const char* filename) {
 
 	for (int i = 0; i < this->toc.last; i++)
 	{
-		printf("\x1b[32mPCECD: Track = %u, start = %u, end = %u, offset = %u, type = %u\n\x1b[0m", i, this->toc.tracks[i].start, this->toc.tracks[i].end, this->toc.tracks[i].offset, this->toc.tracks[i].type);
+		printf("\x1b[32mPCECD: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, this->toc.tracks[i].start, this->toc.tracks[i].end, this->toc.tracks[i].offset, this->toc.tracks[i].sector_size, this->toc.tracks[i].type);
 	}
 
 	FileClose(&this->toc.tracks[this->toc.last].f);
@@ -243,11 +246,7 @@ int pcecdd_t::Load(const char *filename)
 {
 	Unload();
 
-	if (LoadCUE(filename)) {
-		return (-1);
-	}
-
-	printf("\x1b[32mPCECD: Tr0 Sector size = %u, Tr0 end = %u\n\x1b[0m", this->toc.tracks[0].sector_size, this->toc.tracks[0].end);
+	if (LoadCUE(filename)) return -1;
 
 	if (this->toc.last)
 	{
@@ -258,7 +257,6 @@ int pcecdd_t::Load(const char *filename)
 		//this->toc.sub = fopen(getFullPath(fname), "r");
 
 		printf("\x1b[32mPCECD: CD mounted , last track = %u\n\x1b[0m", this->toc.last);
-
 		return 1;
 	}
 
