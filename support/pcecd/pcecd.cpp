@@ -128,6 +128,7 @@ int pcecd_using_cd()
 void pcecd_set_image(int num, const char *filename)
 {
 	(void)num;
+	static char romname[1024];
 
 	pcecdd.Unload();
 	pcecdd.state = PCECD_STATE_NODISC;
@@ -141,8 +142,21 @@ void pcecd_set_image(int num, const char *filename)
 			pcecdd.SendData = pcecd_send_data;
 
 			// load CD BIOS
-			sprintf(path, "%s/cd.rom", user_io_get_core_path());
-			user_io_file_tx(path, 0);
+			strcpy(romname, filename);
+			char *p = strrchr(romname, '/');
+			int loaded = 0;
+			if (p)
+			{
+				p++;
+				strcpy(p, "cd_bios.rom");
+				loaded = user_io_file_tx(romname, 0);
+			}
+
+			if (!loaded)
+			{
+				sprintf(path, "%s/cd_bios.rom", user_io_get_core_path());
+				user_io_file_tx(path, 0);
+			}
 			notify_mount(1);
 		}
 		else {
