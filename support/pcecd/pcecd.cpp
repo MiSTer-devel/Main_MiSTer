@@ -125,10 +125,64 @@ int pcecd_using_cd()
 	return pcecdd.loaded;
 }
 
+static char buf[1024];
+static char us_sig[] =
+	{ 0x72, 0xA2, 0xC2, 0x04, 0x12, 0xF6, 0xB6, 0xA6,
+	  0x04, 0xA2, 0x36, 0xA6, 0xC6, 0x2E, 0x4E, 0xF6,
+	  0x76, 0x96, 0xC6, 0xCE, 0x34, 0x32, 0x2E, 0x26,
+	  0x74, 0x00 };
+
+static int load_bios(char *name)
+{
+	uint32_t size = FileLoad(name, 0, 0);
+	if (!size) return 0;
+
+	if (size < 262144)
+	{
+		//not official bios
+		return user_io_file_tx(name, 0);
+	}
+
+	fileTYPE f;
+	if (!FileOpen(&f, name)) return 0;
+
+	uint32_t start = size & 0x3FF;
+	size = 262144;
+
+	FileSeek(&f, start+size-26, SEEK_SET);
+	memset(buf, 0, sizeof(buf));
+	FileReadAdv(&f, buf, 26);
+	int swap = !memcmp(buf, us_sig, sizeof(us_sig));
+
+	user_io_set_index(0);
+	user_io_set_download(1);
+	FileSeek(&f, start, SEEK_SET);
+
+	while (size)
+	{
+		uint16_t chunk = (size > sizeof(buf)) ? sizeof(buf) : size;
+		size -= chunk;
+
+		FileReadAdv(&f, buf, chunk);
+		if (swap)
+		{
+			for (uint32_t i = 0; i < chunk; i++)
+			{
+				unsigned char c = buf[i];
+				buf[i] = ((c & 1) << 7) | ((c & 2) << 5) | ((c & 4) << 3) | ((c & 8) << 1) | ((c & 16) >> 1) | ((c & 32) >> 3) | ((c & 64) >> 5) | ((c & 128) >> 7);
+			}
+		}
+		user_io_file_tx_write((uint8_t*)buf, chunk);
+	}
+
+	user_io_set_download(0);
+
+	return 1;
+}
+
 void pcecd_set_image(int num, const char *filename)
 {
 	(void)num;
-	static char romname[1024];
 
 	pcecdd.Unload();
 	pcecdd.state = PCECD_STATE_NODISC;
@@ -142,20 +196,20 @@ void pcecd_set_image(int num, const char *filename)
 			pcecdd.SendData = pcecd_send_data;
 
 			// load CD BIOS
-			strcpy(romname, filename);
-			char *p = strrchr(romname, '/');
+			strcpy(buf, filename);
+			char *p = strrchr(buf, '/');
 			int loaded = 0;
 			if (p)
 			{
 				p++;
 				strcpy(p, "cd_bios.rom");
-				loaded = user_io_file_tx(romname, 0);
+				loaded = load_bios(buf);
 			}
 
 			if (!loaded)
 			{
 				sprintf(path, "%s/cd_bios.rom", user_io_get_core_path());
-				user_io_file_tx(path, 0);
+				load_bios(path);
 			}
 			notify_mount(1);
 		}
