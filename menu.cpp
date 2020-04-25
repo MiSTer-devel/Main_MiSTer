@@ -1700,15 +1700,8 @@ void HandleUI(void)
 										mask = 1;
 									}
 								}
-								if (is_pce())
-								{
-									/*if (mask == 1) pcecd_set_image(0, "");
-									if (mask == 2)
-									{*/
-										pcecd_reset();
-										/*mask = 1;
-									}*/
-								}
+
+								if (is_pce() && mask == 1) pcecd_reset();
 
 								uint32_t status = user_io_8bit_set_status(0, 0, ex);
 
