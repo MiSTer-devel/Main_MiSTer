@@ -15,7 +15,7 @@
 #include "../../lib/md5/md5.h"
 
 #include "buffer.h"
-#include "romutils.h"
+#include "mra_loader.h"
 
 #define kBigTextSize 1024
 struct arc_struct {

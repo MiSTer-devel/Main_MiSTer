@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <time.h>   // clock_gettime, CLOCK_REALTIME
 #include <sys/mman.h>
-#include "loader.h"
+#include "neogeo_loader.h"
 #include "../../sxmlc.h"
 #include "../../user_io.h"
 #include "../../fpga_io.h"
