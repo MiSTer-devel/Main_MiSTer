@@ -132,27 +132,26 @@ static char us_sig[] =
 	  0x76, 0x96, 0xC6, 0xCE, 0x34, 0x32, 0x2E, 0x26,
 	  0x74, 0x00 };
 
-static int load_bios(char *name)
+static int load_bios(char *biosname, const char *cuename)
 {
-	uint32_t size = FileLoad(name, 0, 0);
+	uint32_t size = FileLoad(biosname, 0, 0);
 	if (!size) return 0;
 
-	if (size < 262144)
-	{
-		//not official bios
-		return user_io_file_tx(name, 0);
-	}
-
 	fileTYPE f;
-	if (!FileOpen(&f, name)) return 0;
+	if (!FileOpen(&f, biosname)) return 0;
 
+	int swap = 0;
 	uint32_t start = size & 0x3FF;
-	size = 262144;
 
-	FileSeek(&f, start+size-26, SEEK_SET);
-	memset(buf, 0, sizeof(buf));
-	FileReadAdv(&f, buf, 26);
-	int swap = !memcmp(buf, us_sig, sizeof(us_sig));
+	if (size >= 262144)
+	{
+		size = 262144;
+
+		FileSeek(&f, start + size - 26, SEEK_SET);
+		memset(buf, 0, sizeof(buf));
+		FileReadAdv(&f, buf, 26);
+		swap = !memcmp(buf, us_sig, sizeof(us_sig));
+	}
 
 	user_io_set_index(0);
 	user_io_set_download(1);
@@ -175,6 +174,9 @@ static int load_bios(char *name)
 		user_io_file_tx_write((uint8_t*)buf, chunk);
 	}
 
+	FileGenerateSavePath(cuename, buf);
+	user_io_file_mount(buf, 0, 1);
+
 	user_io_set_download(0);
 
 	return 1;
@@ -187,10 +189,12 @@ void pcecd_set_image(int num, const char *filename)
 	pcecdd.Unload();
 	pcecdd.state = PCECD_STATE_NODISC;
 
-	if (strlen(filename)) {
-		static char path[1024];
+	if (strlen(filename))
+	{
+		printf("Load CD: %s\n", filename);
 
-		if (pcecdd.Load(filename) > 0) {
+		if (pcecdd.Load(filename) > 0)
+		{
 			pcecdd.state = pcecdd.loaded ? PCECD_STATE_IDLE : PCECD_STATE_NODISC;
 			pcecdd.latency = 10;
 			pcecdd.SendData = pcecd_send_data;
@@ -203,13 +207,13 @@ void pcecd_set_image(int num, const char *filename)
 			{
 				p++;
 				strcpy(p, "cd_bios.rom");
-				loaded = load_bios(buf);
+				loaded = load_bios(buf, filename);
 			}
 
 			if (!loaded)
 			{
-				sprintf(path, "%s/cd_bios.rom", user_io_get_core_path());
-				load_bios(path);
+				sprintf(buf, "%s/cd_bios.rom", user_io_get_core_path());
+				load_bios(buf, filename);
 			}
 			notify_mount(1);
 		}
