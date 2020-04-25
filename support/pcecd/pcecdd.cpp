@@ -5,6 +5,7 @@
 #include <inttypes.h>
 
 #include "../../file_io.h"
+#include "../../user_io.h"
 
 #include "pcecd.h"
 
@@ -303,6 +304,7 @@ void pcecdd_t::Reset() {
 void pcecdd_t::Update() {
 	if (this->state == PCECD_STATE_READ)
 	{
+		DISKLED_ON;
 		if (this->latency > 0)
 		{
 			this->latency--;
@@ -370,7 +372,9 @@ void pcecdd_t::Update() {
 			}
 		}
 	}
-	else if (this->state == PCECD_STATE_PLAY) {
+	else if (this->state == PCECD_STATE_PLAY)
+	{
+		DISKLED_ON;
 		if (this->latency > 0)
 		{
 			this->latency--;
