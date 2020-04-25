@@ -8,6 +8,7 @@ typedef struct
 	int start;
 	int end;
 	int type;
+	int sector_size;
 } track_t;
 
 typedef struct

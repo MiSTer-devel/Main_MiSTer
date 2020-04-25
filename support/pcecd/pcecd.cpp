@@ -69,7 +69,7 @@ void pcecd_poll()
 		data_mode = spi_w(0);
 		DisableIO();
 
-		
+
 		switch (data_mode & 0xFF)
 		{
 		case 0:
@@ -118,6 +118,11 @@ static void notify_mount(int load)
 		usleep(100000);
 		user_io_8bit_set_status(0, UIO_STATUS_RESET);
 	}
+}
+
+int pcecd_using_cd()
+{
+	return pcecdd.loaded;
 }
 
 void pcecd_set_image(int num, const char *filename)

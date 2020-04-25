@@ -1155,6 +1155,7 @@ void HandleUI(void)
 					}
 					else
 					{
+						parentstate = MENU_NONE1;
 						menustate = MENU_8BIT_MAIN1;
 					}
 				}
@@ -1325,6 +1326,7 @@ void HandleUI(void)
 		hdmask = spi_w(0);
 		DisableIO();
 		user_io_read_confstr();
+		uint32_t s_entry = 0;
 		int entry = 0;
 		while(1)
 		{
@@ -1384,6 +1386,7 @@ void HandleUI(void)
 						// check for 'F'ile or 'S'D image strings
 						if ((p[0] == 'F') || (p[0] == 'S'))
 						{
+							if (p[0] == 'S') s_entry = selentry;
 							substrcpy(s, p, 2);
 							if (strlen(s))
 							{
@@ -1517,6 +1520,12 @@ void HandleUI(void)
 			MenuWrite(entry, STD_EXIT, menusub == selentry, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 			menusub_last = selentry;
 			menumask = (menumask << 1) | 1;
+
+			if (parentstate == MENU_NONE1 && is_pce() && pcecd_using_cd() && menusub != s_entry)
+			{
+				menusub = s_entry;
+				continue;
+			}
 
 			if (!adjvisible) break;
 			firstmenu += adjvisible;

@@ -141,19 +141,19 @@ int pcecdd_t::LoadCUE(const char* filename) {
 			{
 				if (strstr(lptr, "MODE1/2048"))
 				{
-					this->sectorSize = 2048;
+					this->toc.tracks[this->toc.last].sector_size = 2048;
 					this->toc.tracks[this->toc.last].type = 1;
 				}
 				else if (strstr(lptr, "MODE1/2352"))
 				{
-					this->sectorSize = 2352;
+					this->toc.tracks[this->toc.last].sector_size = 2352;
 					this->toc.tracks[this->toc.last].type = 1;
 
 					FileSeek(&this->toc.tracks[this->toc.last].f, 0x10, SEEK_SET);
 				}
 				else if (strstr(lptr, "AUDIO"))
 				{
-					this->sectorSize = 2352;
+					this->toc.tracks[this->toc.last].sector_size = 2352;
 					this->toc.tracks[this->toc.last].type = 0;
 
 					FileSeek(&this->toc.tracks[this->toc.last].f, 0, SEEK_SET);
@@ -195,7 +195,7 @@ int pcecdd_t::LoadCUE(const char* filename) {
 		else if ((sscanf(lptr, "INDEX 01 %02d:%02d:%02d", &mm, &ss, &bb) == 3) ||
 			(sscanf(lptr, "INDEX 1 %02d:%02d:%02d", &mm, &ss, &bb) == 3))
 		{
-			this->toc.tracks[this->toc.last].offset += pregap * 2352;
+			this->toc.tracks[this->toc.last].offset = pregap * this->toc.tracks[this->toc.last].sector_size;
 
 			if (!this->toc.tracks[this->toc.last].f.opened())
 			{
@@ -211,11 +211,8 @@ int pcecdd_t::LoadCUE(const char* filename) {
 				FileSeek(&this->toc.tracks[this->toc.last].f, 0, SEEK_SET);
 
 				this->toc.tracks[this->toc.last].start = this->toc.end + pregap;
-				this->toc.tracks[this->toc.last].offset += this->toc.end * 2352;
-
-				int sectorSize = 2352;
-				if (this->toc.tracks[this->toc.last].type) sectorSize = this->sectorSize;
-				this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((this->toc.tracks[this->toc.last].f.size + sectorSize - 1) / sectorSize);
+				this->toc.tracks[this->toc.last].offset += this->toc.tracks[this->toc.last].start * this->toc.tracks[this->toc.last].sector_size;
+				this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((this->toc.tracks[this->toc.last].f.size + this->toc.tracks[this->toc.last].sector_size - 1) / this->toc.tracks[this->toc.last].sector_size);
 
 				this->toc.tracks[this->toc.last].start += (bb + ss * 75 + mm * 60 * 75);
 				this->toc.end = this->toc.tracks[this->toc.last].end;
@@ -243,46 +240,13 @@ int pcecdd_t::LoadCUE(const char* filename) {
 
 int pcecdd_t::Load(const char *filename)
 {
-	//char fname[1024 + 10];
-	static char header[1024];
-	fileTYPE *fd_img;
-
 	Unload();
 
 	if (LoadCUE(filename)) {
 		return (-1);
 	}
 
-	fd_img = &this->toc.tracks[0].f;
-
-	FileSeek(fd_img, 0, SEEK_SET);
-	FileReadAdv(fd_img, header, 0x10);
-
-	if (!memcmp("SEGADISCSYSTEM", header, 14))
-	{
-		this->sectorSize = 2048;
-	}
-	else
-	{
-		FileReadAdv(fd_img, header, 0x10);
-		if (!memcmp("SEGADISCSYSTEM", header, 14))
-		{
-			this->sectorSize = 2352;
-		}
-	}
-
-	if (this->sectorSize)
-	{
-		FileReadAdv(fd_img, header + 0x10, 0x200);
-		FileSeek(fd_img, 0, SEEK_SET);
-	}
-	else
-	{
-		FileClose(fd_img);
-		return (-1);
-	}
-
-	printf("\x1b[32mPCECD: Sector size = %u, Track 0 end = %u\n\x1b[0m", this->sectorSize, this->toc.tracks[0].end);
+	printf("\x1b[32mPCECD: Tr0 Sector size = %u, Tr0 end = %u\n\x1b[0m", this->toc.tracks[0].sector_size, this->toc.tracks[0].end);
 
 	if (this->toc.last)
 	{
@@ -315,7 +279,6 @@ void pcecdd_t::Unload()
 	}
 
 	memset(&this->toc, 0x00, sizeof(this->toc));
-	this->sectorSize = 0;
 }
 
 void pcecdd_t::Reset() {
@@ -551,13 +514,10 @@ void pcecdd_t::CommandExec() {
 			lba_ = this->toc.tracks[index].start;
 		}
 
-		if (this->toc.tracks[index].type)
+		if (this->toc.tracks[index].f.opened())
 		{
-			FileSeek(&this->toc.tracks[0].f, lba_ * this->sectorSize, SEEK_SET);
-		}
-		else if (this->toc.tracks[index].f.opened())
-		{
-			FileSeek(&this->toc.tracks[index].f, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
+			int offset = (lba_ * this->toc.tracks[index].sector_size) - this->toc.tracks[index].offset;
+			FileSeek(&this->toc.tracks[index].f, offset, SEEK_SET);
 		}
 
 		this->audioOffset = 0;
@@ -760,16 +720,16 @@ void pcecdd_t::ReadData(uint8_t *buf)
 {
 	if (this->toc.tracks[this->index].type && (this->lba >= 0))
 	{
-		if (this->sectorSize == 2048)
+		if (this->toc.tracks[this->index].sector_size == 2048)
 		{
-			FileSeek(&this->toc.tracks[0].f, this->lba * 2048, SEEK_SET);
+			FileSeek(&this->toc.tracks[this->index].f, this->lba * 2048 - this->toc.tracks[this->index].offset, SEEK_SET);
 		}
 		else
 		{
-			FileSeek(&this->toc.tracks[0].f, this->lba * 2352 + 16, SEEK_SET);
+			FileSeek(&this->toc.tracks[this->index].f, this->lba * 2352 + 16 - this->toc.tracks[this->index].offset, SEEK_SET);
 		}
 
-		FileReadAdv(&this->toc.tracks[0].f, buf, 2048);
+		FileReadAdv(&this->toc.tracks[this->index].f, buf, 2048);
 	}
 }
 
