@@ -15,6 +15,7 @@
 #include "miniz_zip.h"
 #include "osd.h"
 #include "cheats.h"
+#include "support.h"
 
 struct cheat_rec_t
 {
@@ -110,9 +111,10 @@ void cheats_init(const char *rom_path, uint32_t romcrc)
 		const char *rom_name = strrchr(rom_path, '/');
 		if (rom_name)
 		{
-			sprintf(cheat_zip, "%s/cheats/%s%s", getRootDir(), CoreName, rom_name);
+			sprintf(cheat_zip, "%s/cheats/%s%s%s", getRootDir(), CoreName, pcecd_using_cd() ? "CD" : "", rom_name);
 			char *p = strrchr(cheat_zip, '.');
 			if (p) *p = 0;
+			if(pcecd_using_cd()) strcat(cheat_zip, " []");
 			strcat(cheat_zip, ".zip");
 
 			if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))

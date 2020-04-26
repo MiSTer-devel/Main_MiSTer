@@ -1744,7 +1744,7 @@ void HandleUI(void)
 			}
 			user_io_store_filename(SelectedPath);
 			user_io_file_tx(SelectedPath, user_io_ext_idx(SelectedPath, fs_pFileExt) << 6 | ioctl_index, opensave);
-			if (user_io_use_cheats()) cheats_init(SelectedPath, pcecd_using_cd() ? 0 : user_io_get_file_crc());
+			if (user_io_use_cheats()) cheats_init(SelectedPath, user_io_get_file_crc());
 			menustate = MENU_NONE1;
 		}
 
@@ -1771,6 +1771,7 @@ void HandleUI(void)
 		else if (is_pce())
 		{
 			pcecd_set_image(ioctl_index, SelectedPath);
+			cheats_init(SelectedPath, 0);
 		}
 		else
 		{
