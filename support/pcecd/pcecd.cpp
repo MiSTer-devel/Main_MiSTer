@@ -84,8 +84,12 @@ void pcecd_poll()
 			printf("\x1b[32mPCECD: Command MODESELECT6, received data\n\x1b[0m");
 			break;
 
-		default:
+		case 2:
 			pcecdd.can_read_next = true;
+			break;
+
+		default:
+			need_reset = 1;
 			break;
 		}
 
