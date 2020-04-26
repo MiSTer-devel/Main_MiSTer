@@ -472,12 +472,13 @@ int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 {
 	if (file->filp)
 	{
-		offset = fseeko64(file->filp, offset, origin);
-		if(offset<0)
+		__off64_t res = fseeko64(file->filp, offset, origin);
+		if (res < 0)
 		{
-			printf("Fail to seek the file.\n");
+			printf("Fail to seek the file: offset=%lld, %s.\n", offset, file->name);
 			return 0;
 		}
+		offset = res;
 	}
 	else if (file->zip)
 	{
