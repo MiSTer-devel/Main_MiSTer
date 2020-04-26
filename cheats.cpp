@@ -51,6 +51,8 @@ static char cheat_zip[1024] = {};
 
 int find_by_crc(uint32_t romcrc)
 {
+	if (!romcrc) return 0;
+
 	sprintf(cheat_zip, "%s/cheats/%s", getRootDir(), CoreName);
 	DIR *d = opendir(cheat_zip);
 	if (!d)
