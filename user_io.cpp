@@ -2290,6 +2290,14 @@ void user_io_poll()
 							{
 								mcd_fill_blanksave(buffer[disk], lba);
 							}
+							else if (is_pce())
+							{
+								memset(buffer[disk], 0, sizeof(buffer[disk]));
+								if (!lba)
+								{
+									memcpy(buffer[disk], "HUBM\x00\x88\x10\x80", 8);
+								}
+							}
 							else
 							{
 								memset(buffer[disk], -1, sizeof(buffer[disk]));
