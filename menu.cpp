@@ -1771,6 +1771,7 @@ void HandleUI(void)
 		else if (is_pce())
 		{
 			pcecd_set_image(ioctl_index, SelectedPath);
+			cheats_init(SelectedPath, 0);
 		}
 		else
 		{
