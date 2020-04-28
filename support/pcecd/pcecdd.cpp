@@ -492,7 +492,7 @@ void pcecdd_t::CommandExec() {
 
 		SendStatus(PCECD_STATUS_GOOD, 0);
 
-		printf("\x1b[32mPCECD: Command GETDIRINFO, [1] = %02X, [2] = %02X\n\x1b[0m", comm[1], comm[2]);
+		printf("\x1b[32mPCECD: Command GETDIRINFO, [1] = %02X, [2] = %02X(%d)\n\x1b[0m", comm[1], comm[2], comm[2]);
 
 		if (SendData && len)
 			SendData(buf, len, PCECD_DATA_IO_INDEX);
@@ -583,6 +583,7 @@ void pcecdd_t::CommandExec() {
 		}*/
 
 		this->CDDAEnd = this->toc.tracks[index].end;
+		printf("PCECD_COMM_SAPSP: CDDAEnd=%d\n", this->CDDAEnd);
 
 		//this->isData = 0;
 		this->state = PCECD_STATE_PLAY;
@@ -620,20 +621,18 @@ void pcecdd_t::CommandExec() {
 		{
 			int track = U8(comm[2]);
 
-			if (!track)
-				track = 1;
-			else if (track > toc.last)
-				track = toc.last;
-			lba_ = this->toc.tracks[track - 1].start + 150;
+			if (!track)	track = 1;
+			lba_ = (track >= toc.last) ? this->toc.end : (this->toc.tracks[track - 1].start + 150);
 		}
 		break;
 		}
 
 		this->CDDAEnd = lba_;
+		printf("PCECD_COMM_SAPEP: CDDAEnd=%d\n", this->CDDAEnd);
 
 		SendStatus(PCECD_STATUS_GOOD, 0);
 	}
-		printf("\x1b[32mPCECD: Command SAPEP, end = %i, [9] = %02X\n\x1b[0m", this->CDDAEnd, comm[9]);
+		printf("\x1b[32mPCECD: Command SAPEP, end = %i, [2] = %02X(%d), [9] = %02X\n\x1b[0m", this->CDDAEnd, comm[2], comm[2], comm[9]);
 		break;
 
 	case PCECD_COMM_PAUSE: {
