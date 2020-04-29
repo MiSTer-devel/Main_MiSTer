@@ -46,6 +46,10 @@
 #define NSE_DISC_CHANGED			0x28
 #define NSE_AUDIO_NOT_PLAYING		0x2C
 
+#define PCECD_CDDAMODE_SILENT		0x00
+#define PCECD_CDDAMODE_NORMAL		0x01
+#define PCECD_CDDAMODE_INTERRUPT	0x02
+#define PCECD_CDDAMODE_LOOP			0x03
 
 #include "../../cd.h"
 
@@ -77,7 +81,7 @@ public:
 	void CommandExec();
 	int GetStatus(uint8_t* buf);
 	int SetCommand(uint8_t* buf);
-	void SendStatus(uint8_t status, uint8_t message);
+	void PendStatus(uint8_t status, uint8_t message);
 
 private:
 	toc_t toc;
@@ -90,6 +94,7 @@ private:
 	//uint8_t state;
 	int CDDAStart;
 	int CDDAEnd;
+	uint8_t CDDAMode;
 	sense_t sense;
 
 	uint8_t stat[2];
