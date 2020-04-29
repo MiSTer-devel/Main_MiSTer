@@ -80,7 +80,7 @@ void pcecd_poll()
 
 		case 1:
 			//TODO: process data
-			pcecdd.SendStatus(0, 0);
+			pcecdd.PendStatus(0, 0);
 			printf("\x1b[32mPCECD: Command MODESELECT6, received data\n\x1b[0m");
 			break;
 
