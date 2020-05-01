@@ -34,8 +34,8 @@
 
 #include "../../file_io.h"
 
-// Enable following define for debug code.
-#define __SHARPMZ_DEBUG__                1
+// Enable following defines for debug code or include on Make command line.
+//#define __SHARPMZ_DEBUG__                1
 //#define __SHARPMZ_DEBUG_EXTRA__          1
 
 // Defaults.
