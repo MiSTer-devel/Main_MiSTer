@@ -3418,7 +3418,7 @@ int input_poll(int getchar)
 
 			int dx = mouse_emu_x;
 			int dy = mouse_emu_y;
-			if (mouse_sniper)
+			if (mouse_sniper ^ cfg.sniper_mode)
 			{
 				if (dx > 2) dx = 2;
 				if (dx < -2) dx = -2;
