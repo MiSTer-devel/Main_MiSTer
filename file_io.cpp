@@ -1436,7 +1436,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					{
 						const char *ext = extension;
 						int found = (has_trd && x2trd_ext_supp(de->d_name));
-						if (!found && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip"))
+						if (!found && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip") && (options & SCANO_DIR))
 						{
 							// Fake that zip-file is a directory.
 							de->d_type = DT_DIR;
