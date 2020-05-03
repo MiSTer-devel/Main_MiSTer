@@ -192,7 +192,8 @@ const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "     Stick X: Tilt RIGHT", "     Stick Y: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
 const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
-const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "     MIDI" };
+const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "     MIDI", " Midilink" };
+const char *config_midilink_msg[] = { " MIDI Local", "MIDI Remote", "   MFP UART", "" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_gamma_msg[] = { "Off","On" };
 
@@ -1814,7 +1815,8 @@ void HandleUI(void)
 				{
 					menumask |= 0x8;
 					MenuWrite(n++);
-					const char *p = config_uart_msg[GetUARTMode()];
+					int mode = GetUARTMode();
+					const char *p = config_uart_msg[(is_st() && mode == 3) ? 4 : mode];
 					while (*p == ' ') p++;
 					sprintf(s, " UART mode (%s)            ",p);
 					s[27] = '\x16';
@@ -2206,13 +2208,20 @@ void HandleUI(void)
 			int m = (mode != 3 && mode != 4) || hasmidi;
 
 			OsdWrite(0);
-			sprintf(s, " Connection:       %s", config_uart_msg[mode]);
+			sprintf(s, " Connection:       %s", config_uart_msg[(is_st() && mode ==3) ? 4 : mode]);
 			OsdWrite(1, s, menusub == 0, 0);
 			OsdWrite(2);
 
-			sprintf(s, " MidiLink:            %s", (midilink & 2) ? "Remote" : " Local");
+			if (is_st())
+			{
+				sprintf(s, " MidiLink:       %s", config_midilink_msg[(midilink>>1) & 3]);
+			}
+			else
+			{
+				sprintf(s, " MidiLink:            %s", (midilink & 2) ? "Remote" : " Local");
+			}
 			OsdWrite(3, s, menusub == 1, m);
-			sprintf(s, " Type:            %s", (midilink & 2) ? ((midilink & 1) ? "       UDP" : "       TCP") : ((midilink & 1) ? "      MUNT" : "FluidSynth"));
+			sprintf(s, " Type:            %s", (midilink & 6) ? ((midilink & 1) ? "       UDP" : "       TCP") : ((midilink & 1) ? "      MUNT" : "FluidSynth"));
 			OsdWrite(4, s, menusub == 2, m);
 
 			OsdWrite(5);
@@ -2240,7 +2249,7 @@ void HandleUI(void)
 			case 0:
 				{
 					uint mode = GetUARTMode() + 1;
-					if (mode > sizeof(config_uart_msg) / sizeof(config_uart_msg[0])) mode = 0;
+					if (mode > 3) mode = 0;
 
 					SetUARTMode(mode);
 					menustate = MENU_UART1;
@@ -2252,7 +2261,17 @@ void HandleUI(void)
 				if (!m)
 				{
 					int mode = GetUARTMode();
-					SetMidiLinkMode(GetMidiLinkMode() ^ ((menusub == 1) ? 2 : 1));
+					if (!is_st() || menusub == 2)
+					{
+						SetMidiLinkMode(GetMidiLinkMode() ^ ((menusub == 1) ? 2 : 1));
+					}
+					else
+					{
+						int type = GetMidiLinkMode();
+						type += 2;
+						if (type >= 6) type &= 1;
+						SetMidiLinkMode(type);
+					}
 					SetUARTMode(0);
 					SetUARTMode(mode);
 					menustate = MENU_UART1;

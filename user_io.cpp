@@ -547,6 +547,14 @@ void MakeFile(const char * filename, const char * data)
 	fclose(file);
 }
 
+static void set_uart_alt()
+{
+	if (is_st())
+	{
+		tos_uart_mode((GetUARTMode() < 3) || GetMidiLinkMode() >= 4);
+	}
+}
+
 int GetUARTMode()
 {
 	struct stat filestat;
@@ -558,13 +566,13 @@ int GetUARTMode()
 
 void SetUARTMode(int mode)
 {
-	if (is_st()) tos_uart_mode(mode != 3);
 	MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
 	MakeFile("/tmp/UART_SPEED", is_st() ? "19200" : "115200");
 
 	char cmd[32];
 	sprintf(cmd, "uartmode %d", mode & 0xFF);
 	system(cmd);
+	set_uart_alt();
 }
 
 int GetMidiLinkMode()
@@ -574,6 +582,8 @@ int GetMidiLinkMode()
 	if (!stat("/tmp/ML_MUNT", &filestat)) return 1;
 	if (!stat("/tmp/ML_TCP", &filestat)) return 2;
 	if (!stat("/tmp/ML_UDP", &filestat)) return 3;
+	if (!stat("/tmp/ML_TCP_ALT", &filestat)) return 4;
+	if (!stat("/tmp/ML_UDP_ALT", &filestat)) return 5;
 	return 0;
 }
 
@@ -583,13 +593,18 @@ void SetMidiLinkMode(int mode)
 	remove("/tmp/ML_MUNT");
 	remove("/tmp/ML_UDP");
 	remove("/tmp/ML_TCP");
+	remove("/tmp/ML_UDP_ALT");
+	remove("/tmp/ML_TCP_ALT");
 	switch (mode)
 	{
-	case 0: MakeFile("/tmp/ML_FSYNTH", ""); break;
-	case 1: MakeFile("/tmp/ML_MUNT", ""); break;
-	case 2: MakeFile("/tmp/ML_TCP", ""); break;
-	case 3: MakeFile("/tmp/ML_UDP", ""); break;
+		case 0: MakeFile("/tmp/ML_FSYNTH", ""); break;
+		case 1: MakeFile("/tmp/ML_MUNT", ""); break;
+		case 2: MakeFile("/tmp/ML_TCP", ""); break;
+		case 3: MakeFile("/tmp/ML_UDP", ""); break;
+		case 4: MakeFile("/tmp/ML_TCP_ALT", ""); break;
+		case 5: MakeFile("/tmp/ML_UDP_ALT", ""); break;
 	}
+	set_uart_alt();
 }
 
 uint16_t sdram_sz(int sz)
