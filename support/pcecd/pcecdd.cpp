@@ -11,6 +11,8 @@
 
 #define PCECD_DATA_IO_INDEX 2
 
+float get_cd_seek_ms(int start_sector, int target_sector);
+
 pcecdd_t pcecdd;
 
 pcecdd_t::pcecdd_t() {
@@ -304,7 +306,6 @@ void pcecdd_t::Reset() {
 void pcecdd_t::Update() {
 	if (this->state == PCECD_STATE_READ)
 	{
-		DISKLED_ON;
 		if (this->latency > 0)
 		{
 			this->latency--;
@@ -322,8 +323,7 @@ void pcecdd_t::Update() {
 
 		this->can_read_next = false;
 
-		//if (this->toc.sub) mcd_sub_send();
-
+		DISKLED_ON;
 		if (this->toc.tracks[this->index].type)
 		{
 			// CD-ROM (Mode 1)
@@ -374,7 +374,6 @@ void pcecdd_t::Update() {
 	}
 	else if (this->state == PCECD_STATE_PLAY)
 	{
-		DISKLED_ON;
 		if (this->latency > 0)
 		{
 			this->latency--;
@@ -390,6 +389,7 @@ void pcecdd_t::Update() {
 		if (this->toc.tracks[this->index].type)
 			return;
 
+		DISKLED_ON;
 		FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 
 		sec_buf[0] = 0x30;
@@ -512,9 +512,6 @@ void pcecdd_t::CommandExec() {
 		new_lba = ((comm[1] << 16) | (comm[2] << 8) | comm[3]) & 0x1FFFFF;
 		int cnt_ = comm[4];
 
-		this->lba = new_lba;
-		this->cnt = cnt_;
-
 		int index = GetTrackByLBA(new_lba, &this->toc);
 
 		this->index = index;
@@ -522,6 +519,12 @@ void pcecdd_t::CommandExec() {
 		{
 			new_lba = this->toc.tracks[index].start;
 		}
+
+		this->latency = (int)(get_cd_seek_ms(this->lba, new_lba)/13.33);
+		printf("seek time ticks: %d\n", this->latency);
+
+		this->lba = new_lba;
+		this->cnt = cnt_;
 
 		if (this->toc.tracks[index].f.opened())
 		{
@@ -577,6 +580,8 @@ void pcecdd_t::CommandExec() {
 		break;
 		}
 
+		this->latency = (int)(get_cd_seek_ms(this->lba, new_lba) / 13.33);
+		printf("seek time ticks: %d\n", this->latency);
 
 		this->lba = new_lba;
 		int index = GetTrackByLBA(new_lba, &this->toc);
@@ -658,7 +663,7 @@ void pcecdd_t::CommandExec() {
 
 	case PCECD_COMM_READSUBQ: {
 		int lba_rel = this->lba - this->toc.tracks[this->index].start;
-		
+
 		buf[0] = 0x0A;
 		buf[1] = 0 | 0x80;
 		buf[2] = this->state == PCECD_STATE_PAUSE ? 2 : (PCECD_STATE_PLAY ? 0 : 3);

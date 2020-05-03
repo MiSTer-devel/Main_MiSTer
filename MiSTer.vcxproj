@@ -88,6 +88,7 @@
     <ClCompile Include="support\neogeo\neogeo_loader.cpp" />
     <ClCompile Include="support\pcecd\pcecd.cpp" />
     <ClCompile Include="support\pcecd\pcecdd.cpp" />
+    <ClCompile Include="support\pcecd\seektime.cpp" />
     <ClCompile Include="support\sharpmz\sharpmz.cpp" />
     <ClCompile Include="support\snes\snes.cpp" />
     <ClCompile Include="support\st\st_tos.cpp" />
