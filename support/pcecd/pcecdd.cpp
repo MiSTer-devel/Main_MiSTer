@@ -591,9 +591,10 @@ void pcecdd_t::CommandExec() {
 		this->CDDAEnd = this->toc.tracks[index].end;
 		this->CDDAMode = comm[1];
 
-		printf("PCECD_COMM_SAPSP: CDDAEnd=%d\n", this->CDDAEnd);
-
-		if (this->CDDAMode != PCECD_CDDAMODE_SILENT) {
+		if (this->CDDAMode == PCECD_CDDAMODE_SILENT) {
+			this->state = PCECD_STATE_PAUSE;
+		}
+		else {
 			this->state = PCECD_STATE_PLAY;
 		}
 
@@ -610,7 +611,7 @@ void pcecdd_t::CommandExec() {
 
 		PendStatus(PCECD_STATUS_GOOD, 0);
 	}
-		printf("\x1b[32mPCECD: Command SAPSP, start = %i, [1] = %02X, [2] = %02X, [9] = %02X\n\x1b[0m", this->CDDAStart, comm[1], comm[2], comm[9]);
+		printf("\x1b[32mPCECD: Command SAPSP, start = %d, end = %d, [1] = %02X, [2] = %02X, [9] = %02X\n\x1b[0m", this->CDDAStart, this->CDDAEnd, comm[1], comm[2], comm[9]);
 		break;
 
 	case PCECD_COMM_SAPEP: {
@@ -638,8 +639,6 @@ void pcecdd_t::CommandExec() {
 		this->CDDAMode = comm[1];
 		this->CDDAEnd = new_lba;
 
-		printf("PCECD_COMM_SAPEP: CDDAEnd=%d\n", this->CDDAEnd);
-
 		if (this->CDDAMode != PCECD_CDDAMODE_SILENT) {
 			this->state = PCECD_STATE_PLAY;
 		}
@@ -658,29 +657,28 @@ void pcecdd_t::CommandExec() {
 		break;
 
 	case PCECD_COMM_READSUBQ: {
-		int lba_rel = this->toc.tracks[this->index].start - this->toc.tracks[this->index].offset + 150;
-		new_lba = this->toc.tracks[this->index].start + 150;
-
+		int lba_rel = this->lba - this->toc.tracks[this->index].start;
+		
 		buf[0] = 0x0A;
 		buf[1] = 0 | 0x80;
-		buf[2] = this->state == PCECD_STATE_PLAY ? 0 : 3;
+		buf[2] = this->state == PCECD_STATE_PAUSE ? 2 : (PCECD_STATE_PLAY ? 0 : 3);
 		buf[3] = 0;
-		buf[4] = this->index + 1;
-		buf[5] = this->index;
+		buf[4] = BCD(this->index + 1);
+		buf[5] = BCD(this->index);
 
 		LBAToMSF(lba_rel, &msf);
 		buf[6] = BCD(msf.m);
 		buf[7] = BCD(msf.s);
 		buf[8] = BCD(msf.f);
 
-		LBAToMSF(new_lba, &msf);
+		LBAToMSF(this->lba, &msf);
 		buf[9] = BCD(msf.m);
 		buf[10] = BCD(msf.s);
 		buf[11] = BCD(msf.f);
 
 		PendStatus(PCECD_STATUS_GOOD, 0);
 
-		printf("\x1b[32mPCECD: Command READSUBQ, [1] = %02X, track = %i, index = %i, lba_rel = %i, lba_abs = %i\n\x1b[0m", comm[1], this->index + 1, this->index, lba_rel, new_lba);
+		printf("\x1b[32mPCECD: Command READSUBQ, [1] = %02X, track = %i, index = %i, lba_rel = %i, lba_abs = %i\n\x1b[0m", comm[1], this->index + 1, this->index, lba_rel, this->lba);
 
 		if (SendData)
 			SendData(buf, 10 + 2, PCECD_DATA_IO_INDEX);
