@@ -1768,6 +1768,7 @@ void HandleUI(void)
 				mcd_reset();
 			}
 			mcd_set_image(ioctl_index, SelectedPath);
+			cheats_init(SelectedPath, 0);
 		}
 		else if (is_pce())
 		{
