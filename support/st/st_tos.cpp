@@ -625,7 +625,7 @@ const char* tos_get_cfg_string(int num)
 		if (!((tmp.system_ctrl >> 23) & 3) && (tmp.system_ctrl & TOS_CONTROL_BLITTER)) strcat(str, "B ");
 		if (tmp.system_ctrl & TOS_CONTROL_VIKING) strcat(str, "V ");
 		if (tmp.system_ctrl & TOS_CONTROL_VIDEO_AR) strcat(str, "W ");
-		strcat(str, (tmp.system_ctrl & TOS_CONTROL_VIDEO_COLOR) ? "C " : "M ");
+		strcat(str, (tmp.system_ctrl & TOS_CONTROL_VIDEO_COLOR) ? "C " : (tmp.system_ctrl & TOS_CONTROL_MDE60) ? "M6 " : "M ");
 		if (!(tmp.system_ctrl & TOS_CONTROL_BORDER)) strcat(str, "F ");
 		int sl = (tmp.system_ctrl >> 20) & 3;
 		if (sl) sprintf(str + strlen(str), "S%d ", sl);
