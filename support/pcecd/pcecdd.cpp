@@ -410,6 +410,10 @@ void pcecdd_t::Update() {
 			else {
 				this->state = PCECD_STATE_IDLE;
 			}
+
+			if (this->CDDAMode == PCECD_CDDAMODE_INTERRUPT) {
+				PendStatus(PCECD_STATUS_GOOD, 0);
+			}
 		}
 	}
 	else if (this->state == PCECD_STATE_PAUSE)
@@ -641,7 +645,7 @@ void pcecdd_t::CommandExec() {
 			int track = U8(comm[2]);
 
 			if (!track)	track = 1;
-			new_lba = (track >= toc.last) ? this->toc.end : (this->toc.tracks[track - 1].start + 150);
+			new_lba = (track >= toc.last) ? this->toc.end : (this->toc.tracks[track - 1].start);
 		}
 		break;
 		}
@@ -653,7 +657,9 @@ void pcecdd_t::CommandExec() {
 			this->state = PCECD_STATE_PLAY;
 		}
 
-		PendStatus(PCECD_STATUS_GOOD, 0);
+		if (this->CDDAMode != PCECD_CDDAMODE_INTERRUPT) {
+			PendStatus(PCECD_STATUS_GOOD, 0);
+		}
 	}
 		printf("\x1b[32mPCECD: Command SAPEP, end = %i, [1] = %02X, [2] = %02X, [9] = %02X\n\x1b[0m", this->CDDAEnd, comm[1], comm[2], comm[9]);
 		break;
