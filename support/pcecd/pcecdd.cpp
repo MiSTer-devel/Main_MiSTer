@@ -334,7 +334,7 @@ void pcecdd_t::Update() {
 			if (SendData)
 				SendData(sec_buf, 2048 + 2, PCECD_DATA_IO_INDEX);
 
-			printf("\x1b[32mPCECD: Data sector send = %i\n\x1b[0m", this->lba);
+			//printf("\x1b[32mPCECD: Data sector send = %i\n\x1b[0m", this->lba);
 		}
 		else
 		{
