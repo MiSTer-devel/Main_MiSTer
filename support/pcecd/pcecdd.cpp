@@ -733,11 +733,11 @@ void pcecdd_t::LBAToMSF(int lba, msf_t* msf) {
 }
 
 void pcecdd_t::MSFToLBA(int* lba, uint8_t m, uint8_t s, uint8_t f) {
-	*lba = f + s * 75 + m * 60 * 75;
+	*lba = f + s * 75 + m * 60 * 75 - 150;
 }
 
 void pcecdd_t::MSFToLBA(int* lba, msf_t* msf) {
-	*lba = msf->f + msf->s * 75 + msf->m * 60 * 75;
+	*lba = msf->f + msf->s * 75 + msf->m * 60 * 75 - 150;
 }
 
 int pcecdd_t::GetTrackByLBA(int lba, toc_t* toc) {

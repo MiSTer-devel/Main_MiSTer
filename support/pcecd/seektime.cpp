@@ -95,21 +95,21 @@ float get_cd_seek_ms(int start_sector, int target_sector)
 	{
 		milliseconds = (3 * 1000 / 60);
 	}
-	if (abs(target_sector - start_sector) < 5)
+	else if (abs(target_sector - start_sector) < 5)
 	{
-		milliseconds = (9 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms / 0.7);
+		milliseconds = (9 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.7);
 	}
 	else if (track_difference <= 80)
 	{
-		milliseconds = (16 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms / 0.7);
+		milliseconds = (16 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.7);
 	}
 	else if (track_difference <= 160)
 	{
-		milliseconds = (22 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms / 0.7);
+		milliseconds = (22 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.7);
 	}
 	else if (track_difference <= 644)
 	{
-		milliseconds = (22 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms / 0.7) + (float)((track_difference - 161) * 16.66 / 80);
+		milliseconds = (22 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.7) + (float)((track_difference - 161) * 16.66 / 80);
 	}
 	else
 	{
