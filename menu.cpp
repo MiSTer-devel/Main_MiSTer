@@ -151,6 +151,9 @@ enum MENU
 
 	MENU_UART1,
 	MENU_UART2,
+	MENU_BAUD1,
+	MENU_BAUD2,
+	MENU_SFONT_FILE_SELECTED,
 
 	// 8bit menu entries
 	MENU_8BIT_MAIN1,
@@ -194,6 +197,7 @@ const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Pres
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "     MIDI", " Midilink" };
 const char *config_midilink_msg[] = { " MIDI Local", "MIDI Remote", "   MFP UART", "" };
+const char *config_uart_baud[] = { "110", "300", "600", "1200", "2400", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200"};
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_gamma_msg[] = { "Off","On" };
 
@@ -319,7 +323,8 @@ static void SelectFile(const char* pFileExt, unsigned char Options, unsigned cha
 	}
 	else if (Options & SCANO_TXT)
 	{
-		pFileExt = "TXT";
+		if(pFileExt == 0) 
+			pFileExt = "TXT";
 	}
 	else if (strncasecmp(HomeDir, SelectedPath, strlen(HomeDir)) || !strcasecmp(HomeDir, SelectedPath))
 	{
@@ -2192,11 +2197,10 @@ void HandleUI(void)
 			}
 		}
 		break;
-
 	case MENU_UART1:
 		{
 			helptext = 0;
-			menumask = 0x3F;
+			menumask = 0xFF;
 
 			OsdSetTitle("UART mode");
 			menustate = MENU_UART2;
@@ -2226,15 +2230,16 @@ void HandleUI(void)
 			OsdWrite(4, s, menusub == 2, m);
 
 			OsdWrite(5);
-			OsdWrite(6, " Reset UART connection", menusub == 3, mode?0:1);
-			OsdWrite(7);
-			OsdWrite(8, " Save", menusub == 4);
+			OsdWrite(6, " Change Soundfont          \x16", menusub == 3, mode==3&&midilink==0?0:1); 
+			OsdWrite(7, " Change UART BAUD          \x16", menusub == 4, mode==3?0:1);
+			OsdWrite(8, " Reset UART connection", menusub == 5, mode?0:1);
+			OsdWrite(9);
+			OsdWrite(10, " Save", menusub == 6);
 
-			for (int i = 9; i < 15; i++) OsdWrite(i);
-			OsdWrite(15, STD_EXIT, menusub == 5);
+			for (int i = 11; i < 15; i++) OsdWrite(i);
+			OsdWrite(15, STD_EXIT, menusub == 7);
 		}
 		break;
-
 	case MENU_UART2:
 		if (menu)
 		{
@@ -2242,7 +2247,7 @@ void HandleUI(void)
 			menusub = 3;
 			break;
 		}
-
+		
 		if (select)
 		{
 			switch (menusub)
@@ -2280,16 +2285,35 @@ void HandleUI(void)
 				break;
 			case 3:
 				{
+					if(GetUARTMode() == 3 && GetMidiLinkMode() == 0)
+					{
+						sprintf(SelectedPath, "/linux/soundfonts");
+						SelectFile("SF2", SCANO_DIR | SCANO_TXT, MENU_SFONT_FILE_SELECTED, MENU_UART1);
+					}
+				}
+				break;
+			case 4:
+				{
+					if(GetUARTMode() == 3)
+					{ 	
+						menusub = 0;
+						menustate = MENU_BAUD1;
+					} 	
+				}
+				break;
+			case 5:
+				{
 					int mode = GetUARTMode();
 					if(mode != 0)
 					{
 						SetUARTMode(0);
 						SetUARTMode(mode);
 						menustate = MENU_8BIT_SYSTEM1;
+						menusub = 3;
 					}
 				}
 				break;
-			case 4:
+			case 6:
 				{
 					int mode = GetUARTMode() | (GetMidiLinkMode() << 8);
 					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
@@ -2305,7 +2329,61 @@ void HandleUI(void)
 			}
 		}
 		break;
+	case MENU_SFONT_FILE_SELECTED:
+		{
+			printf("MENU_SFONT_FILE_SELECTED --> '%s'\n", SelectedPath);
+			sprintf(s, "/sbin/mlinkutil FSSFONT /media/fat/\"%s\"", SelectedPath);
+			system(s);
+			AdjustDirectory(SelectedPath);
+			//keep file select OSD
+			menustate = MENU_FILE_SELECT1; //MENU_UART1;	
+		}
+		break;
+	case MENU_BAUD1:
+		{
+			helptext = 0;
+			menumask = 0x1FFF;
+			OsdSetTitle("UART BAUD");
+			menustate = MENU_BAUD2;
+			parentstate = MENU_BAUD1;
+			unsigned int max = sizeof(config_uart_baud) / 4 -1;
+			for (unsigned int i = 0; i < 15; i++)
+				if (i <= max)
+				{ 
+					sprintf(s, " %s", config_uart_baud[i]);
+					OsdWrite(i, s, menusub == i, 0);
+				}
+				else
+					OsdWrite(i);
+			OsdWrite(15, STD_EXIT, menusub == max + 1);
+		}
+		break;
+	case MENU_BAUD2:
+		{
+			if (menu)
+			{
+				menustate = MENU_UART1;
+				menusub = 4;
+				break;
+			}
 
+			if (select)
+			{
+				unsigned int max = sizeof(config_uart_baud) / 4 - 1;
+				if(menusub <= max)
+				{	
+					char baudStr[20];
+					strcpy(baudStr, config_uart_baud[menusub]);
+					char * tmp = strchr(baudStr, '/');
+					if(tmp) *tmp = 0x00; //Remove "/MIDI"
+					sprintf(s, "/sbin/mlinkutil BAUD %s", baudStr); 
+					system(s);
+				}
+				menusub = 4;
+				menustate = MENU_UART1;
+			}
+		}
+		break;
 	case MENU_COEFF_FILE_SELECTED:
 		{
 			char *p = strcasestr(SelectedPath, COEFF_DIR"/");
