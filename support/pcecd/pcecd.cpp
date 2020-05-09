@@ -27,7 +27,7 @@ void pcecd_poll()
 		poll_timer += 13 + (!adj ? 1 : 0);
 		if (++adj >= 3) adj = 0;
 
-		if (pcecdd.has_status) {
+		if (pcecdd.has_status && !pcecdd.latency) {
 			uint16_t s;
 			pcecdd.GetStatus((uint8_t*)&s);
 
