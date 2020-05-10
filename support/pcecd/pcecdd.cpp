@@ -334,7 +334,7 @@ void pcecdd_t::Update() {
 			if (SendData)
 				SendData(sec_buf, 2048 + 2, PCECD_DATA_IO_INDEX);
 
-			printf("\x1b[32mPCECD: Data sector send = %i\n\x1b[0m", this->lba);
+			//printf("\x1b[32mPCECD: Data sector send = %i\n\x1b[0m", this->lba);
 		}
 		else
 		{
@@ -390,18 +390,25 @@ void pcecdd_t::Update() {
 			return;
 
 		DISKLED_ON;
-		FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 
-		sec_buf[0] = 0x30;
-		sec_buf[1] = 0x09;
-		ReadCDDA(sec_buf + 2);
+		for (int i = 0; i <= this->CDDAFirst; i++)
+		{
+			FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 
-		if (SendData)
-			SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
+			sec_buf[0] = 0x30;
+			sec_buf[1] = 0x09;
+			ReadCDDA(sec_buf + 2);
 
-		//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
+			if (SendData)
+				SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
 
-		this->lba++;
+			//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
+
+			this->lba++;
+		}
+
+		this->CDDAFirst = 0;
+
 		if (this->lba > this->CDDAEnd)
 		{
 			if (this->CDDAMode == PCECD_CDDAMODE_LOOP) {
@@ -604,6 +611,7 @@ void pcecdd_t::CommandExec() {
 		this->CDDAStart = new_lba;
 		this->CDDAEnd = this->toc.tracks[index].end;
 		this->CDDAMode = comm[1];
+		this->CDDAFirst = 1;
 
 		if (this->CDDAMode == PCECD_CDDAMODE_SILENT) {
 			this->state = PCECD_STATE_PAUSE;
@@ -611,17 +619,6 @@ void pcecdd_t::CommandExec() {
 		else {
 			this->state = PCECD_STATE_PLAY;
 		}
-
-		FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
-
-		sec_buf[0] = 0x30;
-		sec_buf[1] = 0x09;
-		ReadCDDA(sec_buf + 2);
-
-		if (SendData)
-			SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
-
-		this->lba++;
 
 		PendStatus(PCECD_STATUS_GOOD, 0);
 	}
@@ -733,11 +730,11 @@ void pcecdd_t::LBAToMSF(int lba, msf_t* msf) {
 }
 
 void pcecdd_t::MSFToLBA(int* lba, uint8_t m, uint8_t s, uint8_t f) {
-	*lba = f + s * 75 + m * 60 * 75;
+	*lba = f + s * 75 + m * 60 * 75 - 150;
 }
 
 void pcecdd_t::MSFToLBA(int* lba, msf_t* msf) {
-	*lba = msf->f + msf->s * 75 + msf->m * 60 * 75;
+	*lba = msf->f + msf->s * 75 + msf->m * 60 * 75 - 150;
 }
 
 int pcecdd_t::GetTrackByLBA(int lba, toc_t* toc) {

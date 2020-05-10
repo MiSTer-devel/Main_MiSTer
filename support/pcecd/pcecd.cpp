@@ -20,12 +20,14 @@ void pcecd_poll()
 	static uint8_t last_req = 0;
 	static uint8_t adj = 0;
 
-	if (!poll_timer || CheckTimer(poll_timer))
+	if (!poll_timer) poll_timer = GetTimer(13);
+
+	if (CheckTimer(poll_timer))
 	{
-		poll_timer = GetTimer(13 + (!adj ? 1 : 0));
+		poll_timer += 13 + (!adj ? 1 : 0);
 		if (++adj >= 3) adj = 0;
 
-		if (pcecdd.has_status) {
+		if (pcecdd.has_status && !pcecdd.latency) {
 			uint16_t s;
 			pcecdd.GetStatus((uint8_t*)&s);
 
@@ -102,6 +104,7 @@ void pcecd_poll()
 	if (need_reset) {
 		need_reset = 0;
 		pcecdd.Reset();
+		poll_timer = 0;
 		printf("\x1b[32mPCECD: Reset\n\x1b[0m");
 	}
 

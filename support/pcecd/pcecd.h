@@ -94,6 +94,7 @@ private:
 	//uint8_t state;
 	int CDDAStart;
 	int CDDAEnd;
+	int CDDAFirst;
 	uint8_t CDDAMode;
 	sense_t sense;
 
