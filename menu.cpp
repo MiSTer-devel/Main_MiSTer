@@ -884,6 +884,9 @@ void HandleUI(void)
 	// get user control codes
 	uint32_t c = menu_key_get();
 
+	int release = 0;
+	if (c & UPSTROKE) release = 1;
+
 	// decode and set events
 	menu = false;
 	select = false;
@@ -3594,7 +3597,7 @@ void HandleUI(void)
 	case MENU_FILE_SELECT1:
 		helptext = helptexts[HELPTEXT_NONE];
 		OsdSetTitle((fs_Options & SCANO_CORES) ? "Cores" : "Select", 0);
-		PrintDirectory();
+		PrintDirectory(hold_cnt<2);
 		menustate = MENU_FILE_SELECT2;
 		break;
 
@@ -3734,6 +3737,7 @@ void HandleUI(void)
 			}
 		}
 
+		if (release) PrintDirectory(1);
 		break;
 
 		/******************************************************************/
@@ -5156,26 +5160,42 @@ void ScrollLongName(void)
 }
 
 // print directory contents
-void PrintDirectory(void)
+void PrintDirectory(int expand)
 {
-	int k;
-	int len;
-
 	char s[40];
 	ScrollReset();
 
-	for(int i = 0; i < OsdGetSize(); i++)
+	if (expand && cfg.browse_expand)
+	{
+		int k = flist_iFirstEntry() + OsdGetSize() - 1;
+		if (flist_nDirEntries() && k == flist_iSelectedEntry() && k <= flist_nDirEntries() &&
+		    strlen(flist_DirItem(k)->altname) > 28 && !flist_DirItem(k)->datecode[0] && flist_DirItem(k)->de.d_type != DT_DIR)
+		{
+			//make room for last expanded line
+			flist_iFirstEntryInc();
+		}
+	}
+
+	int i = 0;
+	int k = flist_iFirstEntry();
+	while(i < OsdGetSize())
 	{
 		char leftchar = 0;
 		memset(s, ' ', 32); // clear line buffer
 		s[32] = 0;
+		int len2 = 0;
+		leftchar = 0;
+		int len = 0;
 
 		if (i < flist_nDirEntries())
 		{
-			k = flist_iFirstEntry() + i;
 			len = strlen(flist_DirItem(k)->altname); // get name length
 			if (len > 28)
 			{
+				len2 = len - 27;
+				if (len2 > 27) len2 = 27;
+				if (!expand) len2 = 0;
+
 				len = 27; // trim display length if longer than 30 characters
 				s[28] = 22;
 			}
@@ -5200,6 +5220,7 @@ void PrintDirectory(void)
 				{
 					strcpy(&s[22], " <DIR>");
 				}
+				len2 = 0;
 			}
 			else if (!cfg.rbf_hide_datecode && datecode[0])
 			{
@@ -5219,10 +5240,11 @@ void PrintDirectory(void)
 					s[19] = 22;
 					s[28] = ' ';
 				}
+				len2 = 0;
 			}
 
 			if (!i && k) leftchar = 17;
-			if ((i == OsdGetSize() - 1) && (k < flist_nDirEntries() - 1)) leftchar = 16;
+			if (i && k < flist_nDirEntries() - 1) leftchar = 16;
 		}
 		else
 		{
@@ -5230,7 +5252,19 @@ void PrintDirectory(void)
 				strcpy(s, "          No files!");
 		}
 
-		OsdWriteOffset(i, s, i == (flist_iSelectedEntry() - flist_iFirstEntry()), 0, 0, leftchar);
+		int sel = (i == (flist_iSelectedEntry() - flist_iFirstEntry()));
+		OsdWriteOffset(i, s, sel, 0, 0, leftchar);
+		i++;
+
+		if (sel && len2)
+		{
+			len = strlen(flist_DirItem(k)->altname);
+			strcpy(s+1, flist_DirItem(k)->altname + len - len2);
+			OsdWriteOffset(i, s, sel, 0, 0, leftchar);
+			i++;
+		}
+
+		k++;
 	}
 }
 

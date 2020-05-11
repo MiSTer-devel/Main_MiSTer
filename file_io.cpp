@@ -1571,7 +1571,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 		else if (mode == SCANF_NEXT_PAGE)
 		{
-			if (iSelectedEntry < iFirstEntry + OsdGetSize() - 1)
+			if (iSelectedEntry < iFirstEntry + OsdGetSize() - 2)
 			{
 				iSelectedEntry = iFirstEntry + OsdGetSize() - 1;
 				if (iSelectedEntry >= flist_nDirEntries()) iSelectedEntry = flist_nDirEntries() - 1;
@@ -1670,6 +1670,11 @@ int flist_nDirEntries()
 int flist_iFirstEntry()
 {
 	return iFirstEntry;
+}
+
+void flist_iFirstEntryInc()
+{
+	iFirstEntry++;
 }
 
 int flist_iSelectedEntry()

@@ -5,7 +5,7 @@
 
 void HandleUI(void);
 void menu_key_set(unsigned int c);
-void PrintDirectory(void);
+void PrintDirectory(int expand = 0);
 void ScrollLongName(void);
 
 void ErrorMessage(const char *message, unsigned char code);

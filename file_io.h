@@ -34,6 +34,7 @@ struct direntext_t
 
 int flist_nDirEntries();
 int flist_iFirstEntry();
+void flist_iFirstEntryInc();
 int flist_iSelectedEntry();
 direntext_t* flist_DirItem(int n);
 direntext_t* flist_SelectedItem();

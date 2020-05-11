@@ -69,6 +69,7 @@ static const ini_var_t ini_vars[] =
 	{ "JAMMASD_VID", (void*)(&(cfg.jammasd_vid)), UINT16, 0, 0xFFFF },
 	{ "JAMMASD_PID", (void*)(&(cfg.jammasd_pid)), UINT16, 0, 0xFFFF },
 	{ "SNIPER_MODE", (void*)(&(cfg.sniper_mode)), UINT8, 0, 1 },
+	{ "BROWSE_EXPAND", (void*)(&(cfg.browse_expand)), UINT8, 0, 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -313,5 +314,6 @@ void cfg_parse()
 	cfg.bootscreen = 1;
 	cfg.fb_terminal = 1;
 	cfg.controller_info = 6;
+	cfg.browse_expand = 1;
 	ini_parse(altcfg());
 }

@@ -255,6 +255,8 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	if (n == (osd_size-1) && (arrow & OSD_ARROW_RIGHT))
 		linelimit -= 22;
 
+	if (n && n < OsdGetSize() - 1) leftchar = 0;
+
 	if (stipple) {
 		stipplemask = 0x55;
 		stipple = 0xff;
