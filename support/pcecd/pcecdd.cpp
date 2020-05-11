@@ -538,7 +538,13 @@ void pcecdd_t::CommandExec() {
 			new_lba = this->toc.tracks[index].start;
 		}*/
 
-		this->latency = (int)(get_cd_seek_ms(this->lba, new_lba)/13.33);
+		/* HuVideo streams by fetching 120 sectors at a time, taking advantage of the geometry
+		 * of the disc to reduce/eliminate seek time */
+		if ((this->lba == new_lba) && (cnt_ == 120)) {
+			this->latency = 0;
+		} else {
+			this->latency = (int)(get_cd_seek_ms(this->lba, new_lba)/13.33);
+		}
 		printf("seek time ticks: %d\n", this->latency);
 
 		this->lba = new_lba;

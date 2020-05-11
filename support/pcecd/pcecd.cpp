@@ -24,8 +24,14 @@ void pcecd_poll()
 
 	if (CheckTimer(poll_timer))
 	{
-		poll_timer += 13 + (!adj ? 1 : 0);
-		if (++adj >= 3) adj = 0;
+		if ((!pcecdd.latency) && (pcecdd.state == PCECD_STATE_READ)) {
+			poll_timer += 16 + ((adj == 10) ? 1 : 0);	// 16.1ms between frames if reading data */
+			if (--adj <= 0) adj = 10;
+		} else {
+			poll_timer += 13 + ((adj == 3) ? 1 : 0);	// 13.33ms otherwise (including latency counts) */
+			if (adj > 3) adj = 3;
+			if (--adj <= 0) adj = 3;
+		}
 
 		if (pcecdd.has_status && !pcecdd.latency) {
 			uint16_t s;
