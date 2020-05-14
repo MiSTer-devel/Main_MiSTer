@@ -167,7 +167,7 @@ static void BootUploadLogo()
 	int i = 0;
 	int adr;
 
-	if (FileOpen(&file, user_io_make_filepath(HomeDir, LOGO_FILE)) || FileOpen(&file, LOGO_FILE)) {
+	if (FileOpen(&file, user_io_make_filepath(HomeDir(), LOGO_FILE)) || FileOpen(&file, LOGO_FILE)) {
 		FileReadSec(&file, buffer);
 		mem_upload_init(SCREEN_BPL1 + LOGO_OFFSET);
 		adr = SCREEN_BPL1 + LOGO_OFFSET;
@@ -226,7 +226,7 @@ static void BootUploadBall()
 	int i = 0;
 	int adr;
 
-	if (FileOpen(&file, user_io_make_filepath(HomeDir, BALL_FILE)) || FileOpen(&file, BALL_FILE))
+	if (FileOpen(&file, user_io_make_filepath(HomeDir(), BALL_FILE)) || FileOpen(&file, BALL_FILE))
 	{
 		FileReadSec(&file, buffer);
 		mem_upload_init(BALL_ADDRESS);
@@ -256,7 +256,7 @@ static void BootUploadCopper()
 	int i = 0;
 	int adr;
 
-	if (FileOpen(&file, user_io_make_filepath(HomeDir, COPPER_FILE)) || FileOpen(&file, COPPER_FILE))
+	if (FileOpen(&file, user_io_make_filepath(HomeDir(), COPPER_FILE)) || FileOpen(&file, COPPER_FILE))
 	{
 		FileReadSec(&file, buffer);
 		mem_upload_init(COPPER_ADDRESS);

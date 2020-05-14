@@ -161,8 +161,15 @@ char *user_io_get_core_name()
 	return core_name;
 }
 
-char *user_io_get_core_path(void)
+char *user_io_get_core_path(const char *suffix)
 {
+	static char tmp[1024];
+	if (suffix)
+	{
+		strcpy(tmp, core_dir);
+		strcat(tmp, suffix);
+		return tmp;
+	}
 	return core_dir;
 }
 
@@ -1804,7 +1811,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		if ((index >> 6) == 1 || (index >> 6) == 2)
 		{
 			fileTYPE fg = {};
-			if (!FileOpen(&fg, user_io_make_filepath(HomeDir, "goomba.rom")))
+			if (!FileOpen(&fg, user_io_make_filepath(HomeDir(), "goomba.rom")))
 			{
 				dosend = 0;
 				Info("Cannot open goomba.rom!");

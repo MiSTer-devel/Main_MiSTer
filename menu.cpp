@@ -314,6 +314,7 @@ static int changeDir(char *dir)
 static void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
 	printf("pFileExt = %s\n", pFileExt);
+	const char *suffix = NULL;
 
 	strncpy(selPath, path, sizeof(selPath) - 1);
 	selPath[sizeof(selPath) - 1] = 0;
@@ -333,13 +334,17 @@ static void SelectFile(const char* path, const char* pFileExt, unsigned char Opt
 		if(pFileExt == 0)
 			pFileExt = "TXT";
 	}
-	else if (strncasecmp(HomeDir, selPath, strlen(HomeDir)) || !strcasecmp(HomeDir, selPath))
+	else
 	{
-		Options &= ~SCANO_NOENTER;
-		strcpy(selPath, HomeDir);
+		if (is_pce() && !strncasecmp(pFileExt, "CUE", 3)) suffix = "CD";
+		if (strncasecmp(HomeDir(suffix), selPath, strlen(HomeDir(suffix))) || !strcasecmp(HomeDir(suffix), selPath))
+		{
+			Options &= ~SCANO_NOENTER;
+			strcpy(selPath, HomeDir(suffix));
+		}
 	}
 
-	if (!strcasecmp(HomeDir, selPath)) FileCreatePath(selPath);
+	if (!strcasecmp(HomeDir(suffix), selPath)) FileCreatePath(selPath);
 
 	ScanDirectory(selPath, SCANF_INIT, pFileExt, Options);
 	if (!flist_nDirEntries())
@@ -1638,7 +1643,7 @@ void HandleUI(void)
 
 						if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
-						if (is_gba() && FileExists(user_io_make_filepath(HomeDir, "goomba.rom"))) strcat(ext, "GB GBC");
+						if (is_gba() && FileExists(user_io_make_filepath(HomeDir(), "goomba.rom"))) strcat(ext, "GB GBC");
 						while (strlen(ext) % 3) strcat(ext, " ");
 
 						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0);
