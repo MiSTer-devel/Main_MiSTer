@@ -310,11 +310,12 @@ static int changeDir(char *dir)
 	return 1;
 }
 
+static const char *home_dir = NULL;
+
 // this function displays file selection menu
 static void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
 	printf("pFileExt = %s\n", pFileExt);
-	const char *suffix = NULL;
 
 	strncpy(selPath, path, sizeof(selPath) - 1);
 	selPath[sizeof(selPath) - 1] = 0;
@@ -328,31 +329,27 @@ static void SelectFile(const char* path, const char* pFileExt, unsigned char Opt
 			strcat(selPath, get_rbf_name());
 		}
 		pFileExt = "RBFMRA";
+		home_dir = NULL;
 	}
 	else if (Options & SCANO_TXT)
 	{
-		if(pFileExt == 0)
-			pFileExt = "TXT";
+		if(pFileExt == 0) pFileExt = "TXT";
+		home_dir = NULL;
 	}
 	else
 	{
-		if (is_pce() && !strncasecmp(pFileExt, "CUE", 3)) suffix = "CD";
-		if (strncasecmp(HomeDir(suffix), selPath, strlen(HomeDir(suffix))) || !strcasecmp(HomeDir(suffix), selPath))
+		const char *home = HomeDir((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL);
+		home_dir = strrchr(home, '/');
+		if (home_dir) home_dir++;
+
+		if (strncasecmp(home, selPath, strlen(home)) || !strcasecmp(home, selPath))
 		{
 			Options &= ~SCANO_NOENTER;
-			strcpy(selPath, HomeDir(suffix));
+			strcpy(selPath, home);
 		}
 	}
 
-	if (!strcasecmp(HomeDir(suffix), selPath)) FileCreatePath(selPath);
-
 	ScanDirectory(selPath, SCANF_INIT, pFileExt, Options);
-	if (!flist_nDirEntries())
-	{
-		selPath[0] = 0;
-		ScanDirectory(selPath, SCANF_INIT, pFileExt, Options);
-	}
-
 	AdjustDirectory(selPath);
 
 	strcpy(fs_pFileExt, pFileExt);
@@ -5250,10 +5247,19 @@ void PrintDirectory(int expand)
 			if (!i && k) leftchar = 17;
 			if (i && k < flist_nDirEntries() - 1) leftchar = 16;
 		}
-		else
+		else if(!flist_nDirEntries()) // selected directory is empty
 		{
-			if (i == 0 && flist_nDirEntries() == 0) // selected directory is empty
-				strcpy(s, "          No files!");
+			if (!i) strcpy(s, "          No files!");
+			if (home_dir)
+			{
+				if (i == 6) strcpy(s, "      Missing directory:");
+				if (i == 8)
+				{
+					len = strlen(home_dir);
+					if (len > 27) len = 27;
+					strncpy(s + 1 + ((27 - len) / 2), home_dir, len);
+				}
+			}
 		}
 
 		int sel = (i == (flist_iSelectedEntry() - flist_iFirstEntry()));

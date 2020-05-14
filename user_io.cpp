@@ -129,9 +129,7 @@ char* user_io_create_config_name()
 	return str;
 }
 
-static char core_name[16 + 1];  // max 16 bytes for core name
-static char core_dir[1024];
-
+static char core_name[32] = {};
 static char filepath_store[1024];
 
 char *user_io_make_filepath(const char *path, const char *filename)
@@ -141,7 +139,7 @@ char *user_io_make_filepath(const char *path, const char *filename)
 	return filepath_store;
 }
 
-static char ovr_name[16 + 1] = {};
+static char ovr_name[32] = {};
 void user_io_name_override(const char* name)
 {
 	snprintf(ovr_name, sizeof(ovr_name), "%s", name);
@@ -149,10 +147,7 @@ void user_io_name_override(const char* name)
 
 void user_io_set_core_name(const char *name)
 {
-	strncpy(core_name, name, 17);
-	strncpy(core_dir, name, 1024);
-	prefixGameDir(core_dir, 1024);
-
+	snprintf(core_name, sizeof(core_name), name);
 	printf("Core name set to \"%s\"\n", core_name);
 }
 
@@ -164,13 +159,12 @@ char *user_io_get_core_name()
 char *user_io_get_core_path(const char *suffix)
 {
 	static char tmp[1024];
-	if (suffix)
-	{
-		strcpy(tmp, core_dir);
-		strcat(tmp, suffix);
-		return tmp;
-	}
-	return core_dir;
+
+	if (suffix) strcpy(tmp, suffix);
+	else strcpy(tmp, !strcasecmp(core_name, "minimig") ? "Amiga" : core_name);
+
+	prefixGameDir(tmp, sizeof(tmp));
+	return tmp;
 }
 
 const char *user_io_get_core_name_ex()
@@ -322,9 +316,6 @@ static void user_io_read_core_name()
 		char *p = user_io_get_confstr(0);
 		if (p && p[0]) strcpy(core_name, p);
 	}
-
-	strcpy(core_dir, !strcasecmp(core_name, "minimig") ? "Amiga" : core_name);
-	prefixGameDir(core_dir, sizeof(core_dir));
 
 	printf("Core name is \"%s\"\n", core_name);
 }
@@ -787,7 +778,6 @@ void user_io_init(const char *path, const char *xml)
 		send_rtc(1);
 		user_io_set_core_name("Archie");
 		archie_init();
-		user_io_read_core_name();
 		parse_config();
 		parse_buttons();
 		break;
@@ -796,7 +786,6 @@ void user_io_init(const char *path, const char *xml)
 		puts("Identified Sharp MZ Series core");
 		user_io_set_core_name("sharpmz");
         sharpmz_init();
-		user_io_read_core_name();
 		parse_config();
 		parse_buttons();
 		break;

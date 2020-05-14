@@ -104,7 +104,7 @@ static int get_stmode(const char *path)
 	return (stat64(path, &st) < 0) ? 0 : st.st_mode;
 }
 
-static bool isPathDirectory(const char *path)
+static int isPathDirectory(const char *path)
 {
 	make_fullpath(path);
 
@@ -116,13 +116,13 @@ static bool isPathDirectory(const char *path)
 		{
 			printf("isPathDirectory(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path,
 			       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
-			return false;
+			return 0;
 		}
 
 		if (!*file_path)
 		{
 			mz_zip_reader_end(&z);
-			return true;
+			return 1;
 		}
 
 		// Folder names always end with a slash in the zip
@@ -135,13 +135,13 @@ static bool isPathDirectory(const char *path)
 					 zip_path, file_path,
 					 mz_zip_get_error_string(mz_zip_get_last_error(&z)));
 			mz_zip_reader_end(&z);
-			return false;
+			return 0;
 		}
 
 		if (mz_zip_reader_is_file_a_directory(&z, file_index))
 		{
 			mz_zip_reader_end(&z);
-			return true;
+			return 1;
 		}
 		mz_zip_reader_end(&z);
 	}
@@ -150,17 +150,17 @@ static bool isPathDirectory(const char *path)
 		int stmode = get_stmode(full_path);
 		if (!stmode)
 		{
-			printf("isPathDirectory(stat) path:%s, error:%s.\n", full_path, strerror(errno));
-			return false;
+			printf("isPathDirectory(stat) path: %s, error: %s.\n", full_path, strerror(errno));
+			return 0;
 		}
 
-		if (stmode & S_IFDIR) return true;
+		if (stmode & S_IFDIR) return 1;
 	}
 
-	return false;
+	return 0;
 }
 
-static bool isPathRegularFile(const char *path)
+static int isPathRegularFile(const char *path)
 {
 	make_fullpath(path);
 
@@ -172,13 +172,13 @@ static bool isPathRegularFile(const char *path)
 		{
 			//printf("isPathRegularFile(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path,
 			//       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
-			return false;
+			return 0;
 		}
 
 		if (!*file_path)
 		{
 			mz_zip_reader_end(&z);
-			return false;
+			return 0;
 		}
 
 		const int file_index = mz_zip_reader_locate_file(&z, file_path, NULL, 0);
@@ -188,13 +188,13 @@ static bool isPathRegularFile(const char *path)
 			//		 zip_path, file_path,
 			//		 mz_zip_get_error_string(mz_zip_get_last_error(&z)));
 			mz_zip_reader_end(&z);
-			return false;
+			return 0;
 		}
 
 		if (!mz_zip_reader_is_file_a_directory(&z, file_index) && mz_zip_reader_is_file_supported(&z, file_index))
 		{
 			mz_zip_reader_end(&z);
-			return true;
+			return 1;
 		}
 		mz_zip_reader_end(&z);
 	}
@@ -203,7 +203,7 @@ static bool isPathRegularFile(const char *path)
 		if (get_stmode(full_path) & S_IFREG) return true;
 	}
 
-	return false;
+	return 0;
 }
 
 void FileClose(fileTYPE *file)
@@ -892,7 +892,7 @@ void prefixGameDir(char *dir, size_t dir_len)
 	{
 		static char temp_dir[1024];
 
-		FileCreatePath(GAMES_DIR);
+		//FileCreatePath(GAMES_DIR);
 		snprintf(temp_dir, 1024, "%s/%s", GAMES_DIR, dir);
 		strncpy(dir, temp_dir, dir_len);
 		printf("Prefixed dir to %s\n", temp_dir);
@@ -1105,7 +1105,7 @@ struct DirentComp
 
 void AdjustDirectory(char *path)
 {
-	if (isPathDirectory(path)) return;
+	if (!FileExists(path)) return;
 
 	char *p = strrchr(path, '/');
 	if (p)
@@ -1238,8 +1238,12 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 	if (mode == SCANF_INIT)
 	{
+		iFirstEntry = 0;
+		iSelectedEntry = 0;
+		DirItem.clear();
+
 		file_name[0] = 0;
-		if ((options & SCANO_NOENTER) || !isPathDirectory(path))
+		if ((options & SCANO_NOENTER) || isPathRegularFile(path))
 		{
 			char *p = strrchr(path, '/');
 			if (p)
@@ -1254,11 +1258,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 		}
 
-		if (!isPathDirectory(path))
-		{
-			path[0] = 0;
-			file_name[0] = 0;
-		}
+		if (!isPathDirectory(path)) return 0;
 
 		if (options & SCANO_NEOGEO) neogeo_scan_xml(path);
 
@@ -1277,10 +1277,6 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 		char *zip_path, *file_path_in_zip = (char*)"";
 		FileIsZipped(full_path, &zip_path, &file_path_in_zip);
-
-		iFirstEntry = 0;
-		iSelectedEntry = 0;
-		DirItem.clear();
 
 		DIR *d = nullptr;
 		mz_zip_archive *z = nullptr;

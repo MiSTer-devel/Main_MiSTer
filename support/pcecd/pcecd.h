@@ -130,4 +130,6 @@ int pcecd_send_data(uint8_t* buf, int len, uint8_t index);
 void pcecd_reset();
 int pcecd_using_cd();
 
+#define PCECD_DIR "TGFX16-CD"
+
 #endif

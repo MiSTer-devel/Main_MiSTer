@@ -226,7 +226,7 @@ void pcecd_set_image(int num, const char *filename)
 
 			if (!loaded)
 			{
-				sprintf(buf, "%sCD/cd_bios.rom", user_io_get_core_path());
+				sprintf(buf, "%s/cd_bios.rom", HomeDir(PCECD_DIR));
 				loaded = load_bios(buf, filename);
 			}
 
