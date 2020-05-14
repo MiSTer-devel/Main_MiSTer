@@ -1761,13 +1761,12 @@ void HandleUI(void)
 		break;
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
+		MenuHide();
 		printf("File selected: %s\n", selPath);
 		memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
 
 		if (fs_Options & SCANO_NEOGEO)
 		{
-			menustate = MENU_NONE1;
-			HandleUI();
 			neogeo_romset_tx(selPath);
 		}
 		else
@@ -1780,13 +1779,15 @@ void HandleUI(void)
 			user_io_store_filename(selPath);
 			user_io_file_tx(selPath, user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index, opensave);
 			if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
-			menustate = MENU_NONE1;
 		}
 
 		recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
 		break;
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
+		menustate = selPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
+		HandleUI();
+
 		printf("Image selected: %s\n", selPath);
 		memcpy(Selected_S[ioctl_index & 3], selPath, sizeof(Selected_S[ioctl_index & 3]));
 
@@ -1816,8 +1817,6 @@ void HandleUI(void)
 			user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
 			user_io_file_mount(selPath, ioctl_index);
 		}
-
-		menustate = selPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
 
 		recent_update(SelectedDir, Selected_S[ioctl_index & 3], SelectedLabel, ioctl_index + 500);
 		break;

@@ -8,6 +8,7 @@
 #include "../../user_io.h"
 #include "../../spi.h"
 #include "../../hardware.h"
+#include "../../menu.h"
 #include "pcecd.h"
 
 
@@ -225,9 +226,12 @@ void pcecd_set_image(int num, const char *filename)
 
 			if (!loaded)
 			{
-				sprintf(buf, "%s/cd_bios.rom", user_io_get_core_path());
-				load_bios(buf, filename);
+				sprintf(buf, "%sCD/cd_bios.rom", user_io_get_core_path());
+				loaded = load_bios(buf, filename);
 			}
+
+			if (!loaded) Info("CD BIOS not found!", 4000);
+
 			notify_mount(1);
 		}
 		else {
