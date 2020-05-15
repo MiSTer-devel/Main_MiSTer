@@ -880,6 +880,10 @@ void HandleUI(void)
 	static int flash_state = 0;
 	static uint32_t dip_submenu;
 	static int need_reset = 0;
+	static int page = 0;
+	static int flat = 0;
+	static int menusub_parent = 0;
+	static char title[32] = {};
 
 	static char	cp_MenuCancel;
 
@@ -1147,6 +1151,7 @@ void HandleUI(void)
 	case MENU_NONE2:
 		if (menu)
 		{
+			page = 0;
 			OsdSetSize(16);
 			if(!is_menu() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
 			{
@@ -1362,7 +1367,9 @@ void HandleUI(void)
 			if (!p[0]) OsdCoreNameSet("8BIT");
 			else      OsdCoreNameSet(p);
 
-			OsdSetTitle(OsdCoreNameGet());
+			if(!page) OsdSetTitle(OsdCoreNameGet());
+			else OsdSetTitle(title);
+
 			dip_submenu = -1;
 
 			// add options as requested by core
@@ -1376,7 +1383,7 @@ void HandleUI(void)
 
 				if (p)
 				{
-					int h = 0, d = 0;
+					int h = 0, d = 0, inpage = !page;
 
 					if (!strcmp(p, "DIP"))
 					{
@@ -1401,10 +1408,51 @@ void HandleUI(void)
 							if (p[0] == 'd') d |= (flg ^ 1);
 							p += 2;
 						}
+
+						if (p[0] == 'P')
+						{
+							int n = p[1] - '0';
+							if (p[2] != ',')
+							{
+								if (page && page == n) inpage = 1;
+								if (!page && n && !flat) inpage = 0;
+								p += 2;
+							}
+						}
 					}
 
-					if (!h)
+					if (!h && inpage)
 					{
+						if (p[0] == 'P')
+						{
+							if (flat)
+							{
+								strcpy(s, " \x16 ");
+								substrcpy(s + 3, p, 1);
+
+								int len = strlen(s);
+								while (len < 28) s[len++] = ' ';
+								s[28] = 0;
+							}
+							else
+							{
+								strcpy(s, " ");
+								substrcpy(s + 1, p, 1);
+
+								int len = strlen(s);
+								while (len < 27) s[len++] = ' ';
+								s[27] = 17;
+								s[28] = 0;
+							}
+
+							MenuWrite(entry, s, menusub == selentry, d);
+
+							// add bit in menu mask
+							menumask = (menumask << 1) | 1;
+							entry++;
+							selentry++;
+						}
+
 						// check for 'F'ile or 'S'D image strings
 						if ((p[0] == 'F') || (p[0] == 'S'))
 						{
@@ -1539,7 +1587,14 @@ void HandleUI(void)
 			for (; entry < OsdGetSize() - 1; entry++) MenuWrite(entry, "", 0, 0);
 
 			// exit row
-			MenuWrite(entry, STD_EXIT, menusub == selentry, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+			if (!page)
+			{
+				MenuWrite(entry, STD_EXIT, menusub == selentry, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+			}
+			else
+			{
+				MenuWrite(entry, "            back", menusub == selentry, 0, 0);
+			}
 			menusub_last = selentry;
 			menumask = (menumask << 1) | 1;
 
@@ -1555,7 +1610,8 @@ void HandleUI(void)
 
 		if (!entry)
 		{
-			menustate = MENU_8BIT_SYSTEM1;
+			if (page) page = 0;
+			else menustate = MENU_8BIT_SYSTEM1;
 			menusub = 0;
 			break;
 		}
@@ -1575,13 +1631,25 @@ void HandleUI(void)
 		// menu key closes menu
 		if (menu)
 		{
-			menustate = MENU_NONE1;
+			if(!page) menustate = MENU_NONE1;
+			else
+			{
+				menustate = MENU_8BIT_MAIN1;
+				menusub = menusub_parent;
+				page = 0;
+			}
 		}
-		if (select || recent)
+		else if (select || recent)
 		{
 			if (menusub == menusub_last && select)
 			{
-				menustate = MENU_NONE1;
+				if (!page) menustate = MENU_NONE1;
+				else
+				{
+					menustate = MENU_8BIT_MAIN1;
+					menusub = menusub_parent;
+					page = 0;
+				}
 			}
 			else if (dip_submenu == menusub)
 			{
@@ -1593,7 +1661,7 @@ void HandleUI(void)
 				static char ext[256];
 				p = user_io_get_confstr(1);
 
-				int h = 0, d = 0;
+				int h = 0, d = 0, inpage = !page;
 				uint32_t entry = 0;
 				int i = 1;
 
@@ -1604,6 +1672,7 @@ void HandleUI(void)
 
 					h = 0;
 					d = 0;
+					inpage = !page;
 
 					if (strcmp(p, "DIP"))
 					{
@@ -1619,14 +1688,42 @@ void HandleUI(void)
 						}
 					}
 
-					if (h || p[0] < 'A') continue;
+					if (p[0] == 'P')
+					{
+						int n = p[1] - '0';
+						if (p[2] != ',')
+						{
+							if (page && page == n) inpage = 1;
+							if (!page && n && !flat) inpage = 0;
+							p += 2;
+						}
+					}
+
+					if (!inpage || h || p[0] < 'A') continue;
 					if (entry == menusub) break;
 					entry++;
 				}
 
 				if (!d)
 				{
-					if (p[0] == 'F')
+					if (p[0] == 'P')
+					{
+						if (recent)
+						{
+							flat = !flat;
+							page = 0;
+						}
+						else
+						{
+							page = p[1] - '0';
+							if (page < 1 || page > 9) page = 0;
+							menusub_parent = menusub;
+							substrcpy(title, p, 1);
+						}
+						menustate = MENU_8BIT_MAIN1;
+						menusub = 0;
+					}
+					else if (p[0] == 'F')
 					{
 						opensave = 0;
 						ioctl_index = menusub + 1;
@@ -1745,12 +1842,12 @@ void HandleUI(void)
 				}
 			}
 		}
-		else if (right)
+		else if (right && !page)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
 			menusub = 0;
 		}
-		else if (left)
+		else if (left && !page)
 		{
 			menustate = MENU_8BIT_INFO;
 			menusub = 1;
