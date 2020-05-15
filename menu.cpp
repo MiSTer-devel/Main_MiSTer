@@ -1372,6 +1372,8 @@ void HandleUI(void)
 
 			dip_submenu = -1;
 
+			int last_space = 0;
+
 			// add options as requested by core
 			int i = 2;
 			do
@@ -1417,9 +1419,18 @@ void HandleUI(void)
 								if (page && page == n) inpage = 1;
 								if (!page && n && !flat) inpage = 0;
 								p += 2;
+
+								if (flat && !page && p[0] == '-') inpage = 0;
+							}
+							else if (flat && !page && !last_space)
+							{
+								MenuWrite(entry, "", 0, d);
+								entry++;
 							}
 						}
 					}
+
+					last_space = 0;
 
 					if (!h && inpage)
 					{
@@ -1564,7 +1575,9 @@ void HandleUI(void)
 						if (p[0] == '-')
 						{
 							s[0] = ' ';
+							s[1] = 0;
 							substrcpy(s + 1, p, 1);
+							last_space = (strlen(s) == 1);
 							MenuWrite(entry, s, 0, d);
 							entry++;
 						}
@@ -1706,24 +1719,7 @@ void HandleUI(void)
 
 				if (!d)
 				{
-					if (p[0] == 'P')
-					{
-						if (recent)
-						{
-							flat = !flat;
-							page = 0;
-						}
-						else
-						{
-							page = p[1] - '0';
-							if (page < 1 || page > 9) page = 0;
-							menusub_parent = menusub;
-							substrcpy(title, p, 1);
-						}
-						menustate = MENU_8BIT_MAIN1;
-						menusub = 0;
-					}
-					else if (p[0] == 'F')
+					if (p[0] == 'F')
 					{
 						opensave = 0;
 						ioctl_index = menusub + 1;
@@ -1773,7 +1769,16 @@ void HandleUI(void)
 					}
 					else if (select)
 					{
-						if (p[0] == 'C' && cheats_available())
+						if (p[0] == 'P')
+						{
+							page = p[1] - '0';
+							if (page < 1 || page > 9) page = 0;
+							menusub_parent = menusub;
+							substrcpy(title, p, 1);
+							menustate = MENU_8BIT_MAIN1;
+							menusub = 0;
+						}
+						else if (p[0] == 'C' && cheats_available())
 						{
 							menustate = MENU_CHEATS1;
 							cheatsub = menusub;
@@ -1838,6 +1843,13 @@ void HandleUI(void)
 								if (p[0] == 'R' || p[0] == 'r') menustate = MENU_NONE1;
 							}
 						}
+					}
+					else if (recent)
+					{
+						flat = !flat;
+						page = 0;
+						menustate = MENU_8BIT_MAIN1;
+						menusub = 0;
 					}
 				}
 			}
