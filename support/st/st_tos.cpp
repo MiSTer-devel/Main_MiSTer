@@ -570,7 +570,7 @@ void tos_config_load(int slot)
 
 	// set default values
 	config.system_ctrl = TOS_MEMCONFIG_1M | TOS_CONTROL_VIDEO_COLOR | TOS_CONTROL_BORDER;
-	strcpy(config.tos_img, user_io_get_core_path());
+	strcpy(config.tos_img, HomeDir());
 	strcat(config.tos_img, "/TOS.IMG");
 
 	// try to load config

@@ -338,7 +338,7 @@ static void SelectFile(const char* path, const char* pFileExt, unsigned char Opt
 	}
 	else
 	{
-		const char *home = HomeDir((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL);
+		const char *home = user_io_get_core_path((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL, 1);
 		home_dir = strrchr(home, '/');
 		if (home_dir) home_dir++;
 
@@ -1193,7 +1193,7 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_ARCHIE_MAIN1:
-		OsdSetTitle(user_io_get_core_name(), OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+		OsdSetTitle(CoreName, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		m = 0;
 		menumask = 0x3ff;
@@ -1365,7 +1365,7 @@ void HandleUI(void)
 			menumask = 0;
 			p = user_io_get_core_name();
 			if (!p[0]) OsdCoreNameSet("8BIT");
-			else      OsdCoreNameSet(p);
+			else       OsdCoreNameSet(p);
 
 			if(!page) OsdSetTitle(OsdCoreNameGet());
 			else OsdSetTitle(title);

@@ -156,14 +156,19 @@ char *user_io_get_core_name()
 	return core_name;
 }
 
-char *user_io_get_core_path(const char *suffix)
+char *user_io_get_core_path(const char *suffix, int recheck)
 {
-	static char tmp[1024];
+	static char old_name[256] = {};
+	static char tmp[1024] = {};
 
-	if (suffix) strcpy(tmp, suffix);
-	else strcpy(tmp, !strcasecmp(core_name, "minimig") ? "Amiga" : core_name);
+	if (!suffix) suffix = (!strcasecmp(core_name, "minimig")) ? "Amiga" : core_name;
+	if (recheck || strcmp(old_name, suffix) || !tmp[0])
+	{
+		strcpy(old_name, suffix);
+		strcpy(tmp, suffix);
+		prefixGameDir(tmp, sizeof(tmp));
+	}
 
-	prefixGameDir(tmp, sizeof(tmp));
 	return tmp;
 }
 
@@ -845,6 +850,8 @@ void user_io_init(const char *path, const char *xml)
 				}
 				else
 				{
+					const char *home = HomeDir();
+
 					if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 					{
 						if (!is_cpc())
@@ -852,13 +859,13 @@ void user_io_init(const char *path, const char *xml)
 							// check for multipart rom
 							for (char i = 0; i < 4; i++)
 							{
-								sprintf(mainpath, "%s/boot%d.rom", user_io_get_core_path(), i);
+								sprintf(mainpath, "%s/boot%d.rom", home, i);
 								user_io_file_tx(mainpath, i << 6);
 							}
 						}
 
 						// legacy style of rom
-						sprintf(mainpath, "%s/boot.rom", user_io_get_core_path());
+						sprintf(mainpath, "%s/boot.rom", home);
 						if (!user_io_file_tx(mainpath))
 						{
 							strcpy(name + strlen(name) - 3, "ROM");
@@ -882,13 +889,13 @@ void user_io_init(const char *path, const char *xml)
 						for (int m = 0; m < 3; m++)
 						{
 							const char *model = !m ? "" : (m == 1) ? "0" : "1";
-							sprintf(mainpath, "%s/boot%s.eZZ", user_io_get_core_path(), model);
+							sprintf(mainpath, "%s/boot%s.eZZ", home, model);
 							user_io_file_tx(mainpath, 0x40 * (m + 1), 0, 1);
-							sprintf(mainpath, "%s/boot%s.eZ0", user_io_get_core_path(), model);
+							sprintf(mainpath, "%s/boot%s.eZ0", home, model);
 							user_io_file_tx(mainpath, 0x40 * (m + 1), 0, 1);
 							for (int i = 0; i < 256; i++)
 							{
-								sprintf(mainpath, "%s/boot%s.e%02X", user_io_get_core_path(), model, i);
+								sprintf(mainpath, "%s/boot%s.e%02X", home, model, i);
 								user_io_file_tx(mainpath, 0x40 * (m + 1), 0, 1);
 							}
 						}
@@ -897,7 +904,7 @@ void user_io_init(const char *path, const char *xml)
 					// check if vhd present
 					for (char i = 0; i < 4; i++)
 					{
-						sprintf(mainpath, "%s/boot%d.vhd", user_io_get_core_path(), i);
+						sprintf(mainpath, "%s/boot%d.vhd", home, i);
 						if (FileExists(mainpath))
 						{
 							user_io_set_index(i << 6);
@@ -905,7 +912,7 @@ void user_io_init(const char *path, const char *xml)
 						}
 					}
 
-					sprintf(mainpath, "%s/boot.vhd", user_io_get_core_path());
+					sprintf(mainpath, "%s/boot.vhd", home);
 					if (FileExists(mainpath))
 					{
 						user_io_set_index(0);
