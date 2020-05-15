@@ -99,7 +99,7 @@ private:
 	sense_t sense;
 
 	uint8_t stat[2];
-	uint8_t comm[12];
+	uint8_t comm[14];
 
 	uint8_t sec_buf[2352 + 2];
 

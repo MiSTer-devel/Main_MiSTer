@@ -540,9 +540,16 @@ void pcecdd_t::CommandExec() {
 
 		/* HuVideo streams by fetching 120 sectors at a time, taking advantage of the geometry
 		 * of the disc to reduce/eliminate seek time */
-		if ((this->lba == new_lba) && (cnt_ == 120)) {
+		if ((this->lba == new_lba) && (cnt_ == 120))
+		{
 			this->latency = 0;
-		} else {
+		}
+		else if (comm[13] & 0x80) // fast seek (OSD setting)
+		{
+			this->latency = 0;
+		}
+		else
+		{
 			this->latency = (int)(get_cd_seek_ms(this->lba, new_lba)/13.33);
 		}
 		printf("seek time ticks: %d\n", this->latency);
@@ -602,7 +609,15 @@ void pcecdd_t::CommandExec() {
 		break;
 		}
 
-		this->latency = (int)(get_cd_seek_ms(this->lba, new_lba) / 13.33);
+		if (comm[13] & 0x80) // fast seek (OSD setting)
+		{
+			this->latency = 0;
+		}
+		else
+		{
+			this->latency = (int)(get_cd_seek_ms(this->lba, new_lba) / 13.33);
+		}
+
 		printf("seek time ticks: %d\n", this->latency);
 
 		this->lba = new_lba;
@@ -719,7 +734,7 @@ int pcecdd_t::GetStatus(uint8_t* buf) {
 }
 
 int pcecdd_t::SetCommand(uint8_t* buf) {
-	memcpy(comm, buf, 12);
+	memcpy(comm, buf, 14);
 	return 0;
 }
 

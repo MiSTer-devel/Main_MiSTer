@@ -67,19 +67,18 @@ void pcecd_poll()
 	{
 		last_req = req;
 
-		uint16_t data_in[6];
-		uint16_t data_mode;
+		uint16_t data_in[7];
 		data_in[0] = spi_w(0);
 		data_in[1] = spi_w(0);
 		data_in[2] = spi_w(0);
 		data_in[3] = spi_w(0);
 		data_in[4] = spi_w(0);
 		data_in[5] = spi_w(0);
-		data_mode = spi_w(0);
+		data_in[6] = spi_w(0);
 		DisableIO();
 
 
-		switch (data_mode & 0xFF)
+		switch (data_in[6] & 0xFF)
 		{
 		case 0:
 			pcecdd.SetCommand((uint8_t*)data_in);
