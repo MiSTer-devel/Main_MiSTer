@@ -143,10 +143,14 @@ static int rom_checksz(int idx, int chunk)
 {
 	if ((romlen[idx] + chunk) > romblkl)
 	{
-		romblkl += BLKL;
+	        if (romlen[idx] + chunk > romblkl + BLKL)
+		  romblkl += (chunk + BLKL);
+		else
+		  romblkl += BLKL;
 		romdata = (uint8_t*)realloc(romdata, romblkl);
 		if (!romdata)
 		{
+			printf("realloc failed - romblkl %d \n",romblkl);
 			romblkl = 0;
 			memset(romlen, 0, sizeof(romlen));
 			return 0;
@@ -323,6 +327,8 @@ unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
 {
 	size_t len = strlen(hexstr);
 	unsigned char* chrs = (unsigned char*)malloc(len + 1);
+	if (!chrs)
+		printf("hexstr_to_char: malloc failed len+1=%d\n",len+1);
 	int dest = 0;
 	// point to the beginning of the array
 	const char *ptr = hexstr;
@@ -519,6 +525,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 						size_t len = 0;
 						unsigned char* binary = hexstr_to_char(node->attributes[i].value, &len);
 						for (size_t i = 0; i < len; i++) switches.dip_def |= binary[i] << (i * 8);
+
 						free(binary);
 					}
 				}
@@ -639,7 +646,15 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		 *
 		 * the buffer_append is part of a buffer library that will realloc automatically
 		 */
-		buffer_append(arc_info->data, text);
+		{
+		int result = buffer_append(arc_info->data, text);
+		if (result<0)
+			printf("buffer_append failed %d\n",result);
+			if (result==-1) 
+			   printf("-1 no data given\n");
+			if (result==-2) 
+			   printf("-2 could not allocate\n");
+		}
 		//printf("XML_EVENT_TEXT: text [%s]\n",text);
 		break;
 
