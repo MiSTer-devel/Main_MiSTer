@@ -671,7 +671,10 @@ void pcecdd_t::CommandExec() {
 		this->CDDAMode = comm[1];
 		this->CDDAEnd = new_lba;
 
-		if (this->CDDAMode != PCECD_CDDAMODE_SILENT) {
+		if (this->CDDAMode == PCECD_CDDAMODE_SILENT) {
+			this->state = PCECD_STATE_IDLE;
+		}
+		else {
 			this->state = PCECD_STATE_PLAY;
 		}
 
