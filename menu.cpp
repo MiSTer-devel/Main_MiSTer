@@ -338,9 +338,10 @@ static void SelectFile(const char* path, const char* pFileExt, unsigned char Opt
 	}
 	else
 	{
-		const char *home = user_io_get_core_path((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL, 1);
+		const char *home = is_menu() ? "Scripts" : user_io_get_core_path((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL, 1);
 		home_dir = strrchr(home, '/');
 		if (home_dir) home_dir++;
+		else home_dir = home;
 
 		if (strncasecmp(home, selPath, strlen(home)) || !strcasecmp(home, selPath))
 		{

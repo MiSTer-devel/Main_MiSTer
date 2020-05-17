@@ -270,7 +270,7 @@ char is_gba();
 char is_c64();
 char is_st();
 
-#define HomeDir(x) (is_menu() ? "Scripts" : user_io_get_core_path(x))
-#define CoreName (is_menu() ? "Scripts" : user_io_get_core_name())
+#define HomeDir(x) user_io_get_core_path(x)
+#define CoreName user_io_get_core_name()
 
 #endif // USER_IO_H
