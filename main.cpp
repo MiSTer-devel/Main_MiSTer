@@ -46,7 +46,6 @@ int main(int argc, char *argv[])
 	sched_setaffinity(0, sizeof(set), &set);
 
 	fpga_io_init();
-	fpga_gpo_write(0);
 
 	DISKLED_OFF;
 

@@ -572,7 +572,7 @@ int neogeo_scan_xml(char *path)
 {
 	static char full_path[1024];
 	sprintf(full_path, "%s/romsets.xml", path);
-	if(!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
+	if(!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir());
 
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
@@ -1121,6 +1121,8 @@ int neogeo_romset_tx(char* name)
 	crom_sz = 0;
 	set_config(0, -1);
 
+	const char* home = HomeDir();
+
 	// Look for the romset's file list in romsets.xml
 	if (!(system_type & 2))
 	{
@@ -1140,7 +1142,7 @@ int neogeo_romset_tx(char* name)
 				char *p = strrchr(full_path, '/');
 				if (p) *p = 0;
 				strcat(full_path, "/romsets.xml");
-				if (!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
+				if (!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), home);
 			}
 			printf("xml for %s: %s\n", name, full_path);
 
@@ -1162,31 +1164,31 @@ int neogeo_romset_tx(char* name)
 	if (strcmp(romset, "debug")) {
 		// Not loading the special 'debug' romset
 		if (!(system_type & 2)) {
-			sprintf(full_path, "%s/uni-bios.rom", HomeDir);
+			sprintf(full_path, "%s/uni-bios.rom", home);
 			if (!(mask & 0x8000) && FileExists(full_path)) {
 				// Autoload Unibios for cart systems if present
-				neogeo_tx(HomeDir, "uni-bios.rom", NEO_FILE_RAW, 0, 0, 0x20000);
+				neogeo_tx(home, "uni-bios.rom", NEO_FILE_RAW, 0, 0, 0x20000);
 			} else {
 				// Otherwise load normal system roms
 				if (system_type == 0)
-					neogeo_tx(HomeDir, "neo-epo.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
+					neogeo_tx(home, "neo-epo.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
 				else
-					neogeo_tx(HomeDir, "sp-s2.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
+					neogeo_tx(home, "sp-s2.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
 			}
 		} else if (system_type == 2) {
 			// NeoGeo CD
-			neogeo_tx(HomeDir, "top-sp1.bin", NEO_FILE_RAW, 0, 0, 0x80000);
+			neogeo_tx(home, "top-sp1.bin", NEO_FILE_RAW, 0, 0, 0x80000);
 		} else {
 			// NeoGeo CDZ
-			neogeo_tx(HomeDir, "neocd.bin", NEO_FILE_RAW, 0, 0, 0x80000);
+			neogeo_tx(home, "neocd.bin", NEO_FILE_RAW, 0, 0, 0x80000);
 		}
 	}
 
 	//flush CROM if any.
 	neogeo_tx(NULL, NULL, 0, -1, 0, 0);
 
-	if (!(system_type & 2))	neogeo_tx(HomeDir, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0);
-	neogeo_file_tx(HomeDir, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
+	if (!(system_type & 2))	neogeo_tx(home, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0);
+	neogeo_file_tx(home, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
 
 	if (crom_start < 0x300000) crom_start = 0x300000;
 	uint32_t crom_max = crom_start + crom_sz_max;

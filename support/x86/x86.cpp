@@ -88,8 +88,8 @@ static void dma_set(uint32_t address, uint32_t data)
 {
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
-	spi32w(address);
-	spi32w(data);
+	spi32_w(address);
+	spi32_w(data);
 	DisableIO();
 }
 
@@ -97,8 +97,8 @@ static void dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
-	spi32w(address);
-	while (length--) spi32w(*data++);
+	spi32_w(address);
+	while (length--) spi32_w(*data++);
 	DisableIO();
 }
 
@@ -106,8 +106,8 @@ static void dma_rcvbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
 	EnableIO();
 	spi8(UIO_DMA_READ);
-	spi32w(address);
-	while (length--) *data++ = spi32w(0);
+	spi32_w(address);
+	while (length--) *data++ = spi32_w(0);
 	DisableIO();
 }
 
@@ -123,7 +123,7 @@ static int load_bios(const char* name, uint8_t index)
 
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
-	spi32w( index ? 0x80C0000 : 0x80F0000 );
+	spi32_w( index ? 0x80C0000 : 0x80F0000 );
 
 	while (bytes2send)
 	{
@@ -136,7 +136,7 @@ static int load_bios(const char* name, uint8_t index)
 
 		chunk = (chunk + 3) >> 2;
 		uint32_t* p = buf;
-		while(chunk--) spi32w(*p++);
+		while(chunk--) spi32_w(*p++);
 	}
 	DisableIO();
 	FileClose(&f);
@@ -500,8 +500,10 @@ void x86_init()
 {
 	user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 
-	load_bios(user_io_make_filepath(HomeDir, "boot0.rom"), 0);
-	load_bios(user_io_make_filepath(HomeDir, "boot1.rom"), 1);
+	const char *home = HomeDir();
+
+	load_bios(user_io_make_filepath(home, "boot0.rom"), 0);
+	load_bios(user_io_make_filepath(home, "boot1.rom"), 1);
 
 	IOWR(PC_BUS_BASE, 0, 0x00FFF0EA);
 	IOWR(PC_BUS_BASE, 1, 0x000000F0);

@@ -7,8 +7,8 @@
 //                  This module is an extension to the MiSTer control program. It adds extensions to
 //                  the menu system and additional I/O control specific to the Sharp MZ series
 //                  emulation.
-//                                                         
-// Credits:         
+//
+// Credits:
 // Copyright:       (c) 2018 Philip Smart <philip.smart@net2net.org>
 //
 // History:         July 2018      - Initial module written.
@@ -144,7 +144,7 @@ int sharpmz_reset_config(short setStatus)
     // Set the configuration registers to a known defualt.
     config.system_reg[REGISTER_MODEL]      = 0x03;              // MZ-80A
     config.system_reg[REGISTER_DISPLAY]    = 0x00;              // Mono 40x25
-    config.system_reg[REGISTER_DISPLAY2]   = 0x78 | 0x00;       // GRAM base addr | VGA Mode. 
+    config.system_reg[REGISTER_DISPLAY2]   = 0x78 | 0x00;       // GRAM base addr | VGA Mode.
     config.system_reg[REGISTER_DISPLAY3]   = 0x00;              // Status screen buffer.
     config.system_reg[REGISTER_CPU]        = 0x00;              // CPU speed.
     config.system_reg[REGISTER_AUDIO]      = 0x00;              // Audio - sound output.
@@ -435,7 +435,7 @@ void sharpmz_poll(void)
         {
             sharpmz_save_tape_from_cmt((const char *)0);
         }
-      
+
         // Reset the timer.
         time = GetTimer(0);
     }
@@ -479,7 +479,7 @@ char *sharpmz_pop_filename(void)
             tapeQueue.queue[i-1] = tapeQueue.queue[i];
         }
         tapeQueue.queue[MAX_TAPE_QUEUE-1] = NULL;
-        
+
     }
 
     // Return filename.
@@ -583,7 +583,7 @@ void sharpmz_clear_filelist(void)
     sharpmz_debugf("Cleared Tape Queue.");
 }
 
-// Return fast tape status bits. Bit 0,1 of system_reg, 0 = Off, 1 = 2x, 2 = 4x, 3 = 16x 
+// Return fast tape status bits. Bit 0,1 of system_reg, 0 = Off, 1 = 2x, 2 = 4x, 3 = 16x
 //
 int sharpmz_get_fasttape(void)
 {
@@ -656,7 +656,7 @@ void sharpmz_set_fasttape(short mode, short setStatus)
 }
 
 
-// Return Ascii Mapping of header filename bits. Bit 0,1 of system_reg, 0 = Off, 1 = FROMMZ, 2 = TOMZ, 3 = BOTH 
+// Return Ascii Mapping of header filename bits. Bit 0,1 of system_reg, 0 = Off, 1 = FROMMZ, 2 = TOMZ, 3 = BOTH
 //
 int sharpmz_get_cmt_ascii_mapping(void)
 {
@@ -899,7 +899,7 @@ const char *sharpmz_get_gram_base_addr_string(void)
 void sharpmz_set_gram_base_addr(short addr, short setStatus)
 {
     config.system_reg[REGISTER_DISPLAY2] &= ~(0x1f << 3);
-    config.system_reg[REGISTER_DISPLAY2] |= addr << 3; 
+    config.system_reg[REGISTER_DISPLAY2] |= addr << 3;
 
     if(setStatus)
         sharpmz_set_config_register(REGISTER_DISPLAY, config.system_reg[REGISTER_DISPLAY]);
@@ -2216,7 +2216,7 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
         sharpmz_debugf("Register (%02x) = %02x", i, sharpmz_read_config_register(i));
     }
 #endif
-  
+
     // Success.
     //
     return(0);
@@ -2402,7 +2402,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             subItem   = 0;
             *menumask = 0;
 
-            OsdSetTitle(user_io_get_core_name(), 0);
+            OsdSetTitle(CoreName, 0);
 
             OsdWrite(menuItem++, "          Main Menu", 0, 0);
             OsdWrite(menuItem++, "",                    0, 0);
@@ -2529,7 +2529,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     if(right) select = true;
                     break;
 #endif
-    
+
                 case 4:  // System
                     *menustate    = systemState;
 #ifdef __SHARPMZ_DEBUG__
@@ -2541,7 +2541,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     if(right) select = true;
                     break;
 
-                case 5: // Boot Reset 
+                case 5: // Boot Reset
                     if(select)
                     {
                         sharpmz_set_boot_reset();
@@ -2643,7 +2643,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                 OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
                 *menumask = (*menumask << 1) | 1;
             }
-    
+
             for (; menuItem < 15; menuItem++)
             {
                 OsdWrite(menuItem, "", 0, 0);
@@ -2804,7 +2804,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                 *menumask = 0x01;    // Exit.
                 *parentstate = *menustate;
                 menuItem = 0;
-    
+
                 // Limit number of items in queue, makes no sense to have too many and we run out of display space.
                 //
                 if(tapeQueue.elements < MAX_TAPE_QUEUE && !fail)
@@ -3341,7 +3341,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
           //strcat(sBuf, sharpmz_get_scandoubler_fx_string());
           //OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
           //*menumask = (*menumask << 1) | 1;
-    
+
             for (; menuItem < 15; menuItem++)
             {
                 OsdWrite(menuItem, "", 0, 0);
@@ -3445,7 +3445,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             {
                 OsdSetTitle("Memory Dump", OSD_ARROW_LEFT);
             }
-    
+
             OsdWrite(menuItem++, "", 0, 0);
 
             strcpy(sBuf, " Select Memory Bank: ");
@@ -3490,7 +3490,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     strcat(sBuf, sharpmz_get_debug_leds_string());
                     OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
                     *menumask = (*menumask << 1) | 1;
-    
+
                     // Display the LED menu only when enabled.
                     //
                     if(sharpmz_get_debug_leds())
@@ -3499,12 +3499,12 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                         strcat(sBuf, sharpmz_get_debug_leds_smpfreq_string());
                         OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
                         *menumask = (*menumask << 1) | 1;
-                        
+
                         strcpy(sBuf, "     Signal Block:   ");
                         strcat(sBuf, sharpmz_get_debug_leds_bank_string());
                         OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
                         *menumask = (*menumask << 1) | 1;
-                        
+
                         strcpy(sBuf, "            Bank:    ");
                         strcat(sBuf, sharpmz_get_debug_leds_subbank_string());
                         OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);

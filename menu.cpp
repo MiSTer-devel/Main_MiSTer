@@ -310,6 +310,8 @@ static int changeDir(char *dir)
 	return 1;
 }
 
+static const char *home_dir = NULL;
+
 // this function displays file selection menu
 static void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
@@ -327,27 +329,28 @@ static void SelectFile(const char* path, const char* pFileExt, unsigned char Opt
 			strcat(selPath, get_rbf_name());
 		}
 		pFileExt = "RBFMRA";
+		home_dir = NULL;
 	}
 	else if (Options & SCANO_TXT)
 	{
-		if(pFileExt == 0)
-			pFileExt = "TXT";
+		if(pFileExt == 0) pFileExt = "TXT";
+		home_dir = NULL;
 	}
-	else if (strncasecmp(HomeDir, selPath, strlen(HomeDir)) || !strcasecmp(HomeDir, selPath))
+	else
 	{
-		Options &= ~SCANO_NOENTER;
-		strcpy(selPath, HomeDir);
-	}
+		const char *home = is_menu() ? "Scripts" : user_io_get_core_path((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL, 1);
+		home_dir = strrchr(home, '/');
+		if (home_dir) home_dir++;
+		else home_dir = home;
 
-	if (!strcasecmp(HomeDir, selPath)) FileCreatePath(selPath);
+		if (strncasecmp(home, selPath, strlen(home)) || !strcasecmp(home, selPath))
+		{
+			Options &= ~SCANO_NOENTER;
+			strcpy(selPath, home);
+		}
+	}
 
 	ScanDirectory(selPath, SCANF_INIT, pFileExt, Options);
-	if (!flist_nDirEntries())
-	{
-		selPath[0] = 0;
-		ScanDirectory(selPath, SCANF_INIT, pFileExt, Options);
-	}
-
 	AdjustDirectory(selPath);
 
 	strcpy(fs_pFileExt, pFileExt);
@@ -878,11 +881,18 @@ void HandleUI(void)
 	static int flash_state = 0;
 	static uint32_t dip_submenu;
 	static int need_reset = 0;
+	static int page = 0;
+	static int flat = 0;
+	static int menusub_parent = 0;
+	static char title[32] = {};
 
 	static char	cp_MenuCancel;
 
 	// get user control codes
 	uint32_t c = menu_key_get();
+
+	int release = 0;
+	if (c & UPSTROKE) release = 1;
 
 	// decode and set events
 	menu = false;
@@ -1142,6 +1152,7 @@ void HandleUI(void)
 	case MENU_NONE2:
 		if (menu)
 		{
+			page = 0;
 			OsdSetSize(16);
 			if(!is_menu() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
 			{
@@ -1183,7 +1194,7 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_ARCHIE_MAIN1:
-		OsdSetTitle(user_io_get_core_name(), OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+		OsdSetTitle(CoreName, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		m = 0;
 		menumask = 0x3ff;
@@ -1355,10 +1366,14 @@ void HandleUI(void)
 			menumask = 0;
 			p = user_io_get_core_name();
 			if (!p[0]) OsdCoreNameSet("8BIT");
-			else      OsdCoreNameSet(p);
+			else       OsdCoreNameSet(p);
 
-			OsdSetTitle(OsdCoreNameGet());
+			if(!page) OsdSetTitle(OsdCoreNameGet());
+			else OsdSetTitle(title);
+
 			dip_submenu = -1;
+
+			int last_space = 0;
 
 			// add options as requested by core
 			int i = 2;
@@ -1371,7 +1386,7 @@ void HandleUI(void)
 
 				if (p)
 				{
-					int h = 0, d = 0;
+					int h = 0, d = 0, inpage = !page;
 
 					if (!strcmp(p, "DIP"))
 					{
@@ -1396,10 +1411,60 @@ void HandleUI(void)
 							if (p[0] == 'd') d |= (flg ^ 1);
 							p += 2;
 						}
+
+						if (p[0] == 'P')
+						{
+							int n = p[1] - '0';
+							if (p[2] != ',')
+							{
+								if (page && page == n) inpage = 1;
+								if (!page && n && !flat) inpage = 0;
+								p += 2;
+
+								if (flat && !page && p[0] == '-') inpage = 0;
+							}
+							else if (flat && !page && !last_space)
+							{
+								MenuWrite(entry, "", 0, d);
+								entry++;
+							}
+						}
 					}
 
-					if (!h)
+					last_space = 0;
+
+					if (!h && inpage)
 					{
+						if (p[0] == 'P')
+						{
+							if (flat)
+							{
+								strcpy(s, " \x16 ");
+								substrcpy(s + 3, p, 1);
+
+								int len = strlen(s);
+								while (len < 28) s[len++] = ' ';
+								s[28] = 0;
+							}
+							else
+							{
+								strcpy(s, " ");
+								substrcpy(s + 1, p, 1);
+
+								int len = strlen(s);
+								while (len < 27) s[len++] = ' ';
+								s[27] = 17;
+								s[28] = 0;
+							}
+
+							MenuWrite(entry, s, menusub == selentry, d);
+
+							// add bit in menu mask
+							menumask = (menumask << 1) | 1;
+							entry++;
+							selentry++;
+						}
+
 						// check for 'F'ile or 'S'D image strings
 						if ((p[0] == 'F') || (p[0] == 'S'))
 						{
@@ -1511,7 +1576,9 @@ void HandleUI(void)
 						if (p[0] == '-')
 						{
 							s[0] = ' ';
+							s[1] = 0;
 							substrcpy(s + 1, p, 1);
+							last_space = (strlen(s) == 1);
 							MenuWrite(entry, s, 0, d);
 							entry++;
 						}
@@ -1534,7 +1601,14 @@ void HandleUI(void)
 			for (; entry < OsdGetSize() - 1; entry++) MenuWrite(entry, "", 0, 0);
 
 			// exit row
-			MenuWrite(entry, STD_EXIT, menusub == selentry, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+			if (!page)
+			{
+				MenuWrite(entry, STD_EXIT, menusub == selentry, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+			}
+			else
+			{
+				MenuWrite(entry, "            back", menusub == selentry, 0, 0);
+			}
 			menusub_last = selentry;
 			menumask = (menumask << 1) | 1;
 
@@ -1550,7 +1624,8 @@ void HandleUI(void)
 
 		if (!entry)
 		{
-			menustate = MENU_8BIT_SYSTEM1;
+			if (page) page = 0;
+			else menustate = MENU_8BIT_SYSTEM1;
 			menusub = 0;
 			break;
 		}
@@ -1570,13 +1645,25 @@ void HandleUI(void)
 		// menu key closes menu
 		if (menu)
 		{
-			menustate = MENU_NONE1;
+			if(!page) menustate = MENU_NONE1;
+			else
+			{
+				menustate = MENU_8BIT_MAIN1;
+				menusub = menusub_parent;
+				page = 0;
+			}
 		}
-		if (select || recent)
+		else if (select || recent)
 		{
 			if (menusub == menusub_last && select)
 			{
-				menustate = MENU_NONE1;
+				if (!page) menustate = MENU_NONE1;
+				else
+				{
+					menustate = MENU_8BIT_MAIN1;
+					menusub = menusub_parent;
+					page = 0;
+				}
 			}
 			else if (dip_submenu == menusub)
 			{
@@ -1588,7 +1675,7 @@ void HandleUI(void)
 				static char ext[256];
 				p = user_io_get_confstr(1);
 
-				int h = 0, d = 0;
+				int h = 0, d = 0, inpage = !page;
 				uint32_t entry = 0;
 				int i = 1;
 
@@ -1599,6 +1686,7 @@ void HandleUI(void)
 
 					h = 0;
 					d = 0;
+					inpage = !page;
 
 					if (strcmp(p, "DIP"))
 					{
@@ -1614,7 +1702,18 @@ void HandleUI(void)
 						}
 					}
 
-					if (h || p[0] < 'A') continue;
+					if (p[0] == 'P')
+					{
+						int n = p[1] - '0';
+						if (p[2] != ',')
+						{
+							if (page && page == n) inpage = 1;
+							if (!page && n && !flat) inpage = 0;
+							p += 2;
+						}
+					}
+
+					if (!inpage || h || p[0] < 'A') continue;
 					if (entry == menusub) break;
 					entry++;
 				}
@@ -1635,7 +1734,7 @@ void HandleUI(void)
 
 						if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
-						if (is_gba() && FileExists(user_io_make_filepath(HomeDir, "goomba.rom"))) strcat(ext, "GB GBC");
+						if (is_gba() && FileExists(user_io_make_filepath(HomeDir(), "goomba.rom"))) strcat(ext, "GB GBC");
 						while (strlen(ext) % 3) strcat(ext, " ");
 
 						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0);
@@ -1671,7 +1770,16 @@ void HandleUI(void)
 					}
 					else if (select)
 					{
-						if (p[0] == 'C' && cheats_available())
+						if (p[0] == 'P')
+						{
+							page = p[1] - '0';
+							if (page < 1 || page > 9) page = 0;
+							menusub_parent = menusub;
+							substrcpy(title, p, 1);
+							menustate = MENU_8BIT_MAIN1;
+							menusub = 0;
+						}
+						else if (p[0] == 'C' && cheats_available())
 						{
 							menustate = MENU_CHEATS1;
 							cheatsub = menusub;
@@ -1737,15 +1845,22 @@ void HandleUI(void)
 							}
 						}
 					}
+					else if (recent)
+					{
+						flat = !flat;
+						page = 0;
+						menustate = MENU_8BIT_MAIN1;
+						menusub = 0;
+					}
 				}
 			}
 		}
-		else if (right)
+		else if (right && !page)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
 			menusub = 0;
 		}
-		else if (left)
+		else if (left && !page)
 		{
 			menustate = MENU_8BIT_INFO;
 			menusub = 1;
@@ -1753,13 +1868,12 @@ void HandleUI(void)
 		break;
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
+		MenuHide();
 		printf("File selected: %s\n", selPath);
 		memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
 
 		if (fs_Options & SCANO_NEOGEO)
 		{
-			menustate = MENU_NONE1;
-			HandleUI();
 			neogeo_romset_tx(selPath);
 		}
 		else
@@ -1772,13 +1886,15 @@ void HandleUI(void)
 			user_io_store_filename(selPath);
 			user_io_file_tx(selPath, user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index, opensave);
 			if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
-			menustate = MENU_NONE1;
 		}
 
 		recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
 		break;
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
+		menustate = selPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
+		HandleUI();
+
 		printf("Image selected: %s\n", selPath);
 		memcpy(Selected_S[ioctl_index & 3], selPath, sizeof(Selected_S[ioctl_index & 3]));
 
@@ -1808,8 +1924,6 @@ void HandleUI(void)
 			user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
 			user_io_file_mount(selPath, ioctl_index);
 		}
-
-		menustate = selPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
 
 		recent_update(SelectedDir, Selected_S[ioctl_index & 3], SelectedLabel, ioctl_index + 500);
 		break;
@@ -3594,7 +3708,7 @@ void HandleUI(void)
 	case MENU_FILE_SELECT1:
 		helptext = helptexts[HELPTEXT_NONE];
 		OsdSetTitle((fs_Options & SCANO_CORES) ? "Cores" : "Select", 0);
-		PrintDirectory();
+		PrintDirectory(hold_cnt<2);
 		menustate = MENU_FILE_SELECT2;
 		break;
 
@@ -3734,6 +3848,7 @@ void HandleUI(void)
 			}
 		}
 
+		if (release) PrintDirectory(1);
 		break;
 
 		/******************************************************************/
@@ -5156,26 +5271,42 @@ void ScrollLongName(void)
 }
 
 // print directory contents
-void PrintDirectory(void)
+void PrintDirectory(int expand)
 {
-	int k;
-	int len;
-
 	char s[40];
 	ScrollReset();
 
-	for(int i = 0; i < OsdGetSize(); i++)
+	if (expand && cfg.browse_expand)
+	{
+		int k = flist_iFirstEntry() + OsdGetSize() - 1;
+		if (flist_nDirEntries() && k == flist_iSelectedEntry() && k <= flist_nDirEntries() &&
+		    strlen(flist_DirItem(k)->altname) > 28 && !flist_DirItem(k)->datecode[0] && flist_DirItem(k)->de.d_type != DT_DIR)
+		{
+			//make room for last expanded line
+			flist_iFirstEntryInc();
+		}
+	}
+
+	int i = 0;
+	int k = flist_iFirstEntry();
+	while(i < OsdGetSize())
 	{
 		char leftchar = 0;
 		memset(s, ' ', 32); // clear line buffer
 		s[32] = 0;
+		int len2 = 0;
+		leftchar = 0;
+		int len = 0;
 
 		if (i < flist_nDirEntries())
 		{
-			k = flist_iFirstEntry() + i;
 			len = strlen(flist_DirItem(k)->altname); // get name length
 			if (len > 28)
 			{
+				len2 = len - 27;
+				if (len2 > 27) len2 = 27;
+				if (!expand) len2 = 0;
+
 				len = 27; // trim display length if longer than 30 characters
 				s[28] = 22;
 			}
@@ -5200,6 +5331,7 @@ void PrintDirectory(void)
 				{
 					strcpy(&s[22], " <DIR>");
 				}
+				len2 = 0;
 			}
 			else if (!cfg.rbf_hide_datecode && datecode[0])
 			{
@@ -5219,18 +5351,40 @@ void PrintDirectory(void)
 					s[19] = 22;
 					s[28] = ' ';
 				}
+				len2 = 0;
 			}
 
 			if (!i && k) leftchar = 17;
-			if ((i == OsdGetSize() - 1) && (k < flist_nDirEntries() - 1)) leftchar = 16;
+			if (i && k < flist_nDirEntries() - 1) leftchar = 16;
 		}
-		else
+		else if(!flist_nDirEntries()) // selected directory is empty
 		{
-			if (i == 0 && flist_nDirEntries() == 0) // selected directory is empty
-				strcpy(s, "          No files!");
+			if (!i) strcpy(s, "          No files!");
+			if (home_dir)
+			{
+				if (i == 6) strcpy(s, "      Missing directory:");
+				if (i == 8)
+				{
+					len = strlen(home_dir);
+					if (len > 27) len = 27;
+					strncpy(s + 1 + ((27 - len) / 2), home_dir, len);
+				}
+			}
 		}
 
-		OsdWriteOffset(i, s, i == (flist_iSelectedEntry() - flist_iFirstEntry()), 0, 0, leftchar);
+		int sel = (i == (flist_iSelectedEntry() - flist_iFirstEntry()));
+		OsdWriteOffset(i, s, sel, 0, 0, leftchar);
+		i++;
+
+		if (sel && len2)
+		{
+			len = strlen(flist_DirItem(k)->altname);
+			strcpy(s+1, flist_DirItem(k)->altname + len - len2);
+			OsdWriteOffset(i, s, sel, 0, 0, leftchar);
+			i++;
+		}
+
+		k++;
 	}
 }
 

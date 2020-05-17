@@ -97,7 +97,7 @@ static char UploadKickstart(char *name)
 	int keysize = 0;
 
 	BootPrint("Checking for Amiga Forever key file:");
-	if (FileOpen(&file, user_io_make_filepath(HomeDir, "ROM.KEY")) || FileOpen(&file, "ROM.KEY")) {
+	if (FileOpen(&file, user_io_make_filepath(HomeDir(), "ROM.KEY")) || FileOpen(&file, "ROM.KEY")) {
 		keysize = file.size;
 		if (file.size<sizeof(romkey))
 		{
@@ -129,7 +129,7 @@ static char UploadKickstart(char *name)
 			FileClose(&file);
 			//clear tag (write 0 to $fc0000) to force bootrom to load Kickstart from disk
 			//and not use one which was already there.
-			spi_uio_cmd32le_cont(UIO_MM2_WR, 0xfc0000);
+			spi_uio_cmd32_cont(UIO_MM2_WR, 0xfc0000);
 			spi8(0x00);spi8(0x00);
 			DisableIO();
 			return(1);
@@ -139,7 +139,7 @@ static char UploadKickstart(char *name)
 		        BootPrint("Uploading A1000 boot ROM");
 		        SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
 			FileClose(&file);
-			spi_uio_cmd32le_cont(UIO_MM2_WR, 0xfc0000);
+			spi_uio_cmd32_cont(UIO_MM2_WR, 0xfc0000);
 			spi8(0x00);spi8(0x00);
 			DisableIO();
 			return(1);
@@ -198,14 +198,14 @@ static char UploadKickstart(char *name)
 static char UploadActionReplay()
 {
 	fileTYPE file = {};
-	if(FileOpen(&file, user_io_make_filepath(HomeDir, "HRTMON.ROM")) || FileOpen(&file, "HRTMON.ROM"))
+	if(FileOpen(&file, user_io_make_filepath(HomeDir(), "HRTMON.ROM")) || FileOpen(&file, "HRTMON.ROM"))
 	{
 		int adr, data;
 		puts("Uploading HRTmon ROM... ");
 		SendFileV2(&file, NULL, 0, 0xa10000, (file.size + 511) >> 9);
 		// HRTmon config
 		adr = 0xa10000 + 20;
-		spi_uio_cmd32le_cont(UIO_MM2_WR, adr);
+		spi_uio_cmd32_cont(UIO_MM2_WR, adr);
 		data = 0x00800000; // mon_size, 4 bytes
 		spi8((data >> 24) & 0xff); spi8((data >> 16) & 0xff);
 		spi8((data >> 8) & 0xff); spi8((data >> 0) & 0xff);
@@ -247,7 +247,7 @@ static char UploadActionReplay()
 		spi8((data >> 0) & 0xff);
 		DisableIO();
 		adr = 0xa10000 + 68;
-		spi_uio_cmd32le_cont(UIO_MM2_WR, adr);
+		spi_uio_cmd32_cont(UIO_MM2_WR, adr);
 		data = ((minimig_config.memory & 0x3) + 1) * 512 * 1024; // maxchip, 4 bytes TODO is this correct?
 		spi8((data >> 24) & 0xff); spi8((data >> 16) & 0xff);
 		spi8((data >> 8) & 0xff); spi8((data >> 0) & 0xff);
@@ -348,7 +348,7 @@ static void ApplyConfiguration(char reloadkickstart)
 		spi_uio_cmd8(UIO_MM2_RST, rstval);
 		if (!UploadKickstart(minimig_config.kickstart))
 		{
-			snprintf(minimig_config.kickstart, 1024, "%s/%s", HomeDir, "KICK.ROM");
+			snprintf(minimig_config.kickstart, 1024, "%s/%s", HomeDir(), "KICK.ROM");
 			if (!UploadKickstart(minimig_config.kickstart))
 			{
 				strcpy(minimig_config.kickstart, "KICK.ROM");
@@ -451,7 +451,7 @@ int minimig_cfg_load(int num)
 		// set default configuration
 		memset((void*)&minimig_config, 0, sizeof(minimig_config));  // Finally found default config bug - params were reversed!
 		strncpy(minimig_config.id, config_id, sizeof(minimig_config.id));
-		snprintf(minimig_config.kickstart, 1024, "%s/%s", HomeDir, "KICK.ROM");
+		snprintf(minimig_config.kickstart, 1024, "%s/%s", HomeDir(), "KICK.ROM");
 		minimig_config.memory = 0x11;
 		minimig_config.cpu = 0;
 		minimig_config.chipset = 0;

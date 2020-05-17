@@ -8,6 +8,7 @@
 #include "../../user_io.h"
 #include "../../spi.h"
 #include "../../hardware.h"
+#include "../../menu.h"
 #include "pcecd.h"
 
 
@@ -24,8 +25,14 @@ void pcecd_poll()
 
 	if (CheckTimer(poll_timer))
 	{
-		poll_timer += 13 + (!adj ? 1 : 0);
-		if (++adj >= 3) adj = 0;
+		if ((!pcecdd.latency) && (pcecdd.state == PCECD_STATE_READ)) {
+			poll_timer += 16 + ((adj == 10) ? 1 : 0);	// 16.1ms between frames if reading data */
+			if (--adj <= 0) adj = 10;
+		} else {
+			poll_timer += 13 + ((adj == 3) ? 1 : 0);	// 13.33ms otherwise (including latency counts) */
+			if (adj > 3) adj = 3;
+			if (--adj <= 0) adj = 3;
+		}
 
 		if (pcecdd.has_status && !pcecdd.latency) {
 			uint16_t s;
@@ -60,19 +67,18 @@ void pcecd_poll()
 	{
 		last_req = req;
 
-		uint16_t data_in[6];
-		uint16_t data_mode;
+		uint16_t data_in[7];
 		data_in[0] = spi_w(0);
 		data_in[1] = spi_w(0);
 		data_in[2] = spi_w(0);
 		data_in[3] = spi_w(0);
 		data_in[4] = spi_w(0);
 		data_in[5] = spi_w(0);
-		data_mode = spi_w(0);
+		data_in[6] = spi_w(0);
 		DisableIO();
 
 
-		switch (data_mode & 0xFF)
+		switch (data_in[6] & 0xFF)
 		{
 		case 0:
 			pcecdd.SetCommand((uint8_t*)data_in);
@@ -219,9 +225,12 @@ void pcecd_set_image(int num, const char *filename)
 
 			if (!loaded)
 			{
-				sprintf(buf, "%s/cd_bios.rom", user_io_get_core_path());
-				load_bios(buf, filename);
+				sprintf(buf, "%s/cd_bios.rom", HomeDir(PCECD_DIR));
+				loaded = load_bios(buf, filename);
 			}
+
+			if (!loaded) Info("CD BIOS not found!", 4000);
+
 			notify_mount(1);
 		}
 		else {

@@ -99,7 +99,7 @@ private:
 	sense_t sense;
 
 	uint8_t stat[2];
-	uint8_t comm[12];
+	uint8_t comm[14];
 
 	uint8_t sec_buf[2352 + 2];
 
@@ -129,5 +129,7 @@ void pcecd_set_image(int num, const char *filename);
 int pcecd_send_data(uint8_t* buf, int len, uint8_t index);
 void pcecd_reset();
 int pcecd_using_cd();
+
+#define PCECD_DIR "TGFX16-CD"
 
 #endif

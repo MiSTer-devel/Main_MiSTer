@@ -533,33 +533,19 @@ int fpga_load_rbf(const char *name, const char *cfg, const char *xml)
 	return ret;
 }
 
-int fpga_io_init()
-{
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return -1;
-
-	map_base = (uint32_t*)mmap(0, FPGA_REG_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FPGA_REG_BASE);
-	if (map_base == (void *)-1)
-	{
-		printf("Unable to mmap(/dev/mem)\n");
-		close(fd);
-		return -1;
-	}
-	return 0;
-}
-
 static uint32_t gpo_copy = 0;
-void fpga_gpo_write(uint32_t value)
+void inline fpga_gpo_write(uint32_t value)
 {
 	gpo_copy = value;
 	writel(value, (void*)(SOCFPGA_MGR_ADDRESS + 0x10));
 }
 
-uint32_t fpga_gpo_read()
+uint32_t inline fpga_gpo_read()
 {
 	return gpo_copy; //readl((void*)(SOCFPGA_MGR_ADDRESS + 0x10));
 }
 
-int fpga_gpi_read()
+int inline fpga_gpi_read()
 {
 	return readl((void*)(SOCFPGA_MGR_ADDRESS + 0x14));
 }
@@ -572,6 +558,22 @@ void fpga_core_write(uint32_t offset, uint32_t value)
 uint32_t fpga_core_read(uint32_t offset)
 {
 	if (offset <= 0x1FFFFF) return readl((void*)(SOCFPGA_LWFPGASLAVES_ADDRESS + (offset & ~3)));
+	return 0;
+}
+
+int fpga_io_init()
+{
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return -1;
+
+	map_base = (uint32_t*)mmap(0, FPGA_REG_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FPGA_REG_BASE);
+	if (map_base == (void *)-1)
+	{
+		printf("Unable to mmap(/dev/mem)\n");
+		close(fd);
+		return -1;
+	}
+
+	fpga_gpo_write(0);
 	return 0;
 }
 
@@ -671,4 +673,56 @@ int is_fpga_ready(int quick)
 	}
 
 	return fpgamgr_test_fpga_ready();
+}
+
+#define SSPI_STROBE  (1<<17)
+#define SSPI_ACK     SSPI_STROBE
+
+void fpga_spi_en(uint32_t mask, uint32_t en)
+{
+	uint32_t gpo = fpga_gpo_read() | 0x80000000;
+	fpga_gpo_write(en ? gpo | mask : gpo & ~mask);
+}
+
+uint16_t fpga_spi(uint16_t word)
+{
+	uint32_t gpo = (fpga_gpo_read() & ~(0xFFFF | SSPI_STROBE)) | word;
+
+	fpga_gpo_write(gpo);
+	fpga_gpo_write(gpo | SSPI_STROBE);
+
+	int gpi;
+	do
+	{
+		gpi = fpga_gpi_read();
+		if (gpi < 0)
+		{
+			printf("GPI[31]==1. FPGA is uninitialized?\n");
+			return 0;
+		}
+	} while (!(gpi & SSPI_ACK));
+
+	fpga_gpo_write(gpo);
+
+	do
+	{
+		gpi = fpga_gpi_read();
+		if (gpi < 0)
+		{
+			printf("GPI[31]==1. FPGA is uninitialized?\n");
+			return 0;
+		}
+	} while (gpi & SSPI_ACK);
+
+	return (uint16_t)gpi;
+}
+
+uint16_t fpga_spi_fast(uint16_t word)
+{
+	uint32_t gpo = (fpga_gpo_read() & ~(0xFFFF | SSPI_STROBE)) | word;
+
+	fpga_gpo_write(gpo);
+	fpga_gpo_write(gpo | SSPI_STROBE);
+	fpga_gpo_write(gpo);
+	return (uint16_t)fpga_gpi_read();
 }
