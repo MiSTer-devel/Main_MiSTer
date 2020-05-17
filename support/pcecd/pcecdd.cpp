@@ -698,7 +698,7 @@ void pcecdd_t::CommandExec() {
 
 		buf[0] = 0x0A;
 		buf[1] = 0 | 0x80;
-		buf[2] = this->state == PCECD_STATE_PAUSE ? 2 : (PCECD_STATE_PLAY ? 0 : 3);
+		buf[2] = this->state == PCECD_STATE_PAUSE ? 2 : (this->state == PCECD_STATE_PLAY ? 0 : 3);
 		buf[3] = 0;
 		buf[4] = BCD(this->index + 1);
 		buf[5] = BCD(this->index);
