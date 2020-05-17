@@ -18,7 +18,7 @@ static uint8_t buffer[1024];
 
 static void mem_upload_init(unsigned long addr)
 {
-	spi_uio_cmd32le_cont(UIO_MM2_WR, addr);
+	spi_uio_cmd32_cont(UIO_MM2_WR, addr);
 }
 
 static void mem_upload_fini()

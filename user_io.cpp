@@ -742,7 +742,6 @@ void user_io_init(const char *path, const char *xml)
 		io_ver = 0;
 	}
 
-	spi_init(core_type != CORE_TYPE_UNKNOWN);
 	OsdSetSize(8);
 
 	user_io_read_confstr();
@@ -1199,7 +1198,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 		FileClose(&sd_image[index]);
 	}
 
-	buffer_lba[index] = ULLONG_MAX;
+	buffer_lba[index] = -1;
 
 	if (!ret)
 	{
@@ -1235,15 +1234,13 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 
 	if (io_ver)
 	{
-		spi_w((uint16_t)(size));
-		spi_w((uint16_t)(size>>16));
-		spi_w((uint16_t)(size>>32));
-		spi_w((uint16_t)(size>>48));
+		spi32_w(size);
+		spi32_w(size >> 32);
 	}
 	else
 	{
-		spi32le(size);
-		spi32le(size>>32);
+		spi32_b(size);
+		spi32_b(size>>32);
 	}
 	DisableIO();
 
@@ -1544,8 +1541,8 @@ static void check_status_change()
 	if ((stchg & 0xF0) == 0xA0 && last_status_change != (stchg & 0xF))
 	{
 		last_status_change = (stchg & 0xF);
-		uint32_t st0 = spi32w(0);
-		uint32_t st1 = spi32w(0);
+		uint32_t st0 = spi32_w(0);
+		uint32_t st1 = spi32_w(0);
 		DisableIO();
 		user_io_8bit_set_status(st0, ~UIO_STATUS_RESET, 0);
 		user_io_8bit_set_status(st1, 0xFFFFFFFF, 1);
@@ -1943,8 +1940,8 @@ uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask, int ex)
 			else
 			{
 				spi_uio_cmd_cont(UIO_SET_STATUS2);
-				spi32w(status[0]);
-				spi32w(status[1]);
+				spi32_w(status[0]);
+				spi32_w(status[1]);
 				DisableIO();
 			}
 		}
@@ -2192,7 +2189,7 @@ void user_io_poll()
 	{
 		if (is_st()) tos_poll();
 
-		static uint8_t buffer[4][512];
+		static uint8_t buffer[4][8192];
 		uint32_t lba;
 		uint16_t req_type = 0;
 		uint16_t c = user_io_sd_get_status(&lba, &req_type);
@@ -2222,14 +2219,12 @@ void user_io_poll()
 				{
 					//printf("SD WR %d on %d\n", lba, disk);
 
-					int done = 0;
-					buffer_lba[disk] = lba;
+					buffer_lba[disk] = -1;
 
 					// Fetch sector data from FPGA ...
 					spi_uio_cmd_cont(UIO_SECTOR_WR);
 					spi_block_read(buffer[disk], fio_size);
 					DisableIO();
-
 
 					if (sd_image[disk].type == 2 && !lba)
 					{
@@ -2240,7 +2235,6 @@ void user_io_poll()
 							if (FileWriteSec(&sd_image[disk], buffer[disk]))
 							{
 								sd_image[disk].size = 512;
-								done = 1;
 							}
 						}
 						else
@@ -2259,7 +2253,6 @@ void user_io_poll()
 							{
 								if (FileWriteSec(&sd_image[disk], buffer[disk]))
 								{
-									done = 1;
 									if (size == lba)
 									{
 										size++;
@@ -2269,8 +2262,6 @@ void user_io_poll()
 							}
 						}
 					}
-
-					if (!done) buffer_lba[disk] = -1;
 				}
 			}
 			else if (c & 0x0701)
@@ -2283,15 +2274,16 @@ void user_io_poll()
 				//printf("SD RD %d on %d, WIDE=%d\n", lba, disk, fio_size);
 
 				int done = 0;
+				uint32_t offset;
 
-				if (buffer_lba[disk] != lba)
+				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || lba >(buffer_lba[disk] + 15))
 				{
 					if (sd_image[disk].size)
 					{
 						diskled_on();
 						if (FileSeekLBA(&sd_image[disk], lba))
 						{
-							if (FileReadSec(&sd_image[disk], buffer[disk]))
+							if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 							{
 								done = 1;
 							}
@@ -2326,34 +2318,21 @@ void user_io_poll()
 							memset(buffer[disk], 0, sizeof(buffer[disk]));
 						}
 					}
+
 					buffer_lba[disk] = lba;
+					offset = 0;
 				}
-
-				if (buffer_lba[disk] == lba)
+				else
 				{
-					//hexdump(buffer, 32, 0);
-
-					// data is now stored in buffer. send it to fpga
-					spi_uio_cmd_cont(UIO_SECTOR_RD);
-					spi_block_write(buffer[disk], fio_size);
-					DisableIO();
+					offset = (lba - buffer_lba[disk])*512;
 				}
 
-				// just load the next sector now, so it may be prefetched
-				// for the next request already
-				done = 0;
-				if (sd_image[disk].size)
-				{
-					diskled_on();
-					if (FileSeekLBA(&sd_image[disk], lba + 1))
-					{
-						if (FileReadSec(&sd_image[disk], buffer[disk]))
-						{
-							done = 1;
-						}
-					}
-				}
-				if (done) buffer_lba[disk] = lba + 1;
+				//hexdump(buffer, 32, 0);
+
+				// data is now stored in buffer. send it to fpga
+				spi_uio_cmd_cont(UIO_SECTOR_RD);
+				spi_block_write(buffer[disk] + offset, fio_size);
+				DisableIO();
 
 				if (sd_image[disk].type == 2)
 				{

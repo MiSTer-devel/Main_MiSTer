@@ -129,7 +129,7 @@ static char UploadKickstart(char *name)
 			FileClose(&file);
 			//clear tag (write 0 to $fc0000) to force bootrom to load Kickstart from disk
 			//and not use one which was already there.
-			spi_uio_cmd32le_cont(UIO_MM2_WR, 0xfc0000);
+			spi_uio_cmd32_cont(UIO_MM2_WR, 0xfc0000);
 			spi8(0x00);spi8(0x00);
 			DisableIO();
 			return(1);
@@ -139,7 +139,7 @@ static char UploadKickstart(char *name)
 		        BootPrint("Uploading A1000 boot ROM");
 		        SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
 			FileClose(&file);
-			spi_uio_cmd32le_cont(UIO_MM2_WR, 0xfc0000);
+			spi_uio_cmd32_cont(UIO_MM2_WR, 0xfc0000);
 			spi8(0x00);spi8(0x00);
 			DisableIO();
 			return(1);
@@ -205,7 +205,7 @@ static char UploadActionReplay()
 		SendFileV2(&file, NULL, 0, 0xa10000, (file.size + 511) >> 9);
 		// HRTmon config
 		adr = 0xa10000 + 20;
-		spi_uio_cmd32le_cont(UIO_MM2_WR, adr);
+		spi_uio_cmd32_cont(UIO_MM2_WR, adr);
 		data = 0x00800000; // mon_size, 4 bytes
 		spi8((data >> 24) & 0xff); spi8((data >> 16) & 0xff);
 		spi8((data >> 8) & 0xff); spi8((data >> 0) & 0xff);
@@ -247,7 +247,7 @@ static char UploadActionReplay()
 		spi8((data >> 0) & 0xff);
 		DisableIO();
 		adr = 0xa10000 + 68;
-		spi_uio_cmd32le_cont(UIO_MM2_WR, adr);
+		spi_uio_cmd32_cont(UIO_MM2_WR, adr);
 		data = ((minimig_config.memory & 0x3) + 1) * 512 * 1024; // maxchip, 4 bytes TODO is this correct?
 		spi8((data >> 24) & 0xff); spi8((data >> 16) & 0xff);
 		spi8((data >> 8) & 0xff); spi8((data >> 0) & 0xff);

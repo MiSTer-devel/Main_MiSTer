@@ -61,7 +61,7 @@ static void set_control(uint32_t ctrl)
 	ctrl = uart_mode ? (ctrl | TOS_CONTROL_REDIR0) : (ctrl & ~TOS_CONTROL_REDIR0);
 
 	spi_uio_cmd_cont(UIO_SET_STATUS2);
-	spi32w(ctrl);
+	spi32_w(ctrl);
 	DisableIO();
 }
 

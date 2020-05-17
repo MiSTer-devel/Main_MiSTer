@@ -88,8 +88,8 @@ static void dma_set(uint32_t address, uint32_t data)
 {
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
-	spi32w(address);
-	spi32w(data);
+	spi32_w(address);
+	spi32_w(data);
 	DisableIO();
 }
 
@@ -97,8 +97,8 @@ static void dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
-	spi32w(address);
-	while (length--) spi32w(*data++);
+	spi32_w(address);
+	while (length--) spi32_w(*data++);
 	DisableIO();
 }
 
@@ -106,8 +106,8 @@ static void dma_rcvbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
 	EnableIO();
 	spi8(UIO_DMA_READ);
-	spi32w(address);
-	while (length--) *data++ = spi32w(0);
+	spi32_w(address);
+	while (length--) *data++ = spi32_w(0);
 	DisableIO();
 }
 
@@ -123,7 +123,7 @@ static int load_bios(const char* name, uint8_t index)
 
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
-	spi32w( index ? 0x80C0000 : 0x80F0000 );
+	spi32_w( index ? 0x80C0000 : 0x80F0000 );
 
 	while (bytes2send)
 	{
@@ -136,7 +136,7 @@ static int load_bios(const char* name, uint8_t index)
 
 		chunk = (chunk + 3) >> 2;
 		uint32_t* p = buf;
-		while(chunk--) spi32w(*p++);
+		while(chunk--) spi32_w(*p++);
 	}
 	DisableIO();
 	FileClose(&f);
