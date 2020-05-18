@@ -380,6 +380,8 @@ void pcecdd_t::Update() {
 			return;
 		}
 
+		this->index = GetTrackByLBA(this->lba, &this->toc);
+
 		if (this->index >= this->toc.last)
 		{
 			this->state = PCECD_STATE_IDLE;
@@ -393,18 +395,21 @@ void pcecdd_t::Update() {
 
 		for (int i = 0; i <= this->CDDAFirst; i++)
 		{
-			FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
+			if (this->toc.tracks[this->index].f.opened())
+			{
+				FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 
-			sec_buf[0] = 0x30;
-			sec_buf[1] = 0x09;
-			ReadCDDA(sec_buf + 2);
+				sec_buf[0] = 0x30;
+				sec_buf[1] = 0x09;
+				ReadCDDA(sec_buf + 2);
 
-			if (SendData)
-				SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
+				if (SendData)
+					SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
 
-			//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
+				//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
 
-			this->lba++;
+				this->lba++;
+			}
 		}
 
 		this->CDDAFirst = 0;
@@ -630,7 +635,7 @@ void pcecdd_t::CommandExec() {
 		}*/
 
 		this->CDDAStart = new_lba;
-		this->CDDAEnd = this->toc.tracks[index].end;
+		this->CDDAEnd = this->toc.end;
 		this->CDDAMode = comm[1];
 		this->CDDAFirst = 1;
 
