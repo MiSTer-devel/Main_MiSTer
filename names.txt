@@ -64,7 +64,6 @@ Gameboy: Nintendo Game Boy/Color
 GBA: Nintendo Game Boy Advance
 Genesis: Sega Genesis
 #Genesis: Sega Mega Drive
-Jaguar: Atari Jaguar
 MegaCD: Sega CD
 #MegaCD: Sega Mega CD
 NeoGeo: SNK Neo Geo MVS/AES
