@@ -5278,7 +5278,9 @@ void PrintDirectory(int expand)
 	char s[40];
 	ScrollReset();
 
-	if (expand && cfg.browse_expand)
+	if (!cfg.browse_expand) expand = 0;
+
+	if (expand)
 	{
 		int k = flist_iFirstEntry() + OsdGetSize() - 1;
 		if (flist_nDirEntries() && k == flist_iSelectedEntry() && k <= flist_nDirEntries() &&
