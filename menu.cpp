@@ -5300,7 +5300,7 @@ void PrintDirectory(int expand)
 		leftchar = 0;
 		int len = 0;
 
-		if (i < flist_nDirEntries())
+		if (k < flist_nDirEntries())
 		{
 			len = strlen(flist_DirItem(k)->altname); // get name length
 			if (len > 28)
