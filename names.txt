@@ -6,8 +6,8 @@
 # Names on the right can be modified as desired.
 # Cores will be displayed alphabetically based on the modified names.
 
-# This example list is North America-centric for several systems.
-# Change the system names as desired to match your preferred region.
+# Comment/uncomment lines to match your preferred region, or add your own
+# custom lines for existing systems or new ones as they become available.
 
 # [RBF name]: [name that will be shown in the menu]
 
@@ -63,14 +63,19 @@ ColecoVision: ColecoVision/SG-1000
 Gameboy: Nintendo Game Boy/Color
 GBA: Nintendo Game Boy Advance
 Genesis: Sega Genesis
+#Genesis: Sega Mega Drive
 Jaguar: Atari Jaguar
 MegaCD: Sega CD
+#MegaCD: Sega Mega CD
 NeoGeo: SNK Neo Geo MVS/AES
 NES: Nintendo NES
+#NES: Nintendo Famicom
 Odyssey2: Magnavox Odyssey2
 SMS: Sega Master System/Game Gear
 SNES: Nintendo Super NES
+#SNES: Nintendo Super Famicom
 TurboGrafx16: NEC TurboGrafx-16/CD
+#TurboGrafx16: NEC PC Engine/CD
 Vectrex: GCE Vectrex
 
 # Other Cores
