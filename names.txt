@@ -28,7 +28,6 @@ BBCMicro: BBC Micro B
 BK0011M: Electronika BK-0011M
 C16: Commodore Plus/4
 C64: Commodore 64
-CoCo3: TRS-80 Model III
 Electron: Acorn Electron
 Galaksija: Galaksija
 ht1080z: TRS-80 Model I
@@ -47,7 +46,7 @@ SharpMZ: Sharp MZ Series
 Specialist: Specialist/MX
 Ti994a: TI-99/4A
 Vector-06C: Vector-06C
-TSConf: TS-Conf (ZX Spectrum clone)
+TSConf: TS-Conf (ZX-Evolution)
 VIC20: Commodore VIC-20
 X68000: Sharp X68000
 ZX81: Sinclair ZX81
@@ -58,10 +57,10 @@ ZX-Spectrum: Sinclair ZX Spectrum
 Astrocade: Bally Astrocade
 Atari2600: Atari 2600
 Atari5200: Atari 5200
-AY-3-8500: Magnavox Odyssey
+AY-3-8500: GI Pong
 C2650: Arcadia 2001
 ColecoVision: ColecoVision/SG-1000
-Gameboy: Nintendo Game Boy/GB Color
+Gameboy: Nintendo Game Boy/Color
 GBA: Nintendo Game Boy Advance
 Genesis: Sega Genesis
 Jaguar: Atari Jaguar
