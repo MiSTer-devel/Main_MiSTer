@@ -615,6 +615,7 @@ static uint32_t show_video_info(int force)
 	uint16_t res = spi_w(0);
 	if ((nres != res) || force)
 	{
+		if (nres != res) force = 0;
 		nres = res;
 		uint32_t width = spi_w(0) | (spi_w(0) << 16);
 		uint32_t height = spi_w(0) | (spi_w(0) << 16);
@@ -700,12 +701,16 @@ static uint32_t show_video_info(int force)
 		DisableIO();
 	}
 
-	return ret;
+	return force ? 0 : ret;
 }
 
 void video_mode_adjust()
 {
-	uint32_t vtime = show_video_info(0);
+	static int force = 0;
+
+	uint32_t vtime = show_video_info(force);
+	force = 0;
+
 	if (vtime && cfg.vsync_adjust && !is_menu())
 	{
 		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
@@ -773,8 +778,7 @@ void video_mode_adjust()
 
 		set_video(v, Fpix);
 		user_io_send_buttons(1);
-		usleep(100000);
-		show_video_info(1);
+		force = 1;
 	}
 }
 
