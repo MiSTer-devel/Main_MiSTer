@@ -2113,6 +2113,7 @@ void HandleUI(void)
 				if (video_get_scaler_flt())
 				{
 					snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR"/%s", video_get_scaler_coeff());
+					if(!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
@@ -2125,6 +2126,7 @@ void HandleUI(void)
 				if (video_get_gamma_en())
 				{
 					snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR"/%s", video_get_gamma_curve());
+					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_GAMMA_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
