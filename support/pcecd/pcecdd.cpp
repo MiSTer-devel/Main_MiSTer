@@ -382,20 +382,11 @@ void pcecdd_t::Update() {
 
 		this->index = GetTrackByLBA(this->lba, &this->toc);
 
-		if (this->index >= this->toc.last)
-		{
-			this->state = PCECD_STATE_IDLE;
-			return;
-		}
-
-		if (this->toc.tracks[this->index].type)
-			return;
-
 		DISKLED_ON;
 
 		for (int i = 0; i <= this->CDDAFirst; i++)
 		{
-			if (this->toc.tracks[this->index].f.opened())
+			if (this->toc.tracks[this->index].f.opened() && !this->toc.tracks[this->index].type)
 			{
 				FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 
@@ -407,14 +398,13 @@ void pcecdd_t::Update() {
 					SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
 
 				//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
-
-				this->lba++;
 			}
+			this->lba++;
 		}
 
 		this->CDDAFirst = 0;
 
-		if (this->lba > this->CDDAEnd)
+		if ((this->lba >= this->CDDAEnd) || this->toc.tracks[this->index].type || this->index >= this->toc.last)
 		{
 			if (this->CDDAMode == PCECD_CDDAMODE_LOOP) {
 				this->lba = this->CDDAStart;
@@ -426,6 +416,8 @@ void pcecdd_t::Update() {
 			if (this->CDDAMode == PCECD_CDDAMODE_INTERRUPT) {
 				PendStatus(PCECD_STATUS_GOOD, 0);
 			}
+
+			printf("\x1b[32mPCECD: playback reached the end %d\n\x1b[0m", this->lba);
 		}
 	}
 	else if (this->state == PCECD_STATE_PAUSE)
