@@ -2475,7 +2475,7 @@ void HandleUI(void)
 		{
 			printf("MENU_SFONT_FILE_SELECTED --> '%s'\n", selPath);
 			sprintf(Selected_tmp, "/sbin/mlinkutil FSSFONT /media/fat/\"%s\"", selPath);
-			system(s);
+			system(Selected_tmp);
 			AdjustDirectory(selPath);
 			//keep file select OSD
 			menustate = MENU_FILE_SELECT1; //MENU_UART1;
