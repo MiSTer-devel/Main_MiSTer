@@ -1,0 +1,85 @@
+# Place this file in the root of your micro SD card.
+# This changes how the non-arcade cores are displayed in your menu.
+# It does NOT make changes to your existing files or folders.
+
+# Names on the left need to match the name of the RBF (without the date).
+# Names on the right can be modified as desired.
+# Cores will be displayed alphabetically based on the modified names.
+
+# This example list is North America-centric for several systems.
+# Change the system names as desired to match your preferred region.
+
+# [RBF name]: [name that will be shown in the menu]
+
+# Computer Cores
+
+Altair8800: Altair 8800
+Amstrad: Amstrad CPC 6128
+ao486: IBM 386-Compatible
+Apogee: Apogee BK-01
+Apple-I: Apple I
+Apple-II: Apple II+
+Aquarius: Mattel Aquarius
+Archie: Acorn Archimedes
+Atari800: Atari 800XL/65XE/130XE
+AtariST: Atari ST/STe
+Atom: Acorn Atom
+BBCMicro: BBC Micro B
+BK0011M: Electronika BK-0011M
+C16: Commodore Plus/4
+C64: Commodore 64
+Electron: Acorn Electron
+Galaksija: Galaksija
+ht1080z: TRS-80 Model I
+Jupiter: Jupiter Ace
+MacPlus: Apple Macintosh Plus
+Minimig: Commodore Amiga
+MSX: MSX/MSX2/MSX2+/TurboR
+MultiComp: MultiComp (Z80/6502/6809)
+ORAO: Velebit Informatika Orao
+Oric: Oric-1/Atmos
+PDP1: DEC PDP-1
+PET2001: Commodore PET 2001
+QL: Sinclair QL
+SAMCoupe: SAM Coupe
+SharpMZ: Sharp MZ Series
+Specialist: Specialist/MX
+Ti994a: TI-99/4A
+Vector-06C: Vector-06C
+TSConf: TS-Conf (ZX-Evolution)
+VIC20: Commodore VIC-20
+X68000: Sharp X68000
+ZX81: Sinclair ZX81
+ZX-Spectrum: Sinclair ZX Spectrum
+
+# Console Cores
+
+Astrocade: Bally Astrocade
+Atari2600: Atari 2600
+Atari5200: Atari 5200
+AY-3-8500: GI Pong
+C2650: Arcadia 2001
+ColecoVision: ColecoVision/SG-1000
+Gameboy: Nintendo Game Boy/Color
+GBA: Nintendo Game Boy Advance
+Genesis: Sega Genesis
+Jaguar: Atari Jaguar
+MegaCD: Sega CD
+NeoGeo: SNK Neo Geo MVS/AES
+NES: Nintendo NES
+Odyssey2: Magnavox Odyssey2
+SMS: Sega Master System/Game Gear
+SNES: Nintendo Super NES
+TurboGrafx16: NEC TurboGrafx-16/CD
+Vectrex: GCE Vectrex
+
+# Other Cores
+
+Arduboy: Arduboy
+Chip8: CHIP-8
+GameOfLife: Game of Life
+FlappyBird: Flappy Bird
+
+# Service Cores
+
+memtest: SDRAM Test

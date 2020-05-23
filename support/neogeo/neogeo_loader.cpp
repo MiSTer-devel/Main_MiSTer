@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <time.h>   // clock_gettime, CLOCK_REALTIME
 #include <sys/mman.h>
-#include "loader.h"
+#include "neogeo_loader.h"
 #include "../../sxmlc.h"
 #include "../../user_io.h"
 #include "../../fpga_io.h"
@@ -160,10 +160,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 	user_io_set_index(index);
 
 	// prepare transmission of new file
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0xff);
-	DisableFpga();
+	user_io_set_download(1);
 
 	int progress = -1;
 
@@ -209,11 +206,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 	FileClose(&f);
 
 	// signal end of transmission
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0x00);
-	DisableFpga();
-
+	user_io_set_download(0);
 	return size;
 }
 
@@ -230,7 +223,7 @@ static void make_path(const char *root, const char *name, char *path)
 	strcat(path, name);
 }
 
-static uint8_t loadbuf[1024 * 1024];
+extern uint8_t loadbuf[];
 static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t index, uint32_t offset, uint32_t size)
 {
 	fileTYPE f = {};
@@ -267,7 +260,7 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 	while (remain)
 	{
 		uint32_t partsz = remain;
-		if (partsz > 1024 * 1024) partsz = 1024 * 1024;
+		if (partsz > LOADBUF_SZ) partsz = LOADBUF_SZ;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
 		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
@@ -342,10 +335,10 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 	while (remain)
 	{
 		uint32_t partsz = remain;
-		if (partsz > 1024 * 1024) partsz = 1024 * 1024;
+		if (partsz > LOADBUF_SZ) partsz = LOADBUF_SZ;
 
 		uint32_t partszf = remainf;
-		if (partszf > 1024 * 1024) partszf = 1024 * 1024;
+		if (partszf > LOADBUF_SZ) partszf = LOADBUF_SZ;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
 		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
@@ -400,11 +393,7 @@ static uint32_t crom_start = 0;
 static void notify_core(uint8_t index, uint32_t size)
 {
 	user_io_set_index(10);
-
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0xff);
-	DisableFpga();
+	user_io_set_download(1);
 
 	if (index == 4 || index == 6) size = (size + ALIGN_1MB) & ~ALIGN_1MB;
 	char memcp = !(index == 9 || (index >= 16 && index < 64));
@@ -424,10 +413,7 @@ static void notify_core(uint8_t index, uint32_t size)
 	spi_w(0);
 	DisableFpga();
 
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0x00);
-	DisableFpga();
+	user_io_set_download(0);
 }
 
 static uint32_t crom_sz = 0;
@@ -471,6 +457,7 @@ struct rom_info
 {
 	char name[256];
 	char altname[256];
+	char hide;
 };
 
 static rom_info roms[1000];
@@ -504,6 +491,10 @@ static int xml_scan(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 				{
 					memset(roms[rom_cnt].altname, 0, sizeof(roms[rom_cnt].altname));
 					strncpy(roms[rom_cnt].altname, node->attributes[i].value, sizeof(roms[rom_cnt].altname) - 1);
+				}
+				else if (!strcasecmp(node->attributes[i].name, "hide"))
+				{
+					roms[rom_cnt].hide = 1;
 				}
 			}
 			rom_cnt++;
@@ -581,7 +572,7 @@ int neogeo_scan_xml(char *path)
 {
 	static char full_path[1024];
 	sprintf(full_path, "%s/romsets.xml", path);
-	if(!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
+	if(!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir());
 
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
@@ -593,14 +584,14 @@ int neogeo_scan_xml(char *path)
 	return rom_cnt;
 }
 
-char *neogeo_get_altname(char *path, direntext_t *de)
+char *neogeo_get_altname(char *path, char *name, char *altname)
 {
 	static char full_path[1024];
 	strcpy(full_path, path);
 	strcat(full_path, "/");
-	strcat(full_path, de->de.d_name);
+	strcat(full_path, name);
 
-	char *p = strrchr(de->de.d_name, '.');
+	char *p = strrchr(name, '.');
 	if (p && !strcasecmp(p, ".neo"))
 	{
 		static NeoFile hdr;
@@ -630,7 +621,7 @@ char *neogeo_get_altname(char *path, direntext_t *de)
 		if (*altname) return altname;
 	}
 
-	sprintf(full_path, ",%s,", de->altname);
+	sprintf(full_path, ",%s,", altname);
 	for (uint32_t i = 0; i < rom_cnt; i++)
 	{
 		if (roms[i].name[0] == ',')
@@ -638,14 +629,16 @@ char *neogeo_get_altname(char *path, direntext_t *de)
 			char *p = strcasestr(roms[i].name, full_path);
 			if (p)
 			{
+				if (roms[i].hide) return (char*)-1;
 				if(p == roms[i].name) return roms[i].altname;
 
-				sprintf(full_path, "%s (%s)", roms[i].altname, de->altname);
+				sprintf(full_path, "%s (%s)", roms[i].altname, altname);
 				return full_path;
 			}
 		}
-		else if (!strcasecmp(de->altname, roms[i].name))
+		else if (!strcasecmp(altname, roms[i].name))
 		{
+			if (roms[i].hide) return (char*)-1;
 			return roms[i].altname;
 		}
 	}
@@ -779,11 +772,7 @@ static uint32_t set_config(uint32_t new_config, uint32_t mask)
 static void notify_conf()
 {
 	user_io_set_index(10);
-
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0xff);
-	DisableFpga();
+	user_io_set_download(1);
 
 	uint32_t conf = set_config(0, 0);
 	printf("notify_conf(0x%X)\n", conf);
@@ -797,10 +786,7 @@ static void notify_conf()
 	spi_w(0);
 	DisableFpga();
 
-	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(0x00);
-	DisableFpga();
+	user_io_set_download(0);
 }
 
 #define VROM_SIZE  (16 * 1024 * 1024)
@@ -1041,11 +1027,26 @@ void load_neo(char *path)
 		FileClose(&f);
 		if(res)
 		{
-			static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, mir = 1;
+			uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, mir = 1;
 			for (uint32_t i = 0; i < sizeof(neo_quirks) / sizeof(neo_quirks[0]); i++)
 			{
 				if (neo_quirks[i].id == hdr.NGH)
 				{
+					bool found = false;
+					switch (hdr.NGH) {
+						case 0x0251: if (hdr.PSize != 9437184) found = true; break; // (kof99 prototype vs final)
+						case 0x0253: if (hdr.PSize != 9437184) found = true;        // (garou prototype vs the different SMA chip versions) garouh needs SMA=3
+							if (hdr.Name[27] == 'A')
+								{sma = 3; cmc = 1; mir = 0; found = true;}          // (Not ideal, but their headers are otherwise identical)
+							break;
+						case 0x0256: if (hdr.PSize != 9437184) found = true; break; // (mslug3 using SMA vs normal banking)
+						case 0x0263: if (hdr.SSize != 524288) found = true; break;  // (mslug4 bootlegs vs original)
+						case 0x0268: if (hdr.PSize != 8388608) found = true; break; // (mslug5 bootlegs vs original)
+						case 0x0269: if (hdr.SSize != 524288) found = true;break;   // (svc bootlegs vs original)
+						case 0x0271: if (hdr.PSize != 9437184) found = true;break;  // (kof2003 bootlegs vs original)
+					}
+					if (found) break;
+
 					hw_type = neo_quirks[i].hw;
 					cmc = neo_quirks[i].cmc;
 					sma = neo_quirks[i].sma;
@@ -1109,12 +1110,18 @@ int neogeo_romset_tx(char* name)
 	system_type = (user_io_8bit_set_status(0, 0) >> 1) & 3;
 	printf("System type: %u\n", system_type);
 
+	spi_uio_cmd_cont(UIO_GET_OSDMASK);
+	uint16_t mask = spi_w(0);
+	DisableIO();
+
 	user_io_8bit_set_status(1, 1);	// Maintain reset
 
 	crom_sz_max = 0;
 	crom_start = 0;
 	crom_sz = 0;
 	set_config(0, -1);
+
+	const char* home = HomeDir();
 
 	// Look for the romset's file list in romsets.xml
 	if (!(system_type & 2))
@@ -1135,7 +1142,7 @@ int neogeo_romset_tx(char* name)
 				char *p = strrchr(full_path, '/');
 				if (p) *p = 0;
 				strcat(full_path, "/romsets.xml");
-				if (!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), HomeDir);
+				if (!FileExists(full_path)) sprintf(full_path, "%s/%s/romsets.xml", getRootDir(), home);
 			}
 			printf("xml for %s: %s\n", name, full_path);
 
@@ -1157,31 +1164,31 @@ int neogeo_romset_tx(char* name)
 	if (strcmp(romset, "debug")) {
 		// Not loading the special 'debug' romset
 		if (!(system_type & 2)) {
-			sprintf(full_path, "%s/uni-bios.rom", HomeDir);
-			if (FileExists(full_path)) {
+			sprintf(full_path, "%s/uni-bios.rom", home);
+			if (!(mask & 0x8000) && FileExists(full_path)) {
 				// Autoload Unibios for cart systems if present
-				neogeo_tx(HomeDir, "uni-bios.rom", NEO_FILE_RAW, 0, 0, 0x20000);
+				neogeo_tx(home, "uni-bios.rom", NEO_FILE_RAW, 0, 0, 0x20000);
 			} else {
 				// Otherwise load normal system roms
 				if (system_type == 0)
-					neogeo_tx(HomeDir, "neo-epo.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
+					neogeo_tx(home, "neo-epo.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
 				else
-					neogeo_tx(HomeDir, "sp-s2.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
+					neogeo_tx(home, "sp-s2.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
 			}
 		} else if (system_type == 2) {
 			// NeoGeo CD
-			neogeo_tx(HomeDir, "top-sp1.bin", NEO_FILE_RAW, 0, 0, 0x80000);
+			neogeo_tx(home, "top-sp1.bin", NEO_FILE_RAW, 0, 0, 0x80000);
 		} else {
 			// NeoGeo CDZ
-			neogeo_tx(HomeDir, "neocd.bin", NEO_FILE_RAW, 0, 0, 0x80000);
+			neogeo_tx(home, "neocd.bin", NEO_FILE_RAW, 0, 0, 0x80000);
 		}
 	}
 
 	//flush CROM if any.
 	neogeo_tx(NULL, NULL, 0, -1, 0, 0);
 
-	if (!(system_type & 2))	neogeo_tx(HomeDir, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0);
-	neogeo_file_tx(HomeDir, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
+	if (!(system_type & 2))	neogeo_tx(home, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0);
+	neogeo_file_tx(home, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
 
 	if (crom_start < 0x300000) crom_start = 0x300000;
 	uint32_t crom_max = crom_start + crom_sz_max;

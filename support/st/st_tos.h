@@ -3,21 +3,6 @@
 
 #include "../../file_io.h"
 
-// FPGA spi cmommands
-#define MIST_INVALID      0x00
-
-// memory interface
-#define MIST_SET_ADDRESS  0x01
-#define MIST_WRITE_MEMORY 0x02
-#define MIST_READ_MEMORY  0x03
-#define MIST_SET_CONTROL  0x04
-#define MIST_GET_DMASTATE 0x05   // reads state of dma and floppy controller
-#define MIST_ACK_DMA      0x06   // acknowledge a dma command
-#define MIST_BUS_REQ      0x07   // request bus
-#define MIST_BUS_REL      0x08   // release bus
-#define MIST_SET_VADJ     0x09
-#define MIST_NAK_DMA      0x0a   // reject a dma command
-
 // tos sysconfig bits:
 // 0     - RESET
 // 1-3   - Memory configuration
@@ -49,7 +34,7 @@
 #define TOS_CONTROL_FDC_WR_PROT_A 0x00000040
 #define TOS_CONTROL_FDC_WR_PROT_B 0x00000080
 #define TOS_CONTROL_VIDEO_COLOR   0x00000100   // input to mfp
-#define TOS_CONTROL_PAL50HZ       0x00000200   // display pal at 50hz (56 hz otherwise)
+#define TOS_CONTROL_VIDEO_AR      0x00000200   // 16:9 / 4:3
 
 // up to eight acsi devices can be enabled
 #define TOS_ACSI0_ENABLE          0x00000400
@@ -80,28 +65,34 @@
 
 #define TOS_CONTROL_VIKING        0x10000000   // Viking graphics card
 
-unsigned long tos_system_ctrl(void);
+#define TOS_CONTROL_BORDER        0x20000000
+#define TOS_CONTROL_MDE60         0x40000000
 
+extern const char* tos_mem[];
+extern const char* tos_scanlines[];
+extern const char* tos_stereo[];
+extern const char* tos_chipset[];
+
+const char* tos_get_cfg_string(int num);
+
+unsigned long tos_system_ctrl();
 void tos_upload(const char *);
 void tos_poll();
-void tos_update_sysctrl(unsigned long);
-char *tos_get_disk_name(int);
+void tos_update_sysctrl(uint32_t ctrl);
 char tos_disk_is_inserted(int index);
-void tos_insert_disk(int i, const char *name);
+void tos_insert_disk(int index, const char *name);
 void tos_eject_all();
-void tos_select_hdd_image(int i, const char *name);
-void tos_set_direct_hdd(char on);
-char tos_get_direct_hdd();
 void tos_reset(char cold);
-char *tos_get_image_name();
-char *tos_get_cartridge_name();
+const char *tos_get_disk_name(int);
+const char *tos_get_image_name();
+const char *tos_get_cartridge_name();
 char tos_cartridge_is_inserted();
 void tos_load_cartridge(const char *);
 
-void tos_set_video_adjust(int axis, char value);
-char tos_get_video_adjust(int axis);
+void tos_config_load(int slot); // slot -1 == last config
+void tos_config_save(int slot);
+int tos_config_exists(int slot);
 
-void tos_config_init(void);
-void tos_config_save(void);
+void tos_uart_mode(int enable);
 
 #endif

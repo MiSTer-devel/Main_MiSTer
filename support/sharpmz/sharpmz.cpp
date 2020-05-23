@@ -13,6 +13,7 @@
 //
 // History:         July 2018      - Initial module written.
 //                  Sept 2018      - Synchronised with main MiSTer codebase.
+//                  Dec  2018      - Added additional logic for the MZ80B.
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 // This source file is free software: you can redistribute it and/or modify
@@ -45,15 +46,19 @@
 //
 static const char *MZMACHINES[MAX_MZMACHINES] = { "MZ80K", "MZ80C", "MZ1200", "MZ80A", "MZ700", "MZ800", "MZ80B", "MZ2000" };
 
+#if defined __SHARPMZ_DEBUG__
+#define sharpmz_debugf(a, ...) printf("\033[1;31mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
+#define sharpmz_x_debugf(a, ...) printf("\033[1;32mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
+#else
 #define sharpmz_debugf(a, ...)
-//#define sharpmz_debugf(a, ...) printf("\033[1;31mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
 #define sharpmz__x_debugf(a, ...)
-//#define sharpmz_x_debugf(a, ...) printf("\033[1;32mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
+#endif
 
 static sharpmz_config_t      config;
 static uint8_t               sector_buffer[1024];
 static sharpmz_tape_header_t tapeHeader;
 static tape_queue_t          tapeQueue;
+static unsigned char         debugEnabled = 0;
 
 // Method to open a file for writing.
 //
@@ -64,7 +69,7 @@ int sharpmz_file_write(fileTYPE *file, const char *fileName)
 
     sprintf(fullPath, "%s/%s/%s", getRootDir(), SHARPMZ_CORE_NAME, fileName);
 
-    const int mode = O_WRONLY | O_CREAT | O_TRUNC | O_SYNC | S_IRWXU | S_IRWXG | S_IRWXO;
+    const int mode = O_RDWR | O_CREAT | O_TRUNC | O_SYNC;   // No longer required as FileOpenEx has changed.  | S_IRWXU | S_IRWXG | S_IRWXO;
     ret = FileOpenEx(file, fullPath, mode);
     if (!ret)
     {
@@ -72,7 +77,7 @@ int sharpmz_file_write(fileTYPE *file, const char *fileName)
     }
 
     // Success.
-    return 1;
+    return(ret);
 }
 
 // Method to load a rom into the emulator.
@@ -135,10 +140,26 @@ int sharpmz_reset_config(short setStatus)
     // Setup config defaults.
     //
     config.system_ctrl = 0;
-    for(i=0; i < MAX_REGISTERS; i++)
-    {
-        config.system_reg[i] = 0x00; // sharpmz_read_config_register(i);
-    }
+
+    // Set the configuration registers to a known defualt.
+    config.system_reg[REGISTER_MODEL]      = 0x03;              // MZ-80A
+    config.system_reg[REGISTER_DISPLAY]    = 0x00;              // Mono 40x25
+    config.system_reg[REGISTER_DISPLAY2]   = 0x78 | 0x00;       // GRAM base addr | VGA Mode.
+    config.system_reg[REGISTER_DISPLAY3]   = 0x00;              // Status screen buffer.
+    config.system_reg[REGISTER_CPU]        = 0x00;              // CPU speed.
+    config.system_reg[REGISTER_AUDIO]      = 0x00;              // Audio - sound output.
+    config.system_reg[REGISTER_CMT]        = 0x1b;              // Auto.
+    config.system_reg[REGISTER_CMT2]       = 0x00;              // Scratch for APSS
+    config.system_reg[REGISTER_USERROM]    = 0x00;              // User ROM disabled.
+    config.system_reg[REGISTER_FDCROM]     = 0x00;              // FDC ROM disabled.
+    config.system_reg[REGISTER_10]         = 0x00;              // Unused.
+    config.system_reg[REGISTER_11]         = 0x00;              // Unused.
+    config.system_reg[REGISTER_12]         = 0x00;              // Unused.
+    config.system_reg[REGISTER_SETUP]      = 0x00;              // Setup - disable debug.
+    config.system_reg[REGISTER_DEBUG]      = 0x00;              // Debug mode.
+    config.system_reg[REGISTER_DEBUG2]     = 0x00;              // Debug mode.
+
+    // Set the ROMs to known values.
     for(i=0; i < MAX_MZMACHINES; i++)
     {
         sprintf(buf, "%s_mrom.ROM",       MZMACHINES[i]);
@@ -204,6 +225,9 @@ int sharpmz_reload_config(short setStatus)
     if (size > 0 && size == sizeof(sharpmz_config_t))
     {
         FileLoadConfig(SHARPMZ_CONFIG_FILENAME, &config, sizeof(sharpmz_config_t));
+      #if defined __SHARPMZ__DEBUG
+        sharpmz_debugf("Loaded config from file:%s.", SHARPMZ_CONFIG_FILENAME);
+      #endif
         success = 1;
         sharpmz_debugf("Config loaded successfully.");
     }
@@ -277,16 +301,29 @@ void sharpmz_init(void)
         sharpmz_set_rom(config.romKeyMap[i]);
     }
 
-    // Debug, show registers.
+    // Read (and show) registers.
     for(i=0; i < MAX_REGISTERS; i++)
     {
-        sharpmz_debugf("Register (%02x) = %02x", i, sharpmz_read_config_register(i));
+        unsigned char configReg = sharpmz_read_config_register(i);
+        sharpmz_debugf("Register (%02x) = %02x", i, configReg);
+
+        // See if the debug logic has been enabled.
+        //
+        if(i == REGISTER_SETUP)
+        {
+            debugEnabled = configReg & 0x1;
+        }
     }
 
     // Initialise tape queue.
     //
-    tapeQueue.top=tapeQueue.bottom = NULL;
-    tapeQueue.elements = 0;
+    for(int i=0; i < MAX_TAPE_QUEUE; i++)
+    {
+        tapeQueue.queue[i] = NULL;
+    }
+    tapeQueue.tapePos      = 0;
+    tapeQueue.elements     = 0;
+    tapeQueue.fileName[0]  = 0;
 
     sharpmz_debugf("Initialisation complete.");
 }
@@ -299,6 +336,8 @@ void sharpmz_poll(void)
     static unsigned long  time = GetTimer(0);
     unsigned long         timeElapsed;
     char                 *fileName;
+    unsigned char         regCMT;
+    unsigned char         regCMT2;
 
     // Get elapsed time since last poll.
     //
@@ -306,37 +345,95 @@ void sharpmz_poll(void)
 
     // Every 2 seconds (READY signal takes 1 second to become active after previous load) to see if the tape buffer is empty.
     //
-    if(timeElapsed > 2000)
+    if(timeElapsed > 1000)
     {
-        // Check to see if the Tape READY signal is inactive, if it is and we have items in the queue, load up the next
-        // tape file and send it.
+        // Take snapshot of registers.
         //
-        if( !((sharpmz_read_config_register(REGISTER_CMT)) & 0x01) )
+        regCMT  = sharpmz_read_config_register(REGISTER_CMT);
+        regCMT2 = sharpmz_read_config_register(REGISTER_CMT2);
+
+        sharpmz_debugf("CMT/CMT2 (%s%s%s%s%s%s%s:%s%s%s%s%s).",
+                       regCMT & REGISTER_CMT_PLAY_READY   ? "PLAY_READY,"  : "",
+                       regCMT & REGISTER_CMT_PLAYING      ? "PLAYING,"     : "",
+                       regCMT & REGISTER_CMT_RECORD_READY ? "RECORD_READY,": "",
+                       regCMT & REGISTER_CMT_RECORDING    ? "RECORDING,"   : "",
+                       regCMT & REGISTER_CMT_ACTIVE       ? "ACTIVE,"      : "",
+                       regCMT & REGISTER_CMT_SENSE        ? "SENSE,"       : "",
+                       regCMT & REGISTER_CMT_WRITEBIT     ? "WRITEBIT,"    : "",
+                       regCMT2 & REGISTER_CMT2_APSS       ? "APSS,"        : "",
+                       regCMT2 & REGISTER_CMT2_DIRECTION  ? "DIRECTION,"   : "",
+                       regCMT2 & REGISTER_CMT2_EJECT      ? "EJECT,"       : "",
+                       regCMT2 & REGISTER_CMT2_PLAY       ? "PLAY,"        : "",
+                       regCMT2 & REGISTER_CMT2_STOP       ? "STOP"         : "");
+
+        // MZ80B APSS functionality.
+        //
+        if(sharpmz_get_machine_group() == 2)
         {
-            // Check the tape queue, if items available, pop oldest and upload.
+            // If Eject set, clear queue then issue CMT Register Clear.
             //
-            if(tapeQueue.elements > 0)
+            if( regCMT2 & REGISTER_CMT2_EJECT )
             {
-                fileName = sharpmz_pop_filename();
-                if(fileName != 0)
+                sharpmz_debugf("APSS Eject Cassette (%02x:%02x).", regCMT2, REGISTER_CMT2_EJECT);
+                sharpmz_clear_filelist();
+            } else
+
+            // If APSS set, rotate queue forward (DIRECTION = 1) or backward (DIRECTION = 0).
+            //
+            if( regCMT2 & REGISTER_CMT2_APSS )
+            {
+                sharpmz_debugf("APSS Search %s (%02x:%02x).", regCMT2 & REGISTER_CMT2_DIRECTION ? "Forward" : "Reverse", regCMT2, REGISTER_CMT2_APSS );
+                sharpmz_apss_search(regCMT2 & REGISTER_CMT2_DIRECTION ? 1 : 0);
+            }
+
+            // If Play is active, the cache is empty and we are not recording, load into cache the next tape image.
+            //
+            if( (regCMT2 & REGISTER_CMT2_PLAY) && !(regCMT & REGISTER_CMT_PLAY_READY) && !(regCMT & REGISTER_CMT_RECORDING) )
+            {
+                // Check the tape queue, if items available, read oldest,upload and rotate.
+                //
+                if(tapeQueue.elements > 0)
                 {
-                    sharpmz_debugf("Loading tape: %s\n", fileName);
-                    sharpmz_load_tape_to_ram(fileName, 1);
+                    fileName = sharpmz_apss_search(1);
+
+                    if(fileName != 0)
+                    {
+                        sharpmz_debugf("APSS Play %s, Rotate Queue Forward.", fileName);
+                    }
+
+                    if(fileName != 0)
+                    {
+                        sharpmz_debugf("Loading tape: %s\n", fileName);
+                        sharpmz_load_tape_to_ram(fileName, 1);
+                    }
+                }
+            }
+        } else
+        {
+            // Check to see if the Tape READY signal is inactive, if it is and we have items in the queue, load up the next
+            // tape file and send it.
+            //
+            if( (regCMT & REGISTER_CMT_SENSE) && !(regCMT & REGISTER_CMT_PLAY_READY) )
+            {
+                // Check the tape queue, if items available, pop oldest and upload.
+                //
+                if(tapeQueue.elements > 0)
+                {
+                    fileName = sharpmz_pop_filename();
+
+                    if(fileName != 0)
+                    {
+                        sharpmz_debugf("Loading tape: %s\n", fileName);
+                        sharpmz_load_tape_to_ram(fileName, 1);
+                    }
                 }
             }
         }
 
         // Check to see if the RECORD_READY flag is set.
-        if( !((sharpmz_read_config_register(REGISTER_CMT)) & 0x04) )
+        if( (regCMT & REGISTER_CMT_RECORD_READY) )
         {
-            // Ok, so now see if the auto save feature is enabled.
-            //
-            if(config.autoSave)
-            {
-                // Save the CMT cache ram to file. The action of reading will reset the READY flag.
-                //
-                sharpmz_save_tape_from_cmt((const char *)0);
-            }
+            sharpmz_save_tape_from_cmt((const char *)0);
         }
 
         // Reset the timer.
@@ -349,85 +446,117 @@ void sharpmz_poll(void)
 void sharpmz_push_filename(char *fileName)
 {
     // Locals.
-    tape_queue_node_t *ptr=(tape_queue_node_t *)malloc(sizeof(tape_queue_node_t));
+    char *ptr = (char *)malloc(strlen(fileName)+1);
 
-    // Copy filename into queue.
-    strcpy(ptr->fileName, fileName);
+    if(tapeQueue.elements > MAX_TAPE_QUEUE)
+    {
+        free(ptr);
+    } else
+    {
+        // Copy filename into queue.
+        strcpy(ptr, fileName);
+        tapeQueue.queue[tapeQueue.elements] = ptr;
+        tapeQueue.elements++;
+    }
 
-    // Tag onto end of queue.
-    ptr->next=NULL;
-    if (tapeQueue.top == NULL && tapeQueue.bottom == NULL)
-    {
-        tapeQueue.top=tapeQueue.bottom = ptr;
-    }
-    else
-    {
-        tapeQueue.top->next = ptr;
-        tapeQueue.top = ptr;
-    }
-    tapeQueue.elements++;
+    return;
 }
 
 // Method to read the oldest tape filename entered and return it.
 //
 char *sharpmz_pop_filename(void)
 {
-    // Locals.
-    tape_queue_node_t *ptr;
-    static char        fileName[MAX_FILENAME_SIZE];
-
-    // Queue empty, just return.
-    if(tapeQueue.bottom == NULL)
+    // Pop the bottom most item and shift queue down.
+    //
+    tapeQueue.fileName[0] = 0;
+    if(tapeQueue.elements > 0)
     {
-        return 0;
-    }
+        strcpy(tapeQueue.fileName, tapeQueue.queue[0]);
+        free(tapeQueue.queue[0]);
+        tapeQueue.elements--;
+        for(int i= 1; i < MAX_TAPE_QUEUE; i++)
+        {
+            tapeQueue.queue[i-1] = tapeQueue.queue[i];
+        }
+        tapeQueue.queue[MAX_TAPE_QUEUE-1] = NULL;
 
-    // Get item in a FIFO order.
-    ptr=tapeQueue.bottom;
-    if(tapeQueue.top == tapeQueue.bottom)
-    {
-        tapeQueue.top = NULL;
     }
-    tapeQueue.bottom = tapeQueue.bottom->next;
-
-    // Store in static buffer and free node.
-    strcpy(fileName, ptr->fileName);
-    tapeQueue.elements--;
-    free(ptr);
 
     // Return filename.
-    return(fileName);
+    return(tapeQueue.fileName[0] == 0 ? 0 : tapeQueue.fileName);
 }
+
+
+// Method to virtualise a tape and shift the position up and down the queue according to actions given.
+// direction: 0 = rotate left (Rew), 1 = rotate right (Fwd)
+//
+char *sharpmz_apss_search(char direction)
+{
+    tapeQueue.fileName[0] = 0;
+    if(tapeQueue.elements > 0)
+    {
+        if(direction == 0)
+        {
+            // Position is ahead of last, then shift down and return file.
+            //
+            if(tapeQueue.tapePos > 0)
+            {
+                tapeQueue.tapePos--;
+                strcpy(tapeQueue.fileName, tapeQueue.queue[tapeQueue.tapePos]);
+            }
+
+        } else
+        {
+            // Position is below max, then return current and forward.
+            //
+            if(tapeQueue.tapePos < MAX_TAPE_QUEUE && tapeQueue.tapePos < tapeQueue.elements)
+            {
+                strcpy(tapeQueue.fileName, tapeQueue.queue[tapeQueue.tapePos]);
+                tapeQueue.tapePos++;
+            }
+        }
+    }
+
+    // Return filename.
+    return(tapeQueue.fileName[0] == 0 ? 0 : tapeQueue.fileName);
+}
+
 
 // Method to iterate through the list of filenames.
 //
 char *sharpmz_get_next_filename(char reset)
 {
-    static tape_queue_node_t *ptr = NULL;
-
-    // Queue empty, just return.
-    if(tapeQueue.bottom == NULL)
-    {
-        return 0;
-    }
+    static unsigned short  pos = 0;
 
     // Reset is active, start at beginning of list.
     //
-    if(reset || ptr == NULL)
+    if(reset)
     {
-        ptr = tapeQueue.bottom;
+        pos = 0;
+    }
+    tapeQueue.fileName[0] = 0;
+
+    // If we reach the queue limit or the max elements stored, cycle the pointer
+    // round to the beginning.
+    //
+    if(pos >= MAX_TAPE_QUEUE || pos >= tapeQueue.elements)
+    {
+        pos = 0;
     } else
+
+    // Get the next element in the queue, if available.
+    //
+    if(tapeQueue.elements > 0)
     {
-        // At end of list, stop.
-        if(ptr != NULL)
+        if(pos < MAX_TAPE_QUEUE && pos < tapeQueue.elements)
         {
-            ptr = ptr->next;
+            strcpy(tapeQueue.fileName, tapeQueue.queue[pos++]);
         }
     }
 
     // Return filename if available.
     //
-    return(ptr == NULL ? 0 : index(ptr->fileName, '/')+1);
+    return(tapeQueue.fileName[0] == 0 ? 0 : rindex(tapeQueue.fileName, '/')+1);
 }
 
 // Method to clear the queued tape list.
@@ -435,22 +564,23 @@ char *sharpmz_get_next_filename(char reset)
 void sharpmz_clear_filelist(void)
 {
     // Locals.
-    tape_queue_node_t *ptr;
 
-    // Queue empty, just return.
-    if(tapeQueue.bottom == NULL)
+    if(tapeQueue.elements > 0)
     {
-        return;
+        for(int i=0; i < MAX_TAPE_QUEUE; i++)
+        {
+            if(tapeQueue.queue[i] != NULL)
+            {
+                free(tapeQueue.queue[i]);
+            }
+            tapeQueue.queue[i] = NULL;
+        }
     }
+    tapeQueue.elements    = 0;
+    tapeQueue.tapePos     = 0;
+    tapeQueue.fileName[0] = 0;
 
-    // Go from bottom to top, freeing the bottom item in each iteration.
-    for(ptr=tapeQueue.bottom; ptr != NULL; ptr=tapeQueue.bottom)
-    {
-        tapeQueue.bottom = ptr->next;
-        free(ptr);
-    }
-    tapeQueue.top = NULL;
-    tapeQueue.elements = 0;
+    sharpmz_debugf("Cleared Tape Queue.");
 }
 
 // Return fast tape status bits. Bit 0,1 of system_reg, 0 = Off, 1 = 2x, 2 = 4x, 3 = 16x
@@ -478,6 +608,7 @@ short sharpmz_get_machine_group(void)
         case MZ80B_IDX:  // MZ80B
         case MZ2000_IDX: // MZ2000
             machineGroup = 2;
+            break;
 
         case MZ80K_IDX:  // MZ80K
         case MZ80C_IDX:  // MZ80C
@@ -519,6 +650,34 @@ void sharpmz_set_fasttape(short mode, short setStatus)
 
     if((machineGroup == 0 && mode > 5) || (machineGroup == 1 && mode > 5) || (machineGroup == 2 && mode > 4)) mode = 0;
     config.system_reg[REGISTER_CMT] |= (mode & 0x07);
+
+    if(setStatus)
+        sharpmz_set_config_register(REGISTER_CMT, config.system_reg[REGISTER_CMT]);
+}
+
+
+// Return Ascii Mapping of header filename bits. Bit 0,1 of system_reg, 0 = Off, 1 = FROMMZ, 2 = TOMZ, 3 = BOTH
+//
+int sharpmz_get_cmt_ascii_mapping(void)
+{
+    return ((config.system_reg[REGISTER_CMT] >> 5) & 0x00000003 );
+}
+
+// Return string showing ascii mapping setting.
+//
+const char *sharpmz_get_cmt_ascii_mapping_string(void)
+{
+    short mapping = (config.system_reg[REGISTER_CMT] >> 5) & 0x00000003;
+
+    return(SHARPMZ_ASCII_MAPPING[ mapping ]);
+}
+
+// Set ascii mapping status bits to given value.
+//
+void sharpmz_set_cmt_ascii_mapping(short map, short setStatus)
+{
+    config.system_reg[REGISTER_CMT] &= ~(3 << 5);
+    config.system_reg[REGISTER_CMT] |= (map & 0x03) << 5;
 
     if(setStatus)
         sharpmz_set_config_register(REGISTER_CMT, config.system_reg[REGISTER_CMT]);
@@ -719,6 +878,33 @@ void sharpmz_set_vram_disable_mode(short on, short setStatus)
         sharpmz_set_config_register(REGISTER_DISPLAY, config.system_reg[REGISTER_DISPLAY]);
 }
 
+// Return GRAM IO Base Address. Bits 7 .. 3 represent the MSB of the IO address for the framebuffer control registers.
+//
+int sharpmz_get_gram_base_addr(void)
+{
+    return ((config.system_reg[REGISTER_DISPLAY2] >> 3) & 0x1f);
+}
+
+// Return string showing GRAM IO Base Address mode.
+//
+const char *sharpmz_get_gram_base_addr_string(void)
+{
+    short gramBaseAddr = ((config.system_reg[REGISTER_DISPLAY2] >> 3) & 0x1f );
+
+    return(SHARPMZ_GRAM_BASEADDR[ gramBaseAddr ]);
+}
+
+// Set GRAM IO Base Address to given value.
+//
+void sharpmz_set_gram_base_addr(short addr, short setStatus)
+{
+    config.system_reg[REGISTER_DISPLAY2] &= ~(0x1f << 3);
+    config.system_reg[REGISTER_DISPLAY2] |= addr << 3;
+
+    if(setStatus)
+        sharpmz_set_config_register(REGISTER_DISPLAY, config.system_reg[REGISTER_DISPLAY]);
+}
+
 // Return GRAM Output Disable bit. Bit 5 of system_reg, 0 = Output Enabled, 1 = Output Disabled
 //
 int sharpmz_get_gram_disable_mode(void)
@@ -746,6 +932,7 @@ void sharpmz_set_gram_disable_mode(short on, short setStatus)
         sharpmz_set_config_register(REGISTER_DISPLAY, config.system_reg[REGISTER_DISPLAY]);
 }
 
+
 // Return PCG mode status bit. Bit 7 of system_reg, 0 = Off, 1 = On
 //
 int sharpmz_get_pcg_mode(void)
@@ -771,6 +958,35 @@ void sharpmz_set_pcg_mode(short on, short setStatus)
 
     if(setStatus)
         sharpmz_set_config_register(REGISTER_DISPLAY, config.system_reg[REGISTER_DISPLAY]);
+}
+
+// Return VGA mode status bit. Bit 0 of register DISPLAY2, 0 = Off, 1 = 640x480, 2 = 640x400, 3 - 640x480
+//
+int sharpmz_get_vga_mode(void)
+{
+    short vgaMode = config.system_reg[REGISTER_DISPLAY2] & 0x00000003;
+    return (vgaMode);
+}
+
+// Return string showing VGA mode.
+//
+const char *sharpmz_get_vga_mode_string(void)
+{
+    short vgaMode = config.system_reg[REGISTER_DISPLAY2] & 0x00000003;
+
+    return(SHARPMZ_VGA_MODE[ vgaMode ]);
+}
+
+// Set VGA mode status bit to given value.
+//
+void sharpmz_set_vga_mode(short mode, short setStatus)
+{
+    config.system_reg[REGISTER_DISPLAY2] &= ~(3);
+    if(mode == 1 || mode == 2) mode = 3;
+    config.system_reg[REGISTER_DISPLAY2] |= (mode & 0x03);
+
+    if(setStatus)
+        sharpmz_set_config_register(REGISTER_DISPLAY2, config.system_reg[REGISTER_DISPLAY2]);
 }
 
 // Return machine model status bits. Bits 0,1,2 of system_reg.
@@ -803,7 +1019,7 @@ short sharpmz_get_next_machine_model(void)
     static short machineModel = (config.system_reg[REGISTER_MODEL]) & 0x07;
 
     // Certain models not yet active.
-    if(machineModel == MZ800_IDX || machineModel == MZ80B_IDX || machineModel == MZ2000_IDX) machineModel = MZ80K_IDX;
+    if(machineModel == MZ800_IDX) machineModel = MZ80B_IDX;
     return (machineModel++);
 }
 
@@ -815,15 +1031,22 @@ void sharpmz_set_machine_model(short machineModel, short setStatus)
     //
     machineModel &= 0x07;
 
+    // Certain models not yet active.
+    if(machineModel == MZ800_IDX) machineModel = MZ80B_IDX;
+
     // When setting the model, default other settings to sensible values.
     //
     switch(machineModel)
     {
-        // These machines currently underdevelopment, so fall through to MZ80K
-        case MZ800_IDX:  // MZ800
         case MZ80B_IDX:  // MZ80B
         case MZ2000_IDX: // MZ2000
-            machineModel = 0;
+            sharpmz_set_display_type(0x00, 0);  // Normal display
+            sharpmz_set_cpu_speed(0x00, 1);     // 2MHz MZ80C, 3.5MHz MZ700, 4MHz MZ80B
+            break;
+
+        // This machine is yet to be developed.
+        case MZ800_IDX:  // MZ800
+            break;
 
         case MZ80K_IDX:  // MZ80K
         case MZ80C_IDX:  // MZ80C
@@ -833,7 +1056,7 @@ void sharpmz_set_machine_model(short machineModel, short setStatus)
             sharpmz_set_display_type(0x00, 0);  // Normal display
             //sharpmz_set_pcg_mode(0x00, 1);      // ROM
             //sharpmz_set_scandoubler_fx(0x00, 1);// None.
-            sharpmz_set_cpu_speed(0x00, 1);     // 2MHz MZ80C, 3.5MHz MZ700
+            sharpmz_set_cpu_speed(0x00, 1);     // 2MHz MZ80C, 3.5MHz MZ700, 4MHz MZ80B
             break;
 
         case MZ700_IDX:  // MZ700
@@ -841,7 +1064,7 @@ void sharpmz_set_machine_model(short machineModel, short setStatus)
             sharpmz_set_display_type(0x02, 0);  // Colour display
             //sharpmz_set_pcg_mode(0x00, 1);      // ROM sharpmz_set_scandoubler_fx(0x00, 0);// None.
             //sharpmz_set_scandoubler_fx(0x00, 1);// None.
-            sharpmz_set_cpu_speed(0x00, 0);     // 2MHz MZ80C, 3.5MHz MZ700
+            sharpmz_set_cpu_speed(0x00, 0);     // 2MHz MZ80C, 3.5MHz MZ700, 4MHz MZ80B
             break;
     }
 
@@ -878,7 +1101,7 @@ void sharpmz_set_cpu_speed(short cpuSpeed, short setStatus)
     // Clear current setting.
     config.system_reg[REGISTER_CPU] &= ~(0x07);
 
-    if((machineGroup == 0 && cpuSpeed > 5) || (machineGroup == 1 && cpuSpeed > 5) || (machineGroup == 2 && cpuSpeed > 4)) cpuSpeed = 0;
+    if((machineGroup == 0 && cpuSpeed > 5) || (machineGroup == 1 && cpuSpeed > 4) || (machineGroup == 2 && cpuSpeed > 4)) cpuSpeed = 0;
     config.system_reg[REGISTER_CPU] |= (cpuSpeed & 0x07);
 
     if(setStatus)
@@ -912,56 +1135,24 @@ void sharpmz_set_audio_source(short on, short setStatus)
         sharpmz_set_config_register(REGISTER_AUDIO, config.system_reg[REGISTER_AUDIO]);
 }
 
-// Return audio volume setting. The value is inverse, ie. it is an attenuation, 15 is highest, 0 is off.
+// Set BOOT_RESET, ie. initiate an IPL boot.
 //
-int sharpmz_get_audio_volume(void)
+void sharpmz_set_boot_reset(void)
 {
-    return ((config.volume) & 0x0f);
+    unsigned char configReg = sharpmz_read_config_register(REGISTER_CPU);
+
+    sharpmz_debugf("Boot Reset(init) : %02x\n", configReg);
+    configReg &= ~(1 << 7);
+    configReg |= 1 << 7;
+    sharpmz_debugf("Boot Reset(set) : %02x\n", configReg);
+    sharpmz_set_config_register(REGISTER_CPU, configReg);
+    usleep(50000);
+    configReg &= ~(1 << 7);
+    sharpmz_debugf("Boot Reset(reset) : %02x\n", configReg);
+    sharpmz_set_config_register(REGISTER_CPU, configReg);
 }
 
-// Return string showing Audio volume setting - this is inversed.
-//
-const char *sharpmz_get_audio_volume_string(void)
-{
-    return(SHARPMZ_AUDIO_VOLUME[ config.volume & 0x0f ]);
-}
-
-// Set audio volume level. 15 = high attenuation, 0 = no attenuation.
-//
-void sharpmz_set_audio_volume(short volume, short setStatus)
-{
-    config.volume &= 0x10;
-    config.volume |= volume & 0x0f;
-
-    if(setStatus)
-        spi_uio_cmd8(UIO_AUDVOL, config.volume);
-}
-
-// Return audio mute setting.
-//
-int sharpmz_get_audio_mute(void)
-{
-    return ((config.volume & 0x10) >> 4);
-}
-
-// Return string showing Audio mute setting.
-//
-const char *sharpmz_get_audio_mute_string(void)
-{
-    return(SHARPMZ_AUDIO_MUTE[ (config.volume & 0x10) >> 4 ]);
-}
-
-// Set audio mute level.
-//
-void sharpmz_set_audio_mute(short mute, short setStatus)
-{
-    config.volume &= 0x0f;
-    config.volume |= mute << 4;
-
-    if(setStatus)
-        spi_uio_cmd8(UIO_AUDVOL, config.volume);
-}
-
+#ifdef __SHARPMZ_DEBUG__
 // Return debug enable status bit. Bit 7 of system_reg, 0 = Off, 1 = On
 //
 int sharpmz_get_debug_enable(void)
@@ -1024,7 +1215,7 @@ short sharpmz_get_next_debug_leds_bank(void)
 
     // Certain models not yet active.
     if(strcmp(SHARPMZ_DEBUG_LEDS_BANK[ debugLedsBank ], "") == 0) debugLedsBank = 0;
-
+    if(debugLedsBank >  7) debugLedsBank = 0;
     return (debugLedsBank++);
 }
 
@@ -1157,27 +1348,7 @@ void sharpmz_set_debug_leds_smpfreq(short debugLedsSampleFrequency, short setSta
     if(setStatus)
         sharpmz_set_config_register(REGISTER_DEBUG2, config.system_reg[REGISTER_DEBUG2]);
 }
-
-// Return string showing auto save enabled mode.
-//
-const char *sharpmz_get_auto_save_enabled_string(void)
-{
-    return(SHARPMZ_AUTO_SAVE_ENABLED[ config.autoSave ]);
-}
-
-// Method to return the enabled state of auto save.
-//
-unsigned char sharpmz_get_auto_save_enabled(void)
-{
-    return(config.autoSave);
-}
-
-// Method to set the auto save flag to determine if automatic saving of incoming tape data is enabled.
-//
-void sharpmz_set_auto_save_enabled(unsigned char on)
-{
-    config.autoSave = on;
-}
+#endif
 
 // Method to return the enabled state of a user rom for given machine.
 //
@@ -1415,11 +1586,11 @@ sharpmz_tape_header_t *sharpmz_get_tape_header(void)
 //
 int sharpmz_file_read(fileTYPE *file, void *pBuffer, int nSize)
 {
-    if (!FileSeek(file, file->offset, SEEK_SET))
-    {
-        sharpmz_debugf("file_read error(seek).\n");
-        return 0;
-    }
+//    if (!FileSeek(file, file->offset, SEEK_SET))
+//    {
+//        sharpmz_debugf("file_read error(seek).\n");
+//        return 0;
+//    }
 
     int ret = FileReadAdv(file, pBuffer, nSize);
     if (ret < 0)
@@ -1430,6 +1601,183 @@ int sharpmz_file_read(fileTYPE *file, void *pBuffer, int nSize)
 
     return ret;
 }
+
+#if defined __SHARPMZ_DEBUG__
+const unsigned int status_green= 0x320000;
+const unsigned int menu_green  = 0x322000;
+const unsigned int vid_config  = 0x324000;
+
+void test_sb_clear(void)
+{
+    EnableFpga();
+    spi8(SHARPMZ_FILE_ADDR_TX);
+    spi8(0x00);
+    spi8(status_green >> 16);
+    spi8((status_green >> 8) & 0xff);
+    spi8(status_green&0xff);
+    sharpmz_debugf("Load Address:%04x, %04x, %04x\n", status_green, status_green >> 8, status_green);
+
+    for(int i=0; i< 4096; i++)
+    {
+        spi_w(0x0000);
+    }
+    DisableFpga();
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_TX);
+    spi8(SHARPMZ_EOF);
+    DisableFpga();
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_ADDR_TX);
+    spi8(0x00);
+    spi8(menu_green >> 16);
+    spi8((menu_green >> 8) & 0xff);
+    spi8(menu_green&0xff);
+    sharpmz_debugf("Load Address:%04x, %04x, %04x\n", menu_green, menu_green >> 8, menu_green);
+
+    for(int i=0; i< 4096; i++)
+    {
+        spi_w(0x0000);
+    }
+    DisableFpga();
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_TX);
+    spi8(SHARPMZ_EOF);
+    DisableFpga();
+}
+
+
+static unsigned char rom[2048];
+void test_sb_read_cgrom(void)
+{
+    unsigned int mz80a_cgrom = 0x503000;
+
+        EnableFpga();                                     // Setup the load address.
+        spi8(SHARPMZ_FILE_ADDR_RX);
+        spi8(0x00);
+        spi8(mz80a_cgrom >> 16);                             // Memory bank to read.
+        spi8(mz80a_cgrom >> 8);                              // A15-A8
+        spi8(mz80a_cgrom & 0xff);                            // A7-A0
+
+        for(int i=0; i < 2048; i++)
+        {
+            rom[i] = spi_b(0x00);
+        }
+
+        //spi8(0x00);                                       // Setup to read addr first byte.
+
+        // Indicate end of upload.
+        //spi8(0x00);                                        // Setup to read addr first byte.
+        //spi8(SHARPMZ_EOF);
+        DisableFpga();
+}
+
+void test_sb_pattern(void)
+{
+  for(int c=0; c < 10; c++)
+  {
+    test_sb_clear();
+    usleep(500000);
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_TX);
+    spi8(SHARPMZ_EOF);
+    DisableFpga();
+    usleep(500000);
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_ADDR_TX);
+    spi8(0x00);
+    spi8(status_green >> 16);
+    spi8((status_green >> 8) & 0xff);
+    spi8(status_green&0xff);
+    sharpmz_debugf("Load Address:%04x, %04x, %04x\n", status_green, status_green >> 8, status_green);
+
+    for(int i=0; i< 4096; i++)
+    {
+        spi8(0x81);
+    }
+    DisableFpga();
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_TX);
+    spi8(SHARPMZ_EOF);
+    DisableFpga();
+    usleep(500000);
+   }
+}
+
+void test_sb(void)
+{
+    unsigned int data;
+    int z = 0;
+
+    sharpmz_set_config_register(REGISTER_DISPLAY3, 0x3);
+    test_sb_clear();
+    test_sb_read_cgrom();
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_ADDR_TX);
+    spi8(0x00);
+    spi8(status_green >> 16);
+    spi8((status_green >> 8) & 0xff);
+    spi8(status_green&0xff);
+    sharpmz_debugf("Load Address:%04x, %04x, %04x\n", status_green, status_green >> 8, status_green);
+    for(int line=0; line < 6; line++)
+    {
+        for(unsigned int y=0; y < 8; y++)
+        {
+            for(int x = z; x < z+80; x+=1)
+            {
+                data = rom[ (x) << 3 | y] << 8 | rom[x << 3 | y];
+                //data = rom[ 1 << 3 | y] << 8 | rom[1 << 3 | y];
+                spi_w(data);
+                sharpmz_debugf("Data:%02x:%02x=%04x\n", x, y, data);
+            }
+        }
+        z = z + 80;
+        if (z >= 240) { z = 0; }
+    }
+    DisableFpga();
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_TX);
+    spi8(SHARPMZ_EOF);
+    DisableFpga();
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_ADDR_TX);
+    spi8(0x00);
+    spi8(menu_green >> 16);
+    spi8((menu_green >> 8) & 0xff);
+    spi8(menu_green&0xff);
+    sharpmz_debugf("Load Address:%04x, %04x, %04x\n", menu_green, menu_green >> 8, menu_green);
+    z = 0;
+    for(int line=0; line < 16; line++)
+    {
+        for(unsigned int y=0; y < 8; y++)
+        {
+            for(int x = z; x < z+32; x+=1)
+            {
+                data = rom[ (x) << 3 | y] << 8 | rom[x << 3 | y];
+                spi_w(data);
+                sharpmz_debugf("Data:%02x:%02x=%04x\n", x, y, data);
+            }
+        }
+        z = z + 32;
+        if (z >= 240) { z = 0; }
+    }
+    DisableFpga();
+
+    EnableFpga();
+    spi8(SHARPMZ_FILE_TX);
+    spi8(SHARPMZ_EOF);
+    DisableFpga();
+
+}
+#endif
 
 // Method to program a config register in the emulator.
 //
@@ -1509,11 +1857,8 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
     // Limit size to that governed in the config. If the rom is larger than the defined size, waste additional data,
     // if less then finish early. Prevents large images from corrupting other machine roms.
     //
-    sharpmz_debugf("[");
     for (i = 0; i < image.loadSize; i += actualReadSize)
     {
-		if (!(i & 127)) { sharpmz_debugf("*"); }
-
         // Work out size of data block to read.
         int readSize = (image.loadSize - i >= 512 ? 512 : image.loadSize - i);
 
@@ -1527,7 +1872,6 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
         if(actualReadSize != 0)
         {
             spi_write(sector_buffer, actualReadSize, 0);
-
         } else
         {
             // End of file, short file, so just move onto end.
@@ -1535,7 +1879,6 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
         }
     }
     DisableFpga();
-    sharpmz_debugf("]\n");
 
     // Tidy up.
     FileClose(&file);
@@ -1569,34 +1912,27 @@ short sharpmz_read_ram(const char *memDumpFile, short bank)
     //
     for(unsigned int mb=(bank == SHARPMZ_MEMBANK_ALL ? 0 : bank); mb <= (unsigned int)(bank == SHARPMZ_MEMBANK_ALL ? SHARPMZ_MEMBANK_MAXBANKS-1 : bank); mb++)
     {
-        // Skip bank 1, as SYSROM spans two physical banks 0 and 1.
-        if(mb == 1) mb = SHARPMZ_MEMBANK_SYSRAM;
-
         EnableFpga();                                     // Setup the load address.
         spi8(SHARPMZ_FILE_ADDR_RX);
         spi8(0x00);
-        spi8(mb);                                         // Memory bank to read.
+        spi8(MZBANKADDR[mb]);                             // Memory bank to read.
         spi8(0x00);                                       // A15-A8
         spi8(0x00);                                       // A7-A0
         //spi8(0x00);                                       // Setup to read addr first byte.
 
         // The bank size is stored in the config.
         //
-        sharpmz_debugf("[");
         for (unsigned long j = 0; j < MZBANKSIZE[mb] or actualWriteSize == 0; j += actualWriteSize)
         {
-			if (!(j & 127)) { sharpmz_debugf("*"); }
-
             spi_read(sector_buffer, 512, 0);
 
             DISKLED_ON;
-            actualWriteSize=FileWriteAdv(&file, sector_buffer, 512);
+            actualWriteSize=FileWriteAdv(&file, sector_buffer, MZBANKSIZE[mb] >= 512 ? 512 : MZBANKSIZE[mb]);
             DISKLED_OFF;
         }
-        sharpmz_debugf("]\n");
 
         // Indicate end of upload.
-        spi8(SHARPMZ_EOF);
+        //spi8(SHARPMZ_EOF);
         DisableFpga();
     }
 
@@ -1650,7 +1986,9 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
 {
     unsigned int  actualReadSize;
     unsigned long time = GetTimer(0);
-    //char          fileName[17];
+  #if defined __SHARPMZ_DEBUG__
+    char          fileName[17];
+  #endif
 
     //sharpmz_debugf("Sending tape file:%s to emulator ram", tapeFile);
 
@@ -1674,12 +2012,11 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
     // Some sanity checks.
     //
     if(tapeHeader.dataType == 0 || tapeHeader.dataType > 5) return(4);
-	/*
+  #if defined __SHARPMZ_DEBUG__
     for(int i=0; i < 17; i++)
     {
         fileName[i] = tapeHeader.fileName[i] == 0x0d ? 0x00 : tapeHeader.fileName[i];
     }
-	*/
 
     // Debug output to indicate the file loaded and information about the tape image.
     //
@@ -1709,8 +2046,9 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
             sharpmz_debugf("Unknown tape type(Type=%02x, Load Addr=%04x, Size=%04x, Exec Addr=%04x, FileName=%s)\n", tapeHeader.dataType, tapeHeader.loadAddress, tapeHeader.fileSize, tapeHeader.execAddress, fileName);
             break;
     }
+  #endif
 
-    // Check the data type, only load machine code.
+    // Check the data type, only load machine code directly to RAM.
     //
     if(dstCMT == 0 && tapeHeader.dataType != SHARPMZ_CMT_MC)
         return(3);
@@ -1727,40 +2065,34 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
     spi8(0x00);
     if(dstCMT == 0)                                       // Load to emulators RAM
     {
-        spi8(SHARPMZ_MEMBANK_SYSRAM);
+        spi8(MZBANKADDR[SHARPMZ_MEMBANK_SYSRAM]);
         spi8((tapeHeader.loadAddress >> 8)&0xff);
         spi8(tapeHeader.loadAddress & 0xff);              // Location set inside tape header structure.
     } else
     {
-        spi8(SHARPMZ_MEMBANK_CMT_DATA);
+        spi8(MZBANKADDR[SHARPMZ_MEMBANK_CMT_DATA]);
         spi8(0x00);
         spi8(0x00);
     }
 
-    sharpmz_debugf("[");
-    for (unsigned short i = 0; i < tapeHeader.fileSize; i += actualReadSize)
+    for (unsigned short i = 0; i < tapeHeader.fileSize && actualReadSize > 0; i += actualReadSize)
     {
-		if (!(i & 127)) { sharpmz_debugf("*"); }
-
         DISKLED_ON;
         actualReadSize = sharpmz_file_read(&file, sector_buffer, 512);
         DISKLED_OFF;
 
-        // First sector contains the header which has already been written, so just write the remainder.
-        //
-        if(i == 0)
-        {
-            actualReadSize -= MZ_TAPE_HEADER_SIZE;
-            memmove(sector_buffer, sector_buffer+MZ_TAPE_HEADER_SIZE, actualReadSize);
-        }
-        //sharpmz_debugf("Bytes to read, actual:%d, index:%d, sizeHeader:%d", actualReadSize, i, tapeHeader.fileSize);
+        sharpmz_debugf("Bytes to read, actual:%d, index:%d, sizeHeader:%d", actualReadSize, i, tapeHeader.fileSize);
+
         if(actualReadSize > 0)
         {
             // Write the sector (or part) to the fpga memory.
             spi_write(sector_buffer, actualReadSize, 0);
+        } else
+        {
+            sharpmz_debugf("Bad tape or corruption, should never be 0, actual:%d, index:%d, sizeHeader:%d", actualReadSize, i, tapeHeader.fileSize);
+            return(4);
         }
     }
-    sharpmz_debugf("]\n");
     DisableFpga();
 
     // signal end of transmission
@@ -1776,12 +2108,12 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
     spi8(0x00);                                           // Tape header position address: Bit 24
     if(dstCMT == 0)                                       // Load to emulators RAM
     {
-        spi8(SHARPMZ_MEMBANK_SYSRAM);                     // Bits 23:16
+        spi8(MZBANKADDR[SHARPMZ_MEMBANK_SYSRAM]);         // Bits 23:16
         spi8((MZ_TAPE_HEADER_STACK_ADDR >> 8) & 0xff);    // Bits 15:8
         spi8(MZ_TAPE_HEADER_STACK_ADDR & 0xff);           // Bits 7:0
     } else
     {
-        spi8(SHARPMZ_MEMBANK_CMT_HDR);                    // Bits 23:16
+        spi8(MZBANKADDR[SHARPMZ_MEMBANK_CMT_HDR]);        // Bits 23:16
         spi8(0x00);                                       // Bits 15:8
         spi8(0x00);                                       // Bits 7:0
     }
@@ -1797,15 +2129,18 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
     time = GetTimer(0) - time;
     sharpmz_debugf("Uploaded in %lu ms", time >> 20);
 
+#ifdef __SHARPMZ_DEBUG__
     // Debug, show registers.
     for(unsigned int i=0; i < MAX_REGISTERS; i++)
     {
         sharpmz_debugf("Register (%02x) = %02x", i, sharpmz_read_config_register(i));
     }
+#endif
 
     // Tidy up.
     FileClose(&file);
 
+#ifdef __SHARPMZ_DEBUG_EXTRA__
     // Dump out the memory if needed (generally for debug purposes).
     if(dstCMT == 0)                                       // Load to emulators RAM
     {
@@ -1815,6 +2150,7 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
         sharpmz_read_ram((const char *)"cmt_header.dump", SHARPMZ_MEMBANK_CMT_HDR);
         sharpmz_read_ram((const char *)"cmt_data.dump", SHARPMZ_MEMBANK_CMT_DATA);
     }
+#endif
 
     // Remove the LF from the header filename, not needed.
     //
@@ -1823,11 +2159,13 @@ short sharpmz_load_tape_to_ram(const char *tapeFile, unsigned char dstCMT)
         if(tapeHeader.fileName[i] == 0x0d) tapeHeader.fileName[i] = 0x00;
     }
 
+#ifdef __SHARPMZ_DEBUG__
     // Debug, show registers.
     for(unsigned int i=0; i < MAX_REGISTERS; i++)
     {
         sharpmz_debugf("Register (%02x) = %02x", i, sharpmz_read_config_register(i));
     }
+#endif
 
     // Success.
     //
@@ -1841,8 +2179,8 @@ short sharpmz_save_tape_from_cmt(const char *tapeFile)
 {
     short          dataSize = 0;
     unsigned short actualWriteSize;
-    unsigned short writeSize;
-    char           fileName[17];
+    unsigned short writeSize = 0;
+    char           fileName[21];
 
     // Handle for the MZF file to be written.
     //
@@ -1855,10 +2193,10 @@ short sharpmz_save_tape_from_cmt(const char *tapeFile)
         EnableFpga();                                     // Setup the load address.
         spi8(SHARPMZ_FILE_ADDR_RX);
         spi8(0x00);
-        spi8(mb);                                         // Memory bank to read.
+        spi8(MZBANKADDR[mb]);                                         // Memory bank to read.
         spi8(0x00);                                       // A15-A8
         spi8(0x00);                                       // A7-A0
-        spi8(0x00);                                       // Setup to read addr first byte.
+        //spi8(0x00);                                       // Setup to read addr first byte.
 
         // The bank size is stored in the config.
         //
@@ -1891,11 +2229,14 @@ short sharpmz_save_tape_from_cmt(const char *tapeFile)
                 {
                     for(int i=0; i < 17; i++)
                     {
-                        fileName[i] = tapeHeader.fileName[i] == 0x0d ? 0x00 : fileName[i];
+                        fileName[i] = tapeHeader.fileName[i] == 0x0d ? 0x00 : tapeHeader.fileName[i];
                     }
+                    strcat(fileName, ".mzf");
+                    sharpmz_debugf("File from tape:%s (%02x,%04x,%04x,%04x)\n", fileName, tapeHeader.dataType, tapeHeader.fileSize, tapeHeader.loadAddress, tapeHeader.execAddress);
                 } else
                 {
-                    memcpy(fileName, tapeHeader.fileName, 17);
+                    strcpy(fileName, tapeFile);
+                    sharpmz_debugf("File provided:%s\n", fileName);
                 }
 
                 // Open the memory image debug file for writing.
@@ -1911,7 +2252,7 @@ short sharpmz_save_tape_from_cmt(const char *tapeFile)
         }
 
         // Indicate end of upload.
-        spi8(SHARPMZ_EOF);
+        //spi8(SHARPMZ_EOF);
         DisableFpga();
     }
 
@@ -1927,7 +2268,7 @@ short sharpmz_save_tape_from_cmt(const char *tapeFile)
 void sharpmz_select_file(const char* pFileExt, unsigned char Options, char *fs_pFileExt, char chdir, char *SelectedPath)
 {
     sharpmz_debugf("pFileExt = %s\n", pFileExt);
-	(void)chdir;
+    (void)chdir;
 
     if (strncasecmp(SHARPMZ_CORE_NAME, SelectedPath, strlen(SHARPMZ_CORE_NAME))) strcpy(SelectedPath, SHARPMZ_CORE_NAME);
 
@@ -1955,8 +2296,8 @@ int sharpmz_default_ui_state(void)
 //
 void sharpmz_ui(int      idleState,    int      idle2State,    int        systemState,    int      selectFile,
                 uint32_t *parentstate, uint32_t *menustate,    uint32_t   *menusub,       uint32_t *menusub_last,
-				uint32_t *menumask,    char     *selectedPath, const char **helptext,     char     *helptext_custom,
-				uint32_t *fs_ExtLen,   uint32_t *fs_Options,   uint32_t   *fs_MenuSelect, uint32_t *fs_MenuCancel,
+                uint64_t *menumask,    char     *selectedPath, const char **helptext,     char     *helptext_custom,
+                uint32_t *fs_ExtLen,   uint32_t *fs_Options,   uint32_t   *fs_MenuSelect, uint32_t *fs_MenuCancel,
                 char     *fs_pFileExt,
                 unsigned char menu,    unsigned char select,   unsigned char up,          unsigned char down,
                 unsigned char left,    unsigned char right,    unsigned char plus,        unsigned char minus)
@@ -1965,22 +2306,23 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
     //
     static short romType;
     static short machineModel             = sharpmz_get_next_machine_model();
+    static short scrollPos                = 0;
+#ifdef __SHARPMZ_DEBUG__
+    static short memoryBank               = sharpmz_get_next_memory_bank();
+    static short fileDumped               = 0;
     static short debugCPUFrequency        = sharpmz_get_next_debug_cpufreq();
     static short debugLedsBank            = sharpmz_get_next_debug_leds_bank();
     static short debugLedsSampleFrequency = sharpmz_get_next_debug_leds_smpfreq();
-    static short memoryBank               = sharpmz_get_next_memory_bank();
-    static short fileDumped               = 0;
-    static short scrollPos                = 0;
-    static short volumeDir                = 0;
+#endif
     int          menuItem;
-	uint32_t     subItem;
+    uint32_t     subItem;
     short        romEnabled;
     short        itemCount;
     char         sBuf[40];
     char        *fileName;
 
-	(void)plus;
-	(void)minus;
+    (void)plus;
+    (void)minus;
 
     // Idle2 state (MENU_NONE2) is our main hook, when the HandleUI state machine reaches this state, if the menu key is pressed,
     // we takeover control in this method.
@@ -2009,7 +2351,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             subItem   = 0;
             *menumask = 0;
 
-            OsdSetTitle(user_io_get_core_name(), 0);
+            OsdSetTitle(CoreName, 0);
 
             OsdWrite(menuItem++, "          Main Menu", 0, 0);
             OsdWrite(menuItem++, "",                    0, 0);
@@ -2027,17 +2369,31 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             OsdWrite(menuItem++, " Display                   \x16", *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
 
-            OsdWrite(menuItem++, " Debug                     \x16", *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
+#ifdef __SHARPMZ_DEBUG__
+            if(debugEnabled == 1)
+            {
+                OsdWrite(menuItem++, " Debug                     \x16", *menusub == subItem++, 0);
+                *menumask = (*menumask << 1) | 1;
+            } else
+            {
+                OsdWrite(menuItem++, " Memory Dump               \x16", *menusub == subItem++, 0);
+                *menumask = (*menumask << 1) | 1;
+            }
+#endif
 
             OsdWrite(menuItem++, " System                    \x16", *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
 
-            for (; menuItem < 10; menuItem++)
+            for (; menuItem < 9; menuItem++)
             {
                 OsdWrite(menuItem, "", 0, 0);
             }
 
+            if(sharpmz_get_machine_group() == 2)
+            {
+                OsdWrite(menuItem++, " Boot Reset",  *menusub == subItem++, 0);
+                *menumask = (*menumask << 1) | 1;
+            }
             OsdWrite(menuItem++, " Reset",  *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
             OsdWrite(menuItem++, " Reload config", *menusub == subItem++, 0);
@@ -2063,7 +2419,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
 
             // set helptext with core display on top of basic info
             sprintf(helptext_custom, "                                ");
-            strcat(helptext_custom, OsdCoreName());
+            strcat(helptext_custom, OsdCoreNameGet());
             strcat(helptext_custom, "                                ");
             strcat(helptext_custom, SHARPMZ_HELPTEXT[0]);
             *helptext = helptext_custom;
@@ -2076,6 +2432,14 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
 
             if (select || right)
             {
+#ifndef __SHARPMZ_DEBUG__
+                if(*menusub > 2)
+                {
+                    (*menusub) += 1;
+                }
+#endif
+                if(sharpmz_get_machine_group() != 2 && *menusub > 4) { (*menusub) += 1; }
+
                 switch (*menusub)
                 {
                 case 0:  // Tape Storage
@@ -2106,21 +2470,35 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     if(right) select = true;
                     break;
 
-                case 3:  // Debug
+#ifdef __SHARPMZ_DEBUG__
+                case 3:  // Debug/Memory Dump
                     *menustate    = MENU_SHARPMZ_DEBUG1;
                     *menusub_last = *menusub;
                     *menusub      = 0;
                     if(right) select = true;
                     break;
+#endif
 
                 case 4:  // System
                     *menustate    = systemState;
+#ifdef __SHARPMZ_DEBUG__
                     *menusub_last = *menusub;
+#else
+                    *menusub_last = *menusub - 1;
+#endif
                     *menusub      = 0;
                     if(right) select = true;
                     break;
 
-                case 5: // Reset Machine
+                case 5: // Boot Reset
+                    if(select)
+                    {
+                        sharpmz_set_boot_reset();
+                        *menustate = idleState;
+                    }
+                    break;
+
+                case 6: // Reset Machine
                     if(select)
                     {
                         sharpmz_init();
@@ -2128,7 +2506,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     }
                     break;
 
-                case 6:  // Reload Settings
+                case 7:  // Reload Settings
                     if(select)
                     {
                         sharpmz_reload_config(1);
@@ -2136,7 +2514,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     }
                     break;
 
-                case 7:  // Save Settings
+                case 8:  // Save Settings
                     if(select)
                     {
                         sharpmz_save_config();
@@ -2144,7 +2522,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     }
                     break;
 
-                case 8:  // Reset Settings
+                case 9:  // Reset Settings
                     if(select)
                     {
                         sharpmz_reset_config(1);
@@ -2152,10 +2530,12 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     }
                     break;
 
-                case 9:  // Exit
+                case 10:  // Exit
+                default:
                     *menustate = idleState;
                     if(right) select = true;
                     break;
+
                 }
             }
             break;
@@ -2182,31 +2562,36 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             itemCount = 0;
             while((fileName = sharpmz_get_next_filename(0)) != 0)
             {
-                sprintf(sBuf, "  %d> %s", itemCount++, fileName);
+                if((sharpmz_get_machine_group() == 2 && tapeQueue.tapePos == itemCount) ||
+                   (sharpmz_get_machine_group() != 2 && itemCount == 0))
+                    sprintf(sBuf, "  %d>%s", itemCount++, fileName);
+                else
+                    sprintf(sBuf, "  %d %s", itemCount++, fileName);
                 OsdWrite(menuItem++, sBuf, 0, 0);
             }
 
             OsdWrite(menuItem++, "", 0, 0);
 
-            OsdWrite(menuItem++, " Save Tape:            *.MZF", *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
-
-            strcpy(sBuf, " Auto Save Tape:       ");
-            strcat(sBuf, sharpmz_get_auto_save_enabled_string());
-            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
-
-            OsdWrite(menuItem++, "", 0, 0);
-
-            strcpy(sBuf, " Tape Buttons:         ");
-            strcat(sBuf, sharpmz_get_tape_buttons_string());
-            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
+            if(sharpmz_get_machine_group() != 2)
+            {
+                strcpy(sBuf, " Tape Buttons:         ");
+                strcat(sBuf, sharpmz_get_tape_buttons_string());
+                OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
+                *menumask = (*menumask << 1) | 1;
+            }
 
             strcpy(sBuf, " Fast Tape Load:       ");
             strcat(sBuf, sharpmz_get_fasttape_string());
             OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
+
+            if(sharpmz_get_machine_group() != 2)
+            {
+                strcpy(sBuf, " Map Header (Ascii):   ");
+                strcat(sBuf, sharpmz_get_cmt_ascii_mapping_string());
+                OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
+                *menumask = (*menumask << 1) | 1;
+            }
 
             for (; menuItem < 15; menuItem++)
             {
@@ -2229,6 +2614,8 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             if (select)
             {
                 *menusub_last = *menusub;
+                if(sharpmz_get_machine_group() == 2 && *menusub > 2) { (*menusub) += 1; }
+                if(sharpmz_get_machine_group() == 2 && *menusub > 4) { (*menusub) += 1; }
                 switch(*menusub)
                 {
                 // Load direct to RAM? This involves parsing the MZF header, copying the header (128 bytes) to 0x10F0 in the Z80 memory range
@@ -2254,29 +2641,26 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     break;
 
                 case 3:
-                    *menustate = MENU_SHARPMZ_TAPE_STORAGE_SAVE_TAPE_FROM_CMT;
-                    break;
-
-                case 4:
-                    sharpmz_set_auto_save_enabled(sharpmz_get_auto_save_enabled() == 0 ? 1 : 0);
-                    *menustate = MENU_SHARPMZ_TAPE_STORAGE1;
-                    break;
-
-                case 5:
                     sharpmz_set_tape_buttons(sharpmz_get_tape_buttons()+1, 1);
                     *menustate = MENU_SHARPMZ_TAPE_STORAGE1;
                     break;
 
-                case 6:
+                case 4:
                     sharpmz_set_fasttape(sharpmz_get_fasttape()+1, 1);
                     *menustate = MENU_SHARPMZ_TAPE_STORAGE1;
                     break;
 
-                case 7:
+                case 5:
+                    sharpmz_set_cmt_ascii_mapping(sharpmz_get_cmt_ascii_mapping()+1, 1);
+                    *menustate = MENU_SHARPMZ_TAPE_STORAGE1;
+                    break;
+
+                case 6:
                     *menustate = MENU_SHARPMZ_MAIN1;
-                    *menusub   = *menusub_last;
+                    *menusub   = 0;
                     break;
                 }
+                *menusub = *menusub_last;
             }
             if (left)
             {
@@ -2285,8 +2669,8 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             }
             break;
 
-        case MENU_SHARPMZ_TAPE_STORAGE_LOAD_TAPE_TO_RAM:
-            sharpmz_debugf("File selected to send to RAM: %s, for menu option:%04x\n", selectedPath, *menumask);
+       case MENU_SHARPMZ_TAPE_STORAGE_LOAD_TAPE_TO_RAM:
+            sharpmz_debugf("File selected to send to RAM: %s, for menu option:%016llx\n", selectedPath, *menumask);
             *menustate = MENU_SHARPMZ_TAPE_STORAGE1;
             if(selectedPath)
             {
@@ -2357,7 +2741,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             break;
 
         case MENU_SHARPMZ_TAPE_STORAGE_QUEUE_TAPE_TO_CMT:
-            sharpmz_debugf("File added to Queue: %s, for menu option:%04x\n", selectedPath, *menumask);
+            sharpmz_debugf("File added to Queue: %s, for menu option:%016llx\n", selectedPath, *menumask);
             *menustate = MENU_SHARPMZ_TAPE_STORAGE1;
             if(selectedPath)
             {
@@ -2366,23 +2750,17 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                 int fail=sharpmz_read_tape_header(selectedPath);
                 sharpmz_tape_header_t *tapeHeader = sharpmz_get_tape_header();
 
-                // Limit number of items in queue, makes no sense to have too many and we run out of display space.
-                //
-                if(tapeQueue.elements < 5 && !fail)
-                {
-                    sharpmz_push_filename(selectedPath);
-                    OsdSetTitle("Tape Queued", OSD_ARROW_LEFT);
-                } else
-                {
-                    OsdSetTitle("Queue Error", OSD_ARROW_LEFT);
-                }
-
                 *menumask = 0x01;    // Exit.
                 *parentstate = *menustate;
                 menuItem = 0;
 
-                if(!fail)
+                // Limit number of items in queue, makes no sense to have too many and we run out of display space.
+                //
+                if(tapeQueue.elements < MAX_TAPE_QUEUE && !fail)
                 {
+                    sharpmz_push_filename(selectedPath);
+                    OsdSetTitle("Tape Queued", OSD_ARROW_LEFT);
+
                     OsdWrite(menuItem++, "       Tape Details", 0, 0);
                     OsdWrite(menuItem++, "", 0, 0);
                     sprintf(sBuf, " File Size: %04x", tapeHeader->fileSize);
@@ -2401,6 +2779,8 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     OsdWrite(menuItem++, "", 0, 0);
                 } else
                 {
+                    OsdSetTitle("Queue Error", OSD_ARROW_LEFT);
+
                     OsdWrite(menuItem++, "        Queue Error", 0, 0);
                     OsdWrite(menuItem++, "", 0, 0);
 
@@ -2441,10 +2821,10 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             }
             break;
 
-        case MENU_SHARPMZ_TAPE_STORAGE_SAVE_TAPE_FROM_CMT:
-            sharpmz_save_tape_from_cmt((const char *)0);
-            *menustate = MENU_SHARPMZ_TAPE_STORAGE1;
-            break;
+//        case MENU_SHARPMZ_TAPE_STORAGE_SAVE_TAPE_FROM_CMT:
+//            sharpmz_save_tape_from_cmt((const char *)0);
+//            *menustate = MENU_SHARPMZ_TAPE_STORAGE1;
+//            break;
 
         case MENU_SHARPMZ_TAPE_STORAGE_SAVE_TAPE_FROM_CMT2:
             *menustate = MENU_SHARPMZ_TAPE_STORAGE1;
@@ -2525,16 +2905,6 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
 
-            strcpy(sBuf, " Audio Volume:       ");
-            strcat(sBuf, sharpmz_get_audio_volume_string());
-            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
-
-            strcpy(sBuf, " Audio Mute:         ");
-            strcat(sBuf, sharpmz_get_audio_mute_string());
-            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
-
             OsdWrite(menuItem++, "", 0, 0);
             OsdWrite(menuItem++, " Rom Management            \x16", *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
@@ -2577,26 +2947,14 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     *menustate = MENU_SHARPMZ_MACHINE1;
                     break;
 
-                case 3:  // Audio Volume
-                    sharpmz_set_audio_volume((sharpmz_get_audio_volume() + (volumeDir ? -1 : +1)) & 0x0f, 1);
-                    if(sharpmz_get_audio_volume() == 15) volumeDir = 1;
-                    if(sharpmz_get_audio_volume() == 0)  volumeDir = 0;
-                    *menustate = MENU_SHARPMZ_MACHINE1;
-                    break;
-
-                case 4:  // Audio Mute
-                    sharpmz_set_audio_mute(sharpmz_get_audio_mute() ? 0 : 1, 1);
-                    *menustate = MENU_SHARPMZ_MACHINE1;
-                    break;
-
-                case 5:  // Roms
+                case 3:  // Roms
                     *menustate    = MENU_SHARPMZ_ROMS1;
                     *menusub_last = *menusub;
                     *menusub      = 0;
                     if(right) select = true;
                     break;
 
-                case 6:  // Exit
+                case 4:  // Exit
                     *menustate = MENU_SHARPMZ_MAIN1;
                     *menusub   = 1; //*menusub_last;
                     break;
@@ -2866,6 +3224,11 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
 
+            strcpy(sBuf, " VGA Scaling:   ");
+            strcat(sBuf, sharpmz_get_vga_mode_string());
+            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
+            *menumask = (*menumask << 1) | 1;
+
             strcpy(sBuf, " Video:         ");
             strcat(sBuf, sharpmz_get_vram_disable_mode_string());
             OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
@@ -2873,6 +3236,11 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
 
             strcpy(sBuf, " Graphics:      ");
             strcat(sBuf, sharpmz_get_gram_disable_mode_string());
+            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
+            *menumask = (*menumask << 1) | 1;
+
+            strcpy(sBuf, " Graphics Addr: ");
+            strcat(sBuf, sharpmz_get_gram_base_addr_string());
             OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
 
@@ -2885,16 +3253,21 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             strcat(sBuf, sharpmz_get_pcg_mode_string());
             OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
-
-            strcpy(sBuf, " Aspect Ratio:  ");
-            strcat(sBuf, sharpmz_get_aspect_ratio_string());
+         #if defined __SHARPMZ_DEBUG__
+            strcpy(sBuf, " Test SB ->     ");
             OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
+         #endif
 
-            strcpy(sBuf, " Scandoubler:   ");
-            strcat(sBuf, sharpmz_get_scandoubler_fx_string());
-            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
+          //strcpy(sBuf, " Aspect Ratio:  ");
+          //strcat(sBuf, sharpmz_get_aspect_ratio_string());
+          //OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
+          //*menumask = (*menumask << 1) | 1;
+
+          //strcpy(sBuf, " Scandoubler:   ");
+          //strcat(sBuf, sharpmz_get_scandoubler_fx_string());
+          //OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
+          //*menumask = (*menumask << 1) | 1;
 
             for (; menuItem < 15; menuItem++)
             {
@@ -2920,42 +3293,62 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                 case 0:
                     sharpmz_set_display_type((sharpmz_get_display_type() + 1) & 0x07, 1);
                     *menustate = MENU_SHARPMZ_DISPLAY1;
-                        break;
+                    break;
 
                 case 1:
-                    sharpmz_set_vram_disable_mode(sharpmz_get_vram_disable_mode() ? 0 : 1, 1);
+                    sharpmz_set_vga_mode(sharpmz_get_vga_mode() + 1, 1);
                     *menustate = MENU_SHARPMZ_DISPLAY1;
                     break;
 
                 case 2:
-                    sharpmz_set_gram_disable_mode(sharpmz_get_gram_disable_mode() ? 0 : 1, 1);
+                    sharpmz_set_vram_disable_mode(sharpmz_get_vram_disable_mode() ? 0 : 1, 1);
                     *menustate = MENU_SHARPMZ_DISPLAY1;
                     break;
 
                 case 3:
-                    sharpmz_set_vram_wait_mode(sharpmz_get_vram_wait_mode() ? 0 : 1, 1);
+                    sharpmz_set_gram_disable_mode(sharpmz_get_gram_disable_mode() ? 0 : 1, 1);
                     *menustate = MENU_SHARPMZ_DISPLAY1;
                     break;
 
                 case 4:
-                    sharpmz_set_pcg_mode(sharpmz_get_pcg_mode() ? 0 : 1, 1);
+                    sharpmz_set_gram_base_addr((sharpmz_get_gram_base_addr() + 1) & 0x1F, 1);
                     *menustate = MENU_SHARPMZ_DISPLAY1;
                     break;
 
                 case 5:
-                    sharpmz_set_aspect_ratio(sharpmz_get_aspect_ratio() ? 0 : 1, 1);
+                    sharpmz_set_vram_wait_mode(sharpmz_get_vram_wait_mode() ? 0 : 1, 1);
                     *menustate = MENU_SHARPMZ_DISPLAY1;
                     break;
 
                 case 6:
-                    sharpmz_set_scandoubler_fx((sharpmz_get_scandoubler_fx() + 1) & 0x07, 1);
+                    sharpmz_set_pcg_mode(sharpmz_get_pcg_mode() ? 0 : 1, 1);
                     *menustate = MENU_SHARPMZ_DISPLAY1;
                     break;
 
+             #if defined __SHARPMZ_DEBUG__
                 case 7:
+                    test_sb();
+                    *menustate = MENU_SHARPMZ_DISPLAY1;
+                    break;
+
+                case 8:
+             #else
+                case 7:
+             #endif
                     *menustate = MENU_SHARPMZ_MAIN1;
                     *menusub   = *menusub_last;
                     break;
+
+              //case 7:
+              //    sharpmz_set_aspect_ratio(sharpmz_get_aspect_ratio() ? 0 : 1, 1);
+              //    *menustate = MENU_SHARPMZ_DISPLAY1;
+              //    break;
+
+              //case 8:
+              //    sharpmz_set_scandoubler_fx((sharpmz_get_scandoubler_fx() + 1) & 0x07, 1);
+              //    *menustate = MENU_SHARPMZ_DISPLAY1;
+              //    break;
+
                 }
             }
             if (left)
@@ -2965,13 +3358,20 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             }
             break;
 
+#ifdef __SHARPMZ_DEBUG__
         // Debug options.
         case MENU_SHARPMZ_DEBUG1:
             menuItem  = 0;
             subItem   = 0;
             *menumask = 0;
 
-            OsdSetTitle("Debug", OSD_ARROW_LEFT);
+            if(debugEnabled == 1)
+            {
+                OsdSetTitle("Debug", OSD_ARROW_LEFT);
+            } else
+            {
+                OsdSetTitle("Memory Dump", OSD_ARROW_LEFT);
+            }
 
             OsdWrite(menuItem++, "", 0, 0);
 
@@ -2994,44 +3394,49 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
 
-            OsdWrite(menuItem++, "", 0, 0);
-            strcpy(sBuf, " Debug Mode:         ");
-            strcat(sBuf, sharpmz_get_debug_enable_string());
-            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
-
-            // Display the debug menu only when enabled.
+            // Only show debug options if the hardware supports it.
             //
-            if(sharpmz_get_debug_enable())
+            if(debugEnabled == 1)
             {
-                strcpy(sBuf, "   CPU Frequency:    ");
-                strcat(sBuf, sharpmz_get_debug_cpufreq_string());
+                OsdWrite(menuItem++, "", 0, 0);
+                strcpy(sBuf, " Debug Mode:         ");
+                strcat(sBuf, sharpmz_get_debug_enable_string());
                 OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
                 *menumask = (*menumask << 1) | 1;
 
-                strcpy(sBuf, "   Debug LEDS:       ");
-                strcat(sBuf, sharpmz_get_debug_leds_string());
-                OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-                *menumask = (*menumask << 1) | 1;
-
-                // Display the LED menu only when enabled.
+                // Display the debug menu only when enabled.
                 //
-                if(sharpmz_get_debug_leds())
+                if(sharpmz_get_debug_enable())
                 {
-                    strcpy(sBuf, "     Sample Freq:    ");
-                    strcat(sBuf, sharpmz_get_debug_leds_smpfreq_string());
+                    strcpy(sBuf, "   CPU Frequency:    ");
+                    strcat(sBuf, sharpmz_get_debug_cpufreq_string());
                     OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
                     *menumask = (*menumask << 1) | 1;
 
-                    strcpy(sBuf, "     Signal Block:   ");
-                    strcat(sBuf, sharpmz_get_debug_leds_bank_string());
+                    strcpy(sBuf, "   Debug LEDS:       ");
+                    strcat(sBuf, sharpmz_get_debug_leds_string());
                     OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
                     *menumask = (*menumask << 1) | 1;
 
-                    strcpy(sBuf, "            Bank:    ");
-                    strcat(sBuf, sharpmz_get_debug_leds_subbank_string());
-                    OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-                    *menumask = (*menumask << 1) | 1;
+                    // Display the LED menu only when enabled.
+                    //
+                    if(sharpmz_get_debug_leds())
+                    {
+                        strcpy(sBuf, "     Sample Freq:    ");
+                        strcat(sBuf, sharpmz_get_debug_leds_smpfreq_string());
+                        OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
+                        *menumask = (*menumask << 1) | 1;
+
+                        strcpy(sBuf, "     Signal Block:   ");
+                        strcat(sBuf, sharpmz_get_debug_leds_bank_string());
+                        OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
+                        *menumask = (*menumask << 1) | 1;
+
+                        strcpy(sBuf, "            Bank:    ");
+                        strcat(sBuf, sharpmz_get_debug_leds_subbank_string());
+                        OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
+                        *menumask = (*menumask << 1) | 1;
+                    }
                 }
             }
 
@@ -3055,6 +3460,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             if (select)
             {
                 *menusub_last = *menusub;
+                if(debugEnabled == 0) (*menusub) += 6;
                 switch(*menusub)
                 {
                 case 0:  // Select Memory Bank to be dumped.
@@ -3115,6 +3521,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                 *menusub   = *menusub_last;
             }
             break;
+#endif
 
         default:
             break;

@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "input.h"
 #include "fpga_io.h"
 #include "scheduler.h"
+#include "osd.h"
 
 const char *version = "$VER:" VDATE;
 
@@ -45,7 +46,6 @@ int main(int argc, char *argv[])
 	sched_setaffinity(0, sizeof(set), &set);
 
 	fpga_io_init();
-	fpga_gpo_write(0);
 
 	DISKLED_OFF;
 
@@ -56,6 +56,7 @@ int main(int argc, char *argv[])
 	printf("Version %s\n\n", version + 5);
 
 	if (argc > 1) printf("Core path: %s\n", argv[1]);
+	if (argc > 2) printf("XML path: %s\n", argv[2]);
 
 	if (!is_fpga_ready(1))
 	{
@@ -65,10 +66,30 @@ int main(int argc, char *argv[])
 	}
 
 	FindStorage();
-	user_io_init((argc > 1) ? argv[1] : "");
+	user_io_init((argc > 1) ? argv[1] : "",(argc > 2) ? argv[2] : NULL);
 
+#ifdef USE_SCHEDULER
 	scheduler_init();
 	scheduler_run();
+#else
+	while (1)
+	{
+		if (!is_fpga_ready(1))
+		{
+			printf("FPGA is not ready. JTAG uploading?\n");
+			printf("Waiting for FPGA to be ready...\n");
+			//enable reset in advance
+			fpga_core_reset(1);
 
+			while (!is_fpga_ready(0)) sleep(1);
+			reboot(0);
+		}
+
+		user_io_poll();
+		input_poll(0);
+		HandleUI();
+		OsdUpdate();
+	}
+#endif
 	return 0;
 }

@@ -14,6 +14,7 @@
 #include "file_io.h"
 #include "input.h"
 #include "osd.h"
+#include "menu.h"
 
 #include "fpga_base_addr_ac5.h"
 #include "fpga_manager.h"
@@ -448,7 +449,7 @@ static int make_env(const char *name, const char *cfg)
 	return 0;
 }
 
-int fpga_load_rbf(const char *name, const char *cfg)
+int fpga_load_rbf(const char *name, const char *cfg, const char *xml)
 {
 	OsdDisable();
 	static char path[1024];
@@ -456,6 +457,7 @@ int fpga_load_rbf(const char *name, const char *cfg)
 
 	if(cfg)
 	{
+		fpga_core_reset(1);
 		make_env(name, cfg);
 		do_bridge(0);
 		reboot(0);
@@ -469,7 +471,10 @@ int fpga_load_rbf(const char *name, const char *cfg)
 	int rbf = open(path, O_RDONLY);
 	if (rbf < 0)
 	{
+		char error[4096];
+		snprintf(error,4096,"%s\nNot Found", name);
 		printf("Couldn't open file %s\n", path);
+		Info(error,5000);
 		return -1;
 	}
 	else
@@ -492,6 +497,7 @@ int fpga_load_rbf(const char *name, const char *cfg)
 			}
 			else
 			{
+				fpga_core_reset(1);
 				if (read(rbf, buf, st.st_size)<st.st_size)
 				{
 					printf("Couldn't read file %s\n", name);
@@ -522,9 +528,37 @@ int fpga_load_rbf(const char *name, const char *cfg)
 		}
 	}
 	close(rbf);
-	app_restart(!strcasecmp(name, "menu.rbf") ? "menu.rbf" : path);
 
+	app_restart(!strcasecmp(name, "menu.rbf") ? "menu.rbf" : path, xml);
 	return ret;
+}
+
+static uint32_t gpo_copy = 0;
+void inline fpga_gpo_write(uint32_t value)
+{
+	gpo_copy = value;
+	writel(value, (void*)(SOCFPGA_MGR_ADDRESS + 0x10));
+}
+
+uint32_t inline fpga_gpo_read()
+{
+	return gpo_copy; //readl((void*)(SOCFPGA_MGR_ADDRESS + 0x10));
+}
+
+int inline fpga_gpi_read()
+{
+	return readl((void*)(SOCFPGA_MGR_ADDRESS + 0x14));
+}
+
+void fpga_core_write(uint32_t offset, uint32_t value)
+{
+	if (offset <= 0x1FFFFF) writel(value, (void*)(SOCFPGA_LWFPGASLAVES_ADDRESS + (offset & ~3)));
+}
+
+uint32_t fpga_core_read(uint32_t offset)
+{
+	if (offset <= 0x1FFFFF) return readl((void*)(SOCFPGA_LWFPGASLAVES_ADDRESS + (offset & ~3)));
+	return 0;
 }
 
 int fpga_io_init()
@@ -538,34 +572,8 @@ int fpga_io_init()
 		close(fd);
 		return -1;
 	}
-	return 0;
-}
 
-static uint32_t gpo_copy = 0;
-void fpga_gpo_write(uint32_t value)
-{
-	gpo_copy = value;
-	writel(value, (void*)(SOCFPGA_MGR_ADDRESS + 0x10));
-}
-
-uint32_t fpga_gpo_read()
-{
-	return gpo_copy; //readl((void*)(SOCFPGA_MGR_ADDRESS + 0x10));
-}
-
-int fpga_gpi_read()
-{
-	return readl((void*)(SOCFPGA_MGR_ADDRESS + 0x14));
-}
-
-void fpga_core_write(uint32_t offset, uint32_t value)
-{
-	if (offset <= 0x1FFFFF) writel(value, (void*)(SOCFPGA_LWFPGASLAVES_ADDRESS + (offset & ~3)));
-}
-
-uint32_t fpga_core_read(uint32_t offset)
-{
-	if (offset <= 0x1FFFFF) return readl((void*)(SOCFPGA_LWFPGASLAVES_ADDRESS + (offset & ~3)));
+	fpga_gpo_write(0);
 	return 0;
 }
 
@@ -635,7 +643,7 @@ char *getappname()
 	return dest;
 }
 
-void app_restart(const char *path)
+void app_restart(const char *path, const char *xml)
 {
 	sync();
 	fpga_core_reset(1);
@@ -645,7 +653,7 @@ void app_restart(const char *path)
 
 	char *appname = getappname();
 	printf("restarting the %s\n", appname);
-	execl(appname, appname, path, NULL);
+	execl(appname, appname, path, xml, NULL);
 
 	printf("Something went wrong. Rebooting...\n");
 	reboot(0);
@@ -665,4 +673,56 @@ int is_fpga_ready(int quick)
 	}
 
 	return fpgamgr_test_fpga_ready();
+}
+
+#define SSPI_STROBE  (1<<17)
+#define SSPI_ACK     SSPI_STROBE
+
+void fpga_spi_en(uint32_t mask, uint32_t en)
+{
+	uint32_t gpo = fpga_gpo_read() | 0x80000000;
+	fpga_gpo_write(en ? gpo | mask : gpo & ~mask);
+}
+
+uint16_t fpga_spi(uint16_t word)
+{
+	uint32_t gpo = (fpga_gpo_read() & ~(0xFFFF | SSPI_STROBE)) | word;
+
+	fpga_gpo_write(gpo);
+	fpga_gpo_write(gpo | SSPI_STROBE);
+
+	int gpi;
+	do
+	{
+		gpi = fpga_gpi_read();
+		if (gpi < 0)
+		{
+			printf("GPI[31]==1. FPGA is uninitialized?\n");
+			return 0;
+		}
+	} while (!(gpi & SSPI_ACK));
+
+	fpga_gpo_write(gpo);
+
+	do
+	{
+		gpi = fpga_gpi_read();
+		if (gpi < 0)
+		{
+			printf("GPI[31]==1. FPGA is uninitialized?\n");
+			return 0;
+		}
+	} while (gpi & SSPI_ACK);
+
+	return (uint16_t)gpi;
+}
+
+uint16_t fpga_spi_fast(uint16_t word)
+{
+	uint32_t gpo = (fpga_gpo_read() & ~(0xFFFF | SSPI_STROBE)) | word;
+
+	fpga_gpo_write(gpo);
+	fpga_gpo_write(gpo | SSPI_STROBE);
+	fpga_gpo_write(gpo);
+	return (uint16_t)fpga_gpi_read();
 }
