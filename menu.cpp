@@ -2113,6 +2113,7 @@ void HandleUI(void)
 				if (video_get_scaler_flt())
 				{
 					snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR"/%s", video_get_scaler_coeff());
+					if(!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_COEFF_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
@@ -2125,6 +2126,7 @@ void HandleUI(void)
 				if (video_get_gamma_en())
 				{
 					snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR"/%s", video_get_gamma_curve());
+					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_GAMMA_FILE_SELECTED, MENU_8BIT_SYSTEM1);
 				}
 				break;
@@ -2473,7 +2475,7 @@ void HandleUI(void)
 		{
 			printf("MENU_SFONT_FILE_SELECTED --> '%s'\n", selPath);
 			sprintf(Selected_tmp, "/sbin/mlinkutil FSSFONT /media/fat/\"%s\"", selPath);
-			system(s);
+			system(Selected_tmp);
 			AdjustDirectory(selPath);
 			//keep file select OSD
 			menustate = MENU_FILE_SELECT1; //MENU_UART1;
@@ -5276,7 +5278,9 @@ void PrintDirectory(int expand)
 	char s[40];
 	ScrollReset();
 
-	if (expand && cfg.browse_expand)
+	if (!cfg.browse_expand) expand = 0;
+
+	if (expand)
 	{
 		int k = flist_iFirstEntry() + OsdGetSize() - 1;
 		if (flist_nDirEntries() && k == flist_iSelectedEntry() && k <= flist_nDirEntries() &&
@@ -5298,7 +5302,7 @@ void PrintDirectory(int expand)
 		leftchar = 0;
 		int len = 0;
 
-		if (i < flist_nDirEntries())
+		if (k < flist_nDirEntries())
 		{
 			len = strlen(flist_DirItem(k)->altname); // get name length
 			if (len > 28)

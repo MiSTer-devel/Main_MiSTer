@@ -380,36 +380,31 @@ void pcecdd_t::Update() {
 			return;
 		}
 
-		if (this->index >= this->toc.last)
-		{
-			this->state = PCECD_STATE_IDLE;
-			return;
-		}
-
-		if (this->toc.tracks[this->index].type)
-			return;
+		this->index = GetTrackByLBA(this->lba, &this->toc);
 
 		DISKLED_ON;
 
 		for (int i = 0; i <= this->CDDAFirst; i++)
 		{
-			FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
+			if (this->toc.tracks[this->index].f.opened() && !this->toc.tracks[this->index].type)
+			{
+				FileSeek(&this->toc.tracks[index].f, (this->lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 
-			sec_buf[0] = 0x30;
-			sec_buf[1] = 0x09;
-			ReadCDDA(sec_buf + 2);
+				sec_buf[0] = 0x30;
+				sec_buf[1] = 0x09;
+				ReadCDDA(sec_buf + 2);
 
-			if (SendData)
-				SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
+				if (SendData)
+					SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
 
-			//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
-
+				//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
+			}
 			this->lba++;
 		}
 
 		this->CDDAFirst = 0;
 
-		if (this->lba > this->CDDAEnd)
+		if ((this->lba >= this->CDDAEnd) || this->toc.tracks[this->index].type || this->index >= this->toc.last)
 		{
 			if (this->CDDAMode == PCECD_CDDAMODE_LOOP) {
 				this->lba = this->CDDAStart;
@@ -421,6 +416,8 @@ void pcecdd_t::Update() {
 			if (this->CDDAMode == PCECD_CDDAMODE_INTERRUPT) {
 				PendStatus(PCECD_STATUS_GOOD, 0);
 			}
+
+			printf("\x1b[32mPCECD: playback reached the end %d\n\x1b[0m", this->lba);
 		}
 	}
 	else if (this->state == PCECD_STATE_PAUSE)
@@ -630,7 +627,7 @@ void pcecdd_t::CommandExec() {
 		}*/
 
 		this->CDDAStart = new_lba;
-		this->CDDAEnd = this->toc.tracks[index].end;
+		this->CDDAEnd = this->toc.end;
 		this->CDDAMode = comm[1];
 		this->CDDAFirst = 1;
 
