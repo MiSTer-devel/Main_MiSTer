@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "fpga_io.h"
 #include "scheduler.h"
 #include "osd.h"
+#include <time.h>
 
 const char *version = "$VER:" VDATE;
 
@@ -68,10 +69,13 @@ int main(int argc, char *argv[])
 	FindStorage();
 	user_io_init((argc > 1) ? argv[1] : "",(argc > 2) ? argv[2] : NULL);
 
-#ifdef USE_SCHEDULER
-	scheduler_init();
-	scheduler_run();
-#else
+//#ifdef USE_SCHEDULER
+//	scheduler_init();
+//	scheduler_run();
+//#else
+	struct timespec tim, tim2;
+	tim.tv_sec = 0;
+	tim.tv_nsec = 1000000L;
 	while (1)
 	{
 		if (!is_fpga_ready(1))
@@ -89,7 +93,8 @@ int main(int argc, char *argv[])
 		input_poll(0);
 		HandleUI();
 		OsdUpdate();
+		nanosleep(&tim, &tim2);
 	}
-#endif
+//#endif
 	return 0;
 }
