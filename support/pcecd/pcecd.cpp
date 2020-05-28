@@ -14,6 +14,7 @@
 
 static int /*loaded = 0, unloaded = 0,*/ need_reset=0;
 static uint8_t has_command = 0;
+static uint8_t us_cart = 0;
 
 void pcecd_poll()
 {
@@ -40,7 +41,7 @@ void pcecd_poll()
 
 			spi_uio_cmd_cont(UIO_CD_SET);
 			spi_w(s);
-			spi_w(0);
+			spi_w(0 | (us_cart << 1));
 			DisableIO();
 
 			pcecdd.has_status = 0;
@@ -50,7 +51,7 @@ void pcecd_poll()
 		else if (pcecdd.data_req) {
 			spi_uio_cmd_cont(UIO_CD_SET);
 			spi_w(0);
-			spi_w(1);
+			spi_w(1 | (us_cart << 1));
 			DisableIO();
 
 			pcecdd.data_req = false;
@@ -153,7 +154,7 @@ static int load_bios(char *biosname, const char *cuename)
 	fileTYPE f;
 	if (!FileOpen(&f, biosname)) return 0;
 
-	int swap = 0;
+	us_cart = 0;
 	uint32_t start = size & 0x3FF;
 
 	if (size >= 262144)
@@ -163,7 +164,7 @@ static int load_bios(char *biosname, const char *cuename)
 		FileSeek(&f, start + size - 26, SEEK_SET);
 		memset(buf, 0, sizeof(buf));
 		FileReadAdv(&f, buf, 26);
-		swap = !memcmp(buf, us_sig, sizeof(us_sig));
+		us_cart = !memcmp(buf, us_sig, sizeof(us_sig)) ? 1 : 0;
 	}
 
 	user_io_set_index(0);
@@ -176,7 +177,7 @@ static int load_bios(char *biosname, const char *cuename)
 		size -= chunk;
 
 		FileReadAdv(&f, buf, chunk);
-		if (swap)
+		if (us_cart)
 		{
 			for (uint32_t i = 0; i < chunk; i++)
 			{
