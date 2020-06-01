@@ -8,11 +8,12 @@
 #include "../../user_io.h"
 #include "../../spi.h"
 #include "../../hardware.h"
+#include "../../menu.h"
 #include "megacd.h"
 
 #define SAVE_IO_INDEX 5 // fake download to trigger save loading
 
-static int loaded = 0, unloaded = 0, need_reset=0;
+static int need_reset=0;
 static uint8_t has_command = 0;
 
 void mcd_poll()
@@ -71,16 +72,35 @@ void mcd_poll()
 		DisableIO();
 }
 
+static char buf[1024];
 static void mcd_mount_save(const char *filename)
 {
 	user_io_set_index(SAVE_IO_INDEX);
 	user_io_set_download(1);
-
-	static char name[1024];
-	FileGenerateSavePath(filename, name);
-	user_io_file_mount(name, 0, 1);
-
+	if (strlen(filename))
+	{
+		FileGenerateSavePath(filename, buf);
+		user_io_file_mount(buf, 0, 1);
+	}
+	else
+	{
+		user_io_file_mount("");
+	}
 	user_io_set_download(0);
+}
+
+static int mcd_load_rom(const char *basename, const char *name, int sub_index)
+{
+	strcpy(buf, basename);
+	char *p = strrchr(buf, '/');
+	if (p)
+	{
+		p++;
+		strcpy(p, name);
+		if (user_io_file_tx(buf, sub_index << 6)) return 1;
+	}
+
+	return 0;
 }
 
 void mcd_set_image(int num, const char *filename)
@@ -88,20 +108,27 @@ void mcd_set_image(int num, const char *filename)
 	(void)num;
 
 	cdd.Unload();
-	unloaded = 1;
 	cdd.status = CD_STAT_OPEN;
 
-	if (*filename) {
+	mcd_mount_save("");
+	sprintf(buf, "%s/boot.rom", HomeDir());
+	int loaded = user_io_file_tx(buf);
+	if (!loaded) Info("CD BIOS not found!", 4000);
 
-		mcd_mount_save(filename);
-
-		if (cdd.Load(filename) > 0) {
-			loaded = 1;
+	if (loaded && *filename)
+	{
+		if (cdd.Load(filename) > 0)
+		{
 			cdd.status = cdd.loaded ? CD_STAT_STOP : CD_STAT_NO_DISC;
 			cdd.latency = 10;
 			cdd.SendData = mcd_send_data;
+
+			mcd_load_rom(filename, "cd_bios.rom", 0);
+			mcd_load_rom(filename, "cart.rom", 1);
+			mcd_mount_save(filename);
 		}
-		else {
+		else
+		{
 			cdd.status = CD_STAT_NO_DISC;
 		}
 	}

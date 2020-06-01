@@ -235,7 +235,7 @@ int cdd_t::LoadCUE(const char* filename) {
 int cdd_t::Load(const char *filename)
 {
 	//char fname[1024 + 10];
-	static char header[1024];
+	static char header[32];
 	fileTYPE *fd_img;
 
 	Unload();
@@ -255,22 +255,7 @@ int cdd_t::Load(const char *filename)
 	}
 	else
 	{
-		FileReadAdv(fd_img, header, 0x10);
-		if (!memcmp("SEGADISCSYSTEM", header, 14))
-		{
-			this->sectorSize = 2352;
-		}
-	}
-
-	if (this->sectorSize)
-	{
-		FileReadAdv(fd_img, header + 0x10, 0x200);
-		FileSeek(fd_img, 0, SEEK_SET);
-	}
-	else
-	{
-		FileClose(fd_img);
-		return (-1);
+		this->sectorSize = 2352;
 	}
 
 	printf("\x1b[32mMCD: Sector size = %u, Track 0 end = %u\n\x1b[0m", this->sectorSize, this->toc.tracks[0].end);

@@ -1874,6 +1874,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		send_pcolchr(name, (index & 0x1F) | 0x20, 0);
 		send_pcolchr(name, (index & 0x1F) | 0x60, 1);
 	}
+
+	MenuHide();
 	return 1;
 }
 
