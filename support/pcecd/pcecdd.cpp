@@ -32,6 +32,7 @@ pcecdd_t::pcecdd_t() {
 	CDDAStart = 0;
 	CDDAEnd = 0;
 	CDDAMode = PCECD_CDDAMODE_SILENT;
+	region = 0;
 
 	stat[0] = 0x0;
 	stat[1] = 0x0;
@@ -744,15 +745,17 @@ void pcecdd_t::PendStatus(uint8_t status, uint8_t message) {
 	has_status = 1;
 }
 
-void pcecdd_t::SendStatus(uint8_t status, uint8_t message) {
-	uint16_t s = ((uint16_t)message << 8) | status;
+void pcecdd_t::SendStatus(uint16_t status, uint8_t flag) {
 
 	spi_uio_cmd_cont(UIO_CD_SET);
-	spi_w(s);
-	spi_w(0);
+	spi_w(status);
+	spi_w((flag & 1) | (region ? 2 : 0));
 	DisableIO();
 }
 
+void pcecdd_t::SetRegion(uint8_t rgn) {
+	region = rgn;
+}
 
 void pcecdd_t::LBAToMSF(int lba, msf_t* msf) {
 	msf->m = (lba / 75) / 60;

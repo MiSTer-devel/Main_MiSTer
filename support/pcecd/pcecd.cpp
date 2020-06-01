@@ -14,7 +14,6 @@
 
 static int /*loaded = 0, unloaded = 0,*/ need_reset=0;
 static uint8_t has_command = 0;
-static uint8_t us_cart = 0;
 
 void pcecd_poll()
 {
@@ -36,24 +35,17 @@ void pcecd_poll()
 		}
 
 		if (pcecdd.has_status && !pcecdd.latency) {
+
 			uint16_t s;
 			pcecdd.GetStatus((uint8_t*)&s);
-
-			spi_uio_cmd_cont(UIO_CD_SET);
-			spi_w(s);
-			spi_w(0 | (us_cart << 1));
-			DisableIO();
-
+			pcecdd.SendStatus(s, 0);
 			pcecdd.has_status = 0;
 
 			printf("\x1b[32mPCECD: Send status = %02X, message = %02X\n\x1b[0m", s&0xFF, s >> 8);
 		}
 		else if (pcecdd.data_req) {
-			spi_uio_cmd_cont(UIO_CD_SET);
-			spi_w(0);
-			spi_w(1 | (us_cart << 1));
-			DisableIO();
 
+			pcecdd.SendStatus(0, 1);
 			pcecdd.data_req = false;
 
 			printf("\x1b[32mPCECD: Data request for MODESELECT6\n\x1b[0m");
@@ -154,7 +146,7 @@ static int load_bios(char *biosname, const char *cuename)
 	fileTYPE f;
 	if (!FileOpen(&f, biosname)) return 0;
 
-	us_cart = 0;
+	uint8_t us_cart = 0;
 	uint32_t start = size & 0x3FF;
 
 	if (size >= 262144)
@@ -192,7 +184,7 @@ static int load_bios(char *biosname, const char *cuename)
 	user_io_file_mount(buf, 0, 1);
 
 	user_io_set_download(0);
-
+	pcecdd.SetRegion(us_cart);
 	return 1;
 }
 

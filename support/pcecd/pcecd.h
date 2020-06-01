@@ -82,7 +82,8 @@ public:
 	int GetStatus(uint8_t* buf);
 	int SetCommand(uint8_t* buf);
 	void PendStatus(uint8_t status, uint8_t message);
-	void SendStatus(uint8_t status, uint8_t message);
+	void SendStatus(uint16_t status, uint8_t flag);
+	void SetRegion(uint8_t rgn);
 
 private:
 	toc_t toc;
@@ -98,6 +99,7 @@ private:
 	int CDDAFirst;
 	uint8_t CDDAMode;
 	sense_t sense;
+	uint8_t region;
 
 	uint8_t stat[2];
 	uint8_t comm[14];
