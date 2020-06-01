@@ -1102,7 +1102,6 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 
 static Imlib_Image load_bg()
 {
-	const char* bgdir = "wallpapers";
 	const char* fname = "menu.png";
 	if (!FileExists(fname))
 	{
@@ -1110,18 +1109,28 @@ static Imlib_Image load_bg()
 		if (!FileExists(fname)) fname = 0;
 	}
 
-	if (!fname && PathIsDir(bgdir))
+	if (!fname)
 	{
-		int rndfd = open("/dev/urandom", O_RDONLY);
-		if (rndfd >= 0)
-		{
-			uint32_t rnd;
-			read(rndfd, &rnd, sizeof(rnd));
-			close(rndfd);
+		char bgdir[32];
 
-			int count = 0;
-			get_file_fromdir(bgdir, -1, &count);
-			if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
+		int alt = altcfg();
+		sprintf(bgdir, "wallpapers_alt_%d", alt);
+		if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
+		if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
+
+		if (PathIsDir(bgdir))
+		{
+			int rndfd = open("/dev/urandom", O_RDONLY);
+			if (rndfd >= 0)
+			{
+				uint32_t rnd;
+				read(rndfd, &rnd, sizeof(rnd));
+				close(rndfd);
+
+				int count = 0;
+				get_file_fromdir(bgdir, -1, &count);
+				if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
+			}
 		}
 	}
 
