@@ -55,7 +55,8 @@ void mcd_poll()
 		data_in[2] = spi_w(0);
 		DisableIO();
 
-		if (need_reset) {
+		if (need_reset || data_in[0] == 0xFF) {
+			printf("MCD: request to reset\n");
 			need_reset = 0;
 			cdd.Reset();
 		}
