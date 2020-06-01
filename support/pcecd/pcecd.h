@@ -82,6 +82,7 @@ public:
 	int GetStatus(uint8_t* buf);
 	int SetCommand(uint8_t* buf);
 	void PendStatus(uint8_t status, uint8_t message);
+	void SendStatus(uint8_t status, uint8_t message);
 
 private:
 	toc_t toc;
