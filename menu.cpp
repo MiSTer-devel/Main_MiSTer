@@ -1758,7 +1758,7 @@ void HandleUI(void)
 						strcpy(fs_pFileExt, ext);
 
 						memcpy(Selected_tmp, Selected_S[ioctl_index & 3], sizeof(Selected_tmp));
-						if (is_pce())
+						if (is_pce() || is_megacd())
 						{
 							fs_Options |= SCANO_NOENTER;
 							char *p = strrchr(Selected_tmp, '/');
