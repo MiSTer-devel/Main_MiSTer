@@ -140,14 +140,13 @@ static char us_sig[] =
 
 static int load_bios(char *biosname, const char *cuename)
 {
-	uint32_t size = FileLoad(biosname, 0, 0);
-	if (!size) return 0;
-
 	fileTYPE f;
 	if (!FileOpen(&f, biosname)) return 0;
 
-	uint8_t us_cart = 0;
-	uint32_t start = size & 0x3FF;
+	uint8_t us_cart = 0, swap = 0;
+
+	uint32_t start = f.size & 0x3FF;
+	uint32_t size = f.size;
 
 	if (size >= 262144)
 	{
@@ -156,7 +155,7 @@ static int load_bios(char *biosname, const char *cuename)
 		FileSeek(&f, start + size - 26, SEEK_SET);
 		memset(buf, 0, sizeof(buf));
 		FileReadAdv(&f, buf, 26);
-		us_cart = !memcmp(buf, us_sig, sizeof(us_sig)) ? 1 : 0;
+		swap = !memcmp(buf, us_sig, sizeof(us_sig)) ? 1 : 0;
 	}
 
 	user_io_set_index(0);
@@ -165,16 +164,23 @@ static int load_bios(char *biosname, const char *cuename)
 
 	while (size)
 	{
-		uint16_t chunk = (size > sizeof(buf)) ? sizeof(buf) : size;
+		int chunk = (size > sizeof(buf)) ? sizeof(buf) : size;
 		size -= chunk;
 
 		FileReadAdv(&f, buf, chunk);
-		if (us_cart)
+		if (swap)
 		{
-			for (uint32_t i = 0; i < chunk; i++)
+			for (int i = 0; i < chunk; i++)
 			{
 				unsigned char c = buf[i];
 				buf[i] = ((c & 1) << 7) | ((c & 2) << 5) | ((c & 4) << 3) | ((c & 8) << 1) | ((c & 16) >> 1) | ((c & 32) >> 3) | ((c & 64) >> 5) | ((c & 128) >> 7);
+			}
+		}
+		else if (f.size >= 262144)
+		{
+			for (int i = 0; i < chunk - 8; i++)
+			{
+				if (!memcmp(buf + i, "ALL DATA", 8)) us_cart = 1;
 			}
 		}
 		user_io_file_tx_write((uint8_t*)buf, chunk);
@@ -184,7 +190,7 @@ static int load_bios(char *biosname, const char *cuename)
 	user_io_file_mount(buf, 0, 1);
 
 	user_io_set_download(0);
-	pcecdd.SetRegion(us_cart);
+	pcecdd.SetRegion(swap | us_cart);
 	return 1;
 }
 
