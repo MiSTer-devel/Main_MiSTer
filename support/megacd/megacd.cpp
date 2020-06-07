@@ -9,6 +9,7 @@
 #include "../../spi.h"
 #include "../../hardware.h"
 #include "../../menu.h"
+#include "../../cheats.h"
 #include "megacd.h"
 
 #define SAVE_IO_INDEX 5 // fake download to trigger save loading
@@ -106,15 +107,31 @@ static int mcd_load_rom(const char *basename, const char *name, int sub_index)
 
 void mcd_set_image(int num, const char *filename)
 {
+	static char last_dir[1024] = {};
+
 	(void)num;
 
 	cdd.Unload();
 	cdd.status = CD_STAT_OPEN;
 
-	mcd_mount_save("");
-	sprintf(buf, "%s/boot.rom", HomeDir());
-	int loaded = user_io_file_tx(buf);
-	if (!loaded) Info("CD BIOS not found!", 4000);
+	int same_game = *filename && *last_dir && !strncmp(last_dir, filename, strlen(last_dir));
+	strcpy(last_dir, filename);
+	char *p = strrchr(last_dir, '/');
+	if (p) *p = 0;
+
+	int loaded = 1;
+	if (!same_game)
+	{
+		mcd_mount_save("");
+
+		user_io_8bit_set_status(1, 1);
+		user_io_8bit_set_status(0, 1);
+		mcd_reset();
+
+		sprintf(buf, "%s/boot.rom", HomeDir());
+		loaded = user_io_file_tx(buf);
+		if (!loaded) Info("CD BIOS not found!", 4000);
+	}
 
 	if (loaded && *filename)
 	{
@@ -124,9 +141,13 @@ void mcd_set_image(int num, const char *filename)
 			cdd.latency = 10;
 			cdd.SendData = mcd_send_data;
 
-			mcd_load_rom(filename, "cd_bios.rom", 0);
-			mcd_load_rom(filename, "cart.rom", 1);
-			mcd_mount_save(filename);
+			if (!same_game)
+			{
+				mcd_load_rom(filename, "cd_bios.rom", 0);
+				mcd_load_rom(filename, "cart.rom", 1);
+				mcd_mount_save(filename);
+				cheats_init(filename, 0);
+			}
 		}
 		else
 		{

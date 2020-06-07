@@ -1760,9 +1760,15 @@ void HandleUI(void)
 						memcpy(Selected_tmp, Selected_S[ioctl_index & 3], sizeof(Selected_tmp));
 						if (is_pce() || is_megacd())
 						{
-							fs_Options |= SCANO_NOENTER;
-							char *p = strrchr(Selected_tmp, '/');
-							if (p) *p = 0;
+							int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);
+							memcpy(Selected_tmp, Selected_S[ioctl_index & 3], sizeof(Selected_tmp));
+
+							if (num == 1)
+							{
+								fs_Options |= SCANO_NOENTER;
+								char *p = strrchr(Selected_tmp, '/');
+								if (p) *p = 0;
+							}
 						}
 
 						if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
@@ -1904,15 +1910,7 @@ void HandleUI(void)
 		}
 		else if (is_megacd())
 		{
-			uint32_t status = user_io_8bit_set_status(0, 0);
-			if (!(status & 4))
-			{
-				user_io_8bit_set_status(1, 1);
-				user_io_8bit_set_status(0, 1);
-				mcd_reset();
-			}
 			mcd_set_image(ioctl_index, selPath);
-			cheats_init(selPath, 0);
 		}
 		else if (is_pce())
 		{
