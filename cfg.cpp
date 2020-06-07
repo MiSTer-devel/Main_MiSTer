@@ -54,7 +54,7 @@ static const ini_var_t ini_vars[] =
 	{ "RBF_HIDE_DATECODE", (void*)(&(cfg.rbf_hide_datecode)), UINT8, 0, 1 },
 	{ "MENU_PAL", (void*)(&(cfg.menu_pal)), UINT8, 0, 1 },
 	{ "BOOTCORE", (void*)(&(cfg.bootcore)), STRING, 0, sizeof(cfg.bootcore) - 1 },
-	{ "BOOTCORE_TIMEOUT", (void*)(&(cfg.bootcore_timeout)), INT16, 10, 30 },
+	{ "BOOTCORE_TIMEOUT", (void*)(&(cfg.bootcore_timeout)), INT16, 2, 30 },
 	{ "FONT", (void*)(&(cfg.font)), STRING, 0, sizeof(cfg.font) - 1 },
 	{ "FB_SIZE", (void*)(&(cfg.fb_size)), UINT8, 0, 4 },
 	{ "FB_TERMINAL", (void*)(&(cfg.fb_terminal)), UINT8, 0, 1 },

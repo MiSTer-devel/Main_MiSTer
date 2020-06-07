@@ -494,9 +494,6 @@ static uint32_t menu_key_get(void)
 		}
 		c2 = c1;
 
-		// inject a fake "MENU_KEY" if no menu is visible and the menu key is loaded
-		if (!user_io_osd_is_visible() && !video_fb_state() && is_menu()) c = KEY_F12;
-
 		// generate repeat "key-pressed" events
 		if ((c1 & UPSTROKE) || (!c1))
 		{
@@ -905,7 +902,7 @@ void HandleUI(void)
 	minus = false;
 	recent = false;
 
-	if (c && c != KEY_F12 && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
+	if (c && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
 
 	if (is_menu())
 	{
@@ -1150,7 +1147,7 @@ void HandleUI(void)
 		// fall through
 	case MENU_ERROR:
 	case MENU_NONE2:
-		if (menu)
+		if (menu || (is_menu() && !video_fb_state()))
 		{
 			page = 0;
 			OsdSetSize(16);
@@ -5149,8 +5146,9 @@ void HandleUI(void)
 
 			if (cfg.bootcore[0] != '\0')
 			{
-				if (btimeout >= 10)
+				if (btimeout > 0)
 				{
+					OsdWrite(12, "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81");
 					sprintf(str, " Bootcore -> %s", bootcoretype);
 					OsdWrite(13, str, 0, 0);
 					strcpy(straux, cfg.bootcore);
@@ -5173,7 +5171,7 @@ void HandleUI(void)
 					sprintf(str, "   Press any key to cancel");
 					OsdWrite(15, str, 0, 0);
 					btimeout--;
-					if (btimeout < 10)
+					if (!btimeout)
 					{
 						OsdWrite(13, "", 0, 0);
 						OsdWrite(14, s, 1, 0, 0, 0);
