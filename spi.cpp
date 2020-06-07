@@ -227,7 +227,7 @@ void spi_block_write_16be(const uint16_t *addr)
 	while (len--)
 	{
 		tmp = *addr++;
-		spi_w(SWAPW(tmp));
+		fpga_spi_fast(SWAPW(tmp));
 	}
 }
 
@@ -237,7 +237,7 @@ void spi_block_read_16be(uint16_t *addr)
 	uint16_t tmp;
 	while (len--)
 	{
-		tmp = spi_w(0xFFFF);
+		tmp = fpga_spi_fast(0xFFFF);
 		*addr++ = SWAPW(tmp);
 	}
 }

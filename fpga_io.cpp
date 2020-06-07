@@ -38,29 +38,8 @@ static struct nic301_registers       *nic301_regs  = (nic301_registers *)SOCFPGA
 static uint32_t *map_base;
 static int fd;
 
-static __inline void writel(uint32_t val, const void* reg)
-{
-/*
-	if(!IS_REG(reg))
-	{
-		printf("ERROR: Trying to write undefined address: %p\n.", reg);
-		fatal(-1);
-	}
-*/
-	*MAP_ADDR(reg) = val;
-}
-
-static __inline uint32_t readl(const void* reg)
-{
-/*
-	if (!IS_REG(reg))
-	{
-		printf("ERROR: Trying to read undefined address: %p\n.", reg);
-		fatal(-1);
-	}
-*/
-	return *MAP_ADDR(reg);
-}
+#define writel(val, reg) *MAP_ADDR(reg) = val
+#define readl(reg) *MAP_ADDR(reg)
 
 #define clrsetbits_le32(addr, clear, set) writel((readl(addr) & ~(clear)) | (set), addr)
 #define setbits_le32(addr, set)           writel( readl(addr) | (set), addr)
@@ -540,15 +519,8 @@ void inline fpga_gpo_write(uint32_t value)
 	writel(value, (void*)(SOCFPGA_MGR_ADDRESS + 0x10));
 }
 
-uint32_t inline fpga_gpo_read()
-{
-	return gpo_copy; //readl((void*)(SOCFPGA_MGR_ADDRESS + 0x10));
-}
-
-int inline fpga_gpi_read()
-{
-	return readl((void*)(SOCFPGA_MGR_ADDRESS + 0x14));
-}
+#define fpga_gpo_read() gpo_copy //readl((void*)(SOCFPGA_MGR_ADDRESS + 0x10))
+#define fpga_gpi_read() (int)readl((void*)(SOCFPGA_MGR_ADDRESS + 0x14))
 
 void fpga_core_write(uint32_t offset, uint32_t value)
 {
@@ -591,7 +563,7 @@ int fpga_core_id()
 
 int fpga_get_fio_size()
 {
-	return (fpga_gpi_read()>>16) & 1;
+	return (fpga_gpi_read() >> 16) & 1;
 }
 
 int fpga_get_io_version()
@@ -720,7 +692,6 @@ uint16_t fpga_spi(uint16_t word)
 uint16_t fpga_spi_fast(uint16_t word)
 {
 	uint32_t gpo = (fpga_gpo_read() & ~(0xFFFF | SSPI_STROBE)) | word;
-
 	fpga_gpo_write(gpo);
 	fpga_gpo_write(gpo | SSPI_STROBE);
 	fpga_gpo_write(gpo);
