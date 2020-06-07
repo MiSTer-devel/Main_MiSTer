@@ -42,6 +42,8 @@ typedef struct {
 	uint8_t recents;
 	uint16_t jammasd_vid;
 	uint16_t jammasd_pid;
+	uint16_t jpac_vid;
+	uint16_t jpac_pid;
 	uint8_t sniper_mode;
 	uint8_t browse_expand;
 	char bootcore[256];
