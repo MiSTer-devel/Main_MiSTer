@@ -5279,6 +5279,10 @@ void ScrollLongName(void)
 		{
 			max_len = 20; // __.__.__ remove that from the end
 		}
+		else if (cfg.browse_expand && len < 55)
+		{
+			return;
+		}
 	}
 
 	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
@@ -5295,8 +5299,9 @@ void PrintDirectory(int expand)
 	if (expand)
 	{
 		int k = flist_iFirstEntry() + OsdGetSize() - 1;
-		if (flist_nDirEntries() && k == flist_iSelectedEntry() && k <= flist_nDirEntries() &&
-		    strlen(flist_DirItem(k)->altname) > 28 && !flist_DirItem(k)->datecode[0] && flist_DirItem(k)->de.d_type != DT_DIR)
+		if (flist_nDirEntries() && k == flist_iSelectedEntry() && k <= flist_nDirEntries()
+			&& strlen(flist_DirItem(k)->altname) > 28 && !(!cfg.rbf_hide_datecode && flist_DirItem(k)->datecode[0])
+			&& flist_DirItem(k)->de.d_type != DT_DIR)
 		{
 			//make room for last expanded line
 			flist_iFirstEntryInc();
