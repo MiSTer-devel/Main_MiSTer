@@ -39,6 +39,7 @@ static char core_path[1024] = {};
 static char rbf_path[1024] = {};
 
 static uint8_t vol_att = 0;
+static uint8_t corevol_att = 0;
 unsigned long vol_set_timeout = 0;
 
 static fileTYPE sd_image[4] = {};
@@ -765,9 +766,16 @@ void user_io_init(const char *path, const char *xml)
 
 	video_mode_load();
 	if(strlen(cfg.font)) LoadFont(cfg.font);
+
 	FileLoadConfig("Volume.dat", &vol_att, 1);
-	vol_att &= 0x1F;
-	spi_uio_cmd8(UIO_AUDVOL, vol_att);
+	if (!is_menu())
+	{
+		static char cfg_name[128];
+		sprintf(cfg_name, "%s_volume.cfg", user_io_get_core_name_ex());
+		FileLoadConfig(cfg_name, &corevol_att, 1);
+	}
+	send_volume();
+
 	user_io_send_buttons(1);
 
 	switch (core_type)
@@ -2661,6 +2669,10 @@ void user_io_poll()
 	{
 		vol_set_timeout = 0;
 		FileSaveConfig("Volume.dat", &vol_att, 1);
+
+		static char cfg_name[128];
+		sprintf(cfg_name, "%s_volume.cfg", user_io_get_core_name_ex());
+		FileSaveConfig(cfg_name, &corevol_att, 1);
 	}
 
 	if (diskled_is_on && CheckTimer(diskled_timer))
@@ -2946,9 +2958,24 @@ void user_io_osd_key_enable(char on)
 	input_switch(-1);
 }
 
+void send_volume()
+{
+	get_volume();
+	get_core_volume();
+	if (!(vol_att & 0x10) && vol_att + corevol_att > 7) vol_att = 7 - corevol_att;
+	spi_uio_cmd8(UIO_AUDVOL, vol_att + corevol_att);
+}
+
 int get_volume()
 {
 	return vol_att & 0x17;
+}
+
+int get_core_volume()
+{
+	corevol_att &= 7;
+	if (corevol_att > 6) corevol_att = 6;
+	return corevol_att;
 }
 
 void set_volume(int cmd)
@@ -2961,7 +2988,7 @@ void set_volume(int cmd)
 	else if (cmd < 0 && vol_att < 7) vol_att += 1;
 	else if (cmd > 0 && vol_att > 0) vol_att -= 1;
 
-	spi_uio_cmd8(UIO_AUDVOL, vol_att);
+	send_volume();
 
 	if (vol_att & 0x10)
 	{
@@ -2974,10 +3001,23 @@ void set_volume(int cmd)
 
 		sprintf(str, "\x8d ");
 		char *bar = str + strlen(str);
-		memset(bar, 0x8C, 8);
-		memset(bar, 0x7f, 8 - vol_att);
+
+		int vol = get_core_volume();
+		memset(bar, 0x8C, 8 - vol);
+		memset(bar, 0x7f, 8 - vol - vol_att);
 		Info(str, 1000);
 	}
+}
+
+void set_core_volume(int cmd)
+{
+	vol_set_timeout = GetTimer(1000);
+
+	corevol_att &= 7;
+	if (cmd < 0 && corevol_att < 6) corevol_att += 1;
+	if (cmd > 0 && corevol_att > 0) corevol_att -= 1;
+
+	send_volume();
 }
 
 void user_io_kbd(uint16_t key, int press)

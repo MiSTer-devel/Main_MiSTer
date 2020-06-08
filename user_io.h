@@ -249,6 +249,9 @@ void SetMidiLinkMode(int mode);
 
 void set_volume(int cmd);
 int  get_volume();
+int  get_core_volume();
+void set_core_volume(int cmd);
+void send_volume();
 
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();

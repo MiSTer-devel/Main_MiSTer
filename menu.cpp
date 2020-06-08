@@ -1323,7 +1323,7 @@ void HandleUI(void)
 		else if (left)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 1;
+			menusub = 2;
 		}
 		break;
 
@@ -1866,7 +1866,7 @@ void HandleUI(void)
 		else if (left && !page)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 1;
+			menusub = 2;
 		}
 		break;
 
@@ -2557,7 +2557,7 @@ void HandleUI(void)
 	case MENU_8BIT_INFO:
 		OsdSetSize(16);
 		helptext = 0;
-		menumask = 3;
+		menumask = 7;
 		menustate = MENU_8BIT_INFO2;
 		OsdSetTitle("System", OSD_ARROW_RIGHT);
 
@@ -2566,8 +2566,18 @@ void HandleUI(void)
 
 		OsdWrite(3, "         Information");
 
+		m = get_core_volume();
+		{
+			strcpy(s, "     Core Volume: ");
+			memset(s + strlen(s), 0, 10);
+			char *bar = s + strlen(s);
+			memset(bar, 0x8C, 8);
+			memset(bar, 0x7f, 8 - m);
+		}
+		OsdWrite(12, s, menusub == 0);
+
 		m = get_volume();
-		strcpy(s, "      Volume: ");
+		strcpy(s, "   Global Volume: ");
 		if (m & 0x10)
 		{
 			strcat(s, "< Mute >");
@@ -2576,22 +2586,28 @@ void HandleUI(void)
 		{
 			memset(s+strlen(s), 0, 10);
 			char *bar = s + strlen(s);
-			memset(bar, 0x8C, 8);
-			memset(bar, 0x7f, 8 - m);
+			int vol = get_core_volume();
+			memset(bar, 0x8C, 8 - vol);
+			memset(bar, 0x7f, 8 - vol - m);
 		}
+		OsdWrite(13, s, menusub == 1);
 
-		OsdWrite(13, s, menusub == 0);
-		OsdWrite(15, STD_EXIT, menusub == 1, 0, OSD_ARROW_RIGHT);
+		OsdWrite(15, STD_EXIT, menusub == 2, 0, OSD_ARROW_RIGHT);
 		break;
 
 	case MENU_8BIT_INFO2:
 		printSysInfo();
-		if ((select && menusub == 1) || menu)
+		if ((select && menusub == 2) || menu)
 		{
 			menustate = MENU_NONE1;
 			break;
 		}
-		else if(menusub == 0 && (right || left || select))
+		else if(menusub == 0 && (right || left))
+		{
+			set_core_volume(right ? 1 : -1);
+			menustate = MENU_8BIT_INFO;
+		}
+		else if (menusub == 1 && (right || left || select))
 		{
 			set_volume(right ? 1 : left ? -1 : 0);
 			menustate = MENU_8BIT_INFO;
@@ -3055,7 +3071,7 @@ void HandleUI(void)
 		else if (left)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 1;
+			menusub = 2;
 		}
 		else if (select)
 		{
@@ -3616,7 +3632,7 @@ void HandleUI(void)
 		else if (left)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 1;
+			menusub = 2;
 		}
 		break;
 
