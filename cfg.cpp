@@ -66,10 +66,8 @@ static const ini_var_t ini_vars[] =
 	{ "CONTROLLER_INFO", (void*)(&(cfg.controller_info)), UINT8, 0, 10 },
 	{ "REFRESH_MIN", (void*)(&(cfg.refresh_min)), UINT8, 0, 150 },
 	{ "REFRESH_MAX", (void*)(&(cfg.refresh_max)), UINT8, 0, 150 },
-	{ "JAMMASD_VID", (void*)(&(cfg.jammasd_vid)), UINT16, 0, 0xFFFF },
-	{ "JAMMASD_PID", (void*)(&(cfg.jammasd_pid)), UINT16, 0, 0xFFFF },
-	{ "JPAC_VID", (void*)(&(cfg.jpac_vid)), UINT16, 0, 0xFFFF },
-	{ "JPAC_PID", (void*)(&(cfg.jpac_pid)), UINT16, 0, 0xFFFF },
+	{ "JAMMA_VID", (void*)(&(cfg.jamma_vid)), UINT16, 0, 0xFFFF },
+	{ "JAMMA_PID", (void*)(&(cfg.jamma_pid)), UINT16, 0, 0xFFFF },
 	{ "SNIPER_MODE", (void*)(&(cfg.sniper_mode)), UINT8, 0, 1 },
 	{ "BROWSE_EXPAND", (void*)(&(cfg.browse_expand)), UINT8, 0, 1 },
 };
