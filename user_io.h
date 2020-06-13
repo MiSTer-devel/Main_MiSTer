@@ -69,6 +69,7 @@
 #define UIO_INFO_GET    0x36
 #define UIO_SETWIDTH    0x37  // Set max scaled horizontal resolution
 #define UIO_SETSYNC     0x38
+#define UIO_SET_AFILTER 0x39
 
 // codes as used by 8bit for file loading from OSD
 #define UIO_FILE_TX     0x53
@@ -246,12 +247,6 @@ int GetUARTMode();
 void SetUARTMode(int mode);
 int GetMidiLinkMode();
 void SetMidiLinkMode(int mode);
-
-void set_volume(int cmd);
-int  get_volume();
-int  get_core_volume();
-void set_core_volume(int cmd);
-void send_volume();
 
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();

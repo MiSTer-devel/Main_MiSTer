@@ -118,6 +118,7 @@ bool isMraName(char *path);
 
 #define COEFF_DIR "filters"
 #define GAMMA_DIR "gamma"
+#define AFILTER_DIR "filters_audio"
 #define GAMES_DIR "games"
 #define CIFS_DIR "cifs"
 

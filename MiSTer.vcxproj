@@ -48,6 +48,7 @@
     <None Include="Makefile" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="audio.cpp" />
     <ClCompile Include="battery.cpp" />
     <ClCompile Include="bootcore.cpp" />
     <ClCompile Include="brightness.cpp" />
@@ -98,6 +99,7 @@
     <ClCompile Include="video.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="audio.h" />
     <ClInclude Include="battery.h" />
     <ClInclude Include="bootcore.h" />
     <ClInclude Include="brightness.h" />
