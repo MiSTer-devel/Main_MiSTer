@@ -2617,6 +2617,7 @@ void HandleUI(void)
 		m = get_core_volume();
 		{
 			strcpy(s, "     Core Volume: ");
+			if (audio_filter_en() >= 0) s[4] = 0x1b;
 			memset(s + strlen(s), 0, 10);
 			char *bar = s + strlen(s);
 			memset(bar, 0x8C, 8);
@@ -2634,7 +2635,7 @@ void HandleUI(void)
 		{
 			memset(s+strlen(s), 0, 10);
 			char *bar = s + strlen(s);
-			int vol = get_core_volume();
+			int vol = (audio_filter_en() < 0) ? get_core_volume() : 0;
 			memset(bar, 0x8C, 8 - vol);
 			memset(bar, 0x7f, 8 - vol - m);
 		}

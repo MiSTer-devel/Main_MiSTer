@@ -25,12 +25,114 @@ static uint8_t corevol_att = 0;
 unsigned long vol_set_timeout = 0;
 static int has_filter = 0;
 
+static char filter_cfg_path[1024] = {};
+static char filter_cfg[1024] = {};
+
+static void setFilter()
+{
+	fileTYPE f = {};
+
+	has_filter = spi_uio_cmd(UIO_SET_AFILTER);
+	if (!has_filter) return;
+
+	sprintf(filter_cfg_path, AFILTER_DIR"/%s", filter_cfg + 1);
+	if(filter_cfg[0]) printf("\nLoading audio filter: %s\n", filter_cfg_path);
+
+	if (filter_cfg[0] && FileOpen(&f, filter_cfg_path))
+	{
+		char *buf = (char*)malloc(f.size + 1);
+		if (buf)
+		{
+			memset(buf, 0, f.size + 1);
+			int size;
+			if ((size = FileReadAdv(&f, buf, f.size)))
+			{
+				int line = 0;
+				spi_uio_cmd_cont(UIO_SET_AFILTER);
+				spi_w((uint8_t)get_core_volume());
+
+				char *end = buf + size;
+				char *pos = buf;
+				while (pos < end && line < 9)
+				{
+					char *st = pos;
+					while ((pos < end) && *pos && (*pos != 10)) pos++;
+					*pos = 0;
+					while (*st == ' ' || *st == '\t' || *st == 13) st++;
+					if (*st == '#' || *st == ';' || !*st) pos++;
+					else
+					{
+						if (line == 0)
+						{
+							printf("version: %s\n", st);
+							if (strncasecmp(st, "v1", 2)) break;
+							line++;
+						}
+						else if (line == 1 || line == 3 || line == 4 || line == 5)
+						{
+							int val = 0;
+							int n = sscanf(st, "%d", &val);
+							printf("got %d values: %d\n", n, val);
+							if (n == 1)
+							{
+								spi_w((uint16_t)val);
+								if (line == 1) spi_w((uint16_t)(val >> 16));
+								line++;
+							}
+						}
+						else if (line == 2)
+						{
+							double val = 0;
+							int n = sscanf(st, "%lg", &val);
+							printf("got %d values: %g\n", n, val);
+							if (n == 1)
+							{
+								int64_t coeff = 0x8000000000 * val;
+								printf("  -> converted to: %lld\n", coeff);
+								spi_w((uint16_t)coeff);
+								spi_w((uint16_t)(coeff >> 16));
+								spi_w((uint16_t)(coeff >> 32));
+								line++;
+							}
+						}
+						else
+						{
+							double val = 0;
+							int n = sscanf(st, "%lg", &val);
+							printf("got %d values: %g\n", n, val);
+							if (n == 1)
+							{
+								int32_t coeff = 0x200000 * val;
+								printf("  -> converted to: %d\n", coeff);
+								spi_w((uint16_t)coeff);
+								spi_w((uint16_t)(coeff >> 16));
+								line++;
+							}
+						}
+					}
+				}
+				DisableIO();
+			}
+			free(buf);
+		}
+	}
+	else
+	{
+		spi_uio_cmd8(UIO_SET_AFILTER, (uint8_t)get_core_volume());
+	}
+}
+
 void send_volume()
 {
-	get_volume();
+	int vol = get_volume();
 	get_core_volume();
-	if (!(vol_att & 0x10) && vol_att + corevol_att > 7) vol_att = 7 - corevol_att;
-	spi_uio_cmd8(UIO_AUDVOL, vol_att + corevol_att);
+
+	if (!has_filter)
+	{
+		if (!(vol_att & 0x10) && vol_att + corevol_att > 7) vol_att = 7 - corevol_att;
+		vol = vol_att + corevol_att;
+	}
+	spi_uio_cmd8(UIO_AUDVOL, vol);
 }
 
 int get_volume()
@@ -69,7 +171,7 @@ void set_volume(int cmd)
 		sprintf(str, "\x8d ");
 		char *bar = str + strlen(str);
 
-		int vol = get_core_volume();
+		int vol = (audio_filter_en() < 0) ? get_core_volume() : 0;
 		memset(bar, 0x8C, 8 - vol);
 		memset(bar, 0x7f, 8 - vol - vol_att);
 		Info(str, 1000);
@@ -84,7 +186,8 @@ void set_core_volume(int cmd)
 	if (cmd < 0 && corevol_att < 6) corevol_att += 1;
 	if (cmd > 0 && corevol_att > 0) corevol_att -= 1;
 
-	send_volume();
+	if (has_filter) setFilter();
+	else send_volume();
 }
 
 void save_volume()
@@ -100,93 +203,14 @@ void save_volume()
 	}
 }
 
-static char filter_cfg_path[1024] = {};
-static char filter_cfg[1024] = {};
-
-static void setFilter()
-{
-	fileTYPE f = {};
-
-	has_filter = spi_uio_cmd(UIO_SET_AFILTER);
-	if (!has_filter || !filter_cfg[0]) return;
-
-	sprintf(filter_cfg_path, AFILTER_DIR"/%s", filter_cfg + 1);
-
-	if (filter_cfg[0] && FileOpen(&f, filter_cfg_path))
-	{
-		char *buf = (char*)malloc(f.size + 1);
-		if (buf)
-		{
-			memset(buf, 0, f.size + 1);
-			int size;
-			if ((size = FileReadAdv(&f, buf, f.size)))
-			{
-				int line = 0;
-				spi_uio_cmd_cont(UIO_SET_AFILTER);
-
-				char *end = buf + size;
-				char *pos = buf;
-				while (pos < end && line < 8)
-				{
-					char *st = pos;
-					while ((pos < end) && *pos && (*pos != 10)) pos++;
-					*pos = 0;
-					while (*st == ' ' || *st == '\t' || *st == 13) st++;
-					if (*st == '#' || *st == ';' || !*st) pos++;
-					else
-					{
-						if (line == 0 || line == 2 || line == 3 || line == 4)
-						{
-							int val = 0;
-							int n = sscanf(st, "%d", &val);
-							printf("got %d values: %d\n", n, val);
-							if (n == 1)
-							{
-								spi_w((uint16_t)val);
-								if (line == 0) spi_w((uint16_t)(val >> 16));
-								line++;
-							}
-						}
-						else if (line == 1)
-						{
-							double val = 0;
-							int n = sscanf(st, "%lg", &val);
-							printf("got %d values: %g\n", n, val);
-							if (n == 1)
-							{
-								int64_t coeff = 0x8000000000 * val;
-								printf("  -> converted to: %lld\n", coeff);
-								spi_w((uint16_t)coeff);
-								spi_w((uint16_t)(coeff >> 16));
-								spi_w((uint16_t)(coeff >> 32));
-								line++;
-							}
-						}
-						else
-						{
-							double val = 0;
-							int n = sscanf(st, "%lg", &val);
-							printf("got %d values: %g\n", n, val);
-							if (n == 1)
-							{
-								int32_t coeff = 0x200000 * val;
-								printf("  -> converted to: %d\n", coeff);
-								spi_w((uint16_t)coeff);
-								spi_w((uint16_t)(coeff >> 16));
-								line++;
-							}
-						}
-					}
-				}
-				DisableIO();
-			}
-			free(buf);
-		}
-	}
-}
-
 void load_volume()
 {
+	sprintf(filter_cfg_path, "%s_afilter.cfg", user_io_get_core_name_ex());
+	if (!FileLoadConfig(filter_cfg_path, &filter_cfg, sizeof(filter_cfg) - 1) || filter_cfg[0] > 1)
+	{
+		memset(filter_cfg, 0, sizeof(filter_cfg));
+	}
+
 	FileLoadConfig("Volume.dat", &vol_att, 1);
 	if (!is_menu())
 	{
@@ -194,14 +218,12 @@ void load_volume()
 		sprintf(cfg_name, "%s_volume.cfg", user_io_get_core_name_ex());
 		FileLoadConfig(cfg_name, &corevol_att, 1);
 	}
-	send_volume();
 
-	sprintf(filter_cfg_path, "%s_afilter.cfg", user_io_get_core_name_ex());
-	if (!FileLoadConfig(filter_cfg_path, &filter_cfg, sizeof(filter_cfg) - 1) || filter_cfg[0] > 1)
-	{
-		memset(filter_cfg, 0, sizeof(filter_cfg));
-	}
+	get_volume();
+	get_core_volume();
+
 	setFilter();
+	send_volume();
 }
 
 int audio_filter_en()
