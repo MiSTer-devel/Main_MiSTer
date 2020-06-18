@@ -44,6 +44,7 @@ typedef struct {
 	uint16_t jamma_pid;
 	uint8_t sniper_mode;
 	uint8_t browse_expand;
+	uint8_t logo;
 	char bootcore[256];
 	char video_conf[1024];
 	char video_conf_pal[1024];

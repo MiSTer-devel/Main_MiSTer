@@ -1271,7 +1271,7 @@ void video_menu_bg(int n, int idle)
 			break;
 		}
 
-		if (logo && !idle)
+		if (cfg.logo && logo && !idle)
 		{
 			imlib_context_set_image(logo);
 
