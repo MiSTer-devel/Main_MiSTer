@@ -685,7 +685,7 @@ static void printSysInfo()
 		sysinfo_timer = GetTimer(2000);
 		struct battery_data_t bat;
 		int hasbat = getBattery(0, &bat);
-		int n = is_menu() ? 10 : 5;
+		int n = 3;
 
 		char str[40];
 		OsdWrite(n++, info_top, 0, 0);
@@ -1326,7 +1326,7 @@ void HandleUI(void)
 		else if (left)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 2;
+			menusub = 3;
 		}
 		break;
 
@@ -1869,7 +1869,7 @@ void HandleUI(void)
 		else if (left && !page)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 2;
+			menusub = 3;
 		}
 		break;
 
@@ -2605,14 +2605,39 @@ void HandleUI(void)
 	case MENU_8BIT_INFO:
 		OsdSetSize(16);
 		helptext = 0;
-		menumask = 7;
+		menumask = 0xF;
 		menustate = MENU_8BIT_INFO2;
-		OsdSetTitle("System", OSD_ARROW_RIGHT);
+		OsdSetTitle("Misc. Options", OSD_ARROW_RIGHT);
 
-		if(parentstate != MENU_8BIT_INFO) for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		if (parentstate != MENU_8BIT_INFO)
+		{
+			for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+			flag = 1;
+			for (int i = 1; i < 4; i++) if (FileExists(cfg_get_name(i))) flag |= 1 << i;
+			flag |= altcfg() << 4;
+			menusub = 3;
+		}
 		parentstate = MENU_8BIT_INFO;
 
-		OsdWrite(3, "         Information");
+		OsdWrite(1, "         Information");
+
+		if (menusub != 0) flag = (flag & 0xF) | (altcfg() << 4);
+		strcpy(s, " Config:");
+		m = 0;
+		for (int i = 0; i < 4; i++)
+		{
+			int en = flag & (1 << i);
+			if (i == (flag >> 4) && en) strcat(s, "\xc");
+			strcat(s, " ");
+			if (m) strcat(s, "\xc ");
+			m = (i == (flag >> 4) && en);
+			if (!en) strcat(s, "\xb");
+			strcat(s, (!i) ? "Main" : (i == 1) ? "Alt1" : (i == 2) ? "Alt2" : "Alt3");
+			if (!en) strcat(s, "\xb");
+		}
+		strcat(s, " ");
+		if (m) strcat(s, "\xc");
+		OsdWrite(10, s, menusub == 0);
 
 		m = get_core_volume();
 		{
@@ -2623,7 +2648,7 @@ void HandleUI(void)
 			memset(bar, 0x8C, 8);
 			memset(bar, 0x7f, 8 - m);
 		}
-		OsdWrite(12, s, menusub == 0);
+		OsdWrite(12, s, menusub == 1);
 
 		m = get_volume();
 		strcpy(s, "   Global Volume: ");
@@ -2639,24 +2664,43 @@ void HandleUI(void)
 			memset(bar, 0x8C, 8 - vol);
 			memset(bar, 0x7f, 8 - vol - m);
 		}
-		OsdWrite(13, s, menusub == 1);
+		OsdWrite(13, s, menusub == 2);
 
-		OsdWrite(15, STD_EXIT, menusub == 2, 0, OSD_ARROW_RIGHT);
+		OsdWrite(15, STD_EXIT, menusub == 3, 0, OSD_ARROW_RIGHT);
 		break;
 
 	case MENU_8BIT_INFO2:
 		printSysInfo();
-		if ((select && menusub == 2) || menu)
+		if ((select && menusub == 3) || menu)
 		{
 			menustate = MENU_NONE1;
 			break;
 		}
-		else if(menusub == 0 && (right || left))
+		else if (menusub == 0 && (right || left || select))
+		{
+			uint8_t i = flag >> 4;
+			if (select)
+			{
+				user_io_set_ini(i);
+			}
+			else
+			{
+				do
+				{
+					if (right) i = (i + 1) & 3;
+					else i = (i - 1) & 3;
+				} while (!(flag & (1 << i)));
+
+				flag = (flag & 0xF) | (i << 4);
+			}
+			menustate = MENU_8BIT_INFO;
+		}
+		else if(menusub == 1 && (right || left))
 		{
 			set_core_volume(right ? 1 : -1);
 			menustate = MENU_8BIT_INFO;
 		}
-		else if (menusub == 1 && (right || left || select))
+		else if (menusub == 2 && (right || left || select))
 		{
 			set_volume(right ? 1 : left ? -1 : 0);
 			menustate = MENU_8BIT_INFO;
@@ -2671,7 +2715,12 @@ void HandleUI(void)
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 			case CORE_TYPE_8BIT:
-				if (is_minimig())
+				if (is_menu())
+				{
+					menusub = 4;
+					menustate = MENU_SYSTEM1;
+				}
+				else if (is_minimig())
 				{
 					menusub = 0;
 					menustate = MENU_MAIN1;
@@ -3120,7 +3169,7 @@ void HandleUI(void)
 		else if (left)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 2;
+			menusub = 3;
 		}
 		else if (select)
 		{
@@ -3681,7 +3730,7 @@ void HandleUI(void)
 		else if (left)
 		{
 			menustate = MENU_8BIT_INFO;
-			menusub = 2;
+			menusub = 3;
 		}
 		break;
 
@@ -4720,8 +4769,10 @@ void HandleUI(void)
 		helptext = helptexts[HELPTEXT_NONE];
 		parentstate = menustate;
 
-		OsdSetTitle("System Settings", 0);
-		OsdWrite(0, "", 0, 0);
+		m = 0;
+		OsdSetTitle("System Settings", OSD_ARROW_LEFT);
+
+		OsdWrite(m++);
 		sprintf(s, "       MiSTer v%s", version + 5);
 		{
 			char str[8] = {};
@@ -4733,7 +4784,7 @@ void HandleUI(void)
 			}
 		}
 
-		OsdWrite(1, s, 0, 0);
+		OsdWrite(m++, s);
 
 		{
 			uint64_t avail = 0;
@@ -4742,34 +4793,39 @@ void HandleUI(void)
 			if (!statvfs(getRootDir(), &buf)) avail = buf.f_bsize * buf.f_bavail;
 			if(avail < (10ull*1024*1024*1024)) sprintf(s, "   Available space: %llumb", avail / (1024 * 1024));
 			else sprintf(s, "   Available space: %llugb", avail / (1024 * 1024 * 1024));
-			OsdWrite(4, s, 0, 0);
+			OsdWrite(m+2, s, 0, 0);
 		}
-		menumask = 15;
-		OsdWrite(2, "", 0, 0);
+		menumask = 0x1F;
+		OsdWrite(m++, "");
 		if (getStorage(0))
 		{
-			OsdWrite(3, "        Storage: USB", 0, 0);
-			OsdWrite(5, "      Switch to SD card", menusub == 0, 0);
+			OsdWrite(m++, "        Storage: USB", 0, 0);
+			m++;
+			OsdWrite(m++, "      Switch to SD card", menusub == 0, 0);
 		}
 		else
 		{
 			if (getStorage(1))
 			{
-				OsdWrite(3, " No USB found, using SD card", 0, 0);
-				OsdWrite(5, "      Switch to SD card", menusub == 0, 0);
+				OsdWrite(m++, " No USB found, using SD card", 0, 0);
+				m++;
+				OsdWrite(m++, "      Switch to SD card", menusub == 0, 0);
 			}
 			else
 			{
-				OsdWrite(3, "      Storage: SD card", 0, 0);
-				OsdWrite(5, "        Switch to USB", menusub == 0, !isUSBMounted());
+				OsdWrite(m++, "      Storage: SD card", 0, 0);
+				m++;
+				OsdWrite(m++, "        Switch to USB", menusub == 0, !isUSBMounted());
 			}
 		}
-		OsdWrite(6, "", 0, 0);
-		OsdWrite(7, " Remap keyboard            \x16", menusub == 1, 0);
-		OsdWrite(8, " Define joystick buttons   \x16", menusub == 2, 0);
-		OsdWrite(9, " Scripts                   \x16", menusub == 3, 0);
+		OsdWrite(m++, "");
+		OsdWrite(m++, " Remap keyboard            \x16", menusub == 1, 0);
+		OsdWrite(m++, " Define joystick buttons   \x16", menusub == 2, 0);
+		OsdWrite(m++, " Scripts                   \x16", menusub == 3, 0);
 		sysinfo_timer = 0;
 
+		while(m < OsdGetSize()-1) OsdWrite(m++, "");
+		OsdWrite(15, STD_EXIT, menusub == 4);
 		menustate = MENU_SYSTEM2;
 
 	case MENU_SYSTEM2:
@@ -4812,7 +4868,7 @@ void HandleUI(void)
 						}
 					}
 
-					if(match) SelectFile(Selected_F[0], "SH", SCANO_DIR, MENU_SCRIPTS_FB, MENU_SYSTEM1);
+					if (match) SelectFile(Selected_F[0], "SH", SCANO_DIR, MENU_SCRIPTS_FB, MENU_SYSTEM1);
 					else
 					{
 						menustate = MENU_SCRIPTS_PRE;
@@ -4820,9 +4876,16 @@ void HandleUI(void)
 					}
 				}
 				break;
+
+			case 4:
+				menustate = MENU_NONE1;
+				break;
 			}
 		}
-		printSysInfo();
+		else if (left)
+		{
+			menustate = MENU_8BIT_INFO;
+		}
 		break;
 
 	case MENU_JOYSYSMAP:

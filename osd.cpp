@@ -209,9 +209,9 @@ void OsdSetArrow(int a)
 	arrow = a;
 }
 
-void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char usebg, int maxinv)
+void OsdWrite(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char usebg, int maxinv, int mininv)
 {
-	OsdWriteOffset(n, s, invert, stipple, 0, 0, usebg, maxinv);
+	OsdWriteOffset(n, s, invert, stipple, 0, 0, usebg, maxinv, mininv);
 }
 
 static void osd_start(int line)
@@ -243,7 +243,7 @@ static void draw_title(const unsigned char *p)
 }
 
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
-void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar, char usebg, int maxinv)
+void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsigned char stipple, char offset, char leftchar, char usebg, int maxinv, int mininv)
 {
 	//printf("OsdWriteOffset(%d)\n", n);
 	unsigned short i;
@@ -266,13 +266,16 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 
 	osd_start(n);
 
-	if (invert)	invert = 255;
+	unsigned char xormask = 0;
+	unsigned char xorchar = 0;
 
 	i = 0;
 	// send all characters in string to OSD
 	while (1)
 	{
-		if (invert && i / 8 >= maxinv) invert = 0;
+		if (invert && i / 8 >= mininv) xormask = 255;
+		if (invert && i / 8 >= maxinv) xormask = 0;
+
 		if (i == 0 && (n < osd_size))
 		{	// Render sidestripe
 			unsigned char tmp[8];
@@ -292,21 +295,22 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			draw_title(p);
 			i += 22;
 		}
-		else if (n == (osd_size-1) && (arrowmask & OSD_ARROW_LEFT)) {	// Draw initial arrow
+		else if (n == (osd_size-1) && (arrowmask & OSD_ARROW_LEFT))
+		{	// Draw initial arrow
 			unsigned char b;
 
-			osdbuf[osdbufpos++] = invert;
-			osdbuf[osdbufpos++] = invert;
-			osdbuf[osdbufpos++] = invert;
+			osdbuf[osdbufpos++] = xormask;
+			osdbuf[osdbufpos++] = xormask;
+			osdbuf[osdbufpos++] = xormask;
 			p = &charfont[0x10][0];
-			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = (*p++ << offset) ^ invert;
+			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = (*p++ << offset) ^ xormask;
 			p = &charfont[0x14][0];
-			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = (*p++ << offset) ^ invert;
-			osdbuf[osdbufpos++] = invert;
-			osdbuf[osdbufpos++] = invert;
-			osdbuf[osdbufpos++] = invert;
-			osdbuf[osdbufpos++] = invert;
-			osdbuf[osdbufpos++] = invert;
+			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = (*p++ << offset) ^ xormask;
+			osdbuf[osdbufpos++] = xormask;
+			osdbuf[osdbufpos++] = xormask;
+			osdbuf[osdbufpos++] = xormask;
+			osdbuf[osdbufpos++] = xormask;
+			osdbuf[osdbufpos++] = xormask;
 
 			i += 24;
 			arrowmask &= ~OSD_ARROW_LEFT;
@@ -314,12 +318,20 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			if (*s++ == 0) break;
 			if (*s++ == 0) break;
 		}
-		else {
+		else
+		{
 			b = *s++;
+			if (!b) break;
 
-			if (b == 0) // end of string
-				break;
-
+			if (b == 0xb)
+			{
+				stipplemask ^= 0xAA;
+				stipple ^= 0xff;
+			}
+			else if (b == 0xc)
+			{
+				xorchar ^= 0xff;
+			}
 			else if (b == 0x0d || b == 0x0a)
 			{  // cariage return / linefeed, go to next line
 			   // increment line counter
@@ -335,7 +347,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 				p = &charfont[b][0];
 				for (c = 0; c<8; c++) {
 					char bg = usebg ? framebuffer[n][i+c-22] : 0;
-					osdbuf[osdbufpos++] = (((*p++ << offset)&stipplemask) ^ invert) | bg;
+					osdbuf[osdbufpos++] = (((*p++ << offset)&stipplemask) ^ xormask ^ xorchar) | bg;
 					stipplemask ^= stipple;
 				}
 				i += 8;
@@ -346,22 +358,22 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	for (; i < linelimit; i++) // clear end of line
 	{
 		char bg = usebg ? framebuffer[n][i-22] : 0;
-		osdbuf[osdbufpos++] = invert | bg;
+		osdbuf[osdbufpos++] = xormask | bg;
 	}
 
 	if (n == (osd_size-1) && (arrowmask & OSD_ARROW_RIGHT))
 	{	// Draw final arrow if needed
 		unsigned char c;
-		osdbuf[osdbufpos++] = invert;
-		osdbuf[osdbufpos++] = invert;
-		osdbuf[osdbufpos++] = invert;
+		osdbuf[osdbufpos++] = xormask;
+		osdbuf[osdbufpos++] = xormask;
+		osdbuf[osdbufpos++] = xormask;
 		p = &charfont[0x15][0];
-		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = (*p++ << offset) ^ invert;
+		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = (*p++ << offset) ^ xormask;
 		p = &charfont[0x11][0];
-		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = (*p++ << offset) ^ invert;
-		osdbuf[osdbufpos++] = invert;
-		osdbuf[osdbufpos++] = invert;
-		osdbuf[osdbufpos++] = invert;
+		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = (*p++ << offset) ^ xormask;
+		osdbuf[osdbufpos++] = xormask;
+		osdbuf[osdbufpos++] = xormask;
+		osdbuf[osdbufpos++] = xormask;
 		i += 22;
 	}
 }
