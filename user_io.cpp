@@ -294,7 +294,7 @@ char has_menu()
 	return (is_no_type == 1);
 }
 
-static void user_io_read_core_name()
+void user_io_read_core_name()
 {
 	is_menu_type = 0;
 	is_x86_type  = 0;

@@ -1003,6 +1003,13 @@ void FindStorage(void)
 
 	if(device && !isUSBMounted())
 	{
+		uint8_t core_type = (fpga_core_id() & 0xFF);
+		if (core_type == CORE_TYPE_8BIT)
+		{
+			user_io_read_confstr();
+			user_io_read_core_name();
+		}
+
 		int saveddev = device;
 		device = 0;
 		cfg_parse();
@@ -1013,6 +1020,11 @@ void FindStorage(void)
 		printf("Waiting for USB...\n");
 		int btn = 0;
 		int done = 0;
+
+		OsdWrite(16, "", 1);
+		OsdWrite(17, "       www.MiSTerFPGA.org       ", 1);
+		OsdWrite(18, "", 1);
+
 		for (int i = 30; i >= 0; i--)
 		{
 			sprintf(str, "\n     Waiting for USB...\n\n             %d   \n\n\n  OSD/USER or ESC to cancel", i);
