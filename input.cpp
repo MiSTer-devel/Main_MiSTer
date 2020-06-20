@@ -1578,7 +1578,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				break;
 
 			case JOY_BTN2:
-				ev.code = KEY_ESC;
+				ev.code = KEY_BACK;
 				break;
 
 			case JOY_BTN3:

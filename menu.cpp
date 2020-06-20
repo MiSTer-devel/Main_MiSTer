@@ -365,7 +365,6 @@ static void SelectFile(const char* path, const char* pFileExt, unsigned char Opt
 	menustate = MENU_FILE_SELECT1;
 }
 
-
 void substrcpy(char *d, char *s, char idx)
 {
 	char p = 0;
@@ -864,7 +863,7 @@ void HandleUI(void)
 	static char ioctl_index;
 	char *p;
 	static char s[256];
-	unsigned char m = 0, up, down, select, menu, right, left, plus, minus, recent;
+	unsigned char m = 0, up, down, select, menu, back, right, left, plus, minus, recent;
 	char enable;
 	static int reboot_req = 0;
 	static long helptext_timer;
@@ -885,6 +884,7 @@ void HandleUI(void)
 	static int flat = 0;
 	static int menusub_parent = 0;
 	static char title[32] = {};
+	static uint32_t saved_menustate = 0;
 
 	static char	cp_MenuCancel;
 
@@ -896,6 +896,7 @@ void HandleUI(void)
 
 	// decode and set events
 	menu = false;
+	back = false;
 	select = false;
 	up = false;
 	down = false;
@@ -1014,6 +1015,13 @@ void HandleUI(void)
 		case KEY_ESC | UPSTROKE:
 			if (menustate != MENU_NONE2) menu = true;
 			break;
+		case KEY_BACK | UPSTROKE:
+			if (saved_menustate) back = true;
+			else menu = true;
+			break;
+		case KEY_BACKSPACE | UPSTROKE:
+			if (saved_menustate) back = true;
+			break;
 		case KEY_ENTER:
 		case KEY_SPACE:
 			select = true;
@@ -1116,7 +1124,6 @@ void HandleUI(void)
 		}
 	}
 
-
     // SHARPMZ Series Menu - This has been located within the sharpmz.cpp code base in order to keep updates to common code
     // base to a minimum and shrink its size. The UI is called with the basic state data and it handles everything internally,
     // only updating values in this function as necessary.
@@ -1129,6 +1136,19 @@ void HandleUI(void)
 			       fs_pFileExt,
 			       menu, select, up, down,
 			       left, right, plus, minus);
+
+	switch (menustate)
+	{
+	case MENU_NONE1:
+	case MENU_NONE2:
+	case MENU_INFO:
+	case MENU_ERROR:
+		break;
+
+	default:
+		saved_menustate = 0;
+		break;
+	}
 
 	// Switch to current menu screen
 	switch (menustate)
@@ -1152,11 +1172,15 @@ void HandleUI(void)
 	case MENU_NONE2:
 		if (menu || (is_menu() && !video_fb_state()))
 		{
-			page = 0;
 			OsdSetSize(16);
 			if(!is_menu() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
 			{
 				SelectFile("", 0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_NONE1);
+			}
+			else if (saved_menustate)
+			{
+				menustate = saved_menustate;
+				menusub = 0;
 			}
 			else if (is_st()) menustate = MENU_ST_MAIN1;
 			else if (is_archie()) menustate = MENU_ARCHIE_MAIN1;
@@ -1642,8 +1666,14 @@ void HandleUI(void)
 	} break; // end MENU_8BIT_MAIN1
 
 	case MENU_8BIT_MAIN2:
+		saved_menustate = MENU_8BIT_MAIN1;
+
 		// menu key closes menu
 		if (menu)
+		{
+			menustate = MENU_NONE1;
+		}
+		else if(back)
 		{
 			if(!page) menustate = MENU_NONE1;
 			else
@@ -3313,7 +3343,13 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_SYSTEM2:
+		saved_menustate = MENU_ST_SYSTEM1;
+
 		if (menu)
+		{
+			menustate = MENU_NONE1;
+		}
+		else if (back)
 		{
 			menustate = MENU_ST_MAIN1;
 			menusub = 4;
@@ -3612,15 +3648,14 @@ void HandleUI(void)
 		sprintf(s, " Floppy disk turbo : %s", minimig_config.floppy.speed ? "on" : "off");
 		OsdWrite(m++, s, menusub == 4, 0);
 		OsdWrite(m++);
-
-		OsdWrite(m++, " Hard disks", menusub == 5, 0);
-		OsdWrite(m++, " CPU & Chipset", menusub == 6, 0);
-		OsdWrite(m++, " Memory", menusub == 7, 0);
-		OsdWrite(m++, " Audio & Video", menusub == 8, 0);
+		OsdWrite(m++, " Hard disks                \x16", menusub == 5, 0);
+		OsdWrite(m++, " CPU & Chipset             \x16", menusub == 6, 0);
+		OsdWrite(m++, " Memory                    \x16", menusub == 7, 0);
+		OsdWrite(m++, " Audio & Video             \x16", menusub == 8, 0);
 		OsdWrite(m++);
 
-		OsdWrite(m++, " Save configuration", menusub == 9, 0);
-		OsdWrite(m++, " Load configuration", menusub == 10, 0);
+		OsdWrite(m++, " Save configuration        \x16", menusub == 9, 0);
+		OsdWrite(m++, " Load configuration        \x16", menusub == 10, 0);
 
 		OsdWrite(m++);
 		OsdWrite(m++, " Reset", menusub == 11, 0);
@@ -3632,8 +3667,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_MAIN2:
-		if (menu)
-			menustate = MENU_NONE1;
+		if (menu) menustate = MENU_NONE1;
 		else if (plus && (minimig_config.floppy.drives<3))
 		{
 			minimig_config.floppy.drives++;
@@ -4298,6 +4332,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_SETTINGS_CHIPSET2:
+		saved_menustate = MENU_SETTINGS_CHIPSET1;
 
 		if (select)
 		{
@@ -4366,6 +4401,10 @@ void HandleUI(void)
 
 		if (menu)
 		{
+			menustate = MENU_NONE1;
+		}
+		else if (back)
+		{
 			menustate = MENU_MAIN1;
 			menusub = 6;
 		}
@@ -4419,6 +4458,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_SETTINGS_MEMORY2:
+		saved_menustate = MENU_SETTINGS_MEMORY1;
 		if (select)
 		{
 			if (menusub == 0)
@@ -4457,6 +4497,10 @@ void HandleUI(void)
 		}
 
 		if (menu)
+		{
+			menustate = MENU_NONE1;
+		}
+		else if (back)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 7;
@@ -4695,6 +4739,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_SETTINGS_VIDEO2:
+		saved_menustate = MENU_SETTINGS_VIDEO1;
 		if (select)
 		{
 			menustate = MENU_SETTINGS_VIDEO1;
@@ -4739,6 +4784,10 @@ void HandleUI(void)
 		}
 
 		if (menu)
+		{
+			menustate = MENU_NONE1;
+		}
+		else if (back)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 8;
