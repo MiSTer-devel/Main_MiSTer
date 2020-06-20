@@ -431,11 +431,8 @@ uint32_t getStatusMask(char *opt)
 	char idx2 = getIdx(opt + 1);
 	uint32_t x = 1;
 
-	if (idx2>idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
-
-	//printf("grtStatusMask %d %d %x\n", idx1, idx2, x);
-
-	return x << idx1;
+	if (idx2 > idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
+	return x;
 }
 
 // conversion table of Amiga keyboard scan codes to ASCII codes
@@ -1292,18 +1289,24 @@ void HandleUI(void)
 			}
 		}
 
-		if (select)
+		if (select || plus || minus)
 		{
 			switch (menusub) {
 			case 0:  // Floppy 0
 			case 1:  // Floppy 1
-				ioctl_index = 0;
-				SelectFile(Selected_F[menusub], "ADF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
+				if (select)
+				{
+					ioctl_index = 0;
+					SelectFile(Selected_F[menusub], "ADF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
+				}
 				break;
 
 			case 2:  // Load ROM
-				ioctl_index = 1;
-				SelectFile(Selected_F[menusub], "ROM", 0, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
+				if (select)
+				{
+					ioctl_index = 1;
+					SelectFile(Selected_F[menusub], "ROM", 0, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
+				}
 				break;
 
 			case 3:
@@ -1317,7 +1320,7 @@ void HandleUI(void)
 				break;
 
 			case 5:
-				archie_set_amix(archie_get_amix()+1);
+				archie_set_amix(archie_get_amix() + (minus ? -1 : 1));
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
@@ -1337,7 +1340,7 @@ void HandleUI(void)
 				break;
 
 			case 9:  // Exit
-				menustate = MENU_NONE1;
+				if (select) menustate = MENU_NONE1;
 				break;
 			}
 		}
@@ -1683,7 +1686,7 @@ void HandleUI(void)
 				page = 0;
 			}
 		}
-		else if (select || recent)
+		else if (select || recent || minus || plus)
 		{
 			if (menusub == menusub_last && select)
 			{
@@ -1695,7 +1698,7 @@ void HandleUI(void)
 					page = 0;
 				}
 			}
-			else if (dip_submenu == menusub)
+			else if (dip_submenu == menusub && select)
 			{
 				menustate = MENU_ARCADE_DIP1;
 				menusub = 0;
@@ -1750,7 +1753,7 @@ void HandleUI(void)
 
 				if (!d)
 				{
-					if (p[0] == 'F')
+					if (p[0] == 'F' && (select || recent))
 					{
 						opensave = 0;
 						ioctl_index = menusub + 1;
@@ -1775,7 +1778,7 @@ void HandleUI(void)
 						if (select) SelectFile(Selected_F[ioctl_index & 15], ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if(recent_init(ioctl_index)) menustate = MENU_RECENT1;
 					}
-					else if (p[0] == 'S')
+					else if (p[0] == 'S' && (select || recent))
 					{
 						ioctl_index = 0;
 						if (p[1] >= '0' && p[1] <= '3') ioctl_index = p[1] - '0';
@@ -1804,9 +1807,9 @@ void HandleUI(void)
 						if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if(recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
 					}
-					else if (select)
+					else if (select || minus || plus)
 					{
-						if (p[0] == 'P')
+						if (p[0] == 'P' && select)
 						{
 							page = p[1] - '0';
 							if (page < 1 || page > 9) page = 0;
@@ -1815,7 +1818,7 @@ void HandleUI(void)
 							menustate = MENU_8BIT_MAIN1;
 							menusub = 0;
 						}
-						else if (p[0] == 'C' && cheats_available())
+						else if (p[0] == 'C' && cheats_available() && select)
 						{
 							menustate = MENU_CHEATS1;
 							cheatsub = menusub;
@@ -1833,21 +1836,33 @@ void HandleUI(void)
 							}
 
 							uint32_t status = user_io_8bit_set_status(0, 0, ex);  // 0,0 gets status
-							uint32_t x = getStatus(p, status) + 1;
+							uint32_t x = minus ? (getStatus(p, status) - 1) : (getStatus(p, status) + 1);
+							uint32_t mask = getStatusMask(p);
+							x &= mask;
 
-							if (byarm && is_x86())
-							{
-								if (p[1] == '2') x86_set_fdd_boot(!(x & 1));
-							}
+							if (byarm && is_x86() && p[1] == '2') x86_set_fdd_boot(!(x & 1));
+
 							// check if next value available
-							substrcpy(s, p, 2 + x);
-							if (!strlen(s)) x = 0;
+							if (minus)
+							{
+								while(1)
+								{
+									substrcpy(s, p, 2 + x);
+									if (strlen(s)) break;
+									x = (x - 1) & mask;
+								}
+							}
+							else
+							{
+								substrcpy(s, p, 2 + x);
+								if (!strlen(s)) x = 0;
+							}
 
 							user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff, ex);
 
 							menustate = MENU_8BIT_MAIN1;
 						}
-						else if ((p[0] == 'T') || (p[0] == 'R') || (p[0] == 't') || (p[0] == 'r'))
+						else if (((p[0] == 'T') || (p[0] == 'R') || (p[0] == 't') || (p[0] == 'r')) && select)
 						{
 							int ex = (p[0] == 't') || (p[0] == 'r');
 
@@ -2448,15 +2463,13 @@ void HandleUI(void)
 			break;
 		}
 
-		if (select)
+		if (select || minus || plus)
 		{
 			switch (menusub)
 			{
 			case 0:
 				{
-					uint mode = GetUARTMode() + 1;
-					if (mode > 3) mode = 0;
-
+					uint mode = (GetUARTMode() + (minus ? -1 : 1)) & 3;
 					SetUARTMode(mode);
 					menustate = MENU_UART1;
 				}
@@ -2474,8 +2487,16 @@ void HandleUI(void)
 					else
 					{
 						int type = GetMidiLinkMode();
-						type += 2;
-						if (type >= 6) type &= 1;
+						if (minus)
+						{
+							type -= 2;
+							if (type < 0) type = (type & 1) | 4;
+						}
+						else
+						{
+							type += 2;
+							if (type >= 6) type &= 1;
+						}
 						SetMidiLinkMode(type);
 					}
 					SetUARTMode(0);
@@ -2484,6 +2505,7 @@ void HandleUI(void)
 				}
 				break;
 			case 3:
+				if(select)
 				{
 					if(GetUARTMode() == 3 && GetMidiLinkMode() == 0)
 					{
@@ -2493,6 +2515,7 @@ void HandleUI(void)
 				}
 				break;
 			case 4:
+				if (select)
 				{
 					if(GetUARTMode() == 3)
 					{
@@ -2502,6 +2525,7 @@ void HandleUI(void)
 				}
 				break;
 			case 5:
+				if (select)
 				{
 					int mode = GetUARTMode();
 					if(mode != 0)
@@ -2514,6 +2538,7 @@ void HandleUI(void)
 				}
 				break;
 			case 6:
+				if (select)
 				{
 					int mode = GetUARTMode() | (GetMidiLinkMode() << 8);
 					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
@@ -2706,7 +2731,7 @@ void HandleUI(void)
 			menustate = MENU_NONE1;
 			break;
 		}
-		else if (menusub == 0 && (right || left || select))
+		else if (menusub == 0 && (right || left || minus || plus || select))
 		{
 			uint8_t i = flag >> 4;
 			if (select)
@@ -2717,7 +2742,7 @@ void HandleUI(void)
 			{
 				do
 				{
-					if (right) i = (i + 1) & 3;
+					if (right || plus) i = (i + 1) & 3;
 					else i = (i - 1) & 3;
 				} while (!(flag & (1 << i)));
 
@@ -2725,14 +2750,14 @@ void HandleUI(void)
 			}
 			menustate = MENU_8BIT_INFO;
 		}
-		else if(menusub == 1 && (right || left))
+		else if(menusub == 1 && (right || left || minus || plus))
 		{
-			set_core_volume(right ? 1 : -1);
+			set_core_volume((right || plus) ? 1 : -1);
 			menustate = MENU_8BIT_INFO;
 		}
-		else if (menusub == 2 && (right || left || select))
+		else if (menusub == 2 && (right || left || minus || plus || select))
 		{
-			set_volume(right ? 1 : left ? -1 : 0);
+			set_volume((right || plus) ? 1 : (left || minus) ? -1 : 0);
 			menustate = MENU_8BIT_INFO;
 		}
 		else if (right)
@@ -3201,63 +3226,87 @@ void HandleUI(void)
 			menustate = MENU_8BIT_INFO;
 			menusub = 3;
 		}
-		else if (select)
+		else if (select || minus || plus)
 		{
 			switch (menusub)
 			{
 			case 0:
 			case 1:
-				if (tos_disk_is_inserted(menusub))
+				if (select)
 				{
-					tos_insert_disk(menusub, "");
-					menustate = MENU_ST_MAIN1;
-				}
-				else
-				{
-					SelectFile(Selected_F[menusub], "ST ", SCANO_DIR, MENU_ST_FDD_FILE_SELECTED, MENU_ST_MAIN1);
+					if (tos_disk_is_inserted(menusub))
+					{
+						tos_insert_disk(menusub, "");
+						menustate = MENU_ST_MAIN1;
+					}
+					else
+					{
+						SelectFile(Selected_F[menusub], "ST ", SCANO_DIR, MENU_ST_FDD_FILE_SELECTED, MENU_ST_MAIN1);
+					}
 				}
 				break;
 
 			case 2:
 				// remove current write protect bits and increase by one
 				tos_update_sysctrl((tos_system_ctrl() & ~(TOS_CONTROL_FDC_WR_PROT_A | TOS_CONTROL_FDC_WR_PROT_B))
-					| (((((tos_system_ctrl() >> 6) & 3) + 1) & 3) << 6));
+					| (((((tos_system_ctrl() >> 6) & 3) + (minus ? -1 : 1)) & 3) << 6));
 				menustate = MENU_ST_MAIN1;
 				break;
 
 			case 3:
-				user_io_set_joyswap(!user_io_get_joyswap());
-				menustate = MENU_ST_MAIN1;
+				if (select)
+				{
+					user_io_set_joyswap(!user_io_get_joyswap());
+					menustate = MENU_ST_MAIN1;
+				}
 				break;
 
 			case 4:  // System submenu
-				menustate = MENU_ST_SYSTEM1;
-				need_reset = 0;
-				menusub = 0;
+				if (select)
+				{
+					menustate = MENU_ST_SYSTEM1;
+					need_reset = 0;
+					menusub = 0;
+				}
 				break;
 
 			case 5:  // Load config
-				menustate = MENU_ST_LOAD_CONFIG1;
-				menusub = 0;
+				if (select)
+				{
+					menustate = MENU_ST_LOAD_CONFIG1;
+					menusub = 0;
+				}
 				break;
 
 			case 6:  // Save config
-				menustate = MENU_ST_SAVE_CONFIG1;
-				menusub = 0;
+				if (select)
+				{
+					menustate = MENU_ST_SAVE_CONFIG1;
+					menusub = 0;
+				}
 				break;
 
 			case 7:  // Reset
-				tos_reset(0);
-				menustate = MENU_NONE1;
+				if (select)
+				{
+					tos_reset(0);
+					menustate = MENU_NONE1;
+				}
 				break;
 
 			case 8:  // Cold Boot
-				tos_reset(1);
-				menustate = MENU_NONE1;
+				if (select)
+				{
+					tos_reset(1);
+					menustate = MENU_NONE1;
+				}
 				break;
 
 			case 9:  // Exit
-				menustate = MENU_NONE1;
+				if (select)
+				{
+					menustate = MENU_NONE1;
+				}
 				break;
 			}
 		}
@@ -3353,27 +3402,34 @@ void HandleUI(void)
 		{
 			menustate = MENU_ST_MAIN1;
 			menusub = 4;
-			if(need_reset) tos_reset(1);
+			if (need_reset)
+			{
+				tos_reset(1);
+				saved_menustate = 0;
+			}
 		}
-		else if (select)
+		else if (select || plus || minus)
 		{
 			switch (menusub)
 			{
 			case 0:
 			case 1:
-				SelectFile(Selected_S[menusub], "VHD", SCANO_DIR | SCANO_UMOUNT, MENU_ST_HDD_FILE_SELECTED, MENU_ST_SYSTEM1);
+				if (select) SelectFile(Selected_S[menusub], "VHD", SCANO_DIR | SCANO_UMOUNT, MENU_ST_HDD_FILE_SELECTED, MENU_ST_SYSTEM1);
 				break;
 
 			case 2:
 				// Cart
-				if (tos_cartridge_is_inserted())
+				if (select)
 				{
-					tos_load_cartridge("");
-					menustate = MENU_ST_SYSTEM1;
-				}
-				else
-				{
-					SelectFile(Selected_F[menusub], "IMG", SCANO_DIR, MENU_ST_SYSTEM_FILE_SELECTED, MENU_ST_SYSTEM1);
+					if (tos_cartridge_is_inserted())
+					{
+						tos_load_cartridge("");
+						menustate = MENU_ST_SYSTEM1;
+					}
+					else
+					{
+						SelectFile(Selected_F[menusub], "IMG", SCANO_DIR, MENU_ST_SYSTEM_FILE_SELECTED, MENU_ST_SYSTEM1);
+					}
 				}
 				break;
 
@@ -3381,8 +3437,16 @@ void HandleUI(void)
 				{
 					// RAM
 					int mem = (tos_system_ctrl() >> 1) & 7;   // current memory config
-					mem++;
-					if (mem > 5) mem = 0;
+					if (minus)
+					{
+						mem--;
+						if (mem < 0) mem = 5;
+					}
+					else
+					{
+						mem++;
+						if (mem > 5) mem = 0;
+					}
 					tos_update_sysctrl((tos_system_ctrl() & ~0x0e) | (mem << 1));
 					need_reset = 1;
 					menustate = MENU_ST_SYSTEM1;
@@ -3390,13 +3454,12 @@ void HandleUI(void)
 				break;
 
 			case 4:  // TOS
-				SelectFile(Selected_F[menusub], "IMG", SCANO_DIR, MENU_ST_SYSTEM_FILE_SELECTED, MENU_ST_SYSTEM1);
+				if (select) SelectFile(Selected_F[menusub], "IMG", SCANO_DIR, MENU_ST_SYSTEM_FILE_SELECTED, MENU_ST_SYSTEM1);
 				break;
 
 			case 5:
 				{
-					unsigned long chipset = (tos_system_ctrl() >> 23) + 1;
-					if (chipset == 4) chipset = 0;
+					int chipset = (((tos_system_ctrl() >> 23) + (minus ? -1 : 1)) & 3);
 					tos_update_sysctrl((tos_system_ctrl() & ~(TOS_CONTROL_STE | TOS_CONTROL_MSTE)) | (chipset << 23));
 					menustate = MENU_ST_SYSTEM1;
 				}
@@ -3439,7 +3502,7 @@ void HandleUI(void)
 			case 12:
 				{
 					// next scanline state
-					int scan = ((tos_system_ctrl() >> 20) + 1) & 3;
+					int scan = ((tos_system_ctrl() >> 20) + (minus ? -1 : 1)) & 3;
 					tos_update_sysctrl((tos_system_ctrl() & ~TOS_CONTROL_SCANLINES) | (scan << 20));
 					menustate = MENU_ST_SYSTEM1;
 				}
@@ -3454,7 +3517,11 @@ void HandleUI(void)
 			case 14:
 				menustate = MENU_ST_MAIN1;
 				menusub = 4;
-				if (need_reset) tos_reset(1);
+				if (need_reset)
+				{
+					tos_reset(1);
+					saved_menustate = 0;
+				}
 				break;
 			}
 		}
@@ -3668,19 +3735,19 @@ void HandleUI(void)
 
 	case MENU_MAIN2:
 		if (menu) menustate = MENU_NONE1;
-		else if (plus && (minimig_config.floppy.drives<3))
+		else if (plus && (minimig_config.floppy.drives<3) && menusub < 4)
 		{
 			minimig_config.floppy.drives++;
 			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 			menustate = MENU_MAIN1;
 		}
-		else if (minus && (minimig_config.floppy.drives>0))
+		else if (minus && (minimig_config.floppy.drives>0) && menusub < 4)
 		{
 			minimig_config.floppy.drives--;
 			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 			menustate = MENU_MAIN1;
 		}
-		else if (select || recent)
+		else if (select || recent || minus || plus)
 		{
 			if (menusub < 4)
 			{
@@ -3702,15 +3769,15 @@ void HandleUI(void)
 					else if (recent_init(0)) menustate = MENU_RECENT1;
 				}
 			}
+			else if (menusub == 4 && !recent)	// Toggle floppy turbo
+			{
+				minimig_config.floppy.speed ^= 1;
+				minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+				menustate = MENU_MAIN1;
+			}
 			else if (select)
 			{
-				if (menusub == 4)	// Toggle floppy turbo
-				{
-					minimig_config.floppy.speed ^= 1;
-					minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
-					menustate = MENU_MAIN1;
-				}
-				else if (menusub == 5)	// Go to harddrives page.
+				if (menusub == 5)	// Go to harddrives page.
 				{
 					menustate = MENU_SETTINGS_HARDFILE1;
 					menusub = 0;
@@ -4334,7 +4401,7 @@ void HandleUI(void)
 	case MENU_SETTINGS_CHIPSET2:
 		saved_menustate = MENU_SETTINGS_CHIPSET1;
 
-		if (select)
+		if (select || minus || plus)
 		{
 			if (menusub == 0)
 			{
@@ -4362,19 +4429,41 @@ void HandleUI(void)
 			}
 			else if (menusub == 4)
 			{
-				switch (minimig_config.chipset & 0x1c) {
-				case 0:
-					minimig_config.chipset = (minimig_config.chipset & 3) | CONFIG_A1000;
-					break;
-				case CONFIG_A1000:
-					minimig_config.chipset = (minimig_config.chipset & 3) | CONFIG_ECS;
-					break;
-				case CONFIG_ECS:
-					minimig_config.chipset = (minimig_config.chipset & 3) | CONFIG_AGA | CONFIG_ECS;
-					break;
-				case (CONFIG_AGA | CONFIG_ECS) :
-					minimig_config.chipset = (minimig_config.chipset & 3) | 0;
-					break;
+				if (minus)
+				{
+					switch (minimig_config.chipset & 0x1c)
+					{
+					case (CONFIG_AGA | CONFIG_ECS):
+						minimig_config.chipset = (minimig_config.chipset & 3) | CONFIG_ECS;
+						break;
+					case CONFIG_ECS:
+						minimig_config.chipset = (minimig_config.chipset & 3) | CONFIG_A1000;
+						break;
+					case CONFIG_A1000:
+						minimig_config.chipset = (minimig_config.chipset & 3) | 0;
+						break;
+					case 0:
+						minimig_config.chipset = (minimig_config.chipset & 3) | CONFIG_AGA | CONFIG_ECS;
+						break;
+					}
+				}
+				else
+				{
+					switch (minimig_config.chipset & 0x1c)
+					{
+					case 0:
+						minimig_config.chipset = (minimig_config.chipset & 3) | CONFIG_A1000;
+						break;
+					case CONFIG_A1000:
+						minimig_config.chipset = (minimig_config.chipset & 3) | CONFIG_ECS;
+						break;
+					case CONFIG_ECS:
+						minimig_config.chipset = (minimig_config.chipset & 3) | CONFIG_AGA | CONFIG_ECS;
+						break;
+					case (CONFIG_AGA | CONFIG_ECS):
+						minimig_config.chipset = (minimig_config.chipset & 3) | 0;
+						break;
+					}
 				}
 
 				menustate = MENU_SETTINGS_CHIPSET1;
@@ -4459,27 +4548,37 @@ void HandleUI(void)
 
 	case MENU_SETTINGS_MEMORY2:
 		saved_menustate = MENU_SETTINGS_MEMORY1;
-		if (select)
+		if (select || minus || plus)
 		{
 			if (menusub == 0)
 			{
-				minimig_config.memory = ((minimig_config.memory + 1) & 0x03) | (minimig_config.memory & ~0x03);
+				minimig_config.memory = ((minimig_config.memory + (minus ? -1 : 1)) & 0x03) | (minimig_config.memory & ~0x03);
 				menustate = MENU_SETTINGS_MEMORY1;
 			}
 			else if (menusub == 1)
 			{
-				uint8_t c = (((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5))+1;
-				if (c > 5) c = 0;
-				if (!(minimig_config.cpu & 2) && c > 3) c = 0;
+				int c = (((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5));
+				if (minus)
+				{
+					c--;
+					if (c < 0) c = 5;
+					if (!(minimig_config.cpu & 2) && c > 3) c = 3;
+				}
+				else
+				{
+					c++;
+					if (c > 5) c = 0;
+					if (!(minimig_config.cpu & 2) && c > 3) c = 0;
+				}
 				minimig_config.memory = ((c<<4) & 0x30) | ((c<<5) & 0x80) | (minimig_config.memory & ~0xB0);
 				menustate = MENU_SETTINGS_MEMORY1;
 			}
 			else if (menusub == 2)
 			{
-				minimig_config.memory = ((minimig_config.memory + 4) & 0x0C) | (minimig_config.memory & ~0x0C);
+				minimig_config.memory = ((minimig_config.memory + (minus ? -4 : 4)) & 0x0C) | (minimig_config.memory & ~0x0C);
 				menustate = MENU_SETTINGS_MEMORY1;
 			}
-			else if (menusub == 3)
+			else if (menusub == 3 && select)
 			{
 				ioctl_index = 1;
 				SelectFile(Selected_F[4], "ROM", 0, MENU_ROMFILE_SELECTED, MENU_SETTINGS_MEMORY1);
@@ -4489,7 +4588,7 @@ void HandleUI(void)
 				minimig_config.memory ^= 0x40;
 				menustate = MENU_SETTINGS_MEMORY1;
 			}
-			else if (menusub == 5)
+			else if (menusub == 5 && select)
 			{
 				menustate = MENU_MAIN1;
 				menusub = 7;
@@ -4740,7 +4839,7 @@ void HandleUI(void)
 
 	case MENU_SETTINGS_VIDEO2:
 		saved_menustate = MENU_SETTINGS_VIDEO1;
-		if (select)
+		if (select || minus || plus)
 		{
 			menustate = MENU_SETTINGS_VIDEO1;
 			if (menusub == 0)
@@ -4750,8 +4849,18 @@ void HandleUI(void)
 			}
 			else if (menusub == 1)
 			{
-				minimig_config.scanlines = ((minimig_config.scanlines + 1) & 7) | (minimig_config.scanlines & 0xf8);
-				if ((minimig_config.scanlines & 7) > 4) minimig_config.scanlines = minimig_config.scanlines & 0xf8;
+				int scanlines = minimig_config.scanlines & 7;
+				if (minus)
+				{
+					scanlines--;
+					if (scanlines < 0) scanlines = 4;
+				}
+				else
+				{
+					scanlines++;
+					if (scanlines > 4) scanlines = 0;
+				}
+				minimig_config.scanlines = scanlines | (minimig_config.scanlines & 0xf8);
 				minimig_ConfigVideo(minimig_config.scanlines);
 			}
 			else if (menusub == 2)
@@ -4768,10 +4877,10 @@ void HandleUI(void)
 			}
 			else if (menusub == 4)
 			{
-				minimig_config.audio = (minimig_config.audio + 1) & 3;
+				minimig_config.audio = (minimig_config.audio + (minus ? -1 : 1)) & 3;
 				minimig_ConfigAudio(minimig_config.audio);
 			}
-			else if (menusub == 5)
+			else if (menusub == 5 && select)
 			{
 				menustate = MENU_NONE1;
 				minimig_set_adjust(minimig_get_adjust() ? 0 : 1);

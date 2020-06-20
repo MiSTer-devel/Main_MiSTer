@@ -1585,6 +1585,14 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				ev.code = KEY_BACKSPACE;
 				break;
 
+			case JOY_L:
+				ev.code = KEY_MINUS;
+				break;
+
+			case JOY_R:
+				ev.code = KEY_EQUAL;
+				break;
+
 			default:
 				ev.code = (bnum == BTN_OSD) ? KEY_MENU : 0;
 			}
@@ -2157,6 +2165,18 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							(ev->code == input[dev].mmap[SYS_BTN_B]))
 						{
 							joy_digital(0, JOY_BTN2, 0, ev->value, 0);
+							return;
+						}
+
+						if (ev->code == input[dev].mmap[SYS_BTN_L])
+						{
+							joy_digital(0, JOY_L, 0, ev->value, 0);
+							return;
+						}
+
+						if (ev->code == input[dev].mmap[SYS_BTN_R])
+						{
+							joy_digital(0, JOY_R, 0, ev->value, 0);
 							return;
 						}
 
