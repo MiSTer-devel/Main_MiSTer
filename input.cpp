@@ -1,3 +1,5 @@
+#include <set>
+#include <string>
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -2716,183 +2718,225 @@ int input_test(int getchar)
 
 	if (state == 1)
 	{
-		printf("Open up to %d input devices.\n", NUMDEV);
-		for (int i = 0; i < NUMDEV; i++)
-		{
-			pool[i].fd = -1;
-			pool[i].events = 0;
-		}
+		printf("Opening up to %d input devices...\n", NUMDEV);
 
-		int n = 0;
+		// readdir() does not guarantee an ordering, so use a
+		// lexicographically-ordered set to ensure relative
+		// device positions remain deterministic.
+		std::set<std::string> device_names;
 		DIR *d = opendir("/dev/input");
 		if (d)
 		{
-			struct dirent *de;
-			while ((de = readdir(d)))
+			dirent* de = readdir(d);
+			while (de)
 			{
-				if (!strncmp(de->d_name, "event", 5) || !strncmp(de->d_name, "mouse", 5))
+				if (strcmp(de->d_name, ".") && strcmp(de->d_name, ".."))
 				{
-					memset(&input[n], 0, sizeof(input[n]));
-					sprintf(input[n].devname, "/dev/input/%s", de->d_name);
-					int fd = open(input[n].devname, O_RDWR);
-					//printf("open(%s): %d\n", input[n].devname, fd);
+					device_names.emplace(de->d_name);
+				}
+				de = readdir(d);
+			}
+			closedir(d);
+		}
 
-					if (fd > 0)
+		for (auto d_name : device_names)
+		{
+			printf("Found input device: /dev/input/%s\n", d_name.c_str());
+		}
+
+		for (int i = 0; i < NUMDEV; i++)
+		{
+			if ('\0' != input[i].devname[0])
+			{
+				char* d_name = strrchr(input[i].devname, '/') + 1;
+				if (1 == device_names.count(d_name))
+				{
+					// Device still valid, no need to do anything with it again.
+					printf("Keeping connected input device: %s\n", input[i].devname);
+					device_names.erase(d_name);
+				}
+				else
+				{
+					// Device no longer exists, remove it.
+					printf("Closing removed input device: %s\n", input[i].devname);
+					memset(&input[i], 0, sizeof(input[i]));
+					ioctl(pool[i].fd, EVIOCGRAB, 0);
+					close(pool[i].fd);
+					pool[i].fd = -1;
+					pool[i].events = 0;
+				}
+			}
+		}
+
+		for (auto d_name : device_names)
+		{
+			if (!strncmp(d_name.c_str(), "event", 5) || !strncmp(d_name.c_str(), "mouse", 5))
+			{
+				// Find first available input device slot.
+				int n = 0;
+				while (n < NUMDEV && '\0' != input[n].devname[0])
+					n++;
+				if (n >= NUMDEV) break;
+
+				sprintf(input[n].devname, "/dev/input/%s", d_name.c_str());
+				const int fd = open(input[n].devname, O_RDWR);
+				printf("Opening input device: %s (index=%d, fd=%d)\n", input[n].devname, n, fd);
+
+				if (fd > 0)
+				{
+					pool[n].fd = fd;
+					pool[n].events = POLLIN;
+					input[n].mouse = !strncmp(d_name.c_str(), "mouse", 5);
+
+					char uniq[32] = {};
+					if (!input[n].mouse)
 					{
-						pool[n].fd = fd;
-						pool[n].events = POLLIN;
-						input[n].mouse = !strncmp(de->d_name, "mouse", 5);
+						struct input_id id;
+						memset(&id, 0, sizeof(id));
+						ioctl(pool[n].fd, EVIOCGID, &id);
+						input[n].vid = id.vendor;
+						input[n].pid = id.product;
 
-						char uniq[32] = {};
-						if (!input[n].mouse)
+						ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(uniq)), uniq);
+						ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
+						input[n].led = has_led(pool[n].fd);
+					}
+
+					//skip our virtual device
+					if (!strcmp(input[n].name, UINPUT_NAME))
+					{
+						memset(&input[n], 0, sizeof(input[n]));
+						close(pool[n].fd);
+						pool[n].fd = -1;
+						continue;
+					}
+
+					input[n].bind = -1;
+
+					// enable scroll wheel reading
+					if (input[n].mouse)
+					{
+						unsigned char buffer[4];
+						static const unsigned char mousedev_imps_seq[] = { 0xf3, 200, 0xf3, 100, 0xf3, 80 };
+						if (write(pool[n].fd, mousedev_imps_seq, sizeof(mousedev_imps_seq)) != sizeof(mousedev_imps_seq))
 						{
-							struct input_id id;
-							memset(&id, 0, sizeof(id));
-							ioctl(pool[n].fd, EVIOCGID, &id);
-							input[n].vid = id.vendor;
-							input[n].pid = id.product;
-
-							ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(uniq)), uniq);
-							ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
-							input[n].led = has_led(pool[n].fd);
+							printf("Cannot switch %s to ImPS/2 protocol(1)\n", input[n].devname);
 						}
-
-						//skip our virtual device
-						if (!strcmp(input[n].name, UINPUT_NAME))
+						else if (read(pool[n].fd, buffer, sizeof buffer) != 1 || buffer[0] != 0xFA)
 						{
+							printf("Failed to switch %s to ImPS/2 protocol(2)\n", input[n].devname);
+						}
+					}
+
+					if (strcasestr(input[n].name, "Wiimote") && input[n].vid == 1 && input[n].pid == 1)
+					{
+						input[n].quirk = QUIRK_CWIID;
+						input[n].lightgun = 1;
+					}
+
+					if (input[n].vid == 0x054c)
+					{
+						if (input[n].pid == 0x0268)  input[n].quirk = QUIRK_DS3;
+						else if (input[n].pid == 0x05c4 || input[n].pid == 0x09cc || input[n].pid == 0x0ba0)
+						{
+							input[n].quirk = QUIRK_DS4;
+							if (strcasestr(input[n].name, "Touchpad"))
+							{
+								input[n].quirk = QUIRK_DS4TOUCH;
+							}
+						}
+					}
+
+					if (input[n].vid == 0x0079 && input[n].pid == 0x1802)
+					{
+						input[n].lightgun = 1;
+						input[n].num = 2; // force mayflash mode 1/2 as second joystick.
+					}
+
+					if (input[n].vid == 0x057e && (input[n].pid == 0x0306 || input[n].pid == 0x0330))
+					{
+						if (strcasestr(input[n].name, "Accelerometer") || strcasestr(input[n].name, "Motion Plus"))
+						{
+							// don't use Accelerometer
+							memset(&input[n], 0, sizeof(input[n]));
 							close(pool[n].fd);
 							pool[n].fd = -1;
 							continue;
 						}
-
-						input[n].bind = -1;
-
-						// enable scroll wheel reading
-						if (input[n].mouse)
-						{
-							unsigned char buffer[4];
-							static const unsigned char mousedev_imps_seq[] = { 0xf3, 200, 0xf3, 100, 0xf3, 80 };
-							if (write(pool[n].fd, mousedev_imps_seq, sizeof(mousedev_imps_seq)) != sizeof(mousedev_imps_seq))
-							{
-								printf("Cannot switch %s to ImPS/2 protocol(1)\n", input[n].devname);
-							}
-							else if (read(pool[n].fd, buffer, sizeof buffer) != 1 || buffer[0] != 0xFA)
-							{
-								printf("Failed to switch %s to ImPS/2 protocol(2)\n", input[n].devname);
-							}
-						}
-
-						if (strcasestr(input[n].name, "Wiimote") && input[n].vid == 1 && input[n].pid == 1)
-						{
-							input[n].quirk = QUIRK_CWIID;
-							input[n].lightgun = 1;
-						}
-
-						if (input[n].vid == 0x054c)
-						{
-							if (input[n].pid == 0x0268)  input[n].quirk = QUIRK_DS3;
-							else if (input[n].pid == 0x05c4 || input[n].pid == 0x09cc || input[n].pid == 0x0ba0)
-							{
-								input[n].quirk = QUIRK_DS4;
-								if (strcasestr(input[n].name, "Touchpad"))
-								{
-									input[n].quirk = QUIRK_DS4TOUCH;
-								}
-							}
-						}
-
-						if (input[n].vid == 0x0079 && input[n].pid == 0x1802)
-						{
-							input[n].lightgun = 1;
-							input[n].num = 2; // force mayflash mode 1/2 as second joystick.
-						}
-
-						if (input[n].vid == 0x057e && (input[n].pid == 0x0306 || input[n].pid == 0x0330))
-						{
-							if (strcasestr(input[n].name, "Accelerometer"))
-							{
-								// don't use Accelerometer
-								close(pool[n].fd);
-								pool[n].fd = -1;
-								continue;
-							}
-							else if (strcasestr(input[n].name, "Motion Plus"))
-							{
-								// don't use Accelerometer
-								close(pool[n].fd);
-								pool[n].fd = -1;
-								continue;
-							}
-							else
-							{
-								input[n].quirk = QUIRK_WIIMOTE;
-								input[n].guncal[0] = 0;
-								input[n].guncal[1] = 767;
-								input[n].guncal[2] = 1;
-								input[n].guncal[3] = 1023;
-								FileLoadConfig("wiimote_cal.cfg", input[n].guncal, 4 * sizeof(uint16_t));
-							}
-						}
-
-						//Ultimarc lightgun
-						if (input[n].vid == 0xd209 && input[n].pid == 0x1601)
-						{
-							input[n].lightgun = 1;
-						}
-
-						//Madcatz Arcade Stick 360
-						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
-
-						// mr.Spinner
-						// 0x120  - Button
-						// Axis 7 - EV_REL is spinner
-						// Axis 8 - EV_ABS is Paddle
-						// Overlays on other existing gamepads
-						if (strstr(uniq, "MiSTer-S1")) input[n].quirk = QUIRK_PDSP;
-
-						// Arcade with spinner and/or paddle:
-						// Axis 7 - EV_REL is spinner
-						// Axis 8 - EV_ABS is Paddle
-						// Includes other buttons and axes, works as a full featured gamepad.
-						if (strstr(uniq, "MiSTer-A1")) input[n].quirk = QUIRK_PDSP_ARCADE;
-
-						//Jamma
-						if (cfg.jamma_vid && cfg.jamma_pid && input[n].vid == cfg.jamma_vid && input[n].pid == cfg.jamma_pid)
-						{
-							input[n].quirk = QUIRK_JAMMA;
-						}
-
-						//Arduino and Teensy devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
-						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4)) && strlen(uniq))
-						{
-							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x_%s", input[n].vid, input[n].pid, uniq);
-							char *p;
-							while ((p = strchr(input[n].idstr, '/'))) *p = '_';
-							while ((p = strchr(input[n].idstr, ' '))) *p = '_';
-							while ((p = strchr(input[n].idstr, '*'))) *p = '_';
-							while ((p = strchr(input[n].idstr, ':'))) *p = '_';
-							strcpy(input[n].name, uniq);
-						}
 						else
 						{
-							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x", input[n].vid, input[n].pid);
+							input[n].quirk = QUIRK_WIIMOTE;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 767;
+							input[n].guncal[2] = 1;
+							input[n].guncal[3] = 1023;
+							FileLoadConfig("wiimote_cal.cfg", input[n].guncal, 4 * sizeof(uint16_t));
 						}
-
-						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
-
-						n++;
-						if (n >= NUMDEV) break;
 					}
+
+					//Ultimarc lightgun
+					if (input[n].vid == 0xd209 && input[n].pid == 0x1601)
+					{
+						input[n].lightgun = 1;
+					}
+
+					//Madcatz Arcade Stick 360
+					if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
+
+					// mr.Spinner
+					// 0x120  - Button
+					// Axis 7 - EV_REL is spinner
+					// Axis 8 - EV_ABS is Paddle
+					// Overlays on other existing gamepads
+					if (strstr(uniq, "MiSTer-S1")) input[n].quirk = QUIRK_PDSP;
+
+					// Arcade with spinner and/or paddle:
+					// Axis 7 - EV_REL is spinner
+					// Axis 8 - EV_ABS is Paddle
+					// Includes other buttons and axes, works as a full featured gamepad.
+					if (strstr(uniq, "MiSTer-A1")) input[n].quirk = QUIRK_PDSP_ARCADE;
+
+					//Jamma
+					if (cfg.jamma_vid && cfg.jamma_pid && input[n].vid == cfg.jamma_vid && input[n].pid == cfg.jamma_pid)
+					{
+						input[n].quirk = QUIRK_JAMMA;
+					}
+
+					//Arduino and Teensy devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
+					if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid >> 8) == 0x4)) && strlen(uniq))
+					{
+						snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x_%s", input[n].vid, input[n].pid, uniq);
+						char* p;
+						while ((p = strchr(input[n].idstr, '/'))) *p = '_';
+						while ((p = strchr(input[n].idstr, ' '))) *p = '_';
+						while ((p = strchr(input[n].idstr, '*'))) *p = '_';
+						while ((p = strchr(input[n].idstr, ':'))) *p = '_';
+						strcpy(input[n].name, uniq);
+					}
+					else
+					{
+						snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x", input[n].vid, input[n].pid);
+					}
+
+					ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
 				}
 			}
-			closedir(d);
+		}
 
-			mergedevs();
-			for (int i = 0; i < n; i++)
+		mergedevs();
+
+		for (int i = 0; i < NUMDEV; i++)
+		{
+			if ('\0' != input[i].devname[0])
 			{
-				printf("opened %d(%2d): %s (%04x:%04x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].quirk, input[i].id, input[i].name);
+				char* d_name = strrchr(input[i].devname, '/') + 1;
+				if (1 == device_names.count(d_name))
+				{
+					printf("Opened input device: %d(%2d): %s (%04x:%04x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].quirk, input[i].id, input[i].name);
+				}
 			}
 		}
+
 		cur_leds |= 0x80;
 		state++;
 	}
@@ -2915,12 +2959,6 @@ int input_test(int getchar)
 
 			if ((pool[NUMDEV].revents & POLLIN) && check_devs())
 			{
-				printf("Close all devices.\n");
-				for (int i = 0; i < NUMDEV; i++) if (pool[i].fd >= 0)
-				{
-					ioctl(pool[i].fd, EVIOCGRAB, 0);
-					close(pool[i].fd);
-				}
 				state = 1;
 				return 0;
 			}
