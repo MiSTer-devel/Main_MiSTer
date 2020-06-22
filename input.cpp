@@ -896,6 +896,8 @@ typedef struct
 } devInput;
 
 static devInput input[NUMDEV] = {};
+static devInput player_pad[NUMPLAYERS] = {};
+static devInput player_pdsp[NUMPLAYERS] = {};
 
 #define BTN_NUM (sizeof(devInput::map) / sizeof(devInput::map[0]))
 
@@ -1664,6 +1666,13 @@ static void joy_analog(int num, int axis, int offset)
 	}
 }
 
+void reset_players()
+{
+	for (int i = 0; i < NUMDEV; i++) input[i].num = 0;
+	memset(player_pad, 0, sizeof(player_pad));
+	memset(player_pdsp, 0, sizeof(player_pdsp));
+}
+
 static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
@@ -1694,29 +1703,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER);
 	int origcode = ev->code;
 
-	if (!input[dev].num && ((ev->type == EV_KEY && ev->code >= 256) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
-	{
-		for (uint8_t num = 1; num < NUMDEV + 1; num++)
-		{
-			int found = 0;
-			for (int i = 0; i < NUMDEV; i++)
-			{
-				// paddles/spinners overlay on top of other gamepad
-				if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
-				{
-					found = (input[i].num == num);
-					if (found) break;
-				}
-			}
-
-			if (!found)
-			{
-				input[dev].num = num;
-				break;
-			}
-		}
-	}
-
 	if (!input[dev].has_mmap)
 	{
 		if (input[dev].quirk != QUIRK_PDSP)
@@ -1737,12 +1723,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
 			input[dev].map[map_paddle_btn()] = 0x120;
-			if (cfg.controller_info)
-			{
-				char str[32];
-				sprintf(str, "P%d paddle/spinner", input[dev].num);
-				Info(str, cfg.controller_info * 1000);
-			}
 		}
 		else if (!load_map(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 		{
@@ -1752,7 +1732,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (input[dev].has_mmap == 1)
 				{
 					// not defined try to guess the mapping
-					map_joystick(input[dev].map, input[dev].mmap, input[dev].num);
+					map_joystick(input[dev].map, input[dev].mmap);
 				}
 				else
 				{
@@ -1761,11 +1741,50 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			input[dev].has_map++;
 		}
-		else
-		{
-			map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
-		}
 		input[dev].has_map++;
+	}
+
+	if (!input[dev].num && ((ev->type == EV_KEY && ev->code >= 256 && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
+	{
+		for (uint8_t num = 1; num < NUMDEV + 1; num++)
+		{
+			int found = 0;
+			for (int i = 0; i < NUMDEV; i++)
+			{
+				// paddles/spinners overlay on top of other gamepad
+				if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
+				{
+					found = (input[i].num == num);
+					if (found) break;
+				}
+			}
+
+			if (!found)
+			{
+				input[dev].num = num;
+				if (num < NUMPLAYERS)
+				{
+					if(input[dev].quirk == QUIRK_PDSP) memcpy(&player_pdsp[num], &input[dev], sizeof(player_pdsp[0]));
+					else memcpy(&player_pad[num], &input[dev], sizeof(player_pad[0]));
+				}
+				break;
+			}
+		}
+
+		if (cfg.controller_info)
+		{
+			if (input[dev].quirk == QUIRK_PDSP)
+			{
+				char str[32];
+				sprintf(str, "P%d paddle/spinner", input[dev].num);
+				Info(str, cfg.controller_info * 1000);
+			}
+			else
+			{
+				map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
+			}
+		}
+		printf("Device %d assigned to player %d\n", dev, input[dev].num);
 	}
 
 	int old_combo = input[dev].osd_combo;
@@ -2743,6 +2762,23 @@ int input_test(int getchar)
 			pool[i].events = 0;
 		}
 
+		// check assigned pads
+		// remove from list if pad is disappeared
+		for (int i = 0; i < NUMPLAYERS; i++)
+		{
+			if (strlen(player_pad[i].devname))
+			{
+				struct stat64 st = {};
+				if (stat64(player_pad[i].devname, &st) < 0) memset(&player_pad[i], 0, sizeof(player_pad[i]));
+			}
+
+			if (strlen(player_pdsp[i].devname))
+			{
+				struct stat64 st = {};
+				if (stat64(player_pdsp[i].devname, &st) < 0) memset(&player_pdsp[i], 0, sizeof(player_pdsp[i]));
+			}
+		}
+
 		int n = 0;
 		DIR *d = opendir("/dev/input");
 		if (d)
@@ -2911,6 +2947,22 @@ int input_test(int getchar)
 			for (int i = 0; i < n; i++)
 			{
 				printf("opened %d(%2d): %s (%04x:%04x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].quirk, input[i].id, input[i].name);
+
+				// restore players
+				devInput *player = (input[i].quirk == QUIRK_PDSP) ? player_pdsp : player_pad;
+				for (int k = 0; k < NUMPLAYERS; k++)
+				{
+					if (strlen(player[k].devname) && !strcmp(player[k].devname, input[i].devname))
+					{
+						printf("restore player %d\n", k);
+
+						int dev = i;
+						if (input[i].bind) dev = input[i].bind;
+						input[dev].num = k;
+						memcpy(input[dev].jkmap, player[k].jkmap, sizeof(input[dev].jkmap));
+						input[dev].lightgun = player[k].lightgun;
+					}
+				}
 			}
 		}
 		cur_leds |= 0x80;

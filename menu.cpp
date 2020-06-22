@@ -1985,21 +1985,23 @@ void HandleUI(void)
 			while(1)
 			{
 				n = 0;
-				menumask = 0xf807;
+				menumask = 0xf80F;
 
 				if (!menusub) firstmenu = 0;
 				adjvisible = 0;
 
 				MenuWrite(n++, " Core                      \x16", menusub == 0, 0);
+				MenuWrite(n++);
 				sprintf(s, " Define %s buttons         ", is_menu() ? "System" : user_io_get_core_name_ex());
 				s[27] = '\x16';
 				s[28] = 0;
 				MenuWrite(n++, s, menusub == 1, 0);
 				MenuWrite(n++, " Button/Key remap for game \x16", menusub == 2, 0);
+				MenuWrite(n++, " Reset player assignment", menusub == 3, 0);
 
 				if (user_io_get_uart_mode())
 				{
-					menumask |= 0x8;
+					menumask |= 0x10;
 					MenuWrite(n++);
 					int mode = GetUARTMode();
 					const char *p = config_uart_msg[(is_st() && mode == 3) ? 4 : mode];
@@ -2007,14 +2009,14 @@ void HandleUI(void)
 					sprintf(s, " UART mode (%s)            ",p);
 					s[27] = '\x16';
 					s[28] = 0;
-					MenuWrite(n++, s, menusub == 3);
+					MenuWrite(n++, s, menusub == 4);
 				}
 
 				if (video_get_scaler_flt() >= 0 && !cfg.direct_video)
 				{
 					MenuWrite(n++);
 					menumask |= 0x60;
-					sprintf(s, " Scale Filter - %s", config_scaler_msg[video_get_scaler_flt() ? 1 : 0]);
+					sprintf(s, " Scale filter - %s", config_scaler_msg[video_get_scaler_flt() ? 1 : 0]);
 					MenuWrite(n++, s, menusub == 5);
 
 					memset(s, 0, sizeof(s));
@@ -2032,7 +2034,7 @@ void HandleUI(void)
 				{
 					MenuWrite(n++);
 					menumask |= 0x180;
-					sprintf(s, " Gamma Correction - %s", config_gamma_msg[video_get_gamma_en() ? 1 : 0]);
+					sprintf(s, " Gamma correction - %s", config_gamma_msg[video_get_gamma_en() ? 1 : 0]);
 					MenuWrite(n++, s, menusub == 7);
 
 					memset(s, 0, sizeof(s));
@@ -2050,7 +2052,7 @@ void HandleUI(void)
 				{
 					MenuWrite(n++);
 					menumask |= 0x600;
-					sprintf(s, " Audio Filter - %s", config_afilter_msg[audio_filter_en() ? 1 : 0]);
+					sprintf(s, " Audio filter - %s", config_afilter_msg[audio_filter_en() ? 1 : 0]);
 					MenuWrite(n++, s, menusub == 9);
 
 					memset(s, 0, sizeof(s));
@@ -2154,6 +2156,11 @@ void HandleUI(void)
 				break;
 
 			case 3:
+				reset_players();
+				menustate = MENU_NONE1;
+				break;
+
+			case 4:
 				{
 					menustate = MENU_UART1;
 
@@ -2459,7 +2466,7 @@ void HandleUI(void)
 		if (menu)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
-			menusub = 3;
+			menusub = 4;
 			break;
 		}
 
@@ -2533,7 +2540,7 @@ void HandleUI(void)
 						SetUARTMode(0);
 						SetUARTMode(mode);
 						menustate = MENU_8BIT_SYSTEM1;
-						menusub = 3;
+						menusub = 4;
 					}
 				}
 				break;
@@ -2544,7 +2551,7 @@ void HandleUI(void)
 					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
 					FileSaveConfig(s, &mode, 4);
 					menustate = MENU_8BIT_SYSTEM1;
-					menusub = 3;
+					menusub = 4;
 				}
 				break;
 
@@ -3165,7 +3172,7 @@ void HandleUI(void)
 		if (menu | select | left)
 		{
 			menustate = MENU_8BIT_SYSTEM1;
-			menusub = 12;
+			menusub = 14;
 		}
 		break;
 
@@ -4272,7 +4279,7 @@ void HandleUI(void)
 		if (menu || (select && (menusub == 1))) // exit menu
 		{
 			menustate = MENU_8BIT_SYSTEM1;
-			menusub = 4;
+			menusub = 11;
 		}
 		break;
 
