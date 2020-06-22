@@ -1689,23 +1689,30 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].num && ((ev->type == EV_KEY && ev->code >= 256) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
 	{
-		for (uint8_t num = 1; num < NUMDEV + 1; num++)
+		bool num_used[NUMDEV + 1] = { false };
+		for (int i = 0; i < NUMDEV; i++)
 		{
-			int found = 0;
-			for (int i = 0; i < NUMDEV; i++)
+			// paddles/spinners overlay on top of other gamepad
+			if ((input[dev].quirk == QUIRK_PDSP) && (input[i].quirk == QUIRK_PDSP))
 			{
-				// paddles/spinners overlay on top of other gamepad
-				if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
-				{
-					found = (input[i].num == num);
-					if (found) break;
-				}
-			}
-
-			if (!found)
-			{
-				input[dev].num = num;
+				input[dev].num = input[i].num;
 				break;
+			}
+			else if (input[i].num > 0)
+			{
+				num_used[input[i].num] = true;
+			}
+		}
+
+		if (!input[dev].num)
+		{
+			for (int num = 1; num < NUMDEV + 1; num++)
+			{
+				if (!num_used[num])
+				{
+					input[dev].num = num;
+					break;
+				}
 			}
 		}
 	}
