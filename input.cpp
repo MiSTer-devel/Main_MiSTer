@@ -2687,6 +2687,13 @@ static struct
 	{KEY_L,         2, 0x12D}, // 2P 8
 };
 
+std::string device_key_string(uint16_t vid, uint16_t pid)
+{
+	char buffer[256];
+	sprintf(buffer, "%04x:%04x", vid, pid);
+	return buffer;
+}
+
 int input_test(int getchar)
 {
 	static char cur_leds = 0;
@@ -2720,11 +2727,11 @@ int input_test(int getchar)
 		printf("Open up to %d input devices.\n", NUMDEV);
 
 		// Remember which devices mapped to which core device numbers.
-		std::map<std::string, unsigned int> devname_nums;
+		std::map<std::string, unsigned int> devnums;
 		for (int i = 0; i < NUMDEV; i++)
 		{
-			if (pool[i].fd > 0 && '\0' != input[i].devname[0])
-				devname_nums.emplace(input[i].devname, input[i].num);
+			if (pool[i].fd > 0)
+				devnums.emplace(device_key_string(input[i].vid, input[i].pid), input[i].num);
 			pool[i].fd = -1;
 			pool[i].events = 0;
 		}
@@ -2741,9 +2748,6 @@ int input_test(int getchar)
 				{
 					memset(&input[n], 0, sizeof(input[n]));
 					sprintf(input[n].devname, "/dev/input/%s", de->d_name);
-					auto result = devname_nums.find(input[n].devname);
-					if (result != devname_nums.end())
-						input[n].num = result->second;
 					int fd = open(input[n].devname, O_RDWR);
 					//printf("open(%s): %d\n", input[n].devname, fd);
 
@@ -2761,6 +2765,10 @@ int input_test(int getchar)
 							ioctl(pool[n].fd, EVIOCGID, &id);
 							input[n].vid = id.vendor;
 							input[n].pid = id.product;
+
+							auto result = devnums.find(device_key_string(id.vendor, id.product));
+							if (result != devnums.end())
+								input[n].num = result->second;
 
 							ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(uniq)), uniq);
 							ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
