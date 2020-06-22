@@ -3955,8 +3955,11 @@ void HandleUI(void)
 			OsdWrite(OsdGetSize() / 2, "    Unmounting the image", 0, 0);
 			OsdUpdate();
 			sleep(1);
+			input_poll(0);
+			menu_key_set(0);
 			selPath[0] = 0;
 			menustate = fs_MenuSelect;
+			break;
 		}
 
 		if (menu)
