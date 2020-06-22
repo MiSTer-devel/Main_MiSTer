@@ -128,8 +128,21 @@ void mcd_set_image(int num, const char *filename)
 		user_io_8bit_set_status(0, 1);
 		mcd_reset();
 
-		sprintf(buf, "%s/boot.rom", HomeDir());
-		loaded = user_io_file_tx(buf);
+		loaded = 0;
+		strcpy(buf, last_dir);
+		char *p = strrchr(buf, '/');
+		if (p)
+		{
+			strcpy(p + 1, "cd_bios.rom");
+			loaded = user_io_file_tx(buf);
+		}
+
+		if (!loaded)
+		{
+			sprintf(buf, "%s/boot.rom", HomeDir());
+			loaded = user_io_file_tx(buf);
+		}
+
 		if (!loaded) Info("CD BIOS not found!", 4000);
 	}
 
