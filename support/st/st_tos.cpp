@@ -412,6 +412,8 @@ void tos_poll()
 		{
 			if (CheckTimer(timer))
 			{
+				tos_insert_disk(0, "");
+				tos_insert_disk(1, "");
 				tos_reset(1);
 				timer = 1;
 			}

@@ -3297,6 +3297,8 @@ void HandleUI(void)
 			case 8:  // Cold Boot
 				if (select)
 				{
+					tos_insert_disk(0, "");
+					tos_insert_disk(1, "");
 					tos_reset(1);
 					menustate = MENU_NONE1;
 				}
