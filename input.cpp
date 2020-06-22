@@ -1659,6 +1659,13 @@ static void joy_analog(int num, int axis, int offset)
 
 static int ds_mouse_emu = 0;
 
+std::string device_key_string(uint16_t vid, uint16_t pid)
+{
+	char buffer[256];
+	sprintf(buffer, "%04x:%04x", vid, pid);
+	return buffer;
+}
+
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	if (ev->type != EV_KEY && ev->type != EV_ABS && ev->type != EV_REL) return;
@@ -1687,25 +1694,41 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER);
 	int origcode = ev->code;
 
+	// Permanently remember which devices are mapped to which virtual devices.
+	static std::map<std::string, unsigned int> devnums;
+
 	if (!input[dev].num && ((ev->type == EV_KEY && ev->code >= 256) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
 	{
+		// Try to assign the input device to the same virtual device it used before.
+		auto result = devnums.find(device_key_string(input[dev].vid, input[dev].pid));
+		if (result != devnums.end())
+			input[dev].num = result->second;
+
 		bool num_used[NUMDEV + 1] = { false };
-		for (int i = 0; i < NUMDEV; i++)
+		if (!input[dev].num)
 		{
-			// paddles/spinners overlay on top of other gamepad
-			if ((input[dev].quirk == QUIRK_PDSP) && (input[i].quirk == QUIRK_PDSP))
+			// Try to find a matching paddle/spinner device to combine with.
+			for (int i = 0; i < NUMDEV; i++)
 			{
-				input[dev].num = input[i].num;
-				break;
-			}
-			else if (input[i].num > 0)
-			{
-				num_used[input[i].num] = true;
+				if ((input[dev].quirk == QUIRK_PDSP) && (input[i].quirk == QUIRK_PDSP))
+				{
+					input[dev].num = input[i].num;
+					break;
+				}
+				else if (input[i].num > 0)
+				{
+					num_used[input[i].num] = true;
+				}
 			}
 		}
 
 		if (!input[dev].num)
 		{
+			// Ensure any globally-remembered nums are also marked as used.
+			for (auto it : devnums)
+				num_used[it.second] = true;
+
+			// Use the first unused num.
 			for (int num = 1; num < NUMDEV + 1; num++)
 			{
 				if (!num_used[num])
@@ -1715,6 +1738,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 			}
 		}
+
+		if (input[dev].num)
+			devnums.emplace(device_key_string(input[dev].vid, input[dev].pid), input[dev].num);
 	}
 
 	if (!input[dev].has_mmap)
@@ -2694,13 +2720,6 @@ static struct
 	{KEY_L,         2, 0x12D}, // 2P 8
 };
 
-std::string device_key_string(uint16_t vid, uint16_t pid)
-{
-	char buffer[256];
-	sprintf(buffer, "%04x:%04x", vid, pid);
-	return buffer;
-}
-
 int input_test(int getchar)
 {
 	static char cur_leds = 0;
@@ -2733,12 +2752,8 @@ int input_test(int getchar)
 	{
 		printf("Open up to %d input devices.\n", NUMDEV);
 
-		// Remember which devices mapped to which core device numbers.
-		std::map<std::string, unsigned int> devnums;
 		for (int i = 0; i < NUMDEV; i++)
 		{
-			if (pool[i].fd > 0)
-				devnums.emplace(device_key_string(input[i].vid, input[i].pid), input[i].num);
 			pool[i].fd = -1;
 			pool[i].events = 0;
 		}
@@ -2772,11 +2787,6 @@ int input_test(int getchar)
 							ioctl(pool[n].fd, EVIOCGID, &id);
 							input[n].vid = id.vendor;
 							input[n].pid = id.product;
-
-							auto result = devnums.find(device_key_string(id.vendor, id.product));
-							if (result != devnums.end())
-								input[n].num = result->second;
-
 							ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(uniq)), uniq);
 							ioctl(pool[n].fd, EVIOCGNAME(sizeof(input[n].name)), input[n].name);
 							input[n].led = has_led(pool[n].fd);
