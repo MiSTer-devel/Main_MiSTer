@@ -1,3 +1,4 @@
+#include <map>
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -2717,11 +2718,17 @@ int input_test(int getchar)
 	if (state == 1)
 	{
 		printf("Open up to %d input devices.\n", NUMDEV);
+
+		// Remember which devices mapped to which core device numbers.
+		std::map<std::string, unsigned int> devname_nums;
 		for (int i = 0; i < NUMDEV; i++)
 		{
+			if (pool[i].fd > 0 && '\0' != input[i].devname[0])
+				devname_nums.emplace(input[i].devname, input[i].num);
 			pool[i].fd = -1;
 			pool[i].events = 0;
 		}
+
 
 		int n = 0;
 		DIR *d = opendir("/dev/input");
@@ -2734,6 +2741,9 @@ int input_test(int getchar)
 				{
 					memset(&input[n], 0, sizeof(input[n]));
 					sprintf(input[n].devname, "/dev/input/%s", de->d_name);
+					auto result = devname_nums.find(input[n].devname);
+					if (result != devname_nums.end())
+						input[n].num = result->second;
 					int fd = open(input[n].devname, O_RDWR);
 					//printf("open(%s): %d\n", input[n].devname, fd);
 
