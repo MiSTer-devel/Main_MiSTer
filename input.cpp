@@ -384,7 +384,7 @@ static const int ev2ps2[] =
 	0x71, //83  KEY_KPDOT
 	NONE, //84  ???
 	NONE, //85  KEY_ZENKAKU
-	0x56, //86  KEY_102ND
+	0x61, //86  KEY_102ND
 	0x78, //87  KEY_F11
 	0x07, //88  KEY_F12
 	NONE, //89  KEY_RO
