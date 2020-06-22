@@ -502,7 +502,7 @@ static uint32_t menu_key_get(void)
 		else if (CheckTimer(repeat))
 		{
 			repeat = GetTimer(REPEATRATE);
-			if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 13)))
+			if (GetASCIIKey(c1) || ((menustate == MENU_8BIT_SYSTEM2) && (menusub == 13)) || ((menustate == MENU_SYSTEM2) && (menusub == 4)))
 			{
 				c = c1;
 				hold_cnt++;
@@ -4938,6 +4938,7 @@ void HandleUI(void)
 
 		m = 0;
 		OsdSetTitle("System Settings", OSD_ARROW_LEFT);
+		menumask = 0x3F;
 
 		OsdWrite(m++);
 		sprintf(s, "       MiSTer v%s", version + 5);
@@ -4962,37 +4963,42 @@ void HandleUI(void)
 			else sprintf(s, "   Available space: %llugb", avail / (1024 * 1024 * 1024));
 			OsdWrite(m+2, s, 0, 0);
 		}
-		menumask = 0x1F;
+
 		OsdWrite(m++, "");
 		if (getStorage(0))
 		{
-			OsdWrite(m++, "        Storage: USB", 0, 0);
+			OsdWrite(m++, "        Storage: USB");
 			m++;
-			OsdWrite(m++, "      Switch to SD card", menusub == 0, 0);
+			OsdWrite(m++, "      Switch to SD card", menusub == 0);
 		}
 		else
 		{
 			if (getStorage(1))
 			{
-				OsdWrite(m++, " No USB found, using SD card", 0, 0);
+				OsdWrite(m++, " No USB found, using SD card");
 				m++;
-				OsdWrite(m++, "      Switch to SD card", menusub == 0, 0);
+				OsdWrite(m++, "      Switch to SD card", menusub == 0);
 			}
 			else
 			{
-				OsdWrite(m++, "      Storage: SD card", 0, 0);
+				OsdWrite(m++, "      Storage: SD card");
 				m++;
 				OsdWrite(m++, "        Switch to USB", menusub == 0, !isUSBMounted());
 			}
 		}
 		OsdWrite(m++, "");
-		OsdWrite(m++, " Remap keyboard            \x16", menusub == 1, 0);
-		OsdWrite(m++, " Define joystick buttons   \x16", menusub == 2, 0);
-		OsdWrite(m++, " Scripts                   \x16", menusub == 3, 0);
+		OsdWrite(m++, " Remap keyboard            \x16", menusub == 1);
+		OsdWrite(m++, " Define joystick buttons   \x16", menusub == 2);
+		OsdWrite(m++, " Scripts                   \x16", menusub == 3);
+		OsdWrite(m++, "");
+		cr = m;
+		OsdWrite(m++, " Reboot (hold \x16 cold reboot)", menusub == 4);
 		sysinfo_timer = 0;
 
+		reboot_req = 0;
+
 		while(m < OsdGetSize()-1) OsdWrite(m++, "");
-		OsdWrite(15, STD_EXIT, menusub == 4);
+		OsdWrite(15, STD_EXIT, menusub == 5);
 		menustate = MENU_SYSTEM2;
 
 	case MENU_SYSTEM2:
@@ -5045,6 +5051,19 @@ void HandleUI(void)
 				break;
 
 			case 4:
+				{
+					reboot_req = 1;
+
+					int off = hold_cnt / 3;
+					if (off > 5) reboot(1);
+
+					sprintf(s, " Cold Reboot");
+					p = s + 5 - off;
+					MenuWrite(cr, p, 1, 0);
+				}
+				break;
+
+			case 5:
 				menustate = MENU_NONE1;
 				break;
 			}
@@ -5053,6 +5072,8 @@ void HandleUI(void)
 		{
 			menustate = MENU_8BIT_INFO;
 		}
+
+		if (!hold_cnt && reboot_req) fpga_load_rbf("menu.rbf");
 		break;
 
 	case MENU_JOYSYSMAP:
