@@ -1734,6 +1734,10 @@ void HandleUI(void)
 							p += 2;
 						}
 					}
+					else if (!arcade_sw()->dip_num)
+					{
+						continue;
+					}
 
 					if (p[0] == 'P')
 					{
