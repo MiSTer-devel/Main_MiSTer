@@ -251,6 +251,7 @@ void map_joystick_show(uint32_t *map, uint32_t *mmap, int num)
 
 	sprintf(mapinfo, "Map (P%d):", num);
 	if (!num) sprintf(mapinfo, " Map:");
+	char *list = mapinfo + strlen(mapinfo);
 
 	// loop through core requested buttons and construct result map
 	for (int i = 0; i < joy_count; i++)
@@ -267,5 +268,5 @@ void map_joystick_show(uint32_t *map, uint32_t *mmap, int num)
 		}
 	}
 
-	Info(mapinfo, (cfg.controller_info ? cfg.controller_info : 6) * 1000);
+	if(strlen(list) && cfg.controller_info) Info(mapinfo, cfg.controller_info * 1000);
 }
