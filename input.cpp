@@ -2952,7 +2952,9 @@ int input_test(int getchar)
 				devInput *player = (input[i].quirk == QUIRK_PDSP) ? player_pdsp : player_pad;
 				for (int k = 0; k < NUMPLAYERS; k++)
 				{
-					if (strlen(player[k].devname) && !strcmp(player[k].devname, input[i].devname))
+					if (strlen(player[k].devname) &&
+						player[k].vid == input[i].vid &&
+						player[k].pid == input[i].pid)
 					{
 						printf("restore player %d\n", k);
 
