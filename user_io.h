@@ -20,11 +20,6 @@
 #define UIO_KBD_OSD     0x06  // keycodes used by OSD only
 
 // 0x08 - 0x0F - core specific
-#define ST_WRITE_MEMORY 0x08
-#define ST_READ_MEMORY  0x09
-#define ST_ACK_DMA      0x0a
-#define ST_NAK_DMA      0x0b
-#define ST_GET_DMASTATE 0x0c
 
 #define UIO_JOYSTICK2   0x10  // also used by minimig and 8 bit
 #define UIO_JOYSTICK3   0x11  // -"-

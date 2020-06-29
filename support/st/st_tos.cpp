@@ -10,6 +10,12 @@
 #include "../../fpga_io.h"
 #include "st_tos.h"
 
+#define ST_WRITE_MEMORY 0x08
+#define ST_READ_MEMORY  0x09
+#define ST_ACK_DMA      0x0a
+#define ST_NAK_DMA      0x0b
+#define ST_GET_DMASTATE 0x0c
+
 #define CONFIG_FILENAME  "ATARIST0.CFG"
 
 const char* tos_mem[] = { "512kb", "1mb", "2mb", "4mb", "8mb", "14mb", "--", "--" };
