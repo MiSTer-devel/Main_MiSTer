@@ -1744,7 +1744,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		input[dev].has_map++;
 	}
 
-	if (!input[dev].num && ((ev->type == EV_KEY && ev->code >= 256 && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
+	if (!input[dev].num && ((ev->type == EV_KEY && ev->code == input[dev].mmap[SYS_BTN_A] && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
 	{
 		for (uint8_t num = 1; num < NUMDEV + 1; num++)
 		{
@@ -1771,20 +1771,23 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 		}
 
-		if (cfg.controller_info)
+		if (input[dev].num)
 		{
-			if (input[dev].quirk == QUIRK_PDSP)
+			if (cfg.controller_info)
 			{
-				char str[32];
-				sprintf(str, "P%d paddle/spinner", input[dev].num);
-				Info(str, cfg.controller_info * 1000);
+				if (input[dev].quirk == QUIRK_PDSP)
+				{
+					char str[32];
+					sprintf(str, "P%d paddle/spinner", input[dev].num);
+					Info(str, cfg.controller_info * 1000);
+				}
+				else
+				{
+					map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
+				}
 			}
-			else
-			{
-				map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
-			}
+			printf("Device %d assigned to player %d\n", dev, input[dev].num);
 		}
-		printf("Device %d assigned to player %d\n", dev, input[dev].num);
 	}
 
 	int old_combo = input[dev].osd_combo;
