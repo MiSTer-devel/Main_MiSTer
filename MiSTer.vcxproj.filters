@@ -196,6 +196,9 @@
     <ClCompile Include="audio.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="support\minimig\minimig_share.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -368,6 +371,12 @@
     </ClInclude>
     <ClInclude Include="audio.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_share.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\miminig_fs_messages.h">
+      <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

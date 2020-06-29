@@ -30,7 +30,7 @@
     <NMakeOutput>MiSTer</NMakeOutput>
     <NMakeCleanCommandLine>git.lnk ./clean.sh</NMakeCleanCommandLine>
     <NMakePreprocessorDefinitions>__arm__;__GNUC__;__USE_GNU ;_GNU_SOURCE;VDATE="000000";_FILE_OFFSET_BITS=64;_LARGEFILE64_SOURCE;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
-    <NMakeIncludeSearchPath>c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\libc\usr\include;c:\Work\Git\opt\gcc54\lib\gcc\arm-linux-gnueabihf\5.4.1\include;c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\include\c++\5.4.1;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng</NMakeIncludeSearchPath>
+    <NMakeIncludeSearchPath>c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\libc\usr\include;c:\Work\Git\opt\gcc54\lib\gcc\arm-linux-gnueabihf\5.4.1\include;c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\include\c++\5.4.1;c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\include\c++\5.4.1\arm-linux-gnueabihf;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng</NMakeIncludeSearchPath>
     <OutDir>$(TEMP)</OutDir>
     <IntDir>$(TEMP)</IntDir>
     <AdditionalOptions>
@@ -86,6 +86,7 @@
     <ClCompile Include="support\minimig\minimig_config.cpp" />
     <ClCompile Include="support\minimig\minimig_fdd.cpp" />
     <ClCompile Include="support\minimig\minimig_hdd.cpp" />
+    <ClCompile Include="support\minimig\minimig_share.cpp" />
     <ClCompile Include="support\neogeo\neogeo_loader.cpp" />
     <ClCompile Include="support\pcecd\pcecd.cpp" />
     <ClCompile Include="support\pcecd\pcecdd.cpp" />
@@ -142,11 +143,13 @@
     <ClInclude Include="support\archie\archie.h" />
     <ClInclude Include="support\c64\c64.h" />
     <ClInclude Include="support\megacd\megacd.h" />
+    <ClInclude Include="support\minimig\miminig_fs_messages.h" />
     <ClInclude Include="support\minimig\minimig_boot.h" />
     <ClInclude Include="support\minimig\minimig_config.h" />
     <ClInclude Include="support\minimig\minimig_fdd.h" />
     <ClInclude Include="support\minimig\minimig_hdd.h" />
     <ClInclude Include="support\minimig\minimig_hdd_internal.h" />
+    <ClInclude Include="support\minimig\minimig_share.h" />
     <ClInclude Include="support\neogeo\neogeo_loader.h" />
     <ClInclude Include="support\pcecd\pcecd.h" />
     <ClInclude Include="support\sharpmz\sharpmz.h" />

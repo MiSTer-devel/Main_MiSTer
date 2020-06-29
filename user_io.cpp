@@ -2165,13 +2165,14 @@ void user_io_poll()
 			}
 		}
 
-
 		if (!rtc_timer || CheckTimer(rtc_timer))
 		{
 			// Update once per minute should be enough
 			rtc_timer = GetTimer(60000);
 			send_rtc(1);
 		}
+
+		minimig_share_poll();
 	}
 
 	if (core_type == CORE_TYPE_8BIT && !is_menu())

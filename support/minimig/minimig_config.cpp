@@ -15,6 +15,7 @@
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
 #include "minimig_config.h"
+#include "minimig_share.h"
 
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M" };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
@@ -502,6 +503,7 @@ void minimig_reset()
 {
 	ApplyConfiguration(0);
 	user_io_rtc_reset();
+	minimig_share_reset();
 }
 
 void minimig_set_kickstart(char *name)
