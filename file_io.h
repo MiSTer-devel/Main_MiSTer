@@ -12,6 +12,7 @@ struct fileZipArchive;
 struct fileTYPE
 {
 	fileTYPE();
+	~fileTYPE();
 	int opened();
 
 	FILE           *filp;
@@ -75,11 +76,12 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length);
 int FileReadSec(fileTYPE *file, void *pBuffer);
 int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
 int FileWriteSec(fileTYPE *file, void *pBuffer);
-void FileCreatePath(const char *dir);
+int FileCreatePath(const char *dir);
 
 int FileExists(const char *name);
 int FileCanWrite(const char *name);
 int PathIsDir(const char *name);
+struct stat64* getPathStat(const char *path);
 
 #define SAVE_DIR "saves"
 void FileGenerateSavePath(const char *name, char* out_name);
@@ -94,6 +96,7 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen);
 int FileSave(const char *name, void *pBuffer, int size);
 int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 int FileDelete(const char *name);
+int DirDelete(const char *name);
 
 //save/load from config dir
 #define CONFIG_DIR "config"

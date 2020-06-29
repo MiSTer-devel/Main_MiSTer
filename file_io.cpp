@@ -53,6 +53,11 @@ fileTYPE::fileTYPE()
 	offset = 0;
 }
 
+fileTYPE::~fileTYPE()
+{
+	FileClose(this);
+}
+
 int fileTYPE::opened()
 {
 	return filp || zip;
@@ -104,6 +109,13 @@ static int get_stmode(const char *path)
 	return (stat64(path, &st) < 0) ? 0 : st.st_mode;
 }
 
+struct stat64* getPathStat(const char *path)
+{
+	make_fullpath(path);
+	static struct stat64 st;
+	return (stat64(full_path, &st) >= 0) ? &st : NULL;
+}
+
 static int isPathDirectory(const char *path)
 {
 	make_fullpath(path);
@@ -150,7 +162,7 @@ static int isPathDirectory(const char *path)
 		int stmode = get_stmode(full_path);
 		if (!stmode)
 		{
-			printf("isPathDirectory(stat) path: %s, error: %s.\n", full_path, strerror(errno));
+			//printf("isPathDirectory(stat) path: %s, error: %s.\n", full_path, strerror(errno));
 			return 0;
 		}
 
@@ -478,7 +490,7 @@ int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 			printf("Fail to seek the file: offset=%lld, %s.\n", offset, file->name);
 			return 0;
 		}
-		offset = res;
+		offset = ftello64(file->filp);
 	}
 	else if (file->zip)
 	{
@@ -645,6 +657,15 @@ int FileDelete(const char *name)
 	return !unlink(full_path);
 }
 
+int DirDelete(const char *name)
+{
+	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
+	else strcpy(full_path, name);
+
+	printf("rmdir %s\n", full_path);
+	return !rmdir(full_path);
+}
+
 int FileLoad(const char *name, void *pBuffer, int size)
 {
 	fileTYPE f;
@@ -728,12 +749,14 @@ static void create_path(const char *base_dir, const char* sub_dir)
 	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
 }
 
-void FileCreatePath(const char *dir)
+int FileCreatePath(const char *dir)
 {
+	int res = 1;
 	if (!isPathDirectory(dir)) {
 		make_fullpath(dir);
-		mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
+		res = !mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
 	}
+	return res;
 }
 
 void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
@@ -1312,8 +1335,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 		}
 
-		struct dirent *de = nullptr;
-		for (size_t i = 0; (d && (de = readdir(d)))
+		struct dirent64 *de = nullptr;
+		for (size_t i = 0; (d && (de = readdir64(d)))
 				 || (z && i < mz_zip_reader_get_num_files(z)); i++)
 		{
 #ifdef USE_SCHEDULER
@@ -1322,7 +1345,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				scheduler_yield();
 			}
 #endif
-			struct dirent _de = {};
+			struct dirent64 _de = {};
 			if (z) {
 				mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
 				if (!IsInSameFolder(file_path_in_zip, _de.d_name))
