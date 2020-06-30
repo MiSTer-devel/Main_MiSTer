@@ -2664,9 +2664,12 @@ void mergedevs()
 	static char str[1024];
 	char phys[64] = {};
 	char uniq[64] = {};
+
 	while (fgets(str, sizeof(str), f))
 	{
 		int len = strlen(str);
+		while (len && str[len - 1] == '\n') str[--len] = 0;
+
 		if (!len)
 		{
 			phys[0] = 0;
@@ -2674,19 +2677,10 @@ void mergedevs()
 		}
 		else
 		{
-			if (!strncmp("P: Phys", str, 7))
-			{
-				char *p = strchr(str, '=');
-				snprintf(phys, sizeof(phys), "%s", p + 1);
-				if (phys[strlen(phys) - 1] == '\n') phys[strlen(phys) - 1] = 0;
-			}
-			else if (!strncmp("U: Uniq", str, 7))
-			{
-				char *p = strchr(str, '=');
-				snprintf(uniq, sizeof(uniq), "%s", p + 1);
-				if (uniq[strlen(uniq) - 1] == '\n') uniq[strlen(uniq) - 1] = 0;
-			}
-			else if (!strncmp("H: ", str, 3) && phys[0])
+			if (!strncmp("P: Phys", str, 7)) snprintf(phys, sizeof(phys), "%s", strchr(str, '=') + 1);
+			if (!strncmp("U: Uniq", str, 7)) snprintf(uniq, sizeof(uniq), "%s", strchr(str, '=') + 1);
+
+			if (!strncmp("H: ", str, 3) && phys[0])
 			{
 				char *handlers = strchr(str, '=');
 				if (handlers)
