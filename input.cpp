@@ -891,7 +891,7 @@ typedef struct
 
 	int      bind;
 	char     devname[32];
-	char     id[32];
+	char     id[64];
 	char     name[128];
 } devInput;
 
@@ -1673,6 +1673,36 @@ void reset_players()
 	memset(player_pdsp, 0, sizeof(player_pdsp));
 }
 
+void store_player(int num, int dev)
+{
+	devInput *player = (input[dev].quirk == QUIRK_PDSP) ? player_pdsp : player_pad;
+
+	// remove possible old assignment
+	for (int i = 1; i < NUMPLAYERS; i++) if (!strcmp(player[i].id, input[dev].id)) player[i].id[0] = 0;
+
+	if(num && num < NUMPLAYERS) memcpy(&player[num], &input[dev], sizeof(devInput));
+}
+
+void restore_player(int dev)
+{
+	// do not restore bound devices
+	if (dev != input[dev].bind) return;
+
+	devInput *player = (input[dev].quirk == QUIRK_PDSP) ? player_pdsp : player_pad;
+	for (int k = 1; k < NUMPLAYERS; k++)
+	{
+		if (strlen(player[k].id) && !strcmp(player[k].id, input[dev].id))
+		{
+			printf("restore player %d to %s (%s)\n", k, input[dev].devname, input[dev].id);
+
+			input[dev].num = k;
+			memcpy(input[dev].jkmap, player[k].jkmap, sizeof(input[dev].jkmap));
+			input[dev].lightgun = player[k].lightgun;
+			break;
+		}
+	}
+}
+
 static int ds_mouse_emu = 0;
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
@@ -1702,6 +1732,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int cancel   = (ev->type == EV_KEY && ev->code == KEY_ESC);
 	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER);
 	int origcode = ev->code;
+
+	int show_map = 0;
 
 	if (!input[dev].has_mmap)
 	{
@@ -1742,6 +1774,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			input[dev].has_map++;
 		}
 		input[dev].has_map++;
+		show_map = 1;
 	}
 
 	if (!input[dev].num && ((ev->type == EV_KEY && ev->code == input[dev].mmap[SYS_BTN_A] && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
@@ -1762,31 +1795,29 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			if (!found)
 			{
 				input[dev].num = num;
-				if (num < NUMPLAYERS)
-				{
-					if(input[dev].quirk == QUIRK_PDSP) memcpy(&player_pdsp[num], &input[dev], sizeof(player_pdsp[0]));
-					else memcpy(&player_pad[num], &input[dev], sizeof(player_pad[0]));
-				}
+				store_player(num, dev);
+				printf("Device %s assigned to player %d\n", input[dev].id, input[dev].num);
 				break;
 			}
 		}
 
-		if (input[dev].num)
+		if (input[dev].num) show_map = 1;
+	}
+
+	if (show_map)
+	{
+		if (cfg.controller_info)
 		{
-			if (cfg.controller_info)
+			if (input[dev].quirk == QUIRK_PDSP)
 			{
-				if (input[dev].quirk == QUIRK_PDSP)
-				{
-					char str[32];
-					sprintf(str, "P%d paddle/spinner", input[dev].num);
-					Info(str, cfg.controller_info * 1000);
-				}
-				else
-				{
-					map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
-				}
+				char str[32];
+				sprintf(str, "P%d paddle/spinner", input[dev].num);
+				Info(str, cfg.controller_info * 1000);
 			}
-			printf("Device %d assigned to player %d\n", dev, input[dev].num);
+			else
+			{
+				map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
+			}
 		}
 	}
 
@@ -2578,28 +2609,18 @@ void mergedevs()
 	}
 
 	static char str[1024];
-	char id[32] = {};
+	char id[64] = {};
 	while (fgets(str, sizeof(str), f))
 	{
 		int len = strlen(str);
 		if (!len) id[0] = 0;
 		else
 		{
-			if (!strncmp("S: ", str, 3))
+			if (!strncmp("P: Phys", str, 7))
 			{
-				char *p = strcasestr(str, "/input/");
-				if (p)
-				{
-					*p = 0;
-					p = strrchr(str, '/');
-					if (p)
-					{
-						p++;
-						int len = strlen(p);
-						if (len > 30) p += len - 30;
-						strcpy(id, p);
-					}
-				}
+				char *p = strchr(str, '=');
+				snprintf(id, sizeof(id), "%s", p + 1);
+				if (id[strlen(id) - 1] == '\n') id[strlen(id) - 1] = 0;
 			}
 			else if (!strncmp("H: ", str, 3) && id[0])
 			{
@@ -2631,31 +2652,51 @@ void mergedevs()
 	// merge multifunctional devices by id
 	for (int i = 0; i < NUMDEV; i++)
 	{
+		int merge = 1;
+
 		//Bypass merging of specified 2 port/player controllers
-		if (input[i].vid == 0x289B) // Raphnet uses buggy firmware, don't merge it.
-			continue;
+
+		if (input[i].vid == 0x289B && input[i].pid != 0x0057) // Raphnet uses buggy firmware, don't merge it.
+		{
+			merge = 0;
+		}
 		else if(input[i].vid == 0x0E8F) //Vendor -Mayflash
 		{
-			if(input[i].pid == 0x3013)  //SNES controller 2 port adapter
-				continue;
+			if (input[i].pid == 0x3013)  //SNES controller 2 port adapter
+			{
+				merge = 0;
+			}
 		}
 		else if(input[i].vid == 0x16C0) //Vendor - XinMo
 		{
-			if(input[i].pid == 0x05E1) //XM-10 2 player USB Encoder
-				continue;
+			if (input[i].pid == 0x05E1) //XM-10 2 player USB Encoder
+			{
+				merge = 0;
+			}
 		}
 
 		input[i].bind = i;
-		if (input[i].id[0] && !input[i].mouse)
+
+		if (merge)
 		{
-			for (int j = 0; j < i; j++)
+			if (input[i].id[0] && !input[i].mouse)
 			{
-				if (!strcmp(input[i].id, input[j].id))
+				for (int j = 0; j < i; j++)
 				{
-					input[i].bind = j;
-					break;
+					if (!strcmp(input[i].id, input[j].id))
+					{
+						input[i].bind = j;
+						break;
+					}
 				}
 			}
+		}
+		else
+		{
+			const char* p = strrchr(input[i].devname, '/');
+
+			// make id unique
+			if (p) strcat(input[i].id, p);
 		}
 	}
 
@@ -2763,23 +2804,6 @@ int input_test(int getchar)
 		{
 			pool[i].fd = -1;
 			pool[i].events = 0;
-		}
-
-		// check assigned pads
-		// remove from list if pad is disappeared
-		for (int i = 0; i < NUMPLAYERS; i++)
-		{
-			if (strlen(player_pad[i].devname))
-			{
-				struct stat64 st = {};
-				if (stat64(player_pad[i].devname, &st) < 0) memset(&player_pad[i], 0, sizeof(player_pad[i]));
-			}
-
-			if (strlen(player_pdsp[i].devname))
-			{
-				struct stat64 st = {};
-				if (stat64(player_pdsp[i].devname, &st) < 0) memset(&player_pdsp[i], 0, sizeof(player_pdsp[i]));
-			}
 		}
 
 		int n = 0;
@@ -2950,22 +2974,7 @@ int input_test(int getchar)
 			for (int i = 0; i < n; i++)
 			{
 				printf("opened %d(%2d): %s (%04x:%04x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].quirk, input[i].id, input[i].name);
-
-				// restore players
-				devInput *player = (input[i].quirk == QUIRK_PDSP) ? player_pdsp : player_pad;
-				for (int k = 0; k < NUMPLAYERS; k++)
-				{
-					if (strlen(player[k].devname) && !strcmp(player[k].devname, input[i].devname))
-					{
-						printf("restore player %d\n", k);
-
-						int dev = i;
-						if (input[i].bind) dev = input[i].bind;
-						input[dev].num = k;
-						memcpy(input[dev].jkmap, player[k].jkmap, sizeof(input[dev].jkmap));
-						input[dev].lightgun = player[k].lightgun;
-					}
-				}
+				restore_player(i);
 			}
 		}
 		cur_leds |= 0x80;
