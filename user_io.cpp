@@ -2151,7 +2151,24 @@ void user_io_poll()
 						mouse_pos[Y] = 0;
 					}
 
+					// ---- Buttons ------
 					spi8(mouse_flags & 0x07);
+
+					// ----- Wheel -------
+					if (mouse_wheel < -127)
+					{
+						spi8(-127);
+					}
+					else if (mouse_wheel > 127)
+					{
+						spi8(127);
+					}
+					else
+					{
+						spi8(mouse_wheel);
+					}
+
+					mouse_wheel = 0;
 					DisableIO();
 				}
 				else
@@ -2869,6 +2886,7 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 		{
 			mouse_pos[X] += x;
 			mouse_pos[Y] += y;
+			mouse_wheel += w;
 			mouse_flags |= 0x80 | (b & 7);
 		}
 		else if (is_archie())
