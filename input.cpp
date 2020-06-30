@@ -868,6 +868,7 @@ typedef struct
 	uint8_t  num;
 	uint8_t  has_map;
 	uint32_t map[NUMBUTTONS];
+	int      map_shown;
 
 	uint8_t  osd_combo;
 
@@ -1696,10 +1697,29 @@ void restore_player(int dev)
 			printf("restore player %d to %s (%s)\n", k, input[dev].devname, input[dev].id);
 
 			input[dev].num = k;
+			input[dev].map_shown = player[k].map_shown;
+
 			memcpy(input[dev].jkmap, player[k].jkmap, sizeof(input[dev].jkmap));
 			input[dev].lightgun = player[k].lightgun;
 			break;
 		}
+	}
+}
+
+void unflag_players()
+{
+	for (int k = 1; k < NUMPLAYERS; k++)
+	{
+		int found = 0;
+		for (int i = 0; i < NUMDEV; i++) if (strlen(player_pad[k].id) && !strcmp(player_pad[k].id, input[i].id)) found = 1;
+		if (!found) player_pad[k].map_shown = 0;
+	}
+
+	for (int k = 1; k < NUMPLAYERS; k++)
+	{
+		int found = 0;
+		for (int i = 0; i < NUMDEV; i++) if (strlen(player_pdsp[k].id) && !strcmp(player_pdsp[k].id, input[i].id)) found = 1;
+		if (!found) player_pdsp[k].map_shown = 0;
 	}
 }
 
@@ -1732,8 +1752,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int cancel   = (ev->type == EV_KEY && ev->code == KEY_ESC);
 	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER);
 	int origcode = ev->code;
-
-	int show_map = 0;
 
 	if (!input[dev].has_mmap)
 	{
@@ -1774,7 +1792,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			input[dev].has_map++;
 		}
 		input[dev].has_map++;
-		show_map = 1;
 	}
 
 	if (!input[dev].num && ((ev->type == EV_KEY && ev->code == input[dev].mmap[SYS_BTN_A] && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
@@ -1800,12 +1817,13 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				break;
 			}
 		}
-
-		if (input[dev].num) show_map = 1;
 	}
 
-	if (show_map)
+	if (!input[dev].map_shown && input[dev].num && ((ev->type == EV_KEY && ev->code == input[dev].mmap[SYS_BTN_A] && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
 	{
+		input[dev].map_shown = 1;
+		store_player(input[dev].num, dev);
+
 		if (cfg.controller_info)
 		{
 			if (input[dev].quirk == QUIRK_PDSP)
@@ -2812,6 +2830,8 @@ int input_test(int getchar)
 			pool[i].events = 0;
 		}
 
+		memset(input, 0, sizeof(input));
+
 		int n = 0;
 		DIR *d = opendir("/dev/input");
 		if (d)
@@ -2982,6 +3002,7 @@ int input_test(int getchar)
 				printf("opened %d(%2d): %s (%04x:%04x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].quirk, input[i].id, input[i].name);
 				restore_player(i);
 			}
+			unflag_players();
 		}
 		cur_leds |= 0x80;
 		state++;
