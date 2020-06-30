@@ -2594,6 +2594,41 @@ void send_map_cmd(int key)
 
 static struct pollfd pool[NUMDEV + 3];
 
+// add sequential suffixes for non-merged devices
+void make_unique(uint16_t vid, uint16_t pid, int type)
+{
+	int cnt = 0;
+	int lastmin = -1;
+	int min;
+
+	while(1)
+	{
+		int idx = -1;
+		min = INT32_MAX;
+		for (int i = 0; i < NUMDEV; i++)
+		{
+			if ((!type && (input[i].vid == vid)) ||
+				(type > 0 && (input[i].vid == vid) && (input[i].pid == pid)) ||
+				(type < 0 && (input[i].vid == vid) && (input[i].pid != pid)))
+			{
+				int num = -1;
+				const char *n = strstr(input[i].devname, "/event");
+				if (n) num = strtoul(n + 6, NULL, 10);
+				if (num >= 0 && num < min && num > lastmin)
+				{
+					min = num;
+					idx = i;
+				}
+			}
+		}
+
+		if (idx < 0) break;
+
+		lastmin = min;
+		sprintf(input[idx].id + strlen(input[idx].id), "/%d", cnt++);
+	}
+}
+
 void mergedevs()
 {
 	for (int i = 0; i < NUMDEV; i++)
@@ -2649,54 +2684,25 @@ void mergedevs()
 
 	fclose(f);
 
+	//Bypass merging of specified 2 port/player controllers
+	make_unique(0x289B, 0x0057, -1); // Raphnet
+	make_unique(0x0E8F, 0x3013, 1); // Mayflash SNES controller 2 port adapter
+	make_unique(0x16C0, 0x05E1, 1); // XinMo XM-10 2 player USB Encoder
+
 	// merge multifunctional devices by id
 	for (int i = 0; i < NUMDEV; i++)
 	{
-		int merge = 1;
-
-		//Bypass merging of specified 2 port/player controllers
-
-		if (input[i].vid == 0x289B && input[i].pid != 0x0057) // Raphnet uses buggy firmware, don't merge it.
-		{
-			merge = 0;
-		}
-		else if(input[i].vid == 0x0E8F) //Vendor -Mayflash
-		{
-			if (input[i].pid == 0x3013)  //SNES controller 2 port adapter
-			{
-				merge = 0;
-			}
-		}
-		else if(input[i].vid == 0x16C0) //Vendor - XinMo
-		{
-			if (input[i].pid == 0x05E1) //XM-10 2 player USB Encoder
-			{
-				merge = 0;
-			}
-		}
-
 		input[i].bind = i;
-
-		if (merge)
+		if (input[i].id[0] && !input[i].mouse)
 		{
-			if (input[i].id[0] && !input[i].mouse)
+			for (int j = 0; j < i; j++)
 			{
-				for (int j = 0; j < i; j++)
+				if (!strcmp(input[i].id, input[j].id))
 				{
-					if (!strcmp(input[i].id, input[j].id))
-					{
-						input[i].bind = j;
-						break;
-					}
+					input[i].bind = j;
+					break;
 				}
 			}
-		}
-		else
-		{
-			const char* p = strrchr(input[i].devname, '/');
-
-			// make id unique
-			if (p) strcat(input[i].id, p);
 		}
 	}
 
