@@ -2662,20 +2662,31 @@ void mergedevs()
 	}
 
 	static char str[1024];
-	char id[64] = {};
+	char phys[64] = {};
+	char uniq[64] = {};
 	while (fgets(str, sizeof(str), f))
 	{
 		int len = strlen(str);
-		if (!len) id[0] = 0;
+		if (!len)
+		{
+			phys[0] = 0;
+			uniq[0] = 0;
+		}
 		else
 		{
 			if (!strncmp("P: Phys", str, 7))
 			{
 				char *p = strchr(str, '=');
-				snprintf(id, sizeof(id), "%s", p + 1);
-				if (id[strlen(id) - 1] == '\n') id[strlen(id) - 1] = 0;
+				snprintf(phys, sizeof(phys), "%s", p + 1);
+				if (phys[strlen(phys) - 1] == '\n') phys[strlen(phys) - 1] = 0;
 			}
-			else if (!strncmp("H: ", str, 3) && id[0])
+			else if (!strncmp("U: Uniq", str, 7))
+			{
+				char *p = strchr(str, '=');
+				snprintf(uniq, sizeof(uniq), "%s", p + 1);
+				if (uniq[strlen(uniq) - 1] == '\n') uniq[strlen(uniq) - 1] = 0;
+			}
+			else if (!strncmp("H: ", str, 3) && phys[0])
 			{
 				char *handlers = strchr(str, '=');
 				if (handlers)
@@ -2691,7 +2702,11 @@ void mergedevs()
 								char idsp[32];
 								strcpy(idsp, dev+1);
 								strcat(idsp, " ");
-								if (strstr(handlers, idsp)) strcpy(input[i].id, id);
+								if (strstr(handlers, idsp))
+								{
+									if(uniq[0]) snprintf(input[i].id, sizeof(input[i].id), "%s/%s", phys, uniq);
+									else strcpy(input[i].id, phys);
+								}
 							}
 						}
 					}
