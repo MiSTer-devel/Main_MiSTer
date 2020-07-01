@@ -116,12 +116,12 @@ struct stat64* getPathStat(const char *path)
 	return (stat64(full_path, &st) >= 0) ? &st : NULL;
 }
 
-static int isPathDirectory(const char *path)
+static int isPathDirectory(const char *path, int use_zip = 1)
 {
 	make_fullpath(path);
 
 	char *zip_path, *file_path;
-	if (FileIsZipped(full_path, &zip_path, &file_path))
+	if (use_zip && FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		mz_zip_archive z{};
 		if (!mz_zip_reader_init_file(&z, zip_path, 0))
@@ -172,12 +172,12 @@ static int isPathDirectory(const char *path)
 	return 0;
 }
 
-static int isPathRegularFile(const char *path)
+static int isPathRegularFile(const char *path, int use_zip = 1)
 {
 	make_fullpath(path);
 
 	char *zip_path, *file_path;
-	if (FileIsZipped(full_path, &zip_path, &file_path))
+	if (use_zip && FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		mz_zip_archive z{};
 		if (!mz_zip_reader_init_file(&z, zip_path, 0))
@@ -331,7 +331,7 @@ int FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32)
 	return 1;
 }
 
-int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
+int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute, int use_zip)
 {
 	make_fullpath((char*)name, mode);
 	FileClose(file);
@@ -342,7 +342,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	strcpy(file->name, (mode == -1) ? full_path : p + 1);
 
 	char *zip_path, *file_path;
-	if ((mode != -1) && FileIsZipped(full_path, &zip_path, &file_path))
+	if (use_zip && (mode != -1) && FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		if (mode & O_RDWR || mode & O_WRONLY)
 		{
@@ -709,14 +709,14 @@ int FileDeleteConfig(const char *name)
 	return FileDelete(path);
 }
 
-int FileExists(const char *name)
+int FileExists(const char *name, int use_zip)
 {
-	return isPathRegularFile(name);
+	return isPathRegularFile(name, use_zip);
 }
 
-int PathIsDir(const char *name)
+int PathIsDir(const char *name, int use_zip)
 {
-	return isPathDirectory(name);
+	return isPathDirectory(name, use_zip);
 }
 
 int FileCanWrite(const char *name)

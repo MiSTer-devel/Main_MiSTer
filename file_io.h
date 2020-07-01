@@ -63,7 +63,7 @@ void setStorage(int dev);
 int  isUSBMounted();
 
 int  FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32);
-int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0);
+int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0, int use_zip = 1);
 int  FileOpen(fileTYPE *file, const char *name, char mute = 0);
 void FileClose(fileTYPE *file);
 
@@ -78,9 +78,9 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
 int FileWriteSec(fileTYPE *file, void *pBuffer);
 int FileCreatePath(const char *dir);
 
-int FileExists(const char *name);
+int FileExists(const char *name, int use_zip = 1);
 int FileCanWrite(const char *name);
-int PathIsDir(const char *name);
+int PathIsDir(const char *name, int use_zip = 1);
 struct stat64* getPathStat(const char *path);
 
 #define SAVE_DIR "saves"

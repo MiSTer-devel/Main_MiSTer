@@ -208,7 +208,7 @@ static char* find_path(uint32_t key, const char *name)
 		else
 		{
 			*p = 0;
-			if (!PathIsDir(str)) str[0] = 0;
+			if (!PathIsDir(str, 0)) str[0] = 0;
 			else *p = '/';
 		}
 	}
@@ -257,7 +257,7 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
-			if (!FileExists(str) && !PathIsDir(str))
+			if (!FileExists(str, 0) && !PathIsDir(str, 0))
 			{
 				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
@@ -338,7 +338,6 @@ static int process_request(void *reqres_buffer)
 					uint32_t key = add_lock(SHARED_LOCK, buf);
 					res->key = SWAP_INT(key);
 					dbg_print("  parent path: %s\n", buf);
-					dbg_print("  parent path: %s\n", buf);
 				}
 			}
 		}
@@ -374,7 +373,7 @@ static int process_request(void *reqres_buffer)
 				}
 
 				locks[key].dir_items.clear();
-				if (PathIsDir(name))
+				if (PathIsDir(name, 0))
 				{
 					const char* full_path = getFullPath(name);
 					DIR *d = opendir(full_path);
@@ -420,8 +419,8 @@ static int process_request(void *reqres_buffer)
 			dbg_print("    fn: %s\n", fn);
 
 			int type = 0;
-			if (FileExists(name)) type = ST_FILE;
-			else if (PathIsDir(name)) type = ST_USERDIR;
+			if (FileExists(name, 0)) type = ST_FILE;
+			else if (PathIsDir(name, 0)) type = ST_USERDIR;
 			else
 			{
 				ret = ERROR_OBJECT_NOT_FOUND;
@@ -483,7 +482,7 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
-			if (PathIsDir(name))
+			if (PathIsDir(name, 0))
 			{
 				ret = ERROR_OBJECT_WRONG_TYPE;
 				break;
@@ -497,7 +496,7 @@ static int process_request(void *reqres_buffer)
 			if (rtype == MODE_NEWFILE) mode = O_RDWR | O_CREAT | O_TRUNC;
 			if (rtype == MODE_READWRITE) mode = O_RDWR | O_CREAT;
 
-			ret = FileOpenEx(&open_file_handles[key], name, mode);
+			ret = FileOpenEx(&open_file_handles[key], name, mode, 0, 0);
 			if (!ret)
 			{
 				open_file_handles.erase(key);
@@ -624,13 +623,13 @@ static int process_request(void *reqres_buffer)
 					break;
 				}
 
-				if (PathIsDir(name))
+				if (PathIsDir(name, 0))
 				{
 					ret = DirDelete(name) ? 0 : ERROR_DIRECTORY_NOT_EMPTY;
 					break;
 				}
 
-				if (FileExists(name))
+				if (FileExists(name, 0))
 				{
 					ret = FileDelete(name) ? 0 : ERROR_OBJECT_NOT_FOUND;
 					break;
@@ -657,7 +656,7 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
-			if (!FileExists(cp1) && !PathIsDir(cp1))
+			if (!FileExists(cp1, 0) && !PathIsDir(cp1, 0))
 			{
 				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
@@ -672,7 +671,7 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
-			if (FileExists(cp2) || PathIsDir(cp2))
+			if (FileExists(cp2, 0) || PathIsDir(cp2, 0))
 			{
 				ret = ERROR_OBJECT_EXISTS;
 				break;
