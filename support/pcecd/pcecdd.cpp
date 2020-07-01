@@ -350,9 +350,7 @@ void pcecdd_t::Update() {
 		this->cnt--;
 
 		if (!this->cnt) {
-			stat[0] = 0;
-			stat[1] = 0;
-			has_status = 1;
+			PendStatus(PCECD_STATUS_GOOD, 0);
 
 			this->state = PCECD_STATE_IDLE;
 		}
@@ -526,7 +524,7 @@ void pcecdd_t::CommandExec() {
 
 	case PCECD_COMM_READ6: {
 		new_lba = ((comm[1] << 16) | (comm[2] << 8) | comm[3]) & 0x1FFFFF;
-		int cnt_ = comm[4];
+		int cnt_ = comm[4] ? comm[4] : 256;
 
 		int index = GetTrackByLBA(new_lba, &this->toc);
 
