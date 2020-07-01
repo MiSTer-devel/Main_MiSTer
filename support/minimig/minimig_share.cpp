@@ -134,27 +134,83 @@ static char* find_path(uint32_t key, const char *name)
 		if (it != locks.end()) strcpy(str, it->second.path.c_str());
 	}
 
-	if (PathIsDir(str))
+	if (strlen(name))
 	{
-		if (strlen(name))
-		{
-			strcat(str, "/");
-			strcat(str, name);
+		strcat(str, "/");
+		strcat(str, name);
+	}
 
-			dbg_print("check path: %s\n", str);
-			char *p = strrchr(str, '/');
-			if (!p) str[0] = 0;
+	dbg_print("Requested path: %s\n", str);
+
+	if (strncmp(basepath, str, baselen))
+	{
+		dbg_print("Not belonging to shared folder\n");
+		str[0] = 0;
+	}
+	else if (str[baselen] && str[baselen] != '/')
+	{
+		dbg_print("No / after root\n");
+		str[0] = 0;
+	}
+	else if (str[baselen])
+	{
+		char *cur = str + baselen;
+		while (*cur)
+		{
+			cur++;
+			char *next = strchr(cur, '/');
+			if (!next) next = cur + strlen(cur);
+			int len = next - cur;
+
+			if (len && (!strncmp(cur, ".", len) || !strncmp(cur, "..", len)))
+			{
+				dbg_print("Illegal path\n");
+				str[0] = 0;
+				break;
+			}
+
+			// end
+			if (!*next) break;
+
+			if (!len)
+			{
+				// / alone is used for parent
+				cur -= 2;
+				while (*cur != '/') cur--;
+
+				if (cur < str + baselen)
+				{
+					dbg_print("Going above root\n");
+					str[0] = 0;
+					break;
+				}
+
+				// collapse the component
+				strcpy(cur, next);
+			}
 			else
 			{
-				*p = 0;
-				if (!PathIsDir(str)) str[0] = 0;
-				else *p = '/';
+				cur = next;
 			}
 		}
 	}
-	else
+
+	// remove trailing /
+	int len = strlen(str);
+	if (len && str[len-1] == '/') str[len-1] = 0;
+
+	dbg_print("Converted path: %s\n", str);
+
+	if (str[0])
 	{
-		str[0] = 0;
+		char *p = strrchr(str, '/');
+		if (!p) str[0] = 0;
+		else
+		{
+			*p = 0;
+			if (!PathIsDir(str)) str[0] = 0;
+			else *p = '/';
+		}
 	}
 
 	dbg_print("returned path: %s\n", str);
