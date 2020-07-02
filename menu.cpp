@@ -314,11 +314,15 @@ static int changeDir(char *dir)
 }
 
 static const char *home_dir = NULL;
+static char filter[256] = {};
+static unsigned long filter_typing_timer = 0;
 
 // this function displays file selection menu
 static void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
 	printf("pFileExt = %s\n", pFileExt);
+	filter_typing_timer = 0;
+	filter[0] = 0;
 
 	strncpy(selPath, path, sizeof(selPath) - 1);
 	selPath[sizeof(selPath) - 1] = 0;
@@ -3955,7 +3959,7 @@ void HandleUI(void)
 	case MENU_FILE_SELECT2:
 		menumask = 0;
 
-		if (c == KEY_BACKSPACE && (fs_Options & SCANO_UMOUNT))
+		if (c == KEY_BACKSPACE && (fs_Options & SCANO_UMOUNT) && !strlen(filter))
 		{
 			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
 			OsdWrite(OsdGetSize() / 2, "    Unmounting the image", 0, 0);
@@ -3990,70 +3994,69 @@ void HandleUI(void)
 			menustate = MENU_RECENT1;
 		}
 
+		if (c == KEY_BACKSPACE)
+		{
+			filter[0] = 0;
+			filter_typing_timer = 0;
+			ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options);
+			menustate = MENU_FILE_SELECT1;
+		}
+
 		if (flist_nDirEntries())
 		{
-			static char filter[256];
-			static unsigned long filter_typing_timer = 0;
-			int filter_len = strlen(filter);
-
 			ScrollLongName(); // scrolls file name if longer than display line
 
 			if (c == KEY_HOME)
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if (c == KEY_END)
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_END, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
-
 			if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_PREV_PAGE, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
 			{
-				ScanDirectory(selPath, SCANF_NEXT_PAGE, fs_pFileExt, fs_Options);
-				menustate = MENU_FILE_SELECT1;
-			}
-
-			if (c == KEY_BACKSPACE && filter_len > 0)
-			{
-				memset(filter, 0, 256);
 				filter_typing_timer = 0;
-				
-				printf("filter is: %s\n", filter);
-				ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options);
-
+				ScanDirectory(selPath, SCANF_NEXT_PAGE, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if (down) // scroll down one entry
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_NEXT, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if (up) // scroll up one entry
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_PREV, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			{
-				int i;
+				char i;
 				if ((i = GetASCIIKey(c)) > 1)
 				{
+					int filter_len = strlen(filter);
 					if (CheckTimer(filter_typing_timer))
 					{
-						memset(filter, 0, 256);
-						filter[0] = (char)i;
+						filter[0] = i;
+						filter[1] = 0;
 
 						// You need both ScanDirectory calls here: the first
 						// call "clears" the filter, the second one scrolls to
@@ -4063,8 +4066,8 @@ void HandleUI(void)
 					}
 					else if (filter_len < 255)
 					{
-						filter[filter_len] = (char)i;
-
+						filter[filter_len++] = i;
+						filter[filter_len] = 0;
 						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, NULL, filter);
 					}
 
@@ -4077,10 +4080,6 @@ void HandleUI(void)
 
 			if (select)
 			{
-				memset(filter, 0, 256);
-				filter_typing_timer = 0;
-				printf("filter is: %s\n", filter);
-
 				static char name[256];
 				char type = flist_SelectedItem()->de.d_type;
 				memcpy(name, flist_SelectedItem()->de.d_name, sizeof(name));
@@ -5741,7 +5740,7 @@ void PrintDirectory(int expand)
 		else if(!flist_nDirEntries()) // selected directory is empty
 		{
 			if (!i) strcpy(s, "          No files!");
-			if (home_dir)
+			if (home_dir && !filter[0])
 			{
 				if (i == 6) strcpy(s, "      Missing directory:");
 				if (i == 8)
