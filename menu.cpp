@@ -3992,9 +3992,9 @@ void HandleUI(void)
 
 		if (flist_nDirEntries())
 		{
-			static char prefix[256];
-			static unsigned long prefix_typing_timer = 0;
-			int prefix_len = strlen(prefix);
+			static char filter[256];
+			static unsigned long filter_typing_timer = 0;
+			int filter_len = strlen(filter);
 
 			ScrollLongName(); // scrolls file name if longer than display line
 
@@ -4023,12 +4023,12 @@ void HandleUI(void)
 				menustate = MENU_FILE_SELECT1;
 			}
 
-			if (c == KEY_BACKSPACE && prefix_len > 0)
+			if (c == KEY_BACKSPACE && filter_len > 0)
 			{
-				memset(prefix, 0, 256);
-				prefix_typing_timer = 0;
+				memset(filter, 0, 256);
+				filter_typing_timer = 0;
 				
-				printf("Prefix is: %s\n", prefix);
+				printf("filter is: %s\n", filter);
 				ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options);
 
 				menustate = MENU_FILE_SELECT1;
@@ -4050,26 +4050,26 @@ void HandleUI(void)
 				int i;
 				if ((i = GetASCIIKey(c)) > 1)
 				{
-					if (CheckTimer(prefix_typing_timer))
+					if (CheckTimer(filter_typing_timer))
 					{
-						memset(prefix, 0, 256);
-						prefix[0] = (char)i;
+						memset(filter, 0, 256);
+						filter[0] = (char)i;
 
 						// You need both ScanDirectory calls here: the first
-						// call "clears" the prefix, the second one scrolls to
+						// call "clears" the filter, the second one scrolls to
 						// the right place in the list
 						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options);
 						ScanDirectory(selPath, i, fs_pFileExt, fs_Options);
 					}
-					else if (prefix_len < 255)
+					else if (filter_len < 255)
 					{
-						prefix[prefix_len] = (char)i;
+						filter[filter_len] = (char)i;
 
-						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, prefix);
+						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, NULL, filter);
 					}
 
-					prefix_typing_timer = GetTimer(2000);
-					printf("Prefix is: %s\n", prefix);
+					filter_typing_timer = GetTimer(2000);
+					printf("filter is: %s\n", filter);
 
 					menustate = MENU_FILE_SELECT1;
 				}
@@ -4077,9 +4077,9 @@ void HandleUI(void)
 
 			if (select)
 			{
-				memset(prefix, 0, 256);
-				prefix_typing_timer = 0;
-				printf("Prefix is: %s\n", prefix);
+				memset(filter, 0, 256);
+				filter_typing_timer = 0;
+				printf("filter is: %s\n", filter);
 
 				static char name[256];
 				char type = flist_SelectedItem()->de.d_type;

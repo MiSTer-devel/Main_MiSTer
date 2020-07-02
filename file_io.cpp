@@ -1254,7 +1254,7 @@ static void get_display_name(direntext_t *dext, const char *ext, int options)
 	if (fext) *fext = 0;
 }
 
-int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix)
+int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix, const char *filter)
 {
 	static char file_name[1024];
 	static char full_path[1024];
@@ -1268,7 +1268,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	}
 
 	int extlen = strlen(extension);
-
+    int filterlen = filter ? strlen(filter) : 0;
 	//printf("scan dir\n");
 
 	if (mode == SCANF_INIT)
@@ -1388,6 +1388,20 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					}
 				}
 			}
+
+            if (filter) {
+                bool passes_filter = false;
+
+                for(const char *str = de->d_name; *str; str++) {
+                    if (strncasecmp(str, filter, filterlen) == 0) {
+                        passes_filter = true;
+                        break;
+                    }
+                }
+
+                if (!passes_filter) continue;
+            }
+
 
 			if (options & SCANO_NEOGEO)
 			{
