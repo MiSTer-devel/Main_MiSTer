@@ -16,6 +16,7 @@
 #include "../../file_io.h"
 #include "../../user_io.h"
 #include "../../spi.h"
+#include "../../cfg.h"
 #include "miminig_fs_messages.h"
 
 #define SHMEM_ADDR      0x27FF4000
@@ -235,11 +236,34 @@ static int process_request(void *reqres_buffer)
 
 	if (!baselen)
 	{
-		strcpy(basepath, HomeDir());
-		strcat(basepath, "/shared");
+		if (strlen(cfg.shared_folder))
+		{
+			if(cfg.shared_folder[0] == '/') strcpy(basepath, cfg.shared_folder);
+			else
+			{
+				strcpy(basepath, HomeDir());
+				strcat(basepath, "/");
+				strcat(basepath, cfg.shared_folder);
+			}
+		}
+		else
+		{
+			strcpy(basepath, HomeDir());
+			strcat(basepath, "/shared");
+		}
+
 		baselen = strlen(basepath);
-		FileCreatePath(basepath);
+		if (baselen && basepath[baselen - 1] == '/')
+		{
+			basepath[baselen - 1] = 0;
+			baselen--;
+		}
+
+		if(baselen) FileCreatePath(basepath);
 	}
+
+	// no base path => force fail
+	if (!baselen) rtype = ACTION_NIL;
 
 	switch (rtype)
 	{
