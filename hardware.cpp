@@ -67,7 +67,7 @@ unsigned long GetTimer(unsigned long offset)
 
 unsigned long CheckTimer(unsigned long time)
 {
-	return GetTimer(0) >= time;
+	return (!time) || (GetTimer(0) >= time);
 }
 
 void WaitTimer(unsigned long time)
