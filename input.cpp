@@ -1669,7 +1669,11 @@ static void joy_analog(int num, int axis, int offset)
 
 void reset_players()
 {
-	for (int i = 0; i < NUMDEV; i++) input[i].num = 0;
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		input[i].num = 0;
+		input[i].map_shown = 0;
+	}
 	memset(player_pad, 0, sizeof(player_pad));
 	memset(player_pdsp, 0, sizeof(player_pdsp));
 }
