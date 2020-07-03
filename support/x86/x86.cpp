@@ -37,7 +37,7 @@
 #include "../../file_io.h"
 #include "../../fpga_io.h"
 
-#define ALT_CPU_CPU_FREQ 90000000u
+uint32_t cpu_clock;
 
 #define FLOPPY0_BASE     0x8800
 #define HDD0_BASE        0x8840
@@ -47,6 +47,7 @@
 #define PIO_OUTPUT_BASE  0x8860
 #define SOUND_BASE       0x9000
 #define PIT_BASE         0x8880
+#define VGA_BASE         0x8900
 #define RTC_BASE         0x8c00
 #define SD_BASE          0x0A00
 
@@ -61,6 +62,19 @@ typedef struct
 } x86_config;
 
 static x86_config config;
+
+static uint32_t cpu_get_clock()
+{
+	uint32_t clock;
+
+	EnableIO();
+	spi8(UIO_DMA_WRITE);
+	clock = spi_w(0);
+	clock = (spi_w(0) << 16) | clock;
+	DisableIO();
+
+	return clock ? clock : 90000000;
+}
 
 static uint8_t dma_sdio(int status)
 {
@@ -317,11 +331,11 @@ static int fdd_set(char* filename)
 	IOWR(FLOPPY0_BASE, 0x4, floppy_total_sectors);
 	IOWR(FLOPPY0_BASE, 0x5, floppy_heads);
 	IOWR(FLOPPY0_BASE, 0x6, 0); // base LBA
-	IOWR(FLOPPY0_BASE, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY0_BASE, 0x8, (int)(1000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY0_BASE, 0x9, (int)(1666666.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY0_BASE, 0xA, (int)(2000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY0_BASE, 0xB, (int)(500000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(FLOPPY0_BASE, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE, 0x8, (int)(1000000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE, 0x9, (int)(1666666.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE, 0xA, (int)(2000000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE, 0xB, (int)(500000.0 / (1000000000.0 / cpu_clock)));
 	IOWR(FLOPPY0_BASE, 0xC, floppy_media);
 
 	//cmos_set(0x10, CMOS_FDD_TYPE);
@@ -500,6 +514,9 @@ void x86_init()
 {
 	user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 
+	cpu_clock = cpu_get_clock();
+	IOWR(VGA_BASE, 0, cpu_clock);
+
 	const char *home = HomeDir();
 
 	load_bios(user_io_make_filepath(home, "boot0.rom"), 0);
@@ -515,7 +532,7 @@ void x86_init()
 	257.[9:0]:   cycles in 1 sample: 96000 Hz
 	*/
 
-	double cycle_in_ns = (1000000000.0 / ALT_CPU_CPU_FREQ); //33.333333;
+	double cycle_in_ns = (1000000000.0 / cpu_clock); //33.333333;
     for(int i=0; i<256; i++)
 	{
         double f = 1000000.0 / (256.0-i);
@@ -524,15 +541,15 @@ void x86_init()
         IOWR(SOUND_BASE, i, (int)cycles_in_period);
     }
 
-	IOWR(SOUND_BASE, 256, (int)(80000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(SOUND_BASE, 257, (int)((1000000000.0/96000.0) / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(SOUND_BASE, 256, (int)(80000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(SOUND_BASE, 257, (int)((1000000000.0/96000.0) / (1000000000.0 / cpu_clock)));
 
 	//-------------------------------------------------------------------------- pit
 	/*
 	0.[7:0]: cycles in sysclock 1193181 Hz
 	*/
 
-	IOWR(PIT_BASE, 0, (int)((1000000000.0/1193181.0) / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(PIT_BASE, 0, (int)((1000000000.0/1193181.0) / (1000000000.0 / cpu_clock)));
 
 	//-------------------------------------------------------------------------- floppy
 
@@ -550,8 +567,8 @@ void x86_init()
     129.[12:0]: cycles in 122.07031 us
     */
 
-	IOWR(RTC_BASE, 128, (int)(1000000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(RTC_BASE, 129, (int)(122070.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
+	IOWR(RTC_BASE, 128, (int)(1000000000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(RTC_BASE, 129, (int)(122070.0 / (1000000000.0 / cpu_clock)));
 
 	unsigned char translate_mode = 1; //LBA
 	translate_mode = (translate_mode << 6) | (translate_mode << 4) | (translate_mode << 2) | translate_mode;
