@@ -332,7 +332,7 @@ static void SelectFile(const char* path, const char* pFileExt, unsigned char Opt
 		strcpy(selPath, get_rbf_dir());
 		if (strlen(get_rbf_name()))
 		{
-			strcat(selPath, "/");
+			if(strlen(selPath)) strcat(selPath, "/");
 			strcat(selPath, get_rbf_name());
 		}
 		pFileExt = "RBFMRA";
