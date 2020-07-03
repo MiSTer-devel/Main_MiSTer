@@ -91,9 +91,9 @@ static int FileIsZipped(char* path, char** zip_path, char** file_path)
 static char* make_fullpath(const char *path, int mode = 0)
 {
 	const char *root = getRootDir();
- 	if (strncasecmp(getRootDir(), path, strlen(root)))
+ 	if (strncasecmp(root, path, strlen(root)))
 	{
- 		sprintf(full_path, "%s/%s", (mode == -1) ? "" : root, path);
+		sprintf(full_path, "%s/%s", (mode == -1) ? "" : root, path);
 	}
 	else
 	{
@@ -626,7 +626,8 @@ int FileWriteSec(fileTYPE *file, void *pBuffer)
 
 int FileSave(const char *name, void *pBuffer, int size)
 {
-	make_fullpath(name);
+	if(name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
+	else strcpy(full_path, name);
 
 	int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0)
@@ -649,14 +650,18 @@ int FileSave(const char *name, void *pBuffer, int size)
 
 int FileDelete(const char *name)
 {
-	make_fullpath(name);
+	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
+	else strcpy(full_path, name);
+
 	printf("delete %s\n", full_path);
 	return !unlink(full_path);
 }
 
 int DirDelete(const char *name)
 {
-	make_fullpath(name);
+	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
+	else strcpy(full_path, name);
+
 	printf("rmdir %s\n", full_path);
 	return !rmdir(full_path);
 }
@@ -716,7 +721,7 @@ int PathIsDir(const char *name, int use_zip)
 
 int FileCanWrite(const char *name)
 {
-	make_fullpath(name);
+	sprintf(full_path, "%s/%s", getRootDir(), name);
 
 	if (FileIsZipped(full_path, nullptr, nullptr))
 	{
@@ -838,7 +843,7 @@ void FileGenerateSavestatePath(const char *name, char* out_name)
 
 uint32_t getFileType(const char *name)
 {
-	make_fullpath(name);
+	sprintf(full_path, "%s/%s", getRootDir(), name);
 
 	struct stat64 st;
 	if (stat64(full_path, &st)) return 0;
@@ -934,7 +939,7 @@ const char *getRootDir()
 
 const char *getFullPath(const char *name)
 {
-	make_fullpath(name);
+	sprintf(full_path, "%s/%s", getRootDir(), name);
 	return full_path;
 }
 
