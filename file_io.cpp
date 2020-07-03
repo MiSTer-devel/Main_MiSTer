@@ -90,9 +90,10 @@ static int FileIsZipped(char* path, char** zip_path, char** file_path)
 
 static char* make_fullpath(const char *path, int mode = 0)
 {
-	if (path[0] != '/')
+	const char *root = getRootDir();
+ 	if (strncasecmp(getRootDir(), path, strlen(root)))
 	{
-		sprintf(full_path, "%s/%s", (mode == -1) ? "" : getRootDir(), path);
+ 		sprintf(full_path, "%s/%s", (mode == -1) ? "" : root, path);
 	}
 	else
 	{
