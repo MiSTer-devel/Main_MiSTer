@@ -30,6 +30,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <time.h>
 
 #include "../../spi.h"
@@ -52,6 +53,9 @@ uint32_t cpu_clock;
 #define SD_BASE          0x0A00
 
 #define CFG_VER          2
+
+#define SHMEM_ADDR      0x30000000
+#define BIOS_SIZE       0x10000
 
 typedef struct
 {
@@ -125,37 +129,34 @@ static void dma_rcvbuf(uint32_t address, uint32_t length, uint32_t *data)
 	DisableIO();
 }
 
+static void* shmem_init(int offset, int size)
+{
+	int fd;
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
+
+	void *shmem = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, SHMEM_ADDR + offset);
+	close(fd);
+
+	if (shmem == (void *)-1)
+	{
+		printf("ao486 share_init: Unable to mmap(/dev/mem)\n");
+		return 0;
+	}
+
+	return shmem;
+}
+
 static int load_bios(const char* name, uint8_t index)
 {
-	fileTYPE f = {};
-	static uint32_t buf[128];
+	printf("BIOS: %s\n", name);
 
-	if (!FileOpen(&f, name)) return 0;
+	void *buf = shmem_init(index ? 0xC0000 : 0xF0000, BIOS_SIZE);
+	if (!buf) return 0;
 
-	unsigned long bytes2send = f.size;
-	printf("BIOS %s, %lu bytes.\n", name, bytes2send);
+	memset(buf, 0, BIOS_SIZE);
+	FileLoad(name, buf, BIOS_SIZE);
+	munmap(buf, BIOS_SIZE);
 
-	EnableIO();
-	spi8(UIO_DMA_WRITE);
-	spi32_w( index ? 0x80C0000 : 0x80F0000 );
-
-	while (bytes2send)
-	{
-		printf(".");
-
-		uint16_t chunk = (bytes2send>512) ? 512 : bytes2send;
-		bytes2send -= chunk;
-
-		FileReadSec(&f, buf);
-
-		chunk = (chunk + 3) >> 2;
-		uint32_t* p = buf;
-		while(chunk--) spi32_w(*p++);
-	}
-	DisableIO();
-	FileClose(&f);
-
-	printf("\n");
 	return 1;
 }
 
