@@ -3235,7 +3235,7 @@ int input_test(int getchar)
 									if (ev.code == 1)   ev.code = KEY_MENU;
 								}
 
-								if (ev.type == EV_KEY && ev.code == KEY_BACK && input[dev].num)
+								if (ev.type == EV_KEY && ev.code == KEY_BACK && input[dev].vid == 0x45E)
 								{
 									ev.code = BTN_SELECT;
 								}
