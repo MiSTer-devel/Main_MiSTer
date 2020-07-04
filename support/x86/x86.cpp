@@ -199,12 +199,18 @@ static int img_mount(uint32_t type, char *name)
 {
 	FileClose(get_image(type));
 
-	int writable = FileCanWrite(name);
-	int ret = FileOpenEx(get_image(type), name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+	int writable = 0, ret = 0;
+
+	if (strlen(name))
+	{
+		writable = FileCanWrite(name);
+		ret = FileOpenEx(get_image(type), name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+		if (!ret) printf("Failed to open file %s\n", name);
+	}
+
 	if (!ret)
 	{
 		get_image(type)->size = 0;
-		printf("Failed to open file %s\n", name);
 		return 0;
 	}
 
@@ -760,15 +766,18 @@ void x86_set_image(int num, char *filename)
 	switch (num)
 	{
 	case 0:
+		memset(config.fdd_name, 0, sizeof(config.fdd_name));
 		strcpy(config.fdd_name, filename);
 		fdd_set(filename);
 		break;
 
 	case 2:
+		memset(config.hdd0_name, 0, sizeof(config.hdd0_name));
 		strcpy(config.hdd0_name, filename);
 		break;
 
 	case 3:
+		memset(config.hdd1_name, 0, sizeof(config.hdd1_name));
 		strcpy(config.hdd1_name, filename);
 		break;
 	}
