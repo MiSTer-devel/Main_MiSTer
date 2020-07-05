@@ -1287,12 +1287,12 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 		}
 
-		if (!isPathDirectory(path)) return 0;
-
 		if (options & SCANO_NEOGEO) neogeo_scan_xml(path);
 
 		sprintf(full_path, "%s/%s", getRootDir(), path);
 		int path_len = strlen(full_path);
+
+		if (!isPathDirectory(full_path)) return 0;
 
 		const char* is_zipped = strcasestr(full_path, ".zip");
 		if (is_zipped && strcasestr(is_zipped + 4, ".zip"))
