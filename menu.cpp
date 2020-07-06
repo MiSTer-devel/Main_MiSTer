@@ -2524,7 +2524,7 @@ void HandleUI(void)
 				{
 					if(GetUARTMode() == 3 && GetMidiLinkMode() == 0)
 					{
-						sprintf(Selected_tmp, "/linux/soundfonts");
+						sprintf(Selected_tmp, "linux/soundfonts");
 						SelectFile(Selected_tmp, "SF2", SCANO_DIR | SCANO_TXT, MENU_SFONT_FILE_SELECTED, MENU_UART1);
 					}
 				}
