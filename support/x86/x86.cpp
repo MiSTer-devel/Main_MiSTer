@@ -634,7 +634,7 @@ void x86_init()
 		0x00, //0x2B: hd 1 configuration 8/9; landing zone high
 		0x00, //0x2C: hd 1 configuration 9/9; sectors/track
 
-		(boot_from_floppy)? 0x20u : 0x00u, //0x2D: boot sequence
+		(boot_from_floppy && get_image(IMG_TYPE_FDD0)->size)? 0x20u : 0x00u, //0x2D: boot sequence
 
 		0x00, //0x2E: checksum MSB
 		0x00, //0x2F: checksum LSB
