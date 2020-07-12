@@ -1534,10 +1534,13 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 			struct input_event ev;
 			ev.type = EV_KEY;
 			ev.value = press;
+
+			int cfg_switch = menu_allow_cfg_switch() && (osdbtn & JOY_BTN2) && press;
+
 			switch (mask)
 			{
 			case JOY_RIGHT:
-				if (press && (osdbtn & JOY_BTN2))
+				if (cfg_switch)
 				{
 					user_io_set_ini(0);
 					osdbtn = 0;
@@ -1547,7 +1550,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				break;
 
 			case JOY_LEFT:
-				if (press && (osdbtn & JOY_BTN2))
+				if (cfg_switch)
 				{
 					user_io_set_ini(1);
 					osdbtn = 0;
@@ -1557,7 +1560,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				break;
 
 			case JOY_UP:
-				if (press && (osdbtn & JOY_BTN2))
+				if (cfg_switch)
 				{
 					user_io_set_ini(2);
 					osdbtn = 0;
@@ -1567,7 +1570,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				break;
 
 			case JOY_DOWN:
-				if (press && (osdbtn & JOY_BTN2))
+				if (cfg_switch)
 				{
 					user_io_set_ini(3);
 					osdbtn = 0;
