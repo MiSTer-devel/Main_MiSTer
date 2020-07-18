@@ -690,6 +690,7 @@ void x86_init()
 
 	for(unsigned int i=0; i<sizeof(cmos)/sizeof(unsigned int); i++) IOWR(RTC_BASE, i, cmos[i]);
 
+	x86_share_reset();
 	user_io_8bit_set_status(0, UIO_STATUS_RESET);
 }
 
@@ -709,6 +710,8 @@ void x86_poll()
 
 	uint32_t cpu_clock = cpu_get_clock();
 	if (cpu_clock != old_cpu_clock) set_clock();
+
+	x86_share_poll();
 
 	char sd_req = dma_sdio(0);
 	if (sd_req == 1)
