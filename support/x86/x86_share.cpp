@@ -630,6 +630,7 @@ static int process_request(void *reqres_buffer)
 		 *     0000 fail
 		 *     0001 open
 		 *     0010 truncate/open */
+		uint16_t attr = *(uint16_t *)buf;
 		uint16_t actioncode = *(uint16_t *)(buf + 2);
 		uint16_t openmode = *(uint16_t *)(buf + 4);
 
@@ -662,7 +663,9 @@ static int process_request(void *reqres_buffer)
 		}
 		else
 		{
-			if ((actioncode & 0xF0) == 0x10)
+			// some copiers create an empty file with hidden attribute and then fail if found non-hidden file
+			// so prohibit to create a hidden file.
+			if ((actioncode & 0xF0) == 0x10 && !(attr & FAT_HID))
 			{
 				mode = O_RDWR | O_CREAT;
 				spopres = 2;
@@ -736,8 +739,8 @@ static int process_request(void *reqres_buffer)
 		FileSeek(&open_file_handles[key], off, SEEK_SET);
 
 		uint16_t sz = buf[6] | (buf[7] << 8);
-		int read = FileReadAdv(&open_file_handles[key], buf, sz);
-		if (!read)
+		int read = FileReadAdv(&open_file_handles[key], buf, sz, -1);
+		if (read < 0)
 		{
 			res = 5;
 			break;
@@ -764,11 +767,15 @@ static int process_request(void *reqres_buffer)
 		FileSeek(&open_file_handles[key], off, SEEK_SET);
 
 		uint16_t sz = buf[6] | (buf[7] << 8);
-		int written = FileWriteAdv(&open_file_handles[key], buf + 8, sz);
-		if (!written)
+		int written = 0;
+		if (sz)
 		{
-			res = 5;
-			break;
+			written = FileWriteAdv(&open_file_handles[key], buf + 8, sz);
+			if (!written)
+			{
+				res = 5;
+				break;
+			}
 		}
 
 		*buf++ = written;
@@ -908,6 +915,12 @@ static int process_request(void *reqres_buffer)
 			break;
 		}
 
+		if(strchr(path, '?') || strchr(path, '*'))
+		{
+			res = 2;
+			break;
+		}
+
 		if (!FileDelete(path))
 		{
 			res = 2;
@@ -959,12 +972,15 @@ static int process_request(void *reqres_buffer)
 
 			*buf++ = 8;
 			memcpyb(buf, "MiSTer     ", 11);
+
 			buf += 11;
 			*buf++ = 0; *buf++ = 0; // time;
 			*buf++ = 0; *buf++ = 0; // date;
 			*buf++ = 0; *buf++ = 0; *buf++ = 0; *buf++ = 0; // size;
-			*(short *)buf = key; buf += 2;
-			*(short *)buf = 0; buf += 2;
+			*buf++ = key;
+			*buf++ = key >> 8;
+			*buf++ = 0; *buf++ = 0;
+
 			res = 0;
 			reslen = 24;
 			break;
@@ -974,15 +990,18 @@ static int process_request(void *reqres_buffer)
 			struct dirent64 de, *de2;
 			while ((de2 = readdir64(d)))
 			{
-				memcpy(&de, de2, sizeof(dirent64));
-				sprintf(str, "%s/%s", path, de.d_name);
-				stat64 *st = getPathStat(str);
-
-				if (st && cmp_name(de.d_name, flt))
+				if (de2->d_type == DT_REG || (attr & FAT_DIR))
 				{
-					name83(de2->d_name, de.d_name);
-					de.d_name[11] = 0;
-					locks[key].dir_items.push_back({ de, *st });
+					memcpy(&de, de2, sizeof(dirent64));
+					sprintf(str, "%s/%s", path, de.d_name);
+					stat64 *st = getPathStat(str);
+
+					if (st && cmp_name(de.d_name, flt))
+					{
+						name83(de2->d_name, de.d_name);
+						de.d_name[11] = 0;
+						locks[key].dir_items.push_back({ de, *st });
+					}
 				}
 			}
 			closedir(d);
@@ -1032,8 +1051,10 @@ static int process_request(void *reqres_buffer)
 
 		memcpyb(buf, &locks[key].dir_items[idx].st.st_size, 4);
 		buf += 4;
-		*(short *)buf = key; buf += 2;
-		*(short *)buf = idx; buf += 2;
+		*buf++ = key;
+		*buf++ = key >> 8;
+		*buf++ = idx;
+		*buf++ = idx >> 8;
 
 		res = 0;
 		reslen = 24;

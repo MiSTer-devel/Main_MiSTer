@@ -548,7 +548,7 @@ int FileSeekLBA(fileTYPE *file, uint32_t offset)
 }
 
 // Read with offset advancing
-int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
+int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 {
 	ssize_t ret = 0;
 
@@ -558,7 +558,7 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
 		if (ret < 0)
 		{
 			printf("FileReadAdv error(%d).\n", ret);
-			return 0;
+			return failres;
 		}
 	}
 	else if (file->zip)
@@ -568,14 +568,14 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
 		{
 			printf("FileReadEx(mz_zip_reader_extract_iter_read) Failed to read, error:%s\n",
 			       mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
-			return 0;
+			return failres;
 		}
 		file->zip->offset += ret;
 	}
 	else
 	{
 		printf("FileReadAdv error(unknown file type).\n");
-		return 0;
+		return failres;
 	}
 
 	file->offset += ret;

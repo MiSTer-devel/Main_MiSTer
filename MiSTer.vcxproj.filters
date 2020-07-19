@@ -200,7 +200,7 @@
       <Filter>Source Files\support</Filter>
     </ClCompile>
     <ClCompile Include="support\x86\x86_share.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\support</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

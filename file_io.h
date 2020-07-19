@@ -72,7 +72,7 @@ __off64_t FileGetSize(fileTYPE *file);
 int FileSeek(fileTYPE *file, __off64_t offset, int origin);
 int FileSeekLBA(fileTYPE *file, uint32_t offset);
 
-int FileReadAdv(fileTYPE *file, void *pBuffer, int length);
+int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres = 0);
 int FileReadSec(fileTYPE *file, void *pBuffer);
 int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
 int FileWriteSec(fileTYPE *file, void *pBuffer);
