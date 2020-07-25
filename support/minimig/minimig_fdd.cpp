@@ -24,7 +24,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // 2010-01-09   - support for variable number of tracks
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <errno.h>
 #include "../../hardware.h"
 #include "../../file_io.h"
 #include "minimig_fdd.h"
@@ -32,6 +35,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "../../debug.h"
 #include "../../user_io.h"
 #include "../../menu.h"
+#include "adflib.h"
 
 unsigned char drives = 0; // number of active drives reported by FPGA (may change only during reset)
 adfTYPE *pdfx;            // drive select pointer
@@ -631,8 +635,61 @@ void HandleFDD(unsigned char c1, unsigned char c2)
 }
 
 // insert floppy image pointed to to by global <file> into <drive>
+// this was hakked to this defree in a stint, co the code really need a checkup
 void InsertFloppy(adfTYPE *drive, char* path)
 {
+	if(strcasestr(path, ".exe")) {
+		// max length of the gerated tmp file name
+		char *adfpath = (char *)malloc(L_tmpnam);
+		char *tmpstr = (char *)malloc(32);
+		char* targetpath = (char*)malloc(1024);
+		unsigned char bootsector[1024] = {0x44, 0x4F, 0x53, 0x00, 0xC0, 0x20, 0x0F ,0x19, 0x00 ,0x00 ,0x03 \
+			, 0x70, 0x43 ,0xFA, 0x00, 0x18, 0x4E, 0xAE, 0xFF, 0xA0, 0x4A, 0x80, 0x67, 0x0A, 0x20, 0x40 \
+			, 0x20, 0x68, 0x00, 0x16, 0x70, 0x00, 0x4E, 0x75, 0x70, 0xFF, 0x60, 0xFA, 0x64, 0x6F, 0x73 \
+			, 0x2E, 0x6C, 0x69, 0x62, 0x72, 0x61, 0x72, 0x79, 0x00 };
+
+		char *foo = tmpnam_r(adfpath);
+		// create adf dump file
+		struct Device *dev = adfCreateDumpDevice(adfpath, 80, 2, 11);
+		// init floppy
+		adfCreateFlop(dev, tmpstr, 0);
+		struct Volume *vol = adfMount(dev, 0, FALSE);
+		adfInstallBootBlock(vol, bootsector);
+		adfCreateDir(vol, vol->curDirPtr, "S"); // we assume current dir is the root of the ADF	
+		adfCreateDir(vol, vol->curDirPtr, "L"); //
+		adfChangeDir(vol, "S");
+		struct File *amifile = adfOpenFile(vol, "Startup-Sequence", "w");
+		char* seq = ":exe";
+		adfWriteFile(amifile, 4, (uint8_t *)seq);
+		adfCloseFile(amifile);
+		adfToRootDir(vol);
+
+		// generate working path to the actual exe
+		getcwd(targetpath, 1024);
+		if (path[0] != '/')
+		{
+			sprintf(targetpath, "%s/%s", getRootDir(), path);
+		}
+		else
+		{
+			sprintf(targetpath, "%s", path);
+		}
+
+		FILE* targetfile = fopen(targetpath, "r");
+		struct stat st;
+		fstat(fileno(targetfile), &st);
+		long size = (long)st.st_size;		
+		
+		// transfer the exe to the target ADF
+		struct File *exeFile = adfOpenFile(vol, "exe", "w");
+		unsigned char *exebin = (unsigned char *)malloc(size);		
+		fread(exebin, 1, size, targetfile);
+		adfWriteFile(exeFile, size, exebin);
+		adfCloseFile(exeFile);
+		fclose(targetfile);
+		path = adfpath;
+	}
+
 	int writable = FileCanWrite(path);
 
 	if (!FileOpenEx(&drive->file, path, writable ? O_RDWR | O_SYNC : O_RDONLY))
@@ -650,7 +707,6 @@ void InsertFloppy(adfTYPE *drive, char* path)
 		tracks = MAX_TRACKS;
 	}
 	drive->tracks = (unsigned char)tracks;
-
 	strcpy(drive->name, path);
 
 	// initialize the rest of drive struct

@@ -3796,8 +3796,8 @@ void HandleUI(void)
 					fs_Options = SCANO_DIR;
 					fs_MenuSelect = MENU_FILE_SELECTED;
 					fs_MenuCancel = MENU_MAIN1;
-					strcpy(fs_pFileExt, "ADF");
-					if(select) SelectFile(Selected_F[menusub], "ADF", fs_Options, fs_MenuSelect, fs_MenuCancel);
+					strcpy(fs_pFileExt, "ADFEXE");
+					if(select) SelectFile(Selected_F[menusub], "ADFEXE", fs_Options, fs_MenuSelect, fs_MenuCancel);
 					else if (recent_init(0)) menustate = MENU_RECENT1;
 				}
 			}
