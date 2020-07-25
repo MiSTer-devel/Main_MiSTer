@@ -19,11 +19,13 @@ INCLUDE	+= -I./support/minimig
 INCLUDE	+= -I./lib/libco
 INCLUDE	+= -I./lib/miniz
 INCLUDE	+= -I./lib/md5
+INCLUDE += -I./lib/adflib -I./lib/adflib/generic
 
 PRJ = MiSTer
 C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/miniz/*.c) \
           $(wildcard ./lib/md5/*.c) \
+          $(wildcard ./lib/adflib/*.c) $(wildcard ./lib/adflib/generic/*.c) \
           lib/libco/arm.c 
 
 CPP_SRC = $(wildcard *.cpp) \
