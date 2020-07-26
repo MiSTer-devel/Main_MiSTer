@@ -638,27 +638,29 @@ void HandleFDD(unsigned char c1, unsigned char c2)
 // this was hakked to this defree in a stint, co the code really need a checkup
 void InsertFloppy(adfTYPE *drive, char* path)
 {
-	if(strcasestr(path, ".exe")) {
+	if(strcasestr(path, ".exe")) { // should use magic number
 		// max length of the gerated tmp file name
-		char *adfpath = (char *)malloc(L_tmpnam);
-		char *tmpstr = (char *)malloc(32);
-		char* targetpath = (char*)malloc(1024);
+		char adfpath[L_tmpnam];
+		char tmpstr[32];
+		char targetpath[1024];
 		unsigned char bootsector[1024] = {0x44, 0x4F, 0x53, 0x00, 0xC0, 0x20, 0x0F ,0x19, 0x00 ,0x00 ,0x03 \
 			, 0x70, 0x43 ,0xFA, 0x00, 0x18, 0x4E, 0xAE, 0xFF, 0xA0, 0x4A, 0x80, 0x67, 0x0A, 0x20, 0x40 \
 			, 0x20, 0x68, 0x00, 0x16, 0x70, 0x00, 0x4E, 0x75, 0x70, 0xFF, 0x60, 0xFA, 0x64, 0x6F, 0x73 \
 			, 0x2E, 0x6C, 0x69, 0x62, 0x72, 0x61, 0x72, 0x79, 0x00 };
-
-		char *foo = tmpnam_r(adfpath);
+		struct stat st;
+		struct File *amifile;
+		struct File *exefile;
+		struct Volume *vol;
+		char *tmpname = tmpnam_r(adfpath);
 		// create adf dump file
 		struct Device *dev = adfCreateDumpDevice(adfpath, 80, 2, 11);
-		// init floppy
 		adfCreateFlop(dev, tmpstr, 0);
-		struct Volume *vol = adfMount(dev, 0, FALSE);
+		vol = adfMount(dev, 0, FALSE);
 		adfInstallBootBlock(vol, bootsector);
 		adfCreateDir(vol, vol->curDirPtr, "S"); // we assume current dir is the root of the ADF	
 		adfCreateDir(vol, vol->curDirPtr, "L"); //
 		adfChangeDir(vol, "S");
-		struct File *amifile = adfOpenFile(vol, "Startup-Sequence", "w");
+		amifile = adfOpenFile(vol, "Startup-Sequence", "w");
 		char* seq = ":exe";
 		adfWriteFile(amifile, 4, (uint8_t *)seq);
 		adfCloseFile(amifile);
@@ -676,18 +678,31 @@ void InsertFloppy(adfTYPE *drive, char* path)
 		}
 
 		FILE* targetfile = fopen(targetpath, "r");
-		struct stat st;
-		fstat(fileno(targetfile), &st);
-		long size = (long)st.st_size;		
-		
-		// transfer the exe to the target ADF
-		struct File *exeFile = adfOpenFile(vol, "exe", "w");
-		unsigned char *exebin = (unsigned char *)malloc(size);		
-		fread(exebin, 1, size, targetfile);
-		adfWriteFile(exeFile, size, exebin);
-		adfCloseFile(exeFile);
-		fclose(targetfile);
-		path = adfpath;
+		if (targetfile != NULL)
+		{
+			if (fstat(fileno(targetfile), &st) != 0)
+			{
+				printf("Error in stat(): %i (%s)", errno, strerror(errno));
+				return;
+			}
+			long size = (long)st.st_size;		
+			// transfer the exe to the target ADF
+			exefile = adfOpenFile(vol, "exe", "w");
+			unsigned char *exebin = (unsigned char *)malloc(size);		
+			if (fread(exebin, 1, size, targetfile) != size)
+			{
+				printf("Error reading executable: %i (%s)", errno, strerror(errno));
+				return;
+			}
+			adfWriteFile(exefile, size, exebin);
+			adfCloseFile(exefile);
+			fclose(targetfile);
+			free(exebin);
+			path = adfpath;
+		} else {
+			printf("Error %i (%s)", errno, strerror(errno));
+			return;
+		}
 	}
 
 	int writable = FileCanWrite(path);
