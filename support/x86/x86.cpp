@@ -650,13 +650,13 @@ void x86_init()
 		0x00, //0x2F: checksum LSB
 
 		0x00, //0x30: memory size above 1m in 1k LSB
-		0xFC, //0x31: memory size above 1m in 1k MSB
+		0x3C, //0x31: memory size above 1m in 1k MSB
 
 		0x20, //0x32: IBM century
 		0x00, //0x33: ?
 
-		0x00, //0x34: memory size above 16m in 64k LSB
-		0x0F, //0x35: memory size above 16m in 64k MSB; 256 MB
+		0x80, //0x34: memory size above 16m in 64k LSB
+		0x0E, //0x35: memory size above 16m in 64k MSB; 256-8 MB
 
 		0x00, //0x36: ?
 		0x20, //0x37: IBM PS/2 century
