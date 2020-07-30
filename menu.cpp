@@ -1868,6 +1868,15 @@ void HandleUI(void)
 
 							user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff, ex);
 
+							if (is_x86() && p[1] == 'A')
+							{
+								int mode = GetUARTMode();
+								if (mode != 0)
+								{
+									SetUARTMode(0);
+									SetUARTMode(mode);
+								}
+							}
 							menustate = MENU_8BIT_MAIN1;
 						}
 						else if (((p[0] == 'T') || (p[0] == 'R') || (p[0] == 't') || (p[0] == 'r')) && select)

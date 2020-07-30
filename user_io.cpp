@@ -568,7 +568,7 @@ int GetUARTMode()
 void SetUARTMode(int mode)
 {
 	MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
-	MakeFile("/tmp/UART_SPEED", is_st() ? "19200" : "115200");
+	MakeFile("/tmp/UART_SPEED", is_st() ? "19200" : (is_x86() && (user_io_8bit_set_status(0, 0, 0) & (1 << 10))) ? "1152000" : "115200");
 
 	char cmd[32];
 	sprintf(cmd, "uartmode %d", mode & 0xFF);
@@ -2489,6 +2489,10 @@ void user_io_poll()
 				case 0xed:
 					kbd_reply(0xFA);
 					byte++;
+					break;
+
+				case 0xee:
+					kbd_reply(0xEE);
 					break;
 
 				default:
