@@ -80,6 +80,7 @@ enum AL_SUBFUNCTIONS {
 	AL_FINDFIRST  = 0x1B,
 	AL_FINDNEXT   = 0x1C,
 	AL_SKFMEND    = 0x21,
+	AL_QUALIFY    = 0x23,
 	AL_SPOPEN     = 0x2E,
 	AL_UNKNOWN    = 0xFF
 };
@@ -736,15 +737,19 @@ static int process_request(void *reqres_buffer)
 
 		uint32_t off;
 		memcpyb(&off, buf, 4);
+		uint16_t sz = buf[6] | (buf[7] << 8);
+		dbg_print("  read %d bytes at %d\n", sz, off);
+
 		FileSeek(&open_file_handles[key], off, SEEK_SET);
 
-		uint16_t sz = buf[6] | (buf[7] << 8);
 		int read = FileReadAdv(&open_file_handles[key], buf, sz, -1);
 		if (read < 0)
 		{
 			res = 5;
 			break;
 		}
+
+		dbg_print("  was read %d\n", read);
 
 		reslen = read;
 		res = 0;
@@ -764,9 +769,11 @@ static int process_request(void *reqres_buffer)
 
 		uint32_t off;
 		memcpyb(&off, buf, 4);
+		uint16_t sz = buf[6] | (buf[7] << 8);
+		dbg_print("  write %d bytes at %d\n", sz, off);
+
 		FileSeek(&open_file_handles[key], off, SEEK_SET);
 
-		uint16_t sz = buf[6] | (buf[7] << 8);
 		int written = 0;
 		if (sz)
 		{
@@ -777,6 +784,8 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 		}
+
+		dbg_print("  written %d\n", written);
 
 		*buf++ = written;
 		*buf++ = written >> 8;
@@ -1083,6 +1092,15 @@ static int process_request(void *reqres_buffer)
 
 		res = 0;
 		reslen = 4;
+	}
+	break;
+
+	case AL_QUALIFY:
+	{
+		dbg_print("> AL_QUALIFY\n");
+
+		res = 0;
+		reslen = 128;
 	}
 	break;
 
