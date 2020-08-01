@@ -80,9 +80,9 @@ static uint32_t cpu_get_clock()
 	return clock ? clock : 90500000;
 }
 
-static uint8_t dma_sdio(int status)
+static uint16_t dma_sdio(int status)
 {
-	uint8_t res;
+	uint16_t res;
 	EnableIO();
 	spi8(UIO_DMA_SDIO);
 	res = spi_w((uint16_t)status);
@@ -120,7 +120,7 @@ static void dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
 	DisableIO();
 }
 
-static void dma_rcvbuf(uint32_t address, uint32_t length, uint32_t *data)
+static void dma_recvbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
 	EnableIO();
 	spi8(UIO_DMA_READ);
@@ -230,7 +230,7 @@ static int img_write(uint32_t type, uint32_t lba, void *buf, uint32_t len)
 	return FileWriteAdv(get_image(type), buf, len);
 }
 
-#define IOWR(base, reg, value) dma_set(base+(reg<<2), value)
+#define IOWR(base, reg, value) dma_set((base)+((reg)<<2), value)
 
 static uint32_t cmos[128];
 /*
@@ -499,7 +499,7 @@ static int hdd_set(uint32_t num)
 		hdd[num].hd_spt,								//word 56
 		hdd[num].hd_total_sectors & 0xFFFF,				//word 57
 		hdd[num].hd_total_sectors >> 16,				//word 58
-		0x0000,											//word 59 multiple sectors
+		16,												//word 59 multiple sectors
 		hdd[num].hd_total_sectors & 0xFFFF,				//word 60
 		hdd[num].hd_total_sectors >> 16,				//word 61
 		0x0000,											//word 62 single word dma modes
@@ -694,34 +694,109 @@ void x86_init()
 	user_io_8bit_set_status(0, UIO_STATUS_RESET);
 }
 
-struct sd_param_t
+static void img_io(uint32_t address, uint32_t basereg, uint8_t request)
 {
-	uint32_t addr;
-	uint32_t lba;
-	uint32_t bl_cnt;
-};
+	struct sd_param_t
+	{
+		uint32_t lba;
+		uint32_t cnt;
+	};
 
-static struct sd_param_t sd_params = {};
-
-void x86_poll()
-{
-	int res = 0;
+	static struct sd_param_t sd_params = {};
 	static uint32_t secbuf[128 * 4];
 
-	uint32_t cpu_clock = cpu_get_clock();
-	if (cpu_clock != old_cpu_clock) set_clock();
+	if (request & 3)
+	{
+		int res = 0;
+		dma_recvbuf(basereg, sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
+		IOWR(basereg, (address == IMG_TYPE_FDD0) ? 15 : 7, 1);
 
-	x86_share_poll();
+		if (request & 1)
+		{
+			if(sd_params.cnt>1) printf("Read: 0x%08x, 0x%08x, %d\n", address, sd_params.lba, sd_params.cnt);
 
-	char sd_req = dma_sdio(0);
+			if (get_image(address)->size)
+			{
+				if (sd_params.cnt > 0 && sd_params.cnt <= 4)
+				{
+					if (img_read(address, sd_params.lba, secbuf, sd_params.cnt * 512))
+					{
+						dma_sendbuf(address, sd_params.cnt * 128, secbuf);
+						res = 1;
+					}
+				}
+				else
+				{
+					printf("Error: Block count %d is out of range 1..4.\n", sd_params.cnt);
+				}
+			}
+			else
+			{
+				printf("Error: image is not ready.\n");
+			}
+
+			if (!res)
+			{
+				memset(secbuf, 0, sd_params.cnt * 512);
+				dma_sendbuf(address, sd_params.cnt * 128, secbuf);
+			}
+		}
+		else
+		{
+			//printf("Write: 0x%08x, 0x%08x, %d\n", address, sd_params.lba, sd_params.cnt);
+
+			dma_recvbuf(address, sd_params.cnt * 128, secbuf);
+			if (get_image(address)->size)
+			{
+				if (sd_params.cnt > 0 && sd_params.cnt <= 4)
+				{
+					if (get_image(address)->mode & O_RDWR)
+					{
+						if (img_write(address, sd_params.lba, secbuf, sd_params.cnt * 512))
+						{
+							res = 1;
+						}
+					}
+					else
+					{
+						printf("Error: image is read-only.\n");
+					}
+				}
+				else
+				{
+					printf("Error: Block count %d is out of range 1..4.\n", sd_params.cnt);
+				}
+			}
+			else
+			{
+				printf("Error: image is not ready.\n");
+			}
+		}
+	}
+}
+
+void img_io_old(uint8_t sd_req)
+{
+	struct sd_param_t
+	{
+		uint32_t addr;
+		uint32_t lba;
+		uint32_t bl_cnt;
+	};
+
+	static struct sd_param_t sd_params = {};
+	static uint32_t secbuf[128 * 4];
+
+	int res = 0;
+
 	if (sd_req == 1)
 	{
-		dma_rcvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
+		dma_recvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
 		//printf("Read: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
 		if (get_image(sd_params.addr)->size)
 		{
-			if (sd_params.bl_cnt>0 && sd_params.bl_cnt<=4)
+			if (sd_params.bl_cnt > 0 && sd_params.bl_cnt <= 4)
 			{
 				if (img_read(sd_params.addr, sd_params.lba, secbuf, sd_params.bl_cnt * 512))
 				{
@@ -743,16 +818,16 @@ void x86_poll()
 	}
 	else if (sd_req == 2)
 	{
-		dma_rcvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
+		dma_recvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
 		//printf("Write: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
 		if (get_image(sd_params.addr)->size)
 		{
-			if (sd_params.bl_cnt>0 && sd_params.bl_cnt <= 4)
+			if (sd_params.bl_cnt > 0 && sd_params.bl_cnt <= 4)
 			{
 				if (get_image(sd_params.addr)->mode & O_RDWR)
 				{
-					dma_rcvbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
+					dma_recvbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
 					if (img_write(sd_params.addr, sd_params.lba, secbuf, sd_params.bl_cnt * 512))
 					{
 						res = 1;
@@ -774,6 +849,29 @@ void x86_poll()
 		}
 
 		dma_sdio(res ? 1 : 2);
+	}
+}
+
+void x86_poll()
+{
+	uint32_t cpu_clock = cpu_get_clock();
+	if (cpu_clock != old_cpu_clock) set_clock();
+
+	x86_share_poll();
+
+	uint16_t sd_req = dma_sdio(0);
+	if (sd_req)
+	{
+		if (sd_req & 0x8000)
+		{
+			img_io(IMG_TYPE_HDD0, HDD0_BASE, sd_req);
+			img_io(IMG_TYPE_HDD1, HDD1_BASE, sd_req >> 2);
+			img_io(IMG_TYPE_FDD0, FLOPPY0_BASE, sd_req >> 4);
+		}
+		else
+		{
+			img_io_old((uint8_t)sd_req);
+		}
 	}
 }
 
