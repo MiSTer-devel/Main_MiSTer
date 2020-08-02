@@ -12,6 +12,7 @@ int fpga_io_init();
 void fpga_spi_en(uint32_t mask, uint32_t en);
 uint16_t fpga_spi(uint16_t word);
 uint16_t fpga_spi_fast(uint16_t word);
+uint32_t fpga_spi_fast_32(uint32_t dword);
 
 void fpga_set_led(uint32_t on);
 int  fpga_get_buttons();

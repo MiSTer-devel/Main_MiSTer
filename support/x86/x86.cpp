@@ -51,6 +51,13 @@
 #define RTC_BASE         0x8c00
 #define SD_BASE          0x0A00
 
+#define IMG_TYPE_FDD0      0x0800
+#define IMG_TYPE_FDD1      0x1800
+#define IMG_TYPE_HDD0      0x0000
+#define IMG_TYPE_HDD1      0x1000
+#define IMG_TYPE_HDD0_FAST 0x2000
+#define IMG_TYPE_HDD1_FAST 0x2001
+
 #define CFG_VER          2
 
 #define SHMEM_ADDR      0x30000000
@@ -84,8 +91,8 @@ static uint16_t dma_sdio(int status)
 {
 	uint16_t res;
 	EnableIO();
-	spi8(UIO_DMA_SDIO);
-	res = spi_w((uint16_t)status);
+	res = spi_w(UIO_DMA_SDIO);
+	if(status || !res) res = (uint8_t)spi_w((uint16_t)status);
 	DisableIO();
 	return res;
 }
@@ -116,7 +123,8 @@ static void dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
 	spi32_w(address);
-	while (length--) spi32_w(*data++);
+	if(address == IMG_TYPE_HDD0_FAST || address == IMG_TYPE_HDD1_FAST) while (length--) fpga_spi_fast_32(*data++);
+	else while (length--) spi32_w(*data++);
 	DisableIO();
 }
 
@@ -125,7 +133,8 @@ static void dma_recvbuf(uint32_t address, uint32_t length, uint32_t *data)
 	EnableIO();
 	spi8(UIO_DMA_READ);
 	spi32_w(address);
-	while (length--) *data++ = spi32_w(0);
+	if (address == IMG_TYPE_HDD0_FAST || address == IMG_TYPE_HDD1_FAST) while (length--) *data++ = fpga_spi_fast_32(0);
+	else while (length--) *data++ = spi32_w(0);
 	DisableIO();
 }
 
@@ -172,19 +181,21 @@ static bool floppy_is_2_88m= false;
 
 #define CMOS_FDD_TYPE ((floppy_is_2_88m) ? 0x50 : (floppy_is_1_44m || floppy_is_1_68m) ? 0x40 : (floppy_is_720k) ? 0x30 : (floppy_is_1_2m) ? 0x20 : 0x10)
 
-static fileTYPE fdd_image0 = {};
-static fileTYPE fdd_image1 = {};
-static fileTYPE hdd_image0 = {};
-static fileTYPE hdd_image1 = {};
+struct image_t
+{
+	fileTYPE f;
+	uint32_t cached_lba;
+	uint32_t last_lba;
+	uint8_t buf[512 * 8];
+};
+
+static image_t fdd_image0 = {};
+static image_t fdd_image1 = {};
+static image_t hdd_image0 = {};
+static image_t hdd_image1 = {};
 static bool boot_from_floppy = 1;
 
-#define IMG_TYPE_FDD0 0x0800
-#define IMG_TYPE_FDD1 0x1800
-
-#define IMG_TYPE_HDD0 0x0000
-#define IMG_TYPE_HDD1 0x1000
-
-static __inline fileTYPE *get_image(uint32_t type)
+static __inline image_t *get_image(uint32_t type)
 {
 	switch (type)
 	{
@@ -197,20 +208,23 @@ static __inline fileTYPE *get_image(uint32_t type)
 
 static int img_mount(uint32_t type, char *name)
 {
-	FileClose(get_image(type));
+	image_t *img = get_image(type);
+	FileClose(&img->f);
+	img->cached_lba = UINT32_MAX;
+	img->last_lba = 0;
 
 	int writable = 0, ret = 0;
 
 	if (strlen(name))
 	{
 		writable = FileCanWrite(name);
-		ret = FileOpenEx(get_image(type), name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+		ret = FileOpenEx(&img->f, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 		if (!ret) printf("Failed to open file %s\n", name);
 	}
 
 	if (!ret)
 	{
-		get_image(type)->size = 0;
+		img->f.size = 0;
 		return 0;
 	}
 
@@ -218,16 +232,28 @@ static int img_mount(uint32_t type, char *name)
 	return 1;
 }
 
-static int img_read(uint32_t type, uint32_t lba, void *buf, uint32_t len)
+static uint32_t* img_read(image_t *img, uint32_t lba, uint32_t cnt)
 {
-	if (!FileSeekLBA(get_image(type), lba)) return 0;
-	return FileReadAdv(get_image(type), buf, len);
+	if (img->cached_lba == UINT32_MAX || lba < img->cached_lba || (lba + cnt) > img->cached_lba + (sizeof(img->buf)/512))
+	{
+		img->cached_lba = UINT32_MAX;
+		if (!FileSeekLBA(&img->f, lba)) return 0;
+		if (!FileReadAdv(&img->f, img->buf, sizeof(img->buf))) return 0;
+		img->cached_lba = lba;
+	}
+
+	return (uint32_t *)(img->buf + ((lba - img->cached_lba) * 512));
 }
 
-static int img_write(uint32_t type, uint32_t lba, void *buf, uint32_t len)
+static uint32_t img_write(image_t *img, uint32_t lba, void *buf, uint32_t cnt)
 {
-	if (!FileSeekLBA(get_image(type), lba)) return 0;
-	return FileWriteAdv(get_image(type), buf, len);
+	if (img->cached_lba != UINT32_MAX && lba >= img->cached_lba && lba < img->cached_lba + (sizeof(img->buf) / 512))
+	{
+		img->cached_lba = UINT32_MAX;
+	}
+
+	if (!FileSeekLBA(&img->f, lba)) return 0;
+	return FileWriteAdv(&img->f, buf, cnt * 512);
 }
 
 #define IOWR(base, reg, value) dma_set((base)+((reg)<<2), value)
@@ -317,7 +343,7 @@ static int fdd_set(char* filename)
 	floppy_is_2_88m = false;
 
 	int floppy = img_mount(IMG_TYPE_FDD0, filename);
-	uint32_t size = get_image(IMG_TYPE_FDD0)->size/512;
+	uint32_t size = get_image(IMG_TYPE_FDD0)->f.size/512;
 	if (floppy && size)
 	{
 		if (size >= 5760) floppy_is_2_88m = true;
@@ -382,7 +408,7 @@ static int fdd_set(char* filename)
 		0x20;
 
 	IOWR(FLOPPY0_BASE, 0x0, floppy ? 1 : 0);
-	IOWR(FLOPPY0_BASE, 0x1, (floppy && (get_image(IMG_TYPE_FDD0)->mode & O_RDWR)) ? 0 : 1);
+	IOWR(FLOPPY0_BASE, 0x1, (floppy && (get_image(IMG_TYPE_FDD0)->f.mode & O_RDWR)) ? 0 : 1);
 	IOWR(FLOPPY0_BASE, 0x2, floppy_cylinders);
 	IOWR(FLOPPY0_BASE, 0x3, floppy_spt);
 	IOWR(FLOPPY0_BASE, 0x4, floppy_total_sectors);
@@ -425,7 +451,7 @@ static int hdd_set(uint32_t num)
 
 	hdd[num].hd_heads = 16;
 	hdd[num].hd_spt = 63;
-	hdd[num].hd_cylinders = get_image(hdd[num].type)->size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
+	hdd[num].hd_cylinders = get_image(hdd[num].type)->f.size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
 
 	//Maximum 8GB images are supported.
 	if (hdd[num].hd_cylinders > 16383) hdd[num].hd_cylinders = 16383;
@@ -538,7 +564,7 @@ static int hdd_set(uint32_t num)
 
 	if (hdd[num].present)
 	{
-		char *name = get_image(hdd[num].type)->name;
+		char *name = get_image(hdd[num].type)->f.name;
 		for (int i = 0; i < 20; i++)
 		{
 			if (*name) identify[27 + i] = ((*name++) << 8) | 0x20;
@@ -644,7 +670,7 @@ void x86_init()
 		0x00, //0x2B: hd 1 configuration 8/9; landing zone high
 		0x00, //0x2C: hd 1 configuration 9/9; sectors/track
 
-		(boot_from_floppy && get_image(IMG_TYPE_FDD0)->size)? 0x20u : 0x00u, //0x2D: boot sequence
+		(boot_from_floppy && get_image(IMG_TYPE_FDD0)->f.size)? 0x20u : 0x00u, //0x2D: boot sequence
 
 		0x00, //0x2E: checksum MSB
 		0x00, //0x2F: checksum LSB
@@ -694,7 +720,7 @@ void x86_init()
 	user_io_8bit_set_status(0, UIO_STATUS_RESET);
 }
 
-static void img_io(uint32_t address, uint32_t basereg, uint8_t request)
+static void img_io(image_t *img, uint32_t address, uint32_t basereg, uint8_t read, uint8_t next)
 {
 	struct sd_param_t
 	{
@@ -705,72 +731,81 @@ static void img_io(uint32_t address, uint32_t basereg, uint8_t request)
 	static struct sd_param_t sd_params = {};
 	static uint32_t secbuf[128 * 4];
 
-	if (request & 3)
+	int res = 0;
+	if (img->last_lba && next)
 	{
-		int res = 0;
+		//printf("%s next: %d\n", read ? "Read" : "Write", img->last_lba);
+		sd_params.lba = img->last_lba;
+		sd_params.cnt = 1;
+	}
+	else
+	{
 		dma_recvbuf(basereg, sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
-		IOWR(basereg, (address == IMG_TYPE_FDD0) ? 15 : 7, 1);
+	}
 
-		if (request & 1)
+	img->last_lba = sd_params.lba + sd_params.cnt;
+
+	if (read)
+	{
+		//printf("Read: 0x%08x, 0x%08x, %d\n", address, sd_params.lba, sd_params.cnt);
+
+		if (img->f.size)
 		{
-			if(sd_params.cnt>1) printf("Read: 0x%08x, 0x%08x, %d\n", address, sd_params.lba, sd_params.cnt);
-
-			if (get_image(address)->size)
+			if (sd_params.cnt > 0 && sd_params.cnt <= 4)
 			{
-				if (sd_params.cnt > 0 && sd_params.cnt <= 4)
+				uint32_t *buf = img_read(img, sd_params.lba, sd_params.cnt);
+				if (buf)
 				{
-					if (img_read(address, sd_params.lba, secbuf, sd_params.cnt * 512))
+					dma_sendbuf(address, sd_params.cnt * 128, buf);
+					img_read(img, sd_params.lba + 1, 1); //prefetch next
+					res = 1;
+				}
+			}
+			else
+			{
+				printf("Error: Block count %d is out of range 1..4.\n", sd_params.cnt);
+			}
+		}
+		else
+		{
+			printf("Error: image is not ready.\n");
+		}
+
+		if (!res)
+		{
+			memset(secbuf, 0, sd_params.cnt * 512);
+			dma_sendbuf(address, sd_params.cnt * 128, secbuf);
+		}
+	}
+	else
+	{
+		//printf("Write: 0x%08x, 0x%08x, %d\n", address, sd_params.lba, sd_params.cnt);
+
+		dma_recvbuf(address, sd_params.cnt * 128, secbuf);
+		if (img->f.size)
+		{
+			if (sd_params.cnt > 0 && sd_params.cnt <= 4)
+			{
+				if (img->f.mode & O_RDWR)
+				{
+					if (img_write(img, sd_params.lba, secbuf, sd_params.cnt))
 					{
-						dma_sendbuf(address, sd_params.cnt * 128, secbuf);
 						res = 1;
 					}
 				}
 				else
 				{
-					printf("Error: Block count %d is out of range 1..4.\n", sd_params.cnt);
+					printf("Error: image is read-only.\n");
 				}
 			}
 			else
 			{
-				printf("Error: image is not ready.\n");
-			}
-
-			if (!res)
-			{
-				memset(secbuf, 0, sd_params.cnt * 512);
-				dma_sendbuf(address, sd_params.cnt * 128, secbuf);
+				printf("Error: Block count %d is out of range 1..4.\n", sd_params.cnt);
 			}
 		}
 		else
 		{
-			//printf("Write: 0x%08x, 0x%08x, %d\n", address, sd_params.lba, sd_params.cnt);
-
-			dma_recvbuf(address, sd_params.cnt * 128, secbuf);
-			if (get_image(address)->size)
-			{
-				if (sd_params.cnt > 0 && sd_params.cnt <= 4)
-				{
-					if (get_image(address)->mode & O_RDWR)
-					{
-						if (img_write(address, sd_params.lba, secbuf, sd_params.cnt * 512))
-						{
-							res = 1;
-						}
-					}
-					else
-					{
-						printf("Error: image is read-only.\n");
-					}
-				}
-				else
-				{
-					printf("Error: Block count %d is out of range 1..4.\n", sd_params.cnt);
-				}
-			}
-			else
-			{
-				printf("Error: image is not ready.\n");
-			}
+			printf("Error: image is not ready.\n");
 		}
 	}
 }
@@ -788,19 +823,21 @@ void img_io_old(uint8_t sd_req)
 	static uint32_t secbuf[128 * 4];
 
 	int res = 0;
+	image_t *img = get_image(sd_params.addr);
 
 	if (sd_req == 1)
 	{
 		dma_recvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
-		//printf("Read: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
+		//printf("Read(old): 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
-		if (get_image(sd_params.addr)->size)
+		if (img->f.size)
 		{
 			if (sd_params.bl_cnt > 0 && sd_params.bl_cnt <= 4)
 			{
-				if (img_read(sd_params.addr, sd_params.lba, secbuf, sd_params.bl_cnt * 512))
+				uint32_t *buf = img_read(img, sd_params.lba, sd_params.bl_cnt);
+				if (buf)
 				{
-					dma_sendbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
+					dma_sendbuf(sd_params.addr, sd_params.bl_cnt * 128, buf);
 					res = 1;
 				}
 			}
@@ -819,16 +856,16 @@ void img_io_old(uint8_t sd_req)
 	else if (sd_req == 2)
 	{
 		dma_recvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
-		//printf("Write: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
+		//printf("Write(old): 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
-		if (get_image(sd_params.addr)->size)
+		if (img->f.size)
 		{
 			if (sd_params.bl_cnt > 0 && sd_params.bl_cnt <= 4)
 			{
-				if (get_image(sd_params.addr)->mode & O_RDWR)
+				if (img->f.mode & O_RDWR)
 				{
 					dma_recvbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
-					if (img_write(sd_params.addr, sd_params.lba, secbuf, sd_params.bl_cnt * 512))
+					if (img_write(img, sd_params.lba, secbuf, sd_params.bl_cnt))
 					{
 						res = 1;
 					}
@@ -864,9 +901,11 @@ void x86_poll()
 	{
 		if (sd_req & 0x8000)
 		{
-			img_io(IMG_TYPE_HDD0, HDD0_BASE, sd_req);
-			img_io(IMG_TYPE_HDD1, HDD1_BASE, sd_req >> 2);
-			img_io(IMG_TYPE_FDD0, FLOPPY0_BASE, sd_req >> 4);
+			if (sd_req & 3) img_io(&hdd_image0, IMG_TYPE_HDD0_FAST, HDD0_BASE, sd_req & 1, sd_req & 4);
+			sd_req >>= 3;
+			if (sd_req & 3) img_io(&hdd_image1, IMG_TYPE_HDD1_FAST, HDD1_BASE, sd_req & 1, sd_req & 4);
+			sd_req >>= 3;
+			if (sd_req & 3) img_io(&fdd_image0, IMG_TYPE_FDD0, FLOPPY0_BASE, sd_req & 1, 0);
 		}
 		else
 		{

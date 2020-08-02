@@ -694,6 +694,25 @@ uint16_t fpga_spi_fast(uint16_t word)
 	uint32_t gpo = (fpga_gpo_read() & ~(0xFFFF | SSPI_STROBE)) | word;
 	fpga_gpo_write(gpo);
 	fpga_gpo_write(gpo | SSPI_STROBE);
+	fpga_gpo_write(gpo | SSPI_STROBE);
 	fpga_gpo_write(gpo);
 	return (uint16_t)fpga_gpi_read();
+}
+
+uint32_t fpga_spi_fast_32(uint32_t dword)
+{
+	uint32_t gpo = (fpga_gpo_read() & ~(0xFFFF | SSPI_STROBE)) | (uint16_t)dword;
+	fpga_gpo_write(gpo);
+	fpga_gpo_write(gpo | SSPI_STROBE);
+
+	gpo = (gpo & ~0xFFFF) | (uint16_t)(dword>>16);
+	fpga_gpo_write(gpo);
+
+	uint16_t ret_low = (uint16_t)fpga_gpi_read();
+
+	fpga_gpo_write(gpo | SSPI_STROBE);
+	fpga_gpo_write(gpo | SSPI_STROBE);
+	fpga_gpo_write(gpo);
+
+	return (((uint16_t)fpga_gpi_read()) << 16) | ret_low;
 }
