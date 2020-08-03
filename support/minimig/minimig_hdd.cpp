@@ -394,10 +394,10 @@ static void ATA_IdentifyDevice(uint8_t* tfr, hdfTYPE *hdf)
 	WriteTaskFile(0, tfr[2], tfr[3], tfr[4], tfr[5], tfr[6]);
 	WriteStatus(IDE_STATUS_RDY); // pio in (class 1) command type
 	EnableFpga();
-	spi_w(CMD_IDE_DATA_WR<<8); // write data command
-	spi_w(0);
-	spi_w(0);
-	spi_block_write_16be((uint16_t*)sector_buffer);
+	fpga_spi_fast(CMD_IDE_DATA_WR<<8); // write data command
+	fpga_spi_fast(0);
+	fpga_spi_fast(0);
+	fpga_spi_fast_block_write_be((uint16_t*)sector_buffer, 256);
 	DisableFpga();
 	WriteStatus(IDE_STATUS_END | IDE_STATUS_IRQ);
 }
@@ -506,20 +506,20 @@ static void ReadSector(hdfTYPE *hdf)
 static void SendSector()
 {
 	EnableFpga();
-	spi_w(CMD_IDE_DATA_WR << 8); // write data command
-	spi_w(0);
-	spi_w(0);
-	spi_block_write_16be((uint16_t*)sector_buffer);
+	fpga_spi_fast(CMD_IDE_DATA_WR << 8); // write data command
+	fpga_spi_fast(0);
+	fpga_spi_fast(0);
+	fpga_spi_fast_block_write_be((uint16_t*)sector_buffer, 256);
 	DisableFpga();
 }
 
 static void RecvSector()
 {
 	EnableFpga();
-	spi_w(CMD_IDE_DATA_RD << 8); // read data command
-	spi_w(0);
-	spi_w(0);
-	spi_block_read_16be((uint16_t*)sector_buffer);
+	fpga_spi_fast(CMD_IDE_DATA_RD << 8); // read data command
+	fpga_spi_fast(0);
+	fpga_spi_fast(0);
+	fpga_spi_fast_block_read_be((uint16_t*)sector_buffer, 256);
 	DisableFpga();
 }
 

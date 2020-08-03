@@ -192,52 +192,12 @@ void spi_write(const uint8_t *addr, uint16_t len, int wide)
 
 void spi_block_read(uint8_t *addr, int wide)
 {
-	if (wide)
-	{
-		uint16_t len16 = 256;
-		uint16_t *a16 = (uint16_t*)addr;
-		while (len16--) *a16++ = fpga_spi_fast(0);
-	}
-	else
-	{
-		uint16_t len = 512;
-		while (len--) *addr++ = fpga_spi_fast(0);
-	}
+	if (wide) fpga_spi_fast_block_read((uint16_t*)addr, 256);
+	else fpga_spi_fast_block_read_8(addr, 512);
 }
 
 void spi_block_write(const uint8_t *addr, int wide)
 {
-	if (wide)
-	{
-		uint16_t len16 = 256;
-		uint16_t *a16 = (uint16_t*)addr;
-		while (len16--) fpga_spi_fast(*a16++);
-	}
-	else
-	{
-		uint16_t len = 512;
-		while (len--) fpga_spi_fast(*addr++);
-	}
-}
-
-void spi_block_write_16be(const uint16_t *addr)
-{
-	uint16_t len = 256;
-	uint16_t tmp;
-	while (len--)
-	{
-		tmp = *addr++;
-		fpga_spi_fast(SWAPW(tmp));
-	}
-}
-
-void spi_block_read_16be(uint16_t *addr)
-{
-	uint16_t len = 256;
-	uint16_t tmp;
-	while (len--)
-	{
-		tmp = fpga_spi_fast(0xFFFF);
-		*addr++ = SWAPW(tmp);
-	}
+	if (wide) fpga_spi_fast_block_write((const uint16_t*)addr, 256);
+	else fpga_spi_fast_block_write_8(addr, 512);
 }

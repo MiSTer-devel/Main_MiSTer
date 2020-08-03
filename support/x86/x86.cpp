@@ -123,7 +123,7 @@ static void dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
 	spi32_w(address);
-	if(address == IMG_TYPE_HDD0_FAST || address == IMG_TYPE_HDD1_FAST) while (length--) fpga_spi_fast_32(*data++);
+	if (address == IMG_TYPE_HDD0_FAST || address == IMG_TYPE_HDD1_FAST) fpga_spi_fast_block_write((uint16_t*)data, length * 2);
 	else while (length--) spi32_w(*data++);
 	DisableIO();
 }
@@ -133,7 +133,7 @@ static void dma_recvbuf(uint32_t address, uint32_t length, uint32_t *data)
 	EnableIO();
 	spi8(UIO_DMA_READ);
 	spi32_w(address);
-	if (address == IMG_TYPE_HDD0_FAST || address == IMG_TYPE_HDD1_FAST) while (length--) *data++ = fpga_spi_fast_32(0);
+	if (address == IMG_TYPE_HDD0_FAST || address == IMG_TYPE_HDD1_FAST) fpga_spi_fast_block_read((uint16_t*)data, length * 2);
 	else while (length--) *data++ = spi32_w(0);
 	DisableIO();
 }
