@@ -956,3 +956,8 @@ void x86_set_fdd_boot(uint32_t boot)
 {
 	boot_from_floppy = (boot != 0);
 }
+
+void x86_set_uart_mode(int mode)
+{
+	dma_sdio(mode ? 0x40 : 0x80);
+}
