@@ -39,29 +39,36 @@
 #include "../../fpga_io.h"
 #include "x86_share.h"
 
-#define FLOPPY0_BASE     0x8800
-#define HDD0_BASE        0x8840
-#define FLOPPY1_BASE     0x9800
-#define HDD1_BASE        0x9840
-#define PC_BUS_BASE      0x88a0
-#define PIO_OUTPUT_BASE  0x8860
-#define SOUND_BASE       0x9000
-#define PIT_BASE         0x8880
-#define VGA_BASE         0x8900
-#define RTC_BASE         0x8c00
-#define SD_BASE          0x0A00
+#define FLOPPY0_BASE_OLD     0x8800
+#define HDD0_BASE_OLD        0x8840
+#define FLOPPY1_BASE_OLD     0x9800
+#define HDD1_BASE_OLD        0x9840
+#define PC_BUS_BASE_OLD      0x88a0
+#define SOUND_BASE_OLD       0x9000
+#define PIT_BASE_OLD         0x8880
+#define VGA_BASE_OLD         0x8900
+#define RTC_BASE_OLD         0x8c00
+#define SD_BASE_OLD          0x0A00
 
-#define IMG_TYPE_FDD0      0x0800
-#define IMG_TYPE_FDD1      0x1800
-#define IMG_TYPE_HDD0      0x0000
-#define IMG_TYPE_HDD1      0x1000
-#define IMG_TYPE_HDD0_FAST 0x2000
-#define IMG_TYPE_HDD1_FAST 0x2001
+#define IMG_TYPE_FDD0_OLD    0x0800
+#define IMG_TYPE_FDD1_OLD    0x1800
+#define IMG_TYPE_HDD0_OLD    0x0000
+#define IMG_TYPE_HDD1_OLD    0x1000
+
+#define HDD0_BASE_NEW        0xF000
+#define HDD1_BASE_NEW        0xF100
+#define FDD0_BASE_NEW        0xF200
+#define FDD1_BASE_NEW        0xF300
+#define RTC_BASE_NEW         0xF400
 
 #define CFG_VER          2
 
 #define SHMEM_ADDR      0x30000000
 #define BIOS_SIZE       0x10000
+
+static int newcore = 0;
+
+#define IOWR(base, reg, value) dma_set((base) + (newcore ? (reg) : ((reg)<<2)), value)
 
 typedef struct
 {
@@ -121,9 +128,19 @@ static void dma_set(uint32_t address, uint32_t data)
 static void dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
 	EnableIO();
-	spi8(UIO_DMA_WRITE);
-	spi32_w(address);
-	if (address == IMG_TYPE_HDD0_FAST || address == IMG_TYPE_HDD1_FAST) fpga_spi_fast_block_write((uint16_t*)data, length * 2);
+	fpga_spi_fast(UIO_DMA_WRITE);
+	fpga_spi_fast(address);
+	fpga_spi_fast(0);
+	if (newcore)
+	{
+		if(address < FDD0_BASE_NEW) fpga_spi_fast_block_write((uint16_t*)data, length * 2);
+		else
+		{
+			uint8_t *buf = (uint8_t*)data;
+			length *= 4;
+			while (length--) spi32_w(*buf++);
+		}
+	}
 	else while (length--) spi32_w(*data++);
 	DisableIO();
 }
@@ -131,9 +148,19 @@ static void dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
 static void dma_recvbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
 	EnableIO();
-	spi8(UIO_DMA_READ);
-	spi32_w(address);
-	if (address == IMG_TYPE_HDD0_FAST || address == IMG_TYPE_HDD1_FAST) fpga_spi_fast_block_read((uint16_t*)data, length * 2);
+	fpga_spi_fast(UIO_DMA_READ);
+	fpga_spi_fast(address);
+	fpga_spi_fast(0);
+	if (newcore)
+	{
+		if (address <= FDD0_BASE_NEW) fpga_spi_fast_block_read((uint16_t*)data, length * 2);
+		else
+		{
+			uint8_t *buf = (uint8_t*)data;
+			length *= 4;
+			while (length--) *buf++ = spi32_w(0);
+		}
+	}
 	else while (length--) *data++ = spi32_w(0);
 	DisableIO();
 }
@@ -189,26 +216,13 @@ struct image_t
 	uint8_t buf[512 * 8];
 };
 
-static image_t fdd_image0 = {};
-static image_t fdd_image1 = {};
-static image_t hdd_image0 = {};
-static image_t hdd_image1 = {};
+static image_t fdd0_image = {};
+static image_t hdd0_image = {};
+static image_t hdd1_image = {};
 static bool boot_from_floppy = 1;
 
-static __inline image_t *get_image(uint32_t type)
+static int img_mount(image_t *img, char *name)
 {
-	switch (type)
-	{
-		case IMG_TYPE_HDD0: return &hdd_image0;
-		case IMG_TYPE_HDD1: return &hdd_image1;
-		case IMG_TYPE_FDD0: return &fdd_image0;
-	}
-	return &fdd_image1;
-}
-
-static int img_mount(uint32_t type, char *name)
-{
-	image_t *img = get_image(type);
 	FileClose(&img->f);
 	img->cached_lba = UINT32_MAX;
 	img->last_lba = 0;
@@ -256,30 +270,7 @@ static uint32_t img_write(image_t *img, uint32_t lba, void *buf, uint32_t cnt)
 	return FileWriteAdv(&img->f, buf, cnt * 512);
 }
 
-#define IOWR(base, reg, value) dma_set((base)+((reg)<<2), value)
-
 static uint32_t cmos[128];
-/*
-static void cmos_set(uint addr, uint8_t val)
-{
-	if (addr >= sizeof(cmos)) return;
-
-	cmos[addr] = val;
-	return;
-
-	uint16_t sum = 0;
-	for (int i = 0x10; i <= 0x2D; i++) sum += cmos[i];
-
-	cmos[0x2E] = sum >> 8;
-	cmos[0x2F] = sum & 0xFF;
-
-	IOWR(RTC_BASE, addr, cmos[addr]);
-
-	IOWR(RTC_BASE, 0x2E, cmos[0x2E]);
-	IOWR(RTC_BASE, 0x2F, cmos[0x2F]);
-}
-*/
-
 static int floppy_wait_cycles;
 
 static void set_clock()
@@ -287,13 +278,13 @@ static void set_clock()
 	uint32_t cpu_clock = cpu_get_clock();
 	old_cpu_clock = cpu_clock;
 
-	IOWR(FLOPPY0_BASE, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / cpu_clock)));
-	IOWR(FLOPPY0_BASE, 0x8, (int)(1000000.0 / (1000000000.0 / cpu_clock)));
-	IOWR(FLOPPY0_BASE, 0x9, (int)(1666666.0 / (1000000000.0 / cpu_clock)));
-	IOWR(FLOPPY0_BASE, 0xA, (int)(2000000.0 / (1000000000.0 / cpu_clock)));
-	IOWR(FLOPPY0_BASE, 0xB, (int)(500000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE_OLD, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE_OLD, 0x8, (int)(1000000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE_OLD, 0x9, (int)(1666666.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE_OLD, 0xA, (int)(2000000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE_OLD, 0xB, (int)(500000.0 / (1000000000.0 / cpu_clock)));
 
-	IOWR(VGA_BASE, 0, cpu_clock);
+	IOWR(VGA_BASE_OLD, 0, cpu_clock);
 
 	//-------------------------------------------------------------------------- sound
 	/*
@@ -308,26 +299,26 @@ static void set_clock()
 		double f = 1000000.0 / (256.0 - i);
 
 		double cycles_in_period = 1000000000.0 / (f * cycle_in_ns);
-		IOWR(SOUND_BASE, i, (int)cycles_in_period);
+		IOWR(SOUND_BASE_OLD, i, (int)cycles_in_period);
 	}
 
-	IOWR(SOUND_BASE, 256, (int)(80000.0 / (1000000000.0 / cpu_clock)));
-	IOWR(SOUND_BASE, 257, (int)((1000000000.0 / 96000.0) / (1000000000.0 / cpu_clock)));
+	IOWR(SOUND_BASE_OLD, 256, (int)(80000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(SOUND_BASE_OLD, 257, (int)((1000000000.0 / 96000.0) / (1000000000.0 / cpu_clock)));
 
 	//-------------------------------------------------------------------------- pit
 	/*
 	0.[7:0]: cycles in sysclock 1193181 Hz
 	*/
 
-	IOWR(PIT_BASE, 0, (int)((1000000000.0 / 1193181.0) / (1000000000.0 / cpu_clock)));
+	IOWR(PIT_BASE_OLD, 0, (int)((1000000000.0 / 1193181.0) / (1000000000.0 / cpu_clock)));
 
 	/*
 	128.[26:0]: cycles in second
 	129.[12:0]: cycles in 122.07031 us
 	*/
 
-	IOWR(RTC_BASE, 128, (int)(1000000000.0 / (1000000000.0 / cpu_clock)));
-	IOWR(RTC_BASE, 129, (int)(122070.0 / (1000000000.0 / cpu_clock)));
+	IOWR(RTC_BASE_OLD, 128, (int)(1000000000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(RTC_BASE_OLD, 129, (int)(122070.0 / (1000000000.0 / cpu_clock)));
 }
 
 static int fdd_set(char* filename)
@@ -342,8 +333,11 @@ static int fdd_set(char* filename)
 	floppy_is_1_68m = false;
 	floppy_is_2_88m = false;
 
-	int floppy = img_mount(IMG_TYPE_FDD0, filename);
-	uint32_t size = get_image(IMG_TYPE_FDD0)->f.size/512;
+	uint32_t base = newcore ? FDD0_BASE_NEW : FLOPPY0_BASE_OLD;
+
+	int floppy = img_mount(&fdd0_image, filename);
+	uint32_t size = fdd0_image.f.size/512;
+	printf("floppy size: %d blks\n", size);
 	if (floppy && size)
 	{
 		if (size >= 5760) floppy_is_2_88m = true;
@@ -395,6 +389,12 @@ static int fdd_set(char* filename)
 	int floppy_total_sectors = floppy_spt * floppy_heads * floppy_cylinders;
 	floppy_wait_cycles       = 200000000 / floppy_spt;
 
+	printf("floppy:\n");
+	printf("  cylinders:     %d\n", floppy_cylinders);
+	printf("  heads:         %d\n", floppy_heads);
+	printf("  spt:           %d\n", floppy_spt);
+	printf("  total_sectors: %d\n\n", floppy_total_sectors);
+
 	int floppy_media =
 		(!floppy) ? 0x20 :
 		(floppy_is_160k) ? 0x00 :
@@ -407,55 +407,47 @@ static int fdd_set(char* filename)
 		(floppy_is_2_88m) ? 0x40 :
 		0x20;
 
-	IOWR(FLOPPY0_BASE, 0x0, floppy ? 1 : 0);
-	IOWR(FLOPPY0_BASE, 0x1, (floppy && (get_image(IMG_TYPE_FDD0)->f.mode & O_RDWR)) ? 0 : 1);
-	IOWR(FLOPPY0_BASE, 0x2, floppy_cylinders);
-	IOWR(FLOPPY0_BASE, 0x3, floppy_spt);
-	IOWR(FLOPPY0_BASE, 0x4, floppy_total_sectors);
-	IOWR(FLOPPY0_BASE, 0x5, floppy_heads);
-	IOWR(FLOPPY0_BASE, 0x6, 0); // base LBA
-	IOWR(FLOPPY0_BASE, 0xC, floppy_media);
+	IOWR(base, 0x0, floppy ? 1 : 0);
+	IOWR(base, 0x1, (floppy && (fdd0_image.f.mode & O_RDWR)) ? 0 : 1);
+	IOWR(base, 0x2, floppy_cylinders);
+	IOWR(base, 0x3, floppy_spt);
+	IOWR(base, 0x4, floppy_total_sectors);
+	IOWR(base, 0x5, floppy_heads);
+	IOWR(base, 0x6, 0); // base LBA
+	IOWR(base, 0xC, floppy_media);
 
-	set_clock();
+	if(!newcore) set_clock();
 
 	//cmos_set(0x10, CMOS_FDD_TYPE);
 	return floppy;
 }
 
-typedef struct
+static int hdd_set(uint32_t num, char* filename)
 {
-	uint32_t type;
-	uint32_t base;
 	uint32_t hd_cylinders;
 	uint32_t hd_heads;
 	uint32_t hd_spt;
 	uint32_t hd_total_sectors;
 	uint32_t present;
-	char*    name;
-} hdd_config;
 
-static hdd_config hdd[2] = {
-	{ IMG_TYPE_HDD0, HDD0_BASE, 0, 0, 0, 0, 0, config.hdd0_name },
-	{ IMG_TYPE_HDD1, HDD1_BASE, 0, 0, 0, 0, 0, config.hdd1_name }
-};
+	uint32_t base = newcore ? (num ? HDD1_BASE_NEW : HDD0_BASE_NEW) : (num ? HDD1_BASE_OLD : HDD0_BASE_OLD);
+	image_t *img = num ? &hdd1_image : &hdd0_image;
 
-static int hdd_set(uint32_t num)
-{
-	hdd[num].hd_cylinders = 0;
-	hdd[num].hd_heads = 0;
-	hdd[num].hd_spt = 0;
-	hdd[num].hd_total_sectors = 0;
+	hd_cylinders = 0;
+	hd_heads = 0;
+	hd_spt = 0;
+	hd_total_sectors = 0;
 
-	hdd[num].present = img_mount(hdd[num].type, hdd[num].name);
-	if (!hdd[num].present) return 0;
+	present = img_mount(img, filename);
+	if (!present) return 0;
 
-	hdd[num].hd_heads = 16;
-	hdd[num].hd_spt = 63;
-	hdd[num].hd_cylinders = get_image(hdd[num].type)->f.size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
+	hd_heads = 16;
+	hd_spt = 63;
+	hd_cylinders = img->f.size / (hd_heads * hd_spt * 512);
 
 	//Maximum 8GB images are supported.
-	if (hdd[num].hd_cylinders > 16383) hdd[num].hd_cylinders = 16383;
-	hdd[num].hd_total_sectors = hdd[num].hd_spt*hdd[num].hd_heads*hdd[num].hd_cylinders;
+	if (hd_cylinders > 16383) hd_cylinders = 16383;
+	hd_total_sectors = hd_spt*hd_heads*hd_cylinders;
 
 	/*
 	0x00.[31:0]:    identify write
@@ -470,12 +462,12 @@ static int hdd_set(uint32_t num)
 	uint32_t identify[256] =
 	{
 		0x0040, 										//word 0
-		hdd[num].hd_cylinders, 	                        //word 1
+		hd_cylinders, 	                                //word 1
 		0x0000,											//word 2 reserved
-		hdd[num].hd_heads,								//word 3
-		(uint16_t)(512 * hdd[num].hd_spt),				//word 4
+		hd_heads,			               				//word 3
+		(uint16_t)(512 * hd_spt),						//word 4
 		512,											//word 5
-		hdd[num].hd_spt,								//word 6
+		hd_spt,											//word 6
 		0x0000,											//word 7 vendor specific
 		0x0000,											//word 8 vendor specific
 		0x0000,											//word 9 vendor specific
@@ -520,14 +512,14 @@ static int hdd_set(uint32_t num)
 		0x0200,											//word 51 pio timing
 		0x0200,											//word 52 pio timing
 		0x0007,											//word 53 valid fields
-		hdd[num].hd_cylinders, 							//word 54
-		hdd[num].hd_heads,								//word 55
-		hdd[num].hd_spt,								//word 56
-		hdd[num].hd_total_sectors & 0xFFFF,				//word 57
-		hdd[num].hd_total_sectors >> 16,				//word 58
+		hd_cylinders, 									//word 54
+		hd_heads,										//word 55
+		hd_spt,											//word 56
+		hd_total_sectors & 0xFFFF,						//word 57
+		hd_total_sectors >> 16,							//word 58
 		16,												//word 59 multiple sectors
-		hdd[num].hd_total_sectors & 0xFFFF,				//word 60
-		hdd[num].hd_total_sectors >> 16,				//word 61
+		hd_total_sectors & 0xFFFF,						//word 60
+		hd_total_sectors >> 16,							//word 61
 		0x0000,											//word 62 single word dma modes
 		0x0000,											//word 63 multiple word dma modes
 		0x0000,											//word 64 pio modes
@@ -545,8 +537,8 @@ static int hdd_set(uint32_t num)
 		0,0,0,0,										//word 89..92
 		1 | (1 << 14) | 0x2000,							//word 93
 		0,0,0,0,0,0,									//word 94..99
-		hdd[num].hd_total_sectors & 0xFFFF,				//word 100
-		hdd[num].hd_total_sectors >> 16,				//word 101
+		hd_total_sectors & 0xFFFF,						//word 100
+		hd_total_sectors >> 16,							//word 101
 		0,												//word 102
 		0,												//word 103
 
@@ -562,9 +554,9 @@ static int hdd_set(uint32_t num)
 		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	};
 
-	if (hdd[num].present)
+	if (present)
 	{
-		char *name = get_image(hdd[num].type)->f.name;
+		char *name = img->f.name;
 		for (int i = 0; i < 20; i++)
 		{
 			if (*name) identify[27 + i] = ((*name++) << 8) | 0x20;
@@ -572,17 +564,17 @@ static int hdd_set(uint32_t num)
 		}
 	}
 
-	for (int i = 0; i<128; i++) IOWR(hdd[num].base, 0, hdd[num].present ? ((unsigned int)identify[2 * i + 1] << 16) | (unsigned int)identify[2 * i + 0] : 0);
+	for (int i = 0; i < 128; i++) IOWR(base, 0, present ? ((unsigned int)identify[2 * i + 1] << 16) | (unsigned int)identify[2 * i + 0] : 0);
 
-	IOWR(hdd[num].base, 1, hdd[num].hd_cylinders);
-	IOWR(hdd[num].base, 2, hdd[num].hd_heads);
-	IOWR(hdd[num].base, 3, hdd[num].hd_spt);
-	IOWR(hdd[num].base, 4, hdd[num].hd_spt * hdd[num].hd_heads);
-	IOWR(hdd[num].base, 5, hdd[num].hd_spt * hdd[num].hd_heads * hdd[num].hd_cylinders);
-	IOWR(hdd[num].base, 6, 0); // base LBA
+	IOWR(base, 1, hd_cylinders);
+	IOWR(base, 2, hd_heads);
+	IOWR(base, 3, hd_spt);
+	IOWR(base, 4, hd_spt * hd_heads);
+	IOWR(base, 5, hd_spt * hd_heads * hd_cylinders);
+	IOWR(base, 6, 0); // base LBA
 
-	printf("HDD%d:\n  present %d\n  hd_cylinders %d\n  hd_heads %d\n  hd_spt %d\n  hd_total_sectors %d\n\n", num, hdd[num].present, hdd[num].hd_cylinders, hdd[num].hd_heads, hdd[num].hd_spt, hdd[num].hd_total_sectors);
-	return hdd[num].present;
+	printf("HDD%d:\n  present %d\n  hd_cylinders %d\n  hd_heads %d\n  hd_spt %d\n  hd_total_sectors %d\n\n", num, present, hd_cylinders, hd_heads, hd_spt, hd_total_sectors);
+	return present;
 }
 
 static uint8_t bin2bcd(unsigned val)
@@ -599,17 +591,17 @@ void x86_init()
 	load_bios(user_io_make_filepath(home, "boot0.rom"), 0);
 	load_bios(user_io_make_filepath(home, "boot1.rom"), 1);
 
-	IOWR(PC_BUS_BASE, 0, 0x00FFF0EA);
-	IOWR(PC_BUS_BASE, 1, 0x000000F0);
+	newcore = ((dma_sdio(0) & 0xC000) == 0xC000);
 
-	//-------------------------------------------------------------------------- floppy
+	if (!newcore)
+	{
+		IOWR(PC_BUS_BASE_OLD, 0, 0x00FFF0EA);
+		IOWR(PC_BUS_BASE_OLD, 1, 0x000000F0);
+	}
 
 	fdd_set(config.fdd_name);
-
-	//-------------------------------------------------------------------------- hdd
-
-	hdd_set(0);
-	hdd_set(1);
+	hdd_set(0, config.hdd0_name);
+	hdd_set(1, config.hdd1_name);
 
 	//-------------------------------------------------------------------------- rtc
 
@@ -627,10 +619,10 @@ void x86_init()
 		0x00, //0x03: ALARM MIN BCD
 		bin2bcd(tm.tm_hour), //0x04: HOUR BCD 24h
 		0x12, //0x05: ALARM HOUR BCD 24h
-		(uint32_t)tm.tm_wday+1, //0x06: DAY OF WEEK Sunday=1
+		(uint32_t)tm.tm_wday + 1, //0x06: DAY OF WEEK Sunday=1
 		bin2bcd(tm.tm_mday), //0x07: DAY OF MONTH BCD from 1
-		bin2bcd(tm.tm_mon+1), //0x08: MONTH BCD from 1
-		bin2bcd((tm.tm_year<117) ? 17 : tm.tm_year-100), //0x09: YEAR BCD
+		bin2bcd(tm.tm_mon + 1), //0x08: MONTH BCD from 1
+		bin2bcd((tm.tm_year < 117) ? 17 : tm.tm_year - 100), //0x09: YEAR BCD
 		0x26, //0x0A: REG A
 		0x02, //0x0B: REG B
 		0x00, //0x0C: REG C
@@ -670,7 +662,7 @@ void x86_init()
 		0x00, //0x2B: hd 1 configuration 8/9; landing zone high
 		0x00, //0x2C: hd 1 configuration 9/9; sectors/track
 
-		(boot_from_floppy && get_image(IMG_TYPE_FDD0)->f.size)? 0x20u : 0x00u, //0x2D: boot sequence
+		(fdd0_image.f.size && boot_from_floppy) ? 0x20u : 0x00u, //0x2D: boot sequence
 
 		0x00, //0x2E: checksum MSB
 		0x00, //0x2F: checksum LSB
@@ -705,22 +697,23 @@ void x86_init()
 		0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0, 0, 0
 	};
 
+	printf("cmod[2d] = %x\n", tmp[0x2d]);
+
 	memcpy(cmos, tmp, sizeof(cmos));
 
 	//count checksum
 	unsigned short sum = 0;
-	for(int i=0x10; i<=0x2D; i++) sum += cmos[i];
+	for (int i = 0x10; i <= 0x2D; i++) sum += cmos[i];
 
 	cmos[0x2E] = sum >> 8;
 	cmos[0x2F] = sum & 0xFF;
-
-	for(unsigned int i=0; i<sizeof(cmos)/sizeof(unsigned int); i++) IOWR(RTC_BASE, i, cmos[i]);
+	for (unsigned int i = 0; i < sizeof(cmos) / sizeof(uint32_t); i++) IOWR(newcore ? RTC_BASE_NEW : RTC_BASE_OLD, i, cmos[i]);
 
 	x86_share_reset();
 	user_io_8bit_set_status(0, UIO_STATUS_RESET);
 }
 
-static void img_io(image_t *img, uint32_t address, uint32_t basereg, uint8_t read, uint8_t next)
+static void img_io(image_t *img, uint32_t basereg, uint8_t read, uint8_t next)
 {
 	struct sd_param_t
 	{
@@ -732,6 +725,7 @@ static void img_io(image_t *img, uint32_t address, uint32_t basereg, uint8_t rea
 	static uint32_t secbuf[128 * 4];
 
 	int res = 0;
+
 	if (img->last_lba && next)
 	{
 		//printf("%s next: %d\n", read ? "Read" : "Write", img->last_lba);
@@ -747,7 +741,7 @@ static void img_io(image_t *img, uint32_t address, uint32_t basereg, uint8_t rea
 
 	if (read)
 	{
-		//printf("Read: 0x%08x, 0x%08x, %d\n", address, sd_params.lba, sd_params.cnt);
+		//printf("Read: 0x%08x, 0x%08x, %d\n", basereg, sd_params.lba, sd_params.cnt);
 
 		if (img->f.size)
 		{
@@ -756,7 +750,7 @@ static void img_io(image_t *img, uint32_t address, uint32_t basereg, uint8_t rea
 				uint32_t *buf = img_read(img, sd_params.lba, sd_params.cnt);
 				if (buf)
 				{
-					dma_sendbuf(address, sd_params.cnt * 128, buf);
+					dma_sendbuf(basereg + 255, sd_params.cnt * 128, buf);
 					img_read(img, sd_params.lba + 1, 1); //prefetch next
 					res = 1;
 				}
@@ -774,14 +768,14 @@ static void img_io(image_t *img, uint32_t address, uint32_t basereg, uint8_t rea
 		if (!res)
 		{
 			memset(secbuf, 0, sd_params.cnt * 512);
-			dma_sendbuf(address, sd_params.cnt * 128, secbuf);
+			dma_sendbuf(basereg + 255, sd_params.cnt * 128, secbuf);
 		}
 	}
 	else
 	{
-		//printf("Write: 0x%08x, 0x%08x, %d\n", address, sd_params.lba, sd_params.cnt);
+		//printf("Write: 0x%08x, 0x%08x, %d\n", basereg, sd_params.lba, sd_params.cnt);
 
-		dma_recvbuf(address, sd_params.cnt * 128, secbuf);
+		dma_recvbuf(basereg + 255, sd_params.cnt * 128, secbuf);
 		if (img->f.size)
 		{
 			if (sd_params.cnt > 0 && sd_params.cnt <= 4)
@@ -821,13 +815,28 @@ void img_io_old(uint8_t sd_req)
 
 	static struct sd_param_t sd_params = {};
 	static uint32_t secbuf[128 * 4];
+	dma_recvbuf(SD_BASE_OLD + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
+
+	image_t *img;
+	switch (sd_params.addr)
+	{
+		case IMG_TYPE_HDD0_OLD:
+			//printf("HDD0 req\n");
+			img = &hdd0_image;
+			break;
+		case IMG_TYPE_HDD1_OLD:
+			//printf("HDD1 req\n");
+			img = &hdd1_image;
+			break;
+		default:
+			//printf("FDD req\n");
+			img = &fdd0_image;
+			break;
+	}
 
 	int res = 0;
-	image_t *img = get_image(sd_params.addr);
-
 	if (sd_req == 1)
 	{
-		dma_recvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
 		//printf("Read(old): 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
 		if (img->f.size)
@@ -855,7 +864,6 @@ void img_io_old(uint8_t sd_req)
 	}
 	else if (sd_req == 2)
 	{
-		dma_recvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
 		//printf("Write(old): 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
 		if (img->f.size)
@@ -891,8 +899,11 @@ void img_io_old(uint8_t sd_req)
 
 void x86_poll()
 {
-	uint32_t cpu_clock = cpu_get_clock();
-	if (cpu_clock != old_cpu_clock) set_clock();
+	if (!newcore)
+	{
+		uint32_t cpu_clock = cpu_get_clock();
+		if (cpu_clock != old_cpu_clock) set_clock();
+	}
 
 	x86_share_poll();
 
@@ -901,11 +912,11 @@ void x86_poll()
 	{
 		if (sd_req & 0x8000)
 		{
-			if (sd_req & 3) img_io(&hdd_image0, IMG_TYPE_HDD0_FAST, HDD0_BASE, sd_req & 1, sd_req & 4);
+			if (sd_req & 3) img_io(&hdd0_image, HDD0_BASE_NEW, sd_req & 1, sd_req & 4);
 			sd_req >>= 3;
-			if (sd_req & 3) img_io(&hdd_image1, IMG_TYPE_HDD1_FAST, HDD1_BASE, sd_req & 1, sd_req & 4);
+			if (sd_req & 3) img_io(&hdd1_image, HDD1_BASE_NEW, sd_req & 1, sd_req & 4);
 			sd_req >>= 3;
-			if (sd_req & 3) img_io(&fdd_image0, IMG_TYPE_FDD0, FLOPPY0_BASE, sd_req & 1, 0);
+			if (sd_req & 3) img_io(&fdd0_image, FDD0_BASE_NEW, sd_req & 1, 0);
 		}
 		else
 		{
@@ -944,6 +955,7 @@ void x86_config_save()
 
 void x86_config_load()
 {
+	newcore = ((dma_sdio(0) & 0xC000) == 0xC000);
 	static x86_config tmp;
 	memset(&config, 0, sizeof(config));
 	if (FileLoadConfig("ao486sys.cfg", &tmp, sizeof(tmp)) && (tmp.ver == CFG_VER))
