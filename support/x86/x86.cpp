@@ -211,9 +211,6 @@ static bool floppy_is_2_88m= false;
 struct image_t
 {
 	fileTYPE f;
-	uint32_t cached_lba;
-	uint32_t last_lba;
-	uint8_t buf[512 * 8];
 };
 
 static image_t fdd0_image = {};
@@ -224,9 +221,6 @@ static bool boot_from_floppy = 1;
 static int img_mount(image_t *img, char *name)
 {
 	FileClose(&img->f);
-	img->cached_lba = UINT32_MAX;
-	img->last_lba = 0;
-
 	int writable = 0, ret = 0;
 
 	if (strlen(name))
@@ -246,26 +240,14 @@ static int img_mount(image_t *img, char *name)
 	return 1;
 }
 
-static uint32_t* img_read(image_t *img, uint32_t lba, uint32_t cnt)
+static int img_read(image_t *img, uint32_t lba, void *buf, uint32_t cnt)
 {
-	if (img->cached_lba == UINT32_MAX || lba < img->cached_lba || (lba + cnt) > img->cached_lba + (sizeof(img->buf)/512))
-	{
-		img->cached_lba = UINT32_MAX;
-		if (!FileSeekLBA(&img->f, lba)) return 0;
-		if (!FileReadAdv(&img->f, img->buf, sizeof(img->buf))) return 0;
-		img->cached_lba = lba;
-	}
-
-	return (uint32_t *)(img->buf + ((lba - img->cached_lba) * 512));
+	if (!FileSeekLBA(&img->f, lba)) return 0;
+	return FileReadAdv(&img->f, buf, cnt * 512);
 }
 
 static uint32_t img_write(image_t *img, uint32_t lba, void *buf, uint32_t cnt)
 {
-	if (img->cached_lba != UINT32_MAX && lba >= img->cached_lba && lba < img->cached_lba + (sizeof(img->buf) / 512))
-	{
-		img->cached_lba = UINT32_MAX;
-	}
-
 	if (!FileSeekLBA(&img->f, lba)) return 0;
 	return FileWriteAdv(&img->f, buf, cnt * 512);
 }
@@ -713,7 +695,7 @@ void x86_init()
 	user_io_8bit_set_status(0, UIO_STATUS_RESET);
 }
 
-static void img_io(image_t *img, uint32_t basereg, uint8_t read, uint8_t next)
+static void img_io(image_t *img, uint32_t basereg, uint8_t read, int sz)
 {
 	struct sd_param_t
 	{
@@ -722,42 +704,21 @@ static void img_io(image_t *img, uint32_t basereg, uint8_t read, uint8_t next)
 	};
 
 	static struct sd_param_t sd_params = {};
-	static uint32_t secbuf[128 * 4];
+	static uint32_t secbuf[128 * 16];
+
+	dma_recvbuf(basereg, sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
 
 	int res = 0;
-
-	if (img->last_lba && next)
-	{
-		//printf("%s next: %d\n", read ? "Read" : "Write", img->last_lba);
-		sd_params.lba = img->last_lba;
-		sd_params.cnt = 1;
-	}
-	else
-	{
-		dma_recvbuf(basereg, sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
-	}
-
-	img->last_lba = sd_params.lba + sd_params.cnt;
-
 	if (read)
 	{
-		//printf("Read: 0x%08x, 0x%08x, %d\n", basereg, sd_params.lba, sd_params.cnt);
+		//printf("Read: 0x%08x, %d, %d\n", basereg, sd_params.lba, sd_params.cnt);
 
 		if (img->f.size)
 		{
-			if (sd_params.cnt > 0 && sd_params.cnt <= 4)
+			if (img_read(img, sd_params.lba, &secbuf, sz))
 			{
-				uint32_t *buf = img_read(img, sd_params.lba, sd_params.cnt);
-				if (buf)
-				{
-					dma_sendbuf(basereg + 255, sd_params.cnt * 128, buf);
-					img_read(img, sd_params.lba + 1, 1); //prefetch next
-					res = 1;
-				}
-			}
-			else
-			{
-				printf("Error: Block count %d is out of range 1..4.\n", sd_params.cnt);
+				dma_sendbuf(basereg + 255, sz * 128, secbuf);
+				res = 1;
 			}
 		}
 		else
@@ -767,8 +728,8 @@ static void img_io(image_t *img, uint32_t basereg, uint8_t read, uint8_t next)
 
 		if (!res)
 		{
-			memset(secbuf, 0, sd_params.cnt * 512);
-			dma_sendbuf(basereg + 255, sd_params.cnt * 128, secbuf);
+			memset(secbuf, 0, sz * 512);
+			dma_sendbuf(basereg + 255, sz * 128, secbuf);
 		}
 	}
 	else
@@ -778,7 +739,7 @@ static void img_io(image_t *img, uint32_t basereg, uint8_t read, uint8_t next)
 		dma_recvbuf(basereg + 255, sd_params.cnt * 128, secbuf);
 		if (img->f.size)
 		{
-			if (sd_params.cnt > 0 && sd_params.cnt <= 4)
+			if (sd_params.cnt > 0 && sd_params.cnt <= 16)
 			{
 				if (img->f.mode & O_RDWR)
 				{
@@ -794,7 +755,7 @@ static void img_io(image_t *img, uint32_t basereg, uint8_t read, uint8_t next)
 			}
 			else
 			{
-				printf("Error: Block count %d is out of range 1..4.\n", sd_params.cnt);
+				printf("Error: Block count %d is out of range 1..16.\n", sd_params.cnt);
 			}
 		}
 		else
@@ -843,10 +804,9 @@ void img_io_old(uint8_t sd_req)
 		{
 			if (sd_params.bl_cnt > 0 && sd_params.bl_cnt <= 4)
 			{
-				uint32_t *buf = img_read(img, sd_params.lba, sd_params.bl_cnt);
-				if (buf)
+				if (img_read(img, sd_params.lba, secbuf, sd_params.bl_cnt))
 				{
-					dma_sendbuf(sd_params.addr, sd_params.bl_cnt * 128, buf);
+					dma_sendbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
 					res = 1;
 				}
 			}
@@ -912,11 +872,11 @@ void x86_poll()
 	{
 		if (sd_req & 0x8000)
 		{
-			if (sd_req & 3) img_io(&hdd0_image, HDD0_BASE_NEW, sd_req & 1, sd_req & 4);
+			if (sd_req & 3) img_io(&hdd0_image, HDD0_BASE_NEW, sd_req & 1, 16);
 			sd_req >>= 3;
-			if (sd_req & 3) img_io(&hdd1_image, HDD1_BASE_NEW, sd_req & 1, sd_req & 4);
+			if (sd_req & 3) img_io(&hdd1_image, HDD1_BASE_NEW, sd_req & 1, 16);
 			sd_req >>= 3;
-			if (sd_req & 3) img_io(&fdd0_image, FDD0_BASE_NEW, sd_req & 1, 0);
+			if (sd_req & 3) img_io(&fdd0_image, FDD0_BASE_NEW, sd_req & 1, 1);
 		}
 		else
 		{
