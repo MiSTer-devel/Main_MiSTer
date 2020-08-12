@@ -243,6 +243,7 @@ int GetUARTMode();
 void SetUARTMode(int mode);
 int GetMidiLinkMode();
 void SetMidiLinkMode(int mode);
+void ResetUART();
 
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();

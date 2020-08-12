@@ -612,6 +612,19 @@ void SetMidiLinkMode(int mode)
 	set_uart_alt();
 }
 
+void ResetUART()
+{
+	if (uart_mode)
+	{
+		int mode = GetUARTMode();
+		if (mode != 0)
+		{
+			SetUARTMode(0);
+			SetUARTMode(mode);
+		}
+	}
+}
+
 uint16_t sdram_sz(int sz)
 {
 	int res = 0;
@@ -2019,13 +2032,14 @@ void user_io_send_buttons(char force)
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
 			if (is_pce()) pcecd_reset();
+			if (is_x86()) x86_init();
+			ResetUART();
 		}
 
 		key_map = map;
 		if (user_io_osd_is_visible()) map &= ~BUTTON2;
 		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
-		if ((key_map & BUTTON2) && is_x86()) x86_init();
 	}
 }
 
