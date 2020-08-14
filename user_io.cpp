@@ -569,7 +569,7 @@ void SetUARTMode(int mode)
 {
 	mode &= 0xFF;
 
-	if (is_x86()) x86_set_uart_mode(mode != 3);
+	if (is_x86()) x86_set_uart_mode(mode != 3 || GetMidiLinkMode() >= 2);
 
 	MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
 	MakeFile("/tmp/UART_SPEED", is_st() ? "19200" : (is_x86() && (user_io_8bit_set_status(0, 0, 0) & (1 << 10))) ? "4000000" : "115200");
