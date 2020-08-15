@@ -72,6 +72,8 @@ static const ini_var_t ini_vars[] =
 	{ "BROWSE_EXPAND", (void*)(&(cfg.browse_expand)), UINT8, 0, 1 },
 	{ "LOGO", (void*)(&(cfg.logo)), UINT8, 0, 1 },
 	{ "SHARED_FOLDER", (void*)(&(cfg.shared_folder)), STRING, 0, sizeof(cfg.shared_folder) - 1 },
+	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), UINT16, 0, 0xFFFF },
+	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), UINT16, 0, 0xFFFF },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
