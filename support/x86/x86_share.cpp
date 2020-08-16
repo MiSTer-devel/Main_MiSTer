@@ -523,7 +523,7 @@ static int process_request(void *reqres_buffer)
 			break;
 		}
 
-		if (!FileExists(path))
+		if (!FileExists(path, 0))
 		{
 			res = 2;
 			break;
@@ -645,7 +645,7 @@ static int process_request(void *reqres_buffer)
 		int mode = openmode & 0x3;
 		uint16_t spopres = 0;
 
-		if (FileExists(path))
+		if (FileExists(path, 0))
 		{
 			if ((actioncode & 0xF) == 1)
 			{
