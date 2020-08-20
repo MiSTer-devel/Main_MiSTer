@@ -53,6 +53,7 @@ typedef struct {
 	char video_conf_ntsc[1024];
 	char font[1024];
 	char shared_folder[1024];
+	char player_assign_btn[10];
 } cfg_t;
 
 extern cfg_t cfg;

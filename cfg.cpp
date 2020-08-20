@@ -74,6 +74,7 @@ static const ini_var_t ini_vars[] =
 	{ "SHARED_FOLDER", (void*)(&(cfg.shared_folder)), STRING, 0, sizeof(cfg.shared_folder) - 1 },
 	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), UINT16, 0, 0xFFFF },
 	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), UINT16, 0, 0xFFFF },
+	{ "PLAYER_ASSIGN_BTN", (void*)(&(cfg.player_assign_btn)), STRING, 0, sizeof(cfg.player_assign_btn) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));

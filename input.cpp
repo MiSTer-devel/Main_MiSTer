@@ -1801,7 +1801,16 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		input[dev].has_map++;
 	}
 
-	if (!input[dev].num && ((ev->type == EV_KEY && ev->code == input[dev].mmap[SYS_BTN_A] && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
+	int assign_button = (ev->code >= 256);
+
+	if (!strcmp(cfg.player_assign_btn, "a"))
+		assign_button = (ev->code == input[dev].mmap[SYS_BTN_A]);
+	else if (!strcmp(cfg.player_assign_btn, "b"))
+		assign_button = (ev->code == input[dev].mmap[SYS_BTN_B]);
+	else if (!strcmp(cfg.player_assign_btn, "start"))
+		assign_button = (ev->code == input[dev].mmap[SYS_BTN_START]);
+
+	if (!input[dev].num && ((ev->type == EV_KEY && assign_button && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
 	{
 		for (uint8_t num = 1; num < NUMDEV + 1; num++)
 		{
