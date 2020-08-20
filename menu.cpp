@@ -1222,8 +1222,7 @@ void HandleUI(void)
 		OsdSetTitle(CoreName, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		m = 0;
-		menumask = 0x3ff;
-		OsdWrite(m++);
+		menumask = 0xfff;
 
 		strcpy(s, " Floppy 0: ");
 		strncat(s, get_image_name(0) ? get_image_name(0) : "* no disk *",27);
@@ -1235,39 +1234,47 @@ void HandleUI(void)
 
 		OsdWrite(m++);
 
+		strcpy(s, " HDD 0: ");
+		strncat(s, archie_get_hdd_name(0) ? archie_get_hdd_name(0) : "* no disk *", 27);
+		OsdWrite(m++, s, menusub == 2);
+
+		strcpy(s, " HDD 1: ");
+		strncat(s, archie_get_hdd_name(1) ? archie_get_hdd_name(1) : "* no disk *", 27);
+		OsdWrite(m++, s, menusub == 3);
+
+		OsdWrite(m++);
+
 		strcpy(s, " OS ROM: ");
 		strcat(s, archie_get_rom_name());
-		OsdWrite(m++, s, menusub == 2);
+		OsdWrite(m++, s, menusub == 4);
 
 		OsdWrite(m++);
 
 		strcpy(s, " Aspect ratio:       ");
 		strcat(s, archie_get_ar() ? "16:9" : "4:3");
-		OsdWrite(m++, s, menusub == 3);
+		OsdWrite(m++, s, menusub == 5);
 
 		strcpy(s, " Refresh rate:       ");
 		strcat(s, archie_get_60() ? "Variable" : "60Hz");
-		OsdWrite(m++, s, menusub == 4);
-
-		OsdWrite(m++);
+		OsdWrite(m++, s, menusub == 6);
 
 		sprintf(s, " Stereo mix:         %s", config_stereo_msg[archie_get_amix()]);
-		OsdWrite(m++, s, menusub == 5);
+		OsdWrite(m++, s, menusub == 7);
 
 		strcpy(s, " 25MHz audio fix:    ");
 		strcat(s, archie_get_afix() ? "Enable" : "Disable");
-		OsdWrite(m++, s, menusub == 6);
+		OsdWrite(m++, s, menusub == 8);
 
 		OsdWrite(m++);
 
 		sprintf(s, " Swap joysticks:     %s", user_io_get_joyswap() ? "Yes" : "No");
-		OsdWrite(m++, s, menusub == 7);
+		OsdWrite(m++, s, menusub == 9);
 		sprintf(s, " Swap mouse btn 2/3: %s", archie_get_mswap() ? "Yes" : "No");
-		OsdWrite(m++, s, menusub == 8);
+		OsdWrite(m++, s, menusub == 10);
 
 		while(m<15) OsdWrite(m++);
 
-		OsdWrite(15, STD_EXIT, menusub == 9, 0);
+		OsdWrite(15, STD_EXIT, menusub == 11, 0);
 		menustate = MENU_ARCHIE_MAIN2;
 		parentstate = MENU_ARCHIE_MAIN1;
 
@@ -1281,69 +1288,75 @@ void HandleUI(void)
 	case MENU_ARCHIE_MAIN2:
 		// menu key closes menu
 		if (menu) menustate = MENU_NONE1;
-		if (recent)
+		if (recent && (menusub <= 3))
 		{
-			if (menusub <= 1)
-			{
-				fs_Options = SCANO_DIR | SCANO_UMOUNT;
-				fs_MenuSelect = MENU_ARCHIE_MAIN_FILE_SELECTED;
-				fs_MenuCancel = MENU_ARCHIE_MAIN1;
-				strcpy(fs_pFileExt, "ADF");
-				if (recent_init(500)) menustate = MENU_RECENT1;
-			}
+			fs_Options = SCANO_DIR | SCANO_UMOUNT;
+			fs_MenuSelect = MENU_ARCHIE_MAIN_FILE_SELECTED;
+			fs_MenuCancel = MENU_ARCHIE_MAIN1;
+			strcpy(fs_pFileExt, (menusub <= 1) ? "ADF" : "HDF");
+			if (recent_init((menusub <= 1) ? 500 : 501)) menustate = MENU_RECENT1;
 		}
 
 		if (select || plus || minus)
 		{
-			switch (menusub) {
+			switch (menusub)
+			{
 			case 0:  // Floppy 0
 			case 1:  // Floppy 1
 				if (select)
 				{
 					ioctl_index = 0;
-					SelectFile(Selected_F[menusub], "ADF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
+					SelectFile(Selected_S[menusub], "ADF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				}
 				break;
 
-			case 2:  // Load ROM
+			case 2:  // HDD 0
+			case 3:  // HDD 1
 				if (select)
 				{
 					ioctl_index = 1;
+					SelectFile(Selected_S[menusub], "HDF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
+				}
+				break;
+
+			case 4:  // Load ROM
+				if (select)
+				{
 					SelectFile(Selected_F[menusub], "ROM", 0, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				}
 				break;
 
-			case 3:
+			case 5:
 				archie_set_ar(!archie_get_ar());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 4:
+			case 6:
 				archie_set_60(!archie_get_60());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 5:
+			case 7:
 				archie_set_amix(archie_get_amix() + (minus ? -1 : 1));
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 6:
+			case 8:
 				archie_set_afix(!archie_get_afix());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 7:
+			case 9:
 				user_io_set_joyswap(!user_io_get_joyswap());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 8:
+			case 10:
 				archie_set_mswap(!archie_get_mswap());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 9:  // Exit
+			case 11:  // Exit
 				if (select) menustate = MENU_NONE1;
 				break;
 			}
@@ -1362,18 +1375,25 @@ void HandleUI(void)
 		break;
 
 	case MENU_ARCHIE_MAIN_FILE_SELECTED:
+		menustate = MENU_ARCHIE_MAIN1;
 		if (menusub <= 1)
 		{
 			memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
 			recent_update(SelectedDir, Selected_F[menusub], SelectedLabel, 500);
 			user_io_file_mount(selPath, menusub);
 		}
-		else if (menusub == 2)
+		else if (menusub <= 3)
+		{
+			memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
+			recent_update(SelectedDir, Selected_F[menusub], SelectedLabel, 501);
+			archie_hdd_mount(selPath, menusub - 2);
+		}
+		else if (menusub == 4)
 		{
 			memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
 			archie_set_rom(selPath);
+			menustate = MENU_NONE1;
 		}
-		menustate = MENU_ARCHIE_MAIN1;
 		break;
 
 		/******************************************************************/

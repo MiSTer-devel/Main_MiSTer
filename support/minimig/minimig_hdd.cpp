@@ -397,7 +397,8 @@ static void ATA_IdentifyDevice(uint8_t* tfr, hdfTYPE *hdf)
 	fpga_spi_fast(CMD_IDE_DATA_WR<<8); // write data command
 	fpga_spi_fast(0);
 	fpga_spi_fast(0);
-	fpga_spi_fast_block_write_be((uint16_t*)sector_buffer, 256);
+	if(is_minimig()) fpga_spi_fast_block_write_be((uint16_t*)sector_buffer, 256);
+	else fpga_spi_fast_block_write((uint16_t*)sector_buffer, 256);
 	DisableFpga();
 	WriteStatus(IDE_STATUS_END | IDE_STATUS_IRQ);
 }
@@ -509,7 +510,8 @@ static void SendSector()
 	fpga_spi_fast(CMD_IDE_DATA_WR << 8); // write data command
 	fpga_spi_fast(0);
 	fpga_spi_fast(0);
-	fpga_spi_fast_block_write_be((uint16_t*)sector_buffer, 256);
+	if (is_minimig()) fpga_spi_fast_block_write_be((uint16_t*)sector_buffer, 256);
+	else fpga_spi_fast_block_write((uint16_t*)sector_buffer, 256);
 	DisableFpga();
 }
 
@@ -519,7 +521,8 @@ static void RecvSector()
 	fpga_spi_fast(CMD_IDE_DATA_RD << 8); // read data command
 	fpga_spi_fast(0);
 	fpga_spi_fast(0);
-	fpga_spi_fast_block_read_be((uint16_t*)sector_buffer, 256);
+	if (is_minimig()) fpga_spi_fast_block_read_be((uint16_t*)sector_buffer, 256);
+	else fpga_spi_fast_block_read((uint16_t*)sector_buffer, 256);
 	DisableFpga();
 }
 
@@ -717,21 +720,44 @@ void HandleHDD(uint8_t c1, uint8_t c2)
 	}
 }
 
-uint8_t OpenHardfile(uint8_t unit)
+uint8_t OpenHardfile(uint8_t unit, const char* filename)
 {
 	hdfTYPE *hdf = &HDF[unit];
 	hdf->unit = unit;
 	hdf->enabled = 0;
-	if (minimig_config.enable_ide && minimig_config.hardfile[unit].enabled)
+
+	if (is_minimig())
+	{
+		if (minimig_config.enable_ide && minimig_config.hardfile[unit].enabled)
+		{
+			printf("\nChecking HDD %d\n", unit);
+			if (minimig_config.hardfile[unit].filename[0])
+			{
+				if (FileOpenEx(&hdf->file, minimig_config.hardfile[unit].filename, FileCanWrite(minimig_config.hardfile[unit].filename) ? O_RDWR : O_RDONLY))
+				{
+					hdf->enabled = 1;
+					printf("file: \"%s\": ", hdf->file.name);
+					SetHardfileGeometry(hdf, !strcasecmp(".hdf", minimig_config.hardfile[unit].filename + strlen(minimig_config.hardfile[unit].filename) - 4));
+					printf("size: %llu (%llu MB)\n", hdf->file.size, hdf->file.size >> 20);
+					printf("CHS: %u/%u/%u", hdf->cylinders, hdf->heads, hdf->sectors);
+					printf(" (%llu MB), ", ((((uint64_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
+					printf("Offset: %d\n", hdf->offset);
+					return 1;
+				}
+			}
+			printf("HDD %d: not present\n", unit);
+		}
+	}
+	else
 	{
 		printf("\nChecking HDD %d\n", unit);
-		if (minimig_config.hardfile[unit].filename[0])
+		if (filename[0])
 		{
-			if (FileOpenEx(&hdf->file, minimig_config.hardfile[unit].filename, FileCanWrite(minimig_config.hardfile[unit].filename) ? O_RDWR : O_RDONLY))
+			if (FileOpenEx(&hdf->file, filename, FileCanWrite(filename) ? O_RDWR : O_RDONLY))
 			{
 				hdf->enabled = 1;
 				printf("file: \"%s\": ", hdf->file.name);
-				SetHardfileGeometry(hdf, !strcasecmp(".hdf", minimig_config.hardfile[unit].filename + strlen(minimig_config.hardfile[unit].filename) - 4));
+				SetHardfileGeometry(hdf, 0);
 				printf("size: %llu (%llu MB)\n", hdf->file.size, hdf->file.size >> 20);
 				printf("CHS: %u/%u/%u", hdf->cylinders, hdf->heads, hdf->sectors);
 				printf(" (%llu MB), ", ((((uint64_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
@@ -739,7 +765,6 @@ uint8_t OpenHardfile(uint8_t unit)
 				return 1;
 			}
 		}
-		printf("HDD %d: not present\n", unit);
 	}
 
 	// close if opened earlier.
