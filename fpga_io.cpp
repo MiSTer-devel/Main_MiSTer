@@ -657,6 +657,20 @@ void fpga_spi_en(uint32_t mask, uint32_t en)
 	fpga_gpo_write(en ? gpo | mask : gpo & ~mask);
 }
 
+void fpga_wait_to_reset()
+{
+	printf("FPGA is not ready. JTAG uploading?\n");
+	printf("Waiting for FPGA to be ready...\n");
+
+	fpga_core_reset(1);
+
+	while (!is_fpga_ready(0))
+	{
+		sleep(1);
+	}
+	reboot(0);
+}
+
 uint16_t fpga_spi(uint16_t word)
 {
 	uint32_t gpo = (fpga_gpo_read() & ~(0xFFFF | SSPI_STROBE)) | word;
@@ -671,6 +685,7 @@ uint16_t fpga_spi(uint16_t word)
 		if (gpi < 0)
 		{
 			printf("GPI[31]==1. FPGA is uninitialized?\n");
+			fpga_wait_to_reset();
 			return 0;
 		}
 	} while (!(gpi & SSPI_ACK));
@@ -683,6 +698,7 @@ uint16_t fpga_spi(uint16_t word)
 		if (gpi < 0)
 		{
 			printf("GPI[31]==1. FPGA is uninitialized?\n");
+			fpga_wait_to_reset();
 			return 0;
 		}
 	} while (gpi & SSPI_ACK);

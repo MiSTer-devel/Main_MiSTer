@@ -39,4 +39,6 @@ void reboot(int cold);
 void app_restart(const char *path, const char *xml = 0);
 char *getappname();
 
+void fpga_wait_to_reset();
+
 #endif
