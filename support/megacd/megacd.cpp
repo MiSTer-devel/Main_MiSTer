@@ -178,7 +178,7 @@ int mcd_send_data(uint8_t* buf, int len, uint8_t index) {
 	user_io_set_index(index);
 
 	user_io_set_download(1);
-	user_io_file_tx_write(buf, len);
+	user_io_file_tx_data(buf, len);
 	user_io_set_download(0);
 	return 1;
 }

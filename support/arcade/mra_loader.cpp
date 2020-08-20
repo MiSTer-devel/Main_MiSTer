@@ -60,7 +60,7 @@ void arcade_sw_send()
 	{
 		user_io_set_index(254);
 		user_io_set_download(1);
-		user_io_file_tx_write((uint8_t*)&switches.dip_cur, sizeof(switches.dip_cur));
+		user_io_file_tx_data((uint8_t*)&switches.dip_cur, sizeof(switches.dip_cur));
 		user_io_set_download(0);
 	}
 }
@@ -279,7 +279,7 @@ static void rom_finish(int send, uint32_t address)
 				while (romlen[0] > 0)
 				{
 					uint16_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
-					user_io_file_tx_write(data, chunk);
+					user_io_file_tx_data(data, chunk);
 
 					romlen[0] -= chunk;
 					data += chunk;
@@ -650,9 +650,9 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		int result = buffer_append(arc_info->data, text);
 		if (result<0)
 			printf("buffer_append failed %d\n",result);
-			if (result==-1) 
+			if (result==-1)
 			   printf("-1 no data given\n");
-			if (result==-2) 
+			if (result==-2)
 			   printf("-2 could not allocate\n");
 		}
 		//printf("XML_EVENT_TEXT: text [%s]\n",text);

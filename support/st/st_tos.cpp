@@ -374,7 +374,7 @@ static void fill_tx(uint16_t fill, uint32_t len, int index)
 
 	len /= 2;
 	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
+	spi8(FIO_FILE_TX_DAT);
 	while(len--) spi_w(fill);
 	DisableFpga();
 
@@ -411,7 +411,7 @@ void tos_poll()
 	get_dmastate();
 
 	// check the user button
-	if (!user_io_osd_is_visible() && user_io_user_button())
+	if (!user_io_osd_is_visible() && (user_io_user_button() || user_io_get_kbd_reset()))
 	{
 		if (!timer) timer = GetTimer(1000);
 		else if (timer != 1)

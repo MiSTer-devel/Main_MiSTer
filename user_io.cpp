@@ -1158,16 +1158,59 @@ static void kbd_fifo_poll()
 void user_io_set_index(unsigned char index)
 {
 	EnableFpga();
-	spi8(UIO_FILE_INDEX);
+	spi8(FIO_FILE_INDEX);
 	spi8(index);
 	DisableFpga();
 }
 
-void user_io_set_download(unsigned char enable)
+void user_io_set_download(unsigned char enable, int addr)
 {
 	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(enable ? 0xff : 0x00);
+	spi8(FIO_FILE_TX);
+	spi8(enable ? 0xff : 0);
+	if (enable && addr)
+	{
+		spi_w(addr);
+		spi_w(addr >> 16);
+	}
+	DisableFpga();
+}
+
+void user_io_file_tx_data(const uint8_t *addr, uint16_t len)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX_DAT);
+	spi_write(addr, len, fio_size);
+	DisableFpga();
+}
+
+void user_io_set_upload(unsigned char enable, int addr)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX);
+	spi8(enable ? 0xaa : 0);
+	if (enable && addr)
+	{
+		spi_w(addr);
+		spi_w(addr >> 16);
+	}
+	DisableFpga();
+}
+
+void user_io_file_rx_data(uint8_t *addr, uint16_t len)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX_DAT);
+	spi_read(addr, len, fio_size);
+	DisableFpga();
+}
+
+void user_io_file_info(const char *ext)
+{
+	EnableFpga();
+	spi8(FIO_FILE_INFO);
+	spi_w(toupper(ext[0]) << 8 | toupper(ext[1]));
+	spi_w(toupper(ext[2]) << 8 | toupper(ext[3]));
 	DisableFpga();
 }
 
@@ -1532,7 +1575,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 		user_io_set_index(index);
 
 		user_io_set_download(1);
-		user_io_file_tx_write(col_attr, type ? 1024 : 1025);
+		user_io_file_tx_data(col_attr, type ? 1024 : 1025);
 		user_io_set_download(0);
 	}
 }
@@ -1590,14 +1633,6 @@ static void tx_progress(const char* name, unsigned int progress)
 	buf[PROGRESS_CNT] = 0;
 
 	InfoMessage(progress_buf, 2000, "Loading");
-}
-
-void user_io_file_tx_write(const uint8_t *addr, uint16_t len)
-{
-	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
-	spi_write(addr, len, fio_size);
-	DisableFpga();
 }
 
 static void show_core_info(int info_n)
@@ -1778,11 +1813,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	int len = strlen(f.name);
 	char *p = f.name + len - 4;
-	EnableFpga();
-	spi8(UIO_FILE_INFO);
-	spi_w(toupper(p[0]) << 8 | toupper(p[1]));
-	spi_w(toupper(p[2]) << 8 | toupper(p[3]));
-	DisableFpga();
+	user_io_file_info(p);
 
 	// prepare transmission of new file
 	user_io_set_download(1);
@@ -1792,7 +1823,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		printf("Load SNES ROM.\n");
 		uint8_t* buf = snes_get_header(&f);
 		hexdump(buf, 16, 0);
-		user_io_file_tx_write(buf, 512);
+		user_io_file_tx_data(buf, 512);
 
 		//strip original SNES ROM header if present (not used)
 		if (bytes2send & 512)
@@ -1831,7 +1862,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				{
 					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fg, buf, chunk);
-					user_io_file_tx_write(buf, chunk);
+					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
 				}
 				FileClose(&fg);
@@ -1844,7 +1875,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
-		user_io_file_tx_write(buf, chunk);
+		user_io_file_tx_data(buf, chunk);
 
 		if (use_progress)
 		{
@@ -2028,7 +2059,6 @@ void user_io_send_buttons(char force)
 		//special reset for some cores
 		if (!user_io_osd_is_visible() && (key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
 			if (is_pce()) pcecd_reset();
@@ -2041,6 +2071,11 @@ void user_io_send_buttons(char force)
 		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
 	}
+}
+
+int user_io_get_kbd_reset()
+{
+	return kbd_reset;
 }
 
 void user_io_set_ini(int ini_num)
