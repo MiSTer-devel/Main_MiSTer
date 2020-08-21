@@ -1801,32 +1801,41 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		input[dev].has_map++;
 	}
 
-	if (!input[dev].num && ((ev->type == EV_KEY && ev->code == input[dev].mmap[SYS_BTN_A] && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
+	if (!input[dev].num)
 	{
-		for (uint8_t num = 1; num < NUMDEV + 1; num++)
+		int assign_btn = (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL);
+		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1)
 		{
-			int found = 0;
-			for (int i = 0; i < NUMDEV; i++)
-			{
-				// paddles/spinners overlay on top of other gamepad
-				if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
-				{
-					found = (input[i].num == num);
-					if (found) break;
-				}
-			}
+			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_START; i++) if (ev->code == input[dev].mmap[i]) assign_btn = 1;
+		}
 
-			if (!found)
+		if (assign_btn)
+		{
+			for (uint8_t num = 1; num < NUMDEV + 1; num++)
 			{
-				input[dev].num = num;
-				store_player(num, dev);
-				printf("Device %s assigned to player %d\n", input[dev].id, input[dev].num);
-				break;
+				int found = 0;
+				for (int i = 0; i < NUMDEV; i++)
+				{
+					// paddles/spinners overlay on top of other gamepad
+					if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
+					{
+						found = (input[i].num == num);
+						if (found) break;
+					}
+				}
+
+				if (!found)
+				{
+					input[dev].num = num;
+					store_player(num, dev);
+					printf("Device %s assigned to player %d\n", input[dev].id, input[dev].num);
+					break;
+				}
 			}
 		}
 	}
 
-	if (!input[dev].map_shown && input[dev].num && ((ev->type == EV_KEY && ev->code == input[dev].mmap[SYS_BTN_A] && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
+	if (!input[dev].map_shown && input[dev].num)
 	{
 		input[dev].map_shown = 1;
 		store_player(input[dev].num, dev);
