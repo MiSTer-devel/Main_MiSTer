@@ -836,6 +836,47 @@ static void vga_nag()
 	EnableOsd_on(OSD_ALL);
 }
 
+void process_addon(char *ext, uint8_t idx)
+{
+	static char name[1024];
+
+	while (*ext && *ext != ',') ext++;
+	if (*ext) ext++;
+	if (!*ext) return;
+
+	printf("addons: %s\n", ext);
+
+	int i = 0;
+	while (1)
+	{
+		char *fname = name;
+		strcpy(name, selPath);
+		char *p = strrchr(name, '.');
+		if (!p) p = name + strlen(name);
+		*p++ = '.';
+
+		substrcpy(p, ext, i);
+		if (!strlen(p)) return;
+		if (*p == '!')
+		{
+			*p = 0;
+			char *bs = strrchr(name, '/');
+			if (!bs)
+			{
+				fname = p + 1;
+			}
+			else
+			{
+				strcpy(bs + 1, p + 1);
+			}
+		}
+
+		printf("Trying: %s\n", fname);
+		user_io_file_tx_a(fname, ((i+1) << 8) | idx);
+		i++;
+	}
+}
+
 static int joymap_first = 0;
 
 static int wm_x = 0;
@@ -886,6 +927,7 @@ void HandleUI(void)
 	static int menusub_parent = 0;
 	static char title[32] = {};
 	static uint32_t saved_menustate = 0;
+	static char addon[1024];
 
 	static char	cp_MenuCancel;
 
@@ -1736,6 +1778,8 @@ void HandleUI(void)
 				uint32_t entry = 0;
 				int i = 1;
 
+				addon[0] = 0;
+
 				while (1)
 				{
 					p = user_io_get_confstr(i++);
@@ -1775,8 +1819,18 @@ void HandleUI(void)
 					}
 
 					if (!inpage || h || p[0] < 'A') continue;
+
+					// supplement files
+					if (p[0] == 'f')
+					{
+						strcpy(addon, p);
+						continue;
+					}
+
 					if (entry == menusub) break;
 					entry++;
+
+					if (p[0] == 'F' || p[0] == 'S') addon[0] = 0;
 				}
 
 				if (!d)
@@ -1957,56 +2011,70 @@ void HandleUI(void)
 		break;
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
-		MenuHide();
-		printf("File selected: %s\n", selPath);
-		memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
+		{
+			MenuHide();
+			printf("File selected: %s\n", selPath);
+			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
 
-		if (fs_Options & SCANO_NEOGEO)
-		{
-			neogeo_romset_tx(selPath);
-		}
-		else
-		{
-			if (is_pce())
+			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
+			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
+
+			if (fs_Options & SCANO_NEOGEO)
 			{
-				pcecd_set_image(0, "");
-				pcecd_reset();
+				neogeo_romset_tx(selPath);
 			}
-			user_io_store_filename(selPath);
-			user_io_file_tx(selPath, user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index, opensave);
-			if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
-		}
+			else
+			{
+				if (is_pce())
+				{
+					pcecd_set_image(0, "");
+					pcecd_reset();
+				}
+				user_io_store_filename(selPath);
+				user_io_file_tx(selPath, idx, opensave);
+				if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
+			}
 
-		recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
+			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
+
+			recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
+		}
 		break;
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
-		menustate = selPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
-		HandleUI();
+		{
+			menustate = selPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
+			HandleUI();
 
-		printf("Image selected: %s\n", selPath);
-		memcpy(Selected_S[ioctl_index & 3], selPath, sizeof(Selected_S[ioctl_index & 3]));
+			printf("Image selected: %s\n", selPath);
+			memcpy(Selected_S[ioctl_index & 3], selPath, sizeof(Selected_S[ioctl_index & 3]));
 
-		if (is_x86())
-		{
-			x86_set_image(ioctl_index, selPath);
-		}
-		else if (is_megacd())
-		{
-			mcd_set_image(ioctl_index, selPath);
-		}
-		else if (is_pce())
-		{
-			pcecd_set_image(ioctl_index, selPath);
-			cheats_init(selPath, 0);
-		}
-		else
-		{
-			user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
-			user_io_file_mount(selPath, ioctl_index);
-		}
+			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
+			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
-		recent_update(SelectedDir, Selected_S[ioctl_index & 3], SelectedLabel, ioctl_index + 500);
+			if (is_x86())
+			{
+				x86_set_image(ioctl_index, selPath);
+			}
+			else if (is_megacd())
+			{
+				mcd_set_image(ioctl_index, selPath);
+			}
+			else if (is_pce())
+			{
+				pcecd_set_image(ioctl_index, selPath);
+				cheats_init(selPath, 0);
+			}
+			else
+			{
+				user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
+				user_io_file_mount(selPath, ioctl_index);
+			}
+
+			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
+
+			recent_update(SelectedDir, Selected_S[ioctl_index & 3], SelectedLabel, ioctl_index + 500);
+		}
 		break;
 
 	case MENU_8BIT_SYSTEM1:

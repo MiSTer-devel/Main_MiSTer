@@ -1163,6 +1163,14 @@ void user_io_set_index(unsigned char index)
 	DisableFpga();
 }
 
+void user_io_set_aindex(uint16_t index)
+{
+	EnableFpga();
+	spi8(FIO_FILE_INDEX);
+	spi_w(index);
+	DisableFpga();
+}
+
 void user_io_set_download(unsigned char enable, int addr)
 {
 	EnableFpga();
@@ -1782,6 +1790,60 @@ static int process_ss(const char *rom_name)
 		}
 	}
 
+	return 1;
+}
+
+int user_io_file_tx_a(const char* name, uint16_t index)
+{
+	fileTYPE f = {};
+	static uint8_t buf[4096];
+
+	if (!FileOpen(&f, name, 1)) return 0;
+
+	unsigned long bytes2send = f.size;
+
+	/* transmit the entire file using one transfer */
+	printf("Addon file %s with %lu bytes to send for index %04X\n", name, bytes2send, index);
+
+	// set index byte (0=bios rom, 1-n=OSD entry index)
+	user_io_set_aindex(index);
+
+	// prepare transmission of new file
+	user_io_set_download(1);
+
+	int use_progress = 1;
+	int size = bytes2send;
+	int progress = -1;
+	if (use_progress) MenuHide();
+
+	while (bytes2send)
+	{
+		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+
+		FileReadAdv(&f, buf, chunk);
+		user_io_file_tx_data(buf, chunk);
+
+		if (use_progress)
+		{
+			int new_progress = PROGRESS_MAX - ((((uint64_t)bytes2send)*PROGRESS_MAX) / size);
+			if (progress != new_progress)
+			{
+				progress = new_progress;
+				tx_progress(f.name, progress);
+			}
+		}
+		bytes2send -= chunk;
+	}
+
+	// check if core requests some change while downloading
+	check_status_change();
+
+	printf("Done.\n");
+	FileClose(&f);
+
+	// signal end of transmission
+	user_io_set_download(0);
+	MenuHide();
 	return 1;
 }
 
