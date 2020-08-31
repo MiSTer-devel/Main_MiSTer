@@ -2003,10 +2003,19 @@ void HandleUI(void)
 			menustate = MENU_8BIT_SYSTEM1;
 			menusub = 0;
 		}
-		else if (left && !page)
+		else if (left)
 		{
-			menustate = MENU_8BIT_INFO;
-			menusub = 3;
+			if (page)
+			{
+				menustate = MENU_8BIT_MAIN1;
+				menusub = menusub_parent;
+				page = 0;
+			}
+			else
+			{
+				menustate = MENU_8BIT_INFO;
+				menusub = 3;
+			}
 		}
 		break;
 
@@ -3512,7 +3521,7 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		else if (back)
+		else if (back || left)
 		{
 			menustate = MENU_ST_MAIN1;
 			menusub = 4;
@@ -3707,7 +3716,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_LOAD_CONFIG2:
-		if (menu)
+		if (menu || left)
 		{
 			menustate = MENU_ST_MAIN1;
 			menusub = 5;
@@ -3757,7 +3766,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_SAVE_CONFIG2:
-		if (menu)
+		if (menu || left)
 		{
 			menustate = MENU_ST_MAIN1;
 			menusub = 6;
@@ -4032,7 +4041,7 @@ void HandleUI(void)
 				menusub = 10;
 			}
 		}
-		if (menu) // exit menu
+		if (menu || left) // exit menu
 		{
 			menustate = MENU_MAIN1;
 			menusub = 10;
@@ -4512,7 +4521,7 @@ void HandleUI(void)
 			menusub = 9;
 		}
 		else
-		if (menu) // exit menu
+		if (menu || left) // exit menu
 		{
 			menustate = MENU_MAIN1;
 			menusub = 9;
@@ -4653,20 +4662,10 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		else if (back)
+		else if (back || left)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 6;
-		}
-		else if (right)
-		{
-			menustate = MENU_SETTINGS_MEMORY1;
-			menusub = 0;
-		}
-		else if (left)
-		{
-			menustate = MENU_SETTINGS_HARDFILE1;
-			menusub = 0;
 		}
 		break;
 
@@ -4760,20 +4759,10 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		else if (back)
+		else if (back || left)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 7;
-		}
-		else if (right)
-		{
-			menustate = MENU_SETTINGS_VIDEO1;
-			menusub = 0;
-		}
-		else if (left)
-		{
-			menustate = MENU_SETTINGS_CHIPSET1;
-			menusub = 0;
 		}
 		break;
 
@@ -4834,6 +4823,8 @@ void HandleUI(void)
 		break;
 
 	case MENU_SETTINGS_HARDFILE2:
+		saved_menustate = MENU_SETTINGS_HARDFILE1;
+
 		if (select || recent)
 		{
 			if (menusub == 0)
@@ -4877,20 +4868,14 @@ void HandleUI(void)
 			}
 		}
 
-		if (menu) // return to previous menu
+		if (menu)
+		{
+			menustate = MENU_NONE1;
+		}
+		else if (back || left)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 5;
-		}
-		else if (right)
-		{
-			menustate = MENU_SETTINGS_CHIPSET1;
-			menusub = 0;
-		}
-		else if (left)
-		{
-			menustate = MENU_SETTINGS_VIDEO1;
-			menusub = 0;
 		}
 		break;
 
@@ -5057,20 +5042,10 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		else if (back)
+		else if (back || left)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 8;
-		}
-		else if (right)
-		{
-			menustate = MENU_SETTINGS_HARDFILE1;
-			menusub = 0;
-		}
-		else if (left)
-		{
-			menustate = MENU_SETTINGS_MEMORY1;
-			menusub = 0;
 		}
 		break;
 
