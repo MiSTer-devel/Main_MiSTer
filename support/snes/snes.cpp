@@ -165,16 +165,20 @@ uint8_t* snes_get_header(fileTYPE *f)
 				hdr[1] = (addr == 0x00ffc0) ? 1 : (addr == 0x40ffc0) ? 2 : 0;
 
 				//DSPn types 8..B
-				if ((buf[addr + Mapper] == 0x20 || buf[addr + Mapper] == 0x21) && buf[addr + RomType] == 0x03)
+				if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0x03)
 				{	//DSP1
+					hdr[1] |= 0x84;
+				}
+				else if (buf[addr + Mapper] == 0x21 && buf[addr + RomType] == 0x03)
+				{	//DSP1B
 					hdr[1] |= 0x80;
 				}
 				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x05 && buf[addr + Company] != 0xb2)
-				{	//DSP1
+				{	//DSP1B
 					hdr[1] |= 0x80;
 				}
 				else if (buf[addr + Mapper] == 0x31 && (buf[addr + RomType] == 0x03 || buf[addr + RomType] == 0x05))
-				{	//DSP1
+				{	//DSP1B
 					hdr[1] |= 0x80;
 				}
 				else if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0x05)
