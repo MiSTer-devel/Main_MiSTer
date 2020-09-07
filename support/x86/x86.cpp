@@ -61,7 +61,7 @@
 #define FDD1_BASE_NEW        0xF300
 #define RTC_BASE_NEW         0xF400
 
-#define CFG_VER          2
+#define CFG_VER         3
 
 #define SHMEM_ADDR      0x30000000
 #define BIOS_SIZE       0x10000
@@ -73,7 +73,8 @@ static int newcore = 0;
 typedef struct
 {
 	uint32_t ver;
-	char fdd_name[1024];
+	char fdd0_name[1024];
+	char fdd1_name[1024];
 	char hdd0_name[1024];
 	char hdd1_name[1024];
 } x86_config;
@@ -196,17 +197,39 @@ static int load_bios(const char* name, uint8_t index)
 	return 1;
 }
 
-static bool floppy_is_160k = false;
-static bool floppy_is_180k = false;
-static bool floppy_is_320k = false;
-static bool floppy_is_360k = false;
-static bool floppy_is_720k = false;
-static bool floppy_is_1_2m = false;
-static bool floppy_is_1_44m= false;
-static bool floppy_is_1_68m= false;
-static bool floppy_is_2_88m= false;
+#define FDD_TYPE_NONE 0
+#define FDD_TYPE_160  1
+#define FDD_TYPE_180  2
+#define FDD_TYPE_320  3
+#define FDD_TYPE_360  4
+#define FDD_TYPE_720  5
+#define FDD_TYPE_1200 6
+#define FDD_TYPE_1440 7
+#define FDD_TYPE_1680 8
+#define FDD_TYPE_2880 9
 
-#define CMOS_FDD_TYPE ((floppy_is_2_88m) ? 0x50 : (floppy_is_1_44m || floppy_is_1_68m) ? 0x40 : (floppy_is_720k) ? 0x30 : (floppy_is_1_2m) ? 0x20 : 0x10)
+static char floppy_type[2] = { FDD_TYPE_NONE, FDD_TYPE_NONE };
+
+static uint8_t get_fdd_bios_type(char type)
+{
+	switch (type)
+	{
+	case FDD_TYPE_2880:
+		return 0x5;
+
+	case FDD_TYPE_1440:
+	case FDD_TYPE_1680:
+		return 0x4;
+
+	case FDD_TYPE_720:
+		return 0x3;
+
+	case FDD_TYPE_1200:
+		return 0x2;
+	}
+
+	return 0x1;
+}
 
 struct image_t
 {
@@ -214,6 +237,7 @@ struct image_t
 };
 
 static image_t fdd0_image = {};
+static image_t fdd1_image = {};
 static image_t hdd0_image = {};
 static image_t hdd1_image = {};
 static bool boot_from_floppy = 1;
@@ -252,7 +276,6 @@ static uint32_t img_write(image_t *img, uint32_t lba, void *buf, uint32_t cnt)
 	return FileWriteAdv(&img->f, buf, cnt * 512);
 }
 
-static uint32_t cmos[128];
 static int floppy_wait_cycles;
 
 static void set_clock()
@@ -303,39 +326,33 @@ static void set_clock()
 	IOWR(RTC_BASE_OLD, 129, (int)(122070.0 / (1000000000.0 / cpu_clock)));
 }
 
-static int fdd_set(char* filename)
+static void fdd_set(int num, char* filename)
 {
-	floppy_is_160k = false;
-	floppy_is_180k = false;
-	floppy_is_320k = false;
-	floppy_is_360k = false;
-	floppy_is_720k = false;
-	floppy_is_1_2m = false;
-	floppy_is_1_44m = false;
-	floppy_is_1_68m = false;
-	floppy_is_2_88m = false;
+	if (!newcore && num) return;
+
+	floppy_type[num] = FDD_TYPE_1440;
 
 	uint32_t base = newcore ? FDD0_BASE_NEW : FLOPPY0_BASE_OLD;
+	image_t *fdd_image = num ? &fdd1_image : &fdd0_image;
 
-	int floppy = img_mount(&fdd0_image, filename);
-	uint32_t size = fdd0_image.f.size/512;
+	int floppy = img_mount(fdd_image, filename);
+	uint32_t size = fdd_image->f.size/512;
 	printf("floppy size: %d blks\n", size);
 	if (floppy && size)
 	{
-		if (size >= 5760) floppy_is_2_88m = true;
-		else if (size >= 3360) floppy_is_1_68m = true;
-		else if (size >= 2880) floppy_is_1_44m = true;
-		else if (size >= 2400) floppy_is_1_2m = true;
-		else if (size >= 1440) floppy_is_720k = true;
-		else if (size >= 720) floppy_is_360k = true;
-		else if (size >= 640) floppy_is_320k = true;
-		else if (size >= 360) floppy_is_180k = true;
-		else floppy_is_160k = true;
+		if (size >= 5760) floppy_type[num] = FDD_TYPE_2880;
+		else if (size >= 3360) floppy_type[num] = FDD_TYPE_1680;
+		else if (size >= 2880) floppy_type[num] = FDD_TYPE_1440;
+		else if (size >= 2400) floppy_type[num] = FDD_TYPE_1200;
+		else if (size >= 1440) floppy_type[num] = FDD_TYPE_720;
+		else if (size >= 720) floppy_type[num] = FDD_TYPE_360;
+		else if (size >= 640) floppy_type[num] = FDD_TYPE_320;
+		else if (size >= 360) floppy_type[num] = FDD_TYPE_180;
+		else floppy_type[num] = FDD_TYPE_160;
 	}
 	else
 	{
 		floppy = 0;
-		floppy_is_1_44m = true;
 	}
 
 	/*
@@ -354,20 +371,23 @@ static int fdd_set(char* filename)
 	0x0C.[7:0]:    media type: 8'h20 none; 8'h00 old; 8'hC0 720k; 8'h80 1_44M; 8'h40 2_88M
 	*/
 
-	int floppy_spt =
-		(floppy_is_160k) ? 8 :
-		(floppy_is_180k) ? 9 :
-		(floppy_is_320k) ? 8 :
-		(floppy_is_360k) ? 9 :
-		(floppy_is_720k) ? 9 :
-		(floppy_is_1_2m) ? 15 :
-		(floppy_is_1_44m) ? 18 :
-		(floppy_is_1_68m) ? 21 :
-		(floppy_is_2_88m) ? 36 :
-		0;
+	int floppy_spt = 0;
+	int floppy_cylinders = 0;
+	int floppy_heads = 0;
 
-	int floppy_cylinders     = (floppy_is_2_88m || floppy_is_1_68m || floppy_is_1_44m || floppy_is_1_2m || floppy_is_720k) ? 80 : 40;
-	int floppy_heads         = (floppy_is_160k || floppy_is_180k) ? 1 : 2;
+	switch (floppy_type[num])
+	{
+	case FDD_TYPE_160:  floppy_spt = 8;  floppy_cylinders = 40; floppy_heads = 1; break;
+	case FDD_TYPE_180:  floppy_spt = 9;  floppy_cylinders = 40; floppy_heads = 1; break;
+	case FDD_TYPE_320:  floppy_spt = 8;  floppy_cylinders = 40; floppy_heads = 2; break;
+	case FDD_TYPE_360:  floppy_spt = 9;  floppy_cylinders = 40; floppy_heads = 2; break;
+	case FDD_TYPE_720:  floppy_spt = 9;  floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_1200: floppy_spt = 15; floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_1440: floppy_spt = 18; floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_1680: floppy_spt = 21; floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_2880: floppy_spt = 36; floppy_cylinders = 80; floppy_heads = 2; break;
+	}
+
 	int floppy_total_sectors = floppy_spt * floppy_heads * floppy_cylinders;
 	floppy_wait_cycles       = 200000000 / floppy_spt;
 
@@ -377,31 +397,17 @@ static int fdd_set(char* filename)
 	printf("  spt:           %d\n", floppy_spt);
 	printf("  total_sectors: %d\n\n", floppy_total_sectors);
 
-	int floppy_media =
-		(!floppy) ? 0x20 :
-		(floppy_is_160k) ? 0x00 :
-		(floppy_is_180k) ? 0x00 :
-		(floppy_is_320k) ? 0x00 :
-		(floppy_is_360k) ? 0x00 :
-		(floppy_is_720k) ? 0xC0 :
-		(floppy_is_1_2m) ? 0x00 :
-		(floppy_is_1_44m) ? 0x80 :
-		(floppy_is_2_88m) ? 0x40 :
-		0x20;
-
-	IOWR(base, 0x0, floppy ? 1 : 0);
-	IOWR(base, 0x1, (floppy && (fdd0_image.f.mode & O_RDWR)) ? 0 : 1);
-	IOWR(base, 0x2, floppy_cylinders);
-	IOWR(base, 0x3, floppy_spt);
-	IOWR(base, 0x4, floppy_total_sectors);
-	IOWR(base, 0x5, floppy_heads);
-	IOWR(base, 0x6, 0); // base LBA
-	IOWR(base, 0xC, floppy_media);
+	uint32_t subaddr = num << 7;
+	IOWR(base + subaddr, 0x0, floppy ? 1 : 0);
+	IOWR(base + subaddr, 0x1, (floppy && (fdd_image->f.mode & O_RDWR)) ? 0 : 1);
+	IOWR(base + subaddr, 0x2, floppy_cylinders);
+	IOWR(base + subaddr, 0x3, floppy_spt);
+	IOWR(base + subaddr, 0x4, floppy_total_sectors);
+	IOWR(base + subaddr, 0x5, floppy_heads);
+	IOWR(base + subaddr, 0x6, 0); // base LBA
+	IOWR(base + subaddr, 0xC, 0);
 
 	if(!newcore) set_clock();
-
-	//cmos_set(0x10, CMOS_FDD_TYPE);
-	return floppy;
 }
 
 static int hdd_set(uint32_t num, char* filename)
@@ -581,7 +587,8 @@ void x86_init()
 		IOWR(PC_BUS_BASE_OLD, 1, 0x000000F0);
 	}
 
-	fdd_set(config.fdd_name);
+	fdd_set(0, config.fdd0_name);
+	fdd_set(1, config.fdd1_name);
 	hdd_set(0, config.hdd0_name);
 	hdd_set(1, config.hdd1_name);
 
@@ -594,14 +601,15 @@ void x86_init()
 	struct tm tm = *localtime(&t);
 
 	//rtc contents 0-127
-	uint32_t tmp[128] = {
+	uint8_t cmos[128] =
+	{
 		bin2bcd(tm.tm_sec), //0x00: SEC BCD
 		0x00, //0x01: ALARM SEC BCD
 		bin2bcd(tm.tm_min), //0x02: MIN BCD
 		0x00, //0x03: ALARM MIN BCD
 		bin2bcd(tm.tm_hour), //0x04: HOUR BCD 24h
 		0x12, //0x05: ALARM HOUR BCD 24h
-		(uint32_t)tm.tm_wday + 1, //0x06: DAY OF WEEK Sunday=1
+		(uint8_t)(tm.tm_wday + 1), //0x06: DAY OF WEEK Sunday=1
 		bin2bcd(tm.tm_mday), //0x07: DAY OF MONTH BCD from 1
 		bin2bcd(tm.tm_mon + 1), //0x08: MONTH BCD from 1
 		bin2bcd((tm.tm_year < 117) ? 17 : tm.tm_year - 100), //0x09: YEAR BCD
@@ -612,11 +620,11 @@ void x86_init()
 		0x00, //0x0E: REG E - POST status
 		0x00, //0x0F: REG F - shutdown status
 
-		(uint32_t)CMOS_FDD_TYPE, //0x10: floppy drive type; 0-none, 1-360K, 2-1.2M, 3-720K, 4-1.44M, 5-2.88M
+		(uint8_t)((get_fdd_bios_type(floppy_type[0])<<4) | (newcore ? get_fdd_bios_type(floppy_type[1]) : 0)),
 		0x00, //0x11: configuration bits; not used
 		0x00, //0x12: hard disk types; 0-none, 1:E-type, F-type 16+ (unused)
 		0x00, //0x13: advanced configuration bits; not used
-		0x0D, //0x14: equipment bits
+		0x4D, //0x14: equipment bits
 		0x80, //0x15: base memory in 1k LSB
 		0x02, //0x16: base memory in 1k MSB
 		0x00, //0x17: memory size above 1m in 1k LSB
@@ -644,7 +652,7 @@ void x86_init()
 		0x00, //0x2B: hd 1 configuration 8/9; landing zone high
 		0x00, //0x2C: hd 1 configuration 9/9; sectors/track
 
-		(fdd0_image.f.size && boot_from_floppy) ? 0x20u : 0x00u, //0x2D: boot sequence
+		(uint8_t)((fdd0_image.f.size && boot_from_floppy) ? 0x20 : 0x00), //0x2D: boot sequence
 
 		0x00, //0x2E: checksum MSB
 		0x00, //0x2F: checksum LSB
@@ -679,9 +687,7 @@ void x86_init()
 		0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0, 0, 0
 	};
 
-	printf("cmod[2d] = %x\n", tmp[0x2d]);
-
-	memcpy(cmos, tmp, sizeof(cmos));
+	printf("cmos[0x2D] = %x\n", cmos[0x2d]);
 
 	//count checksum
 	unsigned short sum = 0;
@@ -689,7 +695,7 @@ void x86_init()
 
 	cmos[0x2E] = sum >> 8;
 	cmos[0x2F] = sum & 0xFF;
-	for (unsigned int i = 0; i < sizeof(cmos) / sizeof(uint32_t); i++) IOWR(newcore ? RTC_BASE_NEW : RTC_BASE_OLD, i, cmos[i]);
+	for (unsigned int i = 0; i < sizeof(cmos) / sizeof(cmos[0]); i++) IOWR(newcore ? RTC_BASE_NEW : RTC_BASE_OLD, i, cmos[i]);
 
 	x86_share_reset();
 	user_io_8bit_set_status(0, UIO_STATUS_RESET);
@@ -707,6 +713,13 @@ static void img_io(image_t *img, uint32_t basereg, uint8_t read, int sz)
 	static uint32_t secbuf[128 * 16];
 
 	dma_recvbuf(basereg, sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
+
+	if (sz == 1 && (sd_params.lba >> 31))
+	{
+		// Floppy B:
+		sd_params.lba &= 0x7FFFFFFF;
+		img = &fdd1_image;
+	}
 
 	int res = 0;
 	if (read)
@@ -890,9 +903,15 @@ void x86_set_image(int num, char *filename)
 	switch (num)
 	{
 	case 0:
-		memset(config.fdd_name, 0, sizeof(config.fdd_name));
-		strcpy(config.fdd_name, filename);
-		fdd_set(filename);
+		memset(config.fdd0_name, 0, sizeof(config.fdd0_name));
+		strcpy(config.fdd0_name, filename);
+		fdd_set(0, filename);
+		break;
+
+	case 1:
+		memset(config.fdd1_name, 0, sizeof(config.fdd1_name));
+		strcpy(config.fdd1_name, filename);
+		fdd_set(1, filename);
 		break;
 
 	case 2:
