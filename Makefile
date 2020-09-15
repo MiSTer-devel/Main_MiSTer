@@ -48,7 +48,7 @@ OBJ	= $(C_SRC:.c=.c.o) $(CPP_SRC:.cpp=.cpp.o) $(IMG:.png=.png.o)
 DEP	= $(C_SRC:.c=.c.d) $(CPP_SRC:.cpp=.cpp.d)
 
 DFLAGS	= $(INCLUDE) -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
-CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -c -O3
+CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -Wno-psabi -c -O3
 LFLAGS	= -lc -lstdc++ -lrt $(IMLIB2_LIB)
 
 $(PRJ): $(OBJ)
