@@ -1180,8 +1180,8 @@ void HandleUI(void)
 			       menu, select, up, down,
 			       left, right, plus, minus);
 
-	switch (menustate)
-	{
+    switch (menustate)
+    {
 	case MENU_NONE1:
 	case MENU_NONE2:
 	case MENU_INFO:
@@ -1191,11 +1191,11 @@ void HandleUI(void)
 	default:
 		saved_menustate = 0;
 		break;
-	}
+    }
 
 	// Switch to current menu screen
-	switch (menustate)
-	{
+    switch (menustate)
+    {
 		/******************************************************************/
 		/* no menu selected                                               */
 		/******************************************************************/
