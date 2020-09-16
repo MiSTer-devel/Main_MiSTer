@@ -1167,35 +1167,35 @@ void HandleUI(void)
 		}
 	}
 
-    // SHARPMZ Series Menu - This has been located within the sharpmz.cpp code base in order to keep updates to common code
-    // base to a minimum and shrink its size. The UI is called with the basic state data and it handles everything internally,
-    // only updating values in this function as necessary.
-    //
-    if (user_io_core_type() == CORE_TYPE_SHARPMZ)
-        sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_8BIT_SYSTEM1, MENU_FILE_SELECT1,
-			       &parentstate, &menustate, &menusub, &menusub_last,
-			       &menumask, Selected_F[0], &helptext, helptext_custom,
-			       &fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel,
-			       fs_pFileExt,
-			       menu, select, up, down,
-			       left, right, plus, minus);
+	// SHARPMZ Series Menu - This has been located within the sharpmz.cpp code base in order to keep updates to common code
+	// base to a minimum and shrink its size. The UI is called with the basic state data and it handles everything internally,
+	// only updating values in this function as necessary.
+	//
+	if (user_io_core_type() == CORE_TYPE_SHARPMZ)
+		sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_8BIT_SYSTEM1, MENU_FILE_SELECT1,
+			   &parentstate, &menustate, &menusub, &menusub_last,
+			   &menumask, Selected_F[0], &helptext, helptext_custom,
+			   &fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel,
+			   fs_pFileExt,
+			   menu, select, up, down,
+			   left, right, plus, minus);
 
-    switch (menustate)
-    {
-	case MENU_NONE1:
-	case MENU_NONE2:
-	case MENU_INFO:
-	case MENU_ERROR:
-		break;
+	switch (menustate)
+	{
+		case MENU_NONE1:
+		case MENU_NONE2:
+		case MENU_INFO:
+		case MENU_ERROR:
+			break;
 
-	default:
-		saved_menustate = 0;
-		break;
-    }
+		default:
+			saved_menustate = 0;
+			break;
+	}
 
 	// Switch to current menu screen
-    switch (menustate)
-    {
+	switch (menustate)
+	{
 		/******************************************************************/
 		/* no menu selected                                               */
 		/******************************************************************/
