@@ -1,7 +1,7 @@
 # makefile to fail if any command in pipe is failed.
 SHELL = /bin/bash -o pipefail
 
-# using gcc version 5.4.1 20161213 (Linaro GCC 5.4-2017.01-rc2)
+# using gcc version 6.3.0 20170516 (Linaro GCC 6.3-2017.05)
 BASE    = arm-linux-gnueabihf
 
 CC      = $(BASE)-gcc
