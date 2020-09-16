@@ -621,7 +621,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (arc_info->ito < arc_info->ifrom) valid = 0;
 
 			unitlen = arc_info->ifrom ? arc_info->ito / arc_info->ifrom : 1;
-			if (unitlen < 0 && unitlen>8) valid = 0;
+			if (unitlen < 0 || unitlen>8) valid = 0;
 
 			if (!valid)
 			{
