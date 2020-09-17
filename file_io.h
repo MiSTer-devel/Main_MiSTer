@@ -74,7 +74,7 @@ int FileSeekLBA(fileTYPE *file, uint32_t offset);
 
 int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres = 0);
 int FileReadSec(fileTYPE *file, void *pBuffer);
-int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
+int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres = 0);
 int FileWriteSec(fileTYPE *file, void *pBuffer);
 int FileCreatePath(const char *dir);
 

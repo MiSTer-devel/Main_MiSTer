@@ -418,7 +418,8 @@ static void parse_config()
 		if (i>=2 && p && p[0])
 		{
 			//skip Disable/Hide masks
-			while((p[0] == 'H' || p[0] == 'D') && strlen(p)>=2) p += 2;
+			while((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p)>=2) p += 2;
+			if (p[0] == 'P') p += 2;
 
 			if (p[0] == 'J')
 			{

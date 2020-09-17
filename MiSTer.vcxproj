@@ -95,6 +95,7 @@
     <ClCompile Include="support\snes\snes.cpp" />
     <ClCompile Include="support\st\st_tos.cpp" />
     <ClCompile Include="support\x86\x86.cpp" />
+    <ClCompile Include="support\x86\x86_ide.cpp" />
     <ClCompile Include="support\x86\x86_share.cpp" />
     <ClCompile Include="sxmlc.c" />
     <ClCompile Include="user_io.cpp" />
@@ -157,6 +158,7 @@
     <ClInclude Include="support\snes\snes.h" />
     <ClInclude Include="support\st\st_tos.h" />
     <ClInclude Include="support\x86\x86.h" />
+    <ClInclude Include="support\x86\x86_ide.h" />
     <ClInclude Include="support\x86\x86_share.h" />
     <ClInclude Include="sxmlc.h" />
     <ClInclude Include="user_io.h" />

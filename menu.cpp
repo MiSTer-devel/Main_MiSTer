@@ -262,7 +262,7 @@ static char SelectedDir[1024] = {};
 static char SelectedLabel[1024] = {};
 
 static char Selected_F[16][1024] = {};
-static char Selected_S[4][1024] = {};
+static char Selected_S[8][1024] = {};
 static char Selected_tmp[1024] = {};
 
 static char selPath[1024] = {};
@@ -1563,20 +1563,32 @@ void HandleUI(void)
 						{
 							if (p[0] == 'S') s_entry = selentry;
 							substrcpy(s, p, 2);
-							if (strlen(s))
+							int num = (p[1] >= '0' && p[1] <= '9') ? p[1] - '0' : 0;
+
+							if (is_x86() && x86_get_image_name(num))
 							{
 								strcpy(s, " ");
 								substrcpy(s + 1, p, 2);
-								strcat(s, " *.");
+								strcat(s, " ");
+								strcat(s, x86_get_image_name(num));
 							}
 							else
 							{
-								if (p[0] == 'F') strcpy(s, " Load *.");
-								else             strcpy(s, " Mount *.");
+								if (strlen(s))
+								{
+									strcpy(s, " ");
+									substrcpy(s + 1, p, 2);
+									strcat(s, " *.");
+								}
+								else
+								{
+									if (p[0] == 'F') strcpy(s, " Load *.");
+									else             strcpy(s, " Mount *.");
+								}
+								pos = s + strlen(s);
+								substrcpy(pos, p, 1);
+								strcpy(pos, GetExt(pos));
 							}
-							pos = s + strlen(s);
-							substrcpy(pos, p, 1);
-							strcpy(pos, GetExt(pos));
 							MenuWrite(entry, s, menusub == selentry, d);
 
 							// add bit in menu mask
@@ -1863,7 +1875,7 @@ void HandleUI(void)
 					else if (p[0] == 'S' && (select || recent))
 					{
 						ioctl_index = 0;
-						if (p[1] >= '0' && p[1] <= '3') ioctl_index = p[1] - '0';
+						if ((p[1] >= '0' && p[1] <= '3') || is_x86()) ioctl_index = p[1] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
 
@@ -1872,11 +1884,11 @@ void HandleUI(void)
 						fs_MenuCancel = MENU_8BIT_MAIN1;
 						strcpy(fs_pFileExt, ext);
 
-						memcpy(Selected_tmp, Selected_S[ioctl_index & 3], sizeof(Selected_tmp));
+						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 						if (is_pce() || is_megacd())
 						{
 							int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);
-							memcpy(Selected_tmp, Selected_S[ioctl_index & 3], sizeof(Selected_tmp));
+							memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 
 							if (num == 1)
 							{
@@ -2052,11 +2064,11 @@ void HandleUI(void)
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
 		{
-			menustate = selPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
-			HandleUI();
+			menustate = MENU_8BIT_MAIN1;
+			if (selPath[0] && !is_x86()) MenuHide();
 
 			printf("Image selected: %s\n", selPath);
-			memcpy(Selected_S[ioctl_index & 3], selPath, sizeof(Selected_S[ioctl_index & 3]));
+			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
 
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
@@ -2082,7 +2094,7 @@ void HandleUI(void)
 
 			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
 
-			recent_update(SelectedDir, Selected_S[ioctl_index & 3], SelectedLabel, ioctl_index + 500);
+			recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
 		}
 		break;
 

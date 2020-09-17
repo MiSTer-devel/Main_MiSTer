@@ -588,7 +588,7 @@ int FileReadSec(fileTYPE *file, void *pBuffer)
 }
 
 // Write with offset advancing
-int FileWriteAdv(fileTYPE *file, void *pBuffer, int length)
+int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 {
 	int ret;
 
@@ -600,18 +600,18 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length)
 		if (ret < 0)
 		{
 			printf("FileWriteAdv error(%d).\n", ret);
-			return 0;
+			return failres;
 		}
 	}
 	else if (file->zip)
 	{
 		printf("FileWriteAdv error(not supported for zip).\n");
-		return 0;
+		return failres;
 	}
 	else
 	{
 		printf("FileWriteAdv error(unknown file type).\n");
-		return 0;
+		return failres;
 	}
 
 	file->offset += ret;
