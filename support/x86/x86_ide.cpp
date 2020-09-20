@@ -35,16 +35,16 @@
 #define ATA_ERR_NTK0    0x02    // ATA track 0 not found
 #define ATA_ERR_NDAM    0x01    // ATA address mark not found
 
-#define IDE_STATE_IDLE         0
-#define IDE_STATE_RESET        1
-#define IDE_STATE_INIT_RW      2
-#define IDE_STATE_WAIT_RD      3
-#define IDE_STATE_WAIT_WR      4
-#define IDE_STATE_WAIT_END     5
-#define IDE_STATE_WAIT_PKT_CMD 6
-#define IDE_STATE_WAIT_PKT_RD  7
-#define IDE_STATE_WAIT_PKT_END 8
-
+#define IDE_STATE_IDLE          0
+#define IDE_STATE_RESET         1
+#define IDE_STATE_INIT_RW       2
+#define IDE_STATE_WAIT_RD       3
+#define IDE_STATE_WAIT_WR       4
+#define IDE_STATE_WAIT_END      5
+#define IDE_STATE_WAIT_PKT_CMD  6
+#define IDE_STATE_WAIT_PKT_RD   7
+#define IDE_STATE_WAIT_PKT_END  8
+#define IDE_STATE_WAIT_PKT_MODE 9
 
 #if 0
 	#define dbg_printf     printf
@@ -107,9 +107,12 @@ typedef struct
 		uint32_t hd_heads;
 		uint32_t hd_spt;
 		uint32_t hd_total_sectors;
-		uint32_t present;
-		uint32_t placeholder;
-		uint32_t cd;
+		uint8_t present;
+		uint8_t placeholder;
+		uint8_t allow_placeholder;
+		uint8_t cd;
+		uint8_t playing;
+		uint8_t paused;
 
 		struct
 		{
@@ -635,7 +638,7 @@ static int read_subchannel(ide_config *ide, uint8_t* cmdbuf)
 	bool TIME = !!(cmdbuf[1] & 2);
 	unsigned char *write;
 	unsigned char astat;
-	bool playing, pause;
+	bool playing = ide->drive[ide->regs.drv].playing, pause = ide->drive[ide->regs.drv].paused;
 	TMSF rel, abs;
 
 	if (paramList == 0 || paramList > 3)
@@ -663,8 +666,6 @@ static int read_subchannel(ide_config *ide, uint8_t* cmdbuf)
 		memset(buf, 0, 8);
 		return 8;
 	}
-
-	playing = pause = false;
 
 	if (playing)
 		astat = pause ? 0x12 : 0x11;
@@ -716,7 +717,7 @@ static int read_subchannel(ide_config *ide, uint8_t* cmdbuf)
 		buf[3] = x;
 	}
 
-	hexdump(buf, write - buf);
+	cddbg_hexdump(buf, write - buf);
 	return write - buf;
 }
 
@@ -750,7 +751,7 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver)
 			ide_inst[num].drive[drv].present = 0;
 		}
 
-		ide_inst[num].drive[drv].placeholder = (num && !drv);
+		ide_inst[num].drive[drv].placeholder = ide_inst[num].drive[drv].allow_placeholder;
 		if (ide_inst[num].drive[drv].placeholder && ide_inst[num].drive[drv].present && !ide_inst[num].drive[drv].cd) ide_inst[num].drive[drv].placeholder = 0;
 		if (ide_inst[num].drive[drv].placeholder) ide_inst[num].drive[drv].cd = 1;
 
@@ -1069,7 +1070,7 @@ static void process_write(ide_config *ide)
 	ide->regs.head = lba & 0xF;
 }
 
-static int handle_ide(ide_config *ide)
+static int handle_hdd(ide_config *ide)
 {
 	switch (ide->regs.cmd)
 	{
@@ -1236,12 +1237,14 @@ static int cd_inquiry(uint8_t maxlen)
 	return maxlen;
 }
 
-static void cd_err_nomedium(ide_config *ide)
+#define CD_ERR_NO_MEDIUM ((2 << 4) | ATA_ERR_ABRT)
+
+static void cd_reply(ide_config *ide, uint8_t error)
 {
 	ide->state = IDE_STATE_IDLE;
 	ide->regs.sector_count = 3;
-	ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_ERR | ATA_STATUS_IRQ;
-	ide->regs.error = (2 << 4) | ATA_ERR_ABRT;
+	ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ | (error ? ATA_STATUS_ERR : 0);
+	ide->regs.error = error;
 	set_regs(ide);
 }
 
@@ -1284,6 +1287,88 @@ static int get_sense(ide_config *ide)
 	return 18;
 }
 
+
+void pause_resume(ide_config *ide, uint8_t *cmdbuf)
+{
+	bool resume = !!(cmdbuf[8] & 1);
+	if(ide->drive[ide->regs.drv].playing) ide->drive[ide->regs.drv].paused = !resume;
+}
+
+void play_audio_msf(ide_config *ide, uint8_t *cmdbuf)
+{
+	uint32_t start_lba, end_lba;
+
+	if (cmdbuf[3] == 0xFF && cmdbuf[4] == 0xFF && cmdbuf[5] == 0xFF)
+	{
+		start_lba = 0xFFFFFFFF;
+	}
+	else
+	{
+		start_lba = (cmdbuf[3] * 60u * 75u) + (cmdbuf[4] * 75u) + cmdbuf[5];
+
+		if (start_lba >= 150u) start_lba -= 150u; /* LBA sector 0 == M:S:F sector 0:2:0 */
+		else end_lba = 0;
+	}
+
+	if (cmdbuf[6] == 0xFF && cmdbuf[7] == 0xFF && cmdbuf[8] == 0xFF)
+	{
+		end_lba = 0xFFFFFFFF;
+	}
+	else
+	{
+		end_lba = (cmdbuf[6] * 60u * 75u) + (cmdbuf[7] * 75u) + cmdbuf[8];
+		if (end_lba >= 150u) end_lba -= 150u; /* LBA sector 0 == M:S:F sector 0:2:0 */
+		else end_lba = 0;
+	}
+
+	if (start_lba == end_lba)
+	{
+		ide->drive[ide->regs.drv].playing = 0;
+		ide->drive[ide->regs.drv].paused = 0;
+		return;
+	}
+
+	/* LBA 0xFFFFFFFF means start playing wherever the optics of the CD sit */
+	if (start_lba != 0xFFFFFFFF)
+	{
+		ide->drive[ide->regs.drv].playing = 1;
+		ide->drive[ide->regs.drv].paused = 0;
+	}
+	else
+	{
+		ide->drive[ide->regs.drv].playing = 0;
+		ide->drive[ide->regs.drv].paused = 1;
+	}
+}
+
+void play_audio10(ide_config *ide, uint8_t *cmdbuf)
+{
+	uint16_t play_length;
+	uint32_t start_lba;
+
+	start_lba = ((uint32_t)cmdbuf[2] << 24) + ((uint32_t)cmdbuf[3] << 16) + ((uint32_t)cmdbuf[4] << 8) + ((uint32_t)cmdbuf[5] << 0);
+	play_length = ((uint16_t)cmdbuf[7] << 8) + ((uint16_t)cmdbuf[8] << 0);
+
+	if (play_length == 0)
+	{
+		ide->drive[ide->regs.drv].playing = 0;
+		ide->drive[ide->regs.drv].paused = 0;
+		return;
+	}
+
+	/* LBA 0xFFFFFFFF means start playing wherever the optics of the CD sit */
+	if (start_lba != 0xFFFFFFFF)
+	{
+		ide->drive[ide->regs.drv].playing = 1;
+		ide->drive[ide->regs.drv].paused = 0;
+	}
+	else
+	{
+		ide->drive[ide->regs.drv].playing = 0;
+		ide->drive[ide->regs.drv].paused = 1;
+	}
+}
+
 static void process_pkt_cmd(ide_config *ide)
 {
 	uint8_t cmdbuf[16];
@@ -1297,23 +1382,21 @@ static void process_pkt_cmd(ide_config *ide)
 
 	switch (cmdbuf[0])
 	{
-	case 0x28: // read sectors
+	case 0xA8: // read(12) sectors
+	case 0x28: // read(10) sectors
 		//printf("** Read Sectors\n");
 		//hexdump(cmdbuf, 12, 0);
-		ide->regs.pkt_cnt = ((cmdbuf[7] << 8) | cmdbuf[8]);
+		ide->regs.pkt_cnt = (cmdbuf[0] == 0x28) ? ((cmdbuf[7] << 8) | cmdbuf[8]) : ((cmdbuf[6] << 24) | (cmdbuf[7] << 16) | (cmdbuf[8] << 8) | cmdbuf[9]);
 		ide->regs.pkt_lba = ((cmdbuf[2] << 24) | (cmdbuf[3] << 16) | (cmdbuf[4] << 8) | cmdbuf[5]);
 		if (!ide->regs.pkt_cnt)
 		{
-			ide->state = IDE_STATE_IDLE;
-			ide->regs.sector_count = 3;
-			ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
-			ide->regs.error = 0;
-			set_regs(ide);
+			// length 0 is not a error.
+			cd_reply(ide, 0);
 			break;
 		}
 		ide->state = IDE_STATE_INIT_RW;
 		if(!ide->drive[ide->regs.drv].load_state) process_cd_read(ide);
-		else cd_err_nomedium(ide);
+		else cd_reply(ide, CD_ERR_NO_MEDIUM);
 		break;
 
 	case 0x25: // read capacity
@@ -1334,7 +1417,17 @@ static void process_pkt_cmd(ide_config *ide)
 			//hexdump(buf, 8, 0);
 			pkt_send(ide, buf, 8);
 		}
-		else cd_err_nomedium(ide);
+		else cd_reply(ide, CD_ERR_NO_MEDIUM);
+		break;
+
+	case 0x2B: // seek
+		ide->drive[ide->regs.drv].playing = 0;
+		ide->drive[ide->regs.drv].paused = 0;
+		cd_reply(ide, 0);
+		break;
+
+	case 0x1E: // lock the cd door - doing nothing.
+		cd_reply(ide, 0);
 		break;
 
 	case 0x5A: // mode sense
@@ -1342,6 +1435,7 @@ static void process_pkt_cmd(ide_config *ide)
 		break;
 
 	case 0x42: // read sub
+		cddbg_printf("read sub:\n");
 		pkt_send(ide, buf, read_subchannel(ide, cmdbuf));
 		break;
 
@@ -1353,21 +1447,43 @@ static void process_pkt_cmd(ide_config *ide)
 		pkt_send(ide, buf, cd_inquiry(cmdbuf[4]));
 		break;
 
-	case 0x03: // request sense
+	case 0x03: // mode sense
 		cddbg_printf("get sense:\n");
 		pkt_send(ide, buf, get_sense(ide));
 		break;
 
+	case 0x55: // mode select
+		printf("mode select\n");
+		ide->regs.cylinder = (cmdbuf[7] << 8) | cmdbuf[8];
+		if (ide->regs.cylinder > 512) ide->regs.cylinder = 512;
+		ide->regs.pkt_io_size = (ide->regs.cylinder + 1) / 2;
+		ide->regs.sector_count = 0;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
+		set_regs(ide);
+		ide->state = IDE_STATE_WAIT_PKT_MODE;
+		break;
+
 	case 0x00: // test unit ready
-		if (!ide->drive[ide->regs.drv].load_state)
-		{
-			ide->state = IDE_STATE_IDLE;
-			ide->regs.sector_count = 3;
-			ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
-			ide->regs.error = 0;
-			set_regs(ide);
-		}
-		else cd_err_nomedium(ide);
+		if (!ide->drive[ide->regs.drv].load_state) cd_reply(ide, 0);
+		else cd_reply(ide, CD_ERR_NO_MEDIUM);
+		break;
+
+	case 0x45: // play lba
+		printf("CD PLAY AUDIO(10)\n");
+		play_audio10(ide, cmdbuf);
+		cd_reply(ide, 0);
+		break;
+
+	case 0x47: // play msf
+		printf("CD PLAY AUDIO MSF\n");
+		play_audio_msf(ide, cmdbuf);
+		cd_reply(ide, 0);
+		break;
+
+	case 0x4B: // pause/resume
+		printf("CD PAUSE/RESUME\n");
+		pause_resume(ide, cmdbuf);
+		cd_reply(ide, 0);
 		break;
 
 	default:
@@ -1379,11 +1495,7 @@ static void process_pkt_cmd(ide_config *ide)
 	{
 		printf("(!) Error in packet command %02X\n", cmdbuf[0]);
 		hexdump(cmdbuf, 12, 0);
-		ide->state = IDE_STATE_IDLE;
-		ide->regs.sector_count = 3;
-		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_ERR | ATA_STATUS_IRQ;
-		ide->regs.error = ATA_ERR_ABRT;
-		set_regs(ide);
+		cd_reply(ide, ATA_ERR_ABRT);
 	}
 }
 
@@ -1472,6 +1584,8 @@ static int handle_cd(ide_config *ide)
 			return 0;
 		}
 		*/
+		ide->drive[ide->regs.drv].playing = 0;
+		ide->drive[ide->regs.drv].paused = 0;
 		ide->regs.sector = 1;
 		ide->regs.sector_count = 1;
 		ide->regs.cylinder = 0xEB14;
@@ -1519,11 +1633,10 @@ void x86_ide_io(int num, int req)
 
 		if (ide->drive[ide->regs.drv].cd) err = handle_cd(ide);
 		else if (!ide->drive[ide->regs.drv].present) err = 1;
-		else err = handle_ide(ide);
+		else err = handle_hdd(ide);
 
 		if (err)
 		{
-			printf("** err (drv=%d)!\n", ide->regs.drv);
 			ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_ERR | ATA_STATUS_IRQ;
 			ide->regs.error = ATA_ERR_ABRT;
 			set_regs(ide);
@@ -1564,18 +1677,15 @@ void x86_ide_io(int num, int req)
 		else if (ide->state == IDE_STATE_WAIT_PKT_RD)
 		{
 			cddbg_printf("packet was read\n");
-			if (ide->regs.pkt_cnt)
-			{
-				process_cd_read(ide);
-			}
-			else
-			{
-				ide->state = IDE_STATE_IDLE;
-				ide->regs.sector_count = 3;
-				ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
-				ide->regs.error = 0;
-				set_regs(ide);
-			}
+			if (ide->regs.pkt_cnt) process_cd_read(ide);
+			else cd_reply(ide, 0);
+		}
+		else if (ide->state == IDE_STATE_WAIT_PKT_MODE)
+		{
+			ide_recv_data(buf, 128);
+			printf("mode select data:\n");
+			hexdump(buf, ide->regs.cylinder);
+			cd_reply(ide, 0);
 		}
 		else
 		{
@@ -1592,6 +1702,11 @@ void x86_ide_io(int num, int req)
 		{
 			printf("IDE %04X reset start\n", ide->base);
 		}
+
+		ide->drive[0].playing = 0;
+		ide->drive[0].paused = 0;
+		ide->drive[1].playing = 0;
+		ide->drive[1].paused = 0;
 
 		get_regs(ide);
 		ide->regs.head = 0;
@@ -1612,10 +1727,15 @@ int x86_ide_is_placeholder(int num)
 	return ide_inst[num / 2].drive[num & 1].placeholder;
 }
 
-void x86_ide_reset()
+void x86_ide_reset(uint8_t hotswap)
 {
 	ide_inst[0].drive[0].placeholder = 0;
 	ide_inst[0].drive[1].placeholder = 0;
 	ide_inst[1].drive[0].placeholder = 0;
 	ide_inst[1].drive[1].placeholder = 0;
+
+	ide_inst[0].drive[0].allow_placeholder = 0;
+	ide_inst[0].drive[1].allow_placeholder = 0;
+	ide_inst[1].drive[0].allow_placeholder = hotswap & 1;
+	ide_inst[1].drive[1].allow_placeholder = (hotswap >> 1) & 1;
 }

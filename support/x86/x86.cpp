@@ -450,7 +450,7 @@ void x86_init()
 		IOWR(PC_BUS_BASE_OLD, 1, 0x000000F0);
 	}
 
-	x86_ide_reset();
+	x86_ide_reset(((dma_sdio(0)>>8) & 3) ^ 1);
 	fdd_set(0, config.img_name[0]);
 	fdd_set(1, config.img_name[1]);
 	for (int i = 0; i < 4; i++) hdd_set(i, config.img_name[i + 2]);
