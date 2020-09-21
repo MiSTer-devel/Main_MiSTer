@@ -39,6 +39,7 @@
 #include "../../fpga_io.h"
 #include "x86_share.h"
 #include "x86_ide.h"
+#include "x86_cdrom.h"
 
 #define FLOPPY0_BASE_OLD     0x8800
 #define HDD0_BASE_OLD        0x8840
@@ -426,7 +427,7 @@ static void hdd_set(int num, char* filename)
 
 	if (num > 1 && !vhd)
 	{
-		const char *img_name = x86_ide_parse_cd(num, filename);
+		const char *img_name = cdrom_parse(num, filename);
 		if (img_name) present = img_mount(&ide_image[num], img_name);
 		if (present) cd = 1;
 	}
