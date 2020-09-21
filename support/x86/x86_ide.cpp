@@ -6,6 +6,12 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <ios>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <sstream>
+#include <sys/stat.h>
 
 #include "../../spi.h"
 #include "../../user_io.h"
@@ -99,40 +105,47 @@ typedef struct
 
 typedef struct
 {
+	char     filename[1024];
+	uint32_t start;
+	uint32_t length;
+	uint32_t skip;
+	uint16_t sectorSize;
+	uint8_t  attr;
+	uint8_t  mode2;
+	uint8_t  number;
+} track_t;
+
+typedef struct
+{
+	fileTYPE *f;
+	uint32_t hd_cylinders;
+	uint32_t hd_heads;
+	uint32_t hd_spt;
+	uint32_t hd_total_sectors;
+	uint8_t present;
+
+	uint8_t placeholder;
+	uint8_t allow_placeholder;
+	uint8_t cd;
+	uint8_t load_state;
+	uint8_t playing;
+	uint8_t paused;
+	uint8_t track_cnt;
+	uint8_t data_num;
+	track_t track[50];
+
+	uint16_t id[256];
+} drive_t;
+
+typedef struct
+{
 	uint32_t base;
-	struct
-	{
-		fileTYPE *f;
-		uint32_t hd_cylinders;
-		uint32_t hd_heads;
-		uint32_t hd_spt;
-		uint32_t hd_total_sectors;
-		uint8_t present;
-		uint8_t placeholder;
-		uint8_t allow_placeholder;
-		uint8_t cd;
-		uint8_t playing;
-		uint8_t paused;
-
-		struct
-		{
-			uint32_t start;
-			uint32_t length;
-			uint32_t skip;
-			uint16_t sectorSize;
-			uint8_t  attr;
-			uint8_t  mode2;
-		}
-		tracks[2];
-
-		uint8_t load_state;
-		uint16_t id[256];
-	} drive[2];
-
 	uint32_t state;
 	uint32_t null;
 	uint32_t prepcnt;
 	regs_t   regs;
+
+	drive_t drive[2];
 } ide_config;
 
 static ide_config ide_inst[2] = {};
@@ -262,39 +275,374 @@ static int x86_check_iso_file(fileTYPE *f, uint8_t *mode2, uint16_t *sectorSize)
 	return 0;
 }
 
-static void ParseIsoFile(ide_config *ide, int drv)
+static const char * LoadIsoFile(drive_t *drv, const char* filename)
 {
-	memset(ide->drive[drv].tracks, 0, sizeof(ide->drive[drv].tracks));
-	ide->drive[drv].tracks[0].attr = 0x40; //data track
-	if (!ide->drive[drv].f)
+	fileTYPE f;
+	memset(drv->track, 0, sizeof(drv->track));
+	drv->track_cnt = 0;
+
+	strcpy(drv->track[0].filename, filename);
+	if (!FileOpen(&f, filename))
 	{
 		printf("No CD!\n");
-		return;
+		return 0;
 	}
 
-	if(!x86_check_iso_file(ide->drive[drv].f, &ide->drive[drv].tracks[0].mode2, &ide->drive[drv].tracks[0].sectorSize))
+	if(!x86_check_iso_file(&f, &drv->track[0].mode2, &drv->track[0].sectorSize))
 	{
 		printf("Fail to parse ISO!\n");
-		return;
+		FileClose(&f);
+		return 0;
 	}
 
-	ide->drive[drv].tracks[0].length = ide->drive[drv].f->size / ide->drive[drv].tracks[0].sectorSize;
+	drv->track[0].attr = 0x40; //data track
+	drv->track[0].length = f.size / drv->track[0].sectorSize;
+	drv->track[0].number = 1;
+
+	FileClose(&f);
 
 	// lead-out track (track 2)
-	ide->drive[drv].tracks[1].start = ide->drive[drv].tracks[0].length;
+	drv->track[1].start = drv->track[0].length;
+	drv->track[2].number = 2;
 
-	printf("ISO: mode2 = %d, sectorSize = %d, sectors = %d\n", ide->drive[drv].tracks[0].mode2, ide->drive[drv].tracks[0].sectorSize, ide->drive[drv].tracks[0].length);
+	printf("ISO: mode2 = %d, sectorSize = %d, sectors = %d\n", drv->track[0].mode2, drv->track[0].sectorSize, drv->track[0].length);
+	drv->track_cnt = 2;
+
+	drv->data_num = 0;
+	return drv->track[0].filename;
 }
 
-typedef struct SMSF
+#define CD_FPS 75
+#define MSF_TO_FRAMES(M, S, F) ((M)*60*CD_FPS+(S)*CD_FPS+(F))
+
+typedef struct
 {
-	//! \brief Time, minutes field
 	unsigned char   min;
-	//! \brief Time, seconds field
 	unsigned char   sec;
-	//! \brief Time, frame field
 	unsigned char   fr;
 } TMSF;
+
+static int GetCueKeyword(std::string &keyword, std::istream &in)
+{
+	in >> keyword;
+	for (uint32_t i = 0; i < keyword.size(); i++)
+	{
+		keyword[i] = static_cast<char>(toupper(keyword[i]));
+	}
+	return 1;
+}
+
+static int GetCueFrame(uint32_t &frames, std::istream &in)
+{
+	std::string msf;
+	in >> msf;
+	TMSF tmp = { 0, 0, 0 };
+	int success = sscanf(msf.c_str(), "%hhu:%hhu:%hhu", &tmp.min, &tmp.sec, &tmp.fr) == 3;
+	frames = (int)MSF_TO_FRAMES(tmp.min, tmp.sec, tmp.fr);
+	return success;
+}
+
+static int GetCueString(std::string &str, std::istream &in)
+{
+	int pos = (int)in.tellg();
+	in >> str;
+	if (str[0] == '\"') {
+		if (str[str.size() - 1] == '\"')
+		{
+			str.assign(str, 1, str.size() - 2);
+		}
+		else
+		{
+			in.seekg(pos, std::ios::beg);
+			static char buffer[1024];
+			in.getline(buffer, 1024, '\"');	// skip
+			in.getline(buffer, 1024, '\"');
+			str = buffer;
+		}
+	}
+	return 1;
+}
+
+static int AddTrack(drive_t *drv, track_t *curr, uint32_t &shift, const int32_t prestart, uint32_t &totalPregap, uint32_t currPregap)
+{
+	uint32_t skip = 0;
+	if (drv->track_cnt >= sizeof(drv->track) / sizeof(drv->track[0]))
+	{
+		printf("CDROM: too many tracks(%d)\n", drv->track_cnt);
+		return 0;
+	}
+
+	// frames between index 0(prestart) and 1(curr.start) must be skipped
+	if (prestart >= 0)
+	{
+		if (prestart > static_cast<int>(curr->start))
+		{
+			printf("CDROM: AddTrack => prestart %d cannot be > curr.start %u\n", prestart, curr->start);
+			return 0;
+		}
+		skip = static_cast<uint32_t>(static_cast<int>(curr->start) - prestart);
+	}
+
+	// Add the first track, if our vector is empty
+	if (!drv->track_cnt)
+	{
+		//assertm(curr.number == 1, "The first track must be labelled number 1 [BUG!]");
+		curr->skip = skip * curr->sectorSize;
+		curr->start += currPregap;
+		totalPregap = currPregap;
+
+		memcpy(&drv->track[drv->track_cnt], curr, sizeof(track_t));
+		drv->track_cnt++;
+		return 1;
+	}
+
+	// Guard against undefined behavior in subsequent tracks.back() call
+	//assert(!tracks.empty());
+	track_t *prev = &drv->track[drv->track_cnt - 1];
+
+	// current track consumes data from the same file as the previous
+	if (!strcmp(prev->filename, curr->filename))
+	{
+		curr->start += shift;
+		if (!prev->length)
+		{
+			prev->length = curr->start + totalPregap - prev->start - skip;
+		}
+		curr->skip += prev->skip + prev->length * prev->sectorSize + skip * curr->sectorSize;
+		totalPregap += currPregap;
+		curr->start += totalPregap;
+		// current track uses a different file as the previous track
+	}
+	else
+	{
+		uint32_t size = FileLoad(prev->filename, 0, 0);
+		const uint32_t tmp = size - prev->skip;
+		prev->length = tmp / prev->sectorSize;
+
+		if (tmp % prev->sectorSize != 0) prev->length++; // padding
+
+		curr->start += prev->start + prev->length + currPregap;
+		curr->skip = skip * curr->sectorSize;
+		shift += prev->start + prev->length;
+		totalPregap = currPregap;
+	}
+
+	// error checks
+	if (curr->number <= 1
+		|| prev->number + 1 != curr->number
+		|| curr->start < prev->start + prev->length) {
+		printf("AddTrack: failed consistency checks\n"
+			"\tcurr.number (%d) <= 1\n"
+			"\tprev.number (%d) + 1 != curr.number (%d)\n"
+			"\tcurr.start (%d) < prev.start (%d) + prev.length (%d)\n",
+			curr->number, prev->number, curr->number,
+			curr->start, prev->start, prev->length);
+		return 0;
+	}
+
+	memcpy(&drv->track[drv->track_cnt], curr, sizeof(track_t));
+	drv->track_cnt++;
+	return 1;
+}
+
+static std::string dirname(char * file)
+{
+	char * sep = strrchr(file, '/');
+	if (!sep) return "";
+
+	int len = (int)(sep - file);
+	static char tmp[1024];
+	strncpy(tmp, file, len + 1);
+	tmp[len + 1] = 0;
+	return tmp;
+}
+
+static int GetRealFileName(std::string &filename, std::string &pathname)
+{
+	// check if file exists
+	struct stat test;
+	if (stat(filename.c_str(), &test) == 0)
+	{
+		return 1;
+	}
+
+	// check if file with path relative to cue file exists
+	std::string tmpstr(pathname + "/" + filename);
+	if (stat(tmpstr.c_str(), &test) == 0)
+	{
+		filename = tmpstr;
+		return 1;
+	}
+
+	return 0;
+}
+
+static const char * LoadCueSheet(drive_t *drv, const char *cuefile)
+{
+	printf("LoadCueSheet(%s)\n", cuefile);
+
+	memset(drv->track, 0, sizeof(drv->track));
+	drv->track_cnt = 0;
+
+	track_t track = {};
+	uint32_t shift = 0;
+	uint32_t currPregap = 0;
+	uint32_t totalPregap = 0;
+	int32_t prestart = -1;
+	int track_number;
+	int success;
+	int canAddTrack = 0;
+	static char tmp[1024];
+
+	strcpy(tmp, cuefile);
+	std::string pathname(dirname(tmp));
+
+	std::ifstream in;
+	in.open(cuefile, std::ios::in);
+	if (in.fail()) return 0;
+
+	while (!in.eof())
+	{
+		// get next line
+		char buf[256];
+		in.getline(buf, sizeof(buf));
+		if (in.fail() && !in.eof())
+		{
+			return 0;  // probably a binary file
+		}
+
+		std::istringstream line(buf);
+
+		std::string command;
+		GetCueKeyword(command, line);
+
+		//printf("command: %s\n", command.c_str());
+
+		if (command == "TRACK")
+		{
+			if (canAddTrack) success = AddTrack(drv, &track, shift, prestart, totalPregap, currPregap);
+			else success = 1;
+
+			track.start = 0;
+			track.skip = 0;
+			currPregap = 0;
+			prestart = -1;
+
+			line >> track_number; // (cin) read into a true int first
+
+			track.number = static_cast<uint8_t>(track_number);
+
+			std::string type;
+			GetCueKeyword(type, line);
+
+			//printf("  type: %s\n", type.c_str());
+
+			if (type == "AUDIO")
+			{
+				track.sectorSize = BYTES_PER_RAW_REDBOOK_FRAME;
+				track.attr = 0;
+				track.mode2 = false;
+			}
+			else if (type == "MODE1/2048")
+			{
+				track.sectorSize = BYTES_PER_COOKED_REDBOOK_FRAME;
+				track.attr = 0x40;
+				track.mode2 = false;
+			}
+			else if (type == "MODE1/2352")
+			{
+				track.sectorSize = BYTES_PER_RAW_REDBOOK_FRAME;
+				track.attr = 0x40;
+				track.mode2 = false;
+			}
+			else if (type == "MODE2/2336")
+			{
+				track.sectorSize = 2336;
+				track.attr = 0x40;
+				track.mode2 = true;
+			}
+			else if (type == "MODE2/2352")
+			{
+				track.sectorSize = BYTES_PER_RAW_REDBOOK_FRAME;
+				track.attr = 0x40;
+				track.mode2 = true;
+			}
+			else success = 0;
+
+			canAddTrack = true;
+		}
+		else if (command == "INDEX")
+		{
+			int index;
+			line >> index;
+			uint32_t frame;
+			success = GetCueFrame(frame, line);
+
+			if (index == 1) track.start = frame;
+			else if (index == 0) prestart = static_cast<int32_t>(frame);
+			// ignore other indices
+		}
+		else if (command == "FILE")
+		{
+			if (canAddTrack) success = AddTrack(drv, &track, shift, prestart, totalPregap, currPregap);
+			else success = 1;
+			canAddTrack = 0;
+
+			std::string filename;
+			GetCueString(filename, line);
+			GetRealFileName(filename, pathname);
+			std::string type;
+			GetCueKeyword(type, line);
+			strcpy(track.filename, filename.c_str());
+		}
+		else if (command == "PREGAP") success = GetCueFrame(currPregap, line);
+		// ignored commands
+		else if (command == "CATALOG" || command == "CDTEXTFILE" || command == "FLAGS" || command == "ISRC" ||
+			command == "PERFORMER" || command == "POSTGAP" || command == "REM" ||
+			command == "SONGWRITER" || command == "TITLE" || command.empty())
+		{
+			success = 1;
+		}
+		// failure
+		else
+		{
+			success = 0;
+		}
+
+		if (!success)
+		{
+			return 0;
+		}
+	}
+
+	// add last track
+	if (!AddTrack(drv, &track, shift, prestart, totalPregap, currPregap))
+	{
+		return 0;
+	}
+
+	// add lead-out track
+	track.number++;
+	track.attr = 0;//sync with load iso
+	track.start = 0;
+	track.length = 0;
+
+	if (!AddTrack(drv, &track, shift, -1, totalPregap, 0))
+	{
+		return 0;
+	}
+
+	for (uint8_t i = 0; i < drv->track_cnt; i++)
+	{
+		if (drv->track[i].attr == 0x40)
+		{
+			drv->data_num = i;
+			return drv->track[i].filename;
+		}
+	}
+
+	return 0;
+}
 
 inline TMSF frames_to_msf(uint32_t frames)
 {
@@ -307,31 +655,29 @@ inline TMSF frames_to_msf(uint32_t frames)
 	return msf;
 }
 
-static int GetCDTracks(ide_config *ide, int& start_track_num, int& end_track_num, TMSF& lead_out_msf)
+static int GetCDTracks(drive_t *drv, int& start_track_num, int& end_track_num, TMSF& lead_out_msf)
 {
-	if (!ide->drive[ide->regs.drv].tracks[0].length) return 0;
+	if (drv->track_cnt < 2 || !drv->track[0].length) return 0;
 
-	start_track_num = 1;
-	end_track_num = 1;
-	lead_out_msf = frames_to_msf(ide->drive[ide->regs.drv].tracks[1].start + REDBOOK_FRAME_PADDING);
+	start_track_num = drv->track[0].number;
+	end_track_num = drv->track[drv->track_cnt - 2].number;
+	lead_out_msf = frames_to_msf(drv->track[drv->track_cnt - 1].start + REDBOOK_FRAME_PADDING);
 	return 1;
 }
 
-static int GetCDTrackInfo(ide_config *ide, int requested_track_num, TMSF& start_msf, unsigned char& attr)
+static int GetCDTrackInfo(drive_t *drv, int requested_track_num, TMSF& start_msf, unsigned char& attr)
 {
-	if (!ide->drive[ide->regs.drv].tracks[0].length
-		|| requested_track_num < 1
-		|| (unsigned int)requested_track_num >= (sizeof(ide->drive[ide->regs.drv].tracks)/sizeof(ide->drive[ide->regs.drv].tracks[0])))
+	if (drv->track_cnt < 2 || requested_track_num < 1 || requested_track_num >= drv->track_cnt)
 	{
 		return 0;
 	}
 
-	start_msf = frames_to_msf(ide->drive[ide->regs.drv].tracks[requested_track_num - 1].start + REDBOOK_FRAME_PADDING);
-	attr = ide->drive[ide->regs.drv].tracks[requested_track_num - 1].attr;
+	start_msf = frames_to_msf(drv->track[requested_track_num - 1].start + REDBOOK_FRAME_PADDING);
+	attr = drv->track[requested_track_num - 1].attr;
 	return 1;
 }
 
-static int read_toc(ide_config *ide, uint8_t *cmdbuf)
+static int read_toc(drive_t *drv, uint8_t *cmdbuf)
 {
 	/* NTS: The SCSI MMC standards say we're allowed to indicate the return data
 	 *      is longer than it's allocation length. But here's the thing: some MS-DOS
@@ -353,7 +699,7 @@ static int read_toc(ide_config *ide, uint8_t *cmdbuf)
 
 	memset(buf, 0, 8);
 
-	if (!GetCDTracks(ide, first, last, leadOut))
+	if (!GetCDTracks(drv, first, last, leadOut))
 	{
 		printf("WARNING: ATAPI READ TOC failed to get track info\n");
 		return 8;
@@ -370,7 +716,7 @@ static int read_toc(ide_config *ide, uint8_t *cmdbuf)
 		*write++ = (unsigned char)1;        /* @+2 first complete session */
 		*write++ = (unsigned char)1;        /* @+3 last complete session */
 
-		if (!GetCDTrackInfo(ide, first, start, attr))
+		if (!GetCDTrackInfo(drv, first, start, attr))
 		{
 			printf("WARNING: ATAPI READ TOC unable to read track %u information\n", first);
 			attr = 0x41; /* ADR=1 CONTROL=4 */
@@ -413,7 +759,7 @@ static int read_toc(ide_config *ide, uint8_t *cmdbuf)
 			unsigned char attr;
 			TMSF start;
 
-			if (!GetCDTrackInfo(ide, track, start, attr))
+			if (!GetCDTrackInfo(drv, track, start, attr))
 			{
 				printf("WARNING: ATAPI READ TOC unable to read track %u information\n", track);
 				attr = 0x41; /* ADR=1 CONTROL=4 */
@@ -620,9 +966,9 @@ static uint16_t mode_sense(int page)
 	return x + 2;
 }
 
-static int GetCDSub(ide_config *ide, unsigned char& attr, unsigned char& track_num, unsigned char& index, TMSF& relative_msf, TMSF& absolute_msf)
+static int GetCDSub(drive_t *drv, unsigned char& attr, unsigned char& track_num, unsigned char& index, TMSF& relative_msf, TMSF& absolute_msf)
 {
-	attr = ide->drive[ide->regs.drv].tracks[0].attr;
+	attr = drv->track[0].attr;
 	track_num = 1;
 	index = 1;
 	relative_msf.min = relative_msf.fr = 0; relative_msf.sec = 2;
@@ -630,7 +976,7 @@ static int GetCDSub(ide_config *ide, unsigned char& attr, unsigned char& track_n
 	return 1;
 }
 
-static int read_subchannel(ide_config *ide, uint8_t* cmdbuf)
+static int read_subchannel(drive_t *drv, uint8_t* cmdbuf)
 {
 	unsigned char paramList = cmdbuf[3];
 	unsigned char attr, track, index;
@@ -638,7 +984,7 @@ static int read_subchannel(ide_config *ide, uint8_t* cmdbuf)
 	bool TIME = !!(cmdbuf[1] & 2);
 	unsigned char *write;
 	unsigned char astat;
-	bool playing = ide->drive[ide->regs.drv].playing, pause = ide->drive[ide->regs.drv].paused;
+	bool playing = drv->playing, pause = drv->paused;
 	TMSF rel, abs;
 
 	if (paramList == 0 || paramList > 3)
@@ -660,7 +1006,7 @@ static int read_subchannel(ide_config *ide, uint8_t* cmdbuf)
 	}
 
 	/* get current subchannel position */
-	if (!GetCDSub(ide, attr, track, index, rel, abs))
+	if (!GetCDSub(drv, attr, track, index, rel, abs))
 	{
 		printf("ATAPI READ SUBCHANNEL unable to read current pos\n");
 		memset(buf, 0, 8);
@@ -721,7 +1067,20 @@ static int read_subchannel(ide_config *ide, uint8_t* cmdbuf)
 	return write - buf;
 }
 
-void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver)
+const char * x86_ide_parse_cd(uint32_t num, const char *filename)
+{
+	int drv = num & 1;
+	num >>= 1;
+
+	const char *path = getFullPath(filename);
+
+	const char *res = LoadCueSheet(&ide_inst[num].drive[drv], path);
+	if(!res) res = LoadIsoFile(&ide_inst[num].drive[drv], path);
+
+	return res;
+}
+
+void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 {
 	int drv = (ver == 3) ? (num & 1) : 0;
 	if (ver == 3) num >>= 1;
@@ -737,8 +1096,7 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver)
 	ide_inst[num].drive[drv].present = f ? 1 : 0;
 	ide_inst[num].state = IDE_STATE_RESET;
 
-	ide_inst[num].drive[drv].cd = ide_inst[num].drive[drv].present && (ver == 3) && num && x86_check_iso_file(f, 0, 0);
-	if (ide_inst[num].drive[drv].cd) printf("Image recognized as ISO file\n");
+	ide_inst[num].drive[drv].cd = ide_inst[num].drive[drv].present && (ver == 3) && num && cd;
 
 	if (ver == 3)
 	{
@@ -971,7 +1329,6 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver)
 
 		for (int i = 0; i < 256; i++) ide_inst[num].drive[drv].id[i] = (uint16_t)identify[i];
 
-		ParseIsoFile(&ide_inst[num], drv);
 		ide_inst[num].drive[drv].load_state = ide_inst[num].drive[drv].f ? 1 : 3;
 	}
 
@@ -1159,7 +1516,7 @@ static void pkt_send(ide_config *ide, void *data, uint16_t size)
 
 static void read_cd_sectors(ide_config *ide, int cnt)
 {
-	uint32_t sz = ide->drive[ide->regs.drv].tracks[0].sectorSize;
+	uint32_t sz = ide->drive[ide->regs.drv].track[0].sectorSize;
 	fileTYPE *f = ide->drive[ide->regs.drv].f;
 
 	if (sz == 2048)
@@ -1169,7 +1526,7 @@ static void read_cd_sectors(ide_config *ide, int cnt)
 		return;
 	}
 
-	uint32_t pre = ide->drive[ide->regs.drv].tracks[0].mode2 ? 24 : 16;
+	uint32_t pre = ide->drive[ide->regs.drv].track[0].mode2 ? 24 : 16;
 	uint32_t post = sz - pre - 2048;
 	uint32_t off = 0;
 
@@ -1201,7 +1558,7 @@ static void process_cd_read(ide_config *ide)
 
 	if (ide->state == IDE_STATE_INIT_RW)
 	{
-		uint32_t pos = ide->regs.pkt_lba * ide->drive[ide->regs.drv].tracks[0].sectorSize;
+		uint32_t pos = ide->regs.pkt_lba * ide->drive[ide->regs.drv].track[0].sectorSize;
 
 		//printf("Read from pos: %d\n", pos);
 		ide->null = (FileSeek(ide->drive[ide->regs.drv].f, pos, SEEK_SET) < 0);
@@ -1260,9 +1617,9 @@ static void set_sense(uint8_t SK, uint8_t ASC = 0, uint8_t ASCQ = 0)
 	buf[13] = ASCQ;
 }
 
-static int get_sense(ide_config *ide)
+static int get_sense(drive_t *drv)
 {
-	switch (ide->drive[ide->regs.drv].load_state)
+	switch (drv->load_state)
 	{
 	case 3:
 		set_sense(2, 0x3A);
@@ -1270,12 +1627,12 @@ static int get_sense(ide_config *ide)
 
 	case 2:
 		set_sense(2, 4, 1);
-		ide->drive[ide->regs.drv].load_state--;
+		drv->load_state--;
 		break;
 
 	case 1:
 		set_sense(2, 28, 0);
-		ide->drive[ide->regs.drv].load_state--;
+		drv->load_state--;
 		break;
 
 	default:
@@ -1288,13 +1645,13 @@ static int get_sense(ide_config *ide)
 }
 
 
-void pause_resume(ide_config *ide, uint8_t *cmdbuf)
+static void pause_resume(drive_t *drv, uint8_t *cmdbuf)
 {
 	bool resume = !!(cmdbuf[8] & 1);
-	if(ide->drive[ide->regs.drv].playing) ide->drive[ide->regs.drv].paused = !resume;
+	if(drv->playing) drv->paused = !resume;
 }
 
-void play_audio_msf(ide_config *ide, uint8_t *cmdbuf)
+static void play_audio_msf(drive_t *drv, uint8_t *cmdbuf)
 {
 	uint32_t start_lba, end_lba;
 
@@ -1323,25 +1680,25 @@ void play_audio_msf(ide_config *ide, uint8_t *cmdbuf)
 
 	if (start_lba == end_lba)
 	{
-		ide->drive[ide->regs.drv].playing = 0;
-		ide->drive[ide->regs.drv].paused = 0;
+		drv->playing = 0;
+		drv->paused = 0;
 		return;
 	}
 
 	/* LBA 0xFFFFFFFF means start playing wherever the optics of the CD sit */
 	if (start_lba != 0xFFFFFFFF)
 	{
-		ide->drive[ide->regs.drv].playing = 1;
-		ide->drive[ide->regs.drv].paused = 0;
+		drv->playing = 1;
+		drv->paused = 0;
 	}
 	else
 	{
-		ide->drive[ide->regs.drv].playing = 0;
-		ide->drive[ide->regs.drv].paused = 1;
+		drv->playing = 0;
+		drv->paused = 1;
 	}
 }
 
-void play_audio10(ide_config *ide, uint8_t *cmdbuf)
+void play_audio10(drive_t *drv, uint8_t *cmdbuf)
 {
 	uint16_t play_length;
 	uint32_t start_lba;
@@ -1351,21 +1708,21 @@ void play_audio10(ide_config *ide, uint8_t *cmdbuf)
 
 	if (play_length == 0)
 	{
-		ide->drive[ide->regs.drv].playing = 0;
-		ide->drive[ide->regs.drv].paused = 0;
+		drv->playing = 0;
+		drv->paused = 0;
 		return;
 	}
 
 	/* LBA 0xFFFFFFFF means start playing wherever the optics of the CD sit */
 	if (start_lba != 0xFFFFFFFF)
 	{
-		ide->drive[ide->regs.drv].playing = 1;
-		ide->drive[ide->regs.drv].paused = 0;
+		drv->playing = 1;
+		drv->paused = 0;
 	}
 	else
 	{
-		ide->drive[ide->regs.drv].playing = 0;
-		ide->drive[ide->regs.drv].paused = 1;
+		drv->playing = 0;
+		drv->paused = 1;
 	}
 }
 
@@ -1436,11 +1793,11 @@ static void process_pkt_cmd(ide_config *ide)
 
 	case 0x42: // read sub
 		cddbg_printf("read sub:\n");
-		pkt_send(ide, buf, read_subchannel(ide, cmdbuf));
+		pkt_send(ide, buf, read_subchannel(&ide->drive[ide->regs.drv], cmdbuf));
 		break;
 
 	case 0x43: // read TOC
-		pkt_send(ide, buf, read_toc(ide, cmdbuf));
+		pkt_send(ide, buf, read_toc(&ide->drive[ide->regs.drv], cmdbuf));
 		break;
 
 	case 0x12: // inquiry
@@ -1449,7 +1806,7 @@ static void process_pkt_cmd(ide_config *ide)
 
 	case 0x03: // mode sense
 		cddbg_printf("get sense:\n");
-		pkt_send(ide, buf, get_sense(ide));
+		pkt_send(ide, buf, get_sense(&ide->drive[ide->regs.drv]));
 		break;
 
 	case 0x55: // mode select
@@ -1470,19 +1827,19 @@ static void process_pkt_cmd(ide_config *ide)
 
 	case 0x45: // play lba
 		printf("CD PLAY AUDIO(10)\n");
-		play_audio10(ide, cmdbuf);
+		play_audio10(&ide->drive[ide->regs.drv], cmdbuf);
 		cd_reply(ide, 0);
 		break;
 
 	case 0x47: // play msf
 		printf("CD PLAY AUDIO MSF\n");
-		play_audio_msf(ide, cmdbuf);
+		play_audio_msf(&ide->drive[ide->regs.drv], cmdbuf);
 		cd_reply(ide, 0);
 		break;
 
 	case 0x4B: // pause/resume
 		printf("CD PAUSE/RESUME\n");
-		pause_resume(ide, cmdbuf);
+		pause_resume(&ide->drive[ide->regs.drv], cmdbuf);
 		cd_reply(ide, 0);
 		break;
 

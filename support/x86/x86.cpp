@@ -239,7 +239,7 @@ static fileTYPE fdd1_image = {};
 static fileTYPE ide_image[4] = {};
 static bool boot_from_floppy = 1;
 
-static int img_mount(fileTYPE *f, char *name)
+static int img_mount(fileTYPE *f, const char *name)
 {
 	FileClose(f);
 	int writable = 0, ret = 0;
@@ -417,8 +417,22 @@ static void hdd_set(int num, char* filename)
 {
 	if (!v3 && num > 1) return;
 	uint32_t base = newcore ? ((num & (v3 ? 2 : 1)) ? HDD1_BASE_NEW : HDD0_BASE_NEW) : (num ? HDD1_BASE_OLD : HDD0_BASE_OLD);
-	int present = img_mount(&ide_image[num], filename);
-	x86_ide_set(num, base, present ? &ide_image[num] : 0, v3 ? 3 : newcore ? 2 : 0);
+
+	int present = 0;
+	int cd = 0;
+
+	int len = strlen(filename);
+	int vhd = (len > 4 && !strcasecmp(filename + len - 4, ".vhd"));
+
+	if (num > 1 && !vhd)
+	{
+		const char *img_name = x86_ide_parse_cd(num, filename);
+		if (img_name) present = img_mount(&ide_image[num], img_name);
+		if (present) cd = 1;
+	}
+
+	if(!present && vhd) present = img_mount(&ide_image[num], filename);
+	x86_ide_set(num, base, present ? &ide_image[num] : 0, v3 ? 3 : newcore ? 2 : 0, cd);
 }
 
 static uint8_t bin2bcd(unsigned val)
