@@ -12,7 +12,7 @@
 #include "pcecd.h"
 
 
-static int /*loaded = 0, unloaded = 0,*/ need_reset=0;
+static int need_reset=0;
 static uint8_t has_command = 0;
 
 void pcecd_poll()
@@ -36,19 +36,13 @@ void pcecd_poll()
 
 		if (pcecdd.has_status && !pcecdd.latency) {
 
-			uint16_t s;
-			pcecdd.GetStatus((uint8_t*)&s);
-			pcecdd.SendStatus(s, 0);
+			pcecdd.SendStatus(pcecdd.GetStatus());
 			pcecdd.has_status = 0;
-
-			printf("\x1b[32mPCECD: Send status = %02X, message = %02X\n\x1b[0m", s&0xFF, s >> 8);
 		}
 		else if (pcecdd.data_req) {
 
-			pcecdd.SendStatus(0, 1);
+			pcecdd.SendDataRequest();
 			pcecdd.data_req = false;
-
-			printf("\x1b[32mPCECD: Data request for MODESELECT6\n\x1b[0m");
 		}
 
 		pcecdd.Update();
@@ -81,7 +75,7 @@ void pcecd_poll()
 
 		case 1:
 			//TODO: process data
-			pcecdd.PendStatus(0, 0);
+			pcecdd.SendStatus(0);
 			printf("\x1b[32mPCECD: Command MODESELECT6, received data\n\x1b[0m");
 			break;
 
