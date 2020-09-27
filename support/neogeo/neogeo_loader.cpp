@@ -171,7 +171,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 		FileReadAdv(&f, buf, chunk);
 
 		EnableFpga();
-		spi8(UIO_FILE_TX_DAT);
+		spi8(FIO_FILE_TX_DAT);
 
 		if (neo_file_type == NEO_FILE_RAW)
 		{
@@ -405,7 +405,7 @@ static void notify_core(uint8_t index, uint32_t size)
 	if (index == 6) crom_start = 0x300000 + size;
 
 	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
+	spi8(FIO_FILE_TX_DAT);
 	spi_w(index);
 	spi_w((uint16_t)size);
 	spi_w(size >> 16);
@@ -778,7 +778,7 @@ static void notify_conf()
 	printf("notify_conf(0x%X)\n", conf);
 
 	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
+	spi8(FIO_FILE_TX_DAT);
 	spi_w(0x8000);
 	spi_w((uint16_t)conf);
 	spi_w(conf >> 16);

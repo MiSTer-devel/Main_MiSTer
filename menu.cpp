@@ -262,7 +262,7 @@ static char SelectedDir[1024] = {};
 static char SelectedLabel[1024] = {};
 
 static char Selected_F[16][1024] = {};
-static char Selected_S[4][1024] = {};
+static char Selected_S[8][1024] = {};
 static char Selected_tmp[1024] = {};
 
 static char selPath[1024] = {};
@@ -314,11 +314,15 @@ static int changeDir(char *dir)
 }
 
 static const char *home_dir = NULL;
+static char filter[256] = {};
+static unsigned long filter_typing_timer = 0;
 
 // this function displays file selection menu
 static void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
 	printf("pFileExt = %s\n", pFileExt);
+	filter_typing_timer = 0;
+	filter[0] = 0;
 
 	strncpy(selPath, path, sizeof(selPath) - 1);
 	selPath[sizeof(selPath) - 1] = 0;
@@ -328,7 +332,7 @@ static void SelectFile(const char* path, const char* pFileExt, unsigned char Opt
 		strcpy(selPath, get_rbf_dir());
 		if (strlen(get_rbf_name()))
 		{
-			strcat(selPath, "/");
+			if(strlen(selPath)) strcat(selPath, "/");
 			strcat(selPath, get_rbf_name());
 		}
 		pFileExt = "RBFMRA";
@@ -832,6 +836,47 @@ static void vga_nag()
 	EnableOsd_on(OSD_ALL);
 }
 
+void process_addon(char *ext, uint8_t idx)
+{
+	static char name[1024];
+
+	while (*ext && *ext != ',') ext++;
+	if (*ext) ext++;
+	if (!*ext) return;
+
+	printf("addons: %s\n", ext);
+
+	int i = 0;
+	while (1)
+	{
+		char *fname = name;
+		strcpy(name, selPath);
+		char *p = strrchr(name, '.');
+		if (!p) p = name + strlen(name);
+		*p++ = '.';
+
+		substrcpy(p, ext, i);
+		if (!strlen(p)) return;
+		if (*p == '!')
+		{
+			*p = 0;
+			char *bs = strrchr(name, '/');
+			if (!bs)
+			{
+				fname = p + 1;
+			}
+			else
+			{
+				strcpy(bs + 1, p + 1);
+			}
+		}
+
+		printf("Trying: %s\n", fname);
+		user_io_file_tx_a(fname, ((i+1) << 8) | idx);
+		i++;
+	}
+}
+
 static int joymap_first = 0;
 
 static int wm_x = 0;
@@ -839,6 +884,7 @@ static int wm_y = 0;
 static int wm_ok = 0;
 static int wm_side = 0;
 static uint16_t wm_pos[4] = {};
+static int page = 0;
 
 void HandleUI(void)
 {
@@ -877,11 +923,11 @@ void HandleUI(void)
 	static int flash_state = 0;
 	static uint32_t dip_submenu;
 	static int need_reset = 0;
-	static int page = 0;
 	static int flat = 0;
 	static int menusub_parent = 0;
 	static char title[32] = {};
 	static uint32_t saved_menustate = 0;
+	static char addon[1024];
 
 	static char	cp_MenuCancel;
 
@@ -1218,8 +1264,7 @@ void HandleUI(void)
 		OsdSetTitle(CoreName, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		m = 0;
-		menumask = 0x3ff;
-		OsdWrite(m++);
+		menumask = 0xfff;
 
 		strcpy(s, " Floppy 0: ");
 		strncat(s, get_image_name(0) ? get_image_name(0) : "* no disk *",27);
@@ -1231,39 +1276,47 @@ void HandleUI(void)
 
 		OsdWrite(m++);
 
+		strcpy(s, " HDD 0: ");
+		strncat(s, archie_get_hdd_name(0) ? archie_get_hdd_name(0) : "* no disk *", 27);
+		OsdWrite(m++, s, menusub == 2);
+
+		strcpy(s, " HDD 1: ");
+		strncat(s, archie_get_hdd_name(1) ? archie_get_hdd_name(1) : "* no disk *", 27);
+		OsdWrite(m++, s, menusub == 3);
+
+		OsdWrite(m++);
+
 		strcpy(s, " OS ROM: ");
 		strcat(s, archie_get_rom_name());
-		OsdWrite(m++, s, menusub == 2);
+		OsdWrite(m++, s, menusub == 4);
 
 		OsdWrite(m++);
 
 		strcpy(s, " Aspect ratio:       ");
 		strcat(s, archie_get_ar() ? "16:9" : "4:3");
-		OsdWrite(m++, s, menusub == 3);
+		OsdWrite(m++, s, menusub == 5);
 
 		strcpy(s, " Refresh rate:       ");
 		strcat(s, archie_get_60() ? "Variable" : "60Hz");
-		OsdWrite(m++, s, menusub == 4);
-
-		OsdWrite(m++);
+		OsdWrite(m++, s, menusub == 6);
 
 		sprintf(s, " Stereo mix:         %s", config_stereo_msg[archie_get_amix()]);
-		OsdWrite(m++, s, menusub == 5);
+		OsdWrite(m++, s, menusub == 7);
 
 		strcpy(s, " 25MHz audio fix:    ");
 		strcat(s, archie_get_afix() ? "Enable" : "Disable");
-		OsdWrite(m++, s, menusub == 6);
+		OsdWrite(m++, s, menusub == 8);
 
 		OsdWrite(m++);
 
 		sprintf(s, " Swap joysticks:     %s", user_io_get_joyswap() ? "Yes" : "No");
-		OsdWrite(m++, s, menusub == 7);
+		OsdWrite(m++, s, menusub == 9);
 		sprintf(s, " Swap mouse btn 2/3: %s", archie_get_mswap() ? "Yes" : "No");
-		OsdWrite(m++, s, menusub == 8);
+		OsdWrite(m++, s, menusub == 10);
 
 		while(m<15) OsdWrite(m++);
 
-		OsdWrite(15, STD_EXIT, menusub == 9, 0);
+		OsdWrite(15, STD_EXIT, menusub == 11, 0);
 		menustate = MENU_ARCHIE_MAIN2;
 		parentstate = MENU_ARCHIE_MAIN1;
 
@@ -1277,69 +1330,75 @@ void HandleUI(void)
 	case MENU_ARCHIE_MAIN2:
 		// menu key closes menu
 		if (menu) menustate = MENU_NONE1;
-		if (recent)
+		if (recent && (menusub <= 3))
 		{
-			if (menusub <= 1)
-			{
-				fs_Options = SCANO_DIR | SCANO_UMOUNT;
-				fs_MenuSelect = MENU_ARCHIE_MAIN_FILE_SELECTED;
-				fs_MenuCancel = MENU_ARCHIE_MAIN1;
-				strcpy(fs_pFileExt, "ADF");
-				if (recent_init(500)) menustate = MENU_RECENT1;
-			}
+			fs_Options = SCANO_DIR | SCANO_UMOUNT;
+			fs_MenuSelect = MENU_ARCHIE_MAIN_FILE_SELECTED;
+			fs_MenuCancel = MENU_ARCHIE_MAIN1;
+			strcpy(fs_pFileExt, (menusub <= 1) ? "ADF" : "HDF");
+			if (recent_init((menusub <= 1) ? 500 : 501)) menustate = MENU_RECENT1;
 		}
 
 		if (select || plus || minus)
 		{
-			switch (menusub) {
+			switch (menusub)
+			{
 			case 0:  // Floppy 0
 			case 1:  // Floppy 1
 				if (select)
 				{
 					ioctl_index = 0;
-					SelectFile(Selected_F[menusub], "ADF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
+					SelectFile(Selected_S[menusub], "ADF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				}
 				break;
 
-			case 2:  // Load ROM
+			case 2:  // HDD 0
+			case 3:  // HDD 1
 				if (select)
 				{
 					ioctl_index = 1;
+					SelectFile(Selected_S[menusub], "HDF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
+				}
+				break;
+
+			case 4:  // Load ROM
+				if (select)
+				{
 					SelectFile(Selected_F[menusub], "ROM", 0, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				}
 				break;
 
-			case 3:
+			case 5:
 				archie_set_ar(!archie_get_ar());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 4:
+			case 6:
 				archie_set_60(!archie_get_60());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 5:
+			case 7:
 				archie_set_amix(archie_get_amix() + (minus ? -1 : 1));
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 6:
+			case 8:
 				archie_set_afix(!archie_get_afix());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 7:
+			case 9:
 				user_io_set_joyswap(!user_io_get_joyswap());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 8:
+			case 10:
 				archie_set_mswap(!archie_get_mswap());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 9:  // Exit
+			case 11:  // Exit
 				if (select) menustate = MENU_NONE1;
 				break;
 			}
@@ -1358,18 +1417,25 @@ void HandleUI(void)
 		break;
 
 	case MENU_ARCHIE_MAIN_FILE_SELECTED:
+		menustate = MENU_ARCHIE_MAIN1;
 		if (menusub <= 1)
 		{
 			memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
 			recent_update(SelectedDir, Selected_F[menusub], SelectedLabel, 500);
 			user_io_file_mount(selPath, menusub);
 		}
-		else if (menusub == 2)
+		else if (menusub <= 3)
+		{
+			memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
+			recent_update(SelectedDir, Selected_F[menusub], SelectedLabel, 501);
+			archie_hdd_mount(selPath, menusub - 2);
+		}
+		else if (menusub == 4)
 		{
 			memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
 			archie_set_rom(selPath);
+			menustate = MENU_NONE1;
 		}
-		menustate = MENU_ARCHIE_MAIN1;
 		break;
 
 		/******************************************************************/
@@ -1497,20 +1563,32 @@ void HandleUI(void)
 						{
 							if (p[0] == 'S') s_entry = selentry;
 							substrcpy(s, p, 2);
-							if (strlen(s))
+							int num = (p[1] >= '0' && p[1] <= '9') ? p[1] - '0' : 0;
+
+							if (is_x86() && x86_get_image_name(num))
 							{
 								strcpy(s, " ");
 								substrcpy(s + 1, p, 2);
-								strcat(s, " *.");
+								strcat(s, " ");
+								strcat(s, x86_get_image_name(num));
 							}
 							else
 							{
-								if (p[0] == 'F') strcpy(s, " Load *.");
-								else             strcpy(s, " Mount *.");
+								if (strlen(s))
+								{
+									strcpy(s, " ");
+									substrcpy(s + 1, p, 2);
+									strcat(s, " *.");
+								}
+								else
+								{
+									if (p[0] == 'F') strcpy(s, " Load *.");
+									else             strcpy(s, " Mount *.");
+								}
+								pos = s + strlen(s);
+								substrcpy(pos, p, 1);
+								strcpy(pos, GetExt(pos));
 							}
-							pos = s + strlen(s);
-							substrcpy(pos, p, 1);
-							strcpy(pos, GetExt(pos));
 							MenuWrite(entry, s, menusub == selentry, d);
 
 							// add bit in menu mask
@@ -1712,6 +1790,8 @@ void HandleUI(void)
 				uint32_t entry = 0;
 				int i = 1;
 
+				addon[0] = 0;
+
 				while (1)
 				{
 					p = user_io_get_confstr(i++);
@@ -1751,8 +1831,18 @@ void HandleUI(void)
 					}
 
 					if (!inpage || h || p[0] < 'A') continue;
+
+					// supplement files
+					if (p[0] == 'f')
+					{
+						strcpy(addon, p);
+						continue;
+					}
+
 					if (entry == menusub) break;
 					entry++;
+
+					if (p[0] == 'F' || p[0] == 'S') addon[0] = 0;
 				}
 
 				if (!d)
@@ -1785,7 +1875,7 @@ void HandleUI(void)
 					else if (p[0] == 'S' && (select || recent))
 					{
 						ioctl_index = 0;
-						if (p[1] >= '0' && p[1] <= '3') ioctl_index = p[1] - '0';
+						if ((p[1] >= '0' && p[1] <= '3') || is_x86()) ioctl_index = p[1] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
 
@@ -1794,11 +1884,11 @@ void HandleUI(void)
 						fs_MenuCancel = MENU_8BIT_MAIN1;
 						strcpy(fs_pFileExt, ext);
 
-						memcpy(Selected_tmp, Selected_S[ioctl_index & 3], sizeof(Selected_tmp));
+						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 						if (is_pce() || is_megacd())
 						{
 							int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);
-							memcpy(Selected_tmp, Selected_S[ioctl_index & 3], sizeof(Selected_tmp));
+							memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 
 							if (num == 1)
 							{
@@ -1864,6 +1954,15 @@ void HandleUI(void)
 
 							user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff, ex);
 
+							if (is_x86() && p[1] == 'A')
+							{
+								int mode = GetUARTMode();
+								if (mode != 0)
+								{
+									SetUARTMode(0);
+									SetUARTMode(mode);
+								}
+							}
 							menustate = MENU_8BIT_MAIN1;
 						}
 						else if (((p[0] == 'T') || (p[0] == 'R') || (p[0] == 't') || (p[0] == 'r')) && select)
@@ -1875,6 +1974,7 @@ void HandleUI(void)
 							if (mask == 1 && is_x86())
 							{
 								x86_init();
+								ResetUART();
 								menustate = MENU_NONE1;
 							}
 							else
@@ -1915,64 +2015,87 @@ void HandleUI(void)
 			menustate = MENU_8BIT_SYSTEM1;
 			menusub = 0;
 		}
-		else if (left && !page)
+		else if (left)
 		{
-			menustate = MENU_8BIT_INFO;
-			menusub = 3;
+			if (page)
+			{
+				menustate = MENU_8BIT_MAIN1;
+				menusub = menusub_parent;
+				page = 0;
+			}
+			else
+			{
+				menustate = MENU_8BIT_INFO;
+				menusub = 3;
+			}
 		}
 		break;
 
 	case MENU_8BIT_MAIN_FILE_SELECTED:
-		MenuHide();
-		printf("File selected: %s\n", selPath);
-		memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
+		{
+			MenuHide();
+			printf("File selected: %s\n", selPath);
+			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
 
-		if (fs_Options & SCANO_NEOGEO)
-		{
-			neogeo_romset_tx(selPath);
-		}
-		else
-		{
-			if (is_pce())
+			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
+			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
+
+			if (fs_Options & SCANO_NEOGEO)
 			{
-				pcecd_set_image(0, "");
-				pcecd_reset();
+				neogeo_romset_tx(selPath);
 			}
-			user_io_store_filename(selPath);
-			user_io_file_tx(selPath, user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index, opensave);
-			if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
-		}
+			else
+			{
+				if (is_pce())
+				{
+					pcecd_set_image(0, "");
+					pcecd_reset();
+				}
+				user_io_store_filename(selPath);
+				user_io_file_tx(selPath, idx, opensave);
+				if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
+			}
 
-		recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
+			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
+
+			recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
+		}
 		break;
 
 	case MENU_8BIT_MAIN_IMAGE_SELECTED:
-		menustate = selPath[0] ? MENU_NONE1 : MENU_8BIT_MAIN1;
-		HandleUI();
+		{
+			menustate = MENU_8BIT_MAIN1;
+			if (selPath[0] && !is_x86()) MenuHide();
 
-		printf("Image selected: %s\n", selPath);
-		memcpy(Selected_S[ioctl_index & 3], selPath, sizeof(Selected_S[ioctl_index & 3]));
+			printf("Image selected: %s\n", selPath);
+			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
 
-		if (is_x86())
-		{
-			x86_set_image(ioctl_index, selPath);
-		}
-		else if (is_megacd())
-		{
-			mcd_set_image(ioctl_index, selPath);
-		}
-		else if (is_pce())
-		{
-			pcecd_set_image(ioctl_index, selPath);
-			cheats_init(selPath, 0);
-		}
-		else
-		{
-			user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
-			user_io_file_mount(selPath, ioctl_index);
-		}
+			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
+			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
-		recent_update(SelectedDir, Selected_S[ioctl_index & 3], SelectedLabel, ioctl_index + 500);
+			if (is_x86())
+			{
+				x86_set_image(ioctl_index, selPath);
+			}
+			else if (is_megacd())
+			{
+				mcd_set_image(ioctl_index, selPath);
+			}
+			else if (is_pce())
+			{
+				pcecd_set_image(ioctl_index, selPath);
+				cheats_init(selPath, 0);
+			}
+			else
+			{
+				user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
+				user_io_file_mount(selPath, ioctl_index);
+			}
+
+			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
+
+			recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
+		}
 		break;
 
 	case MENU_8BIT_SYSTEM1:
@@ -2520,7 +2643,7 @@ void HandleUI(void)
 				{
 					if(GetUARTMode() == 3 && GetMidiLinkMode() == 0)
 					{
-						sprintf(Selected_tmp, "/linux/soundfonts");
+						sprintf(Selected_tmp, "linux/soundfonts");
 						SelectFile(Selected_tmp, "SF2", SCANO_DIR | SCANO_TXT, MENU_SFONT_FILE_SELECTED, MENU_UART1);
 					}
 				}
@@ -2538,14 +2661,9 @@ void HandleUI(void)
 			case 5:
 				if (select)
 				{
-					int mode = GetUARTMode();
-					if(mode != 0)
-					{
-						SetUARTMode(0);
-						SetUARTMode(mode);
-						menustate = MENU_8BIT_SYSTEM1;
-						menusub = 4;
-					}
+					ResetUART();
+					menustate = MENU_8BIT_SYSTEM1;
+					menusub = 4;
 				}
 				break;
 			case 6:
@@ -3415,7 +3533,7 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		else if (back)
+		else if (back || left)
 		{
 			menustate = MENU_ST_MAIN1;
 			menusub = 4;
@@ -3610,7 +3728,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_LOAD_CONFIG2:
-		if (menu)
+		if (menu || left)
 		{
 			menustate = MENU_ST_MAIN1;
 			menusub = 5;
@@ -3660,7 +3778,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_SAVE_CONFIG2:
-		if (menu)
+		if (menu || left)
 		{
 			menustate = MENU_ST_MAIN1;
 			menusub = 6;
@@ -3935,7 +4053,7 @@ void HandleUI(void)
 				menusub = 10;
 			}
 		}
-		if (menu) // exit menu
+		if (menu || left) // exit menu
 		{
 			menustate = MENU_MAIN1;
 			menusub = 10;
@@ -3955,7 +4073,7 @@ void HandleUI(void)
 	case MENU_FILE_SELECT2:
 		menumask = 0;
 
-		if (c == KEY_BACKSPACE && (fs_Options & SCANO_UMOUNT))
+		if (c == KEY_BACKSPACE && (fs_Options & SCANO_UMOUNT) && !strlen(filter))
 		{
 			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
 			OsdWrite(OsdGetSize() / 2, "    Unmounting the image", 0, 0);
@@ -3990,53 +4108,86 @@ void HandleUI(void)
 			menustate = MENU_RECENT1;
 		}
 
+		if (c == KEY_BACKSPACE)
+		{
+			filter[0] = 0;
+			filter_typing_timer = 0;
+			ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options);
+			menustate = MENU_FILE_SELECT1;
+		}
+
 		if (flist_nDirEntries())
 		{
 			ScrollLongName(); // scrolls file name if longer than display line
 
 			if (c == KEY_HOME)
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if (c == KEY_END)
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_END, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
-
 			if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_PREV_PAGE, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_NEXT_PAGE, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if (down) // scroll down one entry
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_NEXT, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if (up) // scroll up one entry
 			{
+				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_PREV, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			{
-				int i;
+				char i;
 				if ((i = GetASCIIKey(c)) > 1)
 				{
-					// find an entry beginning with given character
-					ScanDirectory(selPath, i, fs_pFileExt, fs_Options);
+					int filter_len = strlen(filter);
+					if (CheckTimer(filter_typing_timer))
+					{
+						filter[0] = i;
+						filter[1] = 0;
+
+						// You need both ScanDirectory calls here: the first
+						// call "clears" the filter, the second one scrolls to
+						// the right place in the list
+						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options);
+						ScanDirectory(selPath, i, fs_pFileExt, fs_Options);
+					}
+					else if (filter_len < 255)
+					{
+						filter[filter_len++] = i;
+						filter[filter_len] = 0;
+						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, NULL, filter);
+					}
+
+					filter_typing_timer = GetTimer(2000);
+					printf("filter is: %s\n", filter);
+
 					menustate = MENU_FILE_SELECT1;
 				}
 			}
@@ -4382,7 +4533,7 @@ void HandleUI(void)
 			menusub = 9;
 		}
 		else
-		if (menu) // exit menu
+		if (menu || left) // exit menu
 		{
 			menustate = MENU_MAIN1;
 			menusub = 9;
@@ -4523,20 +4674,10 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		else if (back)
+		else if (back || left)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 6;
-		}
-		else if (right)
-		{
-			menustate = MENU_SETTINGS_MEMORY1;
-			menusub = 0;
-		}
-		else if (left)
-		{
-			menustate = MENU_SETTINGS_HARDFILE1;
-			menusub = 0;
 		}
 		break;
 
@@ -4630,20 +4771,10 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		else if (back)
+		else if (back || left)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 7;
-		}
-		else if (right)
-		{
-			menustate = MENU_SETTINGS_VIDEO1;
-			menusub = 0;
-		}
-		else if (left)
-		{
-			menustate = MENU_SETTINGS_CHIPSET1;
-			menusub = 0;
 		}
 		break;
 
@@ -4704,6 +4835,8 @@ void HandleUI(void)
 		break;
 
 	case MENU_SETTINGS_HARDFILE2:
+		saved_menustate = MENU_SETTINGS_HARDFILE1;
+
 		if (select || recent)
 		{
 			if (menusub == 0)
@@ -4747,20 +4880,14 @@ void HandleUI(void)
 			}
 		}
 
-		if (menu) // return to previous menu
+		if (menu)
+		{
+			menustate = MENU_NONE1;
+		}
+		else if (back || left)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 5;
-		}
-		else if (right)
-		{
-			menustate = MENU_SETTINGS_CHIPSET1;
-			menusub = 0;
-		}
-		else if (left)
-		{
-			menustate = MENU_SETTINGS_VIDEO1;
-			menusub = 0;
 		}
 		break;
 
@@ -4927,20 +5054,10 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		else if (back)
+		else if (back || left)
 		{
 			menustate = MENU_MAIN1;
 			menusub = 8;
-		}
-		else if (right)
-		{
-			menustate = MENU_SETTINGS_HARDFILE1;
-			menusub = 0;
-		}
-		else if (left)
-		{
-			menustate = MENU_SETTINGS_MEMORY1;
-			menusub = 0;
 		}
 		break;
 
@@ -5703,7 +5820,7 @@ void PrintDirectory(int expand)
 		else if(!flist_nDirEntries()) // selected directory is empty
 		{
 			if (!i) strcpy(s, "          No files!");
-			if (home_dir)
+			if (home_dir && !filter[0])
 			{
 				if (i == 6) strcpy(s, "      Missing directory:");
 				if (i == 8)
@@ -5823,5 +5940,31 @@ int menu_lightgun_cb(uint16_t type, uint16_t code, int value)
 			return 1;
 		}
 	}
+	return 0;
+}
+
+int menu_allow_cfg_switch()
+{
+	if (user_io_osd_is_visible())
+	{
+		switch (menustate)
+		{
+		case MENU_ST_MAIN2:
+		case MENU_ARCHIE_MAIN2:
+		case MENU_MAIN2:
+		case MENU_8BIT_SYSTEM2:
+		case MENU_SYSTEM2:
+			return 1;
+
+		case MENU_FILE_SELECT2:
+			if (is_menu() && (fs_Options & SCANO_CORES)) return 1;
+			break;
+
+		case MENU_8BIT_MAIN2:
+			if (!page) return 1;
+			break;
+		}
+	}
+
 	return 0;
 }

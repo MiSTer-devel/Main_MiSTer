@@ -1,22 +1,26 @@
-#include "stdio.h"
-#include "string.h"
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
 #include "../../hardware.h"
 #include "../../fpga_io.h"
 #include "../../menu.h"
-#include "archie.h"
 #include "../../debug.h"
 #include "../../user_io.h"
 #include "../../input.h"
+#include "../../support.h"
+#include "archie.h"
 
 #define CONFIG_FILENAME  "ARCHIE.CFG"
 
 typedef struct
 {
 	unsigned long system_ctrl;     // system control word
-	char rom_img[1024];              // rom image file name
+	char rom_img[1024];            // rom image file name
+	char hdd_img[2][1024];
 } archie_config_t;
 
-static archie_config_t config;
+static archie_config_t config = {};
 
 #define archie_debugf(a, ...) printf("\033[1;31mARCHIE: " a "\033[0m\n", ##__VA_ARGS__)
 // #define archie_debugf(a, ...)
@@ -189,10 +193,91 @@ static void archie_kbd_reset(void)
 	flags = 0;
 }
 
-void archie_init(void)
+#define cmos_name user_io_make_filepath(HomeDir(), "cmos.dat")
+
+static uint8_t rtc[16] = {};
+static uint8_t year = 0;
+static void update_rtc()
+{
+	time_t t = time(NULL);
+	struct tm tm = *localtime(&t);
+	year = tm.tm_year - 100;
+	rtc[2] = (tm.tm_sec  % 10) | ((tm.tm_sec  / 10) << 4);
+	rtc[3] = (tm.tm_min  % 10) | ((tm.tm_min  / 10) << 4);
+	rtc[4] = (tm.tm_hour % 10) | ((tm.tm_hour / 10) << 4);
+	rtc[5] = (tm.tm_mday % 10) | ((tm.tm_mday / 10) << 4) | (year << 6);
+	rtc[6] = ((tm.tm_mon + 1) % 10) | (((tm.tm_mon + 1) / 10) << 4) | (tm.tm_wday << 5);
+}
+
+static void load_cmos()
+{
+	static uint8_t cmos_data[256] = {};
+	if (FileLoad(cmos_name, cmos_data, sizeof(cmos_data)))
+	{
+		update_rtc();
+		memcpy(cmos_data, rtc, 16);
+		cmos_data[0xC0] = year;
+		cmos_data[0xC1] = 20;
+
+		user_io_set_index(3);
+		user_io_set_download(1);
+		user_io_file_tx_data(cmos_data, sizeof(cmos_data));
+		user_io_set_download(0);
+	}
+}
+
+static void check_cmos(uint8_t cnt)
+{
+	static uint8_t old_cnt = 0;
+	static uint32_t cmos_timer = 0;
+	static uint32_t rtc_timer = 0;
+
+	if (!cmos_timer || CheckTimer(cmos_timer))
+	{
+		cmos_timer = GetTimer(1000);
+		if (old_cnt != cnt)
+		{
+			old_cnt = cnt;
+
+			static uint8_t cmos_data[256];
+			user_io_set_index(3);
+			user_io_set_upload(1);
+			user_io_file_rx_data(cmos_data, sizeof(cmos_data));
+			user_io_set_upload(0);
+			memset(cmos_data, 0, 16);
+			cmos_data[0xC0] = 0;
+			cmos_data[0xC1] = 0;
+
+			static uint8_t cmos_old[256];
+			FileLoad(cmos_name, cmos_old, sizeof(cmos_old));
+			memset(cmos_old, 0, 16);
+			cmos_old[0xC0] = 0;
+			cmos_old[0xC1] = 0;
+
+			if (memcmp(cmos_old, cmos_data, 256))
+			{
+				printf("update cmos.dat\n");
+				//hexdump(cmos_data, 256); printf("\n");
+				FileSave(cmos_name, cmos_data, sizeof(cmos_data));
+			}
+		}
+	}
+
+	if (!rtc_timer || CheckTimer(rtc_timer))
+	{
+		rtc_timer = GetTimer(60000);
+		update_rtc();
+		user_io_set_index(3);
+		user_io_set_download(1);
+		user_io_file_tx_data(rtc, 16);
+		user_io_set_download(0);
+	}
+}
+
+void archie_init()
 {
 	archie_debugf("init");
-	user_io_8bit_set_status(1, UIO_STATUS_RESET);
+	user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 
 	// set config defaults
 	config.system_ctrl = 0;
@@ -217,6 +302,15 @@ void archie_init(void)
 	archie_set_60(archie_get_60());
 	archie_set_afix(archie_get_afix());
 
+	if(!config.hdd_img[0][0] || !OpenHardfile(0, config.hdd_img[0]))
+	{
+		memset(config.hdd_img[0], 0, sizeof(config.hdd_img[0]));
+	}
+
+	if (!config.hdd_img[1][0] || !OpenHardfile(1, config.hdd_img[1]))
+	{
+		memset(config.hdd_img[1], 0, sizeof(config.hdd_img[1]));
+	}
 
 	// upload rom file
 	archie_set_rom(config.rom_img);
@@ -224,9 +318,9 @@ void archie_init(void)
 	// upload ext file
 	//user_io_file_tx("Archie/RISCOS.EXT", 2);
 
-	user_io_file_tx(user_io_make_filepath(HomeDir(), "CMOS.DAT"), 3);
+	load_cmos();
 
-	user_io_8bit_set_status(0, UIO_STATUS_RESET);
+	user_io_8bit_set_status(~UIO_STATUS_RESET, UIO_STATUS_RESET);
 
 /*
 	int i;
@@ -332,8 +426,38 @@ static void archie_check_queue(void)
 	tx_queue_rptr = QUEUE_NEXT(tx_queue_rptr);
 }
 
+static void check_reset()
+{
+	static uint32_t timer = 0;
+
+	// check the user button
+	if (!user_io_osd_is_visible() && (user_io_user_button() || user_io_get_kbd_reset()))
+	{
+		if (!timer) timer = GetTimer(1000);
+		else if (timer != 1)
+		{
+			if (CheckTimer(timer))
+			{
+				archie_set_rom(config.rom_img);
+				timer = 1;
+			}
+		}
+	}
+	else
+	{
+		timer = 0;
+	}
+}
+
 void archie_poll(void)
 {
+	EnableFpga();
+	uint16_t status = spi_w(0);
+	DisableFpga();
+	HandleHDD(status >> 8, 0);
+	check_cmos(status);
+	check_reset();
+
 #ifdef HOLD_OFF_TIME
 	if ((kbd_state == STATE_HOLD_OFF) && CheckTimer(hold_off_timer)) {
 		archie_debugf("KBD resume after hold off");
@@ -472,4 +596,23 @@ void archie_poll(void)
 	}
 	else
 		DisableIO();
+}
+
+const char *archie_get_hdd_name(int i)
+{
+	if (!config.hdd_img[i][0]) return NULL;
+
+	char *p = strrchr(config.hdd_img[i], '/');
+	if (!p) p = config.hdd_img[i]; else p++;
+
+	return p;
+}
+
+void archie_hdd_mount(char *filename, int idx)
+{
+	memset(config.hdd_img[idx], 0, sizeof(config.hdd_img[idx]));
+	if (OpenHardfile(idx, filename))
+	{
+		strcpy(config.hdd_img[idx], filename);
+	}
 }

@@ -27,17 +27,7 @@ C_SRC =   $(wildcard *.c) \
           lib/libco/arm.c 
 
 CPP_SRC = $(wildcard *.cpp) \
-          $(wildcard ./support/minimig/*.cpp) \
-          $(wildcard ./support/sharpmz/*.cpp) \
-          $(wildcard ./support/archie/*.cpp) \
-          $(wildcard ./support/st/*.cpp) \
-          $(wildcard ./support/x86/*.cpp) \
-          $(wildcard ./support/snes/*.cpp) \
-          $(wildcard ./support/neogeo/*.cpp) \
-          $(wildcard ./support/arcade/*.cpp) \
-          $(wildcard ./support/megacd/*.cpp) \
-          $(wildcard ./support/pcecd/*.cpp) \
-          $(wildcard ./support/c64/*.cpp) \
+          $(wildcard ./support/*/*.cpp) \
           lib/lodepng/lodepng.cpp
 
 IMG =     $(wildcard *.png)
@@ -63,7 +53,7 @@ clean:
 	$(Q)find . \( -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -exec rm -f {} \;
 
 cleanall:
-	$(Q)rm -rf $(OBJ) $(DEP) *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
+	$(Q)rm -rf *.o *.d *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
 	$(Q)rm -rf obj DTAR* x64
 	$(Q)find . -name '*.o' -delete
 	$(Q)find . -name '*.d' -delete

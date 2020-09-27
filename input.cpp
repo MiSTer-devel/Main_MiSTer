@@ -1534,10 +1534,13 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 			struct input_event ev;
 			ev.type = EV_KEY;
 			ev.value = press;
+
+			int cfg_switch = menu_allow_cfg_switch() && (osdbtn & JOY_BTN2) && press;
+
 			switch (mask)
 			{
 			case JOY_RIGHT:
-				if (press && (osdbtn & JOY_BTN2))
+				if (cfg_switch)
 				{
 					user_io_set_ini(0);
 					osdbtn = 0;
@@ -1547,7 +1550,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				break;
 
 			case JOY_LEFT:
-				if (press && (osdbtn & JOY_BTN2))
+				if (cfg_switch)
 				{
 					user_io_set_ini(1);
 					osdbtn = 0;
@@ -1557,7 +1560,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				break;
 
 			case JOY_UP:
-				if (press && (osdbtn & JOY_BTN2))
+				if (cfg_switch)
 				{
 					user_io_set_ini(2);
 					osdbtn = 0;
@@ -1567,7 +1570,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				break;
 
 			case JOY_DOWN:
-				if (press && (osdbtn & JOY_BTN2))
+				if (cfg_switch)
 				{
 					user_io_set_ini(3);
 					osdbtn = 0;
@@ -1669,7 +1672,11 @@ static void joy_analog(int num, int axis, int offset)
 
 void reset_players()
 {
-	for (int i = 0; i < NUMDEV; i++) input[i].num = 0;
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		input[i].num = 0;
+		input[i].map_shown = 0;
+	}
 	memset(player_pad, 0, sizeof(player_pad));
 	memset(player_pdsp, 0, sizeof(player_pdsp));
 }
@@ -1794,32 +1801,41 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		input[dev].has_map++;
 	}
 
-	if (!input[dev].num && ((ev->type == EV_KEY && ev->code == input[dev].mmap[SYS_BTN_A] && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
+	if (!input[dev].num)
 	{
-		for (uint8_t num = 1; num < NUMDEV + 1; num++)
+		int assign_btn = (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL);
+		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1)
 		{
-			int found = 0;
-			for (int i = 0; i < NUMDEV; i++)
-			{
-				// paddles/spinners overlay on top of other gamepad
-				if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
-				{
-					found = (input[i].num == num);
-					if (found) break;
-				}
-			}
+			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_START; i++) if (ev->code == input[dev].mmap[i]) assign_btn = 1;
+		}
 
-			if (!found)
+		if (assign_btn)
+		{
+			for (uint8_t num = 1; num < NUMDEV + 1; num++)
 			{
-				input[dev].num = num;
-				store_player(num, dev);
-				printf("Device %s assigned to player %d\n", input[dev].id, input[dev].num);
-				break;
+				int found = 0;
+				for (int i = 0; i < NUMDEV; i++)
+				{
+					// paddles/spinners overlay on top of other gamepad
+					if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
+					{
+						found = (input[i].num == num);
+						if (found) break;
+					}
+				}
+
+				if (!found)
+				{
+					input[dev].num = num;
+					store_player(num, dev);
+					printf("Device %s assigned to player %d\n", input[dev].id, input[dev].num);
+					break;
+				}
 			}
 		}
 	}
 
-	if (!input[dev].map_shown && input[dev].num && ((ev->type == EV_KEY && ev->code == input[dev].mmap[SYS_BTN_A] && ev->value >= 1) || (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL)))
+	if (!input[dev].map_shown && input[dev].num)
 	{
 		input[dev].map_shown = 1;
 		store_player(input[dev].num, dev);
@@ -2664,6 +2680,7 @@ void mergedevs()
 	static char str[1024];
 	char phys[64] = {};
 	char uniq[64] = {};
+	char id[64] = {};
 
 	while (fgets(str, sizeof(str), f))
 	{
@@ -2680,10 +2697,14 @@ void mergedevs()
 			if (!strncmp("P: Phys", str, 7)) snprintf(phys, sizeof(phys), "%s", strchr(str, '=') + 1);
 			if (!strncmp("U: Uniq", str, 7)) snprintf(uniq, sizeof(uniq), "%s", strchr(str, '=') + 1);
 
-			if (!strncmp("H: ", str, 3) && phys[0])
+			if (!strncmp("H: ", str, 3))
 			{
+				if (strlen(phys) && strlen(uniq)) snprintf(id, sizeof(id), "%s/%s", phys, uniq);
+				else if (strlen(phys)) strcpy(id, phys);
+				else strcpy(id, uniq);
+
 				char *handlers = strchr(str, '=');
-				if (handlers)
+				if (handlers && id[0])
 				{
 					handlers++;
 					for (int i = 0; i < NUMDEV; i++)
@@ -2694,13 +2715,9 @@ void mergedevs()
 							if (dev)
 							{
 								char idsp[32];
-								strcpy(idsp, dev+1);
+								strcpy(idsp, dev + 1);
 								strcat(idsp, " ");
-								if (strstr(handlers, idsp))
-								{
-									if(uniq[0]) snprintf(input[i].id, sizeof(input[i].id), "%s/%s", phys, uniq);
-									else strcpy(input[i].id, phys);
-								}
+								if (strstr(handlers, idsp)) strcpy(input[i].id, id);
 							}
 						}
 					}
@@ -2715,6 +2732,11 @@ void mergedevs()
 	make_unique(0x289B, 0x0057, -1); // Raphnet
 	make_unique(0x0E8F, 0x3013, 1); // Mayflash SNES controller 2 port adapter
 	make_unique(0x16C0, 0x05E1, 1); // XinMo XM-10 2 player USB Encoder
+
+	if (cfg.no_merge_vid)
+	{
+		make_unique(cfg.no_merge_vid, cfg.no_merge_pid, (cfg.no_merge_pid ? 1 : 0));
+	}
 
 	// merge multifunctional devices by id
 	for (int i = 0; i < NUMDEV; i++)
@@ -3231,7 +3253,7 @@ int input_test(int getchar)
 									if (ev.code == 1)   ev.code = KEY_MENU;
 								}
 
-								if (ev.type == EV_KEY && ev.code == KEY_BACK && input[dev].num)
+								if (ev.type == EV_KEY && ev.code == KEY_BACK && input[dev].vid == 0x45E)
 								{
 									ev.code = BTN_SELECT;
 								}

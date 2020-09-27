@@ -30,44 +30,77 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <sys/mman.h>
 #include <time.h>
 
 #include "../../spi.h"
 #include "../../user_io.h"
 #include "../../file_io.h"
 #include "../../fpga_io.h"
+#include "x86_share.h"
+#include "x86_ide.h"
+#include "x86_cdrom.h"
 
-#define ALT_CPU_CPU_FREQ 90000000u
+#define FLOPPY0_BASE_OLD     0x8800
+#define HDD0_BASE_OLD        0x8840
+#define FLOPPY1_BASE_OLD     0x9800
+#define HDD1_BASE_OLD        0x9840
+#define PC_BUS_BASE_OLD      0x88a0
+#define SOUND_BASE_OLD       0x9000
+#define PIT_BASE_OLD         0x8880
+#define VGA_BASE_OLD         0x8900
+#define RTC_BASE_OLD         0x8c00
+#define SD_BASE_OLD          0x0A00
 
-#define FLOPPY0_BASE     0x8800
-#define HDD0_BASE        0x8840
-#define FLOPPY1_BASE     0x9800
-#define HDD1_BASE        0x9840
-#define PC_BUS_BASE      0x88a0
-#define PIO_OUTPUT_BASE  0x8860
-#define SOUND_BASE       0x9000
-#define PIT_BASE         0x8880
-#define RTC_BASE         0x8c00
-#define SD_BASE          0x0A00
+#define IMG_TYPE_FDD0_OLD    0x0800
+#define IMG_TYPE_FDD1_OLD    0x1800
+#define IMG_TYPE_HDD0_OLD    0x0000
+#define IMG_TYPE_HDD1_OLD    0x1000
 
-#define CFG_VER          2
+#define HDD0_BASE_NEW        0xF000
+#define HDD1_BASE_NEW        0xF100
+#define FDD0_BASE_NEW        0xF200
+#define FDD1_BASE_NEW        0xF300
+#define RTC_BASE_NEW         0xF400
+
+#define CFG_VER         3
+
+#define SHMEM_ADDR      0x30000000
+#define BIOS_SIZE       0x10000
+
+static int newcore = 0;
+static int v3 = 0;
+
+#define IOWR(base, reg, value) x86_dma_set((base) + (newcore ? (reg) : ((reg)<<2)), value)
 
 typedef struct
 {
 	uint32_t ver;
-	char fdd_name[1024];
-	char hdd0_name[1024];
-	char hdd1_name[1024];
+	char img_name[6][1024];
 } x86_config;
 
 static x86_config config;
 
-static uint8_t dma_sdio(int status)
+static uint32_t old_cpu_clock = 0;
+static uint32_t cpu_get_clock()
 {
-	uint8_t res;
+	uint32_t clock;
+
 	EnableIO();
-	spi8(UIO_DMA_SDIO);
-	res = spi_w((uint16_t)status);
+	spi8(UIO_DMA_WRITE);
+	clock = spi_w(0);
+	clock = (spi_w(0) << 16) | clock;
+	DisableIO();
+
+	return clock ? clock : 90500000;
+}
+
+static uint16_t dma_sdio(int status)
+{
+	uint16_t res;
+	EnableIO();
+	res = spi_w(UIO_DMA_SDIO);
+	if(status || !res) res = (uint8_t)spi_w((uint16_t)status);
 	DisableIO();
 	return res;
 }
@@ -84,112 +117,144 @@ static uint32_t dma_get(uint32_t address)
 }
 */
 
-static void dma_set(uint32_t address, uint32_t data)
+void x86_dma_set(uint32_t address, uint32_t data)
 {
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
 	spi32_w(address);
-	spi32_w(data);
+	if (v3) spi_w((uint16_t)data); else spi32_w(data);
 	DisableIO();
 }
 
-static void dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
+void x86_dma_sendbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
 	EnableIO();
-	spi8(UIO_DMA_WRITE);
-	spi32_w(address);
-	while (length--) spi32_w(*data++);
+	fpga_spi_fast(UIO_DMA_WRITE);
+	fpga_spi_fast(address);
+	fpga_spi_fast(0);
+	if (newcore)
+	{
+		if(address < FDD0_BASE_NEW) fpga_spi_fast_block_write((uint16_t*)data, length * 2);
+		else
+		{
+			uint8_t *buf = (uint8_t*)data;
+			length *= 4;
+			while (length--) if (v3) spi_w(*buf++); else spi32_w(*buf++);
+		}
+	}
+	else while (length--) spi32_w(*data++);
 	DisableIO();
 }
 
-static void dma_rcvbuf(uint32_t address, uint32_t length, uint32_t *data)
+void x86_dma_recvbuf(uint32_t address, uint32_t length, uint32_t *data)
 {
 	EnableIO();
-	spi8(UIO_DMA_READ);
-	spi32_w(address);
-	while (length--) *data++ = spi32_w(0);
+	fpga_spi_fast(UIO_DMA_READ);
+	fpga_spi_fast(address);
+	fpga_spi_fast(0);
+	if (newcore)
+	{
+		if (address < FDD0_BASE_NEW || (!v3 && address == FDD0_BASE_NEW)) fpga_spi_fast_block_read((uint16_t*)data, length * 2);
+		else if (v3 && address == FDD0_BASE_NEW)
+		{
+			while (length--) *data++ = spi_w(0);
+		}
+		else
+		{
+			uint8_t *buf = (uint8_t*)data;
+			length *= 4;
+			while (length--) *buf++ = v3 ? spi_w(0) : spi32_w(0);
+		}
+	}
+	else while (length--) *data++ = spi32_w(0);
 	DisableIO();
+}
+
+static void* shmem_init(int offset, int size)
+{
+	int fd;
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
+
+	void *shmem = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, SHMEM_ADDR + offset);
+	close(fd);
+
+	if (shmem == (void *)-1)
+	{
+		printf("ao486 share_init: Unable to mmap(/dev/mem)\n");
+		return 0;
+	}
+
+	return shmem;
 }
 
 static int load_bios(const char* name, uint8_t index)
 {
-	fileTYPE f = {};
-	static uint32_t buf[128];
+	printf("BIOS: %s\n", name);
 
-	if (!FileOpen(&f, name)) return 0;
+	void *buf = shmem_init(index ? 0xC0000 : 0xF0000, BIOS_SIZE);
+	if (!buf) return 0;
 
-	unsigned long bytes2send = f.size;
-	printf("BIOS %s, %lu bytes.\n", name, bytes2send);
+	memset(buf, 0, BIOS_SIZE);
+	FileLoad(name, buf, BIOS_SIZE);
+	munmap(buf, BIOS_SIZE);
 
-	EnableIO();
-	spi8(UIO_DMA_WRITE);
-	spi32_w( index ? 0x80C0000 : 0x80F0000 );
-
-	while (bytes2send)
-	{
-		printf(".");
-
-		uint16_t chunk = (bytes2send>512) ? 512 : bytes2send;
-		bytes2send -= chunk;
-
-		FileReadSec(&f, buf);
-
-		chunk = (chunk + 3) >> 2;
-		uint32_t* p = buf;
-		while(chunk--) spi32_w(*p++);
-	}
-	DisableIO();
-	FileClose(&f);
-
-	printf("\n");
 	return 1;
 }
 
-static bool floppy_is_160k = false;
-static bool floppy_is_180k = false;
-static bool floppy_is_320k = false;
-static bool floppy_is_360k = false;
-static bool floppy_is_720k = false;
-static bool floppy_is_1_2m = false;
-static bool floppy_is_1_44m= false;
-static bool floppy_is_1_68m= false;
-static bool floppy_is_2_88m= false;
+#define FDD_TYPE_NONE 0
+#define FDD_TYPE_160  1
+#define FDD_TYPE_180  2
+#define FDD_TYPE_320  3
+#define FDD_TYPE_360  4
+#define FDD_TYPE_720  5
+#define FDD_TYPE_1200 6
+#define FDD_TYPE_1440 7
+#define FDD_TYPE_1680 8
+#define FDD_TYPE_2880 9
 
-#define CMOS_FDD_TYPE ((floppy_is_2_88m) ? 0x50 : (floppy_is_1_44m || floppy_is_1_68m) ? 0x40 : (floppy_is_720k) ? 0x30 : (floppy_is_1_2m) ? 0x20 : 0x10)
+static char floppy_type[2] = { FDD_TYPE_NONE, FDD_TYPE_NONE };
 
-static fileTYPE fdd_image0 = {};
-static fileTYPE fdd_image1 = {};
-static fileTYPE hdd_image0 = {};
-static fileTYPE hdd_image1 = {};
-static bool boot_from_floppy = 1;
-
-#define IMG_TYPE_FDD0 0x0800
-#define IMG_TYPE_FDD1 0x1800
-
-#define IMG_TYPE_HDD0 0x0000
-#define IMG_TYPE_HDD1 0x1000
-
-static __inline fileTYPE *get_image(uint32_t type)
+static uint8_t get_fdd_bios_type(char type)
 {
 	switch (type)
 	{
-		case IMG_TYPE_HDD0: return &hdd_image0;
-		case IMG_TYPE_HDD1: return &hdd_image1;
-		case IMG_TYPE_FDD0: return &fdd_image0;
+	case FDD_TYPE_2880:
+		return 0x5;
+
+	case FDD_TYPE_1440:
+	case FDD_TYPE_1680:
+		return 0x4;
+
+	case FDD_TYPE_720:
+		return 0x3;
+
+	case FDD_TYPE_1200:
+		return 0x2;
 	}
-	return &fdd_image1;
+
+	return 0x1;
 }
 
-static int img_mount(uint32_t type, char *name)
-{
-	FileClose(get_image(type));
+static fileTYPE fdd0_image = {};
+static fileTYPE fdd1_image = {};
+static fileTYPE ide_image[4] = {};
+static bool boot_from_floppy = 1;
 
-	int writable = FileCanWrite(name);
-	int ret = FileOpenEx(get_image(type), name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+static int img_mount(fileTYPE *f, const char *name)
+{
+	FileClose(f);
+	int writable = 0, ret = 0;
+
+	if (strlen(name))
+	{
+		writable = FileCanWrite(name);
+		ret = FileOpenEx(f, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+		if (!ret) printf("Failed to open file %s\n", name);
+	}
+
 	if (!ret)
 	{
-		get_image(type)->size = 0;
-		printf("Failed to open file %s\n", name);
+		f->size = 0;
 		return 0;
 	}
 
@@ -197,72 +262,101 @@ static int img_mount(uint32_t type, char *name)
 	return 1;
 }
 
-static int img_read(uint32_t type, uint32_t lba, void *buf, uint32_t len)
+static int img_read(fileTYPE *f, uint32_t lba, void *buf, uint32_t cnt)
 {
-	if (!FileSeekLBA(get_image(type), lba)) return 0;
-	return FileReadAdv(get_image(type), buf, len);
+	if (!FileSeekLBA(f, lba)) return 0;
+	return FileReadAdv(f, buf, cnt * 512);
 }
 
-static int img_write(uint32_t type, uint32_t lba, void *buf, uint32_t len)
+static uint32_t img_write(fileTYPE *f, uint32_t lba, void *buf, uint32_t cnt)
 {
-	if (!FileSeekLBA(get_image(type), lba)) return 0;
-	return FileWriteAdv(get_image(type), buf, len);
+	if (!FileSeekLBA(f, lba)) return 0;
+	return FileWriteAdv(f, buf, cnt * 512);
 }
 
-#define IOWR(base, reg, value) dma_set(base+(reg<<2), value)
+static int floppy_wait_cycles;
 
-static uint32_t cmos[128];
-/*
-static void cmos_set(uint addr, uint8_t val)
+static void set_clock()
 {
-	if (addr >= sizeof(cmos)) return;
+	uint32_t cpu_clock = cpu_get_clock();
+	old_cpu_clock = cpu_clock;
 
-	cmos[addr] = val;
-	return;
+	IOWR(FLOPPY0_BASE_OLD, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE_OLD, 0x8, (int)(1000000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE_OLD, 0x9, (int)(1666666.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE_OLD, 0xA, (int)(2000000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(FLOPPY0_BASE_OLD, 0xB, (int)(500000.0 / (1000000000.0 / cpu_clock)));
 
-	uint16_t sum = 0;
-	for (int i = 0x10; i <= 0x2D; i++) sum += cmos[i];
+	IOWR(VGA_BASE_OLD, 0, cpu_clock);
 
-	cmos[0x2E] = sum >> 8;
-	cmos[0x2F] = sum & 0xFF;
+	//-------------------------------------------------------------------------- sound
+	/*
+	0-255.[15:0]: cycles in period
+	256.[12:0]:  cycles in 80us
+	257.[9:0]:   cycles in 1 sample: 96000 Hz
+	*/
 
-	IOWR(RTC_BASE, addr, cmos[addr]);
+	double cycle_in_ns = (1000000000.0 / cpu_clock); //33.333333;
+	for (int i = 0; i < 256; i++)
+	{
+		double f = 1000000.0 / (256.0 - i);
 
-	IOWR(RTC_BASE, 0x2E, cmos[0x2E]);
-	IOWR(RTC_BASE, 0x2F, cmos[0x2F]);
+		double cycles_in_period = 1000000000.0 / (f * cycle_in_ns);
+		IOWR(SOUND_BASE_OLD, i, (int)cycles_in_period);
+	}
+
+	IOWR(SOUND_BASE_OLD, 256, (int)(80000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(SOUND_BASE_OLD, 257, (int)((1000000000.0 / 96000.0) / (1000000000.0 / cpu_clock)));
+
+	//-------------------------------------------------------------------------- pit
+	/*
+	0.[7:0]: cycles in sysclock 1193181 Hz
+	*/
+
+	IOWR(PIT_BASE_OLD, 0, (int)((1000000000.0 / 1193181.0) / (1000000000.0 / cpu_clock)));
+
+	/*
+	128.[26:0]: cycles in second
+	129.[12:0]: cycles in 122.07031 us
+	*/
+
+	IOWR(RTC_BASE_OLD, 128, (int)(1000000000.0 / (1000000000.0 / cpu_clock)));
+	IOWR(RTC_BASE_OLD, 129, (int)(122070.0 / (1000000000.0 / cpu_clock)));
 }
-*/
 
-static int fdd_set(char* filename)
+static void fdd_set(int num, char* filename)
 {
-	floppy_is_160k = false;
-	floppy_is_180k = false;
-	floppy_is_320k = false;
-	floppy_is_360k = false;
-	floppy_is_720k = false;
-	floppy_is_1_2m = false;
-	floppy_is_1_44m = false;
-	floppy_is_1_68m = false;
-	floppy_is_2_88m = false;
+	if (!newcore && num) return;
 
-	int floppy = img_mount(IMG_TYPE_FDD0, filename);
-	uint32_t size = get_image(IMG_TYPE_FDD0)->size/512;
+	floppy_type[num] = FDD_TYPE_1440;
+
+	uint32_t base = newcore ? FDD0_BASE_NEW : FLOPPY0_BASE_OLD;
+	fileTYPE *fdd_image = num ? &fdd1_image : &fdd0_image;
+
+	int floppy = img_mount(fdd_image, filename);
+	uint32_t size = fdd_image->size/512;
+	printf("floppy size: %d blks\n", size);
 	if (floppy && size)
 	{
-		if (size >= 5760) floppy_is_2_88m = true;
-		else if (size >= 3360) floppy_is_1_68m = true;
-		else if (size >= 2880) floppy_is_1_44m = true;
-		else if (size >= 2400) floppy_is_1_2m = true;
-		else if (size >= 1440) floppy_is_720k = true;
-		else if (size >= 720) floppy_is_360k = true;
-		else if (size >= 640) floppy_is_320k = true;
-		else if (size >= 360) floppy_is_180k = true;
-		else floppy_is_160k = true;
+		if (size >= 8000)
+		{
+			floppy = 0;
+			FileClose(fdd_image);
+			printf("Image size is too large for floppy. Closing...\n");
+		}
+		else if (size >= 5760) floppy_type[num] = FDD_TYPE_2880;
+		else if (size >= 3360) floppy_type[num] = FDD_TYPE_1680;
+		else if (size >= 2880) floppy_type[num] = FDD_TYPE_1440;
+		else if (size >= 2400) floppy_type[num] = FDD_TYPE_1200;
+		else if (size >= 1440) floppy_type[num] = FDD_TYPE_720;
+		else if (size >= 720) floppy_type[num] = FDD_TYPE_360;
+		else if (size >= 640) floppy_type[num] = FDD_TYPE_320;
+		else if (size >= 360) floppy_type[num] = FDD_TYPE_180;
+		else floppy_type[num] = FDD_TYPE_160;
 	}
 	else
 	{
 		floppy = 0;
-		floppy_is_1_44m = true;
 	}
 
 	/*
@@ -281,219 +375,77 @@ static int fdd_set(char* filename)
 	0x0C.[7:0]:    media type: 8'h20 none; 8'h00 old; 8'hC0 720k; 8'h80 1_44M; 8'h40 2_88M
 	*/
 
-	int floppy_spt =
-		(floppy_is_160k) ? 8 :
-		(floppy_is_180k) ? 9 :
-		(floppy_is_320k) ? 8 :
-		(floppy_is_360k) ? 9 :
-		(floppy_is_720k) ? 9 :
-		(floppy_is_1_2m) ? 15 :
-		(floppy_is_1_44m) ? 18 :
-		(floppy_is_1_68m) ? 21 :
-		(floppy_is_2_88m) ? 36 :
-		0;
+	int floppy_spt = 0;
+	int floppy_cylinders = 0;
+	int floppy_heads = 0;
 
-	int floppy_cylinders     = (floppy_is_2_88m || floppy_is_1_68m || floppy_is_1_44m || floppy_is_1_2m || floppy_is_720k) ? 80 : 40;
-	int floppy_heads         = (floppy_is_160k || floppy_is_180k) ? 1 : 2;
-	int floppy_total_sectors = floppy_spt * floppy_heads * floppy_cylinders;
-	int floppy_wait_cycles   = 200000000 / floppy_spt;
-
-	int floppy_media =
-		(!floppy) ? 0x20 :
-		(floppy_is_160k) ? 0x00 :
-		(floppy_is_180k) ? 0x00 :
-		(floppy_is_320k) ? 0x00 :
-		(floppy_is_360k) ? 0x00 :
-		(floppy_is_720k) ? 0xC0 :
-		(floppy_is_1_2m) ? 0x00 :
-		(floppy_is_1_44m) ? 0x80 :
-		(floppy_is_2_88m) ? 0x40 :
-		0x20;
-
-	IOWR(FLOPPY0_BASE, 0x0, floppy ? 1 : 0);
-	IOWR(FLOPPY0_BASE, 0x1, (floppy && (get_image(IMG_TYPE_FDD0)->mode & O_RDWR)) ? 0 : 1);
-	IOWR(FLOPPY0_BASE, 0x2, floppy_cylinders);
-	IOWR(FLOPPY0_BASE, 0x3, floppy_spt);
-	IOWR(FLOPPY0_BASE, 0x4, floppy_total_sectors);
-	IOWR(FLOPPY0_BASE, 0x5, floppy_heads);
-	IOWR(FLOPPY0_BASE, 0x6, 0); // base LBA
-	IOWR(FLOPPY0_BASE, 0x7, (int)(floppy_wait_cycles / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY0_BASE, 0x8, (int)(1000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY0_BASE, 0x9, (int)(1666666.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY0_BASE, 0xA, (int)(2000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY0_BASE, 0xB, (int)(500000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(FLOPPY0_BASE, 0xC, floppy_media);
-
-	//cmos_set(0x10, CMOS_FDD_TYPE);
-	return floppy;
-}
-
-typedef struct
-{
-	uint32_t type;
-	uint32_t base;
-	uint32_t hd_cylinders;
-	uint32_t hd_heads;
-	uint32_t hd_spt;
-	uint32_t hd_total_sectors;
-	uint32_t present;
-	char*    name;
-} hdd_config;
-
-static hdd_config hdd[2] = {
-	{ IMG_TYPE_HDD0, HDD0_BASE, 0, 0, 0, 0, 0, config.hdd0_name },
-	{ IMG_TYPE_HDD1, HDD1_BASE, 0, 0, 0, 0, 0, config.hdd1_name }
-};
-
-static int hdd_set(uint32_t num)
-{
-	hdd[num].hd_cylinders = 0;
-	hdd[num].hd_heads = 0;
-	hdd[num].hd_spt = 0;
-	hdd[num].hd_total_sectors = 0;
-
-	hdd[num].present = img_mount(hdd[num].type, hdd[num].name);
-	if (!hdd[num].present) return 0;
-
-	hdd[num].hd_heads = 16;
-	hdd[num].hd_spt = 63;
-	hdd[num].hd_cylinders = get_image(hdd[num].type)->size / (hdd[num].hd_heads * hdd[num].hd_spt * 512);
-
-	//Maximum 8GB images are supported.
-	if (hdd[num].hd_cylinders > 16383) hdd[num].hd_cylinders = 16383;
-	hdd[num].hd_total_sectors = hdd[num].hd_spt*hdd[num].hd_heads*hdd[num].hd_cylinders;
-
-	/*
-	0x00.[31:0]:    identify write
-	0x01.[16:0]:    media cylinders
-	0x02.[4:0]:     media heads
-	0x03.[8:0]:     media spt
-	0x04.[13:0]:    media sectors per cylinder = spt * heads
-	0x05.[31:0]:    media sectors total
-	0x06.[31:0]:    media sd base
-	*/
-
-	uint32_t identify[256] =
+	switch (floppy_type[num])
 	{
-		0x0040, 										//word 0
-		hdd[num].hd_cylinders, 	                        //word 1
-		0x0000,											//word 2 reserved
-		hdd[num].hd_heads,								//word 3
-		(uint16_t)(512 * hdd[num].hd_spt),				//word 4
-		512,											//word 5
-		hdd[num].hd_spt,								//word 6
-		0x0000,											//word 7 vendor specific
-		0x0000,											//word 8 vendor specific
-		0x0000,											//word 9 vendor specific
-		('A' << 8) | 'O',								//word 10
-		('H' << 8) | 'D',								//word 11
-		('0' << 8) | '0',								//word 12
-		('0' << 8) | '0',								//word 13
-		('0' << 8) | ' ',								//word 14
-		(' ' << 8) | ' ',								//word 15
-		(' ' << 8) | ' ',								//word 16
-		(' ' << 8) | ' ',								//word 17
-		(' ' << 8) | ' ',								//word 18
-		(' ' << 8) | ' ',								//word 19
-		3,   											//word 20 buffer type
-		512,											//word 21 cache size
-		4,												//word 22 number of ecc bytes
-		0,0,0,0,										//words 23..26 firmware revision
-		(' ' << 8) | ' ',								//words 27..46 model number
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		(' ' << 8) | ' ',
-		16,												//word 47 max multiple sectors
-		1,												//word 48 dword io
-		1 << 9,											//word 49 lba supported
-		0x0000,											//word 50 reserved
-		0x0200,											//word 51 pio timing
-		0x0200,											//word 52 pio timing
-		0x0007,											//word 53 valid fields
-		hdd[num].hd_cylinders, 							//word 54
-		hdd[num].hd_heads,								//word 55
-		hdd[num].hd_spt,								//word 56
-		hdd[num].hd_total_sectors & 0xFFFF,				//word 57
-		hdd[num].hd_total_sectors >> 16,				//word 58
-		0x0000,											//word 59 multiple sectors
-		hdd[num].hd_total_sectors & 0xFFFF,				//word 60
-		hdd[num].hd_total_sectors >> 16,				//word 61
-		0x0000,											//word 62 single word dma modes
-		0x0000,											//word 63 multiple word dma modes
-		0x0000,											//word 64 pio modes
-		120,120,120,120,								//word 65..68
-		0,0,0,0,0,0,0,0,0,0,0,							//word 69..79
-		0x007E,											//word 80 ata modes
-		0x0000,											//word 81 minor version number
-		1 << 14,  										//word 82 supported commands
-		(1 << 14) | (1 << 13) | (1 << 12) | (1 << 10),	//word 83
-		1 << 14,	    								//word 84
-		1 << 14,	 	    							//word 85
-		(1 << 14) | (1 << 13) | (1 << 12) | (1 << 10),	//word 86
-		1 << 14,	    								//word 87
-		0x0000,											//word 88
-		0,0,0,0,										//word 89..92
-		1 | (1 << 14) | 0x2000,							//word 93
-		0,0,0,0,0,0,									//word 94..99
-		hdd[num].hd_total_sectors & 0xFFFF,				//word 100
-		hdd[num].hd_total_sectors >> 16,				//word 101
-		0,												//word 102
-		0,												//word 103
-
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,//word 104..127
-
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,				//word 128..255
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	};
-
-	if (hdd[num].present)
-	{
-		char *name = get_image(hdd[num].type)->name;
-		for (int i = 0; i < 20; i++)
-		{
-			if (*name) identify[27 + i] = ((*name++) << 8) | 0x20;
-			if (*name) identify[27 + i] = (identify[27 + i] & 0xFF00) | (*name++);
-		}
+	case FDD_TYPE_160:  floppy_spt = 8;  floppy_cylinders = 40; floppy_heads = 1; break;
+	case FDD_TYPE_180:  floppy_spt = 9;  floppy_cylinders = 40; floppy_heads = 1; break;
+	case FDD_TYPE_320:  floppy_spt = 8;  floppy_cylinders = 40; floppy_heads = 2; break;
+	case FDD_TYPE_360:  floppy_spt = 9;  floppy_cylinders = 40; floppy_heads = 2; break;
+	case FDD_TYPE_720:  floppy_spt = 9;  floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_1200: floppy_spt = 15; floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_1440: floppy_spt = 18; floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_1680: floppy_spt = 21; floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_2880: floppy_spt = 36; floppy_cylinders = 80; floppy_heads = 2; break;
 	}
 
-	for (int i = 0; i<128; i++) IOWR(hdd[num].base, 0, hdd[num].present ? ((unsigned int)identify[2 * i + 1] << 16) | (unsigned int)identify[2 * i + 0] : 0);
+	int floppy_total_sectors = floppy_spt * floppy_heads * floppy_cylinders;
+	floppy_wait_cycles       = 200000000 / floppy_spt;
 
-	IOWR(hdd[num].base, 1, hdd[num].hd_cylinders);
-	IOWR(hdd[num].base, 2, hdd[num].hd_heads);
-	IOWR(hdd[num].base, 3, hdd[num].hd_spt);
-	IOWR(hdd[num].base, 4, hdd[num].hd_spt * hdd[num].hd_heads);
-	IOWR(hdd[num].base, 5, hdd[num].hd_spt * hdd[num].hd_heads * hdd[num].hd_cylinders);
-	IOWR(hdd[num].base, 6, 0); // base LBA
+	printf("floppy:\n");
+	printf("  cylinders:     %d\n", floppy_cylinders);
+	printf("  heads:         %d\n", floppy_heads);
+	printf("  spt:           %d\n", floppy_spt);
+	printf("  total_sectors: %d\n\n", floppy_total_sectors);
 
-	printf("HDD%d:\n  present %d\n  hd_cylinders %d\n  hd_heads %d\n  hd_spt %d\n  hd_total_sectors %d\n\n", num, hdd[num].present, hdd[num].hd_cylinders, hdd[num].hd_heads, hdd[num].hd_spt, hdd[num].hd_total_sectors);
-	return hdd[num].present;
+	uint32_t subaddr = num << 7;
+	IOWR(base + subaddr, 0x0, floppy ? 1 : 0);
+	IOWR(base + subaddr, 0x1, (floppy && (fdd_image->mode & O_RDWR)) ? 0 : 1);
+	IOWR(base + subaddr, 0x2, floppy_cylinders);
+	IOWR(base + subaddr, 0x3, floppy_spt);
+	IOWR(base + subaddr, 0x4, floppy_total_sectors);
+	IOWR(base + subaddr, 0x5, floppy_heads);
+	IOWR(base + subaddr, 0x6, 0); // base LBA
+	IOWR(base + subaddr, 0xC, 0);
+
+	if(!newcore) set_clock();
+}
+
+static void hdd_set(int num, char* filename)
+{
+	if (!v3 && num > 1) return;
+	uint32_t base = newcore ? ((num & (v3 ? 2 : 1)) ? HDD1_BASE_NEW : HDD0_BASE_NEW) : (num ? HDD1_BASE_OLD : HDD0_BASE_OLD);
+
+	int present = 0;
+	int cd = 0;
+
+	int len = strlen(filename);
+	int vhd = (len > 4 && !strcasecmp(filename + len - 4, ".vhd"));
+
+	if (num > 1 && !vhd)
+	{
+		const char *img_name = cdrom_parse(num, filename);
+		if (img_name) present = img_mount(&ide_image[num], img_name);
+		if (present) cd = 1;
+	}
+
+	if(!present && vhd) present = img_mount(&ide_image[num], filename);
+	x86_ide_set(num, base, present ? &ide_image[num] : 0, v3 ? 3 : newcore ? 2 : 0, cd);
 }
 
 static uint8_t bin2bcd(unsigned val)
 {
 	return ((val / 10) << 4) + (val % 10);
+}
+
+static void check_ver()
+{
+	uint16_t flg = dma_sdio(0);
+	newcore = ((flg & 0xC000) == 0xC000);
+	v3 = ((flg & 0xF000) == 0xE000);
 }
 
 void x86_init()
@@ -505,53 +457,20 @@ void x86_init()
 	load_bios(user_io_make_filepath(home, "boot0.rom"), 0);
 	load_bios(user_io_make_filepath(home, "boot1.rom"), 1);
 
-	IOWR(PC_BUS_BASE, 0, 0x00FFF0EA);
-	IOWR(PC_BUS_BASE, 1, 0x000000F0);
+	check_ver();
 
-	//-------------------------------------------------------------------------- sound
-	/*
-	0-255.[15:0]: cycles in period
-	256.[12:0]:  cycles in 80us
-	257.[9:0]:   cycles in 1 sample: 96000 Hz
-	*/
-
-	double cycle_in_ns = (1000000000.0 / ALT_CPU_CPU_FREQ); //33.333333;
-    for(int i=0; i<256; i++)
+	if (!newcore)
 	{
-        double f = 1000000.0 / (256.0-i);
+		IOWR(PC_BUS_BASE_OLD, 0, 0x00FFF0EA);
+		IOWR(PC_BUS_BASE_OLD, 1, 0x000000F0);
+	}
 
-        double cycles_in_period = 1000000000.0 / (f * cycle_in_ns);
-        IOWR(SOUND_BASE, i, (int)cycles_in_period);
-    }
-
-	IOWR(SOUND_BASE, 256, (int)(80000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(SOUND_BASE, 257, (int)((1000000000.0/96000.0) / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-
-	//-------------------------------------------------------------------------- pit
-	/*
-	0.[7:0]: cycles in sysclock 1193181 Hz
-	*/
-
-	IOWR(PIT_BASE, 0, (int)((1000000000.0/1193181.0) / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-
-	//-------------------------------------------------------------------------- floppy
-
-	fdd_set(config.fdd_name);
-
-	//-------------------------------------------------------------------------- hdd
-
-	hdd_set(0);
-	hdd_set(1);
+	x86_ide_reset(((dma_sdio(0)>>8) & 3) ^ 1);
+	fdd_set(0, config.img_name[0]);
+	fdd_set(1, config.img_name[1]);
+	for (int i = 0; i < 4; i++) hdd_set(i, config.img_name[i + 2]);
 
 	//-------------------------------------------------------------------------- rtc
-
-	/*
-    128.[26:0]: cycles in second
-    129.[12:0]: cycles in 122.07031 us
-    */
-
-	IOWR(RTC_BASE, 128, (int)(1000000000.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
-	IOWR(RTC_BASE, 129, (int)(122070.0 / (1000000000.0 / ALT_CPU_CPU_FREQ)));
 
 	unsigned char translate_mode = 1; //LBA
 	translate_mode = (translate_mode << 6) | (translate_mode << 4) | (translate_mode << 2) | translate_mode;
@@ -560,17 +479,18 @@ void x86_init()
 	struct tm tm = *localtime(&t);
 
 	//rtc contents 0-127
-	uint32_t tmp[128] = {
+	uint8_t cmos[128] =
+	{
 		bin2bcd(tm.tm_sec), //0x00: SEC BCD
 		0x00, //0x01: ALARM SEC BCD
 		bin2bcd(tm.tm_min), //0x02: MIN BCD
 		0x00, //0x03: ALARM MIN BCD
 		bin2bcd(tm.tm_hour), //0x04: HOUR BCD 24h
 		0x12, //0x05: ALARM HOUR BCD 24h
-		(uint32_t)tm.tm_wday+1, //0x06: DAY OF WEEK Sunday=1
+		(uint8_t)(tm.tm_wday + 1), //0x06: DAY OF WEEK Sunday=1
 		bin2bcd(tm.tm_mday), //0x07: DAY OF MONTH BCD from 1
-		bin2bcd(tm.tm_mon+1), //0x08: MONTH BCD from 1
-		bin2bcd((tm.tm_year<117) ? 17 : tm.tm_year-100), //0x09: YEAR BCD
+		bin2bcd(tm.tm_mon + 1), //0x08: MONTH BCD from 1
+		bin2bcd((tm.tm_year < 117) ? 17 : tm.tm_year - 100), //0x09: YEAR BCD
 		0x26, //0x0A: REG A
 		0x02, //0x0B: REG B
 		0x00, //0x0C: REG C
@@ -578,11 +498,11 @@ void x86_init()
 		0x00, //0x0E: REG E - POST status
 		0x00, //0x0F: REG F - shutdown status
 
-		(uint32_t)CMOS_FDD_TYPE, //0x10: floppy drive type; 0-none, 1-360K, 2-1.2M, 3-720K, 4-1.44M, 5-2.88M
+		(uint8_t)((get_fdd_bios_type(floppy_type[0])<<4) | (newcore ? get_fdd_bios_type(floppy_type[1]) : 0)),
 		0x00, //0x11: configuration bits; not used
 		0x00, //0x12: hard disk types; 0-none, 1:E-type, F-type 16+ (unused)
 		0x00, //0x13: advanced configuration bits; not used
-		0x0D, //0x14: equipment bits
+		0x4D, //0x14: equipment bits
 		0x80, //0x15: base memory in 1k LSB
 		0x02, //0x16: base memory in 1k MSB
 		0x00, //0x17: memory size above 1m in 1k LSB
@@ -610,19 +530,19 @@ void x86_init()
 		0x00, //0x2B: hd 1 configuration 8/9; landing zone high
 		0x00, //0x2C: hd 1 configuration 9/9; sectors/track
 
-		(boot_from_floppy)? 0x20u : 0x00u, //0x2D: boot sequence
+		(uint8_t)((fdd0_image.size && boot_from_floppy) ? 0x20 : 0x00), //0x2D: boot sequence
 
 		0x00, //0x2E: checksum MSB
 		0x00, //0x2F: checksum LSB
 
 		0x00, //0x30: memory size above 1m in 1k LSB
-		0xFC, //0x31: memory size above 1m in 1k MSB
+		0x3C, //0x31: memory size above 1m in 1k MSB
 
 		0x20, //0x32: IBM century
 		0x00, //0x33: ?
 
-		0x00, //0x34: memory size above 16m in 64k LSB
-		0x07, //0x35: memory size above 16m in 64k MSB; 128 MB
+		0x80, //0x34: memory size above 16m in 64k LSB
+		0x0E, //0x35: memory size above 16m in 64k MSB; 256-8 MB
 
 		0x00, //0x36: ?
 		0x20, //0x37: IBM PS/2 century
@@ -634,7 +554,7 @@ void x86_init()
 		0x00, //0x3B: ?
 		0x00, //0x3C: ?
 
-		0x00, //0x3D: eltorito boot sequence; not used
+		(uint8_t)((fdd0_image.size && boot_from_floppy) ? 0x21 : 0x02), //0x3D: eltorito boot sequence
 
 		0x00, //0x3E: ?
 		0x00, //0x3F: ?
@@ -645,47 +565,137 @@ void x86_init()
 		0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0, 0, 0
 	};
 
-	memcpy(cmos, tmp, sizeof(cmos));
-
 	//count checksum
 	unsigned short sum = 0;
-	for(int i=0x10; i<=0x2D; i++) sum += cmos[i];
+	for (int i = 0x10; i <= 0x2D; i++) sum += cmos[i];
 
 	cmos[0x2E] = sum >> 8;
 	cmos[0x2F] = sum & 0xFF;
+	for (unsigned int i = 0; i < sizeof(cmos) / sizeof(cmos[0]); i++) IOWR(newcore ? RTC_BASE_NEW : RTC_BASE_OLD, i, cmos[i]);
 
-	for(unsigned int i=0; i<sizeof(cmos)/sizeof(unsigned int); i++) IOWR(RTC_BASE, i, cmos[i]);
-
+	x86_share_reset();
 	user_io_8bit_set_status(0, UIO_STATUS_RESET);
 }
 
-struct sd_param_t
+static void img_io(fileTYPE *img, uint32_t basereg, uint8_t read, int sz)
 {
-	uint32_t addr;
-	uint32_t lba;
-	uint32_t bl_cnt;
-};
+	struct sd_param_t
+	{
+		uint32_t lba;
+		uint32_t cnt;
+	};
 
-static struct sd_param_t sd_params = {};
+	static struct sd_param_t sd_params = {};
+	static uint32_t secbuf[128 * 16];
 
-void x86_poll()
-{
+	x86_dma_recvbuf(basereg, sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
+
+	if (sz == 1 && (sd_params.lba >> 15))
+	{
+		// Floppy B:
+		sd_params.lba &= 0x7FFF;
+		img = &fdd1_image;
+	}
+
 	int res = 0;
-	static uint32_t secbuf[128 * 4];
+	if (read)
+	{
+		//printf("Read: 0x%08x, %d, %d\n", basereg, sd_params.lba, sd_params.cnt);
 
-	char sd_req = dma_sdio(0);
+		if (img->size)
+		{
+			if (img_read(img, sd_params.lba, &secbuf, sz))
+			{
+				x86_dma_sendbuf(basereg + 255, sz * 128, secbuf);
+				res = 1;
+			}
+		}
+		else
+		{
+			printf("Error: image is not ready.\n");
+		}
+
+		if (!res)
+		{
+			memset(secbuf, 0, sz * 512);
+			x86_dma_sendbuf(basereg + 255, sz * 128, secbuf);
+		}
+	}
+	else
+	{
+		//printf("Write: 0x%08x, 0x%08x, %d\n", basereg, sd_params.lba, sd_params.cnt);
+
+		x86_dma_recvbuf(basereg + 255, sd_params.cnt * 128, secbuf);
+		if (img->size)
+		{
+			if (sd_params.cnt > 0 && sd_params.cnt <= 16)
+			{
+				if (img->mode & O_RDWR)
+				{
+					if (img_write(img, sd_params.lba, secbuf, sd_params.cnt))
+					{
+						res = 1;
+					}
+				}
+				else
+				{
+					printf("Error: image is read-only.\n");
+				}
+			}
+			else
+			{
+				printf("Error: Block count %d is out of range 1..16.\n", sd_params.cnt);
+			}
+		}
+		else
+		{
+			printf("Error: image is not ready.\n");
+		}
+	}
+}
+
+void img_io_old(uint8_t sd_req)
+{
+	struct sd_param_t
+	{
+		uint32_t addr;
+		uint32_t lba;
+		uint32_t bl_cnt;
+	};
+
+	static struct sd_param_t sd_params = {};
+	static uint32_t secbuf[128 * 4];
+	x86_dma_recvbuf(SD_BASE_OLD + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
+
+	fileTYPE *img;
+	switch (sd_params.addr)
+	{
+		case IMG_TYPE_HDD0_OLD:
+			//printf("HDD0 req\n");
+			img = &ide_image[0];
+			break;
+		case IMG_TYPE_HDD1_OLD:
+			//printf("HDD1 req\n");
+			img = &ide_image[1];
+			break;
+		default:
+			//printf("FDD req\n");
+			img = &fdd0_image;
+			break;
+	}
+
+	int res = 0;
 	if (sd_req == 1)
 	{
-		dma_rcvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
-		//printf("Read: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
+		//printf("Read(old): 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
-		if (get_image(sd_params.addr)->size)
+		if (img->size)
 		{
-			if (sd_params.bl_cnt>0 && sd_params.bl_cnt<=4)
+			if (sd_params.bl_cnt > 0 && sd_params.bl_cnt <= 4)
 			{
-				if (img_read(sd_params.addr, sd_params.lba, secbuf, sd_params.bl_cnt * 512))
+				if (img_read(img, sd_params.lba, secbuf, sd_params.bl_cnt))
 				{
-					dma_sendbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
+					x86_dma_sendbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
 					res = 1;
 				}
 			}
@@ -703,17 +713,16 @@ void x86_poll()
 	}
 	else if (sd_req == 2)
 	{
-		dma_rcvbuf(SD_BASE + (4 << 2), sizeof(sd_params) >> 2, (uint32_t*)&sd_params);
-		//printf("Write: 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
+		//printf("Write(old): 0x%08x, 0x%08x, %d\n", sd_params.addr, sd_params.lba, sd_params.bl_cnt);
 
-		if (get_image(sd_params.addr)->size)
+		if (img->size)
 		{
-			if (sd_params.bl_cnt>0 && sd_params.bl_cnt <= 4)
+			if (sd_params.bl_cnt > 0 && sd_params.bl_cnt <= 4)
 			{
-				if (get_image(sd_params.addr)->mode & O_RDWR)
+				if (img->mode & O_RDWR)
 				{
-					dma_rcvbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
-					if (img_write(sd_params.addr, sd_params.lba, secbuf, sd_params.bl_cnt * 512))
+					x86_dma_recvbuf(sd_params.addr, sd_params.bl_cnt * 128, secbuf);
+					if (img_write(img, sd_params.lba, secbuf, sd_params.bl_cnt))
 					{
 						res = 1;
 					}
@@ -737,23 +746,44 @@ void x86_poll()
 	}
 }
 
+void x86_poll()
+{
+	if (!newcore)
+	{
+		uint32_t cpu_clock = cpu_get_clock();
+		if (cpu_clock != old_cpu_clock) set_clock();
+	}
+
+	x86_share_poll();
+
+	uint16_t sd_req = dma_sdio(0);
+	if (sd_req)
+	{
+		if (sd_req & 0x8000)
+		{
+			if (v3) x86_ide_io(0, sd_req & 7);
+			else if (sd_req & 3) img_io(&ide_image[0], HDD0_BASE_NEW, sd_req & 1, 16);
+
+			sd_req >>= 3;
+			if (v3) x86_ide_io(1, sd_req & 7);
+			else if (sd_req & 3) img_io(&ide_image[1], HDD1_BASE_NEW, sd_req & 1, 16);
+
+			sd_req >>= 3;
+			if (sd_req & 3) img_io(&fdd0_image, FDD0_BASE_NEW, sd_req & 1, 1);
+		}
+		else
+		{
+			img_io_old((uint8_t)sd_req);
+		}
+	}
+}
+
 void x86_set_image(int num, char *filename)
 {
-	switch (num)
-	{
-	case 0:
-		strcpy(config.fdd_name, filename);
-		fdd_set(filename);
-		break;
-
-	case 2:
-		strcpy(config.hdd0_name, filename);
-		break;
-
-	case 3:
-		strcpy(config.hdd1_name, filename);
-		break;
-	}
+	memset(config.img_name[num], 0, sizeof(config.img_name[0]));
+	strcpy(config.img_name[num], filename);
+	if (num < 2) fdd_set(num, filename);
+	else if (v3 && x86_ide_is_placeholder(num - 2)) hdd_set(num - 2, filename);
 }
 
 void x86_config_save()
@@ -764,6 +794,8 @@ void x86_config_save()
 
 void x86_config_load()
 {
+	check_ver();
+
 	static x86_config tmp;
 	memset(&config, 0, sizeof(config));
 	if (FileLoadConfig("ao486sys.cfg", &tmp, sizeof(tmp)) && (tmp.ver == CFG_VER))
@@ -775,4 +807,30 @@ void x86_config_load()
 void x86_set_fdd_boot(uint32_t boot)
 {
 	boot_from_floppy = (boot != 0);
+}
+
+void x86_set_uart_mode(int mode)
+{
+	dma_sdio(mode ? 0x40 : 0x80);
+}
+
+const char* x86_get_image_name(int num)
+{
+	static char res[32];
+
+	char *name = config.img_name[num];
+	if (!name[0]) return NULL;
+
+	char *p = strrchr(name, '/');
+	if (!p) p = name;
+	else p++;
+
+	if (strlen(p) < 19) strcpy(res, p);
+	else
+	{
+		strncpy(res, p, 19);
+		res[19] = 0;
+	}
+
+	return res;
 }

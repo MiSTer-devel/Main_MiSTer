@@ -199,6 +199,15 @@
     <ClCompile Include="support\minimig\minimig_share.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
+    <ClCompile Include="support\x86\x86_share.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\x86\x86_ide.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\x86\x86_cdrom.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -376,6 +385,15 @@
       <Filter>Header Files\support</Filter>
     </ClInclude>
     <ClInclude Include="support\minimig\miminig_fs_messages.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\x86\x86_share.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\x86\x86_ide.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\x86\x86_cdrom.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>

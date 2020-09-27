@@ -63,7 +63,7 @@ void setStorage(int dev);
 int  isUSBMounted();
 
 int  FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32);
-int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0);
+int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0, int use_zip = 1);
 int  FileOpen(fileTYPE *file, const char *name, char mute = 0);
 void FileClose(fileTYPE *file);
 
@@ -72,15 +72,15 @@ __off64_t FileGetSize(fileTYPE *file);
 int FileSeek(fileTYPE *file, __off64_t offset, int origin);
 int FileSeekLBA(fileTYPE *file, uint32_t offset);
 
-int FileReadAdv(fileTYPE *file, void *pBuffer, int length);
+int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres = 0);
 int FileReadSec(fileTYPE *file, void *pBuffer);
-int FileWriteAdv(fileTYPE *file, void *pBuffer, int length);
+int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres = 0);
 int FileWriteSec(fileTYPE *file, void *pBuffer);
 int FileCreatePath(const char *dir);
 
-int FileExists(const char *name);
+int FileExists(const char *name, int use_zip = 1);
 int FileCanWrite(const char *name);
-int PathIsDir(const char *name);
+int PathIsDir(const char *name, int use_zip = 1);
 struct stat64* getPathStat(const char *path);
 
 #define SAVE_DIR "saves"
@@ -105,7 +105,7 @@ int FileLoadConfig(const char *name, void *pBuffer, int size); // supply pBuffer
 int FileDeleteConfig(const char *name);
 
 void AdjustDirectory(char *path);
-int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix = NULL);
+int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix = NULL, const char *filter = NULL);
 
 void prefixGameDir(char *dir, size_t dir_len);
 int findPrefixDir(char *dir, size_t dir_len);

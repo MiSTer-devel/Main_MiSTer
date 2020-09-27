@@ -19,4 +19,6 @@ void substrcpy(char *d, char *s, char idx);
 void open_joystick_setup();
 int menu_lightgun_cb(uint16_t type, uint16_t code, int value);
 
+int menu_allow_cfg_switch();
+
 #endif

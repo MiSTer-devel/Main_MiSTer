@@ -42,6 +42,8 @@ typedef struct {
 	uint8_t recents;
 	uint16_t jamma_vid;
 	uint16_t jamma_pid;
+	uint16_t no_merge_vid;
+	uint16_t no_merge_pid;
 	uint8_t sniper_mode;
 	uint8_t browse_expand;
 	uint8_t logo;
@@ -50,6 +52,7 @@ typedef struct {
 	char video_conf_pal[1024];
 	char video_conf_ntsc[1024];
 	char font[1024];
+	char shared_folder[1024];
 } cfg_t;
 
 extern cfg_t cfg;

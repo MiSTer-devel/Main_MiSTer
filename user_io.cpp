@@ -418,7 +418,8 @@ static void parse_config()
 		if (i>=2 && p && p[0])
 		{
 			//skip Disable/Hide masks
-			while((p[0] == 'H' || p[0] == 'D') && strlen(p)>=2) p += 2;
+			while((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p)>=2) p += 2;
+			if (p[0] == 'P') p += 2;
 
 			if (p[0] == 'J')
 			{
@@ -567,11 +568,15 @@ int GetUARTMode()
 
 void SetUARTMode(int mode)
 {
+	mode &= 0xFF;
+
+	if (is_x86()) x86_set_uart_mode(mode != 3 || GetMidiLinkMode() >= 2);
+
 	MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
-	MakeFile("/tmp/UART_SPEED", is_st() ? "19200" : "115200");
+	MakeFile("/tmp/UART_SPEED", is_st() ? "19200" : (is_x86() && (user_io_8bit_set_status(0, 0, 0) & (1 << 10))) ? "4000000" : "115200");
 
 	char cmd[32];
-	sprintf(cmd, "uartmode %d", mode & 0xFF);
+	sprintf(cmd, "uartmode %d", mode);
 	system(cmd);
 	set_uart_alt();
 }
@@ -606,6 +611,19 @@ void SetMidiLinkMode(int mode)
 		case 5: MakeFile("/tmp/ML_UDP_ALT", ""); break;
 	}
 	set_uart_alt();
+}
+
+void ResetUART()
+{
+	if (uart_mode)
+	{
+		int mode = GetUARTMode();
+		if (mode != 0)
+		{
+			SetUARTMode(0);
+			SetUARTMode(mode);
+		}
+	}
 }
 
 uint16_t sdram_sz(int sz)
@@ -1141,16 +1159,67 @@ static void kbd_fifo_poll()
 void user_io_set_index(unsigned char index)
 {
 	EnableFpga();
-	spi8(UIO_FILE_INDEX);
+	spi8(FIO_FILE_INDEX);
 	spi8(index);
 	DisableFpga();
 }
 
-void user_io_set_download(unsigned char enable)
+void user_io_set_aindex(uint16_t index)
 {
 	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(enable ? 0xff : 0x00);
+	spi8(FIO_FILE_INDEX);
+	spi_w(index);
+	DisableFpga();
+}
+
+void user_io_set_download(unsigned char enable, int addr)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX);
+	spi8(enable ? 0xff : 0);
+	if (enable && addr)
+	{
+		spi_w(addr);
+		spi_w(addr >> 16);
+	}
+	DisableFpga();
+}
+
+void user_io_file_tx_data(const uint8_t *addr, uint16_t len)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX_DAT);
+	spi_write(addr, len, fio_size);
+	DisableFpga();
+}
+
+void user_io_set_upload(unsigned char enable, int addr)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX);
+	spi8(enable ? 0xaa : 0);
+	if (enable && addr)
+	{
+		spi_w(addr);
+		spi_w(addr >> 16);
+	}
+	DisableFpga();
+}
+
+void user_io_file_rx_data(uint8_t *addr, uint16_t len)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX_DAT);
+	spi_read(addr, len, fio_size);
+	DisableFpga();
+}
+
+void user_io_file_info(const char *ext)
+{
+	EnableFpga();
+	spi8(FIO_FILE_INFO);
+	spi_w(toupper(ext[0]) << 8 | toupper(ext[1]));
+	spi_w(toupper(ext[2]) << 8 | toupper(ext[3]));
 	DisableFpga();
 }
 
@@ -1515,7 +1584,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 		user_io_set_index(index);
 
 		user_io_set_download(1);
-		user_io_file_tx_write(col_attr, type ? 1024 : 1025);
+		user_io_file_tx_data(col_attr, type ? 1024 : 1025);
 		user_io_set_download(0);
 	}
 }
@@ -1573,14 +1642,6 @@ static void tx_progress(const char* name, unsigned int progress)
 	buf[PROGRESS_CNT] = 0;
 
 	InfoMessage(progress_buf, 2000, "Loading");
-}
-
-void user_io_file_tx_write(const uint8_t *addr, uint16_t len)
-{
-	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
-	spi_write(addr, len, fio_size);
-	DisableFpga();
 }
 
 static void show_core_info(int info_n)
@@ -1733,6 +1794,60 @@ static int process_ss(const char *rom_name)
 	return 1;
 }
 
+int user_io_file_tx_a(const char* name, uint16_t index)
+{
+	fileTYPE f = {};
+	static uint8_t buf[4096];
+
+	if (!FileOpen(&f, name, 1)) return 0;
+
+	unsigned long bytes2send = f.size;
+
+	/* transmit the entire file using one transfer */
+	printf("Addon file %s with %lu bytes to send for index %04X\n", name, bytes2send, index);
+
+	// set index byte (0=bios rom, 1-n=OSD entry index)
+	user_io_set_aindex(index);
+
+	// prepare transmission of new file
+	user_io_set_download(1);
+
+	int use_progress = 1;
+	int size = bytes2send;
+	int progress = -1;
+	if (use_progress) MenuHide();
+
+	while (bytes2send)
+	{
+		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+
+		FileReadAdv(&f, buf, chunk);
+		user_io_file_tx_data(buf, chunk);
+
+		if (use_progress)
+		{
+			int new_progress = PROGRESS_MAX - ((((uint64_t)bytes2send)*PROGRESS_MAX) / size);
+			if (progress != new_progress)
+			{
+				progress = new_progress;
+				tx_progress(f.name, progress);
+			}
+		}
+		bytes2send -= chunk;
+	}
+
+	// check if core requests some change while downloading
+	check_status_change();
+
+	printf("Done.\n");
+	FileClose(&f);
+
+	// signal end of transmission
+	user_io_set_download(0);
+	MenuHide();
+	return 1;
+}
+
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = {};
@@ -1761,11 +1876,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	int len = strlen(f.name);
 	char *p = f.name + len - 4;
-	EnableFpga();
-	spi8(UIO_FILE_INFO);
-	spi_w(toupper(p[0]) << 8 | toupper(p[1]));
-	spi_w(toupper(p[2]) << 8 | toupper(p[3]));
-	DisableFpga();
+	user_io_file_info(p);
 
 	// prepare transmission of new file
 	user_io_set_download(1);
@@ -1775,7 +1886,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		printf("Load SNES ROM.\n");
 		uint8_t* buf = snes_get_header(&f);
 		hexdump(buf, 16, 0);
-		user_io_file_tx_write(buf, 512);
+		user_io_file_tx_data(buf, 512);
 
 		//strip original SNES ROM header if present (not used)
 		if (bytes2send & 512)
@@ -1814,7 +1925,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				{
 					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fg, buf, chunk);
-					user_io_file_tx_write(buf, chunk);
+					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
 				}
 				FileClose(&fg);
@@ -1827,7 +1938,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
-		user_io_file_tx_write(buf, chunk);
+		user_io_file_tx_data(buf, chunk);
 
 		if (use_progress)
 		{
@@ -2011,18 +2122,23 @@ void user_io_send_buttons(char force)
 		//special reset for some cores
 		if (!user_io_osd_is_visible() && (key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
 			if (is_pce()) pcecd_reset();
+			if (is_x86()) x86_init();
+			ResetUART();
 		}
 
 		key_map = map;
 		if (user_io_osd_is_visible()) map &= ~BUTTON2;
 		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
-		if ((key_map & BUTTON2) && is_x86()) x86_init();
 	}
+}
+
+int user_io_get_kbd_reset()
+{
+	return kbd_reset;
 }
 
 void user_io_set_ini(int ini_num)
@@ -2489,6 +2605,10 @@ void user_io_poll()
 				case 0xed:
 					kbd_reply(0xFA);
 					byte++;
+					break;
+
+				case 0xee:
+					kbd_reply(0xEE);
 					break;
 
 				default:
