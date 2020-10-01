@@ -72,6 +72,7 @@ typedef struct
 {
 	fileTYPE *f;
 	uint8_t  present;
+	uint8_t  drvnum;
 
 	uint16_t cylinders;
 	uint16_t heads;

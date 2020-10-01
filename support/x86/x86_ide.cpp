@@ -101,12 +101,15 @@ void ide_set_regs(ide_config *ide)
 
 void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 {
+	int drvnum = num;
 	int drv = (ver == 3) ? (num & 1) : 0;
 	if (ver == 3) num >>= 1;
 
 	drive_t *drive = &ide_inst[num].drive[drv];
 
 	ide_inst[num].base = baseaddr;
+	ide_inst[num].drive[drv].drvnum = drvnum;
+
 	drive->f = f;
 
 	drive->cylinders = 0;
@@ -449,6 +452,14 @@ static void process_write(ide_config *ide)
 	ide->regs.cylinder = lba;
 	lba >>= 16;
 	ide->regs.head = lba & 0xF;
+
+	if (ide->regs.cmd == 0xFA)
+	{
+		ide->regs.sector_count = 0;
+		char* filename = user_io_make_filepath(HomeDir(), (char*)ide_buf);
+		printf("Request for new image for drive %d: %s\n", ide->drive[ide->regs.drv].drvnum, filename);
+		x86_set_image(ide->drive[ide->regs.drv].drvnum + 2, filename);
+	}
 }
 
 static int handle_hdd(ide_config *ide)
