@@ -6,6 +6,7 @@ void x86_poll();
 
 void x86_set_image(int num, char *filename);
 const char* x86_get_image_name(int num);
+const char* x86_get_image_path(int num);
 
 void x86_config_load();
 void x86_config_save();

@@ -1885,6 +1885,8 @@ void HandleUI(void)
 						strcpy(fs_pFileExt, ext);
 
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
+						if (is_x86()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
+
 						if (is_pce() || is_megacd())
 						{
 							int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);

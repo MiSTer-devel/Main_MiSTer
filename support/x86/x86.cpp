@@ -834,3 +834,8 @@ const char* x86_get_image_name(int num)
 
 	return res;
 }
+
+const char* x86_get_image_path(int num)
+{
+	return config.img_name[num];
+}
