@@ -240,14 +240,14 @@ static fileTYPE fdd1_image = {};
 static fileTYPE ide_image[4] = {};
 static bool boot_from_floppy = 1;
 
-static int img_mount(fileTYPE *f, const char *name)
+static int img_mount(fileTYPE *f, const char *name, int rw)
 {
 	FileClose(f);
 	int writable = 0, ret = 0;
 
 	if (strlen(name))
 	{
-		writable = FileCanWrite(name);
+		writable = rw && FileCanWrite(name);
 		ret = FileOpenEx(f, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 		if (!ret) printf("Failed to open file %s\n", name);
 	}
@@ -333,7 +333,7 @@ static void fdd_set(int num, char* filename)
 	uint32_t base = newcore ? FDD0_BASE_NEW : FLOPPY0_BASE_OLD;
 	fileTYPE *fdd_image = num ? &fdd1_image : &fdd0_image;
 
-	int floppy = img_mount(fdd_image, filename);
+	int floppy = img_mount(fdd_image, filename, 1);
 	uint32_t size = fdd_image->size/512;
 	printf("floppy size: %d blks\n", size);
 	if (floppy && size)
@@ -428,11 +428,11 @@ static void hdd_set(int num, char* filename)
 	if (num > 1 && !vhd)
 	{
 		const char *img_name = cdrom_parse(num, filename);
-		if (img_name) present = img_mount(&ide_image[num], img_name);
+		if (img_name) present = img_mount(&ide_image[num], img_name, 0);
 		if (present) cd = 1;
 	}
 
-	if(!present && vhd) present = img_mount(&ide_image[num], filename);
+	if(!present && vhd) present = img_mount(&ide_image[num], filename, 1);
 	x86_ide_set(num, base, present ? &ide_image[num] : 0, v3 ? 3 : newcore ? 2 : 0, cd);
 }
 
