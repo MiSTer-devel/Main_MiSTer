@@ -1558,16 +1558,26 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		std::sort(DirItem.begin(), DirItem.end(), DirentComp());
 		if (file_name[0])
 		{
+			int pos = -1;
 			for (int i = 0; i < flist_nDirEntries(); i++)
 			{
 				if (!strcmp(file_name, DirItem[i].de.d_name))
 				{
-					iSelectedEntry = i;
-					if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-					else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
-					if (iFirstEntry < 0) iFirstEntry = 0;
+					pos = i;
 					break;
 				}
+				else if (!strcasecmp(file_name, DirItem[i].de.d_name))
+				{
+					pos = i;
+				}
+			}
+
+			if(pos>=0)
+			{
+				iSelectedEntry = pos;
+				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
+				else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
+				if (iFirstEntry < 0) iFirstEntry = 0;
 			}
 		}
 		return flist_nDirEntries();
@@ -1647,16 +1657,26 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 		else if (mode == SCANF_SET_ITEM)
 		{
+			int pos = -1;
 			for (int i = 0; i < flist_nDirEntries(); i++)
 			{
-				if((DirItem[i].de.d_type == DT_DIR) && !strcmp(DirItem[i].altname, extension))
+				if ((DirItem[i].de.d_type == DT_DIR) && !strcmp(DirItem[i].altname, extension))
 				{
-					iSelectedEntry = i;
-					if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-					else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
-					if (iFirstEntry < 0) iFirstEntry = 0;
+					pos = i;
 					break;
 				}
+				else if ((DirItem[i].de.d_type == DT_DIR) && !strcasecmp(DirItem[i].altname, extension))
+				{
+					pos = i;
+				}
+			}
+
+			if(pos>=0)
+			{
+				iSelectedEntry = pos;
+				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
+				else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
+				if (iFirstEntry < 0) iFirstEntry = 0;
 			}
 		}
 		else

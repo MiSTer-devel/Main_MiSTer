@@ -101,12 +101,15 @@ void ide_set_regs(ide_config *ide)
 
 void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 {
+	int drvnum = num;
 	int drv = (ver == 3) ? (num & 1) : 0;
 	if (ver == 3) num >>= 1;
 
 	drive_t *drive = &ide_inst[num].drive[drv];
 
 	ide_inst[num].base = baseaddr;
+	ide_inst[num].drive[drv].drvnum = drvnum;
+
 	drive->f = f;
 
 	drive->cylinders = 0;
@@ -424,10 +427,15 @@ static void prep_write(ide_config *ide)
 
 	if (ide->state == IDE_STATE_INIT_RW)
 	{
-		uint32_t lba = ide->regs.sector | (ide->regs.cylinder << 8) | (ide->regs.head << 24);
-		//printf("Write to LBA: %d\n", lba);
-		ide->null = !FileSeekLBA(ide->drive[ide->regs.drv].f, lba);
 		ide->regs.status &= ~ATA_STATUS_IRQ;
+		ide->null = 1;
+
+		if (ide->regs.cmd != 0xFA)
+		{
+			uint32_t lba = ide->regs.sector | (ide->regs.cylinder << 8) | (ide->regs.head << 24);
+			//printf("Write to LBA: %d\n", lba);
+			ide->null = !FileSeekLBA(ide->drive[ide->regs.drv].f, lba);
+		}
 	}
 
 	ide->state = IDE_STATE_WAIT_WR;
@@ -438,17 +446,30 @@ static void prep_write(ide_config *ide)
 static void process_write(ide_config *ide)
 {
 	ide_recv_data(ide_buf, ide->prepcnt * 128);
-	if (!ide->null) ide->null = (FileWriteAdv(ide->drive[ide->regs.drv].f, ide_buf, ide->prepcnt * 512, -1) <= 0);
+	if (ide->regs.cmd == 0xFA)
+	{
+		ide->regs.sector_count = 0;
+		char* filename = user_io_make_filepath(HomeDir(), (char*)ide_buf);
+		int drvnum = (ide->regs.head == 1) ? 0 : (ide->regs.head == 2) ? 1 : (ide->drive[ide->regs.drv].drvnum + 2);
 
-	uint32_t lba = ide->regs.sector | (ide->regs.cylinder << 8) | (ide->regs.head << 24);
-	lba += ide->prepcnt;
-	ide->regs.sector_count -= ide->prepcnt;
+		static const char* names[6] = { "fdd0", "fdd1", "ide00", "ide01", "ide10", "ide11" };
+		printf("Request for new image for drive %s: %s\n", names[drvnum], filename);
+		x86_set_image(drvnum, filename);
+	}
+	else
+	{
+		if (!ide->null) ide->null = (FileWriteAdv(ide->drive[ide->regs.drv].f, ide_buf, ide->prepcnt * 512, -1) <= 0);
 
-	ide->regs.sector = lba;
-	lba >>= 8;
-	ide->regs.cylinder = lba;
-	lba >>= 16;
-	ide->regs.head = lba & 0xF;
+		uint32_t lba = ide->regs.sector | (ide->regs.cylinder << 8) | (ide->regs.head << 24);
+		lba += ide->prepcnt;
+		ide->regs.sector_count -= ide->prepcnt;
+
+		ide->regs.sector = lba;
+		lba >>= 8;
+		ide->regs.cylinder = lba;
+		lba >>= 16;
+		ide->regs.head = lba & 0xF;
+	}
 }
 
 static int handle_hdd(ide_config *ide)
@@ -495,6 +516,13 @@ static int handle_hdd(ide_config *ide)
 			return 1;
 		}
 
+		ide->state = IDE_STATE_INIT_RW;
+		prep_write(ide);
+	}
+	break;
+
+	case 0xFA: // mount image
+	{
 		ide->state = IDE_STATE_INIT_RW;
 		prep_write(ide);
 	}
