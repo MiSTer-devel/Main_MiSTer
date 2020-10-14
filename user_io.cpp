@@ -1881,18 +1881,68 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	// prepare transmission of new file
 	user_io_set_download(1);
 
+	int dosend = 1;
+
+	int is_snes_bs = 0;
 	if (is_snes() && bytes2send)
 	{
-		printf("Load SNES ROM.\n");
-		uint8_t* buf = snes_get_header(&f);
-		hexdump(buf, 16, 0);
-		user_io_file_tx_data(buf, 512);
+		const char *ext = strrchr(f.name, '.');
+		if (ext && !strcasecmp(ext, ".BS")) {
+			is_snes_bs = 1;
+		}
 
-		//strip original SNES ROM header if present (not used)
-		if (bytes2send & 512)
-		{
-			bytes2send -= 512;
-			FileReadSec(&f, buf);
+		if (is_snes_bs) {
+			char *rom_path = (char*)buf;
+			strcpy(rom_path, name);
+			char *offs = strrchr(rom_path, '/');
+			if (offs) *offs = 0;
+			else *rom_path = 0;
+
+			fileTYPE fb = {};
+			if (FileOpen(&fb, user_io_make_filepath(rom_path, "bsx_bios.rom")) ||
+				FileOpen(&fb, user_io_make_filepath(HomeDir(), "bsx_bios.rom")))
+			{
+				printf("Load BSX bios ROM.\n");
+				uint8_t* buf = snes_get_header(&fb);
+				hexdump(buf, 16, 0);
+				user_io_file_tx_data(buf, 512);
+
+				//strip original SNES ROM header if present (not used)
+				if (bytes2send & 512)
+				{
+					bytes2send -= 512;
+					FileReadSec(&f, buf);
+				}
+
+				uint32_t sz = fb.size;
+				while (sz)
+				{
+					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					FileReadAdv(&fb, buf, chunk);
+					user_io_file_tx_data(buf, chunk);
+					sz -= chunk;
+				}
+				FileClose(&fb);
+			}
+			else
+			{
+				dosend = 0;
+				Info("Cannot open bsx_bios.rom!");
+				sleep(1);
+			}
+		}
+		else {
+			printf("Load SNES ROM.\n");
+			uint8_t* buf = snes_get_header(&f);
+			hexdump(buf, 16, 0);
+			user_io_file_tx_data(buf, 512);
+
+			//strip original SNES ROM header if present (not used)
+			if (bytes2send & 512)
+			{
+				bytes2send -= 512;
+				FileReadSec(&f, buf);
+			}
 		}
 	}
 
@@ -1904,7 +1954,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int progress = -1;
 	if (use_progress) MenuHide();
 
-	int dosend = 1;
+	
 	if (is_gba())
 	{
 		process_ss(name);
@@ -1938,6 +1988,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
+		if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
 		user_io_file_tx_data(buf, chunk);
 
 		if (use_progress)
