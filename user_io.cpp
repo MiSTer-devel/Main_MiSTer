@@ -1931,6 +1931,18 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				sleep(1);
 			}
 		}
+		else if ((index & 0x3F) == 1) {
+			printf("Load SPC ROM.\n");
+			FileReadSec(&f, buf);
+			user_io_file_tx_data(buf, 256);
+
+			FileSeek(&f, (64*1024)+256, SEEK_SET);
+			FileReadSec(&f, buf);
+			user_io_file_tx_data(buf, 256);
+
+			FileSeek(&f, 256, SEEK_SET);
+			bytes2send = 64 * 1024;
+		}
 		else {
 			printf("Load SNES ROM.\n");
 			uint8_t* buf = snes_get_header(&f);
