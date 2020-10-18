@@ -280,14 +280,23 @@ void snes_patch_bs_header(fileTYPE *f, uint8_t *buf)
 {
 	if ((f->offset == 0x008000 && (buf[0xFD8] == 0x20 || buf[0xFD8] == 0x30)) ||
 		(f->offset == 0x010000 && (buf[0xFD8] == 0x21 || buf[0xFD8] == 0x31))) {
-		if (buf[0xFD0] == 0xFF && buf[0xFD1] == 0xFF && buf[0xFD2] == 0xFF && buf[0xFD3] == 0xFF) {
+		if (buf[0xFD0] == 0xF0 || (buf[0xFD1] == 0xFF && buf[0xFD2] == 0xFF && buf[0xFD3] == 0xFF)) {
+			printf("SNES: Patch bad BS header: offset %04X, bad value %02X %02X %02X %02X\n", 0x7FD0 | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFD0], buf[0xFD1], buf[0xFD2], buf[0xFD3]);
 			buf[0xFD3] = 0x00;
 			buf[0xFD2] = 0x00;
 			buf[0xFD1] = 0x00;
 			buf[0xFD0] = f->size <= 256 * 1024 ? 0x03 :
 						 f->size <= 512 * 1024 ? 0x0F :
 						 0xFF;
-			printf("SNES: Patch bad BS header: offset %06X, size %d\n", (int)f->offset, (int)f->size);
+		}
+		if (buf[0xFD5] >= 0x80) {
+			printf("SNES: Patch bad BS header: offset %04X, bad value %02X %02X\n", 0x7FD4 | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFD4], buf[0xFD5]);
+			buf[0xFD5] = 0xFF;
+			buf[0xFD4] = 0xFF;
+		}
+		if (buf[0xFDA] != 0x33) {
+			printf("SNES: Patch bad BS header: offset %04X, bad value %02X\n", 0x7FDA | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFDA]);
+			buf[0xFDA] = 0x33;
 		}
 	}
 }
