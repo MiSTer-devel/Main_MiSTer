@@ -166,7 +166,7 @@ uint8_t* snes_get_header(fileTYPE *f)
 					}
 				}
 
-				bool has_bsx_slot = true;
+				bool has_bsx_slot = false;
 				if (buf[addr - 14] == 'Z' && buf[addr - 11] == 'J' && 
 					((buf[addr - 13] >= 'A' && buf[addr - 13] <= 'Z') || (buf[addr - 13] >= '0' && buf[addr - 13] <= '9')) &&
 					(buf[addr + Company] == 0x33 || (buf[addr - 10] == 0x00 && buf[addr - 4] == 0x00)) ) {
