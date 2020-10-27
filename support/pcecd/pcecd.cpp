@@ -132,7 +132,7 @@ static char us_sig[] =
 	  0x76, 0x96, 0xC6, 0xCE, 0x34, 0x32, 0x2E, 0x26,
 	  0x74, 0x00 };
 
-static int load_bios(char *biosname, const char *cuename)
+static int load_bios(char *biosname, const char *cuename, int sgx)
 {
 	fileTYPE f;
 	if (!FileOpen(&f, biosname)) return 0;
@@ -152,7 +152,9 @@ static int load_bios(char *biosname, const char *cuename)
 		swap = !memcmp(buf, us_sig, sizeof(us_sig)) ? 1 : 0;
 	}
 
-	user_io_set_index(0);
+	printf("CD SGX mode = %d\n", sgx);
+
+	user_io_set_index(sgx ? 1 : 0);
 	user_io_set_download(1);
 	FileSeek(&f, start, SEEK_SET);
 
@@ -205,6 +207,8 @@ void pcecd_set_image(int num, const char *filename)
 			pcecdd.latency = 10;
 			pcecdd.SendData = pcecd_send_data;
 
+			int sgx = 0;
+
 			// load CD BIOS
 			strcpy(buf, filename);
 			char *p = strrchr(buf, '/');
@@ -212,14 +216,18 @@ void pcecd_set_image(int num, const char *filename)
 			if (p)
 			{
 				p++;
+
+				strcpy(p, "sgx");
+				if (FileExists(buf)) sgx = 1;
+
 				strcpy(p, "cd_bios.rom");
-				loaded = load_bios(buf, filename);
+				loaded = load_bios(buf, filename, sgx);
 			}
 
 			if (!loaded)
 			{
 				sprintf(buf, "%s/cd_bios.rom", HomeDir(PCECD_DIR));
-				loaded = load_bios(buf, filename);
+				loaded = load_bios(buf, filename, sgx);
 			}
 
 			if (!loaded) Info("CD BIOS not found!", 4000);
