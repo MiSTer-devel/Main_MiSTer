@@ -1439,7 +1439,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 					else if (lastmask[num] & 0xF)
 					{
 						if (lastmask[num] & 9)
-			{
+						{
 							af_delay[num] += 8 << ((lastmask[num] & 1) ? 1 : 0);
 							if (af_delay[num] > 500) af_delay[num] = 500;
 						}
