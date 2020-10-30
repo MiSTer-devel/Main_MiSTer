@@ -37,7 +37,7 @@ int  joy_bcount = 0;
 
 static int ev2amiga[] =
 {
-	NONE, //0   KEY_RESERVED
+	NONE, //0   KEY_RESERVED 
 	0x45, //1   KEY_ESC
 	0x01, //2   KEY_1
 	0x02, //3   KEY_2
@@ -3587,7 +3587,7 @@ int input_poll(int getchar)
 	{
 		for (int i = 0; i < NUMPLAYERS; i++)
 		{
-			if (!af_delay[i]) af_delay[i] = 50;
+			if (!af_delay[i]) af_delay[i] = 16;
 
 			if (!time[i]) time[i] = GetTimer(af_delay[i]);
 			int send = 0;
