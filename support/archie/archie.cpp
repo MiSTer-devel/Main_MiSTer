@@ -78,21 +78,21 @@ const char *archie_get_rom_name(void)
 
 void archie_set_ar(char i)
 {
-	if (i) config.system_ctrl |= 1;
-	else config.system_ctrl &= ~1;
-	user_io_8bit_set_status((i ? -1 : 0), 2);
+	config.system_ctrl &= ~0b11000000;
+	config.system_ctrl |= (i & 3) << 6;
+	user_io_8bit_set_status(config.system_ctrl, 0b11000000);
 }
 
 int archie_get_ar()
 {
-	return config.system_ctrl & 1;
+	return (config.system_ctrl >> 6) & 3;
 }
 
 void archie_set_60(char i)
 {
 	if (i) config.system_ctrl |=  0b1000;
 	else config.system_ctrl   &= ~0b1000;
-	user_io_8bit_set_status((i ? -1 : 0), 0b10000);
+	user_io_8bit_set_status(config.system_ctrl, 0b10000);
 }
 
 int archie_get_60()
@@ -104,7 +104,7 @@ void archie_set_afix(char i)
 {
 	if (i) config.system_ctrl |= 0b10000;
 	else config.system_ctrl &= ~0b10000;
-	user_io_8bit_set_status((i ? -1 : 0), 0b100000);
+	user_io_8bit_set_status(config.system_ctrl, 0b100000);
 }
 
 int archie_get_afix()

@@ -208,6 +208,23 @@ static void setScaler()
 	fileTYPE f = {};
 	static char filename[1024];
 
+	uint32_t arc[4] = {};
+	for (int i = 0; i < 2; i++)
+	{
+		if (cfg.custom_aspect_ratio[i][0])
+		{
+			if (sscanf(cfg.custom_aspect_ratio[i], "%u:%u", &arc[i * 2], &arc[(i * 2) + 1]) != 2 || arc[i * 2] < 1 || arc[i * 2] > 4095 || arc[(i * 2) + 1] < 1 || arc[(i * 2) + 1] > 4095)
+			{
+				arc[(i * 2) + 0] = 0;
+				arc[(i * 2) + 1] = 0;
+			}
+		}
+	}
+
+	spi_uio_cmd_cont(UIO_SET_AR_CUST);
+	for (int i = 0; i < 4; i++) spi_w(arc[i]);
+	DisableIO();
+
 	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
 	{
 		DisableIO();
