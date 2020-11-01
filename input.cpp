@@ -37,7 +37,7 @@ int  joy_bcount = 0;
 
 static int ev2amiga[] =
 {
-	NONE, //0   KEY_RESERVED 
+	NONE, //0   KEY_RESERVED
 	0x45, //1   KEY_ESC
 	0x01, //2   KEY_1
 	0x02, //3   KEY_2
@@ -1278,6 +1278,10 @@ static uint32_t mouse_timer = 0;
 #define BTN_TGL 100
 #define BTN_OSD 101
 
+#define AF_MIN  16
+#define AF_MAX  512
+#define AF_STEP 8
+
 static int uinp_fd = -1;
 static int input_uinp_setup()
 {
@@ -1427,7 +1431,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 
 						if (hasAPI1_5())
 						{
-							if (!found) sprintf(str, "Auto fire: %d ms", af_delay[num]);
+							if (!found) sprintf(str, "Auto fire: %dms", af_delay[num] * 2);
 							else sprintf(str, "Auto fire: OFF");
 							Info(str);
 						}
@@ -1440,25 +1444,25 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 					{
 						if (lastmask[num] & 9)
 						{
-							af_delay[num] += 8 << ((lastmask[num] & 1) ? 1 : 0);
-							if (af_delay[num] > 500) af_delay[num] = 500;
+							af_delay[num] += AF_STEP << ((lastmask[num] & 1) ? 1 : 0);
+							if (af_delay[num] > AF_MAX) af_delay[num] = AF_MAX;
 						}
 						else
 						{
-							af_delay[num] -= 8 << ((lastmask[num] & 2) ? 1 : 0);
-							if (af_delay[num] < 16) af_delay[num] = 16;
+							af_delay[num] -= AF_STEP << ((lastmask[num] & 2) ? 1 : 0);
+							if (af_delay[num] < AF_MIN) af_delay[num] = AF_MIN;
 						}
 
 						static char str[256];
 
 						if (hasAPI1_5())
 						{
-							sprintf(str, "Auto fire period: %d ms", af_delay[num]);
+							sprintf(str, "Auto fire period: %dms", af_delay[num] * 2);
 							Info(str);
 						}
 						else
 						{
-							sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num]);
+							sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num] * 2);
 							InfoMessage(str);
 						}
 
@@ -3587,7 +3591,7 @@ int input_poll(int getchar)
 	{
 		for (int i = 0; i < NUMPLAYERS; i++)
 		{
-			if (!af_delay[i]) af_delay[i] = 16;
+			if (af_delay[i] < AF_MIN) af_delay[i] = AF_MIN;
 
 			if (!time[i]) time[i] = GetTimer(af_delay[i]);
 			int send = 0;
