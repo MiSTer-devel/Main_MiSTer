@@ -37,7 +37,7 @@ int  joy_bcount = 0;
 
 static int ev2amiga[] =
 {
-	NONE, //0   KEY_RESERVED
+	NONE, //0   KEY_RESERVED 
 	0x45, //1   KEY_ESC
 	0x01, //2   KEY_1
 	0x02, //3   KEY_2
@@ -1427,7 +1427,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 
 						if (hasAPI1_5())
 						{
-							if (!found) sprintf(str, "Auto fire: %d ms", af_delay[num] * 2);
+							if (!found) sprintf(str, "Auto fire: %d ms", af_delay[num]);
 							else sprintf(str, "Auto fire: OFF");
 							Info(str);
 						}
@@ -1440,25 +1440,25 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 					{
 						if (lastmask[num] & 9)
 						{
-							af_delay[num] += 25 << ((lastmask[num] & 1) ? 1 : 0);
+							af_delay[num] += 8 << ((lastmask[num] & 1) ? 1 : 0);
 							if (af_delay[num] > 500) af_delay[num] = 500;
 						}
 						else
 						{
-							af_delay[num] -= 25 << ((lastmask[num] & 2) ? 1 : 0);
-							if (af_delay[num] < 25) af_delay[num] = 25;
+							af_delay[num] -= 8 << ((lastmask[num] & 2) ? 1 : 0);
+							if (af_delay[num] < 16) af_delay[num] = 16;
 						}
 
 						static char str[256];
 
 						if (hasAPI1_5())
 						{
-							sprintf(str, "Auto fire period: %d ms", af_delay[num] * 2);
+							sprintf(str, "Auto fire period: %d ms", af_delay[num]);
 							Info(str);
 						}
 						else
 						{
-							sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num] * 2);
+							sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num]);
 							InfoMessage(str);
 						}
 
@@ -3587,7 +3587,7 @@ int input_poll(int getchar)
 	{
 		for (int i = 0; i < NUMPLAYERS; i++)
 		{
-			if (!af_delay[i]) af_delay[i] = 50;
+			if (!af_delay[i]) af_delay[i] = 16;
 
 			if (!time[i]) time[i] = GetTimer(af_delay[i]);
 			int send = 0;
