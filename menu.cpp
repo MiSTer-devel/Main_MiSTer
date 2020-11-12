@@ -975,7 +975,7 @@ void HandleUI(void)
 		return;
 	}
 
-	struct RigidDiskBlock *rdb = nullptr;
+	static struct RigidDiskBlock *rdb = nullptr;
 
 	static char opensave;
 	static char ioctl_index;
@@ -5020,9 +5020,9 @@ void HandleUI(void)
 			OsdWrite(m++, " Max legal values:", 0, 0);
 			OsdWrite(m++, "   C:65536, H:16, S:255", 0, 0);
 			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, "  Some functions won't work", 0, 0);
-			OsdWrite(m++, "  correctly and may corrupt", 0, 0);
-			OsdWrite(m++, "         the data!", 0, 0);
+			OsdWrite(m++, " Something may not correctly", 0, 0);
+			OsdWrite(m++, "  and may corrupt the data!", 0, 0);
+			OsdWrite(m++);
 		}
 		OsdWrite(m++, "", 0, 0);
 		OsdWrite(m++,     "            OK", 1, 0);
