@@ -1978,6 +1978,8 @@ void HandleUI(void)
 								char *p = strrchr(Selected_tmp, '/');
 								if (p) *p = 0;
 							}
+
+							fs_Options |= SCANO_NOZIP;
 						}
 
 						if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
