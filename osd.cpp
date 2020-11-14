@@ -378,6 +378,15 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	}
 }
 
+void OsdShiftDown(unsigned char n)
+{
+	osd_start(n);
+
+	osdbufpos += 22;
+	for (int i = 22; i < 256; i++) osdbuf[osdbufpos++] <<= 1;
+}
+
+
 void OsdDrawLogo(int row)
 {
 	int mag = (osd_size / 8);

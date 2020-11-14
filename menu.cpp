@@ -216,22 +216,39 @@ static char script_output[script_lines][script_line_length];
 static char script_line_output[script_line_length];
 static bool script_exited;
 
-enum HelpText_Message { HELPTEXT_NONE, HELPTEXT_MAIN, HELPTEXT_HARDFILE, HELPTEXT_CHIPSET, HELPTEXT_MEMORY, HELPTEXT_VIDEO };
+// one screen width
+static const char* HELPTEXT_SPACER = "                                ";
+static char helptext_custom[1024];
+
+enum HelpText_Message
+{
+	HELPTEXT_NONE, HELPTEXT_CUSTOM, HELPTEXT_MAIN, HELPTEXT_HARDFILE, HELPTEXT_CHIPSET, HELPTEXT_MEMORY, HELPTEXT_EJECT
+};
+
 static const char *helptexts[] =
 {
 	0,
+	helptext_custom,
 	"                                Welcome to MiSTer! Use the cursor keys to navigate the menus. Use space bar or enter to select an item. Press Esc or F12 to exit the menus. Joystick emulation on the numeric keypad can be toggled with the numlock or scrlock key, while pressing Ctrl-Alt-0 (numeric keypad) toggles autofire mode.",
 	"                                Minimig can emulate an A600/A1200 IDE harddisk interface. The emulation can make use of Minimig-style hardfiles (complete disk images) or UAE-style hardfiles (filesystem images with no partition table).",
 	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600) or 68020 (maximum performance) processor with transparent cache.",
 	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 384 megabytes of Fast RAM (8MB max for 68000 mode). To use the HRTmon feature you will need a file on the SD card named hrtmon.rom.",
+	"                                Backspace key (or B-hold + A on gamepad) to unmount",
+};
+
+static const uint32_t helptext_timeouts[] =
+{
+	10000,
+	10000,
+	10000,
+	10000,
+	10000,
+	10000,
+	2000
 };
 
 static const char *info_top = "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82";
 static const char *info_bottom = "\x85\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x84";
-
-// one screen width
-static const char* HELPTEXT_SPACER = "                                ";
-static char helptext_custom[1024];
 
 // file selection menu variables
 static char fs_pFileExt[13] = "xxx";
@@ -391,9 +408,6 @@ void substrcpy(char *d, char *s, char idx)
 #define STD_EXIT       "            exit"
 #define STD_SPACE_EXIT "        SPACE to exit"
 #define STD_COMBO_EXIT "      Ctrl+ESC to exit"
-
-#define HELPTEXT_DELAY 10000
-#define FRAME_DELAY 150
 
 static unsigned char getIdx(char *opt)
 {
@@ -757,7 +771,6 @@ static void printSysInfo()
 
 static int  firstmenu = 0;
 static int  adjvisible;
-static char lastrow[256];
 
 static void MenuWrite(unsigned char n, const char *s = "", unsigned char invert = 0, unsigned char stipple = 0, int arrow = 0)
 {
@@ -773,14 +786,6 @@ static void MenuWrite(unsigned char n, const char *s = "", unsigned char invert 
 	{
 		if (invert) adjvisible = row - OsdGetSize() + 1;
 		return;
-	}
-
-	if (row == (OsdGetSize() - 1))
-	{
-		int len = strlen(s);
-		if (len > 255) len = 255;
-		memcpy(lastrow, s, len);
-		lastrow[len] = 0;
 	}
 
 	OsdSetArrow(arrow);
@@ -984,8 +989,9 @@ void HandleUI(void)
 	unsigned char m = 0, up, down, select, menu, back, right, left, plus, minus, recent;
 	char enable;
 	static int reboot_req = 0;
-	static long helptext_timer;
-	static const char *helptext;
+	static uint32_t helptext_timer;
+	static int helptext_idx = 0;
+	static int helptext_idx_old = 0;
 	static char helpstate = 0;
 	static char flag;
 	static int cr = 0;
@@ -1170,21 +1176,22 @@ void HandleUI(void)
 		}
 	}
 
-	if (menu || select || up || down || left || right)
+	if (menu || select || up || down || left || right || (helptext_idx_old != helptext_idx))
 	{
+		helptext_idx_old = helptext_idx;
 		if (helpstate) OsdWrite(OsdGetSize()-1, STD_EXIT, (menumask - ((1 << (menusub + 1)) - 1)) <= 0, 0); // Redraw the Exit line...
 		helpstate = 0;
-		helptext_timer = GetTimer(HELPTEXT_DELAY);
+		helptext_timer = GetTimer(helptext_timeouts[helptext_idx]);
 	}
 
-	if (helptext)
+	if (helptext_idx)
 	{
 		if (helpstate<9)
 		{
 			if (CheckTimer(helptext_timer))
 			{
-				helptext_timer = GetTimer(FRAME_DELAY);
-				OsdWriteOffset(OsdGetSize() - 1, (menustate == MENU_8BIT_MAIN2) ? lastrow : STD_EXIT, 0, 0, helpstate, 0);
+				helptext_timer = GetTimer(32);
+				OsdShiftDown(OsdGetSize() - 1);
 				++helpstate;
 			}
 		}
@@ -1195,7 +1202,7 @@ void HandleUI(void)
 		}
 		else
 		{
-			ScrollText(OsdGetSize() - 1, helptext, 0, 0, 0, 0);
+			ScrollText(OsdGetSize() - 1, helptexts[helptext_idx], 0, 0, 0, 0);
 		}
 	}
 
@@ -1246,10 +1253,10 @@ void HandleUI(void)
     // base to a minimum and shrink its size. The UI is called with the basic state data and it handles everything internally,
     // only updating values in this function as necessary.
     //
-    if (user_io_core_type() == CORE_TYPE_SHARPMZ)
+	if (user_io_core_type() == CORE_TYPE_SHARPMZ)
         sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_8BIT_SYSTEM1, MENU_FILE_SELECT1,
 			       &parentstate, &menustate, &menusub, &menusub_last,
-			       &menumask, Selected_F[0], &helptext, helptext_custom,
+			       &menumask, Selected_F[0], &helptext_idx, helptext_custom,
 			       &fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel,
 			       fs_pFileExt,
 			       menu, select, up, down,
@@ -1275,7 +1282,7 @@ void HandleUI(void)
 		/* no menu selected                                               */
 		/******************************************************************/
 	case MENU_NONE1:
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		menumask = 0;
 		menustate = MENU_NONE2;
 		firstmenu = 0;
@@ -1399,7 +1406,7 @@ void HandleUI(void)
 		sprintf(helptext_custom, HELPTEXT_SPACER);
 		strcat(helptext_custom, OsdCoreNameGet());
 		strcat(helptext_custom, helptexts[HELPTEXT_MAIN]);
-		helptext = helptext_custom;
+		helptext_idx = HELPTEXT_CUSTOM;
 		break;
 
 	case MENU_ARCHIE_MAIN2:
@@ -1822,7 +1829,7 @@ void HandleUI(void)
 		sprintf(helptext_custom, HELPTEXT_SPACER);
 		strcat(helptext_custom, OsdCoreNameGet());
 		strcat(helptext_custom, helptexts[HELPTEXT_MAIN]);
-		helptext = helptext_custom;
+		helptext_idx = HELPTEXT_CUSTOM;
 
 	} break; // end MENU_8BIT_MAIN1
 
@@ -2185,7 +2192,7 @@ void HandleUI(void)
 	case MENU_8BIT_SYSTEM1:
 		{
 			OsdSetSize(16);
-			helptext = 0;
+			helptext_idx = 0;
 			reboot_req = 0;
 
 			OsdSetTitle("System", 0);
@@ -2525,7 +2532,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ARCADE_DIP1:
-		helptext = 0;
+		helptext_idx = 0;
 		menumask = 0;
 		OsdSetTitle("DIP Switches");
 		menustate = MENU_ARCADE_DIP2;
@@ -2631,7 +2638,7 @@ void HandleUI(void)
 
 	case MENU_UART1:
 		{
-			helptext = 0;
+			helptext_idx = 0;
 			menumask = 0xFF;
 
 			OsdSetTitle("UART mode");
@@ -2781,7 +2788,7 @@ void HandleUI(void)
 
 	case MENU_BAUD1:
 		{
-			helptext = 0;
+			helptext_idx = 0;
 			menumask = 0x1FFF;
 			OsdSetTitle("UART BAUD");
 			menustate = MENU_BAUD2;
@@ -2872,7 +2879,7 @@ void HandleUI(void)
 
 	case MENU_8BIT_INFO:
 		OsdSetSize(16);
-		helptext = 0;
+		helptext_idx = 0;
 		menumask = 0xF;
 		menustate = MENU_8BIT_INFO2;
 		OsdSetTitle("Misc. Options", OSD_ARROW_RIGHT);
@@ -3034,7 +3041,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_JOYDIGMAP:
-		helptext = 0;
+		helptext_idx = 0;
 		menumask = 1;
 		OsdSetTitle("Define buttons", 0);
 		menustate = MENU_JOYDIGMAP1;
@@ -3281,7 +3288,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_JOYKBDMAP:
-		helptext = 0;
+		helptext_idx = 0;
 		menumask = 1;
 		menustate = MENU_JOYKBDMAP1;
 		parentstate = MENU_JOYKBDMAP;
@@ -3341,7 +3348,7 @@ void HandleUI(void)
 	case MENU_8BIT_ABOUT1:
 		OsdSetSize(16);
 		menumask = 0;
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		OsdSetTitle("About", 0);
 		menustate = MENU_8BIT_ABOUT2;
 		parentstate = MENU_8BIT_ABOUT1;
@@ -3540,6 +3547,7 @@ void HandleUI(void)
 	case MENU_ST_SYSTEM1:
 		menumask = 0x7fff;
 		OsdSetTitle("Config", 0);
+		helptext_idx = 0;
 		m = 0;
 
 		for (uint32_t i = 0; i < 2; i++)
@@ -3782,7 +3790,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_LOAD_CONFIG1:
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		OsdSetTitle("Load Config", 0);
 
 		if (parentstate != menustate)	// First run?
@@ -3836,7 +3844,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_SAVE_CONFIG1:
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		OsdSetTitle("Save Config", 0);
 
 		parentstate = menustate;
@@ -3890,7 +3898,7 @@ void HandleUI(void)
 	case MENU_MAIN1:
 		menumask = 0x1FF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
 		OsdSetTitle("Minimig", OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
-		helptext = helptexts[HELPTEXT_MAIN];
+		helptext_idx = HELPTEXT_MAIN;
 
 		// floppy drive info
 		// We display a line for each drive that's active
@@ -4075,7 +4083,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_LOADCONFIG_1:
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		if (parentstate != menustate) menumask = 0x400;
 
 		parentstate = menustate;
@@ -4149,7 +4157,7 @@ void HandleUI(void)
 		/* file selection menu                                            */
 		/******************************************************************/
 	case MENU_FILE_SELECT1:
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = (fs_Options & SCANO_UMOUNT) ? HELPTEXT_EJECT : 0;
 		OsdSetTitle((fs_Options & SCANO_CORES) ? "Cores" : "Select", 0);
 		PrintDirectory(hold_cnt<2);
 		menustate = MENU_FILE_SELECT2;
@@ -4168,6 +4176,7 @@ void HandleUI(void)
 			menu_key_set(0);
 			selPath[0] = 0;
 			menustate = fs_MenuSelect;
+			helptext_idx = 0;
 			break;
 		}
 
@@ -4186,6 +4195,7 @@ void HandleUI(void)
 
 			if (!strcasecmp(fs_pFileExt, "RBF")) selPath[0] = 0;
 			menustate = fs_MenuCancel;
+			helptext_idx = 0;
 		}
 
 		if (recent && recent_init((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index))
@@ -4322,6 +4332,7 @@ void HandleUI(void)
 						}
 						strcat(selPath, name);
 						menustate = fs_MenuSelect;
+						helptext_idx = 0;
 					}
 				}
 			}
@@ -4334,7 +4345,7 @@ void HandleUI(void)
 		/* cheats menu                                                    */
 		/******************************************************************/
 	case MENU_CHEATS1:
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		sprintf(s, "Cheats (%d)", cheats_loaded());
 		OsdSetTitle(s);
 		cheats_print();
@@ -4401,7 +4412,7 @@ void HandleUI(void)
 		/* last rom menu                                                    */
 		/******************************************************************/
 	case MENU_RECENT1:
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		OsdSetTitle((fs_Options & SCANO_CORES) ? "Recent Cores" : "Recent Files");
 		recent_print();
 		menustate = MENU_RECENT2;
@@ -4480,7 +4491,7 @@ void HandleUI(void)
 	case MENU_RESET1:
 		m = 0;
 		if (is_minimig()) m = 1;
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		OsdSetTitle("Reset", 0);
 		menumask = 0x03;	// Yes / No
 		parentstate = menustate;
@@ -4542,7 +4553,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_SAVECONFIG_1:
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		menumask = 0x7ff;
 		parentstate = menustate;
 		OsdSetTitle("Save config", 0);
@@ -4629,7 +4640,7 @@ void HandleUI(void)
 		/* chipset settings menu                                          */
 		/******************************************************************/
 	case MENU_SETTINGS_CHIPSET1:
-		helptext = helptexts[HELPTEXT_CHIPSET];
+		helptext_idx = HELPTEXT_CHIPSET;
 		menumask = 0xf9;
 		OsdSetTitle("Chipset", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 		parentstate = menustate;
@@ -4770,7 +4781,7 @@ void HandleUI(void)
 		/* memory settings menu                                           */
 		/******************************************************************/
 	case MENU_SETTINGS_MEMORY1:
-		helptext = helptexts[HELPTEXT_MEMORY];
+		helptext_idx = HELPTEXT_MEMORY;
 		menumask = 0x3f;
 		parentstate = menustate;
 
@@ -4878,7 +4889,7 @@ void HandleUI(void)
 		// Make the menu work on the copy, not the original, and copy on acceptance,
 		// not on rejection.
 	case MENU_SETTINGS_HARDFILE1:
-		helptext = helptexts[HELPTEXT_HARDFILE];
+		helptext_idx = HELPTEXT_HARDFILE;
 		OsdSetTitle("Harddisks", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 
 		parentstate = menustate;
@@ -5048,7 +5059,7 @@ void HandleUI(void)
 	case MENU_SETTINGS_VIDEO1:
 		menumask = 0x7f;
 		parentstate = menustate;
-		helptext = 0; // helptexts[HELPTEXT_VIDEO];
+		helptext_idx = 0; // helptexts[HELPTEXT_VIDEO];
 
 		m = 0;
 		OsdSetTitle("Video", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
@@ -5156,7 +5167,7 @@ void HandleUI(void)
 		}
 
 		OsdSetSize(16);
-		helptext = helptexts[HELPTEXT_NONE];
+		helptext_idx = 0;
 		parentstate = menustate;
 
 		m = 0;
@@ -5348,7 +5359,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_LGCAL:
-		helptext = 0;
+		helptext_idx = 0;
 		OsdSetTitle("Wiimote Calibration", 0);
 		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
 		OsdWrite(9, "  Point Wiimote to the edge");
@@ -5392,7 +5403,7 @@ void HandleUI(void)
 
 	case MENU_SCRIPTS_PRE:
 		OsdSetTitle("Warning!!!", 0);
-		helptext = 0;
+		helptext_idx = 0;
 		menumask = 7;
 		m = 0;
 		OsdWrite(m++);
@@ -5491,7 +5502,7 @@ void HandleUI(void)
 		//fall through
 
 	case MENU_SCRIPTS:
-		helptext = 0;
+		helptext_idx = 0;
 		menumask = 1;
 		menusub = 0;
 		OsdSetTitle((parentstate == MENU_BTPAIR) ? "BT Pairing" : flist_SelectedItem()->de.d_name, 0);
@@ -5570,7 +5581,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_KBDMAP:
-		helptext = 0;
+		helptext_idx = 0;
 		menumask = 1;
 		OsdSetTitle("Keyboard", 0);
 		menustate = MENU_KBDMAP1;
