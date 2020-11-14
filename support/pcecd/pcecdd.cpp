@@ -566,7 +566,7 @@ void pcecdd_t::CommandExec() {
 
 	case PCECD_COMM_MODESELECT6:
 		printf("\x1b[32mPCECD: Command MODESELECT6, cnt = %u\n\x1b[0m", comm[4]);
-		
+
 		if (comm[4]) {
 			data_req = true;
 		}
@@ -705,7 +705,7 @@ void pcecdd_t::CommandExec() {
 		if (SendData)
 			SendData(buf, 10 + 2, PCECD_DATA_IO_INDEX);
 
-		printf("\x1b[32mPCECD: Command READSUBQ, [1] = %02X, track = %i, index = %i, lba_rel = %i, lba_abs = %i\n\x1b[0m", comm[1], this->index + 1, this->index, lba_rel, this->lba);
+		//printf("\x1b[32mPCECD: Command READSUBQ, [1] = %02X, track = %i, index = %i, lba_rel = %i, lba_abs = %i\n\x1b[0m", comm[1], this->index + 1, this->index, lba_rel, this->lba);
 
 		SendStatus(MAKE_STATUS(PCECD_STATUS_GOOD, 0));
 	}
@@ -713,9 +713,9 @@ void pcecdd_t::CommandExec() {
 
 	default:
 		CommandError(SENSEKEY_ILLEGAL_REQUEST, NSE_INVALID_COMMAND, 0, 0);
-		
+
 		printf("\x1b[32mPCECD: Command undefined, [0] = %02X, [1] = %02X, [2] = %02X, [3] = %02X, [4] = %02X, [5] = %02X\n\x1b[0m", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5]);
-		
+
 		SendStatus(MAKE_STATUS(PCECD_STATUS_CHECK_COND, 0));
 
 		break;
@@ -743,7 +743,7 @@ void pcecdd_t::SendStatus(uint16_t status) {
 	spi_w(region ? 2 : 0);
 	DisableIO();
 
-	printf("\x1b[32mPCECD: Send status = %02X, message = %02X\n\x1b[0m", status & 0xFF, status >> 8);
+	//printf("\x1b[32mPCECD: Send status = %02X, message = %02X\n\x1b[0m", status & 0xFF, status >> 8);
 }
 
 void pcecdd_t::SendDataRequest() {
