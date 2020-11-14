@@ -65,6 +65,7 @@
 #define UIO_SETWIDTH    0x37  // Set max scaled horizontal resolution
 #define UIO_SETSYNC     0x38
 #define UIO_SET_AFILTER 0x39
+#define UIO_SET_AR_CUST 0x3A
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53

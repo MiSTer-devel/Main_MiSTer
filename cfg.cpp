@@ -74,6 +74,8 @@ static const ini_var_t ini_vars[] =
 	{ "SHARED_FOLDER", (void*)(&(cfg.shared_folder)), STRING, 0, sizeof(cfg.shared_folder) - 1 },
 	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), UINT16, 0, 0xFFFF },
 	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), UINT16, 0, 0xFFFF },
+	{ "CUSTOM_ASPECT_RATIO_1", (void*)(&(cfg.custom_aspect_ratio[0])), STRING, 0, sizeof(cfg.custom_aspect_ratio[0]) - 1 },
+	{ "CUSTOM_ASPECT_RATIO_2", (void*)(&(cfg.custom_aspect_ratio[1])), STRING, 0, sizeof(cfg.custom_aspect_ratio[1]) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -93,7 +95,8 @@ static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
 #define CHAR_IS_SPECIAL(c)      (((c) == '[') || ((c) == ']') || ((c) == '(') || ((c) == ')') || \
                                  ((c) == '-') || ((c) == '+') || ((c) == '/') || ((c) == '=') || \
                                  ((c) == '#') || ((c) == '$') || ((c) == '@') || ((c) == '_') || \
-                                 ((c) == ',') || ((c) == '.') || ((c) == '!') || ((c) == '*'))
+                                 ((c) == ',') || ((c) == '.') || ((c) == '!') || ((c) == '*') || \
+                                 ((c) == ':'))
 
 #define CHAR_IS_VALID(c)        (CHAR_IS_ALPHANUM(c) || CHAR_IS_SPECIAL(c))
 #define CHAR_IS_SPACE(c)        (((c) == ' ') || ((c) == '\t'))

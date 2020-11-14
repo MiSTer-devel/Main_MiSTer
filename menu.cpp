@@ -187,7 +187,6 @@ extern const char *version;
 const char *config_tos_wrprot[] = { "None", "A:", "B:", "A: and B:" };
 
 const char *config_scanlines_msg[] = { "Off", "HQ2x", "CRT 25%" , "CRT 50%" , "CRT 75%" };
-const char *config_ar_msg[] = { "4:3", "16:9" };
 const char *config_blank_msg[] = { "Blank", "Blank+" };
 const char *config_dither_msg[] = { "off", "SPT", "RND", "S+R" };
 const char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE FAST", "        AUTOFIRE MEDIUM", "        AUTOFIRE SLOW" };
@@ -877,6 +876,82 @@ void process_addon(char *ext, uint8_t idx)
 	}
 }
 
+static int get_arc(const char *str)
+{
+	int arc = 0;
+	if (!strcmp(str, "[ARC1]")) arc = 1;
+	else if(!strcmp(str, "[ARC2]")) arc = 2;
+	else return 0;
+
+	uint32_t x = 0, y = 0;
+	if (sscanf(cfg.custom_aspect_ratio[arc - 1], "%u:%u", &x, &y) != 2 || x < 1 || x > 4095 || y < 1 || y > 4095) arc = -1;
+
+	return arc;
+}
+
+static int get_ar_name(int ar, char *str)
+{
+	switch (ar)
+	{
+	case 0:
+		strcat(str, "Original");
+		break;
+
+	case 1:
+		strcat(str, "Full Screen");
+		break;
+
+	case 2:
+		if (get_arc("[ARC1]") <= 0)
+		{
+			strcat(str, "Original");
+			ar = 0;
+		}
+		else
+		{
+			strcat(str, cfg.custom_aspect_ratio[0]);
+		}
+		break;
+
+	case 3:
+		if (get_arc("[ARC2]") <= 0)
+		{
+			strcat(str, "Original");
+			ar = 0;
+		}
+		else
+		{
+			strcat(str, cfg.custom_aspect_ratio[1]);
+		}
+		break;
+	}
+
+	return ar;
+}
+
+static int next_ar(int ar, int minus)
+{
+	if (minus)
+	{
+		ar = (ar - 1) & 3;
+		while (1)
+		{
+			if (ar == 3 && get_arc("[ARC2]") > 0 && get_arc("[ARC1]") > 0) break;
+			if (ar == 2 && get_arc("[ARC1]") > 0) break;
+			if (ar < 2) break;
+			ar--;
+		}
+	}
+	else
+	{
+		ar = (ar + 1) & 3;
+		if (ar == 3 && get_arc("[ARC2]") <= 0) ar = 0;
+		if (ar == 2 && get_arc("[ARC1]") <= 0) ar = 0;
+	}
+
+	return ar;
+}
+
 static int joymap_first = 0;
 
 static int wm_x = 0;
@@ -1292,26 +1367,26 @@ void HandleUI(void)
 
 		OsdWrite(m++);
 
-		strcpy(s, " Aspect ratio:       ");
-		strcat(s, archie_get_ar() ? "16:9" : "4:3");
+		strcpy(s, " Aspect Ratio:    ");
+		archie_set_ar(get_ar_name(archie_get_ar(), s));
 		OsdWrite(m++, s, menusub == 5);
 
-		strcpy(s, " Refresh rate:       ");
+		strcpy(s, " Refresh Rate:    ");
 		strcat(s, archie_get_60() ? "Variable" : "60Hz");
 		OsdWrite(m++, s, menusub == 6);
 
-		sprintf(s, " Stereo mix:         %s", config_stereo_msg[archie_get_amix()]);
+		sprintf(s, " Stereo Mix:      %s", config_stereo_msg[archie_get_amix()]);
 		OsdWrite(m++, s, menusub == 7);
 
-		strcpy(s, " 25MHz audio fix:    ");
+		strcpy(s, " 25MHz Audio Fix: ");
 		strcat(s, archie_get_afix() ? "Enable" : "Disable");
 		OsdWrite(m++, s, menusub == 8);
 
 		OsdWrite(m++);
 
-		sprintf(s, " Swap joysticks:     %s", user_io_get_joyswap() ? "Yes" : "No");
+		sprintf(s, " Swap Joysticks:  %s", user_io_get_joyswap() ? "Yes" : "No");
 		OsdWrite(m++, s, menusub == 9);
-		sprintf(s, " Swap mouse btn 2/3: %s", archie_get_mswap() ? "Yes" : "No");
+		sprintf(s, " Swap Btn 2/3:    %s", archie_get_mswap() ? "Yes" : "No");
 		OsdWrite(m++, s, menusub == 10);
 
 		while(m<15) OsdWrite(m++);
@@ -1369,7 +1444,7 @@ void HandleUI(void)
 				break;
 
 			case 5:
-				archie_set_ar(!archie_get_ar());
+				archie_set_ar(next_ar(archie_get_ar(), minus));
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
@@ -1645,8 +1720,9 @@ void HandleUI(void)
 
 							// get currently active option
 							substrcpy(s, p, 2 + x);
-							char l = strlen(s);
-							if (!l)
+							int l = strlen(s);
+							int arc = get_arc(s);
+							if (!l || arc < 0)
 							{
 								// option's index is outside of available values.
 								// reset to 0.
@@ -1654,7 +1730,10 @@ void HandleUI(void)
 								//user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
 								substrcpy(s, p, 2 + x);
 								l = strlen(s);
+								arc = get_arc(s);
 							}
+
+							if (arc > 0) l = strlen(cfg.custom_aspect_ratio[arc - 1]);
 
 							s[0] = ' ';
 							substrcpy(s + 1, p, 1);
@@ -1667,7 +1746,8 @@ void HandleUI(void)
 							l = 28 - l - strlen(s);
 							while (l--) strcat(s, " ");
 
-							substrcpy(s + strlen(s), p, 2 + x);
+							if (arc > 0) strcpy(s + strlen(s), cfg.custom_aspect_ratio[arc - 1]);
+							else substrcpy(s + strlen(s), p, 2 + x);
 
 							MenuWrite(entry, s, menusub == selentry, d);
 
@@ -1944,14 +2024,14 @@ void HandleUI(void)
 								while(1)
 								{
 									substrcpy(s, p, 2 + x);
-									if (strlen(s)) break;
+									if (strlen(s) && get_arc(s) >= 0) break;
 									x = (x - 1) & mask;
 								}
 							}
 							else
 							{
 								substrcpy(s, p, 2 + x);
-								if (!strlen(s)) x = 0;
+								if (!strlen(s) || get_arc(s) < 0) x = 0;
 							}
 
 							user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff, ex);
@@ -3495,7 +3575,7 @@ void HandleUI(void)
 		OsdWrite(m++, s, menusub == 7, enable ? 0 : 1);
 
 		strcpy(s, " Aspect:    ");
-		strcat(s, (tos_system_ctrl() & TOS_CONTROL_VIDEO_AR) ? "16:9" : "4:3");
+		tos_set_ar(get_ar_name(tos_get_ar(), s));
 		OsdWrite(m++, s, menusub == 8);
 
 		strcpy(s, " Screen:    ");
@@ -3626,7 +3706,8 @@ void HandleUI(void)
 				break;
 
 			case 8:
-				tos_update_sysctrl(tos_system_ctrl() ^ TOS_CONTROL_VIDEO_AR);
+				tos_set_ar(next_ar(tos_get_ar(), minus));
+				tos_update_sysctrl(tos_system_ctrl());
 				menustate = MENU_ST_SYSTEM1;
 				break;
 
@@ -4971,21 +5052,21 @@ void HandleUI(void)
 		OsdSetTitle("Video", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 
 		OsdWrite(m++);
-		strcpy(s, " TV Standard    : ");
+		strcpy(s, " TV Standard   : ");
 		strcat(s, minimig_config.chipset & CONFIG_NTSC ? "NTSC" : "PAL");
 		OsdWrite(m++, s, menusub == 0, 0);
 		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " Scandoubler FX : ");
+		strcpy(s, " Scandoubler FX: ");
 		strcat(s, config_scanlines_msg[minimig_config.scanlines & 7]);
 		OsdWrite(m++, s, menusub == 1, 0);
-		strcpy(s, " Video area by  : ");
+		strcpy(s, " Video area by : ");
 		strcat(s, config_blank_msg[(minimig_config.scanlines >> 6) & 3]);
 		OsdWrite(m++, s, menusub == 2, 0);
-		strcpy(s, " Aspect Ratio   : ");
-		strcat(s, config_ar_msg[(minimig_config.scanlines >> 4) & 1]);
+		strcpy(s, " Aspect Ratio  : ");
+		minimig_config.scanlines = (get_ar_name((minimig_config.scanlines >> 4) & 3, s) << 4) | (minimig_config.scanlines & ~0x30);
 		OsdWrite(m++, s, menusub == 3, 0);
 		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " Stereo mix     : ");
+		strcpy(s, " Stereo mix    : ");
 		strcat(s, config_stereo_msg[minimig_config.audio & 3]);
 		OsdWrite(m++, s, menusub == 4, 0);
 		OsdWrite(m++, "", 0, 0);
@@ -5031,8 +5112,7 @@ void HandleUI(void)
 			}
 			else if (menusub == 3)
 			{
-				minimig_config.scanlines &= ~0x20; // reserved for auto-ar
-				minimig_config.scanlines ^= 0x10;
+				minimig_config.scanlines = (next_ar((minimig_config.scanlines >> 4) & 3, minus) << 4) | (minimig_config.scanlines & ~0x30);
 				minimig_ConfigVideo(minimig_config.scanlines);
 			}
 			else if (menusub == 4)

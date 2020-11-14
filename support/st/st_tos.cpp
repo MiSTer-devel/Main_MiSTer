@@ -82,6 +82,24 @@ unsigned long tos_system_ctrl()
 	return config.system_ctrl;
 }
 
+int tos_get_ar()
+{
+	int ar = 0;
+	if (config.system_ctrl & TOS_CONTROL_VIDEO_AR1) ar |= 1;
+	if (config.system_ctrl & TOS_CONTROL_VIDEO_AR2) ar |= 2;
+
+	return ar;
+}
+
+void tos_set_ar(int ar)
+{
+	if (ar & 1) config.system_ctrl |= TOS_CONTROL_VIDEO_AR1;
+	else config.system_ctrl &= ~TOS_CONTROL_VIDEO_AR1;
+
+	if (ar & 2) config.system_ctrl |= TOS_CONTROL_VIDEO_AR2;
+	else config.system_ctrl &= ~TOS_CONTROL_VIDEO_AR2;
+}
+
 void tos_uart_mode(int enable)
 {
 	uart_mode = enable;
@@ -632,7 +650,10 @@ const char* tos_get_cfg_string(int num)
 		strcat(str, " ");
 		if (!((tmp.system_ctrl >> 23) & 3) && (tmp.system_ctrl & TOS_CONTROL_BLITTER)) strcat(str, "B ");
 		if (tmp.system_ctrl & TOS_CONTROL_VIKING) strcat(str, "V ");
-		if (tmp.system_ctrl & TOS_CONTROL_VIDEO_AR) strcat(str, "W ");
+		int ar = 0;
+		if (tmp.system_ctrl & TOS_CONTROL_VIDEO_AR1) ar |= 1;
+		if (tmp.system_ctrl & TOS_CONTROL_VIDEO_AR2) ar |= 2;
+		sprintf(str+strlen(str), "A%d ", ar);
 		strcat(str, (tmp.system_ctrl & TOS_CONTROL_VIDEO_COLOR) ? "C " : (tmp.system_ctrl & TOS_CONTROL_MDE60) ? "M6 " : "M ");
 		if (!(tmp.system_ctrl & TOS_CONTROL_BORDER)) strcat(str, "F ");
 		int sl = (tmp.system_ctrl >> 20) & 3;

@@ -385,7 +385,7 @@ static const char* load_cue_file(drive_t *drv, const char *cuefile)
 	// add lead-out track
 	track.number++;
 	track.attr = 0;//sync with load iso
-	track.start = 0;
+	track.start = FileLoad(track.filename, 0, 0) / track.sectorSize;
 	track.length = 0;
 
 	if (!add_track(drv, &track, shift, -1, totalPregap, 0))
