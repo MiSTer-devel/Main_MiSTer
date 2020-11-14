@@ -44,6 +44,9 @@ typedef struct {
 	uint16_t jamma_pid;
 	uint16_t no_merge_vid;
 	uint16_t no_merge_pid;
+	uint16_t spinner_vid;
+	uint16_t spinner_pid;
+	int spinner_throttle;
 	uint8_t sniper_mode;
 	uint8_t browse_expand;
 	uint8_t logo;
