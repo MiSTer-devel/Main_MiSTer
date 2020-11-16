@@ -31,6 +31,7 @@ struct arc_struct {
 	int repeat;
 	int insiderom;
 	int patchaddr;
+	int dataop;
 	int validrom0;
 	int insidesw;
 	int insideinterleave;
@@ -222,10 +223,18 @@ static int rom_file(const char *name, uint32_t crc32, int start, int len, int ma
 	return 1;
 }
 
-static int rom_patch(const uint8_t *buf, int offset, uint16_t len)
+static int rom_patch(const uint8_t *buf, int offset, uint16_t len, int dataop)
 {
 	if ((offset + len) > romlen[0]) return 0;
-	memcpy(romdata + offset, buf, len);
+	if (!dataop)
+	{
+		memcpy(romdata + offset, buf, len);
+	}
+	else
+	{
+		for (int i = 0; i < len; i++) romdata[offset + i] ^= buf[i];
+	}
+
 	return 1;
 }
 
@@ -426,7 +435,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->imap = 0;
 		}
 
-		if (!strcasecmp(node->tag, "patch")) arc_info->patchaddr = 0;
+		if (!strcasecmp(node->tag, "patch"))
+		{
+			arc_info->patchaddr = 0;
+			arc_info->dataop = 0;
+		}
 
 		//printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
 		// walk the attributes and save them in the data structure as appropriate
@@ -503,6 +516,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				if (!strcasecmp(node->attributes[i].name, "offset") && !strcasecmp(node->tag, "patch"))
 				{
 					arc_info->patchaddr = strtoul(node->attributes[i].value, NULL, 0);
+				}
+				if (!strcasecmp(node->attributes[i].name, "operation") && !strcasecmp(node->tag, "patch"))
+				{
+					if(!strcasecmp(node->attributes[i].value, "xor")) arc_info->dataop = 1;
 				}
 				if (!strcasecmp(node->attributes[i].name, "map") && !strcasecmp(node->tag, "part"))
 				{
@@ -806,7 +823,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			unsigned char* binary = hexstr_to_char(arc_info->data->content, &len);
 			if (binary)
 			{
-				rom_patch(binary, arc_info->patchaddr, len);
+				rom_patch(binary, arc_info->patchaddr, len, arc_info->dataop);
 				free(binary);
 			}
 		}
