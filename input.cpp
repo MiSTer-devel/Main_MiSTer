@@ -2763,7 +2763,7 @@ void mergedevs()
 	}
 
 	//copy missing fields to mouseX
-	for (int i = 0; i < NUMDEV; i++) if (input[i].mouse)
+	for (int i = 0; i < NUMDEV; i++) if (input[i].mouse && input[i].quirk != QUIRK_MSSP)
 	{
 		for (int j = 0; j < NUMDEV; j++) if (!input[j].mouse)
 		{
@@ -2927,6 +2927,12 @@ int input_test(int getchar)
 							{
 								printf("Failed to switch %s to ImPS/2 protocol(2)\n", input[n].devname);
 							}
+						}
+
+						//All mice as spinners
+						if (input[n].mouse && cfg.spinner_vid == 0xFFFF && cfg.spinner_pid == 0xFFFF)
+						{
+							input[n].quirk = QUIRK_MSSP;
 						}
 
 						if (strcasestr(input[n].name, "Wiimote") && input[n].vid == 1 && input[n].pid == 1)
