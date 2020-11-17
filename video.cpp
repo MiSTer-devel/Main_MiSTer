@@ -319,6 +319,11 @@ static void loadScalerCfg()
 	if (!FileLoadConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
 	{
 		memset(scaler_flt_cfg, 0, sizeof(scaler_flt_cfg));
+		if (cfg.vfilter_default[0])
+		{
+			strcpy(scaler_flt_cfg+1, cfg.vfilter_default);
+			scaler_flt_cfg[0] = 1;
+		}
 	}
 }
 
