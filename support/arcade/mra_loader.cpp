@@ -798,20 +798,16 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			}
 			else // we have binary data?
 			{
-				//printf("we have bin.hex data [%s]\n",arc_info->data->content);
 				size_t len = 0;
 				unsigned char* binary = hexstr_to_char(arc_info->data->content, &len);
-				//printf("len %d:\n",len);
-				//for (size_t i=0;i<len;i++) {
-				//	printf(" %d ",binary[i]);
-				//}
-				//printf("\n");
-				printf("data (%d bytes) from xml\n", len);
+				int prev_len = romlen[0];
+				printf("data: ");
 				if (binary)
 				{
 					for (int i = 0; i < repeat; i++) rom_data(binary, len, arc_info->imap, &arc_info->context);
 					free(binary);
 				}
+				printf("%d(0x%X) bytes from xml\n", romlen[0] - prev_len, romlen[0] - prev_len);
 			}
 
 			if (!arc_info->insideinterleave) unitlen = 1;
