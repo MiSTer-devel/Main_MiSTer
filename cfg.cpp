@@ -132,9 +132,10 @@ static int ini_getline(char* line)
 		if (i >= (INI_LINE_SIZE - 1) || CHAR_IS_COMMENT(c)) ignore = 1;
 
 		if (CHAR_IS_LINEEND(c)) break;
-		if (CHAR_IS_VALID(c) && !ignore && !skip) line[i++] = c;
+		if ((CHAR_IS_SPACE(c) || CHAR_IS_VALID(c)) && !ignore && !skip) line[i++] = c;
 	}
 	line[i] = '\0';
+	while (i > 0 && CHAR_IS_SPACE(line[i - 1])) line[--i] = 0;
 	return c == 0 ? INI_EOT : 0;
 }
 
@@ -190,7 +191,7 @@ static void ini_parse_var(char* buf)
 	// find var
 	while (1)
 	{
-		if (buf[i] == '=')
+		if (buf[i] == '=' || CHAR_IS_SPACE(buf[i]))
 		{
 			buf[i] = '\0';
 			break;
@@ -215,8 +216,10 @@ static void ini_parse_var(char* buf)
 	// get data
 	if (var_id != -1)
 	{
-		ini_parser_debugf("Got VAR '%s' with VALUE %s", buf, &(buf[i + 1]));
 		i++;
+		while (buf[i] == '=' || CHAR_IS_SPACE(buf[i])) i++;
+		ini_parser_debugf("Got VAR '%s' with VALUE %s", buf, buf+i);
+
 		switch (ini_vars[var_id].type)
 		{
 		case UINT8:
