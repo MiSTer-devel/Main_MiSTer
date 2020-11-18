@@ -888,6 +888,7 @@ typedef struct
 	int      misc_flags;
 	int      paddle_val;
 	int      spinner_acc;
+	int      spinner_prediv;
 	int      old_btn;
 	int      ds_mouse_emu;
 
@@ -896,7 +897,7 @@ typedef struct
 
 	int      bind;
 	char     devname[32];
-	char     id[64];
+	char     id[80];
 	char     name[128];
 } devInput;
 
@@ -2763,7 +2764,7 @@ void mergedevs()
 	}
 
 	//copy missing fields to mouseX
-	for (int i = 0; i < NUMDEV; i++) if (input[i].mouse && input[i].quirk != QUIRK_MSSP)
+	for (int i = 0; i < NUMDEV; i++) if (input[i].mouse)
 	{
 		for (int j = 0; j < NUMDEV; j++) if (!input[j].mouse)
 		{
@@ -2775,6 +2776,30 @@ void mergedevs()
 				input[i].quirk = input[j].quirk;
 				memcpy(input[i].name, input[j].name, sizeof(input[i].name));
 				memcpy(input[i].idstr, input[j].idstr, sizeof(input[i].idstr));
+
+				if (!input[i].quirk)
+				{
+					//All mice as spinners
+					if ((cfg.spinner_vid == 0xFFFF && cfg.spinner_pid == 0xFFFF)
+
+						//Mouse as spinner
+						|| (cfg.spinner_vid && cfg.spinner_pid && input[i].vid == cfg.spinner_vid && input[i].pid == cfg.spinner_pid))
+					{
+						input[i].quirk = QUIRK_MSSP;
+						input[i].bind = i;
+						input[i].spinner_prediv = 1;
+					}
+
+					//Arcade Spinner TS-BSP01
+					if (input[i].vid == 0x32be && input[i].pid == 0x1420)
+					{
+						input[i].quirk = QUIRK_MSSP;
+						input[i].bind = i;
+						input[i].spinner_prediv = 3;
+					}
+
+					if (input[i].quirk == QUIRK_MSSP) strcat(input[i].id, "_sp");
+				}
 				break;
 			}
 		}
@@ -2929,12 +2954,6 @@ int input_test(int getchar)
 							}
 						}
 
-						//All mice as spinners
-						if (input[n].mouse && cfg.spinner_vid == 0xFFFF && cfg.spinner_pid == 0xFFFF)
-						{
-							input[n].quirk = QUIRK_MSSP;
-						}
-
 						if (strcasestr(input[n].name, "Wiimote") && input[n].vid == 1 && input[n].pid == 1)
 						{
 							input[n].quirk = QUIRK_CWIID;
@@ -3013,12 +3032,6 @@ int input_test(int getchar)
 						if (cfg.jamma_vid && cfg.jamma_pid && input[n].vid == cfg.jamma_vid && input[n].pid == cfg.jamma_pid)
 						{
 							input[n].quirk = QUIRK_JAMMA;
-						}
-
-						//Mouse as spinner
-						if (cfg.spinner_vid && cfg.spinner_pid && input[n].vid == cfg.spinner_vid && input[n].pid == cfg.spinner_pid)
-						{
-							input[n].quirk = QUIRK_MSSP;
 						}
 
 						//Arduino and Teensy devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
@@ -3503,7 +3516,7 @@ int input_test(int getchar)
 									input_cb(&ev, &absinfo, i);
 								}
 
-								int throttle = cfg.spinner_throttle ? abs(cfg.spinner_throttle) : 100;
+								int throttle = (cfg.spinner_throttle ? abs(cfg.spinner_throttle) : 100) * input[i].spinner_prediv;
 								int inv = cfg.spinner_throttle < 0;
 
 								input[i].spinner_acc += (xval * 100);
