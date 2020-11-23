@@ -1215,47 +1215,47 @@ void HandleUI(void)
 	{
 		if (down)
 		{
-            if((menumask >= ((uint64_t)1 << (menusub + 1))))	// Any active entries left?
-            {
-			    do
-			    {
-				    menusub++;
-			    } while ((menumask & ((uint64_t)1 << menusub)) == 0);
-            }
-            else
-            {
-                menusub = 0; // jump to first item
-            }
+			if((menumask >= ((uint64_t)1 << (menusub + 1))))	// Any active entries left?
+			{
+				do
+				{
+					menusub++;
+				} while ((menumask & ((uint64_t)1 << menusub)) == 0);
+			}
+			else
+			{
+				menusub = 0; // jump to first item
+			}
 
-            menustate = parentstate;
+			menustate = parentstate;
 		}
 
 		if (up)
 		{
-            if (menusub > 0)
-            {
-			    do
-			    {
-				    --menusub;
-			    } while ((menumask & ((uint64_t)1 << menusub)) == 0);
-            }
-            else
-            {
-                do
-                {
-                    menusub++;
-                } while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0); // jump to last item
-            }
+			if (menusub > 0)
+			{
+				do
+				{
+					--menusub;
+				} while ((menumask & ((uint64_t)1 << menusub)) == 0);
+			}
+			else
+			{
+				do
+				{
+					menusub++;
+				} while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0); // jump to last item
+			}
 			menustate = parentstate;
 		}
 	}
 
-    // SHARPMZ Series Menu - This has been located within the sharpmz.cpp code base in order to keep updates to common code
-    // base to a minimum and shrink its size. The UI is called with the basic state data and it handles everything internally,
-    // only updating values in this function as necessary.
-    //
+	// SHARPMZ Series Menu - This has been located within the sharpmz.cpp code base in order to keep updates to common code
+	// base to a minimum and shrink its size. The UI is called with the basic state data and it handles everything internally,
+	// only updating values in this function as necessary.
+	//
 	if (user_io_core_type() == CORE_TYPE_SHARPMZ)
-        sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_COMMON1, MENU_FILE_SELECT1,
+		sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_COMMON1, MENU_FILE_SELECT1,
 			       &parentstate, &menustate, &menusub, &menusub_last,
 			       &menumask, Selected_F[0], &helptext_idx, helptext_custom,
 			       &fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel,
@@ -1998,7 +1998,7 @@ void HandleUI(void)
 						if (p[0] == 'P' && select)
 						{
 							page = p[1] - '0';
-							if (page < 1 || page > 9) page = 0;
+							if ((page < 1) || (page > 9)) page = 0;
 							menusub_parent = menusub;
 							substrcpy(title, p, 1);
 							menustate = MENU_GENERIC_MAIN1;
@@ -2314,18 +2314,18 @@ void HandleUI(void)
 
 	case MENU_COMMON2:
 		if (menu)
-        {
+		{
 			switch (user_io_core_type())
 			{
-			    case CORE_TYPE_SHARPMZ:
-				    menusub   = menusub_last;
-				    menustate = sharpmz_default_ui_state();
-                    break;
-                default:
-                    menustate = MENU_NONE1;
-                    break;
-            };
-        }
+				case CORE_TYPE_SHARPMZ:
+					menusub   = menusub_last;
+					menustate = sharpmz_default_ui_state();
+					break;
+				default:
+					menustate = MENU_NONE1;
+					break;
+			};
+		}
 
 		if (recent && menusub == 0)
 		{
@@ -2439,7 +2439,7 @@ void HandleUI(void)
 				else if (user_io_core_type() == CORE_TYPE_SHARPMZ)
 				{
 					menustate = sharpmz_reset_config(1);
-                    menusub   = 0;
+					menusub   = 0;
 				}
 				break;
 
@@ -4521,11 +4521,11 @@ void HandleUI(void)
 				menustate = MENU_NONE1;
 				minimig_reset();
 			}
-            else if(m == 2)
-            {
+			else if(m == 2)
+			{
 				menustate = MENU_COMMON1;
-                sharpmz_reset_config(1);
-            }
+				sharpmz_reset_config(1);
+			}
 			else
 			{
 				char *filename = user_io_create_config_name();
