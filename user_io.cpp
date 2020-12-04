@@ -1966,7 +1966,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int progress = -1;
 	if (use_progress) MenuHide();
 
-	
+
 	if (is_gba())
 	{
 		process_ss(name);
@@ -2538,7 +2538,7 @@ void user_io_poll()
 		}
 	}
 
-	if (core_type == CORE_TYPE_8BIT && !is_menu() && !is_minimig() && !is_archie())
+	if (core_type == CORE_TYPE_8BIT && !is_minimig() && !is_archie())
 	{
 		// frequently check ps2 mouse for events
 		if (CheckTimer(mouse_timer))
