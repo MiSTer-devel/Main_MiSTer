@@ -1810,7 +1810,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].num)
 	{
-		int assign_btn = ((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) && ev->type == EV_REL);
+		int assign_btn = ((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) && (ev->type == EV_REL || ev->type == EV_KEY));
 		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1 && ev->code >= 256)
 		{
 			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_START; i++) if (ev->code == input[dev].mmap[i]) assign_btn = 1;
