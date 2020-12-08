@@ -1526,9 +1526,7 @@ void HandleUI(void)
 		/******************************************************************/
 
 	case MENU_GENERIC_MAIN1: {
-		spi_uio_cmd_cont(UIO_GET_OSDMASK);
-		hdmask = spi_w(0);
-		DisableIO();
+		hdmask = spi_uio_cmd16(UIO_GET_OSDMASK, 0);
 		user_io_read_confstr();
 		uint32_t s_entry = 0;
 		int entry = 0;
@@ -2121,6 +2119,11 @@ void HandleUI(void)
 				menusub = 3;
 			}
 		}
+		else if(spi_uio_cmd16(UIO_GET_OSDMASK, 0) != hdmask)
+		{
+			menustate = MENU_GENERIC_MAIN1;
+		}
+
 		break;
 
 	case MENU_GENERIC_FILE_SELECTED:
