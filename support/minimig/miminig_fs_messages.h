@@ -28,6 +28,7 @@
 #define ACTION_DISK_TYPE      32
 #define ACTION_DISK_CHANGE    33
 #define ACTION_SET_DATE       34
+#define ACTION_SAME_LOCK      40
 #define ACTION_SCREEN_MODE    994
 #define ACTION_READ_RETURN    1001
 #define ACTION_WRITE_RETURN   1002
@@ -73,6 +74,10 @@
 
 #define SHARED_LOCK    -2
 #define EXCLUSIVE_LOCK -1
+
+#define LOCK_DIFFERENT   -1
+#define LOCK_SAME        0
+#define LOCK_SAME_VOLUME 1
 
 #define MODE_OLDFILE    1005
 #define MODE_NEWFILE    1006
@@ -350,6 +355,21 @@ struct SetCommentRequest
 };
 
 struct SetCommentResponse
+{
+	long sz;
+	long success;
+	long error_code;
+};
+
+struct SameLockRequest
+{
+	long sz;
+	long type;
+	long key1;
+	long key2;
+};
+
+struct SameLockResponse
 {
 	long sz;
 	long success;

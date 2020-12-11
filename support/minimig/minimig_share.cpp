@@ -781,6 +781,30 @@ static int process_request(void *reqres_buffer)
 			ret = 0;
 		}
 		break;
+
+		case ACTION_SAME_LOCK:
+		{
+			dbg_print("> ACTION_SAME_LOCK\n");
+			SameLockRequest *req = (SameLockRequest*)reqres_buffer;
+
+			uint32_t key1 = SWAP_INT(req->key1);
+			uint32_t key2 = SWAP_INT(req->key2);
+			
+			if ((locks.find(key1) == locks.end()) || (locks.find(key2) == locks.end()))
+			{
+				ret = LOCK_DIFFERENT;
+				break;
+			}
+			
+			if (locks[key1].path == locks[key2].path)
+			{
+				ret = LOCK_SAME;
+				break;
+			}
+
+			ret = LOCK_SAME_VOLUME;
+		}
+		break;
 	}
 
 	int success = ret ? 0 : 1;
