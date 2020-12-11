@@ -591,10 +591,10 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
-			uint32_t old_pos = open_file_handles[key].offset;
+			int old_pos = open_file_handles[key].offset;
 
-			uint32_t new_pos = SWAP_INT(req->new_pos);
-			uint32_t mode = SWAP_INT(req->mode);
+			int new_pos = SWAP_INT(req->new_pos);
+			int mode = SWAP_INT(req->mode);
 
 			int origin = SEEK_SET;
 			if (mode == OFFSET_CURRENT) origin = SEEK_CUR;
