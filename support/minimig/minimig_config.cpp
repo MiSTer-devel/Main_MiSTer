@@ -11,6 +11,7 @@
 #include "../../menu.h"
 #include "../../user_io.h"
 #include "../../input.h"
+#include "../../cfg.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
@@ -527,6 +528,30 @@ typedef struct
 
 vmode_adjust_t vmodes_adj[64] = {};
 
+static const char* get_shared_vadjust_path()
+{
+	static char path[1024] = {};
+	if (!strlen(path))
+	{
+		if (strlen(cfg.shared_folder))
+		{
+			if (cfg.shared_folder[0] == '/')
+			{
+				snprintf(path, sizeof(path), "%s/minimig_vadjust.dat", cfg.shared_folder);
+			}
+			else
+			{
+				snprintf(path, sizeof(path), "%s/%s/minimig_vadjust.dat", HomeDir(), cfg.shared_folder);
+			}
+		}
+		else
+		{
+			snprintf(path, sizeof(path), "%s/shared/minimig_vadjust.dat", HomeDir());
+		}
+	}
+	return path;
+}
+
 static void adjust_vsize(char force)
 {
 	static uint16_t nres = 0;
@@ -542,7 +567,11 @@ static void adjust_vsize(char force)
 		printf("\033[1;37mVMODE: resolution: %u x %u, mode: %u\033[0m\n", scr_hsize, scr_vsize, res & 255);
 
 		static int loaded = 0;
-		if (~loaded)
+		if (!loaded && FileExists(get_shared_vadjust_path(), 0))
+		{
+			FileLoad(get_shared_vadjust_path(), vmodes_adj, sizeof(vmodes_adj));
+		}
+		else if (!loaded)
 		{
 			FileLoadConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
 			loaded = 1;
