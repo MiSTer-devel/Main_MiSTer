@@ -694,6 +694,16 @@ static int process_request(void *reqres_buffer)
 				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
 			}
+			
+			strcpy(buf, getFullPath(buf));
+			const char *fp2 = getFullPath(cp2);
+
+			// Identical match; do nothing
+			if (!strcmp(buf, fp2))
+			{
+				ret = 0;
+				break;
+			}
 
 			if (FileExists(cp2, 0) || PathIsDir(cp2, 0))
 			{
@@ -701,8 +711,7 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
-			strcpy(buf, getFullPath(buf));
-			if (rename(buf, getFullPath(cp2)))
+			if (rename(buf, fp2))
 			{
 				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
