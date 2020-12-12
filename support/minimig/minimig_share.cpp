@@ -218,6 +218,21 @@ static char* find_path(uint32_t key, const char *name)
 	return str;
 }
 
+static void fill_date(time_t time, int date[3])
+{
+	time_t days = time / 86400;
+	time_t left = time - (days * 86400);
+	time_t mins = left / 60;
+	time_t secs = left - (mins * 60);
+	time_t ticks = secs * 50;
+	days -= 2922; // Days between 1970 - 01 - 01 and 1978 - 01 - 01
+	if (days < 0) days = 0;
+	
+	date[0] = SWAP_INT(days);
+	date[1] = SWAP_INT(mins);
+	date[2] = SWAP_INT(ticks);
+}
+
 static int process_request(void *reqres_buffer)
 {
 	static char buf[1024];
@@ -465,26 +480,75 @@ static int process_request(void *reqres_buffer)
 				}
 			}
 
-			time_t days = time / 86400;
-			time_t left = time - (days * 86400);
-			time_t mins = left / 60;
-			time_t secs = left - (mins * 60);
-			time_t ticks = secs * 50;
-			days -= 2922; // Days between 1970 - 01 - 01 and 1978 - 01 - 01
-			if (days < 0) days = 0;
-
 			res->disk_key = SWAP_INT(disk_key);
 			res->entry_type = SWAP_INT(type);
 			res->size = SWAP_INT(size);
 			res->protection = 0;
-			res->date[0] = SWAP_INT(days);
-			res->date[1] = SWAP_INT(mins);
-			res->date[2] = SWAP_INT(ticks);
+			fill_date(time, res->date);
 
 			res->file_name[0] = strlen(fn);
 			strcpy(res->file_name + 1, fn);
 
 			sz_res = sizeof(ExamineObjectResponse) + strlen(fn);
+			ret = 0;
+		}
+		break;
+
+		case ACTION_EXAMINE_FH:
+		{
+			dbg_print("> ACTION_EXAMINE_FH\n");
+			ExamineFhRequest *req = (ExamineFhRequest*)reqres_buffer;
+			ExamineFhResponse *res = (ExamineFhResponse*)reqres_buffer;
+			sz_res = sizeof(ExamineFhResponse);
+			
+			uint32_t key = SWAP_INT(req->arg1);
+			dbg_print("  key: %d\n", key);
+			
+			if (open_file_handles.find(key) == open_file_handles.end())
+			{
+				ret = ERROR_OBJECT_NOT_FOUND;
+				break;
+			}
+
+			const char *fn = open_file_handles[key].name;
+			int disk_key = 666;
+			int type = 0;
+			time_t time = 0;
+			uint32_t size = 0;
+
+			struct stat64 st;
+			if (fstat64(fileno(open_file_handles[key].filp), &st) == 0)
+			{
+				time = st.st_mtime;
+				if (st.st_mode & S_IFDIR) type = ST_USERDIR;
+				else
+				{
+					type = ST_FILE;
+					if (st.st_size > UINT32_MAX) size = UINT32_MAX;
+					else size = (uint32_t)st.st_size;
+				}
+			}
+			else
+			{
+				dbg_print("Couldn't stat %s: %d\n", fn, errno);
+				ret = ERROR_OBJECT_NOT_FOUND;
+				break;
+			}
+			
+			dbg_print("    fn: %s\n", fn);
+			dbg_print("    size: %lld\n", open_file_handles[key].size);
+			dbg_print("    type: %d\n", type);
+			
+			res->disk_key = SWAP_INT(disk_key);
+			res->entry_type = SWAP_INT(type);
+			res->size = SWAP_INT(size);
+			res->protection = 0;
+			fill_date(time, res->date);
+
+			res->file_name[0] = strlen(fn);
+			strcpy(res->file_name + 1, fn);
+
+			sz_res = sizeof(ExamineFhResponse) + strlen(fn);
 			ret = 0;
 		}
 		break;

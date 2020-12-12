@@ -39,6 +39,7 @@
 #define ACTION_SEEK           1008
 #define ACTION_TRUNCATE       1022
 #define ACTION_WRITE_PROTECT  1023
+#define ACTION_EXAMINE_FH     1034
 
 #define ERROR_NO_FREE_STORE            103
 #define ERROR_TASK_TABLE_FULL          105
@@ -374,6 +375,27 @@ struct SameLockResponse
 	long sz;
 	long success;
 	long error_code;
+};
+
+struct ExamineFhRequest
+{
+	long sz;
+	long type;
+	long arg1;
+};
+
+struct ExamineFhResponse
+{
+	long sz;
+	long success;
+	long error_code;
+
+	long disk_key;
+	long entry_type;
+	int size;
+	int protection;
+	int date[3];
+	char file_name[1];
 };
 
 struct DiskInfoRequest
