@@ -566,7 +566,7 @@ static int process_request(void *reqres_buffer)
 
 			if (!name[0])
 			{
-				ret = ERROR_DIR_NOT_FOUND;
+				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
 			}
 
