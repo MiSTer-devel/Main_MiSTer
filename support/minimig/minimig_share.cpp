@@ -27,6 +27,10 @@ static uint8_t *shmem = 0;
 #define REQUEST_BUFFER  4      // ~512B
 #define DATA_BUFFER     0x1000 // 4KB
 
+// Must match device name in MountList and volume name from MiSTerFileSystem
+#define DEVICE_NAME     "SHARE"
+#define VOLUME_NAME     "MiSTer"
+
 //#define DEBUG
 
 #ifdef DEBUG
@@ -124,7 +128,12 @@ static char* find_path(uint32_t key, const char *name)
 	const char* p = strchr(name, ':');
 	if (p)
 	{
-		key = 0;
+		size_t root_len = p - name;
+
+		// Don't use lock for relative path if the name contains our root
+		if (root_len == 0 || !strncasecmp(name, DEVICE_NAME, root_len) || !strncasecmp(name, VOLUME_NAME, root_len))
+			key = 0;
+
 		name = p + 1;
 	}
 
