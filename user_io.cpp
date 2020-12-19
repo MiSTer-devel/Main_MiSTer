@@ -569,6 +569,7 @@ int GetUARTMode()
 void SetUARTMode(int mode)
 {
 	mode &= 0xFF;
+	spi_uio_cmd8(UIO_SET_UART, mode);
 
 	if (is_x86()) x86_set_uart_mode(mode != 3 || GetMidiLinkMode() >= 2);
 
@@ -963,10 +964,7 @@ void user_io_init(const char *path, const char *xml)
 
 	OsdRotation((cfg.osd_rotate == 1) ? 3 : (cfg.osd_rotate == 2) ? 1 : 0);
 
-	spi_uio_cmd_cont(UIO_GETUARTFLG);
-	uart_mode = spi_w(0);
-	DisableIO();
-
+	uart_mode = spi_uio_cmd16(UIO_GETUARTFLG, 0);
 	uint32_t mode = 0;
 	if (uart_mode)
 	{
