@@ -16,14 +16,49 @@ endif
 
 INCLUDE	= -I./
 INCLUDE	+= -I./support/minimig
+INCLUDE += -I./support/chd
 INCLUDE	+= -I./lib/libco
 INCLUDE	+= -I./lib/miniz
 INCLUDE	+= -I./lib/md5
+INCLUDE += -I./lib/lzma
+INCLUDE += -I./lib/libchdr/include
+INCLUDE += -I./lib/flac/include
+INCLUDE += -I./lib/flac/src/include
 
 PRJ = MiSTer
 C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/miniz/*.c) \
           $(wildcard ./lib/md5/*.c) \
+          ./lib/flac/src/bitmath.c \
+          ./lib/flac/src/bitreader.c \
+          ./lib/flac/src/cpu.c \
+          ./lib/flac/src/crc.c \
+          ./lib/flac/src/fixed.c \
+          ./lib/flac/src/float.c \
+          ./lib/flac/src/format.c \
+          ./lib/flac/src/lpc.c \
+          ./lib/flac/src/md5.c \
+          ./lib/flac/src/memory.c \
+          ./lib/flac/src/metadata_iterators.c \
+          ./lib/flac/src/metadata_object.c \
+          ./lib/flac/src/stream_decoder.c \
+          ./lib/flac/src/window.c \
+	  ./lib/lzma/Alloc.c \
+          ./lib/lzma/Bra86.c \
+          ./lib/lzma/BraIA64.c \
+          ./lib/lzma/CpuArch.c \
+          ./lib/lzma/Delta.c \
+          ./lib/lzma/LzFind.c \
+          ./lib/lzma/Lzma86Dec.c \
+          ./lib/lzma/Lzma86Enc.c \
+          ./lib/lzma/LzmaDec.c \
+          ./lib/lzma/LzmaEnc.c \
+          ./lib/lzma/Sort.c \
+          ./lib/libchdr/libchdr_bitstream.c \
+          ./lib/libchdr/libchdr_cdrom.c \
+          ./lib/libchdr/libchdr_chd.c \
+          ./lib/libchdr/libchdr_flac.c \
+          ./lib/libchdr/libchdr_huffman.c \
           lib/libco/arm.c 
 
 CPP_SRC = $(wildcard *.cpp) \
@@ -37,13 +72,13 @@ IMLIB2_LIB  = -Llib/imlib2 -lfreetype -lbz2 -lpng16 -lz -lImlib2
 OBJ	= $(C_SRC:.c=.c.o) $(CPP_SRC:.cpp=.cpp.o) $(IMG:.png=.png.o)
 DEP	= $(C_SRC:.c=.c.d) $(CPP_SRC:.cpp=.cpp.d)
 
-DFLAGS	= $(INCLUDE) -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
+DFLAGS	= $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DFLAC_API_EXPORTS -DFLAC__HAS_OGG=0 -DHAVE_LROUND -DHAVE_STDINT_H -DHAVE_STDLIB_H -DHAVE_SYS_PARAM_H -DENABLE_64_BIT_WORDS=0 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
 CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -c -O3
-LFLAGS	= -lc -lstdc++ -lrt $(IMLIB2_LIB)
+LFLAGS	= -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) 
 
 $(PRJ): $(OBJ)
 	$(Q)$(info $@)
-	$(Q)$(CC) -o $@ $+ $(LFLAGS)
+	$(Q)$(CC) -o $@ $+ $(LFLAGS) 
 	$(Q)cp $@ $@.elf
 	$(Q)$(STRIP) $@
 

@@ -1,6 +1,9 @@
 #ifndef CD_H
 #define CD_H
 
+#include <libchdr/chd.h>
+#include "file_io.h"
+
 typedef struct
 {
 	fileTYPE f;
@@ -15,6 +18,8 @@ typedef struct
 {
 	int end;
 	int last;
+	int sectorSize;
+	chd_file *chd_f;
 	track_t tracks[100];
 //	fileTYPE sub;
 } toc_t;

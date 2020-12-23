@@ -1975,6 +1975,13 @@ void HandleUI(void)
 
 						if (is_pce() || is_megacd())
 						{
+							if (!strncasecmp(fs_pFileExt, "CUE", 3))
+							{
+								//look for CHD too
+								printf("LOOK FOR CHD\n");
+								strcat(fs_pFileExt, "CHD");
+								strcat(ext, "CHD");
+							}
 							int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);
 							memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 
