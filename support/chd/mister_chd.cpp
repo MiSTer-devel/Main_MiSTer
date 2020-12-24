@@ -58,10 +58,11 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 		int track_id = 0, frames = 0, pregap = 0, postgap = 0;
 		char track_type[64], subtype[32], pgtype[32], pgsub[32];
 		
-		err = chd_get_metadata(cd_toc->chd_f, CDROM_TRACK_METADATA2_TAG, cd_toc->last, tmp, sizeof(tmp), NULL, NULL, NULL);
-		if (err == CHDERR_NONE)
+		if(chd_get_metadata(cd_toc->chd_f, CDROM_TRACK_METADATA2_TAG, cd_toc->last, tmp, sizeof(tmp), NULL, NULL, NULL))
 		{
-			sscanf(tmp, CDROM_TRACK_METADATA2_FORMAT, &track_id, track_type, subtype, &frames, &pregap, pgtype, pgsub, &postgap);
+			if (sscanf(tmp, CDROM_TRACK_METADATA2_FORMAT, &track_id, track_type, subtype, &frames, &pregap, pgtype, pgsub, &postgap) != 8) break ;
+		} else if (chd_get_metadata(cd_toc->chd_f, CDROM_TRACK_METADATA_TAG, cd_toc->last, tmp, sizeof(tmp), NULL, NULL, NULL)) {
+			if (sscanf(tmp, CDROM_TRACK_METADATA_FORMAT, &track_id, track_type, subtype, &frames) != 4) break;
 		} else {
 			//No more tracks
 			break;	
