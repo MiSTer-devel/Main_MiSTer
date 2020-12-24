@@ -33,8 +33,7 @@ int mister_chd_log(const char *format, ...)
 
 chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 {
-
-	chd_error err = chd_open(filename, CHD_OPEN_READ, NULL, &cd_toc->chd_f);
+	chd_error err = chd_open(getFullPath(filename), CHD_OPEN_READ, NULL, &cd_toc->chd_f);
 	if (err != CHDERR_NONE)
 	{
 		cd_toc->chd_f = NULL;

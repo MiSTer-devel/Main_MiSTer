@@ -244,14 +244,6 @@ int cdd_t::Load(const char *filename)
 
 	Unload();
 
-	char chd_fname[1024+10];
-
-
-
-	strncpy(chd_fname, filename, 1024+10);
-	strncpy(chd_fname+strlen(chd_fname)-3, "CHD", 3);
-
-	//filename = chd_fname;
 	const char *ext = filename+strlen(filename)-3;
 	if (!strncasecmp("CUE", ext, 3)) 
 	{
@@ -259,8 +251,13 @@ int cdd_t::Load(const char *filename)
 			return (-1);
 		}
 	} else if (!strncasecmp("CHD", ext, 3))  {
-		//TODO: error check
-		mister_load_chd(chd_fname, &this->toc);
+		chd_error err = mister_load_chd(filename, &this->toc);
+		if (err != CHDERR_NONE)
+		{
+			printf("ERROR %s\n", chd_error_string(err));
+			return -1;
+		}
+
 		if (this->chd_hunkbuf)
 		{
 			free(this->chd_hunkbuf);
@@ -960,13 +957,7 @@ int cdd_t::SectorSend(uint8_t* header)
 		ReadData(buf + 16);
 	}
 	else {
-		clock_t start, end;
-		double time_used;
-		start = clock();
 		len = ReadCDDA(buf);
-		end = clock();
-		time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
-		printf("READCDDA: %f\n", time_used);
 	}
 
 	if (SendData)
