@@ -58,10 +58,10 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 		int track_id = 0, frames = 0, pregap = 0, postgap = 0;
 		char track_type[64], subtype[32], pgtype[32], pgsub[32];
 		
-		if(chd_get_metadata(cd_toc->chd_f, CDROM_TRACK_METADATA2_TAG, cd_toc->last, tmp, sizeof(tmp), NULL, NULL, NULL))
+		if(chd_get_metadata(cd_toc->chd_f, CDROM_TRACK_METADATA2_TAG, cd_toc->last, tmp, sizeof(tmp), NULL, NULL, NULL) == CHDERR_NONE)
 		{
 			if (sscanf(tmp, CDROM_TRACK_METADATA2_FORMAT, &track_id, track_type, subtype, &frames, &pregap, pgtype, pgsub, &postgap) != 8) break ;
-		} else if (chd_get_metadata(cd_toc->chd_f, CDROM_TRACK_METADATA_TAG, cd_toc->last, tmp, sizeof(tmp), NULL, NULL, NULL)) {
+		} else if (chd_get_metadata(cd_toc->chd_f, CDROM_TRACK_METADATA_TAG, cd_toc->last, tmp, sizeof(tmp), NULL, NULL, NULL) == CHDERR_NONE) {
 			if (sscanf(tmp, CDROM_TRACK_METADATA_FORMAT, &track_id, track_type, subtype, &frames) != 4) break;
 		} else {
 			//No more tracks
@@ -123,8 +123,6 @@ chd_error mister_chd_read_sector(chd_file *chd_f, int lba, uint8_t d_offset, uin
 			return err;
 		}
 		*hunknum = tmphnum;
-		//for(int i = 0; i < 100; i++) { printf("%02x ", hunkbuf[i]);};
-		//printf("\n");
 	}
 	int sector_offset = hunkofs * CD_FRAME_SIZE;
 	memcpy(destbuf+d_offset, hunkbuf+sector_offset+s_offset, length);
