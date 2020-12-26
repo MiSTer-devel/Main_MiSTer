@@ -114,6 +114,7 @@ chd_error mister_chd_read_sector(chd_file *chd_f, int lba, uint8_t d_offset, uin
 	lba_to_hunkinfo(chd_f, lba, &tmphnum, &hunkofs);
 
 
+	//mister_chd_log("READ LBA: %d, dest_offset: %d sector offset: %d length %d chd_f %p\n", lba, d_offset, s_offset, length, chd_f);
 	if (tmphnum != *hunknum)
 	{
 		chd_error err = chd_read(chd_f, tmphnum, hunkbuf);

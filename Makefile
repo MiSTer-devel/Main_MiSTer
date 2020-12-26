@@ -29,6 +29,7 @@ PRJ = MiSTer
 C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/miniz/*.c) \
           $(wildcard ./lib/md5/*.c) \
+	  $(wildcard ./lib/lzma/*.c) \
           ./lib/flac/src/bitmath.c \
           ./lib/flac/src/bitreader.c \
           ./lib/flac/src/cpu.c \
@@ -43,17 +44,6 @@ C_SRC =   $(wildcard *.c) \
           ./lib/flac/src/metadata_object.c \
           ./lib/flac/src/stream_decoder.c \
           ./lib/flac/src/window.c \
-	  ./lib/lzma/Alloc.c \
-          ./lib/lzma/Bra86.c \
-          ./lib/lzma/BraIA64.c \
-          ./lib/lzma/CpuArch.c \
-          ./lib/lzma/Delta.c \
-          ./lib/lzma/LzFind.c \
-          ./lib/lzma/Lzma86Dec.c \
-          ./lib/lzma/Lzma86Enc.c \
-          ./lib/lzma/LzmaDec.c \
-          ./lib/lzma/LzmaEnc.c \
-          ./lib/lzma/Sort.c \
           ./lib/libchdr/libchdr_bitstream.c \
           ./lib/libchdr/libchdr_cdrom.c \
           ./lib/libchdr/libchdr_chd.c \
