@@ -30,25 +30,8 @@ C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/miniz/*.c) \
           $(wildcard ./lib/md5/*.c) \
 	  $(wildcard ./lib/lzma/*.c) \
-          ./lib/flac/src/bitmath.c \
-          ./lib/flac/src/bitreader.c \
-          ./lib/flac/src/cpu.c \
-          ./lib/flac/src/crc.c \
-          ./lib/flac/src/fixed.c \
-          ./lib/flac/src/float.c \
-          ./lib/flac/src/format.c \
-          ./lib/flac/src/lpc.c \
-          ./lib/flac/src/md5.c \
-          ./lib/flac/src/memory.c \
-          ./lib/flac/src/metadata_iterators.c \
-          ./lib/flac/src/metadata_object.c \
-          ./lib/flac/src/stream_decoder.c \
-          ./lib/flac/src/window.c \
-          ./lib/libchdr/libchdr_bitstream.c \
-          ./lib/libchdr/libchdr_cdrom.c \
-          ./lib/libchdr/libchdr_chd.c \
-          ./lib/libchdr/libchdr_flac.c \
-          ./lib/libchdr/libchdr_huffman.c \
+	  $(wildcard ./lib/flac/src/*.c) \
+	  $(wildcard ./lib/libchdr/*.c) \
           lib/libco/arm.c 
 
 CPP_SRC = $(wildcard *.cpp) \
