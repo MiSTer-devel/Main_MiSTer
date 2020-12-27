@@ -1007,7 +1007,14 @@ void cdrom_read(ide_config *ide)
 	 	for(uint32_t i = 0; i < cnt; i++)	
 		{
 
-			mister_chd_read_sector(drive->chd_f, drive->chd_last_partial_lba + drive->track[drive->data_num].chd_offset, d_offset, hdr, 2048, ide_buf, drive->chd_hunkbuf, &drive->chd_hunknum);
+			if (mister_chd_read_sector(drive->chd_f, drive->chd_last_partial_lba + drive->track[drive->data_num].chd_offset, d_offset, hdr, 2048, ide_buf, drive->chd_hunkbuf, &drive->chd_hunknum) != CHDERR_NONE)
+			{
+				//I don't think anything else uses this, but set it just in case.
+				ide->null = 1;
+				memset(ide_buf+d_offset, 0, 2048);
+			} else {
+				ide->null = 0;
+			}
 			d_offset += 2048;
 			drive->chd_last_partial_lba++;
 		}
