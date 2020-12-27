@@ -251,11 +251,11 @@ int pcecdd_t::Load(const char *filename)
 {
 	Unload();
 
-	const char *ext = filename+strlen(filename)-3;
-	if (!strncasecmp("CUE", ext, 3))
+	const char *ext = filename+strlen(filename)-4;
+	if (!strncasecmp(".cue", ext, 4))
 	{
 		if (LoadCUE(filename)) return -1;
-	} else if (!strncasecmp("CHD", ext, 3)) {
+	} else if (!strncasecmp(".chd", ext, 4)) {
 		mister_load_chd(filename, &this->toc);
 		if (this->chd_hunkbuf)
 		{

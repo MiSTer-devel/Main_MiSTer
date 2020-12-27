@@ -418,6 +418,7 @@ CHD_EXPORT chd_error chd_codec_config(chd_file *chd, int param, void *config);
 /* return a string description of a codec */
 CHD_EXPORT const char *chd_get_codec_name(UINT32 codec);
 
+
 #ifdef __cplusplus
 }
 #endif

@@ -12,7 +12,7 @@ typedef struct
 	int end;
 	int type;
 	int sector_size;
-} track_t;
+} cd_track_t;
 
 typedef struct
 {
@@ -20,7 +20,7 @@ typedef struct
 	int last;
 	int sectorSize;
 	chd_file *chd_f;
-	track_t tracks[100];
+	cd_track_t tracks[100];
 //	fileTYPE sub;
 } toc_t;
 

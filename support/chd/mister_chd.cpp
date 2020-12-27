@@ -48,7 +48,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 		return CHDERR_NO_INTERFACE; //I'm not sure this error condition is possible, so just use whatever
 	}
 
-	mister_chd_log("hunkbytes %d unitbytes %d logical length %d\n", chd_header->hunkbytes, chd_header->unitbytes, chd_header->logicalbytes);
+	mister_chd_log("hunkbytes %d unitbytes %d logical length %llu\n", chd_header->hunkbytes, chd_header->unitbytes, chd_header->logicalbytes);
 	//Load track info
 	
 	int sector_cnt = 0;
@@ -75,13 +75,19 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 			cd_toc->tracks[cd_toc->last].start = 0;
 		}
 
-		if (!strcmp(track_type, "MODE1_RAW") || !strcmp(track_type, "MODE2_RAW"))
+		if (!strcmp(track_type, "MODE1_RAW"))
 		{
 			cd_toc->tracks[cd_toc->last].sector_size = 2352;
 			cd_toc->tracks[cd_toc->last].type = 1;
+		} else if (!strcmp(track_type, "MODE2_RAW")) {
+			cd_toc->tracks[cd_toc->last].sector_size = 2352;
+			cd_toc->tracks[cd_toc->last].type = 2;
 		} else if (!strcmp(track_type, "MODE1")) {
 			cd_toc->tracks[cd_toc->last].sector_size = 2048;
 			cd_toc->tracks[cd_toc->last].type = 1;
+		} else if (!strcmp(track_type, "MODE2")) {
+			cd_toc->tracks[cd_toc->last].sector_size = 2336;
+			cd_toc->tracks[cd_toc->last].type = 2;
 		} else if (!strcmp(track_type, "AUDIO")) {
 			cd_toc->tracks[cd_toc->last].sector_size = 2352;
 			cd_toc->tracks[cd_toc->last].type = 0;
@@ -105,7 +111,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 }
 
 
-chd_error mister_chd_read_sector(chd_file *chd_f, int lba, uint8_t d_offset, uint8_t s_offset, int length, uint8_t *destbuf, uint8_t *hunkbuf, int *hunknum)
+chd_error mister_chd_read_sector(chd_file *chd_f, int lba, uint32_t d_offset, uint32_t s_offset, int length, uint8_t *destbuf, uint8_t *hunkbuf, int *hunknum)
 {
 
 	int tmphnum = 0;

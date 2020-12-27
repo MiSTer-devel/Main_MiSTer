@@ -17,11 +17,13 @@
 #include "../../user_io.h"
 #include "../../file_io.h"
 #include "../../hardware.h"
+#include "../../cd.h"
+#include "../../lib/libchdr/include/libchdr/chd.h"
 #include "x86.h"
 #include "x86_ide.h"
 #include "x86_cdrom.h"
 
-#if 0
+#if 0 
 	#define dbg_printf     printf
 	#define dbg_print_regs ide_print_regs
 	#define dbg_hexdump    hexdump
@@ -46,6 +48,7 @@
 #define MSF_TO_FRAMES(M, S, F) ((M)*60*CD_FPS+(S)*CD_FPS+(F))
 
 #define CD_ERR_NO_DISK ((2 << 4) | ATA_ERR_ABRT)
+
 
 typedef struct
 {
@@ -239,6 +242,87 @@ static int add_track(drive_t *drv, track_t *curr, uint32_t &shift, const int32_t
 	drv->track_cnt++;
 	return 1;
 }
+
+static const char* load_chd_file(drive_t *drv, const char *chdfile)
+{
+
+	//Borrow the cd.h "toc_t" and mister_chd* parse function. Then translate the toc_t to drive_t+track_t.
+	//TODO: abstract all the bin/cue+chd+iso parsing and reading into a shared class
+	//
+	
+	const char *ext = chdfile+strlen(chdfile)-4;
+	uint32_t total_sector_size = 0;
+
+	
+	if (strncasecmp(".chd", ext, 4))
+	{
+		//Not a CHD
+		return 0;
+	}
+	toc_t tmpTOC = { };
+	memset(drv->track, 0, sizeof(drv->track));
+	drv->track_cnt = 0;
+	chd_error err = mister_load_chd(chdfile, &tmpTOC);
+	if (err != CHDERR_NONE)
+	{
+		return 0;
+	}
+
+	if (drv->chd_hunkbuf)
+	{
+		free(drv->chd_hunkbuf);
+	}
+
+	drv->chd_hunkbuf = (uint8_t *)malloc(CD_FRAME_SIZE * CD_FRAMES_PER_HUNK);
+	drv->chd_hunknum = -1;
+	drv->chd_f = tmpTOC.chd_f;
+
+	//don't use add_track, just do it ourselves...
+	for(int i = 0; i <= tmpTOC.last; i++)
+	{
+		cd_track_t *chd_track = &tmpTOC.tracks[i];
+		track_t *trk = &drv->track[i]; 
+		trk->number = i+1;
+		trk->sectorSize = chd_track->sector_size;
+		if (chd_track->type)
+		{
+			trk->attr = 0x40;
+			if (chd_track->type == 2)
+			{
+				trk->mode2 = true;
+			}
+
+		}
+
+		trk->chd_offset = chd_track->offset;
+		trk->start = chd_track->start;
+		trk->length = chd_track->end - chd_track->start;
+		drv->track_cnt++;
+		total_sector_size += trk->length * trk->sectorSize;
+	}
+
+	//Add the lead-out track
+	
+	track_t *lead_out = &drv->track[drv->track_cnt];
+	lead_out->number = drv->track_cnt+1; 
+	lead_out->attr = 0;
+	lead_out->start = tmpTOC.tracks[tmpTOC.last].end;
+	lead_out->length = 0;
+
+	drv->total_sectors = total_sector_size / 512;
+	drv->chd_total_size = total_sector_size;
+
+	for(uint8_t i = 0; i < drv->track_cnt; i++)
+	{
+		if (drv->track[i].attr == 0x40)
+		{
+			drv->data_num = i;
+		}
+	}
+
+	return chdfile;
+}
+
 
 static const char* load_cue_file(drive_t *drv, const char *cuefile)
 {
@@ -881,6 +965,8 @@ static void read_cd_sectors(ide_config *ide, int cnt)
 void cdrom_read(ide_config *ide)
 {
 	uint32_t cnt = ide->regs.pkt_cnt;
+	drive_t *drive = &ide->drive[ide->regs.drv];
+
 	if ((cnt * 4) > ide_io_max_size) cnt = ide_io_max_size / 4;
 
 	while ((cnt * 2048) > ide->regs.pkt_size_limit)
@@ -889,12 +975,13 @@ void cdrom_read(ide_config *ide)
 		cnt--;
 	}
 
+
 	if (cnt != ide->regs.pkt_cnt)
 	{
 		dbg_printf("** partial CD read\n");
 	}
 
-	if (ide->state == IDE_STATE_INIT_RW)
+	if (ide->state == IDE_STATE_INIT_RW && !drive->chd_f) 
 	{
 		uint32_t pos = ide->regs.pkt_lba * ide->drive[ide->regs.drv].track[ide->drive[ide->regs.drv].data_num].sectorSize;
 
@@ -902,7 +989,32 @@ void cdrom_read(ide_config *ide)
 		ide->null = (FileSeek(ide->drive[ide->regs.drv].f, pos, SEEK_SET) < 0);
 	}
 
-	read_cd_sectors(ide, cnt);
+
+	if (drive->chd_f) {
+
+		uint32_t hdr = drive->track[drive->data_num].mode2 ? 24 : 16;
+		if (drive->track[drive->data_num].sectorSize == 2048)
+		{
+			hdr = 0;
+		}
+		uint32_t d_offset = 0;
+		
+		if (ide->state == IDE_STATE_INIT_RW)
+		{
+			drive->chd_last_partial_lba = ide->regs.pkt_lba; 
+		}
+
+	 	for(uint32_t i = 0; i < cnt; i++)	
+		{
+
+			mister_chd_read_sector(drive->chd_f, drive->chd_last_partial_lba + drive->track[drive->data_num].chd_offset, d_offset, hdr, 2048, ide_buf, drive->chd_hunkbuf, &drive->chd_hunknum);
+			d_offset += 2048;
+			drive->chd_last_partial_lba++;
+		}
+
+	} else {
+		read_cd_sectors(ide, cnt);
+	}
 
 	dbg_printf("\nsector:\n");
 	dbg_hexdump(ide_buf, 512, 0);
@@ -1093,10 +1205,17 @@ void cdrom_handle_pkt(ide_config *ide)
 		break;
 
 	case 0x25: // read capacity
-		//printf("** Read Capacity\n");
+		dbg_printf("** Read Capacity\n");
 		if (!drv->load_state)
 		{
-			uint32_t tmp = drv->f->size / 2048;;
+			uint32_t tmp = 0;
+
+			if (drv->chd_f)
+			{
+				tmp = drv->chd_total_size / 2048;
+			} else {
+				tmp = drv->f->size / 2048;
+			}
 			ide_buf[0] = tmp >> 24;
 			ide_buf[1] = tmp >> 16;
 			ide_buf[2] = tmp >> 8;
@@ -1114,39 +1233,45 @@ void cdrom_handle_pkt(ide_config *ide)
 		break;
 
 	case 0x2B: // seek
+
+		dbg_printf("** Seek\n");
 		drv->playing = 0;
 		drv->paused = 0;
 		cdrom_reply(ide, 0);
 		break;
 
 	case 0x1E: // lock the cd door - doing nothing.
+		dbg_printf("** Lock Door\n");
 		cdrom_reply(ide, 0);
 		break;
 
 	case 0x5A: // mode sense
+		dbg_printf("** Mode Sense\n");
 		pkt_send(ide, ide_buf, mode_sense(cmdbuf[2]));
 		break;
 
 	case 0x42: // read sub
-		dbg_printf("read sub:\n");
+		dbg_printf("** read sub:\n");
 		pkt_send(ide, ide_buf, read_subchannel(drv, cmdbuf));
 		break;
 
 	case 0x43: // read TOC
+		dbg_printf("** Read TOC\n");
 		pkt_send(ide, ide_buf, read_toc(drv, cmdbuf));
 		break;
 
 	case 0x12: // inquiry
+		dbg_printf("** Inquiry\n");
 		pkt_send(ide, ide_buf, cd_inquiry(cmdbuf[4]));
 		break;
 
 	case 0x03: // mode sense
-		dbg_printf("get sense:\n");
+		dbg_printf("** get sense:\n");
 		pkt_send(ide, ide_buf, get_sense(drv));
 		break;
 
 	case 0x55: // mode select
-		printf("mode select\n");
+		dbg_printf("** mode select\n");
 		ide->regs.cylinder = (cmdbuf[7] << 8) | cmdbuf[8];
 		if (ide->regs.cylinder > 512) ide->regs.cylinder = 512;
 		ide->regs.pkt_io_size = (ide->regs.cylinder + 1) / 2;
@@ -1157,24 +1282,25 @@ void cdrom_handle_pkt(ide_config *ide)
 		break;
 
 	case 0x00: // test unit ready
+		dbg_printf("** Test Unit Ready\n");
 		if (!drv->load_state) cdrom_reply(ide, 0);
 		else cdrom_nodisk(ide);
 		break;
 
 	case 0x45: // play lba
-		printf("CD PLAY AUDIO(10)\n");
+		dbg_printf("** CD PLAY AUDIO(10)\n");
 		play_audio10(drv, cmdbuf);
 		cdrom_reply(ide, 0);
 		break;
 
 	case 0x47: // play msf
-		printf("CD PLAY AUDIO MSF\n");
+		dbg_printf("** CD PLAY AUDIO MSF\n");
 		play_audio_msf(drv, cmdbuf);
 		cdrom_reply(ide, 0);
 		break;
 
 	case 0x4B: // pause/resume
-		printf("CD PAUSE/RESUME\n");
+		dbg_printf("** CD PAUSE/RESUME\n");
 		pause_resume(drv, cmdbuf);
 		cdrom_reply(ide, 0);
 		break;
@@ -1294,6 +1420,23 @@ void cdrom_reply(ide_config *ide, uint8_t error)
 	ide_set_regs(ide);
 }
 
+void cdrom_close_chd(drive_t *drv)
+{
+
+	if (drv->chd_f)
+	{
+		chd_close(drv->chd_f);
+		drv->chd_f = NULL;
+	}
+
+	if (drv->chd_hunkbuf)
+	{
+		free(drv->chd_hunkbuf);
+		drv->chd_hunkbuf = NULL;
+	}
+	drv->chd_hunknum = -1;
+}
+
 const char* cdrom_parse(uint32_t num, const char *filename)
 {
 	const char *res = 0;
@@ -1303,7 +1446,9 @@ const char* cdrom_parse(uint32_t num, const char *filename)
 		const char *path = getFullPath(filename);
 		int drv = num & 1;
 		num >>= 1;
-		res = load_cue_file(&ide_inst[num].drive[drv], path);
+		cdrom_close_chd(&ide_inst[num].drive[drv]);
+		res = load_chd_file(&ide_inst[num].drive[drv], path);
+		if (!res) res = load_cue_file(&ide_inst[num].drive[drv], path);
 		if (!res) res = load_iso_file(&ide_inst[num].drive[drv], path);
 	}
 	return res;
