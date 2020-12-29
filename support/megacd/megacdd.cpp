@@ -245,7 +245,7 @@ int cdd_t::Load(const char *filename)
 	Unload();
 
 	const char *ext = filename+strlen(filename)-4;
-	if (!strncasecmp(".cue", ext, 4)) 
+	if (!strncasecmp(".cue", ext, 4))
 	{
 		if (LoadCUE(filename)) {
 			return (-1);
@@ -882,17 +882,14 @@ void cdd_t::ReadData(uint8_t *buf)
 	this->lba++;
 }
 
-
-
 int cdd_t::ReadCDDA(uint8_t *buf)
 {
 	this->audioLength = 2352 + 2352 - this->audioOffset;
 	this->audioOffset = 2352;
-	chd_error err;
 
 	//printf("\x1b[32mMCD: AUDIO LENGTH %d LBA: %d INDEX: %d START: %d END %d\n\x1b[0m", this->audioLength, this->lba, this->index, this->toc.tracks[this->index].start, this->toc.tracks[this->index].end);
 	//
-	
+
 	if (this->isData)
 	{
 		//????
