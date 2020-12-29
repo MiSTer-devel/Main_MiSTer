@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include "spi.h"
 
 struct fileZipArchive;

@@ -1,6 +1,8 @@
 #ifndef X86_IDE_H
 #define X86_IDE_H
 
+#include "../chd/mister_chd.h"
+
 #define ATA_STATUS_BSY  0x80  // busy
 #define ATA_STATUS_RDY  0x40  // ready
 #define ATA_STATUS_DF   0x20  // device fault
@@ -66,11 +68,13 @@ typedef struct
 	uint8_t  attr;
 	uint8_t  mode2;
 	uint8_t  number;
+	int 	chd_offset;
 } track_t;
 
 typedef struct
 {
 	fileTYPE *f;
+
 	uint8_t  present;
 	uint8_t  drvnum;
 
@@ -92,6 +96,12 @@ typedef struct
 	uint8_t  paused;
 	uint32_t play_start_lba;
 	uint32_t play_end_lba;
+
+	chd_file	*chd_f;
+	int 	chd_hunknum; 	
+	uint8_t	*chd_hunkbuf;
+	uint32_t chd_total_size;
+	uint32_t chd_last_partial_lba;
 
 	uint16_t id[256];
 } drive_t;

@@ -115,7 +115,7 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 	drive->cylinders = 0;
 	drive->heads = 0;
 	drive->spt = 0;
-	drive->total_sectors = 0;
+	//drive->total_sectors = 0;
 
 	drive->present = f ? 1 : 0;
 	ide_inst[num].state = IDE_STATE_RESET;
@@ -145,7 +145,12 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 		return;
 	}
 
-	if(drive->f) drive->total_sectors = (drive->f->size / 512);
+	if(drive->f)
+	{
+		if (!drive->chd_f) drive->total_sectors = (drive->f->size / 512);
+	} else {
+		drive->total_sectors = 0;
+	}
 
 	if (!drive->cd)
 	{
@@ -355,7 +360,7 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 		};
 
 		for (int i = 0; i < 256; i++) drive->id[i] = identify[i];
-		drive->load_state = drive->f ? 1 : 3;
+		drive->load_state = (drive->f || drive->chd_f) ? 1 : 3;
 	}
 
 	if (ide_inst[num].drive[drv].present)

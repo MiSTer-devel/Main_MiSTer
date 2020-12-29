@@ -1973,8 +1973,14 @@ void HandleUI(void)
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 						if (is_x86()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
 
-						if (is_pce() || is_megacd())
+						if (is_pce() || is_megacd() || is_x86())
 						{
+							//if (!strncasecmp(fs_pFileExt, "CUE", 3))
+							//{
+								//look for CHD too
+								strcat(fs_pFileExt, "CHD");
+								strcat(ext, "CHD");
+							//}
 							int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);
 							memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 

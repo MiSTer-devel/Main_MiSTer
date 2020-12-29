@@ -100,6 +100,8 @@ private:
 	uint8_t CDDAMode;
 	sense_t sense;
 	uint8_t region;
+	uint8_t *chd_hunkbuf;
+	int chd_hunknum;
 
 	uint16_t stat;
 	uint8_t comm[14];
