@@ -2536,7 +2536,7 @@ static chd_error zlib_codec_decompress(void *codec, const uint8_t *src, uint32_t
 	data->inflater.next_out = (Bytef *)dest;
 	data->inflater.avail_out = destlen;
 	data->inflater.total_out = 0;
-	zerr = inflateInit(&data->inflater);
+	zerr = inflateReset(&data->inflater);
 	if (zerr != Z_OK)
 		return CHDERR_DECOMPRESSION_ERROR;
 
