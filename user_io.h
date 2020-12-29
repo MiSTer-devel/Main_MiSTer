@@ -252,6 +252,12 @@ void SetUARTMode(int mode);
 int GetMidiLinkMode();
 void SetMidiLinkMode(int mode);
 void ResetUART();
+uint32_t* GetUARTbauds(int mode);
+uint32_t GetUARTbaud(int mode);
+char* GetUARTbaud_label(int mode);
+char* GetUARTbaud_label(int mode, int idx);
+int GetUARTbaud_idx(int mode);
+uint32_t ValidateUARTbaud(int mode, uint32_t baud);
 
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();

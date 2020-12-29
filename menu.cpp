@@ -199,7 +199,7 @@ const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Pres
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "     None", "      PPP", "  Console", "     MIDI", " Midilink" };
 const char *config_midilink_msg[] = { " MIDI Local", "MIDI Remote", "   MFP UART", "" };
-const char *config_uart_baud[] = { "110", "300", "600", "1200", "2400", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200"};
+//const char *config_uart_baud[] = { "110", "300", "600", "1200", "2400", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200"};
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
 const char *config_gamma_msg[] = { "Off","On" };
@@ -1870,12 +1870,11 @@ void HandleUI(void)
 			else
 			{
 				static char ext[256];
-				p = user_io_get_confstr(1);
-
 				int h = 0, d = 0, inpage = !page;
 				uint32_t entry = 0;
-				int i = 1;
+				int i = 2;
 
+				p = 0;
 				addon[0] = 0;
 
 				while (1)
@@ -1931,7 +1930,7 @@ void HandleUI(void)
 					if (p[0] == 'F' || p[0] == 'S') addon[0] = 0;
 				}
 
-				if (!d)
+				if (p && !d)
 				{
 					if (p[0] == 'F' && (select || recent))
 					{
@@ -2651,7 +2650,7 @@ void HandleUI(void)
 			helptext_idx = 0;
 			menumask = 0xFF;
 
-			OsdSetTitle("UART mode");
+			OsdSetTitle("UART Mode");
 			menustate = MENU_UART2;
 			parentstate = MENU_UART1;
 
@@ -2659,12 +2658,13 @@ void HandleUI(void)
 			int hasmidi = !stat("/dev/midi1", &filestat);
 			int mode = GetUARTMode();
 			int midilink = GetMidiLinkMode();
-			int m = (mode != 3 && mode != 4) || hasmidi;
+			int dis = (mode != 3 && mode != 4) || hasmidi;
 
-			OsdWrite(0);
+			m = 0;
+			OsdWrite(m++);
 			sprintf(s, " Connection:       %s", config_uart_msg[(is_st() && mode ==3) ? 4 : mode]);
-			OsdWrite(1, s, menusub == 0, 0);
-			OsdWrite(2);
+			OsdWrite(m++, s, menusub == 0, 0);
+			OsdWrite(m++);
 
 			if (is_st())
 			{
@@ -2674,18 +2674,24 @@ void HandleUI(void)
 			{
 				sprintf(s, " MidiLink:            %s", (midilink & 2) ? "Remote" : " Local");
 			}
-			OsdWrite(3, s, menusub == 1, m);
+			OsdWrite(m++, s, menusub == 1, dis);
 			sprintf(s, " Type:            %s", (midilink & 6) ? ((midilink & 1) ? "       UDP" : "       TCP") : ((midilink & 1) ? "      MUNT" : "FluidSynth"));
-			OsdWrite(4, s, menusub == 2, m);
+			OsdWrite(m++, s, menusub == 2, dis);
 
-			OsdWrite(5);
-			OsdWrite(6, " Change Soundfont          \x16", menusub == 3, mode==3&&midilink==0?0:1);
-			OsdWrite(7, " Change UART BAUD          \x16", menusub == 4, mode==3?0:1);
-			OsdWrite(8, " Reset UART connection", menusub == 5, mode?0:1);
-			OsdWrite(9);
-			OsdWrite(10, " Save", menusub == 6);
+			OsdWrite(m++);
+			OsdWrite(m++, " Change Soundfont          \x16", menusub == 3, mode != 3 || midilink);
+			OsdWrite(m++);
 
-			for (int i = 11; i < 15; i++) OsdWrite(i);
+			strcpy(s, " Baud                      \x16");
+			sprintf(s + 6, "(%s)", GetUARTbaud_label(GetUARTMode()));
+			s[strlen(s)] = ' ';
+			OsdWrite(m++, s, menusub == 4, !mode);
+
+			OsdWrite(m++, " Reset UART connection", menusub == 5, mode?0:1);
+			OsdWrite(m++);
+			OsdWrite(m++, " Save", menusub == 6);
+
+			for (; m < 15; m++) OsdWrite(m);
 			OsdWrite(15, STD_EXIT, menusub == 7);
 		}
 		break;
@@ -2752,10 +2758,11 @@ void HandleUI(void)
 			case 4:
 				if (select)
 				{
-					if(GetUARTMode() == 3)
+					if(GetUARTMode())
 					{
 						menusub = 0;
 						menustate = MENU_BAUD1;
+						menusub = GetUARTbaud_idx(GetUARTMode());
 					}
 				}
 				break;
@@ -2773,6 +2780,10 @@ void HandleUI(void)
 					int mode = GetUARTMode() | (GetMidiLinkMode() << 8);
 					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
 					FileSaveConfig(s, &mode, 4);
+					uint64_t speeds = GetUARTbaud(3);
+					speeds = (speeds << 32) | GetUARTbaud(1);
+					sprintf(s, "uartspeed.%s", user_io_get_core_name_ex());
+					FileSaveConfig(s, &speeds, 8);
 					menustate = MENU_COMMON1;
 					menusub = 4;
 				}
@@ -2799,22 +2810,37 @@ void HandleUI(void)
 	case MENU_BAUD1:
 		{
 			helptext_idx = 0;
-			menumask = 0x1FFF;
-			OsdSetTitle("UART BAUD");
+			OsdSetTitle("UART Baud Rate");
 			menustate = MENU_BAUD2;
 			parentstate = MENU_BAUD1;
-			unsigned int max = sizeof(config_uart_baud) / 4 -1;
-			for (unsigned int i = 0; i < 15; i++)
+
+			m = 0;
+			menumask = 0;
+			int mode = GetUARTMode();
+			uint32_t *bauds = GetUARTbauds(mode);
+			for (uint32_t i = 0; i < 10; i++)
 			{
-				if (i <= max)
-				{
-					sprintf(s, " %s", config_uart_baud[i]);
-					OsdWrite(i, s, menusub == i, 0);
-				}
-				else
-					OsdWrite(i);
+				if (!bauds[i]) break;
+				menumask |= 1 << i;
+				m = i;
 			}
-			OsdWrite(15, STD_EXIT, menusub == max + 1);
+
+			uint32_t start = (16 - m)/2;
+			uint32_t k = 0;
+			while (k < start) OsdWrite(k++);
+
+			for (uint32_t i = 0; i < 10; i++)
+			{
+				if (!bauds[i]) break;
+
+				sprintf(s, " %s", GetUARTbaud_label(mode, i));
+				OsdWrite(k++, s, menusub == i, 0);
+			}
+
+			while (k < 15) OsdWrite(k++);
+			m++;
+			menumask |= 1 << m;
+			OsdWrite(15, STD_EXIT, menusub == m);
 		}
 		break;
 
@@ -2826,18 +2852,27 @@ void HandleUI(void)
 				menusub = 4;
 				break;
 			}
-
-			if (select)
+			else if (select)
 			{
-				unsigned int max = sizeof(config_uart_baud) / 4 - 1;
-				if(menusub <= max)
+				uint32_t *bauds = GetUARTbauds(GetUARTMode());
+				for (uint32_t i = 0; i < 10; i++)
 				{
-					char baudStr[20];
-					strcpy(baudStr, config_uart_baud[menusub]);
-					char * tmp = strchr(baudStr, '/');
-					if(tmp) *tmp = 0x00; //Remove "/MIDI"
-					sprintf(s, "/sbin/mlinkutil BAUD %s", baudStr);
-					system(s);
+					if (!bauds[i]) break;
+					if (menusub == i)
+					{
+						ValidateUARTbaud(GetUARTMode(), bauds[i]);
+						if (GetUARTMode() >= 3)
+						{
+							sprintf(s, "/sbin/mlinkutil BAUD %d", GetUARTbaud(GetUARTMode()));
+							system(s);
+						}
+						else
+						{
+							int mode = GetUARTMode();
+							SetUARTMode(0);
+							SetUARTMode(mode);
+						}
+					}
 				}
 				menusub = 4;
 				menustate = MENU_UART1;

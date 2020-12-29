@@ -398,6 +398,12 @@ int user_io_get_joy_transl()
 }
 
 static int use_cheats = 0;
+static uint32_t ss_base = 0;
+static uint32_t ss_size = 0;
+static uint32_t uart_speeds[10] = {};
+static char uart_speed_labels[10][32] = {};
+static uint32_t midi_speeds[10] = {};
+static char midi_speed_labels[10][32] = {};
 
 static void parse_config()
 {
@@ -413,6 +419,112 @@ static void parse_config()
 		if (!i && p && p[0])
 		{
 			OsdCoreNameSet(p);
+		}
+
+		if (i == 1 && p)
+		{
+			while (p && *p)
+			{
+				if (!strncasecmp(p, "SS", 2))
+				{
+					char *end = 0;
+					ss_base = strtoul(p+2, &end, 16);
+					p = end;
+					if (p && *p == ':')
+					{
+						p++;
+						ss_size = strtoul(p, &end, 16);
+					}
+
+					printf("Got save state parameters: base=0x%X, size=0x%X\n", ss_base, ss_size);
+
+					if (!ss_size || ss_size > (128 * 1024 * 1024))
+					{
+						ss_size = 0;
+						ss_base = 0;
+						printf("Invalid size!\n");
+					}
+					else if (ss_base < 0x20000000 || ss_base >= 0x40000000 || (ss_base + ss_size) >= 0x40000000)
+					{
+						ss_size = 0;
+						ss_base = 0;
+						printf("Invalid base!\n");
+					}
+				}
+
+				if (!strncasecmp(p, "UART", 4))
+				{
+					p += 4;
+					for (int i = 0; i < 10 && p && *p; i++)
+					{
+						char *end = 0;
+						uart_speeds[i] = strtoul(p, &end, 10);
+						p = end;
+						if (p && *p == '(')
+						{
+							p++;
+							int n = 0;
+							while (*p != ';' && *p != ':' && *p != ')' && *p != ',')
+							{
+								if (n < 16) uart_speed_labels[i][n] = *p;
+								p++;
+								n++;
+							}
+							if (*p == ')') p++;
+						}
+						else
+						{
+							sprintf(uart_speed_labels[i], "%d", uart_speeds[i]);
+						}
+						if (p && *p == ':') p++;
+					}
+
+					printf("Got UART speeds:");
+					for(int i=0; i<10; i++) printf(" %d", uart_speeds[i]);
+					printf("\n");
+				}
+
+				if (!strncasecmp(p, "MIDI", 4))
+				{
+					p += 4;
+					for (int i = 0; i < 10 && p && *p; i++)
+					{
+						char *end = 0;
+						midi_speeds[i] = strtoul(p, &end, 10);
+						p = end;
+						if (p && *p == '(')
+						{
+							p++;
+							int n = 0;
+							while (*p != ';' && *p != ':' && *p != ')' && *p != ',')
+							{
+								if (n < 16) midi_speed_labels[i][n] = *p;
+								p++;
+								n++;
+							}
+							if (*p == ')') p++;
+						}
+						else
+						{
+							sprintf(midi_speed_labels[i], "%d", midi_speeds[i]);
+						}
+						if (p && *p == ':') p++;
+					}
+
+					if (!midi_speeds[0])
+					{
+						midi_speeds[0] = 31250;
+						strcpy(midi_speed_labels[0], "31250");
+					}
+
+					printf("Got MIDI speeds:");
+					for (int i = 0; i < 10; i++) printf(" %d", midi_speeds[i]);
+					printf("\n");
+				}
+
+				p = strchr(p, ',');
+				if (p) p++;
+			}
 		}
 
 		if (i>=2 && p && p[0])
@@ -470,6 +582,13 @@ static void parse_config()
 		}
 		i++;
 	} while (p || i<3);
+
+	// legacy GBA versions
+	if (is_gba() && !ss_base)
+	{
+		ss_base = 0x3E000000;
+		ss_size = 0x100000;
+	}
 }
 
 //MSM6242B layout
@@ -569,17 +688,72 @@ int GetUARTMode()
 void SetUARTMode(int mode)
 {
 	mode &= 0xFF;
-	spi_uio_cmd8(UIO_SET_UART, mode);
+	uint32_t baud = GetUARTbaud(mode);
 
-	if (is_x86()) x86_set_uart_mode(mode != 3 || GetMidiLinkMode() >= 2);
+	spi_uio_cmd_cont(UIO_SET_UART);
+	spi_w(mode);
+	spi_w(baud);
+	spi_w(baud>>16);
+	DisableIO();
 
 	MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
-	MakeFile("/tmp/UART_SPEED", is_st() ? "19200" : (is_x86() && (user_io_8bit_set_status(0, 0, 0) & (1 << 10))) ? "4000000" : "115200");
+
+	char data[20];
+	sprintf(data, "%d", baud);
+	MakeFile("/tmp/UART_SPEED", data);
 
 	char cmd[32];
 	sprintf(cmd, "uartmode %d", mode);
 	system(cmd);
 	set_uart_alt();
+}
+
+static int uart_speed_idx = 0;
+static int midi_speed_idx = 0;
+
+uint32_t* GetUARTbauds(int mode)
+{
+	return (mode >= 3) ? midi_speeds : uart_speeds;
+}
+
+uint32_t GetUARTbaud(int mode)
+{
+	return (mode >= 3) ? midi_speeds[midi_speed_idx] : uart_speeds[uart_speed_idx];
+}
+
+char* GetUARTbaud_label(int mode)
+{
+	return (mode >= 3) ? midi_speed_labels[midi_speed_idx] : uart_speed_labels[uart_speed_idx];
+}
+
+char* GetUARTbaud_label(int mode, int idx)
+{
+	return (mode >= 3) ? midi_speed_labels[idx] : uart_speed_labels[idx];
+}
+
+int GetUARTbaud_idx(int mode)
+{
+	return (mode >= 3) ? midi_speed_idx : uart_speed_idx;
+}
+
+uint32_t ValidateUARTbaud(int mode, uint32_t baud)
+{
+	uint32_t *bauds = GetUARTbauds(mode);
+	int idx = 0;
+	for (int i = 0; i < 10; i++)
+	{
+		if (!bauds[i]) break;
+		if (bauds[i] == baud)
+		{
+			idx = i;
+			break;
+		}
+	}
+
+	if (mode >= 3) midi_speed_idx = idx;
+	else uart_speed_idx = idx;
+
+	return bauds[idx];
 }
 
 int GetMidiLinkMode()
@@ -964,12 +1138,33 @@ void user_io_init(const char *path, const char *xml)
 
 	OsdRotation((cfg.osd_rotate == 1) ? 3 : (cfg.osd_rotate == 2) ? 1 : 0);
 
-	uart_mode = spi_uio_cmd16(UIO_GETUARTFLG, 0);
+	uart_mode = spi_uio_cmd16(UIO_GETUARTFLG, 0) || uart_speeds[0];
 	uint32_t mode = 0;
 	if (uart_mode)
 	{
+		if (!uart_speeds[0])
+		{
+			uart_speeds[0] = is_st() ? 19200 : 115200;
+			sprintf(uart_speed_labels[0], "%d", uart_speeds[0]);
+
+			if (!midi_speeds[0])
+			{
+				midi_speeds[0] = 31250;
+				sprintf(midi_speed_labels[0], "%d", midi_speeds[0]);
+			}
+		}
+
 		sprintf(mainpath, "uartmode.%s", user_io_get_core_name_ex());
 		FileLoadConfig(mainpath, &mode, 4);
+
+		uint64_t speeds = 0;
+		sprintf(mainpath, "uartspeed.%s", user_io_get_core_name_ex());
+		FileLoadConfig(mainpath, &speeds, 8);
+
+		ValidateUARTbaud(1, speeds & 0xFFFFFFFF);
+		ValidateUARTbaud(3, speeds >> 32);
+
+		printf("UART bauds: %d/%d\n", GetUARTbaud(1), GetUARTbaud(3));
 	}
 
 	SetUARTMode(0);
@@ -1668,7 +1863,9 @@ static int process_ss(const char *rom_name)
 	static uint32_t ss_cnt = 0;
 	static int memfd = -1;
 
-	uint32_t map_addr = 0x3E000000;
+	if (!ss_base) return 0;
+
+	uint32_t map_addr = ss_base;
 
 	if (rom_name)
 	{
@@ -1685,7 +1882,7 @@ static int process_ss(const char *rom_name)
 		}
 
 		ss_cnt = 0;
-		uint32_t len = 1024 * 1024;
+		uint32_t len = ss_size;
 		uint32_t clr_addr = map_addr;
 
 		for (int i = 0; i < 16; i++)
@@ -1964,11 +2161,10 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int progress = -1;
 	if (use_progress) MenuHide();
 
+	if(ss_base) process_ss(name);
 
 	if (is_gba())
 	{
-		process_ss(name);
-
 		if ((index >> 6) == 1 || (index >> 6) == 2)
 		{
 			fileTYPE fg = {};
