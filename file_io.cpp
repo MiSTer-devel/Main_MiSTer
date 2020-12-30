@@ -25,7 +25,7 @@
 #include "user_io.h"
 #include "cfg.h"
 #include "input.h"
-#include "miniz_zip.h"
+#include "miniz.h"
 #include "scheduler.h"
 #include "video.h"
 #include "support.h"
