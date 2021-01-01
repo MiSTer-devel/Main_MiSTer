@@ -98,6 +98,10 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 
 		//CHD pads tracks to a multiple of 4 sectors, keep track of the overall sector count and calculate the difference between the cdrom lba and the effective chd lba
 		cd_toc->tracks[cd_toc->last].offset = (sector_cnt + pregap - cd_toc->tracks[cd_toc->last].start); 
+		if (pgtype[0] != 'V')
+		{
+			cd_toc->tracks[cd_toc->last].offset -= pregap;
+		}
 		cd_toc->tracks[cd_toc->last].end = cd_toc->tracks[cd_toc->last].start + frames - pregap;
 		cd_toc->end = cd_toc->tracks[cd_toc->last].end + postgap;
 		sector_cnt += ((frames + CD_TRACK_PADDING - 1) / CD_TRACK_PADDING) * CD_TRACK_PADDING;
