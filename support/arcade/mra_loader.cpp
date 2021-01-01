@@ -1072,7 +1072,8 @@ int arcade_load(const char *xml)
 	MenuHide();
 	static char path[kBigTextSize];
 
-	strcpy(path, xml);
+	if(xml[0] == '/') strcpy(path, xml);
+	else sprintf(path, "%s/%s", getRootDir(), xml);
 
 	set_arcade_root(path);
 	printf("arcade_load [%s]\n", path);
