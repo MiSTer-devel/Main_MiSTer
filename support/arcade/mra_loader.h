@@ -34,4 +34,6 @@ void arcade_sw_save();
 void arcade_sw_load();
 void arcade_override_name(const char *xml);
 
+void arcade_nvm_save();
+
 #endif

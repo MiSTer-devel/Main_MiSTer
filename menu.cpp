@@ -2472,6 +2472,7 @@ void HandleUI(void)
 					printf("Saving config to %s\n", filename);
 					FileSaveConfig(filename, status, 8);
 					if (is_x86()) x86_config_save();
+					if (is_arcade()) arcade_nvm_save();
 				}
 				break;
 

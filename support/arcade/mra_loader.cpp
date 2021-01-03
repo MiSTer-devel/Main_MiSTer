@@ -50,6 +50,59 @@ static char mame_root[kBigTextSize];
 
 static sw_struct switches = {};
 
+static int  nvram_idx  = 0;
+static int  nvram_size = 0;
+static char nvram_name[200] = {};
+
+void arcade_nvm_save()
+{
+	if(nvram_idx && nvram_size)
+	{
+		char path[256] = CONFIG_DIR"/nvram/";
+		FileCreatePath(path);
+		strcat(path, nvram_name);
+
+		uint8_t *buf = new uint8_t[nvram_size];
+		if (buf)
+		{
+			printf("Request for nvram (idx=%d, size=%d) data\n", nvram_idx, nvram_size);
+
+			user_io_set_index(nvram_idx);
+			user_io_set_upload(1);
+			user_io_file_rx_data(buf, nvram_size);
+			user_io_set_upload(0);
+
+			FileSave(path, buf, nvram_size);
+			delete(buf);
+		}
+	}
+}
+
+static void arcade_nvm_load()
+{
+	if (nvram_idx && nvram_size)
+	{
+		char path[256] = "nvram/";
+		uint8_t *buf = new uint8_t[nvram_size];
+		if (buf)
+		{
+			memset(buf, 0, nvram_size);
+
+			strcat(path, nvram_name);
+			FileLoadConfig(path, buf, nvram_size);
+
+			printf("Sending nvram (idx=%d, size=%d) to core\n", nvram_idx, nvram_size);
+
+			user_io_set_index(nvram_idx);
+			user_io_set_download(1);
+			user_io_file_tx_data(buf, nvram_size);
+			user_io_set_download(0);
+
+			delete(buf);
+		}
+	}
+}
+
 sw_struct *arcade_sw()
 {
 	return &switches;
@@ -519,7 +572,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				}
 				if (!strcasecmp(node->attributes[i].name, "operation") && !strcasecmp(node->tag, "patch"))
 				{
-					if(!strcasecmp(node->attributes[i].value, "xor")) arc_info->dataop = 1;
+					if (!strcasecmp(node->attributes[i].value, "xor")) arc_info->dataop = 1;
 				}
 				if (!strcasecmp(node->attributes[i].name, "map") && !strcasecmp(node->tag, "part"))
 				{
@@ -532,8 +585,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					}
 				}
 			}
-
-			if (arc_info->insidesw)
+			else if (arc_info->insidesw)
 			{
 				if (!strcasecmp(node->tag, "switches"))
 				{
@@ -612,6 +664,18 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 						}
 						switches.dip[switches.dip_num].has_val = 1;
 					}
+				}
+			}
+			else
+			{
+				if (!strcasecmp(node->attributes[i].name, "index") && !strcasecmp(node->tag, "nvram"))
+				{
+					nvram_idx = strtoul(node->attributes[i].value, NULL, 0);
+				}
+
+				if (!strcasecmp(node->attributes[i].name, "size") && !strcasecmp(node->tag, "nvram"))
+				{
+					nvram_size = strtoul(node->attributes[i].value, NULL, 0);
 				}
 			}
 		}
@@ -835,6 +899,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (switches.dip_num < 63) switches.dip_num++;
 		}
 
+		if (!strcasecmp(node->tag, "nvram")) arcade_nvm_load();
+
 		if (!strcasecmp(node->tag, "switches"))
 		{
 			arc_info->insidesw = 0;
@@ -957,6 +1023,10 @@ int arcade_send_rom(const char *xml)
 	snprintf(switches.name, sizeof(switches.name), p);
 	char *ext = strcasestr(switches.name, ".mra");
 	if (ext) strcpy(ext, ".dip");
+
+	snprintf(nvram_name, sizeof(nvram_name), p);
+	ext = strcasestr(nvram_name, ".mra");
+	if (ext) strcpy(ext, ".nvm");
 
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
