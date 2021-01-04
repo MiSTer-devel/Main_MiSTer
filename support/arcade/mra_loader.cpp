@@ -89,14 +89,14 @@ static void arcade_nvm_load()
 			memset(buf, 0, nvram_size);
 
 			strcat(path, nvram_name);
-			FileLoadConfig(path, buf, nvram_size);
-
-			printf("Sending nvram (idx=%d, size=%d) to core\n", nvram_idx, nvram_size);
-
-			user_io_set_index(nvram_idx);
-			user_io_set_download(1);
-			user_io_file_tx_data(buf, nvram_size);
-			user_io_set_download(0);
+			if (FileLoadConfig(path, buf, nvram_size))
+			{
+				printf("Sending nvram (idx=%d, size=%d) to core\n", nvram_idx, nvram_size);
+				user_io_set_index(nvram_idx);
+				user_io_set_download(1);
+				user_io_file_tx_data(buf, nvram_size);
+				user_io_set_download(0);
+			}
 
 			delete(buf);
 		}
