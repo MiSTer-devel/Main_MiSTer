@@ -1009,6 +1009,7 @@ void user_io_init(const char *path, const char *xml)
 			{
 				tos_config_load(0);
 				tos_upload(NULL);
+				parse_config();
 			}
 			else if (is_menu())
 			{
