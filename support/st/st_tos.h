@@ -60,8 +60,8 @@
 
 // USB redirection modes
 // (NONE=0, RS232=1, PARALLEL=2, MIDI=3)
-#define TOS_CONTROL_REDIR0        0x04000000
-#define TOS_CONTROL_REDIR1        0x08000000
+#define TOS_CONTROL_REDIR0        0x04000000 // unused
+#define TOS_CONTROL_REDIR1        0x08000000 // unused
 
 #define TOS_CONTROL_VIKING        0x10000000   // Viking graphics card
 
@@ -99,5 +99,8 @@ void tos_uart_mode(int enable);
 
 int tos_get_ar();
 void tos_set_ar(int ar);
+
+uint32_t tos_get_extctrl();
+void tos_set_extctrl(uint32_t ext_ctrl);
 
 #endif

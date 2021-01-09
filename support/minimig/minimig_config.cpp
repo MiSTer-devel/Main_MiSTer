@@ -378,6 +378,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	minimig_ConfigVideo(minimig_config.scanlines);
 	minimig_ConfigAudio(minimig_config.audio);
 	minimig_ConfigAutofire(minimig_config.autofire, 0xC);
+	minimig_set_extcfg(minimig_config.ext_cfg & ~1);
 }
 
 int minimig_cfg_load(int num)
@@ -703,4 +704,19 @@ void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask)
 	uint16_t param = mask;
 	param = (param << 8) | autofire;
 	spi_uio_cmd16(UIO_MM2_JOY, param);
+}
+
+void minimig_set_extcfg(unsigned short ext_cfg)
+{
+	minimig_config.ext_cfg = ext_cfg;
+
+	spi_uio_cmd_cont(UIO_SET_STATUS2);
+	spi32_w(0);
+	spi32_w(ext_cfg);
+	DisableIO();
+}
+
+unsigned short minimig_get_extcfg()
+{
+	return minimig_config.ext_cfg;
 }

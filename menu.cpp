@@ -174,6 +174,10 @@ enum MENU
 	MENU_ARCHIE_MAIN1,
 	MENU_ARCHIE_MAIN2,
 	MENU_ARCHIE_MAIN_FILE_SELECTED,
+
+	// MT32-pi
+	MENU_MT32PI_MAIN1,
+	MENU_MT32PI_MAIN2,
 };
 
 static uint32_t menustate = MENU_NONE1;
@@ -3441,7 +3445,7 @@ void HandleUI(void)
 
 	case MENU_ST_MAIN1:
 		OsdSetSize(16);
-		menumask = 0x3ff;
+		menumask = 0x77f;
 		OsdSetTitle("AtariST", 0);
 		m = 0;
 
@@ -3465,11 +3469,18 @@ void HandleUI(void)
 		OsdWrite(m++, " Save config               \x16", menusub == 6);
 		OsdWrite(m++);
 
-		OsdWrite(m++, " Reset", menusub == 7);
-		OsdWrite(m++, " Cold Boot", menusub == 8);
+		if (spi_uio_cmd16(UIO_GET_OSDMASK, 0) & 1)
+		{
+			menumask |= 0x80;
+			OsdWrite(m++, " MT32-pi                   \x16", menusub == 7);
+			OsdWrite(m++);
+		}
+
+		OsdWrite(m++, " Reset", menusub == 8);
+		OsdWrite(m++, " Cold Boot", menusub == 9);
 
 		for (; m < OsdGetSize()-1; m++) OsdWrite(m);
-		MenuWrite(15, STD_EXIT, menusub == 9, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+		MenuWrite(15, STD_EXIT, menusub == 10, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		menustate = MENU_ST_MAIN2;
 		parentstate = MENU_ST_MAIN1;
@@ -3552,7 +3563,15 @@ void HandleUI(void)
 				}
 				break;
 
-			case 7:  // Reset
+			case 7:
+				if (select)
+				{
+					menustate = MENU_MT32PI_MAIN1;
+					menusub = 0;
+				}
+				break;
+
+			case 8:  // Reset
 				if (select)
 				{
 					tos_reset(0);
@@ -3560,7 +3579,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 8:  // Cold Boot
+			case 9:  // Cold Boot
 				if (select)
 				{
 					tos_insert_disk(0, "");
@@ -3570,7 +3589,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 9:  // Exit
+			case 10:  // Exit
 				if (select)
 				{
 					menustate = MENU_NONE1;
@@ -3935,11 +3954,207 @@ void HandleUI(void)
 		}
 		break;
 
+
+	case MENU_MT32PI_MAIN1:
+		{
+			parentstate = menustate;
+			OsdSetTitle("MT32-pi");
+			menumask = 0x7F;
+			uint32_t mt32_cfg = is_minimig() ? minimig_get_extcfg() : tos_get_extctrl();
+
+			m = 0;
+			OsdWrite(m++);
+			strcpy(s, " Use MT32-pi:            ");
+			strcat(s, (mt32_cfg & 0x2) ? " No" : "Yes");
+			OsdWrite(m++, s, menusub == 0);
+
+			strcpy(s, " Show Info: ");
+			switch ((mt32_cfg >> 8) & 3)
+			{
+			case 0:
+				strcat(s, "              No");
+				break;
+
+			case 1:
+				strcat(s, "             Yes");
+				break;
+
+			case 2:
+				strcat(s, "  LCD-On(non-FB)");
+				break;
+
+			case 3:
+				strcat(s, "LCD-Auto(non-FB)");
+				break;
+			}
+			OsdWrite(m++, s, menusub == 1);
+
+			OsdWrite(m++);
+			OsdWrite(m++, " Default Config:");
+
+			strcpy(s, " Synth:           ");
+			strcat(s, (mt32_cfg & 0x4) ? "FluidSynth" : "      Munt");
+			OsdWrite(m++, s, menusub == 2);
+
+			strcpy(s, " Munt ROM:          ");
+			switch ((mt32_cfg >> 3) & 3)
+			{
+			case 0:
+				strcat(s, "MT-32 v1");
+				break;
+
+			case 1:
+				strcat(s, "MT-32 v2");
+				break;
+
+			case 2:
+				strcat(s, "  CM-32L");
+				break;
+
+			case 3:
+				strcat(s, " Unknown");
+				break;
+			}
+			OsdWrite(m++, s, menusub == 3);
+
+			sprintf(s, " SoundFont:                %d", (mt32_cfg >> 5) & 7);
+			OsdWrite(m++, s, menusub == 4);
+
+			OsdWrite(m++);
+			strcpy(s, " Current Config: ");
+			hdmask = spi_uio_cmd16(UIO_GET_OSDMASK, 0);
+			if (((hdmask >> 1) & 3) == 1)
+			{
+				switch ((hdmask >> 3) & 3)
+				{
+				case 0:
+					strcat(s, "   MT-32 v1");
+					break;
+
+				case 1:
+					strcat(s, "   MT-32 v2");
+					break;
+
+				case 2:
+					strcat(s, "     CM-32L");
+					break;
+
+				default:
+					strcat(s, "    Unknown");
+					break;
+				}
+			}
+			else if (((hdmask >> 1) & 3) == 2)
+			{
+				sprintf(s + strlen(s), "SoundFont %d", (hdmask >> 3) & 7);
+			}
+			else
+			{
+				strcat(s, "    Unknown");
+			}
+			OsdWrite(m++, s);
+
+			OsdWrite(m++);
+			OsdWrite(m++, " Reset Hanging Notes", menusub == 5);
+
+			while (m < 15) OsdWrite(m++);
+			OsdWrite(15, STD_EXIT, menusub == 6, 0);
+
+			menustate = MENU_MT32PI_MAIN2;
+		}
+		break;
+
+
+	case MENU_MT32PI_MAIN2:
+		if (menu || back || left)
+		{
+			if (is_minimig())
+			{
+				menustate = MENU_MINIMIG_MAIN1;
+				menusub = 9;
+			}
+			else
+			{
+				menustate = MENU_ST_MAIN1;
+				menusub = 7;
+			}
+		}
+		else if (select || plus || minus)
+		{
+			uint16_t mt32_cfg = is_minimig() ? minimig_get_extcfg() : tos_get_extctrl();
+
+			switch (menusub)
+			{
+			case 0:
+				mt32_cfg ^= 0x2;
+				menustate = MENU_MT32PI_MAIN1;
+				break;
+
+			case 1:
+				m = (mt32_cfg >> 8) & 3;
+				m = (m + (minus ? -1 : 1)) & 3;
+				mt32_cfg = (mt32_cfg & ~0x300) | (m<<8);
+				menustate = MENU_MT32PI_MAIN1;
+				break;
+
+			case 2:
+				mt32_cfg ^= 0x4;
+				menustate = MENU_MT32PI_MAIN1;
+				break;
+
+			case 3:
+				m = (mt32_cfg >> 3) & 3;
+				if (minus)
+				{
+					m = (m - 1) & 3;
+					if (m == 3) m = 2;
+				}
+				else
+				{
+					m = (m + 1) & 3;
+					if (m == 3) m = 0;
+				}
+				mt32_cfg = (mt32_cfg & ~0x18) | (m << 3);
+				menustate = MENU_MT32PI_MAIN1;
+				break;
+
+			case 4:
+				m = (mt32_cfg >> 5) & 7;
+				m = (m + (minus ? -1 : 1)) & 7;
+				mt32_cfg = (mt32_cfg & ~0xE0) | (m << 5);
+				menustate = MENU_MT32PI_MAIN1;
+				break;
+
+			case 5:
+				if (select)
+				{
+					if (is_minimig()) minimig_set_extcfg(mt32_cfg | 1);
+					else tos_set_extctrl(mt32_cfg | 1);
+					mt32_cfg &= ~1;
+					menustate = MENU_MT32PI_MAIN1;
+				}
+				break;
+
+			case 6:
+				if (select) menustate = MENU_NONE1;
+				break;
+			}
+
+			if (is_minimig()) minimig_set_extcfg(mt32_cfg);
+			else tos_set_extctrl(mt32_cfg);
+		}
+		else if (spi_uio_cmd16(UIO_GET_OSDMASK, 0) != hdmask)
+		{
+			menustate = MENU_MT32PI_MAIN1;
+		}
+		break;
+
+
 		/******************************************************************/
 		/* minimig main menu                                              */
 		/******************************************************************/
 	case MENU_MINIMIG_MAIN1:
-		menumask = 0x1FF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
+		menumask = 0x3DF0;	// b01110000 Floppy turbo, Harddisk options & Exit.
 		OsdSetTitle("Minimig", OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 		helptext_idx = HELPTEXT_MAIN;
 
@@ -4001,15 +4216,19 @@ void HandleUI(void)
 		OsdWrite(m++, " CPU & Chipset             \x16", menusub == 6, 0);
 		OsdWrite(m++, " Memory                    \x16", menusub == 7, 0);
 		OsdWrite(m++, " Audio & Video             \x16", menusub == 8, 0);
+		//if (spi_uio_cmd16(UIO_GET_OSDMASK, 0) & 1)
+		{
+			menumask |= 0x200;
+			OsdWrite(m++, " MT32-pi                   \x16", menusub == 9);
+		}
+
 		OsdWrite(m++);
+		OsdWrite(m++, " Save configuration        \x16", menusub == 10, 0);
+		OsdWrite(m++, " Load configuration        \x16", menusub == 11, 0);
 
-		OsdWrite(m++, " Save configuration        \x16", menusub == 9, 0);
-		OsdWrite(m++, " Load configuration        \x16", menusub == 10, 0);
-
-		OsdWrite(m++);
-		OsdWrite(m++, " Reset", menusub == 11, 0);
-
-		OsdWrite(15, STD_EXIT, menusub == 12, 0);
+		while (m < 14) OsdWrite(m++);
+		OsdWrite(m++, " Reset", menusub == 12, 0);
+		OsdWrite(15, STD_EXIT, menusub == 13, 0);
 
 		menustate = MENU_MINIMIG_MAIN2;
 		parentstate = MENU_MINIMIG_MAIN1;
@@ -4082,19 +4301,24 @@ void HandleUI(void)
 				else if (menusub == 9)
 				{
 					menusub = 0;
-					menustate = MENU_MINIMIG_SAVECONFIG1;
+					menustate = MENU_MT32PI_MAIN1;
 				}
 				else if (menusub == 10)
 				{
 					menusub = 0;
-					menustate = MENU_MINIMIG_LOADCONFIG1;
+					menustate = MENU_MINIMIG_SAVECONFIG1;
 				}
 				else if (menusub == 11)
+				{
+					menusub = 0;
+					menustate = MENU_MINIMIG_LOADCONFIG1;
+				}
+				else if (menusub == 12)
 				{
 					menustate = MENU_NONE1;
 					minimig_reset();
 				}
-				else if (menusub == 12)
+				else if (menusub == 13)
 				{
 					menustate = MENU_NONE1;
 				}
@@ -4186,13 +4410,13 @@ void HandleUI(void)
 			else
 			{
 				menustate = MENU_MINIMIG_MAIN1;
-				menusub = 10;
+				menusub = 11;
 			}
 		}
 		if (menu || left) // exit menu
 		{
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 10;
+			menusub = 11;
 		}
 		break;
 
@@ -4669,13 +4893,13 @@ void HandleUI(void)
 
 			if (menusub<10) minimig_cfg_save(menusub);
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 9;
+			menusub = 10;
 		}
 		else
 		if (menu || left) // exit menu
 		{
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 9;
+			menusub = 10;
 		}
 		break;
 
