@@ -854,6 +854,7 @@ enum QUIRK
 	QUIRK_PDSP_ARCADE,
 	QUIRK_JAMMA,
 	QUIRK_MSSP,
+	QUIRK_TOUCHGUN,
 };
 
 typedef struct
@@ -883,6 +884,8 @@ typedef struct
 	uint16_t guncal[4];
 
 	int      accx, accy;
+	int      startx, starty;
+	int      lastx, lasty;
 	int      quirk;
 
 	int      misc_flags;
@@ -1167,20 +1170,27 @@ void finish_map_setting(int dismiss)
 	}
 }
 
-void input_lightgun_cal(uint16_t *cal)
+void input_lightgun_save(int idx, uint16_t *cal)
 {
-	FileSaveConfig("wiimote_cal.cfg", cal, 4 * sizeof(uint16_t));
-	for (int i = 0; i < NUMDEV; i++)
-	{
-		if (input[i].quirk == QUIRK_WIIMOTE) memcpy(input[i].guncal, cal, sizeof(input[i].guncal));
-	}
+	static char name[128];
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	FileSaveConfig(name, cal, 4 * sizeof(uint16_t));
+	memcpy(input[idx].guncal, cal, sizeof(input[idx].guncal));
+}
+
+static void input_lightgun_load(int idx)
+{
+	static char name[128];
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	FileLoadConfig(name, input[idx].guncal, 4 * sizeof(uint16_t));
 }
 
 int input_has_lightgun()
 {
 	for (int i = 0; i < NUMDEV; i++)
 	{
-		if (input[i].quirk == QUIRK_WIIMOTE) return 1;
+		if (input[i].quirk == QUIRK_WIIMOTE)  return 1;
+		if (input[i].quirk == QUIRK_TOUCHGUN) return 1;
 	}
 	return 0;
 }
@@ -1769,7 +1779,15 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].has_mmap)
 	{
-		if (input[dev].quirk != QUIRK_PDSP && input[dev].quirk != QUIRK_MSSP)
+		if (input[dev].quirk == QUIRK_TOUCHGUN)
+		{
+			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
+			input[dev].mmap[SYS_AXIS_MX] = -1;
+			input[dev].mmap[SYS_AXIS_MY] = -1;
+			input[dev].mmap[SYS_AXIS_X] = -1;
+			input[dev].mmap[SYS_AXIS_Y] = -1;
+		}
+		else if (input[dev].quirk != QUIRK_PDSP && input[dev].quirk != QUIRK_MSSP)
 		{
 			if (!load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 			{
@@ -1823,11 +1841,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				int found = 0;
 				for (int i = 0; i < NUMDEV; i++)
 				{
-					// paddles/spinners overlay on top of other gamepad
-					if (!((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) ^ (input[i].quirk == QUIRK_PDSP || input[i].quirk == QUIRK_MSSP)))
+					if (input[i].quirk != QUIRK_TOUCHGUN)
 					{
-						found = (input[i].num == num);
-						if (found) break;
+						// paddles/spinners overlay on top of other gamepad
+						if (!((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) ^ (input[i].quirk == QUIRK_PDSP || input[i].quirk == QUIRK_MSSP)))
+						{
+							found = (input[i].num == num);
+							if (found) break;
+						}
 					}
 				}
 
@@ -2582,7 +2603,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (!input[dev].num) break;
 
 					int offset = 0;
-					if (value < -1 || value>1) offset = value;
+					if (value < -1 || value>1 || input[dev].lightgun) offset = value;
 					//printf("analog_x = %d\n", offset);
 					joy_analog(input[dev].num, 0, offset);
 					return;
@@ -2593,7 +2614,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (!input[dev].num) break;
 
 					int offset = 0;
-					if (value < -1 || value>1) offset = value;
+					if (value < -1 || value>1 || input[dev].lightgun) offset = value;
 					//printf("analog_y = %d\n", offset);
 					joy_analog(input[dev].num, 1, offset);
 					return;
@@ -2856,12 +2877,179 @@ static struct
 	{KEY_L,         2, 0x12D}, // 2P 8
 };
 
+void send_mouse_with_throttle(int dev, int xval, int yval, int btn, uint8_t data_3)
+{
+	int i = dev;
+	if (input[dev].bind >= 0) dev = input[dev].bind;
+
+	if (is_menu() && !video_fb_state()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, btn, xval, yval, data_3);
+
+	int throttle = cfg.mouse_throttle ? cfg.mouse_throttle : 1;
+	if (input[dev].ds_mouse_emu) throttle *= 4;
+	if (input[dev].quirk == QUIRK_TOUCHGUN) throttle *= 12;
+
+	input[i].accx += xval;
+	xval = input[i].accx / throttle;
+	input[i].accx -= xval * throttle;
+
+	input[i].accy -= yval;
+	yval = input[i].accy / throttle;
+	input[i].accy -= yval * throttle;
+
+	mice_btn = btn & 7;
+	if (input[dev].ds_mouse_emu) mice_btn = (mice_btn & 4) | ((mice_btn & 1) << 1);
+
+	mouse_cb(mouse_btn | mice_btn, xval, yval, data_3);
+}
+
+static uint32_t touch_rel = 0;
+void touchscreen_proc(int dev, input_event *ev)
+{
+	struct input_absinfo absinfo;
+	int i = dev;
+	if (input[dev].bind >= 0) dev = input[dev].bind;
+
+	if (ev->type == EV_KEY)
+	{
+		if (ev->value == 1)
+		{
+			input[i].misc_flags = 0xC0;
+			touch_rel = 0;
+
+			ioctl(pool[i].fd, EVIOCGABS(ABS_X), &absinfo);
+			input[i].lastx = absinfo.value;
+			input[i].startx = absinfo.value;
+
+			ioctl(pool[i].fd, EVIOCGABS(ABS_Y), &absinfo);
+			input[i].lasty = absinfo.value;
+			input[i].starty = absinfo.value;
+		}
+		else
+		{
+			input[i].misc_flags = 0;
+			mice_btn = 0;
+
+			if (input[dev].lightgun)
+			{
+				menu_lightgun_cb(i, EV_KEY, 0x131, 0);
+			}
+			else
+			{
+				if (abs(input[i].lastx - input[i].startx) < 8 && abs(input[i].lasty - input[i].starty) < 8)
+				{
+					mice_btn |= 1;
+					touch_rel = GetTimer(100);
+				}
+			}
+
+			mouse_cb(mice_btn);
+		}
+	}
+	else if (ev->type == EV_ABS && ev->code == ABS_MT_SLOT && ev->value == 3 && (input[i].misc_flags & 0x80))
+	{
+		input[i].misc_flags = 0;
+		mice_btn = 0;
+		mouse_cb(mice_btn);
+		input[dev].lightgun = !input[dev].lightgun;
+		Info(input[dev].lightgun ? "Light Gun mode is ON" : "Light Gun mode is OFF");
+	}
+
+	if (input[dev].lightgun)
+	{
+		if (ev->type == EV_KEY && ev->value == 1)
+		{
+			mice_btn |= 1;
+			mouse_cb(mice_btn);
+			menu_lightgun_cb(i, EV_KEY, 0x131, 1);
+		}
+		else if (ev->type == EV_ABS)
+		{
+			if (ev->code == ABS_MT_POSITION_X)
+			{
+				ev->code = ABS_X;
+				absinfo.minimum = input[i].guncal[2];
+				absinfo.maximum = input[i].guncal[3];
+				menu_lightgun_cb(i, ev->type, ev->code, ev->value);
+				input_cb(ev, &absinfo, i);
+			}
+			else if (ev->code == ABS_MT_POSITION_Y)
+			{
+				ev->code = ABS_Y;
+				absinfo.minimum = input[i].guncal[0];
+				absinfo.maximum = input[i].guncal[1];
+				menu_lightgun_cb(i, ev->type, ev->code, ev->value);
+				input_cb(ev, &absinfo, i);
+			}
+			else if (ev->code == ABS_MT_SLOT && (input[i].misc_flags & 0x80))
+			{
+				if (ev->value == 1) input[i].misc_flags |= 1;
+				if (ev->value == 2) input[i].misc_flags |= 2;
+
+				if (input[i].misc_flags & 2) mice_btn = 4;
+				else if (input[i].misc_flags & 1) mice_btn = 2;
+				else mice_btn = 1;
+
+				mouse_cb(mice_btn);
+			}
+		}
+	}
+	else
+	{
+		if (ev->type == EV_ABS)
+		{
+			if (input[i].misc_flags & 0x80)
+			{
+				if (ev->code == ABS_MT_SLOT)
+				{
+					if (ev->value) input[i].misc_flags &= ~0x40;
+					else input[i].misc_flags |= 0x40;
+
+					if (ev->value == 1) input[i].misc_flags |= 1;
+					if (ev->value == 2) input[i].misc_flags |= 2;
+
+					if (input[i].misc_flags & 2) mice_btn = 4;
+					else if (input[i].misc_flags & 1) mice_btn = 2;
+
+					mouse_cb(mice_btn);
+				}
+				else if (input[i].misc_flags & 0x40)
+				{
+					if (ev->code == ABS_MT_POSITION_X)
+					{
+						int dx = ev->value - input[i].lastx;
+						if (dx > 255) dx = 255;
+						if (dx < -256) dx = -256;
+						input[i].lastx = ev->value;
+						send_mouse_with_throttle(i, dx, 0, mice_btn, 0);
+					}
+					else if (ev->code == ABS_MT_POSITION_Y)
+					{
+						int dy = ev->value - input[i].lasty;
+						if (dy > 255) dy = 255;
+						if (dy < -256) dy = -256;
+						input[i].lasty = ev->value;
+						send_mouse_with_throttle(i, 0, -dy, mice_btn, 0);
+					}
+				}
+			}
+		}
+	}
+
+}
+
 int input_test(int getchar)
 {
 	static char cur_leds = 0;
 	static int state = 0;
 	struct input_absinfo absinfo;
 	struct input_event ev;
+
+	if (touch_rel && CheckTimer(touch_rel))
+	{
+		touch_rel = 0;
+		mice_btn = 0;
+		mouse_cb(mice_btn);
+	}
 
 	if (state == 0)
 	{
@@ -2960,6 +3148,21 @@ int input_test(int getchar)
 							input[n].lightgun = 1;
 						}
 
+						// RasPad3 touchscreen
+						if (input[n].vid == 0x222a && input[n].pid == 1)
+						{
+							input[n].quirk = QUIRK_TOUCHGUN;
+							input[n].num = 1;
+							input[n].map_shown = 1;
+
+							input[n].lightgun = 0;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 16383;
+							input[n].guncal[2] = 2047;
+							input[n].guncal[3] = 14337;
+							input_lightgun_load(n);
+						}
+
 						if (input[n].vid == 0x054c)
 						{
 							if (input[n].pid == 0x0268)  input[n].quirk = QUIRK_DS3;
@@ -3002,7 +3205,7 @@ int input_test(int getchar)
 								input[n].guncal[1] = 767;
 								input[n].guncal[2] = 1;
 								input[n].guncal[3] = 1023;
-								FileLoadConfig("wiimote_cal.cfg", input[n].guncal, 4 * sizeof(uint16_t));
+								input_lightgun_load(n);
 							}
 						}
 
@@ -3147,6 +3350,12 @@ int input_test(int getchar)
 											continue;
 										}
 									}
+								}
+
+								if (input[i].quirk == QUIRK_TOUCHGUN)
+								{
+									touchscreen_proc(i, &ev);
+									continue;
 								}
 
 								if (ev.type == EV_ABS)
@@ -3394,7 +3603,7 @@ int input_test(int getchar)
 
 								if (ev.type == EV_ABS && input[i].quirk == QUIRK_WIIMOTE && input[dev].lightgun)
 								{
-									menu_lightgun_cb(ev.type, ev.code, ev.value);
+									menu_lightgun_cb(i, ev.type, ev.code, ev.value);
 
 									// don't pass IR tracking to OSD
 									if (user_io_osd_is_visible()) continue;
@@ -3415,7 +3624,7 @@ int input_test(int getchar)
 								{
 									if (input[i].quirk == QUIRK_WIIMOTE)
 									{
-										if (menu_lightgun_cb(ev.type, ev.code, ev.value)) continue;
+										if (menu_lightgun_cb(i, ev.type, ev.code, ev.value)) continue;
 									}
 								}
 
@@ -3482,7 +3691,6 @@ int input_test(int getchar)
 					else
 					{
 						uint8_t data[4] = {};
-						static int accx = 0, accy = 0;
 						if (read(pool[i].fd, data, sizeof(data)))
 						{
 							int edev = i;
@@ -3493,6 +3701,12 @@ int input_test(int getchar)
 							if (input[i].quirk == QUIRK_DS4TOUCH && input[dev].lightgun)
 							{
 								//disable DS4 mouse in lightgun mode
+								continue;
+							}
+
+							if (input[i].quirk == QUIRK_TOUCHGUN && input[dev].lightgun)
+							{
+								//don't use original raspad3 emulated mouse
 								continue;
 							}
 
@@ -3544,23 +3758,7 @@ int input_test(int getchar)
 							}
 							else
 							{
-								if (is_menu() && !video_fb_state()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, data[0], xval, yval, (int8_t)data[3]);
-
-								int throttle = cfg.mouse_throttle ? cfg.mouse_throttle : 1;
-								if (input[dev].ds_mouse_emu) throttle *= 4;
-
-								accx += xval;
-								xval = accx / throttle;
-								accx -= xval * throttle;
-
-								accy -= yval;
-								yval = accy / throttle;
-								accy -= yval * throttle;
-
-								mice_btn = data[0] & 7;
-								if (input[dev].ds_mouse_emu) mice_btn = (mice_btn & 4) | ((mice_btn & 1) << 1);
-
-								mouse_cb(mouse_btn | mice_btn, xval, yval, (int8_t)data[3]);
+								send_mouse_with_throttle(i, xval, yval, data[0], data[3]);
 							}
 						}
 					}

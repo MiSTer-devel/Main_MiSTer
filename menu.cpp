@@ -964,11 +964,12 @@ static int next_ar(int ar, int minus)
 
 static int joymap_first = 0;
 
-static int wm_x = 0;
-static int wm_y = 0;
-static int wm_ok = 0;
-static int wm_side = 0;
-static uint16_t wm_pos[4] = {};
+static int gun_x = 0;
+static int gun_y = 0;
+static int gun_ok = 0;
+static int gun_side = 0;
+static int gun_idx = 0;
+static uint16_t gun_pos[4] = {};
 static int page = 0;
 
 void HandleUI(void)
@@ -5627,42 +5628,56 @@ void HandleUI(void)
 
 	case MENU_LGCAL:
 		helptext_idx = 0;
-		OsdSetTitle("Wiimote Calibration", 0);
+		OsdSetTitle("Lightgun Calibration", 0);
 		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
-		OsdWrite(9, "  Point Wiimote to the edge");
-		OsdWrite(10, "     of screen and press");
-		OsdWrite(11, "   the button B to confirm");
+		OsdWrite(9,  "     Point to the edge of");
+		OsdWrite(10, "   screen and press trigger");
+		OsdWrite(11, "         to confirm");
 		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
-		wm_ok = 0;
-		wm_side = 0;
-		memset(wm_pos, 0, sizeof(wm_pos));
+		gun_ok = 0;
+		gun_side = 0;
+		gun_y = 0;
+		gun_x = 0;
+		memset(gun_pos, 0, sizeof(gun_pos));
 		menustate = MENU_LGCAL1;
 		menusub = 0;
 		break;
 
 	case MENU_LGCAL1:
-		if (wm_side < 4) wm_pos[wm_side] = (wm_side < 2) ? wm_y : wm_x;
-		sprintf(s, "           %c%04d%c", (wm_side == 0) ? 17 : 32, (wm_side == 0) ? wm_y : wm_pos[0], (wm_side == 0) ? 16 : 32);
+		{
+			static int state = 0;
+			static uint32_t blink = 0;
+			if (!blink || CheckTimer(blink))
+			{
+				blink = GetTimer(300);
+				state = !state;
+			}
+
+			m = !state;
+		}
+
+		if (gun_side < 4) gun_pos[gun_side] = (gun_side < 2) ? gun_y : gun_x;
+		sprintf(s, "           %c%04d%c", (gun_side == 0 && m) ? 17 : 32, (gun_side == 0) ? gun_y : gun_pos[0], (gun_side == 0 && m) ? 16 : 32);
 		OsdWrite(0, s);
-		sprintf(s, "%c%04d%c                 %c%04d%c", (wm_side == 2) ? 17 : 32, (wm_side == 2) ? wm_x : wm_pos[2], (wm_side == 2) ? 16 : 32,
-		                                                (wm_side == 3) ? 17 : 32, (wm_side == 3) ? wm_x : wm_pos[3], (wm_side == 3) ? 16 : 32);
+		sprintf(s, "%c%04d%c                 %c%04d%c", (gun_side == 2 && m) ? 17 : 32, (gun_side == 2) ? gun_x : gun_pos[2], (gun_side == 2 && m) ? 16 : 32,
+		                                                (gun_side == 3 && m) ? 17 : 32, (gun_side == 3) ? gun_x : gun_pos[3], (gun_side == 3 && m) ? 16 : 32);
 		OsdWrite(7, s);
-		sprintf(s, "           %c%04d%c", (wm_side == 1) ? 17 : 32, (wm_side == 1) ? wm_y : wm_pos[1], (wm_side == 1) ? 16 : 32);
+		sprintf(s, "           %c%04d%c", (gun_side == 1 && m) ? 17 : 32, (gun_side == 1) ? gun_y : gun_pos[1], (gun_side == 1 && m) ? 16 : 32);
 		OsdWrite(13, s);
 		if (menu || select) menustate = MENU_NONE1;
 
-		if (wm_ok == 1)
+		if (gun_ok == 1)
 		{
-			wm_ok = 0;
-			wm_side++;
+			gun_ok = 0;
+			gun_side++;
 		}
 
-		if (wm_ok == 2)
+		if (gun_ok == 2)
 		{
-			wm_ok = 0;
-			if (wm_side == 4)
+			gun_ok = 0;
+			if (gun_side == 4)
 			{
-				input_lightgun_cal(wm_pos);
+				input_lightgun_save(gun_idx, gun_pos);
 				menustate = MENU_NONE1;
 			}
 		}
@@ -6285,20 +6300,21 @@ void Info(const char *message, int timeout, int width, int height, int frame)
 	}
 }
 
-int menu_lightgun_cb(uint16_t type, uint16_t code, int value)
+int menu_lightgun_cb(int idx, uint16_t type, uint16_t code, int value)
 {
 	if (type == EV_ABS)
 	{
-		if (code == 0 && value) wm_x = value;
-		if (code == 1 && value != 1023) wm_y = value;
+		if (code == 0 && value) gun_x = value;
+		if (code == 1 && value != 1023) gun_y = value;
 	}
 
 	if (type == EV_KEY)
 	{
-		if (code == 0x131 && menustate == MENU_LGCAL1)
+		if ((code == 0x130 || code == 0x131) && menustate == MENU_LGCAL1)
 		{
-			if (value == 1) wm_ok = 1;
-			if (value == 0) wm_ok = 2;
+			gun_idx = idx;
+			if (value == 1) gun_ok = 1;
+			if (value == 0) gun_ok = 2;
 			return 1;
 		}
 	}
