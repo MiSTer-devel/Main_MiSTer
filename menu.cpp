@@ -1154,6 +1154,7 @@ void HandleUI(void)
 			break;
 		case KEY_ENTER:
 		case KEY_SPACE:
+		case KEY_KPENTER:
 			select = true;
 			break;
 		case KEY_UP:
