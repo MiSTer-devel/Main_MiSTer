@@ -131,6 +131,7 @@ enum MENU
 	MENU_GENERIC_MAIN2,
 	MENU_GENERIC_FILE_SELECTED,
 	MENU_GENERIC_IMAGE_SELECTED,
+	MENU_GENERIC_SAVE_WAIT,
 
 	// Arcade
 	MENU_ARCADE_DIP1,
@@ -186,6 +187,7 @@ static uint32_t menusub = 0;
 static uint32_t menusub_last = 0; //for when we allocate it dynamically and need to know last row
 static uint64_t menumask = 0; // Used to determine which rows are selectable...
 static uint32_t menu_timer = 0;
+static uint32_t menu_save_timer = 0;
 
 extern const char *version;
 
@@ -1838,11 +1840,26 @@ void HandleUI(void)
 
 	} break;
 
+	case MENU_GENERIC_SAVE_WAIT:
+		menumask = 0;
+		parentstate = menustate;
+		if (menu_save_timer && CheckTimer(menu_save_timer))
+		{
+			menu_save_timer = 0;
+			menustate = MENU_GENERIC_MAIN1;
+		}
+		break;
+
 	case MENU_GENERIC_MAIN2:
 		saved_menustate = MENU_GENERIC_MAIN1;
 
-		// menu key closes menu
-		if (menu)
+		if (menu_save_timer && !CheckTimer(menu_save_timer))
+		{
+			for (int i = 0; i < 16; i++) OsdWrite(m++);
+			OsdWrite(8, "          Saving...");
+			menustate = MENU_GENERIC_SAVE_WAIT;
+		}
+		else if (menu)
 		{
 			menustate = MENU_NONE1;
 		}
@@ -6346,4 +6363,9 @@ int menu_allow_cfg_switch()
 	}
 
 	return 0;
+}
+
+void menu_process_save()
+{
+	menu_save_timer = GetTimer(1000);
 }

@@ -42,6 +42,8 @@ static char rbf_path[1024] = {};
 static fileTYPE sd_image[4] = {};
 static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 
+static int use_save = 0;
+
 // mouse and keyboard emulation state
 static int emu_mode = EMU_NONE;
 
@@ -1466,6 +1468,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	}
 
 	buffer_lba[index] = -1;
+	if (!index) use_save = pre;
 
 	if (!ret)
 	{
@@ -2616,6 +2619,8 @@ void user_io_poll()
 				if(c & 0x04)
 				{
 					//printf("SD WR %d on %d\n", lba, disk);
+
+					if (use_save) menu_process_save();
 
 					buffer_lba[disk] = -1;
 
