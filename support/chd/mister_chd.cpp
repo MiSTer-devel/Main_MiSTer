@@ -68,12 +68,42 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 			break;	
 		}
 
+		bool pregap_valid = true;
+
+		if (pgtype[0] != 'V')
+		{
+			pregap_valid = false;
+
+		}
 		if (cd_toc->last)
 		{
-			cd_toc->tracks[cd_toc->last].start = cd_toc->end + pregap;
+			if (!pregap_valid)
+			{
+				cd_toc->tracks[cd_toc->last-1].end += pregap;
+			}
+			cd_toc->end = cd_toc->tracks[cd_toc->last-1].end;
+			cd_toc->tracks[cd_toc->last].start = cd_toc->end;
+			if (pregap_valid)
+			{
+				cd_toc->tracks[cd_toc->last].start += pregap;
+			}
+
 		} else { 
-			cd_toc->tracks[cd_toc->last].start = 0;
+			if (pregap_valid)
+			{
+				cd_toc->tracks[cd_toc->last].start = pregap;
+			} else {
+				cd_toc->tracks[cd_toc->last].start = 0;
+			}
 		}
+
+                if (!pregap_valid)
+                {
+                        //Pregap sectors are NOT included in the CHD for this track
+                        pregap = 0;
+                }
+
+
 
 		if (!strcmp(track_type, "MODE1_RAW"))
 		{
@@ -97,20 +127,13 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 		}
 
 		//CHD pads tracks to a multiple of 4 sectors, keep track of the overall sector count and calculate the difference between the cdrom lba and the effective chd lba
-		cd_toc->tracks[cd_toc->last].offset = (sector_cnt + pregap - cd_toc->tracks[cd_toc->last].start); 
-		if (pgtype[0] != 'V')
-		{
-			cd_toc->tracks[cd_toc->last].offset -= pregap;
-		}
+		cd_toc->tracks[cd_toc->last].offset = (sector_cnt + pregap - cd_toc->tracks[cd_toc->last].start);
 		cd_toc->tracks[cd_toc->last].end = cd_toc->tracks[cd_toc->last].start + frames - pregap;
 		cd_toc->end = cd_toc->tracks[cd_toc->last].end + postgap;
 		sector_cnt += ((frames + CD_TRACK_PADDING - 1) / CD_TRACK_PADDING) * CD_TRACK_PADDING;
-		mister_chd_log("Track %d: Type: %s PreGap: %d PreGapType: %s Frames: %d start: %d end %d\n", cd_toc->last, track_type, pregap, pgtype, frames, cd_toc->tracks[cd_toc->last].start, cd_toc->tracks[cd_toc->last].end);
-
-
+                mister_chd_log("Track %d: Type: %s PreGap: %d PreGapType: %s Frames: %d start: %d end %d\n", cd_toc->last, track_type, pregap, pgtype, frames, cd_toc->tracks[cd_toc->last].start, cd_toc->tracks[cd_toc->last].end);
 
 	}	
-
 	return CHDERR_NONE;
 }
 
