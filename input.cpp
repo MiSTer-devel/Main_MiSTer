@@ -3704,7 +3704,7 @@ int input_test(int getchar)
 								continue;
 							}
 
-							if (input[i].quirk == QUIRK_TOUCHGUN && input[dev].lightgun)
+							if (input[i].quirk == QUIRK_TOUCHGUN)
 							{
 								//don't use original raspad3 emulated mouse
 								continue;
