@@ -2734,7 +2734,12 @@ void HandleUI(void)
 			{
 			case 0:
 				{
-					uint mode = (GetUARTMode() + (minus ? -1 : 1)) & 3;
+					uint mode = GetUARTMode();
+					do
+					{
+						mode = (mode + (minus ? -1 : 1)) & 3;
+					} while (mode && !GetUARTbaud(mode));
+
 					SetUARTMode(mode);
 					menustate = MENU_UART1;
 				}
