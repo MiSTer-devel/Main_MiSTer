@@ -3646,54 +3646,54 @@ void HandleUI(void)
 		OsdWrite(m++, s, menusub == 2);
 
 		OsdWrite(m++);
-		strcpy(s, " Memory:    ");
+		strcpy(s, " Memory:     ");
 		strcat(s, tos_mem[(tos_system_ctrl() >> 1) & 7]);
 		OsdWrite(m++, s, menusub == 3);
 
-		snprintf(s, 29, " TOS:       %s", tos_get_image_name());
+		snprintf(s, 29, " TOS:        %s", tos_get_image_name());
 		OsdWrite(m++, s, menusub == 4);
 
-		strcpy(s, " Chipset:   ");
+		strcpy(s, " Chipset:    ");
 		// extract  TOS_CONTROL_STE and  TOS_CONTROL_MSTE bits
 		strcat(s, tos_chipset[(tos_system_ctrl() >> 23) & 3]);
 		OsdWrite(m++, s, menusub == 5);
 
 		// Blitter is always present in >= STE
 		enable = (tos_system_ctrl() & (TOS_CONTROL_STE | TOS_CONTROL_MSTE)) ? 1 : 0;
-		strcpy(s, " Blitter:   ");
+		strcpy(s, " Blitter:    ");
 		strcat(s, ((tos_system_ctrl() & TOS_CONTROL_BLITTER) || enable) ? "On" : "Off");
 		OsdWrite(m++, s, menusub == 6, enable);
 
 		// Viking card can only be enabled with max 8MB RAM
 		enable = (tos_system_ctrl() & 0xe) <= TOS_MEMCONFIG_8M;
-		strcpy(s, " Viking:    ");
+		strcpy(s, " Viking:     ");
 		strcat(s, ((tos_system_ctrl() & TOS_CONTROL_VIKING) && enable) ? "On" : "Off");
 		OsdWrite(m++, s, menusub == 7, enable ? 0 : 1);
 
-		strcpy(s, " Aspect:    ");
+		strcpy(s, " Aspect:     ");
 		tos_set_ar(get_ar_name(tos_get_ar(), s));
 		OsdWrite(m++, s, menusub == 8);
 
-		strcpy(s, " Screen:    ");
+		strcpy(s, " Screen:     ");
 		if (tos_system_ctrl() & TOS_CONTROL_VIDEO_COLOR) strcat(s, "Color");
 		else                                             strcat(s, "Mono");
 		OsdWrite(m++, s, menusub == 9);
 
-		strcpy(s, " Mono 60Hz: ");
+		strcpy(s, " Mono 60Hz:  ");
 		if (tos_system_ctrl() & TOS_CONTROL_MDE60) strcat(s, "On");
 		else                                       strcat(s, "Off");
 		OsdWrite(m++, s, menusub == 10);
 
-		strcpy(s, " Border:    ");
+		strcpy(s, " Video Crop: ");
 		if (tos_system_ctrl() & TOS_CONTROL_BORDER) strcat(s, "Visible");
 		else                                        strcat(s, "Full");
 		OsdWrite(m++, s, menusub == 11);
 
-		strcpy(s, " Scanlines: ");
+		strcpy(s, " Scanlines:  ");
 		strcat(s, tos_scanlines[(tos_system_ctrl() >> 20) & 3]);
 		OsdWrite(m++, s, menusub == 12);
 
-		strcpy(s, " YM-Audio:  ");
+		strcpy(s, " YM-Audio:   ");
 		strcat(s, tos_stereo[(tos_system_ctrl() & TOS_CONTROL_STEREO) ? 1 : 0]);
 		OsdWrite(m++, s, menusub == 13);
 
