@@ -670,6 +670,7 @@ void MakeFile(const char * filename, const char * data)
 	fclose(file);
 }
 
+
 static void set_uart_alt()
 {
 	if (is_st())
@@ -684,6 +685,9 @@ int GetUARTMode()
 	if (!stat("/tmp/uartmode1", &filestat)) return 1;
 	if (!stat("/tmp/uartmode2", &filestat)) return 2;
 	if (!stat("/tmp/uartmode3", &filestat)) return 3;
+	if (!stat("/tmp/uartmode4", &filestat)) return 4;
+	if (!stat("/tmp/uartmode5", &filestat)) return 5;
+	if (!stat("/tmp/uartmode6", &filestat)) return 6;
 	return 0;
 }
 
@@ -693,7 +697,8 @@ void SetUARTMode(int mode)
 	uint32_t baud = GetUARTbaud(mode);
 
 	spi_uio_cmd_cont(UIO_SET_UART);
-	spi_w(mode);
+	//spi_w(mode);
+	spi_w(mode==4||mode==5?1:mode);
 	spi_w(baud);
 	spi_w(baud>>16);
 	DisableIO();
@@ -738,6 +743,47 @@ int GetUARTbaud_idx(int mode)
 	return (mode >= 3) ? midi_speed_idx : uart_speed_idx;
 }
 
+char * GetMidiLinkBAUD()
+{
+    FILE * file;
+    static char mLinkBAUD[10];
+    mLinkBAUD[0] = 0x00;
+    char fileName[] = "/tmp/ML_BAUD";   
+    file = fopen(fileName, "r");
+    if (file)
+    {
+        fgets((char *) &mLinkBAUD, sizeof(mLinkBAUD), file);
+        fclose(file);
+    }
+    else
+    {
+        printf("ERROR: GetMidiLinkBAUD : Unable to open --> '%s'\n", fileName);
+    }
+    return mLinkBAUD;
+}
+
+char * GetMidiLinkSoundfont()
+{
+    FILE * file;
+    static char mLinkSoundfont[255];
+    char fileName[] = "/tmp/ML_SOUNDFONT";
+    char strip[] = "/media/fat/";	   
+    file = fopen(fileName, "r");
+    if (file)
+    {
+        fgets((char *) &mLinkSoundfont, sizeof(mLinkSoundfont), file);
+        fclose(file);
+        if(0 == strncmp(strip, mLinkSoundfont, sizeof(strip)-1))
+		return &mLinkSoundfont[sizeof(strip)-1];
+    }
+    else
+    {
+        printf("ERROR: GetMidiLinkSoundfont : Unable to open --> '%s'\n", fileName);
+        sprintf(mLinkSoundfont, "linux/soundfonts");
+    }
+    return mLinkSoundfont;
+}
+
 uint32_t ValidateUARTbaud(int mode, uint32_t baud)
 {
 	uint32_t *bauds = GetUARTbauds(mode);
@@ -760,13 +806,13 @@ uint32_t ValidateUARTbaud(int mode, uint32_t baud)
 
 int GetMidiLinkMode()
 {
-	struct stat filestat;
-	if (!stat("/tmp/ML_FSYNTH", &filestat)) return 0;
-	if (!stat("/tmp/ML_MUNT", &filestat)) return 1;
-	if (!stat("/tmp/ML_TCP", &filestat)) return 2;
-	if (!stat("/tmp/ML_UDP", &filestat)) return 3;
-	if (!stat("/tmp/ML_TCP_ALT", &filestat)) return 4;
-	if (!stat("/tmp/ML_UDP_ALT", &filestat)) return 5;
+	struct stat filestat; 
+	if (!stat("/tmp/ML_FSYNTH", &filestat))  return 0;
+	if (!stat("/tmp/ML_MUNT", &filestat))    return 1; 
+	if (!stat("/tmp/ML_USBMIDI", &filestat)) return 2;
+	if (!stat("/tmp/ML_UDP", &filestat))     return 3;
+	//if (!stat("/tmp/ML_TCP_ALT", &filestat)) return 4;
+	//if (!stat("/tmp/ML_UDP_ALT", &filestat)) return 5;
 	return 0;
 }
 
@@ -775,17 +821,18 @@ void SetMidiLinkMode(int mode)
 	remove("/tmp/ML_FSYNTH");
 	remove("/tmp/ML_MUNT");
 	remove("/tmp/ML_UDP");
-	remove("/tmp/ML_TCP");
+	remove("/tmp/ML_USBMIDI");
 	remove("/tmp/ML_UDP_ALT");
 	remove("/tmp/ML_TCP_ALT");
+	
 	switch (mode)
 	{
 		case 0: MakeFile("/tmp/ML_FSYNTH", ""); break;
 		case 1: MakeFile("/tmp/ML_MUNT", ""); break;
-		case 2: MakeFile("/tmp/ML_TCP", ""); break;
+		case 2: MakeFile("/tmp/ML_USBMIDI", ""); break;
 		case 3: MakeFile("/tmp/ML_UDP", ""); break;
-		case 4: MakeFile("/tmp/ML_TCP_ALT", ""); break;
-		case 5: MakeFile("/tmp/ML_UDP_ALT", ""); break;
+		//case 3: MakeFile("/tmp/ML_TCP_ALT", ""); break;
+		//case 4: MakeFile("/tmp/ML_UDP_ALT", ""); break;
 	}
 	set_uart_alt();
 }
