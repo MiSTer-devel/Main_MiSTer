@@ -728,13 +728,13 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		 * the buffer_append is part of a buffer library that will realloc automatically
 		 */
 		{
-		int result = buffer_append(arc_info->data, text);
-		if (result<0)
-			printf("buffer_append failed %d\n",result);
+			int result = buffer_append(arc_info->data, text);
+			if (result<0)
+				printf("buffer_append failed %d\n",result);
 			if (result==-1)
-			   printf("-1 no data given\n");
+				printf("-1 no data given\n");
 			if (result==-2)
-			   printf("-2 could not allocate\n");
+				printf("-2 could not allocate\n");
 		}
 		//printf("XML_EVENT_TEXT: text [%s]\n",text);
 		break;

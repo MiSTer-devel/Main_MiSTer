@@ -5525,6 +5525,7 @@ void HandleUI(void)
 		while(m < OsdGetSize()-1) OsdWrite(m++, "");
 		OsdWrite(15, STD_EXIT, menusub == 5);
 		menustate = MENU_SYSTEM2;
+		break;
 
 	case MENU_SYSTEM2:
 		if (menu)

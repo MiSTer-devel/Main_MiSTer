@@ -1,7 +1,7 @@
 # makefile to fail if any command in pipe is failed.
 SHELL = /bin/bash -o pipefail
 
-# using gcc version 5.4.1 20161213 (Linaro GCC 5.4-2017.01-rc2)
+# using gcc version 7.5.0 (Linaro GCC 7.5-2019.12)
 BASE    = arm-linux-gnueabihf
 
 CC      = $(BASE)-gcc
@@ -46,7 +46,7 @@ OBJ	= $(C_SRC:.c=.c.o) $(CPP_SRC:.cpp=.cpp.o) $(IMG:.png=.png.o)
 DEP	= $(C_SRC:.c=.c.d) $(CPP_SRC:.cpp=.cpp.d)
 
 DFLAGS	= $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DFLAC_API_EXPORTS -DFLAC__HAS_OGG=0 -DHAVE_LROUND -DHAVE_STDINT_H -DHAVE_STDLIB_H -DHAVE_SYS_PARAM_H -DENABLE_64_BIT_WORDS=0 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
-CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -c -O3
+CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -Wno-format-truncation -Wno-psabi -c -O3
 LFLAGS	= -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) 
 
 $(PRJ): $(OBJ)
