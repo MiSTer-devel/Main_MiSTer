@@ -2815,7 +2815,7 @@ void HandleUI(void)
 							menusub = 0;
 							for (uint8_t i = 0; i < sizeof(config_uart_baud) / 4; i++)
 							{
-								char baudStr[10];
+								char baudStr[sizeof("31250/MIDI")]; //sizeof largest char[]
 								strcpy(baudStr, config_uart_baud[i]);
 								char * tmp = strchr(baudStr, '/');
 								if(tmp) *tmp = 0x00; //Remove "/MIDI";
@@ -3034,12 +3034,12 @@ void HandleUI(void)
                                 unsigned int max = sizeof(config_uart_baud) / 4 - 1;
                                 if(menusub <= max)
                                 {
-                                	char baudStr[10];
+                                	char baudStr[sizeof("31250/MIDI")];
                                 	strcpy(baudStr, config_uart_baud[menusub]);
                                 	char * tmp = strchr(baudStr, '/');
                                 	if(tmp) *tmp = 0x00; //Remove "/MIDI";
-                                        sprintf(s, "/sbin/mlinkutil BAUD %s", baudStr);
-                                        system(s);
+                                		sprintf(s, "/sbin/mlinkutil BAUD %s", baudStr);
+                                	system(s);
                                 }
                                 menusub = 4;
                                 menustate = MENU_UART1;
