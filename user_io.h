@@ -258,7 +258,8 @@ char* GetUARTbaud_label(int mode);
 char* GetUARTbaud_label(int mode, int idx);
 int GetUARTbaud_idx(int mode);
 uint32_t ValidateUARTbaud(int mode, uint32_t baud);
-
+char * GetMidiLinkBAUD();
+char * GetMidiLinkSoundfont();
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();
 
