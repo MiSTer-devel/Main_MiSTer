@@ -63,11 +63,8 @@ static const char *acsi_cmd_name(int cmd) {
 	return cmdname[cmd];
 }
 
-static int uart_mode = 0;
 static void set_control(uint32_t ctrl)
 {
-	ctrl = uart_mode ? (ctrl | TOS_CONTROL_REDIR0) : (ctrl & ~TOS_CONTROL_REDIR0);
-
 	spi_uio_cmd_cont(UIO_SET_STATUS2);
 	spi32_w(ctrl);
 	spi32_w(config.ext_ctrl);
@@ -112,12 +109,6 @@ void tos_set_ar(int ar)
 
 	if (ar & 2) config.system_ctrl |= TOS_CONTROL_VIDEO_AR2;
 	else config.system_ctrl &= ~TOS_CONTROL_VIDEO_AR2;
-}
-
-void tos_uart_mode(int enable)
-{
-	uart_mode = enable;
-	set_control(config.system_ctrl);
 }
 
 static void memory_read(uint8_t *data, uint32_t words)
