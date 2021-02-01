@@ -2846,8 +2846,7 @@ void HandleUI(void)
             menustate = MENU_UART4;
             parentstate = MENU_UART3;
 
-			struct stat filestat;
-            uint32_t max = (sizeof(config_uart_msg) / sizeof(config_uart_msg[0])) - (stat("/dev/ttyUSB0", &filestat) ? 1 : 0);
+            uint32_t max = (sizeof(config_uart_msg) / sizeof(config_uart_msg[0]));
 			m = 0;
 
             for (uint32_t i = 0; i < 15; i++)
@@ -2883,8 +2882,7 @@ void HandleUI(void)
 			{
 				if (menusub != 16)
 				{
-					struct stat filestat;
-					uint32_t max = (sizeof(config_uart_msg) / sizeof(config_uart_msg[0])) - (stat("/dev/ttyUSB0", &filestat) ? 1 : 0);
+					uint32_t max = (sizeof(config_uart_msg) / sizeof(config_uart_msg[0]));
 					if (menusub < max) SetUARTMode(menusub);
 				}
 				menusub  = 0;
