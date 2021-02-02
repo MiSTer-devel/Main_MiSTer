@@ -680,23 +680,7 @@ int GetUARTMode()
 	if (!stat("/tmp/uartmode3", &filestat)) return 3;
 	if (!stat("/tmp/uartmode4", &filestat)) return 4;
 	if (!stat("/tmp/uartmode5", &filestat)) return 5;
-	if (!stat("/tmp/uartmode6", &filestat)) return 6;
 	return 0;
-}
-
-int GetUARTSerial()
-{
-	struct stat filestat;
-	int mode = GetUARTMode();
-	if ((mode == 3 || mode == 4) && !stat("/tmp/USBSER", &filestat)) return 1;
-	return 0;
-}
-
-void SetUARTSerial(int serial)
-{
-	struct stat filestat;
-	if (serial && !stat("/dev/ttyUSB0", &filestat)) MakeFile("/tmp/USBSER", "1");
-	else remove("/tmp/USBSER");
 }
 
 void SetUARTMode(int mode)
@@ -798,10 +782,11 @@ int GetMidiLinkMode()
 	struct stat filestat;
 	if (!stat("/tmp/ML_FSYNTH", &filestat))  return 0;
 	if (!stat("/tmp/ML_MUNT", &filestat))    return 1;
-	if (!stat("/tmp/ML_USBMIDI", &filestat)) return 2;
+	if (!stat("/tmp/ML_SERMIDI", &filestat)) return 2;
 	if (!stat("/tmp/ML_UDP", &filestat))     return 3;
-	//if (!stat("/tmp/ML_TCP_ALT", &filestat)) return 4;
-	//if (!stat("/tmp/ML_UDP_ALT", &filestat)) return 5;
+	if (!stat("/tmp/ML_TCP", &filestat))     return 4;
+	if (!stat("/tmp/ML_UDP_ALT", &filestat)) return 5;
+	if (!stat("/tmp/ML_USBSER", &filestat))  return 6;
 	return 0;
 }
 
@@ -813,15 +798,22 @@ void SetMidiLinkMode(int mode)
 	remove("/tmp/ML_USBMIDI");
 	remove("/tmp/ML_UDP_ALT");
 	remove("/tmp/ML_TCP_ALT");
+	remove("/tmp/ML_SERMIDI");
+	remove("/tmp/ML_USBSER");
+	remove("/tmp/ML_TCP");
+
+	struct stat filestat;
+	if (mode == 6 && stat("/dev/ttyUSB0", &filestat)) mode = 4;
 
 	switch (mode)
 	{
-		case 0: MakeFile("/tmp/ML_FSYNTH", ""); break;
-		case 1: MakeFile("/tmp/ML_MUNT", ""); break;
-		case 2: MakeFile("/tmp/ML_USBMIDI", ""); break;
-		case 3: MakeFile("/tmp/ML_UDP", ""); break;
-		//case 3: MakeFile("/tmp/ML_TCP_ALT", ""); break;
-		//case 4: MakeFile("/tmp/ML_UDP_ALT", ""); break;
+		case 0: MakeFile("/tmp/ML_FSYNTH", "");  break;
+		case 1: MakeFile("/tmp/ML_MUNT", "");    break;
+		case 2: MakeFile("/tmp/ML_SERMIDI", ""); break;
+		case 3: MakeFile("/tmp/ML_UDP", "");     break;
+		case 4: MakeFile("/tmp/ML_TCP", "");     break;
+		case 5: MakeFile("/tmp/ML_UDP_ALT", ""); break;
+		case 6: MakeFile("/tmp/ML_USBSER", "");  break;
 	}
 }
 
@@ -1214,9 +1206,13 @@ void user_io_init(const char *path, const char *xml)
 	}
 
 	SetUARTMode(0);
-	SetMidiLinkMode((mode >> 8) & 0xFF);
-	SetUARTSerial(mode & 0x10);
-	SetUARTMode(mode);
+	int midilink = (mode >> 8) & 0xFF;
+	int uartmode = mode & 0xFF;
+	if (uartmode == 4 && (midilink < 4 || midilink>6)) midilink = 4;
+	if (uartmode == 3 && midilink > 3) midilink = 0;
+	if (uartmode < 3 || uartmode > 4) midilink = 0;
+	SetMidiLinkMode(midilink);
+	SetUARTMode(uartmode);
 }
 
 static int joyswap = 0;

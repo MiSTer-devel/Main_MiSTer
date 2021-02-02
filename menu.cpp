@@ -206,8 +206,8 @@ const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "    Analog X: Tilt RIGHT", "    Analog Y: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
 const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
-const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem", "       UDP"};
-const char *config_midilink_mode[] = {"FSYNTH", "  MUNT", "   USB", "   UDP"};
+const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem"};
+const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
 const char *config_gamma_msg[] = { "Off","On" };
@@ -2256,7 +2256,7 @@ void HandleUI(void)
 					menumask |= 0x10;
 					MenuWrite(n++);
 					int mode = GetUARTMode();
-					const char *p = config_uart_msg[(is_st() && mode == 3) ? 4 : mode];
+					const char *p = config_uart_msg[mode];
 					while (*p == ' ') p++;
 					sprintf(s, " UART mode (%s)            ",p);
 					s[27] = '\x16';
@@ -2683,27 +2683,31 @@ void HandleUI(void)
 			sprintf(s, " Connection:      %s", config_uart_msg[mode]);
 			OsdWrite(m++, s, menusub == 0, 0);
 
-			if (mode == 3 || mode == 4)
+			OsdWrite(m++);
+			if (mode == 4)
 			{
-				sprintf(s, " Device:          %s", GetUARTSerial() ? "USB Serial" : "  Internal");
+				sprintf(s, " Link:            %s", (midilink == 6) ? "USB Serial" : (midilink == 5) ? "       UDP" : "       TCP");
 				OsdWrite(m++, s, menusub == 1);
 				menumask |= 2;
 			}
-			OsdWrite(m++);
 
-			if (mode == 3 && !GetUARTSerial())
+			if (mode == 3)
 			{
-				sprintf(s, " MidiLink:            %s", (midilink > 2) ? "Remote" : " Local");
+				sprintf(s, " MidiLink:             %s", config_midilink_mode[midilink]);
 				OsdWrite(m++, s, menusub == 2);
 
-				sprintf(s, " Type:                %s", config_midilink_mode[midilink]);
-				OsdWrite(m++, s, menusub == 3);
+				if (midilink < 2)
+				{
+					sprintf(s, " Type:                %s", midilink ? "  MUNT" : "FSYNTH");
+					OsdWrite(m++, s, menusub == 3);
 
-				OsdWrite(m++);
-				OsdWrite(m++, " Change Soundfont          \x16", menusub == 4, midilink);
+					OsdWrite(m++);
+					OsdWrite(m++, " Change Soundfont          \x16", menusub == 4, midilink);
+					menumask |= 0x18;
+				}
 				OsdWrite(m++);
 
-				menumask |= 0x1C;
+				menumask |= 0x4;
 			}
 
 			if (mode)
@@ -2746,56 +2750,73 @@ void HandleUI(void)
 			case 1:
 				{
 					int mode = GetUARTMode();
-					int ser = !GetUARTSerial();
+					int midilink = GetMidiLinkMode();
 					SetUARTMode(0);
-					SetUARTSerial(ser);
+					if (minus)
+					{
+						if (midilink <= 4) midilink = 6;
+						else midilink--;
+					}
+					else
+					{
+						if (midilink >= 6) midilink = 4;
+						else midilink++;
+					}
+					SetMidiLinkMode(midilink);
 					SetUARTMode(mode);
 					menustate = MENU_UART1;
 				}
 				break;
 
 			case 2:
-			case 3:
-				#define MIDILINK_LOCAL (midilink <= 2)
-				if (!m)
 				{
+					int mode = GetUARTMode();
 					int midilink = GetMidiLinkMode();
-					if (menusub == 2)
+					SetUARTMode(0);
+
+					if (minus)
 					{
-						if(MIDILINK_LOCAL)
-					    	midilink = 3;
-						else
-					    	midilink = 0;
+						if (midilink < 2 || midilink > 3) midilink = 3;
+						else if (midilink == 3)
+						{
+							struct stat filestat;
+							midilink = (!stat("/dev/midi1", &filestat) || !stat("/dev/ttyUSB0", &filestat)) ? 2 : 0;
+						}
+						else midilink = 0;
 					}
 					else
 					{
-						int max = MIDILINK_LOCAL?2:sizeof(config_midilink_mode) / 4 - 1;
-						int min = MIDILINK_LOCAL?0:3;
-						if (select || plus) midilink++;
-						if (minus) midilink--;
-						struct stat filestat;
-						if (midilink == 2 &&
-							stat("/dev/midi1", &filestat) &&
-							stat("/dev/ttyUSB0", &filestat)) midilink = min;
-						if (midilink > max) midilink = min;
-						if (midilink < min) midilink = max;
+						if (midilink < 2)
+						{
+							struct stat filestat;
+							midilink = (!stat("/dev/midi1", &filestat) || !stat("/dev/ttyUSB0", &filestat)) ? 2 : 3;
+						}
+						else if (midilink == 2) midilink = 3;
+						else midilink = 0;
 					}
+
 					SetMidiLinkMode(midilink);
+					SetUARTMode(mode);
+					menustate = MENU_UART1;
+				}
+				break;
+
+			case 3:
+				{
 					int mode = GetUARTMode();
+					int midilink = GetMidiLinkMode();
 					SetUARTMode(0);
+					SetMidiLinkMode(midilink ? 0 : 1);
 					SetUARTMode(mode);
 					menustate = MENU_UART1;
 				}
 				break;
 
 			case 4:
-				if(select)
+				if(select && GetMidiLinkMode() == 0)
 				{
-					if(GetUARTMode() == 3 && GetMidiLinkMode() == 0)
-					{
-						sprintf(Selected_tmp, GetMidiLinkSoundfont());
-						SelectFile(Selected_tmp, "SF2", SCANO_DIR | SCANO_TXT, MENU_SFONT_FILE_SELECTED, MENU_UART1);
-					}
+					sprintf(Selected_tmp, GetMidiLinkSoundfont());
+					SelectFile(Selected_tmp, "SF2", SCANO_DIR | SCANO_TXT, MENU_SFONT_FILE_SELECTED, MENU_UART1);
 				}
 				break;
 
@@ -2819,7 +2840,7 @@ void HandleUI(void)
 			case 7:
 				if (select)
 				{
-					int mode = GetUARTMode() | (GetMidiLinkMode() << 8) | (GetUARTSerial() << 4);
+					int mode = GetUARTMode() | (GetMidiLinkMode() << 8);
 					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
 					FileSaveConfig(s, &mode, 4);
 					uint64_t speeds = GetUARTbaud(3);
@@ -2875,18 +2896,24 @@ void HandleUI(void)
 			if (menu)
 			{
 				menustate = MENU_UART1;
-				menusub = 1;
-				break;
+				menusub = 0;
 			}
 			else if (select)
 			{
 				if (menusub != 16)
 				{
 					uint32_t max = (sizeof(config_uart_msg) / sizeof(config_uart_msg[0]));
-					if (menusub < max) SetUARTMode(menusub);
+					if (menusub < max)
+					{
+						int midilink = GetMidiLinkMode();
+						if (menusub == 4) midilink = (midilink == 2) ? 6 : 4;
+						if (menusub == 3) midilink = (midilink == 6) ? 2 : (midilink > 3) ? 0 : midilink;
+						SetMidiLinkMode(midilink);
+						SetUARTMode(menusub);
+					}
 				}
-				menusub  = 0;
 				menustate = MENU_UART1;
+				menusub = 0;
 			}
 		}
 		break;
@@ -2944,7 +2971,7 @@ void HandleUI(void)
 			if (menu)
 			{
 				menustate = MENU_UART1;
-				menusub = 4;
+				menusub = 5;
 				break;
 			}
 			else if (select)
@@ -2969,7 +2996,7 @@ void HandleUI(void)
 						}
 					}
 				}
-				menusub = 4;
+				menusub = 5;
 				menustate = MENU_UART1;
 			}
 		}

@@ -249,8 +249,6 @@ uint16_t altcfg(int alt = -1);
 
 int GetUARTMode();
 void SetUARTMode(int mode);
-int GetUARTSerial();
-void SetUARTSerial(int serial);
 int GetMidiLinkMode();
 void SetMidiLinkMode(int mode);
 void ResetUART();
