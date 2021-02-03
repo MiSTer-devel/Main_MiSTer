@@ -90,6 +90,16 @@ uint16_t get_map_pid();
 int has_default_map();
 void send_map_cmd(int key);
 void reset_players();
+void swap_player(int dev_num, int new_num);
+void start_player_remapping();
+void end_player_remapping();
+int get_last_pdsp_dev();
+int get_last_input_dev();
+int get_pad_mask();
+int get_pdsp_mask();
+int get_dev_num(int dev);
+int get_remap_spinner_value();
+int get_numplayers();
 
 uint32_t get_key_mod();
 uint32_t get_ps2_code(uint16_t key);

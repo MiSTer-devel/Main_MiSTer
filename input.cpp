@@ -1082,11 +1082,79 @@ static int mapping_type;
 static int mapping_count;
 static int mapping_clear;
 static int mapping_set;
+static int last_input_dev = 1<<31;
+static int last_pdsp_dev = 1<<31;
+
+static int player_num_remapping = 0;
+static int remapping_spinner_input = 0;
 
 static uint32_t tmp_axis[4];
 static int tmp_axis_n = 0;
 
 static int grabbed = 1;
+
+int get_dev_num(int dev)
+{
+	return input[dev].num;
+}
+
+
+int get_pad_mask()
+{
+	int ret = 0;
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (input[i].num && input[i].quirk != QUIRK_PDSP && input[i].quirk != QUIRK_MSSP)
+		{
+
+			ret |= 1<<i;
+		}
+	}
+
+	return ret;
+}
+
+int get_pdsp_mask()
+{
+	int ret = 0;
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (input[i].num && (input[i].quirk == QUIRK_PDSP || input[i].quirk == QUIRK_MSSP))
+		{
+			ret |= 1<<i;
+		}
+	}
+	return ret;
+}
+
+int get_last_pdsp_dev()
+{
+	return last_pdsp_dev;
+}
+int get_last_input_dev()
+{
+	return last_input_dev;
+}
+
+int get_numplayers()
+{
+	return NUMPLAYERS;
+}
+
+int get_remap_spinner_value()
+{
+	return remapping_spinner_input;
+}
+
+void start_player_remapping()
+{
+	player_num_remapping = 1;
+}
+
+void end_player_remapping()
+{
+	player_num_remapping = 0;
+}
 
 void start_map_setting(int cnt, int set)
 {
@@ -1698,7 +1766,9 @@ void reset_players()
 	}
 	memset(player_pad, 0, sizeof(player_pad));
 	memset(player_pdsp, 0, sizeof(player_pdsp));
+	last_input_dev = 0;
 }
+
 
 void store_player(int num, int dev)
 {
@@ -1731,6 +1801,51 @@ void restore_player(int dev)
 		}
 	}
 }
+
+void swap_player(int cur_dev, int new_num)
+{
+
+        int dest_dev = -1;
+	int cur_num = input[cur_dev].num;
+	bool is_pdsp = false;
+	if (input[cur_dev].quirk == QUIRK_PDSP || input[cur_dev].quirk == QUIRK_MSSP)
+	{
+		is_pdsp = true;
+	}
+
+        for (int i = 0; i < NUMDEV; i++)
+        {
+                if (input[i].num == new_num)
+                {
+			if (input[i].quirk == QUIRK_PDSP || input[i].quirk == QUIRK_MSSP)
+			{
+
+				if (is_pdsp)
+				{	
+					dest_dev = i;
+					break;
+				}
+			} else if (!is_pdsp) {
+                       		dest_dev = i;
+				break;
+			}
+                }
+        }
+
+	if (cur_dev < 0) 
+	{
+		return;
+	}
+        input[cur_dev].num = new_num;
+        store_player(new_num, cur_dev);
+        //Swap if there was already one assigned there
+        if (dest_dev > -1)
+        {
+                input[dest_dev].num = cur_num;
+                store_player(cur_num, dest_dev);
+        }
+}
+
 
 void unflag_players()
 {
@@ -2248,6 +2363,13 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			if (ev->code < 1024 && input[dev].jkmap[ev->code] && !user_io_osd_is_visible()) ev->code = input[dev].jkmap[ev->code];
 
 			//joystick buttons, digital directions
+			/*
+			if (player_num_remapping && input[dev].num)
+			{
+				printf("SET LAST INPUT %d %s\n", dev, input[dev].name);
+				last_input_dev = dev;
+			}*/
+
 			if (ev->code >= 256)
 			{
 				if (input[dev].lightgun_req && !user_io_osd_is_visible())
@@ -2266,6 +2388,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 				if (user_io_osd_is_visible() || video_fb_state())
 				{
+					if (player_num_remapping && input[dev].num)
+					{
+						last_input_dev = dev;	
+					}
+
 					if (ev->value <= 1)
 					{
 						if ((input[dev].mmap[SYS_BTN_MENU_FUNC] & 0xFFFF) ?
@@ -2532,6 +2659,10 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 		//analog joystick
 		case EV_ABS:
+			if (player_num_remapping && (input[dev].quirk == QUIRK_MSSP || input[dev].quirk == QUIRK_PDSP) )
+			{
+				last_pdsp_dev = dev;
+			}	
 			if (!user_io_osd_is_visible())
 			{
 				int value = ev->value;
@@ -2624,6 +2755,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 		// spinner
 		case EV_REL:
+			if (player_num_remapping) 
+			{
+				last_pdsp_dev = dev;
+				remapping_spinner_input = ev->value < 0 ? -1 : 1;
+			}
+
 			if (!user_io_osd_is_visible() && ev->code == 7)
 			{
 				if (input[dev].num && input[dev].num <= NUMPLAYERS)
@@ -2631,7 +2768,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					int value = ev->value;
 					if (ev->value < -128) value = -128;
 					else if (ev->value > 127) value = 127;
-
 					user_io_analog_joystick(((input[dev].num - 1) << 4) | 0x8F, value, 0);
 				}
 			}
@@ -3043,6 +3179,11 @@ int input_test(int getchar)
 	static int state = 0;
 	struct input_absinfo absinfo;
 	struct input_event ev;
+
+	if (remapping_spinner_input != 0)
+	{
+		remapping_spinner_input = 0;
+	}
 
 	if (touch_rel && CheckTimer(touch_rel))
 	{
@@ -3508,6 +3649,7 @@ int input_test(int getchar)
 								if (is_menu() && !video_fb_state())
 								{
 									/*
+									 * 
 									if (mapping && mapping_type <= 1 && !(ev.type==EV_KEY && ev.value>1))
 									{
 										static char str[64], str2[64];

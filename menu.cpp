@@ -97,6 +97,7 @@ enum MENU
 	MENU_JOYRESET1,
 	MENU_JOYKBDMAP,
 	MENU_JOYKBDMAP1,
+	MENU_JOYNUMREMAP,
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
 	MENU_BTPAIR,
@@ -2247,7 +2248,7 @@ void HandleUI(void)
 				s[28] = 0;
 				MenuWrite(n++, s, menusub == 1, 0);
 				MenuWrite(n++, " Button/Key remap for game \x16", menusub == 2, 0);
-				MenuWrite(n++, " Reset player assignment", menusub == 3, 0);
+				MenuWrite(n++, " Change player assignment  \x16", menusub == 3, 0);
 
 				if (user_io_get_uart_mode())
 				{
@@ -2406,8 +2407,9 @@ void HandleUI(void)
 				break;
 
 			case 3:
-				reset_players();
-				menustate = MENU_NONE1;
+				start_player_remapping();
+				menustate = MENU_JOYNUMREMAP;
+				menusub = 0;
 				break;
 
 			case 4:
@@ -3353,6 +3355,171 @@ void HandleUI(void)
 				joymap_first = 0;
 				break;
 			}
+		}
+		break;
+
+	case MENU_JOYNUMREMAP:
+		{
+		OsdSetTitle("Remap assignments", 0);
+		menumask = 0;
+		uint32_t entry = 0;
+		uint32_t selentry = 0;
+
+		parentstate = menustate;
+		uint32_t pad_start = ~0;
+		uint32_t  pad_end = ~0;
+		uint32_t  pdsp_start = ~0;
+		uint32_t  pdsp_end = ~0;
+
+
+		for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
+		MenuWrite(entry, "Joypad remap", 0, 0);
+		entry++;
+
+		int pad_mask = get_pad_mask();
+		int pad_cnt = 0;
+		int pad_input_dev = get_last_input_dev();
+		for (int i = 0; i < 32 ; i++)
+		{
+			char buf[100];
+			if (pad_mask & 1<<i)
+			{
+				if (pad_start == (uint32_t)~0)
+				{
+					pad_start = selentry;
+				}
+				pad_cnt++;
+		        	sprintf(buf, "%sJoypad %d:  Player %d", i == pad_input_dev ? "*" : " ", pad_cnt, get_dev_num(i));
+				MenuWrite(entry, buf, menusub == selentry, 0);	
+				entry++;
+				selentry++;
+				menumask = (menumask << 1) | 1;
+			}
+		}
+
+		pad_end = selentry-1;
+
+
+		MenuWrite(entry++, "", 0, 0);
+		MenuWrite(entry++, "Spinner/Paddle remap", 0, 0);
+		int pdsp_mask = get_pdsp_mask();
+		int pdsp_cnt = 0;
+		int pdsp_input_dev = get_last_pdsp_dev(); 
+		for (int i = 0; i < 32; i++)
+		{
+			char buf[100];
+			if (pdsp_mask & 1<<i)
+			{
+				pdsp_cnt++;
+				sprintf(buf, "%sSpinner %d: Player %d", i == pdsp_input_dev ? "*" : " ", pdsp_cnt, get_dev_num(i)); 
+				if (pdsp_start == (uint32_t)~0)
+				{
+					pdsp_start = selentry;
+				}	
+				MenuWrite(entry, buf, menusub == selentry, 0);
+				entry++;
+				selentry++;
+				menumask = (menumask << 1) | 1;
+					
+			}
+		}
+
+		pdsp_end = selentry-1;
+		OsdWrite(entry++, "");
+		MenuWrite(entry, "Reset All Assignments", menusub == selentry, 0);
+		uint32_t reset_sub = selentry;
+		entry++;
+		selentry++;
+		menumask = (menumask << 1) | 1;
+		entry = OsdGetSize() - 1;
+		MenuWrite(entry, "            back", menusub == selentry, 0, 0);
+		menusub_last = selentry;
+		selentry++;
+		menumask = (menumask << 1) | 1;
+
+		parentstate = MENU_JOYNUMREMAP;
+		saved_menustate = MENU_COMMON1;
+		if (back) {
+			end_player_remapping();
+			menustate = MENU_COMMON1;
+			saved_menustate = 0;
+			menusub = 0;
+		} else if (menu) {
+			end_player_remapping();
+			menustate = MENU_NONE1;
+			menusub = 0;
+		}
+
+		bool menu_pad = false;
+		bool menu_pdsp = false;
+		if (menusub >= pad_start && menusub <= pad_end)
+		{
+			menu_pad = true;
+		} else if (menusub >= pdsp_start && menusub <= pdsp_end) {
+			menu_pdsp = true;
+		} else if (menusub == reset_sub) {
+			if (select)
+			{
+				reset_players();
+				break;
+			}
+		} else if (menusub == menusub_last && select) {
+			end_player_remapping();
+			menustate = MENU_COMMON1;
+			saved_menustate = 0;
+			menusub = 0;
+		}
+		
+		if (menu_pad || menu_pdsp)
+		{
+			int use_start = menu_pad ? pad_start : pdsp_start;
+			int use_mask = menu_pad ? pad_mask : pdsp_mask;
+
+			int dev_cnt = 0;
+			int dev_pos = menusub - use_start + 1;
+			int sel_dev = 1<<31;
+			for(int i = 0; i < 32; i++)
+			{
+				if (use_mask & 1<<i)
+				{
+					dev_cnt++;
+				}
+				if (dev_pos == dev_cnt)
+				{
+					sel_dev = i;
+					break;
+				}
+			}
+
+
+			if (sel_dev != 1<<31)
+			{
+				int cur_pnum = get_dev_num(sel_dev);
+				int new_pnum = cur_pnum;
+				if (right || plus || select) 
+				{
+					new_pnum++;
+					if (new_pnum > 6)
+					{
+						new_pnum = 1;
+					}
+
+				} else if (left || minus) {
+					new_pnum--;
+					if (new_pnum < 1)
+					{
+						new_pnum = 6;
+					}
+				}
+
+				if (cur_pnum != new_pnum)
+				{
+					swap_player(sel_dev, new_pnum);
+				}
+			}
+
+
+		}
 		}
 		break;
 
