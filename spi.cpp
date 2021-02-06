@@ -116,24 +116,26 @@ uint8_t spi_uio_cmd(uint8_t cmd)
 	return res;
 }
 
-void spi_uio_cmd8_cont(uint8_t cmd, uint8_t parm)
+uint8_t spi_uio_cmd8_cont(uint8_t cmd, uint8_t parm)
 {
 	EnableIO();
 	spi_b(cmd);
-	spi_b(parm);
+	return spi_b(parm);
 }
 
-void spi_uio_cmd8(uint8_t cmd, uint8_t parm)
+uint8_t spi_uio_cmd8(uint8_t cmd, uint8_t parm)
 {
-	spi_uio_cmd8_cont(cmd, parm);
+	uint8_t res = spi_uio_cmd8_cont(cmd, parm);
 	DisableIO();
+	return res;
 }
 
-void spi_uio_cmd16(uint8_t cmd, uint16_t parm)
+uint16_t spi_uio_cmd16(uint8_t cmd, uint16_t parm)
 {
 	spi_uio_cmd_cont(cmd);
-	spi_w(parm);
+	uint16_t res = spi_w(parm);
 	DisableIO();
+	return res;
 }
 
 void spi_uio_cmd32(uint8_t cmd, uint32_t parm, int wide)

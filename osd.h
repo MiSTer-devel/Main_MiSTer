@@ -31,6 +31,7 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 void ScrollReset();
 void StarsInit();
 void StarsUpdate();
+void OsdShiftDown(unsigned char n);
 
 // get/set core currently loaded
 void OsdCoreNameSet(const char* str);

@@ -1,16 +1,31 @@
 ## Changelog
 
+### 2.1.0
+
+ - More instances of memcpy instead of cast and use memcpy per default
+ - Remove inline for c90 support
+ - New function to read files via callback functions when adding them
+ - Fix out of bounds read while reading Zip64 extended information
+ - guard memcpy when n == 0 because buffer may be NULL
+ - Implement inflateReset() function
+ - Move comp/decomp alloc/free  prototypes under guarding #ifndef MZ_NO_MALLOC
+ - Fix large file support under Windows
+ - Don't warn if _LARGEFILE64_SOURCE is not defined to 1
+ - Fixes for MSVC warnings
+ - Remove check that path of file added to archive contains ':' or '\'
+ - Add !defined check on MINIZ_USE_ALIGNED_LOADS_AND_STORES
+
 ### 2.0.8
 
  - Remove unimplemented functions (mz_zip_locate_file and mz_zip_locate_file_v2)
  - Add license, changelog, readme and example files to release zip
  - Fix heap overflow to user buffer in tinfl_status tinfl_decompress
- - Fix corrupt archive if uncompressed file smaller than 4 byte and file is added by mz_zip_writer_add_mem*
+ - Fix corrupt archive if uncompressed file smaller than 4 byte and the file is added by mz_zip_writer_add_mem*
 
 ### 2.0.7
 
  - Removed need in C++ compiler in cmake build
- - Fixed loads of uninitilized value errors found with Valgrind by memsetting m_dict to 0 in tdefl_init.
+ - Fixed a lot of uninitialized value errors found with Valgrind by memsetting m_dict to 0 in tdefl_init
  - Fix resource leak in mz_zip_reader_init_file_v2
  - Fix assert with mz_zip_writer_add_mem* w/MZ_DEFAULT_COMPRESSION
  - cmake build: install library and headers
@@ -19,7 +34,7 @@
 ### 2.0.6
 
  - Improve MZ_ZIP_FLAG_WRITE_ZIP64 documentation
- - Remove check for cur_archive_file_ofs > UINT_MAX, because cur_archive_file_ofs is not used after this point
+ - Remove check for cur_archive_file_ofs > UINT_MAX because cur_archive_file_ofs is not used after this point
  - Add cmake debug configuration
  - Fix PNG height when creating png files
  - Add "iterative" file extraction method based on mz_zip_reader_extract_to_callback.
@@ -49,11 +64,12 @@
 
 ### 2.0.0 beta
 
-- Matthew Sitton merged to vogl ZIP64 changes. Miniz is now licensed as MIT since the vogl code base is MIT licensed
+- Matthew Sitton merged miniz 1.x to Rich Geldreich's vogl ZIP64 changes. Miniz is now licensed as MIT since the vogl code base is MIT licensed
 - Miniz is now split into several files
 - Miniz does now not seek backwards when creating ZIP files. That is the ZIP files can be streamed
-- Miniz automatically switches to the ZIP64 format the created ZIP files goes over ZIP file limits
+- Miniz automatically switches to the ZIP64 format when the created ZIP files goes over ZIP file limits
 - Similar to [SQLite](https://www.sqlite.org/amalgamation.html) the Miniz source code is amalgamated into one miniz.c/miniz.h pair in a build step (amalgamate.sh). Please use miniz.c/miniz.h in your projects
+- Miniz 2 is only source back-compatible with miniz 1.x. It breaks binary compatibility because structures changed
 
 ### v1.16 BETA Oct 19, 2013
 

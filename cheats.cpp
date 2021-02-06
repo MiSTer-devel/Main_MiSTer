@@ -12,7 +12,7 @@
 #include "file_io.h"
 #include "user_io.h"
 #include "fpga_io.h"
-#include "miniz_zip.h"
+#include "miniz.h"
 #include "osd.h"
 #include "cheats.h"
 #include "support.h"

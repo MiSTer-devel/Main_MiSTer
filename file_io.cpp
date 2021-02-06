@@ -25,7 +25,7 @@
 #include "user_io.h"
 #include "cfg.h"
 #include "input.h"
-#include "miniz_zip.h"
+#include "miniz.h"
 #include "scheduler.h"
 #include "video.h"
 #include "support.h"
@@ -1475,7 +1475,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					{
 						const char *ext = extension;
 						int found = (has_trd && x2trd_ext_supp(de->d_name));
-						if (!found && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip") && (options & SCANO_DIR))
+						if (!found && !(options & SCANO_NOZIP) && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip") && (options & SCANO_DIR))
 						{
 							// Fake that zip-file is a directory.
 							de->d_type = DT_DIR;

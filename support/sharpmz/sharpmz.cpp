@@ -2296,7 +2296,7 @@ int sharpmz_default_ui_state(void)
 //
 void sharpmz_ui(int      idleState,    int      idle2State,    int        systemState,    int      selectFile,
                 uint32_t *parentstate, uint32_t *menustate,    uint32_t   *menusub,       uint32_t *menusub_last,
-                uint64_t *menumask,    char     *selectedPath, const char **helptext,     char     *helptext_custom,
+                uint64_t *menumask,    char     *selectedPath, int        *helptext_idx,  char     *helptext_custom,
                 uint32_t *fs_ExtLen,   uint32_t *fs_Options,   uint32_t   *fs_MenuSelect, uint32_t *fs_MenuCancel,
                 char     *fs_pFileExt,
                 unsigned char menu,    unsigned char select,   unsigned char up,          unsigned char down,
@@ -2422,7 +2422,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             strcat(helptext_custom, OsdCoreNameGet());
             strcat(helptext_custom, "                                ");
             strcat(helptext_custom, SHARPMZ_HELPTEXT[0]);
-            *helptext = helptext_custom;
+            *helptext_idx = 1;
             break;
 
         case MENU_SHARPMZ_MAIN2:

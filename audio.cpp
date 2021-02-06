@@ -209,6 +209,11 @@ void load_volume()
 	if (!FileLoadConfig(filter_cfg_path, &filter_cfg, sizeof(filter_cfg) - 1) || filter_cfg[0] > 1)
 	{
 		memset(filter_cfg, 0, sizeof(filter_cfg));
+		if (cfg.afilter_default[0])
+		{
+			strcpy(filter_cfg + 1, cfg.afilter_default);
+			filter_cfg[0] = 1;
+		}
 	}
 
 	FileLoadConfig("Volume.dat", &vol_att, 1);

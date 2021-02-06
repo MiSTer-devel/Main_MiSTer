@@ -31,6 +31,8 @@ typedef struct {
 	char acsi_img[2][1024];
 	char video_adjust[2];
 	char cdc_control_redirect;
+	char reserved;
+	uint32_t ext_ctrl;
 } tos_config_t;
 
 static tos_config_t config;
@@ -61,19 +63,28 @@ static const char *acsi_cmd_name(int cmd) {
 	return cmdname[cmd];
 }
 
-static int uart_mode = 0;
 static void set_control(uint32_t ctrl)
 {
-	ctrl = uart_mode ? (ctrl | TOS_CONTROL_REDIR0) : (ctrl & ~TOS_CONTROL_REDIR0);
-
 	spi_uio_cmd_cont(UIO_SET_STATUS2);
 	spi32_w(ctrl);
+	spi32_w(config.ext_ctrl);
 	DisableIO();
 }
 
 void tos_update_sysctrl(uint32_t ctrl)
 {
 	config.system_ctrl = ctrl;
+	set_control(config.system_ctrl);
+}
+
+uint32_t tos_get_extctrl()
+{
+	return config.ext_ctrl;
+}
+
+void tos_set_extctrl(uint32_t ext_ctrl)
+{
+	config.ext_ctrl = ext_ctrl;
 	set_control(config.system_ctrl);
 }
 
@@ -98,12 +109,6 @@ void tos_set_ar(int ar)
 
 	if (ar & 2) config.system_ctrl |= TOS_CONTROL_VIDEO_AR2;
 	else config.system_ctrl &= ~TOS_CONTROL_VIDEO_AR2;
-}
-
-void tos_uart_mode(int enable)
-{
-	uart_mode = enable;
-	set_control(config.system_ctrl);
 }
 
 static void memory_read(uint8_t *data, uint32_t words)
@@ -603,7 +608,7 @@ void tos_config_load(int slot)
 	name[7] = '0' + new_slot;
 	int len = FileLoadConfig(name, 0, 0);
 	tos_debugf("Configuration file size: %d (should be %d)", len, sizeof(tos_config_t));
-	if (len == sizeof(tos_config_t)) FileLoadConfig(name, &config, sizeof(tos_config_t));
+	FileLoadConfig(name, &config, sizeof(tos_config_t));
 
 	// ethernet is auto detected later
 	config.system_ctrl &= ~TOS_CONTROL_ETHERNET;
@@ -636,7 +641,7 @@ const char* tos_get_cfg_string(int num)
 	memset(&tmp, 0, sizeof(tmp));
 
 	int len = FileLoadConfig(name, 0, 0);
-	if (len == sizeof(tos_config_t))
+	if (len)
 	{
 		FileLoadConfig(name, &tmp, sizeof(tos_config_t));
 

@@ -5,6 +5,7 @@
 
 void HandleUI(void);
 void menu_key_set(unsigned int c);
+void menu_process_save();
 void PrintDirectory(int expand = 0);
 void ScrollLongName(void);
 
@@ -17,7 +18,7 @@ uint32_t getStatus(char *opt, uint32_t status);
 void substrcpy(char *d, char *s, char idx);
 
 void open_joystick_setup();
-int menu_lightgun_cb(uint16_t type, uint16_t code, int value);
+int menu_lightgun_cb(int idx, uint16_t type, uint16_t code, int value);
 
 int menu_allow_cfg_switch();
 

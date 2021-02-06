@@ -76,6 +76,11 @@ static const ini_var_t ini_vars[] =
 	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), UINT16, 0, 0xFFFF },
 	{ "CUSTOM_ASPECT_RATIO_1", (void*)(&(cfg.custom_aspect_ratio[0])), STRING, 0, sizeof(cfg.custom_aspect_ratio[0]) - 1 },
 	{ "CUSTOM_ASPECT_RATIO_2", (void*)(&(cfg.custom_aspect_ratio[1])), STRING, 0, sizeof(cfg.custom_aspect_ratio[1]) - 1 },
+	{ "SPINNER_VID", (void*)(&(cfg.spinner_vid)), UINT16, 0, 0xFFFF },
+	{ "SPINNER_PID", (void*)(&(cfg.spinner_pid)), UINT16, 0, 0xFFFF },
+	{ "SPINNER_THROTTLE", (void*)(&(cfg.spinner_throttle)), INT32, -10000, 10000 },
+	{ "AFILTER_DEFAULT", (void*)(&(cfg.afilter_default)), STRING, 0, sizeof(cfg.afilter_default) - 1 },
+	{ "VFILTER_DEFAULT", (void*)(&(cfg.vfilter_default)), STRING, 0, sizeof(cfg.vfilter_default) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -127,9 +132,10 @@ static int ini_getline(char* line)
 		if (i >= (INI_LINE_SIZE - 1) || CHAR_IS_COMMENT(c)) ignore = 1;
 
 		if (CHAR_IS_LINEEND(c)) break;
-		if (CHAR_IS_VALID(c) && !ignore && !skip) line[i++] = c;
+		if ((CHAR_IS_SPACE(c) || CHAR_IS_VALID(c)) && !ignore && !skip) line[i++] = c;
 	}
 	line[i] = '\0';
+	while (i > 0 && CHAR_IS_SPACE(line[i - 1])) line[--i] = 0;
 	return c == 0 ? INI_EOT : 0;
 }
 
@@ -185,7 +191,7 @@ static void ini_parse_var(char* buf)
 	// find var
 	while (1)
 	{
-		if (buf[i] == '=')
+		if (buf[i] == '=' || CHAR_IS_SPACE(buf[i]))
 		{
 			buf[i] = '\0';
 			break;
@@ -210,8 +216,10 @@ static void ini_parse_var(char* buf)
 	// get data
 	if (var_id != -1)
 	{
-		ini_parser_debugf("Got VAR '%s' with VALUE %s", buf, &(buf[i + 1]));
 		i++;
+		while (buf[i] == '=' || CHAR_IS_SPACE(buf[i])) i++;
+		ini_parser_debugf("Got VAR '%s' with VALUE %s", buf, buf+i);
+
 		switch (ini_vars[var_id].type)
 		{
 		case UINT8:

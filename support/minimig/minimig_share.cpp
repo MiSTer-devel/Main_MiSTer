@@ -27,6 +27,10 @@ static uint8_t *shmem = 0;
 #define REQUEST_BUFFER  4      // ~512B
 #define DATA_BUFFER     0x1000 // 4KB
 
+// Must match device name in MountList and volume name from MiSTerFileSystem
+#define DEVICE_NAME     "SHARE"
+#define VOLUME_NAME     "MiSTer"
+
 //#define DEBUG
 
 #ifdef DEBUG
@@ -124,7 +128,12 @@ static char* find_path(uint32_t key, const char *name)
 	const char* p = strchr(name, ':');
 	if (p)
 	{
-		key = 0;
+		size_t root_len = p - name;
+
+		// Don't use lock for relative path if the name contains our root
+		if (root_len == 0 || !strncasecmp(name, DEVICE_NAME, root_len) || !strncasecmp(name, VOLUME_NAME, root_len))
+			key = 0;
+
 		name = p + 1;
 	}
 
@@ -216,6 +225,21 @@ static char* find_path(uint32_t key, const char *name)
 
 	dbg_print("returned path: %s\n", str);
 	return str;
+}
+
+static void fill_date(time_t time, int date[3])
+{
+	time_t days = time / 86400;
+	time_t left = time - (days * 86400);
+	time_t mins = left / 60;
+	time_t secs = left - (mins * 60);
+	time_t ticks = secs * 50;
+	days -= 2922; // Days between 1970 - 01 - 01 and 1978 - 01 - 01
+	if (days < 0) days = 0;
+	
+	date[0] = SWAP_INT(days);
+	date[1] = SWAP_INT(mins);
+	date[2] = SWAP_INT(ticks);
 }
 
 static int process_request(void *reqres_buffer)
@@ -465,26 +489,75 @@ static int process_request(void *reqres_buffer)
 				}
 			}
 
-			time_t days = time / 86400;
-			time_t left = time - (days * 86400);
-			time_t mins = left / 60;
-			time_t secs = left - (mins * 60);
-			time_t ticks = secs * 50;
-			days -= 2922; // Days between 1970 - 01 - 01 and 1978 - 01 - 01
-			if (days < 0) days = 0;
-
 			res->disk_key = SWAP_INT(disk_key);
 			res->entry_type = SWAP_INT(type);
 			res->size = SWAP_INT(size);
 			res->protection = 0;
-			res->date[0] = SWAP_INT(days);
-			res->date[1] = SWAP_INT(mins);
-			res->date[2] = SWAP_INT(ticks);
+			fill_date(time, res->date);
 
 			res->file_name[0] = strlen(fn);
 			strcpy(res->file_name + 1, fn);
 
 			sz_res = sizeof(ExamineObjectResponse) + strlen(fn);
+			ret = 0;
+		}
+		break;
+
+		case ACTION_EXAMINE_FH:
+		{
+			dbg_print("> ACTION_EXAMINE_FH\n");
+			ExamineFhRequest *req = (ExamineFhRequest*)reqres_buffer;
+			ExamineFhResponse *res = (ExamineFhResponse*)reqres_buffer;
+			sz_res = sizeof(ExamineFhResponse);
+			
+			uint32_t key = SWAP_INT(req->arg1);
+			dbg_print("  key: %d\n", key);
+			
+			if (open_file_handles.find(key) == open_file_handles.end())
+			{
+				ret = ERROR_OBJECT_NOT_FOUND;
+				break;
+			}
+
+			const char *fn = open_file_handles[key].name;
+			int disk_key = 666;
+			int type = 0;
+			time_t time = 0;
+			uint32_t size = 0;
+
+			struct stat64 st;
+			if (fstat64(fileno(open_file_handles[key].filp), &st) == 0)
+			{
+				time = st.st_mtime;
+				if (st.st_mode & S_IFDIR) type = ST_USERDIR;
+				else
+				{
+					type = ST_FILE;
+					if (st.st_size > UINT32_MAX) size = UINT32_MAX;
+					else size = (uint32_t)st.st_size;
+				}
+			}
+			else
+			{
+				dbg_print("Couldn't stat %s: %d\n", fn, errno);
+				ret = ERROR_OBJECT_NOT_FOUND;
+				break;
+			}
+			
+			dbg_print("    fn: %s\n", fn);
+			dbg_print("    size: %lld\n", open_file_handles[key].size);
+			dbg_print("    type: %d\n", type);
+			
+			res->disk_key = SWAP_INT(disk_key);
+			res->entry_type = SWAP_INT(type);
+			res->size = SWAP_INT(size);
+			res->protection = 0;
+			fill_date(time, res->date);
+
+			res->file_name[0] = strlen(fn);
+			strcpy(res->file_name + 1, fn);
+
+			sz_res = sizeof(ExamineFhResponse) + strlen(fn);
 			ret = 0;
 		}
 		break;
@@ -502,7 +575,7 @@ static int process_request(void *reqres_buffer)
 
 			if (!name[0])
 			{
-				ret = ERROR_DIR_NOT_FOUND;
+				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
 			}
 
@@ -591,10 +664,10 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
-			uint32_t old_pos = open_file_handles[key].offset;
+			int old_pos = open_file_handles[key].offset;
 
-			uint32_t new_pos = SWAP_INT(req->new_pos);
-			uint32_t mode = SWAP_INT(req->mode);
+			int new_pos = SWAP_INT(req->new_pos);
+			int mode = SWAP_INT(req->mode);
 
 			int origin = SEEK_SET;
 			if (mode == OFFSET_CURRENT) origin = SEEK_CUR;
@@ -694,6 +767,16 @@ static int process_request(void *reqres_buffer)
 				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
 			}
+			
+			strcpy(buf, getFullPath(buf));
+			const char *fp2 = getFullPath(cp2);
+
+			// Identical match; do nothing
+			if (!strcmp(buf, fp2))
+			{
+				ret = 0;
+				break;
+			}
 
 			if (FileExists(cp2, 0) || PathIsDir(cp2, 0))
 			{
@@ -701,8 +784,7 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
-			strcpy(buf, getFullPath(buf));
-			if (rename(buf, getFullPath(cp2)))
+			if (rename(buf, fp2))
 			{
 				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
@@ -770,6 +852,30 @@ static int process_request(void *reqres_buffer)
 		{
 			dbg_print("> ACTION_SET_COMMENT unimplemented\n");
 			ret = 0;
+		}
+		break;
+
+		case ACTION_SAME_LOCK:
+		{
+			dbg_print("> ACTION_SAME_LOCK\n");
+			SameLockRequest *req = (SameLockRequest*)reqres_buffer;
+
+			uint32_t key1 = SWAP_INT(req->key1);
+			uint32_t key2 = SWAP_INT(req->key2);
+			
+			if ((locks.find(key1) == locks.end()) || (locks.find(key2) == locks.end()))
+			{
+				ret = LOCK_DIFFERENT;
+				break;
+			}
+			
+			if (locks[key1].path == locks[key2].path)
+			{
+				ret = LOCK_SAME;
+				break;
+			}
+
+			ret = LOCK_SAME_VOLUME;
 		}
 		break;
 	}

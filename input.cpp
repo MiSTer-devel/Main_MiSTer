@@ -853,6 +853,8 @@ enum QUIRK
 	QUIRK_PDSP,
 	QUIRK_PDSP_ARCADE,
 	QUIRK_JAMMA,
+	QUIRK_MSSP,
+	QUIRK_TOUCHGUN,
 };
 
 typedef struct
@@ -882,17 +884,23 @@ typedef struct
 	uint16_t guncal[4];
 
 	int      accx, accy;
+	int      startx, starty;
+	int      lastx, lasty;
 	int      quirk;
 
 	int      misc_flags;
-	int      mc_a;
+	int      paddle_val;
+	int      spinner_acc;
+	int      spinner_prediv;
+	int      old_btn;
+	int      ds_mouse_emu;
 
 	int      lightgun_req;
 	int      lightgun;
 
 	int      bind;
 	char     devname[32];
-	char     id[64];
+	char     id[80];
 	char     name[128];
 } devInput;
 
@@ -1162,20 +1170,27 @@ void finish_map_setting(int dismiss)
 	}
 }
 
-void input_lightgun_cal(uint16_t *cal)
+void input_lightgun_save(int idx, uint16_t *cal)
 {
-	FileSaveConfig("wiimote_cal.cfg", cal, 4 * sizeof(uint16_t));
-	for (int i = 0; i < NUMDEV; i++)
-	{
-		if (input[i].quirk == QUIRK_WIIMOTE) memcpy(input[i].guncal, cal, sizeof(input[i].guncal));
-	}
+	static char name[128];
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	FileSaveConfig(name, cal, 4 * sizeof(uint16_t));
+	memcpy(input[idx].guncal, cal, sizeof(input[idx].guncal));
+}
+
+static void input_lightgun_load(int idx)
+{
+	static char name[128];
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	FileLoadConfig(name, input[idx].guncal, 4 * sizeof(uint16_t));
 }
 
 int input_has_lightgun()
 {
 	for (int i = 0; i < NUMDEV; i++)
 	{
-		if (input[i].quirk == QUIRK_WIIMOTE) return 1;
+		if (input[i].quirk == QUIRK_WIIMOTE)  return 1;
+		if (input[i].quirk == QUIRK_TOUCHGUN) return 1;
 	}
 	return 0;
 }
@@ -1687,7 +1702,7 @@ void reset_players()
 
 void store_player(int num, int dev)
 {
-	devInput *player = (input[dev].quirk == QUIRK_PDSP) ? player_pdsp : player_pad;
+	devInput *player = (input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) ? player_pdsp : player_pad;
 
 	// remove possible old assignment
 	for (int i = 1; i < NUMPLAYERS; i++) if (!strcmp(player[i].id, input[dev].id)) player[i].id[0] = 0;
@@ -1700,7 +1715,7 @@ void restore_player(int dev)
 	// do not restore bound devices
 	if (dev != input[dev].bind) return;
 
-	devInput *player = (input[dev].quirk == QUIRK_PDSP) ? player_pdsp : player_pad;
+	devInput *player = (input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) ? player_pdsp : player_pad;
 	for (int k = 1; k < NUMPLAYERS; k++)
 	{
 		if (strlen(player[k].id) && !strcmp(player[k].id, input[dev].id))
@@ -1734,8 +1749,6 @@ void unflag_players()
 	}
 }
 
-static int ds_mouse_emu = 0;
-
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	if (ev->type != EV_KEY && ev->type != EV_ABS && ev->type != EV_REL) return;
@@ -1766,7 +1779,15 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].has_mmap)
 	{
-		if (input[dev].quirk != QUIRK_PDSP)
+		if (input[dev].quirk == QUIRK_TOUCHGUN)
+		{
+			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
+			input[dev].mmap[SYS_AXIS_MX] = -1;
+			input[dev].mmap[SYS_AXIS_MY] = -1;
+			input[dev].mmap[SYS_AXIS_X] = -1;
+			input[dev].mmap[SYS_AXIS_Y] = -1;
+		}
+		else if (input[dev].quirk != QUIRK_PDSP && input[dev].quirk != QUIRK_MSSP)
 		{
 			if (!load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 			{
@@ -1780,7 +1801,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].has_map)
 	{
-		if (input[dev].quirk == QUIRK_PDSP)
+		if (input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP)
 		{
 			memset(input[dev].map, 0, sizeof(input[dev].map));
 			input[dev].map[map_paddle_btn()] = 0x120;
@@ -1807,8 +1828,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].num)
 	{
-		int assign_btn = (input[dev].quirk == QUIRK_PDSP && ev->type == EV_REL);
-		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1)
+		int assign_btn = ((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) && (ev->type == EV_REL || ev->type == EV_KEY));
+		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1 && ev->code >= 256)
 		{
 			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_START; i++) if (ev->code == input[dev].mmap[i]) assign_btn = 1;
 		}
@@ -1820,11 +1841,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				int found = 0;
 				for (int i = 0; i < NUMDEV; i++)
 				{
-					// paddles/spinners overlay on top of other gamepad
-					if (!((input[dev].quirk == QUIRK_PDSP) ^ (input[i].quirk == QUIRK_PDSP)))
+					if (input[i].quirk != QUIRK_TOUCHGUN)
 					{
-						found = (input[i].num == num);
-						if (found) break;
+						// paddles/spinners overlay on top of other gamepad
+						if (!((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) ^ (input[i].quirk == QUIRK_PDSP || input[i].quirk == QUIRK_MSSP)))
+						{
+							found = (input[i].num == num);
+							if (found) break;
+						}
 					}
 				}
 
@@ -1846,7 +1870,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 		if (cfg.controller_info)
 		{
-			if (input[dev].quirk == QUIRK_PDSP)
+			if (input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP)
 			{
 				char str[32];
 				sprintf(str, "P%d paddle/spinner", input[dev].num);
@@ -1905,7 +1929,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	//mapping
 	if (mapping && (mapping_dev >= 0 || ev->value)
 		&& !((mapping_type < 2 || !mapping_button) && (cancel || enter))
-		&& input[dev].quirk != QUIRK_PDSP)
+		&& input[dev].quirk != QUIRK_PDSP
+		&& input[dev].quirk != QUIRK_MSSP)
 	{
 		int idx = 0;
 
@@ -2368,7 +2393,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (ev->code == input[dev].mmap[SYS_MS_BTN_EMU] && (ev->value <= 1) && ((!(mouse_emu & 1)) ^ (!ev->value)))
 					{
 						mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
-						if (input[sub_dev].quirk == QUIRK_DS4) ds_mouse_emu = mouse_emu & 1;
+						if (input[sub_dev].quirk == QUIRK_DS4) input[dev].ds_mouse_emu = mouse_emu & 1;
 						printf("mouse_emu = %d\n", mouse_emu);
 						if (mouse_emu & 2)
 						{
@@ -2578,7 +2603,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (!input[dev].num) break;
 
 					int offset = 0;
-					if (value < -1 || value>1) offset = value;
+					if (value < -1 || value>1 || input[dev].lightgun) offset = value;
 					//printf("analog_x = %d\n", offset);
 					joy_analog(input[dev].num, 0, offset);
 					return;
@@ -2589,7 +2614,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (!input[dev].num) break;
 
 					int offset = 0;
-					if (value < -1 || value>1) offset = value;
+					if (value < -1 || value>1 || input[dev].lightgun) offset = value;
 					//printf("analog_y = %d\n", offset);
 					joy_analog(input[dev].num, 1, offset);
 					return;
@@ -2772,6 +2797,30 @@ void mergedevs()
 				input[i].quirk = input[j].quirk;
 				memcpy(input[i].name, input[j].name, sizeof(input[i].name));
 				memcpy(input[i].idstr, input[j].idstr, sizeof(input[i].idstr));
+
+				if (!input[i].quirk)
+				{
+					//All mice as spinners
+					if ((cfg.spinner_vid == 0xFFFF && cfg.spinner_pid == 0xFFFF)
+
+						//Mouse as spinner
+						|| (cfg.spinner_vid && cfg.spinner_pid && input[i].vid == cfg.spinner_vid && input[i].pid == cfg.spinner_pid))
+					{
+						input[i].quirk = QUIRK_MSSP;
+						input[i].bind = i;
+						input[i].spinner_prediv = 1;
+					}
+
+					//Arcade Spinner TS-BSP01
+					if (input[i].vid == 0x32be && input[i].pid == 0x1420)
+					{
+						input[i].quirk = QUIRK_MSSP;
+						input[i].bind = i;
+						input[i].spinner_prediv = 3;
+					}
+
+					if (input[i].quirk == QUIRK_MSSP) strcat(input[i].id, "_sp");
+				}
 				break;
 			}
 		}
@@ -2828,12 +2877,179 @@ static struct
 	{KEY_L,         2, 0x12D}, // 2P 8
 };
 
+void send_mouse_with_throttle(int dev, int xval, int yval, int btn, uint8_t data_3)
+{
+	int i = dev;
+	if (input[dev].bind >= 0) dev = input[dev].bind;
+
+	if (is_menu() && !video_fb_state()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, btn, xval, yval, data_3);
+
+	int throttle = cfg.mouse_throttle ? cfg.mouse_throttle : 1;
+	if (input[dev].ds_mouse_emu) throttle *= 4;
+	if (input[dev].quirk == QUIRK_TOUCHGUN) throttle *= 12;
+
+	input[i].accx += xval;
+	xval = input[i].accx / throttle;
+	input[i].accx -= xval * throttle;
+
+	input[i].accy -= yval;
+	yval = input[i].accy / throttle;
+	input[i].accy -= yval * throttle;
+
+	mice_btn = btn & 7;
+	if (input[dev].ds_mouse_emu) mice_btn = (mice_btn & 4) | ((mice_btn & 1) << 1);
+
+	mouse_cb(mouse_btn | mice_btn, xval, yval, data_3);
+}
+
+static uint32_t touch_rel = 0;
+void touchscreen_proc(int dev, input_event *ev)
+{
+	struct input_absinfo absinfo;
+	int i = dev;
+	if (input[dev].bind >= 0) dev = input[dev].bind;
+
+	if (ev->type == EV_KEY)
+	{
+		if (ev->value == 1)
+		{
+			input[i].misc_flags = 0xC0;
+			touch_rel = 0;
+
+			ioctl(pool[i].fd, EVIOCGABS(ABS_X), &absinfo);
+			input[i].lastx = absinfo.value;
+			input[i].startx = absinfo.value;
+
+			ioctl(pool[i].fd, EVIOCGABS(ABS_Y), &absinfo);
+			input[i].lasty = absinfo.value;
+			input[i].starty = absinfo.value;
+		}
+		else
+		{
+			input[i].misc_flags = 0;
+			mice_btn = 0;
+
+			if (input[dev].lightgun)
+			{
+				menu_lightgun_cb(i, EV_KEY, 0x131, 0);
+			}
+			else
+			{
+				if (abs(input[i].lastx - input[i].startx) < 8 && abs(input[i].lasty - input[i].starty) < 8)
+				{
+					mice_btn |= 1;
+					touch_rel = GetTimer(100);
+				}
+			}
+
+			mouse_cb(mice_btn);
+		}
+	}
+	else if (ev->type == EV_ABS && ev->code == ABS_MT_SLOT && ev->value == 3 && (input[i].misc_flags & 0x80))
+	{
+		input[i].misc_flags = 0;
+		mice_btn = 0;
+		mouse_cb(mice_btn);
+		input[dev].lightgun = !input[dev].lightgun;
+		Info(input[dev].lightgun ? "Light Gun mode is ON" : "Light Gun mode is OFF");
+	}
+
+	if (input[dev].lightgun)
+	{
+		if (ev->type == EV_KEY && ev->value == 1)
+		{
+			mice_btn |= 1;
+			mouse_cb(mice_btn);
+			menu_lightgun_cb(i, EV_KEY, 0x131, 1);
+		}
+		else if (ev->type == EV_ABS)
+		{
+			if (ev->code == ABS_MT_POSITION_X)
+			{
+				ev->code = ABS_X;
+				absinfo.minimum = input[i].guncal[2];
+				absinfo.maximum = input[i].guncal[3];
+				menu_lightgun_cb(i, ev->type, ev->code, ev->value);
+				input_cb(ev, &absinfo, i);
+			}
+			else if (ev->code == ABS_MT_POSITION_Y)
+			{
+				ev->code = ABS_Y;
+				absinfo.minimum = input[i].guncal[0];
+				absinfo.maximum = input[i].guncal[1];
+				menu_lightgun_cb(i, ev->type, ev->code, ev->value);
+				input_cb(ev, &absinfo, i);
+			}
+			else if (ev->code == ABS_MT_SLOT && (input[i].misc_flags & 0x80))
+			{
+				if (ev->value == 1) input[i].misc_flags |= 1;
+				if (ev->value == 2) input[i].misc_flags |= 2;
+
+				if (input[i].misc_flags & 2) mice_btn = 4;
+				else if (input[i].misc_flags & 1) mice_btn = 2;
+				else mice_btn = 1;
+
+				mouse_cb(mice_btn);
+			}
+		}
+	}
+	else
+	{
+		if (ev->type == EV_ABS)
+		{
+			if (input[i].misc_flags & 0x80)
+			{
+				if (ev->code == ABS_MT_SLOT)
+				{
+					if (ev->value) input[i].misc_flags &= ~0x40;
+					else input[i].misc_flags |= 0x40;
+
+					if (ev->value == 1) input[i].misc_flags |= 1;
+					if (ev->value == 2) input[i].misc_flags |= 2;
+
+					if (input[i].misc_flags & 2) mice_btn = 4;
+					else if (input[i].misc_flags & 1) mice_btn = 2;
+
+					mouse_cb(mice_btn);
+				}
+				else if (input[i].misc_flags & 0x40)
+				{
+					if (ev->code == ABS_MT_POSITION_X)
+					{
+						int dx = ev->value - input[i].lastx;
+						if (dx > 255) dx = 255;
+						if (dx < -256) dx = -256;
+						input[i].lastx = ev->value;
+						send_mouse_with_throttle(i, dx, 0, mice_btn, 0);
+					}
+					else if (ev->code == ABS_MT_POSITION_Y)
+					{
+						int dy = ev->value - input[i].lasty;
+						if (dy > 255) dy = 255;
+						if (dy < -256) dy = -256;
+						input[i].lasty = ev->value;
+						send_mouse_with_throttle(i, 0, -dy, mice_btn, 0);
+					}
+				}
+			}
+		}
+	}
+
+}
+
 int input_test(int getchar)
 {
 	static char cur_leds = 0;
 	static int state = 0;
 	struct input_absinfo absinfo;
 	struct input_event ev;
+
+	if (touch_rel && CheckTimer(touch_rel))
+	{
+		touch_rel = 0;
+		mice_btn = 0;
+		mouse_cb(mice_btn);
+	}
 
 	if (state == 0)
 	{
@@ -2932,6 +3148,21 @@ int input_test(int getchar)
 							input[n].lightgun = 1;
 						}
 
+						// RasPad3 touchscreen
+						if (input[n].vid == 0x222a && input[n].pid == 1)
+						{
+							input[n].quirk = QUIRK_TOUCHGUN;
+							input[n].num = 1;
+							input[n].map_shown = 1;
+
+							input[n].lightgun = 0;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 16383;
+							input[n].guncal[2] = 2047;
+							input[n].guncal[3] = 14337;
+							input_lightgun_load(n);
+						}
+
 						if (input[n].vid == 0x054c)
 						{
 							if (input[n].pid == 0x0268)  input[n].quirk = QUIRK_DS3;
@@ -2974,7 +3205,7 @@ int input_test(int getchar)
 								input[n].guncal[1] = 767;
 								input[n].guncal[2] = 1;
 								input[n].guncal[3] = 1023;
-								FileLoadConfig("wiimote_cal.cfg", input[n].guncal, 4 * sizeof(uint16_t));
+								input_lightgun_load(n);
 							}
 						}
 
@@ -3121,6 +3352,12 @@ int input_test(int getchar)
 									}
 								}
 
+								if (input[i].quirk == QUIRK_TOUCHGUN)
+								{
+									touchscreen_proc(i, &ev);
+									continue;
+								}
+
 								if (ev.type == EV_ABS)
 								{
 									if (input[i].quirk == QUIRK_WIIMOTE)
@@ -3204,16 +3441,16 @@ int input_test(int getchar)
 										{
 											if ((input[i].misc_flags & 0x6) == 2)
 											{
-												if (ev.value > 0) input[i].mc_a += 4;
-												if (ev.value < 0) input[i].mc_a -= 4;
+												if (ev.value > 0) input[i].paddle_val += 4;
+												if (ev.value < 0) input[i].paddle_val -= 4;
 
-												if (input[i].mc_a > 256) input[i].mc_a = 256;
-												if (input[i].mc_a < 0)   input[i].mc_a = 0;
+												if (input[i].paddle_val > 256) input[i].paddle_val = 256;
+												if (input[i].paddle_val < 0)   input[i].paddle_val = 0;
 
 												absinfo.maximum = 255;
 												absinfo.minimum = 0;
 												ev.code = 8;
-												ev.value = input[i].mc_a;
+												ev.value = input[i].paddle_val;
 											}
 											else
 											{
@@ -3366,7 +3603,7 @@ int input_test(int getchar)
 
 								if (ev.type == EV_ABS && input[i].quirk == QUIRK_WIIMOTE && input[dev].lightgun)
 								{
-									menu_lightgun_cb(ev.type, ev.code, ev.value);
+									menu_lightgun_cb(i, ev.type, ev.code, ev.value);
 
 									// don't pass IR tracking to OSD
 									if (user_io_osd_is_visible()) continue;
@@ -3387,14 +3624,14 @@ int input_test(int getchar)
 								{
 									if (input[i].quirk == QUIRK_WIIMOTE)
 									{
-										if (menu_lightgun_cb(ev.type, ev.code, ev.value)) continue;
+										if (menu_lightgun_cb(i, ev.type, ev.code, ev.value)) continue;
 									}
 								}
 
 								if (!noabs) input_cb(&ev, &absinfo, i);
 
 								//sumulate digital directions from analog
-								if (ev.type == EV_ABS && !(mapping && mapping_type <= 1 && mapping_button < -4) && !(ev.code <= 1 && input[dev].lightgun) && input[dev].quirk != QUIRK_PDSP)
+								if (ev.type == EV_ABS && !(mapping && mapping_type <= 1 && mapping_button < -4) && !(ev.code <= 1 && input[dev].lightgun) && input[dev].quirk != QUIRK_PDSP && input[dev].quirk != QUIRK_MSSP)
 								{
 									input_absinfo *pai = 0;
 									uint8_t axis_edge = 0;
@@ -3454,7 +3691,6 @@ int input_test(int getchar)
 					else
 					{
 						uint8_t data[4] = {};
-						static int accx = 0, accy = 0;
 						if (read(pool[i].fd, data, sizeof(data)))
 						{
 							int edev = i;
@@ -3468,27 +3704,62 @@ int input_test(int getchar)
 								continue;
 							}
 
-							int xval, yval, throttle = 1;
+							if (input[i].quirk == QUIRK_TOUCHGUN)
+							{
+								//don't use original raspad3 emulated mouse
+								continue;
+							}
+
+							int xval, yval;
 							xval = ((data[0] & 0x10) ? -256 : 0) | data[1];
 							yval = ((data[0] & 0x20) ? -256 : 0) | data[2];
 
-							if (is_menu() && !video_fb_state()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, data[0], xval, yval, (int8_t)data[3]);
+							input_absinfo absinfo = {};
+							absinfo.maximum = 255;
+							absinfo.minimum = 0;
 
-							if (cfg.mouse_throttle) throttle = cfg.mouse_throttle;
-							if (ds_mouse_emu) throttle *= 4;
+							if (input[dev].quirk == QUIRK_MSSP)
+							{
+								int btn = (data[0] & 7) ? 1 : 0;
+								if (input[i].misc_flags != btn)
+								{
+									input[i].misc_flags = btn;
+									ev.value = btn;
+									ev.type = EV_KEY;
+									ev.code = 0x120;
+									input_cb(&ev, &absinfo, i);
+								}
 
-							accx += xval;
-							xval = accx / throttle;
-							accx -= xval * throttle;
+								int throttle = (cfg.spinner_throttle ? abs(cfg.spinner_throttle) : 100) * input[i].spinner_prediv;
+								int inv = cfg.spinner_throttle < 0;
 
-							accy -= yval;
-							yval = accy / throttle;
-							accy -= yval * throttle;
+								input[i].spinner_acc += (xval * 100);
+								int spinner = (input[i].spinner_acc <= -throttle || input[i].spinner_acc >= throttle) ? (input[i].spinner_acc / throttle) : 0;
+								input[i].spinner_acc -= spinner * throttle;
 
-							mice_btn = data[0] & 7;
-							if (ds_mouse_emu) mice_btn = (mice_btn & 4) | ((mice_btn & 1) << 1);
+								if (spinner)
+								{
+									ev.value = inv ? -spinner : spinner;
+									ev.type = EV_REL;
+									ev.code = 7;
+									input_cb(&ev, &absinfo, i);
 
-							mouse_cb(mouse_btn | mice_btn, xval, yval, (int8_t)data[3]);
+									input[i].paddle_val += ev.value;
+									if (input[i].paddle_val < 0) input[i].paddle_val = 0;
+									if (input[i].paddle_val > 255) input[i].paddle_val = 255;
+
+									ev.value = input[i].paddle_val;
+									ev.type = EV_ABS;
+									ev.code = 8;
+									input_cb(&ev, &absinfo, i);
+								}
+
+								if (is_menu() && !video_fb_state()) printf("%s: xval=%d, btn=%d, spinner=%d, paddle=%d\n", input[i].devname, xval, btn, spinner, input[i].paddle_val);
+							}
+							else
+							{
+								send_mouse_with_throttle(i, xval, yval, data[0], data[3]);
+							}
 						}
 					}
 				}

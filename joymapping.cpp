@@ -224,10 +224,10 @@ int map_paddle_btn()
 	{
 		if (!strcmp(joy_names[i], "-")) continue;
 		char *p = strchr(defaults ? joy_pnames[n] : joy_nnames[n], '|');
-		if (p && !strcasecmp(p, "|P")) return i + DPAD_COUNT;
+		if (p && !strcasecmp(p, "|P")) return i + SYS_BTN_A;
 		n++;
 	}
-	return DPAD_COUNT;
+	return SYS_BTN_A;
 }
 
 static const char* get_std_name(uint16_t code, uint32_t *mmap)

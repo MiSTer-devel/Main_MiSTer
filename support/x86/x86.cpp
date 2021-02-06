@@ -245,11 +245,18 @@ static int img_mount(fileTYPE *f, const char *name, int rw)
 	FileClose(f);
 	int writable = 0, ret = 0;
 
-	if (strlen(name))
+	int len = strlen(name);
+	if (len)
 	{
-		writable = rw && FileCanWrite(name);
-		ret = FileOpenEx(f, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
-		if (!ret) printf("Failed to open file %s\n", name);
+		const char *ext = name+len-4;
+		if (!strncasecmp(".chd", ext, 4))
+		{
+			ret = 1;
+		} else {
+			writable = rw && FileCanWrite(name);
+			ret = FileOpenEx(f, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+			if (!ret) printf("Failed to open file %s\n", name);
+		}
 	}
 
 	if (!ret)
@@ -807,11 +814,6 @@ void x86_config_load()
 void x86_set_fdd_boot(uint32_t boot)
 {
 	boot_from_floppy = (boot != 0);
-}
-
-void x86_set_uart_mode(int mode)
-{
-	dma_sdio(mode ? 0x40 : 0x80);
 }
 
 const char* x86_get_image_name(int num)

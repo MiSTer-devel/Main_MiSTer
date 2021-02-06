@@ -378,45 +378,43 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	}
 }
 
-void OsdDrawLogo(int row)
+void OsdShiftDown(unsigned char n)
 {
-	int mag = (osd_size / 8);
-	uint n = row * mag;
-
 	osd_start(n);
 
-	for (int k = 0; k < mag; k++)
+	osdbufpos += 22;
+	for (int i = 22; i < 256; i++) osdbuf[osdbufpos++] <<= 1;
+}
+
+
+void OsdDrawLogo(int row)
+{
+	osd_start(row);
+
+	unsigned char bt = 0;
+	const unsigned char *lp = logodata[row];
+	int bytes = sizeof(logodata[0]);
+	if ((uint)row >= (sizeof(logodata) / sizeof(logodata[0]))) lp = 0;
+
+	char *bg = framebuffer[row];
+
+	int i = 0;
+	while(i < OSDLINELEN)
 	{
-		unsigned char bt = 0;
-		const unsigned char *lp = logodata[row];
-		int bytes = sizeof(logodata[0]);
-		if ((uint)row >= (sizeof(logodata) / sizeof(logodata[0]))) lp = 0;
-
-		char *bg = framebuffer[n + k];
-
-		int i = 0;
-		while(i < OSDLINELEN)
+		if (i == 0)
 		{
-			if (i == 0)
-			{
-				draw_title(&titlebuffer[(osd_size - 1 - n - k) * 8]);
-				i += 22;
-			}
-
-			if(lp && bytes)
-			{
-				bt = *lp++;
-				if(mag > 1)
-				{
-					if (k) bt >>= 4;
-					bt = (bt & 1) | ((bt & 1) << 1) | ((bt & 2) << 1) | ((bt & 2) << 2) | ((bt & 4) << 2) | ((bt & 4) << 3) | ((bt & 8) << 3) | ((bt & 8) << 4);
-				}
-				bytes--;
-			}
-
-			osdbuf[osdbufpos++] = bt | *bg++;
-			++i;
+			draw_title(&titlebuffer[(osd_size - 1 - row) * 8]);
+			i += 22;
 		}
+
+		if(lp && bytes)
+		{
+			bt = *lp++;
+			bytes--;
+		}
+
+		osdbuf[osdbufpos++] = bt | *bg++;
+		++i;
 	}
 }
 

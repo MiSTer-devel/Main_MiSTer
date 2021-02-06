@@ -11,6 +11,7 @@
 #include "../../menu.h"
 #include "../../user_io.h"
 #include "../../input.h"
+#include "../../cfg.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
@@ -377,6 +378,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	minimig_ConfigVideo(minimig_config.scanlines);
 	minimig_ConfigAudio(minimig_config.audio);
 	minimig_ConfigAutofire(minimig_config.autofire, 0xC);
+	minimig_set_extcfg(minimig_config.ext_cfg & ~1);
 }
 
 int minimig_cfg_load(int num)
@@ -527,6 +529,30 @@ typedef struct
 
 vmode_adjust_t vmodes_adj[64] = {};
 
+static const char* get_shared_vadjust_path()
+{
+	static char path[1024] = {};
+	if (!strlen(path))
+	{
+		if (strlen(cfg.shared_folder))
+		{
+			if (cfg.shared_folder[0] == '/')
+			{
+				snprintf(path, sizeof(path), "%s/minimig_vadjust.dat", cfg.shared_folder);
+			}
+			else
+			{
+				snprintf(path, sizeof(path), "%s/%s/minimig_vadjust.dat", HomeDir(), cfg.shared_folder);
+			}
+		}
+		else
+		{
+			snprintf(path, sizeof(path), "%s/shared/minimig_vadjust.dat", HomeDir());
+		}
+	}
+	return path;
+}
+
 static void adjust_vsize(char force)
 {
 	static uint16_t nres = 0;
@@ -542,7 +568,11 @@ static void adjust_vsize(char force)
 		printf("\033[1;37mVMODE: resolution: %u x %u, mode: %u\033[0m\n", scr_hsize, scr_vsize, res & 255);
 
 		static int loaded = 0;
-		if (~loaded)
+		if (!loaded && FileExists(get_shared_vadjust_path(), 0))
+		{
+			FileLoad(get_shared_vadjust_path(), vmodes_adj, sizeof(vmodes_adj));
+		}
+		else if (!loaded)
 		{
 			FileLoadConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
 			loaded = 1;
@@ -674,4 +704,19 @@ void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask)
 	uint16_t param = mask;
 	param = (param << 8) | autofire;
 	spi_uio_cmd16(UIO_MM2_JOY, param);
+}
+
+void minimig_set_extcfg(unsigned short ext_cfg)
+{
+	minimig_config.ext_cfg = ext_cfg;
+
+	spi_uio_cmd_cont(UIO_SET_STATUS2);
+	spi32_w(0);
+	spi32_w(ext_cfg);
+	DisableIO();
+}
+
+unsigned short minimig_get_extcfg()
+{
+	return minimig_config.ext_cfg;
 }
