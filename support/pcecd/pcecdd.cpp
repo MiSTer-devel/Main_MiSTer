@@ -746,7 +746,8 @@ void pcecdd_t::CommandExec() {
 		CommandError(SENSEKEY_ILLEGAL_REQUEST, NSE_INVALID_COMMAND, 0, 0);
 
 		printf("\x1b[32mPCECD: Command undefined, [0] = %02X, [1] = %02X, [2] = %02X, [3] = %02X, [4] = %02X, [5] = %02X\n\x1b[0m", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5]);
-
+		
+		has_status = 0;
 		SendStatus(MAKE_STATUS(PCECD_STATUS_CHECK_COND, 0));
 
 		break;
