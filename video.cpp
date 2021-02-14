@@ -24,7 +24,7 @@
 #include "support.h"
 #include "lib/imlib2/Imlib2.h"
 
-#define FB_SIZE  (1024*1024*8/4)               // 8MB
+#define FB_SIZE  (1920*1080)
 #define FB_ADDR  (0x20000000 + (32*1024*1024)) // 512mb + 32mb(Core's fb)
 
 /*
@@ -51,9 +51,7 @@
 static volatile uint32_t *fb_base = 0;
 static int fb_enabled = 0;
 static int fb_width = 0;
-static int fb_width_full = 0;
 static int fb_height = 0;
-static int fb_stride = 0;
 static int fb_num = 0;
 static int brd_x = 0;
 static int brd_y = 0;
@@ -485,21 +483,19 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	printf("Fpix=%f\n", v_cur.Fpix);
 	DisableIO();
 
-	if (cfg.fb_size < 1) cfg.fb_size = (v_cur.item[1] < 1000) ? 1 : 2;
+	if (cfg.fb_size <= 1) cfg.fb_size = ((v_cur.item[1] * v_cur.item[5]) <= FB_SIZE) ? 1 : 2;
 	else if (cfg.fb_size == 3) cfg.fb_size = 2;
 	else if (cfg.fb_size > 4) cfg.fb_size = 4;
 
 	fb_width = v_cur.item[1] / cfg.fb_size;
 	fb_height = v_cur.item[5] / cfg.fb_size;
-	fb_stride = ((fb_width * 4) + 255) & ~255;
-	fb_width_full = fb_stride / 4;
 
 	brd_x = cfg.vscale_border / cfg.fb_size;;
 	brd_y = cfg.vscale_border / cfg.fb_size;;
 
 	if (fb_enabled) video_fb_enable(1, fb_num);
 
-	sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_stride);
+	sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_width * 4);
 	system(fb_reset_cmd);
 }
 
@@ -841,8 +837,9 @@ void video_fb_enable(int enable, int n)
 				spi_w(xoff + v_cur.item[1] - 1); // scaled right
 				spi_w(yoff);                 // scaled top
 				spi_w(yoff + v_cur.item[5] - 1); // scaled bottom
+				spi_w(fb_width * 4);      // stride
 
-				printf("HPS frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_stride);
+				printf("HPS frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_width * 4);
 				if (!fb_num)
 				{
 					system(fb_reset_cmd);
@@ -895,7 +892,7 @@ static void draw_checkers()
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
 		int c1 = (y / sz) & 1;
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
 			int c2 = c1 ^ ((x / sz) & 1);
@@ -916,7 +913,7 @@ static void draw_hbars1()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		int base_color = ((7 * (y-brd_y)) / height) + 1;
 		if (old_base != base_color)
 		{
@@ -948,7 +945,7 @@ static void draw_hbars2()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		int base_color = ((14 * (y - brd_y)) / height);
 		int inv = base_color & 1;
 		base_color >>= 1;
@@ -976,7 +973,7 @@ static void draw_vbars1()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		int old_base = 0;
 		int gray = 255;
 		for (int x = brd_x; x < fb_width - brd_x; x++)
@@ -1010,7 +1007,7 @@ static void draw_vbars2()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
 			int gray = ((256 * (y - brd_y)) / height);
@@ -1037,7 +1034,7 @@ static void draw_spectrum()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		int blue = ((256 * (y - brd_y)) / height);
 		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
@@ -1057,7 +1054,7 @@ static void draw_black()
 
 	for (int y = 0; y < fb_height; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		for (int x = 0; x < fb_width; x++) buf[pos++] = 0;
 	}
 }
@@ -1218,9 +1215,9 @@ void video_menu_bg(int n, int idle)
 
 		static Imlib_Image menubg = 0;
 		static Imlib_Image bg1 = 0, bg2 = 0;
-		if (!bg1) bg1 = imlib_create_image_using_data(fb_width_full, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 1)));
+		if (!bg1) bg1 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 1)));
 		if (!bg1) printf("Warning: bg1 is 0\n");
-		if (!bg2) bg2 = imlib_create_image_using_data(fb_width_full, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 2)));
+		if (!bg2) bg2 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 2)));
 		if (!bg2) printf("Warning: bg2 is 0\n");
 
 		Imlib_Image *bg = (menu_bgn == 1) ? &bg1 : &bg2;
@@ -1367,7 +1364,7 @@ void video_menu_bg(int n, int idle)
 		}
 
 		//test the fb driver
-		vs_wait();
+		//vs_wait();
 		printf("**** BG DEBUG END ****\n");
 	}
 
@@ -1497,7 +1494,7 @@ void video_cmd(char *cmd)
 
 		if(accept)
 		{
-			int stride = ((width * bpp) + 255) & ~255;
+			int stride = ((width * bpp) + 15) & ~15;
 			printf("fb_cmd: new mode: %dx%d => %dx%d color=%d stride=%d\n", width, height, hmax - hmin + 1, vmax - vmin + 1, fmt, stride);
 
 			uint32_t addr = FB_ADDR + 4096;
@@ -1519,6 +1516,7 @@ void video_cmd(char *cmd)
 			spi_w(xoff + hmax);    // scaled right
 			spi_w(yoff + vmin);    // scaled top
 			spi_w(yoff + vmax);    // scaled bottom
+			spi_w(stride);         // stride
 			DisableIO();
 
 			if (cmd[6] != '2')
