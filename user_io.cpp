@@ -1856,7 +1856,7 @@ static void check_status_change()
 	}
 }
 
-static char pchar[] = { 0x8C, 0x8F, 0x7F };
+static char pchar[] = { 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
 
 #define PROGRESS_CNT    28
 #define PROGRESS_CHARS  (sizeof(pchar)/sizeof(pchar[0]))
