@@ -36,6 +36,7 @@
 #define CD_COMM_TRAY_OPEN		0x0D
 
 #include "../../cd.h"
+#include <libchdr/chd.h>
 
 class cdd_t
 {
@@ -63,11 +64,13 @@ private:
 	int scanOffset;
 	int audioLength;
 	int audioOffset;
-
+	int chd_hunknum;
+	uint8_t *chd_hunkbuf;
 	uint8_t stat[10];
 	uint8_t comm[10];
 
 	int LoadCUE(const char* filename);
+	int LoadCHD(const char* filename);
 	int SectorSend(uint8_t* header);
 	int SubcodeSend();
 	void ReadData(uint8_t *buf);

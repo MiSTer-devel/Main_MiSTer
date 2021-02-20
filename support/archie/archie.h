@@ -22,4 +22,7 @@ int  archie_get_60();
 void archie_set_afix(char i);
 int  archie_get_afix();
 
+const char *archie_get_hdd_name(int i);
+void archie_hdd_mount(char *filename, int idx);
+
 #endif // ARCHIE_H

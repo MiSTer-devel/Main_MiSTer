@@ -25,7 +25,7 @@
 #include "user_io.h"
 #include "cfg.h"
 #include "input.h"
-#include "miniz_zip.h"
+#include "miniz.h"
 #include "scheduler.h"
 #include "video.h"
 #include "support.h"
@@ -51,6 +51,11 @@ fileTYPE::fileTYPE()
 	zip = 0;
 	size = 0;
 	offset = 0;
+}
+
+fileTYPE::~fileTYPE()
+{
+	FileClose(this);
 }
 
 int fileTYPE::opened()
@@ -85,10 +90,9 @@ static int FileIsZipped(char* path, char** zip_path, char** file_path)
 
 static char* make_fullpath(const char *path, int mode = 0)
 {
-	const char *root = getRootDir();
-	if (strncasecmp(getRootDir(), path, strlen(root)))
+	if (path[0] != '/')
 	{
-		sprintf(full_path, "%s/%s", (mode == -1) ? "" : root, path);
+		sprintf(full_path, "%s/%s", (mode == -1) ? "" : getRootDir(), path);
 	}
 	else
 	{
@@ -104,12 +108,19 @@ static int get_stmode(const char *path)
 	return (stat64(path, &st) < 0) ? 0 : st.st_mode;
 }
 
-static int isPathDirectory(const char *path)
+struct stat64* getPathStat(const char *path)
+{
+	make_fullpath(path);
+	static struct stat64 st;
+	return (stat64(full_path, &st) >= 0) ? &st : NULL;
+}
+
+static int isPathDirectory(const char *path, int use_zip = 1)
 {
 	make_fullpath(path);
 
 	char *zip_path, *file_path;
-	if (FileIsZipped(full_path, &zip_path, &file_path))
+	if (use_zip && FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		mz_zip_archive z{};
 		if (!mz_zip_reader_init_file(&z, zip_path, 0))
@@ -150,7 +161,7 @@ static int isPathDirectory(const char *path)
 		int stmode = get_stmode(full_path);
 		if (!stmode)
 		{
-			printf("isPathDirectory(stat) path: %s, error: %s.\n", full_path, strerror(errno));
+			//printf("isPathDirectory(stat) path: %s, error: %s.\n", full_path, strerror(errno));
 			return 0;
 		}
 
@@ -160,12 +171,12 @@ static int isPathDirectory(const char *path)
 	return 0;
 }
 
-static int isPathRegularFile(const char *path)
+static int isPathRegularFile(const char *path, int use_zip = 1)
 {
 	make_fullpath(path);
 
 	char *zip_path, *file_path;
-	if (FileIsZipped(full_path, &zip_path, &file_path))
+	if (use_zip && FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		mz_zip_archive z{};
 		if (!mz_zip_reader_init_file(&z, zip_path, 0))
@@ -319,7 +330,7 @@ int FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32)
 	return 1;
 }
 
-int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
+int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute, int use_zip)
 {
 	make_fullpath((char*)name, mode);
 	FileClose(file);
@@ -330,7 +341,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute)
 	strcpy(file->name, (mode == -1) ? full_path : p + 1);
 
 	char *zip_path, *file_path;
-	if ((mode != -1) && FileIsZipped(full_path, &zip_path, &file_path))
+	if (use_zip && (mode != -1) && FileIsZipped(full_path, &zip_path, &file_path))
 	{
 		if (mode & O_RDWR || mode & O_WRONLY)
 		{
@@ -478,7 +489,7 @@ int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 			printf("Fail to seek the file: offset=%lld, %s.\n", offset, file->name);
 			return 0;
 		}
-		offset = res;
+		offset = ftello64(file->filp);
 	}
 	else if (file->zip)
 	{
@@ -537,7 +548,7 @@ int FileSeekLBA(fileTYPE *file, uint32_t offset)
 }
 
 // Read with offset advancing
-int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
+int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 {
 	ssize_t ret = 0;
 
@@ -547,7 +558,7 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
 		if (ret < 0)
 		{
 			printf("FileReadAdv error(%d).\n", ret);
-			return 0;
+			return failres;
 		}
 	}
 	else if (file->zip)
@@ -557,14 +568,14 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length)
 		{
 			printf("FileReadEx(mz_zip_reader_extract_iter_read) Failed to read, error:%s\n",
 			       mz_zip_get_error_string(mz_zip_get_last_error(&file->zip->archive)));
-			return 0;
+			return failres;
 		}
 		file->zip->offset += ret;
 	}
 	else
 	{
 		printf("FileReadAdv error(unknown file type).\n");
-		return 0;
+		return failres;
 	}
 
 	file->offset += ret;
@@ -577,7 +588,7 @@ int FileReadSec(fileTYPE *file, void *pBuffer)
 }
 
 // Write with offset advancing
-int FileWriteAdv(fileTYPE *file, void *pBuffer, int length)
+int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 {
 	int ret;
 
@@ -589,18 +600,18 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length)
 		if (ret < 0)
 		{
 			printf("FileWriteAdv error(%d).\n", ret);
-			return 0;
+			return failres;
 		}
 	}
 	else if (file->zip)
 	{
 		printf("FileWriteAdv error(not supported for zip).\n");
-		return 0;
+		return failres;
 	}
 	else
 	{
 		printf("FileWriteAdv error(unknown file type).\n");
-		return 0;
+		return failres;
 	}
 
 	file->offset += ret;
@@ -614,8 +625,7 @@ int FileWriteSec(fileTYPE *file, void *pBuffer)
 
 int FileSave(const char *name, void *pBuffer, int size)
 {
-	if(name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
-	else strcpy(full_path, name);
+	make_fullpath(name);
 
 	int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0)
@@ -638,11 +648,16 @@ int FileSave(const char *name, void *pBuffer, int size)
 
 int FileDelete(const char *name)
 {
-	if (name[0] != '/') sprintf(full_path, "%s/%s", getRootDir(), name);
-	else strcpy(full_path, name);
-
+	make_fullpath(name);
 	printf("delete %s\n", full_path);
 	return !unlink(full_path);
+}
+
+int DirDelete(const char *name)
+{
+	make_fullpath(name);
+	printf("rmdir %s\n", full_path);
+	return !rmdir(full_path);
 }
 
 int FileLoad(const char *name, void *pBuffer, int size)
@@ -688,19 +703,19 @@ int FileDeleteConfig(const char *name)
 	return FileDelete(path);
 }
 
-int FileExists(const char *name)
+int FileExists(const char *name, int use_zip)
 {
-	return isPathRegularFile(name);
+	return isPathRegularFile(name, use_zip);
 }
 
-int PathIsDir(const char *name)
+int PathIsDir(const char *name, int use_zip)
 {
-	return isPathDirectory(name);
+	return isPathDirectory(name, use_zip);
 }
 
 int FileCanWrite(const char *name)
 {
-	sprintf(full_path, "%s/%s", getRootDir(), name);
+	make_fullpath(name);
 
 	if (FileIsZipped(full_path, nullptr, nullptr))
 	{
@@ -728,12 +743,14 @@ static void create_path(const char *base_dir, const char* sub_dir)
 	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
 }
 
-void FileCreatePath(const char *dir)
+int FileCreatePath(const char *dir)
 {
+	int res = 1;
 	if (!isPathDirectory(dir)) {
 		make_fullpath(dir);
-		mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
+		res = !mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
 	}
+	return res;
 }
 
 void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
@@ -820,7 +837,7 @@ void FileGenerateSavestatePath(const char *name, char* out_name)
 
 uint32_t getFileType(const char *name)
 {
-	sprintf(full_path, "%s/%s", getRootDir(), name);
+	make_fullpath(name);
 
 	struct stat64 st;
 	if (stat64(full_path, &st)) return 0;
@@ -916,7 +933,7 @@ const char *getRootDir()
 
 const char *getFullPath(const char *name)
 {
-	sprintf(full_path, "%s/%s", getRootDir(), name);
+	make_fullpath(name);
 	return full_path;
 }
 
@@ -1003,6 +1020,13 @@ void FindStorage(void)
 
 	if(device && !isUSBMounted())
 	{
+		uint8_t core_type = (fpga_core_id() & 0xFF);
+		if (core_type == CORE_TYPE_8BIT)
+		{
+			user_io_read_confstr();
+			user_io_read_core_name();
+		}
+
 		int saveddev = device;
 		device = 0;
 		cfg_parse();
@@ -1013,6 +1037,11 @@ void FindStorage(void)
 		printf("Waiting for USB...\n");
 		int btn = 0;
 		int done = 0;
+
+		OsdWrite(16, "", 1);
+		OsdWrite(17, "       www.MiSTerFPGA.org       ", 1);
+		OsdWrite(18, "", 1);
+
 		for (int i = 30; i >= 0; i--)
 		{
 			sprintf(str, "\n     Waiting for USB...\n\n             %d   \n\n\n  OSD/USER or ESC to cancel", i);
@@ -1219,7 +1248,7 @@ static void get_display_name(direntext_t *dext, const char *ext, int options)
 	if (fext) *fext = 0;
 }
 
-int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix)
+int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix, const char *filter)
 {
 	static char file_name[1024];
 	static char full_path[1024];
@@ -1233,7 +1262,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	}
 
 	int extlen = strlen(extension);
-
+    int filterlen = filter ? strlen(filter) : 0;
 	//printf("scan dir\n");
 
 	if (mode == SCANF_INIT)
@@ -1300,8 +1329,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 		}
 
-		struct dirent *de = nullptr;
-		for (size_t i = 0; (d && (de = readdir(d)))
+		struct dirent64 *de = nullptr;
+		for (size_t i = 0; (d && (de = readdir64(d)))
 				 || (z && i < mz_zip_reader_get_num_files(z)); i++)
 		{
 #ifdef USE_SCHEDULER
@@ -1310,7 +1339,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				scheduler_yield();
 			}
 #endif
-			struct dirent _de = {};
+			struct dirent64 _de = {};
 			if (z) {
 				mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
 				if (!IsInSameFolder(file_path_in_zip, _de.d_name))
@@ -1353,6 +1382,20 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					}
 				}
 			}
+
+            if (filter) {
+                bool passes_filter = false;
+
+                for(const char *str = de->d_name; *str; str++) {
+                    if (strncasecmp(str, filter, filterlen) == 0) {
+                        passes_filter = true;
+                        break;
+                    }
+                }
+
+                if (!passes_filter) continue;
+            }
+
 
 			if (options & SCANO_NEOGEO)
 			{
@@ -1432,7 +1475,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					{
 						const char *ext = extension;
 						int found = (has_trd && x2trd_ext_supp(de->d_name));
-						if (!found && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip") && (options & SCANO_DIR))
+						if (!found && !(options & SCANO_NOZIP) && !strcasecmp(de->d_name + strlen(de->d_name) - 4, ".zip") && (options & SCANO_DIR))
 						{
 							// Fake that zip-file is a directory.
 							de->d_type = DT_DIR;
@@ -1515,16 +1558,26 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		std::sort(DirItem.begin(), DirItem.end(), DirentComp());
 		if (file_name[0])
 		{
+			int pos = -1;
 			for (int i = 0; i < flist_nDirEntries(); i++)
 			{
 				if (!strcmp(file_name, DirItem[i].de.d_name))
 				{
-					iSelectedEntry = i;
-					if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-					else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
-					if (iFirstEntry < 0) iFirstEntry = 0;
+					pos = i;
 					break;
 				}
+				else if (!strcasecmp(file_name, DirItem[i].de.d_name))
+				{
+					pos = i;
+				}
+			}
+
+			if(pos>=0)
+			{
+				iSelectedEntry = pos;
+				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
+				else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
+				if (iFirstEntry < 0) iFirstEntry = 0;
 			}
 		}
 		return flist_nDirEntries();
@@ -1604,16 +1657,26 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 		else if (mode == SCANF_SET_ITEM)
 		{
+			int pos = -1;
 			for (int i = 0; i < flist_nDirEntries(); i++)
 			{
-				if((DirItem[i].de.d_type == DT_DIR) && !strcmp(DirItem[i].altname, extension))
+				if ((DirItem[i].de.d_type == DT_DIR) && !strcmp(DirItem[i].altname, extension))
 				{
-					iSelectedEntry = i;
-					if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-					else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
-					if (iFirstEntry < 0) iFirstEntry = 0;
+					pos = i;
 					break;
 				}
+				else if ((DirItem[i].de.d_type == DT_DIR) && !strcasecmp(DirItem[i].altname, extension))
+				{
+					pos = i;
+				}
+			}
+
+			if(pos>=0)
+			{
+				iSelectedEntry = pos;
+				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
+				else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
+				if (iFirstEntry < 0) iFirstEntry = 0;
 			}
 		}
 		else

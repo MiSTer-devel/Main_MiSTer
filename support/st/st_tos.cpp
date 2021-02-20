@@ -10,6 +10,12 @@
 #include "../../fpga_io.h"
 #include "st_tos.h"
 
+#define ST_WRITE_MEMORY 0x08
+#define ST_READ_MEMORY  0x09
+#define ST_ACK_DMA      0x0a
+#define ST_NAK_DMA      0x0b
+#define ST_GET_DMASTATE 0x0c
+
 #define CONFIG_FILENAME  "ATARIST0.CFG"
 
 const char* tos_mem[] = { "512kb", "1mb", "2mb", "4mb", "8mb", "14mb", "--", "--" };
@@ -25,6 +31,8 @@ typedef struct {
 	char acsi_img[2][1024];
 	char video_adjust[2];
 	char cdc_control_redirect;
+	char reserved;
+	uint32_t ext_ctrl;
 } tos_config_t;
 
 static tos_config_t config;
@@ -55,13 +63,11 @@ static const char *acsi_cmd_name(int cmd) {
 	return cmdname[cmd];
 }
 
-static int uart_mode = 0;
 static void set_control(uint32_t ctrl)
 {
-	ctrl = uart_mode ? (ctrl | TOS_CONTROL_REDIR0) : (ctrl & ~TOS_CONTROL_REDIR0);
-
 	spi_uio_cmd_cont(UIO_SET_STATUS2);
 	spi32_w(ctrl);
+	spi32_w(config.ext_ctrl);
 	DisableIO();
 }
 
@@ -71,15 +77,38 @@ void tos_update_sysctrl(uint32_t ctrl)
 	set_control(config.system_ctrl);
 }
 
+uint32_t tos_get_extctrl()
+{
+	return config.ext_ctrl;
+}
+
+void tos_set_extctrl(uint32_t ext_ctrl)
+{
+	config.ext_ctrl = ext_ctrl;
+	set_control(config.system_ctrl);
+}
+
 unsigned long tos_system_ctrl()
 {
 	return config.system_ctrl;
 }
 
-void tos_uart_mode(int enable)
+int tos_get_ar()
 {
-	uart_mode = enable;
-	set_control(config.system_ctrl);
+	int ar = 0;
+	if (config.system_ctrl & TOS_CONTROL_VIDEO_AR1) ar |= 1;
+	if (config.system_ctrl & TOS_CONTROL_VIDEO_AR2) ar |= 2;
+
+	return ar;
+}
+
+void tos_set_ar(int ar)
+{
+	if (ar & 1) config.system_ctrl |= TOS_CONTROL_VIDEO_AR1;
+	else config.system_ctrl &= ~TOS_CONTROL_VIDEO_AR1;
+
+	if (ar & 2) config.system_ctrl |= TOS_CONTROL_VIDEO_AR2;
+	else config.system_ctrl &= ~TOS_CONTROL_VIDEO_AR2;
 }
 
 static void memory_read(uint8_t *data, uint32_t words)
@@ -368,7 +397,7 @@ static void fill_tx(uint16_t fill, uint32_t len, int index)
 
 	len /= 2;
 	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
+	spi8(FIO_FILE_TX_DAT);
 	while(len--) spi_w(fill);
 	DisableFpga();
 
@@ -405,13 +434,15 @@ void tos_poll()
 	get_dmastate();
 
 	// check the user button
-	if (!user_io_osd_is_visible() && user_io_user_button())
+	if (!user_io_osd_is_visible() && (user_io_user_button() || user_io_get_kbd_reset()))
 	{
 		if (!timer) timer = GetTimer(1000);
 		else if (timer != 1)
 		{
 			if (CheckTimer(timer))
 			{
+				tos_insert_disk(0, "");
+				tos_insert_disk(1, "");
 				tos_reset(1);
 				timer = 1;
 			}
@@ -577,7 +608,7 @@ void tos_config_load(int slot)
 	name[7] = '0' + new_slot;
 	int len = FileLoadConfig(name, 0, 0);
 	tos_debugf("Configuration file size: %d (should be %d)", len, sizeof(tos_config_t));
-	if (len == sizeof(tos_config_t)) FileLoadConfig(name, &config, sizeof(tos_config_t));
+	FileLoadConfig(name, &config, sizeof(tos_config_t));
 
 	// ethernet is auto detected later
 	config.system_ctrl &= ~TOS_CONTROL_ETHERNET;
@@ -610,7 +641,7 @@ const char* tos_get_cfg_string(int num)
 	memset(&tmp, 0, sizeof(tmp));
 
 	int len = FileLoadConfig(name, 0, 0);
-	if (len == sizeof(tos_config_t))
+	if (len)
 	{
 		FileLoadConfig(name, &tmp, sizeof(tos_config_t));
 
@@ -624,7 +655,10 @@ const char* tos_get_cfg_string(int num)
 		strcat(str, " ");
 		if (!((tmp.system_ctrl >> 23) & 3) && (tmp.system_ctrl & TOS_CONTROL_BLITTER)) strcat(str, "B ");
 		if (tmp.system_ctrl & TOS_CONTROL_VIKING) strcat(str, "V ");
-		if (tmp.system_ctrl & TOS_CONTROL_VIDEO_AR) strcat(str, "W ");
+		int ar = 0;
+		if (tmp.system_ctrl & TOS_CONTROL_VIDEO_AR1) ar |= 1;
+		if (tmp.system_ctrl & TOS_CONTROL_VIDEO_AR2) ar |= 2;
+		sprintf(str+strlen(str), "A%d ", ar);
 		strcat(str, (tmp.system_ctrl & TOS_CONTROL_VIDEO_COLOR) ? "C " : (tmp.system_ctrl & TOS_CONTROL_MDE60) ? "M6 " : "M ");
 		if (!(tmp.system_ctrl & TOS_CONTROL_BORDER)) strcat(str, "F ");
 		int sl = (tmp.system_ctrl >> 20) & 3;

@@ -116,24 +116,26 @@ uint8_t spi_uio_cmd(uint8_t cmd)
 	return res;
 }
 
-void spi_uio_cmd8_cont(uint8_t cmd, uint8_t parm)
+uint8_t spi_uio_cmd8_cont(uint8_t cmd, uint8_t parm)
 {
 	EnableIO();
 	spi_b(cmd);
-	spi_b(parm);
+	return spi_b(parm);
 }
 
-void spi_uio_cmd8(uint8_t cmd, uint8_t parm)
+uint8_t spi_uio_cmd8(uint8_t cmd, uint8_t parm)
 {
-	spi_uio_cmd8_cont(cmd, parm);
+	uint8_t res = spi_uio_cmd8_cont(cmd, parm);
 	DisableIO();
+	return res;
 }
 
-void spi_uio_cmd16(uint8_t cmd, uint16_t parm)
+uint16_t spi_uio_cmd16(uint8_t cmd, uint16_t parm)
 {
 	spi_uio_cmd_cont(cmd);
-	spi_w(parm);
+	uint16_t res = spi_w(parm);
 	DisableIO();
+	return res;
 }
 
 void spi_uio_cmd32(uint8_t cmd, uint32_t parm, int wide)
@@ -192,52 +194,12 @@ void spi_write(const uint8_t *addr, uint16_t len, int wide)
 
 void spi_block_read(uint8_t *addr, int wide)
 {
-	if (wide)
-	{
-		uint16_t len16 = 256;
-		uint16_t *a16 = (uint16_t*)addr;
-		while (len16--) *a16++ = fpga_spi_fast(0);
-	}
-	else
-	{
-		uint16_t len = 512;
-		while (len--) *addr++ = fpga_spi_fast(0);
-	}
+	if (wide) fpga_spi_fast_block_read((uint16_t*)addr, 256);
+	else fpga_spi_fast_block_read_8(addr, 512);
 }
 
 void spi_block_write(const uint8_t *addr, int wide)
 {
-	if (wide)
-	{
-		uint16_t len16 = 256;
-		uint16_t *a16 = (uint16_t*)addr;
-		while (len16--) fpga_spi_fast(*a16++);
-	}
-	else
-	{
-		uint16_t len = 512;
-		while (len--) fpga_spi_fast(*addr++);
-	}
-}
-
-void spi_block_write_16be(const uint16_t *addr)
-{
-	uint16_t len = 256;
-	uint16_t tmp;
-	while (len--)
-	{
-		tmp = *addr++;
-		spi_w(SWAPW(tmp));
-	}
-}
-
-void spi_block_read_16be(uint16_t *addr)
-{
-	uint16_t len = 256;
-	uint16_t tmp;
-	while (len--)
-	{
-		tmp = spi_w(0xFFFF);
-		*addr++ = SWAPW(tmp);
-	}
+	if (wide) fpga_spi_fast_block_write((const uint16_t*)addr, 256);
+	else fpga_spi_fast_block_write_8(addr, 512);
 }

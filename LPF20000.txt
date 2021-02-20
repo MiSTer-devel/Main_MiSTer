@@ -1,0 +1,27 @@
+# version
+v1
+
+# sampling frequency
+# must be multiple of 48000 for best results
+7056000
+
+#base gain
+0.00000774701983513660
+
+#gain scale for X0
+3
+
+#gain scale for X1
+3
+
+#gain scale for X2
+1
+
+#coefficient for Y0
+-2.96438150626551080000
+
+#coefficient for Y1
+2.92939452735121100000
+
+#coefficient for Y2
+-0.96500747158831091000

@@ -54,7 +54,7 @@ static const ini_var_t ini_vars[] =
 	{ "RBF_HIDE_DATECODE", (void*)(&(cfg.rbf_hide_datecode)), UINT8, 0, 1 },
 	{ "MENU_PAL", (void*)(&(cfg.menu_pal)), UINT8, 0, 1 },
 	{ "BOOTCORE", (void*)(&(cfg.bootcore)), STRING, 0, sizeof(cfg.bootcore) - 1 },
-	{ "BOOTCORE_TIMEOUT", (void*)(&(cfg.bootcore_timeout)), INT16, 10, 30 },
+	{ "BOOTCORE_TIMEOUT", (void*)(&(cfg.bootcore_timeout)), INT16, 2, 30 },
 	{ "FONT", (void*)(&(cfg.font)), STRING, 0, sizeof(cfg.font) - 1 },
 	{ "FB_SIZE", (void*)(&(cfg.fb_size)), UINT8, 0, 4 },
 	{ "FB_TERMINAL", (void*)(&(cfg.fb_terminal)), UINT8, 0, 1 },
@@ -66,10 +66,21 @@ static const ini_var_t ini_vars[] =
 	{ "CONTROLLER_INFO", (void*)(&(cfg.controller_info)), UINT8, 0, 10 },
 	{ "REFRESH_MIN", (void*)(&(cfg.refresh_min)), UINT8, 0, 150 },
 	{ "REFRESH_MAX", (void*)(&(cfg.refresh_max)), UINT8, 0, 150 },
-	{ "JAMMASD_VID", (void*)(&(cfg.jammasd_vid)), UINT16, 0, 0xFFFF },
-	{ "JAMMASD_PID", (void*)(&(cfg.jammasd_pid)), UINT16, 0, 0xFFFF },
+	{ "JAMMA_VID", (void*)(&(cfg.jamma_vid)), UINT16, 0, 0xFFFF },
+	{ "JAMMA_PID", (void*)(&(cfg.jamma_pid)), UINT16, 0, 0xFFFF },
 	{ "SNIPER_MODE", (void*)(&(cfg.sniper_mode)), UINT8, 0, 1 },
 	{ "BROWSE_EXPAND", (void*)(&(cfg.browse_expand)), UINT8, 0, 1 },
+	{ "LOGO", (void*)(&(cfg.logo)), UINT8, 0, 1 },
+	{ "SHARED_FOLDER", (void*)(&(cfg.shared_folder)), STRING, 0, sizeof(cfg.shared_folder) - 1 },
+	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), UINT16, 0, 0xFFFF },
+	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), UINT16, 0, 0xFFFF },
+	{ "CUSTOM_ASPECT_RATIO_1", (void*)(&(cfg.custom_aspect_ratio[0])), STRING, 0, sizeof(cfg.custom_aspect_ratio[0]) - 1 },
+	{ "CUSTOM_ASPECT_RATIO_2", (void*)(&(cfg.custom_aspect_ratio[1])), STRING, 0, sizeof(cfg.custom_aspect_ratio[1]) - 1 },
+	{ "SPINNER_VID", (void*)(&(cfg.spinner_vid)), UINT16, 0, 0xFFFF },
+	{ "SPINNER_PID", (void*)(&(cfg.spinner_pid)), UINT16, 0, 0xFFFF },
+	{ "SPINNER_THROTTLE", (void*)(&(cfg.spinner_throttle)), INT32, -10000, 10000 },
+	{ "AFILTER_DEFAULT", (void*)(&(cfg.afilter_default)), STRING, 0, sizeof(cfg.afilter_default) - 1 },
+	{ "VFILTER_DEFAULT", (void*)(&(cfg.vfilter_default)), STRING, 0, sizeof(cfg.vfilter_default) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -89,7 +100,8 @@ static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
 #define CHAR_IS_SPECIAL(c)      (((c) == '[') || ((c) == ']') || ((c) == '(') || ((c) == ')') || \
                                  ((c) == '-') || ((c) == '+') || ((c) == '/') || ((c) == '=') || \
                                  ((c) == '#') || ((c) == '$') || ((c) == '@') || ((c) == '_') || \
-                                 ((c) == ',') || ((c) == '.') || ((c) == '!') || ((c) == '*'))
+                                 ((c) == ',') || ((c) == '.') || ((c) == '!') || ((c) == '*') || \
+                                 ((c) == ':'))
 
 #define CHAR_IS_VALID(c)        (CHAR_IS_ALPHANUM(c) || CHAR_IS_SPECIAL(c))
 #define CHAR_IS_SPACE(c)        (((c) == ' ') || ((c) == '\t'))
@@ -120,9 +132,10 @@ static int ini_getline(char* line)
 		if (i >= (INI_LINE_SIZE - 1) || CHAR_IS_COMMENT(c)) ignore = 1;
 
 		if (CHAR_IS_LINEEND(c)) break;
-		if (CHAR_IS_VALID(c) && !ignore && !skip) line[i++] = c;
+		if ((CHAR_IS_SPACE(c) || CHAR_IS_VALID(c)) && !ignore && !skip) line[i++] = c;
 	}
 	line[i] = '\0';
+	while (i > 0 && CHAR_IS_SPACE(line[i - 1])) line[--i] = 0;
 	return c == 0 ? INI_EOT : 0;
 }
 
@@ -178,7 +191,7 @@ static void ini_parse_var(char* buf)
 	// find var
 	while (1)
 	{
-		if (buf[i] == '=')
+		if (buf[i] == '=' || CHAR_IS_SPACE(buf[i]))
 		{
 			buf[i] = '\0';
 			break;
@@ -203,8 +216,10 @@ static void ini_parse_var(char* buf)
 	// get data
 	if (var_id != -1)
 	{
-		ini_parser_debugf("Got VAR '%s' with VALUE %s", buf, &(buf[i + 1]));
 		i++;
+		while (buf[i] == '=' || CHAR_IS_SPACE(buf[i])) i++;
+		ini_parser_debugf("Got VAR '%s' with VALUE %s", buf, buf+i);
+
 		switch (ini_vars[var_id].type)
 		{
 		case UINT8:
@@ -315,5 +330,6 @@ void cfg_parse()
 	cfg.fb_terminal = 1;
 	cfg.controller_info = 6;
 	cfg.browse_expand = 1;
+	cfg.logo = 1;
 	ini_parse(altcfg());
 }

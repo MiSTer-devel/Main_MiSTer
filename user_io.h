@@ -20,11 +20,6 @@
 #define UIO_KBD_OSD     0x06  // keycodes used by OSD only
 
 // 0x08 - 0x0F - core specific
-#define ST_WRITE_MEMORY 0x08
-#define ST_READ_MEMORY  0x09
-#define ST_ACK_DMA      0x0a
-#define ST_NAK_DMA      0x0b
-#define ST_GET_DMASTATE 0x0c
 
 #define UIO_JOYSTICK2   0x10  // also used by minimig and 8 bit
 #define UIO_JOYSTICK3   0x11  // -"-
@@ -69,12 +64,15 @@
 #define UIO_INFO_GET    0x36
 #define UIO_SETWIDTH    0x37  // Set max scaled horizontal resolution
 #define UIO_SETSYNC     0x38
+#define UIO_SET_AFILTER 0x39
+#define UIO_SET_AR_CUST 0x3A
+#define UIO_SET_UART    0x3B
 
 // codes as used by 8bit for file loading from OSD
-#define UIO_FILE_TX     0x53
-#define UIO_FILE_TX_DAT 0x54
-#define UIO_FILE_INDEX  0x55
-#define UIO_FILE_INFO   0x56
+#define FIO_FILE_TX     0x53
+#define FIO_FILE_TX_DAT 0x54
+#define FIO_FILE_INDEX  0x55
+#define FIO_FILE_INFO   0x56
 
 // ao486 direct memory access
 #define UIO_DMA_WRITE   0x61
@@ -186,6 +184,7 @@
 
 void user_io_init(const char *path, const char *xml);
 unsigned char user_io_core_type();
+void user_io_read_core_name();
 void user_io_poll();
 char user_io_menu_button();
 char user_io_user_button();
@@ -193,9 +192,7 @@ void user_io_osd_key_enable(char);
 void user_io_read_confstr();
 char *user_io_get_confstr(int index);
 uint32_t user_io_8bit_set_status(uint32_t, uint32_t, int ex = 0);
-int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
-void user_io_file_tx_write(const uint8_t *addr, uint16_t len);
-int user_io_get_width();
+int user_io_get_kbd_reset();
 
 uint32_t user_io_get_file_crc();
 int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0);
@@ -226,9 +223,17 @@ void user_io_set_ini(int ini_num);
 void user_io_send_buttons(char);
 uint16_t user_io_get_sdram_cfg();
 
-void user_io_set_index(unsigned char index);
-void user_io_set_download(unsigned char enable);
+int user_io_file_tx(const char* name, unsigned char index = 0, char opensave = 0, char mute = 0, char composite = 0);
+int user_io_file_tx_a(const char* name, uint16_t index);
 unsigned char user_io_ext_idx(char *, char*);
+void user_io_set_index(unsigned char index);
+void user_io_set_aindex(uint16_t index);
+void user_io_set_download(unsigned char enable, int addr = 0);
+void user_io_file_tx_data(const uint8_t *addr, uint16_t len);
+void user_io_set_upload(unsigned char enable, int addr = 0);
+void user_io_file_rx_data(uint8_t *addr, uint16_t len);
+void user_io_file_info(const char *ext);
+int user_io_get_width();
 
 void user_io_check_reset(unsigned short modifiers, char useKeys);
 
@@ -246,10 +251,14 @@ int GetUARTMode();
 void SetUARTMode(int mode);
 int GetMidiLinkMode();
 void SetMidiLinkMode(int mode);
-
-void set_volume(int cmd);
-int  get_volume();
-
+void ResetUART();
+const uint32_t* GetUARTbauds(int mode);
+uint32_t GetUARTbaud(int mode);
+const char* GetUARTbaud_label(int mode);
+const char* GetUARTbaud_label(int mode, int idx);
+int GetUARTbaud_idx(int mode);
+uint32_t ValidateUARTbaud(int mode, uint32_t baud);
+char * GetMidiLinkSoundfont();
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();
 

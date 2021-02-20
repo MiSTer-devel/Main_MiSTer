@@ -1135,56 +1135,6 @@ void sharpmz_set_audio_source(short on, short setStatus)
         sharpmz_set_config_register(REGISTER_AUDIO, config.system_reg[REGISTER_AUDIO]);
 }
 
-// Return audio volume setting. The value is inverse, ie. it is an attenuation, 15 is highest, 0 is off.
-//
-int sharpmz_get_audio_volume(void)
-{
-    return ((config.volume) & 0x0f);
-}
-
-// Return string showing Audio volume setting - this is inversed.
-//
-const char *sharpmz_get_audio_volume_string(void)
-{
-    return(SHARPMZ_AUDIO_VOLUME[ config.volume & 0x0f ]);
-}
-
-// Set audio volume level. 15 = high attenuation, 0 = no attenuation.
-//
-void sharpmz_set_audio_volume(short volume, short setStatus)
-{
-    config.volume &= 0x10;
-    config.volume |= volume & 0x0f;
-
-    if(setStatus)
-        spi_uio_cmd8(UIO_AUDVOL, config.volume);
-}
-
-// Return audio mute setting.
-//
-int sharpmz_get_audio_mute(void)
-{
-    return ((config.volume & 0x10) >> 4);
-}
-
-// Return string showing Audio mute setting.
-//
-const char *sharpmz_get_audio_mute_string(void)
-{
-    return(SHARPMZ_AUDIO_MUTE[ (config.volume & 0x10) >> 4 ]);
-}
-
-// Set audio mute level.
-//
-void sharpmz_set_audio_mute(short mute, short setStatus)
-{
-    config.volume &= 0x0f;
-    config.volume |= mute << 4;
-
-    if(setStatus)
-        spi_uio_cmd8(UIO_AUDVOL, config.volume);
-}
-
 // Set BOOT_RESET, ie. initiate an IPL boot.
 //
 void sharpmz_set_boot_reset(void)
@@ -2346,7 +2296,7 @@ int sharpmz_default_ui_state(void)
 //
 void sharpmz_ui(int      idleState,    int      idle2State,    int        systemState,    int      selectFile,
                 uint32_t *parentstate, uint32_t *menustate,    uint32_t   *menusub,       uint32_t *menusub_last,
-                uint64_t *menumask,    char     *selectedPath, const char **helptext,     char     *helptext_custom,
+                uint64_t *menumask,    char     *selectedPath, int        *helptext_idx,  char     *helptext_custom,
                 uint32_t *fs_ExtLen,   uint32_t *fs_Options,   uint32_t   *fs_MenuSelect, uint32_t *fs_MenuCancel,
                 char     *fs_pFileExt,
                 unsigned char menu,    unsigned char select,   unsigned char up,          unsigned char down,
@@ -2357,7 +2307,6 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
     static short romType;
     static short machineModel             = sharpmz_get_next_machine_model();
     static short scrollPos                = 0;
-    static short volumeDir                = 0;
 #ifdef __SHARPMZ_DEBUG__
     static short memoryBank               = sharpmz_get_next_memory_bank();
     static short fileDumped               = 0;
@@ -2473,7 +2422,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             strcat(helptext_custom, OsdCoreNameGet());
             strcat(helptext_custom, "                                ");
             strcat(helptext_custom, SHARPMZ_HELPTEXT[0]);
-            *helptext = helptext_custom;
+            *helptext_idx = 1;
             break;
 
         case MENU_SHARPMZ_MAIN2:
@@ -2956,16 +2905,6 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
 
-            strcpy(sBuf, " Audio Volume:       ");
-            strcat(sBuf, sharpmz_get_audio_volume_string());
-            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
-
-            strcpy(sBuf, " Audio Mute:         ");
-            strcat(sBuf, sharpmz_get_audio_mute_string());
-            OsdWrite(menuItem++, sBuf, *menusub == subItem++, 0);
-            *menumask = (*menumask << 1) | 1;
-
             OsdWrite(menuItem++, "", 0, 0);
             OsdWrite(menuItem++, " Rom Management            \x16", *menusub == subItem++, 0);
             *menumask = (*menumask << 1) | 1;
@@ -3008,26 +2947,14 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                     *menustate = MENU_SHARPMZ_MACHINE1;
                     break;
 
-                case 3:  // Audio Volume
-                    sharpmz_set_audio_volume((sharpmz_get_audio_volume() + (volumeDir ? -1 : +1)) & 0x0f, 1);
-                    if(sharpmz_get_audio_volume() == 15) volumeDir = 1;
-                    if(sharpmz_get_audio_volume() == 0)  volumeDir = 0;
-                    *menustate = MENU_SHARPMZ_MACHINE1;
-                    break;
-
-                case 4:  // Audio Mute
-                    sharpmz_set_audio_mute(sharpmz_get_audio_mute() ? 0 : 1, 1);
-                    *menustate = MENU_SHARPMZ_MACHINE1;
-                    break;
-
-                case 5:  // Roms
+                case 3:  // Roms
                     *menustate    = MENU_SHARPMZ_ROMS1;
                     *menusub_last = *menusub;
                     *menusub      = 0;
                     if(right) select = true;
                     break;
 
-                case 6:  // Exit
+                case 4:  // Exit
                     *menustate = MENU_SHARPMZ_MAIN1;
                     *menusub   = 1; //*menusub_last;
                     break;

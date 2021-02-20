@@ -32,17 +32,17 @@
 #include "miniz.h"
 #include "cheats.h"
 #include "video.h"
+#include "audio.h"
 
 #include "support.h"
 
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};
 
-static uint8_t vol_att = 0;
-unsigned long vol_set_timeout = 0;
-
 static fileTYPE sd_image[4] = {};
 static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
+
+static int use_save = 0;
 
 // mouse and keyboard emulation state
 static int emu_mode = EMU_NONE;
@@ -296,7 +296,7 @@ char has_menu()
 	return (is_no_type == 1);
 }
 
-static void user_io_read_core_name()
+void user_io_read_core_name()
 {
 	is_menu_type = 0;
 	is_x86_type  = 0;
@@ -400,6 +400,14 @@ int user_io_get_joy_transl()
 }
 
 static int use_cheats = 0;
+static uint32_t ss_base = 0;
+static uint32_t ss_size = 0;
+static uint32_t uart_speeds[12] = {};
+static char uart_speed_labels[12][32] = {};
+static uint32_t midi_speeds[12] = {};
+static char midi_speed_labels[12][32] = {};
+static const uint32_t mlink_speeds[12] = { 110, 300, 600, 1200, 2400, 9600, 14400, 19200, 31250, 38400, 57600, 115200 };
+static const char mlink_speed_labels[12][32] = { "110", "300", "600", "1200", "2400", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200" };
 
 static void parse_config()
 {
@@ -417,10 +425,117 @@ static void parse_config()
 			OsdCoreNameSet(p);
 		}
 
+		if (i == 1 && p)
+		{
+			while (p && *p)
+			{
+				if (!strncasecmp(p, "SS", 2))
+				{
+					char *end = 0;
+					ss_base = strtoul(p+2, &end, 16);
+					p = end;
+					if (p && *p == ':')
+					{
+						p++;
+						ss_size = strtoul(p, &end, 16);
+					}
+
+					printf("Got save state parameters: base=0x%X, size=0x%X\n", ss_base, ss_size);
+
+					if (!ss_size || ss_size > (128 * 1024 * 1024))
+					{
+						ss_size = 0;
+						ss_base = 0;
+						printf("Invalid size!\n");
+					}
+					else if (ss_base < 0x20000000 || ss_base >= 0x40000000 || (ss_base + ss_size) >= 0x40000000)
+					{
+						ss_size = 0;
+						ss_base = 0;
+						printf("Invalid base!\n");
+					}
+				}
+
+				if (!strncasecmp(p, "UART", 4))
+				{
+					p += 4;
+					for (int i = 0; i < 10 && p && *p; i++)
+					{
+						char *end = 0;
+						uart_speeds[i] = strtoul(p, &end, 10);
+						p = end;
+						if (p && *p == '(')
+						{
+							p++;
+							int n = 0;
+							while (*p != ';' && *p != ':' && *p != ')' && *p != ',')
+							{
+								if (n < 16) uart_speed_labels[i][n] = *p;
+								p++;
+								n++;
+							}
+							if (*p == ')') p++;
+						}
+						else
+						{
+							sprintf(uart_speed_labels[i], "%d", uart_speeds[i]);
+						}
+						if (p && *p == ':') p++;
+					}
+
+					printf("Got UART speeds:");
+					for(int i=0; i<10; i++) printf(" %d", uart_speeds[i]);
+					printf("\n");
+				}
+
+				if (!strncasecmp(p, "MIDI", 4))
+				{
+					p += 4;
+					for (int i = 0; i < 10 && p && *p; i++)
+					{
+						char *end = 0;
+						midi_speeds[i] = strtoul(p, &end, 10);
+						p = end;
+						if (p && *p == '(')
+						{
+							p++;
+							int n = 0;
+							while (*p != ';' && *p != ':' && *p != ')' && *p != ',')
+							{
+								if (n < 16) midi_speed_labels[i][n] = *p;
+								p++;
+								n++;
+							}
+							if (*p == ')') p++;
+						}
+						else
+						{
+							sprintf(midi_speed_labels[i], "%d", midi_speeds[i]);
+						}
+						if (p && *p == ':') p++;
+					}
+
+					if (!midi_speeds[0])
+					{
+						midi_speeds[0] = 31250;
+						strcpy(midi_speed_labels[0], "31250");
+					}
+
+					printf("Got MIDI speeds:");
+					for (int i = 0; i < 10; i++) printf(" %d", midi_speeds[i]);
+					printf("\n");
+				}
+
+				p = strchr(p, ',');
+				if (p) p++;
+			}
+		}
+
 		if (i>=2 && p && p[0])
 		{
 			//skip Disable/Hide masks
-			while((p[0] == 'H' || p[0] == 'D') && strlen(p)>=2) p += 2;
+			while((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p)>=2) p += 2;
+			if (p[0] == 'P') p += 2;
 
 			if (p[0] == 'J')
 			{
@@ -471,6 +586,13 @@ static void parse_config()
 		}
 		i++;
 	} while (p || i<3);
+
+	// legacy GBA versions
+	if (is_gba() && !ss_base)
+	{
+		ss_base = 0x3E000000;
+		ss_size = 0x100000;
+	}
 }
 
 //MSM6242B layout
@@ -550,43 +672,121 @@ void MakeFile(const char * filename, const char * data)
 	fclose(file);
 }
 
-static void set_uart_alt()
-{
-	if (is_st())
-	{
-		tos_uart_mode((GetUARTMode() < 3) || GetMidiLinkMode() >= 4);
-	}
-}
-
 int GetUARTMode()
 {
 	struct stat filestat;
 	if (!stat("/tmp/uartmode1", &filestat)) return 1;
 	if (!stat("/tmp/uartmode2", &filestat)) return 2;
 	if (!stat("/tmp/uartmode3", &filestat)) return 3;
+	if (!stat("/tmp/uartmode4", &filestat)) return 4;
+	if (!stat("/tmp/uartmode5", &filestat)) return 5;
 	return 0;
 }
 
 void SetUARTMode(int mode)
 {
+	mode &= 0xF;
+	uint32_t baud = GetUARTbaud(mode);
+
+	spi_uio_cmd_cont(UIO_SET_UART);
+	spi_w((mode == 4 || mode == 5) ? 1 : mode);
+	spi_w(baud);
+	spi_w(baud >> 16);
+	DisableIO();
+
 	MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
-	MakeFile("/tmp/UART_SPEED", is_st() ? "19200" : "115200");
+
+	char data[20];
+	sprintf(data, "%d", baud);
+	MakeFile("/tmp/UART_SPEED", data);
 
 	char cmd[32];
-	sprintf(cmd, "uartmode %d", mode & 0xFF);
+	sprintf(cmd, "uartmode %d", mode);
 	system(cmd);
-	set_uart_alt();
+}
+
+static int uart_speed_idx = 0;
+static int midi_speed_idx = 0;
+static int mlink_speed_idx = 0;
+
+const uint32_t* GetUARTbauds(int mode)
+{
+	return (mode == 3) ? midi_speeds : (mode > 3) ? mlink_speeds : uart_speeds;
+}
+
+uint32_t GetUARTbaud(int mode)
+{
+	return (mode == 3) ? midi_speeds[midi_speed_idx] : (mode > 3) ? mlink_speeds[mlink_speed_idx] : uart_speeds[uart_speed_idx];
+}
+
+const char* GetUARTbaud_label(int mode)
+{
+	return (mode == 3) ? midi_speed_labels[midi_speed_idx] : (mode > 3) ? mlink_speed_labels[mlink_speed_idx] : uart_speed_labels[uart_speed_idx];
+}
+
+const char* GetUARTbaud_label(int mode, int idx)
+{
+	return (mode == 3) ? midi_speed_labels[idx] : (mode > 3) ? mlink_speed_labels[idx] : uart_speed_labels[idx];
+}
+
+int GetUARTbaud_idx(int mode)
+{
+	return (mode == 3) ? midi_speed_idx : (mode > 3) ? mlink_speed_idx : uart_speed_idx;
+}
+
+char * GetMidiLinkSoundfont()
+{
+    FILE * file;
+    static char mLinkSoundfont[255];
+    char fileName[] = "/tmp/ML_SOUNDFONT";
+    char strip[] = "/media/fat/";
+    file = fopen(fileName, "r");
+    if (file)
+    {
+        fgets((char *) &mLinkSoundfont, sizeof(mLinkSoundfont), file);
+        fclose(file);
+        if(0 == strncmp(strip, mLinkSoundfont, sizeof(strip)-1))
+		return &mLinkSoundfont[sizeof(strip)-1];
+    }
+    else
+    {
+        printf("ERROR: GetMidiLinkSoundfont : Unable to open --> '%s'\n", fileName);
+        sprintf(mLinkSoundfont, "linux/soundfonts");
+    }
+    return mLinkSoundfont;
+}
+
+uint32_t ValidateUARTbaud(int mode, uint32_t baud)
+{
+	const uint32_t *bauds = GetUARTbauds(mode);
+	int idx = 0;
+	for (int i = 0; i < 12; i++)
+	{
+		if (!bauds[i]) break;
+		if (bauds[i] == baud)
+		{
+			idx = i;
+			break;
+		}
+	}
+
+	if (mode == 3) midi_speed_idx = idx;
+	else if (mode > 3) mlink_speed_idx = idx;
+	else uart_speed_idx = idx;
+
+	return bauds[idx];
 }
 
 int GetMidiLinkMode()
 {
 	struct stat filestat;
-	if (!stat("/tmp/ML_FSYNTH", &filestat)) return 0;
-	if (!stat("/tmp/ML_MUNT", &filestat)) return 1;
-	if (!stat("/tmp/ML_TCP", &filestat)) return 2;
-	if (!stat("/tmp/ML_UDP", &filestat)) return 3;
-	if (!stat("/tmp/ML_TCP_ALT", &filestat)) return 4;
+	if (!stat("/tmp/ML_FSYNTH", &filestat))  return 0;
+	if (!stat("/tmp/ML_MUNT", &filestat))    return 1;
+	if (!stat("/tmp/ML_SERMIDI", &filestat)) return 2;
+	if (!stat("/tmp/ML_UDP", &filestat))     return 3;
+	if (!stat("/tmp/ML_TCP", &filestat))     return 4;
 	if (!stat("/tmp/ML_UDP_ALT", &filestat)) return 5;
+	if (!stat("/tmp/ML_USBSER", &filestat))  return 6;
 	return 0;
 }
 
@@ -595,19 +795,39 @@ void SetMidiLinkMode(int mode)
 	remove("/tmp/ML_FSYNTH");
 	remove("/tmp/ML_MUNT");
 	remove("/tmp/ML_UDP");
-	remove("/tmp/ML_TCP");
+	remove("/tmp/ML_USBMIDI");
 	remove("/tmp/ML_UDP_ALT");
 	remove("/tmp/ML_TCP_ALT");
+	remove("/tmp/ML_SERMIDI");
+	remove("/tmp/ML_USBSER");
+	remove("/tmp/ML_TCP");
+
+	struct stat filestat;
+	if (mode == 6 && stat("/dev/ttyUSB0", &filestat)) mode = 4;
+
 	switch (mode)
 	{
-		case 0: MakeFile("/tmp/ML_FSYNTH", ""); break;
-		case 1: MakeFile("/tmp/ML_MUNT", ""); break;
-		case 2: MakeFile("/tmp/ML_TCP", ""); break;
-		case 3: MakeFile("/tmp/ML_UDP", ""); break;
-		case 4: MakeFile("/tmp/ML_TCP_ALT", ""); break;
+		case 0: MakeFile("/tmp/ML_FSYNTH", "");  break;
+		case 1: MakeFile("/tmp/ML_MUNT", "");    break;
+		case 2: MakeFile("/tmp/ML_SERMIDI", ""); break;
+		case 3: MakeFile("/tmp/ML_UDP", "");     break;
+		case 4: MakeFile("/tmp/ML_TCP", "");     break;
 		case 5: MakeFile("/tmp/ML_UDP_ALT", ""); break;
+		case 6: MakeFile("/tmp/ML_USBSER", "");  break;
 	}
-	set_uart_alt();
+}
+
+void ResetUART()
+{
+	if (uart_mode)
+	{
+		int mode = GetUARTMode();
+		if (mode != 0)
+		{
+			SetUARTMode(0);
+			SetUARTMode(mode);
+		}
+	}
 }
 
 uint16_t sdram_sz(int sz)
@@ -765,9 +985,8 @@ void user_io_init(const char *path, const char *xml)
 
 	video_mode_load();
 	if(strlen(cfg.font)) LoadFont(cfg.font);
-	FileLoadConfig("Volume.dat", &vol_att, 1);
-	vol_att &= 0x1F;
-	spi_uio_cmd8(UIO_AUDVOL, vol_att);
+	load_volume();
+
 	user_io_send_buttons(1);
 
 	switch (core_type)
@@ -802,16 +1021,22 @@ void user_io_init(const char *path, const char *xml)
 			OsdCoreNameSet(user_io_get_core_name());
 
 			uint32_t status[2] = { 0, 0 };
-			if (!is_st())
+			if (!is_st() && !is_minimig())
 			{
 				printf("Loading config %s\n", name);
 				if (FileLoadConfig(name, status, 8))
 				{
 					printf("Found config: %08X-%08X\n", status[0], status[1]);
-					status[0] &= ~UIO_STATUS_RESET;
-					user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
-					user_io_8bit_set_status(status[1], 0xffffffff, 1);
 				}
+				else
+				{
+					status[0] = 0;
+					status[1] = 0;
+				}
+
+				status[0] &= ~UIO_STATUS_RESET;
+				user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
+				user_io_8bit_set_status(status[1], 0xffffffff, 1);
 				parse_config();
 			}
 
@@ -819,6 +1044,7 @@ void user_io_init(const char *path, const char *xml)
 			{
 				tos_config_load(0);
 				tos_upload(NULL);
+				parse_config();
 			}
 			else if (is_menu())
 			{
@@ -834,6 +1060,7 @@ void user_io_init(const char *path, const char *xml)
 				}
 				else if (is_minimig())
 				{
+					parse_config();
 					puts("Identified Minimig V2 core");
 					BootInit();
 				}
@@ -948,20 +1175,44 @@ void user_io_init(const char *path, const char *xml)
 
 	OsdRotation((cfg.osd_rotate == 1) ? 3 : (cfg.osd_rotate == 2) ? 1 : 0);
 
-	spi_uio_cmd_cont(UIO_GETUARTFLG);
-	uart_mode = spi_w(0);
-	DisableIO();
-
+	uart_mode = spi_uio_cmd16(UIO_GETUARTFLG, 0) || uart_speeds[0];
 	uint32_t mode = 0;
 	if (uart_mode)
 	{
+		if (!uart_speeds[0])
+		{
+			uart_speeds[0] = is_st() ? 19200 : 115200;
+			sprintf(uart_speed_labels[0], "%d", uart_speeds[0]);
+
+			if (!midi_speeds[0])
+			{
+				midi_speeds[0] = 31250;
+				sprintf(midi_speed_labels[0], "%d", midi_speeds[0]);
+			}
+		}
+
 		sprintf(mainpath, "uartmode.%s", user_io_get_core_name_ex());
 		FileLoadConfig(mainpath, &mode, 4);
+
+		uint64_t speeds = 0;
+		sprintf(mainpath, "uartspeed.%s", user_io_get_core_name_ex());
+		FileLoadConfig(mainpath, &speeds, 8);
+
+		ValidateUARTbaud(1, speeds & 0xFFFFFFFF);
+		ValidateUARTbaud(3, speeds >> 32);
+		ValidateUARTbaud(4, uart_speeds[0]);
+
+		printf("UART bauds: %d/%d/%d\n", GetUARTbaud(1), GetUARTbaud(3), GetUARTbaud(4));
 	}
 
 	SetUARTMode(0);
-	SetMidiLinkMode((mode >> 8) & 0xFF);
-	SetUARTMode(mode);
+	int midilink = (mode >> 8) & 0xFF;
+	int uartmode = mode & 0xFF;
+	if (uartmode == 4 && (midilink < 4 || midilink>6)) midilink = 4;
+	if (uartmode == 3 && midilink > 3) midilink = 0;
+	if (uartmode < 3 || uartmode > 4) midilink = 0;
+	SetMidiLinkMode(midilink);
+	SetUARTMode(uartmode);
 }
 
 static int joyswap = 0;
@@ -1144,16 +1395,67 @@ static void kbd_fifo_poll()
 void user_io_set_index(unsigned char index)
 {
 	EnableFpga();
-	spi8(UIO_FILE_INDEX);
+	spi8(FIO_FILE_INDEX);
 	spi8(index);
 	DisableFpga();
 }
 
-void user_io_set_download(unsigned char enable)
+void user_io_set_aindex(uint16_t index)
 {
 	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(enable ? 0xff : 0x00);
+	spi8(FIO_FILE_INDEX);
+	spi_w(index);
+	DisableFpga();
+}
+
+void user_io_set_download(unsigned char enable, int addr)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX);
+	spi8(enable ? 0xff : 0);
+	if (enable && addr)
+	{
+		spi_w(addr);
+		spi_w(addr >> 16);
+	}
+	DisableFpga();
+}
+
+void user_io_file_tx_data(const uint8_t *addr, uint16_t len)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX_DAT);
+	spi_write(addr, len, fio_size);
+	DisableFpga();
+}
+
+void user_io_set_upload(unsigned char enable, int addr)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX);
+	spi8(enable ? 0xaa : 0);
+	if (enable && addr)
+	{
+		spi_w(addr);
+		spi_w(addr >> 16);
+	}
+	DisableFpga();
+}
+
+void user_io_file_rx_data(uint8_t *addr, uint16_t len)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX_DAT);
+	spi_read(addr, len, fio_size);
+	DisableFpga();
+}
+
+void user_io_file_info(const char *ext)
+{
+	EnableFpga();
+	spi8(FIO_FILE_INFO);
+	spi_w(toupper(ext[0]) << 8 | toupper(ext[1]));
+	spi_w(toupper(ext[2]) << 8 | toupper(ext[3]));
 	DisableFpga();
 }
 
@@ -1199,6 +1501,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	}
 
 	buffer_lba[index] = -1;
+	if (!index) use_save = pre;
 
 	if (!ret)
 	{
@@ -1518,7 +1821,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 		user_io_set_index(index);
 
 		user_io_set_download(1);
-		user_io_file_tx_write(col_attr, type ? 1024 : 1025);
+		user_io_file_tx_data(col_attr, type ? 1024 : 1025);
 		user_io_set_download(0);
 	}
 }
@@ -1578,14 +1881,6 @@ static void tx_progress(const char* name, unsigned int progress)
 	InfoMessage(progress_buf, 2000, "Loading");
 }
 
-void user_io_file_tx_write(const uint8_t *addr, uint16_t len)
-{
-	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
-	spi_write(addr, len, fio_size);
-	DisableFpga();
-}
-
 static void show_core_info(int info_n)
 {
 	int i = 2;
@@ -1612,7 +1907,9 @@ static int process_ss(const char *rom_name)
 	static uint32_t ss_cnt = 0;
 	static int memfd = -1;
 
-	uint32_t map_addr = 0x3E000000;
+	if (!ss_base) return 0;
+
+	uint32_t map_addr = ss_base;
 
 	if (rom_name)
 	{
@@ -1629,7 +1926,7 @@ static int process_ss(const char *rom_name)
 		}
 
 		ss_cnt = 0;
-		uint32_t len = 1024 * 1024;
+		uint32_t len = ss_size;
 		uint32_t clr_addr = map_addr;
 
 		for (int i = 0; i < 16; i++)
@@ -1736,6 +2033,60 @@ static int process_ss(const char *rom_name)
 	return 1;
 }
 
+int user_io_file_tx_a(const char* name, uint16_t index)
+{
+	fileTYPE f = {};
+	static uint8_t buf[4096];
+
+	if (!FileOpen(&f, name, 1)) return 0;
+
+	unsigned long bytes2send = f.size;
+
+	/* transmit the entire file using one transfer */
+	printf("Addon file %s with %lu bytes to send for index %04X\n", name, bytes2send, index);
+
+	// set index byte (0=bios rom, 1-n=OSD entry index)
+	user_io_set_aindex(index);
+
+	// prepare transmission of new file
+	user_io_set_download(1);
+
+	int use_progress = 1;
+	int size = bytes2send;
+	int progress = -1;
+	if (use_progress) MenuHide();
+
+	while (bytes2send)
+	{
+		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+
+		FileReadAdv(&f, buf, chunk);
+		user_io_file_tx_data(buf, chunk);
+
+		if (use_progress)
+		{
+			int new_progress = PROGRESS_MAX - ((((uint64_t)bytes2send)*PROGRESS_MAX) / size);
+			if (progress != new_progress)
+			{
+				progress = new_progress;
+				tx_progress(f.name, progress);
+			}
+		}
+		bytes2send -= chunk;
+	}
+
+	// check if core requests some change while downloading
+	check_status_change();
+
+	printf("Done.\n");
+	FileClose(&f);
+
+	// signal end of transmission
+	user_io_set_download(0);
+	MenuHide();
+	return 1;
+}
+
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
 {
 	fileTYPE f = {};
@@ -1764,27 +2115,85 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	int len = strlen(f.name);
 	char *p = f.name + len - 4;
-	EnableFpga();
-	spi8(UIO_FILE_INFO);
-	spi_w(toupper(p[0]) << 8 | toupper(p[1]));
-	spi_w(toupper(p[2]) << 8 | toupper(p[3]));
-	DisableFpga();
+	user_io_file_info(p);
 
 	// prepare transmission of new file
 	user_io_set_download(1);
 
+	int dosend = 1;
+
+	int is_snes_bs = 0;
 	if (is_snes() && bytes2send)
 	{
-		printf("Load SNES ROM.\n");
-		uint8_t* buf = snes_get_header(&f);
-		hexdump(buf, 16, 0);
-		user_io_file_tx_write(buf, 512);
+		const char *ext = strrchr(f.name, '.');
+		if (ext && !strcasecmp(ext, ".BS")) {
+			is_snes_bs = 1;
+		}
 
-		//strip original SNES ROM header if present (not used)
-		if (bytes2send & 512)
-		{
-			bytes2send -= 512;
+		if (is_snes_bs) {
+			char *rom_path = (char*)buf;
+			strcpy(rom_path, name);
+			char *offs = strrchr(rom_path, '/');
+			if (offs) *offs = 0;
+			else *rom_path = 0;
+
+			fileTYPE fb = {};
+			if (FileOpen(&fb, user_io_make_filepath(rom_path, "bsx_bios.rom")) ||
+				FileOpen(&fb, user_io_make_filepath(HomeDir(), "bsx_bios.rom")))
+			{
+				printf("Load BSX bios ROM.\n");
+				uint8_t* buf = snes_get_header(&fb);
+				hexdump(buf, 16, 0);
+				user_io_file_tx_data(buf, 512);
+
+				//strip original SNES ROM header if present (not used)
+				if (bytes2send & 512)
+				{
+					bytes2send -= 512;
+					FileReadSec(&f, buf);
+				}
+
+				uint32_t sz = fb.size;
+				while (sz)
+				{
+					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					FileReadAdv(&fb, buf, chunk);
+					user_io_file_tx_data(buf, chunk);
+					sz -= chunk;
+				}
+				FileClose(&fb);
+			}
+			else
+			{
+				dosend = 0;
+				Info("Cannot open bsx_bios.rom!");
+				sleep(1);
+			}
+		}
+		else if ((index & 0x3F) == 1) {
+			printf("Load SPC ROM.\n");
 			FileReadSec(&f, buf);
+			user_io_file_tx_data(buf, 256);
+
+			FileSeek(&f, (64*1024)+256, SEEK_SET);
+			FileReadSec(&f, buf);
+			user_io_file_tx_data(buf, 256);
+
+			FileSeek(&f, 256, SEEK_SET);
+			bytes2send = 64 * 1024;
+		}
+		else {
+			printf("Load SNES ROM.\n");
+			uint8_t* buf = snes_get_header(&f);
+			hexdump(buf, 16, 0);
+			user_io_file_tx_data(buf, 512);
+
+			//strip original SNES ROM header if present (not used)
+			if (bytes2send & 512)
+			{
+				bytes2send -= 512;
+				FileReadSec(&f, buf);
+			}
 		}
 	}
 
@@ -1796,11 +2205,10 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int progress = -1;
 	if (use_progress) MenuHide();
 
-	int dosend = 1;
+	if(ss_base) process_ss(name);
+
 	if (is_gba())
 	{
-		process_ss(name);
-
 		if ((index >> 6) == 1 || (index >> 6) == 2)
 		{
 			fileTYPE fg = {};
@@ -1817,7 +2225,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				{
 					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fg, buf, chunk);
-					user_io_file_tx_write(buf, chunk);
+					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
 				}
 				FileClose(&fg);
@@ -1830,7 +2238,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
-		user_io_file_tx_write(buf, chunk);
+		if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
+		user_io_file_tx_data(buf, chunk);
 
 		if (use_progress)
 		{
@@ -1874,6 +2283,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		send_pcolchr(name, (index & 0x1F) | 0x20, 0);
 		send_pcolchr(name, (index & 0x1F) | 0x60, 1);
 	}
+
+	MenuHide();
 	return 1;
 }
 
@@ -2012,18 +2423,23 @@ void user_io_send_buttons(char force)
 		//special reset for some cores
 		if (!user_io_osd_is_visible() && (key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
 			if (is_pce()) pcecd_reset();
+			if (is_x86()) x86_init();
+			ResetUART();
 		}
 
 		key_map = map;
 		if (user_io_osd_is_visible()) map &= ~BUTTON2;
 		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
-		if ((key_map & BUTTON2) && is_x86()) x86_init();
 	}
+}
+
+int user_io_get_kbd_reset()
+{
+	return kbd_reset;
 }
 
 void user_io_set_ini(int ini_num)
@@ -2152,7 +2568,24 @@ void user_io_poll()
 						mouse_pos[Y] = 0;
 					}
 
+					// ---- Buttons ------
 					spi8(mouse_flags & 0x07);
+
+					// ----- Wheel -------
+					if (mouse_wheel < -127)
+					{
+						spi8(-127);
+					}
+					else if (mouse_wheel > 127)
+					{
+						spi8(127);
+					}
+					else
+					{
+						spi8(mouse_wheel);
+					}
+
+					mouse_wheel = 0;
 					DisableIO();
 				}
 				else
@@ -2166,13 +2599,14 @@ void user_io_poll()
 			}
 		}
 
-
 		if (!rtc_timer || CheckTimer(rtc_timer))
 		{
 			// Update once per minute should be enough
 			rtc_timer = GetTimer(60000);
 			send_rtc(1);
 		}
+
+		minimig_share_poll();
 	}
 
 	if (core_type == CORE_TYPE_8BIT && !is_menu())
@@ -2218,6 +2652,8 @@ void user_io_poll()
 				if(c & 0x04)
 				{
 					//printf("SD WR %d on %d\n", lba, disk);
+
+					if (use_save) menu_process_save();
 
 					buffer_lba[disk] = -1;
 
@@ -2342,7 +2778,7 @@ void user_io_poll()
 		}
 	}
 
-	if (core_type == CORE_TYPE_8BIT && !is_menu() && !is_minimig() && !is_archie())
+	if (core_type == CORE_TYPE_8BIT && !is_minimig() && !is_archie())
 	{
 		// frequently check ps2 mouse for events
 		if (CheckTimer(mouse_timer))
@@ -2472,6 +2908,10 @@ void user_io_poll()
 				case 0xed:
 					kbd_reply(0xFA);
 					byte++;
+					break;
+
+				case 0xee:
+					kbd_reply(0xEE);
 					break;
 
 				default:
@@ -2655,11 +3095,7 @@ void user_io_poll()
 		reboot(1);
 	}
 
-	if (vol_set_timeout && CheckTimer(vol_set_timeout))
-	{
-		vol_set_timeout = 0;
-		FileSaveConfig("Volume.dat", &vol_att, 1);
-	}
+	save_volume();
 
 	if (diskled_is_on && CheckTimer(diskled_timer))
 	{
@@ -2873,6 +3309,7 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 		{
 			mouse_pos[X] += x;
 			mouse_pos[Y] += y;
+			mouse_wheel += w;
 			mouse_flags |= 0x80 | (b & 7);
 		}
 		else if (is_archie())
@@ -2942,40 +3379,6 @@ void user_io_osd_key_enable(char on)
 	//printf("OSD is now %s\n", on ? "visible" : "invisible");
 	osd_is_visible = on;
 	input_switch(-1);
-}
-
-int get_volume()
-{
-	return vol_att & 0x17;
-}
-
-void set_volume(int cmd)
-{
-	vol_set_timeout = GetTimer(1000);
-
-	vol_att &= 0x17;
-	if(!cmd) vol_att ^= 0x10;
-	else if (vol_att & 0x10) vol_att &= 0xF;
-	else if (cmd < 0 && vol_att < 7) vol_att += 1;
-	else if (cmd > 0 && vol_att > 0) vol_att -= 1;
-
-	spi_uio_cmd8(UIO_AUDVOL, vol_att);
-
-	if (vol_att & 0x10)
-	{
-		Info("\x8d Mute", 1000);
-	}
-	else
-	{
-		char str[32];
-		memset(str, 0, sizeof(str));
-
-		sprintf(str, "\x8d ");
-		char *bar = str + strlen(str);
-		memset(bar, 0x8C, 8);
-		memset(bar, 0x7f, 8 - vol_att);
-		Info(str, 1000);
-	}
 }
 
 void user_io_kbd(uint16_t key, int press)
@@ -3065,7 +3468,10 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
-				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
+				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
+				{
+					if (press == 1) menu_key_set(KEY_F12);
+				}
 				else if (osd_is_visible)
 				{
 					if (press == 1) menu_key_set(key);

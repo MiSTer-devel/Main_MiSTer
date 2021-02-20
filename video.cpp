@@ -81,6 +81,8 @@ vmode_t vmodes[] =
 	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5   }, //9
 	{ { 1366,  70, 143, 213,  768,  3,  3, 24 },  85.5   }, //10
 	{ { 1024,  40, 104, 144,  600,  1,  3, 18 },  48.96  }, //11
+	{ { 1920,  48,  32,  80, 1440,  2,  4, 38 }, 185.203 }, //12
+	{ { 2048,  48,  32,  80, 1536,  2,  4, 38 }, 209.318 }, //13
 };
 #define VMODES_NUM (sizeof(vmodes) / sizeof(vmodes[0]))
 
@@ -206,6 +208,23 @@ static void setScaler()
 	fileTYPE f = {};
 	static char filename[1024];
 
+	uint32_t arc[4] = {};
+	for (int i = 0; i < 2; i++)
+	{
+		if (cfg.custom_aspect_ratio[i][0])
+		{
+			if (sscanf(cfg.custom_aspect_ratio[i], "%u:%u", &arc[i * 2], &arc[(i * 2) + 1]) != 2 || arc[i * 2] < 1 || arc[i * 2] > 4095 || arc[(i * 2) + 1] < 1 || arc[(i * 2) + 1] > 4095)
+			{
+				arc[(i * 2) + 0] = 0;
+				arc[(i * 2) + 1] = 0;
+			}
+		}
+	}
+
+	spi_uio_cmd_cont(UIO_SET_AR_CUST);
+	for (int i = 0; i < 4; i++) spi_w(arc[i]);
+	DisableIO();
+
 	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
 	{
 		DisableIO();
@@ -300,6 +319,11 @@ static void loadScalerCfg()
 	if (!FileLoadConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
 	{
 		memset(scaler_flt_cfg, 0, sizeof(scaler_flt_cfg));
+		if (cfg.vfilter_default[0])
+		{
+			strcpy(scaler_flt_cfg+1, cfg.vfilter_default);
+			scaler_flt_cfg[0] = 1;
+		}
 	}
 }
 
@@ -615,6 +639,7 @@ static uint32_t show_video_info(int force)
 	uint16_t res = spi_w(0);
 	if ((nres != res) || force)
 	{
+		if (nres != res) force = 0;
 		nres = res;
 		uint32_t width = spi_w(0) | (spi_w(0) << 16);
 		uint32_t height = spi_w(0) | (spi_w(0) << 16);
@@ -700,12 +725,16 @@ static uint32_t show_video_info(int force)
 		DisableIO();
 	}
 
-	return ret;
+	return force ? 0 : ret;
 }
 
 void video_mode_adjust()
 {
-	uint32_t vtime = show_video_info(0);
+	static int force = 0;
+
+	uint32_t vtime = show_video_info(force);
+	force = 0;
+
 	if (vtime && cfg.vsync_adjust && !is_menu())
 	{
 		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
@@ -773,8 +802,7 @@ void video_mode_adjust()
 
 		set_video(v, Fpix);
 		user_io_send_buttons(1);
-		usleep(100000);
-		show_video_info(1);
+		force = 1;
 	}
 }
 
@@ -1096,7 +1124,6 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 
 static Imlib_Image load_bg()
 {
-	const char* bgdir = "wallpapers";
 	const char* fname = "menu.png";
 	if (!FileExists(fname))
 	{
@@ -1104,18 +1131,28 @@ static Imlib_Image load_bg()
 		if (!FileExists(fname)) fname = 0;
 	}
 
-	if (!fname && PathIsDir(bgdir))
+	if (!fname)
 	{
-		int rndfd = open("/dev/urandom", O_RDONLY);
-		if (rndfd >= 0)
-		{
-			uint32_t rnd;
-			read(rndfd, &rnd, sizeof(rnd));
-			close(rndfd);
+		char bgdir[32];
 
-			int count = 0;
-			get_file_fromdir(bgdir, -1, &count);
-			if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
+		int alt = altcfg();
+		sprintf(bgdir, "wallpapers_alt_%d", alt);
+		if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
+		if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
+
+		if (PathIsDir(bgdir))
+		{
+			int rndfd = open("/dev/urandom", O_RDONLY);
+			if (rndfd >= 0)
+			{
+				uint32_t rnd;
+				read(rndfd, &rnd, sizeof(rnd));
+				close(rndfd);
+
+				int count = 0;
+				get_file_fromdir(bgdir, -1, &count);
+				if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
+			}
 		}
 	}
 
@@ -1256,7 +1293,7 @@ void video_menu_bg(int n, int idle)
 			break;
 		}
 
-		if (logo && !idle)
+		if (cfg.logo && logo && !idle)
 		{
 			imlib_context_set_image(logo);
 

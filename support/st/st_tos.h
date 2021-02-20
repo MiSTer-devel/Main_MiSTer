@@ -34,7 +34,7 @@
 #define TOS_CONTROL_FDC_WR_PROT_A 0x00000040
 #define TOS_CONTROL_FDC_WR_PROT_B 0x00000080
 #define TOS_CONTROL_VIDEO_COLOR   0x00000100   // input to mfp
-#define TOS_CONTROL_VIDEO_AR      0x00000200   // 16:9 / 4:3
+#define TOS_CONTROL_VIDEO_AR1     0x00000200
 
 // up to eight acsi devices can be enabled
 #define TOS_ACSI0_ENABLE          0x00000400
@@ -60,13 +60,15 @@
 
 // USB redirection modes
 // (NONE=0, RS232=1, PARALLEL=2, MIDI=3)
-#define TOS_CONTROL_REDIR0        0x04000000
-#define TOS_CONTROL_REDIR1        0x08000000
+#define TOS_CONTROL_REDIR0        0x04000000 // unused
+#define TOS_CONTROL_REDIR1        0x08000000 // unused
 
 #define TOS_CONTROL_VIKING        0x10000000   // Viking graphics card
 
 #define TOS_CONTROL_BORDER        0x20000000
 #define TOS_CONTROL_MDE60         0x40000000
+
+#define TOS_CONTROL_VIDEO_AR2     0x80000000
 
 extern const char* tos_mem[];
 extern const char* tos_scanlines[];
@@ -93,6 +95,10 @@ void tos_config_load(int slot); // slot -1 == last config
 void tos_config_save(int slot);
 int tos_config_exists(int slot);
 
-void tos_uart_mode(int enable);
+int tos_get_ar();
+void tos_set_ar(int ar);
+
+uint32_t tos_get_extctrl();
+void tos_set_extctrl(uint32_t ext_ctrl);
 
 #endif

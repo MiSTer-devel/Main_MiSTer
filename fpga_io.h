@@ -13,6 +13,13 @@ void fpga_spi_en(uint32_t mask, uint32_t en);
 uint16_t fpga_spi(uint16_t word);
 uint16_t fpga_spi_fast(uint16_t word);
 
+void fpga_spi_fast_block_write(const uint16_t *buf, uint32_t length);
+void fpga_spi_fast_block_read(uint16_t *buf, uint32_t length);
+void fpga_spi_fast_block_write_8(const uint8_t *buf, uint32_t length);
+void fpga_spi_fast_block_read_8(uint8_t *buf, uint32_t length);
+void fpga_spi_fast_block_write_be(const uint16_t *buf, uint32_t length);
+void fpga_spi_fast_block_read_be(uint16_t *buf, uint32_t length);
+
 void fpga_set_led(uint32_t on);
 int  fpga_get_buttons();
 int fpga_get_io_type();
@@ -31,5 +38,7 @@ int fpga_load_rbf(const char *name, const char *cfg = 0, const char *xml = 0);
 void reboot(int cold);
 void app_restart(const char *path, const char *xml = 0);
 char *getappname();
+
+void fpga_wait_to_reset();
 
 #endif

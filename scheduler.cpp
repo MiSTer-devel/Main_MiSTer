@@ -16,17 +16,7 @@ static void scheduler_wait_fpga_ready(void)
 {
 	while (!is_fpga_ready(1))
 	{
-		printf("FPGA is not ready. JTAG uploading?\n");
-		printf("Waiting for FPGA to be ready...\n");
-
-		//enable reset in advance
-		fpga_core_reset(1);
-
-		while (!is_fpga_ready(0))
-		{
-			sleep(1);
-		}
-		reboot(0);
+		fpga_wait_to_reset();
 	}
 }
 

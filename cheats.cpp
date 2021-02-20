@@ -12,7 +12,7 @@
 #include "file_io.h"
 #include "user_io.h"
 #include "fpga_io.h"
-#include "miniz_zip.h"
+#include "miniz.h"
 #include "osd.h"
 #include "cheats.h"
 #include "support.h"
@@ -131,7 +131,7 @@ void cheats_init(const char *rom_path, uint32_t romcrc)
 	// reset cheats
 	user_io_set_index(255);
 	user_io_set_download(1);
-	user_io_file_tx_write((const uint8_t*)&loaded, 2);
+	user_io_file_tx_data((const uint8_t*)&loaded, 2);
 	user_io_set_download(0);
 
 	if (!strcasestr(rom_path, ".zip"))
@@ -399,7 +399,7 @@ static void cheats_send()
 	user_io_set_index(255);
 
 	user_io_set_download(1);
-	user_io_file_tx_write(buff, pos ? pos : 2);
+	user_io_file_tx_data(buff, pos ? pos : 2);
 	user_io_set_download(0);
 }
 
