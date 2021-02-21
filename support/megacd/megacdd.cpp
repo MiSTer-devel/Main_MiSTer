@@ -489,16 +489,47 @@ void cdd_t::CommandExec() {
 
 	switch (comm[0]) {
 	case CD_COMM_IDLE:
-		stat[0] = this->status;
-
-		if (stat[1] == 0x0f)
+		if (this->latency <= 3)
 		{
-			if (!this->latency)
+			stat[0] = this->status;
+			if (stat[1] == 0x0f)
 			{
-				stat[0] = this->status;
-				stat[1] = 0x2;
-				stat[2] = (cdd.index < this->toc.last) ? BCD(this->index + 1) >> 4 : 0xA;
-				stat[3] = (cdd.index < this->toc.last) ? BCD(this->index + 1) & 0xF : 0xA;
+				int lba = this->lba + 150;
+				LBAToMSF(lba, &msf);
+				stat[1] = 0x0;
+	                        stat[2] = BCD(msf.m) >> 4;
+				stat[3] = BCD(msf.m) & 0xF;
+				stat[4] = BCD(msf.s) >> 4;
+				stat[5] = BCD(msf.s) & 0xF;
+				stat[6] = BCD(msf.f) >> 4;
+				stat[7] = BCD(msf.f) & 0xF;
+				stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
+
+				//stat[2] = (cdd.index < this->toc.last) ? BCD(this->index + 1) >> 4 : 0xA;
+				//stat[3] = (cdd.index < this->toc.last) ? BCD(this->index + 1) & 0xF : 0xA;
+			} else if (stat[1] == 0x00) {
+				int lba = this->lba + 150;
+				LBAToMSF(lba, &msf);
+                                stat[2] = BCD(msf.m) >> 4;
+                                stat[3] = BCD(msf.m) & 0xF;
+                                stat[4] = BCD(msf.s) >> 4;
+                                stat[5] = BCD(msf.s) & 0xF;
+                                stat[6] = BCD(msf.f) >> 4;
+                                stat[7] = BCD(msf.f) & 0xF;
+                                stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
+			} else if (stat[1] == 0x01) {
+				int lba = abs(this->lba - this->toc.tracks[this->index].start);
+				LBAToMSF(lba,&msf);
+                                stat[2] = BCD(msf.m) >> 4;
+                                stat[3] = BCD(msf.m) & 0xF;
+                                stat[4] = BCD(msf.s) >> 4;
+                                stat[5] = BCD(msf.s) & 0xF;
+                                stat[6] = BCD(msf.f) >> 4;
+                                stat[7] = BCD(msf.f) & 0xF;
+                                stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
+			} else if (stat[1] == 0x02) {
+                               stat[2] = (cdd.index < this->toc.last) ? BCD(this->index + 1) >> 4 : 0xA;
+                               stat[3] = (cdd.index < this->toc.last) ? BCD(this->index + 1) & 0xF : 0xA;
 			}
 		}
 
@@ -687,7 +718,7 @@ void cdd_t::CommandExec() {
 
 		this->status = CD_STAT_PLAY;
 
-		stat[0] = this->status;
+		stat[0] = CD_STAT_SEEK; 
 		stat[1] = 0xf;
 		stat[2] = 0;
 		stat[3] = 0;
