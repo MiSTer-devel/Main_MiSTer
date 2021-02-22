@@ -268,6 +268,13 @@ static char* find_path(const char *name)
 	return str;
 }
 
+static void __attribute__((noinline)) memcpyb(void *dst, const void *src, int len)
+{
+	char *d = (char*)dst;
+	char *s = (char*)src;
+	while (len--) *d++ = *s++;
+}
+
 
 // | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 | Directory Attribute Flags
 //   |   |   |   |   |   |   |   \-- 1 = read only
@@ -277,13 +284,6 @@ static char* find_path(const char *name)
 //   |   |   |   \------ 1 = subdirectory
 //   |   |   \------- 1 = archive
 //   \---+-------unused
-
-static void memcpyb(void *dst, const void *src, int len)
-{
-	char *d = (char*)dst;
-	char *s = (char*)src;
-	while (len--) *d++ = *s++;
-}
 
 static uint32_t get_attr(char *path, uint16_t *time, uint16_t *date, uint32_t *size)
 {
