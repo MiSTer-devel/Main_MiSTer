@@ -418,7 +418,7 @@ void substrcpy(char *d, char *s, char idx)
 #define STD_SPACE_EXIT "        SPACE to exit"
 #define STD_COMBO_EXIT "      Ctrl+ESC to exit"
 
-static unsigned char getIdx(char *opt)
+int getOptIdx(char *opt)
 {
 	if ((opt[1] >= '0') && (opt[1] <= '9')) return opt[1] - '0';
 	if ((opt[1] >= 'A') && (opt[1] <= 'V')) return opt[1] - 'A' + 10;
@@ -427,8 +427,8 @@ static unsigned char getIdx(char *opt)
 
 uint32_t getStatus(char *opt, uint32_t status)
 {
-	char idx1 = getIdx(opt);
-	char idx2 = getIdx(opt + 1);
+	char idx1 = getOptIdx(opt);
+	char idx2 = getOptIdx(opt + 1);
 	uint32_t x = (status & (1 << idx1)) ? 1 : 0;
 
 	if (idx2>idx1) {
@@ -441,8 +441,8 @@ uint32_t getStatus(char *opt, uint32_t status)
 
 uint32_t setStatus(char *opt, uint32_t status, uint32_t value)
 {
-	unsigned char idx1 = getIdx(opt);
-	unsigned char idx2 = getIdx(opt + 1);
+	unsigned char idx1 = getOptIdx(opt);
+	unsigned char idx2 = getOptIdx(opt + 1);
 	uint32_t x = 1;
 
 	if (idx2>idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
@@ -453,8 +453,8 @@ uint32_t setStatus(char *opt, uint32_t status, uint32_t value)
 
 uint32_t getStatusMask(char *opt)
 {
-	char idx1 = getIdx(opt);
-	char idx2 = getIdx(opt + 1);
+	char idx1 = getOptIdx(opt);
+	char idx2 = getOptIdx(opt + 1);
 	uint32_t x = 1;
 
 	if (idx2 > idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
@@ -1588,7 +1588,7 @@ void HandleUI(void)
 						//Hide or Disable flag (small letter - opposite action)
 						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
 						{
-							int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
+							int flg = (hdmask & (1 << getOptIdx(p))) ? 1 : 0;
 							if (p[0] == 'H') h |= flg;
 							if (p[0] == 'h') h |= (flg ^ 1);
 							if (p[0] == 'D') d |= flg;
@@ -1916,7 +1916,7 @@ void HandleUI(void)
 						//Hide or Disable flag
 						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
 						{
-							int flg = (hdmask & (1 << getIdx(p))) ? 1 : 0;
+							int flg = (hdmask & (1 << getOptIdx(p))) ? 1 : 0;
 							if (p[0] == 'H') h |= flg;
 							if (p[0] == 'h') h |= (flg ^ 1);
 							if (p[0] == 'D') d |= flg;
@@ -2090,7 +2090,7 @@ void HandleUI(void)
 							int ex = (p[0] == 't') || (p[0] == 'r');
 
 							// determine which status bit is affected
-							uint32_t mask = 1 << getIdx(p);
+							uint32_t mask = 1 << getOptIdx(p);
 							if (mask == 1 && is_x86())
 							{
 								x86_init();
@@ -3738,7 +3738,6 @@ void HandleUI(void)
 		snprintf(s, 29, " Cart: %s", tos_get_cartridge_name());
 		OsdWrite(m++, s, menusub == 2);
 
-		OsdWrite(m++);
 		strcpy(s, " Memory:     ");
 		strcat(s, tos_mem[(tos_system_ctrl() >> 1) & 7]);
 		OsdWrite(m++, s, menusub == 3);
@@ -3778,20 +3777,24 @@ void HandleUI(void)
 		OsdWrite(m++, s, menusub == 10);
 
 		strcpy(s, " Video Crop: ");
-		if (tos_system_ctrl() & TOS_CONTROL_BORDER) strcat(s, "Visible");
+		if (tos_system_ctrl() & TOS_CONTROL_BORDER) strcat(s, (tos_get_extctrl() & 0x400) ? "Visible 216p(5x)" : "Visible");
 		else                                        strcat(s, "Full");
 		OsdWrite(m++, s, menusub == 11);
 
+		strcpy(s, " Scale:      ");
+		strcat(s, tos_scale[(tos_get_extctrl() >> 11) & 3]);
+		OsdWrite(m++, s, menusub == 12);
+
 		strcpy(s, " Scanlines:  ");
 		strcat(s, tos_scanlines[(tos_system_ctrl() >> 20) & 3]);
-		OsdWrite(m++, s, menusub == 12);
+		OsdWrite(m++, s, menusub == 13);
 
 		strcpy(s, " YM-Audio:   ");
 		strcat(s, tos_stereo[(tos_system_ctrl() & TOS_CONTROL_STEREO) ? 1 : 0]);
-		OsdWrite(m++, s, menusub == 13);
+		OsdWrite(m++, s, menusub == 14);
 
 		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
-		OsdWrite(15, STD_EXIT, menusub == 14);
+		OsdWrite(15, STD_EXIT, menusub == 15);
 
 		parentstate = menustate;
 		menustate = MENU_ST_SYSTEM2;
@@ -3911,11 +3914,32 @@ void HandleUI(void)
 				break;
 
 			case 11:
-				tos_update_sysctrl(tos_system_ctrl() ^ TOS_CONTROL_BORDER);
-				menustate = MENU_ST_SYSTEM1;
+				{
+					int mode = ((tos_system_ctrl() & TOS_CONTROL_BORDER) ? 1 : 0) | ((tos_get_extctrl() & 0x400) ? 2 : 0);
+					if (minus)
+					{
+						mode = (mode == 0) ? 3 : (mode == 3) ? 1 : 0;
+					}
+					else
+					{
+						mode = (mode == 0) ? 1 : (mode == 1) ? 3 : 0;
+					}
+
+					tos_update_sysctrl((mode & 1) ? (tos_system_ctrl() | TOS_CONTROL_BORDER) : (tos_system_ctrl() & ~TOS_CONTROL_BORDER));
+					tos_set_extctrl((mode & 2) ? (tos_get_extctrl() | 0x400) : (tos_get_extctrl() & ~0x400));
+					menustate = MENU_ST_SYSTEM1;
+				}
 				break;
 
 			case 12:
+				{
+					int mode = ((tos_get_extctrl() >> 11) + (minus ? -1 : 1)) & 3;
+					tos_set_extctrl((tos_get_extctrl() & ~0x1800) | (mode << 11));
+					menustate = MENU_ST_SYSTEM1;
+				}
+				break;
+
+			case 13:
 				{
 					// next scanline state
 					int scan = ((tos_system_ctrl() >> 20) + (minus ? -1 : 1)) & 3;
@@ -3924,13 +3948,13 @@ void HandleUI(void)
 				}
 				break;
 
-			case 13:
+			case 14:
 				tos_update_sysctrl(tos_system_ctrl() ^ TOS_CONTROL_STEREO);
 				menustate = MENU_ST_SYSTEM1;
 				break;
 
 
-			case 14:
+			case 15:
 				menustate = MENU_ST_MAIN1;
 				menusub = 4;
 				if (need_reset)

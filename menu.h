@@ -14,7 +14,9 @@ void InfoMessage(const char *message, int timeout = 2000, const char *title = "M
 void Info(const char *message, int timeout = 2000, int width = 0, int height = 0, int frame = 0);
 void MenuHide();
 
+int getOptIdx(char *opt);
 uint32_t getStatus(char *opt, uint32_t status);
+uint32_t getStatusMask(char *opt);
 void substrcpy(char *d, char *s, char idx);
 
 void open_joystick_setup();
