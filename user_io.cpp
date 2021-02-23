@@ -782,7 +782,7 @@ int GetMidiLinkMode()
 	struct stat filestat;
 	if (!stat("/tmp/ML_FSYNTH", &filestat))  return 0;
 	if (!stat("/tmp/ML_MUNT", &filestat))    return 1;
-	if (!stat("/tmp/ML_SERMIDI", &filestat)) return 2;
+	if (!stat("/tmp/ML_USBMIDI", &filestat)) return 2;
 	if (!stat("/tmp/ML_UDP", &filestat))     return 3;
 	if (!stat("/tmp/ML_TCP", &filestat))     return 4;
 	if (!stat("/tmp/ML_UDP_ALT", &filestat)) return 5;
@@ -809,7 +809,7 @@ void SetMidiLinkMode(int mode)
 	{
 		case 0: MakeFile("/tmp/ML_FSYNTH", "");  break;
 		case 1: MakeFile("/tmp/ML_MUNT", "");    break;
-		case 2: MakeFile("/tmp/ML_SERMIDI", ""); break;
+		case 2: MakeFile("/tmp/ML_USBMIDI", ""); break;
 		case 3: MakeFile("/tmp/ML_UDP", "");     break;
 		case 4: MakeFile("/tmp/ML_TCP", "");     break;
 		case 5: MakeFile("/tmp/ML_UDP_ALT", ""); break;
