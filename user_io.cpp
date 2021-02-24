@@ -1227,7 +1227,7 @@ void user_io_init(const char *path, const char *xml)
 		send_rtc(3);
 
 		// release reset
-		user_io_8bit_set_status(0, UIO_STATUS_RESET);
+		if(!is_minimig() && !is_st()) user_io_8bit_set_status(0, UIO_STATUS_RESET);
 		if(xml) arcade_check_error();
 		break;
 	}
