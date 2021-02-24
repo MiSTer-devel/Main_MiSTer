@@ -23,7 +23,6 @@ const char* tos_scanlines[] = { "Off","25%","50%","75%" };
 const char* tos_stereo[] = { "Mono","Stereo" };
 const char* tos_chipset[] = { "ST","STE","MegaSTE","STEroids" };
 const char* tos_chipset_short[] = { "ST","STe","MST","ST+" };
-const char* tos_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+" };
 
 typedef struct {
 	unsigned long system_ctrl;  // system control word

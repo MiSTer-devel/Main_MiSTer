@@ -74,7 +74,6 @@ extern const char* tos_mem[];
 extern const char* tos_scanlines[];
 extern const char* tos_stereo[];
 extern const char* tos_chipset[];
-extern const char* tos_scale[];
 
 const char* tos_get_cfg_string(int num);
 

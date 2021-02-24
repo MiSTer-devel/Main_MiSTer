@@ -211,6 +211,7 @@ const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
 const char *config_gamma_msg[] = { "Off","On" };
+const char *config_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+" };
 
 #define DPAD_NAMES 4
 #define DPAD_BUTTON_NAMES 12  //DPAD_NAMES + 6 buttons + start/select
@@ -3782,7 +3783,7 @@ void HandleUI(void)
 		OsdWrite(m++, s, menusub == 11);
 
 		strcpy(s, " Scale:      ");
-		strcat(s, tos_scale[(tos_get_extctrl() >> 11) & 3]);
+		strcat(s, config_scale[(tos_get_extctrl() >> 11) & 3]);
 		OsdWrite(m++, s, menusub == 12);
 
 		strcpy(s, " Scanlines:  ");
@@ -5465,7 +5466,7 @@ void HandleUI(void)
 		/* video settings menu                                            */
 		/******************************************************************/
 	case MENU_MINIMIG_VIDEO1:
-		menumask = 0x7f;
+		menumask = 0x1ff;
 		parentstate = menustate;
 		helptext_idx = 0; // helptexts[HELPTEXT_VIDEO];
 
@@ -5486,15 +5487,22 @@ void HandleUI(void)
 		strcpy(s, " Aspect Ratio  : ");
 		minimig_config.scanlines = (get_ar_name((minimig_config.scanlines >> 4) & 3, s) << 4) | (minimig_config.scanlines & ~0x30);
 		OsdWrite(m++, s, menusub == 3, 0);
+		strcpy(s, " Pixel Clock   : ");
+		strcat(s, (minimig_get_extcfg() & 0x400) ? "Adaptive" : "28MHz");
+		OsdWrite(m++, s, menusub == 4, 0);
+		strcpy(s, " Scaling       : ");
+		strcat(s,config_scale[(minimig_get_extcfg() >> 11) & 3]);
+		OsdWrite(m++, s, menusub == 5, 0);
+
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " Stereo mix    : ");
 		strcat(s, config_stereo_msg[minimig_config.audio & 3]);
-		OsdWrite(m++, s, menusub == 4, 0);
+		OsdWrite(m++, s, menusub == 6, 0);
 		OsdWrite(m++, "", 0, 0);
 		OsdWrite(m++, "", 0, 0);
-		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 5, 0);
+		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 7, 0);
 		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 6, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 8, 0);
 
 		menustate = MENU_MINIMIG_VIDEO2;
 		break;
@@ -5538,15 +5546,24 @@ void HandleUI(void)
 			}
 			else if (menusub == 4)
 			{
+				minimig_set_extcfg(minimig_get_extcfg() ^ 0x400);
+			}
+			else if (menusub == 5)
+			{
+				int mode = ((minimig_get_extcfg() >> 11) + (minus ? -1 : 1)) & 3;
+				minimig_set_extcfg((minimig_get_extcfg() & ~0x1800) | (mode << 11));
+			}
+			else if (menusub == 6)
+			{
 				minimig_config.audio = (minimig_config.audio + (minus ? -1 : 1)) & 3;
 				minimig_ConfigAudio(minimig_config.audio);
 			}
-			else if (menusub == 5 && select)
+			else if (menusub == 7 && select)
 			{
 				menustate = MENU_NONE1;
 				minimig_set_adjust(minimig_get_adjust() ? 0 : 1);
 			}
-			else if (menusub == 6)
+			else if (menusub == 8)
 			{
 				menustate = MENU_MINIMIG_MAIN1;
 				menusub = 8;
