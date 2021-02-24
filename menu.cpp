@@ -1358,7 +1358,7 @@ void HandleUI(void)
 		OsdSetTitle(CoreName, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		m = 0;
-		menumask = 0xfff;
+		menumask = 0x1fff;
 
 		strcpy(s, " Floppy 0: ");
 		strncat(s, get_image_name(0) ? get_image_name(0) : "* no disk *",27);
@@ -1390,27 +1390,29 @@ void HandleUI(void)
 		archie_set_ar(get_ar_name(archie_get_ar(), s));
 		OsdWrite(m++, s, menusub == 5);
 
-		strcpy(s, " Refresh Rate:    ");
-		strcat(s, archie_get_60() ? "Variable" : "60Hz");
+		strcpy(s, " Scale:           ");
+		strcat(s, config_scale[archie_get_scale()]);
 		OsdWrite(m++, s, menusub == 6);
 
-		sprintf(s, " Stereo Mix:      %s", config_stereo_msg[archie_get_amix()]);
+		strcpy(s, " Refresh Rate:    ");
+		strcat(s, archie_get_60() ? "Variable" : "60Hz");
 		OsdWrite(m++, s, menusub == 7);
+
+		sprintf(s, " Stereo Mix:      %s", config_stereo_msg[archie_get_amix()]);
+		OsdWrite(m++, s, menusub == 8);
 
 		strcpy(s, " 25MHz Audio Fix: ");
 		strcat(s, archie_get_afix() ? "Enable" : "Disable");
-		OsdWrite(m++, s, menusub == 8);
-
-		OsdWrite(m++);
+		OsdWrite(m++, s, menusub == 9);
 
 		sprintf(s, " Swap Joysticks:  %s", user_io_get_joyswap() ? "Yes" : "No");
-		OsdWrite(m++, s, menusub == 9);
-		sprintf(s, " Swap Btn 2/3:    %s", archie_get_mswap() ? "Yes" : "No");
 		OsdWrite(m++, s, menusub == 10);
+		sprintf(s, " Swap Btn 2/3:    %s", archie_get_mswap() ? "Yes" : "No");
+		OsdWrite(m++, s, menusub == 11);
 
 		while(m<15) OsdWrite(m++);
 
-		OsdWrite(15, STD_EXIT, menusub == 11, 0);
+		OsdWrite(15, STD_EXIT, menusub == 12, 0);
 		menustate = MENU_ARCHIE_MAIN2;
 		parentstate = MENU_ARCHIE_MAIN1;
 
@@ -1468,31 +1470,36 @@ void HandleUI(void)
 				break;
 
 			case 6:
-				archie_set_60(!archie_get_60());
+				archie_set_scale(archie_get_scale() + (minus ? -1 : 1));
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
 			case 7:
-				archie_set_amix(archie_get_amix() + (minus ? -1 : 1));
+				archie_set_60(!archie_get_60());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
 			case 8:
-				archie_set_afix(!archie_get_afix());
+				archie_set_amix(archie_get_amix() + (minus ? -1 : 1));
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
 			case 9:
-				user_io_set_joyswap(!user_io_get_joyswap());
+				archie_set_afix(!archie_get_afix());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
 			case 10:
+				user_io_set_joyswap(!user_io_get_joyswap());
+				menustate = MENU_ARCHIE_MAIN1;
+				break;
+
+			case 11:
 				archie_set_mswap(!archie_get_mswap());
 				menustate = MENU_ARCHIE_MAIN1;
 				break;
 
-			case 11:  // Exit
+			case 12:  // Exit
 				if (select) menustate = MENU_NONE1;
 				break;
 			}
