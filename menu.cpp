@@ -5473,7 +5473,7 @@ void HandleUI(void)
 		/* video settings menu                                            */
 		/******************************************************************/
 	case MENU_MINIMIG_VIDEO1:
-		menumask = 0x1ff;
+		menumask = 0x3ff;
 		parentstate = menustate;
 		helptext_idx = 0; // helptexts[HELPTEXT_VIDEO];
 
@@ -5500,16 +5500,18 @@ void HandleUI(void)
 		strcpy(s, " Scaling       : ");
 		strcat(s,config_scale[(minimig_get_extcfg() >> 11) & 3]);
 		OsdWrite(m++, s, menusub == 5, 0);
+		strcpy(s, " RTG Upscaling : ");
+		strcat(s, (minimig_get_extcfg() & 0x4000) ? "HV-Integer" : "Normal");
+		OsdWrite(m++, s, menusub == 6, 0);
 
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " Stereo mix    : ");
 		strcat(s, config_stereo_msg[minimig_config.audio & 3]);
-		OsdWrite(m++, s, menusub == 6, 0);
+		OsdWrite(m++, s, menusub == 7, 0);
 		OsdWrite(m++, "", 0, 0);
-		OsdWrite(m++, "", 0, 0);
-		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 7, 0);
+		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 8, 0);
 		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 8, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 9, 0);
 
 		menustate = MENU_MINIMIG_VIDEO2;
 		break;
@@ -5562,15 +5564,19 @@ void HandleUI(void)
 			}
 			else if (menusub == 6)
 			{
+				minimig_set_extcfg(minimig_get_extcfg() ^ 0x4000);
+			}
+			else if (menusub == 7)
+			{
 				minimig_config.audio = (minimig_config.audio + (minus ? -1 : 1)) & 3;
 				minimig_ConfigAudio(minimig_config.audio);
 			}
-			else if (menusub == 7 && select)
+			else if (menusub == 8 && select)
 			{
 				menustate = MENU_NONE1;
 				minimig_set_adjust(minimig_get_adjust() ? 0 : 1);
 			}
-			else if (menusub == 8)
+			else if (menusub == 9)
 			{
 				menustate = MENU_MINIMIG_MAIN1;
 				menusub = 8;
