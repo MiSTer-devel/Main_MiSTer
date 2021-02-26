@@ -504,9 +504,6 @@ void cdd_t::CommandExec() {
 				stat[6] = BCD(msf.f) >> 4;
 				stat[7] = BCD(msf.f) & 0xF;
 				stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
-
-				//stat[2] = (cdd.index < this->toc.last) ? BCD(this->index + 1) >> 4 : 0xA;
-				//stat[3] = (cdd.index < this->toc.last) ? BCD(this->index + 1) & 0xF : 0xA;
 			} else if (stat[1] == 0x00) {
 				int lba = this->lba + 150;
 				LBAToMSF(lba, &msf);
