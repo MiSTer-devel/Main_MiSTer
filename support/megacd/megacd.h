@@ -66,6 +66,7 @@ private:
 	int audioOffset;
 	int chd_hunknum;
 	uint8_t *chd_hunkbuf;
+	int chd_audio_read_lba;
 	uint8_t stat[10];
 	uint8_t comm[10];
 
