@@ -324,14 +324,15 @@ static void rom_finish(int send, uint32_t address)
 	{
 		if (send)
 		{
+			uint8_t *data = romdata;
+			int len = romlen[0];
+
 			// set index byte (0=bios rom, 1-n=OSD entry index)
 			user_io_set_index(romindex);
 
 			// prepare transmission of new file
-			user_io_set_download(1);
+			user_io_set_download(1, address ? len : 0);
 
-			uint8_t *data = romdata;
-			int len = romlen[0];
 			if (address)
 			{
 				send_to_ddr(address, data, len);
