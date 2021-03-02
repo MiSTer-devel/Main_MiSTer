@@ -2597,7 +2597,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					mouse_emu_y /= 12;
 					return;
 				}
-				else if (ev->code == (input[dev].mmap[SYS_AXIS_X] & 0xFFFF) || (ev->code == 0 && input[dev].lightgun))
+				else if (((input[dev].mmap[SYS_AXIS_X] >> 16) == 2 && ev->code == (input[dev].mmap[SYS_AXIS_X] & 0xFFFF)) || (ev->code == 0 && input[dev].lightgun))
 				{
 					// skip if joystick is undefined.
 					if (!input[dev].num) break;
@@ -2608,7 +2608,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					joy_analog(input[dev].num, 0, offset);
 					return;
 				}
-				else if (ev->code == (input[dev].mmap[SYS_AXIS_Y] & 0xFFFF) || (ev->code == 1 && input[dev].lightgun))
+				else if (((input[dev].mmap[SYS_AXIS_Y] >> 16) == 2 && ev->code == (input[dev].mmap[SYS_AXIS_Y] & 0xFFFF)) || (ev->code == 1 && input[dev].lightgun))
 				{
 					// skip if joystick is undefined.
 					if (!input[dev].num) break;
