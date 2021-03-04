@@ -5473,7 +5473,7 @@ void HandleUI(void)
 		/* video settings menu                                            */
 		/******************************************************************/
 	case MENU_MINIMIG_VIDEO1:
-		menumask = 0x3ff;
+		menumask = 0x7ff;
 		parentstate = menustate;
 		helptext_idx = 0; // helptexts[HELPTEXT_VIDEO];
 
@@ -5504,14 +5504,18 @@ void HandleUI(void)
 		strcat(s, (minimig_get_extcfg() & 0x4000) ? "HV-Integer" : "Normal");
 		OsdWrite(m++, s, menusub == 6, 0);
 
-		OsdWrite(m++, "", 0, 0);
+		OsdWrite(m++);
 		strcpy(s, " Stereo mix    : ");
 		strcat(s, config_stereo_msg[minimig_config.audio & 3]);
 		OsdWrite(m++, s, menusub == 7, 0);
-		OsdWrite(m++, "", 0, 0);
-		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 8, 0);
+		strcpy(s, " Audio Filter  : ");
+		strcat(s, (minimig_get_extcfg() & 0x8000) ? "On" : "Off");
+		OsdWrite(m++, s, menusub == 8, 0);
+
+		OsdWrite(m++);
+		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 9, 0);
 		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 9, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 10, 0);
 
 		menustate = MENU_MINIMIG_VIDEO2;
 		break;
@@ -5521,69 +5525,81 @@ void HandleUI(void)
 		if (select || minus || plus)
 		{
 			menustate = MENU_MINIMIG_VIDEO1;
-			if (menusub == 0)
+			switch(menusub)
 			{
+			case 0:
 				minimig_config.chipset ^= CONFIG_NTSC;
 				minimig_ConfigChipset(minimig_config.chipset);
-			}
-			else if (menusub == 1)
-			{
-				int scanlines = minimig_config.scanlines & 7;
-				if (minus)
+				break;
+
+			case 1:
 				{
-					scanlines--;
-					if (scanlines < 0) scanlines = 4;
+					int scanlines = minimig_config.scanlines & 7;
+					if (minus)
+					{
+						scanlines--;
+						if (scanlines < 0) scanlines = 4;
+					}
+					else
+					{
+						scanlines++;
+						if (scanlines > 4) scanlines = 0;
+					}
+					minimig_config.scanlines = scanlines | (minimig_config.scanlines & 0xf8);
+					minimig_ConfigVideo(minimig_config.scanlines);
 				}
-				else
-				{
-					scanlines++;
-					if (scanlines > 4) scanlines = 0;
-				}
-				minimig_config.scanlines = scanlines | (minimig_config.scanlines & 0xf8);
-				minimig_ConfigVideo(minimig_config.scanlines);
-			}
-			else if (menusub == 2)
-			{
+				break;
+
+			case 2:
 				minimig_config.scanlines &= ~0x80;
 				minimig_config.scanlines ^= 0x40;
 				minimig_ConfigVideo(minimig_config.scanlines);
-			}
-			else if (menusub == 3)
-			{
+				break;
+
+			case 3:
 				minimig_config.scanlines = (next_ar((minimig_config.scanlines >> 4) & 3, minus) << 4) | (minimig_config.scanlines & ~0x30);
 				minimig_ConfigVideo(minimig_config.scanlines);
-			}
-			else if (menusub == 4)
-			{
+				break;
+
+			case 4:
 				minimig_set_extcfg(minimig_get_extcfg() ^ 0x400);
-			}
-			else if (menusub == 5)
-			{
-				int mode = ((minimig_get_extcfg() >> 11) + (minus ? -1 : 1)) & 3;
-				minimig_set_extcfg((minimig_get_extcfg() & ~0x1800) | (mode << 11));
-			}
-			else if (menusub == 6)
-			{
+				break;
+
+			case 5:
+				minimig_set_extcfg((minimig_get_extcfg() & ~0x1800) | ((minimig_get_extcfg() + (minus ? -0x800 : 0x800)) & 0x1800));
+				break;
+
+			case 6:
 				minimig_set_extcfg(minimig_get_extcfg() ^ 0x4000);
-			}
-			else if (menusub == 7)
-			{
+				break;
+
+			case 7:
 				minimig_config.audio = (minimig_config.audio + (minus ? -1 : 1)) & 3;
 				minimig_ConfigAudio(minimig_config.audio);
-			}
-			else if (menusub == 8 && select)
-			{
-				menustate = MENU_NONE1;
-				minimig_set_adjust(minimig_get_adjust() ? 0 : 1);
-			}
-			else if (menusub == 9)
-			{
-				menustate = MENU_MINIMIG_MAIN1;
-				menusub = 8;
+				break;
+
+			case 8:
+				minimig_set_extcfg(minimig_get_extcfg() ^ 0x8000);
+				break;
+
+			case 9:
+				if (select)
+				{
+					menustate = MENU_NONE1;
+					minimig_set_adjust(minimig_get_adjust() ? 0 : 1);
+				}
+				break;
+
+			case 10:
+				if (select)
+				{
+					menustate = MENU_MINIMIG_MAIN1;
+					menusub = 8;
+				}
+				break;
 			}
 		}
-
-		if (menu)
+		else if (menu)
 		{
 			menustate = MENU_NONE1;
 		}
