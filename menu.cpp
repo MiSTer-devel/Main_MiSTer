@@ -211,7 +211,7 @@ const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
 const char *config_gamma_msg[] = { "Off","On" };
-const char *config_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+" };
+const char *config_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+", "HV-Integer", "???", "???", "???" };
 
 #define DPAD_NAMES 4
 #define DPAD_BUTTON_NAMES 12  //DPAD_NAMES + 6 buttons + start/select
@@ -4230,7 +4230,7 @@ void HandleUI(void)
 		}
 		else if (select || plus || minus)
 		{
-			uint16_t mt32_cfg = is_minimig() ? minimig_get_extcfg() : tos_get_extctrl();
+			uint32_t mt32_cfg = is_minimig() ? minimig_get_extcfg() : tos_get_extctrl();
 
 			switch (menusub)
 			{
@@ -5473,14 +5473,13 @@ void HandleUI(void)
 		/* video settings menu                                            */
 		/******************************************************************/
 	case MENU_MINIMIG_VIDEO1:
-		menumask = 0x7ff;
+		menumask = 0x1fff;
 		parentstate = menustate;
 		helptext_idx = 0; // helptexts[HELPTEXT_VIDEO];
 
 		m = 0;
-		OsdSetTitle("Video", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
+		OsdSetTitle("Audio & Video", OSD_ARROW_LEFT | OSD_ARROW_RIGHT);
 
-		OsdWrite(m++);
 		strcpy(s, " TV Standard   : ");
 		strcat(s, minimig_config.chipset & CONFIG_NTSC ? "NTSC" : "PAL");
 		OsdWrite(m++, s, menusub == 0, 0);
@@ -5498,7 +5497,7 @@ void HandleUI(void)
 		strcat(s, (minimig_get_extcfg() & 0x400) ? "Adaptive" : "28MHz");
 		OsdWrite(m++, s, menusub == 4, 0);
 		strcpy(s, " Scaling       : ");
-		strcat(s,config_scale[(minimig_get_extcfg() >> 11) & 3]);
+		strcat(s,config_scale[(minimig_get_extcfg() >> 11) & 7]);
 		OsdWrite(m++, s, menusub == 5, 0);
 		strcpy(s, " RTG Upscaling : ");
 		strcat(s, (minimig_get_extcfg() & 0x4000) ? "HV-Integer" : "Normal");
@@ -5509,13 +5508,19 @@ void HandleUI(void)
 		strcat(s, config_stereo_msg[minimig_config.audio & 3]);
 		OsdWrite(m++, s, menusub == 7, 0);
 		strcpy(s, " Audio Filter  : ");
-		strcat(s, (minimig_get_extcfg() & 0x8000) ? "On" : "Off");
+		strcat(s, (~minimig_get_extcfg() & 0x10000) ? "Auto(LED)" : (minimig_get_extcfg() & 0x8000) ? "On" : "Off");
 		OsdWrite(m++, s, menusub == 8, 0);
+		strcpy(s, " Model         : ");
+		strcat(s, (minimig_get_extcfg() & 0x20000) ? "A1200" : "A500");
+		OsdWrite(m++, s, menusub == 9, 0);
+		strcpy(s, " Paula Output  : ");
+		strcat(s, (minimig_get_extcfg() & 0x40000) ? "PWM" : "Normal");
+		OsdWrite(m++, s, menusub == 10, 0);
 
 		OsdWrite(m++);
-		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 9, 0);
+		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 11, 0);
 		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
-		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 10, 0);
+		OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 12, 0);
 
 		menustate = MENU_MINIMIG_VIDEO2;
 		break;
@@ -5566,7 +5571,12 @@ void HandleUI(void)
 				break;
 
 			case 5:
-				minimig_set_extcfg((minimig_get_extcfg() & ~0x1800) | ((minimig_get_extcfg() + (minus ? -0x800 : 0x800)) & 0x1800));
+				{
+					int mode = (minimig_get_extcfg() >> 11) & 7;
+					if (minus) mode = (mode <= 0) ? 4 : (mode - 1);
+					else mode = (mode >= 4) ? 0 : (mode + 1);
+					minimig_set_extcfg((minimig_get_extcfg() & ~0x3800) | (mode << 11));
+				}
 				break;
 
 			case 6:
@@ -5579,10 +5589,23 @@ void HandleUI(void)
 				break;
 
 			case 8:
-				minimig_set_extcfg(minimig_get_extcfg() ^ 0x8000);
+				{
+					int mode = (minimig_get_extcfg() >> 15) & 3;
+					if (minus) mode = (mode == 2) ? 0 : (mode - 1);
+					else mode = (mode == 0) ? 2 : (mode + 1);
+					minimig_set_extcfg((minimig_get_extcfg() & ~0x18000) | ((mode & 3) << 15));
+				}
 				break;
 
 			case 9:
+				minimig_set_extcfg(minimig_get_extcfg() ^ 0x20000);
+				break;
+
+			case 10:
+				minimig_set_extcfg(minimig_get_extcfg() ^ 0x40000);
+				break;
+
+			case 11:
 				if (select)
 				{
 					menustate = MENU_NONE1;
@@ -5590,7 +5613,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 10:
+			case 12:
 				if (select)
 				{
 					menustate = MENU_MINIMIG_MAIN1;
