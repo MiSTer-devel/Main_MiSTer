@@ -553,7 +553,7 @@ static const char* get_shared_vadjust_path()
 	return path;
 }
 
-static void adjust_vsize(char force)
+void minimig_adjust_vsize(char force)
 {
 	static uint16_t nres = 0;
 	spi_uio_cmd_cont(UIO_GET_VMODE);
@@ -661,7 +661,7 @@ void minimig_set_adjust(char n)
 {
 	if (minimig_adjust && !n) store_vsize();
 	minimig_adjust = (n == 1) ? 1 : 0;
-	if (n == 2) adjust_vsize(1);
+	if (n == 2) minimig_adjust_vsize(1);
 }
 
 char minimig_get_adjust()

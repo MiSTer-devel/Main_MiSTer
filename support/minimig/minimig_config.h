@@ -70,6 +70,7 @@ void minimig_set_kickstart(char *name);
 
 void minimig_set_adjust(char n);
 char minimig_get_adjust();
+void minimig_adjust_vsize(char force);
 
 void minimig_ConfigVideo(unsigned char scanlines);
 void minimig_ConfigAudio(unsigned char audio);

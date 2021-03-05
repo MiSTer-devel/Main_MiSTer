@@ -3132,6 +3132,7 @@ void user_io_poll()
 		res_timer = GetTimer(500);
 		if (!minimig_get_adjust())
 		{
+			if(is_minimig()) minimig_adjust_vsize(0);
 			video_mode_adjust();
 		}
 	}
