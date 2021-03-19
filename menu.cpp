@@ -376,7 +376,7 @@ static void SelectFile(const char* path, const char* pFileExt, unsigned char Opt
 		if (home_dir) home_dir++;
 		else home_dir = home;
 
-		if (strncasecmp(home, selPath, strlen(home)) || !strcasecmp(home, selPath))
+		if (strncasecmp(home, selPath, strlen(home)) || !strcasecmp(home, selPath) || (!FileExists(selPath) && !PathIsDir(selPath)))
 		{
 			Options &= ~SCANO_NOENTER;
 			strcpy(selPath, home);
