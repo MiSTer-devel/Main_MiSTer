@@ -1020,6 +1020,7 @@ void HandleUI(void)
 	static char title[32] = {};
 	static uint32_t saved_menustate = 0;
 	static char addon[1024];
+	static int store_name;
 
 	static char	cp_MenuCancel;
 
@@ -1967,6 +1968,7 @@ void HandleUI(void)
 				{
 					if (p[0] == 'F' && (select || recent))
 					{
+						store_name = 0;
 						opensave = 0;
 						ioctl_index = menusub + 1;
 						int idx = 1;
@@ -1974,6 +1976,11 @@ void HandleUI(void)
 						if (p[1] == 'S')
 						{
 							opensave = 1;
+							idx++;
+						}
+						else if (p[1] == 'C')
+						{
+							store_name = 1;
 							idx++;
 						}
 
@@ -2170,6 +2177,13 @@ void HandleUI(void)
 			printf("File selected: %s\n", selPath);
 			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
 
+			if (store_name)
+			{
+				char str[64];
+				sprintf(str, "%s.f%d", user_io_get_core_name_ex(), ioctl_index);
+				FileSaveConfig(str, selPath, sizeof(selPath));
+			}
+
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
@@ -2184,7 +2198,7 @@ void HandleUI(void)
 					pcecd_set_image(0, "");
 					pcecd_reset();
 				}
-				user_io_store_filename(selPath);
+				if(!store_name) user_io_store_filename(selPath);
 				user_io_file_tx(selPath, idx, opensave);
 				if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
 			}

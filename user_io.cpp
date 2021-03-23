@@ -534,10 +534,10 @@ static void parse_config()
 			}
 		}
 
-		if (i>=2 && p && p[0])
+		if (i >= 2 && p && p[0])
 		{
 			//skip Disable/Hide masks
-			while((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p)>=2) p += 2;
+			while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) >= 2) p += 2;
 			if (p[0] == 'P') p += 2;
 
 			if (p[0] == 'R' || p[0] == 'T')
@@ -573,7 +573,7 @@ static void parse_config()
 			if (p[0] == 'J')
 			{
 				int n = 1;
-				if (p[1] == 'D') { joy_transl = 0; n++;	}
+				if (p[1] == 'D') { joy_transl = 0; n++; }
 				if (p[1] == 'A') { joy_transl = 1; n++; }
 				if (p[1] == 'N') { joy_transl = 2; n++; }
 
@@ -589,11 +589,11 @@ static void parse_config()
 				uint32_t status = user_io_8bit_set_status(0, 0);
 				printf("found OX option: %s, 0x%08X\n", p, status);
 
-				unsigned long x = getStatus(p+1, status);
+				unsigned long x = getStatus(p + 1, status);
 
 				if (is_x86())
 				{
-					if (p[2] == '2') x86_set_fdd_boot(!(x&1));
+					if (p[2] == '2') x86_set_fdd_boot(!(x & 1));
 				}
 			}
 
@@ -615,6 +615,16 @@ static void parse_config()
 			if (p[0] == 'C')
 			{
 				use_cheats = 1;
+			}
+
+			if (p[0] == 'F' && p[1] == 'C')
+			{
+				static char str[1024];
+				sprintf(str, "%s.f%c", user_io_get_core_name_ex(), p[2]);
+				if (FileLoadConfig(str, str, sizeof(str)))
+				{
+					user_io_file_tx(str, p[2] - '0');
+				}
 			}
 		}
 		i++;
