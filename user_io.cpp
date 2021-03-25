@@ -408,6 +408,7 @@ static uint32_t midi_speeds[12] = {};
 static char midi_speed_labels[12][32] = {};
 static const uint32_t mlink_speeds[12] = { 110, 300, 600, 1200, 2400, 9600, 14400, 19200, 31250, 38400, 57600, 115200 };
 static const char mlink_speed_labels[12][32] = { "110", "300", "600", "1200", "2400", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200" };
+static char defmra[1024] = {};
 
 static void parse_config()
 {
@@ -536,8 +537,19 @@ static void parse_config()
 
 		if (i >= 2 && p && p[0])
 		{
-			//skip Disable/Hide masks
-			while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) >= 2) p += 2;
+			if (!strncmp(p, "DEFMRA,", 7))
+			{
+				snprintf(defmra, sizeof(defmra), "%s/_Arcades/%s", getRootDir(), p + 7);
+			}
+			else if (!strncmp(p, "DIP", 3))
+			{
+
+			}
+			else
+			{
+				//skip Disable/Hide masks
+				while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) >= 2) p += 2;
+			}
 			if (p[0] == 'P') p += 2;
 
 			if (p[0] == 'R' || p[0] == 'T')
@@ -1008,8 +1020,6 @@ void user_io_init(const char *path, const char *xml)
 	strcpy(core_path, xml ? xml : path);
 	strcpy(rbf_path, path);
 
-	if (xml) arcade_override_name(xml);
-
 	memset(sd_image, 0, sizeof(sd_image));
 
 	core_type = (fpga_core_id() & 0xFF);
@@ -1034,6 +1044,16 @@ void user_io_init(const char *path, const char *xml)
 	OsdSetSize(8);
 
 	user_io_read_confstr();
+	parse_config();
+	if (!xml && defmra[0] && FileExists(defmra))
+	{
+		xml = (const char*)defmra;
+		strcpy(core_path, xml);
+		printf("Using default MRA: %s\n", xml);
+	}
+
+	if (xml) arcade_override_name(xml);
+
 	if (core_type == CORE_TYPE_8BIT)
 	{
 		puts("Identified 8BIT core");
@@ -1070,7 +1090,6 @@ void user_io_init(const char *path, const char *xml)
 		send_rtc(1);
 		user_io_set_core_name("Archie");
 		archie_init();
-		parse_config();
 		parse_buttons();
 		break;
 
@@ -1078,7 +1097,6 @@ void user_io_init(const char *path, const char *xml)
 		puts("Identified Sharp MZ Series core");
 		user_io_set_core_name("sharpmz");
         sharpmz_init();
-		parse_config();
 		parse_buttons();
 		break;
 
@@ -1106,14 +1124,12 @@ void user_io_init(const char *path, const char *xml)
 				status[0] &= ~UIO_STATUS_RESET;
 				user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
 				user_io_8bit_set_status(status[1], 0xffffffff, 1);
-				parse_config();
 			}
 
 			if (is_st())
 			{
 				tos_config_load(0);
 				tos_upload(NULL);
-				parse_config();
 			}
 			else if (is_menu())
 			{
@@ -1129,7 +1145,6 @@ void user_io_init(const char *path, const char *xml)
 				}
 				else if (is_minimig())
 				{
-					parse_config();
 					puts("Identified Minimig V2 core");
 					BootInit();
 				}

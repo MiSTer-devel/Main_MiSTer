@@ -1581,7 +1581,10 @@ void HandleUI(void)
 				{
 					int h = 0, d = 0, inpage = !page;
 
-					if (!strcmp(p, "DIP"))
+					if (!strncmp(p, "DEFMRA,", 7))
+					{
+					}
+					else if (!strcmp(p, "DIP"))
 					{
 						if (arcade_sw()->dip_num)
 						{
@@ -1920,7 +1923,7 @@ void HandleUI(void)
 					d = 0;
 					inpage = !page;
 
-					if (strcmp(p, "DIP"))
+					if (strcmp(p, "DIP") && strncmp(p, "DEFMRA,", 7))
 					{
 						//Hide or Disable flag
 						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
