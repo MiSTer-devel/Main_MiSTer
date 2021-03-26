@@ -1134,7 +1134,7 @@ static char *get_map_name(int dev, int def)
 {
 	static char name[128];
 	if (def || is_menu()) sprintf(name, "input_%s_v3.map", input[dev].idstr);
-	else sprintf(name, "%s_input_%s_v3.map", user_io_get_core_name_ex(), input[dev].idstr);
+	else sprintf(name, "%s_input_%s_v3.map", user_io_get_core_name(), input[dev].idstr);
 	return name;
 }
 
@@ -1173,7 +1173,7 @@ void finish_map_setting(int dismiss)
 void input_lightgun_save(int idx, uint16_t *cal)
 {
 	static char name[128];
-	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
 	FileSaveConfig(name, cal, 4 * sizeof(uint16_t));
 	memcpy(input[idx].guncal, cal, sizeof(input[idx].guncal));
 }
@@ -1181,7 +1181,7 @@ void input_lightgun_save(int idx, uint16_t *cal)
 static void input_lightgun_load(int idx)
 {
 	static char name[128];
-	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
 	FileLoadConfig(name, input[idx].guncal, 4 * sizeof(uint16_t));
 }
 

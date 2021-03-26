@@ -174,7 +174,10 @@ static int ini_get_section(char* buf)
 		else buf[i] = toupper(buf[i]);
 	}
 
-	if (!strcasecmp(buf, "MiSTer") || ((wc_pos >= 0) ? !strncasecmp(buf, user_io_get_core_name_ex(), wc_pos) : !strcasecmp(buf, user_io_get_core_name_ex())))
+	if (!strcasecmp(buf, "MiSTer") ||
+		(is_arcade() && !strcasecmp(buf, "arcade")) ||
+		((wc_pos >= 0) ? !strncasecmp(buf, user_io_get_core_name(1), wc_pos) : !strcasecmp(buf, user_io_get_core_name(1))) ||
+		((wc_pos >= 0) ? !strncasecmp(buf, user_io_get_core_name(0), wc_pos) : !strcasecmp(buf, user_io_get_core_name(0))))
 	{
 		ini_parser_debugf("Got SECTION '%s'", buf);
 		return 1;
@@ -271,7 +274,7 @@ static void ini_parse(int alt)
 	int section = INI_SECTION_INVALID_ID;
 	int line_status;
 
-	ini_parser_debugf("Start INI parser for core \"%s\".", user_io_get_core_name_ex());
+	ini_parser_debugf("Start INI parser for core \"%s\"(%s).", user_io_get_core_name(0), user_io_get_core_name(1));
 
 	memset(&ini_file, 0, sizeof(ini_file));
 

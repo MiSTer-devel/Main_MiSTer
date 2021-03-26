@@ -1008,17 +1008,8 @@ static int xml_read_setname(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, 
 	return true;
 }
 
-
-static int arcade_type = 0;
-int is_arcade()
-{
-	return arcade_type;
-}
-
 int arcade_send_rom(const char *xml)
 {
-	arcade_type = 1;
-
 	const char *p = strrchr(xml, '/');
 	p = p ? p + 1 : xml;
 	snprintf(switches.name, sizeof(switches.name), p);

@@ -313,7 +313,7 @@ void video_set_scaler_coeff(char *name)
 
 static void loadScalerCfg()
 {
-	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name_ex());
+	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name());
 	if (!FileLoadConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
 	{
 		memset(scaler_flt_cfg, 0, sizeof(scaler_flt_cfg));
@@ -424,7 +424,7 @@ void video_set_gamma_curve(char *name)
 
 static void loadGammaCfg()
 {
-	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name_ex());
+	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name());
 	if (!FileLoadConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg) - 1) || gamma_cfg[0]>1)
 	{
 		memset(gamma_cfg, 0, sizeof(gamma_cfg));

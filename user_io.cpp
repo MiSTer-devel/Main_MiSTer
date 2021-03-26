@@ -130,6 +130,9 @@ char* user_io_create_config_name()
 }
 
 static char core_name[32] = {};
+static char ovr_name[32] = {};
+static char orig_name[32] = {};
+
 static char filepath_store[1024];
 
 char *user_io_make_filepath(const char *path, const char *filename)
@@ -139,7 +142,6 @@ char *user_io_make_filepath(const char *path, const char *filename)
 	return filepath_store;
 }
 
-static char ovr_name[32] = {};
 void user_io_name_override(const char* name)
 {
 	snprintf(ovr_name, sizeof(ovr_name), "%s", name);
@@ -151,9 +153,9 @@ void user_io_set_core_name(const char *name)
 	printf("Core name set to \"%s\"\n", core_name);
 }
 
-char *user_io_get_core_name()
+char *user_io_get_core_name(int orig)
 {
-	return core_name;
+	return orig ? orig_name : core_name;
 }
 
 char *user_io_get_core_path(const char *suffix, int recheck)
@@ -172,21 +174,10 @@ char *user_io_get_core_path(const char *suffix, int recheck)
 	return tmp;
 }
 
-const char *user_io_get_core_name_ex()
+static char is_arcade_type = 0;
+char is_arcade()
 {
-	switch (user_io_core_type())
-	{
-	case CORE_TYPE_ARCHIE:
-		return "ARCHIE";
-
-    case CORE_TYPE_SHARPMZ:
-		return "SHARPMZ";
-
-	case CORE_TYPE_8BIT:
-		return core_name;
-	}
-
-	return "";
+	return is_arcade_type;
 }
 
 static int is_menu_type = 0;
@@ -255,7 +246,6 @@ char is_pce()
 static int is_archie_type = 0;
 char is_archie()
 {
-	if (core_type == CORE_TYPE_ARCHIE) return 1;
 	if (!is_archie_type) is_archie_type = strcasecmp(core_name, "ARCHIE") ? 2 : 1;
 	return (is_archie_type == 1);
 }
@@ -292,7 +282,7 @@ char has_menu()
 {
 	if (disable_osd) return 0;
 
-	if (!is_no_type) is_no_type = user_io_get_core_name_ex()[0] ? 1 : 2;
+	if (!is_no_type) is_no_type = user_io_get_core_name()[0] ? 1 : 2;
 	return (is_no_type == 1);
 }
 
@@ -314,13 +304,12 @@ void user_io_read_core_name()
 	is_st_type = 0;
 	core_name[0] = 0;
 
+	char *p = user_io_get_confstr(0);
+	if (p && p[0]) snprintf(orig_name, sizeof(orig_name), "%s", p);
+
 	// get core name
 	if (ovr_name[0]) strcpy(core_name, ovr_name);
-	else
-	{
-		char *p = user_io_get_confstr(0);
-		if (p && p[0]) strcpy(core_name, p);
-	}
+	else if (orig_name[0]) strcpy(core_name, p);
 
 	printf("Core name is \"%s\"\n", core_name);
 }
@@ -632,7 +621,7 @@ static void parse_config()
 			if (p[0] == 'F' && p[1] == 'C')
 			{
 				static char str[1024];
-				sprintf(str, "%s.f%c", user_io_get_core_name_ex(), p[2]);
+				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
 				if (FileLoadConfig(str, str, sizeof(str)))
 				{
 					user_io_file_tx(str, p[2] - '0');
@@ -775,7 +764,7 @@ void SetUARTMode(int mode)
 	spi_w(baud >> 16);
 	DisableIO();
 
-	MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
+	MakeFile("/tmp/CORENAME", user_io_get_core_name());
 
 	char data[20];
 	sprintf(data, "%d", baud);
@@ -1032,8 +1021,7 @@ void user_io_init(const char *path, const char *xml)
 		core_type = CORE_TYPE_8BIT;
 	}
 
-	if ((core_type != CORE_TYPE_ARCHIE) &&
-		(core_type != CORE_TYPE_8BIT) &&
+	if ((core_type != CORE_TYPE_8BIT) &&
 		(core_type != CORE_TYPE_SHARPMZ))
 	{
 		core_type = CORE_TYPE_UNKNOWN;
@@ -1052,7 +1040,11 @@ void user_io_init(const char *path, const char *xml)
 		printf("Using default MRA: %s\n", xml);
 	}
 
-	if (xml) arcade_override_name(xml);
+	if (xml)
+	{
+		is_arcade_type = 1;
+		arcade_override_name(xml);
+	}
 
 	if (core_type == CORE_TYPE_8BIT)
 	{
@@ -1064,6 +1056,10 @@ void user_io_init(const char *path, const char *xml)
 
 		// send a reset
 		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+	}
+	else if (core_type == CORE_TYPE_SHARPMZ)
+	{
+		user_io_set_core_name("sharpmz");
 	}
 
 	cfg_parse();
@@ -1082,15 +1078,6 @@ void user_io_init(const char *path, const char *xml)
 	{
 	case CORE_TYPE_UNKNOWN:
 		printf("Unable to identify core (%x)!\n", core_type);
-		break;
-
-	case CORE_TYPE_ARCHIE:
-		puts("Identified Archimedes core");
-		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
-		send_rtc(1);
-		user_io_set_core_name("Archie");
-		archie_init();
-		parse_buttons();
 		break;
 
     case CORE_TYPE_SHARPMZ:
@@ -1275,11 +1262,11 @@ void user_io_init(const char *path, const char *xml)
 			}
 		}
 
-		sprintf(mainpath, "uartmode.%s", user_io_get_core_name_ex());
+		sprintf(mainpath, "uartmode.%s", user_io_get_core_name());
 		FileLoadConfig(mainpath, &mode, 4);
 
 		uint64_t speeds = 0;
-		sprintf(mainpath, "uartspeed.%s", user_io_get_core_name_ex());
+		sprintf(mainpath, "uartspeed.%s", user_io_get_core_name());
 		FileLoadConfig(mainpath, &speeds, 8);
 
 		ValidateUARTbaud(1, speeds & 0xFFFFFFFF);
@@ -1551,7 +1538,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 
 	if (len)
 	{
-		if (!strcasecmp(user_io_get_core_name_ex(), "apple-ii"))
+		if (!strcasecmp(user_io_get_core_name(), "apple-ii"))
 		{
 			ret = dsk2nib(name, sd_image + index);
 		}
@@ -2580,8 +2567,7 @@ static uint32_t res_timer = 0;
 
 void user_io_poll()
 {
-	if ((core_type != CORE_TYPE_ARCHIE) &&
-		(core_type != CORE_TYPE_SHARPMZ) &&
+	if ((core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
 	{
 		return;  // no user io for the installed core
@@ -2703,7 +2689,7 @@ void user_io_poll()
 	{
 		x86_poll();
 	}
-	else if ((core_type == CORE_TYPE_8BIT || core_type == CORE_TYPE_ARCHIE) && !is_menu() && !is_minimig())
+	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
 	{
 		if (is_st()) tos_poll();
 
@@ -2950,7 +2936,7 @@ void user_io_poll()
 		send_rtc(1);
 	}
 
-	if (core_type == CORE_TYPE_ARCHIE || is_archie()) archie_poll();
+	if (is_archie()) archie_poll();
 	if (core_type == CORE_TYPE_SHARPMZ) sharpmz_poll();
 
 	static uint8_t leds = 0;
@@ -3254,7 +3240,7 @@ static void send_keycode(unsigned short key, int press)
 		return;
 	}
 
-	if (core_type == CORE_TYPE_ARCHIE || is_archie())
+	if (is_archie())
 	{
 		if (press > 1) return;
 
@@ -3409,10 +3395,6 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 			mouse_flags |= 0x08 | (b & 7);
 		}
 		return;
-
-	case CORE_TYPE_ARCHIE:
-		archie_mouse(b, x, y);
-		return;
 	}
 }
 
@@ -3445,7 +3427,6 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 		else
 		switch (core_type)
 		{
-		case CORE_TYPE_ARCHIE:
 		case CORE_TYPE_8BIT:
 			if(is_minimig()) minimig_reset();
 			else kbd_reset = 1;

@@ -983,7 +983,6 @@ void HandleUI(void)
 	{
 	case CORE_TYPE_8BIT:
 	case CORE_TYPE_SHARPMZ:
-	case CORE_TYPE_ARCHIE:
 		break;
 
 	default:
@@ -1849,6 +1848,12 @@ void HandleUI(void)
 		// set helptext with core display on top of basic info
 		sprintf(helptext_custom, HELPTEXT_SPACER);
 		strcat(helptext_custom, OsdCoreNameGet());
+		if (is_arcade())
+		{
+			strcat(helptext_custom, " (");
+			strcat(helptext_custom, user_io_get_core_name(1));
+			strcat(helptext_custom, ")");
+		}
 		strcat(helptext_custom, helptexts[HELPTEXT_MAIN]);
 		helptext_idx = HELPTEXT_CUSTOM;
 
@@ -2183,7 +2188,7 @@ void HandleUI(void)
 			if (store_name)
 			{
 				char str[64];
-				sprintf(str, "%s.f%d", user_io_get_core_name_ex(), ioctl_index);
+				sprintf(str, "%s.f%d", user_io_get_core_name(), ioctl_index);
 				FileSaveConfig(str, selPath, sizeof(selPath));
 			}
 
@@ -2269,7 +2274,7 @@ void HandleUI(void)
 
 				MenuWrite(n++, " Core                      \x16", menusub == 0, 0);
 				MenuWrite(n++);
-				sprintf(s, " Define %s buttons         ", is_menu() ? "System" : user_io_get_core_name_ex());
+				sprintf(s, " Define %s buttons         ", is_menu() ? "System" : user_io_get_core_name());
 				s[27] = '\x16';
 				s[28] = 0;
 				MenuWrite(n++, s, menusub == 1, 0);
@@ -2549,11 +2554,6 @@ void HandleUI(void)
 			// go back to core requesting this menu
 			switch (user_io_core_type())
 			{
-			case CORE_TYPE_ARCHIE:
-				menusub = 0;
-				menustate = MENU_ARCHIE_MAIN1;
-				break;
-
 			case CORE_TYPE_8BIT:
 				if (is_minimig())
 				{
@@ -2866,11 +2866,11 @@ void HandleUI(void)
 				if (select)
 				{
 					int mode = GetUARTMode() | (GetMidiLinkMode() << 8);
-					sprintf(s, "uartmode.%s", user_io_get_core_name_ex());
+					sprintf(s, "uartmode.%s", user_io_get_core_name());
 					FileSaveConfig(s, &mode, 4);
 					uint64_t speeds = GetUARTbaud(3);
 					speeds = (speeds << 32) | GetUARTbaud(1);
-					sprintf(s, "uartspeed.%s", user_io_get_core_name_ex());
+					sprintf(s, "uartspeed.%s", user_io_get_core_name());
 					FileSaveConfig(s, &speeds, 8);
 					menustate = MENU_COMMON1;
 					menusub = 4;
@@ -3177,10 +3177,6 @@ void HandleUI(void)
 			// go back to core requesting this menu
 			switch (user_io_core_type())
 			{
-			case CORE_TYPE_ARCHIE:
-				menusub = 0;
-				menustate = MENU_ARCHIE_MAIN1;
-				break;
 			case CORE_TYPE_8BIT:
 				if (is_menu())
 				{
