@@ -1928,31 +1928,6 @@ static void check_status_change()
 	}
 }
 
-static char pchar[] = { 0x8C, 0x8F, 0x7F };
-
-#define PROGRESS_CNT    28
-#define PROGRESS_CHARS  (sizeof(pchar)/sizeof(pchar[0]))
-#define PROGRESS_MAX    ((PROGRESS_CHARS*PROGRESS_CNT)-1)
-
-static void tx_progress(const char* name, unsigned int progress)
-{
-	static char progress_buf[128];
-	memset(progress_buf, 0, sizeof(progress_buf));
-
-	if (progress > PROGRESS_MAX) progress = PROGRESS_MAX;
-	char c = pchar[progress % PROGRESS_CHARS];
-	progress /= PROGRESS_CHARS;
-
-	char *buf = progress_buf;
-	sprintf(buf, "\n\n %.27s\n ", name);
-	buf += strlen(buf);
-
-	for (unsigned int i = 0; i <= progress; i++) buf[i] = (i < progress) ? 0x7F : c;
-	buf[PROGRESS_CNT] = 0;
-
-	InfoMessage(progress_buf, 2000, "Loading");
-}
-
 static void show_core_info(int info_n)
 {
 	int i = 2;
@@ -2125,9 +2100,7 @@ int user_io_file_tx_a(const char* name, uint16_t index)
 
 	int use_progress = 1;
 	int size = bytes2send;
-	int progress = -1;
-	if (use_progress) MenuHide();
-
+	if (use_progress) ProgressMessage(0, 0, 0, 0);
 	while (bytes2send)
 	{
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
@@ -2135,15 +2108,7 @@ int user_io_file_tx_a(const char* name, uint16_t index)
 		FileReadAdv(&f, buf, chunk);
 		user_io_file_tx_data(buf, chunk);
 
-		if (use_progress)
-		{
-			int new_progress = PROGRESS_MAX - ((((uint64_t)bytes2send)*PROGRESS_MAX) / size);
-			if (progress != new_progress)
-			{
-				progress = new_progress;
-				tx_progress(f.name, progress);
-			}
-		}
+		if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
 		bytes2send -= chunk;
 	}
 
@@ -2155,7 +2120,7 @@ int user_io_file_tx_a(const char* name, uint16_t index)
 
 	// signal end of transmission
 	user_io_set_download(0);
-	MenuHide();
+	ProgressMessage(0, 0, 0, 0);
 	return 1;
 }
 
@@ -2274,8 +2239,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	int use_progress = 1; // (bytes2send > (1024 * 1024)) ? 1 : 0;
 	int size = bytes2send;
-	int progress = -1;
-	if (use_progress) MenuHide();
+	if (use_progress) ProgressMessage(0, 0, 0, 0);
 
 	if(ss_base && opensave) process_ss(name);
 
@@ -2313,15 +2277,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
 		user_io_file_tx_data(buf, chunk);
 
-		if (use_progress)
-		{
-			int new_progress = PROGRESS_MAX - ((((uint64_t)bytes2send)*PROGRESS_MAX) / size);
-			if (progress != new_progress)
-			{
-				progress = new_progress;
-				tx_progress(f.name, progress);
-			}
-		}
+		if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
 		bytes2send -= chunk;
 
 		if (skip >= chunk) skip -= chunk;
@@ -2356,7 +2312,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		send_pcolchr(name, (index & 0x1F) | 0x60, 1);
 	}
 
-	MenuHide();
+	ProgressMessage(0, 0, 0, 0);
 	return 1;
 }
 

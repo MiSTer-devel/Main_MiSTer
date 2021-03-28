@@ -6570,3 +6570,41 @@ void menu_process_save()
 {
 	menu_save_timer = GetTimer(1000);
 }
+
+static char pchar[] = { 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
+
+#define PROGRESS_CNT    28
+#define PROGRESS_CHARS  (int)(sizeof(pchar)/sizeof(pchar[0]))
+#define PROGRESS_MAX    ((PROGRESS_CHARS*PROGRESS_CNT)-1)
+
+void ProgressMessage(const char* title, const char* text, int current, int max)
+{
+	static int progress;
+	if (!current && !max)
+	{
+		progress = -1;
+		MenuHide();
+		return;
+	}
+
+	int new_progress = (((uint64_t)current)*PROGRESS_MAX) / max;
+	if (progress != new_progress)
+	{
+		progress = new_progress;
+		static char progress_buf[128];
+		memset(progress_buf, 0, sizeof(progress_buf));
+
+		if (new_progress > PROGRESS_MAX) new_progress = PROGRESS_MAX;
+		char c = pchar[new_progress % PROGRESS_CHARS];
+		new_progress /= PROGRESS_CHARS;
+
+		char *buf = progress_buf;
+		sprintf(buf, "\n\n %.27s\n ", text);
+		buf += strlen(buf);
+
+		for (int i = 0; i <= new_progress; i++) buf[i] = (i < new_progress) ? 0x7F : c;
+		buf[PROGRESS_CNT] = 0;
+
+		InfoMessage(progress_buf, 2000, title);
+	}
+}
