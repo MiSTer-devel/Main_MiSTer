@@ -1031,27 +1031,28 @@ void user_io_init(const char *path, const char *xml)
 
 	OsdSetSize(8);
 
-	user_io_read_confstr();
-	parse_config();
-	if (!xml && defmra[0] && FileExists(defmra))
-	{
-		xml = (const char*)defmra;
-		strcpy(core_path, xml);
-		printf("Using default MRA: %s\n", xml);
-	}
-
 	if (xml)
 	{
 		is_arcade_type = 1;
 		arcade_override_name(xml);
 	}
 
+	user_io_read_confstr();
+	user_io_read_core_name();
+	parse_config();
+	if (!xml && defmra[0] && FileExists(defmra))
+	{
+		// attn: FC option won't use name from defmra!
+		xml = (const char*)defmra;
+		strcpy(core_path, xml);
+		is_arcade_type = 1;
+		arcade_override_name(xml);
+		printf("Using default MRA: %s\n", xml);
+	}
+
 	if (core_type == CORE_TYPE_8BIT)
 	{
-		puts("Identified 8BIT core");
-
-		// set core name. This currently only sets a name for the 8 bit cores
-		user_io_read_core_name();
+		printf("Identified 8BIT core");
 		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 
 		// send a reset
@@ -1081,7 +1082,7 @@ void user_io_init(const char *path, const char *xml)
 		break;
 
     case CORE_TYPE_SHARPMZ:
-		puts("Identified Sharp MZ Series core");
+		printf("Identified Sharp MZ Series core");
 		user_io_set_core_name("sharpmz");
         sharpmz_init();
 		parse_buttons();
@@ -1132,7 +1133,7 @@ void user_io_init(const char *path, const char *xml)
 				}
 				else if (is_minimig())
 				{
-					puts("Identified Minimig V2 core");
+					printf("Identified Minimig V2 core");
 					BootInit();
 				}
 				else if (is_x86())
@@ -1142,7 +1143,7 @@ void user_io_init(const char *path, const char *xml)
 				}
 				else if (is_archie())
 				{
-					puts("Identified Archimedes core");
+					printf("Identified Archimedes core");
 					archie_init();
 				}
 				else
@@ -2276,7 +2277,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int progress = -1;
 	if (use_progress) MenuHide();
 
-	if(ss_base) process_ss(name);
+	if(ss_base && opensave) process_ss(name);
 
 	if (is_gba())
 	{
