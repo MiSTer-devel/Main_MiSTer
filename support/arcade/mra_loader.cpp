@@ -54,6 +54,7 @@ static sw_struct switches = {};
 static int  nvram_idx  = 0;
 static int  nvram_size = 0;
 static char nvram_name[200] = {};
+static uint8_t *nvram_data = nullptr;
 
 void arcade_nvm_save()
 {
@@ -79,6 +80,14 @@ void arcade_nvm_save()
 	}
 }
 
+static void arcade_nvm_upload(uint8_t *data) {
+	printf("Sending nvram (idx=%d, size=%d) to core\n", nvram_idx, nvram_size);
+	user_io_set_index(nvram_idx);
+	user_io_set_download(1);
+	user_io_file_tx_data(data, nvram_size);
+	user_io_set_download(0);
+}
+
 static void arcade_nvm_load()
 {
 	if (nvram_idx && nvram_size)
@@ -92,13 +101,11 @@ static void arcade_nvm_load()
 			strcat(path, nvram_name);
 			if (FileLoadConfig(path, buf, nvram_size))
 			{
-				printf("Sending nvram (idx=%d, size=%d) to core\n", nvram_idx, nvram_size);
-				user_io_set_index(nvram_idx);
-				user_io_set_download(1);
-				user_io_file_tx_data(buf, nvram_size);
-				user_io_set_download(0);
+				arcade_nvm_upload(buf);
+			} else {
+				if(nvram_data != nullptr) arcade_nvm_upload(nvram_data);
 			}
-
+			free(nvram_data);
 			delete(buf);
 		}
 	}
@@ -915,7 +922,12 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (switches.dip_num < 63) switches.dip_num++;
 		}
 
-		if (!strcasecmp(node->tag, "nvram")) arcade_nvm_load();
+		if(!strcasecmp(node->tag, "nvram"))
+		{
+			size_t len = 0;
+			nvram_data = hexstr_to_char(arc_info->data->content, &len);
+			arcade_nvm_load();
+		}
 
 		if (!strcasecmp(node->tag, "switches"))
 		{
