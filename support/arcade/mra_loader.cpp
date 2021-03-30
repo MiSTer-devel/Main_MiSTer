@@ -198,10 +198,10 @@ static int rom_checksz(int idx, int chunk)
 {
 	if ((romlen[idx] + chunk) > romblkl)
 	{
-	        if (romlen[idx] + chunk > romblkl + BLKL)
-		  romblkl += (chunk + BLKL);
+		if (romlen[idx] + chunk > romblkl + BLKL)
+			romblkl += (chunk + BLKL);
 		else
-		  romblkl += BLKL;
+			romblkl += BLKL;
 		romdata = (uint8_t*)realloc(romdata, romblkl);
 		if (!romdata)
 		{
@@ -622,7 +622,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					{
 						int b = 0, e = 0;
 						int num = sscanf(node->attributes[i].value, "%d,%d", &b, &e);
-						if (num <= 0 || b < 0 || b > 63 || e < 0 || e > 63 || (num == 2 && e < b))
+						if ((num <= 0) || (b < 0) || (b > 63) || (e < 0) || (e > 63) || (num == 2 && e < b))
 						{
 							printf("Invalid bits field: ""%s"" (%d, %d, %d)\n", node->attributes[i].value, num, b, e);
 						}
@@ -710,11 +710,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		{
 			int valid = 1;
 			if (arc_info->ifrom != 8) valid = 0;
-			if (arc_info->ito < 8 || arc_info->ito>64 || (arc_info->ito & 7)) valid = 0;
+			if ((arc_info->ito < 8) || (arc_info->ito>64) || (arc_info->ito & 7)) valid = 0;
 			if (arc_info->ito < arc_info->ifrom) valid = 0;
 
 			unitlen = arc_info->ifrom ? arc_info->ito / arc_info->ifrom : 1;
-			if (unitlen < 0 && unitlen>8) valid = 0;
+			if ((unitlen < 0) && (unitlen>8)) valid = 0;
 
 			if (!valid)
 			{

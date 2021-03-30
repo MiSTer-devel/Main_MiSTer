@@ -1226,7 +1226,7 @@ static char kr_fn_table[] =
 	KEY_F5,         KEY_F19, // EMU_JOY1
 	KEY_F6,         KEY_F20, // EMU_NONE
 
-    //Emulate keypad for A600
+	//Emulate keypad for A600
 	KEY_1,          KEY_KP1,
 	KEY_2,          KEY_KP2,
 	KEY_3,          KEY_KP3,

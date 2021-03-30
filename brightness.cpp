@@ -215,7 +215,7 @@ void setBrightness(int cmd, int val)
 		if (brightness > 10) brightness = 10;
 
 		printf("Requested brightness = %d, ", brightness);
-        printf("Requested off = %d\n", screenoffbit);
+		printf("Requested off = %d\n", screenoffbit);
 
 		// calculate data to send
 		shutdown = 0;

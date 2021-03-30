@@ -806,24 +806,24 @@ int GetUARTbaud_idx(int mode)
 
 char * GetMidiLinkSoundfont()
 {
-    FILE * file;
-    static char mLinkSoundfont[255];
-    char fileName[] = "/tmp/ML_SOUNDFONT";
-    char strip[] = "/media/fat/";
-    file = fopen(fileName, "r");
-    if (file)
-    {
-        fgets((char *) &mLinkSoundfont, sizeof(mLinkSoundfont), file);
-        fclose(file);
-        if(0 == strncmp(strip, mLinkSoundfont, sizeof(strip)-1))
-		return &mLinkSoundfont[sizeof(strip)-1];
-    }
-    else
-    {
-        printf("ERROR: GetMidiLinkSoundfont : Unable to open --> '%s'\n", fileName);
-        sprintf(mLinkSoundfont, "linux/soundfonts");
-    }
-    return mLinkSoundfont;
+	FILE * file;
+	static char mLinkSoundfont[255];
+	char fileName[] = "/tmp/ML_SOUNDFONT";
+	char strip[] = "/media/fat/";
+	file = fopen(fileName, "r");
+	if (file)
+	{
+		fgets((char *) &mLinkSoundfont, sizeof(mLinkSoundfont), file);
+		fclose(file);
+		if(0 == strncmp(strip, mLinkSoundfont, sizeof(strip)-1))
+			return &mLinkSoundfont[sizeof(strip)-1];
+	}
+	else
+	{
+		printf("ERROR: GetMidiLinkSoundfont : Unable to open --> '%s'\n", fileName);
+		sprintf(mLinkSoundfont, "linux/soundfonts");
+	}
+	return mLinkSoundfont;
 }
 
 uint32_t ValidateUARTbaud(int mode, uint32_t baud)
@@ -1081,10 +1081,10 @@ void user_io_init(const char *path, const char *xml)
 		printf("Unable to identify core (%x)!\n", core_type);
 		break;
 
-    case CORE_TYPE_SHARPMZ:
+	case CORE_TYPE_SHARPMZ:
 		printf("Identified Sharp MZ Series core");
 		user_io_set_core_name("sharpmz");
-        sharpmz_init();
+		sharpmz_init();
 		parse_buttons();
 		break;
 

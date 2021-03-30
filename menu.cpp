@@ -1227,53 +1227,53 @@ void HandleUI(void)
 	{
 		if (down)
 		{
-            if((menumask >= ((uint64_t)1 << (menusub + 1))))	// Any active entries left?
-            {
-			    do
-			    {
-				    menusub++;
-			    } while ((menumask & ((uint64_t)1 << menusub)) == 0);
-            }
-            else
-            {
-                menusub = 0; // jump to first item
-            }
+			if((menumask >= ((uint64_t)1 << (menusub + 1))))	// Any active entries left?
+			{
+				do
+				{
+					menusub++;
+				} while ((menumask & ((uint64_t)1 << menusub)) == 0);
+			}
+			else
+			{
+				menusub = 0; // jump to first item
+			}
 
-            menustate = parentstate;
+			menustate = parentstate;
 		}
 
 		if (up)
 		{
-            if (menusub > 0)
-            {
-			    do
-			    {
-				    --menusub;
-			    } while ((menumask & ((uint64_t)1 << menusub)) == 0);
-            }
-            else
-            {
-                do
-                {
-                    menusub++;
-                } while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0); // jump to last item
-            }
+			if (menusub > 0)
+			{
+				do
+				{
+					--menusub;
+				} while ((menumask & ((uint64_t)1 << menusub)) == 0);
+			}
+			else
+			{
+				do
+				{
+					menusub++;
+				} while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0); // jump to last item
+			}
 			menustate = parentstate;
 		}
 	}
 
-    // SHARPMZ Series Menu - This has been located within the sharpmz.cpp code base in order to keep updates to common code
-    // base to a minimum and shrink its size. The UI is called with the basic state data and it handles everything internally,
-    // only updating values in this function as necessary.
-    //
+	// SHARPMZ Series Menu - This has been located within the sharpmz.cpp code base in order to keep updates to common code
+	// base to a minimum and shrink its size. The UI is called with the basic state data and it handles everything internally,
+	// only updating values in this function as necessary.
+	//
 	if (user_io_core_type() == CORE_TYPE_SHARPMZ)
-        sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_COMMON1, MENU_FILE_SELECT1,
-			       &parentstate, &menustate, &menusub, &menusub_last,
-			       &menumask, Selected_F[0], &helptext_idx, helptext_custom,
-			       &fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel,
-			       fs_pFileExt,
-			       menu, select, up, down,
-			       left, right, plus, minus);
+			sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_COMMON1, MENU_FILE_SELECT1,
+					&parentstate, &menustate, &menusub, &menusub_last,
+					&menumask, Selected_F[0], &helptext_idx, helptext_custom,
+					&fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel,
+					fs_pFileExt,
+					menu, select, up, down,
+					left, right, plus, minus);
 
 	switch (menustate)
 	{
@@ -2050,7 +2050,7 @@ void HandleUI(void)
 						if (p[0] == 'P' && select)
 						{
 							page = p[1] - '0';
-							if (page < 1 || page > 9) page = 0;
+							if ((page < 1) || (page > 9)) page = 0;
 							menusub_parent = menusub;
 							substrcpy(title, p, 1);
 							menustate = MENU_GENERIC_MAIN1;
@@ -2378,18 +2378,18 @@ void HandleUI(void)
 
 	case MENU_COMMON2:
 		if (menu)
-        {
+			{
 			switch (user_io_core_type())
 			{
-			    case CORE_TYPE_SHARPMZ:
-				    menusub   = menusub_last;
-				    menustate = sharpmz_default_ui_state();
-                    break;
-                default:
-                    menustate = MENU_NONE1;
-                    break;
-            };
-        }
+				case CORE_TYPE_SHARPMZ:
+					menusub   = menusub_last;
+					menustate = sharpmz_default_ui_state();
+					break;
+				default:
+					menustate = MENU_NONE1;
+					break;
+			};
+		}
 
 		if (recent && menusub == 0)
 		{
@@ -2498,7 +2498,7 @@ void HandleUI(void)
 				else if (user_io_core_type() == CORE_TYPE_SHARPMZ)
 				{
 					menustate = sharpmz_reset_config(1);
-                    menusub   = 0;
+					menusub   = 0;
 				}
 				break;
 
@@ -2802,7 +2802,7 @@ void HandleUI(void)
 
 					if (minus)
 					{
-						if (midilink < 2 || midilink > 3) midilink = 3;
+						if ((midilink < 2) || (midilink > 3)) midilink = 3;
 						else if (midilink == 3)
 						{
 							struct stat filestat;
@@ -2886,39 +2886,39 @@ void HandleUI(void)
 		break;
 
 	case MENU_UART3:
-        {
-            helptext_idx = 0;
-            menumask = 0x00;
-            OsdSetTitle("UART MODE");
-            menustate = MENU_UART4;
-            parentstate = MENU_UART3;
+		{
+			helptext_idx = 0;
+			menumask = 0x00;
+			OsdSetTitle("UART MODE");
+			menustate = MENU_UART4;
+			parentstate = MENU_UART3;
 
-            uint32_t max = (sizeof(config_uart_msg) / sizeof(config_uart_msg[0]));
+			uint32_t max = (sizeof(config_uart_msg) / sizeof(config_uart_msg[0]));
 			m = 0;
 
-            for (uint32_t i = 0; i < 15; i++)
-            {
+			for (uint32_t i = 0; i < 15; i++)
+			{
 				if((i >= (14-max)/2) && (m < max))
-                {
-                    menumask |= 1 << m;
-                    const char * uart_msg = config_uart_msg[m];
-                    while (*uart_msg == ' ') {uart_msg++;}//skip spaces
-                    sprintf(s, "         %s", uart_msg);
-                    OsdWrite(i, s, menusub == m, 0);
+				{
+					menumask |= 1 << m;
+					const char * uart_msg = config_uart_msg[m];
+					while (*uart_msg == ' ') {uart_msg++;}//skip spaces
+					sprintf(s, "         %s", uart_msg);
+					OsdWrite(i, s, menusub == m, 0);
 					m++;
-                }
+				}
 				else
 				{
 					OsdWrite(i);
 				}
-            }
-            menumask |= 0x10000;
-            OsdWrite(15, STD_EXIT, menusub == 16);
-        }
-        break;
+			}
+			menumask |= 0x10000;
+			OsdWrite(15, STD_EXIT, menusub == 16);
+		}
+		break;
 
-    case MENU_UART4:
-        {
+	case MENU_UART4:
+		{
 			if (menu)
 			{
 				menustate = MENU_UART1;
@@ -4675,11 +4675,11 @@ void HandleUI(void)
 				menustate = MENU_NONE1;
 				minimig_reset();
 			}
-            else if(m == 2)
-            {
+			else if(m == 2)
+			{
 				menustate = MENU_COMMON1;
-                sharpmz_reset_config(1);
-            }
+				sharpmz_reset_config(1);
+			}
 			else
 			{
 				char *filename = user_io_create_config_name();

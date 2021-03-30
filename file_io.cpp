@@ -1262,7 +1262,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	}
 
 	int extlen = strlen(extension);
-    int filterlen = filter ? strlen(filter) : 0;
+	int filterlen = filter ? strlen(filter) : 0;
 	//printf("scan dir\n");
 
 	if (mode == SCANF_INIT)
@@ -1383,18 +1383,18 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				}
 			}
 
-            if (filter) {
-                bool passes_filter = false;
+			if (filter) {
+				bool passes_filter = false;
 
-                for(const char *str = de->d_name; *str; str++) {
-                    if (strncasecmp(str, filter, filterlen) == 0) {
-                        passes_filter = true;
-                        break;
-                    }
-                }
+				for(const char *str = de->d_name; *str; str++) {
+					if (strncasecmp(str, filter, filterlen) == 0) {
+						passes_filter = true;
+						break;
+					}
+				}
 
-                if (!passes_filter) continue;
-            }
+				if (!passes_filter) continue;
+			}
 
 
 			if (options & SCANO_NEOGEO)
@@ -1601,13 +1601,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry++;
 				if (iSelectedEntry > iFirstEntry + OsdGetSize() - 1) iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
 			}
-            else
-            {
+			else
+			{
 				// jump to first visible item
 				iFirstEntry = 0;
 				iSelectedEntry = 0;
-            }
-            return 0;
+			}
+			return 0;
 		}
 		else if (mode == SCANF_PREV)
 		{
@@ -1616,7 +1616,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iSelectedEntry--;
 				if (iSelectedEntry < iFirstEntry) iFirstEntry = iSelectedEntry;
 			}
-            return 0;
+			return 0;
 		}
 		else if (mode == SCANF_NEXT_PAGE)
 		{
@@ -1753,7 +1753,7 @@ direntext_t* flist_SelectedItem()
 
 bool isMraName(char *path)
 {
-        char *spl = strrchr(path, '.');
-        return (spl && !strcmp(spl, ".mra"));
+	char *spl = strrchr(path, '.');
+	return (spl && !strcmp(spl, ".mra"));
 }
 

@@ -497,7 +497,7 @@ void cdd_t::CommandExec() {
 				int lba = this->lba + 150;
 				LBAToMSF(lba, &msf);
 				stat[1] = 0x0;
-	                        stat[2] = BCD(msf.m) >> 4;
+				stat[2] = BCD(msf.m) >> 4;
 				stat[3] = BCD(msf.m) & 0xF;
 				stat[4] = BCD(msf.s) >> 4;
 				stat[5] = BCD(msf.s) & 0xF;
@@ -507,26 +507,26 @@ void cdd_t::CommandExec() {
 			} else if (stat[1] == 0x00) {
 				int lba = this->lba + 150;
 				LBAToMSF(lba, &msf);
-                                stat[2] = BCD(msf.m) >> 4;
-                                stat[3] = BCD(msf.m) & 0xF;
-                                stat[4] = BCD(msf.s) >> 4;
-                                stat[5] = BCD(msf.s) & 0xF;
-                                stat[6] = BCD(msf.f) >> 4;
-                                stat[7] = BCD(msf.f) & 0xF;
-                                stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
+				stat[2] = BCD(msf.m) >> 4;
+				stat[3] = BCD(msf.m) & 0xF;
+				stat[4] = BCD(msf.s) >> 4;
+				stat[5] = BCD(msf.s) & 0xF;
+				stat[6] = BCD(msf.f) >> 4;
+				stat[7] = BCD(msf.f) & 0xF;
+				stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
 			} else if (stat[1] == 0x01) {
 				int lba = abs(this->lba - this->toc.tracks[this->index].start);
 				LBAToMSF(lba,&msf);
-                                stat[2] = BCD(msf.m) >> 4;
-                                stat[3] = BCD(msf.m) & 0xF;
-                                stat[4] = BCD(msf.s) >> 4;
-                                stat[5] = BCD(msf.s) & 0xF;
-                                stat[6] = BCD(msf.f) >> 4;
-                                stat[7] = BCD(msf.f) & 0xF;
-                                stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
+				stat[2] = BCD(msf.m) >> 4;
+				stat[3] = BCD(msf.m) & 0xF;
+				stat[4] = BCD(msf.s) >> 4;
+				stat[5] = BCD(msf.s) & 0xF;
+				stat[6] = BCD(msf.f) >> 4;
+				stat[7] = BCD(msf.f) & 0xF;
+				stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
 			} else if (stat[1] == 0x02) {
-                               stat[2] = (cdd.index < this->toc.last) ? BCD(this->index + 1) >> 4 : 0xA;
-                               stat[3] = (cdd.index < this->toc.last) ? BCD(this->index + 1) & 0xF : 0xA;
+				stat[2] = (cdd.index < this->toc.last) ? BCD(this->index + 1) >> 4 : 0xA;
+				stat[3] = (cdd.index < this->toc.last) ? BCD(this->index + 1) & 0xF : 0xA;
 			}
 		}
 
@@ -1006,8 +1006,4 @@ int cdd_t::SubcodeSend()
 
 	return 0;
 }
-
-
-
-
 
