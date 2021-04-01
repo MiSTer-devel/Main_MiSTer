@@ -1099,6 +1099,7 @@ void HandleUI(void)
 		case KEY_F12:
 			menu = true;
 			menu_key_set(KEY_F12 | UPSTROKE);
+			video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1);
 			video_fb_enable(0);
 			break;
 
@@ -5987,6 +5988,7 @@ void HandleUI(void)
 		{
 			if (c & UPSTROKE)
 			{
+				video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1);
 				video_fb_enable(0);
 				menustate = MENU_SYSTEM1;
 				menusub = 3;
