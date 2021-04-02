@@ -1951,17 +1951,15 @@ static void show_core_info(int info_n)
 static int process_ss(const char *rom_name)
 {
 	static char ss_name[1024] = {};
-	static uint32_t ss_cnt = 0;
+	static char *ss_sufx = 0;
 	static int memfd = -1;
+	static uint32_t ss_cnt[4] = {};
+	static void *base[4] = {};
 
 	if (!ss_base) return 0;
 
-	uint32_t map_addr = ss_base;
-
 	if (rom_name)
 	{
-		FileGenerateSavestatePath(rom_name, ss_name);
-
 		if (memfd < 0)
 		{
 			memfd = open("/dev/mem", O_RDWR | O_SYNC);
@@ -1972,57 +1970,57 @@ static int process_ss(const char *rom_name)
 			}
 		}
 
-		ss_cnt = 0;
 		uint32_t len = ss_size;
-		uint32_t clr_addr = map_addr;
+		uint32_t map_addr = ss_base;
+		fileTYPE f = {};
 
-		for (int i = 0; i < 16; i++)
+		for (int i = 0; i < 4; i++)
 		{
-			void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, clr_addr);
-			if (base == (void *)-1)
-			{
-				printf("Unable to mmap (0x%X, %d)!\n", clr_addr, len);
-				close(memfd);
-				memfd = -1;
-				return 0;
-			}
-
-			memset(base, 0, len);
-			munmap(base, len);
-			clr_addr += len;
-		}
-
-		if (ss_name[0] && FileExists(ss_name))
-		{
-			void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-			if (base == (void *)-1)
+			if (!base[i]) base[i] = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
+			if (base[i] == (void *)-1)
 			{
 				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-				return 0;
-			}
-
-			fileTYPE f = {};
-			if (!FileOpen(&f, ss_name))
-			{
-				printf("Unable to open file: %s\n", ss_name);
-				munmap(base, len);
 			}
 			else
 			{
-				int ret = FileReadAdv(&f, base, len);
-				FileClose(&f);
-				*(uint32_t*)base = 1;
-				ss_cnt = 1;
-				munmap(base, len);
-				printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
-				return 1;
+				ss_cnt[i] = 0;
+				memset(base[i], 0, len);
+
+				if (!i)
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, 1);
+					printf("Base SavestatePath=%s\n", ss_name);
+					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
+				}
+				else
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
+				}
+
+				if (FileExists(ss_name))
+				{
+					if (!FileOpen(&f, ss_name))
+					{
+						printf("Unable to open file: %s\n", ss_name);
+					}
+					else
+					{
+						int ret = FileReadAdv(&f, base[i], len);
+						FileClose(&f);
+						*(uint32_t*)(base[i]) = 1;
+						ss_cnt[i] = 1;
+						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
+					}
+				}
 			}
+
+			map_addr += len;
 		}
 
+		FileGenerateSavestatePath(rom_name, ss_name, 1);
+		ss_sufx = ss_name + strlen(ss_name) - 4;
 		return 1;
 	}
-
-	if (!ss_name[0]) return 0;
 
 	static unsigned long ss_timer = 0;
 	if (ss_timer && !CheckTimer(ss_timer)) return 0;
@@ -2030,49 +2028,36 @@ static int process_ss(const char *rom_name)
 
 	if (memfd >= 0)
 	{
-		uint32_t len = 4 * 1024;
-
-		void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-		if (base == (void *)-1)
+		fileTYPE f = {};
+		for (int i = 0; i < 4; i++)
 		{
-			printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-			return 0;
-		}
-
-		uint32_t curcnt = ((uint32_t*)base)[0];
-		uint32_t size = ((uint32_t*)base)[1];
-		munmap(base, len);
-
-		if (curcnt > ss_cnt)
-		{
-			ss_cnt = curcnt;
-			len = 512 * 1024;
-
-			if (size) size = (size + 2) * 4;
-			if (size > 0 && size <= len)
+			if (base[i] && (base[i] != (void *)-1))
 			{
-				OsdDisable();
-				Info("Saving the state", 500);
+				uint32_t curcnt = ((uint32_t*)(base[i]))[0];
+				uint32_t size = ((uint32_t*)(base[i]))[1];
 
-				void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-				if (base == (void *)-1)
+				if (curcnt != ss_cnt[i])
 				{
-					printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-					return 0;
-				}
+					ss_cnt[i] = curcnt;
+					if (size) size = (size + 2) * 4;
+					if (size > 0 && size <= ss_size)
+					{
+						MenuHide();
+						Info("Saving the state", 500);
 
-				fileTYPE f = {};
-				if (!FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
-				{
-					printf("Unable to create file: %s\n", ss_name);
-					munmap(base, len);
-					return 0;
+						*ss_sufx = i + '1';
+						if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
+						{
+							int ret = FileWriteAdv(&f, base[i], size);
+							FileClose(&f);
+							printf("Wrote %d bytes to file: %s\n", ret, ss_name);
+						}
+						else
+						{
+							printf("Unable to create file: %s\n", ss_name);
+						}
+					}
 				}
-
-				int ret = FileWriteAdv(&f, base, size);
-				FileClose(&f);
-				munmap(base, len);
-				printf("Wrote %d bytes to file: %s\n", ret, ss_name);
 			}
 		}
 	}
@@ -2688,7 +2673,7 @@ void user_io_poll()
 
 						// Fetch sector data from FPGA ...
 						EnableIO();
-						spi_w(UIO_SECTOR_WR | ((c & 4) ? 0 : (1<<(8+disk))));
+						spi_w(UIO_SECTOR_WR | ((c & 4) ? 0 : ((disk + 1) << 8)));
 						spi_block_read(buffer[disk], fio_size);
 						DisableIO();
 
@@ -2794,7 +2779,7 @@ void user_io_poll()
 
 					// data is now stored in buffer. send it to fpga
 					EnableIO();
-					spi_w(UIO_SECTOR_RD | ((c & 4) ? 0 : (1 << (8 + disk))));
+					spi_w(UIO_SECTOR_RD | ((c & 4) ? 0 : ((disk + 1) << 8)));
 					spi_block_write(buffer[disk], fio_size);
 					DisableIO();
 
