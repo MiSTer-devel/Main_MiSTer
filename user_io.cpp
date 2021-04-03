@@ -2637,7 +2637,8 @@ void user_io_poll()
 
 		while (1)
 		{
-			static uint8_t buffer[4][512];
+			const int buf_sz = 16;
+			static uint8_t buffer[4][buf_sz * 512];
 			uint32_t lba;
 			uint16_t req_type = 0;
 			uint16_t c = user_io_sd_get_status(&lba, &req_type);
@@ -2725,16 +2726,20 @@ void user_io_poll()
 					//printf("SD RD %d on %d, WIDE=%d\n", lba, disk, fio_size);
 
 					int done = 0;
-					if ((buffer_lba[disk] == (uint64_t)-1) || lba != buffer_lba[disk])
+					uint32_t offset;
+
+					if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || lba >(buffer_lba[disk] + buf_sz - 1))
 					{
+						buffer_lba[disk] = -1;
 						if (sd_image[disk].size)
 						{
 							diskled_on();
 							if (FileSeekLBA(&sd_image[disk], lba))
 							{
-								if (FileReadAdv(&sd_image[disk], buffer[disk], 512) == 512)
+								if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 								{
 									done = 1;
+									buffer_lba[disk] = lba;
 								}
 							}
 						}
@@ -2768,10 +2773,11 @@ void user_io_poll()
 							}
 						}
 
-						buffer_lba[disk] = lba;
+						offset = 0;
 					}
 					else
 					{
+						offset = (lba - buffer_lba[disk])*512;
 						done = 1;
 					}
 
@@ -2780,19 +2786,19 @@ void user_io_poll()
 					// data is now stored in buffer. send it to fpga
 					EnableIO();
 					spi_w(UIO_SECTOR_RD | ((c & 4) ? 0 : ((disk + 1) << 8)));
-					spi_block_write(buffer[disk], fio_size);
+					spi_block_write(buffer[disk] + offset, fio_size);
 					DisableIO();
 
 					if (sd_image[disk].type == 2)
 					{
 						buffer_lba[disk] = -1;
 					}
-					else if(done)
+					else if(done && (lba == (buffer_lba[disk] + buf_sz - 1)))
 					{
 						diskled_on();
-						if (FileReadAdv(&sd_image[disk], buffer[disk], 512) == 512)
+						if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 						{
-							buffer_lba[disk]++;
+							buffer_lba[disk] += buf_sz;
 						}
 						else
 						{
