@@ -2649,7 +2649,7 @@ void user_io_poll()
 			if ((c & 0xf0) == 0x50)
 			{
 				// check if core requests configuration
-				if (c & 0x08)
+				if ((c & 0xC) == 0xC)
 				{
 					printf("core requests SD config\n");
 					user_io_sd_set_config();
@@ -2662,54 +2662,49 @@ void user_io_poll()
 					else if (c & 0x0800) disk = 1;
 					else if (c & 0x1000) disk = 2;
 
-					// only write if the inserted card is not sdhc or
-					// if the core uses sdhc
-					if (c & 0x04)
+					//printf("SD WR %d on %d\n", lba, disk);
+
+					if (use_save) menu_process_save();
+
+					buffer_lba[disk] = -1;
+
+					// Fetch sector data from FPGA ...
+					EnableIO();
+					spi_w(UIO_SECTOR_WR | ((c & 4) ? 0 : ((disk + 1) << 8)));
+					spi_block_read(buffer[disk], fio_size);
+					DisableIO();
+
+					if (sd_image[disk].type == 2 && !lba)
 					{
-						//printf("SD WR %d on %d\n", lba, disk);
-
-						if (use_save) menu_process_save();
-
-						buffer_lba[disk] = -1;
-
-						// Fetch sector data from FPGA ...
-						EnableIO();
-						spi_w(UIO_SECTOR_WR | ((c & 4) ? 0 : ((disk + 1) << 8)));
-						spi_block_read(buffer[disk], fio_size);
-						DisableIO();
-
-						if (sd_image[disk].type == 2 && !lba)
+						//Create the file
+						if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
 						{
-							//Create the file
-							if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
+							diskled_on();
+							if (FileWriteSec(&sd_image[disk], buffer[disk]))
 							{
-								diskled_on();
-								if (FileWriteSec(&sd_image[disk], buffer[disk]))
-								{
-									sd_image[disk].size = 512;
-								}
-							}
-							else
-							{
-								printf("Error in creating file: %s\n", sd_image[disk].path);
+								sd_image[disk].size = 512;
 							}
 						}
 						else
 						{
-							// ... and write it to disk
-							__off64_t size = sd_image[disk].size >> 9;
-							if (size && size >= lba)
+							printf("Error in creating file: %s\n", sd_image[disk].path);
+						}
+					}
+					else
+					{
+						// ... and write it to disk
+						__off64_t size = sd_image[disk].size >> 9;
+						if (size && size >= lba)
+						{
+							diskled_on();
+							if (FileSeekLBA(&sd_image[disk], lba))
 							{
-								diskled_on();
-								if (FileSeekLBA(&sd_image[disk], lba))
+								if (FileWriteSec(&sd_image[disk], buffer[disk]))
 								{
-									if (FileWriteSec(&sd_image[disk], buffer[disk]))
+									if (size == lba)
 									{
-										if (size == lba)
-										{
-											size++;
-											sd_image[disk].size = size << 9;
-										}
+										size++;
+										sd_image[disk].size = size << 9;
 									}
 								}
 							}
