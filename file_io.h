@@ -89,7 +89,7 @@ struct stat64* getPathStat(const char *path);
 void FileGenerateSavePath(const char *name, char* out_name);
 
 #define SAVESTATE_DIR "savestates"
-void FileGenerateSavestatePath(const char *name, char* out_name);
+void FileGenerateSavestatePath(const char *name, char* out_name, int sufx);
 
 #define SCREENSHOT_DIR "screenshots"
 #define SCREENSHOT_DEFAULT "screen"

@@ -1134,7 +1134,7 @@ static char *get_map_name(int dev, int def)
 {
 	static char name[128];
 	if (def || is_menu()) sprintf(name, "input_%s_v3.map", input[dev].idstr);
-	else sprintf(name, "%s_input_%s_v3.map", user_io_get_core_name_ex(), input[dev].idstr);
+	else sprintf(name, "%s_input_%s_v3.map", user_io_get_core_name(), input[dev].idstr);
 	return name;
 }
 
@@ -1173,7 +1173,7 @@ void finish_map_setting(int dismiss)
 void input_lightgun_save(int idx, uint16_t *cal)
 {
 	static char name[128];
-	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
 	FileSaveConfig(name, cal, 4 * sizeof(uint16_t));
 	memcpy(input[idx].guncal, cal, sizeof(input[idx].guncal));
 }
@@ -1181,7 +1181,7 @@ void input_lightgun_save(int idx, uint16_t *cal)
 static void input_lightgun_load(int idx)
 {
 	static char name[128];
-	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
 	FileLoadConfig(name, input[idx].guncal, 4 * sizeof(uint16_t));
 }
 
@@ -2597,7 +2597,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					mouse_emu_y /= 12;
 					return;
 				}
-				else if (ev->code == (input[dev].mmap[SYS_AXIS_X] & 0xFFFF) || (ev->code == 0 && input[dev].lightgun))
+				else if (((input[dev].mmap[SYS_AXIS_X] >> 16) == 2 && ev->code == (input[dev].mmap[SYS_AXIS_X] & 0xFFFF)) || (ev->code == 0 && input[dev].lightgun))
 				{
 					// skip if joystick is undefined.
 					if (!input[dev].num) break;
@@ -2608,7 +2608,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					joy_analog(input[dev].num, 0, offset);
 					return;
 				}
-				else if (ev->code == (input[dev].mmap[SYS_AXIS_Y] & 0xFFFF) || (ev->code == 1 && input[dev].lightgun))
+				else if (((input[dev].mmap[SYS_AXIS_Y] >> 16) == 2 && ev->code == (input[dev].mmap[SYS_AXIS_Y] & 0xFFFF)) || (ev->code == 1 && input[dev].lightgun))
 				{
 					// skip if joystick is undefined.
 					if (!input[dev].num) break;
@@ -2761,6 +2761,7 @@ void mergedevs()
 	make_unique(0x289B, 0x0057, -1); // Raphnet
 	make_unique(0x0E8F, 0x3013, 1); // Mayflash SNES controller 2 port adapter
 	make_unique(0x16C0, 0x05E1, 1); // XinMo XM-10 2 player USB Encoder
+	make_unique(0x045E, 0x02A1, 1); // Xbox 360 wireless receiver
 
 	if (cfg.no_merge_vid)
 	{

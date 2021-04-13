@@ -4,7 +4,6 @@
 int arcade_send_rom(const char *xml);
 int arcade_load(const char *xml);
 void arcade_check_error();
-int is_arcade();
 
 struct dip_struct
 {

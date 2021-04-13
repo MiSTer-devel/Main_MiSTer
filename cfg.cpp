@@ -85,13 +85,11 @@ static const ini_var_t ini_vars[] =
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
 
-#define INI_EOT                 4 // End-Of-Transmission
-
-#define INI_LINE_SIZE           256
+#define INI_LINE_SIZE           1024
 
 #define INI_SECTION_START       '['
 #define INI_SECTION_END         ']'
-#define INI_SECTION_INVALID_ID  0
+#define INCL_SECTION            '+'
 
 #define CHAR_IS_NUM(c)          (((c) >= '0') && ((c) <= '9'))
 #define CHAR_IS_ALPHA_LOWER(c)  (((c) >= 'a') && ((c) <= 'z'))
@@ -134,81 +132,77 @@ static int ini_getline(char* line)
 		if (CHAR_IS_LINEEND(c)) break;
 		if ((CHAR_IS_SPACE(c) || CHAR_IS_VALID(c)) && !ignore && !skip) line[i++] = c;
 	}
-	line[i] = '\0';
+	line[i] = 0;
 	while (i > 0 && CHAR_IS_SPACE(line[i - 1])) line[--i] = 0;
-	return c == 0 ? INI_EOT : 0;
+	return c == 0;
 }
 
 static int ini_get_section(char* buf)
 {
 	int i = 0;
+	int incl = (buf[0] == INCL_SECTION);
 
 	// get section start marker
-	if (buf[0] != INI_SECTION_START)
+	if (buf[0] != INI_SECTION_START && buf[0] != INCL_SECTION)
 	{
-		return INI_SECTION_INVALID_ID;
+		return 0;
 	}
 	else buf++;
 
 	int wc_pos = -1;
 
 	// get section stop marker
-	while (1)
+	while (buf[i])
 	{
 		if (buf[i] == INI_SECTION_END)
 		{
-			buf[i] = '\0';
+			buf[i] = 0;
 			break;
 		}
 
 		if (buf[i] == '*') wc_pos = i;
 
 		i++;
-		if (i >= INI_LINE_SIZE) return INI_SECTION_INVALID_ID;
+		if (i >= INI_LINE_SIZE) return 0;
 	}
 
-	// convert to uppercase
-	for (i = 0; i < INI_LINE_SIZE; i++)
+	if (!strcasecmp(buf, "MiSTer") ||
+		(is_arcade() && !strcasecmp(buf, "arcade")) ||
+		((wc_pos >= 0) ? !strncasecmp(buf, user_io_get_core_name(1), wc_pos) : !strcasecmp(buf, user_io_get_core_name(1))) ||
+		((wc_pos >= 0) ? !strncasecmp(buf, user_io_get_core_name(0), wc_pos) : !strcasecmp(buf, user_io_get_core_name(0))))
 	{
-		if (!buf[i]) break;
-		else buf[i] = toupper(buf[i]);
-	}
-
-	if (!strcasecmp(buf, "MiSTer") || ((wc_pos >= 0) ? !strncasecmp(buf, user_io_get_core_name_ex(), wc_pos) : !strcasecmp(buf, user_io_get_core_name_ex())))
-	{
-		ini_parser_debugf("Got SECTION '%s'", buf);
+		if (incl)
+		{
+			ini_parser_debugf("included '%s'", buf);
+		}
+		else
+		{
+			ini_parser_debugf("Got SECTION '%s'", buf);
+		}
 		return 1;
 	}
 
-	return INI_SECTION_INVALID_ID;
+	return 0;
 }
 
 static void ini_parse_var(char* buf)
 {
-	int i = 0, j = 0;
-	int var_id = -1;
-
 	// find var
+	int i = 0;
 	while (1)
 	{
 		if (buf[i] == '=' || CHAR_IS_SPACE(buf[i]))
 		{
-			buf[i] = '\0';
+			buf[i] = 0;
 			break;
 		}
-		else if (buf[i] == '\0') return;
+		else if (!buf[i]) return;
 		i++;
 	}
 
-	// convert to uppercase
-	for (j = 0; j <= i; j++)
-	{
-		if (!buf[j]) break;
-		else buf[j] = toupper(buf[j]);
-	}
-
 	// parse var
-	for (j = 0; j < (int)(sizeof(ini_vars) / sizeof(ini_var_t)); j++)
+	int var_id = -1;
+	for (int j = 0; j < (int)(sizeof(ini_vars) / sizeof(ini_var_t)); j++)
 	{
 		if (!strcasecmp(buf, ini_vars[j].name)) var_id = j;
 	}
@@ -267,12 +261,13 @@ static void ini_parse_var(char* buf)
 
 static void ini_parse(int alt)
 {
-	char line[INI_LINE_SIZE] = { 0 };
-	int section = INI_SECTION_INVALID_ID;
-	int line_status;
+	static char line[INI_LINE_SIZE];
+	int section = 0;
+	int eof;
 
-	ini_parser_debugf("Start INI parser for core \"%s\".", user_io_get_core_name_ex());
+	ini_parser_debugf("Start INI parser for core \"%s\"(%s).", user_io_get_core_name(0), user_io_get_core_name(1));
 
+	memset(line, 0, sizeof(line));
 	memset(&ini_file, 0, sizeof(ini_file));
 
 	const char *name = cfg_get_name(alt);
@@ -286,12 +281,16 @@ static void ini_parse(int alt)
 	while (1)
 	{
 		// get line
-		line_status = ini_getline(line);
-		ini_parser_debugf("line(%d): \"%s\".", line_status, line);
+		eof = ini_getline(line);
+		ini_parser_debugf("line(%d): \"%s\".", section, line);
 
 		if (line[0] == INI_SECTION_START)
 		{
 			// if first char in line is INI_SECTION_START, get section
+			section = ini_get_section(line);
+		}
+		else if (line[0] == INCL_SECTION && !section)
+		{
 			section = ini_get_section(line);
 		}
 		else if(section)
@@ -301,7 +300,7 @@ static void ini_parse(int alt)
 		}
 
 		// if end of file, stop
-		if (line_status == INI_EOT) break;
+		if (eof) break;
 	}
 
 	FileClose(&ini_file);
