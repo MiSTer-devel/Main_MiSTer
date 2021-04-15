@@ -576,7 +576,7 @@ static void fb_init()
 {
 	if (!fb_base)
 	{
-		int fd = open("/dev/mem", O_RDWR | O_SYNC);
+		int fd = open("/dev/mem", O_RDWR | O_SYNC | O_CLOEXEC);
 		if (fd == -1) return;
 
 		fb_base = (volatile uint32_t*)mmap(0, FB_SIZE * 4 * 3, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FB_ADDR);
@@ -1068,7 +1068,7 @@ static uint64_t getus()
 
 static void vs_wait()
 {
-	int fb = open("/dev/fb0", O_RDWR);
+	int fb = open("/dev/fb0", O_RDWR | O_CLOEXEC);
 	int zero = 0;
 	uint64_t t1, t2;
 	if (ioctl(fb, FBIO_WAITFORVSYNC, &zero) == -1)
@@ -1139,7 +1139,7 @@ static Imlib_Image load_bg()
 
 		if (PathIsDir(bgdir))
 		{
-			int rndfd = open("/dev/urandom", O_RDONLY);
+			int rndfd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
 			if (rndfd >= 0)
 			{
 				uint32_t rnd;
@@ -1383,7 +1383,7 @@ int video_chvt(int num)
 	{
 		cur_vt = num;
 		int fd;
-		if ((fd = open("/dev/tty0", O_RDONLY)) >= 0)
+		if ((fd = open("/dev/tty0", O_RDONLY | O_CLOEXEC)) >= 0)
 		{
 			if (ioctl(fd, VT_ACTIVATE, cur_vt)) printf("ioctl VT_ACTIVATE fails\n");
 			if (ioctl(fd, VT_WAITACTIVE, cur_vt)) printf("ioctl VT_WAITACTIVE fails\n");

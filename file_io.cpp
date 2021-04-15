@@ -394,7 +394,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute, int use_zi
 	}
 	else
 	{
-		int fd = (mode == -1) ? shm_open("/vdsk", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
+		int fd = (mode == -1) ? shm_open("/vdsk", O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0777) : open(full_path, mode | O_CLOEXEC, 0777);
 		if (fd <= 0)
 		{
 			if(!mute) printf("FileOpenEx(open) File:%s, error: %s.\n", full_path, strerror(errno));

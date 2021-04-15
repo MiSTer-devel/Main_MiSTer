@@ -1120,7 +1120,7 @@ static int process_request(void *reqres_buffer)
 static void share_init()
 {
 	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return;
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC | O_CLOEXEC)) == -1) return;
 
 	shmem = (uint8_t*)mmap(0, SHMEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, SHMEM_ADDR);
 	close(fd);

@@ -32,7 +32,7 @@ mister_scaler * mister_scaler_init()
     //printf("map_start = %d map_off=%d offset=%d\n",map_start,ms->map_off,offset);
 
     unsigned char *buffer;
-    ms->fd=open("/dev/mem", O_RDONLY, S_IRUSR | S_IWUSR);
+    ms->fd=open("/dev/mem", O_RDONLY, S_IRUSR | S_IWUSR | O_CLOEXEC);
     ms->map=(char *)mmap(NULL, ms->num_bytes+ms->map_off,PROT_READ, MAP_SHARED, ms->fd, map_start);
     if (ms->map==MAP_FAILED)
     {

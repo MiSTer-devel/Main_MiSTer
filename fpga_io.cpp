@@ -392,7 +392,7 @@ static void do_bridge(uint32_t enable)
 
 static int make_env(const char *name, const char *cfg)
 {
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return -1;
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC | O_CLOEXEC)) == -1) return -1;
 
 	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
 	if (buf == (void *)-1)
@@ -536,7 +536,7 @@ uint32_t fpga_core_read(uint32_t offset)
 
 int fpga_io_init()
 {
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return -1;
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC | O_CLOEXEC)) == -1) return -1;
 
 	map_base = (uint32_t*)mmap(0, FPGA_REG_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FPGA_REG_BASE);
 	if (map_base == (void *)-1)

@@ -905,7 +905,7 @@ uint16_t sdram_sz(int sz)
 	int res = 0;
 
 	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC | O_CLOEXEC)) == -1) return 0;
 
 	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
 	if (buf == (void *)-1)
@@ -948,7 +948,7 @@ uint16_t altcfg(int alt)
 	int res = 0;
 
 	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
+	if ((fd = open("/dev/mem", O_RDWR | O_SYNC | O_CLOEXEC)) == -1) return 0;
 
 	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
 	if (buf == (void *)-1)
@@ -1962,7 +1962,7 @@ static int process_ss(const char *rom_name)
 	{
 		if (memfd < 0)
 		{
-			memfd = open("/dev/mem", O_RDWR | O_SYNC);
+			memfd = open("/dev/mem", O_RDWR | O_SYNC | O_CLOEXEC);
 			if (memfd == -1)
 			{
 				printf("Unable to open /dev/mem!\n");

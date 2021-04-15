@@ -1156,7 +1156,7 @@ void TDiskImage::Open(const char *filename, bool ROnly)
 	}
 	FType = typ;
 
-	int hfile = open(filename, O_RDONLY);
+	int hfile = open(filename, O_RDONLY | O_CLOEXEC);
 
 	if (hfile < 0)
 	{
