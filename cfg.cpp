@@ -81,6 +81,7 @@ static const ini_var_t ini_vars[] =
 	{ "SPINNER_THROTTLE", (void*)(&(cfg.spinner_throttle)), INT32, -10000, 10000 },
 	{ "AFILTER_DEFAULT", (void*)(&(cfg.afilter_default)), STRING, 0, sizeof(cfg.afilter_default) - 1 },
 	{ "VFILTER_DEFAULT", (void*)(&(cfg.vfilter_default)), STRING, 0, sizeof(cfg.vfilter_default) - 1 },
+	{ "PROGRESS_INFO", (void*)(&(cfg.progress_info)), UINT8, 0, 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -330,5 +331,6 @@ void cfg_parse()
 	cfg.controller_info = 6;
 	cfg.browse_expand = 1;
 	cfg.logo = 1;
+	cfg.progress_info = 1;
 	ini_parse(altcfg());
 }

@@ -11,6 +11,7 @@
 #include "../../input.h"
 #include "../../file_io.h"
 #include "../../menu.h"
+#include "../../cfg.h"
 #include "../../fpga_io.h"
 #include "../../lib/md5/md5.h"
 
@@ -343,18 +344,17 @@ static void rom_finish(int send, uint32_t address, int index)
 				char str[32];
 				sprintf(str, "ROM #%d", index);
 
-				ProgressMessage(0, 0, 0, 0);
+				if (cfg.progress_info) ProgressMessage(0, 0, 0, 0);
 				while (romlen[0] > 0)
 				{
-					ProgressMessage("Sending", str, len - romlen[0], len);
-
+					if (cfg.progress_info) ProgressMessage("Sending", str, len - romlen[0], len);
 					uint16_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
 					user_io_file_tx_data(data, chunk);
 
 					romlen[0] -= chunk;
 					data += chunk;
 				}
-				ProgressMessage(0, 0, 0, 0);
+				if (cfg.progress_info) ProgressMessage(0, 0, 0, 0);
 			}
 
 			// signal end of transmission
@@ -472,7 +472,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->address = 0;
 			arc_info->insideinterleave = 0;
 			MD5Init(&arc_info->context);
-			ProgressMessage(0, 0, 0, 0);
+			if (cfg.progress_info) ProgressMessage(0, 0, 0, 0);
 		}
 
 		if (!strcasecmp(node->tag, "switches"))
@@ -733,7 +733,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			for (int i = 1; i < 8; i++) romlen[i] = romlen[0];
 		}
 
-		ProgressMessage("Loading", message, ftell(sd->file), arc_info->file_size);
+		if (cfg.progress_info) ProgressMessage("Loading", message, ftell(sd->file), arc_info->file_size);
 		break;
 
 	case XML_EVENT_TEXT:
@@ -1049,7 +1049,7 @@ int arcade_send_rom(const char *xml)
 	arc_info.validrom0 = 0;
 	struct stat64 *st = getPathStat(xml);
 	if (st) arc_info.file_size = (int)st->st_size;
-	ProgressMessage(0, 0, 0, 0);
+	if (cfg.progress_info) ProgressMessage(0, 0, 0, 0);
 
 	// parse
 	XMLDoc_parse_file_SAX(xml, &sax, &arc_info);

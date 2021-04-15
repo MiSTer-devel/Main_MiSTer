@@ -59,6 +59,7 @@ typedef struct {
 	char custom_aspect_ratio[2][16];
 	char afilter_default[1023];
 	char vfilter_default[1023];
+	uint8_t progress_info;
 } cfg_t;
 
 extern cfg_t cfg;

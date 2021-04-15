@@ -345,25 +345,25 @@ static void set_emu_mode(int mode)
 	case EMU_JOY0:
 		emu_led = 0x20;
 		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_NUM_LOCK);
-		Info("Kbd mode: Joystick 1", 1000);
+		if (cfg.controller_info) Info("Kbd mode: Joystick 1", 1000);
 		break;
 
 	case EMU_JOY1:
 		emu_led = 0x40;
 		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_SCROLL_LOCK);
-		Info("Kbd mode: Joystick 2", 1000);
+		if (cfg.controller_info) Info("Kbd mode: Joystick 2", 1000);
 		break;
 
 	case EMU_MOUSE:
 		emu_led = 0x60;
 		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK);
-		Info("Kbd mode: Mouse", 1000);
+		if (cfg.controller_info) Info("Kbd mode: Mouse", 1000);
 		break;
 
 	default:
 		emu_led = 0;
 		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, 0);
-		Info("Kbd mode: Normal", 1000);
+		if (cfg.controller_info) Info("Kbd mode: Normal", 1000);
 	}
 
 	spi_uio_cmd16(UIO_LEDS, 0x6000 | emu_led);
