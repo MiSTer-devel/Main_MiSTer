@@ -18,7 +18,7 @@ void MenuHide();
 int getOptIdx(char *opt);
 uint32_t getStatus(char *opt, uint32_t status);
 uint32_t getStatusMask(char *opt);
-void substrcpy(char *d, char *s, char idx);
+int substrcpy(char *d, const char *s, char idx);
 
 void open_joystick_setup();
 int menu_lightgun_cb(int idx, uint16_t type, uint16_t code, int value);

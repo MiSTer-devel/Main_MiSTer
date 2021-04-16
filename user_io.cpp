@@ -2077,7 +2077,7 @@ int user_io_file_tx_a(const char* name, uint16_t index)
 	return 1;
 }
 
-int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
+int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite, uint32_t load_addr)
 {
 	fileTYPE f = {};
 	static uint8_t buf[4096];
@@ -2099,6 +2099,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	/* transmit the entire file using one transfer */
 	printf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index & 0x3F, index >> 6);
+	if(load_addr) printf("Load to address 0x%X\n", load_addr);
 
 	// set index byte (0=bios rom, 1-n=OSD entry index)
 	user_io_set_index(index);
@@ -2108,7 +2109,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	user_io_file_info(p);
 
 	// prepare transmission of new file
-	user_io_set_download(1);
+	user_io_set_download(1, load_addr ? bytes2send : 0);
 
 	int dosend = 1;
 
@@ -2222,22 +2223,37 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		}
 	}
 
-	while (dosend && bytes2send)
+	if (dosend && load_addr >= 0x20000000 && (load_addr + bytes2send) <= 0x40000000)
 	{
-		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
-
-		FileReadAdv(&f, buf, chunk);
-		if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
-		user_io_file_tx_data(buf, chunk);
-
-		if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
-		bytes2send -= chunk;
-
-		if (skip >= chunk) skip -= chunk;
-		else
+		uint8_t *mem = (uint8_t *)shmem_map(fpga_mem(load_addr), bytes2send);
+		if (mem)
 		{
-			file_crc = crc32(file_crc, buf + skip, chunk - skip);
+			FileReadAdv(&f, mem, bytes2send);
+			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, mem);
+			file_crc = crc32(file_crc, mem + skip, bytes2send - skip);
 			skip = 0;
+			shmem_unmap(mem, bytes2send);
+		}
+	}
+	else
+	{
+		while (dosend && bytes2send)
+		{
+			uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+
+			FileReadAdv(&f, buf, chunk);
+			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
+			user_io_file_tx_data(buf, chunk);
+
+			if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
+			bytes2send -= chunk;
+
+			if (skip >= chunk) skip -= chunk;
+			else
+			{
+				file_crc = crc32(file_crc, buf + skip, chunk - skip);
+				skip = 0;
+			}
 		}
 	}
 
