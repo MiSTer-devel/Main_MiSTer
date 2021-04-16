@@ -9,7 +9,6 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
-#include <sys/mman.h>
 
 #include "lib/lodepng/lodepng.h"
 
@@ -33,6 +32,7 @@
 #include "cheats.h"
 #include "video.h"
 #include "audio.h"
+#include "shmem.h"
 
 #include "support.h"
 
@@ -904,16 +904,8 @@ uint16_t sdram_sz(int sz)
 {
 	int res = 0;
 
-	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
-
-	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
-	if (buf == (void *)-1)
-	{
-		printf("Unable to mmap(/dev/mem)\n");
-		close(fd);
-		return 0;
-	}
+	void* buf = shmem_map(0x1FFFF000, 0x1000);
+	if (!buf) return 0;
 
 	volatile uint8_t* par = (volatile uint8_t*)buf;
 	par += 0xF00;
@@ -938,8 +930,7 @@ uint16_t sdram_sz(int sz)
 		}
 	}
 
-	munmap(buf, 0x1000);
-	close(fd);
+	shmem_unmap(buf, 0x1000);
 	return res;
 }
 
@@ -947,16 +938,8 @@ uint16_t altcfg(int alt)
 {
 	int res = 0;
 
-	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
-
-	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
-	if (buf == (void *)-1)
-	{
-		printf("Unable to mmap(/dev/mem)\n");
-		close(fd);
-		return 0;
-	}
+	void* buf = shmem_map(0x1FFFF000, 0x1000);
+	if (!buf) return 0;
 
 	volatile uint8_t* par = (volatile uint8_t*)buf;
 	par += 0xF04;
@@ -981,8 +964,7 @@ uint16_t altcfg(int alt)
 		}
 	}
 
-	munmap(buf, 0x1000);
-	close(fd);
+	shmem_unmap(buf, 0x1000);
 	return res;
 }
 
@@ -1952,7 +1934,6 @@ static int process_ss(const char *rom_name)
 {
 	static char ss_name[1024] = {};
 	static char *ss_sufx = 0;
-	static int memfd = -1;
 	static uint32_t ss_cnt[4] = {};
 	static void *base[4] = {};
 
@@ -1960,24 +1941,14 @@ static int process_ss(const char *rom_name)
 
 	if (rom_name)
 	{
-		if (memfd < 0)
-		{
-			memfd = open("/dev/mem", O_RDWR | O_SYNC);
-			if (memfd == -1)
-			{
-				printf("Unable to open /dev/mem!\n");
-				return 0;
-			}
-		}
-
 		uint32_t len = ss_size;
 		uint32_t map_addr = ss_base;
 		fileTYPE f = {};
 
 		for (int i = 0; i < 4; i++)
 		{
-			if (!base[i]) base[i] = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-			if (base[i] == (void *)-1)
+			if (!base[i]) base[i] = shmem_map(map_addr, len);
+			if (!base[i])
 			{
 				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
 			}
@@ -2026,36 +1997,33 @@ static int process_ss(const char *rom_name)
 	if (ss_timer && !CheckTimer(ss_timer)) return 0;
 	ss_timer = GetTimer(1000);
 
-	if (memfd >= 0)
+	fileTYPE f = {};
+	for (int i = 0; i < 4; i++)
 	{
-		fileTYPE f = {};
-		for (int i = 0; i < 4; i++)
+		if (base[i])
 		{
-			if (base[i] && (base[i] != (void *)-1))
+			uint32_t curcnt = ((uint32_t*)(base[i]))[0];
+			uint32_t size = ((uint32_t*)(base[i]))[1];
+
+			if (curcnt != ss_cnt[i])
 			{
-				uint32_t curcnt = ((uint32_t*)(base[i]))[0];
-				uint32_t size = ((uint32_t*)(base[i]))[1];
-
-				if (curcnt != ss_cnt[i])
+				ss_cnt[i] = curcnt;
+				if (size) size = (size + 2) * 4;
+				if (size > 0 && size <= ss_size)
 				{
-					ss_cnt[i] = curcnt;
-					if (size) size = (size + 2) * 4;
-					if (size > 0 && size <= ss_size)
-					{
-						MenuHide();
-						Info("Saving the state", 500);
+					MenuHide();
+					Info("Saving the state", 500);
 
-						*ss_sufx = i + '1';
-						if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
-						{
-							int ret = FileWriteAdv(&f, base[i], size);
-							FileClose(&f);
-							printf("Wrote %d bytes to file: %s\n", ret, ss_name);
-						}
-						else
-						{
-							printf("Unable to create file: %s\n", ss_name);
-						}
+					*ss_sufx = i + '1';
+					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
+					{
+						int ret = FileWriteAdv(&f, base[i], size);
+						FileClose(&f);
+						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
+					}
+					else
+					{
+						printf("Unable to create file: %s\n", ss_name);
 					}
 				}
 			}

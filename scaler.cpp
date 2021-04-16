@@ -14,10 +14,10 @@ with help from the MiSTer contributors including Grabulosaure
 #include <fcntl.h>
 
 #include <sys/types.h>
-#include <sys/mman.h>
 #include <err.h>
 
 #include "scaler.h"
+#include "shmem.h"
 
 
 mister_scaler * mister_scaler_init()
@@ -32,11 +32,9 @@ mister_scaler * mister_scaler_init()
     //printf("map_start = %d map_off=%d offset=%d\n",map_start,ms->map_off,offset);
 
     unsigned char *buffer;
-    ms->fd=open("/dev/mem", O_RDONLY, S_IRUSR | S_IWUSR);
-    ms->map=(char *)mmap(NULL, ms->num_bytes+ms->map_off,PROT_READ, MAP_SHARED, ms->fd, map_start);
-    if (ms->map==MAP_FAILED)
+    ms->map=(char *)shmem_map(map_start, ms->num_bytes+ms->map_off);
+    if (!ms->map)
     {
-        printf("problem MAP_FAILED\n");
         mister_scaler_free(ms);
         return NULL;
     }
@@ -68,8 +66,7 @@ mister_scaler * mister_scaler_init()
 
 void mister_scaler_free(mister_scaler *ms)
 {
-   munmap(ms->map,ms->num_bytes+ms->map_off);
-   close(ms->fd);
+   shmem_unmap(ms->map,ms->num_bytes+ms->map_off);
    free(ms);
 }
 

@@ -75,6 +75,7 @@
     <ClCompile Include="recent.cpp" />
     <ClCompile Include="scaler.cpp" />
     <ClCompile Include="scheduler.cpp" />
+    <ClCompile Include="shmem.cpp" />
     <ClCompile Include="spi.cpp" />
     <ClCompile Include="support\arcade\buffer.cpp" />
     <ClCompile Include="support\arcade\mra_loader.cpp" />
@@ -139,6 +140,7 @@
     <ClInclude Include="recent.h" />
     <ClInclude Include="scaler.h" />
     <ClInclude Include="scheduler.h" />
+    <ClInclude Include="shmem.h" />
     <ClInclude Include="spi.h" />
     <ClInclude Include="support.h" />
     <ClInclude Include="support\arcade\buffer.h" />

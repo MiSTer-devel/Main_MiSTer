@@ -916,7 +916,7 @@ int mwd = -1;
 static int set_watch()
 {
 	mwd = -1;
-	mfd = inotify_init();
+	mfd = inotify_init1(IN_CLOEXEC);
 	if (mfd < 0)
 	{
 		printf("ERR: inotify_init");
@@ -1304,7 +1304,7 @@ static int input_uinp_setup()
 	{
 		struct uinput_user_dev uinp;
 
-		if (!(uinp_fd = open("/dev/uinput", O_WRONLY | O_NDELAY)))
+		if (!(uinp_fd = open("/dev/uinput", O_WRONLY | O_NDELAY | O_CLOEXEC)))
 		{
 			printf("Unable to open /dev/uinput\n");
 			uinp_fd = -1;
@@ -3064,10 +3064,10 @@ int input_test(int getchar)
 		unlink(CMD_FIFO);
 		mkfifo(CMD_FIFO, 0666);
 
-		pool[NUMDEV+1].fd = open(CMD_FIFO, O_RDWR | O_NONBLOCK);
+		pool[NUMDEV+1].fd = open(CMD_FIFO, O_RDWR | O_NONBLOCK | O_CLOEXEC);
 		pool[NUMDEV+1].events = POLLIN;
 
-		pool[NUMDEV + 2].fd = open(LED_MONITOR, O_RDONLY);
+		pool[NUMDEV + 2].fd = open(LED_MONITOR, O_RDONLY | O_CLOEXEC);
 		pool[NUMDEV + 2].events = POLLPRI;
 
 		state++;
@@ -3095,7 +3095,7 @@ int input_test(int getchar)
 				{
 					memset(&input[n], 0, sizeof(input[n]));
 					sprintf(input[n].devname, "/dev/input/%s", de->d_name);
-					int fd = open(input[n].devname, O_RDWR);
+					int fd = open(input[n].devname, O_RDWR | O_CLOEXEC);
 					//printf("open(%s): %d\n", input[n].devname, fd);
 
 					if (fd > 0)

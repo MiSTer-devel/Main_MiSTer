@@ -15,7 +15,6 @@ typedef struct {
    char *map;
    int num_bytes;
    int map_off;
-   int fd;
 } mister_scaler;
 
 #define MISTER_SCALER_BASEADDR     0x20000000
