@@ -1590,6 +1590,7 @@ void HandleUI(void)
 					}
 					else if (!strcmp(p, "DIP"))
 					{
+						h = page;
 						if (arcade_sw()->dip_num)
 						{
 							dip_submenu = selentry;
@@ -1933,6 +1934,7 @@ void HandleUI(void)
 					d = 0;
 					inpage = !page;
 
+					if (!strcmp(p, "DIP") && page) continue;
 					if (strcmp(p, "DIP") && strncmp(p, "DEFMRA,", 7))
 					{
 						//Hide or Disable flag
