@@ -1654,7 +1654,7 @@ void HandleUI(void)
 
 								int len = strlen(s);
 								while (len < 27) s[len++] = ' ';
-								s[27] = 17;
+								s[27] = 0x16;
 								s[28] = 0;
 							}
 
