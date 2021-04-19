@@ -1591,7 +1591,7 @@ void HandleUI(void)
 					else if (!strcmp(p, "DIP"))
 					{
 						h = page;
-						if (arcade_sw()->dip_num)
+						if (!h && arcade_sw()->dip_num)
 						{
 							dip_submenu = selentry;
 							MenuWrite(entry, " DIP Switches              \x16", menusub == selentry, 0);
@@ -1775,7 +1775,11 @@ void HandleUI(void)
 							while ((end > s + 1) && (*end == ' ')) end--;
 							*(end + 1) = 0;
 
-							strcat(s, ":");
+							int len = strlen(s);
+							if (len+l > 27) len = 27-l;
+							s[len++] = ':';
+							s[len] = 0;
+
 							l = 28 - l - strlen(s);
 							while (l--) strcat(s, " ");
 
@@ -1934,7 +1938,6 @@ void HandleUI(void)
 					d = 0;
 					inpage = !page;
 
-					if (!strcmp(p, "DIP") && page) continue;
 					if (strcmp(p, "DIP") && strncmp(p, "DEFMRA,", 7))
 					{
 						//Hide or Disable flag
