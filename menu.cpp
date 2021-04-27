@@ -233,7 +233,7 @@ static char helptext_custom[1024];
 
 enum HelpText_Message
 {
-	HELPTEXT_NONE, HELPTEXT_CUSTOM, HELPTEXT_MAIN, HELPTEXT_HARDFILE, HELPTEXT_CHIPSET, HELPTEXT_MEMORY, HELPTEXT_EJECT
+	HELPTEXT_NONE, HELPTEXT_CUSTOM, HELPTEXT_MAIN, HELPTEXT_HARDFILE, HELPTEXT_CHIPSET, HELPTEXT_MEMORY, HELPTEXT_EJECT, HELPTEXT_CLEAR
 };
 
 static const char *helptexts[] =
@@ -245,6 +245,7 @@ static const char *helptexts[] =
 	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600) or 68020 (maximum performance) processor with transparent cache.",
 	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 384 megabytes of Fast RAM (8MB max for 68000 mode). To use the HRTmon feature you will need a file on the SD card named hrtmon.rom.",
 	"                                Backspace key (or B-hold + A on gamepad) to unmount",
+	"                                Backspace key (or B-hold + A on gamepad) to clear stored option. You have to reload the core to be able to use default value.",
 };
 
 static const uint32_t helptext_timeouts[] =
@@ -255,6 +256,7 @@ static const uint32_t helptext_timeouts[] =
 	10000,
 	10000,
 	10000,
+	2000,
 	2000
 };
 
@@ -2007,7 +2009,7 @@ void HandleUI(void)
 						if (is_gba() && FileExists(user_io_make_filepath(HomeDir(), "goomba.rom"))) strcat(ext, "GB GBC");
 						while (strlen(ext) % 3) strcat(ext, " ");
 
-						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0);
+						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0) | (store_name ? SCANO_CLEAR : 0);
 						fs_MenuSelect = MENU_GENERIC_FILE_SELECTED;
 						fs_MenuCancel = MENU_GENERIC_MAIN1;
 						strcpy(fs_pFileExt, ext);
@@ -2213,28 +2215,32 @@ void HandleUI(void)
 				FileSaveConfig(str, selPath, sizeof(selPath));
 			}
 
-			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
-			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
+			if (selPath[0])
+			{
 
-			if (fs_Options & SCANO_NEOGEO)
-			{
-				neogeo_romset_tx(selPath);
-			}
-			else
-			{
-				if (is_pce())
+				char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
+				if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
+
+				if (fs_Options & SCANO_NEOGEO)
 				{
-					pcecd_set_image(0, "");
-					pcecd_reset();
+					neogeo_romset_tx(selPath);
 				}
-				if(!store_name) user_io_store_filename(selPath);
-				user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr);
-				if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
+				else
+				{
+					if (is_pce())
+					{
+						pcecd_set_image(0, "");
+						pcecd_reset();
+					}
+					if (!store_name) user_io_store_filename(selPath);
+					user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr);
+					if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
+				}
+
+				if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
+
+				recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
 			}
-
-			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
-
-			recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
 		}
 		break;
 
@@ -4332,7 +4338,7 @@ void HandleUI(void)
 		/* file selection menu                                            */
 		/******************************************************************/
 	case MENU_FILE_SELECT1:
-		helptext_idx = (fs_Options & SCANO_UMOUNT) ? HELPTEXT_EJECT : 0;
+		helptext_idx = (fs_Options & SCANO_UMOUNT) ? HELPTEXT_EJECT : (fs_Options & SCANO_CLEAR) ? HELPTEXT_CLEAR : 0;
 		OsdSetTitle((fs_Options & SCANO_CORES) ? "Cores" : "Select", 0);
 		PrintDirectory(hold_cnt<2);
 		menustate = MENU_FILE_SELECT2;
@@ -4341,12 +4347,25 @@ void HandleUI(void)
 	case MENU_FILE_SELECT2:
 		menumask = 0;
 
-		if (c == KEY_BACKSPACE && (fs_Options & SCANO_UMOUNT) && !strlen(filter))
+		if (c == KEY_BACKSPACE && (fs_Options & (SCANO_UMOUNT | SCANO_CLEAR)) && !strlen(filter))
 		{
 			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
-			OsdWrite(OsdGetSize() / 2, "    Unmounting the image", 0, 0);
-			OsdUpdate();
-			sleep(1);
+			if (fs_Options & SCANO_CLEAR)
+			{
+				int i = (OsdGetSize() / 2) - 2;
+				OsdWrite(i++, "     Clearing the option");
+				OsdWrite(i++);
+				OsdWrite(i++, " You have to reload the core");
+				OsdWrite(i++, "    to use default value.");
+				OsdUpdate();
+				sleep(2);
+			}
+			else
+			{
+				OsdWrite(OsdGetSize() / 2, "    Unmounting the image", 0, 0);
+				OsdUpdate();
+				sleep(1);
+			}
 			input_poll(0);
 			menu_key_set(0);
 			selPath[0] = 0;
