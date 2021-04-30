@@ -72,7 +72,6 @@ enum MENU
 	MENU_MISC1,
 	MENU_MISC2,
 
-	MENU_ERROR,
 	MENU_INFO,
 
 	MENU_FILE_SELECT1,
@@ -848,7 +847,7 @@ static void vga_nag()
 		OsdWrite(n++, "       vga_scaler=1");
 		for (; n < OsdGetSize(); n++) OsdWrite(n);
 		OsdUpdate();
-		OsdEnable(0);
+		OsdEnable(OSD_MSG);
 		EnableOsd_on(OSD_HDMI);
 	}
 
@@ -1286,7 +1285,6 @@ void HandleUI(void)
 	case MENU_NONE1:
 	case MENU_NONE2:
 	case MENU_INFO:
-	case MENU_ERROR:
 		break;
 
 	default:
@@ -1312,7 +1310,6 @@ void HandleUI(void)
 	case MENU_INFO:
 		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
 		// fall through
-	case MENU_ERROR:
 	case MENU_NONE2:
 		if (menu || (is_menu() && !video_fb_state()))
 		{
@@ -6513,22 +6510,12 @@ static void set_text(const char *message, unsigned char code)
 	while (l <= 7) OsdWrite(l++, "", 0, 0);
 }
 
-/*  Error Message */
-void ErrorMessage(const char *message, unsigned char code)
-{
-	menustate = MENU_ERROR;
-
-	OsdSetTitle("Error", 0);
-	set_text(message, code);
-	OsdEnable(0); // do not disable KEYBOARD
-}
-
 void InfoMessage(const char *message, int timeout, const char *title)
 {
 	if (menustate != MENU_INFO)
 	{
 		OsdSetTitle(title, 0);
-		OsdEnable(0); // do not disable keyboard
+		OsdEnable(OSD_MSG); // do not disable keyboard
 	}
 
 	set_text(message, 0);

@@ -6,6 +6,7 @@
 // some constants
 #define DISABLE_KEYBOARD 0x02        // disable keyboard while OSD is active
 #define OSD_INFO         0x04        // display info
+#define OSD_MSG          0x08        // display message window
 
 #define REPEATDELAY      500         // repeat delay in 1ms units
 #define REPEATRATE       50          // repeat rate in 1ms units
