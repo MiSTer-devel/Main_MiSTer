@@ -293,6 +293,11 @@ static char Selected_F[16][1024] = {};
 static char Selected_S[8][1024] = {};
 static char Selected_tmp[1024] = {};
 
+void StoreIdx_F(int idx, char *path)
+{
+	strcpy(Selected_F[idx], path);
+}
+
 static char selPath[1024] = {};
 
 static int changeDir(char *dir)

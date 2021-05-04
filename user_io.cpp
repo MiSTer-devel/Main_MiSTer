@@ -624,7 +624,9 @@ static void parse_config()
 				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
 				if (FileLoadConfig(str, str, sizeof(str)) && str[0])
 				{
-					user_io_file_tx(str, p[2] - '0');
+					int idx = p[2] - '0';
+					StoreIdx_F(idx, str);
+					user_io_file_tx(str, idx);
 				}
 			}
 		}
