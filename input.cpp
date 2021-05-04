@@ -1060,7 +1060,6 @@ static int load_map(const char *name, void *pBuffer, int size)
 static void delete_map(const char *name)
 {
 	char path[256] = { JOYMAP_DIR };
-	FileCreatePath(path);
 	strcat(path, name);
 	FileDeleteConfig(name);
 	FileDeleteConfig(path);
@@ -1069,7 +1068,6 @@ static void delete_map(const char *name)
 static int save_map(const char *name, void *pBuffer, int size)
 {
 	char path[256] = { JOYMAP_DIR };
-	FileCreatePath(path);
 	strcat(path, name);
 	FileDeleteConfig(name);
 	return FileSaveConfig(path, pBuffer, size);
