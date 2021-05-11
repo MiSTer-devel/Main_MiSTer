@@ -595,7 +595,7 @@ void WriteTrack(adfTYPE *drive)
 		if (Error)
 		{
 			fdd_debugf("WriteTrack: error %u\n", Error);
-			ErrorMessage("  WriteTrack", Error);
+			Info("Write error");
 		}
 	}
 }

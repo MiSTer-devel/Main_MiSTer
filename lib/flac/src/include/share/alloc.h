@@ -78,7 +78,7 @@ static inline void *safe_calloc_(size_t nmemb, size_t size)
 {
 	if(!nmemb || !size)
 		return malloc(1); /* malloc(0) is undefined; FLAC src convention is to always allocate */
-	return calloc(nmemb, size);
+	return (nmemb <= INT_MAX) ? calloc(nmemb, size) : NULL;
 }
 
 /*@@@@ there's probably a better way to prevent overflows when allocating untrusted sums but this works for now */

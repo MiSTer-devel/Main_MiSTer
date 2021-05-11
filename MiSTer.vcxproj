@@ -30,7 +30,7 @@
     <NMakeOutput>MiSTer</NMakeOutput>
     <NMakeCleanCommandLine>git.lnk ./clean.sh</NMakeCleanCommandLine>
     <NMakePreprocessorDefinitions>__arm__;__GNUC__;__USE_GNU ;_GNU_SOURCE;VDATE="000000";_FILE_OFFSET_BITS=64;_LARGEFILE64_SOURCE;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
-    <NMakeIncludeSearchPath>c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\libc\usr\include;c:\Work\Git\opt\gcc54\lib\gcc\arm-linux-gnueabihf\5.4.1\include;c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\include\c++\5.4.1;c:\Work\Git\opt\gcc54\arm-linux-gnueabihf\include\c++\5.4.1\arm-linux-gnueabihf;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng</NMakeIncludeSearchPath>
+    <NMakeIncludeSearchPath>c:\Work\Git\opt\gcc75\arm-linux-gnueabihf\libc\usr\include;c:\Work\Git\opt\gcc75\lib\gcc\arm-linux-gnueabihf\7.5.0\include;c:\Work\Git\opt\gcc75\arm-linux-gnueabihf\include\c++\7.5.0;c:\Work\Git\opt\gcc75\arm-linux-gnueabihf\include\c++\7.5.0\arm-linux-gnueabihf;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng</NMakeIncludeSearchPath>
     <OutDir>$(TEMP)</OutDir>
     <IntDir>$(TEMP)</IntDir>
     <AdditionalOptions>
@@ -75,6 +75,7 @@
     <ClCompile Include="recent.cpp" />
     <ClCompile Include="scaler.cpp" />
     <ClCompile Include="scheduler.cpp" />
+    <ClCompile Include="shmem.cpp" />
     <ClCompile Include="spi.cpp" />
     <ClCompile Include="support\arcade\buffer.cpp" />
     <ClCompile Include="support\arcade\mra_loader.cpp" />
@@ -139,6 +140,7 @@
     <ClInclude Include="recent.h" />
     <ClInclude Include="scaler.h" />
     <ClInclude Include="scheduler.h" />
+    <ClInclude Include="shmem.h" />
     <ClInclude Include="spi.h" />
     <ClInclude Include="support.h" />
     <ClInclude Include="support\arcade\buffer.h" />

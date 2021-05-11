@@ -58,6 +58,7 @@ direntext_t* flist_SelectedItem();
 #define SCANO_NEOGEO     0b00010000
 #define SCANO_NOENTER    0b00100000
 #define SCANO_NOZIP      0b01000000
+#define SCANO_CLEAR      0b10000000 // allow backspace key, clear FC option
 
 void FindStorage();
 int  getStorage(int from_setting);
@@ -89,7 +90,7 @@ struct stat64* getPathStat(const char *path);
 void FileGenerateSavePath(const char *name, char* out_name);
 
 #define SAVESTATE_DIR "savestates"
-void FileGenerateSavestatePath(const char *name, char* out_name);
+void FileGenerateSavestatePath(const char *name, char* out_name, int sufx);
 
 #define SCREENSHOT_DIR "screenshots"
 #define SCREENSHOT_DEFAULT "screen"

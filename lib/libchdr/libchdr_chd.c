@@ -1272,6 +1272,8 @@ static chd_error decompress_v5_map(chd_file* chd, chd_header* header)
 			/* pseudo-types; convert into base types */
 			case COMPRESSION_SELF_1:
 				last_self++;
+				// fall through
+
 			case COMPRESSION_SELF_0:
 				rawmap[0] = COMPRESSION_SELF;
 				offset = last_self;
@@ -1284,6 +1286,8 @@ static chd_error decompress_v5_map(chd_file* chd, chd_header* header)
 
 			case COMPRESSION_PARENT_1:
 				last_parent += header->hunkbytes / header->unitbytes;
+				// fall through
+
 			case COMPRESSION_PARENT_0:
 				rawmap[0] = COMPRESSION_PARENT;
 				offset = last_parent;

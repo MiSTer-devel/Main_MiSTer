@@ -348,6 +348,7 @@ void cdd_t::Reset() {
 	status = CD_STAT_STOP;
 	audioLength = 0;
 	audioOffset = 0;
+	chd_audio_read_lba = 0;
 
 	stat[0] = 0x0;
 	stat[1] = 0x0;
@@ -416,11 +417,11 @@ void cdd_t::Update() {
 			{
 				this->isData = 0x00;
 			}
-
 			SectorSend(0);
 		}
 
-		//this->lba++;
+		this->lba++;
+		this->chd_audio_read_lba++;
 
 		if (this->lba >= this->toc.tracks[this->index].end)
 		{
@@ -488,16 +489,44 @@ void cdd_t::CommandExec() {
 
 	switch (comm[0]) {
 	case CD_COMM_IDLE:
-		stat[0] = this->status;
-
-		if (stat[1] == 0x0f)
+		if (this->latency <= 3)
 		{
-			if (!this->latency)
+			stat[0] = this->status;
+			if (stat[1] == 0x0f)
 			{
-				stat[0] = this->status;
-				stat[1] = 0x2;
-				stat[2] = (cdd.index < this->toc.last) ? BCD(this->index + 1) >> 4 : 0xA;
-				stat[3] = (cdd.index < this->toc.last) ? BCD(this->index + 1) & 0xF : 0xA;
+				int lba = this->lba + 150;
+				LBAToMSF(lba, &msf);
+				stat[1] = 0x0;
+	                        stat[2] = BCD(msf.m) >> 4;
+				stat[3] = BCD(msf.m) & 0xF;
+				stat[4] = BCD(msf.s) >> 4;
+				stat[5] = BCD(msf.s) & 0xF;
+				stat[6] = BCD(msf.f) >> 4;
+				stat[7] = BCD(msf.f) & 0xF;
+				stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
+			} else if (stat[1] == 0x00) {
+				int lba = this->lba + 150;
+				LBAToMSF(lba, &msf);
+                                stat[2] = BCD(msf.m) >> 4;
+                                stat[3] = BCD(msf.m) & 0xF;
+                                stat[4] = BCD(msf.s) >> 4;
+                                stat[5] = BCD(msf.s) & 0xF;
+                                stat[6] = BCD(msf.f) >> 4;
+                                stat[7] = BCD(msf.f) & 0xF;
+                                stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
+			} else if (stat[1] == 0x01) {
+				int lba = abs(this->lba - this->toc.tracks[this->index].start);
+				LBAToMSF(lba,&msf);
+                                stat[2] = BCD(msf.m) >> 4;
+                                stat[3] = BCD(msf.m) & 0xF;
+                                stat[4] = BCD(msf.s) >> 4;
+                                stat[5] = BCD(msf.s) & 0xF;
+                                stat[6] = BCD(msf.f) >> 4;
+                                stat[7] = BCD(msf.f) & 0xF;
+                                stat[8] = this->toc.tracks[this->index].type ? 0x04 : 0x00;
+			} else if (stat[1] == 0x02) {
+                               stat[2] = (cdd.index < this->toc.last) ? BCD(this->index + 1) >> 4 : 0xA;
+                               stat[3] = (cdd.index < this->toc.last) ? BCD(this->index + 1) & 0xF : 0xA;
 			}
 		}
 
@@ -677,6 +706,7 @@ void cdd_t::CommandExec() {
 			FileSeek(&this->toc.tracks[index].f, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 		}
 
+		this->chd_audio_read_lba = this->lba;
 		this->audioOffset = 0;
 
 		//if (this->toc.sub) fseek(this->toc.sub, lba_ * 96, SEEK_SET);
@@ -685,7 +715,7 @@ void cdd_t::CommandExec() {
 
 		this->status = CD_STAT_PLAY;
 
-		stat[0] = this->status;
+		stat[0] = CD_STAT_SEEK; 
 		stat[1] = 0xf;
 		stat[2] = 0;
 		stat[3] = 0;
@@ -762,7 +792,6 @@ void cdd_t::CommandExec() {
 		this->status = CD_STAT_PLAY;
 		stat[0] = this->status;
 		this->audioOffset = 0;
-
 		//printf("\x1b[32mMCD: Command RESUME, status = %X\n\x1b[0m", this->status);
 		break;
 
@@ -879,7 +908,6 @@ void cdd_t::ReadData(uint8_t *buf)
 			FileReadAdv(&this->toc.tracks[0].f, buf, 2048);
 		}
 	}
-	this->lba++;
 }
 
 int cdd_t::ReadCDDA(uint8_t *buf)
@@ -892,7 +920,6 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 
 	if (this->isData)
 	{
-		//????
 		return this->audioLength;
 	}
 
@@ -900,7 +927,7 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 	{
 		for(int i = 0; i < this->audioLength / 2352; i++)
 		{
-			mister_chd_read_sector(this->toc.chd_f, this->lba + this->toc.tracks[this->index].offset, 2352*i, 0, 2352, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 2352*i, 0, 2352, buf, this->chd_hunkbuf, &this->chd_hunknum);
 		}
 
 		//CHD audio requires byteswap. There's probably a better way to do this...
@@ -912,11 +939,15 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 			buf[swapidx+1] = temp;
 		}
 
+		if ((this->audioLength / 2352) > 1)
+		{
+			this->chd_audio_read_lba++;
+		}
+
 	} else if (this->toc.tracks[this->index].f.opened()) {
 		FileReadAdv(&this->toc.tracks[this->index].f, buf, this->audioLength);
 	}
 
-	this->lba += (this->audioLength / 2352);
 	return this->audioLength;
 }
 

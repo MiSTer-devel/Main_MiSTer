@@ -4,7 +4,6 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <ctype.h>
-#include <sys/mman.h>
 
 #include "../../sxmlc.h"
 #include "../../user_io.h"
@@ -13,6 +12,7 @@
 #include "../../menu.h"
 #include "../../fpga_io.h"
 #include "../../lib/md5/md5.h"
+#include "../../shmem.h"
 
 #include "buffer.h"
 #include "mra_loader.h"
@@ -38,6 +38,7 @@ struct arc_struct {
 	int ifrom;
 	int ito;
 	int imap;
+	int file_size;
 	uint32_t address;
 	uint32_t crc;
 	buffer_data *data;
@@ -291,61 +292,42 @@ static int rom_patch(const uint8_t *buf, int offset, uint16_t len, int dataop)
 	return 1;
 }
 
-static void send_to_ddr(uint32_t address, void* buf, uint32_t len)
-{
-	int memfd = open("/dev/mem", O_RDWR | O_SYNC);
-	if (memfd == -1)
-	{
-		printf("Unable to open /dev/mem!\n");
-		return;
-	}
-
-	//make sure it's in FPGA address space
-	uint32_t map_addr = 0x20000000 | address;
-
-	void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-	if (base == (void *)-1)
-	{
-		printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-		close(memfd);
-		return;
-	}
-
-	memcpy(base, buf, len);
-	munmap(base, len);
-
-	close(memfd);
-	return;
-}
-
-static void rom_finish(int send, uint32_t address)
+static void rom_finish(int send, uint32_t address, int index)
 {
 	if (romlen[0] && romdata)
 	{
 		if (send)
 		{
+			uint8_t *data = romdata;
+			int len = romlen[0];
+
 			// set index byte (0=bios rom, 1-n=OSD entry index)
 			user_io_set_index(romindex);
 
 			// prepare transmission of new file
-			user_io_set_download(1);
+			user_io_set_download(1, address ? len : 0);
 
-			uint8_t *data = romdata;
-			int len = romlen[0];
 			if (address)
 			{
-				send_to_ddr(address, data, len);
+				shmem_put(fpga_mem(address), len, data);
 			}
 			else
 			{
+				char str[32];
+				sprintf(str, "ROM #%d", index);
+
+				ProgressMessage(0, 0, 0, 0);
 				while (romlen[0] > 0)
 				{
+					ProgressMessage("Sending", str, len - romlen[0], len);
+
 					uint16_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
 					user_io_file_tx_data(data, chunk);
 
 					romlen[0] -= chunk;
 					data += chunk;
 				}
+				ProgressMessage(0, 0, 0, 0);
 			}
 
 			// signal end of transmission
@@ -426,12 +408,13 @@ unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
  * */
 static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
+	static char message[32];
 	struct arc_struct *arc_info = (struct arc_struct *)sd->user;
-	(void)(sd);
 
 	switch (evt)
 	{
 	case XML_EVENT_START_DOC:
+		message[0] = 0;
 		arc_info->insiderom = 0;
 		arc_info->insidesw = 0;
 		break;
@@ -462,6 +445,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->address = 0;
 			arc_info->insideinterleave = 0;
 			MD5Init(&arc_info->context);
+			ProgressMessage(0, 0, 0, 0);
 		}
 
 		if (!strcasecmp(node->tag, "switches"))
@@ -514,6 +498,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (!strcasecmp(node->attributes[i].name, "index") && !strcasecmp(node->tag, "rom"))
 			{
 				arc_info->romindex = atoi(node->attributes[i].value);
+				sprintf(message, "Assembling ROM #%d", arc_info->romindex);
 			}
 			if (!strcasecmp(node->attributes[i].name, "address") && !strcasecmp(node->tag, "rom"))
 			{
@@ -720,6 +705,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 
 			for (int i = 1; i < 8; i++) romlen[i] = romlen[0];
 		}
+
+		ProgressMessage("Loading", message, ftell(sd->file), arc_info->file_size);
 		break;
 
 	case XML_EVENT_TEXT:
@@ -728,13 +715,13 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		 * the buffer_append is part of a buffer library that will realloc automatically
 		 */
 		{
-		int result = buffer_append(arc_info->data, text);
-		if (result<0)
-			printf("buffer_append failed %d\n",result);
+			int result = buffer_append(arc_info->data, text);
+			if (result<0)
+				printf("buffer_append failed %d\n",result);
 			if (result==-1)
-			   printf("-1 no data given\n");
+				printf("-1 no data given\n");
 			if (result==-2)
-			   printf("-2 could not allocate\n");
+				printf("-2 could not allocate\n");
 		}
 		//printf("XML_EVENT_TEXT: text [%s]\n",text);
 		break;
@@ -745,6 +732,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		// At the end of a rom node (when it is closed) we need to calculate hash values and clean up
 		if (!strcasecmp(node->tag, "rom"))
 		{
+			message[0] = 0;
+
 			if (arc_info->insiderom)
 			{
 				unsigned char checksum[16];
@@ -784,7 +773,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					}
 				}
 
-				rom_finish(checksumsame, arc_info->address);
+				rom_finish(checksumsame, arc_info->address, arc_info->romindex);
 			}
 			arc_info->insiderom = 0;
 		}
@@ -1007,17 +996,8 @@ static int xml_read_setname(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, 
 	return true;
 }
 
-
-static int arcade_type = 0;
-int is_arcade()
-{
-	return arcade_type;
-}
-
 int arcade_send_rom(const char *xml)
 {
-	arcade_type = 1;
-
 	const char *p = strrchr(xml, '/');
 	p = p ? p + 1 : xml;
 	snprintf(switches.name, sizeof(switches.name), p);
@@ -1040,6 +1020,9 @@ int arcade_send_rom(const char *xml)
 	arc_info.data = buffer_init(kBigTextSize);
 	arc_info.error_msg[0] = 0;
 	arc_info.validrom0 = 0;
+	struct stat64 *st = getPathStat(xml);
+	if (st) arc_info.file_size = (int)st->st_size;
+	ProgressMessage(0, 0, 0, 0);
 
 	// parse
 	XMLDoc_parse_file_SAX(xml, &sax, &arc_info);

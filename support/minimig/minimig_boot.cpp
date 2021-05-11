@@ -414,7 +414,7 @@ void BootInit()
 		BootCustomInit();
 
 		WaitTimer(500);
-		BootPrintEx("Minimig-AGA by Rok Krajnc. MiSTer port by Sorgelig.");
+		BootPrintEx("Minimig-AGA by Rok Krajnc. MiSTer port by Alexey Melnikov.");
 		BootPrintEx(" ");
 		BootPrintEx("Original Minimig by Dennis van Weeren");
 		BootPrintEx("Updates by Jakub Bednarski, Tobias Gubener, Sascha Boing, A.M. Robinson & others");

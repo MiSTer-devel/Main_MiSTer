@@ -88,6 +88,18 @@ int archie_get_ar()
 	return (config.system_ctrl >> 6) & 3;
 }
 
+void archie_set_scale(char i)
+{
+	config.system_ctrl &= ~0b1100000000;
+	config.system_ctrl |= (i & 3) << 8;
+	user_io_8bit_set_status(config.system_ctrl, 0b1100000000);
+}
+
+int archie_get_scale()
+{
+	return (config.system_ctrl >> 8) & 3;
+}
+
 void archie_set_60(char i)
 {
 	if (i) config.system_ctrl |=  0b1000;

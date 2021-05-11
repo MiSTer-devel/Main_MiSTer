@@ -4,7 +4,6 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <time.h>
 #include <ios>
 #include <fstream>
@@ -23,7 +22,7 @@
 #include "x86_ide.h"
 #include "x86_cdrom.h"
 
-#if 0 
+#if 0
 	#define dbg_printf     printf
 	#define dbg_print_regs ide_print_regs
 	#define dbg_hexdump    hexdump
@@ -249,11 +248,11 @@ static const char* load_chd_file(drive_t *drv, const char *chdfile)
 	//Borrow the cd.h "toc_t" and mister_chd* parse function. Then translate the toc_t to drive_t+track_t.
 	//TODO: abstract all the bin/cue+chd+iso parsing and reading into a shared class
 	//
-	
+
 	const char *ext = chdfile+strlen(chdfile)-4;
 	uint32_t total_sector_size = 0;
 
-	
+
 	if (strncasecmp(".chd", ext, 4))
 	{
 		//Not a CHD
@@ -281,7 +280,7 @@ static const char* load_chd_file(drive_t *drv, const char *chdfile)
 	for(int i = 0; i <= tmpTOC.last; i++)
 	{
 		cd_track_t *chd_track = &tmpTOC.tracks[i];
-		track_t *trk = &drv->track[i]; 
+		track_t *trk = &drv->track[i];
 		trk->number = i+1;
 		trk->sectorSize = chd_track->sector_size;
 		if (chd_track->type)
@@ -302,9 +301,9 @@ static const char* load_chd_file(drive_t *drv, const char *chdfile)
 	}
 
 	//Add the lead-out track
-	
+
 	track_t *lead_out = &drv->track[drv->track_cnt];
-	lead_out->number = drv->track_cnt+1; 
+	lead_out->number = drv->track_cnt+1;
 	lead_out->attr = 0;
 	lead_out->start = tmpTOC.tracks[tmpTOC.last].end;
 	lead_out->length = 0;
@@ -981,7 +980,7 @@ void cdrom_read(ide_config *ide)
 		dbg_printf("** partial CD read\n");
 	}
 
-	if (ide->state == IDE_STATE_INIT_RW && !drive->chd_f) 
+	if (ide->state == IDE_STATE_INIT_RW && !drive->chd_f)
 	{
 		uint32_t pos = ide->regs.pkt_lba * ide->drive[ide->regs.drv].track[ide->drive[ide->regs.drv].data_num].sectorSize;
 
@@ -998,13 +997,13 @@ void cdrom_read(ide_config *ide)
 			hdr = 0;
 		}
 		uint32_t d_offset = 0;
-		
+
 		if (ide->state == IDE_STATE_INIT_RW)
 		{
-			drive->chd_last_partial_lba = ide->regs.pkt_lba; 
+			drive->chd_last_partial_lba = ide->regs.pkt_lba;
 		}
 
-	 	for(uint32_t i = 0; i < cnt; i++)	
+	 	for(uint32_t i = 0; i < cnt; i++)
 		{
 
 			if (mister_chd_read_sector(drive->chd_f, drive->chd_last_partial_lba + drive->track[drive->data_num].chd_offset, d_offset, hdr, 2048, ide_buf, drive->chd_hunkbuf, &drive->chd_hunknum) != CHDERR_NONE)

@@ -394,7 +394,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute, int use_zi
 	}
 	else
 	{
-		int fd = (mode == -1) ? shm_open("/vdsk", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
+		int fd = (mode == -1) ? shm_open("/vdsk", O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0777) : open(full_path, mode | O_CLOEXEC, 0777);
 		if (fd <= 0)
 		{
 			if(!mute) printf("FileOpenEx(open) File:%s, error: %s.\n", full_path, strerror(errno));
@@ -805,7 +805,7 @@ void FileGenerateSavePath(const char *name, char* out_name)
 	printf("SavePath=%s\n", out_name);
 }
 
-void FileGenerateSavestatePath(const char *name, char* out_name)
+void FileGenerateSavestatePath(const char *name, char* out_name, int sufx)
 {
 	create_path(SAVESTATE_DIR, CoreName);
 
@@ -823,16 +823,10 @@ void FileGenerateSavestatePath(const char *name, char* out_name)
 	}
 
 	char *e = strrchr(fname, '.');
-	if (e)
-	{
-		strcpy(e, ".ss");
-	}
-	else
-	{
-		strcat(fname, ".ss");
-	}
+	if (e) e[0] = 0;
 
-	printf("SavestatePath=%s\n", out_name);
+	if(sufx) sprintf(e, "_%d.ss", sufx);
+	else strcat(e, ".ss");
 }
 
 uint32_t getFileType(const char *name)

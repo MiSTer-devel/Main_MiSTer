@@ -500,7 +500,7 @@ void OsdClear(void)
 void OsdEnable(unsigned char mode)
 {
 	user_io_osd_key_enable(mode & DISABLE_KEYBOARD);
-	mode &= DISABLE_KEYBOARD;
+	mode &= (DISABLE_KEYBOARD | OSD_MSG);
 	spi_osd_cmd(OSD_CMD_ENABLE | mode);
 }
 
