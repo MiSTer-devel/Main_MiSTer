@@ -2783,7 +2783,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_UART2:
-		if (menu)
+		if (menu || left)
 		{
 			menustate = MENU_COMMON1;
 			menusub = 4;
