@@ -216,34 +216,46 @@ static int rom_checksz(int idx, int chunk)
 
 static int rom_data(const uint8_t *buf, int chunk, int map, struct MD5Context *md5context)
 {
+	uint8_t offsets[8]; // assert (unitlen <= 8)
+	int bytes_in_iter = 0;
+
 	if (md5context) MD5Update(md5context, buf, chunk);
 
 	int idx = 0;
 	if (!map) map = 1;
 
-	for (int i = 0; i<unitlen; i++)
+	int map_reg = map;
+	for (int i = 0; i < unitlen; i++)
 	{
-		if (((map >> (i * 4)) & 0xF)) break;
+		if (map_reg & 0xf)
+			break;
+		map_reg >>= 4;
 		idx++;
 	}
 
-	if (idx >= unitlen) return 0; // illegal map
-	if (!rom_checksz(idx, chunk*unitlen)) return 0;
+	if (idx >= unitlen)
+		return 0; // illegal map
+	if (!rom_checksz(idx, chunk*unitlen))
+		return 0;
+
+	map_reg = map;
+	for (int i = 0; i < unitlen; i++)
+	{
+		if (map_reg & 0xf)
+		{
+			offsets[bytes_in_iter] = idx + (map_reg & 0xf) - 1;
+			bytes_in_iter++;
+		}
+		map_reg >>= 4;
+	}
 
 	while (chunk)
 	{
-		for (int ord = 1; ord <= unitlen; ord++)
+		for (int i = 0; i < bytes_in_iter; i++)
 		{
-			for (int i = 0; (i < unitlen && chunk); i++)
-			{
-				if (((map >> (i * 4)) & 0xF) == ord)
-				{
-					*(romdata + romlen[idx] + i) = *buf++;
-					chunk--;
-				}
-			}
+			*(romdata + romlen[idx] + offsets[i]) = *buf++;
+			chunk--;
 		}
-
 		romlen[idx] += unitlen;
 	}
 
