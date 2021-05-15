@@ -391,12 +391,12 @@ int user_io_get_joy_transl()
 static int use_cheats = 0;
 static uint32_t ss_base = 0;
 static uint32_t ss_size = 0;
-static uint32_t uart_speeds[12] = {};
-static char uart_speed_labels[12][32] = {};
-static uint32_t midi_speeds[12] = {};
-static char midi_speed_labels[12][32] = {};
-static const uint32_t mlink_speeds[12] = { 110, 300, 600, 1200, 2400, 9600, 14400, 19200, 31250, 38400, 57600, 115200 };
-static const char mlink_speed_labels[12][32] = { "110", "300", "600", "1200", "2400", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200" };
+static uint32_t uart_speeds[13] = {};
+static char uart_speed_labels[13][32] = {};
+static uint32_t midi_speeds[13] = {};
+static char midi_speed_labels[13][32] = {};
+static const uint32_t mlink_speeds[13] = { 110, 300, 600, 1200, 2400, 4800, 9600, 14400, 19200, 31250, 38400, 57600, 115200 };
+static const char mlink_speed_labels[13][32] = { "110", "300", "600", "1200", "2400", "4800", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200" };
 static char defmra[1024] = {};
 
 static void parse_config()
@@ -832,7 +832,7 @@ uint32_t ValidateUARTbaud(int mode, uint32_t baud)
 {
 	const uint32_t *bauds = GetUARTbauds(mode);
 	int idx = 0;
-	for (int i = 0; i < 12; i++)
+	for (int i = 0; i < 13; i++)
 	{
 		if (!bauds[i]) break;
 		if (bauds[i] == baud)
