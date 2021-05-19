@@ -3473,7 +3473,7 @@ int input_test(int getchar)
 								if (input[dev].quirk == QUIRK_JAMMA && ev.type == EV_KEY)
 								{
 									input[dev].num = 0;
-									for (uint32_t i = 0; i <= sizeof(jamma2joy) / sizeof(jamma2joy[0]); i++)
+									for (uint32_t i = 0; i < sizeof(jamma2joy) / sizeof(jamma2joy[0]); i++)
 									{
 										if (jamma2joy[i].key == ev.code)
 										{
