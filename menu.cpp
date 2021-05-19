@@ -2185,6 +2185,7 @@ void HandleUI(void)
 		{
 			if (page)
 			{
+				firstmenu = 0;
 				menustate = MENU_GENERIC_MAIN1;
 				menusub = menusub_parent;
 				page = 0;
