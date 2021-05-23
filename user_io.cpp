@@ -529,7 +529,7 @@ static void parse_config()
 		{
 			if (!strncmp(p, "DEFMRA,", 7))
 			{
-				snprintf(defmra, sizeof(defmra), "%s/_Arcades/%s", getRootDir(), p + 7);
+				snprintf(defmra, sizeof(defmra), (p[7] == '/') ? "%s%s" : "%s/_Arcades/%s", getRootDir(), p + 7);
 			}
 			else if (!strncmp(p, "DIP", 3))
 			{
