@@ -1393,9 +1393,9 @@ static void mouse_cb(unsigned char b, int16_t x = 0, int16_t y = 0, int16_t w = 
 	if (grabbed) user_io_mouse(b, x, y, w);
 }
 
+static uint32_t osdbtn = 0;
 static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
 {
-	static uint32_t osdbtn = 0;
 	static char str[128];
 	static uint32_t lastcode[NUMPLAYERS], lastmask[NUMPLAYERS];
 	int num = jnum - 1;
@@ -1931,6 +1931,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		&& input[dev].quirk != QUIRK_MSSP)
 	{
 		int idx = 0;
+		osdbtn = 0;
 
 		if (is_menu())
 		{
