@@ -1894,11 +1894,12 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
-		else if(back)
+		else if(back || (left && page) || (menusub == menusub_last && select))
 		{
 			if(!page) menustate = MENU_NONE1;
 			else
 			{
+				firstmenu = 0;
 				menustate = MENU_GENERIC_MAIN1;
 				menusub = menusub_parent;
 				page = 0;
@@ -1906,17 +1907,7 @@ void HandleUI(void)
 		}
 		else if (select || recent || minus || plus)
 		{
-			if (menusub == menusub_last && select)
-			{
-				if (!page) menustate = MENU_NONE1;
-				else
-				{
-					menustate = MENU_GENERIC_MAIN1;
-					menusub = menusub_parent;
-					page = 0;
-				}
-			}
-			else if (dip_submenu == menusub && select)
+			if (dip_submenu == menusub && select)
 			{
 				menustate = MENU_ARCADE_DIP1;
 				menusub = 0;
@@ -2183,17 +2174,8 @@ void HandleUI(void)
 		}
 		else if (left)
 		{
-			if (page)
-			{
-				menustate = MENU_GENERIC_MAIN1;
-				menusub = menusub_parent;
-				page = 0;
-			}
-			else
-			{
-				menustate = MENU_MISC1;
-				menusub = 3;
-			}
+			menustate = MENU_MISC1;
+			menusub = 3;
 		}
 		else if(spi_uio_cmd16(UIO_GET_OSDMASK, 0) != hdmask)
 		{
@@ -2783,7 +2765,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_UART2:
-		if (menu)
+		if (menu || left)
 		{
 			menustate = MENU_COMMON1;
 			menusub = 4;

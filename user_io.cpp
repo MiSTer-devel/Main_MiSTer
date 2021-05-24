@@ -40,6 +40,7 @@ static char core_path[1024] = {};
 static char rbf_path[1024] = {};
 
 static fileTYPE sd_image[4] = {};
+static int      sd_image_cangrow[4] = {};
 static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 
 static int use_save = 0;
@@ -391,12 +392,12 @@ int user_io_get_joy_transl()
 static int use_cheats = 0;
 static uint32_t ss_base = 0;
 static uint32_t ss_size = 0;
-static uint32_t uart_speeds[12] = {};
-static char uart_speed_labels[12][32] = {};
-static uint32_t midi_speeds[12] = {};
-static char midi_speed_labels[12][32] = {};
-static const uint32_t mlink_speeds[12] = { 110, 300, 600, 1200, 2400, 9600, 14400, 19200, 31250, 38400, 57600, 115200 };
-static const char mlink_speed_labels[12][32] = { "110", "300", "600", "1200", "2400", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200" };
+static uint32_t uart_speeds[13] = {};
+static char uart_speed_labels[13][32] = {};
+static uint32_t midi_speeds[13] = {};
+static char midi_speed_labels[13][32] = {};
+static const uint32_t mlink_speeds[13] = { 110, 300, 600, 1200, 2400, 4800, 9600, 14400, 19200, 31250, 38400, 57600, 115200 };
+static const char mlink_speed_labels[13][32] = { "110", "300", "600", "1200", "2400", "4800", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200" };
 static char defmra[1024] = {};
 
 static void parse_config()
@@ -832,7 +833,7 @@ uint32_t ValidateUARTbaud(int mode, uint32_t baud)
 {
 	const uint32_t *bauds = GetUARTbauds(mode);
 	int idx = 0;
-	for (int i = 0; i < 12; i++)
+	for (int i = 0; i < 13; i++)
 	{
 		if (!bauds[i]) break;
 		if (bauds[i] == baud)
@@ -1520,6 +1521,8 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	int writable = 0;
 	int ret = 0;
 	int len = strlen(name);
+
+	sd_image_cangrow[index] = (pre != 0);
 
 	if (len)
 	{
@@ -2680,14 +2683,20 @@ void user_io_poll()
 					{
 						// ... and write it to disk
 						__off64_t size = sd_image[disk].size >> 9;
-						if (size && size >= lba)
+						if (size && lba <= size)
 						{
 							diskled_on();
 							if (FileSeekLBA(&sd_image[disk], lba))
 							{
-								if (FileWriteSec(&sd_image[disk], buffer[disk]))
+								int sz = 512;
+								if (!sd_image_cangrow[disk])
 								{
-									if (size == lba)
+									__off64_t rem = sd_image[disk].size - sd_image[disk].offset;
+									sz = (rem >= 512) ? 512 : (int)rem;
+								}
+								if(sz && FileWriteAdv(&sd_image[disk], buffer[disk], sz))
+								{
+									if (size == lba && sd_image_cangrow[disk])
 									{
 										size++;
 										sd_image[disk].size = size << 9;
