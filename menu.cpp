@@ -1020,7 +1020,7 @@ void HandleUI(void)
 	static int has_fb_terminal = 0;
 	static unsigned long flash_timer = 0;
 	static int flash_state = 0;
-	static uint32_t dip_submenu;
+	static uint32_t dip_submenu, dip2_submenu, dipv;
 	static int need_reset = 0;
 	static int flat = 0;
 	static int menusub_parent = 0;
@@ -1571,6 +1571,7 @@ void HandleUI(void)
 			else OsdSetTitle(title);
 
 			dip_submenu = -1;
+			dip2_submenu = -1;
 
 			int last_space = 0;
 
@@ -1592,8 +1593,7 @@ void HandleUI(void)
 					}
 					else if (!strcmp(p, "DIP"))
 					{
-						h = page;
-						if (!h && arcade_sw()->dip_num)
+						if (!h && arcade_sw(0)->dip_num)
 						{
 							dip_submenu = selentry;
 							MenuWrite(entry, " DIP Switches              \x16", menusub == selentry, 0);
@@ -1601,6 +1601,20 @@ void HandleUI(void)
 							selentry++;
 							menumask = (menumask << 1) | 1;
 						}
+						continue;
+					}
+					else if (!strcmp(p, "CHEAT"))
+					{
+						h = page;
+						if (!h && arcade_sw(1)->dip_num)
+						{
+							dip2_submenu = selentry;
+							MenuWrite(entry, " Cheats                    \x16", menusub == selentry, 0);
+							entry++;
+							selentry++;
+							menumask = (menumask << 1) | 1;
+						}
+						continue;
 					}
 					else
 					{
@@ -1907,8 +1921,9 @@ void HandleUI(void)
 		}
 		else if (select || recent || minus || plus)
 		{
-			if (dip_submenu == menusub && select)
+			if ((dip_submenu == menusub || dip2_submenu == menusub) && select)
 			{
+				dipv = (dip_submenu == menusub) ? 0 : 1;
 				menustate = MENU_ARCADE_DIP1;
 				menusub = 0;
 			}
@@ -1931,7 +1946,7 @@ void HandleUI(void)
 					d = 0;
 					inpage = !page;
 
-					if (strcmp(p, "DIP") && strncmp(p, "DEFMRA,", 7))
+					if (strcmp(p, "DIP") && strcmp(p, "CHEAT") && strncmp(p, "DEFMRA,", 7))
 					{
 						//Hide or Disable flag
 						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
@@ -1944,10 +1959,9 @@ void HandleUI(void)
 							p += 2;
 						}
 					}
-					else if (!arcade_sw()->dip_num)
-					{
-						continue;
-					}
+
+					if (!strcmp(p, "DIP") && (!arcade_sw(0)->dip_num || inpage)) continue;
+					if (!strcmp(p, "CHEAT") && (!arcade_sw(1)->dip_num || inpage)) continue;
 
 					if (p[0] == 'P')
 					{
@@ -2598,7 +2612,7 @@ void HandleUI(void)
 	case MENU_ARCADE_DIP1:
 		helptext_idx = 0;
 		menumask = 0;
-		OsdSetTitle("DIP Switches");
+		OsdSetTitle(dipv ? "Cheats" : "DIP Switches");
 		menustate = MENU_ARCADE_DIP2;
 		parentstate = MENU_ARCADE_DIP1;
 
@@ -2611,7 +2625,7 @@ void HandleUI(void)
 			uint32_t selentry = 0;
 			menumask = 0;
 
-			sw_struct *sw = arcade_sw();
+			sw_struct *sw = arcade_sw(dipv);
 
 			int n = (sw->dip_num < OsdGetSize() - 1) ? (OsdGetSize() - 1 - sw->dip_num) / 2 : 0;
 			for (; entry < n; entry++) MenuWrite(entry);
@@ -2652,7 +2666,7 @@ void HandleUI(void)
 
 			for (; entry < OsdGetSize() - 1; entry++) MenuWrite(entry, "", 0, 0);
 
-			MenuWrite(entry, "       Reset to apply", menusub == selentry);
+			MenuWrite(entry, dipv ? "            save" : "       Reset to apply", menusub == selentry);
 			menusub_last = selentry;
 			menumask = (menumask << 1) | 1;
 
@@ -2662,25 +2676,28 @@ void HandleUI(void)
 		break;
 
 	case MENU_ARCADE_DIP2:
-		if (menu)
+		if (menu || left)
 		{
 			menustate = MENU_GENERIC_MAIN1;
-			menusub = dip_submenu;
-			arcade_sw_save();
+			menusub = dipv ? dip2_submenu : dip_submenu;
+			arcade_sw_save(0);
 		}
 
 		if (select)
 		{
 			if (menusub == menusub_last)
 			{
-				arcade_sw_save();
-				user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
-				user_io_8bit_set_status(0, UIO_STATUS_RESET);
+				arcade_sw_save(dipv);
+				if (!dipv)
+				{
+					user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+					user_io_8bit_set_status(0, UIO_STATUS_RESET);
+				}
 				menustate = MENU_NONE1;
 			}
 			else
 			{
-				sw_struct *sw = arcade_sw();
+				sw_struct *sw = arcade_sw(dipv);
 				uint64_t status = sw->dip_cur & sw->dip[menusub].mask;
 				int m = 0;
 				for (int n = 0; n < sw->dip[menusub].num; n++)
@@ -2695,7 +2712,7 @@ void HandleUI(void)
 				m = (m + 1) % sw->dip[menusub].num;
 				sw->dip_cur = (sw->dip_cur & ~sw->dip[menusub].mask) | sw->dip[menusub].val[m];
 				menustate = MENU_ARCADE_DIP1;
-				arcade_sw_send();
+				arcade_sw_send(dipv);
 			}
 		}
 		break;
@@ -4708,15 +4725,18 @@ void HandleUI(void)
 				printf("Saving config to %s\n", filename);
 				FileSaveConfig(filename, status, 8);
 				menustate = MENU_GENERIC_MAIN1;
-				if (arcade_sw()->dip_num)
+				for (int n = 0; n < 2; n++)
 				{
-					arcade_sw()->dip_cur = arcade_sw()->dip_def;
-					arcade_sw_send();
-					arcade_sw_save();
-					user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
-					user_io_8bit_set_status(0, UIO_STATUS_RESET);
-					menustate = MENU_NONE1;
+					if (arcade_sw(n)->dip_num)
+					{
+						arcade_sw(n)->dip_cur = arcade_sw(n)->dip_def;
+						arcade_sw_send(n);
+						user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+						user_io_8bit_set_status(0, UIO_STATUS_RESET);
+						arcade_sw_save(n);
+					}
 				}
+				menustate = MENU_NONE1;
 				menusub = 0;
 			}
 		}
