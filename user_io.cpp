@@ -1025,19 +1025,6 @@ void user_io_init(const char *path, const char *xml)
 		arcade_override_name(xml);
 	}
 
-	user_io_read_confstr();
-	user_io_read_core_name();
-	parse_config();
-	if (!xml && defmra[0] && FileExists(defmra))
-	{
-		// attn: FC option won't use name from defmra!
-		xml = (const char*)defmra;
-		strcpy(core_path, xml);
-		is_arcade_type = 1;
-		arcade_override_name(xml);
-		printf("Using default MRA: %s\n", xml);
-	}
-
 	if (core_type == CORE_TYPE_8BIT)
 	{
 		printf("Identified 8BIT core");
@@ -1049,6 +1036,19 @@ void user_io_init(const char *path, const char *xml)
 	else if (core_type == CORE_TYPE_SHARPMZ)
 	{
 		user_io_set_core_name("sharpmz");
+	}
+
+	user_io_read_confstr();
+	user_io_read_core_name();
+	parse_config();
+	if (!xml && defmra[0] && FileExists(defmra))
+	{
+		// attn: FC option won't use name from defmra!
+		xml = (const char*)defmra;
+		strcpy(core_path, xml);
+		is_arcade_type = 1;
+		arcade_override_name(xml);
+		printf("Using default MRA: %s\n", xml);
 	}
 
 	cfg_parse();
