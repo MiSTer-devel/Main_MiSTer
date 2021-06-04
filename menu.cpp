@@ -2038,7 +2038,7 @@ void HandleUI(void)
 					else if (p[0] == 'S' && (select || recent))
 					{
 						ioctl_index = 0;
-						if ((p[1] >= '0' && p[1] <= '3') || is_x86()) ioctl_index = p[1] - '0';
+						if ((p[1] >= '0' && p[1] <= '9') || is_x86()) ioctl_index = p[1] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
 
