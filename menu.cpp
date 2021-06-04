@@ -81,6 +81,8 @@ enum MENU
 	MENU_CORE_FILE_CANCELED,
 	MENU_RECENT1,
 	MENU_RECENT2,
+	MENU_RECENT3,
+	MENU_RECENT4,
 	MENU_ABOUT1,
 	MENU_ABOUT2,
 	MENU_RESET1,
@@ -4655,13 +4657,9 @@ void HandleUI(void)
 
 		if (c == KEY_BACKSPACE)
 		{
-			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
-			OsdWrite(OsdGetSize() / 2, "    Clearing the recents", 0, 0);
-			OsdUpdate();
-			sleep(1);
-			recent_clear((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index);
-			menustate = fs_MenuCancel;
-			if (is_menu()) menustate = MENU_FILE_SELECT1;
+			menusub_last = menusub;
+			menusub = 0;
+			menustate = MENU_RECENT3;
 			break;
 		}
 
@@ -4680,6 +4678,45 @@ void HandleUI(void)
 		if (select)
 		{
 			menustate = recent_select(SelectedDir, selPath, SelectedLabel) ? (enum MENU)fs_MenuSelect : MENU_RECENT1;
+		}
+		break;
+
+	case MENU_RECENT3:
+		menumask = 0x03;
+		parentstate = menustate;
+		m = 0;
+		OsdWrite(m++);
+		OsdWrite(m++);
+		OsdWrite(m++);
+		OsdWrite(m++);
+		OsdWrite(m++);
+		OsdWrite(m++);
+		OsdWrite(m++, "        Clear the List?");
+		OsdWrite(m++);
+		OsdWrite(m++, "             No", menusub == 0);
+		OsdWrite(m++, "             Yes", menusub == 1);
+		while(m < OsdGetSize()) OsdWrite(m++);
+		menustate = MENU_RECENT4;
+		break;
+
+	case MENU_RECENT4:
+		if (select && menusub == 1)
+		{
+			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i, "", 0, 0);
+			OsdWrite(OsdGetSize() / 2, "    Clearing the recents", 0, 0);
+			OsdUpdate();
+			sleep(1);
+			recent_clear((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index);
+			menustate = fs_MenuCancel;
+			menusub = menusub_last;
+			if (is_menu()) menustate = MENU_FILE_SELECT1;
+
+		}
+		else if (select || menu || back)
+		{
+			menustate = fs_MenuCancel;
+			menusub = menusub_last;
+			if (is_menu()) menustate = MENU_FILE_SELECT1;
 		}
 		break;
 
