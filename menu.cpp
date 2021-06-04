@@ -1220,12 +1220,12 @@ void HandleUI(void)
 		}
 		else if (helpstate == 9)
 		{
-			ScrollReset();
+			ScrollReset(1);
 			++helpstate;
 		}
 		else
 		{
-			ScrollText(OsdGetSize() - 1, helptexts[helptext_idx], 0, 0, 0, 0);
+			ScrollText(OsdGetSize() - 1, helptexts[helptext_idx], 0, 0, 0, 0, 1);
 		}
 	}
 
