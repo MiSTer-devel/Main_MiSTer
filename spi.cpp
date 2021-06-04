@@ -103,13 +103,13 @@ void spi_uio_cmd32_cont(uint8_t cmd, uint32_t parm)
 }
 
 /* User_io related SPI functions */
-uint8_t spi_uio_cmd_cont(uint8_t cmd)
+uint16_t spi_uio_cmd_cont(uint8_t cmd)
 {
 	EnableIO();
-	return spi_b(cmd);
+	return spi_w(cmd);
 }
 
-uint8_t spi_uio_cmd(uint8_t cmd)
+uint16_t spi_uio_cmd(uint8_t cmd)
 {
 	uint8_t res = spi_uio_cmd_cont(cmd);
 	DisableIO();
@@ -192,14 +192,14 @@ void spi_write(const uint8_t *addr, uint16_t len, int wide)
 	}
 }
 
-void spi_block_read(uint8_t *addr, int wide)
+void spi_block_read(uint8_t *addr, int wide, int sz)
 {
-	if (wide) fpga_spi_fast_block_read((uint16_t*)addr, 256);
-	else fpga_spi_fast_block_read_8(addr, 512);
+	if (wide) fpga_spi_fast_block_read((uint16_t*)addr, sz/2);
+	else fpga_spi_fast_block_read_8(addr, sz);
 }
 
-void spi_block_write(const uint8_t *addr, int wide)
+void spi_block_write(const uint8_t *addr, int wide, int sz)
 {
-	if (wide) fpga_spi_fast_block_write((const uint16_t*)addr, 256);
-	else fpga_spi_fast_block_write_8(addr, 512);
+	if (wide) fpga_spi_fast_block_write((const uint16_t*)addr, sz/2);
+	else fpga_spi_fast_block_write_8(addr, sz);
 }

@@ -602,6 +602,10 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 			printf("FileWriteAdv error(%d).\n", ret);
 			return failres;
 		}
+
+		file->offset += ret;
+		if (file->offset > file->size) file->size = FileGetSize(file);
+		return ret;
 	}
 	else if (file->zip)
 	{
@@ -613,9 +617,6 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 		printf("FileWriteAdv error(unknown file type).\n");
 		return failres;
 	}
-
-	file->offset += ret;
-	return ret;
 }
 
 int FileWriteSec(fileTYPE *file, void *pBuffer)
