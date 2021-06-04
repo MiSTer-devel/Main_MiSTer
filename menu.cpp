@@ -2666,7 +2666,7 @@ void HandleUI(void)
 
 			for (; entry < OsdGetSize() - 1; entry++) MenuWrite(entry, "", 0, 0);
 
-			MenuWrite(entry, dipv ? "            save" : "       Reset to apply", menusub == selentry);
+			MenuWrite(entry, dipv ? STD_BACK : "       Reset to apply", menusub == selentry);
 			menusub_last = selentry;
 			menumask = (menumask << 1) | 1;
 
@@ -2687,13 +2687,18 @@ void HandleUI(void)
 		{
 			if (menusub == menusub_last)
 			{
-				arcade_sw_save(dipv);
 				if (!dipv)
 				{
+					arcade_sw_save(dipv);
 					user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 					user_io_8bit_set_status(0, UIO_STATUS_RESET);
+					menustate = MENU_NONE1;
 				}
-				menustate = MENU_NONE1;
+				else
+				{
+					menusub = dip2_submenu;
+					menustate = MENU_GENERIC_MAIN1;
+				}
 			}
 			else
 			{
