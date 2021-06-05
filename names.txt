@@ -41,6 +41,7 @@ Oric: Oric-1/Atmos
 PDP1: DEC PDP-1
 PET2001: Commodore PET 2001
 QL: Sinclair QL
+RX78: Bandai RX-78
 SAMCoupe: SAM Coupe
 SharpMZ: Sharp MZ Series
 Specialist: Specialist/MX
