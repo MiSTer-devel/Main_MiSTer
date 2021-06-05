@@ -143,7 +143,7 @@ void arcade_sw_load(int n)
 {
 	sw_struct *sw = arcade_sw(n);
 	static char path[1024];
-	strcpy(path, (n) ? CONFIG_DIR"/cheats/" : CONFIG_DIR"/dips/");
+	strcpy(path, (n) ? "cheats/" : "dips/");
 	strcat(path, sw->name);
 	FileLoadConfig(path, &sw->dip_cur, sizeof(sw->dip_cur));
 }
