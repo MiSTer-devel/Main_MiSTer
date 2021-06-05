@@ -290,7 +290,7 @@ static char SelectedDir[1024] = {};
 static char SelectedLabel[1024] = {};
 
 static char Selected_F[16][1024] = {};
-static char Selected_S[8][1024] = {};
+static char Selected_S[16][1024] = {};
 static char Selected_tmp[1024] = {};
 
 void StoreIdx_F(int idx, char *path)
@@ -1595,6 +1595,7 @@ void HandleUI(void)
 					}
 					else if (!strcmp(p, "DIP"))
 					{
+						h = page;
 						if (!h && arcade_sw(0)->dip_num)
 						{
 							dip_submenu = selentry;
@@ -1942,13 +1943,15 @@ void HandleUI(void)
 				while (1)
 				{
 					p = user_io_get_confstr(i++);
-					if (!p) continue;
+					if (!p) break;
 
 					h = 0;
 					d = 0;
 					inpage = !page;
 
-					if (strcmp(p, "DIP") && strcmp(p, "CHEAT") && strncmp(p, "DEFMRA,", 7))
+					if (!strcmp(p, "DIP")) h = page || !arcade_sw(0)->dip_num;
+					else if (!strcmp(p, "CHEAT")) h = page || !arcade_sw(1)->dip_num;
+					else if (strncmp(p, "DEFMRA,", 7))
 					{
 						//Hide or Disable flag
 						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
@@ -1961,9 +1964,6 @@ void HandleUI(void)
 							p += 2;
 						}
 					}
-
-					if (!strcmp(p, "DIP") && (!arcade_sw(0)->dip_num || inpage)) continue;
-					if (!strcmp(p, "CHEAT") && (!arcade_sw(1)->dip_num || inpage)) continue;
 
 					if (p[0] == 'P')
 					{
