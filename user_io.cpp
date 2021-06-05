@@ -2591,7 +2591,7 @@ void user_io_poll()
 	{
 		if (is_st()) tos_poll();
 
-		while (1)
+		for (int i = 0; i < 4; i++)
 		{
 			int disk = -1;
 			int ack = 0;
