@@ -34,7 +34,7 @@ void pcecd_poll()
 			if (--adj <= 0) adj = 3;
 		}
 
-		if (pcecdd.has_status && !pcecdd.latency) {
+		if (pcecdd.has_status ) {
 
 			pcecdd.SendStatus(pcecdd.GetStatus());
 			pcecdd.has_status = 0;
