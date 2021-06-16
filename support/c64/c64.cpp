@@ -433,7 +433,7 @@ void c64_readGCR(int idx, uint8_t track)
 			FileSeek(gcr_info[idx].f, gcr_info[idx].trk_map[track], SEEK_SET);
 			FileReadAdv(gcr_info[idx].f, gcr_buf, 8192);
 			gcr_info[idx].trk_sz = (gcr_buf[1] << 8) | gcr_buf[0];
-			dbgprintf("Track %d%s: size %d\n", track >> 1, (track & 1) ? ".5" : "", gcr_info[idx].trk_sz);
+			dbgprintf("Track %d%s: size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", gcr_info[idx].trk_sz);
 			gcr_info[idx].trk_sz += 2;
 		}
 	}
@@ -544,7 +544,12 @@ void c64_writeGCR(int idx, uint8_t track)
 
 	if (gcr_info[idx].type == 2)
 	{
-		printf("Write to G64 is not supported.\n");
+		if (gcr_info[idx].trk_map[track])
+		{
+			FileSeek(gcr_info[idx].f, gcr_info[idx].trk_map[track]+2, SEEK_SET);
+			FileWriteAdv(gcr_info[idx].f, gcr_buf + 2, gcr_info[idx].trk_sz - 2);
+			dbgprintf("Write Track %d%s: size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", gcr_info[idx].trk_sz - 2);
+		}
 		return;
 	}
 
