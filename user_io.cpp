@@ -2207,10 +2207,18 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		uint8_t *mem = (uint8_t *)shmem_map(fpga_mem(load_addr), bytes2send);
 		if (mem)
 		{
-			FileReadAdv(&f, mem, bytes2send);
-			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, mem);
-			file_crc = crc32(file_crc, mem + skip, bytes2send - skip);
-			skip = 0;
+			while (bytes2send)
+			{
+				uint32_t chunk = (bytes2send > (256 * 1024)) ? (256 * 1024) : bytes2send;
+				FileReadAdv(&f, mem + size - bytes2send, chunk);
+
+				file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
+				skip = 0;
+
+				if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
+				bytes2send -= chunk;
+			}
+
 			shmem_unmap(mem, bytes2send);
 		}
 	}
