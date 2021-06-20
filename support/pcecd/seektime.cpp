@@ -91,11 +91,11 @@ float get_cd_seek_ms(int start_sector, int target_sector)
 	}
 
 	// Now, we use the algorithm to determine how long to wait
-	if (abs(target_sector - start_sector) < 2)
+	if (abs(target_sector - start_sector) <= 3)
 	{
 		milliseconds = (2 * 1000 / 60);
 	}
-	else if (abs(target_sector - start_sector) < 5)
+	else if (abs(target_sector - start_sector) < 7)
 	{
 		milliseconds = (9 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.75);
 	}
