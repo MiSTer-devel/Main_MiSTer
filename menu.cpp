@@ -4414,6 +4414,15 @@ void HandleUI(void)
 		if (flist_nDirEntries())
 		{
 			ScrollLongName(); // scrolls file name if longer than display line
+			
+			//Write out paths infos for external integration
+			FILE* filePtr = fopen("/tmp/CURRENTPATH","w");
+           		FILE* pathPtr = fopen("/tmp/FULLPATH","w");
+           		fprintf(filePtr, "%s", flist_SelectedItem()->altname);
+           		fprintf(pathPtr, "%s", selPath);
+           		fclose(filePtr);
+           		fclose(pathPtr);
+			
 
 			if (c == KEY_HOME)
 			{
