@@ -687,8 +687,11 @@ void pcecdd_t::CommandExec() {
 		{
 			int track = U8(comm[2]);
 
+			// Note that track (imput from PCE) starts numbering at 1
+			// but toc.tracks starts numbering at 0
+			//
 			if (!track)	track = 1;
-			new_lba = (track >= toc.last) ? this->toc.end : (this->toc.tracks[track - 1].start);
+			new_lba = ((track-1) >= toc.last) ? this->toc.end : (this->toc.tracks[track - 1].start);
 		}
 		break;
 		}
