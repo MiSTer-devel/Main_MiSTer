@@ -31,7 +31,6 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <sys/statvfs.h>
-#include <sys/mman.h>
 #include <time.h>
 
 #include <map>
@@ -42,6 +41,7 @@
 #include "../../user_io.h"
 #include "../../file_io.h"
 #include "../../cfg.h"
+#include "../../shmem.h"
 
 #define SHMEM_ADDR      0x300CE000
 #define SHMEM_SIZE      0x2000
@@ -1117,23 +1117,12 @@ static int process_request(void *reqres_buffer)
 	return reslen;
 }
 
-static void share_init()
-{
-	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return;
-
-	shmem = (uint8_t*)mmap(0, SHMEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, SHMEM_ADDR);
-	close(fd);
-
-	if (shmem == (uint8_t *)-1) printf("x86_setup_shmem: Unable to mmap(/dev/mem)\n");
-	return;
-}
-
 void x86_share_poll()
 {
 	if (!shmem)
 	{
-		share_init();
+		shmem = (uint8_t *)shmem_map(SHMEM_ADDR, SHMEM_SIZE);
+		if (!shmem) shmem = (uint8_t *)-1;
 	}
 	else if (shmem != (uint8_t *)-1)
 	{

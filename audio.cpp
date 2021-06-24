@@ -2,8 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include <sys/mman.h>
-#include <linux/fb.h>
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <linux/vt.h>

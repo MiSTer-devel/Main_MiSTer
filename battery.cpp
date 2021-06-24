@@ -115,7 +115,7 @@ static int smbus_open(int dev_address)
 			int fd;
 			sprintf(str, "/dev/i2c-%d", bus);
 
-			if ((fd = open(str, O_RDWR)) < 0)
+			if ((fd = open(str, O_RDWR | O_CLOEXEC)) < 0)
 			{
 				printf("Unable to open I2C bus %s: %s\n", str, strerror(errno));
 				continue;

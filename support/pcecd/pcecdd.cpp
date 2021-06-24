@@ -567,6 +567,12 @@ void pcecdd_t::CommandExec() {
 		{
 			this->latency = 0;
 		}
+		/* Sherlock Holmes streams by fetching 252 sectors at a time, and suffers
+		 * from slight pauses at each seek */
+		else if ((this->lba == new_lba) && (cnt_ == 252))
+		{
+			this->latency = 5;
+		}
 		else if (comm[13] & 0x80) // fast seek (OSD setting)
 		{
 			this->latency = 0;
@@ -697,11 +703,11 @@ void pcecdd_t::CommandExec() {
 			this->state = PCECD_STATE_PLAY;
 		}
 
-		printf("\x1b[32mPCECD: Command SAPEP, end = %i, [1] = %02X, [2] = %02X, [9] = %02X\n\x1b[0m", this->CDDAEnd, comm[1], comm[2], comm[9]);
-
 		if (this->CDDAMode != PCECD_CDDAMODE_INTERRUPT) {
 			SendStatus(MAKE_STATUS(PCECD_STATUS_GOOD, 0));
 		}
+
+		printf("\x1b[32mPCECD: Command SAPEP, end = %i, [1] = %02X, [2] = %02X, [9] = %02X\n\x1b[0m", this->CDDAEnd, comm[1], comm[2], comm[9]);
 	}
 		break;
 

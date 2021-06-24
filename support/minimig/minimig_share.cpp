@@ -5,7 +5,6 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <dirent.h>
-#include <sys/mman.h>
 #include <time.h>
 
 #include <map>
@@ -17,6 +16,7 @@
 #include "../../user_io.h"
 #include "../../spi.h"
 #include "../../cfg.h"
+#include "../../shmem.h"
 #include "miminig_fs_messages.h"
 
 #define SHMEM_ADDR      0x27FF4000
@@ -236,7 +236,7 @@ static void fill_date(time_t time, int date[3])
 	time_t ticks = secs * 50;
 	days -= 2922; // Days between 1970 - 01 - 01 and 1978 - 01 - 01
 	if (days < 0) days = 0;
-	
+
 	date[0] = SWAP_INT(days);
 	date[1] = SWAP_INT(mins);
 	date[2] = SWAP_INT(ticks);
@@ -509,10 +509,10 @@ static int process_request(void *reqres_buffer)
 			ExamineFhRequest *req = (ExamineFhRequest*)reqres_buffer;
 			ExamineFhResponse *res = (ExamineFhResponse*)reqres_buffer;
 			sz_res = sizeof(ExamineFhResponse);
-			
+
 			uint32_t key = SWAP_INT(req->arg1);
 			dbg_print("  key: %d\n", key);
-			
+
 			if (open_file_handles.find(key) == open_file_handles.end())
 			{
 				ret = ERROR_OBJECT_NOT_FOUND;
@@ -543,11 +543,11 @@ static int process_request(void *reqres_buffer)
 				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
 			}
-			
+
 			dbg_print("    fn: %s\n", fn);
 			dbg_print("    size: %lld\n", open_file_handles[key].size);
 			dbg_print("    type: %d\n", type);
-			
+
 			res->disk_key = SWAP_INT(disk_key);
 			res->entry_type = SWAP_INT(type);
 			res->size = SWAP_INT(size);
@@ -767,7 +767,7 @@ static int process_request(void *reqres_buffer)
 				ret = ERROR_OBJECT_NOT_FOUND;
 				break;
 			}
-			
+
 			strcpy(buf, getFullPath(buf));
 			const char *fp2 = getFullPath(cp2);
 
@@ -862,13 +862,13 @@ static int process_request(void *reqres_buffer)
 
 			uint32_t key1 = SWAP_INT(req->key1);
 			uint32_t key2 = SWAP_INT(req->key2);
-			
+
 			if ((locks.find(key1) == locks.end()) || (locks.find(key2) == locks.end()))
 			{
 				ret = LOCK_DIFFERENT;
 				break;
 			}
-			
+
 			if (locks[key1].path == locks[key2].path)
 			{
 				ret = LOCK_SAME;
@@ -891,23 +891,12 @@ static int process_request(void *reqres_buffer)
 	return sz_res;
 }
 
-static void share_init()
-{
-	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return;
-
-	shmem = (uint8_t*)mmap(0, SHMEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, SHMEM_ADDR);
-	close(fd);
-
-	if (shmem == (uint8_t *)-1) printf("minimig_setup_shmem: Unable to mmap(/dev/mem)\n");
-	return;
-}
-
 void minimig_share_poll()
 {
 	if (!shmem)
 	{
-		share_init();
+		shmem = (uint8_t *)shmem_map(SHMEM_ADDR, SHMEM_SIZE);
+		if (!shmem) shmem = (uint8_t *)-1;
 	}
 	else if(shmem != (uint8_t *)-1)
 	{

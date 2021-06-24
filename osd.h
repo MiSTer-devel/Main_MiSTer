@@ -6,6 +6,7 @@
 // some constants
 #define DISABLE_KEYBOARD 0x02        // disable keyboard while OSD is active
 #define OSD_INFO         0x04        // display info
+#define OSD_MSG          0x08        // display message window
 
 #define REPEATDELAY      500         // repeat delay in 1ms units
 #define REPEATRATE       50          // repeat rate in 1ms units
@@ -27,8 +28,8 @@ void OsdMenuCtl(int en);
 void OsdUpdate();
 void OSD_PrintInfo(const char *message, int *width, int *height, int frame = 0);
 void OsdDrawLogo(int row);
-void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert);
-void ScrollReset();
+void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert, int idx = 0);
+void ScrollReset(int idx = 0);
 void StarsInit();
 void StarsUpdate();
 void OsdShiftDown(unsigned char n);

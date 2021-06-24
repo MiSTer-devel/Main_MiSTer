@@ -125,8 +125,8 @@ void StarsUpdate()
 #define SCROLL_DELAY2 10
 #define SCROLL_DELAY3 50
 
-static unsigned long scroll_offset = 0; // file/dir name scrolling position
-static unsigned long scroll_timer = 0;  // file/dir name scrolling timer
+static unsigned long scroll_offset[2] = {}; // file/dir name scrolling position
+static unsigned long scroll_timer[2] = {};  // file/dir name scrolling timer
 
 static int arrow;
 static unsigned char titlebuffer[256];
@@ -500,7 +500,7 @@ void OsdClear(void)
 void OsdEnable(unsigned char mode)
 {
 	user_io_osd_key_enable(mode & DISABLE_KEYBOARD);
-	mode &= DISABLE_KEYBOARD;
+	mode &= (DISABLE_KEYBOARD | OSD_MSG);
 	spi_osd_cmd(OSD_CMD_ENABLE | mode);
 }
 
@@ -593,7 +593,7 @@ static void print_line(unsigned char line, const char *hdr, const char *text, un
 	}
 }
 
-void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert)
+void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert, int idx)
 {
 	// this function is called periodically when a string longer than the window is displayed.
 
@@ -603,7 +603,7 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 	long offset;
 	if (!max_len) max_len = 30;
 
-	if (str && str[0] && CheckTimer(scroll_timer)) // scroll if long name and timer delay elapsed
+	if (str && str[0] && CheckTimer(scroll_timer[idx])) // scroll if long name and timer delay elapsed
 	{
 		hdr[0] = 0;
 		if (off)
@@ -614,9 +614,9 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 			if (len > off) len -= off;
 		}
 
-		scroll_timer = GetTimer(SCROLL_DELAY2); // reset scroll timer to repeat delay
+		scroll_timer[idx] = GetTimer(SCROLL_DELAY2); // reset scroll timer to repeat delay
 
-		scroll_offset++; // increase scroll position (1 pixel unit)
+		scroll_offset[idx]++; // increase scroll position (1 pixel unit)
 		memset(s, ' ', 32); // clear buffer
 
 		if (!len) len = strlen(str); // get name length
@@ -624,9 +624,9 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 		if (off+2+len > max_len) // scroll name if longer than display size
 		{
 			// reset scroll position if it exceeds predefined maximum
-			if (scroll_offset >= (uint)(len + BLANKSPACE) << 3) scroll_offset = 0;
+			if (scroll_offset[idx] >= (uint)(len + BLANKSPACE) << 3) scroll_offset[idx] = 0;
 
-			offset = scroll_offset >> 3; // get new starting character of the name (scroll_offset is no longer in 2 pixel unit)
+			offset = scroll_offset[idx] >> 3; // get new starting character of the name (scroll_offset is no longer in 2 pixel unit)
 			len -= offset; // remaining number of characters in the name
 			if (len>max_len) len = max_len;
 			if (len > 0) strncpy(s, &str[offset], len); // copy name substring
@@ -636,15 +636,15 @@ void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned
 				strncpy(s + len + BLANKSPACE, str, max_len - len - BLANKSPACE); // repeat the name after its end and predefined number of blank space
 			}
 
-			print_line(n, hdr, s, (max_len - 1) << 3, (scroll_offset & 0x7), invert); // OSD print function with pixel precision
+			print_line(n, hdr, s, (max_len - 1) << 3, (scroll_offset[idx] & 0x7), invert); // OSD print function with pixel precision
 		}
 	}
 }
 
-void ScrollReset()
+void ScrollReset(int idx)
 {
-	scroll_timer = GetTimer(SCROLL_DELAY); // set timer to start name scrolling after predefined time delay
-	scroll_offset = 0; // start scrolling from the start
+	scroll_timer[idx] = GetTimer(SCROLL_DELAY); // set timer to start name scrolling after predefined time delay
+	scroll_offset[idx] = 0; // start scrolling from the start
 }
 
 /* core currently loaded */

@@ -394,7 +394,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute, int use_zi
 	}
 	else
 	{
-		int fd = (mode == -1) ? shm_open("/vdsk", O_CREAT | O_RDWR | O_TRUNC, 0777) : open(full_path, mode, 0777);
+		int fd = (mode == -1) ? shm_open("/vdsk", O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC, 0777) : open(full_path, mode | O_CLOEXEC, 0777);
 		if (fd <= 0)
 		{
 			if(!mute) printf("FileOpenEx(open) File:%s, error: %s.\n", full_path, strerror(errno));
@@ -602,6 +602,10 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 			printf("FileWriteAdv error(%d).\n", ret);
 			return failres;
 		}
+
+		file->offset += ret;
+		if (file->offset > file->size) file->size = FileGetSize(file);
+		return ret;
 	}
 	else if (file->zip)
 	{
@@ -613,9 +617,6 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 		printf("FileWriteAdv error(unknown file type).\n");
 		return failres;
 	}
-
-	file->offset += ret;
-	return ret;
 }
 
 int FileWriteSec(fileTYPE *file, void *pBuffer)

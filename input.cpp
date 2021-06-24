@@ -916,7 +916,7 @@ int mwd = -1;
 static int set_watch()
 {
 	mwd = -1;
-	mfd = inotify_init();
+	mfd = inotify_init1(IN_CLOEXEC);
 	if (mfd < 0)
 	{
 		printf("ERR: inotify_init");
@@ -1060,7 +1060,6 @@ static int load_map(const char *name, void *pBuffer, int size)
 static void delete_map(const char *name)
 {
 	char path[256] = { JOYMAP_DIR };
-	FileCreatePath(path);
 	strcat(path, name);
 	FileDeleteConfig(name);
 	FileDeleteConfig(path);
@@ -1069,7 +1068,6 @@ static void delete_map(const char *name)
 static int save_map(const char *name, void *pBuffer, int size)
 {
 	char path[256] = { JOYMAP_DIR };
-	FileCreatePath(path);
 	strcat(path, name);
 	FileDeleteConfig(name);
 	return FileSaveConfig(path, pBuffer, size);
@@ -1304,7 +1302,7 @@ static int input_uinp_setup()
 	{
 		struct uinput_user_dev uinp;
 
-		if (!(uinp_fd = open("/dev/uinput", O_WRONLY | O_NDELAY)))
+		if (!(uinp_fd = open("/dev/uinput", O_WRONLY | O_NDELAY | O_CLOEXEC)))
 		{
 			printf("Unable to open /dev/uinput\n");
 			uinp_fd = -1;
@@ -1395,9 +1393,9 @@ static void mouse_cb(unsigned char b, int16_t x = 0, int16_t y = 0, int16_t w = 
 	if (grabbed) user_io_mouse(b, x, y, w);
 }
 
+static uint32_t osdbtn = 0;
 static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
 {
-	static uint32_t osdbtn = 0;
 	static char str[128];
 	static uint32_t lastcode[NUMPLAYERS], lastmask[NUMPLAYERS];
 	int num = jnum - 1;
@@ -1933,6 +1931,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		&& input[dev].quirk != QUIRK_MSSP)
 	{
 		int idx = 0;
+		osdbtn = 0;
 
 		if (is_menu())
 		{
@@ -3064,10 +3063,10 @@ int input_test(int getchar)
 		unlink(CMD_FIFO);
 		mkfifo(CMD_FIFO, 0666);
 
-		pool[NUMDEV+1].fd = open(CMD_FIFO, O_RDWR | O_NONBLOCK);
+		pool[NUMDEV+1].fd = open(CMD_FIFO, O_RDWR | O_NONBLOCK | O_CLOEXEC);
 		pool[NUMDEV+1].events = POLLIN;
 
-		pool[NUMDEV + 2].fd = open(LED_MONITOR, O_RDONLY);
+		pool[NUMDEV + 2].fd = open(LED_MONITOR, O_RDONLY | O_CLOEXEC);
 		pool[NUMDEV + 2].events = POLLPRI;
 
 		state++;
@@ -3095,7 +3094,7 @@ int input_test(int getchar)
 				{
 					memset(&input[n], 0, sizeof(input[n]));
 					sprintf(input[n].devname, "/dev/input/%s", de->d_name);
-					int fd = open(input[n].devname, O_RDWR);
+					int fd = open(input[n].devname, O_RDWR | O_CLOEXEC);
 					//printf("open(%s): %d\n", input[n].devname, fd);
 
 					if (fd > 0)
@@ -3475,7 +3474,7 @@ int input_test(int getchar)
 								if (input[dev].quirk == QUIRK_JAMMA && ev.type == EV_KEY)
 								{
 									input[dev].num = 0;
-									for (uint32_t i = 0; i <= sizeof(jamma2joy) / sizeof(jamma2joy[0]); i++)
+									for (uint32_t i = 0; i < sizeof(jamma2joy) / sizeof(jamma2joy[0]); i++)
 									{
 										if (jamma2joy[i].key == ev.code)
 										{

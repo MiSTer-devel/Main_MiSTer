@@ -5,13 +5,13 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <time.h>   // clock_gettime, CLOCK_REALTIME
-#include <sys/mman.h>
 #include "neogeo_loader.h"
 #include "../../sxmlc.h"
 #include "../../user_io.h"
 #include "../../fpga_io.h"
 #include "../../osd.h"
 #include "../../menu.h"
+#include "../../shmem.h"
 
 struct NeoFile
 {
@@ -204,14 +204,6 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 		return 0;
 	}
 
-	int memfd = open("/dev/mem", O_RDWR | O_SYNC);
-	if (memfd == -1)
-	{
-		printf("Unable to open /dev/mem!\n");
-		FileClose(&f);
-		return 0;
-	}
-
 	size *= 2;
 
 	FileSeek(&f, offset, SEEK_SET);
@@ -229,11 +221,9 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 		if (partsz > LOADBUF_SZ) partsz = LOADBUF_SZ;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
-		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-		if (base == (void *)-1)
+		void *base = shmem_map(map_addr, partsz);
+		if (!base)
 		{
-			printf("Unable to mmap (0x%X, %d)!\n", map_addr, partsz);
-			close(memfd);
 			FileClose(&f);
 			return 0;
 		}
@@ -243,12 +233,11 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 
 		ProgressMessage("Loading", name, size - (remain - partsz), size);
 
-		munmap(base, partsz);
+		shmem_unmap(base, partsz);
 		remain -= partsz;
 		map_addr += partsz;
 	}
 
-	close(memfd);
 	FileClose(&f);
 	ProgressMessage();
 
@@ -274,14 +263,6 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 		return 0;
 	}
 
-	int memfd = open("/dev/mem", O_RDWR | O_SYNC);
-	if (memfd == -1)
-	{
-		printf("Unable to open /dev/mem!\n");
-		FileClose(&f);
-		return 0;
-	}
-
 	FileSeek(&f, offset, SEEK_SET);
 	printf("ROM %s (offset %u, size %u, exp %u, type %u, addr %u) with index %u\n", name, offset, size, expand, neo_file_type, addr, index);
 
@@ -302,11 +283,9 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 		if (partszf > LOADBUF_SZ) partszf = LOADBUF_SZ;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
-		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-		if (base == (void *)-1)
+		void *base = shmem_map(map_addr, partsz);
+		if (!base)
 		{
-			printf("Unable to mmap (0x%X, %d)!\n", map_addr, partsz);
-			close(memfd);
 			FileClose(&f);
 			return 0;
 		}
@@ -332,12 +311,11 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 
 		ProgressMessage("Loading", name, size - (remain - partsz), size);
 
-		munmap(base, partsz);
+		shmem_unmap(base, partsz);
 		remain -= partsz;
 		map_addr += partsz;
 	}
 
-	close(memfd);
 	FileClose(&f);
 	ProgressMessage();
 

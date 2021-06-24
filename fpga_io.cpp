@@ -7,7 +7,6 @@
 #include <ctype.h>
 #include <termios.h>
 #include <sys/types.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
 
 #include "fpga_io.h"
@@ -15,6 +14,7 @@
 #include "input.h"
 #include "osd.h"
 #include "menu.h"
+#include "shmem.h"
 
 #include "fpga_base_addr_ac5.h"
 #include "fpga_manager.h"
@@ -36,7 +36,6 @@ static struct socfpga_system_manager *sysmgr_regs  = (socfpga_system_manager *)S
 static struct nic301_registers       *nic301_regs  = (nic301_registers *)SOCFPGA_L3REGS_ADDRESS;
 
 static uint32_t *map_base;
-static int fd;
 
 #define writel(val, reg) *MAP_ADDR(reg) = val
 #define readl(reg) *MAP_ADDR(reg)
@@ -392,15 +391,8 @@ static void do_bridge(uint32_t enable)
 
 static int make_env(const char *name, const char *cfg)
 {
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return -1;
-
-	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
-	if (buf == (void *)-1)
-	{
-		printf("Unable to mmap(/dev/mem)\n");
-		close(fd);
-		return -1;
-	}
+	void* buf = shmem_map(0x1FFFF000, 0x1000);
+	if (!buf) return -1;
 
 	volatile char* str = (volatile char*)buf;
 	memset((void*)str, 0, 0xF00);
@@ -424,7 +416,7 @@ static int make_env(const char *name, const char *cfg)
 	*str++ = '"';
 	*str++ = '\n';
 	FileLoad(cfg, (void*)str, 0);
-	munmap(buf, 0x1000);
+	shmem_unmap(buf, 0x1000);
 	return 0;
 }
 
@@ -536,15 +528,8 @@ uint32_t fpga_core_read(uint32_t offset)
 
 int fpga_io_init()
 {
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return -1;
-
-	map_base = (uint32_t*)mmap(0, FPGA_REG_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FPGA_REG_BASE);
-	if (map_base == (void *)-1)
-	{
-		printf("Unable to mmap(/dev/mem)\n");
-		close(fd);
-		return -1;
-	}
+	map_base = (uint32_t*)shmem_map(FPGA_REG_BASE, FPGA_REG_SIZE);
+	if (!map_base) return -1;
 
 	fpga_gpo_write(0);
 	return 0;

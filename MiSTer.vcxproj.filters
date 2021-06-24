@@ -208,6 +208,9 @@
     <ClCompile Include="support\x86\x86_cdrom.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
+    <ClCompile Include="shmem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -395,6 +398,9 @@
     </ClInclude>
     <ClInclude Include="support\x86\x86_cdrom.h">
       <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="shmem.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
