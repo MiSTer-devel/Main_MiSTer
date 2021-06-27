@@ -59,7 +59,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "recent.h"
 #include "support.h"
 #include "bootcore.h"
-#include "support/x86/x86_ide.h"
+#include "ide.h"
 
 /*menu states*/
 enum MENU

@@ -1,7 +1,7 @@
-#ifndef X86_IDE_H
-#define X86_IDE_H
+#ifndef IDE_H
+#define IDE_H
 
-#include "../chd/mister_chd.h"
+#include "support/chd/mister_chd.h"
 
 #define ATA_STATUS_BSY  0x80  // busy
 #define ATA_STATUS_RDY  0x40  // ready
@@ -35,6 +35,7 @@
 typedef struct
 {
 	uint8_t io_done;
+	uint8_t io_fast;
 	uint8_t features;
 	uint8_t sector_count;
 	uint8_t sector;
@@ -64,7 +65,7 @@ typedef struct
 	uint8_t  attr;
 	uint8_t  mode2;
 	uint8_t  number;
-	int 	chd_offset;
+	int      chd_offset;
 } track_t;
 
 typedef struct
@@ -94,11 +95,11 @@ typedef struct
 	uint32_t play_start_lba;
 	uint32_t play_end_lba;
 
-	chd_file	*chd_f;
-	int 	chd_hunknum;
-	uint8_t	*chd_hunkbuf;
-	uint32_t chd_total_size;
-	uint32_t chd_last_partial_lba;
+	chd_file *chd_f;
+	int      chd_hunknum;
+	uint8_t	 *chd_hunkbuf;
+	uint32_t  chd_total_size;
+	uint32_t  chd_last_partial_lba;
 
 	uint16_t id[256];
 } drive_t;
@@ -115,7 +116,7 @@ typedef struct
 	drive_t drive[2];
 } ide_config;
 
-#include "x86_cdrom.h"
+#include "ide_cdrom.h"
 
 extern ide_config ide_inst[2];
 extern const uint32_t ide_io_max_size;
@@ -125,11 +126,16 @@ void ide_print_regs(regs_t *regs);
 void ide_get_regs(ide_config *ide);
 void ide_set_regs(ide_config *ide);
 
+void ide_sendbuf(ide_config *ide, uint16_t reg, uint32_t length, uint16_t *data);
+void ide_recvbuf(ide_config *ide, uint16_t reg, uint32_t length, uint16_t *data);
+void ide_reg_set(ide_config *ide, uint16_t reg, uint16_t value);
+
 uint16_t ide_check(int status = 0);
-void ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd, int sectors = 0, int heads = 0);
-void ide_io(int num, int req);
+int ide_img_mount(fileTYPE *f, const char *name, int rw);
+void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors = 0, int heads = 0);
 int ide_is_placeholder(int num);
 void ide_reset(uint8_t hotswap[4]);
-int ide_img_mount(fileTYPE *f, const char *name, int rw);
+
+void ide_io(int num, int req);
 
 #endif

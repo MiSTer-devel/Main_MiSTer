@@ -12,12 +12,12 @@
 #include "../../user_io.h"
 #include "../../input.h"
 #include "../../cfg.h"
+#include "../../ide.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
 #include "minimig_config.h"
 #include "minimig_share.h"
-#include "../x86/x86_ide.h"
 
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M" };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };

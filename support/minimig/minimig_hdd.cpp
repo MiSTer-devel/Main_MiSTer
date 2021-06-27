@@ -27,12 +27,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <string.h>
 #include "../../hardware.h"
 #include "../../file_io.h"
-#include "minimig_hdd.h"
 #include "../../menu.h"
-#include "minimig_config.h"
 #include "../../debug.h"
 #include "../../user_io.h"
-#include "../x86/x86_ide.h"
+#include "../../ide.h"
+#include "minimig_hdd.h"
+#include "minimig_config.h"
 
 #define CMD_IDECMD                 0x04
 #define CMD_IDEDAT                 0x08
@@ -762,7 +762,7 @@ uint8_t OpenHardfile(uint8_t unit, const char* filename)
 						}
 
 						if (!present && vhd) present = ide_img_mount(&hdf->file, minimig_config.hardfile[unit].filename, 1);
-						ide_set(unit, (unit & 2) ? 0xF100 : 0xF000, present ? &hdf->file : 0, 3, cd, hdf->sectors, hdf->heads);
+						ide_img_set(unit, present ? &hdf->file : 0, cd, hdf->sectors, hdf->heads);
 						if (present) return 1;
 					}
 					else
@@ -794,7 +794,7 @@ uint8_t OpenHardfile(uint8_t unit, const char* filename)
 	}
 
 	// close if opened earlier.
-	if (is_minimig() && (ide_check() & 0x8000)) ide_set(unit, (unit & 2) ? 0xF100 : 0xF000, 0, 3, 0);
+	if (is_minimig() && (ide_check() & 0x8000)) ide_img_set(unit, 0, 0);
 	FileClose(&hdf->file);
 	return 0;
 }

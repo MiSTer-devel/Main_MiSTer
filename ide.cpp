@@ -12,13 +12,12 @@
 #include <sstream>
 #include <sys/stat.h>
 
-#include "../../spi.h"
-#include "../../user_io.h"
-#include "../../file_io.h"
-#include "../../hardware.h"
-#include "x86.h"
-#include "x86_ide.h"
-#include "x86_cdrom.h"
+#include "support/x86/x86.h"
+#include "spi.h"
+#include "user_io.h"
+#include "file_io.h"
+#include "hardware.h"
+#include "ide.h"
 
 #if 0
 	#define dbg_printf     printf
@@ -36,10 +35,40 @@
 	#define dbg2_printf(...)   void()
 #endif
 
-#define IOWR(base, reg, value, ver) x86_dma_set((base) + ((ver) ? (reg) : ((reg)<<2)), (value))
+#define IDE0_BASE 0xF000
+#define IDE1_BASE 0xF100
 
-#define ide_send_data(databuf, size) x86_dma_sendbuf(ide->base + 255, (size), (uint32_t*)(databuf))
-#define ide_recv_data(databuf, size) x86_dma_recvbuf(ide->base + 255, (size), (uint32_t*)(databuf))
+#define ide_send_data(databuf, size) ide_sendbuf(ide, 255, (size), (uint16_t*)(databuf))
+#define ide_recv_data(databuf, size) ide_recvbuf(ide, 255, (size), (uint16_t*)(databuf))
+
+void ide_reg_set(ide_config *ide, uint16_t reg, uint16_t value)
+{
+	EnableIO();
+	spi8(UIO_DMA_WRITE);
+	spi32_w(ide->base + reg);
+	spi_w(value);
+	DisableIO();
+}
+
+void ide_sendbuf(ide_config *ide, uint16_t reg, uint32_t length, uint16_t *data)
+{
+	EnableIO();
+	fpga_spi_fast(UIO_DMA_WRITE);
+	fpga_spi_fast(ide->base + reg);
+	fpga_spi_fast(0);
+	fpga_spi_fast_block_write(data, length);
+	DisableIO();
+}
+
+void ide_recvbuf(ide_config *ide, uint16_t reg, uint32_t length, uint16_t *data)
+{
+	EnableIO();
+	fpga_spi_fast(UIO_DMA_READ);
+	fpga_spi_fast(ide->base + reg);
+	fpga_spi_fast(0);
+	fpga_spi_fast_block_read(data, length);
+	DisableIO();
+}
 
 const uint32_t ide_io_max_size = 32;
 uint8_t ide_buf[ide_io_max_size * 512];
@@ -103,9 +132,10 @@ void ide_print_regs(regs_t *regs)
 void ide_get_regs(ide_config *ide)
 {
 	uint32_t data[3];
-	x86_dma_recvbuf(ide->base, 3, data);
+	ide_recvbuf(ide, 0, 6, (uint16_t*)data);
 
 	ide->regs.io_done = (uint8_t)(data[0] & 1);
+	ide->regs.io_fast = (uint8_t)(data[0] & 2);
 	ide->regs.features = (uint8_t)(data[0] >> 8);
 	ide->regs.sector_count = (uint8_t)(data[0] >> 16);
 	ide->regs.sector = (uint8_t)(data[0] >> 24);
@@ -145,7 +175,7 @@ void ide_set_regs(ide_config *ide)
 	};
 
 	//hexdump(data, 12, ide->base);
-	x86_dma_sendbuf(ide->base, 3, (uint32_t*)data);
+	ide_sendbuf(ide, 0, 6, (uint16_t*)data);
 }
 
 static void ide_set_geometry(drive_t *drive, uint16_t sectors, uint16_t heads)
@@ -162,16 +192,15 @@ static void ide_set_geometry(drive_t *drive, uint16_t sectors, uint16_t heads)
 	drive->cylinders = cylinders;
 }
 
-void ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd, int sectors, int heads)
+void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads)
 {
-	int drvnum = num;
-	int drv = (ver == 3) ? (num & 1) : 0;
-	if (ver == 3) num >>= 1;
+	int drv = (drvnum & 1);
+	int port = (drvnum >> 1);
 
-	drive_t *drive = &ide_inst[num].drive[drv];
+	drive_t *drive = &ide_inst[port].drive[drv];
 
-	ide_inst[num].base = baseaddr;
-	ide_inst[num].drive[drv].drvnum = drvnum;
+	ide_inst[port].base = port ? IDE1_BASE : IDE0_BASE;
+	ide_inst[port].drive[drv].drvnum = drvnum;
 
 	drive->f = f;
 
@@ -182,33 +211,26 @@ void ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd, int 
 	//drive->total_sectors = 0;
 
 	drive->present = f ? 1 : 0;
-	ide_inst[num].state = IDE_STATE_RESET;
-	ide_inst[num].bitoff = num * 3;
+	ide_inst[port].state = IDE_STATE_RESET;
+	ide_inst[port].bitoff = port * 3;
 
-	drive->cd = drive->present && (ver == 3) && cd;
+	drive->cd = drive->present && cd;
 
-	if (ver == 3)
+	if (f && drive->placeholder && !drive->cd)
 	{
-		if (f && drive->placeholder && !drive->cd)
-		{
-			printf("Cannot hot-mount HDD image to CD!\n");
-			FileClose(drive->f);
-			drive->f = 0;
-			f = 0;
-			drive->present = 0;
-		}
-
-		drive->placeholder = drive->allow_placeholder;
-		if (drive->placeholder && drive->present && !drive->cd) drive->placeholder = 0;
-		if (drive->placeholder) drive->cd = 1;
-
-		IOWR(ide_inst[num].base, 6, ((drive->present || drive->placeholder) ? 9 : 8) << (drv * 4), 1);
-		IOWR(ide_inst[num].base, 6, 0x200, 1);
+		printf("Cannot hot-mount HDD image to CD!\n");
+		FileClose(drive->f);
+		drive->f = 0;
+		f = 0;
+		drive->present = 0;
 	}
-	else if (!drive->present)
-	{
-		return;
-	}
+
+	drive->placeholder = drive->allow_placeholder;
+	if (drive->placeholder && drive->present && !drive->cd) drive->placeholder = 0;
+	if (drive->placeholder) drive->cd = 1;
+
+	ide_reg_set(&ide_inst[port], 6, ((drive->present || drive->placeholder) ? 9 : 8) << (drv * 4));
+	ide_reg_set(&ide_inst[port], 6, 0x200);
 
 	if(drive->f)
 	{
@@ -220,101 +242,6 @@ void ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd, int 
 	if (!drive->cd)
 	{
 		if (drive->present) ide_set_geometry(drive, sectors, heads);
-
-		/*uint16_t identify[256] =
-		{
-			0x0040, 											//word 0
-			drive->cylinders,									//word 1
-			0x0000,												//word 2 reserved
-			drive->heads,										//word 3
-			0x0000,												//word 4 obsolete
-			0x0000,												//word 5 obsolete
-			drive->spt,											//word 6
-			0x0000,												//word 7 vendor specific
-			0x0000,												//word 8 vendor specific
-			0x0000,												//word 9 vendor specific
-			('A' << 8) | 'O',									//word 10
-			('H' << 8) | 'D',									//word 11
-			('0' << 8) | '0',									//word 12
-			('0' << 8) | '0',									//word 13
-			('0' << 8) | ' ',									//word 14
-			(' ' << 8) | ' ',									//word 15
-			(' ' << 8) | ' ',									//word 16
-			(' ' << 8) | ' ',									//word 17
-			(' ' << 8) | ' ',									//word 18
-			(' ' << 8) | ' ',									//word 19
-			0,   												//word 20 buffer type
-			0,													//word 21 cache size
-			0,													//word 22 number of ecc bytes
-			0,0,0,0,											//words 23..26 firmware revision
-			(' ' << 8) | ' ',									//words 27..46 model number
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			(' ' << 8) | ' ',
-			0x8010,												//word 47 max multiple sectors
-			0,													//word 48 dword io
-			1 << 9,												//word 49 lba supported
-			0,													//word 50 reserved
-			0,													//word 51 pio timing
-			0,													//word 52 pio timing
-			1,													//word 53 valid fields
-			drive->cylinders, 									//word 54
-			drive->heads,										//word 55
-			drive->spt,											//word 56
-			(uint16_t)(drive->total_sectors & 0xFFFF),			//word 57
-			(uint16_t)(drive->total_sectors >> 16),				//word 58
-			0,													//word 59 multiple sectors
-			(uint16_t)(drive->total_sectors & 0xFFFF),			//word 60 LBA-28
-			(uint16_t)(drive->total_sectors >> 16),				//word 61 LBA-28
-			0,													//word 62 single word dma modes
-			0,													//word 63 multiple word dma modes
-			0,													//word 64 pio modes
-			0,0,0,0,											//word 65..68
-			0,0,0,0,0,0,0,0,0,0,0,								//word 69..79
-			0,													//word 80 ata modes
-			0,													//word 81 minor version number
-			0, 													//word 82 supported commands
-			0,													//word 83
-			0,	    											//word 84
-			0,  												//word 85
-			0,													//word 86
-			0,			    									//word 87
-			0,													//word 88
-			0,0,0,0,											//word 89..92
-			0,													//word 93
-			0,0,0,0,0,0,										//word 94..99
-			(uint16_t)(drive->total_sectors & 0xFFFF),			//word 100 LBA-48
-			(uint16_t)(drive->total_sectors >> 16),				//word 101 LBA-48
-			0,													//word 102 LBA-48
-			0,													//word 103 LBA-48
-
-			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	//word 104..127
-
-			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,					//word 128..255
-			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-		};*/
 
 		uint16_t identify[256] =
 		{
@@ -513,9 +440,9 @@ void ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd, int 
 		drive->load_state = (drive->f || drive->chd_f) ? 1 : 3;
 	}
 
-	if (ide_inst[num].drive[drv].present)
+	if (ide_inst[port].drive[drv].present)
 	{
-		char *name = ide_inst[num].drive[drv].f->name;
+		char *name = ide_inst[port].drive[drv].f->name;
 		for (int i = 0; i < 20; i++)
 		{
 			if (*name) drive->id[27 + i] = ((*name++) << 8) | 0x20;
@@ -524,20 +451,8 @@ void ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd, int 
 		//hexdump(drive->id, 256);
 	}
 
-	if (ver < 3)
-	{
-		for (int i = 0; i < 128; i++) IOWR(ide_inst[num].base, 0, drive->present ? (drive->id[2 * i + 1] << 16) | drive->id[2 * i + 0] : 0, ver);
-
-		IOWR(ide_inst[num].base, 1, drive->cylinders, ver);
-		IOWR(ide_inst[num].base, 2, drive->heads, ver);
-		IOWR(ide_inst[num].base, 3, drive->spt, ver);
-		IOWR(ide_inst[num].base, 4, drive->spt * drive->heads, ver);
-		IOWR(ide_inst[num].base, 5, drive->spt * drive->heads * drive->cylinders, ver);
-		IOWR(ide_inst[num].base, 6, 0, ver); // base LBA
-	}
-
 	printf("HDD%d:\n  present %d\n  hd_cylinders %d\n  hd_heads %d\n  hd_spt %d\n  hd_total_sectors %d\n\n",
-		(ver < 3) ? num : (num * 2 + drv), drive->present, drive->cylinders, drive->heads, drive->spt, drive->total_sectors);
+		drvnum, drive->present, drive->cylinders, drive->heads, drive->spt, drive->total_sectors);
 }
 
 static uint32_t get_lba(ide_config *ide)
@@ -619,8 +534,17 @@ static void process_read(ide_config *ide, int multi)
 		ide->regs.status = ATA_STATUS_RDP | ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
 		if (!ide->regs.sector_count) ide->regs.status |= ATA_STATUS_END;
 
-		ide_set_regs(ide);
-		ide_send_data(ide_buf, cnt * 128);
+		if (ide->regs.io_fast)
+		{
+			ide_set_regs(ide);
+			ide_send_data(ide_buf, cnt * 256);
+		}
+		else
+		{
+			ide_send_data(ide_buf, cnt * 256);
+			ide->regs.status &= ~ATA_STATUS_RDP;
+			ide_set_regs(ide);
+		}
 
 		if (!ide->regs.sector_count)
 		{
@@ -673,7 +597,7 @@ static void process_write(ide_config *ide, int multi)
 			break;
 		}
 
-		ide_recv_data(ide_buf, cnt * 128);
+		ide_recv_data(ide_buf, cnt * 256);
 
 		if (ide->regs.cmd == 0xFA)
 		{
@@ -683,7 +607,7 @@ static void process_write(ide_config *ide, int multi)
 
 			static const char* names[6] = { "fdd0", "fdd1", "ide00", "ide01", "ide10", "ide11" };
 			printf("Request for new image for drive %s: %s\n", names[drvnum], filename);
-			x86_set_image(drvnum, filename);
+			if(is_x86()) x86_set_image(drvnum, filename);
 		}
 		else
 		{
@@ -714,9 +638,9 @@ static int handle_hdd(ide_config *ide)
 			ide->regs.drv = drv;
 		}
 		ide->regs.io_size = 1;
-		ide->regs.status = ATA_STATUS_RDP | ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ | ATA_STATUS_END;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ | ATA_STATUS_END;
+		ide_send_data(ide->drive[ide->regs.drv].id, 256);
 		ide_set_regs(ide);
-		ide_send_data(ide->drive[ide->regs.drv].id, 128);
 		break;
 
 	case 0xC4: // read multiple
@@ -840,7 +764,7 @@ void ide_io(int num, int req)
 		}
 		else if (ide->state == IDE_STATE_WAIT_PKT_MODE)
 		{
-			ide_recv_data(ide_buf, 128);
+			ide_recv_data(ide_buf, 256);
 			printf("mode select data:\n");
 			hexdump(ide_buf, ide->regs.cylinder);
 			cdrom_reply(ide, 0);

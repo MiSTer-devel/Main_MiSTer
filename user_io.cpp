@@ -33,9 +33,9 @@
 #include "video.h"
 #include "audio.h"
 #include "shmem.h"
+#include "ide.h"
 
 #include "support.h"
-#include "support/x86/x86_ide.h"
 
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};

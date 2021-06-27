@@ -30,7 +30,7 @@
     <NMakeOutput>MiSTer</NMakeOutput>
     <NMakeCleanCommandLine>git.lnk ./clean.sh</NMakeCleanCommandLine>
     <NMakePreprocessorDefinitions>__arm__;__GNUC__;__USE_GNU ;_GNU_SOURCE;VDATE="000000";_FILE_OFFSET_BITS=64;_LARGEFILE64_SOURCE;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
-    <NMakeIncludeSearchPath>c:\Work\Git\opt\gcc75\arm-linux-gnueabihf\libc\usr\include;c:\Work\Git\opt\gcc75\lib\gcc\arm-linux-gnueabihf\7.5.0\include;c:\Work\Git\opt\gcc75\arm-linux-gnueabihf\include\c++\7.5.0;c:\Work\Git\opt\gcc75\arm-linux-gnueabihf\include\c++\7.5.0\arm-linux-gnueabihf;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng</NMakeIncludeSearchPath>
+    <NMakeIncludeSearchPath>c:\Work\Git\opt\gcc75\arm-linux-gnueabihf\libc\usr\include;c:\Work\Git\opt\gcc75\lib\gcc\arm-linux-gnueabihf\7.5.0\include;c:\Work\Git\opt\gcc75\arm-linux-gnueabihf\include\c++\7.5.0;c:\Work\Git\opt\gcc75\arm-linux-gnueabihf\include\c++\7.5.0\arm-linux-gnueabihf;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng;lib\libchdr\include</NMakeIncludeSearchPath>
     <OutDir>$(TEMP)</OutDir>
     <IntDir>$(TEMP)</IntDir>
     <AdditionalOptions>
@@ -59,6 +59,8 @@
     <ClCompile Include="file_io.cpp" />
     <ClCompile Include="fpga_io.cpp" />
     <ClCompile Include="hardware.cpp" />
+    <ClCompile Include="ide.cpp" />
+    <ClCompile Include="ide_cdrom.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="joymapping.cpp" />
     <ClCompile Include="lib\libco\arm.c" />
@@ -81,6 +83,7 @@
     <ClCompile Include="support\arcade\mra_loader.cpp" />
     <ClCompile Include="support\archie\archie.cpp" />
     <ClCompile Include="support\c64\c64.cpp" />
+    <ClCompile Include="support\chd\mister_chd.cpp" />
     <ClCompile Include="support\megacd\megacd.cpp" />
     <ClCompile Include="support\megacd\megacdd.cpp" />
     <ClCompile Include="support\minimig\minimig_boot.cpp" />
@@ -96,8 +99,6 @@
     <ClCompile Include="support\snes\snes.cpp" />
     <ClCompile Include="support\st\st_tos.cpp" />
     <ClCompile Include="support\x86\x86.cpp" />
-    <ClCompile Include="support\x86\x86_cdrom.cpp" />
-    <ClCompile Include="support\x86\x86_ide.cpp" />
     <ClCompile Include="support\x86\x86_share.cpp" />
     <ClCompile Include="sxmlc.c" />
     <ClCompile Include="user_io.cpp" />
@@ -122,6 +123,8 @@
     <ClInclude Include="fpga_reset_manager.h" />
     <ClInclude Include="fpga_system_manager.h" />
     <ClInclude Include="hardware.h" />
+    <ClInclude Include="ide.h" />
+    <ClInclude Include="ide_cdrom.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="joymapping.h" />
     <ClInclude Include="lib\imlib2\Imlib2.h" />
@@ -147,6 +150,7 @@
     <ClInclude Include="support\arcade\mra_loader.h" />
     <ClInclude Include="support\archie\archie.h" />
     <ClInclude Include="support\c64\c64.h" />
+    <ClInclude Include="support\chd\mister_chd.h" />
     <ClInclude Include="support\megacd\megacd.h" />
     <ClInclude Include="support\minimig\miminig_fs_messages.h" />
     <ClInclude Include="support\minimig\minimig_boot.h" />
@@ -161,8 +165,6 @@
     <ClInclude Include="support\snes\snes.h" />
     <ClInclude Include="support\st\st_tos.h" />
     <ClInclude Include="support\x86\x86.h" />
-    <ClInclude Include="support\x86\x86_cdrom.h" />
-    <ClInclude Include="support\x86\x86_ide.h" />
     <ClInclude Include="support\x86\x86_share.h" />
     <ClInclude Include="sxmlc.h" />
     <ClInclude Include="user_io.h" />
