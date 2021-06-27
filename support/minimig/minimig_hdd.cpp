@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "minimig_config.h"
 #include "../../debug.h"
 #include "../../user_io.h"
+#include "../x86/x86_ide.h"
 
 #define CMD_IDECMD                 0x04
 #define CMD_IDEDAT                 0x08
@@ -728,7 +729,7 @@ uint8_t OpenHardfile(uint8_t unit, const char* filename)
 
 	if (is_minimig())
 	{
-		if (minimig_config.enable_ide && minimig_config.hardfile[unit].enabled)
+		if (minimig_config.enable_ide && minimig_config.hardfile[unit].cfg)
 		{
 			printf("\nChecking HDD %d\n", unit);
 			if (minimig_config.hardfile[unit].filename[0])
@@ -742,7 +743,32 @@ uint8_t OpenHardfile(uint8_t unit, const char* filename)
 					printf("CHS: %u/%u/%u", hdf->cylinders, hdf->heads, hdf->sectors);
 					printf(" (%llu MB), ", ((((uint64_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
 					printf("Offset: %d\n", hdf->offset);
-					return 1;
+
+					if (ide_check() & 0x8000)
+					{
+						int present = 0;
+						int cd = 0;
+
+						int len = strlen(minimig_config.hardfile[unit].filename);
+						char *ext = minimig_config.hardfile[unit].filename + len - 4;
+						int vhd = (len > 4 && (!strcasecmp(ext, ".hdf") || (!strcasecmp(ext, ".vhd"))));
+
+						if (!vhd)
+						{
+							const char *img_name = cdrom_parse(unit, minimig_config.hardfile[unit].filename);
+							if (img_name) present = ide_img_mount(&hdf->file, img_name, 0);
+							if (present) cd = 1;
+							else vhd = 1;
+						}
+
+						if (!present && vhd) present = ide_img_mount(&hdf->file, minimig_config.hardfile[unit].filename, 1);
+						ide_set(unit, (unit & 2) ? 0xF100 : 0xF000, present ? &hdf->file : 0, 3, cd, hdf->sectors, hdf->heads);
+						if (present) return 1;
+					}
+					else
+					{
+						return 1;
+					}
 				}
 			}
 			printf("HDD %d: not present\n", unit);
@@ -768,6 +794,7 @@ uint8_t OpenHardfile(uint8_t unit, const char* filename)
 	}
 
 	// close if opened earlier.
+	if (is_minimig() && (ide_check() & 0x8000)) ide_set(unit, (unit & 2) ? 0xF100 : 0xF000, 0, 3, 0);
 	FileClose(&hdf->file);
 	return 0;
 }

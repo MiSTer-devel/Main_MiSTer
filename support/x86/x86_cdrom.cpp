@@ -1324,24 +1324,6 @@ void cdrom_handle_pkt(ide_config *ide)
 	}
 }
 
-static void prep_FA_cmd(ide_config *ide)
-{
-	ide->prepcnt = ide->regs.sector_count;
-	if (!ide->prepcnt || ide->prepcnt > ide_io_max_size) ide->prepcnt = ide_io_max_size;
-
-	ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
-
-	if (ide->state == IDE_STATE_INIT_RW)
-	{
-		ide->regs.status &= ~ATA_STATUS_IRQ;
-		ide->null = 1;
-	}
-
-	ide->state = IDE_STATE_WAIT_WR;
-	ide->regs.pkt_io_size = ide->prepcnt * 256;
-	ide_set_regs(ide);
-}
-
 int cdrom_handle_cmd(ide_config *ide)
 {
 	uint8_t drv;
@@ -1356,14 +1338,9 @@ int cdrom_handle_cmd(ide_config *ide)
 		memset(&ide->regs, 0, sizeof(ide->regs));
 		ide->regs.drv = drv;
 		ide->regs.pkt_io_size = 256;
-		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ | ATA_STATUS_END;
 		ide_set_regs(ide);
-		ide->state = IDE_STATE_WAIT_END;
-		break;
-
-	case 0xFA: // mount image
-		ide->state = IDE_STATE_INIT_RW;
-		prep_FA_cmd(ide);
+		ide->state = IDE_STATE_IDLE;
 		break;
 
 	case 0xEC: // identify (fail)

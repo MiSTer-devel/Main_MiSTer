@@ -95,16 +95,6 @@ static uint32_t cpu_get_clock()
 	return clock ? clock : 90500000;
 }
 
-static uint16_t dma_sdio(int status)
-{
-	uint16_t res;
-	EnableIO();
-	res = spi_w(UIO_DMA_SDIO);
-	if(status || !res) res = (uint8_t)spi_w((uint16_t)status);
-	DisableIO();
-	return res;
-}
-
 /*
 static uint32_t dma_get(uint32_t address)
 {
@@ -223,35 +213,6 @@ static fileTYPE fdd1_image = {};
 static fileTYPE ide_image[4] = {};
 static bool boot_from_floppy = 1;
 
-static int img_mount(fileTYPE *f, const char *name, int rw)
-{
-	FileClose(f);
-	int writable = 0, ret = 0;
-
-	int len = strlen(name);
-	if (len)
-	{
-		const char *ext = name+len-4;
-		if (!strncasecmp(".chd", ext, 4))
-		{
-			ret = 1;
-		} else {
-			writable = rw && FileCanWrite(name);
-			ret = FileOpenEx(f, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
-			if (!ret) printf("Failed to open file %s\n", name);
-		}
-	}
-
-	if (!ret)
-	{
-		f->size = 0;
-		return 0;
-	}
-
-	printf("Mount %s as %s\n", name, writable ? "read-write" : "read-only");
-	return 1;
-}
-
 static int img_read(fileTYPE *f, uint32_t lba, void *buf, uint32_t cnt)
 {
 	if (!FileSeekLBA(f, lba)) return 0;
@@ -323,7 +284,7 @@ static void fdd_set(int num, char* filename)
 	uint32_t base = newcore ? FDD0_BASE_NEW : FLOPPY0_BASE_OLD;
 	fileTYPE *fdd_image = num ? &fdd1_image : &fdd0_image;
 
-	int floppy = img_mount(fdd_image, filename, 1);
+	int floppy = ide_img_mount(fdd_image, filename, 1);
 	uint32_t size = fdd_image->size/512;
 	printf("floppy size: %d blks\n", size);
 	if (floppy && size)
@@ -418,12 +379,12 @@ static void hdd_set(int num, char* filename)
 	if (num > 1 && !vhd)
 	{
 		const char *img_name = cdrom_parse(num, filename);
-		if (img_name) present = img_mount(&ide_image[num], img_name, 0);
+		if (img_name) present = ide_img_mount(&ide_image[num], img_name, 0);
 		if (present) cd = 1;
 	}
 
-	if(!present && vhd) present = img_mount(&ide_image[num], filename, 1);
-	x86_ide_set(num, base, present ? &ide_image[num] : 0, v3 ? 3 : newcore ? 2 : 0, cd);
+	if(!present && vhd) present = ide_img_mount(&ide_image[num], filename, 1);
+	ide_set(num, base, present ? &ide_image[num] : 0, v3 ? 3 : newcore ? 2 : 0, cd);
 }
 
 static uint8_t bin2bcd(unsigned val)
@@ -433,7 +394,7 @@ static uint8_t bin2bcd(unsigned val)
 
 static void check_ver()
 {
-	uint16_t flg = dma_sdio(0);
+	uint16_t flg = ide_check();
 	newcore = ((flg & 0xC000) == 0xC000);
 	v3 = ((flg & 0xF000) == 0xE000);
 }
@@ -455,7 +416,15 @@ void x86_init()
 		IOWR(PC_BUS_BASE_OLD, 1, 0x000000F0);
 	}
 
-	x86_ide_reset(((dma_sdio(0)>>8) & 3) ^ 1);
+	uint8_t cfg = ide_check();
+	uint8_t hotswap[4] = {
+		0,
+		0,
+		((cfg >> 8) & 1) ^ 1,
+		(cfg >> 9) & 1,
+	};
+	ide_reset(hotswap);
+
 	fdd_set(0, config.img_name[0]);
 	fdd_set(1, config.img_name[1]);
 	for (int i = 0; i < 4; i++) hdd_set(i, config.img_name[i + 2]);
@@ -699,7 +668,7 @@ void img_io_old(uint8_t sd_req)
 			printf("Error: image is not ready.\n");
 		}
 
-		dma_sdio(res ? 1 : 2);
+		ide_check(res ? 1 : 2);
 	}
 	else if (sd_req == 2)
 	{
@@ -732,7 +701,7 @@ void img_io_old(uint8_t sd_req)
 			printf("Error: image is not ready.\n");
 		}
 
-		dma_sdio(res ? 1 : 2);
+		ide_check(res ? 1 : 2);
 	}
 }
 
@@ -746,16 +715,16 @@ void x86_poll()
 
 	x86_share_poll();
 
-	uint16_t sd_req = dma_sdio(0);
+	uint16_t sd_req = ide_check();
 	if (sd_req)
 	{
 		if (sd_req & 0x8000)
 		{
-			if (v3) x86_ide_io(0, sd_req & 7);
+			if (v3) ide_io(0, sd_req & 7);
 			else if (sd_req & 3) img_io(&ide_image[0], HDD0_BASE_NEW, sd_req & 1, 16);
 
 			sd_req >>= 3;
-			if (v3) x86_ide_io(1, sd_req & 7);
+			if (v3) ide_io(1, sd_req & 7);
 			else if (sd_req & 3) img_io(&ide_image[1], HDD1_BASE_NEW, sd_req & 1, 16);
 
 			sd_req >>= 3;
@@ -773,7 +742,7 @@ void x86_set_image(int num, char *filename)
 	memset(config.img_name[num], 0, sizeof(config.img_name[0]));
 	strcpy(config.img_name[num], filename);
 	if (num < 2) fdd_set(num, filename);
-	else if (v3 && x86_ide_is_placeholder(num - 2)) hdd_set(num - 2, filename);
+	else if (v3 && ide_is_placeholder(num - 2)) hdd_set(num - 2, filename);
 }
 
 void x86_config_save()

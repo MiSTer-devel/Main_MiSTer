@@ -5,13 +5,12 @@
 
 #define ATA_STATUS_BSY  0x80  // busy
 #define ATA_STATUS_RDY  0x40  // ready
-#define ATA_STATUS_DF   0x20  // device fault
-#define ATA_STATUS_WFT  0x20  // write fault (old name)
-#define ATA_STATUS_SKC  0x10  // seek complete
+#define ATA_STATUS_RDP  0x20  // performance read
+#define ATA_STATUS_DSC  0x10  // seek complete
 #define ATA_STATUS_SERV 0x10  // service
 #define ATA_STATUS_DRQ  0x08  // data request
 #define ATA_STATUS_IRQ  0x04  // rise IRQ
-#define ATA_STATUS_IDX  0x02  // index
+#define ATA_STATUS_END  0x02  // last read
 #define ATA_STATUS_ERR  0x01  // error (ATA)
 #define ATA_STATUS_CHK  0x01  // check (ATAPI)
 
@@ -28,13 +27,10 @@
 #define IDE_STATE_IDLE          0
 #define IDE_STATE_RESET         1
 #define IDE_STATE_INIT_RW       2
-#define IDE_STATE_WAIT_RD       3
-#define IDE_STATE_WAIT_WR       4
-#define IDE_STATE_WAIT_END      5
-#define IDE_STATE_WAIT_PKT_CMD  6
-#define IDE_STATE_WAIT_PKT_RD   7
-#define IDE_STATE_WAIT_PKT_END  8
-#define IDE_STATE_WAIT_PKT_MODE 9
+#define IDE_STATE_WAIT_PKT_CMD  3
+#define IDE_STATE_WAIT_PKT_RD   4
+#define IDE_STATE_WAIT_PKT_END  5
+#define IDE_STATE_WAIT_PKT_MODE 6
 
 typedef struct
 {
@@ -82,6 +78,7 @@ typedef struct
 	uint16_t heads;
 	uint16_t spt;
 	uint32_t total_sectors;
+	uint32_t spb;
 
 	uint8_t  placeholder;
 	uint8_t  allow_placeholder;
@@ -98,7 +95,7 @@ typedef struct
 	uint32_t play_end_lba;
 
 	chd_file	*chd_f;
-	int 	chd_hunknum; 	
+	int 	chd_hunknum;
 	uint8_t	*chd_hunkbuf;
 	uint32_t chd_total_size;
 	uint32_t chd_last_partial_lba;
@@ -109,6 +106,7 @@ typedef struct
 typedef struct
 {
 	uint32_t base;
+	uint32_t bitoff;
 	uint32_t state;
 	uint32_t null;
 	uint32_t prepcnt;
@@ -116,6 +114,8 @@ typedef struct
 
 	drive_t drive[2];
 } ide_config;
+
+#include "x86_cdrom.h"
 
 extern ide_config ide_inst[2];
 extern const uint32_t ide_io_max_size;
@@ -125,9 +125,11 @@ void ide_print_regs(regs_t *regs);
 void ide_get_regs(ide_config *ide);
 void ide_set_regs(ide_config *ide);
 
-void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd);
-void x86_ide_io(int num, int req);
-int x86_ide_is_placeholder(int num);
-void x86_ide_reset(uint8_t hotswap);
+uint16_t ide_check(int status = 0);
+void ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd, int sectors = 0, int heads = 0);
+void ide_io(int num, int req);
+int ide_is_placeholder(int num);
+void ide_reset(uint8_t hotswap[4]);
+int ide_img_mount(fileTYPE *f, const char *name, int rw);
 
 #endif

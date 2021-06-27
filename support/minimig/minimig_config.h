@@ -33,7 +33,7 @@ typedef struct
 
 typedef struct
 {
-	unsigned char enabled;
+	unsigned char cfg;
 	unsigned char reserved;
 	char filename[1024];
 } mm_hardfileTYPE;

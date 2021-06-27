@@ -30,7 +30,13 @@
 	#define dbg_hexdump(...)  void()
 #endif
 
-#define IOWR(base, reg, value, ver) x86_dma_set((base) + ((ver) ? (reg) : ((reg)<<2)), value)
+#if 0
+	#define dbg2_printf     printf
+#else
+	#define dbg2_printf(...)   void()
+#endif
+
+#define IOWR(base, reg, value, ver) x86_dma_set((base) + ((ver) ? (reg) : ((reg)<<2)), (value))
 
 #define ide_send_data(databuf, size) x86_dma_sendbuf(ide->base + 255, (size), (uint32_t*)(databuf))
 #define ide_recv_data(databuf, size) x86_dma_recvbuf(ide->base + 255, (size), (uint32_t*)(databuf))
@@ -39,6 +45,46 @@ const uint32_t ide_io_max_size = 32;
 uint8_t ide_buf[ide_io_max_size * 512];
 
 ide_config ide_inst[2] = {};
+
+uint16_t ide_check(int status)
+{
+	uint16_t res;
+	EnableIO();
+	res = spi_w(UIO_DMA_SDIO);
+	if (status || !res) res = (uint8_t)spi_w((uint16_t)status);
+	DisableIO();
+	return res;
+}
+
+int ide_img_mount(fileTYPE *f, const char *name, int rw)
+{
+	FileClose(f);
+	int writable = 0, ret = 0;
+
+	int len = strlen(name);
+	if (len)
+	{
+		const char *ext = name + len - 4;
+		if (!strncasecmp(".chd", ext, 4))
+		{
+			ret = 1;
+		}
+		else {
+			writable = rw && FileCanWrite(name);
+			ret = FileOpenEx(f, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+			if (!ret) printf("Failed to open file %s\n", name);
+		}
+	}
+
+	if (!ret)
+	{
+		f->size = 0;
+		return 0;
+	}
+
+	printf("Mount %s as %s\n", name, writable ? "read-write" : "read-only");
+	return 1;
+}
 
 void ide_print_regs(regs_t *regs)
 {
@@ -78,27 +124,45 @@ void ide_get_regs(ide_config *ide)
 
 void ide_set_regs(ide_config *ide)
 {
-	uint32_t data[3];
+	if (!(ide->regs.status & (ATA_STATUS_BSY | ATA_STATUS_ERR))) ide->regs.status |= ATA_STATUS_DSC;
 
-	if(!(ide->regs.status & (ATA_STATUS_BSY | ATA_STATUS_ERR))) ide->regs.status |= ATA_STATUS_SKC;
+	uint8_t data[12] =
+	{
+		(uint8_t)((ide->drive[ide->regs.drv].cd) ? 0x80 : ide->regs.io_size),
+		(uint8_t)(ide->regs.error),
+		(uint8_t)(ide->regs.sector_count),
+		(uint8_t)(ide->regs.sector),
 
-	data[0] = (ide->drive[ide->regs.drv].cd) ? 0x80 : ide->regs.io_size;
-	data[0] |= ide->regs.error << 8;
-	data[0] |= ide->regs.sector_count << 16;
-	data[0] |= ide->regs.sector << 24;
+		(uint8_t)(ide->regs.cylinder),
+		(uint8_t)(ide->regs.cylinder >> 8),
+		(uint8_t)(ide->regs.cylinder >> 16),
+		(uint8_t)(ide->regs.cylinder >> 24),
 
-	data[1] = ide->regs.cylinder;
+		(uint8_t)(ide->drive[ide->regs.drv].cd ? ide->regs.pkt_io_size : 0),
+		(uint8_t)(ide->drive[ide->regs.drv].cd ? ide->regs.pkt_io_size >> 8 : 0),
+		(uint8_t)((ide->regs.lba ? 0xE0 : 0xA0) | (ide->regs.drv ? 0x10 : 0x00) | ide->regs.head),
+		(uint8_t)(ide->regs.status)
+	};
 
-	data[2] = (ide->drive[ide->regs.drv].cd) ? ide->regs.pkt_io_size : 0;
-	data[2] |= ide->regs.head << 16;
-	data[2] |= ide->regs.drv << 20;
-	data[2] |= (ide->regs.lba ? 7 : 5) << 21;
-	data[2] |= ide->regs.status << 24;
-
-	x86_dma_sendbuf(ide->base, 3, data);
+	//hexdump(data, 12, ide->base);
+	x86_dma_sendbuf(ide->base, 3, (uint32_t*)data);
 }
 
-void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
+static void ide_set_geometry(drive_t *drive, uint16_t sectors, uint16_t heads)
+{
+	printf("New SPT=%d, Heads=%d\n", sectors, heads);
+
+	drive->heads = heads ? heads : 16;
+	drive->spt = sectors ? sectors : 256;
+
+	uint32_t cylinders = drive->f->size / (drive->heads * drive->spt * 512);
+	if (cylinders > 65535) cylinders = 65535;
+
+	//Maximum 137GB images are supported.
+	drive->cylinders = cylinders;
+}
+
+void ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd, int sectors, int heads)
 {
 	int drvnum = num;
 	int drv = (ver == 3) ? (num & 1) : 0;
@@ -114,12 +178,14 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 	drive->cylinders = 0;
 	drive->heads = 0;
 	drive->spt = 0;
+	drive->spb = 0;
 	//drive->total_sectors = 0;
 
 	drive->present = f ? 1 : 0;
 	ide_inst[num].state = IDE_STATE_RESET;
+	ide_inst[num].bitoff = num * 3;
 
-	drive->cd = drive->present && (ver == 3) && num && cd;
+	drive->cd = drive->present && (ver == 3) && cd;
 
 	if (ver == 3)
 	{
@@ -153,17 +219,102 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 
 	if (!drive->cd)
 	{
-		if (drive->present)
+		if (drive->present) ide_set_geometry(drive, sectors, heads);
+
+		/*uint16_t identify[256] =
 		{
-			drive->heads = 16;
-			drive->spt = (ver == 3) ? 256 : 63;
+			0x0040, 											//word 0
+			drive->cylinders,									//word 1
+			0x0000,												//word 2 reserved
+			drive->heads,										//word 3
+			0x0000,												//word 4 obsolete
+			0x0000,												//word 5 obsolete
+			drive->spt,											//word 6
+			0x0000,												//word 7 vendor specific
+			0x0000,												//word 8 vendor specific
+			0x0000,												//word 9 vendor specific
+			('A' << 8) | 'O',									//word 10
+			('H' << 8) | 'D',									//word 11
+			('0' << 8) | '0',									//word 12
+			('0' << 8) | '0',									//word 13
+			('0' << 8) | ' ',									//word 14
+			(' ' << 8) | ' ',									//word 15
+			(' ' << 8) | ' ',									//word 16
+			(' ' << 8) | ' ',									//word 17
+			(' ' << 8) | ' ',									//word 18
+			(' ' << 8) | ' ',									//word 19
+			0,   												//word 20 buffer type
+			0,													//word 21 cache size
+			0,													//word 22 number of ecc bytes
+			0,0,0,0,											//words 23..26 firmware revision
+			(' ' << 8) | ' ',									//words 27..46 model number
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			(' ' << 8) | ' ',
+			0x8010,												//word 47 max multiple sectors
+			0,													//word 48 dword io
+			1 << 9,												//word 49 lba supported
+			0,													//word 50 reserved
+			0,													//word 51 pio timing
+			0,													//word 52 pio timing
+			1,													//word 53 valid fields
+			drive->cylinders, 									//word 54
+			drive->heads,										//word 55
+			drive->spt,											//word 56
+			(uint16_t)(drive->total_sectors & 0xFFFF),			//word 57
+			(uint16_t)(drive->total_sectors >> 16),				//word 58
+			0,													//word 59 multiple sectors
+			(uint16_t)(drive->total_sectors & 0xFFFF),			//word 60 LBA-28
+			(uint16_t)(drive->total_sectors >> 16),				//word 61 LBA-28
+			0,													//word 62 single word dma modes
+			0,													//word 63 multiple word dma modes
+			0,													//word 64 pio modes
+			0,0,0,0,											//word 65..68
+			0,0,0,0,0,0,0,0,0,0,0,								//word 69..79
+			0,													//word 80 ata modes
+			0,													//word 81 minor version number
+			0, 													//word 82 supported commands
+			0,													//word 83
+			0,	    											//word 84
+			0,  												//word 85
+			0,													//word 86
+			0,			    									//word 87
+			0,													//word 88
+			0,0,0,0,											//word 89..92
+			0,													//word 93
+			0,0,0,0,0,0,										//word 94..99
+			(uint16_t)(drive->total_sectors & 0xFFFF),			//word 100 LBA-48
+			(uint16_t)(drive->total_sectors >> 16),				//word 101 LBA-48
+			0,													//word 102 LBA-48
+			0,													//word 103 LBA-48
 
-			uint32_t cylinders = drive->f->size / (drive->heads * drive->spt * 512);
-			if (cylinders > 65535) cylinders = 65535;
+			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	//word 104..127
 
-			//Maximum 137GB images are supported.
-			drive->cylinders = cylinders;
-		}
+			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,					//word 128..255
+			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+			0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+		};*/
 
 		uint16_t identify[256] =
 		{
@@ -234,14 +385,14 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 			0x007E,												//word 80 ata modes
 			0x0000,												//word 81 minor version number
 			(1 << 14) | (1 << 9), 								//word 82 supported commands
-			(1 << 14) | (1 << 13) | (1 << 12) | (1 << 10),		//word 83
+			(1 << 14) | (1 << 13) | (1 << 12),					//word 83
 			1 << 14,	    									//word 84
 			(1 << 14) | (1 << 9),  								//word 85
-			(1 << 14) | (1 << 13) | (1 << 12) | (1 << 10),		//word 86
+			(1 << 14) | (1 << 13) | (1 << 12),					//word 86
 			1 << 14,	    									//word 87
 			0x0000,												//word 88
 			0,0,0,0,											//word 89..92
-			1 | (1 << 14) | (1 << 13) | (1 << 9) | (1 << 8) | (1 << 3) | (1 << 1) | (1 << 0), //word 93
+			(1 << 14) | (1 << 13) | (1 << 9) | (1 << 8) | (1 << 3) | (1 << 1) | (1 << 0), //word 93
 			0,0,0,0,0,0,										//word 94..99
 			(uint16_t)(drive->total_sectors & 0xFFFF),			//word 100 LBA-48
 			(uint16_t)(drive->total_sectors >> 16),				//word 101 LBA-48
@@ -370,6 +521,7 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 			if (*name) drive->id[27 + i] = ((*name++) << 8) | 0x20;
 			if (*name) drive->id[27 + i] = (drive->id[27 + i] & 0xFF00) | (*name++);
 		}
+		//hexdump(drive->id, 256);
 	}
 
 	if (ver < 3)
@@ -388,91 +540,166 @@ void x86_ide_set(uint32_t num, uint32_t baseaddr, fileTYPE *f, int ver, int cd)
 		(ver < 3) ? num : (num * 2 + drv), drive->present, drive->cylinders, drive->heads, drive->spt, drive->total_sectors);
 }
 
-static void process_read(ide_config *ide)
+static uint32_t get_lba(ide_config *ide)
 {
-	uint32_t lba = ide->regs.sector | (ide->regs.cylinder << 8) | (ide->regs.head << 24);
-
-	uint16_t cnt = ide->regs.sector_count;
-	if (!cnt || cnt > ide_io_max_size) cnt = ide_io_max_size;
-
-	if (ide->state == IDE_STATE_INIT_RW)
+	uint32_t lba;
+	if (ide->regs.lba)
 	{
-		//printf("Read from LBA: %d\n", lba);
-		ide->null = !FileSeekLBA(ide->drive[ide->regs.drv].f, lba);
-	}
-
-	if (!ide->null) ide->null = (FileReadAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
-	if (ide->null) memset(ide_buf, 0, cnt * 512);
-
-	ide_send_data(ide_buf, cnt * 128);
-
-	lba += cnt;
-	ide->regs.sector_count -= cnt;
-
-	ide->regs.sector = lba;
-	lba >>= 8;
-	ide->regs.cylinder = lba;
-	lba >>= 16;
-	ide->regs.head = lba & 0xF;
-
-	ide->state = ide->regs.sector_count ? IDE_STATE_WAIT_RD : IDE_STATE_WAIT_END;
-
-	ide->regs.io_size = cnt;
-	ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
-	ide_set_regs(ide);
-}
-
-static void prep_write(ide_config *ide)
-{
-	ide->prepcnt = ide->regs.sector_count;
-	if (!ide->prepcnt || ide->prepcnt > ide_io_max_size) ide->prepcnt = ide_io_max_size;
-
-	ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
-
-	if (ide->state == IDE_STATE_INIT_RW)
-	{
-		ide->regs.status &= ~ATA_STATUS_IRQ;
-		ide->null = 1;
-
-		if (ide->regs.cmd != 0xFA)
-		{
-			uint32_t lba = ide->regs.sector | (ide->regs.cylinder << 8) | (ide->regs.head << 24);
-			//printf("Write to LBA: %d\n", lba);
-			ide->null = !FileSeekLBA(ide->drive[ide->regs.drv].f, lba);
-		}
-	}
-
-	ide->state = IDE_STATE_WAIT_WR;
-	ide->regs.io_size = ide->prepcnt;
-	ide_set_regs(ide);
-}
-
-static void process_write(ide_config *ide)
-{
-	ide_recv_data(ide_buf, ide->prepcnt * 128);
-	if (ide->regs.cmd == 0xFA)
-	{
-		ide->regs.sector_count = 0;
-		char* filename = user_io_make_filepath(HomeDir(), (char*)ide_buf);
-		int drvnum = (ide->regs.head == 1) ? 0 : (ide->regs.head == 2) ? 1 : (ide->drive[ide->regs.drv].drvnum + 2);
-
-		static const char* names[6] = { "fdd0", "fdd1", "ide00", "ide01", "ide10", "ide11" };
-		printf("Request for new image for drive %s: %s\n", names[drvnum], filename);
-		x86_set_image(drvnum, filename);
+		lba = ide->regs.sector | (ide->regs.cylinder << 8) | (ide->regs.head << 24);
 	}
 	else
 	{
-		if (!ide->null) ide->null = (FileWriteAdv(ide->drive[ide->regs.drv].f, ide_buf, ide->prepcnt * 512, -1) <= 0);
+		drive_t *drive = &ide->drive[ide->regs.drv];
+		dbg2_printf("  CHS: %d/%d/%d (%d/%d)\n", ide->regs.cylinder, ide->regs.head, ide->regs.sector, drive->heads, drive->spt);
+		lba = ide->regs.cylinder;
+		lba *= drive->heads;
+		lba += ide->regs.head;
+		lba *= drive->spt;
+		lba += ide->regs.sector - 1;
+	}
 
-		uint32_t lba = ide->regs.sector | (ide->regs.cylinder << 8) | (ide->regs.head << 24);
-		lba += ide->prepcnt;
-		ide->regs.sector_count -= ide->prepcnt;
+	dbg2_printf("  LBA: %u\n", lba);
+	return lba;
+}
 
+static void put_lba(ide_config *ide, uint32_t lba)
+{
+	if (ide->regs.lba)
+	{
 		ide->regs.sector = lba;
 		lba >>= 8;
 		ide->regs.cylinder = lba;
 		lba >>= 16;
 		ide->regs.head = lba & 0xF;
+	}
+	else
+	{
+		drive_t *drive = &ide->drive[ide->regs.drv];
+		uint32_t hspt = drive->heads * drive->spt;
+		ide->regs.cylinder = lba / hspt;
+		lba = lba % hspt;
+		ide->regs.head = lba / drive->spt;
+		lba = lba % drive->spt;
+		ide->regs.sector = lba + 1;
+	}
+}
+
+inline uint16_t get_cnt(ide_config *ide)
+{
+	drive_t *drive = &ide->drive[ide->regs.drv];
+	dbg2_printf("  Cnt: %d (max = %d)\n", ide->regs.sector_count, drive->spb);
+	uint16_t cnt = ide->regs.sector_count;
+	if (!cnt || cnt > drive->spb)
+	{
+		cnt = drive->spb;
+		dbg2_printf("  New cnt: %d\n", cnt);
+	}
+	return cnt;
+}
+
+static void process_read(ide_config *ide, int multi)
+{
+	uint32_t lba = get_lba(ide);
+	uint16_t ide_req = 0;
+
+	dbg2_printf("  sector_count: %d\n", ide->regs.sector_count);
+
+	uint32_t cnt = multi ? get_cnt(ide) : 1;
+	ide->null = !FileSeekLBA(ide->drive[ide->regs.drv].f, lba);
+	if (!ide->null) ide->null = (FileReadAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
+	if (ide->null) memset(ide_buf, 0, cnt * 512);
+
+	while (1)
+	{
+		lba += cnt;
+		ide->regs.sector_count -= cnt;
+		put_lba(ide, lba);
+
+		ide->regs.io_size = cnt;
+		ide->regs.status = ATA_STATUS_RDP | ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
+		if (!ide->regs.sector_count) ide->regs.status |= ATA_STATUS_END;
+
+		ide_set_regs(ide);
+		ide_send_data(ide_buf, cnt * 128);
+
+		if (!ide->regs.sector_count)
+		{
+			//ATA_STATUS_END will set ATA_STATUS_RDY at the end
+			ide->state = IDE_STATE_IDLE;
+			break;
+		}
+
+		cnt = multi ? get_cnt(ide) : 1;
+		if (!ide->null) ide->null = (FileReadAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
+		if (ide->null) memset(ide_buf, 0, cnt * 512);
+
+		ide_req = 0;
+		while (!ide_req) ide_req = (ide_check() >> ide->bitoff) & 7;
+
+		if (ide_req != 5)
+		{
+			ide->state = IDE_STATE_IDLE;
+			break;
+		}
+	}
+
+	dbg2_printf("  finish\n");
+}
+
+static void process_write(ide_config *ide, int multi)
+{
+	uint32_t lba = get_lba(ide);
+	uint32_t cnt = 1;
+	uint16_t ide_req;
+
+	ide->null = (ide->regs.cmd != 0xFA) ? !FileSeekLBA(ide->drive[ide->regs.drv].f, lba) : 1;
+	uint8_t irq = 0;
+
+	while (1)
+	{
+		cnt = multi ? get_cnt(ide) : 1;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | irq;
+		irq = ATA_STATUS_IRQ;
+
+		ide->regs.io_size = cnt;
+		ide_set_regs(ide);
+
+		ide_req = 0;
+		while (!ide_req) ide_req = (ide_check() >> ide->bitoff) & 7;
+
+		if (ide_req != 5)
+		{
+			ide->state = IDE_STATE_IDLE;
+			break;
+		}
+
+		ide_recv_data(ide_buf, cnt * 128);
+
+		if (ide->regs.cmd == 0xFA)
+		{
+			ide->regs.sector_count = 0;
+			char* filename = user_io_make_filepath(HomeDir(), (char*)ide_buf);
+			int drvnum = (ide->regs.head == 1) ? 0 : (ide->regs.head == 2) ? 1 : (ide->drive[ide->regs.drv].drvnum + 2);
+
+			static const char* names[6] = { "fdd0", "fdd1", "ide00", "ide01", "ide10", "ide11" };
+			printf("Request for new image for drive %s: %s\n", names[drvnum], filename);
+			x86_set_image(drvnum, filename);
+		}
+		else
+		{
+			if (!ide->null) ide->null = (FileWriteAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
+			lba += cnt;
+			ide->regs.sector_count -= cnt;
+			put_lba(ide, lba);
+		}
+
+		if (!ide->regs.sector_count)
+		{
+			ide->state = IDE_STATE_IDLE;
+			ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
+			ide_set_regs(ide);
+			break;
+		}
 	}
 }
 
@@ -481,75 +708,78 @@ static int handle_hdd(ide_config *ide)
 	switch (ide->regs.cmd)
 	{
 	case 0xEC: // identify
-	{
-		//print_regs(&ide->regs);
-		ide_send_data(ide->drive[ide->regs.drv].id, 128);
-
-		uint8_t drv = ide->regs.drv;
-		memset(&ide->regs, 0, sizeof(ide->regs));
-		ide->regs.drv = drv;
+		{
+			uint8_t drv = ide->regs.drv;
+			memset(&ide->regs, 0, sizeof(ide->regs));
+			ide->regs.drv = drv;
+		}
 		ide->regs.io_size = 1;
-		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
+		ide->regs.status = ATA_STATUS_RDP | ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ | ATA_STATUS_END;
 		ide_set_regs(ide);
-		ide->state = IDE_STATE_WAIT_END;
-	}
-	break;
+		ide_send_data(ide->drive[ide->regs.drv].id, 128);
+		break;
+
+	case 0xC4: // read multiple
+		if (!ide->drive[ide->regs.drv].spb)
+		{
+			printf("(!) Read multiple is disabled!\n");
+			return 1;
+		}
+		process_read(ide, 1);
+		break;
 
 	case 0x20: // read with retry
 	case 0x21: // read
-	case 0xC4: // read multiple
-	{
-		if (!ide->regs.lba)
+		process_read(ide, 0);
+		break;
+
+	case 0xC5: // write multiple
+		if (!ide->drive[ide->regs.drv].spb)
 		{
-			printf("(!) Unsupported Non-LBA read!\n");
+			printf("(!) Read multiple is disabled!\n");
 			return 1;
 		}
-
-		ide->state = IDE_STATE_INIT_RW;
-		process_read(ide);
-	}
-	break;
+		process_write(ide, 1);
+		break;
 
 	case 0x30: // write with retry
 	case 0x31: // write
-	case 0xC5: // write multiple
-	{
-		if (!ide->regs.lba)
-		{
-			printf("(!) Unsupported Non-LBA write!\n");
-			return 1;
-		}
-
-		ide->state = IDE_STATE_INIT_RW;
-		prep_write(ide);
-	}
-	break;
+		process_write(ide, 0);
+		break;
 
 	case 0xFA: // mount image
-	{
-		ide->state = IDE_STATE_INIT_RW;
-		prep_write(ide);
-	}
-	break;
+		process_write(ide, 0);
+		break;
 
 	case 0xC6: // set multople
-	{
-		if (!ide->regs.sector_count || ide->regs.sector_count > ide_io_max_size)
+		if (ide->regs.sector_count > ide_io_max_size)
 		{
 			return 1;
 		}
-
-		ide->regs.status = ATA_STATUS_RDY;
+		ide->drive[ide->regs.drv].spb = ide->regs.sector_count;
+		printf("New block size: %d\n", ide->drive[ide->regs.drv].spb);
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
 		ide_set_regs(ide);
-	}
-	break;
+		break;
 
 	case 0x08: // reset (fail)
 		printf("Reset command (08h) for HDD not supported\n");
 		return 1;
 
+	case 0x10 ... 0x1F: // recalibrate
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
+		ide->regs.cylinder = 0;
+		ide_set_regs(ide);
+		break;
+
+	case 0x91: // initialize device parameters
+		ide_set_geometry(&ide->drive[ide->regs.drv], ide->regs.sector_count, ide->regs.head + 1);
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
+		ide_set_regs(ide);
+		break;
+
 	default:
-		printf("(!) Unsupported command\n");
+		printf("(!) Unsupported command (%04X)\n", ide->base);
 		ide_print_regs(&ide->regs);
 		return 1;
 	}
@@ -557,9 +787,11 @@ static int handle_hdd(ide_config *ide)
 	return 0;
 }
 
-void x86_ide_io(int num, int req)
+void ide_io(int num, int req)
 {
 	ide_config *ide = &ide_inst[num];
+
+	//printf("req: %d, disk: %d\n", req, num);
 
 	if (req == 0) // no request
 	{
@@ -578,9 +810,12 @@ void x86_ide_io(int num, int req)
 		ide->state = IDE_STATE_IDLE;
 		ide_get_regs(ide);
 
+		dbg2_printf("IDE command: %02X (on %d)\n", ide->regs.cmd, ide->regs.drv);
+
 		int err = 0;
 
-		if (ide->drive[ide->regs.drv].cd) err = cdrom_handle_cmd(ide);
+		if(ide->regs.cmd == 0xFA) err = handle_hdd(ide);
+		else if (ide->drive[ide->regs.drv].cd) err = cdrom_handle_cmd(ide);
 		else if (!ide->drive[ide->regs.drv].present) err = 1;
 		else err = handle_hdd(ide);
 
@@ -593,32 +828,8 @@ void x86_ide_io(int num, int req)
 	}
 	else if (req == 5) // data request
 	{
-		dbg_printf("IDE data request\n");
-		if (ide->state == IDE_STATE_WAIT_END)
-		{
-			ide->state = IDE_STATE_IDLE;
-			ide->regs.status = ATA_STATUS_RDY;
-			ide_set_regs(ide);
-		}
-		else if (ide->state == IDE_STATE_WAIT_RD)
-		{
-			process_read(ide);
-		}
-		else if (ide->state == IDE_STATE_WAIT_WR)
-		{
-			process_write(ide);
-			if (ide->regs.sector_count)
-			{
-				prep_write(ide);
-			}
-			else
-			{
-				ide->state = IDE_STATE_IDLE;
-				ide->regs.status = ATA_STATUS_RDY;
-				ide_set_regs(ide);
-			}
-		}
-		else if (ide->state == IDE_STATE_WAIT_PKT_CMD)
+		dbg2_printf("IDE data request (on %d)\n", ide->regs.drv);
+		if (ide->state == IDE_STATE_WAIT_PKT_CMD)
 		{
 			cdrom_handle_pkt(ide);
 		}
@@ -669,20 +880,20 @@ void x86_ide_io(int num, int req)
 	}
 }
 
-int x86_ide_is_placeholder(int num)
+int ide_is_placeholder(int num)
 {
 	return ide_inst[num / 2].drive[num & 1].placeholder;
 }
 
-void x86_ide_reset(uint8_t hotswap)
+void ide_reset(uint8_t hotswap[4])
 {
 	ide_inst[0].drive[0].placeholder = 0;
 	ide_inst[0].drive[1].placeholder = 0;
 	ide_inst[1].drive[0].placeholder = 0;
 	ide_inst[1].drive[1].placeholder = 0;
 
-	ide_inst[0].drive[0].allow_placeholder = 0;
-	ide_inst[0].drive[1].allow_placeholder = 0;
-	ide_inst[1].drive[0].allow_placeholder = hotswap & 1;
-	ide_inst[1].drive[1].allow_placeholder = (hotswap >> 1) & 1;
+	ide_inst[0].drive[0].allow_placeholder = hotswap[0];
+	ide_inst[0].drive[1].allow_placeholder = hotswap[1];
+	ide_inst[1].drive[0].allow_placeholder = hotswap[2];
+	ide_inst[1].drive[1].allow_placeholder = hotswap[3];
 }

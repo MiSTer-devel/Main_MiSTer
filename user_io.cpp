@@ -35,6 +35,7 @@
 #include "shmem.h"
 
 #include "support.h"
+#include "support/x86/x86_ide.h"
 
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};
@@ -2500,7 +2501,17 @@ void user_io_poll()
 		spi_w(0);
 		DisableFpga();
 		HandleFDD(c1, c2);
-		HandleHDD(c1, c2);
+
+		uint16_t sd_req = ide_check();
+		if (sd_req & 0x8000)
+		{
+			ide_io(0, sd_req & 7);
+			ide_io(1, (sd_req >> 3) & 7);
+		}
+		else
+		{
+			HandleHDD(c1, c2);
+		}
 		UpdateDriveStatus();
 
 		kbd_fifo_poll();

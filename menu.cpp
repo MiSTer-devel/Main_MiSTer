@@ -59,6 +59,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "recent.h"
 #include "support.h"
 #include "bootcore.h"
+#include "support/x86/x86_ide.h"
 
 /*menu states*/
 enum MENU
@@ -5118,10 +5119,10 @@ void HandleUI(void)
 				config_cpu_msg[minimig_config.cpu & 0x03] + 2,
 				config_chipset_msg[(minimig_config.chipset >> 2) & 7],
 				minimig_config.chipset & CONFIG_NTSC ? "N" : "P",
-				(minimig_config.enable_ide && (minimig_config.hardfile[0].enabled ||
-					minimig_config.hardfile[1].enabled ||
-					minimig_config.hardfile[2].enabled ||
-					minimig_config.hardfile[3].enabled)) ? "/HD" : "",
+				(minimig_config.enable_ide && (minimig_config.hardfile[0].cfg ||
+					minimig_config.hardfile[1].cfg ||
+					minimig_config.hardfile[2].cfg ||
+					minimig_config.hardfile[3].cfg)) ? "/HD" : "",
 				config_memory_chip_msg[minimig_config.memory & 0x03],
 				fastcfg ? "+" : "",
 				fastcfg ? config_memory_fast_msg[(minimig_config.cpu>>1) & 1][fastcfg] : "",
@@ -5355,20 +5356,24 @@ void HandleUI(void)
 			uint n = 1, t = 4;
 			for (uint i = 0; i < 4; i++)
 			{
-				strcpy(s, (i & 2) ? " Secondary " : " Primary ");
-				strcat(s, (i & 1) ? "Slave: " : "Master: ");
-				strcat(s, minimig_config.hardfile[i].enabled ? "Enabled" : "Disabled");
-				OsdWrite(m++, s, minimig_config.enable_ide ? (menusub == n++) : 0, minimig_config.enable_ide == 0);
+				strcpy(s, (i & 2) ? " Sec. " : " Pri. ");
+				strcat(s, (i & 1) ? " Slave: " : "Master: ");
+				strcat(s, (minimig_config.hardfile[i].cfg == 2) ? "Removable/CD" : minimig_config.hardfile[i].cfg ? "Fixed/HDD" : "Disabled");
+				OsdWrite(m++, s, minimig_config.enable_ide ? (menusub == n++) : 0, minimig_config.enable_ide ==0);
 				if (minimig_config.hardfile[i].filename[0])
 				{
 					strcpy(s, "                                ");
-					strncpy(&s[3], minimig_config.hardfile[i].filename, 25);
+					char *path = user_io_get_core_path();
+					int len = strlen(path);
+					char *name = minimig_config.hardfile[i].filename;
+					if (!strncasecmp(name, path, len))  name += len + 1;
+					strncpy(&s[3], name, 25);
 				}
 				else
 				{
 					strcpy(s, "   ** not selected **");
 				}
-				enable = minimig_config.enable_ide && minimig_config.hardfile[i].enabled;
+				enable = minimig_config.enable_ide && minimig_config.hardfile[i].cfg;
 				if (enable) menumask |= t;	// Make hardfile selectable
 				OsdWrite(m++, s, menusub == n++, enable == 0);
 				t <<= 2;
@@ -5388,7 +5393,7 @@ void HandleUI(void)
 	case MENU_MINIMIG_DISK2:
 		saved_menustate = MENU_MINIMIG_DISK1;
 
-		if (select || recent)
+		if (select || recent || minus || plus)
 		{
 			if (menusub == 0)
 			{
@@ -5402,24 +5407,33 @@ void HandleUI(void)
 			{
 				if(menusub&1)
 				{
-					if (select)
+					if (select || minus || plus)
 					{
-						int num = (menusub - 1) / 2;
-						minimig_config.hardfile[num].enabled = minimig_config.hardfile[num].enabled ? 0 : 1;
+						int idx = (menusub - 1) / 2;
+						if (minus)
+						{
+							if (!minimig_config.hardfile[idx].cfg) minimig_config.hardfile[idx].cfg = 2;
+							else minimig_config.hardfile[idx].cfg--;
+						}
+						else
+						{
+							minimig_config.hardfile[idx].cfg++;
+							if (minimig_config.hardfile[idx].cfg > 2) minimig_config.hardfile[idx].cfg = 0;
+						}
 						menustate = MENU_MINIMIG_DISK1;
 					}
 				}
-				else
+				else if(select || recent)
 				{
 					fs_Options = SCANO_DIR | SCANO_UMOUNT;
 					fs_MenuSelect = MENU_MINIMIG_HDFFILE_SELECTED;
 					fs_MenuCancel = MENU_MINIMIG_DISK1;
-					strcpy(fs_pFileExt, "HDFVHDIMGDSK");
+					int idx = (menusub - 2) / 2;
+					strcpy(fs_pFileExt, (minimig_config.hardfile[idx].cfg == 2) ? "ISOCUECHDIMG" : "HDFVHDIMGDSK");
 					if (select)
 					{
-						int idx = (menusub - 2) / 2;
 						if (!Selected_S[idx][0]) memcpy(Selected_S[idx], minimig_config.hardfile[idx].filename, sizeof(Selected_S[idx]));
-						SelectFile(Selected_S[idx], "HDFVHDIMGDSK", fs_Options, fs_MenuSelect, fs_MenuCancel);
+						SelectFile(Selected_S[idx], fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
 					}
 					else if (recent_init(500)) menustate = MENU_RECENT1;
 				}
@@ -5457,7 +5471,16 @@ void HandleUI(void)
 			if (len > sizeof(minimig_config.hardfile[num].filename) - 1) len = sizeof(minimig_config.hardfile[num].filename) - 1;
 			if(len) memcpy(minimig_config.hardfile[num].filename, selPath, len);
 			minimig_config.hardfile[num].filename[len] = 0;
-			menustate = checkHDF(minimig_config.hardfile[num].filename, &rdb) ? MENU_MINIMIG_DISK1 : MENU_MINIMIG_HDFFILE_SELECTED2;
+
+			if (ide_is_placeholder(num))
+			{
+				OpenHardfile(num);
+				menustate = MENU_MINIMIG_DISK1;
+			}
+			else
+			{
+				menustate = checkHDF(minimig_config.hardfile[num].filename, &rdb) ? MENU_MINIMIG_DISK1 : MENU_MINIMIG_HDFFILE_SELECTED2;
+			}
 		}
 		break;
 

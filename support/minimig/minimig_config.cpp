@@ -17,6 +17,7 @@
 #include "minimig_hdd.h"
 #include "minimig_config.h"
 #include "minimig_share.h"
+#include "../x86/x86_ide.h"
 
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M" };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
@@ -325,11 +326,19 @@ static void ApplyConfiguration(char reloadkickstart)
 	printf("\nIDE state: %s.\n", minimig_config.enable_ide ? "enabled" : "disabled");
 	if (minimig_config.enable_ide)
 	{
-		printf("Primary Master HDD is %s.\n", minimig_config.hardfile[0].enabled ? "enabled" : "disabled");
-		printf("Primary Slave HDD is %s.\n", minimig_config.hardfile[1].enabled ? "enabled" : "disabled");
-		printf("Secondary Master HDD is %s.\n", minimig_config.hardfile[2].enabled ? "enabled" : "disabled");
-		printf("Secondary Slave HDD is %s.\n", minimig_config.hardfile[3].enabled ? "enabled" : "disabled");
+		printf("Primary Master HDD is %s.\n", (minimig_config.hardfile[0].cfg == 2) ? "CD" : minimig_config.hardfile[0].cfg ? "HDD" : "disabled");
+		printf("Primary Slave HDD is %s.\n", (minimig_config.hardfile[1].cfg == 2) ? "CD" : minimig_config.hardfile[1].cfg ? "HDD" : "disabled");
+		printf("Secondary Master HDD is %s.\n", (minimig_config.hardfile[2].cfg == 2) ? "CD" : minimig_config.hardfile[2].cfg ? "HDD" : "disabled");
+		printf("Secondary Slave HDD is %s.\n", (minimig_config.hardfile[3].cfg == 2) ? "CD" : minimig_config.hardfile[3].cfg ? "HDD" : "disabled");
 	}
+
+	uint8_t hotswap[4] = {
+		minimig_config.hardfile[0].cfg == 2,
+		minimig_config.hardfile[1].cfg == 2,
+		minimig_config.hardfile[2].cfg == 2,
+		minimig_config.hardfile[3].cfg == 2
+	};
+	ide_reset(hotswap);
 
 	rstval = SPI_CPU_HLT;
 	spi_uio_cmd8(UIO_MM2_RST, rstval);
@@ -461,10 +470,14 @@ int minimig_cfg_load(int num)
 		minimig_config.floppy.speed = CONFIG_FLOPPY2X;
 		minimig_config.floppy.drives = 1;
 		minimig_config.enable_ide = 0;
-		minimig_config.hardfile[0].enabled = 1;
+		minimig_config.hardfile[0].cfg = 1;
 		minimig_config.hardfile[0].filename[0] = 0;
-		minimig_config.hardfile[1].enabled = 1;
+		minimig_config.hardfile[1].cfg = 1;
 		minimig_config.hardfile[1].filename[0] = 0;
+		minimig_config.hardfile[2].cfg = 0;
+		minimig_config.hardfile[2].filename[0] = 0;
+		minimig_config.hardfile[3].cfg = 0;
+		minimig_config.hardfile[3].filename[0] = 0;
 		updatekickstart = true;
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
