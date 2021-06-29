@@ -351,7 +351,7 @@ static char filter[256] = {};
 static unsigned long filter_typing_timer = 0;
 
 // this function displays file selection menu
-static void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
+void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
 	printf("pFileExt = %s\n", pFileExt);
 	filter_typing_timer = 0;
@@ -1279,7 +1279,7 @@ void HandleUI(void)
 	if (user_io_core_type() == CORE_TYPE_SHARPMZ)
         sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_COMMON1, MENU_FILE_SELECT1,
 			       &parentstate, &menustate, &menusub, &menusub_last,
-			       &menumask, Selected_F[0], &helptext_idx, helptext_custom,
+			       &menumask, /*Selected_F[0]*/ selPath, &helptext_idx, helptext_custom,
 			       &fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel,
 			       fs_pFileExt,
 			       menu, select, up, down,
