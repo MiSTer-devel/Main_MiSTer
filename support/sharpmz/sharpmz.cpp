@@ -144,7 +144,7 @@ int sharpmz_reset_config(short setStatus)
     // Set the configuration registers to a known defualt.
     config.system_reg[REGISTER_MODEL]      = 0x03;              // MZ-80A
     config.system_reg[REGISTER_DISPLAY]    = 0x00;              // Mono 40x25
-    config.system_reg[REGISTER_DISPLAY2]   = 0x7B | 0x00;       // GRAM base addr | VGA Mode. // 78 - VGA 7B - 15khz
+    config.system_reg[REGISTER_DISPLAY2]   = 0x78 | 0x00;       // GRAM base addr | VGA Mode. // 78 - VGA 7B - 15khz
     config.system_reg[REGISTER_DISPLAY3]   = 0x00;              // Status screen buffer.
     config.system_reg[REGISTER_CPU]        = 0x00;              // CPU speed.
     config.system_reg[REGISTER_AUDIO]      = 0x00;              // Audio - sound output.
