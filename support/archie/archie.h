@@ -21,6 +21,8 @@ void archie_set_60(char i);
 int  archie_get_60();
 void archie_set_afix(char i);
 int  archie_get_afix();
+void archie_set_scale(char i);
+int  archie_get_scale();
 
 const char *archie_get_hdd_name(int i);
 void archie_hdd_mount(char *filename, int idx);

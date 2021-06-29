@@ -4,7 +4,6 @@
 int arcade_send_rom(const char *xml);
 int arcade_load(const char *xml);
 void arcade_check_error();
-int is_arcade();
 
 struct dip_struct
 {
@@ -28,10 +27,10 @@ struct sw_struct
 	dip_struct dip[64];
 };
 
-sw_struct *arcade_sw();
-void arcade_sw_send();
-void arcade_sw_save();
-void arcade_sw_load();
+sw_struct *arcade_sw(int n);
+void arcade_sw_send(int n);
+void arcade_sw_save(int n);
+void arcade_sw_load(int n);
 void arcade_override_name(const char *xml);
 
 void arcade_nvm_save();

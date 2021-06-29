@@ -30,13 +30,13 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <fcntl.h>
-#include <sys/mman.h>
 #include <time.h>
 
 #include "../../spi.h"
 #include "../../user_io.h"
 #include "../../file_io.h"
 #include "../../fpga_io.h"
+#include "../../shmem.h"
 #include "x86_share.h"
 #include "x86_ide.h"
 #include "x86_cdrom.h"
@@ -170,33 +170,16 @@ void x86_dma_recvbuf(uint32_t address, uint32_t length, uint32_t *data)
 	DisableIO();
 }
 
-static void* shmem_init(int offset, int size)
-{
-	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
-
-	void *shmem = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, SHMEM_ADDR + offset);
-	close(fd);
-
-	if (shmem == (void *)-1)
-	{
-		printf("ao486 share_init: Unable to mmap(/dev/mem)\n");
-		return 0;
-	}
-
-	return shmem;
-}
-
 static int load_bios(const char* name, uint8_t index)
 {
 	printf("BIOS: %s\n", name);
 
-	void *buf = shmem_init(index ? 0xC0000 : 0xF0000, BIOS_SIZE);
+	void *buf = shmem_map(SHMEM_ADDR + (index ? 0xC0000 : 0xF0000), BIOS_SIZE);
 	if (!buf) return 0;
 
 	memset(buf, 0, BIOS_SIZE);
 	FileLoad(name, buf, BIOS_SIZE);
-	munmap(buf, BIOS_SIZE);
+	shmem_unmap(buf, BIOS_SIZE);
 
 	return 1;
 }

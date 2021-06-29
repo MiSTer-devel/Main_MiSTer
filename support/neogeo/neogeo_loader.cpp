@@ -5,13 +5,13 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <time.h>   // clock_gettime, CLOCK_REALTIME
-#include <sys/mman.h>
 #include "neogeo_loader.h"
 #include "../../sxmlc.h"
 #include "../../user_io.h"
 #include "../../fpga_io.h"
 #include "../../osd.h"
 #include "../../menu.h"
+#include "../../shmem.h"
 
 struct NeoFile
 {
@@ -107,36 +107,6 @@ static void fix_convert(uint8_t* buf_in, uint8_t* buf_out, uint32_t size)
 	for (uint32_t i = 0; i < size; i++) buf_out[i] = buf_in[(i & ~0x1F) | ((i >> 2) & 7) | ((i & 1) << 3) | (((i & 2) << 3) ^ 0x10)];
 }
 
-static char pchar[] = { 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
-
-#define PROGRESS_CNT    10
-#define PROGRESS_CHARS  (sizeof(pchar)/sizeof(pchar[0]))
-#define PROGRESS_MAX    ((PROGRESS_CHARS*PROGRESS_CNT)-1)
-
-static void neogeo_osd_progress(const char* name, unsigned int progress)
-{
-	static char progress_buf[64];
-	memset(progress_buf, ' ', sizeof(progress_buf));
-
-	if (progress > PROGRESS_MAX) progress = PROGRESS_MAX;
-	char c = pchar[progress % PROGRESS_CHARS];
-	progress /= PROGRESS_CHARS;
-
-	const char* p = strrchr(name, '/');
-	if (p) p++;
-	else p = name;
-	if (strlen(p) > 16) p = p + strlen(p) - 16;
-
-	strcpy(progress_buf, p);
-	char *buf = progress_buf + strlen(progress_buf);
-	*buf++ = ' ';
-
-	for (unsigned int i = 0; i <= progress; i++) buf[i] = (i < progress) ? 0x7F : c;
-	buf[PROGRESS_CNT] = 0;
-
-	Info(progress_buf);
-}
-
 static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_file_type, uint8_t index, uint32_t offset, uint32_t size)
 {
 	fileTYPE f = {};
@@ -162,8 +132,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 	// prepare transmission of new file
 	user_io_set_download(1);
 
-	int progress = -1;
-
+	ProgressMessage();
 	while (bytes2send)
 	{
 		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
@@ -194,16 +163,13 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 		}
 
 		DisableFpga();
-		int new_progress = PROGRESS_MAX - ((((uint64_t)bytes2send)*PROGRESS_MAX) / size);
-		if (progress != new_progress)
-		{
-			progress = new_progress;
-			neogeo_osd_progress(name, progress);
-		}
+
+		ProgressMessage("Loading", name, size - bytes2send, size);
 		bytes2send -= chunk;
 	}
 
 	FileClose(&f);
+	ProgressMessage();
 
 	// signal end of transmission
 	user_io_set_download(0);
@@ -238,36 +204,26 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 		return 0;
 	}
 
-	int memfd = open("/dev/mem", O_RDWR | O_SYNC);
-	if (memfd == -1)
-	{
-		printf("Unable to open /dev/mem!\n");
-		FileClose(&f);
-		return 0;
-	}
-
 	size *= 2;
 
 	FileSeek(&f, offset, SEEK_SET);
 	printf("CROM %s (offset %u, size %u) with index %u\n", name, offset, size, index);
 
 	// Put pairs of bitplanes in the correct order for the core
-	int progress = -1;
 
 	uint32_t remain = size;
 	uint32_t map_addr = 0x38000000 + (((index - 64) >> 1) * 1024 * 1024);
 
+	ProgressMessage();
 	while (remain)
 	{
 		uint32_t partsz = remain;
 		if (partsz > LOADBUF_SZ) partsz = LOADBUF_SZ;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
-		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-		if (base == (void *)-1)
+		void *base = shmem_map(map_addr, partsz);
+		if (!base)
 		{
-			printf("Unable to mmap (0x%X, %d)!\n", map_addr, partsz);
-			close(memfd);
 			FileClose(&f);
 			return 0;
 		}
@@ -275,20 +231,15 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 		FileReadAdv(&f, loadbuf, partsz/2);
 		spr_convert_skp((uint16_t*)loadbuf, ((uint16_t*)base) + ((index ^ 1) & 1), partsz / 4);
 
-		int new_progress = PROGRESS_MAX - ((((uint64_t)(remain - partsz))*PROGRESS_MAX) / size);
-		if (progress != new_progress)
-		{
-			progress = new_progress;
-			neogeo_osd_progress(name, progress);
-		}
+		ProgressMessage("Loading", name, size - (remain - partsz), size);
 
-		munmap(base, partsz);
+		shmem_unmap(base, partsz);
 		remain -= partsz;
 		map_addr += partsz;
 	}
 
-	close(memfd);
 	FileClose(&f);
+	ProgressMessage();
 
 	return map_addr - 0x38000000;
 }
@@ -312,18 +263,8 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 		return 0;
 	}
 
-	int memfd = open("/dev/mem", O_RDWR | O_SYNC);
-	if (memfd == -1)
-	{
-		printf("Unable to open /dev/mem!\n");
-		FileClose(&f);
-		return 0;
-	}
-
 	FileSeek(&f, offset, SEEK_SET);
 	printf("ROM %s (offset %u, size %u, exp %u, type %u, addr %u) with index %u\n", name, offset, size, expand, neo_file_type, addr, index);
-
-	int progress = -1;
 
 	uint32_t remainf = size;
 
@@ -332,6 +273,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 
 	uint32_t map_addr = 0x30000000 + (addr ? addr : ((index >= 16) && (index < 64)) ? (index - 16) * 0x80000 : (index == 9) ? 0x2000000 : 0x8000000);
 
+	ProgressMessage();
 	while (remain)
 	{
 		uint32_t partsz = remain;
@@ -341,11 +283,9 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 		if (partszf > LOADBUF_SZ) partszf = LOADBUF_SZ;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
-		void *base = mmap(0, partsz, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-		if (base == (void *)-1)
+		void *base = shmem_map(map_addr, partsz);
+		if (!base)
 		{
-			printf("Unable to mmap (0x%X, %d)!\n", map_addr, partsz);
-			close(memfd);
 			FileClose(&f);
 			return 0;
 		}
@@ -369,19 +309,15 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 			if (partszf) FileReadAdv(&f, base, partszf);
 		}
 
-		int new_progress = PROGRESS_MAX - ((((uint64_t)(remain - partsz))*PROGRESS_MAX) / size);
-		if (progress != new_progress)
-		{
-			progress = new_progress;
-			neogeo_osd_progress(name, progress);
-		}
-		munmap(base, partsz);
+		ProgressMessage("Loading", name, size - (remain - partsz), size);
+
+		shmem_unmap(base, partsz);
 		remain -= partsz;
 		map_addr += partsz;
 	}
 
-	close(memfd);
 	FileClose(&f);
+	ProgressMessage();
 
 	return size;
 }

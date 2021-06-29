@@ -916,7 +916,7 @@ int mwd = -1;
 static int set_watch()
 {
 	mwd = -1;
-	mfd = inotify_init();
+	mfd = inotify_init1(IN_CLOEXEC);
 	if (mfd < 0)
 	{
 		printf("ERR: inotify_init");
@@ -1060,7 +1060,6 @@ static int load_map(const char *name, void *pBuffer, int size)
 static void delete_map(const char *name)
 {
 	char path[256] = { JOYMAP_DIR };
-	FileCreatePath(path);
 	strcat(path, name);
 	FileDeleteConfig(name);
 	FileDeleteConfig(path);
@@ -1069,7 +1068,6 @@ static void delete_map(const char *name)
 static int save_map(const char *name, void *pBuffer, int size)
 {
 	char path[256] = { JOYMAP_DIR };
-	FileCreatePath(path);
 	strcat(path, name);
 	FileDeleteConfig(name);
 	return FileSaveConfig(path, pBuffer, size);
@@ -1134,7 +1132,7 @@ static char *get_map_name(int dev, int def)
 {
 	static char name[128];
 	if (def || is_menu()) sprintf(name, "input_%s_v3.map", input[dev].idstr);
-	else sprintf(name, "%s_input_%s_v3.map", user_io_get_core_name_ex(), input[dev].idstr);
+	else sprintf(name, "%s_input_%s_v3.map", user_io_get_core_name(), input[dev].idstr);
 	return name;
 }
 
@@ -1173,7 +1171,7 @@ void finish_map_setting(int dismiss)
 void input_lightgun_save(int idx, uint16_t *cal)
 {
 	static char name[128];
-	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
 	FileSaveConfig(name, cal, 4 * sizeof(uint16_t));
 	memcpy(input[idx].guncal, cal, sizeof(input[idx].guncal));
 }
@@ -1181,7 +1179,7 @@ void input_lightgun_save(int idx, uint16_t *cal)
 static void input_lightgun_load(int idx)
 {
 	static char name[128];
-	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name_ex(), input[idx].vid, input[idx].pid);
+	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
 	FileLoadConfig(name, input[idx].guncal, 4 * sizeof(uint16_t));
 }
 
@@ -1304,7 +1302,7 @@ static int input_uinp_setup()
 	{
 		struct uinput_user_dev uinp;
 
-		if (!(uinp_fd = open("/dev/uinput", O_WRONLY | O_NDELAY)))
+		if (!(uinp_fd = open("/dev/uinput", O_WRONLY | O_NDELAY | O_CLOEXEC)))
 		{
 			printf("Unable to open /dev/uinput\n");
 			uinp_fd = -1;
@@ -1395,9 +1393,9 @@ static void mouse_cb(unsigned char b, int16_t x = 0, int16_t y = 0, int16_t w = 
 	if (grabbed) user_io_mouse(b, x, y, w);
 }
 
+static uint32_t osdbtn = 0;
 static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
 {
-	static uint32_t osdbtn = 0;
 	static char str[128];
 	static uint32_t lastcode[NUMPLAYERS], lastmask[NUMPLAYERS];
 	int num = jnum - 1;
@@ -1933,6 +1931,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		&& input[dev].quirk != QUIRK_MSSP)
 	{
 		int idx = 0;
+		osdbtn = 0;
 
 		if (is_menu())
 		{
@@ -2597,7 +2596,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					mouse_emu_y /= 12;
 					return;
 				}
-				else if (ev->code == (input[dev].mmap[SYS_AXIS_X] & 0xFFFF) || (ev->code == 0 && input[dev].lightgun))
+				else if (((input[dev].mmap[SYS_AXIS_X] >> 16) == 2 && ev->code == (input[dev].mmap[SYS_AXIS_X] & 0xFFFF)) || (ev->code == 0 && input[dev].lightgun))
 				{
 					// skip if joystick is undefined.
 					if (!input[dev].num) break;
@@ -2608,7 +2607,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					joy_analog(input[dev].num, 0, offset);
 					return;
 				}
-				else if (ev->code == (input[dev].mmap[SYS_AXIS_Y] & 0xFFFF) || (ev->code == 1 && input[dev].lightgun))
+				else if (((input[dev].mmap[SYS_AXIS_Y] >> 16) == 2 && ev->code == (input[dev].mmap[SYS_AXIS_Y] & 0xFFFF)) || (ev->code == 1 && input[dev].lightgun))
 				{
 					// skip if joystick is undefined.
 					if (!input[dev].num) break;
@@ -2761,6 +2760,7 @@ void mergedevs()
 	make_unique(0x289B, 0x0057, -1); // Raphnet
 	make_unique(0x0E8F, 0x3013, 1); // Mayflash SNES controller 2 port adapter
 	make_unique(0x16C0, 0x05E1, 1); // XinMo XM-10 2 player USB Encoder
+	make_unique(0x045E, 0x02A1, 1); // Xbox 360 wireless receiver
 
 	if (cfg.no_merge_vid)
 	{
@@ -3063,10 +3063,10 @@ int input_test(int getchar)
 		unlink(CMD_FIFO);
 		mkfifo(CMD_FIFO, 0666);
 
-		pool[NUMDEV+1].fd = open(CMD_FIFO, O_RDWR | O_NONBLOCK);
+		pool[NUMDEV+1].fd = open(CMD_FIFO, O_RDWR | O_NONBLOCK | O_CLOEXEC);
 		pool[NUMDEV+1].events = POLLIN;
 
-		pool[NUMDEV + 2].fd = open(LED_MONITOR, O_RDONLY);
+		pool[NUMDEV + 2].fd = open(LED_MONITOR, O_RDONLY | O_CLOEXEC);
 		pool[NUMDEV + 2].events = POLLPRI;
 
 		state++;
@@ -3094,7 +3094,7 @@ int input_test(int getchar)
 				{
 					memset(&input[n], 0, sizeof(input[n]));
 					sprintf(input[n].devname, "/dev/input/%s", de->d_name);
-					int fd = open(input[n].devname, O_RDWR);
+					int fd = open(input[n].devname, O_RDWR | O_CLOEXEC);
 					//printf("open(%s): %d\n", input[n].devname, fd);
 
 					if (fd > 0)
@@ -3474,7 +3474,7 @@ int input_test(int getchar)
 								if (input[dev].quirk == QUIRK_JAMMA && ev.type == EV_KEY)
 								{
 									input[dev].num = 0;
-									for (uint32_t i = 0; i <= sizeof(jamma2joy) / sizeof(jamma2joy[0]); i++)
+									for (uint32_t i = 0; i < sizeof(jamma2joy) / sizeof(jamma2joy[0]); i++)
 									{
 										if (jamma2joy[i].key == ev.code)
 										{
