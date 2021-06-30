@@ -269,8 +269,6 @@ static void fdd_set(int num, char* filename)
 
 static void hdd_set(int num, char* filename)
 {
-	if (num > 1) return;
-
 	int present = 0;
 	int cd = 0;
 

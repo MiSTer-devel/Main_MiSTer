@@ -5185,7 +5185,14 @@ void HandleUI(void)
 
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " ROM    : ");
-		strncat(s, minimig_config.kickstart, 24);
+		{
+			char *path = user_io_get_core_path();
+			int len = strlen(path);
+			char *name = minimig_config.kickstart;
+			if (!strncasecmp(name, path, len))  name += len + 1;
+			strncat(&s[3], name, 24);
+		}
+
 		OsdWrite(m++, s, menusub == 7, 0);
 		strcpy(s, " HRTmon : ");
 		strcat(s, (minimig_config.memory & 0x40) ? "enabled " : "disabled");

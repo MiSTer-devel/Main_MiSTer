@@ -289,7 +289,7 @@ void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads)
 			(' ' << 8) | ' ',
 			(' ' << 8) | ' ',
 			(' ' << 8) | ' ',
-			0x8010,												//word 47 max multiple sectors
+			0x8020,												//word 47 max multiple sectors
 			1,													//word 48 dword io
 			1 << 9,												//word 49 lba supported
 			0x4001,												//word 50 reserved
