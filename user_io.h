@@ -227,9 +227,9 @@ unsigned char user_io_ext_idx(char *, char*);
 void user_io_set_index(unsigned char index);
 void user_io_set_aindex(uint16_t index);
 void user_io_set_download(unsigned char enable, int addr = 0);
-void user_io_file_tx_data(const uint8_t *addr, uint16_t len);
+void user_io_file_tx_data(const uint8_t *addr, uint32_t len);
 void user_io_set_upload(unsigned char enable, int addr = 0);
-void user_io_file_rx_data(uint8_t *addr, uint16_t len);
+void user_io_file_rx_data(uint8_t *addr, uint32_t len);
 void user_io_file_info(const char *ext);
 int user_io_get_width();
 

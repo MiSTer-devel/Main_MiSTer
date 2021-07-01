@@ -39,8 +39,8 @@ void spi32_b(uint32_t parm);
 uint32_t spi32_w(uint32_t parm);
 
 /* block transfer functions */
-void spi_read(uint8_t *addr, uint16_t len, int wide);
-void spi_write(const uint8_t *addr, uint16_t len, int wide);
+void spi_read(uint8_t *addr, uint32_t len, int wide);
+void spi_write(const uint8_t *addr, uint32_t len, int wide);
 void spi_block_read(uint8_t *addr, int wide, int sz = 512);
 void spi_block_write(const uint8_t *addr, int wide, int sz = 512);
 

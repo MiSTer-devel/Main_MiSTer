@@ -340,7 +340,7 @@ static void rom_finish(int send, uint32_t address, int index)
 				{
 					ProgressMessage("Sending", str, len - romlen[0], len);
 
-					uint16_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
+					uint32_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
 					user_io_file_tx_data(data, chunk);
 
 					romlen[0] -= chunk;

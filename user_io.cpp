@@ -1446,7 +1446,7 @@ void user_io_set_download(unsigned char enable, int addr)
 	DisableFpga();
 }
 
-void user_io_file_tx_data(const uint8_t *addr, uint16_t len)
+void user_io_file_tx_data(const uint8_t *addr, uint32_t len)
 {
 	EnableFpga();
 	spi8(FIO_FILE_TX_DAT);
@@ -1467,7 +1467,7 @@ void user_io_set_upload(unsigned char enable, int addr)
 	DisableFpga();
 }
 
-void user_io_file_rx_data(uint8_t *addr, uint16_t len)
+void user_io_file_rx_data(uint8_t *addr, uint32_t len)
 {
 	EnableFpga();
 	spi8(FIO_FILE_TX_DAT);
@@ -2036,7 +2036,7 @@ int user_io_file_tx_a(const char* name, uint16_t index)
 	if (use_progress) ProgressMessage(0, 0, 0, 0);
 	while (bytes2send)
 	{
-		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+		uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
 		user_io_file_tx_data(buf, chunk);
@@ -2127,7 +2127,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t sz = fb.size;
 				while (sz)
 				{
-					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					uint32_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fb, buf, chunk);
 					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
@@ -2193,7 +2193,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t sz = fg.size;
 				while (sz)
 				{
-					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					uint32_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fg, buf, chunk);
 					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
@@ -2227,7 +2227,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	{
 		while (dosend && bytes2send)
 		{
-			uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+			uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 			FileReadAdv(&f, buf, chunk);
 			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
