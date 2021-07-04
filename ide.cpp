@@ -672,6 +672,7 @@ static int handle_hdd(ide_config *ide)
 		break;
 
 	case 0xFA: // mount image
+		ide->regs.pkt_io_size = 256;
 		process_write(ide, 0);
 		break;
 
