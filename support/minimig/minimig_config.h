@@ -50,7 +50,7 @@ typedef struct
 	unsigned char   chipset;
 	mm_floppyTYPE   floppy;
 	unsigned char   disable_ar3;
-	unsigned char   enable_ide;
+	unsigned char   ide_cfg;
 	unsigned char   scanlines;
 	unsigned char   audio;
 	mm_hardfileTYPE hardfile[4];

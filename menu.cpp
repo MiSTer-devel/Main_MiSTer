@@ -5119,7 +5119,7 @@ void HandleUI(void)
 				config_cpu_msg[minimig_config.cpu & 0x03] + 2,
 				config_chipset_msg[(minimig_config.chipset >> 2) & 7],
 				minimig_config.chipset & CONFIG_NTSC ? "N" : "P",
-				(minimig_config.enable_ide && (minimig_config.hardfile[0].cfg ||
+				((minimig_config.ide_cfg & 1) && (minimig_config.hardfile[0].cfg ||
 					minimig_config.hardfile[1].cfg ||
 					minimig_config.hardfile[2].cfg ||
 					minimig_config.hardfile[3].cfg)) ? "/HD" : "",
@@ -5351,22 +5351,26 @@ void HandleUI(void)
 
 		m = 0;
 		parentstate = menustate;
-		menumask = 0x601;	                      // b001000000001 - On/off & exit enabled by default...
-		if (minimig_config.enable_ide) menumask |= 0xAA;  // b010101010 - HD0/1/2/3 type
+		menumask = 0xC01;
+		if (minimig_config.ide_cfg & 1) menumask |= 0x156;
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " IDE A600/A1200    : ");
-		strcat(s, minimig_config.enable_ide ? "On " : "Off");
+		strcat(s, (minimig_config.ide_cfg & 1) ? "On " : "Off");
 		OsdWrite(m++, s, menusub == 0, 0);
+		strcpy(s, " Fast-IDE (68020)  : ");
+		strcat(s, (minimig_config.ide_cfg & 0x20) ? "Off" : "On");
+		OsdWrite(m++, s, menusub == 1,  !(minimig_config.ide_cfg & 1) || !(minimig_config.cpu & 2));
+		if (!(minimig_config.cpu & 2)) menumask &= ~2;
 		OsdWrite(m++);
 
 		{
-			uint n = 1, t = 4;
+			uint n = 2, t = 8;
 			for (uint i = 0; i < 4; i++)
 			{
 				strcpy(s, (i & 2) ? " Sec. " : " Pri. ");
 				strcat(s, (i & 1) ? " Slave: " : "Master: ");
 				strcat(s, (minimig_config.hardfile[i].cfg == 2) ? "Removable/CD" : minimig_config.hardfile[i].cfg ? "Fixed/HDD" : "Disabled");
-				OsdWrite(m++, s, minimig_config.enable_ide ? (menusub == n++) : 0, minimig_config.enable_ide ==0);
+				OsdWrite(m++, s, (minimig_config.ide_cfg & 1) ? (menusub == n++) : 0, !(minimig_config.ide_cfg & 1));
 				if (minimig_config.hardfile[i].filename[0])
 				{
 					strcpy(s, "                                ");
@@ -5380,7 +5384,7 @@ void HandleUI(void)
 				{
 					strcpy(s, "   ** not selected **");
 				}
-				enable = minimig_config.enable_ide && minimig_config.hardfile[i].cfg;
+				enable = (minimig_config.ide_cfg & 1) && minimig_config.hardfile[i].cfg;
 				if (enable) menumask |= t;	// Make hardfile selectable
 				OsdWrite(m++, s, menusub == n++, enable == 0);
 				t <<= 2;
@@ -5390,10 +5394,10 @@ void HandleUI(void)
 
 		OsdWrite(m++);
 		sprintf(s, " Floppy Disk Turbo : %s", minimig_config.floppy.speed ? "On" : "Off");
-		OsdWrite(m++, s, menusub == 9, 0);
+		OsdWrite(m++, s, menusub == 10, 0);
 		OsdWrite(m++);
 
-		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 10, 0);
+		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 11, 0);
 		menustate = MENU_MINIMIG_DISK2;
 		break;
 
@@ -5406,17 +5410,25 @@ void HandleUI(void)
 			{
 				if (select)
 				{
-					minimig_config.enable_ide = (minimig_config.enable_ide == 0);
+					minimig_config.ide_cfg ^= 1;
 					menustate = MENU_MINIMIG_DISK1;
 				}
 			}
-			else if (menusub < 9)
+			else if (menusub == 1)
 			{
-				if(menusub&1)
+				if (select)
+				{
+					minimig_config.ide_cfg ^= 0x20;
+					menustate = MENU_MINIMIG_DISK1;
+				}
+			}
+			else if (menusub < 10)
+			{
+				if (!(menusub & 1))
 				{
 					if (select || minus || plus)
 					{
-						int idx = (menusub - 1) / 2;
+						int idx = (menusub - 2) / 2;
 						if (minus)
 						{
 							if (!minimig_config.hardfile[idx].cfg) minimig_config.hardfile[idx].cfg = 2;
@@ -5435,7 +5447,7 @@ void HandleUI(void)
 					fs_Options = SCANO_DIR | SCANO_UMOUNT;
 					fs_MenuSelect = MENU_MINIMIG_HDFFILE_SELECTED;
 					fs_MenuCancel = MENU_MINIMIG_DISK1;
-					int idx = (menusub - 2) / 2;
+					int idx = (menusub - 3) / 2;
 					strcpy(fs_pFileExt, (minimig_config.hardfile[idx].cfg == 2) ? "ISOCUECHDIMG" : "HDFVHDIMGDSK");
 					if (select)
 					{
@@ -5445,13 +5457,13 @@ void HandleUI(void)
 					else if (recent_init(500)) menustate = MENU_RECENT1;
 				}
 			}
-			else if (menusub == 9 && select) // return to previous menu
+			else if (menusub == 10 && select) // return to previous menu
 			{
 				minimig_config.floppy.speed ^= 1;
 				minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 				menustate = MENU_MINIMIG_DISK1;
 			}
-			else if (menusub == 10 && select) // return to previous menu
+			else if (menusub == 11 && select) // return to previous menu
 			{
 				menustate = MENU_MINIMIG_MAIN1;
 				menusub = 5;

@@ -729,7 +729,7 @@ uint8_t OpenHardfile(uint8_t unit, const char* filename)
 
 	if (is_minimig())
 	{
-		if (minimig_config.enable_ide && minimig_config.hardfile[unit].cfg)
+		if ((minimig_config.ide_cfg & 1) && minimig_config.hardfile[unit].cfg)
 		{
 			printf("\nChecking HDD %d\n", unit);
 			if (minimig_config.hardfile[unit].filename[0])

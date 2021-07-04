@@ -226,7 +226,7 @@ static char UploadActionReplay()
 		spi8((data >> 0) & 0xff);
 		data = 0xff; // key, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = minimig_config.enable_ide ? 0xff : 0; // ide, 1 byte
+		data = (minimig_config.ide_cfg & 1) ? 0xff : 0; // ide, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 0xff; // a1200, 1 byte
 		spi8((data >> 0) & 0xff);
@@ -323,8 +323,8 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	printf("\n");
 
-	printf("\nIDE state: %s.\n", minimig_config.enable_ide ? "enabled" : "disabled");
-	if (minimig_config.enable_ide)
+	printf("\nIDE state: %s.\n", (minimig_config.ide_cfg & 1) ? "enabled" : "disabled");
+	if (minimig_config.ide_cfg & 1)
 	{
 		printf("Primary Master HDD is %s.\n", (minimig_config.hardfile[0].cfg == 2) ? "CD" : minimig_config.hardfile[0].cfg ? "HDD" : "disabled");
 		printf("Primary Slave HDD is %s.\n", (minimig_config.hardfile[1].cfg == 2) ? "CD" : minimig_config.hardfile[1].cfg ? "HDD" : "disabled");
@@ -342,7 +342,7 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	rstval = SPI_CPU_HLT;
 	spi_uio_cmd8(UIO_MM2_RST, rstval);
-	spi_uio_cmd8(UIO_MM2_HDD, (minimig_config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
+	spi_uio_cmd8(UIO_MM2_HDD, (minimig_config.ide_cfg & 0x21) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
 
 	minimig_ConfigMemory(memcfg);
 	minimig_ConfigCPU(minimig_config.cpu);
@@ -469,7 +469,7 @@ int minimig_cfg_load(int num)
 		minimig_config.chipset = 0;
 		minimig_config.floppy.speed = CONFIG_FLOPPY2X;
 		minimig_config.floppy.drives = 1;
-		minimig_config.enable_ide = 0;
+		minimig_config.ide_cfg = 0;
 		minimig_config.hardfile[0].cfg = 1;
 		minimig_config.hardfile[0].filename[0] = 0;
 		minimig_config.hardfile[1].cfg = 1;
