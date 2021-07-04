@@ -2877,7 +2877,7 @@ static struct
 	{KEY_L,         2, 0x12D}, // 2P 8
 };
 
-void send_mouse_with_throttle(int dev, int xval, int yval, int btn, uint8_t data_3)
+static void send_mouse_with_throttle(int dev, int xval, int yval, int btn, int8_t data_3)
 {
 	int i = dev;
 	if (input[dev].bind >= 0) dev = input[dev].bind;
@@ -2903,7 +2903,7 @@ void send_mouse_with_throttle(int dev, int xval, int yval, int btn, uint8_t data
 }
 
 static uint32_t touch_rel = 0;
-void touchscreen_proc(int dev, input_event *ev)
+static void touchscreen_proc(int dev, input_event *ev)
 {
 	struct input_absinfo absinfo;
 	int i = dev;
