@@ -3698,10 +3698,10 @@ int input_test(int getchar)
 							if (input[i].bind >= 0) edev = input[i].bind; // mouse to event
 							if (input[edev].bind >= 0) dev = input[edev].bind; // event to base device
 
-							if (input[i].quirk == QUIRK_DS4TOUCH && input[dev].lightgun)
+							if ((input[i].quirk == QUIRK_DS4TOUCH || input[i].quirk == QUIRK_DS4))
 							{
 								//disable DS4 mouse in lightgun mode
-								continue;
+								if (input[dev].lightgun) continue;
 							}
 
 							if (input[i].quirk == QUIRK_TOUCHGUN)
