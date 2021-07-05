@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include "support/x86/x86.h"
+#include "support/minimig/minimig_hdd_internal.h"
 #include "spi.h"
 #include "user_io.h"
 #include "file_io.h"
@@ -180,7 +181,7 @@ void ide_set_regs(ide_config *ide)
 
 static void ide_set_geometry(drive_t *drive, uint16_t sectors, uint16_t heads)
 {
-	printf("New SPT=%d, Heads=%d\n", sectors, heads);
+	printf("SPT=%d, Heads=%d\n", sectors, heads);
 
 	drive->heads = heads ? heads : 16;
 	drive->spt = sectors ? sectors : 256;
@@ -190,9 +191,114 @@ static void ide_set_geometry(drive_t *drive, uint16_t sectors, uint16_t heads)
 
 	//Maximum 137GB images are supported.
 	drive->cylinders = cylinders;
+	printf("New SPT=%d, Heads=%d, Cylinders=%d\n", drive->spt, drive->heads, drive->cylinders);
 }
 
-void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads)
+#define SWAP(a)  ((((a)&0x000000ff)<<24)|(((a)&0x0000ff00)<<8)|(((a)&0x00ff0000)>>8)|(((a)&0xff000000)>>24))
+
+static uint32_t checksum_rdb(uint32_t *p, int set)
+{
+	uint32_t count = SWAP(p[1]);
+	uint32_t result = 0;
+	if (set) p[2] = 0;
+
+	for (uint32_t i = 0; i < count; ++i) result += SWAP(p[i]);
+	if (!set) return result;
+
+	result = 0 - result;
+	p[2] = SWAP(result);
+	return 0;
+}
+
+static void fill_fake_rdb(drive_t *drive, uint32_t sector, int cnt)
+{
+	printf("fill_fake_rdb(%u,%d)\n", sector, cnt);
+
+	uint8_t *buff = ide_buf;
+	memset(ide_buf, 0, sizeof(ide_buf));
+
+	while (cnt)
+	{
+		// if we're asked for LBA 0 we create an RDSK block, and if LBA 1, a PART block
+		if (sector == 0)
+		{
+			// RDB
+			struct RigidDiskBlock *rdb = (struct RigidDiskBlock *)buff;
+			rdb->rdb_ID = 'R' << 24 | 'D' << 16 | 'S' << 8 | 'K';
+			rdb->rdb_Summedlongs = 0x40;
+			rdb->rdb_HostID = 0x07;
+			rdb->rdb_BlockBytes = 0x200;
+			rdb->rdb_Flags = 0x12;                 // (Disk ID valid, no LUNs after this one)
+			rdb->rdb_BadBlockList = 0xffffffff;    // We don't provide a bad block list
+			rdb->rdb_PartitionList = 1;
+			rdb->rdb_FileSysHeaderList = 0xffffffff;
+			rdb->rdb_DriveInit = 0xffffffff;
+			rdb->rdb_Reserved1[0] = 0xffffffff;
+			rdb->rdb_Reserved1[1] = 0xffffffff;
+			rdb->rdb_Reserved1[2] = 0xffffffff;
+			rdb->rdb_Reserved1[3] = 0xffffffff;
+			rdb->rdb_Reserved1[4] = 0xffffffff;
+			rdb->rdb_Reserved1[5] = 0xffffffff;
+			rdb->rdb_Cylinders = drive->cylinders;
+			rdb->rdb_Sectors = drive->spt;
+			rdb->rdb_Heads = drive->heads;
+			rdb->rdb_Interleave = 1;
+			rdb->rdb_Park = rdb->rdb_Cylinders;
+			rdb->rdb_WritePreComp = rdb->rdb_Cylinders;
+			rdb->rdb_ReducedWrite = rdb->rdb_Cylinders;
+			rdb->rdb_StepRate = 3;
+			rdb->rdb_RDBBlocksLo = 0;
+			rdb->rdb_RDBBlocksHi = 1;
+			rdb->rdb_LoCylinder = 1;
+			rdb->rdb_HiCylinder = rdb->rdb_Cylinders - 1;
+			rdb->rdb_CylBlocks = rdb->rdb_Heads * rdb->rdb_Sectors;
+			rdb->rdb_AutoParkSeconds = 0;
+			rdb->rdb_HighRDSKBlock = 1;
+			strcpy(rdb->rdb_DiskVendor, "DON'T   REPARTITION!    0.00");
+			uint32_t *p = (uint32_t*)buff;
+			for (int i = 0; i < 40; i++) p[i] = SWAP(p[i]);
+		}
+		else if(sector == 1)
+		{
+			// Partition
+			struct PartitionBlock *pb = (struct PartitionBlock *)buff;
+			pb->pb_ID = 'P' << 24 | 'A' << 16 | 'R' << 8 | 'T';
+			pb->pb_Summedlongs = 0x40;
+			pb->pb_HostID = 0x07;
+			pb->pb_Next = 0xffffffff;
+			pb->pb_Flags = 0x1; // bootable
+			pb->pb_DevFlags = 0;
+			strcpy(pb->pb_DriveName, "0HD\003");  // "DHx" BCPL string
+			pb->pb_DriveName[0] = drive->drvnum + '0';
+			pb->pb_Environment.de_TableSize = 0x10;
+			pb->pb_Environment.de_SizeBlock = 0x80;
+			pb->pb_Environment.de_Surfaces = drive->heads;
+			pb->pb_Environment.de_SectorPerBlock = 1;
+			pb->pb_Environment.de_BlocksPerTrack = drive->spt;
+			pb->pb_Environment.de_Reserved = 2;
+			pb->pb_Environment.de_LowCyl = 1;
+			pb->pb_Environment.de_HighCyl = drive->cylinders - 1;
+			pb->pb_Environment.de_NumBuffers = 30;
+			pb->pb_Environment.de_MaxTransfer = 0xffffff;
+			pb->pb_Environment.de_Mask = 0x7ffffffe;
+			pb->pb_Environment.de_DosType = 0x444f5301;
+			uint32_t *p = (uint32_t*)buff;
+			for (int i = 0; i < 64; i++) p[i] = SWAP(p[i]);
+		}
+		else
+		{
+			break;
+		}
+
+		checksum_rdb((uint32_t*)buff, 1);
+		//hexdump(buff, 256);
+		cnt--;
+		sector++;
+		buff += 512;
+	}
+}
+
+void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads, int offset, int type)
 {
 	int drv = (drvnum & 1);
 	int port = (drvnum >> 1);
@@ -208,7 +314,8 @@ void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads)
 	drive->heads = 0;
 	drive->spt = 0;
 	drive->spb = 0;
-	//drive->total_sectors = 0;
+	drive->offset = 0;
+	drive->type = 0;
 
 	drive->present = f ? 1 : 0;
 	ide_inst[port].state = IDE_STATE_RESET;
@@ -235,13 +342,21 @@ void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads)
 	if(drive->f)
 	{
 		if (!drive->chd_f) drive->total_sectors = (drive->f->size / 512);
-	} else {
+	}
+	else
+	{
 		drive->total_sectors = 0;
 	}
 
 	if (!drive->cd)
 	{
-		if (drive->present) ide_set_geometry(drive, sectors, heads);
+		if (drive->present)
+		{
+			ide_set_geometry(drive, sectors, heads);
+			if (offset && drive->cylinders < 65535) drive->cylinders++;
+			drive->offset = offset;
+			drive->type = type;
+		}
 
 		uint16_t identify[256] =
 		{
@@ -512,6 +627,20 @@ inline uint16_t get_cnt(ide_config *ide)
 	return cnt;
 }
 
+inline int readhdd(drive_t *drive, uint32_t lba, int cnt)
+{
+	if (lba < drive->offset)
+	{
+		if (!drive->type) fill_fake_rdb(drive, lba, cnt);
+		else memset(ide_buf, 0, sizeof(ide_buf));
+		return 1;
+	}
+	else
+	{
+		return FileReadAdv(drive->f, ide_buf, cnt * 512, -1);
+	}
+}
+
 static void process_read(ide_config *ide, int multi)
 {
 	uint32_t lba = get_lba(ide);
@@ -520,8 +649,8 @@ static void process_read(ide_config *ide, int multi)
 	dbg2_printf("  sector_count: %d\n", ide->regs.sector_count);
 
 	uint32_t cnt = multi ? get_cnt(ide) : 1;
-	ide->null = !FileSeekLBA(ide->drive[ide->regs.drv].f, lba);
-	if (!ide->null) ide->null = (FileReadAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
+	ide->null = !FileSeekLBA(ide->drive[ide->regs.drv].f, (lba <= ide->drive[ide->regs.drv].offset) ? 0 : (lba - ide->drive[ide->regs.drv].offset));
+	if (!ide->null) ide->null = (readhdd(&ide->drive[ide->regs.drv], lba, cnt) <= 0);
 	if (ide->null) memset(ide_buf, 0, cnt * 512);
 
 	while (1)
@@ -554,7 +683,7 @@ static void process_read(ide_config *ide, int multi)
 		}
 
 		cnt = multi ? get_cnt(ide) : 1;
-		if (!ide->null) ide->null = (FileReadAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
+		if (!ide->null) ide->null = (readhdd(&ide->drive[ide->regs.drv], lba, cnt) <= 0);
 		if (ide->null) memset(ide_buf, 0, cnt * 512);
 
 		ide_req = 0;
@@ -576,7 +705,7 @@ static void process_write(ide_config *ide, int multi)
 	uint32_t cnt = 1;
 	uint16_t ide_req;
 
-	ide->null = (ide->regs.cmd != 0xFA) ? !FileSeekLBA(ide->drive[ide->regs.drv].f, lba) : 1;
+	ide->null = (ide->regs.cmd != 0xFA) ? !FileSeekLBA(ide->drive[ide->regs.drv].f, (lba <= ide->drive[ide->regs.drv].offset) ? 0 : (lba - ide->drive[ide->regs.drv].offset)) : 1;
 	uint8_t irq = 0;
 
 	while (1)
@@ -611,7 +740,7 @@ static void process_write(ide_config *ide, int multi)
 		}
 		else
 		{
-			if (!ide->null) ide->null = (FileWriteAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
+			if (!ide->null) ide->null = (lba < ide->drive[ide->regs.drv].offset) ? 0 : (FileWriteAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
 			lba += cnt;
 			ide->regs.sector_count -= cnt;
 			put_lba(ide, lba);
