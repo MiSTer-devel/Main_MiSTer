@@ -187,6 +187,11 @@ static void ide_set_geometry(drive_t *drive, uint16_t sectors, uint16_t heads)
 	drive->spt = sectors ? sectors : 256;
 
 	uint32_t cylinders = drive->f->size / (drive->heads * drive->spt * 512);
+	if (drive->offset)
+	{
+		cylinders++;
+		drive->offset = drive->heads * drive->spt;
+	}
 	if (cylinders > 65535) cylinders = 65535;
 
 	//Maximum 137GB images are supported.
@@ -594,6 +599,8 @@ static uint32_t get_lba(ide_config *ide)
 
 static void put_lba(ide_config *ide, uint32_t lba)
 {
+	lba--;
+	dbg2_printf("  putLBA: %u\n", lba);
 	if (ide->regs.lba)
 	{
 		ide->regs.sector = lba;
