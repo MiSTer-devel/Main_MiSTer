@@ -2663,6 +2663,8 @@ void make_unique(uint16_t vid, uint16_t pid, int type)
 	int lastmin = -1;
 	int min;
 
+	printf("make_unique(%04X,%04X,%d)\n", vid, pid, type);
+
 	while(1)
 	{
 		int idx = -1;
@@ -2766,6 +2768,8 @@ void mergedevs()
 	{
 		make_unique(cfg.no_merge_vid, cfg.no_merge_pid, (cfg.no_merge_pid ? 1 : 0));
 	}
+
+	for (int i = 0; i < (int)cfg.no_merge_vidpid[0]; i++) make_unique(cfg.no_merge_vidpid[i + 1] >> 16, (uint16_t)(cfg.no_merge_vidpid[i + 1]), 1);
 
 	// merge multifunctional devices by id
 	for (int i = 0; i < NUMDEV; i++)

@@ -16,7 +16,7 @@ cfg_t cfg;
 
 typedef enum
 {
-	UINT8 = 0, INT8, UINT16, INT16, UINT32, INT32, FLOAT, STRING
+	UINT8 = 0, INT8, UINT16, INT16, UINT32, INT32, FLOAT, STRING, UINT32ARR
 } ini_vartypes_t;
 
 typedef struct
@@ -74,6 +74,7 @@ static const ini_var_t ini_vars[] =
 	{ "SHARED_FOLDER", (void*)(&(cfg.shared_folder)), STRING, 0, sizeof(cfg.shared_folder) - 1 },
 	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), UINT16, 0, 0xFFFF },
 	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), UINT16, 0, 0xFFFF },
+	{ "NO_MERGE_VIDPID", (void*)(cfg.no_merge_vidpid), UINT32ARR, 0, (int)0xFFFFFFFF },
 	{ "CUSTOM_ASPECT_RATIO_1", (void*)(&(cfg.custom_aspect_ratio[0])), STRING, 0, sizeof(cfg.custom_aspect_ratio[0]) - 1 },
 	{ "CUSTOM_ASPECT_RATIO_2", (void*)(&(cfg.custom_aspect_ratio[1])), STRING, 0, sizeof(cfg.custom_aspect_ratio[1]) - 1 },
 	{ "SPINNER_VID", (void*)(&(cfg.spinner_vid)), UINT16, 0, 0xFFFF },
@@ -230,6 +231,15 @@ static void ini_parse_var(char* buf)
 			*(uint16_t*)(ini_vars[var_id].var) = strtoul(&(buf[i]), NULL, 0);
 			if (*(uint16_t*)(ini_vars[var_id].var) > ini_vars[var_id].max) *(uint16_t*)(ini_vars[var_id].var) = ini_vars[var_id].max;
 			if (*(uint16_t*)(ini_vars[var_id].var) < ini_vars[var_id].min) *(uint16_t*)(ini_vars[var_id].var) = ini_vars[var_id].min;
+			break;
+		case UINT32ARR:
+			{
+				uint32_t *arr = (uint32_t*)ini_vars[var_id].var;
+				uint32_t pos = ++arr[0];
+				arr[pos] = strtoul(&(buf[i]), NULL, 0);
+				if (arr[pos] > (uint32_t)ini_vars[var_id].max) arr[pos] = (uint32_t)ini_vars[var_id].max;
+				if (arr[pos] < (uint32_t)ini_vars[var_id].min) arr[pos] = (uint32_t)ini_vars[var_id].min;
+			}
 			break;
 		case INT16:
 			*(int16_t*)(ini_vars[var_id].var) = strtol(&(buf[i]), NULL, 0);
