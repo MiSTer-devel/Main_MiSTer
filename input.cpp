@@ -902,6 +902,7 @@ typedef struct
 	char     devname[32];
 	char     id[80];
 	char     name[128];
+	char     sysfs[512];
 } devInput;
 
 static devInput input[NUMDEV] = {};
@@ -1687,18 +1688,126 @@ static void joy_analog(int num, int axis, int offset)
 	}
 }
 
+static char* get_led_path(int dev, int add_id = 1)
+{
+	static char path[1024];
+	if (!input[dev].sysfs[0]) return NULL;
+
+	sprintf(path, "/sys%s", input[dev].sysfs);
+	char *p = strstr(path, "/input/");
+	if (p)
+	{
+		*p = 0;
+		char *id = strrchr(path, '/');
+		strcpy(p, "/leds");
+		if (add_id && id) strncat(p, id, p - id);
+		return path;
+	}
+
+	return NULL;
+}
+
+static int set_led(char *base, const char *led, int brightness)
+{
+	static char path[1024];
+	sprintf(path, "%s%s/brightness", base, led);
+	FILE* f = fopen(path, "w");
+	if (f)
+	{
+		fprintf(f, "%d", brightness);
+		fclose(f);
+		return 1;
+	}
+
+	return 0;
+}
+
+static void update_num_hw(int dev, int num)
+{
+	char *led_path;
+	if (num > 6) num = 6;
+
+	if (input[dev].quirk == QUIRK_DS4 || input[dev].quirk == QUIRK_DS4TOUCH)
+	{
+		led_path = get_led_path(dev);
+		if (led_path)
+		{
+			if (set_led(led_path, ":player_id", (num > 5) ? 0 : num))
+			{
+				//duslsense
+				set_led(led_path, ":blue", (num == 0) ? 128 : 64);
+				set_led(led_path, ":green", (num == 0) ? 128 : 64);
+				set_led(led_path, ":red", (num == 0) ? 128 : 0);
+			}
+			else
+			{
+				//dualshock4
+				static const uint8_t color_code[7][3] =
+				{
+					{ 0x30, 0x30, 0x30 }, // White
+					{ 0x00, 0x00, 0x40 }, // Blue
+					{ 0x40, 0x00, 0x00 }, // Red
+					{ 0x00, 0x40, 0x00 }, // Green
+					{ 0x20, 0x00, 0x20 }, // Pink
+					{ 0x40, 0x10, 0x00 }, // Orange
+					{ 0x00, 0x20, 0x20 }  // Teal
+				};
+
+				set_led(led_path, ":blue", color_code[num][2]);
+				set_led(led_path, ":green", color_code[num][1]);
+				set_led(led_path, ":red", color_code[num][0]);
+			}
+		}
+	}
+	else if (input[dev].quirk == QUIRK_DS3)
+	{
+		led_path = get_led_path(dev);
+		if (led_path)
+		{
+			set_led(led_path, "::sony1", (num == 0 || num == 1 || num == 5));
+			set_led(led_path, "::sony2", (num == 0 || num == 2 || num == 6));
+			set_led(led_path, "::sony3", (num == 0 || num == 3));
+			set_led(led_path, "::sony4", (num == 0 || num >= 4));
+		}
+	}
+	else if (input[dev].quirk == QUIRK_WIIMOTE)
+	{
+		led_path = get_led_path(dev);
+		if (led_path)
+		{
+			set_led(led_path, ":blue:p0", (num == 0 || num == 1 || num == 5));
+			set_led(led_path, ":blue:p1", (num == 0 || num == 2 || num == 6));
+			set_led(led_path, ":blue:p2", (num == 0 || num == 3));
+			set_led(led_path, ":blue:p3", (num == 0 || num >= 4));
+		}
+	}
+	else if (input[dev].vid == 0x057e && ((input[dev].pid & 0xFF00) == 0x2000))
+	{
+		// nintendo switch controllers
+		led_path = get_led_path(dev);
+		if (led_path)
+		{
+			set_led(led_path, ":player1", (num == 0 || num == 1 || num == 5));
+			set_led(led_path, ":player2", (num == 0 || num == 2 || num == 6));
+			set_led(led_path, ":player3", (num == 0 || num == 3));
+			set_led(led_path, ":player4", (num == 0 || num >= 4));
+		}
+	}
+}
+
 void reset_players()
 {
 	for (int i = 0; i < NUMDEV; i++)
 	{
 		input[i].num = 0;
 		input[i].map_shown = 0;
+		update_num_hw(i, 0);
 	}
 	memset(player_pad, 0, sizeof(player_pad));
 	memset(player_pdsp, 0, sizeof(player_pdsp));
 }
 
-void store_player(int num, int dev)
+static void store_player(int num, int dev)
 {
 	devInput *player = (input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) ? player_pdsp : player_pad;
 
@@ -1706,9 +1815,10 @@ void store_player(int num, int dev)
 	for (int i = 1; i < NUMPLAYERS; i++) if (!strcmp(player[i].id, input[dev].id)) player[i].id[0] = 0;
 
 	if(num && num < NUMPLAYERS) memcpy(&player[num], &input[dev], sizeof(devInput));
+	update_num_hw(dev, num);
 }
 
-void restore_player(int dev)
+static void restore_player(int dev)
 {
 	// do not restore bound devices
 	if (dev != input[dev].bind) return;
@@ -1728,6 +1838,8 @@ void restore_player(int dev)
 			break;
 		}
 	}
+
+	update_num_hw(dev, input[dev].num);
 }
 
 void unflag_players()
@@ -2711,6 +2823,7 @@ void mergedevs()
 	char phys[64] = {};
 	char uniq[64] = {};
 	char id[64] = {};
+	static char sysfs[512] = {};
 
 	while (fgets(str, sizeof(str), f))
 	{
@@ -2726,6 +2839,7 @@ void mergedevs()
 		{
 			if (!strncmp("P: Phys", str, 7)) snprintf(phys, sizeof(phys), "%s", strchr(str, '=') + 1);
 			if (!strncmp("U: Uniq", str, 7)) snprintf(uniq, sizeof(uniq), "%s", strchr(str, '=') + 1);
+			if (!strncmp("S: Sysfs", str, 8)) snprintf(sysfs, sizeof(sysfs), "%s", strchr(str, '=') + 1);
 
 			if (!strncmp("H: ", str, 3))
 			{
@@ -2747,7 +2861,11 @@ void mergedevs()
 								char idsp[32];
 								strcpy(idsp, dev + 1);
 								strcat(idsp, " ");
-								if (strstr(handlers, idsp)) strcpy(input[i].id, id);
+								if (strstr(handlers, idsp))
+								{
+									strcpy(input[i].id, id);
+									strcpy(input[i].sysfs, sysfs);
+								}
 							}
 						}
 					}
