@@ -626,12 +626,24 @@ static void parse_config()
 			if (p[0] == 'F' && p[1] == 'C')
 			{
 				static char str[1024];
+				uint32_t load_addr = 0;
+				if (substrcpy(str, p, 3))
+				{
+					load_addr = strtoul(str, NULL, 16);
+					if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+					{
+						printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
+						load_addr = 0;
+					}
+				}
+
 				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
 				if (FileLoadConfig(str, str, sizeof(str)) && str[0])
 				{
+
 					int idx = p[2] - '0';
 					StoreIdx_F(idx, str);
-					user_io_file_tx(str, idx);
+					user_io_file_tx(str, idx, 0, 0, 0, load_addr);
 				}
 			}
 		}
