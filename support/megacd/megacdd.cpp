@@ -714,7 +714,7 @@ void cdd_t::CommandExec() {
 
 		this->status = CD_STAT_PLAY;
 
-		stat[0] = CD_STAT_SEEK; 
+		stat[0] = CD_STAT_SEEK;
 		stat[1] = 0xf;
 		stat[2] = 0;
 		stat[3] = 0;
@@ -952,17 +952,12 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 
 void InterleaveSubcode(uint8_t *subc_data, uint16_t *buf)
 {
-
-	uint8_t dsub[8][12];
-
-	int i, j, n;
-
-	for(i = 0, n=0; i < 96; i+=2,n++)
+	for(int i = 0, n=0; i < 96; i+=2,n++)
 	{
 		int code = 0;
-		for (j = 0; j < 8; j++)
+		for (int j = 0; j < 8; j++)
 		{
-			int bits = (subc_data[(j * 12) + (i / 8)] >> (6 - (i&6))) & 3; 
+			int bits = (subc_data[(j * 12) + (i / 8)] >> (6 - (i&6))) & 3;
 			code |= ((bits & 1) << (15 - j));
 			code |= ((bits >> 1) << (7 - j));
 		}
@@ -972,10 +967,8 @@ void InterleaveSubcode(uint8_t *subc_data, uint16_t *buf)
 
 void cdd_t::ReadSubcode(uint16_t* buf)
 {
-	uint8_t dsub[8][12];
-
 	uint8_t subc[96];
-	if (this->toc.chd_f) 
+	if (this->toc.chd_f)
 	{
 		//Just use the read sector call with an offset, since we previously read that sector, it is already in the hunk cache
 		if (this->toc.tracks[this->index].sbc_type == SUBCODE_RW_RAW) {
