@@ -124,6 +124,13 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 			cd_toc->tracks[cd_toc->last].type = 0;
 		}
 
+		cd_toc->tracks[cd_toc->last].sbc_type = SUBCODE_NONE;
+		if (!strcmp(subtype, "RW")) {
+			cd_toc->tracks[cd_toc->last].sbc_type = SUBCODE_RW;
+		} else if (!strcmp(subtype, "RW_RAW")) {
+			cd_toc->tracks[cd_toc->last].sbc_type = SUBCODE_RW_RAW;
+		}
+
 		//CHD pads tracks to a multiple of 4 sectors, keep track of the overall sector count and calculate the difference between the cdrom lba and the effective chd lba
 		cd_toc->tracks[cd_toc->last].offset = (sector_cnt + pregap - cd_toc->tracks[cd_toc->last].start);
 		cd_toc->tracks[cd_toc->last].end = cd_toc->tracks[cd_toc->last].start + frames - pregap;
