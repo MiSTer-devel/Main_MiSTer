@@ -738,74 +738,25 @@ uint8_t OpenHardfile(uint8_t unit, const char* filename)
 	hdf->unit = unit;
 	hdf->enabled = 0;
 
-	if (is_minimig())
+	if (!is_minimig() || ((minimig_config.ide_cfg & 1) && minimig_config.hardfile[unit].cfg))
 	{
-		if ((minimig_config.ide_cfg & 1) && minimig_config.hardfile[unit].cfg)
+		printf("\nChecking HDD %d\n", hdf->unit);
+		if (filename[0] && FileOpenEx(&hdf->file, filename, FileCanWrite(filename) ? O_RDWR : O_RDONLY))
 		{
-			printf("\nChecking HDD %d\n", unit);
-			if (minimig_config.hardfile[unit].filename[0])
-			{
-				if (FileOpenEx(&hdf->file, minimig_config.hardfile[unit].filename, FileCanWrite(minimig_config.hardfile[unit].filename) ? O_RDWR : O_RDONLY))
-				{
-					hdf->enabled = 1;
-					printf("file: \"%s\": ", hdf->file.name);
-					SetHardfileGeometry(hdf, !strcasecmp(".hdf", minimig_config.hardfile[unit].filename + strlen(minimig_config.hardfile[unit].filename) - 4));
-					printf("size: %llu (%llu MB)\n", hdf->file.size, hdf->file.size >> 20);
-					printf("CHS: %u/%u/%u", hdf->cylinders, hdf->heads, hdf->sectors);
-					printf(" (%llu MB), ", ((((uint64_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
-					printf("Offset: %d\n", hdf->offset);
-
-					if (ide_check() & 0x8000)
-					{
-						int present = 0;
-						int cd = 0;
-
-						int len = strlen(minimig_config.hardfile[unit].filename);
-						char *ext = minimig_config.hardfile[unit].filename + len - 4;
-						int vhd = (len > 4 && (!strcasecmp(ext, ".hdf") || (!strcasecmp(ext, ".vhd"))));
-
-						if (!vhd)
-						{
-							const char *img_name = cdrom_parse(unit, minimig_config.hardfile[unit].filename);
-							if (img_name) present = ide_img_mount(&hdf->file, img_name, 0);
-							if (present) cd = 1;
-							else vhd = 1;
-						}
-
-						if (!present && vhd) present = ide_img_mount(&hdf->file, minimig_config.hardfile[unit].filename, 1);
-						ide_img_set(unit, present ? &hdf->file : 0, cd, hdf->sectors, hdf->heads, cd ? 0 : -hdf->offset);
-						if (present) return 1;
-					}
-					else
-					{
-						return 1;
-					}
-				}
-			}
-			printf("HDD %d: not present\n", unit);
+			hdf->enabled = 1;
+			printf("file: \"%s\": ", hdf->file.name);
+			SetHardfileGeometry(hdf, is_minimig() && !strcasecmp(".hdf", filename + strlen(filename) - 4));
+			printf("size: %llu (%llu MB)\n", hdf->file.size, hdf->file.size >> 20);
+			printf("CHS: %u/%u/%u", hdf->cylinders, hdf->heads, hdf->sectors);
+			printf(" (%llu MB), ", ((((uint64_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
+			printf("Offset: %d\n", hdf->offset);
+			return 1;
 		}
-	}
-	else
-	{
-		printf("\nChecking HDD %d\n", unit);
-		if (filename[0])
-		{
-			if (FileOpenEx(&hdf->file, filename, FileCanWrite(filename) ? O_RDWR : O_RDONLY))
-			{
-				hdf->enabled = 1;
-				printf("file: \"%s\": ", hdf->file.name);
-				SetHardfileGeometry(hdf, 0);
-				printf("size: %llu (%llu MB)\n", hdf->file.size, hdf->file.size >> 20);
-				printf("CHS: %u/%u/%u", hdf->cylinders, hdf->heads, hdf->sectors);
-				printf(" (%llu MB), ", ((((uint64_t)hdf->cylinders) * hdf->heads * hdf->sectors) >> 11));
-				printf("Offset: %d\n", hdf->offset);
-				return 1;
-			}
-		}
+
+		printf("HDD %d: not present\n", hdf->unit);
 	}
 
 	// close if opened earlier.
-	if (is_minimig() && (ide_check() & 0x8000)) ide_img_set(unit, 0, 0);
 	FileClose(&hdf->file);
 	return 0;
 }

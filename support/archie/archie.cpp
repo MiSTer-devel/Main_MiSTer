@@ -9,6 +9,7 @@
 #include "../../user_io.h"
 #include "../../input.h"
 #include "../../support.h"
+#include "../../ide.h"
 #include "archie.h"
 
 #define CONFIG_FILENAME  "ARCHIE.CFG"
@@ -286,6 +287,11 @@ static void check_cmos(uint8_t cnt)
 	}
 }
 
+inline int hdd_open(int unit, char *filename)
+{
+	return (ide_check() & 0x8000) ? ide_open(unit, filename) : OpenHardfile(unit, filename);
+}
+
 void archie_init()
 {
 	archie_debugf("init");
@@ -314,12 +320,12 @@ void archie_init()
 	archie_set_60(archie_get_60());
 	archie_set_afix(archie_get_afix());
 
-	if(!config.hdd_img[0][0] || !OpenHardfile(0, config.hdd_img[0]))
+	if (!config.hdd_img[0][0] || !hdd_open(0, config.hdd_img[0]))
 	{
 		memset(config.hdd_img[0], 0, sizeof(config.hdd_img[0]));
 	}
 
-	if (!config.hdd_img[1][0] || !OpenHardfile(1, config.hdd_img[1]))
+	if (!config.hdd_img[1][0] || !hdd_open(1, config.hdd_img[1]))
 	{
 		memset(config.hdd_img[1], 0, sizeof(config.hdd_img[1]));
 	}
@@ -466,7 +472,11 @@ void archie_poll(void)
 	EnableFpga();
 	uint16_t status = spi_w(0);
 	DisableFpga();
-	HandleHDD(status >> 8, 0);
+
+	uint16_t sd_req = ide_check();
+	if (sd_req & 0x8000) ide_io(0, sd_req & 7);
+	else HandleHDD(status >> 8, 0);
+
 	check_cmos(status);
 	check_reset();
 
@@ -623,8 +633,5 @@ const char *archie_get_hdd_name(int i)
 void archie_hdd_mount(char *filename, int idx)
 {
 	memset(config.hdd_img[idx], 0, sizeof(config.hdd_img[idx]));
-	if (OpenHardfile(idx, filename))
-	{
-		strcpy(config.hdd_img[idx], filename);
-	}
+	if (hdd_open(idx, filename)) strcpy(config.hdd_img[idx], filename);
 }

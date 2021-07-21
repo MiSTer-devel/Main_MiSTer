@@ -348,9 +348,6 @@
     <ClInclude Include="support\minimig\minimig_hdd.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
-    <ClInclude Include="support\minimig\minimig_hdd_internal.h">
-      <Filter>Header Files\support</Filter>
-    </ClInclude>
     <ClInclude Include="support\x86\x86.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>

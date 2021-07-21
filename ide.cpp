@@ -13,7 +13,8 @@
 #include <sys/stat.h>
 
 #include "support/x86/x86.h"
-#include "support/minimig/minimig_hdd_internal.h"
+#include "support/minimig/minimig_hdd.h"
+#include "support/minimig/minimig_config.h"
 #include "spi.h"
 #include "user_io.h"
 #include "file_io.h"
@@ -41,6 +42,8 @@
 
 #define ide_send_data(databuf, size) ide_sendbuf(ide, 255, (size), (uint16_t*)(databuf))
 #define ide_recv_data(databuf, size) ide_recvbuf(ide, 255, (size), (uint16_t*)(databuf))
+
+#define SWAP(a)  ((((a)&0x000000ff)<<24)|(((a)&0x0000ff00)<<8)|(((a)&0x00ff0000)>>8)|(((a)&0xff000000)>>24))
 
 void ide_reg_set(ide_config *ide, uint16_t reg, uint16_t value)
 {
@@ -179,9 +182,113 @@ void ide_set_regs(ide_config *ide)
 	ide_sendbuf(ide, 0, 6, (uint16_t*)data);
 }
 
+static void calc_geometry(chs_t *chs, uint64_t size)
+{
+	uint32_t head = 0, cyl = 0, spt = 0;
+	uint32_t sptt[] = { 63, 127, 255, 0 };
+	uint32_t total = size / 512;
+	for (int i = 0; sptt[i] != 0; i++)
+	{
+		spt = sptt[i];
+		for (head = 4; head <= 16; head++)
+		{
+			cyl = total / (head * spt);
+			if (total <= 1024 * 1024)
+			{
+				if (cyl <= 1023) break;
+			}
+			else
+			{
+				if (cyl < 16383) break;
+				if (cyl < 32767 && head >= 5) break;
+				if (cyl <= 65536) break;
+			}
+		}
+		if (head <= 16) break;
+	}
+
+	chs->cylinders = cyl;
+	chs->heads = (uint16_t)head;
+	chs->sectors = (uint16_t)spt;
+}
+
+static void get_rdb_geometry(RigidDiskBlock *rdb, chs_t *chs, uint64_t size)
+{
+	chs->heads = SWAP(rdb->rdb_Heads);
+	chs->sectors = SWAP(rdb->rdb_Sectors);
+	chs->cylinders = SWAP(rdb->rdb_Cylinders);
+	if (chs->sectors > 255 || chs->heads > 16)
+	{
+		printf("ATTN: Illegal CHS value(s).");
+		if (!(chs->sectors & 1) && (chs->sectors < 512) && (chs->heads <= 8))
+		{
+			printf(" Translate: sectors %d->%d, heads %d->%d.\n", chs->sectors, chs->sectors / 2, chs->heads, chs->heads * 2);
+			chs->sectors /= 2;
+			chs->heads *= 2;
+			return;
+		}
+
+		printf(" DANGEROUS: Cannot translate to legal CHS values. Re-calculate the CHS.\n");
+		calc_geometry(chs, size);
+	}
+}
+
+static void guess_geometry(fileTYPE *f, chs_t *chs, int allow_vrdb)
+{
+	uint8_t flg = 0;
+	chs->offset = 0;
+
+	for (int i = 0; i < 16; ++i)
+	{
+		struct RigidDiskBlock *rdb = (struct RigidDiskBlock *)ide_buf;
+		if (!FileReadSec(f, ide_buf)) break;
+		for (int i = 0; i < 512; i++) flg |= ide_buf[i];
+
+		if (rdb->rdb_ID == RDB_MAGIC)
+		{
+			printf("Found RDB header -> native Amiga image.\n");
+			get_rdb_geometry(rdb, chs, f->size);
+			return;
+		}
+	}
+
+	if (allow_vrdb && flg)
+	{
+		chs->heads = 16;
+		chs->sectors = 128;
+
+		for (int i = 32; i <= 2048; i <<= 1)
+		{
+			int cylinders = f->size / (512 * i) + 1;
+			if (cylinders < 65536)
+			{
+				chs->sectors = (i < 128) ? i : 128;
+				chs->heads = i / chs->sectors;
+				break;
+			}
+		}
+
+		int spc = chs->heads * chs->sectors;
+		chs->cylinders = f->size / (512 * spc) + 1;
+		if (chs->cylinders > 65535) chs->cylinders = 65535;
+		chs->offset = -spc;
+		printf("No RDB header found in HDF image. Assume it's image of single partition. Use Virtual RDB header.\n");
+	}
+	else
+	{
+		calc_geometry(chs, f->size);
+		if(allow_vrdb) printf("No RDB header found. Possible non-Amiga or empty image.\n");
+	}
+}
+
 static void ide_set_geometry(drive_t *drive, uint16_t sectors, uint16_t heads)
 {
-	printf("SPT=%d, Heads=%d\n", sectors, heads);
+	int info = 0;
+	if (drive->heads != heads || drive->spt != sectors)
+	{
+		info = 1;
+		printf("SPT=%d, Heads=%d\n", sectors, heads);
+	}
 
 	drive->heads = heads ? heads : 16;
 	drive->spt = sectors ? sectors : 256;
@@ -196,10 +303,8 @@ static void ide_set_geometry(drive_t *drive, uint16_t sectors, uint16_t heads)
 
 	//Maximum 137GB images are supported.
 	drive->cylinders = cylinders;
-	printf("New SPT=%d, Heads=%d, Cylinders=%d\n", drive->spt, drive->heads, drive->cylinders);
+	if(info) printf("New SPT=%d, Heads=%d, Cylinders=%d\n", drive->spt, drive->heads, drive->cylinders);
 }
-
-#define SWAP(a)  ((((a)&0x000000ff)<<24)|(((a)&0x0000ff00)<<8)|(((a)&0x00ff0000)>>8)|(((a)&0xff000000)>>24))
 
 static uint32_t checksum_rdb(uint32_t *p, int set)
 {
@@ -957,4 +1062,50 @@ void ide_reset(uint8_t hotswap[4])
 	ide_inst[0].drive[1].allow_placeholder = hotswap[1];
 	ide_inst[1].drive[0].allow_placeholder = hotswap[2];
 	ide_inst[1].drive[1].allow_placeholder = hotswap[3];
+}
+
+int ide_open(uint8_t unit, const char* filename)
+{
+	static fileTYPE hdd_file[4] = {};
+	chs_t chs = {};
+
+	if (!is_minimig() || ((minimig_config.ide_cfg & 1) && minimig_config.hardfile[unit].cfg))
+	{
+		printf("\nChecking HDD %d\n", unit);
+		if (filename[0] && FileOpenEx(&hdd_file[unit], filename, FileCanWrite(filename) ? O_RDWR : O_RDONLY))
+		{
+			printf("file: \"%s\": ", hdd_file[unit].name);
+			guess_geometry(&hdd_file[unit], &chs, is_minimig() && !strcasecmp(".hdf", filename + strlen(filename) - 4));
+			printf("size: %llu (%llu MB)\n", hdd_file[unit].size, hdd_file[unit].size >> 20);
+			printf("CHS: %u/%u/%u", chs.cylinders, chs.heads, chs.sectors);
+			printf(" (%llu MB), ", ((((uint64_t)chs.cylinders) * chs.heads * chs.sectors) >> 11));
+			printf("Offset: %d\n", chs.offset);
+
+			int present = 0;
+			int cd = 0;
+
+			int len = strlen(filename);
+			const char *ext = filename + len - 4;
+			int vhd = (len > 4 && (!strcasecmp(ext, ".hdf") || (!strcasecmp(ext, ".vhd"))));
+
+			if (!vhd)
+			{
+				const char *img_name = cdrom_parse(unit, filename);
+				if (img_name) present = ide_img_mount(&hdd_file[unit], img_name, 0);
+				if (present) cd = 1;
+				else vhd = 1;
+			}
+
+			if (!present && vhd) present = ide_img_mount(&hdd_file[unit], filename, 1);
+			ide_img_set(unit, present ? &hdd_file[unit] : 0, cd, chs.sectors, chs.heads, cd ? 0 : -chs.offset);
+			if (present) return 1;
+		}
+
+		printf("HDD %d: not present\n", unit);
+	}
+
+	// close if opened earlier.
+	ide_img_set(unit, 0, 0);
+	FileClose(&hdd_file[unit]);
+	return 0;
 }

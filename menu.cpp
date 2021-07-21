@@ -152,8 +152,6 @@ enum MENU
 	MENU_MINIMIG_DISK1,
 	MENU_MINIMIG_DISK2,
 	MENU_MINIMIG_HDFFILE_SELECTED,
-	MENU_MINIMIG_HDFFILE_SELECTED2,
-	MENU_MINIMIG_HDFFILE_SELECTED3,
 	MENU_MINIMIG_ADFFILE_SELECTED,
 	MENU_MINIMIG_ROMFILE_SELECTED,
 	MENU_MINIMIG_LOADCONFIG1,
@@ -1000,8 +998,6 @@ void HandleUI(void)
 		// No UI in unknown cores.
 		return;
 	}
-
-	static struct RigidDiskBlock *rdb = nullptr;
 
 	static char opensave;
 	static char ioctl_index;
@@ -5504,62 +5500,10 @@ void HandleUI(void)
 
 			if (ide_is_placeholder(num))
 			{
-				OpenHardfile(num);
-				menustate = MENU_MINIMIG_DISK1;
+				if (ide_check() & 0x8000) ide_open(num, minimig_config.hardfile[num].filename);
+				else OpenHardfile(num, minimig_config.hardfile[num].filename);
 			}
-			else
-			{
-				menustate = checkHDF(minimig_config.hardfile[num].filename, &rdb) ? MENU_MINIMIG_DISK1 : MENU_MINIMIG_HDFFILE_SELECTED2;
-			}
-		}
-		break;
 
-	case MENU_MINIMIG_HDFFILE_SELECTED2:
-		m = 0;
-		menumask = 0x1;
-		if (!rdb)
-		{
-			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, "    Cannot open the file", 0, 0);
-		}
-		else
-		{
-			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, "      !! DANGEROUS !!", 0, 0);
-			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, " RDB has illegal CHS values:", 0, 0);
-			sprintf(s,    "   Cylinders: %lu", rdb->rdb_Cylinders);
-			OsdWrite(m++, s, 0, 0);
-			sprintf(s,    "   Heads:     %lu", rdb->rdb_Heads);
-			OsdWrite(m++, s, 0, 0);
-			sprintf(s,    "   Sectors:   %lu", rdb->rdb_Sectors);
-			OsdWrite(m++, s, 0, 0);
-			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, " Max legal values:", 0, 0);
-			OsdWrite(m++, "   C:65536, H:16, S:255", 0, 0);
-			OsdWrite(m++, "", 0, 0);
-			OsdWrite(m++, " Something may not correctly", 0, 0);
-			OsdWrite(m++, "  and may corrupt the data!", 0, 0);
-			OsdWrite(m++);
-		}
-		OsdWrite(m++, "", 0, 0);
-		OsdWrite(m++,     "            OK", 1, 0);
-		while (m < OsdGetSize()) OsdWrite(m++, "", 0, 0);
-
-		menusub_last = menusub;
-		menusub = 0;
-		menustate = MENU_MINIMIG_HDFFILE_SELECTED3;
-		break;
-
-	case MENU_MINIMIG_HDFFILE_SELECTED3:
-		if (select || menu)
-		{
-			menusub = menusub_last;
-			parentstate = menustate;
 			menustate = MENU_MINIMIG_DISK1;
 		}
 		break;

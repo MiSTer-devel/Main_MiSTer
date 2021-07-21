@@ -32,7 +32,7 @@
 #define IDE_STATE_WAIT_PKT_END  5
 #define IDE_STATE_WAIT_PKT_MODE 6
 
-typedef struct
+struct regs_t
 {
 	uint8_t io_done;
 	uint8_t io_fast;
@@ -53,9 +53,9 @@ typedef struct
 	uint8_t io_size;
 	uint8_t error;
 	uint8_t status;
-} regs_t;
+};
 
-typedef struct
+struct track_t
 {
 	char     filename[1024];
 	uint32_t start;
@@ -66,9 +66,9 @@ typedef struct
 	uint8_t  mode2;
 	uint8_t  number;
 	int      chd_offset;
-} track_t;
+};
 
-typedef struct
+struct drive_t
 {
 	fileTYPE *f;
 
@@ -105,9 +105,9 @@ typedef struct
 	uint32_t  chd_last_partial_lba;
 
 	uint16_t id[256];
-} drive_t;
+};
 
-typedef struct
+struct ide_config
 {
 	uint32_t base;
 	uint32_t bitoff;
@@ -117,7 +117,15 @@ typedef struct
 	regs_t   regs;
 
 	drive_t drive[2];
-} ide_config;
+};
+
+struct chs_t
+{
+	uint32_t sectors;
+	uint32_t heads;
+	uint32_t cylinders;
+	uint32_t offset;
+};
 
 #include "ide_cdrom.h"
 
@@ -138,6 +146,7 @@ int ide_img_mount(fileTYPE *f, const char *name, int rw);
 void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors = 0, int heads = 0, int offset = 0, int type = 0);
 int ide_is_placeholder(int num);
 void ide_reset(uint8_t hotswap[4]);
+int ide_open(uint8_t unit, const char* filename);
 
 void ide_io(int num, int req);
 

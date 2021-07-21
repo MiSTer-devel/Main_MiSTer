@@ -297,6 +297,13 @@ const char* minimig_get_cfg_info(int num, int label)
 	return "";
 }
 
+inline int hdd_open(int unit)
+{
+	return (ide_check() & 0x8000) ?
+		ide_open(unit, minimig_config.hardfile[unit].filename) :
+		OpenHardfile(unit, minimig_config.hardfile[unit].filename);
+}
+
 static int force_reload_kickstart = 0;
 static void ApplyConfiguration(char reloadkickstart)
 {
@@ -342,7 +349,11 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	rstval = SPI_CPU_HLT;
 	spi_uio_cmd8(UIO_MM2_RST, rstval);
-	spi_uio_cmd8(UIO_MM2_HDD, (minimig_config.ide_cfg & 0x21) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
+	spi_uio_cmd8(UIO_MM2_HDD, (minimig_config.ide_cfg & 0x21) |
+		(hdd_open(0) ? 2 : 0) |
+		(hdd_open(1) ? 4 : 0) |
+		(hdd_open(2) ? 8 : 0) |
+		(hdd_open(3) ? 16 : 0));
 
 	minimig_ConfigMemory(memcfg);
 	minimig_ConfigCPU(minimig_config.cpu);
