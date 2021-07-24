@@ -419,9 +419,9 @@ static void parse_config()
 	do {
 		p = user_io_get_confstr(i);
 		printf("get cfgstring %d = %s\n", i, p);
-		if (!i && p && p[0])
+		if (!i)
 		{
-			OsdCoreNameSet(p);
+			OsdCoreNameSet((p && p[0]) ? p : "CORE");
 		}
 
 		if (i == 1 && p)
@@ -1095,8 +1095,6 @@ void user_io_init(const char *path, const char *xml)
 		name = user_io_create_config_name();
 		if(strlen(name) > 0)
 		{
-			OsdCoreNameSet(user_io_get_core_name());
-
 			uint32_t status[2] = { 0, 0 };
 			if (!is_st() && !is_minimig())
 			{

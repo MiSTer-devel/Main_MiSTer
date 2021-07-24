@@ -1330,7 +1330,6 @@ void HandleUI(void)
 			else {
 				if (is_menu())
 				{
-					OsdCoreNameSet("");
 					SelectFile("", 0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_SYSTEM1);
 				}
 				else if (is_minimig())
@@ -1562,12 +1561,8 @@ void HandleUI(void)
 			entry = 0;
 			uint32_t selentry = 0;
 			menumask = 0;
-			p = user_io_get_core_name();
-			if (!p[0]) OsdCoreNameSet("8BIT");
-			else       OsdCoreNameSet(p);
 
-			if(!page) OsdSetTitle(OsdCoreNameGet());
-			else OsdSetTitle(title);
+			OsdSetTitle(page ? title : user_io_get_core_name());
 
 			dip_submenu = -1;
 			dip2_submenu = -1;
@@ -1820,16 +1815,6 @@ void HandleUI(void)
 							MenuWrite(entry, s, 0, d);
 							entry++;
 						}
-					}
-
-					// check for 'V'ersion strings
-					if (p[0] == 'V')
-					{
-						// get version string
-						strcpy(s, OsdCoreNameGet());
-						strcat(s, " ");
-						substrcpy(s + strlen(s), p, 1);
-						OsdCoreNameSet(s);
 					}
 				}
 			} while (p);
@@ -5766,7 +5751,6 @@ void HandleUI(void)
 	case MENU_SYSTEM2:
 		if (menu)
 		{
-			OsdCoreNameSet("");
 			SelectFile("", 0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_SYSTEM1);
 			break;
 		}
