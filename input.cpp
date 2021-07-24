@@ -855,12 +855,14 @@ enum QUIRK
 	QUIRK_JAMMA,
 	QUIRK_MSSP,
 	QUIRK_TOUCHGUN,
+	QUIRK_VCS,
 };
 
 typedef struct
 {
 	uint16_t vid, pid;
 	char     idstr[256];
+	char     mod;
 
 	uint8_t  led;
 	uint8_t  mouse;
@@ -1132,8 +1134,8 @@ int get_map_cancel()
 static char *get_map_name(int dev, int def)
 {
 	static char name[128];
-	if (def || is_menu()) sprintf(name, "input_%s_v3.map", input[dev].idstr);
-	else sprintf(name, "%s_input_%s_v3.map", user_io_get_core_name(), input[dev].idstr);
+	if (def || is_menu()) sprintf(name, "input_%s%s_v3.map", input[dev].idstr, input[dev].mod ? "_m" : "");
+	else sprintf(name, "%s_input_%s%s_v3.map", user_io_get_core_name(), input[dev].idstr, input[dev].mod ? "_m" : "");
 	return name;
 }
 
@@ -3359,6 +3361,14 @@ int input_test(int getchar)
 							input[n].quirk = QUIRK_JAMMA;
 						}
 
+						//Atari VCS wireless joystick with spinner
+						if (input[n].vid == 0x3250 && input[n].pid == 0x1001)
+						{
+							input[n].quirk = QUIRK_VCS;
+							input[n].spinner_acc = -1;
+							input[n].misc_flags = 0;
+						}
+
 						//Arduino and Teensy devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
 						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4)) && strlen(uniq))
 						{
@@ -3590,6 +3600,96 @@ int input_test(int getchar)
 											absinfo.minimum = 30;
 											absinfo.maximum = 225;
 										}
+									}
+								}
+
+								if (input[dev].quirk == QUIRK_VCS)
+								{
+									if (ev.type == EV_KEY)
+									{
+										int alt = input[i].mod && (input[i].misc_flags & 2);
+										switch (ev.code)
+										{
+										case 0x130:
+											if (!ev.value)
+											{
+												ev.code = !alt ? 0x135 : 0x130;
+												input_cb(&ev, &absinfo, i);
+											}
+											ev.code = alt ? 0x135 : 0x130;
+											break;
+										case 0x0AC:
+											if (!ev.value)
+											{
+												ev.code = !alt ? 0x136 : 0x132;
+												input_cb(&ev, &absinfo, i);
+											}
+											ev.code = alt ? 0x136 : 0x132;
+											break;
+										case 0x09E:
+											if (!ev.value)
+											{
+												ev.code = !alt ? 0x137 : 0x133;
+												input_cb(&ev, &absinfo, i);
+											}
+											ev.code = alt ? 0x137 : 0x133;
+											break;
+										case 0x08B:
+											if (!ev.value)
+											{
+												ev.code = !alt ? 0x138 : 0x134;
+												input_cb(&ev, &absinfo, i);
+											}
+											ev.code = alt ? 0x138 : 0x134;
+											break;
+										}
+
+										if (ev.code >= 0x130 && ev.code <= 0x134)
+										{
+											if (ev.value) input[i].misc_flags |= (0x1 << (ev.code - 0x130));
+											else input[i].misc_flags &= ~(0x1 << (ev.code - 0x130));
+
+											if ((input[i].misc_flags & 0x1B) == 0x1B)
+											{
+												input[i].misc_flags = 0;
+												input[i].mod = !input[i].mod;
+												input[i].has_map = 0;
+												input[i].has_mmap = 0;
+												Info(input[i].mod ? "8-button mode" : "5-button mode");
+											}
+
+											if (ev.code == 0x131 && input[i].mod) continue;
+										}
+									}
+									else if (ev.code == 7)
+									{
+										if (input[i].spinner_acc < 0) input[i].spinner_acc = ev.value;
+
+										int diff =
+											(input[i].spinner_acc > 700 && ev.value < 300) ? (ev.value + 1024 - input[i].spinner_acc) :
+											(input[i].spinner_acc < 300 && ev.value > 700) ? (ev.value - 1024 - input[i].spinner_acc) :
+																							  ev.value - input[i].spinner_acc;
+
+										if (diff < -2 || diff>2)
+										{
+											if (is_menu()) printf("diff = %d, paddle=%d, old = %d, new = %d\n", diff, input[i].paddle_val, input[i].spinner_acc, ev.value);
+											input[i].spinner_acc = ev.value;
+
+											input[i].paddle_val += diff;
+											if (input[i].paddle_val < 0) input[i].paddle_val = 0;
+											if (input[i].paddle_val > 1023) input[i].paddle_val = 1023;
+
+											ev.type = EV_ABS;
+											ev.code = 8;
+											ev.value = input[i].paddle_val;
+											input_cb(&ev, &absinfo, i);
+
+											ev.type = EV_REL;
+											ev.code = 7;
+											ev.value = diff / 2;
+											input_cb(&ev, &absinfo, i);
+										}
+										continue;
 									}
 								}
 
