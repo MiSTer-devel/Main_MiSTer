@@ -3615,6 +3615,7 @@ void HandleUI(void)
 		OsdSetSize(16);
 		menumask = 0x77f;
 		OsdSetTitle("AtariST", 0);
+		firstmenu = 0;
 		m = 0;
 
 		OsdWrite(m++);
@@ -3648,7 +3649,7 @@ void HandleUI(void)
 		OsdWrite(m++, " Cold Boot", menusub == 9);
 
 		for (; m < OsdGetSize()-1; m++) OsdWrite(m);
-		MenuWrite(15, STD_EXIT, menusub == 10, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+		OsdWrite(15, STD_EXIT, menusub == 10, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		menustate = MENU_ST_MAIN2;
 		parentstate = MENU_ST_MAIN1;
@@ -3778,74 +3779,87 @@ void HandleUI(void)
 		menumask = 0xffff;
 		OsdSetTitle("Config", 0);
 		helptext_idx = 0;
-		m = 0;
 
-		for (uint32_t i = 0; i < 2; i++)
+		while (1)
 		{
-			snprintf(s, 29, " HDD%d: %s", i, tos_get_disk_name(2 + i));
-			OsdWrite(m++, s, menusub == i);
+			if (!menusub) firstmenu = 0;
+			adjvisible = 0;
+			m = 0;
+
+			for (uint32_t i = 0; i < 2; i++)
+			{
+				snprintf(s, 29, " HDD%d: %s", i, tos_get_disk_name(2 + i));
+				MenuWrite(m++, s, menusub == i);
+			}
+			MenuWrite(m++);
+
+			snprintf(s, 29, " Cart: %s", tos_get_cartridge_name());
+			MenuWrite(m++, s, menusub == 2);
+			MenuWrite(m++);
+
+			strcpy(s, " Memory:     ");
+			strcat(s, tos_mem[(tos_system_ctrl() >> 1) & 7]);
+			MenuWrite(m++, s, menusub == 3);
+
+			snprintf(s, 29, " TOS:        %s", tos_get_image_name());
+			MenuWrite(m++, s, menusub == 4);
+
+			strcpy(s, " Chipset:    ");
+			// extract  TOS_CONTROL_STE and  TOS_CONTROL_MSTE bits
+			strcat(s, tos_chipset[(tos_system_ctrl() >> 23) & 3]);
+			MenuWrite(m++, s, menusub == 5);
+			MenuWrite(m++);
+
+			// Blitter is always present in >= STE
+			enable = (tos_system_ctrl() & (TOS_CONTROL_STE | TOS_CONTROL_MSTE)) ? 1 : 0;
+			strcpy(s, " Blitter:    ");
+			strcat(s, ((tos_system_ctrl() & TOS_CONTROL_BLITTER) || enable) ? "On" : "Off");
+			MenuWrite(m++, s, menusub == 6, enable);
+
+			// Viking card can only be enabled with max 8MB RAM
+			enable = (tos_system_ctrl() & 0xe) <= TOS_MEMCONFIG_8M;
+			strcpy(s, " Viking:     ");
+			strcat(s, ((tos_system_ctrl() & TOS_CONTROL_VIKING) && enable) ? "On" : "Off");
+			MenuWrite(m++, s, menusub == 7, enable ? 0 : 1);
+
+			strcpy(s, " Aspect:     ");
+			tos_set_ar(get_ar_name(tos_get_ar(), s));
+			MenuWrite(m++, s, menusub == 8);
+
+			strcpy(s, " Screen:     ");
+			if (tos_system_ctrl() & TOS_CONTROL_VIDEO_COLOR) strcat(s, "Color");
+			else                                             strcat(s, "Mono");
+			MenuWrite(m++, s, menusub == 9);
+
+			strcpy(s, " Mono 60Hz:  ");
+			if (tos_system_ctrl() & TOS_CONTROL_MDE60) strcat(s, "On");
+			else                                       strcat(s, "Off");
+			MenuWrite(m++, s, menusub == 10);
+
+			strcpy(s, " Video Crop: ");
+			if (tos_system_ctrl() & TOS_CONTROL_BORDER) strcat(s, (tos_get_extctrl() & 0x400) ? "Visible 216p(5x)" : "Visible");
+			else                                        strcat(s, "Full");
+			MenuWrite(m++, s, menusub == 11);
+
+			strcpy(s, " Scale:      ");
+			strcat(s, config_scale[(tos_get_extctrl() >> 11) & 3]);
+			MenuWrite(m++, s, menusub == 12);
+
+			strcpy(s, " Scanlines:  ");
+			strcat(s, tos_scanlines[(tos_system_ctrl() >> 20) & 3]);
+			MenuWrite(m++, s, menusub == 13);
+			MenuWrite(m++);
+
+			strcpy(s, " YM-Audio:   ");
+			strcat(s, tos_stereo[(tos_system_ctrl() & TOS_CONTROL_STEREO) ? 1 : 0]);
+			MenuWrite(m++, s, menusub == 14);
+			MenuWrite(m++);
+
+			MenuWrite(m++, STD_BACK, menusub == 15);
+
+			if (!adjvisible) break;
+			firstmenu += adjvisible;
 		}
-
-		snprintf(s, 29, " Cart: %s", tos_get_cartridge_name());
-		OsdWrite(m++, s, menusub == 2);
-
-		strcpy(s, " Memory:     ");
-		strcat(s, tos_mem[(tos_system_ctrl() >> 1) & 7]);
-		OsdWrite(m++, s, menusub == 3);
-
-		snprintf(s, 29, " TOS:        %s", tos_get_image_name());
-		OsdWrite(m++, s, menusub == 4);
-
-		strcpy(s, " Chipset:    ");
-		// extract  TOS_CONTROL_STE and  TOS_CONTROL_MSTE bits
-		strcat(s, tos_chipset[(tos_system_ctrl() >> 23) & 3]);
-		OsdWrite(m++, s, menusub == 5);
-
-		// Blitter is always present in >= STE
-		enable = (tos_system_ctrl() & (TOS_CONTROL_STE | TOS_CONTROL_MSTE)) ? 1 : 0;
-		strcpy(s, " Blitter:    ");
-		strcat(s, ((tos_system_ctrl() & TOS_CONTROL_BLITTER) || enable) ? "On" : "Off");
-		OsdWrite(m++, s, menusub == 6, enable);
-
-		// Viking card can only be enabled with max 8MB RAM
-		enable = (tos_system_ctrl() & 0xe) <= TOS_MEMCONFIG_8M;
-		strcpy(s, " Viking:     ");
-		strcat(s, ((tos_system_ctrl() & TOS_CONTROL_VIKING) && enable) ? "On" : "Off");
-		OsdWrite(m++, s, menusub == 7, enable ? 0 : 1);
-
-		strcpy(s, " Aspect:     ");
-		tos_set_ar(get_ar_name(tos_get_ar(), s));
-		OsdWrite(m++, s, menusub == 8);
-
-		strcpy(s, " Screen:     ");
-		if (tos_system_ctrl() & TOS_CONTROL_VIDEO_COLOR) strcat(s, "Color");
-		else                                             strcat(s, "Mono");
-		OsdWrite(m++, s, menusub == 9);
-
-		strcpy(s, " Mono 60Hz:  ");
-		if (tos_system_ctrl() & TOS_CONTROL_MDE60) strcat(s, "On");
-		else                                       strcat(s, "Off");
-		OsdWrite(m++, s, menusub == 10);
-
-		strcpy(s, " Video Crop: ");
-		if (tos_system_ctrl() & TOS_CONTROL_BORDER) strcat(s, (tos_get_extctrl() & 0x400) ? "Visible 216p(5x)" : "Visible");
-		else                                        strcat(s, "Full");
-		OsdWrite(m++, s, menusub == 11);
-
-		strcpy(s, " Scale:      ");
-		strcat(s, config_scale[(tos_get_extctrl() >> 11) & 3]);
-		OsdWrite(m++, s, menusub == 12);
-
-		strcpy(s, " Scanlines:  ");
-		strcat(s, tos_scanlines[(tos_system_ctrl() >> 20) & 3]);
-		OsdWrite(m++, s, menusub == 13);
-
-		strcpy(s, " YM-Audio:   ");
-		strcat(s, tos_stereo[(tos_system_ctrl() & TOS_CONTROL_STEREO) ? 1 : 0]);
-		OsdWrite(m++, s, menusub == 14);
-
-		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
-		OsdWrite(15, STD_BACK, menusub == 15);
 
 		parentstate = menustate;
 		menustate = MENU_ST_SYSTEM2;
