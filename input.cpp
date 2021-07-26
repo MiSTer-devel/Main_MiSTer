@@ -2926,7 +2926,6 @@ void mergedevs()
 				{
 					//All mice as spinners
 					if ((cfg.spinner_vid == 0xFFFF && cfg.spinner_pid == 0xFFFF)
-
 						//Mouse as spinner
 						|| (cfg.spinner_vid && cfg.spinner_pid && input[i].vid == cfg.spinner_vid && input[i].pid == cfg.spinner_pid))
 					{
@@ -2935,7 +2934,7 @@ void mergedevs()
 						input[i].spinner_prediv = 1;
 					}
 
-					//Arcade Spinner TS-BSP01
+					//Arcade Spinner TS-BSP01 (X axis) and Atari (Y axis)
 					if (input[i].vid == 0x32be && input[i].pid == 0x1420)
 					{
 						input[i].quirk = QUIRK_MSSP;
@@ -3942,6 +3941,7 @@ int input_test(int getchar)
 
 							if (input[dev].quirk == QUIRK_MSSP)
 							{
+								int val = cfg.spinner_axis ? yval : xval;
 								int btn = (data[0] & 7) ? 1 : 0;
 								if (input[i].misc_flags != btn)
 								{
@@ -3955,7 +3955,7 @@ int input_test(int getchar)
 								int throttle = (cfg.spinner_throttle ? abs(cfg.spinner_throttle) : 100) * input[i].spinner_prediv;
 								int inv = cfg.spinner_throttle < 0;
 
-								input[i].spinner_acc += (xval * 100);
+								input[i].spinner_acc += (val * 100);
 								int spinner = (input[i].spinner_acc <= -throttle || input[i].spinner_acc >= throttle) ? (input[i].spinner_acc / throttle) : 0;
 								input[i].spinner_acc -= spinner * throttle;
 
@@ -3976,7 +3976,7 @@ int input_test(int getchar)
 									input_cb(&ev, &absinfo, i);
 								}
 
-								if (is_menu() && !video_fb_state()) printf("%s: xval=%d, btn=%d, spinner=%d, paddle=%d\n", input[i].devname, xval, btn, spinner, input[i].paddle_val);
+								if (is_menu() && !video_fb_state()) printf("%s: xval=%d, btn=%d, spinner=%d, paddle=%d\n", input[i].devname, val, btn, spinner, input[i].paddle_val);
 							}
 							else
 							{
