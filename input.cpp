@@ -1789,6 +1789,7 @@ static void update_num_hw(int dev, int num)
 		led_path = get_led_path(dev);
 		if (led_path)
 		{
+			set_led(led_path, ":home", num ? 1 : 15);
 			set_led(led_path, ":player1", (num == 0 || num == 1 || num == 5));
 			set_led(led_path, ":player2", (num == 0 || num == 2 || num == 6));
 			set_led(led_path, ":player3", (num == 0 || num == 3));
@@ -2998,6 +2999,32 @@ static struct
 	{KEY_K,         2, 0x12B}, // 2P 6
 	{KEY_J,         2, 0x12C}, // 2P 7
 	{KEY_L,         2, 0x12D}, // 2P 8
+
+/*
+	some key codes overlap with 1P/2P buttons.
+
+	{KEY_7,         3, 0x120}, // 3P coin
+	{KEY_3,         3, 0x121}, // 3P start
+	{KEY_I,         3, 0x122}, // 3P up
+	{KEY_K,         3, 0x123}, // 3P down
+	{KEY_J,         3, 0x124}, // 3P left
+	{KEY_L,         3, 0x125}, // 3P right
+	{KEY_RIGHTCTRL, 3, 0x126}, // 3P 1
+	{KEY_RIGHTSHIFT,3, 0x127}, // 3P 2
+	{KEY_ENTER,     3, 0x128}, // 3P 3
+	{KEY_O,         3, 0x129}, // 3P 4
+
+	{KEY_8,         4, 0x120}, // 4P coin
+	{KEY_4,         4, 0x121}, // 4P start
+	{KEY_Y,         4, 0x122}, // 4P up
+	{KEY_N,         4, 0x123}, // 4P down
+	{KEY_V,         4, 0x124}, // 4P left
+	{KEY_U,         4, 0x125}, // 4P right
+	{KEY_B,         4, 0x126}, // 4P 1
+	{KEY_E,         4, 0x127}, // 4P 2
+	{KEY_H,         4, 0x128}, // 4P 3
+	{KEY_M,         4, 0x129}, // 4P 4
+*/
 };
 
 static void send_mouse_with_throttle(int dev, int xval, int yval, int btn, int8_t data_3)
@@ -3329,6 +3356,17 @@ int input_test(int getchar)
 								input[n].guncal[2] = 1;
 								input[n].guncal[3] = 1023;
 								input_lightgun_load(n);
+							}
+						}
+
+						if (input[n].vid == 0x057e)
+						{
+							if (strstr(input[n].name, " IMU"))
+							{
+								// don't use Accelerometer
+								close(pool[n].fd);
+								pool[n].fd = -1;
+								continue;
 							}
 						}
 
