@@ -33,6 +33,7 @@
 #include "video.h"
 #include "audio.h"
 #include "shmem.h"
+#include "ide.h"
 
 #include "support.h"
 
@@ -40,6 +41,7 @@ static char core_path[1024] = {};
 static char rbf_path[1024] = {};
 
 static fileTYPE sd_image[16] = {};
+static int      sd_type[16] = {};
 static int      sd_image_cangrow[16] = {};
 static uint64_t buffer_lba[16] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
 								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
@@ -417,9 +419,9 @@ static void parse_config()
 	do {
 		p = user_io_get_confstr(i);
 		printf("get cfgstring %d = %s\n", i, p);
-		if (!i && p && p[0])
+		if (!i)
 		{
-			OsdCoreNameSet(p);
+			OsdCoreNameSet((p && p[0]) ? p : "CORE");
 		}
 
 		if (i == 1 && p)
@@ -625,12 +627,24 @@ static void parse_config()
 			if (p[0] == 'F' && p[1] == 'C')
 			{
 				static char str[1024];
+				uint32_t load_addr = 0;
+				if (substrcpy(str, p, 3))
+				{
+					load_addr = strtoul(str, NULL, 16);
+					if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+					{
+						printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
+						load_addr = 0;
+					}
+				}
+
 				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
 				if (FileLoadConfig(str, str, sizeof(str)) && str[0])
 				{
+
 					int idx = p[2] - '0';
 					StoreIdx_F(idx, str);
-					user_io_file_tx(str, idx);
+					user_io_file_tx(str, idx, 0, 0, 0, load_addr);
 				}
 			}
 		}
@@ -1081,8 +1095,6 @@ void user_io_init(const char *path, const char *xml)
 		name = user_io_create_config_name();
 		if(strlen(name) > 0)
 		{
-			OsdCoreNameSet(user_io_get_core_name());
-
 			uint32_t status[2] = { 0, 0 };
 			if (!is_st() && !is_minimig())
 			{
@@ -1445,7 +1457,7 @@ void user_io_set_download(unsigned char enable, int addr)
 	DisableFpga();
 }
 
-void user_io_file_tx_data(const uint8_t *addr, uint16_t len)
+void user_io_file_tx_data(const uint8_t *addr, uint32_t len)
 {
 	EnableFpga();
 	spi8(FIO_FILE_TX_DAT);
@@ -1466,7 +1478,7 @@ void user_io_set_upload(unsigned char enable, int addr)
 	DisableFpga();
 }
 
-void user_io_file_rx_data(uint8_t *addr, uint16_t len)
+void user_io_file_rx_data(uint8_t *addr, uint32_t len)
 {
 	EnableFpga();
 	spi8(FIO_FILE_TX_DAT);
@@ -1490,6 +1502,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	int len = strlen(name);
 
 	sd_image_cangrow[index] = (pre != 0);
+	sd_type[index] = 0;
 
 	if (len)
 	{
@@ -1504,7 +1517,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 			{
 				ret = x2trd(name, sd_image + index);
 			}
-			else if (is_c64() && len > 4 && !strcasecmp(name + len - 4, ".t64"))
+			else if (len > 4 && !strcasecmp(name + len - 4, ".t64"))
 			{
 				writable = 0;
 				ret = c64_openT64(name, sd_image + index);
@@ -1514,9 +1527,10 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 			{
 				writable = FileCanWrite(name);
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
-				if (ret && is_c64() && len > 4 && (!strcasecmp(name + len - 4, ".d64") || !strcasecmp(name + len - 4, ".g64")))
+				if (ret && len > 4 && (!strcasecmp(name + len - 4, ".d64") || !strcasecmp(name + len - 4, ".g64")))
 				{
 					ret = c64_openGCR(name, sd_image + index, index);
+					sd_type[index] = 1;
 					if(!ret) FileClose(&sd_image[index]);
 				}
 			}
@@ -2035,7 +2049,7 @@ int user_io_file_tx_a(const char* name, uint16_t index)
 	if (use_progress) ProgressMessage(0, 0, 0, 0);
 	while (bytes2send)
 	{
-		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+		uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
 		user_io_file_tx_data(buf, chunk);
@@ -2126,7 +2140,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t sz = fb.size;
 				while (sz)
 				{
-					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					uint32_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fb, buf, chunk);
 					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
@@ -2192,7 +2206,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t sz = fg.size;
 				while (sz)
 				{
-					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					uint32_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fg, buf, chunk);
 					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
@@ -2226,7 +2240,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	{
 		while (dosend && bytes2send)
 		{
-			uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+			uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 			FileReadAdv(&f, buf, chunk);
 			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
@@ -2500,7 +2514,17 @@ void user_io_poll()
 		spi_w(0);
 		DisableFpga();
 		HandleFDD(c1, c2);
-		HandleHDD(c1, c2);
+
+		uint16_t sd_req = ide_check();
+		if (sd_req & 0x8000)
+		{
+			ide_io(0, sd_req & 7);
+			ide_io(1, (sd_req >> 3) & 7);
+		}
+		else
+		{
+			HandleHDD(c1, c2);
+		}
 		UpdateDriveStatus();
 
 		kbd_fifo_poll();
@@ -2677,7 +2701,7 @@ void user_io_poll()
 			}
 			DisableIO();
 
-			if ((blksz == 32) && is_c64())
+			if ((blksz == 32) && sd_type[disk])
 			{
 				if (op == 2) c64_writeGCR(disk, lba);
 				else if (op & 1) c64_readGCR(disk, lba);

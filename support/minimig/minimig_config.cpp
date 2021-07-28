@@ -12,6 +12,7 @@
 #include "../../user_io.h"
 #include "../../input.h"
 #include "../../cfg.h"
+#include "../../ide.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
@@ -225,7 +226,7 @@ static char UploadActionReplay()
 		spi8((data >> 0) & 0xff);
 		data = 0xff; // key, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = minimig_config.enable_ide ? 0xff : 0; // ide, 1 byte
+		data = (minimig_config.ide_cfg & 1) ? 0xff : 0; // ide, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 0xff; // a1200, 1 byte
 		spi8((data >> 0) & 0xff);
@@ -296,6 +297,13 @@ const char* minimig_get_cfg_info(int num, int label)
 	return "";
 }
 
+inline int hdd_open(int unit)
+{
+	return (ide_check() & 0x8000) ?
+		ide_open(unit, minimig_config.hardfile[unit].filename) :
+		OpenHardfile(unit, minimig_config.hardfile[unit].filename);
+}
+
 static int force_reload_kickstart = 0;
 static void ApplyConfiguration(char reloadkickstart)
 {
@@ -322,18 +330,30 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	printf("\n");
 
-	printf("\nIDE state: %s.\n", minimig_config.enable_ide ? "enabled" : "disabled");
-	if (minimig_config.enable_ide)
+	printf("\nIDE state: %s.\n", (minimig_config.ide_cfg & 1) ? "enabled" : "disabled");
+	if (minimig_config.ide_cfg & 1)
 	{
-		printf("Primary Master HDD is %s.\n", minimig_config.hardfile[0].enabled ? "enabled" : "disabled");
-		printf("Primary Slave HDD is %s.\n", minimig_config.hardfile[1].enabled ? "enabled" : "disabled");
-		printf("Secondary Master HDD is %s.\n", minimig_config.hardfile[2].enabled ? "enabled" : "disabled");
-		printf("Secondary Slave HDD is %s.\n", minimig_config.hardfile[3].enabled ? "enabled" : "disabled");
+		printf("Primary Master HDD is %s.\n", (minimig_config.hardfile[0].cfg == 2) ? "CD" : minimig_config.hardfile[0].cfg ? "HDD" : "disabled");
+		printf("Primary Slave HDD is %s.\n", (minimig_config.hardfile[1].cfg == 2) ? "CD" : minimig_config.hardfile[1].cfg ? "HDD" : "disabled");
+		printf("Secondary Master HDD is %s.\n", (minimig_config.hardfile[2].cfg == 2) ? "CD" : minimig_config.hardfile[2].cfg ? "HDD" : "disabled");
+		printf("Secondary Slave HDD is %s.\n", (minimig_config.hardfile[3].cfg == 2) ? "CD" : minimig_config.hardfile[3].cfg ? "HDD" : "disabled");
 	}
+
+	uint8_t hotswap[4] = {
+		minimig_config.hardfile[0].cfg == 2,
+		minimig_config.hardfile[1].cfg == 2,
+		minimig_config.hardfile[2].cfg == 2,
+		minimig_config.hardfile[3].cfg == 2
+	};
+	ide_reset(hotswap);
 
 	rstval = SPI_CPU_HLT;
 	spi_uio_cmd8(UIO_MM2_RST, rstval);
-	spi_uio_cmd8(UIO_MM2_HDD, (minimig_config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
+	spi_uio_cmd8(UIO_MM2_HDD, (minimig_config.ide_cfg & 0x21) |
+		(hdd_open(0) ? 2 : 0) |
+		(hdd_open(1) ? 4 : 0) |
+		(hdd_open(2) ? 8 : 0) |
+		(hdd_open(3) ? 16 : 0));
 
 	minimig_ConfigMemory(memcfg);
 	minimig_ConfigCPU(minimig_config.cpu);
@@ -460,11 +480,15 @@ int minimig_cfg_load(int num)
 		minimig_config.chipset = 0;
 		minimig_config.floppy.speed = CONFIG_FLOPPY2X;
 		minimig_config.floppy.drives = 1;
-		minimig_config.enable_ide = 0;
-		minimig_config.hardfile[0].enabled = 1;
+		minimig_config.ide_cfg = 0;
+		minimig_config.hardfile[0].cfg = 1;
 		minimig_config.hardfile[0].filename[0] = 0;
-		minimig_config.hardfile[1].enabled = 1;
+		minimig_config.hardfile[1].cfg = 1;
 		minimig_config.hardfile[1].filename[0] = 0;
+		minimig_config.hardfile[2].cfg = 0;
+		minimig_config.hardfile[2].filename[0] = 0;
+		minimig_config.hardfile[3].cfg = 0;
+		minimig_config.hardfile[3].filename[0] = 0;
 		updatekickstart = true;
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}

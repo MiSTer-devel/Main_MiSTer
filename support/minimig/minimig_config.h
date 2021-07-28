@@ -33,7 +33,7 @@ typedef struct
 
 typedef struct
 {
-	unsigned char enabled;
+	unsigned char cfg;
 	unsigned char reserved;
 	char filename[1024];
 } mm_hardfileTYPE;
@@ -50,7 +50,7 @@ typedef struct
 	unsigned char   chipset;
 	mm_floppyTYPE   floppy;
 	unsigned char   disable_ar3;
-	unsigned char   enable_ide;
+	unsigned char   ide_cfg;
 	unsigned char   scanlines;
 	unsigned char   audio;
 	mm_hardfileTYPE hardfile[4];

@@ -4,6 +4,12 @@
 #include <libchdr/chd.h>
 #include "file_io.h"
 
+
+typedef enum
+{
+        SUBCODE_NONE = 0, SUBCODE_RW, SUBCODE_RW_RAW 
+} cd_subcode_types_t;
+
 typedef struct
 {
 	fileTYPE f;
@@ -12,6 +18,7 @@ typedef struct
 	int end;
 	int type;
 	int sector_size;
+	cd_subcode_types_t sbc_type;
 } cd_track_t;
 
 typedef struct
@@ -21,7 +28,7 @@ typedef struct
 	int sectorSize;
 	chd_file *chd_f;
 	cd_track_t tracks[100];
-//	fileTYPE sub;
+	fileTYPE sub;
 } toc_t;
 
 typedef struct

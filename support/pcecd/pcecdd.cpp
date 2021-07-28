@@ -18,6 +18,7 @@ pcecdd_t pcecdd;
 
 pcecdd_t::pcecdd_t() {
 	latency = 0;
+	audiodelay = 0;
 	loaded = 0;
 	index = 0;
 	lba = 0;
@@ -315,6 +316,7 @@ void pcecdd_t::Unload()
 
 void pcecdd_t::Reset() {
 	latency = 0;
+	audiodelay = 0;
 	index = 0;
 	lba = 0;
 	scanOffset = 0;
@@ -408,6 +410,12 @@ void pcecdd_t::Update() {
 			return;
 		}
 
+		if (this->audiodelay > 0)
+		{
+			this->audiodelay--;
+			return;
+		}
+
 		this->index = GetTrackByLBA(this->lba, &this->toc);
 
 		DISKLED_ON;
@@ -464,6 +472,7 @@ void pcecdd_t::CommandExec() {
 	msf_t msf;
 	int new_lba = 0;
 	static uint8_t buf[32];
+	uint32_t temp_latency;
 
 	memset(buf, 0, 32);
 
@@ -580,6 +589,7 @@ void pcecdd_t::CommandExec() {
 		else
 		{
 			this->latency = (int)(get_cd_seek_ms(this->lba, new_lba)/13.33);
+			this->audiodelay = 0;
 		}
 		printf("seek time ticks: %d\n", this->latency);
 
@@ -641,10 +651,19 @@ void pcecdd_t::CommandExec() {
 		if (comm[13] & 0x80) // fast seek (OSD setting)
 		{
 			this->latency = 0;
+			this->audiodelay = 0;
 		}
 		else
 		{
-			this->latency = (int)(get_cd_seek_ms(this->lba, new_lba) / 13.33);
+			temp_latency = (int)(get_cd_seek_ms(this->lba, new_lba) / 13.33);
+			this->audiodelay = (int)(220 / 13.33);
+
+			if (temp_latency > this->audiodelay)
+				this->latency = temp_latency - this->audiodelay;
+			else {
+				this->latency = temp_latency;
+				this->audiodelay = 0;
+			}
 		}
 
 		printf("seek time ticks: %d\n", this->latency);

@@ -162,11 +162,11 @@ void spi_n(uint8_t value, uint16_t cnt)
 	while (cnt--) spi_b(value);
 }
 
-void spi_read(uint8_t *addr, uint16_t len, int wide)
+void spi_read(uint8_t *addr, uint32_t len, int wide)
 {
 	if (wide)
 	{
-		uint16_t len16 = len >> 1;
+		uint32_t len16 = len >> 1;
 		uint16_t *a16 = (uint16_t*)addr;
 		while (len16--) *a16++ = spi_w(0);
 		if (len & 1) *((uint8_t*)a16) = spi_w(0);
@@ -177,11 +177,11 @@ void spi_read(uint8_t *addr, uint16_t len, int wide)
 	}
 }
 
-void spi_write(const uint8_t *addr, uint16_t len, int wide)
+void spi_write(const uint8_t *addr, uint32_t len, int wide)
 {
 	if (wide)
 	{
-		uint16_t len16 = len >> 1;
+		uint32_t len16 = len >> 1;
 		uint16_t *a16 = (uint16_t*)addr;
 		while (len16--) spi_w(*a16++);
 		if(len & 1) spi_w(*((uint8_t*)a16));

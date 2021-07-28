@@ -44,12 +44,14 @@ typedef struct {
 	uint16_t jamma_pid;
 	uint16_t no_merge_vid;
 	uint16_t no_merge_pid;
+	uint32_t no_merge_vidpid[256];
 	uint16_t spinner_vid;
 	uint16_t spinner_pid;
 	int spinner_throttle;
 	uint8_t sniper_mode;
 	uint8_t browse_expand;
 	uint8_t logo;
+	uint8_t log_file_entry;
 	char bootcore[256];
 	char video_conf[1024];
 	char video_conf_pal[1024];
