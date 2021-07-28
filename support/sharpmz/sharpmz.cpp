@@ -65,9 +65,15 @@ static unsigned char         debugEnabled = 0;
 int sharpmz_file_write(fileTYPE *file, const char *fileName)
 {
     int           ret;
+    char          directoryPath[1024];
     char          fullPath[1024];
 
-    sprintf(fullPath, "%s/%s/%s", getRootDir(), SHARPMZ_CORE_NAME, fileName);
+    strcpy(directoryPath,SHARPMZ_CORE_NAME);
+    findPrefixDir(directoryPath, sizeof(directoryPath));
+
+	
+
+    sprintf(fullPath, "%s/%s", directoryPath, fileName);
 
     const int mode = O_RDWR | O_CREAT | O_TRUNC | O_SYNC;   // No longer required as FileOpenEx has changed.  | S_IRWXU | S_IRWXG | S_IRWXO;
     ret = FileOpenEx(file, fullPath, mode);
