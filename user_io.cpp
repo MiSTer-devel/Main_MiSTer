@@ -2513,7 +2513,9 @@ void user_io_poll()
 		spi_w(0);
 		spi_w(0);
 		DisableFpga();
+		sysled_enable(0);
 		HandleFDD(c1, c2);
+		sysled_enable(1);
 
 		uint16_t sd_req = ide_check();
 		if (sd_req & 0x8000)

@@ -1050,6 +1050,12 @@ int toggle_kbdled(int mask)
 	return state;
 }
 
+static int sysled_is_enabled = 1;
+void sysled_enable(int en)
+{
+	sysled_is_enabled = en;
+}
+
 #define JOYMAP_DIR  "inputs/"
 static int load_map(const char *name, void *pBuffer, int size)
 {
@@ -4047,7 +4053,10 @@ int input_test(int getchar)
 			if ((pool[NUMDEV + 2].fd >= 0) && (pool[NUMDEV + 2].revents & POLLPRI))
 			{
 				static char status[16];
-				if (read(pool[NUMDEV + 2].fd, status, sizeof(status) - 1) && status[0] != '0') DISKLED_ON;
+				if (read(pool[NUMDEV + 2].fd, status, sizeof(status) - 1) && status[0] != '0')
+				{
+					if (sysled_is_enabled || video_fb_state()) DISKLED_ON;
+				}
 				lseek(pool[NUMDEV + 2].fd, 0, SEEK_SET);
 			}
 		}
