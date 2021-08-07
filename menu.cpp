@@ -4344,6 +4344,16 @@ void HandleUI(void)
 		OsdSetTitle((fs_Options & SCANO_CORES) ? "Cores" : "Select", 0);
 		PrintDirectory(hold_cnt<2);
 		menustate = MENU_FILE_SELECT2;
+		if (cfg.log_file_entry)
+		{
+			//Write out paths infos for external integration
+			FILE* filePtr = fopen("/tmp/CURRENTPATH", "w");
+			FILE* pathPtr = fopen("/tmp/FULLPATH", "w");
+			fprintf(filePtr, "%s", flist_SelectedItem()->altname);
+			fprintf(pathPtr, "%s", selPath);
+			fclose(filePtr);
+			fclose(pathPtr);
+		}
 		break;
 
 	case MENU_FILE_SELECT2:
@@ -4410,17 +4420,6 @@ void HandleUI(void)
 		if (flist_nDirEntries())
 		{
 			ScrollLongName(); // scrolls file name if longer than display line
-
-			if (cfg.log_file_entry)
-			{
-				//Write out paths infos for external integration
-				FILE* filePtr = fopen("/tmp/CURRENTPATH", "w");
-				FILE* pathPtr = fopen("/tmp/FULLPATH", "w");
-				fprintf(filePtr, "%s", flist_SelectedItem()->altname);
-				fprintf(pathPtr, "%s", selPath);
-				fclose(filePtr);
-				fclose(pathPtr);
-			}
 
 			if (c == KEY_HOME)
 			{
