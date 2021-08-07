@@ -67,6 +67,7 @@
 #define UIO_SET_AFILTER 0x39
 #define UIO_SET_AR_CUST 0x3A
 #define UIO_SET_UART    0x3B
+#define UIO_CHK_UPLOAD  0x3C
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53

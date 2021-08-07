@@ -3176,6 +3176,7 @@ void user_io_poll()
 
 	if (is_megacd()) mcd_poll();
 	if (is_pce()) pcecd_poll();
+	if (is_arcade() && spi_uio_cmd(UIO_CHK_UPLOAD)) arcade_nvm_save();
 	process_ss(0);
 }
 
