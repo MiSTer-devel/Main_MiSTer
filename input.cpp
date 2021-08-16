@@ -856,6 +856,7 @@ enum QUIRK
 	QUIRK_MSSP,
 	QUIRK_TOUCHGUN,
 	QUIRK_VCS,
+	QUIRK_JOYCON,
 };
 
 typedef struct
@@ -903,6 +904,9 @@ typedef struct
 	int      lightgun_req;
 	int      lightgun;
 
+	int      timeout;
+	char     mac[64];
+
 	int      bind;
 	char     devname[32];
 	char     id[80];
@@ -913,6 +917,12 @@ typedef struct
 static devInput input[NUMDEV] = {};
 static devInput player_pad[NUMPLAYERS] = {};
 static devInput player_pdsp[NUMPLAYERS] = {};
+
+#define JOYCON_COMBO(dev)    (input[(dev)].misc_flags & (1 << 31))
+#define JOYCON_LEFT(dev)     (input[(dev)].misc_flags & (1 << 30))
+#define JOYCON_RIGHT(dev)    (input[(dev)].misc_flags & (1 << 29))
+#define JOYCON_REQ(dev)      ((input[(dev)].misc_flags & 7) == 7)
+#define JOYCON_COMBINED(dev) (input[(dev)].quirk == QUIRK_JOYCON && JOYCON_COMBO((dev)))
 
 #define BTN_NUM (sizeof(devInput::map) / sizeof(devInput::map[0]))
 
@@ -1172,11 +1182,14 @@ void finish_map_setting(int dismiss)
 	}
 	else
 	{
-		for (int i = 0; i < NUMDEV; i++) input[i].has_map = 0;
+		for (int i = 0; i < NUMDEV; i++)
+		{
+			input[i].has_map = 0;
+			input[i].has_mmap = 0;
+		}
 
 		if (!dismiss) save_map(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
 		if (dismiss == 2) delete_map(get_map_name(mapping_dev, 0));
-		if (is_menu()) input[mapping_dev].has_mmap = 0;
 	}
 }
 
@@ -1733,10 +1746,26 @@ static int set_led(char *base, const char *led, int brightness)
 	return 0;
 }
 
+static int get_led(char *base, const char *led)
+{
+	static char path[1024];
+	sprintf(path, "%s%s/brightness", base, led);
+	FILE* f = fopen(path, "r");
+	if (f)
+	{
+		int res = 0;
+		fscanf(f, "%d", &res);
+		fclose(f);
+		return res;
+	}
+
+	return 0;
+}
+
 static void update_num_hw(int dev, int num)
 {
 	char *led_path;
-	if (num > 6) num = 6;
+	if (num > 7) num = 7;
 
 	if (input[dev].quirk == QUIRK_DS4 || input[dev].quirk == QUIRK_DS4TOUCH)
 	{
@@ -1753,7 +1782,7 @@ static void update_num_hw(int dev, int num)
 			else
 			{
 				//dualshock4
-				static const uint8_t color_code[7][3] =
+				static const uint8_t color_code[8][3] =
 				{
 					{ 0x30, 0x30, 0x30 }, // White
 					{ 0x00, 0x00, 0x40 }, // Blue
@@ -1761,7 +1790,8 @@ static void update_num_hw(int dev, int num)
 					{ 0x00, 0x40, 0x00 }, // Green
 					{ 0x20, 0x00, 0x20 }, // Pink
 					{ 0x40, 0x10, 0x00 }, // Orange
-					{ 0x00, 0x20, 0x20 }  // Teal
+					{ 0x00, 0x20, 0x20 }, // Teal
+					{ 0x00, 0x00, 0x00 }  // none
 				};
 
 				set_led(led_path, ":blue", color_code[num][2]);
@@ -1778,7 +1808,7 @@ static void update_num_hw(int dev, int num)
 			set_led(led_path, "::sony1", (num == 0 || num == 1 || num == 5));
 			set_led(led_path, "::sony2", (num == 0 || num == 2 || num == 6));
 			set_led(led_path, "::sony3", (num == 0 || num == 3));
-			set_led(led_path, "::sony4", (num == 0 || num >= 4));
+			set_led(led_path, "::sony4", (num == 0 || num == 4 || num == 5 || num == 6));
 		}
 	}
 	else if (input[dev].quirk == QUIRK_WIIMOTE)
@@ -1789,20 +1819,27 @@ static void update_num_hw(int dev, int num)
 			set_led(led_path, ":blue:p0", (num == 0 || num == 1 || num == 5));
 			set_led(led_path, ":blue:p1", (num == 0 || num == 2 || num == 6));
 			set_led(led_path, ":blue:p2", (num == 0 || num == 3));
-			set_led(led_path, ":blue:p3", (num == 0 || num >= 4));
+			set_led(led_path, ":blue:p3", (num == 0 || num == 4 || num == 5 || num == 6));
 		}
 	}
 	else if (input[dev].vid == 0x057e && ((input[dev].pid & 0xFF00) == 0x2000))
 	{
 		// nintendo switch controllers
-		led_path = get_led_path(dev);
-		if (led_path)
+		int repeat = 1;
+		while (1)
 		{
-			set_led(led_path, ":home", num ? 1 : 15);
-			set_led(led_path, ":player1", (num == 0 || num == 1 || num == 5));
-			set_led(led_path, ":player2", (num == 0 || num == 2 || num == 6));
-			set_led(led_path, ":player3", (num == 0 || num == 3));
-			set_led(led_path, ":player4", (num == 0 || num >= 4));
+			led_path = get_led_path(dev);
+			if (led_path)
+			{
+				set_led(led_path, ":home", num ? 1 : 15);
+				set_led(led_path, ":player1", (num == 0 || num == 1 || num == 5));
+				set_led(led_path, ":player2", (num == 0 || num == 2 || num == 6));
+				set_led(led_path, ":player3", (num == 0 || num == 3));
+				set_led(led_path, ":player4", (num == 0 || num == 4 || num == 5 || num == 6));
+			}
+
+			if (repeat && JOYCON_COMBINED(dev)) dev = input[dev].bind; else break;
+			repeat = 0;
 		}
 	}
 }
@@ -1833,7 +1870,7 @@ static void store_player(int num, int dev)
 static void restore_player(int dev)
 {
 	// do not restore bound devices
-	if (dev != input[dev].bind) return;
+	if (dev != input[dev].bind && !(JOYCON_COMBINED(dev) && JOYCON_LEFT(dev))) return;
 
 	devInput *player = (input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) ? player_pdsp : player_pad;
 	for (int k = 1; k < NUMPLAYERS; k++)
@@ -1844,6 +1881,11 @@ static void restore_player(int dev)
 
 			input[dev].num = k;
 			input[dev].map_shown = player[k].map_shown;
+			if (JOYCON_COMBINED(dev))
+			{
+				input[input[dev].bind].num = k;
+				input[input[dev].bind].map_shown = player[k].map_shown;
+			}
 
 			memcpy(input[dev].jkmap, player[k].jkmap, sizeof(input[dev].jkmap));
 			input[dev].lightgun = player[k].lightgun;
@@ -1881,13 +1923,18 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int sub_dev = dev;
 
 	//check if device is a part of multifunctional device
-	if (input[dev].bind >= 0) dev = input[dev].bind;
+	if (!JOYCON_COMBINED(dev) && input[dev].bind >= 0) dev = input[dev].bind;
 
-	//mouse
-	if (ev->type == EV_KEY && ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK)
+	if (ev->type == EV_KEY)
 	{
-		//skip it. we use /dev/input/mice
-		return;
+		if (input[dev].timeout > 0) input[dev].timeout = cfg.bt_auto_disconnect * 10;
+
+		//mouse
+		if (ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK)
+		{
+			//skip it. we use /dev/input/mice
+			return;
+		}
 	}
 
 	static int key_mapped = 0;
@@ -1977,6 +2024,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (!found)
 				{
 					input[dev].num = num;
+					if (JOYCON_COMBINED(dev)) input[input[dev].bind].num = num;
 					store_player(num, dev);
 					printf("Device %s assigned to player %d\n", input[dev].id, input[dev].num);
 					break;
@@ -1988,6 +2036,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	if (!input[dev].map_shown && input[dev].num)
 	{
 		input[dev].map_shown = 1;
+		if (JOYCON_COMBINED(dev)) input[input[dev].bind].map_shown = 1;
 		store_player(input[dev].num, dev);
 
 		if (cfg.controller_info)
@@ -2877,6 +2926,8 @@ void mergedevs()
 								{
 									strcpy(input[i].id, id);
 									strcpy(input[i].sysfs, sysfs);
+									strcpy(input[i].mac, uniq);
+									input[i].timeout = (strlen(uniq) && strstr(sysfs, "bluetooth")) ? (cfg.bt_auto_disconnect * 10) : 0;
 								}
 							}
 						}
@@ -3326,12 +3377,168 @@ static int vcs_proc(int dev, input_event *ev)
 	return 1;
 }
 
+void check_joycon()
+{
+	while (1)
+	{
+		int l = -1, r = -1;
+		int id_combo = 0;
+
+		for (int i = 0; i < NUMDEV; i++)
+		{
+			if (input[i].quirk == QUIRK_JOYCON && !JOYCON_COMBO(i))
+			{
+				if (JOYCON_LEFT(i))
+				{
+					int id = 0;
+					char *led_path = get_led_path(i);
+					if (led_path) id = get_led(led_path, ":combo");
+					if (id && (!id_combo || id_combo == id))
+					{
+						id_combo = id;
+						l = i;
+					}
+				}
+				else if (JOYCON_RIGHT(i))
+				{
+					int id = 0;
+					char *led_path = get_led_path(i);
+					if (led_path) id = get_led(led_path, ":combo");
+					if (id && (!id_combo || id_combo == id))
+					{
+						id_combo = id;
+						r = i;
+					}
+				}
+			}
+		}
+
+		if (l >= 0 && r >= 0)
+		{
+			printf("** joycon_l = %d, joycon_r = %d, id = %d\n", l, r, id_combo);
+
+			input[l].bind = r;
+			input[r].bind = l;
+			input[l].misc_flags |= 1 << 31;
+			input[r].misc_flags |= 1 << 31;
+			strcpy(input[l].idstr, "057e_2009");
+			strcpy(input[r].idstr, "057e_2009");
+		}
+		else break;
+	}
+}
+
+int process_joycon(int dev, input_event *ev, input_absinfo *absinfo)
+{
+	if (ev->type == EV_ABS)
+	{
+		if (JOYCON_COMBO(dev)) return 0;
+		if (ev->code == 4 && JOYCON_RIGHT(dev)) ev->value = -ev->value;
+		if (ev->code == 0 && JOYCON_LEFT(dev)) ev->value = -ev->value;
+		return 0;
+	}
+
+	int mask = 0;
+
+	// simulate DPAD on left joycon
+	if (JOYCON_COMBO(dev) && (ev->code & ~3) == 0x220)
+	{
+		mask = 0x100 << (ev->code & 3);
+		input[dev].misc_flags = ev->value ? (input[dev].misc_flags | mask) : (input[dev].misc_flags & ~mask);
+		if (ev->value)
+		{
+			ev->value = (ev->code & 1) ? 1 : -1;
+		}
+		else
+		{
+			mask = (ev->code & 2) ? 0x400 : 0x100;
+			ev->value = (input[dev].misc_flags & mask) ? -1 : (input[dev].misc_flags & (mask << 1)) ? 1 : 0;
+		}
+
+		ev->code = (ev->code & 2) ? 16 : 17;
+		ev->type = EV_ABS;
+		absinfo->minimum = -1;
+		absinfo->maximum = 1;
+		return 0;
+	}
+
+	//check for request to combine/split joycons
+	switch (ev->code)
+	{
+		case 0x136: case 0x137: mask = 1; break;
+		case 0x138: case 0x139: mask = 2; break;
+		case 0x13D: case 0x13E: mask = 4; break;
+		default: return 0;
+	}
+
+	input[dev].misc_flags = ev->value ? (input[dev].misc_flags | mask) : (input[dev].misc_flags & ~mask);
+
+	if (JOYCON_REQ(dev))
+	{
+		int uncombo = 0;
+		int l = -1, r = -1;
+		for (int n = 0; n < NUMDEV; n++)
+		{
+			if (input[n].quirk == QUIRK_JOYCON)
+			{
+				if (JOYCON_COMBO(n))
+				{
+					if (JOYCON_REQ(n) && JOYCON_REQ(input[n].bind))
+					{
+						r = n;
+						l = input[n].bind;
+						uncombo = 1;
+						break;
+					}
+				}
+				else if (JOYCON_RIGHT(n) && JOYCON_REQ(n)) r = n;
+				else if (JOYCON_LEFT(n) && JOYCON_REQ(n)) l = n;
+			}
+		}
+
+		if (l >= 0 && r >= 0)
+		{
+			uint8_t id = 0;
+			char *led_path;
+
+			printf(uncombo ? "Joycons request split\n" : "Joycons request combo\n");
+
+			if (!uncombo)
+			{
+				FileLoad("/tmp/combo_id", &id, sizeof(id));
+				if (!(++id)) ++id;
+				FileSave("/tmp/combo_id", &id, sizeof(id));
+			}
+
+			led_path = get_led_path(l); if (led_path) set_led(led_path, ":combo", id);
+			led_path = get_led_path(r); if (led_path) set_led(led_path, ":combo", id);
+
+			printf("Close all devices.\n");
+			for (int i = 0; i < NUMDEV; i++) if (pool[i].fd >= 0)
+			{
+				ioctl(pool[i].fd, EVIOCGRAB, 0);
+				close(pool[i].fd);
+			}
+			update_num_hw(l, 7);
+			update_num_hw(r, 7);
+			usleep(500000);
+			update_num_hw(l, 0);
+			update_num_hw(r, 0);
+			usleep(500000);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 int input_test(int getchar)
 {
 	static char cur_leds = 0;
 	static int state = 0;
 	struct input_absinfo absinfo;
 	struct input_event ev;
+	static uint32_t timeout = 0;
 
 	if (touch_rel && CheckTimer(touch_rel))
 	{
@@ -3363,6 +3570,7 @@ int input_test(int getchar)
 
 	if (state == 1)
 	{
+		timeout = 0;
 		printf("Open up to %d input devices.\n", NUMDEV);
 		for (int i = 0; i < NUMDEV; i++)
 		{
@@ -3509,6 +3717,17 @@ int input_test(int getchar)
 							}
 						}
 
+						if (input[n].vid == 0x057e && input[n].pid == 0x2006)
+						{
+							input[n].misc_flags = 1 << 30;
+							input[n].quirk = QUIRK_JOYCON;
+						}
+						if (input[n].vid == 0x057e && input[n].pid == 0x2007)
+						{
+							input[n].misc_flags = 1 << 29;
+							input[n].quirk = QUIRK_JOYCON;
+						}
+
 						//Ultimarc lightgun
 						if (input[n].vid == 0xd209 && input[n].pid == 0x1601)
 						{
@@ -3571,6 +3790,7 @@ int input_test(int getchar)
 			closedir(d);
 
 			mergedevs();
+			check_joycon();
 			for (int i = 0; i < n; i++)
 			{
 				printf("opened %d(%2d): %s (%04x:%04x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].quirk, input[i].id, input[i].name);
@@ -3580,6 +3800,34 @@ int input_test(int getchar)
 		}
 		cur_leds |= 0x80;
 		state++;
+	}
+
+	if (cfg.bt_auto_disconnect)
+	{
+		if (!timeout) timeout = GetTimer(6000);
+		else if (CheckTimer(timeout))
+		{
+			timeout = GetTimer(6000);
+			for (int i = 0; i < NUMDEV; i++)
+			{
+				if (pool[i].fd >= 0 && input[i].timeout > 0)
+				{
+					if (!(JOYCON_COMBINED(i) && JOYCON_LEFT(i)) && input[i].bind != i) continue;
+					input[i].timeout--;
+					if (!input[i].timeout)
+					{
+						static char cmd[128];
+						sprintf(cmd, "btctl disconnect %s", input[i].mac);
+						system(cmd);
+						if (JOYCON_COMBINED(i))
+						{
+							sprintf(cmd, "btctl disconnect %s", input[input[i].bind].mac);
+							system(cmd);
+						}
+					}
+				}
+			}
+		}
 	}
 
 	if (state == 2)
@@ -3610,8 +3858,9 @@ int input_test(int getchar)
 				return 0;
 			}
 
-			for (int i = 0; i < NUMDEV; i++)
+			for (int pos = 0; pos < NUMDEV; pos++)
 			{
+				int i = pos;
 				if ((pool[i].fd >= 0) && (pool[i].revents & POLLIN))
 				{
 					if (!input[i].mouse)
@@ -3629,7 +3878,7 @@ int input_test(int getchar)
 							else if (ev.type)
 							{
 								int dev = i;
-								if (input[dev].bind >= 0) dev = input[dev].bind;
+								if (!JOYCON_COMBINED(i) && input[dev].bind >= 0) dev = input[dev].bind;
 
 								int noabs = 0;
 
@@ -3700,8 +3949,8 @@ int input_test(int getchar)
 											}
 											else if (ev.code == 0)
 											{
-												absinfo.minimum = 200;
-												absinfo.maximum = 1720;
+											absinfo.minimum = 200;
+											absinfo.maximum = 1720;
 											}
 											else continue;
 										}
@@ -3795,6 +4044,15 @@ int input_test(int getchar)
 									}
 								}
 
+								if (input[i].quirk == QUIRK_JOYCON)
+								{
+									if (process_joycon(i, &ev, &absinfo))
+									{
+										state = 1;
+										return 0;
+									}
+								}
+
 								//Menu combo on 8BitDo receiver in PSC mode
 								if (input[dev].vid == 0x054c && input[dev].pid == 0x0cda && ev.type == EV_KEY)
 								{
@@ -3848,7 +4106,7 @@ int input_test(int getchar)
 									{
 										//keyboard, buttons
 									case EV_KEY:
-										printf("Input event: type=EV_KEY, code=%d(0x%x), value=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
+										printf("%04x:%04x:%02d P%d Input event: type=EV_KEY, code=%d(0x%x), value=%d\n", input[dev].vid, input[dev].pid, i, input[dev].num, ev.code, ev.code, ev.value);
 										break;
 
 									case EV_REL:
@@ -3858,7 +4116,7 @@ int input_test(int getchar)
 											if (!timeout || CheckTimer(timeout))
 											{
 												timeout = GetTimer(20);
-												printf("Input event: type=EV_REL, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d\n", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
+												printf("%04x:%04x:%02d P%d Input event: type=EV_REL, Axis=%d, Offset=%d\n", input[dev].vid, input[dev].pid, i, input[dev].num, ev.code, ev.value);
 											}
 										}
 										break;
@@ -3888,9 +4146,8 @@ int input_test(int getchar)
 													if (ev.code == 2) break;
 												}
 
-												printf("Input event: type=EV_ABS, Axis=%d, Offset=%d, jnum=%d, ID:%04x:%04x:%02d,", ev.code, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
-												printf(" abs_min = %d, abs_max = %d", absinfo.minimum, absinfo.maximum);
-												if (absinfo.fuzz) printf(", fuzz = %d", absinfo.fuzz);
+												printf("%04x:%04x:%02d P%d Input event: type=EV_ABS, Axis=%d [%d...%d], Offset=%d", input[dev].vid, input[dev].pid, i, input[dev].num, ev.code, absinfo.minimum, absinfo.maximum, ev.value);
+												//if (absinfo.fuzz) printf(", fuzz = %d", absinfo.fuzz);
 												if (absinfo.resolution) printf(", res = %d", absinfo.resolution);
 												printf("\n");
 											}
@@ -3898,7 +4155,7 @@ int input_test(int getchar)
 										break;
 
 									default:
-										printf("Input event: type=%d, code=%d(0x%x), value=%d(0x%x), jnum=%d, ID:%04x:%04x:%02d\n", ev.type, ev.code, ev.code, ev.value, ev.value, input[dev].num, input[dev].vid, input[dev].pid, i);
+										printf("%04x:%04x:%02d P%d Input event: type=%d, code=%d(0x%x), value=%d(0x%x)\n", input[dev].vid, input[dev].pid, i, input[dev].num, ev.type, ev.code, ev.code, ev.value, ev.value);
 									}
 								}
 
@@ -3936,6 +4193,13 @@ int input_test(int getchar)
 									{
 										if (menu_lightgun_cb(i, ev.type, ev.code, ev.value)) continue;
 									}
+								}
+
+								// redirect further actions to left joycon in combined mode
+								if (JOYCON_COMBINED(i))
+								{
+									if (JOYCON_RIGHT(i)) i = input[i].bind;
+									dev = i;
 								}
 
 								if (!noabs) input_cb(&ev, &absinfo, i);
