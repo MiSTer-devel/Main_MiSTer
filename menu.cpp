@@ -105,8 +105,6 @@ enum MENU
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
 	MENU_BTPAIR,
-	MENU_WMPAIR,
-	MENU_WMPAIR1,
 	MENU_LGCAL,
 	MENU_LGCAL1,
 	MENU_LGCAL2,
@@ -607,40 +605,6 @@ static uint32_t menu_key_get(void)
 	return(c);
 }
 
-static int has_bt()
-{
-	return hci_get_route(0) >= 0;
-}
-
-static int toggle_wminput()
-{
-	if (access("/bin/wminput", F_OK) < 0 || access("/media/fat/linux/wiimote.cfg", F_OK) < 0) return -1;
-
-	FILE *fp;
-	static char out[1035];
-
-	fp = popen("pidof wminput", "r");
-	if (!fp) return -1;
-
-	int ret = -1;
-	if (fgets(out, sizeof(out) - 1, fp) != NULL)
-	{
-		if (strlen(out))
-		{
-			system("killall wminput");
-			ret = 0;
-		}
-	}
-	else
-	{
-		system("taskset 1 wminput --daemon --config /media/fat/linux/wiimote.cfg &");
-		ret = 1;
-	}
-
-	pclose(fp);
-	return ret;
-}
-
 static char* getNet(int spec)
 {
 	int netType = 0;
@@ -1117,11 +1081,7 @@ void HandleUI(void)
 			break;
 
 		case KEY_F10:
-			if (user_io_osd_is_visible() && !access("/bin/wminput", F_OK))
-			{
-				menustate = MENU_WMPAIR;
-			}
-			else if (input_has_lightgun())
+			if (input_has_lightgun())
 			{
 				menustate = MENU_LGCAL;
 			}
@@ -5842,28 +5802,6 @@ void HandleUI(void)
 		menusub = 0;
 		break;
 
-	case MENU_WMPAIR:
-		{
-			OsdSetTitle("Wiimote", 0);
-			int res = toggle_wminput();
-			menu_timer = GetTimer(2000);
-			for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
-			if (res < 0)       OsdWrite(7, "    Cannot enable Wiimote");
-			else if (res == 0) OsdWrite(7, "       Wiimote disabled");
-			else
-			{
-				OsdWrite(7, "       Wiimote enabled");
-				OsdWrite(9, "    Press 1+2 to connect");
-				menu_timer = GetTimer(3000);
-			}
-			menustate = MENU_WMPAIR1;
-		}
-		//fall through
-
-	case MENU_WMPAIR1:
-		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
-		break;
-
 	case MENU_LGCAL:
 		helptext_idx = 0;
 		OsdSetTitle("Lightgun Calibration", 0);
@@ -6271,7 +6209,7 @@ void HandleUI(void)
 
 				int netType = (int)getNet(0);
 				if (netType) str[8] = 0x1b + netType;
-				if (has_bt()) str[9] = 4;
+				if (hci_get_route(0) >= 0) str[9] = 4;
 				if (user_io_get_sdram_cfg() & 0x8000)
 				{
 					switch (user_io_get_sdram_cfg() & 7)

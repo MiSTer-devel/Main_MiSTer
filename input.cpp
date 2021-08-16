@@ -844,7 +844,6 @@ uint32_t get_key_mod()
 enum QUIRK
 {
 	QUIRK_NONE = 0,
-	QUIRK_CWIID,
 	QUIRK_WIIMOTE,
 	QUIRK_DS3,
 	QUIRK_DS4,
@@ -2724,11 +2723,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				int hrange = (absinfo->maximum - absinfo->minimum) / 2;
 				int dead = hrange/63;
 
-				if (input[sub_dev].quirk == QUIRK_CWIID)
-				{
-					if(ev->code == 3 || ev->code == 4) dead = 10;
-				}
-
 				if (input[sub_dev].quirk == QUIRK_DS3 || input[sub_dev].quirk == QUIRK_DS4)
 				{
 					dead = 10;
@@ -3639,12 +3633,6 @@ int input_test(int getchar)
 							}
 						}
 
-						if (strcasestr(input[n].name, "Wiimote") && input[n].vid == 1 && input[n].pid == 1)
-						{
-							input[n].quirk = QUIRK_CWIID;
-							input[n].lightgun = 1;
-						}
-
 						// RasPad3 touchscreen
 						if (input[n].vid == 0x222a && input[n].pid == 1)
 						{
@@ -4017,15 +4005,6 @@ int input_test(int getchar)
 										}
 										else continue;
 									}
-
-									if (input[i].quirk == QUIRK_CWIID)
-									{
-										if (ev.code == 3 || ev.code == 4)
-										{
-											absinfo.minimum = 30;
-											absinfo.maximum = 225;
-										}
-									}
 								}
 
 								if (input[dev].quirk == QUIRK_VCS && !vcs_proc(i, &ev)) continue;
@@ -4156,15 +4135,6 @@ int input_test(int getchar)
 
 									default:
 										printf("%04x:%04x:%02d P%d Input event: type=%d, code=%d(0x%x), value=%d(0x%x)\n", input[dev].vid, input[dev].pid, i, input[dev].num, ev.type, ev.code, ev.code, ev.value, ev.value);
-									}
-								}
-
-								if (input[i].quirk == QUIRK_CWIID && ev.type == EV_ABS)
-								{
-									if (ev.code <= 1 && user_io_osd_is_visible())
-									{
-										// don't pass IR tracking to OSD
-										continue;
 									}
 								}
 
