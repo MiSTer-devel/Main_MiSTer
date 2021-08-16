@@ -41,6 +41,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <libgen.h>
+#include <bluetooth.h>
+#include <hci.h>
+#include <hci_lib.h>
 
 #include "file_io.h"
 #include "osd.h"
@@ -606,20 +609,7 @@ static uint32_t menu_key_get(void)
 
 static int has_bt()
 {
-	FILE *fp;
-	static char out[1035];
-
-	fp = popen("hcitool dev | grep hci0", "r");
-	if (!fp) return 0;
-
-	int ret = 0;
-	while (fgets(out, sizeof(out) - 1, fp) != NULL)
-	{
-		if (strlen(out)) ret = 1;
-	}
-
-	pclose(fp);
-	return ret;
+	return hci_get_route(0) >= 0;
 }
 
 static int toggle_wminput()
@@ -1120,7 +1110,7 @@ void HandleUI(void)
 			break;
 
 		case KEY_F11:
-			if (user_io_osd_is_visible())
+			if (user_io_osd_is_visible() && (menustate != MENU_SCRIPTS1 || script_exited))
 			{
 				menustate = MENU_BTPAIR;
 			}
