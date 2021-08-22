@@ -224,7 +224,7 @@ static char script_command[script_line_length];
 static int script_line;
 static char script_output[script_lines][script_line_length];
 static char script_line_output[script_line_length];
-static bool script_exited;
+static bool script_finished;
 
 // one screen width
 static const char* HELPTEXT_SPACER = "                                ";
@@ -558,7 +558,8 @@ static uint32_t menu_key_get(void)
 		if (but && CheckTimer(longpress) && !longpress_consumed)
 		{
 			longpress_consumed = 1;
-			menustate = MENU_BTPAIR;
+			if (menustate == MENU_SCRIPTS1) c = KEY_BACKSPACE;
+			else menustate = MENU_BTPAIR;
 		}
 
 		if (!but && last_but && !longpress_consumed) c = KEY_F12;
@@ -648,6 +649,26 @@ static char* getNet(int spec)
 
 	freeifaddrs(ifaddr);
 	return spec ? (ifa ? host : 0) : (char*)netType;
+}
+
+int bt_check()
+{
+	int res = (hci_get_route(0) >= 0);
+
+	static int cnt = 2;
+	if (cnt>=0)
+	{
+		cnt--;
+		if (!cnt && !res)
+		{
+			// Some BT dongles get stuck after boot.
+			// Kicking of USB port usually make it work.
+			printf("*** reset bt ***\n");
+			system("/bin/bluetoothd hcireset &");
+		}
+	}
+
+	return res;
 }
 
 static long sysinfo_timer;
@@ -1074,7 +1095,7 @@ void HandleUI(void)
 			break;
 
 		case KEY_F11:
-			if (user_io_osd_is_visible() && (menustate != MENU_SCRIPTS1 || script_exited))
+			if (user_io_osd_is_visible() && (menustate != MENU_SCRIPTS1 || script_finished))
 			{
 				menustate = MENU_BTPAIR;
 			}
@@ -5962,16 +5983,16 @@ void HandleUI(void)
 
 	case MENU_SCRIPTS:
 		helptext_idx = 0;
-		menumask = 1;
+		menumask = 0;
 		menusub = 0;
 		OsdSetTitle((parentstate == MENU_BTPAIR) ? "BT Pairing" : flist_SelectedItem()->de.d_name, 0);
 		menustate = MENU_SCRIPTS1;
 		if (parentstate != MENU_BTPAIR) parentstate = MENU_SCRIPTS;
-		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
+		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i);
+		OsdWrite(OsdGetSize() - 1, (parentstate == MENU_BTPAIR) ? "           Finish" : "           Cancel", menusub == 0, 0);
 		for (int i = 0; i < script_lines; i++) strcpy(script_output[i], "");
 		script_line=0;
-		script_exited = false;
+		script_finished = false;
 		cpu_set_t set;
 		CPU_ZERO(&set);
 		CPU_SET(0, &set);
@@ -5983,7 +6004,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_SCRIPTS1:
-		if (!script_exited)
+		if (!script_finished)
 		{
 			if (!feof(script_pipe)) {
 				if (fgets(script_line_output, script_line_length, script_pipe) != NULL)
@@ -6007,34 +6028,45 @@ void HandleUI(void)
 				CPU_ZERO(&set);
 				CPU_SET(1, &set);
 				sched_setaffinity(0, sizeof(set), &set);
-				script_exited=true;
+				script_finished=true;
 				OsdWrite(OsdGetSize() - 1, "             OK", menusub == 0, 0);
 			};
 		};
 
-		if (select || (script_exited && menu))
+		if (select || menu || script_finished || c == KEY_BACKSPACE)
 		{
-			if (!script_exited)
+			if (!script_finished)
 			{
 				strcpy(script_command, "killall ");
-				strcat(script_command, (parentstate == MENU_BTPAIR) ? "btpair" : flist_SelectedItem()->de.d_name);
+				strcat(script_command, (parentstate == MENU_BTPAIR) ? "-SIGINT btctl" : flist_SelectedItem()->de.d_name);
 				system(script_command);
 				pclose(script_pipe);
 				cpu_set_t set;
 				CPU_ZERO(&set);
 				CPU_SET(1, &set);
 				sched_setaffinity(0, sizeof(set), &set);
-				script_exited = true;
+				script_finished = true;
 			};
 
-			if (parentstate == MENU_BTPAIR)
+			if (c == KEY_BACKSPACE && (parentstate == MENU_BTPAIR))
 			{
-				menustate = MENU_NONE1;
+				for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i);
+				OsdWrite(7, "   Delete all pairings...");
+				OsdUpdate();
+				system("/bin/bluetoothd renew");
+				menustate = MENU_BTPAIR;
 			}
 			else
 			{
-				menustate = MENU_SYSTEM1;
-				menusub = 3;
+				if (parentstate == MENU_BTPAIR)
+				{
+					menustate = MENU_NONE1;
+				}
+				else
+				{
+					menustate = MENU_SYSTEM1;
+					menusub = 3;
+				}
 			}
 		}
 		break;
@@ -6209,7 +6241,7 @@ void HandleUI(void)
 
 				int netType = (int)getNet(0);
 				if (netType) str[8] = 0x1b + netType;
-				if (hci_get_route(0) >= 0) str[9] = 4;
+				if (bt_check()) str[9] = 4;
 				if (user_io_get_sdram_cfg() & 0x8000)
 				{
 					switch (user_io_get_sdram_cfg() & 7)
