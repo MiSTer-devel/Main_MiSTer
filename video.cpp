@@ -822,7 +822,7 @@ void video_fb_enable(int enable, int n)
 					yoff = v_cur.item[8] - FB_DV_UBRD;
 				}
 
-				printf("Switch to HPS frame buffer\n");
+				//printf("Switch to Linux frame buffer\n");
 				spi_w((uint16_t)(FB_EN | FB_FMT_RxB | FB_FMT_8888)); // format, enable flag
 				spi_w((uint16_t)fb_addr); // base address low word
 				spi_w(fb_addr >> 16);     // base address high word
@@ -834,7 +834,7 @@ void video_fb_enable(int enable, int n)
 				spi_w(yoff + v_cur.item[5] - 1); // scaled bottom
 				spi_w(fb_width * 4);      // stride
 
-				printf("HPS frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_width * 4);
+				//printf("Linux frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_width * 4);
 				if (!fb_num)
 				{
 					system(fb_reset_cmd);
@@ -1167,8 +1167,8 @@ void video_menu_bg(int n, int idle)
 	menu_bg = n;
 	if (n)
 	{
-		printf("**** BG DEBUG START ****\n");
-		printf("n = %d\n", n);
+		//printf("**** BG DEBUG START ****\n");
+		//printf("n = %d\n", n);
 
 		Imlib_Load_Error error;
 		static Imlib_Image logo = 0;
@@ -1244,7 +1244,7 @@ void video_menu_bg(int n, int idle)
 				imlib_context_set_image(menubg);
 				int src_w = imlib_image_get_width();
 				int src_h = imlib_image_get_height();
-				printf("menubg: src_w=%d, src_h=%d\n", src_w, src_h);
+				//printf("menubg: src_w=%d, src_h=%d\n", src_w, src_h);
 
 				if (*bg)
 				{
@@ -1360,7 +1360,7 @@ void video_menu_bg(int n, int idle)
 
 		//test the fb driver
 		//vs_wait();
-		printf("**** BG DEBUG END ****\n");
+		//printf("**** BG DEBUG END ****\n");
 	}
 
 	video_fb_enable(0);
