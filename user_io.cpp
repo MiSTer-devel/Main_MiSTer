@@ -63,15 +63,6 @@ static int io_ver = 0;
 // keep state of caps lock
 static char caps_lock_toggle = 0;
 
-// mouse position storage for ps2 and minimig rate limitation
-#define X 0
-#define Y 1
-#define MOUSE_FREQ 20   // 20 ms -> 50hz
-static int16_t mouse_pos[2] = { 0, 0 };
-static int16_t mouse_wheel = 0;
-static uint8_t mouse_flags = 0;
-static unsigned long mouse_timer;
-
 #define LED_FREQ 100   // 100 ms
 static unsigned long led_timer;
 static char keyboard_leds = 0;
@@ -2531,83 +2522,6 @@ void user_io_poll()
 
 		kbd_fifo_poll();
 
-		// frequently check mouse for events
-		if (CheckTimer(mouse_timer))
-		{
-			mouse_timer = GetTimer(MOUSE_FREQ);
-
-			// has ps2 mouse data been updated in the meantime
-			if (mouse_flags & 0x80)
-			{
-				if (!osd_is_visible)
-				{
-					spi_uio_cmd_cont(UIO_MOUSE);
-
-					// ----- X axis -------
-					if (mouse_pos[X] < -128)
-					{
-						spi8(-128);
-						mouse_pos[X] += 128;
-					}
-					else if (mouse_pos[X] > 127)
-					{
-						spi8(127);
-						mouse_pos[X] -= 127;
-					}
-					else
-					{
-						spi8(mouse_pos[X]);
-						mouse_pos[X] = 0;
-					}
-
-					// ----- Y axis -------
-					if (mouse_pos[Y] < -128)
-					{
-						spi8(-128);
-						mouse_pos[Y] += 128;
-					}
-					else if (mouse_pos[Y] > 127)
-					{
-						spi8(127);
-						mouse_pos[Y] -= 127;
-					}
-					else
-					{
-						spi8(mouse_pos[Y]);
-						mouse_pos[Y] = 0;
-					}
-
-					// ---- Buttons ------
-					spi8(mouse_flags & 0x07);
-
-					// ----- Wheel -------
-					if (mouse_wheel < -127)
-					{
-						spi8(-127);
-					}
-					else if (mouse_wheel > 127)
-					{
-						spi8(127);
-					}
-					else
-					{
-						spi8(mouse_wheel);
-					}
-
-					mouse_wheel = 0;
-					DisableIO();
-				}
-				else
-				{
-					mouse_pos[X] = 0;
-					mouse_pos[Y] = 0;
-				}
-
-				// reset flags
-				mouse_flags = 0;
-			}
-		}
-
 		if (!rtc_timer || CheckTimer(rtc_timer))
 		{
 			// Update once per minute should be enough
@@ -2845,87 +2759,6 @@ void user_io_poll()
 				}
 			}
 			else break;
-		}
-	}
-
-	if (core_type == CORE_TYPE_8BIT && !is_minimig() && !is_archie())
-	{
-		// frequently check ps2 mouse for events
-		if (CheckTimer(mouse_timer))
-		{
-			mouse_timer = GetTimer(MOUSE_FREQ);
-
-			// has ps2 mouse data been updated in the meantime
-			if (mouse_flags & 0x08)
-			{
-				unsigned char ps2_mouse[3];
-
-				// PS2 format:
-				// YOvfl, XOvfl, dy8, dx8, 1, mbtn, rbtn, lbtn
-				// dx[7:0]
-				// dy[7:0]
-				ps2_mouse[0] = mouse_flags;
-
-				// ------ X axis -----------
-				// store sign bit in first byte
-				ps2_mouse[0] |= (mouse_pos[X] < 0) ? 0x10 : 0x00;
-				if (mouse_pos[X] < -255)
-				{
-					// min possible value + overflow flag
-					ps2_mouse[0] |= 0x40;
-					ps2_mouse[1] = 1; // -255
-				}
-				else if (mouse_pos[X] > 255)
-				{
-					// max possible value + overflow flag
-					ps2_mouse[0] |= 0x40;
-					ps2_mouse[1] = 255;
-				}
-				else
-				{
-					ps2_mouse[1] = mouse_pos[X];
-				}
-
-				// ------ Y axis -----------
-				// store sign bit in first byte
-				ps2_mouse[0] |= (mouse_pos[Y] < 0) ? 0x20 : 0x00;
-				if (mouse_pos[Y] < -255)
-				{
-					// min possible value + overflow flag
-					ps2_mouse[0] |= 0x80;
-					ps2_mouse[2] = 1; // -255;
-				}
-				else if (mouse_pos[Y] > 255)
-				{
-					// max possible value + overflow flag
-					ps2_mouse[0] |= 0x80;
-					ps2_mouse[2] = 255;
-				}
-				else
-				{
-					ps2_mouse[2] = mouse_pos[Y];
-				}
-
-				int16_t ps2_wheel = mouse_wheel;
-				if (ps2_wheel > 63) ps2_wheel = 63;
-				else if (ps2_wheel < -63) ps2_wheel = -63;
-
-				// collect movement info and send at predefined rate
-				if (is_menu() && !video_fb_state()) printf("PS2 MOUSE: %x %d %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2], ps2_wheel);
-
-				if (!osd_is_visible)
-				{
-					spi_uio_cmd_cont(UIO_MOUSE);
-					spi_w(ps2_mouse[0] | ((ps2_wheel&127)<<8));
-					spi_w(ps2_mouse[1]);
-					spi_w(ps2_mouse[2]);
-					DisableIO();
-				}
-
-				// reset counters
-				mouse_flags = 0;
-				mouse_pos[X] = mouse_pos[Y] = mouse_wheel = 0;
-			}
 		}
 	}
 
@@ -3373,15 +3206,19 @@ static void send_keycode(unsigned short key, int press)
 
 void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 {
+	if (osd_is_visible && !is_menu()) return;
+
 	switch (core_type)
 	{
 	case CORE_TYPE_8BIT:
 		if (is_minimig())
 		{
-			mouse_pos[X] += x;
-			mouse_pos[Y] += y;
-			mouse_wheel += w;
-			mouse_flags |= 0x80 | (b & 7);
+			spi_uio_cmd_cont(UIO_MOUSE);
+			spi8((x < -127) ? -127 : (x > 127) ? 127 : x);
+			spi8((y < -127) ? -127 : (y > 127) ? 127 : y);
+			spi8(b & 0x07);
+			spi8((w < -127) ? -127 : (w > 127) ? 127 : w);
+			DisableIO();
 		}
 		else if (is_archie())
 		{
@@ -3389,10 +3226,69 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 		}
 		else
 		{
-			mouse_pos[X] += x;
-			mouse_pos[Y] -= y;  // ps2 y axis is reversed over usb
-			mouse_wheel += w;
-			mouse_flags |= 0x08 | (b & 7);
+			unsigned char ps2_mouse[3];
+
+			// PS2 format:
+			// YOvfl, XOvfl, dy8, dx8, 1, mbtn, rbtn, lbtn
+			// dx[7:0]
+			// dy[7:0]
+			ps2_mouse[0] = (b & 7) | 8;
+
+			// ------ X axis -----------
+			// store sign bit in first byte
+			ps2_mouse[0] |= (x < 0) ? 0x10 : 0x00;
+			if (x < -255)
+			{
+				// min possible value + overflow flag
+				ps2_mouse[0] |= 0x40;
+				ps2_mouse[1] = 1; // -255
+			}
+			else if (x > 255)
+			{
+				// max possible value + overflow flag
+				ps2_mouse[0] |= 0x40;
+				ps2_mouse[1] = 255;
+			}
+			else
+			{
+				ps2_mouse[1] = (char)x;
+			}
+
+			// ------ Y axis -----------
+			// store sign bit in first byte
+			y = -y;
+			ps2_mouse[0] |= (y < 0) ? 0x20 : 0x00;
+			if (y < -255)
+			{
+				// min possible value + overflow flag
+				ps2_mouse[0] |= 0x80;
+				ps2_mouse[2] = 1; // -255;
+			}
+			else if (y > 255)
+			{
+				// max possible value + overflow flag
+				ps2_mouse[0] |= 0x80;
+				ps2_mouse[2] = 255;
+			}
+			else
+			{
+				ps2_mouse[2] = (char)y;
+			}
+
+			if (w > 63) w = 63;
+			else if (w < -63) w = -63;
+
+			// collect movement info and send at predefined rate
+			if (is_menu() && !video_fb_state()) printf("PS2 MOUSE: %x %d %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2], w);
+
+			if (!osd_is_visible)
+			{
+				spi_uio_cmd_cont(UIO_MOUSE);
+				spi_w(ps2_mouse[0] | (w << 8));
+				spi_w(ps2_mouse[1] | ((((uint16_t)b) << 5) & 0xF00));
+				spi_w(ps2_mouse[2] | ((((uint16_t)b) << 1) & 0x100));
+				DisableIO();
+			}
 		}
 		return;
 	}

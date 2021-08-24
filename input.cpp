@@ -1302,8 +1302,12 @@ static uint32_t autofire[NUMPLAYERS] = {};
 static uint32_t autofirecodes[NUMPLAYERS][BTN_NUM] = {};
 static int af_delay[NUMPLAYERS] = {};
 
-static unsigned char mouse_btn = 0;
+static unsigned char mouse_btn = 0; //emulated mouse
 static unsigned char mice_btn = 0;
+static int mouse_req = 0;
+static int mouse_x = 0;
+static int mouse_y = 0;
+static int mouse_w = 0;
 static int mouse_emu = 0;
 static int kbd_mouse_emu = 0;
 static int mouse_sniper = 0;
@@ -1412,9 +1416,15 @@ static void uinp_check_key()
 	}
 }
 
-static void mouse_cb(unsigned char b, int16_t x = 0, int16_t y = 0, int16_t w = 0)
+static void mouse_cb(int16_t x = 0, int16_t y = 0, int16_t w = 0)
 {
-	if (grabbed) user_io_mouse(b, x, y, w);
+	if (grabbed)
+	{
+		mouse_x += x;
+		mouse_y += y;
+		mouse_w += w;
+		mouse_req = 1;
+	}
 }
 
 static uint32_t osdbtn = 0;
@@ -1524,7 +1534,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				mouse_btn = 0;
 				mouse_emu_x = 0;
 				mouse_emu_y = 0;
-				mouse_cb(mice_btn);
+				mouse_cb();
 
 				mouse_emu ^= 2;
 				if (hasAPI1_5()) Info((mouse_emu & 2) ? "Mouse mode ON" : "Mouse mode OFF");
@@ -1931,7 +1941,13 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		//mouse
 		if (ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK)
 		{
-			//skip it. we use /dev/input/mice
+			if (ev->value <= 1)
+			{
+				int mask = 1 << (ev->code - BTN_MOUSE);
+				if (input[dev].ds_mouse_emu && mask == 1) mask = 2;
+				mice_btn = (ev->value) ? (mice_btn | mask) : (mice_btn & ~mask);
+				mouse_cb();
+			}
 			return;
 		}
 	}
@@ -2536,7 +2552,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - SYS_MS_BTN_L) : mouse_btn & ~(1 << (i - SYS_MS_BTN_L));
-									mouse_cb(mouse_btn | mice_btn);
+									mouse_cb();
 									break;
 								}
 								return;
@@ -2565,7 +2581,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					{
 						mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
 						if (input[sub_dev].quirk == QUIRK_DS4) input[dev].ds_mouse_emu = mouse_emu & 1;
-						printf("mouse_emu = %d\n", mouse_emu);
 						if (mouse_emu & 2)
 						{
 							mouse_sniper = ev->value;
@@ -2576,7 +2591,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_btn = 0;
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
-							mouse_cb(mice_btn);
+							mouse_cb();
 						}
 					}
 				}
@@ -2664,7 +2679,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - SYS_MS_BTN_L) : mouse_btn & ~(1 << (i - SYS_MS_BTN_L));
-									mouse_cb(mouse_btn | mice_btn);
+									mouse_cb();
 									break;
 								}
 								return;
@@ -2689,7 +2704,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_btn = 0;
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
-							mouse_cb(mice_btn);
+							mouse_cb();
 						}
 						return;
 					}
@@ -3081,12 +3096,12 @@ static struct
 */
 };
 
-static void send_mouse_with_throttle(int dev, int xval, int yval, int btn, int8_t data_3)
+static void send_mouse_with_throttle(int dev, int xval, int yval, int8_t wval)
 {
 	int i = dev;
 	if (input[dev].bind >= 0) dev = input[dev].bind;
 
-	if (is_menu() && !video_fb_state()) printf("%s: btn=0x%02X, dx=%d, dy=%d, scroll=%d\n", input[i].devname, btn, xval, yval, data_3);
+	if (is_menu() && !video_fb_state()) printf("%s: dx=%d, dy=%d, scroll=%d\n", input[i].devname, xval, yval, wval);
 
 	int throttle = cfg.mouse_throttle ? cfg.mouse_throttle : 1;
 	if (input[dev].ds_mouse_emu) throttle *= 4;
@@ -3100,10 +3115,7 @@ static void send_mouse_with_throttle(int dev, int xval, int yval, int btn, int8_
 	yval = input[i].accy / throttle;
 	input[i].accy -= yval * throttle;
 
-	mice_btn = btn & 7;
-	if (input[dev].ds_mouse_emu) mice_btn = (mice_btn & 4) | ((mice_btn & 1) << 1);
-
-	mouse_cb(mouse_btn | mice_btn, xval, yval, data_3);
+	mouse_cb(xval, yval, wval);
 }
 
 static uint32_t touch_rel = 0;
@@ -3146,14 +3158,14 @@ static void touchscreen_proc(int dev, input_event *ev)
 				}
 			}
 
-			mouse_cb(mice_btn);
+			mouse_cb();
 		}
 	}
 	else if (ev->type == EV_ABS && ev->code == ABS_MT_SLOT && ev->value == 3 && (input[i].misc_flags & 0x80))
 	{
 		input[i].misc_flags = 0;
 		mice_btn = 0;
-		mouse_cb(mice_btn);
+		mouse_cb();
 		input[dev].lightgun = !input[dev].lightgun;
 		Info(input[dev].lightgun ? "Light Gun mode is ON" : "Light Gun mode is OFF");
 	}
@@ -3163,7 +3175,7 @@ static void touchscreen_proc(int dev, input_event *ev)
 		if (ev->type == EV_KEY && ev->value == 1)
 		{
 			mice_btn |= 1;
-			mouse_cb(mice_btn);
+			mouse_cb();
 			menu_lightgun_cb(i, EV_KEY, 0x131, 1);
 		}
 		else if (ev->type == EV_ABS)
@@ -3193,7 +3205,7 @@ static void touchscreen_proc(int dev, input_event *ev)
 				else if (input[i].misc_flags & 1) mice_btn = 2;
 				else mice_btn = 1;
 
-				mouse_cb(mice_btn);
+				mouse_cb();
 			}
 		}
 	}
@@ -3214,7 +3226,7 @@ static void touchscreen_proc(int dev, input_event *ev)
 					if (input[i].misc_flags & 2) mice_btn = 4;
 					else if (input[i].misc_flags & 1) mice_btn = 2;
 
-					mouse_cb(mice_btn);
+					mouse_cb();
 				}
 				else if (input[i].misc_flags & 0x40)
 				{
@@ -3224,7 +3236,7 @@ static void touchscreen_proc(int dev, input_event *ev)
 						if (dx > 255) dx = 255;
 						if (dx < -256) dx = -256;
 						input[i].lastx = ev->value;
-						send_mouse_with_throttle(i, dx, 0, mice_btn, 0);
+						send_mouse_with_throttle(i, dx, 0, 0);
 					}
 					else if (ev->code == ABS_MT_POSITION_Y)
 					{
@@ -3232,7 +3244,7 @@ static void touchscreen_proc(int dev, input_event *ev)
 						if (dy > 255) dy = 255;
 						if (dy < -256) dy = -256;
 						input[i].lasty = ev->value;
-						send_mouse_with_throttle(i, 0, -dy, mice_btn, 0);
+						send_mouse_with_throttle(i, 0, -dy, 0);
 					}
 				}
 			}
@@ -3538,7 +3550,7 @@ int input_test(int getchar)
 	{
 		touch_rel = 0;
 		mice_btn = 0;
-		mouse_cb(mice_btn);
+		mouse_cb();
 	}
 
 	if (state == 0)
@@ -4303,7 +4315,7 @@ int input_test(int getchar)
 							}
 							else
 							{
-								send_mouse_with_throttle(i, xval, yval, data[0], data[3]);
+								send_mouse_with_throttle(i, xval, yval, data[3]);
 							}
 						}
 					}
@@ -4398,7 +4410,7 @@ int input_poll(int getchar)
 				if (dy < -2) dy = -2;
 			}
 
-			mouse_cb(mouse_btn | mice_btn, dx, dy);
+			mouse_cb(dx, dy);
 			prev_dx = mouse_emu_x;
 			prev_dy = mouse_emu_y;
 		}
@@ -4454,6 +4466,15 @@ int input_poll(int getchar)
 		}
 	}
 
+	if (mouse_req)
+	{
+		user_io_mouse(mouse_btn | mice_btn, mouse_x, mouse_y, mouse_w);
+		mouse_req = 0;
+		mouse_x = 0;
+		mouse_y = 0;
+		mouse_w = 0;
+	}
+
 	return 0;
 }
 
@@ -4494,7 +4515,7 @@ void input_notify_mode()
 	mouse_btn = 0;
 	mouse_emu_x = 0;
 	mouse_emu_y = 0;
-	mouse_cb(mice_btn);
+	mouse_cb();
 }
 
 void input_switch(int grab)
