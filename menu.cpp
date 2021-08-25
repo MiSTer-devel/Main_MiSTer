@@ -655,10 +655,11 @@ int bt_check()
 {
 	int res = (hci_get_route(0) >= 0);
 
-	static int cnt = 2;
+	static int cnt = 6;
 	if (cnt>=0)
 	{
 		cnt--;
+		//printf("*** cnt = %d\n", cnt);
 		if (!cnt && !res)
 		{
 			// Some BT dongles get stuck after boot.
