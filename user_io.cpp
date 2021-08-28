@@ -1512,7 +1512,12 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 			{
 				writable = 0;
 				ret = c64_openT64(name, sd_image + index);
-				if (ret) ret = c64_openGCR(name, sd_image + index, index);
+				if (ret)
+				{
+					ret = c64_openGCR(name, sd_image + index, index);
+					sd_type[index] = 1;
+					if (!ret) FileClose(&sd_image[index]);
+				}
 			}
 			else
 			{
