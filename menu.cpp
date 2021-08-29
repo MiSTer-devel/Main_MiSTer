@@ -6240,24 +6240,25 @@ void HandleUI(void)
 					strftime(str + strlen(str), sizeof(str) - 1 - strlen(str), "%b %d %a%H:%M:%S", &tm);
 				}
 
-				int netType = (int)getNet(0);
-				if (netType) str[8] = 0x1b + netType;
-				if (bt_check()) str[9] = 4;
+				int n = 8;
+				if (getNet(2)) str[n++] = 0x1d;
+				if (getNet(1)) str[n++] = 0x1c;
+				if (bt_check()) str[n++] = 4;
 				if (user_io_get_sdram_cfg() & 0x8000)
 				{
 					switch (user_io_get_sdram_cfg() & 7)
 					{
 					case 7:
-						str[10] = 0x95;
+						str[n] = 0x95;
 						break;
 					case 3:
-						str[10] = 0x94;
+						str[n] = 0x94;
 						break;
 					case 1:
-						str[10] = 0x93;
+						str[n] = 0x93;
 						break;
 					default:
-						str[10] = 0x92;
+						str[n] = 0x92;
 						break;
 					}
 				}
