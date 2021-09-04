@@ -878,7 +878,7 @@ static int process_request(void *reqres_buffer)
 		*buf++ = 0;
 
 		res = 0;
-		reslen = 10;
+		reslen = 9;
 	}
 	break;
 
