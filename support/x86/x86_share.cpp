@@ -875,10 +875,9 @@ static int process_request(void *reqres_buffer)
 		*buf++ = sz >> 16;
 		*buf++ = sz >> 24;
 		*buf++ = (mode & S_IFDIR) ? FAT_DIR : 0;
-		*buf++ = 0;
 
 		res = 0;
-		reslen = 10;
+		reslen = 9;
 	}
 	break;
 
