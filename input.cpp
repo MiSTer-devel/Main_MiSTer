@@ -1922,6 +1922,17 @@ void unflag_players()
 	}
 }
 
+static uint16_t def_mmap[] = {
+	0x0321, 0x0000, 0x0320, 0x0000, 0x0323, 0x0000, 0x0322, 0x0000,
+	0x0131, 0x0000, 0x0130, 0x0000, 0x0133, 0x0000, 0x0134, 0x0000,
+	0x0136, 0x0000, 0x0137, 0x0000, 0x013A, 0x0000, 0x013B, 0x0000,
+	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+	0x0000, 0x0000, 0x013C, 0x0000, 0x013C, 0x0000, 0x0131, 0x0130,
+	0x0000, 0x0002, 0x0001, 0x0002, 0x0003, 0x0002, 0x0004, 0x0002,
+	0x0000, 0x0002, 0x0001, 0x0002, 0x0000, 0x0000, 0x0000, 0x0000
+};
+
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	if (ev->type != EV_KEY && ev->type != EV_ABS && ev->type != EV_REL) return;
@@ -1976,6 +1987,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			if (!load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 			{
 				memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
+				memcpy(input[dev].mmap, def_mmap, sizeof(def_mmap));
 				input[dev].has_mmap++;
 			}
 			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
@@ -4057,19 +4069,18 @@ int input_test(int getchar)
 								{
 									//in PSC mode these keys coming from separate virtual keyboard device
 									//so it's impossible to use joystick codes as keyboards aren't personalized
-									if (ev.code == 164) ev.code = KEY_MENU;
-									if (ev.code == 1)   ev.code = KEY_MENU;
+									if (ev.code == 164 || ev.code == 1) ev.code = KEY_MENU;
 								}
 
-								if (ev.type == EV_KEY && ev.code == KEY_BACK && input[dev].vid == 0x45E)
+								// various controllers in X-Input mode generate keyboard key codes, remap them.
+								if (input[dev].vid == 0x45E && ev.type == EV_KEY)
 								{
-									ev.code = BTN_SELECT;
-								}
-
-								//Menu button quirk of 8BitDo gamepad in X-Input mode
-								if (input[dev].vid == 0x045e && input[dev].pid == 0x02e0 && ev.type == EV_KEY)
-								{
-									if (ev.code == KEY_MENU) ev.code = BTN_MODE;
+									switch (ev.code)
+									{
+									case KEY_BACK:   ev.code = BTN_SELECT; break;
+									case KEY_MENU:   ev.code = BTN_MODE;   break;
+									case KEY_RECORD: ev.code = BTN_Z;      break;
+									}
 								}
 
 								if (is_menu() && !video_fb_state())
