@@ -2965,6 +2965,7 @@ void mergedevs()
 	make_unique(0x0E8F, 0x3013, 1); // Mayflash SNES controller 2 port adapter
 	make_unique(0x16C0, 0x05E1, 1); // XinMo XM-10 2 player USB Encoder
 	make_unique(0x045E, 0x02A1, 1); // Xbox 360 wireless receiver
+	make_unique(0x8282, 0x3201, 1);  // Irken Labs JAMMA Expander / Mojo Retro Adapter
 
 	if (cfg.no_merge_vid)
 	{
