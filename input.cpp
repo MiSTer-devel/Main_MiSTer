@@ -1423,8 +1423,13 @@ static void mouse_cb(int16_t x = 0, int16_t y = 0, int16_t w = 0)
 		mouse_x += x;
 		mouse_y += y;
 		mouse_w += w;
-		mouse_req = 1;
+		mouse_req |= 1;
 	}
+}
+
+static void mouse_btn_req()
+{
+	if (grabbed) mouse_req |= 2;
 }
 
 static uint32_t osdbtn = 0;
@@ -1535,6 +1540,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				mouse_emu_x = 0;
 				mouse_emu_y = 0;
 				mouse_cb();
+				mouse_btn_req();
 
 				mouse_emu ^= 2;
 				if (hasAPI1_5()) Info((mouse_emu & 2) ? "Mouse mode ON" : "Mouse mode OFF");
@@ -1957,7 +1963,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				int mask = 1 << (ev->code - BTN_MOUSE);
 				if (input[dev].ds_mouse_emu && mask == 1) mask = 2;
 				mice_btn = (ev->value) ? (mice_btn | mask) : (mice_btn & ~mask);
-				mouse_cb();
+				mouse_btn_req();
 			}
 			return;
 		}
@@ -2564,7 +2570,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - SYS_MS_BTN_L) : mouse_btn & ~(1 << (i - SYS_MS_BTN_L));
-									mouse_cb();
+									mouse_btn_req();
 									break;
 								}
 								return;
@@ -2604,6 +2610,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
 							mouse_cb();
+							mouse_btn_req();
 						}
 					}
 				}
@@ -2691,7 +2698,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 								default:
 									mouse_btn = ev->value ? mouse_btn | 1 << (i - SYS_MS_BTN_L) : mouse_btn & ~(1 << (i - SYS_MS_BTN_L));
-									mouse_cb();
+									mouse_btn_req();
 									break;
 								}
 								return;
@@ -2717,6 +2724,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mouse_emu_x = 0;
 							mouse_emu_y = 0;
 							mouse_cb();
+							mouse_btn_req();
 						}
 						return;
 					}
@@ -3172,14 +3180,14 @@ static void touchscreen_proc(int dev, input_event *ev)
 				}
 			}
 
-			mouse_cb();
+			mouse_btn_req();
 		}
 	}
 	else if (ev->type == EV_ABS && ev->code == ABS_MT_SLOT && ev->value == 3 && (input[i].misc_flags & 0x80))
 	{
 		input[i].misc_flags = 0;
 		mice_btn = 0;
-		mouse_cb();
+		mouse_btn_req();
 		input[dev].lightgun = !input[dev].lightgun;
 		Info(input[dev].lightgun ? "Light Gun mode is ON" : "Light Gun mode is OFF");
 	}
@@ -3189,7 +3197,7 @@ static void touchscreen_proc(int dev, input_event *ev)
 		if (ev->type == EV_KEY && ev->value == 1)
 		{
 			mice_btn |= 1;
-			mouse_cb();
+			mouse_btn_req();
 			menu_lightgun_cb(i, EV_KEY, 0x131, 1);
 		}
 		else if (ev->type == EV_ABS)
@@ -3219,7 +3227,7 @@ static void touchscreen_proc(int dev, input_event *ev)
 				else if (input[i].misc_flags & 1) mice_btn = 2;
 				else mice_btn = 1;
 
-				mouse_cb();
+				mouse_btn_req();
 			}
 		}
 	}
@@ -3240,7 +3248,7 @@ static void touchscreen_proc(int dev, input_event *ev)
 					if (input[i].misc_flags & 2) mice_btn = 4;
 					else if (input[i].misc_flags & 1) mice_btn = 2;
 
-					mouse_cb();
+					mouse_btn_req();
 				}
 				else if (input[i].misc_flags & 0x40)
 				{
@@ -3564,7 +3572,7 @@ int input_test(int getchar)
 	{
 		touch_rel = 0;
 		mice_btn = 0;
-		mouse_cb();
+		mouse_btn_req();
 	}
 
 	if (state == 0)
@@ -4489,11 +4497,17 @@ int input_poll(int getchar)
 
 	if (mouse_req)
 	{
-		user_io_mouse(mouse_btn | mice_btn, mouse_x, mouse_y, mouse_w);
-		mouse_req = 0;
-		mouse_x = 0;
-		mouse_y = 0;
-		mouse_w = 0;
+		static uint32_t old_time = 0;
+		uint32_t time = GetTimer(0);
+		if ((time - old_time > 15) || (mouse_req & 2))
+		{
+			old_time = time;
+			user_io_mouse(mouse_btn | mice_btn, mouse_x, mouse_y, mouse_w);
+			mouse_req = 0;
+			mouse_x = 0;
+			mouse_y = 0;
+			mouse_w = 0;
+		}
 	}
 
 	return 0;
@@ -4537,6 +4551,7 @@ void input_notify_mode()
 	mouse_emu_x = 0;
 	mouse_emu_y = 0;
 	mouse_cb();
+	mouse_btn_req();
 }
 
 void input_switch(int grab)
