@@ -5999,7 +5999,16 @@ void HandleUI(void)
 		CPU_SET(0, &set);
 		CPU_SET(1, &set);
 		sched_setaffinity(0, sizeof(set), &set);
-		script_pipe=popen((parentstate != MENU_BTPAIR) ? getFullPath(selPath) : "/usr/sbin/btpair", "r");
+		if (parentstate == MENU_BTPAIR)
+		{
+			OsdUpdate();
+			if(cfg.bt_reset_before_pair) system("hciconfig hci0 reset");
+			script_pipe = popen("/usr/sbin/btpair", "r");
+		}
+		else
+		{
+			script_pipe = popen(getFullPath(selPath), "r");
+		}
 		script_file = fileno(script_pipe);
 		fcntl(script_file, F_SETFL, O_NONBLOCK);
 		break;
