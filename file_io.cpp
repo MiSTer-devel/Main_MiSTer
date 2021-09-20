@@ -1114,11 +1114,11 @@ struct DirentComp
 		int ret = strncasecmp(de1.altname, de2.altname, len);
 		if (!ret)
 		{
-			ret = strcasecmp(de1.datecode, de2.datecode);
-			if (!ret)
+			if(len1 != len2)
 			{
 				return len1 < len2;
 			}
+			ret = strcasecmp(de1.datecode, de2.datecode);
 		}
 
 		return ret < 0;
