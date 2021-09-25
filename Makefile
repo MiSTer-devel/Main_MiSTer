@@ -14,77 +14,118 @@ else
 	Q := @
 endif
 
-INCLUDE	= -I./
-INCLUDE	+= -I./support/minimig
-INCLUDE += -I./support/chd
-INCLUDE	+= -I./lib/libco
-INCLUDE	+= -I./lib/miniz
-INCLUDE	+= -I./lib/md5
-INCLUDE += -I./lib/lzma
-INCLUDE += -I./lib/libchdr/include
-INCLUDE += -I./lib/flac/include
-INCLUDE += -I./lib/flac/src/include
-INCLUDE += -I./lib/bluetooth
+FILTER = sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
-PRJ = MiSTer
-C_SRC =   $(wildcard *.c) \
-          $(wildcard ./lib/miniz/*.c) \
-          $(wildcard ./lib/md5/*.c) \
-	  $(wildcard ./lib/lzma/*.c) \
-	  $(wildcard ./lib/flac/src/*.c) \
-	  $(wildcard ./lib/libchdr/*.c) \
-          lib/libco/arm.c 
+SRCDIR = .
+BUILDBASE = build
 
-CPP_SRC = $(wildcard *.cpp) \
-          $(wildcard ./support/*/*.cpp) \
-          lib/lodepng/lodepng.cpp
+ifeq ($(DEBUG),1)
+	PRJ = MiSTer-debug
+	BUILDDIR = $(BUILDBASE)/debug
+else
+	PRJ = MiSTer
+	BUILDDIR = $(BUILDBASE)/release
+endif
 
-IMG =     $(wildcard *.png)
+INCLUDE =  -I$(SRCDIR)/
+INCLUDE += -I$(SRCDIR)/support/minimig
+INCLUDE += -I$(SRCDIR)/support/chd
+INCLUDE += -I$(SRCDIR)/lib/libco
+INCLUDE += -I$(SRCDIR)/lib/miniz
+INCLUDE += -I$(SRCDIR)/lib/md5
+INCLUDE += -I$(SRCDIR)/lib/lzma
+INCLUDE += -I$(SRCDIR)/lib/libchdr/include
+INCLUDE += -I$(SRCDIR)/lib/flac/include
+INCLUDE += -I$(SRCDIR)/lib/flac/src/include
+INCLUDE += -I$(SRCDIR)/lib/bluetooth
+
+C_SRC =   $(wildcard $(SRCDIR)/*.c) \
+          $(wildcard $(SRCDIR)/lib/miniz/*.c) \
+          $(wildcard $(SRCDIR)/lib/md5/*.c) \
+          $(wildcard $(SRCDIR)/lib/lzma/*.c) \
+          $(wildcard $(SRCDIR)/lib/flac/src/*.c) \
+          $(wildcard $(SRCDIR)/lib/libchdr/*.c) \
+          $(SRCDIR)/lib/libco/arm.c 
+
+CPP_SRC = $(wildcard $(SRCDIR)/*.cpp) \
+          $(wildcard $(SRCDIR)/support/*/*.cpp) \
+          $(SRCDIR)/lib/lodepng/lodepng.cpp
+
+IMG =     $(wildcard $(SRCDIR)/*.png)
 
 IMLIB2_LIB  = -Llib/imlib2 -lfreetype -lbz2 -lpng16 -lz -lImlib2
 
-OBJ	= $(C_SRC:.c=.c.o) $(CPP_SRC:.cpp=.cpp.o) $(IMG:.png=.png.o)
-DEP	= $(C_SRC:.c=.c.d) $(CPP_SRC:.cpp=.cpp.d)
+OBJ = $(C_SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.c.o) \
+      $(CPP_SRC:$(SRCDIR)/%.cpp=$(BUILDDIR)/%.cpp.o) \
+      $(IMG:$(SRCDIR)/%.png=$(BUILDDIR)/%.png.o)
 
-DFLAGS	= $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DFLAC_API_EXPORTS -DFLAC__HAS_OGG=0 -DHAVE_LROUND -DHAVE_STDINT_H -DHAVE_STDLIB_H -DHAVE_SYS_PARAM_H -DENABLE_64_BIT_WORDS=0 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
-CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -Wno-format-truncation -Wno-psabi -c -O3
-LFLAGS	= -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) -Llib/bluetooth -lbluetooth
+DEP = $(C_SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.c.d) \
+      $(CPP_SRC:$(SRCDIR)/%.cpp=$(BUILDDIR)/%.cpp.d)
 
-$(PRJ): $(OBJ)
+DFLAGS = $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DFLAC_API_EXPORTS -DFLAC__HAS_OGG=0 -DHAVE_LROUND -DHAVE_STDINT_H -DHAVE_STDLIB_H -DHAVE_SYS_PARAM_H -DENABLE_64_BIT_WORDS=0 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
+CFLAGS = $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -Wno-format-truncation -Wno-psabi -c
+LFLAGS = -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) -Llib/bluetooth -lbluetooth
+
+ifeq ($(DEBUG),1)
+	CFLAGS += -g -O0 -fomit-frame-pointer
+	LFLAGS += -g
+else
+	CFLAGS += -O3
+	LFLAGS +=
+endif
+
+ifeq ($(DEBUG),1)
+$(PRJ): $(PRJ).elf
+	$(Q)cp $< $@
+else
+$(PRJ): $(PRJ).elf
+	$(Q)$(STRIP) -o $@ $<
+endif
+
+$(PRJ).elf: $(OBJ)
 	$(Q)$(info $@)
 	$(Q)$(CC) -o $@ $+ $(LFLAGS) 
-	$(Q)cp $@ $@.elf
-	$(Q)$(STRIP) $@
 
 clean:
 	$(Q)rm -f *.elf *.map *.lst *.user *~ $(PRJ)
 	$(Q)rm -rf obj DTAR* x64
 	$(Q)find . \( -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -exec rm -f {} \;
+	$(Q)rm -rf $(BUILDDIR)
 
 cleanall:
-	$(Q)rm -rf *.o *.d *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
+	$(Q)rm -rf *.o *.d *.elf *.map *.lst *.bak *.rej *.org *.user *~ MiSTer MiSTer-debug
 	$(Q)rm -rf obj DTAR* x64
 	$(Q)find . -name '*.o' -delete
 	$(Q)find . -name '*.d' -delete
+	$(Q)rm -rf $(BUILDBASE)
 
-%.c.o: %.c
+$(BUILDDIR)/%.c.o: $(SRCDIR)/%.c | build_dirs
 	$(Q)$(info $<)
-	$(Q)$(CC) $(CFLAGS) -std=gnu99 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+	$(Q)$(CC) $(CFLAGS) -std=gnu99 -o $@ -c $< 2>&1 | $(FILTER)
 
-%.cpp.o: %.cpp
+$(BUILDDIR)/%.cpp.o: $(SRCDIR)/%.cpp | build_dirs
 	$(Q)$(info $<)
-	$(Q)$(CC) $(CFLAGS) -std=gnu++14 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+	$(Q)$(CC) $(CFLAGS) -std=gnu++14 -o $@ -c $< 2>&1 | $(FILTER)
 
-%.png.o: %.png
+$(BUILDDIR)/%.png.o: $(SRCDIR)/%.png | build_dirs
 	$(Q)$(info $<)
-	$(Q)$(LD) -r -b binary -o $@ $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+	$(Q)$(LD) -r -b binary -o $@ $< 2>&1 | $(FILTER)
 
 -include $(DEP)
-%.c.d: %.c
-	$(Q)$(CC) $(DFLAGS) -MM $< -MT $@ -MT $*.c.o -MF $@ 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+$(BUILDDIR)/%.c.d: $(SRCDIR)/%.c | build_dirs
+	$(Q)$(CC) $(DFLAGS) -MM $< -MT $@ -MT $(@:%.c.d=%.c.o) -MF $@ 2>&1 | $(FILTER)
 
-%.cpp.d: %.cpp
-	$(Q)$(CC) $(DFLAGS) -MM $< -MT $@ -MT $*.cpp.o -MF $@ 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+$(BUILDDIR)/%.cpp.d: $(SRCDIR)/%.cpp | build_dirs
+	$(Q)$(CC) $(DFLAGS) -MM $< -MT $@ -MT $(@:%.cpp.d=%.cpp.o) -MF $@ 2>&1 | $(FILTER)
 
 # Ensure correct time stamp
-main.cpp.o: $(filter-out main.cpp.o, $(OBJ))
+$(BUILDDIR)/main.cpp.o: $(filter-out $(BUILDDIR)/main.cpp.o, $(OBJ))
+
+# Create the build directories
+BUILD_DIRS = $(sort $(dir $(OBJ) $(DEP)))
+.PHONY: build_dirs $(BUILD_DIRS)
+
+build_dirs: $(BUILD_DIRS)
+
+$(BUILD_DIRS):
+	$(Q)mkdir -p $@
