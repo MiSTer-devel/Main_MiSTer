@@ -1057,6 +1057,8 @@ void user_io_init(const char *path, const char *xml)
 	}
 
 	cfg_parse();
+	if (cfg.log_file_entry) MakeFile("/tmp/STARTPATH", core_path);
+
 	if (cfg.bootcore[0] != '\0')
 	{
 		bootcore_init(xml ? xml : path);
