@@ -3773,12 +3773,14 @@ int input_test(int getchar)
 						// Axis 8 - EV_ABS is Paddle
 						// Overlays on other existing gamepads
 						if (strstr(uniq, "MiSTer-S1")) input[n].quirk = QUIRK_PDSP;
+						if (strstr(input[n].name, "MiSTer-S1")) input[n].quirk = QUIRK_PDSP;
 
 						// Arcade with spinner and/or paddle:
 						// Axis 7 - EV_REL is spinner
 						// Axis 8 - EV_ABS is Paddle
 						// Includes other buttons and axes, works as a full featured gamepad.
 						if (strstr(uniq, "MiSTer-A1")) input[n].quirk = QUIRK_PDSP_ARCADE;
+						if (strstr(input[n].name, "MiSTer-A1")) input[n].quirk = QUIRK_PDSP_ARCADE;
 
 						//Jamma
 						if (cfg.jamma_vid && cfg.jamma_pid && input[n].vid == cfg.jamma_vid && input[n].pid == cfg.jamma_pid)
@@ -3804,6 +3806,16 @@ int input_test(int getchar)
 							while ((p = strchr(input[n].idstr, '*'))) *p = '_';
 							while ((p = strchr(input[n].idstr, ':'))) *p = '_';
 							strcpy(input[n].name, uniq);
+						}
+						else if (input[n].vid == 0x1209 && input[n].pid == 0xFACE)
+						{
+							int sum = 0;
+							for (uint32_t i = 0; i < sizeof(input[n].name); i++)
+							{
+								if (!input[n].name[i]) break;
+								sum += (uint8_t)input[n].name[i];
+							}
+							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x_%d", input[n].vid, input[n].pid, sum);
 						}
 						else
 						{
