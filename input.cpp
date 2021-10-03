@@ -1994,7 +1994,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			{
 				memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
 				memcpy(input[dev].mmap, def_mmap, sizeof(def_mmap));
-				input[dev].has_mmap++;
+				//input[dev].has_mmap++;
 			}
 			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
 		}
