@@ -3807,7 +3807,7 @@ int input_test(int getchar)
 							while ((p = strchr(input[n].idstr, ':'))) *p = '_';
 							strcpy(input[n].name, uniq);
 						}
-						else if (input[n].vid == 0x1209 && input[n].pid == 0xFACE)
+						else if (input[n].vid == 0x1209 && (input[n].pid == 0xFACE || input[n].pid == 0xFACA))
 						{
 							int sum = 0;
 							for (uint32_t i = 0; i < sizeof(input[n].name); i++)
@@ -3991,8 +3991,8 @@ int input_test(int getchar)
 											}
 											else if (ev.code == 0)
 											{
-											absinfo.minimum = 200;
-											absinfo.maximum = 1720;
+												absinfo.minimum = 200;
+												absinfo.maximum = 1720;
 											}
 											else continue;
 										}
