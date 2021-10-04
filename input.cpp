@@ -1648,6 +1648,10 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 				ev.code = KEY_BACKSPACE;
 				break;
 
+			case JOY_BTN4:
+				ev.code = KEY_TAB;
+				break;
+
 			case JOY_L:
 				ev.code = KEY_MINUS;
 				break;
@@ -2480,12 +2484,16 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							joy_digital(0, JOY_BTN1, 0, ev->value, 0);
 							return;
 						}
-
-						if ((input[dev].mmap[SYS_BTN_MENU_FUNC] >> 16) ?
+						else if ((input[dev].mmap[SYS_BTN_MENU_FUNC] >> 16) ?
 							(ev->code == (input[dev].mmap[SYS_BTN_MENU_FUNC] >> 16)) :
 							(ev->code == input[dev].mmap[SYS_BTN_B]))
 						{
 							joy_digital(0, JOY_BTN2, 0, ev->value, 0);
+							return;
+						}
+						else if (ev->code == input[dev].mmap[SYS_BTN_X])
+						{
+							joy_digital(0, JOY_BTN4, 0, ev->value, 0);
 							return;
 						}
 

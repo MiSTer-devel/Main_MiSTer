@@ -4398,11 +4398,12 @@ void HandleUI(void)
 		{
 			ScrollLongName(); // scrolls file name if longer than display line
 
-			if (c == KEY_HOME)
+			if (c == KEY_HOME || c == KEY_TAB)
 			{
 				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
+				select = (c == KEY_TAB && flist_SelectedItem()->de.d_type == DT_DIR && !strcmp(flist_SelectedItem()->de.d_name, ".."));
 			}
 
 			if (c == KEY_END)
