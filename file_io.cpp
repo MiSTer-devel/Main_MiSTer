@@ -756,22 +756,39 @@ int FileCreatePath(const char *dir)
 
 void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 {
-	create_path(SCREENSHOT_DIR, CoreName);
-
-	time_t t = time(NULL);
-	struct tm tm = *localtime(&t);
-	char datecode[32] = {};
-	if (tm.tm_year >= 119) // 2019 or up considered valid time
+	// If the name ends with .png then don't modify it
+	if( !strcasecmp(name + strlen(name) - 4, ".png") )
 	{
-		strftime(datecode, 31, "%Y%m%d_%H%M%S", &tm);
-		snprintf(out_name, buflen, "%s/%s/%s-%s.png", SCREENSHOT_DIR, CoreName, datecode, name[0] ? name : SCREENSHOT_DEFAULT);
+		const char *p = strrchr(name, '/');
+		make_fullpath(SCREENSHOT_DIR);
+		if( p )
+		{
+			snprintf(out_name, buflen, "%s%s", SCREENSHOT_DIR, p);
+		}
+		else
+		{
+			snprintf(out_name, buflen, "%s/%s", SCREENSHOT_DIR, name);
+		}
 	}
 	else
 	{
-		for (int i = 1; i < 10000; i++)
+		create_path(SCREENSHOT_DIR, CoreName);
+
+		time_t t = time(NULL);
+		struct tm tm = *localtime(&t);
+		char datecode[32] = {};
+		if (tm.tm_year >= 119) // 2019 or up considered valid time
 		{
-			snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d.png", SCREENSHOT_DIR, CoreName, name[0] ? name : SCREENSHOT_DEFAULT, i);
-			if (!getFileType(out_name)) return;
+			strftime(datecode, 31, "%Y%m%d_%H%M%S", &tm);
+			snprintf(out_name, buflen, "%s/%s/%s-%s.png", SCREENSHOT_DIR, CoreName, datecode, name[0] ? name : SCREENSHOT_DEFAULT);
+		}
+		else
+		{
+			for (int i = 1; i < 10000; i++)
+			{
+				snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d.png", SCREENSHOT_DIR, CoreName, name[0] ? name : SCREENSHOT_DEFAULT, i);
+				if (!getFileType(out_name)) return;
+			}
 		}
 	}
 }
