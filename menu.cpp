@@ -105,6 +105,7 @@ enum MENU
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
 	MENU_BTPAIR,
+	MENU_BTPAIR2,
 	MENU_LGCAL,
 	MENU_LGCAL1,
 	MENU_LGCAL2,
@@ -191,6 +192,7 @@ static uint64_t menumask = 0; // Used to determine which rows are selectable...
 static uint32_t menu_timer = 0;
 static uint32_t menu_save_timer = 0;
 static uint32_t load_addr = 0;
+static int32_t  bt_timer = 0;
 
 extern const char *version;
 
@@ -651,27 +653,6 @@ static char* getNet(int spec)
 	return spec ? (ifa ? host : 0) : (char*)netType;
 }
 
-int bt_check()
-{
-	int res = (hci_get_route(0) >= 0);
-
-	static int cnt = 6;
-	if (cnt>=0)
-	{
-		cnt--;
-		//printf("*** cnt = %d\n", cnt);
-		if (!cnt && !res)
-		{
-			// Some BT dongles get stuck after boot.
-			// Kicking of USB port usually make it work.
-			printf("*** reset bt ***\n");
-			system("/bin/bluetoothd hcireset &");
-		}
-	}
-
-	return res;
-}
-
 static long sysinfo_timer;
 static void infowrite(int pos, const char* txt)
 {
@@ -964,6 +945,22 @@ static int page = 0;
 
 void HandleUI(void)
 {
+	if (bt_timer >= 0)
+	{
+		if (!bt_timer) bt_timer = (int32_t)GetTimer(6000);
+		else if (CheckTimer((uint32_t)bt_timer))
+		{
+			bt_timer = -1;
+			if (hci_get_route(0) < 0)
+			{
+				// Some BT dongles get stuck after boot.
+				// Kicking of USB port usually make it work.
+				printf("*** reset bt ***\n");
+				system("/bin/bluetoothd hcireset &");
+			}
+		}
+	}
+
 	switch (user_io_core_type())
 	{
 	case CORE_TYPE_8BIT:
@@ -5977,17 +5974,36 @@ void HandleUI(void)
 		}
 		break;
 
+	case MENU_BTPAIR2:
+		if (select || menu)
+		{
+			menustate = MENU_NONE1;
+		}
+		break;
+
 	case MENU_BTPAIR:
 		OsdSetSize(16);
 		OsdEnable(DISABLE_KEYBOARD);
 		parentstate = MENU_BTPAIR;
+		OsdSetTitle("BT Pairing");
+		if (hci_get_route(0) < 0)
+		{
+			helptext_idx = 0;
+			menumask = 1;
+			menusub = 0;
+			for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i);
+			OsdWrite(7, "    No Bluetooth available");
+			OsdWrite(OsdGetSize() - 1, STD_EXIT, menusub == 0);
+			menustate = MENU_BTPAIR2;
+			break;
+		}
 		//fall through
 
 	case MENU_SCRIPTS:
 		helptext_idx = 0;
 		menumask = 0;
 		menusub = 0;
-		OsdSetTitle((parentstate == MENU_BTPAIR) ? "BT Pairing" : flist_SelectedItem()->de.d_name, 0);
+		if(parentstate != MENU_BTPAIR) OsdSetTitle(flist_SelectedItem()->de.d_name);
 		menustate = MENU_SCRIPTS1;
 		if (parentstate != MENU_BTPAIR) parentstate = MENU_SCRIPTS;
 		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i);
@@ -6253,7 +6269,7 @@ void HandleUI(void)
 				int n = 8;
 				if (getNet(2)) str[n++] = 0x1d;
 				if (getNet(1)) str[n++] = 0x1c;
-				if (bt_check()) str[n++] = 4;
+				if (hci_get_route(0) >= 0) str[n++] = 4;
 				if (user_io_get_sdram_cfg() & 0x8000)
 				{
 					switch (user_io_get_sdram_cfg() & 7)
