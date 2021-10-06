@@ -409,7 +409,7 @@ static void parse_config()
 
 	do {
 		p = user_io_get_confstr(i);
-		printf("get cfgstring %d = %s\n", i, p);
+		printf("get cfgstring %d = %s\n", i, p ? p : "NULL");
 		if (!i)
 		{
 			OsdCoreNameSet((p && p[0]) ? p : "CORE");

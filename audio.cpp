@@ -33,7 +33,7 @@ static void setFilter()
 	has_filter = spi_uio_cmd(UIO_SET_AFILTER);
 	if (!has_filter) return;
 
-	sprintf(filter_cfg_path, AFILTER_DIR"/%s", filter_cfg + 1);
+	snprintf(filter_cfg_path, sizeof(filter_cfg_path), AFILTER_DIR"/%s", filter_cfg + 1);
 	if(filter_cfg[0]) printf("\nLoading audio filter: %s\n", filter_cfg_path);
 
 	if (filter_cfg[0] && FileOpen(&f, filter_cfg_path))

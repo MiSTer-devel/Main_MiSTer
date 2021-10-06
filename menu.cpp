@@ -317,15 +317,11 @@ static int changeDir(char *dir)
 		if (p)
 		{
 			*p = 0;
-			uint32_t len = strlen(p+1);
-			if (len > sizeof(curdir) - 1) len = sizeof(curdir) - 1;
-			strncpy(curdir, p+1, len);
+			strncpy(curdir, p + 1, sizeof(curdir) - 1);
 		}
 		else
 		{
-			uint32_t len = strlen(selPath);
-			if (len > sizeof(curdir) - 1) len = sizeof(curdir) - 1;
-			strncpy(curdir, selPath, len);
+			strncpy(curdir, selPath, sizeof(curdir) - 1);
 			selPath[0] = 0;
 		}
 	}
@@ -6217,7 +6213,7 @@ void HandleUI(void)
 				if (btimeout > 0)
 				{
 					OsdWrite(12, "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81");
-					sprintf(str, " Bootcore -> %s", bootcoretype);
+					snprintf(str, sizeof(str), " Bootcore -> %s", bootcoretype);
 					OsdWrite(13, str, 0, 0);
 					strcpy(straux, cfg.bootcore);
 					sprintf(str, " %s", get_rbf_name_bootcore(straux));

@@ -1753,7 +1753,7 @@ static char* get_led_path(int dev, int add_id = 1)
 static int set_led(char *base, const char *led, int brightness)
 {
 	static char path[1024];
-	sprintf(path, "%s%s/brightness", base, led);
+	snprintf(path, sizeof(path), "%s%s/brightness", base, led);
 	FILE* f = fopen(path, "w");
 	if (f)
 	{
@@ -1768,7 +1768,7 @@ static int set_led(char *base, const char *led, int brightness)
 static int get_led(char *base, const char *led)
 {
 	static char path[1024];
-	sprintf(path, "%s%s/brightness", base, led);
+	snprintf(path, sizeof(path), "%s%s/brightness", base, led);
 	FILE* f = fopen(path, "r");
 	if (f)
 	{

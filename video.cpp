@@ -232,7 +232,7 @@ static void setScaler()
 	new_scaler = 1;
 	spi8(scaler_flt_cfg[0]);
 	DisableIO();
-	sprintf(filename, COEFF_DIR"/%s", scaler_flt_cfg + 1);
+	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt_cfg + 1);
 
 	if (FileOpen(&f, filename))
 	{
@@ -342,7 +342,7 @@ static void setGamma()
 	has_gamma = 1;
 	spi8(0);
 	DisableIO();
-	sprintf(filename, GAMMA_DIR"/%s", gamma_cfg + 1);
+	snprintf(filename, sizeof(filename), GAMMA_DIR"/%s", gamma_cfg + 1);
 
 	if (FileOpen(&f, filename))
 	{
@@ -1105,7 +1105,7 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 
 		if (de)
 		{
-			sprintf(name, "%s/%s", dir, de->d_name);
+			snprintf(name, sizeof(name), "%s/%s", dir, de->d_name);
 		}
 		closedir(d);
 		if(count) *count = cnt;

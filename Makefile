@@ -1,8 +1,8 @@
 # makefile to fail if any command in pipe is failed.
 SHELL = /bin/bash -o pipefail
 
-# using gcc version 7.5.0 (Linaro GCC 7.5-2019.12)
-BASE    = arm-linux-gnueabihf
+# using gcc version 10.2.1
+BASE    = arm-none-linux-gnueabihf
 
 CC      = $(BASE)-gcc
 LD      = $(BASE)-ld
@@ -30,9 +30,9 @@ PRJ = MiSTer
 C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/miniz/*.c) \
           $(wildcard ./lib/md5/*.c) \
-	  $(wildcard ./lib/lzma/*.c) \
-	  $(wildcard ./lib/flac/src/*.c) \
-	  $(wildcard ./lib/libchdr/*.c) \
+          $(wildcard ./lib/lzma/*.c) \
+          $(wildcard ./lib/flac/src/*.c) \
+          $(wildcard ./lib/libchdr/*.c) \
           lib/libco/arm.c 
 
 CPP_SRC = $(wildcard *.cpp) \
@@ -47,7 +47,7 @@ OBJ	= $(C_SRC:.c=.c.o) $(CPP_SRC:.cpp=.cpp.o) $(IMG:.png=.png.o)
 DEP	= $(C_SRC:.c=.c.d) $(CPP_SRC:.cpp=.cpp.d)
 
 DFLAGS	= $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DFLAC_API_EXPORTS -DFLAC__HAS_OGG=0 -DHAVE_LROUND -DHAVE_STDINT_H -DHAVE_STDLIB_H -DHAVE_SYS_PARAM_H -DENABLE_64_BIT_WORDS=0 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
-CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -Wno-format-truncation -Wno-psabi -c -O3
+CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -Wno-stringop-overflow -Wno-stringop-truncation -Wno-format-truncation -Wno-psabi -Wno-restrict -c -O3
 LFLAGS	= -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) -Llib/bluetooth -lbluetooth
 
 $(PRJ): $(OBJ)
@@ -56,16 +56,11 @@ $(PRJ): $(OBJ)
 	$(Q)cp $@ $@.elf
 	$(Q)$(STRIP) $@
 
+.PHONY: clean
 clean:
 	$(Q)rm -f *.elf *.map *.lst *.user *~ $(PRJ)
 	$(Q)rm -rf obj DTAR* x64
 	$(Q)find . \( -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -exec rm -f {} \;
-
-cleanall:
-	$(Q)rm -rf *.o *.d *.elf *.map *.lst *.bak *.rej *.org *.user *~ $(PRJ)
-	$(Q)rm -rf obj DTAR* x64
-	$(Q)find . -name '*.o' -delete
-	$(Q)find . -name '*.d' -delete
 
 %.c.o: %.c
 	$(Q)$(info $<)
@@ -73,13 +68,15 @@ cleanall:
 
 %.cpp.o: %.cpp
 	$(Q)$(info $<)
-	$(Q)$(CC) $(CFLAGS) -std=gnu++14 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
+	$(Q)$(CC) $(CFLAGS) -std=gnu++14 -Wno-class-memaccess -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 %.png.o: %.png
 	$(Q)$(info $<)
 	$(Q)$(LD) -r -b binary -o $@ $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
+ifneq ($(MAKECMDGOALS), clean)
 -include $(DEP)
+endif
 %.c.d: %.c
 	$(Q)$(CC) $(DFLAGS) -MM $< -MT $@ -MT $*.c.o -MF $@ 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
