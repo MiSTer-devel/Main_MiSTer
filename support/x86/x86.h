@@ -4,7 +4,7 @@
 void x86_init();
 void x86_poll();
 
-void x86_set_image(int num, char *filename);
+void x86_set_image(int num, const char *filename);
 const char* x86_get_image_name(int num);
 const char* x86_get_image_path(int num);
 

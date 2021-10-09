@@ -1034,9 +1034,9 @@ void load_neo(char *path)
 	}
 }
 
-int neogeo_romset_tx(char* name)
+int neogeo_romset_tx(const char* name)
 {
-	char *romset = strrchr(name, '/');
+	const char *romset = strrchr(name, '/');
 	if (!romset) return 0;
 	romset++;
 
@@ -1062,7 +1062,7 @@ int neogeo_romset_tx(char* name)
 	// Look for the romset's file list in romsets.xml
 	if (!(system_type & 2))
 	{
-		char *p = strrchr(name, '.');
+		const char *p = strrchr(name, '.');
 		if (p && !strcasecmp(p, ".neo"))
 		{
 			printf("Loading neo file.\n");
@@ -1088,11 +1088,11 @@ int neogeo_romset_tx(char* name)
 			checked_ok = false;
 			romsets = 0;
 			sax.all_event = xml_check_files;
-			parse_xml(full_path, &sax, name);
+			parse_xml(full_path, &sax, (char *)name);
 			if (!checked_ok) return 0;
 
 			sax.all_event = xml_load_files;
-			parse_xml(full_path, &sax, name);
+			parse_xml(full_path, &sax, (char *)name);
 		}
 	}
 

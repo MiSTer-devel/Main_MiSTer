@@ -5,14 +5,19 @@
 #ifndef __BOOTCORE_H__
 #define __BOOTCORE_H__
 
-char *getcoreName(char *path);
-char *getcoreExactName(char *path);
-char *replaceStr(const char *str, const char *oldstr, const char *newstr);
-char *loadLastcore();
-char *findCore(const char *name, char *coreName, int indent);
 void bootcore_init(const char *path);
+void bootcore_record_file(const char *path);
+void bootcore_load_file();
+void bootcore_cancel();
 
-extern char bootcoretype[64];
-extern int16_t btimeout;
+void bootcore_launch();
+bool bootcore_pending();
+bool bootcore_ready();
+
+unsigned int bootcore_remaining();
+unsigned int bootcore_delay();
+
+const char *bootcore_type();
+const char *bootcore_name();
 
 #endif // __BOOTCORE_H__

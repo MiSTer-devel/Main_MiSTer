@@ -191,7 +191,6 @@ static uint32_t menusub_last = 0; //for when we allocate it dynamically and need
 static uint64_t menumask = 0; // Used to determine which rows are selectable...
 static uint32_t menu_timer = 0;
 static uint32_t menu_save_timer = 0;
-static uint32_t load_addr = 0;
 static int32_t  bt_timer = 0;
 
 extern const char *version;
@@ -764,24 +763,6 @@ static void MenuWrite(unsigned char n, const char *s = "", unsigned char invert 
 	OsdWriteOffset(row, s, invert, stipple, 0, (row == 0 && firstmenu) ? 17 : (row == (OsdGetSize()-1) && !arrow) ? 16 : 0, 0);
 }
 
-const char* get_rbf_name_bootcore(char *str)
-{
-	if (!strlen(cfg.bootcore)) return "";
-	char *p = strrchr(str, '/');
-	if (!p) return str;
-
-	char *spl = strrchr(p + 1, '.');
-	if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")))
-	{
-		*spl = 0;
-	}
-	else
-	{
-		return NULL;
-	}
-	return p + 1;
-}
-
 static void vga_nag()
 {
 	if (video_fb_state())
@@ -810,47 +791,6 @@ static void vga_nag()
 
 	OsdDisable();
 	EnableOsd_on(OSD_ALL);
-}
-
-void process_addon(char *ext, uint8_t idx)
-{
-	static char name[1024];
-
-	while (*ext && *ext != ',') ext++;
-	if (*ext) ext++;
-	if (!*ext) return;
-
-	printf("addons: %s\n", ext);
-
-	int i = 0;
-	while (1)
-	{
-		char *fname = name;
-		strcpy(name, selPath);
-		char *p = strrchr(name, '.');
-		if (!p) p = name + strlen(name);
-		*p++ = '.';
-
-		substrcpy(p, ext, i);
-		if (!strlen(p)) return;
-		if (*p == '!')
-		{
-			*p = 0;
-			char *bs = strrchr(name, '/');
-			if (!bs)
-			{
-				fname = p + 1;
-			}
-			else
-			{
-				strcpy(bs + 1, p + 1);
-			}
-		}
-
-		printf("Trying: %s\n", fname);
-		user_io_file_tx_a(fname, ((i+1) << 8) | idx);
-		i++;
-	}
 }
 
 static int get_arc(const char *str)
@@ -968,8 +908,6 @@ void HandleUI(void)
 		return;
 	}
 
-	static char opensave;
-	static char ioctl_index;
 	char *p;
 	static char s[256];
 	unsigned char m = 0, up, down, select, menu, back, right, left, plus, minus, recent;
@@ -994,8 +932,8 @@ void HandleUI(void)
 	static int menusub_parent = 0;
 	static char title[32] = {};
 	static uint32_t saved_menustate = 0;
+	static uio_selection_descriptor sel_desc;
 	static char addon[1024];
-	static int store_name;
 
 	static char	cp_MenuCancel;
 
@@ -1017,7 +955,7 @@ void HandleUI(void)
 	minus = false;
 	recent = false;
 
-	if (c && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
+	if (c && bootcore_pending()) bootcore_cancel();
 
 	if (is_menu())
 	{
@@ -1413,7 +1351,6 @@ void HandleUI(void)
 			case 1:  // Floppy 1
 				if (select)
 				{
-					ioctl_index = 0;
 					SelectFile(Selected_S[menusub], "ADF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				}
 				break;
@@ -1422,7 +1359,6 @@ void HandleUI(void)
 			case 3:  // HDD 1
 				if (select)
 				{
-					ioctl_index = 1;
 					SelectFile(Selected_S[menusub], "HDF", SCANO_DIR | SCANO_UMOUNT, MENU_ARCHIE_MAIN_FILE_SELECTED, MENU_ARCHIE_MAIN1);
 				}
 				break;
@@ -1884,7 +1820,6 @@ void HandleUI(void)
 			}
 			else
 			{
-				static char ext[256];
 				int h = 0, d = 0, inpage = !page;
 				uint32_t entry = 0;
 				int i = 2;
@@ -1931,9 +1866,8 @@ void HandleUI(void)
 					if (!inpage || h || p[0] < 'A') continue;
 
 					// supplement files
-					if (p[0] == 'f')
+					if (user_io_parse_addon(p, addon, sizeof(addon)))
 					{
-						strcpy(addon, p);
 						continue;
 					}
 
@@ -1945,86 +1879,46 @@ void HandleUI(void)
 
 				if (p && !d)
 				{
-					if (p[0] == 'F' && (select || recent))
+					if ((select || recent) && user_io_parse_selection(p, menusub, &sel_desc))
 					{
-						store_name = 0;
-						opensave = 0;
-						ioctl_index = menusub + 1;
-						int idx = 1;
-
-						if (p[1] == 'S')
+						if( sel_desc.type == UIO_SELECTION_FILE )
 						{
-							opensave = 1;
-							idx++;
+							fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0) | (sel_desc.store_name ? SCANO_CLEAR : 0);
+							fs_MenuSelect = MENU_GENERIC_FILE_SELECTED;
+							fs_MenuCancel = MENU_GENERIC_MAIN1;
+							strcpy(fs_pFileExt, sel_desc.extensions);
+
+							if (select) SelectFile(Selected_F[sel_desc.ioctl_index & 15], sel_desc.extensions, fs_Options, fs_MenuSelect, fs_MenuCancel);
+							else if(recent_init(sel_desc.ioctl_index)) menustate = MENU_RECENT1;
 						}
-						else if (p[1] == 'C')
+						else if (sel_desc.type == UIO_SELECTION_IMAGE)
 						{
-							store_name = 1;
-							idx++;
-						}
+							fs_Options = SCANO_DIR | SCANO_UMOUNT;
+							fs_MenuSelect = MENU_GENERIC_IMAGE_SELECTED;
+							fs_MenuCancel = MENU_GENERIC_MAIN1;
+							strcpy(fs_pFileExt, sel_desc.extensions);
 
-						if (p[idx] >= '0' && p[idx] <= '9') ioctl_index = p[idx] - '0';
-						substrcpy(ext, p, 1);
-						if (is_gba() && FileExists(user_io_make_filepath(HomeDir(), "goomba.rom"))) strcat(ext, "GB GBC");
-						while (strlen(ext) % 3) strcat(ext, " ");
+							memcpy(Selected_tmp, Selected_S[(int)sel_desc.ioctl_index], sizeof(Selected_tmp));
+							if (is_x86()) strcpy(Selected_tmp, x86_get_image_path(sel_desc.ioctl_index));
 
-						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0) | (store_name ? SCANO_CLEAR : 0);
-						fs_MenuSelect = MENU_GENERIC_FILE_SELECTED;
-						fs_MenuCancel = MENU_GENERIC_MAIN1;
-						strcpy(fs_pFileExt, ext);
-
-						load_addr = 0;
-						if (substrcpy(s, p, 3))
-						{
-							load_addr = strtoul(s, NULL, 16);
-							if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+							if (is_pce() || is_megacd() || is_x86())
 							{
-								printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
-								load_addr = 0;
-							}
-						}
+								int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);
+								memcpy(Selected_tmp, Selected_S[(int)sel_desc.ioctl_index], sizeof(Selected_tmp));
 
-						if (select) SelectFile(Selected_F[ioctl_index & 15], ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
-						else if(recent_init(ioctl_index)) menustate = MENU_RECENT1;
-					}
-					else if (p[0] == 'S' && (select || recent))
-					{
-						ioctl_index = 0;
-						if ((p[1] >= '0' && p[1] <= '9') || is_x86()) ioctl_index = p[1] - '0';
-						substrcpy(ext, p, 1);
-						while (strlen(ext) % 3) strcat(ext, " ");
+								if (num == 1)
+								{
+									fs_Options |= SCANO_NOENTER;
+									char *p = strrchr(Selected_tmp, '/');
+									if (p) *p = 0;
+								}
 
-						fs_Options = SCANO_DIR | SCANO_UMOUNT;
-						fs_MenuSelect = MENU_GENERIC_IMAGE_SELECTED;
-						fs_MenuCancel = MENU_GENERIC_MAIN1;
-						strcpy(fs_pFileExt, ext);
-
-						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
-						if (is_x86()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
-
-						if (is_pce() || is_megacd() || is_x86())
-						{
-							//if (!strncasecmp(fs_pFileExt, "CUE", 3))
-							//{
-								//look for CHD too
-								strcat(fs_pFileExt, "CHD");
-								strcat(ext, "CHD");
-							//}
-							int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);
-							memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
-
-							if (num == 1)
-							{
-								fs_Options |= SCANO_NOENTER;
-								char *p = strrchr(Selected_tmp, '/');
-								if (p) *p = 0;
+								fs_Options |= SCANO_NOZIP;
 							}
 
-							fs_Options |= SCANO_NOZIP;
+							if (select) SelectFile(Selected_tmp, sel_desc.extensions, fs_Options, fs_MenuSelect, fs_MenuCancel);
+							else if(recent_init(sel_desc.ioctl_index + 500)) menustate = MENU_RECENT1;
 						}
-
-						if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
-						else if(recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
 					}
 					else if (select || minus || plus)
 					{
@@ -2156,41 +2050,11 @@ void HandleUI(void)
 		{
 			MenuHide();
 			printf("File selected: %s\n", selPath);
-			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
-
-			if (store_name)
-			{
-				char str[64];
-				sprintf(str, "%s.f%d", user_io_get_core_name(), ioctl_index);
-				FileSaveConfig(str, selPath, sizeof(selPath));
-			}
-
-			if (selPath[0])
-			{
-
-				char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
-				if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
-
-				if (fs_Options & SCANO_NEOGEO)
-				{
-					neogeo_romset_tx(selPath);
-				}
-				else
-				{
-					if (is_pce())
-					{
-						pcecd_set_image(0, "");
-						pcecd_reset();
-					}
-					if (!store_name) user_io_store_filename(selPath);
-					user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr);
-					if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
-				}
-
-				if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
-
-				recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
-			}
+			if( !sel_desc.store_name)
+				bootcore_record_file(selPath);
+			memcpy(Selected_F[sel_desc.ioctl_index & 15], selPath, sizeof(Selected_F[sel_desc.ioctl_index & 15]));
+			user_io_load_file(selPath, &sel_desc, addon);
+			recent_update(SelectedDir, Selected_F[sel_desc.ioctl_index & 15], SelectedLabel, sel_desc.ioctl_index);
 		}
 		break;
 
@@ -2200,33 +2064,9 @@ void HandleUI(void)
 			if (selPath[0] && !is_x86()) MenuHide();
 
 			printf("Image selected: %s\n", selPath);
-			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
-
-			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
-			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
-
-			if (is_x86())
-			{
-				x86_set_image(ioctl_index, selPath);
-			}
-			else if (is_megacd())
-			{
-				mcd_set_image(ioctl_index, selPath);
-			}
-			else if (is_pce())
-			{
-				pcecd_set_image(ioctl_index, selPath);
-				cheats_init(selPath, 0);
-			}
-			else
-			{
-				user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
-				user_io_file_mount(selPath, ioctl_index);
-			}
-
-			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
-
-			recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
+			memcpy(Selected_S[sel_desc.ioctl_index], selPath, sizeof(Selected_S[sel_desc.ioctl_index]));
+			user_io_mount_image(selPath, &sel_desc, addon);
+			recent_update(SelectedDir, Selected_S[sel_desc.ioctl_index], SelectedLabel, sel_desc.ioctl_index + 500);
 		}
 		break;
 
@@ -4374,7 +4214,7 @@ void HandleUI(void)
 			helptext_idx = 0;
 		}
 
-		if (recent && recent_init((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index))
+		if (recent && recent_init((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? sel_desc.ioctl_index + 500 : sel_desc.ioctl_index))
 		{
 			menustate = MENU_RECENT1;
 		}
@@ -4683,7 +4523,7 @@ void HandleUI(void)
 			OsdWrite(OsdGetSize() / 2, "    Clearing the recents", 0, 0);
 			OsdUpdate();
 			sleep(1);
-			recent_clear((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? ioctl_index + 500 : ioctl_index);
+			recent_clear((fs_Options & SCANO_CORES) ? -1 : (fs_Options & SCANO_UMOUNT) ? sel_desc.ioctl_index + 500 : sel_desc.ioctl_index);
 			menustate = fs_MenuCancel;
 			menusub = menusub_last;
 			if (is_menu()) menustate = MENU_FILE_SELECT1;
@@ -4878,7 +4718,6 @@ void HandleUI(void)
 		{
 			if (menusub < 4)
 			{
-				ioctl_index = 0;
 				if (df[menusub].status & DSK_INSERTED) // eject selected floppy
 				{
 					df[menusub].status = 0;
@@ -5289,7 +5128,6 @@ void HandleUI(void)
 			}
 			else if (menusub == 7 && select)
 			{
-				ioctl_index = 1;
 				SelectFile(Selected_F[4], "ROM", 0, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 			}
 			else if (menusub == 8)
@@ -6204,45 +6042,39 @@ void HandleUI(void)
 
 		if (!rtc_timer || CheckTimer(rtc_timer))
 		{
-			rtc_timer = GetTimer(cfg.bootcore[0] != '\0' ? 100 : 1000);
+			rtc_timer = GetTimer(bootcore_pending() ? 100 : 1000);
 			char str[64] = { 0 };
-			char straux[64];
 
-			if (cfg.bootcore[0] != '\0')
+			if (bootcore_pending())
 			{
-				if (btimeout > 0)
+				OsdWrite(12, "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81");
+				sprintf(str, " Bootcore -> %s", bootcore_type());
+				OsdWrite(13, str, 0, 0);
+				sprintf(str, " %s", bootcore_name());
+
+				char s[40];
+				memset(s, ' ', 32); // clear line buffer
+				s[32] = 0; // set temporary string length to OSD line length
+
+				int len = strlen(str);
+				if (len > 28)
 				{
-					OsdWrite(12, "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81");
-					snprintf(str, sizeof(str), " Bootcore -> %s", bootcoretype);
-					OsdWrite(13, str, 0, 0);
-					strcpy(straux, cfg.bootcore);
-					sprintf(str, " %s", get_rbf_name_bootcore(straux));
+					len = 27; // trim display length if longer than 30 characters
+					s[28] = 22;
+				}
 
-					char s[40];
-					memset(s, ' ', 32); // clear line buffer
-					s[32] = 0; // set temporary string length to OSD line length
+				strncpy(s + 1, str, len); // display only name
+				OsdWrite(14, s, 1, 0, 0, (32 * bootcore_remaining()) / bootcore_delay());
 
-					int len = strlen(str);
-					if (len > 28)
-					{
-						len = 27; // trim display length if longer than 30 characters
-						s[28] = 22;
-					}
-
-					strncpy(s + 1, str, len); // display only name
-					OsdWrite(14, s, 1, 0, 0, (32 * btimeout) / cfg.bootcore_timeout);
-
-					sprintf(str, "   Press any key to cancel");
-					OsdWrite(15, str, 0, 0);
-					btimeout--;
-					if (!btimeout)
-					{
-						OsdWrite(13, "", 0, 0);
-						OsdWrite(14, s, 1, 0, 0, 0);
-						sprintf(str, "           Loading...");
-						OsdWrite(15, str, 1, 0);
-						isMraName(cfg.bootcore) ? arcade_load(getFullPath(cfg.bootcore)) : fpga_load_rbf(cfg.bootcore);
-					}
+				sprintf(str, "   Press any key to cancel");
+				OsdWrite(15, str, 0, 0);
+				if (bootcore_ready())
+				{
+					OsdWrite(13, "", 0, 0);
+					OsdWrite(14, s, 1, 0, 0, 0);
+					sprintf(str, "           Loading...");
+					OsdWrite(15, str, 1, 0);
+					bootcore_launch();
 				}
 			}
 

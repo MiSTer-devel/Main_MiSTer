@@ -624,7 +624,7 @@ int FileWriteSec(fileTYPE *file, void *pBuffer)
 	return FileWriteAdv(file, pBuffer, 512);
 }
 
-int FileSave(const char *name, void *pBuffer, int size)
+int FileSave(const char *name, const void *pBuffer, int size)
 {
 	make_fullpath(name);
 
@@ -680,7 +680,7 @@ int FileLoadConfig(const char *name, void *pBuffer, int size)
 	return FileLoad(path, pBuffer, size);
 }
 
-int FileSaveConfig(const char *name, void *pBuffer, int size)
+int FileSaveConfig(const char *name, const void *pBuffer, int size)
 {
 	char path[256] = { CONFIG_DIR };
 	const char *p;

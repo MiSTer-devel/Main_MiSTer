@@ -72,14 +72,15 @@ static bool scrl_status = 0;
 
 static uint16_t sdram_cfg = 0;
 
+
 static char last_filename[1024] = {};
-void user_io_store_filename(char *filename)
+void user_io_store_filename(const char *filename)
 {
-	char *p = strrchr(filename, '/');
-	if (p) strcpy(last_filename, p + 1);
+	const char *slash = strrchr(filename, '/');
+	if (slash) strcpy(last_filename, slash + 1);
 	else strcpy(last_filename, filename);
 
-	p = strrchr(last_filename, '.');
+	char *p = strrchr(last_filename, '.');
 	if (p) *p = 0;
 }
 
@@ -615,27 +616,19 @@ static void parse_config()
 				use_cheats = 1;
 			}
 
-			if (p[0] == 'F' && p[1] == 'C')
+			uio_selection_descriptor sel_desc;
+			if (user_io_parse_selection(p, 0, &sel_desc))
 			{
-				static char str[1024];
-				uint32_t load_addr = 0;
-				if (substrcpy(str, p, 3))
+				if( sel_desc.type == UIO_SELECTION_FILE && sel_desc.store_name )
 				{
-					load_addr = strtoul(str, NULL, 16);
-					if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+					static char str[1024];
+
+					sprintf(str, "%s.f%d", user_io_get_core_name(), sel_desc.ioctl_index);
+					if (FileLoadConfig(str, str, sizeof(str)) && str[0])
 					{
-						printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
-						load_addr = 0;
+						StoreIdx_F(sel_desc.ioctl_index, str);
+						user_io_file_tx(str, sel_desc.ioctl_index, 0, 0, 0, sel_desc.load_addr);
 					}
-				}
-
-				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
-				if (FileLoadConfig(str, str, sizeof(str)) && str[0])
-				{
-
-					int idx = p[2] - '0';
-					StoreIdx_F(idx, str);
-					user_io_file_tx(str, idx, 0, 0, 0, load_addr);
 				}
 			}
 		}
@@ -1278,6 +1271,8 @@ void user_io_init(const char *path, const char *xml)
 	if (uartmode < 3 || uartmode > 4) midilink = 0;
 	SetMidiLinkMode(midilink);
 	SetUARTMode(uartmode);
+
+	bootcore_load_file();
 }
 
 static int joyswap = 0;
@@ -1595,6 +1590,255 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	// notify core of possible sd image change
 	spi_uio_cmd8(UIO_SET_SDSTAT, (1<< index) | (writable ? 0 : 0x80));
 	return ret ? 1 : 0;
+}
+
+static void process_addon(const char *path, const char *ext, uint8_t idx)
+{
+	char name[1024];
+
+	while (*ext && *ext != ',') ext++;
+	if (*ext) ext++;
+	if (!*ext) return;
+
+	printf("addons: %s\n", ext);
+
+	int i = 0;
+	while (1)
+	{
+		char *fname = name;
+		strcpy(name, path);
+		char *p = strrchr(name, '.');
+		if (!p) p = name + strlen(name);
+		*p++ = '.';
+
+		substrcpy(p, ext, i);
+		if (!strlen(p)) return;
+		if (*p == '!')
+		{
+			*p = 0;
+			char *bs = strrchr(name, '/');
+			if (!bs)
+			{
+				fname = p + 1;
+			}
+			else
+			{
+				strcpy(bs + 1, p + 1);
+			}
+		}
+
+		printf("Trying: %s\n", fname);
+		user_io_file_tx_a(fname, ((i+1) << 8) | idx);
+		i++;
+	}
+}
+
+bool user_io_parse_addon(const char *confstr, char *addon, int addon_size)
+{
+	const char *p = confstr;
+	const char *p_end = p + strlen(p);
+
+	while( p < p_end )
+	{
+		switch(*p)
+		{
+			case 'H': case 'h': case 'D': case 'd': p += 2; break;
+			case 'P': p += 2; break;
+ 			case 'f': strncpy(addon, p, addon_size); return true;
+			default: return false;
+		}
+	}
+	return false;
+}
+
+bool user_io_parse_selection(const char *confstr, int index, uio_selection_descriptor *desc)
+{
+	const char *p = confstr;
+	const char *p_end = p + strlen(p);
+
+	while( p < p_end )
+	{
+		switch(*p)
+		{
+			case 'H': case 'h': case 'D': case 'd': p += 2; break;
+			case 'P': p += 2; break;
+			case 'F':
+			{
+				memset(desc, 0, sizeof(*desc));
+				desc->type = UIO_SELECTION_FILE;
+				desc->ioctl_index = index + 1;
+				int idx = 1;
+				if( p[idx] == 'S' )
+				{
+					desc->open_save = true;
+					idx++;
+				}
+				else if (p[idx] == 'C')
+				{
+					desc->store_name = true;
+					idx++;
+				}
+			
+				if (p[idx] >= '0' && p[idx] <= '9')
+				{
+					desc->ioctl_index = p[idx] - '0';
+				}
+
+				const bool gba_gb_ext = is_gba() && FileExists(user_io_make_filepath(HomeDir(), "goomba.rom"));
+				substrcpy(desc->extensions, p, 1);
+				if (gba_gb_ext) strcat(desc->extensions, "GB GBC");
+				while (strlen(desc->extensions) % 3) strcat(desc->extensions, " ");
+
+				char load_str[256];
+				if (substrcpy(load_str, p, 3))
+				{
+					desc->load_addr = strtoul(load_str, NULL, 16);
+					if (desc->load_addr < 0x20000000 || desc->load_addr >= 0x40000000)
+					{
+						printf("Loading address 0x%X is outside the supported range! Using normal load.\n", desc->load_addr);
+						desc->load_addr = 0;
+					}
+				}
+				return true;
+			}
+			case 'S':
+			{
+				memset(desc, 0, sizeof(*desc));
+				desc->type = UIO_SELECTION_IMAGE;
+				desc->ioctl_index = 0;
+				if ((p[1] >= '0' && p[1] <= '9') || is_x86()) desc->ioctl_index = p[1] - '0';
+				substrcpy(desc->extensions, p, 1);
+				while (strlen(desc->extensions) % 3) strcat(desc->extensions, " ");
+
+				if (is_pce() || is_megacd() || is_x86())
+				{
+					strcat(desc->extensions, "CHD");
+				}
+				return true;
+			}
+			default: return false;
+		}
+	}
+	return false;
+}
+
+void user_io_load_file(const char *path, const uio_selection_descriptor* sel_desc, const char *addon)
+{
+	if (sel_desc->store_name)
+	{
+		char str[64];
+		sprintf(str, "%s.f%d", user_io_get_core_name(), sel_desc->ioctl_index);
+		FileSaveConfig(str, path, strlen(path) + 1);
+	}
+
+	if (path[0])
+	{
+		char idx = user_io_ext_idx(path, sel_desc->extensions, nullptr) << 6 | sel_desc->ioctl_index;
+		if (addon[0] == 'f' && addon[1] != '1') process_addon(path, addon, idx);
+
+		if (is_neogeo())
+		{
+			neogeo_romset_tx(path);
+		}
+		else
+		{
+			if (is_pce())
+			{
+				pcecd_set_image(0, "");
+				pcecd_reset();
+			}
+			if (!sel_desc->store_name) user_io_store_filename(path);
+			user_io_file_tx(path, idx, sel_desc->open_save, 0, 0, sel_desc->load_addr);
+			if (user_io_use_cheats()) cheats_init(path, user_io_get_file_crc());
+		}
+
+		if (addon[0] == 'f' && addon[1] == '1') process_addon(path, addon, idx);
+	}
+}
+
+void user_io_mount_image(const char *path, const uio_selection_descriptor* sel_desc, const char *addon)
+{
+	char idx = user_io_ext_idx(path, sel_desc->extensions, nullptr) << 6 | sel_desc->ioctl_index;
+	if (addon[0] == 'f' && addon[1] != '1') process_addon(path, addon, idx);
+
+	if (is_x86())
+	{
+		x86_set_image(sel_desc->ioctl_index, path);
+	}
+	else if (is_megacd())
+	{
+		mcd_set_image(sel_desc->ioctl_index, path);
+	}
+	else if (is_pce())
+	{
+		pcecd_set_image(sel_desc->ioctl_index, path);
+		cheats_init(path, 0);
+	}
+	else
+	{
+		// MJDTOD - is this needed?
+		user_io_set_index(idx);
+		user_io_file_mount(path, sel_desc->ioctl_index);
+	}
+
+	if (addon[0] == 'f' && addon[1] == '1') process_addon(path, addon, idx);
+}
+
+
+void user_io_load_or_mount(const char *path)
+{
+	user_io_read_confstr();
+
+	int confstr_index = 2;
+	int implicit_index = -1;
+	char addon[1024];
+
+	addon[0] = 0;
+
+	uio_selection_descriptor sel_desc;
+
+	while( true )
+	{
+		const char *p = user_io_get_confstr(confstr_index);
+		confstr_index += 1;
+
+		if(!p)
+		{
+			break;
+		}
+
+		if( user_io_parse_addon(p, addon, sizeof(addon)) )
+		{
+			continue;
+		}
+
+		implicit_index += 1;
+
+		if( !user_io_parse_selection(p, implicit_index, &sel_desc) )
+		{
+			continue;
+		}
+
+		bool found_ext = false;
+		user_io_ext_idx(path, sel_desc.extensions, &found_ext);
+
+		if( !found_ext )
+		{
+			addon[0] = 0;
+			continue;
+		}
+
+		if( sel_desc.type == UIO_SELECTION_FILE )
+		{
+			user_io_load_file(path, &sel_desc, addon);
+		}
+		else if( sel_desc.type == UIO_SELECTION_IMAGE )
+		{
+			user_io_mount_image(path, &sel_desc, addon);
+		}
+
+		break;
+	}
 }
 
 static unsigned char col_attr[1025];
@@ -3475,41 +3719,49 @@ void user_io_kbd(uint16_t key, int press)
 	}
 }
 
-unsigned char user_io_ext_idx(char *name, char* ext)
+unsigned char user_io_ext_idx(const char *name, const char* ext, bool *was_found)
 {
 	unsigned char idx = 0;
 	printf("Subindex of \"%s\" in \"%s\": ", name, ext);
 
-	char *p = strrchr(name, '.');
-	if (p)
+	const char *p = strrchr(name, '.');
+	if(!p) p = ".";
+
+	p++;
+	char e[4] = "   ";
+	for (int i = 0; i < 3; i++)
 	{
-		p++;
-		char e[4] = "   ";
+		if (!*p) break;
+		e[i] = *p++;
+	}
+
+	while (*ext)
+	{
+		int found = 1;
 		for (int i = 0; i < 3; i++)
 		{
-			if (!*p) break;
-			e[i] = *p++;
+			if (ext[i] == '*') break;
+			if (ext[i] != '?' && (toupper(ext[i]) != toupper(e[i]))) found = 0;
 		}
 
-		while (*ext)
+		if (found)
 		{
-			int found = 1;
-			for (int i = 0; i < 3; i++)
+			printf("%d\n", idx);
+			if( was_found )
 			{
-				if (ext[i] == '*') break;
-				if (ext[i] != '?' && (toupper(ext[i]) != toupper(e[i]))) found = 0;
+				*was_found = true;
 			}
-
-			if (found)
-			{
-				printf("%d\n", idx);
-				return idx;
-			}
-
-			if (strlen(ext) <= 3) break;
-			idx++;
-			ext += 3;
+			return idx;
 		}
+
+		if (strlen(ext) <= 3) break;
+		idx++;
+		ext += 3;
+	}
+
+	if( was_found )
+	{
+		*was_found = false;
 	}
 
 	printf("not found! use 0\n");

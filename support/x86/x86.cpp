@@ -183,7 +183,7 @@ static uint32_t img_write(fileTYPE *f, uint32_t lba, void *buf, uint32_t cnt)
 	return FileWriteAdv(f, buf, cnt * 512);
 }
 
-static void fdd_set(int num, char* filename)
+static void fdd_set(int num, const char* filename)
 {
 	floppy_type[num] = FDD_TYPE_1440;
 
@@ -267,7 +267,7 @@ static void fdd_set(int num, char* filename)
 	IOWR(FDD0_BASE + subaddr, 0xC, 0);
 }
 
-static void hdd_set(int num, char* filename)
+static void hdd_set(int num, const char* filename)
 {
 	int present = 0;
 	int cd = 0;
@@ -515,7 +515,7 @@ void x86_poll()
 	}
 }
 
-void x86_set_image(int num, char *filename)
+void x86_set_image(int num, const char *filename)
 {
 	memset(config.img_name[num], 0, sizeof(config.img_name[0]));
 	strcpy(config.img_name[num], filename);

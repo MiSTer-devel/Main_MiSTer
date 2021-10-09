@@ -96,14 +96,14 @@ void FileGenerateSavestatePath(const char *name, char* out_name, int sufx);
 #define SCREENSHOT_DEFAULT "screen"
 void FileGenerateScreenshotName(const char *name, char *out_name, int buflen);
 
-int FileSave(const char *name, void *pBuffer, int size);
+int FileSave(const char *name, const void *pBuffer, int size);
 int FileLoad(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 int FileDelete(const char *name);
 int DirDelete(const char *name);
 
 //save/load from config dir
 #define CONFIG_DIR "config"
-int FileSaveConfig(const char *name, void *pBuffer, int size);
+int FileSaveConfig(const char *name, const void *pBuffer, int size);
 int FileLoadConfig(const char *name, void *pBuffer, int size); // supply pBuffer = 0 to get the file size without loading
 int FileDeleteConfig(const char *name);
 

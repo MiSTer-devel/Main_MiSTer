@@ -5,15 +5,97 @@
 #include "file_io.h"
 #include "cfg.h"
 #include "fpga_io.h"
+#include "hardware.h"
+#include "support/arcade/mra_loader.h"
+#include "bootcore.h"
+#include "user_io.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
 
+enum bootcoreType
+{
+	BOOTCORE_NONE,
+	BOOTCORE_LASTCORE,
+	BOOTCORE_LASTCORE_EXACT,
+	BOOTCORE_LASTGAME,
+	BOOTCORE_LASTGAME_EXACT,
+	BOOTCORE_CORENAME,
+	BOOTCORE_CORENAME_EXACT
+};
 
-extern int arcade_load(const char *xml);
-int16_t btimeout;
-char bootcoretype[64];
+static bool isExact(bootcoreType t)
+{
+	switch( t )
+	{
+		case BOOTCORE_LASTCORE_EXACT:
+		case BOOTCORE_LASTGAME_EXACT:
+		case BOOTCORE_CORENAME_EXACT:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool isLastCore(bootcoreType t)
+{
+	switch( t )
+	{
+		case BOOTCORE_LASTCORE_EXACT:
+		case BOOTCORE_LASTGAME_EXACT:
+		case BOOTCORE_LASTGAME:
+		case BOOTCORE_LASTCORE:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool isLastGame(bootcoreType t)
+{
+	switch( t )
+	{
+		case BOOTCORE_LASTGAME_EXACT:
+		case BOOTCORE_LASTGAME:
+			return true;
+		default:
+			return false;
+	}
+}
+
+
+typedef struct
+{
+	uint8_t version;
+	char core_name[32];
+	char core_path[256];
+	char game_path[256];
+} lastcoreSave_t;
+
+#define LASTCORE_VERSION 1
+static lastcoreSave_t lastcore_save;
+
+static char rbf_name[256];
+static char core_path[256];
+bootcoreType launch_type = BOOTCORE_NONE;
+static unsigned long launch_time;
+static bool launch_pending = false;
+
+void makeRBFName(char *str)
+{
+	char *p = strrchr(str, '/');
+	if (!p) return;
+
+	char *spl = strrchr(p + 1, '.');
+	if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")))
+	{
+		*spl = 0;
+	}
+
+	memmove(str, p + 1, strlen(p + 1) + 1);
+}
+
 
 bool isExactcoreName(char *path)
 {
@@ -21,8 +103,9 @@ bool isExactcoreName(char *path)
 	return (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")));
 }
 
-char *getcoreName(char *path)
+void makeCoreName(char *path)
 {
+	char *orig = path;
 	char *spl = strrchr(path, '.');
 	if (spl && !strcmp(spl, ".rbf"))
 	{
@@ -30,92 +113,35 @@ char *getcoreName(char *path)
 	}
 	else
 	{
-		return NULL;
+		*path = '\0';
+		return;
 	}
+
 	if ((spl = strrchr(path, '/')) != NULL)
 	{
 		path = spl + 1;
 	}
+
 	if ((spl = strrchr(path, '_')) != NULL)
 	{
 		*spl = 0;
 	}
 
-	return path;
+	if( orig != path )
+	{
+		memmove(orig, path, strlen(path) + 1);
+	}
 }
 
-char *getcoreExactName(char *path)
+void makeExactCoreName(char *path)
 {
 	char *spl;
 	if ((spl = strrchr(path, '/')) != NULL)
 	{
-		path = spl + 1;
+		memmove(path, spl + 1, strlen(spl + 1) + 1);
 	}
-
-	return path;
 }
 
-char *replaceStr(const char *str, const char *oldstr, const char *newstr)
-{
-	char *result;
-	int i, cnt = 0;
-	int newstrlen = strlen(newstr);
-	int oldstrlen = strlen(oldstr);
-
-	for (i = 0; str[i] != '\0'; i++)
-	{
-		if (strstr(&str[i], oldstr) == &str[i])
-		{
-			cnt++;
-			i += oldstrlen - 1;
-		}
-	}
-
-	result = new char[i + cnt * (newstrlen - oldstrlen) + 1];
-
-	i = 0;
-	while (*str)
-	{
-		if (strstr(str, oldstr) == str)
-		{
-			strcpy(&result[i], newstr);
-			i += newstrlen;
-			str += oldstrlen;
-		}
-		else
-			result[i++] = *str++;
-	}
-
-	result[i] = '\0';
-	return result;
-}
-
-char* loadLastcore()
-{
-	char full_path[2100];
-	char path[256] = { CONFIG_DIR"/" };
-	strcat(path, "lastcore.dat");
-	sprintf(full_path, "%s/%s", getRootDir(), path);
-	FILE *fd = fopen(full_path, "r");
-	if (!fd)
-	{
-		return NULL;
-	}
-	fseek(fd, 0L, SEEK_END);
-	long size = ftell(fd);
-
-	fseek(fd, 0L, SEEK_SET);
-	char *lastcore = new char[size + 1]();
-	int ret = fread(lastcore, sizeof(char), size, fd);
-	fclose(fd);
-	if (ret == size)
-	{
-		return lastcore;
-	}
-	delete[] lastcore;
-	return NULL;
-
-}
 
 char *findCore(const char *name, char *coreName, int indent)
 {
@@ -127,7 +153,6 @@ char *findCore(const char *name, char *coreName, int indent)
 	{
 		return NULL;
 	}
-
 
 	char *indir;
 	char* path = new char[256];
@@ -163,73 +188,225 @@ char *findCore(const char *name, char *coreName, int indent)
 
 void bootcore_init(const char *path)
 {
-	char *auxpointer;
-	char auxstr[256];
 	char bootcore[256];
-	bool is_lastcore;
-	const char *rootdir = getRootDir();
-	cfg.bootcore_timeout = cfg.bootcore_timeout * 10;
-	btimeout = cfg.bootcore_timeout;
-	strcpy(bootcore, cfg.bootcore);
+	int len = FileLoadConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
 
-	is_lastcore = (!strcmp(cfg.bootcore, "lastcore") || !strcmp(cfg.bootcore, "lastexactcore"));
-
-	if (is_lastcore)
+	if( len != sizeof(lastcore_save) || lastcore_save.version != LASTCORE_VERSION )
 	{
-		strcpy(bootcoretype, cfg.bootcore);
-		auxpointer = loadLastcore();
-		if (auxpointer != NULL)
-		{
-			strcpy(bootcore, auxpointer);
-			delete[] auxpointer;
-		}
+		memset( &lastcore_save, 0, sizeof( lastcore_save ) );
+		lastcore_save.version = LASTCORE_VERSION;
+	}
+
+	launch_pending = false;
+
+	// determine type
+	if( !strcmp( cfg.bootcore, "lastcore" ) )
+	{
+		launch_type = BOOTCORE_LASTCORE;
+		strcpy(bootcore, lastcore_save.core_path);
+	}
+	else if( !strcmp( cfg.bootcore, "lastexactcore" ) )
+	{
+		launch_type = BOOTCORE_LASTCORE_EXACT;
+		strcpy(bootcore, lastcore_save.core_path);
+	}
+	else if( !strcmp( cfg.bootcore, "lastgame" ) )
+	{
+		launch_type = BOOTCORE_LASTGAME;
+		strcpy(bootcore, lastcore_save.core_path);
+	}
+	else if( !strcmp( cfg.bootcore, "lastexactgame" ) )
+	{
+		launch_type = BOOTCORE_LASTGAME_EXACT;
+		strcpy(bootcore, lastcore_save.core_path);
+	}
+	else if( isExactcoreName(cfg.bootcore) )
+	{
+		launch_type = BOOTCORE_CORENAME_EXACT;
+		strcpy(bootcore, cfg.bootcore);
 	}
 	else
 	{
-		strcpy(bootcoretype, isExactcoreName(cfg.bootcore) ? "exactcorename" : "corename");
+		launch_type = BOOTCORE_CORENAME;
+		strcpy(bootcore, cfg.bootcore);
 	}
 
-	auxpointer = findCore(rootdir, bootcore, 0);
-	if (auxpointer != NULL)
+	// if we are booting a core
+	if( path[0] != '\0' )
 	{
-		strcpy(bootcore, auxpointer);
-		delete[] auxpointer;
-
-		sprintf(auxstr, "%s/", rootdir);
-		auxpointer = replaceStr(bootcore, auxstr, "");
-		if (auxpointer != NULL)
+		if( !is_menu() && isLastCore( launch_type ) )
 		{
-			strcpy(bootcore, auxpointer);
-			delete[] auxpointer;
-
-			if (path[0] == '\0')
+			if( strcmp(path, bootcore) )
 			{
-				if (!cfg.bootcore_timeout)
+				strcpy(lastcore_save.core_path, path);
+				
+				// Clear game path if the corename differs
+				if( strcmp( lastcore_save.core_name, CoreName ) )
 				{
-					isMraName(bootcore) ? arcade_load(bootcore) : fpga_load_rbf(bootcore);
+					strcpy( lastcore_save.core_name, CoreName );
+					lastcore_save.game_path[0] = '\0';
 				}
-
-				strcpy(cfg.bootcore, strcmp(bootcore, "menu.rbf") ? bootcore : "");
-				return;
+				FileSaveConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
 			}
+			
+
 		}
+		return;
 	}
 
-	if (is_lastcore && path[0] != '\0')
+	// clean up name
+	if( isExact( launch_type ) || isMraName(bootcore) )
 	{
-
-		strcpy(auxstr, path);
-		auxpointer = (!strcmp(cfg.bootcore, "lastexactcore") || isMraName(auxstr)) ? getcoreExactName(auxstr) : getcoreName(auxstr);
-
-		if (auxpointer != NULL)
-		{
-			if (strcmp(bootcore, auxpointer))
-			{
-				FileSaveConfig("lastcore.dat", (char*)auxpointer, strlen(auxpointer));
-			}
-		}
+		makeExactCoreName(bootcore);
 	}
-	strcpy(cfg.bootcore, "");
+	else
+	{	
+		makeCoreName(bootcore);
+	}
 
+	// no valid bootcore
+	if( bootcore[0] == '\0' )
+	{
+		return;
+	}
+
+	// find the core
+	char *found_path = findCore(getRootDir(), bootcore, 0);
+	if (found_path == NULL)
+	{
+		return;
+	}
+
+	char rootDir[256];
+	sprintf(rootDir, "%s/", getRootDir());
+	if( strncasecmp( found_path, rootDir, strlen(rootDir) ))
+	{
+		strcpy(core_path, found_path);
+	}
+	else
+	{
+		strcpy(core_path, found_path + strlen(rootDir));
+	}
+	delete[] found_path;
+
+	strcpy(rbf_name, core_path);
+	makeRBFName(rbf_name);
+
+	if( cfg.bootcore_timeout )
+	{
+		launch_time = GetTimer(cfg.bootcore_timeout * 1000UL);
+		launch_pending = true;
+	}
+	else
+	{
+		launch_time = 0;
+		bootcore_launch();
+	}
+}
+
+void bootcore_record_file(const char *path)
+{
+	if( !isLastGame(launch_type) )
+	{
+		return;
+	}
+
+	if( strcmp( CoreName, lastcore_save.core_name ) )
+	{
+		return;
+	}
+
+	printf( "Bootcore: recorded %s for %s\n", path, lastcore_save.core_name );
+	strncpy(lastcore_save.game_path, path, sizeof(lastcore_save.game_path));
+	FileSaveConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
+}
+
+void bootcore_launch()
+{
+	launch_pending = false;
+	if( isMraName(core_path) )
+	{
+		arcade_load(getFullPath(core_path));
+	}
+	else
+	{
+		fpga_load_rbf(core_path);
+	}
+}
+
+void bootcore_load_file()
+{
+	if( !isLastGame( launch_type ) )
+	{
+		return;
+	}
+
+	if( strcmp( CoreName, lastcore_save.core_name ) )
+	{
+		return;
+	}
+
+	if( lastcore_save.game_path[0] )
+	{
+		user_io_load_or_mount( lastcore_save.game_path );
+	}
+}
+
+void bootcore_cancel()
+{
+	launch_pending = false;
+	if( isLastCore( launch_type ) )
+	{
+		memset( &lastcore_save, 0, sizeof(lastcore_save) );
+		FileSaveConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
+	}
+}
+
+bool bootcore_pending()
+{
+	return launch_pending;
+}
+
+bool bootcore_ready()
+{
+	return CheckTimer(launch_time);
+}
+
+unsigned int bootcore_delay()
+{
+	return cfg.bootcore_timeout * 1000;
+}
+
+unsigned int bootcore_remaining()
+{
+	unsigned long curtime = GetTimer(0);
+	if( curtime >= launch_time )
+	{
+		return 0;
+	}
+	else
+	{
+		return ( launch_time - curtime );
+	}
+}
+
+const char *bootcore_type()
+{
+	switch( launch_type )
+	{
+		case BOOTCORE_LASTCORE: return "lastcore";
+		case BOOTCORE_LASTCORE_EXACT: return "lastcore (exact)";
+		case BOOTCORE_CORENAME_EXACT: return "corename (exact)";
+		case BOOTCORE_CORENAME: return "corename";
+		case BOOTCORE_LASTGAME: return "lastgame";
+		case BOOTCORE_LASTGAME_EXACT: return "lastgame (exact)";
+		default: break;
+	}
+	return "none";
+}
+
+const char *bootcore_name()
+{
+	return rbf_name;
 }
 
