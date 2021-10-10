@@ -3377,32 +3377,8 @@ void user_io_kbd(uint16_t key, int press)
 		if (press == 1)
 		{
 			printf("print key pressed - do screen shot\n");
-			mister_scaler *ms = mister_scaler_init();
-			if (ms == NULL)
-			{
-				printf("problem with scaler, maybe not a new enough version\n");
-				Info("Scaler not compatible");
-			}
-			else
-			{
-				unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 3, 1);
-				mister_scaler_read(ms, outputbuf);
-				static char filename[1024];
-				FileGenerateScreenshotName(last_filename, filename, 1024);
-				unsigned error = lodepng_encode24_file(getFullPath(filename), outputbuf, ms->width, ms->height);
-				if (error) {
-					printf("error %u: %s\n", error, lodepng_error_text(error));
-					printf("%s", filename);
-					Info("error in saving png");
-				}
-				free(outputbuf);
-				mister_scaler_free(ms);
-				char msg[1024];
-				snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
-				Info(msg);
-			}
+			user_io_screenshot(nullptr);
 		}
-
 	}
 	else
 	if (key == KEY_MUTE)
@@ -3560,4 +3536,52 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 uint16_t user_io_get_sdram_cfg()
 {
 	return sdram_cfg;
+}
+
+bool user_io_screenshot(const char *pngname)
+{
+	mister_scaler *ms = mister_scaler_init();
+	if (ms == NULL)
+	{
+		printf("problem with scaler, maybe not a new enough version\n");
+		Info("Scaler not compatible");
+		return false;
+	}
+	else
+	{
+		const char *basename = last_filename;
+		if( pngname && *pngname )
+			basename = pngname;
+		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 3, 1);
+		mister_scaler_read(ms, outputbuf);
+		static char filename[1024];
+		FileGenerateScreenshotName(basename, filename, 1024);
+		unsigned error = lodepng_encode24_file(getFullPath(filename), outputbuf, ms->width, ms->height);
+		if (error) {
+			printf("error %u: %s\n", error, lodepng_error_text(error));
+			printf("%s", filename);
+			Info("error in saving png");
+			return false;
+		}
+		free(outputbuf);
+		mister_scaler_free(ms);
+		char msg[1024];
+		snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
+		Info(msg);
+	}
+	return true;
+}
+
+void user_io_screenshot_cmd(const char *cmd)
+{
+	if( strncmp( cmd, "screenshot", 10 ))
+	{
+		return;
+	}
+
+	cmd += 10;
+	while( *cmd != '\0' && ( *cmd == '\t' || *cmd == ' ' || *cmd == '\n' ) )
+		cmd++;
+
+	user_io_screenshot(cmd);
 }

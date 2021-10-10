@@ -4423,6 +4423,10 @@ int input_test(int getchar)
 						if (len > 4 && !strcasecmp(cmd + len - 4, ".mra")) arcade_load(cmd + 10);
 						else fpga_load_rbf(cmd + 10);
 					}
+					else if (!strncmp(cmd, "screenshot", 10))
+					{
+						user_io_screenshot_cmd(cmd);
+					}
 				}
 			}
 
