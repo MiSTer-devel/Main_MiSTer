@@ -1,0 +1,46 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "deploy_debug",
+            "command": "sh", // Could be any other shell command
+            "args": [
+                "deploy_debug.sh"
+            ],
+            "type": "shell",
+            "presentation": {
+                "reveal": "silent",
+                "clear": true
+            }
+        },
+        {
+            "label": "make debug",
+            "command": "make",
+            "args": [
+                "-j4",
+                "DEBUG=1"
+            ],
+            "type": "shell",
+            "problemMatcher": {
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}"
+                ],
+                "pattern": {
+                    "regexp": "^(.*)\\((\\d+), (\\d+)\\):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
