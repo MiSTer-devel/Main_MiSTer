@@ -879,6 +879,8 @@ typedef struct
 	uint8_t  has_mmap;
 	uint32_t mmap[NUMBUTTONS];
 	uint16_t jkmap[1024];
+	int      stick_l[2];
+	int      stick_r[2];
 
 	uint8_t  has_kbdmap;
 	uint8_t  kbdmap[256];
@@ -1719,15 +1721,16 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 	}
 }
 
-static void joy_analog(int num, int axis, int offset)
+static void joy_analog(int num, int axis, int offset, int stick = 0)
 {
-	static int pos[NUMPLAYERS][2] = {};
+	static int pos[2][NUMPLAYERS][2] = {};
 
 	if (grabbed && num > 0 && num < NUMPLAYERS+1)
 	{
 		num--;
-		pos[num][axis] = offset;
-		user_io_analog_joystick(num, (char)(pos[num][0]), (char)(pos[num][1]));
+		pos[stick][num][axis] = offset;
+		if(stick) user_io_r_analog_joystick(num, (char)(pos[1][num][0]), (char)(pos[1][num][1]));
+		else user_io_l_analog_joystick(num, (char)(pos[0][num][0]), (char)(pos[0][num][1]));
 	}
 }
 
@@ -2001,6 +2004,27 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				//input[dev].has_mmap++;
 			}
 			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
+
+			if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS1_X])
+			{
+				input[dev].stick_l[0] = SYS_AXIS1_X;
+				if((input[dev].mmap[SYS_AXIS2_X] >> 16) == 2) input[dev].stick_r[0] = SYS_AXIS2_X;
+			}
+			if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS1_Y])
+			{
+				input[dev].stick_l[1] = SYS_AXIS1_Y;
+				if ((input[dev].mmap[SYS_AXIS2_Y] >> 16) == 2) input[dev].stick_r[1] = SYS_AXIS2_Y;
+			}
+			if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS2_X])
+			{
+				input[dev].stick_l[0] = SYS_AXIS2_X;
+				if ((input[dev].mmap[SYS_AXIS1_X] >> 16) == 2) input[dev].stick_r[0] = SYS_AXIS1_X;
+			}
+			if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS2_Y])
+			{
+				input[dev].stick_l[1] = SYS_AXIS2_Y;
+				if ((input[dev].mmap[SYS_AXIS1_Y] >> 16) == 2) input[dev].stick_r[1] = SYS_AXIS1_Y;
+			}
 		}
 		input[dev].has_mmap++;
 	}
@@ -2758,7 +2782,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					{
 						value -= absinfo->minimum;
 						value = (value * 255) / (absinfo->maximum - absinfo->minimum);
-						user_io_analog_joystick(((input[dev].num - 1) << 4) | 0xF, value, 0);
+						user_io_l_analog_joystick(((input[dev].num - 1) << 4) | 0xF, value, 0);
 					}
 					break;
 				}
@@ -2806,27 +2830,39 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					mouse_emu_y /= 12;
 					return;
 				}
-				else if (((input[dev].mmap[SYS_AXIS_X] >> 16) == 2 && ev->code == (input[dev].mmap[SYS_AXIS_X] & 0xFFFF)) || (ev->code == 0 && input[dev].lightgun))
+				else
 				{
 					// skip if joystick is undefined.
 					if (!input[dev].num) break;
 
-					int offset = 0;
-					if (value < -1 || value>1 || input[dev].lightgun) offset = value;
-					//printf("analog_x = %d\n", offset);
-					joy_analog(input[dev].num, 0, offset);
-					return;
-				}
-				else if (((input[dev].mmap[SYS_AXIS_Y] >> 16) == 2 && ev->code == (input[dev].mmap[SYS_AXIS_Y] & 0xFFFF)) || (ev->code == 1 && input[dev].lightgun))
-				{
-					// skip if joystick is undefined.
-					if (!input[dev].num) break;
-
-					int offset = 0;
-					if (value < -1 || value>1 || input[dev].lightgun) offset = value;
-					//printf("analog_y = %d\n", offset);
-					joy_analog(input[dev].num, 1, offset);
-					return;
+					if (ev->code == 0 && input[dev].lightgun)
+					{
+						joy_analog(input[dev].num, 0, value);
+					}
+					else if (ev->code == 1 && input[dev].lightgun)
+					{
+						joy_analog(input[dev].num, 1, value);
+					}
+					else
+					{
+						int offset = (value < -1 || value>1) ? value : 0;
+						if (input[dev].stick_l[0] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_l[0]])
+						{
+							joy_analog(input[dev].num, 0, offset, 0);
+						}
+						else if (input[dev].stick_l[1] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_l[1]])
+						{
+							joy_analog(input[dev].num, 1, offset, 0);
+						}
+						else if (input[dev].stick_r[0] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_r[0]])
+						{
+							joy_analog(input[dev].num, 0, offset, 1);
+						}
+						else if (input[dev].stick_r[1] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_r[1]])
+						{
+							joy_analog(input[dev].num, 1, offset, 1);
+						}
+					}
 				}
 			}
 			break;
@@ -2841,7 +2877,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (ev->value < -128) value = -128;
 					else if (ev->value > 127) value = 127;
 
-					user_io_analog_joystick(((input[dev].num - 1) << 4) | 0x8F, value, 0);
+					user_io_l_analog_joystick(((input[dev].num - 1) << 4) | 0x8F, value, 0);
 				}
 			}
 			break;

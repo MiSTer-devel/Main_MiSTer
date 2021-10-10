@@ -68,6 +68,7 @@
 #define UIO_SET_AR_CUST 0x3A
 #define UIO_SET_UART    0x3B
 #define UIO_CHK_UPLOAD  0x3C
+#define UIO_ASTICK_2    0x3D
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
@@ -212,7 +213,8 @@ void user_io_kbd(uint16_t key, int press);
 char* user_io_create_config_name();
 int user_io_get_joy_transl();
 void user_io_digital_joystick(unsigned char, uint32_t, int);
-void user_io_analog_joystick(unsigned char, char, char);
+void user_io_l_analog_joystick(unsigned char, char, char);
+void user_io_r_analog_joystick(unsigned char, char, char);
 void user_io_set_joyswap(int swap);
 int user_io_get_joyswap();
 char user_io_osd_is_visible();
