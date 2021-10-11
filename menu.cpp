@@ -2184,7 +2184,7 @@ void HandleUI(void)
 					}
 					if (!store_name) user_io_store_filename(selPath);
 					user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr);
-					if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
+					if (user_io_use_cheats() && !store_name) cheats_init(selPath, user_io_get_file_crc());
 				}
 
 				if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
