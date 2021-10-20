@@ -3308,7 +3308,7 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 			if (!osd_is_visible)
 			{
 				spi_uio_cmd_cont(UIO_MOUSE);
-				spi_w(ps2_mouse[0] | (w << 8));
+				spi_w(ps2_mouse[0] | ((w & 0x7f) << 8));
 				spi_w(ps2_mouse[1] | ((((uint16_t)b) << 5) & 0xF00));
 				spi_w(ps2_mouse[2] | ((((uint16_t)b) << 1) & 0x100));
 				DisableIO();
