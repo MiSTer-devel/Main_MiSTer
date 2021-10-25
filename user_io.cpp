@@ -1259,13 +1259,13 @@ void user_io_init(const char *path, const char *xml)
 		sprintf(mainpath, "uartmode.%s", user_io_get_core_name());
 		FileLoadConfig(mainpath, &mode, 4);
 
-		uint64_t speeds = 0;
+		uint32_t speeds[3] = {};
 		sprintf(mainpath, "uartspeed.%s", user_io_get_core_name());
-		FileLoadConfig(mainpath, &speeds, 8);
+		FileLoadConfig(mainpath, speeds, sizeof(speeds));
 
-		ValidateUARTbaud(1, speeds & 0xFFFFFFFF);
-		ValidateUARTbaud(3, speeds >> 32);
-		ValidateUARTbaud(4, uart_speeds[0]);
+		ValidateUARTbaud(1, speeds[0]);
+		ValidateUARTbaud(3, speeds[1]);
+		ValidateUARTbaud(4, speeds[2] ? speeds[2] : uart_speeds[0]);
 
 		printf("UART bauds: %d/%d/%d\n", GetUARTbaud(1), GetUARTbaud(3), GetUARTbaud(4));
 	}
