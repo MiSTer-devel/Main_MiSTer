@@ -2146,7 +2146,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				user_io_file_tx_data(buf, 512);
 
 				//strip original SNES ROM header if present (not used)
-				if (bytes2send & 512)
+				if ((bytes2send % 1024) == 512)
 				{
 					bytes2send -= 512;
 					FileReadSec(&f, buf);
@@ -2188,7 +2188,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			user_io_file_tx_data(buf, 512);
 
 			//strip original SNES ROM header if present (not used)
-			if (bytes2send & 512)
+			if ((bytes2send % 1024) == 512)
 			{
 				bytes2send -= 512;
 				FileReadSec(&f, buf);
