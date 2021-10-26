@@ -620,6 +620,7 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
+			DISKLED_ON;
 			uint32_t length = SWAP_INT(req->length);
 			length = FileReadAdv(&open_file_handles[key], shmem + DATA_BUFFER, length);
 
@@ -642,6 +643,7 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
+			DISKLED_ON;
 			uint32_t length = SWAP_INT(req->length);
 			length = FileWriteAdv(&open_file_handles[key], shmem + DATA_BUFFER, length);
 
@@ -720,6 +722,7 @@ static int process_request(void *reqres_buffer)
 					break;
 				}
 
+				DISKLED_ON;
 				if (PathIsDir(name, 0))
 				{
 					ret = DirDelete(name) ? 0 : ERROR_DIRECTORY_NOT_EMPTY;
@@ -784,6 +787,7 @@ static int process_request(void *reqres_buffer)
 				break;
 			}
 
+			DISKLED_ON;
 			if (rename(buf, fp2))
 			{
 				ret = ERROR_OBJECT_NOT_FOUND;
@@ -801,6 +805,7 @@ static int process_request(void *reqres_buffer)
 			CreateDirResponse *res = (CreateDirResponse*)reqres_buffer;
 			sz_res = sizeof(CreateDirResponse);
 
+			DISKLED_ON;
 			char *name = find_path(SWAP_INT(req->key), req->name + 1);
 			if (!FileCreatePath(name))
 			{

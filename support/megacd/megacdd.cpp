@@ -232,6 +232,9 @@ int cdd_t::LoadCUE(const char* filename) {
 		this->toc.tracks[this->toc.last - 1].end = this->toc.end;
 	}
 
+        memcpy(&fname[strlen(fname) - 4], ".sub", 4);
+        FileOpen(&this->toc.sub, getFullPath(fname));
+
 	FileClose(&this->toc.tracks[this->toc.last].f);
 	return 0;
 }
@@ -296,9 +299,6 @@ int cdd_t::Load(const char *filename)
 		this->toc.tracks[this->toc.last].start = this->toc.end;
 		this->loaded = 1;
 
-		//memcpy(&fname[strlen(fname) - 4], ".sub", 4);
-		//this->toc.sub = fopen(getFullPath(fname), "r");
-
 		printf("\x1b[32mMCD: CD mounted , last track = %u\n\x1b[0m", this->toc.last);
 
 		return 1;
@@ -330,7 +330,7 @@ void cdd_t::Unload()
 			}
 		}
 
-		//if (this->toc.sub) fclose(this->toc.sub);
+		if (this->toc.sub.opened()) FileClose(&this->toc.sub);
 
 		this->loaded = 0;
 	}
@@ -395,7 +395,6 @@ void cdd_t::Update() {
 			return;
 		}
 
-		//if (this->toc.sub) mcd_sub_send();
 
 		if (this->toc.tracks[this->index].type)
 		{
@@ -469,7 +468,7 @@ void cdd_t::Update() {
 
 		this->isData = this->toc.tracks[this->index].type;
 
-		//if (this->toc.sub) fseek(this->toc.sub, this->lba * 96, SEEK_SET);
+		if (this->toc.sub.opened()) FileSeek(&this->toc.sub, this->lba * 96, SEEK_SET);
 
 		if (this->toc.tracks[this->index].type)
 		{
@@ -709,13 +708,13 @@ void cdd_t::CommandExec() {
 		this->chd_audio_read_lba = this->lba;
 		this->audioOffset = 0;
 
-		//if (this->toc.sub) fseek(this->toc.sub, lba_ * 96, SEEK_SET);
+		if (this->toc.sub.opened()) FileSeek(&this->toc.sub, lba_ * 96, SEEK_SET);
 
 		this->isData = 1;
 
 		this->status = CD_STAT_PLAY;
 
-		stat[0] = CD_STAT_SEEK; 
+		stat[0] = CD_STAT_SEEK;
 		stat[1] = 0xf;
 		stat[2] = 0;
 		stat[3] = 0;
@@ -758,7 +757,7 @@ void cdd_t::CommandExec() {
 			FileSeek(&this->toc.tracks[index].f, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
 		}
 
-		//if (this->toc.sub) fseek(this->toc.sub, lba_ * 96, SEEK_SET);
+		if (this->toc.sub.opened()) FileSeek(&this->toc.sub, lba_ * 96, SEEK_SET);
 
 		this->isData = 1;
 
@@ -951,29 +950,39 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 	return this->audioLength;
 }
 
-void cdd_t::ReadSubcode(uint16_t* buf)
+void InterleaveSubcode(uint8_t *subc_data, uint16_t *buf)
 {
-	(void)buf;
-	/*
-	uint8_t subc[96];
-	int i, j, n;
-
-	fread(subc, 96, 1, this->toc.sub);
-
-	for (i = 0, n = 0; i < 96; i += 2, n++)
+	for(int i = 0, n=0; i < 96; i+=2,n++)
 	{
 		int code = 0;
-		for (j = 0; j < 8; j++)
+		for (int j = 0; j < 8; j++)
 		{
-			int bits = (subc[(j * 12) + (i / 8)] >> (6 - (i & 6))) & 3;
-			code |= ((bits & 1) << (7 - j));
-			code |= ((bits >> 1) << (15 - j));
+			int bits = (subc_data[(j * 12) + (i / 8)] >> (6 - (i&6))) & 3;
+			code |= ((bits & 1) << (15 - j));
+			code |= ((bits >> 1) << (7 - j));
 		}
-
 		buf[n] = code;
 	}
-	*/
 }
+
+void cdd_t::ReadSubcode(uint16_t* buf)
+{
+	uint8_t subc[96];
+	if (this->toc.chd_f)
+	{
+		//Just use the read sector call with an offset, since we previously read that sector, it is already in the hunk cache
+		if (this->toc.tracks[this->index].sbc_type == SUBCODE_RW_RAW) {
+			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 0, CD_MAX_SECTOR_DATA, 96, (uint8_t *)buf, this->chd_hunkbuf, &this->chd_hunknum);
+		} else if (this->toc.tracks[this->index].sbc_type == SUBCODE_RW) {
+			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 0, CD_MAX_SECTOR_DATA, 96, subc, this->chd_hunkbuf, &this->chd_hunknum);
+			InterleaveSubcode(subc, buf);
+		}
+	} else if (this->toc.sub.opened()) {
+		FileReadAdv(&this->toc.sub, subc, 96);
+		InterleaveSubcode(subc, buf);
+	}
+}
+
 
 int cdd_t::SectorSend(uint8_t* header)
 {
@@ -988,6 +997,7 @@ int cdd_t::SectorSend(uint8_t* header)
 		len = ReadCDDA(buf);
 	}
 
+	SubcodeSend();
 	if (SendData)
 		return SendData(buf, len, CD_DATA_IO_INDEX);
 

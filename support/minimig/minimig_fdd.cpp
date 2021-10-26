@@ -614,19 +614,15 @@ void HandleFDD(unsigned char c1, unsigned char c2)
 
 	if (c1 & CMD_RDTRK)
 	{
-		DISKLED_ON;
 		sel = (c1 >> 6) & 0x03;
 		df[sel].track = c2;
 		ReadTrack(&df[sel]);
-		DISKLED_OFF;
 	}
 	else if (c1 & CMD_WRTRK)
 	{
-		DISKLED_ON;
 		sel = (c1 >> 6) & 0x03;
 		df[sel].track = c2;
 		WriteTrack(&df[sel]);
-		DISKLED_OFF;
 	}
 }
 

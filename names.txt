@@ -73,6 +73,7 @@ SMS: Sega Master System/Game Gear
 SNES: Nintendo Super NES
 TurboGrafx16: NEC TurboGrafx-16/CD
 Vectrex: GCE Vectrex
+WonderSwan: Bandai WonderSwan/Color
 
 # Other Cores
 

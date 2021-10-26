@@ -179,7 +179,7 @@ static const char *get_arcade_root(int rbf)
 	static char path[kBigTextSize];
 
 	if (!rbf) strcpy(path, mame_root);
-	else sprintf(path, "%s/cores", arcade_root);
+	else snprintf(path, sizeof(path), "%s/cores", arcade_root);
 
 	return path;
 }
@@ -340,7 +340,7 @@ static void rom_finish(int send, uint32_t address, int index)
 				{
 					ProgressMessage("Sending", str, len - romlen[0], len);
 
-					uint16_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
+					uint32_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
 					user_io_file_tx_data(data, chunk);
 
 					romlen[0] -= chunk;
@@ -1149,7 +1149,7 @@ static const char *get_rbf(const char *xml)
 		}
 	}
 
-	if (lastfound[0]) sprintf(rbfname, "%s/%s", dirname, lastfound);
+	if (lastfound[0]) snprintf(rbfname, sizeof(rbfname), "%s/%s", dirname, lastfound);
 	closedir(dir);
 
 	return lastfound[0] ? rbfname : NULL;
@@ -1161,7 +1161,7 @@ int arcade_load(const char *xml)
 	static char path[kBigTextSize];
 
 	if(xml[0] == '/') strcpy(path, xml);
-	else sprintf(path, "%s/%s", getRootDir(), xml);
+	else snprintf(path, sizeof(path), "%s/%s", getRootDir(), xml);
 
 	set_arcade_root(path);
 	printf("arcade_load [%s]\n", path);

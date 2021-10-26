@@ -65,6 +65,7 @@ class pcecdd_t
 {
 public:
 	uint32_t latency;
+	uint32_t audiodelay;
 	uint8_t state;
 	uint8_t isData;
 	int loaded;

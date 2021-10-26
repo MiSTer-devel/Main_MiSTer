@@ -11,13 +11,11 @@
 
 void lba_to_hunkinfo(chd_file *chd_f, int lba, int *hunknumber, int *hunkoffset)
 {
-        const chd_header *chd_header = chd_get_header(chd_f);
-
-
-        int sectors_per_hunk =  chd_header->hunkbytes / chd_header->unitbytes;
-        *hunknumber = lba / sectors_per_hunk;
-        *hunkoffset = lba % sectors_per_hunk;
-        return;
+	const chd_header *chd_header = chd_get_header(chd_f);
+	int sectors_per_hunk =  chd_header->hunkbytes / chd_header->unitbytes;
+	*hunknumber = lba / sectors_per_hunk;
+	*hunkoffset = lba % sectors_per_hunk;
+	return;
 }
 
 
@@ -40,7 +38,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 		return err;
 	}
 
-	//TODO: deal with non v5 chd versions 
+	//TODO: deal with non v5 chd versions
 	const chd_header *chd_header = chd_get_header(cd_toc->chd_f);
 	if (!chd_header)
 	{
@@ -50,14 +48,14 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 
 	mister_chd_log("hunkbytes %d unitbytes %d logical length %llu\n", chd_header->hunkbytes, chd_header->unitbytes, chd_header->logicalbytes);
 	//Load track info
-	
+
 	int sector_cnt = 0;
 	for(cd_toc->last = 0; cd_toc->last < 99; cd_toc->last++)
 	{
 		char tmp[512];
 		int track_id = 0, frames = 0, pregap = 0, postgap = 0;
 		char track_type[64], subtype[32], pgtype[32], pgsub[32];
-		
+
 		if(chd_get_metadata(cd_toc->chd_f, CDROM_TRACK_METADATA2_TAG, cd_toc->last, tmp, sizeof(tmp), NULL, NULL, NULL) == CHDERR_NONE)
 		{
 			if (sscanf(tmp, CDROM_TRACK_METADATA2_FORMAT, &track_id, track_type, subtype, &frames, &pregap, pgtype, pgsub, &postgap) != 8) break ;
@@ -65,7 +63,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 			if (sscanf(tmp, CDROM_TRACK_METADATA_FORMAT, &track_id, track_type, subtype, &frames) != 4) break;
 		} else {
 			//No more tracks
-			break;	
+			break;
 		}
 
 		bool pregap_valid = true;
@@ -88,7 +86,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 				cd_toc->tracks[cd_toc->last].start += pregap;
 			}
 
-		} else { 
+		} else {
 			if (pregap_valid)
 			{
 				cd_toc->tracks[cd_toc->last].start = pregap;
@@ -126,6 +124,13 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 			cd_toc->tracks[cd_toc->last].type = 0;
 		}
 
+		cd_toc->tracks[cd_toc->last].sbc_type = SUBCODE_NONE;
+		if (!strcmp(subtype, "RW")) {
+			cd_toc->tracks[cd_toc->last].sbc_type = SUBCODE_RW;
+		} else if (!strcmp(subtype, "RW_RAW")) {
+			cd_toc->tracks[cd_toc->last].sbc_type = SUBCODE_RW_RAW;
+		}
+
 		//CHD pads tracks to a multiple of 4 sectors, keep track of the overall sector count and calculate the difference between the cdrom lba and the effective chd lba
 		cd_toc->tracks[cd_toc->last].offset = (sector_cnt + pregap - cd_toc->tracks[cd_toc->last].start);
 		cd_toc->tracks[cd_toc->last].end = cd_toc->tracks[cd_toc->last].start + frames - pregap;
@@ -133,7 +138,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 		sector_cnt += ((frames + CD_TRACK_PADDING - 1) / CD_TRACK_PADDING) * CD_TRACK_PADDING;
                 mister_chd_log("Track %d: Type: %s PreGap: %d PreGapType: %s Frames: %d start: %d end %d\n", cd_toc->last, track_type, pregap, pgtype, frames, cd_toc->tracks[cd_toc->last].start, cd_toc->tracks[cd_toc->last].end);
 
-	}	
+	}
 	return CHDERR_NONE;
 }
 

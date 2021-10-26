@@ -74,6 +74,7 @@
 void set_kbdled(int mask, int state);
 int  get_kbdled(int mask);
 int  toggle_kbdled(int mask);
+void sysled_enable(int en);
 
 void input_notify_mode();
 int input_poll(int getchar);
