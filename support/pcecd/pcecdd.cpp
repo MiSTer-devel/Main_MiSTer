@@ -452,7 +452,7 @@ void pcecdd_t::Update() {
 			}
 
 			if (this->CDDAMode == PCECD_CDDAMODE_INTERRUPT) {
-				PendStatus(MAKE_STATUS(PCECD_STATUS_GOOD, 0));
+				SendStatus(MAKE_STATUS(PCECD_STATUS_GOOD, 0));
 			}
 
 			printf("\x1b[32mPCECD: playback reached the end %d\n\x1b[0m", this->lba);
