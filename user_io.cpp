@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 
-#include "lib/lodepng/lodepng.h"
+#include "lib/imlib2/Imlib2.h"
 
 #include "hardware.h"
 #include "osd.h"
@@ -3374,10 +3374,11 @@ void user_io_kbd(uint16_t key, int press)
 	// Win+PrnScr or Alt/Win+ScrLk - screen shot
 	if ((key == KEY_SYSRQ && (get_key_mod() & (RGUI | LGUI))) || (key == KEY_SCROLLLOCK && (get_key_mod() & (LALT | RALT | RGUI | LGUI))))
 	{
+		int shift = (get_key_mod() & LSHIFT);
 		if (press == 1)
 		{
 			printf("print key pressed - do screen shot\n");
-			user_io_screenshot(nullptr);
+			user_io_screenshot(nullptr,!shift);
 		}
 	}
 	else
@@ -3538,7 +3539,37 @@ uint16_t user_io_get_sdram_cfg()
 	return sdram_cfg;
 }
 
-bool user_io_screenshot(const char *pngname)
+static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
+  {"file '%s' does not exist", IMLIB_LOAD_ERROR_FILE_DOES_NOT_EXIST},
+  {"file '%s' is a directory", IMLIB_LOAD_ERROR_FILE_IS_DIRECTORY},
+  {"permission denied to read file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_READ},
+  {"no loader for the file format used in file '%s'", IMLIB_LOAD_ERROR_NO_LOADER_FOR_FILE_FORMAT},
+  {"path for file '%s' is too long", IMLIB_LOAD_ERROR_PATH_TOO_LONG},
+  {"a component of path '%s' does not exist", IMLIB_LOAD_ERROR_PATH_COMPONENT_NON_EXISTANT},
+  {"a component of path '%s' is not a directory", IMLIB_LOAD_ERROR_PATH_COMPONENT_NOT_DIRECTORY},
+  {"path '%s' has too many symbolic links", IMLIB_LOAD_ERROR_TOO_MANY_SYMBOLIC_LINKS},
+  {"ran out of file descriptors trying to access file '%s'", IMLIB_LOAD_ERROR_OUT_OF_FILE_DESCRIPTORS},
+  {"denied write permission for file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_WRITE},
+  {"out of disk space writing to file '%s'", IMLIB_LOAD_ERROR_OUT_OF_DISK_SPACE},
+  {(const char *)NULL, (Imlib_Load_Error) 0}
+};
+
+static void print_imlib_load_error (Imlib_Load_Error err, const char *filepath) {
+  int i;
+  for (i = 0; err_strings[i].fmtstr != NULL; i++) {
+    if (err == err_strings[i].errno) {
+	printf("Screenshot Error (%d): ",err);
+	printf(err_strings[i].fmtstr,filepath);
+	printf("\n");
+      return ;
+    }
+  }
+  /* Unrecognised error */
+    printf("Screenshot Error (%d): unrecognized error accessing file '%s'\n",err,filepath);
+  return ;
+}
+
+bool user_io_screenshot(const char *pngname, int rescale)
 {
 	mister_scaler *ms = mister_scaler_init();
 	if (ms == NULL)
@@ -3552,18 +3583,32 @@ bool user_io_screenshot(const char *pngname)
 		const char *basename = last_filename;
 		if( pngname && *pngname )
 			basename = pngname;
-		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 3, 1);
-		mister_scaler_read(ms, outputbuf);
+		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 4, 1);
+		// read the image into the outpubuf - RGBA format
+		mister_scaler_read_32(ms,outputbuf);
+		// using_data will keep a pointer and dispose of the outbuf 
+		Imlib_Image im = imlib_create_image_using_data(ms->width,ms->height,(unsigned int *)outputbuf);
+		imlib_context_set_image(im);
+
 		static char filename[1024];
 		FileGenerateScreenshotName(basename, filename, 1024);
-		unsigned error = lodepng_encode24_file(getFullPath(filename), outputbuf, ms->width, ms->height);
-		if (error) {
-			printf("error %u: %s\n", error, lodepng_error_text(error));
-			printf("%s", filename);
+
+
+		/* do we want to save a rescaled image? */
+		if (rescale) {
+			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,ms->output_width,ms->output_height);
+                	imlib_free_image_and_decache();
+			imlib_context_set_image(im_scaled);
+
+		}
+		Imlib_Load_Error error;
+		imlib_save_image_with_error_return(getFullPath(filename),&error);
+		if (error != IMLIB_LOAD_ERROR_NONE) {
+			print_imlib_load_error (error, filename);
 			Info("error in saving png");
 			return false;
 		}
-		free(outputbuf);
+                imlib_free_image_and_decache();
 		mister_scaler_free(ms);
 		char msg[1024];
 		snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
@@ -3583,5 +3628,5 @@ void user_io_screenshot_cmd(const char *cmd)
 	while( *cmd != '\0' && ( *cmd == '\t' || *cmd == ' ' || *cmd == '\n' ) )
 		cmd++;
 
-	user_io_screenshot(cmd);
+	user_io_screenshot(cmd,0);
 }
