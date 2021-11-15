@@ -2,6 +2,7 @@
 SHELL = /bin/bash -o pipefail
 
 # using gcc version 10.2.1
+
 BASE    = arm-none-linux-gnueabihf
 
 CC      = $(BASE)-gcc
@@ -36,8 +37,7 @@ C_SRC =   $(wildcard *.c) \
           lib/libco/arm.c 
 
 CPP_SRC = $(wildcard *.cpp) \
-          $(wildcard ./support/*/*.cpp) \
-          lib/lodepng/lodepng.cpp
+          $(wildcard ./support/*/*.cpp) 
 
 IMG =     $(wildcard *.png)
 

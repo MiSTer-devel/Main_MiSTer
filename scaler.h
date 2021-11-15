@@ -11,6 +11,8 @@ typedef struct {
    int width;
    int height;
    int line;
+   int output_width;
+   int output_height;
 
    char *map;
    int num_bytes;
@@ -22,6 +24,7 @@ typedef struct {
 
 mister_scaler *mister_scaler_init();
 int mister_scaler_read(mister_scaler *,unsigned char *buffer);
+int mister_scaler_read_32(mister_scaler *ms, unsigned char *buffer);
 int mister_scaler_read_yuv(mister_scaler *ms,int,unsigned char *y,int, unsigned char *U,int, unsigned char *V);
 void mister_scaler_free(mister_scaler *);
 
