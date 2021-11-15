@@ -254,9 +254,9 @@ void recent_update(char* dir, char* path, char* label, int idx)
 	// update the selection
 	int indexToErase = RECENT_MAX - 1;
 	recent_rec_t rec = {};
-	strncpy(rec.dir, dir, sizeof(rec.dir));
-	strncpy(rec.name, name, sizeof(rec.name));
-	strncpy(rec.label, label ? label : name, sizeof(rec.label));
+	strncpy(rec.dir, dir, sizeof(rec.dir)-1);
+	strncpy(rec.name, name, sizeof(rec.name)-1);
+	strncpy(rec.label, label ? label : name, sizeof(rec.label)-1);
 
 	for (unsigned i = 0; i < sizeof(recents)/sizeof(recents[0]); i++)
 	{

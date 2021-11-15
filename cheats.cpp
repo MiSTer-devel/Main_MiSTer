@@ -358,7 +358,7 @@ static void cheats_send()
 		fileTYPE f = {};
 		if (cheats[i].enabled)
 		{
-			sprintf(filename, "%s/%s", cheat_zip, cheats[i].name);
+			snprintf(filename, sizeof(filename), "%s/%s", cheat_zip, cheats[i].name);
 			if (FileOpen(&f, filename))
 			{
 				int len = f.size;
