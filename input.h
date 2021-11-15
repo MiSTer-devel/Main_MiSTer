@@ -89,6 +89,7 @@ uint16_t get_map_vid();
 uint16_t get_map_pid();
 int has_default_map();
 void send_map_cmd(int key);
+void reset_players();
 
 uint32_t get_key_mod();
 uint32_t get_ps2_code(uint16_t key);
@@ -96,7 +97,7 @@ uint32_t get_amiga_code(uint16_t key);
 uint32_t get_archie_code(uint16_t key);
 
 int input_has_lightgun();
-void input_lightgun_cal(uint16_t *cal);
+void input_lightgun_save(int idx, uint16_t *cal);
 
 void input_switch(int grab);
 int input_state();

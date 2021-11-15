@@ -33,7 +33,7 @@ typedef struct
 
 typedef struct
 {
-	unsigned char enabled;
+	unsigned char cfg;
 	unsigned char reserved;
 	char filename[1024];
 } mm_hardfileTYPE;
@@ -41,15 +41,16 @@ typedef struct
 typedef struct
 {
 	char            id[8];
-	unsigned long   version;
+	unsigned short  version;
+	unsigned short  ext_cfg2;
 	char            kickstart[992];
 	char            label[32];
-	mm_filterTYPE   filter;
+	unsigned short  ext_cfg;
 	unsigned char   memory;
 	unsigned char   chipset;
 	mm_floppyTYPE   floppy;
 	unsigned char   disable_ar3;
-	unsigned char   enable_ide;
+	unsigned char   ide_cfg;
 	unsigned char   scanlines;
 	unsigned char   audio;
 	mm_hardfileTYPE hardfile[4];
@@ -69,6 +70,7 @@ void minimig_set_kickstart(char *name);
 
 void minimig_set_adjust(char n);
 char minimig_get_adjust();
+void minimig_adjust_vsize(char force);
 
 void minimig_ConfigVideo(unsigned char scanlines);
 void minimig_ConfigAudio(unsigned char audio);
@@ -77,5 +79,8 @@ void minimig_ConfigCPU(unsigned char cpu);
 void minimig_ConfigChipset(unsigned char chipset);
 void minimig_ConfigFloppy(unsigned char drives, unsigned char speed);
 void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask);
+
+void minimig_set_extcfg(unsigned int ext_cfg);
+unsigned int minimig_get_extcfg();
 
 #endif

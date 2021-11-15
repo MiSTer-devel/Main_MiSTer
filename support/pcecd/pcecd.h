@@ -65,6 +65,7 @@ class pcecdd_t
 {
 public:
 	uint32_t latency;
+	uint32_t audiodelay;
 	uint8_t state;
 	uint8_t isData;
 	int loaded;
@@ -79,9 +80,12 @@ public:
 	void Reset();
 	void Update();
 	void CommandExec();
-	int GetStatus(uint8_t* buf);
+	uint16_t GetStatus();
 	int SetCommand(uint8_t* buf);
-	void PendStatus(uint8_t status, uint8_t message);
+	void PendStatus(uint16_t status);
+	void SendStatus(uint16_t status);
+	void SendDataRequest();
+	void SetRegion(uint8_t rgn);
 
 private:
 	toc_t toc;
@@ -91,14 +95,16 @@ private:
 	int scanOffset;
 	int audioLength;
 	int audioOffset;
-	//uint8_t state;
 	int CDDAStart;
 	int CDDAEnd;
 	int CDDAFirst;
 	uint8_t CDDAMode;
 	sense_t sense;
+	uint8_t region;
+	uint8_t *chd_hunkbuf;
+	int chd_hunknum;
 
-	uint8_t stat[2];
+	uint16_t stat;
 	uint8_t comm[14];
 
 	uint8_t sec_buf[2352 + 2];
@@ -114,6 +120,8 @@ private:
 	int GetTrackByLBA(int lba, toc_t* toc);
 	void CommandError(uint8_t key,	uint8_t asc, uint8_t ascq, uint8_t fru);
 };
+
+#define MAKE_STATUS(s,m)				 ((uint16_t)((((m)&0xFF) << 8) | ((s)&0xFF)))
 
 #define BCD(v)				 ((uint8_t)((((v)/10) << 4) | ((v)%10)))
 #define U8(v)				 ((uint8_t)(((((v)&0xF0) >> 4) * 10) + ((v)&0x0F)))

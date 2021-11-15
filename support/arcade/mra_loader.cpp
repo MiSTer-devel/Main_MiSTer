@@ -4,7 +4,6 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <ctype.h>
-#include <sys/mman.h>
 
 #include "../../sxmlc.h"
 #include "../../user_io.h"
@@ -13,6 +12,7 @@
 #include "../../menu.h"
 #include "../../fpga_io.h"
 #include "../../lib/md5/md5.h"
+#include "../../shmem.h"
 
 #include "buffer.h"
 #include "mra_loader.h"
@@ -31,12 +31,14 @@ struct arc_struct {
 	int repeat;
 	int insiderom;
 	int patchaddr;
+	int dataop;
 	int validrom0;
 	int insidesw;
 	int insideinterleave;
 	int ifrom;
 	int ito;
 	int imap;
+	int file_size;
 	uint32_t address;
 	uint32_t crc;
 	buffer_data *data;
@@ -47,43 +49,103 @@ static char arcade_error_msg[kBigTextSize] = {};
 static char arcade_root[kBigTextSize];
 static char mame_root[kBigTextSize];
 
-static sw_struct switches = {};
+static sw_struct switches[2] = {};
 
-sw_struct *arcade_sw()
-{
-	return &switches;
-}
+static int  nvram_idx  = 0;
+static int  nvram_size = 0;
+static char nvram_name[200] = {};
 
-void arcade_sw_send()
+void arcade_nvm_save()
 {
-	if (switches.dip_num)
+	if(nvram_idx && nvram_size)
 	{
-		user_io_set_index(254);
-		user_io_set_download(1);
-		user_io_file_tx_write((uint8_t*)&switches.dip_cur, sizeof(switches.dip_cur));
-		user_io_set_download(0);
-	}
-}
-
-void arcade_sw_save()
-{
-	if (switches.dip_saved != switches.dip_cur)
-	{
-		char path[256] = CONFIG_DIR"/dips/";
+		char path[256] = CONFIG_DIR"/nvram/";
 		FileCreatePath(path);
-		strcat(path, switches.name);
-		if (FileSave(path, &switches.dip_cur, sizeof(switches.dip_cur)))
+		strcat(path, nvram_name);
+
+		uint8_t *buf = new uint8_t[nvram_size];
+		if (buf)
 		{
-			switches.dip_saved = switches.dip_cur;
+			printf("Request for nvram (idx=%d, size=%d) data\n", nvram_idx, nvram_size);
+
+			user_io_set_index(nvram_idx);
+			user_io_set_upload(1);
+			user_io_file_rx_data(buf, nvram_size);
+			user_io_set_upload(0);
+
+			FileSave(path, buf, nvram_size);
+			delete(buf);
 		}
 	}
 }
 
-void arcade_sw_load()
+static void arcade_nvm_load()
 {
-	char path[256] = "dips/";
-	strcat(path, switches.name);
-	FileLoadConfig(path, &switches.dip_cur, sizeof(switches.dip_cur));
+	if (nvram_idx && nvram_size)
+	{
+		char path[256] = "nvram/";
+		uint8_t *buf = new uint8_t[nvram_size];
+		if (buf)
+		{
+			memset(buf, 0, nvram_size);
+
+			strcat(path, nvram_name);
+			if (FileLoadConfig(path, buf, nvram_size))
+			{
+				printf("Sending nvram (idx=%d, size=%d) to core\n", nvram_idx, nvram_size);
+				user_io_set_index(nvram_idx);
+				user_io_set_download(1);
+				user_io_file_tx_data(buf, nvram_size);
+				user_io_set_download(0);
+			}
+
+			delete(buf);
+		}
+	}
+}
+
+sw_struct *arcade_sw(int n)
+{
+	if (n > 1) n = 1;
+	if (n < 0) n = 0;
+	return &switches[n];
+}
+
+void arcade_sw_send(int n)
+{
+	sw_struct *sw = arcade_sw(n);
+	if (sw->dip_num)
+	{
+		user_io_set_index(254 + n);
+		user_io_set_download(1);
+		user_io_file_tx_data((uint8_t*)&sw->dip_cur, sizeof(sw->dip_cur));
+		user_io_set_download(0);
+	}
+}
+
+void arcade_sw_save(int n)
+{
+	sw_struct *sw = arcade_sw(n);
+	if (sw->dip_num && sw->dip_saved != sw->dip_cur)
+	{
+		static char path[1024];
+		strcpy(path, (n) ? CONFIG_DIR"/cheats/" : CONFIG_DIR"/dips/");
+		FileCreatePath(path);
+		strcat(path, sw->name);
+		if (FileSave(path, &sw->dip_cur, sizeof(sw->dip_cur)))
+		{
+			sw->dip_saved = sw->dip_cur;
+		}
+	}
+}
+
+void arcade_sw_load(int n)
+{
+	sw_struct *sw = arcade_sw(n);
+	static char path[1024];
+	strcpy(path, (n) ? "cheats/" : "dips/");
+	strcat(path, sw->name);
+	FileLoadConfig(path, &sw->dip_cur, sizeof(sw->dip_cur));
 }
 
 static void set_arcade_root(const char *path)
@@ -161,34 +223,46 @@ static int rom_checksz(int idx, int chunk)
 
 static int rom_data(const uint8_t *buf, int chunk, int map, struct MD5Context *md5context)
 {
+	uint8_t offsets[8]; // assert (unitlen <= 8)
+	int bytes_in_iter = 0;
+
 	if (md5context) MD5Update(md5context, buf, chunk);
 
 	int idx = 0;
 	if (!map) map = 1;
 
-	for (int i = 0; i<unitlen; i++)
+	int map_reg = map;
+	for (int i = 0; i < unitlen; i++)
 	{
-		if (((map >> (i * 4)) & 0xF)) break;
+		if (map_reg & 0xf)
+			break;
+		map_reg >>= 4;
 		idx++;
 	}
 
-	if (idx >= unitlen) return 0; // illegal map
-	if (!rom_checksz(idx, chunk*unitlen)) return 0;
+	if (idx >= unitlen)
+		return 0; // illegal map
+	if (!rom_checksz(idx, chunk*unitlen))
+		return 0;
+
+	map_reg = map;
+	for (int i = 0; i < unitlen; i++)
+	{
+		if (map_reg & 0xf)
+		{
+			offsets[bytes_in_iter] = idx + (map_reg & 0xf) - 1;
+			bytes_in_iter++;
+		}
+		map_reg >>= 4;
+	}
 
 	while (chunk)
 	{
-		for (int ord = 1; ord <= unitlen; ord++)
+		for (int i = 0; i < bytes_in_iter; i++)
 		{
-			for (int i = 0; (i < unitlen && chunk); i++)
-			{
-				if (((map >> (i * 4)) & 0xF) == ord)
-				{
-					*(romdata + romlen[idx] + i) = *buf++;
-					chunk--;
-				}
-			}
+			*(romdata + romlen[idx] + offsets[i]) = *buf++;
+			chunk--;
 		}
-
 		romlen[idx] += unitlen;
 	}
 
@@ -222,68 +296,57 @@ static int rom_file(const char *name, uint32_t crc32, int start, int len, int ma
 	return 1;
 }
 
-static int rom_patch(const uint8_t *buf, int offset, uint16_t len)
+static int rom_patch(const uint8_t *buf, int offset, uint16_t len, int dataop)
 {
 	if ((offset + len) > romlen[0]) return 0;
-	memcpy(romdata + offset, buf, len);
+	if (!dataop)
+	{
+		memcpy(romdata + offset, buf, len);
+	}
+	else
+	{
+		for (int i = 0; i < len; i++) romdata[offset + i] ^= buf[i];
+	}
+
 	return 1;
 }
 
-static void send_to_ddr(uint32_t address, void* buf, uint32_t len)
-{
-	int memfd = open("/dev/mem", O_RDWR | O_SYNC);
-	if (memfd == -1)
-	{
-		printf("Unable to open /dev/mem!\n");
-		return;
-	}
-
-	//make sure it's in FPGA address space
-	uint32_t map_addr = 0x20000000 | address;
-
-	void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-	if (base == (void *)-1)
-	{
-		printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-		close(memfd);
-		return;
-	}
-
-	memcpy(base, buf, len);
-	munmap(base, len);
-
-	close(memfd);
-	return;
-}
-
-static void rom_finish(int send, uint32_t address)
+static void rom_finish(int send, uint32_t address, int index)
 {
 	if (romlen[0] && romdata)
 	{
 		if (send)
 		{
+			uint8_t *data = romdata;
+			int len = romlen[0];
+
 			// set index byte (0=bios rom, 1-n=OSD entry index)
 			user_io_set_index(romindex);
 
 			// prepare transmission of new file
-			user_io_set_download(1);
+			user_io_set_download(1, address ? len : 0);
 
-			uint8_t *data = romdata;
-			int len = romlen[0];
 			if (address)
 			{
-				send_to_ddr(address, data, len);
+				shmem_put(fpga_mem(address), len, data);
 			}
 			else
 			{
+				char str[32];
+				sprintf(str, "ROM #%d", index);
+
+				ProgressMessage(0, 0, 0, 0);
 				while (romlen[0] > 0)
 				{
-					uint16_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
-					user_io_file_tx_write(data, chunk);
+					ProgressMessage("Sending", str, len - romlen[0], len);
+
+					uint32_t chunk = (romlen[0] > 4096) ? 4096 : romlen[0];
+					user_io_file_tx_data(data, chunk);
 
 					romlen[0] -= chunk;
 					data += chunk;
 				}
+				ProgressMessage(0, 0, 0, 0);
 			}
 
 			// signal end of transmission
@@ -364,12 +427,13 @@ unsigned char* hexstr_to_char(const char* hexstr, size_t *out_len)
  * */
 static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
+	static char message[32];
 	struct arc_struct *arc_info = (struct arc_struct *)sd->user;
-	(void)(sd);
 
 	switch (evt)
 	{
 	case XML_EVENT_START_DOC:
+		message[0] = 0;
 		arc_info->insiderom = 0;
 		arc_info->insidesw = 0;
 		break;
@@ -400,15 +464,25 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->address = 0;
 			arc_info->insideinterleave = 0;
 			MD5Init(&arc_info->context);
+			ProgressMessage(0, 0, 0, 0);
 		}
 
 		if (!strcasecmp(node->tag, "switches"))
 		{
 			arc_info->insidesw = 1;
-			switches.dip_cur = 0;
-			switches.dip_def = 0;
-			switches.dip_num = 0;
-			memset(&switches.dip, 0, sizeof(switches.dip));
+			switches[0].dip_cur = 0;
+			switches[0].dip_def = 0;
+			switches[0].dip_num = 0;
+			memset(&switches[0].dip, 0, sizeof(switches[0].dip));
+		}
+
+		if (!strcasecmp(node->tag, "cheats"))
+		{
+			arc_info->insidesw = 2;
+			switches[1].dip_cur = 0;
+			switches[1].dip_def = 0;
+			switches[1].dip_num = 0;
+			memset(&switches[1].dip, 0, sizeof(switches[1].dip));
 		}
 
 		if (!strcasecmp(node->tag, "interleave"))
@@ -426,7 +500,11 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->imap = 0;
 		}
 
-		if (!strcasecmp(node->tag, "patch")) arc_info->patchaddr = 0;
+		if (!strcasecmp(node->tag, "patch"))
+		{
+			arc_info->patchaddr = 0;
+			arc_info->dataop = 0;
+		}
 
 		//printf("XML_EVENT_START_NODE: tag [%s]\n",node->tag);
 		// walk the attributes and save them in the data structure as appropriate
@@ -448,6 +526,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (!strcasecmp(node->attributes[i].name, "index") && !strcasecmp(node->tag, "rom"))
 			{
 				arc_info->romindex = atoi(node->attributes[i].value);
+				sprintf(message, "Assembling ROM #%d", arc_info->romindex);
 			}
 			if (!strcasecmp(node->attributes[i].name, "address") && !strcasecmp(node->tag, "rom"))
 			{
@@ -504,6 +583,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				{
 					arc_info->patchaddr = strtoul(node->attributes[i].value, NULL, 0);
 				}
+				if (!strcasecmp(node->attributes[i].name, "operation") && !strcasecmp(node->tag, "patch"))
+				{
+					if (!strcasecmp(node->attributes[i].value, "xor")) arc_info->dataop = 1;
+				}
 				if (!strcasecmp(node->attributes[i].name, "map") && !strcasecmp(node->tag, "part"))
 				{
 					arc_info->imap = strtoul(node->attributes[i].value, NULL, 16);
@@ -515,16 +598,16 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					}
 				}
 			}
-
-			if (arc_info->insidesw)
+			else if (arc_info->insidesw)
 			{
-				if (!strcasecmp(node->tag, "switches"))
+				sw_struct* sw = &switches[arc_info->insidesw - 1];
+				if (!strcasecmp(node->tag, "switches") || !strcasecmp(node->tag, "cheats"))
 				{
 					if (!strcasecmp(node->attributes[i].name, "default"))
 					{
 						size_t len = 0;
 						unsigned char* binary = hexstr_to_char(node->attributes[i].value, &len);
-						for (size_t i = 0; i < len; i++) switches.dip_def |= binary[i] << (i * 8);
+						for (size_t i = 0; i < len; i++) sw->dip_def |= binary[i] << (i * 8);
 
 						free(binary);
 					}
@@ -534,7 +617,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				{
 					if (!strcasecmp(node->attributes[i].name, "name"))
 					{
-						snprintf(switches.dip[switches.dip_num].name, sizeof(switches.dip[switches.dip_num].name), node->attributes[i].value);
+						snprintf(sw->dip[sw->dip_num].name, sizeof(sw->dip[sw->dip_num].name), node->attributes[i].value);
 					}
 
 					if (!strcasecmp(node->attributes[i].name, "bits"))
@@ -549,10 +632,10 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 						{
 							uint64_t mask = 1;
 							if (num == 1) e = b;
-							switches.dip[switches.dip_num].start = b;
+							sw->dip[sw->dip_num].start = b;
 							for (int i = 0; i < (e - b); i++) mask = (mask << 1) | 1;
-							switches.dip[switches.dip_num].mask = mask << b;
-							switches.dip[switches.dip_num].size = e - b + 1;
+							sw->dip[sw->dip_num].mask = mask << b;
+							sw->dip[sw->dip_num].size = e - b + 1;
 						}
 					}
 
@@ -565,13 +648,13 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 							char *p = strchr(val, ',');
 							size_t len = p ? p - val : strlen(val);
 							size_t sz = len + 1;
-							if (sz > sizeof(switches.dip[0].id[0])) sz = sizeof(switches.dip[0].id[0]);
-							snprintf(switches.dip[switches.dip_num].id[n], sz, val);
+							if (sz > sizeof(sw->dip[0].id[0])) sz = sizeof(sw->dip[0].id[0]);
+							snprintf(sw->dip[sw->dip_num].id[n], sz, val);
 							val += len;
 							if (*val == ',') val++;
 							n++;
 						}
-						switches.dip[switches.dip_num].num = n;
+						sw->dip[sw->dip_num].num = n;
 					}
 
 					if (!strcasecmp(node->attributes[i].name, "values"))
@@ -588,13 +671,25 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 								break;
 							}
 
-							switches.dip[switches.dip_num].val[n] = v;
+							sw->dip[sw->dip_num].val[n] = v;
 							val = endp;
 							while (*val && (*val == ' ' || *val == ',')) val++;
 							n++;
 						}
-						switches.dip[switches.dip_num].has_val = 1;
+						sw->dip[sw->dip_num].has_val = 1;
 					}
+				}
+			}
+			else
+			{
+				if (!strcasecmp(node->attributes[i].name, "index") && !strcasecmp(node->tag, "nvram"))
+				{
+					nvram_idx = strtoul(node->attributes[i].value, NULL, 0);
+				}
+
+				if (!strcasecmp(node->attributes[i].name, "size") && !strcasecmp(node->tag, "nvram"))
+				{
+					nvram_size = strtoul(node->attributes[i].value, NULL, 0);
 				}
 			}
 		}
@@ -639,6 +734,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 
 			for (int i = 1; i < 8; i++) romlen[i] = romlen[0];
 		}
+
+		ProgressMessage("Loading", message, ftell(sd->file), arc_info->file_size);
 		break;
 
 	case XML_EVENT_TEXT:
@@ -647,13 +744,13 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		 * the buffer_append is part of a buffer library that will realloc automatically
 		 */
 		{
-		int result = buffer_append(arc_info->data, text);
-		if (result<0)
-			printf("buffer_append failed %d\n",result);
-			if (result==-1) 
-			   printf("-1 no data given\n");
-			if (result==-2) 
-			   printf("-2 could not allocate\n");
+			int result = buffer_append(arc_info->data, text);
+			if (result<0)
+				printf("buffer_append failed %d\n",result);
+			if (result==-1)
+				printf("-1 no data given\n");
+			if (result==-2)
+				printf("-2 could not allocate\n");
 		}
 		//printf("XML_EVENT_TEXT: text [%s]\n",text);
 		break;
@@ -664,6 +761,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		// At the end of a rom node (when it is closed) we need to calculate hash values and clean up
 		if (!strcasecmp(node->tag, "rom"))
 		{
+			message[0] = 0;
+
 			if (arc_info->insiderom)
 			{
 				unsigned char checksum[16];
@@ -703,7 +802,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					}
 				}
 
-				rom_finish(checksumsame, arc_info->address);
+				rom_finish(checksumsame, arc_info->address, arc_info->romindex);
 			}
 			arc_info->insiderom = 0;
 		}
@@ -781,20 +880,16 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			}
 			else // we have binary data?
 			{
-				//printf("we have bin.hex data [%s]\n",arc_info->data->content);
 				size_t len = 0;
 				unsigned char* binary = hexstr_to_char(arc_info->data->content, &len);
-				//printf("len %d:\n",len);
-				//for (size_t i=0;i<len;i++) {
-				//	printf(" %d ",binary[i]);
-				//}
-				//printf("\n");
-				printf("data (%d bytes) from xml\n", len);
+				int prev_len = romlen[0];
+				printf("data: ");
 				if (binary)
 				{
 					for (int i = 0; i < repeat; i++) rom_data(binary, len, arc_info->imap, &arc_info->context);
 					free(binary);
 				}
+				printf("%d(0x%X) bytes from xml\n", romlen[0] - prev_len, romlen[0] - prev_len);
 			}
 
 			if (!arc_info->insideinterleave) unitlen = 1;
@@ -806,21 +901,25 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			unsigned char* binary = hexstr_to_char(arc_info->data->content, &len);
 			if (binary)
 			{
-				rom_patch(binary, arc_info->patchaddr, len);
+				rom_patch(binary, arc_info->patchaddr, len, arc_info->dataop);
 				free(binary);
 			}
 		}
 
-		if (!strcasecmp(node->tag, "dip"))
+		if (arc_info->insidesw && !strcasecmp(node->tag, "dip"))
 		{
-			int n = switches.dip_num;
-			for (int i = 0; i < switches.dip[n].num; i++)
+			sw_struct* sw = &switches[arc_info->insidesw - 1];
+
+			int n = sw->dip_num;
+			for (int i = 0; i < sw->dip[n].num; i++)
 			{
-				switches.dip[n].val[i] = ((switches.dip[n].has_val) ? switches.dip[n].val[i] : i) << switches.dip[n].start;
+				sw->dip[n].val[i] = ((sw->dip[n].has_val) ? sw->dip[n].val[i] : i) << sw->dip[n].start;
 			}
 
-			if (switches.dip_num < 63) switches.dip_num++;
+			if (sw->dip_num < 63) sw->dip_num++;
 		}
+
+		if (!strcasecmp(node->tag, "nvram")) arcade_nvm_load();
 
 		if (!strcasecmp(node->tag, "switches"))
 		{
@@ -928,22 +1027,18 @@ static int xml_read_setname(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, 
 	return true;
 }
 
-
-static int arcade_type = 0;
-int is_arcade()
-{
-	return arcade_type;
-}
-
 int arcade_send_rom(const char *xml)
 {
-	arcade_type = 1;
-
 	const char *p = strrchr(xml, '/');
 	p = p ? p + 1 : xml;
-	snprintf(switches.name, sizeof(switches.name), p);
-	char *ext = strcasestr(switches.name, ".mra");
+	snprintf(switches[0].name, sizeof(switches[0].name), "%s", p);
+	char *ext = strcasestr(switches[0].name, ".mra");
 	if (ext) strcpy(ext, ".dip");
+	memcpy(switches[1].name, switches[0].name, sizeof(switches[1].name));
+
+	snprintf(nvram_name, sizeof(nvram_name), p);
+	ext = strcasestr(nvram_name, ".mra");
+	if (ext) strcpy(ext, ".nvm");
 
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
@@ -957,6 +1052,9 @@ int arcade_send_rom(const char *xml)
 	arc_info.data = buffer_init(kBigTextSize);
 	arc_info.error_msg[0] = 0;
 	arc_info.validrom0 = 0;
+	struct stat64 *st = getPathStat(xml);
+	if (st) arc_info.file_size = (int)st->st_size;
+	ProgressMessage(0, 0, 0, 0);
 
 	// parse
 	XMLDoc_parse_file_SAX(xml, &sax, &arc_info);
@@ -967,10 +1065,13 @@ int arcade_send_rom(const char *xml)
 	}
 	buffer_destroy(arc_info.data);
 
-	switches.dip_cur = switches.dip_def;
-	arcade_sw_load();
-	switches.dip_saved = switches.dip_cur;
-	arcade_sw_send();
+	for (int n = 0; n < 2; n++)
+	{
+		switches[n].dip_cur = switches[n].dip_def;
+		arcade_sw_load(n);
+		switches[n].dip_saved = switches[n].dip_cur;
+		arcade_sw_send(n);
+	}
 	return 0;
 }
 
@@ -1059,7 +1160,8 @@ int arcade_load(const char *xml)
 	MenuHide();
 	static char path[kBigTextSize];
 
-	strcpy(path, xml);
+	if(xml[0] == '/') strcpy(path, xml);
+	else sprintf(path, "%s/%s", getRootDir(), xml);
 
 	set_arcade_root(path);
 	printf("arcade_load [%s]\n", path);

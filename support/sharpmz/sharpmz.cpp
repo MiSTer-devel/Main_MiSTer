@@ -45,7 +45,7 @@
 // Names of the supported machines.
 //
 static const char *MZMACHINES[MAX_MZMACHINES] = { "MZ80K", "MZ80C", "MZ1200", "MZ80A", "MZ700", "MZ800", "MZ80B", "MZ2000" };
-
+//#define __SHARPMZ_DEBUG__
 #if defined __SHARPMZ_DEBUG__
 #define sharpmz_debugf(a, ...) printf("\033[1;31mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
 #define sharpmz_x_debugf(a, ...) printf("\033[1;32mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
@@ -65,9 +65,15 @@ static unsigned char         debugEnabled = 0;
 int sharpmz_file_write(fileTYPE *file, const char *fileName)
 {
     int           ret;
+    char          directoryPath[1024];
     char          fullPath[1024];
 
-    sprintf(fullPath, "%s/%s/%s", getRootDir(), SHARPMZ_CORE_NAME, fileName);
+    strcpy(directoryPath,SHARPMZ_CORE_NAME);
+    findPrefixDir(directoryPath, sizeof(directoryPath));
+
+	
+
+    sprintf(fullPath, "%s/%s", directoryPath, fileName);
 
     const int mode = O_RDWR | O_CREAT | O_TRUNC | O_SYNC;   // No longer required as FileOpenEx has changed.  | S_IRWXU | S_IRWXG | S_IRWXO;
     ret = FileOpenEx(file, fullPath, mode);
@@ -144,7 +150,7 @@ int sharpmz_reset_config(short setStatus)
     // Set the configuration registers to a known defualt.
     config.system_reg[REGISTER_MODEL]      = 0x03;              // MZ-80A
     config.system_reg[REGISTER_DISPLAY]    = 0x00;              // Mono 40x25
-    config.system_reg[REGISTER_DISPLAY2]   = 0x78 | 0x00;       // GRAM base addr | VGA Mode.
+    config.system_reg[REGISTER_DISPLAY2]   = 0x78 | 0x00;       // GRAM base addr | VGA Mode. // 78 - VGA 7B - 15khz
     config.system_reg[REGISTER_DISPLAY3]   = 0x00;              // Status screen buffer.
     config.system_reg[REGISTER_CPU]        = 0x00;              // CPU speed.
     config.system_reg[REGISTER_AUDIO]      = 0x00;              // Audio - sound output.
@@ -2296,7 +2302,7 @@ int sharpmz_default_ui_state(void)
 //
 void sharpmz_ui(int      idleState,    int      idle2State,    int        systemState,    int      selectFile,
                 uint32_t *parentstate, uint32_t *menustate,    uint32_t   *menusub,       uint32_t *menusub_last,
-                uint64_t *menumask,    char     *selectedPath, const char **helptext,     char     *helptext_custom,
+                uint64_t *menumask,    char     *selectedPath, int        *helptext_idx,  char     *helptext_custom,
                 uint32_t *fs_ExtLen,   uint32_t *fs_Options,   uint32_t   *fs_MenuSelect, uint32_t *fs_MenuCancel,
                 char     *fs_pFileExt,
                 unsigned char menu,    unsigned char select,   unsigned char up,          unsigned char down,
@@ -2422,7 +2428,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             strcat(helptext_custom, OsdCoreNameGet());
             strcat(helptext_custom, "                                ");
             strcat(helptext_custom, SHARPMZ_HELPTEXT[0]);
-            *helptext = helptext_custom;
+            *helptext_idx = 1;
             break;
 
         case MENU_SHARPMZ_MAIN2:
@@ -2627,7 +2633,8 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                 case 0:
                 case 1:
                     *fs_Options    = SCANO_DIR;
-                    sharpmz_select_file("MZFmzfMZTmzt", *fs_Options, fs_pFileExt, 1, selectedPath);
+                    //sharpmz_select_file("MZFmzfMZTmzt", *fs_Options, fs_pFileExt, 1, selectedPath);
+                    SelectFile("","MZFmzfMZTmzt", *fs_Options,  1,1 );
                     //sharpmz_select_file("MZFmzf", *fs_Options, fs_pFileExt, 1, selectedPath);
                     *fs_ExtLen     = strlen(fs_pFileExt);
                     *fs_MenuSelect = (*menusub == 0 ? MENU_SHARPMZ_TAPE_STORAGE_LOAD_TAPE_TO_RAM : MENU_SHARPMZ_TAPE_STORAGE_QUEUE_TAPE_TO_CMT);

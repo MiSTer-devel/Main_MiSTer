@@ -109,28 +109,36 @@ static int smbus_open(int dev_address)
 	// re-entry compatible
 	if(i2c_handle < 0)
 	{
-		int fd;
-		if ((fd = open ("/dev/i2c-1", O_RDWR)) < 0)
+		char str[16];
+		for (int bus = 2; bus >= 0; bus--)
 		{
-			printf("Unable to open I2C device: %s\n", strerror(errno));
-			return 0;
-		}
+			int fd;
+			sprintf(str, "/dev/i2c-%d", bus);
 
-		if (ioctl (fd, I2C_SLAVE, dev_address) < 0)
-		{
-			printf("Unable to select I2C device: %s\n", strerror (errno));
-			close(fd);
-			return 0;
-		}
+			if ((fd = open(str, O_RDWR | O_CLOEXEC)) < 0)
+			{
+				printf("Unable to open I2C bus %s: %s\n", str, strerror(errno));
+				continue;
+			}
 
-		if (i2c_smbus_write_quick(fd, I2C_SMBUS_WRITE) < 0)
-		{
-			printf("Unable to detect SMBUS device: %s\n", strerror(errno));
-			close(fd);
-			return 0;
-		}
+			if (ioctl(fd, I2C_SLAVE, dev_address) < 0)
+			{
+				printf("Unable to select I2C device on bus %s: %s\n", str, strerror(errno));
+				close(fd);
+				continue;
+			}
 
-		i2c_handle = fd;
+			if (i2c_smbus_write_quick(fd, I2C_SMBUS_WRITE) < 0)
+			{
+				printf("Unable to detect SMBUS device on bus %s: %s\n", str, strerror(errno));
+				close(fd);
+				continue;
+			}
+
+			i2c_handle = fd;
+			return 1;
+		}
+		return 0;
 	}
 	return 1;
 }

@@ -12,7 +12,7 @@
 #include "pcecd.h"
 
 
-static int /*loaded = 0, unloaded = 0,*/ need_reset=0;
+static int need_reset=0;
 static uint8_t has_command = 0;
 
 void pcecd_poll()
@@ -35,27 +35,14 @@ void pcecd_poll()
 		}
 
 		if (pcecdd.has_status && !pcecdd.latency) {
-			uint16_t s;
-			pcecdd.GetStatus((uint8_t*)&s);
 
-			spi_uio_cmd_cont(UIO_CD_SET);
-			spi_w(s);
-			spi_w(0);
-			DisableIO();
-
+			pcecdd.SendStatus(pcecdd.GetStatus());
 			pcecdd.has_status = 0;
-
-			printf("\x1b[32mPCECD: Send status = %02X, message = %02X\n\x1b[0m", s&0xFF, s >> 8);
 		}
 		else if (pcecdd.data_req) {
-			spi_uio_cmd_cont(UIO_CD_SET);
-			spi_w(0);
-			spi_w(1);
-			DisableIO();
 
+			pcecdd.SendDataRequest();
 			pcecdd.data_req = false;
-
-			printf("\x1b[32mPCECD: Data request for MODESELECT6\n\x1b[0m");
 		}
 
 		pcecdd.Update();
@@ -88,7 +75,7 @@ void pcecd_poll()
 
 		case 1:
 			//TODO: process data
-			pcecdd.PendStatus(0, 0);
+			pcecdd.SendStatus(0);
 			printf("\x1b[32mPCECD: Command MODESELECT6, received data\n\x1b[0m");
 			break;
 
@@ -145,16 +132,15 @@ static char us_sig[] =
 	  0x76, 0x96, 0xC6, 0xCE, 0x34, 0x32, 0x2E, 0x26,
 	  0x74, 0x00 };
 
-static int load_bios(char *biosname, const char *cuename)
+static int load_bios(char *biosname, const char *cuename, int sgx)
 {
-	uint32_t size = FileLoad(biosname, 0, 0);
-	if (!size) return 0;
-
 	fileTYPE f;
 	if (!FileOpen(&f, biosname)) return 0;
 
-	int swap = 0;
-	uint32_t start = size & 0x3FF;
+	uint8_t us_cart = 0, swap = 0;
+
+	uint32_t start = f.size & 0x3FF;
+	uint32_t size = f.size;
 
 	if (size >= 262144)
 	{
@@ -163,35 +149,44 @@ static int load_bios(char *biosname, const char *cuename)
 		FileSeek(&f, start + size - 26, SEEK_SET);
 		memset(buf, 0, sizeof(buf));
 		FileReadAdv(&f, buf, 26);
-		swap = !memcmp(buf, us_sig, sizeof(us_sig));
+		swap = !memcmp(buf, us_sig, sizeof(us_sig)) ? 1 : 0;
 	}
 
-	user_io_set_index(0);
+	printf("CD SGX mode = %d\n", sgx);
+
+	user_io_set_index(sgx ? 1 : 0);
 	user_io_set_download(1);
 	FileSeek(&f, start, SEEK_SET);
 
 	while (size)
 	{
-		uint16_t chunk = (size > sizeof(buf)) ? sizeof(buf) : size;
+		int chunk = (size > sizeof(buf)) ? sizeof(buf) : size;
 		size -= chunk;
 
 		FileReadAdv(&f, buf, chunk);
 		if (swap)
 		{
-			for (uint32_t i = 0; i < chunk; i++)
+			for (int i = 0; i < chunk; i++)
 			{
 				unsigned char c = buf[i];
 				buf[i] = ((c & 1) << 7) | ((c & 2) << 5) | ((c & 4) << 3) | ((c & 8) << 1) | ((c & 16) >> 1) | ((c & 32) >> 3) | ((c & 64) >> 5) | ((c & 128) >> 7);
 			}
 		}
-		user_io_file_tx_write((uint8_t*)buf, chunk);
+		else if (f.size >= 262144)
+		{
+			for (int i = 0; i < chunk - 8; i++)
+			{
+				if (!memcmp(buf + i, "ALL DATA", 8)) us_cart = 1;
+			}
+		}
+		user_io_file_tx_data((uint8_t*)buf, chunk);
 	}
 
 	FileGenerateSavePath(cuename, buf);
 	user_io_file_mount(buf, 0, 1);
 
 	user_io_set_download(0);
-
+	pcecdd.SetRegion(swap | us_cart);
 	return 1;
 }
 
@@ -212,6 +207,8 @@ void pcecd_set_image(int num, const char *filename)
 			pcecdd.latency = 10;
 			pcecdd.SendData = pcecd_send_data;
 
+			int sgx = 0;
+
 			// load CD BIOS
 			strcpy(buf, filename);
 			char *p = strrchr(buf, '/');
@@ -219,14 +216,18 @@ void pcecd_set_image(int num, const char *filename)
 			if (p)
 			{
 				p++;
+
+				strcpy(p, "sgx");
+				if (FileExists(buf)) sgx = 1;
+
 				strcpy(p, "cd_bios.rom");
-				loaded = load_bios(buf, filename);
+				loaded = load_bios(buf, filename, sgx);
 			}
 
 			if (!loaded)
 			{
 				sprintf(buf, "%s/cd_bios.rom", HomeDir(PCECD_DIR));
-				loaded = load_bios(buf, filename);
+				loaded = load_bios(buf, filename, sgx);
 			}
 
 			if (!loaded) Info("CD BIOS not found!", 4000);
@@ -249,7 +250,7 @@ void pcecd_set_image(int num, const char *filename)
 int pcecd_send_data(uint8_t* buf, int len, uint8_t index) {
 	user_io_set_index(index);
 	user_io_set_download(1);
-	user_io_file_tx_write(buf, len);
+	user_io_file_tx_data(buf, len);
 	user_io_set_download(0);
 	return 1;
 }

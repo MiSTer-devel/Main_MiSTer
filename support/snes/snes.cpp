@@ -143,6 +143,11 @@ uint8_t* snes_get_header(fileTYPE *f)
 
 			*(uint32_t*)(&hdr[8]) = size;
 
+			bool is_bsx_bios = false;
+			if (!memcmp(buf+0x7FC0, "Satellaview BS-X     ", 21)) {
+				is_bsx_bios = true;
+			}
+
 			uint32_t addr = find_header(buf, size);
 			if (addr)
 			{
@@ -161,85 +166,106 @@ uint8_t* snes_get_header(fileTYPE *f)
 					}
 				}
 
-				//Rom type: 0-Low, 1-High, 2-ExHigh
-				hdr[1] = (addr == 0x00ffc0) ? 1 : (addr == 0x40ffc0) ? 2 : 0;
-
-				//DSPn types 8..B
-				if ((buf[addr + Mapper] == 0x20 || buf[addr + Mapper] == 0x21) && buf[addr + RomType] == 0x03)
-				{	//DSP1
-					hdr[1] |= 0x80;
-				}
-				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x05 && buf[addr + Company] != 0xb2)
-				{	//DSP1
-					hdr[1] |= 0x80;
-				}
-				else if (buf[addr + Mapper] == 0x31 && (buf[addr + RomType] == 0x03 || buf[addr + RomType] == 0x05))
-				{	//DSP1
-					hdr[1] |= 0x80;
-				}
-				else if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0x05)
-				{	//DSP2
-					hdr[1] |= 0x90;
-				}
-				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x05 && buf[addr + Company] == 0xb2)
-				{	//DSP3
-					hdr[1] |= 0xA0;
-				}
-				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x03)
-				{	//DSP4
-					hdr[1] |= 0xB0;
-				}
-				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0xf6)
-				{	//ST010
-					hdr[1] |= 0x88;
-					ramsz = 1;
-					if(buf[addr + RomSize] < 10) hdr[1] |= 0x20; // ST011
-				}
-				else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x25)
-				{	//OBC1
-					hdr[1] |= 0xC0;
+				bool has_bsx_slot = false;
+				if (buf[addr - 14] == 'Z' && buf[addr - 11] == 'J' && 
+					((buf[addr - 13] >= 'A' && buf[addr - 13] <= 'Z') || (buf[addr - 13] >= '0' && buf[addr - 13] <= '9')) &&
+					(buf[addr + Company] == 0x33 || (buf[addr - 10] == 0x00 && buf[addr - 4] == 0x00)) ) {
+					has_bsx_slot = true;
 				}
 
-				if (buf[addr + Mapper] == 0x3a && (buf[addr + RomType] == 0xf5 || buf[addr + RomType] == 0xf9)) {
-					//SPC7110
-					hdr[1] |= 0xD0;
-					if(buf[addr + RomType] == 0xf9) hdr[1] |= 0x08; // with RTC
-				}
+				//Rom type: 0-Low, 1-High, 2-ExHigh, 3-SpecialLoRom
+				hdr[1] = (addr == 0x00ffc0) ? 1 : 
+						 (addr == 0x40ffc0) ? 2 : 
+						 has_bsx_slot ? 3 : 
+						 0;
 
-				if (buf[addr + Mapper] == 0x35 && buf[addr + RomType] == 0x55)
-				{
-					//S-RTC (+ExHigh)
-					hdr[1] |= 0x08;
+				//BSX 3
+				if (is_bsx_bios) {
+					hdr[1] = 0x30;
 				}
+				else {
 
-				//CX4 4
-				if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0xf3)
-				{
-					hdr[1] |= 0x40;
+					//DSPn types 8..B
+					if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0x03)
+					{	//DSP1
+						hdr[1] |= 0x84;
+					}
+					else if (buf[addr + Mapper] == 0x21 && buf[addr + RomType] == 0x03)
+					{	//DSP1B
+						hdr[1] |= 0x80;
+					}
+					else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x05 && buf[addr + Company] != 0xb2)
+					{	//DSP1B
+						hdr[1] |= 0x80;
+					}
+					else if (buf[addr + Mapper] == 0x31 && (buf[addr + RomType] == 0x03 || buf[addr + RomType] == 0x05))
+					{	//DSP1B
+						hdr[1] |= 0x80;
+					}
+					else if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0x05)
+					{	//DSP2
+						hdr[1] |= 0x90;
+					}
+					else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x05 && buf[addr + Company] == 0xb2)
+					{	//DSP3
+						hdr[1] |= 0xA0;
+					}
+					else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x03)
+					{	//DSP4
+						hdr[1] |= 0xB0;
+					}
+					else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0xf6)
+					{	//ST010
+						hdr[1] |= 0x88;
+						ramsz = 1;
+						if (buf[addr + RomSize] < 10) hdr[1] |= 0x20; // ST011
+					}
+					else if (buf[addr + Mapper] == 0x30 && buf[addr + RomType] == 0x25)
+					{	//OBC1
+						hdr[1] |= 0xC0;
+					}
+
+					if (buf[addr + Mapper] == 0x3a && (buf[addr + RomType] == 0xf5 || buf[addr + RomType] == 0xf9)) {
+						//SPC7110
+						hdr[1] |= 0xD0;
+						if (buf[addr + RomType] == 0xf9) hdr[1] |= 0x08; // with RTC
+					}
+
+					if (buf[addr + Mapper] == 0x35 && buf[addr + RomType] == 0x55)
+					{
+						//S-RTC (+ExHigh)
+						hdr[1] |= 0x08;
+					}
+
+					//CX4 4
+					if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0xf3)
+					{
+						hdr[1] |= 0x40;
+					}
+
+					//SDD1 5
+					if (buf[addr + Mapper] == 0x32 && (buf[addr + RomType] == 0x43 || buf[addr + RomType] == 0x45))
+					{
+						if (romsz < 14) hdr[1] |= 0x50; // except Star Ocean un-SDD1
+					}
+
+					//SA1 6
+					if (buf[addr + Mapper] == 0x23 && (buf[addr + RomType] == 0x32 || buf[addr + RomType] == 0x34 || buf[addr + RomType] == 0x35))
+					{
+						hdr[1] |= 0x60;
+					}
+
+					//GSU 7
+					if (buf[addr + Mapper] == 0x20 && (buf[addr + RomType] == 0x13 || buf[addr + RomType] == 0x14 || buf[addr + RomType] == 0x15 || buf[addr + RomType] == 0x1a))
+					{
+						ramsz = buf[addr - 3];
+						if (ramsz == 0xFF) ramsz = 5; //StarFox
+						if (ramsz > 6) ramsz = 6;
+						hdr[1] |= 0x70;
+					}
+
+					//1..2,E..F - reserved for other mappers.
 				}
-
-				//SDD1 5
-				if (buf[addr + Mapper] == 0x32 && (buf[addr + RomType] == 0x43 || buf[addr + RomType] == 0x45))
-				{
-					if (romsz < 14) hdr[1] |= 0x50; // except Star Ocean un-SDD1
-				}
-
-				//SA1 6
-				if (buf[addr + Mapper] == 0x23 && (buf[addr + RomType] == 0x32 || buf[addr + RomType] == 0x34 || buf[addr + RomType] == 0x35))
-				{
-					hdr[1] |= 0x60;
-				}
-
-				//GSU 7
-				if (buf[addr + Mapper] == 0x20 && (buf[addr + RomType] == 0x13 || buf[addr + RomType] == 0x14 || buf[addr + RomType] == 0x15 || buf[addr + RomType] == 0x1a))
-				{
-					ramsz = buf[addr - 3];
-					if (ramsz == 0xFF) ramsz = 5; //StarFox
-					if (ramsz > 6) ramsz = 6;
-					hdr[1] |= 0x70;
-				}
-
-				//1..3,E..F - reserved for other mappers.
 
 				hdr[2] = 0;
 
@@ -258,4 +284,29 @@ uint8_t* snes_get_header(fileTYPE *f)
 		free(prebuf);
 	}
 	return hdr;
+}
+
+void snes_patch_bs_header(fileTYPE *f, uint8_t *buf)
+{
+	if ((f->offset == 0x008000 && (buf[0xFD8] == 0x20 || buf[0xFD8] == 0x30)) ||
+		(f->offset == 0x010000 && (buf[0xFD8] == 0x21 || buf[0xFD8] == 0x31))) {
+		if (buf[0xFD0] == 0xF0 || (buf[0xFD1] == 0xFF && buf[0xFD2] == 0xFF && buf[0xFD3] == 0xFF)) {
+			printf("SNES: Patch bad BS header: offset %04X, bad value %02X %02X %02X %02X\n", 0x7FD0 | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFD0], buf[0xFD1], buf[0xFD2], buf[0xFD3]);
+			buf[0xFD3] = 0x00;
+			buf[0xFD2] = 0x00;
+			buf[0xFD1] = 0x00;
+			buf[0xFD0] = f->size <= 256 * 1024 ? 0x03 :
+						 f->size <= 512 * 1024 ? 0x0F :
+						 0xFF;
+		}
+		if (buf[0xFD5] >= 0x80) {
+			printf("SNES: Patch bad BS header: offset %04X, bad value %02X %02X\n", 0x7FD4 | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFD4], buf[0xFD5]);
+			buf[0xFD5] = 0xFF;
+			buf[0xFD4] = 0xFF;
+		}
+		if (buf[0xFDA] != 0x33) {
+			printf("SNES: Patch bad BS header: offset %04X, bad value %02X\n", 0x7FDA | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFDA]);
+			buf[0xFDA] = 0x33;
+		}
+	}
 }

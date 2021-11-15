@@ -9,7 +9,6 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
-#include <sys/mman.h>
 
 #include "lib/lodepng/lodepng.h"
 
@@ -32,17 +31,24 @@
 #include "miniz.h"
 #include "cheats.h"
 #include "video.h"
+#include "audio.h"
+#include "shmem.h"
+#include "ide.h"
 
 #include "support.h"
 
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};
 
-static uint8_t vol_att = 0;
-unsigned long vol_set_timeout = 0;
+static fileTYPE sd_image[16] = {};
+static int      sd_type[16] = {};
+static int      sd_image_cangrow[16] = {};
+static uint64_t buffer_lba[16] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
+								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
+								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
+								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 
-static fileTYPE sd_image[4] = {};
-static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
+static int use_save = 0;
 
 // mouse and keyboard emulation state
 static int emu_mode = EMU_NONE;
@@ -130,6 +136,9 @@ char* user_io_create_config_name()
 }
 
 static char core_name[32] = {};
+static char ovr_name[32] = {};
+static char orig_name[32] = {};
+
 static char filepath_store[1024];
 
 char *user_io_make_filepath(const char *path, const char *filename)
@@ -139,7 +148,6 @@ char *user_io_make_filepath(const char *path, const char *filename)
 	return filepath_store;
 }
 
-static char ovr_name[32] = {};
 void user_io_name_override(const char* name)
 {
 	snprintf(ovr_name, sizeof(ovr_name), "%s", name);
@@ -151,9 +159,9 @@ void user_io_set_core_name(const char *name)
 	printf("Core name set to \"%s\"\n", core_name);
 }
 
-char *user_io_get_core_name()
+char *user_io_get_core_name(int orig)
 {
-	return core_name;
+	return orig ? orig_name : core_name;
 }
 
 char *user_io_get_core_path(const char *suffix, int recheck)
@@ -172,21 +180,10 @@ char *user_io_get_core_path(const char *suffix, int recheck)
 	return tmp;
 }
 
-const char *user_io_get_core_name_ex()
+static char is_arcade_type = 0;
+char is_arcade()
 {
-	switch (user_io_core_type())
-	{
-	case CORE_TYPE_ARCHIE:
-		return "ARCHIE";
-
-    case CORE_TYPE_SHARPMZ:
-		return "SHARPMZ";
-
-	case CORE_TYPE_8BIT:
-		return core_name;
-	}
-
-	return "";
+	return is_arcade_type;
 }
 
 static int is_menu_type = 0;
@@ -255,7 +252,6 @@ char is_pce()
 static int is_archie_type = 0;
 char is_archie()
 {
-	if (core_type == CORE_TYPE_ARCHIE) return 1;
 	if (!is_archie_type) is_archie_type = strcasecmp(core_name, "ARCHIE") ? 2 : 1;
 	return (is_archie_type == 1);
 }
@@ -292,11 +288,11 @@ char has_menu()
 {
 	if (disable_osd) return 0;
 
-	if (!is_no_type) is_no_type = user_io_get_core_name_ex()[0] ? 1 : 2;
+	if (!is_no_type) is_no_type = user_io_get_core_name()[0] ? 1 : 2;
 	return (is_no_type == 1);
 }
 
-static void user_io_read_core_name()
+void user_io_read_core_name()
 {
 	is_menu_type = 0;
 	is_x86_type  = 0;
@@ -314,13 +310,12 @@ static void user_io_read_core_name()
 	is_st_type = 0;
 	core_name[0] = 0;
 
+	char *p = user_io_get_confstr(0);
+	if (p && p[0]) snprintf(orig_name, sizeof(orig_name), "%s", p);
+
 	// get core name
 	if (ovr_name[0]) strcpy(core_name, ovr_name);
-	else
-	{
-		char *p = user_io_get_confstr(0);
-		if (p && p[0]) strcpy(core_name, p);
-	}
+	else if (orig_name[0]) strcpy(core_name, p);
 
 	printf("Core name is \"%s\"\n", core_name);
 }
@@ -400,9 +395,21 @@ int user_io_get_joy_transl()
 }
 
 static int use_cheats = 0;
+static uint32_t ss_base = 0;
+static uint32_t ss_size = 0;
+static uint32_t uart_speeds[13] = {};
+static char uart_speed_labels[13][32] = {};
+static uint32_t midi_speeds[13] = {};
+static char midi_speed_labels[13][32] = {};
+static const uint32_t mlink_speeds[13] = { 110, 300, 600, 1200, 2400, 4800, 9600, 14400, 19200, 31250, 38400, 57600, 115200 };
+static const char mlink_speed_labels[13][32] = { "110", "300", "600", "1200", "2400", "4800", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200" };
+static char defmra[1024] = {};
 
 static void parse_config()
 {
+	uint64_t mask = 0;
+	uint64_t overlap = 0;
+
 	int i = 0;
 	char *p;
 
@@ -412,20 +419,168 @@ static void parse_config()
 	do {
 		p = user_io_get_confstr(i);
 		printf("get cfgstring %d = %s\n", i, p);
-		if (!i && p && p[0])
+		if (!i)
 		{
-			OsdCoreNameSet(p);
+			OsdCoreNameSet((p && p[0]) ? p : "CORE");
 		}
 
-		if (i>=2 && p && p[0])
+		if (i == 1 && p)
 		{
-			//skip Disable/Hide masks
-			while((p[0] == 'H' || p[0] == 'D') && strlen(p)>=2) p += 2;
+			while (p && *p)
+			{
+				if (!strncasecmp(p, "SS", 2))
+				{
+					char *end = 0;
+					ss_base = strtoul(p+2, &end, 16);
+					p = end;
+					if (p && *p == ':')
+					{
+						p++;
+						ss_size = strtoul(p, &end, 16);
+					}
+
+					printf("Got save state parameters: base=0x%X, size=0x%X\n", ss_base, ss_size);
+
+					if (!ss_size || ss_size > (128 * 1024 * 1024))
+					{
+						ss_size = 0;
+						ss_base = 0;
+						printf("Invalid size!\n");
+					}
+					else if (ss_base < 0x20000000 || ss_base >= 0x40000000 || (ss_base + ss_size) >= 0x40000000)
+					{
+						ss_size = 0;
+						ss_base = 0;
+						printf("Invalid base!\n");
+					}
+				}
+
+				if (!strncasecmp(p, "UART", 4))
+				{
+					p += 4;
+					for (int i = 0; i < 10 && p && *p; i++)
+					{
+						char *end = 0;
+						uart_speeds[i] = strtoul(p, &end, 10);
+						p = end;
+						if (p && *p == '(')
+						{
+							p++;
+							int n = 0;
+							while (*p != ';' && *p != ':' && *p != ')' && *p != ',')
+							{
+								if (n < 16) uart_speed_labels[i][n] = *p;
+								p++;
+								n++;
+							}
+							if (*p == ')') p++;
+						}
+						else
+						{
+							sprintf(uart_speed_labels[i], "%d", uart_speeds[i]);
+						}
+						if (p && *p == ':') p++;
+					}
+
+					printf("Got UART speeds:");
+					for(int i=0; i<10; i++) printf(" %d", uart_speeds[i]);
+					printf("\n");
+				}
+
+				if (!strncasecmp(p, "MIDI", 4))
+				{
+					p += 4;
+					for (int i = 0; i < 10 && p && *p; i++)
+					{
+						char *end = 0;
+						midi_speeds[i] = strtoul(p, &end, 10);
+						p = end;
+						if (p && *p == '(')
+						{
+							p++;
+							int n = 0;
+							while (*p != ';' && *p != ':' && *p != ')' && *p != ',')
+							{
+								if (n < 16) midi_speed_labels[i][n] = *p;
+								p++;
+								n++;
+							}
+							if (*p == ')') p++;
+						}
+						else
+						{
+							sprintf(midi_speed_labels[i], "%d", midi_speeds[i]);
+						}
+						if (p && *p == ':') p++;
+					}
+
+					if (!midi_speeds[0])
+					{
+						midi_speeds[0] = 31250;
+						strcpy(midi_speed_labels[0], "31250");
+					}
+
+					printf("Got MIDI speeds:");
+					for (int i = 0; i < 10; i++) printf(" %d", midi_speeds[i]);
+					printf("\n");
+				}
+
+				p = strchr(p, ',');
+				if (p) p++;
+			}
+		}
+
+		if (i >= 2 && p && p[0])
+		{
+			if (!strncmp(p, "DEFMRA,", 7))
+			{
+				snprintf(defmra, sizeof(defmra), (p[7] == '/') ? "%s%s" : "%s/_Arcades/%s", getRootDir(), p + 7);
+			}
+			else if (!strncmp(p, "DIP", 3))
+			{
+
+			}
+			else
+			{
+				//skip Disable/Hide masks
+				while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) >= 2) p += 2;
+			}
+			if (p[0] == 'P') p += 2;
+
+			if (p[0] == 'R' || p[0] == 'T')
+			{
+				uint64_t x = 1 << getOptIdx(p);
+				overlap |= mask & x;
+				mask |= x;
+			}
+			if (p[0] == 'r' || p[0] == 't')
+			{
+				uint64_t x = 1 << getOptIdx(p);
+				x <<= 32;
+				overlap |= mask & x;
+				mask |= x;
+			}
+			if (p[0] == 'O')
+			{
+				char *opt = (p[1] == 'X') ? p + 1 : p;
+				uint64_t x = getStatusMask(opt);
+				x <<= getOptIdx(opt);
+				overlap |= mask & x;
+				mask |= x;
+			}
+			if (p[0] == 'o')
+			{
+				char *opt = (p[1] == 'X') ? p + 1 : p;
+				uint64_t x = getStatusMask(opt);
+				x <<= 32 + getOptIdx(opt);
+				overlap |= mask & x;
+				mask |= x;
+			}
 
 			if (p[0] == 'J')
 			{
 				int n = 1;
-				if (p[1] == 'D') { joy_transl = 0; n++;	}
+				if (p[1] == 'D') { joy_transl = 0; n++; }
 				if (p[1] == 'A') { joy_transl = 1; n++; }
 				if (p[1] == 'N') { joy_transl = 2; n++; }
 
@@ -441,11 +596,11 @@ static void parse_config()
 				uint32_t status = user_io_8bit_set_status(0, 0);
 				printf("found OX option: %s, 0x%08X\n", p, status);
 
-				unsigned long x = getStatus(p+1, status);
+				unsigned long x = getStatus(p + 1, status);
 
 				if (is_x86())
 				{
-					if (p[2] == '2') x86_set_fdd_boot(!(x&1));
+					if (p[2] == '2') x86_set_fdd_boot(!(x & 1));
 				}
 			}
 
@@ -468,9 +623,66 @@ static void parse_config()
 			{
 				use_cheats = 1;
 			}
+
+			if (p[0] == 'F' && p[1] == 'C')
+			{
+				static char str[1024];
+				uint32_t load_addr = 0;
+				if (substrcpy(str, p, 3))
+				{
+					load_addr = strtoul(str, NULL, 16);
+					if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+					{
+						printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
+						load_addr = 0;
+					}
+				}
+
+				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
+				if (FileLoadConfig(str, str, sizeof(str)) && str[0])
+				{
+
+					int idx = p[2] - '0';
+					StoreIdx_F(idx, str);
+					user_io_file_tx(str, idx, 0, 0, 0, load_addr);
+				}
+			}
 		}
 		i++;
 	} while (p || i<3);
+
+	mask |= 1; // reset is always on bit 0
+	printf("\n// Status Bit Map:\n");
+	printf("//              Upper                          Lower\n");
+	printf("// 0         1         2         3          4         5         6   \n");
+	printf("// 01234567890123456789012345678901 23456789012345678901234567890123\n");
+	printf("// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV\n");
+	char str[128];
+	strcpy(str, "// ");
+	for (int i = 0; i < 32; i++) strcat(str, (mask & (1ULL << i)) ? "X" : " ");
+	strcat(str, " ");
+	for (int i = 32; i < 64; i++) strcat(str, (mask & (1ULL << i)) ? "X" : " ");
+	strcat(str, "\n");
+	printf(str);
+
+	if (overlap)
+	{
+		strcpy(str, "// ");
+		for (int i = 0; i < 32; i++) strcat(str, (overlap & (1ULL << i)) ? "^" : " ");
+		strcat(str, " ");
+		for (int i = 32; i < 64; i++) strcat(str, (overlap & (1ULL << i)) ? "^" : " ");
+		strcat(str, "\n");
+		printf(str);
+		printf("// *Overlapped bits!* (can be intentional):\n");
+	}
+	printf("\n");
+
+	// legacy GBA versions
+	if (is_gba() && !ss_base)
+	{
+		ss_base = 0x3E000000;
+		ss_size = 0x100000;
+	}
 }
 
 //MSM6242B layout
@@ -550,43 +762,121 @@ void MakeFile(const char * filename, const char * data)
 	fclose(file);
 }
 
-static void set_uart_alt()
-{
-	if (is_st())
-	{
-		tos_uart_mode((GetUARTMode() < 3) || GetMidiLinkMode() >= 4);
-	}
-}
-
 int GetUARTMode()
 {
 	struct stat filestat;
 	if (!stat("/tmp/uartmode1", &filestat)) return 1;
 	if (!stat("/tmp/uartmode2", &filestat)) return 2;
 	if (!stat("/tmp/uartmode3", &filestat)) return 3;
+	if (!stat("/tmp/uartmode4", &filestat)) return 4;
+	if (!stat("/tmp/uartmode5", &filestat)) return 5;
 	return 0;
 }
 
 void SetUARTMode(int mode)
 {
-	MakeFile("/tmp/CORENAME", user_io_get_core_name_ex());
-	MakeFile("/tmp/UART_SPEED", is_st() ? "19200" : "115200");
+	mode &= 0xF;
+	uint32_t baud = GetUARTbaud(mode);
+
+	spi_uio_cmd_cont(UIO_SET_UART);
+	spi_w((mode == 4 || mode == 5) ? 1 : mode);
+	spi_w(baud);
+	spi_w(baud >> 16);
+	DisableIO();
+
+	MakeFile("/tmp/CORENAME", user_io_get_core_name());
+
+	char data[20];
+	sprintf(data, "%d", baud);
+	MakeFile("/tmp/UART_SPEED", data);
 
 	char cmd[32];
-	sprintf(cmd, "uartmode %d", mode & 0xFF);
+	sprintf(cmd, "uartmode %d", mode);
 	system(cmd);
-	set_uart_alt();
+}
+
+static int uart_speed_idx = 0;
+static int midi_speed_idx = 0;
+static int mlink_speed_idx = 0;
+
+const uint32_t* GetUARTbauds(int mode)
+{
+	return (mode == 3) ? midi_speeds : (mode > 3) ? mlink_speeds : uart_speeds;
+}
+
+uint32_t GetUARTbaud(int mode)
+{
+	return (mode == 3) ? midi_speeds[midi_speed_idx] : (mode > 3) ? mlink_speeds[mlink_speed_idx] : uart_speeds[uart_speed_idx];
+}
+
+const char* GetUARTbaud_label(int mode)
+{
+	return (mode == 3) ? midi_speed_labels[midi_speed_idx] : (mode > 3) ? mlink_speed_labels[mlink_speed_idx] : uart_speed_labels[uart_speed_idx];
+}
+
+const char* GetUARTbaud_label(int mode, int idx)
+{
+	return (mode == 3) ? midi_speed_labels[idx] : (mode > 3) ? mlink_speed_labels[idx] : uart_speed_labels[idx];
+}
+
+int GetUARTbaud_idx(int mode)
+{
+	return (mode == 3) ? midi_speed_idx : (mode > 3) ? mlink_speed_idx : uart_speed_idx;
+}
+
+char * GetMidiLinkSoundfont()
+{
+    FILE * file;
+    static char mLinkSoundfont[255];
+    char fileName[] = "/tmp/ML_SOUNDFONT";
+    char strip[] = "/media/fat/";
+    file = fopen(fileName, "r");
+    if (file)
+    {
+        fgets((char *) &mLinkSoundfont, sizeof(mLinkSoundfont), file);
+        fclose(file);
+        if(0 == strncmp(strip, mLinkSoundfont, sizeof(strip)-1))
+		return &mLinkSoundfont[sizeof(strip)-1];
+    }
+    else
+    {
+        printf("ERROR: GetMidiLinkSoundfont : Unable to open --> '%s'\n", fileName);
+        sprintf(mLinkSoundfont, "linux/soundfonts");
+    }
+    return mLinkSoundfont;
+}
+
+uint32_t ValidateUARTbaud(int mode, uint32_t baud)
+{
+	const uint32_t *bauds = GetUARTbauds(mode);
+	int idx = 0;
+	for (int i = 0; i < 13; i++)
+	{
+		if (!bauds[i]) break;
+		if (bauds[i] == baud)
+		{
+			idx = i;
+			break;
+		}
+	}
+
+	if (mode == 3) midi_speed_idx = idx;
+	else if (mode > 3) mlink_speed_idx = idx;
+	else uart_speed_idx = idx;
+
+	return bauds[idx];
 }
 
 int GetMidiLinkMode()
 {
 	struct stat filestat;
-	if (!stat("/tmp/ML_FSYNTH", &filestat)) return 0;
-	if (!stat("/tmp/ML_MUNT", &filestat)) return 1;
-	if (!stat("/tmp/ML_TCP", &filestat)) return 2;
-	if (!stat("/tmp/ML_UDP", &filestat)) return 3;
-	if (!stat("/tmp/ML_TCP_ALT", &filestat)) return 4;
+	if (!stat("/tmp/ML_FSYNTH", &filestat))  return 0;
+	if (!stat("/tmp/ML_MUNT", &filestat))    return 1;
+	if (!stat("/tmp/ML_USBMIDI", &filestat)) return 2;
+	if (!stat("/tmp/ML_UDP", &filestat))     return 3;
+	if (!stat("/tmp/ML_TCP", &filestat))     return 4;
 	if (!stat("/tmp/ML_UDP_ALT", &filestat)) return 5;
+	if (!stat("/tmp/ML_USBSER", &filestat))  return 6;
 	return 0;
 }
 
@@ -595,35 +885,47 @@ void SetMidiLinkMode(int mode)
 	remove("/tmp/ML_FSYNTH");
 	remove("/tmp/ML_MUNT");
 	remove("/tmp/ML_UDP");
-	remove("/tmp/ML_TCP");
+	remove("/tmp/ML_USBMIDI");
 	remove("/tmp/ML_UDP_ALT");
 	remove("/tmp/ML_TCP_ALT");
+	remove("/tmp/ML_SERMIDI");
+	remove("/tmp/ML_USBSER");
+	remove("/tmp/ML_TCP");
+
+	struct stat filestat;
+	if (mode == 6 && stat("/dev/ttyUSB0", &filestat)) mode = 4;
+
 	switch (mode)
 	{
-		case 0: MakeFile("/tmp/ML_FSYNTH", ""); break;
-		case 1: MakeFile("/tmp/ML_MUNT", ""); break;
-		case 2: MakeFile("/tmp/ML_TCP", ""); break;
-		case 3: MakeFile("/tmp/ML_UDP", ""); break;
-		case 4: MakeFile("/tmp/ML_TCP_ALT", ""); break;
+		case 0: MakeFile("/tmp/ML_FSYNTH", "");  break;
+		case 1: MakeFile("/tmp/ML_MUNT", "");    break;
+		case 2: MakeFile("/tmp/ML_USBMIDI", ""); break;
+		case 3: MakeFile("/tmp/ML_UDP", "");     break;
+		case 4: MakeFile("/tmp/ML_TCP", "");     break;
 		case 5: MakeFile("/tmp/ML_UDP_ALT", ""); break;
+		case 6: MakeFile("/tmp/ML_USBSER", "");  break;
 	}
-	set_uart_alt();
+}
+
+void ResetUART()
+{
+	if (uart_mode)
+	{
+		int mode = GetUARTMode();
+		if (mode != 0)
+		{
+			SetUARTMode(0);
+			SetUARTMode(mode);
+		}
+	}
 }
 
 uint16_t sdram_sz(int sz)
 {
 	int res = 0;
 
-	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
-
-	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
-	if (buf == (void *)-1)
-	{
-		printf("Unable to mmap(/dev/mem)\n");
-		close(fd);
-		return 0;
-	}
+	void* buf = shmem_map(0x1FFFF000, 0x1000);
+	if (!buf) return 0;
 
 	volatile uint8_t* par = (volatile uint8_t*)buf;
 	par += 0xF00;
@@ -648,8 +950,7 @@ uint16_t sdram_sz(int sz)
 		}
 	}
 
-	munmap(buf, 0x1000);
-	close(fd);
+	shmem_unmap(buf, 0x1000);
 	return res;
 }
 
@@ -657,16 +958,8 @@ uint16_t altcfg(int alt)
 {
 	int res = 0;
 
-	int fd;
-	if ((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) return 0;
-
-	void* buf = mmap(0, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x1FFFF000);
-	if (buf == (void *)-1)
-	{
-		printf("Unable to mmap(/dev/mem)\n");
-		close(fd);
-		return 0;
-	}
+	void* buf = shmem_map(0x1FFFF000, 0x1000);
+	if (!buf) return 0;
 
 	volatile uint8_t* par = (volatile uint8_t*)buf;
 	par += 0xF04;
@@ -691,8 +984,7 @@ uint16_t altcfg(int alt)
 		}
 	}
 
-	munmap(buf, 0x1000);
-	close(fd);
+	shmem_unmap(buf, 0x1000);
 	return res;
 }
 
@@ -719,8 +1011,6 @@ void user_io_init(const char *path, const char *xml)
 	strcpy(core_path, xml ? xml : path);
 	strcpy(rbf_path, path);
 
-	if (xml) arcade_override_name(xml);
-
 	memset(sd_image, 0, sizeof(sd_image));
 
 	core_type = (fpga_core_id() & 0xFF);
@@ -733,8 +1023,7 @@ void user_io_init(const char *path, const char *xml)
 		core_type = CORE_TYPE_8BIT;
 	}
 
-	if ((core_type != CORE_TYPE_ARCHIE) &&
-		(core_type != CORE_TYPE_8BIT) &&
+	if ((core_type != CORE_TYPE_8BIT) &&
 		(core_type != CORE_TYPE_SHARPMZ))
 	{
 		core_type = CORE_TYPE_UNKNOWN;
@@ -744,17 +1033,36 @@ void user_io_init(const char *path, const char *xml)
 
 	OsdSetSize(8);
 
-	user_io_read_confstr();
+	if (xml)
+	{
+		is_arcade_type = 1;
+		arcade_override_name(xml);
+	}
+
 	if (core_type == CORE_TYPE_8BIT)
 	{
-		puts("Identified 8BIT core");
-
-		// set core name. This currently only sets a name for the 8 bit cores
-		user_io_read_core_name();
+		printf("Identified 8BIT core");
 		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 
 		// send a reset
 		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+	}
+	else if (core_type == CORE_TYPE_SHARPMZ)
+	{
+		user_io_set_core_name("sharpmz");
+	}
+
+	user_io_read_confstr();
+	user_io_read_core_name();
+	parse_config();
+	if (!xml && defmra[0] && FileExists(defmra))
+	{
+		// attn: FC option won't use name from defmra!
+		xml = (const char*)defmra;
+		strcpy(core_path, xml);
+		is_arcade_type = 1;
+		arcade_override_name(xml);
+		printf("Using default MRA: %s\n", xml);
 	}
 
 	cfg_parse();
@@ -765,9 +1073,8 @@ void user_io_init(const char *path, const char *xml)
 
 	video_mode_load();
 	if(strlen(cfg.font)) LoadFont(cfg.font);
-	FileLoadConfig("Volume.dat", &vol_att, 1);
-	vol_att &= 0x1F;
-	spi_uio_cmd8(UIO_AUDVOL, vol_att);
+	load_volume();
+
 	user_io_send_buttons(1);
 
 	switch (core_type)
@@ -776,21 +1083,10 @@ void user_io_init(const char *path, const char *xml)
 		printf("Unable to identify core (%x)!\n", core_type);
 		break;
 
-	case CORE_TYPE_ARCHIE:
-		puts("Identified Archimedes core");
-		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
-		send_rtc(1);
-		user_io_set_core_name("Archie");
-		archie_init();
-		parse_config();
-		parse_buttons();
-		break;
-
     case CORE_TYPE_SHARPMZ:
-		puts("Identified Sharp MZ Series core");
+		printf("Identified Sharp MZ Series core");
 		user_io_set_core_name("sharpmz");
         sharpmz_init();
-		parse_config();
 		parse_buttons();
 		break;
 
@@ -799,20 +1095,23 @@ void user_io_init(const char *path, const char *xml)
 		name = user_io_create_config_name();
 		if(strlen(name) > 0)
 		{
-			OsdCoreNameSet(user_io_get_core_name());
-
 			uint32_t status[2] = { 0, 0 };
-			if (!is_st())
+			if (!is_st() && !is_minimig())
 			{
 				printf("Loading config %s\n", name);
 				if (FileLoadConfig(name, status, 8))
 				{
 					printf("Found config: %08X-%08X\n", status[0], status[1]);
-					status[0] &= ~UIO_STATUS_RESET;
-					user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
-					user_io_8bit_set_status(status[1], 0xffffffff, 1);
 				}
-				parse_config();
+				else
+				{
+					status[0] = 0;
+					status[1] = 0;
+				}
+
+				status[0] &= ~UIO_STATUS_RESET;
+				user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
+				user_io_8bit_set_status(status[1], 0xffffffff, 1);
 			}
 
 			if (is_st())
@@ -834,7 +1133,7 @@ void user_io_init(const char *path, const char *xml)
 				}
 				else if (is_minimig())
 				{
-					puts("Identified Minimig V2 core");
+					printf("Identified Minimig V2 core");
 					BootInit();
 				}
 				else if (is_x86())
@@ -844,7 +1143,7 @@ void user_io_init(const char *path, const char *xml)
 				}
 				else if (is_archie())
 				{
-					puts("Identified Archimedes core");
+					printf("Identified Archimedes core");
 					archie_init();
 				}
 				else
@@ -941,27 +1240,51 @@ void user_io_init(const char *path, const char *xml)
 		send_rtc(3);
 
 		// release reset
-		user_io_8bit_set_status(0, UIO_STATUS_RESET);
+		if(!is_minimig() && !is_st()) user_io_8bit_set_status(0, UIO_STATUS_RESET);
 		if(xml) arcade_check_error();
 		break;
 	}
 
 	OsdRotation((cfg.osd_rotate == 1) ? 3 : (cfg.osd_rotate == 2) ? 1 : 0);
 
-	spi_uio_cmd_cont(UIO_GETUARTFLG);
-	uart_mode = spi_w(0);
-	DisableIO();
-
+	uart_mode = spi_uio_cmd16(UIO_GETUARTFLG, 0) || uart_speeds[0];
 	uint32_t mode = 0;
 	if (uart_mode)
 	{
-		sprintf(mainpath, "uartmode.%s", user_io_get_core_name_ex());
+		if (!uart_speeds[0])
+		{
+			uart_speeds[0] = is_st() ? 19200 : 115200;
+			sprintf(uart_speed_labels[0], "%d", uart_speeds[0]);
+
+			if (!midi_speeds[0])
+			{
+				midi_speeds[0] = 31250;
+				sprintf(midi_speed_labels[0], "%d", midi_speeds[0]);
+			}
+		}
+
+		sprintf(mainpath, "uartmode.%s", user_io_get_core_name());
 		FileLoadConfig(mainpath, &mode, 4);
+
+		uint64_t speeds = 0;
+		sprintf(mainpath, "uartspeed.%s", user_io_get_core_name());
+		FileLoadConfig(mainpath, &speeds, 8);
+
+		ValidateUARTbaud(1, speeds & 0xFFFFFFFF);
+		ValidateUARTbaud(3, speeds >> 32);
+		ValidateUARTbaud(4, uart_speeds[0]);
+
+		printf("UART bauds: %d/%d/%d\n", GetUARTbaud(1), GetUARTbaud(3), GetUARTbaud(4));
 	}
 
 	SetUARTMode(0);
-	SetMidiLinkMode((mode >> 8) & 0xFF);
-	SetUARTMode(mode);
+	int midilink = (mode >> 8) & 0xFF;
+	int uartmode = mode & 0xFF;
+	if (uartmode == 4 && (midilink < 4 || midilink>6)) midilink = 4;
+	if (uartmode == 3 && midilink > 3) midilink = 0;
+	if (uartmode < 3 || uartmode > 4) midilink = 0;
+	SetMidiLinkMode(midilink);
+	SetUARTMode(uartmode);
 }
 
 static int joyswap = 0;
@@ -1033,42 +1356,6 @@ void user_io_sd_set_config(void)
 	printf("SD CSD\n");
 	hexdump(CSD, sizeof(CSD), 0);
 */
-}
-
-// read 8+32 bit sd card status word from FPGA
-uint16_t user_io_sd_get_status(uint32_t *lba, uint16_t *req_type)
-{
-	uint32_t s;
-	uint16_t c;
-	uint16_t req = 0;
-
-	spi_uio_cmd_cont(UIO_GET_SDSTAT);
-	if (io_ver)
-	{
-		c = spi_w(0);
-		s = spi_w(0);
-		s = (s & 0xFFFF) | (((uint32_t)spi_w(0))<<16);
-		req = spi_w(0);
-	}
-	else
-	{
-		//note: using 32bit big-endian transfer!
-		c = spi_in();
-		s = spi_in();
-		s = (s << 8) | spi_in();
-		s = (s << 8) | spi_in();
-		s = (s << 8) | spi_in();
-		req = spi_in();
-	}
-	DisableIO();
-
-	if (lba)
-		*lba = s;
-
-	if (req)
-		*req_type = req;
-
-	return c;
 }
 
 // read 8 bit keyboard LEDs status from FPGA
@@ -1144,16 +1431,67 @@ static void kbd_fifo_poll()
 void user_io_set_index(unsigned char index)
 {
 	EnableFpga();
-	spi8(UIO_FILE_INDEX);
+	spi8(FIO_FILE_INDEX);
 	spi8(index);
 	DisableFpga();
 }
 
-void user_io_set_download(unsigned char enable)
+void user_io_set_aindex(uint16_t index)
 {
 	EnableFpga();
-	spi8(UIO_FILE_TX);
-	spi8(enable ? 0xff : 0x00);
+	spi8(FIO_FILE_INDEX);
+	spi_w(index);
+	DisableFpga();
+}
+
+void user_io_set_download(unsigned char enable, int addr)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX);
+	spi8(enable ? 0xff : 0);
+	if (enable && addr)
+	{
+		spi_w(addr);
+		spi_w(addr >> 16);
+	}
+	DisableFpga();
+}
+
+void user_io_file_tx_data(const uint8_t *addr, uint32_t len)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX_DAT);
+	spi_write(addr, len, fio_size);
+	DisableFpga();
+}
+
+void user_io_set_upload(unsigned char enable, int addr)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX);
+	spi8(enable ? 0xaa : 0);
+	if (enable && addr)
+	{
+		spi_w(addr);
+		spi_w(addr >> 16);
+	}
+	DisableFpga();
+}
+
+void user_io_file_rx_data(uint8_t *addr, uint32_t len)
+{
+	EnableFpga();
+	spi8(FIO_FILE_TX_DAT);
+	spi_read(addr, len, fio_size);
+	DisableFpga();
+}
+
+void user_io_file_info(const char *ext)
+{
+	EnableFpga();
+	spi8(FIO_FILE_INFO);
+	spi_w(toupper(ext[0]) << 8 | toupper(ext[1]));
+	spi_w(toupper(ext[2]) << 8 | toupper(ext[3]));
 	DisableFpga();
 }
 
@@ -1163,9 +1501,12 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	int ret = 0;
 	int len = strlen(name);
 
+	sd_image_cangrow[index] = (pre != 0);
+	sd_type[index] = 0;
+
 	if (len)
 	{
-		if (!strcasecmp(user_io_get_core_name_ex(), "apple-ii"))
+		if (!strcasecmp(user_io_get_core_name(), "apple-ii"))
 		{
 			ret = dsk2nib(name, sd_image + index);
 		}
@@ -1176,15 +1517,22 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 			{
 				ret = x2trd(name, sd_image + index);
 			}
-			else if (is_c64() && len > 4 && !strcasecmp(name + len - 4, ".t64"))
+			else if (len > 4 && !strcasecmp(name + len - 4, ".t64"))
 			{
 				writable = 0;
 				ret = c64_openT64(name, sd_image + index);
+				if (ret) ret = c64_openGCR(name, sd_image + index, index);
 			}
 			else
 			{
 				writable = FileCanWrite(name);
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+				if (ret && len > 4 && (!strcasecmp(name + len - 4, ".d64") || !strcasecmp(name + len - 4, ".g64")))
+				{
+					ret = c64_openGCR(name, sd_image + index, index);
+					sd_type[index] = 1;
+					if(!ret) FileClose(&sd_image[index]);
+				}
 			}
 		}
 
@@ -1196,9 +1544,11 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	else
 	{
 		FileClose(&sd_image[index]);
+		c64_closeGCR(index);
 	}
 
 	buffer_lba[index] = -1;
+	if (!index) use_save = pre;
 
 	if (!ret)
 	{
@@ -1518,7 +1868,7 @@ static void send_pcolchr(const char* name, unsigned char index, int type)
 		user_io_set_index(index);
 
 		user_io_set_download(1);
-		user_io_file_tx_write(col_attr, type ? 1024 : 1025);
+		user_io_file_tx_data(col_attr, type ? 1024 : 1025);
 		user_io_set_download(0);
 	}
 }
@@ -1553,39 +1903,6 @@ static void check_status_change()
 	}
 }
 
-static char pchar[] = { 0x8C, 0x8F, 0x7F };
-
-#define PROGRESS_CNT    28
-#define PROGRESS_CHARS  (sizeof(pchar)/sizeof(pchar[0]))
-#define PROGRESS_MAX    ((PROGRESS_CHARS*PROGRESS_CNT)-1)
-
-static void tx_progress(const char* name, unsigned int progress)
-{
-	static char progress_buf[128];
-	memset(progress_buf, 0, sizeof(progress_buf));
-
-	if (progress > PROGRESS_MAX) progress = PROGRESS_MAX;
-	char c = pchar[progress % PROGRESS_CHARS];
-	progress /= PROGRESS_CHARS;
-
-	char *buf = progress_buf;
-	sprintf(buf, "\n\n %.27s\n ", name);
-	buf += strlen(buf);
-
-	for (unsigned int i = 0; i <= progress; i++) buf[i] = (i < progress) ? 0x7F : c;
-	buf[PROGRESS_CNT] = 0;
-
-	InfoMessage(progress_buf, 2000, "Loading");
-}
-
-void user_io_file_tx_write(const uint8_t *addr, uint16_t len)
-{
-	EnableFpga();
-	spi8(UIO_FILE_TX_DAT);
-	spi_write(addr, len, fio_size);
-	DisableFpga();
-}
-
 static void show_core_info(int info_n)
 {
 	int i = 2;
@@ -1609,126 +1926,99 @@ static void show_core_info(int info_n)
 static int process_ss(const char *rom_name)
 {
 	static char ss_name[1024] = {};
-	static uint32_t ss_cnt = 0;
-	static int memfd = -1;
+	static char *ss_sufx = 0;
+	static uint32_t ss_cnt[4] = {};
+	static void *base[4] = {};
 
-	uint32_t map_addr = 0x3E000000;
+	if (!ss_base) return 0;
 
 	if (rom_name)
 	{
-		FileGenerateSavestatePath(rom_name, ss_name);
+		uint32_t len = ss_size;
+		uint32_t map_addr = ss_base;
+		fileTYPE f = {};
 
-		if (memfd < 0)
+		for (int i = 0; i < 4; i++)
 		{
-			memfd = open("/dev/mem", O_RDWR | O_SYNC);
-			if (memfd == -1)
-			{
-				printf("Unable to open /dev/mem!\n");
-				return 0;
-			}
-		}
-
-		ss_cnt = 0;
-		uint32_t len = 1024 * 1024;
-		uint32_t clr_addr = map_addr;
-
-		for (int i = 0; i < 16; i++)
-		{
-			void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, clr_addr);
-			if (base == (void *)-1)
-			{
-				printf("Unable to mmap (0x%X, %d)!\n", clr_addr, len);
-				close(memfd);
-				memfd = -1;
-				return 0;
-			}
-
-			memset(base, 0, len);
-			munmap(base, len);
-			clr_addr += len;
-		}
-
-		if (ss_name[0] && FileExists(ss_name))
-		{
-			void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-			if (base == (void *)-1)
+			if (!base[i]) base[i] = shmem_map(map_addr, len);
+			if (!base[i])
 			{
 				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-				return 0;
-			}
-
-			fileTYPE f = {};
-			if (!FileOpen(&f, ss_name))
-			{
-				printf("Unable to open file: %s\n", ss_name);
-				munmap(base, len);
 			}
 			else
 			{
-				int ret = FileReadAdv(&f, base, len);
-				FileClose(&f);
-				*(uint32_t*)base = 1;
-				ss_cnt = 1;
-				munmap(base, len);
-				printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
-				return 1;
+				ss_cnt[i] = 0;
+				memset(base[i], 0, len);
+
+				if (!i)
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, 1);
+					printf("Base SavestatePath=%s\n", ss_name);
+					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
+				}
+				else
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
+				}
+
+				if (FileExists(ss_name))
+				{
+					if (!FileOpen(&f, ss_name))
+					{
+						printf("Unable to open file: %s\n", ss_name);
+					}
+					else
+					{
+						int ret = FileReadAdv(&f, base[i], len);
+						FileClose(&f);
+						*(uint32_t*)(base[i]) = 1;
+						ss_cnt[i] = 1;
+						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
+					}
+				}
 			}
+
+			map_addr += len;
 		}
 
+		FileGenerateSavestatePath(rom_name, ss_name, 1);
+		ss_sufx = ss_name + strlen(ss_name) - 4;
 		return 1;
 	}
-
-	if (!ss_name[0]) return 0;
 
 	static unsigned long ss_timer = 0;
 	if (ss_timer && !CheckTimer(ss_timer)) return 0;
 	ss_timer = GetTimer(1000);
 
-	if (memfd >= 0)
+	fileTYPE f = {};
+	for (int i = 0; i < 4; i++)
 	{
-		uint32_t len = 4 * 1024;
-
-		void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-		if (base == (void *)-1)
+		if (base[i])
 		{
-			printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-			return 0;
-		}
+			uint32_t curcnt = ((uint32_t*)(base[i]))[0];
+			uint32_t size = ((uint32_t*)(base[i]))[1];
 
-		uint32_t curcnt = ((uint32_t*)base)[0];
-		uint32_t size = ((uint32_t*)base)[1];
-		munmap(base, len);
-
-		if (curcnt > ss_cnt)
-		{
-			ss_cnt = curcnt;
-			len = 512 * 1024;
-
-			if (size) size = (size + 2) * 4;
-			if (size > 0 && size <= len)
+			if (curcnt != ss_cnt[i])
 			{
-				OsdDisable();
-				Info("Saving the state", 500);
-
-				void *base = mmap(0, len, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, map_addr);
-				if (base == (void *)-1)
+				ss_cnt[i] = curcnt;
+				if (size) size = (size + 2) * 4;
+				if (size > 0 && size <= ss_size)
 				{
-					printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-					return 0;
-				}
+					MenuHide();
+					Info("Saving the state", 500);
 
-				fileTYPE f = {};
-				if (!FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
-				{
-					printf("Unable to create file: %s\n", ss_name);
-					munmap(base, len);
-					return 0;
+					*ss_sufx = i + '1';
+					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
+					{
+						int ret = FileWriteAdv(&f, base[i], size);
+						FileClose(&f);
+						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
+					}
+					else
+					{
+						printf("Unable to create file: %s\n", ss_name);
+					}
 				}
-
-				int ret = FileWriteAdv(&f, base, size);
-				FileClose(&f);
-				munmap(base, len);
-				printf("Wrote %d bytes to file: %s\n", ret, ss_name);
 			}
 		}
 	}
@@ -1736,7 +2026,51 @@ static int process_ss(const char *rom_name)
 	return 1;
 }
 
-int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite)
+int user_io_file_tx_a(const char* name, uint16_t index)
+{
+	fileTYPE f = {};
+	static uint8_t buf[4096];
+
+	if (!FileOpen(&f, name, 1)) return 0;
+
+	unsigned long bytes2send = f.size;
+
+	/* transmit the entire file using one transfer */
+	printf("Addon file %s with %lu bytes to send for index %04X\n", name, bytes2send, index);
+
+	// set index byte (0=bios rom, 1-n=OSD entry index)
+	user_io_set_aindex(index);
+
+	// prepare transmission of new file
+	user_io_set_download(1);
+
+	int use_progress = 1;
+	int size = bytes2send;
+	if (use_progress) ProgressMessage(0, 0, 0, 0);
+	while (bytes2send)
+	{
+		uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+
+		FileReadAdv(&f, buf, chunk);
+		user_io_file_tx_data(buf, chunk);
+
+		if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
+		bytes2send -= chunk;
+	}
+
+	// check if core requests some change while downloading
+	check_status_change();
+
+	printf("Done.\n");
+	FileClose(&f);
+
+	// signal end of transmission
+	user_io_set_download(0);
+	ProgressMessage(0, 0, 0, 0);
+	return 1;
+}
+
+int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite, uint32_t load_addr)
 {
 	fileTYPE f = {};
 	static uint8_t buf[4096];
@@ -1758,33 +2092,92 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	/* transmit the entire file using one transfer */
 	printf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index & 0x3F, index >> 6);
+	if(load_addr) printf("Load to address 0x%X\n", load_addr);
 
 	// set index byte (0=bios rom, 1-n=OSD entry index)
 	user_io_set_index(index);
 
 	int len = strlen(f.name);
 	char *p = f.name + len - 4;
-	EnableFpga();
-	spi8(UIO_FILE_INFO);
-	spi_w(toupper(p[0]) << 8 | toupper(p[1]));
-	spi_w(toupper(p[2]) << 8 | toupper(p[3]));
-	DisableFpga();
+	user_io_file_info(p);
 
 	// prepare transmission of new file
-	user_io_set_download(1);
+	user_io_set_download(1, load_addr ? bytes2send : 0);
 
+	int dosend = 1;
+
+	int is_snes_bs = 0;
 	if (is_snes() && bytes2send)
 	{
-		printf("Load SNES ROM.\n");
-		uint8_t* buf = snes_get_header(&f);
-		hexdump(buf, 16, 0);
-		user_io_file_tx_write(buf, 512);
+		const char *ext = strrchr(f.name, '.');
+		if (ext && !strcasecmp(ext, ".BS")) {
+			is_snes_bs = 1;
+		}
 
-		//strip original SNES ROM header if present (not used)
-		if (bytes2send & 512)
-		{
-			bytes2send -= 512;
+		if (is_snes_bs) {
+			char *rom_path = (char*)buf;
+			strcpy(rom_path, name);
+			char *offs = strrchr(rom_path, '/');
+			if (offs) *offs = 0;
+			else *rom_path = 0;
+
+			fileTYPE fb = {};
+			if (FileOpen(&fb, user_io_make_filepath(rom_path, "bsx_bios.rom")) ||
+				FileOpen(&fb, user_io_make_filepath(HomeDir(), "bsx_bios.rom")))
+			{
+				printf("Load BSX bios ROM.\n");
+				uint8_t* buf = snes_get_header(&fb);
+				hexdump(buf, 16, 0);
+				user_io_file_tx_data(buf, 512);
+
+				//strip original SNES ROM header if present (not used)
+				if (bytes2send & 512)
+				{
+					bytes2send -= 512;
+					FileReadSec(&f, buf);
+				}
+
+				uint32_t sz = fb.size;
+				while (sz)
+				{
+					uint32_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					FileReadAdv(&fb, buf, chunk);
+					user_io_file_tx_data(buf, chunk);
+					sz -= chunk;
+				}
+				FileClose(&fb);
+			}
+			else
+			{
+				dosend = 0;
+				Info("Cannot open bsx_bios.rom!");
+				sleep(1);
+			}
+		}
+		else if ((index & 0x3F) == 1) {
+			printf("Load SPC ROM.\n");
 			FileReadSec(&f, buf);
+			user_io_file_tx_data(buf, 256);
+
+			FileSeek(&f, (64*1024)+256, SEEK_SET);
+			FileReadSec(&f, buf);
+			user_io_file_tx_data(buf, 256);
+
+			FileSeek(&f, 256, SEEK_SET);
+			bytes2send = 64 * 1024;
+		}
+		else {
+			printf("Load SNES ROM.\n");
+			uint8_t* buf = snes_get_header(&f);
+			hexdump(buf, 16, 0);
+			user_io_file_tx_data(buf, 512);
+
+			//strip original SNES ROM header if present (not used)
+			if (bytes2send & 512)
+			{
+				bytes2send -= 512;
+				FileReadSec(&f, buf);
+			}
 		}
 	}
 
@@ -1793,14 +2186,12 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	int use_progress = 1; // (bytes2send > (1024 * 1024)) ? 1 : 0;
 	int size = bytes2send;
-	int progress = -1;
-	if (use_progress) MenuHide();
+	if (use_progress) ProgressMessage(0, 0, 0, 0);
 
-	int dosend = 1;
+	if(ss_base && opensave) process_ss(name);
+
 	if (is_gba())
 	{
-		process_ss(name);
-
 		if ((index >> 6) == 1 || (index >> 6) == 2)
 		{
 			fileTYPE fg = {};
@@ -1815,9 +2206,9 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t sz = fg.size;
 				while (sz)
 				{
-					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					uint32_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fg, buf, chunk);
-					user_io_file_tx_write(buf, chunk);
+					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
 				}
 				FileClose(&fg);
@@ -1825,29 +2216,45 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		}
 	}
 
-	while (dosend && bytes2send)
+	if (dosend && load_addr >= 0x20000000 && (load_addr + bytes2send) <= 0x40000000)
 	{
-		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
-
-		FileReadAdv(&f, buf, chunk);
-		user_io_file_tx_write(buf, chunk);
-
-		if (use_progress)
+		uint8_t *mem = (uint8_t *)shmem_map(fpga_mem(load_addr), bytes2send);
+		if (mem)
 		{
-			int new_progress = PROGRESS_MAX - ((((uint64_t)bytes2send)*PROGRESS_MAX) / size);
-			if (progress != new_progress)
+			while (bytes2send)
 			{
-				progress = new_progress;
-				tx_progress(f.name, progress);
-			}
-		}
-		bytes2send -= chunk;
+				uint32_t chunk = (bytes2send > (256 * 1024)) ? (256 * 1024) : bytes2send;
+				FileReadAdv(&f, mem + size - bytes2send, chunk);
 
-		if (skip >= chunk) skip -= chunk;
-		else
+				file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
+				skip = 0;
+
+				if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
+				bytes2send -= chunk;
+			}
+
+			shmem_unmap(mem, bytes2send);
+		}
+	}
+	else
+	{
+		while (dosend && bytes2send)
 		{
-			file_crc = crc32(file_crc, buf + skip, chunk - skip);
-			skip = 0;
+			uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+
+			FileReadAdv(&f, buf, chunk);
+			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
+			user_io_file_tx_data(buf, chunk);
+
+			if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
+			bytes2send -= chunk;
+
+			if (skip >= chunk) skip -= chunk;
+			else
+			{
+				file_crc = crc32(file_crc, buf + skip, chunk - skip);
+				skip = 0;
+			}
 		}
 	}
 
@@ -1875,7 +2282,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		send_pcolchr(name, (index & 0x1F) | 0x60, 1);
 	}
 
-	MenuHide();
+	ProgressMessage(0, 0, 0, 0);
 	return 1;
 }
 
@@ -2014,18 +2421,23 @@ void user_io_send_buttons(char force)
 		//special reset for some cores
 		if (!user_io_osd_is_visible() && (key_map & BUTTON2) && !(map & BUTTON2))
 		{
-			if (is_archie()) fpga_load_rbf(name[0] ? name : "Archie.rbf");
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
 			if (is_pce()) pcecd_reset();
+			if (is_x86()) x86_init();
+			ResetUART();
 		}
 
 		key_map = map;
 		if (user_io_osd_is_visible()) map &= ~BUTTON2;
 		spi_uio_cmd16(UIO_BUT_SW, map);
 		printf("sending keymap: %X\n", map);
-		if ((key_map & BUTTON2) && is_x86()) x86_init();
 	}
+}
+
+int user_io_get_kbd_reset()
+{
+	return kbd_reset;
 }
 
 void user_io_set_ini(int ini_num)
@@ -2082,8 +2494,7 @@ static uint32_t res_timer = 0;
 
 void user_io_poll()
 {
-	if ((core_type != CORE_TYPE_ARCHIE) &&
-		(core_type != CORE_TYPE_SHARPMZ) &&
+	if ((core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
 	{
 		return;  // no user io for the installed core
@@ -2103,7 +2514,17 @@ void user_io_poll()
 		spi_w(0);
 		DisableFpga();
 		HandleFDD(c1, c2);
-		HandleHDD(c1, c2);
+
+		uint16_t sd_req = ide_check();
+		if (sd_req & 0x8000)
+		{
+			ide_io(0, sd_req & 7);
+			ide_io(1, (sd_req >> 3) & 7);
+		}
+		else
+		{
+			HandleHDD(c1, c2);
+		}
 		UpdateDriveStatus();
 
 		kbd_fifo_poll();
@@ -2154,7 +2575,24 @@ void user_io_poll()
 						mouse_pos[Y] = 0;
 					}
 
+					// ---- Buttons ------
 					spi8(mouse_flags & 0x07);
+
+					// ----- Wheel -------
+					if (mouse_wheel < -127)
+					{
+						spi8(-127);
+					}
+					else if (mouse_wheel > 127)
+					{
+						spi8(127);
+					}
+					else
+					{
+						spi8(mouse_wheel);
+					}
+
+					mouse_wheel = 0;
 					DisableIO();
 				}
 				else
@@ -2168,13 +2606,14 @@ void user_io_poll()
 			}
 		}
 
-
 		if (!rtc_timer || CheckTimer(rtc_timer))
 		{
 			// Update once per minute should be enough
 			rtc_timer = GetTimer(60000);
 			send_rtc(1);
 		}
+
+		minimig_share_poll();
 	}
 
 	if (core_type == CORE_TYPE_8BIT && !is_menu())
@@ -2187,107 +2626,157 @@ void user_io_poll()
 	{
 		x86_poll();
 	}
-	else if ((core_type == CORE_TYPE_8BIT || core_type == CORE_TYPE_ARCHIE) && !is_menu() && !is_minimig())
+	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
 	{
 		if (is_st()) tos_poll();
 
-		static uint8_t buffer[4][8192];
-		uint32_t lba;
-		uint16_t req_type = 0;
-		uint16_t c = user_io_sd_get_status(&lba, &req_type);
-		//if(c&3) printf("user_io_sd_get_status: cmd=%02x, lba=%08x\n", c, lba);
-
-		// valid sd commands start with "5x" to avoid problems with
-		// cores that don't implement this command
-		if ((c & 0xf0) == 0x50)
+		for (int i = 0; i < 4; i++)
 		{
-			// check if core requests configuration
-			if (c & 0x08)
-			{
-				printf("core requests SD config\n");
-				user_io_sd_set_config();
-			}
+			int disk = -1;
+			int ack = 0;
+			int op = 0;
+			static uint8_t buffer[16][16384];
+			uint64_t lba;
+			uint32_t blkpow = 9;
+			uint32_t sz = 512;
+			uint32_t blksz = 1;
 
-			if(c & 0x3802)
+			uint16_t c = spi_uio_cmd_cont(UIO_GET_SDSTAT);
+			if (c & 0x8000)
 			{
-				int disk = 3;
-				if (c & 0x0002) disk = 0;
-				else if (c & 0x0800) disk = 1;
-				else if (c & 0x1000) disk = 2;
-
-				// only write if the inserted card is not sdhc or
-				// if the core uses sdhc
-				if(c & 0x04)
+				disk = (c >> 2) & 0xF;
+				op = c & 3;
+				ack = disk << 8;
+				spi_w(0);
+				lba = spi_w(0);
+				lba = (lba & 0xFFFF) | (((uint32_t)spi_w(0)) << 16);
+				blkpow = 7 + ((c >> 6) & 7);
+				blksz = (((c >> 9) & 0x3F) + 1);
+				sz = blksz << blkpow;
+				if (sz > sizeof(buffer[0]))
 				{
-					//printf("SD WR %d on %d\n", lba, disk);
+					sz = sizeof(buffer[0]);
+					blksz = sz >> blkpow;
+				}
+				//if (op) printf("c=%X, op=%d, blkpow=%d, sz=%d, lba=%llu, disk=%d\n", c, op, blkpow, sz, lba, disk);
+			}
+			else
+			{
+				c = spi_w(0);
+				if ((c & 0xf0) == 0x50 && (c & 0x3F03))
+				{
+					lba = spi_w(0);
+					lba = (lba & 0xFFFF) | (((uint32_t)spi_w(0)) << 16);
 
-					buffer_lba[disk] = -1;
-
-					// Fetch sector data from FPGA ...
-					spi_uio_cmd_cont(UIO_SECTOR_WR);
-					spi_block_read(buffer[disk], fio_size);
-					DisableIO();
-
-					if (sd_image[disk].type == 2 && !lba)
+					// check if core requests configuration
+					if ((c & 0xC) == 0xC)
 					{
-						//Create the file
-						if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
+						printf("core requests SD config\n");
+						user_io_sd_set_config();
+					}
+
+					if (c & 0x0003)
+					{
+						disk = 0;
+						op = (c & 1) ? 1 : 2;
+					}
+					else if (c & 0x0900)
+					{
+						disk = 1;
+						op = (c & 0x100) ? 1 : 2;
+					}
+					else if (c & 0x1200)
+					{
+						disk = 2;
+						op = (c & 0x200) ? 1 : 2;
+					}
+					else if (c & 0x2400)
+					{
+						disk = 3;
+						op = (c & 0x400) ? 1 : 2;
+					}
+
+					ack = ((c & 4) ? 0 : ((disk + 1) << 8));
+				}
+			}
+			DisableIO();
+
+			if ((blksz == 32) && sd_type[disk])
+			{
+				if (op == 2) c64_writeGCR(disk, lba);
+				else if (op & 1) c64_readGCR(disk, lba);
+				else break;
+			}
+			else if (op == 2)
+			{
+				//printf("SD WR %d on %d\n", lba, disk);
+
+				if (use_save) menu_process_save();
+
+				buffer_lba[disk] = -1;
+
+				// Fetch sector data from FPGA ...
+				EnableIO();
+				spi_w(UIO_SECTOR_WR | ack);
+				spi_block_read(buffer[disk], fio_size, sz);
+				DisableIO();
+
+				if (sd_image[disk].type == 2 && !lba)
+				{
+					//Create the file
+					if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
+					{
+						diskled_on();
+						if (FileWriteSec(&sd_image[disk], buffer[disk]))
 						{
-							diskled_on();
-							if (FileWriteSec(&sd_image[disk], buffer[disk]))
-							{
-								sd_image[disk].size = 512;
-							}
-						}
-						else
-						{
-							printf("Error in creating file: %s\n", sd_image[disk].path);
+							sd_image[disk].size = sz;
 						}
 					}
 					else
 					{
-						// ... and write it to disk
-						__off64_t size = sd_image[disk].size>>9;
-						if (size && size>=lba)
+						printf("Error in creating file: %s\n", sd_image[disk].path);
+					}
+				}
+				else
+				{
+					// ... and write it to disk
+					uint64_t size = sd_image[disk].size >> blkpow;
+					if (size && lba <= size)
+					{
+						diskled_on();
+						if (FileSeek(&sd_image[disk], lba << blkpow, SEEK_SET))
 						{
-							diskled_on();
-							if (FileSeekLBA(&sd_image[disk], lba))
+							if (!sd_image_cangrow[disk])
 							{
-								if (FileWriteSec(&sd_image[disk], buffer[disk]))
-								{
-									if (size == lba)
-									{
-										size++;
-										sd_image[disk].size = size << 9;
-									}
-								}
+								__off64_t rem = sd_image[disk].size - sd_image[disk].offset;
+								sz = (rem >= sz) ? sz : (int)rem;
 							}
+
+							if (sz) FileWriteAdv(&sd_image[disk], buffer[disk], sz);
 						}
 					}
 				}
 			}
-			else if (c & 0x0701)
+			else if (op & 1)
 			{
-				int disk = 3;
-				if (c & 0x0001) disk = 0;
-				else if (c & 0x0100) disk = 1;
-				else if (c & 0x0200) disk = 2;
-
-				//printf("SD RD %d on %d, WIDE=%d\n", lba, disk, fio_size);
+				uint32_t buf_n = sizeof(buffer[0]) >> blkpow;
+				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, sz, disk, fio_size);
 
 				int done = 0;
 				uint32_t offset;
 
-				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || lba >(buffer_lba[disk] + 15))
+				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || (lba + blksz - buffer_lba[disk]) > buf_n)
 				{
+					buffer_lba[disk] = -1;
 					if (sd_image[disk].size)
 					{
 						diskled_on();
-						if (FileSeekLBA(&sd_image[disk], lba))
+						if (FileSeek(&sd_image[disk], lba << blkpow, SEEK_SET))
 						{
 							if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 							{
 								done = 1;
+								buffer_lba[disk] = lba;
 							}
 						}
 					}
@@ -2321,30 +2810,43 @@ void user_io_poll()
 						}
 					}
 
-					buffer_lba[disk] = lba;
 					offset = 0;
 				}
 				else
 				{
-					offset = (lba - buffer_lba[disk])*512;
+					offset = (lba - buffer_lba[disk]) << blkpow;
+					done = 1;
 				}
 
-				//hexdump(buffer, 32, 0);
-
 				// data is now stored in buffer. send it to fpga
-				spi_uio_cmd_cont(UIO_SECTOR_RD);
-				spi_block_write(buffer[disk] + offset, fio_size);
+				EnableIO();
+				spi_w(UIO_SECTOR_RD | ack);
+				spi_block_write(buffer[disk] + offset, fio_size, sz);
 				DisableIO();
 
 				if (sd_image[disk].type == 2)
 				{
 					buffer_lba[disk] = -1;
 				}
+				else if(done && (lba + blksz - buffer_lba[disk]) == buf_n)
+				{
+					diskled_on();
+					if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
+					{
+						buffer_lba[disk] += buf_n;
+					}
+					else
+					{
+						memset(buffer[disk], 0, sizeof(buffer[disk]));
+						buffer_lba[disk] = -1;
+					}
+				}
 			}
+			else break;
 		}
 	}
 
-	if (core_type == CORE_TYPE_8BIT && !is_menu() && !is_minimig() && !is_archie())
+	if (core_type == CORE_TYPE_8BIT && !is_minimig() && !is_archie())
 	{
 		// frequently check ps2 mouse for events
 		if (CheckTimer(mouse_timer))
@@ -2432,7 +2934,7 @@ void user_io_poll()
 		send_rtc(1);
 	}
 
-	if (core_type == CORE_TYPE_ARCHIE || is_archie()) archie_poll();
+	if (is_archie()) archie_poll();
 	if (core_type == CORE_TYPE_SHARPMZ) sharpmz_poll();
 
 	static uint8_t leds = 0;
@@ -2474,6 +2976,10 @@ void user_io_poll()
 				case 0xed:
 					kbd_reply(0xFA);
 					byte++;
+					break;
+
+				case 0xee:
+					kbd_reply(0xEE);
 					break;
 
 				default:
@@ -2635,6 +3141,7 @@ void user_io_poll()
 		res_timer = GetTimer(500);
 		if (!minimig_get_adjust())
 		{
+			if(is_minimig()) minimig_adjust_vsize(0);
 			video_mode_adjust();
 		}
 	}
@@ -2657,11 +3164,7 @@ void user_io_poll()
 		reboot(1);
 	}
 
-	if (vol_set_timeout && CheckTimer(vol_set_timeout))
-	{
-		vol_set_timeout = 0;
-		FileSaveConfig("Volume.dat", &vol_att, 1);
-	}
+	save_volume();
 
 	if (diskled_is_on && CheckTimer(diskled_timer))
 	{
@@ -2735,7 +3238,7 @@ static void send_keycode(unsigned short key, int press)
 		return;
 	}
 
-	if (core_type == CORE_TYPE_ARCHIE || is_archie())
+	if (is_archie())
 	{
 		if (press > 1) return;
 
@@ -2875,6 +3378,7 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 		{
 			mouse_pos[X] += x;
 			mouse_pos[Y] += y;
+			mouse_wheel += w;
 			mouse_flags |= 0x80 | (b & 7);
 		}
 		else if (is_archie())
@@ -2888,10 +3392,6 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 			mouse_wheel += w;
 			mouse_flags |= 0x08 | (b & 7);
 		}
-		return;
-
-	case CORE_TYPE_ARCHIE:
-		archie_mouse(b, x, y);
 		return;
 	}
 }
@@ -2925,7 +3425,6 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 		else
 		switch (core_type)
 		{
-		case CORE_TYPE_ARCHIE:
 		case CORE_TYPE_8BIT:
 			if(is_minimig()) minimig_reset();
 			else kbd_reset = 1;
@@ -2944,40 +3443,6 @@ void user_io_osd_key_enable(char on)
 	//printf("OSD is now %s\n", on ? "visible" : "invisible");
 	osd_is_visible = on;
 	input_switch(-1);
-}
-
-int get_volume()
-{
-	return vol_att & 0x17;
-}
-
-void set_volume(int cmd)
-{
-	vol_set_timeout = GetTimer(1000);
-
-	vol_att &= 0x17;
-	if(!cmd) vol_att ^= 0x10;
-	else if (vol_att & 0x10) vol_att &= 0xF;
-	else if (cmd < 0 && vol_att < 7) vol_att += 1;
-	else if (cmd > 0 && vol_att > 0) vol_att -= 1;
-
-	spi_uio_cmd8(UIO_AUDVOL, vol_att);
-
-	if (vol_att & 0x10)
-	{
-		Info("\x8d Mute", 1000);
-	}
-	else
-	{
-		char str[32];
-		memset(str, 0, sizeof(str));
-
-		sprintf(str, "\x8d ");
-		char *bar = str + strlen(str);
-		memset(bar, 0x8C, 8);
-		memset(bar, 0x7f, 8 - vol_att);
-		Info(str, 1000);
-	}
 }
 
 void user_io_kbd(uint16_t key, int press)
@@ -3067,7 +3532,10 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
-				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU)) menu_key_set(KEY_F12);
+				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
+				{
+					if (press == 1) menu_key_set(KEY_F12);
+				}
 				else if (osd_is_visible)
 				{
 					if (press == 1) menu_key_set(key);

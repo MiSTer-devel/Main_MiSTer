@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include <sys/mman.h>
 #include <linux/fb.h>
 #include <errno.h>
 #include <sys/ioctl.h>
@@ -20,11 +19,12 @@
 #include "menu.h"
 #include "video.h"
 #include "input.h"
+#include "shmem.h"
 
 #include "support.h"
 #include "lib/imlib2/Imlib2.h"
 
-#define FB_SIZE  (1024*1024*8/4)               // 8MB
+#define FB_SIZE  (1920*1080)
 #define FB_ADDR  (0x20000000 + (32*1024*1024)) // 512mb + 32mb(Core's fb)
 
 /*
@@ -51,9 +51,7 @@
 static volatile uint32_t *fb_base = 0;
 static int fb_enabled = 0;
 static int fb_width = 0;
-static int fb_width_full = 0;
 static int fb_height = 0;
-static int fb_stride = 0;
 static int fb_num = 0;
 static int brd_x = 0;
 static int brd_y = 0;
@@ -81,6 +79,8 @@ vmode_t vmodes[] =
 	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5   }, //9
 	{ { 1366,  70, 143, 213,  768,  3,  3, 24 },  85.5   }, //10
 	{ { 1024,  40, 104, 144,  600,  1,  3, 18 },  48.96  }, //11
+	{ { 1920,  48,  32,  80, 1440,  2,  4, 38 }, 185.203 }, //12
+	{ { 2048,  48,  32,  80, 1536,  2,  4, 38 }, 209.318 }, //13
 };
 #define VMODES_NUM (sizeof(vmodes) / sizeof(vmodes[0]))
 
@@ -206,6 +206,23 @@ static void setScaler()
 	fileTYPE f = {};
 	static char filename[1024];
 
+	uint32_t arc[4] = {};
+	for (int i = 0; i < 2; i++)
+	{
+		if (cfg.custom_aspect_ratio[i][0])
+		{
+			if (sscanf(cfg.custom_aspect_ratio[i], "%u:%u", &arc[i * 2], &arc[(i * 2) + 1]) != 2 || arc[i * 2] < 1 || arc[i * 2] > 4095 || arc[(i * 2) + 1] < 1 || arc[(i * 2) + 1] > 4095)
+			{
+				arc[(i * 2) + 0] = 0;
+				arc[(i * 2) + 1] = 0;
+			}
+		}
+	}
+
+	spi_uio_cmd_cont(UIO_SET_AR_CUST);
+	for (int i = 0; i < 4; i++) spi_w(arc[i]);
+	DisableIO();
+
 	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
 	{
 		DisableIO();
@@ -296,10 +313,15 @@ void video_set_scaler_coeff(char *name)
 
 static void loadScalerCfg()
 {
-	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name_ex());
+	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name());
 	if (!FileLoadConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
 	{
 		memset(scaler_flt_cfg, 0, sizeof(scaler_flt_cfg));
+		if (cfg.vfilter_default[0])
+		{
+			strcpy(scaler_flt_cfg+1, cfg.vfilter_default);
+			scaler_flt_cfg[0] = 1;
+		}
 	}
 }
 
@@ -402,7 +424,7 @@ void video_set_gamma_curve(char *name)
 
 static void loadGammaCfg()
 {
-	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name_ex());
+	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name());
 	if (!FileLoadConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg) - 1) || gamma_cfg[0]>1)
 	{
 		memset(gamma_cfg, 0, sizeof(gamma_cfg));
@@ -461,21 +483,19 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	printf("Fpix=%f\n", v_cur.Fpix);
 	DisableIO();
 
-	if (cfg.fb_size < 1) cfg.fb_size = (v_cur.item[1] < 1000) ? 1 : 2;
+	if (cfg.fb_size <= 1) cfg.fb_size = ((v_cur.item[1] * v_cur.item[5]) <= FB_SIZE) ? 1 : 2;
 	else if (cfg.fb_size == 3) cfg.fb_size = 2;
 	else if (cfg.fb_size > 4) cfg.fb_size = 4;
 
 	fb_width = v_cur.item[1] / cfg.fb_size;
 	fb_height = v_cur.item[5] / cfg.fb_size;
-	fb_stride = ((fb_width * 4) + 255) & ~255;
-	fb_width_full = fb_stride / 4;
 
 	brd_x = cfg.vscale_border / cfg.fb_size;;
 	brd_y = cfg.vscale_border / cfg.fb_size;;
 
 	if (fb_enabled) video_fb_enable(1, fb_num);
 
-	sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_stride);
+	sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_width * 4);
 	system(fb_reset_cmd);
 }
 
@@ -556,16 +576,11 @@ static void fb_init()
 {
 	if (!fb_base)
 	{
-		int fd = open("/dev/mem", O_RDWR | O_SYNC);
-		if (fd == -1) return;
-
-		fb_base = (volatile uint32_t*)mmap(0, FB_SIZE * 4 * 3, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FB_ADDR);
-		if (fb_base == (void *)-1)
+		fb_base = (volatile uint32_t*)shmem_map(FB_ADDR, FB_SIZE * 4 * 3);
+		if (!fb_base)
 		{
 			printf("Unable to mmap FB!\n");
-			fb_base = 0;
 		}
-		close(fd);
 	}
 	spi_uio_cmd16(UIO_SET_FBUF, 0);
 }
@@ -817,8 +832,9 @@ void video_fb_enable(int enable, int n)
 				spi_w(xoff + v_cur.item[1] - 1); // scaled right
 				spi_w(yoff);                 // scaled top
 				spi_w(yoff + v_cur.item[5] - 1); // scaled bottom
+				spi_w(fb_width * 4);      // stride
 
-				printf("HPS frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_stride);
+				printf("HPS frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_width * 4);
 				if (!fb_num)
 				{
 					system(fb_reset_cmd);
@@ -871,7 +887,7 @@ static void draw_checkers()
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
 		int c1 = (y / sz) & 1;
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
 			int c2 = c1 ^ ((x / sz) & 1);
@@ -892,7 +908,7 @@ static void draw_hbars1()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		int base_color = ((7 * (y-brd_y)) / height) + 1;
 		if (old_base != base_color)
 		{
@@ -924,7 +940,7 @@ static void draw_hbars2()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		int base_color = ((14 * (y - brd_y)) / height);
 		int inv = base_color & 1;
 		base_color >>= 1;
@@ -952,7 +968,7 @@ static void draw_vbars1()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		int old_base = 0;
 		int gray = 255;
 		for (int x = brd_x; x < fb_width - brd_x; x++)
@@ -986,7 +1002,7 @@ static void draw_vbars2()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
 			int gray = ((256 * (y - brd_y)) / height);
@@ -1013,7 +1029,7 @@ static void draw_spectrum()
 
 	for (int y = brd_y; y < fb_height - brd_y; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		int blue = ((256 * (y - brd_y)) / height);
 		for (int x = brd_x; x < fb_width - brd_x; x++)
 		{
@@ -1033,7 +1049,7 @@ static void draw_black()
 
 	for (int y = 0; y < fb_height; y++)
 	{
-		int pos = y * fb_width_full;
+		int pos = y * fb_width;
 		for (int x = 0; x < fb_width; x++) buf[pos++] = 0;
 	}
 }
@@ -1047,7 +1063,7 @@ static uint64_t getus()
 
 static void vs_wait()
 {
-	int fb = open("/dev/fb0", O_RDWR);
+	int fb = open("/dev/fb0", O_RDWR | O_CLOEXEC);
 	int zero = 0;
 	uint64_t t1, t2;
 	if (ioctl(fb, FBIO_WAITFORVSYNC, &zero) == -1)
@@ -1100,7 +1116,6 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 
 static Imlib_Image load_bg()
 {
-	const char* bgdir = "wallpapers";
 	const char* fname = "menu.png";
 	if (!FileExists(fname))
 	{
@@ -1108,18 +1123,28 @@ static Imlib_Image load_bg()
 		if (!FileExists(fname)) fname = 0;
 	}
 
-	if (!fname && PathIsDir(bgdir))
+	if (!fname)
 	{
-		int rndfd = open("/dev/urandom", O_RDONLY);
-		if (rndfd >= 0)
-		{
-			uint32_t rnd;
-			read(rndfd, &rnd, sizeof(rnd));
-			close(rndfd);
+		char bgdir[32];
 
-			int count = 0;
-			get_file_fromdir(bgdir, -1, &count);
-			if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
+		int alt = altcfg();
+		sprintf(bgdir, "wallpapers_alt_%d", alt);
+		if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
+		if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
+
+		if (PathIsDir(bgdir))
+		{
+			int rndfd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+			if (rndfd >= 0)
+			{
+				uint32_t rnd;
+				read(rndfd, &rnd, sizeof(rnd));
+				close(rndfd);
+
+				int count = 0;
+				get_file_fromdir(bgdir, -1, &count);
+				if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
+			}
 		}
 	}
 
@@ -1185,9 +1210,9 @@ void video_menu_bg(int n, int idle)
 
 		static Imlib_Image menubg = 0;
 		static Imlib_Image bg1 = 0, bg2 = 0;
-		if (!bg1) bg1 = imlib_create_image_using_data(fb_width_full, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 1)));
+		if (!bg1) bg1 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 1)));
 		if (!bg1) printf("Warning: bg1 is 0\n");
-		if (!bg2) bg2 = imlib_create_image_using_data(fb_width_full, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 2)));
+		if (!bg2) bg2 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 2)));
 		if (!bg2) printf("Warning: bg2 is 0\n");
 
 		Imlib_Image *bg = (menu_bgn == 1) ? &bg1 : &bg2;
@@ -1260,7 +1285,7 @@ void video_menu_bg(int n, int idle)
 			break;
 		}
 
-		if (logo && !idle)
+		if (cfg.logo && logo && !idle)
 		{
 			imlib_context_set_image(logo);
 
@@ -1334,7 +1359,7 @@ void video_menu_bg(int n, int idle)
 		}
 
 		//test the fb driver
-		vs_wait();
+		//vs_wait();
 		printf("**** BG DEBUG END ****\n");
 	}
 
@@ -1353,7 +1378,7 @@ int video_chvt(int num)
 	{
 		cur_vt = num;
 		int fd;
-		if ((fd = open("/dev/tty0", O_RDONLY)) >= 0)
+		if ((fd = open("/dev/tty0", O_RDONLY | O_CLOEXEC)) >= 0)
 		{
 			if (ioctl(fd, VT_ACTIVATE, cur_vt)) printf("ioctl VT_ACTIVATE fails\n");
 			if (ioctl(fd, VT_WAITACTIVE, cur_vt)) printf("ioctl VT_WAITACTIVE fails\n");
@@ -1464,7 +1489,7 @@ void video_cmd(char *cmd)
 
 		if(accept)
 		{
-			int stride = ((width * bpp) + 255) & ~255;
+			int stride = ((width * bpp) + 15) & ~15;
 			printf("fb_cmd: new mode: %dx%d => %dx%d color=%d stride=%d\n", width, height, hmax - hmin + 1, vmax - vmin + 1, fmt, stride);
 
 			uint32_t addr = FB_ADDR + 4096;
@@ -1486,6 +1511,7 @@ void video_cmd(char *cmd)
 			spi_w(xoff + hmax);    // scaled right
 			spi_w(yoff + vmin);    // scaled top
 			spi_w(yoff + vmax);    // scaled bottom
+			spi_w(stride);         // stride
 			DisableIO();
 
 			if (cmd[6] != '2')

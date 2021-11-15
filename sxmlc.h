@@ -269,6 +269,7 @@ typedef enum _XMLEvent {
  */
 typedef struct _SAX_Data {
 	const SXML_CHAR* name;
+	FILE *file;
 	int line_num;
 	void* user;
 } SAX_Data;

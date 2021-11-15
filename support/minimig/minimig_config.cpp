@@ -11,10 +11,13 @@
 #include "../../menu.h"
 #include "../../user_io.h"
 #include "../../input.h"
+#include "../../cfg.h"
+#include "../../ide.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
 #include "minimig_hdd.h"
 #include "minimig_config.h"
+#include "minimig_share.h"
 
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M" };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
@@ -223,7 +226,7 @@ static char UploadActionReplay()
 		spi8((data >> 0) & 0xff);
 		data = 0xff; // key, 1 byte
 		spi8((data >> 0) & 0xff);
-		data = minimig_config.enable_ide ? 0xff : 0; // ide, 1 byte
+		data = (minimig_config.ide_cfg & 1) ? 0xff : 0; // ide, 1 byte
 		spi8((data >> 0) & 0xff);
 		data = 0xff; // a1200, 1 byte
 		spi8((data >> 0) & 0xff);
@@ -294,6 +297,13 @@ const char* minimig_get_cfg_info(int num, int label)
 	return "";
 }
 
+inline int hdd_open(int unit)
+{
+	return (ide_check() & 0x8000) ?
+		ide_open(unit, minimig_config.hardfile[unit].filename) :
+		OpenHardfile(unit, minimig_config.hardfile[unit].filename);
+}
+
 static int force_reload_kickstart = 0;
 static void ApplyConfiguration(char reloadkickstart)
 {
@@ -320,18 +330,30 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	printf("\n");
 
-	printf("\nIDE state: %s.\n", minimig_config.enable_ide ? "enabled" : "disabled");
-	if (minimig_config.enable_ide)
+	printf("\nIDE state: %s.\n", (minimig_config.ide_cfg & 1) ? "enabled" : "disabled");
+	if (minimig_config.ide_cfg & 1)
 	{
-		printf("Primary Master HDD is %s.\n", minimig_config.hardfile[0].enabled ? "enabled" : "disabled");
-		printf("Primary Slave HDD is %s.\n", minimig_config.hardfile[1].enabled ? "enabled" : "disabled");
-		printf("Secondary Master HDD is %s.\n", minimig_config.hardfile[2].enabled ? "enabled" : "disabled");
-		printf("Secondary Slave HDD is %s.\n", minimig_config.hardfile[3].enabled ? "enabled" : "disabled");
+		printf("Primary Master HDD is %s.\n", (minimig_config.hardfile[0].cfg == 2) ? "CD" : minimig_config.hardfile[0].cfg ? "HDD" : "disabled");
+		printf("Primary Slave HDD is %s.\n", (minimig_config.hardfile[1].cfg == 2) ? "CD" : minimig_config.hardfile[1].cfg ? "HDD" : "disabled");
+		printf("Secondary Master HDD is %s.\n", (minimig_config.hardfile[2].cfg == 2) ? "CD" : minimig_config.hardfile[2].cfg ? "HDD" : "disabled");
+		printf("Secondary Slave HDD is %s.\n", (minimig_config.hardfile[3].cfg == 2) ? "CD" : minimig_config.hardfile[3].cfg ? "HDD" : "disabled");
 	}
+
+	uint8_t hotswap[4] = {
+		minimig_config.hardfile[0].cfg == 2,
+		minimig_config.hardfile[1].cfg == 2,
+		minimig_config.hardfile[2].cfg == 2,
+		minimig_config.hardfile[3].cfg == 2
+	};
+	ide_reset(hotswap);
 
 	rstval = SPI_CPU_HLT;
 	spi_uio_cmd8(UIO_MM2_RST, rstval);
-	spi_uio_cmd8(UIO_MM2_HDD, (minimig_config.enable_ide ? 1 : 0) | (OpenHardfile(0) ? 2 : 0) | (OpenHardfile(1) ? 4 : 0) | (OpenHardfile(2) ? 8 : 0) | (OpenHardfile(3) ? 16 : 0));
+	spi_uio_cmd8(UIO_MM2_HDD, (minimig_config.ide_cfg & 0x21) |
+		(hdd_open(0) ? 2 : 0) |
+		(hdd_open(1) ? 4 : 0) |
+		(hdd_open(2) ? 8 : 0) |
+		(hdd_open(3) ? 16 : 0));
 
 	minimig_ConfigMemory(memcfg);
 	minimig_ConfigCPU(minimig_config.cpu);
@@ -376,6 +398,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	minimig_ConfigVideo(minimig_config.scanlines);
 	minimig_ConfigAudio(minimig_config.audio);
 	minimig_ConfigAutofire(minimig_config.autofire, 0xC);
+	minimig_set_extcfg(minimig_get_extcfg() & ~1);
 }
 
 int minimig_cfg_load(int num)
@@ -457,11 +480,15 @@ int minimig_cfg_load(int num)
 		minimig_config.chipset = 0;
 		minimig_config.floppy.speed = CONFIG_FLOPPY2X;
 		minimig_config.floppy.drives = 1;
-		minimig_config.enable_ide = 0;
-		minimig_config.hardfile[0].enabled = 1;
+		minimig_config.ide_cfg = 0;
+		minimig_config.hardfile[0].cfg = 1;
 		minimig_config.hardfile[0].filename[0] = 0;
-		minimig_config.hardfile[1].enabled = 1;
+		minimig_config.hardfile[1].cfg = 1;
 		minimig_config.hardfile[1].filename[0] = 0;
+		minimig_config.hardfile[2].cfg = 0;
+		minimig_config.hardfile[2].filename[0] = 0;
+		minimig_config.hardfile[3].cfg = 0;
+		minimig_config.hardfile[3].filename[0] = 0;
 		updatekickstart = true;
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
@@ -502,6 +529,7 @@ void minimig_reset()
 {
 	ApplyConfiguration(0);
 	user_io_rtc_reset();
+	minimig_share_reset();
 }
 
 void minimig_set_kickstart(char *name)
@@ -525,7 +553,31 @@ typedef struct
 
 vmode_adjust_t vmodes_adj[64] = {};
 
-static void adjust_vsize(char force)
+static const char* get_shared_vadjust_path()
+{
+	static char path[1024] = {};
+	if (!strlen(path))
+	{
+		if (strlen(cfg.shared_folder))
+		{
+			if (cfg.shared_folder[0] == '/')
+			{
+				snprintf(path, sizeof(path), "%s/minimig_vadjust.dat", cfg.shared_folder);
+			}
+			else
+			{
+				snprintf(path, sizeof(path), "%s/%s/minimig_vadjust.dat", HomeDir(), cfg.shared_folder);
+			}
+		}
+		else
+		{
+			snprintf(path, sizeof(path), "%s/shared/minimig_vadjust.dat", HomeDir());
+		}
+	}
+	return path;
+}
+
+void minimig_adjust_vsize(char force)
 {
 	static uint16_t nres = 0;
 	spi_uio_cmd_cont(UIO_GET_VMODE);
@@ -540,7 +592,11 @@ static void adjust_vsize(char force)
 		printf("\033[1;37mVMODE: resolution: %u x %u, mode: %u\033[0m\n", scr_hsize, scr_vsize, res & 255);
 
 		static int loaded = 0;
-		if (~loaded)
+		if (!loaded && FileExists(get_shared_vadjust_path(), 0))
+		{
+			FileLoad(get_shared_vadjust_path(), vmodes_adj, sizeof(vmodes_adj));
+		}
+		else if (!loaded)
 		{
 			FileLoadConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
 			loaded = 1;
@@ -629,7 +685,7 @@ void minimig_set_adjust(char n)
 {
 	if (minimig_adjust && !n) store_vsize();
 	minimig_adjust = (n == 1) ? 1 : 0;
-	if (n == 2) adjust_vsize(1);
+	if (n == 2) minimig_adjust_vsize(1);
 }
 
 char minimig_get_adjust()
@@ -672,4 +728,20 @@ void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask)
 	uint16_t param = mask;
 	param = (param << 8) | autofire;
 	spi_uio_cmd16(UIO_MM2_JOY, param);
+}
+
+void minimig_set_extcfg(unsigned int ext_cfg)
+{
+	minimig_config.ext_cfg = (unsigned short)ext_cfg;
+	minimig_config.ext_cfg2 = (unsigned short)(ext_cfg >> 16);
+
+	spi_uio_cmd_cont(UIO_SET_STATUS2);
+	spi32_w(0);
+	spi32_w(ext_cfg);
+	DisableIO();
+}
+
+unsigned int minimig_get_extcfg()
+{
+	return (minimig_config.ext_cfg2 << 16) | minimig_config.ext_cfg;
 }
