@@ -48,10 +48,13 @@ typedef struct {
 	uint16_t spinner_vid;
 	uint16_t spinner_pid;
 	int spinner_throttle;
+	uint8_t spinner_axis;
 	uint8_t sniper_mode;
 	uint8_t browse_expand;
 	uint8_t logo;
 	uint8_t log_file_entry;
+	int bt_auto_disconnect;
+	int bt_reset_before_pair;
 	char bootcore[256];
 	char video_conf[1024];
 	char video_conf_pal[1024];

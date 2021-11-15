@@ -584,9 +584,17 @@ void reboot(int cold)
 
 	usleep(500000);
 
-	writel(cold ? 0 : 0x1, &reset_regs->tstscratch);
-	writel(2, &reset_regs->ctrl);
-	while (1);
+	void* buf = shmem_map(0x1FFFF000, 0x1000);
+	if (buf)
+	{
+		volatile uint32_t* flg = (volatile uint32_t*)buf;
+		flg += 0xF08/4;
+		*flg = cold ? 0 : 0xBEEFB001;
+		shmem_unmap(buf, 0x1000);
+	}
+
+	writel(1, &reset_regs->ctrl);
+	while (1) sleep(1);
 }
 
 char *getappname()
@@ -614,7 +622,7 @@ void app_restart(const char *path, const char *xml)
 	execl(appname, appname, path, xml, NULL);
 
 	printf("Something went wrong. Rebooting...\n");
-	reboot(0);
+	reboot(1);
 }
 
 void fpga_core_reset(int reset)

@@ -453,7 +453,8 @@ int minimig_cfg_load(int num)
 						if (strcmp(tmpconf.kickstart, minimig_config.kickstart) != 0) {
 							updatekickstart = true;
 						}
-						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(minimig_config));
+						memset((void*)&minimig_config, 0, sizeof(minimig_config));
+						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(tmpconf));
 						minimig_config.cpu = tmpconf.cpu;
 						minimig_config.autofire = tmpconf.autofire;
 						memset(&minimig_config.hardfile[2], 0, sizeof(minimig_config.hardfile[2]));
@@ -473,7 +474,7 @@ int minimig_cfg_load(int num)
 		BootPrint("Setting config defaults\n");
 		// set default configuration
 		memset((void*)&minimig_config, 0, sizeof(minimig_config));  // Finally found default config bug - params were reversed!
-		strncpy(minimig_config.id, config_id, sizeof(minimig_config.id));
+		memcpy(minimig_config.id, config_id, sizeof(minimig_config.id));
 		snprintf(minimig_config.kickstart, 1024, "%s/%s", HomeDir(), "KICK.ROM");
 		minimig_config.memory = 0x11;
 		minimig_config.cpu = 0;
