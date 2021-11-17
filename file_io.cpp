@@ -1260,7 +1260,7 @@ static void get_display_name(direntext_t *dext, const char *ext, int options)
 	if (fext) *fext = 0;
 }
 
-int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix, const char *filter)
+int ScanDirectory(char* path, int mode, const char *extension, int options, const char *root_path, const char *prefix, const char *filter)
 {
 	static char file_name[1024];
 	static char full_path[1024];
@@ -1408,6 +1408,21 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
                 if (!passes_filter) continue;
             }
 
+			if( de->d_type == DT_DIR )
+			{
+				// skip System Volume Information folder
+				if (!strcmp(de->d_name, "System Volume Information")) continue;
+				if (!strcmp(de->d_name, ".."))
+				{
+					if (!strlen(path)) continue;
+					if (root_path && !strcasecmp(path, root_path)) continue;
+				}
+				else
+				{
+					// skip hidden folder
+					if (!strncasecmp(de->d_name, ".", 1)) continue;
+				}
+			}
 
 			if (options & SCANO_NEOGEO)
 			{
@@ -1419,16 +1434,6 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				if (strcasecmp(de->d_name + strlen(de->d_name) - 4, ".neo"))
 				{
 					if (de->d_type != DT_DIR) continue;
-				}
-
-				if (!strcmp(de->d_name, ".."))
-				{
-					if (!strlen(path)) continue;
-				}
-				else
-				{
-					// skip hidden folders
-					if (!strncasecmp(de->d_name, ".", 1)) continue;
 				}
 
 				direntext_t dext;
@@ -1453,18 +1458,6 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			{
 				if (de->d_type == DT_DIR)
 				{
-					// skip System Volume Information folder
-					if (!strcmp(de->d_name, "System Volume Information")) continue;
-					if (!strcmp(de->d_name, ".."))
-					{
-						if (!strlen(path)) continue;
-					}
-					else
-					{
-						// skip hidden folder
-						if (!strncasecmp(de->d_name, ".", 1)) continue;
-					}
-
 					if (!(options & SCANO_DIR))
 					{
 						if (de->d_name[0] != '_' && strcmp(de->d_name, "..")) continue;

@@ -118,7 +118,7 @@ int FileLoadConfig(const char *name, void *pBuffer, int size); // supply pBuffer
 int FileDeleteConfig(const char *name);
 
 void AdjustDirectory(char *path);
-int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix = NULL, const char *filter = NULL);
+int ScanDirectory(char* path, int mode, const char *extension, int options, const char *root_path = NULL, const char *prefix = NULL, const char *filter = NULL);
 
 void prefixGameDir(char *dir, size_t dir_len);
 int findPrefixDir(char *dir, size_t dir_len);

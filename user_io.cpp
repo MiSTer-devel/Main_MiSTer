@@ -34,6 +34,7 @@
 #include "audio.h"
 #include "shmem.h"
 #include "ide.h"
+#include "restrict.h"
 
 #include "support.h"
 
@@ -1074,6 +1075,8 @@ void user_io_init(const char *path, const char *xml)
 	video_mode_load();
 	if(strlen(cfg.font)) LoadFont(cfg.font);
 	load_volume();
+
+	Restrict_Init( cfg.restrictions, cfg.restrictions_code );
 
 	user_io_send_buttons(1);
 
