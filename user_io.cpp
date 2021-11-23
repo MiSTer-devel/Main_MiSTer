@@ -3593,23 +3593,24 @@ bool user_io_screenshot(const char *pngname, int rescale)
 		static char filename[1024];
 		FileGenerateScreenshotName(basename, filename, 1024);
 
-
 		/* do we want to save a rescaled image? */
-		if (rescale) {
+		if (rescale)
+		{
 			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,ms->output_width,ms->output_height);
-                	imlib_free_image_and_decache();
+			imlib_free_image_and_decache();
 			imlib_context_set_image(im_scaled);
-
 		}
 		Imlib_Load_Error error;
 		imlib_save_image_with_error_return(getFullPath(filename),&error);
-		if (error != IMLIB_LOAD_ERROR_NONE) {
+		if (error != IMLIB_LOAD_ERROR_NONE)
+		{
 			print_imlib_load_error (error, filename);
 			Info("error in saving png");
 			return false;
 		}
-                imlib_free_image_and_decache();
+		imlib_free_image_and_decache();
 		mister_scaler_free(ms);
+		free(outputbuf);
 		char msg[1024];
 		snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
 		Info(msg);
