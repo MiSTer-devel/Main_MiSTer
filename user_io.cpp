@@ -261,6 +261,13 @@ char is_c64()
 	return (is_c64_type == 1);
 }
 
+static int is_psx_type = 0;
+char is_psx()
+{
+	if (!is_psx_type) is_psx_type = strcasecmp(core_name, "PlayStation") ? 2 : 1;
+	return (is_psx_type == 1);
+}
+
 static int is_st_type = 0;
 char is_st()
 {
@@ -2577,7 +2584,6 @@ void user_io_poll()
 			int op = 0;
 			static uint8_t buffer[16][16384];
 			uint64_t lba;
-			uint32_t blkpow = 9;
 			uint32_t sz = 512;
 			uint32_t blksz = 1;
 
@@ -2590,13 +2596,21 @@ void user_io_poll()
 				spi_w(0);
 				lba = spi_w(0);
 				lba = (lba & 0xFFFF) | (((uint32_t)spi_w(0)) << 16);
-				blkpow = 7 + ((c >> 6) & 7);
 				blksz = (((c >> 9) & 0x3F) + 1);
-				sz = blksz << blkpow;
-				if (sz > sizeof(buffer[0]))
+
+				if (disk == 1 && is_psx())
 				{
-					sz = sizeof(buffer[0]);
-					blksz = sz >> blkpow;
+					sz = 2352;
+				}
+				else
+				{
+					uint32_t blkpow = 7 + ((c >> 6) & 7);
+					sz = blksz << blkpow;
+					if (sz > sizeof(buffer[0]))
+					{
+						sz = sizeof(buffer[0]);
+						blksz = sz >> blkpow;
+					}
 				}
 				//if (op) printf("c=%X, op=%d, blkpow=%d, sz=%d, lba=%llu, disk=%d\n", c, op, blkpow, sz, lba, disk);
 			}
@@ -2680,11 +2694,11 @@ void user_io_poll()
 				else
 				{
 					// ... and write it to disk
-					uint64_t size = sd_image[disk].size >> blkpow;
+					uint64_t size = sd_image[disk].size / sz;
 					if (size && lba <= size)
 					{
 						diskled_on();
-						if (FileSeek(&sd_image[disk], lba << blkpow, SEEK_SET))
+						if (FileSeek(&sd_image[disk], lba*sz, SEEK_SET))
 						{
 							if (!sd_image_cangrow[disk])
 							{
@@ -2699,7 +2713,7 @@ void user_io_poll()
 			}
 			else if (op & 1)
 			{
-				uint32_t buf_n = sizeof(buffer[0]) >> blkpow;
+				uint32_t buf_n = sizeof(buffer[0]) / sz;
 				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, sz, disk, fio_size);
 
 				int done = 0;
@@ -2711,7 +2725,7 @@ void user_io_poll()
 					if (sd_image[disk].size)
 					{
 						diskled_on();
-						if (FileSeek(&sd_image[disk], lba << blkpow, SEEK_SET))
+						if (FileSeek(&sd_image[disk], lba*sz, SEEK_SET))
 						{
 							if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 							{
@@ -2754,7 +2768,7 @@ void user_io_poll()
 				}
 				else
 				{
-					offset = (lba - buffer_lba[disk]) << blkpow;
+					offset = (lba - buffer_lba[disk]) * sz;
 					done = 1;
 				}
 
