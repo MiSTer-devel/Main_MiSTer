@@ -539,7 +539,7 @@ static uint32_t menu_key_get(void)
 		else if (CheckTimer(repeat))
 		{
 			repeat = GetTimer(REPEATRATE);
-			if (GetASCIIKey(c1) || ((menustate == MENU_COMMON2) && (menusub == 13)) || ((menustate == MENU_SYSTEM2) && (menusub == 4)))
+			if (GetASCIIKey(c1) || ((menustate == MENU_COMMON2) && (menusub == 15)) || ((menustate == MENU_SYSTEM2) && (menusub == 4)))
 			{
 				c = c1;
 				hold_cnt++;
