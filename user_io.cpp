@@ -2584,8 +2584,7 @@ void user_io_poll()
 			int op = 0;
 			static uint8_t buffer[16][16384];
 			uint64_t lba;
-			uint32_t sz = 512;
-			uint32_t blksz = 1;
+			uint32_t blksz, blks, sz;
 
 			uint16_t c = spi_uio_cmd_cont(UIO_GET_SDSTAT);
 			if (c & 0x8000)
@@ -2596,22 +2595,16 @@ void user_io_poll()
 				spi_w(0);
 				lba = spi_w(0);
 				lba = (lba & 0xFFFF) | (((uint32_t)spi_w(0)) << 16);
-				blksz = (((c >> 9) & 0x3F) + 1);
+				blks = ((c >> 9) & 0x3F) + 1;
+				blksz = (disk == 1 && is_psx()) ? 2352 : (128 << ((c >> 6) & 7));
 
-				if (disk == 1 && is_psx())
+				sz = blksz * blks;
+				if (sz > sizeof(buffer[0]))
 				{
-					sz = 2352;
+					blks = sizeof(buffer[0]) / blksz;
+					sz = blksz * blks;
 				}
-				else
-				{
-					uint32_t blkpow = 7 + ((c >> 6) & 7);
-					sz = blksz << blkpow;
-					if (sz > sizeof(buffer[0]))
-					{
-						sz = sizeof(buffer[0]);
-						blksz = sz >> blkpow;
-					}
-				}
+
 				//if (op) printf("c=%X, op=%d, blkpow=%d, sz=%d, lba=%llu, disk=%d\n", c, op, blkpow, sz, lba, disk);
 			}
 			else
@@ -2652,10 +2645,14 @@ void user_io_poll()
 
 					ack = ((c & 4) ? 0 : ((disk + 1) << 8));
 				}
+
+				sz = 512;
+				blksz = 512;
+				blks = 1;
 			}
 			DisableIO();
 
-			if ((blksz == 32) && sd_type[disk])
+			if ((blks == 32) && sd_type[disk])
 			{
 				if (op == 2) c64_writeGCR(disk, lba);
 				else if (op & 1) c64_readGCR(disk, lba);
@@ -2681,7 +2678,7 @@ void user_io_poll()
 					if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
 					{
 						diskled_on();
-						if (FileWriteSec(&sd_image[disk], buffer[disk]))
+						if (FileWriteAdv(&sd_image[disk], buffer[disk], sz))
 						{
 							sd_image[disk].size = sz;
 						}
@@ -2694,11 +2691,11 @@ void user_io_poll()
 				else
 				{
 					// ... and write it to disk
-					uint64_t size = sd_image[disk].size / sz;
-					if (size && lba <= size)
+					uint64_t size = sd_image[disk].size / blksz;
+					if (sz && lba <= size)
 					{
 						diskled_on();
-						if (FileSeek(&sd_image[disk], lba*sz, SEEK_SET))
+						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
 						{
 							if (!sd_image_cangrow[disk])
 							{
@@ -2713,19 +2710,19 @@ void user_io_poll()
 			}
 			else if (op & 1)
 			{
-				uint32_t buf_n = sizeof(buffer[0]) / sz;
-				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, sz, disk, fio_size);
+				uint32_t buf_n = sizeof(buffer[0]) / blksz;
+				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, blksz, disk, fio_size);
 
 				int done = 0;
 				uint32_t offset;
 
-				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || (lba + blksz - buffer_lba[disk]) > buf_n)
+				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
 				{
 					buffer_lba[disk] = -1;
 					if (sd_image[disk].size)
 					{
 						diskled_on();
-						if (FileSeek(&sd_image[disk], lba*sz, SEEK_SET))
+						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
 						{
 							if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 							{
@@ -2768,7 +2765,7 @@ void user_io_poll()
 				}
 				else
 				{
-					offset = (lba - buffer_lba[disk]) * sz;
+					offset = (lba - buffer_lba[disk]) * blksz;
 					done = 1;
 				}
 
@@ -2782,10 +2779,11 @@ void user_io_poll()
 				{
 					buffer_lba[disk] = -1;
 				}
-				else if(done && (lba + blksz - buffer_lba[disk]) == buf_n)
+				else if(done && (lba + blks - buffer_lba[disk]) == buf_n)
 				{
 					diskled_on();
-					if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
+					if (FileSeek(&sd_image[disk], (lba + blks) * blksz, SEEK_SET) &&
+						FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 					{
 						buffer_lba[disk] += buf_n;
 					}
@@ -3600,7 +3598,7 @@ bool user_io_screenshot(const char *pngname, int rescale)
 		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 4, 1);
 		// read the image into the outpubuf - RGBA format
 		mister_scaler_read_32(ms,outputbuf);
-		// using_data will keep a pointer and dispose of the outbuf 
+		// using_data will keep a pointer and dispose of the outbuf
 		Imlib_Image im = imlib_create_image_using_data(ms->width,ms->height,(unsigned int *)outputbuf);
 		imlib_context_set_image(im);
 
