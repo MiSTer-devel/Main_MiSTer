@@ -2685,7 +2685,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					{
 						for (uint i = 0; i < BTN_NUM; i++)
 						{
-							if (ev->code == input[dev].map[i])
+							if (ev->code == (uint16_t)input[dev].map[i])
 							{
 								if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
 								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 1 : 2, 1 << i, origcode, ev->value, i);
