@@ -203,7 +203,7 @@ static char new_scaler = 0;
 
 static void setScaler()
 {
-	fileTYPE f = {};
+	fileTextReader reader = {};
 	static char filename[1024];
 
 	uint32_t arc[4] = {};
@@ -234,52 +234,32 @@ static void setScaler()
 	DisableIO();
 	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt_cfg + 1);
 
-	if (FileOpen(&f, filename))
+	if (FileOpenTextReader(&reader, filename))
 	{
 		//printf("Read scaler coefficients\n");
-		char *buf = (char*)malloc(f.size+1);
-		if (buf)
+		spi_uio_cmd_cont(UIO_SET_FLTCOEF);
+
+		int phase = 0;
+		const char *line;
+		while ((line = FileReadLine(&reader)))
 		{
-			memset(buf, 0, f.size + 1);
-			int size;
-			if ((size = FileReadAdv(&f, buf, f.size)))
+			int c0, c1, c2, c3;
+			int n = sscanf(line, "%d,%d,%d,%d", &c0, &c1, &c2, &c3);
+			if (n == 4)
 			{
-				spi_uio_cmd_cont(UIO_SET_FLTCOEF);
+				//printf("   phase %c-%02d: %4d,%4d,%4d,%4d\n", (phase >= 16) ? 'V' : 'H', phase % 16, c0, c1, c2, c3);
+				//printf("%03X: %03X %03X %03X %03X;\n",phase*4, c0 & 0x1FF, c1 & 0x1FF, c2 & 0x1FF, c3 & 0x1FF);
 
-				char *end = buf + size;
-				char *pos = buf;
-				int phase = 0;
-				while (pos < end)
-				{
-					char *st = pos;
-					while ((pos < end) && *pos && (*pos != 10)) pos++;
-					*pos = 0;
-					while (*st == ' ' || *st == '\t' || *st == 13) st++;
-					if (*st == '#' || *st == ';' || !*st) pos++;
-					else
-					{
-						int c0, c1, c2, c3;
-						int n = sscanf(st, "%d,%d,%d,%d", &c0, &c1, &c2, &c3);
-						if (n == 4)
-						{
-							//printf("   phase %c-%02d: %4d,%4d,%4d,%4d\n", (phase >= 16) ? 'V' : 'H', phase % 16, c0, c1, c2, c3);
-							//printf("%03X: %03X %03X %03X %03X;\n",phase*4, c0 & 0x1FF, c1 & 0x1FF, c2 & 0x1FF, c3 & 0x1FF);
+				spi_w((c0 & 0x1FF) | (((phase * 4) + 0) << 9));
+				spi_w((c1 & 0x1FF) | (((phase * 4) + 1) << 9));
+				spi_w((c2 & 0x1FF) | (((phase * 4) + 2) << 9));
+				spi_w((c3 & 0x1FF) | (((phase * 4) + 3) << 9));
 
-							spi_w((c0 & 0x1FF) | (((phase * 4) + 0) << 9));
-							spi_w((c1 & 0x1FF) | (((phase * 4) + 1) << 9));
-							spi_w((c2 & 0x1FF) | (((phase * 4) + 2) << 9));
-							spi_w((c3 & 0x1FF) | (((phase * 4) + 3) << 9));
-
-							phase++;
-							if (phase >= 32) break;
-						}
-					}
-				}
-				DisableIO();
+				phase++;
+				if (phase >= 32) break;
 			}
-
-			free(buf);
 		}
+		DisableIO();
 	}
 }
 
@@ -330,7 +310,7 @@ static char has_gamma = 0;
 
 static void setGamma()
 {
-	fileTYPE f = {};
+	fileTextReader reader = {};
 	static char filename[1024];
 
 	if (!spi_uio_cmd_cont(UIO_SET_GAMMA))
@@ -344,57 +324,38 @@ static void setGamma()
 	DisableIO();
 	snprintf(filename, sizeof(filename), GAMMA_DIR"/%s", gamma_cfg + 1);
 
-	if (FileOpen(&f, filename))
+	if (FileOpenTextReader(&reader, filename))
 	{
-		char *buf = (char*)malloc(f.size+1);
-		if (buf)
+		spi_uio_cmd_cont(UIO_SET_GAMCURV);
+
+		const char *line;
+		int index = 0;
+		while ((line = FileReadLine(&reader)))
 		{
-			memset(buf, 0, f.size + 1);
-			int size;
-			if ((size = FileReadAdv(&f, buf, f.size)))
+			int c0, c1, c2;
+			int n = sscanf(line, "%d,%d,%d", &c0, &c1, &c2);
+			if (n == 1)
 			{
-				spi_uio_cmd_cont(UIO_SET_GAMCURV);
-
-				char *end = buf + size;
-				char *pos = buf;
-				int index = 0;
-				while (pos < end)
-				{
-					char *st = pos;
-					while ((pos < end) && *pos && (*pos != 10)) pos++;
-					*pos = 0;
-					while (*st == ' ' || *st == '\t' || *st == 13) st++;
-					if (*st == '#' || *st == ';' || !*st) pos++;
-					else
-					{
-						int c0, c1, c2;
-						int n = sscanf(st, "%d,%d,%d", &c0, &c1, &c2);
-						if (n == 1)
-						{
-							c1 = c0;
-							c2 = c0;
-							n = 3;
-						}
-
-						if (n == 3)
-						{
-							spi_w((index << 8) | (c0 & 0xFF));
-							spi_w((index << 8) | (c1 & 0xFF));
-							spi_w((index << 8) | (c2 & 0xFF));
-
-							index++;
-							if (index >= 256) break;
-						}
-					}
-				}
-				DisableIO();
-				spi_uio_cmd8(UIO_SET_GAMMA, gamma_cfg[0]);
+				c1 = c0;
+				c2 = c0;
+				n = 3;
 			}
 
-			free(buf);
+			if (n == 3)
+			{
+				spi_w((index << 8) | (c0 & 0xFF));
+				spi_w((index << 8) | (c1 & 0xFF));
+				spi_w((index << 8) | (c2 & 0xFF));
+
+				index++;
+				if (index >= 256) break;
+			}
 		}
+		DisableIO();
+		spi_uio_cmd8(UIO_SET_GAMMA, gamma_cfg[0]);
 	}
 }
+
 int video_get_gamma_en()
 {
 	return has_gamma ? gamma_cfg[0] : -1;
@@ -431,6 +392,152 @@ static void loadGammaCfg()
 	}
 }
 
+static char shadow_mask_cfg[1024] = { 0 };
+static bool has_shadow_mask = false;
+
+#define SM_FLAG_ENABLED ( 1 << 0 )
+#define SM_FLAG_2X ( 1 << 1 )
+#define SM_FLAG_ROTATED ( 1 << 2 )
+
+#define SM_FLAG(v) ( ( 0x0 << 13 ) | ( (v) & 0x7 ) )
+#define SM_VMAX(v) ( ( 0x1 << 13 ) | ( (v) & 0xf ) )
+#define SM_HMAX(v) ( ( 0x2 << 13 ) | ( (v) & 0xf ) )
+#define SM_LUT(o,v) ( ( 0x3 << 13 ) | ( ( (o) & 0x3f ) << 4 ) | ( (v) & 0x7 ) )
+
+enum
+{
+	SM_MODE_NONE = 0,
+	SM_MODE_1X,
+	SM_MODE_2X,
+	SM_MODE_1X_ROTATED,
+	SM_MODE_2X_ROTATED,
+	SM_MODE_COUNT
+};
+
+static void setShadowMask()
+{
+	static char filename[1024];
+
+	if (!spi_uio_cmd_cont(UIO_SHADOWMASK))
+	{
+		DisableIO();
+		has_shadow_mask = false;
+		return;
+	}
+
+	has_shadow_mask = true;
+
+	switch( video_get_shadow_mask_mode() )
+	{
+		default: spi_w(SM_FLAG(0)); break;
+		case SM_MODE_1X: spi_w(SM_FLAG(SM_FLAG_ENABLED)); break;
+		case SM_MODE_2X: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_2X)); break;
+		case SM_MODE_1X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED)); break;
+		case SM_MODE_2X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED | SM_FLAG_2X)); break;
+	}
+
+	snprintf(filename, sizeof(filename), SMASK_DIR"/%s", shadow_mask_cfg + 1);
+
+	fileTextReader reader;
+	if( FileOpenTextReader( &reader, filename ) )
+	{
+		int w = -1, h = -1;
+		int y = 0;
+
+		const char *line;
+		while ((line = FileReadLine( &reader )))
+		{
+			if( w == -1 )
+			{
+				int n = sscanf(line, "%d,%d", &w, &h);
+				if( (n != 2) || (w <= 0) || ( w <= 0 ) )
+				{
+					spi_w(SM_FLAG(0));
+					break;
+				}
+			}
+			else
+			{
+				unsigned int p[8];
+				int n = sscanf(line, "%u,%u,%u,%u,%u,%u,%u,%u", p+0, p+1, p+2, p+3, p+4, p+5, p+6, p+7);
+				if( n != w )
+				{
+					spi_w(SM_FLAG(0));
+					break;
+				}
+
+				for( int x = 0; x < w; x++ )
+				{
+					int offset = x + ( y * 8 );
+					spi_w( SM_LUT(offset, p[x]) );
+				}
+
+				y += 1;
+
+				if( y == h ) break;
+			}
+		}
+
+		if( y == h )
+		{
+			spi_w(SM_HMAX(w - 1));
+			spi_w(SM_VMAX(h - 1));
+		}
+	}
+
+	DisableIO();
+}
+
+int video_get_shadow_mask_mode()
+{
+	return has_shadow_mask ? shadow_mask_cfg[0] : -1;
+}
+
+char* video_get_shadow_mask()
+{
+	return shadow_mask_cfg + 1;
+}
+
+static char shadow_mask_cfg_path[1024] = { 0 };
+
+void video_set_shadow_mask_mode(int n)
+{
+	if( n >= SM_MODE_COUNT )
+	{
+		n = 0;
+	}
+
+	shadow_mask_cfg[0] = (char)n;
+	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
+	setShadowMask();
+}
+
+void video_set_shadow_mask(char *name)
+{
+	strcpy(shadow_mask_cfg + 1, name);
+	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
+	setShadowMask();
+	user_io_send_buttons(1);
+}
+
+static void loadShadowMaskCfg()
+{
+	sprintf(shadow_mask_cfg_path, "%s_shmask.cfg", user_io_get_core_name());
+	if (!FileLoadConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg) - 1))
+	{
+		memset(shadow_mask_cfg, 0, sizeof(shadow_mask_cfg));
+		if (cfg.shmask_default[0])
+		{
+			strcpy(shadow_mask_cfg + 1, cfg.shmask_default);
+			shadow_mask_cfg[0] = cfg.shmask_mode_default;
+		}
+	}
+
+	if( shadow_mask_cfg[0] >= SM_MODE_COUNT )
+	{
+		shadow_mask_cfg[0] = 0;
+	}
+}
 
 static char fb_reset_cmd[128] = {};
 static void set_video(vmode_custom_t *v, double Fpix)
@@ -440,6 +547,9 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 	loadScalerCfg();
 	setScaler();
+
+	loadShadowMaskCfg();
+	setShadowMask();
 
 	v_cur = *v;
 
