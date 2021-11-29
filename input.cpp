@@ -2176,15 +2176,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		// paddle axis - skip from mapping
 		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8)) return;
 
-		// in alternative set, the first button can be skipped, so clear the set now
-		if (!mapping_button && mapping_set && ev->value == 1 && mapping_dev >= 0)
-		{
-			for (uint i = 0; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
-			{
-				input[mapping_dev].map[i] &= 0x0000FFFF;
-			}
-		}
-
 		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
 		{
 			if (mapping_type == 2)
@@ -2235,6 +2226,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					mapping_dev = dev;
 					mapping_type = (ev->code >= 256) ? 1 : 0;
 					key_mapped = 0;
+					memset(input[mapping_dev].map, 0, sizeof(input[mapping_dev].map));
 				}
 
 				mapping_clear = 0;
