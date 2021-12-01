@@ -283,6 +283,7 @@ char is_archie();
 char is_gba();
 char is_c64();
 char is_st();
+char is_psx();
 char is_arcade();
 
 #define HomeDir(x) user_io_get_core_path(x)
