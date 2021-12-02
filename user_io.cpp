@@ -1445,6 +1445,109 @@ static void kbd_fifo_poll()
 	kbd_fifo_r = (kbd_fifo_r + 1)&(KBD_FIFO_SIZE - 1);
 }
 
+static int process_ss(const char *rom_name)
+{
+	static char ss_name[1024] = {};
+	static char *ss_sufx = 0;
+	static uint32_t ss_cnt[4] = {};
+	static void *base[4] = {};
+
+	if (!ss_base) return 0;
+
+	if (rom_name)
+	{
+		uint32_t len = ss_size;
+		uint32_t map_addr = ss_base;
+		fileTYPE f = {};
+
+		for (int i = 0; i < 4; i++)
+		{
+			if (!base[i]) base[i] = shmem_map(map_addr, len);
+			if (!base[i])
+			{
+				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
+			}
+			else
+			{
+				ss_cnt[i] = 0;
+				memset(base[i], 0, len);
+
+				if (!i)
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, 1);
+					printf("Base SavestatePath=%s\n", ss_name);
+					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
+				}
+				else
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
+				}
+
+				if (FileExists(ss_name))
+				{
+					if (!FileOpen(&f, ss_name))
+					{
+						printf("Unable to open file: %s\n", ss_name);
+					}
+					else
+					{
+						int ret = FileReadAdv(&f, base[i], len);
+						FileClose(&f);
+						*(uint32_t*)(base[i]) = 1;
+						ss_cnt[i] = 1;
+						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
+					}
+				}
+			}
+
+			map_addr += len;
+		}
+
+		FileGenerateSavestatePath(rom_name, ss_name, 1);
+		ss_sufx = ss_name + strlen(ss_name) - 4;
+		return 1;
+	}
+
+	static unsigned long ss_timer = 0;
+	if (ss_timer && !CheckTimer(ss_timer)) return 0;
+	ss_timer = GetTimer(1000);
+
+	fileTYPE f = {};
+	for (int i = 0; i < 4; i++)
+	{
+		if (base[i])
+		{
+			uint32_t curcnt = ((uint32_t*)(base[i]))[0];
+			uint32_t size = ((uint32_t*)(base[i]))[1];
+
+			if (curcnt != ss_cnt[i])
+			{
+				ss_cnt[i] = curcnt;
+				if (size) size = (size + 2) * 4;
+				if (size > 0 && size <= ss_size)
+				{
+					MenuHide();
+					Info("Saving the state", 500);
+
+					*ss_sufx = i + '1';
+					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
+					{
+						int ret = FileWriteAdv(&f, base[i], size);
+						FileClose(&f);
+						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
+					}
+					else
+					{
+						printf("Unable to create file: %s\n", ss_name);
+					}
+				}
+			}
+		}
+	}
+
+	return 1;
+}
+
 void user_io_set_index(unsigned char index)
 {
 	EnableFpga();
@@ -1517,6 +1620,14 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	int writable = 0;
 	int ret = 0;
 	int len = strlen(name);
+
+	if (index && is_psx())
+	{
+		static char buf[1024];
+		FileGenerateSavePath(name, buf);
+		user_io_file_mount(buf, 0, 1);
+		process_ss(name);
+	}
 
 	sd_image_cangrow[index] = (pre != 0);
 	sd_type[index] = 0;
@@ -1943,109 +2054,6 @@ static void show_core_info(int info_n)
 			break;
 		}
 	}
-}
-
-static int process_ss(const char *rom_name)
-{
-	static char ss_name[1024] = {};
-	static char *ss_sufx = 0;
-	static uint32_t ss_cnt[4] = {};
-	static void *base[4] = {};
-
-	if (!ss_base) return 0;
-
-	if (rom_name)
-	{
-		uint32_t len = ss_size;
-		uint32_t map_addr = ss_base;
-		fileTYPE f = {};
-
-		for (int i = 0; i < 4; i++)
-		{
-			if (!base[i]) base[i] = shmem_map(map_addr, len);
-			if (!base[i])
-			{
-				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-			}
-			else
-			{
-				ss_cnt[i] = 0;
-				memset(base[i], 0, len);
-
-				if (!i)
-				{
-					FileGenerateSavestatePath(rom_name, ss_name, 1);
-					printf("Base SavestatePath=%s\n", ss_name);
-					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
-				}
-				else
-				{
-					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
-				}
-
-				if (FileExists(ss_name))
-				{
-					if (!FileOpen(&f, ss_name))
-					{
-						printf("Unable to open file: %s\n", ss_name);
-					}
-					else
-					{
-						int ret = FileReadAdv(&f, base[i], len);
-						FileClose(&f);
-						*(uint32_t*)(base[i]) = 1;
-						ss_cnt[i] = 1;
-						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
-					}
-				}
-			}
-
-			map_addr += len;
-		}
-
-		FileGenerateSavestatePath(rom_name, ss_name, 1);
-		ss_sufx = ss_name + strlen(ss_name) - 4;
-		return 1;
-	}
-
-	static unsigned long ss_timer = 0;
-	if (ss_timer && !CheckTimer(ss_timer)) return 0;
-	ss_timer = GetTimer(1000);
-
-	fileTYPE f = {};
-	for (int i = 0; i < 4; i++)
-	{
-		if (base[i])
-		{
-			uint32_t curcnt = ((uint32_t*)(base[i]))[0];
-			uint32_t size = ((uint32_t*)(base[i]))[1];
-
-			if (curcnt != ss_cnt[i])
-			{
-				ss_cnt[i] = curcnt;
-				if (size) size = (size + 2) * 4;
-				if (size > 0 && size <= ss_size)
-				{
-					MenuHide();
-					Info("Saving the state", 500);
-
-					*ss_sufx = i + '1';
-					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
-					{
-						int ret = FileWriteAdv(&f, base[i], size);
-						FileClose(&f);
-						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
-					}
-					else
-					{
-						printf("Unable to create file: %s\n", ss_name);
-					}
-				}
-			}
-		}
-	}
-
-	return 1;
 }
 
 int user_io_file_tx_a(const char* name, uint16_t index)
