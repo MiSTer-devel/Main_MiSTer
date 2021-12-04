@@ -2025,6 +2025,8 @@ void HandleUI(void)
 							fs_Options |= SCANO_NOZIP;
 						}
 
+						if (is_psx()) fs_Options |= SCANO_NOZIP;
+
 						if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if(recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
 					}
