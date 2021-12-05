@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "hardware.h"
 #include "user_io.h"
@@ -402,7 +403,9 @@ static bool has_shadow_mask = false;
 #define SM_FLAG(v) ( ( 0x0 << 13 ) | ( (v) & 0x7 ) )
 #define SM_VMAX(v) ( ( 0x1 << 13 ) | ( (v) & 0xf ) )
 #define SM_HMAX(v) ( ( 0x2 << 13 ) | ( (v) & 0xf ) )
-#define SM_LUT(o,v) ( ( 0x3 << 13 ) | ( ( (o) & 0x3f ) << 4 ) | ( (v) & 0x7 ) )
+#define SM_LUT(o,v) ( ( 0x3 << 13 ) | ( ( (o) & 0x3f ) << 4 ) | ( (v) & 0xf ) )
+#define SM_ON_INTENSITY(o,v) ( ( 0x4 << 13 ) | ( ( (o) & 0x1 ) << 4 ) | ( (v) & 0xf ) )
+#define SM_OFF_INTENSITY(o,v) ( ( 0x5 << 13 ) | ( ( (o) & 0x1 ) << 4 ) | ( (v) & 0xf ) )
 
 enum
 {
@@ -413,6 +416,57 @@ enum
 	SM_MODE_2X_ROTATED,
 	SM_MODE_COUNT
 };
+
+static const float sm_onIntensity[8] = { 100.0f, 106.25f, 112.5f, 118.75f, 125.00f, 131.25f, 137.50f, 143.75f };
+static const float sm_offIntensity[16] =
+{
+	00.00f, 06.25f, 12.50f, 18.75f,
+	25.00f, 31.25f, 37.50f, 43.75f,
+	50.00f, 56.25f, 62.50f, 68.75f,
+	75.00f, 81.25f, 87.50f, 93.75f
+};
+
+static int shadowMaskBestIndex(float val, const float *options, int optionCount)
+{
+	float bestDiff = 9999.0f;
+	int bestIdx = 0;
+
+	for( int i = 0; i < optionCount; i++ )
+	{
+		float diff = fabs( val - options[i] );
+		if( diff < bestDiff )
+		{
+			bestDiff = diff;
+			bestIdx = i;
+		}
+	}
+
+	return bestIdx;
+}
+
+static int shadowMaskCharToInt(char c)
+{
+	switch( c )
+	{
+		case 'k': return 0;
+		case 'b': return 1;
+		case 'g': return 2;
+		case 'c': return 3;
+		case 'r': return 4;
+		case 'm': return 5;
+		case 'y': return 6;
+		case 'w': return 7;
+		case 'K': return 8;
+		case 'B': return 9;
+		case 'G': return 10;
+		case 'C': return 11;
+		case 'R': return 12;
+		case 'M': return 13;
+		case 'Y': return 14;
+		case 'W': return 15;
+		default: return 0;
+	}
+}
 
 static void setShadowMask()
 {
@@ -444,16 +498,27 @@ static void setShadowMask()
 		int w = -1, h = -1;
 		int y = 0;
 
+		float on0 = 112.5f;
+		float off0 = 62.5f;
+		float on1 = 112.5f;
+		float off1 = 62.5f;
+
 		const char *line;
 		while ((line = FileReadLine( &reader )))
 		{
 			if( w == -1 )
 			{
-				int n = sscanf(line, "%d,%d", &w, &h);
-				if( (n != 2) || (w <= 0) || ( w <= 0 ) )
+				int n = sscanf(line, "%d,%d,%f,%f,%f,%f", &w, &h, &on0, &off0, &on1, &off1);
+				if( (n < 2) || (w <= 0) || ( w <= 0 ) )
 				{
 					spi_w(SM_FLAG(0));
 					break;
+				}
+
+				if( n == 4 )
+				{
+					on1 = on0;
+					off1 = off0;
 				}
 			}
 			else
@@ -462,8 +527,17 @@ static void setShadowMask()
 				int n = sscanf(line, "%u,%u,%u,%u,%u,%u,%u,%u", p+0, p+1, p+2, p+3, p+4, p+5, p+6, p+7);
 				if( n != w )
 				{
-					spi_w(SM_FLAG(0));
-					break;
+					char c[8];
+					n = sscanf(line, "%c,%c,%c,%c,%c,%c,%c,%c", c+0, c+1, c+2, c+3, c+4, c+5, c+6, c+7);
+					if( n != w )
+					{
+						spi_w(SM_FLAG(0));
+						break;
+					}
+					for( int i = 0; i < w; i++ )
+					{
+						p[i] = shadowMaskCharToInt(c[i]);
+					}
 				}
 
 				for( int x = 0; x < w; x++ )
@@ -483,6 +557,11 @@ static void setShadowMask()
 			spi_w(SM_HMAX(w - 1));
 			spi_w(SM_VMAX(h - 1));
 		}
+
+		spi_w(SM_ON_INTENSITY(0, shadowMaskBestIndex(on0, sm_onIntensity, sizeof(sm_onIntensity) / sizeof(float))));
+		spi_w(SM_ON_INTENSITY(1, shadowMaskBestIndex(on1, sm_onIntensity, sizeof(sm_onIntensity) / sizeof(float))));
+		spi_w(SM_OFF_INTENSITY(0, shadowMaskBestIndex(off0, sm_offIntensity, sizeof(sm_offIntensity) / sizeof(float))));
+		spi_w(SM_OFF_INTENSITY(1, shadowMaskBestIndex(off1, sm_offIntensity, sizeof(sm_offIntensity) / sizeof(float))));
 	}
 
 	DisableIO();
