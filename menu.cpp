@@ -2397,6 +2397,15 @@ void HandleUI(void)
 			break;
 		}
 
+		if (plus || minus)
+		{
+			if(menusub == 11)
+			{
+				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
+				menustate = MENU_COMMON1;
+			}
+		}
+
 		if (select)
 		{
 			switch (menusub)

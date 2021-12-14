@@ -395,14 +395,14 @@ static void loadGammaCfg()
 static char shadow_mask_cfg[1024] = { 0 };
 static bool has_shadow_mask = false;
 
-#define SM_FLAG_ENABLED ( 1 << 0 )
-#define SM_FLAG_2X ( 1 << 1 )
+#define SM_FLAG_2X      ( 1 << 1 )
 #define SM_FLAG_ROTATED ( 1 << 2 )
+#define SM_FLAG_ENABLED ( 1 << 3 )
 
-#define SM_FLAG(v) ( ( 0x0 << 13 ) | ( (v) & 0x7 ) )
-#define SM_VMAX(v) ( ( 0x1 << 13 ) | ( (v) & 0xf ) )
-#define SM_HMAX(v) ( ( 0x2 << 13 ) | ( (v) & 0xf ) )
-#define SM_LUT(o,v) ( ( 0x3 << 13 ) | ( ( (o) & 0x3f ) << 4 ) | ( (v) & 0x7 ) )
+#define SM_FLAG(v) ( ( 0x0 << 13 ) | (v) )
+#define SM_VMAX(v) ( ( 0x1 << 13 ) | (v) )
+#define SM_HMAX(v) ( ( 0x2 << 13 ) | (v) )
+#define SM_LUT(v)  ( ( 0x3 << 13 ) | (v) )
 
 enum
 {
@@ -443,14 +443,21 @@ static void setShadowMask()
 	{
 		int w = -1, h = -1;
 		int y = 0;
+		int v2 = 0;
 
 		const char *line;
 		while ((line = FileReadLine( &reader )))
 		{
 			if( w == -1 )
 			{
+				if (!strcasecmp(line, "v2"))
+				{
+					v2 = 1;
+					continue;
+				}
+
 				int n = sscanf(line, "%d,%d", &w, &h);
-				if( (n != 2) || (w <= 0) || ( w <= 0 ) )
+				if ((n != 2) || (w <= 0) || (h <= 0) || (w > 16) || (h > 16))
 				{
 					spi_w(SM_FLAG(0));
 					break;
@@ -458,20 +465,15 @@ static void setShadowMask()
 			}
 			else
 			{
-				unsigned int p[8];
-				int n = sscanf(line, "%u,%u,%u,%u,%u,%u,%u,%u", p+0, p+1, p+2, p+3, p+4, p+5, p+6, p+7);
+				unsigned int p[16];
+				int n = sscanf(line, "%X,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x", p + 0, p + 1, p + 2, p + 3, p + 4, p + 5, p + 6, p + 7, p + 8, p + 9, p + 10, p + 11, p + 12, p + 13, p + 14, p + 15);
 				if( n != w )
 				{
 					spi_w(SM_FLAG(0));
 					break;
 				}
 
-				for( int x = 0; x < w; x++ )
-				{
-					int offset = x + ( y * 8 );
-					spi_w( SM_LUT(offset, p[x]) );
-				}
-
+				for (int x = 0; x < 16; x++) spi_w(SM_LUT(v2 ? (p[x] & 0x7FF) : (((p[x] & 7) << 8) | 0x2A)));
 				y += 1;
 
 				if( y == h ) break;
@@ -505,6 +507,10 @@ void video_set_shadow_mask_mode(int n)
 	if( n >= SM_MODE_COUNT )
 	{
 		n = 0;
+	}
+	else if (n < 0)
+	{
+		n = SM_MODE_COUNT - 1;
 	}
 
 	shadow_mask_cfg[0] = (char)n;
