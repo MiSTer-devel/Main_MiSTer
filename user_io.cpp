@@ -622,27 +622,73 @@ static void parse_config()
 				use_cheats = 1;
 			}
 
-			if (p[0] == 'F' && p[1] == 'C')
+			if (p[0] == 'F')
 			{
-				static char str[1024];
-				uint32_t load_addr = 0;
-				if (substrcpy(str, p, 3))
+				int opensave = 0;
+				int idx = 1;
+				if (p[idx] == 'S')
 				{
-					load_addr = strtoul(str, NULL, 16);
-					if (load_addr < 0x20000000 || load_addr >= 0x40000000)
-					{
-						printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
-						load_addr = 0;
-					}
+					opensave = 1;
+					idx++;
 				}
 
-				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
+				if (p[idx] == 'C')
+				{
+					idx++;
+					static char str[1024];
+					uint32_t load_addr = 0;
+					if (substrcpy(str, p, 3))
+					{
+						load_addr = strtoul(str, NULL, 16);
+						if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+						{
+							printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
+							load_addr = 0;
+						}
+					}
+
+					sprintf(str, "%s.f%c", user_io_get_core_name(), p[idx]);
+					if (FileLoadConfig(str, str, sizeof(str)) && str[0])
+					{
+
+						idx = p[idx] - '0';
+						StoreIdx_F(idx, str);
+						user_io_file_tx(str, idx, opensave, 0, 0, load_addr);
+					}
+				}
+			}
+
+			if (p[0] == 'S' && p[1] == 'C')
+			{
+				static char str[1024];
+				sprintf(str, "%s.s%c", user_io_get_core_name(), p[2]);
+
+				static char ext[256];
+				substrcpy(ext, p, 1);
+				while (strlen(ext) % 3) strcat(ext, " ");
+
 				if (FileLoadConfig(str, str, sizeof(str)) && str[0])
 				{
-
 					int idx = p[2] - '0';
-					StoreIdx_F(idx, str);
-					user_io_file_tx(str, idx, 0, 0, 0, load_addr);
+					StoreIdx_S(idx, str);
+					if (is_x86())
+					{
+						x86_set_image(idx, str);
+					}
+					else if (is_megacd())
+					{
+						mcd_set_image(idx, str);
+					}
+					else if (is_pce())
+					{
+						pcecd_set_image(idx, str);
+						cheats_init(str, 0);
+					}
+					else
+					{
+						user_io_set_index(user_io_ext_idx(str, ext) << 6 | idx);
+						user_io_file_mount(str, idx);
+					}
 				}
 			}
 		}
@@ -1621,19 +1667,9 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	int ret = 0;
 	int len = strlen(name);
 
-	if (index && is_psx())
+	if ((index == 1) && is_psx() && len)
 	{
-		if (len)
-		{
-			static char buf[1024];
-			FileGenerateSavePath(name, buf);
-			user_io_file_mount(buf, 0, 1);
-			process_ss(name);
-		}
-		else
-		{
-			FileClose(&sd_image[0]);
-		}
+		process_ss(name);
 	}
 
 	sd_image_cangrow[index] = (pre != 0);
