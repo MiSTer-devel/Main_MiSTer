@@ -1623,10 +1623,17 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 
 	if (index && is_psx())
 	{
-		static char buf[1024];
-		FileGenerateSavePath(name, buf);
-		user_io_file_mount(buf, 0, 1);
-		process_ss(name);
+		if (len)
+		{
+			static char buf[1024];
+			FileGenerateSavePath(name, buf);
+			user_io_file_mount(buf, 0, 1);
+			process_ss(name);
+		}
+		else
+		{
+			FileClose(&sd_image[0]);
+		}
 	}
 
 	sd_image_cangrow[index] = (pre != 0);
