@@ -307,6 +307,11 @@ void StoreIdx_F(int idx, char *path)
 	strcpy(Selected_F[idx], path);
 }
 
+void StoreIdx_S(int idx, char *path)
+{
+	strcpy(Selected_S[idx], path);
+}
+
 static char selPath[1024] = {};
 
 static int changeDir(char *dir)
@@ -2007,12 +2012,13 @@ void HandleUI(void)
 						ioctl_index = menusub + 1;
 						int idx = 1;
 
-						if (p[1] == 'S')
+						if (p[idx] == 'S')
 						{
 							opensave = 1;
 							idx++;
 						}
-						else if (p[1] == 'C')
+
+						if (p[idx] == 'C')
 						{
 							store_name = 1;
 							idx++;
@@ -2044,8 +2050,17 @@ void HandleUI(void)
 					}
 					else if (p[0] == 'S' && (select || recent))
 					{
+						store_name = 0;
+						int idx = 1;
+
+						if (p[idx] == 'C')
+						{
+							store_name = 1;
+							idx++;
+						}
+
 						ioctl_index = 0;
-						if ((p[1] >= '0' && p[1] <= '9') || is_x86()) ioctl_index = p[1] - '0';
+						if ((p[idx] >= '0' && p[idx] <= '9') || is_x86()) ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
 
@@ -2059,12 +2074,10 @@ void HandleUI(void)
 
 						if (is_pce() || is_megacd() || is_x86())
 						{
-							//if (!strncasecmp(fs_pFileExt, "CUE", 3))
-							//{
-								//look for CHD too
-								strcat(fs_pFileExt, "CHD");
-								strcat(ext, "CHD");
-							//}
+							//look for CHD too
+							strcat(fs_pFileExt, "CHD");
+							strcat(ext, "CHD");
+
 							int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);
 							memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 
@@ -2077,6 +2090,8 @@ void HandleUI(void)
 
 							fs_Options |= SCANO_NOZIP;
 						}
+
+						if (is_psx()) fs_Options |= SCANO_NOZIP;
 
 						if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if(recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
@@ -2251,6 +2266,13 @@ void HandleUI(void)
 
 	case MENU_GENERIC_IMAGE_SELECTED:
 		{
+			if (store_name)
+			{
+				char str[64];
+				sprintf(str, "%s.s%d", user_io_get_core_name(), ioctl_index);
+				FileSaveConfig(str, selPath, sizeof(selPath));
+			}
+
 			menustate = MENU_GENERIC_MAIN1;
 			if (selPath[0] && !is_x86()) MenuHide();
 
@@ -2448,6 +2470,15 @@ void HandleUI(void)
 
 			if (recent_init(-1)) menustate = MENU_RECENT1;
 			break;
+		}
+
+		if ((plus || minus) && (enablemask & (1 << menusub)))
+		{
+			if(menusub == 11)
+			{
+				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
+				menustate = MENU_COMMON1;
+			}
 		}
 
 		if (select && (enablemask & (1 << menusub)))
