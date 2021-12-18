@@ -16,8 +16,6 @@ else
 endif
 
 INCLUDE	= -I./
-INCLUDE	+= -I./support/minimig
-INCLUDE += -I./support/chd
 INCLUDE	+= -I./lib/libco
 INCLUDE	+= -I./lib/miniz
 INCLUDE	+= -I./lib/md5

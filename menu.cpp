@@ -2242,6 +2242,10 @@ void HandleUI(void)
 				pcecd_set_image(ioctl_index, selPath);
 				cheats_init(selPath, 0);
 			}
+			else if (is_psx())
+			{
+				psx_mount_cd(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1), ioctl_index, selPath);
+			}
 			else
 			{
 				user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
