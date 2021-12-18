@@ -1491,17 +1491,21 @@ static void kbd_fifo_poll()
 	kbd_fifo_r = (kbd_fifo_r + 1)&(KBD_FIFO_SIZE - 1);
 }
 
-static int process_ss(const char *rom_name)
+int process_ss(const char *rom_name, int enable)
 {
 	static char ss_name[1024] = {};
 	static char *ss_sufx = 0;
 	static uint32_t ss_cnt[4] = {};
 	static void *base[4] = {};
+	static int enabled = 0;
 
 	if (!ss_base) return 0;
 
 	if (rom_name)
 	{
+		enabled = enable;
+		if (!enabled) return 0;
+
 		uint32_t len = ss_size;
 		uint32_t map_addr = ss_base;
 		fileTYPE f = {};
@@ -1553,6 +1557,8 @@ static int process_ss(const char *rom_name)
 		ss_sufx = ss_name + strlen(ss_name) - 4;
 		return 1;
 	}
+
+	if (!enabled) return 0;
 
 	static unsigned long ss_timer = 0;
 	if (ss_timer && !CheckTimer(ss_timer)) return 0;
@@ -1666,11 +1672,6 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	int writable = 0;
 	int ret = 0;
 	int len = strlen(name);
-
-	if ((index == 1) && is_psx() && len)
-	{
-		process_ss(name);
-	}
 
 	sd_image_cangrow[index] = (pre != 0);
 	sd_type[index] = 0;

@@ -267,6 +267,8 @@ char * GetMidiLinkSoundfont();
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();
 
+int process_ss(const char *rom_name, int enable = 1);
+
 void diskled_on();
 #define DISKLED_ON  diskled_on()
 #define DISKLED_OFF void()
