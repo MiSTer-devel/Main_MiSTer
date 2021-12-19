@@ -114,7 +114,14 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 {
 	static char last_dir[1024] = {};
 
-	int same_game = *filename && *last_dir && !strncmp(last_dir, filename, strlen(last_dir));
+	const char *p = strrchr(filename, '/');
+	int cur_len = p ? p - filename : 0;
+	int old_len = strlen(last_dir);
+
+	int name_len = strlen(filename);
+	int is_cue = (name_len > 4) && !strcasecmp(filename + name_len - 4, ".cue");
+
+	int same_game = old_len && (cur_len == old_len) && !strncmp(last_dir, filename, old_len);
 	int loaded = 1;
 
 	if (!same_game)
@@ -124,8 +131,11 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 		strcpy(last_dir, filename);
 		char *p = strrchr(last_dir, '/');
 		if (p) *p = 0;
+		else *last_dir = 0;
 
 		strcpy(buf, last_dir);
+		if (!is_cue && buf[0]) strcat(buf, "/");
+
 		p = strrchr(buf, '/');
 		if (p)
 		{
@@ -144,12 +154,10 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 	if (loaded)
 	{
-		int len = strlen(filename);
 		user_io_set_index(f_index);
+		process_ss(filename, name_len != 0);
 
-		process_ss(filename, len != 0);
-
-		if (len > 4 && !strcasecmp(filename + len - 4, ".cue") && get_bin(filename))
+		if (is_cue && get_bin(filename))
 		{
 			user_io_file_mount(buf, s_index);
 		}
