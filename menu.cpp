@@ -1026,7 +1026,7 @@ void HandleUI(void)
 
 	if (c && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
 
-	if (is_menu())
+	if (is_menu() && cfg.osd_timeout >= 5)
 	{
 		static int menu_visible = 1;
 		static unsigned long timeout = 0;
@@ -1062,7 +1062,6 @@ void HandleUI(void)
 
 			if (!timeout)
 			{
-				if (!cfg.osd_timeout) cfg.osd_timeout = 30;
 				timeout = GetTimer(cfg.osd_timeout * 1000);
 			}
 		}
