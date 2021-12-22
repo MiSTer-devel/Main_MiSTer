@@ -1809,16 +1809,19 @@ bool FileOpenTextReader( fileTextReader *reader, const char *filename )
 	return false;
 }
 
+#define IS_NEWLINE(c) (((c) == '\r') || ((c) == '\n'))
+#define IS_WHITESPACE(c) (IS_NEWLINE(c) || ((c) == ' ') || ((c) == '\t'))
+
 const char *FileReadLine(fileTextReader *reader)
 {
 	const char *end = reader->buffer + reader->size;
 	while (reader->pos < end)
 	{
 		char *st = reader->pos;
-		while ((reader->pos < end) && *reader->pos && (*reader->pos != 10))
+		while ((reader->pos < end) && *reader->pos && !IS_NEWLINE(*reader->pos))
 			reader->pos++;
 		*reader->pos = 0;
-		while (*st == ' ' || *st == '\t' || *st == 13)
+		while (IS_WHITESPACE(*st))
 			st++;
 		if (*st == '#' || *st == ';' || !*st)
 		{
