@@ -43,6 +43,21 @@ static const size_t YieldIterations = 128;
 DirentVector DirItem;
 DirNameSet DirNames;
 
+
+// Directory scanning can cause the same zip file to be opened multiple times
+// due to testing file types to adjust the path 
+// (and the fact the code path is shared with regular files)
+// cache the opened mz_zip_archive so we only open it once
+// this has the extra benefit that if a user is navigating through multiple directories
+// in a zip archive, the zip will only be opened once and things will be more responsive
+// ** We have to open the file outselves with open() so we can set O_CLOEXEC to prevent
+// leaking the file descriptor when the user changes cores
+
+static mz_zip_archive last_zip_archive = {};
+static int last_zip_fd = -1;
+static FILE *last_zip_cfile = NULL;
+static char last_zip_fname[256] = {};
+
 static int iSelectedEntry = 0;       // selected entry index
 static int iFirstEntry = 0;
 
@@ -76,6 +91,46 @@ struct fileZipArchive
 	mz_zip_reader_extract_iter_state* iter;
 	__off64_t                         offset;
 };
+
+
+static int OpenZipfileCached(char *path, int flags)
+{
+  if (last_zip_fname[0] && !strcasecmp(path, last_zip_fname))
+  {
+    return 1;
+  }
+ 
+  mz_zip_reader_end(&last_zip_archive);
+  mz_zip_zero_struct(&last_zip_archive);
+  if (last_zip_cfile)
+  {
+    fclose(last_zip_cfile);
+    last_zip_cfile = nullptr;
+  }
+
+  last_zip_fname[0] = '\0';
+  last_zip_fd = open(path, O_RDONLY|O_CLOEXEC);
+  if (last_zip_fd < 0)
+  {
+    return 0;
+  }
+
+  last_zip_cfile = fdopen(last_zip_fd, "r");
+  if (!last_zip_cfile)
+  {
+    close(last_zip_fd);
+    last_zip_fd = -1;
+    return 0;
+  }
+
+  int mz_ret = mz_zip_reader_init_cfile(&last_zip_archive, last_zip_cfile, 0, flags);
+  if (mz_ret)
+  {
+    strncpy(last_zip_fname, path, sizeof(last_zip_fname));
+  }
+  return mz_ret;
+}
+
 
 static int FileIsZipped(char* path, char** zip_path, char** file_path)
 {
@@ -134,12 +189,10 @@ static int isPathDirectory(const char *path, int use_zip = 1)
         return 1;
       }
 
-      mz_zip_archive z{};
-      if (!mz_zip_reader_init_file(&z, zip_path, 0))
+      if (!OpenZipfileCached(full_path, 0))
 		  {
 			  printf("isPathDirectory(OpenZipfileCached) Zip:%s, error:%s\n", zip_path,
-			        mz_zip_get_error_string(mz_zip_get_last_error(&z)));
-        mz_zip_reader_end(&z);
+			        mz_zip_get_error_string(mz_zip_get_last_error(&last_zip_archive)));
 			  return 0;
 		  }
 
@@ -153,23 +206,20 @@ static int isPathDirectory(const char *path, int use_zip = 1)
     // this is a binary search (usually) If that fails then scan for the first
     // entry that starts with file_path
 
-    const int file_index = mz_zip_reader_locate_file(&z, file_path, NULL, 0);
-    if (file_index >= 0 && mz_zip_reader_is_file_a_directory(&z, file_index)) 
+    const int file_index = mz_zip_reader_locate_file(&last_zip_archive, file_path, NULL, 0);
+    if (file_index >= 0 && mz_zip_reader_is_file_a_directory(&last_zip_archive, file_index)) 
     {
-      mz_zip_reader_end(&z);
       return 1;
     }
 
-    for (size_t i = 0; i < mz_zip_reader_get_num_files(&z); i++) {
+    for (size_t i = 0; i < mz_zip_reader_get_num_files(&last_zip_archive); i++) {
       char zip_fname[256];
-      mz_zip_reader_get_filename(&z, i, &zip_fname[0], sizeof(zip_fname));
+      mz_zip_reader_get_filename(&last_zip_archive, i, &zip_fname[0], sizeof(zip_fname));
       if (strcasestr(zip_fname, file_path)) 
       {
-        mz_zip_reader_end(&z);
         return 1;
       }
     }
-    mz_zip_reader_end(&z);
     return 0;
   }
 	else
@@ -194,35 +244,30 @@ static int isPathRegularFile(const char *path, int use_zip = 1)
 	char *zip_path, *file_path;
 	if (use_zip && FileIsZipped(full_path, &zip_path, &file_path))
 	{
-    mz_zip_archive z{};
     //If there's no path into the zip file, don't bother opening it, we're a "directory"
     if (!*file_path)
     {
       return 0;
     }
-		  if (!mz_zip_reader_init_file(&z, zip_path, 0))
+		  if (!OpenZipfileCached(full_path, 0))
 		  {
 			  //printf("isPathRegularFile(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path,
 			  //       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
-        mz_zip_reader_end(&z);
 			  return 0;
 		  }
-		const int file_index = mz_zip_reader_locate_file(&z, file_path, NULL, 0);
+		const int file_index = mz_zip_reader_locate_file(&last_zip_archive, file_path, NULL, 0);
 		if (file_index < 0)
 		{
 			//printf("isPathRegularFile(mz_zip_reader_locate_file) Zip:%s, file:%s, error: %s\n",
 			//		 zip_path, file_path,
 			//		 mz_zip_get_error_string(mz_zip_get_last_error(&z)));
-      mz_zip_reader_end(&z);
 			return 0;
 		}
 
-		if (!mz_zip_reader_is_file_a_directory(&z, file_index) && mz_zip_reader_is_file_supported(&z, file_index))
+		if (!mz_zip_reader_is_file_a_directory(&last_zip_archive, file_index) && mz_zip_reader_is_file_supported(&last_zip_archive, file_index))
 		{
-      mz_zip_reader_end(&z);
 			return 1;
 		}
-    mz_zip_reader_end(&z);
 	}
 	else
 	{
@@ -1355,14 +1400,12 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		mz_zip_archive *z = nullptr;
 		if (is_zipped)
 		{
-			mz_zip_archive _z = {};
-			if (!mz_zip_reader_init_file(&_z, zip_path, 0))
+			if (!OpenZipfileCached(full_path, 0))
 			{
-				printf("Couldn't open zip file %s: %s\n", full_path, mz_zip_get_error_string(mz_zip_get_last_error(&_z)));
-        mz_zip_reader_end(&_z);
+				printf("Couldn't open zip file %s: %s\n", full_path, mz_zip_get_error_string(mz_zip_get_last_error(&last_zip_archive)));
 				return 0;
 			}
-			z = new mz_zip_archive(_z);
+			z = &last_zip_archive; 
 		}
 		else
 		{
@@ -1611,10 +1654,6 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			strcpy(dext.de.d_name, "..");
 			get_display_name(&dext, extension, options);
 			DirItem.push_back(dext);
-
-
-      mz_zip_reader_end(z);
-      delete z;
 		}
 
 		if (d)
