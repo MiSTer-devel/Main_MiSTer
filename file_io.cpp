@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <fcntl.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <ctype.h>
@@ -17,6 +18,8 @@
 #include <algorithm>
 #include <vector>
 #include <string>
+#include <set>
+#include "lib/miniz/miniz.h"
 #include "osd.h"
 #include "fpga_io.h"
 #include "menu.h"
@@ -33,10 +36,13 @@
 #define MIN(a,b) (((a)<(b)) ? (a) : (b))
 
 typedef std::vector<direntext_t> DirentVector;
+typedef std::set<std::string> DirNameSet;
 
 static const size_t YieldIterations = 128;
 
 DirentVector DirItem;
+DirNameSet DirNames;
+
 static int iSelectedEntry = 0;       // selected entry index
 static int iFirstEntry = 0;
 
@@ -122,40 +128,50 @@ static int isPathDirectory(const char *path, int use_zip = 1)
 	char *zip_path, *file_path;
 	if (use_zip && FileIsZipped(full_path, &zip_path, &file_path))
 	{
-		mz_zip_archive z{};
-		if (!mz_zip_reader_init_file(&z, zip_path, 0))
-		{
-			printf("isPathDirectory(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path,
-			       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
-			return 0;
-		}
 
-		if (!*file_path)
-		{
-			mz_zip_reader_end(&z);
-			return 1;
-		}
+      if (!*file_path)
+      {
+        return 1;
+      }
+
+      mz_zip_archive z{};
+      if (!mz_zip_reader_init_file(&z, zip_path, 0))
+		  {
+			  printf("isPathDirectory(OpenZipfileCached) Zip:%s, error:%s\n", zip_path,
+			        mz_zip_get_error_string(mz_zip_get_last_error(&z)));
+        mz_zip_reader_end(&z);
+			  return 0;
+		  }
 
 		// Folder names always end with a slash in the zip
 		// file central directory.
 		strcat(file_path, "/");
-		const int file_index = mz_zip_reader_locate_file(&z, file_path, NULL, 0);
-		if (file_index < 0)
-		{
-			printf("isPathDirectory(mz_zip_reader_locate_file) Zip:%s, file:%s, error: %s\n",
-					 zip_path, file_path,
-					 mz_zip_get_error_string(mz_zip_get_last_error(&z)));
-			mz_zip_reader_end(&z);
-			return 0;
-		}
 
-		if (mz_zip_reader_is_file_a_directory(&z, file_index))
-		{
-			mz_zip_reader_end(&z);
-			return 1;
-		}
-		mz_zip_reader_end(&z);
-	}
+
+    // Some zip files don't have directory entries
+    // Use the locate_file call to try and find the directory entry first, since
+    // this is a binary search (usually) If that fails then scan for the first
+    // entry that starts with file_path
+
+    const int file_index = mz_zip_reader_locate_file(&z, file_path, NULL, 0);
+    if (file_index >= 0 && mz_zip_reader_is_file_a_directory(&z, file_index)) 
+    {
+      mz_zip_reader_end(&z);
+      return 1;
+    }
+
+    for (size_t i = 0; i < mz_zip_reader_get_num_files(&z); i++) {
+      char zip_fname[256];
+      mz_zip_reader_get_filename(&z, i, &zip_fname[0], sizeof(zip_fname));
+      if (strcasestr(zip_fname, file_path)) 
+      {
+        mz_zip_reader_end(&z);
+        return 1;
+      }
+    }
+    mz_zip_reader_end(&z);
+    return 0;
+  }
 	else
 	{
 		int stmode = get_stmode(full_path);
@@ -178,36 +194,35 @@ static int isPathRegularFile(const char *path, int use_zip = 1)
 	char *zip_path, *file_path;
 	if (use_zip && FileIsZipped(full_path, &zip_path, &file_path))
 	{
-		mz_zip_archive z{};
-		if (!mz_zip_reader_init_file(&z, zip_path, 0))
-		{
-			//printf("isPathRegularFile(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path,
-			//       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
-			return 0;
-		}
-
-		if (!*file_path)
-		{
-			mz_zip_reader_end(&z);
-			return 0;
-		}
-
+    mz_zip_archive z{};
+    //If there's no path into the zip file, don't bother opening it, we're a "directory"
+    if (!*file_path)
+    {
+      return 0;
+    }
+		  if (!mz_zip_reader_init_file(&z, zip_path, 0))
+		  {
+			  //printf("isPathRegularFile(mz_zip_reader_init_file) Zip:%s, error:%s\n", zip_path,
+			  //       mz_zip_get_error_string(mz_zip_get_last_error(&z)));
+        mz_zip_reader_end(&z);
+			  return 0;
+		  }
 		const int file_index = mz_zip_reader_locate_file(&z, file_path, NULL, 0);
 		if (file_index < 0)
 		{
 			//printf("isPathRegularFile(mz_zip_reader_locate_file) Zip:%s, file:%s, error: %s\n",
 			//		 zip_path, file_path,
 			//		 mz_zip_get_error_string(mz_zip_get_last_error(&z)));
-			mz_zip_reader_end(&z);
+      mz_zip_reader_end(&z);
 			return 0;
 		}
 
 		if (!mz_zip_reader_is_file_a_directory(&z, file_index) && mz_zip_reader_is_file_supported(&z, file_index))
 		{
-			mz_zip_reader_end(&z);
+      mz_zip_reader_end(&z);
 			return 1;
 		}
-		mz_zip_reader_end(&z);
+    mz_zip_reader_end(&z);
 	}
 	else
 	{
@@ -1159,6 +1174,21 @@ void AdjustDirectory(char *path)
 	}
 }
 
+static const char *GetRelativeFileName(const char *folder, const char *path) {
+  if (strcasestr(path, folder) == path) {
+    const char *subpath = path + strlen(folder);
+    if (*subpath != '\0') 
+    {
+      if (*subpath == '/')
+      {
+        return subpath+1;
+      }
+      return subpath;
+    }
+  }
+  return NULL;
+}
+
 static bool IsInSameFolder(const char *folder, const char *path)
 {
 	if (strcasestr(path, folder) == path)
@@ -1282,8 +1312,10 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		iFirstEntry = 0;
 		iSelectedEntry = 0;
 		DirItem.clear();
+    DirNames.clear();
 
 		file_name[0] = 0;
+
 		if ((options & SCANO_NOENTER) || isPathRegularFile(path))
 		{
 			char *p = strrchr(path, '/');
@@ -1326,7 +1358,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			mz_zip_archive _z = {};
 			if (!mz_zip_reader_init_file(&_z, zip_path, 0))
 			{
-				printf("Couldn't open zip file %s: %s\n", full_path, mz_zip_get_error_string(mz_zip_get_last_error(z)));
+				printf("Couldn't open zip file %s: %s\n", full_path, mz_zip_get_error_string(mz_zip_get_last_error(&_z)));
+        mz_zip_reader_end(&_z);
 				return 0;
 			}
 			z = new mz_zip_archive(_z);
@@ -1353,26 +1386,50 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 #endif
 			struct dirent64 _de = {};
 			if (z) {
-				mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
-				if (!IsInSameFolder(file_path_in_zip, _de.d_name))
-				{
-					continue;
-				}
-				// Remove leading folders.
-				const char* subpath = _de.d_name + strlen(file_path_in_zip);
-				if (*subpath == '/')
-				{
-					subpath++;
-				}
-				strcpy(_de.d_name, subpath);
+        mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
+        const char *rname = GetRelativeFileName(file_path_in_zip, _de.d_name);
+        if (rname) {
+          const char *fslash = strchr(rname, '/');
+          if (fslash) {
 
-				_de.d_type = mz_zip_reader_is_file_a_directory(z, i) ? DT_DIR : DT_REG;
-				if (_de.d_type == DT_DIR)
-				{
-					// Remove trailing slash.
-					_de.d_name[strlen(_de.d_name) - 1] = '\0';
-				}
-				de = &_de;
+            char dirname[256] = {};
+            strncpy(dirname, rname, fslash - rname);
+            if (rname[0] != '/' && !(DirNames.find(dirname) != DirNames.end())) {
+              direntext_t dirext;
+              memset(&dirext, 0, sizeof(dirext));
+              strncpy(dirext.de.d_name, rname, fslash - rname);
+              dirext.de.d_type = DT_DIR;
+              memcpy(dirext.altname, dirext.de.d_name,
+                     sizeof(dirext.de.d_name));
+              DirItem.push_back(dirext);
+              DirNames.insert(dirname);
+            }
+          }
+        }
+
+        if (!IsInSameFolder(file_path_in_zip, _de.d_name)) {
+          continue;
+        }
+        // Remove leading folders.
+        const char *subpath = _de.d_name + strlen(file_path_in_zip);
+        if (*subpath == '/') {
+          subpath++;
+        }
+        strcpy(_de.d_name, subpath);
+
+        de = &_de;
+
+        _de.d_type = mz_zip_reader_is_file_a_directory(z, i) ? DT_DIR : DT_REG;
+        if (_de.d_type == DT_DIR) {
+          // Remove trailing slash.
+          if (DirNames.find(_de.d_name) != DirNames.end())
+          {
+            DirNames.insert(_de.d_name);
+            _de.d_name[strlen(_de.d_name) - 1] = '\0';
+          } else {
+            continue;
+          }
+        }
 			}
 			else
 			// Handle (possible) symbolic link type in the directory entry
@@ -1534,13 +1591,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					continue;
 				}
 
-				{
-					direntext_t dext;
-					memset(&dext, 0, sizeof(dext));
-					memcpy(&dext.de, de, sizeof(dext.de));
-					get_display_name(&dext, extension, options);
-					DirItem.push_back(dext);
-				}
+        {
+			      direntext_t dext;
+				    memset(&dext, 0, sizeof(dext));
+				    memcpy(&dext.de, de, sizeof(dext.de));
+				    get_display_name(&dext, extension, options);
+				    DirItem.push_back(dext);
+        }
 			}
 		}
 
@@ -1555,8 +1612,9 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			get_display_name(&dext, extension, options);
 			DirItem.push_back(dext);
 
-			mz_zip_reader_end(z);
-			delete z;
+
+      mz_zip_reader_end(z);
+      delete z;
 		}
 
 		if (d)
