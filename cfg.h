@@ -53,6 +53,7 @@ typedef struct {
 	uint8_t browse_expand;
 	uint8_t logo;
 	uint8_t log_file_entry;
+	uint8_t shmask_mode_default;
 	int bt_auto_disconnect;
 	int bt_reset_before_pair;
 	char bootcore[256];
@@ -64,6 +65,7 @@ typedef struct {
 	char custom_aspect_ratio[2][16];
 	char afilter_default[1023];
 	char vfilter_default[1023];
+	char shmask_default[1023];
 } cfg_t;
 
 extern cfg_t cfg;

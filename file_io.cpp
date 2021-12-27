@@ -1769,3 +1769,68 @@ bool isMraName(char *path)
         return (spl && !strcmp(spl, ".mra"));
 }
 
+fileTextReader::fileTextReader()
+{
+	buffer = nullptr;
+}
+
+fileTextReader::~fileTextReader()
+{
+	if( buffer != nullptr )
+	{
+		free(buffer);
+	}
+	buffer = nullptr;
+}
+
+bool FileOpenTextReader( fileTextReader *reader, const char *filename )
+{
+	fileTYPE f;
+
+	// ensure buffer is freed if the reader is being reused
+	reader->~fileTextReader();
+
+	if (FileOpen(&f, filename))
+	{
+		char *buf = (char*)malloc(f.size+1);
+		if (buf)
+		{
+			memset(buf, 0, f.size + 1);
+			int size;
+			if ((size = FileReadAdv(&f, buf, f.size)))
+			{
+				reader->size = f.size;
+				reader->buffer = buf;
+				reader->pos = reader->buffer;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+#define IS_NEWLINE(c) (((c) == '\r') || ((c) == '\n'))
+#define IS_WHITESPACE(c) (IS_NEWLINE(c) || ((c) == ' ') || ((c) == '\t'))
+
+const char *FileReadLine(fileTextReader *reader)
+{
+	const char *end = reader->buffer + reader->size;
+	while (reader->pos < end)
+	{
+		char *st = reader->pos;
+		while ((reader->pos < end) && *reader->pos && !IS_NEWLINE(*reader->pos))
+			reader->pos++;
+		*reader->pos = 0;
+		while (IS_WHITESPACE(*st))
+			st++;
+		if (*st == '#' || *st == ';' || !*st)
+		{
+			reader->pos++;
+		}
+		else
+		{
+			return st;
+		}
+	}
+	return nullptr;
+}

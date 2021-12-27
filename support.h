@@ -34,3 +34,6 @@
 
 // PCECD  support
 #include "support/pcecd/pcecd.h"
+
+// PSX support
+#include "support/psx/psx.h"

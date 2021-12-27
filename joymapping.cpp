@@ -130,14 +130,14 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 	map[SYS_BTN_DOWN]  = mmap[SYS_BTN_DOWN]  & 0xFFFF;
 	map[SYS_BTN_UP]    = mmap[SYS_BTN_UP]    & 0xFFFF;
 
-	if (mmap[SYS_AXIS_X])
+	if (mmap[SYS_AXIS_X] && !is_psx())
 	{
 		uint32_t key = KEY_EMU + (((uint16_t)mmap[SYS_AXIS_X]) << 1);
 		map[SYS_BTN_LEFT] = (key << 16) | map[SYS_BTN_LEFT];
 		map[SYS_BTN_RIGHT] = ((key+1) << 16) | map[SYS_BTN_RIGHT];
 	}
 
-	if (mmap[SYS_AXIS_Y])
+	if (mmap[SYS_AXIS_Y] && !is_psx())
 	{
 		uint32_t key = KEY_EMU + (((uint16_t)mmap[SYS_AXIS_Y]) << 1);
 		map[SYS_BTN_UP] = (key << 16) | map[SYS_BTN_UP];
