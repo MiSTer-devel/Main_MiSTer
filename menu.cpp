@@ -132,6 +132,7 @@ enum MENU
 	MENU_COEFF_FILE_SELECTED,
 	MENU_GAMMA_FILE_SELECTED,
 	MENU_AFILTER_FILE_SELECTED,
+	MENU_SMASK_FILE_SELECTED,
 
 	// Generic
 	MENU_GENERIC_MAIN1,
@@ -212,6 +213,7 @@ const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "   
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
+const char *config_smask_msg[] = { "None", "1x", "2x", "1x Rotated", "2x Rotated" };
 const char *config_gamma_msg[] = { "Off","On" };
 const char *config_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+", "HV-Integer", "???", "???", "???" };
 
@@ -298,6 +300,11 @@ static char Selected_tmp[1024] = {};
 void StoreIdx_F(int idx, char *path)
 {
 	strcpy(Selected_F[idx], path);
+}
+
+void StoreIdx_S(int idx, char *path)
+{
+	strcpy(Selected_S[idx], path);
 }
 
 static char selPath[1024] = {};
@@ -537,7 +544,7 @@ static uint32_t menu_key_get(void)
 		else if (CheckTimer(repeat))
 		{
 			repeat = GetTimer(REPEATRATE);
-			if (GetASCIIKey(c1) || ((menustate == MENU_COMMON2) && (menusub == 13)) || ((menustate == MENU_SYSTEM2) && (menusub == 4)))
+			if (GetASCIIKey(c1) || ((menustate == MENU_COMMON2) && (menusub == 15)) || ((menustate == MENU_SYSTEM2) && (menusub == 4)))
 			{
 				c = c1;
 				hold_cnt++;
@@ -1019,7 +1026,7 @@ void HandleUI(void)
 
 	if (c && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
 
-	if (is_menu())
+	if (is_menu() && cfg.osd_timeout >= 5)
 	{
 		static int menu_visible = 1;
 		static unsigned long timeout = 0;
@@ -1055,7 +1062,6 @@ void HandleUI(void)
 
 			if (!timeout)
 			{
-				if (!cfg.osd_timeout) cfg.osd_timeout = 30;
 				timeout = GetTimer(cfg.osd_timeout * 1000);
 			}
 		}
@@ -1952,12 +1958,13 @@ void HandleUI(void)
 						ioctl_index = menusub + 1;
 						int idx = 1;
 
-						if (p[1] == 'S')
+						if (p[idx] == 'S')
 						{
 							opensave = 1;
 							idx++;
 						}
-						else if (p[1] == 'C')
+
+						if (p[idx] == 'C')
 						{
 							store_name = 1;
 							idx++;
@@ -1989,8 +1996,17 @@ void HandleUI(void)
 					}
 					else if (p[0] == 'S' && (select || recent))
 					{
+						store_name = 0;
+						int idx = 1;
+
+						if (p[idx] == 'C')
+						{
+							store_name = 1;
+							idx++;
+						}
+
 						ioctl_index = 0;
-						if ((p[1] >= '0' && p[1] <= '9') || is_x86()) ioctl_index = p[1] - '0';
+						if ((p[idx] >= '0' && p[idx] <= '9') || is_x86()) ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
 
@@ -2004,12 +2020,10 @@ void HandleUI(void)
 
 						if (is_pce() || is_megacd() || is_x86())
 						{
-							//if (!strncasecmp(fs_pFileExt, "CUE", 3))
-							//{
-								//look for CHD too
-								strcat(fs_pFileExt, "CHD");
-								strcat(ext, "CHD");
-							//}
+							//look for CHD too
+							strcat(fs_pFileExt, "CHD");
+							strcat(ext, "CHD");
+
 							int num = ScanDirectory(Selected_tmp, SCANF_INIT, fs_pFileExt, 0);
 							memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 
@@ -2022,6 +2036,8 @@ void HandleUI(void)
 
 							fs_Options |= SCANO_NOZIP;
 						}
+
+						if (is_psx()) fs_Options |= SCANO_NOZIP;
 
 						if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if(recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
@@ -2196,6 +2212,13 @@ void HandleUI(void)
 
 	case MENU_GENERIC_IMAGE_SELECTED:
 		{
+			if (store_name)
+			{
+				char str[64];
+				sprintf(str, "%s.s%d", user_io_get_core_name(), ioctl_index);
+				FileSaveConfig(str, selPath, sizeof(selPath));
+			}
+
 			menustate = MENU_GENERIC_MAIN1;
 			if (selPath[0] && !is_x86()) MenuHide();
 
@@ -2217,6 +2240,10 @@ void HandleUI(void)
 			{
 				pcecd_set_image(ioctl_index, selPath);
 				cheats_init(selPath, 0);
+			}
+			else if (is_psx() && ioctl_index == 1)
+			{
+				psx_mount_cd(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1), ioctl_index, selPath);
 			}
 			else
 			{
@@ -2244,7 +2271,7 @@ void HandleUI(void)
 			while(1)
 			{
 				n = 0;
-				menumask = 0xf80F;
+				menumask = 0x3800f;
 
 				if (!menusub) firstmenu = 0;
 				adjvisible = 0;
@@ -2325,24 +2352,40 @@ void HandleUI(void)
 					MenuWrite(n++, s, menusub == 10, !audio_filter_en() || !S_ISDIR(getFileType(AFILTER_DIR)));
 				}
 
-				if (is_minimig() || is_st())
-				{
-					menumask &= ~0x1800;
-				}
-				else
+				if (video_get_shadow_mask_mode() >= 0)
 				{
 					MenuWrite(n++);
-					MenuWrite(n++, " Reset settings", menusub == 11, is_archie());
-					MenuWrite(n++, " Save settings", menusub == 12, 0);
+					menumask |= 0x1800;
+					sprintf(s, " Shadow Mask - %s", config_smask_msg[video_get_shadow_mask_mode()]);
+					MenuWrite(n++, s, menusub == 11);
+
+					memset(s, 0, sizeof(s));
+					s[0] = ' ';
+					if (strlen(video_get_shadow_mask())) strncpy(s + 1, video_get_shadow_mask(), 25);
+					else strcpy(s, " < none >");
+
+					while (strlen(s) < 26) strcat(s, " ");
+					strcat(s, " \x16 ");
+
+					MenuWrite(n++, s, menusub == 12, !video_get_shadow_mask_mode() || !S_ISDIR(getFileType(SMASK_DIR)));
+				}
+
+
+				if (!is_minimig() && !is_st())
+				{
+					menumask |= 0x6000;
+					MenuWrite(n++);
+					MenuWrite(n++, " Reset settings", menusub == 13, is_archie());
+					MenuWrite(n++, " Save settings", menusub == 14, 0);
 				}
 
 				MenuWrite(n++);
 				cr = n;
-				MenuWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 13);
-				MenuWrite(n++, " About", menusub == 14);
+				MenuWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 15);
+				MenuWrite(n++, " About", menusub == 16);
 
 				while(n < OsdGetSize() - 1) MenuWrite(n++);
-				MenuWrite(n++, STD_EXIT, menusub == 15, 0, OSD_ARROW_LEFT);
+				MenuWrite(n++, STD_EXIT, menusub == 17, 0, OSD_ARROW_LEFT);
 				sysinfo_timer = 0;
 
 				if (!adjvisible) break;
@@ -2375,6 +2418,15 @@ void HandleUI(void)
 
 			if (recent_init(-1)) menustate = MENU_RECENT1;
 			break;
+		}
+
+		if (plus || minus)
+		{
+			if(menusub == 11)
+			{
+				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
+				menustate = MENU_COMMON1;
+			}
 		}
 
 		if (select)
@@ -2466,6 +2518,18 @@ void HandleUI(void)
 				}
 				break;
 			case 11:
+				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + 1);
+				menustate = MENU_COMMON1;
+				break;
+			case 12:
+				if (video_get_shadow_mask_mode())
+				{
+					snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR"/%s", video_get_shadow_mask());
+					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR);
+					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_SMASK_FILE_SELECTED, MENU_COMMON1);
+				}
+				break;
+			case 13:
 				if (!is_archie())
 				{
 					menustate = MENU_RESET1;
@@ -2478,7 +2542,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 12:
+			case 14:
 				// Save settings
 				menustate = MENU_GENERIC_MAIN1;
 				menusub = 0;
@@ -2503,7 +2567,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 13:
+			case 15:
 				{
 					reboot_req = 1;
 
@@ -2516,7 +2580,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 14:
+			case 16:
 				menustate = MENU_ABOUT1;
 				menusub = 0;
 				break;
@@ -3056,6 +3120,20 @@ void HandleUI(void)
 		}
 		break;
 
+	case MENU_SMASK_FILE_SELECTED:
+		{
+			char *p = strcasestr(selPath, SMASK_DIR"/");
+			if (!p) video_set_shadow_mask(selPath);
+			else
+			{
+				p += strlen(SMASK_DIR);
+				while (*p == '/') p++;
+				video_set_shadow_mask(p);
+			}
+			menustate = MENU_COMMON1;
+		}
+		break;
+
 	case MENU_MISC1:
 		OsdSetSize(16);
 		helptext_idx = 0;
@@ -3559,7 +3637,7 @@ void HandleUI(void)
 		if (menu | select | left)
 		{
 			menustate = MENU_COMMON1;
-			menusub = 14;
+			menusub = 16;
 		}
 		break;
 

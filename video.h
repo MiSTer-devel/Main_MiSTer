@@ -11,6 +11,11 @@ void  video_set_gamma_en(int n);
 char* video_get_gamma_curve();
 void  video_set_gamma_curve(char *name);
 
+int   video_get_shadow_mask_mode();
+void  video_set_shadow_mask_mode(int n);
+char* video_get_shadow_mask();
+void  video_set_shadow_mask(char *name);
+
 void  video_mode_load();
 void  video_mode_adjust();
 

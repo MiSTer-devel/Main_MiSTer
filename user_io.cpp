@@ -261,6 +261,13 @@ char is_c64()
 	return (is_c64_type == 1);
 }
 
+static int is_psx_type = 0;
+char is_psx()
+{
+	if (!is_psx_type) is_psx_type = strcasecmp(core_name, "PSX") ? 2 : 1;
+	return (is_psx_type == 1);
+}
+
 static int is_st_type = 0;
 char is_st()
 {
@@ -615,27 +622,73 @@ static void parse_config()
 				use_cheats = 1;
 			}
 
-			if (p[0] == 'F' && p[1] == 'C')
+			if (p[0] == 'F')
 			{
-				static char str[1024];
-				uint32_t load_addr = 0;
-				if (substrcpy(str, p, 3))
+				int opensave = 0;
+				int idx = 1;
+				if (p[idx] == 'S')
 				{
-					load_addr = strtoul(str, NULL, 16);
-					if (load_addr < 0x20000000 || load_addr >= 0x40000000)
-					{
-						printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
-						load_addr = 0;
-					}
+					opensave = 1;
+					idx++;
 				}
 
-				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
+				if (p[idx] == 'C')
+				{
+					idx++;
+					static char str[1024];
+					uint32_t load_addr = 0;
+					if (substrcpy(str, p, 3))
+					{
+						load_addr = strtoul(str, NULL, 16);
+						if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+						{
+							printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
+							load_addr = 0;
+						}
+					}
+
+					sprintf(str, "%s.f%c", user_io_get_core_name(), p[idx]);
+					if (FileLoadConfig(str, str, sizeof(str)) && str[0])
+					{
+
+						idx = p[idx] - '0';
+						StoreIdx_F(idx, str);
+						user_io_file_tx(str, idx, opensave, 0, 0, load_addr);
+					}
+				}
+			}
+
+			if (p[0] == 'S' && p[1] == 'C')
+			{
+				static char str[1024];
+				sprintf(str, "%s.s%c", user_io_get_core_name(), p[2]);
+
+				static char ext[256];
+				substrcpy(ext, p, 1);
+				while (strlen(ext) % 3) strcat(ext, " ");
+
 				if (FileLoadConfig(str, str, sizeof(str)) && str[0])
 				{
-
 					int idx = p[2] - '0';
-					StoreIdx_F(idx, str);
-					user_io_file_tx(str, idx, 0, 0, 0, load_addr);
+					StoreIdx_S(idx, str);
+					if (is_x86())
+					{
+						x86_set_image(idx, str);
+					}
+					else if (is_megacd())
+					{
+						mcd_set_image(idx, str);
+					}
+					else if (is_pce())
+					{
+						pcecd_set_image(idx, str);
+						cheats_init(str, 0);
+					}
+					else
+					{
+						user_io_set_index(user_io_ext_idx(str, ext) << 6 | idx);
+						user_io_file_mount(str, idx);
+					}
 				}
 			}
 		}
@@ -1438,6 +1491,115 @@ static void kbd_fifo_poll()
 	kbd_fifo_r = (kbd_fifo_r + 1)&(KBD_FIFO_SIZE - 1);
 }
 
+int process_ss(const char *rom_name, int enable)
+{
+	static char ss_name[1024] = {};
+	static char *ss_sufx = 0;
+	static uint32_t ss_cnt[4] = {};
+	static void *base[4] = {};
+	static int enabled = 0;
+
+	if (!ss_base) return 0;
+
+	if (rom_name)
+	{
+		enabled = enable;
+		if (!enabled) return 0;
+
+		uint32_t len = ss_size;
+		uint32_t map_addr = ss_base;
+		fileTYPE f = {};
+
+		for (int i = 0; i < 4; i++)
+		{
+			if (!base[i]) base[i] = shmem_map(map_addr, len);
+			if (!base[i])
+			{
+				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
+			}
+			else
+			{
+				ss_cnt[i] = 0;
+				memset(base[i], 0, len);
+
+				if (!i)
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, 1);
+					printf("Base SavestatePath=%s\n", ss_name);
+					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
+				}
+				else
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
+				}
+
+				if (FileExists(ss_name))
+				{
+					if (!FileOpen(&f, ss_name))
+					{
+						printf("Unable to open file: %s\n", ss_name);
+					}
+					else
+					{
+						int ret = FileReadAdv(&f, base[i], len);
+						FileClose(&f);
+						*(uint32_t*)(base[i]) = 1;
+						ss_cnt[i] = 1;
+						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
+					}
+				}
+			}
+
+			map_addr += len;
+		}
+
+		FileGenerateSavestatePath(rom_name, ss_name, 1);
+		ss_sufx = ss_name + strlen(ss_name) - 4;
+		return 1;
+	}
+
+	if (!enabled) return 0;
+
+	static unsigned long ss_timer = 0;
+	if (ss_timer && !CheckTimer(ss_timer)) return 0;
+	ss_timer = GetTimer(1000);
+
+	fileTYPE f = {};
+	for (int i = 0; i < 4; i++)
+	{
+		if (base[i])
+		{
+			uint32_t curcnt = ((uint32_t*)(base[i]))[0];
+			uint32_t size = ((uint32_t*)(base[i]))[1];
+
+			if (curcnt != ss_cnt[i])
+			{
+				ss_cnt[i] = curcnt;
+				if (size) size = (size + 2) * 4;
+				if (size > 0 && size <= ss_size)
+				{
+					MenuHide();
+					Info("Saving the state", 500);
+
+					*ss_sufx = i + '1';
+					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
+					{
+						int ret = FileWriteAdv(&f, base[i], size);
+						FileClose(&f);
+						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
+					}
+					else
+					{
+						printf("Unable to create file: %s\n", ss_name);
+					}
+				}
+			}
+		}
+	}
+
+	return 1;
+}
+
 void user_io_set_index(unsigned char index)
 {
 	EnableFpga();
@@ -1936,109 +2098,6 @@ static void show_core_info(int info_n)
 			break;
 		}
 	}
-}
-
-static int process_ss(const char *rom_name)
-{
-	static char ss_name[1024] = {};
-	static char *ss_sufx = 0;
-	static uint32_t ss_cnt[4] = {};
-	static void *base[4] = {};
-
-	if (!ss_base) return 0;
-
-	if (rom_name)
-	{
-		uint32_t len = ss_size;
-		uint32_t map_addr = ss_base;
-		fileTYPE f = {};
-
-		for (int i = 0; i < 4; i++)
-		{
-			if (!base[i]) base[i] = shmem_map(map_addr, len);
-			if (!base[i])
-			{
-				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-			}
-			else
-			{
-				ss_cnt[i] = 0;
-				memset(base[i], 0, len);
-
-				if (!i)
-				{
-					FileGenerateSavestatePath(rom_name, ss_name, 1);
-					printf("Base SavestatePath=%s\n", ss_name);
-					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
-				}
-				else
-				{
-					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
-				}
-
-				if (FileExists(ss_name))
-				{
-					if (!FileOpen(&f, ss_name))
-					{
-						printf("Unable to open file: %s\n", ss_name);
-					}
-					else
-					{
-						int ret = FileReadAdv(&f, base[i], len);
-						FileClose(&f);
-						*(uint32_t*)(base[i]) = 1;
-						ss_cnt[i] = 1;
-						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
-					}
-				}
-			}
-
-			map_addr += len;
-		}
-
-		FileGenerateSavestatePath(rom_name, ss_name, 1);
-		ss_sufx = ss_name + strlen(ss_name) - 4;
-		return 1;
-	}
-
-	static unsigned long ss_timer = 0;
-	if (ss_timer && !CheckTimer(ss_timer)) return 0;
-	ss_timer = GetTimer(1000);
-
-	fileTYPE f = {};
-	for (int i = 0; i < 4; i++)
-	{
-		if (base[i])
-		{
-			uint32_t curcnt = ((uint32_t*)(base[i]))[0];
-			uint32_t size = ((uint32_t*)(base[i]))[1];
-
-			if (curcnt != ss_cnt[i])
-			{
-				ss_cnt[i] = curcnt;
-				if (size) size = (size + 2) * 4;
-				if (size > 0 && size <= ss_size)
-				{
-					MenuHide();
-					Info("Saving the state", 500);
-
-					*ss_sufx = i + '1';
-					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
-					{
-						int ret = FileWriteAdv(&f, base[i], size);
-						FileClose(&f);
-						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
-					}
-					else
-					{
-						printf("Unable to create file: %s\n", ss_name);
-					}
-				}
-			}
-		}
-	}
-
-	return 1;
 }
 
 int user_io_file_tx_a(const char* name, uint16_t index)
@@ -2577,9 +2636,7 @@ void user_io_poll()
 			int op = 0;
 			static uint8_t buffer[16][16384];
 			uint64_t lba;
-			uint32_t blkpow = 9;
-			uint32_t sz = 512;
-			uint32_t blksz = 1;
+			uint32_t blksz, blks, sz;
 
 			uint16_t c = spi_uio_cmd_cont(UIO_GET_SDSTAT);
 			if (c & 0x8000)
@@ -2590,14 +2647,16 @@ void user_io_poll()
 				spi_w(0);
 				lba = spi_w(0);
 				lba = (lba & 0xFFFF) | (((uint32_t)spi_w(0)) << 16);
-				blkpow = 7 + ((c >> 6) & 7);
-				blksz = (((c >> 9) & 0x3F) + 1);
-				sz = blksz << blkpow;
+				blks = ((c >> 9) & 0x3F) + 1;
+				blksz = (disk == 1 && is_psx()) ? 2352 : (128 << ((c >> 6) & 7));
+
+				sz = blksz * blks;
 				if (sz > sizeof(buffer[0]))
 				{
-					sz = sizeof(buffer[0]);
-					blksz = sz >> blkpow;
+					blks = sizeof(buffer[0]) / blksz;
+					sz = blksz * blks;
 				}
+
 				//if (op) printf("c=%X, op=%d, blkpow=%d, sz=%d, lba=%llu, disk=%d\n", c, op, blkpow, sz, lba, disk);
 			}
 			else
@@ -2638,10 +2697,14 @@ void user_io_poll()
 
 					ack = ((c & 4) ? 0 : ((disk + 1) << 8));
 				}
+
+				sz = 512;
+				blksz = 512;
+				blks = 1;
 			}
 			DisableIO();
 
-			if ((blksz == 32) && sd_type[disk])
+			if ((blks == 32) && sd_type[disk])
 			{
 				if (op == 2) c64_writeGCR(disk, lba);
 				else if (op & 1) c64_readGCR(disk, lba);
@@ -2667,7 +2730,7 @@ void user_io_poll()
 					if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
 					{
 						diskled_on();
-						if (FileWriteSec(&sd_image[disk], buffer[disk]))
+						if (FileWriteAdv(&sd_image[disk], buffer[disk], sz))
 						{
 							sd_image[disk].size = sz;
 						}
@@ -2680,11 +2743,11 @@ void user_io_poll()
 				else
 				{
 					// ... and write it to disk
-					uint64_t size = sd_image[disk].size >> blkpow;
-					if (size && lba <= size)
+					uint64_t size = sd_image[disk].size / blksz;
+					if (sz && lba <= size)
 					{
 						diskled_on();
-						if (FileSeek(&sd_image[disk], lba << blkpow, SEEK_SET))
+						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
 						{
 							if (!sd_image_cangrow[disk])
 							{
@@ -2699,19 +2762,19 @@ void user_io_poll()
 			}
 			else if (op & 1)
 			{
-				uint32_t buf_n = sizeof(buffer[0]) >> blkpow;
-				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, sz, disk, fio_size);
+				uint32_t buf_n = sizeof(buffer[0]) / blksz;
+				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, blksz, disk, fio_size);
 
 				int done = 0;
 				uint32_t offset;
 
-				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || (lba + blksz - buffer_lba[disk]) > buf_n)
+				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
 				{
 					buffer_lba[disk] = -1;
 					if (sd_image[disk].size)
 					{
 						diskled_on();
-						if (FileSeek(&sd_image[disk], lba << blkpow, SEEK_SET))
+						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
 						{
 							if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 							{
@@ -2754,7 +2817,7 @@ void user_io_poll()
 				}
 				else
 				{
-					offset = (lba - buffer_lba[disk]) << blkpow;
+					offset = (lba - buffer_lba[disk]) * blksz;
 					done = 1;
 				}
 
@@ -2768,10 +2831,11 @@ void user_io_poll()
 				{
 					buffer_lba[disk] = -1;
 				}
-				else if(done && (lba + blksz - buffer_lba[disk]) == buf_n)
+				else if(done && (lba + blks - buffer_lba[disk]) == buf_n)
 				{
 					diskled_on();
-					if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
+					if (FileSeek(&sd_image[disk], (lba + blks) * blksz, SEEK_SET) &&
+						FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 					{
 						buffer_lba[disk] += buf_n;
 					}
@@ -3593,23 +3657,24 @@ bool user_io_screenshot(const char *pngname, int rescale)
 		static char filename[1024];
 		FileGenerateScreenshotName(basename, filename, 1024);
 
-
 		/* do we want to save a rescaled image? */
-		if (rescale) {
+		if (rescale)
+		{
 			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,ms->output_width,ms->output_height);
-                	imlib_free_image_and_decache();
+			imlib_free_image_and_decache();
 			imlib_context_set_image(im_scaled);
-
 		}
 		Imlib_Load_Error error;
 		imlib_save_image_with_error_return(getFullPath(filename),&error);
-		if (error != IMLIB_LOAD_ERROR_NONE) {
+		if (error != IMLIB_LOAD_ERROR_NONE)
+		{
 			print_imlib_load_error (error, filename);
 			Info("error in saving png");
 			return false;
 		}
                 imlib_free_image_and_decache();
 		mister_scaler_free(ms);
+		free(outputbuf);
 		char msg[1024];
 		snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
 		Info(msg);

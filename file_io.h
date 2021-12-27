@@ -34,6 +34,16 @@ struct direntext_t
 	char altname[256];
 };
 
+struct fileTextReader
+{
+	fileTextReader();
+	~fileTextReader();
+
+	size_t size;
+	char *buffer;
+	char *pos;
+};
+
 int flist_nDirEntries();
 int flist_iFirstEntry();
 void flist_iFirstEntryInc();
@@ -120,11 +130,15 @@ const char *getFullPath(const char *name);
 uint32_t getFileType(const char *name);
 bool isMraName(char *path);
 
+bool FileOpenTextReader(fileTextReader *reader, const char *path);
+const char* FileReadLine(fileTextReader *reader);
+
 #define LOADBUF_SZ (1024*1024)
 
 #define COEFF_DIR "filters"
 #define GAMMA_DIR "gamma"
 #define AFILTER_DIR "filters_audio"
+#define SMASK_DIR "shadow_masks"
 #define GAMES_DIR "games"
 #define CIFS_DIR "cifs"
 

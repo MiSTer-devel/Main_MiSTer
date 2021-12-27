@@ -69,6 +69,7 @@
 #define UIO_SET_UART    0x3B
 #define UIO_CHK_UPLOAD  0x3C
 #define UIO_ASTICK_2    0x3D
+#define UIO_SHADOWMASK  0x3E
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
@@ -266,6 +267,8 @@ char * GetMidiLinkSoundfont();
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();
 
+int process_ss(const char *rom_name, int enable = 1);
+
 void diskled_on();
 #define DISKLED_ON  diskled_on()
 #define DISKLED_OFF void()
@@ -282,6 +285,7 @@ char is_archie();
 char is_gba();
 char is_c64();
 char is_st();
+char is_psx();
 char is_arcade();
 
 #define HomeDir(x) user_io_get_core_path(x)
