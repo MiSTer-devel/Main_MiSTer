@@ -3650,7 +3650,7 @@ bool user_io_screenshot(const char *pngname, int rescale)
 		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 4, 1);
 		// read the image into the outpubuf - RGBA format
 		mister_scaler_read_32(ms,outputbuf);
-		// using_data will keep a pointer and dispose of the outbuf 
+		// using_data will keep a pointer and dispose of the outbuf
 		Imlib_Image im = imlib_create_image_using_data(ms->width,ms->height,(unsigned int *)outputbuf);
 		imlib_context_set_image(im);
 
@@ -3672,7 +3672,7 @@ bool user_io_screenshot(const char *pngname, int rescale)
 			Info("error in saving png");
 			return false;
 		}
-                imlib_free_image_and_decache();
+		imlib_free_image_and_decache();
 		mister_scaler_free(ms);
 		free(outputbuf);
 		char msg[1024];
