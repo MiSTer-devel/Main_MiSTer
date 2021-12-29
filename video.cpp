@@ -198,14 +198,107 @@ static void setPLL(double Fout, vmode_custom_t *v)
 	v->Fpix = Fpix;
 }
 
-static char scaler_flt_cfg[1024] = { 0 };
-static char new_scaler = 0;
+static char scaler_flt[3][1024] = { 0 };
+
+static int get_phases_count(char *filename)
+{
+	fileTextReader reader = {};
+	int res = 0;
+
+	if (FileOpenTextReader(&reader, filename))
+	{
+		const char *line;
+		while ((line = FileReadLine(&reader)))
+		{
+			int c0, c1, c2, c3;
+			int n = sscanf(line, "%d,%d,%d,%d", &c0, &c1, &c2, &c3);
+			if (n == 4) res++;
+		}
+	}
+	return res;
+}
+
+static void send_phases(char* filename, int type, int phases, int ver)
+{
+	printf("send_phases(%s, %d, %d, %d)\n", filename, type, phases, ver);
+	fileTextReader reader = {};
+	int phase = (type == VFILTER_VERT) ? 64 : 0;
+
+	if (FileOpenTextReader(&reader, filename))
+	{
+		int v2txt = (phases >= 64);
+		const char *line;
+		while ((line = FileReadLine(&reader)))
+		{
+			int c0, c1, c2, c3;
+			if (sscanf(line, "%d,%d,%d,%d", &c0, &c1, &c2, &c3) == 4)
+			{
+				if (ver == 2)
+				{
+					int rep = v2txt ? 1 : 4;
+					for (int i = 0; i < rep; i++)
+					{
+						spi_w((phase * 4) + 0); spi_w(c0 & 0x1FF);
+						spi_w((phase * 4) + 1); spi_w(c1 & 0x1FF);
+						spi_w((phase * 4) + 2); spi_w(c2 & 0x1FF);
+						spi_w((phase * 4) + 3); spi_w(c3 & 0x1FF);
+						phase++;
+					}
+				}
+				else
+				{
+					if (!(phase & 3))
+					{
+						spi_w((c0 & 0x1FF) | ((phase + 0) << 9));
+						spi_w((c1 & 0x1FF) | ((phase + 1) << 9));
+						spi_w((c2 & 0x1FF) | ((phase + 2) << 9));
+						spi_w((c3 & 0x1FF) | ((phase + 3) << 9));
+					}
+					phase += v2txt ? 1 : 4;
+				}
+				if (!(phase & 63)) break;
+			}
+		}
+	}
+}
+
+static void set_vfilter(int force)
+{
+	static char filename[1024];
+	static int last_flags = 0;
+
+	int flt_flags = spi_uio_cmd_cont(UIO_SET_FLTNUM);
+	if (!flt_flags || (!force && last_flags == flt_flags))
+	{
+		DisableIO();
+		return;
+	}
+
+	last_flags = flt_flags;
+	printf("video_set_filter: flt_flags=%d\n", flt_flags);
+
+	spi8(scaler_flt[0][0]);
+	DisableIO();
+
+	spi_uio_cmd_cont(UIO_SET_FLTCOEF);
+	int phases;
+
+	//horizontal filter
+	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt[VFILTER_HORZ] + 1);
+	phases = get_phases_count(filename);
+	if (phases) send_phases(filename, VFILTER_HORZ, phases, flt_flags & 0xF);
+
+	//vertical/scanlines filter
+	int vert_flt = ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN][0]) ? VFILTER_SCAN : (scaler_flt[VFILTER_VERT][0]) ? VFILTER_VERT : VFILTER_HORZ;
+	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt[vert_flt] + 1);
+	phases = get_phases_count(filename);
+	if (phases) send_phases(filename, VFILTER_VERT, phases, flt_flags & 0xF);
+
+	DisableIO();
+}
 
 static void setScaler()
 {
-	fileTextReader reader = {};
-	static char filename[1024];
-
 	uint32_t arc[4] = {};
 	for (int i = 0; i < 2; i++)
 	{
@@ -222,71 +315,33 @@ static void setScaler()
 	spi_uio_cmd_cont(UIO_SET_AR_CUST);
 	for (int i = 0; i < 4; i++) spi_w(arc[i]);
 	DisableIO();
-
-	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
-	{
-		DisableIO();
-		return;
-	}
-
-	new_scaler = 1;
-	spi8(scaler_flt_cfg[0]);
-	DisableIO();
-	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt_cfg + 1);
-
-	if (FileOpenTextReader(&reader, filename))
-	{
-		//printf("Read scaler coefficients\n");
-		spi_uio_cmd_cont(UIO_SET_FLTCOEF);
-
-		int phase = 0;
-		const char *line;
-		while ((line = FileReadLine(&reader)))
-		{
-			int c0, c1, c2, c3;
-			int n = sscanf(line, "%d,%d,%d,%d", &c0, &c1, &c2, &c3);
-			if (n == 4)
-			{
-				//printf("   phase %c-%02d: %4d,%4d,%4d,%4d\n", (phase >= 16) ? 'V' : 'H', phase % 16, c0, c1, c2, c3);
-				//printf("%03X: %03X %03X %03X %03X;\n",phase*4, c0 & 0x1FF, c1 & 0x1FF, c2 & 0x1FF, c3 & 0x1FF);
-
-				spi_w((c0 & 0x1FF) | (((phase * 4) + 0) << 9));
-				spi_w((c1 & 0x1FF) | (((phase * 4) + 1) << 9));
-				spi_w((c2 & 0x1FF) | (((phase * 4) + 2) << 9));
-				spi_w((c3 & 0x1FF) | (((phase * 4) + 3) << 9));
-
-				phase++;
-				if (phase >= 32) break;
-			}
-		}
-		DisableIO();
-	}
+	set_vfilter(1);
 }
 
-int video_get_scaler_flt()
+int video_get_scaler_flt(int type)
 {
-	return new_scaler ? scaler_flt_cfg[0] : -1;
+	return scaler_flt[type][0];
 }
 
-char* video_get_scaler_coeff()
+char* video_get_scaler_coeff(int type)
 {
-	return scaler_flt_cfg + 1;
+	return scaler_flt[type] + 1;
 }
 
 static char scaler_cfg[128] = { 0 };
 
-void video_set_scaler_flt(int n)
+void video_set_scaler_flt(int type, int n)
 {
-	scaler_flt_cfg[0] = (char)n;
-	FileSaveConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg));
-	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt_cfg[0]);
-	spi_uio_cmd(UIO_SET_FLTCOEF);
+	scaler_flt[type][0] = (char)n;
+	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
+	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt[0][0]);
+	set_vfilter(1);
 }
 
-void video_set_scaler_coeff(char *name)
+void video_set_scaler_coeff(int type, char *name)
 {
-	strcpy(scaler_flt_cfg + 1, name);
-	FileSaveConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg));
+	strcpy(scaler_flt[type] + 1, name);
+	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
 	setScaler();
 	user_io_send_buttons(1);
 }
@@ -294,14 +349,28 @@ void video_set_scaler_coeff(char *name)
 static void loadScalerCfg()
 {
 	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name());
-	if (!FileLoadConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
+	memset(scaler_flt, 0, sizeof(scaler_cfg));
+	if (!FileLoadConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt)) || scaler_flt[0][0] > 1)
 	{
-		memset(scaler_flt_cfg, 0, sizeof(scaler_flt_cfg));
-		if (cfg.vfilter_default[0])
-		{
-			strcpy(scaler_flt_cfg+1, cfg.vfilter_default);
-			scaler_flt_cfg[0] = 1;
-		}
+		memset(scaler_flt, 0, sizeof(scaler_flt));
+	}
+
+	if (!scaler_flt[VFILTER_HORZ][1] && cfg.vfilter_default[0])
+	{
+		strcpy(scaler_flt[VFILTER_HORZ]+1, cfg.vfilter_default);
+		scaler_flt[VFILTER_HORZ][0] = 1;
+	}
+
+	if (!scaler_flt[VFILTER_VERT][1] && cfg.vfilter_vertical_default[0])
+	{
+		strcpy(scaler_flt[VFILTER_VERT] + 1, cfg.vfilter_vertical_default);
+		scaler_flt[VFILTER_VERT][0] = 1;
+	}
+
+	if (!scaler_flt[VFILTER_SCAN][1] && cfg.vfilter_scanlines_default[0])
+	{
+		strcpy(scaler_flt[VFILTER_SCAN] + 1, cfg.vfilter_scanlines_default);
+		scaler_flt[VFILTER_SCAN][0] = 1;
 	}
 }
 
@@ -911,6 +980,8 @@ void video_mode_adjust()
 		user_io_send_buttons(1);
 		force = 1;
 	}
+
+	set_vfilter(0);
 }
 
 void video_fb_enable(int enable, int n)
