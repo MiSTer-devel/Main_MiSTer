@@ -2799,10 +2799,10 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					else value = 0;
 				}
 
-				value = (value * 127) / hrange;
+				value = (value * 128) / hrange;
 
 				//final check to eliminate additive error
-				if (value < -127) value = -127;
+				if (value < -128) value = -128;
 				else if (value > 127) value = 127;
 
 				if (input[sub_dev].axis_pos[ev->code & 0xFF] == (int8_t)value) break;
