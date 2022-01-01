@@ -486,16 +486,15 @@ enum
 static void setShadowMask()
 {
 	static char filename[1024];
+	has_shadow_mask = 0;
 
 	if (!spi_uio_cmd_cont(UIO_SHADOWMASK))
 	{
 		DisableIO();
-		has_shadow_mask = false;
 		return;
 	}
 
-	has_shadow_mask = true;
-
+	has_shadow_mask = 1;
 	switch( video_get_shadow_mask_mode() )
 	{
 		default: spi_w(SM_FLAG(0)); break;
@@ -505,19 +504,37 @@ static void setShadowMask()
 		case SM_MODE_2X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED | SM_FLAG_2X)); break;
 	}
 
+	int loaded = 0;
 	snprintf(filename, sizeof(filename), SMASK_DIR"/%s", shadow_mask_cfg + 1);
 
 	fileTextReader reader;
-	if( FileOpenTextReader( &reader, filename ) )
+	if (FileOpenTextReader(&reader, filename))
 	{
+		char *start_pos = reader.pos;
+		const char *line;
+		uint32_t res = 0;
+		while ((line = FileReadLine(&reader)))
+		{
+			if (!strncasecmp(line, "resolution=", 11))
+			{
+				if (sscanf(line + 11, "%u", &res))
+				{
+					if (v_cur.item[5] >= res)
+					{
+						start_pos = reader.pos;
+					}
+				}
+			}
+		}
+
 		int w = -1, h = -1;
 		int y = 0;
 		int v2 = 0;
 
-		const char *line;
-		while ((line = FileReadLine( &reader )))
+		reader.pos = start_pos;
+		while ((line = FileReadLine(&reader)))
 		{
-			if( w == -1 )
+			if (w == -1)
 			{
 				if (!strcasecmp(line, "v2"))
 				{
@@ -525,10 +542,14 @@ static void setShadowMask()
 					continue;
 				}
 
+				if (!strncasecmp(line, "resolution=", 11))
+				{
+					continue;
+				}
+
 				int n = sscanf(line, "%d,%d", &w, &h);
 				if ((n != 2) || (w <= 0) || (h <= 0) || (w > 16) || (h > 16))
 				{
-					spi_w(SM_FLAG(0));
 					break;
 				}
 			}
@@ -536,26 +557,30 @@ static void setShadowMask()
 			{
 				unsigned int p[16];
 				int n = sscanf(line, "%X,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x", p + 0, p + 1, p + 2, p + 3, p + 4, p + 5, p + 6, p + 7, p + 8, p + 9, p + 10, p + 11, p + 12, p + 13, p + 14, p + 15);
-				if( n != w )
+				if (n != w)
 				{
-					spi_w(SM_FLAG(0));
 					break;
 				}
 
 				for (int x = 0; x < 16; x++) spi_w(SM_LUT(v2 ? (p[x] & 0x7FF) : (((p[x] & 7) << 8) | 0x2A)));
 				y += 1;
 
-				if( y == h ) break;
+				if (y == h)
+				{
+					loaded = 1;
+					break;
+				}
 			}
 		}
 
-		if( y == h )
+		if (y == h)
 		{
 			spi_w(SM_HMAX(w - 1));
 			spi_w(SM_VMAX(h - 1));
 		}
 	}
 
+	if (!loaded) spi_w(SM_FLAG(0));
 	DisableIO();
 }
 
@@ -623,11 +648,7 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	loadScalerCfg();
 	setScaler();
 
-	loadShadowMaskCfg();
-	setShadowMask();
-
 	v_cur = *v;
-
 	vmode_custom_t v_fix = v_cur;
 	if (cfg.direct_video)
 	{
@@ -682,6 +703,9 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 	sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_width * 4);
 	system(fb_reset_cmd);
+
+	loadShadowMaskCfg();
+	setShadowMask();
 }
 
 static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)

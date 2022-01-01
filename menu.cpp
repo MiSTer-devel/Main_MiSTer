@@ -2370,15 +2370,6 @@ void HandleUI(void)
 			break;
 		}
 
-		if (plus || minus)
-		{
-			if(menusub == 11)
-			{
-				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
-				menustate = MENU_COMMON1;
-			}
-		}
-
 		if (select)
 		{
 			switch (menusub)
@@ -2600,7 +2591,7 @@ void HandleUI(void)
 			MenuWrite(n++, s, menusub == 7, (video_get_gamma_en() <= 0) || !S_ISDIR(getFileType(GAMMA_DIR)));
 
 			MenuWrite(n++);
-			sprintf(s, " Shadow Mask - %s", config_smask_msg[video_get_shadow_mask_mode()]);
+			sprintf(s, " Shadow Mask - %s", (video_get_shadow_mask_mode() < 0) ? config_smask_msg[0] : config_smask_msg[video_get_shadow_mask_mode()]);
 			MenuWrite(n++, s, menusub == 8, video_get_shadow_mask_mode() < 0);
 			strcpy(s, " ");
 			if (strlen(video_get_shadow_mask())) strncat(s, video_get_shadow_mask(), 25);
