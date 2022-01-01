@@ -44,6 +44,7 @@ QL: Sinclair QL
 RX78: Bandai RX-78
 SAMCoupe: SAM Coupe
 SharpMZ: Sharp MZ Series
+SordM5: Sord M5
 Specialist: Specialist/MX
 Ti994a: TI-99/4A
 Vector-06C: Vector-06C
