@@ -1004,8 +1004,10 @@ void video_mode_adjust()
 		user_io_send_buttons(1);
 		force = 1;
 	}
-
-	set_vfilter(0);
+	else
+	{
+		set_vfilter(0);
+	}
 }
 
 void video_fb_enable(int enable, int n)
