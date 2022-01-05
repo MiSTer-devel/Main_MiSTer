@@ -2799,10 +2799,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					else value = 0;
 				}
 
-				value = (value * 127) / hrange;
+				int range = is_psx() ? 128 : 127;
+				value = (value * range) / hrange;
 
 				//final check to eliminate additive error
-				if (value < -127) value = -127;
+				if (value < -range) value = -range;
 				else if (value > 127) value = 127;
 
 				if (input[sub_dev].axis_pos[ev->code & 0xFF] == (int8_t)value) break;

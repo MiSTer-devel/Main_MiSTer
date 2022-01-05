@@ -65,6 +65,8 @@ typedef struct {
 	char custom_aspect_ratio[2][16];
 	char afilter_default[1023];
 	char vfilter_default[1023];
+	char vfilter_vertical_default[1023];
+	char vfilter_scanlines_default[1023];
 	char shmask_default[1023];
 } cfg_t;
 

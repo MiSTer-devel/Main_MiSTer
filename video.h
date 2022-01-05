@@ -1,10 +1,14 @@
 #ifndef VIDEO_H
 #define VIDEO_H
 
-int   video_get_scaler_flt();
-void  video_set_scaler_flt(int n);
-char* video_get_scaler_coeff();
-void  video_set_scaler_coeff(char *name);
+#define VFILTER_HORZ 0
+#define VFILTER_VERT 1
+#define VFILTER_SCAN 2
+
+int   video_get_scaler_flt(int type);
+void  video_set_scaler_flt(int type, int n);
+char* video_get_scaler_coeff(int type);
+void  video_set_scaler_coeff(int type, char *name);
 
 int   video_get_gamma_en();
 void  video_set_gamma_en(int n);

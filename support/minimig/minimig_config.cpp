@@ -116,7 +116,15 @@ static char UploadKickstart(char *name)
 	BootPrint("Loading file: ");
 	BootPrint(name);
 
-	if (FileOpen(&file, name)) {
+	if (FileOpen(&file, name))
+	{
+		// discard from possible residents
+		EnableIO();
+		spi8(UIO_MM2_WR);
+		for (int i = 0; i < 8; i++) spi8(0);
+		for (int i = 0; i < 4; i++) spi8(1);
+		DisableIO();
+
 		if (file.size == 0x100000) {
 			// 1MB Kickstart ROM
 			BootPrint("Uploading 1MB Kickstart ...");
@@ -126,8 +134,8 @@ static char UploadKickstart(char *name)
 			return(1);
 		}
 		else if ((file.size == 8203) && keysize) {
-		        // Cloanto encrypted A1000 boot ROM
-		        BootPrint("Uploading encrypted A1000 boot ROM");
+			// Cloanto encrypted A1000 boot ROM
+			BootPrint("Uploading encrypted A1000 boot ROM");
 			SendFileV2(&file, romkey, keysize, 0xf80000, file.size >> 9);
 			FileClose(&file);
 			//clear tag (write 0 to $fc0000) to force bootrom to load Kickstart from disk
@@ -138,9 +146,9 @@ static char UploadKickstart(char *name)
 			return(1);
 		  }
 		else if (file.size == 0x2000) {
-		        // 8KB A1000 boot ROM
-		        BootPrint("Uploading A1000 boot ROM");
-		        SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
+			// 8KB A1000 boot ROM
+			BootPrint("Uploading A1000 boot ROM");
+			SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
 			FileClose(&file);
 			spi_uio_cmd32_cont(UIO_MM2_WR, 0xfc0000);
 			spi8(0x00);spi8(0x00);
