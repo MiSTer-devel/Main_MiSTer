@@ -370,7 +370,7 @@ static void ApplyConfiguration(char reloadkickstart)
 		spi_uio_cmd8(UIO_MM2_RST, rstval);
 		if (!UploadKickstart(minimig_config.kickstart))
 		{
-			snprintf(minimig_config.kickstart, 1024, "%s/%s", HomeDir(), "KICK.ROM");
+			snprintf(minimig_config.kickstart, sizeof(minimig_config.kickstart) - 1, "%s/%s", HomeDir(), "KICK.ROM");
 			if (!UploadKickstart(minimig_config.kickstart))
 			{
 				strcpy(minimig_config.kickstart, "KICK.ROM");
@@ -475,7 +475,7 @@ int minimig_cfg_load(int num)
 		// set default configuration
 		memset((void*)&minimig_config, 0, sizeof(minimig_config));  // Finally found default config bug - params were reversed!
 		memcpy(minimig_config.id, config_id, sizeof(minimig_config.id));
-		snprintf(minimig_config.kickstart, 1024, "%s/%s", HomeDir(), "KICK.ROM");
+		snprintf(minimig_config.kickstart, sizeof(minimig_config.kickstart) - 1, "%s/%s", HomeDir(), "KICK.ROM");
 		minimig_config.memory = 0x11;
 		minimig_config.cpu = 0;
 		minimig_config.chipset = 0;
