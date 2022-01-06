@@ -412,7 +412,6 @@ static void ApplyConfiguration(char reloadkickstart)
 int minimig_cfg_load(int num)
 {
 	static const char config_id[] = "MNMGCFG0";
-	char updatekickstart = 0;
 	int result = 0;
 
 	const char *filename = GetConfigurationName(num, 1);
@@ -432,11 +431,6 @@ int minimig_cfg_load(int num)
 				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
 					// A few more sanity checks...
 					if (tmpconf.floppy.drives <= 4) {
-						// If either the old config and new config have a different kickstart file,
-						// or this is the first boot, we need to upload a kickstart image.
-						if (strcmp(tmpconf.kickstart, minimig_config.kickstart) != 0) {
-							updatekickstart = true;
-						}
 						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(minimig_config));
 						result = 1; // We successfully loaded the config.
 					}
@@ -456,11 +450,6 @@ int minimig_cfg_load(int num)
 				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
 					// A few more sanity checks...
 					if (tmpconf.floppy.drives <= 4) {
-						// If either the old config and new config have a different kickstart file,
-						// or this is the first boot, we need to upload a kickstart image.
-						if (strcmp(tmpconf.kickstart, minimig_config.kickstart) != 0) {
-							updatekickstart = true;
-						}
 						memset((void*)&minimig_config, 0, sizeof(minimig_config));
 						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(tmpconf));
 						minimig_config.cpu = tmpconf.cpu;
@@ -498,7 +487,6 @@ int minimig_cfg_load(int num)
 		minimig_config.hardfile[2].filename[0] = 0;
 		minimig_config.hardfile[3].cfg = 0;
 		minimig_config.hardfile[3].filename[0] = 0;
-		updatekickstart = true;
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
 
@@ -530,7 +518,7 @@ int minimig_cfg_load(int num)
 		minimig_config.chipset &= ~CONFIG_NTSC;
 	}
 
-	ApplyConfiguration(updatekickstart);
+	ApplyConfiguration(1);
 	return(result);
 }
 
