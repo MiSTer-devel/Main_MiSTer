@@ -199,72 +199,70 @@ static void setPLL(double Fout, vmode_custom_t *v)
 }
 
 static char scaler_flt[3][1024] = { 0 };
+static int phases[65][4];
 
-static int get_phases_count(char *filename)
+static int get_phases_count(int type)
 {
 	fileTextReader reader = {};
 	int res = 0;
 
+	static char filename[1024];
+	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt[type] + 1);
+
 	if (FileOpenTextReader(&reader, filename))
 	{
 		const char *line;
 		while ((line = FileReadLine(&reader)))
 		{
-			int c0, c1, c2, c3;
-			int n = sscanf(line, "%d,%d,%d,%d", &c0, &c1, &c2, &c3);
+			int n = sscanf(line, "%d,%d,%d,%d", &phases[res][0], &phases[res][1], &phases[res][2], &phases[res][3]);
 			if (n == 4) res++;
+			if (res > 64) return 0; //too many
 		}
 	}
+
+	if (res != 16 && res != 32 && res != 64) res = 0;
 	return res;
 }
 
-static void send_phases(char* filename, int type, int phases, int ver)
+static void send_phases(int type, int cnt, int ver)
 {
-	printf("send_phases(%s, %d, %d, %d)\n", filename, type, phases, ver);
+	printf("send_phases: %d, %d, %d)\n", type, cnt, ver);
 	fileTextReader reader = {};
 	int phase = (type == VFILTER_VERT) ? 64 : 0;
 
-	if (FileOpenTextReader(&reader, filename))
+	int v2txt = (cnt >= 64);
+	int line = 0;
+	do
 	{
-		int v2txt = (phases >= 64);
-		const char *line;
-		while ((line = FileReadLine(&reader)))
+		if (ver == 2)
 		{
-			int c0, c1, c2, c3;
-			if (sscanf(line, "%d,%d,%d,%d", &c0, &c1, &c2, &c3) == 4)
+			int rep = v2txt ? 1 : 4;
+			for (int i = 0; i < rep; i++)
 			{
-				if (ver == 2)
-				{
-					int rep = v2txt ? 1 : 4;
-					for (int i = 0; i < rep; i++)
-					{
-						spi_w((phase * 4) + 0); spi_w(c0 & 0x1FF);
-						spi_w((phase * 4) + 1); spi_w(c1 & 0x1FF);
-						spi_w((phase * 4) + 2); spi_w(c2 & 0x1FF);
-						spi_w((phase * 4) + 3); spi_w(c3 & 0x1FF);
-						phase++;
-					}
-				}
-				else
-				{
-					if (!(phase & 3))
-					{
-						spi_w((c0 & 0x1FF) | ((phase + 0) << 9));
-						spi_w((c1 & 0x1FF) | ((phase + 1) << 9));
-						spi_w((c2 & 0x1FF) | ((phase + 2) << 9));
-						spi_w((c3 & 0x1FF) | ((phase + 3) << 9));
-					}
-					phase += v2txt ? 1 : 4;
-				}
-				if (!(phase & 63)) break;
+				spi_w((phase * 4) + 0); spi_w(phases[line][0] & 0x1FF);
+				spi_w((phase * 4) + 1); spi_w(phases[line][1] & 0x1FF);
+				spi_w((phase * 4) + 2); spi_w(phases[line][2] & 0x1FF);
+				spi_w((phase * 4) + 3); spi_w(phases[line][3] & 0x1FF);
+				phase++;
 			}
 		}
-	}
+		else
+		{
+			if (!(phase & 3))
+			{
+				spi_w((phases[line][0] & 0x1FF) | ((phase + 0) << 9));
+				spi_w((phases[line][1] & 0x1FF) | ((phase + 1) << 9));
+				spi_w((phases[line][2] & 0x1FF) | ((phase + 2) << 9));
+				spi_w((phases[line][3] & 0x1FF) | ((phase + 3) << 9));
+			}
+			phase += v2txt ? 1 : 4;
+		}
+		line++;
+	} while (phase & 63);
 }
 
 static void set_vfilter(int force)
 {
-	static char filename[1024];
 	static int last_flags = 0;
 
 	int flt_flags = spi_uio_cmd_cont(UIO_SET_FLTNUM);
@@ -284,17 +282,19 @@ static void set_vfilter(int force)
 	int phases;
 
 	//horizontal filter
-	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt[VFILTER_HORZ] + 1);
-	phases = get_phases_count(filename);
-	if (phases) send_phases(filename, VFILTER_HORZ, phases, flt_flags & 0xF);
-
-	//vertical/scanlines filter
-	int vert_flt = ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN][0]) ? VFILTER_SCAN : (scaler_flt[VFILTER_VERT][0]) ? VFILTER_VERT : VFILTER_HORZ;
-	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt[vert_flt] + 1);
-	phases = get_phases_count(filename);
-	if (phases) send_phases(filename, VFILTER_VERT, phases, flt_flags & 0xF);
+	phases = get_phases_count(VFILTER_HORZ);
+	if (phases)
+	{
+		send_phases(VFILTER_HORZ, phases, flt_flags & 0xF);
+		//vertical/scanlines filter
+		int vert_flt = ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN][0]) ? VFILTER_SCAN : (scaler_flt[VFILTER_VERT][0]) ? VFILTER_VERT : VFILTER_HORZ;
+		phases = get_phases_count(vert_flt);
+		if (!phases) phases = get_phases_count(VFILTER_HORZ);
+		send_phases(VFILTER_VERT, phases, flt_flags & 0xF);
+	}
 
 	DisableIO();
+	if (!phases) spi_uio_cmd8(UIO_SET_FLTNUM, 0);
 }
 
 static void setScaler()
@@ -372,6 +372,10 @@ static void loadScalerCfg()
 		strcpy(scaler_flt[VFILTER_SCAN] + 1, cfg.vfilter_scanlines_default);
 		scaler_flt[VFILTER_SCAN][0] = 1;
 	}
+
+	if (!get_phases_count(VFILTER_HORZ)) memset(scaler_flt[VFILTER_HORZ], 0, sizeof(scaler_flt[VFILTER_HORZ]));
+	if (!get_phases_count(VFILTER_VERT)) memset(scaler_flt[VFILTER_VERT], 0, sizeof(scaler_flt[VFILTER_VERT]));
+	if (!get_phases_count(VFILTER_SCAN)) memset(scaler_flt[VFILTER_SCAN], 0, sizeof(scaler_flt[VFILTER_SCAN]));
 }
 
 static char gamma_cfg[1024] = { 0 };
