@@ -15,7 +15,7 @@
 
 Altair8800: Altair 8800
 Amstrad: Amstrad CPC 6128
-ao486: IBM 386-Compatible
+ao486: IBM 486-Compatible
 Apogee: Apogee BK-01
 Apple-I: Apple I
 Apple-II: Apple II+
@@ -40,9 +40,11 @@ ORAO: Velebit Informatika Orao
 Oric: Oric-1/Atmos
 PDP1: DEC PDP-1
 PET2001: Commodore PET 2001
+PSX: Sony PlayStation
 QL: Sinclair QL
 RX78: Bandai RX-78
 SAMCoupe: SAM Coupe
+Saturn: Sega Saturn
 SharpMZ: Sharp MZ Series
 SordM5: Sord M5
 Specialist: Specialist/MX
@@ -57,8 +59,9 @@ ZX-Spectrum: Sinclair ZX Spectrum
 # Console Cores
 
 Astrocade: Bally Astrocade
-Atari2600: Atari 2600
+Atari2600: Atari 2600 (Old)
 Atari5200: Atari 5200
+Atari7800: Atari 2600/7800
 AY-3-8500: GI Pong
 C2650: Arcadia 2001
 ColecoVision: ColecoVision/SG-1000
