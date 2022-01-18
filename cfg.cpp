@@ -33,6 +33,7 @@ static const ini_var_t ini_vars[] =
 	{ "YPBPR", (void*)(&(cfg.ypbpr)), UINT8, 0, 1 },
 	{ "COMPOSITE_SYNC", (void*)(&(cfg.csync)), UINT8, 0, 1 },
 	{ "FORCED_SCANDOUBLER", (void*)(&(cfg.forced_scandoubler)), UINT8, 0, 1 },
+	{ "FORCED_DVRATE_CRT", (void*)(&(cfg.forced_dvrate_crt)), UINT8, 0, 4 },
 	{ "VGA_SCALER", (void*)(&(cfg.vga_scaler)), UINT8, 0, 1 },
 	{ "VGA_SOG", (void*)(&(cfg.vga_sog)), UINT8, 0, 1 },
 	{ "KEYRAH_MODE", (void*)(&(cfg.keyrah_mode)), UINT32, 0, (int)0xFFFFFFFF },

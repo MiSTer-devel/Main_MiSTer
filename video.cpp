@@ -24,6 +24,8 @@
 #include "support.h"
 #include "lib/imlib2/Imlib2.h"
 
+#include "DetailedResolutionClass.h"
+
 #define FB_SIZE  (1920*1080)
 #define FB_ADDR  (0x20000000 + (32*1024*1024)) // 512mb + 32mb(Core's fb)
 
@@ -653,6 +655,80 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	setScaler();
 
 	v_cur = *v;
+	if (cfg.forced_dvrate_crt) //CRT double scan
+	{
+		DetailedResolutionClass *detailedResolution = new DetailedResolutionClass();
+		spi_uio_cmd_cont(UIO_GET_VRES);
+		spi_w(0);
+		uint32_t width = spi_w(0) | (spi_w(0) << 16);
+		uint32_t height = spi_w(0) | (spi_w(0) << 16);
+		uint32_t htime = spi_w(0) | (spi_w(0) << 16);
+		uint32_t vtime = spi_w(0) | (spi_w(0) << 16);
+
+		DisableIO();
+		float hrate = 100000;
+		if (htime) hrate /= htime; else hrate = 0;
+		float vrate = 100000000;
+		if (vtime) vrate /= vtime; else vrate = 0;
+		if (width == 0 || height == 0)
+		{
+			width = 529;
+			height = 240;
+			vrate = 119.6;
+			hrate = 15;
+		} 
+		
+		if (hrate != 0)
+		{
+			if (cfg.forced_dvrate_crt > 2)
+			{
+				if (width <= 282) {
+					width *= 2;
+				} 
+			}
+			detailedResolution->SetHActive(width);
+			detailedResolution->SetVActive(height);
+			detailedResolution->SetVRate(vrate);
+			detailedResolution->CalculateNative(false);
+			hrate = (detailedResolution->GetVTotal() * vrate)/1000;
+			if (hrate < 29) 
+			{
+				vrate *= 2;
+				detailedResolution->Init();
+				detailedResolution->SetHActive(width);
+				detailedResolution->SetVActive(height);
+				detailedResolution->SetVRate(vrate);
+				detailedResolution->CalculateNative(false);
+				hrate = (detailedResolution->GetVTotal() * vrate)/1000;
+
+			}
+			if (hrate < 29 && cfg.forced_dvrate_crt > 1) 
+			{
+				vrate = 30000/detailedResolution->GetVTotal();
+				detailedResolution->Init();
+				detailedResolution->SetHActive(width);
+				detailedResolution->SetVActive(height);
+				detailedResolution->SetVRate(vrate);
+				detailedResolution->CalculateNative(false);
+
+			}
+			v_cur.item[1] = detailedResolution->GetHActive();
+			v_cur.item[2] = detailedResolution->GetHFront();
+			v_cur.item[3] = detailedResolution->GetHSync();
+			v_cur.item[4] = detailedResolution->GetHBack();
+			v_cur.item[5] = detailedResolution->GetVActive();
+			v_cur.item[6] = detailedResolution->GetVFront();
+			v_cur.item[7] = detailedResolution->GetVSync();
+			v_cur.item[8] = detailedResolution->GetVBack();
+			float fpixc = ((v_cur.item[1]+v_cur.item[2]+v_cur.item[3]+v_cur.item[4])*(v_cur.item[5]+v_cur.item[6]+v_cur.item[7]+v_cur.item[8])*vrate)/1000000;
+			Fpix = 0;
+			v_cur.Fpix = fpixc;
+			setPLL(v_cur.Fpix, &v_cur);
+		}
+		delete detailedResolution;
+		
+	}
+
 	vmode_custom_t v_fix = v_cur;
 	if (cfg.direct_video)
 	{
@@ -820,7 +896,7 @@ void video_mode_load()
 		vmode_pal = 0;
 		vmode_ntsc = 0;
 	}
-	else
+	else 
 	{
 		vmode_def = store_custom_video_mode(cfg.video_conf, &v_def);
 		vmode_pal = store_custom_video_mode(cfg.video_conf_pal, &v_pal);
@@ -939,7 +1015,7 @@ void video_mode_adjust()
 	uint32_t vtime = show_video_info(force);
 	force = 0;
 
-	if (vtime && cfg.vsync_adjust && !is_menu())
+	if (vtime && (cfg.vsync_adjust || cfg.forced_dvrate_crt)  && !is_menu())
 	{
 		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
 
