@@ -108,7 +108,7 @@ static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
                                  ((c) == '-') || ((c) == '+') || ((c) == '/') || ((c) == '=') || \
                                  ((c) == '#') || ((c) == '$') || ((c) == '@') || ((c) == '_') || \
                                  ((c) == ',') || ((c) == '.') || ((c) == '!') || ((c) == '*') || \
-                                 ((c) == ':'))
+                                 ((c) == ':') || ((c) == '~'))
 
 #define CHAR_IS_VALID(c)        (CHAR_IS_ALPHANUM(c) || CHAR_IS_SPECIAL(c))
 #define CHAR_IS_SPACE(c)        (((c) == ' ') || ((c) == '\t'))
