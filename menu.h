@@ -19,6 +19,7 @@ void MenuHide();
 
 int getOptIdx(char *opt);
 uint32_t getStatus(char *opt, uint32_t status);
+uint32_t setStatus(char *opt, uint32_t status, uint32_t value);
 uint32_t getStatusMask(char *opt);
 int substrcpy(char *d, const char *s, char idx);
 

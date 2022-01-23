@@ -691,7 +691,9 @@ static void set_video(vmode_custom_t *v, double Fpix)
 			detailedResolution->SetVRate(vrate);
 			detailedResolution->CalculateNative(false);
 			hrate = (detailedResolution->GetVTotal() * vrate)/1000;
-			if (hrate < 29) 
+			float hlimit = 29;
+			hlimit = cfg.forced_dvrate_crt == 4 ? 28.5 : 29;
+			if (hrate < hlimit) 
 			{
 				vrate *= 2;
 				detailedResolution->Init();
@@ -702,7 +704,7 @@ static void set_video(vmode_custom_t *v, double Fpix)
 				hrate = (detailedResolution->GetVTotal() * vrate)/1000;
 
 			}
-			if (hrate < 29 && cfg.forced_dvrate_crt > 1) 
+			if (hrate < hlimit && cfg.forced_dvrate_crt > 1) 
 			{
 				vrate = 30000/detailedResolution->GetVTotal();
 				detailedResolution->Init();

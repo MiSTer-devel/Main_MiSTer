@@ -392,6 +392,11 @@ int user_io_get_joy_transl()
 	return joy_transl;
 }
 
+static char forced_keys[3][32] = {"aspect ratio", "scandoubler fx", "orientation"};
+static int forced_values[3] = {1,0,1};
+static bool forced_opt_h[3] = {false, false, false};
+static char forced_opt_ar[3][256] = {};
+
 static int use_cheats = 0;
 static uint32_t ss_base = 0;
 static uint32_t ss_size = 0;
@@ -565,6 +570,14 @@ static void parse_config()
 				x <<= getOptIdx(opt);
 				overlap |= mask & x;
 				mask |= x;
+				for (int i = 0; i < (int)(sizeof(forced_values)/sizeof(forced_values[0])); i++)
+				{
+					if (strcasestr(opt,forced_keys[i]) != NULL)
+					{
+						forced_opt_h[i] = false;
+						strcpy(forced_opt_ar[i],opt);
+					}
+				}
 			}
 			if (p[0] == 'o')
 			{
@@ -573,6 +586,14 @@ static void parse_config()
 				x <<= 32 + getOptIdx(opt);
 				overlap |= mask & x;
 				mask |= x;
+				for (int i = 0; i < (int)(sizeof(forced_values)/sizeof(forced_values[0])); i++)
+				{
+					if (strcasestr(opt,forced_keys[i]) != NULL)
+					{
+						forced_opt_h[i] = true;
+						strcpy(forced_opt_ar[i],opt);
+					}
+				}
 			}
 
 			if (p[0] == 'J')
@@ -1154,7 +1175,23 @@ void user_io_init(const char *path, const char *xml)
 					status[0] = 0;
 					status[1] = 0;
 				}
-
+				if (cfg.forced_dvrate_cfg)
+				{
+					for (int i = 0; i < (int)(sizeof(forced_values)/sizeof(forced_values[0])); i++)
+					{
+						if (strlen(forced_opt_ar[i]) > 0)
+						{
+							if (!forced_opt_h[i])
+							{
+								status[0] = setStatus(forced_opt_ar[i],status[0],forced_values[i]);
+							}
+							else
+							{
+								status[1] = setStatus(forced_opt_ar[i],status[1],forced_values[i]);
+							}
+						}
+					}
+				}
 				status[0] &= ~UIO_STATUS_RESET;
 				user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
 				user_io_8bit_set_status(status[1], 0xffffffff, 1);
