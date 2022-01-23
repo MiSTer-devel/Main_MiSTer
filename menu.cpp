@@ -3522,7 +3522,7 @@ void HandleUI(void)
 
 			if (get_map_vid() || get_map_pid())
 			{
-				if (!is_menu() && get_map_type() && !has_default_map())
+				if (!is_menu() && get_map_type() && !has_default_map() && !get_map_set())
 				{
 					for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
 					OsdWrite(6, "   You need to define this");

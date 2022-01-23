@@ -1130,6 +1130,11 @@ void start_map_setting(int cnt, int set)
 	user_io_kbd(KEY_ENTER, 0);
 }
 
+int get_map_set()
+{
+	return mapping_set;
+}
+
 int get_map_button()
 {
 	return mapping_button;
