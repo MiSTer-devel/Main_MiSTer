@@ -3806,6 +3806,12 @@ int input_test(int getchar)
 							input[n].lightgun = 1;
 						}
 
+						//Namco GunCon 2
+						if (input[n].vid == 0x0b9a && input[n].pid == 0x016a)
+						{
+							input[n].lightgun = 1;
+						}
+
 						//Madcatz Arcade Stick 360
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
 
