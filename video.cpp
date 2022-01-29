@@ -338,7 +338,7 @@ void video_set_scaler_flt(int type, int n)
 	set_vfilter(1);
 }
 
-void video_set_scaler_coeff(int type, char *name)
+void video_set_scaler_coeff(int type, const char *name)
 {
 	strcpy(scaler_flt[type] + 1, name);
 	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
@@ -640,6 +640,105 @@ static void loadShadowMaskCfg()
 	if( shadow_mask_cfg[0] >= SM_MODE_COUNT )
 	{
 		shadow_mask_cfg[0] = 0;
+	}
+}
+
+
+#define IS_NEWLINE(c) (((c) == '\r') || ((c) == '\n'))
+#define IS_WHITESPACE(c) (IS_NEWLINE(c) || ((c) == ' ') || ((c) == '\t'))
+
+static char* get_preset_arg(const char *str)
+{
+	static char par[1024];
+	snprintf(par, sizeof(par), "%s", str);
+	char *pos = par;
+
+	while (*pos && !IS_NEWLINE(*pos)) pos++;
+	*pos-- = 0;
+
+	while (pos >= par)
+	{
+		if (!IS_WHITESPACE(*pos)) break;
+		*pos-- = 0;
+	}
+
+	return par;
+}
+
+static void load_flt_pres(const char *str, int type)
+{
+	char *arg = get_preset_arg(str);
+	if (arg[0])
+	{
+		if (!strcasecmp(arg, "same") || !strcasecmp(arg, "off"))
+		{
+			video_set_scaler_flt(type, 0);
+		}
+		else
+		{
+			video_set_scaler_coeff(type, arg);
+			video_set_scaler_flt(type, 1);
+		}
+	}
+}
+
+void video_loadPreset(char *name)
+{
+	char *arg;
+	fileTextReader reader;
+	if (FileOpenTextReader(&reader, name))
+	{
+		const char *line;
+		while ((line = FileReadLine(&reader)))
+		{
+			if (!strncasecmp(line, "hfilter=", 8))
+			{
+				load_flt_pres(line + 8, VFILTER_HORZ);
+			}
+			else if (!strncasecmp(line, "vfilter=", 8))
+			{
+				load_flt_pres(line + 8, VFILTER_VERT);
+			}
+			else if (!strncasecmp(line, "sfilter=", 8))
+			{
+				load_flt_pres(line + 8, VFILTER_SCAN);
+			}
+			else if (!strncasecmp(line, "mask=", 5))
+			{
+				arg = get_preset_arg(line + 5);
+				if (arg[0])
+				{
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_shadow_mask_mode(0);
+					else video_set_shadow_mask(arg);
+				}
+			}
+			else if (!strncasecmp(line, "maskmode=", 9))
+			{
+				arg = get_preset_arg(line + 9);
+				if (arg[0])
+				{
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_shadow_mask_mode(0);
+					else if (!strcasecmp(arg, "1x")) video_set_shadow_mask_mode(SM_MODE_1X);
+					else if (!strcasecmp(arg, "2x")) video_set_shadow_mask_mode(SM_MODE_2X);
+					else if (!strcasecmp(arg, "1x rotated")) video_set_shadow_mask_mode(SM_MODE_1X_ROTATED);
+					else if (!strcasecmp(arg, "2x rotated")) video_set_shadow_mask_mode(SM_MODE_2X_ROTATED);
+				}
+			}
+			else if (!strncasecmp(line, "gamma=", 6))
+			{
+				arg = get_preset_arg(line + 6);
+				if (arg[0])
+				{
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_gamma_en(0);
+					else
+					{
+						video_set_gamma_curve(arg);
+						video_set_gamma_en(1);
+					}
+				}
+
+			}
+		}
 	}
 }
 

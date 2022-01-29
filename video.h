@@ -8,7 +8,7 @@
 int   video_get_scaler_flt(int type);
 void  video_set_scaler_flt(int type, int n);
 char* video_get_scaler_coeff(int type);
-void  video_set_scaler_coeff(int type, char *name);
+void  video_set_scaler_coeff(int type, const char *name);
 
 int   video_get_gamma_en();
 void  video_set_gamma_en(int n);
@@ -19,6 +19,7 @@ int   video_get_shadow_mask_mode();
 void  video_set_shadow_mask_mode(int n);
 char* video_get_shadow_mask();
 void  video_set_shadow_mask(char *name);
+void  video_loadPreset(char *name);
 
 void  video_mode_load();
 void  video_mode_adjust();

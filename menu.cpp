@@ -134,6 +134,7 @@ enum MENU
 	MENU_COEFF_FILE_SELECTED,
 	MENU_GAMMA_FILE_SELECTED,
 	MENU_SMASK_FILE_SELECTED,
+	MENU_PRESET_FILE_SELECTED,
 
 	MENU_AFILTER_FILE_SELECTED,
 
@@ -2540,7 +2541,7 @@ void HandleUI(void)
 
 	case MENU_VIDEOPROC1:
 		helptext_idx = 0;
-		menumask = 0x7FF;
+		menumask = 0xFFF;
 		OsdSetTitle("Video Processing");
 		menustate = MENU_VIDEOPROC2;
 		parentstate = MENU_VIDEOPROC1;
@@ -2551,57 +2552,60 @@ void HandleUI(void)
 			if (!menusub) firstmenu = 0;
 			adjvisible = 0;
 
+			MenuWrite(n++, " Load preset", menusub == 0);
+			MenuWrite(n++);
+
 			sprintf(s, video_get_scaler_flt(VFILTER_HORZ) ?  " Horz filter: From file" : " Video filter: NearNeighbour");
-			MenuWrite(n++, s, menusub == 0, cfg.direct_video);
+			MenuWrite(n++, s, menusub == 1, cfg.direct_video);
 			strcpy(s, " ");
 			if (strlen(video_get_scaler_coeff(VFILTER_HORZ))) strncat(s, video_get_scaler_coeff(VFILTER_HORZ), 25);
 			else strcpy(s, " < none >");
 			while (strlen(s) < 26) strcat(s, " ");
 			strcat(s, " \x16 ");
-			MenuWrite(n++, s, menusub == 1, !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)));
+			MenuWrite(n++, s, menusub == 2, !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)));
 
 			MenuWrite(n++);
 			sprintf(s, " Vert filter: %s", video_get_scaler_flt(VFILTER_VERT) ? "From file" : "Same as Horz");
-			MenuWrite(n++, s, menusub == 2, cfg.direct_video || !video_get_scaler_flt(VFILTER_HORZ));
+			MenuWrite(n++, s, menusub == 3, cfg.direct_video || !video_get_scaler_flt(VFILTER_HORZ));
 			strcpy(s, " ");
 			if (strlen(video_get_scaler_coeff(VFILTER_VERT))) strncat(s, video_get_scaler_coeff(VFILTER_VERT), 25);
 			else strcpy(s, " < none >");
 			while (strlen(s) < 26) strcat(s, " ");
 			strcat(s, " \x16 ");
-			MenuWrite(n++, s, menusub == 3, !video_get_scaler_flt(VFILTER_VERT) || !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)) || cfg.direct_video);
+			MenuWrite(n++, s, menusub == 4, !video_get_scaler_flt(VFILTER_VERT) || !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)) || cfg.direct_video);
 
 			MenuWrite(n++);
 			sprintf(s, " Scan filter: %s", video_get_scaler_flt(VFILTER_SCAN) ? "From file" : "Same as Vert");
-			MenuWrite(n++, s, menusub == 4, cfg.direct_video || !video_get_scaler_flt(VFILTER_HORZ));
+			MenuWrite(n++, s, menusub == 5, cfg.direct_video || !video_get_scaler_flt(VFILTER_HORZ));
 			strcpy(s, " ");
 			if (strlen(video_get_scaler_coeff(VFILTER_SCAN))) strncat(s, video_get_scaler_coeff(VFILTER_SCAN), 25);
 			else strcpy(s, " < none >");
 			while (strlen(s) < 26) strcat(s, " ");
 			strcat(s, " \x16 ");
-			MenuWrite(n++, s, menusub == 5, !video_get_scaler_flt(VFILTER_SCAN) || !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)) || cfg.direct_video);
+			MenuWrite(n++, s, menusub == 6, !video_get_scaler_flt(VFILTER_SCAN) || !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)) || cfg.direct_video);
 
 			MenuWrite(n++);
 			sprintf(s, " Gamma correction - %s", (video_get_gamma_en() > 0) ? "On" : "Off");
-			MenuWrite(n++, s, menusub == 6, video_get_gamma_en() < 0);
+			MenuWrite(n++, s, menusub == 7, video_get_gamma_en() < 0);
 			strcpy(s, " ");
 			if (strlen(video_get_gamma_curve())) strncat(s, video_get_gamma_curve(), 25);
 			else strcpy(s, " < none >");
 			while (strlen(s) < 26) strcat(s, " ");
 			strcat(s, " \x16 ");
-			MenuWrite(n++, s, menusub == 7, (video_get_gamma_en() <= 0) || !S_ISDIR(getFileType(GAMMA_DIR)));
+			MenuWrite(n++, s, menusub == 8, (video_get_gamma_en() <= 0) || !S_ISDIR(getFileType(GAMMA_DIR)));
 
 			MenuWrite(n++);
 			sprintf(s, " Shadow Mask - %s", (video_get_shadow_mask_mode() < 0) ? config_smask_msg[0] : config_smask_msg[video_get_shadow_mask_mode()]);
-			MenuWrite(n++, s, menusub == 8, video_get_shadow_mask_mode() < 0);
+			MenuWrite(n++, s, menusub == 9, video_get_shadow_mask_mode() < 0);
 			strcpy(s, " ");
 			if (strlen(video_get_shadow_mask())) strncat(s, video_get_shadow_mask(), 25);
 			else strcpy(s, " < none >");
 			while (strlen(s) < 26) strcat(s, " ");
 			strcat(s, " \x16 ");
-			MenuWrite(n++, s, menusub == 9, (video_get_shadow_mask_mode() <= 0) || !S_ISDIR(getFileType(SMASK_DIR)));
+			MenuWrite(n++, s, menusub == 10, (video_get_shadow_mask_mode() <= 0) || !S_ISDIR(getFileType(SMASK_DIR)));
 
 			MenuWrite(n++);
-			MenuWrite(n++, STD_BACK, menusub == 10);
+			MenuWrite(n++, STD_BACK, menusub == 11);
 
 			if (!adjvisible) break;
 			firstmenu += adjvisible;
@@ -2618,7 +2622,7 @@ void HandleUI(void)
 
 		if (plus || minus)
 		{
-			if (menusub == 8)
+			if (menusub == 9)
 			{
 				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
 			}
@@ -2626,11 +2630,23 @@ void HandleUI(void)
 			break;
 		}
 
+		if ((select || recent) && menusub == 0)
+		{
+			fs_Options = SCANO_DIR | SCANO_TXT;
+			fs_MenuSelect = MENU_PRESET_FILE_SELECTED;
+			fs_MenuCancel = parentstate;
+			strcpy(fs_pFileExt, "INI");
+			if (!FileExists(Selected_F[15])) snprintf(Selected_F[15], sizeof(Selected_F[15]), PRESET_DIR);
+			if (select) SelectFile(Selected_F[15], fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
+			else if (recent_init(15)) menustate = MENU_RECENT1;
+			break;
+		}
+
 		if (select)
 		{
 			switch (menusub)
 			{
-			case 0:
+			case 1:
 				if (!cfg.direct_video)
 				{
 					video_set_scaler_flt(VFILTER_HORZ, video_get_scaler_flt(VFILTER_HORZ) ? 0 : 1);
@@ -2638,10 +2654,10 @@ void HandleUI(void)
 				}
 				break;
 
-			case 1:
-			case 3:
-			case 5:
-				vfilter_type = (menusub == 1) ? VFILTER_HORZ : (menusub == 3) ? VFILTER_VERT : VFILTER_SCAN;
+			case 2:
+			case 4:
+			case 6:
+				vfilter_type = (menusub == 2) ? VFILTER_HORZ : (menusub == 4) ? VFILTER_VERT : VFILTER_SCAN;
 				if (video_get_scaler_flt(VFILTER_HORZ))
 				{
 					snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR"/%s", video_get_scaler_coeff(vfilter_type));
@@ -2650,7 +2666,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 2:
+			case 3:
 				if (!cfg.direct_video && video_get_scaler_flt(VFILTER_HORZ))
 				{
 					video_set_scaler_flt(VFILTER_VERT, video_get_scaler_flt(VFILTER_VERT) ? 0 : 1);
@@ -2658,7 +2674,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 4:
+			case 5:
 				if (!cfg.direct_video && video_get_scaler_flt(VFILTER_HORZ))
 				{
 					video_set_scaler_flt(VFILTER_SCAN, video_get_scaler_flt(VFILTER_SCAN) ? 0 : 1);
@@ -2666,12 +2682,12 @@ void HandleUI(void)
 				}
 				break;
 
-			case 6:
+			case 7:
 				if (video_get_gamma_en() >= 0) video_set_gamma_en(video_get_gamma_en() ? 0 : 1);
 				menustate = parentstate;
 				break;
 
-			case 7:
+			case 8:
 				if (video_get_gamma_en() > 0)
 				{
 					snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR"/%s", video_get_gamma_curve());
@@ -2680,12 +2696,12 @@ void HandleUI(void)
 				}
 				break;
 
-			case 8:
+			case 9:
 				if (video_get_shadow_mask_mode() >= 0) video_set_shadow_mask_mode(video_get_shadow_mask_mode() + 1);
 				menustate = parentstate;
 				break;
 
-			case 9:
+			case 10:
 				if (video_get_shadow_mask_mode() > 0)
 				{
 					snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR"/%s", video_get_shadow_mask());
@@ -2694,7 +2710,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 10:
+			case 11:
 				menusub = 5;
 				menustate = MENU_COMMON1;
 				break;
@@ -3207,6 +3223,13 @@ void HandleUI(void)
 			}
 			menustate = MENU_VIDEOPROC1;
 		}
+		break;
+
+	case MENU_PRESET_FILE_SELECTED:
+		memcpy(Selected_F[15], selPath, sizeof(Selected_F[15]));
+		recent_update(SelectedDir, selPath, SelectedLabel, 15);
+		video_loadPreset(selPath);
+		menustate = MENU_VIDEOPROC1;
 		break;
 
 	case MENU_MISC1:
