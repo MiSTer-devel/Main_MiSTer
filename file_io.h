@@ -139,6 +139,7 @@ const char* FileReadLine(fileTextReader *reader);
 #define GAMMA_DIR "gamma"
 #define AFILTER_DIR "filters_audio"
 #define SMASK_DIR "shadow_masks"
+#define PRESET_DIR "presets"
 #define GAMES_DIR "games"
 #define CIFS_DIR "cifs"
 

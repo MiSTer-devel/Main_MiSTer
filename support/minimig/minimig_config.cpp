@@ -116,7 +116,15 @@ static char UploadKickstart(char *name)
 	BootPrint("Loading file: ");
 	BootPrint(name);
 
-	if (FileOpen(&file, name)) {
+	if (FileOpen(&file, name))
+	{
+		// discard from possible residents
+		EnableIO();
+		spi8(UIO_MM2_WR);
+		for (int i = 0; i < 8; i++) spi8(0);
+		for (int i = 0; i < 4; i++) spi8(1);
+		DisableIO();
+
 		if (file.size == 0x100000) {
 			// 1MB Kickstart ROM
 			BootPrint("Uploading 1MB Kickstart ...");
@@ -126,8 +134,8 @@ static char UploadKickstart(char *name)
 			return(1);
 		}
 		else if ((file.size == 8203) && keysize) {
-		        // Cloanto encrypted A1000 boot ROM
-		        BootPrint("Uploading encrypted A1000 boot ROM");
+			// Cloanto encrypted A1000 boot ROM
+			BootPrint("Uploading encrypted A1000 boot ROM");
 			SendFileV2(&file, romkey, keysize, 0xf80000, file.size >> 9);
 			FileClose(&file);
 			//clear tag (write 0 to $fc0000) to force bootrom to load Kickstart from disk
@@ -138,9 +146,9 @@ static char UploadKickstart(char *name)
 			return(1);
 		  }
 		else if (file.size == 0x2000) {
-		        // 8KB A1000 boot ROM
-		        BootPrint("Uploading A1000 boot ROM");
-		        SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
+			// 8KB A1000 boot ROM
+			BootPrint("Uploading A1000 boot ROM");
+			SendFileV2(&file, NULL, 0, 0xf80000, file.size >> 9);
 			FileClose(&file);
 			spi_uio_cmd32_cont(UIO_MM2_WR, 0xfc0000);
 			spi8(0x00);spi8(0x00);
@@ -370,7 +378,7 @@ static void ApplyConfiguration(char reloadkickstart)
 		spi_uio_cmd8(UIO_MM2_RST, rstval);
 		if (!UploadKickstart(minimig_config.kickstart))
 		{
-			snprintf(minimig_config.kickstart, 1024, "%s/%s", HomeDir(), "KICK.ROM");
+			snprintf(minimig_config.kickstart, sizeof(minimig_config.kickstart) - 1, "%s/%s", HomeDir(), "KICK.ROM");
 			if (!UploadKickstart(minimig_config.kickstart))
 			{
 				strcpy(minimig_config.kickstart, "KICK.ROM");
@@ -404,7 +412,6 @@ static void ApplyConfiguration(char reloadkickstart)
 int minimig_cfg_load(int num)
 {
 	static const char config_id[] = "MNMGCFG0";
-	char updatekickstart = 0;
 	int result = 0;
 
 	const char *filename = GetConfigurationName(num, 1);
@@ -424,11 +431,6 @@ int minimig_cfg_load(int num)
 				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
 					// A few more sanity checks...
 					if (tmpconf.floppy.drives <= 4) {
-						// If either the old config and new config have a different kickstart file,
-						// or this is the first boot, we need to upload a kickstart image.
-						if (strcmp(tmpconf.kickstart, minimig_config.kickstart) != 0) {
-							updatekickstart = true;
-						}
 						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(minimig_config));
 						result = 1; // We successfully loaded the config.
 					}
@@ -448,11 +450,6 @@ int minimig_cfg_load(int num)
 				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
 					// A few more sanity checks...
 					if (tmpconf.floppy.drives <= 4) {
-						// If either the old config and new config have a different kickstart file,
-						// or this is the first boot, we need to upload a kickstart image.
-						if (strcmp(tmpconf.kickstart, minimig_config.kickstart) != 0) {
-							updatekickstart = true;
-						}
 						memset((void*)&minimig_config, 0, sizeof(minimig_config));
 						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(tmpconf));
 						minimig_config.cpu = tmpconf.cpu;
@@ -475,7 +472,7 @@ int minimig_cfg_load(int num)
 		// set default configuration
 		memset((void*)&minimig_config, 0, sizeof(minimig_config));  // Finally found default config bug - params were reversed!
 		memcpy(minimig_config.id, config_id, sizeof(minimig_config.id));
-		snprintf(minimig_config.kickstart, 1024, "%s/%s", HomeDir(), "KICK.ROM");
+		snprintf(minimig_config.kickstart, sizeof(minimig_config.kickstart) - 1, "%s/%s", HomeDir(), "KICK.ROM");
 		minimig_config.memory = 0x11;
 		minimig_config.cpu = 0;
 		minimig_config.chipset = 0;
@@ -490,7 +487,6 @@ int minimig_cfg_load(int num)
 		minimig_config.hardfile[2].filename[0] = 0;
 		minimig_config.hardfile[3].cfg = 0;
 		minimig_config.hardfile[3].filename[0] = 0;
-		updatekickstart = true;
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
 
@@ -522,7 +518,7 @@ int minimig_cfg_load(int num)
 		minimig_config.chipset &= ~CONFIG_NTSC;
 	}
 
-	ApplyConfiguration(updatekickstart);
+	ApplyConfiguration(1);
 	return(result);
 }
 

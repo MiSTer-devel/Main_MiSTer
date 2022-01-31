@@ -83,6 +83,8 @@ static const ini_var_t ini_vars[] =
 	{ "SPINNER_THROTTLE", (void*)(&(cfg.spinner_throttle)), INT32, -10000, 10000 },
 	{ "AFILTER_DEFAULT", (void*)(&(cfg.afilter_default)), STRING, 0, sizeof(cfg.afilter_default) - 1 },
 	{ "VFILTER_DEFAULT", (void*)(&(cfg.vfilter_default)), STRING, 0, sizeof(cfg.vfilter_default) - 1 },
+	{ "VFILTER_VERTICAL_DEFAULT", (void*)(&(cfg.vfilter_vertical_default)), STRING, 0, sizeof(cfg.vfilter_vertical_default) - 1 },
+	{ "VFILTER_SCANLINES_DEFAULT", (void*)(&(cfg.vfilter_scanlines_default)), STRING, 0, sizeof(cfg.vfilter_scanlines_default) - 1 },
 	{ "SHMASK_DEFAULT", (void*)(&(cfg.shmask_default)), STRING, 0, sizeof(cfg.shmask_default) - 1 },
 	{ "SHMASK_MODE_DEFAULT", (void*)(&(cfg.shmask_mode_default)), UINT8, 0, 255 },
 	{ "LOG_FILE_ENTRY", (void*)(&(cfg.log_file_entry)), UINT8, 0, 1 },
@@ -106,7 +108,7 @@ static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
                                  ((c) == '-') || ((c) == '+') || ((c) == '/') || ((c) == '=') || \
                                  ((c) == '#') || ((c) == '$') || ((c) == '@') || ((c) == '_') || \
                                  ((c) == ',') || ((c) == '.') || ((c) == '!') || ((c) == '*') || \
-                                 ((c) == ':'))
+                                 ((c) == ':') || ((c) == '~'))
 
 #define CHAR_IS_VALID(c)        (CHAR_IS_ALPHANUM(c) || CHAR_IS_SPECIAL(c))
 #define CHAR_IS_SPACE(c)        (((c) == ' ') || ((c) == '\t'))

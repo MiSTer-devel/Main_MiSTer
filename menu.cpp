@@ -129,10 +129,14 @@ enum MENU
 
 	MENU_SFONT_FILE_SELECTED,
 
+	MENU_VIDEOPROC1,
+	MENU_VIDEOPROC2,
 	MENU_COEFF_FILE_SELECTED,
 	MENU_GAMMA_FILE_SELECTED,
-	MENU_AFILTER_FILE_SELECTED,
 	MENU_SMASK_FILE_SELECTED,
+	MENU_PRESET_FILE_SELECTED,
+
+	MENU_AFILTER_FILE_SELECTED,
 
 	// Generic
 	MENU_GENERIC_MAIN1,
@@ -206,15 +210,13 @@ const char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE 
 const char *config_cd32pad_msg[] = { "OFF", "ON" };
 const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
-const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "    Analog X: Tilt RIGHT", "    Analog Y: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
+const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "    Stick 1: Tilt RIGHT", "    Stick 1: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
 const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem"};
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
-const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
 const char *config_smask_msg[] = { "None", "1x", "2x", "1x Rotated", "2x Rotated" };
-const char *config_gamma_msg[] = { "Off","On" };
 const char *config_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+", "HV-Integer", "???", "???", "???" };
 
 #define DPAD_NAMES 4
@@ -1003,6 +1005,7 @@ void HandleUI(void)
 	static uint32_t saved_menustate = 0;
 	static char addon[1024];
 	static int store_name;
+	static int vfilter_type;
 
 	static char	cp_MenuCancel;
 
@@ -2271,7 +2274,7 @@ void HandleUI(void)
 			while(1)
 			{
 				n = 0;
-				menumask = 0x3800f;
+				menumask = 0x3802f;
 
 				if (!menusub) firstmenu = 0;
 				adjvisible = 0;
@@ -2298,41 +2301,8 @@ void HandleUI(void)
 					MenuWrite(n++, s, menusub == 4);
 				}
 
-				if (video_get_scaler_flt() >= 0 && !cfg.direct_video)
-				{
-					MenuWrite(n++);
-					menumask |= 0x60;
-					sprintf(s, " Scale filter - %s", config_scaler_msg[video_get_scaler_flt() ? 1 : 0]);
-					MenuWrite(n++, s, menusub == 5);
-
-					memset(s, 0, sizeof(s));
-					s[0] = ' ';
-					if (strlen(video_get_scaler_coeff())) strncpy(s+1, video_get_scaler_coeff(),25);
-					else strcpy(s, " < none >");
-
-					while(strlen(s) < 26) strcat(s, " ");
-					strcat(s, " \x16 ");
-
-					MenuWrite(n++, s, menusub == 6, !video_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
-				}
-
-				if (video_get_gamma_en() >=0)
-				{
-					MenuWrite(n++);
-					menumask |= 0x180;
-					sprintf(s, " Gamma correction - %s", config_gamma_msg[video_get_gamma_en() ? 1 : 0]);
-					MenuWrite(n++, s, menusub == 7);
-
-					memset(s, 0, sizeof(s));
-					s[0] = ' ';
-					if (strlen(video_get_gamma_curve())) strncpy(s+1, video_get_gamma_curve(),25);
-					else strcpy(s, " < none >");
-
-					while(strlen(s) < 26) strcat(s, " ");
-					strcat(s, " \x16 ");
-
-					MenuWrite(n++, s, menusub == 8, !video_get_gamma_en() || !S_ISDIR(getFileType(GAMMA_DIR)));
-				}
+				MenuWrite(n++);
+				MenuWrite(n++, " Video processing          \x16", menusub==5);
 
 				if (audio_filter_en() >= 0)
 				{
@@ -2351,25 +2321,6 @@ void HandleUI(void)
 
 					MenuWrite(n++, s, menusub == 10, !audio_filter_en() || !S_ISDIR(getFileType(AFILTER_DIR)));
 				}
-
-				if (video_get_shadow_mask_mode() >= 0)
-				{
-					MenuWrite(n++);
-					menumask |= 0x1800;
-					sprintf(s, " Shadow Mask - %s", config_smask_msg[video_get_shadow_mask_mode()]);
-					MenuWrite(n++, s, menusub == 11);
-
-					memset(s, 0, sizeof(s));
-					s[0] = ' ';
-					if (strlen(video_get_shadow_mask())) strncpy(s + 1, video_get_shadow_mask(), 25);
-					else strcpy(s, " < none >");
-
-					while (strlen(s) < 26) strcat(s, " ");
-					strcat(s, " \x16 ");
-
-					MenuWrite(n++, s, menusub == 12, !video_get_shadow_mask_mode() || !S_ISDIR(getFileType(SMASK_DIR)));
-				}
-
 
 				if (!is_minimig() && !is_st())
 				{
@@ -2418,15 +2369,6 @@ void HandleUI(void)
 
 			if (recent_init(-1)) menustate = MENU_RECENT1;
 			break;
-		}
-
-		if (plus || minus)
-		{
-			if(menusub == 11)
-			{
-				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
-				menustate = MENU_COMMON1;
-			}
 		}
 
 		if (select)
@@ -2479,31 +2421,12 @@ void HandleUI(void)
 				break;
 
 			case 5:
-				video_set_scaler_flt(video_get_scaler_flt() ? 0 : 1);
-				menustate = MENU_COMMON1;
-				break;
-
-			case 6:
-				if (video_get_scaler_flt())
 				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR"/%s", video_get_scaler_coeff());
-					if(!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR);
-					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_COEFF_FILE_SELECTED, MENU_COMMON1);
+					menustate = MENU_VIDEOPROC1;
+					menusub = 0;
 				}
 				break;
-			case 7:
-				video_set_gamma_en(video_get_gamma_en() ? 0 : 1);
-				menustate = MENU_COMMON1;
-				break;
 
-			case 8:
-				if (video_get_gamma_en())
-				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR"/%s", video_get_gamma_curve());
-					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR);
-					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_GAMMA_FILE_SELECTED, MENU_COMMON1);
-				}
-				break;
 			case 9:
 				audio_set_filter_en(audio_filter_en() ? 0 : 1);
 				menustate = MENU_COMMON1;
@@ -2517,18 +2440,7 @@ void HandleUI(void)
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_AFILTER_FILE_SELECTED, MENU_COMMON1);
 				}
 				break;
-			case 11:
-				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + 1);
-				menustate = MENU_COMMON1;
-				break;
-			case 12:
-				if (video_get_shadow_mask_mode())
-				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR"/%s", video_get_shadow_mask());
-					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR);
-					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_SMASK_FILE_SELECTED, MENU_COMMON1);
-				}
-				break;
+
 			case 13:
 				if (!is_archie())
 				{
@@ -2625,6 +2537,185 @@ void HandleUI(void)
 		}
 
 		if(!hold_cnt && reboot_req) fpga_load_rbf("menu.rbf");
+		break;
+
+	case MENU_VIDEOPROC1:
+		helptext_idx = 0;
+		menumask = 0xFFF;
+		OsdSetTitle("Video Processing");
+		menustate = MENU_VIDEOPROC2;
+		parentstate = MENU_VIDEOPROC1;
+
+		while (1)
+		{
+			int n = 0;
+			if (!menusub) firstmenu = 0;
+			adjvisible = 0;
+
+			MenuWrite(n++, " Load preset", menusub == 0);
+			MenuWrite(n++);
+
+			sprintf(s, video_get_scaler_flt(VFILTER_HORZ) ?  " Horz filter: From file" : " Video filter: NearNeighbour");
+			MenuWrite(n++, s, menusub == 1, cfg.direct_video);
+			strcpy(s, " ");
+			if (strlen(video_get_scaler_coeff(VFILTER_HORZ))) strncat(s, video_get_scaler_coeff(VFILTER_HORZ), 25);
+			else strcpy(s, " < none >");
+			while (strlen(s) < 26) strcat(s, " ");
+			strcat(s, " \x16 ");
+			MenuWrite(n++, s, menusub == 2, !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)));
+
+			MenuWrite(n++);
+			sprintf(s, " Vert filter: %s", video_get_scaler_flt(VFILTER_VERT) ? "From file" : "Same as Horz");
+			MenuWrite(n++, s, menusub == 3, cfg.direct_video || !video_get_scaler_flt(VFILTER_HORZ));
+			strcpy(s, " ");
+			if (strlen(video_get_scaler_coeff(VFILTER_VERT))) strncat(s, video_get_scaler_coeff(VFILTER_VERT), 25);
+			else strcpy(s, " < none >");
+			while (strlen(s) < 26) strcat(s, " ");
+			strcat(s, " \x16 ");
+			MenuWrite(n++, s, menusub == 4, !video_get_scaler_flt(VFILTER_VERT) || !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)) || cfg.direct_video);
+
+			MenuWrite(n++);
+			sprintf(s, " Scan filter: %s", video_get_scaler_flt(VFILTER_SCAN) ? "From file" : "Same as Vert");
+			MenuWrite(n++, s, menusub == 5, cfg.direct_video || !video_get_scaler_flt(VFILTER_HORZ));
+			strcpy(s, " ");
+			if (strlen(video_get_scaler_coeff(VFILTER_SCAN))) strncat(s, video_get_scaler_coeff(VFILTER_SCAN), 25);
+			else strcpy(s, " < none >");
+			while (strlen(s) < 26) strcat(s, " ");
+			strcat(s, " \x16 ");
+			MenuWrite(n++, s, menusub == 6, !video_get_scaler_flt(VFILTER_SCAN) || !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)) || cfg.direct_video);
+
+			MenuWrite(n++);
+			sprintf(s, " Gamma correction - %s", (video_get_gamma_en() > 0) ? "On" : "Off");
+			MenuWrite(n++, s, menusub == 7, video_get_gamma_en() < 0);
+			strcpy(s, " ");
+			if (strlen(video_get_gamma_curve())) strncat(s, video_get_gamma_curve(), 25);
+			else strcpy(s, " < none >");
+			while (strlen(s) < 26) strcat(s, " ");
+			strcat(s, " \x16 ");
+			MenuWrite(n++, s, menusub == 8, (video_get_gamma_en() <= 0) || !S_ISDIR(getFileType(GAMMA_DIR)));
+
+			MenuWrite(n++);
+			sprintf(s, " Shadow Mask - %s", (video_get_shadow_mask_mode() < 0) ? config_smask_msg[0] : config_smask_msg[video_get_shadow_mask_mode()]);
+			MenuWrite(n++, s, menusub == 9, video_get_shadow_mask_mode() < 0);
+			strcpy(s, " ");
+			if (strlen(video_get_shadow_mask())) strncat(s, video_get_shadow_mask(), 25);
+			else strcpy(s, " < none >");
+			while (strlen(s) < 26) strcat(s, " ");
+			strcat(s, " \x16 ");
+			MenuWrite(n++, s, menusub == 10, (video_get_shadow_mask_mode() <= 0) || !S_ISDIR(getFileType(SMASK_DIR)));
+
+			MenuWrite(n++);
+			MenuWrite(n++, STD_BACK, menusub == 11);
+
+			if (!adjvisible) break;
+			firstmenu += adjvisible;
+		}
+		break;
+
+	case MENU_VIDEOPROC2:
+		if (menu || left)
+		{
+			menusub = 5;
+			menustate = MENU_COMMON1;
+			break;
+		}
+
+		if (plus || minus)
+		{
+			if (menusub == 9)
+			{
+				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
+			}
+			menustate = parentstate;
+			break;
+		}
+
+		if ((select || recent) && menusub == 0)
+		{
+			fs_Options = SCANO_DIR | SCANO_TXT;
+			fs_MenuSelect = MENU_PRESET_FILE_SELECTED;
+			fs_MenuCancel = parentstate;
+			strcpy(fs_pFileExt, "INI");
+			if (!FileExists(Selected_F[15])) snprintf(Selected_F[15], sizeof(Selected_F[15]), PRESET_DIR);
+			if (select) SelectFile(Selected_F[15], fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
+			else if (recent_init(15)) menustate = MENU_RECENT1;
+			break;
+		}
+
+		if (select)
+		{
+			switch (menusub)
+			{
+			case 1:
+				if (!cfg.direct_video)
+				{
+					video_set_scaler_flt(VFILTER_HORZ, video_get_scaler_flt(VFILTER_HORZ) ? 0 : 1);
+					menustate = parentstate;
+				}
+				break;
+
+			case 2:
+			case 4:
+			case 6:
+				vfilter_type = (menusub == 2) ? VFILTER_HORZ : (menusub == 4) ? VFILTER_VERT : VFILTER_SCAN;
+				if (video_get_scaler_flt(VFILTER_HORZ))
+				{
+					snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR"/%s", video_get_scaler_coeff(vfilter_type));
+					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR);
+					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_COEFF_FILE_SELECTED, parentstate);
+				}
+				break;
+
+			case 3:
+				if (!cfg.direct_video && video_get_scaler_flt(VFILTER_HORZ))
+				{
+					video_set_scaler_flt(VFILTER_VERT, video_get_scaler_flt(VFILTER_VERT) ? 0 : 1);
+					menustate = parentstate;
+				}
+				break;
+
+			case 5:
+				if (!cfg.direct_video && video_get_scaler_flt(VFILTER_HORZ))
+				{
+					video_set_scaler_flt(VFILTER_SCAN, video_get_scaler_flt(VFILTER_SCAN) ? 0 : 1);
+					menustate = parentstate;
+				}
+				break;
+
+			case 7:
+				if (video_get_gamma_en() >= 0) video_set_gamma_en(video_get_gamma_en() ? 0 : 1);
+				menustate = parentstate;
+				break;
+
+			case 8:
+				if (video_get_gamma_en() > 0)
+				{
+					snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR"/%s", video_get_gamma_curve());
+					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR);
+					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_GAMMA_FILE_SELECTED, parentstate);
+				}
+				break;
+
+			case 9:
+				if (video_get_shadow_mask_mode() >= 0) video_set_shadow_mask_mode(video_get_shadow_mask_mode() + 1);
+				menustate = parentstate;
+				break;
+
+			case 10:
+				if (video_get_shadow_mask_mode() > 0)
+				{
+					snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR"/%s", video_get_shadow_mask());
+					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR);
+					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_SMASK_FILE_SELECTED, parentstate);
+				}
+				break;
+
+			case 11:
+				menusub = 5;
+				menustate = MENU_COMMON1;
+				break;
+			}
+		}
 		break;
 
 	case MENU_ARCADE_DIP1:
@@ -3078,34 +3169,6 @@ void HandleUI(void)
 		}
 		break;
 
-	case MENU_COEFF_FILE_SELECTED:
-		{
-			char *p = strcasestr(selPath, COEFF_DIR"/");
-			if (!p) video_set_scaler_coeff(selPath);
-			else
-			{
-				p += strlen(COEFF_DIR);
-				while (*p == '/') p++;
-				video_set_scaler_coeff(p);
-			}
-			menustate = MENU_COMMON1;
-		}
-		break;
-
-	case MENU_GAMMA_FILE_SELECTED:
-		{
-			char *p = strcasestr(selPath, GAMMA_DIR"/");
-			if (!p) video_set_gamma_curve(selPath);
-			else
-			{
-				p += strlen(GAMMA_DIR);
-				while (*p == '/') p++;
-				video_set_gamma_curve(p);
-			}
-			menustate = MENU_COMMON1;
-		}
-		break;
-
 	case MENU_AFILTER_FILE_SELECTED:
 		{
 			char *p = strcasestr(selPath, AFILTER_DIR"/");
@@ -3120,6 +3183,34 @@ void HandleUI(void)
 		}
 		break;
 
+	case MENU_COEFF_FILE_SELECTED:
+		{
+			char *p = strcasestr(selPath, COEFF_DIR"/");
+			if (!p) video_set_scaler_coeff(vfilter_type, selPath);
+			else
+			{
+				p += strlen(COEFF_DIR);
+				while (*p == '/') p++;
+				video_set_scaler_coeff(vfilter_type, p);
+			}
+			menustate = MENU_VIDEOPROC1;
+		}
+		break;
+
+	case MENU_GAMMA_FILE_SELECTED:
+		{
+			char *p = strcasestr(selPath, GAMMA_DIR"/");
+			if (!p) video_set_gamma_curve(selPath);
+			else
+			{
+				p += strlen(GAMMA_DIR);
+				while (*p == '/') p++;
+				video_set_gamma_curve(p);
+			}
+			menustate = MENU_VIDEOPROC1;
+		}
+		break;
+
 	case MENU_SMASK_FILE_SELECTED:
 		{
 			char *p = strcasestr(selPath, SMASK_DIR"/");
@@ -3130,8 +3221,15 @@ void HandleUI(void)
 				while (*p == '/') p++;
 				video_set_shadow_mask(p);
 			}
-			menustate = MENU_COMMON1;
+			menustate = MENU_VIDEOPROC1;
 		}
+		break;
+
+	case MENU_PRESET_FILE_SELECTED:
+		memcpy(Selected_F[15], selPath, sizeof(Selected_F[15]));
+		recent_update(SelectedDir, selPath, SelectedLabel, 15);
+		video_loadPreset(selPath);
+		menustate = MENU_VIDEOPROC1;
 		break;
 
 	case MENU_MISC1:
@@ -3447,7 +3545,7 @@ void HandleUI(void)
 
 			if (get_map_vid() || get_map_pid())
 			{
-				if (!is_menu() && get_map_type() && !has_default_map())
+				if (!is_menu() && get_map_type() && !has_default_map() && !get_map_set())
 				{
 					for (int i = 0; i < OsdGetSize(); i++) OsdWrite(i);
 					OsdWrite(6, "   You need to define this");
