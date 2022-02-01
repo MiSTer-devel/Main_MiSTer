@@ -71,7 +71,7 @@ static uint16_t ReadChunkHeader(FILE* f, ChunkInfo* chunk)
         return (-1);
     }
 
-    fprintf(stderr, "ReadChunkHeader: chunk->id %d chunk->length %d\n", chunk->id,chunk->length);
+    //fprintf(stderr, "ReadChunkHeader: chunk->id %d chunk->length %d\n", chunk->id,chunk->length);
     return chunk->id;
 }
 
@@ -81,7 +81,7 @@ static ChunkInfo* GetChunkAtPosFile(FILE *f, uint32_t* p_bit_pos)
     uint8_t length_check = (bit_pos == 0xffffffff);
     ChunkInfo* chunk = &s_ChunkData;
 
-    fprintf(stderr, "Find pos : %d\n", bit_pos);
+    //fprintf(stderr, "Find pos : %d\n", bit_pos);
 
     if (chunk->bit_offset_start <= bit_pos && bit_pos < chunk->bit_offset_end) {
         bit_pos -= chunk->bit_offset_start;
@@ -110,7 +110,7 @@ static ChunkInfo* GetChunkAtPosFile(FILE *f, uint32_t* p_bit_pos)
             break;
         }
 
-        fprintf(stderr, "Parse ChunkID : %04x - Length : %4d bytes (%04x) - Offset = %d\n", chunk->id, chunk->length, chunk->length, (uint32_t)ftell(f));
+        //fprintf(stderr, "Parse ChunkID : %04x - Length : %4d bytes (%04x) - Offset = %d\n", chunk->id, chunk->length, chunk->length, (uint32_t)ftell(f));
         chunk->file_offset = ftell(f);
 
         if (UEF_tapeID == id || UEF_gapID == id || UEF_highToneID == id || UEF_highDummyID == id) {
@@ -282,6 +282,7 @@ static uint8_t GetBitAtPos(FILE *f, uint32_t bit_pos)
 
 
 #define BUFLEN      16384
+#define CHUNK 16384
 void gz_uncompress(in, out)
     gzFile in;
     FILE   *out;
@@ -304,17 +305,108 @@ void gz_uncompress(in, out)
 }
 
 
+#define kBufferSize 4096
+
+static int uef_copy_file(FILE *source, FILE *dest)
+{
+    unsigned char in[CHUNK];
+	int num_bytes;
+
+
+        do {
+		num_bytes = fread(in, 1, CHUNK, source);
+		fprintf(stderr,"fread: %d\n",num_bytes);
+        	if (ferror(source)) {
+			fprintf(stderr,"uef_copy_file: error reading data\n");
+			return -1;
+		}
+               if (fwrite(in, 1, num_bytes, dest) != num_bytes || ferror(dest)) {
+			fprintf(stderr,"uef_copy_file: error writing data\n");
+		       return -1;
+	       }
+		fprintf(stderr,"fread: %d\n",num_bytes);
+	}while (num_bytes!=0);
+}
+
+/* Decompress from file source to file dest until stream ends or EOF.
+   inf() returns Z_OK on success, Z_MEM_ERROR if memory could not be
+   allocated for processing, Z_DATA_ERROR if the deflate data is
+   invalid or incomplete, Z_VERSION_ERROR if the version of zlib.h and
+   the version of the library linked do not match, or Z_ERRNO if there
+   is an error reading or writing the files. */
+static int uef_inflate_file(FILE *source, FILE *dest)
+{
+
+    int ret;
+    unsigned have;
+    z_stream strm;
+    unsigned char in[CHUNK];
+    unsigned char out[CHUNK];
+
+    /* allocate inflate state */
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    strm.avail_in = 0;
+    strm.next_in = Z_NULL;
+    ret = inflateInit2(&strm,MAX_WBITS|16); // make sure to add the 16 to get it to accept gz header
+
+    if (ret != Z_OK)
+        return ret;
+
+    /* decompress until deflate stream ends or end of file */
+    do {
+
+        strm.avail_in = fread(in, 1, CHUNK, source);
+        if (ferror(source)) {
+            (void)inflateEnd(&strm);
+            return Z_ERRNO;
+        }
+        if (strm.avail_in == 0)
+            break;
+        strm.next_in = in;
+
+        /* run inflate() on input until output buffer not full */
+        do {
+
+            strm.avail_out = CHUNK;
+            strm.next_out = out;
+
+
+
+            ret = inflate(&strm, Z_NO_FLUSH);
+            assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
+            switch (ret) {
+            case Z_NEED_DICT:
+                ret = Z_DATA_ERROR;     /* and fall through */
+            case Z_DATA_ERROR:
+            case Z_MEM_ERROR:
+                (void)inflateEnd(&strm);
+                return ret;
+            }
+
+            have = CHUNK - strm.avail_out;
+            if (fwrite(out, 1, have, dest) != have || ferror(dest)) {
+                (void)inflateEnd(&strm);
+                return Z_ERRNO;
+            }
+
+        } while (strm.avail_out == 0);
+
+        /* done when inflate() says it's done */
+    } while (ret != Z_STREAM_END);
+
+    /* clean up and return */
+    (void)inflateEnd(&strm);
+    return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
+}
 
 int convert_uef(char *filename)
 {
+	
 	FILE *infile = fopen(filename,"rb");
 
-	FILE *outfile = fopen("tape.raw","wb");
-	fseek(infile, 0L, SEEK_END);
-	long int size =ftell(infile);
-	fprintf(stderr,"size: %ld\n",size);
-	rewind(infile);
-#define kBufferSize 4096
+
         int buf_size=kBufferSize;
 	unsigned char fbuf[kBufferSize];
 	int addr=0;
@@ -326,7 +418,7 @@ int convert_uef(char *filename)
         } UEF_header;
         UEF_header header;
 
-        fseek(infile, 0, SEEK_SET);
+
 
 
 	// the UAE file might be gzipped, if so we need to ungzip it
@@ -339,40 +431,23 @@ int convert_uef(char *filename)
 	// if it isn't gzipped, we need to rewind to the beginning
 	rewind(infile);
 
+	FILE *out = tmpfile();
+	//FILE *out = fopen("OURFILE","rb+");
+
 	// 1f 8b is the gzip magic number
 	if (fbuf[0]==0x1f && fbuf[1]==0x8b) {
-		gzFile in;
-		fprintf(stderr,"we have a gzipped file\n");
-		// close the file so we can gzopen it
-		fclose(infile);
-
-
-    		in = gzopen(filename, "rb");
-    		if (in == NULL) {
-        		fprintf(stderr, "can't gzopen %s\n",  filename);
-			return 0;
-    		}
- 
-		//FILE *out = fopen("TEMP","wb");//tmpfile();
-		FILE *out = tmpfile();
-
-    		char buf[BUFLEN];
-    		int len;
-    		int err;
-
-		gz_uncompress(in, out);
-		fflush(out);
-		infile=out;
-		rewind(infile);
-		fseek(infile, 0L, SEEK_END);
-		size =ftell(infile);
-		fprintf(stderr,"size: %ld\n",size);
-		rewind(infile);
-
+		fprintf(stderr,"UEF is compressed\n");
+		uef_inflate_file(infile, out);
 	}
 	else {
+		uef_copy_file(infile,out);
 		fprintf(stderr,"UEF is not compressed\n");
 	}
+
+	// close the infile
+	rewind(out);
+	fclose(infile);
+	infile = out;
 
         if (fread(&header, 1, sizeof(UEF_header), infile) != sizeof(UEF_header)) {
             fprintf(stderr,"Couldn't read file header\n");
@@ -383,8 +458,15 @@ int convert_uef(char *filename)
 
         } else {
             fprintf(stderr,"UEF: %s %d %d\n",header.ueftag,header.minor_version,header.major_version);
+
+	// figure out how big the file is
+	fseek(infile, 0L, SEEK_END);
+	long int size =ftell(infile);
+	fprintf(stderr,"size: %ld\n",size);
+	rewind(infile);
 	
     memset(&s_ChunkData, 0x00, sizeof(ChunkInfo));
+	FILE *outfile = fopen("tape.raw","wb");
 	while (size>0) {
         // this is a very naive conversion, but it'll have to do for now..
         for (uint32_t pos = 0; pos < buf_size; ++pos) {
