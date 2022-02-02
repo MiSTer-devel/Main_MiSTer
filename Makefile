@@ -3,7 +3,7 @@ SHELL = /bin/bash -o pipefail
 
 # using gcc version 10.2.1
 
-BASE    = arm-linux-gnueabihf
+BASE    = arm-none-linux-gnueabihf
 
 CC      = $(BASE)-gcc
 LD      = $(BASE)-ld
