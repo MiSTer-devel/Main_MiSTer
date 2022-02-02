@@ -252,7 +252,7 @@ static uint8_t GetBitAtPos(FILE *f, uint32_t bit_pos)
         uint8_t byte;
         fseek(f, info->file_offset + byte_offset, SEEK_SET);
         int ret=fread(&byte, 1, sizeof(byte), f);
-	if (ret<0) fprintf(stderr,"uef: error reading byte\n");
+        if (ret<0) fprintf(stderr,"uef: error reading byte\n");
 
         bit_offset -= 1;        // E (0,7)
         assert(bit_offset < 8);
@@ -291,24 +291,24 @@ static uint8_t GetBitAtPos(FILE *f, uint32_t bit_pos)
 
 static int uef_copy_file(fileTYPE *source, FILE *dest)
 {
-    unsigned char in[CHUNK];
-	int num_bytes;
+unsigned char in[CHUNK];
+int num_bytes;
 
 
-        do {
-		num_bytes = FileReadAdv(source, in, CHUNK,-1);
-		fprintf(stderr,"fread: %d\n",num_bytes);
-        	if (num_bytes<0) {
-			fprintf(stderr,"uef_copy_file: error reading data\n");
-			return -1;
-		}
-               if (fwrite(in, 1, num_bytes, dest) != (size_t)num_bytes || ferror(dest)) {
-			fprintf(stderr,"uef_copy_file: error writing data\n");
-		       return -1;
-	       }
-	}while (num_bytes!=0);
+  do {
+       num_bytes = FileReadAdv(source, in, CHUNK,-1);
+       fprintf(stderr,"fread: %d\n",num_bytes);
+       if (num_bytes<0) {
+           fprintf(stderr,"uef_copy_file: error reading data\n");
+           return -1;
+       }
+       if (fwrite(in, 1, num_bytes, dest) != (size_t)num_bytes || ferror(dest)) {
+           fprintf(stderr,"uef_copy_file: error writing data\n");
+           return -1;
+       }
+   } while (num_bytes!=0);
 
-	return 0;
+  return 0;
 }
 
 /* Decompress from file source to file dest until stream ends or EOF.
@@ -340,8 +340,8 @@ static int uef_inflate_file(fileTYPE *source, FILE *dest)
     /* decompress until deflate stream ends or end of file */
     do {
 
-	int res = FileReadAdv(source, in, CHUNK,-1);
-	strm.avail_in= res;
+        int res = FileReadAdv(source, in, CHUNK,-1);
+        strm.avail_in= res;
         if (res<0) {
             (void)inflateEnd(&strm);
             return Z_ERRNO;
@@ -365,15 +365,15 @@ static int uef_inflate_file(fileTYPE *source, FILE *dest)
                 ret = Z_DATA_ERROR;     /* and fall through */
                 (void)inflateEnd(&strm);
                 return ret;
-		break;
+            break;
             case Z_DATA_ERROR:
                 (void)inflateEnd(&strm);
                 return ret;
-		break;
+            break;
             case Z_MEM_ERROR:
                 (void)inflateEnd(&strm);
                 return ret;
-		break;
+            break;
             }
 
             have = CHUNK - strm.avail_out;
@@ -395,8 +395,8 @@ static int uef_inflate_file(fileTYPE *source, FILE *dest)
 int UEF_FileSend(fileTYPE *inputfile,int use_progress)
 {
         uint32_t buf_size=kBufferSize;
-	unsigned char fbuf[kBufferSize];
-	int addr=0;
+        unsigned char fbuf[kBufferSize];
+        int addr=0;
 
         typedef struct {
             char    ueftag[10];
@@ -408,29 +408,29 @@ int UEF_FileSend(fileTYPE *inputfile,int use_progress)
 
 
 
-	// the UAE file might be gzipped, if so we need to ungzip it
-	// gzip : 1f 8b
-	if ( FileReadAdv(inputfile, &fbuf,2) !=2)
-	{
-		fprintf(stderr,"error reading 2 bytes of file\n");
-		return 0;
-	}
-	// we need to rewind to the beginning
-	FileSeek(inputfile, 0, SEEK_SET);
+        // the UAE file might be gzipped, if so we need to ungzip it
+        // gzip : 1f 8b
+        if ( FileReadAdv(inputfile, &fbuf,2) !=2)
+        {
+                fprintf(stderr,"error reading 2 bytes of file\n");
+                return 0;
+        }
+        // we need to rewind to the beginning
+        FileSeek(inputfile, 0, SEEK_SET);
 
-	FILE *uncompressed_file= tmpfile();
+        FILE *uncompressed_file= tmpfile();
 
-	// 1f 8b is the gzip magic number
-	if (fbuf[0]==0x1f && fbuf[1]==0x8b) {
-		fprintf(stderr,"UEF is compressed\n");
-		uef_inflate_file(inputfile, uncompressed_file);
-	}
-	else {
-		uef_copy_file(inputfile,uncompressed_file);
-		fprintf(stderr,"UEF is not compressed\n");
-	}
+        // 1f 8b is the gzip magic number
+        if (fbuf[0]==0x1f && fbuf[1]==0x8b) {
+            fprintf(stderr,"UEF is compressed\n");
+            uef_inflate_file(inputfile, uncompressed_file);
+        }
+        else {
+            uef_copy_file(inputfile,uncompressed_file);
+            fprintf(stderr,"UEF is not compressed\n");
+        }
 
-	rewind(uncompressed_file);
+        rewind(uncompressed_file);
 
         if (fread(&header, 1, sizeof(UEF_header), uncompressed_file) != sizeof(UEF_header)) {
             fprintf(stderr,"Couldn't read file header\n");
@@ -464,26 +464,27 @@ int UEF_FileSend(fileTYPE *inputfile,int use_progress)
             fprintf(stderr, "Wave length : %ds\n", numbits / bits_per_second);
             fprintf(stderr, "Byte length : %d\n", (numbits + 7) / 8);
 
-	    // size is the output size of the file we are creating (or dynamically sending)
+            // size is the output size of the file we are creating (or dynamically sending)
             size= (numbits + 7) / 8;
-            uint32_t  orig_size=size;	
+            uint32_t  orig_size=size;
 
-	    fprintf(stderr,"output size: %d\n",size);
+            fprintf(stderr,"output size: %d\n",size);
 
-	    // clear the header
+            // clear the header
             memset(&s_ChunkData, 0x00, sizeof(ChunkInfo));
-	    uint32_t tot_size=0;
-	    uint32_t cur_size=0;
-	    uint32_t act_size=0;
+            uint32_t tot_size=0;
+            uint32_t cur_size=0;
+            uint32_t act_size=0;
+
             while (size) {
-		cur_size= size;
+                cur_size= size;
                 if (cur_size>  buf_size) cur_size=buf_size;
-		act_size=cur_size;
+                act_size=cur_size;
                 // artifically clamp size to the end of the bit stream
                 if (addr + act_size >  orig_size)
                    act_size = orig_size  - addr;
 
-		tot_size+=act_size;
+               tot_size+=act_size;
                // this is a very naive conversion, but it'll have to do for now..
                for (uint32_t pos = 0; pos < act_size; ++pos) {
                    uint8_t val = 0;
@@ -496,17 +497,17 @@ int UEF_FileSend(fileTYPE *inputfile,int use_progress)
                }
                if (use_progress) ProgressMessage("Loading", inputfile->name, orig_size-size  , orig_size);
                user_io_file_tx_data(fbuf, act_size);
-	       if (act_size!=cur_size)
-		       fprintf(stderr,"truncated?\n");
+               if (act_size!=cur_size)
+                  fprintf(stderr,"truncated?\n");
 //fwrite(fbuf,1,act_size,outfile);
                size -= cur_size;
                addr += cur_size;
-	   }
-	   fclose(uncompressed_file);
+            }
+         fclose(uncompressed_file);
 
 //fclose(outfile);
-       }
-       return 0;
+      }
+  return 0;
 }
 
 
