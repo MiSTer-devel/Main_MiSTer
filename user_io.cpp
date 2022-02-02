@@ -280,6 +280,13 @@ char is_sharpmz()
 	return(core_type == CORE_TYPE_SHARPMZ);
 }
 
+static int is_electron_type = 0;
+char is_electron()
+{
+	if (!is_electron_type) is_electron_type = strcasecmp(core_name, "AcornElectron") ? 2 : 1;
+	return (is_electron_type == 1);
+}
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -2180,6 +2187,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	int dosend = 1;
 
+
+
 	int is_snes_bs = 0;
 	if (is_snes() && bytes2send)
 	{
@@ -2287,6 +2296,15 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				}
 				FileClose(&fg);
 			}
+		}
+	}
+
+	if (is_electron() && bytes2send)
+	{
+		const char *ext = strrchr(f.name, '.');
+		if (ext && !strcasecmp(ext, ".UEF")) {
+			UEF_FileSend(&f,use_progress);
+			dosend=0;
 		}
 	}
 

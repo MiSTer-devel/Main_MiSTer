@@ -32,6 +32,9 @@
 
 #include <zlib.h>
 
+#include "file_io.h"
+#include "user_io.h"
+#include "menu.h"
 
 #define UEF_ChunkHeaderSize (sizeof(uint16_t) + sizeof(uint32_t))
 #define UEF_infoID      0x0000
@@ -280,30 +283,194 @@ static uint8_t GetBitAtPos(FILE *f, uint32_t bit_pos)
     return (byte & (1 << bit_pos)) ? 1 : 0;
 }
 
+#define BUFLEN      16384
+#define CHUNK 16384
+
+#define kBufferSize 4096
+
+static int uef_copy_file(fileTYPE *source, FILE *dest)
+{
+    unsigned char in[CHUNK];
+	int num_bytes;
+
+
+        do {
+		num_bytes = FileReadAdv(source, in, CHUNK);
+		fprintf(stderr,"fread: %d\n",num_bytes);
+        	if (num_bytes<0) {
+			fprintf(stderr,"uef_copy_file: error reading data\n");
+			return -1;
+		}
+               if (fwrite(in, 1, num_bytes, dest) != num_bytes || ferror(dest)) {
+			fprintf(stderr,"uef_copy_file: error writing data\n");
+		       return -1;
+	       }
+	}while (num_bytes!=0);
+}
+
+/* Decompress from file source to file dest until stream ends or EOF.
+   inf() returns Z_OK on success, Z_MEM_ERROR if memory could not be
+   allocated for processing, Z_DATA_ERROR if the deflate data is
+   invalid or incomplete, Z_VERSION_ERROR if the version of zlib.h and
+   the version of the library linked do not match, or Z_ERRNO if there
+   is an error reading or writing the files. */
+static int uef_inflate_file(fileTYPE *source, FILE *dest)
+{
+
+    int ret;
+    unsigned have;
+    z_stream strm;
+    unsigned char in[CHUNK];
+    unsigned char out[CHUNK];
+
+    /* allocate inflate state */
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    strm.avail_in = 0;
+    strm.next_in = Z_NULL;
+    ret = inflateInit2(&strm,MAX_WBITS|16); // make sure to add the 16 to get it to accept gz header
+
+    if (ret != Z_OK)
+        return ret;
+
+    /* decompress until deflate stream ends or end of file */
+    do {
+
+	strm.avail_in= FileReadAdv(source, in, CHUNK);
+        if (strm.avail_in<0) {
+            (void)inflateEnd(&strm);
+            return Z_ERRNO;
+        }
+        if (strm.avail_in == 0)
+            break;
+        strm.next_in = in;
+
+        /* run inflate() on input until output buffer not full */
+        do {
+
+            strm.avail_out = CHUNK;
+            strm.next_out = out;
+
+
+
+            ret = inflate(&strm, Z_NO_FLUSH);
+            assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
+            switch (ret) {
+            case Z_NEED_DICT:
+                ret = Z_DATA_ERROR;     /* and fall through */
+            case Z_DATA_ERROR:
+            case Z_MEM_ERROR:
+                (void)inflateEnd(&strm);
+                return ret;
+            }
+
+            have = CHUNK - strm.avail_out;
+            if (fwrite(out, 1, have, dest) != have || ferror(dest)) {
+                (void)inflateEnd(&strm);
+                return Z_ERRNO;
+            }
+
+        } while (strm.avail_out == 0);
+
+        /* done when inflate() says it's done */
+    } while (ret != Z_STREAM_END);
+
+    /* clean up and return */
+    (void)inflateEnd(&strm);
+    return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
+}
+
+int UEF_FileSend(fileTYPE *inputfile,int use_progress)
+{
+        int buf_size=kBufferSize;
+	unsigned char fbuf[kBufferSize];
+	int addr=0;
+
+        typedef struct {
+            char    ueftag[10];
+            uint8_t minor_version;
+            uint8_t major_version;
+        } UEF_header;
+        UEF_header header;
+
+
+
+
+	// the UAE file might be gzipped, if so we need to ungzip it
+	// gzip : 1f 8b
+	if ( FileReadAdv(inputfile, &fbuf,2) !=2)
+	{
+		fprintf(stderr,"error reading 2 bytes of file\n");
+		return 0;
+	}
+	// we need to rewind to the beginning
+	FileSeek(inputfile, 0, SEEK_SET);
+
+	FILE *uncompressed_file= tmpfile();
+
+	// 1f 8b is the gzip magic number
+	if (fbuf[0]==0x1f && fbuf[1]==0x8b) {
+		fprintf(stderr,"UEF is compressed\n");
+		uef_inflate_file(inputfile, uncompressed_file);
+	}
+	else {
+		uef_copy_file(inputfile,uncompressed_file);
+		fprintf(stderr,"UEF is not compressed\n");
+	}
+
+	rewind(uncompressed_file);
+
+        if (fread(&header, 1, sizeof(UEF_header), uncompressed_file) != sizeof(UEF_header)) {
+            fprintf(stderr,"Couldn't read file header\n");
+
+        } else if (memcmp(header.ueftag, "UEF File!\0", sizeof(header.ueftag)) != 0) {
+            fprintf(stderr,"UEF file header mismatch\n");
+            fprintf(stderr,"File compressed?\n");
+
+        } else {
+            fprintf(stderr,"UEF: %s %d %d\n",header.ueftag,header.minor_version,header.major_version);
+
+            // figure out how big the file is
+            fseek(uncompressed_file, 0L, SEEK_END);
+            long int size =ftell(uncompressed_file);
+            fprintf(stderr,"size: %ld\n",size);
+            rewind(uncompressed_file);
+            int orig_size=size;	
+FILE *outfile = fopen("tape.raw","wb");
+            memset(&s_ChunkData, 0x00, sizeof(ChunkInfo));
+            while (size>0) {
+                int act_size = buf_size;
+                // artifically clamp size to the end of the bit stream
+                if (addr + act_size >  orig_size)
+                   act_size = orig_size  - addr;
+
+               // this is a very naive conversion, but it'll have to do for now..
+               for (uint32_t pos = 0; pos < act_size; ++pos) {
+                   uint8_t val = 0;
+                   for (uint32_t bit = 0; bit < 8; ++bit) {
+                      val = val << 1;
+                      val = val | GetBitAtPos(uncompressed_file, ((addr + pos) << 3) + bit);
+                   }
+
+                   fbuf[pos] = val;
+               }
+               if (use_progress) ProgressMessage("Loading", inputfile->name, orig_size-size  , orig_size);
+               user_io_file_tx_data(fbuf, act_size);
+fwrite(fbuf,1,act_size,outfile);
+               size -= act_size;
+               addr += act_size;
+	   }
+	   fclose(uncompressed_file);
+       }
+       return 0;
+}
+
+
+#if 0
 
 #define BUFLEN      16384
 #define CHUNK 16384
-void gz_uncompress(in, out)
-    gzFile in;
-    FILE   *out;
-{
-    char buf[BUFLEN];
-    int len;
-    int err;
-
-    for (;;) {
-        len = gzread(in, buf, sizeof(buf));
-        if (len < 0) fprintf(stderr,"len < 0 error ungzip\n"); //	(gzerror(in, &err));
-        if (len == 0) break;
-
-        if ((int)fwrite(buf, 1, (unsigned)len, out) != len) {
-            fprintf(stderr,"failed fwrite\n");
-        }
-    }
-
-    if (gzclose(in) != Z_OK) fprintf(stderr,"failed gzclose\n");
-}
-
 
 #define kBufferSize 4096
 
@@ -479,14 +646,16 @@ int convert_uef(char *filename)
             fbuf[pos] = val;
         }
 	fwrite(fbuf,1,buf_size,outfile);
+	
+	//
         size -= buf_size;
         addr += buf_size;
 	}
 	fclose(infile);
-	fclose(outfile);
 	}
 }
 int main(int argc, char *argv[]) {
 	return convert_uef(argv[1]);
 }
 
+#endif
