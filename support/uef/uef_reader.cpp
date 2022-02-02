@@ -439,17 +439,39 @@ int UEF_FileSend(fileTYPE *inputfile,int use_progress)
             uint32_t size =ftell(uncompressed_file);
             fprintf(stderr,"size: %d\n",size);
             rewind(uncompressed_file);
-            uint32_t  orig_size=size;	
 FILE *outfile = fopen("tape.raw","wb");
+   memset(&s_ChunkData, 0x00, sizeof(ChunkInfo));
+            uint32_t numbits = 0xffffffff;
+            GetChunkAtPosFile(uncompressed_file,&numbits);
+
+            numbits = ~numbits;
+
+            uint32_t bits_per_second = 1225;
+            fprintf(stderr, "Bit length  : %d", numbits);
+            fprintf(stderr, "Wave length : %ds", numbits / bits_per_second);
+            fprintf(stderr, "Byte length : %d", (numbits + 7) / 8);
+
+            size= (numbits + 7) / 8;
+            uint32_t  orig_size=size;	
+
+	fprintf(stderr,"output size: %d\n",size);
             memset(&s_ChunkData, 0x00, sizeof(ChunkInfo));
 	    uint32_t tot_size=0;
-	    uint16_t cur_size=0;
+	    uint32_t cur_size=0;
 	    uint32_t act_size=0;
             while (size) {
+		printf("b size: %d\n",size);
+		printf("b cur_size: %d\n",cur_size);
 		cur_size= size;
-                if (cur_size>  buf_size) act_size=buf_size;
+		printf("ba cur_size size: %d\n",cur_size);
+		printf("ba buf_size: %d\n",buf_size);
+                if (cur_size>  buf_size) cur_size=buf_size;
+		printf("b cur_size: %d\n",cur_size);
 		act_size=cur_size;
                 // artifically clamp size to the end of the bit stream
+		printf("b act_size: %d\n",act_size);
+		printf("b addr: %d\n",addr);
+		printf("b orig_size: %d\n",orig_size);
                 if (addr + act_size >  orig_size)
                    act_size = orig_size  - addr;
 
