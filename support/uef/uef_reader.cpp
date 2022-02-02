@@ -61,7 +61,7 @@ typedef struct {
 } __attribute__((packed)) ChunkInfo;
 
 // TODO - allocate this as part of the desc structure
-static ChunkInfo s_ChunkData = { 0 };
+static ChunkInfo s_ChunkData = { 0,0,0,0,0,0 };
 
 
 
@@ -251,7 +251,7 @@ static uint8_t GetBitAtPos(FILE *f, uint32_t bit_pos)
 
         uint8_t byte;
         fseek(f, info->file_offset + byte_offset, SEEK_SET);
-        fread(&byte, 1, sizeof(byte), f);
+        int res=fread(&byte, 1, sizeof(byte), f);
 
         bit_offset -= 1;        // E (0,7)
         assert(bit_offset < 8);
@@ -295,17 +295,19 @@ static int uef_copy_file(fileTYPE *source, FILE *dest)
 
 
         do {
-		num_bytes = FileReadAdv(source, in, CHUNK);
+		num_bytes = FileReadAdv(source, in, CHUNK,-1);
 		fprintf(stderr,"fread: %d\n",num_bytes);
         	if (num_bytes<0) {
 			fprintf(stderr,"uef_copy_file: error reading data\n");
 			return -1;
 		}
-               if (fwrite(in, 1, num_bytes, dest) != num_bytes || ferror(dest)) {
+               if (fwrite(in, 1, num_bytes, dest) != (size_t)num_bytes || ferror(dest)) {
 			fprintf(stderr,"uef_copy_file: error writing data\n");
 		       return -1;
 	       }
 	}while (num_bytes!=0);
+
+	return 0;
 }
 
 /* Decompress from file source to file dest until stream ends or EOF.
@@ -337,8 +339,9 @@ static int uef_inflate_file(fileTYPE *source, FILE *dest)
     /* decompress until deflate stream ends or end of file */
     do {
 
-	strm.avail_in= FileReadAdv(source, in, CHUNK);
-        if (strm.avail_in<0) {
+	int res = FileReadAdv(source, in, CHUNK,-1);
+	strm.avail_in= res;
+        if (res<0) {
             (void)inflateEnd(&strm);
             return Z_ERRNO;
         }
@@ -433,18 +436,27 @@ int UEF_FileSend(fileTYPE *inputfile,int use_progress)
 
             // figure out how big the file is
             fseek(uncompressed_file, 0L, SEEK_END);
-            long int size =ftell(uncompressed_file);
-            fprintf(stderr,"size: %ld\n",size);
+            uint32_t size =ftell(uncompressed_file);
+            fprintf(stderr,"size: %d\n",size);
             rewind(uncompressed_file);
-            int orig_size=size;	
+            uint32_t  orig_size=size;	
 FILE *outfile = fopen("tape.raw","wb");
             memset(&s_ChunkData, 0x00, sizeof(ChunkInfo));
-            while (size>0) {
-                int act_size = buf_size;
+	    uint32_t tot_size=0;
+	    uint16_t cur_size=0;
+	    uint32_t act_size=0;
+            while (size) {
+		cur_size= size;
+                if (cur_size>  buf_size) act_size=buf_size;
+		act_size=cur_size;
                 // artifically clamp size to the end of the bit stream
                 if (addr + act_size >  orig_size)
                    act_size = orig_size  - addr;
 
+		tot_size+=act_size;
+		printf("act_size: %d\n",act_size);
+		printf("tot_size: %d\n",tot_size);
+		printf("size: %d\n",size);
                // this is a very naive conversion, but it'll have to do for now..
                for (uint32_t pos = 0; pos < act_size; ++pos) {
                    uint8_t val = 0;
@@ -457,11 +469,15 @@ FILE *outfile = fopen("tape.raw","wb");
                }
                if (use_progress) ProgressMessage("Loading", inputfile->name, orig_size-size  , orig_size);
                user_io_file_tx_data(fbuf, act_size);
+	       if (act_size!=cur_size)
+		       fprintf(stderr,"truncated?\n");
 fwrite(fbuf,1,act_size,outfile);
-               size -= act_size;
-               addr += act_size;
+               size -= cur_size;
+               addr += cur_size;
 	   }
 	   fclose(uncompressed_file);
+
+	   fclose(outfile);
        }
        return 0;
 }
@@ -629,9 +645,25 @@ int convert_uef(char *filename)
 	// figure out how big the file is
 	fseek(infile, 0L, SEEK_END);
 	long int size =ftell(infile);
-	fprintf(stderr,"size: %ld\n",size);
+	fprintf(stderr,"file size: %ld\n",size);
 	rewind(infile);
-	
+
+   memset(&s_ChunkData, 0x00, sizeof(ChunkInfo));
+            uint32_t numbits = 0xffffffff;
+            GetChunkAtPosFile(infile,&numbits);
+
+            numbits = ~numbits;
+
+            uint32_t bits_per_second = 1225;
+            fprintf(stderr, "Bit length  : %d", numbits);
+            fprintf(stderr, "Wave length : %ds", numbits / bits_per_second);
+            fprintf(stderr, "Byte length : %d", (numbits + 7) / 8);
+
+            size= (numbits + 7) / 8;
+
+	fprintf(stderr,"output size: %ld\n",size);
+
+
     memset(&s_ChunkData, 0x00, sizeof(ChunkInfo));
 	FILE *outfile = fopen("tape.raw","wb");
 	while (size>0) {
