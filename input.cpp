@@ -856,6 +856,7 @@ enum QUIRK
 	QUIRK_TOUCHGUN,
 	QUIRK_VCS,
 	QUIRK_JOYCON,
+	QUIRK_GUNCON2,
 };
 
 typedef struct
@@ -1220,6 +1221,7 @@ int input_has_lightgun()
 	{
 		if (input[i].quirk == QUIRK_WIIMOTE)  return 1;
 		if (input[i].quirk == QUIRK_TOUCHGUN) return 1;
+		if (input[i].quirk == QUIRK_GUNCON2) return 1;
 	}
 	return 0;
 }
@@ -3809,7 +3811,13 @@ int input_test(int getchar)
 						//Namco GunCon 2
 						if (input[n].vid == 0x0b9a && input[n].pid == 0x016a)
 						{
+							input[n].quirk = QUIRK_GUNCON2;
 							input[n].lightgun = 1;
+							input[n].guncal[0] = 25;
+							input[n].guncal[1] = 245;
+							input[n].guncal[2] = 145;
+							input[n].guncal[3] = 700;
+							input_lightgun_load(n);
 						}
 
 						//Madcatz Arcade Stick 360
@@ -4258,9 +4266,25 @@ int input_test(int getchar)
 									}
 								}
 
+								if (ev.type == EV_ABS && input[i].quirk == QUIRK_GUNCON2)
+								{
+									menu_lightgun_cb(i, ev.type, ev.code, ev.value);
+
+									if (ev.code == ABS_X)
+									{
+										absinfo.minimum = input[i].guncal[2];
+										absinfo.maximum = input[i].guncal[3];
+									}
+									else if (ev.code == ABS_Y)
+									{
+										absinfo.minimum = input[i].guncal[0];
+										absinfo.maximum = input[i].guncal[1];
+									}
+								}
+
 								if (ev.type == EV_KEY && user_io_osd_is_visible())
 								{
-									if (input[i].quirk == QUIRK_WIIMOTE)
+									if (input[i].quirk == QUIRK_WIIMOTE || input[i].quirk == QUIRK_GUNCON2)
 									{
 										if (menu_lightgun_cb(i, ev.type, ev.code, ev.value)) continue;
 									}
