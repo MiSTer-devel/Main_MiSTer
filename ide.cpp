@@ -79,12 +79,12 @@ uint8_t ide_buf[ide_io_max_size * 512];
 
 ide_config ide_inst[2] = {};
 
-uint16_t ide_check(int status)
+uint16_t ide_check()
 {
 	uint16_t res;
 	EnableIO();
 	res = spi_w(UIO_DMA_SDIO);
-	if (status || !res) res = (uint8_t)spi_w((uint16_t)status);
+	if (!res) res = (uint8_t)spi_w(0);
 	DisableIO();
 	return res;
 }

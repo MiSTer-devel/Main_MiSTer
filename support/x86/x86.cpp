@@ -300,12 +300,12 @@ void x86_init()
 	load_bios(user_io_make_filepath(home, "boot0.rom"), 0);
 	load_bios(user_io_make_filepath(home, "boot1.rom"), 1);
 
-	uint8_t cfg = ide_check();
+	uint16_t cfg = ide_check();
 	uint8_t hotswap[4] = {
 		0,
 		0,
-		((cfg >> 8) & 1) ^ 1,
-		(cfg >> 9) & 1,
+		(uint8_t)(((cfg >> 8) & 1) ^ 1),
+		(uint8_t)((cfg >> 9) & 1),
 	};
 	ide_reset(hotswap);
 
