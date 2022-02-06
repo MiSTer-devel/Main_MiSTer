@@ -30,7 +30,7 @@
 #include <assert.h>
 
 
-#include "miniz.h"
+#include <zlib.h>
 
 #include "file_io.h"
 #include "user_io.h"
