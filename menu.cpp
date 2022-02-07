@@ -686,14 +686,10 @@ static void printSysInfo()
 		sysinfo_timer = GetTimer(2000);
 		struct battery_data_t bat;
 		int hasbat = getBattery(0, &bat);
-		int n = 3;
+		int n = 2;
 
 		char str[40];
 		OsdWrite(n++, info_top, 0, 0);
-		if (!hasbat)
-		{
-			infowrite(n++, "");
-		}
 
 		int j = 0;
 		char *net;
@@ -716,6 +712,8 @@ static void printSysInfo()
 
 		if (hasbat)
 		{
+			infowrite(n++, "");
+	
 			sprintf(str, "\x1F ");
 			if (bat.capacity == -1) strcat(str, "n/a");
 			else sprintf(str + strlen(str), "%d%%", bat.capacity);
@@ -752,6 +750,10 @@ static void printSysInfo()
 		else
 		{
 			infowrite(n++, "");
+			video_core_description(str, 40);
+			infowrite(n++, str);
+			video_scaler_description(str, 40);
+			infowrite(n++, str);
 		}
 		OsdWrite(n++, info_bottom, 0, 0);
 	}
@@ -3136,7 +3138,7 @@ void HandleUI(void)
 	case MENU_SFONT_FILE_SELECTED:
 		{
 			printf("MENU_SFONT_FILE_SELECTED --> '%s'\n", selPath);
-			sprintf(Selected_tmp, "/sbin/mlinkutil FSSFONT /media/fat/\"%s\"", selPath);
+			snprintf(Selected_tmp, sizeof(Selected_tmp), "/sbin/mlinkutil FSSFONT /media/fat/\"%s\"", selPath);
 			system(Selected_tmp);
 			AdjustDirectory(selPath);
 			// MENU_FILE_SELECT1 to file select OSD
@@ -3285,6 +3287,7 @@ void HandleUI(void)
 		helptext_idx = 0;
 		menumask = 0xF;
 		menustate = MENU_MISC2;
+		sysinfo_timer = 0; // force refresh
 		OsdSetTitle("Misc. Options", OSD_ARROW_RIGHT);
 
 		if (parentstate != MENU_MISC1)

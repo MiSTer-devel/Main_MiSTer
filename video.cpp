@@ -59,6 +59,8 @@ static int brd_y = 0;
 static int menu_bg = 0;
 static int menu_bgn = 0;
 
+static VideoInfo current_video_info;
+
 struct vmode_t
 {
 	uint32_t vpar[8];
@@ -371,7 +373,14 @@ static void set_vfilter(int force)
 			valid = true;
 		}
 
-		send_video_filters(&horiz, &vert, flt_flags & 0xF);
+		if (video_is_rotated())
+		{
+			send_video_filters(&vert, &horiz, flt_flags & 0xF);
+		}
+		else
+		{
+			send_video_filters(&horiz, &vert, flt_flags & 0xF);
+		}
 	}
 
 	if (!valid) spi_uio_cmd8(UIO_SET_FLTNUM, 0);
@@ -591,14 +600,23 @@ static void setShadowMask()
 		return;
 	}
 
+	int normal_flag = 0;
+	int rotated_flag = SM_FLAG_ROTATED;
+
+	if (video_is_rotated())
+	{
+		normal_flag = SM_FLAG_ROTATED;
+		rotated_flag = 0;
+	}
+
 	has_shadow_mask = 1;
-	switch( video_get_shadow_mask_mode() )
+	switch (video_get_shadow_mask_mode())
 	{
 		default: spi_w(SM_FLAG(0)); break;
-		case SM_MODE_1X: spi_w(SM_FLAG(SM_FLAG_ENABLED)); break;
-		case SM_MODE_2X: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_2X)); break;
-		case SM_MODE_1X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED)); break;
-		case SM_MODE_2X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED | SM_FLAG_2X)); break;
+		case SM_MODE_1X: spi_w(SM_FLAG(SM_FLAG_ENABLED | normal_flag)); break;
+		case SM_MODE_2X: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_2X | normal_flag)); break;
+		case SM_MODE_1X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | rotated_flag)); break;
+		case SM_MODE_2X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | rotated_flag | SM_FLAG_2X)); break;
 	}
 
 	int loaded = 0;
@@ -1033,111 +1051,160 @@ int hasAPI1_5()
 	return api1_5 || is_menu();
 }
 
-static uint32_t show_video_info(int force)
+static bool get_video_info(bool force, VideoInfo *video_info)
 {
-	uint32_t ret = 0;
 	static uint16_t nres = 0;
+	bool changed = false;
+
 	spi_uio_cmd_cont(UIO_GET_VRES);
 	uint16_t res = spi_w(0);
 	if ((nres != res) || force)
 	{
-		if (nres != res) force = 0;
+		changed = (nres != res);
 		nres = res;
-		uint32_t width = spi_w(0) | (spi_w(0) << 16);
-		uint32_t height = spi_w(0) | (spi_w(0) << 16);
-		uint32_t htime = spi_w(0) | (spi_w(0) << 16);
-		uint32_t vtime = spi_w(0) | (spi_w(0) << 16);
-		uint32_t ptime = spi_w(0) | (spi_w(0) << 16);
-		uint32_t vtimeh = spi_w(0) | (spi_w(0) << 16);
-		DisableIO();
-
-		float vrate = 100000000;
-		if (vtime) vrate /= vtime; else vrate = 0;
-		float hrate = 100000;
-		if (htime) hrate /= htime; else hrate = 0;
-
-		float prate = width * 100;
-		prate /= ptime;
-
-		printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, (res & 0x100) ? "i" : "", hrate, vrate, prate);
-		printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
-
-		if (vtimeh) api1_5 = 1;
-		if (hasAPI1_5() && cfg.video_info)
-		{
-			static char str[128], res1[16], res2[16];
-			float vrateh = 100000000;
-			if (vtimeh) vrateh /= vtimeh; else vrateh = 0;
-			sprintf(res1, "%dx%d%s", width, height, (res & 0x100) ? "i" : "");
-			sprintf(res2, "%dx%d", v_cur.item[1], v_cur.item[5]);
-			sprintf(str, "%9s %6.2fKHz %4.1fHz\n" \
-				         "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n" \
-				         "%9s %6.2fMHz %4.1fHz",
-				res1,  hrate, vrate, res2, v_cur.Fpix, vrateh);
-			Info(str, cfg.video_info * 1000);
-		}
-
-		uint32_t scrh = v_cur.item[5];
-		if (scrh)
-		{
-			if (cfg.vscale_mode && height)
-			{
-				uint32_t div = 1 << (cfg.vscale_mode - 1);
-				uint32_t mag = (scrh*div) / height;
-				scrh = (height * mag) / div;
-				printf("Set vertical scaling to : %d\n", scrh);
-				spi_uio_cmd16(UIO_SETHEIGHT, scrh);
-			}
-			else if(cfg.vscale_border)
-			{
-				uint32_t border = cfg.vscale_border * 2;
-				if ((border + 100) > scrh) border = scrh - 100;
-				scrh -= border;
-				printf("Set max vertical resolution to : %d\n", scrh);
-				spi_uio_cmd16(UIO_SETHEIGHT, scrh);
-			}
-			else
-			{
-				spi_uio_cmd16(UIO_SETHEIGHT, 0);
-			}
-		}
-
-		uint32_t scrw = v_cur.item[1];
-		if (scrw)
-		{
-			if (cfg.vscale_border && !(cfg.vscale_mode && height))
-			{
-				uint32_t border = cfg.vscale_border * 2;
-				if ((border + 100) > scrw) border = scrw - 100;
-				scrw -= border;
-				printf("Set max horizontal resolution to : %d\n", scrw);
-				spi_uio_cmd16(UIO_SETWIDTH, scrw);
-			}
-			else
-			{
-				spi_uio_cmd16(UIO_SETWIDTH, 0);
-			}
-		}
-
-		if (vtime && vtimeh) ret = vtime;
-		minimig_set_adjust(2);
+		video_info->width = spi_w(0) | (spi_w(0) << 16);
+		video_info->height = spi_w(0) | (spi_w(0) << 16);
+		video_info->htime = spi_w(0) | (spi_w(0) << 16);
+		video_info->vtime = spi_w(0) | (spi_w(0) << 16);
+		video_info->ptime = spi_w(0) | (spi_w(0) << 16);
+		video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
+		video_info->interlaced = ( res & 0x100 ) != 0;
+		video_info->rotated = ( res & 0x200 ) != 0;
 	}
-	else
+
+	DisableIO();
+
+	return changed;
+}
+
+static void video_core_description(const VideoInfo *vi, const vmode_custom_t * /*vm*/, char *str, size_t len)
+{
+	float vrate = 100000000;
+	if (vi->vtime) vrate /= vi->vtime; else vrate = 0;
+	float hrate = 100000;
+	if (vi->htime) hrate /= vi->htime; else hrate = 0;
+
+	float prate = vi->width * 100;
+	prate /= vi->ptime;
+
+	char res[16];
+	snprintf(res, 16, "%dx%d%s", vi->width, vi->height, vi->interlaced ? "i" : "");
+	snprintf(str, len, "%9s %6.2fKHz %5.1fHz", res, hrate, vrate);
+}
+
+static void video_scaler_description(const VideoInfo *vi, const vmode_custom_t *vm, char *str, size_t len)
+{
+	char res[16];
+	float vrateh = 100000000;
+	if (vi->vtimeh) vrateh /= vi->vtimeh; else vrateh = 0;
+	snprintf(res, 16, "%dx%d", vm->item[1], vm->item[5]);
+	snprintf(str, len, "%9s %6.2fMHz %5.1fHz", res, vm->Fpix, vrateh);
+}
+
+void video_core_description(char *str, size_t len)
+{
+	video_core_description(&current_video_info, &v_cur, str, len);
+}
+
+void video_scaler_description(char *str, size_t len)
+{
+	video_scaler_description(&current_video_info, &v_cur, str, len);
+}
+
+static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
+{
+	float vrate = 100000000;
+	if (vi->vtime) vrate /= vi->vtime; else vrate = 0;
+	float hrate = 100000;
+	if (vi->htime) hrate /= vi->htime; else hrate = 0;
+
+	float prate = vi->width * 100;
+	prate /= vi->ptime;
+
+	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n",
+		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate);
+	printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vi->vtime, vi->vtimeh);
+	if (vi->vtimeh) api1_5 = 1;
+	if (hasAPI1_5() && cfg.video_info)
 	{
-		DisableIO();
+		char str[128], res1[64], res2[64];
+		video_core_description(vi, vm, res1, 64);
+		video_scaler_description(vi, vm, res2, 64);
+		snprintf(str, 128, "%s\n" \
+						"\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n" \
+						"%s", res1, res2);
+		Info(str, cfg.video_info * 1000);
+	}
+}
+
+static void video_scaling_adjust(const VideoInfo *vi)
+{
+	const uint32_t height = vi->rotated ? vi->width : vi->height;
+
+	uint32_t scrh = v_cur.item[5];
+	if (scrh)
+	{
+		if (cfg.vscale_mode && height)
+		{
+			uint32_t div = 1 << (cfg.vscale_mode - 1);
+			uint32_t mag = (scrh*div) / height;
+			scrh = (height * mag) / div;
+			printf("Set vertical scaling to : %d\n", scrh);
+			spi_uio_cmd16(UIO_SETHEIGHT, scrh);
+		}
+		else if(cfg.vscale_border)
+		{
+			uint32_t border = cfg.vscale_border * 2;
+			if ((border + 100) > scrh) border = scrh - 100;
+			scrh -= border;
+			printf("Set max vertical resolution to : %d\n", scrh);
+			spi_uio_cmd16(UIO_SETHEIGHT, scrh);
+		}
+		else
+		{
+			spi_uio_cmd16(UIO_SETHEIGHT, 0);
+		}
 	}
 
-	return force ? 0 : ret;
+	uint32_t scrw = v_cur.item[1];
+	if (scrw)
+	{
+		if (cfg.vscale_border && !(cfg.vscale_mode && height))
+		{
+			uint32_t border = cfg.vscale_border * 2;
+			if ((border + 100) > scrw) border = scrw - 100;
+			scrw -= border;
+			printf("Set max horizontal resolution to : %d\n", scrw);
+			spi_uio_cmd16(UIO_SETWIDTH, scrw);
+		}
+		else
+		{
+			spi_uio_cmd16(UIO_SETWIDTH, 0);
+		}
+	}
+
+	minimig_set_adjust(2);
 }
 
 void video_mode_adjust()
 {
-	static int force = 0;
+	static bool force = false;
 
-	uint32_t vtime = show_video_info(force);
-	force = 0;
+	VideoInfo video_info;
 
-	if (vtime && cfg.vsync_adjust && !is_menu())
+	const bool vid_changed = get_video_info(force, &video_info);
+
+	if (vid_changed || force)
+	{
+		show_video_info(&video_info, &v_cur);
+		video_scaling_adjust(&video_info);
+
+		current_video_info = video_info;
+	}
+	force = false;
+
+	const uint32_t vtime = video_info.vtime;
+	if (vid_changed && vtime && cfg.vsync_adjust && !is_menu())
 	{
 		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
 
@@ -1204,7 +1271,12 @@ void video_mode_adjust()
 
 		set_video(v, Fpix);
 		user_io_send_buttons(1);
-		force = 1;
+		force = true;
+	}
+	else if (vid_changed)
+	{
+		setScaler();
+		setShadowMask();
 	}
 	else
 	{
@@ -1941,4 +2013,9 @@ void video_cmd(char *cmd)
 			printf("video_cmd: unknown command or format.\n");
 		}
 	}
+}
+
+bool video_is_rotated()
+{
+	return current_video_info.rotated;
 }
