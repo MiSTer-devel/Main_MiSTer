@@ -103,7 +103,7 @@ static int get_bin(const char *cue)
 				}
 			}
 
-			delete(toc);
+			delete[](toc);
 		}
 	}
 
