@@ -358,8 +358,9 @@ static char filter[256] = {};
 static unsigned long filter_typing_timer = 0;
 
 // this function displays file selection menu
-void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
+void SelectFile(const char* path, const char* pFileExt, int Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
+	static char tmp[1024];
 	printf("pFileExt = %s\n", pFileExt);
 	filter_typing_timer = 0;
 	filter[0] = 0;
@@ -389,6 +390,12 @@ void SelectFile(const char* path, const char* pFileExt, unsigned char Options, u
 		home_dir = strrchr(home, '/');
 		if (home_dir) home_dir++;
 		else home_dir = home;
+
+		if (Options & SCANO_SAVES)
+		{
+			snprintf(tmp, sizeof(tmp), "%s/%s", SAVE_DIR, CoreName);
+			home = tmp;
+		}
 
 		if (strncasecmp(home, selPath, strlen(home)) || !strcasecmp(home, selPath) || (!FileExists(selPath) && !PathIsDir(selPath)))
 		{
@@ -2020,6 +2027,7 @@ void HandleUI(void)
 
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 						if (is_x86()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
+						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
 						if (is_pce() || is_megacd() || is_x86())
 						{

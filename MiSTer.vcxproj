@@ -162,6 +162,7 @@
     <ClInclude Include="support\minimig\minimig_share.h" />
     <ClInclude Include="support\neogeo\neogeo_loader.h" />
     <ClInclude Include="support\pcecd\pcecd.h" />
+    <ClInclude Include="support\psx\mcdheader.h" />
     <ClInclude Include="support\psx\psx.h" />
     <ClInclude Include="support\sharpmz\sharpmz.h" />
     <ClInclude Include="support\snes\snes.h" />

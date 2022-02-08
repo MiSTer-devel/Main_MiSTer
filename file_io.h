@@ -61,14 +61,15 @@ direntext_t* flist_SelectedItem();
 #define SCANF_END        4 // find last file in directory
 
 // options flags
-#define SCANO_DIR        0b00000001 // include subdirectories
-#define SCANO_UMOUNT     0b00000010 // allow backspace key
-#define SCANO_CORES      0b00000100 // only include subdirectories with prefix '_'
-#define SCANO_TXT        0b00001000
-#define SCANO_NEOGEO     0b00010000
-#define SCANO_NOENTER    0b00100000
-#define SCANO_NOZIP      0b01000000
-#define SCANO_CLEAR      0b10000000 // allow backspace key, clear FC option
+#define SCANO_DIR        0b000000001 // include subdirectories
+#define SCANO_UMOUNT     0b000000010 // allow backspace key
+#define SCANO_CORES      0b000000100 // only include subdirectories with prefix '_'
+#define SCANO_TXT        0b000001000
+#define SCANO_NEOGEO     0b000010000
+#define SCANO_NOENTER    0b000100000
+#define SCANO_NOZIP      0b001000000
+#define SCANO_CLEAR      0b010000000 // allow backspace key, clear FC option
+#define SCANO_SAVES      0b100000000
 
 void FindStorage();
 int  getStorage(int from_setting);
