@@ -10,6 +10,7 @@
 #include "../../hardware.h"
 #include "../../menu.h"
 #include "psx.h"
+#include "mcdheader.h"
 
 static char buf[1024];
 
@@ -161,6 +162,40 @@ static uint16_t libCryptMask(const char *sbifile)
 	return mask;
 }
 
+#define MCD_SIZE (128*1024)
+
+static void psx_mount_save(const char *filename)
+{
+	user_io_set_index(2);
+	user_io_set_download(1);
+
+	int mounted = 0;
+	if (strlen(filename))
+	{
+		FileGenerateSavePath(filename, buf);
+		if(!FileExists(buf))
+		{
+			uint8_t *mcd = new uint8_t[MCD_SIZE];
+			if (mcd)
+			{
+				memset(mcd, 0, MCD_SIZE);
+				memcpy(mcd, mcdheader, sizeof(mcdheader));
+				FileSave(buf, mcd, MCD_SIZE);
+				delete(mcd);
+			}
+		}
+
+		if (FileExists(buf))
+		{
+			user_io_file_mount(buf, 0, 1);
+			mounted = 1;
+		}
+	}
+
+	if(!mounted) user_io_file_mount("");
+	user_io_set_download(0);
+}
+
 void psx_mount_cd(int f_index, int s_index, const char *filename)
 {
 	static char last_dir[1024] = {};
@@ -201,6 +236,8 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 		}
 
 		if (!loaded) Info("CD BIOS not found!", 4000);
+
+		if(*last_dir) psx_mount_save(last_dir);
 	}
 
 	if (loaded)
