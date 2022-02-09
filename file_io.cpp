@@ -45,7 +45,7 @@ DirNameSet DirNames;
 
 
 // Directory scanning can cause the same zip file to be opened multiple times
-// due to testing file types to adjust the path 
+// due to testing file types to adjust the path
 // (and the fact the code path is shared with regular files)
 // cache the opened mz_zip_archive so we only open it once
 // this has the extra benefit that if a user is navigating through multiple directories
@@ -99,7 +99,7 @@ static int OpenZipfileCached(char *path, int flags)
   {
     return 1;
   }
- 
+
   mz_zip_reader_end(&last_zip_archive);
   mz_zip_zero_struct(&last_zip_archive);
   if (last_zip_cfile)
@@ -207,7 +207,7 @@ static int isPathDirectory(const char *path, int use_zip = 1)
     // entry that starts with file_path
 
     const int file_index = mz_zip_reader_locate_file(&last_zip_archive, file_path, NULL, 0);
-    if (file_index >= 0 && mz_zip_reader_is_file_a_directory(&last_zip_archive, file_index)) 
+    if (file_index >= 0 && mz_zip_reader_is_file_a_directory(&last_zip_archive, file_index))
     {
       return 1;
     }
@@ -215,7 +215,7 @@ static int isPathDirectory(const char *path, int use_zip = 1)
     for (size_t i = 0; i < mz_zip_reader_get_num_files(&last_zip_archive); i++) {
       char zip_fname[256];
       mz_zip_reader_get_filename(&last_zip_archive, i, &zip_fname[0], sizeof(zip_fname));
-      if (strcasestr(zip_fname, file_path)) 
+      if (strcasestr(zip_fname, file_path))
       {
         return 1;
       }
@@ -853,7 +853,7 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 	}
 }
 
-void FileGenerateSavePath(const char *name, char* out_name)
+void FileGenerateSavePath(const char *name, char* out_name, int ext_replace)
 {
 	create_path(SAVE_DIR, CoreName);
 
@@ -871,7 +871,7 @@ void FileGenerateSavePath(const char *name, char* out_name)
 	}
 
 	char *e = strrchr(fname, '.');
-	if (e)
+	if (ext_replace && e)
 	{
 		strcpy(e,".sav");
 	}
@@ -1222,7 +1222,7 @@ void AdjustDirectory(char *path)
 static const char *GetRelativeFileName(const char *folder, const char *path) {
   if (strcasestr(path, folder) == path) {
     const char *subpath = path + strlen(folder);
-    if (*subpath != '\0') 
+    if (*subpath != '\0')
     {
       if (*subpath == '/')
       {
@@ -1405,7 +1405,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				printf("Couldn't open zip file %s: %s\n", full_path, mz_zip_get_error_string(mz_zip_get_last_error(&last_zip_archive)));
 				return 0;
 			}
-			z = &last_zip_archive; 
+			z = &last_zip_archive;
 		}
 		else
 		{
