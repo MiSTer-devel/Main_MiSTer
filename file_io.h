@@ -98,7 +98,7 @@ int PathIsDir(const char *name, int use_zip = 1);
 struct stat64* getPathStat(const char *path);
 
 #define SAVE_DIR "saves"
-void FileGenerateSavePath(const char *name, char* out_name);
+void FileGenerateSavePath(const char *name, char* out_name, int ext_replace = 1);
 
 #define SAVESTATE_DIR "savestates"
 void FileGenerateSavestatePath(const char *name, char* out_name, int sufx);

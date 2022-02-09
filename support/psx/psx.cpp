@@ -172,7 +172,7 @@ static void psx_mount_save(const char *filename)
 	int mounted = 0;
 	if (strlen(filename))
 	{
-		FileGenerateSavePath(filename, buf);
+		FileGenerateSavePath(filename, buf, 0);
 		if(!FileExists(buf))
 		{
 			uint8_t *mcd = new uint8_t[MCD_SIZE];
