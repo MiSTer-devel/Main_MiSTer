@@ -299,12 +299,12 @@ static char Selected_F[16][1024] = {};
 static char Selected_S[16][1024] = {};
 static char Selected_tmp[1024] = {};
 
-void StoreIdx_F(int idx, char *path)
+void StoreIdx_F(int idx, const char *path)
 {
 	strcpy(Selected_F[idx], path);
 }
 
-void StoreIdx_S(int idx, char *path)
+void StoreIdx_S(int idx, const char *path)
 {
 	strcpy(Selected_S[idx], path);
 }
