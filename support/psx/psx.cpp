@@ -188,11 +188,16 @@ static void psx_mount_save(const char *filename)
 		if (FileExists(buf))
 		{
 			user_io_file_mount(buf, 2);
+			StoreIdx_S(2, buf);
 			mounted = 1;
 		}
 	}
 
-	if(!mounted) user_io_file_mount("", 2);
+	if (!mounted)
+	{
+		user_io_file_mount("", 2);
+		StoreIdx_S(2, "");
+	}
 	user_io_set_download(0);
 }
 
