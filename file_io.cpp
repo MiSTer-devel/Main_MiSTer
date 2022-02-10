@@ -57,6 +57,8 @@ static mz_zip_archive last_zip_archive = {};
 static int last_zip_fd = -1;
 static FILE *last_zip_cfile = NULL;
 static char last_zip_fname[256] = {};
+static char scanned_path[1024] = {};
+static int scanned_opts = 0;
 
 static int iSelectedEntry = 0;       // selected entry index
 static int iFirstEntry = 0;
@@ -1357,7 +1359,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		iFirstEntry = 0;
 		iSelectedEntry = 0;
 		DirItem.clear();
-    DirNames.clear();
+		DirNames.clear();
 
 		file_name[0] = 0;
 
@@ -1377,6 +1379,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 
 		if (!isPathDirectory(path)) return 0;
+		snprintf(scanned_path, sizeof(scanned_path), "%s", path);
+		scanned_opts = options;
 
 		if (options & SCANO_NEOGEO) neogeo_scan_xml(path);
 
@@ -1830,6 +1834,11 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	return 0;
 }
 
+char* flist_Path()
+{
+	return scanned_path;
+}
+
 int flist_nDirEntries()
 {
 	return DirItem.size();
@@ -1860,10 +1869,31 @@ direntext_t* flist_SelectedItem()
 	return &DirItem[iSelectedEntry];
 }
 
+char* flist_GetPrevNext(const char* base_path, const char* file, const char* ext, int next)
+{
+	static char path[1024];
+	snprintf(path, sizeof(path), "%s/%s", base_path, file);
+	char *p = strrchr(path, '/');
+	if (!FileExists(path))
+	{
+		snprintf(path, sizeof(path), "%s", base_path);
+		p = 0;
+	}
+
+	int len = (p) ? p - path : strlen(path);
+	if (strncasecmp(scanned_path, path, len) || (scanned_opts & SCANO_DIR)) ScanDirectory(path, SCANF_INIT, ext, 0);
+
+	if (!DirItem.size()) return NULL;
+	if (p) ScanDirectory(path, next ? SCANF_NEXT : SCANF_PREV, "", 0);
+	snprintf(path, sizeof(path), "%s/%s", scanned_path, DirItem[iSelectedEntry].de.d_name);
+
+	return path + strlen(base_path) + 1;
+}
+
 bool isMraName(char *path)
 {
-        char *spl = strrchr(path, '.');
-        return (spl && !strcmp(spl, ".mra"));
+	char *spl = strrchr(path, '.');
+	return (spl && !strcmp(spl, ".mra"));
 }
 
 fileTextReader::fileTextReader()

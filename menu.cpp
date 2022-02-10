@@ -2321,7 +2321,7 @@ void HandleUI(void)
 
 					memset(s, 0, sizeof(s));
 					s[0] = ' ';
-					if (strlen(audio_get_filter())) strncpy(s + 1, audio_get_filter(), 25);
+					if (strlen(audio_get_filter(1))) strncpy(s + 1, audio_get_filter(1), 25);
 					else strcpy(s, " < none >");
 
 					while (strlen(s) < 26) strcat(s, " ");
@@ -2443,7 +2443,7 @@ void HandleUI(void)
 			case 10:
 				if (audio_filter_en())
 				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), AFILTER_DIR"/%s", audio_get_filter());
+					snprintf(Selected_tmp, sizeof(Selected_tmp), AFILTER_DIR"/%s", audio_get_filter(0));
 					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), AFILTER_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_AFILTER_FILE_SELECTED, MENU_COMMON1);
 				}
@@ -2543,6 +2543,15 @@ void HandleUI(void)
 				break;
 			}
 		}
+		else if (minus || plus)
+		{
+			if (menusub == 10 && audio_filter_en())
+			{
+				const char *newfile = flist_GetPrevNext(AFILTER_DIR, audio_get_filter(0), "TXT", plus);
+				audio_set_filter(newfile ? newfile : "");
+				menustate = MENU_COMMON1;
+			}
+		}
 
 		if(!hold_cnt && reboot_req) fpga_load_rbf("menu.rbf");
 		break;
@@ -2628,16 +2637,6 @@ void HandleUI(void)
 			break;
 		}
 
-		if (plus || minus)
-		{
-			if (menusub == 9)
-			{
-				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
-			}
-			menustate = parentstate;
-			break;
-		}
-
 		if ((select || recent) && menusub == 0)
 		{
 			fs_Options = SCANO_DIR | SCANO_TXT;
@@ -2647,6 +2646,47 @@ void HandleUI(void)
 			if (!FileExists(Selected_F[15])) snprintf(Selected_F[15], sizeof(Selected_F[15]), PRESET_DIR);
 			if (select) SelectFile(Selected_F[15], fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
 			else if (recent_init(15)) menustate = MENU_RECENT1;
+			break;
+		}
+
+		if (plus || minus)
+		{
+			if (menusub == 9)
+			{
+				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
+			}
+
+			switch (menusub)
+			{
+			case 2:
+			case 4:
+			case 6:
+				vfilter_type = (menusub == 2) ? VFILTER_HORZ : (menusub == 4) ? VFILTER_VERT : VFILTER_SCAN;
+				if(video_get_scaler_flt(VFILTER_HORZ) && video_get_scaler_flt(vfilter_type))
+				{
+					const char *newfile = flist_GetPrevNext(COEFF_DIR, video_get_scaler_coeff(vfilter_type, 0), "TXT", plus);
+					video_set_scaler_coeff(vfilter_type, newfile ? newfile : "");
+				}
+				break;
+
+			case 8:
+				if(video_get_gamma_en() > 0)
+				{
+					const char *newfile = flist_GetPrevNext(GAMMA_DIR, video_get_gamma_curve(0), "TXT", plus);
+					video_set_gamma_curve(newfile ? newfile : "");
+				}
+				break;
+
+			case 10:
+				if (video_get_shadow_mask_mode() > 0)
+				{
+					const char *newfile = flist_GetPrevNext(SMASK_DIR, video_get_shadow_mask(0), "TXT", plus);
+					video_set_shadow_mask(newfile ? newfile : "");
+				}
+				break;
+			}
+
+			menustate = parentstate;
 			break;
 		}
 
@@ -2668,7 +2708,7 @@ void HandleUI(void)
 				vfilter_type = (menusub == 2) ? VFILTER_HORZ : (menusub == 4) ? VFILTER_VERT : VFILTER_SCAN;
 				if (video_get_scaler_flt(VFILTER_HORZ))
 				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR"/%s", video_get_scaler_coeff(vfilter_type));
+					snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR"/%s", video_get_scaler_coeff(vfilter_type, 0));
 					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_COEFF_FILE_SELECTED, parentstate);
 				}
@@ -2698,7 +2738,7 @@ void HandleUI(void)
 			case 8:
 				if (video_get_gamma_en() > 0)
 				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR"/%s", video_get_gamma_curve());
+					snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR"/%s", video_get_gamma_curve(0));
 					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_GAMMA_FILE_SELECTED, parentstate);
 				}
@@ -2712,7 +2752,7 @@ void HandleUI(void)
 			case 10:
 				if (video_get_shadow_mask_mode() > 0)
 				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR"/%s", video_get_shadow_mask());
+					snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR"/%s", video_get_shadow_mask(0));
 					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_SMASK_FILE_SELECTED, parentstate);
 				}

@@ -50,6 +50,8 @@ void flist_iFirstEntryInc();
 int flist_iSelectedEntry();
 direntext_t* flist_DirItem(int n);
 direntext_t* flist_SelectedItem();
+char* flist_Path();
+char* flist_GetPrevNext(const char* base_path, const char* file, const char* ext, int next);
 
 // scanning flags
 #define SCANF_INIT       0 // start search from beginning of directory
