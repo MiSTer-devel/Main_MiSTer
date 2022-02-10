@@ -233,7 +233,7 @@ static bool read_video_filter(int type, VideoFilter *out)
 		const char *line;
 		while ((line = FileReadLine(&reader)))
 		{
-			if( count == 0 && !strcasecmp(line, "adaptive") )
+			if (count == 0 && !strcasecmp(line, "adaptive"))
 			{
 				is_adaptive = true;
 				continue;
@@ -243,7 +243,7 @@ static bool read_video_filter(int type, VideoFilter *out)
 			int n = sscanf(line, "%d,%d,%d,%d", &phase[0], &phase[1], &phase[2], &phase[3]);
 			if (n == 4)
 			{
-				if (count == 128) return false; //too many
+				if (count >= (is_adaptive ? 128 : 64)) return false; //too many
 				phases[count].t[0] = phase[0];
 				phases[count].t[1] = phase[1];
 				phases[count].t[2] = phase[2];
@@ -253,25 +253,25 @@ static bool read_video_filter(int type, VideoFilter *out)
 		}
 	}
 
-	if( count == 128 && is_adaptive )
+	if (count == 128 && is_adaptive)
 	{
 		out->is_adaptive = true;
 		memcpy(out->phases, phases, sizeof(FilterPhase) * 64);
 		memcpy(out->adaptive_phases, phases + 64, sizeof(FilterPhase) * 64);
 		return true;
 	}
-	else if( count == 64 && !is_adaptive )
+	else if (count == 64 && !is_adaptive)
 	{
 		out->is_adaptive = false;
 		memcpy(out->phases, phases, sizeof(FilterPhase) * 64);
 		return true;
 	}
-	else if( ( count == 32 || count == 16 ) && !is_adaptive )
+	else if ((count == 32 || count == 16) && !is_adaptive)
 	{
 		out->is_adaptive = false;
-		for( int i = 0; i < 16; i++ )
+		for (int i = 0; i < 16; i++)
 		{
-			for( int j = 0; j < 4; j++ )
+			for (int j = 0; j < 4; j++)
 			{
 				out->phases[(i * 4) + j] = phases[i];
 			}
@@ -284,7 +284,7 @@ static bool read_video_filter(int type, VideoFilter *out)
 
 static void send_phases_legacy(int addr, const FilterPhase phases[64])
 {
-	for( int idx = 0; idx < 64; idx += 4 )
+	for (int idx = 0; idx < 64; idx += 4)
 	{
 		const FilterPhase *p = &phases[idx];
 		spi_w((p->t[0] & 0x1FF) | ((addr + 0) << 9));
@@ -297,7 +297,7 @@ static void send_phases_legacy(int addr, const FilterPhase phases[64])
 
 static void send_phases(int addr, const FilterPhase phases[64])
 {
-	for( int idx = 0; idx < 64; idx++ )
+	for (int idx = 0; idx < 64; idx++)
 	{
 		const FilterPhase *p = &phases[idx];
 		spi_w(addr + 0); spi_w(p->t[0] & 0x1FF);
@@ -312,28 +312,28 @@ static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert
 {
 	spi_uio_cmd_cont(UIO_SET_FLTCOEF);
 
-	if( ver == 1 )
+	if (ver == 1)
 	{
 		send_phases_legacy(0, horiz->phases);
 		send_phases_legacy(64, vert->phases);
 	}
-	else if( ver == 2)
+	else if (ver == 2)
 	{
 		send_phases(0, horiz->phases);
-		send_phases(64*4, vert->phases);
+		send_phases(64 * 4, vert->phases);
 	}
-	else if( ver == 3)
+	else if (ver == 3)
 	{
 		send_phases(0, horiz->phases);
-		send_phases(64*4, vert->phases);
+		send_phases(64 * 4, vert->phases);
 
-		if( horiz->is_adaptive )
+		if (horiz->is_adaptive)
 		{
-			send_phases(64*8, horiz->adaptive_phases);
+			send_phases(64 * 8, horiz->adaptive_phases);
 		}
-		else if( vert->is_adaptive )
+		else if (vert->is_adaptive)
 		{
-			send_phases(64*12, vert->adaptive_phases);
+			send_phases(64 * 12, vert->adaptive_phases);
 		}
 	}
 
@@ -357,18 +357,15 @@ static void set_vfilter(int force)
 	spi8(scaler_flt[0].mode);
 	DisableIO();
 
-
-	bool valid;
-
 	VideoFilter horiz, vert;
 
 	//horizontal filter
-	valid = read_video_filter(VFILTER_HORZ, &horiz);
+	bool valid = read_video_filter(VFILTER_HORZ, &horiz);
 	if (valid)
 	{
 		//vertical/scanlines filter
 		int vert_flt = ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN].mode) ? VFILTER_SCAN : (scaler_flt[VFILTER_VERT].mode) ? VFILTER_VERT : VFILTER_HORZ;
-		if( !read_video_filter(vert_flt, &vert) )
+		if (!read_video_filter(vert_flt, &vert))
 		{
 			vert = horiz;
 			valid = true;
@@ -377,7 +374,6 @@ static void set_vfilter(int force)
 		send_video_filters(&horiz, &vert, flt_flags & 0xF);
 	}
 
-	DisableIO();
 	if (!valid) spi_uio_cmd8(UIO_SET_FLTNUM, 0);
 }
 
@@ -462,7 +458,7 @@ static void loadScalerCfg()
 		strcpy(scaler_flt[VFILTER_SCAN].filename, cfg.vfilter_scanlines_default);
 		scaler_flt[VFILTER_SCAN].mode = 1;
 	}
-	
+
 	VideoFilter null;
 	if (!read_video_filter(VFILTER_HORZ, &null)) memset(&scaler_flt[VFILTER_HORZ], 0, sizeof(scaler_flt[VFILTER_HORZ]));
 	if (!read_video_filter(VFILTER_VERT, &null)) memset(&scaler_flt[VFILTER_VERT], 0, sizeof(scaler_flt[VFILTER_VERT]));
