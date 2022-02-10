@@ -299,12 +299,12 @@ static char Selected_F[16][1024] = {};
 static char Selected_S[16][1024] = {};
 static char Selected_tmp[1024] = {};
 
-void StoreIdx_F(int idx, char *path)
+void StoreIdx_F(int idx, const char *path)
 {
 	strcpy(Selected_F[idx], path);
 }
 
-void StoreIdx_S(int idx, char *path)
+void StoreIdx_S(int idx, const char *path)
 {
 	strcpy(Selected_S[idx], path);
 }
@@ -358,8 +358,9 @@ static char filter[256] = {};
 static unsigned long filter_typing_timer = 0;
 
 // this function displays file selection menu
-void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel)
+void SelectFile(const char* path, const char* pFileExt, int Options, unsigned char MenuSelect, unsigned char MenuCancel)
 {
+	static char tmp[1024];
 	printf("pFileExt = %s\n", pFileExt);
 	filter_typing_timer = 0;
 	filter[0] = 0;
@@ -389,6 +390,12 @@ void SelectFile(const char* path, const char* pFileExt, unsigned char Options, u
 		home_dir = strrchr(home, '/');
 		if (home_dir) home_dir++;
 		else home_dir = home;
+
+		if (Options & SCANO_SAVES)
+		{
+			snprintf(tmp, sizeof(tmp), "%s/%s", SAVE_DIR, CoreName);
+			home = tmp;
+		}
 
 		if (strncasecmp(home, selPath, strlen(home)) || !strcasecmp(home, selPath) || (!FileExists(selPath) && !PathIsDir(selPath)))
 		{
@@ -2020,8 +2027,9 @@ void HandleUI(void)
 
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 						if (is_x86()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
+						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
-						if (is_pce() || is_megacd() || is_x86())
+						if (is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)))
 						{
 							//look for CHD too
 							strcat(fs_pFileExt, "CHD");
@@ -2313,7 +2321,7 @@ void HandleUI(void)
 
 					memset(s, 0, sizeof(s));
 					s[0] = ' ';
-					if (strlen(audio_get_filter())) strncpy(s + 1, audio_get_filter(), 25);
+					if (strlen(audio_get_filter(1))) strncpy(s + 1, audio_get_filter(1), 25);
 					else strcpy(s, " < none >");
 
 					while (strlen(s) < 26) strcat(s, " ");
@@ -2435,7 +2443,7 @@ void HandleUI(void)
 			case 10:
 				if (audio_filter_en())
 				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), AFILTER_DIR"/%s", audio_get_filter());
+					snprintf(Selected_tmp, sizeof(Selected_tmp), AFILTER_DIR"/%s", audio_get_filter(0));
 					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), AFILTER_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_AFILTER_FILE_SELECTED, MENU_COMMON1);
 				}
@@ -2535,6 +2543,15 @@ void HandleUI(void)
 				break;
 			}
 		}
+		else if (minus || plus)
+		{
+			if (menusub == 10 && audio_filter_en())
+			{
+				const char *newfile = flist_GetPrevNext(AFILTER_DIR, audio_get_filter(0), "TXT", plus);
+				audio_set_filter(newfile ? newfile : "");
+				menustate = MENU_COMMON1;
+			}
+		}
 
 		if(!hold_cnt && reboot_req) fpga_load_rbf("menu.rbf");
 		break;
@@ -2620,16 +2637,6 @@ void HandleUI(void)
 			break;
 		}
 
-		if (plus || minus)
-		{
-			if (menusub == 9)
-			{
-				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
-			}
-			menustate = parentstate;
-			break;
-		}
-
 		if ((select || recent) && menusub == 0)
 		{
 			fs_Options = SCANO_DIR | SCANO_TXT;
@@ -2639,6 +2646,47 @@ void HandleUI(void)
 			if (!FileExists(Selected_F[15])) snprintf(Selected_F[15], sizeof(Selected_F[15]), PRESET_DIR);
 			if (select) SelectFile(Selected_F[15], fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
 			else if (recent_init(15)) menustate = MENU_RECENT1;
+			break;
+		}
+
+		if (plus || minus)
+		{
+			if (menusub == 9)
+			{
+				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
+			}
+
+			switch (menusub)
+			{
+			case 2:
+			case 4:
+			case 6:
+				vfilter_type = (menusub == 2) ? VFILTER_HORZ : (menusub == 4) ? VFILTER_VERT : VFILTER_SCAN;
+				if(video_get_scaler_flt(VFILTER_HORZ) && video_get_scaler_flt(vfilter_type))
+				{
+					const char *newfile = flist_GetPrevNext(COEFF_DIR, video_get_scaler_coeff(vfilter_type, 0), "TXT", plus);
+					video_set_scaler_coeff(vfilter_type, newfile ? newfile : "");
+				}
+				break;
+
+			case 8:
+				if(video_get_gamma_en() > 0)
+				{
+					const char *newfile = flist_GetPrevNext(GAMMA_DIR, video_get_gamma_curve(0), "TXT", plus);
+					video_set_gamma_curve(newfile ? newfile : "");
+				}
+				break;
+
+			case 10:
+				if (video_get_shadow_mask_mode() > 0)
+				{
+					const char *newfile = flist_GetPrevNext(SMASK_DIR, video_get_shadow_mask(0), "TXT", plus);
+					video_set_shadow_mask(newfile ? newfile : "");
+				}
+				break;
+			}
+
+			menustate = parentstate;
 			break;
 		}
 
@@ -2660,7 +2708,7 @@ void HandleUI(void)
 				vfilter_type = (menusub == 2) ? VFILTER_HORZ : (menusub == 4) ? VFILTER_VERT : VFILTER_SCAN;
 				if (video_get_scaler_flt(VFILTER_HORZ))
 				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR"/%s", video_get_scaler_coeff(vfilter_type));
+					snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR"/%s", video_get_scaler_coeff(vfilter_type, 0));
 					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), COEFF_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_COEFF_FILE_SELECTED, parentstate);
 				}
@@ -2690,7 +2738,7 @@ void HandleUI(void)
 			case 8:
 				if (video_get_gamma_en() > 0)
 				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR"/%s", video_get_gamma_curve());
+					snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR"/%s", video_get_gamma_curve(0));
 					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), GAMMA_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_GAMMA_FILE_SELECTED, parentstate);
 				}
@@ -2704,7 +2752,7 @@ void HandleUI(void)
 			case 10:
 				if (video_get_shadow_mask_mode() > 0)
 				{
-					snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR"/%s", video_get_shadow_mask());
+					snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR"/%s", video_get_shadow_mask(0));
 					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_SMASK_FILE_SELECTED, parentstate);
 				}
@@ -4648,7 +4696,7 @@ void HandleUI(void)
 				char type = flist_SelectedItem()->de.d_type;
 				memcpy(name, flist_SelectedItem()->de.d_name, sizeof(name));
 
-				if ((fs_Options & SCANO_UMOUNT) && (is_megacd() || is_pce()) && type == DT_DIR && strcmp(flist_SelectedItem()->de.d_name, ".."))
+				if ((fs_Options & SCANO_UMOUNT) && (is_megacd() || is_pce() || (is_psx() && !(fs_Options & SCANO_SAVES))) && type == DT_DIR && strcmp(flist_SelectedItem()->de.d_name, ".."))
 				{
 					int len = strlen(selPath);
 					strcat(selPath, "/");

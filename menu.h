@@ -4,7 +4,7 @@
 #include <inttypes.h>
 
 
-void SelectFile(const char* path, const char* pFileExt, unsigned char Options, unsigned char MenuSelect, unsigned char MenuCancel);
+void SelectFile(const char* path, const char* pFileExt, int Options, unsigned char MenuSelect, unsigned char MenuCancel);
 
 void HandleUI(void);
 void menu_key_set(unsigned int c);
@@ -26,7 +26,7 @@ void open_joystick_setup();
 int menu_lightgun_cb(int idx, uint16_t type, uint16_t code, int value);
 
 int menu_allow_cfg_switch();
-void StoreIdx_F(int idx, char *path);
-void StoreIdx_S(int idx, char *path);
+void StoreIdx_F(int idx, const char *path);
+void StoreIdx_S(int idx, const char *path);
 
 #endif

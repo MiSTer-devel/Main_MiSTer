@@ -99,6 +99,7 @@
     <ClCompile Include="support\sharpmz\sharpmz.cpp" />
     <ClCompile Include="support\snes\snes.cpp" />
     <ClCompile Include="support\st\st_tos.cpp" />
+    <ClCompile Include="support\uef\uef_reader.cpp" />
     <ClCompile Include="support\x86\x86.cpp" />
     <ClCompile Include="support\x86\x86_share.cpp" />
     <ClCompile Include="sxmlc.c" />
@@ -161,10 +162,14 @@
     <ClInclude Include="support\minimig\minimig_share.h" />
     <ClInclude Include="support\neogeo\neogeo_loader.h" />
     <ClInclude Include="support\pcecd\pcecd.h" />
+    <ClInclude Include="support\psx\mcdheader.h" />
     <ClInclude Include="support\psx\psx.h" />
     <ClInclude Include="support\sharpmz\sharpmz.h" />
     <ClInclude Include="support\snes\snes.h" />
     <ClInclude Include="support\st\st_tos.h" />
+    <ClInclude Include="support\uef\uef_reader.h" />
+    <ClInclude Include="support\uef\zconf.h" />
+    <ClInclude Include="support\uef\zlib.h" />
     <ClInclude Include="support\x86\x86.h" />
     <ClInclude Include="support\x86\x86_share.h" />
     <ClInclude Include="sxmlc.h" />

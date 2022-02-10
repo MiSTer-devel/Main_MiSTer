@@ -407,9 +407,15 @@ int video_get_scaler_flt(int type)
 	return scaler_flt[type].mode;
 }
 
-char* video_get_scaler_coeff(int type)
+char* video_get_scaler_coeff(int type, int only_name)
 {
-	return scaler_flt[type].filename;
+	char *path = scaler_flt[type].filename;
+	if (only_name)
+	{
+		char *p = strrchr(path, '/');
+		if (p) return p + 1;
+	}
+	return path;
 }
 
 static char scaler_cfg[128] = { 0 };
@@ -519,9 +525,15 @@ int video_get_gamma_en()
 	return has_gamma ? gamma_cfg[0] : -1;
 }
 
-char* video_get_gamma_curve()
+char* video_get_gamma_curve(int only_name)
 {
-	return gamma_cfg + 1;
+	char *path = gamma_cfg + 1;
+	if (only_name)
+	{
+		char *p = strrchr(path, '/');
+		if (p) return p + 1;
+	}
+	return path;
 }
 
 static char gamma_cfg_path[1024] = { 0 };
@@ -533,7 +545,7 @@ void video_set_gamma_en(int n)
 	setGamma();
 }
 
-void video_set_gamma_curve(char *name)
+void video_set_gamma_curve(const char *name)
 {
 	strcpy(gamma_cfg + 1, name);
 	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
@@ -678,9 +690,15 @@ int video_get_shadow_mask_mode()
 	return has_shadow_mask ? shadow_mask_cfg[0] : -1;
 }
 
-char* video_get_shadow_mask()
+char* video_get_shadow_mask(int only_name)
 {
-	return shadow_mask_cfg + 1;
+	char *path = shadow_mask_cfg + 1;
+	if (only_name)
+	{
+		char *p = strrchr(path, '/');
+		if (p) return p + 1;
+	}
+	return path;
 }
 
 static char shadow_mask_cfg_path[1024] = { 0 };
@@ -701,7 +719,7 @@ void video_set_shadow_mask_mode(int n)
 	setShadowMask();
 }
 
-void video_set_shadow_mask(char *name)
+void video_set_shadow_mask(const char *name)
 {
 	strcpy(shadow_mask_cfg + 1, name);
 	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));

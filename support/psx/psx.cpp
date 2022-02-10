@@ -10,6 +10,7 @@
 #include "../../hardware.h"
 #include "../../menu.h"
 #include "psx.h"
+#include "mcdheader.h"
 
 static char buf[1024];
 
@@ -110,6 +111,96 @@ static int get_bin(const char *cue)
 	return res;
 }
 
+static uint32_t libCryptSectors[16] =
+{
+	14105,
+	14231,
+	14485,
+	14579,
+	14649,
+	14899,
+	15056,
+	15130,
+	15242,
+	15312,
+	15378,
+	15628,
+	15919,
+	16031,
+	16101,
+	16167,
+};
+
+static uint32_t msfToLba(uint32_t m, uint32_t s, uint32_t f)
+{
+	return (m * 60 + s) * 75 + f;
+}
+
+static uint8_t bcdToDec(uint8_t bcd)
+{
+	return (bcd >> 4) * 10 + (bcd & 0x0F);
+}
+
+#define SBI_HEADER_SIZE 4
+#define SBI_BLOCK_SIZE  14
+
+static uint16_t libCryptMask(const char *sbifile)
+{
+	int sz;
+	uint16_t mask = 0;
+	if ((sz = FileLoad(sbifile, buf, sizeof(buf))))
+	{
+		for (int i = 0;; i++)
+		{
+			int pos = SBI_HEADER_SIZE + i * SBI_BLOCK_SIZE;
+			if (pos >= sz) break;
+			uint32_t lba = msfToLba(bcdToDec(buf[pos]), bcdToDec(buf[pos + 1]), bcdToDec(buf[pos + 2]));
+			for (int m = 0; m < 16; m++) if (libCryptSectors[m] == lba) mask |= (1 << (15 - m));
+		}
+	}
+
+	return mask;
+}
+
+#define MCD_SIZE (128*1024)
+
+static void psx_mount_save(const char *filename)
+{
+	user_io_set_index(2);
+	user_io_set_download(1);
+
+	int mounted = 0;
+	if (strlen(filename))
+	{
+		FileGenerateSavePath(filename, buf, 0);
+		if(!FileExists(buf))
+		{
+			uint8_t *mcd = new uint8_t[MCD_SIZE];
+			if (mcd)
+			{
+				memset(mcd, 0, MCD_SIZE);
+				memcpy(mcd, mcdheader, sizeof(mcdheader));
+				FileSave(buf, mcd, MCD_SIZE);
+				delete(mcd);
+			}
+		}
+
+		if (FileExists(buf))
+		{
+			user_io_file_mount(buf, 2);
+			StoreIdx_S(2, buf);
+			mounted = 1;
+		}
+	}
+
+	if (!mounted)
+	{
+		user_io_file_mount("", 2);
+		StoreIdx_S(2, "");
+	}
+	user_io_set_download(0);
+}
+
 void psx_mount_cd(int f_index, int s_index, const char *filename)
 {
 	static char last_dir[1024] = {};
@@ -150,10 +241,21 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 		}
 
 		if (!loaded) Info("CD BIOS not found!", 4000);
+
+		if(*last_dir) psx_mount_save(last_dir);
 	}
 
 	if (loaded)
 	{
+		strcpy(buf, filename);
+		strcpy((name_len > 4) ? buf + name_len - 4 : buf + name_len, ".sbi");
+
+		uint16_t mask = libCryptMask(buf);
+		user_io_set_index(250);
+		user_io_set_download(1);
+		user_io_file_tx_data((const uint8_t*)&mask, 2);
+		user_io_set_download(0);
+
 		user_io_set_index(f_index);
 		process_ss(filename, name_len != 0);
 

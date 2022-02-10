@@ -141,7 +141,7 @@ void ide_sendbuf(ide_config *ide, uint16_t reg, uint32_t length, uint16_t *data)
 void ide_recvbuf(ide_config *ide, uint16_t reg, uint32_t length, uint16_t *data);
 void ide_reg_set(ide_config *ide, uint16_t reg, uint16_t value);
 
-uint16_t ide_check(int status = 0);
+uint16_t ide_check();
 int ide_img_mount(fileTYPE *f, const char *name, int rw);
 void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors = 0, int heads = 0, int offset = 0, int type = 0);
 int ide_is_placeholder(int num);

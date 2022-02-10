@@ -7,18 +7,18 @@
 
 int   video_get_scaler_flt(int type);
 void  video_set_scaler_flt(int type, int n);
-char* video_get_scaler_coeff(int type);
+char* video_get_scaler_coeff(int type, int only_name = 1);
 void  video_set_scaler_coeff(int type, const char *name);
 
 int   video_get_gamma_en();
 void  video_set_gamma_en(int n);
-char* video_get_gamma_curve();
-void  video_set_gamma_curve(char *name);
+char* video_get_gamma_curve(int only_name = 1);
+void  video_set_gamma_curve(const char *name);
 
 int   video_get_shadow_mask_mode();
 void  video_set_shadow_mask_mode(int n);
-char* video_get_shadow_mask();
-void  video_set_shadow_mask(char *name);
+char* video_get_shadow_mask(int only_name = 1);
+void  video_set_shadow_mask(const char *name);
 void  video_loadPreset(char *name);
 
 void  video_mode_load();
