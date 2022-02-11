@@ -423,7 +423,7 @@ void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads, i
 	drive->cylinders = 0;
 	drive->heads = 0;
 	drive->spt = 0;
-	drive->spb = 0;
+	drive->spb = 16;
 	drive->offset = 0;
 	drive->type = 0;
 
@@ -885,11 +885,6 @@ static int handle_hdd(ide_config *ide)
 		break;
 
 	case 0xC4: // read multiple
-		if (!ide->drive[ide->regs.drv].spb)
-		{
-			printf("(!) Read multiple is disabled!\n");
-			return 1;
-		}
 		process_read(ide, 1);
 		break;
 
@@ -899,11 +894,6 @@ static int handle_hdd(ide_config *ide)
 		break;
 
 	case 0xC5: // write multiple
-		if (!ide->drive[ide->regs.drv].spb)
-		{
-			printf("(!) Read multiple is disabled!\n");
-			return 1;
-		}
 		process_write(ide, 1);
 		break;
 
