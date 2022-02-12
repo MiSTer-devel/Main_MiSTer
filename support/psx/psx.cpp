@@ -217,30 +217,40 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 	if (!same_game)
 	{
-		loaded = 0;
+		int reset = 1;
+		if (old_len)
+		{
+			strcat(last_dir, "/noreset.txt");
+			reset = !FileExists(last_dir);
+		}
 
 		strcpy(last_dir, filename);
 		char *p = strrchr(last_dir, '/');
 		if (p) *p = 0;
 		else *last_dir = 0;
 
-		strcpy(buf, last_dir);
-		if (!is_cue && buf[0]) strcat(buf, "/");
-
-		p = strrchr(buf, '/');
-		if (p)
+		if (reset)
 		{
-			strcpy(p + 1, "cd_bios.rom");
-			loaded = user_io_file_tx(buf);
-		}
+			loaded = 0;
 
-		if (!loaded)
-		{
-			sprintf(buf, "%s/boot.rom", HomeDir());
-			loaded = user_io_file_tx(buf);
-		}
+			strcpy(buf, last_dir);
+			if (!is_cue && buf[0]) strcat(buf, "/");
 
-		if (!loaded) Info("CD BIOS not found!", 4000);
+			p = strrchr(buf, '/');
+			if (p)
+			{
+				strcpy(p + 1, "cd_bios.rom");
+				loaded = user_io_file_tx(buf);
+			}
+
+			if (!loaded)
+			{
+				sprintf(buf, "%s/boot.rom", HomeDir());
+				loaded = user_io_file_tx(buf);
+			}
+
+			if (!loaded) Info("CD BIOS not found!", 4000);
+		}
 
 		if(*last_dir) psx_mount_save(last_dir);
 	}
