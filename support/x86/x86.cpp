@@ -293,7 +293,7 @@ static uint8_t bin2bcd(unsigned val)
 
 void x86_init()
 {
-	user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+	user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 
 	const char *home = HomeDir();
 
@@ -417,7 +417,7 @@ void x86_init()
 	for (unsigned int i = 0; i < sizeof(cmos) / sizeof(cmos[0]); i++) IOWR(RTC_BASE, i, cmos[i]);
 
 	x86_share_reset();
-	user_io_8bit_set_status(0, UIO_STATUS_RESET);
+	user_io_status(0, UIO_STATUS_RESET);
 }
 
 static void fdd_io(uint8_t read)

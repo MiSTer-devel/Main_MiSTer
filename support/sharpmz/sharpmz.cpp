@@ -71,7 +71,7 @@ int sharpmz_file_write(fileTYPE *file, const char *fileName)
     strcpy(directoryPath,SHARPMZ_CORE_NAME);
     findPrefixDir(directoryPath, sizeof(directoryPath));
 
-	
+
 
     sprintf(fullPath, "%s/%s", directoryPath, fileName);
 
@@ -118,7 +118,7 @@ void sharpmz_reset(unsigned long preResetSleep, unsigned long postResetSleep)
     // Set the reset bit.
     //
     config.system_ctrl |= 1;
-    user_io_8bit_set_status(config.system_ctrl, (1));
+    user_io_status(config.system_ctrl, (1));
 
     // Sleep and hold device in reset for given period.
     //
@@ -128,7 +128,7 @@ void sharpmz_reset(unsigned long preResetSleep, unsigned long postResetSleep)
     // Remove reset.
     //
     config.system_ctrl &= ~(1);
-    user_io_8bit_set_status(config.system_ctrl, (1));
+    user_io_status(config.system_ctrl, (1));
 
     // Sleep and hold device in reset for given period.
     //
@@ -204,7 +204,7 @@ int sharpmz_reset_config(short setStatus)
     //
     if(setStatus)
     {
-        user_io_8bit_set_status(config.system_ctrl, 0xffffffff);
+        user_io_status(config.system_ctrl, 0xffffffff);
 
         // Set the registers.
         //
@@ -248,7 +248,7 @@ int sharpmz_reload_config(short setStatus)
     //
     if(setStatus && success)
     {
-        user_io_8bit_set_status(config.system_ctrl, 0xffffffff);
+        user_io_status(config.system_ctrl, 0xffffffff);
 
         // Set the registers.
         //
@@ -286,7 +286,7 @@ void sharpmz_init(void)
 
     // Setup the status values based on the config.
     //
-    user_io_8bit_set_status(config.system_ctrl, 0xffffffff);
+    user_io_status(config.system_ctrl, 0xffffffff);
 
     // Set the control registers according to config.
     //
@@ -797,7 +797,7 @@ void sharpmz_set_aspect_ratio(short on, short setStatus)
     config.system_ctrl |= (on == 1 ? 1 << 1 : 0);
 
     if(setStatus)
-        user_io_8bit_set_status(config.system_ctrl, (1 << 1));
+        user_io_status(config.system_ctrl, (1 << 1));
 }
 
 // Return Scan doubler fx status bits. Bits 2,3,4 of systemctrl.
@@ -827,7 +827,7 @@ void sharpmz_set_scandoubler_fx(short doubler, short setStatus)
     config.system_ctrl |= (doubler & 0x07) << 2;
 
     if(setStatus)
-        user_io_8bit_set_status(config.system_ctrl, (0x07 << 2));
+        user_io_status(config.system_ctrl, (0x07 << 2));
 }
 
 // Return VRAM wait state mode status bit. Bit 6 of system_reg, 0 = Off, 1 = On

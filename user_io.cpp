@@ -598,7 +598,7 @@ static void parse_config()
 
 			if (p[0] == 'O' && p[1] == 'X')
 			{
-				uint32_t status = user_io_8bit_set_status(0, 0);
+				uint32_t status = user_io_status(0, 0);
 				printf("found OX option: %s, 0x%08X\n", p, status);
 
 				unsigned long x = getStatus(p + 1, status);
@@ -1096,7 +1096,7 @@ void user_io_init(const char *path, const char *xml)
 		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 
 		// send a reset
-		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+		user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 	}
 	else if (core_type == CORE_TYPE_SHARPMZ)
 	{
@@ -1163,8 +1163,8 @@ void user_io_init(const char *path, const char *xml)
 				}
 
 				status[0] &= ~UIO_STATUS_RESET;
-				user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
-				user_io_8bit_set_status(status[1], 0xffffffff, 1);
+				user_io_status(status[0], ~UIO_STATUS_RESET, 0);
+				user_io_status(status[1], 0xffffffff, 1);
 			}
 
 			if (is_st())
@@ -1174,9 +1174,9 @@ void user_io_init(const char *path, const char *xml)
 			}
 			else if (is_menu())
 			{
-				user_io_8bit_set_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
+				user_io_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
 				if (cfg.fb_terminal) video_menu_bg((status[0] >> 1) & 7);
-				else user_io_8bit_set_status(0, 0xE);
+				else user_io_status(0, 0xE);
 			}
 			else
 			{
@@ -1293,7 +1293,7 @@ void user_io_init(const char *path, const char *xml)
 		send_rtc(3);
 
 		// release reset
-		if(!is_minimig() && !is_st()) user_io_8bit_set_status(0, UIO_STATUS_RESET);
+		if(!is_minimig() && !is_st()) user_io_status(0, UIO_STATUS_RESET);
 		if(xml) arcade_check_error();
 		break;
 	}
@@ -2079,8 +2079,8 @@ static void check_status_change()
 		uint32_t st0 = spi32_w(0);
 		uint32_t st1 = spi32_w(0);
 		DisableIO();
-		user_io_8bit_set_status(st0, ~UIO_STATUS_RESET, 0);
-		user_io_8bit_set_status(st1, 0xFFFFFFFF, 1);
+		user_io_status(st0, ~UIO_STATUS_RESET, 0);
+		user_io_status(st1, 0xFFFFFFFF, 1);
 	}
 	else
 	{
@@ -2420,7 +2420,7 @@ char *user_io_get_confstr(int index)
 	return buffer;
 }
 
-uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask, int ex)
+uint32_t user_io_status(uint32_t new_status, uint32_t mask, int ex)
 {
 	static uint32_t status[2] = { 0, 0 };
 	if (ex) ex = 1;

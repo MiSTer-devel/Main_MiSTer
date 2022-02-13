@@ -1277,7 +1277,7 @@ void video_fb_enable(int enable, int n)
 
 		DisableIO();
 		if (cfg.direct_video) set_vga_fb(enable);
-		if (is_menu()) user_io_8bit_set_status((fb_enabled && !fb_num) ? 0x160 : 0, 0x1E0);
+		if (is_menu()) user_io_status((fb_enabled && !fb_num) ? 0x160 : 0, 0x1E0);
 	}
 }
 

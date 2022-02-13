@@ -193,7 +193,7 @@ char user_io_user_button();
 void user_io_osd_key_enable(char);
 void user_io_read_confstr();
 char *user_io_get_confstr(int index);
-uint32_t user_io_8bit_set_status(uint32_t, uint32_t, int ex = 0);
+uint32_t user_io_status(uint32_t, uint32_t, int ex = 0);
 int user_io_get_kbd_reset();
 
 uint32_t user_io_get_file_crc();
