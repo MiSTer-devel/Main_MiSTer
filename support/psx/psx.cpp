@@ -252,7 +252,9 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 			if (!loaded) Info("CD BIOS not found!", 4000);
 		}
 
-		if(*last_dir) psx_mount_save(last_dir);
+		sprintf(buf, "%s/originalwaymemcards.txt", HomeDir());
+		if(!FileExists(buf))
+			if(*last_dir) psx_mount_save(last_dir);
 	}
 
 	if (loaded)
