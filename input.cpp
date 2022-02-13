@@ -3753,7 +3753,7 @@ int input_test(int getchar)
 							input[n].num = 2; // force mayflash mode 1/2 as second joystick.
 						}
 
-						if (input[n].vid == 0x057e && (input[n].pid == 0x0306 || input[n].pid == 0x0330 || input[n].pid == 0x2009))
+						if (input[n].vid == 0x057e && (input[n].pid == 0x0306 || input[n].pid == 0x0330))
 						{
 							if (strcasestr(input[n].name, "Accelerometer"))
 							{
@@ -3777,6 +3777,17 @@ int input_test(int getchar)
 								input[n].guncal[2] = 1;
 								input[n].guncal[3] = 1023;
 								input_lightgun_load(n);
+							}
+						}
+
+						if (input[n].vid == 0x057e && input[n].pid == 0x2009) // Disable Switch Pro Accelerometer
+						{
+							if (strcasestr(input[n].name, "Accelerometer"))
+							{
+								// don't use Accelerometer
+								close(pool[n].fd);
+								pool[n].fd = -1;
+								continue;
 							}
 						}
 
