@@ -3753,7 +3753,7 @@ int input_test(int getchar)
 							input[n].num = 2; // force mayflash mode 1/2 as second joystick.
 						}
 
-						if (input[n].vid == 0x057e && (input[n].pid == 0x0306 || input[n].pid == 0x0330))
+						if (input[n].vid == 0x057e && (input[n].pid == 0x0306 || input[n].pid == 0x0330 || input[n].pid == 0x2009))
 						{
 							if (strcasestr(input[n].name, "Accelerometer"))
 							{
