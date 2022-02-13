@@ -1674,7 +1674,7 @@ void user_io_file_info(const char *ext)
 	DisableFpga();
 }
 
-int user_io_file_mount(const char *name, unsigned char index, char pre)
+int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_size)
 {
 	int writable = 0;
 	int ret = 0;
@@ -1764,6 +1764,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	{
 		sd_image[index].type = 2;
 		strcpy(sd_image[index].path, name);
+		size = pre_size;
 	}
 
 	if (io_ver)
@@ -2819,6 +2820,10 @@ void user_io_poll()
 								{
 									memcpy(buffer[disk], "HUBM\x00\x88\x10\x80", 8);
 								}
+							}
+							else if (is_psx())
+							{
+								psx_fill_blanksave(buffer[disk], lba, blks);
 							}
 							else
 							{

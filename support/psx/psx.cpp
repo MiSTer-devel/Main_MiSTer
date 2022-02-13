@@ -167,38 +167,32 @@ static uint16_t libCryptMask(const char *sbifile)
 static void psx_mount_save(const char *filename)
 {
 	user_io_set_index(2);
-	user_io_set_download(1);
-
-	int mounted = 0;
 	if (strlen(filename))
 	{
 		FileGenerateSavePath(filename, buf, 0);
-		if(!FileExists(buf))
-		{
-			uint8_t *mcd = new uint8_t[MCD_SIZE];
-			if (mcd)
-			{
-				memset(mcd, 0, MCD_SIZE);
-				memcpy(mcd, mcdheader, sizeof(mcdheader));
-				FileSave(buf, mcd, MCD_SIZE);
-				delete(mcd);
-			}
-		}
-
-		if (FileExists(buf))
-		{
-			user_io_file_mount(buf, 2);
-			StoreIdx_S(2, buf);
-			mounted = 1;
-		}
+		user_io_file_mount(buf, 2, 1, MCD_SIZE);
+		StoreIdx_S(2, buf);
 	}
-
-	if (!mounted)
+	else
 	{
 		user_io_file_mount("", 2);
 		StoreIdx_S(2, "");
 	}
-	user_io_set_download(0);
+}
+
+void psx_fill_blanksave(uint8_t *buffer, uint32_t lba, int cnt)
+{
+	uint32_t offset = lba * 1024;
+	uint32_t size = cnt * 1024;
+
+	if ((offset + size) <= sizeof(mcdheader))
+	{
+		memcpy(buffer, mcdheader + offset, size);
+	}
+	else
+	{
+		memset(buffer, 0, size);
+	}
 }
 
 void psx_mount_cd(int f_index, int s_index, const char *filename)
@@ -252,7 +246,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 			if (!loaded) Info("CD BIOS not found!", 4000);
 		}
 
-		if(*last_dir) psx_mount_save(last_dir);
+		psx_mount_save(last_dir);
 	}
 
 	if (loaded)
