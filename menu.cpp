@@ -1048,13 +1048,13 @@ void HandleUI(void)
 				if (menu_visible > 0)
 				{
 					menu_visible = 0;
-					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1, 1);
+					video_menu_bg((user_io_status(0, 0) & 0xE) >> 1, 1);
 					OsdMenuCtl(0);
 				}
 				else if (!menu_visible)
 				{
 					menu_visible--;
-					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1, 2);
+					video_menu_bg((user_io_status(0, 0) & 0xE) >> 1, 2);
 				}
 			}
 
@@ -1065,7 +1065,7 @@ void HandleUI(void)
 				{
 					c = 0;
 					menu_visible = 1;
-					video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1);
+					video_menu_bg((user_io_status(0, 0) & 0xE) >> 1);
 					OsdMenuCtl(1);
 				}
 			}
@@ -1090,15 +1090,15 @@ void HandleUI(void)
 		case KEY_F12:
 			menu = true;
 			menu_key_set(KEY_F12 | UPSTROKE);
-			if(video_fb_state()) video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1);
+			if(video_fb_state()) video_menu_bg((user_io_status(0, 0) & 0xE) >> 1);
 			video_fb_enable(0);
 			break;
 
 		case KEY_F1:
 			if (is_menu() && cfg.fb_terminal)
 			{
-				unsigned long status = (user_io_8bit_set_status(0, 0)+ 2) & 0xE;
-				user_io_8bit_set_status(status, 0xE);
+				unsigned long status = (user_io_status(0, 0)+ 2) & 0xE;
+				user_io_status(status, 0xE);
 				FileSaveConfig(user_io_create_config_name(), &status, 4);
 				video_menu_bg(status >> 1);
 			}
@@ -1736,7 +1736,7 @@ void HandleUI(void)
 						if ((p[0] == 'O') || (p[0] == 'o'))
 						{
 							int ex = (p[0] == 'o');
-							uint32_t status = user_io_8bit_set_status(0, 0, ex);  // 0,0 gets status
+							uint32_t status = user_io_status(0, 0, ex);  // 0,0 gets status
 
 							//option handled by ARM
 							if (p[1] == 'X') p++;
@@ -1752,7 +1752,7 @@ void HandleUI(void)
 								// option's index is outside of available values.
 								// reset to 0.
 								x = 0;
-								//user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff);
+								//user_io_status(setStatus(p, status, x), 0xffffffff);
 								substrcpy(s, p, 2 + x);
 								l = strlen(s);
 								arc = get_arc(s);
@@ -2081,7 +2081,7 @@ void HandleUI(void)
 								p++;
 							}
 
-							uint32_t status = user_io_8bit_set_status(0, 0, ex);  // 0,0 gets status
+							uint32_t status = user_io_status(0, 0, ex);  // 0,0 gets status
 							uint32_t x = minus ? (getStatus(p, status) - 1) : (getStatus(p, status) + 1);
 							uint32_t mask = getStatusMask(p);
 							x &= mask;
@@ -2104,7 +2104,7 @@ void HandleUI(void)
 								if (!strlen(s) || get_arc(s) < 0) x = 0;
 							}
 
-							user_io_8bit_set_status(setStatus(p, status, x), 0xffffffff, ex);
+							user_io_status(setStatus(p, status, x), 0xffffffff, ex);
 
 							if (is_x86() && p[1] == 'A')
 							{
@@ -2143,10 +2143,10 @@ void HandleUI(void)
 
 								if (is_pce() && mask == 1) pcecd_reset();
 
-								uint32_t status = user_io_8bit_set_status(0, 0, ex);
+								uint32_t status = user_io_status(0, 0, ex);
 
-								user_io_8bit_set_status(status ^ mask, mask, ex);
-								user_io_8bit_set_status(status, mask, ex);
+								user_io_status(status ^ mask, mask, ex);
+								user_io_status(status, mask, ex);
 								menustate = MENU_GENERIC_MAIN1;
 								if (p[0] == 'R' || p[0] == 'r') menustate = MENU_NONE1;
 							}
@@ -2479,7 +2479,7 @@ void HandleUI(void)
 				else
 				{
 					char *filename = user_io_create_config_name();
-					uint32_t status[2] = { user_io_8bit_set_status(0, 0, 0), user_io_8bit_set_status(0, 0, 1) };
+					uint32_t status[2] = { user_io_status(0, 0, 0), user_io_status(0, 0, 1) };
 					printf("Saving config to %s\n", filename);
 					FileSaveConfig(filename, status, 8);
 					if (is_x86()) x86_config_save();
@@ -2847,8 +2847,8 @@ void HandleUI(void)
 				if (!dipv)
 				{
 					arcade_sw_save(dipv);
-					user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
-					user_io_8bit_set_status(0, UIO_STATUS_RESET);
+					user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+					user_io_status(0, UIO_STATUS_RESET);
 					menustate = MENU_NONE1;
 				}
 				else
@@ -4966,7 +4966,7 @@ void HandleUI(void)
 			else
 			{
 				char *filename = user_io_create_config_name();
-				uint32_t status[2] = { user_io_8bit_set_status(0, 0xffffffff, 0), user_io_8bit_set_status(0, 0xffffffff, 1) };
+				uint32_t status[2] = { user_io_status(0, 0xffffffff, 0), user_io_status(0, 0xffffffff, 1) };
 				printf("Saving config to %s\n", filename);
 				FileSaveConfig(filename, status, 8);
 				menustate = MENU_GENERIC_MAIN1;
@@ -4976,8 +4976,8 @@ void HandleUI(void)
 					{
 						arcade_sw(n)->dip_cur = arcade_sw(n)->dip_def;
 						arcade_sw_send(n);
-						user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
-						user_io_8bit_set_status(0, UIO_STATUS_RESET);
+						user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+						user_io_status(0, UIO_STATUS_RESET);
 						arcade_sw_save(n);
 					}
 				}
@@ -6186,7 +6186,7 @@ void HandleUI(void)
 		{
 			if (c & UPSTROKE)
 			{
-				video_menu_bg((user_io_8bit_set_status(0, 0) & 0xE) >> 1);
+				video_menu_bg((user_io_status(0, 0) & 0xE) >> 1);
 				video_fb_enable(0);
 				menustate = MENU_SYSTEM1;
 				menusub = 3;
