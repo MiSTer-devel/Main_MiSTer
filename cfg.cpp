@@ -90,6 +90,7 @@ static const ini_var_t ini_vars[] =
 	{ "LOG_FILE_ENTRY", (void*)(&(cfg.log_file_entry)), UINT8, 0, 1 },
 	{ "BT_AUTO_DISCONNECT", (void*)(&(cfg.bt_auto_disconnect)), UINT32, 0, 180 },
 	{ "BT_RESET_BEFORE_PAIR", (void*)(&(cfg.bt_reset_before_pair)), UINT8, 0, 1 },
+	{ "WAITMOUNT", (void*)(&(cfg.waitmount)), STRING, 0, sizeof(cfg.waitmount) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));

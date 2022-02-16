@@ -5,6 +5,19 @@
 #define VFILTER_VERT 1
 #define VFILTER_SCAN 2
 
+struct VideoInfo
+{
+    uint32_t width;
+	uint32_t height;
+	uint32_t htime;
+	uint32_t vtime;
+	uint32_t ptime;
+	uint32_t vtimeh;
+
+    bool interlaced;
+    bool rotated;
+};
+
 int   video_get_scaler_flt(int type);
 void  video_set_scaler_flt(int type, int n);
 char* video_get_scaler_coeff(int type, int only_name = 1);
@@ -32,5 +45,10 @@ void video_menu_bg(int n, int idle = 0);
 int video_bg_has_picture();
 int video_chvt(int num);
 void video_cmd(char *cmd);
+
+bool video_is_rotated();
+void video_core_description(char *str, size_t len);
+void video_scaler_description(char *str, size_t len);
+
 
 #endif // VIDEO_H
