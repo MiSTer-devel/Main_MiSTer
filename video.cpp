@@ -373,14 +373,7 @@ static void set_vfilter(int force)
 			valid = true;
 		}
 
-		if (video_is_rotated())
-		{
-			send_video_filters(&vert, &horiz, flt_flags & 0xF);
-		}
-		else
-		{
-			send_video_filters(&horiz, &vert, flt_flags & 0xF);
-		}
+		send_video_filters(&horiz, &vert, flt_flags & 0xF);
 	}
 
 	if (!valid) spi_uio_cmd8(UIO_SET_FLTNUM, 0);
@@ -600,23 +593,14 @@ static void setShadowMask()
 		return;
 	}
 
-	int normal_flag = 0;
-	int rotated_flag = SM_FLAG_ROTATED;
-
-	if (video_is_rotated())
-	{
-		normal_flag = SM_FLAG_ROTATED;
-		rotated_flag = 0;
-	}
-
 	has_shadow_mask = 1;
 	switch (video_get_shadow_mask_mode())
 	{
 		default: spi_w(SM_FLAG(0)); break;
-		case SM_MODE_1X: spi_w(SM_FLAG(SM_FLAG_ENABLED | normal_flag)); break;
-		case SM_MODE_2X: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_2X | normal_flag)); break;
-		case SM_MODE_1X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | rotated_flag)); break;
-		case SM_MODE_2X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | rotated_flag | SM_FLAG_2X)); break;
+		case SM_MODE_1X: spi_w(SM_FLAG(SM_FLAG_ENABLED)); break;
+		case SM_MODE_2X: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_2X)); break;
+		case SM_MODE_1X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED)); break;
+		case SM_MODE_2X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED | SM_FLAG_2X)); break;
 	}
 
 	int loaded = 0;
@@ -1272,11 +1256,6 @@ void video_mode_adjust()
 		set_video(v, Fpix);
 		user_io_send_buttons(1);
 		force = true;
-	}
-	else if (vid_changed)
-	{
-		setScaler();
-		setShadowMask();
 	}
 	else
 	{
