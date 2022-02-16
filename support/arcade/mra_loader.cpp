@@ -777,30 +777,33 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				}
 
 				int checksumsame = !strlen(arc_info->zipname) || !strcasecmp(arc_info->md5, hex);
-				if (checksumsame == 0)
-				{
-					printf("\n*** Checksum mismatch\n");
-					printf("    md5-orig = %s\n", arc_info->md5);
-					printf("    md5-calc = %s\n\n", hex);
-				}
+				int no_checksum = !strcasecmp(arc_info->md5, "none") || !strlen(arc_info->md5);
 
-				checksumsame |= !strcasecmp(arc_info->md5, "none");
-				if (checksumsame == 0)
+				if (!no_checksum)
 				{
-					if (!strlen(arc_info->error_msg))
-						snprintf(arc_info->error_msg, kBigTextSize, "md5 mismatch for rom %d", arc_info->romindex);
-				}
-				else
-				{
-					// this code sets the validerom0 and clears the message
-					// if a rom with index 0 has a correct md5. It supresses
-					// sending any further rom0 messages
-					if (arc_info->romindex == 0)
+					if (checksumsame == 0)
 					{
-						arc_info->validrom0 = 1;
-						arc_info->error_msg[0] = 0;
+						printf("\n*** Checksum mismatch\n");
+						printf("    md5-orig = %s\n", arc_info->md5);
+						printf("    md5-calc = %s\n\n", hex);
+
+						if (!strlen(arc_info->error_msg))
+							snprintf(arc_info->error_msg, kBigTextSize, "md5 mismatch for rom %d", arc_info->romindex);
+					}
+					else
+					{
+						// this code sets the validerom0 and clears the message
+						// if a rom with index 0 has a correct md5. It supresses
+						// sending any further rom0 messages
+						if (arc_info->romindex == 0)
+						{
+							arc_info->validrom0 = 1;
+							arc_info->error_msg[0] = 0;
+						}
 					}
 				}
+
+				checksumsame |= no_checksum;
 
 				rom_finish(checksumsame, arc_info->address, arc_info->romindex);
 			}
@@ -875,7 +878,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				if (result == 0)
 				{
 					printf("%s does not exist\n", arc_info->partname);
-					snprintf(arc_info->error_msg, kBigTextSize, "%s\nFile Not Found", arc_info->partname);
+					snprintf(arc_info->error_msg, kBigTextSize, "%s\n%s not found", fname, arc_info->partname);
 				}
 			}
 			else // we have binary data?
@@ -1088,9 +1091,9 @@ void arcade_check_error()
 {
 	if (arcade_error_msg[0] != 0) {
 		printf("ERROR: [%s]\n", arcade_error_msg);
-		Info(arcade_error_msg, 1000 * 30);
+		Info(arcade_error_msg, 1000 * 5);
 		arcade_error_msg[0] = 0;
-		sleep(3);
+		sleep(5+3);
 	}
 }
 
