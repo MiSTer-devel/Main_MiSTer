@@ -1103,9 +1103,11 @@ void user_io_init(const char *path, const char *xml)
 		user_io_set_core_name("sharpmz");
 	}
 
-	// parse INI before CONFSTR, no core-specific settings possible at theis time!
+	user_io_read_confstr();
+	user_io_read_core_name();
+
 	cfg_parse();
-	while (cfg.waitmount[0])
+	while (cfg.waitmount[0] && !is_menu())
 	{
 		printf("> > > wait for %s mount < < <\n", cfg.waitmount);
 		static char str[256];
@@ -1115,21 +1117,19 @@ void user_io_init(const char *path, const char *xml)
 		sleep(1);
 	}
 
-	user_io_read_confstr();
-	user_io_read_core_name();
 	parse_config();
 	if (!xml && defmra[0] && FileExists(defmra))
 	{
 		// attn: FC option won't use name from defmra!
+		// attn: cfg is parsed before defmra, no defmra-name specifics possible in INI!
 		xml = (const char*)defmra;
 		strcpy(core_path, xml);
 		is_arcade_type = 1;
 		arcade_override_name(xml);
+		user_io_read_core_name();
 		printf("Using default MRA: %s\n", xml);
 	}
 
-	// parse INI again with core-specific settings.
-	cfg_parse();
 	if (cfg.log_file_entry) MakeFile("/tmp/STARTPATH", core_path);
 
 	if (cfg.bootcore[0] != '\0')
