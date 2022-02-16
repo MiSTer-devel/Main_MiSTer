@@ -62,6 +62,7 @@ typedef struct {
 	char video_conf_ntsc[1024];
 	char font[1024];
 	char shared_folder[1024];
+	char waitmount[1024];
 	char custom_aspect_ratio[2][16];
 	char afilter_default[1023];
 	char vfilter_default[1023];

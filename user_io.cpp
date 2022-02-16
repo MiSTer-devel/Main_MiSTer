@@ -1103,6 +1103,18 @@ void user_io_init(const char *path, const char *xml)
 		user_io_set_core_name("sharpmz");
 	}
 
+	// parse INI before CONFSTR, no core-specific settings possible at theis time!
+	cfg_parse();
+	while (cfg.waitmount[0])
+	{
+		printf("> > > wait for %s mount < < <\n", cfg.waitmount);
+		static char str[256];
+		snprintf(str, sizeof(str), "exit $(mount | grep \"%s\" | wc -c)", cfg.waitmount);
+		int ret = system(str);
+		if (!(ret & 0xFF) && ret) break;
+		sleep(1);
+	}
+
 	user_io_read_confstr();
 	user_io_read_core_name();
 	parse_config();
@@ -1116,6 +1128,7 @@ void user_io_init(const char *path, const char *xml)
 		printf("Using default MRA: %s\n", xml);
 	}
 
+	// parse INI again with core-specific settings.
 	cfg_parse();
 	if (cfg.log_file_entry) MakeFile("/tmp/STARTPATH", core_path);
 
