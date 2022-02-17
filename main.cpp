@@ -34,6 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "osd.h"
 
 const char *version = "$VER:" VDATE;
+uint8_t ps2_kbd_scan_set = 2;
 
 int main(int argc, char *argv[])
 {
