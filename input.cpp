@@ -2806,6 +2806,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					else value = 0;
 				}
 
+				// When in PSX core, adjust lightguns to Namco GunCon 1 range
+				// (NOTE: may need additional adjustments for PAL and/or the Konami Justifier)
+				if (is_psx() && input[dev].lightgun)
+				{
+					if (ev->code == 0) value = (value * 550) / 762;
+					if (ev->code == 1) value = (value * 240) / 256;
+				}
+
 				int range = is_psx() ? 128 : 127;
 				value = (value * range) / hrange;
 
