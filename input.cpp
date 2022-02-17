@@ -856,7 +856,7 @@ enum QUIRK
 	QUIRK_TOUCHGUN,
 	QUIRK_VCS,
 	QUIRK_JOYCON,
-	QUIRK_GUNCON2,
+	QUIRK_CRTGUN,
 };
 
 typedef struct
@@ -1221,7 +1221,7 @@ int input_has_lightgun()
 	{
 		if (input[i].quirk == QUIRK_WIIMOTE)  return 1;
 		if (input[i].quirk == QUIRK_TOUCHGUN) return 1;
-		if (input[i].quirk == QUIRK_GUNCON2) return 1;
+		if (input[i].quirk == QUIRK_CRTGUN) return 1;
 	}
 	return 0;
 }
@@ -3819,7 +3819,7 @@ int input_test(int getchar)
 						//Namco GunCon 2
 						if (input[n].vid == 0x0b9a && input[n].pid == 0x016a)
 						{
-							input[n].quirk = QUIRK_GUNCON2;
+							input[n].quirk = QUIRK_CRTGUN;
 							input[n].lightgun = 1;
 							input[n].guncal[0] = 25;
 							input[n].guncal[1] = 245;
@@ -4274,7 +4274,7 @@ int input_test(int getchar)
 									}
 								}
 
-								if (ev.type == EV_ABS && input[i].quirk == QUIRK_GUNCON2)
+								if (ev.type == EV_ABS && input[i].quirk == QUIRK_CRTGUN)
 								{
 									menu_lightgun_cb(i, ev.type, ev.code, ev.value);
 
@@ -4282,17 +4282,51 @@ int input_test(int getchar)
 									{
 										absinfo.minimum = input[i].guncal[2];
 										absinfo.maximum = input[i].guncal[3];
+
+										// Handle gun going off-screen
+										// The GunCon 2 (or at least its driver) will more reliably report
+										// an out-of-screen value for X than for Y, so X is used here
+										if (ev.value < absinfo.minimum || ev.value > absinfo.maximum)
+										{
+											if (input[i].startx < 5)
+											{
+												input[i].startx++;
+											}
+										}
+										else
+										{
+											input[i].startx = 0;
+											input[i].lastx = ev.value;
+										}
+
+										if (input[i].startx && (input[i].startx < 5))
+										{
+											ev.value = input[i].lastx;
+										}
 									}
 									else if (ev.code == ABS_Y)
 									{
 										absinfo.minimum = input[i].guncal[0];
 										absinfo.maximum = input[i].guncal[1];
+
+										// Handle gun going off-screen
+										if (input[i].startx)
+										{
+											if (input[i].startx < 5)
+											{
+												ev.value = input[i].lasty;
+											}
+										}
+										else
+										{
+											input[i].lasty = ev.value;
+										}
 									}
 								}
 
 								if (ev.type == EV_KEY && user_io_osd_is_visible())
 								{
-									if (input[i].quirk == QUIRK_WIIMOTE || input[i].quirk == QUIRK_GUNCON2)
+									if (input[i].quirk == QUIRK_WIIMOTE || input[i].quirk == QUIRK_CRTGUN)
 									{
 										if (menu_lightgun_cb(i, ev.type, ev.code, ev.value)) continue;
 									}
