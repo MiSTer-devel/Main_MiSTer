@@ -107,7 +107,7 @@ void input_uinp_destroy();
 
 extern char joy_bnames[NUMBUTTONS][32];
 extern int  joy_bcount;
-extern uint8_t  ps2_kbd_scan_set;
+extern uint8_t ps2_kbd_scan_set;
 
 void parse_buttons();
 char *get_buttons(int type = 0);
