@@ -1948,8 +1948,7 @@ const char *FileReadLine(fileTextReader *reader)
 		while ((reader->pos < end) && *reader->pos && !IS_NEWLINE(*reader->pos))
 			reader->pos++;
 		*reader->pos = 0;
-		while (IS_WHITESPACE(*st))
-			st++;
+		while (IS_WHITESPACE(*st)) st++;
 		if (*st == '#' || *st == ';' || !*st)
 		{
 			reader->pos++;

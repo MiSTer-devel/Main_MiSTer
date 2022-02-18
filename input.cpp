@@ -558,8 +558,8 @@ static const int ev2ps2[] =
 
 static const int ev2ps2_set1[] =
 {
-	NONE, //0   KEY_RESERVED 
-	0x01, //1   KEY_ESC 
+	NONE, //0   KEY_RESERVED
+	0x01, //1   KEY_ESC
 	0x02, //2   KEY_1
 	0x03, //3   KEY_2
 	0x04, //4   KEY_3
@@ -598,7 +598,7 @@ static const int ev2ps2_set1[] =
 	0x25, //37  KEY_K
 	0x26, //38  KEY_L
 	0x27, //39  KEY_SEMICOLON  ;
-	0x28, //40  KEY_APOSTROPHE 
+	0x28, //40  KEY_APOSTROPHE
 	0x29, //41  KEY_GRAVE
 	LSHIFT | 0x2a, //42  KEY_LEFTSHIFT
 	0x2b, //43  KEY_BACKSLASH
@@ -613,7 +613,7 @@ static const int ev2ps2_set1[] =
 	0x34, //52  KEY_DOT
 	0x35, //53  KEY_SLASH
 	RSHIFT | 0x36, //54  KEY_RIGHTSHIFT
-	0x37, //55  KEY_KPASTERISK          
+	0x37, //55  KEY_KPASTERISK
 	LALT | 0x38, //56  KEY_LEFTALT
 	0x39, //57  KEY_SPACE
 	0x3a, //58  KEY_CAPSLOCK
@@ -642,8 +642,8 @@ static const int ev2ps2_set1[] =
 	0x51, //81  KEY_KP3
 	0x52, //82  KEY_KP0
 	0x53, //83  KEY_KPDOT
-	NONE, //84  ???                 
-	NONE, //85  KEY_ZENKAKU         
+	NONE, //84  ???
+	NONE, //85  KEY_ZENKAKU
 	0x56, //86  KEY_102ND
 	0x57, //87  KEY_F11
 	0x58, //88  KEY_F12
@@ -659,7 +659,7 @@ static const int ev2ps2_set1[] =
 	EXT | 0x35, //98  KEY_KPSLASH
 	0xE2, //99  KEY_SYSRQ
 	RALT | EXT | 0x38, //100 KEY_RIGHTALT
-	NONE, //101 KEY_LINEFEED    
+	NONE, //101 KEY_LINEFEED
 	EXT | 0x47, //102 KEY_HOME
 	EXT | 0x48, //103 KEY_UP
 	EXT | 0x49, //104 KEY_PAGEUP
@@ -1076,10 +1076,11 @@ static int ev2archie[] =
 	NONE  //255 ???
 };
 
+uint8_t ps2_kbd_scan_set = 2;
 uint32_t get_ps2_code(uint16_t key)
 {
-	if (key > 255) return NONE;	
-    return (ps2_kbd_scan_set == 1) ? ev2ps2_set1[key] : ev2ps2[key];
+	if (key > 255) return NONE;
+	return (ps2_kbd_scan_set == 1) ? ev2ps2_set1[key] : ev2ps2[key];
 }
 
 uint32_t get_amiga_code(uint16_t key)
