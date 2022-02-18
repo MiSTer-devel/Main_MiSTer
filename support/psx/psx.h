@@ -3,5 +3,6 @@
 
 void psx_mount_cd(int f_index, int s_index, const char *filename);
 void psx_fill_blanksave(uint8_t *buffer, uint32_t lba, int cnt);
+void psx_read_cd(uint8_t *buffer, int lba, int cnt);
 
 #endif

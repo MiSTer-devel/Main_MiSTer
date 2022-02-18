@@ -2803,7 +2803,14 @@ void user_io_poll()
 				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
 				{
 					buffer_lba[disk] = -1;
-					if (sd_image[disk].size)
+					if (blksz == 2352 && is_psx())
+					{
+						diskled_on();
+						psx_read_cd(buffer[disk], lba, buf_n);
+						done = 1;
+						buffer_lba[disk] = lba;
+					}
+					else if (sd_image[disk].size)
 					{
 						diskled_on();
 						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
@@ -2867,13 +2874,19 @@ void user_io_poll()
 				{
 					buffer_lba[disk] = -1;
 				}
-				else if(done && (lba + blks - buffer_lba[disk]) == buf_n)
+				else if (done && (lba + blks - buffer_lba[disk]) == buf_n)
 				{
 					diskled_on();
-					if (FileSeek(&sd_image[disk], (lba + blks) * blksz, SEEK_SET) &&
+					lba += blks;
+					if (blksz == 2352 && is_psx())
+					{
+						psx_read_cd(buffer[disk], lba, buf_n);
+						buffer_lba[disk] = lba;
+					}
+					else if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET) &&
 						FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 					{
-						buffer_lba[disk] += buf_n;
+						buffer_lba[disk] = lba;
 					}
 					else
 					{
