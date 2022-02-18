@@ -2897,6 +2897,8 @@ void user_io_poll()
 	if (core_type == CORE_TYPE_SHARPMZ) sharpmz_poll();
 
 	static uint8_t leds = 0;
+    static uint8_t ps2_scancode_f0 = 0;
+    
 	if(use_ps2ctl && !is_minimig() && !is_archie())
 	{
 		leds |= (KBD_LED_FLAG_STATUS | KBD_LED_CAPS_CONTROL);
@@ -2907,44 +2909,73 @@ void user_io_poll()
 		if (ps2ctl & 1)
 		{
 			static uint8_t cmd = 0;
-			static uint8_t byte = 0;
+			static uint8_t byte = 0;            
 
 			printf("kbd_ctl = 0x%02X\n", kbd_ctl);
 			if (!byte)
 			{
 				cmd = kbd_ctl;
-				switch (cmd)
-				{
-				case 0xff:
-					kbd_reply(0xFA);
-					kbd_reply(0xAA);
-					break;
+                
+                if (ps2_scancode_f0 == 0)
+                {
+                    switch (cmd)
+                    {
+                    case 0xff:
+                        ps2_kbd_scan_set = 2;
+                        kbd_reply(0xFA);
+                        kbd_reply(0xAA);
+                        break;
 
-				case 0xf2:
-					kbd_reply(0xFA);
-					kbd_reply(0xAB);
-					kbd_reply(0x83);
-					break;
+                    case 0xf2:
+                        kbd_reply(0xFA);
+                        kbd_reply(0xAB);
+                        kbd_reply(0x83);
+                        break;
+                    case 0xF0: // scan get/set
+                        kbd_reply(0xFA);
+                        ps2_scancode_f0 = 1;
+                        break;                       
+                        
+                    case 0xF6: // set default parameters
+                        kbd_reply(0xFA);
+                        ps2_kbd_scan_set = 2;
+                        break;
 
-				case 0xf4:
-				case 0xf5:
-				case 0xfa:
-					kbd_reply(0xFA);
-					break;
+                    case 0xf4:
+                    case 0xf5:
+                    case 0xfa:
+                        kbd_reply(0xFA);
+                        break;
 
-				case 0xed:
-					kbd_reply(0xFA);
-					byte++;
-					break;
+                    case 0xed:
+                        kbd_reply(0xFA);
+                        byte++;
+                        break;
 
-				case 0xee:
-					kbd_reply(0xEE);
-					break;
+                    case 0xee:
+                        kbd_reply(0xEE);
+                        break;
 
-				default:
-					kbd_reply(0xFE);
-					break;
-				}
+                    default:
+                        kbd_reply(0xFE);
+                        break;
+                    }
+                }
+                
+                else
+                {
+                    if (cmd<=3) {
+                        kbd_reply(0xFA);
+                        if (!cmd) // get
+                            kbd_reply(ps2_kbd_scan_set);                            
+                        else // set
+                            ps2_kbd_scan_set = cmd;
+                        ps2_scancode_f0 = 0;
+                    } else {
+                        kbd_reply(0xFE); // RESEND
+                    }                    
+                }
+
 			}
 			else
 			{
@@ -3245,7 +3276,8 @@ static void send_keycode(unsigned short key, int press)
 			{
 				// Pause key sends E11477E1F014E077
 				static const unsigned char c[] = { 0xe1, 0x14, 0x77, 0xe1, 0xf0, 0x14, 0xf0, 0x77, 0x00 };
-				const unsigned char *p = c;
+				static const unsigned char c_set1[] = { 0xe1, 0x1d, 0x45, 0xe1, 0x9d, 0xc5, 0x00 };
+				const unsigned char *p = (ps2_kbd_scan_set == 1) ? c_set1 : c;
 
 				spi_uio_cmd_cont(UIO_KEYBOARD);
 
@@ -3269,8 +3301,12 @@ static void send_keycode(unsigned short key, int press)
 					{ 0xE0, 0xF0, 0x7C, 0xE0, 0xF0, 0x12, 0x00, 0x00 },
 					{ 0xE0, 0x12, 0xE0, 0x7C, 0x00, 0x00, 0x00, 0x00 }
 				};
-
-				const unsigned char *p = c[press];
+				static const unsigned char c_set1[2][8] = {
+					{ 0xE0, 0xB7, 0xE0, 0xAA, 0x00, 0x00, 0x00, 0x00 },
+					{ 0xE0, 0x2A, 0xE0, 0x37, 0x00, 0x00, 0x00, 0x00 }
+				};
+				
+				const unsigned char *p = (ps2_kbd_scan_set == 1) ? c_set1[press] : c[press];
 
 				spi_uio_cmd_cont(UIO_KEYBOARD);
 
@@ -3295,8 +3331,13 @@ static void send_keycode(unsigned short key, int press)
 			if (code & EXT) spi8(0xe0);
 
 			// prepend break code if required
-			if (!press) spi8(0xf0);
-
+            if (!press)
+            {
+                if (ps2_kbd_scan_set == 1)
+                        code |= 0x80;
+                    else
+                        spi8(0xf0);
+            }
 			// send code itself
 			spi8(code & 0xff);
 
