@@ -12,8 +12,13 @@
 #include "psx.h"
 #include "mcdheader.h"
 #include "../../cd.h"
+#include "../chd/mister_chd.h"
+#include <libchdr/chd.h>
 
 static char buf[1024];
+static uint8_t chd_hunkbuf[CD_FRAME_SIZE * CD_FRAMES_PER_HUNK];
+static int chd_hunknum;
+
 
 static int sgets(char *out, int sz, char **in)
 {
@@ -98,6 +103,17 @@ static uint16_t libCryptMask(const char *sbifile)
 	return mask;
 }
 
+static void unload_chd(toc_t *table)
+{
+  if (table->chd_f)
+  {
+    chd_close(table->chd_f);
+  }
+  memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
+  chd_hunknum = -1;
+}
+
+
 static void unload_cue(toc_t *table)
 {
 	for (int i = 0; i < table->last; i++)
@@ -107,6 +123,35 @@ static void unload_cue(toc_t *table)
 	memset(table, 0, sizeof(toc_t));
 }
 
+static int load_chd(const char *filename, toc_t *table)
+{
+
+  unload_chd(table);
+  chd_error err = mister_load_chd(filename, table);
+  if (err != CHDERR_NONE)
+  {
+    return 0;
+  }
+
+  for(int i = 0; i < table->last; i++)
+  {
+      if (i == 0) table->tracks[i].index1 = 150;
+      table->tracks[i].start += table->tracks[i].index1;
+      if (table->tracks[i].start < 0) table->tracks[i].start = 0;
+      table->tracks[i].end += (table->tracks[i].index1 - 1);
+  }
+  table->end = table->tracks[table->last-1].end+1;
+
+  memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
+  chd_hunknum = -1;
+
+  return 1;
+
+  //Need to store hunkbuf, hunknum and chd_f
+
+
+
+}
 static int load_cue(const char* filename, toc_t *table)
 {
 	static char fname[1024 + 10];
@@ -230,6 +275,23 @@ static int load_cue(const char* filename, toc_t *table)
 	return 1;
 }
 
+static int load_cd_image(const char *filename, toc_t *table)
+{
+
+  const char *ext = strrchr(filename, '.');
+  if (!ext) return 0;
+
+  if (!strncasecmp(".chd", ext, 4))
+  {
+    return load_chd(filename, table);
+  } else if (!strncasecmp(".cue", ext, 4)) {
+    return load_cue(filename,table);
+  }
+
+  return 0;
+}
+
+
 struct track_t
 {
 	uint32_t start_lba;
@@ -333,10 +395,28 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 			{
 				if (lba >= toc.tracks[i].start && lba <= toc.tracks[i].end)
 				{
-					FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start) * CD_SECTOR_LEN, SEEK_SET);
+          if ((&toc.tracks[i].f)->opened())
+          {
+					  FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start) * CD_SECTOR_LEN, SEEK_SET);
+          }
 					while (cnt)
 					{
-						FileReadAdv(&toc.tracks[i].f, buffer, CD_SECTOR_LEN);
+            if (toc.chd_f)
+            {
+              if (mister_chd_read_sector(toc.chd_f, (lba - toc.tracks[i].index1) + toc.tracks[i].offset, 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) != CHDERR_NONE) printf("CHD ERROR LBA %d TRACK %d\n", lba, i); 
+              if (!toc.tracks[i].type) //CHD requires byteswap of audio data
+              {
+                for (int swapidx = 0; swapidx < CD_SECTOR_LEN; swapidx += 2)
+                {
+                        uint8_t temp = buffer[swapidx];
+                        buffer[swapidx] = buffer[swapidx+1];
+                        buffer[swapidx+1] = temp;
+                }
+
+              }
+            } else {
+						  FileReadAdv(&toc.tracks[i].f, buffer, CD_SECTOR_LEN);
+            }
 						if ((lba + 1) > toc.tracks[i].end) break;
 						buffer += CD_SECTOR_LEN;
 						cnt--;
@@ -377,7 +457,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 	if (strlen(filename))
 	{
-		if (load_cue(filename, &toc) && toc.last)
+		if (load_cd_image(filename, &toc) && toc.last)
 		{
 			int name_len = strlen(filename);
 
@@ -450,6 +530,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 	{
 		printf("Unmount CD\n");
 		unload_cue(&toc);
+    unload_chd(&toc);
 		mount_cd(0, s_index);
 	}
 }
