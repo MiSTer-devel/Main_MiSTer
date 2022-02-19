@@ -11,6 +11,7 @@
 #include "../../menu.h"
 #include "psx.h"
 #include "mcdheader.h"
+#include "../../cd.h"
 
 static char buf[1024];
 
@@ -44,71 +45,6 @@ static int sgets(char *out, int sz, char **in)
 	} while (!*out && **in);
 
 	return *out;
-}
-
-static int get_bin(const char *cue)
-{
-	static char line[128];
-	char *ptr, *lptr;
-	int bb;
-	int res = 0;
-	buf[0] = 0;
-
-	int sz = FileLoad(cue, 0, 0);
-	if (sz)
-	{
-		char *toc = new char[sz + 1];
-		if (toc)
-		{
-			if (FileLoad(cue, toc, sz))
-			{
-				toc[sz] = 0;
-
-				char *tbuf = toc;
-				while (sgets(line, sizeof(line), &tbuf))
-				{
-					lptr = line;
-					while (*lptr == 0x20) lptr++;
-
-					/* decode FILE commands */
-					if (!(memcmp(lptr, "FILE", 4)))
-					{
-						strcpy(buf, cue);
-						ptr = strrchr(buf, '/');
-						if (!ptr) ptr = buf;
-						else ptr++;
-
-						lptr += 4;
-						while (*lptr == 0x20) lptr++;
-						char stp = 0x20;
-
-						if (*lptr == '\"')
-						{
-							lptr++;
-							stp = '\"';
-						}
-
-						while ((*lptr != stp) && (lptr <= (line + 128)) && (ptr < (buf + 1023))) *ptr++ = *lptr++;
-						*ptr = 0;
-					}
-
-					/* decode TRACK commands */
-					else if ((sscanf(lptr, "TRACK %02d %*s", &bb)) || (sscanf(lptr, "TRACK %d %*s", &bb)))
-					{
-						if (buf[0] && (strstr(lptr, "MODE1") || strstr(lptr, "MODE2")))
-						{
-							res = 1;
-							break;
-						}
-					}
-				}
-			}
-
-			delete(toc);
-		}
-	}
-
-	return res;
 }
 
 static uint32_t libCryptSectors[16] =
@@ -162,6 +98,188 @@ static uint16_t libCryptMask(const char *sbifile)
 	return mask;
 }
 
+static void unload_cue(toc_t *table)
+{
+	for (int i = 0; i < table->last; i++)
+	{
+		FileClose(&table->tracks[i].f);
+	}
+	memset(table, 0, sizeof(toc_t));
+}
+
+static int load_cue(const char* filename, toc_t *table)
+{
+	static char fname[1024 + 10];
+	static char line[128];
+	char *ptr, *lptr;
+	static char toc[100 * 1024];
+
+	unload_cue(table);
+	printf("\x1b[32mPSX: Open CUE: %s\n\x1b[0m", fname);
+
+	strcpy(fname, filename);
+
+	memset(toc, 0, sizeof(toc));
+	if (!FileLoad(fname, toc, sizeof(toc) - 1))
+	{
+		printf("\x1b[32mPSX: cannot load file: %s\n\x1b[0m", fname);
+		return 0;
+	}
+
+	int mm, ss, bb;
+
+	char *buf = toc;
+	while (sgets(line, sizeof(line), &buf))
+	{
+		lptr = line;
+		while (*lptr == 0x20) lptr++;
+
+		/* decode FILE commands */
+		if (!(memcmp(lptr, "FILE", 4)))
+		{
+			ptr = fname + strlen(fname) - 1;
+			while ((ptr - fname) && (*ptr != '/') && (*ptr != '\\')) ptr--;
+			if (ptr - fname) ptr++;
+
+			lptr += 4;
+			while (*lptr == 0x20) lptr++;
+
+			if (*lptr == '\"')
+			{
+				lptr++;
+				while ((*lptr != '\"') && (lptr <= (line + 128)) && (ptr < (fname + 1023)))
+					*ptr++ = *lptr++;
+			}
+			else
+			{
+				while ((*lptr != 0x20) && (lptr <= (line + 128)) && (ptr < (fname + 1023)))
+					*ptr++ = *lptr++;
+			}
+			*ptr = 0;
+
+			if (!FileOpen(&table->tracks[table->last].f, fname)) return 0;
+
+			printf("\x1b[32mPSX: Open track file: %s\n\x1b[0m", fname);
+
+			table->tracks[table->last].offset = 0;
+
+			if (!strstr(lptr, "BINARY"))
+			{
+				FileClose(&table->tracks[table->last].f);
+				printf("\x1b[32mPSX: unsupported file: %s\n\x1b[0m", fname);
+				return 0;
+			}
+		}
+
+		/* decode TRACK commands */
+		else if ((sscanf(lptr, "TRACK %02d %*s", &bb)) || (sscanf(lptr, "TRACK %d %*s", &bb)))
+		{
+			if (bb != (table->last + 1))
+			{
+				FileClose(&table->tracks[table->last].f);
+				printf("\x1b[32mPSX: missing tracks: %s\n\x1b[0m", fname);
+				return 0;
+			}
+
+			if (strstr(lptr, "MODE1/2352") || strstr(lptr, "MODE2/2352"))
+			{
+				table->tracks[table->last].sector_size = 2352;
+				table->tracks[table->last].type = 1;
+				if (!table->last) table->end = 150; // implicit 2 seconds pregap for track 1
+			}
+			else if (strstr(lptr, "AUDIO"))
+			{
+				table->tracks[table->last].sector_size = 2352;
+				table->tracks[table->last].type = 0;
+			}
+			else
+			{
+				FileClose(&table->tracks[table->last].f);
+				printf("\x1b[32mPSX: unsupported track type: %s\n\x1b[0m", lptr);
+				return 0;
+			}
+		}
+
+		/* decode INDEX commands */
+		else if ((sscanf(lptr, "INDEX 01 %02d:%02d:%02d", &mm, &ss, &bb) == 3) ||
+			(sscanf(lptr, "INDEX 1 %02d:%02d:%02d", &mm, &ss, &bb) == 3))
+		{
+			if (!table->tracks[table->last].f.opened())
+			{
+				printf("\x1b[32mPSX: multiple tracks per file is unsupported\n\x1b[0m");
+				return 0;
+			}
+
+			table->tracks[table->last].index1 = bb + ss * 75 + mm * 60 * 75;
+			if (table->tracks[table->last].type && !table->last) table->tracks[table->last].index1 = 150;
+			table->tracks[table->last].start = table->end;
+			table->end += (table->tracks[table->last].f.size / table->tracks[table->last].sector_size);
+			table->tracks[table->last].end = table->end - 1;
+			table->tracks[table->last].offset = 0;
+
+			table->last++;
+			if (table->last >= 99) break;
+		}
+	}
+
+	for (int i = 0; i < table->last; i++)
+	{
+		printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
+	}
+
+	return 1;
+}
+
+struct track_t
+{
+	uint32_t start_lba;
+	uint32_t end_lba;
+	uint32_t bcd;
+	uint32_t reserved;
+};
+
+struct disk_t
+{
+	uint32_t track_count;
+	uint32_t total_lba;
+	uint32_t total_bcd;
+	uint32_t reserved;
+	track_t  track[99];
+};
+
+#define BCD(v) ((uint8_t)((((v)/10) << 4) | ((v)%10)))
+
+void send_cue(toc_t *table)
+{
+	disk_t *disk = new disk_t;
+	if (disk)
+	{
+		memset(disk, 0, sizeof(disk_t));
+		disk->track_count = (BCD(table->last) << 8) | table->last;
+		disk->total_lba = table->end;
+		int m = (disk->total_lba / 75) / 60;
+		int s = (disk->total_lba / 75) % 60;
+		disk->total_bcd = (BCD(m) << 8) | BCD(s);
+
+		for (int i = 0; i < table->last; i++)
+		{
+			disk->track[i].start_lba = i ? table->tracks[i].start : 0;
+			disk->track[i].end_lba = table->tracks[i].end;
+			m = ((disk->track[i].start_lba + table->tracks[i].index1) / 75) / 60;
+			s = ((disk->track[i].start_lba + table->tracks[i].index1) / 75) % 60;
+			disk->track[i].bcd = ((BCD(m) << 8) | BCD(s)) | ((table->tracks[i].type ? 0 : 1) << 16);
+		}
+
+		user_io_set_index(251);
+		user_io_set_download(1);
+		user_io_file_tx_data((uint8_t *)disk, sizeof(disk_t));
+		user_io_set_download(0);
+
+		hexdump(disk, 256);
+		delete(disk);
+	}
+}
+
 #define MCD_SIZE (128*1024)
 
 static void psx_mount_save(const char *filename)
@@ -195,81 +313,143 @@ void psx_fill_blanksave(uint8_t *buffer, uint32_t lba, int cnt)
 	}
 }
 
+static toc_t toc = {};
+#define CD_SECTOR_LEN 2352
+
+void psx_read_cd(uint8_t *buffer, int lba, int cnt)
+{
+	//printf("req lba=%d, cnt=%d\n", lba, cnt);
+
+	while (cnt > 0)
+	{
+		if (lba < toc.tracks[0].start || !toc.last)
+		{
+			memset(buffer, 0, CD_SECTOR_LEN);
+		}
+		else
+		{
+			memset(buffer, 0xAA, CD_SECTOR_LEN);
+			for (int i = 0; i < toc.last; i++)
+			{
+				if (lba >= toc.tracks[i].start && lba <= toc.tracks[i].end)
+				{
+					FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start) * CD_SECTOR_LEN, SEEK_SET);
+					while (cnt)
+					{
+						FileReadAdv(&toc.tracks[i].f, buffer, CD_SECTOR_LEN);
+						if ((lba + 1) > toc.tracks[i].end) break;
+						buffer += CD_SECTOR_LEN;
+						cnt--;
+						lba++;
+					}
+					break;
+				}
+			}
+		}
+
+		buffer += CD_SECTOR_LEN;
+		cnt--;
+		lba++;
+	}
+}
+
+static void mount_cd(int size, int index)
+{
+	spi_uio_cmd_cont(UIO_SET_SDINFO);
+	spi32_w(size);
+	spi32_w(0);
+	DisableIO();
+	spi_uio_cmd8(UIO_SET_SDSTAT, (1 << index) | 0x80);
+}
+
+static int load_bios(const char* filename)
+{
+	int sz = FileLoad(filename, 0, 0);
+	if (sz != 512 * 1024) return 0;
+	return user_io_file_tx(filename);
+}
+
 void psx_mount_cd(int f_index, int s_index, const char *filename)
 {
 	static char last_dir[1024] = {};
 
-	const char *p = strrchr(filename, '/');
-	int cur_len = p ? p - filename : 0;
-	int old_len = strlen(last_dir);
+	int loaded = 0;
 
-	int name_len = strlen(filename);
-	int is_cue = (name_len > 4) && !strcasecmp(filename + name_len - 4, ".cue");
-
-	int same_game = old_len && (cur_len == old_len) && !strncmp(last_dir, filename, old_len);
-	int loaded = 1;
-
-	if (!same_game)
+	if (strlen(filename))
 	{
-		int reset = 1;
-		if (old_len)
+		if (load_cue(filename, &toc) && toc.last)
 		{
-			strcat(last_dir, "/noreset.txt");
-			reset = !FileExists(last_dir);
-		}
+			int name_len = strlen(filename);
 
-		strcpy(last_dir, filename);
-		char *p = strrchr(last_dir, '/');
-		if (p) *p = 0;
-		else *last_dir = 0;
-
-		if (reset)
-		{
-			loaded = 0;
-
-			strcpy(buf, last_dir);
-			if (!is_cue && buf[0]) strcat(buf, "/");
-
-			p = strrchr(buf, '/');
-			if (p)
+			if (toc.tracks[0].type) // is first track a data?
 			{
-				strcpy(p + 1, "cd_bios.rom");
-				loaded = user_io_file_tx(buf);
+				const char *p = strrchr(filename, '/');
+				int cur_len = p ? p - filename : 0;
+				int old_len = strlen(last_dir);
+
+				int same_game = old_len && (cur_len == old_len) && !strncmp(last_dir, filename, old_len);
+
+				if (!same_game)
+				{
+					int reset = 1;
+					if (old_len)
+					{
+						strcat(last_dir, "/noreset.txt");
+						reset = !FileExists(last_dir);
+					}
+
+					strcpy(last_dir, filename);
+					char *p = strrchr(last_dir, '/');
+					if (p) *p = 0;
+					else *last_dir = 0;
+
+					if (reset)
+					{
+						int bios_loaded = 0;
+
+						strcpy(buf, last_dir);
+						p = strrchr(buf, '/');
+						if (p)
+						{
+							strcpy(p + 1, "cd_bios.rom");
+							bios_loaded = load_bios(buf);
+						}
+
+						if (!bios_loaded)
+						{
+							sprintf(buf, "%s/boot.rom", HomeDir());
+							bios_loaded = load_bios(buf);
+						}
+
+						if (!bios_loaded) Info("CD BIOS not found!", 4000);
+					}
+
+					if (!(user_io_status(0, 0, 1) >> 31)) psx_mount_save(last_dir);
+				}
 			}
 
-			if (!loaded)
-			{
-				sprintf(buf, "%s/boot.rom", HomeDir());
-				loaded = user_io_file_tx(buf);
-			}
+			send_cue(&toc);
 
-			if (!loaded) Info("CD BIOS not found!", 4000);
+			strcpy(buf, filename);
+			strcpy((name_len > 4) ? buf + name_len - 4 : buf + name_len, ".sbi");
+			uint16_t mask = libCryptMask(buf);
+			user_io_set_index(250);
+			user_io_set_download(1);
+			user_io_file_tx_data((const uint8_t*)&mask, 2);
+			user_io_set_download(0);
+
+			user_io_set_index(f_index);
+			process_ss(filename, name_len != 0);
+
+			mount_cd(toc.end*CD_SECTOR_LEN, s_index);
+			loaded = 1;
 		}
-
-		if (!(user_io_status(0, 0, 1) >> 31)) psx_mount_save(last_dir);
 	}
 
-	if (loaded)
+	if (!loaded)
 	{
-		strcpy(buf, filename);
-		strcpy((name_len > 4) ? buf + name_len - 4 : buf + name_len, ".sbi");
-
-		uint16_t mask = libCryptMask(buf);
-		user_io_set_index(250);
-		user_io_set_download(1);
-		user_io_file_tx_data((const uint8_t*)&mask, 2);
-		user_io_set_download(0);
-
-		user_io_set_index(f_index);
-		process_ss(filename, name_len != 0);
-
-		if (is_cue && get_bin(filename))
-		{
-			user_io_file_mount(buf, s_index);
-		}
-		else
-		{
-			user_io_file_mount(filename, s_index);
-		}
+		printf("Unmount CD\n");
+		unload_cue(&toc);
+		mount_cd(0, s_index);
 	}
 }

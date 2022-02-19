@@ -7,7 +7,7 @@
 
 typedef enum
 {
-        SUBCODE_NONE = 0, SUBCODE_RW, SUBCODE_RW_RAW 
+        SUBCODE_NONE = 0, SUBCODE_RW, SUBCODE_RW_RAW
 } cd_subcode_types_t;
 
 typedef struct
@@ -18,6 +18,7 @@ typedef struct
 	int end;
 	int type;
 	int sector_size;
+	int index1;
 	cd_subcode_types_t sbc_type;
 } cd_track_t;
 
