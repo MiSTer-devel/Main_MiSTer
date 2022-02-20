@@ -135,9 +135,11 @@ static int load_chd(const char *filename, toc_t *table)
 
   for(int i = 0; i < table->last; i++)
   {
-      if (i == 0) table->tracks[i].index1 = 150;
-      table->tracks[i].start += table->tracks[i].index1;
-      if (table->tracks[i].start < 0) table->tracks[i].start = 0;
+      if (i == 0) //First track fakes a pregap even if it doesn't exist
+      { 
+        table->tracks[i].index1 = 150;
+        table->tracks[i].start = 150;
+      }
       table->tracks[i].end += (table->tracks[i].index1 - 1);
   }
   table->end = table->tracks[table->last-1].end+1;
@@ -337,7 +339,14 @@ void send_cue(toc_t *table)
 		user_io_file_tx_data((uint8_t *)disk, sizeof(disk_t));
 		user_io_set_download(0);
 
-		hexdump(disk, 256);
+    /*
+  uint8_t tbuf[2352];
+  for (uint32_t i = 0; i < disk->total_lba; i++)
+  {
+
+      psx_read_cd(tbuf, i, 1);
+    */
+
 		delete(disk);
 	}
 }
