@@ -1,7 +1,6 @@
 #ifndef MISTER_CHD_INCLUDED
 #define MISTER_CHD_INCLUDED
 
-
 #include <libchdr/chd.h>
 #include <libchdr/cdrom.h>
 #include "../../cd.h"
