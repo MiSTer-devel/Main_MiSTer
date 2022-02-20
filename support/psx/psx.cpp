@@ -19,7 +19,6 @@ static char buf[1024];
 static uint8_t chd_hunkbuf[CD_FRAME_SIZE * CD_FRAMES_PER_HUNK];
 static int chd_hunknum;
 
-
 static int sgets(char *out, int sz, char **in)
 {
 	*out = 0;
@@ -105,16 +104,15 @@ static uint16_t libCryptMask(const char *sbifile)
 
 static void unload_chd(toc_t *table)
 {
-  if (table->chd_f)
-  {
-    chd_close(table->chd_f);
-  }
-  memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
-  memset(table, 0, sizeof(toc_t));
-  chd_hunknum = -1;
+	if (table->chd_f)
+	{
+		chd_close(table->chd_f);
+	}
+	memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
+	memset(table, 0, sizeof(toc_t));
+	chd_hunknum = -1;
 
 }
-
 
 static void unload_cue(toc_t *table)
 {
@@ -128,34 +126,32 @@ static void unload_cue(toc_t *table)
 static int load_chd(const char *filename, toc_t *table)
 {
 
-  unload_chd(table);
-  chd_error err = mister_load_chd(filename, table);
-  if (err != CHDERR_NONE)
-  {
-    return 0;
-  }
+	unload_chd(table);
+	chd_error err = mister_load_chd(filename, table);
+	if (err != CHDERR_NONE)
+	{
+		return 0;
+	}
 
-  for(int i = 0; i < table->last; i++)
-  {
-      if (i == 0) //First track fakes a pregap even if it doesn't exist
-      { 
-        table->tracks[i].index1 = 150;
-        table->tracks[i].start = 150;
-      }
-      table->tracks[i].end += (table->tracks[i].index1 - 1);
-  }
-  table->end = table->tracks[table->last-1].end+1;
+	for (int i = 0; i < table->last; i++)
+	{
+		if (i == 0) //First track fakes a pregap even if it doesn't exist
+		{
+			table->tracks[i].index1 = 150;
+			table->tracks[i].start = 150;
+		}
+		table->tracks[i].end += (table->tracks[i].index1 - 1);
+	}
+	table->end = table->tracks[table->last - 1].end + 1;
 
-  memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
-  chd_hunknum = -1;
+	memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
+	chd_hunknum = -1;
 
-  return 1;
+	return 1;
 
-  //Need to store hunkbuf, hunknum and chd_f
-
-
-
+	//Need to store hunkbuf, hunknum and chd_f
 }
+
 static int load_cue(const char* filename, toc_t *table)
 {
 	static char fname[1024 + 10];
@@ -266,8 +262,8 @@ static int load_cue(const char* filename, toc_t *table)
 				table->tracks[table->last].start = (bb + ss * 75 + mm * 60 * 75) + pregap;
 
 				//if (!table->last && table->tracks[table->last - 1].end == 0)
-				
-				table->tracks[table->last-1].end = (bb + ss * 75 + mm * 60 * 75)+ pregap -1;
+
+				table->tracks[table->last - 1].end = (bb + ss * 75 + mm * 60 * 75) + pregap - 1;
 			}
 		}
 		else if ((sscanf(lptr, "INDEX 01 %02d:%02d:%02d", &mm, &ss, &bb) == 3) ||
@@ -282,13 +278,13 @@ static int load_cue(const char* filename, toc_t *table)
 				table->tracks[table->last].index1 = bb + ss * 75 + mm * 60 * 75;
 
 				// Set start if its not set yet (some cue files have both Index 0 and Index 1) else set the end of this track.
-				if(!table->tracks[table->last].start)
+				if (!table->tracks[table->last].start)
 					table->tracks[table->last].start = bb + ss * 75 + mm * 60 * 75 + pregap;
 				else
 					table->tracks[table->last].end = bb + ss * 75 + mm * 60 * 75 + pregap;
 
 				int lasttrackend = table->tracks[table->last - 1].index1;
-				table->tracks[table->last-1].index1 = (bb + ss * 75 + mm * 60 * 75)- lasttrackend;
+				table->tracks[table->last - 1].index1 = (bb + ss * 75 + mm * 60 * 75) - lasttrackend;
 
 				if (table->tracks[table->last].type && !table->last) table->tracks[table->last].index1 = 150;
 
@@ -303,7 +299,7 @@ static int load_cue(const char* filename, toc_t *table)
 					table->tracks[table->last - 1].end = table->tracks[table->last].start - 1;
 				}
 				// Check if the data track is set to be the full disc
-				if (table->last == 1 && table->tracks[0].end == table->end-1)
+				if (table->last == 1 && table->tracks[0].end == table->end - 1)
 				{
 					table->tracks[table->last - 1].end = table->tracks[table->last].start - 1;
 				}
@@ -325,8 +321,8 @@ static int load_cue(const char* filename, toc_t *table)
 	for (int i = 0; i < table->last; i++)
 	{
 		printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
-		if(table->tracks[i].index1)
-			printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1/75);
+		if (table->tracks[i].index1)
+			printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1 / 75);
 
 	}
 
@@ -336,17 +332,18 @@ static int load_cue(const char* filename, toc_t *table)
 static int load_cd_image(const char *filename, toc_t *table)
 {
 
-  const char *ext = strrchr(filename, '.');
-  if (!ext) return 0;
+	const char *ext = strrchr(filename, '.');
+	if (!ext) return 0;
 
-  if (!strncasecmp(".chd", ext, 4))
-  {
-    return load_chd(filename, table);
-  } else if (!strncasecmp(".cue", ext, 4)) {
-    return load_cue(filename,table);
-  }
+	if (!strncasecmp(".chd", ext, 4))
+	{
+		return load_chd(filename, table);
+	}
+	else if (!strncasecmp(".cue", ext, 4)) {
+		return load_cue(filename, table);
+	}
 
-  return 0;
+	return 0;
 }
 
 
@@ -451,37 +448,39 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 			{
 				if (lba >= toc.tracks[i].start && lba <= toc.tracks[i].end)
 				{
-          if (!toc.chd_f)
-          {
-					  if(toc.tracks[i].offset)
-						  FileSeek(&toc.tracks[0].f, ((lba * CD_SECTOR_LEN) - toc.tracks[i].offset), SEEK_SET);
-					  else
-						  FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start) * CD_SECTOR_LEN, SEEK_SET);
-          }
+					if (!toc.chd_f)
+					{
+						if (toc.tracks[i].offset)
+							FileSeek(&toc.tracks[0].f, ((lba * CD_SECTOR_LEN) - toc.tracks[i].offset), SEEK_SET);
+						else
+							FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start) * CD_SECTOR_LEN, SEEK_SET);
+					}
 					while (cnt)
 					{
-            if (toc.chd_f)
-            {
-              if (mister_chd_read_sector(toc.chd_f, (lba - toc.tracks[i].index1) + toc.tracks[i].offset, 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
-              {
-                if (!toc.tracks[i].type) //CHD requires byteswap of audio data
-                {
-                  for (int swapidx = 0; swapidx < CD_SECTOR_LEN; swapidx += 2)
-                  {
-                    uint8_t temp = buffer[swapidx];
-                    buffer[swapidx] = buffer[swapidx+1];
-                    buffer[swapidx+1] = temp;
-                  }
-                }
-              } else {
-                printf("\x1b[32mPSX: CHD read error: %d\n\x1b[0m", lba);
-              }
-            } else {
-						  if (toc.tracks[i].offset)
-							  FileReadAdv(&toc.tracks[0].f, buffer, CD_SECTOR_LEN);
-						  else
-							  FileReadAdv(&toc.tracks[i].f, buffer, CD_SECTOR_LEN);
-            }
+						if (toc.chd_f)
+						{
+							if (mister_chd_read_sector(toc.chd_f, (lba - toc.tracks[i].index1) + toc.tracks[i].offset, 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
+							{
+								if (!toc.tracks[i].type) //CHD requires byteswap of audio data
+								{
+									for (int swapidx = 0; swapidx < CD_SECTOR_LEN; swapidx += 2)
+									{
+										uint8_t temp = buffer[swapidx];
+										buffer[swapidx] = buffer[swapidx + 1];
+										buffer[swapidx + 1] = temp;
+									}
+								}
+							}
+							else {
+								printf("\x1b[32mPSX: CHD read error: %d\n\x1b[0m", lba);
+							}
+						}
+						else {
+							if (toc.tracks[i].offset)
+								FileReadAdv(&toc.tracks[0].f, buffer, CD_SECTOR_LEN);
+							else
+								FileReadAdv(&toc.tracks[i].f, buffer, CD_SECTOR_LEN);
+						}
 						if ((lba + 1) > toc.tracks[i].end) break;
 						buffer += CD_SECTOR_LEN;
 						cnt--;
@@ -595,7 +594,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 	{
 		printf("Unmount CD\n");
 		unload_cue(&toc);
-    unload_chd(&toc);
+		unload_chd(&toc);
 		mount_cd(0, s_index);
 	}
 }
