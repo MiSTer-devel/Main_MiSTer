@@ -213,17 +213,44 @@ struct FilterPhase
 	short t[4];
 };
 
+static constexpr int N_PHASES = 256;
+
 struct VideoFilter
 {
 	bool is_adaptive;
-	FilterPhase phases[64];
-	FilterPhase adaptive_phases[64];
+	FilterPhase phases[N_PHASES];
+	FilterPhase adaptive_phases[N_PHASES];
 };
+
+static bool scale_phases(FilterPhase out_phases[N_PHASES], FilterPhase *in_phases, int in_count)
+{
+	if (!in_count)
+	{
+		return false;
+	}
+
+	int dup = N_PHASES / in_count;
+
+	if ((in_count * dup) != N_PHASES)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < in_count; i++)
+	{
+		for (int j = 0; j < dup; j++)
+		{
+			out_phases[(i * dup) + j] = in_phases[i];
+		}
+	}
+
+	return true;
+}
 
 static bool read_video_filter(int type, VideoFilter *out)
 {
 	fileTextReader reader = {};
-	FilterPhase phases[128];
+	FilterPhase phases[512];
 	int count = 0;
 	bool is_adaptive = false;
 
@@ -245,7 +272,7 @@ static bool read_video_filter(int type, VideoFilter *out)
 			int n = sscanf(line, "%d,%d,%d,%d", &phase[0], &phase[1], &phase[2], &phase[3]);
 			if (n == 4)
 			{
-				if (count >= (is_adaptive ? 128 : 64)) return false; //too many
+				if (count >= (is_adaptive ? N_PHASES * 2 : N_PHASES)) return false; //too many
 				phases[count].t[0] = phase[0];
 				phases[count].t[1] = phase[1];
 				phases[count].t[2] = phase[2];
@@ -255,38 +282,35 @@ static bool read_video_filter(int type, VideoFilter *out)
 		}
 	}
 
-	if (count == 128 && is_adaptive)
+	printf( "Filter \'%s\', phases: %d adaptive: %s\n",
+			scaler_flt[type].filename,
+			is_adaptive ? count / 2 : count,
+			is_adaptive ? "true" : "false" );
+
+	if (is_adaptive)
 	{
 		out->is_adaptive = true;
-		memcpy(out->phases, phases, sizeof(FilterPhase) * 64);
-		memcpy(out->adaptive_phases, phases + 64, sizeof(FilterPhase) * 64);
-		return true;
+		bool valid = scale_phases(out->phases, phases, count / 2);
+		valid = valid && scale_phases(out->adaptive_phases, phases + (count / 2), count / 2);
+		return valid;
 	}
-	else if (count == 64 && !is_adaptive)
+	else if (count == 32 && !is_adaptive) // legacy
 	{
 		out->is_adaptive = false;
-		memcpy(out->phases, phases, sizeof(FilterPhase) * 64);
-		return true;
+		return scale_phases(out->phases, phases, 16);
 	}
-	else if ((count == 32 || count == 16) && !is_adaptive)
+	else if (!is_adaptive)
 	{
 		out->is_adaptive = false;
-		for (int i = 0; i < 16; i++)
-		{
-			for (int j = 0; j < 4; j++)
-			{
-				out->phases[(i * 4) + j] = phases[i];
-			}
-		}
-		return true;
+		return scale_phases(out->phases, phases, count);
 	}
 
 	return false;
 }
 
-static void send_phases_legacy(int addr, const FilterPhase phases[64])
+static void send_phases_legacy(int addr, const FilterPhase phases[N_PHASES])
 {
-	for (int idx = 0; idx < 64; idx += 4)
+	for (int idx = 0; idx < N_PHASES; idx += 16)
 	{
 		const FilterPhase *p = &phases[idx];
 		spi_w((p->t[0] & 0x1FF) | ((addr + 0) << 9));
@@ -297,9 +321,9 @@ static void send_phases_legacy(int addr, const FilterPhase phases[64])
 	}
 }
 
-static void send_phases(int addr, const FilterPhase phases[64])
+static void send_phases(int addr, const FilterPhase phases[N_PHASES], int skip)
 {
-	for (int idx = 0; idx < 64; idx++)
+	for (int idx = 0; idx < N_PHASES; idx += skip)
 	{
 		const FilterPhase *p = &phases[idx];
 		spi_w(addr + 0); spi_w(p->t[0] & 0x1FF);
@@ -314,29 +338,33 @@ static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert
 {
 	spi_uio_cmd_cont(UIO_SET_FLTCOEF);
 
-	if (ver == 1)
-	{
-		send_phases_legacy(0, horiz->phases);
-		send_phases_legacy(64, vert->phases);
-	}
-	else if (ver == 2)
-	{
-		send_phases(0, horiz->phases);
-		send_phases(64 * 4, vert->phases);
-	}
-	else if (ver == 3)
-	{
-		send_phases(0, horiz->phases);
-		send_phases(64 * 4, vert->phases);
+	int skip = (ver & 0x4) ? 1 : 4;
 
-		if (horiz->is_adaptive)
-		{
-			send_phases(64 * 8, horiz->adaptive_phases);
-		}
-		else if (vert->is_adaptive)
-		{
-			send_phases(64 * 12, vert->adaptive_phases);
-		}
+	switch( ver & 0x3 )
+	{
+		case 1:
+			send_phases_legacy(0, horiz->phases);
+			send_phases_legacy(64, vert->phases);
+			break;
+		case 2:
+			send_phases(0, horiz->phases, skip);
+			send_phases(N_PHASES * 4 / skip, vert->phases, skip);
+			break;
+		case 3:
+			send_phases(0, horiz->phases, skip);
+			send_phases(N_PHASES * 4 / skip, vert->phases, skip);
+
+			if (horiz->is_adaptive)
+			{
+				send_phases(N_PHASES * 8 / skip, horiz->adaptive_phases, skip);
+			}
+			else if (vert->is_adaptive)
+			{
+				send_phases(N_PHASES * 12 / skip, vert->adaptive_phases, skip);
+			}
+			break;
+		default:
+			break;
 	}
 
 	DisableIO();
