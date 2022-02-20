@@ -110,7 +110,9 @@ static void unload_chd(toc_t *table)
     chd_close(table->chd_f);
   }
   memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
+  memset(table, 0, sizeof(toc_t));
   chd_hunknum = -1;
+
 }
 
 
@@ -458,17 +460,37 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 			{
 				if (lba >= toc.tracks[i].start && lba <= toc.tracks[i].end)
 				{
-					if(toc.tracks[i].offset)
-						FileSeek(&toc.tracks[0].f, ((lba * CD_SECTOR_LEN) - toc.tracks[i].offset), SEEK_SET);
-					else
-						FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start) * CD_SECTOR_LEN, SEEK_SET);
-
+          if ((&toc.tracks[i].f)->opened())
+          {
+					  if(toc.tracks[i].offset)
+						  FileSeek(&toc.tracks[0].f, ((lba * CD_SECTOR_LEN) - toc.tracks[i].offset), SEEK_SET);
+					  else
+						  FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start) * CD_SECTOR_LEN, SEEK_SET);
+          }
 					while (cnt)
 					{
-						if (toc.tracks[i].offset)
-							FileReadAdv(&toc.tracks[0].f, buffer, CD_SECTOR_LEN);
-						else
-							FileReadAdv(&toc.tracks[i].f, buffer, CD_SECTOR_LEN);
+            if (toc.chd_f)
+            {
+              if (mister_chd_read_sector(toc.chd_f, (lba - toc.tracks[i].index1) + toc.tracks[i].offset, 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
+              {
+                if (!toc.tracks[i].type) //CHD requires byteswap of audio data
+                {
+                  for (int swapidx = 0; swapidx < CD_SECTOR_LEN; swapidx += 2)
+                  {
+                    uint8_t temp = buffer[swapidx];
+                    buffer[swapidx] = buffer[swapidx+1];
+                    buffer[swapidx+1] = temp;
+                  }
+                }
+              } else {
+                printf("\x1b[32mPSX: CHD read error: %d\n\x1b[0m", lba);
+              }
+            } else {
+						  if (toc.tracks[i].offset)
+							  FileReadAdv(&toc.tracks[0].f, buffer, CD_SECTOR_LEN);
+						  else
+							  FileReadAdv(&toc.tracks[i].f, buffer, CD_SECTOR_LEN);
+            }
 						if ((lba + 1) > toc.tracks[i].end) break;
 						buffer += CD_SECTOR_LEN;
 						cnt--;
