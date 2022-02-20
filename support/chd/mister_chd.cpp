@@ -86,6 +86,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 				cd_toc->tracks[cd_toc->last].start += pregap;
 			}
 
+        cd_toc->tracks[cd_toc->last].index1 = pregap;
 		} else {
 			if (pregap_valid)
 			{
@@ -93,6 +94,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 			} else {
 				cd_toc->tracks[cd_toc->last].start = 0;
 			}
+      cd_toc->tracks[cd_toc->last].index1 = pregap;
 		}
 
                 if (!pregap_valid)
