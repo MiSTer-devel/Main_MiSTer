@@ -394,15 +394,6 @@ void send_cue(toc_t *table)
 		user_io_set_download(1);
 		user_io_file_tx_data((uint8_t *)disk, sizeof(disk_t));
 		user_io_set_download(0);
-
-    /*
-  uint8_t tbuf[2352];
-  for (uint32_t i = 0; i < disk->total_lba; i++)
-  {
-
-      psx_read_cd(tbuf, i, 1);
-    */
-
 		delete(disk);
 	}
 }
@@ -460,7 +451,7 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 			{
 				if (lba >= toc.tracks[i].start && lba <= toc.tracks[i].end)
 				{
-          if ((&toc.tracks[i].f)->opened())
+          if (!toc.chd_f)
           {
 					  if(toc.tracks[i].offset)
 						  FileSeek(&toc.tracks[0].f, ((lba * CD_SECTOR_LEN) - toc.tracks[i].offset), SEEK_SET);
