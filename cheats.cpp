@@ -122,6 +122,36 @@ static int find_in_same_dir(const char *name)
 	return 0;
 }
 
+
+bool cheat_init_psx(mz_zip_archive* _z, const char* rom_path)
+{
+	// lookup based on file name
+	const char *rom_name = strrchr(rom_path, '/');
+	if (rom_name)
+	{
+		sprintf(cheat_zip, "%s/cheats/%s%s", getRootDir(), CoreName, rom_name);
+		char *p = strrchr(cheat_zip, '.');
+		if (p) *p = 0;
+		strcat(cheat_zip, ".zip");
+		printf("Trying cheat file: %s\n", cheat_zip);
+
+		memset(_z, 0, sizeof(mz_zip_archive));
+		if (mz_zip_reader_init_file(_z, cheat_zip, 0)) return true;
+	}
+
+	// lookup based on game ID
+	const char* game_id = psx_get_game_id();
+	if (game_id && game_id[0])
+	{
+		sprintf(cheat_zip, "%s/cheats/%s/%s.zip", getRootDir(), CoreName, psx_get_game_id());
+		printf("Trying cheat file: %s\n", cheat_zip);
+		memset(_z, 0, sizeof(mz_zip_archive));
+		if (mz_zip_reader_init_file(_z, cheat_zip, 0)) return true;
+	}
+
+	return false;
+}
+
 void cheats_init(const char *rom_path, uint32_t romcrc)
 {
 	cheats.clear();
@@ -143,7 +173,16 @@ void cheats_init(const char *rom_path, uint32_t romcrc)
 	}
 
 	mz_zip_archive _z = {};
-	if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
+
+	if (is_psx() && !mz_zip_reader_init_file(&_z, cheat_zip, 0))
+	{
+		if (!cheat_init_psx(&_z, rom_path))
+		{
+			printf("no cheat file found\n");
+			return;
+		}
+	}
+	else if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
 	{
 		memset(&_z, 0, sizeof(_z));
 		if (!(pcecd_using_cd() || is_megacd()) || !find_in_same_dir(rom_path) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
