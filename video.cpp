@@ -253,6 +253,7 @@ static bool read_video_filter(int type, VideoFilter *out)
 	FilterPhase phases[512];
 	int count = 0;
 	bool is_adaptive = false;
+	int scale = 2;
 
 	static char filename[1024];
 	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt[type].filename);
@@ -268,15 +269,21 @@ static bool read_video_filter(int type, VideoFilter *out)
 				continue;
 			}
 
+			if (count == 0 && !strcasecmp(line, "10bit"))
+			{
+				scale = 1;
+				continue;
+			}
+
 			int phase[4];
 			int n = sscanf(line, "%d,%d,%d,%d", &phase[0], &phase[1], &phase[2], &phase[3]);
 			if (n == 4)
 			{
 				if (count >= (is_adaptive ? N_PHASES * 2 : N_PHASES)) return false; //too many
-				phases[count].t[0] = phase[0];
-				phases[count].t[1] = phase[1];
-				phases[count].t[2] = phase[2];
-				phases[count].t[3] = phase[3];
+				phases[count].t[0] = phase[0] * scale;
+				phases[count].t[1] = phase[1] * scale;
+				phases[count].t[2] = phase[2] * scale;
+				phases[count].t[3] = phase[3] * scale;
 				count++;
 			}
 		}
@@ -313,23 +320,28 @@ static void send_phases_legacy(int addr, const FilterPhase phases[N_PHASES])
 	for (int idx = 0; idx < N_PHASES; idx += 16)
 	{
 		const FilterPhase *p = &phases[idx];
-		spi_w((p->t[0] & 0x1FF) | ((addr + 0) << 9));
-		spi_w((p->t[1] & 0x1FF) | ((addr + 1) << 9));
-		spi_w((p->t[2] & 0x1FF) | ((addr + 2) << 9));
-		spi_w((p->t[3] & 0x1FF) | ((addr + 3) << 9));
+		spi_w(((p->t[0] >> 1) & 0x1FF) | ((addr + 0) << 9));
+		spi_w(((p->t[1] >> 1) & 0x1FF) | ((addr + 1) << 9));
+		spi_w(((p->t[2] >> 1) & 0x1FF) | ((addr + 2) << 9));
+		spi_w(((p->t[3] >> 1) & 0x1FF) | ((addr + 3) << 9));
 		addr += 4;
 	}
 }
 
-static void send_phases(int addr, const FilterPhase phases[N_PHASES], int skip)
+static void send_phases(int addr, const FilterPhase phases[N_PHASES], bool full_precision)
 {
+	const int skip = full_precision ? 1 : 4;
+	const int shift = full_precision ? 0 : 1;
+
+	addr *= full_precision ? (N_PHASES * 4) : (64 * 4);
+
 	for (int idx = 0; idx < N_PHASES; idx += skip)
 	{
 		const FilterPhase *p = &phases[idx];
-		spi_w(addr + 0); spi_w(p->t[0] & 0x1FF);
-		spi_w(addr + 1); spi_w(p->t[1] & 0x1FF);
-		spi_w(addr + 2); spi_w(p->t[2] & 0x1FF);
-		spi_w(addr + 3); spi_w(p->t[3] & 0x1FF);
+		spi_w(addr + 0); spi_w((p->t[0] >> shift) & 0x3FF);
+		spi_w(addr + 1); spi_w((p->t[1] >> shift) & 0x3FF);
+		spi_w(addr + 2); spi_w((p->t[2] >> shift) & 0x3FF);
+		spi_w(addr + 3); spi_w((p->t[3] >> shift) & 0x3FF);
 		addr += 4;
 	}
 }
@@ -338,7 +350,7 @@ static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert
 {
 	spi_uio_cmd_cont(UIO_SET_FLTCOEF);
 
-	int skip = (ver & 0x4) ? 1 : 4;
+	const bool full_precision = (ver & 0x4) != 0;
 
 	switch( ver & 0x3 )
 	{
@@ -347,20 +359,20 @@ static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert
 			send_phases_legacy(64, vert->phases);
 			break;
 		case 2:
-			send_phases(0, horiz->phases, skip);
-			send_phases(N_PHASES * 4 / skip, vert->phases, skip);
+			send_phases(0, horiz->phases, full_precision);
+			send_phases(1, vert->phases, full_precision);
 			break;
 		case 3:
-			send_phases(0, horiz->phases, skip);
-			send_phases(N_PHASES * 4 / skip, vert->phases, skip);
+			send_phases(0, horiz->phases, full_precision);
+			send_phases(1, vert->phases, full_precision);
 
 			if (horiz->is_adaptive)
 			{
-				send_phases(N_PHASES * 8 / skip, horiz->adaptive_phases, skip);
+				send_phases(2, horiz->adaptive_phases, full_precision);
 			}
 			else if (vert->is_adaptive)
 			{
-				send_phases(N_PHASES * 12 / skip, vert->adaptive_phases, skip);
+				send_phases(3, vert->adaptive_phases, full_precision);
 			}
 			break;
 		default:
