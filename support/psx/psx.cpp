@@ -4,9 +4,6 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include <string>
-#include <vector>
-
 #include "../../file_io.h"
 #include "../../user_io.h"
 #include "../../spi.h"
@@ -502,7 +499,7 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 
 #define ROOT_FOLDER_LBA 150 + 22
 
-std::vector<std::string> game_id_prefixes
+const char* game_id_prefixes[]
 {
 	"SCES",
 	"SLES",
@@ -527,9 +524,9 @@ const char* psx_get_game_id()
 		//hexdump(buffer, CD_SECTOR_LEN);
 		char* start = nullptr;
 
-		for (const auto& prefix : game_id_prefixes)
+		for (const char* prefix : game_id_prefixes)
 		{
-			start = (char*)memmem(buffer, CD_SECTOR_LEN, prefix.c_str(), prefix.size());
+			start = (char*)memmem(buffer, CD_SECTOR_LEN, prefix, 4);
 			if (start) break;
 		}
 
