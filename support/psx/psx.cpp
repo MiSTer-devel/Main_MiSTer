@@ -87,11 +87,11 @@ static uint8_t bcdToDec(uint8_t bcd)
 #define SBI_HEADER_SIZE 4
 #define SBI_BLOCK_SIZE  14
 
-static uint16_t libCryptMask(const char *sbifile)
+static uint16_t libCryptMask(fileTYPE* sbi_file)
 {
 	int sz;
 	uint16_t mask = 0;
-	if ((sz = FileLoad(sbifile, buf, sizeof(buf))))
+	if ((sz = FileReadAdv(sbi_file, buf, sizeof(buf))))
 	{
 		for (int i = 0;; i++)
 		{
@@ -642,9 +642,29 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 			send_cue(&toc);
 
-			strcpy(buf, filename);
-			strcpy((name_len > 4) ? buf + name_len - 4 : buf + name_len, ".sbi");
-			uint16_t mask = libCryptMask(buf);
+			uint16_t mask = 0;
+
+			fileTYPE sbi_file = {};
+			bool has_sbi_file = false;
+
+			// search for .sbi file in PSX/sbi.zip
+			sprintf(buf, "%s/sbi.zip/%s.sbi", HomeDir(), psx_get_game_id());
+			has_sbi_file = (FileOpen(&sbi_file, buf, 1));
+
+			if (!has_sbi_file)
+			{
+				// search for .sbi file base on image name
+				strcpy(buf, filename);
+				strcpy((name_len > 4) ? buf + name_len - 4 : buf + name_len, ".sbi");
+				has_sbi_file = (FileOpen(&sbi_file, buf, 1));
+			}
+
+			if (has_sbi_file)
+			{
+				printf("Found SBI file: %s\n", buf);
+				mask = libCryptMask(&sbi_file);
+			}
+
 			user_io_set_index(250);
 			user_io_set_download(1);
 			user_io_file_tx_data((const uint8_t*)&mask, 2);
