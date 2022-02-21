@@ -4,6 +4,9 @@
 #include <string.h>
 #include <inttypes.h>
 
+#include <string>
+#include <vector>
+
 #include "../../file_io.h"
 #include "../../user_io.h"
 #include "../../spi.h"
@@ -497,6 +500,69 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 	}
 }
 
+#define ROOT_FOLDER_LBA 150 + 22
+
+std::vector<std::string> game_id_prefixes
+{
+	"SCES",
+	"SLES",
+	"SCUS",
+	"SLUS",
+	"SCPM",
+	"SLPM",
+	"SCPS",
+	"SLPS",
+};
+
+const char* psx_get_game_id()
+{
+	uint8_t buffer[CD_SECTOR_LEN];
+
+	static char game_id[11];
+	memset(game_id, 0, sizeof(game_id));
+
+	for (int sector = ROOT_FOLDER_LBA; sector < ROOT_FOLDER_LBA + 3; ++sector)
+	{
+		psx_read_cd(buffer, sector, 1);
+		//hexdump(buffer, CD_SECTOR_LEN);
+		char* start = nullptr;
+
+		for (const auto& prefix : game_id_prefixes)
+		{
+			start = (char*)memmem(buffer, CD_SECTOR_LEN, prefix.c_str(), prefix.size());
+			if (start) break;
+		}
+
+		if (!start) continue;
+
+		const size_t start_pos = start - (char*)buffer;
+		char* end = (char*)memmem(start, CD_SECTOR_LEN - start_pos, ";1", 2);
+
+		if (!end) continue;
+
+		size_t size = end - start;
+
+		// file is usually in CCCC_DDD.DD format, normalize to CCCC-DDDDD
+		if (size == 11)
+		{
+			if (start[4] == '_') start[4] = '-';
+			if (start[8] == '.')
+			{
+				start[8] = start[9];
+				start[9] = start[10];
+				--size;
+			}
+		}
+
+		const size_t max_length = sizeof(game_id) - 1;
+		if (size > max_length) size = max_length;
+
+		return (char*)memcpy(game_id, start, size);
+	}
+
+	return game_id;
+}
+
 static void mount_cd(int size, int index)
 {
 	spi_uio_cmd_cont(UIO_SET_SDINFO);
@@ -523,6 +589,8 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 	{
 		if (load_cd_image(filename, &toc) && toc.last)
 		{
+			printf("GAME ID: %s\n", psx_get_game_id());
+
 			int name_len = strlen(filename);
 
 			if (toc.tracks[0].type) // is first track a data?
