@@ -2,7 +2,7 @@
 #define ROMUTILS_H_
 
 int arcade_send_rom(const char *xml);
-int arcade_load(const char *xml);
+int xml_load(const char *xml);
 void arcade_check_error();
 
 struct dip_struct
@@ -27,6 +27,17 @@ struct sw_struct
 	dip_struct dip[64];
 };
 
+struct mgl_struct
+{
+	char path[1024];
+	int  delay;
+	char type;
+	int  index;
+	int  valid;
+	int  parsed;
+	uint32_t timer;
+};
+
 sw_struct *arcade_sw(int n);
 void arcade_sw_send(int n);
 void arcade_sw_save(int n);
@@ -34,5 +45,8 @@ void arcade_sw_load(int n);
 void arcade_override_name(const char *xml);
 
 void arcade_nvm_save();
+
+mgl_struct* mgl_parse(const char *xml);
+mgl_struct* mgl_get();
 
 #endif

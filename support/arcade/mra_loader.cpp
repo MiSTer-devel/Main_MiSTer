@@ -1097,7 +1097,16 @@ void arcade_check_error()
 	}
 }
 
-static const char *get_rbf(const char *xml)
+static const char *get_rbf_path(const char *rbfname)
+{
+	static char path[kBigTextSize];
+	snprintf(path, sizeof(path), "%s/%s", getRootDir(), rbfname);
+	char *p = strrchr(path, '/');
+	*p = 0;
+	return path;
+}
+
+static const char *get_rbf(const char *xml, int arcade)
 {
 	static char rbfname[kBigTextSize];
 
@@ -1111,9 +1120,23 @@ static const char *get_rbf(const char *xml)
 	/* once we have the rbfname fragment from the MRA xml file
 	 * search the arcade folder for the match */
 	struct dirent *entry;
-	DIR *dir;
+	DIR *dir = 0;
 
-	const char *dirname = get_arcade_root(1);
+	const char *dirname;
+	const char *filename;
+	if (arcade)
+	{
+		dirname = get_arcade_root(1);
+		filename = rbfname;
+	}
+	else
+	{
+		dirname = get_rbf_path(rbfname);
+		filename = strrchr(rbfname, '/');
+		if (filename) filename++;
+		else filename = rbfname;
+	}
+
 	if (!(dir = opendir(dirname)))
 	{
 		printf("%s directory not found\n", dirname);
@@ -1130,17 +1153,20 @@ static const char *get_rbf(const char *xml)
 			static char newstring[kBigTextSize];
 			//printf("entry name: %s\n",entry->d_name);
 
-			snprintf(newstring, kBigTextSize, "Arcade-%s", rbfname);
-			len = strlen(newstring);
-			if (!strncasecmp(newstring, entry->d_name, len) && (entry->d_name[len] == '.' || entry->d_name[len] == '_'))
+			if (arcade)
 			{
-				if (!lastfound[0] || strcmp(lastfound, entry->d_name) < 0)
+				snprintf(newstring, kBigTextSize, "Arcade-%s", filename);
+				len = strlen(newstring);
+				if (!strncasecmp(newstring, entry->d_name, len) && (entry->d_name[len] == '.' || entry->d_name[len] == '_'))
 				{
-					strcpy(lastfound, entry->d_name);
+					if (!lastfound[0] || strcmp(lastfound, entry->d_name) < 0)
+					{
+						strcpy(lastfound, entry->d_name);
+					}
 				}
 			}
 
-			snprintf(newstring, kBigTextSize, "%s", rbfname);
+			snprintf(newstring, kBigTextSize, "%s", filename);
 			len = strlen(newstring);
 			if (!strncasecmp(newstring, entry->d_name, len) && (entry->d_name[len] == '.' || entry->d_name[len] == '_'))
 			{
@@ -1158,7 +1184,7 @@ static const char *get_rbf(const char *xml)
 	return lastfound[0] ? rbfname : NULL;
 }
 
-int arcade_load(const char *xml)
+int xml_load(const char *xml)
 {
 	MenuHide();
 	static char path[kBigTextSize];
@@ -1166,13 +1192,16 @@ int arcade_load(const char *xml)
 	if(xml[0] == '/') strcpy(path, xml);
 	else snprintf(path, sizeof(path), "%s/%s", getRootDir(), xml);
 
-	set_arcade_root(path);
-	printf("arcade_load [%s]\n", path);
-	const char *rbf = get_rbf(path);
+	int len = strlen(xml);
+	int is_arcade = (len > 4) && !strcasecmp(xml + len - 4, ".mra");
+
+	if (is_arcade) set_arcade_root(path);
+	printf("xml_load [%s]\n", path);
+	const char *rbf = get_rbf(path, is_arcade);
 
 	if (rbf)
 	{
-		printf("MRA: %s, RBF: %s\n", path, rbf);
+		printf("XML: %s, RBF: %s\n", path, rbf);
 		fpga_load_rbf(rbf, NULL, path);
 	}
 	else
@@ -1181,4 +1210,92 @@ int arcade_load(const char *xml)
 	}
 
 	return 0;
+}
+
+static mgl_struct mgl = {};
+
+static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
+{
+	(void)sd;
+
+	static int inside_mgl = 0;
+	switch (evt)
+	{
+	case XML_EVENT_START_DOC:
+		inside_mgl = 0;
+		break;
+
+	case XML_EVENT_START_NODE:
+		if (!strcasecmp(node->tag, "mistergamedescription")) inside_mgl = 1;
+		else if (inside_mgl && !strcasecmp(node->tag, "file"))
+		{
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "delay"))
+				{
+					mgl.delay = strtoul(node->attributes[i].value, NULL, 0);
+					mgl.valid |= 0x1;
+				}
+				else if (!strcasecmp(node->attributes[i].name, "type"))
+				{
+					if (!strcasecmp(node->attributes[i].value, "s"))
+					{
+						mgl.type = 'S';
+						mgl.valid |= 0x2;
+					}
+					else if (!strcasecmp(node->attributes[i].value, "f"))
+					{
+						mgl.type = 'F';
+						mgl.valid |= 0x2;
+					}
+				}
+				else if (!strcasecmp(node->attributes[i].name, "index"))
+				{
+					mgl.index = strtoul(node->attributes[i].value, NULL, 0);
+					mgl.valid |= 0x4;
+				}
+				else if (!strcasecmp(node->attributes[i].name, "path"))
+				{
+					snprintf(mgl.path, sizeof(mgl.path), "%s", node->attributes[i].value);
+					mgl.valid |= 0x8;
+				}
+			}
+		}
+		break;
+
+	case XML_EVENT_TEXT:
+		break;
+
+	case XML_EVENT_END_NODE:
+		if (!strcasecmp(node->tag, "mistergamedescription")) inside_mgl = 0;
+		break;
+
+	case XML_EVENT_ERROR:
+		printf("XML parse: %s: ERROR %d\n", text, n);
+		break;
+	default:
+		break;
+	}
+
+	return true;
+}
+
+mgl_struct* mgl_parse(const char *xml)
+{
+	memset(&mgl, 0, sizeof(mgl));
+
+	SAX_Callbacks sax;
+	SAX_Callbacks_init(&sax);
+	sax.all_event = scan_mgl;
+	XMLDoc_parse_file_SAX(xml, &sax, 0);
+
+	printf("MGL %s\n  delay=%d\n  type=%c\n  index=%d\n  path=%s\n  valid=%X\n\n", xml, mgl.delay, mgl.type, mgl.index, mgl.path, mgl.valid);
+
+	mgl.parsed = 1;
+	return &mgl;
+}
+
+mgl_struct* mgl_get()
+{
+	return &mgl;
 }

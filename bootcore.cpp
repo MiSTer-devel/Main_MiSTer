@@ -11,7 +11,7 @@
 #include <dirent.h>
 
 
-extern int arcade_load(const char *xml);
+extern int xml_load(const char *xml);
 int16_t btimeout;
 char bootcoretype[64];
 
@@ -206,7 +206,7 @@ void bootcore_init(const char *path)
 			{
 				if (!cfg.bootcore_timeout)
 				{
-					isMraName(bootcore) ? arcade_load(bootcore) : fpga_load_rbf(bootcore);
+					isXmlName(bootcore) ? xml_load(bootcore) : fpga_load_rbf(bootcore);
 				}
 
 				strcpy(cfg.bootcore, strcmp(bootcore, "menu.rbf") ? bootcore : "");
@@ -219,7 +219,7 @@ void bootcore_init(const char *path)
 	{
 
 		strcpy(auxstr, path);
-		auxpointer = (!strcmp(cfg.bootcore, "lastexactcore") || isMraName(auxstr)) ? getcoreExactName(auxstr) : getcoreName(auxstr);
+		auxpointer = (!strcmp(cfg.bootcore, "lastexactcore") || isXmlName(auxstr)) ? getcoreExactName(auxstr) : getcoreName(auxstr);
 
 		if (auxpointer != NULL)
 		{
