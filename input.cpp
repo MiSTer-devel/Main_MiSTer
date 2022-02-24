@@ -4708,8 +4708,7 @@ int input_test(int getchar)
 					if (!strncmp(cmd, "fb_cmd", 6)) video_cmd(cmd);
 					else if (!strncmp(cmd, "load_core ", 10))
 					{
-						len = strlen(cmd);
-						if (len > 4 && !strcasecmp(cmd + len - 4, ".mra")) arcade_load(cmd + 10);
+						if(isXmlName(cmd)) xml_load(cmd + 10);
 						else fpga_load_rbf(cmd + 10);
 					}
 					else if (!strncmp(cmd, "screenshot", 10))

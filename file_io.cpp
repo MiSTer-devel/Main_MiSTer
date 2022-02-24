@@ -1890,10 +1890,15 @@ char* flist_GetPrevNext(const char* base_path, const char* file, const char* ext
 	return path + strlen(base_path) + 1;
 }
 
-bool isMraName(char *path)
+int isXmlName(const char *path)
 {
-	char *spl = strrchr(path, '.');
-	return (spl && !strcmp(spl, ".mra"));
+	int len = strlen(path);
+	if (len > 4)
+	{
+		if (!strcasecmp(path + len - 4, ".mra")) return 1;
+		if (!strcasecmp(path + len - 4, ".mgl")) return 2;
+	}
+	return 0;
 }
 
 fileTextReader::fileTextReader()

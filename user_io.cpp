@@ -1084,7 +1084,7 @@ void user_io_init(const char *path, const char *xml)
 
 	OsdSetSize(8);
 
-	if (xml)
+	if (xml && isXmlName(xml) == 1)
 	{
 		is_arcade_type = 1;
 		arcade_override_name(xml);
@@ -1142,6 +1142,7 @@ void user_io_init(const char *path, const char *xml)
 	load_volume();
 
 	user_io_send_buttons(1);
+	if (xml && isXmlName(xml) == 2) mgl_parse(xml);
 
 	switch (core_type)
 	{
@@ -1193,7 +1194,7 @@ void user_io_init(const char *path, const char *xml)
 			}
 			else
 			{
-				if (xml)
+				if (xml && isXmlName(xml) == 1)
 				{
 					arcade_send_rom(xml);
 				}
@@ -1307,7 +1308,7 @@ void user_io_init(const char *path, const char *xml)
 
 		// release reset
 		if(!is_minimig() && !is_st()) user_io_status(0, UIO_STATUS_RESET);
-		if(xml) arcade_check_error();
+		if (xml && isXmlName(xml) == 1) arcade_check_error();
 		break;
 	}
 
@@ -1351,6 +1352,8 @@ void user_io_init(const char *path, const char *xml)
 	if (uartmode < 3 || uartmode > 4) midilink = 0;
 	SetMidiLinkMode(midilink);
 	SetUARTMode(uartmode);
+
+	if (mgl_get()->valid == 0xF) mgl_get()->timer = GetTimer(mgl_get()->delay * 1000);
 }
 
 static int joyswap = 0;

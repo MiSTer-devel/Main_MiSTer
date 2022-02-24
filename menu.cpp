@@ -376,7 +376,7 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 			if(strlen(selPath)) strcat(selPath, "/");
 			strcat(selPath, get_rbf_name());
 		}
-		pFileExt = "RBFMRA";
+		pFileExt = "RBFMRAMGL";
 		home_dir = NULL;
 	}
 	else if (Options & SCANO_TXT)
@@ -713,7 +713,7 @@ static void printSysInfo()
 		if (hasbat)
 		{
 			infowrite(n++, "");
-	
+
 			sprintf(str, "\x1F ");
 			if (bat.capacity == -1) strcat(str, "n/a");
 			else sprintf(str + strlen(str), "%d%%", bat.capacity);
@@ -789,7 +789,7 @@ const char* get_rbf_name_bootcore(char *str)
 	if (!p) return str;
 
 	char *spl = strrchr(p + 1, '.');
-	if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")))
+	if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra") || !strcmp(spl, ".mgl")))
 	{
 		*spl = 0;
 	}
@@ -1016,10 +1016,34 @@ void HandleUI(void)
 	static int store_name;
 	static int vfilter_type;
 
+	static int mgl_done = 0;
+	static int mgl_active = 0;
+	static int mgl_submenu = -1;
+
 	static char	cp_MenuCancel;
 
-	// get user control codes
-	uint32_t c = menu_key_get();
+	uint32_t c = 0;
+
+	if (!mgl_done)
+	{
+		mgl_struct *mgl = mgl_get();
+		if (mgl->valid != 0xF ||
+			is_menu() || is_minimig() || is_st() || is_archie()
+			|| user_io_core_type() == CORE_TYPE_SHARPMZ) mgl_done = 1;
+		else
+		{
+			if (mgl->timer && CheckTimer(mgl->timer))
+			{
+				mgl_active = 1;
+				mgl_done = 1;
+			}
+		}
+	}
+	else if(!mgl_active)
+	{
+		// get user control codes
+		c = menu_key_get();
+	}
 
 	int release = 0;
 	if (c & UPSTROKE) release = 1;
@@ -1296,7 +1320,7 @@ void HandleUI(void)
 		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
 		// fall through
 	case MENU_NONE2:
-		if (menu || (is_menu() && !video_fb_state()))
+		if (menu || (is_menu() && !video_fb_state()) || mgl_active)
 		{
 			OsdSetSize(16);
 			if(!is_menu() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
@@ -1334,7 +1358,8 @@ void HandleUI(void)
 			}
 			menusub = 0;
 			OsdClear();
-			OsdEnable(DISABLE_KEYBOARD);
+			if (mgl_active) OsdDisable();
+			else OsdEnable(DISABLE_KEYBOARD);
 		}
 		break;
 
@@ -1665,7 +1690,13 @@ void HandleUI(void)
 						{
 							if (p[0] == 'S') s_entry = selentry;
 							substrcpy(s, p, 2);
-							int num = (p[1] >= '0' && p[1] <= '9') ? p[1] - '0' : 0;
+							int idx = 1;
+
+							if (p[idx] == 'S') idx++;
+							if (p[idx] == 'C') idx++;
+
+							int num = (p[idx] >= '0' && p[idx] <= '9') ? p[idx] - '0' : 0;
+							if (mgl_active && num == mgl_get()->index && (p[0] == mgl_get()->type)) mgl_submenu = selentry;
 
 							if (is_x86() && x86_get_image_name(num))
 							{
@@ -1866,6 +1897,9 @@ void HandleUI(void)
 	case MENU_GENERIC_MAIN2:
 		saved_menustate = MENU_GENERIC_MAIN1;
 
+		// F/S option not found -> deactivate mgl.
+		if (mgl_active && mgl_submenu < 0) mgl_active = 0;
+
 		if (menu_save_timer && !CheckTimer(menu_save_timer))
 		{
 			for (int i = 0; i < 16; i++) OsdWrite(m++);
@@ -1892,8 +1926,14 @@ void HandleUI(void)
 				page = 0;
 			}
 		}
-		else if (select || recent || minus || plus)
+		else if (select || recent || minus || plus || mgl_active)
 		{
+			if (mgl_active)
+			{
+				menusub = mgl_submenu;
+				select = 1;
+			}
+
 			if ((dip_submenu == menusub || dip2_submenu == menusub) && select)
 			{
 				dipv = (dip_submenu == menusub) ? 0 : 1;
@@ -2003,8 +2043,9 @@ void HandleUI(void)
 							}
 						}
 
-						if (select) SelectFile(Selected_F[ioctl_index & 15], ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
-						else if(recent_init(ioctl_index)) menustate = MENU_RECENT1;
+						if (mgl_active) menustate = MENU_GENERIC_FILE_SELECTED;
+						else if (select) SelectFile(Selected_F[ioctl_index & 15], ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
+						else if (recent_init(ioctl_index)) menustate = MENU_RECENT1;
 					}
 					else if (p[0] == 'S' && (select || recent))
 					{
@@ -2052,8 +2093,9 @@ void HandleUI(void)
 
 						if (is_psx()) fs_Options |= SCANO_NOZIP;
 
-						if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
-						else if(recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
+						if (mgl_active) menustate = MENU_GENERIC_IMAGE_SELECTED;
+						else if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
+						else if (recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
 					}
 					else if (select || minus || plus)
 					{
@@ -2183,9 +2225,14 @@ void HandleUI(void)
 
 	case MENU_GENERIC_FILE_SELECTED:
 		{
+			if (mgl_active) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl_get()->path);
+
 			MenuHide();
 			printf("File selected: %s\n", selPath);
 			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
+
+			if (!mgl_active && selPath[0]) recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
+			mgl_active = 0;
 
 			if (store_name)
 			{
@@ -2217,14 +2264,14 @@ void HandleUI(void)
 				}
 
 				if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
-
-				recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
 			}
 		}
 		break;
 
 	case MENU_GENERIC_IMAGE_SELECTED:
 		{
+			if (mgl_active) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl_get()->path);
+
 			if (store_name)
 			{
 				char str[64];
@@ -2237,6 +2284,8 @@ void HandleUI(void)
 
 			printf("Image selected: %s\n", selPath);
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
+			if (!mgl_active) recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
+			mgl_active = 0;
 
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
@@ -2266,8 +2315,6 @@ void HandleUI(void)
 			}
 
 			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
-
-			recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
 		}
 		break;
 
@@ -6400,10 +6447,10 @@ void HandleUI(void)
 			}
 		}
 
-		if (!strcasecmp(".mra",&(Selected_tmp[strlen(Selected_tmp) - 4])))
+		if (isXmlName(Selected_tmp))
 		{
 			// find the RBF file from the XML
-			arcade_load(getFullPath(Selected_tmp));
+			xml_load(getFullPath(Selected_tmp));
 		}
 		else
 		{
@@ -6471,7 +6518,7 @@ void HandleUI(void)
 						OsdWrite(14, s, 1, 0, 0, 0);
 						sprintf(str, "           Loading...");
 						OsdWrite(15, str, 1, 0);
-						isMraName(cfg.bootcore) ? arcade_load(getFullPath(cfg.bootcore)) : fpga_load_rbf(cfg.bootcore);
+						isXmlName(cfg.bootcore) ? xml_load(getFullPath(cfg.bootcore)) : fpga_load_rbf(cfg.bootcore);
 					}
 				}
 			}
