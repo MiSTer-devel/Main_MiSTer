@@ -912,9 +912,15 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	printf("video: ");
 	for (int i = 1; i <= 8; i++)
 	{
-		spi_w(v_fix.item[i]);
+		//hsync polarity
+		if (i == 3) spi_w((!!v_cur.item[21] << 15) | v_fix.item[i]);
+		//vsync polarity
+		else if (i == 7) spi_w((!!v_cur.item[22] << 15) | v_fix.item[i]);
+		else spi_w(v_fix.item[i]);
 		printf("%d(%d), ", v_cur.item[i], v_fix.item[i]);
 	}
+
+	printf("%chsync, %cvsync", !!v_cur.item[21]?'+':'-', !!v_cur.item[22]?'+':'-');
 
 	if(Fpix) setPLL(Fpix, &v_cur);
 
@@ -970,7 +976,11 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 			}
 
 			setPLL(Fpix, v);
-			break;
+			//read sync polarities if present
+			if (*next == ',') next++;
+			vcfg = next;
+			cnt = 21;
+			continue;
 		}
 
 		uint32_t val = strtoul(vcfg, &next, 0);
