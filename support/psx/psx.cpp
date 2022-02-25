@@ -616,12 +616,24 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 					{
 						int bios_loaded = 0;
 
-						strcpy(buf, last_dir);
+						// load cd_bios.rom from game directory
+						sprintf(buf, "%s/", last_dir);
 						p = strrchr(buf, '/');
 						if (p)
 						{
 							strcpy(p + 1, "cd_bios.rom");
 							bios_loaded = load_bios(buf);
+						}
+
+						// load cd_bios.rom from parent directory
+						if (!bios_loaded) {
+							strcpy(buf, last_dir);
+							p = strrchr(buf, '/');
+							if (p)
+							{
+								strcpy(p + 1, "cd_bios.rom");
+								bios_loaded = load_bios(buf);
+							}
 						}
 
 						if (!bios_loaded)
