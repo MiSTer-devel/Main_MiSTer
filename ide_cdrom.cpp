@@ -1314,8 +1314,8 @@ void cdrom_handle_pkt(ide_config *ide)
 
 	if (err)
 	{
-		printf("(!) Error in packet command %02X\n", cmdbuf[0]);
-		hexdump(cmdbuf, 12, 0);
+		dbg_printf("(!) Error in packet command %02X\n", cmdbuf[0]);
+		dbg_hexdump(cmdbuf, 12, 0);
 		cdrom_reply(ide, ATA_ERR_ABRT);
 	}
 }
@@ -1382,8 +1382,8 @@ int cdrom_handle_cmd(ide_config *ide)
 		return 1; // must always fail
 
 	default:
-		printf("(!) Unsupported command\n");
-		ide_print_regs(&ide->regs);
+		dbg_printf("(!) Unsupported command\n");
+		dbg_print_regs(&ide->regs);
 		return 1;
 	}
 
