@@ -913,13 +913,13 @@ static int handle_hdd(ide_config *ide)
 			return 1;
 		}
 		ide->drive[ide->regs.drv].spb = ide->regs.sector_count;
-		printf("New block size: %d\n", ide->drive[ide->regs.drv].spb);
+		dbg_printf("New block size: %d\n", ide->drive[ide->regs.drv].spb);
 		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
 		ide_set_regs(ide);
 		break;
 
 	case 0x08: // reset (fail)
-		printf("Reset command (08h) for HDD not supported\n");
+		dbg_printf("Reset command (08h) for HDD not supported\n");
 		return 1;
 
 	case 0x10 ... 0x1F: // recalibrate
@@ -941,8 +941,8 @@ static int handle_hdd(ide_config *ide)
 		break;
 
 	default:
-		printf("(!) Unsupported command (%04X)\n", ide->base);
-		ide_print_regs(&ide->regs);
+		dbg_printf("(!) Unsupported command (%04X)\n", ide->base);
+		dbg_print_regs(&ide->regs);
 		return 1;
 	}
 
@@ -964,7 +964,7 @@ void ide_io(int num, int req)
 			ide->regs.status = ATA_STATUS_RDY;
 			ide_set_regs(ide);
 
-			printf("IDE %04X reset finish\n", ide->base);
+			dbg_printf("IDE %04X reset finish\n", ide->base);
 		}
 	}
 	else if (req == 4) // command
