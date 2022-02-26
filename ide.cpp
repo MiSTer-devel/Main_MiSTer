@@ -928,6 +928,12 @@ static int handle_hdd(ide_config *ide)
 		ide_set_regs(ide);
 		break;
 
+	case 0x40: // READ VERIFY
+		dbg_printf("Received read verify command. Not implemented but returning OK.\n");
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
+		ide_set_regs(ide);
+		break;
+
 	case 0x91: // initialize device parameters
 		ide_set_geometry(&ide->drive[ide->regs.drv], ide->regs.sector_count, ide->regs.head + 1);
 		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
