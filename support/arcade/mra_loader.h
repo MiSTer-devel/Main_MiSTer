@@ -35,6 +35,9 @@ struct mgl_struct
 	int  index;
 	int  valid;
 	int  parsed;
+	int  done;
+	int  active;
+	int  submenu;
 	uint32_t timer;
 };
 

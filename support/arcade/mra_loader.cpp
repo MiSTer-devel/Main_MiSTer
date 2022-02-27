@@ -1283,6 +1283,7 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 mgl_struct* mgl_parse(const char *xml)
 {
 	memset(&mgl, 0, sizeof(mgl));
+	mgl.submenu = -1;
 
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
