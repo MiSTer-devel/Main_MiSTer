@@ -1016,30 +1016,20 @@ void HandleUI(void)
 	static int store_name;
 	static int vfilter_type;
 
-	static int mgl_done = 0;
-	static int mgl_active = 0;
-	static int mgl_submenu = -1;
-
 	static char	cp_MenuCancel;
 
 	uint32_t c = 0;
 
-	if (!mgl_done)
+	mgl_struct *mgl = mgl_get();
+	if (!mgl->done)
 	{
-		mgl_struct *mgl = mgl_get();
-		if (mgl->valid != 0xF ||
-			is_menu() || is_minimig() || is_st() || is_archie()
-			|| user_io_core_type() == CORE_TYPE_SHARPMZ) mgl_done = 1;
-		else
+		if (mgl->timer && CheckTimer(mgl->timer))
 		{
-			if (mgl->timer && CheckTimer(mgl->timer))
-			{
-				mgl_active = 1;
-				mgl_done = 1;
-			}
+			mgl->active = 1;
+			mgl->done = 1;
 		}
 	}
-	else if(!mgl_active)
+	else if(!mgl->active)
 	{
 		// get user control codes
 		c = menu_key_get();
@@ -1320,7 +1310,7 @@ void HandleUI(void)
 		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
 		// fall through
 	case MENU_NONE2:
-		if (menu || (is_menu() && !video_fb_state()) || mgl_active)
+		if (menu || (is_menu() && !video_fb_state()) || mgl->active)
 		{
 			OsdSetSize(16);
 			if(!is_menu() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
@@ -1358,7 +1348,7 @@ void HandleUI(void)
 			}
 			menusub = 0;
 			OsdClear();
-			if (mgl_active) OsdDisable();
+			if (mgl->active) OsdDisable();
 			else OsdEnable(DISABLE_KEYBOARD);
 		}
 		break;
@@ -1696,7 +1686,7 @@ void HandleUI(void)
 							if (p[idx] == 'C') idx++;
 
 							int num = (p[idx] >= '0' && p[idx] <= '9') ? p[idx] - '0' : 0;
-							if (mgl_active && num == mgl_get()->index && (p[0] == mgl_get()->type)) mgl_submenu = selentry;
+							if (mgl->active && num == mgl->index && (p[0] == mgl->type)) mgl->submenu = selentry;
 
 							if (is_x86() && x86_get_image_name(num))
 							{
@@ -1898,7 +1888,7 @@ void HandleUI(void)
 		saved_menustate = MENU_GENERIC_MAIN1;
 
 		// F/S option not found -> deactivate mgl.
-		if (mgl_active && mgl_submenu < 0) mgl_active = 0;
+		if (mgl->active && mgl->submenu < 0) mgl->active = 0;
 
 		if (menu_save_timer && !CheckTimer(menu_save_timer))
 		{
@@ -1926,11 +1916,11 @@ void HandleUI(void)
 				page = 0;
 			}
 		}
-		else if (select || recent || minus || plus || mgl_active)
+		else if (select || recent || minus || plus || mgl->active)
 		{
-			if (mgl_active)
+			if (mgl->active)
 			{
-				menusub = mgl_submenu;
+				menusub = mgl->submenu;
 				select = 1;
 			}
 
@@ -2043,7 +2033,7 @@ void HandleUI(void)
 							}
 						}
 
-						if (mgl_active) menustate = MENU_GENERIC_FILE_SELECTED;
+						if (mgl->active) menustate = MENU_GENERIC_FILE_SELECTED;
 						else if (select) SelectFile(Selected_F[ioctl_index & 15], ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if (recent_init(ioctl_index)) menustate = MENU_RECENT1;
 					}
@@ -2093,7 +2083,7 @@ void HandleUI(void)
 
 						if (is_psx()) fs_Options |= SCANO_NOZIP;
 
-						if (mgl_active) menustate = MENU_GENERIC_IMAGE_SELECTED;
+						if (mgl->active) menustate = MENU_GENERIC_IMAGE_SELECTED;
 						else if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if (recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
 					}
@@ -2225,14 +2215,14 @@ void HandleUI(void)
 
 	case MENU_GENERIC_FILE_SELECTED:
 		{
-			if (mgl_active) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl_get()->path);
+			if (mgl->active) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->path);
 
 			MenuHide();
 			printf("File selected: %s\n", selPath);
 			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
 
-			if (!mgl_active && selPath[0]) recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
-			mgl_active = 0;
+			if (!mgl->active && selPath[0]) recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
+			mgl->active = 0;
 
 			if (store_name)
 			{
@@ -2270,7 +2260,7 @@ void HandleUI(void)
 
 	case MENU_GENERIC_IMAGE_SELECTED:
 		{
-			if (mgl_active) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl_get()->path);
+			if (mgl->active) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->path);
 
 			if (store_name)
 			{
@@ -2284,8 +2274,8 @@ void HandleUI(void)
 
 			printf("Image selected: %s\n", selPath);
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
-			if (!mgl_active) recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
-			mgl_active = 0;
+			if (!mgl->active) recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
+			mgl->active = 0;
 
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
