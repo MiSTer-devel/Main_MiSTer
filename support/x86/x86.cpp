@@ -257,6 +257,10 @@ static void fdd_set(int num, char* filename)
 	printf("  total_sectors: %d\n\n", floppy_total_sectors);
 
 	uint32_t subaddr = num << 7;
+
+	IOWR(FDD0_BASE + subaddr, 0x0, 0); // Always eject floppy before insertion
+	usleep(100000);
+
 	IOWR(FDD0_BASE + subaddr, 0x0, floppy ? 1 : 0);
 	IOWR(FDD0_BASE + subaddr, 0x1, (floppy && (fdd_image->mode & O_RDWR)) ? 0 : 1);
 	IOWR(FDD0_BASE + subaddr, 0x2, floppy_cylinders);
