@@ -195,6 +195,7 @@ void user_io_read_confstr();
 char *user_io_get_confstr(int index);
 uint32_t user_io_status(uint32_t, uint32_t, int ex = 0);
 int user_io_get_kbd_reset();
+void user_io_set_kbd_reset(int reset);
 
 uint32_t user_io_get_file_crc();
 int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0, int pre_size = 0);
