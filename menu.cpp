@@ -5163,6 +5163,16 @@ void HandleUI(void)
 
 		menustate = MENU_MINIMIG_MAIN2;
 		parentstate = MENU_MINIMIG_MAIN1;
+
+		if (!mgl->done)
+		{
+			if (mgl->item[mgl->current].index < 4)
+			{
+				menusub = mgl->item[mgl->current].index;
+				menustate = MENU_MINIMIG_ADFFILE_SELECTED;
+				break;
+			}
+		}
 		break;
 
 	case MENU_MINIMIG_MAIN2:
@@ -5269,11 +5279,17 @@ void HandleUI(void)
 		break;
 
 	case MENU_MINIMIG_ADFFILE_SELECTED:
+		if (!mgl->done) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
 		memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
-		recent_update(SelectedDir, selPath, SelectedLabel, 0);
+		if (mgl->done) recent_update(SelectedDir, selPath, SelectedLabel, 0);
 		InsertFloppy(&df[menusub], selPath);
 		if (menusub < drives) menusub++;
 		menustate = MENU_MINIMIG_MAIN1;
+		if (!mgl->done)
+		{
+			mgl->state = 2;
+			menustate = MENU_NONE1;
+		}
 		break;
 
 	case MENU_MINIMIG_LOADCONFIG1:

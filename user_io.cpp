@@ -1353,7 +1353,7 @@ void user_io_init(const char *path, const char *xml)
 	SetMidiLinkMode(midilink);
 	SetUARTMode(uartmode);
 
-	if (!mgl_get()->count || is_menu() || is_minimig() || is_st() || is_archie() || user_io_core_type() == CORE_TYPE_SHARPMZ)
+	if (!mgl_get()->count || is_menu() || is_st() || is_archie() || user_io_core_type() == CORE_TYPE_SHARPMZ)
 	{
 		mgl_get()->done = 1;
 	}
