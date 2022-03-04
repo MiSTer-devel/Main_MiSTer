@@ -27,18 +27,32 @@ struct sw_struct
 	dip_struct dip[64];
 };
 
-struct mgl_struct
+#define MGL_ACTION_LOAD  0
+#define MGL_ACTION_RESET 1
+
+struct mgl_item_struct
 {
 	char path[1024];
 	int  delay;
 	char type;
-	int  index;
+	union
+	{
+		int  index;
+		int  hold;
+	};
 	int  valid;
-	int  parsed;
-	int  done;
-	int  active;
 	int  submenu;
+	int  action;
+};
+
+struct mgl_struct
+{
+	int  count;
+	int  current;
+	mgl_item_struct item[6];
 	uint32_t timer;
+	int  state;
+	int  done;
 };
 
 sw_struct *arcade_sw(int n);

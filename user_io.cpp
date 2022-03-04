@@ -1353,13 +1353,13 @@ void user_io_init(const char *path, const char *xml)
 	SetMidiLinkMode(midilink);
 	SetUARTMode(uartmode);
 
-	if (mgl_get()->valid != 0xF || is_menu() || is_minimig() || is_st() || is_archie() || user_io_core_type() == CORE_TYPE_SHARPMZ)
+	if (!mgl_get()->count || is_menu() || is_st() || is_archie() || user_io_core_type() == CORE_TYPE_SHARPMZ)
 	{
 		mgl_get()->done = 1;
 	}
 	else
 	{
-		mgl_get()->timer = GetTimer(mgl_get()->delay * 1000);
+		mgl_get()->timer = GetTimer(mgl_get()->item[0].delay * 1000);
 	}
 }
 
@@ -2499,6 +2499,8 @@ int get_vga_fb()
 }
 
 static char kbd_reset = 0;
+static char kbd_reset_ovr = 0;
+
 void user_io_send_buttons(char force)
 {
 	static unsigned short key_map = 0;
@@ -2508,7 +2510,7 @@ void user_io_send_buttons(char force)
 
 	if (user_io_menu_button()) map |= BUTTON1;
 	if (user_io_user_button()) map |= BUTTON2;
-	if (kbd_reset) map |= BUTTON2;
+	if (kbd_reset || kbd_reset_ovr) map |= BUTTON2;
 
 	if (cfg.vga_scaler) map |= CONF_VGA_SCALER;
 	if (cfg.vga_sog) map |= CONF_VGA_SOG;
@@ -2553,7 +2555,12 @@ void user_io_send_buttons(char force)
 
 int user_io_get_kbd_reset()
 {
-	return kbd_reset;
+	return kbd_reset || kbd_reset_ovr;
+}
+
+void user_io_set_kbd_reset(int reset)
+{
+	kbd_reset_ovr = reset;
 }
 
 void user_io_set_ini(int ini_num)

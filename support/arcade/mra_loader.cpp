@@ -1227,38 +1227,75 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 
 	case XML_EVENT_START_NODE:
 		if (!strcasecmp(node->tag, "mistergamedescription")) inside_mgl = 1;
-		else if (inside_mgl && !strcasecmp(node->tag, "file"))
+		else if (inside_mgl && mgl.count < (int)(sizeof(mgl.item) / sizeof(mgl.item[0])))
 		{
-			for (int i = 0; i < node->n_attributes; i++)
+			if (!strcasecmp(node->tag, "file"))
 			{
-				if (!strcasecmp(node->attributes[i].name, "delay"))
+				mgl.item[mgl.count].action = MGL_ACTION_LOAD;
+
+				for (int i = 0; i < node->n_attributes; i++)
 				{
-					mgl.delay = strtoul(node->attributes[i].value, NULL, 0);
-					mgl.valid |= 0x1;
-				}
-				else if (!strcasecmp(node->attributes[i].name, "type"))
-				{
-					if (!strcasecmp(node->attributes[i].value, "s"))
+					if (!strcasecmp(node->attributes[i].name, "delay"))
 					{
-						mgl.type = 'S';
-						mgl.valid |= 0x2;
+						mgl.item[mgl.count].delay = strtoul(node->attributes[i].value, NULL, 0);
+						mgl.item[mgl.count].valid |= 0x1;
 					}
-					else if (!strcasecmp(node->attributes[i].value, "f"))
+					else if (!strcasecmp(node->attributes[i].name, "type"))
 					{
-						mgl.type = 'F';
-						mgl.valid |= 0x2;
+						if (!strcasecmp(node->attributes[i].value, "s"))
+						{
+							mgl.item[mgl.count].type = 'S';
+							mgl.item[mgl.count].valid |= 0x2;
+						}
+						else if (!strcasecmp(node->attributes[i].value, "f"))
+						{
+							mgl.item[mgl.count].type = 'F';
+							mgl.item[mgl.count].valid |= 0x2;
+						}
+					}
+					else if (!strcasecmp(node->attributes[i].name, "index"))
+					{
+						mgl.item[mgl.count].index = strtoul(node->attributes[i].value, NULL, 0);
+						mgl.item[mgl.count].valid |= 0x4;
+					}
+					else if (!strcasecmp(node->attributes[i].name, "path"))
+					{
+						snprintf(mgl.item[mgl.count].path, sizeof(mgl.item[mgl.count].path), "%s", node->attributes[i].value);
+						mgl.item[mgl.count].valid |= 0x8;
 					}
 				}
-				else if (!strcasecmp(node->attributes[i].name, "index"))
+
+				printf("  action=load\n  delay=%d\n  type=%c\n  index=%d\n  path=%s\n  valid=%X\n\n", mgl.item[mgl.count].delay, mgl.item[mgl.count].type, mgl.item[mgl.count].index, mgl.item[mgl.count].path, mgl.item[mgl.count].valid);
+
+				if (mgl.item[mgl.count].valid == 0xF)
 				{
-					mgl.index = strtoul(node->attributes[i].value, NULL, 0);
-					mgl.valid |= 0x4;
+					mgl.item[mgl.count].valid = 1;
+					mgl.count++;
 				}
-				else if (!strcasecmp(node->attributes[i].name, "path"))
+				else
 				{
-					snprintf(mgl.path, sizeof(mgl.path), "%s", node->attributes[i].value);
-					mgl.valid |= 0x8;
+					mgl.item[mgl.count].valid = 0;
 				}
+			}
+			else if (!strcasecmp(node->tag, "reset"))
+			{
+				mgl.item[mgl.count].action = MGL_ACTION_RESET;
+
+				for (int i = 0; i < node->n_attributes; i++)
+				{
+					if (!strcasecmp(node->attributes[i].name, "delay"))
+					{
+						mgl.item[mgl.count].delay = strtoul(node->attributes[i].value, NULL, 0);
+						mgl.item[mgl.count].valid = 1;
+					}
+					else if (!strcasecmp(node->attributes[i].name, "hold"))
+					{
+						mgl.item[mgl.count].hold = strtoul(node->attributes[i].value, NULL, 0);
+					}
+				}
+
+				printf("  action=reset\n  delay=%d\n  hold=%d\n\n", mgl.item[mgl.count].delay, mgl.item[mgl.count].hold);
+				if (mgl.item[mgl.count].valid) mgl.count++;
 			}
 		}
 		break;
@@ -1283,16 +1320,14 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 mgl_struct* mgl_parse(const char *xml)
 {
 	memset(&mgl, 0, sizeof(mgl));
-	mgl.submenu = -1;
+
+	printf("MGL %s\n", xml);
 
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
 	sax.all_event = scan_mgl;
 	XMLDoc_parse_file_SAX(xml, &sax, 0);
 
-	printf("MGL %s\n  delay=%d\n  type=%c\n  index=%d\n  path=%s\n  valid=%X\n\n", xml, mgl.delay, mgl.type, mgl.index, mgl.path, mgl.valid);
-
-	mgl.parsed = 1;
 	return &mgl;
 }
 

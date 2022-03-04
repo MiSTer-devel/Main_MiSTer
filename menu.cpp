@@ -1023,13 +1023,44 @@ void HandleUI(void)
 	mgl_struct *mgl = mgl_get();
 	if (!mgl->done)
 	{
-		if (mgl->timer && CheckTimer(mgl->timer))
+		switch (mgl->state)
 		{
-			mgl->active = 1;
-			mgl->done = 1;
+		case 0:
+			if (CheckTimer(mgl->timer))
+			{
+				//printf("*** MGL state=%d,%d\n", mgl->current, mgl->state);
+				mgl->state = (mgl->item[mgl->current].action == MGL_ACTION_LOAD) ? 1 : 3;
+			}
+			break;
+
+		case 2:
+			//printf("*** MGL state=%d,%d\n", mgl->current, mgl->state);
+			mgl->state = 0;
+			mgl->current++;
+			if (mgl->current < mgl->count) mgl->timer = GetTimer(mgl->item[mgl->current].delay * 1000);
+			else mgl->done = 1;
+			break;
+
+		case 3:
+			//printf("*** MGL state=%d,%d\n", mgl->current, mgl->state);
+			user_io_set_kbd_reset(1);
+			user_io_send_buttons(1);
+			mgl->timer = GetTimer(mgl->item[mgl->current].hold ? (mgl->item[mgl->current].hold * 1000) : 100);
+			mgl->state = 4;
+			break;
+
+		case 4:
+			if (CheckTimer(mgl->timer))
+			{
+				//printf("*** MGL state=%d,%d\n", mgl->current, mgl->state);
+				user_io_set_kbd_reset(0);
+				user_io_send_buttons(1);
+				mgl->state = 2;
+			}
+			break;
 		}
 	}
-	else if(!mgl->active)
+	else
 	{
 		// get user control codes
 		c = menu_key_get();
@@ -1309,8 +1340,9 @@ void HandleUI(void)
 	case MENU_INFO:
 		if (CheckTimer(menu_timer)) menustate = MENU_NONE1;
 		// fall through
+
 	case MENU_NONE2:
-		if (menu || (is_menu() && !video_fb_state()) || mgl->active)
+		if (menu || (is_menu() && !video_fb_state()) || (menustate == MENU_NONE2 && !mgl->done && mgl->state == 1))
 		{
 			OsdSetSize(16);
 			if(!is_menu() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
@@ -1348,7 +1380,7 @@ void HandleUI(void)
 			}
 			menusub = 0;
 			OsdClear();
-			if (mgl->active) OsdDisable();
+			if (!mgl->done) OsdDisable();
 			else OsdEnable(DISABLE_KEYBOARD);
 		}
 		break;
@@ -1686,7 +1718,7 @@ void HandleUI(void)
 							if (p[idx] == 'C') idx++;
 
 							int num = (p[idx] >= '0' && p[idx] <= '9') ? p[idx] - '0' : 0;
-							if (mgl->active && num == mgl->index && (p[0] == mgl->type)) mgl->submenu = selentry;
+							if (!mgl->done && num == mgl->item[mgl->current].index && (p[0] == mgl->item[mgl->current].type)) mgl->item[mgl->current].submenu = selentry;
 
 							if (is_x86() && x86_get_image_name(num))
 							{
@@ -1888,7 +1920,11 @@ void HandleUI(void)
 		saved_menustate = MENU_GENERIC_MAIN1;
 
 		// F/S option not found -> deactivate mgl.
-		if (mgl->active && mgl->submenu < 0) mgl->active = 0;
+		if (!mgl->done && mgl->item[mgl->current].submenu < 0)
+		{
+			menustate = MENU_NONE1;
+			mgl->state = 2;
+		}
 
 		if (menu_save_timer && !CheckTimer(menu_save_timer))
 		{
@@ -1916,11 +1952,11 @@ void HandleUI(void)
 				page = 0;
 			}
 		}
-		else if (select || recent || minus || plus || mgl->active)
+		else if (select || recent || minus || plus || !mgl->done)
 		{
-			if (mgl->active)
+			if (!mgl->done)
 			{
-				menusub = mgl->submenu;
+				menusub = mgl->item[mgl->current].submenu;
 				select = 1;
 			}
 
@@ -2033,7 +2069,7 @@ void HandleUI(void)
 							}
 						}
 
-						if (mgl->active) menustate = MENU_GENERIC_FILE_SELECTED;
+						if (!mgl->done) menustate = MENU_GENERIC_FILE_SELECTED;
 						else if (select) SelectFile(Selected_F[ioctl_index & 15], ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if (recent_init(ioctl_index)) menustate = MENU_RECENT1;
 					}
@@ -2083,7 +2119,7 @@ void HandleUI(void)
 
 						if (is_psx()) fs_Options |= SCANO_NOZIP;
 
-						if (mgl->active) menustate = MENU_GENERIC_IMAGE_SELECTED;
+						if (!mgl->done) menustate = MENU_GENERIC_IMAGE_SELECTED;
 						else if (select) SelectFile(Selected_tmp, ext, fs_Options, fs_MenuSelect, fs_MenuCancel);
 						else if (recent_init(ioctl_index + 500)) menustate = MENU_RECENT1;
 					}
@@ -2215,14 +2251,13 @@ void HandleUI(void)
 
 	case MENU_GENERIC_FILE_SELECTED:
 		{
-			if (mgl->active) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->path);
+			if (!mgl->done) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
 
 			MenuHide();
 			printf("File selected: %s\n", selPath);
 			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
 
-			if (!mgl->active && selPath[0]) recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
-			mgl->active = 0;
+			if (mgl->done && selPath[0]) recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
 
 			if (store_name)
 			{
@@ -2255,12 +2290,14 @@ void HandleUI(void)
 
 				if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
 			}
+
+			mgl->state = 2;
 		}
 		break;
 
 	case MENU_GENERIC_IMAGE_SELECTED:
 		{
-			if (mgl->active) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->path);
+			if (!mgl->done) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
 
 			if (store_name)
 			{
@@ -2274,8 +2311,7 @@ void HandleUI(void)
 
 			printf("Image selected: %s\n", selPath);
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
-			if (!mgl->active) recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
-			mgl->active = 0;
+			if (mgl->done) recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
 
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
@@ -2305,6 +2341,8 @@ void HandleUI(void)
 			}
 
 			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
+
+			mgl->state = 2;
 		}
 		break;
 
@@ -5125,6 +5163,16 @@ void HandleUI(void)
 
 		menustate = MENU_MINIMIG_MAIN2;
 		parentstate = MENU_MINIMIG_MAIN1;
+
+		if (!mgl->done)
+		{
+			if (mgl->item[mgl->current].index < 4)
+			{
+				menusub = mgl->item[mgl->current].index;
+				menustate = MENU_MINIMIG_ADFFILE_SELECTED;
+				break;
+			}
+		}
 		break;
 
 	case MENU_MINIMIG_MAIN2:
@@ -5231,11 +5279,17 @@ void HandleUI(void)
 		break;
 
 	case MENU_MINIMIG_ADFFILE_SELECTED:
+		if (!mgl->done) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
 		memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
-		recent_update(SelectedDir, selPath, SelectedLabel, 0);
+		if (mgl->done) recent_update(SelectedDir, selPath, SelectedLabel, 0);
 		InsertFloppy(&df[menusub], selPath);
 		if (menusub < drives) menusub++;
 		menustate = MENU_MINIMIG_MAIN1;
+		if (!mgl->done)
+		{
+			mgl->state = 2;
+			menustate = MENU_NONE1;
+		}
 		break;
 
 	case MENU_MINIMIG_LOADCONFIG1:
