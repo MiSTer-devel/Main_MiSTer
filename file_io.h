@@ -145,5 +145,6 @@ const char* FileReadLine(fileTextReader *reader);
 #define PRESET_DIR "presets"
 #define GAMES_DIR "games"
 #define CIFS_DIR "cifs"
+#define DOCS_DIR "docs"
 
 #endif

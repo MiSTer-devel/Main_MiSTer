@@ -389,15 +389,7 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 	}
 	else
 	{
-		// if we are inside the menu, then the path needs
-		// to be Scripts if we are looking for SH or
-		// Docs if we are looking for PDFTXTMD
-		const char *menu_dir;
-		if (!strcasecmp(pFileExt,"PDFTXTMD"))
-			menu_dir="Docs";
-		else
-			menu_dir="Scripts";
-		const char *home = is_menu() ? menu_dir : user_io_get_core_path((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL, 1);
+		const char *home = is_menu() ? "Scripts" : user_io_get_core_path((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL, 1);
 		home_dir = strrchr(home, '/');
 		if (home_dir) home_dir++;
 		else home_dir = home;
@@ -2591,7 +2583,9 @@ void HandleUI(void)
 				break;
 
 			case 16:
-				strcpy(Selected_tmp, HomeDir());
+				FileCreatePath(DOCS_DIR);
+				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR"/%s",user_io_get_core_name());
+				FileCreatePath(Selected_tmp);
 				SelectFile(Selected_tmp, "PDFTXTMD ",  SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
 				break;
 
@@ -6169,8 +6163,9 @@ void HandleUI(void)
 				break;
 
 			case 4:
-				Selected_tmp[0]=0;
-				SelectFile(Selected_tmp, "PDFTXTMD", SCANO_DIR, MENU_DOC_FILE_SELECTED, MENU_NONE1);
+				strcpy(Selected_tmp, DOCS_DIR);
+				FileCreatePath(Selected_tmp);
+				SelectFile(Selected_tmp, "PDFTXTMD ", SCANO_DIR | SCANO_TXT, MENU_DOC_FILE_SELECTED, MENU_NONE1);
 				break;
 
 			case 5:
