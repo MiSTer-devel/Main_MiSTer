@@ -117,6 +117,9 @@ enum MENU
 	MENU_SCRIPTS_FB,
 	MENU_SCRIPTS_FB2,
 
+	MENU_DOC_FILE_SELECTED,
+	MENU_DOC_FILE_SELECTED_2,
+
 	MENU_CHEATS1,
 	MENU_CHEATS2,
 
@@ -386,7 +389,15 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 	}
 	else
 	{
-		const char *home = is_menu() ? "Scripts" : user_io_get_core_path((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL, 1);
+		// if we are inside the menu, then the path needs 
+		// to be Scripts if we are looking for SH or 
+		// Docs if we are looking for PDFTXTMD
+		const char *menu_dir;
+		if (!strcasecmp(pFileExt,"PDFTXTMD"))
+			menu_dir="Docs";
+		else
+			menu_dir="Scripts";
+		const char *home = is_menu() ? menu_dir : user_io_get_core_path((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL, 1);
 		home_dir = strrchr(home, '/');
 		if (home_dir) home_dir++;
 		else home_dir = home;
@@ -2322,7 +2333,7 @@ void HandleUI(void)
 			while(1)
 			{
 				n = 0;
-				menumask = 0x3802f;
+				menumask = 0x7802f;
 
 				if (!menusub) firstmenu = 0;
 				adjvisible = 0;
@@ -2381,10 +2392,11 @@ void HandleUI(void)
 				MenuWrite(n++);
 				cr = n;
 				MenuWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 15);
-				MenuWrite(n++, " About", menusub == 16);
+				MenuWrite(n++, " Help                      \x16", menusub == 16);
+				MenuWrite(n++, " About", menusub == 17);
 
 				while(n < OsdGetSize() - 1) MenuWrite(n++);
-				MenuWrite(n++, STD_EXIT, menusub == 17, 0, OSD_ARROW_LEFT);
+				MenuWrite(n++, STD_EXIT, menusub == 18, 0, OSD_ARROW_LEFT);
 				sysinfo_timer = 0;
 
 				if (!adjvisible) break;
@@ -2541,6 +2553,12 @@ void HandleUI(void)
 				break;
 
 			case 16:
+				Selected_tmp[0]=0;
+				snprintf(Selected_tmp, sizeof(Selected_tmp), "Docs/%s",user_io_get_core_name() );
+				//SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_AFILTER_FILE_SELECTED, MENU_COMMON1);
+				SelectFile(Selected_tmp, "PDFTXTMD",  SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
+				break;
+			case 17:
 				menustate = MENU_ABOUT1;
 				menusub = 0;
 				break;
@@ -2805,7 +2823,64 @@ void HandleUI(void)
 			}
 		}
 		break;
+	case MENU_DOC_FILE_SELECTED:
+		if (cfg.fb_terminal)
+		{
+			memcpy(Selected_tmp, selPath, sizeof(Selected_tmp));
+			static char cmd[1024 * 2];
+			const char *path = getFullPath(selPath);
+			menustate = MENU_DOC_FILE_SELECTED_2;
+			video_chvt(2);
+			video_fb_enable(1);
+			vga_nag();
+			// check file type
+			const char *ext = "";
+                        if (strlen(path) > 4) ext = path + strlen(path) - 4;
+			static char binary[1024*2];
+			printf("extension: [%s]\n",ext);
+			strcpy(binary,"/media/fat/linux/pdfviewer");
+			if (!strcasecmp(ext,".pdf")) {
+				sprintf(binary,"/media/fat/linux/pdfviewer --zoom_to_fit \"%s\"",path);
+			} else if (!strcasecmp(ext,".txt")) {
+				sprintf(binary,"less \"%s\"",path);
+			} else if (!strcasecmp(ext+1,".md")) {
+				sprintf(binary,"/media/fat/linux/glow --style dark  \"%s\" | less -R",path);
+			} 
 
+			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\nexport LESSKEY=/media/fat/linux/lesskey\ncd $(dirname \"%s\")\n%s \necho \"Press any key to continue\"\n", path, binary  );
+			printf("CMD [%s]\n",cmd);
+			unlink("/tmp/script");
+			FileSave("/tmp/script", cmd, strlen(cmd));
+			ttypid = fork();
+			if (!ttypid)
+			{
+				execl("/sbin/agetty", "/sbin/agetty", "-a", "root", "-l", "/tmp/script", "--nohostname", "-L", "tty2", "linux", NULL);
+				exit(0); //should never be reached
+			}
+		}
+		break;
+	case MENU_DOC_FILE_SELECTED_2:
+		if (ttypid)
+		{
+			if (waitpid(ttypid, 0, WNOHANG) > 0)
+			{
+				ttypid = 0;
+				user_io_osd_key_enable(1);
+			}
+		}
+		else
+		{
+			if (c & UPSTROKE)
+			{
+				video_menu_bg((user_io_status(0, 0) & 0xE) >> 1);
+				video_fb_enable(0);
+				menustate = MENU_NONE1;
+				menusub = 3;
+				OsdClear();
+				OsdEnable(DISABLE_KEYBOARD);
+			}
+		}
+		break;
 	case MENU_ARCADE_DIP1:
 		helptext_idx = 0;
 		menumask = 0;
@@ -5921,7 +5996,7 @@ void HandleUI(void)
 
 		m = 0;
 		OsdSetTitle("System Settings", OSD_ARROW_LEFT);
-		menumask = 0x3F;
+		menumask = 0x7F;
 
 		OsdWrite(m++);
 		sprintf(s, "       MiSTer v%s", version + 5);
@@ -5973,15 +6048,16 @@ void HandleUI(void)
 		OsdWrite(m++, " Remap keyboard            \x16", menusub == 1);
 		OsdWrite(m++, " Define joystick buttons   \x16", menusub == 2);
 		OsdWrite(m++, " Scripts                   \x16", menusub == 3);
+		OsdWrite(m++, " Help                      \x16", menusub == 4);
 		OsdWrite(m++, "");
 		cr = m;
-		OsdWrite(m++, " Reboot (hold \x16 cold reboot)", menusub == 4);
+		OsdWrite(m++, " Reboot (hold \x16 cold reboot)", menusub == 5);
 		sysinfo_timer = 0;
 
 		reboot_req = 0;
 
 		while(m < OsdGetSize()-1) OsdWrite(m++, "");
-		OsdWrite(15, STD_EXIT, menusub == 5);
+		OsdWrite(15, STD_EXIT, menusub == 6);
 		menustate = MENU_SYSTEM2;
 		break;
 
@@ -6034,6 +6110,10 @@ void HandleUI(void)
 				break;
 
 			case 4:
+				Selected_tmp[0]=0;
+				SelectFile(Selected_tmp, "PDFTXTMD", SCANO_DIR, MENU_DOC_FILE_SELECTED, MENU_NONE1);
+				break;
+			case 5:
 				{
 					reboot_req = 1;
 
@@ -6046,7 +6126,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 5:
+			case 6:
 				menustate = MENU_NONE1;
 				break;
 			}
@@ -6199,6 +6279,7 @@ void HandleUI(void)
 			video_fb_enable(1);
 			vga_nag();
 			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\ncd $(dirname %s)\n%s\necho \"Press any key to continue\"\n", path, path);
+
 			unlink("/tmp/script");
 			FileSave("/tmp/script", cmd, strlen(cmd));
 			ttypid = fork();
