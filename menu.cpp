@@ -389,8 +389,8 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 	}
 	else
 	{
-		// if we are inside the menu, then the path needs 
-		// to be Scripts if we are looking for SH or 
+		// if we are inside the menu, then the path needs
+		// to be Scripts if we are looking for SH or
 		// Docs if we are looking for PDFTXTMD
 		const char *menu_dir;
 		if (!strcasecmp(pFileExt,"PDFTXTMD"))
@@ -2591,11 +2591,10 @@ void HandleUI(void)
 				break;
 
 			case 16:
-				Selected_tmp[0]=0;
-				snprintf(Selected_tmp, sizeof(Selected_tmp), "Docs/%s",user_io_get_core_name() );
-				//SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_AFILTER_FILE_SELECTED, MENU_COMMON1);
-				SelectFile(Selected_tmp, "PDFTXTMD",  SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
+				strcpy(Selected_tmp, HomeDir());
+				SelectFile(Selected_tmp, "PDFTXTMD ",  SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
 				break;
+
 			case 17:
 				menustate = MENU_ABOUT1;
 				menusub = 0;
@@ -2861,6 +2860,7 @@ void HandleUI(void)
 			}
 		}
 		break;
+
 	case MENU_DOC_FILE_SELECTED:
 		if (cfg.fb_terminal)
 		{
@@ -2883,7 +2883,7 @@ void HandleUI(void)
 				sprintf(binary,"less \"%s\"",path);
 			} else if (!strcasecmp(ext+1,".md")) {
 				sprintf(binary,"/media/fat/linux/glow --style dark  \"%s\" | less -R",path);
-			} 
+			}
 
 			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\nexport LESSKEY=/media/fat/linux/lesskey\ncd $(dirname \"%s\")\n%s \necho \"Press any key to continue\"\n", path, binary  );
 			printf("CMD [%s]\n",cmd);
@@ -2897,6 +2897,7 @@ void HandleUI(void)
 			}
 		}
 		break;
+
 	case MENU_DOC_FILE_SELECTED_2:
 		if (ttypid)
 		{
@@ -2919,6 +2920,7 @@ void HandleUI(void)
 			}
 		}
 		break;
+
 	case MENU_ARCADE_DIP1:
 		helptext_idx = 0;
 		menumask = 0;
@@ -6128,14 +6130,17 @@ void HandleUI(void)
 			case 0:
 				if (getStorage(1) || isUSBMounted()) setStorage(!getStorage(1));
 				break;
+
 			case 1:
 				start_map_setting(0);
 				menustate = MENU_KBDMAP;
 				menusub = 0;
 				break;
+
 			case 2:
 				menustate = MENU_JOYSYSMAP;
 				break;
+
 			case 3:
 				{
 					uint8_t confirm[32] = {};
@@ -6167,6 +6172,7 @@ void HandleUI(void)
 				Selected_tmp[0]=0;
 				SelectFile(Selected_tmp, "PDFTXTMD", SCANO_DIR, MENU_DOC_FILE_SELECTED, MENU_NONE1);
 				break;
+
 			case 5:
 				{
 					reboot_req = 1;
