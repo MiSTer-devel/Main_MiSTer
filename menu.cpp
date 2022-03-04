@@ -1342,7 +1342,7 @@ void HandleUI(void)
 		// fall through
 
 	case MENU_NONE2:
-		if (menu || (is_menu() && !video_fb_state()) || (menustate == MENU_NONE2 && mgl->state == 1))
+		if (menu || (is_menu() && !video_fb_state()) || (menustate == MENU_NONE2 && !mgl->done && mgl->state == 1))
 		{
 			OsdSetSize(16);
 			if(!is_menu() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
