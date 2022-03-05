@@ -14,7 +14,7 @@ set -o pipefail
 make
 
 set +e
-plink root@$HOST -pw 1 -batch 'killall MiSTer'
+echo y|plink root@$HOST -pw 1 'killall MiSTer'
 
 set -e
 ftp -n <<EOF
