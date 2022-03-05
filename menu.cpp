@@ -69,14 +69,14 @@ enum MENU
 {
 	MENU_NONE1,
 	MENU_NONE2,
+	MENU_INFO,
+
 	MENU_SYSTEM1,
 	MENU_SYSTEM2,
 	MENU_COMMON1,
 	MENU_COMMON2,
 	MENU_MISC1,
 	MENU_MISC2,
-
-	MENU_INFO,
 
 	MENU_FILE_SELECT1,
 	MENU_FILE_SELECT2,
@@ -1024,6 +1024,23 @@ void HandleUI(void)
 	uint32_t c = 0;
 
 	mgl_struct *mgl = mgl_get();
+
+	/*
+	static int old_state = -1;
+	static int old_current = -1;
+	static int old_done = -1;
+	static uint32_t old_menustate = -1;
+
+	if ((old_state != mgl->state) || (old_current != mgl->current) || (old_done != mgl->done) || (old_menustate != menustate))
+	{
+		printf("*** MGL menustate=%d, count=%d current=%d state=%d action=%d done=%d\n", menustate, mgl->count, mgl->current, mgl->state, mgl->item[mgl->current].action, mgl->done);
+		old_state = mgl->state;
+		old_current = mgl->current;
+		old_done = mgl->done;
+		old_menustate = menustate;
+	}
+	*/
+
 	if (!mgl->done)
 	{
 		switch (mgl->state)
@@ -1031,34 +1048,30 @@ void HandleUI(void)
 		case 0:
 			if (CheckTimer(mgl->timer))
 			{
-				//printf("*** MGL state=%d,%d\n", mgl->current, mgl->state);
-				mgl->state = (mgl->item[mgl->current].action == MGL_ACTION_LOAD) ? 1 : 3;
+				mgl->state = (mgl->item[mgl->current].action == MGL_ACTION_LOAD) ? 1 : 4;
 			}
 			break;
 
-		case 2:
-			//printf("*** MGL state=%d,%d\n", mgl->current, mgl->state);
+		case 3:
 			mgl->state = 0;
 			mgl->current++;
 			if (mgl->current < mgl->count) mgl->timer = GetTimer(mgl->item[mgl->current].delay * 1000);
 			else mgl->done = 1;
 			break;
 
-		case 3:
-			//printf("*** MGL state=%d,%d\n", mgl->current, mgl->state);
+		case 4:
 			user_io_set_kbd_reset(1);
 			user_io_send_buttons(1);
 			mgl->timer = GetTimer(mgl->item[mgl->current].hold ? (mgl->item[mgl->current].hold * 1000) : 100);
-			mgl->state = 4;
+			mgl->state = 5;
 			break;
 
-		case 4:
+		case 5:
 			if (CheckTimer(mgl->timer))
 			{
-				//printf("*** MGL state=%d,%d\n", mgl->current, mgl->state);
 				user_io_set_kbd_reset(0);
 				user_io_send_buttons(1);
-				mgl->state = 2;
+				mgl->state = 3;
 			}
 			break;
 		}
@@ -1385,6 +1398,7 @@ void HandleUI(void)
 			OsdClear();
 			if (!mgl->done) OsdDisable();
 			else OsdEnable(DISABLE_KEYBOARD);
+			if (mgl->state == 1) mgl->state = 2;
 		}
 		break;
 
@@ -1926,7 +1940,7 @@ void HandleUI(void)
 		if (!mgl->done && mgl->item[mgl->current].submenu < 0)
 		{
 			menustate = MENU_NONE1;
-			mgl->state = 2;
+			mgl->state = 3;
 		}
 
 		if (menu_save_timer && !CheckTimer(menu_save_timer))
@@ -2294,7 +2308,7 @@ void HandleUI(void)
 				if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
 			}
 
-			mgl->state = 2;
+			mgl->state = 3;
 		}
 		break;
 
@@ -2345,7 +2359,8 @@ void HandleUI(void)
 
 			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
 
-			mgl->state = 2;
+			mgl->state = 3;
+			if (!mgl->done) MenuHide();
 		}
 		break;
 
@@ -5358,7 +5373,7 @@ void HandleUI(void)
 		menustate = MENU_MINIMIG_MAIN1;
 		if (!mgl->done)
 		{
-			mgl->state = 2;
+			mgl->state = 3;
 			menustate = MENU_NONE1;
 		}
 		break;
@@ -6892,18 +6907,21 @@ static void set_text(const char *message, unsigned char code)
 
 void InfoMessage(const char *message, int timeout, const char *title)
 {
-	if (menustate != MENU_INFO)
+	if (menustate <= MENU_INFO)
 	{
-		OsdSetTitle(title, 0);
-		OsdEnable(OSD_MSG); // do not disable keyboard
+		if (menustate != MENU_INFO)
+		{
+			OsdSetTitle(title, 0);
+			OsdEnable(OSD_MSG); // do not disable keyboard
+		}
+
+		set_text(message, 0);
+
+		menu_timer = GetTimer(timeout);
+		menustate = MENU_INFO;
+		HandleUI();
+		OsdUpdate();
 	}
-
-	set_text(message, 0);
-
-	menu_timer = GetTimer(timeout);
-	menustate = MENU_INFO;
-	HandleUI();
-	OsdUpdate();
 }
 
 void MenuHide()
@@ -6914,7 +6932,7 @@ void MenuHide()
 
 void Info(const char *message, int timeout, int width, int height, int frame)
 {
-	if (!user_io_osd_is_visible())
+	if (menustate <= MENU_INFO)
 	{
 		OSD_PrintInfo(message, &width, &height, frame);
 		InfoEnable(20, (cfg.direct_video && get_vga_fb()) ? 30 : 10, width, height);
