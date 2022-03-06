@@ -957,7 +957,7 @@ static int gun_y = 0;
 static int gun_ok = 0;
 static int gun_side = 0;
 static int gun_idx = 0;
-static uint16_t gun_pos[4] = {};
+static int32_t gun_pos[4] = {};
 static int page = 0;
 
 void HandleUI(void)

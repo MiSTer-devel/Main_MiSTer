@@ -1117,7 +1117,8 @@ enum QUIRK
 	QUIRK_TOUCHGUN,
 	QUIRK_VCS,
 	QUIRK_JOYCON,
-	QUIRK_GUNCON2,
+	QUIRK_LIGHTGUN_CRT,
+	QUIRK_LIGHTGUN
 };
 
 typedef struct
@@ -1147,7 +1148,7 @@ typedef struct
 	uint8_t  has_kbdmap;
 	uint8_t  kbdmap[256];
 
-	uint16_t guncal[4];
+	int32_t  guncal[4];
 
 	int      accx, accy;
 	int      startx, starty;
@@ -1461,19 +1462,19 @@ void finish_map_setting(int dismiss)
 	}
 }
 
-void input_lightgun_save(int idx, uint16_t *cal)
+void input_lightgun_save(int idx, int32_t *cal)
 {
 	static char name[128];
-	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
-	FileSaveConfig(name, cal, 4 * sizeof(uint16_t));
+	sprintf(name, "%s_gun_cal_%04x_%04x_v2.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
+	FileSaveConfig(name, cal, 4 * sizeof(int32_t));
 	memcpy(input[idx].guncal, cal, sizeof(input[idx].guncal));
 }
 
 static void input_lightgun_load(int idx)
 {
 	static char name[128];
-	sprintf(name, "%s_gun_cal_%04x_%04x.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
-	FileLoadConfig(name, input[idx].guncal, 4 * sizeof(uint16_t));
+	sprintf(name, "%s_gun_cal_%04x_%04x_v2.cfg", user_io_get_core_name(), input[idx].vid, input[idx].pid);
+	FileLoadConfig(name, input[idx].guncal, 4 * sizeof(int32_t));
 }
 
 int input_has_lightgun()
@@ -1482,7 +1483,8 @@ int input_has_lightgun()
 	{
 		if (input[i].quirk == QUIRK_WIIMOTE)  return 1;
 		if (input[i].quirk == QUIRK_TOUCHGUN) return 1;
-		if (input[i].quirk == QUIRK_GUNCON2) return 1;
+		if (input[i].quirk == QUIRK_LIGHTGUN) return 1;
+		if (input[i].quirk == QUIRK_LIGHTGUN_CRT) return 1;
 	}
 	return 0;
 }
@@ -4072,12 +4074,24 @@ int input_test(int getchar)
 						//Namco GunCon 2
 						if (input[n].vid == 0x0b9a && input[n].pid == 0x016a)
 						{
-							input[n].quirk = QUIRK_GUNCON2;
+							input[n].quirk = QUIRK_LIGHTGUN_CRT;
 							input[n].lightgun = 1;
 							input[n].guncal[0] = 25;
 							input[n].guncal[1] = 245;
 							input[n].guncal[2] = 145;
 							input[n].guncal[3] = 700;
+							input_lightgun_load(n);
+						}
+
+						//Namco GunCon 3
+						if (input[n].vid == 0x0b9a && input[n].pid == 0x0800)
+						{
+							input[n].quirk = QUIRK_LIGHTGUN;
+							input[n].lightgun = 1;
+							input[n].guncal[0] = -32768;
+							input[n].guncal[1] = 32767;
+							input[n].guncal[2] = -32768;
+							input[n].guncal[3] = 32767;
 							input_lightgun_load(n);
 						}
 
@@ -4527,7 +4541,7 @@ int input_test(int getchar)
 									}
 								}
 
-								if (ev.type == EV_ABS && input[i].quirk == QUIRK_GUNCON2)
+								if (ev.type == EV_ABS && (input[i].quirk == QUIRK_LIGHTGUN_CRT || input[i].quirk == QUIRK_LIGHTGUN))
 								{
 									menu_lightgun_cb(i, ev.type, ev.code, ev.value);
 
@@ -4545,7 +4559,7 @@ int input_test(int getchar)
 
 								if (ev.type == EV_KEY && user_io_osd_is_visible())
 								{
-									if (input[i].quirk == QUIRK_WIIMOTE || input[i].quirk == QUIRK_GUNCON2)
+									if (input[i].quirk == QUIRK_WIIMOTE || input[i].quirk == QUIRK_LIGHTGUN_CRT || input[i].quirk == QUIRK_LIGHTGUN)
 									{
 										if (menu_lightgun_cb(i, ev.type, ev.code, ev.value)) continue;
 									}
