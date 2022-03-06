@@ -2,7 +2,7 @@
 #define ROMUTILS_H_
 
 int arcade_send_rom(const char *xml);
-int arcade_load(const char *xml);
+int xml_load(const char *xml);
 void arcade_check_error();
 
 struct dip_struct
@@ -27,12 +27,43 @@ struct sw_struct
 	dip_struct dip[64];
 };
 
-sw_struct *arcade_sw();
-void arcade_sw_send();
-void arcade_sw_save();
-void arcade_sw_load();
+#define MGL_ACTION_LOAD  0
+#define MGL_ACTION_RESET 1
+
+struct mgl_item_struct
+{
+	char path[1024];
+	int  delay;
+	char type;
+	union
+	{
+		int  index;
+		int  hold;
+	};
+	int  valid;
+	int  submenu;
+	int  action;
+};
+
+struct mgl_struct
+{
+	int  count;
+	int  current;
+	mgl_item_struct item[6];
+	uint32_t timer;
+	int  state;
+	int  done;
+};
+
+sw_struct *arcade_sw(int n);
+void arcade_sw_send(int n);
+void arcade_sw_save(int n);
+void arcade_sw_load(int n);
 void arcade_override_name(const char *xml);
 
 void arcade_nvm_save();
+
+mgl_struct* mgl_parse(const char *xml);
+mgl_struct* mgl_get();
 
 #endif

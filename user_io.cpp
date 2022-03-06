@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 
-#include "lib/lodepng/lodepng.h"
+#include "lib/imlib2/Imlib2.h"
 
 #include "hardware.h"
 #include "osd.h"
@@ -33,15 +33,20 @@
 #include "video.h"
 #include "audio.h"
 #include "shmem.h"
+#include "ide.h"
 
 #include "support.h"
 
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};
 
-static fileTYPE sd_image[4] = {};
-static int      sd_image_cangrow[4] = {};
-static uint64_t buffer_lba[4] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
+static fileTYPE sd_image[16] = {};
+static int      sd_type[16] = {};
+static int      sd_image_cangrow[16] = {};
+static uint64_t buffer_lba[16] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
+								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
+								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
+								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX };
 
 static int use_save = 0;
 
@@ -57,15 +62,6 @@ static int io_ver = 0;
 
 // keep state of caps lock
 static char caps_lock_toggle = 0;
-
-// mouse position storage for ps2 and minimig rate limitation
-#define X 0
-#define Y 1
-#define MOUSE_FREQ 20   // 20 ms -> 50hz
-static int16_t mouse_pos[2] = { 0, 0 };
-static int16_t mouse_wheel = 0;
-static uint8_t mouse_flags = 0;
-static unsigned long mouse_timer;
 
 #define LED_FREQ 100   // 100 ms
 static unsigned long led_timer;
@@ -265,6 +261,13 @@ char is_c64()
 	return (is_c64_type == 1);
 }
 
+static int is_psx_type = 0;
+char is_psx()
+{
+	if (!is_psx_type) is_psx_type = strcasecmp(core_name, "PSX") ? 2 : 1;
+	return (is_psx_type == 1);
+}
+
 static int is_st_type = 0;
 char is_st()
 {
@@ -275,6 +278,13 @@ char is_st()
 char is_sharpmz()
 {
 	return(core_type == CORE_TYPE_SHARPMZ);
+}
+
+static int is_electron_type = 0;
+char is_electron()
+{
+	if (!is_electron_type) is_electron_type = strcasecmp(core_name, "AcornElectron") ? 2 : 1;
+	return (is_electron_type == 1);
 }
 
 static int is_no_type = 0;
@@ -413,10 +423,10 @@ static void parse_config()
 
 	do {
 		p = user_io_get_confstr(i);
-		printf("get cfgstring %d = %s\n", i, p);
-		if (!i && p && p[0])
+		printf("get cfgstring %d = %s\n", i, p ? p : "NULL");
+		if (!i)
 		{
-			OsdCoreNameSet(p);
+			OsdCoreNameSet((p && p[0]) ? p : "CORE");
 		}
 
 		if (i == 1 && p)
@@ -529,7 +539,7 @@ static void parse_config()
 		{
 			if (!strncmp(p, "DEFMRA,", 7))
 			{
-				snprintf(defmra, sizeof(defmra), "%s/_Arcades/%s", getRootDir(), p + 7);
+				snprintf(defmra, sizeof(defmra), (p[7] == '/') ? "%s%s" : "%s/_Arcades/%s", getRootDir(), p + 7);
 			}
 			else if (!strncmp(p, "DIP", 3))
 			{
@@ -588,7 +598,7 @@ static void parse_config()
 
 			if (p[0] == 'O' && p[1] == 'X')
 			{
-				uint32_t status = user_io_8bit_set_status(0, 0);
+				uint32_t status = user_io_status(0, 0);
 				printf("found OX option: %s, 0x%08X\n", p, status);
 
 				unsigned long x = getStatus(p + 1, status);
@@ -619,15 +629,73 @@ static void parse_config()
 				use_cheats = 1;
 			}
 
-			if (p[0] == 'F' && p[1] == 'C')
+			if (p[0] == 'F')
+			{
+				int opensave = 0;
+				int idx = 1;
+				if (p[idx] == 'S')
+				{
+					opensave = 1;
+					idx++;
+				}
+
+				if (p[idx] == 'C')
+				{
+					idx++;
+					static char str[1024];
+					uint32_t load_addr = 0;
+					if (substrcpy(str, p, 3))
+					{
+						load_addr = strtoul(str, NULL, 16);
+						if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+						{
+							printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
+							load_addr = 0;
+						}
+					}
+
+					sprintf(str, "%s.f%c", user_io_get_core_name(), p[idx]);
+					if (FileLoadConfig(str, str, sizeof(str)) && str[0])
+					{
+
+						idx = p[idx] - '0';
+						StoreIdx_F(idx, str);
+						user_io_file_tx(str, idx, opensave, 0, 0, load_addr);
+					}
+				}
+			}
+
+			if (p[0] == 'S' && p[1] == 'C')
 			{
 				static char str[1024];
-				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
+				sprintf(str, "%s.s%c", user_io_get_core_name(), p[2]);
+
+				static char ext[256];
+				substrcpy(ext, p, 1);
+				while (strlen(ext) % 3) strcat(ext, " ");
+
 				if (FileLoadConfig(str, str, sizeof(str)) && str[0])
 				{
 					int idx = p[2] - '0';
-					StoreIdx_F(idx, str);
-					user_io_file_tx(str, idx);
+					StoreIdx_S(idx, str);
+					if (is_x86())
+					{
+						x86_set_image(idx, str);
+					}
+					else if (is_megacd())
+					{
+						mcd_set_image(idx, str);
+					}
+					else if (is_pce())
+					{
+						pcecd_set_image(idx, str);
+						cheats_init(str, 0);
+					}
+					else
+					{
+						user_io_set_index(user_io_ext_idx(str, ext) << 6 | idx);
+						user_io_file_mount(str, idx);
+					}
 				}
 			}
 		}
@@ -1016,23 +1084,10 @@ void user_io_init(const char *path, const char *xml)
 
 	OsdSetSize(8);
 
-	if (xml)
+	if (xml && isXmlName(xml) == 1)
 	{
 		is_arcade_type = 1;
 		arcade_override_name(xml);
-	}
-
-	user_io_read_confstr();
-	user_io_read_core_name();
-	parse_config();
-	if (!xml && defmra[0] && FileExists(defmra))
-	{
-		// attn: FC option won't use name from defmra!
-		xml = (const char*)defmra;
-		strcpy(core_path, xml);
-		is_arcade_type = 1;
-		arcade_override_name(xml);
-		printf("Using default MRA: %s\n", xml);
 	}
 
 	if (core_type == CORE_TYPE_8BIT)
@@ -1041,24 +1096,53 @@ void user_io_init(const char *path, const char *xml)
 		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 
 		// send a reset
-		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+		user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 	}
 	else if (core_type == CORE_TYPE_SHARPMZ)
 	{
 		user_io_set_core_name("sharpmz");
 	}
 
+	user_io_read_confstr();
+	user_io_read_core_name();
+
 	cfg_parse();
+	while (cfg.waitmount[0] && !is_menu())
+	{
+		printf("> > > wait for %s mount < < <\n", cfg.waitmount);
+		static char str[256];
+		snprintf(str, sizeof(str), "exit $(mount | grep \"%s\" | wc -c)", cfg.waitmount);
+		int ret = system(str);
+		if (!(ret & 0xFF) && ret) break;
+		sleep(1);
+	}
+
+	parse_config();
+	if (!xml && defmra[0] && FileExists(defmra))
+	{
+		// attn: FC option won't use name from defmra!
+		// attn: cfg is parsed before defmra, no defmra-name specifics possible in INI!
+		xml = (const char*)defmra;
+		strcpy(core_path, xml);
+		is_arcade_type = 1;
+		arcade_override_name(xml);
+		user_io_read_core_name();
+		printf("Using default MRA: %s\n", xml);
+	}
+
+	if (cfg.log_file_entry) MakeFile("/tmp/STARTPATH", core_path);
+
 	if (cfg.bootcore[0] != '\0')
 	{
 		bootcore_init(xml ? xml : path);
 	}
 
 	video_mode_load();
-	if(strlen(cfg.font)) LoadFont(cfg.font);
+	if (strlen(cfg.font)) LoadFont(cfg.font);
 	load_volume();
 
 	user_io_send_buttons(1);
+	if (xml && isXmlName(xml) == 2) mgl_parse(xml);
 
 	switch (core_type)
 	{
@@ -1066,20 +1150,18 @@ void user_io_init(const char *path, const char *xml)
 		printf("Unable to identify core (%x)!\n", core_type);
 		break;
 
-    case CORE_TYPE_SHARPMZ:
+	case CORE_TYPE_SHARPMZ:
 		printf("Identified Sharp MZ Series core");
 		user_io_set_core_name("sharpmz");
-        sharpmz_init();
+		sharpmz_init();
 		parse_buttons();
 		break;
 
 	case CORE_TYPE_8BIT:
 		// try to load config
 		name = user_io_create_config_name();
-		if(strlen(name) > 0)
+		if (strlen(name) > 0)
 		{
-			OsdCoreNameSet(user_io_get_core_name());
-
 			uint32_t status[2] = { 0, 0 };
 			if (!is_st() && !is_minimig())
 			{
@@ -1095,8 +1177,8 @@ void user_io_init(const char *path, const char *xml)
 				}
 
 				status[0] &= ~UIO_STATUS_RESET;
-				user_io_8bit_set_status(status[0], ~UIO_STATUS_RESET, 0);
-				user_io_8bit_set_status(status[1], 0xffffffff, 1);
+				user_io_status(status[0], ~UIO_STATUS_RESET, 0);
+				user_io_status(status[1], 0xffffffff, 1);
 			}
 
 			if (is_st())
@@ -1106,13 +1188,13 @@ void user_io_init(const char *path, const char *xml)
 			}
 			else if (is_menu())
 			{
-				user_io_8bit_set_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
+				user_io_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
 				if (cfg.fb_terminal) video_menu_bg((status[0] >> 1) & 7);
-				else user_io_8bit_set_status(0, 0xE);
+				else user_io_status(0, 0xE);
 			}
 			else
 			{
-				if (xml)
+				if (xml && isXmlName(xml) == 1)
 				{
 					arcade_send_rom(xml);
 				}
@@ -1225,8 +1307,8 @@ void user_io_init(const char *path, const char *xml)
 		send_rtc(3);
 
 		// release reset
-		if(!is_minimig() && !is_st()) user_io_8bit_set_status(0, UIO_STATUS_RESET);
-		if(xml) arcade_check_error();
+		if (!is_minimig() && !is_st()) user_io_status(0, UIO_STATUS_RESET);
+		if (xml && isXmlName(xml) == 1) arcade_check_error();
 		break;
 	}
 
@@ -1251,13 +1333,13 @@ void user_io_init(const char *path, const char *xml)
 		sprintf(mainpath, "uartmode.%s", user_io_get_core_name());
 		FileLoadConfig(mainpath, &mode, 4);
 
-		uint64_t speeds = 0;
+		uint32_t speeds[3] = {};
 		sprintf(mainpath, "uartspeed.%s", user_io_get_core_name());
-		FileLoadConfig(mainpath, &speeds, 8);
+		FileLoadConfig(mainpath, speeds, sizeof(speeds));
 
-		ValidateUARTbaud(1, speeds & 0xFFFFFFFF);
-		ValidateUARTbaud(3, speeds >> 32);
-		ValidateUARTbaud(4, uart_speeds[0]);
+		ValidateUARTbaud(1, speeds[0]);
+		ValidateUARTbaud(3, speeds[1]);
+		ValidateUARTbaud(4, speeds[2] ? speeds[2] : uart_speeds[0]);
 
 		printf("UART bauds: %d/%d/%d\n", GetUARTbaud(1), GetUARTbaud(3), GetUARTbaud(4));
 	}
@@ -1270,6 +1352,15 @@ void user_io_init(const char *path, const char *xml)
 	if (uartmode < 3 || uartmode > 4) midilink = 0;
 	SetMidiLinkMode(midilink);
 	SetUARTMode(uartmode);
+
+	if (!mgl_get()->count || is_menu() || is_st() || is_archie() || user_io_core_type() == CORE_TYPE_SHARPMZ)
+	{
+		mgl_get()->done = 1;
+	}
+	else
+	{
+		mgl_get()->timer = GetTimer(mgl_get()->item[0].delay * 1000);
+	}
 }
 
 static int joyswap = 0;
@@ -1283,7 +1374,7 @@ int user_io_get_joyswap()
 	return joyswap;
 }
 
-void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
+void user_io_l_analog_joystick(unsigned char joystick, char valueX, char valueY)
 {
 	uint8_t joy = (joystick > 1 || !joyswap) ? joystick : (joystick >= 15) ? (joystick ^ 16) : (joystick ^ 1);
 
@@ -1291,6 +1382,23 @@ void user_io_analog_joystick(unsigned char joystick, char valueX, char valueY)
 	{
 		spi_uio_cmd8_cont(UIO_ASTICK, joy);
 		if(io_ver) spi_w((valueY<<8) | (uint8_t)(valueX));
+		else
+		{
+			spi8(valueX);
+			spi8(valueY);
+		}
+		DisableIO();
+	}
+}
+
+void user_io_r_analog_joystick(unsigned char joystick, char valueX, char valueY)
+{
+	uint8_t joy = (joystick > 1 || !joyswap) ? joystick : (joystick ^ 1);
+
+	if (core_type == CORE_TYPE_8BIT)
+	{
+		spi_uio_cmd8_cont(UIO_ASTICK_2, joy);
+		if (io_ver) spi_w((valueY << 8) | (uint8_t)(valueX));
 		else
 		{
 			spi8(valueX);
@@ -1314,7 +1422,7 @@ void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
 
 	if (!is_minimig() && joy_transl == 1 && newdir)
 	{
-		user_io_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
+		user_io_l_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
 	}
 }
 
@@ -1341,42 +1449,6 @@ void user_io_sd_set_config(void)
 	printf("SD CSD\n");
 	hexdump(CSD, sizeof(CSD), 0);
 */
-}
-
-// read 8+32 bit sd card status word from FPGA
-uint16_t user_io_sd_get_status(uint32_t *lba, uint16_t *req_type)
-{
-	uint32_t s;
-	uint16_t c;
-	uint16_t req = 0;
-
-	spi_uio_cmd_cont(UIO_GET_SDSTAT);
-	if (io_ver)
-	{
-		c = spi_w(0);
-		s = spi_w(0);
-		s = (s & 0xFFFF) | (((uint32_t)spi_w(0))<<16);
-		req = spi_w(0);
-	}
-	else
-	{
-		//note: using 32bit big-endian transfer!
-		c = spi_in();
-		s = spi_in();
-		s = (s << 8) | spi_in();
-		s = (s << 8) | spi_in();
-		s = (s << 8) | spi_in();
-		req = spi_in();
-	}
-	DisableIO();
-
-	if (lba)
-		*lba = s;
-
-	if (req)
-		*req_type = req;
-
-	return c;
 }
 
 // read 8 bit keyboard LEDs status from FPGA
@@ -1449,6 +1521,115 @@ static void kbd_fifo_poll()
 	kbd_fifo_r = (kbd_fifo_r + 1)&(KBD_FIFO_SIZE - 1);
 }
 
+int process_ss(const char *rom_name, int enable)
+{
+	static char ss_name[1024] = {};
+	static char *ss_sufx = 0;
+	static uint32_t ss_cnt[4] = {};
+	static void *base[4] = {};
+	static int enabled = 0;
+
+	if (!ss_base) return 0;
+
+	if (rom_name)
+	{
+		enabled = enable;
+		if (!enabled) return 0;
+
+		uint32_t len = ss_size;
+		uint32_t map_addr = ss_base;
+		fileTYPE f = {};
+
+		for (int i = 0; i < 4; i++)
+		{
+			if (!base[i]) base[i] = shmem_map(map_addr, len);
+			if (!base[i])
+			{
+				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
+			}
+			else
+			{
+				ss_cnt[i] = 0;
+				memset(base[i], 0, len);
+
+				if (!i)
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, 1);
+					printf("Base SavestatePath=%s\n", ss_name);
+					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
+				}
+				else
+				{
+					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
+				}
+
+				if (FileExists(ss_name))
+				{
+					if (!FileOpen(&f, ss_name))
+					{
+						printf("Unable to open file: %s\n", ss_name);
+					}
+					else
+					{
+						int ret = FileReadAdv(&f, base[i], len);
+						FileClose(&f);
+						*(uint32_t*)(base[i]) = 1;
+						ss_cnt[i] = 1;
+						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
+					}
+				}
+			}
+
+			map_addr += len;
+		}
+
+		FileGenerateSavestatePath(rom_name, ss_name, 1);
+		ss_sufx = ss_name + strlen(ss_name) - 4;
+		return 1;
+	}
+
+	if (!enabled) return 0;
+
+	static unsigned long ss_timer = 0;
+	if (ss_timer && !CheckTimer(ss_timer)) return 0;
+	ss_timer = GetTimer(1000);
+
+	fileTYPE f = {};
+	for (int i = 0; i < 4; i++)
+	{
+		if (base[i])
+		{
+			uint32_t curcnt = ((uint32_t*)(base[i]))[0];
+			uint32_t size = ((uint32_t*)(base[i]))[1];
+
+			if (curcnt != ss_cnt[i])
+			{
+				ss_cnt[i] = curcnt;
+				if (size) size = (size + 2) * 4;
+				if (size > 0 && size <= ss_size)
+				{
+					MenuHide();
+					Info("Saving the state", 500);
+
+					*ss_sufx = i + '1';
+					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
+					{
+						int ret = FileWriteAdv(&f, base[i], size);
+						FileClose(&f);
+						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
+					}
+					else
+					{
+						printf("Unable to create file: %s\n", ss_name);
+					}
+				}
+			}
+		}
+	}
+
+	return 1;
+}
+
 void user_io_set_index(unsigned char index)
 {
 	EnableFpga();
@@ -1478,7 +1659,7 @@ void user_io_set_download(unsigned char enable, int addr)
 	DisableFpga();
 }
 
-void user_io_file_tx_data(const uint8_t *addr, uint16_t len)
+void user_io_file_tx_data(const uint8_t *addr, uint32_t len)
 {
 	EnableFpga();
 	spi8(FIO_FILE_TX_DAT);
@@ -1499,7 +1680,7 @@ void user_io_set_upload(unsigned char enable, int addr)
 	DisableFpga();
 }
 
-void user_io_file_rx_data(uint8_t *addr, uint16_t len)
+void user_io_file_rx_data(uint8_t *addr, uint32_t len)
 {
 	EnableFpga();
 	spi8(FIO_FILE_TX_DAT);
@@ -1516,13 +1697,14 @@ void user_io_file_info(const char *ext)
 	DisableFpga();
 }
 
-int user_io_file_mount(const char *name, unsigned char index, char pre)
+int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_size)
 {
 	int writable = 0;
 	int ret = 0;
 	int len = strlen(name);
 
 	sd_image_cangrow[index] = (pre != 0);
+	sd_type[index] = 0;
 
 	if (len)
 	{
@@ -1537,15 +1719,27 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 			{
 				ret = x2trd(name, sd_image + index);
 			}
-			else if (is_c64() && len > 4 && !strcasecmp(name + len - 4, ".t64"))
+			else if (len > 4 && !strcasecmp(name + len - 4, ".t64"))
 			{
 				writable = 0;
 				ret = c64_openT64(name, sd_image + index);
+				if (ret)
+				{
+					ret = c64_openGCR(name, sd_image + index, index);
+					sd_type[index] = 1;
+					if (!ret) FileClose(&sd_image[index]);
+				}
 			}
 			else
 			{
 				writable = FileCanWrite(name);
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+				if (ret && len > 4 && (!strcasecmp(name + len - 4, ".d64") || !strcasecmp(name + len - 4, ".g64")))
+				{
+					ret = c64_openGCR(name, sd_image + index, index);
+					sd_type[index] = 1;
+					if(!ret) FileClose(&sd_image[index]);
+				}
 			}
 		}
 
@@ -1557,6 +1751,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	else
 	{
 		FileClose(&sd_image[index]);
+		c64_closeGCR(index);
 	}
 
 	buffer_lba[index] = -1;
@@ -1592,6 +1787,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre)
 	{
 		sd_image[index].type = 2;
 		strcpy(sd_image[index].path, name);
+		size = pre_size;
 	}
 
 	if (io_ver)
@@ -1906,8 +2102,8 @@ static void check_status_change()
 		uint32_t st0 = spi32_w(0);
 		uint32_t st1 = spi32_w(0);
 		DisableIO();
-		user_io_8bit_set_status(st0, ~UIO_STATUS_RESET, 0);
-		user_io_8bit_set_status(st1, 0xFFFFFFFF, 1);
+		user_io_status(st0, ~UIO_STATUS_RESET, 0);
+		user_io_status(st1, 0xFFFFFFFF, 1);
 	}
 	else
 	{
@@ -1935,109 +2131,6 @@ static void show_core_info(int info_n)
 	}
 }
 
-static int process_ss(const char *rom_name)
-{
-	static char ss_name[1024] = {};
-	static char *ss_sufx = 0;
-	static uint32_t ss_cnt[4] = {};
-	static void *base[4] = {};
-
-	if (!ss_base) return 0;
-
-	if (rom_name)
-	{
-		uint32_t len = ss_size;
-		uint32_t map_addr = ss_base;
-		fileTYPE f = {};
-
-		for (int i = 0; i < 4; i++)
-		{
-			if (!base[i]) base[i] = shmem_map(map_addr, len);
-			if (!base[i])
-			{
-				printf("Unable to mmap (0x%X, %d)!\n", map_addr, len);
-			}
-			else
-			{
-				ss_cnt[i] = 0;
-				memset(base[i], 0, len);
-
-				if (!i)
-				{
-					FileGenerateSavestatePath(rom_name, ss_name, 1);
-					printf("Base SavestatePath=%s\n", ss_name);
-					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
-				}
-				else
-				{
-					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
-				}
-
-				if (FileExists(ss_name))
-				{
-					if (!FileOpen(&f, ss_name))
-					{
-						printf("Unable to open file: %s\n", ss_name);
-					}
-					else
-					{
-						int ret = FileReadAdv(&f, base[i], len);
-						FileClose(&f);
-						*(uint32_t*)(base[i]) = 1;
-						ss_cnt[i] = 1;
-						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
-					}
-				}
-			}
-
-			map_addr += len;
-		}
-
-		FileGenerateSavestatePath(rom_name, ss_name, 1);
-		ss_sufx = ss_name + strlen(ss_name) - 4;
-		return 1;
-	}
-
-	static unsigned long ss_timer = 0;
-	if (ss_timer && !CheckTimer(ss_timer)) return 0;
-	ss_timer = GetTimer(1000);
-
-	fileTYPE f = {};
-	for (int i = 0; i < 4; i++)
-	{
-		if (base[i])
-		{
-			uint32_t curcnt = ((uint32_t*)(base[i]))[0];
-			uint32_t size = ((uint32_t*)(base[i]))[1];
-
-			if (curcnt != ss_cnt[i])
-			{
-				ss_cnt[i] = curcnt;
-				if (size) size = (size + 2) * 4;
-				if (size > 0 && size <= ss_size)
-				{
-					MenuHide();
-					Info("Saving the state", 500);
-
-					*ss_sufx = i + '1';
-					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
-					{
-						int ret = FileWriteAdv(&f, base[i], size);
-						FileClose(&f);
-						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
-					}
-					else
-					{
-						printf("Unable to create file: %s\n", ss_name);
-					}
-				}
-			}
-		}
-	}
-
-	return 1;
-}
-
 int user_io_file_tx_a(const char* name, uint16_t index)
 {
 	fileTYPE f = {};
@@ -2061,7 +2154,7 @@ int user_io_file_tx_a(const char* name, uint16_t index)
 	if (use_progress) ProgressMessage(0, 0, 0, 0);
 	while (bytes2send)
 	{
-		uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+		uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
 		user_io_file_tx_data(buf, chunk);
@@ -2118,6 +2211,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	int dosend = 1;
 
+
+
 	int is_snes_bs = 0;
 	if (is_snes() && bytes2send)
 	{
@@ -2143,7 +2238,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				user_io_file_tx_data(buf, 512);
 
 				//strip original SNES ROM header if present (not used)
-				if (bytes2send & 512)
+				if ((bytes2send % 1024) == 512)
 				{
 					bytes2send -= 512;
 					FileReadSec(&f, buf);
@@ -2152,7 +2247,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t sz = fb.size;
 				while (sz)
 				{
-					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					uint32_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fb, buf, chunk);
 					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
@@ -2185,7 +2280,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			user_io_file_tx_data(buf, 512);
 
 			//strip original SNES ROM header if present (not used)
-			if (bytes2send & 512)
+			if ((bytes2send % 1024) == 512)
 			{
 				bytes2send -= 512;
 				FileReadSec(&f, buf);
@@ -2218,7 +2313,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t sz = fg.size;
 				while (sz)
 				{
-					uint16_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
+					uint32_t chunk = (sz > sizeof(buf)) ? sizeof(buf) : sz;
 					FileReadAdv(&fg, buf, chunk);
 					user_io_file_tx_data(buf, chunk);
 					sz -= chunk;
@@ -2228,15 +2323,32 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		}
 	}
 
+	if (is_electron() && bytes2send)
+	{
+		const char *ext = strrchr(f.name, '.');
+		if (ext && !strcasecmp(ext, ".UEF")) {
+			UEF_FileSend(&f,use_progress);
+			dosend=0;
+		}
+	}
+
 	if (dosend && load_addr >= 0x20000000 && (load_addr + bytes2send) <= 0x40000000)
 	{
 		uint8_t *mem = (uint8_t *)shmem_map(fpga_mem(load_addr), bytes2send);
 		if (mem)
 		{
-			FileReadAdv(&f, mem, bytes2send);
-			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, mem);
-			file_crc = crc32(file_crc, mem + skip, bytes2send - skip);
-			skip = 0;
+			while (bytes2send)
+			{
+				uint32_t chunk = (bytes2send > (256 * 1024)) ? (256 * 1024) : bytes2send;
+				FileReadAdv(&f, mem + size - bytes2send, chunk);
+
+				file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
+				skip = 0;
+
+				if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
+				bytes2send -= chunk;
+			}
+
 			shmem_unmap(mem, bytes2send);
 		}
 	}
@@ -2244,7 +2356,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	{
 		while (dosend && bytes2send)
 		{
-			uint16_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+			uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 			FileReadAdv(&f, buf, chunk);
 			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
@@ -2331,7 +2443,7 @@ char *user_io_get_confstr(int index)
 	return buffer;
 }
 
-uint32_t user_io_8bit_set_status(uint32_t new_status, uint32_t mask, int ex)
+uint32_t user_io_status(uint32_t new_status, uint32_t mask, int ex)
 {
 	static uint32_t status[2] = { 0, 0 };
 	if (ex) ex = 1;
@@ -2387,6 +2499,8 @@ int get_vga_fb()
 }
 
 static char kbd_reset = 0;
+static char kbd_reset_ovr = 0;
+
 void user_io_send_buttons(char force)
 {
 	static unsigned short key_map = 0;
@@ -2396,7 +2510,7 @@ void user_io_send_buttons(char force)
 
 	if (user_io_menu_button()) map |= BUTTON1;
 	if (user_io_user_button()) map |= BUTTON2;
-	if (kbd_reset) map |= BUTTON2;
+	if (kbd_reset || kbd_reset_ovr) map |= BUTTON2;
 
 	if (cfg.vga_scaler) map |= CONF_VGA_SCALER;
 	if (cfg.vga_sog) map |= CONF_VGA_SOG;
@@ -2441,7 +2555,12 @@ void user_io_send_buttons(char force)
 
 int user_io_get_kbd_reset()
 {
-	return kbd_reset;
+	return kbd_reset || kbd_reset_ovr;
+}
+
+void user_io_set_kbd_reset(int reset)
+{
+	kbd_reset_ovr = reset;
 }
 
 void user_io_set_ini(int ini_num)
@@ -2517,88 +2636,23 @@ void user_io_poll()
 		spi_w(0);
 		spi_w(0);
 		DisableFpga();
+		sysled_enable(0);
 		HandleFDD(c1, c2);
-		HandleHDD(c1, c2);
+		sysled_enable(1);
+
+		uint16_t sd_req = ide_check();
+		if (sd_req & 0x8000)
+		{
+			ide_io(0, sd_req & 7);
+			ide_io(1, (sd_req >> 3) & 7);
+		}
+		else
+		{
+			HandleHDD(c1, c2);
+		}
 		UpdateDriveStatus();
 
 		kbd_fifo_poll();
-
-		// frequently check mouse for events
-		if (CheckTimer(mouse_timer))
-		{
-			mouse_timer = GetTimer(MOUSE_FREQ);
-
-			// has ps2 mouse data been updated in the meantime
-			if (mouse_flags & 0x80)
-			{
-				if (!osd_is_visible)
-				{
-					spi_uio_cmd_cont(UIO_MOUSE);
-
-					// ----- X axis -------
-					if (mouse_pos[X] < -128)
-					{
-						spi8(-128);
-						mouse_pos[X] += 128;
-					}
-					else if (mouse_pos[X] > 127)
-					{
-						spi8(127);
-						mouse_pos[X] -= 127;
-					}
-					else
-					{
-						spi8(mouse_pos[X]);
-						mouse_pos[X] = 0;
-					}
-
-					// ----- Y axis -------
-					if (mouse_pos[Y] < -128)
-					{
-						spi8(-128);
-						mouse_pos[Y] += 128;
-					}
-					else if (mouse_pos[Y] > 127)
-					{
-						spi8(127);
-						mouse_pos[Y] -= 127;
-					}
-					else
-					{
-						spi8(mouse_pos[Y]);
-						mouse_pos[Y] = 0;
-					}
-
-					// ---- Buttons ------
-					spi8(mouse_flags & 0x07);
-
-					// ----- Wheel -------
-					if (mouse_wheel < -127)
-					{
-						spi8(-127);
-					}
-					else if (mouse_wheel > 127)
-					{
-						spi8(127);
-					}
-					else
-					{
-						spi8(mouse_wheel);
-					}
-
-					mouse_wheel = 0;
-					DisableIO();
-				}
-				else
-				{
-					mouse_pos[X] = 0;
-					mouse_pos[Y] = 0;
-				}
-
-				// reset flags
-				mouse_flags = 0;
-			}
-		}
 
 		if (!rtc_timer || CheckTimer(rtc_timer))
 		{
@@ -2624,262 +2678,241 @@ void user_io_poll()
 	{
 		if (is_st()) tos_poll();
 
-		while (1)
+		for (int i = 0; i < 4; i++)
 		{
-			const int buf_sz = 16;
-			static uint8_t buffer[4][buf_sz * 512];
-			uint32_t lba;
-			uint16_t req_type = 0;
-			uint16_t c = user_io_sd_get_status(&lba, &req_type);
-			//if(c&3) printf("user_io_sd_get_status: cmd=%02x, lba=%08x\n", c, lba);
+			int disk = -1;
+			int ack = 0;
+			int op = 0;
+			static uint8_t buffer[16][16384];
+			uint64_t lba;
+			uint32_t blksz, blks, sz;
 
-			// valid sd commands start with "5x" to avoid problems with
-			// cores that don't implement this command
-			if ((c & 0xf0) == 0x50)
+			uint16_t c = spi_uio_cmd_cont(UIO_GET_SDSTAT);
+			if (c & 0x8000)
 			{
-				// check if core requests configuration
-				if ((c & 0xC) == 0xC)
+				disk = (c >> 2) & 0xF;
+				op = c & 3;
+				ack = disk << 8;
+				spi_w(0);
+				lba = spi_w(0);
+				lba = (lba & 0xFFFF) | (((uint32_t)spi_w(0)) << 16);
+				blks = ((c >> 9) & 0x3F) + 1;
+				blksz = (disk == 1 && is_psx()) ? 2352 : (128 << ((c >> 6) & 7));
+
+				sz = blksz * blks;
+				if (sz > sizeof(buffer[0]))
 				{
-					printf("core requests SD config\n");
-					user_io_sd_set_config();
+					blks = sizeof(buffer[0]) / blksz;
+					sz = blksz * blks;
 				}
 
-				if (c & 0x3802)
+				//if (op) printf("c=%X, op=%d, blkpow=%d, sz=%d, lba=%llu, disk=%d\n", c, op, blkpow, sz, lba, disk);
+			}
+			else
+			{
+				c = spi_w(0);
+				if ((c & 0xf0) == 0x50 && (c & 0x3F03))
 				{
-					int disk = 3;
-					if (c & 0x0002) disk = 0;
-					else if (c & 0x0800) disk = 1;
-					else if (c & 0x1000) disk = 2;
+					lba = spi_w(0);
+					lba = (lba & 0xFFFF) | (((uint32_t)spi_w(0)) << 16);
 
-					//printf("SD WR %d on %d\n", lba, disk);
-
-					if (use_save) menu_process_save();
-
-					buffer_lba[disk] = -1;
-
-					// Fetch sector data from FPGA ...
-					EnableIO();
-					spi_w(UIO_SECTOR_WR | ((c & 4) ? 0 : ((disk + 1) << 8)));
-					spi_block_read(buffer[disk], fio_size);
-					DisableIO();
-
-					if (sd_image[disk].type == 2 && !lba)
+					// check if core requests configuration
+					if ((c & 0xC) == 0xC)
 					{
-						//Create the file
-						if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
+						printf("core requests SD config\n");
+						user_io_sd_set_config();
+					}
+
+					if (c & 0x0003)
+					{
+						disk = 0;
+						op = (c & 1) ? 1 : 2;
+					}
+					else if (c & 0x0900)
+					{
+						disk = 1;
+						op = (c & 0x100) ? 1 : 2;
+					}
+					else if (c & 0x1200)
+					{
+						disk = 2;
+						op = (c & 0x200) ? 1 : 2;
+					}
+					else if (c & 0x2400)
+					{
+						disk = 3;
+						op = (c & 0x400) ? 1 : 2;
+					}
+
+					ack = ((c & 4) ? 0 : ((disk + 1) << 8));
+				}
+
+				sz = 512;
+				blksz = 512;
+				blks = 1;
+			}
+			DisableIO();
+
+			if ((blks == 32) && sd_type[disk])
+			{
+				if (op == 2) c64_writeGCR(disk, lba);
+				else if (op & 1) c64_readGCR(disk, lba);
+				else break;
+			}
+			else if (op == 2)
+			{
+				//printf("SD WR %d on %d\n", lba, disk);
+
+				if (use_save) menu_process_save();
+
+				buffer_lba[disk] = -1;
+
+				// Fetch sector data from FPGA ...
+				EnableIO();
+				spi_w(UIO_SECTOR_WR | ack);
+				spi_block_read(buffer[disk], fio_size, sz);
+				DisableIO();
+
+				if (sd_image[disk].type == 2 && !lba)
+				{
+					//Create the file
+					if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
+					{
+						diskled_on();
+						if (FileWriteAdv(&sd_image[disk], buffer[disk], sz))
 						{
-							diskled_on();
-							if (FileWriteSec(&sd_image[disk], buffer[disk]))
-							{
-								sd_image[disk].size = 512;
-							}
-						}
-						else
-						{
-							printf("Error in creating file: %s\n", sd_image[disk].path);
+							sd_image[disk].size = sz;
 						}
 					}
 					else
 					{
-						// ... and write it to disk
-						__off64_t size = sd_image[disk].size >> 9;
-						if (size && lba <= size)
+						printf("Error in creating file: %s\n", sd_image[disk].path);
+					}
+				}
+				else
+				{
+					// ... and write it to disk
+					uint64_t size = sd_image[disk].size / blksz;
+					if (sz && lba <= size)
+					{
+						diskled_on();
+						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
 						{
-							diskled_on();
-							if (FileSeekLBA(&sd_image[disk], lba))
+							if (!sd_image_cangrow[disk])
 							{
-								int sz = 512;
-								if (!sd_image_cangrow[disk])
-								{
-									__off64_t rem = sd_image[disk].size - sd_image[disk].offset;
-									sz = (rem >= 512) ? 512 : (int)rem;
-								}
-								if(sz && FileWriteAdv(&sd_image[disk], buffer[disk], sz))
-								{
-									if (size == lba && sd_image_cangrow[disk])
-									{
-										size++;
-										sd_image[disk].size = size << 9;
-									}
-								}
+								__off64_t rem = sd_image[disk].size - sd_image[disk].offset;
+								sz = (rem >= sz) ? sz : (int)rem;
 							}
+
+							if (sz) FileWriteAdv(&sd_image[disk], buffer[disk], sz);
 						}
 					}
 				}
-				else if (c & 0x0701)
+			}
+			else if (op & 1)
+			{
+				uint32_t buf_n = sizeof(buffer[0]) / blksz;
+				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, blksz, disk, fio_size);
+
+				int done = 0;
+				uint32_t offset;
+
+				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
 				{
-					int disk = 3;
-					if (c & 0x0001) disk = 0;
-					else if (c & 0x0100) disk = 1;
-					else if (c & 0x0200) disk = 2;
-
-					//printf("SD RD %d on %d, WIDE=%d\n", lba, disk, fio_size);
-
-					int done = 0;
-					uint32_t offset;
-
-					if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || lba >(buffer_lba[disk] + buf_sz - 1))
+					buffer_lba[disk] = -1;
+					if (blksz == 2352 && is_psx())
 					{
-						buffer_lba[disk] = -1;
-						if (sd_image[disk].size)
+						diskled_on();
+						psx_read_cd(buffer[disk], lba, buf_n);
+						done = 1;
+						buffer_lba[disk] = lba;
+					}
+					else if (sd_image[disk].size)
+					{
+						diskled_on();
+						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
 						{
-							diskled_on();
-							if (FileSeekLBA(&sd_image[disk], lba))
+							if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
 							{
-								if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
-								{
-									done = 1;
-									buffer_lba[disk] = lba;
-								}
+								done = 1;
+								buffer_lba[disk] = lba;
 							}
 						}
+					}
 
-						//Even after error we have to provide the block to the core
-						//Give an empty block.
-						if (!done)
+					//Even after error we have to provide the block to the core
+					//Give an empty block.
+					if (!done)
+					{
+						if (sd_image[disk].type == 2)
 						{
-							if (sd_image[disk].type == 2)
+							if (is_megacd())
 							{
-								if (is_megacd())
+								mcd_fill_blanksave(buffer[disk], lba);
+							}
+							else if (is_pce())
+							{
+								memset(buffer[disk], 0, sizeof(buffer[disk]));
+								if (!lba)
 								{
-									mcd_fill_blanksave(buffer[disk], lba);
+									memcpy(buffer[disk], "HUBM\x00\x88\x10\x80", 8);
 								}
-								else if (is_pce())
-								{
-									memset(buffer[disk], 0, sizeof(buffer[disk]));
-									if (!lba)
-									{
-										memcpy(buffer[disk], "HUBM\x00\x88\x10\x80", 8);
-									}
-								}
-								else
-								{
-									memset(buffer[disk], -1, sizeof(buffer[disk]));
-								}
+							}
+							else if (is_psx())
+							{
+								psx_fill_blanksave(buffer[disk], lba, blks);
 							}
 							else
 							{
-								memset(buffer[disk], 0, sizeof(buffer[disk]));
+								memset(buffer[disk], -1, sizeof(buffer[disk]));
 							}
-						}
-
-						offset = 0;
-					}
-					else
-					{
-						offset = (lba - buffer_lba[disk])*512;
-						done = 1;
-					}
-
-					//hexdump(buffer, 32, 0);
-
-					// data is now stored in buffer. send it to fpga
-					EnableIO();
-					spi_w(UIO_SECTOR_RD | ((c & 4) ? 0 : ((disk + 1) << 8)));
-					spi_block_write(buffer[disk] + offset, fio_size);
-					DisableIO();
-
-					if (sd_image[disk].type == 2)
-					{
-						buffer_lba[disk] = -1;
-					}
-					else if(done && (lba == (buffer_lba[disk] + buf_sz - 1)))
-					{
-						diskled_on();
-						if (FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
-						{
-							buffer_lba[disk] += buf_sz;
 						}
 						else
 						{
 							memset(buffer[disk], 0, sizeof(buffer[disk]));
-							buffer_lba[disk] = -1;
 						}
 					}
-				}
-				else break;
-			}
-		}
-	}
 
-	if (core_type == CORE_TYPE_8BIT && !is_minimig() && !is_archie())
-	{
-		// frequently check ps2 mouse for events
-		if (CheckTimer(mouse_timer))
-		{
-			mouse_timer = GetTimer(MOUSE_FREQ);
-
-			// has ps2 mouse data been updated in the meantime
-			if (mouse_flags & 0x08)
-			{
-				unsigned char ps2_mouse[3];
-
-				// PS2 format:
-				// YOvfl, XOvfl, dy8, dx8, 1, mbtn, rbtn, lbtn
-				// dx[7:0]
-				// dy[7:0]
-				ps2_mouse[0] = mouse_flags;
-
-				// ------ X axis -----------
-				// store sign bit in first byte
-				ps2_mouse[0] |= (mouse_pos[X] < 0) ? 0x10 : 0x00;
-				if (mouse_pos[X] < -255)
-				{
-					// min possible value + overflow flag
-					ps2_mouse[0] |= 0x40;
-					ps2_mouse[1] = 1; // -255
-				}
-				else if (mouse_pos[X] > 255)
-				{
-					// max possible value + overflow flag
-					ps2_mouse[0] |= 0x40;
-					ps2_mouse[1] = 255;
+					offset = 0;
 				}
 				else
 				{
-					ps2_mouse[1] = mouse_pos[X];
+					offset = (lba - buffer_lba[disk]) * blksz;
+					done = 1;
 				}
 
-				// ------ Y axis -----------
-				// store sign bit in first byte
-				ps2_mouse[0] |= (mouse_pos[Y] < 0) ? 0x20 : 0x00;
-				if (mouse_pos[Y] < -255)
+				// data is now stored in buffer. send it to fpga
+				EnableIO();
+				spi_w(UIO_SECTOR_RD | ack);
+				spi_block_write(buffer[disk] + offset, fio_size, sz);
+				DisableIO();
+
+				if (sd_image[disk].type == 2)
 				{
-					// min possible value + overflow flag
-					ps2_mouse[0] |= 0x80;
-					ps2_mouse[2] = 1; // -255;
+					buffer_lba[disk] = -1;
 				}
-				else if (mouse_pos[Y] > 255)
+				else if (done && (lba + blks - buffer_lba[disk]) == buf_n)
 				{
-					// max possible value + overflow flag
-					ps2_mouse[0] |= 0x80;
-					ps2_mouse[2] = 255;
+					diskled_on();
+					lba += blks;
+					if (blksz == 2352 && is_psx())
+					{
+						psx_read_cd(buffer[disk], lba, buf_n);
+						buffer_lba[disk] = lba;
+					}
+					else if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET) &&
+						FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
+					{
+						buffer_lba[disk] = lba;
+					}
+					else
+					{
+						memset(buffer[disk], 0, sizeof(buffer[disk]));
+						buffer_lba[disk] = -1;
+					}
 				}
-				else
-				{
-					ps2_mouse[2] = mouse_pos[Y];
-				}
-
-				int16_t ps2_wheel = mouse_wheel;
-				if (ps2_wheel > 63) ps2_wheel = 63;
-				else if (ps2_wheel < -63) ps2_wheel = -63;
-
-				// collect movement info and send at predefined rate
-				if (is_menu() && !video_fb_state()) printf("PS2 MOUSE: %x %d %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2], ps2_wheel);
-
-				if (!osd_is_visible)
-				{
-					spi_uio_cmd_cont(UIO_MOUSE);
-					spi_w(ps2_mouse[0] | ((ps2_wheel&127)<<8));
-					spi_w(ps2_mouse[1]);
-					spi_w(ps2_mouse[2]);
-					DisableIO();
-				}
-
-				// reset counters
-				mouse_flags = 0;
-				mouse_pos[X] = mouse_pos[Y] = mouse_wheel = 0;
 			}
+			else break;
 		}
 	}
 
@@ -2894,7 +2927,8 @@ void user_io_poll()
 	if (core_type == CORE_TYPE_SHARPMZ) sharpmz_poll();
 
 	static uint8_t leds = 0;
-	if(use_ps2ctl && !is_minimig() && !is_archie())
+
+	if (use_ps2ctl && !is_minimig() && !is_archie())
 	{
 		leds |= (KBD_LED_FLAG_STATUS | KBD_LED_CAPS_CONTROL);
 
@@ -2910,9 +2944,11 @@ void user_io_poll()
 			if (!byte)
 			{
 				cmd = kbd_ctl;
+
 				switch (cmd)
 				{
 				case 0xff:
+					ps2_kbd_scan_set = 2;
 					kbd_reply(0xFA);
 					kbd_reply(0xAA);
 					break;
@@ -2921,6 +2957,21 @@ void user_io_poll()
 					kbd_reply(0xFA);
 					kbd_reply(0xAB);
 					kbd_reply(0x83);
+					break;
+
+				case 0xf0: // scan get/set
+					kbd_reply(0xFA);
+					byte++;
+					break;
+
+				case 0xf6: // set default parameters
+					kbd_reply(0xFA);
+					ps2_kbd_scan_set = 2;
+					break;
+
+				case 0xf3: // set type rate
+					kbd_reply(0xFA);
+					byte++;
 					break;
 
 				case 0xf4:
@@ -2950,10 +3001,27 @@ void user_io_poll()
 				case 0xed:
 					kbd_reply(0xFA);
 					byte = 0;
-
 					if (kbd_ctl & 4) leds |= KBD_LED_CAPS_STATUS;
-						else leds &= ~KBD_LED_CAPS_STATUS;
+					else leds &= ~KBD_LED_CAPS_STATUS;
+					break;
 
+				case 0xf0:
+					byte = 0;
+					if (kbd_ctl <= 3)
+					{
+						kbd_reply(0xFA);
+						if (!kbd_ctl) kbd_reply(ps2_kbd_scan_set); // get
+						else ps2_kbd_scan_set = kbd_ctl; // set
+					}
+					else
+					{
+						kbd_reply(0xFE); // RESEND
+					}
+					break;
+
+				case 0xf3: // set type rate
+					kbd_reply(0xFA);
+					byte = 0;
 					break;
 
 				default:
@@ -3036,7 +3104,7 @@ void user_io_poll()
 		if (!use_ps2ctl)
 		{
 			uint16_t s = user_io_kbdled_get_status();
-			if(s & 0x100) use_ps2ctl = 1;
+			if (s & 0x100) use_ps2ctl = 1;
 			if (!use_ps2ctl) leds = (uint8_t)s;
 		}
 
@@ -3061,7 +3129,7 @@ void user_io_poll()
 	{
 		res_timer = GetTimer(1000);
 	}
-	else if(CheckTimer(res_timer))
+	else if (CheckTimer(res_timer))
 	{
 		if (is_menu())
 		{
@@ -3097,7 +3165,7 @@ void user_io_poll()
 		res_timer = GetTimer(500);
 		if (!minimig_get_adjust())
 		{
-			if(is_minimig()) minimig_adjust_vsize(0);
+			if (is_minimig()) minimig_adjust_vsize(0);
 			video_mode_adjust();
 		}
 	}
@@ -3242,7 +3310,8 @@ static void send_keycode(unsigned short key, int press)
 			{
 				// Pause key sends E11477E1F014E077
 				static const unsigned char c[] = { 0xe1, 0x14, 0x77, 0xe1, 0xf0, 0x14, 0xf0, 0x77, 0x00 };
-				const unsigned char *p = c;
+				static const unsigned char c_set1[] = { 0xe1, 0x1d, 0x45, 0xe1, 0x9d, 0xc5, 0x00 };
+				const unsigned char *p = (ps2_kbd_scan_set == 1) ? c_set1 : c;
 
 				spi_uio_cmd_cont(UIO_KEYBOARD);
 
@@ -3266,8 +3335,12 @@ static void send_keycode(unsigned short key, int press)
 					{ 0xE0, 0xF0, 0x7C, 0xE0, 0xF0, 0x12, 0x00, 0x00 },
 					{ 0xE0, 0x12, 0xE0, 0x7C, 0x00, 0x00, 0x00, 0x00 }
 				};
+				static const unsigned char c_set1[2][8] = {
+					{ 0xE0, 0xB7, 0xE0, 0xAA, 0x00, 0x00, 0x00, 0x00 },
+					{ 0xE0, 0x2A, 0xE0, 0x37, 0x00, 0x00, 0x00, 0x00 }
+				};
 
-				const unsigned char *p = c[press];
+				const unsigned char *p = (ps2_kbd_scan_set == 1) ? c_set1[press] : c[press];
 
 				spi_uio_cmd_cont(UIO_KEYBOARD);
 
@@ -3292,8 +3365,13 @@ static void send_keycode(unsigned short key, int press)
 			if (code & EXT) spi8(0xe0);
 
 			// prepend break code if required
-			if (!press) spi8(0xf0);
-
+            if (!press)
+            {
+                if (ps2_kbd_scan_set == 1)
+                        code |= 0x80;
+                    else
+                        spi8(0xf0);
+            }
 			// send code itself
 			spi8(code & 0xff);
 
@@ -3327,15 +3405,19 @@ static void send_keycode(unsigned short key, int press)
 
 void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 {
+	if (osd_is_visible && !is_menu()) return;
+
 	switch (core_type)
 	{
 	case CORE_TYPE_8BIT:
 		if (is_minimig())
 		{
-			mouse_pos[X] += x;
-			mouse_pos[Y] += y;
-			mouse_wheel += w;
-			mouse_flags |= 0x80 | (b & 7);
+			spi_uio_cmd_cont(UIO_MOUSE);
+			spi8((x < -127) ? -127 : (x > 127) ? 127 : x);
+			spi8((y < -127) ? -127 : (y > 127) ? 127 : y);
+			spi8(b & 0x07);
+			spi8((w < -127) ? -127 : (w > 127) ? 127 : w);
+			DisableIO();
 		}
 		else if (is_archie())
 		{
@@ -3343,10 +3425,69 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 		}
 		else
 		{
-			mouse_pos[X] += x;
-			mouse_pos[Y] -= y;  // ps2 y axis is reversed over usb
-			mouse_wheel += w;
-			mouse_flags |= 0x08 | (b & 7);
+			unsigned char ps2_mouse[3];
+
+			// PS2 format:
+			// YOvfl, XOvfl, dy8, dx8, 1, mbtn, rbtn, lbtn
+			// dx[7:0]
+			// dy[7:0]
+			ps2_mouse[0] = (b & 7) | 8;
+
+			// ------ X axis -----------
+			// store sign bit in first byte
+			ps2_mouse[0] |= (x < 0) ? 0x10 : 0x00;
+			if (x < -255)
+			{
+				// min possible value + overflow flag
+				ps2_mouse[0] |= 0x40;
+				ps2_mouse[1] = 1; // -255
+			}
+			else if (x > 255)
+			{
+				// max possible value + overflow flag
+				ps2_mouse[0] |= 0x40;
+				ps2_mouse[1] = 255;
+			}
+			else
+			{
+				ps2_mouse[1] = (char)x;
+			}
+
+			// ------ Y axis -----------
+			// store sign bit in first byte
+			y = -y;
+			ps2_mouse[0] |= (y < 0) ? 0x20 : 0x00;
+			if (y < -255)
+			{
+				// min possible value + overflow flag
+				ps2_mouse[0] |= 0x80;
+				ps2_mouse[2] = 1; // -255;
+			}
+			else if (y > 255)
+			{
+				// max possible value + overflow flag
+				ps2_mouse[0] |= 0x80;
+				ps2_mouse[2] = 255;
+			}
+			else
+			{
+				ps2_mouse[2] = (char)y;
+			}
+
+			if (w > 63) w = 63;
+			else if (w < -63) w = -63;
+
+			// collect movement info and send at predefined rate
+			if (is_menu() && !video_fb_state()) printf("PS2 MOUSE: %x %d %d %d\n", ps2_mouse[0], ps2_mouse[1], ps2_mouse[2], w);
+
+			if (!osd_is_visible)
+			{
+				spi_uio_cmd_cont(UIO_MOUSE);
+				spi_w(ps2_mouse[0] | ((w & 0x7f) << 8));
+				spi_w(ps2_mouse[1] | ((((uint16_t)b) << 5) & 0xF00));
+				spi_w(ps2_mouse[2] | ((((uint16_t)b) << 1) & 0x100));
+				DisableIO();
+			}
 		}
 		return;
 	}
@@ -3408,35 +3549,12 @@ void user_io_kbd(uint16_t key, int press)
 	// Win+PrnScr or Alt/Win+ScrLk - screen shot
 	if ((key == KEY_SYSRQ && (get_key_mod() & (RGUI | LGUI))) || (key == KEY_SCROLLLOCK && (get_key_mod() & (LALT | RALT | RGUI | LGUI))))
 	{
+		int shift = (get_key_mod() & LSHIFT);
 		if (press == 1)
 		{
 			printf("print key pressed - do screen shot\n");
-			mister_scaler *ms = mister_scaler_init();
-			if (ms == NULL)
-			{
-				printf("problem with scaler, maybe not a new enough version\n");
-				Info("Scaler not compatible");
-			}
-			else
-			{
-				unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 3, 1);
-				mister_scaler_read(ms, outputbuf);
-				static char filename[1024];
-				FileGenerateScreenshotName(last_filename, filename, 1024);
-				unsigned error = lodepng_encode24_file(getFullPath(filename), outputbuf, ms->width, ms->height);
-				if (error) {
-					printf("error %u: %s\n", error, lodepng_error_text(error));
-					printf("%s", filename);
-					Info("error in saving png");
-				}
-				free(outputbuf);
-				mister_scaler_free(ms);
-				char msg[1024];
-				snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
-				Info(msg);
-			}
+			user_io_screenshot(nullptr,!shift);
 		}
-
 	}
 	else
 	if (key == KEY_MUTE)
@@ -3594,4 +3712,97 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 uint16_t user_io_get_sdram_cfg()
 {
 	return sdram_cfg;
+}
+
+static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
+  {"file '%s' does not exist", IMLIB_LOAD_ERROR_FILE_DOES_NOT_EXIST},
+  {"file '%s' is a directory", IMLIB_LOAD_ERROR_FILE_IS_DIRECTORY},
+  {"permission denied to read file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_READ},
+  {"no loader for the file format used in file '%s'", IMLIB_LOAD_ERROR_NO_LOADER_FOR_FILE_FORMAT},
+  {"path for file '%s' is too long", IMLIB_LOAD_ERROR_PATH_TOO_LONG},
+  {"a component of path '%s' does not exist", IMLIB_LOAD_ERROR_PATH_COMPONENT_NON_EXISTANT},
+  {"a component of path '%s' is not a directory", IMLIB_LOAD_ERROR_PATH_COMPONENT_NOT_DIRECTORY},
+  {"path '%s' has too many symbolic links", IMLIB_LOAD_ERROR_TOO_MANY_SYMBOLIC_LINKS},
+  {"ran out of file descriptors trying to access file '%s'", IMLIB_LOAD_ERROR_OUT_OF_FILE_DESCRIPTORS},
+  {"denied write permission for file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_WRITE},
+  {"out of disk space writing to file '%s'", IMLIB_LOAD_ERROR_OUT_OF_DISK_SPACE},
+  {(const char *)NULL, (Imlib_Load_Error) 0}
+};
+
+static void print_imlib_load_error (Imlib_Load_Error err, const char *filepath) {
+  int i;
+  for (i = 0; err_strings[i].fmtstr != NULL; i++) {
+    if (err == err_strings[i].errno) {
+	printf("Screenshot Error (%d): ",err);
+	printf(err_strings[i].fmtstr,filepath);
+	printf("\n");
+      return ;
+    }
+  }
+  /* Unrecognised error */
+    printf("Screenshot Error (%d): unrecognized error accessing file '%s'\n",err,filepath);
+  return ;
+}
+
+bool user_io_screenshot(const char *pngname, int rescale)
+{
+	mister_scaler *ms = mister_scaler_init();
+	if (ms == NULL)
+	{
+		printf("problem with scaler, maybe not a new enough version\n");
+		Info("Scaler not compatible");
+		return false;
+	}
+	else
+	{
+		const char *basename = last_filename;
+		if( pngname && *pngname )
+			basename = pngname;
+		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 4, 1);
+		// read the image into the outpubuf - RGBA format
+		mister_scaler_read_32(ms,outputbuf);
+		// using_data will keep a pointer and dispose of the outbuf
+		Imlib_Image im = imlib_create_image_using_data(ms->width,ms->height,(unsigned int *)outputbuf);
+		imlib_context_set_image(im);
+
+		static char filename[1024];
+		FileGenerateScreenshotName(basename, filename, 1024);
+
+		/* do we want to save a rescaled image? */
+		if (rescale)
+		{
+			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,ms->output_width,ms->output_height);
+			imlib_free_image_and_decache();
+			imlib_context_set_image(im_scaled);
+		}
+		Imlib_Load_Error error;
+		imlib_save_image_with_error_return(getFullPath(filename),&error);
+		if (error != IMLIB_LOAD_ERROR_NONE)
+		{
+			print_imlib_load_error (error, filename);
+			Info("error in saving png");
+			return false;
+		}
+		imlib_free_image_and_decache();
+		mister_scaler_free(ms);
+		free(outputbuf);
+		char msg[1024];
+		snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
+		Info(msg);
+	}
+	return true;
+}
+
+void user_io_screenshot_cmd(const char *cmd)
+{
+	if( strncmp( cmd, "screenshot", 10 ))
+	{
+		return;
+	}
+
+	cmd += 10;
+	while( *cmd != '\0' && ( *cmd == '\t' || *cmd == ' ' || *cmd == '\n' ) )
+		cmd++;
+
+	user_io_screenshot(cmd,0);
 }

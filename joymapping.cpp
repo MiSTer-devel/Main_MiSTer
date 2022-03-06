@@ -130,14 +130,14 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 	map[SYS_BTN_DOWN]  = mmap[SYS_BTN_DOWN]  & 0xFFFF;
 	map[SYS_BTN_UP]    = mmap[SYS_BTN_UP]    & 0xFFFF;
 
-	if (mmap[SYS_AXIS_X])
+	if (mmap[SYS_AXIS_X] && !is_psx())
 	{
 		uint32_t key = KEY_EMU + (((uint16_t)mmap[SYS_AXIS_X]) << 1);
 		map[SYS_BTN_LEFT] = (key << 16) | map[SYS_BTN_LEFT];
 		map[SYS_BTN_RIGHT] = ((key+1) << 16) | map[SYS_BTN_RIGHT];
 	}
 
-	if (mmap[SYS_AXIS_Y])
+	if (mmap[SYS_AXIS_Y] && !is_psx())
 	{
 		uint32_t key = KEY_EMU + (((uint16_t)mmap[SYS_AXIS_Y]) << 1);
 		map[SYS_BTN_UP] = (key << 16) | map[SYS_BTN_UP];
@@ -232,16 +232,19 @@ int map_paddle_btn()
 
 static const char* get_std_name(uint16_t code, uint32_t *mmap)
 {
-	if (code == mmap[SYS_BTN_A     ]) return "[A]";
-	if (code == mmap[SYS_BTN_B     ]) return "[B]";
-	if (code == mmap[SYS_BTN_X     ]) return "[X]";
-	if (code == mmap[SYS_BTN_Y     ]) return "[Y]";
-	if (code == mmap[SYS_BTN_L     ]) return "[L]";
-	if (code == mmap[SYS_BTN_R     ]) return "[R]";
-	if (code == mmap[SYS_BTN_SELECT]) return "[\x96]";
-	if (code == mmap[SYS_BTN_START ]) return "[\x16]";
-
-	return code ? "[ ]" : NULL;
+	if (code)
+	{
+		if (code == mmap[SYS_BTN_A]) return "[A]";
+		if (code == mmap[SYS_BTN_B]) return "[B]";
+		if (code == mmap[SYS_BTN_X]) return "[X]";
+		if (code == mmap[SYS_BTN_Y]) return "[Y]";
+		if (code == mmap[SYS_BTN_L]) return "[L]";
+		if (code == mmap[SYS_BTN_R]) return "[R]";
+		if (code == mmap[SYS_BTN_SELECT]) return "[\x96]";
+		if (code == mmap[SYS_BTN_START]) return "[\x16]";
+		return "[ ]";
+	}
+	return NULL;
 }
 
 void map_joystick_show(uint32_t *map, uint32_t *mmap, int num)

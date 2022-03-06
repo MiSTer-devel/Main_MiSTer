@@ -74,12 +74,14 @@
 void set_kbdled(int mask, int state);
 int  get_kbdled(int mask);
 int  toggle_kbdled(int mask);
+void sysled_enable(int en);
 
 void input_notify_mode();
 int input_poll(int getchar);
 int is_key_pressed(int key);
 
 void start_map_setting(int cnt, int set = 0);
+int get_map_set();
 int get_map_button();
 int get_map_type();
 int get_map_clear();
@@ -97,7 +99,7 @@ uint32_t get_amiga_code(uint16_t key);
 uint32_t get_archie_code(uint16_t key);
 
 int input_has_lightgun();
-void input_lightgun_save(int idx, uint16_t *cal);
+void input_lightgun_save(int idx, int32_t *cal);
 
 void input_switch(int grab);
 int input_state();
@@ -105,6 +107,7 @@ void input_uinp_destroy();
 
 extern char joy_bnames[NUMBUTTONS][32];
 extern int  joy_bcount;
+extern uint8_t ps2_kbd_scan_set;
 
 void parse_buttons();
 char *get_buttons(int type = 0);

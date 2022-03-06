@@ -45,7 +45,7 @@
 // Names of the supported machines.
 //
 static const char *MZMACHINES[MAX_MZMACHINES] = { "MZ80K", "MZ80C", "MZ1200", "MZ80A", "MZ700", "MZ800", "MZ80B", "MZ2000" };
-
+//#define __SHARPMZ_DEBUG__
 #if defined __SHARPMZ_DEBUG__
 #define sharpmz_debugf(a, ...) printf("\033[1;31mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
 #define sharpmz_x_debugf(a, ...) printf("\033[1;32mSHARPMZ: " a "\033[0m\n", ##__VA_ARGS__)
@@ -65,9 +65,15 @@ static unsigned char         debugEnabled = 0;
 int sharpmz_file_write(fileTYPE *file, const char *fileName)
 {
     int           ret;
+    char          directoryPath[1024];
     char          fullPath[1024];
 
-    sprintf(fullPath, "%s/%s/%s", getRootDir(), SHARPMZ_CORE_NAME, fileName);
+    strcpy(directoryPath,SHARPMZ_CORE_NAME);
+    findPrefixDir(directoryPath, sizeof(directoryPath));
+
+
+
+    sprintf(fullPath, "%s/%s", directoryPath, fileName);
 
     const int mode = O_RDWR | O_CREAT | O_TRUNC | O_SYNC;   // No longer required as FileOpenEx has changed.  | S_IRWXU | S_IRWXG | S_IRWXO;
     ret = FileOpenEx(file, fullPath, mode);
@@ -112,7 +118,7 @@ void sharpmz_reset(unsigned long preResetSleep, unsigned long postResetSleep)
     // Set the reset bit.
     //
     config.system_ctrl |= 1;
-    user_io_8bit_set_status(config.system_ctrl, (1));
+    user_io_status(config.system_ctrl, (1));
 
     // Sleep and hold device in reset for given period.
     //
@@ -122,7 +128,7 @@ void sharpmz_reset(unsigned long preResetSleep, unsigned long postResetSleep)
     // Remove reset.
     //
     config.system_ctrl &= ~(1);
-    user_io_8bit_set_status(config.system_ctrl, (1));
+    user_io_status(config.system_ctrl, (1));
 
     // Sleep and hold device in reset for given period.
     //
@@ -144,7 +150,7 @@ int sharpmz_reset_config(short setStatus)
     // Set the configuration registers to a known defualt.
     config.system_reg[REGISTER_MODEL]      = 0x03;              // MZ-80A
     config.system_reg[REGISTER_DISPLAY]    = 0x00;              // Mono 40x25
-    config.system_reg[REGISTER_DISPLAY2]   = 0x78 | 0x00;       // GRAM base addr | VGA Mode.
+    config.system_reg[REGISTER_DISPLAY2]   = 0x78 | 0x00;       // GRAM base addr | VGA Mode. // 78 - VGA 7B - 15khz
     config.system_reg[REGISTER_DISPLAY3]   = 0x00;              // Status screen buffer.
     config.system_reg[REGISTER_CPU]        = 0x00;              // CPU speed.
     config.system_reg[REGISTER_AUDIO]      = 0x00;              // Audio - sound output.
@@ -198,7 +204,7 @@ int sharpmz_reset_config(short setStatus)
     //
     if(setStatus)
     {
-        user_io_8bit_set_status(config.system_ctrl, 0xffffffff);
+        user_io_status(config.system_ctrl, 0xffffffff);
 
         // Set the registers.
         //
@@ -242,7 +248,7 @@ int sharpmz_reload_config(short setStatus)
     //
     if(setStatus && success)
     {
-        user_io_8bit_set_status(config.system_ctrl, 0xffffffff);
+        user_io_status(config.system_ctrl, 0xffffffff);
 
         // Set the registers.
         //
@@ -280,7 +286,7 @@ void sharpmz_init(void)
 
     // Setup the status values based on the config.
     //
-    user_io_8bit_set_status(config.system_ctrl, 0xffffffff);
+    user_io_status(config.system_ctrl, 0xffffffff);
 
     // Set the control registers according to config.
     //
@@ -791,7 +797,7 @@ void sharpmz_set_aspect_ratio(short on, short setStatus)
     config.system_ctrl |= (on == 1 ? 1 << 1 : 0);
 
     if(setStatus)
-        user_io_8bit_set_status(config.system_ctrl, (1 << 1));
+        user_io_status(config.system_ctrl, (1 << 1));
 }
 
 // Return Scan doubler fx status bits. Bits 2,3,4 of systemctrl.
@@ -821,7 +827,7 @@ void sharpmz_set_scandoubler_fx(short doubler, short setStatus)
     config.system_ctrl |= (doubler & 0x07) << 2;
 
     if(setStatus)
-        user_io_8bit_set_status(config.system_ctrl, (0x07 << 2));
+        user_io_status(config.system_ctrl, (0x07 << 2));
 }
 
 // Return VRAM wait state mode status bit. Bit 6 of system_reg, 0 = Off, 1 = On
@@ -2627,7 +2633,8 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
                 case 0:
                 case 1:
                     *fs_Options    = SCANO_DIR;
-                    sharpmz_select_file("MZFmzfMZTmzt", *fs_Options, fs_pFileExt, 1, selectedPath);
+                    //sharpmz_select_file("MZFmzfMZTmzt", *fs_Options, fs_pFileExt, 1, selectedPath);
+                    SelectFile("","MZFmzfMZTmzt", *fs_Options,  1,1 );
                     //sharpmz_select_file("MZFmzf", *fs_Options, fs_pFileExt, 1, selectedPath);
                     *fs_ExtLen     = strlen(fs_pFileExt);
                     *fs_MenuSelect = (*menusub == 0 ? MENU_SHARPMZ_TAPE_STORAGE_LOAD_TAPE_TO_RAM : MENU_SHARPMZ_TAPE_STORAGE_QUEUE_TAPE_TO_CMT);

@@ -16,7 +16,7 @@ cfg_t cfg;
 
 typedef enum
 {
-	UINT8 = 0, INT8, UINT16, INT16, UINT32, INT32, FLOAT, STRING
+	UINT8 = 0, INT8, UINT16, INT16, UINT32, INT32, FLOAT, STRING, UINT32ARR
 } ini_vartypes_t;
 
 typedef struct
@@ -58,7 +58,7 @@ static const ini_var_t ini_vars[] =
 	{ "FONT", (void*)(&(cfg.font)), STRING, 0, sizeof(cfg.font) - 1 },
 	{ "FB_SIZE", (void*)(&(cfg.fb_size)), UINT8, 0, 4 },
 	{ "FB_TERMINAL", (void*)(&(cfg.fb_terminal)), UINT8, 0, 1 },
-	{ "OSD_TIMEOUT", (void*)(&(cfg.osd_timeout)), INT16, 5, 3600 },
+	{ "OSD_TIMEOUT", (void*)(&(cfg.osd_timeout)), INT16, 0, 3600 },
 	{ "DIRECT_VIDEO", (void*)(&(cfg.direct_video)), UINT8, 0, 1 },
 	{ "OSD_ROTATE", (void*)(&(cfg.osd_rotate)), UINT8, 0, 2 },
 	{ "GAMEPAD_DEFAULTS", (void*)(&(cfg.gamepad_defaults)), UINT8, 0, 1 },
@@ -74,13 +74,23 @@ static const ini_var_t ini_vars[] =
 	{ "SHARED_FOLDER", (void*)(&(cfg.shared_folder)), STRING, 0, sizeof(cfg.shared_folder) - 1 },
 	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), UINT16, 0, 0xFFFF },
 	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), UINT16, 0, 0xFFFF },
+	{ "NO_MERGE_VIDPID", (void*)(cfg.no_merge_vidpid), UINT32ARR, 0, (int)0xFFFFFFFF },
 	{ "CUSTOM_ASPECT_RATIO_1", (void*)(&(cfg.custom_aspect_ratio[0])), STRING, 0, sizeof(cfg.custom_aspect_ratio[0]) - 1 },
 	{ "CUSTOM_ASPECT_RATIO_2", (void*)(&(cfg.custom_aspect_ratio[1])), STRING, 0, sizeof(cfg.custom_aspect_ratio[1]) - 1 },
 	{ "SPINNER_VID", (void*)(&(cfg.spinner_vid)), UINT16, 0, 0xFFFF },
 	{ "SPINNER_PID", (void*)(&(cfg.spinner_pid)), UINT16, 0, 0xFFFF },
+	{ "SPINNER_AXIS", (void*)(&(cfg.spinner_axis)), UINT8, 0, 1 },
 	{ "SPINNER_THROTTLE", (void*)(&(cfg.spinner_throttle)), INT32, -10000, 10000 },
 	{ "AFILTER_DEFAULT", (void*)(&(cfg.afilter_default)), STRING, 0, sizeof(cfg.afilter_default) - 1 },
 	{ "VFILTER_DEFAULT", (void*)(&(cfg.vfilter_default)), STRING, 0, sizeof(cfg.vfilter_default) - 1 },
+	{ "VFILTER_VERTICAL_DEFAULT", (void*)(&(cfg.vfilter_vertical_default)), STRING, 0, sizeof(cfg.vfilter_vertical_default) - 1 },
+	{ "VFILTER_SCANLINES_DEFAULT", (void*)(&(cfg.vfilter_scanlines_default)), STRING, 0, sizeof(cfg.vfilter_scanlines_default) - 1 },
+	{ "SHMASK_DEFAULT", (void*)(&(cfg.shmask_default)), STRING, 0, sizeof(cfg.shmask_default) - 1 },
+	{ "SHMASK_MODE_DEFAULT", (void*)(&(cfg.shmask_mode_default)), UINT8, 0, 255 },
+	{ "LOG_FILE_ENTRY", (void*)(&(cfg.log_file_entry)), UINT8, 0, 1 },
+	{ "BT_AUTO_DISCONNECT", (void*)(&(cfg.bt_auto_disconnect)), UINT32, 0, 180 },
+	{ "BT_RESET_BEFORE_PAIR", (void*)(&(cfg.bt_reset_before_pair)), UINT8, 0, 1 },
+	{ "WAITMOUNT", (void*)(&(cfg.waitmount)), STRING, 0, sizeof(cfg.waitmount) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -99,7 +109,7 @@ static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
                                  ((c) == '-') || ((c) == '+') || ((c) == '/') || ((c) == '=') || \
                                  ((c) == '#') || ((c) == '$') || ((c) == '@') || ((c) == '_') || \
                                  ((c) == ',') || ((c) == '.') || ((c) == '!') || ((c) == '*') || \
-                                 ((c) == ':'))
+                                 ((c) == ':') || ((c) == '~'))
 
 #define CHAR_IS_VALID(c)        (CHAR_IS_ALPHANUM(c) || CHAR_IS_SPECIAL(c))
 #define CHAR_IS_SPACE(c)        (((c) == ' ') || ((c) == '\t'))
@@ -230,6 +240,15 @@ static void ini_parse_var(char* buf)
 			*(uint16_t*)(ini_vars[var_id].var) = strtoul(&(buf[i]), NULL, 0);
 			if (*(uint16_t*)(ini_vars[var_id].var) > ini_vars[var_id].max) *(uint16_t*)(ini_vars[var_id].var) = ini_vars[var_id].max;
 			if (*(uint16_t*)(ini_vars[var_id].var) < ini_vars[var_id].min) *(uint16_t*)(ini_vars[var_id].var) = ini_vars[var_id].min;
+			break;
+		case UINT32ARR:
+			{
+				uint32_t *arr = (uint32_t*)ini_vars[var_id].var;
+				uint32_t pos = ++arr[0];
+				arr[pos] = strtoul(&(buf[i]), NULL, 0);
+				if (arr[pos] > (uint32_t)ini_vars[var_id].max) arr[pos] = (uint32_t)ini_vars[var_id].max;
+				if (arr[pos] < (uint32_t)ini_vars[var_id].min) arr[pos] = (uint32_t)ini_vars[var_id].min;
+			}
 			break;
 		case INT16:
 			*(int16_t*)(ini_vars[var_id].var) = strtol(&(buf[i]), NULL, 0);

@@ -59,6 +59,8 @@ static int brd_y = 0;
 static int menu_bg = 0;
 static int menu_bgn = 0;
 
+static VideoInfo current_video_info;
+
 struct vmode_t
 {
 	uint32_t vpar[8];
@@ -198,14 +200,227 @@ static void setPLL(double Fout, vmode_custom_t *v)
 	v->Fpix = Fpix;
 }
 
-static char scaler_flt_cfg[1024] = { 0 };
-static char new_scaler = 0;
+struct ScalerFilter
+{
+	char mode;
+	char filename[1023];
+};
+
+static ScalerFilter scaler_flt[3];
+
+struct FilterPhase
+{
+	short t[4];
+};
+
+static constexpr int N_PHASES = 256;
+
+struct VideoFilter
+{
+	bool is_adaptive;
+	FilterPhase phases[N_PHASES];
+	FilterPhase adaptive_phases[N_PHASES];
+};
+
+static bool scale_phases(FilterPhase out_phases[N_PHASES], FilterPhase *in_phases, int in_count)
+{
+	if (!in_count)
+	{
+		return false;
+	}
+
+	int dup = N_PHASES / in_count;
+
+	if ((in_count * dup) != N_PHASES)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < in_count; i++)
+	{
+		for (int j = 0; j < dup; j++)
+		{
+			out_phases[(i * dup) + j] = in_phases[i];
+		}
+	}
+
+	return true;
+}
+
+static bool read_video_filter(int type, VideoFilter *out)
+{
+	fileTextReader reader = {};
+	FilterPhase phases[512];
+	int count = 0;
+	bool is_adaptive = false;
+	int scale = 2;
+
+	static char filename[1024];
+	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt[type].filename);
+
+	if (FileOpenTextReader(&reader, filename))
+	{
+		const char *line;
+		while ((line = FileReadLine(&reader)))
+		{
+			if (count == 0 && !strcasecmp(line, "adaptive"))
+			{
+				is_adaptive = true;
+				continue;
+			}
+
+			if (count == 0 && !strcasecmp(line, "10bit"))
+			{
+				scale = 1;
+				continue;
+			}
+
+			int phase[4];
+			int n = sscanf(line, "%d,%d,%d,%d", &phase[0], &phase[1], &phase[2], &phase[3]);
+			if (n == 4)
+			{
+				if (count >= (is_adaptive ? N_PHASES * 2 : N_PHASES)) return false; //too many
+				phases[count].t[0] = phase[0] * scale;
+				phases[count].t[1] = phase[1] * scale;
+				phases[count].t[2] = phase[2] * scale;
+				phases[count].t[3] = phase[3] * scale;
+				count++;
+			}
+		}
+	}
+
+	printf( "Filter \'%s\', phases: %d adaptive: %s\n",
+			scaler_flt[type].filename,
+			is_adaptive ? count / 2 : count,
+			is_adaptive ? "true" : "false" );
+
+	if (is_adaptive)
+	{
+		out->is_adaptive = true;
+		bool valid = scale_phases(out->phases, phases, count / 2);
+		valid = valid && scale_phases(out->adaptive_phases, phases + (count / 2), count / 2);
+		return valid;
+	}
+	else if (count == 32 && !is_adaptive) // legacy
+	{
+		out->is_adaptive = false;
+		return scale_phases(out->phases, phases, 16);
+	}
+	else if (!is_adaptive)
+	{
+		out->is_adaptive = false;
+		return scale_phases(out->phases, phases, count);
+	}
+
+	return false;
+}
+
+static void send_phases_legacy(int addr, const FilterPhase phases[N_PHASES])
+{
+	for (int idx = 0; idx < N_PHASES; idx += 16)
+	{
+		const FilterPhase *p = &phases[idx];
+		spi_w(((p->t[0] >> 1) & 0x1FF) | ((addr + 0) << 9));
+		spi_w(((p->t[1] >> 1) & 0x1FF) | ((addr + 1) << 9));
+		spi_w(((p->t[2] >> 1) & 0x1FF) | ((addr + 2) << 9));
+		spi_w(((p->t[3] >> 1) & 0x1FF) | ((addr + 3) << 9));
+		addr += 4;
+	}
+}
+
+static void send_phases(int addr, const FilterPhase phases[N_PHASES], bool full_precision)
+{
+	const int skip = full_precision ? 1 : 4;
+	const int shift = full_precision ? 0 : 1;
+
+	addr *= full_precision ? (N_PHASES * 4) : (64 * 4);
+
+	for (int idx = 0; idx < N_PHASES; idx += skip)
+	{
+		const FilterPhase *p = &phases[idx];
+		spi_w(addr + 0); spi_w((p->t[0] >> shift) & 0x3FF);
+		spi_w(addr + 1); spi_w((p->t[1] >> shift) & 0x3FF);
+		spi_w(addr + 2); spi_w((p->t[2] >> shift) & 0x3FF);
+		spi_w(addr + 3); spi_w((p->t[3] >> shift) & 0x3FF);
+		addr += 4;
+	}
+}
+
+static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert, int ver)
+{
+	spi_uio_cmd_cont(UIO_SET_FLTCOEF);
+
+	const bool full_precision = (ver & 0x4) != 0;
+
+	switch( ver & 0x3 )
+	{
+		case 1:
+			send_phases_legacy(0, horiz->phases);
+			send_phases_legacy(64, vert->phases);
+			break;
+		case 2:
+			send_phases(0, horiz->phases, full_precision);
+			send_phases(1, vert->phases, full_precision);
+			break;
+		case 3:
+			send_phases(0, horiz->phases, full_precision);
+			send_phases(1, vert->phases, full_precision);
+
+			if (horiz->is_adaptive)
+			{
+				send_phases(2, horiz->adaptive_phases, full_precision);
+			}
+			else if (vert->is_adaptive)
+			{
+				send_phases(3, vert->adaptive_phases, full_precision);
+			}
+			break;
+		default:
+			break;
+	}
+
+	DisableIO();
+}
+
+static void set_vfilter(int force)
+{
+	static int last_flags = 0;
+
+	int flt_flags = spi_uio_cmd_cont(UIO_SET_FLTNUM);
+	if (!flt_flags || (!force && last_flags == flt_flags))
+	{
+		DisableIO();
+		return;
+	}
+
+	last_flags = flt_flags;
+	printf("video_set_filter: flt_flags=%d\n", flt_flags);
+
+	spi8(scaler_flt[0].mode);
+	DisableIO();
+
+	VideoFilter horiz, vert;
+
+	//horizontal filter
+	bool valid = read_video_filter(VFILTER_HORZ, &horiz);
+	if (valid)
+	{
+		//vertical/scanlines filter
+		int vert_flt = ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN].mode) ? VFILTER_SCAN : (scaler_flt[VFILTER_VERT].mode) ? VFILTER_VERT : VFILTER_HORZ;
+		if (!read_video_filter(vert_flt, &vert))
+		{
+			vert = horiz;
+			valid = true;
+		}
+
+		send_video_filters(&horiz, &vert, flt_flags & 0xF);
+	}
+
+	if (!valid) spi_uio_cmd8(UIO_SET_FLTNUM, 0);
+}
 
 static void setScaler()
 {
-	fileTYPE f = {};
-	static char filename[1024];
-
 	uint32_t arc[4] = {};
 	for (int i = 0; i < 2; i++)
 	{
@@ -222,91 +437,39 @@ static void setScaler()
 	spi_uio_cmd_cont(UIO_SET_AR_CUST);
 	for (int i = 0; i < 4; i++) spi_w(arc[i]);
 	DisableIO();
-
-	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
-	{
-		DisableIO();
-		return;
-	}
-
-	new_scaler = 1;
-	spi8(scaler_flt_cfg[0]);
-	DisableIO();
-	sprintf(filename, COEFF_DIR"/%s", scaler_flt_cfg + 1);
-
-	if (FileOpen(&f, filename))
-	{
-		//printf("Read scaler coefficients\n");
-		char *buf = (char*)malloc(f.size+1);
-		if (buf)
-		{
-			memset(buf, 0, f.size + 1);
-			int size;
-			if ((size = FileReadAdv(&f, buf, f.size)))
-			{
-				spi_uio_cmd_cont(UIO_SET_FLTCOEF);
-
-				char *end = buf + size;
-				char *pos = buf;
-				int phase = 0;
-				while (pos < end)
-				{
-					char *st = pos;
-					while ((pos < end) && *pos && (*pos != 10)) pos++;
-					*pos = 0;
-					while (*st == ' ' || *st == '\t' || *st == 13) st++;
-					if (*st == '#' || *st == ';' || !*st) pos++;
-					else
-					{
-						int c0, c1, c2, c3;
-						int n = sscanf(st, "%d,%d,%d,%d", &c0, &c1, &c2, &c3);
-						if (n == 4)
-						{
-							//printf("   phase %c-%02d: %4d,%4d,%4d,%4d\n", (phase >= 16) ? 'V' : 'H', phase % 16, c0, c1, c2, c3);
-							//printf("%03X: %03X %03X %03X %03X;\n",phase*4, c0 & 0x1FF, c1 & 0x1FF, c2 & 0x1FF, c3 & 0x1FF);
-
-							spi_w((c0 & 0x1FF) | (((phase * 4) + 0) << 9));
-							spi_w((c1 & 0x1FF) | (((phase * 4) + 1) << 9));
-							spi_w((c2 & 0x1FF) | (((phase * 4) + 2) << 9));
-							spi_w((c3 & 0x1FF) | (((phase * 4) + 3) << 9));
-
-							phase++;
-							if (phase >= 32) break;
-						}
-					}
-				}
-				DisableIO();
-			}
-
-			free(buf);
-		}
-	}
+	set_vfilter(1);
 }
 
-int video_get_scaler_flt()
+int video_get_scaler_flt(int type)
 {
-	return new_scaler ? scaler_flt_cfg[0] : -1;
+	return scaler_flt[type].mode;
 }
 
-char* video_get_scaler_coeff()
+char* video_get_scaler_coeff(int type, int only_name)
 {
-	return scaler_flt_cfg + 1;
+	char *path = scaler_flt[type].filename;
+	if (only_name)
+	{
+		char *p = strrchr(path, '/');
+		if (p) return p + 1;
+	}
+	return path;
 }
 
 static char scaler_cfg[128] = { 0 };
 
-void video_set_scaler_flt(int n)
+void video_set_scaler_flt(int type, int n)
 {
-	scaler_flt_cfg[0] = (char)n;
-	FileSaveConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg));
-	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt_cfg[0]);
-	spi_uio_cmd(UIO_SET_FLTCOEF);
+	scaler_flt[type].mode = (char)n;
+	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
+	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt[0].mode);
+	set_vfilter(1);
 }
 
-void video_set_scaler_coeff(char *name)
+void video_set_scaler_coeff(int type, const char *name)
 {
-	strcpy(scaler_flt_cfg + 1, name);
-	FileSaveConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg));
+	strcpy(scaler_flt[type].filename, name);
+	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
 	setScaler();
 	user_io_send_buttons(1);
 }
@@ -314,15 +477,34 @@ void video_set_scaler_coeff(char *name)
 static void loadScalerCfg()
 {
 	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name());
-	if (!FileLoadConfig(scaler_cfg, &scaler_flt_cfg, sizeof(scaler_flt_cfg) - 1) || scaler_flt_cfg[0]>4)
+	memset(scaler_flt, 0, sizeof(scaler_cfg));
+	if (!FileLoadConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt)) || scaler_flt[0].mode > 1)
 	{
-		memset(scaler_flt_cfg, 0, sizeof(scaler_flt_cfg));
-		if (cfg.vfilter_default[0])
-		{
-			strcpy(scaler_flt_cfg+1, cfg.vfilter_default);
-			scaler_flt_cfg[0] = 1;
-		}
+		memset(scaler_flt, 0, sizeof(scaler_flt));
 	}
+
+	if (!scaler_flt[VFILTER_HORZ].filename[0] && cfg.vfilter_default[0])
+	{
+		strcpy(scaler_flt[VFILTER_HORZ].filename, cfg.vfilter_default);
+		scaler_flt[VFILTER_HORZ].mode = 1;
+	}
+
+	if (!scaler_flt[VFILTER_VERT].filename[0] && cfg.vfilter_vertical_default[0])
+	{
+		strcpy(scaler_flt[VFILTER_VERT].filename, cfg.vfilter_vertical_default);
+		scaler_flt[VFILTER_VERT].mode = 1;
+	}
+
+	if (!scaler_flt[VFILTER_SCAN].filename[0] && cfg.vfilter_scanlines_default[0])
+	{
+		strcpy(scaler_flt[VFILTER_SCAN].filename, cfg.vfilter_scanlines_default);
+		scaler_flt[VFILTER_SCAN].mode = 1;
+	}
+
+	VideoFilter null;
+	if (!read_video_filter(VFILTER_HORZ, &null)) memset(&scaler_flt[VFILTER_HORZ], 0, sizeof(scaler_flt[VFILTER_HORZ]));
+	if (!read_video_filter(VFILTER_VERT, &null)) memset(&scaler_flt[VFILTER_VERT], 0, sizeof(scaler_flt[VFILTER_VERT]));
+	if (!read_video_filter(VFILTER_SCAN, &null)) memset(&scaler_flt[VFILTER_SCAN], 0, sizeof(scaler_flt[VFILTER_SCAN]));
 }
 
 static char gamma_cfg[1024] = { 0 };
@@ -330,7 +512,7 @@ static char has_gamma = 0;
 
 static void setGamma()
 {
-	fileTYPE f = {};
+	fileTextReader reader = {};
 	static char filename[1024];
 
 	if (!spi_uio_cmd_cont(UIO_SET_GAMMA))
@@ -342,67 +524,54 @@ static void setGamma()
 	has_gamma = 1;
 	spi8(0);
 	DisableIO();
-	sprintf(filename, GAMMA_DIR"/%s", gamma_cfg + 1);
+	snprintf(filename, sizeof(filename), GAMMA_DIR"/%s", gamma_cfg + 1);
 
-	if (FileOpen(&f, filename))
+	if (FileOpenTextReader(&reader, filename))
 	{
-		char *buf = (char*)malloc(f.size+1);
-		if (buf)
+		spi_uio_cmd_cont(UIO_SET_GAMCURV);
+
+		const char *line;
+		int index = 0;
+		while ((line = FileReadLine(&reader)))
 		{
-			memset(buf, 0, f.size + 1);
-			int size;
-			if ((size = FileReadAdv(&f, buf, f.size)))
+			int c0, c1, c2;
+			int n = sscanf(line, "%d,%d,%d", &c0, &c1, &c2);
+			if (n == 1)
 			{
-				spi_uio_cmd_cont(UIO_SET_GAMCURV);
-
-				char *end = buf + size;
-				char *pos = buf;
-				int index = 0;
-				while (pos < end)
-				{
-					char *st = pos;
-					while ((pos < end) && *pos && (*pos != 10)) pos++;
-					*pos = 0;
-					while (*st == ' ' || *st == '\t' || *st == 13) st++;
-					if (*st == '#' || *st == ';' || !*st) pos++;
-					else
-					{
-						int c0, c1, c2;
-						int n = sscanf(st, "%d,%d,%d", &c0, &c1, &c2);
-						if (n == 1)
-						{
-							c1 = c0;
-							c2 = c0;
-							n = 3;
-						}
-
-						if (n == 3)
-						{
-							spi_w((index << 8) | (c0 & 0xFF));
-							spi_w((index << 8) | (c1 & 0xFF));
-							spi_w((index << 8) | (c2 & 0xFF));
-
-							index++;
-							if (index >= 256) break;
-						}
-					}
-				}
-				DisableIO();
-				spi_uio_cmd8(UIO_SET_GAMMA, gamma_cfg[0]);
+				c1 = c0;
+				c2 = c0;
+				n = 3;
 			}
 
-			free(buf);
+			if (n == 3)
+			{
+				spi_w((index << 8) | (c0 & 0xFF));
+				spi_w((index << 8) | (c1 & 0xFF));
+				spi_w((index << 8) | (c2 & 0xFF));
+
+				index++;
+				if (index >= 256) break;
+			}
 		}
+		DisableIO();
+		spi_uio_cmd8(UIO_SET_GAMMA, gamma_cfg[0]);
 	}
 }
+
 int video_get_gamma_en()
 {
 	return has_gamma ? gamma_cfg[0] : -1;
 }
 
-char* video_get_gamma_curve()
+char* video_get_gamma_curve(int only_name)
 {
-	return gamma_cfg + 1;
+	char *path = gamma_cfg + 1;
+	if (only_name)
+	{
+		char *p = strrchr(path, '/');
+		if (p) return p + 1;
+	}
+	return path;
 }
 
 static char gamma_cfg_path[1024] = { 0 };
@@ -414,7 +583,7 @@ void video_set_gamma_en(int n)
 	setGamma();
 }
 
-void video_set_gamma_curve(char *name)
+void video_set_gamma_curve(const char *name)
 {
 	strcpy(gamma_cfg + 1, name);
 	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
@@ -431,6 +600,288 @@ static void loadGammaCfg()
 	}
 }
 
+static char shadow_mask_cfg[1024] = { 0 };
+static bool has_shadow_mask = false;
+
+#define SM_FLAG_2X      ( 1 << 1 )
+#define SM_FLAG_ROTATED ( 1 << 2 )
+#define SM_FLAG_ENABLED ( 1 << 3 )
+
+#define SM_FLAG(v) ( ( 0x0 << 13 ) | (v) )
+#define SM_VMAX(v) ( ( 0x1 << 13 ) | (v) )
+#define SM_HMAX(v) ( ( 0x2 << 13 ) | (v) )
+#define SM_LUT(v)  ( ( 0x3 << 13 ) | (v) )
+
+enum
+{
+	SM_MODE_NONE = 0,
+	SM_MODE_1X,
+	SM_MODE_2X,
+	SM_MODE_1X_ROTATED,
+	SM_MODE_2X_ROTATED,
+	SM_MODE_COUNT
+};
+
+static void setShadowMask()
+{
+	static char filename[1024];
+	has_shadow_mask = 0;
+
+	if (!spi_uio_cmd_cont(UIO_SHADOWMASK))
+	{
+		DisableIO();
+		return;
+	}
+
+	has_shadow_mask = 1;
+	switch (video_get_shadow_mask_mode())
+	{
+		default: spi_w(SM_FLAG(0)); break;
+		case SM_MODE_1X: spi_w(SM_FLAG(SM_FLAG_ENABLED)); break;
+		case SM_MODE_2X: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_2X)); break;
+		case SM_MODE_1X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED)); break;
+		case SM_MODE_2X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED | SM_FLAG_2X)); break;
+	}
+
+	int loaded = 0;
+	snprintf(filename, sizeof(filename), SMASK_DIR"/%s", shadow_mask_cfg + 1);
+
+	fileTextReader reader;
+	if (FileOpenTextReader(&reader, filename))
+	{
+		char *start_pos = reader.pos;
+		const char *line;
+		uint32_t res = 0;
+		while ((line = FileReadLine(&reader)))
+		{
+			if (!strncasecmp(line, "resolution=", 11))
+			{
+				if (sscanf(line + 11, "%u", &res))
+				{
+					if (v_cur.item[5] >= res)
+					{
+						start_pos = reader.pos;
+					}
+				}
+			}
+		}
+
+		int w = -1, h = -1;
+		int y = 0;
+		int v2 = 0;
+
+		reader.pos = start_pos;
+		while ((line = FileReadLine(&reader)))
+		{
+			if (w == -1)
+			{
+				if (!strcasecmp(line, "v2"))
+				{
+					v2 = 1;
+					continue;
+				}
+
+				if (!strncasecmp(line, "resolution=", 11))
+				{
+					continue;
+				}
+
+				int n = sscanf(line, "%d,%d", &w, &h);
+				if ((n != 2) || (w <= 0) || (h <= 0) || (w > 16) || (h > 16))
+				{
+					break;
+				}
+			}
+			else
+			{
+				unsigned int p[16];
+				int n = sscanf(line, "%X,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x", p + 0, p + 1, p + 2, p + 3, p + 4, p + 5, p + 6, p + 7, p + 8, p + 9, p + 10, p + 11, p + 12, p + 13, p + 14, p + 15);
+				if (n != w)
+				{
+					break;
+				}
+
+				for (int x = 0; x < 16; x++) spi_w(SM_LUT(v2 ? (p[x] & 0x7FF) : (((p[x] & 7) << 8) | 0x2A)));
+				y += 1;
+
+				if (y == h)
+				{
+					loaded = 1;
+					break;
+				}
+			}
+		}
+
+		if (y == h)
+		{
+			spi_w(SM_HMAX(w - 1));
+			spi_w(SM_VMAX(h - 1));
+		}
+	}
+
+	if (!loaded) spi_w(SM_FLAG(0));
+	DisableIO();
+}
+
+int video_get_shadow_mask_mode()
+{
+	return has_shadow_mask ? shadow_mask_cfg[0] : -1;
+}
+
+char* video_get_shadow_mask(int only_name)
+{
+	char *path = shadow_mask_cfg + 1;
+	if (only_name)
+	{
+		char *p = strrchr(path, '/');
+		if (p) return p + 1;
+	}
+	return path;
+}
+
+static char shadow_mask_cfg_path[1024] = { 0 };
+
+void video_set_shadow_mask_mode(int n)
+{
+	if( n >= SM_MODE_COUNT )
+	{
+		n = 0;
+	}
+	else if (n < 0)
+	{
+		n = SM_MODE_COUNT - 1;
+	}
+
+	shadow_mask_cfg[0] = (char)n;
+	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
+	setShadowMask();
+}
+
+void video_set_shadow_mask(const char *name)
+{
+	strcpy(shadow_mask_cfg + 1, name);
+	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
+	setShadowMask();
+	user_io_send_buttons(1);
+}
+
+static void loadShadowMaskCfg()
+{
+	sprintf(shadow_mask_cfg_path, "%s_shmask.cfg", user_io_get_core_name());
+	if (!FileLoadConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg) - 1))
+	{
+		memset(shadow_mask_cfg, 0, sizeof(shadow_mask_cfg));
+		if (cfg.shmask_default[0])
+		{
+			strcpy(shadow_mask_cfg + 1, cfg.shmask_default);
+			shadow_mask_cfg[0] = cfg.shmask_mode_default;
+		}
+	}
+
+	if( shadow_mask_cfg[0] >= SM_MODE_COUNT )
+	{
+		shadow_mask_cfg[0] = 0;
+	}
+}
+
+
+#define IS_NEWLINE(c) (((c) == '\r') || ((c) == '\n'))
+#define IS_WHITESPACE(c) (IS_NEWLINE(c) || ((c) == ' ') || ((c) == '\t'))
+
+static char* get_preset_arg(const char *str)
+{
+	static char par[1024];
+	snprintf(par, sizeof(par), "%s", str);
+	char *pos = par;
+
+	while (*pos && !IS_NEWLINE(*pos)) pos++;
+	*pos-- = 0;
+
+	while (pos >= par)
+	{
+		if (!IS_WHITESPACE(*pos)) break;
+		*pos-- = 0;
+	}
+
+	return par;
+}
+
+static void load_flt_pres(const char *str, int type)
+{
+	char *arg = get_preset_arg(str);
+	if (arg[0])
+	{
+		if (!strcasecmp(arg, "same") || !strcasecmp(arg, "off"))
+		{
+			video_set_scaler_flt(type, 0);
+		}
+		else
+		{
+			video_set_scaler_coeff(type, arg);
+			video_set_scaler_flt(type, 1);
+		}
+	}
+}
+
+void video_loadPreset(char *name)
+{
+	char *arg;
+	fileTextReader reader;
+	if (FileOpenTextReader(&reader, name))
+	{
+		const char *line;
+		while ((line = FileReadLine(&reader)))
+		{
+			if (!strncasecmp(line, "hfilter=", 8))
+			{
+				load_flt_pres(line + 8, VFILTER_HORZ);
+			}
+			else if (!strncasecmp(line, "vfilter=", 8))
+			{
+				load_flt_pres(line + 8, VFILTER_VERT);
+			}
+			else if (!strncasecmp(line, "sfilter=", 8))
+			{
+				load_flt_pres(line + 8, VFILTER_SCAN);
+			}
+			else if (!strncasecmp(line, "mask=", 5))
+			{
+				arg = get_preset_arg(line + 5);
+				if (arg[0])
+				{
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_shadow_mask_mode(0);
+					else video_set_shadow_mask(arg);
+				}
+			}
+			else if (!strncasecmp(line, "maskmode=", 9))
+			{
+				arg = get_preset_arg(line + 9);
+				if (arg[0])
+				{
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_shadow_mask_mode(0);
+					else if (!strcasecmp(arg, "1x")) video_set_shadow_mask_mode(SM_MODE_1X);
+					else if (!strcasecmp(arg, "2x")) video_set_shadow_mask_mode(SM_MODE_2X);
+					else if (!strcasecmp(arg, "1x rotated")) video_set_shadow_mask_mode(SM_MODE_1X_ROTATED);
+					else if (!strcasecmp(arg, "2x rotated")) video_set_shadow_mask_mode(SM_MODE_2X_ROTATED);
+				}
+			}
+			else if (!strncasecmp(line, "gamma=", 6))
+			{
+				arg = get_preset_arg(line + 6);
+				if (arg[0])
+				{
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_gamma_en(0);
+					else
+					{
+						video_set_gamma_curve(arg);
+						video_set_gamma_en(1);
+					}
+				}
+
+			}
+		}
+	}
+}
 
 static char fb_reset_cmd[128] = {};
 static void set_video(vmode_custom_t *v, double Fpix)
@@ -442,7 +893,6 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	setScaler();
 
 	v_cur = *v;
-
 	vmode_custom_t v_fix = v_cur;
 	if (cfg.direct_video)
 	{
@@ -462,9 +912,15 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	printf("video: ");
 	for (int i = 1; i <= 8; i++)
 	{
-		spi_w(v_fix.item[i]);
+		//hsync polarity
+		if (i == 3) spi_w((!!v_cur.item[21] << 15) | v_fix.item[i]);
+		//vsync polarity
+		else if (i == 7) spi_w((!!v_cur.item[22] << 15) | v_fix.item[i]);
+		else spi_w(v_fix.item[i]);
 		printf("%d(%d), ", v_cur.item[i], v_fix.item[i]);
 	}
+
+	printf("%chsync, %cvsync", !!v_cur.item[21]?'+':'-', !!v_cur.item[22]?'+':'-');
 
 	if(Fpix) setPLL(Fpix, &v_cur);
 
@@ -497,6 +953,9 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 	sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_width * 4);
 	system(fb_reset_cmd);
+
+	loadShadowMaskCfg();
+	setShadowMask();
 }
 
 static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
@@ -517,7 +976,11 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 			}
 
 			setPLL(Fpix, v);
-			break;
+			//read sync polarities if present
+			if (*next == ',') next++;
+			vcfg = next;
+			cnt = 21;
+			continue;
 		}
 
 		uint32_t val = strtoul(vcfg, &next, 0);
@@ -622,111 +1085,160 @@ int hasAPI1_5()
 	return api1_5 || is_menu();
 }
 
-static uint32_t show_video_info(int force)
+static bool get_video_info(bool force, VideoInfo *video_info)
 {
-	uint32_t ret = 0;
 	static uint16_t nres = 0;
+	bool changed = false;
+
 	spi_uio_cmd_cont(UIO_GET_VRES);
 	uint16_t res = spi_w(0);
 	if ((nres != res) || force)
 	{
-		if (nres != res) force = 0;
+		changed = (nres != res);
 		nres = res;
-		uint32_t width = spi_w(0) | (spi_w(0) << 16);
-		uint32_t height = spi_w(0) | (spi_w(0) << 16);
-		uint32_t htime = spi_w(0) | (spi_w(0) << 16);
-		uint32_t vtime = spi_w(0) | (spi_w(0) << 16);
-		uint32_t ptime = spi_w(0) | (spi_w(0) << 16);
-		uint32_t vtimeh = spi_w(0) | (spi_w(0) << 16);
-		DisableIO();
-
-		float vrate = 100000000;
-		if (vtime) vrate /= vtime; else vrate = 0;
-		float hrate = 100000;
-		if (htime) hrate /= htime; else hrate = 0;
-
-		float prate = width * 100;
-		prate /= ptime;
-
-		printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n", width, height, (res & 0x100) ? "i" : "", hrate, vrate, prate);
-		printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vtime, vtimeh);
-
-		if (vtimeh) api1_5 = 1;
-		if (hasAPI1_5() && cfg.video_info)
-		{
-			static char str[128], res1[16], res2[16];
-			float vrateh = 100000000;
-			if (vtimeh) vrateh /= vtimeh; else vrateh = 0;
-			sprintf(res1, "%dx%d%s", width, height, (res & 0x100) ? "i" : "");
-			sprintf(res2, "%dx%d", v_cur.item[1], v_cur.item[5]);
-			sprintf(str, "%9s %6.2fKHz %4.1fHz\n" \
-				         "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n" \
-				         "%9s %6.2fMHz %4.1fHz",
-				res1,  hrate, vrate, res2, v_cur.Fpix, vrateh);
-			Info(str, cfg.video_info * 1000);
-		}
-
-		uint32_t scrh = v_cur.item[5];
-		if (scrh)
-		{
-			if (cfg.vscale_mode && height)
-			{
-				uint32_t div = 1 << (cfg.vscale_mode - 1);
-				uint32_t mag = (scrh*div) / height;
-				scrh = (height * mag) / div;
-				printf("Set vertical scaling to : %d\n", scrh);
-				spi_uio_cmd16(UIO_SETHEIGHT, scrh);
-			}
-			else if(cfg.vscale_border)
-			{
-				uint32_t border = cfg.vscale_border * 2;
-				if ((border + 100) > scrh) border = scrh - 100;
-				scrh -= border;
-				printf("Set max vertical resolution to : %d\n", scrh);
-				spi_uio_cmd16(UIO_SETHEIGHT, scrh);
-			}
-			else
-			{
-				spi_uio_cmd16(UIO_SETHEIGHT, 0);
-			}
-		}
-
-		uint32_t scrw = v_cur.item[1];
-		if (scrw)
-		{
-			if (cfg.vscale_border && !(cfg.vscale_mode && height))
-			{
-				uint32_t border = cfg.vscale_border * 2;
-				if ((border + 100) > scrw) border = scrw - 100;
-				scrw -= border;
-				printf("Set max horizontal resolution to : %d\n", scrw);
-				spi_uio_cmd16(UIO_SETWIDTH, scrw);
-			}
-			else
-			{
-				spi_uio_cmd16(UIO_SETWIDTH, 0);
-			}
-		}
-
-		if (vtime && vtimeh) ret = vtime;
-		minimig_set_adjust(2);
+		video_info->width = spi_w(0) | (spi_w(0) << 16);
+		video_info->height = spi_w(0) | (spi_w(0) << 16);
+		video_info->htime = spi_w(0) | (spi_w(0) << 16);
+		video_info->vtime = spi_w(0) | (spi_w(0) << 16);
+		video_info->ptime = spi_w(0) | (spi_w(0) << 16);
+		video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
+		video_info->interlaced = ( res & 0x100 ) != 0;
+		video_info->rotated = ( res & 0x200 ) != 0;
 	}
-	else
+
+	DisableIO();
+
+	return changed;
+}
+
+static void video_core_description(const VideoInfo *vi, const vmode_custom_t * /*vm*/, char *str, size_t len)
+{
+	float vrate = 100000000;
+	if (vi->vtime) vrate /= vi->vtime; else vrate = 0;
+	float hrate = 100000;
+	if (vi->htime) hrate /= vi->htime; else hrate = 0;
+
+	float prate = vi->width * 100;
+	prate /= vi->ptime;
+
+	char res[16];
+	snprintf(res, 16, "%dx%d%s", vi->width, vi->height, vi->interlaced ? "i" : "");
+	snprintf(str, len, "%9s %6.2fKHz %5.1fHz", res, hrate, vrate);
+}
+
+static void video_scaler_description(const VideoInfo *vi, const vmode_custom_t *vm, char *str, size_t len)
+{
+	char res[16];
+	float vrateh = 100000000;
+	if (vi->vtimeh) vrateh /= vi->vtimeh; else vrateh = 0;
+	snprintf(res, 16, "%dx%d", vm->item[1], vm->item[5]);
+	snprintf(str, len, "%9s %6.2fMHz %5.1fHz", res, vm->Fpix, vrateh);
+}
+
+void video_core_description(char *str, size_t len)
+{
+	video_core_description(&current_video_info, &v_cur, str, len);
+}
+
+void video_scaler_description(char *str, size_t len)
+{
+	video_scaler_description(&current_video_info, &v_cur, str, len);
+}
+
+static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
+{
+	float vrate = 100000000;
+	if (vi->vtime) vrate /= vi->vtime; else vrate = 0;
+	float hrate = 100000;
+	if (vi->htime) hrate /= vi->htime; else hrate = 0;
+
+	float prate = vi->width * 100;
+	prate /= vi->ptime;
+
+	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n",
+		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate);
+	printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vi->vtime, vi->vtimeh);
+	if (vi->vtimeh) api1_5 = 1;
+	if (hasAPI1_5() && cfg.video_info)
 	{
-		DisableIO();
+		char str[128], res1[64], res2[64];
+		video_core_description(vi, vm, res1, 64);
+		video_scaler_description(vi, vm, res2, 64);
+		snprintf(str, 128, "%s\n" \
+						"\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n" \
+						"%s", res1, res2);
+		Info(str, cfg.video_info * 1000);
+	}
+}
+
+static void video_scaling_adjust(const VideoInfo *vi)
+{
+	const uint32_t height = vi->rotated ? vi->width : vi->height;
+
+	uint32_t scrh = v_cur.item[5];
+	if (scrh)
+	{
+		if (cfg.vscale_mode && height)
+		{
+			uint32_t div = 1 << (cfg.vscale_mode - 1);
+			uint32_t mag = (scrh*div) / height;
+			scrh = (height * mag) / div;
+			printf("Set vertical scaling to : %d\n", scrh);
+			spi_uio_cmd16(UIO_SETHEIGHT, scrh);
+		}
+		else if(cfg.vscale_border)
+		{
+			uint32_t border = cfg.vscale_border * 2;
+			if ((border + 100) > scrh) border = scrh - 100;
+			scrh -= border;
+			printf("Set max vertical resolution to : %d\n", scrh);
+			spi_uio_cmd16(UIO_SETHEIGHT, scrh);
+		}
+		else
+		{
+			spi_uio_cmd16(UIO_SETHEIGHT, 0);
+		}
 	}
 
-	return force ? 0 : ret;
+	uint32_t scrw = v_cur.item[1];
+	if (scrw)
+	{
+		if (cfg.vscale_border && !(cfg.vscale_mode && height))
+		{
+			uint32_t border = cfg.vscale_border * 2;
+			if ((border + 100) > scrw) border = scrw - 100;
+			scrw -= border;
+			printf("Set max horizontal resolution to : %d\n", scrw);
+			spi_uio_cmd16(UIO_SETWIDTH, scrw);
+		}
+		else
+		{
+			spi_uio_cmd16(UIO_SETWIDTH, 0);
+		}
+	}
+
+	minimig_set_adjust(2);
 }
 
 void video_mode_adjust()
 {
-	static int force = 0;
+	static bool force = false;
 
-	uint32_t vtime = show_video_info(force);
-	force = 0;
+	VideoInfo video_info;
 
-	if (vtime && cfg.vsync_adjust && !is_menu())
+	const bool vid_changed = get_video_info(force, &video_info);
+
+	if (vid_changed || force)
+	{
+		show_video_info(&video_info, &v_cur);
+		video_scaling_adjust(&video_info);
+
+		current_video_info = video_info;
+	}
+	force = false;
+
+	const uint32_t vtime = video_info.vtime;
+	if (vid_changed && vtime && cfg.vsync_adjust && !is_menu())
 	{
 		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
 
@@ -793,7 +1305,11 @@ void video_mode_adjust()
 
 		set_video(v, Fpix);
 		user_io_send_buttons(1);
-		force = 1;
+		force = true;
+	}
+	else
+	{
+		set_vfilter(0);
 	}
 }
 
@@ -822,7 +1338,7 @@ void video_fb_enable(int enable, int n)
 					yoff = v_cur.item[8] - FB_DV_UBRD;
 				}
 
-				printf("Switch to HPS frame buffer\n");
+				//printf("Switch to Linux frame buffer\n");
 				spi_w((uint16_t)(FB_EN | FB_FMT_RxB | FB_FMT_8888)); // format, enable flag
 				spi_w((uint16_t)fb_addr); // base address low word
 				spi_w(fb_addr >> 16);     // base address high word
@@ -834,7 +1350,7 @@ void video_fb_enable(int enable, int n)
 				spi_w(yoff + v_cur.item[5] - 1); // scaled bottom
 				spi_w(fb_width * 4);      // stride
 
-				printf("HPS frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_width * 4);
+				//printf("Linux frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_width * 4);
 				if (!fb_num)
 				{
 					system(fb_reset_cmd);
@@ -862,7 +1378,7 @@ void video_fb_enable(int enable, int n)
 
 		DisableIO();
 		if (cfg.direct_video) set_vga_fb(enable);
-		if (is_menu()) user_io_8bit_set_status((fb_enabled && !fb_num) ? 0x160 : 0, 0x1E0);
+		if (is_menu()) user_io_status((fb_enabled && !fb_num) ? 0x160 : 0, 0x1E0);
 	}
 }
 
@@ -1105,7 +1621,7 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 
 		if (de)
 		{
-			sprintf(name, "%s/%s", dir, de->d_name);
+			snprintf(name, sizeof(name), "%s/%s", dir, de->d_name);
 		}
 		closedir(d);
 		if(count) *count = cnt;
@@ -1167,8 +1683,8 @@ void video_menu_bg(int n, int idle)
 	menu_bg = n;
 	if (n)
 	{
-		printf("**** BG DEBUG START ****\n");
-		printf("n = %d\n", n);
+		//printf("**** BG DEBUG START ****\n");
+		//printf("n = %d\n", n);
 
 		Imlib_Load_Error error;
 		static Imlib_Image logo = 0;
@@ -1244,7 +1760,7 @@ void video_menu_bg(int n, int idle)
 				imlib_context_set_image(menubg);
 				int src_w = imlib_image_get_width();
 				int src_h = imlib_image_get_height();
-				printf("menubg: src_w=%d, src_h=%d\n", src_w, src_h);
+				//printf("menubg: src_w=%d, src_h=%d\n", src_w, src_h);
 
 				if (*bg)
 				{
@@ -1360,7 +1876,7 @@ void video_menu_bg(int n, int idle)
 
 		//test the fb driver
 		//vs_wait();
-		printf("**** BG DEBUG END ****\n");
+		//printf("**** BG DEBUG END ****\n");
 	}
 
 	video_fb_enable(0);
@@ -1526,4 +2042,9 @@ void video_cmd(char *cmd)
 			printf("video_cmd: unknown command or format.\n");
 		}
 	}
+}
+
+bool video_is_rotated()
+{
+	return current_video_info.rotated;
 }

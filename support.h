@@ -34,3 +34,9 @@
 
 // PCECD  support
 #include "support/pcecd/pcecd.h"
+
+// PSX support
+#include "support/psx/psx.h"
+
+// UEF support
+#include "support/uef/uef_reader.h"

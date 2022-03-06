@@ -34,12 +34,24 @@ struct direntext_t
 	char altname[256];
 };
 
+struct fileTextReader
+{
+	fileTextReader();
+	~fileTextReader();
+
+	size_t size;
+	char *buffer;
+	char *pos;
+};
+
 int flist_nDirEntries();
 int flist_iFirstEntry();
 void flist_iFirstEntryInc();
 int flist_iSelectedEntry();
 direntext_t* flist_DirItem(int n);
 direntext_t* flist_SelectedItem();
+char* flist_Path();
+char* flist_GetPrevNext(const char* base_path, const char* file, const char* ext, int next);
 
 // scanning flags
 #define SCANF_INIT       0 // start search from beginning of directory
@@ -51,14 +63,15 @@ direntext_t* flist_SelectedItem();
 #define SCANF_END        4 // find last file in directory
 
 // options flags
-#define SCANO_DIR        0b00000001 // include subdirectories
-#define SCANO_UMOUNT     0b00000010 // allow backspace key
-#define SCANO_CORES      0b00000100 // only include subdirectories with prefix '_'
-#define SCANO_TXT        0b00001000
-#define SCANO_NEOGEO     0b00010000
-#define SCANO_NOENTER    0b00100000
-#define SCANO_NOZIP      0b01000000
-#define SCANO_CLEAR      0b10000000 // allow backspace key, clear FC option
+#define SCANO_DIR        0b000000001 // include subdirectories
+#define SCANO_UMOUNT     0b000000010 // allow backspace key
+#define SCANO_CORES      0b000000100 // only include subdirectories with prefix '_'
+#define SCANO_TXT        0b000001000
+#define SCANO_NEOGEO     0b000010000
+#define SCANO_NOENTER    0b000100000
+#define SCANO_NOZIP      0b001000000
+#define SCANO_CLEAR      0b010000000 // allow backspace key, clear FC option
+#define SCANO_SAVES      0b100000000
 
 void FindStorage();
 int  getStorage(int from_setting);
@@ -87,7 +100,7 @@ int PathIsDir(const char *name, int use_zip = 1);
 struct stat64* getPathStat(const char *path);
 
 #define SAVE_DIR "saves"
-void FileGenerateSavePath(const char *name, char* out_name);
+void FileGenerateSavePath(const char *name, char* out_name, int ext_replace = 1);
 
 #define SAVESTATE_DIR "savestates"
 void FileGenerateSavestatePath(const char *name, char* out_name, int sufx);
@@ -118,14 +131,20 @@ const char *getRootDir();
 const char *getFullPath(const char *name);
 
 uint32_t getFileType(const char *name);
-bool isMraName(char *path);
+int isXmlName(const char *path); // 1 - MRA, 2 - MGL
+
+bool FileOpenTextReader(fileTextReader *reader, const char *path);
+const char* FileReadLine(fileTextReader *reader);
 
 #define LOADBUF_SZ (1024*1024)
 
 #define COEFF_DIR "filters"
 #define GAMMA_DIR "gamma"
 #define AFILTER_DIR "filters_audio"
+#define SMASK_DIR "shadow_masks"
+#define PRESET_DIR "presets"
 #define GAMES_DIR "games"
 #define CIFS_DIR "cifs"
+#define DOCS_DIR "docs"
 
 #endif

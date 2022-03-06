@@ -26,8 +26,7 @@ void pcecd_poll()
 	if (CheckTimer(poll_timer))
 	{
 		if ((!pcecdd.latency) && (pcecdd.state == PCECD_STATE_READ)) {
-			poll_timer += 16 + ((adj == 10) ? 1 : 0);	// 16.1ms between frames if reading data */
-			if (--adj <= 0) adj = 10;
+			poll_timer += 16;				// 16.0ms between frames if reading data */
 		} else {
 			poll_timer += 13 + ((adj == 3) ? 1 : 0);	// 13.33ms otherwise (including latency counts) */
 			if (adj > 3) adj = 3;
@@ -114,9 +113,9 @@ static void notify_mount(int load)
 
 	if (!load)
 	{
-		user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+		user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 		usleep(100000);
-		user_io_8bit_set_status(0, UIO_STATUS_RESET);
+		user_io_status(0, UIO_STATUS_RESET);
 	}
 }
 

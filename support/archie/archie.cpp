@@ -9,6 +9,7 @@
 #include "../../user_io.h"
 #include "../../input.h"
 #include "../../support.h"
+#include "../../ide.h"
 #include "archie.h"
 
 #define CONFIG_FILENAME  "ARCHIE.CFG"
@@ -80,7 +81,7 @@ void archie_set_ar(char i)
 {
 	config.system_ctrl &= ~0b11000000;
 	config.system_ctrl |= (i & 3) << 6;
-	user_io_8bit_set_status(config.system_ctrl, 0b11000000);
+	user_io_status(config.system_ctrl, 0b11000000);
 }
 
 int archie_get_ar()
@@ -92,7 +93,7 @@ void archie_set_scale(char i)
 {
 	config.system_ctrl &= ~0b1100000000;
 	config.system_ctrl |= (i & 3) << 8;
-	user_io_8bit_set_status(config.system_ctrl, 0b1100000000);
+	user_io_status(config.system_ctrl, 0b1100000000);
 }
 
 int archie_get_scale()
@@ -104,7 +105,7 @@ void archie_set_60(char i)
 {
 	if (i) config.system_ctrl |=  0b1000;
 	else config.system_ctrl   &= ~0b1000;
-	user_io_8bit_set_status(config.system_ctrl, 0b10000);
+	user_io_status(config.system_ctrl, 0b10000);
 }
 
 int archie_get_60()
@@ -116,7 +117,7 @@ void archie_set_afix(char i)
 {
 	if (i) config.system_ctrl |= 0b10000;
 	else config.system_ctrl &= ~0b10000;
-	user_io_8bit_set_status(config.system_ctrl, 0b100000);
+	user_io_status(config.system_ctrl, 0b100000);
 }
 
 int archie_get_afix()
@@ -138,7 +139,7 @@ int archie_get_mswap()
 void archie_set_amix(char i)
 {
 	config.system_ctrl = (config.system_ctrl & ~0b110) | ((i & 3)<<1);
-	user_io_8bit_set_status(config.system_ctrl << 1, 0b1100);
+	user_io_status(config.system_ctrl << 1, 0b1100);
 }
 
 int archie_get_amix()
@@ -286,10 +287,15 @@ static void check_cmos(uint8_t cnt)
 	}
 }
 
+inline int hdd_open(int unit, char *filename)
+{
+	return (ide_check() & 0x8000) ? ide_open(unit, filename) : OpenHardfile(unit, filename);
+}
+
 void archie_init()
 {
 	archie_debugf("init");
-	user_io_8bit_set_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+	user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
 
 	// set config defaults
 	config.system_ctrl = 0;
@@ -314,12 +320,12 @@ void archie_init()
 	archie_set_60(archie_get_60());
 	archie_set_afix(archie_get_afix());
 
-	if(!config.hdd_img[0][0] || !OpenHardfile(0, config.hdd_img[0]))
+	if (!config.hdd_img[0][0] || !hdd_open(0, config.hdd_img[0]))
 	{
 		memset(config.hdd_img[0], 0, sizeof(config.hdd_img[0]));
 	}
 
-	if (!config.hdd_img[1][0] || !OpenHardfile(1, config.hdd_img[1]))
+	if (!config.hdd_img[1][0] || !hdd_open(1, config.hdd_img[1]))
 	{
 		memset(config.hdd_img[1], 0, sizeof(config.hdd_img[1]));
 	}
@@ -332,7 +338,7 @@ void archie_init()
 
 	load_cmos();
 
-	user_io_8bit_set_status(~UIO_STATUS_RESET, UIO_STATUS_RESET);
+	user_io_status(~UIO_STATUS_RESET, UIO_STATUS_RESET);
 
 /*
 	int i;
@@ -466,7 +472,11 @@ void archie_poll(void)
 	EnableFpga();
 	uint16_t status = spi_w(0);
 	DisableFpga();
-	HandleHDD(status >> 8, 0);
+
+	uint16_t sd_req = ide_check();
+	if (sd_req & 0x8000) ide_io(0, sd_req & 7);
+	else HandleHDD(status >> 8, 0);
+
 	check_cmos(status);
 	check_reset();
 
@@ -623,8 +633,5 @@ const char *archie_get_hdd_name(int i)
 void archie_hdd_mount(char *filename, int idx)
 {
 	memset(config.hdd_img[idx], 0, sizeof(config.hdd_img[idx]));
-	if (OpenHardfile(idx, filename))
-	{
-		strcpy(config.hdd_img[idx], filename);
-	}
+	if (hdd_open(idx, filename)) strcpy(config.hdd_img[idx], filename);
 }

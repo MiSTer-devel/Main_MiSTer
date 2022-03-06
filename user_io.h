@@ -67,6 +67,9 @@
 #define UIO_SET_AFILTER 0x39
 #define UIO_SET_AR_CUST 0x3A
 #define UIO_SET_UART    0x3B
+#define UIO_CHK_UPLOAD  0x3C
+#define UIO_ASTICK_2    0x3D
+#define UIO_SHADOWMASK  0x3E
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
@@ -190,11 +193,12 @@ char user_io_user_button();
 void user_io_osd_key_enable(char);
 void user_io_read_confstr();
 char *user_io_get_confstr(int index);
-uint32_t user_io_8bit_set_status(uint32_t, uint32_t, int ex = 0);
+uint32_t user_io_status(uint32_t, uint32_t, int ex = 0);
 int user_io_get_kbd_reset();
+void user_io_set_kbd_reset(int reset);
 
 uint32_t user_io_get_file_crc();
-int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0);
+int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0, int pre_size = 0);
 char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name(int orig = 0);
 char *user_io_get_core_path(const char *suffix = NULL, int recheck = 0);
@@ -211,7 +215,8 @@ void user_io_kbd(uint16_t key, int press);
 char* user_io_create_config_name();
 int user_io_get_joy_transl();
 void user_io_digital_joystick(unsigned char, uint32_t, int);
-void user_io_analog_joystick(unsigned char, char, char);
+void user_io_l_analog_joystick(unsigned char, char, char);
+void user_io_r_analog_joystick(unsigned char, char, char);
 void user_io_set_joyswap(int swap);
 int user_io_get_joyswap();
 char user_io_osd_is_visible();
@@ -227,15 +232,18 @@ unsigned char user_io_ext_idx(char *, char*);
 void user_io_set_index(unsigned char index);
 void user_io_set_aindex(uint16_t index);
 void user_io_set_download(unsigned char enable, int addr = 0);
-void user_io_file_tx_data(const uint8_t *addr, uint16_t len);
+void user_io_file_tx_data(const uint8_t *addr, uint32_t len);
 void user_io_set_upload(unsigned char enable, int addr = 0);
-void user_io_file_rx_data(uint8_t *addr, uint16_t len);
+void user_io_file_rx_data(uint8_t *addr, uint32_t len);
 void user_io_file_info(const char *ext);
 int user_io_get_width();
 
 void user_io_check_reset(unsigned short modifiers, char useKeys);
 
 void user_io_rtc_reset();
+
+void user_io_screenshot_cmd(const char *cmd);
+bool user_io_screenshot(const char *pngname, int rescale);
 
 const char* get_rbf_dir();
 const char* get_rbf_name();
@@ -260,6 +268,8 @@ char * GetMidiLinkSoundfont();
 void user_io_store_filename(char *filename);
 int user_io_use_cheats();
 
+int process_ss(const char *rom_name, int enable = 1);
+
 void diskled_on();
 #define DISKLED_ON  diskled_on()
 #define DISKLED_OFF void()
@@ -276,6 +286,7 @@ char is_archie();
 char is_gba();
 char is_c64();
 char is_st();
+char is_psx();
 char is_arcade();
 
 #define HomeDir(x) user_io_get_core_path(x)

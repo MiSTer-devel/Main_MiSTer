@@ -11,16 +11,14 @@
 #include <string>
 #include <sstream>
 #include <sys/stat.h>
+#include <libchdr/chd.h>
 
-#include "../../spi.h"
-#include "../../user_io.h"
-#include "../../file_io.h"
-#include "../../hardware.h"
-#include "../../cd.h"
-#include "../../lib/libchdr/include/libchdr/chd.h"
-#include "x86.h"
-#include "x86_ide.h"
-#include "x86_cdrom.h"
+#include "spi.h"
+#include "user_io.h"
+#include "file_io.h"
+#include "hardware.h"
+#include "cd.h"
+#include "ide.h"
 
 #if 0
 	#define dbg_printf     printf
@@ -32,11 +30,9 @@
 	#define dbg_hexdump(...)  void()
 #endif
 
-#define IOWR(base, reg, value, ver) x86_dma_set((base) + ((ver) ? (reg) : ((reg)<<2)), value)
-
-#define ide_send_data(databuf, size) x86_dma_sendbuf(ide->base + 255, (size), (uint32_t*)(databuf))
-#define ide_recv_data(databuf, size) x86_dma_recvbuf(ide->base + 255, (size), (uint32_t*)(databuf))
-#define ide_reset_buf() x86_dma_set(ide->base + 3, 0)
+#define ide_send_data(databuf, size) ide_sendbuf(ide, 255, (size), (uint16_t*)(databuf))
+#define ide_recv_data(databuf, size) ide_recvbuf(ide, 255, (size), (uint16_t*)(databuf))
+#define ide_reset_buf() ide_reg_set(ide, 7, 0)
 
 #define BYTES_PER_RAW_REDBOOK_FRAME    2352
 #define BYTES_PER_COOKED_REDBOOK_FRAME 2048
@@ -924,9 +920,9 @@ static int read_subchannel(drive_t *drv, uint8_t* cmdbuf)
 
 static void pkt_send(ide_config *ide, void *data, uint16_t size)
 {
-	ide_send_data(data, (size + 3) / 4);
+	ide->regs.pkt_io_size = (size + 1) / 2;
+	ide_send_data(data, ide->regs.pkt_io_size);
 
-	ide->regs.pkt_io_size = (size+1)/2;
 	ide->regs.cylinder = size;
 	ide->regs.sector_count = 2;
 
@@ -1182,7 +1178,7 @@ void cdrom_handle_pkt(ide_config *ide)
 	drive_t *drv = &ide->drive[ide->regs.drv];
 	uint8_t cmdbuf[16];
 
-	ide_recv_data(cmdbuf, 3);
+	ide_recv_data(cmdbuf, 6);
 	ide_reset_buf();
 	dbg_hexdump(cmdbuf, 12, 0);
 
@@ -1324,24 +1320,6 @@ void cdrom_handle_pkt(ide_config *ide)
 	}
 }
 
-static void prep_FA_cmd(ide_config *ide)
-{
-	ide->prepcnt = ide->regs.sector_count;
-	if (!ide->prepcnt || ide->prepcnt > ide_io_max_size) ide->prepcnt = ide_io_max_size;
-
-	ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
-
-	if (ide->state == IDE_STATE_INIT_RW)
-	{
-		ide->regs.status &= ~ATA_STATUS_IRQ;
-		ide->null = 1;
-	}
-
-	ide->state = IDE_STATE_WAIT_WR;
-	ide->regs.pkt_io_size = ide->prepcnt * 256;
-	ide_set_regs(ide);
-}
-
 int cdrom_handle_cmd(ide_config *ide)
 {
 	uint8_t drv;
@@ -1351,19 +1329,14 @@ int cdrom_handle_cmd(ide_config *ide)
 	case 0xA1: // identify packet
 		//print_regs(&ide->regs);
 		dbg_printf("identify packet\n");
-		ide_send_data(ide->drive[ide->regs.drv].id, 128);
+		ide_send_data(ide->drive[ide->regs.drv].id, 256);
 		drv = ide->regs.drv;
 		memset(&ide->regs, 0, sizeof(ide->regs));
 		ide->regs.drv = drv;
 		ide->regs.pkt_io_size = 256;
-		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ | ATA_STATUS_END;
 		ide_set_regs(ide);
-		ide->state = IDE_STATE_WAIT_END;
-		break;
-
-	case 0xFA: // mount image
-		ide->state = IDE_STATE_INIT_RW;
-		prep_FA_cmd(ide);
+		ide->state = IDE_STATE_IDLE;
 		break;
 
 	case 0xEC: // identify (fail)
