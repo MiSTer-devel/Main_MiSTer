@@ -556,7 +556,7 @@ static uint32_t menu_key_get(void)
 		else if (CheckTimer(repeat))
 		{
 			repeat = GetTimer(REPEATRATE);
-			if (GetASCIIKey(c1) || ((menustate == MENU_COMMON2) && (menusub == 15)) || ((menustate == MENU_SYSTEM2) && (menusub == 4)))
+			if (GetASCIIKey(c1) || ((menustate == MENU_COMMON2) && (menusub == 17)) || ((menustate == MENU_SYSTEM2) && (menusub == 5)))
 			{
 				c = c1;
 				hold_cnt++;
@@ -2435,10 +2435,12 @@ void HandleUI(void)
 				}
 
 				MenuWrite(n++);
+				MenuWrite(n++, " Help                      \x16", menusub == 15);
+				MenuWrite(n++, " About",                          menusub == 16);
+
+				MenuWrite(n++);
 				cr = n;
-				MenuWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 15);
-				MenuWrite(n++, " Help                      \x16", menusub == 16);
-				MenuWrite(n++, " About", menusub == 17);
+				MenuWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 17);
 
 				while(n < OsdGetSize() - 1) MenuWrite(n++);
 				MenuWrite(n++, STD_EXIT, menusub == 18, 0, OSD_ARROW_LEFT);
@@ -2585,28 +2587,28 @@ void HandleUI(void)
 				break;
 
 			case 15:
-				{
-					reboot_req = 1;
-
-					int off = hold_cnt/3;
-					if (off > 5) reboot(1);
-
-					sprintf(s, " Cold Reboot");
-					p = s + 5 - off;
-					MenuWrite(cr, p, 1, 0);
-				}
-				break;
-
-			case 16:
 				FileCreatePath(DOCS_DIR);
 				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR"/%s",user_io_get_core_name());
 				FileCreatePath(Selected_tmp);
 				SelectFile(Selected_tmp, "PDFTXTMD ",  SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
 				break;
 
-			case 17:
+			case 16:
 				menustate = MENU_ABOUT1;
 				menusub = 0;
+				break;
+
+			case 17:
+				{
+					reboot_req = 1;
+
+					int off = hold_cnt / 3;
+					if (off > 5) reboot(1);
+
+					sprintf(s, " Cold Reboot");
+					p = s + 5 - off;
+					MenuWrite(cr, p, 1, 0);
+				}
 				break;
 
 			default:
