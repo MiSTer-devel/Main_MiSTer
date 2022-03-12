@@ -91,6 +91,7 @@ static const ini_var_t ini_vars[] =
 	{ "BT_AUTO_DISCONNECT", (void*)(&(cfg.bt_auto_disconnect)), UINT32, 0, 180 },
 	{ "BT_RESET_BEFORE_PAIR", (void*)(&(cfg.bt_reset_before_pair)), UINT8, 0, 1 },
 	{ "WAITMOUNT", (void*)(&(cfg.waitmount)), STRING, 0, sizeof(cfg.waitmount) - 1 },
+	{ "RUMBLE", (void *)(&(cfg.rumble)), UINT8, 0, 1},
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -349,5 +350,6 @@ void cfg_parse()
 	cfg.controller_info = 6;
 	cfg.browse_expand = 1;
 	cfg.logo = 1;
+	cfg.rumble = 1;
 	ini_parse(altcfg());
 }
