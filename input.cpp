@@ -1168,8 +1168,8 @@ typedef struct
 
 	int      lightgun_req;
 	int      lightgun;
-	bool			has_rumble;
-	uint16_t		last_rumble;
+	bool     has_rumble;
+	uint16_t last_rumble;
 	ff_effect rumble_effect;
 
 	int      timeout;
@@ -3972,7 +3972,7 @@ int input_test(int getchar)
 							if (ioctl(fd, EVIOCGEFFECTS, &effects) >= 0)
 							{
 								unsigned char ff_features[(FF_MAX + 7) / 8] = {};
-								
+
 								if (ioctl(fd, EVIOCGBIT(EV_FF, sizeof(ff_features)), ff_features) != -1)
 								{
 									if (test_bit(FF_RUMBLE, ff_features)) {
@@ -4234,24 +4234,24 @@ int input_test(int getchar)
 
 		while (1)
 		{
-				if (cfg.rumble)
+			if (cfg.rumble)
+			{
+				for (int pl = 1; pl < NUMPLAYERS; pl++)
 				{
-					for (int pl = 1; pl < NUMPLAYERS; pl++)
+					if (!player_pad[pl].num || !player_pad[pl].has_rumble) continue;
+					uint16_t rumble_val = spi_uio_cmd(UIO_GET_RUMBLE | ((pl - 1) << 8));
+					if (player_pad[pl].last_rumble != rumble_val)
 					{
-						if (!player_pad[pl].num || !player_pad[pl].has_rumble) continue;
-						uint16_t rumble_val = spi_uio_cmd(UIO_GET_RUMBLE0+(pl-1));
-						if (player_pad[pl].last_rumble != rumble_val)
-						{
-							uint16_t strong_m, weak_m;
+						uint16_t strong_m, weak_m;
 
-							strong_m = (rumble_val & 0xFF00) + (rumble_val >> 8);
-							weak_m = (rumble_val << 8) + (rumble_val & 0x00FF);
+						strong_m = (rumble_val & 0xFF00) + (rumble_val >> 8);
+						weak_m = (rumble_val << 8) + (rumble_val & 0x00FF);
 
-							rumble_player(pl, strong_m, weak_m, 0x7FFF); 
-							player_pad[pl].last_rumble = rumble_val;
-						}
+						rumble_player(pl, strong_m, weak_m, 0x7FFF);
+						player_pad[pl].last_rumble = rumble_val;
 					}
 				}
+			}
 
 			int return_value = poll(pool, NUMDEV + 3, timeout);
 			if (!return_value) break;
@@ -4519,16 +4519,16 @@ int input_test(int getchar)
 										break;
 
 									case EV_REL:
+									{
+										//limit the amount of EV_REL messages, so Menu core won't be laggy
+										static unsigned long timeout = 0;
+										if (!timeout || CheckTimer(timeout))
 										{
-											//limit the amount of EV_REL messages, so Menu core won't be laggy
-											static unsigned long timeout = 0;
-											if (!timeout || CheckTimer(timeout))
-											{
-												timeout = GetTimer(20);
-												printf("%04x:%04x:%02d P%d Input event: type=EV_REL, Axis=%d, Offset=%d\n", input[dev].vid, input[dev].pid, i, input[dev].num, ev.code, ev.value);
-											}
+											timeout = GetTimer(20);
+											printf("%04x:%04x:%02d P%d Input event: type=EV_REL, Axis=%d, Offset=%d\n", input[dev].vid, input[dev].pid, i, input[dev].num, ev.code, ev.value);
 										}
-										break;
+									}
+									break;
 
 									case EV_SYN:
 									case EV_MSC:
@@ -4536,32 +4536,32 @@ int input_test(int getchar)
 
 										//analog joystick
 									case EV_ABS:
+									{
+										//limit the amount of EV_ABS messages, so Menu core won't be laggy
+										static unsigned long timeout = 0;
+										if (!timeout || CheckTimer(timeout))
 										{
-											//limit the amount of EV_ABS messages, so Menu core won't be laggy
-											static unsigned long timeout = 0;
-											if (!timeout || CheckTimer(timeout))
+											timeout = GetTimer(20);
+
+											//reduce flood from DUALSHOCK 3/4
+											if ((input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code <= 5 && ev.value > 118 && ev.value < 138)
 											{
-												timeout = GetTimer(20);
-
-												//reduce flood from DUALSHOCK 3/4
-												if ((input[i].quirk == QUIRK_DS4 || input[i].quirk == QUIRK_DS3) && ev.code <= 5 && ev.value > 118 && ev.value < 138)
-												{
-													break;
-												}
-
-												//aliexpress USB encoder floods messages
-												if (input[dev].vid == 0x0079 && input[dev].pid == 0x0006)
-												{
-													if (ev.code == 2) break;
-												}
-
-												printf("%04x:%04x:%02d P%d Input event: type=EV_ABS, Axis=%d [%d...%d], Offset=%d", input[dev].vid, input[dev].pid, i, input[dev].num, ev.code, absinfo.minimum, absinfo.maximum, ev.value);
-												//if (absinfo.fuzz) printf(", fuzz = %d", absinfo.fuzz);
-												if (absinfo.resolution) printf(", res = %d", absinfo.resolution);
-												printf("\n");
+												break;
 											}
+
+											//aliexpress USB encoder floods messages
+											if (input[dev].vid == 0x0079 && input[dev].pid == 0x0006)
+											{
+												if (ev.code == 2) break;
+											}
+
+											printf("%04x:%04x:%02d P%d Input event: type=EV_ABS, Axis=%d [%d...%d], Offset=%d", input[dev].vid, input[dev].pid, i, input[dev].num, ev.code, absinfo.minimum, absinfo.maximum, ev.value);
+											//if (absinfo.fuzz) printf(", fuzz = %d", absinfo.fuzz);
+											if (absinfo.resolution) printf(", res = %d", absinfo.resolution);
+											printf("\n");
 										}
-										break;
+									}
+									break;
 
 									default:
 										printf("%04x:%04x:%02d P%d Input event: type=%d, code=%d(0x%x), value=%d(0x%x)\n", input[dev].vid, input[dev].pid, i, input[dev].num, ev.type, ev.code, ev.code, ev.value, ev.value);
