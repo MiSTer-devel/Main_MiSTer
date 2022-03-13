@@ -70,6 +70,12 @@
 #define UIO_CHK_UPLOAD  0x3C
 #define UIO_ASTICK_2    0x3D
 #define UIO_SHADOWMASK  0x3E
+#define UIO_GET_RUMBLE0	0x3F
+#define UIO_GET_RUMBLE1	0x40
+#define UIO_GET_RUMBLE2	0x41
+#define UIO_GET_RUMBLE3	0x42
+#define UIO_GET_RUMBLE4 0x43
+#define UIO_GET_RUMBLE5 0x44
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
