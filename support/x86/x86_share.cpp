@@ -104,7 +104,7 @@ struct dir_item_t
 
 struct lock
 {
-	std::string path;
+	uint16_t token;
 	std::vector<dir_item_t> dir_items;
 };
 
@@ -126,22 +126,22 @@ static short get_key()
 	return key;
 }
 
-static short get_lock(const char* path)
+static short get_lock(const uint16_t token)
 {
 	for (const auto &pair : locks)
 	{
-		if (pair.second.path == path)
+		if (pair.second.token == token)
 		{
-			dbg_print("! path %s has lock: %d\n", path, pair.first);
+			dbg_print("! token %u has lock: %d\n", token, pair.first);
 			return pair.first;
 		}
 	}
 	return 0;
 }
 
-static short add_lock(const char* path)
+static short add_lock(const uint16_t token)
 {
-	short key = get_lock(path);
+	short key = get_lock(token);
 	if (key)
 	{
 		locks[key].dir_items.clear();
@@ -149,8 +149,8 @@ static short add_lock(const char* path)
 	else
 	{
 		key = get_key();
-		locks[key] = { path, {} };
-		dbg_print("+ add lock: %d, %s\n", key, path);
+		locks[key] = { token, {} };
+		dbg_print("+ add lock: %d, %u\n", key, token);
 	}
 	return key;
 }
@@ -944,9 +944,11 @@ static int process_request(void *reqres_buffer)
 	{
 		dbg_print("> AL_FINDFIRST\n");
 
-		char attr = *buf;
+		const uint16_t token = ((uint16_t *)buf)[0];
 
-		char *path = find_path(buf+1);
+		char attr = buf[2];
+
+		char *path = find_path(buf+3);
 		if (!*path)
 		{
 			res = 0x12;
@@ -961,7 +963,7 @@ static int process_request(void *reqres_buffer)
 		}
 
 		*flt++ = 0;
-		key = add_lock(path);
+		key = add_lock(token);
 
 		const char* full_path = getFullPath(path);
 		DIR *d = opendir(full_path);
