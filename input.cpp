@@ -3872,6 +3872,82 @@ int process_joycon(int dev, input_event *ev, input_absinfo *absinfo)
 	return 0;
 }
 
+static int get_rumble_device(int player)
+{
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		int dev = i;
+		if (input[i].bind >= 0) dev = input[i].bind;
+
+		if (input[dev].num == player && input[i].has_rumble)
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+static int rumble_input_device(int devnum, uint16_t strong_mag, uint16_t weak_mag, uint16_t duration = 500, uint16_t delay = 0)
+{
+	int ioret = 0;
+	if (!input[devnum].has_rumble) return 0;
+	int fd = pool[devnum].fd;
+	if (!(fd >= 0)) return 0;
+
+	if (!strong_mag && !weak_mag) //Stop rumble
+	{
+		if (input[devnum].rumble_effect.id == -1) return 1; //No uploaded effect
+
+		ioret = ioctl(fd, EVIOCRMFF, input[devnum].rumble_effect.id);
+		input[devnum].rumble_effect.id = -1; //always set to -1 even if we fail to remove it?
+		return ioret != -1;
+	}
+	else {
+		//Upload effect and then immediately play it
+		//If the effect id in the input struct is -1, it will be filled with the newly uploaded effect
+		//If it is filled with an already uploaded effect, the effect is modified in place
+		struct ff_effect *fef;
+		fef = &input[devnum].rumble_effect;
+		fef->type = FF_RUMBLE;
+
+		fef->u.rumble.strong_magnitude = strong_mag;
+		fef->u.rumble.weak_magnitude = weak_mag;
+		fef->replay.length = duration;
+		fef->replay.delay = delay;
+		ioret = ioctl(fd, EVIOCSFF, fef);
+
+		if (ioret == -1)
+		{
+			printf("RUMBLE UPLOAD FAILED %s\n", strerror(errno));
+			return 0;
+		}
+
+		//Play effect
+		struct input_event play_ev;
+		play_ev.type = EV_FF;
+		play_ev.code = input[devnum].rumble_effect.id;
+		play_ev.value = 1;
+		ioret = write(fd, (const void *)&play_ev, sizeof(play_ev));
+		return ioret != -1;
+	}
+	return 0;
+}
+
+static void set_rumble(int dev, uint16_t rumble_val)
+{
+	if (input[dev].last_rumble != rumble_val)
+	{
+		uint16_t strong_m, weak_m;
+
+		strong_m = (rumble_val & 0xFF00) + (rumble_val >> 8);
+		weak_m = (rumble_val << 8) + (rumble_val & 0x00FF);
+
+		rumble_input_device(dev, strong_m, weak_m, 0x7FFF);
+		input[dev].last_rumble = rumble_val;
+	}
+}
+
 int input_test(int getchar)
 {
 	static char cur_leds = 0;
@@ -4234,22 +4310,17 @@ int input_test(int getchar)
 
 		while (1)
 		{
-			if (cfg.rumble)
+			if (cfg.rumble && !is_menu())
 			{
-				for (int pl = 1; pl < NUMPLAYERS; pl++)
+				for (int i = 1; i < NUMDEV; i++)
 				{
-					if (!player_pad[pl].num || !player_pad[pl].has_rumble) continue;
-					uint16_t rumble_val = spi_uio_cmd(UIO_GET_RUMBLE | ((pl - 1) << 8));
-					if (player_pad[pl].last_rumble != rumble_val)
-					{
-						uint16_t strong_m, weak_m;
+					if (!input[i].has_rumble) continue;
 
-						strong_m = (rumble_val & 0xFF00) + (rumble_val >> 8);
-						weak_m = (rumble_val << 8) + (rumble_val & 0x00FF);
+					int dev = i;
+					if (input[i].bind >= 0) dev = input[i].bind;
+					if (!input[dev].num) continue;
 
-						rumble_player(pl, strong_m, weak_m, 0x7FFF);
-						player_pad[pl].last_rumble = rumble_val;
-					}
+					set_rumble(i, spi_uio_cmd(UIO_GET_RUMBLE | ((input[dev].num - 1) << 8)));
 				}
 			}
 
@@ -4565,6 +4636,17 @@ int input_test(int getchar)
 
 									default:
 										printf("%04x:%04x:%02d P%d Input event: type=%d, code=%d(0x%x), value=%d(0x%x)\n", input[dev].vid, input[dev].pid, i, input[dev].num, ev.type, ev.code, ev.code, ev.value, ev.value);
+									}
+
+									if (ev.type == EV_KEY && input[dev].num)
+									{
+										int n = get_rumble_device(input[dev].num);
+										if (n >= 0)
+										{
+											uint16_t rumble_val = input[n].last_rumble;
+											if (ev.code == (input[dev].mmap[SYS_BTN_X] & 0xFFFF)) set_rumble(n, (rumble_val & 0xFF00) | ((ev.value) ? 0xFF : 0x00));
+											if (ev.code == (input[dev].mmap[SYS_BTN_Y] & 0xFFFF)) set_rumble(n, (rumble_val & 0xFF) | ((ev.value) ? 0xFF00 : 0x00));
+										}
 									}
 								}
 
@@ -5045,62 +5127,4 @@ void parse_buttons()
 		if (!joy_bnames[n][0]) break;
 		joy_bcount++;
 	}
-}
-
-
-int rumble_input_device(int devnum, uint16_t strong_mag, uint16_t weak_mag, uint16_t duration, uint16_t delay)
-{
-
-	int ioret = 0;
-	if (!input[devnum].has_rumble) return 0;
-	int fd = pool[devnum].fd;
-	if (!(fd >= 0)) return 0;
-
-	if (!strong_mag && !weak_mag) //Stop rumble
-	{
-		if (input[devnum].rumble_effect.id== -1) return 1; //No uploaded effect
-
-		ioret = ioctl(fd, EVIOCRMFF, input[devnum].rumble_effect.id);
-		input[devnum].rumble_effect.id = -1; //always set to -1 even if we fail to remove it?
-		return ioret != -1;
-	} else {
-		//Upload effect and then immediately play it
-		//If the effect id in the input struct is -1, it will be filled with the newly uploaded effect
-		//If it is filled with an already uploaded effect, the effect is modified in place
-		struct ff_effect *fef;
-		fef = &input[devnum].rumble_effect;
-		fef->type = FF_RUMBLE;
-
-		fef->u.rumble.strong_magnitude = strong_mag;
-		fef->u.rumble.weak_magnitude = weak_mag;
-		fef->replay.length = duration;
-		fef->replay.delay = delay;
-		ioret = ioctl(fd, EVIOCSFF, fef);
-		if (ioret == -1) {printf("RUMBLE UPLOAD FAILED %s\n", strerror(errno)); return 0;}
-		//Play effect
-		struct input_event play_ev;
-		play_ev.type = EV_FF;
-		play_ev.code = input[devnum].rumble_effect.id;
-		play_ev.value = 1;
-		ioret = write(fd, (const void *)&play_ev, sizeof(play_ev));
-		return ioret != -1;
-	}
-	return 0;
-}
-
-int rumble_player(int pnum, uint16_t strong_mag, uint16_t weak_mag, uint16_t duration, uint16_t delay)
-{
-
-	int dev_num = -1;
-	for (int i = 0; i < NUMDEV; i++)
-	{
-		if (input[i].num == pnum)
-		{
-				dev_num = i;
-				break;
-		}
-	}
-
-	if (dev_num == -1) return 0;
-	return rumble_input_device(dev_num, strong_mag, weak_mag, duration, delay);
 }
