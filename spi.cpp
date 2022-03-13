@@ -111,7 +111,7 @@ uint16_t spi_uio_cmd_cont(uint8_t cmd)
 
 uint16_t spi_uio_cmd(uint8_t cmd)
 {
-	uint8_t res = spi_uio_cmd_cont(cmd);
+	uint16_t res = spi_uio_cmd_cont(cmd);
 	DisableIO();
 	return res;
 }

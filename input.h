@@ -113,4 +113,10 @@ void parse_buttons();
 char *get_buttons(int type = 0);
 void set_ovr_buttons(char *s, int type);
 
+int rumble_input_device(int devnum, uint16_t strong_mag, uint16_t weak_mag, uint16_t duration = 500, uint16_t delay = 0);
+int rumble_player(int pnum, uint16_t strong_mag, uint16_t weak_mag, uint16_t duration = 500, uint16_t delay = 0);
+
+
+
+
 #endif
