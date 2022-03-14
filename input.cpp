@@ -4312,7 +4312,7 @@ int input_test(int getchar)
 		{
 			if (cfg.rumble && !is_menu())
 			{
-				for (int i = 1; i < NUMDEV; i++)
+				for (int i = 0; i < NUMDEV; i++)
 				{
 					if (!input[i].has_rumble) continue;
 
