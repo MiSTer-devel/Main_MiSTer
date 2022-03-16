@@ -1145,6 +1145,25 @@ void video_scaler_description(char *str, size_t len)
 	video_scaler_description(&current_video_info, &v_cur, str, len);
 }
 
+char* video_get_core_mode_name(int with_vrefresh)
+{
+	static char tmp[256] = {};
+
+	if (with_vrefresh)
+	{
+		float vrate = 100000000;
+		if (current_video_info.vtime) vrate /= current_video_info.vtime; else vrate = 0;
+
+		snprintf(tmp, sizeof(tmp), "%dx%d@%.1f", current_video_info.width, current_video_info.height, vrate);
+	}
+	else
+	{
+		snprintf(tmp, sizeof(tmp), "%dx%d", current_video_info.width, current_video_info.height);
+	}
+
+	return tmp;
+}
+
 static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 {
 	float vrate = 100000000;
@@ -1230,10 +1249,17 @@ void video_mode_adjust()
 
 	if (vid_changed || force)
 	{
+		current_video_info = video_info;
+
+		if (cfg.has_video_sections)
+		{
+			cfg_parse();
+			video_mode_load();
+			user_io_send_buttons(1);
+		}
+
 		show_video_info(&video_info, &v_cur);
 		video_scaling_adjust(&video_info);
-
-		current_video_info = video_info;
 	}
 	force = false;
 
