@@ -11,6 +11,7 @@
 #include "debug.h"
 #include "file_io.h"
 #include "user_io.h"
+#include "video.h"
 
 cfg_t cfg;
 
@@ -121,6 +122,9 @@ static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
 
 fileTYPE ini_file;
 
+static bool has_video_sections = false;
+static bool using_video_section = false;
+
 int ini_pt = 0;
 static char ini_getch()
 {
@@ -148,7 +152,7 @@ static int ini_getline(char* line)
 	return c == 0;
 }
 
-static int ini_get_section(char* buf)
+static int ini_get_section(char* buf, const char *vmode)
 {
 	int i = 0;
 	int incl = (buf[0] == INCL_SECTION);
@@ -161,6 +165,7 @@ static int ini_get_section(char* buf)
 	else buf++;
 
 	int wc_pos = -1;
+	int eq_pos = -1;
 
 	// get section stop marker
 	while (buf[i])
@@ -172,6 +177,7 @@ static int ini_get_section(char* buf)
 		}
 
 		if (buf[i] == '*') wc_pos = i;
+		if (buf[i] == '=') eq_pos = i;
 
 		i++;
 		if (i >= INI_LINE_SIZE) return 0;
@@ -191,6 +197,20 @@ static int ini_get_section(char* buf)
 			ini_parser_debugf("Got SECTION '%s'", buf);
 		}
 		return 1;
+	}
+	else if ((eq_pos >= 0) && !strncasecmp(buf, "video", eq_pos))
+	{
+		has_video_sections = true;
+		if(!strcasecmp(&buf[eq_pos+1], vmode))
+		{
+			using_video_section = true;
+			ini_parser_debugf("Got SECTION '%s'", buf);
+			return 1;
+		}
+		else
+		{
+			return 0;
+		}
 	}
 
 	return 0;
@@ -279,13 +299,13 @@ static void ini_parse_var(char* buf)
 	}
 }
 
-static void ini_parse(int alt)
+static void ini_parse(int alt, const char *vmode)
 {
 	static char line[INI_LINE_SIZE];
 	int section = 0;
 	int eof;
 
-	ini_parser_debugf("Start INI parser for core \"%s\"(%s).", user_io_get_core_name(0), user_io_get_core_name(1));
+	ini_parser_debugf("Start INI parser for core \"%s\"(%s), video mode \"%s\".", user_io_get_core_name(0), user_io_get_core_name(1), vmode);
 
 	memset(line, 0, sizeof(line));
 	memset(&ini_file, 0, sizeof(ini_file));
@@ -307,11 +327,11 @@ static void ini_parse(int alt)
 		if (line[0] == INI_SECTION_START)
 		{
 			// if first char in line is INI_SECTION_START, get section
-			section = ini_get_section(line);
+			section = ini_get_section(line, vmode);
 		}
 		else if (line[0] == INCL_SECTION && !section)
 		{
-			section = ini_get_section(line);
+			section = ini_get_section(line, vmode);
 		}
 		else if(section)
 		{
@@ -351,5 +371,17 @@ void cfg_parse()
 	cfg.browse_expand = 1;
 	cfg.logo = 1;
 	cfg.rumble = 1;
-	ini_parse(altcfg());
+	has_video_sections = false;
+	using_video_section = false;
+	ini_parse(altcfg(), video_get_core_mode_name(1));
+	if (has_video_sections && !using_video_section)
+	{
+		// second pass to look for section without vrefresh
+		ini_parse(altcfg(), video_get_core_mode_name(0));
+	}
+}
+
+bool cfg_has_video_sections()
+{
+	return has_video_sections;
 }
