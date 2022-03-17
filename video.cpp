@@ -1251,7 +1251,7 @@ void video_mode_adjust()
 	{
 		current_video_info = video_info;
 
-		if (cfg.has_video_sections)
+		if (cfg_has_video_sections())
 		{
 			cfg_parse();
 			video_mode_load();

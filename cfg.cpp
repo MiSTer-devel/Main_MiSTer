@@ -93,8 +93,6 @@ static const ini_var_t ini_vars[] =
 	{ "BT_RESET_BEFORE_PAIR", (void*)(&(cfg.bt_reset_before_pair)), UINT8, 0, 1 },
 	{ "WAITMOUNT", (void*)(&(cfg.waitmount)), STRING, 0, sizeof(cfg.waitmount) - 1 },
 	{ "RUMBLE", (void *)(&(cfg.rumble)), UINT8, 0, 1},
-	{ "HAS_VIDEO_SECTIONS", (void*)(&(cfg.has_video_sections)), UINT8, 0, 1 },
-	{ "USING_VIDEO_SECTION", (void*)(&(cfg.using_video_section)), UINT8, 0, 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -123,6 +121,9 @@ static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
 
 
 fileTYPE ini_file;
+
+static bool has_video_sections = false;
+static bool using_video_section = false;
 
 int ini_pt = 0;
 static char ini_getch()
@@ -199,10 +200,10 @@ static int ini_get_section(char* buf, const char *vmode)
 	}
 	else if ((eq_pos >= 0) && !strncasecmp(buf, "video", eq_pos))
 	{
-		cfg.has_video_sections = 1;
+		has_video_sections = true;
 		if(!strcasecmp(&buf[eq_pos+1], vmode))
 		{
-			cfg.using_video_section = 1;
+			using_video_section = true;
 			ini_parser_debugf("Got SECTION '%s'", buf);
 			return 1;
 		}
@@ -370,10 +371,17 @@ void cfg_parse()
 	cfg.browse_expand = 1;
 	cfg.logo = 1;
 	cfg.rumble = 1;
+	has_video_sections = false;
+	using_video_section = false;
 	ini_parse(altcfg(), video_get_core_mode_name(1));
-	if (cfg.has_video_sections && !cfg.using_video_section)
+	if (has_video_sections && !using_video_section)
 	{
 		// second pass to look for section without vrefresh
 		ini_parse(altcfg(), video_get_core_mode_name(0));
 	}
+}
+
+bool cfg_has_video_sections()
+{
+	return has_video_sections;
 }

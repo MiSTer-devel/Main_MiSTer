@@ -56,8 +56,6 @@ typedef struct {
 	uint8_t shmask_mode_default;
 	int bt_auto_disconnect;
 	int bt_reset_before_pair;
-	uint8_t has_video_sections;
-	uint8_t using_video_section;
 	char bootcore[256];
 	char video_conf[1024];
 	char video_conf_pal[1024];
@@ -79,5 +77,6 @@ extern cfg_t cfg;
 //// functions ////
 void cfg_parse();
 const char* cfg_get_name(uint8_t alt);
+bool cfg_has_video_sections();
 
 #endif // __CFG_H__
