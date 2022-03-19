@@ -4170,6 +4170,18 @@ int input_test(int getchar)
 						{
 							input[n].lightgun = 1;
 						}
+						
+						//Namco Guncon via RetroZord adapter
+						if (input[n].vid == 0x2341 && input[n].pid == 0x8036 && (strstr(uniq, "RZordPsGun") || strstr(input[n].name, "RZordPsGun")))
+						{
+							input[n].quirk = QUIRK_LIGHTGUN;
+							input[n].lightgun = 1;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 32767;
+							input[n].guncal[2] = 0;
+							input[n].guncal[3] = 32767;
+							input_lightgun_load(n);
+						}
 
 						//Namco GunCon 2
 						if (input[n].vid == 0x0b9a && input[n].pid == 0x016a)
