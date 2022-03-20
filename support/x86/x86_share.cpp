@@ -809,19 +809,28 @@ static int process_request(void *reqres_buffer)
 		dbg_print("> AL_DISKSPACE\n");
 		uint32_t total = 10;
 		uint32_t avail = 1;
-		uint32_t spc = 128;
-		uint32_t bps = 512;
+
+		// Set the sector size to the maximum size supported by FAT16:
+		//   1024 MB - 2047 MB: 64 Sectors/Cluster, 32K Cluster Size
+		//
+		// This allows for MS-DOS version that only support up to 64
+		// Sectors/Cluster to display a non-zero value for disk space remaning.
+		uint32_t spc = 64;	// Sectors/Cluster (normally based on partition size)
+		uint32_t bps = 512;	// Bytes/Sector (this value is not adjusted)
 
 		struct statvfs st;
 		if (!statvfs(getFullPath(basepath), &st))
 		{
+			// Calculate the size available and remaining as reported from Linux
 			uint64_t sz = st.f_bsize * st.f_blocks;
 			uint64_t av = st.f_bsize * st.f_bavail;
-
+			// Convert those values into cluster sizes.
 			total = sz / (bps * spc);
 			avail = av / (bps * spc);
 		}
 
+		// Limit the total and available sizes to the maximum supported size
+		// based on the cluster size. (In our case 2GB at 32KB clusters)
 		if (total > UINT16_MAX) total = UINT16_MAX;
 		if (avail > UINT16_MAX) avail = UINT16_MAX;
 
