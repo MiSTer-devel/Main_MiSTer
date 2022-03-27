@@ -18,7 +18,7 @@ char bootcoretype[64];
 bool isExactcoreName(char *path)
 {
 	char *spl = strrchr(path, '.');
-	return (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")));
+	return (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra") || !strcmp(spl, ".mgl")));
 }
 
 char *getcoreName(char *path)
@@ -148,7 +148,7 @@ char *findCore(const char *name, char *coreName, int indent)
 			snprintf(path, 256, "%s/%s", name, entry->d_name);
 			if (strstr(path, coreName) != NULL) {
 				spl = strrchr(path, '.');
-				if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")))
+				if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra") || !strcmp(spl, ".mgl")))
 				{
 					closedir(dir);
 					return path;
