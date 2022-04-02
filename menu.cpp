@@ -4124,7 +4124,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_SYSTEM1:
-		menumask = 0xffff;
+		menumask = 0x1ffff;
 		OsdSetTitle("Config", 0);
 		helptext_idx = 0;
 
@@ -4198,12 +4198,18 @@ void HandleUI(void)
 			MenuWrite(m++, s, menusub == 13);
 			MenuWrite(m++);
 
-			strcpy(s, " YM-Audio:   ");
-			strcat(s, tos_stereo[(tos_system_ctrl() & TOS_CONTROL_STEREO) ? 1 : 0]);
+			strcpy(s, " Dongle:     ");
+			if (tos_system_ctrl() & TOS_CONTROL_DONGLE) strcat(s, "Cubase");
+			else                                        strcat(s, "None");
 			MenuWrite(m++, s, menusub == 14);
 			MenuWrite(m++);
 
-			MenuWrite(m++, STD_BACK, menusub == 15);
+			strcpy(s, " YM-Audio:   ");
+			strcat(s, tos_stereo[(tos_system_ctrl() & TOS_CONTROL_STEREO) ? 1 : 0]);
+			MenuWrite(m++, s, menusub == 15);
+			MenuWrite(m++);
+
+			MenuWrite(m++, STD_BACK, menusub == 16);
 
 			if (!adjvisible) break;
 			firstmenu += adjvisible;
@@ -4362,12 +4368,17 @@ void HandleUI(void)
 				break;
 
 			case 14:
+				tos_update_sysctrl(tos_system_ctrl() ^ TOS_CONTROL_DONGLE);
+				menustate = MENU_ST_SYSTEM1;
+				break;
+
+			case 15:
 				tos_update_sysctrl(tos_system_ctrl() ^ TOS_CONTROL_STEREO);
 				menustate = MENU_ST_SYSTEM1;
 				break;
 
 
-			case 15:
+			case 16:
 				menustate = MENU_ST_MAIN1;
 				menusub = 4;
 				if (need_reset)
