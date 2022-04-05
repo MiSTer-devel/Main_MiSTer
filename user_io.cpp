@@ -3547,7 +3547,10 @@ void user_io_kbd(uint16_t key, int press)
 	if(is_menu()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 
 	// Win+PrnScr or Alt/Win+ScrLk - screen shot
-	if ((key == KEY_SYSRQ && (get_key_mod() & (RGUI | LGUI))) || (key == KEY_SCROLLLOCK && (get_key_mod() & (LALT | RALT | RGUI | LGUI))))
+	bool key_WinPrnScr = (key == KEY_SYSRQ && (get_key_mod() & (RGUI | LGUI)));
+	// Excluding scroll lock for PS/2 so Win+ScrLk can be used to change the emu mode.
+	bool key_AltWinScrLk = (key == KEY_SCROLLLOCK && (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && !use_ps2ctl;
+	if (key_WinPrnScr || key_AltWinScrLk)
 	{
 		int shift = (get_key_mod() & LSHIFT);
 		if (press == 1)
@@ -3616,7 +3619,14 @@ void user_io_kbd(uint16_t key, int press)
 				}
 				else
 				{
-					if (((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl && !is_archie())) && !is_menu())
+					// When ps2ctl is set then the RGUI or LGUI key must be held in addition
+					// to the EMU_SWITCH_1 or EMU_SWITCH_2. This allows for cores such as AO486
+					// to pass through the Scroll Lock and Num Lock keys.
+					bool ps2ctl_modifier = (get_key_mod() & (RGUI | LGUI)) || !use_ps2ctl;
+					bool key_EMU_SWITCH_1 = (code & EMU_SWITCH_1) && ps2ctl_modifier;
+					bool key_EMU_SWITCH_2 = (code & EMU_SWITCH_2) && ps2ctl_modifier && !is_archie();
+
+					if (( key_EMU_SWITCH_1 || key_EMU_SWITCH_2 ) && !is_menu())
 					{
 						if (press == 1)
 						{
