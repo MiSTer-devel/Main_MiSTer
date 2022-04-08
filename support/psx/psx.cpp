@@ -133,23 +133,31 @@ static int load_chd(const char *filename, toc_t *table)
 		return 0;
 	}
 
+	/* PSX core expects the TOC values for track start/end to not take into account
+	* pregap, unlike some other cores. Adjust the CHD toc to reflect this
+	*/
+	
 	for (int i = 0; i < table->last; i++)
 	{
 		if (i == 0) //First track fakes a pregap even if it doesn't exist
 		{
 			table->tracks[i].index1 = 150;
 			table->tracks[i].start = 150;
+			table->tracks[i].end += 150-1;
+		} else {
+			int frame_cnt = table->tracks[i].end - table->tracks[i].start;
+			frame_cnt += table->tracks[i].index1;
+			table->tracks[i].start = table->tracks[i-1].end + 1;
+			table->tracks[i].end = table->tracks[i].start + frame_cnt - 1;
 		}
-		table->tracks[i].end += (table->tracks[i].index1 - 1);
 	}
+	
 	table->end = table->tracks[table->last - 1].end + 1;
 
 	memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
 	chd_hunknum = -1;
 
 	return 1;
-
-	//Need to store hunkbuf, hunknum and chd_f
 }
 
 static int load_cue(const char* filename, toc_t *table)
@@ -318,13 +326,14 @@ static int load_cue(const char* filename, toc_t *table)
 		}
 	}
 
+	/*
 	for (int i = 0; i < table->last; i++)
 	{
 		printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
 		if (table->tracks[i].index1)
 			printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1 / 75);
 
-	}
+	}*/
 
 	return 1;
 }
@@ -368,9 +377,18 @@ struct disk_t
 
 void send_cue(toc_t *table)
 {
+
 	disk_t *disk = new disk_t;
 	if (disk)
 	{
+	for (int i = 0; i < table->last; i++)
+	{
+		printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
+		if (table->tracks[i].index1)
+			printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1 / 75);
+
+	}
+
 		memset(disk, 0, sizeof(disk_t));
 		disk->track_count = (BCD(table->last) << 8) | table->last;
 		disk->total_lba = table->end;
@@ -459,7 +477,10 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 					{
 						if (toc.chd_f)
 						{
-							if (mister_chd_read_sector(toc.chd_f, (lba - toc.tracks[i].index1) + toc.tracks[i].offset, 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
+
+							// The "fake" 150 sector pregap moves all the LBAs up by 150, so adjust here to read where the core actually wants data from
+							int read_lba = lba - toc.tracks[0].index1;
+							if (mister_chd_read_sector(toc.chd_f, (read_lba + toc.tracks[i].offset), 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
 							{
 								if (!toc.tracks[i].type) //CHD requires byteswap of audio data
 								{
