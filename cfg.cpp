@@ -93,6 +93,8 @@ static const ini_var_t ini_vars[] =
 	{ "BT_RESET_BEFORE_PAIR", (void*)(&(cfg.bt_reset_before_pair)), UINT8, 0, 1 },
 	{ "WAITMOUNT", (void*)(&(cfg.waitmount)), STRING, 0, sizeof(cfg.waitmount) - 1 },
 	{ "RUMBLE", (void *)(&(cfg.rumble)), UINT8, 0, 1},
+	{ "WHEEL_FORCE", (void*)(&(cfg.wheel_force)), UINT8, 0, 100 },
+	{ "WHEEL_RANGE", (void*)(&(cfg.wheel_range)), UINT16, 0, 1000 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -371,6 +373,7 @@ void cfg_parse()
 	cfg.browse_expand = 1;
 	cfg.logo = 1;
 	cfg.rumble = 1;
+	cfg.wheel_force = 50;
 	has_video_sections = false;
 	using_video_section = false;
 	ini_parse(altcfg(), video_get_core_mode_name(1));
