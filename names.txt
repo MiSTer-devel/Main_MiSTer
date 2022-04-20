@@ -73,6 +73,7 @@ MegaCD: Sega CD
 NeoGeo: SNK Neo Geo MVS/AES
 NES: Nintendo NES
 Odyssey2: Magnavox Odyssey2
+S32X: Sega 32X
 SMS: Sega Master System/Game Gear
 SNES: Nintendo Super NES
 TurboGrafx16: NEC TurboGrafx-16/CD
