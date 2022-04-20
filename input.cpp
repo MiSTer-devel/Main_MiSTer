@@ -1119,7 +1119,8 @@ enum QUIRK
 	QUIRK_VCS,
 	QUIRK_JOYCON,
 	QUIRK_LIGHTGUN_CRT,
-	QUIRK_LIGHTGUN
+	QUIRK_LIGHTGUN,
+	QUIRK_WHEEL,
 };
 
 typedef struct
@@ -1171,6 +1172,12 @@ typedef struct
 	bool     has_rumble;
 	uint16_t last_rumble;
 	ff_effect rumble_effect;
+
+	int8_t   wh_steer;
+	int8_t   wh_accel;
+	int8_t   wh_break;
+	int8_t   wh_clutch;
+	int8_t   wh_combo;
 
 	int      timeout;
 	char     mac[64];
@@ -2280,25 +2287,39 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
 
-			if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS1_X])
+			if (input[dev].quirk == QUIRK_WHEEL)
 			{
-				input[dev].stick_l[0] = SYS_AXIS1_X;
-				if((input[dev].mmap[SYS_AXIS2_X] >> 16) == 2) input[dev].stick_r[0] = SYS_AXIS2_X;
+				input[dev].mmap[SYS_AXIS_MX] = -1;
+				input[dev].mmap[SYS_AXIS_MY] = -1;
+				input[dev].mmap[SYS_AXIS_X] = -1;
+				input[dev].mmap[SYS_AXIS_Y] = -1;
+				input[dev].mmap[SYS_AXIS1_X] = -1;
+				input[dev].mmap[SYS_AXIS1_Y] = -1;
+				input[dev].mmap[SYS_AXIS2_X] = -1;
+				input[dev].mmap[SYS_AXIS2_Y] = -1;
 			}
-			if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS1_Y])
+			else
 			{
-				input[dev].stick_l[1] = SYS_AXIS1_Y;
-				if ((input[dev].mmap[SYS_AXIS2_Y] >> 16) == 2) input[dev].stick_r[1] = SYS_AXIS2_Y;
-			}
-			if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS2_X])
-			{
-				input[dev].stick_l[0] = SYS_AXIS2_X;
-				if ((input[dev].mmap[SYS_AXIS1_X] >> 16) == 2) input[dev].stick_r[0] = SYS_AXIS1_X;
-			}
-			if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS2_Y])
-			{
-				input[dev].stick_l[1] = SYS_AXIS2_Y;
-				if ((input[dev].mmap[SYS_AXIS1_Y] >> 16) == 2) input[dev].stick_r[1] = SYS_AXIS1_Y;
+				if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS1_X])
+				{
+					input[dev].stick_l[0] = SYS_AXIS1_X;
+					if ((input[dev].mmap[SYS_AXIS2_X] >> 16) == 2) input[dev].stick_r[0] = SYS_AXIS2_X;
+				}
+				if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS1_Y])
+				{
+					input[dev].stick_l[1] = SYS_AXIS1_Y;
+					if ((input[dev].mmap[SYS_AXIS2_Y] >> 16) == 2) input[dev].stick_r[1] = SYS_AXIS2_Y;
+				}
+				if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS2_X])
+				{
+					input[dev].stick_l[0] = SYS_AXIS2_X;
+					if ((input[dev].mmap[SYS_AXIS1_X] >> 16) == 2) input[dev].stick_r[0] = SYS_AXIS1_X;
+				}
+				if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS2_Y])
+				{
+					input[dev].stick_l[1] = SYS_AXIS2_Y;
+					if ((input[dev].mmap[SYS_AXIS1_Y] >> 16) == 2) input[dev].stick_r[1] = SYS_AXIS1_Y;
+				}
 			}
 		}
 		input[dev].has_mmap++;
@@ -2827,18 +2848,21 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							}
 						}
 
-						if (input[dev].mmap[SYS_AXIS_X])
+						if (input[dev].quirk != QUIRK_WHEEL)
 						{
-							uint16_t key = KEY_EMU + ((uint16_t)input[dev].mmap[SYS_AXIS_X]*2);
-							if (ev->code == (key + 1)) joy_digital(0, 1 << 0, 0, ev->value, 0);
-							if (ev->code == key) joy_digital(0, 1 << 1, 0, ev->value, 1);
-						}
+							if (input[dev].mmap[SYS_AXIS_X])
+							{
+								uint16_t key = KEY_EMU + ((uint16_t)input[dev].mmap[SYS_AXIS_X] * 2);
+								if (ev->code == (key + 1)) joy_digital(0, 1 << 0, 0, ev->value, 0);
+								if (ev->code == key) joy_digital(0, 1 << 1, 0, ev->value, 1);
+							}
 
-						if (input[dev].mmap[SYS_AXIS_Y])
-						{
-							uint16_t key = KEY_EMU + ((uint16_t)input[dev].mmap[SYS_AXIS_Y]*2);
-							if (ev->code == (key + 1)) joy_digital(0, 1 << 2, 0, ev->value, 2);
-							if (ev->code == key) joy_digital(0, 1 << 3, 0, ev->value, 3);
+							if (input[dev].mmap[SYS_AXIS_Y])
+							{
+								uint16_t key = KEY_EMU + ((uint16_t)input[dev].mmap[SYS_AXIS_Y] * 2);
+								if (ev->code == (key + 1)) joy_digital(0, 1 << 2, 0, ev->value, 2);
+								if (ev->code == key) joy_digital(0, 1 << 3, 0, ev->value, 3);
+							}
 						}
 					}
 				}
@@ -3065,7 +3089,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				// normalize to -range/2...+range/2
 				value = value - (absinfo->minimum + absinfo->maximum) / 2;
 
-				if (ev->code > 1 || !input[dev].lightgun) //lightgun has no dead zone
+				if (ev->code > 1 || (!input[dev].lightgun && input[dev].quirk != QUIRK_WHEEL)) //lightgun/wheel has no dead zone
 				{
 					// check the dead-zone and remove it from the range
 					hrange -= dead;
@@ -3103,7 +3127,38 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					// skip if joystick is undefined.
 					if (!input[dev].num) break;
 
-					if (ev->code == 0 && input[dev].lightgun)
+					if (input[dev].quirk == QUIRK_WHEEL)
+					{
+						int wh_value = ((127 * (ev->value - absinfo->minimum)) / (absinfo->maximum - absinfo->minimum)) - 127;
+
+						if (ev->code == input[dev].wh_steer)
+						{
+							joy_analog(input[dev].num, 0, value, 0);
+						}
+						else if (ev->code == input[dev].wh_accel)
+						{
+							joy_analog(input[dev].num, 1, wh_value, 0);
+						}
+						else if (ev->code == input[dev].wh_break)
+						{
+							joy_analog(input[dev].num, 1, wh_value, 1);
+						}
+						else if (ev->code == input[dev].wh_clutch)
+						{
+							joy_analog(input[dev].num, 0, wh_value, 1);
+						}
+						else if (ev->code == input[dev].wh_combo)
+						{
+							if (value < -1) joy_analog(input[dev].num, 1, value, 0);
+							else if (value > 1) joy_analog(input[dev].num, 1, -value, 1);
+							else
+							{
+								joy_analog(input[dev].num, 1, 0, 0);
+								joy_analog(input[dev].num, 1, 0, 0);
+							}
+						}
+					}
+					else if (ev->code == 0 && input[dev].lightgun)
 					{
 						joy_analog(input[dev].num, 0, value);
 					}
@@ -3948,6 +4003,75 @@ static void set_rumble(int dev, uint16_t rumble_val)
 	}
 }
 
+static void setup_wheels()
+{
+	static char path[1024];
+	if (cfg.wheel_force > 100) cfg.wheel_force = 100;
+
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (pool[i].fd != -1 && input[i].quirk == QUIRK_WHEEL)
+		{
+			input[i].wh_steer = -1;
+			input[i].wh_accel = -1;
+			input[i].wh_break = -1;
+			input[i].wh_clutch = -1;
+			input[i].wh_combo = -1;
+
+			if (input[i].vid == 0x046d) // logitech
+			{
+				struct input_event ie;
+				ie.type = EV_FF;
+				ie.code = FF_AUTOCENTER;
+				ie.value = 0xFFFFUL * cfg.wheel_force / 100;
+				write(pool[i].fd, &ie, sizeof(ie));
+				if (cfg.wheel_range && input[i].sysfs[0])
+				{
+					sprintf(path, "/sys%s", input[i].sysfs);
+					char *p = strstr(path, "/input/");
+					if (p)
+					{
+						strcpy(p, "/range");
+						FILE* f = fopen(path, "w");
+						if (f)
+						{
+							fprintf(f, "%d", cfg.wheel_range);
+							fclose(f);
+						}
+					}
+				}
+
+				input[i].wh_steer = 0;
+
+				switch (input[i].pid)
+				{
+				case 0xc299: // LOGITECH_G25_WHEEL
+				case 0xc29b: // LOGITECH_G27_WHEEL
+				case 0xc24f: // LOGITECH_G29_WHEEL
+					input[i].wh_accel = 2;
+					input[i].wh_break = 5;
+					input[i].wh_clutch = 1;
+					break;
+
+				case 0xc294: // LOGITECH_WHEEL
+					input[i].wh_combo = 1;
+					break;
+
+				case 0xc298: // LOGITECH_DFP_WHEEL
+					input[i].wh_accel = 1;
+					input[i].wh_break = 5;
+					break;
+
+				case 0xc29a: // LOGITECH_DFGT_WHEEL
+					input[i].wh_accel = 1;
+					input[i].wh_break = 2;
+					break;
+				}
+			}
+		}
+	}
+}
+
 int input_test(int getchar)
 {
 	static char cur_leds = 0;
@@ -4055,6 +4179,25 @@ int input_test(int getchar)
 										input[n].rumble_effect.id = -1;
 										input[n].has_rumble = true;
 									}
+								}
+							}
+						}
+
+						// Logitech Wheels
+						if (input[n].vid == 0x046d)
+						{
+							switch (input[n].pid)
+							{
+								case 0xc24f: // LOGITECH_G29_WHEEL
+								//case 0xc262: // LOGITECH_G920_WHEEL
+								case 0xc294: // LOGITECH_WHEEL
+								//case 0xc295: // LOGITECH_MOMO_WHEEL
+								case 0xc298: // LOGITECH_DFP_WHEEL
+								case 0xc299: // LOGITECH_G25_WHEEL
+								case 0xc29a: // LOGITECH_DFGT_WHEEL
+								case 0xc29b: // LOGITECH_G27_WHEEL
+								{
+									input[n].quirk = QUIRK_WHEEL;
 								}
 							}
 						}
@@ -4170,7 +4313,7 @@ int input_test(int getchar)
 						{
 							input[n].lightgun = 1;
 						}
-						
+
 						//Namco Guncon via RetroZord adapter
 						if (input[n].vid == 0x2341 && input[n].pid == 0x8036 && (strstr(uniq, "RZordPsGun") || strstr(input[n].name, "RZordPsGun")))
 						{
@@ -4276,6 +4419,7 @@ int input_test(int getchar)
 
 			mergedevs();
 			check_joycon();
+			setup_wheels();
 			for (int i = 0; i < n; i++)
 			{
 				printf("opened %d(%2d): %s (%04x:%04x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].quirk, input[i].id, input[i].name);

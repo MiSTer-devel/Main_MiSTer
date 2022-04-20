@@ -70,6 +70,8 @@ typedef struct {
 	char vfilter_scanlines_default[1023];
 	char shmask_default[1023];
 	uint8_t rumble;
+	uint8_t wheel_force;
+	uint16_t wheel_range;
 } cfg_t;
 
 extern cfg_t cfg;
