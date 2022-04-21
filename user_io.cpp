@@ -1807,6 +1807,11 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	return ret ? 1 : 0;
 }
 
+void user_io_bufferinvalidate(unsigned char index)
+{
+	buffer_lba[index] = -1;
+}
+
 static unsigned char col_attr[1025];
 static int col_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
