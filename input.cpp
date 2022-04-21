@@ -4068,6 +4068,57 @@ static void setup_wheels()
 					break;
 				}
 			}
+			else if (input[i].vid == 0x0eb7) // fanatec
+			{
+				struct ff_effect fef;
+
+				fef.type = FF_SPRING;
+				fef.id = -1;
+
+				fef.u.condition[0].right_saturation = 0xFFFFUL * cfg.wheel_force / 100;
+				fef.u.condition[0].left_saturation = 0xFFFFUL * cfg.wheel_force / 100;
+				fef.u.condition[0].right_coeff = 0x7FFF;
+				fef.u.condition[0].left_coeff = 0x7FFF;
+				fef.u.condition[0].deadband = 0x0;
+				fef.u.condition[0].center = 0x0;
+				fef.u.condition[1] = fef.u.condition[0];
+				fef.replay.delay = 0;
+
+				if (ioctl(pool[i].fd, EVIOCSFF, &fef) >= 0)
+				{
+					struct input_event play_ev;
+					play_ev.type = EV_FF;
+					play_ev.code = fef.id;
+					play_ev.value = 1;
+					write(pool[i].fd, (const void *)&play_ev, sizeof(play_ev));
+				}
+
+				if (cfg.wheel_range && input[i].sysfs[0])
+				{
+					sprintf(path, "/sys%s", input[i].sysfs);
+					strcat(path, "/device/range");
+
+					FILE* f = fopen(path, "w");
+					if (f)
+					{
+						fprintf(f, "%d", cfg.wheel_range);
+						fclose(f);
+					}
+				}
+
+				input[i].wh_steer = 0;
+
+				switch (input[i].pid)
+				{
+				case 0x0004: // CLUBSPORT_V25_WHEELBASE_DEVICE_ID
+				case 0x0006: // PODIUM_WHEELBASE_DD1_DEVICE_ID
+				case 0x0007: // PODIUM_WHEELBASE_DD2_DEVICE_ID
+					input[i].wh_accel = 2;
+					input[i].wh_break = 5;
+					input[i].wh_clutch = 1;
+					break;
+				}
+			}
 		}
 	}
 }
@@ -4196,6 +4247,24 @@ int input_test(int getchar)
 								case 0xc299: // LOGITECH_G25_WHEEL
 								case 0xc29a: // LOGITECH_DFGT_WHEEL
 								case 0xc29b: // LOGITECH_G27_WHEEL
+								{
+									input[n].quirk = QUIRK_WHEEL;
+								}
+							}
+						}
+						// Fanatec Wheels
+						else if (input[n].vid == 0x0eb7)
+						{
+							switch (input[n].pid)
+							{
+								//case 0x0001: //CLUBSPORT_V2_WHEELBASE_DEVICE_ID
+								case 0x0004: // CLUBSPORT_V25_WHEELBASE_DEVICE_ID
+								//case 0x0005: // CSL_ELITE_PS4_WHEELBASE_DEVICE_ID
+								case 0x0006: // PODIUM_WHEELBASE_DD1_DEVICE_ID
+								case 0x0007: // PODIUM_WHEELBASE_DD2_DEVICE_ID
+								//case 0x0011: // CSR_ELITE_WHEELBASE_DEVICE_ID
+								//case 0x0020: // CSL_DD_WHEELBASE_DEVICE_ID
+								//case 0x0E03: // CSL_ELITE_WHEELBASE_DEVICE_ID
 								{
 									input[n].quirk = QUIRK_WHEEL;
 								}
