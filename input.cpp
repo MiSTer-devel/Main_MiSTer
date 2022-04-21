@@ -4108,7 +4108,6 @@ static void setup_wheels()
 
 				input[i].wh_steer = 0;
 
-
 				switch (input[i].pid)
 				{
 				case 0x0004: // CLUBSPORT_V25_WHEELBASE_DEVICE_ID
