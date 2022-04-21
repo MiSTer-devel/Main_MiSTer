@@ -588,6 +588,7 @@ static void mount_cd(int size, int index)
 	spi32_w(0);
 	DisableIO();
 	spi_uio_cmd8(UIO_SET_SDSTAT, (1 << index) | 0x80);
+	user_io_bufferinvalidate(1);
 }
 
 static int load_bios(const char* filename)

@@ -200,6 +200,7 @@ void user_io_set_kbd_reset(int reset);
 
 uint32_t user_io_get_file_crc();
 int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0, int pre_size = 0);
+void user_io_bufferinvalidate(unsigned char index);
 char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name(int orig = 0);
 char *user_io_get_core_path(const char *suffix = NULL, int recheck = 0);
