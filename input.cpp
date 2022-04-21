@@ -4262,7 +4262,7 @@ int input_test(int getchar)
 								//case 0x0005: // CSL_ELITE_PS4_WHEELBASE_DEVICE_ID
 								case 0x0006: // PODIUM_WHEELBASE_DD1_DEVICE_ID
 								case 0x0007: // PODIUM_WHEELBASE_DD2_DEVICE_ID
-								case 0x0011: // CSR_ELITE_WHEELBASE_DEVICE_ID
+								//case 0x0011: // CSR_ELITE_WHEELBASE_DEVICE_ID
 								//case 0x0020: // CSL_DD_WHEELBASE_DEVICE_ID
 								//case 0x0E03: // CSL_ELITE_WHEELBASE_DEVICE_ID
 								{
