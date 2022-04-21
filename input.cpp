@@ -4252,6 +4252,7 @@ int input_test(int getchar)
 								}
 							}
 						}
+						// Fanatec Wheels
 						else if (input[n].vid == 0x0eb7)
 						{
 							switch (input[n].pid)
@@ -4259,7 +4260,7 @@ int input_test(int getchar)
 								//case 0x0001: //CLUBSPORT_V2_WHEELBASE_DEVICE_ID
 								case 0x0004: // CLUBSPORT_V25_WHEELBASE_DEVICE_ID
 								//case 0x0005: // CSL_ELITE_PS4_WHEELBASE_DEVICE_ID
-								case 0x0006: //PODIUM_WHEELBASE_DD1_DEVICE_ID
+								case 0x0006: // PODIUM_WHEELBASE_DD1_DEVICE_ID
 								case 0x0007: // PODIUM_WHEELBASE_DD2_DEVICE_ID
 								case 0x0011: // CSR_ELITE_WHEELBASE_DEVICE_ID
 								//case 0x0020: // CSL_DD_WHEELBASE_DEVICE_ID
