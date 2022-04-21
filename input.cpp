@@ -4003,46 +4003,39 @@ static void set_rumble(int dev, uint16_t rumble_val)
 	}
 }
 
-static void setup_wheels()
+static void set_wheel_range(int dev, int range)
 {
 	static char path[1024];
+	if (range && input[dev].sysfs[0])
+	{
+		sprintf(path, "/sys%s/device/range", input[dev].sysfs);
+
+		FILE* f = fopen(path, "w");
+		if (f)
+		{
+			fprintf(f, "%d", range);
+			fclose(f);
+		}
+	}
+}
+
+static void setup_wheels()
+{
 	if (cfg.wheel_force > 100) cfg.wheel_force = 100;
 
 	for (int i = 0; i < NUMDEV; i++)
 	{
-		if (pool[i].fd != -1 && input[i].quirk == QUIRK_WHEEL)
+		if (pool[i].fd != -1)
 		{
-			input[i].wh_steer = -1;
+			input[i].wh_steer = 0;
 			input[i].wh_accel = -1;
 			input[i].wh_break = -1;
 			input[i].wh_clutch = -1;
 			input[i].wh_combo = -1;
 
-			if (input[i].vid == 0x046d) // logitech
+			// Logitech Wheels
+			if (input[i].vid == 0x046d)
 			{
-				struct input_event ie;
-				ie.type = EV_FF;
-				ie.code = FF_AUTOCENTER;
-				ie.value = 0xFFFFUL * cfg.wheel_force / 100;
-				write(pool[i].fd, &ie, sizeof(ie));
-				if (cfg.wheel_range && input[i].sysfs[0])
-				{
-					sprintf(path, "/sys%s", input[i].sysfs);
-					char *p = strstr(path, "/input/");
-					if (p)
-					{
-						strcpy(p, "/range");
-						FILE* f = fopen(path, "w");
-						if (f)
-						{
-							fprintf(f, "%d", cfg.wheel_range);
-							fclose(f);
-						}
-					}
-				}
-
-				input[i].wh_steer = 0;
-
 				switch (input[i].pid)
 				{
 				case 0xc299: // LOGITECH_G25_WHEEL
@@ -4051,72 +4044,87 @@ static void setup_wheels()
 					input[i].wh_accel = 2;
 					input[i].wh_break = 5;
 					input[i].wh_clutch = 1;
+					input[i].quirk = QUIRK_WHEEL;
 					break;
 
 				case 0xc294: // LOGITECH_WHEEL
 					input[i].wh_combo = 1;
+					input[i].quirk = QUIRK_WHEEL;
 					break;
 
 				case 0xc298: // LOGITECH_DFP_WHEEL
 					input[i].wh_accel = 1;
 					input[i].wh_break = 5;
+					input[i].quirk = QUIRK_WHEEL;
 					break;
 
 				case 0xc29a: // LOGITECH_DFGT_WHEEL
 					input[i].wh_accel = 1;
 					input[i].wh_break = 2;
+					input[i].quirk = QUIRK_WHEEL;
 					break;
+
+				//case 0xc262: // LOGITECH_G920_WHEEL
+				//case 0xc295: // LOGITECH_MOMO_WHEEL
+				}
+
+				if (input[i].quirk == QUIRK_WHEEL)
+				{
+					struct input_event ie = {};
+					ie.type = EV_FF;
+					ie.code = FF_AUTOCENTER;
+					ie.value = 0xFFFFUL * cfg.wheel_force / 100;
+					write(pool[i].fd, &ie, sizeof(ie));
+
+					set_wheel_range(i, cfg.wheel_range);
 				}
 			}
-			else if (input[i].vid == 0x0eb7) // fanatec
+
+			// Fanatec Wheels
+			else if (input[i].vid == 0x0eb7)
 			{
-				struct ff_effect fef;
-
-				fef.type = FF_SPRING;
-				fef.id = -1;
-
-				fef.u.condition[0].right_saturation = 0xFFFFUL * cfg.wheel_force / 100;
-				fef.u.condition[0].left_saturation = 0xFFFFUL * cfg.wheel_force / 100;
-				fef.u.condition[0].right_coeff = 0x7FFF;
-				fef.u.condition[0].left_coeff = 0x7FFF;
-				fef.u.condition[0].deadband = 0x0;
-				fef.u.condition[0].center = 0x0;
-				fef.u.condition[1] = fef.u.condition[0];
-				fef.replay.delay = 0;
-
-				if (ioctl(pool[i].fd, EVIOCSFF, &fef) >= 0)
-				{
-					struct input_event play_ev;
-					play_ev.type = EV_FF;
-					play_ev.code = fef.id;
-					play_ev.value = 1;
-					write(pool[i].fd, (const void *)&play_ev, sizeof(play_ev));
-				}
-
-				if (cfg.wheel_range && input[i].sysfs[0])
-				{
-					sprintf(path, "/sys%s", input[i].sysfs);
-					strcat(path, "/device/range");
-
-					FILE* f = fopen(path, "w");
-					if (f)
-					{
-						fprintf(f, "%d", cfg.wheel_range);
-						fclose(f);
-					}
-				}
-
-				input[i].wh_steer = 0;
-
 				switch (input[i].pid)
 				{
-				case 0x0004: // CLUBSPORT_V25_WHEELBASE_DEVICE_ID
-				case 0x0006: // PODIUM_WHEELBASE_DD1_DEVICE_ID
-				case 0x0007: // PODIUM_WHEELBASE_DD2_DEVICE_ID
+				case 0x0004:   // CLUBSPORT_V25_WHEELBASE_DEVICE_ID
+				case 0x0006:   // PODIUM_WHEELBASE_DD1_DEVICE_ID
+				case 0x0007:   // PODIUM_WHEELBASE_DD2_DEVICE_ID
 					input[i].wh_accel = 2;
 					input[i].wh_break = 5;
 					input[i].wh_clutch = 1;
+					input[i].quirk = QUIRK_WHEEL;
 					break;
+
+				//case 0x0001: // CLUBSPORT_V2_WHEELBASE_DEVICE_ID
+				//case 0x0005: // CSL_ELITE_PS4_WHEELBASE_DEVICE_ID
+				//case 0x0011: // CSR_ELITE_WHEELBASE_DEVICE_ID
+				//case 0x0020: // CSL_DD_WHEELBASE_DEVICE_ID
+				//case 0x0E03: // CSL_ELITE_WHEELBASE_DEVICE_ID
+				}
+
+				if (input[i].quirk == QUIRK_WHEEL)
+				{
+					struct ff_effect fef;
+					fef.type = FF_SPRING;
+					fef.id = -1;
+					fef.u.condition[0].right_saturation = 0xFFFFUL * cfg.wheel_force / 100;
+					fef.u.condition[0].left_saturation = 0xFFFFUL * cfg.wheel_force / 100;
+					fef.u.condition[0].right_coeff = 0x7FFF;
+					fef.u.condition[0].left_coeff = 0x7FFF;
+					fef.u.condition[0].deadband = 0x0;
+					fef.u.condition[0].center = 0x0;
+					fef.u.condition[1] = fef.u.condition[0];
+					fef.replay.delay = 0;
+
+					if (ioctl(pool[i].fd, EVIOCSFF, &fef) >= 0)
+					{
+						struct input_event play_ev;
+						play_ev.type = EV_FF;
+						play_ev.code = fef.id;
+						play_ev.value = 1;
+						write(pool[i].fd, (const void *)&play_ev, sizeof(play_ev));
+					}
+
+					set_wheel_range(i, cfg.wheel_range);
 				}
 			}
 		}
@@ -4230,43 +4238,6 @@ int input_test(int getchar)
 										input[n].rumble_effect.id = -1;
 										input[n].has_rumble = true;
 									}
-								}
-							}
-						}
-
-						// Logitech Wheels
-						if (input[n].vid == 0x046d)
-						{
-							switch (input[n].pid)
-							{
-								case 0xc24f: // LOGITECH_G29_WHEEL
-								//case 0xc262: // LOGITECH_G920_WHEEL
-								case 0xc294: // LOGITECH_WHEEL
-								//case 0xc295: // LOGITECH_MOMO_WHEEL
-								case 0xc298: // LOGITECH_DFP_WHEEL
-								case 0xc299: // LOGITECH_G25_WHEEL
-								case 0xc29a: // LOGITECH_DFGT_WHEEL
-								case 0xc29b: // LOGITECH_G27_WHEEL
-								{
-									input[n].quirk = QUIRK_WHEEL;
-								}
-							}
-						}
-						// Fanatec Wheels
-						else if (input[n].vid == 0x0eb7)
-						{
-							switch (input[n].pid)
-							{
-								//case 0x0001: //CLUBSPORT_V2_WHEELBASE_DEVICE_ID
-								case 0x0004: // CLUBSPORT_V25_WHEELBASE_DEVICE_ID
-								//case 0x0005: // CSL_ELITE_PS4_WHEELBASE_DEVICE_ID
-								case 0x0006: // PODIUM_WHEELBASE_DD1_DEVICE_ID
-								case 0x0007: // PODIUM_WHEELBASE_DD2_DEVICE_ID
-								//case 0x0011: // CSR_ELITE_WHEELBASE_DEVICE_ID
-								//case 0x0020: // CSL_DD_WHEELBASE_DEVICE_ID
-								//case 0x0E03: // CSL_ELITE_WHEELBASE_DEVICE_ID
-								{
-									input[n].quirk = QUIRK_WHEEL;
 								}
 							}
 						}
