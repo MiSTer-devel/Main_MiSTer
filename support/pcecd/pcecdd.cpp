@@ -756,7 +756,7 @@ void pcecdd_t::CommandExec() {
 		buf[7] = BCD(msf.s);
 		buf[8] = BCD(msf.f);
 
-		LBAToMSF(this->lba, &msf);
+		LBAToMSF(this->lba+150, &msf);
 		buf[9] = BCD(msf.m);
 		buf[10] = BCD(msf.s);
 		buf[11] = BCD(msf.f);
