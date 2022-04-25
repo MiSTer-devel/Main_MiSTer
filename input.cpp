@@ -27,6 +27,7 @@
 #include "video.h"
 #include "joymapping.h"
 #include "support.h"
+#include "audio.h"
 
 #define NUMDEV 30
 #define NUMPLAYERS 6
@@ -5053,6 +5054,7 @@ int input_test(int getchar)
 					{
 						user_io_screenshot_cmd(cmd);
 					}
+					else if (!strncmp(cmd, "vol_load", 8)) load_volume();
 				}
 			}
 
