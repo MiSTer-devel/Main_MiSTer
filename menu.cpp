@@ -1591,10 +1591,6 @@ void HandleUI(void)
 		}
 		break;
 
-		/******************************************************************/
-		/* 8 bit main menu                                                */
-		/******************************************************************/
-
 	case MENU_GENERIC_MAIN1: {
 		hdmask = spi_uio_cmd16(UIO_GET_OSDMASK, 0);
 		user_io_read_confstr();
@@ -2314,7 +2310,7 @@ void HandleUI(void)
 
 	case MENU_GENERIC_IMAGE_SELECTED:
 		{
-			if (!mgl->done) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
+			if (!mgl->done) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(((is_pce() && !strncasecmp(fs_pFileExt, "CUE", 3)) ? PCECD_DIR : NULL)), mgl->item[mgl->current].path);
 
 			if (store_name)
 			{
