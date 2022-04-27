@@ -2119,10 +2119,10 @@ static void check_status_change()
 static void show_core_info(int info_n)
 {
 	int i = 2;
+	user_io_read_confstr();
+
 	while (1)
 	{
-		user_io_read_confstr();
-
 		char *p = user_io_get_confstr(i++);
 		if (!p) break;
 
