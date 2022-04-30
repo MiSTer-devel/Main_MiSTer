@@ -369,15 +369,15 @@ struct disk_t
 	uint32_t track_count;
 	uint32_t total_lba;
 	uint32_t total_bcd;
-	uint32_t reserved;
+	uint16_t libcrypt_mask;
+	uint16_t reserved;
 	track_t  track[99];
 };
 
 #define BCD(v) ((uint8_t)((((v)/10) << 4) | ((v)%10)))
 
-void send_cue(toc_t *table)
+void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask)
 {
-
 	disk_t *disk = new disk_t;
 	if (disk)
 	{
@@ -390,6 +390,7 @@ void send_cue(toc_t *table)
 	}
 
 		memset(disk, 0, sizeof(disk_t));
+		disk->libcrypt_mask = libcrypt_mask;
 		disk->track_count = (BCD(table->last) << 8) | table->last;
 		disk->total_lba = table->end;
 		int m = (disk->total_lba / 75) / 60;
@@ -671,8 +672,6 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				}
 			}
 
-			send_cue(&toc);
-
 			uint16_t mask = 0;
 
 			fileTYPE sbi_file = {};
@@ -696,10 +695,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				mask = libCryptMask(&sbi_file);
 			}
 
-			user_io_set_index(250);
-			user_io_set_download(1);
-			user_io_file_tx_data((const uint8_t*)&mask, 2);
-			user_io_set_download(0);
+			send_cue_and_metadata(&toc, mask);
 
 			user_io_set_index(f_index);
 			process_ss(filename, name_len != 0);
