@@ -370,13 +370,32 @@ struct disk_t
 	uint32_t total_lba;
 	uint32_t total_bcd;
 	uint16_t libcrypt_mask;
-	uint16_t reserved;
+	uint16_t metadata; // lower 2 bits encode the region, the other bits are reseved
 	track_t  track[99];
 };
 
+enum region_t
+{
+	UNKNOWN = 0,
+	JP,
+	US,
+	EU
+};
+
+const char* region_string(region_t region)
+{
+	switch (region)
+	{
+		case region_t::JP: return "Japan";
+		case region_t::US: return "USA";
+		case region_t::EU: return "Europe";
+		default: return "Unknown";
+	}
+}
+
 #define BCD(v) ((uint8_t)((((v)/10) << 4) | ((v)%10)))
 
-void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask)
+void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask, enum region_t region)
 {
 	disk_t *disk = new disk_t;
 	if (disk)
@@ -391,6 +410,7 @@ void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask)
 
 		memset(disk, 0, sizeof(disk_t));
 		disk->libcrypt_mask = libcrypt_mask;
+		disk->metadata = region; // the lower 2 bits of metadata contain the region
 		disk->track_count = (BCD(table->last) << 8) | table->last;
 		disk->total_lba = table->end;
 		int m = (disk->total_lba / 75) / 60;
@@ -521,24 +541,37 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 
 #define ROOT_FOLDER_LBA 150 + 22
 
-const char* game_id_prefixes[]
+struct region_info_t
 {
-	"SCES",
-	"SLES",
-	"SCUS",
-	"SLUS",
-	"SCPM",
-	"SLPM",
-	"SCPS",
-	"SLPS",
+	const char* game_id_prefix;
+	enum region_t region;
 };
 
-const char* psx_get_game_id()
+const region_info_t region_info_table[]
+{
+	{ "SCES", region_t::EU },
+	{ "SLES", region_t::EU },
+	{ "SCUS", region_t::US },
+	{ "SLUS", region_t::US },
+	{ "SCPM", region_t::JP },
+	{ "SLPM", region_t::JP },
+	{ "SCPS", region_t::JP },
+	{ "SLPS", region_t::JP },
+};
+
+struct game_info_t
+{
+	const char* game_id;
+	region_t region;
+};
+
+game_info_t psx_get_game_info()
 {
 	uint8_t buffer[CD_SECTOR_LEN];
 
 	static char game_id[11];
 	memset(game_id, 0, sizeof(game_id));
+	enum region_t game_region = UNKNOWN;
 
 	for (int sector = ROOT_FOLDER_LBA; sector < ROOT_FOLDER_LBA + 3; ++sector)
 	{
@@ -546,9 +579,10 @@ const char* psx_get_game_id()
 		//hexdump(buffer, CD_SECTOR_LEN);
 		char* start = nullptr;
 
-		for (const char* prefix : game_id_prefixes)
+		for (const auto& region_info : region_info_table)
 		{
-			start = (char*)memmem(buffer, CD_SECTOR_LEN, prefix, 4);
+			game_region = region_info.region;
+			start = (char*)memmem(buffer, CD_SECTOR_LEN, region_info.game_id_prefix, 4);
 			if (start) break;
 		}
 
@@ -576,10 +610,15 @@ const char* psx_get_game_id()
 		const size_t max_length = sizeof(game_id) - 1;
 		if (size > max_length) size = max_length;
 
-		return (char*)memcpy(game_id, start, size);
+		return { (const char*)memcpy(game_id, start, size), game_region };
 	}
 
-	return game_id;
+	return { game_id, region_t::UNKNOWN };
+}
+
+const char* psx_get_game_id()
+{
+	return psx_get_game_info().game_id;
 }
 
 static void mount_cd(int size, int index)
@@ -609,7 +648,9 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 	{
 		if (load_cd_image(filename, &toc) && toc.last)
 		{
-			printf("GAME ID: %s\n", psx_get_game_id());
+			game_info_t game_info = psx_get_game_info();
+			const char* game_id = game_info.game_id;
+			printf("Game ID: %s, region: %s\n", game_id, region_string(game_info.region));
 
 			int name_len = strlen(filename);
 
@@ -678,7 +719,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 			bool has_sbi_file = false;
 
 			// search for .sbi file in PSX/sbi.zip
-			sprintf(buf, "%s/sbi.zip/%s.sbi", HomeDir(), psx_get_game_id());
+			sprintf(buf, "%s/sbi.zip/%s.sbi", HomeDir(), game_id);
 			has_sbi_file = (FileOpen(&sbi_file, buf, 1));
 
 			if (!has_sbi_file)
@@ -695,7 +736,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				mask = libCryptMask(&sbi_file);
 			}
 
-			send_cue_and_metadata(&toc, mask);
+			send_cue_and_metadata(&toc, mask, game_info.region);
 
 			user_io_set_index(f_index);
 			process_ss(filename, name_len != 0);
