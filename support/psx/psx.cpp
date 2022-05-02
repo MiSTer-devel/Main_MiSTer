@@ -631,6 +631,13 @@ static void mount_cd(int size, int index)
 	user_io_bufferinvalidate(1);
 }
 
+static int load_bios(const char* filename)
+{
+	int sz = FileLoad(filename, 0, 0);
+	if (sz != 512 * 1024) return 0;
+	return user_io_file_tx(filename, 0xC0);
+}
+
 void psx_mount_cd(int f_index, int s_index, const char *filename)
 {
 	static char last_dir[1024] = {};
@@ -669,6 +676,32 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 					char *p = strrchr(last_dir, '/');
 					if (p) *p = 0;
 					else *last_dir = 0;
+
+					if (reset)
+					{
+						int bios_loaded = 0;
+
+						// load cd_bios.rom from game directory
+						sprintf(buf, "%s/", last_dir);
+						p = strrchr(buf, '/');
+						if (p)
+						{
+							strcpy(p + 1, "cd_bios.rom");
+							bios_loaded = load_bios(buf);
+						}
+
+						// load cd_bios.rom from parent directory
+						if (!bios_loaded) {
+							strcpy(buf, last_dir);
+							p = strrchr(buf, '/');
+							if (p)
+							{
+								strcpy(p + 1, "cd_bios.rom");
+								bios_loaded = load_bios(buf);
+							}
+						}
+
+					}
 
 					if (!(user_io_status(0, 0, 1) >> 31)) psx_mount_save(last_dir);
 				}
