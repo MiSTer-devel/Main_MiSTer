@@ -136,7 +136,7 @@ static int load_chd(const char *filename, toc_t *table)
 	/* PSX core expects the TOC values for track start/end to not take into account
 	* pregap, unlike some other cores. Adjust the CHD toc to reflect this
 	*/
-	
+
 	for (int i = 0; i < table->last; i++)
 	{
 		if (i == 0) //First track fakes a pregap even if it doesn't exist
@@ -151,7 +151,7 @@ static int load_chd(const char *filename, toc_t *table)
 			table->tracks[i].end = table->tracks[i].start + frame_cnt - 1;
 		}
 	}
-	
+
 	table->end = table->tracks[table->last - 1].end + 1;
 
 	memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
@@ -348,7 +348,8 @@ static int load_cd_image(const char *filename, toc_t *table)
 	{
 		return load_chd(filename, table);
 	}
-	else if (!strncasecmp(".cue", ext, 4)) {
+	else if (!strncasecmp(".cue", ext, 4))
+	{
 		return load_cue(filename, table);
 	}
 
@@ -370,7 +371,7 @@ struct disk_t
 	uint32_t total_lba;
 	uint32_t total_bcd;
 	uint16_t libcrypt_mask;
-	uint16_t metadata; // lower 2 bits encode the region, the other bits are reseved
+	uint16_t metadata; // lower 2 bits encode the region, 3rd bit is reset request, the other bits are reseved
 	track_t  track[99];
 };
 
@@ -382,7 +383,7 @@ enum region_t
 	EU
 };
 
-const char* region_string(region_t region)
+static const char* region_string(region_t region)
 {
 	switch (region)
 	{
@@ -395,22 +396,21 @@ const char* region_string(region_t region)
 
 #define BCD(v) ((uint8_t)((((v)/10) << 4) | ((v)%10)))
 
-void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask, enum region_t region)
+static void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask, enum region_t region, int reset)
 {
 	disk_t *disk = new disk_t;
 	if (disk)
 	{
-	for (int i = 0; i < table->last; i++)
-	{
-		printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
-		if (table->tracks[i].index1)
-			printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1 / 75);
-
-	}
+		for (int i = 0; i < table->last; i++)
+		{
+			printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
+			if (table->tracks[i].index1) printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1 / 75);
+		}
 
 		memset(disk, 0, sizeof(disk_t));
 		disk->libcrypt_mask = libcrypt_mask;
 		disk->metadata = region; // the lower 2 bits of metadata contain the region
+		if (reset) disk->metadata |= 4; // 3rd bit is reset request
 		disk->track_count = (BCD(table->last) << 8) | table->last;
 		disk->total_lba = table->end;
 		int m = (disk->total_lba / 75) / 60;
@@ -565,7 +565,7 @@ struct game_info_t
 	region_t region;
 };
 
-game_info_t psx_get_game_info()
+static game_info_t psx_get_game_info()
 {
 	uint8_t buffer[CD_SECTOR_LEN];
 
@@ -631,13 +631,6 @@ static void mount_cd(int size, int index)
 	user_io_bufferinvalidate(1);
 }
 
-static int load_bios(const char* filename)
-{
-	int sz = FileLoad(filename, 0, 0);
-	if (sz != 512 * 1024) return 0;
-	return user_io_file_tx(filename);
-}
-
 void psx_mount_cd(int f_index, int s_index, const char *filename)
 {
 	static char last_dir[1024] = {};
@@ -648,6 +641,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 	{
 		if (load_cd_image(filename, &toc) && toc.last)
 		{
+			int reset = 0;
 			game_info_t game_info = psx_get_game_info();
 			const char* game_id = game_info.game_id;
 			printf("Game ID: %s, region: %s\n", game_id, region_string(game_info.region));
@@ -664,7 +658,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 				if (!same_game)
 				{
-					int reset = 1;
+					reset = 1;
 					if (old_len)
 					{
 						strcat(last_dir, "/noreset.txt");
@@ -675,39 +669,6 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 					char *p = strrchr(last_dir, '/');
 					if (p) *p = 0;
 					else *last_dir = 0;
-
-					if (reset)
-					{
-						int bios_loaded = 0;
-
-						// load cd_bios.rom from game directory
-						sprintf(buf, "%s/", last_dir);
-						p = strrchr(buf, '/');
-						if (p)
-						{
-							strcpy(p + 1, "cd_bios.rom");
-							bios_loaded = load_bios(buf);
-						}
-
-						// load cd_bios.rom from parent directory
-						if (!bios_loaded) {
-							strcpy(buf, last_dir);
-							p = strrchr(buf, '/');
-							if (p)
-							{
-								strcpy(p + 1, "cd_bios.rom");
-								bios_loaded = load_bios(buf);
-							}
-						}
-
-						if (!bios_loaded)
-						{
-							sprintf(buf, "%s/boot.rom", HomeDir());
-							bios_loaded = load_bios(buf);
-						}
-
-						if (!bios_loaded) Info("CD BIOS not found!", 4000);
-					}
 
 					if (!(user_io_status(0, 0, 1) >> 31)) psx_mount_save(last_dir);
 				}
@@ -736,7 +697,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				mask = libCryptMask(&sbi_file);
 			}
 
-			send_cue_and_metadata(&toc, mask, game_info.region);
+			send_cue_and_metadata(&toc, mask, game_info.region, reset);
 
 			user_io_set_index(f_index);
 			process_ss(filename, name_len != 0);
