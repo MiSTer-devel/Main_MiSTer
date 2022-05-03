@@ -557,6 +557,14 @@ const region_info_t region_info_table[]
 	{ "SLPM", region_t::JP },
 	{ "SCPS", region_t::JP },
 	{ "SLPS", region_t::JP },
+	// for demo disks
+	{ "PUPX", region_t::US },
+	{ "PEPX", region_t::EU },
+	{ "PAPX", region_t::JP },
+	{ "PCPX", region_t::JP },
+	{ "SCZS", region_t::JP },
+	{ "SCED", region_t::EU },
+	{ "SLED", region_t::EU },
 };
 
 struct game_info_t
