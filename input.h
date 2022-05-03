@@ -71,6 +71,72 @@
 
 #define KEY_EMU (KEY_MAX+1)
 
+typedef struct
+{
+	uint16_t vid, pid;
+	char     idstr[256];
+	char     mod;
+
+	uint8_t  led;
+	uint8_t  mouse;
+	uint8_t  axis_edge[256];
+	int8_t   axis_pos[256];
+
+	uint8_t  num;
+	uint8_t  has_map;
+	uint32_t map[NUMBUTTONS];
+	int      map_shown;
+
+	uint8_t  osd_combo;
+
+	uint8_t  has_mmap;
+	uint32_t mmap[NUMBUTTONS];
+	uint16_t jkmap[1024];
+	int      stick_l[2];
+	int      stick_r[2];
+
+	uint8_t  has_kbdmap;
+	uint8_t  kbdmap[256];
+
+	int32_t  guncal[4];
+
+	int      accx, accy;
+	int      startx, starty;
+	int      lastx, lasty;
+	int      quirk;
+
+	int      misc_flags;
+	int      paddle_val;
+	int      spinner_prev;
+	int      spinner_acc;
+	int      spinner_prediv;
+	int      spinner_dir;
+	int      spinner_accept;
+	int      old_btn;
+	int      ds_mouse_emu;
+
+	int      lightgun_req;
+	int      lightgun;
+	bool     has_rumble;
+	uint16_t last_rumble;
+	ff_effect rumble_effect;
+
+	int8_t   wh_steer;
+	int8_t   wh_accel;
+	int8_t   wh_break;
+	int8_t   wh_clutch;
+	int8_t   wh_combo;
+
+	int      timeout;
+	char     mac[64];
+
+	int      bind;
+	char     devname[32];
+	char     id[80];
+	char     name[128];
+	char     sysfs[512];
+} devInput;
+
 void set_kbdled(int mask, int state);
 int  get_kbdled(int mask);
 int  toggle_kbdled(int mask);

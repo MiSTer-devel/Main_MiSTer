@@ -6,6 +6,7 @@
 #include "input.h"
 #include "fpga_io.h"
 #include "osd.h"
+#include "input_socket.h"
 
 static cothread_t co_scheduler = nullptr;
 static cothread_t co_poll = nullptr;
@@ -28,6 +29,7 @@ static void scheduler_co_poll(void)
 
 		user_io_poll();
 		input_poll(0);
+		input_socket_poll(0);
 
 		scheduler_yield();
 	}
