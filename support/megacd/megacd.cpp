@@ -124,8 +124,8 @@ void mcd_set_image(int num, const char *filename)
 	{
 		mcd_mount_save("");
 
-		user_io_status(1, 1);
-		user_io_status(0, 1);
+		user_io_status_set("[0]", 1);
+		user_io_status_set("[0]", 0);
 		mcd_reset();
 
 		loaded = 0;

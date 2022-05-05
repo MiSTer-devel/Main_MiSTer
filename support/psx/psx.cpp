@@ -703,7 +703,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 					}
 
-					if (!(user_io_status(0, 0, 1) >> 31)) psx_mount_save(last_dir);
+					if (!(user_io_status_get("[63]"))) psx_mount_save(last_dir);
 				}
 			}
 

@@ -113,9 +113,9 @@ static void notify_mount(int load)
 
 	if (!load)
 	{
-		user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+		user_io_status_set("[0]", 1);
 		usleep(100000);
-		user_io_status(0, UIO_STATUS_RESET);
+		user_io_status_set("[0]", 0);
 	}
 }
 
