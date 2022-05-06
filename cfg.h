@@ -72,6 +72,9 @@ typedef struct {
 	uint8_t rumble;
 	uint8_t wheel_force;
 	uint16_t wheel_range;
+	uint8_t input_socket_enabled;
+	uint16_t input_socket_bindport;
+	char input_socket_bindhost[128];
 } cfg_t;
 
 extern cfg_t cfg;

@@ -95,6 +95,9 @@ static const ini_var_t ini_vars[] =
 	{ "RUMBLE", (void *)(&(cfg.rumble)), UINT8, 0, 1},
 	{ "WHEEL_FORCE", (void*)(&(cfg.wheel_force)), UINT8, 0, 100 },
 	{ "WHEEL_RANGE", (void*)(&(cfg.wheel_range)), UINT16, 0, 1000 },
+	{ "INPUT_SOCKET_ENABLED", (void *)(&(cfg.input_socket_enabled)), UINT8, 0, 1 },
+	{ "INPUT_SOCKET_BINDPORT", (void *)(&(cfg.input_socket_bindport)), UINT16, 1025, 65535 },
+	{ "INPUT_SOCKET_BINDHOST", (void *)(&(cfg.input_socket_bindhost)), STRING, 0, sizeof(cfg.input_socket_bindhost) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
