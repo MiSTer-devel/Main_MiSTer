@@ -24,6 +24,7 @@
             ],
             "type": "shell",
             "problemMatcher": {
+                "owner": "cpp",
                 "fileLocation": [
                     "relative",
                     "${workspaceFolder}"
@@ -36,6 +37,10 @@
                     "severity": 4,
                     "message": 5
                 }
+            },
+            "presentation": {
+                "reveal": "always",
+                "revealProblems": "onProblem"
             },
             "group": {
                 "kind": "build",
