@@ -486,7 +486,7 @@ void pcecdd_t::CommandExec() {
 			SendStatus(MAKE_STATUS(PCECD_STATUS_GOOD, 0));
 		}
 
-		printf("\x1b[32mPCECD: Command TESTUNIT, state = %u\n\x1b[0m", state);
+		// printf("\x1b[32mPCECD: Command TESTUNIT, state = %u\n\x1b[0m", state);
 		break;
 
 	case PCECD_COMM_REQUESTSENSE:
