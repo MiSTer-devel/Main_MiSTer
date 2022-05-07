@@ -573,6 +573,25 @@ struct game_info_t
 	region_t region;
 };
 
+static region_t psx_get_region()
+{
+	uint8_t buffer[CD_SECTOR_LEN];
+	int license_sector = 154;
+	psx_read_cd(buffer, license_sector, 1);
+	uint8_t* license_start = (uint8_t*)memmem(buffer, CD_SECTOR_LEN, "          Licensed  by          Sony Computer Entertainment ", 60);
+	if (license_start) {
+		const uint8_t* region_start = license_start + 60;
+		if (memcmp(region_start, "Amer  ica ", 10) == 0)
+			return region_t::US;
+		if (memcmp(region_start, "Inc.", 4) == 0)
+			return region_t::JP;
+		if (memcmp(region_start, "Euro pe", 7) == 0)
+			return region_t::EU;
+	}
+
+	return region_t::UNKNOWN;
+}
+
 static game_info_t psx_get_game_info()
 {
 	uint8_t buffer[CD_SECTOR_LEN];
@@ -581,7 +600,7 @@ static game_info_t psx_get_game_info()
 	memset(game_id, 0, sizeof(game_id));
 	enum region_t game_region = UNKNOWN;
 
-	for (int sector = ROOT_FOLDER_LBA; sector < ROOT_FOLDER_LBA + 3; ++sector)
+	for (int sector = ROOT_FOLDER_LBA; sector < ROOT_FOLDER_LBA + 25; ++sector)
 	{
 		psx_read_cd(buffer, sector, 1);
 		//hexdump(buffer, CD_SECTOR_LEN);
@@ -659,7 +678,10 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 			int reset = 0;
 			game_info_t game_info = psx_get_game_info();
 			const char* game_id = game_info.game_id;
-			printf("Game ID: %s, region: %s\n", game_id, region_string(game_info.region));
+			region_t region = psx_get_region();
+			if (region == region_t::UNKNOWN)
+				region = game_info.region;
+			printf("Game ID: %s, region: %s\n", game_id, region_string(region));
 
 			int name_len = strlen(filename);
 
@@ -738,7 +760,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				mask = libCryptMask(&sbi_file);
 			}
 
-			send_cue_and_metadata(&toc, mask, game_info.region, reset);
+			send_cue_and_metadata(&toc, mask, region, reset);
 
 			user_io_set_index(f_index);
 			process_ss(filename, name_len != 0);
