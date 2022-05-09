@@ -557,6 +557,7 @@ const region_info_t region_info_table[]
 	{ "SLPM", region_t::JP },
 	{ "SCPS", region_t::JP },
 	{ "SLPS", region_t::JP },
+	{ "SIPS", region_t::JP },
 	// for demo disks
 	{ "PUPX", region_t::US },
 	{ "PEPX", region_t::EU },
