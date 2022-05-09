@@ -6676,7 +6676,7 @@ void ScrollLongName(void)
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
 	if (flist_SelectedItem()->de.d_type == DT_DIR)
 	{
-		max_len = 24; // number of directory name characters to display
+		max_len = 23; // number of directory name characters to display
 	}
 
 	if (flist_SelectedItem()->de.d_type != DT_DIR) // if a file
