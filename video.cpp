@@ -972,7 +972,7 @@ static void hdmi_config()
 		0x56, 0b00001000,		// [5:4] Picture Aspect Ratio
 								// [3:0] Active Portion Aspect Ratio b1000 = Same as Picture Aspect Ratio
 
-		0x57, (uint8_t)(0b10000000 // [7] IT Content. 0 - No. 1 - Yes (type set in register 0x59).
+		0x57, (uint8_t)((cfg.hdmi_game_mode ? 0x80 : 0x00) // [7] IT Content. 0 - No. 1 - Yes (type set in register 0x59).
 								// [6:4] Color space (ignored for RGB)
 			| ((ypbpr || cfg.hdmi_limited) ? 0b0100 : 0b1000)), // [3:2] RGB Quantization range
 								// [1:0] Non-Uniform Scaled: 00 - None. 01 - Horiz. 10 - Vert. 11 - Both.
