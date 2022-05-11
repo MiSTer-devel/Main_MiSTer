@@ -108,7 +108,7 @@ int i2c_smbus_read_byte_data(int file, uint8_t command)
 
 int i2c_smbus_write_byte_data(int file, uint8_t command, uint8_t value)
 {
-	printf("i2c: %02X %02X\n", command, value);
+	//printf("i2c: %02X %02X\n", command, value);
 	union i2c_smbus_data data;
 	data.byte = value;
 	return i2c_smbus_access(file, I2C_SMBUS_WRITE, command, I2C_SMBUS_BYTE_DATA, &data);

@@ -1060,7 +1060,7 @@ static void hdmi_config()
 		for (uint i = 0; i < sizeof(init_data); i += 2)
 		{
 			int res = i2c_smbus_write_byte_data(fd, init_data[i], init_data[i + 1]);
-			if (res < 0) printf("i2c: write error %d\n", res);
+			if (res < 0) printf("i2c: write error (%02X %02X): %d\n", init_data[i], init_data[i + 1], res);
 		}
 		i2c_close(fd);
 	}
