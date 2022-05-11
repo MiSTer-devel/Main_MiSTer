@@ -95,6 +95,7 @@ static const ini_var_t ini_vars[] =
 	{ "RUMBLE", (void *)(&(cfg.rumble)), UINT8, 0, 1},
 	{ "WHEEL_FORCE", (void*)(&(cfg.wheel_force)), UINT8, 0, 100 },
 	{ "WHEEL_RANGE", (void*)(&(cfg.wheel_range)), UINT16, 0, 1000 },
+	{ "HDMI_GAME_MODE", (void *)(&(cfg.hdmi_game_mode)), UINT8, 0, 1},
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));

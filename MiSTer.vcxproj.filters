@@ -220,6 +220,9 @@
     <ClCompile Include="support\uef\uef_reader.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
+    <ClCompile Include="smbus.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -425,6 +428,9 @@
     </ClInclude>
     <ClInclude Include="support\psx\mcdheader.h">
       <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="smbus.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
