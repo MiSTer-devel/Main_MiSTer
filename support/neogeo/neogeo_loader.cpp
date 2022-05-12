@@ -1043,14 +1043,14 @@ int neogeo_romset_tx(char* name)
 	int system_type;
 	static char full_path[1024];
 
-	system_type = (user_io_status(0, 0) >> 1) & 3;
+	system_type = user_io_status_get("[2:1]") & 3;
 	printf("System type: %u\n", system_type);
 
 	spi_uio_cmd_cont(UIO_GET_OSDMASK);
 	uint16_t mask = spi_w(0);
 	DisableIO();
 
-	user_io_status(1, 1);	// Maintain reset
+	user_io_status_set("[0]", 1);	// Maintain reset
 
 	crom_sz_max = 0;
 	crom_start = 0;
@@ -1140,7 +1140,7 @@ int neogeo_romset_tx(char* name)
 	FileGenerateSavePath((system_type & 2) ? "ngcd" : name, (char*)full_path);
 	user_io_file_mount((char*)full_path, 0, 1);
 
-	user_io_status(0, 1);	// Release reset
+	user_io_status_set("[0]", 0); // Release reset
 
 	return 1;
 }

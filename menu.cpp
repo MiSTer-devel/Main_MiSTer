@@ -419,75 +419,10 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 	menustate = MENU_FILE_SELECT1;
 }
 
-int substrcpy(char *d, const char *s, char idx)
-{
-	char p = 0;
-	char *b = d;
-
-	while (*s)
-	{
-		if ((p == idx) && *s && (*s != ',')) *d++ = *s;
-
-		if (*s == ',')
-		{
-			if (p == idx) break;
-			p++;
-		}
-
-		s++;
-	}
-
-	*d = 0;
-	return (int)(d - b);
-}
-
 #define STD_EXIT       "            exit"
 #define STD_BACK       "            back"
 #define STD_SPACE_EXIT "        SPACE to exit"
 #define STD_COMBO_EXIT "      Ctrl+ESC to exit"
-
-int getOptIdx(char *opt)
-{
-	if ((opt[1] >= '0') && (opt[1] <= '9')) return opt[1] - '0';
-	if ((opt[1] >= 'A') && (opt[1] <= 'V')) return opt[1] - 'A' + 10;
-	return 0; // basically 0 cannot be valid because used as a reset. Thus can be used as a error.
-}
-
-uint32_t getStatus(char *opt, uint32_t status)
-{
-	char idx1 = getOptIdx(opt);
-	char idx2 = getOptIdx(opt + 1);
-	uint32_t x = (status & (1 << idx1)) ? 1 : 0;
-
-	if (idx2>idx1) {
-		x = status >> idx1;
-		x = x & ~(0xffffffff << (idx2 - idx1 + 1));
-	}
-
-	return x;
-}
-
-uint32_t setStatus(char *opt, uint32_t status, uint32_t value)
-{
-	unsigned char idx1 = getOptIdx(opt);
-	unsigned char idx2 = getOptIdx(opt + 1);
-	uint32_t x = 1;
-
-	if (idx2>idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
-	x = x << idx1;
-
-	return (status & ~x) | ((value << idx1) & x);
-}
-
-uint32_t getStatusMask(char *opt)
-{
-	char idx1 = getOptIdx(opt);
-	char idx2 = getOptIdx(opt + 1);
-	uint32_t x = 1;
-
-	if (idx2 > idx1) x = ~(0xffffffff << (idx2 - idx1 + 1));
-	return x;
-}
 
 // conversion table of Amiga keyboard scan codes to ASCII codes
 static const uint8_t keycode_table[128] =
@@ -1111,13 +1046,13 @@ void HandleUI(void)
 				if (menu_visible > 0)
 				{
 					menu_visible = 0;
-					video_menu_bg((user_io_status(0, 0) & 0xE) >> 1, 1);
+					video_menu_bg(user_io_status_get("[3:1]"), 1);
 					OsdMenuCtl(0);
 				}
 				else if (!menu_visible)
 				{
 					menu_visible--;
-					video_menu_bg((user_io_status(0, 0) & 0xE) >> 1, 2);
+					video_menu_bg(user_io_status_get("[3:1]"), 2);
 				}
 			}
 
@@ -1128,7 +1063,7 @@ void HandleUI(void)
 				{
 					c = 0;
 					menu_visible = 1;
-					video_menu_bg((user_io_status(0, 0) & 0xE) >> 1);
+					video_menu_bg(user_io_status_get("[3:1]"));
 					OsdMenuCtl(1);
 				}
 			}
@@ -1153,17 +1088,16 @@ void HandleUI(void)
 		case KEY_F12:
 			menu = true;
 			menu_key_set(KEY_F12 | UPSTROKE);
-			if(video_fb_state()) video_menu_bg((user_io_status(0, 0) & 0xE) >> 1);
+			if(video_fb_state()) video_menu_bg(user_io_status_get("[3:1]"));
 			video_fb_enable(0);
 			break;
 
 		case KEY_F1:
 			if (is_menu() && cfg.fb_terminal)
 			{
-				unsigned long status = (user_io_status(0, 0)+ 2) & 0xE;
-				user_io_status(status, 0xE);
-				FileSaveConfig(user_io_create_config_name(), &status, 4);
-				video_menu_bg(status >> 1);
+				user_io_status_set("[3:1]", user_io_status_get("[3:1]") + 1);
+				user_io_status_save(user_io_create_config_name());
+				video_menu_bg(user_io_status_get("[3:1]"));
 			}
 			break;
 
@@ -1659,7 +1593,7 @@ void HandleUI(void)
 						//Hide or Disable flag (small letter - opposite action)
 						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
 						{
-							int flg = (hdmask & (1 << getOptIdx(p))) ? 1 : 0;
+							int flg = (hdmask & (1 << user_io_hd_mask(p + 1))) ? 1 : 0;
 							if (p[0] == 'H') h |= flg;
 							if (p[0] == 'h') h |= (flg ^ 1);
 							if (p[0] == 'D') d |= flg;
@@ -1803,13 +1737,9 @@ void HandleUI(void)
 						// check for 'O'ption strings
 						if ((p[0] == 'O') || (p[0] == 'o'))
 						{
-							int ex = (p[0] == 'o');
-							uint32_t status = user_io_status(0, 0, ex);  // 0,0 gets status
-
-							//option handled by ARM
+							//option handled by HPS
 							if (p[1] == 'X') p++;
-
-							uint32_t x = getStatus(p, status);
+							uint32_t x = user_io_status_get(p + 1, p[0] == 'o');
 
 							// get currently active option
 							substrcpy(s, p, 2 + x);
@@ -2005,7 +1935,7 @@ void HandleUI(void)
 						//Hide or Disable flag
 						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
 						{
-							int flg = (hdmask & (1 << getOptIdx(p))) ? 1 : 0;
+							int flg = (hdmask & (1 << user_io_hd_mask(p + 1))) ? 1 : 0;
 							if (p[0] == 'H') h |= flg;
 							if (p[0] == 'h') h |= (flg ^ 1);
 							if (p[0] == 'D') d |= flg;
@@ -2164,9 +2094,9 @@ void HandleUI(void)
 								p++;
 							}
 
-							uint32_t status = user_io_status(0, 0, ex);  // 0,0 gets status
-							uint32_t x = minus ? (getStatus(p, status) - 1) : (getStatus(p, status) + 1);
-							uint32_t mask = getStatusMask(p);
+							uint32_t x = user_io_status_get(p + 1, ex);
+							x = minus ? (x - 1) : (x + 1);
+							uint32_t mask = user_io_status_mask(p + 1);
 							x &= mask;
 
 							if (byarm && is_x86() && p[1] == '2') x86_set_fdd_boot(!(x & 1));
@@ -2187,7 +2117,7 @@ void HandleUI(void)
 								if (!strlen(s) || get_arc(s) < 0) x = 0;
 							}
 
-							user_io_status(setStatus(p, status, x), 0xffffffff, ex);
+							user_io_status_set(p + 1, x, ex);
 
 							if (is_x86() && p[1] == 'A')
 							{
@@ -2202,36 +2132,37 @@ void HandleUI(void)
 						}
 						else if (((p[0] == 'T') || (p[0] == 'R') || (p[0] == 't') || (p[0] == 'r')) && select)
 						{
+							int bit;
 							int ex = (p[0] == 't') || (p[0] == 'r');
-
-							// determine which status bit is affected
-							uint32_t mask = 1 << getOptIdx(p);
-							if (mask == 1 && is_x86())
+							if (user_io_status_bits(p + 1, &bit, 0, ex) == 1)
 							{
-								x86_init();
-								ResetUART();
-								menustate = MENU_NONE1;
-							}
-							else
-							{
-								if (is_megacd())
+								const char *opt = p + 1;
+								if (!bit && is_x86())
 								{
-									if (mask == 1) mcd_set_image(0, "");
-									if (mask == 2)
-									{
-										mcd_reset();
-										mask = 1;
-									}
+									x86_init();
+									ResetUART();
+									menustate = MENU_NONE1;
 								}
+								else
+								{
+									if (is_megacd())
+									{
+										if (!bit) mcd_set_image(0, "");
+										if (bit == 1)
+										{
+											mcd_reset();
+											opt = "[0]";
+										}
+									}
 
-								if (is_pce() && mask == 1) pcecd_reset();
+									if (is_pce() && !bit) pcecd_reset();
 
-								uint32_t status = user_io_status(0, 0, ex);
+									user_io_status_set(opt, 1, ex);
+									user_io_status_set(opt, 0, ex);
 
-								user_io_status(status ^ mask, mask, ex);
-								user_io_status(status, mask, ex);
-								menustate = MENU_GENERIC_MAIN1;
-								if (p[0] == 'R' || p[0] == 'r') menustate = MENU_NONE1;
+									menustate = MENU_GENERIC_MAIN1;
+									if (p[0] == 'R' || p[0] == 'r') menustate = MENU_NONE1;
+								}
 							}
 						}
 					}
@@ -2574,9 +2505,8 @@ void HandleUI(void)
 				else
 				{
 					char *filename = user_io_create_config_name();
-					uint32_t status[2] = { user_io_status(0, 0, 0), user_io_status(0, 0, 1) };
 					printf("Saving config to %s\n", filename);
-					FileSaveConfig(filename, status, 8);
+					user_io_status_save(filename);
 					if (is_x86()) x86_config_save();
 					if (is_arcade()) arcade_nvm_save();
 				}
@@ -2918,7 +2848,7 @@ void HandleUI(void)
 		{
 			if (c & UPSTROKE)
 			{
-				video_menu_bg((user_io_status(0, 0) & 0xE) >> 1);
+				video_menu_bg(user_io_status_get("[3:1]"));
 				video_fb_enable(0);
 				menustate = MENU_NONE1;
 				menusub = 3;
@@ -3009,8 +2939,8 @@ void HandleUI(void)
 				if (!dipv)
 				{
 					arcade_sw_save(dipv);
-					user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
-					user_io_status(0, UIO_STATUS_RESET);
+					user_io_status_set("[0]", 1);
+					user_io_status_set("[0]", 0);
 					menustate = MENU_NONE1;
 				}
 				else
@@ -5139,10 +5069,10 @@ void HandleUI(void)
             }
 			else
 			{
+				user_io_status_reset();
 				char *filename = user_io_create_config_name();
-				uint32_t status[2] = { user_io_status(0, 0xffffffff, 0), user_io_status(0, 0xffffffff, 1) };
 				printf("Saving config to %s\n", filename);
-				FileSaveConfig(filename, status, 8);
+				user_io_status_save(filename);
 				menustate = MENU_GENERIC_MAIN1;
 				for (int n = 0; n < 2; n++)
 				{
@@ -5150,8 +5080,8 @@ void HandleUI(void)
 					{
 						arcade_sw(n)->dip_cur = arcade_sw(n)->dip_def;
 						arcade_sw_send(n);
-						user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
-						user_io_status(0, UIO_STATUS_RESET);
+						user_io_status_set("[0]", 1);
+						user_io_status_set("[0]", 0);
 						arcade_sw_save(n);
 					}
 				}
@@ -6387,7 +6317,7 @@ void HandleUI(void)
 		{
 			if (c & UPSTROKE)
 			{
-				video_menu_bg((user_io_status(0, 0) & 0xE) >> 1);
+				video_menu_bg(user_io_status_get("[3:1]"));
 				video_fb_enable(0);
 				menustate = MENU_SYSTEM1;
 				menusub = 3;
@@ -6746,7 +6676,7 @@ void ScrollLongName(void)
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
 	if (flist_SelectedItem()->de.d_type == DT_DIR)
 	{
-		max_len = 24; // number of directory name characters to display
+		max_len = 23; // number of directory name characters to display
 	}
 
 	if (flist_SelectedItem()->de.d_type != DT_DIR) // if a file

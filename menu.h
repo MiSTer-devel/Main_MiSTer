@@ -3,7 +3,6 @@
 
 #include <inttypes.h>
 
-
 void SelectFile(const char* path, const char* pFileExt, int Options, unsigned char MenuSelect, unsigned char MenuCancel);
 
 void HandleUI(void);
@@ -16,11 +15,6 @@ void ProgressMessage(const char* title = 0, const char* text = 0, int current = 
 void InfoMessage(const char *message, int timeout = 2000, const char *title = "Message");
 void Info(const char *message, int timeout = 2000, int width = 0, int height = 0, int frame = 0);
 void MenuHide();
-
-int getOptIdx(char *opt);
-uint32_t getStatus(char *opt, uint32_t status);
-uint32_t getStatusMask(char *opt);
-int substrcpy(char *d, const char *s, char idx);
 
 void open_joystick_setup();
 int menu_lightgun_cb(int idx, uint16_t type, uint16_t code, int value);
