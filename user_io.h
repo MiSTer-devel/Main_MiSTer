@@ -70,6 +70,7 @@
 #define UIO_CHK_UPLOAD  0x3C
 #define UIO_ASTICK_2    0x3D
 #define UIO_SHADOWMASK  0x3E
+#define UIO_GET_RUMBLE  0x3F
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
@@ -152,33 +153,6 @@
 #define CORE_TYPE_SHARPMZ   0xa7   // Sharp MZ Series
 #define CORE_TYPE_8BIT2     0xa8   // generic core using dual SDRAM
 
-#define UART_FLG_PPP        0x0001
-#define UART_FLG_TERM       0x0002
-#define UART_FLG_RTSCTS     0x0004
-#define UART_FLG_DTRDSR     0x0008
-#define UART_FLG_DSRDCD     0x0010
-#define UART_FLG_9600       0x0100
-#define UART_FLG_19200      0x0200
-#define UART_FLG_38400      0x0400
-#define UART_FLG_57600      0x0800
-#define UART_FLG_115200     0x1000
-
-// user io status bits (currently only used by 8bit)
-#define UIO_STATUS_RESET   0x01
-
-#define UIO_STOP_BIT_1   0
-#define UIO_STOP_BIT_1_5 1
-#define UIO_STOP_BIT_2   2
-
-#define UIO_PARITY_NONE  0
-#define UIO_PARITY_ODD   1
-#define UIO_PARITY_EVEN  2
-#define UIO_PARITY_MARK  3
-#define UIO_PARITY_SPACE 4
-
-#define UIO_PRIORITY_KEYBOARD 0
-#define UIO_PRIORITY_GAMEPAD  1
-
 #define EMU_NONE  0
 #define EMU_MOUSE 1
 #define EMU_JOY0  2
@@ -191,14 +165,24 @@ void user_io_poll();
 char user_io_menu_button();
 char user_io_user_button();
 void user_io_osd_key_enable(char);
-void user_io_read_confstr();
-char *user_io_get_confstr(int index);
-uint32_t user_io_status(uint32_t, uint32_t, int ex = 0);
 int user_io_get_kbd_reset();
 void user_io_set_kbd_reset(int reset);
 
+int substrcpy(char *d, const char *s, char idx);
+
+void user_io_read_confstr();
+char *user_io_get_confstr(int index);
+int user_io_status_bits(const char *opt, int *s, int *e, int ex = 0, int single = 0);
+uint32_t user_io_status_mask(const char *opt);
+uint32_t user_io_hd_mask(const char *opt);
+uint32_t user_io_status_get(const char *opt, int ex = 0);
+void user_io_status_set(const char *opt, uint32_t value, int ex = 0);
+int user_io_status_save(const char *filename);
+void user_io_status_reset();
+
 uint32_t user_io_get_file_crc();
 int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0, int pre_size = 0);
+void user_io_bufferinvalidate(unsigned char index);
 char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name(int orig = 0);
 char *user_io_get_core_path(const char *suffix = NULL, int recheck = 0);

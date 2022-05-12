@@ -60,6 +60,27 @@ static sharpmz_tape_header_t tapeHeader;
 static tape_queue_t          tapeQueue;
 static unsigned char         debugEnabled = 0;
 
+static uint32_t set_status(uint32_t new_status, uint32_t mask, int ex = 0)
+{
+	static uint32_t status[2] = { 0, 0 };
+	if (ex) ex = 1;
+
+	// if mask is 0 just return the current status
+	if (mask) {
+		// keep everything not masked
+		status[ex] &= ~mask;
+		// updated masked bits
+		status[ex] |= new_status & mask;
+
+		spi_uio_cmd_cont(UIO_SET_STATUS2);
+		spi32_w(status[0]);
+		spi32_w(status[1]);
+		DisableIO();
+	}
+
+	return status[ex];
+}
+
 // Method to open a file for writing.
 //
 int sharpmz_file_write(fileTYPE *file, const char *fileName)
@@ -118,7 +139,7 @@ void sharpmz_reset(unsigned long preResetSleep, unsigned long postResetSleep)
     // Set the reset bit.
     //
     config.system_ctrl |= 1;
-    user_io_status(config.system_ctrl, (1));
+	set_status(config.system_ctrl, (1));
 
     // Sleep and hold device in reset for given period.
     //
@@ -128,7 +149,7 @@ void sharpmz_reset(unsigned long preResetSleep, unsigned long postResetSleep)
     // Remove reset.
     //
     config.system_ctrl &= ~(1);
-    user_io_status(config.system_ctrl, (1));
+	set_status(config.system_ctrl, (1));
 
     // Sleep and hold device in reset for given period.
     //
@@ -204,7 +225,7 @@ int sharpmz_reset_config(short setStatus)
     //
     if(setStatus)
     {
-        user_io_status(config.system_ctrl, 0xffffffff);
+		set_status(config.system_ctrl, 0xffffffff);
 
         // Set the registers.
         //
@@ -248,7 +269,7 @@ int sharpmz_reload_config(short setStatus)
     //
     if(setStatus && success)
     {
-        user_io_status(config.system_ctrl, 0xffffffff);
+		set_status(config.system_ctrl, 0xffffffff);
 
         // Set the registers.
         //
@@ -286,7 +307,7 @@ void sharpmz_init(void)
 
     // Setup the status values based on the config.
     //
-    user_io_status(config.system_ctrl, 0xffffffff);
+	set_status(config.system_ctrl, 0xffffffff);
 
     // Set the control registers according to config.
     //
@@ -797,7 +818,7 @@ void sharpmz_set_aspect_ratio(short on, short setStatus)
     config.system_ctrl |= (on == 1 ? 1 << 1 : 0);
 
     if(setStatus)
-        user_io_status(config.system_ctrl, (1 << 1));
+		set_status(config.system_ctrl, (1 << 1));
 }
 
 // Return Scan doubler fx status bits. Bits 2,3,4 of systemctrl.
@@ -827,7 +848,7 @@ void sharpmz_set_scandoubler_fx(short doubler, short setStatus)
     config.system_ctrl |= (doubler & 0x07) << 2;
 
     if(setStatus)
-        user_io_status(config.system_ctrl, (0x07 << 2));
+		set_status(config.system_ctrl, (0x07 << 2));
 }
 
 // Return VRAM wait state mode status bit. Bit 6 of system_reg, 0 = Off, 1 = On

@@ -609,9 +609,6 @@ void tos_config_load(int slot)
 	int len = FileLoadConfig(name, 0, 0);
 	tos_debugf("Configuration file size: %d (should be %d)", len, sizeof(tos_config_t));
 	FileLoadConfig(name, &config, sizeof(tos_config_t));
-
-	// ethernet is auto detected later
-	config.system_ctrl &= ~TOS_CONTROL_ETHERNET;
 }
 
 // save configuration

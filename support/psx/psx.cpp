@@ -133,23 +133,31 @@ static int load_chd(const char *filename, toc_t *table)
 		return 0;
 	}
 
+	/* PSX core expects the TOC values for track start/end to not take into account
+	* pregap, unlike some other cores. Adjust the CHD toc to reflect this
+	*/
+
 	for (int i = 0; i < table->last; i++)
 	{
 		if (i == 0) //First track fakes a pregap even if it doesn't exist
 		{
 			table->tracks[i].index1 = 150;
 			table->tracks[i].start = 150;
+			table->tracks[i].end += 150-1;
+		} else {
+			int frame_cnt = table->tracks[i].end - table->tracks[i].start;
+			frame_cnt += table->tracks[i].index1;
+			table->tracks[i].start = table->tracks[i-1].end + 1;
+			table->tracks[i].end = table->tracks[i].start + frame_cnt - 1;
 		}
-		table->tracks[i].end += (table->tracks[i].index1 - 1);
 	}
+
 	table->end = table->tracks[table->last - 1].end + 1;
 
 	memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
 	chd_hunknum = -1;
 
 	return 1;
-
-	//Need to store hunkbuf, hunknum and chd_f
 }
 
 static int load_cue(const char* filename, toc_t *table)
@@ -318,13 +326,14 @@ static int load_cue(const char* filename, toc_t *table)
 		}
 	}
 
+	/*
 	for (int i = 0; i < table->last; i++)
 	{
 		printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
 		if (table->tracks[i].index1)
 			printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1 / 75);
 
-	}
+	}*/
 
 	return 1;
 }
@@ -339,7 +348,8 @@ static int load_cd_image(const char *filename, toc_t *table)
 	{
 		return load_chd(filename, table);
 	}
-	else if (!strncasecmp(".cue", ext, 4)) {
+	else if (!strncasecmp(".cue", ext, 4))
+	{
 		return load_cue(filename, table);
 	}
 
@@ -360,18 +370,47 @@ struct disk_t
 	uint32_t track_count;
 	uint32_t total_lba;
 	uint32_t total_bcd;
-	uint32_t reserved;
+	uint16_t libcrypt_mask;
+	uint16_t metadata; // lower 2 bits encode the region, 3rd bit is reset request, the other bits are reseved
 	track_t  track[99];
 };
 
+enum region_t
+{
+	UNKNOWN = 0,
+	JP,
+	US,
+	EU
+};
+
+static const char* region_string(region_t region)
+{
+	switch (region)
+	{
+		case region_t::JP: return "Japan";
+		case region_t::US: return "USA";
+		case region_t::EU: return "Europe";
+		default: return "Unknown";
+	}
+}
+
 #define BCD(v) ((uint8_t)((((v)/10) << 4) | ((v)%10)))
 
-void send_cue(toc_t *table)
+static void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask, enum region_t region, int reset)
 {
 	disk_t *disk = new disk_t;
 	if (disk)
 	{
+		for (int i = 0; i < table->last; i++)
+		{
+			printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
+			if (table->tracks[i].index1) printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1 / 75);
+		}
+
 		memset(disk, 0, sizeof(disk_t));
+		disk->libcrypt_mask = libcrypt_mask;
+		disk->metadata = region; // the lower 2 bits of metadata contain the region
+		if (reset) disk->metadata |= 4; // 3rd bit is reset request
 		disk->track_count = (BCD(table->last) << 8) | table->last;
 		disk->total_lba = table->end;
 		int m = (disk->total_lba / 75) / 60;
@@ -459,7 +498,10 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 					{
 						if (toc.chd_f)
 						{
-							if (mister_chd_read_sector(toc.chd_f, (lba - toc.tracks[i].index1) + toc.tracks[i].offset, 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
+
+							// The "fake" 150 sector pregap moves all the LBAs up by 150, so adjust here to read where the core actually wants data from
+							int read_lba = lba - toc.tracks[0].index1;
+							if (mister_chd_read_sector(toc.chd_f, (read_lba + toc.tracks[i].offset), 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
 							{
 								if (!toc.tracks[i].type) //CHD requires byteswap of audio data
 								{
@@ -499,34 +541,76 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 
 #define ROOT_FOLDER_LBA 150 + 22
 
-const char* game_id_prefixes[]
+struct region_info_t
 {
-	"SCES",
-	"SLES",
-	"SCUS",
-	"SLUS",
-	"SCPM",
-	"SLPM",
-	"SCPS",
-	"SLPS",
+	const char* game_id_prefix;
+	enum region_t region;
 };
 
-const char* psx_get_game_id()
+const region_info_t region_info_table[]
+{
+	{ "SCES", region_t::EU },
+	{ "SLES", region_t::EU },
+	{ "SCUS", region_t::US },
+	{ "SLUS", region_t::US },
+	{ "SCPM", region_t::JP },
+	{ "SLPM", region_t::JP },
+	{ "SCPS", region_t::JP },
+	{ "SLPS", region_t::JP },
+	{ "SIPS", region_t::JP },
+	// for demo disks
+	{ "PUPX", region_t::US },
+	{ "PEPX", region_t::EU },
+	{ "PAPX", region_t::JP },
+	{ "PCPX", region_t::JP },
+	{ "SCZS", region_t::JP },
+	{ "SCED", region_t::EU },
+	{ "SLED", region_t::EU },
+};
+
+struct game_info_t
+{
+	const char* game_id;
+	region_t region;
+};
+
+static region_t psx_get_region()
+{
+	uint8_t buffer[CD_SECTOR_LEN];
+	int license_sector = 154;
+	psx_read_cd(buffer, license_sector, 1);
+	uint8_t* license_start = (uint8_t*)memmem(buffer, CD_SECTOR_LEN, "          Licensed  by          Sony Computer Entertainment ", 60);
+	if (license_start) {
+		const uint8_t* region_start = license_start + 60;
+		if (memcmp(region_start, "Amer  ica ", 10) == 0)
+			return region_t::US;
+		if (memcmp(region_start, "Inc.", 4) == 0)
+			return region_t::JP;
+		if (memcmp(region_start, "Euro pe", 7) == 0)
+			return region_t::EU;
+	}
+
+	return region_t::UNKNOWN;
+}
+
+static game_info_t psx_get_game_info()
 {
 	uint8_t buffer[CD_SECTOR_LEN];
 
 	static char game_id[11];
 	memset(game_id, 0, sizeof(game_id));
+	enum region_t game_region = UNKNOWN;
 
-	for (int sector = ROOT_FOLDER_LBA; sector < ROOT_FOLDER_LBA + 3; ++sector)
+	for (int sector = ROOT_FOLDER_LBA; sector < ROOT_FOLDER_LBA + 25; ++sector)
 	{
 		psx_read_cd(buffer, sector, 1);
 		//hexdump(buffer, CD_SECTOR_LEN);
 		char* start = nullptr;
 
-		for (const char* prefix : game_id_prefixes)
+		for (const auto& region_info : region_info_table)
 		{
-			start = (char*)memmem(buffer, CD_SECTOR_LEN, prefix, 4);
+			game_region = region_info.region;
+			start = (char*)memmem(buffer, CD_SECTOR_LEN, region_info.game_id_prefix, 4);
 			if (start) break;
 		}
 
@@ -554,10 +638,15 @@ const char* psx_get_game_id()
 		const size_t max_length = sizeof(game_id) - 1;
 		if (size > max_length) size = max_length;
 
-		return (char*)memcpy(game_id, start, size);
+		return { (const char*)memcpy(game_id, start, size), game_region };
 	}
 
-	return game_id;
+	return { game_id, region_t::UNKNOWN };
+}
+
+const char* psx_get_game_id()
+{
+	return psx_get_game_info().game_id;
 }
 
 static void mount_cd(int size, int index)
@@ -567,13 +656,14 @@ static void mount_cd(int size, int index)
 	spi32_w(0);
 	DisableIO();
 	spi_uio_cmd8(UIO_SET_SDSTAT, (1 << index) | 0x80);
+	user_io_bufferinvalidate(1);
 }
 
 static int load_bios(const char* filename)
 {
 	int sz = FileLoad(filename, 0, 0);
 	if (sz != 512 * 1024) return 0;
-	return user_io_file_tx(filename);
+	return user_io_file_tx(filename, 0xC0);
 }
 
 void psx_mount_cd(int f_index, int s_index, const char *filename)
@@ -586,7 +676,13 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 	{
 		if (load_cd_image(filename, &toc) && toc.last)
 		{
-			printf("GAME ID: %s\n", psx_get_game_id());
+			int reset = 0;
+			game_info_t game_info = psx_get_game_info();
+			const char* game_id = game_info.game_id;
+			region_t region = psx_get_region();
+			if (region == region_t::UNKNOWN)
+				region = game_info.region;
+			printf("Game ID: %s, region: %s\n", game_id, region_string(region));
 
 			int name_len = strlen(filename);
 
@@ -600,7 +696,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 				if (!same_game)
 				{
-					int reset = 1;
+					reset = 1;
 					if (old_len)
 					{
 						strcat(last_dir, "/noreset.txt");
@@ -636,20 +732,11 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 							}
 						}
 
-						if (!bios_loaded)
-						{
-							sprintf(buf, "%s/boot.rom", HomeDir());
-							bios_loaded = load_bios(buf);
-						}
-
-						if (!bios_loaded) Info("CD BIOS not found!", 4000);
 					}
 
-					if (!(user_io_status(0, 0, 1) >> 31)) psx_mount_save(last_dir);
+					if (!(user_io_status_get("[63]"))) psx_mount_save(last_dir);
 				}
 			}
-
-			send_cue(&toc);
 
 			uint16_t mask = 0;
 
@@ -657,7 +744,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 			bool has_sbi_file = false;
 
 			// search for .sbi file in PSX/sbi.zip
-			sprintf(buf, "%s/sbi.zip/%s.sbi", HomeDir(), psx_get_game_id());
+			sprintf(buf, "%s/sbi.zip/%s.sbi", HomeDir(), game_id);
 			has_sbi_file = (FileOpen(&sbi_file, buf, 1));
 
 			if (!has_sbi_file)
@@ -674,10 +761,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				mask = libCryptMask(&sbi_file);
 			}
 
-			user_io_set_index(250);
-			user_io_set_download(1);
-			user_io_file_tx_data((const uint8_t*)&mask, 2);
-			user_io_set_download(0);
+			send_cue_and_metadata(&toc, mask, region, reset);
 
 			user_io_set_index(f_index);
 			process_ss(filename, name_len != 0);

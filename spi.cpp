@@ -103,15 +103,15 @@ void spi_uio_cmd32_cont(uint8_t cmd, uint32_t parm)
 }
 
 /* User_io related SPI functions */
-uint16_t spi_uio_cmd_cont(uint8_t cmd)
+uint16_t spi_uio_cmd_cont(uint16_t cmd)
 {
 	EnableIO();
 	return spi_w(cmd);
 }
 
-uint16_t spi_uio_cmd(uint8_t cmd)
+uint16_t spi_uio_cmd(uint16_t cmd)
 {
-	uint8_t res = spi_uio_cmd_cont(cmd);
+	uint16_t res = spi_uio_cmd_cont(cmd);
 	DisableIO();
 	return res;
 }

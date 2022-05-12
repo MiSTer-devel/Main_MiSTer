@@ -325,6 +325,137 @@ void user_io_read_core_name()
 	printf("Core name is \"%s\"\n", core_name);
 }
 
+int substrcpy(char *d, const char *s, char idx)
+{
+	char p = 0;
+	char *b = d;
+
+	while (*s)
+	{
+		if ((p == idx) && *s && (*s != ',')) *d++ = *s;
+
+		if (*s == ',')
+		{
+			if (p == idx) break;
+			p++;
+		}
+
+		s++;
+	}
+
+	*d = 0;
+	return (int)(d - b);
+}
+
+static char cur_status[16] = {};
+
+int user_io_status_bits(const char *opt, int *s, int *e, int ex, int single)
+{
+	uint32_t start = 0, end = 0;
+	if (opt[0] == '[')
+	{
+		if (!single && sscanf(opt, "[%u:%u]", &end, &start) == 2)
+		{
+			if (start > 127 || end > 127 || end <= start) return 0;
+		}
+		else if (sscanf(opt, "[%u]", &start) == 1)
+		{
+			if (start > 127) return 0;
+			end = start;
+		}
+		else return 0;
+	}
+	else
+	{
+		if ((opt[0] >= '0') && (opt[0] <= '9')) start = opt[0] - '0';
+		else if ((opt[0] >= 'A') && (opt[0] <= 'V')) start = opt[0] - 'A' + 10;
+		else return 0;
+
+		if (!single && (opt[1] >= '0') && (opt[1] <= '9')) end = opt[1] - '0';
+		else if (!single && (opt[1] >= 'A') && (opt[1] <= 'V')) end = opt[1] - 'A' + 10;
+		else
+		{
+			single = 1;
+			end = start;
+		}
+
+		if (ex)
+		{
+			start += 32;
+			end += 32;
+		}
+
+		if (start > 127 || end > 127 || (!single && end <= start)) return 0;
+	}
+
+	//max 8 bits per option
+	if (end - start > 8) return 0;
+
+	if (s) *s = (int)start;
+	if (e) *e = (int)end;
+	return 1 + end - start;
+}
+
+uint32_t user_io_status_get(const char *opt, int ex)
+{
+	int start, end;
+	int size = user_io_status_bits(opt, &start, &end, ex);
+	if (!size) return 0;
+
+	uint32_t x = (cur_status[end / 8] << 8) | cur_status[start / 8];
+	x >>= start % 8;
+	return x & ~(0xffffffff << size);
+}
+
+uint32_t user_io_status_mask(const char *opt)
+{
+	return ~(0xffffffff << user_io_status_bits(opt, 0, 0, 0));
+}
+
+uint32_t user_io_hd_mask(const char *opt)
+{
+	int start;
+	int size = user_io_status_bits(opt, &start, 0, 0, 1);
+	if (!size) return 0;
+	return start;
+}
+
+void user_io_status_set(const char *opt, uint32_t value, int ex)
+{
+	int start, end;
+	int size = user_io_status_bits(opt, &start, &end, ex);
+	if (!size) return;
+
+	int s = start / 8;
+	int e = end / 8;
+
+	uint32_t mask = ~(0xffffffff << size);
+	mask <<= start % 8;
+	uint32_t x = (cur_status[e] << 8) | cur_status[s];
+	x = (x & ~mask) | ((value << (start % 8)) & mask);
+
+	cur_status[s] = (char)x;
+	if (e != s) cur_status[e] = (char)(x >> 8);
+
+	if (!is_st())
+	{
+		spi_uio_cmd_cont(UIO_SET_STATUS2);
+		for (uint32_t i = 0; i < sizeof(cur_status); i += 2) spi_w((cur_status[i + 1] << 8) | cur_status[i]);
+		DisableIO();
+	}
+}
+
+int user_io_status_save(const char *filename)
+{
+	return FileSaveConfig(filename, cur_status, sizeof(cur_status));
+}
+
+void user_io_status_reset()
+{
+	memset(cur_status, 0, sizeof(cur_status));
+	user_io_status_set("[0]", 0);
+}
+
 static void set_kbd_led(int led, int state)
 {
 	if (led & HID_LED_CAPS_LOCK)
@@ -412,8 +543,9 @@ static char defmra[1024] = {};
 
 static void parse_config()
 {
-	uint64_t mask = 0;
-	uint64_t overlap = 0;
+	char mask[sizeof(cur_status) * 8] = {};
+	char overlap[sizeof(cur_status) * 8] = {};
+	int start, end, sz;
 
 	int i = 0;
 	char *p;
@@ -552,34 +684,37 @@ static void parse_config()
 			}
 			if (p[0] == 'P') p += 2;
 
-			if (p[0] == 'R' || p[0] == 'T')
+			if (p[0] == 'R' || p[0] == 'T' || p[0] == 'r' || p[0] == 't')
 			{
-				uint64_t x = 1 << getOptIdx(p);
-				overlap |= mask & x;
-				mask |= x;
+				sz = user_io_status_bits(p + 1, &start, &end, p[0] == 'r' || p[0] == 't');
+				if (sz == 1)
+				{
+					overlap[start] |= mask[start];
+					mask[start] |= 1;
+				}
+				else
+				{
+					printf("Invalid OSD option: %s\n", p);
+				}
 			}
-			if (p[0] == 'r' || p[0] == 't')
+			else if (p[0] == 'O' || p[0] == 'o')
 			{
-				uint64_t x = 1 << getOptIdx(p);
-				x <<= 32;
-				overlap |= mask & x;
-				mask |= x;
-			}
-			if (p[0] == 'O')
-			{
-				char *opt = (p[1] == 'X') ? p + 1 : p;
-				uint64_t x = getStatusMask(opt);
-				x <<= getOptIdx(opt);
-				overlap |= mask & x;
-				mask |= x;
-			}
-			if (p[0] == 'o')
-			{
-				char *opt = (p[1] == 'X') ? p + 1 : p;
-				uint64_t x = getStatusMask(opt);
-				x <<= 32 + getOptIdx(opt);
-				overlap |= mask & x;
-				mask |= x;
+				char *opt = (p[1] == 'X') ? (p + 2) : (p + 1);
+				sz = user_io_status_bits(opt, &start, &end, p[0] == 'o');
+				if (sz)
+				{
+					while (sz)
+					{
+						overlap[start] |= mask[start];
+						mask[start] |= 1;
+						sz--;
+						start++;
+					}
+				}
+				else
+				{
+					printf("Invalid OSD option: %s\n", p);
+				}
 			}
 
 			if (p[0] == 'J')
@@ -598,10 +733,8 @@ static void parse_config()
 
 			if (p[0] == 'O' && p[1] == 'X')
 			{
-				uint32_t status = user_io_status(0, 0);
-				printf("found OX option: %s, 0x%08X\n", p, status);
-
-				unsigned long x = getStatus(p + 1, status);
+				int x = user_io_status_get(p + 2);
+				printf("found OX option: %s: %d\n", p, x);
 
 				if (is_x86())
 				{
@@ -702,7 +835,7 @@ static void parse_config()
 		i++;
 	} while (p || i<3);
 
-	mask |= 1; // reset is always on bit 0
+	mask[0] = 1; // reset is always on bit 0
 	printf("\n// Status Bit Map:\n");
 	printf("//              Upper                          Lower\n");
 	printf("// 0         1         2         3          4         5         6   \n");
@@ -710,23 +843,58 @@ static void parse_config()
 	printf("// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV\n");
 	char str[128];
 	strcpy(str, "// ");
-	for (int i = 0; i < 32; i++) strcat(str, (mask & (1ULL << i)) ? "X" : " ");
+	for (int i = 0; i < 32; i++) strcat(str, mask[i] ? "X" : " ");
 	strcat(str, " ");
-	for (int i = 32; i < 64; i++) strcat(str, (mask & (1ULL << i)) ? "X" : " ");
+	for (int i = 32; i < 64; i++) strcat(str, mask[i] ? "X" : " ");
 	strcat(str, "\n");
 	printf(str);
 
-	if (overlap)
+	int ovr = 0;
+	for (int i = 0; i < 64; i++) ovr |= overlap[i];
+
+	if (ovr)
 	{
 		strcpy(str, "// ");
-		for (int i = 0; i < 32; i++) strcat(str, (overlap & (1ULL << i)) ? "^" : " ");
+		for (int i = 0; i < 32; i++) strcat(str, overlap[i] ? "^" : " ");
 		strcat(str, " ");
-		for (int i = 32; i < 64; i++) strcat(str, (overlap & (1ULL << i)) ? "^" : " ");
+		for (int i = 32; i < 64; i++) strcat(str, overlap[i] ? "^" : " ");
 		strcat(str, "\n");
 		printf(str);
-		printf("// *Overlapped bits!* (can be intentional):\n");
+		printf("// *Overlapped bits!* (can be intentional)\n");
 	}
 	printf("\n");
+
+	ovr = 0;
+	for (int i = 64; i < 128; i++) ovr |= mask[i];
+
+	if (ovr)
+	{
+		printf("// 0     0         0         0          1         1         1       \n");
+		printf("// 6     7         8         9          0         1         2       \n");
+		printf("// 45678901234567890123456789012345 67890123456789012345678901234567\n");
+		strcpy(str, "// ");
+		for (int i = 64; i < 96; i++) strcat(str, mask[i] ? "X" : " ");
+		strcat(str, " ");
+		for (int i = 96; i < 128; i++) strcat(str, mask[i] ? "X" : " ");
+		strcat(str, "\n");
+		printf(str);
+
+		ovr = 0;
+		for (int i = 64; i < 128; i++) ovr |= overlap[i];
+
+		if (ovr)
+		{
+			strcpy(str, "// ");
+			for (int i = 64; i < 96; i++) strcat(str, overlap[i] ? "^" : " ");
+			strcat(str, " ");
+			for (int i = 96; i < 128; i++) strcat(str, overlap[i] ? "^" : " ");
+			strcat(str, "\n");
+			printf(str);
+			printf("// *Overlapped bits!* (can be intentional)\n");
+		}
+		printf("\n");
+	}
+
 
 	// legacy GBA versions
 	if (is_gba() && !ss_base)
@@ -1096,7 +1264,7 @@ void user_io_init(const char *path, const char *xml)
 		spi_uio_cmd16(UIO_SET_MEMSZ, sdram_sz(-1));
 
 		// send a reset
-		user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+		user_io_status_set("[0]", 1);
 	}
 	else if (core_type == CORE_TYPE_SHARPMZ)
 	{
@@ -1162,23 +1330,21 @@ void user_io_init(const char *path, const char *xml)
 		name = user_io_create_config_name();
 		if (strlen(name) > 0)
 		{
-			uint32_t status[2] = { 0, 0 };
 			if (!is_st() && !is_minimig())
 			{
 				printf("Loading config %s\n", name);
-				if (FileLoadConfig(name, status, 8))
+				memset(cur_status, 0, sizeof(cur_status));
+				if (FileLoadConfig(name, cur_status, sizeof(cur_status)))
 				{
-					printf("Found config: %08X-%08X\n", status[0], status[1]);
+					printf("Found config:\n");
+					hexdump(cur_status, sizeof(cur_status));
 				}
 				else
 				{
-					status[0] = 0;
-					status[1] = 0;
+					memset(cur_status, 0, sizeof(cur_status));
 				}
 
-				status[0] &= ~UIO_STATUS_RESET;
-				user_io_status(status[0], ~UIO_STATUS_RESET, 0);
-				user_io_status(status[1], 0xffffffff, 1);
+				user_io_status_set("[0]", 1);
 			}
 
 			if (is_st())
@@ -1188,9 +1354,9 @@ void user_io_init(const char *path, const char *xml)
 			}
 			else if (is_menu())
 			{
-				user_io_status((cfg.menu_pal) ? 0x10 : 0, 0x10);
-				if (cfg.fb_terminal) video_menu_bg((status[0] >> 1) & 7);
-				else user_io_status(0, 0xE);
+				user_io_status_set("[4]", (cfg.menu_pal) ? 1 : 0);
+				if (cfg.fb_terminal) video_menu_bg(user_io_status_get("[3:1]"));
+				else user_io_status_set("[3:1]", 0);
 			}
 			else
 			{
@@ -1307,7 +1473,7 @@ void user_io_init(const char *path, const char *xml)
 		send_rtc(3);
 
 		// release reset
-		if (!is_minimig() && !is_st()) user_io_status(0, UIO_STATUS_RESET);
+		if (!is_minimig() && !is_st()) user_io_status_set("[0]", 0);
 		if (xml && isXmlName(xml) == 1) arcade_check_error();
 		break;
 	}
@@ -1807,6 +1973,11 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	return ret ? 1 : 0;
 }
 
+void user_io_bufferinvalidate(unsigned char index)
+{
+	buffer_lba[index] = -1;
+}
+
 static unsigned char col_attr[1025];
 static int col_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
@@ -2099,11 +2270,14 @@ static void check_status_change()
 	if ((stchg & 0xF0) == 0xA0 && last_status_change != (stchg & 0xF))
 	{
 		last_status_change = (stchg & 0xF);
-		uint32_t st0 = spi32_w(0);
-		uint32_t st1 = spi32_w(0);
+		for (uint i = 0; i < sizeof(cur_status); i += 2)
+		{
+			uint16_t x = spi_w(0);
+			cur_status[i] = (char)x;
+			cur_status[i + 1] = (char)(x >> 8);
+		}
 		DisableIO();
-		user_io_status(st0, ~UIO_STATUS_RESET, 0);
-		user_io_status(st1, 0xFFFFFFFF, 1);
+		user_io_status_set("[0]", 0);
 	}
 	else
 	{
@@ -2114,10 +2288,10 @@ static void check_status_change()
 static void show_core_info(int info_n)
 {
 	int i = 2;
+	user_io_read_confstr();
+
 	while (1)
 	{
-		user_io_read_confstr();
-
 		char *p = user_io_get_confstr(i++);
 		if (!p) break;
 
@@ -2441,38 +2615,6 @@ char *user_io_get_confstr(int index)
 	memcpy(buffer, start, len);
 	buffer[len] = 0;
 	return buffer;
-}
-
-uint32_t user_io_status(uint32_t new_status, uint32_t mask, int ex)
-{
-	static uint32_t status[2] = { 0, 0 };
-	if (ex) ex = 1;
-
-	// if mask is 0 just return the current status
-	if (mask) {
-		// keep everything not masked
-		status[ex] &= ~mask;
-		// updated masked bits
-		status[ex] |= new_status & mask;
-
-		if (!is_st())
-		{
-			if (!io_ver)
-			{
-				spi_uio_cmd8(UIO_SET_STATUS, status[0]);
-				spi_uio_cmd32(UIO_SET_STATUS2, status[0], 0);
-			}
-			else
-			{
-				spi_uio_cmd_cont(UIO_SET_STATUS2);
-				spi32_w(status[0]);
-				spi32_w(status[1]);
-				DisableIO();
-			}
-		}
-	}
-
-	return status[ex];
 }
 
 static char cur_btn = 0;
@@ -3547,7 +3689,10 @@ void user_io_kbd(uint16_t key, int press)
 	if(is_menu()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 
 	// Win+PrnScr or Alt/Win+ScrLk - screen shot
-	if ((key == KEY_SYSRQ && (get_key_mod() & (RGUI | LGUI))) || (key == KEY_SCROLLLOCK && (get_key_mod() & (LALT | RALT | RGUI | LGUI))))
+	bool key_WinPrnScr = (key == KEY_SYSRQ && (get_key_mod() & (RGUI | LGUI)));
+	// Excluding scroll lock for PS/2 so Win+ScrLk can be used to change the emu mode.
+	bool key_AltWinScrLk = (key == KEY_SCROLLLOCK && (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && !use_ps2ctl;
+	if (key_WinPrnScr || key_AltWinScrLk)
 	{
 		int shift = (get_key_mod() & LSHIFT);
 		if (press == 1)
@@ -3616,7 +3761,14 @@ void user_io_kbd(uint16_t key, int press)
 				}
 				else
 				{
-					if (((code & EMU_SWITCH_1) || ((code & EMU_SWITCH_2) && !use_ps2ctl && !is_archie())) && !is_menu())
+					// When ps2ctl is set then the RGUI or LGUI key must be held in addition
+					// to the EMU_SWITCH_1 or EMU_SWITCH_2. This allows for cores such as AO486
+					// to pass through the Scroll Lock and Num Lock keys.
+					bool ps2ctl_modifier = (get_key_mod() & (RGUI | LGUI)) || !use_ps2ctl;
+					bool key_EMU_SWITCH_1 = (code & EMU_SWITCH_1) && ps2ctl_modifier;
+					bool key_EMU_SWITCH_2 = (code & EMU_SWITCH_2) && ps2ctl_modifier && !is_archie();
+
+					if (( key_EMU_SWITCH_1 || key_EMU_SWITCH_2 ) && !is_menu())
 					{
 						if (press == 1)
 						{

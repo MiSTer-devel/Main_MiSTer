@@ -81,7 +81,7 @@ void archie_set_ar(char i)
 {
 	config.system_ctrl &= ~0b11000000;
 	config.system_ctrl |= (i & 3) << 6;
-	user_io_status(config.system_ctrl, 0b11000000);
+	user_io_status_set("[7:6]", config.system_ctrl >> 6);
 }
 
 int archie_get_ar()
@@ -93,7 +93,7 @@ void archie_set_scale(char i)
 {
 	config.system_ctrl &= ~0b1100000000;
 	config.system_ctrl |= (i & 3) << 8;
-	user_io_status(config.system_ctrl, 0b1100000000);
+	user_io_status_set("[9:8]", config.system_ctrl >> 8);
 }
 
 int archie_get_scale()
@@ -103,26 +103,26 @@ int archie_get_scale()
 
 void archie_set_60(char i)
 {
-	if (i) config.system_ctrl |=  0b1000;
-	else config.system_ctrl   &= ~0b1000;
-	user_io_status(config.system_ctrl, 0b10000);
+	if (i) config.system_ctrl |=  0b10000;
+	else config.system_ctrl   &= ~0b10000;
+	user_io_status_set("[4]", config.system_ctrl >> 4);
 }
 
 int archie_get_60()
 {
-	return config.system_ctrl & 0b1000;
+	return config.system_ctrl & 0b10000;
 }
 
 void archie_set_afix(char i)
 {
-	if (i) config.system_ctrl |= 0b10000;
-	else config.system_ctrl &= ~0b10000;
-	user_io_status(config.system_ctrl, 0b100000);
+	if (i) config.system_ctrl |= 0b100000;
+	else config.system_ctrl &= ~0b100000;
+	user_io_status_set("[5]", config.system_ctrl >> 5);
 }
 
 int archie_get_afix()
 {
-	return config.system_ctrl & 0b10000;
+	return config.system_ctrl & 0b100000;
 }
 
 static int mswap = 0;
@@ -139,7 +139,7 @@ int archie_get_mswap()
 void archie_set_amix(char i)
 {
 	config.system_ctrl = (config.system_ctrl & ~0b110) | ((i & 3)<<1);
-	user_io_status(config.system_ctrl << 1, 0b1100);
+	user_io_status_set("[3:2]", config.system_ctrl>>1);
 }
 
 int archie_get_amix()
@@ -295,7 +295,7 @@ inline int hdd_open(int unit, char *filename)
 void archie_init()
 {
 	archie_debugf("init");
-	user_io_status(UIO_STATUS_RESET, UIO_STATUS_RESET);
+	user_io_status_set("[0]", 1);
 
 	// set config defaults
 	config.system_ctrl = 0;
@@ -338,7 +338,7 @@ void archie_init()
 
 	load_cmos();
 
-	user_io_status(~UIO_STATUS_RESET, UIO_STATUS_RESET);
+	user_io_status_set("[0]", 0);
 
 /*
 	int i;

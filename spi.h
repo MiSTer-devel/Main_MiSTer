@@ -52,8 +52,8 @@ void spi_osd_cmd8_cont(uint8_t cmd, uint8_t parm);
 void spi_osd_cmd8(uint8_t cmd, uint8_t parm);
 
 /* User_io related SPI functions */
-uint16_t spi_uio_cmd_cont(uint8_t cmd);
-uint16_t spi_uio_cmd(uint8_t cmd);
+uint16_t spi_uio_cmd_cont(uint16_t cmd);
+uint16_t spi_uio_cmd(uint16_t cmd);
 uint8_t spi_uio_cmd8_cont(uint8_t cmd, uint8_t parm);
 uint8_t spi_uio_cmd8(uint8_t cmd, uint8_t parm);
 uint16_t spi_uio_cmd16(uint8_t cmd, uint16_t parm);
