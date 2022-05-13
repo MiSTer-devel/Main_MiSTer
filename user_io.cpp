@@ -2385,8 +2385,6 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	int dosend = 1;
 
-
-
 	int is_snes_bs = 0;
 	if (is_snes() && bytes2send)
 	{
@@ -2574,11 +2572,11 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	ProgressMessage(0, 0, 0, 0);
 
-    if (is_snes())
-    {
-        // Setup MSU
-        snes_msu_init(name);
-    }
+	if (is_snes())
+	{
+		// Setup MSU
+		snes_msu_init(name);
+	}
 
 	return 1;
 }

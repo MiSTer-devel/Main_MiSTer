@@ -4,21 +4,13 @@
 #include <string.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <glob.h>
 
 #include "../../file_io.h"
 #include "../../user_io.h"
 #include "../../spi.h"
 
 static uint8_t hdr[512];
-static uint16_t msu_currenttrack = 0x0000;
-const  uint64_t MSU_AUDIO_SECTOR_SENT       = 0x00000000101;
-const  uint64_t MSU_AUDIO_TRACKMOUNTED      = 0x00000000201;
-const  uint64_t MSU_AUDIO_SENDING_SECTOR    = 0x00000000301;
-const  uint64_t MSU_AUDIO_TRACKMISSING      = 0x00000000401;
-
-const  uint64_t MSU_DATA_SECTOR_SENT        = 0x00000000102;
-const  uint64_t MSU_DATA_FILEMOUNTED        = 0x00000000202;
-const  uint64_t MSU_DATA_SENDING_SECTOR     = 0x00000000302;
 
 enum HeaderField {
 	CartName = 0x00,
@@ -179,16 +171,16 @@ uint8_t* snes_get_header(fileTYPE *f)
 				}
 
 				bool has_bsx_slot = false;
-				if (buf[addr - 14] == 'Z' && buf[addr - 11] == 'J' && 
+				if (buf[addr - 14] == 'Z' && buf[addr - 11] == 'J' &&
 					((buf[addr - 13] >= 'A' && buf[addr - 13] <= 'Z') || (buf[addr - 13] >= '0' && buf[addr - 13] <= '9')) &&
 					(buf[addr + Company] == 0x33 || (buf[addr - 10] == 0x00 && buf[addr - 4] == 0x00)) ) {
 					has_bsx_slot = true;
 				}
 
 				//Rom type: 0-Low, 1-High, 2-ExHigh, 3-SpecialLoRom
-				hdr[1] = (addr == 0x00ffc0) ? 1 : 
-						 (addr == 0x40ffc0) ? 2 : 
-						 has_bsx_slot ? 3 : 
+				hdr[1] = (addr == 0x00ffc0) ? 1 :
+						 (addr == 0x40ffc0) ? 2 :
+						 has_bsx_slot ? 3 :
 						 0;
 
 				//BSX 3
@@ -301,8 +293,10 @@ uint8_t* snes_get_header(fileTYPE *f)
 void snes_patch_bs_header(fileTYPE *f, uint8_t *buf)
 {
 	if ((f->offset == 0x008000 && (buf[0xFD8] == 0x20 || buf[0xFD8] == 0x30)) ||
-		(f->offset == 0x010000 && (buf[0xFD8] == 0x21 || buf[0xFD8] == 0x31))) {
-		if (buf[0xFD0] == 0xF0 || (buf[0xFD1] == 0xFF && buf[0xFD2] == 0xFF && buf[0xFD3] == 0xFF)) {
+		(f->offset == 0x010000 && (buf[0xFD8] == 0x21 || buf[0xFD8] == 0x31)))
+	{
+		if (buf[0xFD0] == 0xF0 || (buf[0xFD1] == 0xFF && buf[0xFD2] == 0xFF && buf[0xFD3] == 0xFF))
+		{
 			printf("SNES: Patch bad BS header: offset %04X, bad value %02X %02X %02X %02X\n", 0x7FD0 | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFD0], buf[0xFD1], buf[0xFD2], buf[0xFD3]);
 			buf[0xFD3] = 0x00;
 			buf[0xFD2] = 0x00;
@@ -311,65 +305,58 @@ void snes_patch_bs_header(fileTYPE *f, uint8_t *buf)
 						 f->size <= 512 * 1024 ? 0x0F :
 						 0xFF;
 		}
-		if (buf[0xFD5] >= 0x80) {
+
+		if (buf[0xFD5] >= 0x80)
+		{
 			printf("SNES: Patch bad BS header: offset %04X, bad value %02X %02X\n", 0x7FD4 | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFD4], buf[0xFD5]);
 			buf[0xFD5] = 0xFF;
 			buf[0xFD4] = 0xFF;
 		}
-		if (buf[0xFDA] != 0x33) {
+
+		if (buf[0xFDA] != 0x33)
+		{
 			printf("SNES: Patch bad BS header: offset %04X, bad value %02X\n", 0x7FDA | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFDA]);
 			buf[0xFDA] = 0x33;
 		}
 	}
 }
 
-// This gets set by snes_msu_init for use by MSU-1 support later
-char snes_romFileName[1024] = { 0 };
-uint8_t topup_buffer = 0;
+////////////// MSU /////////////
 
-//uint8_t msu_data_array[0x2000000];
-uint8_t msu_data_loaded = 0x00;
+#define MSU_CD_ENABLE            0x001
+#define MSU_CD_DISABLE           0x002
+#define MSU_AUDIO_SECTOR_SENT    0x101
+#define MSU_AUDIO_TRACKMOUNTED   0x201
+#define MSU_AUDIO_SENDING_SECTOR 0x301
+#define MSU_AUDIO_TRACKMISSING   0x401
+#define MSU_DATA_SECTOR_SENT     0x102
+#define MSU_DATA_FILEMOUNTED     0x202
+#define MSU_DATA_SENDING_SECTOR  0x302
 
-void snes_msu_send_command(uint64_t cmd)
+static uint16_t msu_currenttrack = 0x0000;
+static char snes_romFileName[1024] = {};
+static char SelectedPath[1024] = {};
+static uint8_t topup_buffer = 0;
+static char has_cd = 0;
+static int need_reset = 0;
+
+//static uint8_t msu_data_array[0x2000000];
+//static uint8_t msu_data_loaded = 0x00;
+
+static void msu_send_command(uint64_t cmd)
 {
-    spi_uio_cmd_cont(UIO_CD_SET);
-    spi_w((cmd >> 0) & 0xFFFF);
-    spi_w((cmd >> 16) & 0xFFFF);
-    spi_w(((cmd >> 32) & 0x00FF) | 0x00 << 8);
-    DisableIO();
+	spi_uio_cmd_cont(UIO_CD_SET);
+	spi_w((cmd >> 0) & 0xFFFF);
+	spi_w((cmd >> 16) & 0xFFFF);
+	spi_w(((cmd >> 32) & 0x00FF) | 0x00 << 8);
+	DisableIO();
 }
 
-void snes_msu_init(const char* name)
-{
-	fileTYPE f = {};
-//	static char msuDataFileName[1024] = { 0 };
-	// Clear our our rom file name
-	memset(snes_romFileName, 0, 1024);
-	strncpy(snes_romFileName, name, strlen(name) - 4);
-
-	printf("SNES MSU - Rom named '%s' initialised\n", name);
-	msu_currenttrack = 0x0000;
-
-// TODO msu1 data file
-//	sprintf(msuDataFileName, "%s.msu", snes_romFileName);
-//	printf("SNES MSU - Checking for MSU datafile: %s\n", msuDataFileName);
-//	if (!FileOpen(&f, msuDataFileName)) {
-//		printf("SNES MSU - MSU datafile not found");
-//		return;
-//	}
-	//else user_io_file_mount(msuDataFileName, 2);
-	msu_data_loaded = 0x01;
-	topup_buffer = 0;
-}
-
-static int need_reset=0;
-static uint8_t has_command = 0;
-
-int snes_msu_send_data(fileTYPE *f, uint8_t *buf)
+static int msu_send_data(fileTYPE *f, uint8_t *buf)
 {
 	int chunk = 1024;
-    FileReadAdv(f, buf, chunk);
-    // set index byte
+	FileReadAdv(f, buf, chunk);
+	// set index byte
 	user_io_set_index(2);
 	user_io_set_download(1);
 	user_io_file_tx_data(buf, chunk);
@@ -377,108 +364,141 @@ int snes_msu_send_data(fileTYPE *f, uint8_t *buf)
 	return 1;
 }
 
-int snes_msu_jump_sector(fileTYPE *f, uint32_t sector)
+static int msu_jump_sector(fileTYPE *f, uint32_t sector)
 {
 	__off64_t off64 = sector;
 	off64 = off64 * 1024;
 	printf("SNES MSU - jumping to sector: 0x%X\n", sector);
-
 	return FileSeek(f, off64, SEEK_SET);
+}
+
+void snes_msu_init(const char* name)
+{
+	memset(snes_romFileName, 0, 1024);
+	strncpy(snes_romFileName, name, strlen(name) - 4);
+	printf("SNES MSU - Rom named '%s' initialised\n", name);
+
+	glob64_t result;
+	snprintf(SelectedPath, sizeof(SelectedPath), "%s-*.pcm", getFullPath(snes_romFileName));
+	has_cd = !glob64(SelectedPath, 0, NULL, &result) && result.gl_pathc;
+	globfree64(&result);
+
+	msu_currenttrack = 0x0000;
+
+	// TODO msu1 data file
+	// sprintf(msuDataFileName, "%s.msu", snes_romFileName);
+	// printf("SNES MSU - Checking for MSU datafile: %s\n", msuDataFileName);
+	// if (!FileOpen(&f, msuDataFileName)) {
+	// 	printf("SNES MSU - MSU datafile not found");
+	// 	return;
+	// }
+	// else user_io_file_mount(msuDataFileName, 2);
+	//msu_data_loaded = 0x01;
+	topup_buffer = 0;
+
+	msu_send_command(has_cd ? MSU_CD_ENABLE : MSU_CD_DISABLE);
 }
 
 void snes_poll(void)
 {
 	static fileTYPE f = {};
-    static char SelectedPath[1024] = { 0 };
 	static char msuErrorMessage[256] = { 0 };
 	static uint8_t last_req = 255;
 	static uint16_t command = 0X0000;
 	static uint16_t command_payload_lower = 0X0000;
 	static uint16_t command_payload_middle = 0X0000;
-	static uint16_t command_payload_upper = 0X0000;
+	//static uint16_t command_payload_upper = 0X0000;
 	static uint8_t buf[1024];
 
-    static uint16_t msu_trackout = 0;
+	static uint16_t msu_trackout = 0;
 	static uint8_t msu_trackrequest = 0;
 	static uint8_t msu_trackmounted = 0;
-	static uint8_t msu_trackmissing = 0;
+	//static uint8_t msu_trackmissing = 0;
 	static uint8_t msu_sector_jumping = 0;
 	static uint8_t msu_sector_requested = 0;
 	static uint8_t send_sector = 0;
 	static uint8_t data_req = 0;
+	static uint8_t has_command = 0;
 
-	if (has_command) {
-        // What was the command?
+	if (!has_cd) return;
 
-        if (command == 0x0034) {
-            // Next sector requested
-            send_sector = 1;
-            msu_trackrequest = 0;
-        }
+	if (has_command)
+	{
+		// What was the command?
 
-        if (command == 0x0035) {
-            // Unmount any existing tracks
-            msu_trackmounted = 0;
-            // track requested is in next word
-            msu_trackrequest = 1;
-            send_sector = 0;
-            printf("\x1b[32mSNES MSU: Track requested\n\x1b[0m");
-        }
+		if (command == 0x0034)
+		{
+			// Next sector requested
+			send_sector = 1;
+			msu_trackrequest = 0;
+		}
 
-        if (command == 0x0036) {
-            // A particular sector was requested
-            printf("\x1b[32mSNES MSU: Sector requested\n\x1b[0m");
-            msu_sector_requested = 1;
-        }
+		if (command == 0x0035)
+		{
+			// Unmount any existing tracks
+			msu_trackmounted = 0;
+			// track requested is in next word
+			msu_trackrequest = 1;
+			send_sector = 0;
+			printf("\x1b[32mSNES MSU: Track requested\n\x1b[0m");
+		}
 
-        has_command = 0;
-    }
+		if (command == 0x0036)
+		{
+			// A particular sector was requested
+			printf("\x1b[32mSNES MSU: Sector requested\n\x1b[0m");
+			msu_sector_requested = 1;
+		}
 
-    // Detect incoming command via CD_GET (which we are repurposing for MSU1)
-    uint8_t req = spi_uio_cmd_cont(UIO_CD_GET);
-    if (req != last_req)
-    {
-        last_req = req;
+		has_command = 0;
+	}
 
-        // 49 bit messaging (48 usable)
-        uint16_t data_in[4];
-        data_in[0] = spi_w(0);
-        data_in[1] = spi_w(0);
-        data_in[2] = spi_w(0);
-        DisableIO();
+	// Detect incoming command via CD_GET (which we are repurposing for MSU1)
+	uint8_t req = spi_uio_cmd_cont(UIO_CD_GET);
+	if (req != last_req)
+	{
+		last_req = req;
 
-        if (need_reset || data_in[0] == 0xFF) {
-            printf("SNES: request to reset\n");
-            need_reset = 1;
-            // TODO need to reset everything at this point
-            need_reset = 0;
-            //cdd.Reset();
-        }
+		// 49 bit messaging (48 usable)
+		uint16_t data_in[4];
+		data_in[0] = spi_w(0);
+		data_in[1] = spi_w(0);
+		data_in[2] = spi_w(0);
+		DisableIO();
 
-        has_command = 1;
-        command = data_in[0];
-        command_payload_lower = data_in[1];
-        command_payload_middle = data_in[2];
-        command_payload_upper = data_in[3];
+		if (need_reset || data_in[0] == 0xFF)
+		{
+			printf("SNES: request to reset\n");
+			need_reset = 1;
+			// TODO need to reset everything at this point
+			need_reset = 0;
+			//cdd.Reset();
+		}
 
-        //printf("\x1b[32mSNES MSU: Get command, full command = %04X%04X%04X, has_command = %u\n\x1b[0m", data_in[2], data_in[1], data_in[0], has_command);
-    }
-    else
-    {
-        DisableIO();
-    }
+		has_command = 1;
+		command = data_in[0];
+		command_payload_lower = data_in[1];
+		command_payload_middle = data_in[2];
+		//command_payload_upper = data_in[3];
+
+		//printf("\x1b[32mSNES MSU: Get command, full command = %04X%04X%04X, has_command = %u\n\x1b[0m", data_in[2], data_in[1], data_in[0], has_command);
+	}
+	else
+	{
+		DisableIO();
+	}
 
 	// New MSU1 Track?
 	if (msu_trackrequest == 1 && msu_trackmounted == 0)
 	{
-	    send_sector = 0;
-	    // Track number is in the first word
-	    msu_trackout = command_payload_lower;
-        printf("SNES MSU - New track selected: 0x%X\n", msu_trackout);
-        msu_currenttrack = msu_trackout;
+		send_sector = 0;
+		// Track number is in the first word
+		msu_trackout = command_payload_lower;
+		printf("SNES MSU - New track selected: 0x%X\n", msu_trackout);
+		msu_currenttrack = msu_trackout;
 
-        sprintf(SelectedPath, "%s-%d.pcm", snes_romFileName, msu_trackout);
-        printf("SNES MSU - Full MSU track path is: %s\n", SelectedPath);
+		snprintf(SelectedPath, sizeof(SelectedPath), "%s-%d.pcm", snes_romFileName, msu_trackout);
+		printf("SNES MSU - Full MSU track path is: %s\n", SelectedPath);
 
 		if (strlen(snes_romFileName) == 0)
 		{
@@ -486,56 +506,57 @@ void snes_poll(void)
 		}
 		else
 		{
-            if (!FileOpen(&f, SelectedPath))
-            {
-                snes_msu_send_command(MSU_AUDIO_TRACKMISSING);
-                sprintf(msuErrorMessage, "SNES MSU - Track not found: %d\n", 1);
-                printf(msuErrorMessage, 3000);
-                msu_trackrequest = 0;
-                msu_trackmounted = 0;
-            }
-            else
-            {
-                // Track wasn't missing! Let's mount it and wait for sector requests
-                user_io_file_mount(SelectedPath, 2);
-                FileSeek(&f, 0, SEEK_SET);
-                msu_trackmounted = 1;
-                msu_trackrequest = 0;
-                // Note that track request will be set to 0 AFTER the track mounted message is sent to FPGA
-                printf("SNES MSU - Track mounted\n");
-                msu_trackmissing = 0;
-            }
-        }
-    }
+			if (!FileOpen(&f, SelectedPath))
+			{
+				msu_send_command(MSU_AUDIO_TRACKMISSING);
+				sprintf(msuErrorMessage, "SNES MSU - Track not found: %d\n", 1);
+				printf(msuErrorMessage, 3000);
+				msu_trackrequest = 0;
+				msu_trackmounted = 0;
+			}
+			else
+			{
+				// Track wasn't missing! Let's mount it and wait for sector requests
+				user_io_file_mount(SelectedPath, 2);
+				FileSeek(&f, 0, SEEK_SET);
+				msu_trackmounted = 1;
+				msu_trackrequest = 0;
+				// Note that track request will be set to 0 AFTER the track mounted message is sent to FPGA
+				printf("SNES MSU - Track mounted\n");
+				//msu_trackmissing = 0;
+			}
+		}
+	}
 
-    if (msu_trackmounted == 1 && msu_trackrequest == 0 && send_sector == 1)
-    {
-        if (msu_sector_jumping == 1) {
-            printf("SNES MSU - Sending a sector as part of a jump\n");
-            msu_sector_jumping = 0;
-        }
+	if (msu_trackmounted == 1 && msu_trackrequest == 0 && send_sector == 1)
+	{
+		if (msu_sector_jumping == 1)
+		{
+			printf("SNES MSU - Sending a sector as part of a jump\n");
+			msu_sector_jumping = 0;
+		}
 
-        snes_msu_send_data(&f, buf);
+		msu_send_data(&f, buf);
 
-        msu_sector_jumping = 0;
-        send_sector = 0;
-        data_req = !data_req;
-    }
-    else if (msu_trackmounted == 1 && msu_trackrequest == 1 && send_sector == 0)
-    {
-        // Tell the core that the track has been mounted
-        msu_trackrequest = 0;
-        printf("SNES MSU: sending track mounted - 201\n");
-        // @todo We may need to buffer on the linux side at this point
-        snes_msu_send_command(MSU_AUDIO_TRACKMOUNTED);
-        send_sector = 0;
-    }
-    else if (msu_trackmounted == 1 && msu_sector_requested == 1 && send_sector == 0)
-    {
-        // We received a jump sector message
-        msu_sector_requested = 0;
-        send_sector = 1;
-        msu_sector_jumping = 1;
-        snes_msu_jump_sector(&f, command_payload_middle << 8 | command_payload_lower);
-    }
+		msu_sector_jumping = 0;
+		send_sector = 0;
+		data_req = !data_req;
+	}
+	else if (msu_trackmounted == 1 && msu_trackrequest == 1 && send_sector == 0)
+	{
+		// Tell the core that the track has been mounted
+		msu_trackrequest = 0;
+		printf("SNES MSU: sending track mounted - 201\n");
+		// @todo We may need to buffer on the linux side at this point
+		msu_send_command(MSU_AUDIO_TRACKMOUNTED);
+		send_sector = 0;
+	}
+	else if (msu_trackmounted == 1 && msu_sector_requested == 1 && send_sector == 0)
+	{
+		// We received a jump sector message
+		msu_sector_requested = 0;
+		send_sector = 1;
+		msu_sector_jumping = 1;
+		msu_jump_sector(&f, command_payload_middle << 8 | command_payload_lower);
+	}
 }
