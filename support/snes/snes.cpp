@@ -396,6 +396,8 @@ void snes_msu_init(const char* name)
 	//msu_data_loaded = 0x01;
 	topup_buffer = 0;
 
+	printf("*** MSU: enable cd: %d\n", has_cd);
+
 	msu_send_command(has_cd ? MSU_CD_ENABLE : MSU_CD_DISABLE);
 }
 
@@ -404,7 +406,7 @@ void snes_poll(void)
 	static fileTYPE f = {};
 	static char msuErrorMessage[256] = { 0 };
 	static uint8_t last_req = 255;
-	static uint16_t command = 0X0000;
+	static uint16_t command = 0;
 	static uint16_t command_payload_lower = 0X0000;
 	static uint16_t command_payload_middle = 0X0000;
 	//static uint16_t command_payload_upper = 0X0000;
@@ -426,14 +428,14 @@ void snes_poll(void)
 	{
 		// What was the command?
 
-		if (command == 0x0034)
+		if (command == 0x34)
 		{
 			// Next sector requested
 			send_sector = 1;
 			msu_trackrequest = 0;
 		}
 
-		if (command == 0x0035)
+		if (command == 0x35)
 		{
 			// Unmount any existing tracks
 			msu_trackmounted = 0;
@@ -443,7 +445,7 @@ void snes_poll(void)
 			printf("\x1b[32mSNES MSU: Track requested\n\x1b[0m");
 		}
 
-		if (command == 0x0036)
+		if (command == 0x36)
 		{
 			// A particular sector was requested
 			printf("\x1b[32mSNES MSU: Sector requested\n\x1b[0m");
@@ -494,7 +496,7 @@ void snes_poll(void)
 		send_sector = 0;
 		// Track number is in the first word
 		msu_trackout = command_payload_lower;
-		printf("SNES MSU - New track selected: 0x%X\n", msu_trackout);
+		printf("SNES MSU - New track selected: %d\n", msu_trackout);
 		msu_currenttrack = msu_trackout;
 
 		snprintf(SelectedPath, sizeof(SelectedPath), "%s-%d.pcm", snes_romFileName, msu_trackout);
@@ -517,10 +519,9 @@ void snes_poll(void)
 			else
 			{
 				// Track wasn't missing! Let's mount it and wait for sector requests
-				user_io_file_mount(SelectedPath, 2);
+				//user_io_file_mount(SelectedPath, 2);
 				FileSeek(&f, 0, SEEK_SET);
 				msu_trackmounted = 1;
-				msu_trackrequest = 0;
 				// Note that track request will be set to 0 AFTER the track mounted message is sent to FPGA
 				printf("SNES MSU - Track mounted\n");
 				//msu_trackmissing = 0;
