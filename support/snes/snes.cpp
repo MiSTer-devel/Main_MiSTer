@@ -366,10 +366,8 @@ void snes_msu_init(const char* name)
 	strncpy(snes_romFileName, name, strlen(name) - 4);
 	printf("MSU: Rom named '%s' initialised\n", name);
 
-	glob64_t result;
-	snprintf(SelectedPath, sizeof(SelectedPath), "%s-*.pcm", getFullPath(snes_romFileName));
-	has_cd = !glob64(SelectedPath, 0, NULL, &result) && result.gl_pathc;
-	globfree64(&result);
+	snprintf(SelectedPath, sizeof(SelectedPath), "%s.msu", snes_romFileName);
+	has_cd = FileExists(SelectedPath);
 
 	// TODO msu1 data file
 	// sprintf(msuDataFileName, "%s.msu", snes_romFileName);
