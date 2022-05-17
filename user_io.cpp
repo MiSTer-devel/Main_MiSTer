@@ -2356,7 +2356,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	if (!FileOpen(&f, name, mute)) return 0;
 
-	unsigned long bytes2send = f.size;
+	uint32_t bytes2send = f.size;
 
 	if (composite)
 	{
@@ -2370,7 +2370,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	}
 
 	/* transmit the entire file using one transfer */
-	printf("Selected file %s with %lu bytes to send for index %d.%d\n", name, bytes2send, index & 0x3F, index >> 6);
+	printf("Selected file %s with %u bytes to send for index %d.%d\n", name, bytes2send, index & 0x3F, index >> 6);
 	if(load_addr) printf("Load to address 0x%X\n", load_addr);
 
 	// set index byte (0=bios rom, 1-n=OSD entry index)
@@ -2386,7 +2386,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int dosend = 1;
 
 	int is_snes_bs = 0;
-	if (is_snes() && bytes2send)
+	if (is_snes() && bytes2send && !load_addr)
 	{
 		const char *ext = strrchr(f.name, '.');
 		if (ext && !strcasecmp(ext, ".BS")) {
@@ -2506,22 +2506,25 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	if (dosend && load_addr >= 0x20000000 && (load_addr + bytes2send) <= 0x40000000)
 	{
-		uint8_t *mem = (uint8_t *)shmem_map(fpga_mem(load_addr), bytes2send);
+		uint32_t map_size = bytes2send + ((is_snes() && load_addr < 0x22000000) ? 0x800000 : 0);
+		uint8_t *mem = (uint8_t *)shmem_map(fpga_mem(load_addr), map_size);
 		if (mem)
 		{
 			while (bytes2send)
 			{
-				uint32_t chunk = (bytes2send > (256 * 1024)) ? (256 * 1024) : bytes2send;
-				FileReadAdv(&f, mem + size - bytes2send, chunk);
+				uint32_t gap = (is_snes() && (load_addr < 0x22000000) && (load_addr + size - bytes2send) >= 0x22000000) ? 0x800000 : 0;
 
-				file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
+				uint32_t chunk = (bytes2send > (256 * 1024)) ? (256 * 1024) : bytes2send;
+				FileReadAdv(&f, mem + size - bytes2send + gap, chunk);
+
+				if(!is_snes()) file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
 				skip = 0;
 
 				if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
 				bytes2send -= chunk;
 			}
 
-			shmem_unmap(mem, bytes2send);
+			shmem_unmap(mem, map_size);
 		}
 	}
 	else
@@ -2572,7 +2575,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	ProgressMessage(0, 0, 0, 0);
 
-	if (is_snes())
+	if (is_snes() && !load_addr)
 	{
 		// Setup MSU
 		snes_msu_init(name);

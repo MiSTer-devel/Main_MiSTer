@@ -323,18 +323,15 @@ void snes_patch_bs_header(fileTYPE *f, uint8_t *buf)
 
 ////////////// MSU /////////////
 
-#define MSU_CD_ENABLE            1
-#define MSU_CD_DISABLE           2
-#define MSU_AUDIO_TRACK_MOUNTED  3
-#define MSU_AUDIO_TRACK_MISSING  4
-#define MSU_DATA_TRACK_MOUNTED   5
-#define MSU_DATA_TRACK_MISSING   6
+#define MSU_CD_SET               1
+#define MSU_AUDIO_TRACK_MOUNTED  2
+#define MSU_DATA_BASE            3
 
 static char snes_romFileName[1024] = {};
 static char SelectedPath[1024] = {};
 static uint8_t buf[1024];
 static char has_cd = 0;
-static int msu_trackmounted = 0;
+static fileTYPE f_audio = {};
 
 static void msu_send_command(uint64_t cmd)
 {
@@ -345,14 +342,14 @@ static void msu_send_command(uint64_t cmd)
 	DisableIO();
 }
 
-static int msu_send_data(fileTYPE *f)
+static int msu_send_data(fileTYPE *f, int idx)
 {
 	int chunk = sizeof(buf);
 
 	memset(buf, 0, chunk);
-	FileReadAdv(f, buf, chunk);
+	if (f->size) FileReadAdv(f, buf, chunk);
 
-	user_io_set_index(2);
+	user_io_set_index(idx);
 	user_io_set_download(1);
 	user_io_file_tx_data(buf, chunk);
 	user_io_set_download(0);
@@ -362,33 +359,32 @@ static int msu_send_data(fileTYPE *f)
 
 void snes_msu_init(const char* name)
 {
+	static fileTYPE f = {};
+	FileClose(&f_audio);
+
 	memset(snes_romFileName, 0, 1024);
 	strncpy(snes_romFileName, name, strlen(name) - 4);
 	printf("MSU: Rom named '%s' initialised\n", name);
 
 	snprintf(SelectedPath, sizeof(SelectedPath), "%s.msu", snes_romFileName);
-	has_cd = FileExists(SelectedPath);
-
-	// TODO msu1 data file
-	// sprintf(msuDataFileName, "%s.msu", snes_romFileName);
-	// printf("SNES MSU - Checking for MSU datafile: %s\n", msuDataFileName);
-	// if (!FileOpen(&f, msuDataFileName)) {
-	// 	printf("SNES MSU - MSU datafile not found");
-	// 	return;
-	// }
-	// else user_io_file_mount(msuDataFileName, 2);
-	//msu_data_loaded = 0x01;
+	has_cd = FileOpen(&f, SelectedPath) ? 1 : 0;
+	uint32_t size = f.size;
+	FileClose(&f);
 
 	printf("MSU: enable cd: %d\n", has_cd);
 
-	msu_send_command(has_cd ? MSU_CD_ENABLE : MSU_CD_DISABLE);
+	if (size && size < 0x1F500000)
+	{
+		msu_send_command((0x20300000ULL << 16) | MSU_DATA_BASE);
+		user_io_file_tx(SelectedPath, 3, 0, 0, 0, 0x20300000);
+	}
+
+	msu_send_command((has_cd << 15) | MSU_CD_SET);
 }
 
 void snes_poll(void)
 {
-	static fileTYPE f = {};
 	static uint8_t last_req = 255;
-
 	if (!has_cd) return;
 
 	// Detect incoming command via CD_GET (which we are repurposing for MSU1)
@@ -409,36 +405,21 @@ void snes_poll(void)
 			break;
 
 		case 0x35:
-			msu_trackmounted = 0;
 			snprintf(SelectedPath, sizeof(SelectedPath), "%s-%d.pcm", snes_romFileName, data);
 			printf("MSU: New track selected: %s\n", SelectedPath);
-
-			if (!FileOpen(&f, SelectedPath))
-			{
-				msu_send_command(MSU_AUDIO_TRACK_MISSING);
-				printf("MSU: Track not found!\n");
-			}
-			else
-			{
-				FileSeek(&f, 0, SEEK_SET);
-				printf("MSU: sending track mounted - 201\n");
-				msu_send_command((f.size << 16) | MSU_AUDIO_TRACK_MOUNTED);
-				msu_trackmounted = 1;
-			}
+			FileOpen(&f_audio, SelectedPath);
+			printf(f_audio.size ? "MSU: Track mounted\n" : "MSU: Track not found!\n");
+			msu_send_command((f_audio.size << 16) | MSU_AUDIO_TRACK_MOUNTED);
 			break;
 
 		case 0x36:
-			if (msu_trackmounted)
-			{
-				// A particular sector was requested
-				printf("MSU: jumping to sector: 0x%X\n", data);
-				FileSeek(&f, data * 1024, SEEK_SET);
-			}
+			printf("MSU: Jump to offset: 0x%X\n", data * 1024);
+			FileSeek(&f_audio, data * 1024, SEEK_SET);
 			// fallthrough
 
 		case 0x34:
 			// Next sector requested
-			if (msu_trackmounted) msu_send_data(&f);
+			msu_send_data(&f_audio, 2);
 			break;
 		}
 	}
