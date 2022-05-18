@@ -954,7 +954,7 @@ static void hdmi_config()
 		0x2E, (uint8_t)(ypbpr ? 0x07 : 0x01),
 		0x2F, (uint8_t)(ypbpr ? 0xE7 : 0x00),
 
-		0x3B, 0b01000000,       // Pixel repetition [6:5] b00 AUTO. [4:3] b00 x1 mult of input clock. [2:1] b00 x1 pixel rep to send to HDMI Rx.
+		0x3B, (uint8_t)(cfg.direct_video ? 0 : 0b01000000), // Pixel repetition [6:5] b00 AUTO. [4:3] b00 x1 mult of input clock. [2:1] b00 x1 pixel rep to send to HDMI Rx.
 								// Pixel repetition set to manual to avoid VIC auto detection as defined in ADV7513 Programming Guide
 
 		0x40, 0x00,				// General Control Packet Enable
@@ -1212,7 +1212,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 static int store_custom_video_mode(char* vcfg, vmode_custom_t *v)
 {
 	memset(v, 0, sizeof(vmode_custom_t));
-	
+
 	int ret = parse_custom_video_mode(vcfg, v);
 	if (ret == -2) return 1;
 
