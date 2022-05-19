@@ -408,7 +408,12 @@ static void set_vfilter(int force)
 	if (valid)
 	{
 		//vertical/scanlines filter
-		int vert_flt = ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN].mode) ? VFILTER_SCAN : (scaler_flt[VFILTER_VERT].mode) ? VFILTER_VERT : VFILTER_HORZ;
+		int vert_flt;
+		if (current_video_info.interlaced) vert_flt = VFILTER_HORZ;
+		else if ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN].mode) vert_flt = VFILTER_SCAN;
+		else if (scaler_flt[VFILTER_VERT].mode) vert_flt = VFILTER_VERT;
+		else vert_flt = VFILTER_HORZ;
+		
 		if (!read_video_filter(vert_flt, &vert))
 		{
 			vert = horiz;
