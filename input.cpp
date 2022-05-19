@@ -4129,6 +4129,15 @@ static void setup_wheels()
 					set_wheel_range(i, cfg.wheel_range);
 				}
 			}
+			
+			//Namco NeGcon via RetroZord adapter
+			else if (input[i].vid == 0x2341 && input[i].pid == 0x8036 && strstr(input[i].name, "RZordPsWheel"))
+			{
+				input[i].wh_accel = 6;
+				input[i].wh_break = 10;
+				input[i].wh_clutch = 2;
+				input[i].quirk = QUIRK_WHEEL;
+			}
 		}
 	}
 }
