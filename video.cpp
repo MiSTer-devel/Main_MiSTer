@@ -117,7 +117,7 @@ struct vmode_custom_param_t
 	uint32_t vs;
 	uint32_t vbp;
 
-    // [9]
+	// [9]
 	uint32_t pll[12];
 
 	// [21]
@@ -137,7 +137,7 @@ struct vmode_custom_t
 		vmode_custom_param_t param;
 		uint32_t item[32];
 	};
-	
+
 	double Fpix;
 };
 
@@ -1303,9 +1303,9 @@ static void set_video(vmode_custom_t *v, double Fpix)
 		printf("%d(%d), ", v_cur.item[i], v_fix.item[i]);
 	}
 
-	printf("%chsync, %cvsync\n", !!v_cur.param.hpol?'+':'-', !!v_cur.param.vpol?'+':'-');
+	printf("%chsync, %cvsync\n", !!v_cur.param.hpol ? '+' : '-', !!v_cur.param.vpol ? '+' : '-');
 
-	if(Fpix) setPLL(Fpix, &v_cur);
+	if (Fpix) setPLL(Fpix, &v_cur);
 
 	printf("\nPLL: ");
 	for (int i = 9; i < 21; i++)
@@ -1369,7 +1369,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	for (int i = cnt; i < token_cnt; i++)
 	{
 		const char *flag = tokens[i];
-		if (!strcasecmp( flag, "+vsync")) v->param.vpol = 1;
+		if (!strcasecmp(flag, "+vsync")) v->param.vpol = 1;
 		else if (!strcasecmp(flag, "-vsync")) v->param.vpol = 0;
 		else if (!strcasecmp(flag, "+hsync")) v->param.hpol = 1;
 		else if (!strcasecmp(flag, "-hsync")) v->param.hpol = 0;
@@ -1401,10 +1401,10 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	{
 		v->item[0] = 1;
 		for (int i = 0; i < 8; i++)
-			v->item[i+1] = val[i];
+			v->item[i + 1] = val[i];
 
 		v->Fpix = val[8] / 1000.0;
-		
+
 		if (cnt == 11)
 		{
 			v->param.hpol = val[9];
@@ -1596,8 +1596,8 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 		video_core_description(vi, vm, res1, 64);
 		video_scaler_description(vi, vm, res2, 64);
 		snprintf(str, 128, "%s\n" \
-						"\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n" \
-						"%s", res1, res2);
+			"\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\n" \
+			"%s", res1, res2);
 		Info(str, cfg.video_info * 1000);
 	}
 }
@@ -1621,7 +1621,7 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 	int disp_h = core_height * scale;
 	int disp_w = cfg.vscale_mode == 4 ? (int)(disp_h * aspect) : w;
 
-	float refresh = 1000000.0 / ((vm->item[1]+vm->item[2]+vm->item[3]+vm->item[4])*(vm->item[5]+vm->item[6]+vm->item[7]+vm->item[8])/vm->Fpix);
+	float refresh = 1000000.0 / ((vm->item[1] + vm->item[2] + vm->item[3] + vm->item[4])*(vm->item[5] + vm->item[6] + vm->item[7] + vm->item[8]) / vm->Fpix);
 	video_calculate_cvt(disp_w, disp_h, refresh, vm->param.rb != 0, vm);
 	setPLL(vm->Fpix, vm);
 }
@@ -1648,7 +1648,7 @@ static void video_scaling_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 			printf("Set vertical scaling to : %d\n", scrh);
 			spi_uio_cmd16(UIO_SETHEIGHT, scrh);
 		}
-		else if(cfg.vscale_border)
+		else if (cfg.vscale_border)
 		{
 			uint32_t border = cfg.vscale_border * 2;
 			if ((border + 100) > scrh) border = scrh - 100;
@@ -1686,9 +1686,9 @@ bool video_mode_select(uint32_t vtime, vmode_custom_t* out_mode)
 {
 	vmode_custom_t *v = &v_def;
 	bool adjustable = true;
-	
+
 	printf("\033[1;33mvideo_mode_select(%u): ", vtime);
-	
+
 	if (vtime == 0 || !cfg.vsync_adjust)
 	{
 		printf(", using default mode");
@@ -2541,7 +2541,6 @@ bool video_is_rotated()
 	return current_video_info.rotated;
 }
 
-
 static constexpr int CELL_GRAN_RND = 8;
 
 static int determine_vsync(int w, int h)
@@ -2565,80 +2564,80 @@ static int determine_vsync(int w, int h)
 static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, bool reduced_blanking, vmode_custom_t *vmode)
 {
 	// Based on xfree86 cvt.c and https://tomverbeure.github.io/video_timings_calculator
-	
-    const float CLOCK_STEP = 0.25f;
-    const int MIN_V_BPORCH = 6;
-    const int V_FRONT_PORCH = 3;
- 
-    const int h_pixels_rnd = (h_pixels / CELL_GRAN_RND) * CELL_GRAN_RND;
-    const int v_sync = determine_vsync(h_pixels_rnd, v_lines);
 
-    int v_back_porch;
-    int h_blank, h_sync, h_back_porch, h_front_porch;
-    int total_pixels;
-    float pixel_freq;
+	const float CLOCK_STEP = 0.25f;
+	const int MIN_V_BPORCH = 6;
+	const int V_FRONT_PORCH = 3;
 
-    if (reduced_blanking)
-    {
-        const int RB_V_FPORCH = 3; 
-        const float RB_MIN_V_BLANK = 460.0f;
+	const int h_pixels_rnd = (h_pixels / CELL_GRAN_RND) * CELL_GRAN_RND;
+	const int v_sync = determine_vsync(h_pixels_rnd, v_lines);
 
-        float h_period_est = ((1000000.0f / refresh_rate) - RB_MIN_V_BLANK) / (float)v_lines;
-        h_blank = 160;
+	int v_back_porch;
+	int h_blank, h_sync, h_back_porch, h_front_porch;
+	int total_pixels;
+	float pixel_freq;
 
-        int vbi_lines = (int)(RB_MIN_V_BLANK / h_period_est) + 1;
+	if (reduced_blanking)
+	{
+		const int RB_V_FPORCH = 3;
+		const float RB_MIN_V_BLANK = 460.0f;
 
-        int rb_min_vbi = RB_V_FPORCH + v_sync + MIN_V_BPORCH;
-        int act_vbi_lines = (vbi_lines < rb_min_vbi) ? rb_min_vbi : vbi_lines;
+		float h_period_est = ((1000000.0f / refresh_rate) - RB_MIN_V_BLANK) / (float)v_lines;
+		h_blank = 160;
 
-        int total_v_lines = act_vbi_lines + v_lines;
+		int vbi_lines = (int)(RB_MIN_V_BLANK / h_period_est) + 1;
 
-        total_pixels = h_blank + h_pixels_rnd;
+		int rb_min_vbi = RB_V_FPORCH + v_sync + MIN_V_BPORCH;
+		int act_vbi_lines = (vbi_lines < rb_min_vbi) ? rb_min_vbi : vbi_lines;
 
-        pixel_freq = CLOCK_STEP * floorf((refresh_rate * (float)(total_v_lines * total_pixels) / 1000000.0f) / CLOCK_STEP);
+		int total_v_lines = act_vbi_lines + v_lines;
 
-		v_back_porch  = act_vbi_lines - V_FRONT_PORCH - v_sync;
+		total_pixels = h_blank + h_pixels_rnd;
+
+		pixel_freq = CLOCK_STEP * floorf((refresh_rate * (float)(total_v_lines * total_pixels) / 1000000.0f) / CLOCK_STEP);
+
+		v_back_porch = act_vbi_lines - V_FRONT_PORCH - v_sync;
 
 		h_sync = 32;
 		h_back_porch = 80;
 		h_front_porch = h_blank - h_sync - h_back_porch;
-    }
-    else
-    {
-        const float MIN_VSYNC_BP = 550.0f;
-        const float C_PRIME      = 30.0f;
-        const float M_PRIME      = 300.0f;
-        const float H_SYNC_PER   = 0.08f;
+	}
+	else
+	{
+		const float MIN_VSYNC_BP = 550.0f;
+		const float C_PRIME = 30.0f;
+		const float M_PRIME = 300.0f;
+		const float H_SYNC_PER = 0.08f;
 
-        const float h_period_est = ((1.0f / refresh_rate) - MIN_VSYNC_BP / 1000000.0f) / (float)(v_lines + V_FRONT_PORCH) * 1000000.0f;
+		const float h_period_est = ((1.0f / refresh_rate) - MIN_VSYNC_BP / 1000000.0f) / (float)(v_lines + V_FRONT_PORCH) * 1000000.0f;
 
-        int v_sync_bp = (int)(MIN_VSYNC_BP / h_period_est) + 1;
-        if (v_sync_bp < (v_sync + MIN_V_BPORCH))
-        {
-            v_sync_bp = v_sync + MIN_V_BPORCH;
-        }
+		int v_sync_bp = (int)(MIN_VSYNC_BP / h_period_est) + 1;
+		if (v_sync_bp < (v_sync + MIN_V_BPORCH))
+		{
+			v_sync_bp = v_sync + MIN_V_BPORCH;
+		}
 
-        v_back_porch = v_sync_bp - v_sync;
+		v_back_porch = v_sync_bp - v_sync;
 
-        float ideal_duty_cycle = C_PRIME - (M_PRIME * h_period_est / 1000.0f);
+		float ideal_duty_cycle = C_PRIME - (M_PRIME * h_period_est / 1000.0f);
 
-        if (ideal_duty_cycle < 20)
-        {
-            h_blank = (h_pixels_rnd / 4 / (2 * CELL_GRAN_RND)) * (2 * CELL_GRAN_RND);
-        }
-        else
-        {
-            h_blank = (int)((float)h_pixels_rnd * ideal_duty_cycle / (100.0f - ideal_duty_cycle) / (2 * CELL_GRAN_RND)) * (2 * CELL_GRAN_RND);
-        }
+		if (ideal_duty_cycle < 20)
+		{
+			h_blank = (h_pixels_rnd / 4 / (2 * CELL_GRAN_RND)) * (2 * CELL_GRAN_RND);
+		}
+		else
+		{
+			h_blank = (int)((float)h_pixels_rnd * ideal_duty_cycle / (100.0f - ideal_duty_cycle) / (2 * CELL_GRAN_RND)) * (2 * CELL_GRAN_RND);
+		}
 
-        total_pixels = h_pixels_rnd + h_blank;
+		total_pixels = h_pixels_rnd + h_blank;
 
-        h_sync = (int)(H_SYNC_PER * (float)total_pixels / CELL_GRAN_RND) * CELL_GRAN_RND;
-        h_back_porch = h_blank / 2;
-        h_front_porch = h_blank - h_sync - h_back_porch;
+		h_sync = (int)(H_SYNC_PER * (float)total_pixels / CELL_GRAN_RND) * CELL_GRAN_RND;
+		h_back_porch = h_blank / 2;
+		h_front_porch = h_blank - h_sync - h_back_porch;
 
-        pixel_freq = CLOCK_STEP * floorf((float)total_pixels / h_period_est / CLOCK_STEP);
-    }
+		pixel_freq = CLOCK_STEP * floorf((float)total_pixels / h_period_est / CLOCK_STEP);
+	}
 
 	vmode->item[0] = 1;
 	vmode->item[1] = h_pixels_rnd;
@@ -2660,5 +2659,5 @@ static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, b
 		vmode->item[5], vmode->item[6], vmode->item[7], vmode->item[8],
 		(int)(pixel_freq * 1000.0f),
 		reduced_blanking ? "cvtrb" : "cvt",
-		vmode->param.vpol ? '+' : '-', vmode->param.hpol ? '+' : '-' );
+		vmode->param.vpol ? '+' : '-', vmode->param.hpol ? '+' : '-');
 }
