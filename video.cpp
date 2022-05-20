@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "hardware.h"
 #include "user_io.h"
@@ -21,6 +22,7 @@
 #include "input.h"
 #include "shmem.h"
 #include "smbus.h"
+#include "str_util.h"
 
 #include "support.h"
 #include "lib/imlib2/Imlib2.h"
@@ -98,14 +100,53 @@ vmode_t tvmodes[] =
 	{{ 640, 16, 96, 48, 576,  2, 4, 42 }, 25.175, 0 }, //PAL 31K
 };
 
+// named aliases for vmode_custom_t items
+struct vmode_custom_param_t
+{
+	uint32_t mode;
+
+	// [1]
+	uint32_t hact;
+	uint32_t hfp;
+	uint32_t hs;
+	uint32_t hbp;
+
+	// [5]
+	uint32_t vact;
+	uint32_t vfp;
+	uint32_t vs;
+	uint32_t vbp;
+
+    // [9]
+	uint32_t pll[12];
+
+	// [21]
+	uint32_t hpol;
+	uint32_t vpol;
+	uint32_t vic;
+	uint32_t rb;
+
+	// [25]
+	uint32_t unused[7];
+};
+
 struct vmode_custom_t
 {
-	uint32_t item[32];
+	union // anonymous
+	{
+		vmode_custom_param_t param;
+		uint32_t item[32];
+	};
+	
 	double Fpix;
 };
 
+static_assert(sizeof(vmode_custom_param_t) == sizeof(vmode_custom_t::item));
+
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
+
+static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, bool reduced_blanking, vmode_custom_t *vmode);
 
 static uint32_t getPLLdiv(uint32_t div)
 {
@@ -895,7 +936,12 @@ void video_loadPreset(char *name)
 static void hdmi_config()
 {
 	int ypbpr = cfg.ypbpr && cfg.direct_video;
-	const uint8_t vic_mode = (uint8_t)v_cur.item[23];
+	const uint8_t vic_mode = (uint8_t)v_cur.param.vic;
+
+	uint8_t sync_invert = 0;
+	if (v_cur.param.hpol == 0) sync_invert |= 1 << 5;
+	if (v_cur.param.vpol == 0) sync_invert |= 1 << 6;
+
 
 	// address, value
 	uint8_t init_data[] = {
@@ -932,7 +978,7 @@ static void hdmi_config()
 								// DDR Input Edge falling [1]=0 (not using DDR atm).
 								// Output Colour Space RGB [0]=0.
 
-		0x17, 0b01100010,		// Aspect ratio 16:9 [1]=1, 4:3 [1]=0
+		0x17, (uint8_t)(0b00000010 | sync_invert),		// Aspect ratio 16:9 [1]=1, 4:3 [1]=0
 
 		0x18, (uint8_t)(ypbpr ? 0x86 : (cfg.hdmi_limited & 1) ? 0x8D : (cfg.hdmi_limited & 2) ? 0x8E : 0x00),  // CSC Scaling Factors and Coefficients for RGB Full->Limited.
 		0x19, (uint8_t)(ypbpr ? 0xDF : (cfg.hdmi_limited & 1) ? 0xBC : 0xFE),                       // Taken from table in ADV7513 Programming Guide.
@@ -1250,14 +1296,14 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	for (int i = 1; i <= 8; i++)
 	{
 		//hsync polarity
-		if (i == 3) spi_w((!!v_cur.item[21] << 15) | v_fix.item[i]);
+		if (i == 3) spi_w((!!v_cur.param.hpol << 15) | v_fix.item[i]);
 		//vsync polarity
-		else if (i == 7) spi_w((!!v_cur.item[22] << 15) | v_fix.item[i]);
+		else if (i == 7) spi_w((!!v_cur.param.vpol << 15) | v_fix.item[i]);
 		else spi_w(v_fix.item[i]);
 		printf("%d(%d), ", v_cur.item[i], v_fix.item[i]);
 	}
 
-	printf("%chsync, %cvsync", !!v_cur.item[21]?'+':'-', !!v_cur.item[22]?'+':'-');
+	printf("%chsync, %cvsync\n", !!v_cur.param.hpol?'+':'-', !!v_cur.param.vpol?'+':'-');
 
 	if(Fpix) setPLL(Fpix, &v_cur);
 
@@ -1299,80 +1345,92 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 {
-	int khz = 0;
-	int cnt = 0;
-	char *orig = vcfg;
-	while (*vcfg)
+	char *tokens[32];
+	uint32_t val[32];
+
+	char work[1024];
+	char *next;
+
+	memset(v, 0, sizeof(vmode_custom_t));
+	v->param.rb = 1; // default reduced blanking to true
+
+	int token_cnt = str_tokenize(strcpyz(work, vcfg), ",", tokens, 32);
+
+	int cnt;
+	for (cnt = 0; cnt < token_cnt; cnt++)
 	{
-		char *next;
-		if (cnt == 9 && v->item[0] == 1)
+		val[cnt] = strtoul(tokens[cnt], &next, 0);
+		if (*next)
 		{
-			double Fpix = khz ? strtoul(vcfg, &next, 0)/1000.f : strtod(vcfg, &next);
-			if (vcfg == next || (Fpix < 2.f || Fpix > 300.f))
-			{
-				printf("Error parsing video_mode parameter: ""%s""\n", orig);
-				return -1;
-			}
-
-			setPLL(Fpix, v);
-			//read sync polarities if present
-			if (*next == ',') next++;
-			vcfg = next;
-			cnt = 21;
-			continue;
+			break;
 		}
+	}
 
-		uint32_t val = strtoul(vcfg, &next, 0);
-		if (vcfg == next || (*next != ',' && *next))
+	for (int i = cnt; i < token_cnt; i++)
+	{
+		const char *flag = tokens[i];
+		if (!strcasecmp( flag, "+vsync")) v->param.vpol = 1;
+		else if (!strcasecmp(flag, "-vsync")) v->param.vpol = 0;
+		else if (!strcasecmp(flag, "+hsync")) v->param.hpol = 1;
+		else if (!strcasecmp(flag, "-hsync")) v->param.hpol = 0;
+		else if (!strcasecmp(flag, "cvt")) v->param.rb = 0;
+		else if (!strcasecmp(flag, "cvtrb")) v->param.rb = 1;
+		else
 		{
-			printf("Error parsing video_mode parameter: ""%s""\n", orig);
+			printf("Error parsing video_mode parameter %d \"%s\": \"%s\"\n", i, flag, vcfg);
 			return -1;
 		}
-
-		if (!cnt && val >= 100)
-		{
-			v->item[cnt++] = 1;
-			khz = 1;
-		}
-		if (cnt < 32) v->item[cnt] = val;
-		if (*next == ',') next++;
-		vcfg = next;
-		cnt++;
 	}
 
 	if (cnt == 1)
 	{
+		v->item[0] = val[0];
 		printf("Set predefined video_mode to %d\n", v->item[0]);
 		return v->item[0];
 	}
-
-	if ((v->item[0] == 0 && cnt < 21) || (v->item[0] == 1 && cnt < 9))
+	else if (cnt == 3)
 	{
-		printf("Incorrect amount of items in video_mode parameter: %d\n", cnt);
+		video_calculate_cvt(val[0], val[1], val[2], v->param.rb != 0, v);
+	}
+	else if (cnt >= 21)
+	{
+		for (int i = 0; i < cnt; i++)
+			v->item[i] = val[i];
+	}
+	else if (cnt == 9 || cnt == 11)
+	{
+		v->item[0] = 1;
+		for (int i = 0; i < 8; i++)
+			v->item[i+1] = val[i];
+
+		v->Fpix = val[8] / 1000.0;
+		
+		if (cnt == 11)
+		{
+			v->param.hpol = val[9];
+			v->param.vpol = val[10];
+		}
+	}
+	else
+	{
+		printf("Error parsing video_mode parameter: ""%s""\n", vcfg);
 		return -1;
 	}
 
-	if (v->item[0] > 1)
-	{
-		printf("Incorrect video_mode parameter\n");
-		return -1;
-	}
-
+	setPLL(v->Fpix, v);
 	return -2;
 }
 
 static int store_custom_video_mode(char* vcfg, vmode_custom_t *v)
 {
-	memset(v, 0, sizeof(vmode_custom_t));
-
 	int ret = parse_custom_video_mode(vcfg, v);
 	if (ret == -2) return 1;
 
 	uint mode = (ret >= 0) ? ret : (support_FHD) ? 8 : 0;
 	if (mode >= VMODES_NUM) mode = 0;
 	for (int i = 0; i < 8; i++) v->item[i + 1] = vmodes[mode].vpar[i];
-	v->item[23] = vmodes[mode].vic_mode;
-
+	v->param.vic = vmodes[mode].vic_mode;
+	v->param.rb = 1;
 	setPLL(vmodes[mode].Fpix, v);
 
 	return ret >= 0;
@@ -1404,6 +1462,8 @@ void video_mode_load()
 	{
 		int mode = cfg.menu_pal ? 2 : 0;
 		if (cfg.forced_scandoubler) mode++;
+
+		memset(&v_def, 0, sizeof(v_def));
 
 		v_def.item[0] = mode;
 		for (int i = 0; i < 8; i++) v_def.item[i + 1] = tvmodes[mode].vpar[i];
@@ -1542,11 +1602,42 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 	}
 }
 
-static void video_scaling_adjust(const VideoInfo *vi)
+static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 {
+	if (cfg.vscale_mode < 4) return;
+
+	int w = vm->item[1];
+	int h = vm->item[5];
+	const uint32_t core_height = vi->rotated ? vi->width : vi->height;
+
+	if (w == 0 || h == 0 || core_height == 0) return;
+
+	float aspect = w / (float)h;
+
+	int scale = h / core_height;
+
+	if (scale == 0) return;
+
+	int disp_h = core_height * scale;
+	int disp_w = cfg.vscale_mode == 4 ? (int)(disp_h * aspect) : w;
+
+	float refresh = 1000000.0 / ((vm->item[1]+vm->item[2]+vm->item[3]+vm->item[4])*(vm->item[5]+vm->item[6]+vm->item[7]+vm->item[8])/vm->Fpix);
+	video_calculate_cvt(disp_w, disp_h, refresh, vm->param.rb != 0, vm);
+	setPLL(vm->Fpix, vm);
+}
+
+static void video_scaling_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
+{
+	if (cfg.vscale_mode >= 4)
+	{
+		spi_uio_cmd16(UIO_SETHEIGHT, 0);
+		spi_uio_cmd16(UIO_SETWIDTH, 0);
+		return;
+	}
+
 	const uint32_t height = vi->rotated ? vi->width : vi->height;
 
-	uint32_t scrh = v_cur.item[5];
+	uint32_t scrh = vm->item[5];
 	if (scrh)
 	{
 		if (cfg.vscale_mode && height)
@@ -1571,7 +1662,7 @@ static void video_scaling_adjust(const VideoInfo *vi)
 		}
 	}
 
-	uint32_t scrw = v_cur.item[1];
+	uint32_t scrw = vm->item[1];
 	if (scrw)
 	{
 		if (cfg.vscale_border && !(cfg.vscale_mode && height))
@@ -1589,6 +1680,58 @@ static void video_scaling_adjust(const VideoInfo *vi)
 	}
 
 	minimig_set_adjust(2);
+}
+
+bool video_mode_select(uint32_t vtime, vmode_custom_t* out_mode)
+{
+	vmode_custom_t *v = &v_def;
+	bool adjustable = true;
+	
+	printf("\033[1;33mvideo_mode_select(%u): ", vtime);
+	
+	if (vtime == 0 || !cfg.vsync_adjust)
+	{
+		printf(", using default mode");
+		adjustable = false;
+	}
+	else if (vmode_pal || vmode_ntsc)
+	{
+		if (vtime > 1800000)
+		{
+			if (vmode_pal)
+			{
+				printf(", using PAL mode");
+				v = &v_pal;
+			}
+			else
+			{
+				printf(", PAL mode cannot be used. Using predefined NTSC mode");
+				v = &v_ntsc;
+				adjustable = false;
+			}
+		}
+		else
+		{
+			if (vmode_ntsc)
+			{
+				printf(", using NTSC mode");
+				v = &v_ntsc;
+			}
+			else
+			{
+				printf(", NTSC mode cannot be used. Using predefined PAL mode");
+				v = &v_pal;
+				adjustable = false;
+			}
+		}
+	}
+	else
+	{
+		printf(", using default mode");
+	}
+	printf(".\033[0m\n");
+	memcpy(out_mode, v, sizeof(vmode_custom_t));
+	return adjustable;
 }
 
 void video_mode_adjust()
@@ -1611,51 +1754,22 @@ void video_mode_adjust()
 		}
 
 		show_video_info(&video_info, &v_cur);
-		video_scaling_adjust(&video_info);
+		video_scaling_adjust(&video_info, &v_cur);
 	}
 	force = false;
 
-	const uint32_t vtime = video_info.vtime;
-	if (vid_changed && vtime && cfg.vsync_adjust && !is_menu())
+	if (vid_changed && !is_menu() && (cfg.vsync_adjust || cfg.vscale_mode >= 4))
 	{
-		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
+		const uint32_t vtime = video_info.vtime;
 
-		int adjust = 1;
-		vmode_custom_t *v = &v_def;
-		if (vmode_pal || vmode_ntsc)
-		{
-			if (vtime > 1800000)
-			{
-				if (vmode_pal)
-				{
-					printf(", using PAL mode");
-					v = &v_pal;
-				}
-				else
-				{
-					printf(", PAL mode cannot be used. Using predefined NTSC mode");
-					v = &v_ntsc;
-					adjust = 0;
-				}
-			}
-			else
-			{
-				if (vmode_ntsc)
-				{
-					printf(", using NTSC mode");
-					v = &v_ntsc;
-				}
-				else
-				{
-					printf(", NTSC mode cannot be used. Using predefined PAL mode");
-					v = &v_pal;
-					adjust = 0;
-				}
-			}
-		}
+		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d vscale_mode=%d.\033[0m\n", vtime, cfg.vsync_adjust, cfg.vscale_mode);
 
-		printf(".\033[0m\n");
+		vmode_custom_t new_mode;
+		bool adjust = video_mode_select(vtime, &new_mode);
 
+		video_resolution_adjust(&video_info, &new_mode);
+
+		vmode_custom_t *v = &new_mode;
 		double Fpix = 0;
 		if (adjust)
 		{
@@ -2425,4 +2539,126 @@ void video_cmd(char *cmd)
 bool video_is_rotated()
 {
 	return current_video_info.rotated;
+}
+
+
+static constexpr int CELL_GRAN_RND = 8;
+
+static int determine_vsync(int w, int h)
+{
+    const int arx[] =   {4, 16, 16, 5, 15};
+    const int ary[] =   {3,  9, 10, 4, 9 };
+	const int vsync[] = {4,  5,  6, 7, 7 };
+
+    for (int ar = 0; ar < 5; ar++)
+    {
+        int w_calc = ((h * arx[ar]) / (ary[ar] * CELL_GRAN_RND)) * CELL_GRAN_RND;
+        if (w_calc == w)
+        {
+            return vsync[ar];
+        }
+    }
+
+    return 10;
+}
+
+static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, bool reduced_blanking, vmode_custom_t *vmode)
+{
+	// Based on xfree86 cvt.c and https://tomverbeure.github.io/video_timings_calculator
+	
+    const float CLOCK_STEP = 0.25f;
+    const int MIN_V_BPORCH = 6;
+    const int V_FRONT_PORCH = 3;
+ 
+    const int h_pixels_rnd = (h_pixels / CELL_GRAN_RND) * CELL_GRAN_RND;
+    const int v_sync = determine_vsync(h_pixels_rnd, v_lines);
+
+    int v_back_porch;
+    int h_blank, h_sync, h_back_porch, h_front_porch;
+    int total_pixels;
+    float pixel_freq;
+
+    if (reduced_blanking)
+    {
+        const int RB_V_FPORCH = 3; 
+        const float RB_MIN_V_BLANK = 460.0f;
+
+        float h_period_est = ((1000000.0f / refresh_rate) - RB_MIN_V_BLANK) / (float)v_lines;
+        h_blank = 160;
+
+        int vbi_lines = (int)(RB_MIN_V_BLANK / h_period_est) + 1;
+
+        int rb_min_vbi = RB_V_FPORCH + v_sync + MIN_V_BPORCH;
+        int act_vbi_lines = (vbi_lines < rb_min_vbi) ? rb_min_vbi : vbi_lines;
+
+        int total_v_lines = act_vbi_lines + v_lines;
+
+        total_pixels = h_blank + h_pixels_rnd;
+
+        pixel_freq = CLOCK_STEP * floorf((refresh_rate * (float)(total_v_lines * total_pixels) / 1000000.0f) / CLOCK_STEP);
+
+		v_back_porch  = act_vbi_lines - V_FRONT_PORCH - v_sync;
+
+		h_sync = 32;
+		h_back_porch = 80;
+		h_front_porch = h_blank - h_sync - h_back_porch;
+    }
+    else
+    {
+        const float MIN_VSYNC_BP = 550.0f;
+        const float C_PRIME      = 30.0f;
+        const float M_PRIME      = 300.0f;
+        const float H_SYNC_PER   = 0.08f;
+
+        const float h_period_est = ((1.0f / refresh_rate) - MIN_VSYNC_BP / 1000000.0f) / (float)(v_lines + V_FRONT_PORCH) * 1000000.0f;
+
+        int v_sync_bp = (int)(MIN_VSYNC_BP / h_period_est) + 1;
+        if (v_sync_bp < (v_sync + MIN_V_BPORCH))
+        {
+            v_sync_bp = v_sync + MIN_V_BPORCH;
+        }
+
+        v_back_porch = v_sync_bp - v_sync;
+
+        float ideal_duty_cycle = C_PRIME - (M_PRIME * h_period_est / 1000.0f);
+
+        if (ideal_duty_cycle < 20)
+        {
+            h_blank = (h_pixels_rnd / 4 / (2 * CELL_GRAN_RND)) * (2 * CELL_GRAN_RND);
+        }
+        else
+        {
+            h_blank = (int)((float)h_pixels_rnd * ideal_duty_cycle / (100.0f - ideal_duty_cycle) / (2 * CELL_GRAN_RND)) * (2 * CELL_GRAN_RND);
+        }
+
+        total_pixels = h_pixels_rnd + h_blank;
+
+        h_sync = (int)(H_SYNC_PER * (float)total_pixels / CELL_GRAN_RND) * CELL_GRAN_RND;
+        h_back_porch = h_blank / 2;
+        h_front_porch = h_blank - h_sync - h_back_porch;
+
+        pixel_freq = CLOCK_STEP * floorf((float)total_pixels / h_period_est / CLOCK_STEP);
+    }
+
+	vmode->item[0] = 1;
+	vmode->item[1] = h_pixels_rnd;
+	vmode->item[2] = h_front_porch;
+	vmode->item[3] = h_sync;
+	vmode->item[4] = h_back_porch;
+	vmode->item[5] = v_lines;
+	vmode->item[6] = V_FRONT_PORCH;
+	vmode->item[7] = v_sync;
+	vmode->item[8] = v_back_porch;
+	vmode->param.rb = reduced_blanking ? 1 : 0;
+	vmode->param.hpol = reduced_blanking ? 1 : 0;
+	vmode->param.vpol = reduced_blanking ? 0 : 1;
+	vmode->Fpix = pixel_freq;
+
+	printf("Calculated %dx%d@%0.1fhz %s timings: %d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%cvsync,%chsync\n",
+		h_pixels, v_lines, refresh_rate, reduced_blanking ? "CVT-RB" : "CVT",
+		vmode->item[1], vmode->item[2], vmode->item[3], vmode->item[4],
+		vmode->item[5], vmode->item[6], vmode->item[7], vmode->item[8],
+		(int)(pixel_freq * 1000.0f),
+		reduced_blanking ? "cvtrb" : "cvt",
+		vmode->param.vpol ? '+' : '-', vmode->param.hpol ? '+' : '-' );
 }
