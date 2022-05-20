@@ -2668,7 +2668,7 @@ void user_io_send_buttons(char force)
 	if (cfg.ypbpr) map |= CONF_YPBPR;
 	if (cfg.forced_scandoubler) map |= CONF_FORCED_SCANDOUBLER;
 	if (cfg.hdmi_audio_96k) map |= CONF_AUDIO_96K;
-	if (cfg.dvi) map |= CONF_DVI;
+	if (cfg.dvi_mode == 1) map |= CONF_DVI;
 	if (cfg.hdmi_limited & 1) map |= CONF_HDMI_LIMITED1;
 	if (cfg.hdmi_limited & 2) map |= CONF_HDMI_LIMITED2;
 	if (cfg.direct_video) map |= CONF_DIRECT_VIDEO;

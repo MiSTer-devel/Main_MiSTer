@@ -18,7 +18,7 @@ typedef struct {
 	uint8_t vga_scaler;
 	uint8_t vga_sog;
 	uint8_t hdmi_audio_96k;
-	uint8_t dvi;
+	uint8_t dvi_mode;
 	uint8_t hdmi_limited;
 	uint8_t direct_video;
 	uint8_t video_info;

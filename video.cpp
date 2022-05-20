@@ -62,6 +62,8 @@ static int menu_bgn = 0;
 
 static VideoInfo current_video_info;
 
+static int support_FHD = 0;
+
 struct vmode_t
 {
 	uint32_t vpar[8];
@@ -413,7 +415,7 @@ static void set_vfilter(int force)
 		else if ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN].mode) vert_flt = VFILTER_SCAN;
 		else if (scaler_flt[VFILTER_VERT].mode) vert_flt = VFILTER_VERT;
 		else vert_flt = VFILTER_HORZ;
-		
+
 		if (!read_video_filter(vert_flt, &vert))
 		{
 			vert = horiz;
@@ -1014,7 +1016,7 @@ static void hdmi_config()
 								// [6:5] must be b00!
 								// [4]=0 Current frame is unencrypted
 								// [3:2] must be b01!
-			| (cfg.dvi ? 0b00 : 0b10)),	 //	[1]=1 HDMI Mode.
+			| ((cfg.dvi_mode == 1) ? 0b00 : 0b10)),	 //	[1]=1 HDMI Mode.
 								// [0] must be b0!
 
 		0xB9, 0x00,				// ADI required Write.
@@ -1071,6 +1073,150 @@ static void hdmi_config()
 		}
 		i2c_close(fd);
 	}
+}
+
+static int get_edid_vmode(vmode_custom_t *v)
+{
+	static uint8_t edid[256];
+	int hact, vact, pixclk_khz, hfp, hsync, hbp, vfp, vsync, vbp, hbl, vbl;
+	uint8_t *x = edid + 0x36;
+	static const uint8_t magic[] = { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00 };
+
+	hdmi_config(); // required to get EDID
+
+	int fd = i2c_open(0x3f, 0);
+	if (fd < 0)
+	{
+		printf("EDID: cannot find i2c device.\n");
+		return 0;
+	}
+
+	// waiting for valid EDID
+	for (int k = 0; k < 20; k++)
+	{
+		for (uint i = 0; i < sizeof(edid); i++) edid[i] = (uint8_t)i2c_smbus_read_byte_data(fd, i);
+		if (!memcmp(edid, magic, sizeof(magic))) break;
+		usleep(100000);
+	}
+
+	i2c_close(fd);
+	printf("EDID:\n"); hexdump(edid, 256, 0);
+
+	if (memcmp(edid, magic, sizeof(magic)))
+	{
+		printf("Invalid EDID: incorrect header.\n");
+		return 0;
+	}
+
+	pixclk_khz = (x[0] + (x[1] << 8)) * 10;
+	if (pixclk_khz < 10000)
+	{
+		if (!pixclk_khz) printf("Invalid EDID: First two bytes are 0, invalid data.\n");
+		else printf("Invalid EDID: Pixelclock < 10 MHz, assuming invalid data 0x%02x 0x%02x.\n", x[0], x[1]);
+		return 0;
+	}
+
+	if (cfg.dvi_mode == 2)
+	{
+		cfg.dvi_mode = (edid[0x80] == 2 && edid[0x81] == 3 && (edid[0x83] & 0x40)) ? 0 : 1;
+		if (cfg.dvi_mode == 1) printf("EDID: using DVI mode.\n");
+	}
+
+	unsigned char flags = x[17];
+	if (flags & 0x80)
+	{
+		printf("EDID: preferred mode is interlaced. Fall back to default video mode.\n");
+		return 0;
+	}
+
+	hact = (x[2] + ((x[4] & 0xf0) << 4));
+	hbl = (x[3] + ((x[4] & 0x0f) << 8));
+	hfp = (x[8] + ((x[11] & 0xc0) << 2));
+	hsync = (x[9] + ((x[11] & 0x30) << 4));
+	hbp = hbl - hsync - hfp;
+	vact = (x[5] + ((x[7] & 0xf0) << 4));
+	vbl = (x[6] + ((x[7] & 0x0f) << 8));
+	vfp = ((x[10] >> 4) + ((x[11] & 0x0c) << 2));
+	vsync = ((x[10] & 0x0f) + ((x[11] & 0x03) << 4));
+	vbp = vbl - vsync - vfp;
+
+	/*
+	int pos_pol_hsync = 0;
+	int pos_pol_vsync = 0;
+	int no_pol_vsync = 0; // digital composite signals have no vsync polarity
+
+	switch ((flags & 0x18) >> 3)
+	{
+	case 0x02:
+		if (flags & (1 << 1)) pos_pol_hsync = 1;
+		no_pol_vsync = 1;
+		break;
+	case 0x03:
+		if (flags & (1 << 1)) pos_pol_hsync = 1;
+		if (flags & (1 << 2)) pos_pol_vsync = 1;
+		break;
+	}
+	*/
+
+	double Fpix = pixclk_khz / 1000.f;
+	double frame_rate = Fpix * 1000000.f / ((hact + hfp + hbp + hsync)*(vact + vfp + vbp + vsync));
+	printf("EDID: preferred mode: %dx%d@%.1f, pixel clock: %.3fMHz\n", hact, vact, frame_rate, Fpix);
+
+	if (hact >= 1920) support_FHD = 1;
+
+	if (hact > 2048)
+	{
+		printf("EDID: Preferred resolution is too high (%dx%d).\n", hact, vact);
+		printf("EDID: Falling back to default video mode.\n");
+		return 0;
+	}
+
+	memset(v, 0, sizeof(vmode_custom_t));
+	v->item[1] = hact;
+	v->item[2] = hfp;
+	v->item[3] = hsync;
+	v->item[4] = hbp;
+	v->item[5] = vact;
+	v->item[6] = vfp;
+	v->item[7] = vsync;
+	v->item[8] = vbp;
+	v->Fpix = Fpix;
+
+	if (Fpix > 210.f)
+	{
+		printf("EDID: Preferred mode has too high pixel clock (%.3fMHz).\n", Fpix);
+		if (hact == 2048 && vact == 1536)
+		{
+			int n = 13;
+			printf("EDID: Using safe vmode %d.\n", n);
+			for (int i = 0; i < 8; i++) v->item[i + 1] = vmodes[n].vpar[i];
+			v->item[23] = vmodes[n].vic_mode;
+			v->Fpix = vmodes[n].Fpix;
+		}
+		else
+		{
+			int fail = 1;
+			if (frame_rate > 60.f)
+			{
+				Fpix = 60.f * (hact + hfp + hbp + hsync)*(vact + vfp + vbp + vsync) / 1000000.f;
+				if (Fpix <= 210.f)
+				{
+					printf("EDID: Reducing frame rate to 60Hz with new pixel clock %.3fMHz.\n", Fpix);
+					v->Fpix = Fpix;
+					fail = 0;
+				}
+			}
+
+			if (fail)
+			{
+				printf("EDID: Falling back to default video mode.\n");
+				return 0;
+			}
+		}
+	}
+
+	setPLL(v->Fpix, v);
+	return 1;
 }
 
 static char fb_reset_cmd[128] = {};
@@ -1221,7 +1367,7 @@ static int store_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	int ret = parse_custom_video_mode(vcfg, v);
 	if (ret == -2) return 1;
 
-	uint mode = (ret < 0) ? 0 : ret;
+	uint mode = (ret >= 0) ? ret : (support_FHD) ? 8 : 0;
 	if (mode >= VMODES_NUM) mode = 0;
 	for (int i = 0; i < 8; i++) v->item[i + 1] = vmodes[mode].vpar[i];
 	v->item[23] = vmodes[mode].vic_mode;
@@ -1268,9 +1414,18 @@ void video_mode_load()
 	}
 	else
 	{
-		vmode_def = store_custom_video_mode(cfg.video_conf, &v_def);
-		vmode_pal = store_custom_video_mode(cfg.video_conf_pal, &v_pal);
-		vmode_ntsc = store_custom_video_mode(cfg.video_conf_ntsc, &v_ntsc);
+		vmode_def = 0;
+		if (!strlen(cfg.video_conf) && !strlen(cfg.video_conf_pal) && !strlen(cfg.video_conf_ntsc))
+		{
+			vmode_def = get_edid_vmode(&v_def);
+		}
+
+		if (!vmode_def)
+		{
+			vmode_def = store_custom_video_mode(cfg.video_conf, &v_def);
+			vmode_pal = store_custom_video_mode(cfg.video_conf_pal, &v_pal);
+			vmode_ntsc = store_custom_video_mode(cfg.video_conf_ntsc, &v_ntsc);
+		}
 	}
 	set_video(&v_def, 0);
 }
