@@ -973,7 +973,8 @@ static void hdmi_config()
 		0x49, 0xA8,				// ADI required Write.
 		0x4C, 0x00,				// ADI required Write.
 
-		0x55, 0b00010010,       // [7] must be 0!. Set RGB444 in AVinfo Frame [6:5], Set active format [4].
+		0x55, (uint8_t)(cfg.hdmi_game_mode ? 0b00010010 : 0b00010000),
+								// [7] must be 0!. Set RGB444 in AVinfo Frame [6:5], Set active format [4].
 								// AVI InfoFrame Valid [4].
 								// Bar Info [3:2] b00 Bars invalid. b01 Bars vertical. b10 Bars horizontal. b11 Bars both.
 								// Scan Info [1:0] b00 (No data). b01 TV. b10 PC. b11 None.
