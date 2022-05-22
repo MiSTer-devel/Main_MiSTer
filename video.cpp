@@ -1614,15 +1614,26 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 
 	if (w == 0 || h == 0 || core_height == 0) return;
 
-	int scale = h / core_height;
-	if (scale == 0) return;
+	int scale_h = h / core_height;
+	int scale_w = w / core_width;
+	if (!scale_h) return;
 
-	int disp_h = core_height * scale;
-	int disp_w = w;
+	int disp_h, disp_w;
 	if (cfg.vscale_mode == 4)
 	{
-		scale = w / core_width;
-		if (scale == 0) return;
+		disp_h = core_height * scale_h;
+		disp_w = (disp_h * w) / h;
+	}
+	else if(cfg.vscale_mode == 5)
+	{
+		disp_h = core_height * scale_h;
+		disp_w = w;
+	}
+	else
+	{
+		if (!scale_w) return;
+		int scale = (scale_h < scale_w) ? scale_h : scale_w;
+		disp_h = core_height * scale;
 		disp_w = core_width * scale;
 	}
 
