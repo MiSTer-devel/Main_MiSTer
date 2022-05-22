@@ -39,7 +39,15 @@ typedef struct
 	uint8_t f;
 } msf_t;
 
+#define BCD(v)				 ((uint8_t)((((v)/10) << 4) | ((v)%10)))
 
 typedef int (*SendDataFunc) (uint8_t* buf, int len, uint8_t index);
+
+inline int FindIndexInTOC(toc_t* toc, int lba)
+{
+	int index = 0;
+	while ((toc->tracks[index].end <= lba) && (index < toc->last)) index++;
+	return index;
+}
 
 #endif

@@ -3,8 +3,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <limits.h>
+#include <glob.h>
 
 #include "../../file_io.h"
+#include "../../user_io.h"
+#include "../../spi.h"
 
 static uint8_t hdr[512];
 
@@ -167,16 +171,16 @@ uint8_t* snes_get_header(fileTYPE *f)
 				}
 
 				bool has_bsx_slot = false;
-				if (buf[addr - 14] == 'Z' && buf[addr - 11] == 'J' && 
+				if (buf[addr - 14] == 'Z' && buf[addr - 11] == 'J' &&
 					((buf[addr - 13] >= 'A' && buf[addr - 13] <= 'Z') || (buf[addr - 13] >= '0' && buf[addr - 13] <= '9')) &&
 					(buf[addr + Company] == 0x33 || (buf[addr - 10] == 0x00 && buf[addr - 4] == 0x00)) ) {
 					has_bsx_slot = true;
 				}
 
 				//Rom type: 0-Low, 1-High, 2-ExHigh, 3-SpecialLoRom
-				hdr[1] = (addr == 0x00ffc0) ? 1 : 
-						 (addr == 0x40ffc0) ? 2 : 
-						 has_bsx_slot ? 3 : 
+				hdr[1] = (addr == 0x00ffc0) ? 1 :
+						 (addr == 0x40ffc0) ? 2 :
+						 has_bsx_slot ? 3 :
 						 0;
 
 				//BSX 3
@@ -289,8 +293,10 @@ uint8_t* snes_get_header(fileTYPE *f)
 void snes_patch_bs_header(fileTYPE *f, uint8_t *buf)
 {
 	if ((f->offset == 0x008000 && (buf[0xFD8] == 0x20 || buf[0xFD8] == 0x30)) ||
-		(f->offset == 0x010000 && (buf[0xFD8] == 0x21 || buf[0xFD8] == 0x31))) {
-		if (buf[0xFD0] == 0xF0 || (buf[0xFD1] == 0xFF && buf[0xFD2] == 0xFF && buf[0xFD3] == 0xFF)) {
+		(f->offset == 0x010000 && (buf[0xFD8] == 0x21 || buf[0xFD8] == 0x31)))
+	{
+		if (buf[0xFD0] == 0xF0 || (buf[0xFD1] == 0xFF && buf[0xFD2] == 0xFF && buf[0xFD3] == 0xFF))
+		{
 			printf("SNES: Patch bad BS header: offset %04X, bad value %02X %02X %02X %02X\n", 0x7FD0 | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFD0], buf[0xFD1], buf[0xFD2], buf[0xFD3]);
 			buf[0xFD3] = 0x00;
 			buf[0xFD2] = 0x00;
@@ -299,14 +305,126 @@ void snes_patch_bs_header(fileTYPE *f, uint8_t *buf)
 						 f->size <= 512 * 1024 ? 0x0F :
 						 0xFF;
 		}
-		if (buf[0xFD5] >= 0x80) {
+
+		if (buf[0xFD5] >= 0x80)
+		{
 			printf("SNES: Patch bad BS header: offset %04X, bad value %02X %02X\n", 0x7FD4 | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFD4], buf[0xFD5]);
 			buf[0xFD5] = 0xFF;
 			buf[0xFD4] = 0xFF;
 		}
-		if (buf[0xFDA] != 0x33) {
+
+		if (buf[0xFDA] != 0x33)
+		{
 			printf("SNES: Patch bad BS header: offset %04X, bad value %02X\n", 0x7FDA | (f->offset == 0x008000 ? 0x0000 : 0x8000), buf[0xFDA]);
 			buf[0xFDA] = 0x33;
 		}
+	}
+}
+
+////////////// MSU /////////////
+
+#define MSU_CD_SET               1
+#define MSU_AUDIO_TRACK_MOUNTED  2
+#define MSU_DATA_BASE            3
+
+static char snes_romFileName[1024] = {};
+static char SelectedPath[1024] = {};
+static uint8_t buf[1024];
+static char has_cd = 0;
+static fileTYPE f_audio = {};
+
+static void msu_send_command(uint64_t cmd)
+{
+	spi_uio_cmd_cont(UIO_CD_SET);
+	spi_w((cmd >> 00) & 0xFFFF);
+	spi_w((cmd >> 16) & 0xFFFF);
+	spi_w((cmd >> 32) & 0xFFFF);
+	DisableIO();
+}
+
+static int msu_send_data(fileTYPE *f, int idx)
+{
+	int chunk = sizeof(buf);
+
+	memset(buf, 0, chunk);
+	if (f->size) FileReadAdv(f, buf, chunk);
+
+	user_io_set_index(idx);
+	user_io_set_download(1);
+	user_io_file_tx_data(buf, chunk);
+	user_io_set_download(0);
+
+	return 1;
+}
+
+void snes_msu_init(const char* name)
+{
+	static fileTYPE f = {};
+	FileClose(&f_audio);
+
+	memset(snes_romFileName, 0, 1024);
+	strncpy(snes_romFileName, name, strlen(name) - 4);
+	printf("MSU: Rom named '%s' initialised\n", name);
+
+	snprintf(SelectedPath, sizeof(SelectedPath), "%s.msu", snes_romFileName);
+	has_cd = FileOpen(&f, SelectedPath) ? 1 : 0;
+	uint32_t size = f.size;
+	FileClose(&f);
+
+	printf("MSU: enable cd: %d\n", has_cd);
+
+	if (size && size < 0x1F500000)
+	{
+		msu_send_command((0x20300000ULL << 16) | MSU_DATA_BASE);
+		user_io_file_tx(SelectedPath, 3, 0, 0, 0, 0x20300000);
+	}
+
+	msu_send_command((has_cd << 15) | MSU_CD_SET);
+}
+
+void snes_poll(void)
+{
+	static uint8_t last_req = 255;
+	if (!has_cd) return;
+
+	// Detect incoming command via CD_GET (which we are repurposing for MSU1)
+	uint8_t req = spi_uio_cmd_cont(UIO_CD_GET);
+	if (req != last_req)
+	{
+		last_req = req;
+
+		uint16_t command = spi_w(0);
+		uint32_t data = spi_w(0);
+		data = (spi_w(0) << 16) | data;
+		DisableIO();
+
+		switch(command)
+		{
+		case 0xFF:
+			printf("MSU: request to reset\n");
+			break;
+
+		case 0x35:
+			snprintf(SelectedPath, sizeof(SelectedPath), "%s-%d.pcm", snes_romFileName, data);
+			printf("MSU: New track selected: %s\n", SelectedPath);
+			FileOpen(&f_audio, SelectedPath);
+			printf(f_audio.size ? "MSU: Track mounted\n" : "MSU: Track not found!\n");
+			msu_send_command((f_audio.size << 16) | MSU_AUDIO_TRACK_MOUNTED);
+			break;
+
+		case 0x36:
+			printf("MSU: Jump to offset: 0x%X\n", data * 1024);
+			FileSeek(&f_audio, data * 1024, SEEK_SET);
+			// fallthrough
+
+		case 0x34:
+			// Next sector requested
+			msu_send_data(&f_audio, 2);
+			break;
+		}
+	}
+	else
+	{
+		DisableIO();
 	}
 }

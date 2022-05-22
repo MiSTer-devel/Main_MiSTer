@@ -36,7 +36,7 @@ static void setFilter()
 	snprintf(filter_cfg_path, sizeof(filter_cfg_path), AFILTER_DIR"/%s", filter_cfg + 1);
 	if(filter_cfg[0]) printf("\nLoading audio filter: %s\n", filter_cfg_path);
 
-	if (filter_cfg[0] && FileOpen(&f, filter_cfg_path))
+	if (filter_cfg[0] && FileExists(filter_cfg_path) && FileOpen(&f, filter_cfg_path))
 	{
 		char *buf = (char*)malloc(f.size + 1);
 		if (buf)
