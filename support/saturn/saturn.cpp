@@ -50,7 +50,7 @@ void saturn_poll()
 		if (req != last_req)
 		{
 			last_req = req;
-			
+
 			for (int i = 0; i < 6; i++) data_in[i] = spi_w(0);
 			DisableIO();
 
@@ -77,9 +77,10 @@ void saturn_poll()
 }
 
 static char buf[1024];
+/*
 static void saturn_mount_save(const char *filename)
 {
-	/*user_io_set_index(SAVE_IO_INDEX);
+	user_io_set_index(SAVE_IO_INDEX);
 	user_io_set_download(1);
 	if (strlen(filename))
 	{
@@ -90,8 +91,9 @@ static void saturn_mount_save(const char *filename)
 	{
 		user_io_file_mount("");
 	}
-	user_io_set_download(0);*/
+	user_io_set_download(0);
 }
+*/
 
 static int saturn_load_rom(const char *basename, const char *name, int sub_index)
 {
@@ -108,8 +110,8 @@ static int saturn_load_rom(const char *basename, const char *name, int sub_index
 }
 void saturn_set_image(int num, const char *filename)
 {
-	static char last_dir[1024] = {}; 
-	
+	static char last_dir[1024] = {};
+
 	(void)num;
 
 	satcdd.Unload();
@@ -123,7 +125,7 @@ void saturn_set_image(int num, const char *filename)
 	int loaded = 1;
 	if (!same_game)
 	{
-		saturn_mount_save("");
+		//saturn_mount_save("");
 
 		user_io_status_set("[0]", 1);
 		user_io_status_set("[0]", 0);
@@ -158,7 +160,7 @@ void saturn_set_image(int num, const char *filename)
 			{
 				saturn_load_rom(filename, "cd_bios.rom", 0);
 				//saturn_load_rom(filename, "cart.rom", 1);
-				saturn_mount_save(filename);
+				//saturn_mount_save(filename);
 				//cheats_init(filename, 0);
 			}
 		}
