@@ -4500,7 +4500,7 @@ int input_test(int getchar)
 						memset(&ev, 0, sizeof(ev));
 						if (read(pool[i].fd, &ev, sizeof(ev)) == sizeof(ev))
 						{
-							input_socket_send(pos, &ev, &input[pos]);
+							input_socket_send(i, &ev, &input[i]);
 							if (getchar)
 							{
 								if (ev.type == EV_KEY && ev.value >= 1)

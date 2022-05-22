@@ -13,6 +13,15 @@
 #include "input.h"
 #include "cfg.h"
 
+struct __attribute__((__packed__)) input_socket_packet {
+	uint8_t index;
+	uint16_t vendor_id;
+	uint16_t product_id;
+	uint16_t type;
+	uint16_t code;
+	int32_t value;
+};
+
 bool initialized = false;
 
 struct pollfd sockets[MAX_CONNECTIONS + 1];
@@ -55,6 +64,7 @@ void input_socket_init(void) {
 			printf("Listening on port %d\n", port);
 			printf("  sizeof struct timeval: %d\n", sizeof(struct timeval));
 			printf("  sizeof struct input_event: %d\n", sizeof(struct input_event));
+			printf("  sizeof struct input_socket_packet: %d\n", sizeof(struct input_socket_packet));
 		} else {
 			printf("sockets already initialized, reinit unneccesary\n");
 		}
@@ -65,17 +75,17 @@ void input_socket_init(void) {
 
 void input_socket_send(uint8_t inputno, struct input_event *ev, devInput *input) {
 	if (cfg.input_socket_enabled) {
-		int packet_size = sizeof(struct input_event) + 1 + 2 + 2;
-		char packet[packet_size];
-		packet[0] = inputno;
-		memcpy(packet + 1, &input[inputno].vid, sizeof(input[inputno].vid));
-		memcpy(packet + 3, &input[inputno].pid, sizeof(input[inputno].pid));
-		memcpy(packet + 5, ev, sizeof(struct input_event));
-		//memcpy(&(packet.inputno), ev, sizeof(struct input_event));
+		struct input_socket_packet packet;
+		packet.index      = inputno;
+		packet.vendor_id  = input[inputno].vid;
+		packet.product_id = input[inputno].pid;
+		packet.type       = ev->type;
+		packet.code       = ev->code;
+		packet.value      = ev->value;
 
 		for (int i = 1; i < MAX_CONNECTIONS + 1; i++) {
 			if (sockets[i].fd >= 0) {
-				write(sockets[i].fd, (char *) &packet, packet_size);
+				write(sockets[i].fd, (char *) &packet, sizeof(packet));
 			}
 		}
 	}
