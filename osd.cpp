@@ -671,6 +671,7 @@ void OsdUpdate()
 			DisableOsd();
 			if (is_megacd()) mcd_poll();
 			if (is_pce()) pcecd_poll();
+			if (is_saturn()) saturn_poll();
 		}
 	}
 
