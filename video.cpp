@@ -2649,15 +2649,12 @@ static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, b
 	vmode->item[7] = v_sync;
 	vmode->item[8] = v_back_porch;
 	vmode->param.rb = reduced_blanking ? 1 : 0;
-	vmode->param.hpol = reduced_blanking ? 1 : 0;
-	vmode->param.vpol = reduced_blanking ? 0 : 1;
 	vmode->Fpix = pixel_freq;
 
-	printf("Calculated %dx%d@%0.1fhz %s timings: %d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%cvsync,%chsync\n",
+	printf("Calculated %dx%d@%0.1fhz %s timings: %d,%d,%d,%d,%d,%d,%d,%d,%d,%s\n",
 		h_pixels, v_lines, refresh_rate, reduced_blanking ? "CVT-RB" : "CVT",
 		vmode->item[1], vmode->item[2], vmode->item[3], vmode->item[4],
 		vmode->item[5], vmode->item[6], vmode->item[7], vmode->item[8],
 		(int)(pixel_freq * 1000.0f),
-		reduced_blanking ? "cvtrb" : "cvt",
-		vmode->param.vpol ? '+' : '-', vmode->param.hpol ? '+' : '-');
+		reduced_blanking ? "cvtrb" : "cvt");
 }
