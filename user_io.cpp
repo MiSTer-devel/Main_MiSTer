@@ -287,6 +287,14 @@ char is_electron()
 	return (is_electron_type == 1);
 }
 
+static int is_saturn_type = 0;
+char is_saturn()
+{
+	if (!is_saturn_type) is_saturn_type = strcasecmp(core_name, "Saturn") ? 2 : 1;
+	return (is_saturn_type == 1);
+}
+
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -2691,7 +2699,8 @@ void user_io_send_buttons(char force)
 		{
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
-			if (is_pce()) pcecd_reset();
+			if (is_pce()) pcecd_reset(); 
+			if (is_saturn()) saturn_reset();
 			if (is_x86()) x86_init();
 			ResetUART();
 		}
@@ -3012,6 +3021,10 @@ void user_io_poll()
 							else if (is_psx())
 							{
 								psx_fill_blanksave(buffer[disk], lba, blks);
+							}
+							else if (is_saturn())
+							{
+								saturn_fill_blanksave(buffer[disk], lba);
 							}
 							else
 							{
@@ -3349,6 +3362,7 @@ void user_io_poll()
 
 	if (is_megacd()) mcd_poll();
 	if (is_pce()) pcecd_poll();
+	if (is_saturn()) saturn_poll();
 	process_ss(0);
 }
 
