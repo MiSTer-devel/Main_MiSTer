@@ -146,7 +146,7 @@ static_assert(sizeof(vmode_custom_param_t) == sizeof(vmode_custom_t::item));
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
 
-static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, bool reduced_blanking, vmode_custom_t *vmode);
+static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode);
 
 static uint32_t getPLLdiv(uint32_t div)
 {
@@ -1237,7 +1237,7 @@ static int get_edid_vmode(vmode_custom_t *v)
 			int n = 13;
 			printf("EDID: Using safe vmode %d.\n", n);
 			for (int i = 0; i < 8; i++) v->item[i + 1] = vmodes[n].vpar[i];
-			v->item[23] = vmodes[n].vic_mode;
+			v->param.vic = vmodes[n].vic_mode;
 			v->Fpix = vmodes[n].Fpix;
 		}
 		else
@@ -1262,6 +1262,7 @@ static int get_edid_vmode(vmode_custom_t *v)
 		}
 	}
 
+	v->param.rb = 2;
 	setPLL(v->Fpix, v);
 	return 1;
 }
@@ -1390,7 +1391,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	}
 	else if (cnt == 3)
 	{
-		video_calculate_cvt(val[0], val[1], val[2], v->param.rb != 0, v);
+		video_calculate_cvt(val[0], val[1], val[2], v->param.rb, v);
 	}
 	else if (cnt >= 21)
 	{
@@ -1609,20 +1610,25 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 	int w = vm->item[1];
 	int h = vm->item[5];
 	const uint32_t core_height = vi->rotated ? vi->width : vi->height;
+	const uint32_t core_width = vi->rotated ? vi->height : vi->width;
 
 	if (w == 0 || h == 0 || core_height == 0) return;
 
-	float aspect = w / (float)h;
-
 	int scale = h / core_height;
-
 	if (scale == 0) return;
 
 	int disp_h = core_height * scale;
-	int disp_w = cfg.vscale_mode == 4 ? (int)(disp_h * aspect) : w;
+	int disp_w = w;
+	if (cfg.vscale_mode == 4)
+	{
+		scale = w / core_width;
+		if (scale == 0) return;
+		disp_w = core_width * scale;
+	}
 
 	float refresh = 1000000.0 / ((vm->item[1] + vm->item[2] + vm->item[3] + vm->item[4])*(vm->item[5] + vm->item[6] + vm->item[7] + vm->item[8]) / vm->Fpix);
-	video_calculate_cvt(disp_w, disp_h, refresh, vm->param.rb != 0, vm);
+	video_calculate_cvt(disp_w, disp_h, refresh, vm->param.rb, vm);
+
 	setPLL(vm->Fpix, vm);
 }
 
@@ -2561,7 +2567,7 @@ static int determine_vsync(int w, int h)
     return 10;
 }
 
-static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, bool reduced_blanking, vmode_custom_t *vmode)
+static void video_calculate_cvt_int(int h_pixels, int v_lines, float refresh_rate, bool reduced_blanking, vmode_custom_t *vmode)
 {
 	// Based on xfree86 cvt.c and https://tomverbeure.github.io/video_timings_calculator
 
@@ -2657,4 +2663,14 @@ static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, b
 		vmode->item[5], vmode->item[6], vmode->item[7], vmode->item[8],
 		(int)(pixel_freq * 1000.0f),
 		reduced_blanking ? "cvtrb" : "cvt");
+}
+
+static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode)
+{
+	video_calculate_cvt_int(h_pixels, v_lines, refresh_rate, reduced_blanking == 1, vmode);
+	if (vmode->Fpix > 210.f && reduced_blanking == 2)
+	{
+		printf("Calculated pixel clock is too high. Trying CVT-RB timings.\n");
+		video_calculate_cvt_int(h_pixels, v_lines, refresh_rate, 1, vmode);
+	}
 }
