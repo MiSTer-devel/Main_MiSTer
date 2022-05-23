@@ -13,6 +13,13 @@ struct VideoInfo
 	uint32_t vtime;
 	uint32_t ptime;
 	uint32_t vtimeh;
+	uint32_t arx;
+	uint32_t ary;
+	uint32_t arxy;
+	uint32_t fb_en;
+	uint32_t fb_fmt;
+	uint32_t fb_width;
+	uint32_t fb_height;
 
     bool interlaced;
     bool rotated;
