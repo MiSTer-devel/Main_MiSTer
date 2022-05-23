@@ -1522,13 +1522,29 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
+	DisableIO();
 
+	static uint8_t fb_crc = 0;
+	uint8_t crc = spi_uio_cmd_cont(UIO_GET_FB_PAR);
+	if (fb_crc != crc || force || changed)
+	{
+		changed |= (fb_crc != crc);
+		fb_crc = crc;
+		video_info->arx = spi_w(0);
+		video_info->arxy = !!(video_info->arx & 0x1000);
+		video_info->arx &= 0xFFF;
+		video_info->ary = spi_w(0) & 0xFFF;
+		video_info->fb_fmt = spi_w(0);
+		video_info->fb_width = spi_w(0);
+		video_info->fb_height = spi_w(0);
+		video_info->fb_en = !!(video_info->fb_fmt & 0x40);
+	}
 	DisableIO();
 
 	return changed;
 }
 
-static void video_core_description(const VideoInfo *vi, const vmode_custom_t * /*vm*/, char *str, size_t len)
+static void video_core_description(const VideoInfo *vi, const vmode_custom_t */*vm*/, char *str, size_t len)
 {
 	float vrate = 100000000;
 	if (vi->vtime) vrate /= vi->vtime; else vrate = 0;
@@ -1539,7 +1555,7 @@ static void video_core_description(const VideoInfo *vi, const vmode_custom_t * /
 	prate /= vi->ptime;
 
 	char res[16];
-	snprintf(res, 16, "%dx%d%s", vi->width, vi->height, vi->interlaced ? "i" : "");
+	snprintf(res, 16, "%dx%d%s", vi->fb_en ? vi->fb_width : vi->width, vi->fb_en ? vi->fb_height : vi->height, vi->interlaced ? "i" : "");
 	snprintf(str, len, "%9s %6.2fKHz %5.1fHz", res, hrate, vrate);
 }
 
@@ -1594,6 +1610,7 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n",
 		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate);
 	printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vi->vtime, vi->vtimeh);
+	printf("\033[1;33mINFO: AR = %d:%d, fb_en = %d, fb_width = %d, fb_height = %d\033[0m\n", vi->arx, vi->ary, vi->fb_en, vi->fb_width, vi->fb_height);
 	if (vi->vtimeh) api1_5 = 1;
 	if (hasAPI1_5() && cfg.video_info)
 	{
@@ -1613,8 +1630,8 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 
 	int w = vm->item[1];
 	int h = vm->item[5];
-	const uint32_t core_height = vi->rotated ? vi->width : vi->height;
-	const uint32_t core_width = vi->rotated ? vi->height : vi->width;
+	const uint32_t core_height = vi->fb_en ? vi->fb_height : vi->rotated ? vi->width : vi->height;
+	const uint32_t core_width = vi->fb_en ? vi->fb_width : vi->rotated ? vi->height : vi->width;
 
 	if (w == 0 || h == 0 || core_height == 0) return;
 
@@ -1625,8 +1642,17 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 	int disp_h, disp_w;
 	if (cfg.vscale_mode == 4)
 	{
+		int ary = vi->ary;
+		int arx = vi->arx;
+		if (!ary || !arx)
+		{
+			// full screen
+			ary = h;
+			arx = w;
+		}
+
 		disp_h = core_height * scale_h;
-		disp_w = (disp_h * w) / h;
+		disp_w = (disp_h * arx) / ary;
 	}
 	else if(cfg.vscale_mode == 5)
 	{
