@@ -28,6 +28,7 @@ BBCMicro: BBC Micro B
 BK0011M: Electronika BK-0011M
 C16: Commodore Plus/4
 C64: Commodore 64
+ColecoAdam: Coleco Adam
 Electron: Acorn Electron
 Galaksija: Galaksija
 ht1080z: TRS-80 Model I
