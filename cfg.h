@@ -22,8 +22,8 @@ typedef struct {
 	uint8_t hdmi_limited;
 	uint8_t direct_video;
 	uint8_t video_info;
-	uint8_t refresh_min;
-	uint8_t refresh_max;
+	float refresh_min;
+	float refresh_max;
 	uint8_t controller_info;
 	uint8_t vsync_adjust;
 	uint8_t kbd_nomouse;
