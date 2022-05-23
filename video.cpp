@@ -1120,6 +1120,10 @@ static void hdmi_config()
 		}
 		i2c_close(fd);
 	}
+	else
+	{
+		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
+	}
 }
 
 static int get_edid_vmode(vmode_custom_t *v)
