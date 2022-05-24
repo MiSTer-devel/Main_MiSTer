@@ -1505,13 +1505,14 @@ int hasAPI1_5()
 static bool get_video_info(bool force, VideoInfo *video_info)
 {
 	static uint16_t nres = 0;
-	bool changed = false;
+	bool res_changed = false;
+	bool fb_changed = false;
 
 	spi_uio_cmd_cont(UIO_GET_VRES);
 	uint16_t res = spi_w(0);
 	if ((nres != res) || force)
 	{
-		changed = (nres != res);
+		res_changed = (nres != res);
 		nres = res;
 		video_info->width = spi_w(0) | (spi_w(0) << 16);
 		video_info->height = spi_w(0) | (spi_w(0) << 16);
@@ -1526,9 +1527,11 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 
 	static uint8_t fb_crc = 0;
 	uint8_t crc = spi_uio_cmd_cont(UIO_GET_FB_PAR);
-	if (fb_crc != crc || force || changed)
+	if (fb_crc != crc || force || res_changed)
 	{
-		changed |= (fb_crc != crc);
+		if (!res_changed) *video_info = current_video_info;
+
+		fb_changed |= (fb_crc != crc);
 		fb_crc = crc;
 		video_info->arx = spi_w(0);
 		video_info->arxy = !!(video_info->arx & 0x1000);
@@ -1541,7 +1544,7 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 	}
 	DisableIO();
 
-	return changed;
+	return res_changed || fb_changed;
 }
 
 static void video_core_description(const VideoInfo *vi, const vmode_custom_t */*vm*/, char *str, size_t len)
@@ -1639,25 +1642,28 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 	int scale_w = w / core_width;
 	if (!scale_h) return;
 
-	int disp_h, disp_w;
-	if (cfg.vscale_mode == 4)
+	int disp_h = h;
+	int disp_w = w;
+	int ary = vi->ary;
+	int arx = vi->arx;
+	if (!ary || !arx)
 	{
-		int ary = vi->ary;
-		int arx = vi->arx;
-		if (!ary || !arx)
-		{
-			// full screen
-			ary = h;
-			arx = w;
-		}
-
-		disp_h = core_height * scale_h;
-		disp_w = (disp_h * arx) / ary;
+		ary = h;
+		arx = w;
 	}
-	else if(cfg.vscale_mode == 5)
+
+	if (cfg.vscale_mode == 4 || cfg.vscale_mode == 5)
 	{
-		disp_h = core_height * scale_h;
-		disp_w = w;
+		int scale;
+		for (scale = scale_h; scale > 0; scale--)
+		{
+			disp_h = core_height * scale;
+			disp_w = (disp_h * arx) / ary;
+			if (disp_w <= w) break;
+		}
+		if (scale == 0) return; // could not find a scale
+
+		if (cfg.vscale_mode == 5) disp_w = w;
 	}
 	else
 	{
