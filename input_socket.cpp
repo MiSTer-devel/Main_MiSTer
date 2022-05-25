@@ -77,8 +77,8 @@ void input_socket_send(uint8_t inputno, struct input_event *ev, devInput *input)
 	if (cfg.input_socket_enabled) {
 		struct input_socket_packet packet;
 		packet.index      = inputno;
-		packet.vendor_id  = input[inputno].vid;
-		packet.product_id = input[inputno].pid;
+		packet.vendor_id  = input->vid;
+		packet.product_id = input->pid;
 		packet.type       = ev->type;
 		packet.code       = ev->code;
 		packet.value      = ev->value;
