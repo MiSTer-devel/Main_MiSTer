@@ -1723,7 +1723,7 @@ int process_ss(const char *rom_name, int enable)
 			}
 			else
 			{
-				ss_cnt[i] = 0;
+				ss_cnt[i] = 0xFFFFFFFF;
 				memset(base[i], 0, len);
 
 				if (!i)
@@ -1747,8 +1747,7 @@ int process_ss(const char *rom_name, int enable)
 					{
 						int ret = FileReadAdv(&f, base[i], len);
 						FileClose(&f);
-						*(uint32_t*)(base[i]) = 1;
-						ss_cnt[i] = 1;
+						*(uint32_t*)(base[i]) = 0xFFFFFFFF;
 						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
 					}
 				}
@@ -1778,7 +1777,7 @@ int process_ss(const char *rom_name, int enable)
 
 			if (curcnt != ss_cnt[i])
 			{
-				ss_cnt[i] = curcnt;
+				ss_cnt[i] = 0xFFFFFFFF;
 				if (size) size = (size + 2) * 4;
 				if (size > 0 && size <= ss_size)
 				{
@@ -1797,6 +1796,7 @@ int process_ss(const char *rom_name, int enable)
 						printf("Unable to create file: %s\n", ss_name);
 					}
 				}
+				*(uint32_t*)(base[i]) = 0xFFFFFFFF;
 			}
 		}
 	}
