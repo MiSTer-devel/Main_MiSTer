@@ -1007,7 +1007,7 @@ static void hdmi_config()
 		0x2E, (uint8_t)(ypbpr ? 0x07 : 0x01),
 		0x2F, (uint8_t)(ypbpr ? 0xE7 : 0x00),
 
-		0x3B, (uint8_t)(cfg.direct_video ? 0 : 0b01000000), // Pixel repetition [6:5] b00 AUTO. [4:3] b00 x1 mult of input clock. [2:1] b00 x1 pixel rep to send to HDMI Rx.
+		0x3B, (uint8_t)(cfg.direct_video && is_menu() ? 0 : 0b01000000), // Pixel repetition [6:5] b00 AUTO. [4:3] b00 x1 mult of input clock. [2:1] b00 x1 pixel rep to send to HDMI Rx.
 								// Pixel repetition set to manual to avoid VIC auto detection as defined in ADV7513 Programming Guide
 
 		0x40, 0x00,				// General Control Packet Enable
@@ -1028,16 +1028,16 @@ static void hdmi_config()
 		0x56, 0b00001000,		// [5:4] Picture Aspect Ratio
 								// [3:0] Active Portion Aspect Ratio b1000 = Same as Picture Aspect Ratio
 
-		0x57, (uint8_t)((cfg.hdmi_game_mode ? 0x80 : 0x00) // [7] IT Content. 0 - No. 1 - Yes (type set in register 0x59).
-								// [6:4] Color space (ignored for RGB)
-			| ((ypbpr || cfg.hdmi_limited) ? 0b0100 : 0b1000)), // [3:2] RGB Quantization range
-								// [1:0] Non-Uniform Scaled: 00 - None. 01 - Horiz. 10 - Vert. 11 - Both.
+		0x57, (uint8_t)((cfg.hdmi_game_mode ? 0x80 : 0x00)		// [7] IT Content. 0 - No. 1 - Yes (type set in register 0x59).
+																// [6:4] Color space (ignored for RGB)
+			| ((ypbpr || cfg.hdmi_limited) ? 0b0100 : 0b1000)),	// [3:2] RGB Quantization range
+																// [1:0] Non-Uniform Scaled: 00 - None. 01 - Horiz. 10 - Vert. 11 - Both.
 
 		0x3C, vic_mode,			// VIC
 
-		0x59, (uint8_t)(((ypbpr || cfg.hdmi_limited) ? 0x00 : 0x40) // [7:6] [YQ1 YQ0] YCC Quantization Range: b00 = Limited Range, b01 = Full Range
-			| 0x30),			// [5:4] IT Content Type b11 = Game
-								// [3:0] Pixel Repetition Fields b0000 = No Repetition
+		0x59, (uint8_t)(((ypbpr || cfg.hdmi_limited) ? 0x00 : 0x40)	// [7:6] [YQ1 YQ0] YCC Quantization Range: b00 = Limited Range, b01 = Full Range
+			| (cfg.hdmi_game_mode ? 0x30 : 0x00)),					// [5:4] IT Content Type b11 = Game, b00 = Graphics/None
+																	// [3:0] Pixel Repetition Fields b0000 = No Repetition
 
 		0x73, 0x01,
 
@@ -1119,6 +1119,10 @@ static void hdmi_config()
 			if (res < 0) printf("i2c: write error (%02X %02X): %d\n", init_data[i], init_data[i + 1], res);
 		}
 		i2c_close(fd);
+	}
+	else
+	{
+		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
 	}
 }
 
@@ -1501,13 +1505,14 @@ int hasAPI1_5()
 static bool get_video_info(bool force, VideoInfo *video_info)
 {
 	static uint16_t nres = 0;
-	bool changed = false;
+	bool res_changed = false;
+	bool fb_changed = false;
 
 	spi_uio_cmd_cont(UIO_GET_VRES);
 	uint16_t res = spi_w(0);
 	if ((nres != res) || force)
 	{
-		changed = (nres != res);
+		res_changed = (nres != res);
 		nres = res;
 		video_info->width = spi_w(0) | (spi_w(0) << 16);
 		video_info->height = spi_w(0) | (spi_w(0) << 16);
@@ -1518,13 +1523,31 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
-
 	DisableIO();
 
-	return changed;
+	static uint8_t fb_crc = 0;
+	uint8_t crc = spi_uio_cmd_cont(UIO_GET_FB_PAR);
+	if (fb_crc != crc || force || res_changed)
+	{
+		if (!res_changed) *video_info = current_video_info;
+
+		fb_changed |= (fb_crc != crc);
+		fb_crc = crc;
+		video_info->arx = spi_w(0);
+		video_info->arxy = !!(video_info->arx & 0x1000);
+		video_info->arx &= 0xFFF;
+		video_info->ary = spi_w(0) & 0xFFF;
+		video_info->fb_fmt = spi_w(0);
+		video_info->fb_width = spi_w(0);
+		video_info->fb_height = spi_w(0);
+		video_info->fb_en = !!(video_info->fb_fmt & 0x40);
+	}
+	DisableIO();
+
+	return res_changed || fb_changed;
 }
 
-static void video_core_description(const VideoInfo *vi, const vmode_custom_t * /*vm*/, char *str, size_t len)
+static void video_core_description(const VideoInfo *vi, const vmode_custom_t */*vm*/, char *str, size_t len)
 {
 	float vrate = 100000000;
 	if (vi->vtime) vrate /= vi->vtime; else vrate = 0;
@@ -1535,7 +1558,7 @@ static void video_core_description(const VideoInfo *vi, const vmode_custom_t * /
 	prate /= vi->ptime;
 
 	char res[16];
-	snprintf(res, 16, "%dx%d%s", vi->width, vi->height, vi->interlaced ? "i" : "");
+	snprintf(res, 16, "%dx%d%s", vi->fb_en ? vi->fb_width : vi->width, vi->fb_en ? vi->fb_height : vi->height, vi->interlaced ? "i" : "");
 	snprintf(str, len, "%9s %6.2fKHz %5.1fHz", res, hrate, vrate);
 }
 
@@ -1590,6 +1613,7 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n",
 		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate);
 	printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vi->vtime, vi->vtimeh);
+	printf("\033[1;33mINFO: AR = %d:%d, fb_en = %d, fb_width = %d, fb_height = %d\033[0m\n", vi->arx, vi->ary, vi->fb_en, vi->fb_width, vi->fb_height);
 	if (vi->vtimeh) api1_5 = 1;
 	if (hasAPI1_5() && cfg.video_info)
 	{
@@ -1609,8 +1633,8 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 
 	int w = vm->item[1];
 	int h = vm->item[5];
-	const uint32_t core_height = vi->rotated ? vi->width : vi->height;
-	const uint32_t core_width = vi->rotated ? vi->height : vi->width;
+	const uint32_t core_height = vi->fb_en ? vi->fb_height : vi->rotated ? vi->width : vi->height;
+	const uint32_t core_width = vi->fb_en ? vi->fb_width : vi->rotated ? vi->height : vi->width;
 
 	if (w == 0 || h == 0 || core_height == 0) return;
 
@@ -1618,16 +1642,28 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 	int scale_w = w / core_width;
 	if (!scale_h) return;
 
-	int disp_h, disp_w;
-	if (cfg.vscale_mode == 4)
+	int disp_h = h;
+	int disp_w = w;
+	int ary = vi->ary;
+	int arx = vi->arx;
+	if (!ary || !arx)
 	{
-		disp_h = core_height * scale_h;
-		disp_w = (disp_h * w) / h;
+		ary = h;
+		arx = w;
 	}
-	else if(cfg.vscale_mode == 5)
+
+	if (cfg.vscale_mode == 4 || cfg.vscale_mode == 5)
 	{
-		disp_h = core_height * scale_h;
-		disp_w = w;
+		int scale;
+		for (scale = scale_h; scale > 0; scale--)
+		{
+			disp_h = core_height * scale;
+			disp_w = (disp_h * arx) / ary;
+			if (disp_w <= w) break;
+		}
+		if (scale == 0) return; // could not find a scale
+
+		if (cfg.vscale_mode == 5) disp_w = w;
 	}
 	else
 	{
