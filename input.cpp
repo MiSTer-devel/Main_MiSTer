@@ -1175,7 +1175,7 @@ typedef struct
 
 	int8_t   wh_steer;
 	int8_t   wh_accel;
-	int8_t   wh_break;
+	int8_t   wh_brake;
 	int8_t   wh_clutch;
 	int8_t   wh_combo;
 
@@ -3141,7 +3141,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							joy_analog(input[dev].num, 1, wh_value, 0);
 						}
-						else if (ev->code == input[dev].wh_break)
+						else if (ev->code == input[dev].wh_brake)
 						{
 							joy_analog(input[dev].num, 1, wh_value, 1);
 						}
@@ -4031,7 +4031,7 @@ static void setup_wheels()
 		{
 			input[i].wh_steer = 0;
 			input[i].wh_accel = -1;
-			input[i].wh_break = -1;
+			input[i].wh_brake = -1;
 			input[i].wh_clutch = -1;
 			input[i].wh_combo = -1;
 
@@ -4044,7 +4044,7 @@ static void setup_wheels()
 				case 0xc29b: // LOGITECH_G27_WHEEL
 				case 0xc24f: // LOGITECH_G29_WHEEL
 					input[i].wh_accel = 2;
-					input[i].wh_break = 5;
+					input[i].wh_brake = 5;
 					input[i].wh_clutch = 1;
 					input[i].quirk = QUIRK_WHEEL;
 					break;
@@ -4056,13 +4056,13 @@ static void setup_wheels()
 
 				case 0xc298: // LOGITECH_DFP_WHEEL
 					input[i].wh_accel = 1;
-					input[i].wh_break = 5;
+					input[i].wh_brake = 5;
 					input[i].quirk = QUIRK_WHEEL;
 					break;
 
 				case 0xc29a: // LOGITECH_DFGT_WHEEL
 					input[i].wh_accel = 1;
-					input[i].wh_break = 2;
+					input[i].wh_brake = 2;
 					input[i].quirk = QUIRK_WHEEL;
 					break;
 
@@ -4091,7 +4091,7 @@ static void setup_wheels()
 				case 0x0006:   // PODIUM_WHEELBASE_DD1_DEVICE_ID
 				case 0x0007:   // PODIUM_WHEELBASE_DD2_DEVICE_ID
 					input[i].wh_accel = 2;
-					input[i].wh_break = 5;
+					input[i].wh_brake = 5;
 					input[i].wh_clutch = 1;
 					input[i].quirk = QUIRK_WHEEL;
 					break;
@@ -4134,7 +4134,7 @@ static void setup_wheels()
 			else if (input[i].vid == 0x2341 && input[i].pid == 0x8036 && strstr(input[i].name, "RZordPsWheel"))
 			{
 				input[i].wh_accel = 6;
-				input[i].wh_break = 10;
+				input[i].wh_brake = 10;
 				input[i].wh_clutch = 2;
 				input[i].quirk = QUIRK_WHEEL;
 			}
