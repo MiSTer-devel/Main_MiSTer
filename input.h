@@ -123,7 +123,7 @@ typedef struct
 
 	int8_t   wh_steer;
 	int8_t   wh_accel;
-	int8_t   wh_break;
+	int8_t   wh_brake;
 	int8_t   wh_clutch;
 	int8_t   wh_combo;
 
