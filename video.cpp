@@ -1523,14 +1523,16 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
+	else
+	{
+		*video_info = current_video_info;
+	}
 	DisableIO();
 
 	static uint8_t fb_crc = 0;
 	uint8_t crc = spi_uio_cmd_cont(UIO_GET_FB_PAR);
 	if (fb_crc != crc || force || res_changed)
 	{
-		if (!res_changed) *video_info = current_video_info;
-
 		fb_changed |= (fb_crc != crc);
 		fb_crc = crc;
 		video_info->arx = spi_w(0);
