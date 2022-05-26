@@ -1747,10 +1747,10 @@ int process_ss(const char *rom_name, int enable)
 					{
 						int ret = FileReadAdv(&f, base[i], len);
 						FileClose(&f);
-						*(uint32_t*)(base[i]) = 0xFFFFFFFF;
 						printf("process_ss: read %d bytes from file: %s\n", ret, ss_name);
 					}
 				}
+				*(uint32_t*)(base[i]) = 0xFFFFFFFF;
 			}
 
 			map_addr += len;
