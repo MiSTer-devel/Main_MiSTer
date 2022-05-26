@@ -2699,7 +2699,7 @@ void user_io_send_buttons(char force)
 		{
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
-			if (is_pce()) pcecd_reset(); 
+			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
 			if (is_x86()) x86_init();
 			ResetUART();
@@ -3363,6 +3363,7 @@ void user_io_poll()
 	if (is_megacd()) mcd_poll();
 	if (is_pce()) pcecd_poll();
 	if (is_saturn()) saturn_poll();
+	if (is_psx()) psx_poll();
 	process_ss(0);
 }
 
