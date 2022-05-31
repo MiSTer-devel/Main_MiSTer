@@ -136,6 +136,7 @@ int input_socket_poll(int timeout) {
 						int rlen = read(sockets[i].fd, trash, 1024);
 						if (rlen == 0) {
 							printf("closing socket %d\n", i);
+							shutdown(sockets[i].fd, SHUT_RDWR);
 							close(sockets[i].fd);
 							sockets[i].fd = -1;
 						}
