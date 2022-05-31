@@ -779,3 +779,8 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 		mount_cd(0, s_index);
 	}
 }
+
+void psx_poll()
+{
+	spi_uio_cmd(UIO_CD_GET);
+}
