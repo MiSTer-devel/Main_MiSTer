@@ -1660,14 +1660,19 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 	const uint32_t core_height = vi->fb_en ? vi->fb_height : vi->rotated ? vi->width : vi->height;
 	const uint32_t core_width = vi->fb_en ? vi->fb_width : vi->rotated ? vi->height : vi->width;
 
-	if (w == 0 || h == 0 || core_height == 0) return;
+	if (w == 0 || h == 0 || core_height == 0 || core_width == 0)
+	{
+		printf("video_resolution_adjust: invalid core or display sizes. Not adjusting resolution.\n");
+		return;
+	}
 
 	int scale_h = h / core_height;
-	int scale_w = w / core_width;
-	if (!scale_h) return;
+	if (!scale_h)
+	{
+		printf("video_resolution_adjust: display height less than core height. Not adjusting resolution.\n");
+		return;
+	}
 
-	int disp_h = h;
-	int disp_w = w;
 	int ary = vi->ary;
 	int arx = vi->arx;
 	if (!ary || !arx)
@@ -1676,26 +1681,39 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 		arx = w;
 	}
 
-	if (cfg.vscale_mode == 4 || cfg.vscale_mode == 5)
+	int scale_w = (w * ary) / (core_height * arx);
+	if (!scale_w)
 	{
-		int scale;
-		for (scale = scale_h; scale > 0; scale--)
-		{
-			disp_h = core_height * scale;
-			disp_w = (disp_h * arx) / ary;
-			if (disp_w <= w) break;
-		}
-		if (scale == 0) return; // could not find a scale
+		printf("video_resolution_adjust: display width less than core width. Not adjusting resolution.\n");
+		return;
+	}
 
-		if (cfg.vscale_mode == 5) disp_w = w;
+	int scale = scale_h > scale_w ? scale_w : scale_h;
+
+	int disp_h = core_height * scale;
+	int core_ar_width = (disp_h * arx) / ary;
+	int disp_ar_width = (disp_h * w) / h;
+	int disp_w;
+
+	if (cfg.vscale_mode == 5)
+	{
+		if (disp_ar_width < core_ar_width)
+		{
+			printf("video_resolution_adjust: ideal width %d wider than aspect restricted width %dx%d. Not adjusting resolution.\n", core_ar_width, disp_ar_width, disp_h);
+			return;
+		}
+		disp_w = disp_ar_width;
+		printf("video_resolution_adjust: using display aspect ratio - ");
 	}
 	else
 	{
-		if (!scale_w) return;
-		int scale = (scale_h < scale_w) ? scale_h : scale_w;
-		disp_h = core_height * scale;
-		disp_w = core_width * scale;
+		disp_w = core_ar_width;
+		printf("video_resolution_adjust: using core aspect ratio - ");
 	}
+
+	disp_w = (disp_w + 7) & ~0x7; // round up to 8
+
+	printf("scale x%d, %dx%d.\n", scale, disp_w, disp_h);
 
 	float refresh = 1000000.0 / ((vm->item[1] + vm->item[2] + vm->item[3] + vm->item[4])*(vm->item[5] + vm->item[6] + vm->item[7] + vm->item[8]) / vm->Fpix);
 	video_calculate_cvt(disp_w, disp_h, refresh, vm->param.rb, vm);
