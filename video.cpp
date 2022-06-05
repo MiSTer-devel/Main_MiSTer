@@ -71,33 +71,35 @@ struct vmode_t
 	uint32_t vpar[8];
 	double Fpix;
 	uint8_t vic_mode;
+	uint8_t pr;
 };
 
 vmode_t vmodes[] =
 {
-	{ { 1280, 110,  40, 220,  720,  5,  5, 20 },  74.25,  4 }, //0  1280x720@60
-	{ { 1024,  24, 136, 160,  768,  3,  6, 29 },  65,     0 }, //1  1024x768@60
-	{ {  720,  16,  62,  60,  480,  9,  6, 30 },  27,     3 }, //2  720x480@60
-	{ {  720,  12,  64,  68,  576,  5,  5, 39 },  27,    18 }, //3  720x576@50
-	{ { 1280,  48, 112, 248, 1024,  1,  3, 38 }, 108,     0 }, //4  1280x1024@60
-	{ {  800,  40, 128,  88,  600,  1,  4, 23 },  40,     0 }, //5  800x600@60
-	{ {  640,  16,  96,  48,  480, 10,  2, 33 },  25.175, 1 }, //6  640x480@60
-	{ { 1280, 440,  40, 220,  720,  5,  5, 20 },  74.25, 19 }, //7  1280x720@50
-	{ { 1920,  88,  44, 148, 1080,  4,  5, 36 }, 148.5,  16 }, //8  1920x1080@60
-	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5,  31 }, //9  1920x1080@50
-	{ { 1366,  70, 143, 213,  768,  3,  3, 24 },  85.5,   0 }, //10 1366x768@60
-	{ { 1024,  40, 104, 144,  600,  1,  3, 18 },  48.96,  0 }, //11 1024x600@60
-	{ { 1920,  48,  32,  80, 1440,  2,  4, 38 }, 185.203, 0 }, //12 1920x1440@60
-	{ { 2048,  48,  32,  80, 1536,  2,  4, 38 }, 209.318, 0 }, //13 2048x1536@60
+	{ { 1280, 110,  40, 220,  720,  5,  5, 20 },  74.25,  4, 0 }, //0  1280x720@60
+	{ { 1024,  24, 136, 160,  768,  3,  6, 29 },  65,     0, 0 }, //1  1024x768@60
+	{ {  720,  16,  62,  60,  480,  9,  6, 30 },  27,     3, 0 }, //2  720x480@60
+	{ {  720,  12,  64,  68,  576,  5,  5, 39 },  27,    18, 0 }, //3  720x576@50
+	{ { 1280,  48, 112, 248, 1024,  1,  3, 38 }, 108,     0, 0 }, //4  1280x1024@60
+	{ {  800,  40, 128,  88,  600,  1,  4, 23 },  40,     0, 0 }, //5  800x600@60
+	{ {  640,  16,  96,  48,  480, 10,  2, 33 },  25.175, 1, 0 }, //6  640x480@60
+	{ { 1280, 440,  40, 220,  720,  5,  5, 20 },  74.25, 19, 0 }, //7  1280x720@50
+	{ { 1920,  88,  44, 148, 1080,  4,  5, 36 }, 148.5,  16, 0 }, //8  1920x1080@60
+	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5,  31, 0 }, //9  1920x1080@50
+	{ { 1366,  70, 143, 213,  768,  3,  3, 24 },  85.5,   0, 0 }, //10 1366x768@60
+	{ { 1024,  40, 104, 144,  600,  1,  3, 18 },  48.96,  0, 0 }, //11 1024x600@60
+	{ { 1920,  48,  32,  80, 1440,  2,  4, 38 }, 185.203, 0, 0 }, //12 1920x1440@60
+	{ { 2048,  48,  32,  80, 1536,  2,  4, 38 }, 209.318, 0, 0 }, //13 2048x1536@60
+	{ { 1280,  24,  16,  40, 1440,  3,  5, 33 }, 120.75,  0, 1 }, //14 2560x1440@60 (pr)
 };
 #define VMODES_NUM (sizeof(vmodes) / sizeof(vmodes[0]))
 
 vmode_t tvmodes[] =
 {
-	{{ 640, 30, 60, 70, 240,  4, 4, 14 }, 12.587, 0 }, //NTSC 15K
-	{{ 640, 16, 96, 48, 480,  8, 4, 33 }, 25.175, 0 }, //NTSC 31K
-	{{ 640, 30, 60, 70, 288,  6, 4, 14 }, 12.587, 0 }, //PAL 15K
-	{{ 640, 16, 96, 48, 576,  2, 4, 42 }, 25.175, 0 }, //PAL 31K
+	{{ 640, 30, 60, 70, 240,  4, 4, 14 }, 12.587, 0, 0 }, //NTSC 15K
+	{{ 640, 16, 96, 48, 480,  8, 4, 33 }, 25.175, 0, 0 }, //NTSC 31K
+	{{ 640, 30, 60, 70, 288,  6, 4, 14 }, 12.587, 0, 0 }, //PAL 15K
+	{{ 640, 16, 96, 48, 576,  2, 4, 42 }, 25.175, 0, 0 }, //PAL 31K
 };
 
 // named aliases for vmode_custom_t items
@@ -125,9 +127,10 @@ struct vmode_custom_param_t
 	uint32_t vpol;
 	uint32_t vic;
 	uint32_t rb;
+	uint32_t pr;
 
-	// [25]
-	uint32_t unused[7];
+	// [26]
+	uint32_t unused[6];
 };
 
 struct vmode_custom_t
@@ -937,6 +940,11 @@ static void hdmi_config()
 {
 	int ypbpr = cfg.ypbpr && cfg.direct_video;
 	const uint8_t vic_mode = (uint8_t)v_cur.param.vic;
+	uint8_t pr_flags;
+
+	if (cfg.direct_video && is_menu()) pr_flags = 0; // automatic pixel repetition
+	else if (v_cur.param.pr != 0) pr_flags = 0b01001000; // manual pixel repetition with 2x clock
+	else pr_flags = 0b01000000; // manual pixel repetition
 
 	uint8_t sync_invert = 0;
 	if (v_cur.param.hpol == 0) sync_invert |= 1 << 5;
@@ -1007,8 +1015,7 @@ static void hdmi_config()
 		0x2E, (uint8_t)(ypbpr ? 0x07 : 0x01),
 		0x2F, (uint8_t)(ypbpr ? 0xE7 : 0x00),
 
-		0x3B, (uint8_t)(cfg.direct_video && is_menu() ? 0 : 0b01000000), // Pixel repetition [6:5] b00 AUTO. [4:3] b00 x1 mult of input clock. [2:1] b00 x1 pixel rep to send to HDMI Rx.
-								// Pixel repetition set to manual to avoid VIC auto detection as defined in ADV7513 Programming Guide
+		0x3B, pr_flags,
 
 		0x40, 0x00,				// General Control Packet Enable
 
@@ -1300,8 +1307,9 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	printf("video: ");
 	for (int i = 1; i <= 8; i++)
 	{
+		if (i == 1) spi_w((v_cur.param.pr << 15) | v_fix.item[i]);
 		//hsync polarity
-		if (i == 3) spi_w((!!v_cur.param.hpol << 15) | v_fix.item[i]);
+		else if (i == 3) spi_w((!!v_cur.param.hpol << 15) | v_fix.item[i]);
 		//vsync polarity
 		else if (i == 7) spi_w((!!v_cur.param.vpol << 15) | v_fix.item[i]);
 		else spi_w(v_fix.item[i]);
@@ -1329,15 +1337,26 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 	hdmi_config();
 
-	if (cfg.fb_size <= 1) cfg.fb_size = ((v_cur.item[1] * v_cur.item[5]) <= FB_SIZE) ? 1 : 2;
-	else if (cfg.fb_size == 3) cfg.fb_size = 2;
-	else if (cfg.fb_size > 4) cfg.fb_size = 4;
+	int fb_scale = 1;
 
-	fb_width = v_cur.item[1] / cfg.fb_size;
-	fb_height = v_cur.item[5] / cfg.fb_size;
+	if (cfg.fb_size <= 1)
+	{
+		if (((v_cur.item[1] * v_cur.item[5]) > FB_SIZE))
+			fb_scale = 2;
+		else
+			fb_scale = 1;
+	}
+	else if (cfg.fb_size == 3) fb_scale = 2;
+	else if (cfg.fb_size > 4) fb_scale = 4;
 
-	brd_x = cfg.vscale_border / cfg.fb_size;;
-	brd_y = cfg.vscale_border / cfg.fb_size;;
+	const int fb_scale_x = fb_scale;
+	const int fb_scale_y = v_cur.param.pr == 0 ? fb_scale : fb_scale * 2;
+
+	fb_width = v_cur.item[1] / fb_scale_x;
+	fb_height = v_cur.item[5] / fb_scale_y;
+
+	brd_x = cfg.vscale_border / fb_scale_x;
+	brd_y = cfg.vscale_border / fb_scale_y;
 
 	if (fb_enabled) video_fb_enable(1, fb_num);
 
@@ -1380,6 +1399,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 		else if (!strcasecmp(flag, "-hsync")) v->param.hpol = 0;
 		else if (!strcasecmp(flag, "cvt")) v->param.rb = 0;
 		else if (!strcasecmp(flag, "cvtrb")) v->param.rb = 1;
+		else if (!strcasecmp(flag, "pr")) v->param.pr = 1;
 		else
 		{
 			printf("Error parsing video_mode parameter %d \"%s\": \"%s\"\n", i, flag, vcfg);
@@ -1433,8 +1453,10 @@ static int store_custom_video_mode(char* vcfg, vmode_custom_t *v)
 
 	uint mode = (ret >= 0) ? ret : (support_FHD) ? 8 : 0;
 	if (mode >= VMODES_NUM) mode = 0;
+	if (vmodes[mode].pr == 1 && !video_supports_pr()) mode = 8;
 	for (int i = 0; i < 8; i++) v->item[i + 1] = vmodes[mode].vpar[i];
 	v->param.vic = vmodes[mode].vic_mode;
+	v->param.pr = vmodes[mode].pr;
 	v->param.rb = 1;
 	setPLL(vmodes[mode].Fpix, v);
 
@@ -1569,7 +1591,7 @@ static void video_scaler_description(const VideoInfo *vi, const vmode_custom_t *
 	char res[16];
 	float vrateh = 100000000;
 	if (vi->vtimeh) vrateh /= vi->vtimeh; else vrateh = 0;
-	snprintf(res, 16, "%dx%d", vm->item[1], vm->item[5]);
+	snprintf(res, 16, "%dx%d", vm->item[1] * (vm->param.pr ? 2 : 1), vm->item[5]);
 	snprintf(str, len, "%9s %6.2fMHz %5.1fHz", res, vm->Fpix, vrateh);
 }
 
@@ -1633,8 +1655,8 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 {
 	if (cfg.vscale_mode < 4) return;
 
-	int w = vm->item[1];
-	int h = vm->item[5];
+	int w = vm->param.pr ? vm->param.hact * 2 : vm->param.hact;
+	int h = vm->param.vact;
 	const uint32_t core_height = vi->fb_en ? vi->fb_height : vi->rotated ? vi->width : vi->height;
 	const uint32_t core_width = vi->fb_en ? vi->fb_width : vi->rotated ? vi->height : vi->width;
 
@@ -1677,7 +1699,6 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 
 	float refresh = 1000000.0 / ((vm->item[1] + vm->item[2] + vm->item[3] + vm->item[4])*(vm->item[5] + vm->item[6] + vm->item[7] + vm->item[8]) / vm->Fpix);
 	video_calculate_cvt(disp_w, disp_h, refresh, vm->param.rb, vm);
-
 	setPLL(vm->Fpix, vm);
 }
 
@@ -2591,9 +2612,19 @@ void video_cmd(char *cmd)
 	}
 }
 
+
 bool video_is_rotated()
 {
 	return current_video_info.rotated;
+}
+
+static uint16_t video_version = 0xffff;
+
+bool video_supports_pr()
+{
+	if (video_version == 0xffff) video_version = spi_uio_cmd(UIO_SET_VIDEO);
+
+	return video_version != 0;
 }
 
 static constexpr int CELL_GRAN_RND = 8;
@@ -2695,27 +2726,51 @@ static void video_calculate_cvt_int(int h_pixels, int v_lines, float refresh_rat
 	}
 
 	vmode->item[0] = 1;
-	vmode->item[1] = h_pixels_rnd;
-	vmode->item[2] = h_front_porch;
-	vmode->item[3] = h_sync;
-	vmode->item[4] = h_back_porch;
-	vmode->item[5] = v_lines;
-	vmode->item[6] = V_FRONT_PORCH;
-	vmode->item[7] = v_sync;
-	vmode->item[8] = v_back_porch;
+	vmode->param.hact = h_pixels_rnd;
+	vmode->param.hfp = h_front_porch;
+	vmode->param.hs = h_sync;
+	vmode->param.hbp = h_back_porch;
+	vmode->param.vact = v_lines;
+	vmode->param.vfp = V_FRONT_PORCH;
+	vmode->param.vs = v_sync;
+	vmode->param.vbp = v_back_porch;
 	vmode->param.rb = reduced_blanking ? 1 : 0;
 	vmode->Fpix = pixel_freq;
 
-	printf("Calculated %dx%d@%0.1fhz %s timings: %d,%d,%d,%d,%d,%d,%d,%d,%d,%s\n",
+	if (h_pixels_rnd > 2048)
+	{
+		vmode->param.pr = 1;
+		vmode->param.hact /= 2;
+		vmode->param.hbp /= 2;
+		vmode->param.hfp /= 2;
+		vmode->param.hs /= 2;
+		vmode->Fpix /= 2.0;
+	}
+	else
+	{
+		vmode->param.pr = 0;
+	}
+
+
+	printf("Calculated %dx%d@%0.1fhz %s timings: %d,%d,%d,%d,%d,%d,%d,%d,%d,%s%s\n",
 		h_pixels, v_lines, refresh_rate, reduced_blanking ? "CVT-RB" : "CVT",
 		vmode->item[1], vmode->item[2], vmode->item[3], vmode->item[4],
 		vmode->item[5], vmode->item[6], vmode->item[7], vmode->item[8],
 		(int)(pixel_freq * 1000.0f),
-		reduced_blanking ? "cvtrb" : "cvt");
+		reduced_blanking ? "cvtrb" : "cvt",
+		vmode->param.pr ? ",pr" : "");
 }
 
 static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode)
 {
+	// If the resolution it too wide and the core doesn't support pixel repetition then just do 1080p
+	if (h_pixels > 2048 && !video_supports_pr())
+	{
+		printf("Pixel repetition not supported by core for %dx%d resolution, defaulting 1080p.\n", h_pixels, v_lines);
+		video_calculate_cvt(1920, 1080, refresh_rate, reduced_blanking, vmode);
+		return;
+	}
+
 	video_calculate_cvt_int(h_pixels, v_lines, refresh_rate, reduced_blanking == 1, vmode);
 	if (vmode->Fpix > 210.f && reduced_blanking == 2)
 	{
