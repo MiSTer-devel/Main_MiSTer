@@ -4400,6 +4400,18 @@ int input_test(int getchar)
 							input[n].guncal[3] = 32767;
 							input_lightgun_load(n);
 						}
+						
+						//GUN4IR Lightgun
+						if (input[n].vid == 0x2341 && input[n].pid >= 0x8042 && input[n].pid <= 0x8049)
+						{
+							input[n].quirk = QUIRK_LIGHTGUN;
+							input[n].lightgun = 1;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 32767;
+							input[n].guncal[2] = 0;
+							input[n].guncal[3] = 32767;
+							input_lightgun_load(n);
+						}
 
 						//Madcatz Arcade Stick 360
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
