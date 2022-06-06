@@ -1169,7 +1169,9 @@ typedef struct
 
 	int      lightgun_req;
 	int      lightgun;
-	bool     has_rumble;
+
+	int      has_rumble;
+	int      rumble_en;
 	uint16_t last_rumble;
 	ff_effect rumble_effect;
 
@@ -4129,7 +4131,7 @@ static void setup_wheels()
 					set_wheel_range(i, cfg.wheel_range);
 				}
 			}
-			
+
 			//Namco NeGcon via RetroZord adapter
 			else if (input[i].vid == 0x2341 && input[i].pid == 0x8036 && strstr(input[i].name, "RZordPsWheel"))
 			{
@@ -4400,7 +4402,7 @@ int input_test(int getchar)
 							input[n].guncal[3] = 32767;
 							input_lightgun_load(n);
 						}
-						
+
 						//GUN4IR Lightgun
 						if (input[n].vid == 0x2341 && input[n].pid >= 0x8042 && input[n].pid <= 0x8049)
 						{
@@ -4859,8 +4861,10 @@ int input_test(int getchar)
 
 									if (ev.type == EV_KEY && input[dev].num)
 									{
+										if (ev.code == (input[dev].mmap[SYS_BTN_L] & 0xFFFF)) input[dev].rumble_en = ev.value;
+
 										int n = get_rumble_device(input[dev].num);
-										if (n >= 0)
+										if (n >= 0 && input[dev].rumble_en)
 										{
 											uint16_t rumble_val = input[n].last_rumble;
 											if (ev.code == (input[dev].mmap[SYS_BTN_X] & 0xFFFF)) set_rumble(n, (rumble_val & 0xFF00) | ((ev.value) ? 0xFF : 0x00));
