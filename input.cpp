@@ -4864,7 +4864,7 @@ int input_test(int getchar)
 										if (ev.code == (input[dev].mmap[SYS_BTN_L] & 0xFFFF)) input[dev].rumble_en = ev.value;
 
 										int n = get_rumble_device(input[dev].num);
-										if (n >= 0 && input[dev].rumble_en)
+										if (n >= 0 && (input[dev].rumble_en || !ev.value))
 										{
 											uint16_t rumble_val = input[n].last_rumble;
 											if (ev.code == (input[dev].mmap[SYS_BTN_X] & 0xFFFF)) set_rumble(n, (rumble_val & 0xFF00) | ((ev.value) ? 0xFF : 0x00));
