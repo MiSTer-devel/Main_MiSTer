@@ -259,7 +259,7 @@ void cheats_scan(int mode)
 	{
 		if (!cheats_available()) return;
 
-		if (mode == SCANF_END)
+		if (mode == SCANF_END || (mode == SCANF_PREV && iSelectedEntry <= 0))
 		{
 			iSelectedEntry = cheats_available() - 1;
 			iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
@@ -271,6 +271,12 @@ void cheats_scan(int mode)
 			{
 				iSelectedEntry++;
 				if (iSelectedEntry > iFirstEntry + OsdGetSize() - 1) iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
+			}
+			else
+			{
+				// jump to first visible item
+				iFirstEntry = 0;
+				iSelectedEntry = 0;
 			}
 		}
 		else if (mode == SCANF_PREV)
