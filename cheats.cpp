@@ -19,8 +19,26 @@
 
 struct cheat_rec_t
 {
-	char enabled;
+	bool enabled;
 	char name[256];
+	int cheatSize;
+	char *cheatData;
+
+	cheat_rec_t()
+	{
+		this->enabled = false;
+		this->cheatData = NULL;
+		this->cheatSize = 0;
+		memset(name, 0, sizeof(name));
+	}
+
+	~cheat_rec_t()
+	{
+		if (this->cheatData)
+		{
+			delete[] cheatData;
+		}
+	}
 };
 
 typedef std::vector<cheat_rec_t> CheatVector;
