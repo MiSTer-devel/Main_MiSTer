@@ -36,7 +36,7 @@ struct cheat_rec_t
 	{
 		if (this->cheatData)
 		{
-			delete[] cheatData;
+			delete[] this->cheatData;
 		}
 	}
 };
@@ -427,7 +427,9 @@ static void cheats_send()
 			}
 			else
 			{
-				printf("Consistency error, memory for cheat not allocated, but cheat was enabled.\n");
+				printf("Consistency error, memory for cheat not allocated, but cheat was enabled -> disable.\n");
+				cheats[i].cheatSize = 0;
+				cheats[i].enabled = false;
 			}
 		}
 	}
@@ -463,6 +465,14 @@ void cheats_toggle()
 		/* enabled cheat, load data */
 		static char filename[1024];
 		fileTYPE f = {};
+
+		if (cheats[iSelectedEntry].cheatData)
+		{
+			printf("Consistency error, memory for cheat already allocated -> cleanup.\n");
+			delete[] cheats[iSelectedEntry].cheatData;
+			cheats[iSelectedEntry].cheatData = NULL;
+			cheats[iSelectedEntry].cheatSize = 0;
+		}
 
 		snprintf(filename, sizeof(filename), "%s/%s", cheat_zip, cheats[iSelectedEntry].name);
 		if (FileOpen(&f, filename))
