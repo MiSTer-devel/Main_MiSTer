@@ -198,6 +198,13 @@ char is_snes()
 	return (is_snes_type == 1);
 }
 
+static int is_sgb_type = 0;
+char is_sgb()
+{
+	if (!is_sgb_type) is_sgb_type = strcasecmp(core_name, "SGB") ? 2 : 1;
+	return (is_sgb_type == 1);
+}
+
 static int is_cpc_type = 0;
 char is_cpc()
 {
@@ -311,6 +318,7 @@ void user_io_read_core_name()
 	is_x86_type  = 0;
 	is_no_type   = 0;
 	is_snes_type = 0;
+	is_sgb_type = 0;
 	is_cpc_type = 0;
 	is_zx81_type = 0;
 	is_neogeo_type = 0;
@@ -2582,7 +2590,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	ProgressMessage(0, 0, 0, 0);
 
-	if (is_snes() && !load_addr)
+	if ((is_snes() || is_sgb()) && !load_addr)
 	{
 		// Setup MSU
 		snes_msu_init(name);
@@ -2835,7 +2843,7 @@ void user_io_poll()
 	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
 	{
 		if (is_st()) tos_poll();
-		if (is_snes()) snes_poll();
+		if (is_snes() || is_sgb()) snes_poll();
 
 		for (int i = 0; i < 4; i++)
 		{
