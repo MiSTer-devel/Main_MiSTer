@@ -963,6 +963,39 @@ void video_loadPreset(char *name)
 	}
 }
 
+static void hdmi_config_set_spd(bool val)
+{
+	int fd = i2c_open(0x39, 0);
+	if (fd >= 0)
+	{
+		uint8_t packet_val = i2c_smbus_read_byte_data(fd, 0x40);
+		if (val) 
+			packet_val |= 0x40;
+		else
+			packet_val &= ~0x40;
+		int res = i2c_smbus_write_byte_data(fd, 0x40, packet_val);
+		if (res < 0) printf("i2c: write error (%02X %02X): %d\n", 0x40, packet_val, res);
+		i2c_close(fd);
+	}
+}
+
+
+static void hdmi_config_set_spare(bool val)
+{
+	int fd = i2c_open(0x39, 0);
+	if (fd >= 0)
+	{
+		uint8_t packet_val = i2c_smbus_read_byte_data(fd, 0x40);
+		if (val) 
+			packet_val |= 0x01;
+		else
+			packet_val &= ~0x01;
+		int res = i2c_smbus_write_byte_data(fd, 0x40, packet_val);
+		if (res < 0) printf("i2c: write error (%02X %02X): %d\n", 0x40, packet_val, res);
+		i2c_close(fd);
+	}
+}
+
 static void hdmi_config()
 {
 	int ypbpr = cfg.ypbpr && cfg.direct_video;
@@ -1044,7 +1077,7 @@ static void hdmi_config()
 
 		0x3B, pr_flags,
 
-		0x40, 0b01000001,				// General Control Packet Enable
+		0x40, 0x00,
 
 		0x48, 0b00001000,       // [6]=0 Normal bus order!
 								// [5] DDR Alignment.
@@ -1436,8 +1469,14 @@ static int get_edid_vmode(vmode_custom_t *v)
 static void set_vrr_mode()
 {
 
-
 	float vrateh = 100000000;
+
+	if (cfg.vrr_mode == 0)
+	{
+		hdmi_config_set_spd(0);
+		hdmi_config_set_spare(0);
+		return;
+	}
 	if (current_video_info.vtimeh) vrateh /= current_video_info.vtimeh; else vrateh = 0;
 	if (cfg.vrr_vesa_framerate) vrateh = cfg.vrr_vesa_framerate;
 
@@ -1498,6 +1537,9 @@ static void set_vrr_mode()
 		}
 	}
 
+	int16_t vrateh_i = (int16_t)vrateh;
+
+	//These are only sent in the case that freesync or vesa vrr is enabled
 	uint8_t freesync_data[] = {
 		//header
 		0x00, 0x83,
@@ -1509,7 +1551,7 @@ static void set_vrr_mode()
 		0x06, 0x00,
 		//0x07
 		//0x08
-		0x09, (uint8_t)(use_vrr == VRR_FREESYNC ? 0x07 : 0x00), 
+		0x09, 0x07, 
 		0x0A, min_fr, 
 		0x0B, max_fr,
 	};
@@ -1526,54 +1568,55 @@ static void set_vrr_mode()
 		0xC8, 0x00,
 		0xC9, 0x04,
 
-		0xCA, (uint8_t)(use_vrr == VRR_VESA ? 0x01 : 0x00),
-		0xCB, (uint8_t)(use_vrr == VRR_VESA ? v_cur.param.vfp : 0x00),
-		0xCC, (uint8_t)(use_vrr == VRR_VESA ? ((int16_t)vrateh >> 8) & 0x03  : 0x00),
-		0xCD, (uint8_t)(use_vrr == VRR_VESA ? (int16_t)vrateh & 0xFF  : 0x00),
+		0xCA, 0x01,
+		0xCB, (uint8_t)v_cur.param.vfp,
+		0xCC, (uint8_t)((vrateh_i >> 8) & 0x03),
+		0xCD, (uint8_t)(vrateh_i & 0xFF),
 	};
 
-	if (vrr_modes[VRR_FREESYNC].available || vrr_modes[VRR_VESA].available)
+	int res = 0;
+	int fd = i2c_open(0x38, 0);
+	if (fd >= 0)
 	{
-		int res = 0;
-		int fd = i2c_open(0x38, 0);
-		if (fd >= 0)
+		if (use_vrr == VRR_FREESYNC)
 		{
-			if (vrr_modes[VRR_FREESYNC].available)
+			hdmi_config_set_spd(1);
+			res = i2c_smbus_write_byte_data(fd, 0x1F, 0b10000000);
+			if (res < 0)
 			{
-				res = i2c_smbus_write_byte_data(fd, 0x1F, 0b10000000);
-				if (res < 0)
-				{
-					printf("i2c: Vrr: Couldn't update SPD change register (0x1F, 0x80) %d\n", res);
-				}
-
-				for (uint i = 0; i < sizeof(freesync_data); i+=2)
-				{
-					res = i2c_smbus_write_byte_data(fd, freesync_data[i], freesync_data[i+1]);
-					if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n",freesync_data[i], freesync_data[i+1], res);
-				}
-				res = i2c_smbus_write_byte_data(fd, 0x1F, 0x00);
-				if (res < 0) printf("i2c: Vrr: Couldn't update SPD change register (0x1F, 0x00), %d\n", res);
+				printf("i2c: Vrr: Couldn't update SPD change register (0x1F, 0x80) %d\n", res);
 			}
-
-			if (vrr_modes[VRR_VESA].available)
+			for (uint i = 0; i < sizeof(freesync_data); i+=2)
 			{
-				res = i2c_smbus_write_byte_data(fd, 0xDF, 0b10000000);
-				if (res < 0)
-				{
-					printf("i2c: Vrr: Couldn't update Spare Packet change register (0xDF, 0x80) %d\n", res);
-				}
-
-				for (uint i = 0; i < sizeof(vesa_data); i+=2)
-				{
-					res = i2c_smbus_write_byte_data(fd, vesa_data[i], vesa_data[i+1]);
-					if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n", vesa_data[i], vesa_data[i+1], res);
-				}
-				res = i2c_smbus_write_byte_data(fd, 0xDF, 0x00);
-				if (res < 0) printf("i2c: Vrr: Couldn't update Spare Packet change register (0xDF, 0x00), %d\n", res);
+				res = i2c_smbus_write_byte_data(fd, freesync_data[i], freesync_data[i+1]);
+				if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n",freesync_data[i], freesync_data[i+1], res);
 			}
-
-			i2c_close(fd);
+			res = i2c_smbus_write_byte_data(fd, 0x1F, 0x00);
+			if (res < 0) printf("i2c: Vrr: Couldn't update SPD change register (0x1F, 0x00), %d\n", res);
+		} else {
+			hdmi_config_set_spd(0);
 		}
+
+		if (use_vrr == VRR_VESA)
+		{
+			hdmi_config_set_spare(1);
+			res = i2c_smbus_write_byte_data(fd, 0xDF, 0b10000000);
+			if (res < 0)
+			{
+				printf("i2c: Vrr: Couldn't update Spare Packet change register (0xDF, 0x80) %d\n", res);
+			}
+
+			for (uint i = 0; i < sizeof(vesa_data); i+=2)
+			{
+				res = i2c_smbus_write_byte_data(fd, vesa_data[i], vesa_data[i+1]);
+				if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n", vesa_data[i], vesa_data[i+1], res);
+			}
+			res = i2c_smbus_write_byte_data(fd, 0xDF, 0x00);
+			if (res < 0) printf("i2c: Vrr: Couldn't update Spare Packet change register (0xDF, 0x00), %d\n", res);
+		} else {
+			hdmi_config_set_spare(0);
+		}
+		i2c_close(fd);
 	}
 	last_vrr_mode = cfg.vrr_mode;
 	last_vrr_rate = vrateh;
