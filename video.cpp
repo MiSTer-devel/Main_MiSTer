@@ -1681,17 +1681,17 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 	hdmi_config();
 
-	int fb_scale = 1;
+	int fb_scale = cfg.fb_size;
 
-	if (cfg.fb_size <= 1)
+	if (fb_scale <= 1)
 	{
 		if (((v_cur.item[1] * v_cur.item[5]) > FB_SIZE))
 			fb_scale = 2;
 		else
 			fb_scale = 1;
 	}
-	else if (cfg.fb_size == 3) fb_scale = 2;
-	else if (cfg.fb_size > 4) fb_scale = 4;
+	else if (fb_scale == 3) fb_scale = 2;
+	else if (fb_scale > 4) fb_scale = 4;
 
 	const int fb_scale_x = fb_scale;
 	const int fb_scale_y = v_cur.param.pr == 0 ? fb_scale : fb_scale * 2;
