@@ -1531,7 +1531,7 @@ static void set_vrr_mode()
 		if (!vrr_max_fr) vrr_max_fr = vrr_modes[use_vrr].max_fr;
 
 		if (!vrr_min_fr) vrr_min_fr = 47;
-		if (!vrr_max_fr) vrr_max_fr = 75;
+		if (!vrr_max_fr) vrr_max_fr = 62;
 
 		vrr_modes[use_vrr].active = 1;
 		printf("VRR: Set %s active\n", vrr_modes[use_vrr].description);
