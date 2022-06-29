@@ -1629,8 +1629,8 @@ static void set_vrr_mode()
 	last_vrr_mode = cfg.vrr_mode;
 	last_vrr_rate = vrateh;
 
-	if (!supports_vrr()) use_vrr = 0;
-	if (use_vrr) cfg.vsync_adjust = 0;
+	if (!supports_vrr() || cfg.vsync_adjust == 2) use_vrr = 0;
+	if (use_vrr && cfg.vsync_adjust < 2) cfg.vsync_adjust = 0;
 }
 
 static char fb_reset_cmd[128] = {};
