@@ -1531,7 +1531,7 @@ static void set_vrr_mode()
 		if (!vrr_max_fr) vrr_max_fr = vrr_modes[use_vrr].max_fr;
 
 		if (!vrr_min_fr) vrr_min_fr = 47;
-		if (!vrr_max_fr) vrr_max_fr = 75;
+		if (!vrr_max_fr) vrr_max_fr = 62;
 
 		vrr_modes[use_vrr].active = 1;
 		printf("VRR: Set %s active\n", vrr_modes[use_vrr].description);
@@ -1629,8 +1629,8 @@ static void set_vrr_mode()
 	last_vrr_mode = cfg.vrr_mode;
 	last_vrr_rate = vrateh;
 
-	if (!supports_vrr()) use_vrr = 0;
-	if (use_vrr) cfg.vsync_adjust = 0;
+	if (!supports_vrr() || cfg.vsync_adjust == 2) use_vrr = 0;
+	if (use_vrr && cfg.vsync_adjust < 2) cfg.vsync_adjust = 0;
 }
 
 static char fb_reset_cmd[128] = {};
