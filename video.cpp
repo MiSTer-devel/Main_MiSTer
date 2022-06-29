@@ -1089,7 +1089,6 @@ static void hdmi_config()
 
 		0x3B, pr_flags,
 
-		0x40, 0x00,
 
 		0x48, 0b00001000,       // [6]=0 Normal bus order!
 								// [5] DDR Alignment.
