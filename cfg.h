@@ -74,8 +74,8 @@ typedef struct {
 	uint16_t wheel_range;
 	uint8_t hdmi_game_mode;
 	uint8_t vrr_mode;
-	uint8_t vrr_freesync_min_framerate;
-	uint8_t vrr_freesync_max_framerate;
+	uint8_t vrr_min_framerate;
+	uint8_t vrr_max_framerate;
 	uint8_t vrr_vesa_framerate;
 } cfg_t;
 

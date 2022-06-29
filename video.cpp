@@ -50,12 +50,13 @@
 #define FB_DV_UBRD  2
 #define FB_DV_BBRD  2
 
-#define VRR_NONE 0x00
+#define VRR_NONE     0x00
 #define VRR_FREESYNC 0x01
-#define VRR_VESA 0x02
+#define VRR_VESA     0x02
 
-
-
+static int     use_vrr = 0;
+static uint8_t vrr_min_fr = 0;
+static uint8_t vrr_max_fr = 0;
 
 static volatile uint32_t *fb_base = 0;
 static int fb_enabled = 0;
@@ -74,11 +75,11 @@ static int support_FHD = 0;
 
 struct vrr_cap_t
 {
-		uint8_t active;
-		uint8_t available;
-		uint8_t min_fr;
-		uint8_t max_fr;
-		char description[128];
+	uint8_t active;
+	uint8_t available;
+	uint8_t min_fr;
+	uint8_t max_fr;
+	char description[128];
 };
 
 static vrr_cap_t vrr_modes[3] = {
@@ -88,10 +89,8 @@ static vrr_cap_t vrr_modes[3] = {
 };
 
 static uint8_t last_vrr_mode = 0xFF;
-static float last_vrr_rate = 0.0f; 
+static float last_vrr_rate = 0.0f;
 static uint8_t edid[256] = {};
-
-
 
 struct vmode_t
 {
@@ -175,6 +174,20 @@ static_assert(sizeof(vmode_custom_param_t) == sizeof(vmode_custom_t::item));
 
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
+
+static bool supports_pr()
+{
+	static uint16_t video_version = 0xffff;
+	if (video_version == 0xffff) video_version = spi_uio_cmd(UIO_SET_VIDEO) & 1;
+	return video_version != 0;
+}
+
+static bool supports_vrr()
+{
+	static uint16_t video_version = 0xffff;
+	if (video_version == 0xffff) video_version = spi_uio_cmd(UIO_SET_VIDEO) & 2;
+	return video_version != 0;
+}
 
 static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode);
 
@@ -969,7 +982,7 @@ static void hdmi_config_set_spd(bool val)
 	if (fd >= 0)
 	{
 		uint8_t packet_val = i2c_smbus_read_byte_data(fd, 0x40);
-		if (val) 
+		if (val)
 			packet_val |= 0x40;
 		else
 			packet_val &= ~0x40;
@@ -979,14 +992,13 @@ static void hdmi_config_set_spd(bool val)
 	}
 }
 
-
 static void hdmi_config_set_spare(bool val)
 {
 	int fd = i2c_open(0x39, 0);
 	if (fd >= 0)
 	{
 		uint8_t packet_val = i2c_smbus_read_byte_data(fd, 0x40);
-		if (val) 
+		if (val)
 			packet_val |= 0x01;
 		else
 			packet_val &= ~0x01;
@@ -1188,8 +1200,6 @@ static void hdmi_config()
 
 		i2c_close(fd);
 	}
-
-
 	else
 	{
 		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
@@ -1198,64 +1208,62 @@ static void hdmi_config()
 
 static void edid_parse_cea_ext(uint8_t *cea)
 {
-
 	uint8_t *data_block_end = cea + cea[2];
-	uint8_t *cur_blk_start = cea+4; 
+	uint8_t *cur_blk_start = cea + 4;
 	uint8_t *cur_blk_data = cur_blk_start;
 	while (cur_blk_start != data_block_end)
 	{
-			cur_blk_data = cur_blk_start;
-			uint8_t blk_tag = (*cur_blk_data & 0xe0) >> 5;
-			uint8_t blk_size = *cur_blk_data & 0x1f;
-			uint8_t blk_data_size = blk_size; //size of actual data in the block, it might be adjusted if the first byte is extended tag
-			cur_blk_data++;
-			//vendor specific block might be the only one?
+		cur_blk_data = cur_blk_start;
+		uint8_t blk_tag = (*cur_blk_data & 0xe0) >> 5;
+		uint8_t blk_size = *cur_blk_data & 0x1f;
+		uint8_t blk_data_size = blk_size; //size of actual data in the block, it might be adjusted if the first byte is extended tag
+		cur_blk_data++;
+		//vendor specific block might be the only one?
 
-			uint8_t is_vendor_specific = 0;
-			if (blk_tag == 0x03) is_vendor_specific = 1;
-			if (blk_tag == 0x07)
-			{
-				if (*cur_blk_data == 0x01) is_vendor_specific = 1;
-				cur_blk_data++; //The extended tag uses the next byte for the type. We may not need it?
-				blk_data_size--;
-			}
-			if (is_vendor_specific && blk_data_size >= 3)
-			{
+		uint8_t is_vendor_specific = 0;
+		if (blk_tag == 0x03) is_vendor_specific = 1;
+		if (blk_tag == 0x07)
+		{
+			if (*cur_blk_data == 0x01) is_vendor_specific = 1;
+			cur_blk_data++; //The extended tag uses the next byte for the type. We may not need it?
+			blk_data_size--;
+		}
 
-				int oui = cur_blk_data[0] |  cur_blk_data[1] << 8 | cur_blk_data[2] << 16;
-				cur_blk_data +=3;
-				blk_data_size -= 3;
-				if (oui == 0x00001a) //AMD block
+		if (is_vendor_specific && blk_data_size >= 3)
+		{
+			int oui = cur_blk_data[0] | cur_blk_data[1] << 8 | cur_blk_data[2] << 16;
+			cur_blk_data += 3;
+			blk_data_size -= 3;
+			if (oui == 0x00001a) //AMD block
+			{
+				uint8_t min_fr = cur_blk_data[2];
+
+				uint8_t max_fr = cur_blk_data[3];
+				if (min_fr && max_fr)
 				{
-					uint8_t min_fr = cur_blk_data[2];
-
-					uint8_t max_fr = cur_blk_data[3];
+					vrr_modes[VRR_FREESYNC].available = 1;
+					vrr_modes[VRR_FREESYNC].min_fr = min_fr;
+					vrr_modes[VRR_FREESYNC].max_fr = max_fr;
+				}
+			}
+			else if (oui == 0xc45dd8)
+			{
+				if (blk_data_size > 5) //VRR lies beyond here
+				{
+					uint8_t min_fr = cur_blk_data[5] & 0x3f;
+					uint8_t max_fr = (cur_blk_data[5] & 0xc0) << 2 | cur_blk_data[6];
 					if (min_fr && max_fr)
 					{
-						vrr_modes[VRR_FREESYNC].available = 1;
-						vrr_modes[VRR_FREESYNC].min_fr = min_fr;
-						vrr_modes[VRR_FREESYNC].max_fr = max_fr;
-					}
-				} else if (oui == 0xc45dd8) {
-				
-					if (blk_data_size > 5) //VRR lies beyond here
-					{
-						uint8_t min_fr = cur_blk_data[5] & 0x3f;
-						uint8_t max_fr = (cur_blk_data[5] & 0xc0) << 2 | cur_blk_data[6];
-						if (min_fr && max_fr)
-						{
-							vrr_modes[VRR_VESA].available = 1;
-							vrr_modes[VRR_VESA].min_fr = min_fr;
-							vrr_modes[VRR_VESA].max_fr = max_fr;
-						}
+						vrr_modes[VRR_VESA].available = 1;
+						vrr_modes[VRR_VESA].min_fr = min_fr;
+						vrr_modes[VRR_VESA].max_fr = max_fr;
 					}
 				}
 			}
-			cur_blk_start += blk_size+1;
+		}
+		cur_blk_start += blk_size + 1;
 	}
-
 }
-
 
 static int find_edid_vrr_capability()
 {
@@ -1265,17 +1273,17 @@ static int find_edid_vrr_capability()
 	//Probably only one extension, but just in case...
 	for (int i = 0; i < ext_cnt; i++)
 	{
-		cur_ext = edid + 128 + i*128; //edid extension blocks are 128 bytes 
+		cur_ext = edid + 128 + i * 128; //edid extension blocks are 128 bytes
 		uint8_t ext_tag = *cur_ext;
 		if (ext_tag == 0x02) //CEA EDID extension
 		{
-			edid_parse_cea_ext(cur_ext);			
+			edid_parse_cea_ext(cur_ext);
 		}
 	}
 
-	for (size_t i = 1; i < sizeof(vrr_modes)/sizeof(vrr_cap_t); i++)
+	for (size_t i = 1; i < sizeof(vrr_modes) / sizeof(vrr_cap_t); i++)
 	{
-		if (vrr_modes[i].available) printf("VRR: %s available\n", vrr_modes[i].description);	
+		if (vrr_modes[i].available) printf("VRR: %s available\n", vrr_modes[i].description);
 	}
 	return 0;
 
@@ -1283,18 +1291,13 @@ static int find_edid_vrr_capability()
 
 static int is_edid_valid()
 {
-
 	static const uint8_t magic[] = { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00 };
-
 	if (sizeof(edid) < sizeof(magic)) return 0;
-
 	return !memcmp(edid, magic, sizeof(magic));
 }
 
-
 static int get_active_edid()
 {
-
 	hdmi_config(); // required to get EDID
 
 	int fd = i2c_open(0x39, 0);
@@ -1306,7 +1309,7 @@ static int get_active_edid()
 
 	for (int i = 0; i < 10; i++)
 	{
-		i2c_smbus_write_byte_data(fd, 0xC9, 0x03); 
+		i2c_smbus_write_byte_data(fd, 0xC9, 0x03);
 		i2c_smbus_write_byte_data(fd, 0xC9, 0x13);
 	}
 	i2c_close(fd);
@@ -1337,18 +1340,14 @@ static int get_active_edid()
 	return 1;
 }
 
-
 static int get_edid_vmode(vmode_custom_t *v)
 {
-
-
 	if (!is_edid_valid())
 	{
- 		get_active_edid();		
+		get_active_edid();
 	}
 
 	if (!is_edid_valid()) return 0;
-	
 
 	int hact, vact, pixclk_khz, hfp, hsync, hbp, vfp, vsync, vbp, hbl, vbl;
 	uint8_t *x = edid + 0x36;
@@ -1402,7 +1401,6 @@ static int get_edid_vmode(vmode_custom_t *v)
 		break;
 	}
 	*/
-
 
 	double Fpix = pixclk_khz / 1000.f;
 	double frame_rate = Fpix * 1000000.f / ((hact + hfp + hbp + hsync)*(vact + vfp + vbp + vsync));
@@ -1468,7 +1466,7 @@ static int get_edid_vmode(vmode_custom_t *v)
 
 static void set_vrr_mode()
 {
-
+	use_vrr = 0;
 	float vrateh = 100000000;
 
 	if (cfg.vrr_mode == 0)
@@ -1477,6 +1475,7 @@ static void set_vrr_mode()
 		hdmi_config_set_spare(0);
 		return;
 	}
+
 	if (current_video_info.vtimeh) vrateh /= current_video_info.vtimeh; else vrateh = 0;
 	if (cfg.vrr_vesa_framerate) vrateh = cfg.vrr_vesa_framerate;
 
@@ -1493,42 +1492,47 @@ static void set_vrr_mode()
 		return;
 	}
 
-
 	find_edid_vrr_capability();
-
-	int use_vrr = 0;
 
 	if (cfg.vrr_mode == 1) //autodetect
 	{
-		for(uint8_t i = 0; i < sizeof(vrr_modes) / sizeof(vrr_cap_t); i++)
+		for (uint8_t i = 1; i < sizeof(vrr_modes) / sizeof(vrr_cap_t); i++)
 		{
 			if (vrr_modes[i].available)
 			{
-					use_vrr = i;
-					break;
+				use_vrr = i;
+				break;
 			}
 		}
-	} else if (cfg.vrr_mode == 2) { //force AMD Freesync
+	}
+	else if (cfg.vrr_mode == 2)
+	{ //force AMD Freesync
 		use_vrr = VRR_FREESYNC;
-	} else if (cfg.vrr_mode == 3) { //force Vesa Forum VRR
+	}
+	else if (cfg.vrr_mode == 3)
+	{ //force Vesa Forum VRR
 		use_vrr = VRR_VESA;
-	} else { 
+	}
+	else
+	{
 		use_vrr = 0;
 	}
 
-	uint8_t min_fr = 0;
-	uint8_t max_fr = 0;
+	vrr_min_fr = 0;
+	vrr_max_fr = 0;
 
 	if (use_vrr == VRR_VESA && !vrateh) return;
 	if (use_vrr)
 	{
-		if (use_vrr == VRR_FREESYNC)
-		{
-			min_fr = cfg.vrr_freesync_min_framerate ? cfg.vrr_freesync_min_framerate : vrr_modes[use_vrr].min_fr;
-			max_fr = cfg.vrr_freesync_max_framerate ? cfg.vrr_freesync_max_framerate : vrr_modes[use_vrr].max_fr;
-			if (!min_fr) min_fr = 48;
-			if (!max_fr) max_fr = 75;
-		}
+		vrr_min_fr = cfg.vrr_min_framerate;
+		vrr_max_fr = cfg.vrr_max_framerate;
+
+		if (!vrr_min_fr) vrr_min_fr = vrr_modes[use_vrr].min_fr;
+		if (!vrr_max_fr) vrr_max_fr = vrr_modes[use_vrr].max_fr;
+
+		if (!vrr_min_fr) vrr_min_fr = 47;
+		if (!vrr_max_fr) vrr_max_fr = 75;
+
 		vrr_modes[use_vrr].active = 1;
 		printf("VRR: Set %s active\n", vrr_modes[use_vrr].description);
 		if (use_vrr == VRR_VESA)
@@ -1551,9 +1555,9 @@ static void set_vrr_mode()
 		0x06, 0x00,
 		//0x07
 		//0x08
-		0x09, 0x07, 
-		0x0A, min_fr, 
-		0x0B, max_fr,
+		0x09, 0x07,
+		0x0A, vrr_min_fr,
+		0x0B, vrr_max_fr,
 	};
 
 	uint8_t vesa_data[] = {
@@ -1586,14 +1590,16 @@ static void set_vrr_mode()
 			{
 				printf("i2c: Vrr: Couldn't update SPD change register (0x1F, 0x80) %d\n", res);
 			}
-			for (uint i = 0; i < sizeof(freesync_data); i+=2)
+			for (uint i = 0; i < sizeof(freesync_data); i += 2)
 			{
-				res = i2c_smbus_write_byte_data(fd, freesync_data[i], freesync_data[i+1]);
-				if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n",freesync_data[i], freesync_data[i+1], res);
+				res = i2c_smbus_write_byte_data(fd, freesync_data[i], freesync_data[i + 1]);
+				if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n", freesync_data[i], freesync_data[i + 1], res);
 			}
 			res = i2c_smbus_write_byte_data(fd, 0x1F, 0x00);
 			if (res < 0) printf("i2c: Vrr: Couldn't update SPD change register (0x1F, 0x00), %d\n", res);
-		} else {
+		}
+		else
+		{
 			hdmi_config_set_spd(0);
 		}
 
@@ -1606,20 +1612,25 @@ static void set_vrr_mode()
 				printf("i2c: Vrr: Couldn't update Spare Packet change register (0xDF, 0x80) %d\n", res);
 			}
 
-			for (uint i = 0; i < sizeof(vesa_data); i+=2)
+			for (uint i = 0; i < sizeof(vesa_data); i += 2)
 			{
-				res = i2c_smbus_write_byte_data(fd, vesa_data[i], vesa_data[i+1]);
-				if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n", vesa_data[i], vesa_data[i+1], res);
+				res = i2c_smbus_write_byte_data(fd, vesa_data[i], vesa_data[i + 1]);
+				if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n", vesa_data[i], vesa_data[i + 1], res);
 			}
 			res = i2c_smbus_write_byte_data(fd, 0xDF, 0x00);
 			if (res < 0) printf("i2c: Vrr: Couldn't update Spare Packet change register (0xDF, 0x00), %d\n", res);
-		} else {
+		}
+		else
+		{
 			hdmi_config_set_spare(0);
 		}
 		i2c_close(fd);
 	}
 	last_vrr_mode = cfg.vrr_mode;
 	last_vrr_rate = vrateh;
+
+	if (!supports_vrr()) use_vrr = 0;
+	if (use_vrr) cfg.vsync_adjust = 0;
 }
 
 static char fb_reset_cmd[128] = {};
@@ -1645,13 +1656,54 @@ static void set_video(vmode_custom_t *v, double Fpix)
 		v_fix.item[5] += v_cur.item[6] - v_fix.item[6];
 		v_fix.item[5] += v_cur.item[8] - v_fix.item[8];
 	}
+	else
+	{
+		set_vrr_mode();
+	}
+
+	if (Fpix) setPLL(Fpix, &v_cur);
+	if (use_vrr)
+	{
+		printf("Requested variable refresh rate: min=%dHz, max=%dHz\n", vrr_min_fr, vrr_max_fr);
+
+		int horz = v_fix.param.hact + v_fix.param.hbp + v_fix.param.hfp + v_fix.param.hs;
+
+		// try to adjust VBlank to match max refresh
+		int vbl_fmax = ((v_cur.Fpix * 1000000.f) / (vrr_max_fr * horz)) - v_fix.param.vact - v_fix.param.vs - 1;
+		if (vbl_fmax >= 2)
+		{
+			int vfp = vbl_fmax - v_fix.param.vbp;
+			v_fix.param.vfp = vfp;
+			if (vfp < 1)
+			{
+				v_fix.param.vfp = 1;
+				v_fix.param.vbp = vbl_fmax - 1;
+			}
+		}
+
+		int vert = v_fix.param.vact + v_fix.param.vbp + v_fix.param.vfp + v_fix.param.vs;
+
+		double freq_max = (v_cur.Fpix * 1000000.f) / (horz * vert);
+		double freq_min = vrr_min_fr;
+		int vfp_vrr = 0;
+		if (freq_min && freq_min < freq_max)
+		{
+			vfp_vrr = ((v_cur.Fpix * 1000000.f) / (vrr_min_fr * horz)) - vert + 1;
+			v_fix.param.vfp += vfp_vrr;
+			if (v_fix.param.vfp > 4095) v_fix.param.vfp = 4095;
+		}
+
+		vert = v_fix.param.vact + v_fix.param.vbp + v_fix.param.vfp + v_fix.param.vs;
+		freq_min = (v_cur.Fpix * 1000000.f) / (horz * vert);
+		printf("Using variable refresh rate: min=%2.1fHz, max=%2.1fHz. Additional VFP lines: %d\n", freq_min, freq_max, vfp_vrr);
+	}
 
 	printf("Send HDMI parameters:\n");
 	spi_uio_cmd_cont(UIO_SET_VIDEO);
 	printf("video: ");
 	for (int i = 1; i <= 8; i++)
 	{
-		if (i == 1) spi_w((v_cur.param.pr << 15) | v_fix.item[i]);
+		if (i == 1) spi_w((v_cur.param.pr << 15) | ((use_vrr ? 1 : 0) << 14) | v_fix.item[i]);
 		//hsync polarity
 		else if (i == 3) spi_w((!!v_cur.param.hpol << 15) | v_fix.item[i]);
 		//vsync polarity
@@ -1662,9 +1714,7 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 	printf("%chsync, %cvsync\n", !!v_cur.param.hpol ? '+' : '-', !!v_cur.param.vpol ? '+' : '-');
 
-	if (Fpix) setPLL(Fpix, &v_cur);
-
-	printf("\nPLL: ");
+	printf("PLL: ");
 	for (int i = 9; i < 21; i++)
 	{
 		printf("0x%X, ", v_cur.item[i]);
@@ -1703,7 +1753,6 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	brd_y = cfg.vscale_border / fb_scale_y;
 
 	if (fb_enabled) video_fb_enable(1, fb_num);
-
 
 	sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_width * 4);
 	system(fb_reset_cmd);
@@ -1798,7 +1847,7 @@ static int store_custom_video_mode(char* vcfg, vmode_custom_t *v)
 
 	uint mode = (ret >= 0) ? ret : (support_FHD) ? 8 : 0;
 	if (mode >= VMODES_NUM) mode = 0;
-	if (vmodes[mode].pr == 1 && !video_supports_pr()) mode = 8;
+	if (vmodes[mode].pr == 1 && !supports_pr()) mode = 8;
 	for (int i = 0; i < 8; i++) v->item[i + 1] = vmodes[mode].vpar[i];
 	v->param.vic = vmodes[mode].vic_mode;
 	v->param.pr = vmodes[mode].pr;
@@ -2175,7 +2224,6 @@ bool video_mode_select(uint32_t vtime, vmode_custom_t* out_mode)
 
 void video_mode_adjust()
 {
-
 	static bool force = false;
 
 	VideoInfo video_info;
@@ -2195,7 +2243,6 @@ void video_mode_adjust()
 
 		show_video_info(&video_info, &v_cur);
 		video_scaling_adjust(&video_info, &v_cur);
-		set_vrr_mode();
 	}
 	force = false;
 
@@ -2977,21 +3024,6 @@ void video_cmd(char *cmd)
 	}
 }
 
-
-bool video_is_rotated()
-{
-	return current_video_info.rotated;
-}
-
-static uint16_t video_version = 0xffff;
-
-bool video_supports_pr()
-{
-	if (video_version == 0xffff) video_version = spi_uio_cmd(UIO_SET_VIDEO);
-
-	return video_version != 0;
-}
-
 static constexpr int CELL_GRAN_RND = 8;
 
 static int determine_vsync(int w, int h)
@@ -3129,7 +3161,7 @@ static void video_calculate_cvt_int(int h_pixels, int v_lines, float refresh_rat
 static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode)
 {
 	// If the resolution it too wide and the core doesn't support pixel repetition then just do 1080p
-	if (h_pixels > 2048 && !video_supports_pr())
+	if (h_pixels > 2048 && !supports_pr())
 	{
 		printf("Pixel repetition not supported by core for %dx%d resolution, defaulting 1080p.\n", h_pixels, v_lines);
 		video_calculate_cvt(1920, 1080, refresh_rate, reduced_blanking, vmode);

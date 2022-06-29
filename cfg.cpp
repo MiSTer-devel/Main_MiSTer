@@ -97,8 +97,8 @@ static const ini_var_t ini_vars[] =
 	{ "WHEEL_RANGE", (void*)(&(cfg.wheel_range)), UINT16, 0, 1000 },
 	{ "HDMI_GAME_MODE", (void *)(&(cfg.hdmi_game_mode)), UINT8, 0, 1},
 	{ "VRR_MODE", (void *)(&(cfg.vrr_mode)), UINT8, 0, 3},
-	{ "VRR_FREESYNC_MIN_FRAMERATE", (void *)(&(cfg.vrr_freesync_min_framerate)), UINT8, 0, 255},
-	{ "VRR_FREESYNC_MAX_FRAMERATE", (void *)(&(cfg.vrr_freesync_max_framerate)), UINT8, 0, 255},
+	{ "VRR_MIN_FRAMERATE", (void *)(&(cfg.vrr_min_framerate)), UINT8, 0, 255},
+	{ "VRR_MAX_FRAMERATE", (void *)(&(cfg.vrr_max_framerate)), UINT8, 0, 255},
 	{ "VRR_VESA_FRAMERATE", (void *)(&(cfg.vrr_vesa_framerate)), UINT8, 0, 255},
 };
 
