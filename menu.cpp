@@ -264,8 +264,8 @@ static const uint32_t helptext_timeouts[] =
 	10000,
 	10000,
 	10000,
-	2000,
-	2000
+	10000,
+	10000
 };
 
 static const char *info_top = "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82";
@@ -4724,7 +4724,7 @@ void HandleUI(void)
 
 		if (flist_nDirEntries())
 		{
-			ScrollLongName(); // scrolls file name if longer than display line
+			if (!helpstate || ((flist_iSelectedEntry() - flist_iFirstEntry() + 1) < OsdGetSize())) ScrollLongName(); // scrolls file name if longer than display line
 
 			if (c == KEY_HOME || c == KEY_TAB)
 			{
