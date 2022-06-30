@@ -1764,6 +1764,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 {
 	char *tokens[32];
 	uint32_t val[32];
+	double valf = 0;
 
 	char work[1024];
 	char *next;
@@ -1781,6 +1782,12 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 		{
 			break;
 		}
+	}
+
+	if (cnt == 2)
+	{
+		valf = strtod(tokens[cnt], &next);
+		if (!*next) cnt++;
 	}
 
 	for (int i = cnt; i < token_cnt; i++)
@@ -1808,7 +1815,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	}
 	else if (cnt == 3)
 	{
-		video_calculate_cvt(val[0], val[1], val[2], v->param.rb, v);
+		video_calculate_cvt(val[0], val[1], valf ? valf : val[2], v->param.rb, v);
 	}
 	else if (cnt >= 21)
 	{
