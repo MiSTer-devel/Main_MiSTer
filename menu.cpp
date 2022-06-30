@@ -625,6 +625,7 @@ static void printSysInfo()
 		struct battery_data_t bat;
 		int hasbat = getBattery(0, &bat);
 		int n = 2;
+		static int flip = 0;
 
 		char str[40];
 		OsdWrite(n++, info_top, 0, 0);
@@ -648,7 +649,8 @@ static void printSysInfo()
 		if (!j) infowrite(n++, "No network");
 		if (j<2) infowrite(n++, "");
 
-		if (hasbat)
+		flip = (flip + 1) & 3;
+		if (hasbat && (flip & 2))
 		{
 			infowrite(n++, "");
 
