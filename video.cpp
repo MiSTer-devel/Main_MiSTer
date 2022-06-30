@@ -1669,15 +1669,13 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 		// try to adjust VBlank to match max refresh
 		int vbl_fmax = ((v_cur.Fpix * 1000000.f) / (vrr_max_fr * horz)) - v_fix.param.vact - v_fix.param.vs - 1;
-		if (vbl_fmax >= 2)
+		if (vbl_fmax < 2) vbl_fmax = 2;
+		int vfp = vbl_fmax - v_fix.param.vbp;
+		v_fix.param.vfp = vfp;
+		if (vfp < 1)
 		{
-			int vfp = vbl_fmax - v_fix.param.vbp;
-			v_fix.param.vfp = vfp;
-			if (vfp < 1)
-			{
-				v_fix.param.vfp = 1;
-				v_fix.param.vbp = vbl_fmax - 1;
-			}
+			v_fix.param.vfp = 1;
+			v_fix.param.vbp = vbl_fmax - 1;
 		}
 
 		int vert = v_fix.param.vact + v_fix.param.vbp + v_fix.param.vfp + v_fix.param.vs;
