@@ -1663,9 +1663,10 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	if (use_vrr)
 	{
 		printf("Requested variable refresh rate: min=%dHz, max=%dHz\n", vrr_min_fr, vrr_max_fr);
-
 		int horz = v_fix.param.hact + v_fix.param.hbp + v_fix.param.hfp + v_fix.param.hs;
 
+#if 0
+		// variant 1: try to reduce vblank to reach max refresh rate but keep original pixel clock.
 		// try to adjust VBlank to match max refresh
 		int vbl_fmax = ((v_cur.Fpix * 1000000.f) / (vrr_max_fr * horz)) - v_fix.param.vact - v_fix.param.vs - 1;
 		if (vbl_fmax < 2) vbl_fmax = 2;
@@ -1676,8 +1677,14 @@ static void set_video(vmode_custom_t *v, double Fpix)
 			v_fix.param.vfp = 1;
 			v_fix.param.vbp = vbl_fmax - 1;
 		}
-
 		int vert = v_fix.param.vact + v_fix.param.vbp + v_fix.param.vfp + v_fix.param.vs;
+#else
+		// variant 2: keep original vblank and adjust pixel clock to max refresh rate
+		int vert = v_fix.param.vact + v_fix.param.vbp + v_fix.param.vfp + v_fix.param.vs;
+		Fpix = horz * vert * vrr_max_fr;
+		Fpix /= 1000000.f;
+		setPLL(Fpix, &v_cur);
+#endif
 
 		double freq_max = (v_cur.Fpix * 1000000.f) / (horz * vert);
 		double freq_min = vrr_min_fr;
@@ -3027,7 +3034,7 @@ void video_cmd(char *cmd)
 	}
 }
 
-static constexpr int CELL_GRAN_RND = 8;
+static constexpr int CELL_GRAN_RND = 4;
 
 static int determine_vsync(int w, int h)
 {
