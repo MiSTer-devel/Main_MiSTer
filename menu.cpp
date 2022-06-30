@@ -210,7 +210,7 @@ const char *config_scanlines_msg[] = { "Off", "HQ2x", "CRT 25%" , "CRT 50%" , "C
 const char *config_blank_msg[] = { "Blank", "Blank+" };
 const char *config_dither_msg[] = { "off", "SPT", "RND", "S+R" };
 const char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE FAST", "        AUTOFIRE MEDIUM", "        AUTOFIRE SLOW" };
-const char *config_cd32pad_msg[] = { "OFF", "ON" };
+const char *config_joystick_mode[] = { "Digital", "Analog", "CD32", "Analog" };
 const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "    Stick 1: Tilt RIGHT", "    Stick 1: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
@@ -264,8 +264,8 @@ static const uint32_t helptext_timeouts[] =
 	10000,
 	10000,
 	10000,
-	2000,
-	2000
+	10000,
+	10000
 };
 
 static const char *info_top = "\x80\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x82";
@@ -4724,7 +4724,7 @@ void HandleUI(void)
 
 		if (flist_nDirEntries())
 		{
-			ScrollLongName(); // scrolls file name if longer than display line
+			if (!helpstate || ((flist_iSelectedEntry() - flist_iFirstEntry() + 1) < OsdGetSize())) ScrollLongName(); // scrolls file name if longer than display line
 
 			if (c == KEY_HOME || c == KEY_TAB)
 			{
@@ -5506,8 +5506,8 @@ void HandleUI(void)
 		OsdWrite(m++, s, menusub == 5, 0);
 
 		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " CD32 Pad : ");
-		strcat(s, config_cd32pad_msg[(minimig_config.autofire >> 2) & 1]);
+		strcpy(s, " Joystick : ");
+		strcat(s, config_joystick_mode[(minimig_config.autofire & 6) >> 1]);
 		OsdWrite(m++, s, menusub == 6, 0);
 
 		OsdWrite(m++, "", 0, 0);
@@ -5634,9 +5634,21 @@ void HandleUI(void)
 			}
 			else if (menusub == 6)
 			{
-				minimig_config.autofire ^= 0x4;
+				uint8_t x = (minimig_config.autofire & 6) >> 1;
+				if (minus)
+				{
+					x = (x - 1) & 3;
+					if (x == 3) x = 2;
+				}
+				else
+				{
+					x = (x + 1) & 3;
+					if (x == 3) x = 0;
+				}
+
+				minimig_config.autofire = (minimig_config.autofire & ~6) | (x << 1);
 				menustate = MENU_MINIMIG_CHIPSET1;
-				minimig_ConfigAutofire(minimig_config.autofire, 0x4);
+				minimig_ConfigAutofire(minimig_config.autofire, 6);
 			}
 			else if (menusub == 7 && select)
 			{
