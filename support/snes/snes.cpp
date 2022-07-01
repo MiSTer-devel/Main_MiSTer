@@ -363,7 +363,8 @@ void snes_msu_init(const char* name)
 	FileClose(&f_audio);
 
 	memset(snes_romFileName, 0, 1024);
-	strncpy(snes_romFileName, name, strlen(name) - 4);
+	int extSize = strlen(strrchr(name, '.'));
+	strncpy(snes_romFileName, name, strlen(name) - extSize);
 	printf("MSU: Rom named '%s' initialised\n", name);
 
 	snprintf(SelectedPath, sizeof(SelectedPath), "%s.msu", snes_romFileName);
