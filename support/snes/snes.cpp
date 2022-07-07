@@ -374,10 +374,10 @@ void snes_msu_init(const char* name)
 
 	printf("MSU: enable cd: %d\n", has_cd);
 
-	if (size && size < 0x1F500000)
+	if (size && size < 0x1F200000)
 	{
-		msu_send_command((0x20300000ULL << 16) | MSU_DATA_BASE);
-		user_io_file_tx(SelectedPath, 3, 0, 0, 0, 0x20300000);
+		msu_send_command((0x20600000ULL << 16) | MSU_DATA_BASE);
+		user_io_file_tx(SelectedPath, 3, 0, 0, 0, 0x20600000);
 	}
 
 	msu_send_command((has_cd << 15) | MSU_CD_SET);
