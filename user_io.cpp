@@ -2364,7 +2364,7 @@ int user_io_file_tx_a(const char* name, uint16_t index)
 	return 1;
 }
 
-int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite, uint32_t load_addr)
+int user_io_file_tx(const char* name, uint16_t index, char opensave, char mute, char composite, uint32_t load_addr)
 {
 	fileTYPE f = {};
 	static uint8_t buf[4096];
@@ -2389,7 +2389,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	if(load_addr) printf("Load to address 0x%X\n", load_addr);
 
 	// set index byte (0=bios rom, 1-n=OSD entry index)
-	user_io_set_index(index);
+	user_io_set_aindex(index);
 
 	int len = strlen(f.name);
 	char *p = f.name + len - 4;

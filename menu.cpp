@@ -2216,7 +2216,7 @@ void HandleUI(void)
 			if (selPath[0])
 			{
 
-				char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
+				uint16_t idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 				if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
 				if (fs_Options & SCANO_NEOGEO)
