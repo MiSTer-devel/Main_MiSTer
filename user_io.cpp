@@ -1915,7 +1915,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 			{
 				writable = FileCanWrite(name);
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
-				if (ret && len > 4 && (!strcasecmp(name + len - 4, ".d64") || !strcasecmp(name + len - 4, ".g64")))
+				if (ret && len > 4 && (!strcasecmp(name + len - 4, ".d64") || !strcasecmp(name + len - 4, ".g64") || !strcasecmp(name + len - 4, ".d71") || !strcasecmp(name + len - 4, ".g71")))
 				{
 					ret = c64_openGCR(name, sd_image + index, index);
 					sd_type[index] = 1;
