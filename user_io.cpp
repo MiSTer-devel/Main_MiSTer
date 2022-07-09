@@ -842,7 +842,7 @@ static void parse_config()
 					}
 					else
 					{
-						user_io_set_index(user_io_ext_idx(str, ext) << 6 | idx);
+						user_io_set_aindex(user_io_ext_idx(str, ext) << 6 | idx);
 						user_io_file_mount(str, idx);
 					}
 				}

@@ -2287,7 +2287,7 @@ void HandleUI(void)
 			}
 			else
 			{
-				user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
+				user_io_set_aindex(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
 				user_io_file_mount(selPath, ioctl_index);
 			}
 
