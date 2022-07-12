@@ -3140,9 +3140,9 @@ static void video_calculate_cvt_int(int h_pixels, int v_lines, float refresh_rat
 	vmode->param.hs = h_sync;
 	vmode->param.hbp = h_back_porch;
 	vmode->param.vact = v_lines;
-	vmode->param.vfp = V_FRONT_PORCH;
+	vmode->param.vfp = V_FRONT_PORCH - 1;
 	vmode->param.vs = v_sync;
-	vmode->param.vbp = v_back_porch;
+	vmode->param.vbp = v_back_porch + 1;
 	vmode->param.rb = reduced_blanking ? 1 : 0;
 	vmode->Fpix = pixel_freq;
 
