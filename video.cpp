@@ -1238,6 +1238,7 @@ static void edid_parse_cea_ext(uint8_t *cea)
 				uint8_t min_fr = cur_blk_data[2];
 
 				uint8_t max_fr = cur_blk_data[3];
+				if (max_fr > 62) max_fr = 62;
 				if (min_fr && max_fr)
 				{
 					vrr_modes[VRR_FREESYNC].available = 1;
@@ -1251,6 +1252,7 @@ static void edid_parse_cea_ext(uint8_t *cea)
 				{
 					uint8_t min_fr = cur_blk_data[5] & 0x3f;
 					uint8_t max_fr = (cur_blk_data[5] & 0xc0) << 2 | cur_blk_data[6];
+					if (max_fr > 62) max_fr = 62;
 					if (min_fr && max_fr)
 					{
 						vrr_modes[VRR_VESA].available = 1;
