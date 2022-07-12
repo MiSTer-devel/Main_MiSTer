@@ -180,105 +180,105 @@ char is_arcade()
 static int is_menu_type = 0;
 char is_menu()
 {
-	if (!is_menu_type) is_menu_type = strcasecmp(core_name, "MENU") ? 2 : 1;
+	if (!is_menu_type) is_menu_type = strcasecmp(orig_name, "MENU") ? 2 : 1;
 	return (is_menu_type == 1);
 }
 
 static int is_x86_type = 0;
 char is_x86()
 {
-	if (!is_x86_type) is_x86_type = strcasecmp(core_name, "AO486") ? 2 : 1;
+	if (!is_x86_type) is_x86_type = strcasecmp(orig_name, "AO486") ? 2 : 1;
 	return (is_x86_type == 1);
 }
 
 static int is_snes_type = 0;
 char is_snes()
 {
-	if (!is_snes_type) is_snes_type = strcasecmp(core_name, "SNES") ? 2 : 1;
+	if (!is_snes_type) is_snes_type = strcasecmp(orig_name, "SNES") ? 2 : 1;
 	return (is_snes_type == 1);
 }
 
 static int is_sgb_type = 0;
 char is_sgb()
 {
-	if (!is_sgb_type) is_sgb_type = strcasecmp(core_name, "SGB") ? 2 : 1;
+	if (!is_sgb_type) is_sgb_type = strcasecmp(orig_name, "SGB") ? 2 : 1;
 	return (is_sgb_type == 1);
 }
 
 static int is_cpc_type = 0;
 char is_cpc()
 {
-	if (!is_cpc_type) is_cpc_type = strcasecmp(core_name, "amstrad") ? 2 : 1;
+	if (!is_cpc_type) is_cpc_type = strcasecmp(orig_name, "amstrad") ? 2 : 1;
 	return (is_cpc_type == 1);
 }
 
 static int is_zx81_type = 0;
 char is_zx81()
 {
-	if (!is_zx81_type) is_zx81_type = strcasecmp(core_name, "zx81") ? 2 : 1;
+	if (!is_zx81_type) is_zx81_type = strcasecmp(orig_name, "zx81") ? 2 : 1;
 	return (is_zx81_type == 1);
 }
 
 static int is_neogeo_type = 0;
 char is_neogeo()
 {
-	if (!is_neogeo_type) is_neogeo_type = strcasecmp(core_name, "neogeo") ? 2 : 1;
+	if (!is_neogeo_type) is_neogeo_type = strcasecmp(orig_name, "neogeo") ? 2 : 1;
 	return (is_neogeo_type == 1);
 }
 
 static int is_minimig_type = 0;
 char is_minimig()
 {
-	if (!is_minimig_type) is_minimig_type = strcasecmp(core_name, "minimig") ? 2 : 1;
+	if (!is_minimig_type) is_minimig_type = strcasecmp(orig_name, "minimig") ? 2 : 1;
 	return (is_minimig_type == 1);
 }
 
 static int is_megacd_type = 0;
 char is_megacd()
 {
-	if (!is_megacd_type) is_megacd_type = strcasecmp(core_name, "MEGACD") ? 2 : 1;
+	if (!is_megacd_type) is_megacd_type = strcasecmp(orig_name, "MEGACD") ? 2 : 1;
 	return (is_megacd_type == 1);
 }
 
 static int is_pce_type = 0;
 char is_pce()
 {
-	if (!is_pce_type) is_pce_type = strcasecmp(core_name, "TGFX16") ? 2 : 1;
+	if (!is_pce_type) is_pce_type = strcasecmp(orig_name, "TGFX16") ? 2 : 1;
 	return (is_pce_type == 1);
 }
 
 static int is_archie_type = 0;
 char is_archie()
 {
-	if (!is_archie_type) is_archie_type = strcasecmp(core_name, "ARCHIE") ? 2 : 1;
+	if (!is_archie_type) is_archie_type = strcasecmp(orig_name, "ARCHIE") ? 2 : 1;
 	return (is_archie_type == 1);
 }
 
 static int is_gba_type = 0;
 char is_gba()
 {
-	if (!is_gba_type) is_gba_type = strcasecmp(core_name, "GBA") ? 2 : 1;
+	if (!is_gba_type) is_gba_type = strcasecmp(orig_name, "GBA") ? 2 : 1;
 	return (is_gba_type == 1);
 }
 
 static int is_c64_type = 0;
 char is_c64()
 {
-	if (!is_c64_type) is_c64_type = strcasecmp(core_name, "C64") ? 2 : 1;
+	if (!is_c64_type) is_c64_type = strcasecmp(orig_name, "C64") ? 2 : 1;
 	return (is_c64_type == 1);
 }
 
 static int is_psx_type = 0;
 char is_psx()
 {
-	if (!is_psx_type) is_psx_type = strcasecmp(core_name, "PSX") ? 2 : 1;
+	if (!is_psx_type) is_psx_type = strcasecmp(orig_name, "PSX") ? 2 : 1;
 	return (is_psx_type == 1);
 }
 
 static int is_st_type = 0;
 char is_st()
 {
-	if (!is_st_type) is_st_type = strcasecmp(core_name, "AtariST") ? 2 : 1;
+	if (!is_st_type) is_st_type = strcasecmp(orig_name, "AtariST") ? 2 : 1;
 	return (is_st_type == 1);
 }
 
@@ -290,14 +290,14 @@ char is_sharpmz()
 static int is_electron_type = 0;
 char is_electron()
 {
-	if (!is_electron_type) is_electron_type = strcasecmp(core_name, "AcornElectron") ? 2 : 1;
+	if (!is_electron_type) is_electron_type = strcasecmp(orig_name, "AcornElectron") ? 2 : 1;
 	return (is_electron_type == 1);
 }
 
 static int is_saturn_type = 0;
 char is_saturn()
 {
-	if (!is_saturn_type) is_saturn_type = strcasecmp(core_name, "Saturn") ? 2 : 1;
+	if (!is_saturn_type) is_saturn_type = strcasecmp(orig_name, "Saturn") ? 2 : 1;
 	return (is_saturn_type == 1);
 }
 
@@ -1268,9 +1268,9 @@ void user_io_init(const char *path, const char *xml)
 
 	OsdSetSize(8);
 
-	if (xml && isXmlName(xml) == 1)
+	if (xml)
 	{
-		is_arcade_type = 1;
+		if (isXmlName(xml) == 1) is_arcade_type = 1;
 		arcade_override_name(xml);
 	}
 
