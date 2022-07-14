@@ -23,6 +23,7 @@
 #include "shmem.h"
 #include "smbus.h"
 #include "str_util.h"
+#include "profiling.h"
 
 #include "support.h"
 #include "lib/imlib2/Imlib2.h"
@@ -237,6 +238,8 @@ static int findPLLpar(double Fout, uint32_t *pc, uint32_t *pm, double *pko)
 
 static void setPLL(double Fout, vmode_custom_t *v)
 {
+	PROFILE_FUNCTION();
+
 	double Fpix;
 	double fvco, ko;
 	uint32_t m, c;
@@ -436,6 +439,8 @@ static void send_phases(int addr, const FilterPhase phases[N_PHASES], bool full_
 
 static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert, int ver)
 {
+	PROFILE_FUNCTION();
+
 	spi_uio_cmd_cont(UIO_SET_FLTCOEF);
 
 	const bool full_precision = (ver & 0x4) != 0;
@@ -472,6 +477,8 @@ static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert
 
 static void set_vfilter(int force)
 {
+	PROFILE_FUNCTION();
+
 	static int last_flags = 0;
 
 	int flt_flags = spi_uio_cmd_cont(UIO_SET_FLTNUM);
@@ -514,6 +521,8 @@ static void set_vfilter(int force)
 
 static void setScaler()
 {
+	PROFILE_FUNCTION();
+
 	uint32_t arc[4] = {};
 	for (int i = 0; i < 2; i++)
 	{
@@ -569,6 +578,8 @@ void video_set_scaler_coeff(int type, const char *name)
 
 static void loadScalerCfg()
 {
+	PROFILE_FUNCTION();
+
 	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name());
 	memset(scaler_flt, 0, sizeof(scaler_cfg));
 	if (!FileLoadConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt)) || scaler_flt[0].mode > 1)
@@ -605,6 +616,8 @@ static char has_gamma = 0;
 
 static void setGamma()
 {
+	PROFILE_FUNCTION();
+
 	fileTextReader reader = {};
 	static char filename[1024];
 
@@ -686,6 +699,7 @@ void video_set_gamma_curve(const char *name)
 
 static void loadGammaCfg()
 {
+	PROFILE_FUNCTION();
 	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name());
 	if (!FileLoadConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg) - 1) || gamma_cfg[0]>1)
 	{
@@ -717,6 +731,8 @@ enum
 
 static void setShadowMask()
 {
+	PROFILE_FUNCTION();
+
 	static char filename[1024];
 	has_shadow_mask = 0;
 
@@ -860,6 +876,8 @@ void video_set_shadow_mask(const char *name)
 
 static void loadShadowMaskCfg()
 {
+	PROFILE_FUNCTION();
+
 	sprintf(shadow_mask_cfg_path, "%s_shmask.cfg", user_io_get_core_name());
 	if (!FileLoadConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg) - 1))
 	{
@@ -1010,6 +1028,8 @@ static void hdmi_config_set_spare(bool val)
 
 static void hdmi_config()
 {
+	PROFILE_FUNCTION();
+
 	int ypbpr = cfg.ypbpr && cfg.direct_video;
 	const uint8_t vic_mode = (uint8_t)v_cur.param.vic;
 	uint8_t pr_flags;
@@ -1467,6 +1487,8 @@ static int get_edid_vmode(vmode_custom_t *v)
 
 static void set_vrr_mode()
 {
+	PROFILE_FUNCTION();
+
 	use_vrr = 0;
 	float vrateh = 100000000;
 
@@ -1636,6 +1658,8 @@ static void set_vrr_mode()
 static char fb_reset_cmd[128] = {};
 static void set_video(vmode_custom_t *v, double Fpix)
 {
+	PROFILE_FUNCTION();
+
 	loadGammaCfg();
 	setGamma();
 
@@ -1759,8 +1783,12 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 	if (fb_enabled) video_fb_enable(1, fb_num);
 
-	sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_width * 4);
-	system(fb_reset_cmd);
+	{
+		PROFILE_SCOPE("Write MiSTer_fb");
+
+		sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_width * 4);
+		system(fb_reset_cmd);
+	}
 
 	loadShadowMaskCfg();
 	setShadowMask();
@@ -2307,6 +2335,8 @@ void video_mode_adjust()
 
 void video_fb_enable(int enable, int n)
 {
+	PROFILE_FUNCTION();
+
 	if (fb_base)
 	{
 		int res = spi_uio_cmd_cont(UIO_SET_FBUF);

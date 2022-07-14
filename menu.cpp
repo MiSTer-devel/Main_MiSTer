@@ -63,6 +63,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "support.h"
 #include "bootcore.h"
 #include "ide.h"
+#include "profiling.h"
 
 /*menu states*/
 enum MENU
@@ -899,6 +900,8 @@ static int page = 0;
 
 void HandleUI(void)
 {
+	PROFILE_FUNCTION();
+
 	if (bt_timer >= 0)
 	{
 		if (!bt_timer) bt_timer = (int32_t)GetTimer(6000);

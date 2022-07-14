@@ -34,6 +34,7 @@
 #include "audio.h"
 #include "shmem.h"
 #include "ide.h"
+#include "profiling.h"
 
 #include "support.h"
 
@@ -2783,6 +2784,8 @@ static uint32_t res_timer = 0;
 
 void user_io_poll()
 {
+	PROFILE_FUNCTION();
+
 	if ((core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
 	{
