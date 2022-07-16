@@ -51,6 +51,7 @@ SordM5: Sord M5
 Specialist: Specialist/MX
 Ti994a: TI-99/4A
 Vector-06C: Vector-06C
+TomyTutor: Tomy Tutor/Pyuta/Pyuta Jr
 TSConf: TS-Conf (ZX-Evolution)
 VIC20: Commodore VIC-20
 X68000: Sharp X68000
