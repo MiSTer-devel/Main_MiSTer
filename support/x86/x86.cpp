@@ -527,17 +527,25 @@ void x86_set_image(int num, char *filename)
 	else if (ide_is_placeholder(num - 2)) hdd_set(num - 2, filename);
 }
 
+static char* get_config_name()
+{
+	static char str[256];
+	snprintf(str, sizeof(str), "%ssys.cfg", user_io_get_core_name());
+	return str;
+}
+
+
 void x86_config_save()
 {
 	config.ver = CFG_VER;
-	FileSaveConfig("ao486sys.cfg", &config, sizeof(config));
+	FileSaveConfig(get_config_name(), &config, sizeof(config));
 }
 
 void x86_config_load()
 {
 	static x86_config tmp;
 	memset(&config, 0, sizeof(config));
-	if (FileLoadConfig("ao486sys.cfg", &tmp, sizeof(tmp)) && (tmp.ver == CFG_VER))
+	if (FileLoadConfig(get_config_name(), &tmp, sizeof(tmp)) && (tmp.ver == CFG_VER))
 	{
 		memcpy(&config, &tmp, sizeof(config));
 	}
