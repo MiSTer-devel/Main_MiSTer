@@ -24,9 +24,11 @@
 #include "smbus.h"
 #include "str_util.h"
 #include "profiling.h"
+#include "offload.h"
 
 #include "support.h"
 #include "lib/imlib2/Imlib2.h"
+#include "lib/md5/md5.h"
 
 #define FB_SIZE  (1920*1080)
 #define FB_ADDR  (0x20000000 + (32*1024*1024)) // 512mb + 32mb(Core's fb)
@@ -91,6 +93,7 @@ static vrr_cap_t vrr_modes[3] = {
 
 static uint8_t last_vrr_mode = 0xFF;
 static float last_vrr_rate = 0.0f;
+static uint32_t last_vrr_vfp = 0;
 static uint8_t edid[256] = {};
 
 struct vmode_t
@@ -173,6 +176,10 @@ struct vmode_custom_t
 
 static_assert(sizeof(vmode_custom_param_t) == sizeof(vmode_custom_t::item));
 
+// Static fwd decl
+static void video_fb_config();
+static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode);
+
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
 
@@ -189,8 +196,6 @@ static bool supports_vrr()
 	if (video_version == 0xffff) video_version = spi_uio_cmd(UIO_SET_VIDEO) & 2;
 	return video_version != 0;
 }
-
-static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode);
 
 static uint32_t getPLLdiv(uint32_t div)
 {
@@ -306,12 +311,24 @@ struct FilterPhase
 
 static constexpr int N_PHASES = 256;
 
+struct VideoFilterDigest
+{
+	VideoFilterDigest() { memset(md5, 0, sizeof(md5)); }
+	bool operator!=(const VideoFilterDigest& other) { return memcmp(md5, other.md5, sizeof(md5)) != 0; }
+	bool operator==(const VideoFilterDigest& other) { return memcmp(md5, other.md5, sizeof(md5)) == 0; }
+
+	unsigned char md5[16];
+};
+
 struct VideoFilter
 {
 	bool is_adaptive;
 	FilterPhase phases[N_PHASES];
 	FilterPhase adaptive_phases[N_PHASES];
+	VideoFilterDigest digest;
 };
+
+static VideoFilter scaler_flt_data[3];
 
 static bool scale_phases(FilterPhase out_phases[N_PHASES], FilterPhase *in_phases, int in_count)
 {
@@ -340,11 +357,15 @@ static bool scale_phases(FilterPhase out_phases[N_PHASES], FilterPhase *in_phase
 
 static bool read_video_filter(int type, VideoFilter *out)
 {
+	PROFILE_FUNCTION();
+
 	fileTextReader reader = {};
 	FilterPhase phases[512];
 	int count = 0;
 	bool is_adaptive = false;
 	int scale = 2;
+
+	memset(out, 0, sizeof(VideoFilter));
 
 	static char filename[1024];
 	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt[type].filename);
@@ -385,29 +406,50 @@ static bool read_video_filter(int type, VideoFilter *out)
 			is_adaptive ? count / 2 : count,
 			is_adaptive ? "true" : "false" );
 
+	bool valid = false;
 	if (is_adaptive)
 	{
 		out->is_adaptive = true;
-		bool valid = scale_phases(out->phases, phases, count / 2);
+		valid = scale_phases(out->phases, phases, count / 2);
 		valid = valid && scale_phases(out->adaptive_phases, phases + (count / 2), count / 2);
-		return valid;
 	}
 	else if (count == 32 && !is_adaptive) // legacy
 	{
 		out->is_adaptive = false;
-		return scale_phases(out->phases, phases, 16);
+		valid = scale_phases(out->phases, phases, 16);
 	}
 	else if (!is_adaptive)
 	{
 		out->is_adaptive = false;
-		return scale_phases(out->phases, phases, count);
+		valid = scale_phases(out->phases, phases, count);
+	}
+	else
+	{
+		// Make a default NN filter in case of error
+		out->is_adaptive = false;
+		FilterPhase nn_phases[2] =
+		{
+			{ .t = { 0, 256, 0, 0 } },
+			{ .t = { 0, 0, 256, 0 } }
+		};
+		scale_phases(out->phases, nn_phases, 2);
+		valid = false;
 	}
 
-	return false;
+	MD5Context ctx;
+	MD5Init(&ctx);
+	MD5Update(&ctx, (unsigned char *)&out->is_adaptive, sizeof(VideoFilter::is_adaptive));
+	MD5Update(&ctx, (unsigned char *)out->phases, sizeof(VideoFilter::phases));
+	MD5Update(&ctx, (unsigned char *)out->adaptive_phases, sizeof(VideoFilter::adaptive_phases));
+	MD5Final(out->digest.md5, &ctx);
+
+	return valid;
 }
 
 static void send_phases_legacy(int addr, const FilterPhase phases[N_PHASES])
 {
+	PROFILE_FUNCTION();
+
 	for (int idx = 0; idx < N_PHASES; idx += 16)
 	{
 		const FilterPhase *p = &phases[idx];
@@ -421,6 +463,8 @@ static void send_phases_legacy(int addr, const FilterPhase phases[N_PHASES])
 
 static void send_phases(int addr, const FilterPhase phases[N_PHASES], bool full_precision)
 {
+	PROFILE_FUNCTION();
+
 	const int skip = full_precision ? 1 : 4;
 	const int shift = full_precision ? 0 : 1;
 
@@ -437,6 +481,8 @@ static void send_phases(int addr, const FilterPhase phases[N_PHASES], bool full_
 	}
 }
 
+static VideoFilterDigest horiz_filter_digest, vert_filter_digest;
+
 static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert, int ver)
 {
 	PROFILE_FUNCTION();
@@ -445,25 +491,28 @@ static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert
 
 	const bool full_precision = (ver & 0x4) != 0;
 
+	const bool send_horiz = horiz_filter_digest != horiz->digest;
+	const bool send_vert = vert_filter_digest != vert->digest;
+
 	switch( ver & 0x3 )
 	{
 		case 1:
-			send_phases_legacy(0, horiz->phases);
-			send_phases_legacy(64, vert->phases);
+			if (send_horiz) send_phases_legacy(0, horiz->phases);
+			if (send_vert) send_phases_legacy(64, vert->phases);
 			break;
 		case 2:
-			send_phases(0, horiz->phases, full_precision);
-			send_phases(1, vert->phases, full_precision);
+			if (send_horiz) send_phases(0, horiz->phases, full_precision);
+			if (send_vert) send_phases(1, vert->phases, full_precision);
 			break;
 		case 3:
-			send_phases(0, horiz->phases, full_precision);
-			send_phases(1, vert->phases, full_precision);
+			if (send_horiz) send_phases(0, horiz->phases, full_precision);
+			if (send_vert) send_phases(1, vert->phases, full_precision);
 
-			if (horiz->is_adaptive)
+			if (horiz->is_adaptive && send_horiz)
 			{
 				send_phases(2, horiz->adaptive_phases, full_precision);
 			}
-			else if (vert->is_adaptive)
+			else if (vert->is_adaptive && send_vert)
 			{
 				send_phases(3, vert->adaptive_phases, full_precision);
 			}
@@ -471,6 +520,9 @@ static void send_video_filters(const VideoFilter *horiz, const VideoFilter *vert
 		default:
 			break;
 	}
+
+	horiz_filter_digest = horiz->digest;
+	vert_filter_digest = vert->digest;
 
 	DisableIO();
 }
@@ -494,29 +546,13 @@ static void set_vfilter(int force)
 	spi8(scaler_flt[0].mode);
 	DisableIO();
 
-	VideoFilter horiz, vert;
+	int vert_flt;
+	if (current_video_info.interlaced) vert_flt = VFILTER_HORZ;
+	else if ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN].mode) vert_flt = VFILTER_SCAN;
+	else if (scaler_flt[VFILTER_VERT].mode) vert_flt = VFILTER_VERT;
+	else vert_flt = VFILTER_HORZ;
 
-	//horizontal filter
-	bool valid = read_video_filter(VFILTER_HORZ, &horiz);
-	if (valid)
-	{
-		//vertical/scanlines filter
-		int vert_flt;
-		if (current_video_info.interlaced) vert_flt = VFILTER_HORZ;
-		else if ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN].mode) vert_flt = VFILTER_SCAN;
-		else if (scaler_flt[VFILTER_VERT].mode) vert_flt = VFILTER_VERT;
-		else vert_flt = VFILTER_HORZ;
-
-		if (!read_video_filter(vert_flt, &vert))
-		{
-			vert = horiz;
-			valid = true;
-		}
-
-		send_video_filters(&horiz, &vert, flt_flags & 0xF);
-	}
-
-	if (!valid) spi_uio_cmd8(UIO_SET_FLTNUM, 0);
+	send_video_filters(&scaler_flt_data[VFILTER_HORZ], &scaler_flt_data[vert_flt], flt_flags & 0xF);
 }
 
 static void setScaler()
@@ -572,6 +608,7 @@ void video_set_scaler_coeff(int type, const char *name)
 {
 	strcpy(scaler_flt[type].filename, name);
 	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
+	read_video_filter(type, &scaler_flt_data[type]);
 	setScaler();
 	user_io_send_buttons(1);
 }
@@ -605,18 +642,20 @@ static void loadScalerCfg()
 		scaler_flt[VFILTER_SCAN].mode = 1;
 	}
 
-	VideoFilter null;
-	if (!read_video_filter(VFILTER_HORZ, &null)) memset(&scaler_flt[VFILTER_HORZ], 0, sizeof(scaler_flt[VFILTER_HORZ]));
-	if (!read_video_filter(VFILTER_VERT, &null)) memset(&scaler_flt[VFILTER_VERT], 0, sizeof(scaler_flt[VFILTER_VERT]));
-	if (!read_video_filter(VFILTER_SCAN, &null)) memset(&scaler_flt[VFILTER_SCAN], 0, sizeof(scaler_flt[VFILTER_SCAN]));
+	if (!read_video_filter(VFILTER_HORZ, &scaler_flt_data[VFILTER_HORZ])) memset(&scaler_flt[VFILTER_HORZ], 0, sizeof(scaler_flt[VFILTER_HORZ]));
+	if (!read_video_filter(VFILTER_VERT, &scaler_flt_data[VFILTER_VERT])) memset(&scaler_flt[VFILTER_VERT], 0, sizeof(scaler_flt[VFILTER_VERT]));
+	if (!read_video_filter(VFILTER_SCAN, &scaler_flt_data[VFILTER_SCAN])) memset(&scaler_flt[VFILTER_SCAN], 0, sizeof(scaler_flt[VFILTER_SCAN]));
 }
 
+static char active_gamma_cfg[1024] = { 0 };
 static char gamma_cfg[1024] = { 0 };
 static char has_gamma = 0;
 
 static void setGamma()
 {
 	PROFILE_FUNCTION();
+
+	if (!memcmp(active_gamma_cfg, gamma_cfg, sizeof(gamma_cfg))) return;
 
 	fileTextReader reader = {};
 	static char filename[1024];
@@ -630,6 +669,7 @@ static void setGamma()
 	has_gamma = 1;
 	spi8(0);
 	DisableIO();
+
 	snprintf(filename, sizeof(filename), GAMMA_DIR"/%s", gamma_cfg + 1);
 
 	if (FileOpenTextReader(&reader, filename))
@@ -662,6 +702,7 @@ static void setGamma()
 		DisableIO();
 		spi_uio_cmd8(UIO_SET_GAMMA, gamma_cfg[0]);
 	}
+	memcpy(active_gamma_cfg, gamma_cfg, sizeof(gamma_cfg));
 }
 
 int video_get_gamma_en()
@@ -1026,22 +1067,9 @@ static void hdmi_config_set_spare(bool val)
 	}
 }
 
-static void hdmi_config()
+static void hdmi_config_init()
 {
-	PROFILE_FUNCTION();
-
 	int ypbpr = cfg.ypbpr && cfg.direct_video;
-	const uint8_t vic_mode = (uint8_t)v_cur.param.vic;
-	uint8_t pr_flags;
-
-	if (cfg.direct_video && is_menu()) pr_flags = 0; // automatic pixel repetition
-	else if (v_cur.param.pr != 0) pr_flags = 0b01001000; // manual pixel repetition with 2x clock
-	else pr_flags = 0b01000000; // manual pixel repetition
-
-	uint8_t sync_invert = 0;
-	if (v_cur.param.hpol == 0) sync_invert |= 1 << 5;
-	if (v_cur.param.vpol == 0) sync_invert |= 1 << 6;
-
 
 	// address, value
 	uint8_t init_data[] = {
@@ -1078,7 +1106,7 @@ static void hdmi_config()
 								// DDR Input Edge falling [1]=0 (not using DDR atm).
 								// Output Colour Space RGB [0]=0.
 
-		0x17, (uint8_t)(0b00000010 | sync_invert),		// Aspect ratio 16:9 [1]=1, 4:3 [1]=0
+		0x17, 0b01100010,		// Aspect ratio 16:9 [1]=1, 4:3 [1]=0, invert sync polarity
 
 		0x18, (uint8_t)(ypbpr ? 0x86 : (cfg.hdmi_limited & 1) ? 0x8D : (cfg.hdmi_limited & 2) ? 0x8E : 0x00),  // CSC Scaling Factors and Coefficients for RGB Full->Limited.
 		0x19, (uint8_t)(ypbpr ? 0xDF : (cfg.hdmi_limited & 1) ? 0xBC : 0xFE),                       // Taken from table in ADV7513 Programming Guide.
@@ -1107,7 +1135,7 @@ static void hdmi_config()
 		0x2E, (uint8_t)(ypbpr ? 0x07 : 0x01),
 		0x2F, (uint8_t)(ypbpr ? 0xE7 : 0x00),
 
-		0x3B, pr_flags,
+		0x3B, 0x0,              // Automatic pixel repetition and VIC detection
 
 
 		0x48, 0b00001000,       // [6]=0 Normal bus order!
@@ -1131,8 +1159,6 @@ static void hdmi_config()
 																// [6:4] Color space (ignored for RGB)
 			| ((ypbpr || cfg.hdmi_limited) ? 0b0100 : 0b1000)),	// [3:2] RGB Quantization range
 																// [1:0] Non-Uniform Scaled: 00 - None. 01 - Horiz. 10 - Vert. 11 - Both.
-
-		0x3C, vic_mode,			// VIC
 
 		0x59, (uint8_t)(((ypbpr || cfg.hdmi_limited) ? 0x00 : 0x40)	// [7:6] [YQ1 YQ0] YCC Quantization Range: b00 = Limited Range, b01 = Full Range
 			| (cfg.hdmi_game_mode ? 0x30 : 0x00)),					// [5:4] IT Content Type b11 = Game, b00 = Graphics/None
@@ -1223,6 +1249,55 @@ static void hdmi_config()
 	{
 		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
 	}
+}
+
+static uint8_t last_sync_invert = 0xff;
+static uint8_t last_pr_flags = 0xff;
+static uint8_t last_vic_mode = 0xff;
+
+static void hdmi_config_set_mode(vmode_custom_t *vm)
+{
+	PROFILE_FUNCTION();
+
+	const uint8_t vic_mode = (uint8_t)vm->param.vic;
+	uint8_t pr_flags;
+
+	if (cfg.direct_video && is_menu()) pr_flags = 0; // automatic pixel repetition
+	else if (vm->param.pr != 0) pr_flags = 0b01001000; // manual pixel repetition with 2x clock
+	else pr_flags = 0b01000000; // manual pixel repetition
+
+	uint8_t sync_invert = 0;
+	if (vm->param.hpol == 0) sync_invert |= 1 << 5;
+	if (vm->param.vpol == 0) sync_invert |= 1 << 6;
+
+	if (last_sync_invert == sync_invert && last_pr_flags == pr_flags && last_vic_mode == vic_mode) return;
+
+	// address, value
+	uint8_t init_data[] = {
+		0x17, (uint8_t)(0b00000010 | sync_invert),		// Aspect ratio 16:9 [1]=1, 4:3 [1]=0
+		0x3B, pr_flags,
+		0x3C, vic_mode,			// VIC
+	};
+
+	int fd = i2c_open(0x39, 0);
+	if (fd >= 0)
+	{
+		for (uint i = 0; i < sizeof(init_data); i += 2)
+		{
+			int res = i2c_smbus_write_byte_data(fd, init_data[i], init_data[i + 1]);
+			if (res < 0) printf("i2c: write error (%02X %02X): %d\n", init_data[i], init_data[i + 1], res);
+		}
+
+		i2c_close(fd);
+	}
+	else
+	{
+		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
+	}
+
+	last_pr_flags = pr_flags;
+	last_sync_invert = sync_invert;
+	last_vic_mode = vic_mode;
 }
 
 static void edid_parse_cea_ext(uint8_t *cea)
@@ -1319,8 +1394,6 @@ static int is_edid_valid()
 
 static int get_active_edid()
 {
-	hdmi_config(); // required to get EDID
-
 	int fd = i2c_open(0x39, 0);
 	if (fd < 0)
 	{
@@ -1494,15 +1567,21 @@ static void set_vrr_mode()
 
 	if (cfg.vrr_mode == 0)
 	{
-		hdmi_config_set_spd(0);
-		hdmi_config_set_spare(0);
+		if (last_vrr_mode != 0)
+		{
+			hdmi_config_set_spd(0);
+			hdmi_config_set_spare(0);
+		}
+		last_vrr_mode = 0;
 		return;
 	}
 
 	if (current_video_info.vtimeh) vrateh /= current_video_info.vtimeh; else vrateh = 0;
 	if (cfg.vrr_vesa_framerate) vrateh = cfg.vrr_vesa_framerate;
 
-	if (last_vrr_mode == cfg.vrr_mode && last_vrr_rate == vrateh) return;
+	if ((last_vrr_mode == cfg.vrr_mode) &&
+		(last_vrr_rate == vrateh) &&
+		(last_vrr_vfp == v_cur.param.vfp || cfg.vrr_mode != VRR_VESA)) return;
 
 	if (!is_edid_valid())
 	{
@@ -1651,19 +1730,16 @@ static void set_vrr_mode()
 	}
 	last_vrr_mode = cfg.vrr_mode;
 	last_vrr_rate = vrateh;
+	last_vrr_vfp = v_cur.param.vfp;
 
 	if (!supports_vrr() || cfg.vsync_adjust) use_vrr = 0;
 }
 
-static char fb_reset_cmd[128] = {};
-static void set_video(vmode_custom_t *v, double Fpix)
+static void video_set_mode(vmode_custom_t *v, double Fpix)
 {
 	PROFILE_FUNCTION();
 
-	loadGammaCfg();
 	setGamma();
-
-	loadScalerCfg();
 	setScaler();
 
 	v_cur = *v;
@@ -1758,39 +1834,10 @@ static void set_video(vmode_custom_t *v, double Fpix)
 	printf("Fpix=%f\n", v_cur.Fpix);
 	DisableIO();
 
-	hdmi_config();
+	hdmi_config_set_mode(&v_cur);
 
-	int fb_scale = cfg.fb_size;
+	video_fb_config();
 
-	if (fb_scale <= 1)
-	{
-		if (((v_cur.item[1] * v_cur.item[5]) > FB_SIZE))
-			fb_scale = 2;
-		else
-			fb_scale = 1;
-	}
-	else if (fb_scale == 3) fb_scale = 2;
-	else if (fb_scale > 4) fb_scale = 4;
-
-	const int fb_scale_x = fb_scale;
-	const int fb_scale_y = v_cur.param.pr == 0 ? fb_scale : fb_scale * 2;
-
-	fb_width = v_cur.item[1] / fb_scale_x;
-	fb_height = v_cur.item[5] / fb_scale_y;
-
-	brd_x = cfg.vscale_border / fb_scale_x;
-	brd_y = cfg.vscale_border / fb_scale_y;
-
-	if (fb_enabled) video_fb_enable(1, fb_num);
-
-	{
-		PROFILE_SCOPE("Write MiSTer_fb");
-
-		sprintf(fb_reset_cmd, "echo %d %d %d %d %d >/sys/module/MiSTer_fb/parameters/mode", 8888, 1, fb_width, fb_height, fb_width * 4);
-		system(fb_reset_cmd);
-	}
-
-	loadShadowMaskCfg();
 	setShadowMask();
 }
 
@@ -1910,9 +1957,8 @@ static void fb_init()
 	spi_uio_cmd16(UIO_SET_FBUF, 0);
 }
 
-void video_mode_load()
+static void video_mode_load()
 {
-	fb_init();
 	if (cfg.direct_video && cfg.vsync_adjust)
 	{
 		printf("Disabling vsync_adjust because of enabled direct video.\n");
@@ -1949,8 +1995,21 @@ void video_mode_load()
 			vmode_ntsc = store_custom_video_mode(cfg.video_conf_ntsc, &v_ntsc);
 		}
 	}
-	set_video(&v_def, 0);
 }
+
+void video_init()
+{
+	fb_init();
+	hdmi_config_init();
+	video_mode_load();
+
+	loadGammaCfg();
+	loadScalerCfg();
+	loadShadowMaskCfg();
+
+	video_set_mode(&v_def, 0);
+}
+
 
 static int api1_5 = 0;
 int hasAPI1_5()
@@ -2274,6 +2333,12 @@ void video_mode_adjust()
 	{
 		current_video_info = video_info;
 
+		show_video_info(&video_info, &v_cur);
+	}
+	force = false;
+
+	if (vid_changed && !is_menu())
+	{
 		if (cfg_has_video_sections())
 		{
 			cfg_parse();
@@ -2281,56 +2346,79 @@ void video_mode_adjust()
 			user_io_send_buttons(1);
 		}
 
-		show_video_info(&video_info, &v_cur);
-		video_scaling_adjust(&video_info, &v_cur);
-	}
-	force = false;
-
-	if (vid_changed && !is_menu() && (cfg.vsync_adjust || cfg.vscale_mode >= 4))
-	{
-		const uint32_t vtime = video_info.vtime;
-
-		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d vscale_mode=%d.\033[0m\n", vtime, cfg.vsync_adjust, cfg.vscale_mode);
-
-		vmode_custom_t new_mode;
-		bool adjust = video_mode_select(vtime, &new_mode);
-
-		video_resolution_adjust(&video_info, &new_mode);
-
-		vmode_custom_t *v = &new_mode;
-		double Fpix = 0;
-		if (adjust)
+		if ((cfg.vsync_adjust || cfg.vscale_mode >= 4))
 		{
-			Fpix = 100 * (v->item[1] + v->item[2] + v->item[3] + v->item[4]) * (v->item[5] + v->item[6] + v->item[7] + v->item[8]);
-			Fpix /= vtime;
-			if (Fpix < 2.f || Fpix > 300.f)
+			const uint32_t vtime = video_info.vtime;
+
+			printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d vscale_mode=%d.\033[0m\n", vtime, cfg.vsync_adjust, cfg.vscale_mode);
+
+			vmode_custom_t new_mode;
+			bool adjust = video_mode_select(vtime, &new_mode);
+
+			video_resolution_adjust(&video_info, &new_mode);
+
+			vmode_custom_t *v = &new_mode;
+			double Fpix = 0;
+			if (adjust)
 			{
-				printf("Estimated Fpix(%.4f MHz) is outside supported range. Canceling auto-adjust.\n", Fpix);
-				Fpix = 0;
+				Fpix = 100 * (v->item[1] + v->item[2] + v->item[3] + v->item[4]) * (v->item[5] + v->item[6] + v->item[7] + v->item[8]);
+				Fpix /= vtime;
+				if (Fpix < 2.f || Fpix > 300.f)
+				{
+					printf("Estimated Fpix(%.4f MHz) is outside supported range. Canceling auto-adjust.\n", Fpix);
+					Fpix = 0;
+				}
+
+				float hz = 100000000.0f / vtime;
+				if (cfg.refresh_min && hz < cfg.refresh_min)
+				{
+					printf("Estimated frame rate (%f Hz) is less than REFRESH_MIN(%f Hz). Canceling auto-adjust.\n", hz, cfg.refresh_min);
+					Fpix = 0;
+				}
+
+				if (cfg.refresh_max && hz > cfg.refresh_max)
+				{
+					printf("Estimated frame rate (%f Hz) is more than REFRESH_MAX(%f Hz). Canceling auto-adjust.\n", hz, cfg.refresh_max);
+					Fpix = 0;
+				}
 			}
 
-			float hz = 100000000.0f / vtime;
-			if (cfg.refresh_min && hz < cfg.refresh_min)
-			{
-				printf("Estimated frame rate (%f Hz) is less than REFRESH_MIN(%f Hz). Canceling auto-adjust.\n", hz, cfg.refresh_min);
-				Fpix = 0;
-			}
-
-			if (cfg.refresh_max && hz > cfg.refresh_max)
-			{
-				printf("Estimated frame rate (%f Hz) is more than REFRESH_MAX(%f Hz). Canceling auto-adjust.\n", hz, cfg.refresh_max);
-				Fpix = 0;
-			}
+			video_set_mode(v, Fpix);
+			user_io_send_buttons(1);
+			force = true;
+		}
+		else if (cfg_has_video_sections()) // if we have video sections but aren't updating the resolution for other reasons, then do it here
+		{
+			video_set_mode(&v_def, 0); 
+			user_io_send_buttons(1);
+			force = true;
+		}
+		else
+		{
+			set_vfilter(1); // force update filters in case interlacing changed
 		}
 
-		set_video(v, Fpix);
-		user_io_send_buttons(1);
-		force = true;
+		video_scaling_adjust(&video_info, &v_cur);
 	}
 	else
 	{
-		set_vfilter(0);
+		set_vfilter(0); // update filters if flags have changed
 	}
+}
+
+static void fb_write_module_params()
+{
+	int width = fb_width;
+	int height = fb_height;
+	offload_add_work([=]
+	{
+		FILE *fp = fopen("/sys/module/MiSTer_fb/parameters/mode", "wt");
+		if (fp)
+		{
+			fprintf(fp, "%d %d %d %d %d\n", 8888, 1, width, height, width * 4);
+			fclose(fp);
+		}
+	});
 }
 
 void video_fb_enable(int enable, int n)
@@ -2375,7 +2463,7 @@ void video_fb_enable(int enable, int n)
 				//printf("Linux frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_width * 4);
 				if (!fb_num)
 				{
-					system(fb_reset_cmd);
+					fb_write_module_params();
 					input_switch(0);
 				}
 				else
@@ -2412,6 +2500,37 @@ int video_fb_state()
 	}
 
 	return fb_enabled;
+}
+
+
+static void video_fb_config()
+{
+	PROFILE_FUNCTION();
+
+	int fb_scale = cfg.fb_size;
+
+	if (fb_scale <= 1)
+	{
+		if (((v_cur.item[1] * v_cur.item[5]) > FB_SIZE))
+			fb_scale = 2;
+		else
+			fb_scale = 1;
+	}
+	else if (fb_scale == 3) fb_scale = 2;
+	else if (fb_scale > 4) fb_scale = 4;
+
+	const int fb_scale_x = fb_scale;
+	const int fb_scale_y = v_cur.param.pr == 0 ? fb_scale : fb_scale * 2;
+
+	fb_width = v_cur.item[1] / fb_scale_x;
+	fb_height = v_cur.item[5] / fb_scale_y;
+
+	brd_x = cfg.vscale_border / fb_scale_x;
+	brd_y = cfg.vscale_border / fb_scale_y;
+
+	if (fb_enabled) video_fb_enable(1, fb_num);
+
+	fb_write_module_params();
 }
 
 static void draw_checkers()
