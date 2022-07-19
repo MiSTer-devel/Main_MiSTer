@@ -423,7 +423,8 @@ static bool read_video_filter(int type, VideoFilter *out)
 		out->is_adaptive = false;
 		valid = scale_phases(out->phases, phases, count);
 	}
-	else
+	
+	if (!valid)
 	{
 		// Make a default NN filter in case of error
 		out->is_adaptive = false;
@@ -433,7 +434,6 @@ static bool read_video_filter(int type, VideoFilter *out)
 			{ .t = { 0, 0, 256, 0 } }
 		};
 		scale_phases(out->phases, nn_phases, 2);
-		valid = false;
 	}
 
 	MD5Context ctx;
