@@ -32,6 +32,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "fpga_io.h"
 #include "scheduler.h"
 #include "osd.h"
+#include "offload.h"
 
 const char *version = "$VER:" VDATE;
 
@@ -44,6 +45,8 @@ int main(int argc, char *argv[])
 	CPU_ZERO(&set);
 	CPU_SET(1, &set);
 	sched_setaffinity(0, sizeof(set), &set);
+
+	offload_start();
 
 	fpga_io_init();
 

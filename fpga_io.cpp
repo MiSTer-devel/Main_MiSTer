@@ -15,6 +15,7 @@
 #include "osd.h"
 #include "menu.h"
 #include "shmem.h"
+#include "offload.h"
 
 #include "fpga_base_addr_ac5.h"
 #include "fpga_manager.h"
@@ -616,6 +617,8 @@ void app_restart(const char *path, const char *xml)
 
 	input_switch(0);
 	input_uinp_destroy();
+
+	offload_stop();
 
 	char *appname = getappname();
 	printf("restarting the %s\n", appname);
