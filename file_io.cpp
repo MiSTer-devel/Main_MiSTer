@@ -1105,7 +1105,7 @@ void FindStorage(void)
 		device = 0;
 		cfg_parse();
 		device = saveddev;
-		video_mode_load();
+		video_init();
 		user_io_send_buttons(1);
 
 		printf("Waiting for USB...\n");

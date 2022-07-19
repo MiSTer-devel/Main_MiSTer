@@ -27,6 +27,7 @@
 #include "video.h"
 #include "joymapping.h"
 #include "support.h"
+#include "profiling.h"
 
 #define NUMDEV 30
 #define NUMPLAYERS 6
@@ -5178,6 +5179,8 @@ int input_test(int getchar)
 
 int input_poll(int getchar)
 {
+	PROFILE_FUNCTION();
+
 	static int af[NUMPLAYERS] = {};
 	static uint32_t time[NUMPLAYERS] = {};
 	static uint32_t joy_prev[NUMPLAYERS] = {};
