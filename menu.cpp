@@ -4654,7 +4654,7 @@ void HandleUI(void)
 		OsdSetTitle((fs_Options & SCANO_CORES) ? "Cores" : "Select", 0);
 		PrintDirectory(hold_cnt<2);
 		menustate = MENU_FILE_SELECT2;
-		if (cfg.log_file_entry)
+		if (cfg.log_file_entry && flist_nDirEntries())
 		{
 			//Write out paths infos for external integration
 			FILE* filePtr = fopen("/tmp/CURRENTPATH", "w");
