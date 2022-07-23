@@ -277,8 +277,8 @@ static char UploadActionReplay()
 static char* GetConfigurationName(int num, int chk)
 {
 	static char name[128];
-	if (num) sprintf(name, CONFIG_DIR "/minimig%d.cfg", num);
-	else sprintf(name, CONFIG_DIR "/minimig.cfg");
+	if (num) sprintf(name, CONFIG_DIR "/%s%d.cfg", user_io_get_core_name(), num);
+	else sprintf(name, CONFIG_DIR "/%s.cfg", user_io_get_core_name());
 
 	if (chk && !S_ISREG(getFileType(name))) return 0;
 	return name+strlen(CONFIG_DIR)+1;
