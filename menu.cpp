@@ -5658,7 +5658,7 @@ void HandleUI(void)
 			else if (menusub == 7 && select)
 			{
 				ioctl_index = 1;
-				SelectFile(Selected_F[4], "ROM", 0, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
+				SelectFile(Selected_F[4], "ROM", SCANO_DIR, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 			}
 			else if (menusub == 8)
 			{
