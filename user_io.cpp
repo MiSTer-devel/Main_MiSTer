@@ -2920,10 +2920,10 @@ void user_io_poll()
 			}
 			DisableIO();
 
-			if ((blks == 32) && sd_type[disk])
+			if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk])
 			{
-				if (op == 2) c64_writeGCR(disk, lba);
-				else if (op & 1) c64_readGCR(disk, lba);
+				if (op == 2) c64_writeGCR(disk, lba, blks-1);
+				else if (op & 1) c64_readGCR(disk, lba, blks-1);
 				else break;
 			}
 			else if (op == 2)

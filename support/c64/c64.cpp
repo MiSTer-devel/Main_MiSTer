@@ -10,6 +10,8 @@
 #include "../../user_io.h"
 #include "../../hardware.h"
 
+#include "c64.h"
+
 //#define dbgprintf printf
 #define dbgprintf(...)
 
@@ -41,6 +43,11 @@
 
 #define D64_FILL_VALUE           0xA0
 #define D64_INIT_VALUE           0x00 // DIR relies on 0x00 initial value
+
+#define G64_MAX_TRACK_LEN        (G64_BLOCK_COUNT_1571 * 256)
+
+// Define EXTEND_1541 to enable creating new tracks in G64 images on the 1541 in the C64/C16/VIC20 cores
+// #define EXTEND_1541
 
 struct FileRecord {
 	char           name[D64_BYTE_PER_STRING];
@@ -310,15 +317,15 @@ struct img_info
 	int type;
 	uint8_t tracks;
 	uint8_t id[2];
-	int32_t trk_sz;
 	uint32_t trk_map[168];
+	uint32_t spd_map[168];
 	int *sector_map;
 };
 
 static img_info gcr_info[16] = {};
 
 static uint8_t trk_buf[8192];
-static uint8_t gcr_buf[8192*2];
+static uint8_t gcr_buf[G64_MAX_TRACK_LEN*2];
 static uint8_t track_count[4] = {35, 40, 42, 70};
 static int start_sectors[4][85] = {
 	{	// single sided, 35 tracks
@@ -389,6 +396,8 @@ int c64_openGCR(const char *path, fileTYPE *f, int idx)
 		}
 		memset(gcr_info[idx].trk_map, 0, sizeof(gcr_info[idx].trk_map));
 		FileReadAdv(f, gcr_info[idx].trk_map, gcr_info[idx].tracks*4);
+		memset(gcr_info[idx].spd_map, 0, sizeof(gcr_info[idx].spd_map));
+		FileReadAdv(f, gcr_info[idx].spd_map, gcr_info[idx].tracks*4);
 		printf("G64/G71 disk tracks=%d\n", gcr_info[idx].tracks);
 	}
 	else
@@ -469,46 +478,44 @@ void gcr2bin(uint8_t *gcr, uint8_t *bin)
 	}
 }
 
-void c64_readGCR(int idx, uint8_t track)
+void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 {
+	// dbgprintf("c64_readGCR: idx=%d, lba=%04llx, blks=%d\n", idx, lba, blks);
+	bool     is_1571 = (lba & 0x100) != 0;
+
+	uint8_t  track   = (uint8_t)lba;
+	uint8_t  track_f = track >> 1;
+	uint8_t  track_h = ((track_f > 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
+
+	uint32_t track_size;
+	
 	if (!gcr_info[idx].type) return;
 
 	if (gcr_info[idx].type == 2)
 	{
 		if (track >= gcr_info[idx].tracks || !gcr_info[idx].trk_map[track])
 		{
-			gcr_info[idx].trk_sz = 4096;
-			memset(gcr_buf, 0, gcr_info[idx].trk_sz);
-			dbgprintf("Track %d%s: no data\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
+			track_size = 0;
+			dbgprintf("Track %d%s: no data, size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", track_size);
 		}
 		else
 		{
 			FileSeek(gcr_info[idx].f, gcr_info[idx].trk_map[track], SEEK_SET);
-			FileReadAdv(gcr_info[idx].f, gcr_buf, 8192);
-			gcr_info[idx].trk_sz = (gcr_buf[1] << 8) | gcr_buf[0];
-			dbgprintf("Track %d%s: size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", gcr_info[idx].trk_sz);
-			gcr_info[idx].trk_sz += 2;
+			FileReadAdv(gcr_info[idx].f, gcr_buf, blks * 256);
+			track_size = (gcr_buf[1] << 8) | gcr_buf[0];
+			dbgprintf("Track %d%s: read ok, size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", track_size);
 		}
 	}
 	else if (track & 1)
 	{
-		track >>= 1;
-		gcr_info[idx].trk_sz = (gcr_info[idx].sector_map[track + 1] - gcr_info[idx].sector_map[track]) * 256;
-		memset(gcr_buf, 0, gcr_info[idx].trk_sz);
-
-		track++;
-		dbgprintf("\nBetween tracks %d <|> %d.\n", track, track+1);
+		track_size = 0;
+		dbgprintf("\nBetween tracks %d <|> %d.\n", track_f, track_f+1);
 	}
 	else
 	{
-		track >>= 1;
-
-		int size = track < 84 ? (gcr_info[idx].sector_map[track + 1] - gcr_info[idx].sector_map[track]) * 256 : 0;
-		if (size) 
-		{
-			uint8_t track_h = ((track > 42) ? track%42 + gcr_info[idx].tracks/2 : track) + 1;
-
-			FileSeek(gcr_info[idx].f, gcr_info[idx].sector_map[track] * 256, SEEK_SET);
+		int size = track_f < 84 ? (gcr_info[idx].sector_map[track_f + 1] - gcr_info[idx].sector_map[track_f]) * 256 : 0;
+		if (size) {
+			FileSeek(gcr_info[idx].f, gcr_info[idx].sector_map[track_f] * 256, SEEK_SET);
 			FileReadAdv(gcr_info[idx].f, trk_buf, size);
 
 			uint8_t sec = 0;
@@ -548,24 +555,40 @@ void c64_readGCR(int idx, uint8_t track)
 				sec++;
 			}
 
-			gcr_info[idx].trk_sz = gcrptr - gcr_buf;
-			dbgprintf("Read GCR track %d: bin_size = %d, gcr_size = %d\n", track+1, size, gcr_info[idx].trk_sz);
+			track_size = gcrptr - gcr_buf - 2;
+			dbgprintf("Read GCR track %d: bin_size = %d, gcr_size = %d\n", track_f+1, size, track_size);
 		}
-		else
-		{
-			gcr_info[idx].trk_sz = 4096;
-			memset(gcr_buf, 0, gcr_info[idx].trk_sz);
-			dbgprintf("Read non-existant GCR track %d: bin_size = %d, gcr_size = %d\n", track+1, size, gcr_info[idx].trk_sz);
+		else {
+			track_size = 0;
+			dbgprintf("Read non-existant GCR track %d: bin_size = %d, gcr_size = %d\n", track_f+1, size, track_size);
 		}
 	}
 
-	uint16_t sz = gcr_info[idx].trk_sz - 1;
-	gcr_buf[0] = (uint8_t)sz;
-	gcr_buf[1] = (uint8_t)(sz >> 8);
+	if (track_size > (blks * 256) - 2)
+		track_size = (blks * 256) - 2;
+
+	uint32_t buffer_size = track_size + 2;
+	if (track_size == 0) {
+		if (is_1571) {
+			buffer_size = 12502U;
+		}
+		else {
+#ifdef EXTEND_1541		
+			track_size = (track_h < 18) ? 7692U : (track_h < 25) ? 7142U : (track_h < 31) ? 6666U : 6250U;
+#else		
+			track_size = 4096;
+#endif		
+			buffer_size = track_size + 2;
+		}
+		memset(gcr_buf, 0, buffer_size);
+	}
+
+	gcr_buf[0] = (uint8_t)track_size;
+	gcr_buf[1] = (uint8_t)(track_size >> 8);
 
 	EnableIO();
 	spi_w(UIO_SECTOR_RD | (idx << 8));
-	spi_block_write(gcr_buf, user_io_get_width(), gcr_info[idx].trk_sz);
+	spi_block_write(gcr_buf, user_io_get_width(), buffer_size);
 	DisableIO();
 }
 
@@ -594,31 +617,128 @@ static uint8_t* align(uint8_t* src, int size)
 	return buf;
 }
 
-void c64_writeGCR(int idx, uint8_t track)
+uint32_t c64_get_freq(int idx, uint64_t lba){
+	uint32_t freq;
+
+	uint8_t track = (uint8_t)lba;
+	uint8_t speed = (lba >> 8)&7;
+
+	if (speed&1) {
+		freq = speed >> 1; 
+	}
+	else {
+		uint8_t track_f = track >> 1;
+		uint8_t track_h = ((track_f > 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
+		freq = (track_h < 18) ? 3U : (track_h < 25) ? 2U : (track_h < 31) ? 1U : 0U;
+	}
+
+	dbgprintf("Track %d%s: speed flag=%d, freq=%d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", speed, freq);
+	return freq;
+}
+
+void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 {
+	// dbgprintf("c64_writeGCR: idx=%d, lba=%04llx, blks=%d\n", idx, lba, blks);
+
+	uint8_t track = (uint8_t)lba;
+#ifdef EXTEND_1541
+	bool    allow_new_track = true;
+#else
+	bool    allow_new_track = (lba & 0x100) != 0;
+#endif
+
 	if (!gcr_info[idx].type) return;
 
 	static uint8_t sec_buf[260];
 
 	EnableIO();
 	spi_w(UIO_SECTOR_WR | (idx << 8));
-	spi_block_read(gcr_buf, user_io_get_width(), 8192);
+	spi_block_read(gcr_buf, user_io_get_width(), blks * 256);
 	DisableIO();
+
+	uint32_t track_size = (gcr_buf[1] << 8) | gcr_buf[0];
 
 	if (track >= gcr_info[idx].tracks) 
 	{
-		dbgprintf("Ignore track %d%s: out of range\n", track >> 1, (track & 1) ? ".5" : "");
+		dbgprintf("Ignore track %d%s: out of range\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
 		return;
 	}
 
 	if (gcr_info[idx].type == 2)
 	{
-		if (gcr_info[idx].trk_map[track])
-		{
-			FileSeek(gcr_info[idx].f, gcr_info[idx].trk_map[track]+2, SEEK_SET);
-			FileWriteAdv(gcr_info[idx].f, gcr_buf + 2, gcr_info[idx].trk_sz - 2);
-			dbgprintf("Write Track %d%s: size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", gcr_info[idx].trk_sz - 2);
+		uint32_t track_pos = gcr_info[idx].trk_map[track];
+		if (track_pos == 0 && !allow_new_track) {
+			return;
 		}
+
+		uint32_t track_end = 0;
+		uint32_t file_end = gcr_info[idx].f->size;
+
+		if (track_pos > 0) {
+			// find track end position
+			track_end = file_end;
+			for (uint8_t t=0; t<gcr_info[idx].tracks; t++)
+			{
+				if (gcr_info[idx].trk_map[t] > track_pos && gcr_info[idx].trk_map[t] < track_end)
+					track_end = gcr_info[idx].trk_map[t];
+				else if (gcr_info[idx].spd_map[t] > track_pos && gcr_info[idx].spd_map[t] < track_end)
+					track_end = gcr_info[idx].spd_map[t];
+			}
+		}
+
+		uint32_t track_space = track_end - track_pos;
+
+		if (track_size + 2 > track_space) {
+			if (!allow_new_track) {
+				return;
+			}
+
+			// TODO reclaim unused space 
+			if (track_space > 0) {
+				dbgprintf("Write Track %d%s: not enough space, relocating to end of file\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
+			} 
+			else {
+				dbgprintf("Write Track %d%s: new track, saving to end of file\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
+			}
+
+			FileSeek(gcr_info[idx].f, 0, SEEK_END);
+			FileWriteAdv(gcr_info[idx].f, gcr_buf, track_size + 2);
+
+			// update track map entry
+			gcr_info[idx].trk_map[track] = file_end;
+			FileSeek(gcr_info[idx].f, 12+track*4, SEEK_SET);
+			FileWriteAdv(gcr_info[idx].f, &gcr_info[idx].trk_map[track], 4);
+
+			if (track_space == 0) {
+				// init speed map entry
+				gcr_info[idx].spd_map[track] = c64_get_freq(idx, lba);
+				FileSeek(gcr_info[idx].f, 12+(gcr_info[idx].tracks+track)*4, SEEK_SET);
+				FileWriteAdv(gcr_info[idx].f, &gcr_info[idx].spd_map[track], 4);
+			}
+			else {
+				// clear old space
+				memset(gcr_buf, 0xff, track_space);
+				FileSeek(gcr_info[idx].f, track_pos, SEEK_SET);
+				FileWriteAdv(gcr_info[idx].f, gcr_buf, track_space);
+			}
+
+			FileSeek(gcr_info[idx].f, 0, SEEK_END);
+			track_space = (track_size <= 7930) ? 7930 : (track_size <= 12500) ? 12500 : track_size;
+		}
+		else {
+			FileSeek(gcr_info[idx].f, track_pos, SEEK_SET);
+			FileWriteAdv(gcr_info[idx].f, gcr_buf, track_size + 2);
+		}
+
+		// fill unused space
+		int unused = track_space - track_size - 2;
+		if (unused > 0) {
+			if (unused > G64_MAX_TRACK_LEN * 2) unused = G64_MAX_TRACK_LEN * 2;
+			memset(gcr_buf, 0xff, unused);
+			FileWriteAdv(gcr_info[idx].f, gcr_buf, unused);
+		}
+
+		dbgprintf("Write Track %d%s: size %d, unused %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", track_size, unused);
 		return;
 	}
 
@@ -642,13 +762,13 @@ void c64_writeGCR(int idx, uint8_t track)
 
 	int sync = 0;
 	uint8_t prev = 0, started = 0;
-	int off = 0, ptr = 2;
+	uint32_t off = 0, ptr = 2;
 	uint8_t sec = 0xFF;
 
-	memcpy(gcr_buf + gcr_info[idx].trk_sz, gcr_buf + 2, gcr_info[idx].trk_sz - 2);
+	memcpy(gcr_buf + track_size + 2, gcr_buf + 2, track_size);
 	memset(trk_buf, 0, sizeof(trk_buf));
 
-	while(ptr < gcr_info[idx].trk_sz)
+	while(ptr < track_size + 2)
 	{
 		if (prev == 0xFF && gcr_buf[ptr + off] == 0xFF)
 		{
