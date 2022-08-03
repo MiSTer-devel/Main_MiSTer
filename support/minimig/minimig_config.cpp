@@ -559,16 +559,16 @@ static const char* get_shared_vadjust_path()
 		{
 			if (cfg.shared_folder[0] == '/')
 			{
-				snprintf(path, sizeof(path), "%s/minimig_vadjust.dat", cfg.shared_folder);
+				snprintf(path, sizeof(path), "%s/%s_vadjust.dat", cfg.shared_folder, user_io_get_core_name());
 			}
 			else
 			{
-				snprintf(path, sizeof(path), "%s/%s/minimig_vadjust.dat", HomeDir(), cfg.shared_folder);
+				snprintf(path, sizeof(path), "%s/%s/%s_vadjust.dat", HomeDir(), cfg.shared_folder, user_io_get_core_name());
 			}
 		}
 		else
 		{
-			snprintf(path, sizeof(path), "%s/shared/minimig_vadjust.dat", HomeDir());
+			snprintf(path, sizeof(path), "%s/shared/%s_vadjust.dat", HomeDir(), user_io_get_core_name());
 		}
 	}
 	return path;
@@ -595,7 +595,9 @@ void minimig_adjust_vsize(char force)
 		}
 		else if (!loaded)
 		{
-			FileLoadConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
+			static char name[256];
+			snprintf(name, sizeof(name), "%s_vadjust.dat", user_io_get_core_name());
+			FileLoadConfig(name, vmodes_adj, sizeof(vmodes_adj));
 			loaded = 1;
 		}
 
@@ -670,7 +672,9 @@ static void store_vsize()
 
 		if (applied)
 		{
-			FileSaveConfig("minimig_vadjust.dat", vmodes_adj, sizeof(vmodes_adj));
+			static char name[256];
+			snprintf(name, sizeof(name), "%s_vadjust.dat", user_io_get_core_name());
+			FileSaveConfig(name, vmodes_adj, sizeof(vmodes_adj));
 		}
 	}
 }
