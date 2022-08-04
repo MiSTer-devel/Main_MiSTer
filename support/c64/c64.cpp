@@ -481,7 +481,7 @@ void gcr2bin(uint8_t *gcr, uint8_t *bin)
 void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 {
 	// dbgprintf("c64_readGCR: idx=%d, lba=%04llx, blks=%d\n", idx, lba, blks);
-	bool     is_1571 = (lba & 0x100) != 0;
+	bool     is_1571 = (lba & 0x400) != 0;
 
 	uint8_t  track   = (uint8_t)lba;
 	uint8_t  track_f = track >> 1;
@@ -619,20 +619,19 @@ static uint8_t* align(uint8_t* src, int size)
 
 uint32_t c64_get_freq(int idx, uint64_t lba){
 	uint32_t freq;
-
 	uint8_t track = (uint8_t)lba;
-	uint8_t speed = (lba >> 8)&7;
 
-	if (speed&1) {
-		freq = speed >> 1; 
+	if (lba & 0x400) {
+		freq = (lba & 0x300) >> 8; 
+		dbgprintf("Track %d%s: freq=%d (provided)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
 	}
 	else {
 		uint8_t track_f = track >> 1;
 		uint8_t track_h = ((track_f > 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
 		freq = (track_h < 18) ? 3U : (track_h < 25) ? 2U : (track_h < 31) ? 1U : 0U;
+		dbgprintf("Track %d%s: freq=%d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
 	}
 
-	dbgprintf("Track %d%s: speed flag=%d, freq=%d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", speed, freq);
 	return freq;
 }
 
@@ -644,7 +643,7 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 #ifdef EXTEND_1541
 	bool    allow_new_track = true;
 #else
-	bool    allow_new_track = (lba & 0x100) != 0;
+	bool    allow_new_track = (lba & 0x400) != 0;
 #endif
 
 	if (!gcr_info[idx].type) return;
