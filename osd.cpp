@@ -45,6 +45,7 @@ as rotated copies of the first 128 entries.  -- AMR
 #include "logo.h"
 #include "user_io.h"
 #include "hardware.h"
+#include "profiling.h"
 
 #include "support.h"
 
@@ -661,6 +662,7 @@ char* OsdCoreNameGet()
 
 void OsdUpdate()
 {
+	PROFILE_FUNCTION();
 	int n = is_menu() ? 19 : osd_size;
 	for (int i = 0; i < n; i++)
 	{

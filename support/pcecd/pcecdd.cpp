@@ -516,11 +516,13 @@ void pcecdd_t::CommandExec() {
 		switch (comm[1]) {
 		case 0:
 		default:
-			buf[0] = 2;
+			buf[0] = 4;
 			buf[1] = 0 | 0x80;
 			buf[2] = 1;
 			buf[3] = BCD(this->toc.last);
-			len = 2 + 2;
+			buf[4] = 0;
+			buf[5] = 0;
+			len = 4 + 2;
 			break;
 
 		case 1:

@@ -63,6 +63,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "support.h"
 #include "bootcore.h"
 #include "ide.h"
+#include "profiling.h"
 
 /*menu states*/
 enum MENU
@@ -899,6 +900,8 @@ static int page = 0;
 
 void HandleUI(void)
 {
+	PROFILE_FUNCTION();
+
 	if (bt_timer >= 0)
 	{
 		if (!bt_timer) bt_timer = (int32_t)GetTimer(6000);
@@ -1040,6 +1043,7 @@ void HandleUI(void)
 	{
 		static int menu_visible = 1;
 		static unsigned long timeout = 0;
+		static unsigned long off_timeout = 0;
 		if (!video_fb_state() && cfg.fb_terminal)
 		{
 			if (timeout && CheckTimer(timeout))
@@ -1055,7 +1059,14 @@ void HandleUI(void)
 				{
 					menu_visible--;
 					video_menu_bg(user_io_status_get("[3:1]"), 2);
+					off_timeout = cfg.video_off ? GetTimer(cfg.video_off * 1000) : 0;
 				}
+			}
+
+			if (off_timeout && CheckTimer(off_timeout) && menu_visible < 0)
+			{
+				off_timeout = 0;
+				video_menu_bg(user_io_status_get("[3:1]"), 3);
 			}
 
 			if (c || menustate != MENU_FILE_SELECT2)
@@ -4651,7 +4662,7 @@ void HandleUI(void)
 		OsdSetTitle((fs_Options & SCANO_CORES) ? "Cores" : "Select", 0);
 		PrintDirectory(hold_cnt<2);
 		menustate = MENU_FILE_SELECT2;
-		if (cfg.log_file_entry)
+		if (cfg.log_file_entry && flist_nDirEntries())
 		{
 			//Write out paths infos for external integration
 			FILE* filePtr = fopen("/tmp/CURRENTPATH", "w");
@@ -5655,7 +5666,7 @@ void HandleUI(void)
 			else if (menusub == 7 && select)
 			{
 				ioctl_index = 1;
-				SelectFile(Selected_F[4], "ROM", 0, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
+				SelectFile(Selected_F[4], "ROM", SCANO_DIR, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 			}
 			else if (menusub == 8)
 			{

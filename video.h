@@ -25,6 +25,8 @@ struct VideoInfo
     bool rotated;
 };
 
+void  video_init();
+
 int   video_get_scaler_flt(int type);
 void  video_set_scaler_flt(int type, int n);
 char* video_get_scaler_coeff(int type, int only_name = 1);
@@ -41,7 +43,6 @@ char* video_get_shadow_mask(int only_name = 1);
 void  video_set_shadow_mask(const char *name);
 void  video_loadPreset(char *name);
 
-void  video_mode_load();
 void  video_mode_adjust();
 
 int   hasAPI1_5();
