@@ -485,7 +485,6 @@ void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 
 	uint8_t  track   = (uint8_t)lba;
 	uint8_t  track_f = track >> 1;
-	uint8_t  track_h = ((track_f > 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
 
 	uint32_t track_size;
 	
@@ -513,7 +512,10 @@ void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 	}
 	else
 	{
+		uint8_t track_h = ((track_f >= 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
 		int size = track_f < 84 ? (gcr_info[idx].sector_map[track_f + 1] - gcr_info[idx].sector_map[track_f]) * 256 : 0;
+
+		// dbgprintf("GCR physical track=%d%s, logical track=%d, size=%d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", track_h, size);
 		if (size) {
 			FileSeek(gcr_info[idx].f, gcr_info[idx].sector_map[track_f] * 256, SEEK_SET);
 			FileReadAdv(gcr_info[idx].f, trk_buf, size);
@@ -657,14 +659,14 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 
 	uint32_t track_size = (gcr_buf[1] << 8) | gcr_buf[0];
 
-	if (track >= gcr_info[idx].tracks) 
-	{
-		dbgprintf("Ignore track %d%s: out of range\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
-		return;
-	}
-
 	if (gcr_info[idx].type == 2)
 	{
+		if (track >= gcr_info[idx].tracks) 
+		{
+			dbgprintf("Ignore track %d%s: out of range\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
+			return;
+		}
+
 		uint32_t track_pos = gcr_info[idx].trk_map[track];
 		if (track_pos == 0 && !allow_new_track) {
 			return;
@@ -749,15 +751,16 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 
 	track >>= 1;
 
-	dbgprintf("\n\nGCR track = %d\n", track + 1);
 	//hexdump(gcr_buf, 8192);
 
-	int sec_cnt = gcr_info[idx].sector_map[track + 1] - gcr_info[idx].sector_map[track];
+	int sec_cnt = track < 84 ? gcr_info[idx].sector_map[track + 1] - gcr_info[idx].sector_map[track] : 0;
 	if (sec_cnt == 0) 
 	{
-		dbgprintf("Discard data beyond last track!\n");
+		dbgprintf("Ignore track %d: invalid\n", track+1);
 		return;
 	}
+
+	dbgprintf("\n\nGCR track = %d\n", track + 1);
 
 	int sync = 0;
 	uint8_t prev = 0, started = 0;
