@@ -682,7 +682,7 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 			{
 				if (gcr_info[idx].trk_map[t] > track_pos && gcr_info[idx].trk_map[t] < track_end)
 					track_end = gcr_info[idx].trk_map[t];
-				else if (gcr_info[idx].spd_map[t] > track_pos && gcr_info[idx].spd_map[t] < track_end)
+				if (gcr_info[idx].spd_map[t] > track_pos && gcr_info[idx].spd_map[t] < track_end)
 					track_end = gcr_info[idx].spd_map[t];
 			}
 		}
