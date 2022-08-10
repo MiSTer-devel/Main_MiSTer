@@ -1393,6 +1393,15 @@ static int get_active_edid()
 		return 0;
 	}
 
+	//Test if adv7513 senses hdmi clock. If not, don't bother with the edid query
+	int hpd_state = i2c_smbus_read_byte_data(fd, 0x42);
+	if (hpd_state < 0 || !(hpd_state & 0x20))
+	{
+		i2c_close(fd);
+		return 0;
+	}
+
+
 	for (int i = 0; i < 10; i++)
 	{
 		i2c_smbus_write_byte_data(fd, 0xC9, 0x03);
