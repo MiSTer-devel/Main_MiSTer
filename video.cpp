@@ -649,7 +649,7 @@ static void loadScalerCfg()
 
 static char active_gamma_cfg[1024] = { 0 };
 static char gamma_cfg[1024] = { 0 };
-static char has_gamma = 0;
+static char has_gamma = 0; // set in video_init
 
 static void setGamma()
 {
@@ -660,15 +660,7 @@ static void setGamma()
 	fileTextReader reader = {};
 	static char filename[1024];
 
-	if (!spi_uio_cmd_cont(UIO_SET_GAMMA))
-	{
-		DisableIO();
-		return;
-	}
-
-	has_gamma = 1;
-	spi8(0);
-	DisableIO();
+	if (!has_gamma) return;
 
 	snprintf(filename, sizeof(filename), GAMMA_DIR"/%s", gamma_cfg + 1);
 
@@ -1401,6 +1393,15 @@ static int get_active_edid()
 		return 0;
 	}
 
+	//Test if adv7513 senses hdmi clock. If not, don't bother with the edid query
+	int hpd_state = i2c_smbus_read_byte_data(fd, 0x42);
+	if (hpd_state < 0 || !(hpd_state & 0x20))
+	{
+		i2c_close(fd);
+		return 0;
+	}
+
+
 	for (int i = 0; i < 10; i++)
 	{
 		i2c_smbus_write_byte_data(fd, 0xC9, 0x03);
@@ -2002,6 +2003,8 @@ void video_init()
 	fb_init();
 	hdmi_config_init();
 	video_mode_load();
+
+	has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
 
 	loadGammaCfg();
 	loadScalerCfg();
