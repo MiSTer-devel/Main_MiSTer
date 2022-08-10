@@ -649,7 +649,7 @@ static void loadScalerCfg()
 
 static char active_gamma_cfg[1024] = { 0 };
 static char gamma_cfg[1024] = { 0 };
-static char has_gamma = 0;
+static char has_gamma = 0; // set in video_init
 
 static void setGamma()
 {
@@ -660,15 +660,7 @@ static void setGamma()
 	fileTextReader reader = {};
 	static char filename[1024];
 
-	if (!spi_uio_cmd_cont(UIO_SET_GAMMA))
-	{
-		DisableIO();
-		return;
-	}
-
-	has_gamma = 1;
-	spi8(0);
-	DisableIO();
+	if (!has_gamma) return;
 
 	snprintf(filename, sizeof(filename), GAMMA_DIR"/%s", gamma_cfg + 1);
 
@@ -2002,6 +1994,8 @@ void video_init()
 	fb_init();
 	hdmi_config_init();
 	video_mode_load();
+
+	has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
 
 	loadGammaCfg();
 	loadScalerCfg();
