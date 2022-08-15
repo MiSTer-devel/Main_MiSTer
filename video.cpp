@@ -1133,7 +1133,7 @@ static uint16_t *hdr_coeff_calc()
 	quant[9] = res[2][1] * 4096;
 	quant[10] = res[2][2] * 4096;
 
-	quant[3] = quant[7] = quant[11] = 0;
+	quant[3] = quant[7] = quant[11] = 0x0000;
 
 	return quant;
 }
@@ -1164,17 +1164,6 @@ static void hdmi_config_init()
 		0x0EBC, 0x0000, 0x0000, 0x0100,
 		0x0000, 0x0DBC, 0x0000, 0x0100,
 		0x0000, 0x0000, 0x0DBC, 0x0100
-	};
-
-	/* 709 -> 2020
-	0.6274 0.3293 0.0433
-	0.0691 0.9195 0.0114
-	0.0164 0.0880 0.8956 */
-
-	uint16_t hdr_coeffs[12] = {
-		0x0a0a, 0x0545, 0x00b1, 0x0000,
-		0x011b, 0x0eb6, 0x002f, 0x0000,
-		0x0043, 0x0168, 0x0e54, 0x0000
 	};
 
 	const uint16_t *csc = hdmi_full_coeffs;
