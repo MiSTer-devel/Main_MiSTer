@@ -1051,25 +1051,138 @@ static void hdmi_config_set_spd(bool val)
 	}
 }
 
-static void hdmi_config_set_spare(bool val)
+static void hdmi_config_set_spare(int packet, bool enabled)
 {
 	int fd = i2c_open(0x39, 0);
+	uint8_t mask = packet == 0 ? 0x01 : 0x02;
 	if (fd >= 0)
 	{
 		uint8_t packet_val = i2c_smbus_read_byte_data(fd, 0x40);
-		if (val)
-			packet_val |= 0x01;
+		if (enabled)
+			packet_val |= mask;
 		else
-			packet_val &= ~0x01;
+			packet_val &= ~mask;
 		int res = i2c_smbus_write_byte_data(fd, 0x40, packet_val);
 		if (res < 0) printf("i2c: write error (%02X %02X): %d\n", 0x40, packet_val, res);
 		i2c_close(fd);
 	}
 }
 
+static void mat33_mul(const float a[3][3], const float b[3][3], float res[3][3])
+{
+	for( int r = 0; r < 3; r++ )
+	{
+		for( int c = 0; c < 3; c++ )
+		{
+			res[r][c] = b[r][0] * a[0][c] + b[r][1] * a[1][c] + b[r][2] * a[2][c];
+		}
+	}
+}
+
+static uint16_t *hdr_coeff_calc()
+{
+	float s = cfg.hdr / 100.0f;
+	float sr = ( 1.0f - s ) * .3086;
+	float sg = ( 1.0f - s ) * .6094;
+	float sb = ( 1.0f - s ) * .0920;
+
+	float sat_mat[3][3] =
+	{
+		{ sr + s, sg, sb },
+		{ sr, sg + s, sb },
+		{ sr, sg, sb + s }
+	};
+
+/*	
+	float csc_mat[3][3] =
+	{
+		{ 0.6274, 0.3293, 0.0433 },
+		{ 0.0691, 0.9195, 0.0114 },
+		{ 0.0164, 0.0880, 0.8956 },
+	};
+	*/
+
+	float csc_mat[3][3] =
+	{
+		{ 0.8225, 0.1774, 0.0000 },
+		{ 0.0332, 0.9669, 0.0000 },
+		{ 0.0171, 0.0724, 0.9108 },
+	};
+
+	float ident[3][3] =
+	{
+		{ 1, 0, 0 },
+		{ 0, 1, 0 },
+		{ 0, 0, 1 }
+	};
+
+	float res[3][3];
+	mat33_mul(sat_mat, csc_mat, res);
+
+	static uint16_t quant[12];
+
+	quant[0] = res[0][0] * 4096;
+	quant[1] = res[0][1] * 4096;
+	quant[2] = res[0][2] * 4096;
+
+	quant[4] = res[1][0] * 4096;
+	quant[5] = res[1][1] * 4096;
+	quant[6] = res[1][2] * 4096;
+
+	quant[8] = res[2][0] * 4096;
+	quant[9] = res[2][1] * 4096;
+	quant[10] = res[2][2] * 4096;
+
+	quant[3] = quant[7] = quant[11] = 0;
+
+	return quant;
+}
+
 static void hdmi_config_init()
 {
 	int ypbpr = cfg.ypbpr && cfg.direct_video;
+
+	uint16_t ypbpr_coeffs[12] = {
+		0x06DF, 0x1A3F, 0x1EE2, 0x07E7,
+		0x041C, 0x0811, 0x0191, 0x0100,
+		0x1DAE, 0x1B73, 0x06DF, 0x07E7
+	};
+
+	uint16_t hdmi_full_coeffs[12] = {
+		0xA800, 0x0000, 0x0000, 0x0000,
+		0x0000, 0x0800, 0x0000, 0x0000,
+		0x0000, 0x0000, 0x0800, 0x0000
+	};
+
+	uint16_t hdmi_limited_1_coeffs[12] = {
+		0x0DBC, 0x0000, 0x0000, 0x0100,
+		0x0000, 0x0DBC, 0x0000, 0x0100,
+		0x0000, 0x0000, 0x0DBC, 0x0100
+	};
+
+	uint16_t hdmi_limited_2_coeffs[12] = {
+		0x0EBC, 0x0000, 0x0000, 0x0100,
+		0x0000, 0x0DBC, 0x0000, 0x0100,
+		0x0000, 0x0000, 0x0DBC, 0x0100
+	};
+
+	/* 709 -> 2020
+	0.6274 0.3293 0.0433
+	0.0691 0.9195 0.0114
+	0.0164 0.0880 0.8956 */
+
+	uint16_t hdr_coeffs[12] = {
+		0x0a0a, 0x0545, 0x00b1, 0x0000,
+		0x011b, 0x0eb6, 0x002f, 0x0000,
+		0x0043, 0x0168, 0x0e54, 0x0000
+	};
+
+	const uint16_t *csc = hdmi_full_coeffs;
+
+	if (ypbpr) csc = ypbpr_coeffs;
+	else if (cfg.hdr) csc = hdr_coeff_calc();
+	else if (cfg.hdmi_limited & 1) csc = hdmi_limited_1_coeffs;
+	else if (cfg.hdmi_limited & 2) csc = hdmi_limited_2_coeffs;
 
 	// address, value
 	uint8_t init_data[] = {
@@ -1108,32 +1221,32 @@ static void hdmi_config_init()
 
 		0x17, 0b01100010,		// Aspect ratio 16:9 [1]=1, 4:3 [1]=0, invert sync polarity
 
-		0x18, (uint8_t)(ypbpr ? 0x86 : (cfg.hdmi_limited & 1) ? 0x8D : (cfg.hdmi_limited & 2) ? 0x8E : 0x00),  // CSC Scaling Factors and Coefficients for RGB Full->Limited.
-		0x19, (uint8_t)(ypbpr ? 0xDF : (cfg.hdmi_limited & 1) ? 0xBC : 0xFE),                       // Taken from table in ADV7513 Programming Guide.
-		0x1A, (uint8_t)(ypbpr ? 0x1A : 0x00),         // CSC Channel A.
-		0x1B, (uint8_t)(ypbpr ? 0x3F : 0x00),
-		0x1C, (uint8_t)(ypbpr ? 0x1E : 0x00),
-		0x1D, (uint8_t)(ypbpr ? 0xE2 : 0x00),
-		0x1E, (uint8_t)(ypbpr ? 0x07 : 0x01),
-		0x1F, (uint8_t)(ypbpr ? 0xE7 : 0x00),
+		0x18, (uint8_t)(0x80 | ( csc[0] >> 8)),  // CSC Coefficients, Channel A
+		0x19, (uint8_t)(csc[0] & 0xff),
+		0x1A, (uint8_t)(csc[1] >> 8),
+		0x1B, (uint8_t)(csc[1] & 0xff),
+		0x1C, (uint8_t)(csc[2] >> 8),
+		0x1D, (uint8_t)(csc[2] & 0xff),
+		0x1E, (uint8_t)(csc[3] >> 8),
+		0x1F, (uint8_t)(csc[3] & 0xff),
 
-		0x20, (uint8_t)(ypbpr ? 0x04 : 0x00),         // CSC Channel B.
-		0x21, (uint8_t)(ypbpr ? 0x1C : 0x00),
-		0x22, (uint8_t)(ypbpr ? 0x08 : (cfg.hdmi_limited & 1) ? 0x0D : 0x0E),
-		0x23, (uint8_t)(ypbpr ? 0x11 : (cfg.hdmi_limited & 1) ? 0xBC : 0xFE),
-		0x24, (uint8_t)(ypbpr ? 0x01 : 0x00),
-		0x25, (uint8_t)(ypbpr ? 0x91 : 0x00),
-		0x26, (uint8_t)(ypbpr ? 0x01 : 0x01),
-		0x27, 0x00,
+		0x20, (uint8_t)(csc[4] >> 8),  // CSC Coefficients, Channel B
+		0x21, (uint8_t)(csc[4] & 0xff),
+		0x22, (uint8_t)(csc[5] >> 8),
+		0x23, (uint8_t)(csc[5] & 0xff),
+		0x24, (uint8_t)(csc[6] >> 8),
+		0x25, (uint8_t)(csc[6] & 0xff),
+		0x26, (uint8_t)(csc[7] >> 8),
+		0x27, (uint8_t)(csc[7] & 0xff),
 
-		0x28, (uint8_t)(ypbpr ? 0x1D : 0x00),         // CSC Channel C.
-		0x29, (uint8_t)(ypbpr ? 0xAE : 0x00),
-		0x2A, (uint8_t)(ypbpr ? 0x1B : 0x00),
-		0x2B, (uint8_t)(ypbpr ? 0x73 : 0x00),
-		0x2C, (uint8_t)(ypbpr ? 0x06 : (cfg.hdmi_limited & 1) ? 0x0D : 0x0E),
-		0x2D, (uint8_t)(ypbpr ? 0xDF : (cfg.hdmi_limited & 1) ? 0xBC : 0xFE),
-		0x2E, (uint8_t)(ypbpr ? 0x07 : 0x01),
-		0x2F, (uint8_t)(ypbpr ? 0xE7 : 0x00),
+		0x28, (uint8_t)(csc[8] >> 8),  // CSC Coefficients, Channel C
+		0x29, (uint8_t)(csc[8] & 0xff),
+		0x2A, (uint8_t)(csc[9] >> 8),
+		0x2B, (uint8_t)(csc[9] & 0xff),
+		0x2C, (uint8_t)(csc[10] >> 8),
+		0x2D, (uint8_t)(csc[10] & 0xff),
+		0x2E, (uint8_t)(csc[11] >> 8),
+		0x2F, (uint8_t)(csc[11] & 0xff),
 
 		0x3B, 0x0,              // Automatic pixel repetition and VIC detection
 
@@ -1152,16 +1265,16 @@ static void hdmi_config_init()
 								// Bar Info [3:2] b00 Bars invalid. b01 Bars vertical. b10 Bars horizontal. b11 Bars both.
 								// Scan Info [1:0] b00 (No data). b01 TV. b10 PC. b11 None.
 
-		0x56, 0b00001000,		// [5:4] Picture Aspect Ratio
+		0x56, (uint8_t)( 0b00001000 | (cfg.hdr ? 0xb11000000 : 0)),		// [5:4] Picture Aspect Ratio
 								// [3:0] Active Portion Aspect Ratio b1000 = Same as Picture Aspect Ratio
 
 		0x57, (uint8_t)((cfg.hdmi_game_mode ? 0x80 : 0x00)		// [7] IT Content. 0 - No. 1 - Yes (type set in register 0x59).
 																// [6:4] Color space (ignored for RGB)
-			| ((ypbpr || cfg.hdmi_limited) ? 0b0100 : 0b1000)),	// [3:2] RGB Quantization range
+			| ((ypbpr || cfg.hdmi_limited) ? 0b0100 : cfg.hdr ? 0b1101000 : 0b0001000)),	// [3:2] RGB Quantization range
 																// [1:0] Non-Uniform Scaled: 00 - None. 01 - Horiz. 10 - Vert. 11 - Both.
-
-		0x59, (uint8_t)(((ypbpr || cfg.hdmi_limited) ? 0x00 : 0x40)	// [7:6] [YQ1 YQ0] YCC Quantization Range: b00 = Limited Range, b01 = Full Range
-			| (cfg.hdmi_game_mode ? 0x30 : 0x00)),					// [5:4] IT Content Type b11 = Game, b00 = Graphics/None
+																
+		0x59, (uint8_t)(cfg.hdmi_game_mode ? 0x30 : 0x00),			// [7:6] [YQ1 YQ0] YCC Quantization Range: b00 = Limited Range, b01 = Full Range
+																	// [5:4] IT Content Type b11 = Game, b00 = Graphics/None
 																	// [3:0] Pixel Repetition Fields b0000 = No Repetition
 
 		0x73, 0x01,
@@ -1248,6 +1361,68 @@ static void hdmi_config_init()
 	else
 	{
 		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
+	}
+}
+
+static void hdmi_config_set_hdr()
+{
+	// 87:01:1a:74:02:00:c2:33:c4:86:4c:1d:b8:0b:d0:84:80 :3e:13:3d:42:40:e8:03:32:00:e8:03:90:01
+	uint8_t hdr_data[] = {
+		0x87,
+		0x01,
+		0x1a,
+		0x74,
+		0x02,
+		0x00,
+		0xc2,
+		0x33,
+		0xc4,
+		0x86,
+		0x4c,
+		0x1d,
+		0xb8,
+		0x0b,
+		0xd0,
+		0x84,
+		0x80,
+		0x3e,
+		0x13,
+		0x3d,
+		0x42,
+		0x40,
+		0xe8,
+		0x03,
+		0x32,
+		0x00,
+		0xe8,
+		0x03,
+		0x90,
+		0x01
+	};
+
+	if (cfg.hdr == 0)
+	{
+		hdmi_config_set_spare(1, false);
+	}
+	else
+	{
+		hdmi_config_set_spare(1, true);
+		int fd = i2c_open(0x38, 0);
+		int res = i2c_smbus_write_byte_data(fd, 0xFF, 0b10000000);
+		if (res < 0)
+		{
+			printf("i2c: hdr: Couldn't update Spare Packet change register (0xDF, 0x80) %d\n", res);
+		}
+
+		uint8_t addr = 0xe0;
+		for (uint i = 0; i < sizeof(hdr_data); i++)
+		{
+			res = i2c_smbus_write_byte_data(fd, addr, hdr_data[i]);
+			if (res < 0) printf("i2c: hdr register write error (%02X %02x): %d\n", addr, hdr_data[i], res);
+			addr += 1;
+		}
+		res = i2c_smbus_write_byte_data(fd, 0xfF, 0x00);
+		if (res < 0) printf("i2c: hdr: Couldn't update Spare Packet change register (0xDF, 0x00), %d\n", res);
 	}
 }
 
@@ -1569,8 +1744,8 @@ static void set_vrr_mode()
 	{
 		if (last_vrr_mode != 0)
 		{
-			hdmi_config_set_spd(0);
-			hdmi_config_set_spare(0);
+			hdmi_config_set_spd(false);
+			hdmi_config_set_spare(0, false);
 		}
 		last_vrr_mode = 0;
 		return;
@@ -1707,7 +1882,7 @@ static void set_vrr_mode()
 
 		if (use_vrr == VRR_VESA)
 		{
-			hdmi_config_set_spare(1);
+			hdmi_config_set_spare(0, true);
 			res = i2c_smbus_write_byte_data(fd, 0xDF, 0b10000000);
 			if (res < 0)
 			{
@@ -1724,7 +1899,7 @@ static void set_vrr_mode()
 		}
 		else
 		{
-			hdmi_config_set_spare(0);
+			hdmi_config_set_spare(0, false);
 		}
 		i2c_close(fd);
 	}
@@ -2001,6 +2176,7 @@ void video_init()
 {
 	fb_init();
 	hdmi_config_init();
+	hdmi_config_set_hdr();
 	video_mode_load();
 
 	loadGammaCfg();

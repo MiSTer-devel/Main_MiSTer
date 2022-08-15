@@ -78,6 +78,8 @@ typedef struct {
 	uint8_t vrr_max_framerate;
 	uint8_t vrr_vesa_framerate;
 	uint16_t video_off;
+
+	uint8_t hdr;
 } cfg_t;
 
 extern cfg_t cfg;
