@@ -1331,7 +1331,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					if ((get_key_mod() & (LGUI | RGUI)) && !is_x86() && has_menu()) //Win+Menu
+					if ((get_key_mod() & (LGUI | RGUI)) && !is_x86() && !is_pcxt() && has_menu()) //Win+Menu
 					{
 						menustate = MENU_COMMON1;
 					}
@@ -1686,6 +1686,13 @@ void HandleUI(void)
 								substrcpy(s + 1, p, 2);
 								strcat(s, " ");
 								strcat(s, x86_get_image_name(num));
+							}
+							else if (is_pcxt() && pcxt_get_image_name(num))
+							{
+								strcpy(s, " ");
+								substrcpy(s + 1, p, 2);
+								strcat(s, " ");
+								strcat(s, pcxt_get_image_name(num));
 							}
 							else
 							{
@@ -2130,7 +2137,12 @@ void HandleUI(void)
 								if (!strlen(s) || get_arc(s) < 0) x = 0;
 							}
 
-							user_io_status_set(p + 1, x, ex);
+							user_io_status_set(p + 1, x, ex);														
+														
+							if (is_pcxt() && (p[1] == 'J' || p[1] == 'L'))
+							{
+								pcxt_load_images();
+							}
 
 							if (is_x86() && p[1] == 'A')
 							{
@@ -2170,6 +2182,7 @@ void HandleUI(void)
 
 									if (is_pce() && !bit) pcecd_reset();
 									if (is_saturn() && !bit) saturn_reset();
+									if (is_pcxt() && !bit) pcxt_init();
 
 									user_io_status_set(opt, 1, ex);
 									user_io_status_set(opt, 0, ex);
@@ -2274,7 +2287,11 @@ void HandleUI(void)
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
-			if (is_x86())
+			if (is_pcxt())
+			{
+				pcxt_set_image(ioctl_index, selPath);
+			}
+			else if (is_x86())
 			{
 				x86_set_image(ioctl_index, selPath);
 			}
@@ -2527,6 +2544,7 @@ void HandleUI(void)
 					user_io_status_save(filename);
 					if (is_x86()) x86_config_save();
 					if (is_arcade()) arcade_nvm_save();
+					if (is_pcxt()) pcxt_config_save();
 				}
 				break;
 
@@ -4695,6 +4713,7 @@ void HandleUI(void)
 				OsdWrite(OsdGetSize() / 2, "    Unmounting the image", 0, 0);
 				OsdUpdate();
 				sleep(1);
+				if (is_pcxt()) pcxt_load_images();
 			}
 			input_poll(0);
 			menu_key_set(0);

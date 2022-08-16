@@ -24,6 +24,7 @@ INCLUDE += -I./lib/libchdr/include
 INCLUDE += -I./lib/flac/include
 INCLUDE += -I./lib/flac/src/include
 INCLUDE += -I./lib/bluetooth
+INCLUDE += -I./lib/serial_server/library
 
 PRJ = MiSTer
 C_SRC =   $(wildcard *.c) \
@@ -35,6 +36,7 @@ C_SRC =   $(wildcard *.c) \
           lib/libco/arm.c 
 
 CPP_SRC = $(wildcard *.cpp) \
+          $(wildcard ./lib/serial_server/library/*.cpp) \
           $(wildcard ./support/*/*.cpp) 
 
 IMG =     $(wildcard *.png)
