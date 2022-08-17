@@ -255,6 +255,13 @@ char is_archie()
 	return (is_archie_type == 1);
 }
 
+static int is_pcxt_type = 0;
+char is_pcxt()
+{
+	if (!is_pcxt_type) is_pcxt_type = strcasecmp(orig_name, "PCXT") ? 2 : 1;
+	return (is_pcxt_type == 1);
+}
+
 static int is_gba_type = 0;
 char is_gba()
 {
@@ -1395,6 +1402,11 @@ void user_io_init(const char *path, const char *xml)
 				{
 					printf("Identified Archimedes core");
 					archie_init();
+				}
+				else if (is_pcxt())
+				{
+					pcxt_config_load();
+					pcxt_init();
 				}
 				else
 				{
@@ -3785,7 +3797,7 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
-				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
+				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_pcxt() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
 				{
 					if (press == 1) menu_key_set(KEY_F12);
 				}

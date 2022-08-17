@@ -275,6 +275,7 @@ char is_st();
 char is_psx();
 char is_arcade();
 char is_saturn();
+char is_pcxt();
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()
