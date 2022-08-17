@@ -1152,9 +1152,9 @@ static void hdmi_config_init()
 			| ((ypbpr || cfg.hdmi_limited) ? 0b0100 : 0b1000)),	// [3:2] RGB Quantization range
 																// [1:0] Non-Uniform Scaled: 00 - None. 01 - Horiz. 10 - Vert. 11 - Both.
 
-		0x59, (uint8_t)(((ypbpr || cfg.hdmi_limited) ? 0x00 : 0x40)	// [7:6] [YQ1 YQ0] YCC Quantization Range: b00 = Limited Range, b01 = Full Range
-			| (cfg.hdmi_game_mode ? 0x30 : 0x00)),					// [5:4] IT Content Type b11 = Game, b00 = Graphics/None
-																	// [3:0] Pixel Repetition Fields b0000 = No Repetition
+		0x59, (uint8_t)(cfg.hdmi_game_mode ? 0x30 : 0x00),		// [7:6] [YQ1 YQ0] YCC Quantization Range: b00 = Limited Range, b01 = Full Range
+																// [5:4] IT Content Type b11 = Game, b00 = Graphics/None
+																// [3:0] Pixel Repetition Fields b0000 = No Repetition
 
 		0x73, 0x01,
 
