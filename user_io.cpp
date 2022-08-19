@@ -337,6 +337,7 @@ void user_io_read_core_name()
 	is_gba_type = 0;
 	is_c64_type = 0;
 	is_st_type = 0;
+	is_pcxt_type = 0;
 	core_name[0] = 0;
 
 	char *p = user_io_get_confstr(0);
