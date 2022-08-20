@@ -39,6 +39,7 @@ MSX: MSX/MSX2/MSX2+/TurboR
 MultiComp: MultiComp (Z80/6502/6809)
 ORAO: Velebit Informatika Orao
 Oric: Oric-1/Atmos
+PCXT: IBM PC/XT Compatible
 PDP1: DEC PDP-1
 PET2001: Commodore PET 2001
 PSX: Sony PlayStation
