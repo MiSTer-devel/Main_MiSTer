@@ -37,6 +37,7 @@
 
 char joy_bnames[NUMBUTTONS][32] = {};
 int  joy_bcount = 0;
+static struct pollfd pool[NUMDEV + 3];
 
 static int ev2amiga[] =
 {
@@ -2287,7 +2288,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			if (!load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 			{
-				if (!gcdb_map_for_controller(input[dev].bustype, input[dev].vid, input[dev].pid, input[dev].version, input[dev].mmap))
+				if (!gcdb_map_for_controller(input[dev].bustype, input[dev].vid, input[dev].pid, input[dev].version, pool[dev].fd, input[dev].mmap))
 				{
 					memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
 					memcpy(input[dev].mmap, def_mmap, sizeof(def_mmap));
@@ -3231,8 +3232,6 @@ void send_map_cmd(int key)
 
 #define CMD_FIFO "/dev/MiSTer_cmd"
 #define LED_MONITOR "/sys/class/leds/hps_led0/brightness_hw_changed"
-
-static struct pollfd pool[NUMDEV + 3];
 
 // add sequential suffixes for non-merged devices
 void make_unique(uint16_t vid, uint16_t pid, int type)
@@ -4184,7 +4183,6 @@ int input_test(int getchar)
 		pool[NUMDEV + 2].fd = open(LED_MONITOR, O_RDONLY | O_CLOEXEC);
 		pool[NUMDEV + 2].events = POLLPRI;
 
-		load_gcdb_maps();
 		state++;
 	}
 
