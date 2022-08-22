@@ -40,12 +40,16 @@ typedef struct
 
 static pcxt_config config;
 
-void pcxt_init()
+void pcxt_init(bool rom_by_model)
 {	
 	user_io_status_set("[0]", 1);
+	if (rom_by_model) pcxt_model_rom();
+}
+
+void pcxt_model_rom()
+{
 	const char* home = HomeDir();
 	static char mainpath[512];
-
 	int status = user_io_status_get("[3]");
 	if (status)
 	{
@@ -54,8 +58,7 @@ void pcxt_init()
 	else
 	{
 		sprintf(mainpath, "%s/pcxt.rom", home);
-	}	
-	
+	}
 	user_io_file_tx(mainpath);
 }
 

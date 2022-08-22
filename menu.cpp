@@ -2182,7 +2182,7 @@ void HandleUI(void)
 
 									if (is_pce() && !bit) pcecd_reset();
 									if (is_saturn() && !bit) saturn_reset();
-									if (is_pcxt() && !bit) pcxt_init();
+									if (is_pcxt() && !bit) pcxt_init(!(bool)user_io_status_get("[23]"));
 
 									user_io_status_set(opt, 1, ex);
 									user_io_status_set(opt, 0, ex);

@@ -1407,7 +1407,7 @@ void user_io_init(const char *path, const char *xml)
 				else if (is_pcxt())
 				{
 					pcxt_config_load();
-					pcxt_init();
+					pcxt_init(true);
 				}
 				else
 				{

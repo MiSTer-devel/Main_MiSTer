@@ -3,7 +3,8 @@
 
 #include "../../file_io.h"
 
-void pcxt_init(void);
+void pcxt_init(bool rom_by_model);
+void pcxt_model_rom();
 void* OpenUART(void*);
 void log(int level, const char* message, ...);
 unsigned long GetTime(void);
