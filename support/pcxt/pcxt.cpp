@@ -18,6 +18,7 @@
 #include "../../support.h"
 #include "../../lib/serial_server/library/Library.h"
 #include "../../lib/serial_server/library/FlatImage.h"
+#include "../../ide.h"
 #include "pcxt.h"
 
 int verbose = 0;
@@ -30,33 +31,48 @@ pthread_t uart_thread;
 SerialAccess serial;
 bool in_process;
 
+#define FDD0_BASE   0xF200
+#define FDD1_BASE   0xF300
 #define CFG_VER     1
+
+#define FDD_TYPE_NONE 0
+#define FDD_TYPE_160  1
+#define FDD_TYPE_180  2
+#define FDD_TYPE_320  3
+#define FDD_TYPE_360  4
+#define FDD_TYPE_720  5
+#define FDD_TYPE_1200 6
+#define FDD_TYPE_1440 7
+#define FDD_TYPE_1680 8
+#define FDD_TYPE_2880 9
+
+static char floppy_type[2] = { FDD_TYPE_NONE, FDD_TYPE_NONE };
+
+static fileTYPE fdd0_image = {};
+static fileTYPE fdd1_image = {};
+
+#define IOWR(base, reg, value) x86_dma_set((base) + (reg), value)
 
 typedef struct
 {
 	uint32_t ver;
-	char img_name[2][1024];
+	char img_name[3][1024];
 } pcxt_config;
 
 static pcxt_config config;
 
+static void x86_dma_set(uint32_t address, uint32_t data)
+{
+	EnableIO();
+	spi8(UIO_DMA_WRITE);
+	spi32_w(address);
+	spi_w((uint16_t)data);
+	DisableIO();
+}
+
 void pcxt_init()
 {	
 	user_io_status_set("[0]", 1);
-	const char* home = HomeDir();
-	static char mainpath[512];
-
-	int status = user_io_status_get("[3]");
-	if (status)
-	{
-		sprintf(mainpath, "%s/tandy.rom", home);
-	}
-	else
-	{
-		sprintf(mainpath, "%s/pcxt.rom", home);
-	}	
-	
-	user_io_file_tx(mainpath);
 }
 
 void* OpenUART(void*) {
@@ -91,36 +107,6 @@ void* OpenUART(void*) {
 	int timeoutEnabled = 1;
 	FILE* fd;
 	long size;
-	
-	// FDD CHS Calculator
-
-	unsigned long fdd_cyl = 0, fdd_sect = 0, fdd_head = 0;
-	bool is_fdd = false;
-	struct floppyInfo* fdd_fi;
-	
-	if (strlen(config.img_name[1]))
-	{
-		fd = fopen(config.img_name[1], "r");
-		if (fd)
-		{
-			is_fdd = true;
-			fseek(fd, 0L, SEEK_END);
-			size = ftell(fd);
-
-			if ((fdd_fi = FindFloppyInfoBySize(size)))
-			{
-				fdd_sect = fdd_fi->sectors;
-				fdd_head = fdd_fi->heads;
-				fdd_cyl = fdd_fi->cylinders;
-			}
-			else
-			{
-				fdd_sect = 63;
-				fdd_head = 16;
-				fdd_cyl = size / (16 * 63);
-			}
-		}
-	}
 
 	// HDD CHS Calculator
 
@@ -128,9 +114,9 @@ void* OpenUART(void*) {
 	bool is_hdd = false;
 	struct hddInfo *hdd_fi;
 
-	if (strlen(config.img_name[0]))
+	if (strlen(config.img_name[2]))
 	{
-		fd = fopen(config.img_name[0], "r");
+		fd = fopen(config.img_name[2], "r");
 		if (fd)
 		{
 			is_hdd = true;
@@ -157,16 +143,7 @@ void* OpenUART(void*) {
 
 	if (is_hdd)
 	{
-		images[0] = new FlatImage(config.img_name[0], status & 2, 0, createFile, hdd_cyl, hdd_head, hdd_sect, useCHS);
-		
-		if (is_fdd)
-		{
-			images[1] = new FlatImage(config.img_name[1], status & 1, 1, createFile, fdd_cyl, fdd_head, fdd_sect, useCHS);
-		}
-	}
-	else if (is_fdd)
-	{
-		images[0] = new FlatImage(config.img_name[1], status & 1, 0, createFile, fdd_cyl, fdd_head, fdd_sect, useCHS);
+		images[0] = new FlatImage(config.img_name[2], 0, 0, createFile, hdd_cyl, hdd_head, hdd_sect, useCHS);		
 	}
 
 	// Mount Images
@@ -250,7 +227,103 @@ void pcxt_load_images()
 	in_process = true;
 }
 
+static void fdd_set(int num, char* filename)
+{
+	floppy_type[num] = FDD_TYPE_1440;
+
+	fileTYPE* fdd_image = num ? &fdd1_image : &fdd0_image;
+
+	int floppy = ide_img_mount(fdd_image, filename, 1);
+	uint32_t size = fdd_image->size / 512;
+	printf("floppy size: %d blks\n", size);
+	if (floppy && size)
+	{
+		if (size >= 8000)
+		{
+			floppy = 0;
+			FileClose(fdd_image);
+			printf("Image size is too large for floppy. Closing...\n");
+		}
+		else if (size >= 5760) floppy_type[num] = FDD_TYPE_2880;
+		else if (size >= 3360) floppy_type[num] = FDD_TYPE_1680;
+		else if (size >= 2880) floppy_type[num] = FDD_TYPE_1440;
+		else if (size >= 2400) floppy_type[num] = FDD_TYPE_1200;
+		else if (size >= 1440) floppy_type[num] = FDD_TYPE_720;
+		else if (size >= 720) floppy_type[num] = FDD_TYPE_360;
+		else if (size >= 640) floppy_type[num] = FDD_TYPE_320;
+		else if (size >= 360) floppy_type[num] = FDD_TYPE_180;
+		else floppy_type[num] = FDD_TYPE_160;
+	}
+	else
+	{
+		floppy = 0;
+	}
+
+	/*
+	0x00.[0]:      media present
+	0x01.[0]:      media writeprotect
+	0x02.[7:0]:    media cylinders
+	0x03.[7:0]:    media sectors per track
+	0x04.[31:0]:   media total sector count
+	0x05.[1:0]:    media heads
+	0x06.[31:0]:   media sd base
+	0x07.[15:0]:   media wait cycles: 200000 us / spt
+	0x08.[15:0]:   media wait rate 0: 1000 us
+	0x09.[15:0]:   media wait rate 1: 1666 us
+	0x0A.[15:0]:   media wait rate 2: 2000 us
+	0x0B.[15:0]:   media wait rate 3: 500 us
+	0x0C.[7:0]:    media type: 8'h20 none; 8'h00 old; 8'hC0 720k; 8'h80 1_44M; 8'h40 2_88M
+	*/
+
+	int floppy_spt = 0;
+	int floppy_cylinders = 0;
+	int floppy_heads = 0;
+
+	switch (floppy_type[num])
+	{
+	case FDD_TYPE_160:  floppy_spt = 8;  floppy_cylinders = 40; floppy_heads = 1; break;
+	case FDD_TYPE_180:  floppy_spt = 9;  floppy_cylinders = 40; floppy_heads = 1; break;
+	case FDD_TYPE_320:  floppy_spt = 8;  floppy_cylinders = 40; floppy_heads = 2; break;
+	case FDD_TYPE_360:  floppy_spt = 9;  floppy_cylinders = 40; floppy_heads = 2; break;
+	case FDD_TYPE_720:  floppy_spt = 9;  floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_1200: floppy_spt = 15; floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_1440: floppy_spt = 18; floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_1680: floppy_spt = 21; floppy_cylinders = 80; floppy_heads = 2; break;
+	case FDD_TYPE_2880: floppy_spt = 36; floppy_cylinders = 80; floppy_heads = 2; break;
+	}
+
+	int floppy_total_sectors = floppy_spt * floppy_heads * floppy_cylinders;
+
+	printf("floppy:\n");
+	printf("  cylinders:     %d\n", floppy_cylinders);
+	printf("  heads:         %d\n", floppy_heads);
+	printf("  spt:           %d\n", floppy_spt);
+	printf("  total_sectors: %d\n\n", floppy_total_sectors);
+
+	uint32_t subaddr = num << 7;
+
+	IOWR(FDD0_BASE + subaddr, 0x0, 0); // Always eject floppy before insertion
+	usleep(100000);
+
+	IOWR(FDD0_BASE + subaddr, 0x0, floppy ? 1 : 0);
+	IOWR(FDD0_BASE + subaddr, 0x1, (floppy && (fdd_image->mode & O_RDWR)) ? 0 : 1);
+	IOWR(FDD0_BASE + subaddr, 0x2, floppy_cylinders);
+	IOWR(FDD0_BASE + subaddr, 0x3, floppy_spt);
+	IOWR(FDD0_BASE + subaddr, 0x4, floppy_total_sectors);
+	IOWR(FDD0_BASE + subaddr, 0x5, floppy_heads);
+	IOWR(FDD0_BASE + subaddr, 0x6, 0); // base LBA
+	IOWR(FDD0_BASE + subaddr, 0xC, 0);
+}
+
 void pcxt_set_image(int num, char* filename)
+{
+	memset(config.img_name[num], 0, sizeof(config.img_name[0]));
+	strcpy(config.img_name[num], filename);
+	if (num < 2) fdd_set(num, filename);
+	else hdd_set(num, filename);
+}
+
+void hdd_set(int num, char* filename)
 {	
 	const char* imghome = "/media/fat";
 
