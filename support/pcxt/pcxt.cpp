@@ -43,20 +43,6 @@ static pcxt_config config;
 void pcxt_init()
 {	
 	user_io_status_set("[0]", 1);
-	const char* home = HomeDir();
-	static char mainpath[512];
-
-	int status = user_io_status_get("[3]");
-	if (status)
-	{
-		sprintf(mainpath, "%s/tandy.rom", home);
-	}
-	else
-	{
-		sprintf(mainpath, "%s/pcxt.rom", home);
-	}	
-	
-	user_io_file_tx(mainpath);
 }
 
 void* OpenUART(void*) {
