@@ -1280,7 +1280,7 @@ void user_io_init(const char *path, const char *xml)
 	if (xml)
 	{
 		if (isXmlName(xml) == 1) is_arcade_type = 1;
-		arcade_override_name(xml);
+		arcade_pre_parse(xml);
 	}
 
 	if (core_type == CORE_TYPE_8BIT)
@@ -1318,7 +1318,7 @@ void user_io_init(const char *path, const char *xml)
 		xml = (const char*)defmra;
 		strcpy(core_path, xml);
 		is_arcade_type = 1;
-		arcade_override_name(xml);
+		arcade_pre_parse(xml);
 		user_io_read_core_name();
 		printf("Using default MRA: %s\n", xml);
 	}

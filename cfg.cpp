@@ -12,6 +12,7 @@
 #include "file_io.h"
 #include "user_io.h"
 #include "video.h"
+#include "support/arcade/mra_loader.h"
 
 cfg_t cfg;
 
@@ -193,6 +194,7 @@ static int ini_get_section(char* buf, const char *vmode)
 
 	if (!strcasecmp(buf, "MiSTer") ||
 		(is_arcade() && !strcasecmp(buf, "arcade")) ||
+		(arcade_is_vertical() && !strcasecmp(buf, "arcade_vertical")) ||
 		((wc_pos >= 0) ? !strncasecmp(buf, user_io_get_core_name(1), wc_pos) : !strcasecmp(buf, user_io_get_core_name(1))) ||
 		((wc_pos >= 0) ? !strncasecmp(buf, user_io_get_core_name(0), wc_pos) : !strcasecmp(buf, user_io_get_core_name(0))))
 	{
