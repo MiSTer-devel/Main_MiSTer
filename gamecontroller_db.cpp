@@ -195,12 +195,14 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 		uint16_t abs_cnt = 0;
 		bzero(btn_map, sizeof(btn_map));
 		bzero(abs_map, sizeof(abs_map));
+		printf("Gamecontrollerdb: mapping buttons for %s ", guid);
 		if (ioctl(dev_fd, EVIOCGBIT(EV_KEY, sizeof(keybits)), keybits) >= 0)
 		{
 			for (int i = BTN_JOYSTICK; i < KEY_MAX; i++)
 			{
 					if (test_bit(i, keybits))
 					{
+						printf("b%d->%d ", btn_cnt, i);
 						btn_map[btn_cnt] = i;
 						btn_cnt++;
 					}
@@ -210,13 +212,16 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 			{
 					if (test_bit(i, keybits))
 					{	
+						printf("b%d -> %d ", btn_cnt, i);
 						btn_map[btn_cnt] = i;
 						btn_cnt++;
 					}
 			}
+			printf("\n");
 				
 		}
 
+		printf("Gamecontrollerdb: mapping analog axes for %s ", guid);
 		if (ioctl(dev_fd, EVIOCGBIT(EV_ABS, sizeof(absbits)), absbits) >= 0)
 		{
 			//The "correct" way is to test  all the way to ABS_MAX and skip any hats the device has.
@@ -226,11 +231,23 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 			{
 				if (test_bit(i, absbits))
 				{
+						printf("a%d->%d ", abs_cnt, i);
 						abs_map[abs_cnt] = i;
 						abs_cnt++;
 				}
 			}
+
+			//Just for debugging purposes...
+			for (int i = ABS_HAT0X; i < ABS_MAX; i++)
+			{
+					if (test_bit(i, absbits))
+					{
+						printf("(debug)a%d->%d ", abs_cnt, i);
+						abs_cnt++;
+					}
+			}
 		}
+		printf("\n");
 	}
 
 	char l_btn[20] = {};
@@ -321,6 +338,7 @@ bool read_controller_map_from_file(char *fname, char *guid, int dev_fd, uint32_t
 		printf("Gamecontrollerdb: searching for GUID %s in file %s\n", guid, fname);
 		while ((line = FileReadLine(&reader)))
 		{
+			if (line[0] == '#') continue;
 			const char *gcom = strchr(line, ',');
 			if (!strncasecmp(line, guid, gcom-line))
 			{
