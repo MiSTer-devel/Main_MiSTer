@@ -64,7 +64,7 @@ $(PRJ): $(OBJ)
 clean:
 	$(Q)rm -f *.elf *.map *.lst *.user *~ $(PRJ)
 	$(Q)rm -rf obj DTAR* x64
-	$(Q)find . \( -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -exec rm -f {} \;
+	$(Q)find . \( -path ./$(shell basename $(shell dirname $(shell which $(BASE)-gcc)/..)) -prune -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -exec rm -f {} \;
 
 %.c.o: %.c
 	$(Q)$(info $<)
