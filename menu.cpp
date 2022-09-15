@@ -2297,7 +2297,7 @@ void HandleUI(void)
 			}
 
 			menustate = MENU_GENERIC_MAIN1;
-			if (selPath[0] && !is_x86()) MenuHide();
+			if (selPath[0] && !is_x86() && !is_pcxt()) MenuHide();
 
 			printf("Image selected: %s\n", selPath);
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
