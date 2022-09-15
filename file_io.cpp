@@ -723,6 +723,24 @@ int DirDelete(const char *name)
 	return !rmdir(full_path);
 }
 
+const char* GetNameFromPath(char *path)
+{
+	static char res[32];
+
+	char* p = strrchr(path, '/');
+	if (!p) p = path;
+	else p++;
+
+	if (strlen(p) < 19) strcpy(res, p);
+	else
+	{
+		strncpy(res, p, 19);
+		res[19] = 0;
+	}
+
+	return res;
+}
+
 int FileLoad(const char *name, void *pBuffer, int size)
 {
 	fileTYPE f;
