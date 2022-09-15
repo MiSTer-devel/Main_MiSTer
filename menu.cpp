@@ -1687,12 +1687,31 @@ void HandleUI(void)
 								strcat(s, " ");
 								strcat(s, x86_get_image_name(num));
 							}
-							else if (is_pcxt() && pcxt_get_image_name(num))
+							else if (is_pcxt() && (p[0] == 'S') && pcxt_get_image_name(num))
 							{
 								strcpy(s, " ");
 								substrcpy(s + 1, p, 2);
 								strcat(s, " ");
 								strcat(s, pcxt_get_image_name(num));
+							}
+							else if (is_pcxt() && (p[0] == 'F'))
+							{
+								strcpy(s, " ");
+								substrcpy(s + 1, p, 2);
+								static char str[1024];
+								sprintf(str, "%s.f%c", user_io_get_core_name(), p[idx]);
+								if (FileLoadConfig(str, str, sizeof(str)) && str[0])
+								{									
+									strcat(s, " ");
+									strcat(s, GetNameFromPath(str));
+								}
+								else
+								{
+									strcat(s, " *.");
+									pos = s + strlen(s);
+									substrcpy(pos, p, 1);
+									strcpy(pos, GetExt(pos));
+								}
 							}
 							else
 							{
