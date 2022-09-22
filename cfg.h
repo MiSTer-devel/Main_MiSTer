@@ -87,4 +87,7 @@ void cfg_parse();
 const char* cfg_get_name(uint8_t alt);
 bool cfg_has_video_sections();
 
+void cfg_error(const char *fmt, ...);
+bool cfg_check_errors(char *msg, size_t max_len);
+
 #endif // __CFG_H__

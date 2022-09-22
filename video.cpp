@@ -1851,6 +1851,8 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	char work[1024];
 	char *next;
 
+	if (!vcfg[0]) return -1;
+
 	memset(v, 0, sizeof(vmode_custom_t));
 	v->param.rb = 1; // default reduced blanking to true
 
@@ -1866,7 +1868,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 		}
 	}
 
-	if (cnt == 2)
+	if (cnt == 2 && token_cnt > 2)
 	{
 		valf = strtod(tokens[cnt], &next);
 		if (!*next) cnt++;
@@ -1885,6 +1887,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 		else
 		{
 			printf("Error parsing video_mode parameter %d \"%s\": \"%s\"\n", i, flag, vcfg);
+			cfg_error("Invalid video_mode\n> %s", vcfg);
 			return -1;
 		}
 	}
@@ -1921,6 +1924,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	else
 	{
 		printf("Error parsing video_mode parameter: ""%s""\n", vcfg);
+		cfg_error("Invalid video_mode\n> %s", vcfg);
 		return -1;
 	}
 
