@@ -1505,6 +1505,13 @@ void user_io_init(const char *path, const char *xml)
 		// release reset
 		if (!is_minimig() && !is_st()) user_io_status_set("[0]", 0);
 		if (xml && isXmlName(xml) == 1) arcade_check_error();
+
+		char cfg_errs[512];
+		if (cfg_check_errors(cfg_errs, sizeof(cfg_errs)))
+		{
+			Info(cfg_errs, 5000);
+			sleep(5);
+		}
 		break;
 	}
 

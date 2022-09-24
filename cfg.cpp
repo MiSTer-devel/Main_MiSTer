@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <inttypes.h>
 #include <ctype.h>
@@ -26,8 +27,8 @@ typedef struct
 	const char* name;
 	void* var;
 	ini_vartypes_t type;
-	int min;
-	int max;
+	int64_t min;
+	int64_t max;
 } ini_var_t;
 
 static const ini_var_t ini_vars[] =
@@ -37,7 +38,7 @@ static const ini_var_t ini_vars[] =
 	{ "FORCED_SCANDOUBLER", (void*)(&(cfg.forced_scandoubler)), UINT8, 0, 1 },
 	{ "VGA_SCALER", (void*)(&(cfg.vga_scaler)), UINT8, 0, 1 },
 	{ "VGA_SOG", (void*)(&(cfg.vga_sog)), UINT8, 0, 1 },
-	{ "KEYRAH_MODE", (void*)(&(cfg.keyrah_mode)), UINT32, 0, (int)0xFFFFFFFF },
+	{ "KEYRAH_MODE", (void*)(&(cfg.keyrah_mode)), UINT32, 0, 0xFFFFFFFF },
 	{ "RESET_COMBO", (void*)(&(cfg.reset_combo)), UINT8, 0, 3 },
 	{ "KEY_MENU_AS_RGUI", (void*)(&(cfg.key_menu_as_rgui)), UINT8, 0, 1 },
 	{ "VIDEO_MODE", (void*)(cfg.video_conf), STRING, 0, sizeof(cfg.video_conf) - 1 },
@@ -76,7 +77,7 @@ static const ini_var_t ini_vars[] =
 	{ "SHARED_FOLDER", (void*)(&(cfg.shared_folder)), STRING, 0, sizeof(cfg.shared_folder) - 1 },
 	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), UINT16, 0, 0xFFFF },
 	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), UINT16, 0, 0xFFFF },
-	{ "NO_MERGE_VIDPID", (void*)(cfg.no_merge_vidpid), UINT32ARR, 0, (int)0xFFFFFFFF },
+	{ "NO_MERGE_VIDPID", (void*)(cfg.no_merge_vidpid), UINT32ARR, 0, 0xFFFFFFFF },
 	{ "CUSTOM_ASPECT_RATIO_1", (void*)(&(cfg.custom_aspect_ratio[0])), STRING, 0, sizeof(cfg.custom_aspect_ratio[0]) - 1 },
 	{ "CUSTOM_ASPECT_RATIO_2", (void*)(&(cfg.custom_aspect_ratio[1])), STRING, 0, sizeof(cfg.custom_aspect_ratio[1]) - 1 },
 	{ "SPINNER_VID", (void*)(&(cfg.spinner_vid)), UINT16, 0, 0xFFFF },
@@ -226,6 +227,65 @@ static int ini_get_section(char* buf, const char *vmode)
 	return 0;
 }
 
+static void ini_parse_numeric(const ini_var_t *var, const char *text, void *out)
+{
+	uint32_t u32 = 0;
+	int32_t i32 = 0;
+	float f32 = 0.0f;
+	char *endptr = nullptr;
+
+	bool out_of_range = true;
+
+	switch(var->type)
+	{
+	case UINT8:
+	case UINT16:
+	case UINT32:
+	case UINT32ARR:
+		u32 = strtoul(text, &endptr, 0);
+		if (u32 < var->min) u32 = var->min;
+		else if (u32 > var->max) u32 = var->max;
+		else out_of_range = false;
+		break;
+
+	case INT8:
+	case INT16:
+	case INT32:
+		i32 = strtol(text, &endptr, 0);
+		if (i32 < var->min) i32 = var->min;
+		else if (i32 > var->max) i32 = var->max;
+		else out_of_range = false;
+		break;
+
+	case FLOAT:
+		f32 = strtof(text, &endptr);
+		if (f32 < var->min) f32 = var->min;
+		else if (f32 > var->max) f32 = var->max;
+		else out_of_range = false;
+		break;
+
+	default:
+		out_of_range = false;
+		break;
+	}
+
+	if (*endptr) cfg_error("%s: \'%s\' not a number", var->name, text);
+	else if (out_of_range) cfg_error("%s: \'%s\' out of range", var->name, text);
+
+	switch (var->type)
+	{
+	case UINT8: *(uint8_t*)out = u32; break;
+	case INT8: *(int8_t*)out = u32; break;
+	case UINT16: *(uint16_t*)out = u32; break;
+	case UINT32ARR: *(uint32_t*)out = u32; break;
+	case INT16: *(int16_t*)out = u32; break;
+	case UINT32: *(uint32_t*)out = u32; break;
+	case INT32: *(int32_t*)out = u32; break;
+	case FLOAT: *(float*)out = f32; break;
+	default: break;
+	}
+}
+
 static void ini_parse_var(char* buf)
 {
 	// find var
@@ -248,62 +308,35 @@ static void ini_parse_var(char* buf)
 		if (!strcasecmp(buf, ini_vars[j].name)) var_id = j;
 	}
 
-	// get data
-	if (var_id != -1)
+	if (var_id == -1)
+	{
+		cfg_error("%s: unknown option", buf);
+	}
+	else // get data
 	{
 		i++;
 		while (buf[i] == '=' || CHAR_IS_SPACE(buf[i])) i++;
 		ini_parser_debugf("Got VAR '%s' with VALUE %s", buf, buf+i);
 
-		switch (ini_vars[var_id].type)
+		const ini_var_t *var = &ini_vars[var_id];
+
+		switch (var->type)
 		{
-		case UINT8:
-			*(uint8_t*)(ini_vars[var_id].var) = strtoul(&(buf[i]), NULL, 0);
-			if (*(uint8_t*)(ini_vars[var_id].var) > ini_vars[var_id].max) *(uint8_t*)(ini_vars[var_id].var) = ini_vars[var_id].max;
-			if (*(uint8_t*)(ini_vars[var_id].var) < ini_vars[var_id].min) *(uint8_t*)(ini_vars[var_id].var) = ini_vars[var_id].min;
+		case STRING:
+			memset(var->var, 0, var->max);
+			strncpy((char*)(var->var), &(buf[i]), var->max);
 			break;
-		case INT8:
-			*(int8_t*)(ini_vars[var_id].var) = strtol(&(buf[i]), NULL, 0);
-			if (*(int8_t*)(ini_vars[var_id].var) > ini_vars[var_id].max) *(int8_t*)(ini_vars[var_id].var) = ini_vars[var_id].max;
-			if (*(int8_t*)(ini_vars[var_id].var) < ini_vars[var_id].min) *(int8_t*)(ini_vars[var_id].var) = ini_vars[var_id].min;
-			break;
-		case UINT16:
-			*(uint16_t*)(ini_vars[var_id].var) = strtoul(&(buf[i]), NULL, 0);
-			if (*(uint16_t*)(ini_vars[var_id].var) > ini_vars[var_id].max) *(uint16_t*)(ini_vars[var_id].var) = ini_vars[var_id].max;
-			if (*(uint16_t*)(ini_vars[var_id].var) < ini_vars[var_id].min) *(uint16_t*)(ini_vars[var_id].var) = ini_vars[var_id].min;
-			break;
+
 		case UINT32ARR:
 			{
-				uint32_t *arr = (uint32_t*)ini_vars[var_id].var;
+				uint32_t *arr = (uint32_t*)var->var;
 				uint32_t pos = ++arr[0];
-				arr[pos] = strtoul(&(buf[i]), NULL, 0);
-				if (arr[pos] > (uint32_t)ini_vars[var_id].max) arr[pos] = (uint32_t)ini_vars[var_id].max;
-				if (arr[pos] < (uint32_t)ini_vars[var_id].min) arr[pos] = (uint32_t)ini_vars[var_id].min;
+				ini_parse_numeric(var, &buf[i], &arr[pos]);
 			}
 			break;
-		case INT16:
-			*(int16_t*)(ini_vars[var_id].var) = strtol(&(buf[i]), NULL, 0);
-			if (*(int16_t*)(ini_vars[var_id].var) > ini_vars[var_id].max) *(int16_t*)(ini_vars[var_id].var) = ini_vars[var_id].max;
-			if (*(int16_t*)(ini_vars[var_id].var) < ini_vars[var_id].min) *(int16_t*)(ini_vars[var_id].var) = ini_vars[var_id].min;
-			break;
-		case UINT32:
-			*(uint32_t*)(ini_vars[var_id].var) = strtoul(&(buf[i]), NULL, 0);
-			if (*(uint32_t*)(ini_vars[var_id].var) > (uint32_t)ini_vars[var_id].max) *(uint32_t*)(ini_vars[var_id].var) = ini_vars[var_id].max;
-			if (*(uint32_t*)(ini_vars[var_id].var) < (uint32_t)ini_vars[var_id].min) *(uint32_t*)(ini_vars[var_id].var) = ini_vars[var_id].min;
-			break;
-		case INT32:
-			*(int32_t*)(ini_vars[var_id].var) = strtol(&(buf[i]), NULL, 0);
-			if (*(int32_t*)(ini_vars[var_id].var) > ini_vars[var_id].max) *(int32_t*)(ini_vars[var_id].var) = ini_vars[var_id].max;
-			if (*(int32_t*)(ini_vars[var_id].var) < ini_vars[var_id].min) *(int32_t*)(ini_vars[var_id].var) = ini_vars[var_id].min;
-			break;
-		case FLOAT:
-			*(float*)(ini_vars[var_id].var) = strtof(&(buf[i]), NULL);
-			if (*(float*)(ini_vars[var_id].var) > ini_vars[var_id].max) *(float*)(ini_vars[var_id].var) = ini_vars[var_id].max;
-			if (*(float*)(ini_vars[var_id].var) < ini_vars[var_id].min) *(float*)(ini_vars[var_id].var) = ini_vars[var_id].min;
-			break;
-		case STRING:
-			memset(ini_vars[var_id].var, 0, ini_vars[var_id].max);
-			strncpy((char*)(ini_vars[var_id].var), &(buf[i]), ini_vars[var_id].max);
+
+		default:
+			ini_parse_numeric(var, &buf[i], var->var);
 			break;
 		}
 	}
@@ -356,6 +389,11 @@ static void ini_parse(int alt, const char *vmode)
 	FileClose(&ini_file);
 }
 
+static constexpr int CFG_ERRORS_MAX = 4;
+static constexpr int CFG_ERRORS_STRLEN = 128;
+static char cfg_errors[CFG_ERRORS_MAX][CFG_ERRORS_STRLEN];
+static int cfg_error_count = 0;
+
 const char* cfg_get_name(uint8_t alt)
 {
 	static char name[64];
@@ -385,6 +423,7 @@ void cfg_parse()
 	cfg.dvi_mode = 2;
 	has_video_sections = false;
 	using_video_section = false;
+	cfg_error_count = 0;
 	ini_parse(altcfg(), video_get_core_mode_name(1));
 	if (has_video_sections && !using_video_section)
 	{
@@ -396,4 +435,35 @@ void cfg_parse()
 bool cfg_has_video_sections()
 {
 	return has_video_sections;
+}
+
+
+void cfg_error(const char *fmt, ...)
+{
+	if (cfg_error_count >= CFG_ERRORS_MAX) return;
+
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(cfg_errors[cfg_error_count], CFG_ERRORS_STRLEN, fmt, args);
+	va_end(args);
+
+	printf("ERROR CFG: %s\n", cfg_errors[cfg_error_count]);
+
+	cfg_error_count += 1;
+}
+
+bool cfg_check_errors(char *msg, size_t max_len)
+{
+	msg[0] = '\0';
+
+	if (cfg_error_count == 0) return false;
+	
+	int pos = snprintf(msg, max_len, "%d INI Error%s\n---", cfg_error_count, cfg_error_count > 1 ? "s" : "");
+
+	for (int i = 0; i < cfg_error_count; i++)
+	{
+		pos += snprintf(msg + pos, max_len - pos, "\n%s\n", cfg_errors[i]);
+	}
+
+	return true;
 }
