@@ -14,6 +14,7 @@ typedef struct
 {
 	fileTYPE f;
 	int offset;
+	int pregap;
 	int start;
 	int end;
 	int type;
@@ -30,6 +31,13 @@ typedef struct
 	chd_file *chd_f;
 	cd_track_t tracks[100];
 	fileTYPE sub;
+
+	int GetTrackByLBA(int lba)
+	{
+		int i = 0;
+		while ((this->tracks[i].end <= lba) && (i < this->last)) i++;
+		return i;
+	}
 } toc_t;
 
 typedef struct
@@ -42,12 +50,5 @@ typedef struct
 #define BCD(v)				 ((uint8_t)((((v)/10) << 4) | ((v)%10)))
 
 typedef int (*SendDataFunc) (uint8_t* buf, int len, uint8_t index);
-
-inline int FindIndexInTOC(toc_t* toc, int lba)
-{
-	int index = 0;
-	while ((toc->tracks[index].end <= lba) && (index < toc->last)) index++;
-	return index;
-}
 
 #endif
