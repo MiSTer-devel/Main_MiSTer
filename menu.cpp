@@ -2067,7 +2067,7 @@ void HandleUI(void)
 						}
 
 						ioctl_index = 0;
-						if ((p[idx] >= '0' && p[idx] <= '9') || is_x86()) ioctl_index = p[idx] - '0';
+						if ((p[idx] >= '0' && p[idx] <= '9') || is_x86() || is_pcxt()) ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
 
@@ -2078,6 +2078,7 @@ void HandleUI(void)
 
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 						if (is_x86()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
+						if (is_pcxt()) strcpy(Selected_tmp, pcxt_get_image_path(ioctl_index));
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
 						if (is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)))
