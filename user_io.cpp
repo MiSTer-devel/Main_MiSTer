@@ -840,6 +840,10 @@ static void parse_config()
 					{
 						x86_set_image(idx, str);
 					}
+					else if (is_pcxt())
+					{
+						pcxt_set_image(idx, str);
+					}
 					else if (is_megacd())
 					{
 						mcd_set_image(idx, str);
@@ -2730,6 +2734,7 @@ void user_io_send_buttons(char force)
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
 			if (is_x86()) x86_init();
+			if (is_pcxt()) pcxt_init();
 			ResetUART();
 		}
 
@@ -2862,6 +2867,10 @@ void user_io_poll()
 	if (is_x86())
 	{
 		x86_poll();
+	}
+	else if (is_pcxt())
+	{
+		pcxt_poll();
 	}
 	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
 	{
