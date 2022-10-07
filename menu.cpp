@@ -3943,12 +3943,11 @@ void HandleUI(void)
 
 	case MENU_ST_MAIN1:
 		OsdSetSize(16);
-		menumask = 0x77f;
+		menumask = 0xeff;
 		OsdSetTitle("AtariST", 0);
 		firstmenu = 0;
 		m = 0;
 
-		OsdWrite(m++);
 		for (uint32_t i = 0; i < 2; i++)
 		{
 			snprintf(s, 29, " %c: %s%s", 'A' + i, (tos_system_ctrl() & (TOS_CONTROL_FDC_WR_PROT_A << i)) ? "\x17" : "", tos_get_disk_name(i));
@@ -3959,27 +3958,30 @@ void HandleUI(void)
 		OsdWrite(m++, s, menusub == 2, 0);
 		OsdWrite(m++);
 
+		snprintf(s, 29, " Cart: %s", tos_get_cartridge_name());
+		MenuWrite(m++, s, menusub == 3, !!(tos_system_ctrl() & TOS_CONTROL_DONGLE));
+		MenuWrite(m++);
+
 		snprintf(s, 29, " Joysticks swap: %s", user_io_get_joyswap() ? "Yes" : "No");
-		OsdWrite(m++, s, menusub == 3);
+		OsdWrite(m++, s, menusub == 4);
 		OsdWrite(m++);
 
-		OsdWrite(m++, " Modify config             \x16", menusub == 4);
-		OsdWrite(m++, " Load config               \x16", menusub == 5);
-		OsdWrite(m++, " Save config               \x16", menusub == 6);
-		OsdWrite(m++);
+		OsdWrite(m++, " Modify config             \x16", menusub == 5);
+		OsdWrite(m++, " Load config               \x16", menusub == 6);
+		OsdWrite(m++, " Save config               \x16", menusub == 7);
 
 		if (spi_uio_cmd16(UIO_GET_OSDMASK, 0) & 1)
 		{
-			menumask |= 0x80;
-			OsdWrite(m++, " MT32-pi                   \x16", menusub == 7);
-			OsdWrite(m++);
+			menumask |= 0x100;
+			OsdWrite(m++, " MT32-pi                   \x16", menusub == 8);
 		}
 
-		OsdWrite(m++, " Reset", menusub == 8);
-		OsdWrite(m++, " Cold Boot", menusub == 9);
+		OsdWrite(m++);
+		OsdWrite(m++, " Reset", menusub == 9);
+		OsdWrite(m++, " Cold Boot", menusub == 10);
 
 		for (; m < OsdGetSize()-1; m++) OsdWrite(m);
-		OsdWrite(15, STD_EXIT, menusub == 10, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+		OsdWrite(15, STD_EXIT, menusub == 11, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 
 		menustate = MENU_ST_MAIN2;
 		parentstate = MENU_ST_MAIN1;
@@ -4030,6 +4032,26 @@ void HandleUI(void)
 				break;
 
 			case 3:
+				if (!(tos_system_ctrl() & TOS_CONTROL_DONGLE))
+				{
+					if (tos_cartridge_is_inserted())
+					{
+						tos_load_cartridge("");
+						menustate = MENU_ST_MAIN1;
+					}
+					else
+					{
+						fs_Options = SCANO_DIR;
+						fs_MenuSelect = MENU_ST_SYSTEM_FILE_SELECTED;
+						fs_MenuCancel = MENU_ST_MAIN1;
+						strcpy(fs_pFileExt, "STC");
+						if (select) SelectFile(Selected_F[menusub], fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
+						else if (recent_init(menusub)) menustate = MENU_RECENT1;
+					}
+				}
+				break;
+
+			case 4:
 				if (select)
 				{
 					user_io_set_joyswap(!user_io_get_joyswap());
@@ -4037,7 +4059,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 4:  // System submenu
+			case 5:  // System submenu
 				if (select)
 				{
 					menustate = MENU_ST_SYSTEM1;
@@ -4046,7 +4068,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 5:  // Load config
+			case 6:  // Load config
 				if (select)
 				{
 					menustate = MENU_ST_LOAD_CONFIG1;
@@ -4054,7 +4076,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 6:  // Save config
+			case 7:  // Save config
 				if (select)
 				{
 					menustate = MENU_ST_SAVE_CONFIG1;
@@ -4062,7 +4084,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 7:
+			case 8:
 				if (select)
 				{
 					menustate = MENU_MT32PI_MAIN1;
@@ -4070,7 +4092,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 8:  // Reset
+			case 9:  // Reset
 				if (select)
 				{
 					tos_reset(0);
@@ -4078,7 +4100,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 9:  // Cold Boot
+			case 10:  // Cold Boot
 				if (select)
 				{
 					tos_insert_disk(0, "");
@@ -4088,7 +4110,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 10:  // Exit
+			case 11:  // Exit
 				if (select)
 				{
 					menustate = MENU_NONE1;
@@ -4106,7 +4128,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_ST_SYSTEM1:
-		menumask = 0x1ffff;
+		menumask = 0x1fffb;
 		OsdSetTitle("Config", 0);
 		helptext_idx = 0;
 
@@ -4121,10 +4143,6 @@ void HandleUI(void)
 				snprintf(s, 29, " HDD%d: %s", i, tos_get_disk_name(2 + i));
 				MenuWrite(m++, s, menusub == i);
 			}
-			MenuWrite(m++);
-
-			snprintf(s, 29, " Cart: %s", tos_get_cartridge_name());
-			MenuWrite(m++, s, menusub == 2);
 			MenuWrite(m++);
 
 			strcpy(s, " Memory:     ");
@@ -4211,7 +4229,7 @@ void HandleUI(void)
 		else if (back || left)
 		{
 			menustate = MENU_ST_MAIN1;
-			menusub = 4;
+			menusub = 5;
 			if (need_reset)
 			{
 				tos_reset(1);
@@ -4229,24 +4247,6 @@ void HandleUI(void)
 				if (select) SelectFile(Selected_S[menusub], "VHD", fs_Options, fs_MenuSelect, fs_MenuCancel);
 				else if (recent_init(menusub + 500)) menustate = MENU_RECENT1;
 			}
-			else
-			{
-				if (tos_cartridge_is_inserted())
-				{
-					tos_load_cartridge("");
-					menustate = MENU_ST_SYSTEM1;
-				}
-				else
-				{
-					fs_Options = SCANO_DIR;
-					fs_MenuSelect = MENU_ST_SYSTEM_FILE_SELECTED;
-					fs_MenuCancel = MENU_ST_SYSTEM1;
-					strcpy(fs_pFileExt, "IMG");
-					if (select) SelectFile(Selected_F[menusub], "IMG", fs_Options, fs_MenuSelect, fs_MenuCancel);
-					else if (recent_init(menusub)) menustate = MENU_RECENT1;
-				}
-			}
-
 		}
 		else if (select || plus || minus)
 		{
@@ -4362,7 +4362,7 @@ void HandleUI(void)
 
 			case 16:
 				menustate = MENU_ST_MAIN1;
-				menusub = 4;
+				menusub = 5;
 				if (need_reset)
 				{
 					tos_reset(1);
@@ -4389,12 +4389,12 @@ void HandleUI(void)
 			menustate = MENU_ST_SYSTEM1;
 		}
 
-		if (menusub == 2)
+		if (menusub == 3)
 		{
 			memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
 			recent_update(SelectedDir, selPath, SelectedLabel, menusub);
 			tos_load_cartridge(selPath);
-			menustate = MENU_ST_SYSTEM1;
+			menustate = MENU_ST_MAIN1;
 		}
 		break;
 
@@ -4433,7 +4433,7 @@ void HandleUI(void)
 		if (menu || left)
 		{
 			menustate = MENU_ST_MAIN1;
-			menusub = 5;
+			menusub = 6;
 		}
 
 		if (select)
@@ -4447,7 +4447,7 @@ void HandleUI(void)
 			else
 			{
 				menustate = MENU_ST_MAIN1;
-				menusub = 5;
+				menusub = 6;
 			}
 		}
 		break;
@@ -4483,7 +4483,7 @@ void HandleUI(void)
 		if (menu || left)
 		{
 			menustate = MENU_ST_MAIN1;
-			menusub = 6;
+			menusub = 7;
 		}
 
 		if (select)
@@ -4496,7 +4496,7 @@ void HandleUI(void)
 			else
 			{
 				menustate = MENU_ST_MAIN1;
-				menusub = 6;
+				menusub = 7;
 			}
 		}
 		break;
@@ -4623,7 +4623,7 @@ void HandleUI(void)
 			else
 			{
 				menustate = MENU_ST_MAIN1;
-				menusub = 7;
+				menusub = 8;
 			}
 		}
 		else if (select || plus || minus)

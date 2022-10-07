@@ -58,6 +58,7 @@
     <ClCompile Include="DiskImage.cpp" />
     <ClCompile Include="file_io.cpp" />
     <ClCompile Include="fpga_io.cpp" />
+    <ClCompile Include="gamecontroller_db.cpp" />
     <ClCompile Include="hardware.cpp" />
     <ClCompile Include="ide.cpp" />
     <ClCompile Include="ide_cdrom.cpp" />
@@ -133,6 +134,7 @@
     <ClInclude Include="fpga_nic301.h" />
     <ClInclude Include="fpga_reset_manager.h" />
     <ClInclude Include="fpga_system_manager.h" />
+    <ClInclude Include="gamecontroller_db.h" />
     <ClInclude Include="hardware.h" />
     <ClInclude Include="ide.h" />
     <ClInclude Include="ide_cdrom.h" />

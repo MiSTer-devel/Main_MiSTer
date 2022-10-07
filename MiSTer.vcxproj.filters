@@ -253,6 +253,9 @@
     <ClCompile Include="lib\serial_server\library\Serial.cpp">
       <Filter>Source Files\serial_server</Filter>
     </ClCompile>
+    <ClCompile Include="gamecontroller_db.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -485,6 +488,9 @@
     </ClInclude>
     <ClInclude Include="lib\serial_server\library\LinuxSerial.h">
       <Filter>Header Files\serial_server</Filter>
+    </ClInclude>
+    <ClInclude Include="gamecontroller_db.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
