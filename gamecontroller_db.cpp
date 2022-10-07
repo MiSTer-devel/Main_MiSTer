@@ -35,7 +35,7 @@ static const char *sdlname_to_mister_idx[] = {
 	NULL,
 	NULL, //20
 	"guide", //21
-	"guide2", //Mister extension: guide2 is the 2nd button for OSD chord 
+	"guide2", //Mister extension: guide2 is the 2nd button for OSD chord
 	"menufunc", //Dummy entry so mister->sdl map string works
 	"leftx",
 	"lefty",
@@ -59,15 +59,15 @@ static controllerdb_entry db_maps[MAX_GCDB_ENTRIES] = {};
 static int last_db_idx = 0;
 
 //platform should be at the end of mapping strings. this function will null the start of platform: if found
-static bool cdb_entry_matches(char *db_str) 
+static bool cdb_entry_matches(char *db_str)
 {
 	char *pl_ptr = NULL;
-	
+
 	if (!db_str || !strlen(db_str)) return false;
 	pl_ptr = strcasestr(db_str, "platform:");
 	if (!pl_ptr) return false;
 
-	*pl_ptr = 0; 
+	*pl_ptr = 0;
 	pl_ptr += strlen("platform:");
 	if (!strncasecmp(pl_ptr, "Linux", 5)) return true;
 	if (!strncasecmp(pl_ptr, "MiSTer", 6))
@@ -83,8 +83,8 @@ static bool cdb_entry_matches(char *db_str)
 				nxt_c = strchr(core_ptr, ',');
 				if (!nxt_c) break;
 				match_c = strchr(core_ptr, '*');
-				if (!match_c || match_c >= nxt_c) 
-				{	
+				if (!match_c || match_c >= nxt_c)
+				{
 					match_c = nxt_c;
 				}
 
@@ -138,29 +138,29 @@ static int find_linux_code_for_button(char *btn_name, uint16_t *btn_map, uint16_
 			{
 				//Normal button
 				int bidx = strtol(btn_name+1, NULL, 10);
-				return btn_map[bidx]; 
+				return btn_map[bidx];
 				break;
 			}
-			
+
 			case 'a':
 			{
 				int aidx = strtol(btn_name + (a_edge != 0 ? 2 : 1) , NULL, 10);
 				int abs_axis = abs_map[aidx];
 				if (a_edge)
 				{
-					return KEY_EMU + (abs_axis << 1) - 1 + a_edge;															
+					return KEY_EMU + (abs_axis << 1) - 1 + a_edge;
 				} else {
 						return abs_axis;
 				}
 				break;
 			}
 			case 'h':
-			//Mister creates fake digital buttons for hats that depend on the code and axis direction. 
+			//Mister creates fake digital buttons for hats that depend on the code and axis direction.
 			{
 				char *dot_ptr = NULL;
 				int hidx = strtol(btn_name+1, NULL, 10);
 				int base_hat = ABS_HAT0X + hidx*2;
-				//base_hat is X, base_hat+1 is Y 
+				//base_hat is X, base_hat+1 is Y
 				dot_ptr = strchr(btn_name, '.');
 				if (dot_ptr)
 				{
@@ -209,7 +209,7 @@ static void get_ctrl_index_maps(int dev_fd, char *guid, uint16_t *btn_map, uint1
 		{
 				if (test_bit(i, keybits))
 				{
-					printf("b%d->%d ", btn_cnt, i);
+					//printf("b%d->%d ", btn_cnt, i);
 					btn_map[btn_cnt] = i;
 					btn_cnt++;
 				}
@@ -217,14 +217,14 @@ static void get_ctrl_index_maps(int dev_fd, char *guid, uint16_t *btn_map, uint1
 		for (int i = 0; i < BTN_JOYSTICK; i++)
 		{
 				if (test_bit(i, keybits))
-				{	
-					printf("b%d -> %d ", btn_cnt, i);
+				{
+					//printf("b%d -> %d ", btn_cnt, i);
 					btn_map[btn_cnt] = i;
 					btn_cnt++;
 				}
 		}
 		printf("\n");
-		
+
 	}
 
 	printf("Gamecontrollerdb: mapping analog axes for %s ", guid);
@@ -237,7 +237,7 @@ static void get_ctrl_index_maps(int dev_fd, char *guid, uint16_t *btn_map, uint1
 		{
 			if (test_bit(i, absbits))
 			{
-					printf("a%d->%d ", abs_cnt, i);
+					//printf("a%d->%d ", abs_cnt, i);
 					abs_map[abs_cnt] = i;
 					abs_cnt++;
 			}
@@ -248,7 +248,7 @@ static void get_ctrl_index_maps(int dev_fd, char *guid, uint16_t *btn_map, uint1
 		{
 				if (test_bit(i, absbits))
 				{
-					printf("(debug)a%d->%d ", abs_cnt, i);
+					//printf("(debug)a%d->%d ", abs_cnt, i);
 					abs_cnt++;
 				}
 		}
@@ -303,7 +303,7 @@ void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid,
 							{
 								printf("%s:h%d.%d,", sdlname, hat_num, hat_sub);
 							}
-						} else { 
+						} else {
 							//Mister 'fake' analog digital inputs.
 							for(unsigned int j=0; j < sizeof(abs_map)/sizeof(uint16_t); j++)
 							{
@@ -367,7 +367,7 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 	//gamecontrollerdb references buttons/axes numerically, and the number depends on the actual buttons supported
 	//by the controller. Build a map of button number -> keycode (same with axes)
 
-	if (strcmp(map_guid, guid)) //New guid, map out button indexes for this new controller 
+	if (strcmp(map_guid, guid)) //New guid, map out button indexes for this new controller
 	{
 		bzero(btn_map, sizeof(btn_map));
 		bzero(abs_map, sizeof(abs_map));
@@ -379,7 +379,7 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 	bool in_m_btn = true;
 	size_t i = 0;
 	bool map_parsed = false;
-	char *cur_str = map_str; 
+	char *cur_str = map_str;
 
 	while (cur_str && *cur_str)
 	{
@@ -420,7 +420,7 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 				l_btn[i] = *cur_str;
 				i++;
 			}
-		}	
+		}
 		cur_str++;
 	}
 
@@ -452,7 +452,7 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 bool read_controller_map_from_file(char *fname, char *guid, int dev_fd, uint32_t *fill_map)
 {
 	fileTextReader reader;
-	char matched[1024] = {}; 
+	char matched[1024] = {};
 	char *map_start = NULL;
 
 	if (FileOpenTextReader(&reader, fname))
@@ -480,10 +480,10 @@ bool read_controller_map_from_file(char *fname, char *guid, int dev_fd, uint32_t
 	if (matched[0] != 0)
 	{
 		printf("Gamecontrollerdb: found match, using config %s\n", matched);
-		return parse_mapping_string(matched, guid, dev_fd, fill_map);	
+		return parse_mapping_string(matched, guid, dev_fd, fill_map);
 	}
 
-	return false; 
+	return false;
 }
 
 static int gcdb_controller_idx(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version)
@@ -537,14 +537,14 @@ bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint1
 			strcat(path, "gamecontrollerdb.txt");
 			found_entry = read_controller_map_from_file(path, guid_str, dev_fd, fill_map);
 		}
-		
+
 
 		if (found_entry)
 		{
 			gcdb_cache_controller_map(bustype, vid, pid, version, fill_map);
 			return true;
 		}
-		return false; 
+		return false;
 }
 
 
