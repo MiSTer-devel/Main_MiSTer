@@ -2735,6 +2735,7 @@ void user_io_send_buttons(char force)
 			if (is_saturn()) saturn_reset();
 			if (is_x86()) x86_init();
 			if (is_pcxt()) pcxt_init();
+			if (is_st()) tos_reset(0);
 			ResetUART();
 		}
 
