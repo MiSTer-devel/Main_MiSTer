@@ -275,12 +275,12 @@ static void ini_parse_numeric(const ini_var_t *var, const char *text, void *out)
 	switch (var->type)
 	{
 	case UINT8: *(uint8_t*)out = u32; break;
-	case INT8: *(int8_t*)out = u32; break;
+	case INT8: *(int8_t*)out = i32; break;
 	case UINT16: *(uint16_t*)out = u32; break;
 	case UINT32ARR: *(uint32_t*)out = u32; break;
-	case INT16: *(int16_t*)out = u32; break;
+	case INT16: *(int16_t*)out = i32; break;
 	case UINT32: *(uint32_t*)out = u32; break;
-	case INT32: *(int32_t*)out = u32; break;
+	case INT32: *(int32_t*)out = i32; break;
 	case FLOAT: *(float*)out = f32; break;
 	default: break;
 	}
@@ -457,7 +457,7 @@ bool cfg_check_errors(char *msg, size_t max_len)
 	msg[0] = '\0';
 
 	if (cfg_error_count == 0) return false;
-	
+
 	int pos = snprintf(msg, max_len, "%d INI Error%s\n---", cfg_error_count, cfg_error_count > 1 ? "s" : "");
 
 	for (int i = 0; i < cfg_error_count; i++)
