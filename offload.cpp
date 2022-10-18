@@ -100,7 +100,7 @@ void offload_stop()
 	printf("Done\n");
 }
 
-void offload_add_work(std::function<void()> handler)
+void offload_add_work(std::function<void()> handler, bool skipIfQueueFull /* = false */)
 {
 	PROFILE_FUNCTION();
 
@@ -108,6 +108,13 @@ void offload_add_work(std::function<void()> handler)
 
 	if ((s_queue_head - s_queue_tail) == QUEUE_SIZE)
 	{
+		if (skipIfQueueFull)
+		{
+			// bail out
+			pthread_mutex_unlock(&s_queue_lock);
+			return;
+		}
+
 		pthread_cond_wait(&s_cond_available, &s_queue_lock);
 	}
 

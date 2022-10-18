@@ -7,6 +7,6 @@
 void offload_start();
 void offload_stop();
 
-void offload_add_work(std::function<void()> work);
+void offload_add_work(std::function<void()> work, bool skipIfQueueFull = false);
 
 #endif
