@@ -247,12 +247,12 @@ static const char* get_std_name(uint16_t code, uint32_t *mmap)
 	return NULL;
 }
 
-void map_joystick_show(uint32_t *map, uint32_t *mmap, int num)
+void map_joystick_show(uint32_t *map, uint32_t *mmap, int num, int dev)
 {
 	static char mapinfo[1024];
 	read_buttons();
 
-	sprintf(mapinfo, "Map (P%d):", num);
+	sprintf(mapinfo, "Map (P%d,D%d):", num, dev);
 	if (!num) sprintf(mapinfo, " Map:");
 	char *list = mapinfo + strlen(mapinfo);
 

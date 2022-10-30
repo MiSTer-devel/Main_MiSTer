@@ -67,6 +67,10 @@ static const ini_var_t ini_vars[] =
 	{ "GAMEPAD_DEFAULTS", (void*)(&(cfg.gamepad_defaults)), UINT8, 0, 1 },
 	{ "RECENTS", (void*)(&(cfg.recents)), UINT8, 0, 1 },
 	{ "CONTROLLER_INFO", (void*)(&(cfg.controller_info)), UINT8, 0, 10 },
+	{ "CONTROLLER_1_DEVICE", (void*)(&(cfg.controller_device[0])), UINT8, 0, 255 },
+	{ "CONTROLLER_2_DEVICE", (void*)(&(cfg.controller_device[1])), UINT8, 0, 255 },
+	{ "CONTROLLER_3_DEVICE", (void*)(&(cfg.controller_device[2])), UINT8, 0, 255 },
+	{ "CONTROLLER_4_DEVICE", (void*)(&(cfg.controller_device[3])), UINT8, 0, 255 },
 	{ "REFRESH_MIN", (void*)(&(cfg.refresh_min)), FLOAT, 0, 150 },
 	{ "REFRESH_MAX", (void*)(&(cfg.refresh_max)), FLOAT, 0, 150 },
 	{ "JAMMA_VID", (void*)(&(cfg.jamma_vid)), UINT16, 0, 0xFFFF },
@@ -416,6 +420,10 @@ void cfg_parse()
 	cfg.bootscreen = 1;
 	cfg.fb_terminal = 1;
 	cfg.controller_info = 6;
+	for (int i = 0; i < 4; i++)
+	{
+		cfg.controller_device[i] = 255;
+	}
 	cfg.browse_expand = 1;
 	cfg.logo = 1;
 	cfg.rumble = 1;

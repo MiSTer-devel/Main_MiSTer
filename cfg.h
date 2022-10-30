@@ -25,6 +25,7 @@ typedef struct {
 	float refresh_min;
 	float refresh_max;
 	uint8_t controller_info;
+	uint8_t controller_device[4];
 	uint8_t vsync_adjust;
 	uint8_t kbd_nomouse;
 	uint8_t mouse_throttle;

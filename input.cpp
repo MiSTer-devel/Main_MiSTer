@@ -2366,6 +2366,19 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].num)
 	{
+		for (int i = 0; i < 4; i++)
+		{
+			if (cfg.controller_device[i] == dev)
+			{
+				input[dev].num = i + 1;
+				store_player(input[dev].num, dev);
+				break;
+			}
+		}
+	}
+
+	if (!input[dev].num)
+	{
 		int assign_btn = ((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) && (ev->type == EV_REL || ev->type == EV_KEY));
 		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1 && ev->code >= 256)
 		{
@@ -2418,7 +2431,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			else
 			{
-				map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
+				map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num, dev);
 			}
 		}
 	}
