@@ -2235,6 +2235,14 @@ static uint16_t def_mmap[] = {
 	0x0000, 0x0002, 0x0001, 0x0002, 0x0000, 0x0000, 0x0000, 0x0000
 };
 
+static void assign_player(int dev, int num)
+{
+	input[dev].num = num;
+	if (JOYCON_COMBINED(dev)) input[input[dev].bind].num = num;
+	store_player(num, dev);
+	printf("Device %s assigned to player %d\n", input[dev].id, input[dev].num);
+}
+
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
 {
 	if (ev->type != EV_KEY && ev->type != EV_ABS && ev->type != EV_REL) return;
@@ -2295,7 +2303,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					//input[dev].has_mmap++;
 				}
 			} else {
-				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap); 
+				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap);
 			}
 			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
 
@@ -2374,29 +2382,41 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 		if (assign_btn)
 		{
-			for (uint8_t num = 1; num < NUMDEV + 1; num++)
+			for (uint8_t i = 0; i < (sizeof(cfg.player_controller) / sizeof(cfg.player_controller[0])); i++)
 			{
-				int found = 0;
-				for (int i = 0; i < NUMDEV; i++)
+				if (cfg.player_controller[i][0])
 				{
-					if (input[i].quirk != QUIRK_TOUCHGUN)
+					if (strcasestr(input[dev].id, cfg.player_controller[i]))
 					{
-						// paddles/spinners overlay on top of other gamepad
-						if (!((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) ^ (input[i].quirk == QUIRK_PDSP || input[i].quirk == QUIRK_MSSP)))
-						{
-							found = (input[i].num == num);
-							if (found) break;
-						}
+						assign_player(dev, i + 1);
+						break;
 					}
 				}
+			}
 
-				if (!found)
+			if (!input[dev].num)
+			{
+				for (uint8_t num = 1; num < NUMDEV + 1; num++)
 				{
-					input[dev].num = num;
-					if (JOYCON_COMBINED(dev)) input[input[dev].bind].num = num;
-					store_player(num, dev);
-					printf("Device %s assigned to player %d\n", input[dev].id, input[dev].num);
-					break;
+					int found = 0;
+					for (int i = 0; i < NUMDEV; i++)
+					{
+						if (input[i].quirk != QUIRK_TOUCHGUN)
+						{
+							// paddles/spinners overlay on top of other gamepad
+							if (!((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) ^ (input[i].quirk == QUIRK_PDSP || input[i].quirk == QUIRK_MSSP)))
+							{
+								found = (input[i].num == num);
+								if (found) break;
+							}
+						}
+					}
+
+					if (!found)
+					{
+						assign_player(dev, num);
+						break;
+					}
 				}
 			}
 		}
