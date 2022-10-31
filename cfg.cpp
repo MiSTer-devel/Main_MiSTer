@@ -103,6 +103,10 @@ static const ini_var_t ini_vars[] =
 	{ "VRR_MAX_FRAMERATE", (void *)(&(cfg.vrr_max_framerate)), UINT8, 0, 255},
 	{ "VRR_VESA_FRAMERATE", (void *)(&(cfg.vrr_vesa_framerate)), UINT8, 0, 255},
 	{ "VIDEO_OFF", (void*)(&(cfg.video_off)), INT16, 0, 3600 },
+	{ "PLAYER_1_CONTROLLER", (void*)(&(cfg.player_controller[0])), STRING, 0, sizeof(cfg.player_controller[0]) - 1 },
+	{ "PLAYER_2_CONTROLLER", (void*)(&(cfg.player_controller[1])), STRING, 0, sizeof(cfg.player_controller[1]) - 1 },
+	{ "PLAYER_3_CONTROLLER", (void*)(&(cfg.player_controller[2])), STRING, 0, sizeof(cfg.player_controller[2]) - 1 },
+	{ "PLAYER_4_CONTROLLER", (void*)(&(cfg.player_controller[3])), STRING, 0, sizeof(cfg.player_controller[3]) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
