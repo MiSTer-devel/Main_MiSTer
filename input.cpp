@@ -25,6 +25,7 @@
 #include "fpga_io.h"
 #include "osd.h"
 #include "video.h"
+#include "audio.h"
 #include "joymapping.h"
 #include "support.h"
 #include "profiling.h"
@@ -5163,6 +5164,12 @@ int input_test(int getchar)
 					else if (!strncmp(cmd, "screenshot", 10))
 					{
 						user_io_screenshot_cmd(cmd);
+					}
+					else if (!strncmp(cmd, "volume ", 7))
+					{
+						if (!strcmp(cmd + 7, "mute")) set_volume(0x81);
+						else if (!strcmp(cmd + 7, "unmute")) set_volume(0x80);
+						else if (cmd[7] >= '0' && cmd[7] <= '7') set_volume(0x40 - 0x30 + cmd[7]);
 					}
 				}
 			}
