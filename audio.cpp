@@ -150,7 +150,9 @@ void set_volume(int cmd)
 	vol_set_timeout = GetTimer(1000);
 
 	vol_att &= 0x17;
-	if (!cmd) vol_att ^= 0x10;
+	if ((cmd & 0xC0) == 0x80) vol_att = (vol_att & 0x7) | ((cmd & 1) << 4);
+	else if ((cmd & 0xC0) == 0x40) vol_att = (vol_att & 0x10) | (~cmd & 7);
+	else if (!cmd) vol_att ^= 0x10;
 	else if (vol_att & 0x10) vol_att &= 0xF;
 	else if (cmd < 0 && vol_att < 7) vol_att += 1;
 	else if (cmd > 0 && vol_att > 0) vol_att -= 1;
