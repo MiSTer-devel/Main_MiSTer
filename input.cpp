@@ -2392,6 +2392,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						assign_player(dev, i + 1);
 						break;
 					}
+
+					if (strcasestr(input[dev].sysfs, cfg.player_controller[i]))
+					{
+						assign_player(dev, i + 1);
+						break;
+					}
 				}
 			}
 
