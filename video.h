@@ -5,6 +5,10 @@
 #define VFILTER_VERT 1
 #define VFILTER_SCAN 2
 
+#define BGSWAP_STATUS_NONE 0
+#define BGSWAP_STATUS_REFRESH 1
+#define BGSWAP_STATUS_FB_ENABLE 2
+
 struct VideoInfo
 {
     uint32_t width;
@@ -49,6 +53,7 @@ int   hasAPI1_5();
 
 void video_fb_enable(int enable, int n = 0);
 int video_fb_state();
+int& video_get_menubg_swap_signal();
 void video_menu_bg(int n, int idle = 0);
 int video_bg_has_picture();
 int video_chvt(int num);

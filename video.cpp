@@ -2823,12 +2823,37 @@ static Imlib_Image load_bg()
 	return NULL;
 }
 
+// This is an extraction out of load_bg to load something
+// other than "menu[.png][.jpg]" or alt wallpapers.
+// For now we copy the relevant parts from above
+static Imlib_Image menubg_swap = 0;
+static int menubg_swap_signal = BGSWAP_STATUS_NONE;
+
+int& video_get_menubg_swap_signal()
+{
+	return menubg_swap_signal;
+}
+
+void load_bg_specific(const char* fname)
+{
+  if (fname)
+	{
+		Imlib_Image img = imlib_load_image_without_cache(getFullPath(fname));
+		if (img && !menubg_swap_signal)
+		{
+			menubg_swap = img;
+			menubg_swap_signal = BGSWAP_STATUS_REFRESH;
+		}
+	}
+}
+
 static int bg_has_picture = 0;
 extern uint8_t  _binary_logo_png_start[], _binary_logo_png_end[];
 void video_menu_bg(int n, int idle)
 {
 	bg_has_picture = 0;
 	menu_bg = n;
+
 	if (n)
 	{
 		//printf("**** BG DEBUG START ****\n");
@@ -2874,6 +2899,19 @@ void video_menu_bg(int n, int idle)
 
 		static Imlib_Image menubg = 0;
 		static Imlib_Image bg1 = 0, bg2 = 0;
+		static Imlib_Image curtain = 0;
+		static int idle_prev = 0;
+
+		// swap if necessary
+		if (menubg_swap_signal == BGSWAP_STATUS_REFRESH)
+		{
+			menubg = menubg_swap;
+			bg1 = 0; bg2 = 0;
+			// we need to use the previous "idle" value
+			// to respect screen dim
+			idle = idle_prev;
+		}
+
 		if (!bg1) bg1 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 1)));
 		if (!bg1) printf("Warning: bg1 is 0\n");
 		if (!bg2) bg2 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 2)));
@@ -2882,7 +2920,6 @@ void video_menu_bg(int n, int idle)
 		Imlib_Image *bg = (menu_bgn == 1) ? &bg1 : &bg2;
 		//printf("*bg = %p\n", *bg);
 
-		static Imlib_Image curtain = 0;
 		if (!curtain)
 		{
 			curtain = imlib_create_image(fb_width, fb_height);
@@ -3025,12 +3062,18 @@ void video_menu_bg(int n, int idle)
 			printf("curtain = 0!\n");
 		}
 
+		idle_prev = idle;
+
 		//test the fb driver
 		//vs_wait();
 		//printf("**** BG DEBUG END ****\n");
 	}
 
-	video_fb_enable(0);
+	if (menubg_swap_signal == BGSWAP_STATUS_NONE)
+		video_fb_enable(0);
+
+	if (menubg_swap_signal > BGSWAP_STATUS_NONE)
+		menubg_swap_signal = BGSWAP_STATUS_FB_ENABLE; // set to 2 to call video_fb_enable elsewhere
 }
 
 int video_bg_has_picture()
@@ -3192,6 +3235,32 @@ void video_cmd(char *cmd)
 		{
 			printf("video_cmd: unknown command or format.\n");
 		}
+	}
+
+	// Command to load a custom wallpaper at runtime
+	if (!strncmp(cmd, "load_bg ", 8) &&
+			is_menu())
+	{
+		// Find the direct bg path pointer
+		// The 'cmd' param is max 1024,
+		const char* bg = cmd + 8;
+		while (*bg == ' ' && (bg - cmd) < 1024)
+			bg++;
+
+		// Copy the filename part as this will go invalid soon
+		static char fname[1024];
+		sprintf(fname, "%s", bg);
+
+		int state = user_io_status_get("[3:1]");
+
+		// We need to do the load async because we're currently
+		// on the input thread - if we don't use offload we will
+		// stall the core's input processing
+		offload_add_work([=]
+		{
+			load_bg_specific(fname);
+			video_menu_bg(state); // force redraw
+		}, true);
 	}
 }
 

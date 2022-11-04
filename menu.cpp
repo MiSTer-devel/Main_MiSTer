@@ -1093,6 +1093,13 @@ void HandleUI(void)
 		}
 	}
 
+	//check for background swap
+	if (is_menu() && video_get_menubg_swap_signal() == BGSWAP_STATUS_FB_ENABLE)
+	{
+		video_fb_enable(0);
+		video_get_menubg_swap_signal() = BGSWAP_STATUS_NONE;
+	}
+
 	//prevent OSD control while script is executing on framebuffer
 	if (!video_fb_state() || video_chvt(0) != 2)
 	{
