@@ -45,6 +45,8 @@
 #define D64_INIT_VALUE           0x00 // DIR relies on 0x00 initial value
 
 #define G64_MAX_TRACK_LEN        (G64_BLOCK_COUNT_1571 * 256)
+#define G64_TRACK_SPACE_GCR      7930
+#define G64_TRACK_SPACE_MFM      12500
 
 // Define EXTEND_1541 to enable creating new tracks in G64 images on the 1541 in the C64/C16/VIC20 cores
 // #define EXTEND_1541
@@ -619,19 +621,23 @@ static uint8_t* align(uint8_t* src, int size)
 	return buf;
 }
 
-uint32_t c64_get_freq(int idx, uint64_t lba){
+uint32_t c64_get_track_speed(int idx, uint64_t lba, uint32_t track_size){
 	uint32_t freq;
 	uint8_t track = (uint8_t)lba;
 
-	if (lba & 0x400) {
+	if (track_size > G64_TRACK_SPACE_GCR) {
+		freq = 8;
+		dbgprintf("Track %d%s: freq=%d (mfm)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
+	}
+	else if (lba & 0x400) {
 		freq = (lba & 0x300) >> 8; 
-		dbgprintf("Track %d%s: freq=%d (provided)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
+		dbgprintf("Track %d%s: freq=%d (gcr, provided)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
 	}
 	else {
 		uint8_t track_f = track >> 1;
 		uint8_t track_h = ((track_f > 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
 		freq = (track_h < 18) ? 3U : (track_h < 25) ? 2U : (track_h < 31) ? 1U : 0U;
-		dbgprintf("Track %d%s: freq=%d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
+		dbgprintf("Track %d%s: freq=%d (gcr, calculated)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
 	}
 
 	return freq;
@@ -710,13 +716,15 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 			FileSeek(gcr_info[idx].f, 12+track*4, SEEK_SET);
 			FileWriteAdv(gcr_info[idx].f, &gcr_info[idx].trk_map[track], 4);
 
-			if (track_space == 0) {
-				// init speed map entry
-				gcr_info[idx].spd_map[track] = c64_get_freq(idx, lba);
+			// update speed map entry
+			uint32_t spd = c64_get_track_speed(idx, lba, track_size);
+			if (gcr_info[idx].spd_map[track] != spd) {
+				gcr_info[idx].spd_map[track] = spd;
 				FileSeek(gcr_info[idx].f, 12+(gcr_info[idx].tracks+track)*4, SEEK_SET);
 				FileWriteAdv(gcr_info[idx].f, &gcr_info[idx].spd_map[track], 4);
 			}
-			else {
+
+			if (track_space > 0) {
 				// clear old space
 				memset(gcr_buf, 0xff, track_space);
 				FileSeek(gcr_info[idx].f, track_pos, SEEK_SET);
@@ -724,7 +732,10 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 			}
 
 			FileSeek(gcr_info[idx].f, 0, SEEK_END);
-			track_space = (track_size <= 7930) ? 7930 : (track_size <= 12500) ? 12500 : track_size;
+			track_space = (
+				(track_size <= G64_TRACK_SPACE_GCR) ? G64_TRACK_SPACE_GCR 
+			  : (track_size <= G64_TRACK_SPACE_MFM) ? G64_TRACK_SPACE_MFM : track_size
+			) + 2;
 		}
 		else {
 			FileSeek(gcr_info[idx].f, track_pos, SEEK_SET);
