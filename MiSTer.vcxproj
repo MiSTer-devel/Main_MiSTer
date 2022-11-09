@@ -58,6 +58,7 @@
     <ClCompile Include="DiskImage.cpp" />
     <ClCompile Include="file_io.cpp" />
     <ClCompile Include="fpga_io.cpp" />
+    <ClCompile Include="gamecontroller_db.cpp" />
     <ClCompile Include="hardware.cpp" />
     <ClCompile Include="ide.cpp" />
     <ClCompile Include="ide_cdrom.cpp" />
@@ -71,6 +72,10 @@
     <ClCompile Include="lib\miniz\miniz_tdef.c" />
     <ClCompile Include="lib\miniz\miniz_tinfl.c" />
     <ClCompile Include="lib\miniz\miniz_zip.c" />
+    <ClCompile Include="lib\serial_server\library\Checksum.cpp" />
+    <ClCompile Include="lib\serial_server\library\Image.cpp" />
+    <ClCompile Include="lib\serial_server\library\Process.cpp" />
+    <ClCompile Include="lib\serial_server\library\Serial.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="menu.cpp" />
     <ClCompile Include="offload.cpp" />
@@ -99,6 +104,7 @@
     <ClCompile Include="support\pcecd\pcecd.cpp" />
     <ClCompile Include="support\pcecd\pcecdd.cpp" />
     <ClCompile Include="support\pcecd\seektime.cpp" />
+    <ClCompile Include="support\pcxt\pcxt.cpp" />
     <ClCompile Include="support\psx\psx.cpp" />
     <ClCompile Include="support\sharpmz\sharpmz.cpp" />
     <ClCompile Include="support\snes\snes.cpp" />
@@ -128,6 +134,7 @@
     <ClInclude Include="fpga_nic301.h" />
     <ClInclude Include="fpga_reset_manager.h" />
     <ClInclude Include="fpga_system_manager.h" />
+    <ClInclude Include="gamecontroller_db.h" />
     <ClInclude Include="hardware.h" />
     <ClInclude Include="ide.h" />
     <ClInclude Include="ide_cdrom.h" />
@@ -143,6 +150,10 @@
     <ClInclude Include="lib\miniz\miniz_tdef.h" />
     <ClInclude Include="lib\miniz\miniz_tinfl.h" />
     <ClInclude Include="lib\miniz\miniz_zip.h" />
+    <ClInclude Include="lib\serial_server\library\FlatImage.h" />
+    <ClInclude Include="lib\serial_server\library\Library.h" />
+    <ClInclude Include="lib\serial_server\library\LinuxFile.h" />
+    <ClInclude Include="lib\serial_server\library\LinuxSerial.h" />
     <ClInclude Include="logo.h" />
     <ClInclude Include="menu.h" />
     <ClInclude Include="offload.h" />
@@ -170,6 +181,7 @@
     <ClInclude Include="support\minimig\minimig_share.h" />
     <ClInclude Include="support\neogeo\neogeo_loader.h" />
     <ClInclude Include="support\pcecd\pcecd.h" />
+    <ClInclude Include="support\pcxt\pcxt.h" />
     <ClInclude Include="support\psx\mcdheader.h" />
     <ClInclude Include="support\psx\psx.h" />
     <ClInclude Include="support\sharpmz\sharpmz.h" />

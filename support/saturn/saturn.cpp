@@ -13,25 +13,29 @@
 
 static int need_reset = 0;
 uint32_t frame_cnt = 0;
+uint8_t time_mode;
 
 static uint32_t CalcTimerOffset(uint8_t speed) {
-	static uint8_t adj = 0x1;
+	static uint8_t adj0 = 0x1, adj1 = 0x1, adj2 = 0x1;
 
 	uint32_t offs;
 	if (speed == 2) {
-		offs = 6 + ((adj & 0x03) != 0x00 ? 1 : 0);	//6.6
-		adj <<= 1;
-		if (adj >= 0x08) adj = 0x01;
+		offs = 6 + ((adj2 & 0x03) != 0x00 ? 1 : 0);	//6.6
+		adj2 <<= 1;
+		if (adj2 >= 0x08) adj2 = 0x01;
+		adj0 = adj1 = 0x1;
 	}
 	else if (speed == 1) {
-		offs = 13 + ((adj & 0x01) != 0x00 ? 1 : 0);	//13.3
-		adj <<= 1;
-		if (adj >= 0x08) adj = 0x01;
+		offs = 13 + ((adj1 & 0x01) != 0x00 ? 1 : 0);	//13.3
+		adj1 <<= 1;
+		if (adj1 >= 0x08) adj1 = 0x01;
+		adj0 = adj2 = 0x1;
 	}
 	else {
-		offs = 16 + ((adj & 0x03) != 0x00 ? 1 : 0);	//16.7
-		adj <<= 1;
-		if (adj >= 0x08) adj = 0x01;
+		offs = 16 + ((adj0 & 0x03) != 0x00 ? 1 : 0);	//16.7
+		adj0 <<= 1;
+		if (adj0 >= 0x08) adj0 = 0x01;
+		adj1 = adj2 = 0x1;
 	}
 	return offs;
 }
@@ -50,7 +54,7 @@ void saturn_poll()
 		if (req != last_req)
 		{
 			last_req = req;
-
+			
 			for (int i = 0; i < 6; i++) data_in[i] = spi_w(0);
 			DisableIO();
 
@@ -60,9 +64,7 @@ void saturn_poll()
 		else
 			DisableIO();
 
-		uint8_t time_mode;
 		satcdd.Process(&time_mode);
-
 		poll_timer += CalcTimerOffset(time_mode);
 
 		uint16_t* s = (uint16_t*)satcdd.GetStatus();
@@ -71,16 +73,23 @@ void saturn_poll()
 		DisableIO();
 
 		satcdd.Update();
-
 		frame_cnt++;
+
+#ifdef SATURN_DEBUG
+		unsigned long curr_timer = GetTimer(0);
+		if (curr_timer >= poll_timer) {
+			printf("\x1b[32mSaturn: ");
+			printf("Time over: next = %u, curr = %u", poll_timer, curr_timer);
+			printf("\n\x1b[0m");
+		}
+#endif // SATURN_DEBUG
 	}
 }
 
 static char buf[1024];
-/*
 static void saturn_mount_save(const char *filename)
 {
-	user_io_set_index(SAVE_IO_INDEX);
+	/*user_io_set_index(SAVE_IO_INDEX);
 	user_io_set_download(1);
 	if (strlen(filename))
 	{
@@ -91,9 +100,8 @@ static void saturn_mount_save(const char *filename)
 	{
 		user_io_file_mount("");
 	}
-	user_io_set_download(0);
+	user_io_set_download(0);*/
 }
-*/
 
 static int saturn_load_rom(const char *basename, const char *name, int sub_index)
 {
@@ -110,12 +118,12 @@ static int saturn_load_rom(const char *basename, const char *name, int sub_index
 }
 void saturn_set_image(int num, const char *filename)
 {
-	static char last_dir[1024] = {};
-
+	static char last_dir[1024] = {}; 
+	
 	(void)num;
 
 	satcdd.Unload();
-	satcdd.state = Open;
+	satcdd.Reset();
 
 	int same_game = *filename && *last_dir && !strncmp(last_dir, filename, strlen(last_dir));
 	strcpy(last_dir, filename);
@@ -125,7 +133,7 @@ void saturn_set_image(int num, const char *filename)
 	int loaded = 1;
 	if (!same_game)
 	{
-		//saturn_mount_save("");
+		saturn_mount_save("");
 
 		user_io_status_set("[0]", 1);
 		user_io_status_set("[0]", 0);
@@ -153,20 +161,15 @@ void saturn_set_image(int num, const char *filename)
 	{
 		if (satcdd.Load(filename) > 0)
 		{
-			satcdd.state = satcdd.loaded ? Stop : Open;
 			satcdd.SendData = saturn_send_data;
 
 			if (!same_game)
 			{
 				saturn_load_rom(filename, "cd_bios.rom", 0);
 				//saturn_load_rom(filename, "cart.rom", 1);
-				//saturn_mount_save(filename);
+				saturn_mount_save(filename);
 				//cheats_init(filename, 0);
 			}
-		}
-		else
-		{
-			satcdd.state = Open;
 		}
 	}
 }

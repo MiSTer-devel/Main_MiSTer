@@ -404,27 +404,38 @@ static void fill_tx(uint16_t fill, uint32_t len, int index)
 	user_io_set_download(0);
 }
 
+static char tos_cart_img[1024] = {};
 void tos_load_cartridge(const char *name)
 {
-	if (name) strncpy(config.cart_img, name, 11);
-
-	// erase that ram area to remove any previously uploaded
-	// image
-	tos_debugf("Erasing cart memory");
-	fill_tx(0xff, 128 * 1024, 2);
-
-	// upload cartridge
-	if (config.cart_img[0] && FileExists(config.cart_img))
+	if (name)
 	{
-		user_io_file_tx(config.cart_img, 2);
-		tos_debugf("%s uploaded", config.cart_img);
-		return;
+		strncpy(tos_cart_img, name, 1023);
+	}
+	else
+	{
+		tos_debugf("Set cartridge: %s\n", tos_cart_img);
+
+		const int sz = (128 * 1024) + 4;
+		uint8_t *buf = new uint8_t[sz];
+		if (buf)
+		{
+			memset(buf, -1, sz);
+			if (!(config.system_ctrl & TOS_CONTROL_DONGLE)) FileLoad(tos_cart_img, buf, sz);
+
+			user_io_set_index(2);
+			user_io_set_download(1);
+			user_io_file_tx_data(buf + 4, sz - 4);
+			DisableFpga();
+
+			user_io_set_download(0);
+			delete buf;
+		}
 	}
 }
 
 char tos_cartridge_is_inserted()
 {
-	return config.cart_img[0];
+	return tos_cart_img[0];
 }
 
 void tos_poll()
@@ -479,9 +490,9 @@ const char *tos_get_image_name()
 
 const char *tos_get_cartridge_name()
 {
-	if (!config.cart_img[0])  return "* no cartridge *";
-	char *p = strrchr(config.cart_img, '/');
-	return p ? p + 1 : config.cart_img;
+	if (!tos_cart_img[0])  return "* no cartridge *";
+	char *p = strrchr(tos_cart_img, '/');
+	return p ? p + 1 : tos_cart_img;
 }
 
 char tos_disk_is_inserted(int index)
@@ -567,8 +578,6 @@ void tos_reset(char cold)
 			return;
 		}
 
-		tos_load_cartridge(NULL);
-
 		for (int i = 0; i < 2; i++)
 		{
 			if (FileExists(config.acsi_img[i]))
@@ -577,6 +586,7 @@ void tos_reset(char cold)
 			}
 		}
 	}
+	tos_load_cartridge(NULL);
 	tos_update_sysctrl(config.system_ctrl & ~TOS_CONTROL_CPU_RESET);  // release reset
 }
 
@@ -647,7 +657,7 @@ const char* tos_get_cfg_string(int num)
 		strcat(str, " ");
 		if (tmp.acsi_img[0][0]) strcat(str, "H0 ");
 		if (tmp.acsi_img[1][0]) strcat(str, "H1 ");
-		if (tmp.cart_img[0]) strcat(str, "CR ");
+		//if (tmp.cart_img[0]) strcat(str, "CR ");
 		strcat(str, tos_chipset_short[(tmp.system_ctrl >> 23) & 3]);
 		strcat(str, " ");
 		if (!((tmp.system_ctrl >> 23) & 3) && (tmp.system_ctrl & TOS_CONTROL_BLITTER)) strcat(str, "B ");
