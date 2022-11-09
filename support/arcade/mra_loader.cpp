@@ -49,6 +49,8 @@ static char arcade_error_msg[kBigTextSize] = {};
 static char arcade_root[kBigTextSize];
 static char mame_root[kBigTextSize];
 
+static bool is_vertical = false;
+
 static sw_struct switches[2] = {};
 
 static int  nvram_idx  = 0;
@@ -988,36 +990,49 @@ static int xml_scan_rbf(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 	return true;
 }
 
-static int xml_read_setname(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
+static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 	(void)(sd);
-	static int insetname = 0;
+	static bool insetname = false;
+	static bool inrotation = false;
+
+	static bool foundsetname = false;
+	static bool foundrotation = false;
 
 	switch (evt)
 	{
 	case XML_EVENT_START_DOC:
-		insetname = 0;
+		insetname = false;
+		inrotation = false;
+		foundsetname = false;
+		foundrotation = false;
 		break;
 
 	case XML_EVENT_START_NODE:
-
-		/* on the beginning of a rom tag, we need to reset the state*/
 		if (!strcasecmp(node->tag, "setname"))
 		{
-			insetname = 1;
+			insetname = true;
+			foundsetname = true;
+		}
+		else if (!strcasecmp(node->tag, "rotation"))
+		{
+			inrotation = true;
+			foundrotation = true;
 		}
 		break;
 
 	case XML_EVENT_TEXT:
 		if(insetname) user_io_name_override(text);
+		if(inrotation)
+		{
+			is_vertical = strncasecmp(text, "vertical", 8) == 0;
+		}
 		break;
 
 	case XML_EVENT_END_NODE:
-		if (!strcasecmp(node->tag, "setname"))
-		{
-			insetname = 0;
-			return false;
-		}
+		insetname = false;
+		inrotation = false;
+		if (foundrotation && foundsetname) return false;
 		break;
 
 	case XML_EVENT_ERROR:
@@ -1078,13 +1093,18 @@ int arcade_send_rom(const char *xml)
 	return 0;
 }
 
-void arcade_override_name(const char *xml)
+void arcade_pre_parse(const char *xml)
 {
 	SAX_Callbacks sax;
 	SAX_Callbacks_init(&sax);
 
-	sax.all_event = xml_read_setname;
+	sax.all_event = xml_read_pre_parse;
 	XMLDoc_parse_file_SAX(xml, &sax, NULL);
+}
+
+bool arcade_is_vertical()
+{
+	return is_vertical;
 }
 
 void arcade_check_error()

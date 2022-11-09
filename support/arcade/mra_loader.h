@@ -59,7 +59,11 @@ sw_struct *arcade_sw(int n);
 void arcade_sw_send(int n);
 void arcade_sw_save(int n);
 void arcade_sw_load(int n);
-void arcade_override_name(const char *xml);
+
+// Read any mra info necessary for ini processing
+void arcade_pre_parse(const char *xml);
+
+bool arcade_is_vertical();
 
 void arcade_nvm_save();
 

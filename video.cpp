@@ -649,7 +649,7 @@ static void loadScalerCfg()
 
 static char active_gamma_cfg[1024] = { 0 };
 static char gamma_cfg[1024] = { 0 };
-static char has_gamma = 0;
+static char has_gamma = 0; // set in video_init
 
 static void setGamma()
 {
@@ -660,15 +660,7 @@ static void setGamma()
 	fileTextReader reader = {};
 	static char filename[1024];
 
-	if (!spi_uio_cmd_cont(UIO_SET_GAMMA))
-	{
-		DisableIO();
-		return;
-	}
-
-	has_gamma = 1;
-	spi8(0);
-	DisableIO();
+	if (!has_gamma) return;
 
 	snprintf(filename, sizeof(filename), GAMMA_DIR"/%s", gamma_cfg + 1);
 
@@ -1160,9 +1152,9 @@ static void hdmi_config_init()
 			| ((ypbpr || cfg.hdmi_limited) ? 0b0100 : 0b1000)),	// [3:2] RGB Quantization range
 																// [1:0] Non-Uniform Scaled: 00 - None. 01 - Horiz. 10 - Vert. 11 - Both.
 
-		0x59, (uint8_t)(((ypbpr || cfg.hdmi_limited) ? 0x00 : 0x40)	// [7:6] [YQ1 YQ0] YCC Quantization Range: b00 = Limited Range, b01 = Full Range
-			| (cfg.hdmi_game_mode ? 0x30 : 0x00)),					// [5:4] IT Content Type b11 = Game, b00 = Graphics/None
-																	// [3:0] Pixel Repetition Fields b0000 = No Repetition
+		0x59, (uint8_t)(cfg.hdmi_game_mode ? 0x30 : 0x00),		// [7:6] [YQ1 YQ0] YCC Quantization Range: b00 = Limited Range, b01 = Full Range
+																// [5:4] IT Content Type b11 = Game, b00 = Graphics/None
+																// [3:0] Pixel Repetition Fields b0000 = No Repetition
 
 		0x73, 0x01,
 
@@ -1400,6 +1392,15 @@ static int get_active_edid()
 		printf("EDID: cannot find main i2c device\n");
 		return 0;
 	}
+
+	//Test if adv7513 senses hdmi clock. If not, don't bother with the edid query
+	int hpd_state = i2c_smbus_read_byte_data(fd, 0x42);
+	if (hpd_state < 0 || !(hpd_state & 0x20))
+	{
+		i2c_close(fd);
+		return 0;
+	}
+
 
 	for (int i = 0; i < 10; i++)
 	{
@@ -1850,6 +1851,8 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	char work[1024];
 	char *next;
 
+	if (!vcfg[0]) return -1;
+
 	memset(v, 0, sizeof(vmode_custom_t));
 	v->param.rb = 1; // default reduced blanking to true
 
@@ -1865,7 +1868,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 		}
 	}
 
-	if (cnt == 2)
+	if (cnt == 2 && token_cnt > 2)
 	{
 		valf = strtod(tokens[cnt], &next);
 		if (!*next) cnt++;
@@ -1884,6 +1887,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 		else
 		{
 			printf("Error parsing video_mode parameter %d \"%s\": \"%s\"\n", i, flag, vcfg);
+			cfg_error("Invalid video_mode\n> %s", vcfg);
 			return -1;
 		}
 	}
@@ -1920,6 +1924,7 @@ static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	else
 	{
 		printf("Error parsing video_mode parameter: ""%s""\n", vcfg);
+		cfg_error("Invalid video_mode\n> %s", vcfg);
 		return -1;
 	}
 
@@ -2002,6 +2007,8 @@ void video_init()
 	fb_init();
 	hdmi_config_init();
 	video_mode_load();
+
+	has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
 
 	loadGammaCfg();
 	loadScalerCfg();

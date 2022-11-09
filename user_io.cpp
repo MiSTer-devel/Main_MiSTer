@@ -255,6 +255,13 @@ char is_archie()
 	return (is_archie_type == 1);
 }
 
+static int is_pcxt_type = 0;
+char is_pcxt()
+{
+	if (!is_pcxt_type) is_pcxt_type = strcasecmp(orig_name, "PCXT") ? 2 : 1;
+	return (is_pcxt_type == 1);
+}
+
 static int is_gba_type = 0;
 char is_gba()
 {
@@ -338,6 +345,7 @@ void user_io_read_core_name()
 	is_c64_type = 0;
 	is_c128_type = 0;
 	is_st_type = 0;
+	is_pcxt_type = 0;
 	core_name[0] = 0;
 
 	char *p = user_io_get_confstr(0);
@@ -840,6 +848,10 @@ static void parse_config()
 					{
 						x86_set_image(idx, str);
 					}
+					else if (is_pcxt())
+					{
+						pcxt_set_image(idx, str);
+					}
 					else if (is_megacd())
 					{
 						mcd_set_image(idx, str);
@@ -1281,7 +1293,7 @@ void user_io_init(const char *path, const char *xml)
 	if (xml)
 	{
 		if (isXmlName(xml) == 1) is_arcade_type = 1;
-		arcade_override_name(xml);
+		arcade_pre_parse(xml);
 	}
 
 	if (core_type == CORE_TYPE_8BIT)
@@ -1319,7 +1331,7 @@ void user_io_init(const char *path, const char *xml)
 		xml = (const char*)defmra;
 		strcpy(core_path, xml);
 		is_arcade_type = 1;
-		arcade_override_name(xml);
+		arcade_pre_parse(xml);
 		user_io_read_core_name();
 		printf("Using default MRA: %s\n", xml);
 	}
@@ -1404,6 +1416,11 @@ void user_io_init(const char *path, const char *xml)
 				{
 					printf("Identified Archimedes core");
 					archie_init();
+				}
+				else if (is_pcxt())
+				{
+					pcxt_config_load();
+					pcxt_init();
 				}
 				else
 				{
@@ -1501,6 +1518,13 @@ void user_io_init(const char *path, const char *xml)
 		// release reset
 		if (!is_minimig() && !is_st()) user_io_status_set("[0]", 0);
 		if (xml && isXmlName(xml) == 1) arcade_check_error();
+
+		char cfg_errs[512];
+		if (cfg_check_errors(cfg_errs, sizeof(cfg_errs)))
+		{
+			Info(cfg_errs, 5000);
+			sleep(5);
+		}
 		break;
 	}
 
@@ -2743,6 +2767,8 @@ void user_io_send_buttons(char force)
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
 			if (is_x86()) x86_init();
+			if (is_pcxt()) pcxt_init();
+			if (is_st()) tos_reset(0);
 			ResetUART();
 		}
 
@@ -2875,6 +2901,10 @@ void user_io_poll()
 	if (is_x86())
 	{
 		x86_poll();
+	}
+	else if (is_pcxt())
+	{
+		pcxt_poll();
 	}
 	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
 	{
@@ -3818,7 +3848,7 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
-				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
+				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_pcxt() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
 				{
 					if (press == 1) menu_key_set(KEY_F12);
 				}
