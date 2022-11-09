@@ -376,6 +376,15 @@ static int start_sectors[4][85] = {
 
 int c64_openGCR(const char *path, fileTYPE *f, int idx)
 {
+	// Return value:
+	//
+	// negative value:
+	//   error
+	//
+	// positive value:
+	//   bit 0=dual sided
+	//       1=MFM supported
+
 	gcr_info[idx].f = f;
 	if (!strcasecmp(path + strlen(path) - 4, ".g64") || !strcasecmp(path + strlen(path) - 4, ".g71"))
 	{
@@ -384,7 +393,7 @@ int c64_openGCR(const char *path, fileTYPE *f, int idx)
 		if (memcmp(str, "GCR-1541", 8) == 0 && memcmp(str, "GCR-1571", 8) == 0)
 		{
 			printf("Not valid G64 or G71 format: missing marker\n");
-			return 0;
+			return -1;
 		}
 
 		gcr_info[idx].type = 2;
@@ -394,13 +403,15 @@ int c64_openGCR(const char *path, fileTYPE *f, int idx)
 		{
 			gcr_info[idx].type = 0;
 			printf("Not valid G64 or G71 format: invalid track count %d\n", gcr_info[idx].tracks);
-			return 0;
+			return -1;
 		}
 		memset(gcr_info[idx].trk_map, 0, sizeof(gcr_info[idx].trk_map));
 		FileReadAdv(f, gcr_info[idx].trk_map, gcr_info[idx].tracks*4);
 		memset(gcr_info[idx].spd_map, 0, sizeof(gcr_info[idx].spd_map));
 		FileReadAdv(f, gcr_info[idx].spd_map, gcr_info[idx].tracks*4);
 		printf("G64/G71 disk tracks=%d\n", gcr_info[idx].tracks);
+
+		return gcr_info[idx].tracks > 84 ? 3 : 2;
 	}
 	else
 	{
@@ -415,9 +426,9 @@ int c64_openGCR(const char *path, fileTYPE *f, int idx)
 		gcr_info[idx].id[1] = 0;
 		FileReadAdv(f, gcr_info[idx].id, 2);
 		printf("D64/D71 disk id1=%02X, id2=%02X, tracks=%d, sectors=%d\n", gcr_info[idx].id[0], gcr_info[idx].id[1], gcr_info[idx].tracks, gcr_info[idx].sector_map[84]);
-	}
 
-	return 1;
+		return gcr_info[idx].tracks > 42 ? 1 : 0;
+	}
 }
 
 void c64_closeGCR(int idx)
