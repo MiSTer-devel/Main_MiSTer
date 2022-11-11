@@ -51,7 +51,6 @@
 
 #define IOWR(base, reg, value) x86_dma_set((base) + (reg), value)
 
-bool pcxt = false;
 unsigned int hdd_table[128][3] = {
 	{  306,  4, 17 },		/* 0 - 7 */
 	{  615,  2, 17 },
@@ -205,7 +204,6 @@ struct hddInfo {
 	unsigned long sectors;
 };
 
-struct hddInfo* FindHDDInfoBySize(unsigned long size);
 struct hddInfo hddInfos[] = { { 0, 0, 0, 0 } };
 
 typedef struct
@@ -215,6 +213,32 @@ typedef struct
 } x86_config;
 
 static x86_config config;
+
+struct hddInfo* FindHDDInfoBySize(uint64_t size)
+{
+	struct hddInfo* fi;
+	uint64_t size_chs;
+	bool is_chs = false;
+
+
+	for (int i = 0; i < 127; i++)
+	{
+		size_chs = hdd_table[i][0] * hdd_table[i][1] * hdd_table[i][2] * 512;
+		if (size == size_chs)
+		{
+			fi = hddInfos;
+			fi->size = size;
+			fi->cylinders = hdd_table[i][0];
+			fi->heads = hdd_table[i][1];
+			fi->sectors = hdd_table[i][2];
+			is_chs = true;
+			break;
+		}
+	}
+
+	if (!is_chs) fi = NULL;
+	return(fi);
+}
 
 /*
 static uint32_t dma_get(uint32_t address)
@@ -430,9 +454,6 @@ static void fdd_set(int num, char* filename)
 
 static void hdd_set(int num, char* filename)
 {
-	FILE* fd;
-	long size;
-	struct hddInfo* hdd_fi;
 	int present = 0;
 	int cd = 0;
 
@@ -447,20 +468,25 @@ static void hdd_set(int num, char* filename)
 	}
 
 	if(!present && vhd) present = ide_img_mount(&ide_image[num], filename, 1);
-	if (!cd) {
+	if (!cd && is_pcxt())
+	{
+		FILE* fd;
+		uint64_t size;
+		struct hddInfo* hdd_fi;
+
 		const char* path = getFullPath(filename);
 		fd = fopen(path, "r");
 		if (fd)
 		{
 			fseek(fd, 0L, SEEK_END);
-			size = ftell(fd);
+			size = ftello64(fd);
 			if ((hdd_fi = FindHDDInfoBySize(size)))
 			{
 				ide_img_set(num, present ? &ide_image[num] : 0, cd, hdd_fi->sectors, hdd_fi->heads);
 			}
 			else
 			{
-				if (size > 8455200768) // 16383 cylinders * 16 heads * 63 sectors * 512 bytes per sector (Max. CHS)
+				if (size > 8455200768ULL) // 16383 cylinders * 16 heads * 63 sectors * 512 bytes per sector (Max. CHS)
 				{
 					ide_img_set(num, present ? &ide_image[num] : 0, cd);
 				}
@@ -482,15 +508,13 @@ static uint8_t bin2bcd(unsigned val)
 	return ((val / 10) << 4) + (val % 10);
 }
 
-void x86_init(bool _is_pcxt)
+void x86_init()
 {
 	user_io_status_set("[0]", 1);
 
 	const char *home = HomeDir();
 
-	pcxt = _is_pcxt;
-
-	if (!_is_pcxt)
+	if (is_x86())
 	{
 		load_bios(user_io_make_filepath(home, "boot0.rom"), 0);
 		load_bios(user_io_make_filepath(home, "boot1.rom"), 1);
@@ -772,31 +796,4 @@ const char* x86_get_image_name(int num)
 const char* x86_get_image_path(int num)
 {
 	return config.img_name[num];
-}
-
-struct hddInfo* FindHDDInfoBySize(unsigned long size)
-{
-	struct hddInfo* fi;
-	unsigned long size_chs;
-	bool is_chs = false;
-
-
-	for (int i = 0; i < 127; i++) {
-		size_chs = ((unsigned long)hdd_table[i][0]) * (unsigned long)hdd_table[i][1] * (unsigned long)hdd_table[i][2] * 512;
-		if (size == size_chs)
-		{
-			fi = hddInfos;
-			fi->size = size;
-			fi->cylinders = hdd_table[i][0];
-			fi->heads = hdd_table[i][1];
-			fi->sectors = hdd_table[i][2];
-			is_chs = true;
-			break;
-		}
-	}
-
-	if (!is_chs)
-		fi = NULL;
-
-	return(fi);
 }

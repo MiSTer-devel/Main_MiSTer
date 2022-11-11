@@ -2178,7 +2178,7 @@ void HandleUI(void)
 								const char *opt = p + 1;
 								if (!bit && (is_x86() || is_pcxt()))
 								{
-									x86_init(is_pcxt());
+									x86_init();
 									ResetUART();
 									menustate = MENU_NONE1;
 								}
