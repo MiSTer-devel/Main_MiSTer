@@ -1,7 +1,7 @@
 #ifndef X86_H
 #define X86_H
 
-void x86_init(bool _is_pcxt);
+void x86_init();
 void x86_poll();
 
 void x86_set_image(int num, char *filename);

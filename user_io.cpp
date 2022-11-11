@@ -1397,7 +1397,7 @@ void user_io_init(const char *path, const char *xml)
 				else if (is_x86() || is_pcxt())
 				{
 					x86_config_load();
-					x86_init(is_pcxt());
+					x86_init();
 				}
 				else if (is_archie())
 				{
@@ -2724,7 +2724,7 @@ void user_io_send_buttons(char force)
 			if (is_megacd()) mcd_reset();
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
-			if (is_x86() || is_pcxt()) x86_init(is_pcxt());
+			if (is_x86() || is_pcxt()) x86_init();
 			if (is_st()) tos_reset(0);
 			ResetUART();
 		}
