@@ -836,13 +836,9 @@ static void parse_config()
 				{
 					int idx = p[2] - '0';
 					StoreIdx_S(idx, str);
-					if (is_x86())
+					if (is_x86() || is_pcxt())
 					{
 						x86_set_image(idx, str);
-					}
-					else if (is_pcxt())
-					{
-						pcxt_set_image(idx, str);
 					}
 					else if (is_megacd())
 					{
@@ -1398,20 +1394,15 @@ void user_io_init(const char *path, const char *xml)
 					printf("Identified Minimig V2 core");
 					BootInit();
 				}
-				else if (is_x86())
+				else if (is_x86() || is_pcxt())
 				{
 					x86_config_load();
-					x86_init();
+					x86_init(is_pcxt());
 				}
 				else if (is_archie())
 				{
 					printf("Identified Archimedes core");
 					archie_init();
-				}
-				else if (is_pcxt())
-				{
-					pcxt_config_load();
-					pcxt_init();
 				}
 				else
 				{
@@ -2733,8 +2724,7 @@ void user_io_send_buttons(char force)
 			if (is_megacd()) mcd_reset();
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
-			if (is_x86()) x86_init();
-			if (is_pcxt()) pcxt_init();
+			if (is_x86() || is_pcxt()) x86_init(is_pcxt());
 			if (is_st()) tos_reset(0);
 			ResetUART();
 		}
@@ -2865,13 +2855,9 @@ void user_io_poll()
 	}
 
 	// sd card emulation
-	if (is_x86())
+	if (is_x86() || is_pcxt())
 	{
 		x86_poll();
-	}
-	else if (is_pcxt())
-	{
-		pcxt_poll();
 	}
 	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
 	{

@@ -11,9 +11,6 @@
 // Archie support
 #include "support/archie/archie.h"
 
-// PCXT support
-#include "support/pcxt/pcxt.h"
-
 // ST (Atari) support
 #include "support/st/st_tos.h"
 
