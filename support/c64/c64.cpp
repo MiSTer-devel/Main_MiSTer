@@ -382,8 +382,9 @@ int c64_openGCR(const char *path, fileTYPE *f, int idx)
 	//   error
 	//
 	// positive value:
-	//   bit 0=dual sided
-	//       1=MFM supported
+	//   bit 0=dual sided         (G64_SUPPORT_DS)
+	//       1=raw GCR supported  (G64_SUPPORT_GCR)
+	//       2=raw MFM supported  (G64_SUPPORT_MFM)
 
 	gcr_info[idx].f = f;
 	if (!strcasecmp(path + strlen(path) - 4, ".g64") || !strcasecmp(path + strlen(path) - 4, ".g71"))
@@ -411,7 +412,7 @@ int c64_openGCR(const char *path, fileTYPE *f, int idx)
 		FileReadAdv(f, gcr_info[idx].spd_map, gcr_info[idx].tracks*4);
 		printf("G64/G71 disk tracks=%d\n", gcr_info[idx].tracks);
 
-		return gcr_info[idx].tracks > 84 ? 3 : 2;
+		return G64_SUPPORT_GCR | G64_SUPPORT_MFM | (gcr_info[idx].tracks > 84 ? G64_SUPPORT_DS : 0);
 	}
 	else
 	{
@@ -427,7 +428,7 @@ int c64_openGCR(const char *path, fileTYPE *f, int idx)
 		FileReadAdv(f, gcr_info[idx].id, 2);
 		printf("D64/D71 disk id1=%02X, id2=%02X, tracks=%d, sectors=%d\n", gcr_info[idx].id[0], gcr_info[idx].id[1], gcr_info[idx].tracks, gcr_info[idx].sector_map[84]);
 
-		return gcr_info[idx].tracks > 42 ? 1 : 0;
+		return G64_SUPPORT_GCR | (gcr_info[idx].tracks > 42 ? G64_SUPPORT_DS : 0);
 	}
 }
 

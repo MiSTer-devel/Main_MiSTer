@@ -1917,7 +1917,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	int writable = 0;
 	int ret = 0;
 	int len = strlen(name);
-	int img_type = 0; // disk image type (for C128 core): bit 0=dual sided, 1=MFM supported, 2=high density
+	int img_type = 0; // disk image type (for C128 core): bit 0=dual sided, 1=raw GCR supported, 2=raw MFM supported, 3=high density
 
 	sd_image_cangrow[index] = (pre != 0);
 	sd_type[index] = 0;
@@ -1970,7 +1970,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					}
 					else if (!strcasecmp(name + len - 4, ".d81"))
 					{
-						img_type = 7;
+						img_type = G64_SUPPORT_HD | G64_SUPPORT_DS;
 					}
 				}
 
