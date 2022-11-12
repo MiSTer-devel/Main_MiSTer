@@ -3806,10 +3806,14 @@ void user_io_kbd(uint16_t key, int press)
 				if (is_menu() && !video_fb_state()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
 				if (key == KEY_MENU) key = KEY_F12;
-				if (osd_is_visible) menu_key_set(UPSTROKE | key);
-
-				//don't block depress so keys won't stick in core if pressed before OSD.
-				send_keycode(key, press);
+				if (osd_is_visible)
+				{
+					menu_key_set(UPSTROKE | key);					
+					if (key == 125 || key == 126 || key == 88) // We release only Win+F12
+						send_keycode(key, press);
+				}
+				else
+					send_keycode(key, press);
 			}
 			else
 			{
