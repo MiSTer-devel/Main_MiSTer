@@ -70,6 +70,7 @@ static char keyboard_leds = 0;
 static bool caps_status = 0;
 static bool num_status = 0;
 static bool scrl_status = 0;
+static bool winkey_pressed = 0;
 
 static uint16_t sdram_cfg = 0;
 
@@ -836,13 +837,9 @@ static void parse_config()
 				{
 					int idx = p[2] - '0';
 					StoreIdx_S(idx, str);
-					if (is_x86())
+					if (is_x86() || is_pcxt())
 					{
 						x86_set_image(idx, str);
-					}
-					else if (is_pcxt())
-					{
-						pcxt_set_image(idx, str);
 					}
 					else if (is_megacd())
 					{
@@ -1398,7 +1395,7 @@ void user_io_init(const char *path, const char *xml)
 					printf("Identified Minimig V2 core");
 					BootInit();
 				}
-				else if (is_x86())
+				else if (is_x86() || is_pcxt())
 				{
 					x86_config_load();
 					x86_init();
@@ -1407,11 +1404,6 @@ void user_io_init(const char *path, const char *xml)
 				{
 					printf("Identified Archimedes core");
 					archie_init();
-				}
-				else if (is_pcxt())
-				{
-					pcxt_config_load();
-					pcxt_init();
 				}
 				else
 				{
@@ -2733,8 +2725,7 @@ void user_io_send_buttons(char force)
 			if (is_megacd()) mcd_reset();
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
-			if (is_x86()) x86_init();
-			if (is_pcxt()) pcxt_init();
+			if (is_x86() || is_pcxt()) x86_init();
 			if (is_st()) tos_reset(0);
 			ResetUART();
 		}
@@ -2865,13 +2856,9 @@ void user_io_poll()
 	}
 
 	// sd card emulation
-	if (is_x86())
+	if (is_x86() || is_pcxt())
 	{
 		x86_poll();
-	}
-	else if (is_pcxt())
-	{
-		pcxt_poll();
 	}
 	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
 	{
@@ -3409,6 +3396,19 @@ void user_io_poll()
 
 static void send_keycode(unsigned short key, int press)
 {
+	if (is_pcxt())
+	{
+		//WIN+... we override this hotkey in the core.
+		if (key == 125 || key == 126)
+		{
+			winkey_pressed = press;			
+			return;
+		}
+		if (winkey_pressed)
+		{
+			return;
+		}
+	}
 	if (is_minimig())
 	{
 		if (press > 1) return;
@@ -3750,6 +3750,8 @@ void user_io_osd_key_enable(char on)
 
 void user_io_kbd(uint16_t key, int press)
 {
+	static int block_F12 = 0;
+
 	if(is_menu()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 
 	// Win+PrnScr or Alt/Win+ScrLk - screen shot
@@ -3806,10 +3808,14 @@ void user_io_kbd(uint16_t key, int press)
 				if (is_menu() && !video_fb_state()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
 				if (key == KEY_MENU) key = KEY_F12;
-				if (osd_is_visible) menu_key_set(UPSTROKE | key);
+				if (key != KEY_F12 || !block_F12)
+				{
+					if (osd_is_visible) menu_key_set(UPSTROKE | key);
 
-				//don't block depress so keys won't stick in core if pressed before OSD.
-				send_keycode(key, press);
+					// these modifiers should be passed to core even if OSD is open or they will get stuck!
+					if (!osd_is_visible || key == KEY_LEFTALT || key == KEY_RIGHTALT || key == KEY_LEFTMETA || key == KEY_RIGHTMETA) send_keycode(key, press);
+				}
+				if (key == KEY_F12) block_F12 = 0;
 			}
 			else
 			{
@@ -3817,10 +3823,13 @@ void user_io_kbd(uint16_t key, int press)
 				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
 				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_pcxt() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
 				{
+					block_F12 = 1;
 					if (press == 1) menu_key_set(KEY_F12);
 				}
 				else if (osd_is_visible)
 				{
+					if (key == KEY_MENU) key = KEY_F12;
+					if (key == KEY_F12) block_F12 = 1;
 					if (press == 1) menu_key_set(key);
 				}
 				else

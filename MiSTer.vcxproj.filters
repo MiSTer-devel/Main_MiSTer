@@ -42,12 +42,6 @@
     <Filter Include="Source Files\lodepng">
       <UniqueIdentifier>{9e138a0b-53c4-4ae8-a59b-6b7bf2dcc01b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\serial_server">
-      <UniqueIdentifier>{6dcec61d-6e11-4dd2-b86b-0e60c7b7815d}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\serial_server">
-      <UniqueIdentifier>{63e50b49-7ff8-4651-a8a9-0b17cef3d364}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="build.sh" />
@@ -237,21 +231,6 @@
     </ClCompile>
     <ClCompile Include="str_util.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="support\pcxt\pcxt.cpp">
-      <Filter>Source Files\support</Filter>
-    </ClCompile>
-    <ClCompile Include="lib\serial_server\library\Checksum.cpp">
-      <Filter>Source Files\serial_server</Filter>
-    </ClCompile>
-    <ClCompile Include="lib\serial_server\library\Image.cpp">
-      <Filter>Source Files\serial_server</Filter>
-    </ClCompile>
-    <ClCompile Include="lib\serial_server\library\Process.cpp">
-      <Filter>Source Files\serial_server</Filter>
-    </ClCompile>
-    <ClCompile Include="lib\serial_server\library\Serial.cpp">
-      <Filter>Source Files\serial_server</Filter>
     </ClCompile>
     <ClCompile Include="gamecontroller_db.cpp">
       <Filter>Source Files</Filter>
@@ -473,21 +452,6 @@
     </ClInclude>
     <ClInclude Include="str_util.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="support\pcxt\pcxt.h">
-      <Filter>Header Files\support</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\serial_server\library\FlatImage.h">
-      <Filter>Header Files\serial_server</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\serial_server\library\Library.h">
-      <Filter>Header Files\serial_server</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\serial_server\library\LinuxFile.h">
-      <Filter>Header Files\serial_server</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\serial_server\library\LinuxSerial.h">
-      <Filter>Header Files\serial_server</Filter>
     </ClInclude>
     <ClInclude Include="gamecontroller_db.h">
       <Filter>Header Files</Filter>
