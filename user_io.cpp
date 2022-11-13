@@ -3736,6 +3736,8 @@ void user_io_osd_key_enable(char on)
 
 void user_io_kbd(uint16_t key, int press)
 {
+	static int block_F12 = 0;
+
 	if(is_menu()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 
 	// Win+PrnScr or Alt/Win+ScrLk - screen shot
@@ -3792,10 +3794,18 @@ void user_io_kbd(uint16_t key, int press)
 				if (is_menu() && !video_fb_state()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
 				if (key == KEY_MENU) key = KEY_F12;
-				if (osd_is_visible) menu_key_set(UPSTROKE | key);
-
-				//don't block depress so keys won't stick in core if pressed before OSD.
-				send_keycode(key, press);
+				if (key != KEY_F12 || !block_F12)
+				{
+					if (osd_is_visible)
+					{
+						menu_key_set(UPSTROKE | key);
+					}
+					else
+					{
+						send_keycode(key, press);
+					}
+				}
+				if (key == KEY_F12) block_F12 = 0;
 			}
 			else
 			{
@@ -3803,10 +3813,13 @@ void user_io_kbd(uint16_t key, int press)
 				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
 				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_pcxt() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
 				{
+					block_F12 = 1;
 					if (press == 1) menu_key_set(KEY_F12);
 				}
 				else if (osd_is_visible)
 				{
+					if (key == KEY_MENU) key = KEY_F12;
+					if (key == KEY_F12) block_F12 = 1;
 					if (press == 1) menu_key_set(key);
 				}
 				else
