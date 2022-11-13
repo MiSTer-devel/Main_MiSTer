@@ -3796,14 +3796,10 @@ void user_io_kbd(uint16_t key, int press)
 				if (key == KEY_MENU) key = KEY_F12;
 				if (key != KEY_F12 || !block_F12)
 				{
-					if (osd_is_visible)
-					{
-						menu_key_set(UPSTROKE | key);
-					}
-					else
-					{
-						send_keycode(key, press);
-					}
+					if (osd_is_visible) menu_key_set(UPSTROKE | key);
+
+					// these modifiers should be passed to core even if OSD is open or they will get stuck!
+					if (!osd_is_visible || key == KEY_LEFTALT || key == KEY_RIGHTALT || key == KEY_LEFTMETA || key == KEY_RIGHTMETA) send_keycode(key, press);
 				}
 				if (key == KEY_F12) block_F12 = 0;
 			}
