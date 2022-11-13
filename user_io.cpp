@@ -70,6 +70,7 @@ static char keyboard_leds = 0;
 static bool caps_status = 0;
 static bool num_status = 0;
 static bool scrl_status = 0;
+static bool winkey_pressed = 0;
 
 static uint16_t sdram_cfg = 0;
 
@@ -3395,6 +3396,19 @@ void user_io_poll()
 
 static void send_keycode(unsigned short key, int press)
 {
+	if (is_pcxt())
+	{
+		//WIN+... we override this hotkey in the core.
+		if (key == 125 || key == 126)
+		{
+			winkey_pressed = press;			
+			return;
+		}
+		if (winkey_pressed)
+		{
+			return;
+		}
+	}
 	if (is_minimig())
 	{
 		if (press > 1) return;
