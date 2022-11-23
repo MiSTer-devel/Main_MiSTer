@@ -1687,12 +1687,12 @@ void HandleUI(void)
 								strcat(s, " ");
 								strcat(s, x86_get_image_name(num));
 							}
-							else if (is_pcxt() && (p[0] == 'S') && pcxt_get_image_name(num))
+							else if (is_pcxt() && (p[0] == 'S') && x86_get_image_name(num))
 							{
 								strcpy(s, " ");
 								substrcpy(s + 1, p, 2);
 								strcat(s, " ");
-								strcat(s, pcxt_get_image_name(num));
+								strcat(s, x86_get_image_name(num));
 							}
 							else if (is_pcxt() && (p[0] == 'F'))
 							{
@@ -2077,8 +2077,7 @@ void HandleUI(void)
 						strcpy(fs_pFileExt, ext);
 
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
-						if (is_x86()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
-						if (is_pcxt()) strcpy(Selected_tmp, pcxt_get_image_path(ioctl_index));
+						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));						
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
 						if (is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)))
@@ -2157,12 +2156,7 @@ void HandleUI(void)
 								if (!strlen(s) || get_arc(s) < 0) x = 0;
 							}
 
-							user_io_status_set(p + 1, x, ex);														
-														
-							if (is_pcxt() && (p[1] == 'J' || p[1] == 'L'))
-							{
-								pcxt_load_images();
-							}
+							user_io_status_set(p + 1, x, ex);
 
 							if (is_x86() && p[1] == 'A')
 							{
@@ -2182,7 +2176,7 @@ void HandleUI(void)
 							if (user_io_status_bits(p + 1, &bit, 0, ex) == 1)
 							{
 								const char *opt = p + 1;
-								if (!bit && is_x86())
+								if (!bit && (is_x86() || is_pcxt()))
 								{
 									x86_init();
 									ResetUART();
@@ -2202,8 +2196,7 @@ void HandleUI(void)
 
 									if (is_pce() && !bit) pcecd_reset();
 									if (is_saturn() && !bit) saturn_reset();
-									if (is_pcxt() && !bit) pcxt_init();
-
+									
 									user_io_status_set(opt, 1, ex);
 									user_io_status_set(opt, 0, ex);
 
@@ -2307,11 +2300,7 @@ void HandleUI(void)
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
-			if (is_pcxt())
-			{
-				pcxt_set_image(ioctl_index, selPath);
-			}
-			else if (is_x86())
+			else if (is_x86() || is_pcxt())
 			{
 				x86_set_image(ioctl_index, selPath);
 			}
@@ -2562,9 +2551,8 @@ void HandleUI(void)
 					char *filename = user_io_create_config_name();
 					printf("Saving config to %s\n", filename);
 					user_io_status_save(filename);
-					if (is_x86()) x86_config_save();
+					if (is_x86() || is_pcxt()) x86_config_save();
 					if (is_arcade()) arcade_nvm_save();
-					if (is_pcxt()) pcxt_config_save();
 				}
 				break;
 
@@ -4733,7 +4721,6 @@ void HandleUI(void)
 				OsdWrite(OsdGetSize() / 2, "    Unmounting the image", 0, 0);
 				OsdUpdate();
 				sleep(1);
-				if (is_pcxt()) pcxt_load_images();
 			}
 			input_poll(0);
 			menu_key_set(0);
