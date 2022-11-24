@@ -19,7 +19,7 @@ cfg_t cfg;
 
 typedef enum
 {
-	UINT8 = 0, INT8, UINT16, INT16, UINT32, INT32, FLOAT, STRING, UINT32ARR
+	UINT8 = 0, INT8, UINT16, INT16, UINT32, INT32, HEX8, HEX16, HEX32, FLOAT, STRING, UINT32ARR, HEX32ARR
 } ini_vartypes_t;
 
 typedef struct
@@ -38,7 +38,7 @@ static const ini_var_t ini_vars[] =
 	{ "FORCED_SCANDOUBLER", (void*)(&(cfg.forced_scandoubler)), UINT8, 0, 1 },
 	{ "VGA_SCALER", (void*)(&(cfg.vga_scaler)), UINT8, 0, 1 },
 	{ "VGA_SOG", (void*)(&(cfg.vga_sog)), UINT8, 0, 1 },
-	{ "KEYRAH_MODE", (void*)(&(cfg.keyrah_mode)), UINT32, 0, 0xFFFFFFFF },
+	{ "KEYRAH_MODE", (void*)(&(cfg.keyrah_mode)), HEX32, 0, 0xFFFFFFFF },
 	{ "RESET_COMBO", (void*)(&(cfg.reset_combo)), UINT8, 0, 3 },
 	{ "KEY_MENU_AS_RGUI", (void*)(&(cfg.key_menu_as_rgui)), UINT8, 0, 1 },
 	{ "VIDEO_MODE", (void*)(cfg.video_conf), STRING, 0, sizeof(cfg.video_conf) - 1 },
@@ -69,19 +69,19 @@ static const ini_var_t ini_vars[] =
 	{ "CONTROLLER_INFO", (void*)(&(cfg.controller_info)), UINT8, 0, 10 },
 	{ "REFRESH_MIN", (void*)(&(cfg.refresh_min)), FLOAT, 0, 150 },
 	{ "REFRESH_MAX", (void*)(&(cfg.refresh_max)), FLOAT, 0, 150 },
-	{ "JAMMA_VID", (void*)(&(cfg.jamma_vid)), UINT16, 0, 0xFFFF },
-	{ "JAMMA_PID", (void*)(&(cfg.jamma_pid)), UINT16, 0, 0xFFFF },
+	{ "JAMMA_VID", (void*)(&(cfg.jamma_vid)), HEX16, 0, 0xFFFF },
+	{ "JAMMA_PID", (void*)(&(cfg.jamma_pid)), HEX16, 0, 0xFFFF },
 	{ "SNIPER_MODE", (void*)(&(cfg.sniper_mode)), UINT8, 0, 1 },
 	{ "BROWSE_EXPAND", (void*)(&(cfg.browse_expand)), UINT8, 0, 1 },
 	{ "LOGO", (void*)(&(cfg.logo)), UINT8, 0, 1 },
 	{ "SHARED_FOLDER", (void*)(&(cfg.shared_folder)), STRING, 0, sizeof(cfg.shared_folder) - 1 },
-	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), UINT16, 0, 0xFFFF },
-	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), UINT16, 0, 0xFFFF },
-	{ "NO_MERGE_VIDPID", (void*)(cfg.no_merge_vidpid), UINT32ARR, 0, 0xFFFFFFFF },
+	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), HEX16, 0, 0xFFFF },
+	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), HEX16, 0, 0xFFFF },
+	{ "NO_MERGE_VIDPID", (void*)(cfg.no_merge_vidpid), HEX32ARR, 0, 0xFFFFFFFF },
 	{ "CUSTOM_ASPECT_RATIO_1", (void*)(&(cfg.custom_aspect_ratio[0])), STRING, 0, sizeof(cfg.custom_aspect_ratio[0]) - 1 },
 	{ "CUSTOM_ASPECT_RATIO_2", (void*)(&(cfg.custom_aspect_ratio[1])), STRING, 0, sizeof(cfg.custom_aspect_ratio[1]) - 1 },
-	{ "SPINNER_VID", (void*)(&(cfg.spinner_vid)), UINT16, 0, 0xFFFF },
-	{ "SPINNER_PID", (void*)(&(cfg.spinner_pid)), UINT16, 0, 0xFFFF },
+	{ "SPINNER_VID", (void*)(&(cfg.spinner_vid)), HEX16, 0, 0xFFFF },
+	{ "SPINNER_PID", (void*)(&(cfg.spinner_pid)), HEX16, 0, 0xFFFF },
 	{ "SPINNER_AXIS", (void*)(&(cfg.spinner_axis)), UINT8, 0, 1 },
 	{ "SPINNER_THROTTLE", (void*)(&(cfg.spinner_throttle)), INT32, -10000, 10000 },
 	{ "AFILTER_DEFAULT", (void*)(&(cfg.afilter_default)), STRING, 0, sizeof(cfg.afilter_default) - 1 },
@@ -239,9 +239,17 @@ static void ini_parse_numeric(const ini_var_t *var, const char *text, void *out)
 	char *endptr = nullptr;
 
 	bool out_of_range = true;
+	bool invalid_format = false;
 
 	switch(var->type)
 	{
+	case HEX8:
+	case HEX16:
+	case HEX32:
+	case HEX32ARR:
+		invalid_format = strncasecmp(text, "0x", 2);
+		// fall through
+
 	case UINT8:
 	case UINT16:
 	case UINT32:
@@ -275,14 +283,19 @@ static void ini_parse_numeric(const ini_var_t *var, const char *text, void *out)
 
 	if (*endptr) cfg_error("%s: \'%s\' not a number", var->name, text);
 	else if (out_of_range) cfg_error("%s: \'%s\' out of range", var->name, text);
+	else if (invalid_format) cfg_error("%s: \'%s\' invalid format", var->name, text);
 
 	switch (var->type)
 	{
+	case HEX8:
 	case UINT8: *(uint8_t*)out = u32; break;
 	case INT8: *(int8_t*)out = i32; break;
+	case HEX16:
 	case UINT16: *(uint16_t*)out = u32; break;
+	case HEX32ARR:
 	case UINT32ARR: *(uint32_t*)out = u32; break;
 	case INT16: *(int16_t*)out = i32; break;
+	case HEX32:
 	case UINT32: *(uint32_t*)out = u32; break;
 	case INT32: *(int32_t*)out = i32; break;
 	case FLOAT: *(float*)out = f32; break;
@@ -434,6 +447,8 @@ void cfg_parse()
 		// second pass to look for section without vrefresh
 		ini_parse(altcfg(), video_get_core_mode_name(0));
 	}
+
+
 }
 
 bool cfg_has_video_sections()
@@ -470,4 +485,75 @@ bool cfg_check_errors(char *msg, size_t max_len)
 	}
 
 	return true;
+}
+
+void cfg_print()
+{
+	printf("Loaded config:\n--------------\n");
+	for (uint i = 0; i < (sizeof(ini_vars) / sizeof(ini_vars[0])); i++)
+	{
+		switch (ini_vars[i].type)
+		{
+		case UINT8:
+			printf("  %s=%u\n", ini_vars[i].name, *(uint8_t*)ini_vars[i].var);
+			break;
+
+		case UINT16:
+			printf("  %s=%u\n", ini_vars[i].name, *(uint16_t*)ini_vars[i].var);
+			break;
+
+		case UINT32:
+			printf("  %s=%u\n", ini_vars[i].name, *(uint32_t*)ini_vars[i].var);
+			break;
+
+		case UINT32ARR:
+			if (*(uint32_t*)ini_vars[i].var)
+			{
+				uint32_t* arr = (uint32_t*)ini_vars[i].var;
+				for (uint32_t n = 0; n < arr[0]; n++) printf("%s=%u\n", ini_vars[i].name, arr[n + 1]);
+			}
+			break;
+
+		case HEX8:
+			printf("  %s=0x%02X\n", ini_vars[i].name, *(uint8_t*)ini_vars[i].var);
+			break;
+
+		case HEX16:
+			printf("  %s=0x%04X\n", ini_vars[i].name, *(uint16_t*)ini_vars[i].var);
+			break;
+
+		case HEX32:
+			printf("  %s=0x%08X\n", ini_vars[i].name, *(uint32_t*)ini_vars[i].var);
+			break;
+
+		case HEX32ARR:
+			if (*(uint32_t*)ini_vars[i].var)
+			{
+				uint32_t* arr = (uint32_t*)ini_vars[i].var;
+				for (uint32_t n = 0; n < arr[0]; n++) printf("%s=0x%08X\n", ini_vars[i].name, arr[n + 1]);
+			}
+			break;
+
+		case INT8:
+			printf("  %s=%d\n", ini_vars[i].name, *(int8_t*)ini_vars[i].var);
+			break;
+
+		case INT16:
+			printf("  %s=%d\n", ini_vars[i].name, *(int16_t*)ini_vars[i].var);
+			break;
+
+		case INT32:
+			printf("  %s=%d\n", ini_vars[i].name, *(int32_t*)ini_vars[i].var);
+			break;
+
+		case FLOAT:
+			printf("  %s=%f\n", ini_vars[i].name, *(float*)ini_vars[i].var);
+			break;
+
+		case STRING:
+			if (*(uint32_t*)ini_vars[i].var) printf("  %s=%s\n", ini_vars[i].name, (char*)ini_vars[i].var);
+			break;
+		}
+	}
+	printf("--------------\n");
 }

@@ -85,6 +85,7 @@ extern cfg_t cfg;
 
 //// functions ////
 void cfg_parse();
+void cfg_print();
 const char* cfg_get_name(uint8_t alt);
 bool cfg_has_video_sections();
 
