@@ -1301,6 +1301,7 @@ void user_io_init(const char *path, const char *xml)
 	user_io_read_core_name();
 
 	cfg_parse();
+	cfg_print();
 	while (cfg.waitmount[0] && !is_menu())
 	{
 		printf("> > > wait for %s mount < < <\n", cfg.waitmount);
@@ -3401,7 +3402,7 @@ static void send_keycode(unsigned short key, int press)
 		//WIN+... we override this hotkey in the core.
 		if (key == 125 || key == 126)
 		{
-			winkey_pressed = press;			
+			winkey_pressed = press;
 			return;
 		}
 		if (winkey_pressed)
