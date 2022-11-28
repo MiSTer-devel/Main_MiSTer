@@ -344,6 +344,7 @@ static void ini_parse_var(char* buf)
 			strncpy((char*)(var->var), &(buf[i]), var->max);
 			break;
 
+		case HEX32ARR:
 		case UINT32ARR:
 			{
 				uint32_t *arr = (uint32_t*)var->var;
