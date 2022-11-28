@@ -1753,7 +1753,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 			}
 			else
 			{
-				if (!user_io_osd_is_visible() && press)
+				if (!user_io_osd_is_visible() && press && !cfg.disable_autofire)
 				{
 					if (lastcode[num] && lastmask[num])
 					{
