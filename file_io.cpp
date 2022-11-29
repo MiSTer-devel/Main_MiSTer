@@ -1276,21 +1276,25 @@ static void get_display_name(direntext_t *dext, const char *ext, int options)
 	if (dext->de.d_type == DT_DIR) return;
 
 	int len = strlen(dext->altname);
+	int xml = (len > 4 && (!strcasecmp(dext->altname + len - 4, ".mgl") || !strcasecmp(dext->altname + len - 4, ".mra")));
 	int rbf = (len > 4 && !strcasecmp(dext->altname + len - 4, ".rbf"));
-	if (rbf)
+	if (rbf || xml)
 	{
 		dext->altname[len - 4] = 0;
-		char *p = strstr(dext->altname, "_20");
-		if (p) if (strlen(p + 3) < 6) p = 0;
-		if (p)
+		if (rbf)
 		{
-			*p = 0;
-			strncpy(dext->datecode, p + 3, 15);
-			dext->datecode[15] = 0;
-		}
-		else
-		{
-			strcpy(dext->datecode, "------");
+			char *p = strstr(dext->altname, "_20");
+			if (p) if (strlen(p + 3) < 6) p = 0;
+			if (p)
+			{
+				*p = 0;
+				strncpy(dext->datecode, p + 3, 15);
+				dext->datecode[15] = 0;
+			}
+			else
+			{
+				strcpy(dext->datecode, "------");
+			}
 		}
 
 		if (!names_loaded)
