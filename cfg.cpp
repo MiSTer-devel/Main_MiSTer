@@ -113,6 +113,7 @@ static const ini_var_t ini_vars[] =
 	{ "VIDEO_SATURATION", (void *)(&(cfg.video_saturation)), UINT16, 0, 100},
 	{ "VIDEO_HUE", (void *)(&(cfg.video_hue)), UINT16, 0, 360},
 	{ "VIDEO_GAIN_OFFSET", (void *)(&(cfg.video_gain_offset)), STRING, 0, sizeof(cfg.video_gain_offset)},
+	{ "HDR", (void*)(&cfg.hdr), UINT8, 0, 3 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -445,6 +446,7 @@ void cfg_parse()
 	cfg.rumble = 1;
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
+	cfg.hdr = 0;
 	cfg.video_brightness = 50;
 	cfg.video_contrast = 50;
 	cfg.video_saturation = 100;
