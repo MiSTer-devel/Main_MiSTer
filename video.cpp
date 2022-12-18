@@ -1115,12 +1115,12 @@ static void hdmi_config_set_csc()
 	mat4x4 csc(coeffs);
 
 	// apply color controls
-	float brightness = (((cfg.cc_brightness/100.0f) - 0.5f)); // [-0.5 .. 0.5]
-	float contrast = ((cfg.cc_contrast/100.0f) - 0.5f) * 2.0f + 1.0f; // [0 .. 2]
-	float saturation = ((cfg.cc_saturation/100.0f)); // [0 .. 1]
-	float hue = (cfg.cc_hue * pi / 180.0f);
+	float brightness = (((cfg.video_brightness/100.0f) - 0.5f)); // [-0.5 .. 0.5]
+	float contrast = ((cfg.video_contrast/100.0f) - 0.5f) * 2.0f + 1.0f; // [0 .. 2]
+	float saturation = ((cfg.video_saturation/100.0f)); // [0 .. 1]
+	float hue = (cfg.video_hue * pi / 180.0f);
 
-	char* gain_offset = cfg.cc_gain_offset;
+	char* gain_offset = cfg.video_gain_offset;
 
 	// we have to parse these
 	float gain_red = 1;
