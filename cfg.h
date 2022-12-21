@@ -80,6 +80,11 @@ typedef struct {
 	uint8_t vrr_vesa_framerate;
 	uint16_t video_off;
 	uint8_t disable_autofire;
+	uint16_t video_brightness;
+	uint16_t video_contrast;
+	uint16_t video_saturation;
+	uint16_t video_hue;
+	char video_gain_offset[256];
 } cfg_t;
 
 extern cfg_t cfg;
