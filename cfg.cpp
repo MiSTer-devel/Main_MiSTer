@@ -108,6 +108,7 @@ static const ini_var_t ini_vars[] =
 	{ "PLAYER_3_CONTROLLER", (void*)(&(cfg.player_controller[2])), STRING, 0, sizeof(cfg.player_controller[2]) - 1 },
 	{ "PLAYER_4_CONTROLLER", (void*)(&(cfg.player_controller[3])), STRING, 0, sizeof(cfg.player_controller[3]) - 1 },
 	{ "DISABLE_AUTOFIRE", (void *)(&(cfg.disable_autofire)), UINT8, 0, 1},
+	{ "SHOW_PROGRESS_INFO", (void*)(&(cfg.show_progress_info)), UINT8, 0, 1 },
 	{ "VIDEO_BRIGHTNESS", (void *)(&(cfg.video_brightness)), UINT16, 0, 100},
 	{ "VIDEO_CONTRAST", (void *)(&(cfg.video_contrast)), UINT16, 0, 100},
 	{ "VIDEO_SATURATION", (void *)(&(cfg.video_saturation)), UINT16, 0, 100},
@@ -446,6 +447,8 @@ void cfg_parse()
 	cfg.rumble = 1;
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
+	cfg.disable_autofire=0
+	cfg.show_progress_info=0;
 	cfg.hdr = 0;
 	cfg.video_brightness = 50;
 	cfg.video_contrast = 50;
