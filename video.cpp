@@ -1481,38 +1481,43 @@ static void hdmi_config_init()
 
 static void hdmi_config_set_hdr()
 {
-	// 87:01:1a:74:02:00:c2:33:c4:86:4c:1d:b8:0b:d0:84:80 :3e:13:3d:42:40:e8:03:32:00:e8:03:90:01
+	// CTA-861-G: 6.9 Dynamic Range and Mastering InfoFrame
+	// Uses BT2020 RGB primaries and white point chromacity
+	// Max Lum: 1000cd/m2, Min Lum: 0cd/m2, MaxCLL: 1000cd/m2
+	// MaxFALL: 250cd/m2 (this value does not matter much -
+	// in essence it means that the display should expect -
+	// 25% of the image to be 1000cd/m2)
 	uint8_t hdr_data[] = {
 		0x87,
 		0x01,
 		0x1a,
-		0x74,
+		0x28,
 		0x02,
-		0x00,
-		0xc2,
-		0x33,
-		0xc4,
-		0x86,
-		0x4c,
-		0x1d,
-		0xb8,
-		0x0b,
-		0xd0,
-		0x84,
-		0x80,
-		0x3e,
+		0x48,
+		0x8a,
+		0x08,
+		0x39,
+		0x34,
+		0x21,
+		0xaa,
+		0x9b,
+		0x96,
+		0x19,
+		0xfc,
+		0x08,
 		0x13,
 		0x3d,
 		0x42,
 		0x40,
+		0x00,
 		0xe8,
 		0x03,
 		0x32,
 		0x00,
 		0xe8,
 		0x03,
-		0x90,
-		0x01
+		0xfa,
+		0x00
 	};
 
 	if (cfg.hdr == 0)
