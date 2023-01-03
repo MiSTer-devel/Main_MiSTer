@@ -5170,7 +5170,14 @@ int input_test(int getchar)
 							}
 							else
 							{
-								send_mouse_with_throttle(i, xval, yval, data[3]);
+								if (data[0] & 8) {
+									int myspinner = data[3] & 0x80 ? ((int) data[3]) - 0xFF : data[3];
+									//printf("IM HERE MAN %d "BYTE_TO_BINARY_PATTERN, myspinner, BYTE_TO_BINARY(myspinner));
+									//printf("\n");
+									send_mouse_with_throttle(i, myspinner, myspinner, 0);
+								} else {
+									send_mouse_with_throttle(i, xval, yval, data[3]);
+								}
 							}
 						}
 					}
