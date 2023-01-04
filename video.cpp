@@ -1487,12 +1487,13 @@ static void hdmi_config_set_hdr()
 	// MaxFALL: 250cd/m2 (this value does not matter much -
 	// in essence it means that the display should expect -
 	// 25% of the image to be 1000cd/m2)
+	// If HDR == 3, use HLG instead
 	uint8_t hdr_data[] = {
 		0x87,
 		0x01,
 		0x1a,
-		0x28,
-		0x02,
+		(cfg.hdr == 3 ? uint8_t(0x27) : uint8_t(0x28)),
+		(cfg.hdr == 3 ? uint8_t(0x03) : uint8_t(0x02)),
 		0x48,
 		0x8a,
 		0x08,
