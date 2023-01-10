@@ -734,7 +734,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	static unsigned char file_index = 0;
 	static char file_type = 0;
 	static unsigned long int file_offset = 0, file_size = 0, vromb_offset = 0;
-	static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0;
+	static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, rom_wait = 0, p_wait = 0;
 	static int file_cnt = 0;
 	static int vrom_mirror = 1;
 
@@ -754,6 +754,8 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 			pvc = 0;
 			sma = 0;
 			cmc = 0;
+			rom_wait = 0;
+			p_wait = 0;
 
 			if (!romsets) in_correct_romset = 1;
 			for (int i = 0; i < node->n_attributes; i++) {
@@ -789,6 +791,12 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				}
 				else if (!strcasecmp(node->attributes[i].name, "vrom_mirror")) {
 					vrom_mirror = strtoul(node->attributes[i].value, NULL, 0);
+				}
+				else if (!strcasecmp(node->attributes[i].name, "rom_wait")) {
+					rom_wait = atoi(node->attributes[i].value);
+				}
+				else if (!strcasecmp(node->attributes[i].name, "p_wait")) {
+					p_wait = atoi(node->attributes[i].value);
 				}
 			}
 		}
@@ -897,6 +905,10 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 
 				printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
 				set_config((use_pcm & 1) << 23, 1 << 23);
+
+				printf("Setting rom_wait to %u, p_wait to %u\n", rom_wait, p_wait);
+				set_config((rom_wait & 1) << 28, 1 << 28);
+				set_config((p_wait & 3) << 29, 3 << 29);
 				return 0;
 			}
 			else if (!strcasecmp(node->tag, "file"))
@@ -934,22 +946,24 @@ struct NeoQuirk
 	uint8_t  pvc;
 	uint8_t  sma;
 	uint8_t  mir;
+	uint8_t  rwait;
 };
 
 static NeoQuirk neo_quirks[] = {
-	{0x022,	0, 0, 0, 0, 1 }, // Blue's Journey
-	{0x052,	1, 0, 0, 0, 0 }, // Super Sidekicks
-	{0x047,	1, 0, 0, 0, 0 }, // Fatal Fury 2
-	{0x006,	2, 0, 0, 0, 0 }, // Riding Hero
-	{0x263,	0, 1, 0, 0, 0 }, // Metal Slug 4
-	{0x253,	0, 1, 0, 2, 0 }, // Garou - Mark of the Wolves
-	{0x251,	0, 0, 0, 1, 0 }, // King of Fighters 99
-	{0x257,	0, 2, 0, 5, 0 }, // King of Fighters 2000
-	{0x271,	0, 2, 1, 0, 0 }, // King of Fighters 2003
-	{0x266,	0, 2, 0, 0, 0 }, // Matrimelee
-	{0x256,	0, 1, 0, 4, 0 }, // Metal Slug 3
-	{0x268,	0, 0, 1, 0, 0 }, // Metal Slug 5
-	{0x269,	0, 2, 1, 0, 0 }, // SNK vs Capcom
+	{0x022,	0, 0, 0, 0, 1, 0 }, // Blue's Journey
+	{0x050,	0, 0, 0, 0, 0, 1 }, // Ninja Commando
+	{0x052,	1, 0, 0, 0, 0, 0 }, // Super Sidekicks
+	{0x047,	1, 0, 0, 0, 0, 0 }, // Fatal Fury 2
+	{0x006,	2, 0, 0, 0, 0, 0 }, // Riding Hero
+	{0x263,	0, 1, 0, 0, 0, 0 }, // Metal Slug 4
+	{0x253,	0, 1, 0, 2, 0, 0 }, // Garou - Mark of the Wolves
+	{0x251,	0, 0, 0, 1, 0, 0 }, // King of Fighters 99
+	{0x257,	0, 2, 0, 5, 0, 0 }, // King of Fighters 2000
+	{0x271,	0, 2, 1, 0, 0, 0 }, // King of Fighters 2003
+	{0x266,	0, 2, 0, 0, 0, 0 }, // Matrimelee
+	{0x256,	0, 1, 0, 4, 0, 0 }, // Metal Slug 3
+	{0x268,	0, 0, 1, 0, 0, 0 }, // Metal Slug 5
+	{0x269,	0, 2, 1, 0, 0, 0 }, // SNK vs Capcom
 };
 
 void load_neo(char *path)
@@ -963,7 +977,7 @@ void load_neo(char *path)
 		FileClose(&f);
 		if(res)
 		{
-			uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, mir = 1;
+			uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, mir = 1, rom_wait = 0, p_wait = 0;
 			for (uint32_t i = 0; i < sizeof(neo_quirks) / sizeof(neo_quirks[0]); i++)
 			{
 				if (neo_quirks[i].id == hdr.NGH)
@@ -988,6 +1002,7 @@ void load_neo(char *path)
 					sma = neo_quirks[i].sma;
 					pvc = neo_quirks[i].pvc;
 					mir = !neo_quirks[i].mir;
+					rom_wait = neo_quirks[i].rwait;
 					break;
 				}
 			}
@@ -1030,6 +1045,10 @@ void load_neo(char *path)
 
 			printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
 			set_config((use_pcm & 1) << 23, 1 << 23);
+
+			printf("Setting rom_wait to %u, p_wait to %u\n", rom_wait, p_wait);
+			set_config((rom_wait & 1) << 28, 1 << 28);
+			set_config((p_wait & 3) << 29, 3 << 29);
 		}
 	}
 }
