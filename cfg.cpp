@@ -108,12 +108,12 @@ static const ini_var_t ini_vars[] =
 	{ "PLAYER_3_CONTROLLER", (void*)(&(cfg.player_controller[2])), STRING, 0, sizeof(cfg.player_controller[2]) - 1 },
 	{ "PLAYER_4_CONTROLLER", (void*)(&(cfg.player_controller[3])), STRING, 0, sizeof(cfg.player_controller[3]) - 1 },
 	{ "DISABLE_AUTOFIRE", (void *)(&(cfg.disable_autofire)), UINT8, 0, 1},
-	{ "VIDEO_BRIGHTNESS", (void *)(&(cfg.video_brightness)), UINT16, 0, 100},
-	{ "VIDEO_CONTRAST", (void *)(&(cfg.video_contrast)), UINT16, 0, 100},
-	{ "VIDEO_SATURATION", (void *)(&(cfg.video_saturation)), UINT16, 0, 100},
+	{ "VIDEO_BRIGHTNESS", (void *)(&(cfg.video_brightness)), UINT8, 0, 100},
+	{ "VIDEO_CONTRAST", (void *)(&(cfg.video_contrast)), UINT8, 0, 100},
+	{ "VIDEO_SATURATION", (void *)(&(cfg.video_saturation)), UINT8, 0, 100},
 	{ "VIDEO_HUE", (void *)(&(cfg.video_hue)), UINT16, 0, 360},
 	{ "VIDEO_GAIN_OFFSET", (void *)(&(cfg.video_gain_offset)), STRING, 0, sizeof(cfg.video_gain_offset)},
-	{ "HDR", (void*)(&cfg.hdr), UINT8, 0, 3 },
+	{ "HDR", (void*)(&cfg.hdr), UINT8, 0, 2 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
