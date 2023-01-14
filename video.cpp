@@ -1095,13 +1095,6 @@ static void hdmi_config_set_csc()
 		0.0f, 0.0f, 0.0f, 1.0f
 	};
 
-	float hdr_bt2020_coeffs[] = {
-		0.6274f, 0.3293f, 0.0433f, 0.0f,
-		0.0691f, 0.9195f, 0.0114f, 0.0f,
-		0.0164f, 0.0880f, 0.8956f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
-
 	float hdr_dcip3_coeffs[] = {
 		0.8225f, 0.1774f, 0.0000f, 0.0f,
 		0.0332f, 0.9669f, 0.0000f, 0.0f,
@@ -1120,18 +1113,20 @@ static void hdmi_config_set_csc()
 	mat4x4 coeffs = hdmi_full_coeffs;
 
 	if (hdr == 1)
-		coeffs = hdr_bt2020_coeffs;
+		coeffs = hdmi_full_coeffs;
 	else if (hdr == 2)
 		coeffs = hdr_dcip3_coeffs;
-	else if (ypbpr)
-		coeffs = ypbpr_coeffs;
-	else if (hdmi_limited_1)
-		coeffs = hdmi_limited_1_coeffs;
-	else if (hdmi_limited_2)
-		coeffs = hdmi_limited_2_coeffs;
 	else
-		coeffs = hdmi_full_coeffs;
-
+	{
+		if (ypbpr)
+			coeffs = ypbpr_coeffs;
+		else if (hdmi_limited_1)
+			coeffs = hdmi_limited_1_coeffs;
+		else if (hdmi_limited_2)
+			coeffs = hdmi_limited_2_coeffs;
+		else
+			coeffs = hdmi_full_coeffs;
+	}
 	mat4x4 csc(coeffs);
 
 	// apply color controls
@@ -1487,13 +1482,13 @@ static void hdmi_config_set_hdr()
 	// MaxFALL: 250cd/m2 (this value does not matter much -
 	// in essence it means that the display should expect -
 	// 25% of the image to be 1000cd/m2)
-	// If HDR == 3, use HLG instead
+	// If HDR == 1, use HLG
 	uint8_t hdr_data[] = {
 		0x87,
 		0x01,
 		0x1a,
-		(cfg.hdr == 3 ? uint8_t(0x27) : uint8_t(0x28)),
-		(cfg.hdr == 3 ? uint8_t(0x03) : uint8_t(0x02)),
+		(cfg.hdr == 1 ? uint8_t(0x27) : uint8_t(0x28)),
+		(cfg.hdr == 1 ? uint8_t(0x03) : uint8_t(0x02)),
 		0x48,
 		0x8a,
 		0x08,
