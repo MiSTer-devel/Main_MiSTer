@@ -86,6 +86,7 @@ typedef struct {
 	uint16_t video_hue;
 	char video_gain_offset[256];
 	uint8_t hdr;
+	uint8_t show_progress_info;
 } cfg_t;
 
 extern cfg_t cfg;

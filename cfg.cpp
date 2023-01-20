@@ -114,6 +114,7 @@ static const ini_var_t ini_vars[] =
 	{ "VIDEO_HUE", (void *)(&(cfg.video_hue)), UINT16, 0, 360},
 	{ "VIDEO_GAIN_OFFSET", (void *)(&(cfg.video_gain_offset)), STRING, 0, sizeof(cfg.video_gain_offset)},
 	{ "HDR", (void*)(&cfg.hdr), UINT8, 0, 2 },
+	{ "SHOW_PROGRESS_INFO", (void*)(&(cfg.show_progress_info)), UINT8, 0, 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -455,6 +456,7 @@ void cfg_parse()
 	has_video_sections = false;
 	using_video_section = false;
 	cfg_error_count = 0;
+	cfg.show_progress_info = 0;
 	ini_parse(altcfg(), video_get_core_mode_name(1));
 	if (has_video_sections && !using_video_section)
 	{
