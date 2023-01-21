@@ -1276,21 +1276,25 @@ static void get_display_name(direntext_t *dext, const char *ext, int options)
 	if (dext->de.d_type == DT_DIR) return;
 
 	int len = strlen(dext->altname);
+	int xml = (len > 4 && (!strcasecmp(dext->altname + len - 4, ".mgl") || !strcasecmp(dext->altname + len - 4, ".mra")));
 	int rbf = (len > 4 && !strcasecmp(dext->altname + len - 4, ".rbf"));
-	if (rbf)
+	if (rbf || xml)
 	{
 		dext->altname[len - 4] = 0;
-		char *p = strstr(dext->altname, "_20");
-		if (p) if (strlen(p + 3) < 6) p = 0;
-		if (p)
+		if (rbf)
 		{
-			*p = 0;
-			strncpy(dext->datecode, p + 3, 15);
-			dext->datecode[15] = 0;
-		}
-		else
-		{
-			strcpy(dext->datecode, "------");
+			char *p = strstr(dext->altname, "_20");
+			if (p) if (strlen(p + 3) < 6) p = 0;
+			if (p)
+			{
+				*p = 0;
+				strncpy(dext->datecode, p + 3, 15);
+				dext->datecode[15] = 0;
+			}
+			else
+			{
+				strcpy(dext->datecode, "------");
+			}
 		}
 
 		if (!names_loaded)
@@ -1450,57 +1454,60 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 #endif
 			struct dirent64 _de = {};
-			if (z) {
-        mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
-        const char *rname = GetRelativeFileName(file_path_in_zip, _de.d_name);
-        if (rname) {
-          const char *fslash = strchr(rname, '/');
-          if (fslash) {
-
-            char dirname[256] = {};
-            strncpy(dirname, rname, fslash - rname);
-            if (rname[0] != '/' && !(DirNames.find(dirname) != DirNames.end())) {
-              direntext_t dirext;
-              memset(&dirext, 0, sizeof(dirext));
-              strncpy(dirext.de.d_name, rname, fslash - rname);
-              dirext.de.d_type = DT_DIR;
-              memcpy(dirext.altname, dirext.de.d_name,
-                     sizeof(dirext.de.d_name));
-              DirItem.push_back(dirext);
-              DirNames.insert(dirname);
-            }
-          }
-        }
-
-        if (!IsInSameFolder(file_path_in_zip, _de.d_name)) {
-          continue;
-        }
-        // Remove leading folders.
-        const char *subpath = _de.d_name + strlen(file_path_in_zip);
-        if (*subpath == '/') {
-          subpath++;
-        }
-        strcpy(_de.d_name, subpath);
-
-        de = &_de;
-
-        _de.d_type = mz_zip_reader_is_file_a_directory(z, i) ? DT_DIR : DT_REG;
-        if (_de.d_type == DT_DIR) {
-          // Remove trailing slash.
-          if (DirNames.find(_de.d_name) != DirNames.end())
-          {
-            DirNames.insert(_de.d_name);
-            _de.d_name[strlen(_de.d_name) - 1] = '\0';
-          } else {
-            continue;
-          }
-        }
-			}
-			else
-			// Handle (possible) symbolic link type in the directory entry
-			if (de->d_type == DT_LNK || de->d_type == DT_REG)
+			if (z)
 			{
-				sprintf(full_path+path_len, "/%s", de->d_name);
+				mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
+				const char *rname = GetRelativeFileName(file_path_in_zip, _de.d_name);
+				if (rname)
+				{
+					const char *fslash = strchr(rname, '/');
+					if (fslash)
+					{
+						char dirname[256] = {};
+						strncpy(dirname, rname, fslash - rname);
+						if (rname[0] != '/' && !(DirNames.find(dirname) != DirNames.end()))
+						{
+							direntext_t dirext;
+							memset(&dirext, 0, sizeof(dirext));
+							strncpy(dirext.de.d_name, rname, fslash - rname);
+							dirext.de.d_type = DT_DIR;
+							memcpy(dirext.altname, dirext.de.d_name, sizeof(dirext.de.d_name));
+							DirItem.push_back(dirext);
+							DirNames.insert(dirname);
+						}
+					}
+				}
+
+				if (!IsInSameFolder(file_path_in_zip, _de.d_name))
+				{
+					continue;
+				}
+
+				// Remove leading folders.
+				const char *subpath = _de.d_name + strlen(file_path_in_zip);
+				if (*subpath == '/') subpath++;
+				strcpy(_de.d_name, subpath);
+
+				de = &_de;
+
+				_de.d_type = mz_zip_reader_is_file_a_directory(z, i) ? DT_DIR : DT_REG;
+				if (_de.d_type == DT_DIR) {
+					// Remove trailing slash.
+					if (DirNames.find(_de.d_name) != DirNames.end())
+					{
+						DirNames.insert(_de.d_name);
+						_de.d_name[strlen(_de.d_name) - 1] = '\0';
+					}
+					else
+					{
+						continue;
+					}
+				}
+			}
+			// Handle (possible) symbolic link type in the directory entry
+			else if (de->d_type == DT_LNK || de->d_type == DT_REG)
+			{
+				sprintf(full_path + path_len, "/%s", de->d_name);
 
 				struct stat entrystat;
 
@@ -1517,11 +1524,14 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				}
 			}
 
-            if (filter) {
+            if (filter)
+			{
                 bool passes_filter = false;
 
-                for(const char *str = de->d_name; *str; str++) {
-                    if (strncasecmp(str, filter, filterlen) == 0) {
+                for(const char *str = de->d_name; *str; str++)
+				{
+                    if (strncasecmp(str, filter, filterlen) == 0)
+					{
                         passes_filter = true;
                         break;
                     }

@@ -79,12 +79,20 @@ typedef struct {
 	uint8_t vrr_max_framerate;
 	uint8_t vrr_vesa_framerate;
 	uint16_t video_off;
+	uint8_t disable_autofire;
+	uint8_t video_brightness;
+	uint8_t video_contrast;
+	uint8_t video_saturation;
+	uint16_t video_hue;
+	char video_gain_offset[256];
+	uint8_t hdr;
 } cfg_t;
 
 extern cfg_t cfg;
 
 //// functions ////
 void cfg_parse();
+void cfg_print();
 const char* cfg_get_name(uint8_t alt);
 bool cfg_has_video_sections();
 
