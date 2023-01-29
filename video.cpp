@@ -1129,9 +1129,9 @@ static void hdmi_config_set_csc()
 		mat4x4 csc(coeffs);
 
 		// apply color controls
-		float brightness = (((cfg.video_brightness/100.0f) - 0.5f)); // [-0.5 .. 0.5]
-		float contrast = ((cfg.video_contrast/100.0f) - 0.5f) * 2.0f + 1.0f; // [0 .. 2]
-		float saturation = ((cfg.video_saturation/100.0f)); // [0 .. 1]
+		float brightness = (((cfg.video_brightness / 100.0f) - 0.5f)); // [-0.5 .. 0.5]
+		float contrast = ((cfg.video_contrast / 100.0f) - 0.5f) * 2.0f + 1.0f; // [0 .. 2]
+		float saturation = ((cfg.video_saturation / 100.0f)); // [0 .. 1]
 		float hue = (cfg.video_hue * pi / 180.0f);
 
 		char* gain_offset = cfg.video_gain_offset;
@@ -1175,25 +1175,25 @@ static void hdmi_config_set_csc()
 		mat4x4 mat_hue;
 		mat_hue.setIdentity();
 
-		mat_hue.m11 = lr+cos_hue*(1-lr)+sin_hue*(-lr);
-		mat_hue.m12 = lg+cos_hue*(-lg) +sin_hue*(-lg);
-		mat_hue.m13 = lb+cos_hue*(-lb) +sin_hue*(1-lb);
+		mat_hue.m11 = lr + cos_hue * (1 - lr) + sin_hue * (-lr);
+		mat_hue.m12 = lg + cos_hue * (-lg) + sin_hue * (-lg);
+		mat_hue.m13 = lb + cos_hue * (-lb) + sin_hue * (1 - lb);
 
-		mat_hue.m21 = lr+cos_hue*(-lr) +sin_hue*(ca);
-		mat_hue.m22 = lg+cos_hue*(1-lg)+sin_hue*(cb);
-		mat_hue.m23 = lb+cos_hue*(-lb) +sin_hue*(cc);
+		mat_hue.m21 = lr + cos_hue * (-lr) + sin_hue * (ca);
+		mat_hue.m22 = lg + cos_hue * (1 - lg) + sin_hue * (cb);
+		mat_hue.m23 = lb + cos_hue * (-lb) + sin_hue * (cc);
 
-		mat_hue.m31 = lr+cos_hue*(-lr) +sin_hue*(-(1-lr));
-		mat_hue.m32 = lg+cos_hue*(-lg) +sin_hue*(lg);
-		mat_hue.m33 = lb+cos_hue*(1-lb)+sin_hue*(lb);
+		mat_hue.m31 = lr + cos_hue * (-lr) + sin_hue * (-(1 - lr));
+		mat_hue.m32 = lg + cos_hue * (-lg) + sin_hue * (lg);
+		mat_hue.m33 = lb + cos_hue * (1 - lb) + sin_hue * (lb);
 
 		csc = csc * mat_hue;
 
 		// now saturation
 		float s = saturation;
-		float sr = ( 1.0f - s ) * .3086f;
-		float sg = ( 1.0f - s ) * .6094f;
-		float sb = ( 1.0f - s ) * .0920f;
+		float sr = (1.0f - s) * .3086f;
+		float sg = (1.0f - s) * .6094f;
+		float sb = (1.0f - s) * .0920f;
 
 		float mat_saturation[] = {
 			sr + s, sg, sb, 0,
@@ -1210,9 +1210,9 @@ static void hdmi_config_set_csc()
 		float t = (1.0f - c) / 2.0f;
 
 		float mat_brightness_contrast[] = {
-			c, 0, 0, (t+b),
-			0, c, 0, (t+b),
-			0, 0, c, (t+b),
+			c, 0, 0, (t + b),
+			0, c, 0, (t + b),
+			0, 0, c, (t + b),
 			0, 0, 0, 1.0f
 		};
 
@@ -1254,7 +1254,7 @@ static void hdmi_config_set_csc()
 
 	// pass to HDMI, use 0xA0 to set a mode of [-2 .. 2] per ADV7513 programming guide
 	uint8_t csc_data[] = {
-		0x18, (uint8_t)(ypbpr ? 0x86 : (0b10100000 | (( (csc_int16[0] >> 8) & 0b00011111)))),  // csc Coefficients, Channel A
+		0x18, (uint8_t)(ypbpr ? 0x86 : (0b10100000 | (((csc_int16[0] >> 8) & 0b00011111)))),  // csc Coefficients, Channel A
 		0x19, (uint8_t)(ypbpr ? 0xDF : (csc_int16[0] & 0xff)),
 		0x1A, (uint8_t)(ypbpr ? 0x1A : (csc_int16[1] >> 8)),
 		0x1B, (uint8_t)(ypbpr ? 0x3F : (csc_int16[1] & 0xff)),
