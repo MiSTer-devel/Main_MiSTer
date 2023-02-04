@@ -595,52 +595,70 @@ char* video_get_scaler_coeff(int type, int only_name)
 	return path;
 }
 
-static char scaler_cfg[128] = { 0 };
+static char scaler_cfg_path[128] = { 0 };
 
-void video_set_scaler_flt(int type, int n)
+static void video_save_scaler_cfg()
+{
+	FileSaveConfig(scaler_cfg_path, &scaler_flt, sizeof(scaler_flt));
+}
+
+static void video_apply_scaler_flt(int type, int n)
 {
 	scaler_flt[type].mode = (char)n;
-	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
 	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt[0].mode);
 	set_vfilter(1);
 }
 
-void video_set_scaler_coeff(int type, const char *name)
+void video_set_scaler_flt(int type, int n)
+{
+	video_apply_scaler_flt(type, n);
+	video_save_scaler_cfg();
+}
+
+void video_apply_scaler_coeff(int type, const char *name)
 {
 	strcpy(scaler_flt[type].filename, name);
-	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
 	read_video_filter(type, &scaler_flt_data[type]);
 	setScaler();
 	user_io_send_buttons(1);
+}
+
+void video_set_scaler_coeff(int type, const char *name)
+{
+	video_apply_scaler_coeff(type, name);
+	video_save_scaler_cfg();
 }
 
 static void loadScalerCfg()
 {
 	PROFILE_FUNCTION();
 
-	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name());
-	memset(scaler_flt, 0, sizeof(scaler_cfg));
-	if (!FileLoadConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt)) || scaler_flt[0].mode > 1)
+	if (FileLoadConfig(scaler_cfg_path, &scaler_flt, sizeof(scaler_flt)))
 	{
-		memset(scaler_flt, 0, sizeof(scaler_flt));
+		if (scaler_flt[0].mode > 1)
+		{
+			memset(scaler_flt, 0, sizeof(scaler_flt));
+		}
 	}
-
-	if (!scaler_flt[VFILTER_HORZ].filename[0] && cfg.vfilter_default[0])
+	else
 	{
-		strcpy(scaler_flt[VFILTER_HORZ].filename, cfg.vfilter_default);
-		scaler_flt[VFILTER_HORZ].mode = 1;
-	}
+		if (cfg.vfilter_default[0])
+		{
+			strcpy(scaler_flt[VFILTER_HORZ].filename, cfg.vfilter_default);
+			scaler_flt[VFILTER_HORZ].mode = 1;
+		}
 
-	if (!scaler_flt[VFILTER_VERT].filename[0] && cfg.vfilter_vertical_default[0])
-	{
-		strcpy(scaler_flt[VFILTER_VERT].filename, cfg.vfilter_vertical_default);
-		scaler_flt[VFILTER_VERT].mode = 1;
-	}
+		if (cfg.vfilter_vertical_default[0])
+		{
+			strcpy(scaler_flt[VFILTER_VERT].filename, cfg.vfilter_vertical_default);
+			scaler_flt[VFILTER_VERT].mode = 1;
+		}
 
-	if (!scaler_flt[VFILTER_SCAN].filename[0] && cfg.vfilter_scanlines_default[0])
-	{
-		strcpy(scaler_flt[VFILTER_SCAN].filename, cfg.vfilter_scanlines_default);
-		scaler_flt[VFILTER_SCAN].mode = 1;
+		if (cfg.vfilter_scanlines_default[0])
+		{
+			strcpy(scaler_flt[VFILTER_SCAN].filename, cfg.vfilter_scanlines_default);
+			scaler_flt[VFILTER_SCAN].mode = 1;
+		}
 	}
 
 	if (!read_video_filter(VFILTER_HORZ, &scaler_flt_data[VFILTER_HORZ])) memset(&scaler_flt[VFILTER_HORZ], 0, sizeof(scaler_flt[VFILTER_HORZ]));
@@ -715,29 +733,46 @@ char* video_get_gamma_curve(int only_name)
 }
 
 static char gamma_cfg_path[1024] = { 0 };
+static void video_save_gamma_cfg()
+{
+	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
+}
 
-void video_set_gamma_en(int n)
+static void video_apply_gamma_en(int n)
 {
 	gamma_cfg[0] = (char)n;
-	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
 	setGamma();
 }
 
-void video_set_gamma_curve(const char *name)
+void video_set_gamma_en(int n)
+{
+	video_apply_gamma_en(n);
+	video_save_gamma_cfg();
+}
+
+static void video_apply_gamma_curve(const char *name)
 {
 	strcpy(gamma_cfg + 1, name);
-	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
 	setGamma();
 	user_io_send_buttons(1);
 }
 
+void video_set_gamma_curve(const char *name)
+{
+	video_apply_gamma_curve(name);
+	video_save_gamma_cfg();
+}
+
+
 static void loadGammaCfg()
 {
 	PROFILE_FUNCTION();
-	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name());
-	if (!FileLoadConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg) - 1) || gamma_cfg[0]>1)
+	if (FileLoadConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg) - 1))
 	{
-		memset(gamma_cfg, 0, sizeof(gamma_cfg));
+		if (gamma_cfg[0] > 1)
+		{
+			memset(gamma_cfg, 0, sizeof(gamma_cfg));
+		}
 	}
 }
 
@@ -884,7 +919,12 @@ char* video_get_shadow_mask(int only_name)
 
 static char shadow_mask_cfg_path[1024] = { 0 };
 
-void video_set_shadow_mask_mode(int n)
+static void video_save_shadow_mask_cfg()
+{
+	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
+}
+
+static void video_apply_shadow_mask_mode(int n)
 {
 	if( n >= SM_MODE_COUNT )
 	{
@@ -896,26 +936,34 @@ void video_set_shadow_mask_mode(int n)
 	}
 
 	shadow_mask_cfg[0] = (char)n;
-	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
 	setShadowMask();
+}
+
+void video_set_shadow_mask_mode(int n)
+{
+	video_apply_shadow_mask_mode(n);
+	video_save_shadow_mask_cfg();
+}
+
+static void video_apply_shadow_mask(const char *name)
+{
+	strcpy(shadow_mask_cfg + 1, name);
+	setShadowMask();
+	user_io_send_buttons(1);
 }
 
 void video_set_shadow_mask(const char *name)
 {
-	strcpy(shadow_mask_cfg + 1, name);
-	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
-	setShadowMask();
-	user_io_send_buttons(1);
+	video_apply_shadow_mask(name);
+	video_save_shadow_mask_cfg();
 }
 
 static void loadShadowMaskCfg()
 {
 	PROFILE_FUNCTION();
 
-	sprintf(shadow_mask_cfg_path, "%s_shmask.cfg", user_io_get_core_name());
 	if (!FileLoadConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg) - 1))
 	{
-		memset(shadow_mask_cfg, 0, sizeof(shadow_mask_cfg));
 		if (cfg.shmask_default[0])
 		{
 			strcpy(shadow_mask_cfg + 1, cfg.shmask_default);
@@ -958,20 +1006,25 @@ static void load_flt_pres(const char *str, int type)
 	{
 		if (!strcasecmp(arg, "same") || !strcasecmp(arg, "off"))
 		{
-			video_set_scaler_flt(type, 0);
+			video_apply_scaler_flt(type, 0);
 		}
 		else
 		{
-			video_set_scaler_coeff(type, arg);
-			video_set_scaler_flt(type, 1);
+			video_apply_scaler_coeff(type, arg);
+			video_apply_scaler_flt(type, 1);
 		}
 	}
 }
 
-void video_loadPreset(char *name)
+void video_loadPreset(char *name, bool save)
 {
 	char *arg;
 	fileTextReader reader;
+	
+	bool scaler_dirty = false;
+	bool mask_dirty = false;
+	bool gamma_dirty = false;
+
 	if (FileOpenTextReader(&reader, name))
 	{
 		const char *line;
@@ -980,51 +1033,63 @@ void video_loadPreset(char *name)
 			if (!strncasecmp(line, "hfilter=", 8))
 			{
 				load_flt_pres(line + 8, VFILTER_HORZ);
+				scaler_dirty = true;
 			}
 			else if (!strncasecmp(line, "vfilter=", 8))
 			{
 				load_flt_pres(line + 8, VFILTER_VERT);
+				scaler_dirty = true;
 			}
 			else if (!strncasecmp(line, "sfilter=", 8))
 			{
 				load_flt_pres(line + 8, VFILTER_SCAN);
+				scaler_dirty = true;
 			}
 			else if (!strncasecmp(line, "mask=", 5))
 			{
+				mask_dirty = true;
 				arg = get_preset_arg(line + 5);
 				if (arg[0])
 				{
-					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_shadow_mask_mode(0);
-					else video_set_shadow_mask(arg);
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_apply_shadow_mask_mode(0);
+					else video_apply_shadow_mask(arg);
 				}
 			}
 			else if (!strncasecmp(line, "maskmode=", 9))
 			{
+				mask_dirty = true;
 				arg = get_preset_arg(line + 9);
 				if (arg[0])
 				{
-					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_shadow_mask_mode(0);
-					else if (!strcasecmp(arg, "1x")) video_set_shadow_mask_mode(SM_MODE_1X);
-					else if (!strcasecmp(arg, "2x")) video_set_shadow_mask_mode(SM_MODE_2X);
-					else if (!strcasecmp(arg, "1x rotated")) video_set_shadow_mask_mode(SM_MODE_1X_ROTATED);
-					else if (!strcasecmp(arg, "2x rotated")) video_set_shadow_mask_mode(SM_MODE_2X_ROTATED);
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_apply_shadow_mask_mode(0);
+					else if (!strcasecmp(arg, "1x")) video_apply_shadow_mask_mode(SM_MODE_1X);
+					else if (!strcasecmp(arg, "2x")) video_apply_shadow_mask_mode(SM_MODE_2X);
+					else if (!strcasecmp(arg, "1x rotated")) video_apply_shadow_mask_mode(SM_MODE_1X_ROTATED);
+					else if (!strcasecmp(arg, "2x rotated")) video_apply_shadow_mask_mode(SM_MODE_2X_ROTATED);
 				}
 			}
 			else if (!strncasecmp(line, "gamma=", 6))
 			{
+				gamma_dirty = true;
 				arg = get_preset_arg(line + 6);
 				if (arg[0])
 				{
-					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_gamma_en(0);
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_apply_gamma_en(0);
 					else
 					{
-						video_set_gamma_curve(arg);
-						video_set_gamma_en(1);
+						video_apply_gamma_curve(arg);
+						video_apply_gamma_en(1);
 					}
 				}
-
 			}
 		}
+	}
+
+	if (save)
+	{
+		if (scaler_dirty) video_save_scaler_cfg();
+		if (mask_dirty) video_save_shadow_mask_cfg();
+		if (gamma_dirty) video_save_gamma_cfg();
 	}
 }
 
@@ -2300,6 +2365,43 @@ static void video_mode_load()
 	}
 }
 
+static void video_cfg_init()
+{
+	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name());
+	sprintf(scaler_cfg_path, "%s_scaler.cfg", user_io_get_core_name());
+	sprintf(shadow_mask_cfg_path, "%s_shmask.cfg", user_io_get_core_name());
+
+	memset(gamma_cfg, 0, sizeof(gamma_cfg));
+	memset(scaler_flt, 0, sizeof(scaler_flt));
+	memset(shadow_mask_cfg, 0, sizeof(shadow_mask_cfg));
+
+	if (cfg.preset_default[0])
+	{
+		char preset_path[1024];
+		int len = sprintfz(preset_path, "%s/%s", PRESET_DIR, cfg.preset_default);
+		if (len < 4 || strcasecmp(&preset_path[len - 4], ".ini"))
+			strcat(preset_path, ".ini");
+		video_loadPreset(preset_path, false);
+	}
+
+	loadGammaCfg();
+	loadScalerCfg();
+	loadShadowMaskCfg();
+}
+
+void video_cfg_reset()
+{
+	FileDeleteConfig(gamma_cfg_path);
+	FileDeleteConfig(scaler_cfg_path);
+	FileDeleteConfig(shadow_mask_cfg_path);
+
+	video_cfg_init();
+
+	setGamma();
+	setScaler();
+	setShadowMask();
+}
+
 void video_init()
 {
 	fb_init();
@@ -2308,10 +2410,8 @@ void video_init()
 	video_mode_load();
 
 	has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
-
-	loadGammaCfg();
-	loadScalerCfg();
-	loadShadowMaskCfg();
+	
+	video_cfg_init();
 
 	video_set_mode(&v_def, 0);
 }
