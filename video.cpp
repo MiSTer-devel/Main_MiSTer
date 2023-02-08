@@ -2731,7 +2731,7 @@ static void set_yc_mode()
 	{
 		float fps = current_video_info.vtime ? (100000000.f / current_video_info.vtime) : 0.f;
 		int pal = fps < 55.f;
-		double CLK_REF = pal ? 4.43361875f : 3.579545f;
+		double CLK_REF = (pal || (cfg.ntsc_mode == 1)) ? 4.43361875f : (cfg.ntsc_mode == 2) ? 3.575611f : 3.579545f;
 		double CLK_VIDEO = current_video_info.ctime * 100.f / current_video_info.ptime;
 
 		int64_t PHASE_INC = ((int64_t)((CLK_REF / CLK_VIDEO) * 1099511627776LL)) & 0xFFFFFFFFFFLL;
@@ -2741,9 +2741,8 @@ static void set_yc_mode()
 		int COLORBURST_RANGE = (COLORBURST_START << 10) | COLORBURST_END;
 
 		char yc_key[64];
-		sprintf(yc_key, "%s_%.1f%s", user_io_get_core_name(1), fps, current_video_info.interlaced ? "i" : "");
-
-		printf("Calculated YC parameters for '%s': %s PHASE_INC=%lld, COLORBURST_START=%d, COLORBURST_END=%d\n", yc_key, pal ? "PAL" : "NTSC", PHASE_INC, COLORBURST_START, COLORBURST_END);
+		sprintf(yc_key, "%s_%.1f%s%s", user_io_get_core_name(1), fps, current_video_info.interlaced ? "i" : "", (pal || !cfg.ntsc_mode) ? "" : (cfg.ntsc_mode == 1) ? "s" : "m");
+		printf("Calculated YC parameters for '%s': %s PHASE_INC=%lld, COLORBURST_START=%d, COLORBURST_END=%d\n", yc_key, pal ? "PAL" : (cfg.ntsc_mode == 1) ? "PAL60" : (cfg.ntsc_mode == 2) ? "PAL-M" : "NTSC", PHASE_INC, COLORBURST_START, COLORBURST_END);
 
 		for (uint i = 0; i < sizeof(yc_modes) / sizeof(yc_modes[0]); i++)
 		{
@@ -2756,7 +2755,7 @@ static void set_yc_mode()
 		}
 
 		spi_uio_cmd_cont(UIO_SET_YC_PAR);
-		spi_w((pal ? 4 : 0) | ((cfg.vga_mode_int == 3) ? 3 : 1));
+		spi_w(((pal || cfg.ntsc_mode) ? 4 : 0) | ((cfg.vga_mode_int == 3) ? 3 : 1));
 		spi_w(PHASE_INC);
 		spi_w(PHASE_INC >> 16);
 		spi_w(PHASE_INC >> 32);

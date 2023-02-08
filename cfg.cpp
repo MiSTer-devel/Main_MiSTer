@@ -115,7 +115,8 @@ static const ini_var_t ini_vars[] =
 	{ "VIDEO_HUE", (void *)(&(cfg.video_hue)), UINT16, 0, 360},
 	{ "VIDEO_GAIN_OFFSET", (void *)(&(cfg.video_gain_offset)), STRING, 0, sizeof(cfg.video_gain_offset)},
 	{ "HDR", (void*)(&cfg.hdr), UINT8, 0, 2 },
-	{ "vga_mode", (void*)(&(cfg.vga_mode)), STRING, 0, sizeof(cfg.vga_mode) - 1 },
+	{ "VGA_MODE", (void*)(&(cfg.vga_mode)), STRING, 0, sizeof(cfg.vga_mode) - 1 },
+	{ "NTSC_MODE", (void *)(&(cfg.ntsc_mode)), UINT8, 0, 2},
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
