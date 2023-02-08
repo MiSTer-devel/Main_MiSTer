@@ -1020,7 +1020,7 @@ void video_loadPreset(char *name, bool save)
 {
 	char *arg;
 	fileTextReader reader;
-	
+
 	bool scaler_dirty = false;
 	bool mask_dirty = false;
 	bool gamma_dirty = false;
@@ -1163,7 +1163,7 @@ static void hdmi_config_set_csc()
 
 	const float pi = float(M_PI);
 
-	int ypbpr = cfg.ypbpr && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
 
 	// out-of-scope defines, not used with ypbpr
 	int16_t csc_int16[12];
@@ -1371,7 +1371,7 @@ static void hdmi_config_set_csc()
 
 static void hdmi_config_init()
 {
-	int ypbpr = cfg.ypbpr && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
 
 	// address, value
 	uint8_t init_data[] = {
@@ -2400,7 +2400,7 @@ void video_init()
 	video_mode_load();
 
 	has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
-	
+
 	video_cfg_init();
 
 	video_set_mode(&v_def, 0);
@@ -2431,6 +2431,7 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->vtime = spi_w(0) | (spi_w(0) << 16);
 		video_info->ptime = spi_w(0) | (spi_w(0) << 16);
 		video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
+		video_info->ctime = spi_w(0) | (spi_w(0) << 16);
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
@@ -2523,8 +2524,11 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 	float prate = vi->width * 100;
 	prate /= vi->ptime;
 
-	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n",
-		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate);
+	float crate = vi->ctime * 100;
+	crate /= vi->ptime;
+
+	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz, fVid = %.2fMHz\033[0m\n",
+		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate, crate);
 	printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vi->vtime, vi->vtimeh);
 	printf("\033[1;33mINFO: AR = %d:%d, fb_en = %d, fb_width = %d, fb_height = %d\033[0m\n", vi->arx, vi->ary, vi->fb_en, vi->fb_width, vi->fb_height);
 	if (vi->vtimeh) api1_5 = 1;
@@ -2717,6 +2721,37 @@ bool video_mode_select(uint32_t vtime, vmode_custom_t* out_mode)
 	return adjustable;
 }
 
+static void set_yc_mode()
+{
+	if (cfg.vga_mode_int >= 2)
+	{
+		int pal = (!current_video_info.vtime || (100000000 / current_video_info.vtime) < 55);
+		double CLK_REF = pal ? 4.43361875f : 3.579545f;
+		double CLK_VIDEO = current_video_info.ctime * 100.f / current_video_info.ptime;
+
+		int64_t PHASE_INC = ((int64_t)((CLK_REF / CLK_VIDEO) * 1099511627776LL)) & 0xFFFFFFFFFFLL;
+
+		int COLORBURST_START = (int)(3.7f * (CLK_VIDEO / CLK_REF));
+		int COLORBURST_END = (int)(9.0f * (CLK_VIDEO / CLK_REF)) + COLORBURST_START;
+		int COLORBURST_RANGE = (COLORBURST_START << 10) | COLORBURST_END;
+
+		spi_uio_cmd_cont(UIO_SET_YC_PAR);
+		spi_w((pal ? 4 : 0) | ((cfg.vga_mode_int == 3) ? 3 : 1));
+		spi_w(PHASE_INC);
+		spi_w(PHASE_INC >> 16);
+		spi_w(PHASE_INC >> 32);
+		spi_w(COLORBURST_RANGE);
+		spi_w(COLORBURST_RANGE >> 16);
+		DisableIO();
+
+		printf("Send YC parameters: %s PHASE_INC=%lld, COLORBURST_START=%d, COLORBURST_END=%d\n", pal ? "PAL" : "NTSC", PHASE_INC, COLORBURST_START, COLORBURST_END);
+	}
+	else
+	{
+		spi_uio_cmd8(UIO_SET_YC_PAR, 0);
+	}
+}
+
 void video_mode_adjust()
 {
 	static bool force = false;
@@ -2728,8 +2763,8 @@ void video_mode_adjust()
 	if (vid_changed || force)
 	{
 		current_video_info = video_info;
-
 		show_video_info(&video_info, &v_cur);
+		set_yc_mode();
 	}
 	force = false;
 

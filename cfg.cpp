@@ -33,7 +33,7 @@ typedef struct
 
 static const ini_var_t ini_vars[] =
 {
-	{ "YPBPR", (void*)(&(cfg.ypbpr)), UINT8, 0, 1 },
+	{ "YPBPR", (void*)(&(cfg.vga_mode_int)), UINT8, 0, 1 },
 	{ "COMPOSITE_SYNC", (void*)(&(cfg.csync)), UINT8, 0, 1 },
 	{ "FORCED_SCANDOUBLER", (void*)(&(cfg.forced_scandoubler)), UINT8, 0, 1 },
 	{ "VGA_SCALER", (void*)(&(cfg.vga_scaler)), UINT8, 0, 1 },
@@ -115,6 +115,7 @@ static const ini_var_t ini_vars[] =
 	{ "VIDEO_HUE", (void *)(&(cfg.video_hue)), UINT16, 0, 360},
 	{ "VIDEO_GAIN_OFFSET", (void *)(&(cfg.video_gain_offset)), STRING, 0, sizeof(cfg.video_gain_offset)},
 	{ "HDR", (void*)(&cfg.hdr), UINT8, 0, 2 },
+	{ "vga_mode", (void*)(&(cfg.vga_mode)), STRING, 0, sizeof(cfg.vga_mode) - 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -463,7 +464,13 @@ void cfg_parse()
 		ini_parse(altcfg(), video_get_core_mode_name(0));
 	}
 
-
+	if (strlen(cfg.vga_mode))
+	{
+		if (!strcasecmp(cfg.vga_mode, "rgb")) cfg.vga_mode_int = 0;
+		if (!strcasecmp(cfg.vga_mode, "ypbpr")) cfg.vga_mode_int = 1;
+		if (!strcasecmp(cfg.vga_mode, "svideo")) cfg.vga_mode_int = 2;
+		if (!strcasecmp(cfg.vga_mode, "cvbs")) cfg.vga_mode_int = 3;
+	}
 }
 
 bool cfg_has_video_sections()
