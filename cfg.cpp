@@ -579,3 +579,70 @@ void cfg_print()
 	}
 	printf("--------------\n");
 }
+
+static int yc_parse_mode(char* buf, yc_mode *mode)
+{
+	int i = 0;
+	while (1)
+	{
+		if (buf[i] == '=' || CHAR_IS_SPACE(buf[i]))
+		{
+			buf[i] = 0;
+			break;
+		}
+		else if (!buf[i]) return 0;
+		i++;
+	}
+
+	i++;
+	while (buf[i] == '=' || CHAR_IS_SPACE(buf[i])) i++;
+	ini_parser_debugf("Got yc_mode '%s' with VALUE %s", buf, buf + i);
+
+	snprintf(mode->key, sizeof(mode->key), "%s", buf);
+	mode->phase_inc = strtoull(buf + i, 0, 0);
+	if (!mode->phase_inc)
+	{
+		printf("ERROR: cannot parse YC phase_inc: '%s'\n", buf + i);
+		return 0;
+	}
+
+	return 1;
+}
+
+void yc_parse(yc_mode *yc_table, int max)
+{
+	memset(yc_table, 0, max * sizeof(yc_mode));
+
+	static char line[INI_LINE_SIZE];
+	int eof;
+
+	memset(line, 0, sizeof(line));
+	memset(&ini_file, 0, sizeof(ini_file));
+
+	const char *corename = user_io_get_core_name(1);
+	int corename_len = strlen(corename);
+
+	const char *name = "yc.txt";
+	if (!FileOpen(&ini_file, name))	return;
+
+	ini_parser_debugf("Opened file %s with size %llu bytes.", name, ini_file.size);
+
+	ini_pt = 0;
+	int n = 0;
+
+	while (n < max)
+	{
+		// get line
+		eof = ini_getline(line);
+		if (!strncasecmp(line, corename, corename_len))
+		{
+			int res = yc_parse_mode(line, &yc_table[n]);
+			if (res) n++;
+		}
+
+		// if end of file, stop
+		if (eof) break;
+	}
+
+	FileClose(&ini_file);
+}
