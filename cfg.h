@@ -88,6 +88,7 @@ typedef struct {
 	uint8_t hdr;
 	char vga_mode[16];
 	char vga_mode_int;
+	char ntsc_mode;
 } cfg_t;
 
 extern cfg_t cfg;
