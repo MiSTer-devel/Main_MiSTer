@@ -13,7 +13,6 @@ typedef struct {
 	uint8_t forced_scandoubler;
 	uint8_t key_menu_as_rgui;
 	uint8_t reset_combo;
-	uint8_t ypbpr;
 	uint8_t csync;
 	uint8_t vga_scaler;
 	uint8_t vga_sog;
@@ -87,6 +86,8 @@ typedef struct {
 	uint16_t video_hue;
 	char video_gain_offset[256];
 	uint8_t hdr;
+	char vga_mode[16];
+	char vga_mode_int;
 } cfg_t;
 
 extern cfg_t cfg;
@@ -99,5 +100,13 @@ bool cfg_has_video_sections();
 
 void cfg_error(const char *fmt, ...);
 bool cfg_check_errors(char *msg, size_t max_len);
+
+struct yc_mode
+{
+	char key[64];
+	int64_t phase_inc;
+};
+
+void yc_parse(yc_mode *yc_table, int max);
 
 #endif // __CFG_H__

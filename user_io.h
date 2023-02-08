@@ -72,6 +72,7 @@
 #define UIO_SHADOWMASK  0x3E
 #define UIO_GET_RUMBLE  0x3F
 #define UIO_GET_FB_PAR  0x40
+#define UIO_SET_YC_PAR  0x41
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
