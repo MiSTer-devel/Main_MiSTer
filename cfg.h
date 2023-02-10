@@ -86,6 +86,8 @@ typedef struct {
 	uint16_t video_hue;
 	char video_gain_offset[256];
 	uint8_t hdr;
+	uint16_t hdr_max_nits;
+	uint16_t hdr_avg_nits;
 	char vga_mode[16];
 	char vga_mode_int;
 	char ntsc_mode;
