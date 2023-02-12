@@ -1174,25 +1174,10 @@ static void hdmi_config_set_csc()
 
 	if (!ypbpr)
 	{
-
 		// select the base CSC
 		int hdr = cfg.hdr;
 
-		mat4x4 coeffs = hdmi_full_coeffs;
-
-		if (hdr == 1)
-			coeffs = hdmi_full_coeffs;
-		else if (hdr == 2)
-			coeffs = hdr_dcip3_coeffs;
-		else
-		{
-			if (hdmi_limited_1)
-				coeffs = hdmi_limited_1_coeffs;
-			else if (hdmi_limited_2)
-				coeffs = hdmi_limited_2_coeffs;
-			else
-				coeffs = hdmi_full_coeffs;
-		}
+		mat4x4 coeffs = hdr == 2 ? hdr_dcip3_coeffs : hdmi_full_coeffs;
 		mat4x4 csc(coeffs);
 
 		// apply color controls
@@ -1304,6 +1289,12 @@ static void hdmi_config_set_csc()
 
 		// final compression
 		csc.compress(2.0f);
+
+		// make sure to retain hdmi limited range
+		if (hdmi_limited_1)
+			csc = csc * mat4x4(hdmi_limited_1_coeffs);
+		else if (hdmi_limited_2)
+			csc = csc * mat4x4(hdmi_limited_2_coeffs);
 
 		// finally, apply a fixed multiplier to get it in
 		// correct range for ADV7513 chip
@@ -1532,6 +1523,13 @@ static void hdmi_config_init()
 
 static void hdmi_config_set_hdr()
 {
+	// Grab desired nits values
+	uint8_t maxNitsLSB = cfg.hdr_max_nits & 0xFF;
+	uint8_t maxNitsMSB = (cfg.hdr_max_nits >> 8) & 0xFF;
+
+	uint8_t avgNitsLSB = cfg.hdr_avg_nits & 0xFF;
+	uint8_t avgNitsMSB = (cfg.hdr_avg_nits >> 8) & 0xFF;
+
 	// CTA-861-G: 6.9 Dynamic Range and Mastering InfoFrame
 	// Uses BT2020 RGB primaries and white point chromacity
 	// Max Lum: 1000cd/m2, Min Lum: 0cd/m2, MaxCLL: 1000cd/m2
@@ -1543,7 +1541,7 @@ static void hdmi_config_set_hdr()
 		0x87,
 		0x01,
 		0x1a,
-		(cfg.hdr == 1 ? uint8_t(0x27) : uint8_t(0x28)),
+		0x00, // Checksum, calculate later
 		(cfg.hdr == 1 ? uint8_t(0x03) : uint8_t(0x02)),
 		0x48,
 		0x8a,
@@ -1562,15 +1560,25 @@ static void hdmi_config_set_hdr()
 		0x42,
 		0x40,
 		0x00,
-		0xe8,
-		0x03,
-		0x32,
+		maxNitsLSB,
+		maxNitsMSB,
+		0x01,
 		0x00,
-		0xe8,
-		0x03,
-		0xfa,
-		0x00
+		maxNitsLSB,
+		maxNitsMSB,
+		avgNitsLSB,
+		avgNitsMSB
 	};
+
+	// now we calculate the checksum for this packet (2s complement sum)
+	uint16_t checksum = 0;
+	for (uint i = 0; i < sizeof(hdr_data); i++)
+		checksum += hdr_data[i];
+
+	checksum = checksum & 0xFF;
+	checksum = ~checksum + 1;
+
+	hdr_data[3] = checksum;
 
 	if (cfg.hdr == 0)
 	{
