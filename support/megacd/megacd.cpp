@@ -30,7 +30,7 @@ void mcd_poll()
 
 		if (has_command) {
 			spi_uio_cmd_cont(UIO_CD_SET);
-			uint64_t s = cdd.GetStatus();
+			uint64_t s = cdd.GetStatus(0);
 			spi_w((s >> 0) & 0xFFFF);
 			spi_w((s >> 16) & 0xFFFF);
 			spi_w(((s >> 32) & 0x00FF) | (cdd.isData ? 0x01 << 8 : 0x00 << 8));
@@ -63,7 +63,7 @@ void mcd_poll()
 		}
 
 		uint64_t c = *((uint64_t*)(data_in));
-		cdd.SetCommand(c);
+		cdd.SetCommand(c, 0);
 		cdd.CommandExec();
 		has_command = 1;
 

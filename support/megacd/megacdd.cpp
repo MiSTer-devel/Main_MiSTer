@@ -149,16 +149,16 @@ int cdd_t::LoadCUE(const char* filename) {
 			{
 				if (strstr(lptr, "MODE1/2048"))
 				{
-					this->sectorSize = 2048;
+					this->toc.tracks[0].sector_size = 2048;
 				}
 				else if (strstr(lptr, "MODE1/2352"))
 				{
-					this->sectorSize = 2352;
+					this->toc.tracks[0].sector_size = 2352;
 
 					FileSeek(&this->toc.tracks[0].f, 0x10, SEEK_SET);
 				}
 
-				if (this->sectorSize)
+				if (this->toc.tracks[0].sector_size)
 				{
 					this->toc.tracks[0].type = 1;
 
@@ -212,7 +212,7 @@ int cdd_t::LoadCUE(const char* filename) {
 				this->toc.tracks[this->toc.last].offset += this->toc.end * 2352;
 
 				int sectorSize = 2352;
-				if (this->toc.tracks[this->toc.last].type) sectorSize = this->sectorSize;
+				if (this->toc.tracks[this->toc.last].type) sectorSize = this->toc.tracks[0].sector_size;
 				this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((this->toc.tracks[this->toc.last].f.size + sectorSize - 1) / sectorSize);
 
 				this->toc.tracks[this->toc.last].start += (bb + ss * 75 + mm * 60 * 75);
@@ -283,7 +283,11 @@ int cdd_t::Load(const char *filename)
 		FileReadAdv(fd_img, header, 0x10);
 	}
 
-	if (!memcmp("SEGADISCSYSTEM", header, 14))
+	if (this->toc.tracks[0].sector_size)
+	{
+		this->sectorSize = this->toc.tracks[0].sector_size;
+	}
+	else if (!memcmp("SEGADISCSYSTEM", header, 14))
 	{
 		this->sectorSize = 2048;
 	}
@@ -836,8 +840,8 @@ void cdd_t::CommandExec() {
 	}
 }
 
-uint64_t cdd_t::GetStatus() {
-	uint8_t n9 = ~(stat[0] + stat[1] + stat[2] + stat[3] + stat[4] + stat[5] + stat[6] + stat[7] + stat[8]);
+uint64_t cdd_t::GetStatus(uint8_t crc_start) {
+	uint8_t n9 = ~(crc_start + stat[0] + stat[1] + stat[2] + stat[3] + stat[4] + stat[5] + stat[6] + stat[7] + stat[8]);
 	return ((uint64_t)(n9 & 0xF) << 36) |
 		((uint64_t)(stat[8] & 0xF) << 32) |
 		((uint64_t)(stat[7] & 0xF) << 28) |
@@ -850,7 +854,7 @@ uint64_t cdd_t::GetStatus() {
 		((uint64_t)(stat[0] & 0xF) << 0);
 }
 
-int cdd_t::SetCommand(uint64_t c) {
+int cdd_t::SetCommand(uint64_t c, uint8_t crc_start) {
 	comm[0] = (c >> 0) & 0xF;
 	comm[1] = (c >> 4) & 0xF;
 	comm[2] = (c >> 8) & 0xF;
@@ -862,7 +866,7 @@ int cdd_t::SetCommand(uint64_t c) {
 	comm[8] = (c >> 32) & 0xF;
 	comm[9] = (c >> 36) & 0xF;
 
-	uint8_t crc = (~(comm[0] + comm[1] + comm[2] + comm[3] + comm[4] + comm[5] + comm[6] + comm[7] + comm[8])) & 0xF;
+	uint8_t crc = (~(crc_start + comm[0] + comm[1] + comm[2] + comm[3] + comm[4] + comm[5] + comm[6] + comm[7] + comm[8])) & 0xF;
 	if (comm[9] != crc)
 		return -1;
 

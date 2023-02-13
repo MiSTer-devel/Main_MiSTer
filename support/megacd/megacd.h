@@ -53,8 +53,8 @@ public:
 	void Reset();
 	void Update();
 	void CommandExec();
-	uint64_t GetStatus();
-	int SetCommand(uint64_t c);
+	uint64_t GetStatus(uint8_t crc_start);
+	int SetCommand(uint64_t c, uint8_t crc_start);
 
 private:
 	toc_t toc;
