@@ -22,6 +22,8 @@
 
 // NeoGeo  support
 #include "support/neogeo/neogeo_loader.h"
+#include "support/neogeo/neogeocd.h"
+
 
 // Arcade support
 #include "support/arcade/mra_loader.h"
