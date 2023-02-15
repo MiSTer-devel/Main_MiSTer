@@ -2558,7 +2558,7 @@ void HandleUI(void)
 
 			case 15:
 				FileCreatePath(DOCS_DIR);
-				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR"/%s",user_io_get_core_name());
+				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR "/%s",user_io_get_core_name());
 				FileCreatePath(Selected_tmp);
 				SelectFile(Selected_tmp, "PDFTXTMD ",  SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
 				break;
@@ -2634,7 +2634,7 @@ void HandleUI(void)
 
 	case MENU_VIDEOPROC1:
 		helptext_idx = 0;
-		menumask = 0xFFF;
+		menumask = 0x1FFF;
 		OsdSetTitle("Video Processing");
 		menustate = MENU_VIDEOPROC2;
 		parentstate = MENU_VIDEOPROC1;
@@ -2698,7 +2698,10 @@ void HandleUI(void)
 			MenuWrite(n++, s, menusub == 10, (video_get_shadow_mask_mode() <= 0) || !S_ISDIR(getFileType(SMASK_DIR)));
 
 			MenuWrite(n++);
-			MenuWrite(n++, STD_BACK, menusub == 11);
+			MenuWrite(n++, " Reset to Defaults", menusub == 11);
+
+			MenuWrite(n++);
+			MenuWrite(n++, STD_BACK, menusub == 12);
 
 			if (!adjvisible) break;
 			firstmenu += adjvisible;
@@ -2835,6 +2838,11 @@ void HandleUI(void)
 				break;
 
 			case 11:
+				video_cfg_reset();
+				menustate = parentstate;
+				break;
+
+			case 12:
 				menusub = 5;
 				menustate = MENU_COMMON1;
 				break;
@@ -3412,7 +3420,7 @@ void HandleUI(void)
 	case MENU_PRESET_FILE_SELECTED:
 		memcpy(Selected_F[15], selPath, sizeof(Selected_F[15]));
 		recent_update(SelectedDir, selPath, SelectedLabel, 15);
-		video_loadPreset(selPath);
+		video_loadPreset(selPath, true);
 		menustate = MENU_VIDEOPROC1;
 		break;
 

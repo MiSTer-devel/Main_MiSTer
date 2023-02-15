@@ -77,6 +77,8 @@ static VideoInfo current_video_info;
 
 static int support_FHD = 0;
 
+yc_mode yc_modes[10];
+
 struct vrr_cap_t
 {
 	uint8_t active;
@@ -595,52 +597,70 @@ char* video_get_scaler_coeff(int type, int only_name)
 	return path;
 }
 
-static char scaler_cfg[128] = { 0 };
+static char scaler_cfg_path[128] = { 0 };
 
-void video_set_scaler_flt(int type, int n)
+static void video_save_scaler_cfg()
+{
+	FileSaveConfig(scaler_cfg_path, &scaler_flt, sizeof(scaler_flt));
+}
+
+static void video_apply_scaler_flt(int type, int n)
 {
 	scaler_flt[type].mode = (char)n;
-	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
 	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt[0].mode);
 	set_vfilter(1);
 }
 
-void video_set_scaler_coeff(int type, const char *name)
+void video_set_scaler_flt(int type, int n)
+{
+	video_apply_scaler_flt(type, n);
+	video_save_scaler_cfg();
+}
+
+void video_apply_scaler_coeff(int type, const char *name)
 {
 	strcpy(scaler_flt[type].filename, name);
-	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
 	read_video_filter(type, &scaler_flt_data[type]);
 	setScaler();
 	user_io_send_buttons(1);
+}
+
+void video_set_scaler_coeff(int type, const char *name)
+{
+	video_apply_scaler_coeff(type, name);
+	video_save_scaler_cfg();
 }
 
 static void loadScalerCfg()
 {
 	PROFILE_FUNCTION();
 
-	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name());
-	memset(scaler_flt, 0, sizeof(scaler_cfg));
-	if (!FileLoadConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt)) || scaler_flt[0].mode > 1)
+	if (FileLoadConfig(scaler_cfg_path, &scaler_flt, sizeof(scaler_flt)))
 	{
-		memset(scaler_flt, 0, sizeof(scaler_flt));
+		if (scaler_flt[0].mode > 1)
+		{
+			memset(scaler_flt, 0, sizeof(scaler_flt));
+		}
 	}
-
-	if (!scaler_flt[VFILTER_HORZ].filename[0] && cfg.vfilter_default[0])
+	else
 	{
-		strcpy(scaler_flt[VFILTER_HORZ].filename, cfg.vfilter_default);
-		scaler_flt[VFILTER_HORZ].mode = 1;
-	}
+		if (cfg.vfilter_default[0])
+		{
+			strcpy(scaler_flt[VFILTER_HORZ].filename, cfg.vfilter_default);
+			scaler_flt[VFILTER_HORZ].mode = 1;
+		}
 
-	if (!scaler_flt[VFILTER_VERT].filename[0] && cfg.vfilter_vertical_default[0])
-	{
-		strcpy(scaler_flt[VFILTER_VERT].filename, cfg.vfilter_vertical_default);
-		scaler_flt[VFILTER_VERT].mode = 1;
-	}
+		if (cfg.vfilter_vertical_default[0])
+		{
+			strcpy(scaler_flt[VFILTER_VERT].filename, cfg.vfilter_vertical_default);
+			scaler_flt[VFILTER_VERT].mode = 1;
+		}
 
-	if (!scaler_flt[VFILTER_SCAN].filename[0] && cfg.vfilter_scanlines_default[0])
-	{
-		strcpy(scaler_flt[VFILTER_SCAN].filename, cfg.vfilter_scanlines_default);
-		scaler_flt[VFILTER_SCAN].mode = 1;
+		if (cfg.vfilter_scanlines_default[0])
+		{
+			strcpy(scaler_flt[VFILTER_SCAN].filename, cfg.vfilter_scanlines_default);
+			scaler_flt[VFILTER_SCAN].mode = 1;
+		}
 	}
 
 	if (!read_video_filter(VFILTER_HORZ, &scaler_flt_data[VFILTER_HORZ])) memset(&scaler_flt[VFILTER_HORZ], 0, sizeof(scaler_flt[VFILTER_HORZ]));
@@ -715,29 +735,46 @@ char* video_get_gamma_curve(int only_name)
 }
 
 static char gamma_cfg_path[1024] = { 0 };
+static void video_save_gamma_cfg()
+{
+	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
+}
 
-void video_set_gamma_en(int n)
+static void video_apply_gamma_en(int n)
 {
 	gamma_cfg[0] = (char)n;
-	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
 	setGamma();
 }
 
-void video_set_gamma_curve(const char *name)
+void video_set_gamma_en(int n)
+{
+	video_apply_gamma_en(n);
+	video_save_gamma_cfg();
+}
+
+static void video_apply_gamma_curve(const char *name)
 {
 	strcpy(gamma_cfg + 1, name);
-	FileSaveConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg));
 	setGamma();
 	user_io_send_buttons(1);
 }
 
+void video_set_gamma_curve(const char *name)
+{
+	video_apply_gamma_curve(name);
+	video_save_gamma_cfg();
+}
+
+
 static void loadGammaCfg()
 {
 	PROFILE_FUNCTION();
-	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name());
-	if (!FileLoadConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg) - 1) || gamma_cfg[0]>1)
+	if (FileLoadConfig(gamma_cfg_path, &gamma_cfg, sizeof(gamma_cfg) - 1))
 	{
-		memset(gamma_cfg, 0, sizeof(gamma_cfg));
+		if (gamma_cfg[0] > 1)
+		{
+			memset(gamma_cfg, 0, sizeof(gamma_cfg));
+		}
 	}
 }
 
@@ -884,7 +921,12 @@ char* video_get_shadow_mask(int only_name)
 
 static char shadow_mask_cfg_path[1024] = { 0 };
 
-void video_set_shadow_mask_mode(int n)
+static void video_save_shadow_mask_cfg()
+{
+	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
+}
+
+static void video_apply_shadow_mask_mode(int n)
 {
 	if( n >= SM_MODE_COUNT )
 	{
@@ -896,26 +938,34 @@ void video_set_shadow_mask_mode(int n)
 	}
 
 	shadow_mask_cfg[0] = (char)n;
-	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
 	setShadowMask();
+}
+
+void video_set_shadow_mask_mode(int n)
+{
+	video_apply_shadow_mask_mode(n);
+	video_save_shadow_mask_cfg();
+}
+
+static void video_apply_shadow_mask(const char *name)
+{
+	strcpy(shadow_mask_cfg + 1, name);
+	setShadowMask();
+	user_io_send_buttons(1);
 }
 
 void video_set_shadow_mask(const char *name)
 {
-	strcpy(shadow_mask_cfg + 1, name);
-	FileSaveConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg));
-	setShadowMask();
-	user_io_send_buttons(1);
+	video_apply_shadow_mask(name);
+	video_save_shadow_mask_cfg();
 }
 
 static void loadShadowMaskCfg()
 {
 	PROFILE_FUNCTION();
 
-	sprintf(shadow_mask_cfg_path, "%s_shmask.cfg", user_io_get_core_name());
 	if (!FileLoadConfig(shadow_mask_cfg_path, &shadow_mask_cfg, sizeof(shadow_mask_cfg) - 1))
 	{
-		memset(shadow_mask_cfg, 0, sizeof(shadow_mask_cfg));
 		if (cfg.shmask_default[0])
 		{
 			strcpy(shadow_mask_cfg + 1, cfg.shmask_default);
@@ -958,20 +1008,25 @@ static void load_flt_pres(const char *str, int type)
 	{
 		if (!strcasecmp(arg, "same") || !strcasecmp(arg, "off"))
 		{
-			video_set_scaler_flt(type, 0);
+			video_apply_scaler_flt(type, 0);
 		}
 		else
 		{
-			video_set_scaler_coeff(type, arg);
-			video_set_scaler_flt(type, 1);
+			video_apply_scaler_coeff(type, arg);
+			video_apply_scaler_flt(type, 1);
 		}
 	}
 }
 
-void video_loadPreset(char *name)
+void video_loadPreset(char *name, bool save)
 {
 	char *arg;
 	fileTextReader reader;
+
+	bool scaler_dirty = false;
+	bool mask_dirty = false;
+	bool gamma_dirty = false;
+
 	if (FileOpenTextReader(&reader, name))
 	{
 		const char *line;
@@ -980,51 +1035,63 @@ void video_loadPreset(char *name)
 			if (!strncasecmp(line, "hfilter=", 8))
 			{
 				load_flt_pres(line + 8, VFILTER_HORZ);
+				scaler_dirty = true;
 			}
 			else if (!strncasecmp(line, "vfilter=", 8))
 			{
 				load_flt_pres(line + 8, VFILTER_VERT);
+				scaler_dirty = true;
 			}
 			else if (!strncasecmp(line, "sfilter=", 8))
 			{
 				load_flt_pres(line + 8, VFILTER_SCAN);
+				scaler_dirty = true;
 			}
 			else if (!strncasecmp(line, "mask=", 5))
 			{
+				mask_dirty = true;
 				arg = get_preset_arg(line + 5);
 				if (arg[0])
 				{
-					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_shadow_mask_mode(0);
-					else video_set_shadow_mask(arg);
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_apply_shadow_mask_mode(0);
+					else video_apply_shadow_mask(arg);
 				}
 			}
 			else if (!strncasecmp(line, "maskmode=", 9))
 			{
+				mask_dirty = true;
 				arg = get_preset_arg(line + 9);
 				if (arg[0])
 				{
-					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_shadow_mask_mode(0);
-					else if (!strcasecmp(arg, "1x")) video_set_shadow_mask_mode(SM_MODE_1X);
-					else if (!strcasecmp(arg, "2x")) video_set_shadow_mask_mode(SM_MODE_2X);
-					else if (!strcasecmp(arg, "1x rotated")) video_set_shadow_mask_mode(SM_MODE_1X_ROTATED);
-					else if (!strcasecmp(arg, "2x rotated")) video_set_shadow_mask_mode(SM_MODE_2X_ROTATED);
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_apply_shadow_mask_mode(0);
+					else if (!strcasecmp(arg, "1x")) video_apply_shadow_mask_mode(SM_MODE_1X);
+					else if (!strcasecmp(arg, "2x")) video_apply_shadow_mask_mode(SM_MODE_2X);
+					else if (!strcasecmp(arg, "1x rotated")) video_apply_shadow_mask_mode(SM_MODE_1X_ROTATED);
+					else if (!strcasecmp(arg, "2x rotated")) video_apply_shadow_mask_mode(SM_MODE_2X_ROTATED);
 				}
 			}
 			else if (!strncasecmp(line, "gamma=", 6))
 			{
+				gamma_dirty = true;
 				arg = get_preset_arg(line + 6);
 				if (arg[0])
 				{
-					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_set_gamma_en(0);
+					if (!strcasecmp(arg, "off") || !strcasecmp(arg, "none")) video_apply_gamma_en(0);
 					else
 					{
-						video_set_gamma_curve(arg);
-						video_set_gamma_en(1);
+						video_apply_gamma_curve(arg);
+						video_apply_gamma_en(1);
 					}
 				}
-
 			}
 		}
+	}
+
+	if (save)
+	{
+		if (scaler_dirty) video_save_scaler_cfg();
+		if (mask_dirty) video_save_shadow_mask_cfg();
+		if (gamma_dirty) video_save_gamma_cfg();
 	}
 }
 
@@ -1066,12 +1133,6 @@ static void hdmi_config_set_csc()
 	// default color conversion matrices
 	// for the original hexadecimal versions please refer
 	// to the ADV7513 programming guide section 4.3.7
-	float ypbpr_coeffs[] = {
-		0.42944335937f, 1.64038085938f, 1.93017578125f, 0.49389648437f,
-		0.25683593750f, 0.50415039062f, 0.09790039062f, 0.06250f,
-		1.85498046875f, 1.71557617188f, 0.42944335937f, 0.49389648437f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
 
 	// no transformation, so use identity matrix
 	float hdmi_full_coeffs[] = {
@@ -1104,193 +1165,179 @@ static void hdmi_config_set_csc()
 
 	const float pi = float(M_PI);
 
-	// select the base CSC
-	int ypbpr = cfg.ypbpr && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
+
+	// out-of-scope defines, not used with ypbpr
+	int16_t csc_int16[12];
 	int hdmi_limited_1 = cfg.hdmi_limited & 1;
 	int hdmi_limited_2 = cfg.hdmi_limited & 2;
-	int hdr = cfg.hdr;
 
-	mat4x4 coeffs = hdmi_full_coeffs;
-
-	if (hdr == 1)
-		coeffs = hdmi_full_coeffs;
-	else if (hdr == 2)
-		coeffs = hdr_dcip3_coeffs;
-	else
+	if (!ypbpr)
 	{
-		if (ypbpr)
-			coeffs = ypbpr_coeffs;
-		else if (hdmi_limited_1)
-			coeffs = hdmi_limited_1_coeffs;
+		// select the base CSC
+		int hdr = cfg.hdr;
+
+		mat4x4 coeffs = hdr == 2 ? hdr_dcip3_coeffs : hdmi_full_coeffs;
+		mat4x4 csc(coeffs);
+
+		// apply color controls
+		float brightness = (((cfg.video_brightness / 100.0f) - 0.5f)); // [-0.5 .. 0.5]
+		float contrast = ((cfg.video_contrast / 100.0f) - 0.5f) * 2.0f + 1.0f; // [0 .. 2]
+		float saturation = ((cfg.video_saturation / 100.0f)); // [0 .. 1]
+		float hue = (cfg.video_hue * pi / 180.0f);
+
+		char* gain_offset = cfg.video_gain_offset;
+
+		// we have to parse these
+		float gain_red = 1;
+		float gain_green = 1;
+		float gain_blue = 1;
+		float off_red = 0;
+		float off_green = 0;
+		float off_blue = 0;
+
+		size_t target = 0;
+		float* targets[6] = { &gain_red, &off_red, &gain_green, &off_green, &gain_blue, &off_blue };
+
+		for (size_t i = 0; i < strlen(gain_offset) && target < 6; i++)
+		{
+			// skip whitespace
+			if (gain_offset[i] == ' ' || gain_offset[i] == ',')
+				continue;
+
+			int numRead = 0;
+			int match = sscanf(gain_offset + i, "%f%n", targets[target], &numRead);
+
+			i += numRead > 0 ? numRead - 1 : 0;
+
+			if (match == 1)
+				target++;
+		}
+
+		// first apply hue matrix, because it does not touch luminance
+		float cos_hue = cos(hue);
+		float sin_hue = sin(hue);
+		float lr = 0.213f;
+		float lg = 0.715f;
+		float lb = 0.072f;
+		float ca = 0.143f;
+		float cb = 0.140f;
+		float cc = 0.283f;
+
+		mat4x4 mat_hue;
+		mat_hue.setIdentity();
+
+		mat_hue.m11 = lr + cos_hue * (1 - lr) + sin_hue * (-lr);
+		mat_hue.m12 = lg + cos_hue * (-lg) + sin_hue * (-lg);
+		mat_hue.m13 = lb + cos_hue * (-lb) + sin_hue * (1 - lb);
+
+		mat_hue.m21 = lr + cos_hue * (-lr) + sin_hue * (ca);
+		mat_hue.m22 = lg + cos_hue * (1 - lg) + sin_hue * (cb);
+		mat_hue.m23 = lb + cos_hue * (-lb) + sin_hue * (cc);
+
+		mat_hue.m31 = lr + cos_hue * (-lr) + sin_hue * (-(1 - lr));
+		mat_hue.m32 = lg + cos_hue * (-lg) + sin_hue * (lg);
+		mat_hue.m33 = lb + cos_hue * (1 - lb) + sin_hue * (lb);
+
+		csc = csc * mat_hue;
+
+		// now saturation
+		float s = saturation;
+		float sr = (1.0f - s) * .3086f;
+		float sg = (1.0f - s) * .6094f;
+		float sb = (1.0f - s) * .0920f;
+
+		float mat_saturation[] = {
+			sr + s, sg, sb, 0,
+			sr, sg + s, sb, 0,
+			sr, sg, sb + s, 0,
+			0, 0, 0, 1.0f
+		};
+
+		csc = csc * mat4x4(mat_saturation);
+
+		// now brightness and contrast
+		float b = brightness;
+		float c = contrast;
+		float t = (1.0f - c) / 2.0f;
+
+		float mat_brightness_contrast[] = {
+			c, 0, 0, (t + b),
+			0, c, 0, (t + b),
+			0, 0, c, (t + b),
+			0, 0, 0, 1.0f
+		};
+
+		csc = csc * mat4x4(mat_brightness_contrast);
+
+		// gain and offset
+		float rg = gain_red;
+		float ro = off_red;
+		float gg = gain_green;
+		float go = off_green;
+		float bg = gain_blue;
+		float bo = off_blue;
+
+		float mat_gain_off[] = {
+			rg, 0, 0, ro,
+			0, gg, 0, go,
+			0, 0, bg, bo,
+			0, 0, 0, 1.0f
+		};
+
+		csc = csc * mat4x4(mat_gain_off);
+
+		// final compression
+		csc.compress(2.0f);
+
+		// make sure to retain hdmi limited range
+		if (hdmi_limited_1)
+			csc = csc * mat4x4(hdmi_limited_1_coeffs);
 		else if (hdmi_limited_2)
-			coeffs = hdmi_limited_2_coeffs;
-		else
-			coeffs = hdmi_full_coeffs;
+			csc = csc * mat4x4(hdmi_limited_2_coeffs);
+
+		// finally, apply a fixed multiplier to get it in
+		// correct range for ADV7513 chip
+		for (size_t i = 0; i < 12; i++)
+		{
+			csc_int16[i] = int16_t(csc.comp[i] * 2048.0f);
+		}
 	}
-	mat4x4 csc(coeffs);
-
-	// apply color controls
-	float brightness = (((cfg.video_brightness/100.0f) - 0.5f)); // [-0.5 .. 0.5]
-	float contrast = ((cfg.video_contrast/100.0f) - 0.5f) * 2.0f + 1.0f; // [0 .. 2]
-	float saturation = ((cfg.video_saturation/100.0f)); // [0 .. 1]
-	float hue = (cfg.video_hue * pi / 180.0f);
-
-	char* gain_offset = cfg.video_gain_offset;
-
-	// we have to parse these
-	float gain_red = 1;
-	float gain_green = 1;
-	float gain_blue = 1;
-	float off_red = 0;
-	float off_green = 0;
-	float off_blue = 0;
-
-	size_t target = 0;
-	float* targets[6] = { &gain_red, &off_red, &gain_green, &off_green, &gain_blue, &off_blue };
-
-	for (size_t i = 0; i < strlen(gain_offset) && target < 6; i++)
-	{
-		// skip whitespace
-		if (gain_offset[i] == ' ' || gain_offset[i] == ',')
-			continue;
-
-		int numRead = 0;
-		int match = sscanf(gain_offset + i, "%f%n", targets[target], &numRead);
-
-		i += numRead > 0 ? numRead - 1 : 0;
-
-		if (match == 1)
-			target++;
-	}
-
-	// first apply hue matrix, because it does not touch luminance
-	float cos_hue = cos(hue);
-	float sin_hue = sin(hue);
-	float lr = 0.213f;
-	float lg = 0.715f;
-	float lb = 0.072f;
-	float ca = 0.143f;
-	float cb = 0.140f;
-	float cc = 0.283f;
-
-	mat4x4 mat_hue;
-	mat_hue.setIdentity();
-
-	mat_hue.m11 = lr+cos_hue*(1-lr)+sin_hue*(-lr);
-	mat_hue.m12 = lg+cos_hue*(-lg) +sin_hue*(-lg);
-	mat_hue.m13 = lb+cos_hue*(-lb) +sin_hue*(1-lb);
-
-	mat_hue.m21 = lr+cos_hue*(-lr) +sin_hue*(ca);
-	mat_hue.m22 = lg+cos_hue*(1-lg)+sin_hue*(cb);
-	mat_hue.m23 = lb+cos_hue*(-lb) +sin_hue*(cc);
-
-	mat_hue.m31 = lr+cos_hue*(-lr) +sin_hue*(-(1-lr));
-	mat_hue.m32 = lg+cos_hue*(-lg) +sin_hue*(lg);
-	mat_hue.m33 = lb+cos_hue*(1-lb)+sin_hue*(lb);
-
-	csc = csc * mat_hue;
-
-	// now saturation
-	float s = saturation;
-	float sr = ( 1.0f - s ) * .3086f;
-	float sg = ( 1.0f - s ) * .6094f;
-	float sb = ( 1.0f - s ) * .0920f;
-
-	float mat_saturation[] = {
-		sr + s, sg, sb, 0,
-		sr, sg + s, sb, 0,
-		sr, sg, sb + s, 0,
-		0, 0, 0, 1.0f
-	};
-
-	csc = csc * mat4x4(mat_saturation);
-
-	// now brightness and contrast
-	float b = brightness;
-	float c = contrast;
-	float t = (1.0f - c) / 2.0f;
-
-	float mat_brightness_contrast[] = {
-		c, 0, 0, (t+b),
-		0, c, 0, (t+b),
-		0, 0, c, (t+b),
-		0, 0, 0, 1.0f
-	};
-
-	csc = csc * mat4x4(mat_brightness_contrast);
-
-	// gain and offset
-	float rg = gain_red;
-	float ro = off_red;
-	float gg = gain_green;
-	float go = off_green;
-	float bg = gain_blue;
-	float bo = off_blue;
-
-	float mat_gain_off[] = {
-		rg, 0, 0, ro,
-		0, gg, 0, go,
-		0, 0, bg, bo,
-		0, 0, 0, 1.0f
-	};
-
-	csc = csc * mat4x4(mat_gain_off);
-
-	// final compression
-	csc.compress(2.0f);
-
-	// finally, apply a fixed multiplier to get it in
-	// correct range for ADV7513 chip
-	const int16_t csc_int16[12] = {
-		int16_t(csc.comp[0] * 2048.0f),
-		int16_t(csc.comp[1] * 2048.0f),
-		int16_t(csc.comp[2] * 2048.0f),
-		int16_t(csc.comp[3] * 2048.0f),
-		int16_t(csc.comp[4] * 2048.0f),
-		int16_t(csc.comp[5] * 2048.0f),
-		int16_t(csc.comp[6] * 2048.0f),
-		int16_t(csc.comp[7] * 2048.0f),
-		int16_t(csc.comp[8] * 2048.0f),
-		int16_t(csc.comp[9] * 2048.0f),
-		int16_t(csc.comp[10] * 2048.0f),
-		int16_t(csc.comp[11] * 2048.0f),
-	};
-
 	// Clamps to reinforce limited if necessary
 	// 0x100 = 16/256 * 4096 (12-bit mul)
 	// 0xEB0 = 235/256 * 4096
 	// 0xFFF = 4095 (12-bit max)
-	uint16_t clipMin = (hdmi_limited_1 || hdmi_limited_2) ? 0x100 : 0x000;
-	uint16_t clipMax = hdmi_limited_1 ? 0xEB0 : 0xFFF;
+	uint16_t clipMin = (!ypbpr && (hdmi_limited_1 || hdmi_limited_2)) ? 0x100 : 0x000;
+	uint16_t clipMax = (!ypbpr && hdmi_limited_1) ? 0xEB0 : 0xFFF;
 
 	// pass to HDMI, use 0xA0 to set a mode of [-2 .. 2] per ADV7513 programming guide
 	uint8_t csc_data[] = {
-		0x18, (uint8_t)(0b10100000 | (( csc_int16[0] >> 8) & 0b00011111)),  // csc Coefficients, Channel A
-		0x19, (uint8_t)(csc_int16[0] & 0xff),
-		0x1A, (uint8_t)(csc_int16[1] >> 8),
-		0x1B, (uint8_t)(csc_int16[1] & 0xff),
-		0x1C, (uint8_t)(csc_int16[2] >> 8),
-		0x1D, (uint8_t)(csc_int16[2] & 0xff),
-		0x1E, (uint8_t)(csc_int16[3] >> 8),
-		0x1F, (uint8_t)(csc_int16[3] & 0xff),
+		0x18, (uint8_t)(ypbpr ? 0x86 : (0b10100000 | (((csc_int16[0] >> 8) & 0b00011111)))),  // csc Coefficients, Channel A
+		0x19, (uint8_t)(ypbpr ? 0xDF : (csc_int16[0] & 0xff)),
+		0x1A, (uint8_t)(ypbpr ? 0x1A : (csc_int16[1] >> 8)),
+		0x1B, (uint8_t)(ypbpr ? 0x3F : (csc_int16[1] & 0xff)),
+		0x1C, (uint8_t)(ypbpr ? 0x1E : (csc_int16[2] >> 8)),
+		0x1D, (uint8_t)(ypbpr ? 0xE2 : (csc_int16[2] & 0xff)),
+		0x1E, (uint8_t)(ypbpr ? 0x07 : (csc_int16[3] >> 8)),
+		0x1F, (uint8_t)(ypbpr ? 0xE7 : (csc_int16[3] & 0xff)),
 
-		0x20, (uint8_t)(csc_int16[4] >> 8),  // csc Coefficients, Channel B
-		0x21, (uint8_t)(csc_int16[4] & 0xff),
-		0x22, (uint8_t)(csc_int16[5] >> 8),
-		0x23, (uint8_t)(csc_int16[5] & 0xff),
-		0x24, (uint8_t)(csc_int16[6] >> 8),
-		0x25, (uint8_t)(csc_int16[6] & 0xff),
-		0x26, (uint8_t)(csc_int16[7] >> 8),
-		0x27, (uint8_t)(csc_int16[7] & 0xff),
+		0x20, (uint8_t)(ypbpr ? 0x04 : (csc_int16[4] >> 8)),  // csc Coefficients, Channel B
+		0x21, (uint8_t)(ypbpr ? 0x1C : (csc_int16[4] & 0xff)),
+		0x22, (uint8_t)(ypbpr ? 0x08 : (csc_int16[5] >> 8)),
+		0x23, (uint8_t)(ypbpr ? 0x11 : (csc_int16[5] & 0xff)),
+		0x24, (uint8_t)(ypbpr ? 0x01 : (csc_int16[6] >> 8)),
+		0x25, (uint8_t)(ypbpr ? 0x91 : (csc_int16[6] & 0xff)),
+		0x26, (uint8_t)(ypbpr ? 0x01 : (csc_int16[7] >> 8)),
+		0x27, (uint8_t)(ypbpr ? 0x00 : (csc_int16[7] & 0xff)),
 
-		0x28, (uint8_t)(csc_int16[8] >> 8),  // csc Coefficients, Channel C
-		0x29, (uint8_t)(csc_int16[8] & 0xff),
-		0x2A, (uint8_t)(csc_int16[9] >> 8),
-		0x2B, (uint8_t)(csc_int16[9] & 0xff),
-		0x2C, (uint8_t)(csc_int16[10] >> 8),
-		0x2D, (uint8_t)(csc_int16[10] & 0xff),
-		0x2E, (uint8_t)(csc_int16[11] >> 8),
-		0x2F, (uint8_t)(csc_int16[11] & 0xff),
+		0x28, (uint8_t)(ypbpr ? 0x1D : (csc_int16[8] >> 8)),  // csc Coefficients, Channel C
+		0x29, (uint8_t)(ypbpr ? 0xAE : (csc_int16[8] & 0xff)),
+		0x2A, (uint8_t)(ypbpr ? 0x1B : (csc_int16[9] >> 8)),
+		0x2B, (uint8_t)(ypbpr ? 0x73 : (csc_int16[9] & 0xff)),
+		0x2C, (uint8_t)(ypbpr ? 0x06 : (csc_int16[10] >> 8)),
+		0x2D, (uint8_t)(ypbpr ? 0xDF : (csc_int16[10] & 0xff)),
+		0x2E, (uint8_t)(ypbpr ? 0x07 : (csc_int16[11] >> 8)),
+		0x2F, (uint8_t)(ypbpr ? 0xE7 : (csc_int16[11] & 0xff)),
 
 		0xC0, (uint8_t)(clipMin >> 8), // HDMI limited clamps
 		0xC1, (uint8_t)(clipMin & 0xff),
@@ -1317,7 +1364,7 @@ static void hdmi_config_set_csc()
 
 static void hdmi_config_init()
 {
-	int ypbpr = cfg.ypbpr && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
 
 	// address, value
 	uint8_t init_data[] = {
@@ -1476,6 +1523,13 @@ static void hdmi_config_init()
 
 static void hdmi_config_set_hdr()
 {
+	// Grab desired nits values
+	uint8_t maxNitsLSB = cfg.hdr_max_nits & 0xFF;
+	uint8_t maxNitsMSB = (cfg.hdr_max_nits >> 8) & 0xFF;
+
+	uint8_t avgNitsLSB = cfg.hdr_avg_nits & 0xFF;
+	uint8_t avgNitsMSB = (cfg.hdr_avg_nits >> 8) & 0xFF;
+
 	// CTA-861-G: 6.9 Dynamic Range and Mastering InfoFrame
 	// Uses BT2020 RGB primaries and white point chromacity
 	// Max Lum: 1000cd/m2, Min Lum: 0cd/m2, MaxCLL: 1000cd/m2
@@ -1487,7 +1541,7 @@ static void hdmi_config_set_hdr()
 		0x87,
 		0x01,
 		0x1a,
-		(cfg.hdr == 1 ? uint8_t(0x27) : uint8_t(0x28)),
+		0x00, // Checksum, calculate later
 		(cfg.hdr == 1 ? uint8_t(0x03) : uint8_t(0x02)),
 		0x48,
 		0x8a,
@@ -1506,15 +1560,25 @@ static void hdmi_config_set_hdr()
 		0x42,
 		0x40,
 		0x00,
-		0xe8,
-		0x03,
-		0x32,
+		maxNitsLSB,
+		maxNitsMSB,
+		0x01,
 		0x00,
-		0xe8,
-		0x03,
-		0xfa,
-		0x00
+		maxNitsLSB,
+		maxNitsMSB,
+		avgNitsLSB,
+		avgNitsMSB
 	};
+
+	// now we calculate the checksum for this packet (2s complement sum)
+	uint16_t checksum = 0;
+	for (uint i = 0; i < sizeof(hdr_data); i++)
+		checksum += hdr_data[i];
+
+	checksum = checksum & 0xFF;
+	checksum = ~checksum + 1;
+
+	hdr_data[3] = checksum;
 
 	if (cfg.hdr == 0)
 	{
@@ -2301,8 +2365,47 @@ static void video_mode_load()
 	}
 }
 
+static void video_cfg_init()
+{
+	sprintf(gamma_cfg_path, "%s_gamma.cfg", user_io_get_core_name());
+	sprintf(scaler_cfg_path, "%s_scaler.cfg", user_io_get_core_name());
+	sprintf(shadow_mask_cfg_path, "%s_shmask.cfg", user_io_get_core_name());
+
+	memset(gamma_cfg, 0, sizeof(gamma_cfg));
+	memset(scaler_flt, 0, sizeof(scaler_flt));
+	memset(shadow_mask_cfg, 0, sizeof(shadow_mask_cfg));
+
+	if (cfg.preset_default[0])
+	{
+		char preset_path[1024];
+		int len = sprintfz(preset_path, "%s/%s", PRESET_DIR, cfg.preset_default);
+		if (len < 4 || strcasecmp(&preset_path[len - 4], ".ini"))
+			strcat(preset_path, ".ini");
+		video_loadPreset(preset_path, false);
+	}
+
+	loadGammaCfg();
+	loadScalerCfg();
+	loadShadowMaskCfg();
+}
+
+void video_cfg_reset()
+{
+	FileDeleteConfig(gamma_cfg_path);
+	FileDeleteConfig(scaler_cfg_path);
+	FileDeleteConfig(shadow_mask_cfg_path);
+
+	video_cfg_init();
+
+	setGamma();
+	setScaler();
+	setShadowMask();
+}
+
 void video_init()
 {
+	yc_parse(yc_modes, sizeof(yc_modes) / sizeof(yc_modes[0]));
+
 	fb_init();
 	hdmi_config_init();
 	hdmi_config_set_hdr();
@@ -2310,9 +2413,7 @@ void video_init()
 
 	has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
 
-	loadGammaCfg();
-	loadScalerCfg();
-	loadShadowMaskCfg();
+	video_cfg_init();
 
 	video_set_mode(&v_def, 0);
 }
@@ -2342,6 +2443,7 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->vtime = spi_w(0) | (spi_w(0) << 16);
 		video_info->ptime = spi_w(0) | (spi_w(0) << 16);
 		video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
+		video_info->ctime = spi_w(0) | (spi_w(0) << 16);
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
@@ -2434,8 +2536,11 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 	float prate = vi->width * 100;
 	prate /= vi->ptime;
 
-	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz\033[0m\n",
-		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate);
+	float crate = vi->ctime * 100;
+	crate /= vi->ptime;
+
+	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz, fVid = %.2fMHz\033[0m\n",
+		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate, crate);
 	printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vi->vtime, vi->vtimeh);
 	printf("\033[1;33mINFO: AR = %d:%d, fb_en = %d, fb_width = %d, fb_height = %d\033[0m\n", vi->arx, vi->ary, vi->fb_en, vi->fb_width, vi->fb_height);
 	if (vi->vtimeh) api1_5 = 1;
@@ -2628,6 +2733,50 @@ bool video_mode_select(uint32_t vtime, vmode_custom_t* out_mode)
 	return adjustable;
 }
 
+static void set_yc_mode()
+{
+	if (cfg.vga_mode_int >= 2)
+	{
+		float fps = current_video_info.vtime ? (100000000.f / current_video_info.vtime) : 0.f;
+		int pal = fps < 55.f;
+		double CLK_REF = (pal || (cfg.ntsc_mode == 1)) ? 4.43361875f : (cfg.ntsc_mode == 2) ? 3.575611f : 3.579545f;
+		double CLK_VIDEO = current_video_info.ctime * 100.f / current_video_info.ptime;
+
+		int64_t PHASE_INC = ((int64_t)((CLK_REF / CLK_VIDEO) * 1099511627776LL)) & 0xFFFFFFFFFFLL;
+
+		int COLORBURST_START = (int)(3.7f * (CLK_VIDEO / CLK_REF));
+		int COLORBURST_END = (int)(9.0f * (CLK_VIDEO / CLK_REF)) + COLORBURST_START;
+		int COLORBURST_RANGE = (COLORBURST_START << 10) | COLORBURST_END;
+
+		char yc_key[64];
+		sprintf(yc_key, "%s_%.1f%s%s", user_io_get_core_name(1), fps, current_video_info.interlaced ? "i" : "", (pal || !cfg.ntsc_mode) ? "" : (cfg.ntsc_mode == 1) ? "s" : "m");
+		printf("Calculated YC parameters for '%s': %s PHASE_INC=%lld, COLORBURST_START=%d, COLORBURST_END=%d\n", yc_key, pal ? "PAL" : (cfg.ntsc_mode == 1) ? "PAL60" : (cfg.ntsc_mode == 2) ? "PAL-M" : "NTSC", PHASE_INC, COLORBURST_START, COLORBURST_END);
+
+		for (uint i = 0; i < sizeof(yc_modes) / sizeof(yc_modes[0]); i++)
+		{
+			if (!strcasecmp(yc_modes[i].key, yc_key))
+			{
+				printf("Override YC PHASE_INC with value: %lld\n", yc_modes[i].phase_inc);
+				PHASE_INC = yc_modes[i].phase_inc;
+				break;
+			}
+		}
+
+		spi_uio_cmd_cont(UIO_SET_YC_PAR);
+		spi_w(((pal || cfg.ntsc_mode) ? 4 : 0) | ((cfg.vga_mode_int == 3) ? 3 : 1));
+		spi_w(PHASE_INC);
+		spi_w(PHASE_INC >> 16);
+		spi_w(PHASE_INC >> 32);
+		spi_w(COLORBURST_RANGE);
+		spi_w(COLORBURST_RANGE >> 16);
+		DisableIO();
+	}
+	else
+	{
+		spi_uio_cmd8(UIO_SET_YC_PAR, 0);
+	}
+}
+
 void video_mode_adjust()
 {
 	static bool force = false;
@@ -2639,8 +2788,8 @@ void video_mode_adjust()
 	if (vid_changed || force)
 	{
 		current_video_info = video_info;
-
 		show_video_info(&video_info, &v_cur);
+		set_yc_mode();
 	}
 	force = false;
 
