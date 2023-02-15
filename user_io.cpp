@@ -277,6 +277,13 @@ char is_c64()
 	return (is_c64_type == 1);
 }
 
+static int is_c128_type = 0;
+char is_c128()
+{
+	if (!is_c128_type) is_c128_type = strcasecmp(orig_name, "C128") ? 2 : 1;
+	return (is_c128_type == 1);
+}
+
 static int is_psx_type = 0;
 char is_psx()
 {
@@ -337,6 +344,7 @@ void user_io_read_core_name()
 	is_archie_type = 0;
 	is_gba_type = 0;
 	is_c64_type = 0;
+	is_c128_type = 0;
 	is_st_type = 0;
 	is_pcxt_type = 0;
 	core_name[0] = 0;
@@ -852,7 +860,8 @@ static void parse_config()
 					}
 					else
 					{
-						user_io_set_index(user_io_ext_idx(str, ext) << 6 | idx);
+						if (!is_c128())
+							user_io_set_index(user_io_ext_idx(str, ext) << 6 | idx);
 						user_io_file_mount(str, idx);
 					}
 				}
@@ -1901,6 +1910,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	int writable = 0;
 	int ret = 0;
 	int len = strlen(name);
+	int img_type = 0; // disk image type (for C128 core): bit 0=dual sided, 1=raw GCR supported, 2=raw MFM supported, 3=high density
 
 	sd_image_cangrow[index] = (pre != 0);
 	sd_type[index] = 0;
@@ -1924,20 +1934,43 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				ret = c64_openT64(name, sd_image + index);
 				if (ret)
 				{
-					ret = c64_openGCR(name, sd_image + index, index);
+					img_type = c64_openGCR(name, sd_image + index, index);
+					ret = img_type < 0 ? 0 : 1;
 					sd_type[index] = 1;
 					if (!ret) FileClose(&sd_image[index]);
+
+					if (ret && is_c128())
+					{
+						printf("Disk image type: %d\n", img_type);
+						user_io_set_aindex(img_type << 6 | index);
+					}
 				}
 			}
 			else
 			{
 				writable = FileCanWrite(name);
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
-				if (ret && len > 4 && (!strcasecmp(name + len - 4, ".d64") || !strcasecmp(name + len - 4, ".g64")))
+				if (ret && len > 4) {
+					if (!strcasecmp(name + len - 4, ".d64") 
+						|| !strcasecmp(name + len - 4, ".g64") 
+						|| !strcasecmp(name + len - 4, ".d71") 
+						|| !strcasecmp(name + len - 4, ".g71"))
+					{
+						img_type = c64_openGCR(name, sd_image + index, index);
+						ret = img_type < 0 ? 0 : 1;
+						sd_type[index] = 1;
+						if(!ret) FileClose(&sd_image[index]);
+					}
+					else if (!strcasecmp(name + len - 4, ".d81"))
+					{
+						img_type = G64_SUPPORT_HD | G64_SUPPORT_DS;
+					}
+				}
+
+				if (ret && is_c128()) 
 				{
-					ret = c64_openGCR(name, sd_image + index, index);
-					sd_type[index] = 1;
-					if(!ret) FileClose(&sd_image[index]);
+					printf("Disk image type: %d\n", img_type);
+					user_io_set_aindex(img_type << 6 | index);
 				}
 			}
 		}
@@ -2941,10 +2974,10 @@ void user_io_poll()
 			}
 			DisableIO();
 
-			if ((blks == 32) && sd_type[disk])
+			if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk])
 			{
-				if (op == 2) c64_writeGCR(disk, lba);
-				else if (op & 1) c64_readGCR(disk, lba);
+				if (op == 2) c64_writeGCR(disk, lba, blks-1);
+				else if (op & 1) c64_readGCR(disk, lba, blks-1);
 				else break;
 			}
 			else if (op == 2)
