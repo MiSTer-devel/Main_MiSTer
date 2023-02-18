@@ -590,7 +590,7 @@ static int yc_parse_mode(char* buf, yc_mode *mode)
 	int i = 0;
 	while (1)
 	{
-		if (buf[i] == '=' || CHAR_IS_SPACE(buf[i]))
+		if (buf[i] == '=' || CHAR_IS_LINEEND(buf[i]))
 		{
 			buf[i] = 0;
 			break;
