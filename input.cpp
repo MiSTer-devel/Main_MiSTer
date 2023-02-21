@@ -5121,9 +5121,10 @@ int input_test(int getchar)
 								continue;
 							}
 
-							int xval, yval;
+							int xval, yval, zval;
 							xval = ((data[0] & 0x10) ? -256 : 0) | data[1];
 							yval = ((data[0] & 0x20) ? -256 : 0) | data[2];
+							zval = ((data[3] & 0x80) ? -256 : 0) | data[3];
 
 							input_absinfo absinfo = {};
 							absinfo.maximum = 255;
@@ -5131,7 +5132,14 @@ int input_test(int getchar)
 
 							if (input[dev].quirk == QUIRK_MSSP)
 							{
-								int val = cfg.spinner_axis ? yval : xval;
+								int val;
+								if(cfg.spinner_axis == 0)
+									val = xval;
+								else if(cfg.spinner_axis == 1)
+									val = yval;
+								else
+									val = zval;
+
 								int btn = (data[0] & 7) ? 1 : 0;
 								if (input[i].misc_flags != btn)
 								{
