@@ -1,0 +1,19 @@
+name: CI Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Build
+      run: set -o pipefail && curl --fail --location https://raw.githubusercontent.com/MiSTer-unstable-nightlies/Build-Automation_MiSTer/main/build.sh | bash -
+      env:
+        REPOSITORY: ${{ github.repository }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        DISPATCH_TOKEN: ${{ secrets.BUILD_AUTOMATION_DISPATCH_TOKEN }}
