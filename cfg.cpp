@@ -426,18 +426,72 @@ static int cfg_error_count = 0;
 
 const char* cfg_get_name(uint8_t alt)
 {
+	static int done = 0;
+	static char names[3][64] = {};
 	static char name[64];
-	strcpy(name, "MiSTer.ini");
 
-	if (alt == 1)
+	if (!done)
 	{
-		strcpy(name, "MiSTer_alt_1.ini");
-		if (FileExists(name)) return name;
-		return "MiSTer_alt.ini";
+		done = 1;
+		DIR *d = opendir(getRootDir());
+		if (!d)
+		{
+			printf("Couldn't open dir: %s\n", getRootDir());
+		}
+		else
+		{
+			struct dirent *de;
+			int i = 0;
+			while ((de = readdir(d)) && i < 3)
+			{
+				int len = strlen(de->d_name);
+				if (!strncasecmp(de->d_name, "MiSTer_", 7) && !strcasecmp(de->d_name + len - 4, ".ini"))
+				{
+					snprintf(names[i], sizeof(names[0]), "%s", de->d_name);
+					i++;
+				}
+			}
+			closedir(d);
+		}
+
+		for (int i = 1; i < 3; i++)
+		{
+			for (int j = 1; j < 3; j++)
+			{
+				if ((!names[j - 1][0] && names[j][0]) || (names[j - 1][0] && names[j][0] && strcasecmp(names[j - 1], names[j]) > 0))
+				{
+					strcpy(name, names[j - 1]);
+					strcpy(names[j - 1], names[j]);
+					strcpy(names[j], name);
+				}
+			}
+		}
 	}
 
-	if (alt && alt < 4) sprintf(name, "MiSTer_alt_%d.ini", alt);
+	strcpy(name, "MiSTer.ini");
+	if (alt && alt < 4) strcpy(name, names[alt-1]);
 	return name;
+}
+
+const char* cfg_get_label(uint8_t alt)
+{
+	if (!alt) return "Main";
+
+	const char *name = cfg_get_name(alt);
+	if (!name[0]) return " -- ";
+
+	static char label[6];
+	snprintf(label, sizeof(label), "%s", name + 7);
+	char *p = strrchr(label, '.');
+	if (p) *p = 0;
+	if (!strcasecmp(label, "alt"))   return "Alt1";
+	if (!strcasecmp(label, "alt_1")) return "Alt1";
+	if (!strcasecmp(label, "alt_2")) return "Alt2";
+	if (!strcasecmp(label, "alt_3")) return "Alt3";
+
+	for (int i = 0; i < 4; i++) if (!label[i]) label[i] = ' ';
+	label[4] = 0;
+	return label;
 }
 
 void cfg_parse()

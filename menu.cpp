@@ -1701,7 +1701,7 @@ void HandleUI(void)
 								static char str[1024];
 								sprintf(str, "%s.f%c", user_io_get_core_name(), p[idx]);
 								if (FileLoadConfig(str, str, sizeof(str)) && str[0])
-								{									
+								{
 									strcat(s, " ");
 									strcat(s, GetNameFromPath(str));
 								}
@@ -2077,7 +2077,7 @@ void HandleUI(void)
 						strcpy(fs_pFileExt, ext);
 
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
-						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));						
+						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
 						if (is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)))
@@ -2196,7 +2196,7 @@ void HandleUI(void)
 
 									if (is_pce() && !bit) pcecd_reset();
 									if (is_saturn() && !bit) saturn_reset();
-									
+
 									user_io_status_set(opt, 1, ex);
 									user_io_status_set(opt, 0, ex);
 
@@ -3455,7 +3455,7 @@ void HandleUI(void)
 			if (m) strcat(s, "\xc ");
 			m = (i == (flag >> 4) && en);
 			if (!en) strcat(s, "\xb");
-			strcat(s, (!i) ? "Main" : (i == 1) ? "Alt1" : (i == 2) ? "Alt2" : "Alt3");
+			strcat(s, cfg_get_label(i));
 			if (!en) strcat(s, "\xb");
 		}
 		strcat(s, " ");
