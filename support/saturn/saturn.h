@@ -22,8 +22,8 @@
 #define SATURN_STAT_STOP			0x12
 #define SATURN_STAT_SEEK			0x22
 #define SATURN_STAT_AUDIO			0x34
-#define SATURN_STAT_DATA			0x32
-#define SATURN_STAT_IDLE			0x42
+#define SATURN_STAT_DATA			0x36
+#define SATURN_STAT_IDLE			0x46
 #define SATURN_STAT_OPEN			0x80
 #define SATURN_STAT_NODISK			0x83
 #define SATURN_STAT_SEEK_RING		0xB2
@@ -84,11 +84,12 @@ private:
 	void LBAToMSF(int lba, msf_t* msf);
 	int GetFAD(uint8_t* cmd);
 	void SetChecksum(uint8_t* stat);
+	int CheckCommand(uint8_t* cmd);
 	void ReadData(uint8_t *buf);
-	int ReadCDDA(uint8_t *buf);
+	int ReadCDDA(uint8_t *buf, int first);
 	void MakeSecureRingData(uint8_t *buf);
 	int DataSectorSend(uint8_t* header, int speed);
-	int AudioSectorSend();
+	int AudioSectorSend(int first);
 	int RingDataSend(uint8_t* header, int speed);
 };
 
