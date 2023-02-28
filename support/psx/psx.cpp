@@ -180,7 +180,7 @@ static int load_cue(const char* filename, toc_t *table)
 	}
 
 	int mm, ss, bb;
-	int pregap = 150;
+	int pregap = 0;
 
 	char *buf = toc;
 	while (sgets(line, sizeof(line), &buf))
@@ -230,10 +230,13 @@ static int load_cue(const char* filename, toc_t *table)
 		{
 			// Single bin specific, add pregab but subtract inherent pregap
 			pregap += bb + ss * 75 + mm * 60 * 75;
+      table->tracks[table->last].pregap = 1;
+
 		}
 		/* decode TRACK commands */
 		else if ((sscanf(lptr, "TRACK %02d %*s", &bb)) || (sscanf(lptr, "TRACK %d %*s", &bb)))
 		{
+      pregap = 0;
 			if (bb != (table->last + 1))
 			{
 				FileClose(&table->tracks[table->last].f);
@@ -267,11 +270,9 @@ static int load_cue(const char* filename, toc_t *table)
 			// Single bin specific
 			if (!table->tracks[table->last].f.opened())
 			{
-				table->tracks[table->last].start = (bb + ss * 75 + mm * 60 * 75) + pregap;
 
-				//if (!table->last && table->tracks[table->last - 1].end == 0)
 
-				table->tracks[table->last - 1].end = (bb + ss * 75 + mm * 60 * 75) + pregap - 1;
+        pregap = bb+ss*75+mm*60*75;
 			}
 		}
 		else if ((sscanf(lptr, "INDEX 01 %02d:%02d:%02d", &mm, &ss, &bb) == 3) ||
@@ -279,38 +280,22 @@ static int load_cue(const char* filename, toc_t *table)
 		{
 			if (!table->tracks[table->last].f.opened())
 			{
-				// Single bin specific
+        table->tracks[table->last].start = bb+ss*75+mm*60*75; 
+        //Subtract the fake 150 sector pregap used for the first data track
+        table->tracks[table->last].offset = table->tracks[table->last].start*table->tracks[table->last].sector_size;
+        if (table->last)
+        {
+          table->tracks[table->last-1].end = table->tracks[table->last].start-1;
+          if (pregap)
+          {
+            table->tracks[table->last].index1 = table->tracks[table->last].start - pregap;
+            if (!table->tracks[table->last].pregap)
+              table->tracks[table->last].offset -= 2352*table->tracks[table->last].index1;
 
-				// store the end of this track in index1, and use this to calculate the lenght of the track with next track
-				// Index1 does not seem to really be used by the core, but I found some code that seems to want to check the length of a track with it
-				table->tracks[table->last].index1 = bb + ss * 75 + mm * 60 * 75;
-
-				// Set start if its not set yet (some cue files have both Index 0 and Index 1) else set the end of this track.
-				if (!table->tracks[table->last].start)
-					table->tracks[table->last].start = bb + ss * 75 + mm * 60 * 75 + pregap;
-				else
-					table->tracks[table->last].end = bb + ss * 75 + mm * 60 * 75 + pregap;
-
-				int lasttrackend = table->tracks[table->last - 1].index1;
-				table->tracks[table->last - 1].index1 = (bb + ss * 75 + mm * 60 * 75) - lasttrackend;
-
-				if (table->tracks[table->last].type && !table->last) table->tracks[table->last].index1 = 150;
-
-				// Set the offset to be the pregap.
-				table->tracks[table->last].offset = (pregap * table->tracks[table->last].sector_size);
-
-				table->end += (table->tracks[table->last].f.size / table->tracks[table->last].sector_size);
-
-				// Code for cue files that only has index 1 for each track
-				if (table->last > 0 && table->tracks[table->last - 1].end == 0)
-				{
-					table->tracks[table->last - 1].end = table->tracks[table->last].start - 1;
-				}
-				// Check if the data track is set to be the full disc
-				if (table->last == 1 && table->tracks[0].end == table->end - 1)
-				{
-					table->tracks[table->last - 1].end = table->tracks[table->last].start - 1;
-				}
+          }
+        } else if (table->tracks[table->last].type) {
+          table->tracks[table->last].index1 = 150;
+        }
 			}
 			else
 			{
@@ -325,6 +310,12 @@ static int load_cue(const char* filename, toc_t *table)
 			if (table->last >= 99) break;
 		}
 	}
+
+  if (!table->tracks[table->last].end && table->tracks[table->last].offset)
+  {
+    //Single bin CUE, calculate the end of the last track based on file size.
+    table->tracks[table->last].end = (table->tracks[0].f.size-table->tracks[table->last].offset) / table->tracks[0].sector_size;
+  }
 
 	/*
 	for (int i = 0; i < table->last; i++)
@@ -490,13 +481,27 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 					if (!toc.chd_f)
 					{
 						if (toc.tracks[i].offset)
-							FileSeek(&toc.tracks[0].f, ((lba * CD_SECTOR_LEN) - toc.tracks[i].offset), SEEK_SET);
-						else
+            {
+							FileSeek(&toc.tracks[0].f, toc.tracks[i].offset+((lba-toc.tracks[i].start)*CD_SECTOR_LEN), SEEK_SET);
+
+            }else {
 							FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start) * CD_SECTOR_LEN, SEEK_SET);
+            }
 					}
 					while (cnt)
 					{
-						if (toc.chd_f)
+            if (toc.tracks[i+1].pregap && lba > (toc.tracks[i+1].start-toc.tracks[i+1].index1)) 
+            {
+              //The TOC is setup so that pregap sectors are actually part of the
+              //PREVIOUS track. If the pregap field is set the file doesn't contain
+              //this data, so we have to fake it. 
+              //Check the next track's pregap and index1 values to determine
+              //if we're reading pregap sectors
+              
+
+              memset(buffer, 0x0, CD_SECTOR_LEN);
+            }
+            else if (toc.chd_f)
 						{
 
 							// The "fake" 150 sector pregap moves all the LBAs up by 150, so adjust here to read where the core actually wants data from

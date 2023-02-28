@@ -33,7 +33,7 @@ typedef struct
 
 static const ini_var_t ini_vars[] =
 {
-	{ "YPBPR", (void*)(&(cfg.ypbpr)), UINT8, 0, 1 },
+	{ "YPBPR", (void*)(&(cfg.vga_mode_int)), UINT8, 0, 1 },
 	{ "COMPOSITE_SYNC", (void*)(&(cfg.csync)), UINT8, 0, 1 },
 	{ "FORCED_SCANDOUBLER", (void*)(&(cfg.forced_scandoubler)), UINT8, 0, 1 },
 	{ "VGA_SCALER", (void*)(&(cfg.vga_scaler)), UINT8, 0, 1 },
@@ -82,7 +82,7 @@ static const ini_var_t ini_vars[] =
 	{ "CUSTOM_ASPECT_RATIO_2", (void*)(&(cfg.custom_aspect_ratio[1])), STRING, 0, sizeof(cfg.custom_aspect_ratio[1]) - 1 },
 	{ "SPINNER_VID", (void*)(&(cfg.spinner_vid)), HEX16, 0, 0xFFFF },
 	{ "SPINNER_PID", (void*)(&(cfg.spinner_pid)), HEX16, 0, 0xFFFF },
-	{ "SPINNER_AXIS", (void*)(&(cfg.spinner_axis)), UINT8, 0, 1 },
+	{ "SPINNER_AXIS", (void*)(&(cfg.spinner_axis)), UINT8, 0, 2 },
 	{ "SPINNER_THROTTLE", (void*)(&(cfg.spinner_throttle)), INT32, -10000, 10000 },
 	{ "AFILTER_DEFAULT", (void*)(&(cfg.afilter_default)), STRING, 0, sizeof(cfg.afilter_default) - 1 },
 	{ "VFILTER_DEFAULT", (void*)(&(cfg.vfilter_default)), STRING, 0, sizeof(cfg.vfilter_default) - 1 },
@@ -90,6 +90,7 @@ static const ini_var_t ini_vars[] =
 	{ "VFILTER_SCANLINES_DEFAULT", (void*)(&(cfg.vfilter_scanlines_default)), STRING, 0, sizeof(cfg.vfilter_scanlines_default) - 1 },
 	{ "SHMASK_DEFAULT", (void*)(&(cfg.shmask_default)), STRING, 0, sizeof(cfg.shmask_default) - 1 },
 	{ "SHMASK_MODE_DEFAULT", (void*)(&(cfg.shmask_mode_default)), UINT8, 0, 255 },
+	{ "PRESET_DEFAULT", (void*)(&(cfg.preset_default)), STRING, 0, sizeof(cfg.preset_default) - 1 },
 	{ "LOG_FILE_ENTRY", (void*)(&(cfg.log_file_entry)), UINT8, 0, 1 },
 	{ "BT_AUTO_DISCONNECT", (void*)(&(cfg.bt_auto_disconnect)), UINT32, 0, 180 },
 	{ "BT_RESET_BEFORE_PAIR", (void*)(&(cfg.bt_reset_before_pair)), UINT8, 0, 1 },
@@ -108,12 +109,16 @@ static const ini_var_t ini_vars[] =
 	{ "PLAYER_3_CONTROLLER", (void*)(&(cfg.player_controller[2])), STRING, 0, sizeof(cfg.player_controller[2]) - 1 },
 	{ "PLAYER_4_CONTROLLER", (void*)(&(cfg.player_controller[3])), STRING, 0, sizeof(cfg.player_controller[3]) - 1 },
 	{ "DISABLE_AUTOFIRE", (void *)(&(cfg.disable_autofire)), UINT8, 0, 1},
-	{ "VIDEO_BRIGHTNESS", (void *)(&(cfg.video_brightness)), UINT16, 0, 100},
-	{ "VIDEO_CONTRAST", (void *)(&(cfg.video_contrast)), UINT16, 0, 100},
-	{ "VIDEO_SATURATION", (void *)(&(cfg.video_saturation)), UINT16, 0, 100},
+	{ "VIDEO_BRIGHTNESS", (void *)(&(cfg.video_brightness)), UINT8, 0, 100},
+	{ "VIDEO_CONTRAST", (void *)(&(cfg.video_contrast)), UINT8, 0, 100},
+	{ "VIDEO_SATURATION", (void *)(&(cfg.video_saturation)), UINT8, 0, 100},
 	{ "VIDEO_HUE", (void *)(&(cfg.video_hue)), UINT16, 0, 360},
 	{ "VIDEO_GAIN_OFFSET", (void *)(&(cfg.video_gain_offset)), STRING, 0, sizeof(cfg.video_gain_offset)},
-	{ "HDR", (void*)(&cfg.hdr), UINT8, 0, 3 },
+	{ "HDR", (void*)(&cfg.hdr), UINT8, 0, 2 },
+	{ "HDR_MAX_NITS", (void*)(&(cfg.hdr_max_nits)), UINT16, 100, 10000},
+	{ "HDR_AVG_NITS", (void*)(&(cfg.hdr_avg_nits)), UINT16, 100, 10000},
+	{ "VGA_MODE", (void*)(&(cfg.vga_mode)), STRING, 0, sizeof(cfg.vga_mode) - 1 },
+	{ "NTSC_MODE", (void *)(&(cfg.ntsc_mode)), UINT8, 0, 2},
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -421,18 +426,72 @@ static int cfg_error_count = 0;
 
 const char* cfg_get_name(uint8_t alt)
 {
+	static int done = 0;
+	static char names[3][64] = {};
 	static char name[64];
-	strcpy(name, "MiSTer.ini");
 
-	if (alt == 1)
+	if (!done)
 	{
-		strcpy(name, "MiSTer_alt_1.ini");
-		if (FileExists(name)) return name;
-		return "MiSTer_alt.ini";
+		done = 1;
+		DIR *d = opendir(getRootDir());
+		if (!d)
+		{
+			printf("Couldn't open dir: %s\n", getRootDir());
+		}
+		else
+		{
+			struct dirent *de;
+			int i = 0;
+			while ((de = readdir(d)) && i < 3)
+			{
+				int len = strlen(de->d_name);
+				if (!strncasecmp(de->d_name, "MiSTer_", 7) && !strcasecmp(de->d_name + len - 4, ".ini"))
+				{
+					snprintf(names[i], sizeof(names[0]), "%s", de->d_name);
+					i++;
+				}
+			}
+			closedir(d);
+		}
+
+		for (int i = 1; i < 3; i++)
+		{
+			for (int j = 1; j < 3; j++)
+			{
+				if ((!names[j - 1][0] && names[j][0]) || (names[j - 1][0] && names[j][0] && strcasecmp(names[j - 1], names[j]) > 0))
+				{
+					strcpy(name, names[j - 1]);
+					strcpy(names[j - 1], names[j]);
+					strcpy(names[j], name);
+				}
+			}
+		}
 	}
 
-	if (alt && alt < 4) sprintf(name, "MiSTer_alt_%d.ini", alt);
+	strcpy(name, "MiSTer.ini");
+	if (alt && alt < 4) strcpy(name, names[alt-1]);
 	return name;
+}
+
+const char* cfg_get_label(uint8_t alt)
+{
+	if (!alt) return "Main";
+
+	const char *name = cfg_get_name(alt);
+	if (!name[0]) return " -- ";
+
+	static char label[6];
+	snprintf(label, sizeof(label), "%s", name + 7);
+	char *p = strrchr(label, '.');
+	if (p) *p = 0;
+	if (!strcasecmp(label, "alt"))   return "Alt1";
+	if (!strcasecmp(label, "alt_1")) return "Alt1";
+	if (!strcasecmp(label, "alt_2")) return "Alt2";
+	if (!strcasecmp(label, "alt_3")) return "Alt3";
+
+	for (int i = 0; i < 4; i++) if (!label[i]) label[i] = ' ';
+	label[4] = 0;
+	return label;
 }
 
 void cfg_parse()
@@ -447,6 +506,8 @@ void cfg_parse()
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
 	cfg.hdr = 0;
+	cfg.hdr_max_nits = 1000;
+	cfg.hdr_avg_nits = 250;
 	cfg.video_brightness = 50;
 	cfg.video_contrast = 50;
 	cfg.video_saturation = 100;
@@ -462,7 +523,13 @@ void cfg_parse()
 		ini_parse(altcfg(), video_get_core_mode_name(0));
 	}
 
-
+	if (strlen(cfg.vga_mode))
+	{
+		if (!strcasecmp(cfg.vga_mode, "rgb")) cfg.vga_mode_int = 0;
+		if (!strcasecmp(cfg.vga_mode, "ypbpr")) cfg.vga_mode_int = 1;
+		if (!strcasecmp(cfg.vga_mode, "svideo")) cfg.vga_mode_int = 2;
+		if (!strcasecmp(cfg.vga_mode, "cvbs")) cfg.vga_mode_int = 3;
+	}
 }
 
 bool cfg_has_video_sections()
@@ -570,4 +637,71 @@ void cfg_print()
 		}
 	}
 	printf("--------------\n");
+}
+
+static int yc_parse_mode(char* buf, yc_mode *mode)
+{
+	int i = 0;
+	while (1)
+	{
+		if (buf[i] == '=' || CHAR_IS_LINEEND(buf[i]))
+		{
+			buf[i] = 0;
+			break;
+		}
+		else if (!buf[i]) return 0;
+		i++;
+	}
+
+	i++;
+	while (buf[i] == '=' || CHAR_IS_SPACE(buf[i])) i++;
+	ini_parser_debugf("Got yc_mode '%s' with VALUE %s", buf, buf + i);
+
+	snprintf(mode->key, sizeof(mode->key), "%s", buf);
+	mode->phase_inc = strtoull(buf + i, 0, 0);
+	if (!mode->phase_inc)
+	{
+		printf("ERROR: cannot parse YC phase_inc: '%s'\n", buf + i);
+		return 0;
+	}
+
+	return 1;
+}
+
+void yc_parse(yc_mode *yc_table, int max)
+{
+	memset(yc_table, 0, max * sizeof(yc_mode));
+
+	static char line[INI_LINE_SIZE];
+	int eof;
+
+	memset(line, 0, sizeof(line));
+	memset(&ini_file, 0, sizeof(ini_file));
+
+	const char *corename = user_io_get_core_name(1);
+	int corename_len = strlen(corename);
+
+	const char *name = "yc.txt";
+	if (!FileOpen(&ini_file, name))	return;
+
+	ini_parser_debugf("Opened file %s with size %llu bytes.", name, ini_file.size);
+
+	ini_pt = 0;
+	int n = 0;
+
+	while (n < max)
+	{
+		// get line
+		eof = ini_getline(line);
+		if (!strncasecmp(line, corename, corename_len))
+		{
+			int res = yc_parse_mode(line, &yc_table[n]);
+			if (res) n++;
+		}
+
+		// if end of file, stop
+		if (eof) break;
+	}
+
+	FileClose(&ini_file);
 }

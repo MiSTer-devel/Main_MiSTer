@@ -5,9 +5,13 @@
 #include <time.h>
 
 #include "saturn.h"
+#include "../../shmem.h"
 #include "../chd/mister_chd.h"
 
 #define CD_DATA_IO_INDEX 4
+#define CD_DATA_IO2_INDEX 8
+
+#define SHMEM_ADDR  0x31000000
 
 satcdd_t satcdd;
 
@@ -431,14 +435,14 @@ void satcdd_t::CommandExec() {
 	case SATURN_COMM_NOP:
 #ifdef SATURN_DEBUG
 		//printf("\x1b[32mSaturn: ");
-		//printf("Command Nop, status = %02X", status);
+		//printf("Command Nop");
 		//printf(" (%u)\n\x1b[0m", frame_cnt);
 #endif // SATURN_DEBUG
 		break;
 
 	case SATURN_COMM_SEEK_RING:
-		this->lba = fad - 150;
 		this->seek_lba = fad - 150;
+		this->track = this->toc.GetTrackByLBA(this->seek_lba);
 
 		this->seek_ring = true;
 		this->read_pend = false;
@@ -476,24 +480,27 @@ void satcdd_t::CommandExec() {
 #endif // SATURN_DEBUG
 		break;
 
-	case SATURN_COMM_READ:
+	case SATURN_COMM_READ: 
 		this->seek_lba = fad - 150 - 4;
-		//if (this->toc.tracks[this->track].type) {
-		//	this->lba -= 4;
-		//	this->seek_lba -= 4;
-		//}
+		this->lba = fad - 150 - 4;
+
+		this->track = this->toc.GetTrackByLBA(this->seek_lba);
+
 		this->read_pend = true;
-		this->seek_pend = true;
+		//this->seek_pend = true;
 		this->pause_pend = false;
 		this->speed = comm[10] == 1 ? 1 : 2;
 
 		this->audioFirst = 1;
 
 #ifdef SATURN_DEBUG
+		//printf("\x1b[32mSaturn: ");
+		//printf("Command = %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5], comm[6], comm[7], comm[8], comm[9], comm[10], comm[11]);
+		//printf("\n\x1b[0m");
 		printf("\x1b[32mSaturn: ");
 		printf("Command Read Data: FAD = %u, track = %u, speed = %u", fad, this->toc.GetTrackByLBA(this->seek_lba) + 1, this->speed);
 		printf(" (%u)\n\x1b[0m", frame_cnt);
-#endif // SATURN_DEBUG
+#endif // SATURN_DEBUG 
 		break;
 
 	case SATURN_COMM_PAUSE:
@@ -501,26 +508,27 @@ void satcdd_t::CommandExec() {
 		this->read_pend = false;
 
 #ifdef SATURN_DEBUG
-		printf("\x1b[32mSaturn: ");
-		printf("Command Pause");
+		//printf("\x1b[32mSaturn: ");
+		//printf("Command Pause");
 		//printf(", last FAD = %u", last_lba + 150);
-		printf(" (%u)\n\x1b[0m", frame_cnt);
+		//printf(" (%u)\n\x1b[0m", frame_cnt);
 #endif // SATURN_DEBUG
 		break;
 
 	case SATURN_COMM_SEEK:
-		this->lba = fad - 150;
 		this->seek_lba = fad - 150;
-		//if (this->toc.tracks[this->track].type) {
-		//	this->lba -= 4;
-		//	this->seek_lba -= 4;
-		//}
+
+		this->track = this->toc.GetTrackByLBA(this->seek_lba);
+
 		this->seek_pend = true;
 		this->read_pend = false;
 		this->pause_pend = false;
 		this->speed = comm[10] == 1 ? 1 : 2;
 
 #ifdef SATURN_DEBUG
+		//printf("\x1b[32mSaturn: ");
+		//printf("Command = %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5], comm[6], comm[7], comm[8], comm[9], comm[10], comm[11]);
+		//printf("\n\x1b[0m");
 		printf("\x1b[32mSaturn: ");
 		printf("Command Seek: FAD = %u, track = %u, speed = %u, num = %u", fad, this->toc.GetTrackByLBA(this->seek_lba) + 1, this->speed, comm[8]);
 		//printf(", command = %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5], comm[6], comm[7], comm[8], comm[9], comm[10], comm[11]);
@@ -540,15 +548,23 @@ void satcdd_t::CommandExec() {
 #endif // SATURN_DEBUG
 		break;
 	}
+
+	if (!CheckCommand(comm)) {
+#ifdef SATURN_DEBUG
+		//printf("\x1b[32mSaturn: ");
+		//printf("Command checksum error!!!, command = %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5], comm[6], comm[7], comm[8], comm[9], comm[10], comm[11]);
+		//printf(" (%u)\n\x1b[0m", frame_cnt);
+#endif // SATURN_DEBUG
+	}
 }
 
 void satcdd_t::Process(uint8_t* time_mode) {
+	static int seek_time = 1;
+
 	msf_t amsf = { 0,2,0 };
 	msf_t msf = { 0,2,0 };
 	uint8_t idx = 0;
 	uint8_t q = this->lba < this->toc.end && this->toc.tracks[this->track].type ? 0x40 : 0x00;
-	static int seek_time = 8;
-	static int idle_cnt = 0;
 		
 	if (this->lid_open) {
 		this->state = Open;
@@ -560,7 +576,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 		stat[4] = 0x00;
 		stat[5] = 0x00;
 		stat[6] = 0x00;
-		stat[7] = 0x06;
+		stat[7] = 0x00;
 		stat[8] = 0x00;
 		stat[9] = 0x00;
 		stat[10] = 0x00;
@@ -613,7 +629,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 		stat[4] = 0x00;
 		stat[5] = 0x00;
 		stat[6] = 0x00;
-		stat[7] = 0x06;
+		stat[7] = 0x00;
 		stat[8] = BCD(msf.m);
 		stat[9] = BCD(msf.s);
 		stat[10] = BCD(msf.f);
@@ -636,24 +652,24 @@ void satcdd_t::Process(uint8_t* time_mode) {
 			LBAToMSF(this->lba - this->toc.tracks[this->track].start, &msf);
 
 		stat[0] = SATURN_STAT_SEEK;
-		/*stat[1] = q | 0x01;
+		stat[1] = q | 0x01;
 		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
 		stat[3] = this->lba < 0 ? 0x00 : 0x01;
 		stat[4] = BCD(msf.m);
 		stat[5] = BCD(msf.s);
 		stat[6] = BCD(msf.f);
-		stat[7] = 0x06;
+		stat[7] = 0x00;
 		stat[8] = BCD(amsf.m);
 		stat[9] = BCD(amsf.s);
-		stat[10] = BCD(amsf.f);*/
+		stat[10] = BCD(amsf.f);
 
-		if (seek_time) seek_time--;
-		else {
+		//if (seek_time) seek_time--;
+		//else {
 			this->seek_pend = false;
-			seek_time = 8;
-		}
+			seek_time = 1;
+		//}
 
-		*time_mode = this->speed;
+		*time_mode = 1;// this->speed;
 
 #ifdef SATURN_DEBUG
 		//printf("\x1b[32mSaturn: ");
@@ -713,7 +729,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 		if (seek_time) seek_time--;
 		else {
 			this->seek_ring2 = false;
-			seek_time = 8;
+			seek_time = 1;
 		}
 
 		*time_mode = 1;
@@ -733,52 +749,53 @@ void satcdd_t::Process(uint8_t* time_mode) {
 		else
 			LBAToMSF(this->lba - this->toc.tracks[this->track].start, &msf);
 
-		stat[0] = SATURN_STAT_DATA | (idle_cnt == 0 ? 0x00 : 0x04);
+		stat[0] = SATURN_STAT_DATA;
 		stat[1] = q | 0x01;
 		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
 		stat[3] = this->lba < 0 ? 0x00 : 0x01;
 		stat[4] = BCD(msf.m);
 		stat[5] = BCD(msf.s);
 		stat[6] = BCD(msf.f);
-		stat[7] = 0x06;
+		stat[7] = 0x00;
 		stat[8] = BCD(amsf.m);
 		stat[9] = BCD(amsf.s);
 		stat[10] = BCD(amsf.f);
-
-		if (++idle_cnt == 10) idle_cnt = 0;
 
 		*time_mode = this->speed;
 
 #ifdef SATURN_DEBUG
 		//printf("\x1b[32mSaturn: ");
-		//printf("Process read data, fad = %i, msf = %02X:%02X:%02X, q = %02X", this->lba + 150, BCD(msf.m), BCD(msf.s), BCD(msf.f), q);
+		//printf("Process read data, fad = %i, msf = %02X:%02X:%02X, ", this->lba + 150, BCD(msf.m), BCD(msf.s), BCD(msf.f));
 		//printf(" (%u)\n\x1b[0m", frame_cnt);
 #endif // SATURN_DEBUG
 	}
 	else if (this->pause_pend) {
 		this->state = Idle;
 
-		stat[0] = SATURN_STAT_IDLE | 0x04;
-		stat[1] = 0x41;
-		stat[2] = 0x01;
-		stat[3] = 0x01;
-		stat[4] = 0x00;
-		stat[5] = 0x00;
-		stat[6] = 0x00;
-		stat[7] = 0x06;
-		stat[8] = 0x00;
-		stat[9] = 0x00;
-		stat[10] = 0x00;
+		LBAToMSF(this->lba + 150, &amsf);
+		LBAToMSF(abs(this->lba - this->toc.tracks[this->track].start) + 150, &msf);
+
+		stat[0] = SATURN_STAT_IDLE;
+		stat[1] = q | 0x01;
+		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
+		stat[3] = this->lba < 0 ? 0x00 : 0x01;
+		stat[4] = BCD(msf.m);
+		stat[5] = BCD(msf.s);
+		stat[6] = BCD(msf.f);
+		stat[7] = 0x00;
+		stat[8] = BCD(amsf.m);
+		stat[9] = BCD(amsf.s);
+		stat[10] = BCD(amsf.f);
 
 		this->pause_pend = false;
 
 		*time_mode = 1;
 
 #ifdef SATURN_DEBUG
-		LBAToMSF(this->lba + 150, &amsf);
-		printf("\x1b[32mSaturn: ");
-		printf("Pause, fad = %i, msf = %02X:%02X:%02X, q = %02X", this->lba + 150, BCD(amsf.m), BCD(amsf.s), BCD(amsf.f), q);
-		printf(" (%u)\n\x1b[0m", frame_cnt);
+		//LBAToMSF(this->lba + 150, &amsf);
+		//printf("\x1b[32mSaturn: ");
+		//printf("Pause, fad = %i, msf = %02X:%02X:%02X, q = %02X", this->lba + 150, BCD(amsf.m), BCD(amsf.s), BCD(amsf.f), q);
+		//printf(" (%u)\n\x1b[0m", frame_cnt);
 #endif // SATURN_DEBUG
 	}
 	else if (this->stop_pend) {
@@ -791,7 +808,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 		stat[4] = 0x00;
 		stat[5] = 0x00;
 		stat[6] = 0x00;
-		stat[7] = 0x06;
+		stat[7] = 0x00;
 		stat[8] = 0x00;
 		stat[9] = 0x00;
 		stat[10] = 0x00;
@@ -804,24 +821,19 @@ void satcdd_t::Process(uint8_t* time_mode) {
 		this->state = Idle;
 
 		LBAToMSF(this->lba + 150, &amsf);
-		if (this->lba < 0)
-			LBAToMSF(-this->lba, &msf);
-		else
-			LBAToMSF(this->lba - this->toc.tracks[this->track].start, &msf);
+		LBAToMSF(abs(this->lba - this->toc.tracks[this->track].start) + 150, &msf);
 
-		stat[0] = SATURN_STAT_IDLE | (idle_cnt == 0 ? 0x00 : 0x04);
+		stat[0] = SATURN_STAT_IDLE;
 		stat[1] = q | 0x01;
 		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
 		stat[3] = this->lba < 0 ? 0x00 : 0x01;
 		stat[4] = BCD(msf.m);
 		stat[5] = BCD(msf.s);
 		stat[6] = BCD(msf.f);
-		stat[7] = 0x06;
+		stat[7] = 0x00;
 		stat[8] = BCD(amsf.m);
 		stat[9] = BCD(amsf.s);
 		stat[10] = BCD(amsf.f);
-
-		if (++idle_cnt == 10) idle_cnt = 0;
 
 		*time_mode = 1;
 	}
@@ -835,8 +847,9 @@ void satcdd_t::Update() {
 	switch (this->state)
 	{
 	case Idle:
-		//this->lba++;
-		//if (this->lba > this->seek_lba) this->lba -= 4;
+		this->lba++;
+		if (this->lba > this->seek_lba + 4) this->lba -= 4;
+		this->track = this->toc.GetTrackByLBA(this->lba);
 		break;
 
 	case Open:
@@ -876,6 +889,12 @@ void satcdd_t::Update() {
 			// CD-ROM Data (Mode 1/2)
 			uint8_t header[4];
 
+#ifdef SATURN_DEBUG
+			printf("\x1b[32mSaturn: ");
+			printf("Update read data, track = %i, lba = %i, msf = %02X:%02X:%02X, mode = %u", this->track + 1, this->lba + 150, BCD(msf.m), BCD(msf.s), BCD(msf.f), this->toc.tracks[this->track].type);
+			printf("\n\x1b[0m");
+#endif // SATURN_DEBUG
+
 			if (this->sectorSize == 2048 || (this->lba - this->toc.tracks[this->track].start) < 0) {
 				header[0] = BCD(msf.m);
 				header[1] = BCD(msf.s);
@@ -886,14 +905,6 @@ void satcdd_t::Update() {
 			else {
 				DataSectorSend(0, this->speed);
 			}
-
-#ifdef SATURN_DEBUG
-			/*if (this->toc.tracks[this->track].type == 2) {
-				printf("\x1b[32mSaturn: ");
-				printf("Update read data, track = %i, lba = %i, msf = %02X:%02X:%02X, mode = %u", this->track + 1, this->lba + 150, BCD(msf.m), BCD(msf.s), BCD(msf.f), this->toc.tracks[this->track].type);
-				printf(" (%u)\n\x1b[0m", frame_cnt);
-			}*/
-#endif // SATURN_DEBUG
 		}
 		else
 		{
@@ -901,7 +912,8 @@ void satcdd_t::Update() {
 			{
 				//this->isData = 0x00;
 			}
-			AudioSectorSend();
+			AudioSectorSend(this->audioFirst);
+			this->audioFirst = 0;
 		}
 
 #ifdef SATURN_DEBUG
@@ -912,25 +924,24 @@ void satcdd_t::Update() {
 
 		this->lba++;
 		this->track = this->toc.GetTrackByLBA(this->lba);
+		this->seek_lba = this->lba;
 		//this->chd_audio_read_lba++;
-
 		break;
 
 	case Pause:
 	case Stop:
+		this->track = this->toc.GetTrackByLBA(this->lba);
 		break;
 
 	case Seek:
 	case SeekRead:
 		if (!this->seek_pend) {
 			this->lba = this->seek_lba;
-			this->track = this->toc.GetTrackByLBA(this->lba);
 		}
-
-		LBAToMSF(this->lba + 150, &msf);
-
+		this->track = this->toc.GetTrackByLBA(this->lba);
 
 #ifdef SATURN_DEBUG
+		LBAToMSF(this->lba + 150, &msf);
 		//printf("\x1b[32mSaturn: ");
 		//printf("Update seek, lba = %i, seek_lba = %i, msf = %u:%u:%u", this->lba, this->seek_lba, msf.m, msf.s, msf.f);
 		//printf(" (%u)\n\x1b[0m", frame_cnt);
@@ -939,6 +950,7 @@ void satcdd_t::Update() {
 
 	case SeekRing:
 		this->lba = this->seek_lba;
+		this->track = this->toc.GetTrackByLBA(this->lba);
 		break;
 	}
 }
@@ -948,6 +960,13 @@ void satcdd_t::SetChecksum(uint8_t* stat) {
 	uint8_t sum = 0;
 	for (int i = 0; i < 11; i++) sum += stat[i];
 	stat[11] = ~sum;
+}
+
+int satcdd_t::CheckCommand(uint8_t* cmd) {
+	uint8_t sum = 0;
+	for (int i = 0; i < 11; i++) sum += cmd[i];
+	sum = ~sum;
+	return (cmd[11] == sum);
 }
 
 void satcdd_t::LBAToMSF(int lba, msf_t* msf) {
@@ -1022,14 +1041,19 @@ void satcdd_t::ReadData(uint8_t *buf)
 				FileSeek(&this->toc.tracks[this->track].f, offs, SEEK_SET);
 				FileReadAdv(&this->toc.tracks[this->track].f, buf, 2352);
 			}
+#ifdef SATURN_DEBUG
+			//printf("\x1b[32mSaturn: ");
+			//printf("Read data, lba = %i, track = %i, offset = %i", lba_, this->track, offs);
+			//printf(" (%u)\n\x1b[0m", frame_cnt);
+#endif // SATURN_DEBUG
 		}
 	}
 }
 
-int satcdd_t::ReadCDDA(uint8_t *buf)
+int satcdd_t::ReadCDDA(uint8_t *buf, int first)
 {
-	this->audioLength = 2352;
-	if (this->audioFirst) this->audioLength += 4096 - 2352;
+	int len = 2352;
+	if (first) len += 2352;
 
 #ifdef SATURN_DEBUG
 	//printf("\x1b[32mMCD: AUDIO LENGTH %d LBA: %d INDEX: %d START: %d END %d\n\x1b[0m", this->audioLength, this->lba, this->track, this->toc.tracks[this->track].start, this->toc.tracks[this->track].end);
@@ -1065,9 +1089,9 @@ int satcdd_t::ReadCDDA(uint8_t *buf)
 	}
 	else*/ if (this->toc.tracks[this->track].f.opened()) {
 		offs = (this->lba * 2352) - this->toc.tracks[this->track].offset;
-		if (!this->audioFirst) offs += 4096 - 2352;
+		if (!first) offs += 2352;
 		FileSeek(&this->toc.tracks[this->track].f, offs, SEEK_SET);
-		FileReadAdv(&this->toc.tracks[this->track].f, buf, this->audioLength);
+		FileReadAdv(&this->toc.tracks[this->track].f, buf, len);
 	}
 
 #ifdef SATURN_DEBUG
@@ -1076,16 +1100,15 @@ int satcdd_t::ReadCDDA(uint8_t *buf)
 	//printf(" (%u)\n\x1b[0m", frame_cnt);
 #endif // SATURN_DEBUG
 
-	this->audioFirst = 0;
-
-	return this->audioLength;
+	return len;
 }
 
 int satcdd_t::DataSectorSend(uint8_t* header, int speed)
 {
-	int len = 2352;
-	uint8_t* data_ptr = cd_buf + 2;
+	static int buf_num_read = 0, buf_num_write = 0;
 
+	uint8_t *shmem_ptr = (uint8_t*)shmem_map(SHMEM_ADDR, 4096 * 4);
+	uint8_t *data_ptr = shmem_ptr + (buf_num_write * 4096);
 	if (header) {
 		ReadData(data_ptr);
 		memcpy(data_ptr + 12 , header, 4);
@@ -1093,43 +1116,114 @@ int satcdd_t::DataSectorSend(uint8_t* header, int speed)
 	else {
 		ReadData(data_ptr);
 	}
-	cd_buf[0] = cd_buf[1] = (speed == 2 ? 0x01 : 0x00);
+	shmem_unmap(shmem_ptr, 4096 * 4);
+
+	buf_num_write++;
+	buf_num_write &= 3;
+	
+	uint16_t mode = (speed == 2 ? 0x0101 : 0x0000) | (buf_num_read << 4) | (buf_num_read << 12);
+
+	buf_num_read++;
+	buf_num_read &= 3;
 
 	if (SendData)
-		return SendData(cd_buf, len + 2, CD_DATA_IO_INDEX);
-
-	return 0;
-}
-
-int satcdd_t::AudioSectorSend()
-{
-	int len = 2352;
-	uint8_t* data_ptr = cd_buf + 2;
-
-	len = ReadCDDA(data_ptr);
-	cd_buf[0] = cd_buf[1] = 0x02;
-
-	if (SendData)
-		return SendData(cd_buf, len + 2, CD_DATA_IO_INDEX);
+		return SendData((uint8_t*)&mode, 2, CD_DATA_IO2_INDEX);
 
 	return 0;
 }
 
 int satcdd_t::RingDataSend(uint8_t* header, int speed)
 {
-	uint8_t* data_ptr = cd_buf + 2;
-
+	uint8_t *shmem_ptr = (uint8_t*)shmem_map(SHMEM_ADDR, 4096 * 4);
+	uint8_t *data_ptr = shmem_ptr;
 	if (header) {
 		MakeSecureRingData(data_ptr);
 		memcpy(data_ptr + 12, header, 12);
 		memset(data_ptr + 2348, 0, 4);
 	}
-	cd_buf[0] = cd_buf[1] = (speed == 2 ? 1 : 0);
+	shmem_unmap(shmem_ptr, 4096 * 4);
+
+	uint16_t mode = (speed == 2 ? 0x0101 : 0x0000) | 0x0404;
 
 	if (SendData)
-		return SendData(cd_buf, 2352 + 2, CD_DATA_IO_INDEX);
+		return SendData((uint8_t*)&mode, 2, CD_DATA_IO2_INDEX);
 
 	return 0;
 }
+
+int satcdd_t::AudioSectorSend(int first)
+{
+	static int buf_num_read = 0, buf_num_write = 0;
+
+	uint8_t *shmem_ptr = (uint8_t*)shmem_map(SHMEM_ADDR, 4096 * 4);
+	uint8_t *data_ptr = shmem_ptr + (buf_num_write * 4096);
+
+	ReadCDDA(data_ptr, first);
+	shmem_unmap(shmem_ptr, 4096 * 4);
+
+	if (first) buf_num_write++;
+	buf_num_write++;
+	buf_num_write &= 3;
+
+	uint16_t mode = 0x0202 | (buf_num_read << 4) | (buf_num_read << 12);
+
+	buf_num_read++;
+	buf_num_read &= 3;
+
+	if (SendData)
+		return SendData((uint8_t*)&mode, 2, CD_DATA_IO2_INDEX);
+
+	return 0;
+}
+
+//int satcdd_t::DataSectorSend(uint8_t* header, int speed)
+//{
+//	uint8_t* data_ptr = cd_buf + 2;
+//
+//	if (header) {
+//		ReadData(data_ptr);
+//		memcpy(data_ptr + 12, header, 4);
+//	}
+//	else {
+//		ReadData(data_ptr);
+//	}
+//	cd_buf[0] = cd_buf[1] = (speed == 2 ? 0x01 : 0x00);
+//
+//	if (SendData)
+//		return SendData(cd_buf, 2352 + 2, CD_DATA_IO_INDEX);
+//
+//	return 0;
+//}
+//
+//int satcdd_t::RingDataSend(uint8_t* header, int speed)
+//{
+//	uint8_t* data_ptr = cd_buf + 2;
+//
+//	if (header) {
+//		MakeSecureRingData(data_ptr);
+//		memcpy(data_ptr + 12, header, 12);
+//		memset(data_ptr + 2348, 0, 4);
+//	}
+//	cd_buf[0] = cd_buf[1] = (speed == 2 ? 1 : 0);
+//
+//	if (SendData)
+//		return SendData(cd_buf, 2352 + 2, CD_DATA_IO_INDEX);
+//
+//	return 0;
+//}
+//
+//int satcdd_t::AudioSectorSend(int first)
+//{
+//	int len;
+//	uint8_t* data_ptr = cd_buf + 2;
+//
+//	len = ReadCDDA(data_ptr, first);
+//	cd_buf[0] = cd_buf[1] = 0x02;
+//
+//	if (SendData)
+//		return SendData(cd_buf, len + 2, CD_DATA_IO_INDEX);
+//
+//	return 0;
+//}
 
 

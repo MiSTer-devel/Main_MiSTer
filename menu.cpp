@@ -1701,7 +1701,7 @@ void HandleUI(void)
 								static char str[1024];
 								sprintf(str, "%s.f%c", user_io_get_core_name(), p[idx]);
 								if (FileLoadConfig(str, str, sizeof(str)) && str[0])
-								{									
+								{
 									strcat(s, " ");
 									strcat(s, GetNameFromPath(str));
 								}
@@ -2077,7 +2077,7 @@ void HandleUI(void)
 						strcpy(fs_pFileExt, ext);
 
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
-						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));						
+						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
 						if (is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)))
@@ -2196,7 +2196,7 @@ void HandleUI(void)
 
 									if (is_pce() && !bit) pcecd_reset();
 									if (is_saturn() && !bit) saturn_reset();
-									
+
 									user_io_status_set(opt, 1, ex);
 									user_io_status_set(opt, 0, ex);
 
@@ -2558,7 +2558,7 @@ void HandleUI(void)
 
 			case 15:
 				FileCreatePath(DOCS_DIR);
-				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR"/%s",user_io_get_core_name());
+				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR "/%s",user_io_get_core_name());
 				FileCreatePath(Selected_tmp);
 				SelectFile(Selected_tmp, "PDFTXTMD ",  SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
 				break;
@@ -2634,7 +2634,7 @@ void HandleUI(void)
 
 	case MENU_VIDEOPROC1:
 		helptext_idx = 0;
-		menumask = 0xFFF;
+		menumask = 0x1FFF;
 		OsdSetTitle("Video Processing");
 		menustate = MENU_VIDEOPROC2;
 		parentstate = MENU_VIDEOPROC1;
@@ -2698,7 +2698,10 @@ void HandleUI(void)
 			MenuWrite(n++, s, menusub == 10, (video_get_shadow_mask_mode() <= 0) || !S_ISDIR(getFileType(SMASK_DIR)));
 
 			MenuWrite(n++);
-			MenuWrite(n++, STD_BACK, menusub == 11);
+			MenuWrite(n++, " Reset to Defaults", menusub == 11);
+
+			MenuWrite(n++);
+			MenuWrite(n++, STD_BACK, menusub == 12);
 
 			if (!adjvisible) break;
 			firstmenu += adjvisible;
@@ -2835,6 +2838,11 @@ void HandleUI(void)
 				break;
 
 			case 11:
+				video_cfg_reset();
+				menustate = parentstate;
+				break;
+
+			case 12:
 				menusub = 5;
 				menustate = MENU_COMMON1;
 				break;
@@ -3412,7 +3420,7 @@ void HandleUI(void)
 	case MENU_PRESET_FILE_SELECTED:
 		memcpy(Selected_F[15], selPath, sizeof(Selected_F[15]));
 		recent_update(SelectedDir, selPath, SelectedLabel, 15);
-		video_loadPreset(selPath);
+		video_loadPreset(selPath, true);
 		menustate = MENU_VIDEOPROC1;
 		break;
 
@@ -3447,7 +3455,7 @@ void HandleUI(void)
 			if (m) strcat(s, "\xc ");
 			m = (i == (flag >> 4) && en);
 			if (!en) strcat(s, "\xb");
-			strcat(s, (!i) ? "Main" : (i == 1) ? "Alt1" : (i == 2) ? "Alt2" : "Alt3");
+			strcat(s, cfg_get_label(i));
 			if (!en) strcat(s, "\xb");
 		}
 		strcat(s, " ");

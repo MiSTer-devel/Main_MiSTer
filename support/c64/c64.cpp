@@ -10,6 +10,8 @@
 #include "../../user_io.h"
 #include "../../hardware.h"
 
+#include "c64.h"
+
 //#define dbgprintf printf
 #define dbgprintf(...)
 
@@ -41,6 +43,13 @@
 
 #define D64_FILL_VALUE           0xA0
 #define D64_INIT_VALUE           0x00 // DIR relies on 0x00 initial value
+
+#define G64_MAX_TRACK_LEN        (G64_BLOCK_COUNT_1571 * 256)
+#define G64_TRACK_SPACE_GCR      7930
+#define G64_TRACK_SPACE_MFM      12500
+
+// Define EXTEND_1541 to enable creating new tracks in G64 images on the 1541 in the C64/C16/VIC20 cores
+// #define EXTEND_1541
 
 struct FileRecord {
 	char           name[D64_BYTE_PER_STRING];
@@ -308,58 +317,125 @@ struct img_info
 {
 	fileTYPE *f;
 	int type;
+	uint8_t tracks;
 	uint8_t id[2];
-	int32_t trk_sz;
-	uint32_t trk_map[84];
+	uint32_t trk_map[168];
+	uint32_t spd_map[168];
+	int *sector_map;
 };
 
 static img_info gcr_info[16] = {};
 
+static uint8_t trk_buf[8192];
+static uint8_t gcr_buf[G64_MAX_TRACK_LEN*2];
+static uint8_t track_count[4] = {35, 40, 42, 70};
+static int start_sectors[4][85] = {
+	{	// single sided, 35 tracks
+		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
+		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  683,  683,  683,  683,  683,  683,  
+		 683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  
+		 683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,
+		 683
+	},
+	{	// single sided, 40 tracks
+		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
+		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  768,  
+		 768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  
+		 768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,
+		 768
+	},
+	{	// single sided, 42 tracks
+		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
+		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  785,  
+		 802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  
+		 802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,
+		 802,
+	},
+	{	// double sided, 35 tracks per side
+		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414, 
+		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  683,  683,  683,  683,  683,  683,  
+		 683,  704,  725,  746,  767,  788,  809,  830,  851,  872,  893,  914,  935,  956,  977,  998, 1019, 1040, 1059, 1078, 1097, 
+		1116, 1135, 1154, 1173, 1191, 1209, 1227, 1245, 1263, 1281, 1298, 1315, 1332, 1349, 1366, 1366, 1366, 1366, 1366, 1366, 1366, 
+		1366
+	}
+	// {   // double sided, 40 tracks per side
+	// 	   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
+	// 	 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  768,
+	// 	 768,  789,  810,  831,  852,  873,  894,  915,  936,  957,  978,  999, 1020, 1041, 1062, 1083, 1104, 1125, 1144, 1163, 1182, 
+	// 	1201, 1220, 1239, 1258, 1276, 1294, 1312, 1330, 1348, 1366, 1383, 1400, 1417, 1434, 1451, 1468, 1485, 1502, 1519, 1536, 1536,
+	// 	1536
+	// },
+	// {   // double sided, 42 tracks per side
+	// 	   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
+	// 	 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  785,  
+	// 	 802,  823,  844,  865,  886,  907,  928,  949,  970,  991, 1012, 1033, 1054, 1075, 1096, 1117, 1138, 1159, 1178, 1197, 1216,
+	// 	1235, 1254, 1273, 1292, 1310, 1328, 1346, 1364, 1382, 1400, 1417, 1434, 1451, 1468, 1485, 1502, 1519, 1536, 1553, 1570, 1587,
+	// 	1587
+	// }
+};
+
 int c64_openGCR(const char *path, fileTYPE *f, int idx)
 {
+	// Return value:
+	//
+	// negative value:
+	//   error
+	//
+	// positive value:
+	//   bit 0=dual sided         (G64_SUPPORT_DS)
+	//       1=raw GCR supported  (G64_SUPPORT_GCR)
+	//       2=raw MFM supported  (G64_SUPPORT_MFM)
+
 	gcr_info[idx].f = f;
-	if (!strcasecmp(path + strlen(path) - 4, ".g64"))
+	if (!strcasecmp(path + strlen(path) - 4, ".g64") || !strcasecmp(path + strlen(path) - 4, ".g71"))
 	{
 		char str[16];
 		FileReadAdv(f, str, 12);
-		if (memcmp(str, "GCR-1541", 8))
+		if (memcmp(str, "GCR-1541", 8) == 0 && memcmp(str, "GCR-1571", 8) == 0)
 		{
-			printf("Not a G64 format!\n");
-			return 0;
+			printf("Not valid G64 or G71 format: missing marker\n");
+			return -1;
 		}
-		else
+
+		gcr_info[idx].type = 2;
+		gcr_info[idx].tracks = str[9];
+		gcr_info[idx].sector_map = 0;
+		if (gcr_info[idx].tracks != 84 && gcr_info[idx].tracks != 168)
 		{
-			gcr_info[idx].type = 2;
-			memset(gcr_info[idx].trk_map, 0, sizeof(gcr_info[idx].trk_map));
-			FileReadAdv(f, gcr_info[idx].trk_map, 84 * 4);
+			gcr_info[idx].type = 0;
+			printf("Not valid G64 or G71 format: invalid track count %d\n", gcr_info[idx].tracks);
+			return -1;
 		}
+		memset(gcr_info[idx].trk_map, 0, sizeof(gcr_info[idx].trk_map));
+		FileReadAdv(f, gcr_info[idx].trk_map, gcr_info[idx].tracks*4);
+		memset(gcr_info[idx].spd_map, 0, sizeof(gcr_info[idx].spd_map));
+		FileReadAdv(f, gcr_info[idx].spd_map, gcr_info[idx].tracks*4);
+		printf("G64/G71 disk tracks=%d\n", gcr_info[idx].tracks);
+
+		return G64_SUPPORT_GCR | G64_SUPPORT_MFM | (gcr_info[idx].tracks > 84 ? G64_SUPPORT_DS : 0);
 	}
 	else
 	{
 		gcr_info[idx].type = 1;
+		for (int i = 0; i < 4 ; i++) {
+			gcr_info[idx].tracks = track_count[i];
+			gcr_info[idx].sector_map = &start_sectors[i][0];
+			if (f->size <= gcr_info[idx].sector_map[84] * 257) break;
+		}
 		FileSeek(f, 0x165a2, SEEK_SET);
 		gcr_info[idx].id[0] = 0;
 		gcr_info[idx].id[1] = 0;
 		FileReadAdv(f, gcr_info[idx].id, 2);
-		printf("D64 disk id1=%02X, id2=%02X\n", gcr_info[idx].id[0], gcr_info[idx].id[1]);
-	}
+		printf("D64/D71 disk id1=%02X, id2=%02X, tracks=%d, sectors=%d\n", gcr_info[idx].id[0], gcr_info[idx].id[1], gcr_info[idx].tracks, gcr_info[idx].sector_map[84]);
 
-	return 1;
+		return G64_SUPPORT_GCR | (gcr_info[idx].tracks > 42 ? G64_SUPPORT_DS : 0);
+	}
 }
 
 void c64_closeGCR(int idx)
 {
 	gcr_info[idx].type = 0;
 }
-
-static uint8_t trk_buf[8192];
-static uint8_t gcr_buf[8192*2];
-
-static int start_sectors[41] = {
-	  0,  21,  42,  63,  84, 105, 126, 147, 168, 189, 210, 231, 252, 273, 294, 315, 336, 357, 376, 395,
-	414, 433, 452, 471, 490, 508, 526, 544, 562, 580, 598, 615, 632, 649, 666, 683, 700, 717, 734, 751,
-	768
-};
 
 static const uint8_t gcr_lut[16] = {
 	0x0a, 0x0b, 0x12, 0x13,
@@ -416,93 +492,119 @@ void gcr2bin(uint8_t *gcr, uint8_t *bin)
 	}
 }
 
-void c64_readGCR(int idx, uint8_t track)
+void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 {
+	// dbgprintf("c64_readGCR: idx=%d, lba=%04llx, blks=%d\n", idx, lba, blks);
+	bool     is_1571 = (lba & 0x400) != 0;
+
+	uint8_t  track   = (uint8_t)lba;
+	uint8_t  track_f = track >> 1;
+
+	uint32_t track_size;
+	
 	if (!gcr_info[idx].type) return;
 
 	if (gcr_info[idx].type == 2)
 	{
-		if (!gcr_info[idx].trk_map[track])
+		if (track >= gcr_info[idx].tracks || !gcr_info[idx].trk_map[track])
 		{
-			gcr_info[idx].trk_sz = 4096;
-			memset(gcr_buf, 0, gcr_info[idx].trk_sz);
-			dbgprintf("Track %d%s: no data\n", track >> 1, (track & 1) ? ".5" : "");
+			track_size = 0;
+			dbgprintf("Track %d%s: no data, size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", track_size);
 		}
 		else
 		{
 			FileSeek(gcr_info[idx].f, gcr_info[idx].trk_map[track], SEEK_SET);
-			FileReadAdv(gcr_info[idx].f, gcr_buf, 8192);
-			gcr_info[idx].trk_sz = (gcr_buf[1] << 8) | gcr_buf[0];
-			dbgprintf("Track %d%s: size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", gcr_info[idx].trk_sz);
-			gcr_info[idx].trk_sz += 2;
+			FileReadAdv(gcr_info[idx].f, gcr_buf, blks * 256);
+			track_size = (gcr_buf[1] << 8) | gcr_buf[0];
+			dbgprintf("Track %d%s: read ok, size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", track_size);
 		}
 	}
 	else if (track & 1)
 	{
-		track >>= 1;
-		gcr_info[idx].trk_sz = (start_sectors[track + 1] - start_sectors[track]) * 256;
-		memset(gcr_buf, 0, gcr_info[idx].trk_sz);
-
-		track++;
-		dbgprintf("\nBetween tracks %d <|> %d.\n", track, track+1);
+		track_size = 0;
+		dbgprintf("\nBetween tracks %d <|> %d.\n", track_f, track_f+1);
 	}
 	else
 	{
-		track >>= 1;
+		uint8_t track_h = ((track_f >= 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
+		int size = track_f < 84 ? (gcr_info[idx].sector_map[track_f + 1] - gcr_info[idx].sector_map[track_f]) * 256 : 0;
 
-		int size = (start_sectors[track + 1] - start_sectors[track]) * 256;
-		FileSeek(gcr_info[idx].f, start_sectors[track] * 256, SEEK_SET);
-		FileReadAdv(gcr_info[idx].f, trk_buf, size);
+		// dbgprintf("GCR physical track=%d%s, logical track=%d, size=%d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", track_h, size);
+		if (size) {
+			FileSeek(gcr_info[idx].f, gcr_info[idx].sector_map[track_f] * 256, SEEK_SET);
+			FileReadAdv(gcr_info[idx].f, trk_buf, size);
 
-		track++;
-		uint8_t sec = 0;
-		gcrptr = gcr_buf + 2;
-		for (int ptr = 0; ptr < size; ptr += 256)
-		{
-			gcrcnt = 0;
-			*gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF;
-			bin2gcr(0x08);
-			bin2gcr(sec ^ track ^ gcr_info[idx].id[0] ^ gcr_info[idx].id[1]);
-			bin2gcr(sec);
-			bin2gcr(track);
-			bin2gcr(gcr_info[idx].id[1]);
-			bin2gcr(gcr_info[idx].id[0]);
-			bin2gcr(0x0F);
-			bin2gcr(0x0F);
-			*gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55;
-			*gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55;
-
-			uint8_t cs = 0;
-			uint8_t bt;
-
-			*gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF;
-			bin2gcr(0x07);
-			for (int i = 0; i < 256; i++)
+			uint8_t sec = 0;
+			gcrptr = gcr_buf + 2;
+			for (int ptr = 0; ptr < size; ptr += 256)
 			{
-				bt = trk_buf[ptr + i];
-				cs ^= bt;
-				bin2gcr(bt);
+				gcrcnt = 0;
+				*gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF;
+				bin2gcr(0x08);
+				bin2gcr(sec ^ track_h ^ gcr_info[idx].id[0] ^ gcr_info[idx].id[1]);
+				bin2gcr(sec);
+				bin2gcr(track_h);
+				bin2gcr(gcr_info[idx].id[1]);
+				bin2gcr(gcr_info[idx].id[0]);
+				bin2gcr(0x0F);
+				bin2gcr(0x0F);
+				*gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55;
+				*gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55;
+
+				uint8_t cs = 0;
+				uint8_t bt;
+
+				*gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF;
+				bin2gcr(0x07);
+				for (int i = 0; i < 256; i++)
+				{
+					bt = trk_buf[ptr + i];
+					cs ^= bt;
+					bin2gcr(bt);
+				}
+				bin2gcr(cs);
+				bin2gcr(0);
+				bin2gcr(0);
+
+				int gap = (track_h < 18) ? 8 : (track_h < 25) ? 17 : (track_h < 31) ? 12 : 9;
+				while (gap--) *gcrptr++ = 0x55;
+				sec++;
 			}
-			bin2gcr(cs);
-			bin2gcr(0);
-			bin2gcr(0);
 
-			int gap = (track < 18) ? 8 : (track < 25) ? 17 : (track < 31) ? 12 : 9;
-			while (gap--) *gcrptr++ = 0x55;
-			sec++;
+			track_size = gcrptr - gcr_buf - 2;
+			dbgprintf("Read GCR track %d: bin_size = %d, gcr_size = %d\n", track_f+1, size, track_size);
 		}
-
-		gcr_info[idx].trk_sz = gcrptr - gcr_buf;
-		dbgprintf("Read GCR track %d: bin_size = %d, gcr_size  = %d\n", track, size, gcr_info[idx].trk_sz);
+		else {
+			track_size = 0;
+			dbgprintf("Read non-existant GCR track %d: bin_size = %d, gcr_size = %d\n", track_f+1, size, track_size);
+		}
 	}
 
-	uint16_t sz = gcr_info[idx].trk_sz - 1;
-	gcr_buf[0] = (uint8_t)sz;
-	gcr_buf[1] = (uint8_t)(sz >> 8);
+	if (track_size > (blks * 256) - 2)
+		track_size = (blks * 256) - 2;
+
+	uint32_t buffer_size = track_size + 2;
+	if (track_size == 0) {
+		if (is_1571) {
+			buffer_size = 12502U;
+		}
+		else {
+#ifdef EXTEND_1541		
+			track_size = (track_h < 18) ? 7692U : (track_h < 25) ? 7142U : (track_h < 31) ? 6666U : 6250U;
+#else		
+			track_size = 4096;
+#endif		
+			buffer_size = track_size + 2;
+		}
+		memset(gcr_buf, 0, buffer_size);
+	}
+
+	gcr_buf[0] = (uint8_t)track_size;
+	gcr_buf[1] = (uint8_t)(track_size >> 8);
 
 	EnableIO();
 	spi_w(UIO_SECTOR_RD | (idx << 8));
-	spi_block_write(gcr_buf, user_io_get_width(), gcr_info[idx].trk_sz);
+	spi_block_write(gcr_buf, user_io_get_width(), buffer_size);
 	DisableIO();
 }
 
@@ -531,25 +633,136 @@ static uint8_t* align(uint8_t* src, int size)
 	return buf;
 }
 
-void c64_writeGCR(int idx, uint8_t track)
+uint32_t c64_get_track_speed(int idx, uint64_t lba, uint32_t track_size){
+	uint32_t freq;
+	uint8_t track = (uint8_t)lba;
+
+	if (track_size > G64_TRACK_SPACE_GCR) {
+		freq = 8;
+		dbgprintf("Track %d%s: freq=%d (mfm)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
+	}
+	else if (lba & 0x400) {
+		freq = (lba & 0x300) >> 8; 
+		dbgprintf("Track %d%s: freq=%d (gcr, provided)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
+	}
+	else {
+		uint8_t track_f = track >> 1;
+		uint8_t track_h = ((track_f > 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
+		freq = (track_h < 18) ? 3U : (track_h < 25) ? 2U : (track_h < 31) ? 1U : 0U;
+		dbgprintf("Track %d%s: freq=%d (gcr, calculated)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
+	}
+
+	return freq;
+}
+
+void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 {
+	// dbgprintf("c64_writeGCR: idx=%d, lba=%04llx, blks=%d\n", idx, lba, blks);
+
+	uint8_t track = (uint8_t)lba;
+#ifdef EXTEND_1541
+	bool    allow_new_track = true;
+#else
+	bool    allow_new_track = (lba & 0x400) != 0;
+#endif
+
 	if (!gcr_info[idx].type) return;
 
 	static uint8_t sec_buf[260];
 
 	EnableIO();
 	spi_w(UIO_SECTOR_WR | (idx << 8));
-	spi_block_read(gcr_buf, user_io_get_width(), 8192);
+	spi_block_read(gcr_buf, user_io_get_width(), blks * 256);
 	DisableIO();
+
+	uint32_t track_size = (gcr_buf[1] << 8) | gcr_buf[0];
 
 	if (gcr_info[idx].type == 2)
 	{
-		if (gcr_info[idx].trk_map[track])
+		if (track >= gcr_info[idx].tracks) 
 		{
-			FileSeek(gcr_info[idx].f, gcr_info[idx].trk_map[track]+2, SEEK_SET);
-			FileWriteAdv(gcr_info[idx].f, gcr_buf + 2, gcr_info[idx].trk_sz - 2);
-			dbgprintf("Write Track %d%s: size %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", gcr_info[idx].trk_sz - 2);
+			dbgprintf("Ignore track %d%s: out of range\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
+			return;
 		}
+
+		uint32_t track_pos = gcr_info[idx].trk_map[track];
+		if (track_pos == 0 && !allow_new_track) {
+			return;
+		}
+
+		uint32_t track_end = 0;
+		uint32_t file_end = gcr_info[idx].f->size;
+
+		if (track_pos > 0) {
+			// find track end position
+			track_end = file_end;
+			for (uint8_t t=0; t<gcr_info[idx].tracks; t++)
+			{
+				if (gcr_info[idx].trk_map[t] > track_pos && gcr_info[idx].trk_map[t] < track_end)
+					track_end = gcr_info[idx].trk_map[t];
+				if (gcr_info[idx].spd_map[t] > track_pos && gcr_info[idx].spd_map[t] < track_end)
+					track_end = gcr_info[idx].spd_map[t];
+			}
+		}
+
+		uint32_t track_space = track_end - track_pos;
+
+		if (track_size + 2 > track_space) {
+			if (!allow_new_track) {
+				return;
+			}
+
+			// TODO reclaim unused space 
+			if (track_space > 0) {
+				dbgprintf("Write Track %d%s: not enough space, relocating to end of file\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
+			} 
+			else {
+				dbgprintf("Write Track %d%s: new track, saving to end of file\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
+			}
+
+			FileSeek(gcr_info[idx].f, 0, SEEK_END);
+			FileWriteAdv(gcr_info[idx].f, gcr_buf, track_size + 2);
+
+			// update track map entry
+			gcr_info[idx].trk_map[track] = file_end;
+			FileSeek(gcr_info[idx].f, 12+track*4, SEEK_SET);
+			FileWriteAdv(gcr_info[idx].f, &gcr_info[idx].trk_map[track], 4);
+
+			// update speed map entry
+			uint32_t spd = c64_get_track_speed(idx, lba, track_size);
+			if (gcr_info[idx].spd_map[track] != spd) {
+				gcr_info[idx].spd_map[track] = spd;
+				FileSeek(gcr_info[idx].f, 12+(gcr_info[idx].tracks+track)*4, SEEK_SET);
+				FileWriteAdv(gcr_info[idx].f, &gcr_info[idx].spd_map[track], 4);
+			}
+
+			if (track_space > 0) {
+				// clear old space
+				memset(gcr_buf, 0xff, track_space);
+				FileSeek(gcr_info[idx].f, track_pos, SEEK_SET);
+				FileWriteAdv(gcr_info[idx].f, gcr_buf, track_space);
+			}
+
+			FileSeek(gcr_info[idx].f, 0, SEEK_END);
+			track_space = (
+				(track_size <= G64_TRACK_SPACE_GCR) ? G64_TRACK_SPACE_GCR 
+			  : (track_size <= G64_TRACK_SPACE_MFM) ? G64_TRACK_SPACE_MFM : track_size
+			) + 2;
+		}
+		else {
+			FileSeek(gcr_info[idx].f, track_pos, SEEK_SET);
+			FileWriteAdv(gcr_info[idx].f, gcr_buf, track_size + 2);
+		}
+
+		// fill unused space
+		int unused = track_space - track_size - 2;
+		if (unused > 0) {
+			if (unused > G64_MAX_TRACK_LEN * 2) unused = G64_MAX_TRACK_LEN * 2;
+			memset(gcr_buf, 0xff, unused);
+			FileWriteAdv(gcr_info[idx].f, gcr_buf, unused);
+		}
+
+		dbgprintf("Write Track %d%s: size %d, unused %d\n", (track >> 1) + 1, (track & 1) ? ".5" : "", track_size, unused);
 		return;
 	}
 
@@ -561,20 +774,26 @@ void c64_writeGCR(int idx, uint8_t track)
 
 	track >>= 1;
 
-	dbgprintf("\n\nTrack = %d\n", track + 1);
 	//hexdump(gcr_buf, 8192);
 
-	int sec_cnt = start_sectors[track + 1] - start_sectors[track];
+	int sec_cnt = track < 84 ? gcr_info[idx].sector_map[track + 1] - gcr_info[idx].sector_map[track] : 0;
+	if (sec_cnt == 0) 
+	{
+		dbgprintf("Ignore track %d: invalid\n", track+1);
+		return;
+	}
+
+	dbgprintf("\n\nGCR track = %d\n", track + 1);
 
 	int sync = 0;
 	uint8_t prev = 0, started = 0;
-	int off = 0, ptr = 2;
+	uint32_t off = 0, ptr = 2;
 	uint8_t sec = 0xFF;
 
-	memcpy(gcr_buf + gcr_info[idx].trk_sz, gcr_buf + 2, gcr_info[idx].trk_sz - 2);
+	memcpy(gcr_buf + track_size + 2, gcr_buf + 2, track_size);
 	memset(trk_buf, 0, sizeof(trk_buf));
 
-	while(ptr < gcr_info[idx].trk_sz)
+	while(ptr < track_size + 2)
 	{
 		if (prev == 0xFF && gcr_buf[ptr + off] == 0xFF)
 		{
@@ -651,6 +870,6 @@ void c64_writeGCR(int idx, uint8_t track)
 		}
 	}
 
-	FileSeek(gcr_info[idx].f, start_sectors[track] * 256, SEEK_SET);
+	FileSeek(gcr_info[idx].f, gcr_info[idx].sector_map[track] * 256, SEEK_SET);
 	FileWriteAdv(gcr_info[idx].f, trk_buf, sec_cnt * 256);
 }

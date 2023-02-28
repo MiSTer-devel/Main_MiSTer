@@ -12,6 +12,7 @@ struct VideoInfo
 	uint32_t htime;
 	uint32_t vtime;
 	uint32_t ptime;
+	uint32_t ctime;
 	uint32_t vtimeh;
 	uint32_t arx;
 	uint32_t ary;
@@ -41,7 +42,9 @@ int   video_get_shadow_mask_mode();
 void  video_set_shadow_mask_mode(int n);
 char* video_get_shadow_mask(int only_name = 1);
 void  video_set_shadow_mask(const char *name);
-void  video_loadPreset(char *name);
+void  video_loadPreset(char *name, bool save);
+
+void video_cfg_reset();
 
 void  video_mode_adjust();
 
