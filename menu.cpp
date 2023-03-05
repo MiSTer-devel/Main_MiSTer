@@ -6732,15 +6732,20 @@ void ScrollLongName(void)
 	// this function is called periodically when file selection window is displayed
 	// it checks if predefined period of time has elapsed and scrolls the name if necessary
 
-	static int len;
+	int off = 0;
 	int max_len;
 
-	len = strlen(flist_SelectedItem()->altname); // get name length
+	int len = strlen(flist_SelectedItem()->altname); // get name length
 
 	max_len = 30; // number of file name characters to display (one more required for scrolling)
 	if (flist_SelectedItem()->de.d_type == DT_DIR)
 	{
 		max_len = 23; // number of directory name characters to display
+		if ((fs_Options & SCANO_CORES) && (flist_SelectedItem()->altname[0] == '_'))
+		{
+			off = 1;
+			len--;
+		}
 	}
 
 	if (flist_SelectedItem()->de.d_type != DT_DIR) // if a file
@@ -6755,7 +6760,7 @@ void ScrollLongName(void)
 		}
 	}
 
-	ScrollText(flist_iSelectedEntry()-flist_iFirstEntry(), flist_SelectedItem()->altname, 0, len, max_len, 1);
+	ScrollText(flist_iSelectedEntry() - flist_iFirstEntry(), flist_SelectedItem()->altname + off, 0, len, max_len, 1);
 }
 
 // print directory contents
