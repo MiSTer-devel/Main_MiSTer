@@ -2548,7 +2548,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					char *filename = user_io_create_config_name();
+					char *filename = user_io_create_config_name(1);
 					printf("Saving config to %s\n", filename);
 					user_io_status_save(filename);
 					if (is_x86() || is_pcxt()) x86_config_save();
@@ -5122,7 +5122,7 @@ void HandleUI(void)
 			else
 			{
 				user_io_status_reset();
-				char *filename = user_io_create_config_name();
+				char *filename = user_io_create_config_name(1);
 				printf("Saving config to %s\n", filename);
 				user_io_status_save(filename);
 				menustate = MENU_GENERIC_MAIN1;

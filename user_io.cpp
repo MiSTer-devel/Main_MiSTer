@@ -115,7 +115,9 @@ unsigned char user_io_core_type()
 	return core_type;
 }
 
-char* user_io_create_config_name()
+static char config_ver[10] = {};
+
+char* user_io_create_config_name(int with_ver)
 {
 	static char str[40];
 	str[0] = 0;
@@ -123,6 +125,7 @@ char* user_io_create_config_name()
 	if (p[0])
 	{
 		strcpy(str, p);
+		if (with_ver) strcat(str, config_ver);
 		strcat(str, ".CFG");
 	}
 	return str;
@@ -791,6 +794,15 @@ static void parse_config()
 				OsdCoreNameSet(s);
 			}
 
+			if (p[0] == 'v')
+			{
+				static char str[256];
+				substrcpy(str, p, 1);
+				str[2] = 0;
+				int v = strtoul(str, 0, 10);
+				if(v) snprintf(config_ver, sizeof(config_ver), "_v%d", v);
+			}
+
 			if (p[0] == 'C')
 			{
 				use_cheats = 1;
@@ -1363,7 +1375,7 @@ void user_io_init(const char *path, const char *xml)
 
 	case CORE_TYPE_8BIT:
 		// try to load config
-		name = user_io_create_config_name();
+		name = user_io_create_config_name(1);
 		if (strlen(name) > 0)
 		{
 			if (!is_st() && !is_minimig())
@@ -1383,6 +1395,7 @@ void user_io_init(const char *path, const char *xml)
 				user_io_status_set("[0]", 1);
 			}
 
+			name = user_io_create_config_name();
 			if (is_st())
 			{
 				tos_config_load(0);
@@ -1951,9 +1964,9 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				writable = FileCanWrite(name);
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 				if (ret && len > 4) {
-					if (!strcasecmp(name + len - 4, ".d64") 
-						|| !strcasecmp(name + len - 4, ".g64") 
-						|| !strcasecmp(name + len - 4, ".d71") 
+					if (!strcasecmp(name + len - 4, ".d64")
+						|| !strcasecmp(name + len - 4, ".g64")
+						|| !strcasecmp(name + len - 4, ".d71")
 						|| !strcasecmp(name + len - 4, ".g71"))
 					{
 						img_type = c64_openGCR(name, sd_image + index, index);
@@ -1967,7 +1980,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					}
 				}
 
-				if (ret && is_c128()) 
+				if (ret && is_c128())
 				{
 					printf("Disk image type: %d\n", img_type);
 					user_io_set_aindex(img_type << 6 | index);
