@@ -5121,10 +5121,10 @@ int input_test(int getchar)
 								continue;
 							}
 
-							int xval, yval, zval;
-							xval = ((data[0] & 0x10) ? -256 : 0) | data[1];
-							yval = ((data[0] & 0x20) ? -256 : 0) | data[2];
-							zval = ((data[3] & 0x80) ? -256 : 0) | data[3];
+							// The bytes in the mouse delta data are signed
+							int xval = (int8_t)data[1];
+							int yval = (int8_t)data[2];
+							int zval = (int8_t)data[3];
 
 							input_absinfo absinfo = {};
 							absinfo.maximum = 255;

@@ -3682,24 +3682,24 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 
 			// PS2 format:
 			// YOvfl, XOvfl, dy8, dx8, 1, mbtn, rbtn, lbtn
-			// dx[7:0]
-			// dy[7:0]
+			// dx[7:0] (signed)
+			// dy[7:0] (signed)
 			ps2_mouse[0] = (b & 7) | 8;
 
 			// ------ X axis -----------
-			// store sign bit in first byte
+			// Also store sign bit in first byte
 			ps2_mouse[0] |= (x < 0) ? 0x10 : 0x00;
-			if (x < -255)
+			if (x < -127)
 			{
 				// min possible value + overflow flag
 				ps2_mouse[0] |= 0x40;
-				ps2_mouse[1] = 1; // -255
+				ps2_mouse[1] = -127;
 			}
-			else if (x > 255)
+			else if (x > 127)
 			{
 				// max possible value + overflow flag
 				ps2_mouse[0] |= 0x40;
-				ps2_mouse[1] = 255;
+				ps2_mouse[1] = 127;
 			}
 			else
 			{
@@ -3707,20 +3707,20 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 			}
 
 			// ------ Y axis -----------
-			// store sign bit in first byte
+			// Also store sign bit in first byte
 			y = -y;
 			ps2_mouse[0] |= (y < 0) ? 0x20 : 0x00;
-			if (y < -255)
+			if (y < -127)
 			{
 				// min possible value + overflow flag
 				ps2_mouse[0] |= 0x80;
-				ps2_mouse[2] = 1; // -255;
+				ps2_mouse[2] = -127;
 			}
-			else if (y > 255)
+			else if (y > 127)
 			{
 				// max possible value + overflow flag
 				ps2_mouse[0] |= 0x80;
-				ps2_mouse[2] = 255;
+				ps2_mouse[2] = 127;
 			}
 			else
 			{
