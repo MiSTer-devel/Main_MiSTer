@@ -38,7 +38,7 @@ void pcecd_poll()
 			pcecdd.SendStatus(pcecdd.GetStatus());
 			pcecdd.has_status = 0;
 		}
-		else if (pcecdd.data_req) {
+		else if (pcecdd.data_req && !pcecdd.latency) {
 
 			pcecdd.SendDataRequest();
 			pcecdd.data_req = false;
