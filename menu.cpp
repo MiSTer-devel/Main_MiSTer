@@ -2267,6 +2267,7 @@ void HandleUI(void)
 
 				if (fs_Options & SCANO_NEOGEO)
 				{
+					neocd_set_en(0);
 					neogeo_romset_tx(selPath);
 				}
 				else
@@ -2330,6 +2331,11 @@ void HandleUI(void)
 			else if (is_saturn())
 			{
 				saturn_set_image(ioctl_index, selPath);
+			}
+			else if (is_neogeo())
+			{
+				neocd_set_en(1);
+				neocd_set_image(selPath);
 			}
 			else
 			{
