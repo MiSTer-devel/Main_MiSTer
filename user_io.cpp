@@ -231,6 +231,10 @@ char is_neogeo()
 	return (is_neogeo_type == 1);
 }
 
+char is_neogeo_cd() {
+    return is_neogeo() && neocd_is_en();
+}
+
 static int is_minimig_type = 0;
 char is_minimig()
 {
@@ -2770,6 +2774,7 @@ void user_io_send_buttons(char force)
 		{
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
+			if (is_neogeo_cd()) neocd_reset();
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
 			if (is_x86() || is_pcxt()) x86_init();
@@ -3438,6 +3443,7 @@ void user_io_poll()
 	if (is_pce()) pcecd_poll();
 	if (is_saturn()) saturn_poll();
 	if (is_psx()) psx_poll();
+	if (is_neogeo_cd()) neocd_poll();
 	process_ss(0);
 }
 

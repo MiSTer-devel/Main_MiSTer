@@ -31,9 +31,12 @@
 #define CD_COMM_FW_SCAN			0x08
 #define CD_COMM_RW_SCAN			0x09
 #define CD_COMM_TRACK_MOVE		0x0A
-//#define CD_COMM_NO_DISC		0x0B
+#define CD_COMM_TRACK_PLAY		0x0B
 #define CD_COMM_TRAY_CLOSE		0x0C
 #define CD_COMM_TRAY_OPEN		0x0D
+
+#define MCD_DATA_IO_INDEX 2
+#define MCD_SUB_IO_INDEX 3
 
 #include "../../cd.h"
 #include <libchdr/chd.h>
@@ -53,8 +56,8 @@ public:
 	void Reset();
 	void Update();
 	void CommandExec();
-	uint64_t GetStatus();
-	int SetCommand(uint64_t c);
+	uint64_t GetStatus(uint8_t crc_start);
+	int SetCommand(uint64_t c, uint8_t crc_start);
 
 private:
 	toc_t toc;
@@ -80,6 +83,7 @@ private:
 	void LBAToMSF(int lba, msf_t* msf);
 	void MSFToLBA(int* lba, msf_t* msf);
 	void MSFToLBA(int* lba, uint8_t m, uint8_t s, uint8_t f);
+	void SeekToLBA(int lba, int play);
 };
 
 #define BCD(v)				 ((uint8_t)((((v)/10) << 4) | ((v)%10)))
