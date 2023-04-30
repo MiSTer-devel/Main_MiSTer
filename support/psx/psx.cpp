@@ -281,6 +281,8 @@ static int load_cue(const char* filename, toc_t *table)
 			if (!table->tracks[table->last].f.opened())
 			{
         table->tracks[table->last].start = bb+ss*75+mm*60*75; 
+        if (table->tracks[table->last].pregap)
+          table->tracks[table->last].start += pregap;
         //Subtract the fake 150 sector pregap used for the first data track
         table->tracks[table->last].offset = table->tracks[table->last].start*table->tracks[table->last].sector_size;
         if (table->last)
@@ -290,8 +292,12 @@ static int load_cue(const char* filename, toc_t *table)
           {
             table->tracks[table->last].index1 = table->tracks[table->last].start - pregap;
             if (!table->tracks[table->last].pregap)
+            {
               table->tracks[table->last].offset -= 2352*table->tracks[table->last].index1;
-
+              table->tracks[table->last].index1 = table->tracks[table->last].start - pregap;
+            } else {
+              table->tracks[table->last].index1 = pregap;
+            }
           }
         } else if (table->tracks[table->last].type) {
           table->tracks[table->last].index1 = 150;
