@@ -53,6 +53,7 @@ typedef struct {
 	uint8_t logo;
 	uint8_t log_file_entry;
 	uint8_t game_wallpapers;
+	uint16_t game_wallpapers_delay;
 	uint8_t shmask_mode_default;
 	int bt_auto_disconnect;
 	int bt_reset_before_pair;

@@ -202,6 +202,7 @@ static uint32_t menu_timer = 0;
 static uint32_t menu_save_timer = 0;
 static uint32_t load_addr = 0;
 static int32_t  bt_timer = 0;
+static uint32_t wallpaper_timer = 0;
 
 extern const char *version;
 
@@ -917,6 +918,13 @@ void HandleUI(void)
 			}
 		}
 	}
+
+	// Check if the wallpaper timestamp has passed & act if it has.
+    if (wallpaper_timer > 0 && CheckTimer(wallpaper_timer))
+    {
+        video_menu_bg(user_io_status_get("[3:1]"));
+        wallpaper_timer = 0;
+    }
 
 	switch (user_io_core_type())
 	{
@@ -4720,7 +4728,13 @@ void HandleUI(void)
 		}
 		if (cfg.game_wallpapers && user_io_status_get("[3:1]") == 1)
 		{
-			video_menu_bg(user_io_status_get("[3:1]"));
+		    if (cfg.game_wallpapers_delay > 0)
+            {
+                wallpaper_timer = GetTimer(cfg.game_wallpapers_delay);
+            } else {
+                video_menu_bg(user_io_status_get("[3:1]"));
+                wallpaper_timer = 0;
+            }
 		}
 		break;
 

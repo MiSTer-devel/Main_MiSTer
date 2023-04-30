@@ -3236,8 +3236,10 @@ static Imlib_Image load_bg()
 		if (!FileExists(fname)) fname = 0;
 	}
 
+	// Start dynamic wallpaper section here.
 	if (cfg.game_wallpapers)
 	{
+	    // Similar chunk of code to get valid wallpapers folder:
 		char bgdir[32];
 		int alt = altcfg();
 		sprintf(bgdir, "wallpapers_alt_%d", alt);
@@ -3245,21 +3247,37 @@ static Imlib_Image load_bg()
 		if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
 		if (PathIsDir(bgdir))
 		{
+		    // Assuming all is well above, parse out the name of the currently selected main menu listing.
 			auto selectedItem = flist_SelectedItem();
 			char fullpath[256];
 			bool fileExists = false;
 
+            // If there's a name in that listing, continue on.
 			if (selectedItem != nullptr)
 			{
 				char* altname = selectedItem->altname;
-				sprintf(fullpath, "%s/%s.png", bgdir, altname);
+                // Removal of potentially problematic characters: '/', '\', ':', '*', '?', '"', '<', '>', '|'
+				char sanitized_altname[256];
+                char* src = altname;
+                char* dst = sanitized_altname;
+                while (*src) {
+                    if (*src != '/' && *src != '\\' && *src != ':' && *src != '*' && *src != '?' &&
+                        *src != '"' && *src != '<' && *src != '>' && *src != '|') {
+                        *dst++ = *src;
+                    }
+                    src++;
+                }
+                *dst = '\0';
+                // Slap together all the things you need for a file path and then check to ensure a .png exists.
+				sprintf(fullpath, "%s/%s.png", bgdir, sanitized_altname);
 				if (FileExists(fullpath))
 				{
 					fileExists = true;
 				}
 				else
+                // If not, check to see if a .jpg exists.
 				{
-					sprintf(fullpath, "%s/%s.jpg", bgdir, altname);
+					sprintf(fullpath, "%s/%s.jpg", bgdir, sanitized_altname);
 					if (FileExists(fullpath))
 					{
 						fileExists = true;
@@ -3267,6 +3285,7 @@ static Imlib_Image load_bg()
 				}
 			}
 
+            // If nothing exists for that file at all, attempt to assign it one of the default image names.
 			if (!fileExists)
 			{
 				sprintf(fullpath, "%s/default.png", bgdir);
@@ -3275,6 +3294,7 @@ static Imlib_Image load_bg()
 					sprintf(fullpath, "%s/default.jpg", bgdir);
 				}
 			}
+			// Finally, go ahead and push whatever full path you've constructed into fname for actual processing.
 			fname = fullpath;
 		}
 	}
@@ -3396,7 +3416,7 @@ void video_menu_bg(int n, int idle)
 			switch (n)
 			{
 			case 1:
-				if (!menubg || cfg.game_wallpapers) menubg = load_bg();
+				if (!menubg || cfg.game_wallpapers) menubg = load_bg();  // The OR statement allows reloading of the background image if the option is enabled.
 				if (menubg)
 				{
 					imlib_context_set_image(menubg);
