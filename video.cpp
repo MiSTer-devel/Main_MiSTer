@@ -3236,6 +3236,49 @@ static Imlib_Image load_bg()
 		if (!FileExists(fname)) fname = 0;
 	}
 
+	if (cfg.game_wallpapers)
+	{
+		char bgdir[32];
+		int alt = altcfg();
+		sprintf(bgdir, "wallpapers_alt_%d", alt);
+		if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
+		if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
+		if (PathIsDir(bgdir))
+		{
+			auto selectedItem = flist_SelectedItem();
+			char fullpath[256];
+			bool fileExists = false;
+
+			if (selectedItem != nullptr)
+			{
+				char* altname = selectedItem->altname;
+				sprintf(fullpath, "%s/%s.png", bgdir, altname);
+				if (FileExists(fullpath))
+				{
+					fileExists = true;
+				}
+				else
+				{
+					sprintf(fullpath, "%s/%s.jpg", bgdir, altname);
+					if (FileExists(fullpath))
+					{
+						fileExists = true;
+					}
+				}
+			}
+
+			if (!fileExists)
+			{
+				sprintf(fullpath, "%s/default.png", bgdir);
+				if (!FileExists(fullpath))
+				{
+					sprintf(fullpath, "%s/default.jpg", bgdir);
+				}
+			}
+			fname = fullpath;
+		}
+	}
+
 	if (!fname)
 	{
 		char bgdir[32];
@@ -3353,7 +3396,7 @@ void video_menu_bg(int n, int idle)
 			switch (n)
 			{
 			case 1:
-				if (!menubg) menubg = load_bg();
+				if (!menubg || cfg.game_wallpapers) menubg = load_bg();
 				if (menubg)
 				{
 					imlib_context_set_image(menubg);
