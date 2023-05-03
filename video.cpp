@@ -3227,118 +3227,57 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 	return name;
 }
 
-static Imlib_Image load_bg()
+static Imlib_Image load_bg(const char* fname = NULL)
 {
-	const char* fname = "menu.png";
-	if (!FileExists(fname))
-	{
-		fname = "menu.jpg";
-		if (!FileExists(fname)) fname = 0;
-	}
+    if (!fname)
+    {
+        if (!FileExists("menu.png"))
+            fname = !FileExists("menu.jpg") ? NULL : "menu.jpg";
+        else
+            fname = "menu.png";
+    }
 
-	// Start dynamic wallpaper section here.
-	if (cfg.game_wallpapers)
-	{
-	    // Similar chunk of code to get valid wallpapers folder:
-		char bgdir[32];
-		int alt = altcfg();
-		sprintf(bgdir, "wallpapers_alt_%d", alt);
-		if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
-		if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
-		if (PathIsDir(bgdir))
-		{
-		    // Assuming all is well above, parse out the name of the currently selected main menu listing.
-			auto selectedItem = flist_SelectedItem();
-			char fullpath[256];
-			bool fileExists = false;
+    if (!fname)
+    {
+        char bgdir[32];
 
-            // If there's a name in that listing, continue on.
-			if (selectedItem != nullptr)
-			{
-				char* altname = selectedItem->altname;
-                // Removal of potentially problematic characters: '/', '\', ':', '*', '?', '"', '<', '>', '|'
-				char sanitized_altname[256];
-                char* src = altname;
-                char* dst = sanitized_altname;
-                while (*src) {
-                    if (*src != '/' && *src != '\\' && *src != ':' && *src != '*' && *src != '?' &&
-                        *src != '"' && *src != '<' && *src != '>' && *src != '|') {
-                        *dst++ = *src;
-                    }
-                    src++;
-                }
-                *dst = '\0';
-                // Slap together all the things you need for a file path and then check to ensure a .png exists.
-				sprintf(fullpath, "%s/%s.png", bgdir, sanitized_altname);
-				if (FileExists(fullpath))
-				{
-					fileExists = true;
-				}
-				else
-                // If not, check to see if a .jpg exists.
-				{
-					sprintf(fullpath, "%s/%s.jpg", bgdir, sanitized_altname);
-					if (FileExists(fullpath))
-					{
-						fileExists = true;
-					}
-				}
-			}
+        int alt = altcfg();
+        sprintf(bgdir, "wallpapers_alt_%d", alt);
+        if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
+        if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
 
-            // If nothing exists for that file at all, attempt to assign it one of the default image names.
-			if (!fileExists)
-			{
-				sprintf(fullpath, "%s/default.png", bgdir);
-				if (!FileExists(fullpath))
-				{
-					sprintf(fullpath, "%s/default.jpg", bgdir);
-				}
-			}
-			// Finally, go ahead and push whatever full path you've constructed into fname for actual processing.
-			fname = fullpath;
-		}
-	}
+        if (PathIsDir(bgdir))
+        {
+            int rndfd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+            if (rndfd >= 0)
+            {
+                uint32_t rnd;
+                read(rndfd, &rnd, sizeof(rnd));
+                close(rndfd);
 
-	if (!fname)
-	{
-		char bgdir[32];
+                int count = 0;
+                get_file_fromdir(bgdir, -1, &count);
+                if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
+            }
+        }
+    }
 
-		int alt = altcfg();
-		sprintf(bgdir, "wallpapers_alt_%d", alt);
-		if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
-		if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
+    if (fname)
+    {
+        Imlib_Load_Error error = IMLIB_LOAD_ERROR_NONE;
+        Imlib_Image img = imlib_load_image_with_error_return(getFullPath(fname), &error);
+        if (img) return img;
+        printf("Image %s loading error %d\n", fname, error);
+    }
 
-		if (PathIsDir(bgdir))
-		{
-			int rndfd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
-			if (rndfd >= 0)
-			{
-				uint32_t rnd;
-				read(rndfd, &rnd, sizeof(rnd));
-				close(rndfd);
-
-				int count = 0;
-				get_file_fromdir(bgdir, -1, &count);
-				if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
-			}
-		}
-	}
-
-	if (fname)
-	{
-		Imlib_Load_Error error = IMLIB_LOAD_ERROR_NONE;
-		Imlib_Image img = imlib_load_image_with_error_return(getFullPath(fname), &error);
-		if (img) return img;
-		printf("Image %s loading error %d\n", fname, error);
-	}
-
-	return NULL;
+    return NULL;
 }
 
 static int bg_has_picture = 0;
 extern uint8_t  _binary_logo_png_start[], _binary_logo_png_end[];
-void video_menu_bg(int n, int idle)
+void video_menu_bg(int n, int idle, const char* fname)
 {
+    static char current_fname[256] = "";
 	bg_has_picture = 0;
 	menu_bg = n;
 	if (n)
@@ -3416,7 +3355,11 @@ void video_menu_bg(int n, int idle)
 			switch (n)
 			{
 			case 1:
-				if (!menubg || cfg.game_wallpapers) menubg = load_bg();  // The OR statement allows reloading of the background image if the option is enabled.
+				if (!menubg || strcmp(fname, current_fname) != 0)
+                {
+                    menubg = load_bg(fname);
+                    strncpy(current_fname, fname, sizeof(current_fname) - 1);
+                }
 				if (menubg)
 				{
 					imlib_context_set_image(menubg);

@@ -899,6 +899,116 @@ static int gun_idx = 0;
 static int32_t gun_pos[4] = {};
 static int page = 0;
 
+// Helper functions for GetImagePathForMenuItem
+// they work together to check for image files
+// with shorter names and different extensions
+void removeBracket(const char* fileName, char* result)
+{
+    int bracketLevel = 0;
+    const char* src = fileName;
+    char* dst = result;
+
+    while (*src)
+    {
+        if (*src == '(' || *src == '[' || *src == '{') {
+            bracketLevel++;
+        }
+        else if (*src == ')' || *src == ']' || *src == '}') {
+            bracketLevel--;
+            src++;
+            continue;
+        }
+
+        if (bracketLevel == 0) {
+            *dst++ = *src;
+        }
+        src++;
+    }
+
+    // Remove any unnecessary dangling spaces
+    while (dst > result && *(dst - 1) == ' ') {
+        dst--;
+    }
+    *dst = '\0';
+}
+
+bool FindImageFile(const char* basePath, const char* fileName, const char* extensions[], int extCount, char* outPath, int outPathLength)
+{
+    char currentVariation[256];
+    strncpy(currentVariation, fileName, sizeof(currentVariation));
+    currentVariation[sizeof(currentVariation) - 1] = '\0';
+
+    while (true)
+    {
+        for (int i = 0; i < extCount; ++i)
+        {
+            snprintf(outPath, outPathLength, "%s/%s.%s", basePath, currentVariation, extensions[i]);
+            if (FileExists(outPath))
+            {
+                return true;
+            }
+        }
+
+        // Create next variation by removing one set of brackets at a time
+        char nextVariation[256];
+        removeBracket(currentVariation, nextVariation);
+
+        // If the next variation is empty or the same as the current variation, break the loop
+        if (nextVariation[0] == '\0' || strcmp(currentVariation, nextVariation) == 0) {
+            break;
+        }
+
+        strncpy(currentVariation, nextVariation, sizeof(currentVariation));
+        currentVariation[sizeof(currentVariation) - 1] = '\0';
+    }
+
+    return false;
+}
+
+// Determine file name for next wallpaper based on the menu chosen.
+void GetImagePathForMenuItem(const char* menuItemName, char* imagePath, int imagePathLength)
+{
+    imagePath[0] = '\0';
+
+    if (cfg.dynamic_wallpaper)
+    {
+        char bgdir[32];
+        int alt = altcfg();
+        sprintf(bgdir, "wallpapers_alt_%d", alt);
+        if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
+        if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
+
+        if (PathIsDir(bgdir))
+        {
+            char sanitized_altname[256];
+            char* src = (char*)menuItemName;
+            char* dst = sanitized_altname;
+
+            while (*src)
+            {
+                if (*src != '/' && *src != '\\' && *src != ':' && *src != '*' && *src != '?' &&
+                    *src != '"' && *src != '<' && *src != '>' && *src != '|') {
+                    *dst++ = *src;
+                }
+                src++;
+            }
+            *dst = '\0';
+
+            const char* extensions[] = { "png", "jpg" };
+            int extCount = sizeof(extensions) / sizeof(extensions[0]);
+
+            if (FindImageFile(bgdir, sanitized_altname, extensions, extCount, imagePath, imagePathLength))
+            {
+                imagePath[imagePathLength - 1] = '\0';
+            }
+            else if (FindImageFile(bgdir, "default", extensions, extCount, imagePath, imagePathLength))
+            {
+                imagePath[imagePathLength - 1] = '\0';
+            }
+        }
+    }
+}
+
 void HandleUI(void)
 {
 	PROFILE_FUNCTION();
@@ -922,7 +1032,9 @@ void HandleUI(void)
 	// Check if the wallpaper timestamp has passed & act if it has.
     if (wallpaper_timer > 0 && CheckTimer(wallpaper_timer))
     {
-        video_menu_bg(user_io_status_get("[3:1]"));
+        char imagePath[256];
+        GetImagePathForMenuItem(flist_SelectedItem()->altname, imagePath, sizeof(imagePath));
+        video_menu_bg(user_io_status_get("[3:1]"),0,imagePath);
         wallpaper_timer = 0;
     }
 
@@ -4726,13 +4838,18 @@ void HandleUI(void)
 			MakeFile("/tmp/FULLPATH", selPath);
 			MakeFile("/tmp/FILESELECT", "active");
 		}
-		if (cfg.game_wallpapers && user_io_status_get("[3:1]") == 1)
+		if (cfg.dynamic_wallpaper && user_io_status_get("[3:1]") == 1)
 		{
-		    if (cfg.game_wallpapers_delay > 0)
+		    printf("Dynamic Wallpaper is enabled.");
+		    if (cfg.dynamic_wallpaper_delay > 0)
             {
-                wallpaper_timer = GetTimer(cfg.game_wallpapers_delay);
+                wallpaper_timer = GetTimer(cfg.dynamic_wallpaper_delay);
+                printf("Setting a timer for wallpaper.");
             } else {
-                video_menu_bg(user_io_status_get("[3:1]"));
+                char imagePath[256];
+                GetImagePathForMenuItem(flist_SelectedItem()->altname, imagePath, sizeof(imagePath));
+                printf("No delay configured; imagePath set to %s\n",imagePath);
+                video_menu_bg(user_io_status_get("[3:1]"),0,imagePath);
                 wallpaper_timer = 0;
             }
 		}
