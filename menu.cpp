@@ -202,7 +202,12 @@ static uint32_t menu_timer = 0;
 static uint32_t menu_save_timer = 0;
 static uint32_t load_addr = 0;
 static int32_t  bt_timer = 0;
+
+// Dynamic Wallpaper
 static uint32_t wallpaper_timer = 0;
+static uint16_t wallpaper_delay = 0;
+static bool wallpaper_first_run = 1;
+static char imagePath[256];
 
 extern const char *version;
 
@@ -902,6 +907,15 @@ static int page = 0;
 // Helper functions for GetImagePathForMenuItem
 // they work together to check for image files
 // with shorter names and different extensions
+void removeLeadingUnderscore(const char* fileName, char* result)
+{
+    const char* src = fileName;
+    if (*src == '_') {
+        src++;
+    }
+    strcpy(result, src);
+}
+
 void removeBracket(const char* fileName, char* result)
 {
     int bracketLevel = 0;
@@ -938,11 +952,21 @@ bool FindImageFile(const char* basePath, const char* fileName, const char* exten
     strncpy(currentVariation, fileName, sizeof(currentVariation));
     currentVariation[sizeof(currentVariation) - 1] = '\0';
 
+    char noUnderscoreVariation[256];
+    removeLeadingUnderscore(currentVariation, noUnderscoreVariation);
+
     while (true)
     {
         for (int i = 0; i < extCount; ++i)
         {
             snprintf(outPath, outPathLength, "%s/%s.%s", basePath, currentVariation, extensions[i]);
+            if (FileExists(outPath))
+            {
+                return true;
+            }
+
+            // Check the variation without the leading underscore
+            snprintf(outPath, outPathLength, "%s/%s.%s", basePath, noUnderscoreVariation, extensions[i]);
             if (FileExists(outPath))
             {
                 return true;
@@ -960,6 +984,9 @@ bool FindImageFile(const char* basePath, const char* fileName, const char* exten
 
         strncpy(currentVariation, nextVariation, sizeof(currentVariation));
         currentVariation[sizeof(currentVariation) - 1] = '\0';
+
+        // Update the variation without the leading underscore
+        removeLeadingUnderscore(currentVariation, noUnderscoreVariation);
     }
 
     return false;
@@ -1029,10 +1056,9 @@ void HandleUI(void)
 		}
 	}
 
-	// Check if the wallpaper timestamp has passed & act if it has.
-    if (wallpaper_timer > 0 && CheckTimer(wallpaper_timer))
+	// Check if the wallpaper timestamp has passed & act if it has, as long as no script is executing.
+    if (wallpaper_timer > 0 && CheckTimer(wallpaper_timer) && (!video_fb_state() || video_chvt(0) != 2))
     {
-        char imagePath[256];
         GetImagePathForMenuItem(flist_SelectedItem()->altname, imagePath, sizeof(imagePath));
         video_menu_bg(user_io_status_get("[3:1]"),0,imagePath);
         wallpaper_timer = 0;
@@ -1172,13 +1198,13 @@ void HandleUI(void)
 				if (menu_visible > 0)
 				{
 					menu_visible = 0;
-					video_menu_bg(user_io_status_get("[3:1]"), 1);
+					video_menu_bg(user_io_status_get("[3:1]"), 1, imagePath);
 					OsdMenuCtl(0);
 				}
 				else if (!menu_visible)
 				{
 					menu_visible--;
-					video_menu_bg(user_io_status_get("[3:1]"), 2);
+					video_menu_bg(user_io_status_get("[3:1]"), 2, imagePath);
 					off_timeout = cfg.video_off ? GetTimer(cfg.video_off * 1000) : 0;
 				}
 			}
@@ -1186,7 +1212,7 @@ void HandleUI(void)
 			if (off_timeout && CheckTimer(off_timeout) && menu_visible < 0)
 			{
 				off_timeout = 0;
-				video_menu_bg(user_io_status_get("[3:1]"), 3);
+				video_menu_bg(user_io_status_get("[3:1]"), 3, imagePath);
 			}
 
 			if (c || menustate != MENU_FILE_SELECT2)
@@ -1196,7 +1222,7 @@ void HandleUI(void)
 				{
 					c = 0;
 					menu_visible = 1;
-					video_menu_bg(user_io_status_get("[3:1]"));
+					video_menu_bg(user_io_status_get("[3:1]"), 0, imagePath);
 					OsdMenuCtl(1);
 				}
 			}
@@ -1221,7 +1247,7 @@ void HandleUI(void)
 		case KEY_F12:
 			menu = true;
 			menu_key_set(KEY_F12 | UPSTROKE);
-			if(video_fb_state()) video_menu_bg(user_io_status_get("[3:1]"));
+			if(video_fb_state()) video_menu_bg(user_io_status_get("[3:1]"), 0, imagePath);
 			video_fb_enable(0);
 			break;
 
@@ -1230,7 +1256,7 @@ void HandleUI(void)
 			{
 				user_io_status_set("[3:1]", user_io_status_get("[3:1]") + 1);
 				user_io_status_save(user_io_create_config_name());
-				video_menu_bg(user_io_status_get("[3:1]"));
+				video_menu_bg(user_io_status_get("[3:1]"), 0, imagePath);
 			}
 			break;
 
@@ -3035,7 +3061,7 @@ void HandleUI(void)
 		{
 			if (c & UPSTROKE)
 			{
-				video_menu_bg(user_io_status_get("[3:1]"));
+				video_menu_bg(user_io_status_get("[3:1]"), 0, imagePath);
 				video_fb_enable(0);
 				menustate = MENU_NONE1;
 				menusub = 3;
@@ -4838,19 +4864,24 @@ void HandleUI(void)
 			MakeFile("/tmp/FULLPATH", selPath);
 			MakeFile("/tmp/FILESELECT", "active");
 		}
-		if (cfg.dynamic_wallpaper && user_io_status_get("[3:1]") == 1)
+		if (cfg.dynamic_wallpaper && user_io_status_get("[3:1]") == 1 && (fs_Options & SCANO_CORES))
 		{
-		    printf("Dynamic Wallpaper is enabled.");
-		    if (cfg.dynamic_wallpaper_delay > 0)
+		    if (wallpaper_delay > 0)
             {
-                wallpaper_timer = GetTimer(cfg.dynamic_wallpaper_delay);
-                printf("Setting a timer for wallpaper.");
+                wallpaper_timer = GetTimer(wallpaper_delay);
             } else {
-                char imagePath[256];
                 GetImagePathForMenuItem(flist_SelectedItem()->altname, imagePath, sizeof(imagePath));
-                printf("No delay configured; imagePath set to %s\n",imagePath);
                 video_menu_bg(user_io_status_get("[3:1]"),0,imagePath);
                 wallpaper_timer = 0;
+                if (cfg.dynamic_wallpaper_delay && wallpaper_first_run)
+                {
+                    wallpaper_delay = cfg.dynamic_wallpaper_delay;
+                    wallpaper_first_run = 0;
+                }
+                if (!cfg.dynamic_wallpaper_delay)
+                {
+                    wallpaper_delay = 100;
+                }
             }
 		}
 		break;
@@ -6205,6 +6236,15 @@ void HandleUI(void)
 			break;
 		}
 
+		if (cfg.dynamic_wallpaper)
+        {
+            GetImagePathForMenuItem("System Settings", imagePath, sizeof(imagePath));
+            video_menu_bg(user_io_status_get("[3:1]"),0,imagePath);
+            wallpaper_timer = 0;
+            wallpaper_delay = 0;
+            wallpaper_first_run = 1;
+        }
+
 		OsdSetSize(16);
 		helptext_idx = 0;
 		parentstate = menustate;
@@ -6528,7 +6568,7 @@ void HandleUI(void)
 		{
 			if (c & UPSTROKE)
 			{
-				video_menu_bg(user_io_status_get("[3:1]"));
+				video_menu_bg(user_io_status_get("[3:1]"),0,imagePath);
 				video_fb_enable(0);
 				menustate = MENU_SYSTEM1;
 				menusub = 3;

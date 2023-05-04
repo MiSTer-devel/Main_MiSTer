@@ -3227,17 +3227,17 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 	return name;
 }
 
-static Imlib_Image load_bg(const char* fname = NULL)
+static Imlib_Image load_bg(const char* fname = "")
 {
-    if (!fname)
+    if (fname[0] == '\0')
     {
-        if (!FileExists("menu.png"))
-            fname = !FileExists("menu.jpg") ? NULL : "menu.jpg";
-        else
+        if (FileExists("menu.png"))
             fname = "menu.png";
+        else if (FileExists("menu.jpg"))
+            fname = "menu.jpg";
     }
 
-    if (!fname)
+    if (fname[0] == '\0')
     {
         char bgdir[32];
 
@@ -3262,7 +3262,7 @@ static Imlib_Image load_bg(const char* fname = NULL)
         }
     }
 
-    if (fname)
+    if (fname[0] != '\0')
     {
         Imlib_Load_Error error = IMLIB_LOAD_ERROR_NONE;
         Imlib_Image img = imlib_load_image_with_error_return(getFullPath(fname), &error);
