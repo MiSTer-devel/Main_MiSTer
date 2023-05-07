@@ -3238,12 +3238,17 @@ static Imlib_Image load_bg()
 
 	if (!fname)
 	{
-		char bgdir[32];
-
+		static char bgdir[128];
+		static char label[64];
 		int alt = altcfg();
-		sprintf(bgdir, "wallpapers_alt_%d", alt);
-		if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
-		if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
+
+		const char* cfg_name = cfg_get_name(alt);
+		snprintf(label, sizeof(label), "%s", cfg_name + 6);
+		char *p = strrchr(label, '.');
+		if (p) *p = 0;
+
+		sprintf(bgdir, "wallpapers%s", label);
+		if (alt <= 0 || !cfg_name[0] || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
 
 		if (PathIsDir(bgdir))
 		{
