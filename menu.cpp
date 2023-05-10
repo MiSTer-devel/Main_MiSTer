@@ -958,6 +958,7 @@ void HandleUI(void)
 	static char addon[1024];
 	static int store_name;
 	static int vfilter_type;
+	static int old_volume = 0;
 
 	static char	cp_MenuCancel;
 
@@ -3488,9 +3489,9 @@ void HandleUI(void)
 		}
 		OsdWrite(12, s, menusub == 1);
 
-		m = get_volume();
+		old_volume = get_volume();
 		strcpy(s, "   Global Volume: ");
-		if (m & 0x10)
+		if (old_volume & 0x10)
 		{
 			strcat(s, "< Mute >");
 		}
@@ -3500,7 +3501,7 @@ void HandleUI(void)
 			char *bar = s + strlen(s);
 			int vol = (audio_filter_en() < 0) ? get_core_volume() : 0;
 			memset(bar, 0x8C, 8 - vol);
-			memset(bar, 0x7f, 8 - vol - m);
+			memset(bar, 0x7f, 8 - vol - old_volume);
 		}
 		OsdWrite(13, s, menusub == 2);
 
@@ -3580,6 +3581,13 @@ void HandleUI(void)
 				menustate = sharpmz_default_ui_state();
 				break;
 			}
+		}
+
+		m = get_volume();
+		if (old_volume != m)
+		{
+			old_volume = m;
+			menustate = MENU_MISC1;
 		}
 		break;
 
