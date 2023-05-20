@@ -38,4 +38,6 @@ size_t sprintfz(char (&dest)[N], const char *fmt, ...)
 	return r;
 }
 
+unsigned int str_hash(const char *s, unsigned int initial = 5381);
+
 #endif // STR_UTIL_H
