@@ -38,7 +38,7 @@ unsigned int str_hash(const char *s, unsigned int initial)
 	unsigned int hash = initial;
 	int c;
 
-	while( c = *s++ )
+	while((c = *s++))
 	{
 		hash = ((hash << 5) + hash) + c;
 	}

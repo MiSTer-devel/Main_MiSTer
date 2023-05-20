@@ -1443,8 +1443,8 @@ static char *get_map_name(int dev, int def)
 {
 	static char name[128];
 	char id[32];
-	
-	if (cfg.unique_mapping) sprintfz(id, "%08x", input[dev].unique_hash);
+
+	if (cfg.controller_unique_mapping) sprintfz(id, "%08x", input[dev].unique_hash);
 	else strcpyz(id, input[dev].idstr);
 
 	if (def || is_menu()) sprintf(name, "input_%s%s_v3.map", id, input[dev].mod ? "_m" : "");
@@ -1455,10 +1455,10 @@ static char *get_map_name(int dev, int def)
 static char *get_kbdmap_name(int dev)
 {
 	static char name[128];
-	
-	if (cfg.unique_mapping) sprintfz(name, "kbd_%08x.map", input[dev].unique_hash);
+
+	if (cfg.controller_unique_mapping) sprintfz(name, "kbd_%08x.map", input[dev].unique_hash);
 	else sprintfz(name, "kbd_%s.map", input[dev].idstr);
-	
+
 	return name;
 }
 
@@ -3399,6 +3399,7 @@ void mergedevs()
 									int unique_hash = str_hash(input[i].id);
 									unique_hash = str_hash(input[i].mac, unique_hash);
 									unique_hash = str_hash(input[i].idstr, unique_hash);
+									unique_hash = str_hash(input[i].sysfs, unique_hash);
 									input[i].unique_hash = unique_hash;
 
 									input[i].timeout = (strlen(uniq) && strstr(sysfs, "bluetooth")) ? (cfg.bt_auto_disconnect * 10) : 0;
