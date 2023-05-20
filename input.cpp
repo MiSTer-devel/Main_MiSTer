@@ -3399,7 +3399,6 @@ void mergedevs()
 									int unique_hash = str_hash(input[i].id);
 									unique_hash = str_hash(input[i].mac, unique_hash);
 									unique_hash = str_hash(input[i].idstr, unique_hash);
-									unique_hash = str_hash(input[i].sysfs, unique_hash);
 									input[i].unique_hash = unique_hash;
 
 									input[i].timeout = (strlen(uniq) && strstr(sysfs, "bluetooth")) ? (cfg.bt_auto_disconnect * 10) : 0;
