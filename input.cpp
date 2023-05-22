@@ -1439,12 +1439,22 @@ int get_map_cancel()
 	return (mapping && !is_menu() && osd_timer && CheckTimer(osd_timer));
 }
 
+static int has_unique_mapping(uint32_t vidpid)
+{
+	for (uint i = 0; i < cfg.controller_unique_mapping[0]; i++)
+	{
+		if (!cfg.controller_unique_mapping[i + 1]) break;
+		if (cfg.controller_unique_mapping[i + 1] == 1 || cfg.controller_unique_mapping[i + 1] == vidpid) return 1;
+	}
+	return 0;
+}
+
 static char *get_map_name(int dev, int def)
 {
 	static char name[128];
 	char id[32];
 
-	if (cfg.controller_unique_mapping) sprintfz(id, "%s_%08x", input[dev].idstr, input[dev].unique_hash);
+	if (has_unique_mapping((input[dev].vid << 16) | input[dev].pid)) sprintfz(id, "%s_%08x", input[dev].idstr, input[dev].unique_hash);
 	else strcpyz(id, input[dev].idstr);
 
 	if (def || is_menu()) sprintf(name, "input_%s%s_v3.map", id, input[dev].mod ? "_m" : "");
@@ -1456,7 +1466,7 @@ static char *get_kbdmap_name(int dev)
 {
 	static char name[128];
 
-	if (cfg.controller_unique_mapping) sprintfz(name, "kbd_%s_%08x.map", input[dev].idstr, input[dev].unique_hash);
+	if (has_unique_mapping((input[dev].vid << 16) | input[dev].pid)) sprintfz(name, "kbd_%s_%08x.map", input[dev].idstr, input[dev].unique_hash);
 	else sprintfz(name, "kbd_%s.map", input[dev].idstr);
 
 	return name;
