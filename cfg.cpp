@@ -19,7 +19,7 @@ cfg_t cfg;
 
 typedef enum
 {
-	UINT8 = 0, INT8, UINT16, INT16, UINT32, INT32, HEX8, HEX16, HEX32, FLOAT, STRING, UINT32ARR, HEX32ARR
+	UINT8 = 0, INT8, UINT16, INT16, UINT32, INT32, HEX8, HEX16, HEX32, FLOAT, STRING, UINT32ARR, HEX32ARR, STRINGARR
 } ini_vartypes_t;
 
 typedef struct
@@ -104,10 +104,12 @@ static const ini_var_t ini_vars[] =
 	{ "VRR_MAX_FRAMERATE", (void *)(&(cfg.vrr_max_framerate)), UINT8, 0, 255},
 	{ "VRR_VESA_FRAMERATE", (void *)(&(cfg.vrr_vesa_framerate)), UINT8, 0, 255},
 	{ "VIDEO_OFF", (void*)(&(cfg.video_off)), INT16, 0, 3600 },
-	{ "PLAYER_1_CONTROLLER", (void*)(&(cfg.player_controller[0])), STRING, 0, sizeof(cfg.player_controller[0]) - 1 },
-	{ "PLAYER_2_CONTROLLER", (void*)(&(cfg.player_controller[1])), STRING, 0, sizeof(cfg.player_controller[1]) - 1 },
-	{ "PLAYER_3_CONTROLLER", (void*)(&(cfg.player_controller[2])), STRING, 0, sizeof(cfg.player_controller[2]) - 1 },
-	{ "PLAYER_4_CONTROLLER", (void*)(&(cfg.player_controller[3])), STRING, 0, sizeof(cfg.player_controller[3]) - 1 },
+	{ "PLAYER_1_CONTROLLER", (void*)(&(cfg.player_controller[0])), STRINGARR, sizeof(cfg.player_controller[0]) / sizeof(cfg.player_controller[0][0]), sizeof(cfg.player_controller[0][0])},
+	{ "PLAYER_2_CONTROLLER", (void*)(&(cfg.player_controller[1])), STRINGARR, sizeof(cfg.player_controller[0]) / sizeof(cfg.player_controller[0][0]), sizeof(cfg.player_controller[0][0])},
+	{ "PLAYER_3_CONTROLLER", (void*)(&(cfg.player_controller[2])), STRINGARR, sizeof(cfg.player_controller[0]) / sizeof(cfg.player_controller[0][0]), sizeof(cfg.player_controller[0][0])},
+	{ "PLAYER_4_CONTROLLER", (void*)(&(cfg.player_controller[3])), STRINGARR, sizeof(cfg.player_controller[0]) / sizeof(cfg.player_controller[0][0]), sizeof(cfg.player_controller[0][0])},
+	{ "PLAYER_5_CONTROLLER", (void*)(&(cfg.player_controller[4])), STRINGARR, sizeof(cfg.player_controller[0]) / sizeof(cfg.player_controller[0][0]), sizeof(cfg.player_controller[0][0])},
+	{ "PLAYER_6_CONTROLLER", (void*)(&(cfg.player_controller[5])), STRINGARR, sizeof(cfg.player_controller[0]) / sizeof(cfg.player_controller[0][0]), sizeof(cfg.player_controller[0][0])},
 	{ "DISABLE_AUTOFIRE", (void *)(&(cfg.disable_autofire)), UINT8, 0, 1},
 	{ "VIDEO_BRIGHTNESS", (void *)(&(cfg.video_brightness)), UINT8, 0, 100},
 	{ "VIDEO_CONTRAST", (void *)(&(cfg.video_contrast)), UINT8, 0, 100},
@@ -354,7 +356,22 @@ static void ini_parse_var(char* buf)
 		{
 		case STRING:
 			memset(var->var, 0, var->max);
-			strncpy((char*)(var->var), &(buf[i]), var->max);
+			snprintf((char*)(var->var), var->max, "%s", buf+i);
+			break;
+
+		case STRINGARR:
+			{
+				int item_sz = var->max;
+				for (int n = 0; n < var->min; n++)
+				{
+					char *str = ((char*)var->var) + (n * item_sz);
+					if (!strlen(str))
+					{
+						snprintf(str, item_sz, "%s", buf + i);
+						break;
+					}
+				}
+			}
 			break;
 
 		case HEX32ARR:
@@ -592,7 +609,7 @@ void cfg_print()
 			if (*(uint32_t*)ini_vars[i].var)
 			{
 				uint32_t* arr = (uint32_t*)ini_vars[i].var;
-				for (uint32_t n = 0; n < arr[0]; n++) printf("%s=%u\n", ini_vars[i].name, arr[n + 1]);
+				for (uint32_t n = 0; n < arr[0]; n++) printf("  %s=%u\n", ini_vars[i].name, arr[n + 1]);
 			}
 			break;
 
@@ -612,7 +629,7 @@ void cfg_print()
 			if (*(uint32_t*)ini_vars[i].var)
 			{
 				uint32_t* arr = (uint32_t*)ini_vars[i].var;
-				for (uint32_t n = 0; n < arr[0]; n++) printf("%s=0x%08X\n", ini_vars[i].name, arr[n + 1]);
+				for (uint32_t n = 0; n < arr[0]; n++) printf("  %s=0x%08X\n", ini_vars[i].name, arr[n + 1]);
 			}
 			break;
 
@@ -634,6 +651,15 @@ void cfg_print()
 
 		case STRING:
 			if (*(uint32_t*)ini_vars[i].var) printf("  %s=%s\n", ini_vars[i].name, (char*)ini_vars[i].var);
+			break;
+
+		case STRINGARR:
+			for (int n = 0; n < ini_vars[i].min; n++)
+			{
+				char *str = ((char*)ini_vars[i].var) + (n*ini_vars[i].max);
+				if (!strlen(str)) break;
+				printf("  %s=%s\n", ini_vars[i].name, str);
+			}
 			break;
 		}
 	}

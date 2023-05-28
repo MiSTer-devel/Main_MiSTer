@@ -1439,36 +1439,41 @@ int get_map_cancel()
 	return (mapping && !is_menu() && osd_timer && CheckTimer(osd_timer));
 }
 
-static int has_unique_mapping(uint32_t vidpid)
+static char *get_unique_mapping(int dev, int force_unique = 0)
 {
+	uint32_t vidpid = (input[dev].vid << 16) | input[dev].pid;
+	static char str[128];
+
 	for (uint i = 0; i < cfg.controller_unique_mapping[0]; i++)
 	{
 		if (!cfg.controller_unique_mapping[i + 1]) break;
-		if (cfg.controller_unique_mapping[i + 1] == 1 || cfg.controller_unique_mapping[i + 1] == vidpid) return 1;
+		if (force_unique || cfg.controller_unique_mapping[i + 1] == 1 || cfg.controller_unique_mapping[i + 1] == vidpid)
+		{
+			sprintfz(str, "%s_%08x", input[dev].idstr, input[dev].unique_hash);
+			return str;
+		}
 	}
-	return 0;
+
+	sprintfz(str, "%s", input[dev].idstr);
+	return str;
 }
 
 static char *get_map_name(int dev, int def)
 {
-	static char name[128];
-	char id[32];
+	static char name[1024];
+	char *id = get_unique_mapping(dev);
 
-	if (has_unique_mapping((input[dev].vid << 16) | input[dev].pid)) sprintfz(id, "%s_%08x", input[dev].idstr, input[dev].unique_hash);
-	else strcpyz(id, input[dev].idstr);
-
-	if (def || is_menu()) sprintf(name, "input_%s%s_v3.map", id, input[dev].mod ? "_m" : "");
-	else sprintf(name, "%s_input_%s%s_v3.map", user_io_get_core_name(), id, input[dev].mod ? "_m" : "");
+	if (def || is_menu()) sprintfz(name, "input_%s%s_v3.map", id, input[dev].mod ? "_m" : "");
+	else sprintfz(name, "%s_input_%s%s_v3.map", user_io_get_core_name(), id, input[dev].mod ? "_m" : "");
 	return name;
 }
 
 static char *get_kbdmap_name(int dev)
 {
 	static char name[128];
+	char *id = get_unique_mapping(dev);
 
-	if (has_unique_mapping((input[dev].vid << 16) | input[dev].pid)) sprintfz(name, "kbd_%s_%08x.map", input[dev].idstr, input[dev].unique_hash);
-	else sprintfz(name, "kbd_%s.map", input[dev].idstr);
-
+	sprintfz(name, "kbd_%s.map", id);
 	return name;
 }
 
@@ -2269,12 +2274,12 @@ static uint16_t def_mmap[] = {
 	0x0000, 0x0002, 0x0001, 0x0002, 0x0000, 0x0000, 0x0000, 0x0000
 };
 
-static void assign_player(int dev, int num)
+static void assign_player(int dev, int num, int force = 0)
 {
 	input[dev].num = num;
 	if (JOYCON_COMBINED(dev)) input[input[dev].bind].num = num;
 	store_player(num, dev);
-	printf("Device %s assigned to player %d\n", input[dev].id, input[dev].num);
+	printf("Device %s %sassigned to player %d\n", input[dev].id, force ? "forcebly " : "", input[dev].num);
 }
 
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
@@ -2411,24 +2416,35 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		int assign_btn = ((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) && (ev->type == EV_REL || ev->type == EV_KEY));
 		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1 && ev->code >= 256)
 		{
-			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_START; i++) if (ev->code == input[dev].mmap[i]) assign_btn = 1;
+			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_START; i++)
+			{
+				if (ev->code == input[dev].mmap[i]) assign_btn = 1;
+			}
 		}
 
 		if (assign_btn)
 		{
 			for (uint8_t i = 0; i < (sizeof(cfg.player_controller) / sizeof(cfg.player_controller[0])); i++)
 			{
-				if (cfg.player_controller[i][0])
+				for (int n = 0; n < 8; n++)
 				{
-					if (strcasestr(input[dev].id, cfg.player_controller[i]))
+					if (!cfg.player_controller[i][n][0]) break;
+
+					if (strcasestr(input[dev].id, cfg.player_controller[i][n]))
 					{
-						assign_player(dev, i + 1);
+						assign_player(dev, i + 1, 1);
 						break;
 					}
 
-					if (strcasestr(input[dev].sysfs, cfg.player_controller[i]))
+					if (strcasestr(input[dev].sysfs, cfg.player_controller[i][n]))
 					{
-						assign_player(dev, i + 1);
+						assign_player(dev, i + 1, 1);
+						break;
+					}
+
+					if (strcasestr(get_unique_mapping(dev, 1), cfg.player_controller[i][n]))
+					{
+						assign_player(dev, i + 1, 1);
 						break;
 					}
 				}
@@ -4573,7 +4589,7 @@ int input_test(int getchar)
 			setup_wheels();
 			for (int i = 0; i < n; i++)
 			{
-				printf("opened %d(%2d): %s (%04x:%04x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].quirk, input[i].id, input[i].name);
+				printf("opened %d(%2d): %s (%04x:%04x:%08x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].unique_hash, input[i].quirk, input[i].id, input[i].name);
 				restore_player(i);
 			}
 			unflag_players();
