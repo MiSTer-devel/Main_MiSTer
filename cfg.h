@@ -92,6 +92,7 @@ typedef struct {
 	char vga_mode_int;
 	char ntsc_mode;
 	uint32_t controller_unique_mapping[256];
+	uint8_t show_progress_info;
 } cfg_t;
 
 extern cfg_t cfg;
