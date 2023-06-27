@@ -153,6 +153,7 @@ void mcd_set_image(int num, const char *filename)
 			cdd.status = cdd.loaded ? CD_STAT_STOP : CD_STAT_NO_DISC;
 			cdd.latency = 10;
 			cdd.SendData = mcd_send_data;
+			cdd.CanSendData = NULL;
 
 			if (!same_game)
 			{
