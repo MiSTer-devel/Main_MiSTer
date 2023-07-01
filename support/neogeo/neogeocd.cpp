@@ -17,21 +17,24 @@
 static int need_reset=0;
 static uint8_t has_command = 0;
 static uint8_t neo_cd_en = 0;
+static uint32_t poll_timer = 0;
+static uint8_t cd_speed = 0;
 
 #define CRC_START 5
 
 #define NEOCD_AUDIO_IO_INDEX 4
 
+#define NEOCD_GET_CMD        0
+#define NEOCD_GET_SEND_DATA  1
+
 void neocd_poll()
 {
-	static uint32_t poll_timer = 0;
 	static uint8_t last_req = 255;
-	static uint8_t adj = 0;
 
 	if (!poll_timer || CheckTimer(poll_timer))
 	{
-		poll_timer = GetTimer(13 + (!adj ? 1 : 0));
-		if (++adj >= 3) adj = 0;
+
+		set_poll_timer();
 
 		if (has_command) {
 			spi_uio_cmd_cont(UIO_CD_SET);
@@ -56,6 +59,8 @@ void neocd_poll()
 	{
 		last_req = req;
 
+		spi_w(NEOCD_GET_CMD);
+
 		uint16_t data_in[4];
 		data_in[0] = spi_w(0);
 		data_in[1] = spi_w(0);
@@ -68,6 +73,8 @@ void neocd_poll()
 			cdd.Reset();
 		}
 
+		cd_speed = (data_in[2] >> 8) & 3;
+
 		uint64_t c = *((uint64_t*)(data_in));
 		cdd.SetCommand(c, CRC_START);
 		cdd.CommandExec();
@@ -79,6 +86,32 @@ void neocd_poll()
 		DisableIO();
 }
 
+void set_poll_timer()
+{
+	int speed = cd_speed;
+	int interval = 10; // Slightly faster so the buffers stay filled when playing
+
+	if (!cdd.isData || cdd.status != CD_STAT_PLAY || cdd.latency != 0)
+	{
+		speed = 0;
+	}
+
+	if (speed == 1)
+	{
+		interval = 5;
+	}
+	else if (speed == 2)
+	{
+		interval = 4;
+	}
+	else if (speed == 3)
+	{
+		interval = 2;
+	}
+
+	poll_timer = GetTimer(interval);
+}
+
 void neocd_set_image(char *filename)
 {
 	cdd.Unload();
@@ -86,13 +119,14 @@ void neocd_set_image(char *filename)
 
 	if (*filename)
 	{
-		neogeo_romset_tx(filename);
+		neogeo_romset_tx(filename, 1);
 
 		if (cdd.Load(filename) > 0)
 		{
 			cdd.status = cdd.loaded ? CD_STAT_STOP : CD_STAT_NO_DISC;
 			cdd.latency = 10;
 			cdd.SendData = neocd_send_data;
+			cdd.CanSendData = neocd_can_send_data;
 		}
 		else
 		{
@@ -132,4 +166,15 @@ int neocd_is_en() {
 
 void neocd_set_en(int enable) {
 	neo_cd_en = enable;
+}
+
+int neocd_can_send_data(uint8_t type) {
+	// Ask the FPGA if it is ready to receive a sector
+	spi_uio_cmd_cont(UIO_CD_GET);
+	spi_w(NEOCD_GET_SEND_DATA | (type << 2));
+
+	uint16_t data = spi_w(0);
+	DisableIO();
+
+	return (data == 1);
 }

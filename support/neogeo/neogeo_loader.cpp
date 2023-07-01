@@ -1053,17 +1053,18 @@ void load_neo(char *path)
 	}
 }
 
-int neogeo_romset_tx(char* name)
+int neogeo_romset_tx(char* name, int cd_en)
 {
 	char *romset = strrchr(name, '/');
 	if (!romset) return 0;
 	romset++;
 
-	int system_type;
+	int system_mvs, system_cdz;
 	static char full_path[1024];
 
-	system_type = user_io_status_get("[2:1]") & 3;
-	printf("System type: %u\n", system_type);
+	system_mvs = user_io_status_get("[1]") & 1;
+	system_cdz = user_io_status_get("[2]") & 1;
+	printf("System MVS: %u, CDZ: %u, CD: %u\n", system_mvs, system_cdz, cd_en);
 
 	spi_uio_cmd_cont(UIO_GET_OSDMASK);
 	uint16_t mask = spi_w(0);
@@ -1078,8 +1079,12 @@ int neogeo_romset_tx(char* name)
 
 	const char* home = HomeDir();
 
+	// Send cd_en to the FPGA before loading files
+	set_config((cd_en & 1) << 31, 1 << 31);
+	notify_conf();
+
 	// Look for the romset's file list in romsets.xml
-	if (!(system_type & 2))
+	if (!cd_en)
 	{
 		char *p = strrchr(name, '.');
 		if (p && !strcasecmp(p, ".neo"))
@@ -1118,31 +1123,36 @@ int neogeo_romset_tx(char* name)
 	// Load system ROMs
 	if (strcmp(romset, "debug")) {
 		// Not loading the special 'debug' romset
-		if (!(system_type & 2)) {
+		if (!cd_en) {
 			sprintf(full_path, "%s/uni-bios.rom", home);
 			if (!(mask & 0x8000) && FileExists(full_path)) {
 				// Autoload Unibios for cart systems if present
 				neogeo_tx(home, "uni-bios.rom", NEO_FILE_RAW, 0, 0, 0x20000);
 			} else {
 				// Otherwise load normal system roms
-				if (system_type == 0)
+				if (!system_mvs)
 					neogeo_tx(home, "neo-epo.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
 				else
 					neogeo_tx(home, "sp-s2.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
 			}
-		} else if (system_type == 2) {
-			// NeoGeo CD
-			neogeo_tx(home, "top-sp1.bin", NEO_FILE_RAW, 0, 0, 0x80000);
 		} else {
-			// NeoGeo CDZ
-			neogeo_tx(home, "neocd.bin", NEO_FILE_RAW, 0, 0, 0x80000);
+			sprintf(full_path, "%s/uni-bioscd.rom", home);
+			if (!(mask & 0x8000) && FileExists(full_path)) {
+				neogeo_tx(home, "uni-bioscd.rom", NEO_FILE_RAW, 0, 0, 0x80000);
+			} else if (!system_cdz) {
+				// NeoGeo CD
+				neogeo_tx(home, "top-sp1.bin", NEO_FILE_RAW, 0, 0, 0x80000);
+			} else {
+				// NeoGeo CDZ
+				neogeo_tx(home, "neocd.bin", NEO_FILE_RAW, 0, 0, 0x80000);
+			}
 		}
 	}
 
 	//flush CROM if any.
 	neogeo_tx(NULL, NULL, 0, -1, 0, 0);
 
-	if (!(system_type & 2))	neogeo_tx(home, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0);
+	if (!cd_en)	neogeo_tx(home, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0);
 	neogeo_file_tx(home, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
 
 	if (crom_start < 0x300000) crom_start = 0x300000;
@@ -1156,7 +1166,7 @@ int neogeo_romset_tx(char* name)
 
 	notify_conf();
 
-	FileGenerateSavePath((system_type & 2) ? "ngcd" : name, (char*)full_path);
+	FileGenerateSavePath(cd_en ? "ngcd" : name, (char*)full_path);
 	user_io_file_mount((char*)full_path, 0, 1);
 
 	user_io_status_set("[0]", 0); // Release reset

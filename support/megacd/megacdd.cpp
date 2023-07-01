@@ -23,6 +23,7 @@ cdd_t::cdd_t() {
 	chd_hunkbuf = NULL;
 	chd_hunknum = -1;
 	SendData = NULL;
+	CanSendData = NULL;
 
 	stat[0] = 0xB;
 	stat[1] = 0x0;
@@ -371,7 +372,12 @@ void cdd_t::Update() {
 			this->latency--;
 			return;
 		}
-		this->status = this->loaded ? CD_STAT_TOC : CD_STAT_NO_DISC;
+		// Neo Geo CDZ does not like the status changing to TOC here.
+		//this->status = this->loaded ? CD_STAT_TOC : CD_STAT_NO_DISC;
+		if (!this->loaded)
+		{
+			this->status = CD_STAT_NO_DISC;
+		}
 	}
 	else if (this->status == CD_STAT_SEEK)
 	{
@@ -396,6 +402,11 @@ void cdd_t::Update() {
 			return;
 		}
 
+		if (CanSendData && !CanSendData(this->toc.tracks[this->index].type))
+		{
+			// Not ready yet to receive sector
+			return;
+		}
 
 		if (this->toc.tracks[this->index].type)
 		{
@@ -409,7 +420,6 @@ void cdd_t::Update() {
 			header[3] = 0x01;
 
 			SectorSend(header);
-
 		}
 		else
 		{
@@ -551,6 +561,9 @@ void cdd_t::CommandExec() {
 		break;
 
 	case CD_COMM_TOC:
+		if (this->status == CD_STAT_STOP) {
+			this->status = CD_STAT_TOC;
+		}
 		switch (comm[3]) {
 		case 0: {
 			int lba_ = this->lba + 150;
@@ -980,8 +993,9 @@ void InterleaveSubcode(uint8_t *subc_data, uint16_t *buf)
 	}
 }
 
-void cdd_t::ReadSubcode(uint16_t* buf)
+int cdd_t::ReadSubcode(uint16_t* buf)
 {
+	int err = 0;
 	uint8_t subc[96];
 	if (this->toc.chd_f)
 	{
@@ -991,11 +1005,17 @@ void cdd_t::ReadSubcode(uint16_t* buf)
 		} else if (this->toc.tracks[this->index].sbc_type == SUBCODE_RW) {
 			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 0, CD_MAX_SECTOR_DATA, 96, subc, this->chd_hunkbuf, &this->chd_hunknum);
 			InterleaveSubcode(subc, buf);
+		} else {
+			err = -1;
 		}
 	} else if (this->toc.sub.opened()) {
 		FileReadAdv(&this->toc.sub, subc, 96);
 		InterleaveSubcode(subc, buf);
+	} else {
+		err = -1;
 	}
+
+	return err;
 }
 
 
@@ -1024,9 +1044,9 @@ int cdd_t::SubcodeSend()
 {
 	uint16_t buf[98 / 2];
 
-	ReadSubcode(buf);
+	int err = ReadSubcode(buf);
 
-	if (SendData)
+	if (!err && SendData)
 		return SendData((uint8_t*)buf, 98, MCD_SUB_IO_INDEX);
 
 	return 0;
