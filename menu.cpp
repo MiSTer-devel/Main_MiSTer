@@ -2269,7 +2269,7 @@ void HandleUI(void)
 				if (fs_Options & SCANO_NEOGEO)
 				{
 					neocd_set_en(0);
-					neogeo_romset_tx(selPath);
+					neogeo_romset_tx(selPath, 0);
 				}
 				else
 				{

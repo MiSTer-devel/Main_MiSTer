@@ -49,6 +49,7 @@ public:
 	uint8_t isData;
 	int loaded;
 	SendDataFunc SendData;
+	int (*CanSendData)(uint8_t type);
 
 	cdd_t();
 	int Load(const char *filename);
@@ -79,7 +80,7 @@ private:
 	int SubcodeSend();
 	void ReadData(uint8_t *buf);
 	int ReadCDDA(uint8_t *buf);
-	void ReadSubcode(uint16_t* buf);
+	int ReadSubcode(uint16_t* buf);
 	void LBAToMSF(int lba, msf_t* msf);
 	void MSFToLBA(int* lba, msf_t* msf);
 	void MSFToLBA(int* lba, uint8_t m, uint8_t s, uint8_t f);
