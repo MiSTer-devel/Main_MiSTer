@@ -79,6 +79,9 @@ enum MENU
 	MENU_MISC1,
 	MENU_MISC2,
 
+	MENU_SELECT_INI1,
+	MENU_SELECT_INI2,
+
 	MENU_FILE_SELECT1,
 	MENU_FILE_SELECT2,
 	MENU_CORE_FILE_SELECTED1,
@@ -446,6 +449,12 @@ static uint8_t GetASCIIKey(uint32_t keycode)
 	return keycode_table[get_amiga_code(keycode & 0xFFFF) & 0x7F];
 }
 
+static int select_ini = 0;
+void SelectINI()
+{
+	select_ini = 1;
+}
+
 /* the Atari core handles OSD keys competely inside the core */
 static uint32_t menu_key = 0;
 
@@ -501,7 +510,7 @@ static uint32_t menu_key_get(void)
 	}
 
 	// currently no key pressed
-	if (!c)
+	if (!c && !select_ini)
 	{
 		static unsigned long longpress = 0, longpress_consumed = 0;
 		static unsigned char last_but = 0;
@@ -545,7 +554,11 @@ static uint32_t menu_key_get(void)
 
 			if (!but && last_but && !longpress_consumed)
 			{
-				if (get_map_vid() || get_map_pid())
+				if (select_ini)
+				{
+					c = KEY_ESC | UPSTROKE;
+				}
+				else if (get_map_vid() || get_map_pid())
 				{
 					send_map_cmd(KEY_ALTERASE);
 				}
@@ -1040,7 +1053,7 @@ void HandleUI(void)
 
 	if (c && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
 
-	if (is_menu() && cfg.osd_timeout >= 5)
+	if (!select_ini && is_menu() && cfg.osd_timeout >= 5)
 	{
 		static int menu_visible = 1;
 		static unsigned long timeout = 0;
@@ -1095,7 +1108,7 @@ void HandleUI(void)
 	}
 
 	//prevent OSD control while script is executing on framebuffer
-	if (!video_fb_state() || video_chvt(0) != 2)
+	if ((!video_fb_state() || video_chvt(0) != 2) && !select_ini)
 	{
 		switch (c)
 		{
@@ -1184,6 +1197,30 @@ void HandleUI(void)
 			break;
 		case KEY_GRAVE:
 			recent = true;
+			break;
+		}
+	}
+
+	if (select_ini)
+	{
+		DISKLED_ON;
+
+		switch (c)
+		{
+		case KEY_ESC | UPSTROKE:
+			menu = true;
+			break;
+		case KEY_UP:
+			up = true;
+			break;
+		case KEY_DOWN:
+			down = true;
+			break;
+		case KEY_LEFT:
+			left = true;
+			break;
+		case KEY_RIGHT:
+			right = true;
 			break;
 		}
 	}
@@ -1330,7 +1367,11 @@ void HandleUI(void)
 			else if (is_st()) menustate = MENU_ST_MAIN1;
 			else if (is_archie()) menustate = MENU_ARCHIE_MAIN1;
 			else {
-				if (is_menu())
+				if (select_ini)
+				{
+					menustate = MENU_SELECT_INI1;
+				}
+				else if (is_menu())
 				{
 					menusub = 6;
 					SelectFile("", 0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_SYSTEM1);
@@ -1356,6 +1397,59 @@ void HandleUI(void)
 			if (!mgl->done) OsdDisable();
 			else OsdEnable(DISABLE_KEYBOARD);
 			if (mgl->state == 1) mgl->state = 2;
+		}
+		break;
+
+	case MENU_SELECT_INI1:
+		{
+			OsdSetTitle("Select INI");
+			int flag = 1;
+			for (int i = 1; i < 4; i++) if (FileExists(cfg_get_name(i))) flag |= 1 << i;
+			for(int i = 0; i<16; i++) OsdWrite(m++);
+			m = 4;
+			OsdWrite(m++, "  Use dpad/cursor to select");
+			m += 2;
+			sprintf(s, "            %s", cfg_get_label(0));
+			OsdWrite(m++, s);
+			m++;
+			strcpy(s, "      ");
+			if (!(flag & 2)) strcat(s, "\xb");
+			strcat(s, cfg_get_label(1));
+			if (!(flag & 2)) strcat(s, "\xb");
+			strcat(s, "        ");
+			if (!(flag & 8)) strcat(s, "\xb");
+			strcat(s, cfg_get_label(3));
+			if (!(flag & 8)) strcat(s, "\xb");
+			OsdWrite(m++, s);
+			m++;
+			strcpy(s, "            ");
+			if (!(flag & 4)) strcat(s, "\xb");
+			strcat(s, cfg_get_label(2));
+			if (!(flag & 4)) strcat(s, "\xb");
+			OsdWrite(m++, s);
+			m++;
+			parentstate = MENU_SELECT_INI1;
+			menustate = MENU_SELECT_INI2;
+		}
+		break;
+
+	case MENU_SELECT_INI2:
+		if (menu || up)
+		{
+			menustate = MENU_NONE1;
+			select_ini = 0;
+		}
+		else if (left && FileExists(cfg_get_name(1)))
+		{
+			user_io_set_ini(1);
+		}
+		else if (down && FileExists(cfg_get_name(2)))
+		{
+			user_io_set_ini(2);
+		}
+		else if (right && FileExists(cfg_get_name(3)))
+		{
+			user_io_set_ini(3);
 		}
 		break;
 
