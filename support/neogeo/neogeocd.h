@@ -10,4 +10,7 @@ int neocd_can_send_data(uint8_t type);
 int neocd_is_en();
 void neocd_set_en(int enable);
 void set_poll_timer();
+
+#define NEOCD_DIR "NeoGeo-CD"
+
 #endif
