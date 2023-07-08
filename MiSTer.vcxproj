@@ -96,6 +96,7 @@
     <ClCompile Include="support\minimig\minimig_fdd.cpp" />
     <ClCompile Include="support\minimig\minimig_hdd.cpp" />
     <ClCompile Include="support\minimig\minimig_share.cpp" />
+    <ClCompile Include="support\neogeo\neogeocd.cpp" />
     <ClCompile Include="support\neogeo\neogeo_loader.cpp" />
     <ClCompile Include="support\pcecd\pcecd.cpp" />
     <ClCompile Include="support\pcecd\pcecdd.cpp" />
@@ -170,6 +171,7 @@
     <ClInclude Include="support\minimig\minimig_fdd.h" />
     <ClInclude Include="support\minimig\minimig_hdd.h" />
     <ClInclude Include="support\minimig\minimig_share.h" />
+    <ClInclude Include="support\neogeo\neogeocd.h" />
     <ClInclude Include="support\neogeo\neogeo_loader.h" />
     <ClInclude Include="support\pcecd\pcecd.h" />
     <ClInclude Include="support\psx\mcdheader.h" />
