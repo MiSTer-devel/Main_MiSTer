@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <time.h>   // clock_gettime, CLOCK_REALTIME
 #include "neogeo_loader.h"
+#include "neogeocd.h"
 #include "../../sxmlc.h"
 #include "../../user_io.h"
 #include "../../fpga_io.h"
@@ -1077,7 +1078,7 @@ int neogeo_romset_tx(char* name, int cd_en)
 	crom_sz = 0;
 	set_config(0, -1);
 
-	const char* home = HomeDir();
+	const char* home = HomeDir(cd_en ? NEOCD_DIR : NULL);
 
 	// Send cd_en to the FPGA before loading files
 	set_config((cd_en & 1) << 31, 1 << 31);
@@ -1153,7 +1154,11 @@ int neogeo_romset_tx(char* name, int cd_en)
 	neogeo_tx(NULL, NULL, 0, -1, 0, 0);
 
 	if (!cd_en)	neogeo_tx(home, "sfix.sfix", NEO_FILE_FIX, 2, 0, 0);
-	neogeo_file_tx(home, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
+	if (!neogeo_file_tx(home, "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000) && cd_en)
+	{
+		//fallback to original NeoGeo folder
+		neogeo_file_tx(HomeDir(), "000-lo.lo", NEO_FILE_8BIT, 1, 0, 0x10000);
+	}
 
 	if (crom_start < 0x300000) crom_start = 0x300000;
 	uint32_t crom_max = crom_start + crom_sz_max;

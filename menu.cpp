@@ -393,7 +393,10 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 	}
 	else
 	{
-		const char *home = is_menu() ? "Scripts" : user_io_get_core_path((is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR : NULL, 1);
+		const char *home = is_menu() ? "Scripts" : user_io_get_core_path(
+			(is_pce() && !strncasecmp(pFileExt, "CUE", 3)) ? PCECD_DIR :
+			(is_neogeo() && !strncasecmp(pFileExt, "CUE", 3)) ? NEOCD_DIR :
+			NULL, 1);
 		home_dir = strrchr(home, '/');
 		if (home_dir) home_dir++;
 		else home_dir = home;
