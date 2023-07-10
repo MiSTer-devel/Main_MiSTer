@@ -459,6 +459,7 @@ void cdd_t::Update() {
 			else
 			{
 				this->lba = this->toc.end;
+				this->chd_audio_read_lba = this->lba;
 				this->status = CD_STAT_END;
 				this->isData = 0x01;
 				return;
@@ -476,6 +477,8 @@ void cdd_t::Update() {
 				this->lba = 0;
 			}
 		}
+
+		this->chd_audio_read_lba = this->lba;
 
 		this->isData = this->toc.tracks[this->index].type;
 
@@ -613,6 +616,7 @@ void cdd_t::CommandExec() {
 			stat[8] = 0;
 
 			//printf("\x1b[32mMCD: Command TOC 2, index = %i, command = %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X, status = %02X%08X, frame = %u\n\x1b[0m", this->index, comm[9], comm[8], comm[7], comm[6], comm[5], comm[4], comm[3], comm[2], comm[1], comm[0], (uint32_t)(GetStatus() >> 32), (uint32_t)GetStatus(), frame);
+
 		}
 			break;
 
@@ -1023,18 +1027,20 @@ int cdd_t::SectorSend(uint8_t* header)
 {
 	uint8_t buf[2352 + 2352];
 	int len = 2352;
+	uint8_t index = MCD_DATA_IO_INDEX;
 
 	if (header) {
 		memcpy(buf + 12, header, 4);
 		ReadData(buf + 16);
 	}
 	else {
+		index = MCD_CDDA_IO_INDEX;
 		len = ReadCDDA(buf);
 	}
 
 	SubcodeSend();
 	if (SendData)
-		return SendData(buf, len, MCD_DATA_IO_INDEX);
+		return SendData(buf, len, index);
 
 	return 0;
 }
