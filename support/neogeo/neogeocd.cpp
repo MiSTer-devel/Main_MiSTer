@@ -22,8 +22,6 @@ static uint8_t cd_speed = 0;
 
 #define CRC_START 5
 
-#define NEOCD_AUDIO_IO_INDEX 4
-
 #define NEOCD_GET_CMD        0
 #define NEOCD_GET_SEND_DATA  1
 
@@ -142,17 +140,8 @@ void neocd_reset() {
 }
 
 int neocd_send_data(uint8_t* buf, int len, uint8_t index) {
-	uint8_t idx = index;
-	if (idx == MCD_DATA_IO_INDEX && !cdd.isData)
-	{
-		// The MegaCD core sends the isData bit through the status to differentiate between data/audio.
-		// This requires that more commands come in after the initial play command.
-		// NeoGeo does not always send another command so use another index for audio.
-		idx = NEOCD_AUDIO_IO_INDEX;
-	}
-
 	// set index byte
-	user_io_set_index(idx);
+	user_io_set_index(index);
 
 	user_io_set_download(1);
 	user_io_file_tx_data(buf, len);
