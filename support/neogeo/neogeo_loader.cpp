@@ -1171,7 +1171,7 @@ int neogeo_romset_tx(char* name, int cd_en)
 
 	notify_conf();
 
-	FileGenerateSavePath(cd_en ? "ngcd" : name, (char*)full_path);
+	FileGenerateSavePath(name, (char*)full_path);
 	user_io_file_mount((char*)full_path, 0, 1);
 
 	user_io_status_set("[0]", 0); // Release reset
