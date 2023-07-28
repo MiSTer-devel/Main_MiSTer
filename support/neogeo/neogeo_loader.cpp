@@ -948,23 +948,25 @@ struct NeoQuirk
 	uint8_t  sma;
 	uint8_t  mir;
 	uint8_t  rwait;
+	uint8_t  pwait;
 };
 
 static NeoQuirk neo_quirks[] = {
-	{0x022,	0, 0, 0, 0, 1, 0 }, // Blue's Journey
-	{0x050,	0, 0, 0, 0, 0, 1 }, // Ninja Commando
-	{0x052,	1, 0, 0, 0, 0, 0 }, // Super Sidekicks
-	{0x047,	1, 0, 0, 0, 0, 0 }, // Fatal Fury 2
-	{0x006,	2, 0, 0, 0, 0, 0 }, // Riding Hero
-	{0x263,	0, 1, 0, 0, 0, 0 }, // Metal Slug 4
-	{0x253,	0, 1, 0, 2, 0, 0 }, // Garou - Mark of the Wolves
-	{0x251,	0, 0, 0, 1, 0, 0 }, // King of Fighters 99
-	{0x257,	0, 2, 0, 5, 0, 0 }, // King of Fighters 2000
-	{0x271,	0, 2, 1, 0, 0, 0 }, // King of Fighters 2003
-	{0x266,	0, 2, 0, 0, 0, 0 }, // Matrimelee
-	{0x256,	0, 1, 0, 4, 0, 0 }, // Metal Slug 3
-	{0x268,	0, 0, 1, 0, 0, 0 }, // Metal Slug 5
-	{0x269,	0, 2, 1, 0, 0, 0 }, // SNK vs Capcom
+	{0x022,	0, 0, 0, 0, 1, 0, 0 }, // Blue's Journey
+	{0x050,	0, 0, 0, 0, 0, 1, 0 }, // Ninja Commando
+	{0x052,	1, 0, 0, 0, 0, 0, 0 }, // Super Sidekicks
+	{0x047,	1, 0, 0, 0, 0, 0, 0 }, // Fatal Fury 2
+	{0x006,	2, 0, 0, 0, 0, 0, 0 }, // Riding Hero
+	{0x263,	0, 1, 0, 0, 0, 0, 0 }, // Metal Slug 4
+	{0x253,	0, 1, 0, 2, 0, 0, 0 }, // Garou - Mark of the Wolves
+	{0x251,	0, 0, 0, 1, 0, 0, 0 }, // King of Fighters 99
+	{0x257,	0, 2, 0, 5, 0, 0, 0 }, // King of Fighters 2000
+	{0x271,	0, 2, 1, 0, 0, 0, 0 }, // King of Fighters 2003
+	{0x055,	0, 0, 0, 0, 0, 1, 1 }, // King of Fighters 94
+	{0x266,	0, 2, 0, 0, 0, 0, 0 }, // Matrimelee
+	{0x256,	0, 1, 0, 4, 0, 0, 0 }, // Metal Slug 3
+	{0x268,	0, 0, 1, 0, 0, 0, 0 }, // Metal Slug 5
+	{0x269,	0, 2, 1, 0, 0, 0, 0 }, // SNK vs Capcom
 };
 
 void load_neo(char *path)
@@ -1004,11 +1006,12 @@ void load_neo(char *path)
 					pvc = neo_quirks[i].pvc;
 					mir = !neo_quirks[i].mir;
 					rom_wait = neo_quirks[i].rwait;
+					p_wait = neo_quirks[i].pwait;
 					break;
 				}
 			}
 
-			printf("PSize=%d, SSize=%d, MSize=%d, V1Size=%d, V2Size=%d, CSize=%d, Name=%s\n", hdr.PSize, hdr.SSize, hdr.MSize, hdr.V1Size, hdr.V2Size, hdr.CSize, hdr.Name);
+			printf("ID=0x%X, PSize=%d, SSize=%d, MSize=%d, V1Size=%d, V2Size=%d, CSize=%d, Name=%s\n", hdr.NGH, hdr.PSize, hdr.SSize, hdr.MSize, hdr.V1Size, hdr.V2Size, hdr.CSize, hdr.Name);
 			char *p = strrchr(path, '/');
 			*p++ = 0;
 			uint32_t off = 4096;
