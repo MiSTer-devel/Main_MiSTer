@@ -904,8 +904,10 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				else if(sma) set_config(((2+sma) & 0x7) << 20, 0x7 << 20);
 				printf("Setting cart prom special chip to %u\n", (set_config(0, 0) >> 20) & 0x7);
 
-				printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
-				set_config((use_pcm & 1) << 23, 1 << 23);
+				if (use_pcm == 2) printf("Setting cart to use the double VROMa space\n");
+				else printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
+				set_config((use_pcm ? 1 : 0) << 23, 1 << 23);
+				set_config(((use_pcm == 2) ? 1 : 0) << 19, 1 << 19);
 
 				printf("Setting rom_wait to %u, p_wait to %u\n", rom_wait, p_wait);
 				set_config((rom_wait & 1) << 28, 1 << 28);
@@ -1047,8 +1049,10 @@ void load_neo(char *path)
 			else if (sma) set_config(((2 + sma) & 0x7) << 20, 0x7 << 20);
 			printf("Setting cart prom special chip to %u\n", (set_config(0, 0) >> 20) & 0x7);
 
-			printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
-			set_config((use_pcm & 1) << 23, 1 << 23);
+			if (use_pcm == 2) printf("Setting cart to use the double VROMa space\n");
+			else printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
+			set_config((use_pcm ? 1 : 0) << 23, 1 << 23);
+			set_config(((use_pcm == 2) ? 1 : 0) << 19, 1 << 19);
 
 			printf("Setting rom_wait to %u, p_wait to %u\n", rom_wait, p_wait);
 			set_config((rom_wait & 1) << 28, 1 << 28);
