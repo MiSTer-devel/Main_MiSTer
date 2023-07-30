@@ -1155,6 +1155,8 @@ int satcdd_t::AudioSectorSend(int first)
 {
 	static int buf_num_read = 0, buf_num_write = 0;
 
+	if (first) buf_num_read = buf_num_write = 0;
+
 	uint8_t *shmem_ptr = (uint8_t*)shmem_map(SHMEM_ADDR, 4096 * 4);
 	uint8_t *data_ptr = shmem_ptr + (buf_num_write * 4096);
 
