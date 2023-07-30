@@ -327,13 +327,13 @@ static uint32_t crom_sz_max = 0;
 static uint32_t crom_start = 0;
 
 #define ALIGN_1MB ((1024*1024)-1)
-static void notify_core(uint8_t index, uint32_t size)
+static void notify_core(uint8_t index, uint32_t size, uint32_t memcp_force = 0)
 {
 	user_io_set_index(10);
 	user_io_set_download(1);
 
 	if (index == 4 || index == 6) size = (size + ALIGN_1MB) & ~ALIGN_1MB;
-	char memcp = !(index == 9 || (index >= 16 && index < 64));
+	char memcp = memcp_force || !(index == 9 || (index >= 16 && index < 64));
 	printf("notify_core(%d,%d): memcp = %d\n", index, size, memcp);
 
 	if (index == 15 && size > crom_sz_max) crom_sz_max = size;
@@ -351,6 +351,17 @@ static void notify_core(uint8_t index, uint32_t size)
 	DisableFpga();
 
 	user_io_set_download(0);
+}
+
+static uint32_t fill_ram(uint32_t size, uint8_t pattern)
+{
+	void *base = shmem_map(0x30000000, size);
+	if (!base) return 0;
+	memset(base, pattern, size);
+	shmem_unmap(base, size);
+
+	notify_core(18, size, 1);
+	return 1;
 }
 
 static uint32_t crom_sz = 0;
@@ -1144,6 +1155,7 @@ int neogeo_romset_tx(char* name, int cd_en)
 					neogeo_tx(home, "sp-s2.sp1", NEO_FILE_RAW, 0, 0, 0x20000);
 			}
 		} else {
+			fill_ram(128 * 1024, 0xAA);
 			sprintf(full_path, "%s/uni-bioscd.rom", home);
 			if (!(mask & 0x8000) && FileExists(full_path)) {
 				neogeo_tx(home, "uni-bioscd.rom", NEO_FILE_RAW, 0, 0, 0x80000);
