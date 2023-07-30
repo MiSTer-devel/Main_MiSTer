@@ -355,7 +355,7 @@ static void notify_core(uint8_t index, uint32_t size, uint32_t memcp_force = 0)
 
 static uint32_t fill_ram(uint32_t size, uint8_t pattern)
 {
-	void *base = shmem_map(0x30000000, size);
+	void *base = shmem_map(0x38000000, size);
 	if (!base) return 0;
 	memset(base, pattern, size);
 	shmem_unmap(base, size);
