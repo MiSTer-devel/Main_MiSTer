@@ -272,7 +272,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 	if(expand) size = expand;
 	uint32_t remain = size;
 
-	uint32_t map_addr = 0x30000000 + (addr ? addr : ((index >= 16) && (index < 64)) ? (index - 16) * 0x80000 : (index == 9) ? 0x2000000 : 0x8000000);
+	uint32_t map_addr = 0x30000000 + (addr ? (addr + 0x8000000) : ((index >= 16) && (index < 64)) ? (index - 16) * 0x80000 : (index == 9) ? 0x2000000 : 0x8000000);
 
 	ProgressMessage();
 	while (remain)
