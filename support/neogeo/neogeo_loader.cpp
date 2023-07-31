@@ -746,7 +746,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	static unsigned char file_index = 0;
 	static char file_type = 0;
 	static unsigned long int file_offset = 0, file_size = 0, vromb_offset = 0;
-	static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, rom_wait = 0, p_wait = 0;
+	static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, rom_wait = 0, p_wait = 0, xram = 0;
 	static int file_cnt = 0;
 	static int vrom_mirror = 1;
 
@@ -768,6 +768,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 			cmc = 0;
 			rom_wait = 0;
 			p_wait = 0;
+			xram = 0;
 
 			if (!romsets) in_correct_romset = 1;
 			for (int i = 0; i < node->n_attributes; i++) {
@@ -809,6 +810,9 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				}
 				else if (!strcasecmp(node->attributes[i].name, "p_wait")) {
 					p_wait = atoi(node->attributes[i].value);
+				}
+				else if (!strcasecmp(node->attributes[i].name, "xram")) {
+					xram = atoi(node->attributes[i].value);
 				}
 			}
 		}
@@ -905,6 +909,9 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 					}
 				}
 
+				printf("Setting cart extra RAM to %u\n", xram);
+				set_config((xram & 1) << 18, 1 << 18);
+
 				printf("Setting cart special chip (legacy) to %u\n", hw_type);
 				set_config((hw_type & 3) << 24, 3 << 24);
 
@@ -959,27 +966,30 @@ struct NeoQuirk
 	uint8_t  cmc;
 	uint8_t  pvc;
 	uint8_t  sma;
+	uint8_t  xram;
 	uint8_t  mir;
 	uint8_t  rwait;
 	uint8_t  pwait;
 };
 
 static NeoQuirk neo_quirks[] = {
-	{0x022,	0, 0, 0, 0, 1, 0, 0 }, // Blue's Journey
-	{0x050,	0, 0, 0, 0, 0, 1, 0 }, // Ninja Commando
-	{0x052,	1, 0, 0, 0, 0, 0, 0 }, // Super Sidekicks
-	{0x047,	1, 0, 0, 0, 0, 0, 0 }, // Fatal Fury 2
-	{0x006,	2, 0, 0, 0, 0, 0, 0 }, // Riding Hero
-	{0x263,	0, 1, 0, 0, 0, 0, 0 }, // Metal Slug 4
-	{0x253,	0, 1, 0, 2, 0, 0, 0 }, // Garou - Mark of the Wolves
-	{0x251,	0, 0, 0, 1, 0, 0, 0 }, // King of Fighters 99
-	{0x257,	0, 2, 0, 5, 0, 0, 0 }, // King of Fighters 2000
-	{0x271,	0, 2, 1, 0, 0, 0, 0 }, // King of Fighters 2003
-	{0x055,	0, 0, 0, 0, 0, 1, 1 }, // King of Fighters 94
-	{0x266,	0, 2, 0, 0, 0, 0, 0 }, // Matrimelee
-	{0x256,	0, 1, 0, 4, 0, 0, 0 }, // Metal Slug 3
-	{0x268,	0, 0, 1, 0, 0, 0, 0 }, // Metal Slug 5
-	{0x269,	0, 2, 1, 0, 0, 0, 0 }, // SNK vs Capcom
+	{0x022,	0, 0, 0, 0, 0, 1, 0, 0 }, // Blue's Journey
+	{0x050,	0, 0, 0, 0, 0, 0, 1, 0 }, // Ninja Commando
+	{0x052,	1, 0, 0, 0, 0, 0, 0, 0 }, // Super Sidekicks
+	{0x047,	1, 0, 0, 0, 0, 0, 0, 0 }, // Fatal Fury 2
+	{0x006,	2, 0, 0, 0, 0, 0, 0, 0 }, // Riding Hero
+	{0x263,	0, 1, 0, 0, 0, 0, 0, 0 }, // Metal Slug 4
+	{0x253,	0, 1, 0, 2, 0, 0, 0, 0 }, // Garou - Mark of the Wolves
+	{0x251,	0, 0, 0, 1, 0, 0, 0, 0 }, // King of Fighters 99
+	{0x257,	0, 2, 0, 5, 0, 0, 0, 0 }, // King of Fighters 2000
+	{0x271,	0, 2, 1, 0, 0, 0, 0, 0 }, // King of Fighters 2003
+	{0x055,	0, 0, 0, 0, 0, 0, 1, 1 }, // King of Fighters 94
+	{0x266,	0, 2, 0, 0, 0, 0, 0, 0 }, // Matrimelee
+	{0x256,	0, 1, 0, 4, 0, 0, 0, 0 }, // Metal Slug 3
+	{0x268,	0, 0, 1, 0, 0, 0, 0, 0 }, // Metal Slug 5
+	{0x269,	0, 2, 1, 0, 0, 0, 0, 0 }, // SNK vs Capcom
+	{0x008,	0, 0, 0, 0, 1, 0, 0, 0 }, // JockeyGP
+	{0x3E7,	0, 0, 0, 0, 1, 0, 0, 0 }, // V-Liner
 };
 
 void load_neo(char *path)
@@ -993,7 +1003,7 @@ void load_neo(char *path)
 		FileClose(&f);
 		if(res)
 		{
-			uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, mir = 1, rom_wait = 0, p_wait = 0;
+			uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, mir = 1, rom_wait = 0, p_wait = 0, xram = 0;
 			for (uint32_t i = 0; i < sizeof(neo_quirks) / sizeof(neo_quirks[0]); i++)
 			{
 				if (neo_quirks[i].id == hdr.NGH)
@@ -1017,6 +1027,7 @@ void load_neo(char *path)
 					cmc = neo_quirks[i].cmc;
 					sma = neo_quirks[i].sma;
 					pvc = neo_quirks[i].pvc;
+					xram = neo_quirks[i].xram;
 					mir = !neo_quirks[i].mir;
 					rom_wait = neo_quirks[i].rwait;
 					p_wait = neo_quirks[i].pwait;
@@ -1049,6 +1060,9 @@ void load_neo(char *path)
 			}
 
 			neogeo_tx(path, p, NEO_FILE_SPR, 15, off, hdr.CSize, 0, 1);
+
+			printf("Setting cart extra RAM to %u\n", xram);
+			set_config((xram & 1) << 18, 1 << 18);
 
 			printf("Setting cart special chip (legacy) to %u\n", hw_type);
 			set_config((hw_type & 3) << 24, 3 << 24);
