@@ -1048,16 +1048,16 @@ void load_neo(char *path)
 			char *p = strrchr(path, '/');
 			*p++ = 0;
 			uint32_t off = 4096;
-			neogeo_tx(path, p, NEO_FILE_RAW, 4, off, hdr.PSize);
+			if (hdr.PSize) neogeo_tx(path, p, NEO_FILE_RAW, 4, off, hdr.PSize);
 			off += hdr.PSize;
 
-			neogeo_tx(path, p, NEO_FILE_FIX, 8, off, hdr.SSize);
+			if (hdr.SSize) neogeo_tx(path, p, NEO_FILE_FIX, 8, off, hdr.SSize);
 			off += hdr.SSize;
 
-			neogeo_tx(path, p, NEO_FILE_RAW, 9, off, hdr.MSize);
+			if (hdr.MSize) neogeo_tx(path, p, NEO_FILE_RAW, 9, off, hdr.MSize);
 			off += hdr.MSize;
 
-			neogeo_tx(path, p, NEO_FILE_RAW, 16, off, hdr.V1Size, mir ? 0 : VROM_SIZE);
+			if (hdr.V1Size) neogeo_tx(path, p, NEO_FILE_RAW, 16, off, hdr.V1Size, mir ? 0 : VROM_SIZE);
 			off += hdr.V1Size;
 
 			use_pcm = 1;
@@ -1067,8 +1067,12 @@ void load_neo(char *path)
 				neogeo_tx(path, p, NEO_FILE_RAW, 48, off, hdr.V2Size, mir ? 0 : VROM_SIZE);
 				off += hdr.V2Size;
 			}
+			else if (hdr.V1Size > 16 * 1024 * 1024)
+			{
+				use_pcm = 2;
+			}
 
-			neogeo_tx(path, p, NEO_FILE_SPR, 15, off, hdr.CSize, 0, 1);
+			if (hdr.CSize) neogeo_tx(path, p, NEO_FILE_SPR, 15, off, hdr.CSize, 0, 1);
 
 			printf("Setting cart ms5p to %u\n", ms5p);
 			set_config((ms5p & 1) << 17, 1 << 17);
