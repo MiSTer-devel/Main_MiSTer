@@ -108,6 +108,28 @@ static void fix_convert(uint8_t* buf_in, uint8_t* buf_out, uint32_t size)
 	for (uint32_t i = 0; i < size; i++) buf_out[i] = buf_in[(i & ~0x1F) | ((i >> 2) & 7) | ((i & 1) << 3) | (((i & 2) << 3) ^ 0x10)];
 }
 
+static const char *get_name(const char *path, const char *name)
+{
+	static char buf[1024];
+
+	int len = strlen(name);
+	if (len < 4) return name;
+	if (!strcasecmp(name + len - 4, ".neo")) return name;
+
+	const char *p = strrchr(path, '/');
+	if (p) p++;
+	else p = path;
+
+	len = strlen(p);
+	if (len < 4) return name;
+	if (strcasecmp(p + len - 4, ".zip")) return name;
+
+	strcpy(buf, p);
+	strcpy(buf + len - 4, "/");
+	strcpy(buf + len - 3, name);
+	return buf;
+}
+
 static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_file_type, uint8_t index, uint32_t offset, uint32_t size)
 {
 	fileTYPE f = {};
@@ -124,6 +146,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 
 	FileSeek(&f, offset, SEEK_SET);
 	printf("Loading %s (offset %u, size %u, type %u) with index %u\n", name, offset, bytes2send, neo_file_type, index);
+	const char *dispname = get_name(path, name);
 
 	// Put pairs of bitplanes in the correct order for the core
 	if (neo_file_type == NEO_FILE_SPR && index != 15) index ^= 1;
@@ -165,7 +188,7 @@ static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_f
 
 		DisableFpga();
 
-		ProgressMessage("Loading", name, size - bytes2send, size);
+		ProgressMessage("Loading", dispname, size - bytes2send, size);
 		bytes2send -= chunk;
 	}
 
@@ -209,6 +232,7 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 
 	FileSeek(&f, offset, SEEK_SET);
 	printf("CROM %s (offset %u, size %u) with index %u\n", name, offset, size, index);
+	const char *dispname = get_name(path, name);
 
 	// Put pairs of bitplanes in the correct order for the core
 
@@ -232,7 +256,7 @@ static uint32_t load_crom_to_mem(const char* path, const char* name, uint8_t ind
 		FileReadAdv(&f, loadbuf, partsz/2);
 		spr_convert_skp((uint16_t*)loadbuf, ((uint16_t*)base) + ((index ^ 1) & 1), partsz / 4);
 
-		ProgressMessage("Loading", name, size - (remain - partsz), size);
+		ProgressMessage("Loading", dispname, size - (remain - partsz), size);
 
 		shmem_unmap(base, partsz);
 		remain -= partsz;
@@ -266,6 +290,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 
 	FileSeek(&f, offset, SEEK_SET);
 	printf("ROM %s (offset %u, size %u, exp %u, type %u, addr %u) with index %u\n", name, offset, size, expand, neo_file_type, addr, index);
+	const char *dispname = get_name(path, name);
 
 	uint32_t remainf = size;
 
@@ -310,7 +335,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 			if (partszf) FileReadAdv(&f, base, partszf);
 		}
 
-		ProgressMessage("Loading", name, size - (remain - partsz), size);
+		ProgressMessage("Loading", dispname, size - (remain - partsz), size);
 
 		shmem_unmap(base, partsz);
 		remain -= partsz;
@@ -377,6 +402,7 @@ static uint32_t neogeo_tx(const char* path, const char* name, uint8_t neo_file_t
 	if (index >= 64)
 	{
 		sz = load_crom_to_mem(path, name, index, offset, size);
+		if (!sz) return 0;
 		if (sz > crom_sz) crom_sz = sz;
 		return sz;
 	}
@@ -391,6 +417,7 @@ static uint32_t neogeo_tx(const char* path, const char* name, uint8_t neo_file_t
 	if (index >= 0)
 	{
 		sz = load_rom_to_mem(path, name, neo_file_type, index, offset, size, expand, swap, 0);
+		if (!sz) return 0;
 
 		//multipart prom
 		if (!strcasecmp(name, "prom") && index == 4) sz += load_rom_to_mem(path, "prom1", neo_file_type, index, offset, size, expand, swap, sz);
@@ -746,7 +773,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	static unsigned char file_index = 0;
 	static char file_type = 0;
 	static unsigned long int file_offset = 0, file_size = 0, vromb_offset = 0;
-	static uint32_t hw_type = 0, use_pcm = 0, pvc = 0, sma = 0, cmc = 0, rom_wait = 0, p_wait = 0, xram = 0, ms5p = 0;
+	static uint32_t hw_type = 0, use_pcm = 0, force_pcm = 0, pvc = 0, sma = 0, cmc = 0, rom_wait = 0, p_wait = 0, xram = 0, ms5p = 0;
 	static int file_cnt = 0;
 	static int vrom_mirror = 1;
 
@@ -757,11 +784,13 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 	switch (evt)
 	{
 	case XML_EVENT_START_NODE:
+		if (!strcasecmp(node->tag, "romsets")) romsets = 1;
+
 		if (!strcasecmp(node->tag, "romset")) {
 			file_cnt = 0;
 			vromb_offset = 0;
 			vrom_mirror = 1;
-			use_pcm = 1;
+			use_pcm = 1; force_pcm = 0;
 			hw_type = 0;
 			pvc = 0;
 			sma = 0;
@@ -798,10 +827,10 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				}
 				else if (!strcasecmp(node->attributes[i].name, "pcm")) {
 					use_pcm = atoi(node->attributes[i].value);
+					force_pcm = 1;
 				}
 				else if (!strcasecmp(node->attributes[i].name, "vromb_offset")) {
 					vromb_offset = strtoul(node->attributes[i].value, NULL, 0);
-					use_pcm = 0;
 				}
 				else if (!strcasecmp(node->attributes[i].name, "vrom_mirror")) {
 					vrom_mirror = strtoul(node->attributes[i].value, NULL, 0);
@@ -844,6 +873,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 							file_index = atoi(node->attributes[i].value);
 							if (file_index >= 64 || file_index == 15) file_type = NEO_FILE_SPR;
 							else if (file_index == 2 || file_index == 8) file_type = NEO_FILE_FIX;
+							else if ((file_index >= 48 && file_index <= 63) && !force_pcm) use_pcm = 0;
 						}
 					}
 					else
@@ -883,7 +913,6 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 						file_size = strtol(node->attributes[i].value, NULL, 0);
 				}
 				in_file = 1;
-				file_cnt++;
 			}
 		}
 		break;
@@ -894,7 +923,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 			{
 				if (!file_cnt)
 				{
-					printf("No parts specified. Trying to load known files:\n");
+					printf("No parts specified or found. Trying to load known files:\n");
 					neogeo_tx(path, "prom", NEO_FILE_RAW, 4, 0, 0);
 					neogeo_tx(path, "p1rom", NEO_FILE_RAW, 4, 0, 0);
 					neogeo_tx(path, "p2rom", NEO_FILE_RAW, 6, 0, 0);
@@ -905,11 +934,15 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 					{
 						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, vromb_offset, vrom_mirror ? 0 : VROM_SIZE);
 						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 48, vromb_offset, 0, vrom_mirror ? 0 : VROM_SIZE);
+						if(!force_pcm) use_pcm = 0;
 					}
 					else
 					{
 						neogeo_tx(path, "vroma0", NEO_FILE_RAW, 16, 0, 0, vrom_mirror ? 0 : VROM_SIZE);
-						if (!use_pcm) neogeo_tx(path, "vromb0", NEO_FILE_RAW, 48, 0, 0, vrom_mirror ? 0 : VROM_SIZE);
+						if (neogeo_tx(path, "vromb0", NEO_FILE_RAW, 48, 0, 0, vrom_mirror ? 0 : VROM_SIZE))
+						{
+							if (!force_pcm) use_pcm = 0;
+						}
 					}
 				}
 
@@ -929,8 +962,8 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 				else if(sma) set_config(((2+sma) & 0x7) << 20, 0x7 << 20);
 				printf("Setting cart prom special chip to %u\n", (set_config(0, 0) >> 20) & 0x7);
 
-				if (use_pcm == 2) printf("Setting cart to use the double VROMa space\n");
-				else printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
+				if (use_pcm == 2) printf("Setting cart to use the double ADPCMA space\n");
+				else printf("Setting cart PCM to %d\n", use_pcm);
 				set_config((use_pcm ? 1 : 0) << 23, 1 << 23);
 				set_config(((use_pcm == 2) ? 1 : 0) << 19, 1 << 19);
 
@@ -949,7 +982,7 @@ static int xml_load_files(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, co
 						expand = VROM_SIZE - (((file_index - 16) * 0x80000) & 0xFFFFFF);
 					}
 
-					neogeo_tx(path, file_name, file_type, file_index, file_offset, file_size, expand);
+					if (neogeo_tx(path, file_name, file_type, file_index, file_offset, file_size, expand)) file_cnt++;
 				}
 				in_file = 0;
 			}
@@ -1090,8 +1123,8 @@ void load_neo(char *path)
 			else if (sma) set_config(((2 + sma) & 0x7) << 20, 0x7 << 20);
 			printf("Setting cart prom special chip to %u\n", (set_config(0, 0) >> 20) & 0x7);
 
-			if (use_pcm == 2) printf("Setting cart to use the double VROMa space\n");
-			else printf("Setting cart to%s use the PCM chip\n", use_pcm ? "" : " not");
+			if (use_pcm == 2) printf("Setting cart to use the double ADPCM space\n");
+			else printf("Setting cart PCM to %d\n", use_pcm);
 			set_config((use_pcm ? 1 : 0) << 23, 1 << 23);
 			set_config(((use_pcm == 2) ? 1 : 0) << 19, 1 << 19);
 
@@ -1144,6 +1177,15 @@ int neogeo_romset_tx(char* name, int cd_en)
 		}
 		else
 		{
+			int dspack = 1;
+			sprintf(full_path, "%s/crom0", name);
+			if (!FileExists(full_path)) dspack = 0;
+			if (dspack)
+			{
+				sprintf(full_path, "%s/prom", name);
+				if (!FileExists(full_path)) dspack = 0;
+			}
+
 			sprintf(full_path, "%s/%s/romset.xml", getRootDir(), name);
 			if (!FileExists(full_path))
 			{
@@ -1160,10 +1202,14 @@ int neogeo_romset_tx(char* name, int cd_en)
 
 			checked_ok = false;
 			romsets = 0;
-			sax.all_event = xml_check_files;
-			parse_xml(full_path, &sax, name);
-			if (!checked_ok) return 0;
+			if (!dspack)
+			{
+				sax.all_event = xml_check_files;
+				parse_xml(full_path, &sax, name);
+				if (!checked_ok) return 0;
+			}
 
+			romsets = 0;
 			sax.all_event = xml_load_files;
 			parse_xml(full_path, &sax, name);
 		}
