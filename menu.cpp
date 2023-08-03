@@ -95,6 +95,8 @@ enum MENU
 	MENU_ABOUT2,
 	MENU_RESET1,
 	MENU_RESET2,
+	MENU_UNLOCK1,
+	MENU_UNLOCK2,
 
 	MENU_JOYSYSMAP,
 	MENU_JOYDIGMAP,
@@ -205,6 +207,11 @@ static uint32_t menu_timer = 0;
 static uint32_t menu_save_timer = 0;
 static uint32_t load_addr = 0;
 static int32_t  bt_timer = 0;
+
+static bool osd_unlocked = false;
+static char osd_code_entry[32];
+static uint32_t osd_lock_timer = 0;
+
 
 extern const char *version;
 
@@ -934,6 +941,8 @@ void HandleUI(void)
 		}
 	}
 
+	if (osd_lock_timer == 0) osd_lock_timer = GetTimer(cfg.osd_lock_time * 1000);
+
 	switch (user_io_core_type())
 	{
 	case CORE_TYPE_8BIT:
@@ -1346,6 +1355,8 @@ void HandleUI(void)
 		menumask = 0;
 		menustate = MENU_NONE2;
 		firstmenu = 0;
+		osd_unlocked = false;
+		osd_lock_timer = GetTimer(cfg.osd_lock_time * 1000);
 		vga_nag();
 		OsdSetSize(8);
 		break;
@@ -1355,7 +1366,11 @@ void HandleUI(void)
 		// fall through
 
 	case MENU_NONE2:
-		if (menu || (is_menu() && !video_fb_state()) || (menustate == MENU_NONE2 && !mgl->done && mgl->state == 1))
+		if (menu && cfg.osd_lock[0] && !osd_unlocked && CheckTimer(osd_lock_timer) && !is_menu() && mgl->done)
+		{
+			menustate = MENU_UNLOCK1;
+		}
+		else if (menu || osd_unlocked || (is_menu() && !video_fb_state()) || (menustate == MENU_NONE2 && !mgl->done && mgl->state == 1))
 		{
 			OsdSetSize(16);
 			menusub = 0;
@@ -4055,6 +4070,64 @@ void HandleUI(void)
 		}
 		break;
 
+	case MENU_UNLOCK1:
+		osd_code_entry[0] = '\0';
+		menumask = 0;
+		helptext_idx = 0;
+		menustate = MENU_UNLOCK2;
+		parentstate = MENU_UNLOCK1;
+		OsdSetSize(16);
+		OsdEnable(DISABLE_KEYBOARD);
+		OsdSetTitle("Menu Locked", 0);
+		for (int r = 0; r < OsdGetSize(); r++)
+			OsdWrite(r);
+		break;
+
+	case MENU_UNLOCK2:
+	{
+		const char *append = "";
+		if (up) append = "U";
+		else if (down) append = "D";
+		else if (left) append = "L";
+		else if (right) append = "R";
+		else if (select) append = "A";
+		else if (back) append = "B";
+		else if (menu) menustate = MENU_NONE1;
+
+		strcat(osd_code_entry, append);
+
+		if (strlen(osd_code_entry) >= strlen(cfg.osd_lock))
+		{
+			if (!strcmp(osd_code_entry, cfg.osd_lock))
+			{
+				osd_unlocked = true;
+				menustate = MENU_NONE2;
+			}
+			else
+			{
+				osd_code_entry[0] = '\0';
+			}
+		}
+
+		int maxlen = strlen(cfg.osd_lock);
+		int count = strlen(osd_code_entry);
+
+		m = 5;
+		OsdWrite(m++, "      Enter Unlock Code", 0, 0, 1);
+		OsdWrite(m++, "", 0, 0, 1);
+		OsdWrite(m++, "", 0, 0, 1);
+		int i;
+		for( i = 0; i < ( 29 - maxlen ) / 2; i++ )
+			s[i] = ' ';
+		for( int j = 0; j < maxlen; j++, i++ )
+		{
+			s[i] = j < count ? '*' : '-';
+		}
+
+		s[i] = '\0';
+		OsdWrite(m++, s, 0, 0, 1);
+		break;
+	}
 
 		/******************************************************************/
 		/* st main menu                                                 */
