@@ -208,7 +208,7 @@ static uint32_t menu_save_timer = 0;
 static uint32_t load_addr = 0;
 static int32_t  bt_timer = 0;
 
-static bool osd_unlocked = false;
+static bool osd_unlocked = 1;
 static char osd_code_entry[32];
 static uint32_t osd_lock_timer = 0;
 
@@ -1178,7 +1178,7 @@ void HandleUI(void)
 			else menu = true;
 			break;
 		case KEY_BACKSPACE | UPSTROKE:
-			if (saved_menustate) back = true;
+			if (saved_menustate || !osd_unlocked) back = true;
 			break;
 		case KEY_ENTER:
 		case KEY_SPACE:
