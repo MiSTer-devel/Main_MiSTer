@@ -941,8 +941,6 @@ void HandleUI(void)
 		}
 	}
 
-	if (osd_lock_timer == 0) osd_lock_timer = GetTimer(cfg.osd_lock_time * 1000);
-
 	switch (user_io_core_type())
 	{
 	case CORE_TYPE_8BIT:
@@ -1176,7 +1174,7 @@ void HandleUI(void)
 			if (menustate != MENU_NONE2) menu = true;
 			break;
 		case KEY_BACK | UPSTROKE:
-			if (saved_menustate) back = true;
+			if (saved_menustate || !osd_unlocked) back = true;
 			else menu = true;
 			break;
 		case KEY_BACKSPACE | UPSTROKE:
@@ -1344,6 +1342,27 @@ void HandleUI(void)
 		break;
 	}
 
+	if (osd_lock_timer == 0) osd_lock_timer = GetTimer(cfg.osd_lock_time * 1000);
+
+	switch (menustate)
+	{
+	case MENU_NONE1:
+	case MENU_NONE2:
+	case MENU_INFO:
+		if (!cfg.osd_lock[0] || is_menu() || !mgl->done) osd_unlocked = 1;
+		else if (CheckTimer(osd_lock_timer)) osd_unlocked = 0;
+		break;
+
+	case MENU_UNLOCK1:
+	case MENU_UNLOCK2:
+		break;
+
+	default:
+		osd_unlocked = 1;
+		osd_lock_timer = GetTimer(cfg.osd_lock_time * 1000);
+		break;
+	}
+
 	// Switch to current menu screen
 	switch (menustate)
 	{
@@ -1355,8 +1374,6 @@ void HandleUI(void)
 		menumask = 0;
 		menustate = MENU_NONE2;
 		firstmenu = 0;
-		osd_unlocked = false;
-		osd_lock_timer = GetTimer(cfg.osd_lock_time * 1000);
 		vga_nag();
 		OsdSetSize(8);
 		break;
@@ -1366,11 +1383,11 @@ void HandleUI(void)
 		// fall through
 
 	case MENU_NONE2:
-		if (menu && cfg.osd_lock[0] && !osd_unlocked && CheckTimer(osd_lock_timer) && !is_menu() && mgl->done)
+		if (menu && !osd_unlocked)
 		{
 			menustate = MENU_UNLOCK1;
 		}
-		else if (menu || osd_unlocked || (is_menu() && !video_fb_state()) || (menustate == MENU_NONE2 && !mgl->done && mgl->state == 1))
+		else if (menu || (is_menu() && !video_fb_state()) || (menustate == MENU_NONE2 && !mgl->done && mgl->state == 1))
 		{
 			OsdSetSize(16);
 			menusub = 0;
@@ -4079,8 +4096,7 @@ void HandleUI(void)
 		OsdSetSize(16);
 		OsdEnable(DISABLE_KEYBOARD);
 		OsdSetTitle("Menu Locked", 0);
-		for (int r = 0; r < OsdGetSize(); r++)
-			OsdWrite(r);
+		for (int r = 0; r < OsdGetSize(); r++) OsdWrite(r);
 		break;
 
 	case MENU_UNLOCK2:
@@ -4100,8 +4116,10 @@ void HandleUI(void)
 		{
 			if (!strcmp(osd_code_entry, cfg.osd_lock))
 			{
-				osd_unlocked = true;
+				osd_unlocked = 1;
+				osd_lock_timer = GetTimer(cfg.osd_lock_time * 1000);
 				menustate = MENU_NONE2;
+				menu_key_set(KEY_F12);
 			}
 			else
 			{
