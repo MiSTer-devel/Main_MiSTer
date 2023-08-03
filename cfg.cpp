@@ -122,6 +122,8 @@ static const ini_var_t ini_vars[] =
 	{ "VGA_MODE", (void*)(&(cfg.vga_mode)), STRING, 0, sizeof(cfg.vga_mode) - 1 },
 	{ "NTSC_MODE", (void *)(&(cfg.ntsc_mode)), UINT8, 0, 2},
 	{ "CONTROLLER_UNIQUE_MAPPING", (void *)(cfg.controller_unique_mapping), UINT32ARR, 0, 0xFFFFFFFF },
+	{ "OSD_LOCK", (void*)(&(cfg.osd_lock)), STRING, 0, sizeof(cfg.osd_lock) - 1 },
+	{ "OSD_LOCK_TIME", (void*)(&(cfg.osd_lock_time)), UINT16, 0, 60},
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
