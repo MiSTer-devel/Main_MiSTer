@@ -94,6 +94,7 @@ typedef struct {
 	uint32_t controller_unique_mapping[256];
 	char osd_lock[25];
 	uint16_t osd_lock_time;
+	uint8_t show_progress_info;
 } cfg_t;
 
 extern cfg_t cfg;
