@@ -57,6 +57,7 @@ struct regs_t
 
 struct track_t
 {
+	fileTYPE f;
 	char     filename[1024];
 	uint32_t start;
 	uint32_t length;
@@ -97,6 +98,9 @@ struct drive_t
 	uint8_t  paused;
 	uint32_t play_start_lba;
 	uint32_t play_end_lba;
+	float    volume_l;
+	float    volume_r;
+	bool     mcr_flag;
 
 	chd_file *chd_f;
 	int      chd_hunknum;
