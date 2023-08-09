@@ -8,9 +8,6 @@
 #include "../../shmem.h"
 #include "../chd/mister_chd.h"
 
-#define CD_DATA_IO_INDEX 4
-#define CD_DATA_IO2_INDEX 8
-
 #define SHMEM_ADDR  0x31000000
 
 satcdd_t satcdd;
@@ -508,10 +505,10 @@ void satcdd_t::CommandExec() {
 		this->read_pend = false;
 
 #ifdef SATURN_DEBUG
-		//printf("\x1b[32mSaturn: ");
-		//printf("Command Pause");
+		printf("\x1b[32mSaturn: ");
+		printf("Command Pause");
 		//printf(", last FAD = %u", last_lba + 150);
-		//printf(" (%u)\n\x1b[0m", frame_cnt);
+		printf(" (%u)\n\x1b[0m", frame_cnt);
 #endif // SATURN_DEBUG
 		break;
 
@@ -890,9 +887,9 @@ void satcdd_t::Update() {
 			uint8_t header[4];
 
 #ifdef SATURN_DEBUG
-			printf("\x1b[32mSaturn: ");
-			printf("Update read data, track = %i, lba = %i, msf = %02X:%02X:%02X, mode = %u", this->track + 1, this->lba + 150, BCD(msf.m), BCD(msf.s), BCD(msf.f), this->toc.tracks[this->track].type);
-			printf("\n\x1b[0m");
+			//printf("\x1b[32mSaturn: ");
+			//printf("Update read data, track = %i, lba = %i, msf = %02X:%02X:%02X, mode = %u", this->track + 1, this->lba + 150, BCD(msf.m), BCD(msf.s), BCD(msf.f), this->toc.tracks[this->track].type);
+			//printf("\n\x1b[0m");
 #endif // SATURN_DEBUG
 
 			if (this->sectorSize == 2048 || (this->lba - this->toc.tracks[this->track].start) < 0) {
@@ -1116,18 +1113,20 @@ int satcdd_t::DataSectorSend(uint8_t* header, int speed)
 	else {
 		ReadData(data_ptr);
 	}
+	int boot = (data_ptr[12] == 0x00 && data_ptr[13] == 0x02 && data_ptr[14] == 0x00 && data_ptr[15] == 0x01);
 	shmem_unmap(shmem_ptr, 4096 * 4);
+
 
 	buf_num_write++;
 	buf_num_write &= 3;
 	
-	uint16_t mode = (speed == 2 ? 0x0101 : 0x0000) | (buf_num_read << 4) | (buf_num_read << 12);
+	uint16_t mode = (speed == 2 ? 0x0101 : 0x0000) | (boot ? 0x0808 : 0x0000) | (buf_num_read << 4) | (buf_num_read << 12);
 
 	buf_num_read++;
 	buf_num_read &= 3;
 
 	if (SendData)
-		return SendData((uint8_t*)&mode, 2, CD_DATA_IO2_INDEX);
+		return SendData((uint8_t*)&mode, 2, CD_DATA_IO_INDEX);
 
 	return 0;
 }
@@ -1146,7 +1145,7 @@ int satcdd_t::RingDataSend(uint8_t* header, int speed)
 	uint16_t mode = (speed == 2 ? 0x0101 : 0x0000) | 0x0404;
 
 	if (SendData)
-		return SendData((uint8_t*)&mode, 2, CD_DATA_IO2_INDEX);
+		return SendData((uint8_t*)&mode, 2, CD_DATA_IO_INDEX);
 
 	return 0;
 }
@@ -1173,7 +1172,7 @@ int satcdd_t::AudioSectorSend(int first)
 	buf_num_read &= 3;
 
 	if (SendData)
-		return SendData((uint8_t*)&mode, 2, CD_DATA_IO2_INDEX);
+		return SendData((uint8_t*)&mode, 2, CD_DATA_IO_INDEX);
 
 	return 0;
 }
