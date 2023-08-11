@@ -940,13 +940,13 @@ uint32_t getFileType(const char *name)
 int findPrefixDir(char *dir, size_t dir_len)
 {
 	// Searches for the core's folder in the following order:
-	// /media/fat
 	// /media/usb<0..5>
 	// /media/usb<0..5>/games
 	// /media/network
 	// /media/network/games
 	// /media/fat/cifs
 	// /media/fat/cifs/games
+	// /media/fat
 	// /media/fat/games/
 	// if the core folder is not found anywhere,
 	// it will be created in /media/fat/games/<dir>
