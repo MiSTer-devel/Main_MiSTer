@@ -1055,6 +1055,7 @@ void SetUARTMode(int mode)
 	DisableIO();
 
 	MakeFile("/tmp/CORENAME", user_io_get_core_name());
+    MakeFile("/tmp/RBFNAME", user_io_get_confstr(0));
 
 	char data[20];
 	sprintf(data, "%d", baud);
