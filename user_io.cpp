@@ -325,6 +325,12 @@ char is_saturn()
 	return (is_saturn_type == 1);
 }
 
+static int is_n64_type = 0;
+char is_n64()
+{
+	if (!is_n64_type) is_n64_type = strcasecmp(orig_name, "N64") ? 2 : 1;
+	return (is_n64_type == 1);
+}
 
 static int is_no_type = 0;
 static int disable_osd = 0;
