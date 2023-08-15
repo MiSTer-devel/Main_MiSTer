@@ -34,6 +34,7 @@
 #include "audio.h"
 #include "shmem.h"
 #include "ide.h"
+#include "ide_cdrom.h"
 #include "profiling.h"
 
 #include "support.h"
@@ -2890,6 +2891,10 @@ void user_io_poll()
 		{
 			ide_io(0, sd_req & 7);
 			ide_io(1, (sd_req >> 3) & 7);
+			if (sd_req & 0x0100)
+			{
+				ide_cdda_send_sector();
+			}
 		}
 		else
 		{

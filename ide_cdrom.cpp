@@ -11,8 +11,9 @@
 #include <string>
 #include <sstream>
 #include <sys/stat.h>
+#include <cmath>
 #include <libchdr/chd.h>
-
+#include <byteswap.h>
 #include "spi.h"
 #include "user_io.h"
 #include "file_io.h"
@@ -43,6 +44,7 @@
 #define MSF_TO_FRAMES(M, S, F) ((M)*60*CD_FPS+(S)*CD_FPS+(F))
 
 #define CD_ERR_NO_DISK ((2 << 4) | ATA_ERR_ABRT)
+#define CD_ERR_UNIT_ATTENTION ((6 << 4) | ATA_ERR_ABRT)
 
 
 typedef struct
@@ -104,7 +106,7 @@ static int check_iso_file(fileTYPE *f, uint8_t *mode2, uint16_t *sectorSize)
 
 static const char * load_iso_file(drive_t *drv, const char* filename)
 {
-	fileTYPE f;
+	fileTYPE f;   
 	memset(drv->track, 0, sizeof(drv->track));
 	drv->track_cnt = 0;
 
@@ -156,6 +158,19 @@ static int get_timecode(uint32_t &frames, std::istream &in)
 	return success;
 }
 
+static track_t *get_track_from_lba(drive_t *drive, uint32_t lba)
+{
+  track_t *ret = NULL;
+  for (int i = 0; i < drive->track_cnt; i++)
+  {
+    if (lba >= drive->track[i].start && lba < (drive->track[i].start + drive->track[i].length))
+    {
+      ret = &drive->track[i];
+    }
+  }
+  return ret;
+}
+
 static int add_track(drive_t *drv, track_t *curr, uint32_t &shift, const int32_t prestart, uint32_t &totalPregap, uint32_t currPregap)
 {
 	uint32_t skip = 0;
@@ -185,6 +200,7 @@ static int add_track(drive_t *drv, track_t *curr, uint32_t &shift, const int32_t
 		totalPregap = currPregap;
 
 		memcpy(&drv->track[drv->track_cnt], curr, sizeof(track_t));
+		FileOpenEx(&drv->track[drv->track_cnt].f, curr->filename,  O_RDONLY);
 		drv->track_cnt++;
 		return 1;
 	}
@@ -234,6 +250,7 @@ static int add_track(drive_t *drv, track_t *curr, uint32_t &shift, const int32_t
 	}
 
 	memcpy(&drv->track[drv->track_cnt], curr, sizeof(track_t));
+	FileOpenEx(&drv->track[drv->track_cnt].f, drv->track[drv->track_cnt].filename, O_RDONLY);
 	drv->track_cnt++;
 	return 1;
 }
@@ -273,7 +290,7 @@ static const char* load_chd_file(drive_t *drv, const char *chdfile)
 	drv->chd_f = tmpTOC.chd_f;
 
 	//don't use add_track, just do it ourselves...
-	for(int i = 0; i <= tmpTOC.last; i++)
+	for(int i = 0; i < tmpTOC.last; i++)
 	{
 		cd_track_t *chd_track = &tmpTOC.tracks[i];
 		track_t *trk = &drv->track[i];
@@ -301,8 +318,9 @@ static const char* load_chd_file(drive_t *drv, const char *chdfile)
 	track_t *lead_out = &drv->track[drv->track_cnt];
 	lead_out->number = drv->track_cnt+1;
 	lead_out->attr = 0;
-	lead_out->start = tmpTOC.tracks[tmpTOC.last].end;
+	lead_out->start = tmpTOC.tracks[tmpTOC.last-1].end;
 	lead_out->length = 0;
+	drv->track_cnt++;
 
 	drv->total_sectors = total_sector_size / 512;
 	drv->chd_total_size = total_sector_size;
@@ -463,8 +481,9 @@ static const char* load_cue_file(drive_t *drv, const char *cuefile)
 
 	// add lead-out track
 	track.number++;
+	track.filename[0] = 0;
 	track.attr = 0;//sync with load iso
-	track.start = FileLoad(track.filename, 0, 0) / track.sectorSize;
+	track.start = drv->track[track.number-1].start + drv->track[track.number-1].length;
 	track.length = 0;
 
 	if (!add_track(drv, &track, shift, -1, totalPregap, 0))
@@ -611,7 +630,7 @@ static int read_toc(drive_t *drv, uint8_t *cmdbuf)
 			if (track < Track) continue;
 			if ((write + 8) > (ide_buf + AllocationLength)) break;
 
-			printf("Track %u attr=0x%02x %02u:%02u:%02u\n", first, attr, start.min, start.sec, start.fr);
+			printf("Track %u attr=0x%02x %02u:%02u:%02u\n", track, attr, start.min, start.sec, start.fr);
 
 			*write++ = 0x00;        /* entry+0 RESERVED */
 			*write++ = (attr >> 4) | 0x10; /* entry+1 ADR=1 CONTROL=4 (DATA) */
@@ -674,7 +693,27 @@ static int read_toc(drive_t *drv, uint8_t *cmdbuf)
 	return write - ide_buf;
 }
 
-static uint16_t mode_sense(int page)
+void cdrom_mode_select(ide_config *ide)
+{
+
+  uint8_t *mode_page = &ide_buf[8]; 
+	drive_t *drv = &ide->drive[ide->regs.drv];
+  uint8_t page_code = mode_page[0] & 0x3F;
+
+  switch(page_code) {
+    case 0x0E:
+      {
+        uint8_t p0vol = mode_page[9];
+        uint8_t p1vol = mode_page[11];
+        //in gain factor
+        drv->volume_l = (p0vol+1)/256.0f;
+        drv->volume_r = (p1vol+1)/256.0f;
+      }
+      break;
+  }
+}
+
+static uint16_t mode_sense(drive_t *drv, int page)
 {
 	uint8_t *write = ide_buf;
 	uint8_t *plen;
@@ -734,9 +773,9 @@ static uint16_t mode_sense(int page)
 		*write++ = 0x00;    /* +6 Obsolete (75) */
 		*write++ = 75;      /* +7 Obsolete (75) */
 		*write++ = 0x01;    /* +8 output port 0 selection (0001b = channel 0) */
-		*write++ = 0xFF;    /* +9 output port 0 volume (0xFF = 0dB atten.) */
+		*write++ = (uint8_t)((drv->volume_l*256)-1);    /* +9 output port 0 volume (0xFF = 0dB atten.) */
 		*write++ = 0x02;    /* +10 output port 1 selection (0010b = channel 1) */
-		*write++ = 0xFF;    /* +11 output port 1 volume (0xFF = 0dB atten.) */
+		*write++ = (uint8_t)((drv->volume_l*256)-1);    /* +11 output port 1 volume (0xFF = 0dB atten.) */
 		*write++ = 0x00;    /* +12 output port 2 selection (none) */
 		*write++ = 0x00;    /* +13 output port 2 volume (0x00 = mute) */
 		*write++ = 0x00;    /* +14 output port 3 selection (none) */
@@ -826,6 +865,7 @@ static int get_subchan(drive_t *drv, unsigned char& attr, unsigned char& track_n
 			track_num = drv->track[i].number;
 			attr = drv->track[i].attr;
 			absolute_msf = frames_to_msf(cur_pos + REDBOOK_FRAME_PADDING);
+      relative_msf = frames_to_msf((cur_pos + REDBOOK_FRAME_PADDING) - drv->track[i].start);
 			return 1;
 		}
 	}
@@ -931,14 +971,14 @@ static void pkt_send(ide_config *ide, void *data, uint16_t size)
 	ide->state = IDE_STATE_WAIT_PKT_RD;
 }
 
-static void read_cd_sectors(ide_config *ide, int cnt)
+static void read_cd_sectors(ide_config *ide, track_t *track, int cnt)
 {
 	drive_t *drv = &ide->drive[ide->regs.drv];
 	uint32_t sz = drv->track[drv->data_num].sectorSize;
 
 	if (sz == 2048)
 	{
-		if (!ide->null) ide->null = (FileReadAdv(drv->f, ide_buf, cnt * sz, -1) <= 0);
+		if (!ide->null) ide->null = (FileReadAdv(&track->f, ide_buf, cnt * sz, -1) <= 0);
 		if (ide->null) memset(ide_buf, 0, cnt * sz);
 		return;
 	}
@@ -949,10 +989,10 @@ static void read_cd_sectors(ide_config *ide, int cnt)
 
 	while (cnt--)
 	{
-		if (!ide->null) ide->null = !FileSeek(drv->f, pre, SEEK_CUR);
-		if (!ide->null) ide->null = (FileReadAdv(drv->f, ide_buf + off, 2048, -1) <= 0);
+		if (!ide->null) ide->null = !FileSeek(&track->f, pre, SEEK_CUR);
+		if (!ide->null) ide->null = (FileReadAdv(&track->f, ide_buf + off, 2048, -1) <= 0);
 		if (ide->null) memset(ide_buf + off, 0, 2048);
-		if (!ide->null) ide->null = !FileSeek(drv->f, post, SEEK_CUR);
+		if (!ide->null) ide->null = !FileSeek(&track->f, post, SEEK_CUR);
 		off += 2048;
 	}
 }
@@ -976,12 +1016,13 @@ void cdrom_read(ide_config *ide)
 		dbg_printf("** partial CD read\n");
 	}
 
-	if (ide->state == IDE_STATE_INIT_RW && !drive->chd_f)
-	{
-		uint32_t pos = ide->regs.pkt_lba * ide->drive[ide->regs.drv].track[ide->drive[ide->regs.drv].data_num].sectorSize;
 
-		//printf("Read from pos: %d\n", pos);
-		ide->null = (FileSeek(ide->drive[ide->regs.drv].f, pos, SEEK_SET) < 0);
+	track_t *track = get_track_from_lba(drive, ide->regs.pkt_lba); 
+
+	if (ide->state == IDE_STATE_INIT_RW && !drive->chd_f && track)
+	{
+		uint32_t pos = track->skip + (ide->regs.pkt_lba - track->start) * track->sectorSize;
+		ide->null = (FileSeek(&track->f, pos, SEEK_SET) < 0);
 	}
 
 
@@ -1015,7 +1056,7 @@ void cdrom_read(ide_config *ide)
 		}
 
 	} else {
-		read_cd_sectors(ide, cnt);
+		read_cd_sectors(ide, track, cnt);
 	}
 
 	dbg_printf("\nsector:\n");
@@ -1102,7 +1143,7 @@ static void play_audio_msf(drive_t *drv, uint8_t *cmdbuf)
 		drv->play_start_lba = (cmdbuf[3] * 60u * 75u) + (cmdbuf[4] * 75u) + cmdbuf[5];
 
 		if (drv->play_start_lba >= 150u) drv->play_start_lba -= 150u; /* LBA sector 0 == M:S:F sector 0:2:0 */
-		else drv->play_end_lba = 0;
+		else drv->play_start_lba = 0;
 	}
 
 	if (cmdbuf[6] == 0xFF && cmdbuf[7] == 0xFF && cmdbuf[8] == 0xFF)
@@ -1242,6 +1283,11 @@ void cdrom_handle_pkt(ide_config *ide)
 		cdrom_reply(ide, 0);
 		break;
 
+  case 0x1B: //START STOP UNIT
+    dbg_printf("** Start Stop Unit\n");
+    cdrom_reply(ide, 0);
+    break;
+
 	case 0x1E: // lock the cd door - doing nothing.
 		dbg_printf("** Lock Door\n");
 		cdrom_reply(ide, 0);
@@ -1249,7 +1295,7 @@ void cdrom_handle_pkt(ide_config *ide)
 
 	case 0x5A: // mode sense
 		dbg_printf("** Mode Sense\n");
-		pkt_send(ide, ide_buf, mode_sense(cmdbuf[2]));
+		pkt_send(ide, ide_buf, mode_sense(drv, cmdbuf[2]));
 		break;
 
 	case 0x42: // read sub
@@ -1271,6 +1317,7 @@ void cdrom_handle_pkt(ide_config *ide)
 		dbg_printf("** get sense:\n");
 		pkt_send(ide, ide_buf, get_sense(drv));
 		break;
+    
 
 	case 0x55: // mode select
 		dbg_printf("** mode select\n");
@@ -1285,7 +1332,7 @@ void cdrom_handle_pkt(ide_config *ide)
 
 	case 0x00: // test unit ready
 		dbg_printf("** Test Unit Ready\n");
-		if (!drv->load_state) cdrom_reply(ide, 0);
+		if (!drv->load_state) cdrom_reply(ide, 0, false);
 		else cdrom_nodisk(ide);
 		break;
 
@@ -1390,14 +1437,23 @@ int cdrom_handle_cmd(ide_config *ide)
 	return 0;
 }
 
-void cdrom_reply(ide_config *ide, uint8_t error)
+
+void cdrom_reply(ide_config *ide, uint8_t error, bool unit_attention)
 {
 	ide->state = IDE_STATE_IDLE;
 	ide->regs.sector_count = 3;
-	ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ | (error ? ATA_STATUS_ERR : 0);
-	ide->regs.error = error;
+	if (ide->drive[ide->regs.drv].mcr_flag && unit_attention) {
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ | ATA_STATUS_ERR;
+		ide->regs.error = CD_ERR_UNIT_ATTENTION;
+		ide->regs.error |= ATA_ERR_MCR;
+		ide->drive[ide->regs.drv].mcr_flag = false;
+	} else {
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ | (error ? ATA_STATUS_ERR : 0);
+		ide->regs.error = error;
+	}
 	ide_set_regs(ide);
 }
+
 
 void cdrom_close_chd(drive_t *drv)
 {
@@ -1426,9 +1482,75 @@ const char* cdrom_parse(uint32_t num, const char *filename)
 		int drv = num & 1;
 		num >>= 1;
 		cdrom_close_chd(&ide_inst[num].drive[drv]);
+		for(uint8_t i=0; i < sizeof(ide_inst[num].drive[drv].track)/sizeof(track_t); i++)
+		{
+			if (ide_inst[num].drive[drv].track[i].f.opened())
+			{
+				FileClose(&ide_inst[num].drive[drv].track[i].f);
+			}
+		}
 		res = load_chd_file(&ide_inst[num].drive[drv], path);
 		if (!res) res = load_cue_file(&ide_inst[num].drive[drv], path);
 		if (!res) res = load_iso_file(&ide_inst[num].drive[drv], path);
+		if (res) {
+			ide_inst[num].drive[drv].mcr_flag = true;
+			ide_inst[num].drive[drv].playing = 0;
+			ide_inst[num].drive[drv].paused = 0;
+			ide_inst[num].drive[drv].play_start_lba = 0;
+			ide_inst[num].drive[drv].play_end_lba = 0;
+		}
 	}
 	return res;
+}
+
+
+void ide_cdda_send_sector() {
+  drive_t *drv = NULL;
+  ide_config *ide = NULL;
+  int ide_idx = -1;
+  for (ide_idx = 0; ide_idx < 2; ide_idx++) {
+    for (int drv_idx = 0; drv_idx < 2; drv_idx++) {
+      if (ide_inst[ide_idx].drive[drv_idx].playing == 1 && ide_inst[ide_idx].drive[drv_idx].paused == 0) {
+        drv = &ide_inst[ide_idx].drive[drv_idx];
+        ide = &ide_inst[ide_idx];
+        break;
+      }
+    }
+    if (drv) break;
+  }
+  if (!drv || !ide) return;
+  uint8_t cdda_buf[BYTES_PER_RAW_REDBOOK_FRAME];
+  bool needs_swap = false;
+
+  if (drv->chd_f) {
+      mister_chd_read_sector(drv->chd_f, drv->play_start_lba + drv->track[drv->data_num].chd_offset, 0, 0, BYTES_PER_RAW_REDBOOK_FRAME, cdda_buf, drv->chd_hunkbuf, &drv->chd_hunknum );
+      needs_swap = true;
+  } else {
+    track_t *track = get_track_from_lba(drv, drv->play_start_lba); 
+		//uint32_t pos = ide->regs.pkt_lba * ide->drive[ide->regs.drv].track[ide->drive[ide->regs.drv].data_num].sectorSize;
+    uint32_t pos = track->skip + (drv->play_start_lba - track->start) * track->sectorSize;
+    FileSeek(&track->f, pos, SEEK_SET);
+    FileReadAdv(&track->f, cdda_buf, sizeof(cdda_buf), -1);
+  }
+
+  int16_t *cdda_buf16 = (int16_t *)cdda_buf;
+  for (int sidx = 0; sidx < 1176; sidx++)
+  {
+    if (needs_swap) {
+      cdda_buf16[sidx] = bswap_16(cdda_buf16[sidx]);
+    }
+    double tmps = (double)cdda_buf16[sidx];
+    if (sidx%2) {
+      cdda_buf16[sidx] = (int16_t)(tmps*drv->volume_r); 
+    } else {
+      cdda_buf16[sidx] = (int16_t)(tmps*drv->volume_r);
+    }
+  }
+  ide_sendbuf(ide, 0x200, sizeof(cdda_buf)/2, (uint16_t *)cdda_buf);
+  drv->play_start_lba += 1;
+  if (drv->play_start_lba >= drv->play_end_lba) 
+  {
+    drv->playing = 0;
+    drv->paused = 0;
+  }
 }
