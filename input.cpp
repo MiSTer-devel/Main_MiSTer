@@ -1185,6 +1185,7 @@ typedef struct
 	int8_t   wh_brake;
 	int8_t   wh_clutch;
 	int8_t   wh_combo;
+	int8_t   wh_pedal_invert;
 
 	int      timeout;
 	char     mac[64];
@@ -2558,7 +2559,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		}
 
 		// paddle axis - skip from mapping
-		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8)) return;
+		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8) && input[dev].quirk != QUIRK_WHEEL) return;
 
 		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
 		{
@@ -3167,7 +3168,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (ev->value < absinfo->minimum) value = absinfo->minimum;
 				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
 
-				if (ev->code == 8)
+				if (ev->code == 8 && input[dev].quirk != QUIRK_WHEEL)
 				{
 					if (input[dev].num && input[dev].num <= NUMPLAYERS)
 					{
@@ -3230,7 +3231,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (input[dev].quirk == QUIRK_WHEEL)
 					{
 						int wh_value = ((127 * (ev->value - absinfo->minimum)) / (absinfo->maximum - absinfo->minimum)) - 127;
+						if (input[dev].wh_pedal_invert > 0) {
+							// invert pedal values range for wheel setups that require it
+							wh_value = ~(wh_value + 127);
+						}
 
+						// steering wheel passes full range, pedals are standardised in +127 to 0 to -127 range
 						if (ev->code == input[dev].wh_steer)
 						{
 							joy_analog(input[dev].num, 0, value, 0);
@@ -3249,6 +3255,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						}
 						else if (ev->code == input[dev].wh_combo)
 						{
+							// if accel and brake pedal use a shared axis then map negative to accel and positive to brake
 							if (value < -1) joy_analog(input[dev].num, 1, value, 0);
 							else if (value > 1) joy_analog(input[dev].num, 1, -value, 1);
 							else
@@ -4131,11 +4138,18 @@ static void setup_wheels()
 	{
 		if (pool[i].fd != -1)
 		{
+			// steering wheel axis
 			input[i].wh_steer = 0;
+			// accelerator pedal axis
 			input[i].wh_accel = -1;
+			// brake pedal axis
 			input[i].wh_brake = -1;
+			// clutch pedal axis
 			input[i].wh_clutch = -1;
+			// shared accel and brake pedal axis
 			input[i].wh_combo = -1;
+			// invert pedal values range (if >0)
+			input[i].wh_pedal_invert = -1;
 
 			// Logitech Wheels
 			if (input[i].vid == 0x046d)
@@ -4232,7 +4246,33 @@ static void setup_wheels()
 				}
 			}
 
-			//Namco NeGcon via RetroZord adapter
+			// Thrustmaster Guillemot Wheels
+			else if (input[i].vid == 0x06f8)
+			{
+				switch (input[i].pid)
+				{
+				case 0x0004: // Force Feedback Racing Wheel
+					input[i].wh_steer = 8;
+					input[i].wh_accel = 9;
+					input[i].wh_brake = 10;
+					input[i].wh_pedal_invert = 1;
+					input[i].quirk = QUIRK_WHEEL;
+					break;
+				}
+
+				if (input[i].quirk == QUIRK_WHEEL)
+				{
+					struct input_event ie = {};
+					ie.type = EV_FF;
+					ie.code = FF_AUTOCENTER;
+					ie.value = 0xFFFFUL * cfg.wheel_force / 100;
+					write(pool[i].fd, &ie, sizeof(ie));
+
+					set_wheel_range(i, cfg.wheel_range);
+				}
+			}
+
+			// Namco NeGcon via RetroZord adapter
 			else if (input[i].vid == 0x2341 && input[i].pid == 0x8036 && strstr(input[i].name, "RZordPsWheel"))
 			{
 				input[i].wh_accel = 6;
