@@ -94,7 +94,6 @@
     <ClCompile Include="support\minimig\minimig_boot.cpp" />
     <ClCompile Include="support\minimig\minimig_config.cpp" />
     <ClCompile Include="support\minimig\minimig_fdd.cpp" />
-    <ClCompile Include="support\minimig\minimig_hdd.cpp" />
     <ClCompile Include="support\minimig\minimig_share.cpp" />
     <ClCompile Include="support\neogeo\neogeocd.cpp" />
     <ClCompile Include="support\neogeo\neogeo_loader.cpp" />

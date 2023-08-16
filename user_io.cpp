@@ -2887,19 +2887,9 @@ void user_io_poll()
 		sysled_enable(1);
 
 		uint16_t sd_req = ide_check();
-		if (sd_req & 0x8000)
-		{
-			ide_io(0, sd_req & 7);
-			ide_io(1, (sd_req >> 3) & 7);
-			if (sd_req & 0x0100)
-			{
-				ide_cdda_send_sector();
-			}
-		}
-		else
-		{
-			HandleHDD(c1, c2);
-		}
+		ide_io(0, sd_req & 7);
+		ide_io(1, (sd_req >> 3) & 7);
+		if (sd_req & 0x0100) ide_cdda_send_sector();
 		UpdateDriveStatus();
 
 		kbd_fifo_poll();
