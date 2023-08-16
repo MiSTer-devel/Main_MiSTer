@@ -940,16 +940,19 @@ uint32_t getFileType(const char *name)
 int findPrefixDir(char *dir, size_t dir_len)
 {
 	// Searches for the core's folder in the following order:
-	// /media/fat
 	// /media/usb<0..5>
 	// /media/usb<0..5>/games
+	// /media/network
+	// /media/network/games
 	// /media/fat/cifs
 	// /media/fat/cifs/games
+	// /media/fat
 	// /media/fat/games/
 	// if the core folder is not found anywhere,
 	// it will be created in /media/fat/games/<dir>
 	static char temp_dir[1024];
 
+	// Usb<0..5>
 	for (int x = 0; x < 6; x++) {
 		snprintf(temp_dir, 1024, "%s%d/%s", "../usb", x, dir);
 		if (isPathDirectory(temp_dir)) {
@@ -966,6 +969,23 @@ int findPrefixDir(char *dir, size_t dir_len)
 		}
 	}
 
+	// Network share in /media/network/
+	snprintf(temp_dir, 1024, "%s/%s", "../network", dir);
+	if (isPathDirectory(temp_dir)) {
+		printf("Found network dir: %s\n", temp_dir);
+		strncpy(dir, temp_dir, dir_len);
+		return 1;
+	}
+
+	// Network share in /media/network/games
+	snprintf(temp_dir, 1024, "%s/%s/%s", "../network", GAMES_DIR, dir);
+	if (isPathDirectory(temp_dir)) {
+		printf("Found network dir: %s\n", temp_dir);
+		strncpy(dir, temp_dir, dir_len);
+		return 1;
+	}
+
+	// CIFS_DIR directory in /media/fat/cifs
 	snprintf(temp_dir, 1024, "%s/%s", CIFS_DIR, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found CIFS dir: %s\n", temp_dir);
@@ -973,6 +993,7 @@ int findPrefixDir(char *dir, size_t dir_len)
 		return 1;
 	}
 
+	// CIFS_DIR/GAMES_DIR directory in /media/fat/cifs/games
 	snprintf(temp_dir, 1024, "%s/%s/%s", CIFS_DIR, GAMES_DIR, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found CIFS dir: %s\n", temp_dir);
@@ -980,11 +1001,13 @@ int findPrefixDir(char *dir, size_t dir_len)
 		return 1;
 	}
 
+	// media/fat
 	if (isPathDirectory(dir)) {
 		printf("Found existing: %s\n", dir);
 		return 1;
 	}
 
+	// media/fat/GAMES_DIR
 	snprintf(temp_dir, 1024, "%s/%s", GAMES_DIR, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found dir: %s\n", temp_dir);
