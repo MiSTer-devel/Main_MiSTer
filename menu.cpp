@@ -6118,8 +6118,7 @@ void HandleUI(void)
 
 			if (ide_is_placeholder(num))
 			{
-				if (ide_check() & 0x8000) ide_open(num, minimig_config.hardfile[num].filename);
-				else OpenHardfile(num, minimig_config.hardfile[num].filename);
+				ide_open(num, minimig_config.hardfile[num].filename);
 			}
 
 			menustate = MENU_MINIMIG_DISK1;

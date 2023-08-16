@@ -87,9 +87,4 @@ struct PartitionBlock {
 	unsigned long pb_EReserved[12];  // reserved for future environment vector
 } __attribute__((packed));
 
-// functions
-void HandleHDD(uint8_t c1, uint8_t c2);
-uint8_t OpenHardfile(uint8_t unit, const char* filename);
-int checkHDF(const char* name, struct RigidDiskBlock **rdb);
-
 #endif // __HDD_H__
