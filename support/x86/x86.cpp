@@ -726,6 +726,8 @@ void x86_poll()
 	uint16_t sd_req = ide_check();
 	if (sd_req)
 	{
+		if (sd_req & 0x400) ide_cdda_send_sector();
+
 		ide_io(0, sd_req & 7);
 		sd_req >>= 3;
 		ide_io(1, sd_req & 7);

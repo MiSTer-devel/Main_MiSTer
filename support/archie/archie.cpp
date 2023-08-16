@@ -474,7 +474,11 @@ void archie_poll(void)
 	DisableFpga();
 
 	uint16_t sd_req = ide_check();
-	if (sd_req & 0x8000) ide_io(0, sd_req & 7);
+	if (sd_req & 0x8000)
+	{
+		ide_io(0, sd_req & 7);
+		if (sd_req & 0x0100) ide_cdda_send_sector();
+	}
 	else HandleHDD(status >> 8, 0);
 
 	check_cmos(status);
