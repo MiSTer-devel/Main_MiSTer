@@ -2407,6 +2407,10 @@ void HandleUI(void)
 					neocd_set_en(0);
 					neogeo_romset_tx(selPath, 0);
 				}
+				else if (is_n64())
+				{
+					if (!n64_rom_tx(selPath, idx)) Info("failed to load ROM");
+				}
 				else
 				{
 					if (is_pce())
