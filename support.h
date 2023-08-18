@@ -44,3 +44,6 @@
 
 // Saturn  support
 #include "support/saturn/saturn.h"
+
+// N64 support
+#include "support/n64/n64.h"
