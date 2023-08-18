@@ -2407,6 +2407,10 @@ void HandleUI(void)
 					neocd_set_en(0);
 					neogeo_romset_tx(selPath, 0);
 				}
+				else if (is_n64())
+				{
+					if (!n64_rom_tx(selPath, idx)) Info("failed to load ROM");
+				}
 				else
 				{
 					if (is_pce())
@@ -6118,8 +6122,7 @@ void HandleUI(void)
 
 			if (ide_is_placeholder(num))
 			{
-				if (ide_check() & 0x8000) ide_open(num, minimig_config.hardfile[num].filename);
-				else OpenHardfile(num, minimig_config.hardfile[num].filename);
+				ide_open(num, minimig_config.hardfile[num].filename);
 			}
 
 			menustate = MENU_MINIMIG_DISK1;

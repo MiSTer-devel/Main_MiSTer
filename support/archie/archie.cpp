@@ -289,7 +289,7 @@ static void check_cmos(uint8_t cnt)
 
 inline int hdd_open(int unit, char *filename)
 {
-	return (ide_check() & 0x8000) ? ide_open(unit, filename) : OpenHardfile(unit, filename);
+	return ide_open(unit, filename);
 }
 
 void archie_init()
@@ -474,8 +474,8 @@ void archie_poll(void)
 	DisableFpga();
 
 	uint16_t sd_req = ide_check();
-	if (sd_req & 0x8000) ide_io(0, sd_req & 7);
-	else HandleHDD(status >> 8, 0);
+	ide_io(0, sd_req & 7);
+	if (sd_req & 0x0100) ide_cdda_send_sector();
 
 	check_cmos(status);
 	check_reset();

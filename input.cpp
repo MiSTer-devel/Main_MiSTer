@@ -1185,6 +1185,7 @@ typedef struct
 	int8_t   wh_brake;
 	int8_t   wh_clutch;
 	int8_t   wh_combo;
+	int8_t   wh_pedal_invert;
 
 	int      timeout;
 	char     mac[64];
@@ -2558,7 +2559,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		}
 
 		// paddle axis - skip from mapping
-		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8)) return;
+		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8) && input[dev].quirk != QUIRK_WHEEL) return;
 
 		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
 		{
@@ -3167,7 +3168,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (ev->value < absinfo->minimum) value = absinfo->minimum;
 				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
 
-				if (ev->code == 8)
+				if (ev->code == 8 && input[dev].quirk != QUIRK_WHEEL)
 				{
 					if (input[dev].num && input[dev].num <= NUMPLAYERS)
 					{
@@ -3230,7 +3231,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					if (input[dev].quirk == QUIRK_WHEEL)
 					{
 						int wh_value = ((127 * (ev->value - absinfo->minimum)) / (absinfo->maximum - absinfo->minimum)) - 127;
+						if (input[dev].wh_pedal_invert > 0) {
+							// invert pedal values range for wheel setups that require it
+							wh_value = ~(wh_value + 127);
+						}
 
+						// steering wheel passes full range, pedals are standardised in +127 to 0 to -127 range
 						if (ev->code == input[dev].wh_steer)
 						{
 							joy_analog(input[dev].num, 0, value, 0);
@@ -3249,6 +3255,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						}
 						else if (ev->code == input[dev].wh_combo)
 						{
+							// if accel and brake pedal use a shared axis then map negative to accel and positive to brake
 							if (value < -1) joy_analog(input[dev].num, 1, value, 0);
 							else if (value > 1) joy_analog(input[dev].num, 1, -value, 1);
 							else
@@ -3444,6 +3451,7 @@ void mergedevs()
 	make_unique(0x045E, 0x02A1, 1);  // Xbox 360 wireless receiver
 	make_unique(0x8282, 0x3201, 1);  // Irken Labs JAMMA Expander / Mojo Retro Adapter
 	make_unique(0x1209, 0xFACA, 1);  // ControllaBLE
+	make_unique(0x16D0, 0x127E, 1);  // Reflex Adapt to USB
 
 	if (cfg.no_merge_vid)
 	{
@@ -4131,11 +4139,18 @@ static void setup_wheels()
 	{
 		if (pool[i].fd != -1)
 		{
+			// steering wheel axis
 			input[i].wh_steer = 0;
+			// accelerator pedal axis
 			input[i].wh_accel = -1;
+			// brake pedal axis
 			input[i].wh_brake = -1;
+			// clutch pedal axis
 			input[i].wh_clutch = -1;
+			// shared accel and brake pedal axis
 			input[i].wh_combo = -1;
+			// invert pedal values range (if >0)
+			input[i].wh_pedal_invert = -1;
 
 			// Logitech Wheels
 			if (input[i].vid == 0x046d)
@@ -4232,8 +4247,35 @@ static void setup_wheels()
 				}
 			}
 
-			//Namco NeGcon via RetroZord adapter
-			else if (input[i].vid == 0x2341 && input[i].pid == 0x8036 && strstr(input[i].name, "RZordPsWheel"))
+			// Thrustmaster Guillemot Wheels
+			else if (input[i].vid == 0x06f8)
+			{
+				switch (input[i].pid)
+				{
+				case 0x0004: // Force Feedback Racing Wheel
+					input[i].wh_steer = 8;
+					input[i].wh_accel = 9;
+					input[i].wh_brake = 10;
+					input[i].wh_pedal_invert = 1;
+					input[i].quirk = QUIRK_WHEEL;
+					break;
+				}
+
+				if (input[i].quirk == QUIRK_WHEEL)
+				{
+					struct input_event ie = {};
+					ie.type = EV_FF;
+					ie.code = FF_AUTOCENTER;
+					ie.value = 0xFFFFUL * cfg.wheel_force / 100;
+					write(pool[i].fd, &ie, sizeof(ie));
+
+					set_wheel_range(i, cfg.wheel_range);
+				}
+			}
+
+			//Namco NeGcon via RetroZord adapter or Reflex Adapt
+			else if ((input[i].vid == 0x2341 && input[i].pid == 0x8036 && strstr(input[i].name, "RZordPsWheel")) ||
+					 (input[i].vid == 0x16D0 && input[i].pid == 0x127E && strstr(input[i].name, "ReflexPSWheel")))
 			{
 				input[i].wh_accel = 6;
 				input[i].wh_brake = 10;
@@ -4469,8 +4511,9 @@ int input_test(int getchar)
 							input[n].lightgun = 1;
 						}
 
-						//Namco Guncon via RetroZord adapter
-						if (input[n].vid == 0x2341 && input[n].pid == 0x8036 && (strstr(uniq, "RZordPsGun") || strstr(input[n].name, "RZordPsGun")))
+						//Namco Guncon via RetroZord adapter or Reflex Adapt
+						if ((input[n].vid == 0x2341 && input[n].pid == 0x8036 && (strstr(uniq, "RZordPsGun") || strstr(input[n].name, "RZordPsGun"))) ||
+							(input[n].vid == 0x16D0 && input[n].pid == 0x127E && (strstr(uniq, "ReflexPSGun") || strstr(input[n].name, "ReflexPSGun"))))
 						{
 							input[n].quirk = QUIRK_LIGHTGUN;
 							input[n].lightgun = 1;
@@ -4550,7 +4593,8 @@ int input_test(int getchar)
 						}
 
 						//Arduino and Teensy devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
-						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4)) && strlen(uniq))
+						//Reflex Adapt also uses the UNIQ field to differentiate between device modes
+						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4) || (input[n].vid == 0x16D0 && input[n].pid == 0x127E)) && strlen(uniq)) 
 						{
 							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x_%s", input[n].vid, input[n].pid, uniq);
 							char *p;
