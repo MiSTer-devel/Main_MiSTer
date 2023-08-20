@@ -138,6 +138,11 @@ static const char * load_iso_file(drive_t *drv, const char* filename)
 	drv->track_cnt = 2;
 
 	drv->data_num = 0;
+	if (!FileOpen(&drv->track[0].f, drv->track[0].filename))
+	{
+		printf("Cannot open ISO file! (First track)\n");
+		return 0;
+	}
 	return drv->track[0].filename;
 }
 
