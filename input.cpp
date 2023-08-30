@@ -1198,6 +1198,7 @@ typedef struct
 	char     id[80];
 	char     name[128];
 	char     sysfs[512];
+	int      max_range;
 } devInput;
 
 static devInput input[NUMDEV] = {};
@@ -2083,8 +2084,21 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 	{
 		num--;
 		pos[stick][num][axis] = offset;
-		if(stick) user_io_r_analog_joystick(num, (char)(pos[1][num][0]), (char)(pos[1][num][1]));
-		else user_io_l_analog_joystick(num, (char)(pos[0][num][0]), (char)(pos[0][num][1]));
+		int x = pos[stick][num][0];
+		int y = pos[stick][num][1];
+		if (is_n64() && stick == 0)
+		{
+			const int abs_x = abs(x);
+			const int abs_y = abs(y);
+
+			if (abs_x > input[dev].max_range) input[dev].max_range = abs_x;
+			if (abs_y > input[dev].max_range) input[dev].max_range = abs_y;
+
+			// emulate n64 joystick range and shape for regular -127-+127 controllers
+			n64_joy_emu(x, y, &x, &y, input[dev].max_range);
+		}
+		if(stick) user_io_r_analog_joystick(num, (char)x, (char)y);
+		else user_io_l_analog_joystick(num, (char)x, (char)y);
 	}
 }
 
