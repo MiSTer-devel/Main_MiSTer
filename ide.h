@@ -101,6 +101,9 @@ struct drive_t
 	float    volume_l;
 	float    volume_r;
 	bool     mcr_flag;
+	uint8_t	 atapi_sense_key;
+	uint8_t  atapi_asc_code;
+	uint8_t  atapi_ascq_code;
 
 	chd_file *chd_f;
 	int      chd_hunknum;
