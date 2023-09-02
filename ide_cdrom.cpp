@@ -43,8 +43,12 @@
 #define CD_FPS 75
 #define MSF_TO_FRAMES(M, S, F) ((M)*60*CD_FPS+(S)*CD_FPS+(F))
 
-#define CD_ERR_NO_DISK ((2 << 4) | ATA_ERR_ABRT)
-#define CD_ERR_UNIT_ATTENTION ((6 << 4) | ATA_ERR_ABRT)
+#define CD_ERR_NO_DISK 2 
+#define CD_ERR_ILLEGAL_REQUEST 5 
+#define CD_ERR_UNIT_ATTENTION 6 
+
+#define CD_ASC_CODE_COMMAND_SEQUENCE_ERR 0x2C
+#define CD_ASC_CODE_ILLEGAL_OPCODE 0x20
 
 
 typedef struct
@@ -163,14 +167,21 @@ static int get_timecode(uint32_t &frames, std::istream &in)
 	return success;
 }
 
-static track_t *get_track_from_lba(drive_t *drive, uint32_t lba)
+static track_t *get_track_from_lba(drive_t *drive, uint32_t lba, bool &index0)
 {
 	track_t *ret = NULL;
+	index0 = false;
 	for (int i = 0; i < drive->track_cnt; i++)
 	{
-		if (lba >= drive->track[i].start && lba < (drive->track[i].start + drive->track[i].length))
+		uint32_t start_lba = i ? drive->track[i-1].start + drive->track[i-1].length : 0;
+		uint32_t end_lba = drive->track[i].start + drive->track[i].length;
+
+		if (lba >= start_lba && lba <= end_lba)
 		{
 			ret = &drive->track[i];
+			//In the "pregap" section
+			if (lba < drive->track[i].start) index0 = true;
+			break;
 		}
 	}
 	return ret;
@@ -862,17 +873,20 @@ static int get_subchan(drive_t *drv, unsigned char& attr, unsigned char& track_n
 
 	//TODO: use current play position when audio playback will be implemented
 	uint32_t cur_pos = drv->play_start_lba;
+	bool is_index0;
+	track_t *cur_track = NULL;
+	cur_track = get_track_from_lba(drv, cur_pos, is_index0);
 
-	for (int i = 0; i < drv->track_cnt; i++)
+	if (cur_track)
 	{
-		if (cur_pos >= drv->track[i].start && cur_pos < (drv->track[i].start + drv->track[i].length))
-		{
-			track_num = drv->track[i].number;
-			attr = drv->track[i].attr;
-			absolute_msf = frames_to_msf(cur_pos + REDBOOK_FRAME_PADDING);
-			relative_msf = frames_to_msf((cur_pos + REDBOOK_FRAME_PADDING) - drv->track[i].start);
-			return 1;
-		}
+		track_num = cur_track->number;
+		attr = cur_track->attr;
+		absolute_msf = frames_to_msf(cur_pos + REDBOOK_FRAME_PADDING);
+		int relative_diff = cur_pos - cur_track->start;
+
+		relative_msf = frames_to_msf(abs(relative_diff));
+		index = is_index0 ? 0 : 1;
+		return 1;
 	}
 
 	return 0;
@@ -1004,6 +1018,7 @@ static void read_cd_sectors(ide_config *ide, track_t *track, int cnt)
 
 void cdrom_read(ide_config *ide)
 {
+	bool is_index0 = false;
 	uint32_t cnt = ide->regs.pkt_cnt;
 	drive_t *drive = &ide->drive[ide->regs.drv];
 
@@ -1022,7 +1037,7 @@ void cdrom_read(ide_config *ide)
 	}
 
 
-	track_t *track = get_track_from_lba(drive, ide->regs.pkt_lba);
+	track_t *track = get_track_from_lba(drive, ide->regs.pkt_lba, is_index0);
 
 	if (ide->state == IDE_STATE_INIT_RW && !drive->chd_f && track)
 	{
@@ -1127,7 +1142,7 @@ static int get_sense(drive_t *drv)
 		break;
 
 	default:
-		set_sense(0);
+		set_sense(drv->atapi_sense_key, drv->atapi_asc_code, drv->atapi_ascq_code);
 		break;
 	}
 
@@ -1135,10 +1150,15 @@ static int get_sense(drive_t *drv)
 	return 18;
 }
 
-static void pause_resume(drive_t *drv, uint8_t *cmdbuf)
+static bool pause_resume(drive_t *drv, uint8_t *cmdbuf)
 {
 	bool resume = !!(cmdbuf[8] & 1);
-	if (drv->playing) drv->paused = !resume;
+	if (drv->playing) 
+	{
+		drv->paused = !resume;
+		return true;
+	}
+	return false;
 }
 
 static void play_audio_msf(drive_t *drv, uint8_t *cmdbuf)
@@ -1235,6 +1255,19 @@ void cdrom_handle_pkt(ide_config *ide)
 	ide->regs.pkt_cnt = 0;
 	int err = 0;
 
+	//See MMC-5 section 4.1.6.1
+	//If the no disk/load state isn't "done", most commands need to return CHECK CONDITION+sense data. 
+	//The only commands that ignore this are the ones listed below.
+	//GET CONFIG ,GET EVENT STATUS NOTIFICATION, INQUIRY, REQUEST SENSE
+	//0x46, 0x4A, 0x12, 0x3h
+	if (drv->load_state || drv->mcr_flag)
+	{
+		if ((cmdbuf[0] != 0x46) && (cmdbuf[0] != 0x4A) && (cmdbuf[0] != 0x12) && (cmdbuf[0] != 0x3))
+		{
+			cdrom_nodisk(ide);
+			return;
+		}
+	}
 	switch (cmdbuf[0])
 	{
 	case 0xA8: // read(12) sectors
@@ -1262,14 +1295,8 @@ void cdrom_handle_pkt(ide_config *ide)
 		{
 			uint32_t tmp = 0;
 
-			if (drv->chd_f)
-			{
-				tmp = drv->chd_total_size / 2048;
-			}
-			else
-			{
-				tmp = drv->f->size / 2048;
-			}
+			tmp = drv->track[drv->track_cnt-1].start;
+
 			ide_buf[0] = tmp >> 24;
 			ide_buf[1] = tmp >> 16;
 			ide_buf[2] = tmp >> 8;
@@ -1311,12 +1338,20 @@ void cdrom_handle_pkt(ide_config *ide)
 
 	case 0x42: // read sub
 		dbg_printf("** read sub:\n");
-		pkt_send(ide, ide_buf, read_subchannel(drv, cmdbuf));
+		if (!drv->load_state)
+		{
+			pkt_send(ide, ide_buf, read_subchannel(drv, cmdbuf));
+		}
+		else cdrom_nodisk(ide);
 		break;
 
 	case 0x43: // read TOC
 		dbg_printf("** Read TOC\n");
-		pkt_send(ide, ide_buf, read_toc(drv, cmdbuf));
+		if (!drv->load_state) 
+		{
+			pkt_send(ide, ide_buf, read_toc(drv, cmdbuf));
+		} 
+		else cdrom_nodisk(ide);
 		break;
 
 	case 0x12: // inquiry
@@ -1361,8 +1396,7 @@ void cdrom_handle_pkt(ide_config *ide)
 
 	case 0x4B: // pause/resume
 		dbg_printf("** CD PAUSE/RESUME\n");
-		pause_resume(drv, cmdbuf);
-		cdrom_reply(ide, 0);
+		cdrom_reply(ide, pause_resume(drv, cmdbuf) ? 0 : CD_ERR_ILLEGAL_REQUEST, CD_ASC_CODE_COMMAND_SEQUENCE_ERR);
 		break;
 
 	default:
@@ -1374,7 +1408,7 @@ void cdrom_handle_pkt(ide_config *ide)
 	{
 		printf("(!) Error in packet command %02X\n", cmdbuf[0]);
 		hexdump(cmdbuf, 12, 0);
-		cdrom_reply(ide, ATA_ERR_ABRT);
+		cdrom_reply(ide, CD_ERR_ILLEGAL_REQUEST, CD_ASC_CODE_ILLEGAL_OPCODE);
 	}
 }
 
@@ -1431,7 +1465,7 @@ int cdrom_handle_cmd(ide_config *ide)
 		ide->regs.cylinder = 0xEB14;
 		ide->regs.head = 0;
 		ide->regs.io_size = 0;
-		ide->regs.status = ATA_STATUS_RDY;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DSC;
 		ide_set_regs(ide);
 		break;
 
@@ -1449,21 +1483,26 @@ int cdrom_handle_cmd(ide_config *ide)
 }
 
 
-void cdrom_reply(ide_config *ide, uint8_t error, bool unit_attention)
+//error is the atapi sense_key
+void cdrom_reply(ide_config *ide, uint8_t error, uint8_t asc_code, uint8_t ascq_code, bool unit_attention)
 {
 	ide->state = IDE_STATE_IDLE;
 	ide->regs.sector_count = 3;
 	if (ide->drive[ide->regs.drv].mcr_flag && unit_attention) {
 		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ | ATA_STATUS_ERR;
-		ide->regs.error = CD_ERR_UNIT_ATTENTION;
-		ide->regs.error |= ATA_ERR_MCR;
+		ide->regs.error = (CD_ERR_UNIT_ATTENTION << 4) | ATA_ERR_MC;
+		ide->regs.sector_count = 0;
 		ide->drive[ide->regs.drv].mcr_flag = false;
 	}
 	else
 	{
 		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ | (error ? ATA_STATUS_ERR : 0);
-		ide->regs.error = error;
+		ide->regs.error = error << 4;
+		ide->drive[ide->regs.drv].atapi_sense_key = error;
+		ide->drive[ide->regs.drv].atapi_asc_code = asc_code;
+		ide->drive[ide->regs.drv].atapi_ascq_code = ascq_code;
 	}
+
 	ide_set_regs(ide);
 }
 
@@ -1489,35 +1528,36 @@ const char* cdrom_parse(uint32_t num, const char *filename)
 {
 	const char *res = 0;
 
+	int drv = num & 1;
+	num >>= 1;
+
+	//always close files and reset state. empty filename == unmounted cd from OSD
+	cdrom_close_chd(&ide_inst[num].drive[drv]);
+	for (uint8_t i = 0; i < sizeof(ide_inst[num].drive[drv].track) / sizeof(track_t); i++)
+	{
+		if (ide_inst[num].drive[drv].track[i].f.opened())
+		{
+			FileClose(&ide_inst[num].drive[drv].track[i].f);
+		}
+	}
+	ide_inst[num].drive[drv].mcr_flag = true;
+	ide_inst[num].drive[drv].playing = 0;
+	ide_inst[num].drive[drv].paused = 0;
+	ide_inst[num].drive[drv].play_start_lba = 0;
+	ide_inst[num].drive[drv].play_end_lba = 0;
 	if (strlen(filename))
 	{
 		const char *path = getFullPath(filename);
-		int drv = num & 1;
-		num >>= 1;
-		cdrom_close_chd(&ide_inst[num].drive[drv]);
-		for (uint8_t i = 0; i < sizeof(ide_inst[num].drive[drv].track) / sizeof(track_t); i++)
-		{
-			if (ide_inst[num].drive[drv].track[i].f.opened())
-			{
-				FileClose(&ide_inst[num].drive[drv].track[i].f);
-			}
-		}
 		res = load_chd_file(&ide_inst[num].drive[drv], path);
 		if (!res) res = load_cue_file(&ide_inst[num].drive[drv], path);
 		if (!res) res = load_iso_file(&ide_inst[num].drive[drv], path);
-		if (res) {
-			ide_inst[num].drive[drv].mcr_flag = true;
-			ide_inst[num].drive[drv].playing = 0;
-			ide_inst[num].drive[drv].paused = 0;
-			ide_inst[num].drive[drv].play_start_lba = 0;
-			ide_inst[num].drive[drv].play_end_lba = 0;
-		}
 	}
 	return res;
 }
 
 void ide_cdda_send_sector()
 {
+	bool is_index0 = false;
 	static uint8_t cdda_buf[BYTES_PER_RAW_REDBOOK_FRAME];
 	drive_t *drv = NULL;
 	ide_config *ide = NULL;
@@ -1539,7 +1579,7 @@ void ide_cdda_send_sector()
 	if (!drv || !ide) return;
 
 	bool needs_swap = false;
-	track_t *track = get_track_from_lba(drv, drv->play_start_lba);
+	track_t *track = get_track_from_lba(drv, drv->play_start_lba, is_index0);
 
 	if (!track->attr)
 	{
@@ -1550,10 +1590,25 @@ void ide_cdda_send_sector()
 		}
 		else
 		{
-			//uint32_t pos = ide->regs.pkt_lba * ide->drive[ide->regs.drv].track[ide->drive[ide->regs.drv].data_num].sectorSize;
-			uint32_t pos = track->skip + (drv->play_start_lba - track->start) * track->sectorSize;
-			FileSeek(&track->f, pos, SEEK_SET);
-			FileReadAdv(&track->f, cdda_buf, sizeof(cdda_buf), -1);
+			//If we're in the index0 area "audio pregap", that data is actually in the
+			//previous track. Use that file object, seek and return the data from there.
+			//If the seek fails just return zero data.
+			//It may be a 'PREGAP' which indicates no stored data
+
+			track_t *read_track = track;
+			if (is_index0 && track->number > 1)
+			{
+				//track number is 1-based, track array is zero. 
+				read_track = &drv->track[track->number-2];
+
+			}
+			uint32_t pos = read_track->skip + (drv->play_start_lba - read_track->start) * read_track->sectorSize;
+			if (FileSeek(&read_track->f, pos, SEEK_SET))
+			{
+				FileReadAdv(&read_track->f, cdda_buf, sizeof(cdda_buf), -1);
+			} else {
+				memset(cdda_buf, 0, sizeof(cdda_buf));
+			}
 		}
 	}
 	else
