@@ -2074,8 +2074,9 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 	}
 }
 
-static void joy_analog(int num, int axis, int offset, int stick = 0)
+static void joy_analog(int dev, int axis, int offset, int stick = 0)
 {
+	int num = input[dev].num;
 	static int pos[2][NUMPLAYERS][2] = {};
 
 	if (grabbed && num > 0 && num < NUMPLAYERS+1)
@@ -3323,58 +3324,58 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						// steering wheel passes full range, pedals are standardised in +127 to 0 to -127 range
 						if (ev->code == input[dev].wh_steer)
 						{
-							joy_analog(input[dev].num, 0, value, 0);
+							joy_analog(dev, 0, value, 0);
 						}
 						else if (ev->code == input[dev].wh_accel)
 						{
-							joy_analog(input[dev].num, 1, wh_value, 0);
+							joy_analog(dev, 1, wh_value, 0);
 						}
 						else if (ev->code == input[dev].wh_brake)
 						{
-							joy_analog(input[dev].num, 1, wh_value, 1);
+							joy_analog(dev, 1, wh_value, 1);
 						}
 						else if (ev->code == input[dev].wh_clutch)
 						{
-							joy_analog(input[dev].num, 0, wh_value, 1);
+							joy_analog(dev, 0, wh_value, 1);
 						}
 						else if (ev->code == input[dev].wh_combo)
 						{
 							// if accel and brake pedal use a shared axis then map negative to accel and positive to brake
-							if (value < -1) joy_analog(input[dev].num, 1, value, 0);
-							else if (value > 1) joy_analog(input[dev].num, 1, -value, 1);
+							if (value < -1) joy_analog(dev, 1, value, 0);
+							else if (value > 1) joy_analog(dev, 1, -value, 1);
 							else
 							{
-								joy_analog(input[dev].num, 1, 0, 0);
-								joy_analog(input[dev].num, 1, 0, 0);
+								joy_analog(dev, 1, 0, 0);
+								joy_analog(dev, 1, 0, 0);
 							}
 						}
 					}
 					else if (ev->code == 0 && input[dev].lightgun)
 					{
-						joy_analog(input[dev].num, 0, value);
+						joy_analog(dev, 0, value);
 					}
 					else if (ev->code == 1 && input[dev].lightgun)
 					{
-						joy_analog(input[dev].num, 1, value);
+						joy_analog(dev, 1, value);
 					}
 					else
 					{
 						int offset = (value < -1 || value>1) ? value : 0;
 						if (input[dev].stick_l[0] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_l[0]])
 						{
-							joy_analog(input[dev].num, 0, offset, 0);
+							joy_analog(dev, 0, offset, 0);
 						}
 						else if (input[dev].stick_l[1] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_l[1]])
 						{
-							joy_analog(input[dev].num, 1, offset, 0);
+							joy_analog(dev, 1, offset, 0);
 						}
 						else if (input[dev].stick_r[0] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_r[0]])
 						{
-							joy_analog(input[dev].num, 0, offset, 1);
+							joy_analog(dev, 0, offset, 1);
 						}
 						else if (input[dev].stick_r[1] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_r[1]])
 						{
-							joy_analog(input[dev].num, 1, offset, 1);
+							joy_analog(dev, 1, offset, 1);
 						}
 					}
 				}
