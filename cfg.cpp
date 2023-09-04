@@ -71,6 +71,8 @@ static const ini_var_t ini_vars[] =
 	{ "REFRESH_MAX", (void*)(&(cfg.refresh_max)), FLOAT, 0, 150 },
 	{ "JAMMA_VID", (void*)(&(cfg.jamma_vid)), HEX16, 0, 0xFFFF },
 	{ "JAMMA_PID", (void*)(&(cfg.jamma_pid)), HEX16, 0, 0xFFFF },
+	{ "JAMMA2_VID", (void*)(&(cfg.jamma2_vid)), HEX16, 0, 0xFFFF },
+	{ "JAMMA2_PID", (void*)(&(cfg.jamma2_pid)), HEX16, 0, 0xFFFF },
 	{ "SNIPER_MODE", (void*)(&(cfg.sniper_mode)), UINT8, 0, 1 },
 	{ "BROWSE_EXPAND", (void*)(&(cfg.browse_expand)), UINT8, 0, 1 },
 	{ "LOGO", (void*)(&(cfg.logo)), UINT8, 0, 1 },
