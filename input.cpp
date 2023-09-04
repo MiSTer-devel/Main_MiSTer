@@ -1119,6 +1119,7 @@ enum QUIRK
 	QUIRK_PDSP,
 	QUIRK_PDSP_ARCADE,
 	QUIRK_JAMMA,
+	QUIRK_JAMMA2,
 	QUIRK_MSSP,
 	QUIRK_TOUCHGUN,
 	QUIRK_VCS,
@@ -3597,6 +3598,47 @@ static struct
 */
 };
 
+// Second Jammasd/J-PAC/I-PAC quirk. It's equivalent to jamma2joy but assigned to players 3 and 4
+// to give support to JAMMA-VERSUS with two JAMMA USB control interfaces.
+// i.e. JammaSD for Players1-2 (on a first cabinet), and J-PAC for Payers 3-4 (on a second cabinet)
+static struct
+{
+    uint16_t key;
+    uint16_t player;
+    uint16_t btn;
+} jamma22joy[] =
+        {
+                {KEY_5,         3, 0x120}, // 3P coin
+                {KEY_1,         3, 0x121}, // 3P start
+                {KEY_UP,        3, 0x122}, // 3P up
+                {KEY_DOWN,      3, 0x123}, // 3P down
+                {KEY_LEFT,      3, 0x124}, // 3P left
+                {KEY_RIGHT,     3, 0x125}, // 3P right
+                {KEY_LEFTCTRL,  3, 0x126}, // 3P 1
+                {KEY_LEFTALT,   3, 0x127}, // 3P 2
+                {KEY_SPACE,     3, 0x128}, // 3P 3
+                {KEY_LEFTSHIFT, 3, 0x129}, // 3P 4
+                {KEY_Z,         3, 0x12A}, // 3P 5
+                {KEY_X,         3, 0x12B}, // 3P 6
+                {KEY_C,         3, 0x12C}, // 3P 7
+                {KEY_V,         3, 0x12D}, // 3P 8
+
+                {KEY_6,         4, 0x120}, // 4P coin
+                {KEY_2,         4, 0x121}, // 4P start
+                {KEY_R,         4, 0x122}, // 4P up
+                {KEY_F,         4, 0x123}, // 4P down
+                {KEY_D,         4, 0x124}, // 4P left
+                {KEY_G,         4, 0x125}, // 4P right
+                {KEY_A,         4, 0x126}, // 4P 1
+                {KEY_S,         4, 0x127}, // 4P 2
+                {KEY_Q,         4, 0x128}, // 4P 3
+                {KEY_W,         4, 0x129}, // 4P 4
+                {KEY_I,         4, 0x12A}, // 4P 5
+                {KEY_K,         4, 0x12B}, // 4P 6
+                {KEY_J,         4, 0x12C}, // 4P 7
+                {KEY_L,         4, 0x12D}, // 4P 8
+        };
+
 static void send_mouse_with_throttle(int dev, int xval, int yval, int8_t wval)
 {
 	int i = dev;
@@ -4584,6 +4626,12 @@ int input_test(int getchar)
 							input[n].quirk = QUIRK_JAMMA;
 						}
 
+						//Jamma2
+						if (cfg.jamma2_vid && cfg.jamma2_pid && input[n].vid == cfg.jamma2_vid && input[n].pid == cfg.jamma2_pid)
+						{
+							input[n].quirk = QUIRK_JAMMA2;
+						}
+
 						//Atari VCS wireless joystick with spinner
 						if (input[n].vid == 0x3250 && input[n].pid == 0x1001)
 						{
@@ -4887,6 +4935,20 @@ int input_test(int getchar)
 										{
 											ev.code = jamma2joy[i].btn;
 											input[dev].num = jamma2joy[i].player;
+											break;
+										}
+									}
+                                }
+
+								if (input[dev].quirk == QUIRK_JAMMA2 && ev.type == EV_KEY)
+								{
+									input[dev].num = 0;
+									for (uint32_t i = 0; i < sizeof(jamma22joy) / sizeof(jamma22joy[0]); i++)
+									{
+										if (jamma22joy[i].key == ev.code)
+										{
+											ev.code = jamma22joy[i].btn;
+											input[dev].num = jamma22joy[i].player;
 											break;
 										}
 									}
