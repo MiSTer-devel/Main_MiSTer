@@ -1,16 +1,20 @@
 #!/bin/bash
 
-echo "Start building..."
+# NOTE: This script is meant to be run under Ubuntu Linux,
+# including under WSL on Windows.
 
-# create simple text file named 'host' in this folder with IP address of your MiSTer.
+# Make script fail if any command failed, so we don't need
+# to check the exit status of every command.
+set -e
+set -o pipefail
 
+# Override this default value by creating a text file named 'host'
+# in this folder containing the IP address of your MiSTer.
 HOST=192.168.1.75
 [ -f host ] && HOST=$(cat host)
 
-# make script fail if any command failed,
-# so we don't need to check the exit status of every command.
-set -e
-set -o pipefail
+echo "Starting build..."
+
 make
 
 set +e
