@@ -47,6 +47,8 @@
     <None Include="build.sh" />
     <None Include="Makefile" />
     <None Include="clean.sh" />
+    <None Include="README.md" />
+    <None Include="get_toolchain.sh" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="battery.cpp">

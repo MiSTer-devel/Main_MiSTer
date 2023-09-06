@@ -1,11 +1,9 @@
 # makefile to fail if any command in pipe is failed.
 SHELL = /bin/bash -o pipefail
 
-# using gcc version 10.2.1
+BASE    = arm-linux-gnueabihf
 
-BASE    = arm-none-linux-gnueabihf
-
-CC      = $(BASE)-gcc
+CC      = $(BASE)-gcc-10
 LD      = $(BASE)-ld
 STRIP   = $(BASE)-strip
 
@@ -66,6 +64,10 @@ clean:
 	$(Q)rm -rf obj DTAR* x64
 	$(Q)find . \( -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -exec rm -f {} \;
 
+.PHONY: toolchain
+toolchain:
+	$(Q)./get_toolchain.sh
+
 %.c.o: %.c
 	$(Q)$(info $<)
 	$(Q)$(CC) $(CFLAGS) -std=gnu99 -o $@ -c $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
@@ -79,12 +81,17 @@ clean:
 	$(Q)$(LD) -r -b binary -o $@ $< 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 ifneq ($(MAKECMDGOALS), clean)
+ifneq ($(MAKECMDGOALS), toolchain)
 -include $(DEP)
 endif
+endif
+
 %.c.d: %.c
+	$(Q)$(info $< >> $@)
 	$(Q)$(CC) $(DFLAGS) -MM $< -MT $@ -MT $*.c.o -MF $@ 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 %.cpp.d: %.cpp
+	$(Q)$(info $< >> $@)
 	$(Q)$(CC) $(DFLAGS) -MM $< -MT $@ -MT $*.cpp.o -MF $@ 2>&1 | sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
 # Ensure correct time stamp

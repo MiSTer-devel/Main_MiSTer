@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -26,11 +26,11 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <NMakeBuildCommandLine>%systemroot%\sysnative\windowspowershell\v1.0\powershell.exe wsl bash -lic ./build.sh</NMakeBuildCommandLine>
+    <NMakeBuildCommandLine>%systemroot%\system32\wsl.exe ./build.sh</NMakeBuildCommandLine>
     <NMakeOutput>MiSTer</NMakeOutput>
-    <NMakeCleanCommandLine>%systemroot%\sysnative\windowspowershell\v1.0\powershell.exe wsl bash -lic ./clean.sh</NMakeCleanCommandLine>
+    <NMakeCleanCommandLine>%systemroot%\system32\wsl.exe ./clean.sh</NMakeCleanCommandLine>
     <NMakePreprocessorDefinitions>__arm__;__GNUC__;__USE_GNU ;_GNU_SOURCE;VDATE="000000";_FILE_OFFSET_BITS=64;_LARGEFILE64_SOURCE;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
-    <NMakeIncludeSearchPath>c:\Work\MiSTer\toolchain\gcc103\arm-none-linux-gnueabihf\libc\usr\include;c:\Work\MiSTer\toolchain\gcc103\lib\gcc\arm-none-linux-gnueabihf\10.3.1\include;c:\Work\MiSTer\toolchain\gcc103\arm-none-linux-gnueabihf\include\c++\10.3.1;c:\Work\MiSTer\toolchain\gcc103\arm-none-linux-gnueabihf\include\c++\10.3.1\arm-linux-gnueabihf;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng;lib\libchdr\include;lib\bluetooth</NMakeIncludeSearchPath>
+    <NMakeIncludeSearchPath>$(ProjectDir)\ext-include\usr\arm-linux-gnueabihf\include;$(ProjectDir)\ext-include\usr\lib\gcc-cross\arm-linux-gnueabihf\10\include;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng;lib\libchdr\include;lib\bluetooth</NMakeIncludeSearchPath>
     <OutDir>$(TEMP)</OutDir>
     <IntDir>$(TEMP)</IntDir>
     <AdditionalOptions>
@@ -45,7 +45,9 @@
   <ItemGroup>
     <None Include="build.sh" />
     <None Include="clean.sh" />
+    <None Include="get_toolchain.sh" />
     <None Include="Makefile" />
+    <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="audio.cpp" />

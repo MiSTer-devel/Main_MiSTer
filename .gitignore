@@ -19,7 +19,7 @@
 
 # ignore directories
 Debug
-gcc-*
+ext-include
 
 host
 *.lst
