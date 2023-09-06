@@ -1,6 +1,8 @@
 # makefile to fail if any command in pipe is failed.
 SHELL = /bin/bash -o pipefail
 
+MAKEFLAGS += "-j $(shell nproc)"
+
 BASE    = arm-linux-gnueabihf
 
 CC      = $(BASE)-gcc-10
