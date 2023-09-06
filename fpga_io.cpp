@@ -231,6 +231,10 @@ static int fpgamgr_program_init(void)
 /* Write the RBF data to FPGA Manager */
 static void fpgamgr_program_write(const void *rbf_data, unsigned long rbf_size)
 {
+	__asm volatile(
+		"	push {r8-r11}       \n"
+	);
+
 	register uint32_t src asm ("r8") = (uint32_t)rbf_data;
 	register uint32_t dst asm ("r9") = (uint32_t)MAP_ADDR(SOCFPGA_FPGAMGRDATA_ADDRESS);
 
@@ -240,7 +244,6 @@ static void fpgamgr_program_write(const void *rbf_data, unsigned long rbf_size)
 	register uint32_t loops4 asm ("r11") = DIV_ROUND_UP(rbf_size % 32, 4);
 
 	__asm volatile(
-		"	push {r8-r11}       \n"
 		"1:	ldmia %0!,{r0-r7}   \n"
 		"	stmia %1!,{r0-r7}   \n"
 		"	sub	  %1, #32       \n"
