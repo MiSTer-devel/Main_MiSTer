@@ -86,6 +86,7 @@ int get_map_button();
 int get_map_type();
 int get_map_clear();
 int get_map_cancel();
+int get_map_finish();
 void finish_map_setting(int dismiss);
 uint16_t get_map_vid();
 uint16_t get_map_pid();
