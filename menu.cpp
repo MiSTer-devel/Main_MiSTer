@@ -109,6 +109,7 @@ enum MENU
 	MENU_JOYRESET1,
 	MENU_JOYKBDMAP,
 	MENU_JOYKBDMAP1,
+	MENU_JOYKBDMAP2,
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
 	MENU_BTPAIR,
@@ -984,6 +985,7 @@ void HandleUI(void)
 	static int vfilter_type;
 	static int old_volume = 0;
 	static uint32_t lock_pass_timeout = 0;
+	static uint32_t menu_timeout = 0;
 
 	static char	cp_MenuCancel;
 
@@ -2524,7 +2526,7 @@ void HandleUI(void)
 				s[27] = '\x16';
 				s[28] = 0;
 				MenuWrite(n++, s, menusub == 2, 0);
-				MenuWrite(n++, " Button/Key remap for game \x16", menusub == 3, 0);
+				MenuWrite(n++, " Button/Key remap          \x16", menusub == 3, 0);
 				MenuWrite(n++, " Reset player assignment", menusub == 4, 0);
 
 				if (user_io_get_uart_mode())
@@ -4022,8 +4024,8 @@ void HandleUI(void)
 		infowrite( 9, "Button -> Button same pad");
 		infowrite(10, "Key -> Key");
 		infowrite(11, "");
-		infowrite(12, "It will be cleared when you");
-		infowrite(13, "load the new core");
+		infowrite(12, "     Menu \x16 Finish ");
+		infowrite(13, "Menu-hold \x16 Clear  ");
 		OsdWrite(14, info_bottom, 0, 0);
 		OsdWrite(OsdGetSize() - 1, "           Cancel", menusub == 0, 0);
 		break;
@@ -4057,9 +4059,22 @@ void HandleUI(void)
 			OsdWrite(OsdGetSize() - 1);
 		}
 
-		if (select || menu)
+		if (select || menu || get_map_finish() || get_map_cancel())
 		{
-			finish_map_setting(menu);
+			int clear = get_map_vid() && (menu || get_map_cancel());
+			finish_map_setting(clear);
+			menu_timeout = GetTimer(1000);
+			OsdWrite(1);
+			OsdWrite(2, clear ? "          Clearing" : "          Finishing");
+			OsdWrite(3);
+			OsdWrite(OsdGetSize() - 1);
+			menustate = MENU_JOYKBDMAP2;
+		}
+		break;
+
+	case MENU_JOYKBDMAP2:
+		if (CheckTimer(menu_timeout))
+		{
 			menustate = MENU_COMMON1;
 			menusub = 3;
 		}

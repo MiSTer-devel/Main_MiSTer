@@ -1149,6 +1149,7 @@ typedef struct
 
 	uint8_t  has_mmap;
 	uint32_t mmap[NUMBUTTONS];
+	uint8_t  has_jkmap;
 	uint16_t jkmap[1024];
 	int      stick_l[2];
 	int      stick_r[2];
@@ -1387,7 +1388,11 @@ static int mapping_dev = -1;
 static int mapping_type;
 static int mapping_count;
 static int mapping_clear;
+static int mapping_finish;
 static int mapping_set;
+
+static int mapping_current_key = 0;
+static int mapping_current_dev = -1;
 
 static uint32_t tmp_axis[4];
 static int tmp_axis_n = 0;
@@ -1396,6 +1401,9 @@ static int grabbed = 1;
 
 void start_map_setting(int cnt, int set)
 {
+	mapping_current_key = 0;
+	mapping_current_dev = -1;
+
 	mapping_button = 0;
 	mapping = 1;
 	mapping_set = set;
@@ -1406,6 +1414,7 @@ void start_map_setting(int cnt, int set)
 	}
 	mapping_count = cnt;
 	mapping_clear = 0;
+	mapping_finish = 0;
 	tmp_axis_n = 0;
 
 	if (mapping_type <= 1 && is_menu()) mapping_button = -6;
@@ -1433,6 +1442,11 @@ int get_map_type()
 int get_map_clear()
 {
 	return mapping_clear;
+}
+
+int get_map_finish()
+{
+	return mapping_finish;
 }
 
 static uint32_t osd_timer = 0;
@@ -1470,6 +1484,14 @@ static char *get_map_name(int dev, int def)
 	return name;
 }
 
+static char *get_jkmap_name(int dev)
+{
+	static char name[1024];
+	char *id = get_unique_mapping(dev);
+	sprintfz(name, "%s_input_%s_jk.map", user_io_get_core_name(), id);
+	return name;
+}
+
 static char *get_kbdmap_name(int dev)
 {
 	static char name[128];
@@ -1493,6 +1515,7 @@ void finish_map_setting(int dismiss)
 	else if (mapping_type == 3)
 	{
 		if (dismiss) memset(input[mapping_dev].jkmap, 0, sizeof(input[mapping_dev].jkmap));
+		save_map(get_jkmap_name(mapping_dev), &input[mapping_dev].jkmap, sizeof(input[mapping_dev].jkmap));
 	}
 	else
 	{
@@ -2316,11 +2339,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	static int key_mapped = 0;
 
-	if (ev->type == EV_KEY && mapping && mapping_type == 3 && ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1]) ev->code = KEY_ENTER;
-
-	int map_skip = (ev->type == EV_KEY && ((ev->code == KEY_SPACE && mapping_type == 1) || ev->code == KEY_ALTERASE) && (mapping_dev >= 0 || mapping_button<0));
-	int cancel   = (ev->type == EV_KEY && ev->code == KEY_ESC);
-	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER);
+	int map_skip = (ev->type == EV_KEY && mapping && ((ev->code == KEY_SPACE && mapping_type == 1) || ev->code == KEY_ALTERASE) && (mapping_dev >= 0 || mapping_button<0));
+	int cancel   = (ev->type == EV_KEY && ev->code == KEY_ESC && !(mapping && mapping_type == 3 && mapping_button));
+	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER && !(mapping && mapping_type == 3 && mapping_button));
 	int origcode = ev->code;
 
 	if (!input[dev].has_mmap)
@@ -2411,6 +2432,15 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			input[dev].has_map++;
 		}
 		input[dev].has_map++;
+	}
+
+	if (!input[dev].has_jkmap)
+	{
+		if (!load_map(get_jkmap_name(dev), &input[dev].jkmap, sizeof(input[dev].jkmap)))
+		{
+			memset(input[dev].jkmap, 0, sizeof(input[dev].jkmap));
+		}
+		input[dev].has_jkmap = 1;
 	}
 
 	if (!input[dev].num)
@@ -2544,6 +2574,18 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		osd_timer = 0;
 	}
 
+	if (mapping && mapping_type == 3)
+	{
+		printf("cancel = %d, enter = %d\n", cancel, enter);
+
+		if (map_skip)
+		{
+			mapping_finish = 1;
+			ev->value = 0;
+		}
+		osd_event = 0;
+	}
+
 	//mapping
 	if (mapping && (mapping_dev >= 0 || ev->value)
 		&& !((mapping_type < 2 || !mapping_button) && (cancel || enter))
@@ -2562,45 +2604,83 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		// paddle axis - skip from mapping
 		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8) && input[dev].quirk != QUIRK_WHEEL) return;
 
+		// protection against joysticks generating 2 codes per button
+		if (ev->type == EV_KEY && !(mapping < 2 && mapping_button == SYS_BTN_OSD_KTGL))
+		{
+			if (!mapping_current_key)
+			{
+				if (ev->value == 1)
+				{
+					mapping_current_key = ev->code;
+					mapping_current_dev = dev;
+				}
+				else return;
+			}
+			else
+			{
+				if (ev->value == 0 && mapping_current_key == ev->code && mapping_current_dev == dev)
+				{
+					mapping_current_key = 0;
+				}
+				else return;
+			}
+		}
+
 		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
 		{
-			if (mapping_type == 2)
+			if (mapping_type == 2) // keyboard remap
 			{
 				if (ev->code < 256)
 				{
-					if (ev->value == 1)
+					if (!mapping_button)
 					{
-						if (mapping_dev < 0)
+						if (ev->value == 1)
 						{
-							mapping_dev = dev;
+							if (mapping_dev < 0)
+							{
+								mapping_dev = dev;
+								mapping_button = 0;
+							}
+
+							if (!mapping_button) mapping_button = ev->code;
+							mapping_current_dev = mapping_dev;
+						}
+					}
+					else
+					{
+						if (ev->value == 0 && mapping_dev >= 0 && mapping_button != ev->code)
+						{
+							input[mapping_dev].kbdmap[mapping_button] = ev->code;
 							mapping_button = 0;
 						}
-
-						if (!mapping_button) mapping_button = ev->code;
-					}
-
-					if (ev->value == 0 && mapping_dev >= 0 && mapping_button && mapping_button != ev->code)
-					{
-						input[mapping_dev].kbdmap[mapping_button] = ev->code;
-						mapping_button = 0;
 					}
 				}
 				return;
 			}
-			else if (mapping_type == 3)
+			else if (mapping_type == 3) // button remap
 			{
+				if (input[dev].mmap[SYS_BTN_OSD_KTGL] == ev->code ||
+					input[dev].mmap[SYS_BTN_OSD_KTGL + 1] == ev->code ||
+					input[dev].mmap[SYS_BTN_OSD_KTGL + 2] == ev->code) return;
+
 				if (ev->value == 1 && !mapping_button)
 				{
 					if (mapping_dev < 0) mapping_dev = dev;
 					if (mapping_dev == dev && ev->code < 1024) mapping_button = ev->code;
+					mapping_current_dev = mapping_dev;
 				}
 
-				if (ev->value == 0 && mapping_dev >= 0 && (ev->code<256 || mapping_dev == dev) && mapping_button && mapping_button != ev->code)
+				if (mapping_dev >= 0 && (ev->code < 256 || mapping_dev == dev) && mapping_button && mapping_button != ev->code)
 				{
-					// Technically it's hard to map the key to button as keyboards
-					// are all the same while joysticks are personalized and numbered.
-					input[mapping_dev].jkmap[mapping_button] = ev->code;
-					mapping_button = 0;
+					if (ev->value == 1)
+					{
+						// Technically it's hard to map the key to button as keyboards
+						// are all the same while joysticks are personalized and numbered.
+						input[mapping_dev].jkmap[mapping_button] = ev->code;
+						mapping_current_dev = dev;
+					}
+
+					if (ev->value == 0) mapping_button = 0;
 				}
 				return;
 			}
@@ -2641,6 +2721,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 									{
 										input[dev].map[SYS_BTN_OSD_KTGL + mapping_type] = ev->code;
 										input[dev].map[SYS_BTN_OSD_KTGL + 2] = input[dev].map[SYS_BTN_OSD_KTGL + 1];
+										mapping_current_key = 0; // allow 2 buttons to be pressed
 									}
 									else input[dev].map[mapping_button] = ev->code;
 
@@ -4642,7 +4723,7 @@ int input_test(int getchar)
 
 						//Arduino and Teensy devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
 						//Reflex Adapt also uses the UNIQ field to differentiate between device modes
-						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4) || (input[n].vid == 0x16D0 && input[n].pid == 0x127E)) && strlen(uniq)) 
+						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4) || (input[n].vid == 0x16D0 && input[n].pid == 0x127E)) && strlen(uniq))
 						{
 							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x_%s", input[n].vid, input[n].pid, uniq);
 							char *p;
