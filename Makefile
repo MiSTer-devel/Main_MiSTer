@@ -3,9 +3,9 @@ SHELL = /bin/bash -o pipefail
 
 MAKEFLAGS += "-j $(shell nproc)"
 
-BASE    = arm-linux-gnueabihf
+BASE    = gcc-arm/bin/arm-none-linux-gnueabihf
 
-CC      = $(BASE)-gcc-10
+CC      = $(BASE)-gcc
 LD      = $(BASE)-ld
 STRIP   = $(BASE)-strip
 
@@ -33,11 +33,11 @@ C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/lzma/*.c) \
           $(wildcard ./lib/flac/src/*.c) \
           $(wildcard ./lib/libchdr/*.c) \
-          lib/libco/arm.c 
+          lib/libco/arm.c
 
 CPP_SRC = $(wildcard *.cpp) \
           $(wildcard ./lib/serial_server/library/*.cpp) \
-          $(wildcard ./support/*/*.cpp) 
+          $(wildcard ./support/*/*.cpp)
 
 IMG =     $(wildcard *.png)
 
@@ -58,7 +58,7 @@ endif
 
 $(PRJ): $(OBJ)
 	$(Q)$(info $@)
-	$(Q)$(CC) -o $@ $+ $(LFLAGS) 
+	$(Q)$(CC) -o $@ $+ $(LFLAGS)
 	$(Q)cp $@ $@.elf
 	$(Q)$(STRIP) $@
 
@@ -66,7 +66,7 @@ $(PRJ): $(OBJ)
 clean:
 	$(Q)rm -f *.elf *.map *.lst *.user *~ $(PRJ)
 	$(Q)rm -rf obj DTAR* x64
-	$(Q)find . \( -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -exec rm -f {} \;
+	$(Q)find . \( -name '*.o' -o -name '*.d' -o -name '*.bak' -o -name '*.rej' -o -name '*.org' \) -a -not -wholename './gcc-arm/*' -exec rm -f {} \;
 
 .PHONY: toolchain
 toolchain:
@@ -82,7 +82,7 @@ toolchain:
 
 %.png.o: %.png
 	$(Q)$(info $<)
-	$(Q)$(LD) -r -b binary -o $@ $< 2>&1 | $(OUTPUT_FILTER)
+	$(Q)$(LD) -r -b binary -z noexecstack -o $@ $< 2>&1 | $(OUTPUT_FILTER)
 
 ifneq ($(MAKECMDGOALS), clean)
 ifneq ($(MAKECMDGOALS), toolchain)
