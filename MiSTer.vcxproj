@@ -26,9 +26,9 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <NMakeBuildCommandLine>%systemroot%\sysnative\windowspowershell\v1.0\powershell.exe wsl bash -lic ./build.sh</NMakeBuildCommandLine>
+    <NMakeBuildCommandLine>wsl bash -lic ./build.sh</NMakeBuildCommandLine>
     <NMakeOutput>MiSTer</NMakeOutput>
-    <NMakeCleanCommandLine>%systemroot%\sysnative\windowspowershell\v1.0\powershell.exe wsl bash -lic ./clean.sh</NMakeCleanCommandLine>
+    <NMakeCleanCommandLine>wsl bash -lic ./clean.sh</NMakeCleanCommandLine>
     <NMakePreprocessorDefinitions>__arm__;__GNUC__;__USE_GNU ;_GNU_SOURCE;VDATE="000000";_FILE_OFFSET_BITS=64;_LARGEFILE64_SOURCE;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
     <NMakeIncludeSearchPath>c:\Work\MiSTer\toolchain\gcc103\arm-none-linux-gnueabihf\libc\usr\include;c:\Work\MiSTer\toolchain\gcc103\lib\gcc\arm-none-linux-gnueabihf\10.3.1\include;c:\Work\MiSTer\toolchain\gcc103\arm-none-linux-gnueabihf\include\c++\10.3.1;c:\Work\MiSTer\toolchain\gcc103\arm-none-linux-gnueabihf\include\c++\10.3.1\arm-linux-gnueabihf;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng;lib\libchdr\include;lib\bluetooth</NMakeIncludeSearchPath>
     <OutDir>$(TEMP)</OutDir>
