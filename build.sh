@@ -1,7 +1,5 @@
 #!/bin/bash
 
-echo "Start building..."
-
 # create simple text file named 'host' in this folder with IP address of your MiSTer.
 
 HOST=192.168.1.75
@@ -11,6 +9,8 @@ HOST=192.168.1.75
 # so we don't need to check the exit status of every command.
 set -e
 set -o pipefail
+
+echo "Start building..."
 make
 
 set +e
