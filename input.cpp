@@ -2576,8 +2576,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (mapping && mapping_type == 3)
 	{
-		printf("cancel = %d, enter = %d\n", cancel, enter);
-
 		if (map_skip)
 		{
 			mapping_finish = 1;
@@ -2605,7 +2603,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8) && input[dev].quirk != QUIRK_WHEEL) return;
 
 		// protection against joysticks generating 2 codes per button
-		if (ev->type == EV_KEY && !(mapping < 2 && mapping_button == SYS_BTN_OSD_KTGL))
+		if (ev->type == EV_KEY && !(mapping < 2 && mapping_button == SYS_BTN_OSD_KTGL) && !map_skip)
 		{
 			if (!mapping_current_key)
 			{
