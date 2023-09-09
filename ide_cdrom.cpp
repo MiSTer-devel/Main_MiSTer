@@ -1491,7 +1491,6 @@ void cdrom_reply(ide_config *ide, uint8_t error, uint8_t asc_code, uint8_t ascq_
 	if (ide->drive[ide->regs.drv].mcr_flag && unit_attention) {
 		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ | ATA_STATUS_ERR;
 		ide->regs.error = (CD_ERR_UNIT_ATTENTION << 4) | ATA_ERR_MC;
-		ide->regs.sector_count = 0;
 		ide->drive[ide->regs.drv].mcr_flag = false;
 	}
 	else
