@@ -418,6 +418,11 @@ void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads, i
 	ide_inst[port].base = port ? IDE1_BASE : IDE0_BASE;
 	ide_inst[port].drive[drv].drvnum = drvnum;
 
+	if (drive->f && (f != drive->f) && drive->f->opened())
+	{
+		FileClose(drive->f);
+	}
+
 	drive->f = f;
 
 	drive->cylinders = 0;

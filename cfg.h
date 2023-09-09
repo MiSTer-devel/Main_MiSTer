@@ -41,6 +41,8 @@ typedef struct {
 	uint8_t recents;
 	uint16_t jamma_vid;
 	uint16_t jamma_pid;
+	uint16_t jamma2_vid;
+	uint16_t jamma2_pid;
 	uint16_t no_merge_vid;
 	uint16_t no_merge_pid;
 	uint32_t no_merge_vidpid[256];
