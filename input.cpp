@@ -1508,8 +1508,8 @@ void finish_map_setting(int dismiss)
 
 	if (mapping_type == 2)
 	{
-		if (dismiss) input[mapping_dev].has_kbdmap = 0;
-		else if (dismiss == 2) FileDeleteConfig(get_kbdmap_name(mapping_dev));
+		input[mapping_dev].has_kbdmap = 0;
+		if (dismiss) FileDeleteConfig(get_kbdmap_name(mapping_dev));
 		else FileSaveConfig(get_kbdmap_name(mapping_dev), &input[mapping_dev].kbdmap, sizeof(input[mapping_dev].kbdmap));
 	}
 	else if (mapping_type == 3)
