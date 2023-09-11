@@ -2337,6 +2337,20 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		}
 	}
 
+	if (ev->type == EV_KEY && ev->code < 256 && !(mapping && mapping_type == 2))
+	{
+		if (!input[dev].has_kbdmap)
+		{
+			if (!FileLoadConfig(get_kbdmap_name(dev), &input[dev].kbdmap, sizeof(input[dev].kbdmap)))
+			{
+				memset(input[dev].kbdmap, 0, sizeof(input[dev].kbdmap));
+			}
+			input[dev].has_kbdmap = 1;
+		}
+
+		if (input[dev].kbdmap[ev->code]) ev->code = input[dev].kbdmap[ev->code];
+	}
+
 	static int key_mapped = 0;
 
 	int map_skip = (ev->type == EV_KEY && mapping && ((ev->code == KEY_SPACE && mapping_type == 1) || ev->code == KEY_ALTERASE) && (mapping_dev >= 0 || mapping_button<0));
@@ -3123,32 +3137,20 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			// keyboard
 			else
 			{
-				if (!input[dev].has_kbdmap)
-				{
-					if (!FileLoadConfig(get_kbdmap_name(dev), &input[dev].kbdmap, sizeof(input[dev].kbdmap)))
-					{
-						memset(input[dev].kbdmap, 0, sizeof(input[dev].kbdmap));
-					}
-					input[dev].has_kbdmap = 1;
-				}
-
-				uint16_t code = ev->code;
-				if (code < 256 && input[dev].kbdmap[code]) code = input[dev].kbdmap[code];
-
 				//  replace MENU key by RGUI to allow using Right Amiga on reduced keyboards
 				// (it also disables the use of Menu for OSD)
-				if (cfg.key_menu_as_rgui && code == KEY_COMPOSE) code = KEY_RIGHTMETA;
+				if (cfg.key_menu_as_rgui && ev->code == KEY_COMPOSE) ev->code = KEY_RIGHTMETA;
 
 				//Keyrah v2: USB\VID_18D8&PID_0002\A600/A1200_MULTIMEDIA_EXTENSION_VERSION
 				int keyrah = (cfg.keyrah_mode && (((((uint32_t)input[dev].vid) << 16) | input[dev].pid) == cfg.keyrah_mode));
-				if (keyrah) code = keyrah_trans(code, ev->value);
+				if (keyrah) ev->code = keyrah_trans(ev->code, ev->value);
 
-				uint32_t ps2code = get_ps2_code(code);
+				uint32_t ps2code = get_ps2_code(ev->code);
 				if (ev->value) modifier |= ps2code;
 				else modifier &= ~ps2code;
 
 				uint16_t reset_m = (modifier & MODMASK) >> 8;
-				if (code == 111) reset_m |= 0x100;
+				if (ev->code == 111) reset_m |= 0x100;
 				user_io_check_reset(reset_m, (keyrah && !cfg.reset_combo) ? 1 : cfg.reset_combo);
 
 				if(!user_io_osd_is_visible() && ((user_io_get_kbdemu() == EMU_JOY0) || (user_io_get_kbdemu() == EMU_JOY1)) && !video_fb_state())
@@ -3234,8 +3236,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					}
 				}
 
-				if (code == KEY_HOMEPAGE) code = KEY_MENU;
-				user_io_kbd(code, ev->value);
+				if (ev->code == KEY_HOMEPAGE) ev->code = KEY_MENU;
+				user_io_kbd(ev->code, ev->value);
 				return;
 			}
 			break;
