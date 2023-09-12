@@ -682,7 +682,7 @@ static void printSysInfo()
 		net = getNet(3);
 		if (net)
 		{
-			sprintf(str, "\x1c %s", net);
+			sprintf(str, "\x1c VPN %s", net);
 			infowrite(n++, str);
 			j++;
 		}
@@ -6982,6 +6982,7 @@ void HandleUI(void)
 				int n = 8;
 				if (getNet(2)) str[n++] = 0x1d;
 				if (getNet(1)) str[n++] = 0x1c;
+				if (getNet(3)) str[n++] = 0x56;
 				if (hci_get_route(0) >= 0) str[n++] = 4;
 				if (user_io_get_sdram_cfg() & 0x8000)
 				{
