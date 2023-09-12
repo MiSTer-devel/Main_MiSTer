@@ -604,7 +604,7 @@ static char* getNet(int spec)
 
 		if ((strcmp(ifa->ifa_name, "eth0") == 0)     && (ifa->ifa_addr->sa_family == AF_INET)) ifae = ifa;
 		if ((strncmp(ifa->ifa_name, "wlan", 4) == 0) && (ifa->ifa_addr->sa_family == AF_INET)) ifaw = ifa;
-		if ((strcmp(ifa->ifa_name, "tailscale", 4) == 0) && (ifa->ifa_addr->sa_family == AF_INET)) ifat = ifa;
+		if ((strcmp(ifa->ifa_name, "tailscale0") == 0) && (ifa->ifa_addr->sa_family == AF_INET)) ifat = ifa;
 	}
 
 	ifa = 0;
@@ -624,8 +624,8 @@ static char* getNet(int spec)
 	if (ifat && (!spec || spec == 3))
 	{
 		ifa = ifat;
-		nettype = 3;
-
+		netType = 3;
+	}
 	if (spec && ifa)
 	{
 		strcpy(host, "IP: ");
@@ -682,7 +682,7 @@ static void printSysInfo()
 		net = getNet(3);
 		if (net)
 		{
-			sprintf(str, "TS:", net);
+			sprintf(str, "\x1c %s", net);
 			infowrite(n++, str);
 			j++;
 		}
