@@ -602,8 +602,10 @@ static char* getNet(int spec)
 		if (ifa->ifa_addr == NULL) continue;
 		if (!memcmp(ifa->ifa_addr->sa_data, "\x00\x00\xa9\xfe", 4)) continue; // 169.254.x.x
 
-		if ((strcmp(ifa->ifa_name, "eth0" || "end0") == 0)     && (ifa->ifa_addr->sa_family == AF_INET)) ifae = ifa;
-		if ((strncmp(ifa->ifa_name, "wlan" || "wlu"+ *, 4) == 0) && (ifa->ifa_addr->sa_family == AF_INET)) ifaw = ifa;
+		if ((strcmp(ifa->ifa_name, "eth0") == 0)     && (ifa->ifa_addr->sa_family == AF_INET)) ifae = ifa;
+		if ((strcmp(ifa->ifa_name, "end0") == 0)     && (ifa->ifa_addr->sa_family == AF_INET)) ifae = ifa;
+		if ((strncmp(ifa->ifa_name, "wlan", 4) == 0) && (ifa->ifa_addr->sa_family == AF_INET)) ifaw = ifa;
+		if ((strncmp(ifa->ifa_name, "wlu1u", 4) == 0) && (ifa->ifa_addr->sa_family == AF_INET)) ifaw = ifa;
 		if ((strcmp(ifa->ifa_name, "tailscale0") == 0) && (ifa->ifa_addr->sa_family == AF_INET)) ifat = ifa;
 	}
 
