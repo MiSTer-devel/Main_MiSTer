@@ -123,12 +123,12 @@ static void normalizeString(char* s)
 	while (*s) { *s = tolower(*s); ++s; }
 }
 
-static bool detect_rom_settings(const char* lookup_hash)
+static bool detect_rom_settings_in_db(const char* lookup_hash, const char* db_file_name)
 {
 	fileTextReader reader = {};
 
 	char file_path[1024];
-	sprintf(file_path, "%s/N64-database.txt", HomeDir());
+	sprintf(file_path, "%s/%s", HomeDir(), db_file_name);
 
 	if (!FileOpenTextReader(&reader, file_path))
 	{
@@ -222,6 +222,22 @@ static bool detect_rom_settings(const char* lookup_hash)
 		return true;
 	}
 
+	return false;
+}
+
+static const char* DB_FILE_NAMES[] =
+{
+	"N64-database.txt",
+	"N64-database_user.txt",
+};
+
+static bool detect_rom_settings(const char* lookup_hash)
+{
+	for (const char* db_file_name: DB_FILE_NAMES)
+	{
+		if (detect_rom_settings_in_db(lookup_hash, db_file_name))
+			return true;
+	}
 	return false;
 }
 

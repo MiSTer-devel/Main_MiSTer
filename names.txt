@@ -73,6 +73,7 @@ GBA: Nintendo Game Boy Advance
 Genesis: Sega Genesis
 Jaguar: Atari Jaguar
 MegaCD: Sega CD
+MegaDrive: Sega Mega Drive/Genesis
 NeoGeo: SNK Neo Geo MVS/AES/CD
 NES: Nintendo NES
 Odyssey2: Magnavox Odyssey2

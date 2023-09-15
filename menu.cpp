@@ -112,6 +112,7 @@ enum MENU
 	MENU_JOYKBDMAP2,
 	MENU_KBDMAP,
 	MENU_KBDMAP1,
+	MENU_KBDMAP2,
 	MENU_BTPAIR,
 	MENU_BTPAIR2,
 	MENU_LGCAL,
@@ -3797,7 +3798,7 @@ void HandleUI(void)
 			if (get_map_clear())
 			{
 				OsdWrite(3);
-				OsdWrite(4, "           Clearing");
+				OsdWrite(4, "          Clearing");
 				OsdWrite(5);
 				joymap_first = 1;
 				break;
@@ -3806,7 +3807,7 @@ void HandleUI(void)
 			if (get_map_cancel())
 			{
 				OsdWrite(3);
-				OsdWrite(4, "           Canceling");
+				OsdWrite(4, "          Canceling");
 				OsdWrite(5);
 				break;
 			}
@@ -6787,16 +6788,21 @@ void HandleUI(void)
 		menustate = MENU_KBDMAP1;
 		parentstate = MENU_KBDMAP;
 		for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, "           cancel", menusub == 0, 0);
-		flag = 0;
+		m = 8;
+		OsdWrite(m++, info_top, 0, 0);
+		infowrite(m++, "");
+		infowrite(m++, "Enter \x16 Finish");
+		infowrite(m++, " ESC \x16 Clear");
+		infowrite(m++, "");
+		OsdWrite(m++, info_bottom, 0, 0);
 		break;
 
 	case MENU_KBDMAP1:
 		if(!get_map_button())
 		{
-			OsdWrite(3, "     Press key to remap", 0, 0);
+			OsdWrite(3, "     Press key to change", 0, 0);
 			s[0] = 0;
-			if(flag)
+			if(get_map_vid())
 			{
 				sprintf(s, "    on keyboard %04x:%04x", get_map_vid(), get_map_pid());
 			}
@@ -6805,7 +6811,6 @@ void HandleUI(void)
 		}
 		else
 		{
-			flag = 1;
 			sprintf(s, "  Press key to map 0x%02X to", get_map_button() & 0xFF);
 			OsdWrite(3, s, 0, 0);
 			OsdWrite(5, "      on any keyboard", 0, 0);
@@ -6814,7 +6819,20 @@ void HandleUI(void)
 
 		if (select || menu)
 		{
+			if (!get_map_vid()) menu = 0;
+
+			OsdWrite(3);
+			OsdWrite(4, menu ? "          Clearing" : "          Finishing");
+			OsdWrite(5);
 			finish_map_setting(menu);
+			menu_timeout = GetTimer(1000);
+			menustate = MENU_KBDMAP2;
+		}
+		break;
+
+	case MENU_KBDMAP2:
+		if (CheckTimer(menu_timeout))
+		{
 			menustate = MENU_SYSTEM1;
 			menusub = 1;
 		}
