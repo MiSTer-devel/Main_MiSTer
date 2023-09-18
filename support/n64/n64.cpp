@@ -241,6 +241,68 @@ static bool detect_rom_settings(const char* lookup_hash)
 	return false;
 }
 
+static bool detect_rom_settings_from_boot_code(uint64_t crc, char region_code)
+{
+	SystemType system_type;
+	CIC cic;
+
+	switch (region_code)
+	{
+		case 'D': //Germany
+		case 'F': //France
+		case 'I': //Italy
+		case 'L': //Gateway 64 (PAL)
+		case 'P': //Europe
+		case 'S': //Spain
+		case 'U': //Australia
+		case 'X': //Europe
+		case 'Y': //Europe
+			system_type = SystemType::PAL;
+			break;
+		default: 
+			system_type = SystemType::NTSC;
+			break;
+	}
+
+	switch (crc)
+	{
+		case UINT64_C(0x000000d057c85244): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6102 : CIC::CIC_NUS_7101; break; /* CIC_X102 */
+		case UINT64_C(0x000000d0027fdf31):
+		case UINT64_C(0x000000cffb631223): cic = CIC::CIC_NUS_6101; break; /* CIC_X101 */
+		case UINT64_C(0x000000d6497e414b): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6103 : CIC::CIC_NUS_7103; break; /* CIC_X103 */
+		case UINT64_C(0x0000011a49f60e96): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6105 : CIC::CIC_NUS_7105; break; /* CIC_X105 */
+		case UINT64_C(0x000000d6d5be5580): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6106 : CIC::CIC_NUS_7106; break; /* CIC_X106 */
+		case UINT64_C(0x000001053bc19870): cic = CIC::CIC_NUS_5167; break; /* CIC 5167 */
+		// case UINT64_C(0x000000a5f80bf620): cic = CIC::CIC_NUS_5101; break; /* CIC 5101 */
+		case UINT64_C(0x000000d2e53ef008): cic = CIC::CIC_NUS_8303; break; /* CIC 8303 */
+		case UINT64_C(0x000000d2e53ef39f): cic = CIC::CIC_NUS_8401; break; /* CIC 8401 */
+		case UINT64_C(0x000000d2e53e5dda): cic = CIC::CIC_NUS_DDUS; break;/* CIC 8501 */
+		default: return false;
+	}
+
+	printf("System: %d, CIC: %d\n", (int)system_type, (int)cic);
+	const auto auto_detect = (AutoDetect)user_io_status_get("[64]");
+
+	if (auto_detect == AutoDetect::ON)
+	{
+		printf("Auto-detect is on, updating OSD settings\n");
+
+		user_io_status_set("[80:79]", (uint32_t)system_type);
+		user_io_status_set("[68:65]", (uint32_t)cic);
+		user_io_status_set("[71]", 0);
+		user_io_status_set("[72]", 0);
+		user_io_status_set("[73]", 0);
+		user_io_status_set("[74]", 0);
+		user_io_status_set("[77:75]", (uint32_t)MemoryType::NONE);
+	}
+	else
+	{
+		printf("Auto-detect is off, not updating OSD settings\n");
+	}
+
+	return true;
+}
+
 static void md5_to_hex(uint8_t* in, char* out)
 {
 	char *p = out;
@@ -284,6 +346,8 @@ int n64_rom_tx(const char* name, unsigned char index)
 	MD5Init(&ctx);
 	uint8_t md5[16];
 	char md5_hex[40];
+	uint64_t ipl3_crc = 0;
+	char region_code;
 
 	while (bytes2send)
 	{
@@ -321,7 +385,12 @@ int n64_rom_tx(const char* name, unsigned char index)
 			printf("Header MD5: %s\n", md5_hex);
 
 			rom_settings_detected = detect_rom_settings(md5_hex);
-			if (!rom_settings_detected) printf("No ROM information found for header hash: %s\n", md5_hex);
+			if (!rom_settings_detected)
+			{
+				printf("No ROM information found for header hash: %s\n", md5_hex);
+				for (size_t i = 0x040 / 4; i < 0x1000 / 4; i++) ipl3_crc += ((uint32_t*)buf)[i];
+				region_code = buf[0x3e];
+			}
 		}
 
 		user_io_file_tx_data(buf, chunk);
@@ -340,6 +409,12 @@ int n64_rom_tx(const char* name, unsigned char index)
 	{
 		rom_settings_detected = detect_rom_settings(md5_hex);
 		if (!rom_settings_detected) printf("No ROM information found for file hash: %s\n", md5_hex);
+	}
+
+	if (!rom_settings_detected)
+	{
+		rom_settings_detected = detect_rom_settings_from_boot_code(ipl3_crc, region_code);
+		if (!rom_settings_detected) printf("No ROM information found for IPL3 hash: %016" PRIX64 "\n", ipl3_crc);
 	}
 
 	printf("Done.\n");
