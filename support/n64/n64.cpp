@@ -266,17 +266,17 @@ static bool detect_rom_settings_from_boot_code(uint64_t crc, char region_code)
 
 	switch (crc)
 	{
-		case UINT64_C(0x000000d057c85244): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6102 : CIC::CIC_NUS_7101; break; /* CIC_X102 */
+		case UINT64_C(0x000000d057c85244): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6102 : CIC::CIC_NUS_7101; break;
 		case UINT64_C(0x000000d0027fdf31):
-		case UINT64_C(0x000000cffb631223): cic = CIC::CIC_NUS_6101; break; /* CIC_X101 */
-		case UINT64_C(0x000000d6497e414b): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6103 : CIC::CIC_NUS_7103; break; /* CIC_X103 */
-		case UINT64_C(0x0000011a49f60e96): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6105 : CIC::CIC_NUS_7105; break; /* CIC_X105 */
-		case UINT64_C(0x000000d6d5be5580): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6106 : CIC::CIC_NUS_7106; break; /* CIC_X106 */
-		case UINT64_C(0x000001053bc19870): cic = CIC::CIC_NUS_5167; break; /* CIC 5167 */
-		// case UINT64_C(0x000000a5f80bf620): cic = CIC::CIC_NUS_5101; break; /* CIC 5101 */
-		case UINT64_C(0x000000d2e53ef008): cic = CIC::CIC_NUS_8303; break; /* CIC 8303 */
-		case UINT64_C(0x000000d2e53ef39f): cic = CIC::CIC_NUS_8401; break; /* CIC 8401 */
-		case UINT64_C(0x000000d2e53e5dda): cic = CIC::CIC_NUS_DDUS; break;/* CIC 8501 */
+		case UINT64_C(0x000000cffb631223): cic = CIC::CIC_NUS_6101; break;
+		case UINT64_C(0x000000d6497e414b): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6103 : CIC::CIC_NUS_7103; break;
+		case UINT64_C(0x0000011a49f60e96): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6105 : CIC::CIC_NUS_7105; break;
+		case UINT64_C(0x000000d6d5be5580): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6106 : CIC::CIC_NUS_7106; break;
+		case UINT64_C(0x000001053bc19870): cic = CIC::CIC_NUS_5167; break;
+		// case UINT64_C(0x000000a5f80bf620): cic = CIC::CIC_NUS_5101; break;
+		case UINT64_C(0x000000d2e53ef008): cic = CIC::CIC_NUS_8303; break;
+		case UINT64_C(0x000000d2e53ef39f): cic = CIC::CIC_NUS_8401; break;
+		case UINT64_C(0x000000d2e53e5dda): cic = CIC::CIC_NUS_DDUS; break;
 		default: return false;
 	}
 
@@ -347,7 +347,7 @@ int n64_rom_tx(const char* name, unsigned char index)
 	uint8_t md5[16];
 	char md5_hex[40];
 	uint64_t ipl3_crc = 0;
-	char region_code;
+	char region_code = '\0';
 
 	while (bytes2send)
 	{
@@ -414,7 +414,7 @@ int n64_rom_tx(const char* name, unsigned char index)
 	if (!rom_settings_detected)
 	{
 		rom_settings_detected = detect_rom_settings_from_boot_code(ipl3_crc, region_code);
-		if (!rom_settings_detected) printf("No ROM information found for IPL3 hash: %016" PRIX64 "\n", ipl3_crc);
+		if (!rom_settings_detected) printf("Unknown CIC type: %016" PRIX64 "\n", ipl3_crc);
 	}
 
 	printf("Done.\n");
