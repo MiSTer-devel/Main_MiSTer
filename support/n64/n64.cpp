@@ -250,33 +250,40 @@ static bool detect_rom_settings_from_boot_code(uint64_t crc, char region_code)
 	{
 		case 'D': //Germany
 		case 'F': //France
+		case 'H': //Netherlands (Dutch)
 		case 'I': //Italy
-		case 'L': //Gateway 64 (PAL)
+		case 'L': //Gateway 64
 		case 'P': //Europe
 		case 'S': //Spain
 		case 'U': //Australia
+		case 'W': //Scandinavia
 		case 'X': //Europe
 		case 'Y': //Europe
-			system_type = SystemType::PAL;
-			break;
+			system_type = SystemType::PAL; break;
 		default: 
-			system_type = SystemType::NTSC;
-			break;
+			system_type = SystemType::NTSC; break;
 	}
 
 	switch (crc)
 	{
-		case UINT64_C(0x000000d057c85244): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6102 : CIC::CIC_NUS_7101; break;
-		case UINT64_C(0x000000d0027fdf31):
-		case UINT64_C(0x000000cffb631223): cic = CIC::CIC_NUS_6101; break;
-		case UINT64_C(0x000000d6497e414b): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6103 : CIC::CIC_NUS_7103; break;
-		case UINT64_C(0x0000011a49f60e96): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6105 : CIC::CIC_NUS_7105; break;
-		case UINT64_C(0x000000d6d5be5580): cic = system_type == SystemType::NTSC ? CIC::CIC_NUS_6106 : CIC::CIC_NUS_7106; break;
-		case UINT64_C(0x000001053bc19870): cic = CIC::CIC_NUS_5167; break;
-		// case UINT64_C(0x000000a5f80bf620): cic = CIC::CIC_NUS_5101; break;
-		case UINT64_C(0x000000d2e53ef008): cic = CIC::CIC_NUS_8303; break;
-		case UINT64_C(0x000000d2e53ef39f): cic = CIC::CIC_NUS_8401; break;
-		case UINT64_C(0x000000d2e53e5dda): cic = CIC::CIC_NUS_DDUS; break;
+		case UINT64_C(0x000000a316adc55a): cic = system_type == SystemType::NTSC 
+			? CIC::CIC_NUS_6102 
+			: CIC::CIC_NUS_7101; break;
+		case UINT64_C(0x000000a405397b05): cic = CIC::CIC_NUS_7102; break;
+		case UINT64_C(0x000000a0f26f62fe): cic = CIC::CIC_NUS_6101; break;
+		case UINT64_C(0x000000a9229d7c45): cic = system_type == SystemType::NTSC 
+			? CIC::CIC_NUS_6103 
+			: CIC::CIC_NUS_7103; break;
+		case UINT64_C(0x000000f8b860ed00): cic = system_type == SystemType::NTSC 
+			? CIC::CIC_NUS_6105 
+			: CIC::CIC_NUS_7105; break;
+		case UINT64_C(0x000000ba5ba4b8cd): cic = system_type == SystemType::NTSC 
+			? CIC::CIC_NUS_6106 
+			: CIC::CIC_NUS_7106; break;
+		case UINT64_C(0x0000012daafc8aab): cic = CIC::CIC_NUS_5167; break;
+		case UINT64_C(0x000000a9df4b39e1): cic = CIC::CIC_NUS_8303; break;
+		case UINT64_C(0x000000aa764e39e1): cic = CIC::CIC_NUS_8401; break;
+		case UINT64_C(0x000000abb0b739e1): cic = CIC::CIC_NUS_DDUS; break;
 		default: return false;
 	}
 
@@ -289,10 +296,10 @@ static bool detect_rom_settings_from_boot_code(uint64_t crc, char region_code)
 
 		user_io_status_set("[80:79]", (uint32_t)system_type);
 		user_io_status_set("[68:65]", (uint32_t)cic);
-		user_io_status_set("[71]", 0);
-		user_io_status_set("[72]", 0);
-		user_io_status_set("[73]", 0);
-		user_io_status_set("[74]", 0);
+		user_io_status_set("[71]", (uint32_t)0); // Controller pak
+		user_io_status_set("[72]", (uint32_t)0); // Rumble pak
+		user_io_status_set("[73]", (uint32_t)0); // Transfer pak
+		user_io_status_set("[74]", (uint32_t)0); // RTC
 		user_io_status_set("[77:75]", (uint32_t)MemoryType::NONE);
 	}
 	else
@@ -388,7 +395,7 @@ int n64_rom_tx(const char* name, unsigned char index)
 			if (!rom_settings_detected)
 			{
 				printf("No ROM information found for header hash: %s\n", md5_hex);
-				for (size_t i = 0x040 / 4; i < 0x1000 / 4; i++) ipl3_crc += ((uint32_t*)buf)[i];
+				for (size_t i = 0x40 / sizeof(uint32_t); i < 0x1000 / sizeof(uint32_t); i++) ipl3_crc += ((uint32_t*)buf)[i];
 				region_code = buf[0x3e];
 			}
 		}
