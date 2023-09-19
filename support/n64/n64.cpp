@@ -264,6 +264,7 @@ static bool detect_rom_settings_from_boot_code(uint64_t crc, char region_code)
 			system_type = SystemType::NTSC; break;
 	}
 
+	// the following checks assume we're on a little-endian platform
 	switch (crc)
 	{
 		case UINT64_C(0x000000a316adc55a): cic = system_type == SystemType::NTSC 
@@ -418,6 +419,7 @@ int n64_rom_tx(const char* name, unsigned char index)
 		if (!rom_settings_detected) printf("No ROM information found for file hash: %s\n", md5_hex);
 	}
 
+	// Try detect (partial) ROM settings by analyzing the ROM itself
 	if (!rom_settings_detected)
 	{
 		rom_settings_detected = detect_rom_settings_from_boot_code(ipl3_crc, region_code);
