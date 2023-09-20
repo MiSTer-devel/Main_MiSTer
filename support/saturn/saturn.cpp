@@ -130,31 +130,25 @@ void saturn_set_image(int num, const char *filename)
 	char *p = strrchr(last_dir, '/');
 	if (p) *p = 0;
 
-	int loaded = 1;
 	if (!same_game)
 	{
 		saturn_mount_save("");
 
 		user_io_status_set("[0]", 1);
-		user_io_status_set("[0]", 0);
 		saturn_reset();
 
-		loaded = 0;
-		strcpy(buf, last_dir);
-		char *p = strrchr(buf, '/');
-		if (p)
+		// load CD BIOS
+		if (!saturn_load_rom(filename, "cd_bios.rom", 0)) // from disk folder.
 		{
-			strcpy(p + 1, "cd_bios.rom");
-			loaded = user_io_file_tx(buf);
+			if (!saturn_load_rom(last_dir, "cd_bios.rom", 0)) // from parent folder.
+			{
+				sprintf(buf, "%s/boot.rom", HomeDir()); // from home folder.
+				if (!user_io_file_tx(buf))
+				{
+					Info("CD BIOS not found!", 4000);
+				}
+			}
 		}
-
-		if (!loaded)
-		{
-			sprintf(buf, "%s/boot.rom", HomeDir());
-			loaded = user_io_file_tx(buf);
-		}
-
-		if (!loaded) Info("CD BIOS not found!", 4000);
 	}
 
 	if (strlen(filename))
@@ -165,13 +159,14 @@ void saturn_set_image(int num, const char *filename)
 
 			if (!same_game)
 			{
-				saturn_load_rom(filename, "cd_bios.rom", 0);
 				//saturn_load_rom(filename, "cart.rom", 1);
 				saturn_mount_save(filename);
 				//cheats_init(filename, 0);
 			}
 		}
 	}
+
+	user_io_status_set("[0]", 0);
 }
 
 void saturn_reset() {
@@ -189,7 +184,7 @@ int saturn_send_data(uint8_t* buf, int len, uint8_t index) {
 }
 
 static char int_blank[] = {
-	0x00, 0x42, 0x00, 0x61, 0x00, 0x63, 0x00, 0x6B, 0x00, 0x55, 0x00, 0x70, 0x00, 0x52, 0x00, 0x61, 
+	0x00, 0x42, 0x00, 0x61, 0x00, 0x63, 0x00, 0x6B, 0x00, 0x55, 0x00, 0x70, 0x00, 0x52, 0x00, 0x61,
 	0x00, 0x6D, 0x00, 0x20, 0x00, 0x46, 0x00, 0x6F, 0x00, 0x72, 0x00, 0x6D, 0x00, 0x61, 0x00, 0x74,
 	0x00, 0x42, 0x00, 0x61, 0x00, 0x63, 0x00, 0x6B, 0x00, 0x55, 0x00, 0x70, 0x00, 0x52, 0x00, 0x61,
 	0x00, 0x6D, 0x00, 0x20, 0x00, 0x46, 0x00, 0x6F, 0x00, 0x72, 0x00, 0x6D, 0x00, 0x61, 0x00, 0x74,
