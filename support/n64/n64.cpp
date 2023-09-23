@@ -449,8 +449,8 @@ int n64_rom_tx(const char* name, unsigned char index)
 
 	if (!rom_found_in_db)
 	{
-		if (!cic_detected) Info("auto-detect failed, unknown CIC type");
-		else Info("save type not defined, use database if required");
+		if (!cic_detected) Info("auto-detect failed");
+		else Info("use database if save is needed");
 	}
 
 	return 1;
