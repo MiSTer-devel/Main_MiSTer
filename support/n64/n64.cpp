@@ -309,11 +309,6 @@ static bool detect_rom_settings_from_first_chunk(char region_code, uint64_t crc)
 
 	user_io_status_set("[80:79]", (uint32_t)system_type);
 	user_io_status_set("[68:65]", (uint32_t)cic);
-	user_io_status_set("[71]", (uint32_t)0); // Controller pak
-	user_io_status_set("[72]", (uint32_t)0); // Rumble pak
-	user_io_status_set("[73]", (uint32_t)0); // Transfer pak
-	user_io_status_set("[74]", (uint32_t)0); // RTC
-	user_io_status_set("[77:75]", (uint32_t)MemoryType::NONE);
 
 	return true;
 }
