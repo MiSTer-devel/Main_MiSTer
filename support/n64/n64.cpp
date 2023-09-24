@@ -231,7 +231,7 @@ static const char* DB_FILE_NAMES[] =
 	"N64-database_user.txt",
 };
 
-static bool detect_rom_settings(const char* lookup_hash)
+static bool detect_rom_settings_in_dbs(const char* lookup_hash)
 {
 	for (const char* db_file_name: DB_FILE_NAMES)
 	{
@@ -239,6 +239,78 @@ static bool detect_rom_settings(const char* lookup_hash)
 			return true;
 	}
 	return false;
+}
+
+static bool detect_rom_settings_from_first_chunk(char region_code, uint64_t crc)
+{
+	SystemType system_type;
+	CIC cic;
+
+	const auto auto_detect = (AutoDetect)user_io_status_get("[64]");
+
+	if (auto_detect != AutoDetect::ON)
+	{
+		printf("Auto-detect is off, not updating OSD settings\n");
+		return true;
+	}
+
+	switch (region_code)
+	{
+		case 'D': //Germany
+		case 'F': //France
+		case 'H': //Netherlands (Dutch)
+		case 'I': //Italy
+		case 'L': //Gateway 64
+		case 'P': //Europe
+		case 'S': //Spain
+		case 'U': //Australia
+		case 'W': //Scandinavia
+		case 'X': //Europe
+		case 'Y': //Europe
+			system_type = SystemType::PAL; break;
+		default: 
+			system_type = SystemType::NTSC; break;
+	}
+
+	// the following checks assume we're on a little-endian platform
+	switch (crc)
+	{
+		case UINT64_C(0x000000a316adc55a): 
+		case UINT64_C(0x000000039c981107): // hcs64's CIC-6102 IPL3 replacement
+		case UINT64_C(0x000000a30dacd530): // Unknown. Used in SM64 hacks
+		case UINT64_C(0x000000d2828281b0): // Unknown. Used in some homebrew
+		case UINT64_C(0x0000009acc31e644): // Unknown. Used in some betas and homebrew. Dev boot code?
+			  cic = system_type == SystemType::NTSC
+			? CIC::CIC_NUS_6102 
+			: CIC::CIC_NUS_7101; break;
+		case UINT64_C(0x000000a405397b05): cic = CIC::CIC_NUS_7102; system_type = SystemType::PAL; break;
+		case UINT64_C(0x000000a0f26f62fe): cic = CIC::CIC_NUS_6101; system_type = SystemType::NTSC; break;
+		case UINT64_C(0x000000a9229d7c45): 
+			  cic = system_type == SystemType::NTSC 
+			? CIC::CIC_NUS_6103 
+			: CIC::CIC_NUS_7103; break;
+		case UINT64_C(0x000000f8b860ed00): 
+			  cic = system_type == SystemType::NTSC 
+			? CIC::CIC_NUS_6105 
+			: CIC::CIC_NUS_7105; break;
+		case UINT64_C(0x000000ba5ba4b8cd): 
+			  cic = system_type == SystemType::NTSC 
+			? CIC::CIC_NUS_6106 
+			: CIC::CIC_NUS_7106; break;
+		case UINT64_C(0x0000012daafc8aab): cic = CIC::CIC_NUS_5167; break;
+		case UINT64_C(0x000000a9df4b39e1): cic = CIC::CIC_NUS_8303; break;
+		case UINT64_C(0x000000aa764e39e1): cic = CIC::CIC_NUS_8401; break;
+		case UINT64_C(0x000000abb0b739e1): cic = CIC::CIC_NUS_DDUS; break;
+		default: return false;
+	}
+
+	printf("System: %d, CIC: %d\n", (int)system_type, (int)cic);
+	printf("Auto-detect is on, updating OSD settings\n");
+
+	user_io_status_set("[80:79]", (uint32_t)system_type);
+	user_io_status_set("[68:65]", (uint32_t)cic);
+
+	return true;
 }
 
 static void md5_to_hex(uint8_t* in, char* out)
@@ -277,13 +349,16 @@ int n64_rom_tx(const char* name, unsigned char index)
 	process_ss(name);
 
 	bool is_first_chunk = true;
-	bool rom_settings_detected = false;
+	bool rom_found_in_db = false;
+	bool cic_detected = false;
 	RomFormat rom_format = RomFormat::UNKNOWN;
 
 	MD5Context ctx;
 	MD5Init(&ctx);
 	uint8_t md5[16];
 	char md5_hex[40];
+	uint64_t ipl3_crc = 0;
+	char region_code = '\0';
 
 	while (bytes2send)
 	{
@@ -320,8 +395,13 @@ int n64_rom_tx(const char* name, unsigned char index)
 			md5_to_hex(md5, md5_hex);
 			printf("Header MD5: %s\n", md5_hex);
 
-			rom_settings_detected = detect_rom_settings(md5_hex);
-			if (!rom_settings_detected) printf("No ROM information found for header hash: %s\n", md5_hex);
+			rom_found_in_db = detect_rom_settings_in_dbs(md5_hex);
+			if (!rom_found_in_db)
+			{
+				printf("No ROM information found for header hash: %s\n", md5_hex);
+				for (size_t i = 0x40 / sizeof(uint32_t); i < 0x1000 / sizeof(uint32_t); i++) ipl3_crc += ((uint32_t*)buf)[i];
+				region_code = buf[0x3e];
+			}
 		}
 
 		user_io_file_tx_data(buf, chunk);
@@ -336,10 +416,18 @@ int n64_rom_tx(const char* name, unsigned char index)
 	printf("File MD5: %s\n", md5_hex);
 
 	// Try to detect ROM settings from file MD5 if they are not available yet
-	if (!rom_settings_detected)
+	if (!rom_found_in_db)
 	{
-		rom_settings_detected = detect_rom_settings(md5_hex);
-		if (!rom_settings_detected) printf("No ROM information found for file hash: %s\n", md5_hex);
+		rom_found_in_db = detect_rom_settings_in_dbs(md5_hex);
+		if (!rom_found_in_db) printf("No ROM information found for file hash: %s\n", md5_hex);
+	}
+
+	// Try detect (partial) ROM settings by analyzing the ROM itself. (region, cic and save type)
+	// Fallback for missing db entries.
+	if (!rom_found_in_db)
+	{
+		cic_detected = detect_rom_settings_from_first_chunk(region_code, ipl3_crc);
+		if (!cic_detected) printf("Unknown CIC type: %016" PRIX64 "\n", ipl3_crc);
 	}
 
 	printf("Done.\n");
@@ -354,7 +442,11 @@ int n64_rom_tx(const char* name, unsigned char index)
 	user_io_set_download(0);
 	ProgressMessage(0, 0, 0, 0);
 
-	if (!rom_settings_detected) Info("auto-detect failed");
+	if (!rom_found_in_db)
+	{
+		if (!cic_detected) Info("auto-detect failed");
+		else Info("use database if save is needed");
+	}
 
 	return 1;
 }
