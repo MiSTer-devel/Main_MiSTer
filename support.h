@@ -47,3 +47,4 @@
 
 // N64 support
 #include "support/n64/n64.h"
+#include "support/n64/n64_joy_emu.h"
