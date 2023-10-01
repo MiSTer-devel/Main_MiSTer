@@ -14,14 +14,12 @@
 static constexpr uint64_t FNV_PRIME = 0x100000001b3;
 static constexpr uint64_t FNV_OFFSET_BASIS = 0xcbf29ce484222325;
 
-static constexpr uint64_t fnv_hash(const char *s, uint64_t h = FNV_OFFSET_BASIS)
-{
+static constexpr uint64_t fnv_hash(const char *s, uint64_t h = FNV_OFFSET_BASIS) {
 	if (s) while (uint8_t a = *(s++)) h = (h ^ a) * FNV_PRIME;
 	return h;
 }
 
-enum class MemoryType
-{
+enum class MemoryType {
 	NONE = 0,
 	EEPROM_512,
 	EEPROM_2k,
@@ -30,8 +28,7 @@ enum class MemoryType
 	FLASH_128k
 };
 
-enum class CIC
-{
+enum class CIC {
 	CIC_NUS_6101 = 0,
 	CIC_NUS_6102,
 	CIC_NUS_7101,
@@ -48,22 +45,19 @@ enum class CIC
 	CIC_NUS_DDUS
 };
 
-enum class SystemType
-{
+enum class SystemType {
 	NTSC = 0,
 	PAL
 };
 
-enum class RomFormat
-{
+enum class RomFormat {
 	UNKNOWN = 0,
 	BIG_ENDIAN,
 	BYTE_SWAPPED,
 	LITTLE_ENDIAN,
 };
 
-enum class AutoDetect
-{
+enum class AutoDetect {
 	ON = 0,
 	OFF = 1,
 };
@@ -84,41 +78,36 @@ static RomFormat detectRomFormat(const uint8_t* data)
 
 static void normalizeData(uint8_t* data, size_t size, RomFormat format)
 {
-	switch(format)
-	{
+	switch(format) {
 		case RomFormat::BYTE_SWAPPED:
-		for (size_t i = 0; i < size; i += 2)
-		{
-			auto c0 = data[0];
-			auto c1 = data[1];
-			data[0] = c1;
-			data[1] = c0;
-			data += 2;
-		}
-		break;
+			for (size_t i = 0; i < size; i += 2) {
+				auto c0 = data[0];
+				auto c1 = data[1];
+				data[0] = c1;
+				data[1] = c0;
+				data += 2;
+			}
+			break;
 		case RomFormat::LITTLE_ENDIAN:
-		for (size_t i = 0; i < size; i += 4)
-		{
-			auto c0 = data[0];
-			auto c1 = data[1];
-			auto c2 = data[2];
-			auto c3 = data[3];
-			data[0] = c3;
-			data[1] = c2;
-			data[2] = c1;
-			data[3] = c0;
-			data += 4;
-		}
-		break;
+			for (size_t i = 0; i < size; i += 4) {
+				auto c0 = data[0];
+				auto c1 = data[1];
+				auto c2 = data[2];
+				auto c3 = data[3];
+				data[0] = c3;
+				data[1] = c2;
+				data[2] = c1;
+				data[3] = c0;
+				data += 4;
+			}
+			break;
 		default:
-		{
 			// nothing to do
-		}
+			break;
 	}
 }
 
-static void normalizeString(char* s)
-{
+static void normalizeString(char* s) {
 	// change the string to lower-case
 	while (*s) { *s = tolower(*s); ++s; }
 }
@@ -132,8 +121,8 @@ static bool parse_and_apply_db_tags(char* tags) {
 	bool rpak = false;
 	bool tpak = false;
 	bool rtc = false;
-	bool system_type_detected = false;
-	bool cic_detected = false;
+	bool system_type_known = false;
+	bool cic_known = false;
 
 	const char separator[] = "|";
 
@@ -147,26 +136,26 @@ static bool parse_and_apply_db_tags(char* tags) {
 			case fnv_hash("sram32k"): save_type = MemoryType::SRAM_32k; break;
 			case fnv_hash("sram96k"): save_type = MemoryType::SRAM_96k; break;
 			case fnv_hash("flash128k"): save_type = MemoryType::FLASH_128k; break;
-			case fnv_hash("ntsc"): system_type = SystemType::NTSC; system_type_detected = true; break;
-			case fnv_hash("pal"): system_type = SystemType::PAL; system_type_detected = true; break;
+			case fnv_hash("ntsc"): system_type = SystemType::NTSC; system_type_known = true; break;
+			case fnv_hash("pal"): system_type = SystemType::PAL; system_type_known = true; break;
 			case fnv_hash("cpak"): cpak = true; break;
 			case fnv_hash("rpak"): rpak = true; break;
 			case fnv_hash("tpak"): tpak = true; break;
 			case fnv_hash("rtc"): rtc = true; break;
-			case fnv_hash("cic6101"): cic = CIC::CIC_NUS_6101; cic_detected = true; break;
-			case fnv_hash("cic6102"): cic = CIC::CIC_NUS_6102; cic_detected = true; break;
-			case fnv_hash("cic6103"): cic = CIC::CIC_NUS_6103; cic_detected = true; break;
-			case fnv_hash("cic6105"): cic = CIC::CIC_NUS_6105; cic_detected = true; break;
-			case fnv_hash("cic6106"): cic = CIC::CIC_NUS_6106; cic_detected = true; break;
-			case fnv_hash("cic7101"): cic = CIC::CIC_NUS_7101; cic_detected = true; break;
-			case fnv_hash("cic7102"): cic = CIC::CIC_NUS_7102; cic_detected = true; break;
-			case fnv_hash("cic7103"): cic = CIC::CIC_NUS_7103; cic_detected = true; break;
-			case fnv_hash("cic7105"): cic = CIC::CIC_NUS_7105; cic_detected = true; break;
-			case fnv_hash("cic7106"): cic = CIC::CIC_NUS_7106; cic_detected = true; break;
-			case fnv_hash("cic8303"): cic = CIC::CIC_NUS_8303; cic_detected = true; break;
-			case fnv_hash("cic8401"): cic = CIC::CIC_NUS_8401; cic_detected = true; break;
-			case fnv_hash("cic5167"): cic = CIC::CIC_NUS_5167; cic_detected = true; break;
-			case fnv_hash("cicDDUS"): cic = CIC::CIC_NUS_DDUS; cic_detected = true; break;
+			case fnv_hash("cic6101"): cic = CIC::CIC_NUS_6101; cic_known = true; break;
+			case fnv_hash("cic6102"): cic = CIC::CIC_NUS_6102; cic_known = true; break;
+			case fnv_hash("cic6103"): cic = CIC::CIC_NUS_6103; cic_known = true; break;
+			case fnv_hash("cic6105"): cic = CIC::CIC_NUS_6105; cic_known = true; break;
+			case fnv_hash("cic6106"): cic = CIC::CIC_NUS_6106; cic_known = true; break;
+			case fnv_hash("cic7101"): cic = CIC::CIC_NUS_7101; cic_known = true; break;
+			case fnv_hash("cic7102"): cic = CIC::CIC_NUS_7102; cic_known = true; break;
+			case fnv_hash("cic7103"): cic = CIC::CIC_NUS_7103; cic_known = true; break;
+			case fnv_hash("cic7105"): cic = CIC::CIC_NUS_7105; cic_known = true; break;
+			case fnv_hash("cic7106"): cic = CIC::CIC_NUS_7106; cic_known = true; break;
+			case fnv_hash("cic8303"): cic = CIC::CIC_NUS_8303; cic_known = true; break;
+			case fnv_hash("cic8401"): cic = CIC::CIC_NUS_8401; cic_known = true; break;
+			case fnv_hash("cic5167"): cic = CIC::CIC_NUS_5167; cic_known = true; break;
+			case fnv_hash("cicDDUS"): cic = CIC::CIC_NUS_DDUS; cic_known = true; break;
 			default: printf("Unknown tag: %s\n", tag);
 		}
 	}
@@ -177,8 +166,8 @@ static bool parse_and_apply_db_tags(char* tags) {
 	if (auto_detect == AutoDetect::ON) {
 		printf("Auto-detect is on, updating OSD settings\n");
 
-		if (system_type_detected) user_io_status_set("[80:79]", (uint32_t)system_type);
-		if (cic_detected) user_io_status_set("[68:65]", (uint32_t)cic);
+		if (system_type_known) user_io_status_set("[80:79]", (uint32_t)system_type);
+		if (cic_known) user_io_status_set("[68:65]", (uint32_t)cic);
 		user_io_status_set("[71]", (uint32_t)cpak);
 		user_io_status_set("[72]", (uint32_t)rpak);
 		user_io_status_set("[73]", (uint32_t)tpak);
@@ -189,21 +178,21 @@ static bool parse_and_apply_db_tags(char* tags) {
 		printf("Auto-detect is off, not updating OSD settings\n");
 	}
 
-	return (auto_detect != AutoDetect::ON) || (system_type_detected && cic_detected);
+	return (auto_detect != AutoDetect::ON) || (system_type_known && cic_known);
 }
 
 bool id_matches(const char* line, const char* cart_id) {
-	// a valid id line should start with "ID:"
+	// A valid ID line should start with "ID:"
 	if (strlen(line) < 9 || strncmp(line, "ID:", 3) != 0)
 		return false;
 
-	// skip the line if it doesn't match our cart_id, '_' = don't care
-	// cart ids should always be 6 characters long
+	// Skip the line if it doesn't match our cart_id, '_' = don't care
+	// Cart IDs should always be 6 characters long
 	for (size_t i = 0; i < 6; i++) {
 		if (line[i + 3] != '_' && line[i + 3] != cart_id[i])
 			return false; // character didn't match
 
-		if (line[i + 3] == ' ') // end of ID
+		if (line[i + 3] == ' ') // early end of ID
 			return true;
 	}
 
@@ -239,6 +228,7 @@ static uint8_t detect_rom_settings_in_db(const char* lookup_hash, const char* db
 			return 2;
 		}
 
+		// 2 = System region and/or CIC wasn't in DB, will need detection
 		return parse_and_apply_db_tags(tags) ? 3 : 2;
 	}
 
@@ -271,6 +261,7 @@ static uint8_t detect_rom_settings_in_db_with_cartid(const char* cart_id, const 
 			return 2;
 		}
 
+		// 2 = System region and/or CIC wasn't in DB, will need detection
 		return parse_and_apply_db_tags(tags) ? 3 : 2;
 	}
 
@@ -330,6 +321,7 @@ static bool detect_rom_settings_from_first_chunk(char region_code, uint64_t crc)
 	switch (crc) {
 		default: 
 			is_known_cic = false;
+			// fall through
 		case UINT64_C(0x000000a316adc55a): 
 		case UINT64_C(0x000000039c981107): // hcs64's CIC-6102 IPL3 replacement
 		case UINT64_C(0x000000a30dacd530): // Unknown. Used in SM64 hacks
@@ -400,7 +392,12 @@ int n64_rom_tx(const char* name, unsigned char index) {
 	process_ss(name);
 
 	bool is_first_chunk = true;
-	uint8_t rom_info_detected = 0;
+
+	// 0 = Nothing detected
+	// 1 = System region and CIC detected
+	// 2 = Found some ROM info in DB (Save type etc.), but System region and CIC has not been determined
+	// 3 = Has detected everything, System type, CIC, Save type etc.
+	uint8_t rom_settings_detected = 0;
 	RomFormat rom_format = RomFormat::UNKNOWN;
 
 	MD5Context ctx;
@@ -442,9 +439,9 @@ int n64_rom_tx(const char* name, unsigned char index) {
 			md5_to_hex(md5, md5_hex);
 			printf("Header MD5: %s\n", md5_hex);
 
-			rom_info_detected = detect_rom_settings_in_dbs(md5_hex);
-			// system region and/or cic is missing
-			if (rom_info_detected == 0) {
+			rom_settings_detected = detect_rom_settings_in_dbs(md5_hex);
+			if (rom_settings_detected == 0) { 
+				// ROM settings wasn't found in DB, System region and/or CIC wasn't detected
 				printf("No ROM information found for header hash: %s\n", md5_hex);
 				for (size_t i = 0x40 / sizeof(uint32_t); i < 0x1000 / sizeof(uint32_t); i++) ipl3_crc += ((uint32_t*)buf)[i];
 				strncpy(cart_id, (char*)(buf + 0x3b), 4);
@@ -465,23 +462,19 @@ int n64_rom_tx(const char* name, unsigned char index) {
 	md5_to_hex(md5, md5_hex);
 	printf("File MD5: %s\n", md5_hex);
 
-	// 0 = nothing detected
-	// 1 = cic detected
-	// 2 = found in db, but no system type and/or cic
-	// 3 = both
+	// Try to detect ROM settings from full file MD5 if they are not detected yet
+	if (rom_settings_detected == 0)
+		rom_settings_detected = detect_rom_settings_in_dbs(md5_hex);
 
-	// Try to detect ROM settings from full file MD5 if they are not available yet
-	if (rom_info_detected == 0)
-		rom_info_detected = detect_rom_settings_in_dbs(md5_hex);
-
-	if (rom_info_detected == 0) {
-		rom_info_detected = detect_rom_settings_in_dbs_with_cartid(cart_id);
+	if (rom_settings_detected == 0) {
+		rom_settings_detected = detect_rom_settings_in_dbs_with_cartid(cart_id);
 		// Try detect (partial) ROM settings by analyzing the ROM itself. (region, cic and save type)
-		if ((rom_info_detected == 0 || rom_info_detected == 2) && detect_rom_settings_from_first_chunk(cart_id[3], ipl3_crc))
-			rom_info_detected += 1;
+		if ((rom_settings_detected == 0 || rom_settings_detected == 2) && detect_rom_settings_from_first_chunk(cart_id[3], ipl3_crc))
+			rom_settings_detected += 1;
 	}
-	else if (rom_info_detected == 2 && detect_rom_settings_from_first_chunk(cart_id[3], ipl3_crc)) {
-		rom_info_detected = 3;
+	else if (rom_settings_detected == 2 && detect_rom_settings_from_first_chunk(cart_id[3], ipl3_crc)) {
+		// Complement info found in DB with System region and CIC
+		rom_settings_detected = 3;
 	}
 
 	printf("Done.\n");
@@ -496,9 +489,9 @@ int n64_rom_tx(const char* name, unsigned char index) {
 	user_io_set_download(0);
 	ProgressMessage(0, 0, 0, 0);
 
-	if (rom_info_detected == 0 || rom_info_detected == 2) 
+	if (rom_settings_detected == 0 || rom_settings_detected == 2) 
 		Info("Auto-detect failed:\nUnknown CIC type.");
-	else if (rom_info_detected == 1) 
+	else if (rom_settings_detected == 1) 
 		Info("Auto-detect failed:\nROM missing from database,\nyou might not be able to save.", 5000);
 
 	return 1;
