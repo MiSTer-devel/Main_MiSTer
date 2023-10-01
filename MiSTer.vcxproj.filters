@@ -235,6 +235,12 @@
     <ClCompile Include="support\neogeo\neogeocd.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
+    <ClCompile Include="support\saturn\saturn.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\saturn\saturncdd.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -457,6 +463,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="support\neogeo\neogeocd.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\saturn\saturn.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>
