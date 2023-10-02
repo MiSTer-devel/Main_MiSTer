@@ -29,7 +29,8 @@ enum class MemoryType {
 };
 
 enum class CIC {
-	CIC_NUS_6101 = 0,
+	UNKNOWN = -1,
+	CIC_NUS_6101,
 	CIC_NUS_6102,
 	CIC_NUS_7101,
 	CIC_NUS_7102,
@@ -46,7 +47,8 @@ enum class CIC {
 };
 
 enum class SystemType {
-	NTSC = 0,
+	UNKNOWN = -1,
+	NTSC,
 	PAL
 };
 
@@ -115,14 +117,12 @@ static void normalizeString(char* s) {
 // return true if cic and system region is detected
 static bool parse_and_apply_db_tags(char* tags) {
 	MemoryType save_type = MemoryType::NONE;
-	SystemType system_type = SystemType::NTSC;
-	CIC cic = CIC::CIC_NUS_6102;
+	SystemType system_type = SystemType::UNKNOWN;
+	CIC cic = CIC::UNKNOWN;
 	bool cpak = false;
 	bool rpak = false;
 	bool tpak = false;
 	bool rtc = false;
-	bool system_type_known = false;
-	bool cic_known = false;
 
 	const char separator[] = "|";
 
@@ -136,26 +136,26 @@ static bool parse_and_apply_db_tags(char* tags) {
 			case fnv_hash("sram32k"): save_type = MemoryType::SRAM_32k; break;
 			case fnv_hash("sram96k"): save_type = MemoryType::SRAM_96k; break;
 			case fnv_hash("flash128k"): save_type = MemoryType::FLASH_128k; break;
-			case fnv_hash("ntsc"): system_type = SystemType::NTSC; system_type_known = true; break;
-			case fnv_hash("pal"): system_type = SystemType::PAL; system_type_known = true; break;
+			case fnv_hash("ntsc"): system_type = SystemType::NTSC; break;
+			case fnv_hash("pal"): system_type = SystemType::PAL; break;
 			case fnv_hash("cpak"): cpak = true; break;
 			case fnv_hash("rpak"): rpak = true; break;
 			case fnv_hash("tpak"): tpak = true; break;
 			case fnv_hash("rtc"): rtc = true; break;
-			case fnv_hash("cic6101"): cic = CIC::CIC_NUS_6101; cic_known = true; break;
-			case fnv_hash("cic6102"): cic = CIC::CIC_NUS_6102; cic_known = true; break;
-			case fnv_hash("cic6103"): cic = CIC::CIC_NUS_6103; cic_known = true; break;
-			case fnv_hash("cic6105"): cic = CIC::CIC_NUS_6105; cic_known = true; break;
-			case fnv_hash("cic6106"): cic = CIC::CIC_NUS_6106; cic_known = true; break;
-			case fnv_hash("cic7101"): cic = CIC::CIC_NUS_7101; cic_known = true; break;
-			case fnv_hash("cic7102"): cic = CIC::CIC_NUS_7102; cic_known = true; break;
-			case fnv_hash("cic7103"): cic = CIC::CIC_NUS_7103; cic_known = true; break;
-			case fnv_hash("cic7105"): cic = CIC::CIC_NUS_7105; cic_known = true; break;
-			case fnv_hash("cic7106"): cic = CIC::CIC_NUS_7106; cic_known = true; break;
-			case fnv_hash("cic8303"): cic = CIC::CIC_NUS_8303; cic_known = true; break;
-			case fnv_hash("cic8401"): cic = CIC::CIC_NUS_8401; cic_known = true; break;
-			case fnv_hash("cic5167"): cic = CIC::CIC_NUS_5167; cic_known = true; break;
-			case fnv_hash("cicDDUS"): cic = CIC::CIC_NUS_DDUS; cic_known = true; break;
+			case fnv_hash("cic6101"): cic = CIC::CIC_NUS_6101; break;
+			case fnv_hash("cic6102"): cic = CIC::CIC_NUS_6102; break;
+			case fnv_hash("cic6103"): cic = CIC::CIC_NUS_6103; break;
+			case fnv_hash("cic6105"): cic = CIC::CIC_NUS_6105; break;
+			case fnv_hash("cic6106"): cic = CIC::CIC_NUS_6106; break;
+			case fnv_hash("cic7101"): cic = CIC::CIC_NUS_7101; break;
+			case fnv_hash("cic7102"): cic = CIC::CIC_NUS_7102; break;
+			case fnv_hash("cic7103"): cic = CIC::CIC_NUS_7103; break;
+			case fnv_hash("cic7105"): cic = CIC::CIC_NUS_7105; break;
+			case fnv_hash("cic7106"): cic = CIC::CIC_NUS_7106; break;
+			case fnv_hash("cic8303"): cic = CIC::CIC_NUS_8303; break;
+			case fnv_hash("cic8401"): cic = CIC::CIC_NUS_8401; break;
+			case fnv_hash("cic5167"): cic = CIC::CIC_NUS_5167; break;
+			case fnv_hash("cicDDUS"): cic = CIC::CIC_NUS_DDUS; break;
 			default: printf("Unknown tag: %s\n", tag);
 		}
 	}
@@ -166,8 +166,8 @@ static bool parse_and_apply_db_tags(char* tags) {
 	if (auto_detect == AutoDetect::ON) {
 		printf("Auto-detect is on, updating OSD settings\n");
 
-		if (system_type_known) user_io_status_set("[80:79]", (uint32_t)system_type);
-		if (cic_known) user_io_status_set("[68:65]", (uint32_t)cic);
+		if (system_type != SystemType::UNKNOWN) user_io_status_set("[80:79]", (uint32_t)system_type);
+		if (cic != CIC::UNKNOWN) user_io_status_set("[68:65]", (uint32_t)cic);
 		user_io_status_set("[71]", (uint32_t)cpak);
 		user_io_status_set("[72]", (uint32_t)rpak);
 		user_io_status_set("[73]", (uint32_t)tpak);
@@ -178,7 +178,7 @@ static bool parse_and_apply_db_tags(char* tags) {
 		printf("Auto-detect is off, not updating OSD settings\n");
 	}
 
-	return (auto_detect != AutoDetect::ON) || (system_type_known && cic_known);
+	return (auto_detect != AutoDetect::ON) || (system_type != SystemType::UNKNOWN && cic != CIC::UNKNOWN);
 }
 
 bool id_matches(const char* line, const char* cart_id) {
