@@ -13,6 +13,7 @@
 
 static constexpr uint64_t FNV_PRIME = 0x100000001b3;
 static constexpr uint64_t FNV_OFFSET_BASIS = 0xcbf29ce484222325;
+static constexpr uint8_t CARTID_LENGTH = 6;
 
 static constexpr uint64_t fnv_hash(const char *s, uint64_t h = FNV_OFFSET_BASIS) {
 	if (s) while (uint8_t a = *(s++)) h = (h ^ a) * FNV_PRIME;
@@ -181,14 +182,26 @@ static bool parse_and_apply_db_tags(char* tags) {
 	return (auto_detect != AutoDetect::ON) || (system_type != SystemType::UNKNOWN && cic != CIC::UNKNOWN);
 }
 
-bool id_matches(const char* line, const char* cart_id) {
+bool md5_matches(const char* line, const char* md5) {
+	// Case-insensitive MD5 comparision
+	if (strlen(line) < 32)
+		return false;
+
+	char line_md5[33];
+	strncpy(line_md5, line, 32);
+	line_md5[32] = '\0';
+	normalizeString(line_md5);
+
+	return strcmp(md5, line_md5) == 0;
+}
+
+bool cart_id_matches(const char* line, const char* cart_id) {
 	// A valid ID line should start with "ID:"
-	if (strlen(line) < 9 || strncmp(line, "ID:", 3) != 0)
+	if (strlen(line) < 3 + CARTID_LENGTH || strncmp(line, "ID:", 3) != 0)
 		return false;
 
 	// Skip the line if it doesn't match our cart_id, '_' = don't care
-	// Cart IDs should always be 6 characters long
-	for (size_t i = 0; i < 6; i++) {
+	for (size_t i = 0; i < CARTID_LENGTH; i++) {
 		if (line[i + 3] != '_' && line[i + 3] != cart_id[i])
 			return false; // character didn't match
 
@@ -214,11 +227,8 @@ static uint8_t detect_rom_settings_in_db(const char* lookup_hash, const char* db
 
 	const char* line;
 	while ((line = FileReadLine(&reader))) {
-		if (strlen(line) < 32 || !((line[0] >= '0' && line[0] <= '9') || (line[0] >= 'a' && line[0] <= 'f')))
-			continue;
-
-		// skip the line if it doesn't start with our hash
-		if (strncmp(lookup_hash, line, 32) != 0)
+		// Skip the line if it doesn't start with our hash
+		if (!md5_matches(line, lookup_hash))
 			continue;
 
 		printf("Found ROM entry: %s\n", line);
@@ -250,8 +260,8 @@ static uint8_t detect_rom_settings_in_db_with_cartid(const char* cart_id, const 
 
 	const char* line;
 	while ((line = FileReadLine(&reader))) {
-		// skip the line if it doesn't start with our id
-		if (!id_matches(line, cart_id))
+		// Skip the line if it doesn't start with our ID
+		if (!cart_id_matches(line, cart_id))
 			continue;
 
 		printf("Found ROM entry: %s\n", line);
@@ -274,7 +284,7 @@ static const char* DB_FILE_NAMES[] =
 	"N64-database_user.txt",
 };
 
-static uint8_t detect_rom_settings_in_dbs(const char* lookup) {
+static uint8_t detect_rom_settings_in_dbs_with_md5(const char* lookup) {
 	for (const char* db_file_name : DB_FILE_NAMES) {
 		const auto detected = detect_rom_settings_in_db(lookup, db_file_name);
 		if (detected != 0) return detected;
@@ -283,12 +293,22 @@ static uint8_t detect_rom_settings_in_dbs(const char* lookup) {
 	return 0;
 }
 
-static uint8_t detect_rom_settings_in_dbs_with_cartid(const char* id) {
-	for (const char* db_file_name : DB_FILE_NAMES) {
-		const auto detected = detect_rom_settings_in_db_with_cartid(id, db_file_name);
-		if (detected != 0) return detected;
+static uint8_t detect_rom_settings_in_dbs_with_cartid(const char* lookup) {
+	if (strlen(lookup) < CARTID_LENGTH)
+		return 0;
+
+	for (auto i = 0; i < CARTID_LENGTH; i++) {
+		if ((lookup[i] >= '0' && lookup[i] <= '9') || (lookup[i] >= 'A' && lookup[i] <= 'Z'))
+			continue;
+
+		return 0;
 	}
 
+	for (const char* db_file_name : DB_FILE_NAMES) {
+		const auto detected = detect_rom_settings_in_db_with_cartid(lookup, db_file_name);
+		if (detected != 0) return detected;
+	}
+	
 	return 0;
 }
 
@@ -320,6 +340,7 @@ static bool detect_rom_settings_from_first_chunk(char region_code, uint64_t crc)
 	// the following checks assume we're on a little-endian platform
 	switch (crc) {
 		default: 
+			printf("Unknown CIC, uses default\n");
 			is_known_cic = false;
 			// fall through
 		case UINT64_C(0x000000a316adc55a): 
@@ -330,8 +351,8 @@ static bool detect_rom_settings_from_first_chunk(char region_code, uint64_t crc)
 			  cic = system_type == SystemType::NTSC
 			? CIC::CIC_NUS_6102 
 			: CIC::CIC_NUS_7101; break;
-		case UINT64_C(0x000000a405397b05): cic = CIC::CIC_NUS_7102; system_type = SystemType::PAL; break;
-		case UINT64_C(0x000000a0f26f62fe): cic = CIC::CIC_NUS_6101; system_type = SystemType::NTSC; break;
+		case UINT64_C(0x000000a405397b05): system_type = SystemType::PAL; cic = CIC::CIC_NUS_7102; break;
+		case UINT64_C(0x000000a0f26f62fe): system_type = SystemType::NTSC; cic = CIC::CIC_NUS_6101; break;
 		case UINT64_C(0x000000a9229d7c45): 
 			  cic = system_type == SystemType::NTSC 
 			? CIC::CIC_NUS_6103 
@@ -398,7 +419,7 @@ int n64_rom_tx(const char* name, unsigned char index) {
 	// 2 = Found some ROM info in DB (Save type etc.), but System region and CIC has not been determined
 	// 3 = Has detected everything, System type, CIC, Save type etc.
 	uint8_t rom_settings_detected = 0;
-	RomFormat rom_format = RomFormat::UNKNOWN;
+	RomFormat rom_format;
 
 	MD5Context ctx;
 	MD5Init(&ctx);
@@ -419,7 +440,10 @@ int n64_rom_tx(const char* name, unsigned char index) {
 				printf("Failed to load ROM: must be at least 4096 bytes\n");
 				return 0;
 			}
+
 			rom_format = detectRomFormat(buf);
+			if (rom_format == RomFormat::UNKNOWN)
+				printf("Unknown ROM format\n");
 		}
 
 		// normalize data to big-endian format
@@ -428,7 +452,7 @@ int n64_rom_tx(const char* name, unsigned char index) {
 		MD5Update(&ctx, buf, chunk);
 
 		if (is_first_chunk) {
-			// try to detect ROM settings based on header MD5 hash
+			// Try to detect ROM settings based on header MD5 hash
 
 			// For calculating the MD5 hash of the header, we need to make a
 			// copy of the context before calling MD5Final, otherwise the file
@@ -439,16 +463,27 @@ int n64_rom_tx(const char* name, unsigned char index) {
 			md5_to_hex(md5, md5_hex);
 			printf("Header MD5: %s\n", md5_hex);
 
-			rom_settings_detected = detect_rom_settings_in_dbs(md5_hex);
-			if (rom_settings_detected == 0) { 
-				// ROM settings wasn't found in DB, System region and/or CIC wasn't detected
+			rom_settings_detected = detect_rom_settings_in_dbs_with_md5(md5_hex);
+			if (rom_settings_detected == 0)
 				printf("No ROM information found for header hash: %s\n", md5_hex);
-				for (size_t i = 0x40 / sizeof(uint32_t); i < 0x1000 / sizeof(uint32_t); i++) ipl3_crc += ((uint32_t*)buf)[i];
-				strncpy(cart_id, (char*)(buf + 0x3b), 4);
-				sprintf((char*)(cart_id + 4), "%02X", buf[0x3f]);
-				cart_id[6] = '\0';
-				printf("Cartridge ID: %s\n", cart_id);
-			}
+
+			// Calculate boot ROM checksum
+			for (size_t i = 0x40 / sizeof(uint32_t); i < 0x1000 / sizeof(uint32_t); i++) ipl3_crc += ((uint32_t*)buf)[i];
+
+			/* The first byte (starting at 0x3b) indicates the type of ROM 
+			 *   'N' = cart
+			 *   'D' = 64DD disk
+			 *   'C' = cartridge part of expandable game
+			 *   'E' = 64DD expansion for cart
+			 *   'Z' = Aleck64 cart
+			 * The second and third byte form a 2-letter ID for the game
+			 * The fourth byte indicates the region and language for the game 
+			 * The fifth byte indicates the revision of the game */
+
+			strncpy(cart_id, (char*)(buf + 0x3b), 4);
+			sprintf((char*)(cart_id + 4), "%02X", buf[0x3f]);
+			cart_id[6] = '\0';
+			printf("Cartridge ID: %s\n", cart_id);
 		}
 
 		user_io_file_tx_data(buf, chunk);
@@ -462,15 +497,19 @@ int n64_rom_tx(const char* name, unsigned char index) {
 	md5_to_hex(md5, md5_hex);
 	printf("File MD5: %s\n", md5_hex);
 
-	// Try to detect ROM settings from full file MD5 if they are not detected yet
+	// Try to detect ROM settings from full file MD5 if they're are not detected yet
 	if (rom_settings_detected == 0)
-		rom_settings_detected = detect_rom_settings_in_dbs(md5_hex);
+		rom_settings_detected = detect_rom_settings_in_dbs_with_md5(md5_hex);
 
+	// Try to detect ROM settings by cart ID if they're are not detected yet
 	if (rom_settings_detected == 0) {
+		printf("No ROM information found for file hash: %s\n", md5_hex);
 		rom_settings_detected = detect_rom_settings_in_dbs_with_cartid(cart_id);
+		if (rom_settings_detected == 0)
+			printf("No ROM information found for cart ID: %s\n", cart_id);
 		// Try detect (partial) ROM settings by analyzing the ROM itself. (region, cic and save type)
 		if ((rom_settings_detected == 0 || rom_settings_detected == 2) && detect_rom_settings_from_first_chunk(cart_id[3], ipl3_crc))
-			rom_settings_detected += 1;
+			rom_settings_detected |= 1;
 	}
 	else if (rom_settings_detected == 2 && detect_rom_settings_from_first_chunk(cart_id[3], ipl3_crc)) {
 		// Complement info found in DB with System region and CIC
@@ -480,12 +519,12 @@ int n64_rom_tx(const char* name, unsigned char index) {
 	printf("Done.\n");
 	FileClose(&f);
 
-	// mount save state
+	// Mount save state
 	char file_path[1024];
 	FileGenerateSavePath(name, file_path);
 	user_io_file_mount(file_path, 0, 1);
 
-	// signal end of transmission
+	// Signal end of transmission
 	user_io_set_download(0);
 	ProgressMessage(0, 0, 0, 0);
 
