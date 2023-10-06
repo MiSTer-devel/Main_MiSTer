@@ -337,24 +337,30 @@ static bool detect_rom_settings_from_first_chunk(char region_code, uint64_t crc)
 	// the following checks assume we're on a little-endian platform
 	switch (crc) {
 		default: 
-			printf("Unknown CIC, uses default\n");
+			printf("Unknown CIC (0x%016llx), uses default\n", crc);
 			is_known_cic = false;
 			// fall through
 		case UINT64_C(0x000000a316adc55a): 
+		case UINT64_C(0x000000a30dacd530): // NOP:ed out CRC check
 		case UINT64_C(0x000000039c981107): // hcs64's CIC-6102 IPL3 replacement
-		case UINT64_C(0x000000a30dacd530): // Unknown. Used in SM64 hacks
 		case UINT64_C(0x000000d2828281b0): // Unknown. Used in some homebrew
 		case UINT64_C(0x0000009acc31e644): // Unknown. Used in some betas and homebrew. Dev boot code?
 			cic = system_type == SystemType::NTSC
 			? CIC::CIC_NUS_6102 
 			: CIC::CIC_NUS_7101; break;
-		case UINT64_C(0x000000a405397b05): system_type = SystemType::PAL; cic = CIC::CIC_NUS_7102; break;
-		case UINT64_C(0x000000a0f26f62fe): system_type = SystemType::NTSC; cic = CIC::CIC_NUS_6101; break;
+		case UINT64_C(0x000000a405397b05): 
+		case UINT64_C(0x000000a3fc388adb): // NOP:ed out CRC check
+			system_type = SystemType::PAL; cic = CIC::CIC_NUS_7102; break;
+		case UINT64_C(0x000000a0f26f62fe): 
+		case UINT64_C(0x000000a0e96e72d4): // NOP:ed out CRC check
+			system_type = SystemType::NTSC; cic = CIC::CIC_NUS_6101; break;
 		case UINT64_C(0x000000a9229d7c45): 
+		case UINT64_C(0x000000a9199c8c1b): // NOP:ed out CRC check
 			cic = system_type == SystemType::NTSC
 			? CIC::CIC_NUS_6103 
 			: CIC::CIC_NUS_7103; break;
 		case UINT64_C(0x000000f8b860ed00): 
+		case UINT64_C(0x000000f8af5ffcd6): // NOP:ed out CRC check
 			cic = system_type == SystemType::NTSC
 			? CIC::CIC_NUS_6105 
 			: CIC::CIC_NUS_7105; break;
