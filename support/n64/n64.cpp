@@ -503,9 +503,11 @@ int n64_rom_tx(const char* name, unsigned char index) {
 		rom_settings_detected = detect_rom_settings_in_dbs_with_cartid(cart_id);
 		if (rom_settings_detected == 0)
 			printf("No ROM information found for cart ID: %s\n", cart_id);
-		// Try detect (partial) ROM settings by analyzing the ROM itself. (region, cic and save type)
 		// Try detect (partial) ROM settings by analyzing the ROM itself. (System region and CIC)
+		if ((rom_settings_detected == 0 || rom_settings_detected == 2) &&
+			detect_rom_settings_from_first_chunk(cart_id[3], bootcode_sum)) {
 			rom_settings_detected |= 1;
+		}
 	}
 	// Complement info found in DB with System region and CIC
 	else if (rom_settings_detected == 2 && 
