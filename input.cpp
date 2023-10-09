@@ -2098,11 +2098,11 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 			if (abs_x > input[dev].max_cardinal) input[dev].max_cardinal = abs_x;
 			if (abs_y > input[dev].max_cardinal) input[dev].max_cardinal = abs_y;
 
-			// Update maximum observed distance
+			// Update maximum observed diag
 			// Use sum of squares and only calc sqrt() when necessary
 			const int ss_range_curr = x*x + y*y;
 			// compare to max ss_range and update if larger
-			if (ss_range_curr > input[dev].ss_range)
+			if ((ss_range_curr > input[dev].ss_range) & (abs(abs_x - abs_y) <= 3))
 			{
 				input[dev].ss_range = ss_range_curr;
 				input[dev].max_range = sqrt(ss_range_curr);
