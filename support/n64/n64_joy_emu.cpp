@@ -2,7 +2,11 @@
 #include <stdint.h>
 #include <math.h>
 
-#define N64_MAX_DIST 97.5807358037f
+#define N64_MAX_DIAG 69
+#define N64_MAX_DIST sqrt(N64_MAX_DIAG * N64_MAX_DIAG * 2)
+#define N64_MAX_CARDINAL 85
+#define OUTER_DEADZONE 2.0f
+#define WEDGE_BOUNDARY (N64_MAX_CARDINAL - 69.0f) / 69.0f
 
 void n64_joy_emu(int x, int y, int* x2, int* y2, int max_cardinal, float max_range)
 {
@@ -16,10 +20,10 @@ void n64_joy_emu(int x, int y, int* x2, int* y2, int max_cardinal, float max_ran
 	// or reduce cardinals to 85, whichever is less aggressive (smaller reduction in scaling)
 	// (subtracts 2 from each to allow for minor outer deadzone)
 	// assumes the max range is at least 85 (max cardinal of original controller)
-	if (max_cardinal < 85) max_cardinal = 85;
+	if (max_cardinal < N64_MAX_CARDINAL) max_cardinal = N64_MAX_CARDINAL;
 	if (max_range < N64_MAX_DIST) max_range = N64_MAX_DIST;
-	float scale_cardinal = 85.0f / (max_cardinal - 2);
-	float scale_range = N64_MAX_DIST / (max_range - 2);
+	float scale_cardinal = N64_MAX_CARDINAL / (max_cardinal - OUTER_DEADZONE);
+	float scale_range = N64_MAX_DIST / (max_range - OUTER_DEADZONE);
 	float scale = scale_cardinal > scale_range ? scale_cardinal : scale_range;
 	float scaled_x = abs_x * scale;
 	float scaled_y = abs_y * scale;
@@ -38,14 +42,14 @@ void n64_joy_emu(int x, int y, int* x2, int* y2, int max_cardinal, float max_ran
 	// Clamp scaled_min and scaled_max
 	// Note: wedge boundary is given by x = 85 - y * ((85 - 69) / 69)
 	// If x + y * (16 / 69) > 85, coordinates exceed boundary and need clamped
-	float boundary = scaled_max + scaled_min * 0.231884057971f;
-	if (boundary > 85) {
+	float boundary = scaled_max + scaled_min * WEDGE_BOUNDARY;
+	if (boundary > N64_MAX_CARDINAL) {
 		// We know target value is on:
 		//   1) Boundary line: x = 85 - y * (16 / 69)
 		//   2) Observed slope line: y = (scaled_max / scaled_min) * x
 		// Solving system of equations yields:
-		scaled_min = 85 * scaled_min / boundary;
-		scaled_max = 85 - scaled_min * 0.231884057971f; // Boundary line
+		scaled_min = N64_MAX_CARDINAL * scaled_min / boundary;
+		scaled_max = N64_MAX_CARDINAL - scaled_min * WEDGE_BOUNDARY; // Boundary line
 	}
 
 	// Move back from wedge to actual coordinates
@@ -58,4 +62,8 @@ void n64_joy_emu(int x, int y, int* x2, int* y2, int max_cardinal, float max_ran
 	}
 }
 
+#undef N64_MAX_DIAG
 #undef N64_MAX_DIST
+#undef N64_MAX_CARDINAL
+#undef OUTER_DEADZONE
+#undef WEDGE_BOUNDARY
