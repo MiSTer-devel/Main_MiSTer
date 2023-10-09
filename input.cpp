@@ -16,6 +16,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <stdarg.h>
+#include <math.h>
 
 #include "input.h"
 #include "user_io.h"
@@ -1198,7 +1199,9 @@ typedef struct
 	char     id[80];
 	char     name[128];
 	char     sysfs[512];
-	int      max_range;
+	int      ss_range;
+	int 	 max_cardinal;
+	float    max_range;
 } devInput;
 
 static devInput input[NUMDEV] = {};
@@ -2088,14 +2091,25 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 		int y = pos[stick][num][1];
 		if (is_n64() && stick == 0)
 		{
+			// Update maximum observed cardinal distance
 			const int abs_x = abs(x);
 			const int abs_y = abs(y);
 
-			if (abs_x > input[dev].max_range) input[dev].max_range = abs_x;
-			if (abs_y > input[dev].max_range) input[dev].max_range = abs_y;
+			if (abs_x > input[dev].max_cardinal) input[dev].max_cardinal = abs_x;
+			if (abs_y > input[dev].max_cardinal) input[dev].max_cardinal = abs_y;
+
+			// Update maximum observed distance
+			// Use sum of squares and only calc sqrt() when necessary
+			const int ss_range_curr = x*x + y*y;
+			// compare to max ss_range and update if larger
+			if (ss_range_curr > input[dev].ss_range)
+			{
+				input[dev].ss_range = ss_range_curr;
+				input[dev].max_range = sqrt(ss_range_curr);
+			}
 
 			// emulate n64 joystick range and shape for regular -127-+127 controllers
-			n64_joy_emu(x, y, &x, &y, input[dev].max_range);
+			n64_joy_emu(x, y, &x, &y, input[dev].max_cardinal, input[dev].max_range);
 		}
 		if(stick) user_io_r_analog_joystick(num, (char)x, (char)y);
 		else user_io_l_analog_joystick(num, (char)x, (char)y);

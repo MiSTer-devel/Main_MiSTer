@@ -2,7 +2,9 @@
 #include <stdint.h>
 #include <math.h>
 
-void n64_joy_emu(int x, int y, int* x2, int* y2, int max_range)
+#define N64_MAX_DIST 97.5807358037f
+
+void n64_joy_emu(int x, int y, int* x2, int* y2, int max_cardinal, float max_range)
 {
 	// Move to top right quadrant to standardize solutions
 	const int x_flip = x < 0 ? -1 : 1;
@@ -10,10 +12,15 @@ void n64_joy_emu(int x, int y, int* x2, int* y2, int max_range)
 	const int abs_x = x * x_flip;
 	const int abs_y = y * y_flip;
 
-	// Reduce range to radius 97.5807358037f ((69,69) diagonal of original controller)
+	// Either reduce range to radius 97.5807358037f ((69,69) diagonal of original controller)
+	// or reduce cardinals to 85, whichever is less aggressive (smaller reduction in scaling)
+	// (subtracts 2 from each to allow for minor outer deadzone)
 	// assumes the max range is at least 85 (max cardinal of original controller)
-	if (max_range < 85) max_range = 85;
-	float scale = 97.5807358037f / max_range;
+	if (max_cardinal < 85) max_cardinal = 85;
+	if (max_range < N64_MAX_DIST) max_range = N64_MAX_DIST;
+	float scale_cardinal = 85.0f / (max_cardinal - 2);
+	float scale_range = N64_MAX_DIST / (max_range - 2);
+	float scale = scale_cardinal > scale_range ? scale_cardinal : scale_range;
 	float scaled_x = abs_x * scale;
 	float scaled_y = abs_y * scale;
 
@@ -50,3 +57,5 @@ void n64_joy_emu(int x, int y, int* x2, int* y2, int max_range)
 		*y2 = y_flip * scaled_max;
 	}
 }
+
+#undef N64_MAX_DIST
