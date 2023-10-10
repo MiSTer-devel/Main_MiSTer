@@ -28,8 +28,8 @@ satcdd_t::satcdd_t() {
 	speed = 0;
 	audioLength = 0;
 	audioFirst = 0;
-	//chd_hunkbuf = NULL;
-	//chd_hunknum = -1;
+	chd_hunkbuf = NULL;
+	chd_hunknum = -1;
 	SendData = NULL;
 
 	stat[0] = SATURN_STAT_OPEN;
@@ -287,7 +287,7 @@ int satcdd_t::Load(const char *filename)
 			return (-1);
 		}
 	}
-	/*else if (!strncasecmp(".chd", ext, 4)) {
+	else if (!strncasecmp(".chd", ext, 4)) {
 		chd_error err = mister_load_chd(filename, &this->toc);
 		if (err != CHDERR_NONE)
 		{
@@ -302,7 +302,11 @@ int satcdd_t::Load(const char *filename)
 
 		this->chd_hunkbuf = (uint8_t *)malloc(CD_FRAME_SIZE * CD_FRAMES_PER_HUNK);
 		this->chd_hunknum = -1;
-	}*/
+		if (this->toc.tracks[0].sector_size)
+		{
+			this->sectorSize = this->toc.tracks[0].sector_size;
+		}
+	}
 	else {
 		return (-1);
 
@@ -353,7 +357,7 @@ void satcdd_t::Unload()
 {
 	if (this->loaded)
 	{
-		/*if (this->toc.chd_f)
+		if (this->toc.chd_f)
 		{
 			chd_close(this->toc.chd_f);
 		}
@@ -362,7 +366,7 @@ void satcdd_t::Unload()
 		{
 			free(this->chd_hunkbuf);
 			this->chd_hunkbuf = NULL;
-		}*/
+		}
 
 		for (int i = 0; i < this->toc.last; i++)
 		{
@@ -402,7 +406,7 @@ void satcdd_t::Reset() {
 	speed = 0;
 	audioLength = 0;
 	audioFirst = 0;
-	//chd_audio_read_lba = 0;
+	chd_audio_read_lba = 0;
 	satcdd.SendData = 0;
 
 	stat[0] = SATURN_STAT_OPEN;
@@ -480,6 +484,7 @@ void satcdd_t::CommandExec() {
 	case SATURN_COMM_READ: 
 		this->seek_lba = fad - 150 - 4;
 		this->lba = fad - 150 - 4;
+		this->chd_audio_read_lba = this->lba;
 
 		this->track = this->toc.GetTrackByLBA(this->seek_lba);
 
@@ -922,7 +927,7 @@ void satcdd_t::Update() {
 		this->lba++;
 		this->track = this->toc.GetTrackByLBA(this->lba);
 		this->seek_lba = this->lba;
-		//this->chd_audio_read_lba++;
+		this->chd_audio_read_lba++;
 		break;
 
 	case Pause:
@@ -934,6 +939,7 @@ void satcdd_t::Update() {
 	case SeekRead:
 		if (!this->seek_pend) {
 			this->lba = this->seek_lba;
+			this->chd_audio_read_lba = this->lba;
 		}
 		this->track = this->toc.GetTrackByLBA(this->lba);
 
@@ -947,6 +953,7 @@ void satcdd_t::Update() {
 
 	case SeekRing:
 		this->lba = this->seek_lba;
+		this->chd_audio_read_lba = this->lba;
 		this->track = this->toc.GetTrackByLBA(this->lba);
 		break;
 	}
@@ -1016,17 +1023,17 @@ void satcdd_t::ReadData(uint8_t *buf)
 	if (this->toc.tracks[this->track].type)
 	{
 		int lba_ = this->lba >= 0 ? this->lba : 0;
-		/*if (this->toc.chd_f)
+		if (this->toc.chd_f)
 		{
 			int read_offset = 0;
-			if (this->sectorSize != 2048)
+			if (this->sectorSize == 2048)
 			{
 				read_offset += 16;
 			}
 
-			mister_chd_read_sector(this->toc.chd_f, this->lba + this->toc.tracks[this->track].offset, 0, read_offset, 2048, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, lba_ + this->toc.tracks[this->track].offset, read_offset, 0, this->sectorSize, buf, this->chd_hunkbuf, &this->chd_hunknum);
 		}
-		else*/ {
+		else {
 			if (this->sectorSize == 2048)
 			{
 				offs = (lba_ * 2048) - this->toc.tracks[this->track].offset;
@@ -1062,29 +1069,30 @@ int satcdd_t::ReadCDDA(uint8_t *buf, int first)
 	}*/
 
 	int offs = 0;
-	/*if (this->toc.chd_f)
+	if (this->toc.chd_f)
 	{
-		for (int i = 0; i < this->audioLength / 2352; i++)
+		for (int i = 0; i < len / 2352; i++)
 		{
-			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->track].offset, 2352 * i, 0, 2352, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->track].offset ,2352 * i, 0, 2352, buf, this->chd_hunkbuf, &this->chd_hunknum);
 		}
 
 		//CHD audio requires byteswap. There's probably a better way to do this...
 
-		for (int swapidx = 0; swapidx < this->audioLength; swapidx += 2)
+		
+		for (int swapidx = 0; swapidx < len; swapidx += 2)
 		{
 			uint8_t temp = buf[swapidx];
 			buf[swapidx] = buf[swapidx + 1];
 			buf[swapidx + 1] = temp;
 		}
 
-		if ((this->audioLength / 2352) > 1)
+		if ((len / 2352) > 1)
 		{
 			this->chd_audio_read_lba++;
 		}
 
 	}
-	else*/ if (this->toc.tracks[this->track].f.opened()) {
+	else if (this->toc.tracks[this->track].f.opened()) {
 		offs = (this->lba * 2352) - this->toc.tracks[this->track].offset;
 		if (!first) offs += 2352;
 		FileSeek(&this->toc.tracks[this->track].f, offs, SEEK_SET);
