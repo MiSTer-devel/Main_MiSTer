@@ -2226,7 +2226,7 @@ void HandleUI(void)
 						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
-						if (is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
+						if (is_saturn() || is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
 						{
 							//look for CHD too
 							if (!strcasestr(ext, "CHD"))
