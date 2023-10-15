@@ -2077,6 +2077,11 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 		}
 	}
 }
+static int is_swap()
+{
+	return (is_n64() && user_io_status_get("[63]") ==1);
+}
+
 
 static void joy_analog(int dev, int axis, int offset, int stick = 0)
 {
@@ -2089,7 +2094,7 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 		pos[stick][num][axis] = offset;
 		int x = pos[stick][num][0];
 		int y = pos[stick][num][1];
-		if (is_n64() && stick == 0)
+		if (is_n64())
 		{
 			// Update maximum observed cardinal distance
 			const int abs_x = abs(x);
@@ -2111,7 +2116,7 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 			// emulate n64 joystick range and shape for regular -127-+127 controllers
 			n64_joy_emu(x, y, &x, &y, input[dev].max_cardinal, input[dev].max_range);
 		}
-		if(stick) user_io_r_analog_joystick(num, (char)x, (char)y);
+		if((stick && !is_swap()) || (!stick && is_swap())) user_io_r_analog_joystick(num, (char)x, (char)y);
 		else user_io_l_analog_joystick(num, (char)x, (char)y);
 	}
 }
