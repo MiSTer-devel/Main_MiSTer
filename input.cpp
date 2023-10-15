@@ -2089,8 +2089,37 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 		pos[stick][num][axis] = offset;
 		int x = pos[stick][num][0];
 		int y = pos[stick][num][1];
-		if (is_n64() && stick == 0)
+		if (is_n64())
 		{
+			if(user_io_status_get("[63]")==1) //reverse sticks
+			{
+				stick=1-stick;
+			}
+			if(user_io_status_get("[62]")==1) //p1 right stick -> p3
+			{
+			  if (stick && num<2) 
+			  {
+				num+=2;
+				stick=0;
+			  }
+			  else if(!stick && 2<num && num<5){ //swap sticks to minimize conflict
+				  num-=2;
+				  stick=1;
+			  }
+			}
+			if(user_io_status_get("[61]")==1) //p1 right stick -> p2
+			{
+				if (stick && ( (num==0) | (num==2))) 
+				{
+					num++;
+					stick=0;
+				}
+				else if(!stick && num%2==1)
+				{
+					num--;
+					stick=1;
+				}
+			}
 			// Update maximum observed cardinal distance
 			const int abs_x = abs(x);
 			const int abs_y = abs(y);
