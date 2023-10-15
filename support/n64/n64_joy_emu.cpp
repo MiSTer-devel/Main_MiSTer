@@ -9,29 +9,19 @@
 #define OUTER_DEADZONE 2.0f
 #define WEDGE_BOUNDARY (N64_MAX_CARDINAL - 69.0f) / 69.0f
 
-static int swap=0;
-static int p2=0;
-static int p3=0;
-void n64update()
-{
-	swap=user_io_status_get("[63]");
-	p3=user_io_status_get("[62]");
-	p2=user_io_status_get("[61]");
 
-}
 
 void stick_swap(int num, int stick, int *num2, int *stick2)
 {
-	//if(user_io_osd_is_visible())
-	if(true)
-	{
-			n64update();
-	}
-	if(swap==1) //reverse sticks
+	int get=user_io_status_get("TV",1);
+	int p2=get%2;
+	int p3=get&2;
+	int swap=get&4;
+	if(swap) //reverse sticks
 	{
 		stick=1-stick;
 	}
-	if(p3==1) //p1 right stick -> p3
+	if(p3) //p1 right stick -> p3
 	{
 		if (stick && num<2) 
 		{
@@ -44,7 +34,7 @@ void stick_swap(int num, int stick, int *num2, int *stick2)
 			stick=1;
 		}
 	}
-	if(p2==1) //p1 right stick -> p2
+	if(p2) //p1 right stick -> p2
 	{
 		if (stick && ( (num==0) | (num==2))) 
 		{
