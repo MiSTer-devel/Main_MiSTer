@@ -1199,9 +1199,9 @@ typedef struct
 	char     id[80];
 	char     name[128];
 	char     sysfs[512];
-	int      ss_range;
-	int 	 max_cardinal;
-	float    max_range;
+	int      ss_range[2];
+	int 	 max_cardinal[2];
+	float    max_range[2];
 } devInput;
 
 static devInput input[NUMDEV] = {};
@@ -2091,54 +2091,26 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 		int y = pos[stick][num][1];
 		if (is_n64())
 		{
-			if(user_io_status_get("[63]")==1) //reverse sticks
-			{
-				stick=1-stick;
-			}
-			if(user_io_status_get("[62]")==1) //p1 right stick -> p3
-			{
-			  if (stick && num<2) 
-			  {
-				num+=2;
-				stick=0;
-			  }
-			  else if(!stick && 2<num && num<5){ //swap sticks to minimize conflict
-				  num-=2;
-				  stick=1;
-			  }
-			}
-			if(user_io_status_get("[61]")==1) //p1 right stick -> p2
-			{
-				if (stick && ( (num==0) | (num==2))) 
-				{
-					num++;
-					stick=0;
-				}
-				else if(!stick && num%2==1)
-				{
-					num--;
-					stick=1;
-				}
-			}
 			// Update maximum observed cardinal distance
 			const int abs_x = abs(x);
 			const int abs_y = abs(y);
 
-			if (abs_x > input[dev].max_cardinal) input[dev].max_cardinal = abs_x;
-			if (abs_y > input[dev].max_cardinal) input[dev].max_cardinal = abs_y;
+			if (abs_x > input[dev].max_cardinal[stick]) input[dev].max_cardinal[stick] = abs_x;
+			if (abs_y > input[dev].max_cardinal[stick]) input[dev].max_cardinal[stick] = abs_y;
 
 			// Update maximum observed diag
 			// Use sum of squares and only calc sqrt() when necessary
 			const int ss_range_curr = x*x + y*y;
 			// compare to max ss_range and update if larger
-			if ((ss_range_curr > input[dev].ss_range) & (abs(abs_x - abs_y) <= 3))
+			if ((ss_range_curr > input[dev].ss_range[stick]) & (abs(abs_x - abs_y) <= 3))
 			{
-				input[dev].ss_range = ss_range_curr;
-				input[dev].max_range = sqrt(ss_range_curr);
+				input[dev].ss_range[stick] = ss_range_curr;
+				input[dev].max_range[stick] = sqrt(ss_range_curr);
 			}
 
 			// emulate n64 joystick range and shape for regular -127-+127 controllers
-			n64_joy_emu(x, y, &x, &y, input[dev].max_cardinal, input[dev].max_range);
+			n64_joy_emu(x, y, &x, &y, input[dev].max_cardinal[stick], input[dev].max_range[stick]);
+			stick_swap(num,stick,&num,&stick);
 		}
 		if(stick) user_io_r_analog_joystick(num, (char)x, (char)y);
 		else user_io_l_analog_joystick(num, (char)x, (char)y);
