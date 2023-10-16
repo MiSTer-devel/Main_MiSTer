@@ -2741,6 +2741,9 @@ static void set_yc_mode()
 		int pal = fps < 55.f;
 		double CLK_REF = (pal || (cfg.ntsc_mode == 1)) ? 4.43361875f : (cfg.ntsc_mode == 2) ? 3.575611f : 3.579545f;
 		double CLK_VIDEO = current_video_info.ctime * 100.f / current_video_info.ptime;
+		
+		float prate = current_video_info.width * 100.f;
+		prate /= current_video_info.ptime;
 
 		int64_t PHASE_INC = ((int64_t)((CLK_REF / CLK_VIDEO) * 1099511627776LL)) & 0xFFFFFFFFFFLL;
 
@@ -2749,12 +2752,14 @@ static void set_yc_mode()
 		int COLORBURST_RANGE = (COLORBURST_START << 10) | COLORBURST_END;
 
 		char yc_key[64];
+		char yc_key_expand[64];
 		sprintf(yc_key, "%s_%.1f%s%s", user_io_get_core_name(1), fps, current_video_info.interlaced ? "i" : "", (pal || !cfg.ntsc_mode) ? "" : (cfg.ntsc_mode == 1) ? "s" : "m");
+		snprintf(yc_key_expand, sizeof(yc_key_expand), "%s_%.2f", yc_key, prate);
 		printf("Calculated YC parameters for '%s': %s PHASE_INC=%lld, COLORBURST_START=%d, COLORBURST_END=%d\n", yc_key, pal ? "PAL" : (cfg.ntsc_mode == 1) ? "PAL60" : (cfg.ntsc_mode == 2) ? "PAL-M" : "NTSC", PHASE_INC, COLORBURST_START, COLORBURST_END);
 
 		for (uint i = 0; i < sizeof(yc_modes) / sizeof(yc_modes[0]); i++)
 		{
-			if (!strcasecmp(yc_modes[i].key, yc_key))
+		if (!strcasecmp(yc_modes[i].key, yc_key) || !strcasecmp(yc_modes[i].key, yc_key_expand))
 			{
 				printf("Override YC PHASE_INC with value: %lld\n", yc_modes[i].phase_inc);
 				PHASE_INC = yc_modes[i].phase_inc;
