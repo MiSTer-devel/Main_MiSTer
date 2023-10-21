@@ -78,6 +78,7 @@ NeoGeo: SNK Neo Geo MVS/AES/CD
 NES: Nintendo NES
 Odyssey2: Magnavox Odyssey2
 S32X: Sega 32X
+Saturn: Sega Saturn
 SGB: Nintendo Super Game Boy
 SMS: Sega Master System/Game Gear
 SNES: Nintendo Super NES
