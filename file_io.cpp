@@ -1274,20 +1274,9 @@ static const char *GetRelativeFileName(const char *folder, const char *path)
 
 static bool IsInSameFolder(const char *folder, const char *path)
 {
-	if (strcasestr(path, folder) == path)
-	{
-		const char *subpath = path + strlen(folder);
-		if (*subpath == '/')
-		{
-			subpath++;
-			if (*subpath != '\0')
-			{
-				const char *slash = strchr(subpath, '/');
-				return !slash || *(slash + 1) == '\0';
-			}
-		}
-	}
-	return false;
+	const char *p = strrchr(path, '/');
+	size_t len = p ? p - path : 0;
+	return (strlen(folder) == len) && !strncasecmp(path, folder, len);
 }
 
 static int names_loaded = 0;
