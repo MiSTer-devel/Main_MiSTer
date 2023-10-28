@@ -492,7 +492,7 @@ int n64_rom_tx(const char* name, unsigned char index) {
 				printf("No ROM information found for header hash: %s\n", md5_hex);
 
 			// Calculate boot ROM checksum
-			for (uint32_t i = 0x40 / sizeof(uint32_t); i < (buf[0x3b] == 'Z' ? 0x0c00 : 0x1000) / sizeof(uint32_t); i++)
+			for (uint32_t i = 0x40 / sizeof(uint32_t); i < (buf[0x3b] == 'Z' ? 0xc00 : 0x1000) / sizeof(uint32_t); i++)
 				bootcode_sum += ((uint32_t*)buf)[i];
 
 			/* The first byte (starting at 0x3b) indicates the type of ROM 
