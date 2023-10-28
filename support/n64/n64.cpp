@@ -45,7 +45,8 @@ enum class CIC {
 	CIC_NUS_8303,
 	CIC_NUS_8401,
 	CIC_NUS_5167,
-	CIC_NUS_DDUS
+	CIC_NUS_DDUS,
+	CIC_NUS_5101
 };
 
 enum class SystemType {
@@ -58,12 +59,12 @@ enum class RomFormat {
 	UNKNOWN = 0,
 	BIG_ENDIAN,
 	BYTE_SWAPPED,
-	LITTLE_ENDIAN,
+	LITTLE_ENDIAN
 };
 
 enum class AutoDetect {
 	ON = 0,
-	OFF = 1,
+	OFF = 1
 };
 
 static RomFormat detectRomFormat(const uint8_t* data) {
@@ -82,6 +83,9 @@ static RomFormat detectRomFormat(const uint8_t* data) {
 
 static void normalizeData(uint8_t* data, size_t size, RomFormat format) {
 	switch(format) {
+		default:
+			// nothing to do
+			break;
 		case RomFormat::BYTE_SWAPPED:
 			for (size_t i = 0; i < size; i += 2) {
 				auto c0 = data[0];
@@ -103,9 +107,6 @@ static void normalizeData(uint8_t* data, size_t size, RomFormat format) {
 				data[3] = c0;
 				data += 4;
 			}
-			break;
-		default:
-			// nothing to do
 			break;
 	}
 }
@@ -157,6 +158,7 @@ static bool parse_and_apply_db_tags(char* tags) {
 			case fnv_hash("cic8401"): cic = CIC::CIC_NUS_8401; break;
 			case fnv_hash("cic5167"): cic = CIC::CIC_NUS_5167; break;
 			case fnv_hash("cicDDUS"): cic = CIC::CIC_NUS_DDUS; break;
+			case fnv_hash("cic5101"): cic = CIC::CIC_NUS_5101; break;
 			default: printf("Unknown tag: %s\n", tag); break;
 		}
 	}
@@ -372,9 +374,10 @@ static bool detect_rom_settings_from_first_chunk(char region_code, uint64_t crc)
 		case UINT64_C(0x000000a9df4b39e1): cic = CIC::CIC_NUS_8303; break;
 		case UINT64_C(0x000000aa764e39e1): cic = CIC::CIC_NUS_8401; break;
 		case UINT64_C(0x000000abb0b739e1): cic = CIC::CIC_NUS_DDUS; break;
+		case UINT64_C(0x00000081ce470326): cic = CIC::CIC_NUS_5101; break;
 	}
 
-	printf("System: %d, CIC: %d\n", (int)system_type, (int)cic);
+	if (is_known_cic) printf("System: %d, CIC: %d\n", (int)system_type, (int)cic);
 	printf("Auto-detect is on, updating OSD settings\n");
 
 	user_io_status_set("[80:79]", (uint32_t)system_type);
@@ -410,10 +413,30 @@ int n64_rom_tx(const char* name, unsigned char index) {
 	int size = bytes2send;
 	if (use_progress) ProgressMessage(0, 0, 0, 0);
 
+	if (index > 'A') {
+		// Handle non-N64 files (Game Boy)
+		while (bytes2send) {
+			uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
+			FileReadAdv(&f, buf, chunk);
+
+			user_io_file_tx_data(buf, chunk);
+
+			if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
+			bytes2send -= chunk;
+		}
+
+		printf("Done.\n");
+		FileClose(&f);
+
+		// Signal end of transmission
+		user_io_set_download(0);
+		ProgressMessage(0, 0, 0, 0);
+
+		return 1;
+	}
+
 	// save state processing
 	process_ss(name);
-
-	bool is_first_chunk = true;
 
 	// 0 = Nothing detected
 	// 1 = System region and CIC detected
@@ -428,9 +451,9 @@ int n64_rom_tx(const char* name, unsigned char index) {
 	char md5_hex[40];
 	uint64_t bootcode_sum = 0;
 	char cart_id[8];
+	bool is_first_chunk = true;
 
-	while (bytes2send)
-	{
+	while (bytes2send) {
 		uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 		FileReadAdv(&f, buf, chunk);
@@ -469,9 +492,8 @@ int n64_rom_tx(const char* name, unsigned char index) {
 				printf("No ROM information found for header hash: %s\n", md5_hex);
 
 			// Calculate boot ROM checksum
-			for (uint32_t i = 0x40 / sizeof(uint32_t); i < 0x1000 / sizeof(uint32_t); i++) {
+			for (uint32_t i = 0x40 / sizeof(uint32_t); i < (buf[0x3b] == 'Z' ? 0xc00 : 0x1000) / sizeof(uint32_t); i++)
 				bootcode_sum += ((uint32_t*)buf)[i];
-			}
 
 			/* The first byte (starting at 0x3b) indicates the type of ROM 
 			 *   'N' = cart
@@ -511,9 +533,8 @@ int n64_rom_tx(const char* name, unsigned char index) {
 			printf("No ROM information found for cart ID: %s\n", cart_id);
 		// Try detect (partial) ROM settings by analyzing the ROM itself. (System region and CIC)
 		if ((rom_settings_detected == 0 || rom_settings_detected == 2) &&
-			detect_rom_settings_from_first_chunk(cart_id[3], bootcode_sum)) {
+			detect_rom_settings_from_first_chunk(cart_id[3], bootcode_sum))
 			rom_settings_detected |= 1;
-		}
 	}
 	// Complement info found in DB with System region and CIC
 	else if (rom_settings_detected == 2 && 
