@@ -332,6 +332,13 @@ char is_n64()
 	return (is_n64_type == 1);
 }
 
+static int is_uneon_type = 0;
+char is_uneon()
+{
+	if (!is_uneon_type) is_uneon_type = strcasecmp(orig_name, "Uneon") ? 2 : 1;
+	return (is_uneon_type == 1);
+}
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -361,6 +368,7 @@ void user_io_read_core_name()
 	is_c128_type = 0;
 	is_st_type = 0;
 	is_pcxt_type = 0;
+	is_uneon_type = 0;
 	core_name[0] = 0;
 
 	char *p = user_io_get_confstr(0);
@@ -879,7 +887,7 @@ static void parse_config()
 				{
 					int idx = p[2] - '0';
 					StoreIdx_S(idx, str);
-					if (is_x86() || is_pcxt())
+					if (is_x86() || is_pcxt() || (is_uneon() && idx >= 2))
 					{
 						x86_set_image(idx, str);
 					}
@@ -1362,6 +1370,9 @@ void user_io_init(const char *path, const char *xml)
 		sleep(1);
 	}
 
+	uint8_t hotswap[4] = {};
+	ide_reset(hotswap);
+
 	parse_config();
 	if (!xml && defmra[0] && FileExists(defmra))
 	{
@@ -1460,6 +1471,8 @@ void user_io_init(const char *path, const char *xml)
 				else
 				{
 					const char *home = HomeDir();
+
+					if (is_uneon()) x86_ide_set();
 
 					if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 					{
@@ -2809,6 +2822,7 @@ void user_io_send_buttons(char force)
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
 			if (is_x86() || is_pcxt()) x86_init();
+			if (is_uneon()) x86_ide_set();
 			if (is_st()) tos_reset(0);
 			ResetUART();
 		}
@@ -2935,7 +2949,7 @@ void user_io_poll()
 	// sd card emulation
 	if (is_x86() || is_pcxt())
 	{
-		x86_poll();
+		x86_poll(0);
 	}
 	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
 	{
@@ -2950,6 +2964,12 @@ void user_io_poll()
 			static uint8_t buffer[16][16384];
 			uint64_t lba;
 			uint32_t blksz, blks, sz;
+
+			if (is_uneon() && i == 3)
+			{
+				x86_poll(1);
+				break;
+			}
 
 			uint16_t c = spi_uio_cmd_cont(UIO_GET_SDSTAT);
 			if (c & 0x8000)

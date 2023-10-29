@@ -212,7 +212,7 @@ typedef struct
 	char img_name[6][1024];
 } x86_config;
 
-static x86_config config;
+static x86_config config = {};
 
 struct hddInfo* FindHDDInfoBySize(uint64_t size)
 {
@@ -508,6 +508,11 @@ static uint8_t bin2bcd(unsigned val)
 	return ((val / 10) << 4) + (val % 10);
 }
 
+void x86_ide_set()
+{
+	for (int i = 0; i < 4; i++) hdd_set(i, config.img_name[i + 2]);
+}
+
 void x86_init()
 {
 	user_io_status_set("[0]", 1);
@@ -719,9 +724,9 @@ static void fdd_io(uint8_t read)
 	}
 }
 
-void x86_poll()
+void x86_poll(int only_ide)
 {
-	x86_share_poll();
+	if(!only_ide) x86_share_poll();
 
 	uint16_t sd_req = ide_check();
 	if (sd_req)
@@ -733,7 +738,7 @@ void x86_poll()
 		ide_io(1, sd_req & 7);
 
 		sd_req >>= 3;
-		if (sd_req & 3) fdd_io(sd_req & 1);
+		if (!only_ide && (sd_req & 3)) fdd_io(sd_req & 1);
 	}
 }
 
