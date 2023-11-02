@@ -3566,6 +3566,7 @@ void mergedevs()
 	make_unique(0x8282, 0x3201, 1);  // Irken Labs JAMMA Expander / Mojo Retro Adapter
 	make_unique(0x1209, 0xFACA, 1);  // ControllaBLE
 	make_unique(0x16D0, 0x127E, 1);  // Reflex Adapt to USB
+	make_unique(0x1209, 0x595A, 1);  // RetroZord adapter
 
 	if (cfg.no_merge_vid)
 	{
@@ -4428,8 +4429,8 @@ static void setup_wheels()
 				}
 			}
 
-			//Namco NeGcon via RetroZord adapter or Reflex Adapt
-			else if ((input[i].vid == 0x2341 && input[i].pid == 0x8036 && strstr(input[i].name, "RZordPsWheel")) ||
+			//Namco NeGcon via Arduino, RetroZord or Reflex Adapt
+			else if (((input[i].vid == 0x2341 || (input[i].vid == 0x1209 && input[i].pid == 0x595A)) && strstr(input[i].name, "RZordPsWheel")) ||
 					 (input[i].vid == 0x16D0 && input[i].pid == 0x127E && strstr(input[i].name, "ReflexPSWheel")))
 			{
 				input[i].wh_accel = 6;
@@ -4666,8 +4667,8 @@ int input_test(int getchar)
 							input[n].lightgun = 1;
 						}
 
-						//Namco Guncon via RetroZord adapter or Reflex Adapt
-						if ((input[n].vid == 0x2341 && input[n].pid == 0x8036 && (strstr(uniq, "RZordPsGun") || strstr(input[n].name, "RZordPsGun"))) ||
+						//Namco Guncon via Arduino, RetroZord or Reflex Adapt
+						if (((input[n].vid == 0x2341 || (input[n].vid == 0x1209 && input[n].pid == 0x595A)) && (strstr(uniq, "RZordPsGun") || strstr(input[n].name, "RZordPsGun"))) ||
 							(input[n].vid == 0x16D0 && input[n].pid == 0x127E && (strstr(uniq, "ReflexPSGun") || strstr(input[n].name, "ReflexPSGun"))))
 						{
 							input[n].quirk = QUIRK_LIGHTGUN;
