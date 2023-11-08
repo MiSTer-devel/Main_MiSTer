@@ -2510,7 +2510,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int len = strlen(f.name);
 	char *p = strrchr(f.name, '.');
 	if (p == 0) {
-	    p = f.name + len - 4;
+            // In case a '.' is not found, send all `NUL` characters.
+	    p = f.name + len;
 	}
 	user_io_file_info(p);
 
