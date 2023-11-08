@@ -413,7 +413,7 @@ int n64_rom_tx(const char* name, unsigned char index) {
 	int size = bytes2send;
 	if (use_progress) ProgressMessage(0, 0, 0, 0);
 
-	if (index == 2) {
+	if ((index & 63) == 2) {
 		// Handle non-N64 files (Game Boy)
 		while (bytes2send) {
 			uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
