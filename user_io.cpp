@@ -1961,8 +1961,12 @@ void user_io_file_info(const char *ext)
 {
 	EnableFpga();
 	spi8(FIO_FILE_INFO);
-	spi_w(toupper(ext[0]) << 8 | toupper(ext[1]));
-	spi_w(toupper(ext[2]) << 8 | toupper(ext[3]));
+	char c1 = *ext ? toupper(*ext++) : 0;
+	char c2 = *ext ? toupper(*ext++) : 0;
+	char c3 = *ext ? toupper(*ext++) : 0;
+	char c4 = *ext ? toupper(*ext++) : 0;
+	spi_w(c1 << 8 | c2);
+	spi_w(c3 << 8 | c4);
 	DisableFpga();
 }
 
@@ -2504,7 +2508,11 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	user_io_set_index(index);
 
 	int len = strlen(f.name);
-	char *p = f.name + len - 4;
+	char *p = strrchr(f.name, '.');
+	if (p == 0) {
+            // In case a '.' is not found, send all `NUL` characters.
+	    p = f.name + len;
+	}
 	user_io_file_info(p);
 
 	// prepare transmission of new file
