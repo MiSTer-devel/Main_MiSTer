@@ -1,5 +1,4 @@
 #include "n64.h"
-#include "n64.h"
 #include "../../menu.h"
 #include "../../user_io.h"
 
