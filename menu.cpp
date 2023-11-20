@@ -2333,6 +2333,12 @@ void HandleUI(void)
 								}
 								else
 								{
+									if (!bit && is_uneon())
+									{
+										x86_ide_set();
+										menustate = MENU_NONE1;
+									}
+
 									if (is_megacd())
 									{
 										if (!bit) mcd_set_image(0, "");
@@ -2462,7 +2468,7 @@ void HandleUI(void)
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
-			else if (is_x86() || is_pcxt())
+			else if (is_x86() || is_pcxt() || (is_uneon() && idx >= 2))
 			{
 				x86_set_image(ioctl_index, selPath);
 			}

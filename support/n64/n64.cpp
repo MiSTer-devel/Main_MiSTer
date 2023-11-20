@@ -30,7 +30,7 @@ static constexpr const char *const CONTROLLER_OPTS[] = { "[51:49]", "[54:52]", "
 static constexpr uint64_t FNV_PRIME = 0x100000001b3;
 static constexpr uint64_t FNV_OFFSET_BASIS = 0xcbf29ce484222325;
 static constexpr uint64_t fnv_hash(const char* s, uint64_t h = FNV_OFFSET_BASIS) {
-	if (s) while (uint8_t a = *(s++)) h = (h ^ (a >= 'A' && a <= 'Z' ? a += 'a' - 'A' : a)) * FNV_PRIME;
+	if (s) while (uint8_t a = *(s++)) h = (h ^ (a >= 'A' && a <= 'Z' ? a += ('a' - 'A') : a)) * FNV_PRIME;
 	return h;
 }
 
@@ -309,35 +309,35 @@ static bool parse_and_apply_db_tags(char *tags) {
 
 	for (auto tag = strtok(tags, separator); tag; tag = strtok(nullptr, separator)) {
 		switch (fnv_hash(tag)) {
-		case fnv_hash("eeprom512"): save_type = MemoryType::EEPROM_512; break;
-		case fnv_hash("eeprom2k"): save_type = MemoryType::EEPROM_2k; break;
-		case fnv_hash("sram32k"): save_type = MemoryType::SRAM_32k; break;
-		case fnv_hash("sram96k"): save_type = MemoryType::SRAM_96k; break;
-		case fnv_hash("flash128k"): save_type = MemoryType::FLASH_128k; break;
-		case fnv_hash("noepak"): no_epak = true; break;
-		case fnv_hash("cpak"): cpak = true; break;
-		case fnv_hash("rpak"): rpak = true; break;
-		case fnv_hash("tpak"): tpak = true; break;
-		case fnv_hash("rtc"): rtc = true; break;
-		case fnv_hash("ntsc"): ntsc: system_type = SystemType::NTSC; break;
-		case fnv_hash("pal"): pal: system_type = SystemType::PAL; break;
-		case fnv_hash("wide"): wide = true; break;
-		case fnv_hash("cic6101"): cic_type = CIC::CIC_NUS_6101; goto ntsc;
-		case fnv_hash("cic6102"): cic_type = CIC::CIC_NUS_6102; goto ntsc;
-		case fnv_hash("cic6103"): cic_type = CIC::CIC_NUS_6103; goto ntsc;
-		case fnv_hash("cic6105"): cic_type = CIC::CIC_NUS_6105; goto ntsc;
-		case fnv_hash("cic6106"): cic_type = CIC::CIC_NUS_6106; goto ntsc;
-		case fnv_hash("cic7101"): cic_type = CIC::CIC_NUS_7101; goto pal;
-		case fnv_hash("cic7102"): cic_type = CIC::CIC_NUS_7102; goto pal;
-		case fnv_hash("cic7103"): cic_type = CIC::CIC_NUS_7103; goto pal;
-		case fnv_hash("cic7105"): cic_type = CIC::CIC_NUS_7105; goto pal;
-		case fnv_hash("cic7106"): cic_type = CIC::CIC_NUS_7106; goto pal;
-		case fnv_hash("cic8303"): cic_type = CIC::CIC_NUS_8303; break;
-		case fnv_hash("cic8401"): cic_type = CIC::CIC_NUS_8401; break;
-		case fnv_hash("cic5167"): cic_type = CIC::CIC_NUS_5167; break;
-		case fnv_hash("cicddus"): cic_type = CIC::CIC_NUS_DDUS; break;
-		case fnv_hash("cic5101"): cic_type = CIC::CIC_NUS_5101; break;
-		default: printf("Unknown tag: [%s] (skipping)\n", tag); break;
+      case fnv_hash("eeprom512"): save_type = MemoryType::EEPROM_512; break;
+      case fnv_hash("eeprom2k"): save_type = MemoryType::EEPROM_2k; break;
+      case fnv_hash("sram32k"): save_type = MemoryType::SRAM_32k; break;
+      case fnv_hash("sram96k"): save_type = MemoryType::SRAM_96k; break;
+      case fnv_hash("flash128k"): save_type = MemoryType::FLASH_128k; break;
+      case fnv_hash("noepak"): no_epak = true; break;
+      case fnv_hash("cpak"): cpak = true; break;
+      case fnv_hash("rpak"): rpak = true; break;
+      case fnv_hash("tpak"): tpak = true; break;
+      case fnv_hash("rtc"): rtc = true; break;
+      case fnv_hash("ntsc"): ntsc: system_type = SystemType::NTSC; break;
+      case fnv_hash("pal"): pal: system_type = SystemType::PAL; break;
+      case fnv_hash("wide"): wide = true; break;
+      case fnv_hash("cic6101"): cic_type = CIC::CIC_NUS_6101; goto ntsc;
+      case fnv_hash("cic6102"): cic_type = CIC::CIC_NUS_6102; goto ntsc;
+      case fnv_hash("cic6103"): cic_type = CIC::CIC_NUS_6103; goto ntsc;
+      case fnv_hash("cic6105"): cic_type = CIC::CIC_NUS_6105; goto ntsc;
+      case fnv_hash("cic6106"): cic_type = CIC::CIC_NUS_6106; goto ntsc;
+      case fnv_hash("cic7101"): cic_type = CIC::CIC_NUS_7101; goto pal;
+      case fnv_hash("cic7102"): cic_type = CIC::CIC_NUS_7102; goto pal;
+      case fnv_hash("cic7103"): cic_type = CIC::CIC_NUS_7103; goto pal;
+      case fnv_hash("cic7105"): cic_type = CIC::CIC_NUS_7105; goto pal;
+      case fnv_hash("cic7106"): cic_type = CIC::CIC_NUS_7106; goto pal;
+      case fnv_hash("cic8303"): cic_type = CIC::CIC_NUS_8303; break;
+      case fnv_hash("cic8401"): cic_type = CIC::CIC_NUS_8401; break;
+      case fnv_hash("cic5167"): cic_type = CIC::CIC_NUS_5167; break;
+      case fnv_hash("cicddus"): cic_type = CIC::CIC_NUS_DDUS; break;
+      case fnv_hash("cic5101"): cic_type = CIC::CIC_NUS_5101; break;
+      default: printf("Unknown tag: [%s] (skipping)\n", tag); break;
 		}
 	}
 
@@ -585,17 +585,17 @@ static bool detect_rom_settings_from_first_chunk(const char region_code, const u
 	bool is_known_cic = true;
 
 	switch (region_code) {
-		case 'D': // Germany
-		case 'F': // France
-		case 'H': // Netherlands (Dutch)
-		case 'I': // Italy
-		case 'L': // Gateway 64
-		case 'P': // Europe
-		case 'S': // Spain
-		case 'U': // Australia
-		case 'W': // Scandinavia
-		case 'X': // Europe
-		case 'Y': // Europe
+    case 'D': // Germany
+    case 'F': // France
+    case 'H': // Netherlands (Dutch)
+    case 'I': // Italy
+    case 'L': // Gateway 64
+    case 'P': // Europe
+    case 'S': // Spain
+    case 'U': // Australia
+    case 'W': // Scandinavia
+    case 'X': // Europe
+    case 'Y': // Europe
 			system_type = SystemType::PAL; break;
 		default:
 			system_type = SystemType::NTSC; break;
