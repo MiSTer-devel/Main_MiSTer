@@ -5,6 +5,6 @@ RUN apt-get update && apt-get upgrade -y && \
     mv gcc-arm-* /usr/local/bin && \
     printf 'export PATH=$PATH:%s\n' /usr/local/bin/gcc-arm-*/bin >> ~/.bashrc && \
     #printf 'export CC=%s\n' /usr/local/bin/gcc-arm-*/bin/arm-none-linux-gnueabihf-gcc >> ~/.bashrc && \
-    source ~/.bashrc && \
+    #source ~/.bashrc && \
     apt-get autoremove && apt-get clean && \
     rm -rf ~/.cache /tmp/*
