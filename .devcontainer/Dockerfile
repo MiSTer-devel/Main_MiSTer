@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y make wget xz-utils && \
-    wget -qO- "https://developer.arm.com/-/media/Files/downloads/gnu-a/10.3-2021.07/binrel/gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf.tar.xz?rev=302e8e98351048d18b6f5b45d472f406&hash=95ED9EEB24EAEEA5C1B11BBA864519B2" | tar -xJ && \
+    wget -qO- "https://developer.arm.com/-/media/Files/downloads/gnu-a/10.2-2020.11/binrel/gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf.tar.xz?revision=d0b90559-3960-4e4b-9297-7ddbc3e52783&rev=d0b9055939604e4b92977ddbc3e52783&hash=0074C1529DE90C98726B80ED3EE0776C" | tar -xJ && \
     mv gcc-arm-* /usr/local/bin && \
     printf 'export PATH=$PATH:%s\n' /usr/local/bin/gcc-arm-*/bin >> ~/.bashrc && \
     #printf 'export CC=%s\n' /usr/local/bin/gcc-arm-*/bin/arm-none-linux-gnueabihf-gcc >> ~/.bashrc && \
