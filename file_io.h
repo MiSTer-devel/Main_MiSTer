@@ -148,4 +148,6 @@ const char* FileReadLine(fileTextReader *reader);
 #define CIFS_DIR "cifs"
 #define DOCS_DIR "docs"
 
+void create_path(const char *base_dir, const char* sub_dir);
+
 #endif

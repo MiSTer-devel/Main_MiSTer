@@ -814,7 +814,7 @@ int FileCanWrite(const char *name)
 	return ((st.st_mode & S_IWUSR) != 0);
 }
 
-static void create_path(const char *base_dir, const char* sub_dir)
+void create_path(const char *base_dir, const char* sub_dir)
 {
 	make_fullpath(base_dir);
 	mkdir(full_path, S_IRWXU | S_IRWXG | S_IRWXO);
