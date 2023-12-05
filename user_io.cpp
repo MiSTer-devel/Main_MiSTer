@@ -96,6 +96,11 @@ const char *get_image_name(int i)
 	return p;
 }
 
+fileTYPE *get_image(int i)
+{
+	return &sd_image[i];
+}
+
 static uint32_t uart_mode;
 uint32_t user_io_get_uart_mode()
 {
@@ -1050,7 +1055,7 @@ const char* get_rbf_path()
 	return core_path;
 }
 
-void MakeFile(const char * filename, const char * data)
+void MakeFile(const char *filename, const char *data)
 {
 	FILE * file;
 	file = fopen(filename, "w");
@@ -1230,14 +1235,14 @@ uint16_t sdram_sz(int sz)
 	{
 		*par++ = 0x12;
 		*par++ = 0x57;
-		*par++ = (uint8_t)(sz>>8);
+		*par++ = (uint8_t)(sz >> 8);
 		*par++ = (uint8_t)sz;
 	}
 	else
 	{
 		if ((par[0] == 0x12) && (par[1] == 0x57))
 		{
-			res = 0x8000 | (par[2]<<8) | par[3];
+			res = 0x8000 | (par[2] << 8) | par[3];
 			if(res & 0x4000) printf("*** Debug phase: %d\n", (res & 0x100) ? (res & 0xFF) : -(res & 0xFF));
 			else printf("*** Found SDRAM config: %d\n", res & 7);
 		}
@@ -1651,7 +1656,7 @@ void user_io_l_analog_joystick(unsigned char joystick, char valueX, char valueY)
 	if (core_type == CORE_TYPE_8BIT)
 	{
 		spi_uio_cmd8_cont(UIO_ASTICK, joy);
-		if(io_ver) spi_w((valueY<<8) | (uint8_t)(valueX));
+		if(io_ver) spi_w((valueY << 8) | (uint8_t)(valueX));
 		else
 		{
 			spi8(valueX);
@@ -1687,7 +1692,7 @@ void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
 
 	spi_uio_cmd_cont((joy < 2) ? (UIO_JOYSTICK0 + joy) : (UIO_JOYSTICK2 + joy - 2));
 	spi_w(map);
-	if(use32) spi_w(map>>16);
+	if(use32) spi_w(map >> 16);
 	DisableIO();
 
 	if (!is_minimig() && joy_transl == 1 && newdir)
@@ -2095,12 +2100,12 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	else
 	{
 		spi32_b(size);
-		spi32_b(size>>32);
+		spi32_b(size >> 32);
 	}
 	DisableIO();
 
 	// notify core of possible sd image change
-	spi_uio_cmd8(UIO_SET_SDSTAT, (1<< index) | (writable ? 0 : 0x80));
+	spi_uio_cmd8(UIO_SET_SDSTAT, (1 << index) | (writable ? 0 : 0x80));
 	return ret ? 1 : 0;
 }
 
@@ -3051,9 +3056,13 @@ void user_io_poll()
 				else if (op & 1) c64_readGCR(disk, lba, blks-1);
 				else break;
 			}
+			else if (op == 2 && is_n64() && use_save)
+			{
+				n64_save_savedata(lba, ack, buffer_lba[disk], buffer[disk], blksz, sz);
+			}
 			else if (op == 2)
 			{
-				//printf("SD WR %d on %d\n", lba, disk);
+				//printf("SD WR %llu on %d\n", lba, disk);
 
 				if (use_save) menu_process_save();
 
@@ -3101,6 +3110,10 @@ void user_io_poll()
 					}
 				}
 			}
+			else if ((op & 1) && is_n64() && use_save)
+			{
+				n64_load_savedata(lba, ack, buffer_lba[disk], buffer[disk], sizeof(*buffer), blksz, sz);
+			}
 			else if (op & 1)
 			{
 				uint32_t buf_n = sizeof(buffer[0]) / blksz;
@@ -3109,7 +3122,7 @@ void user_io_poll()
 				int done = 0;
 				uint32_t offset;
 
-				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
+				if ((buffer_lba[disk] == -1LLU) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
 				{
 					buffer_lba[disk] = -1;
 					if (blksz == 2352 && is_psx())
