@@ -4897,7 +4897,8 @@ int input_test(int getchar)
 
 						//Arduino and Teensy devices may share the same VID:PID, so additional field UNIQ is used to differentiate them
 						//Reflex Adapt also uses the UNIQ field to differentiate between device modes
-						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4) || (input[n].vid == 0x16D0 && input[n].pid == 0x127E)) && strlen(uniq))
+						//RetroZord Adapter also uses the UNIQ field to differentiate between device modes
+						if ((input[n].vid == 0x2341 || (input[n].vid == 0x16C0 && (input[n].pid>>8) == 0x4) || (input[n].vid == 0x16D0 && input[n].pid == 0x127E) || (input[n].vid == 0x1209 && input[n].pid == 0x595A)) && strlen(uniq))
 						{
 							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x_%s", input[n].vid, input[n].pid, uniq);
 							char *p;
