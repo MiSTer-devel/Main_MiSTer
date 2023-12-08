@@ -37,7 +37,6 @@
 #define NUMPLAYERS 6
 #define UINPUT_NAME "MiSTer virtual input"
 
-
 char joy_bnames[NUMBUTTONS][32] = {};
 int  joy_bcount = 0;
 static struct pollfd pool[NUMDEV + 3];
@@ -1199,9 +1198,12 @@ typedef struct
 	char     id[80];
 	char     name[128];
 	char     sysfs[512];
+
 	int      ss_range[2];
 	int 	 max_cardinal[2];
 	float    max_range[2];
+
+	uint32_t deadzone;
 } devInput;
 
 static devInput input[NUMDEV] = {};
@@ -1778,6 +1780,65 @@ static void mouse_btn_req()
 	if (grabbed) mouse_req |= 2;
 }
 
+static inline void joy_clamp(int* value, const int min, const int max)
+{
+	if (*value < min) {
+		*value = min;
+	}
+	else if (*value > max) {
+		*value = max;
+	}
+}
+
+static inline float boxradf(const float angle)
+{
+	return 1.0f / fmaxf(fabsf(sinf(angle)), fabsf(cosf(angle)));
+}
+
+static void joy_apply_deadzone(int* x, int* y, const devInput* dev, const int stick) {
+	// Don't be fancy with such a small deadzone.
+	if (dev->deadzone <= 2) 
+	{
+		if (dev->deadzone && (abs((*x > *y) == (*x > -*y) ? *x : *y) <= dev->deadzone))
+			*x = *y = 0;
+		return;
+	}
+
+	const float radius = hypotf(*x, *y);
+	if (radius <= (float)dev->deadzone)
+	{
+		*x = *y = 0;
+		return;
+	}
+
+	const float angle = atan2f(*y, *x);
+	const float box_radius = boxradf(angle);
+
+	/* A measure of how "cardinal" the angle is,
+	   i.e closeness to [0, 90, 180, 270] degrees (0.0 - 1.0). */
+	const float cardinality = (1.4142136f - box_radius) * 2.4142136f;
+
+	// Expected range for the given angle.
+	const float max_cardinal = dev->max_cardinal[stick] > (2.0f * dev->deadzone) ? dev->max_cardinal[stick] : 127.0f;
+	const float max_diagonal = dev->max_range[stick] > (2.0f * dev->deadzone) ? dev->max_range[stick] : 127.0f;
+	const float range = cardinality * max_cardinal + (1.0f - cardinality) * max_diagonal;
+
+	const float weight = 1.0f - fmaxf(range - radius, .0f) / (range - dev->deadzone);
+	const float adjusted_radius = fminf(weight * range, max_cardinal * box_radius);
+
+	/* Don't ever return a larger magnitude than that was given.
+	   The whole point of this function is to subtract some magnitude, not add. */
+	if (adjusted_radius > radius) return;
+
+	*x = nearbyintf(adjusted_radius * cosf(angle));
+	*y = nearbyintf(adjusted_radius * sinf(angle));
+
+	// Just to be sure.
+	const int min_range = is_psx() ? -128 : -127;
+	joy_clamp(x, min_range, INT8_MAX);
+	joy_clamp(y, min_range, INT8_MAX);
+}
+
 static uint32_t osdbtn = 0;
 static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
 {
@@ -2078,42 +2139,62 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 	}
 }
 
+static bool joy_dir_is_diagonal(const int x, const int y)
+{
+	static const float JOY_DIAG_THRESHOLD = .85f;
+	
+	return
+		((x == 0) || (y == 0)) ? false :
+		((x == y) || (x == -y)) ? true :
+		abs((x > y) == (x > -y) ? (float)y / x : (float)x / y) >= JOY_DIAG_THRESHOLD;
+}
+
 static void joy_analog(int dev, int axis, int offset, int stick = 0)
 {
 	int num = input[dev].num;
 	static int pos[2][NUMPLAYERS][2] = {};
 
-	if (grabbed && num > 0 && num < NUMPLAYERS+1)
+	if (grabbed && num > 0 && --num < NUMPLAYERS)
 	{
-		num--;
 		pos[stick][num][axis] = offset;
-		int x = pos[stick][num][0];
-		int y = pos[stick][num][1];
-		if (is_n64())
+		int x = pos[stick][num][0], y = pos[stick][num][1];
+
+		if (joy_dir_is_diagonal(x, y))
 		{
-			// Update maximum observed cardinal distance
-			const int abs_x = abs(x);
-			const int abs_y = abs(y);
-
-			if (abs_x > input[dev].max_cardinal[stick]) input[dev].max_cardinal[stick] = abs_x;
-			if (abs_y > input[dev].max_cardinal[stick]) input[dev].max_cardinal[stick] = abs_y;
-
 			// Update maximum observed diag
 			// Use sum of squares and only calc sqrt() when necessary
-			const int ss_range_curr = x*x + y*y;
-			// compare to max ss_range and update if larger
-			if ((ss_range_curr > input[dev].ss_range[stick]) & (abs(abs_x - abs_y) <= 3))
+			const int ss_range_curr = x * x + y * y;
+			if ((ss_range_curr > input[dev].ss_range[stick]))
 			{
 				input[dev].ss_range[stick] = ss_range_curr;
-				input[dev].max_range[stick] = sqrt(ss_range_curr);
+				input[dev].max_range[stick] = sqrtf(ss_range_curr);
 			}
-
-			// emulate n64 joystick range and shape for regular -127-+127 controllers
-			n64_joy_emu(x, y, &x, &y, input[dev].max_cardinal[stick], input[dev].max_range[stick]);
-			stick_swap(num,stick,&num,&stick);
 		}
-		if(stick) user_io_r_analog_joystick(num, (char)x, (char)y);
-		else user_io_l_analog_joystick(num, (char)x, (char)y);
+
+		// Update maximum observed cardinal distance
+		const int c_dist = abs((x > y) == (x > -y) ? x : y);
+		if (c_dist > input[dev].max_cardinal[stick])
+		{
+			input[dev].max_cardinal[stick] = c_dist;
+		}
+
+		joy_apply_deadzone(&x, &y, &input[dev], stick);
+
+		if (is_n64())
+		{
+			// Emulate N64 joystick range and shape for regular -127-+127 controllers
+			n64_joy_emu(x, y, &x, &y, input[dev].max_cardinal[stick], input[dev].max_range[stick]);
+			stick_swap(num, stick, &num, &stick);
+		}
+
+		if (stick)
+		{
+			user_io_r_analog_joystick(num, (char)x, (char)y);
+		}
+		else
+		{
+			user_io_l_analog_joystick(num, (char)x, (char)y);
+		}
 	}
 }
 
@@ -2571,6 +2652,81 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			else
 			{
 				map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
+			}
+		}
+
+		// Analog joystick dead zone
+		{
+			// Lightgun/wheel has no dead zone
+			if (ev->type != EV_ABS || (ev->code <= 1 && (input[dev].lightgun || input[dev].quirk == QUIRK_WHEEL)))
+			{
+				input[dev].deadzone = 0U;
+			}
+			// Dual Shock 3/4
+			else if (input[dev].quirk == QUIRK_DS3 || input[dev].quirk == QUIRK_DS4)
+			{
+				input[dev].deadzone = 10U;
+			}
+			// Default dead zone
+			else
+			{
+				input[dev].deadzone = 2U;
+			}
+
+			char cfg_format[32];
+			char cfg_uid[sizeof(*cfg.controller_deadzone)];
+
+			snprintf(cfg_format, sizeof(cfg_format), "%%%u[^ \t,]%%*[ \t,]%%u%%n", (size_t)(sizeof(cfg_uid) - 1));
+
+			const char* dev_uid = get_unique_mapping(dev, 1);
+
+			for (size_t i = 0; i < sizeof(cfg.controller_deadzone) / sizeof(*cfg.controller_deadzone); i++)
+			{
+				const char* cfg_line = cfg.controller_deadzone[i];
+				if (!cfg_line || !strlen(cfg_line)) break;
+
+				uint32_t cfg_vidpid, cfg_deadzone;
+				size_t scan_pos;
+				char vp;
+
+				if ((sscanf(cfg_line, cfg_format, cfg_uid, &cfg_deadzone, &scan_pos) < 2) ||
+					(scan_pos != strlen(cfg_line))) continue;
+
+				if ((
+					sscanf(cfg_uid, "0%*[Xx]%08x%n", &cfg_vidpid, &scan_pos) ||
+					sscanf(cfg_uid, "%08x%n", &cfg_vidpid, &scan_pos)) &&
+					(scan_pos == strlen(cfg_uid)))
+				{
+					const uint32_t vidpid = (input[dev].vid << 16) | input[dev].pid;
+					if (vidpid != cfg_vidpid) continue;
+				}
+				else if ((
+					(sscanf(cfg_uid, "%[VvPp]%*[Ii]%*[Dd]:0%*[Xx]%04x%n", &vp, &cfg_vidpid, &scan_pos) == 2) ||
+					(sscanf(cfg_uid, "%[VvPp]%*[Ii]%*[Dd]:%04x%n", &vp, &cfg_vidpid, &scan_pos) == 2)) &&
+					(scan_pos == strlen(cfg_uid)))
+				{
+					if (vp == 'V' || vp == 'v')
+					{
+						if (input[dev].vid != cfg_vidpid) continue;
+					}
+					else
+					{
+						if (input[dev].pid != cfg_vidpid) continue;
+					}
+				}
+				else if (
+					!strcasestr(input[dev].id, cfg_uid) &&
+					!strcasestr(input[dev].sysfs, cfg_uid) &&
+					!strcasestr(dev_uid, cfg_uid))
+				{
+					continue;
+				}
+
+				if (cfg_deadzone > 64) cfg_deadzone = 64;
+
+				printf("Analog device %s was given a dead zone of %u\n", input[dev].id, cfg_deadzone);
+				input[dev].deadzone = cfg_deadzone;
+				break;
 			}
 		}
 	}
@@ -3294,29 +3450,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 
 				int hrange = (absinfo->maximum - absinfo->minimum) / 2;
-				int dead = hrange/63;
-
-				if (input[sub_dev].quirk == QUIRK_DS3 || input[sub_dev].quirk == QUIRK_DS4)
-				{
-					dead = 10;
-				}
 
 				// normalize to -range/2...+range/2
-				value = value - (absinfo->minimum + absinfo->maximum) / 2;
-
-				if (ev->code > 1 || (!input[dev].lightgun && input[dev].quirk != QUIRK_WHEEL)) //lightgun/wheel has no dead zone
-				{
-					// check the dead-zone and remove it from the range
-					hrange -= dead;
-					if (value < -dead) value += dead;
-					else if (value > dead) value -= dead;
-					else value = 0;
-				}
+				value -= (absinfo->minimum + absinfo->maximum) / 2;
 
 				int range = is_psx() ? 128 : 127;
 				value = (value * range) / hrange;
 
-				//final check to eliminate additive error
+				// final check to eliminate additive error
 				if (value < -range) value = -range;
 				else if (value > 127) value = 127;
 
@@ -3326,14 +3467,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (ev->code == (input[dev].mmap[SYS_AXIS_MX] & 0xFFFF) && mouse_emu)
 				{
 					mouse_emu_x = 0;
-					if (value < -1 || value>1) mouse_emu_x = value;
+					if (value < -1 || value > 1) mouse_emu_x = value;
 					mouse_emu_x /= 12;
 					return;
 				}
 				else if (ev->code == (input[dev].mmap[SYS_AXIS_MY] & 0xFFFF) && mouse_emu)
 				{
 					mouse_emu_y = 0;
-					if (value < -1 || value>1) mouse_emu_y = value;
+					if (value < -1 || value > 1) mouse_emu_y = value;
 					mouse_emu_y /= 12;
 					return;
 				}
@@ -3389,7 +3530,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					}
 					else
 					{
-						int offset = (value < -1 || value>1) ? value : 0;
+						int offset = (value < -1 || value > 1) ? value : 0;
 						if (input[dev].stick_l[0] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_l[0]])
 						{
 							joy_analog(dev, 0, offset, 0);
@@ -5301,7 +5442,7 @@ int input_test(int getchar)
 
 								if (!noabs) input_cb(&ev, &absinfo, i);
 
-								//sumulate digital directions from analog
+								// simulate digital directions from analog
 								if (ev.type == EV_ABS && !(mapping && mapping_type <= 1 && mapping_button < -4) && !(ev.code <= 1 && input[dev].lightgun) && input[dev].quirk != QUIRK_PDSP && input[dev].quirk != QUIRK_MSSP)
 								{
 									input_absinfo *pai = 0;

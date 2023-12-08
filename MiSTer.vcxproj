@@ -95,6 +95,8 @@
     <ClCompile Include="support\minimig\minimig_config.cpp" />
     <ClCompile Include="support\minimig\minimig_fdd.cpp" />
     <ClCompile Include="support\minimig\minimig_share.cpp" />
+    <ClCompile Include="support\n64\n64.cpp" />
+    <ClCompile Include="support\n64\n64_joy_emu.cpp" />
     <ClCompile Include="support\neogeo\neogeocd.cpp" />
     <ClCompile Include="support\neogeo\neogeo_loader.cpp" />
     <ClCompile Include="support\pcecd\pcecd.cpp" />
@@ -172,6 +174,8 @@
     <ClInclude Include="support\minimig\minimig_fdd.h" />
     <ClInclude Include="support\minimig\minimig_hdd.h" />
     <ClInclude Include="support\minimig\minimig_share.h" />
+    <ClInclude Include="support\n64\n64.h" />
+    <ClInclude Include="support\n64\n64_joy_emu.h" />
     <ClInclude Include="support\neogeo\neogeocd.h" />
     <ClInclude Include="support\neogeo\neogeo_loader.h" />
     <ClInclude Include="support\pcecd\pcecd.h" />
