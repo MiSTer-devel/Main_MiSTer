@@ -2422,7 +2422,7 @@ void HandleUI(void)
 				}
 				else if (is_n64())
 				{
-					if (!n64_rom_tx(selPath, idx)) Info("failed to load ROM");
+					if (!n64_rom_tx(selPath, idx, load_addr)) Info("failed to load ROM");
 				}
 				else
 				{

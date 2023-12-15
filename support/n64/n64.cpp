@@ -2,6 +2,7 @@
 #include "n64_cpak_header.h"
 #include "../../menu.h"
 #include "../../user_io.h"
+#include "../../shmem.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -1043,7 +1044,7 @@ static void unmount_all_save_files()
 	mounted_save_files = 0;
 }
 
-int n64_rom_tx(const char *name, unsigned char idx) {
+int n64_rom_tx(const char *name, unsigned char idx, uint32_t load_addr) {
 	static uint8_t buf[4096];
 	fileTYPE f;
 
@@ -1058,7 +1059,7 @@ int n64_rom_tx(const char *name, unsigned char idx) {
 	user_io_set_index(idx);
 
 	// prepare transmission of new file
-	user_io_set_download(1);
+	user_io_set_download(1, load_addr ? data_size : 0);
 
 	const int use_progress = 1;
 	if (use_progress) ProgressMessage(0, 0, 0, 0);
@@ -1106,6 +1107,9 @@ int n64_rom_tx(const char *name, unsigned char idx) {
 
 	MD5Context ctx;
 	MD5Init(&ctx);
+
+	uint8_t *mem = load_addr ? (uint8_t *)shmem_map(fpga_mem(load_addr), data_size) : nullptr;
+	uint8_t *write_ptr = mem;
 
 	while (data_left) {
 		size_t chunk = (data_left > sizeof(buf)) ? sizeof(buf) : data_left;
@@ -1181,12 +1185,24 @@ int n64_rom_tx(const char *name, unsigned char idx) {
 			}
 		}
 
-		user_io_file_tx_data(buf, chunk);
+		// copy to DDR memory for fast ROM loading
+		if (write_ptr)
+		{
+			memcpy(write_ptr, buf, chunk);
+			write_ptr += chunk;
+		}
+		else
+		{
+			user_io_file_tx_data(buf, chunk);
+		}
 
 		if (use_progress) ProgressMessage("Loading", f.name, data_size - data_left, data_size);
 		data_left -= chunk;
 		is_first_chunk = false;
 	}
+
+	if (mem)
+		shmem_unmap(mem, data_size);
 
 	MD5Final(md5, &ctx);
 	md5_to_hex(md5, md5_hex);
