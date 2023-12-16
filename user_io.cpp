@@ -2657,7 +2657,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t chunk = (bytes2send > (256 * 1024)) ? (256 * 1024) : bytes2send;
 				FileReadAdv(&f, mem + size - bytes2send + gap, chunk);
 
-				if(!is_snes()) file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
+				if(!is_snes() && use_cheats) file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
 				skip = 0;
 
 				if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
