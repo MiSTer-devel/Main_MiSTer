@@ -2812,6 +2812,7 @@ void user_io_send_buttons(char force)
 	if (cfg.hdmi_limited & 1) map |= CONF_HDMI_LIMITED1;
 	if (cfg.hdmi_limited & 2) map |= CONF_HDMI_LIMITED2;
 	if (cfg.direct_video) map |= CONF_DIRECT_VIDEO;
+	if (cfg.direct_video == 2) map |= CONF_DIRECT_VIDEO2;
 	if (vga_fb) map |= CONF_VGA_FB;
 
 	if ((map != key_map) || force)

@@ -21,6 +21,7 @@ struct VideoInfo
 	uint32_t fb_fmt;
 	uint32_t fb_width;
 	uint32_t fb_height;
+	uint32_t pixrep;
 
     bool interlaced;
     bool rotated;

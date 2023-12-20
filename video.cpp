@@ -1165,7 +1165,7 @@ static void hdmi_config_set_csc()
 
 	const float pi = float(M_PI);
 
-	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
 
 	// out-of-scope defines, not used with ypbpr
 	int16_t csc_int16[12];
@@ -1364,7 +1364,7 @@ static void hdmi_config_set_csc()
 
 static void hdmi_config_init()
 {
-	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
 
 	// address, value
 	uint8_t init_data[] = {
@@ -1403,8 +1403,8 @@ static void hdmi_config_init()
 
 		0x17, 0b01100010,		// Aspect ratio 16:9 [1]=1, 4:3 [1]=0, invert sync polarity
 
-		0x3B, 0x0,              // Automatic pixel repetition and VIC detection
-
+		0x3B, 0x80,             // Automatic pixel repetition and VIC detection
+		0x3C, 0x00,
 
 		0x48, 0b00001000,       // [6]=0 Normal bus order!
 								// [5] DDR Alignment.
@@ -1519,6 +1519,21 @@ static void hdmi_config_init()
 	}
 
 	hdmi_config_set_csc();
+}
+
+static void hdmi_config_dv2(VideoInfo *vi)
+{
+	int fd = i2c_open(0x39, 0);
+	if (fd >= 0)
+	{
+		i2c_smbus_write_byte_data(fd, 0x3B, 0xC0); //manual mode
+		i2c_smbus_write_byte_data(fd, 0x3C, vi->pixrep & 0x3F);
+		i2c_close(fd);
+	}
+	else
+	{
+		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
+	}
 }
 
 static void hdmi_config_set_hdr()
@@ -2444,6 +2459,7 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->ptime = spi_w(0) | (spi_w(0) << 16);
 		video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
 		video_info->ctime = spi_w(0) | (spi_w(0) << 16);
+		video_info->pixrep = spi_w(0);
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
@@ -2539,8 +2555,8 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 	float crate = vi->ctime * 100;
 	crate /= vi->ptime;
 
-	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz, fVid = %.2fMHz\033[0m\n",
-		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate, crate);
+	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz, fVid = %.2fMHz, pr = %d\033[0m\n",
+		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate, crate, vi->pixrep);
 	printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vi->vtime, vi->vtimeh);
 	printf("\033[1;33mINFO: AR = %d:%d, fb_en = %d, fb_width = %d, fb_height = %d\033[0m\n", vi->arx, vi->ary, vi->fb_en, vi->fb_width, vi->fb_height);
 	if (vi->vtimeh) api1_5 = 1;
@@ -2741,7 +2757,7 @@ static void set_yc_mode()
 		int pal = fps < 55.f;
 		double CLK_REF = (pal || (cfg.ntsc_mode == 1)) ? 4.43361875f : (cfg.ntsc_mode == 2) ? 3.575611f : 3.579545f;
 		double CLK_VIDEO = current_video_info.ctime * 100.f / current_video_info.ptime;
-		
+
 		float prate = current_video_info.width * 100.f;
 		prate /= current_video_info.ptime;
 
@@ -2794,6 +2810,7 @@ void video_mode_adjust()
 	{
 		current_video_info = video_info;
 		show_video_info(&video_info, &v_cur);
+		if(cfg.direct_video == 2) hdmi_config_dv2(&video_info);
 		set_yc_mode();
 	}
 	force = false;
