@@ -7227,6 +7227,11 @@ void MenuHide()
 	HandleUI();
 }
 
+int menu_present()
+{
+	return (menustate != MENU_NONE1) && (menustate != MENU_NONE2);
+}
+
 void Info(const char *message, int timeout, int width, int height, int frame)
 {
 	if (menustate <= MENU_INFO)

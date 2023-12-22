@@ -1165,7 +1165,7 @@ static void hdmi_config_set_csc()
 
 	const float pi = float(M_PI);
 
-	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
+	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
 
 	// out-of-scope defines, not used with ypbpr
 	int16_t csc_int16[12];
@@ -1364,7 +1364,7 @@ static void hdmi_config_set_csc()
 
 static void hdmi_config_init()
 {
-	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
+	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
 
 	// address, value
 	uint8_t init_data[] = {
@@ -1411,7 +1411,8 @@ static void hdmi_config_init()
 								// [4:3] b01 Data right justified (for YCbCr 422 input modes).
 
 		0x49, 0xA8,				// ADI required Write.
-		0x4A, 0b10000000, //Auto-Calculate SPD checksum
+		0x40, 0x00,
+		0x4A, 0b10000000,		//Auto-Calculate SPD checksum
 		0x4C, 0x00,				// ADI required Write.
 
 		0x55, (uint8_t)(cfg.hdmi_game_mode ? 0b00010010 : 0b00010000),
@@ -1521,18 +1522,60 @@ static void hdmi_config_init()
 	hdmi_config_set_csc();
 }
 
-static void hdmi_config_dv2(VideoInfo *vi)
+static void hdmi_config_dv()
 {
-	int fd = i2c_open(0x39, 0);
+	int fd = i2c_open(0x38, 0);
 	if (fd >= 0)
 	{
-		i2c_smbus_write_byte_data(fd, 0x3B, 0xC0); //manual mode
-		i2c_smbus_write_byte_data(fd, 0x3C, vi->pixrep & 0x3F);
+		int res;
+		hdmi_config_set_spd(1);
+
+		res = i2c_smbus_write_byte_data(fd, 0x1F, 0x80);
+		if (res < 0)
+		{
+			printf("i2c: dv: Couldn't update SPD change register (0x1F, 0x80) %d\n", res);
+		}
+		else
+		{
+			VideoInfo *vi = &current_video_info;
+
+			uint8_t data[32] = {
+				0x83, 0x01, 25,
+				'D', 'V', '1' /* version */,
+				(uint8_t)((vi->interlaced ? 1 : 0) | (vi->rotated ? 2 : 0) | (menu_present() ? 4 : 0)),
+				(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
+				(uint8_t)vi->de_h,
+				(uint8_t)(vi->de_h >> 8),
+				(uint8_t)vi->de_v,
+				(uint8_t)(vi->de_v >> 8),
+				(uint8_t)vi->width,
+				(uint8_t)(vi->width >> 8),
+				(uint8_t)vi->height,
+				(uint8_t)(vi->height >> 8)
+			};
+
+			char *name = user_io_get_core_name();
+			for (int i = 16; i < 32; i++)
+			{
+				if (!*name) break;
+				data[i] = (uint8_t)(*name);
+				name++;
+			}
+
+			for (int i = 0; i < 31; i++)
+			{
+				res = i2c_smbus_write_byte_data(fd, i, data[i]);
+				if (res < 0) printf("i2c: dv: SPD register write error (%02X %02x): %d\n", i, data[i], res);
+			}
+
+			res = i2c_smbus_write_byte_data(fd, 0x1F, 0x00);
+			if (res < 0) printf("i2c: dv: Couldn't update SPD change register (0x1F, 0x00), %d\n", res);
+		}
 		i2c_close(fd);
 	}
 	else
 	{
-		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
+		hdmi_config_set_spd(0);
 	}
 }
 
@@ -2460,6 +2503,8 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
 		video_info->ctime = spi_w(0) | (spi_w(0) << 16);
 		video_info->pixrep = spi_w(0);
+		video_info->de_h = spi_w(0);
+		video_info->de_v = spi_w(0);
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
@@ -2555,8 +2600,9 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 	float crate = vi->ctime * 100;
 	crate /= vi->ptime;
 
-	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz, fVid = %.2fMHz, pr = %d\033[0m\n",
-		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate, crate, vi->pixrep);
+	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz, fVid = %.2fMHz\033[0m\n",
+		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate, crate);
+	printf("\033[1;33mINFO: pr = %d, de_h = %d, de_v = %d\033[0m\n", vi->pixrep, vi->de_h, vi->de_v);
 	printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vi->vtime, vi->vtimeh);
 	printf("\033[1;33mINFO: AR = %d:%d, fb_en = %d, fb_width = %d, fb_height = %d\033[0m\n", vi->arx, vi->ary, vi->fb_en, vi->fb_width, vi->fb_height);
 	if (vi->vtimeh) api1_5 = 1;
@@ -2810,10 +2856,18 @@ void video_mode_adjust()
 	{
 		current_video_info = video_info;
 		show_video_info(&video_info, &v_cur);
-		if(cfg.direct_video == 2) hdmi_config_dv2(&video_info);
 		set_yc_mode();
+		if (cfg.direct_video) hdmi_config_dv();
 	}
 	force = false;
+
+	if (cfg.direct_video)
+	{
+		static int menu = 0;
+		int menu_now = menu_present();
+		if(menu != menu_now) hdmi_config_dv();
+		menu = menu_now;
+	}
 
 	if (vid_changed && !is_menu())
 	{
