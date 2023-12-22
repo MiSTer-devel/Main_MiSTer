@@ -24,6 +24,7 @@ static constexpr auto TPAK_OPT = "[73]";
 static constexpr auto RTC_OPT = "[74]";
 static constexpr auto SAVE_TYPE_OPT = "[77:75]";
 static constexpr auto SYS_TYPE_OPT = "[80:79]";
+static constexpr auto AUTOPAK_OPT = "[81]";
 static constexpr const char *const CONTROLLER_OPTS[] = { "[51:49]", "[54:52]", "[57:55]", "[60:58]" };
 
 // Simple hash function, see: https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
@@ -379,6 +380,10 @@ static bool is_auto() {
 	return (AutoDetect)user_io_status_get(AUTODETECT_OPT) == AutoDetect::ON;
 }
 
+static bool is_autopak() {
+	return !user_io_status_get(AUTOPAK_OPT);
+}
+
 static uint8_t hex_to_dec(const char x) {
 	if (x >= '0' && x <= '9') return (x - '0');
 	if (x >= 'A' && x <= 'F') return (x - 'A') + 10;
@@ -511,7 +516,7 @@ static bool parse_and_apply_db_tags(char *tags) {
 	user_io_status_set(RTC_OPT, (uint32_t)rtc);
 	set_cart_save_type(save_type);
 
-	if ((PadType)user_io_status_get(CONTROLLER_OPTS[0]) != PadType::SNAC) {
+	if (is_autopak() && ((PadType)user_io_status_get(CONTROLLER_OPTS[0]) != PadType::SNAC)) {
 		user_io_status_set(CONTROLLER_OPTS[0], (uint32_t)prefered_pad);
 	}
 
@@ -727,6 +732,8 @@ static bool detect_homebrew_header(const uint8_t* controller_settings, const cha
 		(controller_settings[1] == 0x03) ||
 		(controller_settings[2] == 0x03) ||
 		(controller_settings[3] == 0x03) ? 1 : 0)); // Transfer Pak
+		
+	if (!is_autopak()) return true;
 
 	size_t c_idx = 0;
 	for (auto c_opt : CONTROLLER_OPTS) {
@@ -767,6 +774,14 @@ static bool detect_rom_settings_from_first_chunk(const char region_code, const u
 		case 'Y': // Europe
 		case 'Z': // Europe
 			system_type = SystemType::PAL; break;
+		case 'A': // Asia (NTSC, used for 1080 US/JP)
+		case 'B': // Brazil
+		case 'C': // China
+		case 'E': // North America
+		case 'G': // Gateway 64 (NTSC)
+		case 'J': // Japan
+		case 'K': // Korea
+		case 'N': // Canada
 		default:
 			system_type = SystemType::NTSC; break;
 	}
@@ -789,6 +804,8 @@ static bool detect_rom_settings_from_first_chunk(const char region_code, const u
 			case UINT64_C(0x000000a30dacd530): // NOP:ed out CRC check
 			case UINT64_C(0x000000039c981107): // hcs64's CIC-6102 IPL3 replacement
 			case UINT64_C(0x000000d2828281b0): // Unknown. Used in some homebrew
+			case UINT64_C(0x000000d2531456f6): // Unknown. Used in some homebrew
+            case UINT64_C(0x000000d28bc5f6ae): // Unknown. Used in some homebrew
 			case UINT64_C(0x000000d2be3c4486): // Xeno Crisis custom IPL3
 			case UINT64_C(0x0000009acc31e644): // HW1 IPL3 (Turok E3 prototype)
 			case UINT64_C(0x0000009474732e6b): // IPL3 re-assembled with the GNU assembler (iQue)
