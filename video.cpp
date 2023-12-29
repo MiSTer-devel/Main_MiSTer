@@ -1522,7 +1522,7 @@ static void hdmi_config_init()
 	hdmi_config_set_csc();
 }
 
-static void hdmi_config_dv()
+static void spd_config(uint8_t *data)
 {
 	int fd = i2c_open(0x38, 0);
 	if (fd >= 0)
@@ -1533,43 +1533,18 @@ static void hdmi_config_dv()
 		res = i2c_smbus_write_byte_data(fd, 0x1F, 0x80);
 		if (res < 0)
 		{
-			printf("i2c: dv: Couldn't update SPD change register (0x1F, 0x80) %d\n", res);
+			printf("i2c: Couldn't update SPD change register (0x1F, 0x80) %d\n", res);
 		}
 		else
 		{
-			VideoInfo *vi = &current_video_info;
-
-			uint8_t data[32] = {
-				0x83, 0x01, 25,
-				'D', 'V', '1' /* version */,
-				(uint8_t)((vi->interlaced ? 1 : 0) | (vi->rotated ? 2 : 0) | (menu_present() ? 4 : 0)),
-				(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
-				(uint8_t)vi->de_h,
-				(uint8_t)(vi->de_h >> 8),
-				(uint8_t)vi->de_v,
-				(uint8_t)(vi->de_v >> 8),
-				(uint8_t)vi->width,
-				(uint8_t)(vi->width >> 8),
-				(uint8_t)vi->height,
-				(uint8_t)(vi->height >> 8)
-			};
-
-			char *name = user_io_get_core_name();
-			for (int i = 16; i < 32; i++)
-			{
-				if (!*name) break;
-				data[i] = (uint8_t)(*name);
-				name++;
-			}
-
 			for (int i = 0; i < 31; i++)
 			{
 				res = i2c_smbus_write_byte_data(fd, i, data[i]);
-				if (res < 0) printf("i2c: dv: SPD register write error (%02X %02x): %d\n", i, data[i], res);
+				if (res < 0) printf("i2c: SPD register write error (%02X %02x): %d\n", i, data[i], res);
 			}
 
 			res = i2c_smbus_write_byte_data(fd, 0x1F, 0x00);
-			if (res < 0) printf("i2c: dv: Couldn't update SPD change register (0x1F, 0x00), %d\n", res);
+			if (res < 0) printf("i2c: Couldn't update SPD change register (0x1F, 0x00), %d\n", res);
 		}
 		i2c_close(fd);
 	}
@@ -1578,6 +1553,58 @@ static void hdmi_config_dv()
 		hdmi_config_set_spd(0);
 	}
 }
+
+static void spd_config_dv()
+{
+	VideoInfo *vi = &current_video_info;
+
+	uint8_t data[32] = {
+		0x83, 0x01, 25, 0,
+		'D', 'V', '1' /* version */,
+		(uint8_t)((vi->interlaced ? 1 : 0) | (vi->rotated ? 2 : 0) | (menu_present() ? 4 : 0)),
+		(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
+		(uint8_t)vi->de_h,
+		(uint8_t)(vi->de_h >> 8),
+		(uint8_t)vi->de_v,
+		(uint8_t)(vi->de_v >> 8),
+		(uint8_t)vi->width,
+		(uint8_t)(vi->width >> 8),
+		(uint8_t)vi->height,
+		(uint8_t)(vi->height >> 8)
+	};
+
+	char *name = user_io_get_core_name();
+	for (int i = 17; i < 32; i++)
+	{
+		if (!*name) break;
+		data[i] = (uint8_t)(*name);
+		name++;
+	}
+
+	spd_config(data);
+}
+
+/*
+static void spd_config_hdmi()
+{
+	uint8_t data[32] = {
+		0x83, 0x01, 25, 0,
+		'M', 'i', 'S', 'T', 'e', 'r', 0, 0,
+	};
+
+	char *name = user_io_get_core_name();
+	for (int i = 12; i < 27; i++)
+	{
+		if (!*name) break;
+		data[i] = (uint8_t)(*name);
+		name++;
+	}
+
+	data[27] = 8; // GAME
+
+	spd_config(data);
+}
+*/
 
 static void hdmi_config_set_hdr()
 {
@@ -2857,7 +2884,8 @@ void video_mode_adjust()
 		current_video_info = video_info;
 		show_video_info(&video_info, &v_cur);
 		set_yc_mode();
-		if (cfg.direct_video) hdmi_config_dv();
+		if (cfg.direct_video) spd_config_dv();
+		//else if(use_vrr != VRR_FREESYNC) spd_config_hdmi();
 	}
 	force = false;
 
@@ -2865,7 +2893,7 @@ void video_mode_adjust()
 	{
 		static int menu = 0;
 		int menu_now = menu_present();
-		if(menu != menu_now) hdmi_config_dv();
+		if(menu != menu_now) spd_config_dv();
 		menu = menu_now;
 	}
 
