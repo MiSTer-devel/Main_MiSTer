@@ -2437,7 +2437,7 @@ void HandleUI(void)
 				}
 				else if (is_n64())
 				{
-					if (!n64_rom_tx(selPath, idx)) Info("failed to load ROM");
+					if (!n64_rom_tx(selPath, idx, load_addr)) Info("failed to load ROM");
 				}
 				else
 				{
@@ -7241,6 +7241,11 @@ void MenuHide()
 {
 	menustate = MENU_NONE1;
 	HandleUI();
+}
+
+int menu_present()
+{
+	return (menustate != MENU_NONE1) && (menustate != MENU_NONE2);
 }
 
 void Info(const char *message, int timeout, int width, int height, int frame)
