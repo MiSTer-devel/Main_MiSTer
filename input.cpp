@@ -2382,6 +2382,83 @@ static void restore_player(int dev)
 	update_num_hw(dev, input[dev].num);
 }
 
+// Analog joystick dead zone
+static void setup_deadzone(struct input_event* ev, int dev)
+{
+	// Lightgun/wheel has no dead zone
+	if (ev->type != EV_ABS || (ev->code <= 1 && (input[dev].lightgun || input[dev].quirk == QUIRK_WHEEL)))
+	{
+		input[dev].deadzone = 0U;
+	}
+	// Dual Shock 3/4
+	else if (input[dev].quirk == QUIRK_DS3 || input[dev].quirk == QUIRK_DS4)
+	{
+		printf("DETECTED MOTHER FUCKING DS3!\n");
+		input[dev].deadzone = 10U;
+	}
+	// Default dead zone
+	else
+	{
+		input[dev].deadzone = 2U;
+	}
+
+	char cfg_format[32];
+	char cfg_uid[sizeof(*cfg.controller_deadzone)];
+
+	snprintf(cfg_format, sizeof(cfg_format), "%%%u[^ \t,]%%*[ \t,]%%u%%n", (size_t)(sizeof(cfg_uid) - 1));
+
+	const char* dev_uid = get_unique_mapping(dev, 1);
+
+	for (size_t i = 0; i < sizeof(cfg.controller_deadzone) / sizeof(*cfg.controller_deadzone); i++)
+	{
+		const char* cfg_line = cfg.controller_deadzone[i];
+		if (!cfg_line || !strlen(cfg_line)) break;
+
+		uint32_t cfg_vidpid, cfg_deadzone;
+		size_t scan_pos;
+		char vp;
+
+		if ((sscanf(cfg_line, cfg_format, cfg_uid, &cfg_deadzone, &scan_pos) < 2) ||
+			(scan_pos != strlen(cfg_line))) continue;
+
+		if ((
+			sscanf(cfg_uid, "0%*[Xx]%08x%n", &cfg_vidpid, &scan_pos) ||
+			sscanf(cfg_uid, "%08x%n", &cfg_vidpid, &scan_pos)) &&
+			(scan_pos == strlen(cfg_uid)))
+		{
+			const uint32_t vidpid = (input[dev].vid << 16) | input[dev].pid;
+			if (vidpid != cfg_vidpid) continue;
+		}
+		else if ((
+			(sscanf(cfg_uid, "%[VvPp]%*[Ii]%*[Dd]:0%*[Xx]%04x%n", &vp, &cfg_vidpid, &scan_pos) == 2) ||
+			(sscanf(cfg_uid, "%[VvPp]%*[Ii]%*[Dd]:%04x%n", &vp, &cfg_vidpid, &scan_pos) == 2)) &&
+			(scan_pos == strlen(cfg_uid)))
+		{
+			if (vp == 'V' || vp == 'v')
+			{
+				if (input[dev].vid != cfg_vidpid) continue;
+			}
+			else
+			{
+				if (input[dev].pid != cfg_vidpid) continue;
+			}
+		}
+		else if (
+			!strcasestr(input[dev].id, cfg_uid) &&
+			!strcasestr(input[dev].sysfs, cfg_uid) &&
+			!strcasestr(dev_uid, cfg_uid))
+		{
+			continue;
+		}
+
+		if (cfg_deadzone > 64) cfg_deadzone = 64;
+
+		printf("Analog device %s was given a dead zone of %u\n", input[dev].id, cfg_deadzone);
+		input[dev].deadzone = cfg_deadzone;
+		break;
+	}
+}
+
 void unflag_players()
 {
 	for (int k = 1; k < NUMPLAYERS; k++)
@@ -2652,81 +2729,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			else
 			{
 				map_joystick_show(input[dev].map, input[dev].mmap, input[dev].num);
-			}
-		}
-
-		// Analog joystick dead zone
-		{
-			// Lightgun/wheel has no dead zone
-			if (ev->type != EV_ABS || (ev->code <= 1 && (input[dev].lightgun || input[dev].quirk == QUIRK_WHEEL)))
-			{
-				input[dev].deadzone = 0U;
-			}
-			// Dual Shock 3/4
-			else if (input[dev].quirk == QUIRK_DS3 || input[dev].quirk == QUIRK_DS4)
-			{
-				input[dev].deadzone = 10U;
-			}
-			// Default dead zone
-			else
-			{
-				input[dev].deadzone = 2U;
-			}
-
-			char cfg_format[32];
-			char cfg_uid[sizeof(*cfg.controller_deadzone)];
-
-			snprintf(cfg_format, sizeof(cfg_format), "%%%u[^ \t,]%%*[ \t,]%%u%%n", (size_t)(sizeof(cfg_uid) - 1));
-
-			const char* dev_uid = get_unique_mapping(dev, 1);
-
-			for (size_t i = 0; i < sizeof(cfg.controller_deadzone) / sizeof(*cfg.controller_deadzone); i++)
-			{
-				const char* cfg_line = cfg.controller_deadzone[i];
-				if (!cfg_line || !strlen(cfg_line)) break;
-
-				uint32_t cfg_vidpid, cfg_deadzone;
-				size_t scan_pos;
-				char vp;
-
-				if ((sscanf(cfg_line, cfg_format, cfg_uid, &cfg_deadzone, &scan_pos) < 2) ||
-					(scan_pos != strlen(cfg_line))) continue;
-
-				if ((
-					sscanf(cfg_uid, "0%*[Xx]%08x%n", &cfg_vidpid, &scan_pos) ||
-					sscanf(cfg_uid, "%08x%n", &cfg_vidpid, &scan_pos)) &&
-					(scan_pos == strlen(cfg_uid)))
-				{
-					const uint32_t vidpid = (input[dev].vid << 16) | input[dev].pid;
-					if (vidpid != cfg_vidpid) continue;
-				}
-				else if ((
-					(sscanf(cfg_uid, "%[VvPp]%*[Ii]%*[Dd]:0%*[Xx]%04x%n", &vp, &cfg_vidpid, &scan_pos) == 2) ||
-					(sscanf(cfg_uid, "%[VvPp]%*[Ii]%*[Dd]:%04x%n", &vp, &cfg_vidpid, &scan_pos) == 2)) &&
-					(scan_pos == strlen(cfg_uid)))
-				{
-					if (vp == 'V' || vp == 'v')
-					{
-						if (input[dev].vid != cfg_vidpid) continue;
-					}
-					else
-					{
-						if (input[dev].pid != cfg_vidpid) continue;
-					}
-				}
-				else if (
-					!strcasestr(input[dev].id, cfg_uid) &&
-					!strcasestr(input[dev].sysfs, cfg_uid) &&
-					!strcasestr(dev_uid, cfg_uid))
-				{
-					continue;
-				}
-
-				if (cfg_deadzone > 64) cfg_deadzone = 64;
-
-				printf("Analog device %s was given a dead zone of %u\n", input[dev].id, cfg_deadzone);
-				input[dev].deadzone = cfg_deadzone;
-				break;
 			}
 		}
 	}
@@ -4939,6 +4941,7 @@ int input_test(int getchar)
 			{
 				printf("opened %d(%2d): %s (%04x:%04x:%08x) %d \"%s\" \"%s\"\n", i, input[i].bind, input[i].devname, input[i].vid, input[i].pid, input[i].unique_hash, input[i].quirk, input[i].id, input[i].name);
 				restore_player(i);
+				setup_deadzone(&ev, i);
 			}
 			unflag_players();
 		}

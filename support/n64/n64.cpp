@@ -1274,10 +1274,9 @@ int n64_rom_tx(const char *name, unsigned char idx, uint32_t load_addr) {
 	auto save_type = get_cart_save_type();
 	char old_save_path[1024];
 	get_old_save_path(old_save_path, name);
-	bool do_reset = false;
 
 	if (save_type != MemoryType::NONE) {
-		do_reset |= mount_save_file(name, save_type, old_save_path);
+		mount_save_file(name, save_type, old_save_path);
 	}
 
 	auto use_cpak = (bool)user_io_status_get(CPAK_OPT);
@@ -1285,28 +1284,21 @@ int n64_rom_tx(const char *name, unsigned char idx, uint32_t load_addr) {
 
 	// First controller can be either tpak or cpak. Tpak is prioritized.
 	if (use_tpak || use_cpak) {
-		do_reset |= mount_save_file(name,
+		mount_save_file(name,
 			(use_tpak ? MemoryType::TPAK : MemoryType::CPAK), 
 			old_save_path);
 	}
 
 	if (use_cpak) {
-		do_reset |= mount_save_file(name, MemoryType::CPAK, old_save_path);
-		do_reset |= mount_save_file(name, MemoryType::CPAK, old_save_path);
-		do_reset |= mount_save_file(name, MemoryType::CPAK, old_save_path);
+		mount_save_file(name, MemoryType::CPAK, old_save_path);
+		mount_save_file(name, MemoryType::CPAK, old_save_path);
+		mount_save_file(name, MemoryType::CPAK, old_save_path);
 	}
 
 	// Signal end of transmission
 	user_io_set_download(0);
 
 	ProgressMessage(0, 0, 0, 0);
-
-	// reset if new save files were 
-	if (do_reset) {
-		user_io_status_set("[0]", 1);
-		usleep(100000);
-		user_io_status_set("[0]", 0);
-	}
 
 	if (!is_auto()) {
 		return 1;
