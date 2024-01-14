@@ -14,6 +14,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: source
-      run: source setup_default_toolchain.sh
+      run: source setup_default_toolchain.sh && export CC=gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc && export PATH=gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf/bin:$PATH
     - name: make
       run: make
