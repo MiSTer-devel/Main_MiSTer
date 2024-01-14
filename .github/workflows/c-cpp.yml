@@ -16,9 +16,11 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: chmod/chown
-      run: chmod +x $GITHUB_WORKSPACE/bin/*
+      run: source setup_default_toolchain.sh
     - name: env PATH
       run:
-         echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+         echo "$GITHUB_WORKSPACE/gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf/bin" >> $GITHUB_PATH
+      env: 
+        CC: "$GITHUB_WORKSPACE/gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc"
     - name: make
       run: make
