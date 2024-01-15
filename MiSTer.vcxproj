@@ -9,12 +9,13 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{C1D6BEA2-1469-4FBC-8A27-A82BDE9041AC}</ProjectGuid>
     <Keyword>MakeFileProj</Keyword>
+    <!--<VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>-->
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Makefile</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v141</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -24,13 +25,12 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <NMakeBuildCommandLine>wsl bash -lic ./build.sh</NMakeBuildCommandLine>
     <NMakeOutput>MiSTer</NMakeOutput>
     <NMakeCleanCommandLine>wsl bash -lic ./clean.sh</NMakeCleanCommandLine>
-    <NMakePreprocessorDefinitions>__arm__;__GNUC__;__USE_GNU ;_GNU_SOURCE;VDATE="000000";_FILE_OFFSET_BITS=64;_LARGEFILE64_SOURCE;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
-    <NMakeIncludeSearchPath>c:\Work\MiSTer\toolchain\gcc103\arm-none-linux-gnueabihf\libc\usr\include;c:\Work\MiSTer\toolchain\gcc103\lib\gcc\arm-none-linux-gnueabihf\10.3.1\include;c:\Work\MiSTer\toolchain\gcc103\arm-none-linux-gnueabihf\include\c++\10.3.1;c:\Work\MiSTer\toolchain\gcc103\arm-none-linux-gnueabihf\include\c++\10.3.1\arm-linux-gnueabihf;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng;lib\libchdr\include;lib\bluetooth</NMakeIncludeSearchPath>
+    <NMakePreprocessorDefinitions>__arm__;__GNUC__;__USE_GNU;_GNU_SOURCE;VDATE="000000";_FILE_OFFSET_BITS=64;_LARGEFILE64_SOURCE;USE_PROTOTYPES=1;$(NMakePreprocessorDefinitions)</NMakePreprocessorDefinitions>
+    <NMakeIncludeSearchPath>C:\Work\MiSTer\toolchain\gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf\arm-none-linux-gnueabihf\libc\usr\include;C:\Work\MiSTer\toolchain\gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf\lib\gcc\arm-none-linux-gnueabihf\10.3.1\include;C:\Work\MiSTer\toolchain\gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf\arm-none-linux-gnueabihf\include\c++\10.3.1;C:\Work\MiSTer\toolchain\gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf\arm-none-linux-gnueabihf\include\c++\10.3.1\arm-linux-gnueabihf;$(NMakeIncludeSearchPath);lib\libco;lib\miniz;lib\lodepng;lib\libchdr\include;lib\bluetooth</NMakeIncludeSearchPath>
     <OutDir>$(TEMP)</OutDir>
     <IntDir>$(TEMP)</IntDir>
     <AdditionalOptions>
@@ -139,6 +139,7 @@
     <ClInclude Include="ide_cdrom.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="joymapping.h" />
+    <ClInclude Include="mat4x4.h" />
     <ClInclude Include="lib\imlib2\Imlib2.h" />
     <ClInclude Include="lib\libco\libco.h" />
     <ClInclude Include="lib\libco\settings.h" />
@@ -175,6 +176,7 @@
     <ClInclude Include="support\minimig\minimig_hdd.h" />
     <ClInclude Include="support\minimig\minimig_share.h" />
     <ClInclude Include="support\n64\n64.h" />
+    <ClInclude Include="support\n64\n64_cpak_header.h" />
     <ClInclude Include="support\n64\n64_joy_emu.h" />
     <ClInclude Include="support\neogeo\neogeocd.h" />
     <ClInclude Include="support\neogeo\neogeo_loader.h" />
