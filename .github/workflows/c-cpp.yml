@@ -24,7 +24,7 @@ jobs:
       run:
          echo "PATH="$GCC_DIR/bin" >> $GITHUB_PATH
       env: 
-        CC: $GCC_DIR/bin/arm-none-gnueabihf-gcc"
+        CC: $GCC_DIR/bin/arm-none-gnueabihf-gcc
     - name: make
       run: make
     - name: 'Upload Artifact'
