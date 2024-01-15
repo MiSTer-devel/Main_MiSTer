@@ -23,7 +23,7 @@ jobs:
       env: 
         CC: "$GITHUB_WORKSPACE/gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc"
     - name: make
-      run: make
+      run: make ARCH=arm CC=$GITHUB_WORKSPACE/gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc
     - name: 'Upload Artifact'
       uses: actions/upload-artifact@v3
       with:
