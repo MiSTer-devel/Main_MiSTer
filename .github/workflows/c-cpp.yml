@@ -26,7 +26,9 @@ jobs:
       env: 
         CC: "$GCC_DIR/bin/arm-none-gnueabihf-gcc"
     - name: make
-      run: make
+      run: 
+          echo "$GCC_DIR/bin" >> $GITHUB_PATH
+          make
       env: 
         CC: "$GITHUB_WORKSPACE/gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf/arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc"
     - name: 'Upload Artifact'
