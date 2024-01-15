@@ -19,14 +19,11 @@ jobs:
       run: source setup_default_toolchain.sh
     - name: env PATH
       run:
-         echo "$GCC_DIR/bin" >> $GITHUB_PATH
+         echo "$GITHUB_WORKSPACE/gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf/bin" >> $GITHUB_PATH
       env: 
-        CC: "$GCC_DIR/bin/arm-none-gnueabihf-gcc"
+        CC: "$GITHUB_WORKSPACE/gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc"
     - name: make
-      run: 
-          echo "$GITHUB_WORKSPACE/gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf/arm-none-linux-gnueabihf/bin" >> $GITHUB_PATH && echo $GITHUB_PATH && make
-      env: 
-        CC: "$GITHUB_WORKSPACE/gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf/arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc"
+      run: make
     - name: 'Upload Artifact'
       uses: actions/upload-artifact@v3
       with:
