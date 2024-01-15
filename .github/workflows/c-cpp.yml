@@ -15,15 +15,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: chmod/chown
-      run: source setup_default_toolchain.sh
-    - name: env PATH
-      run:
-         echo "$GITHUB_WORKSPACE/gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf/bin" >> $GITHUB_PATH
-      env: 
-        CC: "$GITHUB_WORKSPACE/gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc"
+    - name: wget
+      run: wget -c https://releases.linaro.org/components/toolchain/binaries/6.5-2018.12/arm-linux-gnueabihf/gcc-linaro-6.5.0-2018.12-x86_64_arm-linux-gnueabihf.tar.xz && cat gcc-linaro-6.5.0-2018.12-x86_64_arm-linux-gnueabihf.tar.xz | tar xJ
     - name: make
-      run: make ARCH=arm CC=$GITHUB_WORKSPACE/gcc-arm-10.2-2020.11-x86_64-arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc
+      run: make ARCH=arm CC=$GITHUB_WORKSPACE/gcc-linaro-6.5.0-2018.12-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
     - name: 'Upload Artifact'
       uses: actions/upload-artifact@v3
       with:
