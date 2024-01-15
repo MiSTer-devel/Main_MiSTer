@@ -11,9 +11,6 @@ jobs:
 
     runs-on: ubuntu-latest
     env: 
-      GCC_VER: "10.3-2021.07"
-      GCC_PACKAGE_NAME: "gcc-arm-$GCC_VER-x86_64-arm-none-linux-gnueabihf"
-      GCC_DIR: "$GITHUB_WORKSPACE/$GCC_PACKAGE_NAME"
       CC: "$GITHUB_WORKSPACE/bin/arm-none-gnueabihf-gcc"
 
     steps:
@@ -27,7 +24,7 @@ jobs:
         CC: "$GCC_DIR/bin/arm-none-gnueabihf-gcc"
     - name: make
       run: 
-          echo "$GCC_DIR/bin" >> $GITHUB_PATH && echo $GITHUB_PATH && make
+          echo "$GITHUB_WORKSPACE/gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf/arm-none-linux-gnueabihf/bin" >> $GITHUB_PATH && echo $GITHUB_PATH && make
       env: 
         CC: "$GITHUB_WORKSPACE/gcc-arm-10.3-2021.07-x86_64-arm-none-linux-gnueabihf/arm-none-linux-gnueabihf/bin/arm-none-gnueabihf-gcc"
     - name: 'Upload Artifact'
