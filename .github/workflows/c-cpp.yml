@@ -10,8 +10,6 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    env: 
-      CC: "$GITHUB_WORKSPACE/bin/arm-none-gnueabihf-gcc"
 
     steps:
     - uses: actions/checkout@v3
