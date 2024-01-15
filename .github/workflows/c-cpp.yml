@@ -17,6 +17,8 @@ jobs:
     - uses: actions/checkout@v3
     - name: wget
       run: wget -c https://releases.linaro.org/components/toolchain/binaries/6.5-2018.12/arm-linux-gnueabihf/gcc-linaro-6.5.0-2018.12-x86_64_arm-linux-gnueabihf.tar.xz && cat gcc-linaro-6.5.0-2018.12-x86_64_arm-linux-gnueabihf.tar.xz | tar xJ
+    - name: chmod x $GITHUB_WORKSPACE/gcc-linaro-6.5.0-2018.12-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-*
+      run: chmod +x 
     - name: make
       run: make ARCH=arm CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-linaro-6.5.0-2018.12-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
     - name: 'Upload Artifact'
