@@ -14,7 +14,7 @@ jobs:
       GCC_VER: 10.3-2021.07
       GCC_PACKAGE_NAME: gcc-arm-$GCC_VER-x86_64-arm-none-linux-gnueabihf
       GCC_DIR: $GITHUB_WORKSPACE/$GCC_PACKAGE_NAME
-      CC: "$GITHUB_WORKSPACE/bin/arm-none-gnueabihf-gcc"
+      CC: $GITHUB_WORKSPACE/bin/arm-none-gnueabihf-gcc
 
     steps:
     - uses: actions/checkout@v3
