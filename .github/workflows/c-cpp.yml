@@ -27,6 +27,8 @@ jobs:
         CC: "$GCC_DIR/bin/arm-none-gnueabihf-gcc"
     - name: make
       run: make
+      env: 
+        CC: "$GCC_DIR/bin/arm-none-gnueabihf-gcc"
     - name: 'Upload Artifact'
       uses: actions/upload-artifact@v3
       with:
