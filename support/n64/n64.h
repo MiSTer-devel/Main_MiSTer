@@ -2,6 +2,7 @@
 #define N64_H
 
 #include <stdint.h>
+#include <stdio.h>
 #include "../../cfg.h"
 #include "../../file_io.h"
 
