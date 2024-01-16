@@ -2,6 +2,8 @@
 #define N64_H
 
 #include <stdint.h>
+#include <stdio.h>
+#include "../../cfg.h"
 #include "../../file_io.h"
 
 int n64_rom_tx(const char* name, unsigned char index, uint32_t load_addr);
