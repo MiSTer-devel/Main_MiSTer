@@ -2393,7 +2393,6 @@ static void setup_deadzone(struct input_event* ev, int dev)
 	// Dual Shock 3/4
 	else if (input[dev].quirk == QUIRK_DS3 || input[dev].quirk == QUIRK_DS4)
 	{
-		printf("DETECTED MOTHER FUCKING DS3!\n");
 		input[dev].deadzone = 10U;
 	}
 	// Default dead zone
