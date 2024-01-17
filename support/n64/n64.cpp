@@ -1320,26 +1320,28 @@ int n64_rom_tx(const char *name, unsigned char idx, uint32_t load_addr) {
 		len += sprintf(info + len, "\nRegion: %s (%s)", stringify(system_type), stringify(cic));
 	}
 
-	if ((rom_settings_detected & 2) == 0) {
-		sprintf(info + len, "\nROM missing from database.\nYou might not be able to save.");
+	if (cfg.controller_info) {
+		if ((rom_settings_detected & 2) == 0) {
+			sprintf(info + len, "\nROM missing from database.\nYou might not be able to save.");
 
-		Info(info, 4000);
-	}
-	else {
-		auto no_epak = (bool)user_io_status_get(NO_EPAK_OPT);
-		auto tpak = (bool)user_io_status_get(TPAK_OPT);
-		auto cpak = (bool)user_io_status_get(CPAK_OPT);
-		auto rpak = (bool)user_io_status_get(RPAK_OPT);
-		auto rtc = (bool)user_io_status_get(RTC_OPT);
+			Info(info, cfg.controller_info * 1000);
+		}
+		else {
+			auto no_epak = (bool)user_io_status_get(NO_EPAK_OPT);
+			auto tpak = (bool)user_io_status_get(TPAK_OPT);
+			auto cpak = (bool)user_io_status_get(CPAK_OPT);
+			auto rpak = (bool)user_io_status_get(RPAK_OPT);
+			auto rtc = (bool)user_io_status_get(RTC_OPT);
 
-		if (save_type != MemoryType::NONE) len += sprintf(info + len, "\nSave Type: %s", stringify(save_type));
-		if (tpak) len += sprintf(info + len, "\nTransfer Pak \x96");
-		if (cpak) len += sprintf(info + len, "\nController Pak \x96");
-		if (rpak) len += sprintf(info + len, "\nRumble Pak \x96");
-		if (rtc) len += sprintf(info + len, "\nRTC \x96");
-		if (no_epak) sprintf(info + len, "\nDisable Exp. Pak \x96");
+			if (save_type != MemoryType::NONE) len += sprintf(info + len, "\nSave Type: %s", stringify(save_type));
+			if (tpak) len += sprintf(info + len, "\nTransfer Pak \x96");
+			if (cpak) len += sprintf(info + len, "\nController Pak \x96");
+			if (rpak) len += sprintf(info + len, "\nRumble Pak \x96");
+			if (rtc) len += sprintf(info + len, "\nRTC \x96");
+			if (no_epak) sprintf(info + len, "\nDisable Exp. Pak \x96");
 
-		Info(info, 6000);
+			Info(info, cfg.controller_info * 1000);
+		}
 	}
 
 	return 1;
