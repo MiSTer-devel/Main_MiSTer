@@ -79,7 +79,7 @@ void saturn_poll()
 		unsigned long curr_timer = GetTimer(0);
 		if (curr_timer >= poll_timer) {
 			printf("\x1b[32mSaturn: ");
-			printf("Time over: next = %u, curr = %u", poll_timer, curr_timer);
+			printf("Time over: next = %lu, curr = %lu", poll_timer, curr_timer);
 			printf("\n\x1b[0m");
 		}
 #endif // SATURN_DEBUG
@@ -87,6 +87,27 @@ void saturn_poll()
 }
 
 static char buf[1024];
+
+static void saturn_get_save_without_disk(char *buf)
+{
+	char *p1, *p2;
+
+	if ((p1 = strstr(buf, "disc")) != 0 || (p1 = strstr(buf, "Disc")) != 0 || (p1 = strstr(buf, "DISC")) != 0)
+	{
+		p2 = p1 + 4;
+
+		if (p1 > buf && *(--p1) == '(') p1--;
+		if (p1 > buf && *(--p1) == ' ') p1--;
+		if (*p2 == ' ') p2++;
+		if ((*p2 >= '0' && *p2 <= '9') || (*p2 >= 'a' && *p2 <= 'f') || (*p2 >= 'A' && *p2 <= 'F')) {
+			p2++;
+			if (*p2 == ')') p2++;
+			p1++;
+			strcpy(p1, p2);
+		}
+	}
+}
+
 static void saturn_mount_save(const char *filename)
 {
 	user_io_set_index(SAVE_IO_INDEX);
@@ -94,6 +115,10 @@ static void saturn_mount_save(const char *filename)
 	if (strlen(filename))
 	{
 		FileGenerateSavePath(filename, buf);
+		saturn_get_save_without_disk(buf);
+#ifdef SATURN_DEBUG
+		printf("Saturn save filename = %s\n", buf);
+#endif // SATURN_DEBUG
 		user_io_file_mount(buf, 0, 1);
 	}
 	else
@@ -116,6 +141,7 @@ static int saturn_load_rom(const char *basename, const char *name, int sub_index
 
 	return 0;
 }
+
 void saturn_set_image(int num, const char *filename)
 {
 	static char last_dir[1024] = {};
