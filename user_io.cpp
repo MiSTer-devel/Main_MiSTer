@@ -3057,7 +3057,7 @@ void user_io_poll()
 				else if (op & 1) c64_readGCR(disk, lba, blks-1);
 				else break;
 			}
-			else if (op == 2 && is_n64() && use_save)
+			else if ((op == 2) && is_n64() && use_save)
 			{
 				n64_save_savedata(lba, ack, buffer_lba[disk], buffer[disk], blksz, sz);
 			}
