@@ -409,15 +409,16 @@ static void ini_parse(int alt, const char *vmode)
 	int eof;
 
 	if (!orig_stdout) orig_stdout = stdout;
-	if(!dev_null)
+	if (!dev_null)
 	{
 		dev_null = fopen("/dev/null", "w");
-		if (dev_null) {
+		if (dev_null)
+		{
 			int null_fd = fileno(dev_null);
 			if (null_fd >= 0) fcntl(null_fd, F_SETFD, FD_CLOEXEC);
+			stdout = dev_null;
 		}
 	}
-
 
 	ini_parser_debugf("Start INI parser for core \"%s\"(%s), video mode \"%s\".", user_io_get_core_name(0), user_io_get_core_name(1), vmode);
 
