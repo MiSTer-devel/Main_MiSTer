@@ -17,36 +17,26 @@
 #include "cheats.h"
 #include "support.h"
 
-struct cheat_rec_t
-{
-	bool enabled;
-	char name[256];
-	int cheatSize;
-	char *cheatData;
-
-	cheat_rec_t()
-	{
-		this->enabled = false;
-		this->cheatData = NULL;
-		this->cheatSize = 0;
-		memset(name, 0, sizeof(name));
-	}
-
-	~cheat_rec_t()
-	{
-		if (this->cheatData)
-		{
-			delete[] this->cheatData;
-		}
-	}
-};
-
 typedef std::vector<cheat_rec_t> CheatVector;
 static CheatVector cheats;
 
 static int iSelectedEntry = 0;
 static int iFirstEntry = 0;
 static int loaded = 0;
+
+cheat_rec_t::cheat_rec_t() {
+	this->enabled = false;
+	this->cheatData = NULL;
+	this->cheatSize = 0;
+	memset(name, 0, sizeof(name));
+}
+
+cheat_rec_t::~cheat_rec_t() {
+	if (this->cheatData)
+	{
+		delete[] this->cheatData;
+	}
+}
 
 struct CheatComp
 {
@@ -73,20 +63,20 @@ static int find_by_crc(uint32_t romcrc)
 	if (!romcrc) return 0;
 
 	sprintf(cheat_zip, "%s/cheats/%s", getRootDir(), CoreName);
-	DIR *d = opendir(cheat_zip);
+	DIR* d = opendir(cheat_zip);
 	if (!d)
 	{
 		printf("Couldn't open dir: %s\n", cheat_zip);
 		return 0;
 	}
 
-	struct dirent *de;
-	while((de = readdir(d)))
+	struct dirent* de;
+	while ((de = readdir(d)))
 	{
 		if (de->d_type == DT_REG)
 		{
 			int len = strlen(de->d_name);
-			if (len >= 14 && de->d_name[len - 14] == '[' && !strcasecmp(de->d_name+len-5, "].zip"))
+			if (len >= 14 && de->d_name[len - 14] == '[' && !strcasecmp(de->d_name + len - 5, "].zip"))
 			{
 				uint32_t crc = 0;
 				if (sscanf(de->d_name + len - 14, "[%X].zip", &crc) == 1)
@@ -107,20 +97,20 @@ static int find_by_crc(uint32_t romcrc)
 	return 0;
 }
 
-static int find_in_same_dir(const char *name)
+static int find_in_same_dir(const char* name)
 {
 	sprintf(cheat_zip, "%s/%s", getRootDir(), name);
-	char *p = strrchr(cheat_zip, '/'); //impossible to fail
+	char* p = strrchr(cheat_zip, '/'); //impossible to fail
 	*p = 0;
 
-	DIR *d = opendir(cheat_zip);
+	DIR* d = opendir(cheat_zip);
 	if (!d)
 	{
 		printf("Couldn't open dir: %s\n", cheat_zip);
 		return 0;
 	}
 
-	struct dirent *de;
+	struct dirent* de;
 	while ((de = readdir(d)))
 	{
 		if (de->d_type == DT_REG)
@@ -144,11 +134,11 @@ static int find_in_same_dir(const char *name)
 bool cheat_init_psx(mz_zip_archive* _z, const char* rom_path)
 {
 	// lookup based on file name
-	const char *rom_name = strrchr(rom_path, '/');
+	const char* rom_name = strrchr(rom_path, '/');
 	if (rom_name)
 	{
 		sprintf(cheat_zip, "%s/cheats/%s%s", getRootDir(), CoreName, rom_name);
-		char *p = strrchr(cheat_zip, '.');
+		char* p = strrchr(cheat_zip, '.');
 		if (p) *p = 0;
 		strcat(cheat_zip, ".zip");
 		printf("Trying cheat file: %s\n", cheat_zip);
@@ -170,54 +160,97 @@ bool cheat_init_psx(mz_zip_archive* _z, const char* rom_path)
 	return false;
 }
 
-void cheats_init(const char *rom_path, uint32_t romcrc)
+bool cheat_init_n64(mz_zip_archive* _z, const char* rom_path)
+{
+	// lookup based on file name
+	const char* rom_name = strrchr(rom_path, '/');
+	if (rom_name)
+	{
+		sprintf(cheat_zip, "%s/cheats/%s%s", getRootDir(), CoreName, rom_name);
+		char* p = strrchr(cheat_zip, '.');
+		if (p) *p = 0;
+		strcat(cheat_zip, ".zip");
+		printf("Trying cheat file: %s\n", cheat_zip);
+
+		memset(_z, 0, sizeof(mz_zip_archive));
+		if (mz_zip_reader_init_file(_z, cheat_zip, 0)) return true;
+	}
+
+	// lookup based on game ID
+	const char* game_id = n64_get_game_id();
+	if (game_id && *game_id)
+	{
+		sprintf(cheat_zip, "%s/cheats/%s/%s.zip", getRootDir(), CoreName, game_id);
+		printf("Trying cheat file: %s\n", cheat_zip);
+		memset(_z, 0, sizeof(mz_zip_archive));
+		if (mz_zip_reader_init_file(_z, cheat_zip, 0)) return true;
+	}
+
+	return false;
+}
+
+void cheats_init(const char* rom_path, uint32_t romcrc)
 {
 	cheats.clear();
 	loaded = 0;
 	cheat_zip[0] = 0;
 
 	// reset cheats
-	user_io_set_index(255);
-	user_io_set_download(1);
-	user_io_file_tx_data((const uint8_t*)&loaded, 2);
-	user_io_set_download(0);
+	if (!is_n64())
+	{
+		user_io_set_index(255);
+		user_io_set_download(1);
+		user_io_file_tx_data((const uint8_t*)&loaded, 2);
+		user_io_set_download(0);
+	}
 
 	if (!strcasestr(rom_path, ".zip"))
 	{
 		sprintf(cheat_zip, "%s/%s", getRootDir(), rom_path);
-		char *p = strrchr(cheat_zip, '.');
+		char* p = strrchr(cheat_zip, '.');
 		if (p) *p = 0;
 		strcat(cheat_zip, ".zip");
 	}
 
 	mz_zip_archive _z = {};
 
-	if (is_psx() && !mz_zip_reader_init_file(&_z, cheat_zip, 0))
+	if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
 	{
-		if (!cheat_init_psx(&_z, rom_path))
+		if (is_psx() && !mz_zip_reader_init_file(&_z, cheat_zip, 0))
 		{
-			printf("no cheat file found\n");
-			return;
+			if (!cheat_init_psx(&_z, rom_path))
+			{
+				printf("no cheat file found\n");
+				return;
+			}
 		}
-	}
-	else if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
-	{
-		memset(&_z, 0, sizeof(_z));
-		if (!(pcecd_using_cd() || is_megacd()) || !find_in_same_dir(rom_path) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
+		else
 		{
 			memset(&_z, 0, sizeof(_z));
-			const char *rom_name = strrchr(rom_path, '/');
-			if (rom_name)
+			if (!(pcecd_using_cd() || is_megacd()) || !find_in_same_dir(rom_path) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
 			{
-				sprintf(cheat_zip, "%s/cheats/%s%s%s", getRootDir(), CoreName, pcecd_using_cd() ? "CD" : "", rom_name);
-				char *p = strrchr(cheat_zip, '.');
-				if (p) *p = 0;
-				if (pcecd_using_cd() || is_megacd()) strcat(cheat_zip, " []");
-				strcat(cheat_zip, ".zip");
-
-				if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
+				memset(&_z, 0, sizeof(_z));
+				const char* rom_name = strrchr(rom_path, '/');
+				if (rom_name)
 				{
-					memset(&_z, 0, sizeof(_z));
+					sprintf(cheat_zip, "%s/cheats/%s%s%s", getRootDir(), CoreName, pcecd_using_cd() ? "CD" : "", rom_name);
+					char* p = strrchr(cheat_zip, '.');
+					if (p) *p = 0;
+					if (pcecd_using_cd() || is_megacd()) strcat(cheat_zip, " []");
+					strcat(cheat_zip, ".zip");
+
+					if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
+					{
+						memset(&_z, 0, sizeof(_z));
+						if (!find_by_crc(romcrc) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
+						{
+							printf("no cheat file found\n");
+							return;
+						}
+					}
+				}
+				else
+				{
 					if (!find_by_crc(romcrc) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
 					{
 						printf("no cheat file found\n");
@@ -225,20 +258,12 @@ void cheats_init(const char *rom_path, uint32_t romcrc)
 					}
 				}
 			}
-			else
-			{
-				if (!find_by_crc(romcrc) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
-				{
-					printf("no cheat file found\n");
-					return;
-				}
-			}
 		}
 	}
 
 	printf("Using cheat file: %s\n", cheat_zip);
 
-	mz_zip_archive *z = new mz_zip_archive(_z);
+	mz_zip_archive* z = new mz_zip_archive(_z);
 	for (size_t i = 0; i < mz_zip_reader_get_num_files(z); i++)
 	{
 		cheat_rec_t ch = {};
@@ -369,7 +394,7 @@ void cheats_print()
 	int k;
 	int len;
 
-	static char s[256+4];
+	static char s[256 + 4];
 
 	ScrollReset();
 
@@ -422,7 +447,7 @@ static void cheats_send()
 		{
 			if (cheats[i].cheatData)
 			{
-				memcpy(&buff[pos],cheats[i].cheatData,cheats[i].cheatSize);
+				memcpy(&buff[pos], cheats[i].cheatData, cheats[i].cheatSize);
 				pos += cheats[i].cheatSize;
 			}
 			else
@@ -437,10 +462,17 @@ static void cheats_send()
 	loaded = pos / 16;
 	printf("Cheat codes: %d\n", loaded);
 
-	user_io_set_index(255);
-	user_io_set_download(1);
-	user_io_file_tx_data(buff, pos ? pos : 2);
-	user_io_set_download(0);
+	if (is_n64())
+	{
+		n64_apply_cheats(buff, pos);
+	}
+	else
+	{
+		user_io_set_index(255);
+		user_io_set_download(1);
+		user_io_file_tx_data(buff, pos ? pos : 2);
+		user_io_set_download(0);
+	}
 }
 
 void cheats_toggle()
@@ -475,14 +507,16 @@ void cheats_toggle()
 		}
 
 		snprintf(filename, sizeof(filename), "%s/%s", cheat_zip, cheats[iSelectedEntry].name);
+
 		if (FileOpen(&f, filename))
 		{
 			int len = f.size;
+
 			if (!len || (len & 15))
 			{
 				printf("Cheat file %s has incorrect length %d -> skipping.\n", filename, len);
 			}
-			else if ( (len + cheats_loaded()*16) <= CHEAT_SIZE )
+			else if ((len + cheats_loaded() * 16) <= CHEAT_SIZE)
 			{
 				cheats[iSelectedEntry].cheatData = new char[len];
 				if (cheats[iSelectedEntry].cheatData)
@@ -503,7 +537,7 @@ void cheats_toggle()
 				}
 				else
 				{
-					printf("Could not allocate required memory (%d) for cheat file %s.\n",len,filename);
+					printf("Could not allocate required memory (%d) for cheat file %s.\n", len, filename);
 				}
 			}
 			else
