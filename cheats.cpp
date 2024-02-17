@@ -160,35 +160,6 @@ bool cheat_init_psx(mz_zip_archive* _z, const char* rom_path)
 	return false;
 }
 
-bool cheat_init_n64(mz_zip_archive* _z, const char* rom_path)
-{
-	// lookup based on file name
-	const char* rom_name = strrchr(rom_path, '/');
-	if (rom_name)
-	{
-		sprintf(cheat_zip, "%s/cheats/%s%s", getRootDir(), CoreName, rom_name);
-		char* p = strrchr(cheat_zip, '.');
-		if (p) *p = 0;
-		strcat(cheat_zip, ".zip");
-		printf("Trying cheat file: %s\n", cheat_zip);
-
-		memset(_z, 0, sizeof(mz_zip_archive));
-		if (mz_zip_reader_init_file(_z, cheat_zip, 0)) return true;
-	}
-
-	// lookup based on game ID
-	const char* game_id = n64_get_game_id();
-	if (game_id && *game_id)
-	{
-		sprintf(cheat_zip, "%s/cheats/%s/%s.zip", getRootDir(), CoreName, game_id);
-		printf("Trying cheat file: %s\n", cheat_zip);
-		memset(_z, 0, sizeof(mz_zip_archive));
-		if (mz_zip_reader_init_file(_z, cheat_zip, 0)) return true;
-	}
-
-	return false;
-}
-
 void cheats_init(const char* rom_path, uint32_t romcrc)
 {
 	cheats.clear();
