@@ -1264,7 +1264,7 @@ void n64_apply_cheats(void* addr, uint32_t len) {
 
 static int cheat_compare(uint32_t a, uint32_t b, ComparisionType type, uint32_t mask) {
 	// Mask bytes
-	if (mask) {
+	if (~mask) {
 		a &= mask;
 		b &= mask;
 	}
