@@ -17,26 +17,34 @@
 #include "cheats.h"
 #include "support.h"
 
+struct cheat_rec_t
+{
+	bool enabled;
+	char name[256];
+	int cheatSize;
+	char* cheatData;
+
+	cheat_rec_t() {
+		this->enabled = false;
+		this->cheatData = NULL;
+		this->cheatSize = 0;
+		memset(name, 0, sizeof(name));
+	}
+
+	~cheat_rec_t() {
+		if (this->cheatData)
+		{
+			delete[] this->cheatData;
+		}
+	}
+};
+
 typedef std::vector<cheat_rec_t> CheatVector;
 static CheatVector cheats;
 
 static int iSelectedEntry = 0;
 static int iFirstEntry = 0;
 static int loaded = 0;
-
-cheat_rec_t::cheat_rec_t() {
-	this->enabled = false;
-	this->cheatData = NULL;
-	this->cheatSize = 0;
-	memset(name, 0, sizeof(name));
-}
-
-cheat_rec_t::~cheat_rec_t() {
-	if (this->cheatData)
-	{
-		delete[] this->cheatData;
-	}
-}
 
 struct CheatComp
 {

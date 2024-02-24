@@ -119,10 +119,14 @@ enum class ComparisionType : uint8_t {
 	OPTYPE_EMPTY = 0xf
 };
 
+static uint8_t loaded = 0;
 static AspectRatio old_ar = AspectRatio::UNKNOWN;
 static char current_rom_path[1024] = { '\0' };
 static char current_rom_path_gb[1024] = { '\0' };
 static char old_save_path[1024];
+static void* rdram_ptr = nullptr;
+static void* code_buffer_addr = nullptr;
+static uint32_t code_buffer_len = 0;
 
 static const char* stringify(MemoryType v) {
 	switch (v) {
@@ -856,7 +860,7 @@ static bool detect_rom_settings_from_first_chunk(const char region_code, const u
 				signatures++;
 				break;
 			}
-			printf("Unknown CIC (Signature: 0x%016llx), uses default.\n", *signatures);
+			printf("Unknown CIC signature: 0x%016llx, uses default.\n", *signatures);
 			is_known_signature = false;
 			// Fall through
 		case UINT64_C(0x000000a316adc55a): // CIC-6102/7101 IPL3
@@ -912,10 +916,8 @@ static bool detect_rom_settings_from_first_chunk(const char region_code, const u
 
 // Creates a lower-case hex string out of the MD5 buffer
 static void md5_to_hex(uint8_t* md5, char* out) {
-	for (size_t i = 0; i < MD5_LENGTH; i++) {
-		sprintf(out, "%02x", md5[i]);
-		out += 2;
-	}
+	for (size_t i = 0; i < MD5_LENGTH; i++, md5++, out += 2)
+		sprintf(out, "%02x", *md5);
 }
 
 static void calc_bootcode_checksums(uint64_t bootcode_sums[2], const uint8_t* buf) {
@@ -1253,84 +1255,121 @@ struct cheat_code {
 	uint32_t replace;
 };
 
-static volatile void* code_buffer_addr = nullptr;
-static uint32_t code_buffer_len = 0;
-static uint8_t loaded = 0;
-
 void n64_apply_cheats(void* addr, uint32_t len) {
 	code_buffer_addr = addr;
 	code_buffer_len = len;
 }
 
-static int cheat_compare(uint32_t a, uint32_t b, ComparisionType type, uint32_t mask) {
-	// Mask bytes
-	if (~mask) {
-		a &= mask;
-		b &= mask;
+static int cheat_mask_and_compare(volatile uint8_t* addr, const uint8_t word_length, uint32_t compare, uint32_t flags, uint32_t* out_replace) {
+	ComparisionType type = (ComparisionType)(flags & 0x0f);
+	if ((type == ComparisionType::OPTYPE_ALWAYS) || !word_length) {
+		// No comparision or no mask
+		return 1;
+	}
+
+	// Mask out higher bytes according to word length
+	compare &= (~0U) >> (32 - word_length);
+
+	// Create a mask for the remaining bytes we want to change, up to 4 bytes
+	uint32_t old_value = 0;
+	for (uint8_t i = 0, j = word_length - 8; i < word_length / 8; i++, j -= 8) {
+		old_value <<= 8;
+		if (flags & (0x10 << ((word_length - 8) / 8 - i))) {
+			old_value |= addr[i];
+		}
+		else {
+			compare &= ~(0xff << j);
+			// This byte should not be changed, so read back the old value
+			*out_replace &= ~(0xff << j);
+			*out_replace |= addr[i] << j;
+		}
 	}
 
 	switch (type) {
-	case ComparisionType::OPTYPE_ALWAYS:
-		return 1;
 	case ComparisionType::OPTYPE_EQUALS:
-		return a == b;
+		return old_value == compare;
 	case ComparisionType::OPTYPE_GREATER:
-		return a > b;
+		return old_value > compare;
 	case ComparisionType::OPTYPE_LESS:
-		return a < b;
+		return old_value < compare;
 	case ComparisionType::OPTYPE_GREATER_EQ:
-		return a >= b;
+		return old_value >= compare;
 	case ComparisionType::OPTYPE_LESS_EQ:
-		return a <= b;
+		return old_value <= compare;
 	case ComparisionType::OPTYPE_NOT_EQ:
-		return a != b;
-	case ComparisionType::OPTYPE_EMPTY:
-		return 2;
+		return old_value != compare;
 	default:
 		return -1;
 	}
 }
 
-static int cheat_execute(void* rdram_ptr, const cheat_code* code) {
-	if (code->address >= 0x800000) return -1; // Invalid address
+static void cheat_8bit_write(volatile void* addr, const uint8_t data) {
+	*(uint8_t*)addr = data & 0xff;
+}
+
+static void cheat_16bit_write(volatile void* addr, const uint16_t data) {
+	// Big endian byte order
+	*(uint16_t*)addr = ((data & 0xff) << 8) | ((data & 0xff00) >> 8);
+}
+
+static void cheat_32bit_write(volatile void* addr, const uint32_t data) {
+	// Big endian byte order
+	*(uint32_t*)addr = ((data & 0xff) << 24) | ((data & 0xff00) << 8) | ((data & 0xff0000) >> 8) | ((data & 0xff000000) >> 24);
+}
+
+static int cheat_execute(cheat_code* code) {
+	if (code->address & 0xff800000) return -1; // Invalid address
+
+	if (code->flags & 0x100 || code->flags & 0x400) { 
+		// TODO: Add support for 0x0400 (Game Shark button-activated codes)
+		// Boot code, run only once. Skip if already executed.
+		if (code->flags & 0x200) return 0;
+		code->flags |= 0x200;
+	}
 
 	// Calculate the address of the word we want to change
-	volatile uint32_t* const addr = (volatile uint32_t*)rdram_ptr + ((code->address & ~3U) >> 2);
+	volatile uint8_t* addr = (volatile uint8_t*)rdram_ptr + code->address;
+	// Replace and compare word length according to the mask used
+	const uint8_t word_length = code->flags & 0xc0 ? 32 : code->flags & 0x20 ? 16 : code->flags & 0x10 ? 8 : 0;
 
-	// Create a mask for the bytes we want to change, up to 4 bytes
-	uint32_t byte_mask = 0;
-	if (code->flags & 0x10) byte_mask |= 0x000000ff;
-	if (code->flags & 0x20) byte_mask |= 0x0000ff00;
-	if (code->flags & 0x40) byte_mask |= 0x00ff0000;
-	if (code->flags & 0x80) byte_mask |= 0xff000000;
-
-	const uint32_t data0 = addr[0], misalignment = (code->address & 3) << 3; // Misalignment in bits
-
-	if (!misalignment) {
-		// The easiest case, a 32-bit aligned address. No need to fetch the next word.
-		addr[0] = (data0 & ~byte_mask) | (code->replace & byte_mask);
-		return 1;
-	}
-
-	if (code->address + 3 >= 0x800000) return -1; // Invalid address
-
-	const uint32_t data1 = addr[1], current = (data0 >> misalignment) | (data1 << (32 - misalignment));
-
-	// Compare the current value with the compare value
-	switch (cheat_compare(current, code->compare, (ComparisionType)(code->flags & 0xf), byte_mask)) {
+	// Compare the current value with the compare value and mask the replace value
+	uint32_t replace = code->replace;
+	switch (cheat_mask_and_compare(addr, word_length, code->compare, code->flags, &replace)) {
 	case 0:
+		// Not equal according to compare type and mask
 		return 0;
 	case 1:
-	{
-		// Apply patch data
-		const uint32_t xor_patch = (current ^ code->replace) & byte_mask;
-		addr[0] = data0 ^ (xor_patch << misalignment);
-		addr[1] = data1 ^ (xor_patch >> (32 - misalignment));
-	}
-	// Fall through
-	case 2:
+		// Equal according to compare type and mask
+		if (word_length == 32) {
+			if ((code->address & 2) == 2) { // 16-bit, but NOT 32-bit aligned. Address ends in 0x...2, 6, a or e
+				cheat_16bit_write((uint16_t*)addr + 1, (replace) & 0xffff);
+				cheat_16bit_write((uint16_t*)addr + 0, (replace >> (1 * 16)) & 0xffff);
+			}
+			else if (code->address & 1) { // Odd address
+				cheat_8bit_write((uint8_t*)addr + 3, (replace) & 0xff);
+				cheat_8bit_write((uint8_t*)addr + 2, (replace >> (1 * 8)) & 0xff);
+				cheat_8bit_write((uint8_t*)addr + 1, (replace >> (2 * 8)) & 0xff);
+				cheat_8bit_write((uint8_t*)addr + 0, (replace >> (3 * 8)) & 0xff);
+			}
+			else { // 32-bit aligned (should really just accept this one...)
+				cheat_32bit_write(addr, replace);
+			}
+		}
+		else if (word_length == 16) {
+			if (code->address & 1) { // Odd address
+				cheat_8bit_write((uint8_t*)addr + 1, (replace) & 0xff);
+				cheat_8bit_write((uint8_t*)addr + 0, (replace >> (1 * 8)) & 0xff);
+			}
+			else { // 16-bit aligned (should really just accept this one...)
+				cheat_16bit_write(addr, replace & 0xffff);
+			}
+		}
+		else if (word_length == 8) {
+			cheat_8bit_write(addr, replace & 0xff);
+		}
 		return 1;
 	default:
+		// Invalid compare type
 		return -1;
 	}
 }
@@ -1339,11 +1378,15 @@ static unsigned long poll_timer = 0;
 
 void n64_reset() {
 	printf("Resetting N64...\n");
-	if (cheats_loaded())
-		poll_timer = GetTimer(3000);
-}
+	if (code_buffer_addr && cheats_loaded() && cheats_enabled()) {
+		cheat_code* code = (cheat_code*)code_buffer_addr;
+		for (uint32_t i = 0; i < code_buffer_len / sizeof(struct cheat_code); i++, code++) {
+			code->flags &= ~0x200; // Clear the "already executed" flag
+		}
 
-static void* rdram_ptr = nullptr;
+		poll_timer = GetTimer(2500);
+	}
+}
 
 void n64_poll() {
 	static uint8_t adj = 0;
@@ -1360,22 +1403,22 @@ void n64_poll() {
 		if (adj > 3 || --adj == 0) adj = 3;
 
 		if (cheats_loaded()) {
-			if (rdram_ptr != (void*)-1) {
-				if (!rdram_ptr) {
-					if (!(rdram_ptr = shmem_map(0x30000000, 0x800000))) {
-						rdram_ptr = (void*)-1;
-						printf("Failed to map RDRAM!\n");
-					}
-					else {
-						printf("Mapped RDRAM at 0x%" PRIXPTR ".\n", (uintptr_t)rdram_ptr);
-					}
+			if (rdram_ptr == (void*)-1) return;
+
+			if (!rdram_ptr) {
+				if (!(rdram_ptr = shmem_map(0x30000000, 0x800000))) {
+					rdram_ptr = (void*)-1;
+					printf("Failed to map RDRAM!\n");
 				}
-				else if (cheats_enabled()) {
-					const cheat_code* code = (cheat_code*)code_buffer_addr;
-					for (uint32_t i = 0; i < code_buffer_len / sizeof(struct cheat_code); i++, code++) {
-						if (cheat_execute(rdram_ptr, code) < 0) {
-							printf("Invalid cheat code: %08x\t%08x\t%08x\t%06x:%02x !\n", code->address, code->compare, code->replace, code->flags >> 2, code->flags & 0xff);
-						}
+				else {
+					printf("Mapped RDRAM at 0x%" PRIXPTR ".\n", (uintptr_t)rdram_ptr);
+				}
+			}
+			else if (code_buffer_addr && cheats_enabled()) {
+				cheat_code* code = (cheat_code*)code_buffer_addr;
+				for (uint32_t i = 0; i < code_buffer_len / sizeof(struct cheat_code); i++, code++) {
+					if (cheat_execute(code) < 0) {
+						printf("Invalid cheat code: %08x\t%08x\t%08x\t%06x:%02x !\n", code->address, code->compare, code->replace, code->flags >> 2, code->flags & 0xff);
 					}
 				}
 			}
@@ -1390,7 +1433,7 @@ const char* n64_get_game_id() {
 	return cart_id;
 }
 
-int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t* rom_crc) {
+int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t* out_crc) {
 	static uint8_t buf[4096];
 	fileTYPE f;
 
@@ -1405,7 +1448,7 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 
 	unmount_all_saves();
 
-	// set index byte
+	// Set index byte
 	user_io_set_index(idx);
 
 	if (((idx & 0x3f) == 2) && data_size) {
@@ -1482,13 +1525,14 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 	bool is_first_chunk = true;
 	char internal_name[20 + 1];
 
+	// CRC32 is used for cheat look-up
+	*out_crc = 0;
+
 	void* mem = load_addr ? (uint8_t*)shmem_map(fpga_mem(load_addr), data_size) : nullptr;
 	uint8_t* write_ptr = (uint8_t*)mem;
 
 	MD5Context ctx;
 	MD5Init(&ctx);
-
-	*rom_crc = 0;
 
 	// prepare transmission of new file
 	user_io_set_download(1, load_addr ? data_size : 0);
@@ -1502,13 +1546,10 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 		// Perform sanity checks and detect ROM endianess
 		if (is_first_chunk) {
 			if (chunk < 4096) {
-				printf("Failed to load ROM: must be at least 4096 bytes.\n");
-				Info("Invalid ROM!");
-
-				*current_rom_path = '\0';
-
 				// Signal end of transmission
 				user_io_set_download(0);
+				*current_rom_path = '\0';
+				printf("Failed to load ROM: must be at least 4096 bytes.\n");
 
 				return 0;
 			}
@@ -1580,7 +1621,9 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 		data_left -= chunk;
 		is_first_chunk = false;
 
-		*rom_crc = crc32(*rom_crc, buf, chunk);
+		// CRC32 is used for cheat look-up
+		// normalize_data(buf, chunk, ByteOrder::BYTESWAPPED);
+		*out_crc = crc32(*out_crc, buf, chunk);
 	}
 
 	if (mem) {
@@ -1616,7 +1659,7 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 						user_io_status_set(RPAK_OPT, 0); // Disable Rumble Pak
 						user_io_status_set(TPAK_OPT, 0); // Disable Transfer Pak
 						user_io_status_set(RTC_OPT, 0); // Disable RTC
-						set_cart_save_type(MemoryType::NONE);
+						set_cart_save_type(MemoryType::NONE); // Disable Save
 					}
 				}
 			}
