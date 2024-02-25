@@ -31,6 +31,8 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <time.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include "../../spi.h"
 #include "../../user_io.h"
@@ -513,7 +515,71 @@ void x86_ide_set()
 	for (int i = 0; i < 4; i++) hdd_set(i, config.img_name[i + 2]);
 }
 
-void x86_init()
+void x86_get_ntag_uuid(int cmos_offset) {
+    int sockfd;
+    struct sockaddr_un addr;
+    const char* socket_path = "/tmp/tapto/tapto.sock";
+    const char* message = "status";
+    char buffer[1024];
+
+    sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sockfd == -1) {
+        return;
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
+
+    if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+        close(sockfd);
+        return;
+    }
+
+    if (write(sockfd, message, strlen(message)) == -1) {
+        close(sockfd);
+        return;
+    }
+
+    ssize_t numBytes = read(sockfd, buffer, sizeof(buffer) - 1);
+    if (numBytes > 0) {
+        buffer[numBytes] = '\0';
+    } else {
+        close(sockfd);
+        return;
+    }
+
+    close(sockfd);
+
+    char* token = strtok(buffer, ",");
+    if (token != NULL) {
+        time_t currentTime = time(NULL);
+        long timestamp = atol(token);
+        time_t difference = currentTime - timestamp;
+
+        if (timestamp != 0 && difference <= 2) {
+            token = strtok(NULL, ",");
+            if (token != NULL) {
+                int uuidLen = strlen(token) / 2;
+                int missingBytes = 8 - uuidLen;
+                for (int i = 0; i < missingBytes; ++i) {
+                    IOWR(RTC_BASE, cmos_offset + 7 - i, 0x00);
+                }
+                for (int i = 0; i < uuidLen; ++i) {
+                    char byteStr[3] = {token[i*2], token[i*2 + 1], '\0'};
+                    unsigned int byteVal = (unsigned int)strtol(byteStr, NULL, 16);
+                    IOWR(RTC_BASE, cmos_offset + 7 - i - missingBytes, byteVal);
+                }
+            }
+        } else {
+            for (int i = 0; i < 8; ++i) {
+                IOWR(RTC_BASE, cmos_offset + 7 - i, 0x00);
+            }
+        }
+    }
+}
+
+void x86_init(bool has_tapto)
 {
 	user_io_status_set("[0]", 1);
 
@@ -627,10 +693,12 @@ void x86_init()
 		0x00, //0x3E: ?
 		0x00, //0x3F: ?
 
+		0, 0, 0, 0, 0, 0, 0, 0,	// 0x40 - 0x47: TapTo card UUID
+		
 		0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0, 0, 0
+		0, 0, 0, 0, 0, 0, 0, 0
 	};
 
 	//count checksum
@@ -640,6 +708,9 @@ void x86_init()
 	cmos[0x2E] = sum >> 8;
 	cmos[0x2F] = sum & 0xFF;
 	for (unsigned int i = 0; i < sizeof(cmos) / sizeof(cmos[0]); i++) IOWR(RTC_BASE, i, cmos[i]);
+
+	if (has_tapto)
+		x86_get_ntag_uuid(0x40);
 
 	x86_share_reset();
 	user_io_status_set("[0]", 0);

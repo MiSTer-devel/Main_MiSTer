@@ -658,6 +658,14 @@ static void printSysInfo()
 		OsdWrite(n++, info_top, 0, 0);
 
 		int j = 0;
+		char *tapto;
+		tapto = getTapTo();
+		if (tapto)
+		{
+			sprintf(str, "\x05 %s", tapto);
+			infowrite(n++, str);
+			j++;
+		}
 		char *net;
 		net = getNet(1);
 		if (net)
@@ -2327,7 +2335,7 @@ void HandleUI(void)
 								const char *opt = p + 1;
 								if (!bit && (is_x86() || is_pcxt()))
 								{
-									x86_init();
+									x86_init(getTapTo());
 									ResetUART();
 									menustate = MENU_NONE1;
 								}
@@ -6973,6 +6981,7 @@ void HandleUI(void)
 				}
 
 				int n = 8;
+				if (getTapTo()) str[n++] = 5;
 				if (getNet(2)) str[n++] = 0x1d;
 				if (getNet(1)) str[n++] = 0x1c;
 				if (hci_get_route(0) >= 0) str[n++] = 4;

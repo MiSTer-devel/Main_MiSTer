@@ -1,7 +1,7 @@
 #ifndef X86_H
 #define X86_H
 
-void x86_init();
+void x86_init(bool has_tapto);
 void x86_poll(int only_ide);
 void x86_ide_set();
 

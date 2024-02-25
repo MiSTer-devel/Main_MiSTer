@@ -9,6 +9,8 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include "lib/imlib2/Imlib2.h"
 
@@ -1300,6 +1302,56 @@ int user_io_get_width()
 	return fio_size;
 }
 
+char* getTapTo() {
+    int sockfd;
+    struct sockaddr_un addr;
+    const char* socket_path = "/tmp/tapto/tapto.sock";
+    const char* message = "connection";
+    char buffer[1024] = {0};
+    char *response;
+
+    sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sockfd == -1) {
+        perror("socket");
+        return NULL;
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
+
+    if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+        perror("connect");
+        close(sockfd);
+        return NULL;
+    }
+
+    if (write(sockfd, message, strlen(message)) == -1) {
+        perror("write");
+        close(sockfd);
+        return NULL;
+    }
+
+    if (read(sockfd, buffer, sizeof(buffer)) == -1) {
+        perror("read");
+        close(sockfd);
+        return NULL;
+    }
+
+    close(sockfd);
+
+    if (strncmp(buffer, "true,", 5) == 0) {
+        response = (char*)malloc(strlen(buffer) - 4 + strlen("TapTo: "));
+        if (response) {
+            strcpy(response, "TapTo: ");
+            strcat(response, buffer + 5);
+        }
+        return response;
+    } else {
+        return NULL;
+    }
+}
+
 void user_io_init(const char *path, const char *xml)
 {
 	char *name;
@@ -1466,7 +1518,7 @@ void user_io_init(const char *path, const char *xml)
 				else if (is_x86() || is_pcxt())
 				{
 					x86_config_load();
-					x86_init();
+					x86_init(getTapTo());
 				}
 				else if (is_archie())
 				{
@@ -2835,7 +2887,7 @@ void user_io_send_buttons(char force)
 			if (is_neogeo_cd()) neocd_reset();
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
-			if (is_x86() || is_pcxt()) x86_init();
+			if (is_x86() || is_pcxt()) x86_init(getTapTo());
 			if (is_uneon()) x86_ide_set();
 			if (is_st()) tos_reset(0);
 			ResetUART();

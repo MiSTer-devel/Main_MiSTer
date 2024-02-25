@@ -161,6 +161,7 @@
 #define EMU_JOY0  2
 #define EMU_JOY1  3
 
+char* getTapTo();
 void user_io_init(const char *path, const char *xml);
 unsigned char user_io_core_type();
 void user_io_read_core_name();
