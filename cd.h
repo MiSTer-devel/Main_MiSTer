@@ -19,7 +19,8 @@ typedef struct
 	int end;
 	int type;
 	int sector_size;
-	int index1;
+	int indexes[100];
+	int index_num;
 	cd_subcode_types_t sbc_type;
 } cd_track_t;
 
@@ -36,6 +37,14 @@ typedef struct
 	{
 		int i = 0;
 		while ((this->tracks[i].end <= lba) && (i < this->last)) i++;
+		return i;
+	}
+
+	int GetIndexByLBA(int track, int lba)
+	{
+		int i = 1;
+		while ((lba - this->tracks[track].start >= this->tracks[track].indexes[i]) && (i < this->tracks[track].index_num)) i++;
+		i--;
 		return i;
 	}
 } toc_t;

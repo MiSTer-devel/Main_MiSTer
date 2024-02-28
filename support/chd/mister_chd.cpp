@@ -30,6 +30,8 @@ int mister_chd_log(const char *format, ...)
 
 chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 {
+	cd_toc->last = -1;
+	
 	chd_error err = chd_open(getFullPath(filename), CHD_OPEN_READ, NULL, &cd_toc->chd_f);
 	if (err != CHDERR_NONE)
 	{
@@ -78,6 +80,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 			pregap_valid = false;
 
 		}
+
 		if (cd_toc->last)
 		{
 			if (!pregap_valid)
@@ -91,7 +94,7 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 				cd_toc->tracks[cd_toc->last].start += pregap;
 			}
 
-			cd_toc->tracks[cd_toc->last].index1 = pregap;
+			cd_toc->tracks[cd_toc->last].indexes[1] = pregap;
 		}
 		else {
 			if (pregap_valid)
@@ -101,8 +104,9 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 			else {
 				cd_toc->tracks[cd_toc->last].start = 0;
 			}
-			cd_toc->tracks[cd_toc->last].index1 = pregap;
+			cd_toc->tracks[cd_toc->last].indexes[1] = pregap;
 		}
+		cd_toc->tracks[cd_toc->last].index_num = 2;
 
 		if (!pregap_valid)
 		{
