@@ -310,6 +310,7 @@ int satcdd_t::LoadCUE(const char* filename) {
 #endif // SATURN_DEBUG
 		}
 	}
+	this->toc.last++;
 
 	if (this->toc.last && !this->toc.tracks[this->toc.last - 1].end)
 	{
