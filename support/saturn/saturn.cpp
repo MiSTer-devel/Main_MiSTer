@@ -189,6 +189,11 @@ void saturn_set_image(int num, const char *filename)
 				saturn_mount_save(filename);
 				//cheats_init(filename, 0);
 			}
+
+			if (satcdd.GetBootHeader((uint8_t*)buf) > 0)
+			{
+				saturn_send_data((uint8_t*)buf, 256, BOOT_IO_INDEX);
+			}
 		}
 	}
 

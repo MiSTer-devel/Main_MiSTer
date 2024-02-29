@@ -141,12 +141,12 @@ static int load_chd(const char *filename, toc_t *table)
 	{
 		if (i == 0) //First track fakes a pregap even if it doesn't exist
 		{
-			table->tracks[i].index1 = 150;
+			table->tracks[i].indexes[1] = 150;
 			table->tracks[i].start = 150;
 			table->tracks[i].end += 150-1;
 		} else {
 			int frame_cnt = table->tracks[i].end - table->tracks[i].start;
-			frame_cnt += table->tracks[i].index1;
+			frame_cnt += table->tracks[i].indexes[1];
 			table->tracks[i].start = table->tracks[i-1].end + 1;
 			table->tracks[i].end = table->tracks[i].start + frame_cnt - 1;
 		}
@@ -290,23 +290,23 @@ static int load_cue(const char* filename, toc_t *table)
           table->tracks[table->last-1].end = table->tracks[table->last].start-1;
           if (pregap)
           {
-            table->tracks[table->last].index1 = table->tracks[table->last].start - pregap;
+            table->tracks[table->last].indexes[1] = table->tracks[table->last].start - pregap;
             if (!table->tracks[table->last].pregap)
             {
-              table->tracks[table->last].offset -= 2352*table->tracks[table->last].index1;
-              table->tracks[table->last].index1 = table->tracks[table->last].start - pregap;
+              table->tracks[table->last].offset -= 2352*table->tracks[table->last].indexes[1];
+              table->tracks[table->last].indexes[1] = table->tracks[table->last].start - pregap;
             } else {
-              table->tracks[table->last].index1 = pregap;
+              table->tracks[table->last].indexes[1] = pregap;
             }
           }
         } else if (table->tracks[table->last].type) {
-          table->tracks[table->last].index1 = 150;
+          table->tracks[table->last].indexes[1] = 150;
         }
 			}
 			else
 			{
-				table->tracks[table->last].index1 = bb + ss * 75 + mm * 60 * 75;
-				if (table->tracks[table->last].type && !table->last) table->tracks[table->last].index1 = 150;
+				table->tracks[table->last].indexes[1] = bb + ss * 75 + mm * 60 * 75;
+				if (table->tracks[table->last].type && !table->last) table->tracks[table->last].indexes[1] = 150;
 				table->tracks[table->last].start = table->end;
 				table->end += (table->tracks[table->last].f.size / table->tracks[table->last].sector_size);
 				table->tracks[table->last].end = table->end - 1;
@@ -327,8 +327,8 @@ static int load_cue(const char* filename, toc_t *table)
 	for (int i = 0; i < table->last; i++)
 	{
 		printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
-		if (table->tracks[i].index1)
-			printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1 / 75);
+		if (table->tracks[i].indexes[1])
+			printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].indexes[1] / 75);
 
 	}*/
 
@@ -401,7 +401,7 @@ static void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask, enum reg
 		for (int i = 0; i < table->last; i++)
 		{
 			printf("\x1b[32mPSX: Track = %u, start = %u, end = %u, offset = %d, sector_size=%d, type = %u\n\x1b[0m", i, table->tracks[i].start, table->tracks[i].end, table->tracks[i].offset, table->tracks[i].sector_size, table->tracks[i].type);
-			if (table->tracks[i].index1) printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].index1 / 75);
+			if (table->tracks[i].indexes[1]) printf("\x1b[32mPSX: Track = %u,Index1 = %u seconds\n\x1b[0m", i, table->tracks[i].indexes[1] / 75);
 		}
 
 		memset(disk, 0, sizeof(disk_t));
@@ -418,8 +418,8 @@ static void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask, enum reg
 		{
 			disk->track[i].start_lba = i ? table->tracks[i].start : 0;
 			disk->track[i].end_lba = table->tracks[i].end;
-			m = ((disk->track[i].start_lba + table->tracks[i].index1) / 75) / 60;
-			s = ((disk->track[i].start_lba + table->tracks[i].index1) / 75) % 60;
+			m = ((disk->track[i].start_lba + table->tracks[i].indexes[1]) / 75) / 60;
+			s = ((disk->track[i].start_lba + table->tracks[i].indexes[1]) / 75) % 60;
 			disk->track[i].bcd = ((BCD(m) << 8) | BCD(s)) | ((table->tracks[i].type ? 0 : 1) << 16);
 		}
 
@@ -496,12 +496,12 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 					}
 					while (cnt)
 					{
-            if (toc.tracks[i+1].pregap && lba > (toc.tracks[i+1].start-toc.tracks[i+1].index1)) 
+            if (toc.tracks[i+1].pregap && lba > (toc.tracks[i+1].start-toc.tracks[i+1].indexes[1]))
             {
               //The TOC is setup so that pregap sectors are actually part of the
               //PREVIOUS track. If the pregap field is set the file doesn't contain
               //this data, so we have to fake it. 
-              //Check the next track's pregap and index1 values to determine
+              //Check the next track's pregap and indexes[1] values to determine
               //if we're reading pregap sectors
               
 
@@ -511,7 +511,7 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 						{
 
 							// The "fake" 150 sector pregap moves all the LBAs up by 150, so adjust here to read where the core actually wants data from
-							int read_lba = lba - toc.tracks[0].index1;
+							int read_lba = lba - toc.tracks[0].indexes[1];
 							if (mister_chd_read_sector(toc.chd_f, (read_lba + toc.tracks[i].offset), 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
 							{
 								if (!toc.tracks[i].type) //CHD requires byteswap of audio data
