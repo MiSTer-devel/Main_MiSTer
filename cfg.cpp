@@ -16,6 +16,8 @@
 #include "support/arcade/mra_loader.h"
 
 cfg_t cfg;
+static FILE *orig_stdout = NULL;
+static FILE *dev_null = NULL;
 
 typedef enum
 {
@@ -127,6 +129,7 @@ static const ini_var_t ini_vars[] =
 	{ "CONTROLLER_UNIQUE_MAPPING", (void *)(cfg.controller_unique_mapping), UINT32ARR, 0, 0xFFFFFFFF },
 	{ "OSD_LOCK", (void*)(&(cfg.osd_lock)), STRING, 0, sizeof(cfg.osd_lock) - 1 },
 	{ "OSD_LOCK_TIME", (void*)(&(cfg.osd_lock_time)), UINT16, 0, 60 },
+	{ "DEBUG", (void *)(&(cfg.debug)), UINT8, 0, 1 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -390,6 +393,10 @@ static void ini_parse_var(char* buf)
 
 		default:
 			ini_parse_numeric(var, &buf[i], var->var);
+			if (!strcasecmp(var->name, "DEBUG"))
+			{
+				stdout = cfg.debug ? orig_stdout : dev_null;
+			}
 			break;
 		}
 	}
@@ -400,6 +407,18 @@ static void ini_parse(int alt, const char *vmode)
 	static char line[INI_LINE_SIZE];
 	int section = 0;
 	int eof;
+
+	if (!orig_stdout) orig_stdout = stdout;
+	if (!dev_null)
+	{
+		dev_null = fopen("/dev/null", "w");
+		if (dev_null)
+		{
+			int null_fd = fileno(dev_null);
+			if (null_fd >= 0) fcntl(null_fd, F_SETFD, FD_CLOEXEC);
+			stdout = dev_null;
+		}
+	}
 
 	ini_parser_debugf("Start INI parser for core \"%s\"(%s), video mode \"%s\".", user_io_get_core_name(0), user_io_get_core_name(1), vmode);
 

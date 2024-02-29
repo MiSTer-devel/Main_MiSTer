@@ -1,5 +1,5 @@
 // bootcore.cpp
-// 2019, Aitor Gomez Garcia (spark2k06@gmail.com)
+// 2024, Aitor Gomez Garcia (info@aitorgomez.net)
 // Thanks to Sorgelig and BBond007 for their help and advice in the development of this feature.
 
 #include "file_io.h"
