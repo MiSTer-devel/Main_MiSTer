@@ -243,18 +243,9 @@ int satcdd_t::LoadCUE(const char* filename) {
 		{
 			int idx_pos = bb + ss * 75 + mm * 60 * 75;
 			if (idx == 0) {
-				if (!new_file)
-				{
-					this->toc.tracks[this->toc.last].start = idx_pos + pregap;
-				}
-				else
-				{
-					this->toc.tracks[this->toc.last].start = this->toc.end + pregap;
-				}
-
 				if (this->toc.last && !this->toc.tracks[this->toc.last - 1].end)
 				{
-					this->toc.tracks[this->toc.last - 1].end = /*idx_pos +*/ pregap;
+					this->toc.tracks[this->toc.last - 1].end = pregap;
 				}
 			}
 			else if (idx == 1) {
@@ -262,6 +253,7 @@ int satcdd_t::LoadCUE(const char* filename) {
 
 				if (!new_file)
 				{
+					this->toc.tracks[this->toc.last].start = idx_pos + pregap;
 					if (this->toc.last && !this->toc.tracks[this->toc.last - 1].end)
 					{
 						this->toc.tracks[this->toc.last - 1].end = this->toc.tracks[this->toc.last].start - this->toc.tracks[this->toc.last].pregap;
@@ -272,14 +264,13 @@ int satcdd_t::LoadCUE(const char* filename) {
 				}
 				else
 				{
-					//this->toc.tracks[this->toc.last].start = this->toc.end + pregap;
+					this->toc.tracks[this->toc.last].start = this->toc.end + pregap;
 					this->toc.tracks[this->toc.last].offset += this->toc.end * 2352;
 
 					int sectorSize = 2352;
 					if (this->toc.tracks[this->toc.last].type) sectorSize = this->sectorSize;
 					this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((file_size + sectorSize - 1) / sectorSize);
 
-					//this->toc.tracks[this->toc.last].start += frames;
 					this->toc.end = this->toc.tracks[this->toc.last].end;
 #ifdef SATURN_DEBUG
 					printf("\x1b[32mSaturn: track = %u, start = %u, end = %u\n\x1b[0m", this->toc.last + 1, this->toc.tracks[this->toc.last].start, this->toc.tracks[this->toc.last].end);
