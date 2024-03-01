@@ -42,7 +42,10 @@ typedef struct
 
 	int GetIndexByLBA(int track, int lba)
 	{
-		int i = 1;
+		if (lba - this->tracks[track].start < 0) 
+			return 0;
+
+		int i = 2;
 		while ((lba - this->tracks[track].start >= this->tracks[track].indexes[i]) && (i < this->tracks[track].index_num)) i++;
 		i--;
 		return i;
