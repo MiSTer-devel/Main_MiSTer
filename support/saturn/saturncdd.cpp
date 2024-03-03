@@ -502,6 +502,8 @@ int satcdd_t::GetSectorOffsetByIndex(int tno, int idx) {
 
 	if (idx <= 0)
 		return 0;
+	else if (this->toc.chd_f && idx == 1)
+		return 0;
 	else
 		return this->toc.tracks[track].indexes[idx];
 }
