@@ -502,6 +502,8 @@ int satcdd_t::GetSectorOffsetByIndex(int tno, int idx) {
 
 	if (idx <= 0)
 		return 0;
+	else if (this->toc.chd_f && idx == 1)
+		return 0;
 	else
 		return this->toc.tracks[track].indexes[idx];
 }
@@ -1147,56 +1149,45 @@ void satcdd_t::ReadData(uint8_t *buf)
 
 int satcdd_t::ReadCDDA(uint8_t *buf, int first)
 {
-	int len = 2352;
-	if (first) len += 2352;
+	int sec_offs = first ? 0 : 1;
 
-#ifdef SATURN_DEBUG
-	//printf("\x1b[32mMCD: AUDIO LENGTH %d LBA: %d INDEX: %d START: %d END %d\n\x1b[0m", this->audioLength, this->lba, this->track, this->toc.tracks[this->track].start, this->toc.tracks[this->track].end);
-#endif // SATURN_DEBUG
-
-	/*if (this->isData)
-	{
-		return this->audioLength;
-	}*/
-
-	int offs = 0;
+	uint8_t *dest = buf;
 	if (this->toc.chd_f)
 	{
-		for (int i = 0; i < len / 2352; i++)
+		for (int i = sec_offs; i < 2; i++, dest += 4096)
 		{
-			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->track].offset ,2352 * i, 0, 2352, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->track].offset + i, 0, 0, 2352, dest, this->chd_hunkbuf, &this->chd_hunknum);
+
+			//CHD audio requires byteswap. There's probably a better way to do this...
+			for (int swapidx = 0; swapidx < 2352; swapidx += 2)
+			{
+				uint8_t temp = dest[swapidx];
+				dest[swapidx] = dest[swapidx + 1];
+				dest[swapidx + 1] = temp;
+			}
 		}
 
-		//CHD audio requires byteswap. There's probably a better way to do this...
-
-		
-		for (int swapidx = 0; swapidx < len; swapidx += 2)
-		{
-			uint8_t temp = buf[swapidx];
-			buf[swapidx] = buf[swapidx + 1];
-			buf[swapidx + 1] = temp;
-		}
-
-		if ((len / 2352) > 1)
+		/*if ((len / 2352) > 1)
 		{
 			this->chd_audio_read_lba++;
-		}
-
+		}*/
 	}
 	else if (this->toc.tracks[this->track].f.opened()) {
-		offs = (this->lba * 2352) - this->toc.tracks[this->track].offset;
-		if (!first) offs += 2352;
-		FileSeek(&this->toc.tracks[this->track].f, offs, SEEK_SET);
-		FileReadAdv(&this->toc.tracks[this->track].f, buf, len);
+		int offs = (this->lba * 2352) - this->toc.tracks[this->track].offset;
+		for (int i = sec_offs; i < 2; i++, dest += 4096)
+		{
+			FileSeek(&this->toc.tracks[this->track].f, offs + (i * 2352), SEEK_SET);
+			FileReadAdv(&this->toc.tracks[this->track].f, dest, 2352);
+		}
 	}
 
 #ifdef SATURN_DEBUG
-	//printf("\x1b[32mSaturn: ");
-	//printf("Read CD DA sector: Length = %u, First = %u, offset = %u", this->audioLength, this->audioFirst, offs);
-	//printf(" (%u)\n\x1b[0m", frame_cnt);
+	printf("\x1b[32mSaturn: ");
+	printf("Read CD DA sector: tno = %i, idx = %i, fad = %i, ", this->track + 1, this->index, this->lba + 150);
+	printf(" (%u)\n\x1b[0m", frame_cnt);
 #endif // SATURN_DEBUG
 
-	return len;
+	return (first ? 2352 * 2 : 2352);
 }
 
 int satcdd_t::DataSectorSend(uint8_t* header, int speed)
