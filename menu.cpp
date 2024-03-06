@@ -2432,7 +2432,7 @@ void HandleUI(void)
 					if (is_n64())
 					{
 						uint32_t n64_crc;
-						if (!n64_rom_tx(selPath, idx, load_addr, &n64_crc)) Info("failed to load ROM");
+						if (!n64_rom_tx(selPath, idx, load_addr, n64_crc)) Info("failed to load ROM");
 						else if (user_io_use_cheats() && !store_name) cheats_init(selPath, n64_crc);
 					}
 					else

@@ -24,14 +24,16 @@ struct cheat_rec_t
 	int cheatSize;
 	char* cheatData;
 
-	cheat_rec_t() {
+	cheat_rec_t()
+	{
 		this->enabled = false;
 		this->cheatData = NULL;
 		this->cheatSize = 0;
 		memset(name, 0, sizeof(name));
 	}
 
-	~cheat_rec_t() {
+	~cheat_rec_t()
+	{
 		if (this->cheatData)
 		{
 			delete[] this->cheatData;
@@ -193,48 +195,45 @@ void cheats_init(const char* rom_path, uint32_t romcrc)
 
 	mz_zip_archive _z = {};
 
-	if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
+	if (is_psx() && !mz_zip_reader_init_file(&_z, cheat_zip, 0))
 	{
-		if (is_psx() && !mz_zip_reader_init_file(&_z, cheat_zip, 0))
+		if (!cheat_init_psx(&_z, rom_path))
 		{
-			if (!cheat_init_psx(&_z, rom_path))
-			{
-				printf("no cheat file found\n");
-				return;
-			}
+			printf("no cheat file found\n");
+			return;
 		}
-		else
+	}
+	else if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
+	{
+		memset(&_z, 0, sizeof(_z));
+		if (!(pcecd_using_cd() || is_megacd()) || !find_in_same_dir(rom_path) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
 		{
 			memset(&_z, 0, sizeof(_z));
-			if (!(pcecd_using_cd() || is_megacd()) || !find_in_same_dir(rom_path) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
+			const char* rom_name = strrchr(rom_path, '/');
+			if (rom_name)
 			{
-				memset(&_z, 0, sizeof(_z));
-				const char* rom_name = strrchr(rom_path, '/');
-				if (rom_name)
-				{
-					sprintf(cheat_zip, "%s/cheats/%s%s%s", getRootDir(), CoreName, pcecd_using_cd() ? "CD" : "", rom_name);
-					char* p = strrchr(cheat_zip, '.');
-					if (p) *p = 0;
-					if (pcecd_using_cd() || is_megacd()) strcat(cheat_zip, " []");
-					strcat(cheat_zip, ".zip");
+				sprintf(cheat_zip, "%s/cheats/%s%s%s", getRootDir(), CoreName, pcecd_using_cd() ? "CD" : "", rom_name);
+				char* p = strrchr(cheat_zip, '.');
+				if (p) *p = 0;
+				if (pcecd_using_cd() || is_megacd()) strcat(cheat_zip, " []");
+				strcat(cheat_zip, ".zip");
 
-					if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
-					{
-						memset(&_z, 0, sizeof(_z));
-						if (!find_by_crc(romcrc) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
-						{
-							printf("no cheat file found\n");
-							return;
-						}
-					}
-				}
-				else
+				if (!mz_zip_reader_init_file(&_z, cheat_zip, 0))
 				{
+					memset(&_z, 0, sizeof(_z));
 					if (!find_by_crc(romcrc) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
 					{
 						printf("no cheat file found\n");
 						return;
 					}
+				}
+			}
+			else
+			{
+				if (!find_by_crc(romcrc) || !mz_zip_reader_init_file(&_z, cheat_zip, 0))
+				{
+					printf("no cheat file found\n");
+					return;
 				}
 			}
 		}
@@ -443,7 +442,7 @@ static void cheats_send()
 
 	if (is_n64())
 	{
-		n64_apply_cheats(buff, pos);
+		n64_cheats_send(buff, loaded);
 	}
 	else
 	{
@@ -486,11 +485,9 @@ void cheats_toggle()
 		}
 
 		snprintf(filename, sizeof(filename), "%s/%s", cheat_zip, cheats[iSelectedEntry].name);
-
 		if (FileOpen(&f, filename))
 		{
 			int len = f.size;
-
 			if (!len || (len & 15))
 			{
 				printf("Cheat file %s has incorrect length %d -> skipping.\n", filename, len);
