@@ -3511,6 +3511,7 @@ void user_io_poll()
 	if (is_saturn()) saturn_poll();
 	if (is_psx()) psx_poll();
 	if (is_neogeo_cd()) neocd_poll();
+	if (is_n64()) n64_poll();
 	process_ss(0);
 }
 
