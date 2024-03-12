@@ -30,6 +30,7 @@ typedef struct
 	int last;
 	int sectorSize;
 	chd_file *chd_f;
+	int chd_hunksize;
 	cd_track_t tracks[100];
 	fileTYPE sub;
 

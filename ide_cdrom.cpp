@@ -301,7 +301,7 @@ static const char* load_chd_file(drive_t *drv, const char *chdfile)
 		free(drv->chd_hunkbuf);
 	}
 
-	drv->chd_hunkbuf = (uint8_t *)malloc(CD_FRAME_SIZE * CD_FRAMES_PER_HUNK);
+	drv->chd_hunkbuf = (uint8_t *)malloc(tmpTOC.chd_hunksize);
 	drv->chd_hunknum = -1;
 	drv->chd_f = tmpTOC.chd_f;
 

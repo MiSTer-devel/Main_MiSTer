@@ -16,7 +16,7 @@
 #include <libchdr/chd.h>
 
 static char buf[1024];
-static uint8_t chd_hunkbuf[CD_FRAME_SIZE * CD_FRAMES_PER_HUNK];
+static uint8_t *chd_hunkbuf = NULL;
 static int chd_hunknum;
 
 static int sgets(char *out, int sz, char **in)
@@ -108,7 +108,7 @@ static void unload_chd(toc_t *table)
 	{
 		chd_close(table->chd_f);
 	}
-	memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
+	if (chd_hunkbuf) free(chd_hunkbuf);
 	memset(table, 0, sizeof(toc_t));
 	chd_hunknum = -1;
 
@@ -154,7 +154,7 @@ static int load_chd(const char *filename, toc_t *table)
 
 	table->end = table->tracks[table->last - 1].end + 1;
 
-	memset(chd_hunkbuf, 0, sizeof(chd_hunkbuf));
+	chd_hunkbuf = (uint8_t *)malloc(table->chd_hunksize);
 	chd_hunknum = -1;
 
 	return 1;
