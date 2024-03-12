@@ -467,6 +467,15 @@ void psx_fill_blanksave(uint8_t *buffer, uint32_t lba, int cnt)
 static toc_t toc = {};
 #define CD_SECTOR_LEN 2352
 
+int psx_chd_hunksize()
+{
+	if (toc.chd_f)
+		return toc.chd_hunksize;
+
+	return 0;
+}
+
+
 void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 {
 	//printf("req lba=%d, cnt=%d\n", lba, cnt);
