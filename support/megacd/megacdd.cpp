@@ -264,7 +264,7 @@ int cdd_t::Load(const char *filename)
 			free(this->chd_hunkbuf);
 		}
 
-		this->chd_hunkbuf = (uint8_t *)malloc(CD_FRAME_SIZE * CD_FRAMES_PER_HUNK);
+		this->chd_hunkbuf = (uint8_t *)malloc(this->toc.chd_hunksize);
 		this->chd_hunknum = -1;
  	} else {
 		return (-1);

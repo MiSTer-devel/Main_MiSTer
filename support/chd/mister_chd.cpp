@@ -48,9 +48,10 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 	}
 
 	mister_chd_log("hunkbytes %d unitbytes %d logical length %llu\n", chd_header->hunkbytes, chd_header->unitbytes, chd_header->logicalbytes);
+	cd_toc->chd_hunksize = chd_header->hunkbytes;
 
 	//Set CLOEXEC on underlying FD
-	int chd_fd = fileno(chd_core_file(cd_toc->chd_f));
+	int chd_fd = fileno((FILE *)chd_core_file(cd_toc->chd_f)->argp);
 	if (chd_fd) fcntl(chd_fd, F_SETFD, FD_CLOEXEC);
 
 	//Load track info
