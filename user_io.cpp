@@ -125,16 +125,21 @@ static char config_ver[10] = {};
 
 char* user_io_create_config_name(int with_ver)
 {
-	static char str[40];
-	str[0] = 0;
-	char *p = user_io_get_core_name();
-	if (p[0])
+	if (!cfg.pathstatus[0])
 	{
-		strcpy(str, p);
-		if (with_ver) strcat(str, config_ver);
-		strcat(str, ".CFG");
+		static char str[40];
+		str[0] = 0;
+		char *p = user_io_get_core_name();
+		if (p[0])
+		{
+			strcpy(str, p);
+			if (with_ver) strcat(str, config_ver);
+			strcat(str, ".CFG");
+		}
+		return str;
 	}
-	return str;
+	else
+		return cfg.pathstatus;
 }
 
 static char core_name[32] = {};

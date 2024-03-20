@@ -98,6 +98,7 @@ typedef struct {
 	char osd_lock[25];
 	uint16_t osd_lock_time;
 	char debug;
+	char pathstatus[1024] = {0};
 } cfg_t;
 
 extern cfg_t cfg;
