@@ -125,7 +125,7 @@ static char config_ver[10] = {};
 
 char* user_io_create_config_name(int with_ver)
 {
-	if (!cfg.pathstatus[0])
+	if (!cfg_pathstatus[0])
 	{
 		static char str[40];
 		str[0] = 0;
@@ -139,7 +139,7 @@ char* user_io_create_config_name(int with_ver)
 		return str;
 	}
 	else
-		return cfg.pathstatus;
+		return cfg_pathstatus;
 }
 
 static char core_name[32] = {};

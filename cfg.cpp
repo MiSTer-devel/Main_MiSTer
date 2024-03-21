@@ -16,6 +16,7 @@
 #include "support/arcade/mra_loader.h"
 
 cfg_t cfg;
+char cfg_pathstatus[1024] = {0};
 static FILE *orig_stdout = NULL;
 static FILE *dev_null = NULL;
 

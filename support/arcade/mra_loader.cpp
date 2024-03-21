@@ -1284,13 +1284,9 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 						snprintf(mgl.item[mgl.count].path, sizeof(mgl.item[mgl.count].path), "%s", node->attributes[i].value);
 						mgl.item[mgl.count].valid |= 0x8;
 					}
-					else if (!strcasecmp(node->attributes[i].name, "cfg"))
-					{
-						snprintf(cfg.pathstatus, sizeof(cfg.pathstatus), "%s", node->attributes[i].value);
-					}
 				}
 
-				printf("  action=load\n  delay=%d\n  type=%c\n  index=%d\n  path=%s\n  valid=%X\n  cfg=%s\n\n", mgl.item[mgl.count].delay, mgl.item[mgl.count].type, mgl.item[mgl.count].index, mgl.item[mgl.count].path, mgl.item[mgl.count].valid, cfg.pathstatus);
+				printf("  action=load\n  delay=%d\n  type=%c\n  index=%d\n  path=%s\n  valid=%X\n\n", mgl.item[mgl.count].delay, mgl.item[mgl.count].type, mgl.item[mgl.count].index, mgl.item[mgl.count].path, mgl.item[mgl.count].valid);
 
 				if (mgl.item[mgl.count].valid == 0xF)
 				{
@@ -1317,9 +1313,13 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 					{
 						mgl.item[mgl.count].hold = strtoul(node->attributes[i].value, NULL, 0);
 					}
+					else if (!strcasecmp(node->attributes[i].name, "cfg"))
+					{
+						snprintf(cfg_pathstatus, sizeof(cfg_pathstatus), "%s", node->attributes[i].value);
+					}
 				}
 
-				printf("  action=reset\n  delay=%d\n  hold=%d\n\n", mgl.item[mgl.count].delay, mgl.item[mgl.count].hold);
+				printf("  action=reset\n  delay=%d\n  hold=%d\n  cfg=%s\n\n", mgl.item[mgl.count].delay, mgl.item[mgl.count].hold, cfg_pathstatus);
 				if (mgl.item[mgl.count].valid) mgl.count++;
 			}
 		}

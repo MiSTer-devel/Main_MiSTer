@@ -97,10 +97,10 @@ typedef struct {
 	uint32_t controller_unique_mapping[256];
 	char osd_lock[25];
 	uint16_t osd_lock_time;
-	char debug;
-	char pathstatus[1024] = {0};
+	char debug;	
 } cfg_t;
 
+extern char cfg_pathstatus[1024];
 extern cfg_t cfg;
 
 //// functions ////
