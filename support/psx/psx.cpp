@@ -309,19 +309,13 @@ static int load_cue(const char* filename, toc_t *table)
 				if (table->tracks[table->last].type && !table->last) table->tracks[table->last].indexes[1] = 150;
 				table->tracks[table->last].start = table->end;
 				table->end += (table->tracks[table->last].f.size / table->tracks[table->last].sector_size);
-				table->tracks[table->last].end = table->end - 1;
 				table->tracks[table->last].offset = 0;
 			}
+			table->tracks[table->last].end = table->end - 1;
 			table->last++;
 			if (table->last >= 99) break;
 		}
 	}
-
-  if (!table->tracks[table->last].end && table->tracks[table->last].offset)
-  {
-    //Single bin CUE, calculate the end of the last track based on file size.
-    table->tracks[table->last].end = (table->tracks[0].f.size-table->tracks[table->last].offset) / table->tracks[0].sector_size;
-  }
 
 	/*
 	for (int i = 0; i < table->last; i++)
