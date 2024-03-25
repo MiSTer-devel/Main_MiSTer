@@ -1318,6 +1318,7 @@ void user_io_init(const char *path, const char *xml)
 	core_type = (fpga_core_id() & 0xFF);
 	fio_size = fpga_get_fio_size();
 	io_ver = fpga_get_io_version();
+	printf("I/O Board type: %s\n", fpga_get_io_type() ? "digital" : "analogue");
 
 	if (core_type == CORE_TYPE_8BIT2)
 	{
