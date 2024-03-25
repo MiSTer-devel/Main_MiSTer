@@ -358,7 +358,7 @@ static chd_error header_read(chd_file *chd, chd_header *header);
 
 /* internal hunk read/write */
 #ifdef NEED_CACHE_HUNK
-static chd_error hunk_read_into_cache(chd_file *chd, UINT32 hunknum);
+//static chd_error hunk_read_into_cache(chd_file *chd, UINT32 hunknum);
 #endif
 static chd_error hunk_read_into_memory(chd_file *chd, UINT32 hunknum, UINT8 *dest);
 
@@ -820,6 +820,7 @@ static chd_error cdzl_codec_decompress(void *codec, const uint8_t *src, uint32_t
 
 static chd_error huff_codec_init(void* codec, uint32_t hunkbytes)
 {
+	(void)hunkbytes;
 	huff_codec_data* huff_codec = (huff_codec_data*) codec;
 	huff_codec->decoder = create_huffman_decoder(256, 16);
 	return CHDERR_NONE;
@@ -1030,6 +1031,7 @@ static chd_error cdfl_codec_decompress(void *codec, const uint8_t *src, uint32_t
 
 static chd_error zstd_codec_init(void* codec, uint32_t hunkbytes)
 {
+	(void)hunkbytes;
 	zstd_codec_data* zstd_codec = (zstd_codec_data*) codec;
 
 	zstd_codec->dstream = ZSTD_createDStream();
@@ -1535,7 +1537,6 @@ static inline int chd_compressed(chd_header* header) {
 
 static chd_error decompress_v5_map(chd_file* chd, chd_header* header)
 {
-	int result = 0;
 	uint32_t hunknum;
 	int repcount = 0;
 	uint8_t lastcomp = 0;
@@ -1561,13 +1562,13 @@ static chd_error decompress_v5_map(chd_file* chd, chd_header* header)
 		if (header->rawmap == NULL)
 			return CHDERR_OUT_OF_MEMORY;
 		core_fseek(chd->file, header->mapoffset, SEEK_SET);
-		result = core_fread(chd->file, header->rawmap, rawmapsize);
+		core_fread(chd->file, header->rawmap, rawmapsize);
 		return CHDERR_NONE;
 	}
 
 	/* read the reader */
 	core_fseek(chd->file, header->mapoffset, SEEK_SET);
-	result = core_fread(chd->file, rawbuf, sizeof(rawbuf));
+	core_fread(chd->file, rawbuf, sizeof(rawbuf));
 	mapbytes = get_bigendian_uint32(&rawbuf[0]);
 	firstoffs = get_bigendian_uint48(&rawbuf[4]);
 	mapcrc = get_bigendian_uint16(&rawbuf[10]);
@@ -1580,7 +1581,7 @@ static chd_error decompress_v5_map(chd_file* chd, chd_header* header)
 	if (compressed_ptr == NULL)
 		return CHDERR_OUT_OF_MEMORY;
 	core_fseek(chd->file, header->mapoffset + 16, SEEK_SET);
-	result = core_fread(chd->file, compressed_ptr, mapbytes);
+	core_fread(chd->file, compressed_ptr, mapbytes);
 	bitbuf = create_bitstream(compressed_ptr, sizeof(uint8_t) * mapbytes);
 	header->rawmap = (uint8_t*)malloc(rawmapsize);
 	if (header->rawmap == NULL)
@@ -1661,6 +1662,8 @@ static chd_error decompress_v5_map(chd_file* chd, chd_header* header)
 			/* pseudo-types; convert into base types */
 			case COMPRESSION_SELF_1:
 				last_self++;
+				/*fall through*/
+
 			case COMPRESSION_SELF_0:
 				rawmap[0] = COMPRESSION_SELF;
 				offset = last_self;
@@ -1673,6 +1676,8 @@ static chd_error decompress_v5_map(chd_file* chd, chd_header* header)
 
 			case COMPRESSION_PARENT_1:
 				last_parent += header->hunkbytes / header->unitbytes;
+				/*fall through*/
+
 			case COMPRESSION_PARENT_0:
 				rawmap[0] = COMPRESSION_PARENT;
 				offset = last_parent;
@@ -1747,7 +1752,7 @@ CHD_EXPORT chd_error chd_open_core_file(core_file *file, int mode, chd_file *par
 {
 	chd_file *newchd = NULL;
 	chd_error err;
-	int intfnum;
+	unsigned int intfnum;
 
 	/* verify parameters */
 	if (file == NULL)
@@ -1865,11 +1870,11 @@ CHD_EXPORT chd_error chd_open_core_file(core_file *file, int mode, chd_file *par
 	}
 	else
 	{
-		int decompnum;
+		unsigned int decompnum;
 		/* verify the compression types and initialize the codecs */
 		for (decompnum = 0; decompnum < ARRAY_LENGTH(newchd->header.compression); decompnum++)
 		{
-			int i;
+			unsigned int i;
 			for (i = 0 ; i < ARRAY_LENGTH(codec_interfaces) ; i++)
 			{
 				if (codec_interfaces[i].compression == newchd->header.compression[decompnum])
@@ -1965,7 +1970,7 @@ CHD_EXPORT chd_error chd_precache(chd_file *chd)
 			return CHDERR_OUT_OF_MEMORY;
 		core_fseek(chd->file, 0, SEEK_SET);
 		count = core_fread(chd->file, chd->file_cache, size);
-		if (count != size)
+		if (count != (INT64)size)
 		{
 			free(chd->file_cache);
 			chd->file_cache = NULL;
@@ -2038,7 +2043,7 @@ CHD_EXPORT void chd_close(chd_file *chd)
 	}
 	else
 	{
-		int i;
+		unsigned int i;
 		/* Free the codecs */
 		for (i = 0 ; i < ARRAY_LENGTH(chd->codecintf); i++)
 		{
@@ -2327,6 +2332,10 @@ CHD_EXPORT chd_error chd_get_metadata(chd_file *chd, UINT32 searchtag, UINT32 se
 
 CHD_EXPORT chd_error chd_codec_config(chd_file *chd, int param, void *config)
 {
+	(void)chd;
+	(void)param;
+	(void)config;
+
 	return CHDERR_INVALID_PARAMETER;
 }
 
@@ -2337,6 +2346,7 @@ CHD_EXPORT chd_error chd_codec_config(chd_file *chd, int param, void *config)
 
 CHD_EXPORT const char *chd_get_codec_name(UINT32 codec)
 {
+	(void)codec;
 	return "Unknown";
 }
 
@@ -2351,7 +2361,7 @@ CHD_EXPORT const char *chd_get_codec_name(UINT32 codec)
 
 static chd_error header_validate(const chd_header *header)
 {
-	int intfnum;
+	unsigned int intfnum;
 
 	/* require a valid version */
 	if (header->version == 0 || header->version > CHD_HEADER_VERSION)
@@ -2604,7 +2614,7 @@ static UINT8* hunk_read_compressed(chd_file *chd, UINT64 offset, size_t size)
 	{
 		core_fseek(chd->file, offset, SEEK_SET);
 		bytes = core_fread(chd->file, chd->compressed, size);
-		if (bytes != size)
+		if ((size_t)bytes != size)
 			return NULL;
 		return chd->compressed;
 	}
@@ -2630,40 +2640,41 @@ static chd_error hunk_read_uncompressed(chd_file *chd, UINT64 offset, size_t siz
 	{
 		core_fseek(chd->file, offset, SEEK_SET);
 		bytes = core_fread(chd->file, dest, size);
-		if (bytes != size)
+		if ((size_t)bytes != size)
 			return CHDERR_READ_ERROR;
 	}
 	return CHDERR_NONE;
 }
 
 #ifdef NEED_CACHE_HUNK
-/*-------------------------------------------------
-    hunk_read_into_cache - read a hunk into
-    the CHD's hunk cache
--------------------------------------------------*/
-
+//-------------------------------------------------
+//  hunk_read_into_cache - read a hunk into
+//  the CHD's hunk cache
+//-------------------------------------------------
+/*
 static chd_error hunk_read_into_cache(chd_file *chd, UINT32 hunknum)
 {
 	chd_error err;
 
-	/* track the max */
+	// track the max 
 	if (hunknum > chd->maxhunk)
 		chd->maxhunk = hunknum;
 
-	/* if we're already in the cache, we're done */
+	// if we're already in the cache, we're done 
 	if (chd->cachehunk == hunknum)
 		return CHDERR_NONE;
 	chd->cachehunk = ~0;
 
-	/* otherwise, read the data */
+	// otherwise, read the data
 	err = hunk_read_into_memory(chd, hunknum, chd->cache);
 	if (err != CHDERR_NONE)
 		return err;
 
-	/* mark the hunk successfully cached in */
+	// mark the hunk successfully cached in
 	chd->cachehunk = hunknum;
 	return CHDERR_NONE;
 }
+*/
 #endif
 
 /*-------------------------------------------------
@@ -2766,7 +2777,7 @@ static chd_error hunk_read_into_memory(chd_file *chd, UINT32 hunknum, UINT8 *des
 			blockoffs = (uint64_t)get_bigendian_uint32(rawmap) * (uint64_t)chd->header.hunkbytes;
 			if (blockoffs != 0) {
 				core_fseek(chd->file, blockoffs, SEEK_SET);
-				int result = core_fread(chd->file, dest, chd->header.hunkbytes);
+				core_fread(chd->file, dest, chd->header.hunkbytes);
 			/* TODO
 			else if (m_parent_missing)
 				throw CHDERR_REQUIRES_PARENT; */
@@ -3039,6 +3050,7 @@ static chd_error metadata_find_entry(chd_file *chd, UINT32 metatag, UINT32 metai
 
 static chd_error zlib_codec_init(void *codec, uint32_t hunkbytes)
 {
+	(void)hunkbytes;
 	int zerr;
 	chd_error err;
 	zlib_codec_data *data = (zlib_codec_data*)codec;
