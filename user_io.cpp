@@ -344,6 +344,14 @@ char is_uneon()
 	return (is_uneon_type == 1);
 }
 
+static int is_groovy_type = 0;
+char is_groovy()
+{
+	if (!is_groovy_type) is_groovy_type = strcasecmp(orig_name, "Groovy") ? 2 : 1;
+	return (is_groovy_type == 1);
+}
+
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -3519,6 +3527,7 @@ void user_io_poll()
 	if (is_psx()) psx_poll();
 	if (is_neogeo_cd()) neocd_poll();
 	if (is_n64()) n64_poll();
+	if (is_groovy()) groovy_poll();
 	process_ss(0);
 }
 
