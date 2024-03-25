@@ -1376,6 +1376,13 @@ void user_io_init(const char *path, const char *xml)
 		sleep(1);
 	}
 
+	const char *main = getFullPath(cfg.main);
+	if (strcasecmp(main, getappname()) && FileExists(main))
+	{
+		printf("Current exec is %s, core requires exec %s\n", getappname(), main);
+		app_restart(path, xml, main);
+	}
+
 	uint8_t hotswap[4] = {};
 	ide_reset(hotswap);
 
@@ -3119,7 +3126,7 @@ void user_io_poll()
 			else if (op & 1)
 			{
 				uint32_t buf_n = sizeof(buffer[0]) / blksz;
-				int psx_blksz = 0;
+				unsigned int psx_blksz = 0;
 				if (is_psx() && blksz == 2352)
 				{
 					//returns 0 if the mounted disk is not a chd, otherwise returns the chd hunksize in bytes

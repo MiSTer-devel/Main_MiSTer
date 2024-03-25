@@ -610,7 +610,7 @@ char *getappname()
 	return dest;
 }
 
-void app_restart(const char *path, const char *xml)
+void app_restart(const char *path, const char *xml, const char *exe)
 {
 	sync();
 	fpga_core_reset(1);
@@ -620,8 +620,8 @@ void app_restart(const char *path, const char *xml)
 
 	offload_stop();
 
-	char *appname = getappname();
-	printf("restarting the %s\n", appname);
+	const char *appname = exe ? exe : getappname();
+	printf("restarting to %s\n", appname);
 	execl(appname, appname, path, xml, NULL);
 
 	printf("Something went wrong. Rebooting...\n");
