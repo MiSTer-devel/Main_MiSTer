@@ -140,19 +140,19 @@ char* user_io_create_config_name(int with_ver)
 static char core_name[32] = {};
 static char ovr_name[32] = {};
 static char orig_name[32] = {};
-
-static char filepath_store[1024];
+static int  ovr_samedir = 0;
 
 char *user_io_make_filepath(const char *path, const char *filename)
 {
+	static char filepath_store[1024];
 	snprintf(filepath_store, 1024, "%s/%s", path, filename);
-
 	return filepath_store;
 }
 
-void user_io_name_override(const char* name)
+void user_io_name_override(const char* name, int samedir)
 {
 	snprintf(ovr_name, sizeof(ovr_name), "%s", name);
+	ovr_samedir = samedir;
 }
 
 void user_io_set_core_name(const char *name)
@@ -166,12 +166,18 @@ char *user_io_get_core_name(int orig)
 	return orig ? orig_name : core_name;
 }
 
+char *user_io_get_core_name2()
+{
+	return (ovr_name[0] && ovr_samedir) ? orig_name : core_name;
+}
+
 char *user_io_get_core_path(const char *suffix, int recheck)
 {
 	static char old_name[256] = {};
 	static char tmp[1024] = {};
+	char *name = (ovr_name[0] && ovr_samedir) ? orig_name : core_name;
 
-	if (!suffix) suffix = (!strcasecmp(core_name, "minimig")) ? "Amiga" : core_name;
+	if (!suffix) suffix = (!strcasecmp(name, "minimig")) ? "Amiga" : name;
 	if (recheck || strcmp(old_name, suffix) || !tmp[0])
 	{
 		strcpy(old_name, suffix);

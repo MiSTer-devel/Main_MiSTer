@@ -1573,7 +1573,7 @@ static void spd_config_dv()
 		(uint8_t)(vi->height >> 8)
 	};
 
-	char *name = user_io_get_core_name();
+	char *name = user_io_get_core_name2();
 	for (int i = 17; i < 32; i++)
 	{
 		if (!*name) break;

@@ -413,7 +413,7 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 
 		if (Options & SCANO_SAVES)
 		{
-			snprintf(tmp, sizeof(tmp), "%s/%s", SAVE_DIR, CoreName);
+			snprintf(tmp, sizeof(tmp), "%s/%s", SAVE_DIR, CoreName2);
 			home = tmp;
 		}
 
@@ -5839,7 +5839,7 @@ void HandleUI(void)
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " ROM    : ");
 		{
-			char *path = user_io_get_core_path();
+			char *path = HomeDir();
 			int len = strlen(path);
 			char *name = minimig_config.kickstart;
 			if (!strncasecmp(name, path, len))  name += len + 1;
@@ -6039,7 +6039,7 @@ void HandleUI(void)
 				if (minimig_config.hardfile[i].filename[0])
 				{
 					strcpy(s, "                                ");
-					char *path = user_io_get_core_path();
+					char *path = HomeDir();
 					int len = strlen(path);
 					char *name = minimig_config.hardfile[i].filename;
 					if (!strncasecmp(name, path, len))  name += len + 1;

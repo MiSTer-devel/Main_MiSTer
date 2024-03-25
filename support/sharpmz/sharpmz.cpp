@@ -2378,7 +2378,7 @@ void sharpmz_ui(int      idleState,    int      idle2State,    int        system
             subItem   = 0;
             *menumask = 0;
 
-            OsdSetTitle(CoreName, 0);
+            OsdSetTitle(CoreName2, 0);
 
             OsdWrite(menuItem++, "          Main Menu", 0, 0);
             OsdWrite(menuItem++, "",                    0, 0);

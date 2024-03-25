@@ -918,7 +918,7 @@ static bool detect_rom_settings_from_first_chunk(const char region_code, const u
 		case UINT64_C(0x000000aa764e39e1): cic = CIC::CIC_NUS_8401; break;
 		case UINT64_C(0x000000abb0b739e1): cic = CIC::CIC_NUS_DDUS; break;
 		case UINT64_C(0x00000081ce470326): // CIC-5101 IPL3
-		case UINT64_C(0x000000827a47195a): // Kuru Kuru Fever 
+		case UINT64_C(0x000000827a47195a): // Kuru Kuru Fever
 		case UINT64_C(0x00000082551e4848): // Tower & Shaft
 			cic = CIC::CIC_NUS_5101; break;
 		}
@@ -963,8 +963,8 @@ static void calc_bootcode_checksums(uint64_t bootcode_sums[2], const uint8_t* bu
 }
 
 static void create_save_path(char* save_path, const MemoryType type) {
-	create_path(SAVE_DIR, CoreName);
-	sprintf(save_path, SAVE_DIR"/%s/", CoreName);
+	create_path(SAVE_DIR, CoreName2);
+	sprintf(save_path, SAVE_DIR"/%s/", CoreName2);
 	char* fname = save_path + strlen(save_path);
 
 	char* p = strrchr(current_rom_path, '/');
@@ -1056,8 +1056,8 @@ static void mount_save_gb(const char* old_path) {
 	}
 	else {
 		const uint32_t core_name_len = p - (current_rom_path_gb + games_path_len);
-		if (!strncmp(current_rom_path_gb + games_path_len, CoreName, core_name_len)) {
-			printf("Game Boy game loaded from \"/" GAMES_DIR"/%s/\". Will use \"/" SAVE_DIR"/%s/\".\n", CoreName, core_name);
+		if (!strncmp(current_rom_path_gb + games_path_len, CoreName2, core_name_len)) {
+			printf("Game Boy game loaded from \"/" GAMES_DIR"/%s/\". Will use \"/" SAVE_DIR"/%s/\".\n", CoreName2, core_name);
 		}
 		else {
 			memcpy(core_name, current_rom_path_gb + games_path_len, core_name_len);
@@ -1118,8 +1118,8 @@ static void mount_save_gb(const char* old_path) {
 static void get_old_save_path(char* save_path) {
 	static const char* ext = ".sav";
 
-	create_path(SAVE_DIR, CoreName);
-	sprintf(save_path, SAVE_DIR"/%s/", CoreName);
+	create_path(SAVE_DIR, CoreName2);
+	sprintf(save_path, SAVE_DIR"/%s/", CoreName2);
 	char* fname = save_path + strlen(save_path);
 
 	char* p = strrchr(current_rom_path, '/');
@@ -1315,14 +1315,14 @@ static int cheat_execute(cheat_code* code) {
 
 	// Boot code, run only once. Skip if already executed.
 	if (code->flags.is_boot_code) {
-		if (code->flags.is_boot_code_executed) 
+		if (code->flags.is_boot_code_executed)
 			return 1;
 
 		code->flags.is_boot_code_executed = true;
 	}
 
 	// Game Shark button code. Only run if certain button is pressed. Hard-coded to F5 right now.
-	if (code->flags.is_gs_button_code && !is_key_pressed(63)) 
+	if (code->flags.is_gs_button_code && !is_key_pressed(63))
 		return 1;
 
 	volatile uint8_t* mem = ((volatile uint8_t*)rdram_ptr) + code->address;

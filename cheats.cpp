@@ -72,7 +72,7 @@ static int find_by_crc(uint32_t romcrc)
 {
 	if (!romcrc) return 0;
 
-	sprintf(cheat_zip, "%s/cheats/%s", getRootDir(), CoreName);
+	sprintf(cheat_zip, "%s/cheats/%s", getRootDir(), CoreName2);
 	DIR *d = opendir(cheat_zip);
 	if (!d)
 	{
@@ -147,7 +147,7 @@ bool cheat_init_psx(mz_zip_archive* _z, const char *rom_path)
 	const char *rom_name = strrchr(rom_path, '/');
 	if (rom_name)
 	{
-		sprintf(cheat_zip, "%s/cheats/%s%s", getRootDir(), CoreName, rom_name);
+		sprintf(cheat_zip, "%s/cheats/%s%s", getRootDir(), CoreName2, rom_name);
 		char *p = strrchr(cheat_zip, '.');
 		if (p) *p = 0;
 		strcat(cheat_zip, ".zip");
@@ -161,7 +161,7 @@ bool cheat_init_psx(mz_zip_archive* _z, const char *rom_path)
 	const char *game_id = psx_get_game_id();
 	if (game_id && game_id[0])
 	{
-		sprintf(cheat_zip, "%s/cheats/%s/%s.zip", getRootDir(), CoreName, psx_get_game_id());
+		sprintf(cheat_zip, "%s/cheats/%s/%s.zip", getRootDir(), CoreName2, psx_get_game_id());
 		printf("Trying cheat file: %s\n", cheat_zip);
 		memset(_z, 0, sizeof(mz_zip_archive));
 		if (mz_zip_reader_init_file(_z, cheat_zip, 0)) return true;
@@ -212,7 +212,7 @@ void cheats_init(const char *rom_path, uint32_t romcrc)
 			const char *rom_name = strrchr(rom_path, '/');
 			if (rom_name)
 			{
-				sprintf(cheat_zip, "%s/cheats/%s%s%s", getRootDir(), CoreName, pcecd_using_cd() ? "CD" : "", rom_name);
+				sprintf(cheat_zip, "%s/cheats/%s%s%s", getRootDir(), CoreName2, pcecd_using_cd() ? "CD" : "", rom_name);
 				char *p = strrchr(cheat_zip, '.');
 				if (p) *p = 0;
 				if (pcecd_using_cd() || is_megacd()) strcat(cheat_zip, " []");

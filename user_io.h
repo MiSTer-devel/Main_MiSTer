@@ -188,8 +188,9 @@ int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0,
 void user_io_bufferinvalidate(unsigned char index);
 char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name(int orig = 0);
+char *user_io_get_core_name2();
 char *user_io_get_core_path(const char *suffix = NULL, int recheck = 0);
-void user_io_name_override(const char* name);
+void user_io_name_override(const char* name, int samedir);
 char has_menu();
 
 const char *get_image_name(int i);
@@ -286,5 +287,6 @@ char is_uneon();
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()
+#define CoreName2 user_io_get_core_name2()
 
 #endif // USER_IO_H
