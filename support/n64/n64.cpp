@@ -214,7 +214,7 @@ static const char* stringify(bool v) {
 		: "No";
 }
 
-static ByteOrder detect_rom_endianess(const uint8_t* data) {
+static ByteOrder detect_rom_endianness(const uint8_t* data) {
 	// Data should be aligned
 	const uint32_t val = *(uint32_t*)data;
 
@@ -253,9 +253,9 @@ static ByteOrder detect_rom_endianess(const uint8_t* data) {
 	}
 }
 
-static void normalize_data(uint8_t* data, size_t size, ByteOrder endianess) {
+static void normalize_data(uint8_t* data, size_t size, ByteOrder endianness) {
 	static uint8_t temp0, temp1, temp2;
-	switch (endianess) {
+	switch (endianness) {
 	case ByteOrder::BYTE_SWAPPED:
 		for (size_t i = 0; i < (size & ~1U); i += 2) {
 			temp0 = data[0];
@@ -1510,7 +1510,7 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 	   2 = Found some ROM info in DB (Save type etc.), but System region and/or CIC has not been determined
 	   3 = Has detected everything, System type, CIC, Save type etc. */
 	uint8_t rom_settings_detected = 0;
-	ByteOrder rom_endianess;
+	ByteOrder rom_endianness;
 	uint8_t md5[MD5_LENGTH];
 	char md5_hex[MD5_LENGTH * 2 + 1];
 	uint64_t bootcode_sums[2] = { };
@@ -1537,7 +1537,7 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 
 		FileReadAdv(&f, buf, chunk);
 
-		// Perform sanity checks and detect ROM endianess
+		// Perform sanity checks and detect ROM endianness
 		if (is_first_chunk) {
 			if (chunk < 4096) {
 				// Signal end of transmission
@@ -1548,11 +1548,11 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 				return 0;
 			}
 
-			rom_endianess = detect_rom_endianess(buf);
+			rom_endianness = detect_rom_endianness(buf);
 		}
 
 		// Normalize data to big-endian format, if needed
-		normalize_data(buf, chunk, rom_endianess);
+		normalize_data(buf, chunk, rom_endianness);
 		MD5Update(&ctx, buf, chunk);
 
 		if (is_first_chunk) {
