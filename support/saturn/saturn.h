@@ -72,6 +72,7 @@ private:
 	bool stop_pend;
 	bool seek_pend;
 	bool read_pend;
+	bool final_read;
 	bool seek_ring;
 	bool seek_ring2;
 	bool pause_pend;

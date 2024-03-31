@@ -609,6 +609,7 @@ void satcdd_t::CommandExec() {
 		this->index = this->toc.GetIndexByLBA(this->track, this->seek_lba);
 
 		this->seek_pend = true;
+		this->final_read = this->read_pend;
 		this->read_pend = false;
 		this->pause_pend = false;
 		this->speed = comm[10] == 1 ? 1 : 2;
@@ -731,7 +732,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 #endif // SATURN_DEBUG
 	}
 	else if (this->seek_pend) {
-		this->state = Seek;
+		this->state = this->final_read ? Read : Seek;
 
 		LBAToMSF(this->lba + 150, &amsf);
 		if (this->lba < 0)
@@ -756,6 +757,8 @@ void satcdd_t::Process(uint8_t* time_mode) {
 			this->seek_pend = false;
 			seek_time = 1;
 		//}
+
+		this->final_read = false;
 
 		*time_mode = 1;// this->speed;
 
