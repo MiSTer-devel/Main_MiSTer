@@ -99,6 +99,7 @@ typedef struct {
 	uint16_t osd_lock_time;
 	char debug;
 	char main[1024];
+	uint8_t show_progress_info;
 } cfg_t;
 
 extern cfg_t cfg;
