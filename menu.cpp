@@ -7120,7 +7120,10 @@ void PrintDirectory(int expand)
 				}
 				else
 				{
-					strcpy(&s[22], " <DIR>");
+					if (flist_DirItem(k)->flags & DT_EXT_ZIP) // mark ZIP archive with different suffix
+						strcpy(&s[22], " <zip>");
+					else
+						strcpy(&s[22], " <DIR>");
 				}
 				len2 = 0;
 			}

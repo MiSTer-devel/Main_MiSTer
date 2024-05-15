@@ -1224,6 +1224,12 @@ struct DirentComp
 		if ((de1.de.d_type == DT_DIR) && (de2.de.d_type != DT_DIR)) return true;
 		if ((de1.de.d_type != DT_DIR) && (de2.de.d_type == DT_DIR)) return false;
 
+		if ((de1.de.d_type == DT_DIR) && (de2.de.d_type == DT_DIR))
+		{
+			if (!(de1.flags & DT_EXT_ZIP) && (de2.flags & DT_EXT_ZIP)) return true;
+			if ((de1.flags & DT_EXT_ZIP) && !(de2.flags & DT_EXT_ZIP)) return false;
+		}
+
 		int len1 = strlen(de1.altname);
 		int len2 = strlen(de2.altname);
 		if ((len1 > 4) && (de1.altname[len1 - 4] == '.')) len1 -= 4;
@@ -1465,6 +1471,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			}
 #endif
 			struct dirent64 _de = {};
+			int isZip = 0;
+
 			if (z)
 			{
 				mz_zip_reader_get_filename(z, i, &_de.d_name[0], sizeof(_de.d_name));
@@ -1634,6 +1642,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 						{
 							// Fake that zip-file is a directory.
 							de->d_type = DT_DIR;
+							isZip = 1;
 							found = 1;
 						}
 						if (!found && is_minimig() && !memcmp(extension, "HDF", 3))
@@ -1681,6 +1690,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			      direntext_t dext;
 				    memset(&dext, 0, sizeof(dext));
 				    memcpy(&dext.de, de, sizeof(dext.de));
+				    if (isZip)
+				        dext.flags |= DT_EXT_ZIP;
 				    get_display_name(&dext, extension, options);
 				    DirItem.push_back(dext);
         }
