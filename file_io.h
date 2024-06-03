@@ -30,6 +30,8 @@ struct direntext_t
 {
 	dirent de;
 	int  cookie;
+#define DT_EXT_ZIP    0x1
+	unsigned int flags;
 	char datecode[16];
 	char altname[256];
 };

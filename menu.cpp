@@ -1278,37 +1278,38 @@ void HandleUI(void)
 	{
 		if (down)
 		{
-            if((menumask >= ((uint64_t)1 << (menusub + 1))))	// Any active entries left?
-            {
-			    do
-			    {
-				    menusub++;
-			    } while ((menumask & ((uint64_t)1 << menusub)) == 0);
-            }
-            else
-            {
-                menusub = 0; // jump to first item
-            }
+			if((menumask >= ((uint64_t)1 << (menusub + 1))))	// Any active entries left?
+			{
+				do
+				{
+					menusub++;
+				} while ((menumask & ((uint64_t)1 << menusub)) == 0);
+			} else {
+				menusub = 0; // jump to first item
+				while ((menumask & ((uint64_t)1 << menusub )) == 0) menusub++;
+			}
 
-            menustate = parentstate;
+			menustate = parentstate;
 		}
 
 		if (up)
 		{
-            if (menusub > 0)
-            {
-			    do
-			    {
-				    --menusub;
-			    } while ((menumask & ((uint64_t)1 << menusub)) == 0);
-            }
-            else
-            {
-                do
-                {
-                    menusub++;
-                } while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0); // jump to last item
-            }
+			if (menusub > 0)
+			{
+				do
+				{
+					--menusub;
+				} while (menusub != 0 && (menumask & ((uint64_t)1 << menusub)) == 0);
+				if (menusub == 0 && (menumask & 1) == 0) { //If the first menu entry is disabled...
+					while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0) menusub++; 
+					//Go to to last item 
+				}
+			} else {
+				do
+				{
+					menusub++;
+				} while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0); // jump to last item
+			}
 			menustate = parentstate;
 		}
 	}
@@ -7120,7 +7121,10 @@ void PrintDirectory(int expand)
 				}
 				else
 				{
-					strcpy(&s[22], " <DIR>");
+					if (flist_DirItem(k)->flags & DT_EXT_ZIP) // mark ZIP archive with different suffix
+						strcpy(&s[22], " <zip>");
+					else
+						strcpy(&s[22], " <DIR>");
 				}
 				len2 = 0;
 			}
