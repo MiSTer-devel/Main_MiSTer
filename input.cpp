@@ -1890,7 +1890,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 
 						if (hasAPI1_5())
 						{
-							if (!found) sprintf(str, "Auto fire: %dms", af_delay[num] * 2);
+							if (!found) sprintf(str, "Auto fire: %dms (%uhz)", af_delay[num] * 2, 1000 / (af_delay[num] * 2));
 							else sprintf(str, "Auto fire: OFF");
 							Info(str);
 						}
@@ -1916,12 +1916,12 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 
 						if (hasAPI1_5())
 						{
-							sprintf(str, "Auto fire period: %dms", af_delay[num] * 2);
+							sprintf(str, "Auto fire period: %dms (%uhz)", af_delay[num] * 2, 1000 / (af_delay[num] * 2));
 							Info(str);
 						}
 						else
 						{
-							sprintf(str, "\n\n       Auto fire period\n            %dms", af_delay[num] * 2);
+							sprintf(str, "\n\n       Auto fire period\n            %dms(%uhz)", af_delay[num] * 2, 1000 / (af_delay[num] * 2));
 							InfoMessage(str);
 						}
 
