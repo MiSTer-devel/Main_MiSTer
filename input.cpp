@@ -4376,6 +4376,7 @@ static int rumble_input_device(int devnum, uint16_t strong_mag, uint16_t weak_ma
 		fef = &input[devnum].rumble_effect;
 		fef->type = FF_RUMBLE;
 
+		fef->direction = input[devnum].quirk == QUIRK_WHEEL ? 0x4000 : 0x0000;
 		fef->u.rumble.strong_magnitude = strong_mag;
 		fef->u.rumble.weak_magnitude = weak_mag;
 		fef->replay.length = duration;
