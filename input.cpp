@@ -3301,6 +3301,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (mask) {
 							if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
 							if (ev->value <=1) joy_digital(input[dev].num, mask, origcode, ev->value, i, (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1] || ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 2]));
+							// support 2 simultaneous functions for 1 button if defined in 2 sets. No return.
 						}
 					}
 
