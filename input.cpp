@@ -1643,8 +1643,8 @@ static int keyrah_trans(int key, int press)
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev);
 
 static int kbd_toggle = 0;
-static uint32_t joy[NUMPLAYERS] = {};
-static uint32_t autofire[NUMPLAYERS] = {};
+static uint64_t joy[NUMPLAYERS] = {};		// 0-31 primary mappings, 32-64 alternate
+static uint64_t autofire[NUMPLAYERS] = {};	// 0-31 primary mappings, 32-64 alternate
 static uint32_t autofirecodes[NUMPLAYERS][BTN_NUM] = {};
 static int af_delay[NUMPLAYERS] = {};
 
@@ -1840,12 +1840,12 @@ static void joy_apply_deadzone(int* x, int* y, const devInput* dev, const int st
 }
 
 static uint32_t osdbtn = 0;
-static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
+static void joy_digital(int jnum, uint64_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
 {
 	static char str[128];
-	static uint32_t lastcode[NUMPLAYERS], lastmask[NUMPLAYERS];
+	static uint32_t lastcode[NUMPLAYERS];
+	static uint64_t lastmask[NUMPLAYERS];
 	int num = jnum - 1;
-
 	if (num < NUMPLAYERS)
 	{
 		if (jnum)
@@ -1886,6 +1886,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 						}
 
 						if (!found && zero >= 0) autofirecodes[num][zero] = lastcode[num];
+						
 						autofire[num] = !found ? autofire[num] | lastmask[num] : autofire[num] & ~lastmask[num];
 
 						if (hasAPI1_5())
@@ -2127,6 +2128,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 		{
 			if (press) joy[num] |= mask;
 			else joy[num] &= ~mask;
+			
 			//user_io_digital_joystick(num, joy[num]);
 
 			if (code)
@@ -3290,14 +3292,15 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (input[dev].has_map == 3) Info("This joystick is not defined");
 						input[dev].has_map = 1;
 					}
-
+					
 					for (uint i = 0; i < BTN_NUM; i++)
 					{
-						if (ev->code == (input[dev].map[i] & 0xFFFF) || ev->code == (input[dev].map[i] >> 16))
-						{
+						uint64_t mask = 0;
+						if (ev->code == (input[dev].map[i] & 0xFFFF)) mask = (uint64_t)1 << i;
+						else if (ev->code == (input[dev].map[i] >> 16)) mask = (uint64_t)1 << (i + 32); // 1 is uint32_t. i spent hours realizing this.
+						if (mask) {
 							if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
-							if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, origcode, ev->value, i, (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1] || ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 2]));
-
+							if (ev->value <=1) joy_digital(input[dev].num, mask, origcode, ev->value, i, (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1] || ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 2]));
 							// support 2 simultaneous functions for 1 button if defined in 2 sets. No return.
 						}
 					}
@@ -5663,7 +5666,7 @@ int input_poll(int getchar)
 
 	static int af[NUMPLAYERS] = {};
 	static uint32_t time[NUMPLAYERS] = {};
-	static uint32_t joy_prev[NUMPLAYERS] = {};
+	static uint64_t joy_prev[NUMPLAYERS] = {};
 
 	int ret = input_test(getchar);
 	if (getchar) return ret;
@@ -5705,8 +5708,8 @@ int input_poll(int getchar)
 
 			if (!time[i]) time[i] = GetTimer(af_delay[i]);
 			int send = 0;
-
-			int newdir = ((joy[i] & 0xF) != (joy_prev[i] & 0xF));
+			int newdir = ((((uint32_t)(joy[i]) | (uint32_t)(joy[i] >> 32)) & 0xF) != (((uint32_t)(joy_prev[i]) | (uint32_t)(joy_prev[i] >> 32)) & 0xF));
+			
 			if (joy[i] != joy_prev[i])
 			{
 				if ((joy[i] ^ joy_prev[i]) & autofire[i])
