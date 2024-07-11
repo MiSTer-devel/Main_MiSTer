@@ -1060,7 +1060,10 @@ void load_neo(char *path)
 						case 0x0268: if (hdr.PSize == 5242880) ms5p = 1;           // (mslug5 bootlegs vs original)
 							if (hdr.PSize != 8388608) skip = true;
 							break;
-						case 0x0269: if (hdr.SSize != 524288)  skip = true; break; // (svc bootlegs vs original)
+						case 0x0269: if (hdr.PSize != 8388608)  skip = true;        // (svc bootlegs vs original)
+							if (hdr.Name[15] == 'S')
+								{cmc = 0; pvc = 1;  skip = true;}                   // (svcsplus requires pvc=1)
+							break;
 						case 0x0271: if (hdr.PSize != 9437184) skip = true; break; // (kof2003 bootlegs vs original)
 					}
 					if (skip) break;
