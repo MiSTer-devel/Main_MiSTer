@@ -485,15 +485,15 @@ static uint8_t hex_to_dec(const char x) {
 	return 0;
 }
 
-static void trim(char* out, size_t len, const char* str)
+static void trim(char* out, size_t max_len, const char* str)
 {
-	if (!*str || !len) {
+	if (!*str || !max_len) {
 		*out = '\0';
 		return;
 	}
 
 	const char* end;
-	size_t out_size = len;
+	size_t out_size = max_len;
 
 	// Trim leading space
 	while (isspace(*str)) {
@@ -511,14 +511,14 @@ static void trim(char* out, size_t len, const char* str)
 	}
 
 	// Trim trailing space
-	end = str + strlen(str) - 1;
+	end = str + strnlen(str, max_len) - 1;
 	while (end > str && isspace(*end)) {
 		end--;
 	}
 	end++;
 
 	// Set output size to minimum of trimmed string length and buffer size minus 1
-	out_size = (size_t)(end - str) < (len - 1) ? (end - str) : len - 1;
+	out_size = (size_t)(end - str) < (max_len - 1) ? (end - str) : max_len - 1;
 
 	// Copy trimmed string and add null terminator
 	memcpy(out, str, out_size);
