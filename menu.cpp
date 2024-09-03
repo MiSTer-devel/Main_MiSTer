@@ -5865,24 +5865,20 @@ void HandleUI(void)
 		{
 			if (menusub == 0)
 			{
+				int cpu = minimig_config.cpu & 3;
+				if (minus)
+				{
+					cpu = (cpu == 0) ? 3 : (cpu == 3) ? 1 : 0;
+				}
+				else
+				{
+					cpu = (cpu == 0) ? 1 : (cpu == 1) ? 3 : 0;
+				}
+
 				menustate = MENU_MINIMIG_CHIPSET1;
-				minimig_config.cpu = (minimig_config.cpu & 0xfc) | ((minimig_config.cpu & 1) ? 0 : 3);
+				minimig_config.cpu = (minimig_config.cpu & 0xfc) | cpu;
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
-			/*
-			else if (menusub == 1 && (minimig_config.cpu & 0x2))
-			{
-				menustate = MENU_MINIMIG_CHIPSET1;
-				minimig_config.cpu ^= 4;
-				minimig_ConfigCPU(minimig_config.cpu);
-			}
-			else if (menusub == 2 && (minimig_config.cpu & 0x2))
-			{
-				menustate = MENU_MINIMIG_CHIPSET1;
-				minimig_config.cpu ^= 8;
-				minimig_ConfigCPU(minimig_config.cpu);
-			}
-			*/
 			else if (menusub == 1 && (minimig_config.cpu & 0x2))
 			{
 				menustate = MENU_MINIMIG_CHIPSET1;
