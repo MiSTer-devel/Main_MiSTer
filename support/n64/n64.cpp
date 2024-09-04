@@ -26,7 +26,6 @@ static constexpr auto MD5_LENGTH = 16U;
 static constexpr auto CARTID_PREFIX = "ID:";
 static constexpr auto RESET_OPT = "[0]";
 static constexpr auto RELOAD_SAVE_OPT = "[40]";
-static constexpr auto AR_TYPE_OPT = "[48:47]";
 static constexpr auto AUTODETECT_OPT = "[64]";
 static constexpr auto CIC_TYPE_OPT = "[68:65]";
 static constexpr auto NO_EPAK_OPT = "[70]";
@@ -37,6 +36,7 @@ static constexpr auto RTC_OPT = "[74]";
 static constexpr auto SAVE_TYPE_OPT = "[77:75]";
 static constexpr auto SYS_TYPE_OPT = "[80:79]";
 static constexpr auto AUTOPAK_OPT = "[81]";
+static constexpr auto PATCHES_OPT = "[90]";
 static constexpr auto CHEATS_OPT = "[103]";
 static constexpr const char* const CONTROLLER_OPTS[] = { "[51:49]", "[54:52]", "[57:55]", "[60:58]" };
 
@@ -108,14 +108,6 @@ enum class AutoDetect : uint32_t {
 	OFF
 };
 
-enum class AspectRatio : uint32_t {
-	ORIGINAL = 0,
-	FULL,
-	CUSTOM_1,
-	CUSTOM_2,
-	UNKNOWN = ~0U
-};
-
 enum class ComparisionType : uint8_t {
 	OPTYPE_ALWAYS = 0,
 	OPTYPE_EQUALS = 0x1,
@@ -144,14 +136,21 @@ struct cheat_code {
 	uint32_t replace;
 };
 
+struct patch_data {
+	uint32_t address;
+	uint32_t diff;
+	bool turbo_core_only;
+};
+
 static uint8_t loaded = 0;
-static AspectRatio old_ar = AspectRatio::UNKNOWN;
 static char current_rom_path[1024] = { '\0' };
 static char current_rom_path_gb[1024] = { '\0' };
 static char old_save_path[1024];
 static void* rdram_ptr = nullptr;
 static cheat_code* cheat_codes = nullptr;
 static uint32_t cheat_codes_count = 0;
+static patch_data patches[256];
+static int is_turbo_core_type = 0;
 
 static const char* stringify(MemoryType v) {
 	switch (v) {
@@ -470,12 +469,34 @@ static bool is_autopak() {
 	return !user_io_status_get(AUTOPAK_OPT);
 }
 
+static bool is_turbo_core() {
+	if (!is_turbo_core_type) {
+		is_turbo_core_type = 2;
+
+		user_io_read_confstr();
+		for (size_t i = 2; ; i++) {
+			char *p = user_io_get_confstr(i);
+			if (!p) break;
+			if (strncasecmp(p, "TURBO", 5) == 0) {
+				is_turbo_core_type = 1;
+				break;
+			}
+		}
+	}
+
+	return is_turbo_core_type == 1;
+}
+
 static bool cheats_enabled() {
 	return !user_io_status_get(CHEATS_OPT);
 }
 
 static void cheats_disable() {
 	user_io_status_set(CHEATS_OPT, 1);
+}
+
+static bool patches_enabled() {
+	return !user_io_status_get(PATCHES_OPT);
 }
 
 static uint8_t hex_to_dec(const char x) {
@@ -546,11 +567,27 @@ static bool parse_and_apply_db_tags(char* tags) {
 	bool rpak = false;
 	bool tpak = false;
 	bool rtc = false;
-	bool wide = false;
+	int p_match;
+	uint32_t p_addr, p_diff;
+	char p_tag;
 
 	PadType prefered_pad = PadType::N64_PAD;
 
-	for (auto tag = strtok(tags, separator); tag; tag = strtok(nullptr, separator)) {
+	patch_data* patch = patches;
+
+	for (char* tag = strtok(tags, separator); tag; tag = strtok(nullptr, separator)) {
+		// Patch tag
+		if ((p_match = sscanf(tag, "%*[Pp]%8x:%8x%*[:]%c", &p_addr, &p_diff, &p_tag)) >= 2) {
+			printf("Patch: 0x%08x:0x%08x", p_addr, p_diff);
+			if (p_match >= 3) printf(":%c", p_tag);
+			printf("\n");
+			patch->address = p_addr;
+			patch->diff = p_diff;
+			patch->turbo_core_only = p_match >= 3 && (p_tag == 'T' || p_tag == 't');
+			patch++;
+			continue;
+		}
+
 		switch (fnv_hash(tag)) {
 		case fnv_hash("eeprom512"): save_type = MemoryType::EEPROM_512; break;
 		case fnv_hash("eeprom2k"): save_type = MemoryType::EEPROM_2k; break;
@@ -564,7 +601,6 @@ static bool parse_and_apply_db_tags(char* tags) {
 		case fnv_hash("rtc"): rtc = true; break;
 		case fnv_hash("ntsc"): ntsc: system_type = SystemType::NTSC; break;
 		case fnv_hash("pal"): pal: system_type = SystemType::PAL; break;
-		case fnv_hash("wide"): wide = true; break;
 		case fnv_hash("cic6101"): cic_type = CIC::CIC_NUS_6101; goto ntsc;
 		case fnv_hash("cic6102"): cic_type = CIC::CIC_NUS_6102; goto ntsc;
 		case fnv_hash("cic6103"): cic_type = CIC::CIC_NUS_6103; goto ntsc;
@@ -617,18 +653,6 @@ static bool parse_and_apply_db_tags(char* tags) {
 
 	if (is_autopak() && ((PadType)user_io_status_get(CONTROLLER_OPTS[0]) != PadType::SNAC)) {
 		user_io_status_set(CONTROLLER_OPTS[0], (uint32_t)prefered_pad);
-	}
-
-	auto current_ar = (AspectRatio)user_io_status_get(AR_TYPE_OPT);
-	if (wide) {
-		if (current_ar != AspectRatio::FULL) {
-			old_ar = current_ar;
-		}
-		user_io_status_set(AR_TYPE_OPT, (uint32_t)AspectRatio::FULL);
-	}
-	else if ((current_ar == AspectRatio::FULL) && (old_ar != AspectRatio::UNKNOWN)) {
-		user_io_status_set(AR_TYPE_OPT, (uint32_t)old_ar);
-		old_ar = AspectRatio::UNKNOWN;
 	}
 
 	return (system_type != SystemType::UNKNOWN && cic_type != CIC::UNKNOWN);
@@ -1519,6 +1543,8 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 	char cart_id[CARTID_LENGTH + 1] = { };
 	char internal_name[20 + 1];
 
+	memset(patches, 0, sizeof(patches));
+
 	// CRC32 is used for cheat look-up
 	file_crc = 0;
 
@@ -1620,8 +1646,6 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 		file_crc = crc32(file_crc, buf, chunk);
 	}
 
-	if (mem) shmem_unmap(mem, data_size);
-
 	MD5Final(md5, &ctx);
 	md5_to_hex(md5, md5_hex);
 	printf("File MD5: %s\n", md5_hex);
@@ -1642,10 +1666,6 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 					printf("No ROM information found for Cart ID.\n");
 					if (is_auto()) {
 						// Defaulting misc. System Settings, everything OFF
-						if (old_ar != AspectRatio::UNKNOWN) {
-							user_io_status_set(AR_TYPE_OPT, (uint32_t)old_ar); // Resetting Aspect Ratio to Original
-							old_ar = AspectRatio::UNKNOWN;
-						}
 						user_io_status_set(NO_EPAK_OPT, 0); // Enable Expansion Pak
 						user_io_status_set(CPAK_OPT, 0); // Disable Controller Pak
 						user_io_status_set(RPAK_OPT, 0); // Disable Rumble Pak
@@ -1666,6 +1686,20 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 
 	printf("Done loading N64 ROM.\n");
 	FileClose(&f);
+
+	bool is_patched = false;
+
+	if (mem) {
+		if (patches_enabled()) {
+			for (auto patch = patches; patch->address * 4 < data_size && patch->diff; patch++) {
+				if (patch->turbo_core_only && !is_turbo_core()) continue;
+				((uint32_t*)mem)[patch->address] ^= patch->diff;
+				is_patched = true;
+			}
+		}
+
+		shmem_unmap(mem, data_size);
+	}
 
 	strcpy(current_rom_path, name);
 
@@ -1715,7 +1749,8 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 		if (cpak) len += sprintf(info + len, "\nController Pak \x96");
 		if (rpak) len += sprintf(info + len, "\nRumble Pak \x96");
 		if (rtc) len += sprintf(info + len, "\nRTC \x96");
-		if (no_epak) sprintf(info + len, "\nDisable Exp. Pak \x96");
+		if (no_epak) len += sprintf(info + len, "\nDisable Exp. Pak \x96");
+		if (is_patched) sprintf(info + len, "\nPatched \x96");
 
 		Info(info, cfg.controller_info * 1000);
 	}
