@@ -604,6 +604,7 @@ void satcdd_t::CommandExec() {
 
 	case SATURN_COMM_SEEK:
 		this->seek_lba = fad - 150;
+		this->lba = fad - 150;
 
 		this->track = this->toc.GetTrackByLBA(this->seek_lba);
 		this->index = this->toc.GetIndexByLBA(this->track, this->seek_lba);
