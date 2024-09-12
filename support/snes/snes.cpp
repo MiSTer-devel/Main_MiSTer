@@ -156,7 +156,7 @@ uint8_t* snes_get_header(fileTYPE *f)
 			if (addr)
 			{
 				uint8_t ramsz = buf[addr + RamSize];
-				if (ramsz >= 0x08) ramsz = 0;
+				if (ramsz >= 0x09) ramsz = 0;
 
 				//re-calc rom size
 				uint8_t romsz = 15;
