@@ -4575,6 +4575,21 @@ static void setup_wheels()
 				}
 			}
 
+			// Thrustmaster Wheels
+			else if (input[i].vid == 0x044f)
+			{
+				switch (input[i].pid)
+				{
+				case 0xb655: // FGT Rumble 3-in-1 (PC)
+				case 0xb65b: // F430 Cockpit Wireless (PC)
+					input[i].wh_steer = 0;
+					input[i].wh_accel = 5;
+					input[i].wh_brake = 1;
+					input[i].quirk = QUIRK_WHEEL;
+					break;
+				}
+			}
+
 			//Namco NeGcon via Arduino, RetroZord or Reflex Adapt
 			else if (((input[i].vid == 0x2341 || (input[i].vid == 0x1209 && input[i].pid == 0x595A)) && strstr(input[i].name, "RZordPsWheel")) ||
 					 (input[i].vid == 0x16D0 && input[i].pid == 0x127E && strstr(input[i].name, "ReflexPSWheel")))
