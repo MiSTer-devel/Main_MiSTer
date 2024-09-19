@@ -310,6 +310,13 @@ char is_psx()
 	return (is_psx_type == 1);
 }
 
+static int is_cdi_type = 0;
+char is_cdi()
+{
+	if (!is_cdi_type) is_cdi_type = strcasecmp(orig_name, "CD-i") ? 2 : 1;
+	return (is_cdi_type == 1);
+}
+
 static int is_st_type = 0;
 char is_st()
 {
@@ -3017,7 +3024,10 @@ void user_io_poll()
 				lba = spi_w(0);
 				lba = (lba & 0xFFFF) | (((uint32_t)spi_w(0)) << 16);
 				blks = ((c >> 9) & 0x3F) + 1;
-				blksz = (disk == 1 && is_psx()) ? 2352 : (128 << ((c >> 6) & 7));
+				if ((disk == 0 && is_cdi()) || (disk == 1 && is_psx()))
+					blksz = 2352;
+				else
+					blksz = 128 << ((c >> 6) & 7);
 
 				sz = blksz * blks;
 				if (sz > sizeof(buffer[0]))
@@ -3140,11 +3150,16 @@ void user_io_poll()
 			else if (op & 1)
 			{
 				uint32_t buf_n = sizeof(buffer[0]) / blksz;
-				unsigned int psx_blksz = 0;
 				if (is_psx() && blksz == 2352)
 				{
 					//returns 0 if the mounted disk is not a chd, otherwise returns the chd hunksize in bytes
-					psx_blksz = psx_chd_hunksize();
+					unsigned int psx_blksz = psx_chd_hunksize();
+					if (psx_blksz && psx_blksz <= sizeof(buffer[0])) buf_n = psx_blksz / blksz;
+				}
+				else if (is_cdi() && blksz == 2352)
+				{
+					//returns 0 if the mounted disk is not a chd, otherwise returns the chd hunksize in bytes
+					unsigned int psx_blksz = cdi_chd_hunksize();
 					if (psx_blksz && psx_blksz <= sizeof(buffer[0])) buf_n = psx_blksz / blksz;
 				}
 				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, blksz, disk, fio_size);
@@ -3159,6 +3174,13 @@ void user_io_poll()
 					{
 						diskled_on();
 						psx_read_cd(buffer[disk], lba, buf_n);
+						done = 1;
+						buffer_lba[disk] = lba;
+					}
+					else if (blksz == 2352 && is_cdi())
+					{
+						diskled_on();
+						cdi_read_cd(buffer[disk], lba, buf_n);
 						done = 1;
 						buffer_lba[disk] = lba;
 					}
@@ -3237,6 +3259,11 @@ void user_io_poll()
 					if (blksz == 2352 && is_psx())
 					{
 						psx_read_cd(buffer[disk], lba, buf_n);
+						buffer_lba[disk] = lba;
+					}
+					else if (blksz == 2352 && is_cdi())
+					{
+						cdi_read_cd(buffer[disk], lba, buf_n);
 						buffer_lba[disk] = lba;
 					}
 					else if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET) &&
@@ -3538,6 +3565,7 @@ void user_io_poll()
 	if (is_megacd()) mcd_poll();
 	if (is_pce()) pcecd_poll();
 	if (is_saturn()) saturn_poll();
+	if (is_cdi()) cdi_poll();
 	if (is_psx()) psx_poll();
 	if (is_neogeo_cd()) neocd_poll();
 	if (is_n64()) n64_poll();

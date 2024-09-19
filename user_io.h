@@ -279,6 +279,7 @@ char is_gba();
 char is_c64();
 char is_st();
 char is_psx();
+char is_cdi();
 char is_arcade();
 char is_saturn();
 char is_pcxt();
