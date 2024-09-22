@@ -200,7 +200,7 @@ static int load_cue(const char *filename, toc_t *table)
 				return 0;
 			}
 
-			if (strstr(lptr, "MODE1/2352") || strstr(lptr, "MODE2/2352"))
+			if (strstr(lptr, "MODE1/2352") || strstr(lptr, "MODE2/2352") || strstr(lptr, "CDI/2352"))
 			{
 				table->tracks[table->last].sector_size = CD_SECTOR_LEN;
 				table->tracks[table->last].type = 1;
