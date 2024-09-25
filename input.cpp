@@ -4877,6 +4877,19 @@ int input_test(int getchar)
 							input_lightgun_load(n);
 						}
 
+						//OpenFIRE Lightgun
+						//!Note that OF has a user-configurable PID, but the VID is reserved and every device name has the prefix "OpenFIRE"
+						if (input[n].vid == 0xf143 && strstr(input[n].name, "OpenFIRE "))
+						{
+							input[n].quirk = QUIRK_LIGHTGUN;
+							input[n].lightgun = 1;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 32767;
+							input[n].guncal[2] = 0;
+							input[n].guncal[3] = 32767;
+							input_lightgun_load(n);
+						}
+
 						//Madcatz Arcade Stick 360
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
 
