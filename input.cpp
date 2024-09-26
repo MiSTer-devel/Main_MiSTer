@@ -4185,6 +4185,36 @@ static int vcs_proc(int dev, input_event *ev)
 	return 1;
 }
 
+void openfire_signal()
+{
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (input[i].vid == 0xf143 && strstr(input[i].name, "OpenFIRE ") &&
+			strstr(input[i].devname, "mouse") == NULL)
+		{
+			// OF generates 3 devices, so just focus on the one actual gamepad slot.
+			char *nameInit = input[i].name;
+			if (memcmp(nameInit+strlen(input[i].name)-5, "Mouse", 5) != 0 && memcmp(nameInit+strlen(input[i].name)-8, "Keyboard", 8) != 0)
+			{
+				char mname[strlen(input[i].name)];
+				strcpy(mname, input[i].name);
+				char *p;
+				while ((p = strchr(mname, '/'))) *p = '_';
+				while ((p = strchr(mname, ' '))) *p = '_';
+				while ((p = strchr(mname, '*'))) *p = '_';
+				while ((p = strchr(mname, ':'))) *p = '_';
+				char cmd[31+strlen(mname)+strlen(strrchr(input[i].id, '/')+1)];
+				sprintf(cmd, "echo M0x9 > /dev/serial/by-id/usb-%s_%s-if00", mname, strrchr(input[i].id, '/')+1);
+				if(system(cmd) == 0) {
+					printf("%s (device no. %i) set to MiSTer-compatible mode.\n", input[i].name, i);
+				} else {
+					printf("Failed to send command to %s: device path doesn't exist?\n", input[i].name);
+				}
+			}
+		}
+	}
+}
+
 void check_joycon()
 {
 	while (1)
@@ -4881,13 +4911,18 @@ int input_test(int getchar)
 						//!Note that OF has a user-configurable PID, but the VID is reserved and every device name has the prefix "OpenFIRE"
 						if (input[n].vid == 0xf143 && strstr(input[n].name, "OpenFIRE "))
 						{
-							input[n].quirk = QUIRK_LIGHTGUN;
-							input[n].lightgun = 1;
-							input[n].guncal[0] = 0;
-							input[n].guncal[1] = 32767;
-							input[n].guncal[2] = 0;
-							input[n].guncal[3] = 32767;
-							input_lightgun_load(n);
+							// OF generates 3 devices, so just focus on the one actual gamepad slot.
+							char *nameInit = input[n].name;
+							if(memcmp(nameInit+strlen(input[n].name)-5, "Mouse", 5) != 0 && memcmp(nameInit+strlen(input[n].name)-8, "Keyboard", 8) != 0)
+							{
+								input[n].quirk = QUIRK_LIGHTGUN;
+								input[n].lightgun = 1;
+								input[n].guncal[0] = -32767;
+								input[n].guncal[1] = 32767;
+								input[n].guncal[2] = -32767;
+								input[n].guncal[3] = 32767;
+								input_lightgun_load(n);
+							}
 						}
 
 						//Madcatz Arcade Stick 360
@@ -4967,6 +5002,7 @@ int input_test(int getchar)
 
 			mergedevs();
 			check_joycon();
+			openfire_signal();
 			setup_wheels();
 			for (int i = 0; i < n; i++)
 			{
