@@ -7,11 +7,11 @@
 #include "../../hardware.h"
 #include "../../menu.h"
 #include "../../shmem.h"
+#include "../../lib/md5/md5.h"
 
 #include "miniz.h"
 #include "n64.h"
 #include "n64_cpak_header.h"
-#include "lib/md5/md5.h"
 
 #pragma push_macro("NONE")
 #pragma push_macro("BIG_ENDIAN")

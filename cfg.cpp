@@ -328,6 +328,9 @@ static void ini_parse_numeric(const ini_var_t *var, const char *text, void *out)
 	}
 }
 
+// Used to determine if an array variable should be appended or restarted.
+static bool var_array_append[sizeof(ini_vars) / sizeof(ini_var_t)] = {};
+
 static void ini_parse_var(char* buf)
 {
 	// find var
@@ -372,6 +375,18 @@ static void ini_parse_var(char* buf)
 		case STRINGARR:
 			{
 				int item_sz = var->max;
+
+				if (!var_array_append[var_id])
+				{
+					var_array_append[var_id] = true;
+
+					for (int n = 0; n < var->min; n++)
+					{
+						char *str = ((char*)var->var) + (n * item_sz);
+						str[0] = 0;
+					}
+				}
+
 				for (int n = 0; n < var->min; n++)
 				{
 					char *str = ((char*)var->var) + (n * item_sz);
@@ -387,6 +402,14 @@ static void ini_parse_var(char* buf)
 		case HEX32ARR:
 		case UINT32ARR:
 			{
+				if (!var_array_append[var_id])
+				{
+					var_array_append[var_id] = true;
+
+					uint32_t *arr = (uint32_t*)var->var;
+					arr[0] = 0;
+				}
+
 				uint32_t *arr = (uint32_t*)var->var;
 				uint32_t pos = ++arr[0];
 				ini_parse_numeric(var, &buf[i], &arr[pos]);
@@ -445,10 +468,18 @@ static void ini_parse(int alt, const char *vmode)
 		{
 			// if first char in line is INI_SECTION_START, get section
 			section = ini_get_section(line, vmode);
+			if (section)
+			{
+				memset(var_array_append, 0, sizeof(var_array_append));
+			}
 		}
 		else if (line[0] == INCL_SECTION && !section)
 		{
 			section = ini_get_section(line, vmode);
+			if (section)
+			{
+				memset(var_array_append, 0, sizeof(var_array_append));
+			}
 		}
 		else if(section)
 		{
