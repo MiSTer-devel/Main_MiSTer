@@ -82,7 +82,7 @@ static const ini_var_t ini_vars[] =
 	{ "SHARED_FOLDER", (void*)(&(cfg.shared_folder)), STRING, 0, sizeof(cfg.shared_folder) - 1 },
 	{ "NO_MERGE_VID", (void*)(&(cfg.no_merge_vid)), HEX16, 0, 0xFFFF },
 	{ "NO_MERGE_PID", (void*)(&(cfg.no_merge_pid)), HEX16, 0, 0xFFFF },
-	{ "NO_MERGE_VIDPID", (void*)(cfg.no_merge_vidpid), HEX32ARR, 0, 0xFFFFFFFF },
+	{ "NO_MERGE_VIDPID", (void*)(cfg.no_merge_vidpid), HEX32ARR, 0, sizeof(cfg.no_merge_vidpid) / sizeof(cfg.no_merge_vidpid[0]) },
 	{ "CUSTOM_ASPECT_RATIO_1", (void*)(&(cfg.custom_aspect_ratio[0])), STRING, 0, sizeof(cfg.custom_aspect_ratio[0]) - 1 },
 	{ "CUSTOM_ASPECT_RATIO_2", (void*)(&(cfg.custom_aspect_ratio[1])), STRING, 0, sizeof(cfg.custom_aspect_ratio[1]) - 1 },
 	{ "SPINNER_VID", (void*)(&(cfg.spinner_vid)), HEX16, 0, 0xFFFF },
@@ -126,7 +126,7 @@ static const ini_var_t ini_vars[] =
 	{ "HDR_AVG_NITS", (void*)(&(cfg.hdr_avg_nits)), UINT16, 100, 10000 },
 	{ "VGA_MODE", (void*)(&(cfg.vga_mode)), STRING, 0, sizeof(cfg.vga_mode) - 1 },
 	{ "NTSC_MODE", (void *)(&(cfg.ntsc_mode)), UINT8, 0, 2 },
-	{ "CONTROLLER_UNIQUE_MAPPING", (void *)(cfg.controller_unique_mapping), UINT32ARR, 0, 0xFFFFFFFF },
+	{ "CONTROLLER_UNIQUE_MAPPING", (void *)(cfg.controller_unique_mapping), UINT32ARR, 0, sizeof(cfg.controller_unique_mapping) / sizeof(cfg.controller_unique_mapping[0]) },
 	{ "OSD_LOCK", (void*)(&(cfg.osd_lock)), STRING, 0, sizeof(cfg.osd_lock) - 1 },
 	{ "OSD_LOCK_TIME", (void*)(&(cfg.osd_lock_time)), UINT16, 0, 60 },
 	{ "DEBUG", (void *)(&(cfg.debug)), UINT8, 0, 1 },
@@ -327,6 +327,9 @@ static void ini_parse_numeric(const ini_var_t *var, const char *text, void *out)
 	}
 }
 
+// Used to determine if an array variable should be appended or restarted.
+static bool var_array_append[sizeof(ini_vars) / sizeof(ini_var_t)] = {};
+
 static void ini_parse_var(char* buf)
 {
 	// find var
@@ -371,6 +374,18 @@ static void ini_parse_var(char* buf)
 		case STRINGARR:
 			{
 				int item_sz = var->max;
+
+				if (!var_array_append[var_id])
+				{
+					var_array_append[var_id] = true;
+
+					for (int n = 0; n < var->min; n++)
+					{
+						char *str = ((char*)var->var) + (n * item_sz);
+						str[0] = 0;
+					}
+				}
+
 				for (int n = 0; n < var->min; n++)
 				{
 					char *str = ((char*)var->var) + (n * item_sz);
@@ -386,9 +401,20 @@ static void ini_parse_var(char* buf)
 		case HEX32ARR:
 		case UINT32ARR:
 			{
+				if (!var_array_append[var_id])
+				{
+					var_array_append[var_id] = true;
+
+					uint32_t *arr = (uint32_t*)var->var;
+					arr[0] = 0;
+				}
+
 				uint32_t *arr = (uint32_t*)var->var;
-				uint32_t pos = ++arr[0];
-				ini_parse_numeric(var, &buf[i], &arr[pos]);
+				if (arr[0] < var->max)
+				{
+					uint32_t pos = ++arr[0];
+					ini_parse_numeric(var, &buf[i], &arr[pos]);
+				}
 			}
 			break;
 
@@ -444,10 +470,18 @@ static void ini_parse(int alt, const char *vmode)
 		{
 			// if first char in line is INI_SECTION_START, get section
 			section = ini_get_section(line, vmode);
+			if (section)
+			{
+				memset(var_array_append, 0, sizeof(var_array_append));
+			}
 		}
 		else if (line[0] == INCL_SECTION && !section)
 		{
 			section = ini_get_section(line, vmode);
+			if (section)
+			{
+				memset(var_array_append, 0, sizeof(var_array_append));
+			}
 		}
 		else if(section)
 		{
