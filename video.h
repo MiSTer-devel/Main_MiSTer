@@ -47,6 +47,8 @@ char* video_get_shadow_mask(int only_name = 1);
 void  video_set_shadow_mask(const char *name);
 void  video_loadPreset(char *name, bool save);
 
+int   video_get_rotated();
+
 void video_cfg_reset();
 
 void  video_mode_adjust();
