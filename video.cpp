@@ -3904,3 +3904,12 @@ static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, i
 		video_calculate_cvt_int(h_pixels, v_lines, refresh_rate, 1, vmode);
 	}
 }
+
+
+
+int video_get_rotated()
+{
+  return current_video_info.rotated;
+}
+
+

@@ -4124,6 +4124,17 @@ bool user_io_screenshot(const char *pngname, int rescale)
 	}
 	else
 	{
+    int scwidth = ms->output_width;
+    int scheight = ms->output_height;
+
+    if (video_get_rotated())
+    {
+
+      //If the video is rotated, the scaled output resolution results in a squished image.
+      //Calculate the scaled output res using the original AR
+      scwidth = scheight * ((float)ms->width/ms->height);
+    }
+
 		const char *basename = last_filename;
 		if( pngname && *pngname )
 			basename = pngname;
@@ -4140,7 +4151,7 @@ bool user_io_screenshot(const char *pngname, int rescale)
 		/* do we want to save a rescaled image? */
 		if (rescale)
 		{
-			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,ms->output_width,ms->output_height);
+			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,scwidth,scheight);
 			imlib_free_image_and_decache();
 			imlib_context_set_image(im_scaled);
 		}
