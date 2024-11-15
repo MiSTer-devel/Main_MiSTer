@@ -147,12 +147,31 @@ uint8_t* snes_get_header(fileTYPE *f)
 
 			*(uint32_t*)(&hdr[8]) = size;
 
+			uint32_t addr = find_header(buf, size);
+
 			bool is_bsx_bios = false;
 			if (!memcmp(buf+0x7FC0, "Satellaview BS-X     ", 21)) {
 				is_bsx_bios = true;
 			}
 
-			uint32_t addr = find_header(buf, size);
+			bool is_sufami_bios = false, is_sufami_base = false, is_sufami_turbo = false;
+			if (!memcmp(buf, "BANDAI SFC-ADX", 14)) {
+				uint32_t offs = 0;
+				while (offs < size) {
+					if (!memcmp(buf + offs, "BANDAI SFC-ADX", 14)) {
+						if (!memcmp(buf + offs + 0x10, "SFC-ADX BACKUP", 14)) {
+							is_sufami_bios = true;
+						}
+						else {
+							if (!is_sufami_base) addr = offs;
+							is_sufami_turbo = is_sufami_base;
+							is_sufami_base = true;
+						}
+						offs += 1024 * 1024;
+					}
+				}
+			}
+
 			if (addr)
 			{
 				uint8_t ramsz = buf[addr + RamSize];
@@ -186,6 +205,13 @@ uint8_t* snes_get_header(fileTYPE *f)
 				//BSX 3
 				if (is_bsx_bios) {
 					hdr[1] = 0x30;
+				}
+				else if (is_sufami_base) {
+					hdr[1] = 0x20 | (is_sufami_turbo ? 8 : 0) | (is_sufami_bios ? 4 : 0);
+					const uint8_t rom_sz_tbl[9] = { 0,7,8,9,9,10,10,10,10 };
+					const uint8_t ram_sz_tbl[5] = { 0,1,2,3,3 };
+					romsz = buf[addr + 0x36] >= 8 ? rom_sz_tbl[8] : rom_sz_tbl[buf[addr + 0x36] & 0x0F];
+					ramsz = buf[addr + 0x37] >= 4 ? ram_sz_tbl[4] : ram_sz_tbl[buf[addr + 0x37] & 0x07];
 				}
 				else {
 
@@ -268,13 +294,13 @@ uint8_t* snes_get_header(fileTYPE *f)
 						hdr[1] |= 0x70;
 					}
 
-					//1..2,E..F - reserved for other mappers.
+					//1,E..F - reserved for other mappers.
 				}
 
 				hdr[2] = 0;
 
 				//PAL Regions
-				if ((buf[addr + CartRegion] >= 0x02 && buf[addr + CartRegion] <= 0x0C) || buf[addr + CartRegion] == 0x11)
+				if (((buf[addr + CartRegion] >= 0x02 && buf[addr + CartRegion] <= 0x0C) || buf[addr + CartRegion] == 0x11) && !is_sufami_base)
 				{
 					hdr[3] |= 1;
 				}
