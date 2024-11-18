@@ -4587,6 +4587,13 @@ static void setup_wheels()
 					input[i].wh_brake = 1;
 					input[i].quirk = QUIRK_WHEEL;
 					break;
+				case 0xb66e: // T300RS Racing Wheel (PC/PS3)
+					input[i].wh_steer = 0;
+					input[i].wh_accel = 5;
+					input[i].wh_brake = 1;
+					input[i].wh_clutch = 6;
+					input[i].quirk = QUIRK_WHEEL;
+					break;
 				}
 			}
 
