@@ -418,6 +418,11 @@ void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads, i
 	ide_inst[port].base = port ? IDE1_BASE : IDE0_BASE;
 	ide_inst[port].drive[drv].drvnum = drvnum;
 
+	if (drive->f && (f != drive->f) && drive->f->opened())
+	{
+		FileClose(drive->f);
+	}
+
 	drive->f = f;
 
 	drive->cylinders = 0;
@@ -973,7 +978,6 @@ void ide_io(int num, int req)
 		ide_get_regs(ide);
 
 		dbg2_printf("IDE command: %02X (on %d)\n", ide->regs.cmd, ide->regs.drv);
-
 		int err = 0;
 
 		if(ide->regs.cmd == 0xFA) err = handle_hdd(ide);
@@ -1005,6 +1009,7 @@ void ide_io(int num, int req)
 			ide_recv_data(ide_buf, 256);
 			printf("mode select data:\n");
 			hexdump(ide_buf, ide->regs.cylinder);
+			cdrom_mode_select(ide);
 			cdrom_reply(ide, 0);
 		}
 		else
@@ -1058,6 +1063,22 @@ void ide_reset(uint8_t hotswap[4])
 	ide_inst[0].drive[1].allow_placeholder = hotswap[1];
 	ide_inst[1].drive[0].allow_placeholder = hotswap[2];
 	ide_inst[1].drive[1].allow_placeholder = hotswap[3];
+
+
+	ide_inst[0].drive[0].volume_r = 1.0f;
+	ide_inst[0].drive[1].volume_r = 1.0f;
+	ide_inst[1].drive[0].volume_r = 1.0f;
+	ide_inst[1].drive[1].volume_r = 1.0f;
+
+	ide_inst[0].drive[0].volume_l = 1.0f;
+	ide_inst[0].drive[1].volume_l = 1.0f;
+	ide_inst[1].drive[0].volume_l = 1.0f;
+	ide_inst[1].drive[1].volume_l = 1.0f;
+
+	ide_inst[0].drive[0].mcr_flag = false;
+	ide_inst[0].drive[1].mcr_flag = false;
+	ide_inst[1].drive[0].mcr_flag = false;
+	ide_inst[1].drive[1].mcr_flag = false;
 }
 
 int ide_open(uint8_t unit, const char* filename)

@@ -30,6 +30,8 @@ struct direntext_t
 {
 	dirent de;
 	int  cookie;
+#define DT_EXT_ZIP    0x1
+	unsigned int flags;
 	char datecode[16];
 	char altname[256];
 };
@@ -147,5 +149,7 @@ const char* FileReadLine(fileTextReader *reader);
 #define GAMES_DIR "games"
 #define CIFS_DIR "cifs"
 #define DOCS_DIR "docs"
+
+void create_path(const char *base_dir, const char* sub_dir);
 
 #endif

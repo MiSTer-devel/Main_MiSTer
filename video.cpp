@@ -1403,15 +1403,16 @@ static void hdmi_config_init()
 
 		0x17, 0b01100010,		// Aspect ratio 16:9 [1]=1, 4:3 [1]=0, invert sync polarity
 
-		0x3B, 0x0,              // Automatic pixel repetition and VIC detection
-
+		0x3B, 0x80,             // Automatic pixel repetition and VIC detection
+		0x3C, 0x00,
 
 		0x48, 0b00001000,       // [6]=0 Normal bus order!
 								// [5] DDR Alignment.
 								// [4:3] b01 Data right justified (for YCbCr 422 input modes).
 
 		0x49, 0xA8,				// ADI required Write.
-		0x4A, 0b10000000, //Auto-Calculate SPD checksum
+		0x40, 0x00,
+		0x4A, 0b10000000,		//Auto-Calculate SPD checksum
 		0x4C, 0x00,				// ADI required Write.
 
 		0x55, (uint8_t)(cfg.hdmi_game_mode ? 0b00010010 : 0b00010000),
@@ -1520,6 +1521,90 @@ static void hdmi_config_init()
 
 	hdmi_config_set_csc();
 }
+
+static void spd_config(uint8_t *data)
+{
+	int fd = i2c_open(0x38, 0);
+	if (fd >= 0)
+	{
+		int res;
+		hdmi_config_set_spd(1);
+
+		res = i2c_smbus_write_byte_data(fd, 0x1F, 0x80);
+		if (res < 0)
+		{
+			printf("i2c: Couldn't update SPD change register (0x1F, 0x80) %d\n", res);
+		}
+		else
+		{
+			for (int i = 0; i < 31; i++)
+			{
+				res = i2c_smbus_write_byte_data(fd, i, data[i]);
+				if (res < 0) printf("i2c: SPD register write error (%02X %02x): %d\n", i, data[i], res);
+			}
+
+			res = i2c_smbus_write_byte_data(fd, 0x1F, 0x00);
+			if (res < 0) printf("i2c: Couldn't update SPD change register (0x1F, 0x00), %d\n", res);
+		}
+		i2c_close(fd);
+	}
+	else
+	{
+		hdmi_config_set_spd(0);
+	}
+}
+
+static void spd_config_dv()
+{
+	VideoInfo *vi = &current_video_info;
+
+	uint8_t data[32] = {
+		0x83, 0x01, 25, 0,
+		'D', 'V', '1' /* version */,
+		(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0)),
+		(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
+		(uint8_t)vi->de_h,
+		(uint8_t)(vi->de_h >> 8),
+		(uint8_t)vi->de_v,
+		(uint8_t)(vi->de_v >> 8),
+		(uint8_t)vi->width,
+		(uint8_t)(vi->width >> 8),
+		(uint8_t)vi->height,
+		(uint8_t)(vi->height >> 8)
+	};
+
+	char *name = user_io_get_core_name2();
+	for (int i = 17; i < 32; i++)
+	{
+		if (!*name) break;
+		data[i] = (uint8_t)(*name);
+		name++;
+	}
+
+	spd_config(data);
+}
+
+/*
+static void spd_config_hdmi()
+{
+	uint8_t data[32] = {
+		0x83, 0x01, 25, 0,
+		'M', 'i', 'S', 'T', 'e', 'r', 0, 0,
+	};
+
+	char *name = user_io_get_core_name();
+	for (int i = 12; i < 27; i++)
+	{
+		if (!*name) break;
+		data[i] = (uint8_t)(*name);
+		name++;
+	}
+
+	data[27] = 8; // GAME
+
+	spd_config(data);
+}
+*/
 
 static void hdmi_config_set_hdr()
 {
@@ -2444,6 +2529,9 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->ptime = spi_w(0) | (spi_w(0) << 16);
 		video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
 		video_info->ctime = spi_w(0) | (spi_w(0) << 16);
+		video_info->pixrep = spi_w(0);
+		video_info->de_h = spi_w(0);
+		video_info->de_v = spi_w(0);
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
@@ -2541,6 +2629,7 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 
 	printf("\033[1;33mINFO: Video resolution: %u x %u%s, fHorz = %.1fKHz, fVert = %.1fHz, fPix = %.2fMHz, fVid = %.2fMHz\033[0m\n",
 		vi->width, vi->height, vi->interlaced ? "i" : "", hrate, vrate, prate, crate);
+	printf("\033[1;33mINFO: pr = %d, de_h = %d, de_v = %d\033[0m\n", vi->pixrep, vi->de_h, vi->de_v);
 	printf("\033[1;33mINFO: Frame time (100MHz counter): VGA = %d, HDMI = %d\033[0m\n", vi->vtime, vi->vtimeh);
 	printf("\033[1;33mINFO: AR = %d:%d, fb_en = %d, fb_width = %d, fb_height = %d\033[0m\n", vi->arx, vi->ary, vi->fb_en, vi->fb_width, vi->fb_height);
 	if (vi->vtimeh) api1_5 = 1;
@@ -2742,6 +2831,9 @@ static void set_yc_mode()
 		double CLK_REF = (pal || (cfg.ntsc_mode == 1)) ? 4.43361875f : (cfg.ntsc_mode == 2) ? 3.575611f : 3.579545f;
 		double CLK_VIDEO = current_video_info.ctime * 100.f / current_video_info.ptime;
 
+		float prate = current_video_info.width * 100.f;
+		prate /= current_video_info.ptime;
+
 		int64_t PHASE_INC = ((int64_t)((CLK_REF / CLK_VIDEO) * 1099511627776LL)) & 0xFFFFFFFFFFLL;
 
 		int COLORBURST_START = (int)(3.7f * (CLK_VIDEO / CLK_REF));
@@ -2749,12 +2841,14 @@ static void set_yc_mode()
 		int COLORBURST_RANGE = (COLORBURST_START << 10) | COLORBURST_END;
 
 		char yc_key[64];
+		char yc_key_expand[64];
 		sprintf(yc_key, "%s_%.1f%s%s", user_io_get_core_name(1), fps, current_video_info.interlaced ? "i" : "", (pal || !cfg.ntsc_mode) ? "" : (cfg.ntsc_mode == 1) ? "s" : "m");
+		snprintf(yc_key_expand, sizeof(yc_key_expand), "%s_%.2f", yc_key, prate);
 		printf("Calculated YC parameters for '%s': %s PHASE_INC=%lld, COLORBURST_START=%d, COLORBURST_END=%d\n", yc_key, pal ? "PAL" : (cfg.ntsc_mode == 1) ? "PAL60" : (cfg.ntsc_mode == 2) ? "PAL-M" : "NTSC", PHASE_INC, COLORBURST_START, COLORBURST_END);
 
 		for (uint i = 0; i < sizeof(yc_modes) / sizeof(yc_modes[0]); i++)
 		{
-			if (!strcasecmp(yc_modes[i].key, yc_key))
+		if (!strcasecmp(yc_modes[i].key, yc_key) || !strcasecmp(yc_modes[i].key, yc_key_expand))
 			{
 				printf("Override YC PHASE_INC with value: %lld\n", yc_modes[i].phase_inc);
 				PHASE_INC = yc_modes[i].phase_inc;
@@ -2790,8 +2884,18 @@ void video_mode_adjust()
 		current_video_info = video_info;
 		show_video_info(&video_info, &v_cur);
 		set_yc_mode();
+		if (cfg.direct_video) spd_config_dv();
+		//else if(use_vrr != VRR_FREESYNC) spd_config_hdmi();
 	}
 	force = false;
+
+	if (cfg.direct_video)
+	{
+		static int menu = 0;
+		int menu_now = menu_present();
+		if(menu != menu_now) spd_config_dv();
+		menu = menu_now;
+	}
 
 	if (vid_changed && !is_menu())
 	{
@@ -3238,12 +3342,17 @@ static Imlib_Image load_bg()
 
 	if (!fname)
 	{
-		char bgdir[32];
-
+		static char bgdir[128];
+		static char label[64];
 		int alt = altcfg();
-		sprintf(bgdir, "wallpapers_alt_%d", alt);
-		if (alt == 1 && !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers_alt");
-		if (alt <= 0 || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
+
+		const char* cfg_name = cfg_get_name(alt);
+		snprintf(label, sizeof(label), "%s", cfg_name + 6);
+		char *p = strrchr(label, '.');
+		if (p) *p = 0;
+
+		sprintf(bgdir, "wallpapers%s", label);
+		if (alt <= 0 || !cfg_name[0] || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
 
 		if (PathIsDir(bgdir))
 		{
@@ -3795,3 +3904,12 @@ static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, i
 		video_calculate_cvt_int(h_pixels, v_lines, refresh_rate, 1, vmode);
 	}
 }
+
+
+
+int video_get_rotated()
+{
+  return current_video_info.rotated;
+}
+
+

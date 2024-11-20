@@ -32,3 +32,16 @@ char *strcpyz(char *dest, size_t dest_size, const char *src)
 {
 	return strncpyz(dest, dest_size, src, dest_size - 1);
 }
+
+unsigned int str_hash(const char *s, unsigned int initial)
+{
+	unsigned int hash = initial;
+	int c;
+
+	while((c = *s++))
+	{
+		hash = ((hash << 5) + hash) + c;
+	}
+
+	return hash;
+}

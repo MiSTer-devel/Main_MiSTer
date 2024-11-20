@@ -97,7 +97,6 @@
 ***************************************************************************/
 
 #include <stdlib.h>
-#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -213,6 +212,8 @@ enum huffman_error huffman_import_tree_rle(struct huffman_decoder* decoder, stru
 			else
 			{
 				int repcount = bitstream_read(bitbuf, numbits) + 3;
+				if (repcount + curnode > decoder->numcodes)
+					return HUFFERR_INVALID_DATA;
 				while (repcount--)
 					decoder->huffnode[curnode++].numbits = nodebits;
 			}
@@ -293,6 +294,9 @@ enum huffman_error huffman_import_tree_huffman(struct huffman_decoder* decoder, 
 				decoder->huffnode[curcode++].numbits = last;
 		}
 	}
+
+    /* make sure we free the local huffman decoder */
+    delete_huffman_decoder(smallhuff);
 
 	/* make sure we ended up with the right number */
 	if (curcode != decoder->numcodes)

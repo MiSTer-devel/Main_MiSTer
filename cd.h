@@ -19,7 +19,8 @@ typedef struct
 	int end;
 	int type;
 	int sector_size;
-	int index1;
+	int indexes[100];
+	int index_num;
 	cd_subcode_types_t sbc_type;
 } cd_track_t;
 
@@ -29,6 +30,7 @@ typedef struct
 	int last;
 	int sectorSize;
 	chd_file *chd_f;
+	int chd_hunksize;
 	cd_track_t tracks[100];
 	fileTYPE sub;
 
@@ -36,6 +38,17 @@ typedef struct
 	{
 		int i = 0;
 		while ((this->tracks[i].end <= lba) && (i < this->last)) i++;
+		return i;
+	}
+
+	int GetIndexByLBA(int track, int lba)
+	{
+		if (lba - this->tracks[track].start < 0) 
+			return 0;
+
+		int i = 2;
+		while ((lba - this->tracks[track].start >= this->tracks[track].indexes[i]) && (i < this->tracks[track].index_num)) i++;
+		i--;
 		return i;
 	}
 } toc_t;

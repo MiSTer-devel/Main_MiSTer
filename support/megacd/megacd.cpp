@@ -14,6 +14,9 @@
 
 #define SAVE_IO_INDEX 5 // fake download to trigger save loading
 
+#define MCD_GET_CMD        0
+#define MCD_GET_SEND_DATA  1
+
 static int need_reset=0;
 static uint8_t has_command = 0;
 
@@ -25,12 +28,18 @@ void mcd_poll()
 
 	if (!poll_timer || CheckTimer(poll_timer))
 	{
-		poll_timer = GetTimer(13 + (!adj ? 1 : 0));
-		if (++adj >= 3) adj = 0;
+		if (!cdd.isData && cdd.status == CD_STAT_PLAY && cdd.latency == 0) {
+			// Send audio sectors faster so buffer stays filled
+			poll_timer = GetTimer(10);
+			adj = 0;
+		} else {
+			poll_timer = GetTimer(13 + (!adj ? 1 : 0));
+			if (++adj >= 3) adj = 0;
+		}
 
 		if (has_command) {
 			spi_uio_cmd_cont(UIO_CD_SET);
-			uint64_t s = cdd.GetStatus();
+			uint64_t s = cdd.GetStatus(0);
 			spi_w((s >> 0) & 0xFFFF);
 			spi_w((s >> 16) & 0xFFFF);
 			spi_w(((s >> 32) & 0x00FF) | (cdd.isData ? 0x01 << 8 : 0x00 << 8));
@@ -50,6 +59,8 @@ void mcd_poll()
 	{
 		last_req = req;
 
+		spi_w(MCD_GET_CMD);
+
 		uint16_t data_in[4];
 		data_in[0] = spi_w(0);
 		data_in[1] = spi_w(0);
@@ -63,7 +74,7 @@ void mcd_poll()
 		}
 
 		uint64_t c = *((uint64_t*)(data_in));
-		cdd.SetCommand(c);
+		cdd.SetCommand(c, 0);
 		cdd.CommandExec();
 		has_command = 1;
 
@@ -153,6 +164,7 @@ void mcd_set_image(int num, const char *filename)
 			cdd.status = cdd.loaded ? CD_STAT_STOP : CD_STAT_NO_DISC;
 			cdd.latency = 10;
 			cdd.SendData = mcd_send_data;
+			cdd.CanSendData = mcd_can_send_data;
 
 			if (!same_game)
 			{
@@ -267,4 +279,19 @@ void mcd_fill_blanksave(uint8_t *buffer, uint32_t lba)
 	{
 		memset(buffer, 0, 512);
 	}
+}
+
+int mcd_can_send_data(uint8_t type) {
+	if (type == 1) {
+		return 1;
+	}
+
+	// Ask the FPGA if it is ready to receive a sector
+	spi_uio_cmd_cont(UIO_CD_GET);
+	spi_w(MCD_GET_SEND_DATA | (type << 2));
+
+	uint16_t data = spi_w(0);
+	DisableIO();
+
+	return (data == 1);
 }

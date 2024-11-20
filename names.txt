@@ -46,7 +46,6 @@ PSX: Sony PlayStation
 QL: Sinclair QL
 RX78: Bandai RX-78
 SAMCoupe: SAM Coupe
-Saturn: Sega Saturn
 SharpMZ: Sharp MZ Series
 SordM5: Sord M5
 Specialist: Specialist/MX
@@ -73,10 +72,12 @@ GBA: Nintendo Game Boy Advance
 Genesis: Sega Genesis
 Jaguar: Atari Jaguar
 MegaCD: Sega CD
-NeoGeo: SNK Neo Geo MVS/AES
+MegaDrive: Sega Mega Drive/Genesis
+NeoGeo: SNK Neo Geo MVS/AES/CD
 NES: Nintendo NES
 Odyssey2: Magnavox Odyssey2
 S32X: Sega 32X
+Saturn: Sega Saturn
 SGB: Nintendo Super Game Boy
 SMS: Sega Master System/Game Gear
 SNES: Nintendo Super NES

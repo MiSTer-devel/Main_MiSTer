@@ -8,9 +8,6 @@
 #include "megacd.h"
 #include "../chd/mister_chd.h"
 
-#define CD_DATA_IO_INDEX 2
-#define CD_SUB_IO_INDEX 3
-
 cdd_t cdd;
 
 cdd_t::cdd_t() {
@@ -26,6 +23,7 @@ cdd_t::cdd_t() {
 	chd_hunkbuf = NULL;
 	chd_hunknum = -1;
 	SendData = NULL;
+	CanSendData = NULL;
 
 	stat[0] = 0xB;
 	stat[1] = 0x0;
@@ -149,16 +147,16 @@ int cdd_t::LoadCUE(const char* filename) {
 			{
 				if (strstr(lptr, "MODE1/2048"))
 				{
-					this->sectorSize = 2048;
+					this->toc.tracks[0].sector_size = 2048;
 				}
 				else if (strstr(lptr, "MODE1/2352"))
 				{
-					this->sectorSize = 2352;
+					this->toc.tracks[0].sector_size = 2352;
 
 					FileSeek(&this->toc.tracks[0].f, 0x10, SEEK_SET);
 				}
 
-				if (this->sectorSize)
+				if (this->toc.tracks[0].sector_size)
 				{
 					this->toc.tracks[0].type = 1;
 
@@ -212,7 +210,7 @@ int cdd_t::LoadCUE(const char* filename) {
 				this->toc.tracks[this->toc.last].offset += this->toc.end * 2352;
 
 				int sectorSize = 2352;
-				if (this->toc.tracks[this->toc.last].type) sectorSize = this->sectorSize;
+				if (this->toc.tracks[this->toc.last].type) sectorSize = this->toc.tracks[0].sector_size;
 				this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((this->toc.tracks[this->toc.last].f.size + sectorSize - 1) / sectorSize);
 
 				this->toc.tracks[this->toc.last].start += (bb + ss * 75 + mm * 60 * 75);
@@ -266,7 +264,7 @@ int cdd_t::Load(const char *filename)
 			free(this->chd_hunkbuf);
 		}
 
-		this->chd_hunkbuf = (uint8_t *)malloc(CD_FRAME_SIZE * CD_FRAMES_PER_HUNK);
+		this->chd_hunkbuf = (uint8_t *)malloc(this->toc.chd_hunksize);
 		this->chd_hunknum = -1;
  	} else {
 		return (-1);
@@ -283,7 +281,11 @@ int cdd_t::Load(const char *filename)
 		FileReadAdv(fd_img, header, 0x10);
 	}
 
-	if (!memcmp("SEGADISCSYSTEM", header, 14))
+	if (this->toc.tracks[0].sector_size)
+	{
+		this->sectorSize = this->toc.tracks[0].sector_size;
+	}
+	else if (!memcmp("SEGADISCSYSTEM", header, 14))
 	{
 		this->sectorSize = 2048;
 	}
@@ -370,7 +372,12 @@ void cdd_t::Update() {
 			this->latency--;
 			return;
 		}
-		this->status = this->loaded ? CD_STAT_TOC : CD_STAT_NO_DISC;
+		// Neo Geo CDZ does not like the status changing to TOC here.
+		//this->status = this->loaded ? CD_STAT_TOC : CD_STAT_NO_DISC;
+		if (!this->loaded)
+		{
+			this->status = CD_STAT_NO_DISC;
+		}
 	}
 	else if (this->status == CD_STAT_SEEK)
 	{
@@ -395,6 +402,11 @@ void cdd_t::Update() {
 			return;
 		}
 
+		if (CanSendData && !CanSendData(this->toc.tracks[this->index].type))
+		{
+			// Not ready yet to receive sector
+			return;
+		}
 
 		if (this->toc.tracks[this->index].type)
 		{
@@ -408,7 +420,6 @@ void cdd_t::Update() {
 			header[3] = 0x01;
 
 			SectorSend(header);
-
 		}
 		else
 		{
@@ -448,6 +459,7 @@ void cdd_t::Update() {
 			else
 			{
 				this->lba = this->toc.end;
+				this->chd_audio_read_lba = this->lba;
 				this->status = CD_STAT_END;
 				this->isData = 0x01;
 				return;
@@ -465,6 +477,8 @@ void cdd_t::Update() {
 				this->lba = 0;
 			}
 		}
+
+		this->chd_audio_read_lba = this->lba;
 
 		this->isData = this->toc.tracks[this->index].type;
 
@@ -550,6 +564,9 @@ void cdd_t::CommandExec() {
 		break;
 
 	case CD_COMM_TOC:
+		if (this->status == CD_STAT_STOP) {
+			this->status = CD_STAT_TOC;
+		}
 		switch (comm[3]) {
 		case 0: {
 			int lba_ = this->lba + 150;
@@ -599,6 +616,7 @@ void cdd_t::CommandExec() {
 			stat[8] = 0;
 
 			//printf("\x1b[32mMCD: Command TOC 2, index = %i, command = %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X, status = %02X%08X, frame = %u\n\x1b[0m", this->index, comm[9], comm[8], comm[7], comm[6], comm[5], comm[4], comm[3], comm[2], comm[1], comm[0], (uint32_t)(GetStatus() >> 32), (uint32_t)GetStatus(), frame);
+
 		}
 			break;
 
@@ -673,42 +691,11 @@ void cdd_t::CommandExec() {
 		break;
 
 	case CD_COMM_PLAY: {
-		int index = 0;
 		int lba_;
 		MSFToLBA(&lba_, comm[2] * 10 + comm[3], comm[4] * 10 + comm[5],	comm[6] * 10 + comm[7]);
 		lba_ -= 150;
 
-		//if (!this->latency)
-		{
-			this->latency = 11;
-		}
-
-		this->latency += (abs(lba_ - this->lba) * 120) / 270000;
-
-		this->lba = lba_;
-
-		while ((this->toc.tracks[index].end <= lba_) && (index < this->toc.last)) index++;
-		this->index = index;
-		if (lba_ < this->toc.tracks[index].start)
-		{
-			lba_ = this->toc.tracks[index].start;
-		}
-
-		if (this->toc.tracks[index].type)
-		{
-			/* DATA track */
-			FileSeek(&this->toc.tracks[0].f, lba_ * this->sectorSize, SEEK_SET);
-		}
-		else if (this->toc.tracks[index].f.opened())
-		{
-			/* PCM AUDIO track */
-			FileSeek(&this->toc.tracks[index].f, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
-		}
-
-		this->chd_audio_read_lba = this->lba;
-		this->audioOffset = 0;
-
-		if (this->toc.sub.opened()) FileSeek(&this->toc.sub, lba_ * 96, SEEK_SET);
+		SeekToLBA(lba_, 1);
 
 		this->isData = 1;
 
@@ -729,35 +716,11 @@ void cdd_t::CommandExec() {
 		break;
 
 	case CD_COMM_SEEK: {
-		int index = 0;
 		int lba_;
 		MSFToLBA(&lba_, comm[2] * 10 + comm[3], comm[4] * 10 + comm[5], comm[6] * 10 + comm[7]);
 		lba_ -= 150;
 
-		this->latency = (abs(lba_ - this->lba) * 120) / 270000;
-
-		this->lba = lba_;
-
-		while ((this->toc.tracks[index].end <= lba_) && (index < this->toc.last)) index++;
-		this->index = index;
-
-		if (lba_ < this->toc.tracks[index].start)
-		{
-			lba_ = this->toc.tracks[index].start;
-		}
-
-		if (this->toc.tracks[index].type)
-		{
-			// DATA track
-			FileSeek(&this->toc.tracks[0].f, lba_ * this->sectorSize, SEEK_SET);
-		}
-		else if (this->toc.tracks[index].f.opened())
-		{
-			// AUDIO track
-			FileSeek(&this->toc.tracks[index].f, (lba_ * 2352) - this->toc.tracks[index].offset, SEEK_SET);
-		}
-
-		if (this->toc.sub.opened()) FileSeek(&this->toc.sub, lba_ * 96, SEEK_SET);
+		SeekToLBA(lba_, 0);
 
 		this->isData = 1;
 
@@ -783,7 +746,6 @@ void cdd_t::CommandExec() {
 		this->status = CD_STAT_PAUSE;
 
 		stat[0] = this->status;
-
 		//printf("\x1b[32mMCD: Command PAUSE, status = %X, frame = %u\n\x1b[0m", this->status, frame);
 		break;
 
@@ -812,6 +774,34 @@ void cdd_t::CommandExec() {
 		stat[0] = this->status;
 		break;
 
+	case CD_COMM_TRACK_PLAY: {
+		int index = comm[2] * 10 + comm[3];
+		if (index > 0)
+		{
+			index -= 1;
+		}
+		int lba = this->toc.tracks[index].start;
+
+		SeekToLBA(lba, 1);
+
+		this->isData = 1;
+
+		this->status = CD_STAT_PLAY;
+
+		stat[0] = CD_STAT_SEEK;
+		stat[1] = 0xf;
+		stat[2] = 0;
+		stat[3] = 0;
+		stat[4] = 0;
+		stat[5] = 0;
+		stat[6] = 0;
+		stat[7] = 0;
+		stat[8] = 0;
+
+		//printf("\x1b[32mMCD: Command CD_COMM_TRACK_PLAY, index: %u, status = %u \n\x1b[0m", index, this->status);
+	}
+		break;
+
 	case CD_COMM_TRAY_CLOSE:
 		this->isData = 1;
 		this->status = this->loaded ? CD_STAT_TOC : CD_STAT_NO_DISC;
@@ -836,8 +826,8 @@ void cdd_t::CommandExec() {
 	}
 }
 
-uint64_t cdd_t::GetStatus() {
-	uint8_t n9 = ~(stat[0] + stat[1] + stat[2] + stat[3] + stat[4] + stat[5] + stat[6] + stat[7] + stat[8]);
+uint64_t cdd_t::GetStatus(uint8_t crc_start) {
+	uint8_t n9 = ~(crc_start + stat[0] + stat[1] + stat[2] + stat[3] + stat[4] + stat[5] + stat[6] + stat[7] + stat[8]);
 	return ((uint64_t)(n9 & 0xF) << 36) |
 		((uint64_t)(stat[8] & 0xF) << 32) |
 		((uint64_t)(stat[7] & 0xF) << 28) |
@@ -850,7 +840,7 @@ uint64_t cdd_t::GetStatus() {
 		((uint64_t)(stat[0] & 0xF) << 0);
 }
 
-int cdd_t::SetCommand(uint64_t c) {
+int cdd_t::SetCommand(uint64_t c, uint8_t crc_start) {
 	comm[0] = (c >> 0) & 0xF;
 	comm[1] = (c >> 4) & 0xF;
 	comm[2] = (c >> 8) & 0xF;
@@ -862,7 +852,7 @@ int cdd_t::SetCommand(uint64_t c) {
 	comm[8] = (c >> 32) & 0xF;
 	comm[9] = (c >> 36) & 0xF;
 
-	uint8_t crc = (~(comm[0] + comm[1] + comm[2] + comm[3] + comm[4] + comm[5] + comm[6] + comm[7] + comm[8])) & 0xF;
+	uint8_t crc = (~(crc_start + comm[0] + comm[1] + comm[2] + comm[3] + comm[4] + comm[5] + comm[6] + comm[7] + comm[8])) & 0xF;
 	if (comm[9] != crc)
 		return -1;
 
@@ -881,6 +871,48 @@ void cdd_t::MSFToLBA(int* lba, uint8_t m, uint8_t s, uint8_t f) {
 
 void cdd_t::MSFToLBA(int* lba, msf_t* msf) {
 	*lba = msf->f + msf->s * 75 + msf->m * 60 * 75;
+}
+
+void cdd_t::SeekToLBA(int lba, int play) {
+	int index = 0;
+
+	this->latency = 0;
+	if (play)
+	{
+		this->latency = 11;
+	}
+
+	this->latency += (abs(lba - this->lba) * 120) / 270000;
+
+	this->lba = lba;
+
+	while ((this->toc.tracks[index].end <= lba) && (index < this->toc.last)) index++;
+	this->index = index;
+
+	if (lba < this->toc.tracks[index].start)
+	{
+		lba = this->toc.tracks[index].start;
+	}
+
+	if (this->toc.tracks[index].type)
+	{
+		/* DATA track */
+		FileSeek(&this->toc.tracks[0].f, lba * this->sectorSize, SEEK_SET);
+	}
+	else if (this->toc.tracks[index].f.opened())
+	{
+		/* PCM AUDIO track */
+		FileSeek(&this->toc.tracks[index].f, (lba * 2352) - this->toc.tracks[index].offset, SEEK_SET);
+	}
+
+	if (play)
+	{
+		this->chd_audio_read_lba = this->lba;
+		this->audioOffset = 0;
+	}
+
+	if (this->toc.sub.opened()) FileSeek(&this->toc.sub, lba * 96, SEEK_SET);
+
 }
 
 void cdd_t::ReadData(uint8_t *buf)
@@ -965,8 +997,9 @@ void InterleaveSubcode(uint8_t *subc_data, uint16_t *buf)
 	}
 }
 
-void cdd_t::ReadSubcode(uint16_t* buf)
+int cdd_t::ReadSubcode(uint16_t* buf)
 {
+	int err = 0;
 	uint8_t subc[96];
 	if (this->toc.chd_f)
 	{
@@ -976,11 +1009,17 @@ void cdd_t::ReadSubcode(uint16_t* buf)
 		} else if (this->toc.tracks[this->index].sbc_type == SUBCODE_RW) {
 			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 0, CD_MAX_SECTOR_DATA, 96, subc, this->chd_hunkbuf, &this->chd_hunknum);
 			InterleaveSubcode(subc, buf);
+		} else {
+			err = -1;
 		}
 	} else if (this->toc.sub.opened()) {
 		FileReadAdv(&this->toc.sub, subc, 96);
 		InterleaveSubcode(subc, buf);
+	} else {
+		err = -1;
 	}
+
+	return err;
 }
 
 
@@ -988,18 +1027,20 @@ int cdd_t::SectorSend(uint8_t* header)
 {
 	uint8_t buf[2352 + 2352];
 	int len = 2352;
+	uint8_t index = MCD_DATA_IO_INDEX;
 
 	if (header) {
 		memcpy(buf + 12, header, 4);
 		ReadData(buf + 16);
 	}
 	else {
+		index = MCD_CDDA_IO_INDEX;
 		len = ReadCDDA(buf);
 	}
 
 	SubcodeSend();
 	if (SendData)
-		return SendData(buf, len, CD_DATA_IO_INDEX);
+		return SendData(buf, len, index);
 
 	return 0;
 }
@@ -1009,10 +1050,10 @@ int cdd_t::SubcodeSend()
 {
 	uint16_t buf[98 / 2];
 
-	ReadSubcode(buf);
+	int err = ReadSubcode(buf);
 
-	if (SendData)
-		return SendData((uint8_t*)buf, 98, CD_SUB_IO_INDEX);
+	if (!err && SendData)
+		return SendData((uint8_t*)buf, 98, MCD_SUB_IO_INDEX);
 
 	return 0;
 }

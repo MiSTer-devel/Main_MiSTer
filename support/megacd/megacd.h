@@ -31,9 +31,13 @@
 #define CD_COMM_FW_SCAN			0x08
 #define CD_COMM_RW_SCAN			0x09
 #define CD_COMM_TRACK_MOVE		0x0A
-//#define CD_COMM_NO_DISC		0x0B
+#define CD_COMM_TRACK_PLAY		0x0B
 #define CD_COMM_TRAY_CLOSE		0x0C
 #define CD_COMM_TRAY_OPEN		0x0D
+
+#define MCD_DATA_IO_INDEX 2
+#define MCD_SUB_IO_INDEX 3
+#define MCD_CDDA_IO_INDEX 4
 
 #include "../../cd.h"
 #include <libchdr/chd.h>
@@ -46,6 +50,7 @@ public:
 	uint8_t isData;
 	int loaded;
 	SendDataFunc SendData;
+	int (*CanSendData)(uint8_t type);
 
 	cdd_t();
 	int Load(const char *filename);
@@ -53,8 +58,8 @@ public:
 	void Reset();
 	void Update();
 	void CommandExec();
-	uint64_t GetStatus();
-	int SetCommand(uint64_t c);
+	uint64_t GetStatus(uint8_t crc_start);
+	int SetCommand(uint64_t c, uint8_t crc_start);
 
 private:
 	toc_t toc;
@@ -76,10 +81,11 @@ private:
 	int SubcodeSend();
 	void ReadData(uint8_t *buf);
 	int ReadCDDA(uint8_t *buf);
-	void ReadSubcode(uint16_t* buf);
+	int ReadSubcode(uint16_t* buf);
 	void LBAToMSF(int lba, msf_t* msf);
 	void MSFToLBA(int* lba, msf_t* msf);
 	void MSFToLBA(int* lba, uint8_t m, uint8_t s, uint8_t f);
+	void SeekToLBA(int lba, int play);
 };
 
 #define BCD(v)				 ((uint8_t)((((v)/10) << 4) | ((v)%10)))
@@ -94,6 +100,7 @@ void mcd_poll();
 void mcd_set_image(int num, const char *filename);
 void mcd_reset();
 int mcd_send_data(uint8_t* buf, int len, uint8_t index);
+int mcd_can_send_data(uint8_t type);
 void mcd_fill_blanksave(uint8_t *buffer, uint32_t lba);
 
 #endif

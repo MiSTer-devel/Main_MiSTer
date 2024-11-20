@@ -72,7 +72,7 @@ static int find_by_crc(uint32_t romcrc)
 {
 	if (!romcrc) return 0;
 
-	sprintf(cheat_zip, "%s/cheats/%s", getRootDir(), CoreName);
+	sprintf(cheat_zip, "%s/cheats/%s", getRootDir(), CoreName2);
 	DIR *d = opendir(cheat_zip);
 	if (!d)
 	{
@@ -81,12 +81,12 @@ static int find_by_crc(uint32_t romcrc)
 	}
 
 	struct dirent *de;
-	while((de = readdir(d)))
+	while ((de = readdir(d)))
 	{
 		if (de->d_type == DT_REG)
 		{
 			int len = strlen(de->d_name);
-			if (len >= 14 && de->d_name[len - 14] == '[' && !strcasecmp(de->d_name+len-5, "].zip"))
+			if (len >= 14 && de->d_name[len - 14] == '[' && !strcasecmp(de->d_name + len - 5, "].zip"))
 			{
 				uint32_t crc = 0;
 				if (sscanf(de->d_name + len - 14, "[%X].zip", &crc) == 1)
@@ -141,13 +141,13 @@ static int find_in_same_dir(const char *name)
 }
 
 
-bool cheat_init_psx(mz_zip_archive* _z, const char* rom_path)
+bool cheat_init_psx(mz_zip_archive* _z, const char *rom_path)
 {
 	// lookup based on file name
 	const char *rom_name = strrchr(rom_path, '/');
 	if (rom_name)
 	{
-		sprintf(cheat_zip, "%s/cheats/%s%s", getRootDir(), CoreName, rom_name);
+		sprintf(cheat_zip, "%s/cheats/%s%s", getRootDir(), CoreName2, rom_name);
 		char *p = strrchr(cheat_zip, '.');
 		if (p) *p = 0;
 		strcat(cheat_zip, ".zip");
@@ -158,10 +158,10 @@ bool cheat_init_psx(mz_zip_archive* _z, const char* rom_path)
 	}
 
 	// lookup based on game ID
-	const char* game_id = psx_get_game_id();
+	const char *game_id = psx_get_game_id();
 	if (game_id && game_id[0])
 	{
-		sprintf(cheat_zip, "%s/cheats/%s/%s.zip", getRootDir(), CoreName, psx_get_game_id());
+		sprintf(cheat_zip, "%s/cheats/%s/%s.zip", getRootDir(), CoreName2, psx_get_game_id());
 		printf("Trying cheat file: %s\n", cheat_zip);
 		memset(_z, 0, sizeof(mz_zip_archive));
 		if (mz_zip_reader_init_file(_z, cheat_zip, 0)) return true;
@@ -177,10 +177,13 @@ void cheats_init(const char *rom_path, uint32_t romcrc)
 	cheat_zip[0] = 0;
 
 	// reset cheats
-	user_io_set_index(255);
-	user_io_set_download(1);
-	user_io_file_tx_data((const uint8_t*)&loaded, 2);
-	user_io_set_download(0);
+	if (!is_n64())
+	{
+		user_io_set_index(255);
+		user_io_set_download(1);
+		user_io_file_tx_data((const uint8_t*)&loaded, 2);
+		user_io_set_download(0);
+	}
 
 	if (!strcasestr(rom_path, ".zip"))
 	{
@@ -209,7 +212,7 @@ void cheats_init(const char *rom_path, uint32_t romcrc)
 			const char *rom_name = strrchr(rom_path, '/');
 			if (rom_name)
 			{
-				sprintf(cheat_zip, "%s/cheats/%s%s%s", getRootDir(), CoreName, pcecd_using_cd() ? "CD" : "", rom_name);
+				sprintf(cheat_zip, "%s/cheats/%s%s%s", getRootDir(), CoreName2, pcecd_using_cd() ? "CD" : "", rom_name);
 				char *p = strrchr(cheat_zip, '.');
 				if (p) *p = 0;
 				if (pcecd_using_cd() || is_megacd()) strcat(cheat_zip, " []");
@@ -369,7 +372,7 @@ void cheats_print()
 	int k;
 	int len;
 
-	static char s[256+4];
+	static char s[256 + 4];
 
 	ScrollReset();
 
@@ -422,7 +425,7 @@ static void cheats_send()
 		{
 			if (cheats[i].cheatData)
 			{
-				memcpy(&buff[pos],cheats[i].cheatData,cheats[i].cheatSize);
+				memcpy(&buff[pos], cheats[i].cheatData, cheats[i].cheatSize);
 				pos += cheats[i].cheatSize;
 			}
 			else
@@ -437,10 +440,17 @@ static void cheats_send()
 	loaded = pos / 16;
 	printf("Cheat codes: %d\n", loaded);
 
-	user_io_set_index(255);
-	user_io_set_download(1);
-	user_io_file_tx_data(buff, pos ? pos : 2);
-	user_io_set_download(0);
+	if (is_n64())
+	{
+		n64_cheats_send(buff, loaded);
+	}
+	else
+	{
+		user_io_set_index(255);
+		user_io_set_download(1);
+		user_io_file_tx_data(buff, pos ? pos : 2);
+		user_io_set_download(0);
+	}
 }
 
 void cheats_toggle()
@@ -482,7 +492,7 @@ void cheats_toggle()
 			{
 				printf("Cheat file %s has incorrect length %d -> skipping.\n", filename, len);
 			}
-			else if ( (len + cheats_loaded()*16) <= CHEAT_SIZE )
+			else if ((len + cheats_loaded() * 16) <= CHEAT_SIZE)
 			{
 				cheats[iSelectedEntry].cheatData = new char[len];
 				if (cheats[iSelectedEntry].cheatData)
@@ -503,7 +513,7 @@ void cheats_toggle()
 				}
 				else
 				{
-					printf("Could not allocate required memory (%d) for cheat file %s.\n",len,filename);
+					printf("Could not allocate required memory (%d) for cheat file %s.\n", len, filename);
 				}
 			}
 			else

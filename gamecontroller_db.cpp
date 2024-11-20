@@ -514,7 +514,6 @@ static void gcdb_cache_controller_map(uint16_t bustype, uint16_t vid, uint16_t p
 	last_db_idx = (last_db_idx +1) % MAX_GCDB_ENTRIES;
 }
 
-
 bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version, int dev_fd, uint32_t *fill_map)
 {
 		PROFILE_FUNCTION();
@@ -546,12 +545,3 @@ bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint1
 		}
 		return false;
 }
-
-
-
-
-
-
-
-
-

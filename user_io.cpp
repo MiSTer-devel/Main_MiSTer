@@ -34,6 +34,7 @@
 #include "audio.h"
 #include "shmem.h"
 #include "ide.h"
+#include "ide_cdrom.h"
 #include "profiling.h"
 
 #include "support.h"
@@ -95,6 +96,11 @@ const char *get_image_name(int i)
 	return p;
 }
 
+fileTYPE *get_image(int i)
+{
+	return &sd_image[i];
+}
+
 static uint32_t uart_mode;
 uint32_t user_io_get_uart_mode()
 {
@@ -115,7 +121,9 @@ unsigned char user_io_core_type()
 	return core_type;
 }
 
-char* user_io_create_config_name()
+static char config_ver[10] = {};
+
+char* user_io_create_config_name(int with_ver)
 {
 	static char str[40];
 	str[0] = 0;
@@ -123,6 +131,7 @@ char* user_io_create_config_name()
 	if (p[0])
 	{
 		strcpy(str, p);
+		if (with_ver) strcat(str, config_ver);
 		strcat(str, ".CFG");
 	}
 	return str;
@@ -131,19 +140,19 @@ char* user_io_create_config_name()
 static char core_name[32] = {};
 static char ovr_name[32] = {};
 static char orig_name[32] = {};
-
-static char filepath_store[1024];
+static int  ovr_samedir = 0;
 
 char *user_io_make_filepath(const char *path, const char *filename)
 {
+	static char filepath_store[1024];
 	snprintf(filepath_store, 1024, "%s/%s", path, filename);
-
 	return filepath_store;
 }
 
-void user_io_name_override(const char* name)
+void user_io_name_override(const char* name, int samedir)
 {
 	snprintf(ovr_name, sizeof(ovr_name), "%s", name);
+	ovr_samedir = samedir;
 }
 
 void user_io_set_core_name(const char *name)
@@ -157,12 +166,18 @@ char *user_io_get_core_name(int orig)
 	return orig ? orig_name : core_name;
 }
 
+char *user_io_get_core_name2()
+{
+	return (ovr_name[0] && ovr_samedir) ? orig_name : core_name;
+}
+
 char *user_io_get_core_path(const char *suffix, int recheck)
 {
 	static char old_name[256] = {};
 	static char tmp[1024] = {};
+	char *name = (ovr_name[0] && ovr_samedir) ? orig_name : core_name;
 
-	if (!suffix) suffix = (!strcasecmp(core_name, "minimig")) ? "Amiga" : core_name;
+	if (!suffix) suffix = (!strcasecmp(name, "minimig")) ? "Amiga" : name;
 	if (recheck || strcmp(old_name, suffix) || !tmp[0])
 	{
 		strcpy(old_name, suffix);
@@ -226,6 +241,10 @@ char is_neogeo()
 {
 	if (!is_neogeo_type) is_neogeo_type = strcasecmp(orig_name, "neogeo") ? 2 : 1;
 	return (is_neogeo_type == 1);
+}
+
+char is_neogeo_cd() {
+    return is_neogeo() && neocd_is_en();
 }
 
 static int is_minimig_type = 0;
@@ -317,6 +336,19 @@ char is_saturn()
 	return (is_saturn_type == 1);
 }
 
+static int is_n64_type = 0;
+char is_n64()
+{
+	if (!is_n64_type) is_n64_type = strcasecmp(orig_name, "N64") ? 2 : 1;
+	return (is_n64_type == 1);
+}
+
+static int is_uneon_type = 0;
+char is_uneon()
+{
+	if (!is_uneon_type) is_uneon_type = strcasecmp(orig_name, "Uneon") ? 2 : 1;
+	return (is_uneon_type == 1);
+}
 
 static int is_no_type = 0;
 static int disable_osd = 0;
@@ -347,6 +379,7 @@ void user_io_read_core_name()
 	is_c128_type = 0;
 	is_st_type = 0;
 	is_pcxt_type = 0;
+	is_uneon_type = 0;
 	core_name[0] = 0;
 
 	char *p = user_io_get_confstr(0);
@@ -574,9 +607,14 @@ static char midi_speed_labels[13][32] = {};
 static const uint32_t mlink_speeds[13] = { 110, 300, 600, 1200, 2400, 4800, 9600, 14400, 19200, 31250, 38400, 57600, 115200 };
 static const char mlink_speed_labels[13][32] = { "110", "300", "600", "1200", "2400", "4800", "9600", "14400", "19200", "31250/MIDI", "38400", "57600", "115200" };
 static char defmra[1024] = {};
+static int boot0_loaded = 0;
+static int boot0_mounted = 0;
 
 static void parse_config()
 {
+	static char str[1024];
+	static char ext[256];
+
 	char mask[sizeof(cur_status) * 8] = {};
 	char overlap[sizeof(cur_status) * 8] = {};
 	int start, end, sz;
@@ -791,6 +829,15 @@ static void parse_config()
 				OsdCoreNameSet(s);
 			}
 
+			if (p[0] == 'v')
+			{
+				static char str[256];
+				substrcpy(str, p, 1);
+				str[2] = 0;
+				int v = strtoul(str, 0, 10);
+				if(v) snprintf(config_ver, sizeof(config_ver), "_v%d", v);
+			}
+
 			if (p[0] == 'C')
 			{
 				use_cheats = 1;
@@ -809,7 +856,6 @@ static void parse_config()
 				if (p[idx] == 'C')
 				{
 					idx++;
-					static char str[1024];
 					uint32_t load_addr = 0;
 					if (substrcpy(str, p, 3))
 					{
@@ -822,22 +868,29 @@ static void parse_config()
 					}
 
 					sprintf(str, "%s.f%c", user_io_get_core_name(), p[idx]);
+					substrcpy(ext, p, 1);
+					while (strlen(ext) % 3) strcat(ext, " ");
+
 					if (FileLoadConfig(str, str, sizeof(str)) && str[0])
 					{
-
 						idx = p[idx] - '0';
 						StoreIdx_F(idx, str);
-						user_io_file_tx(str, idx, opensave, 0, 0, load_addr);
+						user_io_file_tx(str, (user_io_ext_idx(str, ext) << 6) | idx, opensave, 0, 0, load_addr);
+						if (!idx) boot0_loaded = 1;
+
+						if (is_cpc())
+						{
+							char *p = strrchr(str, '.');
+							if (p && (!strcasecmp(p, ".eZZ") || !strcasecmp(p, ".eZ0"))) boot0_loaded = 1;
+						}
 					}
 				}
 			}
 
 			if (p[0] == 'S' && p[1] == 'C')
 			{
-				static char str[1024];
 				sprintf(str, "%s.s%c", user_io_get_core_name(), p[2]);
 
-				static char ext[256];
 				substrcpy(ext, p, 1);
 				while (strlen(ext) % 3) strcat(ext, " ");
 
@@ -845,7 +898,7 @@ static void parse_config()
 				{
 					int idx = p[2] - '0';
 					StoreIdx_S(idx, str);
-					if (is_x86() || is_pcxt())
+					if (is_x86() || is_pcxt() || (is_uneon() && idx >= 2))
 					{
 						x86_set_image(idx, str);
 					}
@@ -860,10 +913,11 @@ static void parse_config()
 					}
 					else
 					{
-						if (!is_c128())
-							user_io_set_index(user_io_ext_idx(str, ext) << 6 | idx);
+						if (!is_c128()) user_io_set_index((user_io_ext_idx(str, ext) << 6) | idx);
 						user_io_file_mount(str, idx);
 					}
+
+					if (!idx) boot0_mounted = 1;
 				}
 			}
 		}
@@ -876,7 +930,6 @@ static void parse_config()
 	printf("// 0         1         2         3          4         5         6   \n");
 	printf("// 01234567890123456789012345678901 23456789012345678901234567890123\n");
 	printf("// 0123456789ABCDEFGHIJKLMNOPQRSTUV 0123456789ABCDEFGHIJKLMNOPQRSTUV\n");
-	char str[128];
 	strcpy(str, "// ");
 	for (int i = 0; i < 32; i++) strcat(str, mask[i] ? "X" : " ");
 	strcat(str, " ");
@@ -1008,7 +1061,7 @@ const char* get_rbf_path()
 	return core_path;
 }
 
-void MakeFile(const char * filename, const char * data)
+void MakeFile(const char *filename, const char *data)
 {
 	FILE * file;
 	file = fopen(filename, "w");
@@ -1039,6 +1092,7 @@ void SetUARTMode(int mode)
 	DisableIO();
 
 	MakeFile("/tmp/CORENAME", user_io_get_core_name());
+    MakeFile("/tmp/RBFNAME", user_io_get_core_name(1));
 
 	char data[20];
 	sprintf(data, "%d", baud);
@@ -1187,14 +1241,14 @@ uint16_t sdram_sz(int sz)
 	{
 		*par++ = 0x12;
 		*par++ = 0x57;
-		*par++ = (uint8_t)(sz>>8);
+		*par++ = (uint8_t)(sz >> 8);
 		*par++ = (uint8_t)sz;
 	}
 	else
 	{
 		if ((par[0] == 0x12) && (par[1] == 0x57))
 		{
-			res = 0x8000 | (par[2]<<8) | par[3];
+			res = 0x8000 | (par[2] << 8) | par[3];
 			if(res & 0x4000) printf("*** Debug phase: %d\n", (res & 0x100) ? (res & 0xFF) : -(res & 0xFF));
 			else printf("*** Found SDRAM config: %d\n", res & 7);
 		}
@@ -1270,6 +1324,7 @@ void user_io_init(const char *path, const char *xml)
 	core_type = (fpga_core_id() & 0xFF);
 	fio_size = fpga_get_fio_size();
 	io_ver = fpga_get_io_version();
+	printf("I/O Board type: %s\n", fpga_get_io_type() ? "digital" : "analogue");
 
 	if (core_type == CORE_TYPE_8BIT2)
 	{
@@ -1309,6 +1364,12 @@ void user_io_init(const char *path, const char *xml)
 	user_io_read_confstr();
 	user_io_read_core_name();
 
+	if ((fpga_get_buttons() & BUTTON_OSD) && is_menu())
+	{
+		altcfg(0);
+		SelectINI();
+	}
+
 	cfg_parse();
 	cfg_print();
 	while (cfg.waitmount[0] && !is_menu())
@@ -1320,6 +1381,16 @@ void user_io_init(const char *path, const char *xml)
 		if (!(ret & 0xFF) && ret) break;
 		sleep(1);
 	}
+
+	const char *main = getFullPath(cfg.main);
+	if (strcasecmp(main, getappname()) && FileExists(main))
+	{
+		printf("Current exec is %s, core requires exec %s\n", getappname(), main);
+		app_restart(path, xml, main);
+	}
+
+	uint8_t hotswap[4] = {};
+	ide_reset(hotswap);
 
 	parse_config();
 	if (!xml && defmra[0] && FileExists(defmra))
@@ -1363,7 +1434,7 @@ void user_io_init(const char *path, const char *xml)
 
 	case CORE_TYPE_8BIT:
 		// try to load config
-		name = user_io_create_config_name();
+		name = user_io_create_config_name(1);
 		if (strlen(name) > 0)
 		{
 			if (!is_st() && !is_minimig())
@@ -1383,6 +1454,7 @@ void user_io_init(const char *path, const char *xml)
 				user_io_status_set("[0]", 1);
 			}
 
+			name = user_io_create_config_name();
 			if (is_st())
 			{
 				tos_config_load(0);
@@ -1419,12 +1491,14 @@ void user_io_init(const char *path, const char *xml)
 				{
 					const char *home = HomeDir();
 
+					if (is_uneon()) x86_ide_set();
+
 					if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 					{
 						if (!is_cpc())
 						{
 							// check for multipart rom
-							for (char i = 0; i < 4; i++)
+							for (char i = (boot0_loaded ? 1 : 0); i < 4; i++)
 							{
 								sprintf(mainpath, "%s/boot%d.rom", home, i);
 								user_io_file_tx(mainpath, i << 6);
@@ -1432,17 +1506,20 @@ void user_io_init(const char *path, const char *xml)
 						}
 
 						// legacy style of rom
-						sprintf(mainpath, "%s/boot.rom", home);
-						if (!user_io_file_tx(mainpath))
+						if (!boot0_loaded)
 						{
-							strcpy(name + strlen(name) - 3, "ROM");
-							sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
-							if (!get_rbf_dir()[0] || !user_io_file_tx(mainpath))
+							sprintf(mainpath, "%s/boot.rom", home);
+							if (!user_io_file_tx(mainpath))
 							{
-								if (!user_io_file_tx(name))
+								strcpy(name + strlen(name) - 3, "ROM");
+								sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
+								if (!get_rbf_dir()[0] || !user_io_file_tx(mainpath))
 								{
-									sprintf(mainpath, "bootrom/%s", name);
-									user_io_file_tx(mainpath);
+									if (!user_io_file_tx(name))
+									{
+										sprintf(mainpath, "bootrom/%s", name);
+										user_io_file_tx(mainpath);
+									}
 								}
 							}
 						}
@@ -1469,7 +1546,7 @@ void user_io_init(const char *path, const char *xml)
 					}
 
 					// check if vhd present
-					for (char i = 0; i < 4; i++)
+					for (char i = (boot0_mounted ? 1 : 0); i < 4; i++)
 					{
 						sprintf(mainpath, "%s/boot%d.vhd", home, i);
 						if (FileExists(mainpath))
@@ -1479,25 +1556,28 @@ void user_io_init(const char *path, const char *xml)
 						}
 					}
 
-					sprintf(mainpath, "%s/boot.vhd", home);
-					if (FileExists(mainpath))
+					if (!boot0_mounted)
 					{
-						user_io_set_index(0);
-						user_io_file_mount(mainpath, 0);
-					}
-					else
-					{
-						strcpy(name + strlen(name) - 3, "VHD");
-						sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
+						sprintf(mainpath, "%s/boot.vhd", home);
 						if (FileExists(mainpath))
 						{
 							user_io_set_index(0);
 							user_io_file_mount(mainpath, 0);
 						}
-						else if (FileExists(name))
+						else
 						{
-							user_io_set_index(0);
-							user_io_file_mount(name, 0);
+							strcpy(name + strlen(name) - 3, "VHD");
+							sprintf(mainpath, "%s/%s", get_rbf_dir(), name);
+							if (FileExists(mainpath))
+							{
+								user_io_set_index(0);
+								user_io_file_mount(mainpath, 0);
+							}
+							else if (FileExists(name))
+							{
+								user_io_set_index(0);
+								user_io_file_mount(name, 0);
+							}
 						}
 					}
 				}
@@ -1590,7 +1670,7 @@ void user_io_l_analog_joystick(unsigned char joystick, char valueX, char valueY)
 	if (core_type == CORE_TYPE_8BIT)
 	{
 		spi_uio_cmd8_cont(UIO_ASTICK, joy);
-		if(io_ver) spi_w((valueY<<8) | (uint8_t)(valueX));
+		if(io_ver) spi_w((valueY << 8) | (uint8_t)(valueX));
 		else
 		{
 			spi8(valueX);
@@ -1617,21 +1697,23 @@ void user_io_r_analog_joystick(unsigned char joystick, char valueX, char valueY)
 	}
 }
 
-void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
+void user_io_digital_joystick(unsigned char joystick, uint64_t map, int newdir)
 {
 	uint8_t joy = (joystick>1 || !joyswap) ? joystick : joystick ^ 1;
-
 	static int use32 = 0;
-	use32 |= map >> 16;
-
+	// primary button mappings are in 31:0, alternate mappings are in 64:32.
+	// take the logical OR to ensure a held button isn't overriden
+	// by other mapping being pressed
+	uint32_t bitmask = (uint32_t)(map) | (uint32_t)(map >> 32);
+	use32 |= bitmask >> 16;
 	spi_uio_cmd_cont((joy < 2) ? (UIO_JOYSTICK0 + joy) : (UIO_JOYSTICK2 + joy - 2));
-	spi_w(map);
-	if(use32) spi_w(map>>16);
+	spi_w(bitmask);
+	if(use32) spi_w(bitmask >> 16);
 	DisableIO();
 
 	if (!is_minimig() && joy_transl == 1 && newdir)
 	{
-		user_io_l_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
+		user_io_l_analog_joystick(joystick, (bitmask & 2) ? 128 : (bitmask & 1) ? 127 : 0, (bitmask & 8) ? 128 : (bitmask & 4) ? 127 : 0);
 	}
 }
 
@@ -1900,8 +1982,12 @@ void user_io_file_info(const char *ext)
 {
 	EnableFpga();
 	spi8(FIO_FILE_INFO);
-	spi_w(toupper(ext[0]) << 8 | toupper(ext[1]));
-	spi_w(toupper(ext[2]) << 8 | toupper(ext[3]));
+	char c1 = *ext ? toupper(*ext++) : 0;
+	char c2 = *ext ? toupper(*ext++) : 0;
+	char c3 = *ext ? toupper(*ext++) : 0;
+	char c4 = *ext ? toupper(*ext++) : 0;
+	spi_w(c1 << 8 | c2);
+	spi_w(c3 << 8 | c4);
 	DisableFpga();
 }
 
@@ -1951,9 +2037,9 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				writable = FileCanWrite(name);
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 				if (ret && len > 4) {
-					if (!strcasecmp(name + len - 4, ".d64") 
-						|| !strcasecmp(name + len - 4, ".g64") 
-						|| !strcasecmp(name + len - 4, ".d71") 
+					if (!strcasecmp(name + len - 4, ".d64")
+						|| !strcasecmp(name + len - 4, ".g64")
+						|| !strcasecmp(name + len - 4, ".d71")
 						|| !strcasecmp(name + len - 4, ".g71"))
 					{
 						img_type = c64_openGCR(name, sd_image + index, index);
@@ -1967,7 +2053,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					}
 				}
 
-				if (ret && is_c128()) 
+				if (ret && is_c128())
 				{
 					printf("Disk image type: %d\n", img_type);
 					user_io_set_aindex(img_type << 6 | index);
@@ -2030,12 +2116,12 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	else
 	{
 		spi32_b(size);
-		spi32_b(size>>32);
+		spi32_b(size >> 32);
 	}
 	DisableIO();
 
 	// notify core of possible sd image change
-	spi_uio_cmd8(UIO_SET_SDSTAT, (1<< index) | (writable ? 0 : 0x80));
+	spi_uio_cmd8(UIO_SET_SDSTAT, (1 << index) | (writable ? 0 : 0x80));
 	return ret ? 1 : 0;
 }
 
@@ -2443,7 +2529,11 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	user_io_set_index(index);
 
 	int len = strlen(f.name);
-	char *p = f.name + len - 4;
+	char *p = strrchr(f.name, '.');
+	if (p == 0) {
+            // In case a '.' is not found, send all `NUL` characters.
+	    p = f.name + len;
+	}
 	user_io_file_info(p);
 
 	// prepare transmission of new file
@@ -2511,7 +2601,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			FileSeek(&f, 256, SEEK_SET);
 			bytes2send = 64 * 1024;
 		}
-		else {
+		else if ((index & 0x3F) == 0) {
 			printf("Load SNES ROM.\n");
 			uint8_t* buf = snes_get_header(&f);
 			hexdump(buf, 16, 0);
@@ -2583,7 +2673,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t chunk = (bytes2send > (256 * 1024)) ? (256 * 1024) : bytes2send;
 				FileReadAdv(&f, mem + size - bytes2send + gap, chunk);
 
-				if(!is_snes()) file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
+				if(!is_snes() && use_cheats) file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
 				skip = 0;
 
 				if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
@@ -2738,6 +2828,7 @@ void user_io_send_buttons(char force)
 	if (cfg.hdmi_limited & 1) map |= CONF_HDMI_LIMITED1;
 	if (cfg.hdmi_limited & 2) map |= CONF_HDMI_LIMITED2;
 	if (cfg.direct_video) map |= CONF_DIRECT_VIDEO;
+	if (cfg.direct_video == 2) map |= CONF_DIRECT_VIDEO2;
 	if (vga_fb) map |= CONF_VGA_FB;
 
 	if ((map != key_map) || force)
@@ -2757,9 +2848,11 @@ void user_io_send_buttons(char force)
 		{
 			if (is_minimig()) minimig_reset();
 			if (is_megacd()) mcd_reset();
+			if (is_neogeo_cd()) neocd_reset();
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
 			if (is_x86() || is_pcxt()) x86_init();
+			if (is_uneon()) x86_ide_set();
 			if (is_st()) tos_reset(0);
 			ResetUART();
 		}
@@ -2861,15 +2954,9 @@ void user_io_poll()
 		sysled_enable(1);
 
 		uint16_t sd_req = ide_check();
-		if (sd_req & 0x8000)
-		{
-			ide_io(0, sd_req & 7);
-			ide_io(1, (sd_req >> 3) & 7);
-		}
-		else
-		{
-			HandleHDD(c1, c2);
-		}
+		ide_io(0, sd_req & 7);
+		ide_io(1, (sd_req >> 3) & 7);
+		if (sd_req & 0x0100) ide_cdda_send_sector();
 		UpdateDriveStatus();
 
 		kbd_fifo_poll();
@@ -2892,7 +2979,7 @@ void user_io_poll()
 	// sd card emulation
 	if (is_x86() || is_pcxt())
 	{
-		x86_poll();
+		x86_poll(0);
 	}
 	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
 	{
@@ -2907,6 +2994,12 @@ void user_io_poll()
 			static uint8_t buffer[16][16384];
 			uint64_t lba;
 			uint32_t blksz, blks, sz;
+
+			if (is_uneon() && i == 3)
+			{
+				x86_poll(1);
+				break;
+			}
 
 			uint16_t c = spi_uio_cmd_cont(UIO_GET_SDSTAT);
 			if (c & 0x8000)
@@ -2980,9 +3073,13 @@ void user_io_poll()
 				else if (op & 1) c64_readGCR(disk, lba, blks-1);
 				else break;
 			}
+			else if ((op == 2) && is_n64() && use_save)
+			{
+				n64_save_savedata(lba, ack, buffer_lba[disk], buffer[disk], blksz, sz);
+			}
 			else if (op == 2)
 			{
-				//printf("SD WR %d on %d\n", lba, disk);
+				//printf("SD WR %llu on %d\n", lba, disk);
 
 				if (use_save) menu_process_save();
 
@@ -3030,15 +3127,26 @@ void user_io_poll()
 					}
 				}
 			}
+			else if ((op & 1) && is_n64() && use_save)
+			{
+				n64_load_savedata(lba, ack, buffer_lba[disk], buffer[disk], sizeof(*buffer), blksz, sz);
+			}
 			else if (op & 1)
 			{
 				uint32_t buf_n = sizeof(buffer[0]) / blksz;
+				unsigned int psx_blksz = 0;
+				if (is_psx() && blksz == 2352)
+				{
+					//returns 0 if the mounted disk is not a chd, otherwise returns the chd hunksize in bytes
+					psx_blksz = psx_chd_hunksize();
+					if (psx_blksz && psx_blksz <= sizeof(buffer[0])) buf_n = psx_blksz / blksz;
+				}
 				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, blksz, disk, fio_size);
 
 				int done = 0;
 				uint32_t offset;
 
-				if ((buffer_lba[disk] == (uint64_t)-1) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
+				if ((buffer_lba[disk] == -1LLU) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
 				{
 					buffer_lba[disk] = -1;
 					if (blksz == 2352 && is_psx())
@@ -3425,6 +3533,8 @@ void user_io_poll()
 	if (is_pce()) pcecd_poll();
 	if (is_saturn()) saturn_poll();
 	if (is_psx()) psx_poll();
+	if (is_neogeo_cd()) neocd_poll();
+	if (is_n64()) n64_poll();
 	process_ss(0);
 }
 
@@ -4014,6 +4124,17 @@ bool user_io_screenshot(const char *pngname, int rescale)
 	}
 	else
 	{
+    int scwidth = ms->output_width;
+    int scheight = ms->output_height;
+
+    if (video_get_rotated())
+    {
+
+      //If the video is rotated, the scaled output resolution results in a squished image.
+      //Calculate the scaled output res using the original AR
+      scwidth = scheight * ((float)ms->width/ms->height);
+    }
+
 		const char *basename = last_filename;
 		if( pngname && *pngname )
 			basename = pngname;
@@ -4030,7 +4151,7 @@ bool user_io_screenshot(const char *pngname, int rescale)
 		/* do we want to save a rescaled image? */
 		if (rescale)
 		{
-			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,ms->output_width,ms->output_height);
+			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,scwidth,scheight);
 			imlib_free_image_and_decache();
 			imlib_context_set_image(im_scaled);
 		}

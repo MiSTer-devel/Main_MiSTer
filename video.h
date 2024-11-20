@@ -21,6 +21,9 @@ struct VideoInfo
 	uint32_t fb_fmt;
 	uint32_t fb_width;
 	uint32_t fb_height;
+	uint32_t pixrep;
+	uint32_t de_h;
+	uint32_t de_v;
 
     bool interlaced;
     bool rotated;
@@ -43,6 +46,8 @@ void  video_set_shadow_mask_mode(int n);
 char* video_get_shadow_mask(int only_name = 1);
 void  video_set_shadow_mask(const char *name);
 void  video_loadPreset(char *name, bool save);
+
+int   video_get_rotated();
 
 void video_cfg_reset();
 

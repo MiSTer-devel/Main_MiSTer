@@ -995,6 +995,7 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 	(void)(sd);
 	static bool insetname = false;
 	static bool inrotation = false;
+	static int  samedir = 0;
 
 	static bool foundsetname = false;
 	static bool foundrotation = false;
@@ -1006,6 +1007,7 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		inrotation = false;
 		foundsetname = false;
 		foundrotation = false;
+		samedir = 0;
 		break;
 
 	case XML_EVENT_START_NODE:
@@ -1013,6 +1015,11 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		{
 			insetname = true;
 			foundsetname = true;
+
+			for (int i = 0; i < node->n_attributes; i++)
+			{
+				if (!strcasecmp(node->attributes[i].name, "same_dir") && !strcmp(node->attributes[i].value, "1")) samedir = 1;
+			}
 		}
 		else if (!strcasecmp(node->tag, "rotation"))
 		{
@@ -1022,7 +1029,7 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		break;
 
 	case XML_EVENT_TEXT:
-		if(insetname) user_io_name_override(text);
+		if(insetname) user_io_name_override(text, samedir);
 		if(inrotation)
 		{
 			is_vertical = strncasecmp(text, "vertical", 8) == 0;

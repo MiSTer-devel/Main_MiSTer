@@ -15,7 +15,6 @@
 #include "../../ide.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
-#include "minimig_hdd.h"
 #include "minimig_config.h"
 #include "minimig_share.h"
 
@@ -307,9 +306,7 @@ const char* minimig_get_cfg_info(int num, int label)
 
 inline int hdd_open(int unit)
 {
-	return (ide_check() & 0x8000) ?
-		ide_open(unit, minimig_config.hardfile[unit].filename) :
-		OpenHardfile(unit, minimig_config.hardfile[unit].filename);
+	return ide_open(unit, minimig_config.hardfile[unit].filename);
 }
 
 static int force_reload_kickstart = 0;

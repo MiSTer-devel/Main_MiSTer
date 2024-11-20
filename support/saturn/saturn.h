@@ -57,11 +57,13 @@ public:
 	void CommandExec();
 	uint8_t* GetStatus();
 	int SetCommand(uint8_t* data);
+	int GetBootHeader(uint8_t *buf);
 
 private:
 	toc_t toc;
 	int lba;
 	int track;
+	int index;
 	int seek_lba;
 	uint16_t sectorSize;
 	int toc_pos;
@@ -70,6 +72,7 @@ private:
 	bool stop_pend;
 	bool seek_pend;
 	bool read_pend;
+	bool final_read;
 	bool seek_ring;
 	bool seek_ring2;
 	bool pause_pend;
@@ -79,10 +82,15 @@ private:
 	uint8_t cd_buf[4096 + 2];
 	int audioLength;
 	int audioFirst;
+	int chd_hunknum;
+	uint8_t *chd_hunkbuf;
+	int chd_audio_read_lba;
+
 
 	int LoadCUE(const char* filename);
 	void LBAToMSF(int lba, msf_t* msf);
 	int GetFAD(uint8_t* cmd);
+	int GetSectorOffsetByIndex(int tno, int idx);
 	void SetChecksum(uint8_t* stat);
 	int CheckCommand(uint8_t* cmd);
 	void ReadData(uint8_t *buf);
@@ -95,6 +103,11 @@ private:
 
 extern satcdd_t satcdd;
 extern uint32_t frame_cnt;
+
+
+#define CD_DATA_IO_INDEX	0x8
+#define BOOT_IO_INDEX	    0xC
+#define SAVE_IO_INDEX		0x4 // fake download to trigger save loading
 
 void saturn_poll();
 void saturn_set_image(int num, const char *filename);
