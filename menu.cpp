@@ -7305,7 +7305,7 @@ int menu_allow_cfg_switch()
 
 void menu_process_save()
 {
-	menu_save_timer = GetTimer(1000);
+	menu_save_timer = GetTimer(500);
 }
 
 static char pchar[] = { 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };

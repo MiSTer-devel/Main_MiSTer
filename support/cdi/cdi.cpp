@@ -14,6 +14,7 @@
 #include "../chd/mister_chd.h"
 #include <libchdr/chd.h>
 
+static char buf[1024];
 #define CD_SECTOR_LEN 2352
 
 static uint8_t *chd_hunkbuf = NULL;
@@ -326,6 +327,23 @@ struct disk_t
 	track_t track[99];
 };
 
+#define TIMEKEEPER_SIZE (8 * 1024)
+
+static void cdi_mount_save(const char *filename)
+{
+	user_io_set_index(1);
+	if (strlen(filename))
+	{
+		FileGenerateSavePath(filename, buf, 0);
+		user_io_file_mount(buf, 1, 1, TIMEKEEPER_SIZE);
+		StoreIdx_S(1, buf);
+	}
+	else
+	{
+		user_io_file_mount("", 1);
+		StoreIdx_S(1, "");
+	}
+}
 
 static toc_t toc = {};
 
@@ -339,8 +357,8 @@ int cdi_chd_hunksize()
 
 void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 {
-	printf("req lba=%d, cnt=%d\n", lba, cnt);
-	
+	// printf("req lba=%d, cnt=%d\n", lba, cnt);
+
 	while (cnt > 0)
 	{
 		if (lba < toc.tracks[0].start || !toc.last)
@@ -434,7 +452,6 @@ static void mount_cd(int size, int index)
 	user_io_bufferinvalidate(1);
 }
 
-
 void cdi_mount_cd(int s_index, const char *filename)
 {
 	int loaded = 0;
@@ -443,6 +460,7 @@ void cdi_mount_cd(int s_index, const char *filename)
 	{
 		if (load_cd_image(filename, &toc) && toc.last)
 		{
+			cdi_mount_save(filename);
 			user_io_set_index(0);
 			mount_cd(toc.end * CD_SECTOR_LEN, s_index);
 			loaded = 1;
