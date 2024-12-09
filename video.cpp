@@ -3311,7 +3311,7 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 		while (de)
 		{
 			int len = strlen(de->d_name);
-			if (len > 4 && (!strcasecmp(de->d_name + len - 4, ".png") || !strcasecmp(de->d_name + len - 4, ".jpg")))
+			if (len > 4 && (de->d_name[0] != '.') && (!strcasecmp(de->d_name + len - 4, ".png") || !strcasecmp(de->d_name + len - 4, ".jpg")))
 			{
 				if (num == cnt) break;
 				cnt++;
@@ -3904,3 +3904,12 @@ static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, i
 		video_calculate_cvt_int(h_pixels, v_lines, refresh_rate, 1, vmode);
 	}
 }
+
+
+
+int video_get_rotated()
+{
+  return current_video_info.rotated;
+}
+
+

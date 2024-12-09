@@ -2541,15 +2541,21 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	int dosend = 1;
 
-	int is_snes_bs = 0;
+	int snes_file = SNES_FILE_RAW;
 	if (is_snes() && bytes2send && !load_addr)
 	{
 		const char *ext = strrchr(f.name, '.');
-		if (ext && !strcasecmp(ext, ".BS")) {
-			is_snes_bs = 1;
+		if (ext) {
+			if (index == 0 || !strcasecmp(ext, ".SMC") || !strcasecmp(ext, ".SFC") || !strcasecmp(ext, ".BIN")) {
+				snes_file = SNES_FILE_ROM;
+			} else if (!strcasecmp(ext, ".BS")) {
+				snes_file = SNES_FILE_BS;
+			} else if (!strcasecmp(ext, ".SPC")) {
+				snes_file = SNES_FILE_SPC;
+			}
 		}
 
-		if (is_snes_bs) {
+		if (snes_file == SNES_FILE_BS) {
 			char *rom_path = (char*)buf;
 			strcpy(rom_path, name);
 			char *offs = strrchr(rom_path, '/');
@@ -2589,7 +2595,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				sleep(1);
 			}
 		}
-		else if ((index & 0x3F) == 1) {
+		else if (snes_file == SNES_FILE_SPC) {
 			printf("Load SPC ROM.\n");
 			FileReadSec(&f, buf);
 			user_io_file_tx_data(buf, 256);
@@ -2601,7 +2607,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			FileSeek(&f, 256, SEEK_SET);
 			bytes2send = 64 * 1024;
 		}
-		else if ((index & 0x3F) == 0) {
+		else if (snes_file == SNES_FILE_ROM) {
 			printf("Load SNES ROM.\n");
 			uint8_t* buf = snes_get_header(&f);
 			hexdump(buf, 16, 0);
@@ -2690,7 +2696,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
 			FileReadAdv(&f, buf, chunk);
-			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
+			if (is_snes() && (snes_file == SNES_FILE_BS)) snes_patch_bs_header(&f, buf);
 			user_io_file_tx_data(buf, chunk);
 
 			if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
@@ -4124,6 +4130,17 @@ bool user_io_screenshot(const char *pngname, int rescale)
 	}
 	else
 	{
+    int scwidth = ms->output_width;
+    int scheight = ms->output_height;
+
+    if (video_get_rotated())
+    {
+
+      //If the video is rotated, the scaled output resolution results in a squished image.
+      //Calculate the scaled output res using the original AR
+      scwidth = scheight * ((float)ms->width/ms->height);
+    }
+
 		const char *basename = last_filename;
 		if( pngname && *pngname )
 			basename = pngname;
@@ -4140,7 +4157,7 @@ bool user_io_screenshot(const char *pngname, int rescale)
 		/* do we want to save a rescaled image? */
 		if (rescale)
 		{
-			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,ms->output_width,ms->output_height);
+			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,scwidth,scheight);
 			imlib_free_image_and_decache();
 			imlib_context_set_image(im_scaled);
 		}
