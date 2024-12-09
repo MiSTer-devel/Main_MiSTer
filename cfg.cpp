@@ -8,6 +8,9 @@
 #include <string.h>
 #include <inttypes.h>
 #include <ctype.h>
+#include <algorithm>
+#include <string>
+#include <vector>
 #include "cfg.h"
 #include "debug.h"
 #include "file_io.h"
@@ -140,6 +143,7 @@ static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
 #define INI_SECTION_START       '['
 #define INI_SECTION_END         ']'
 #define INCL_SECTION            '+'
+#define DIRECTIVE_START         '#'
 
 #define CHAR_IS_NUM(c)          (((c) >= '0') && ((c) <= '9'))
 #define CHAR_IS_ALPHA_LOWER(c)  (((c) >= 'a') && ((c) <= 'z'))
@@ -149,7 +153,7 @@ static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
                                  ((c) == '-') || ((c) == '+') || ((c) == '/') || ((c) == '=') || \
                                  ((c) == '#') || ((c) == '$') || ((c) == '@') || ((c) == '_') || \
                                  ((c) == ',') || ((c) == '.') || ((c) == '!') || ((c) == '*') || \
-                                 ((c) == ':') || ((c) == '~'))
+                                 ((c) == ':') || ((c) == '~') || ((c) == '\"'))
 
 #define CHAR_IS_VALID(c)        (CHAR_IS_ALPHANUM(c) || CHAR_IS_SPECIAL(c))
 #define CHAR_IS_SPACE(c)        (((c) == ' ') || ((c) == '\t'))
@@ -253,6 +257,43 @@ static int ini_get_section(char* buf, const char *vmode)
 	}
 
 	return 0;
+}
+
+static bool ini_get_include(char* buf, std::string& out)
+{
+	if (strncmp(buf, "#include", 8))
+	{
+		return false;
+	}
+
+	buf += 8;
+	while (CHAR_IS_SPACE(*buf))
+	{
+		++buf;
+	}
+
+	if (*buf != '\"')
+	{
+		return false;
+	}
+
+	++buf;
+	char* start = buf;
+	while (true)
+	{
+		if (!*buf)
+		{
+			return false;
+		}
+
+		if (*buf == '\"')
+		{
+			out.assign(start, buf);
+			return true;
+		}
+
+		++buf;
+	}
 }
 
 static void ini_parse_numeric(const ini_var_t *var, const char *text, void *out)
@@ -429,11 +470,15 @@ static void ini_parse_var(char* buf)
 	}
 }
 
+struct filename_line_pair
+{
+	std::string filename;
+	int start_line = 0;
+};
+
 static void ini_parse(int alt, const char *vmode)
 {
 	static char line[INI_LINE_SIZE];
-	int section = 0;
-	int eof;
 
 	if (!orig_stdout) orig_stdout = stdout;
 	if (!dev_null)
@@ -449,51 +494,86 @@ static void ini_parse(int alt, const char *vmode)
 
 	ini_parser_debugf("Start INI parser for core \"%s\"(%s), video mode \"%s\".", user_io_get_core_name(0), user_io_get_core_name(1), vmode);
 
-	memset(line, 0, sizeof(line));
-	memset(&ini_file, 0, sizeof(ini_file));
-
 	const char *name = cfg_get_name(alt);
-	if (!FileOpen(&ini_file, name))	return;
+	std::vector<filename_line_pair> ini_stack;
+	ini_stack.push_back({ name, 0 });
 
-	ini_parser_debugf("Opened file %s with size %llu bytes.", name, ini_file.size);
-
-	ini_pt = 0;
-
-	// parse ini
-	while (1)
+	while (!ini_stack.empty())
 	{
-		// get line
-		eof = ini_getline(line);
-		ini_parser_debugf("line(%d): \"%s\".", section, line);
+		filename_line_pair& pair = ini_stack.back();
 
-		if (line[0] == INI_SECTION_START)
+		memset(&ini_file, 0, sizeof(ini_file));
+		ini_pt = 0;
+
+		if (!FileOpen(&ini_file, pair.filename.c_str()))
 		{
-			// if first char in line is INI_SECTION_START, get section
-			section = ini_get_section(line, vmode);
-			if (section)
-			{
-				memset(var_array_append, 0, sizeof(var_array_append));
-			}
-		}
-		else if (line[0] == INCL_SECTION && !section)
-		{
-			section = ini_get_section(line, vmode);
-			if (section)
-			{
-				memset(var_array_append, 0, sizeof(var_array_append));
-			}
-		}
-		else if(section)
-		{
-			// otherwise this is a variable, get it
-			ini_parse_var(line);
+			ini_stack.pop_back();
+			continue;
 		}
 
-		// if end of file, stop
-		if (eof) break;
+		ini_parser_debugf("Opened file %s with size %llu bytes.", name, ini_file.size);
+
+		for (int i = pair.start_line; i; --i)
+		{
+			ini_getline(line);
+		}
+
+		int section = 0;
+
+		// parse ini
+		while (1)
+		{
+			// get line
+			int eof = ini_getline(line);
+			++pair.start_line;
+			ini_parser_debugf("line(%d): \"%s\".", section, line);
+
+			if (line[0] == INI_SECTION_START)
+			{
+				// if first char in line is INI_SECTION_START, get section
+				section = ini_get_section(line, vmode);
+				if (section)
+				{
+					memset(var_array_append, 0, sizeof(var_array_append));
+				}
+			}
+			else if (line[0] == INCL_SECTION && !section)
+			{
+				section = ini_get_section(line, vmode);
+				if (section)
+				{
+					memset(var_array_append, 0, sizeof(var_array_append));
+				}
+			}
+			else if (line[0] == DIRECTIVE_START && !section)
+			{
+				std::string filename;
+				if (ini_get_include(line, filename))
+				{
+					// Ignore circular includes
+					if (std::find_if(ini_stack.begin(), ini_stack.end(), [&](const filename_line_pair& pair){ return pair.filename == filename; }) == ini_stack.end())
+					{
+						ini_stack.push_back({ std::move(filename), 0 });
+						break;
+					}
+				}
+			}
+			else if(section)
+			{
+				// otherwise this is a variable, get it
+				ini_parse_var(line);
+			}
+
+			// if end of file, stop
+			if (eof)
+			{
+				ini_stack.pop_back();
+				break;
+			}
+		}
+
+		FileClose(&ini_file);
 	}
-
-	FileClose(&ini_file);
 }
 
 static constexpr int CFG_ERRORS_MAX = 4;
