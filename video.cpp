@@ -77,7 +77,7 @@ static VideoInfo current_video_info;
 
 static int support_FHD = 0;
 
-yc_mode yc_modes[10];
+yc_mode yc_modes[20];
 
 struct vrr_cap_t
 {
