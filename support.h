@@ -43,6 +43,9 @@
 // PSX support
 #include "support/psx/psx.h"
 
+// CD-i support
+#include "support/cdi/cdi.h"
+
 // UEF support
 #include "support/uef/uef_reader.h"
 

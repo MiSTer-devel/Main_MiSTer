@@ -2227,7 +2227,7 @@ void HandleUI(void)
 						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
-						if (is_saturn() || is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
+						if (is_saturn() || is_pce() || is_megacd() || is_x86() || is_cdi() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
 						{
 							//look for CHD too
 							if (!strcasestr(ext, "CHD"))
@@ -2492,6 +2492,10 @@ void HandleUI(void)
 			{
 				psx_mount_cd(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1), ioctl_index, selPath);
 				cheats_init(selPath, 0);
+			}
+			else if (is_cdi())
+			{
+				cdi_mount_cd(ioctl_index, selPath);
 			}
 			else if (is_saturn())
 			{
@@ -7301,7 +7305,7 @@ int menu_allow_cfg_switch()
 
 void menu_process_save()
 {
-	menu_save_timer = GetTimer(1000);
+	menu_save_timer = GetTimer(500);
 }
 
 static char pchar[] = { 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
