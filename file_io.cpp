@@ -1224,12 +1224,6 @@ struct DirentComp
 		if ((de1.de.d_type == DT_DIR) && (de2.de.d_type != DT_DIR)) return true;
 		if ((de1.de.d_type != DT_DIR) && (de2.de.d_type == DT_DIR)) return false;
 
-		if ((de1.de.d_type == DT_DIR) && (de2.de.d_type == DT_DIR))
-		{
-			if (!(de1.flags & DT_EXT_ZIP) && (de2.flags & DT_EXT_ZIP)) return true;
-			if ((de1.flags & DT_EXT_ZIP) && !(de2.flags & DT_EXT_ZIP)) return false;
-		}
-
 		int len1 = strlen(de1.altname);
 		int len2 = strlen(de2.altname);
 		if ((len1 > 4) && (de1.altname[len1 - 4] == '.')) len1 -= 4;
