@@ -2227,7 +2227,7 @@ void HandleUI(void)
 						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 
-						if (is_saturn() || is_pce() || is_megacd() || is_x86() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
+						if (is_saturn() || is_pce() || is_megacd() || is_x86() || is_cdi() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
 						{
 							//look for CHD too
 							if (!strcasestr(ext, "CHD"))
@@ -2492,6 +2492,10 @@ void HandleUI(void)
 			{
 				psx_mount_cd(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1), ioctl_index, selPath);
 				cheats_init(selPath, 0);
+			}
+			else if (is_cdi())
+			{
+				cdi_mount_cd(ioctl_index, selPath);
 			}
 			else if (is_saturn())
 			{
@@ -7103,6 +7107,10 @@ void PrintDirectory(int expand)
 			{
 				strncpy(s + 1, flist_DirItem(k)->altname+1, len-1);
 			}
+			else if (flist_DirItem(k)->flags & DT_EXT_ZIP)
+			{
+				strncpy(s + 1, flist_DirItem(k)->altname, len-4); // strip .zip extension, see below
+			}
 			else
 			{
 				strncpy(s + 1, flist_DirItem(k)->altname, len); // display only name
@@ -7118,7 +7126,7 @@ void PrintDirectory(int expand)
 				else
 				{
 					if (flist_DirItem(k)->flags & DT_EXT_ZIP) // mark ZIP archive with different suffix
-						strcpy(&s[22], " <zip>");
+						strcpy(&s[22], " <ZIP>");
 					else
 						strcpy(&s[22], " <DIR>");
 				}
@@ -7301,7 +7309,7 @@ int menu_allow_cfg_switch()
 
 void menu_process_save()
 {
-	menu_save_timer = GetTimer(1000);
+	menu_save_timer = GetTimer(500);
 }
 
 static char pchar[] = { 0x8C, 0x8E, 0x8F, 0x90, 0x91, 0x7F };
