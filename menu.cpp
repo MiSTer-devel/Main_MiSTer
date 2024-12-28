@@ -7107,6 +7107,10 @@ void PrintDirectory(int expand)
 			{
 				strncpy(s + 1, flist_DirItem(k)->altname+1, len-1);
 			}
+			else if (flist_DirItem(k)->flags & DT_EXT_ZIP)
+			{
+				strncpy(s + 1, flist_DirItem(k)->altname, len-4); // strip .zip extension, see below
+			}
 			else
 			{
 				strncpy(s + 1, flist_DirItem(k)->altname, len); // display only name
@@ -7122,7 +7126,7 @@ void PrintDirectory(int expand)
 				else
 				{
 					if (flist_DirItem(k)->flags & DT_EXT_ZIP) // mark ZIP archive with different suffix
-						strcpy(&s[22], " <zip>");
+						strcpy(&s[22], " <ZIP>");
 					else
 						strcpy(&s[22], " <DIR>");
 				}

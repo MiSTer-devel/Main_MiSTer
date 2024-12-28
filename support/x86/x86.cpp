@@ -299,6 +299,17 @@ static void x86_dma_recvbuf(uint32_t address, uint32_t length, uint32_t *data)
 	DisableIO();
 }
 
+static int mem_set(uint32_t offset, uint8_t fill_byte, uint32_t size)
+{
+	void *buf = shmem_map(SHMEM_ADDR + offset, size);
+	if (!buf) return 0;
+
+	memset(buf, fill_byte, size);
+	shmem_unmap(buf, size);
+
+	return 1;
+}
+
 static int load_bios(const char* name, uint8_t index)
 {
 	printf("BIOS: %s\n", name);
@@ -521,6 +532,10 @@ void x86_init()
 
 	if (is_x86())
 	{
+		// PC-DOS/MS-DOS/Win3.x/Win9x recognize 0xFF as free memory (UMA),
+		// otherwise it can be incorrectly interpreted as used by Option RAM (non-free).
+		mem_set(0x0, 0xFF, 0x100000); // up to 1Mb
+		mem_set(0xCE00, 0x00, 0x200); // mark shr_rgn as non-free
 		load_bios(user_io_make_filepath(home, "boot0.rom"), 0);
 		load_bios(user_io_make_filepath(home, "boot1.rom"), 1);
 	}
@@ -539,6 +554,10 @@ void x86_init()
 	for (int i = 0; i < 4; i++) hdd_set(i, config.img_name[i + 2]);
 
 	//-------------------------------------------------------------------------- rtc
+
+	// memcfg 0: 256MB
+	// memcfg 1:  16MB
+	uint8_t memcfg = is_x86() ? user_io_status_get("[11]") : 1;
 
 	unsigned char translate_mode = 1; //LBA
 	translate_mode = (translate_mode << 6) | (translate_mode << 4) | (translate_mode << 2) | translate_mode;
@@ -574,7 +593,7 @@ void x86_init()
 		0x80, //0x15: base memory in 1k LSB
 		0x02, //0x16: base memory in 1k MSB
 		0x00, //0x17: memory size above 1m in 1k LSB
-		0xFC, //0x18: memory size above 1m in 1k MSB
+		(uint8_t)(memcfg ? 0x3C : 0xFC), //0x18: memory size above 1m in 1k MSB
 		0x00, //0x19: extended hd types 1/2; type 47d (unused)
 		0x00, //0x1A: extended hd types 2/2 (unused)
 
@@ -604,13 +623,13 @@ void x86_init()
 		0x00, //0x2F: checksum LSB
 
 		0x00, //0x30: memory size above 1m in 1k LSB
-		0x3C, //0x31: memory size above 1m in 1k MSB
+		(uint8_t)(memcfg ? 0x3C : 0xFC), //0x31: memory size above 1m in 1k MSB
 
 		0x20, //0x32: IBM century
 		0x00, //0x33: ?
 
-		0x80, //0x34: memory size above 16m in 64k LSB
-		0x0E, //0x35: memory size above 16m in 64k MSB; 256-8 MB
+		(uint8_t)(memcfg ? 0x00 : 0x80), //0x34: memory size above 16m in 64k LSB
+		(uint8_t)(memcfg ? 0x00 : 0x0E), //0x35: memory size above 16m in 64k MSB; 256-8 MB
 
 		0x00, //0x36: ?
 		0x20, //0x37: IBM PS/2 century
