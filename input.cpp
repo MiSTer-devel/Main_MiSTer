@@ -4884,6 +4884,18 @@ int input_test(int getchar)
 							input_lightgun_load(n);
 						}
 
+                                                //Blamcon Lightgun
+                                                if (input[n].vid == 0x3673 && ((input[n].pid >= 0x0100 && input[n].pid <= 0x0103) || (input[n].pid >= 0x0200 && input[n].pid <= 0x0203)))
+                                                {
+                                                        input[n].quirk = QUIRK_LIGHTGUN;
+                                                        input[n].lightgun = 1;
+                                                        input[n].guncal[0] = 0;
+                                                        input[n].guncal[1] = 32767;
+                                                        input[n].guncal[2] = 0;
+                                                        input[n].guncal[3] = 32767;
+                                                        input_lightgun_load(n);
+                                                }
+
 						//Madcatz Arcade Stick 360
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
 
