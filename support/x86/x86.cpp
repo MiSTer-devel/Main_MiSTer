@@ -38,6 +38,7 @@
 #include "../../fpga_io.h"
 #include "../../shmem.h"
 #include "../../ide.h"
+#include "../vhd/mister_vhd.h"
 #include "x86_share.h"
 
 #define FDD0_BASE   0xF200
@@ -467,6 +468,8 @@ static void hdd_set(int num, char* filename)
 {
 	int present = 0;
 	int cd = 0;
+	bool valid_vhd = false;
+	vhd_geometry geometry;
 
 	int len = strlen(filename);
 	int vhd = (len > 4 && !strcasecmp(filename + len - 4, ".vhd"));
@@ -479,7 +482,18 @@ static void hdd_set(int num, char* filename)
 	}
 
 	if(!present && vhd) present = ide_img_mount(&ide_image[num], filename, 1);
-	if (!cd && is_pcxt())
+
+	if (vhd && present)
+	{
+		valid_vhd = (parse_vhd_geometry(&ide_image[num], &geometry) == VHDERR_NONE);
+	}
+
+	if (!cd && valid_vhd) 
+	{
+		ide_image[num].size=geometry.size;
+		ide_img_set(num, present ? &ide_image[num] : 0, cd, geometry.spt, geometry.heads);
+	}
+	else if (!cd && is_pcxt())
 	{
 		FILE* fd;
 		uint64_t size;
