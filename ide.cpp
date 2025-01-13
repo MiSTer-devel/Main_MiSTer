@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include "support/x86/x86.h"
+#include "support/vhd/vhdcfg.h"
 #include "support/minimig/minimig_hdd.h"
 #include "support/minimig/minimig_config.h"
 #include "spi.h"
@@ -106,6 +107,7 @@ int ide_img_mount(fileTYPE *f, const char *name, int rw)
 			writable = rw && FileCanWrite(name);
 			ret = FileOpenEx(f, name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 			if (!ret) printf("Failed to open file %s\n", name);
+			else strcpy(f->path, name);
 		}
 	}
 
@@ -467,7 +469,12 @@ void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads, i
 	{
 		if (drive->present)
 		{
-			ide_set_geometry(drive, sectors, heads);
+			if (!drive->chd_f) 
+			{
+				if (parse_vhd_config(drive)) ide_set_geometry(drive, sectors, heads);
+				else ide_set_geometry(drive, drive->spt, drive->heads);
+			}
+			else ide_set_geometry(drive, sectors, heads);
 			if (offset && drive->cylinders < 65535) drive->cylinders++;
 			drive->offset = offset;
 			drive->type = type;
