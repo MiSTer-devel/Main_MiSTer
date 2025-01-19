@@ -1126,6 +1126,7 @@ enum QUIRK
 	QUIRK_JOYCON,
 	QUIRK_LIGHTGUN_CRT,
 	QUIRK_LIGHTGUN,
+	QUIRK_LIGHTGUN_MOUSE,
 	QUIRK_WHEEL,
 };
 
@@ -1559,6 +1560,7 @@ int input_has_lightgun()
 		if (input[i].quirk == QUIRK_TOUCHGUN) return 1;
 		if (input[i].quirk == QUIRK_LIGHTGUN) return 1;
 		if (input[i].quirk == QUIRK_LIGHTGUN_CRT) return 1;
+		if (input[i].quirk == QUIRK_LIGHTGUN_MOUSE) return 1;
 	}
 	return 0;
 }
@@ -2513,7 +2515,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		if (input[dev].timeout > 0) input[dev].timeout = cfg.bt_auto_disconnect * 10;
 
 		//mouse
-		if (ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK)
+		//if the lightgun mouse quirk is set then don't pass these button presses to the mouse system
+		//let them get handled and mapped like regular buttons
+		if (ev->code >= BTN_MOUSE && ev->code < BTN_JOYSTICK && input[dev].quirk != QUIRK_LIGHTGUN_MOUSE)
 		{
 			if (ev->value <= 1)
 			{
@@ -2648,7 +2652,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (!input[dev].num)
 	{
-		int assign_btn = ((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) && (ev->type == EV_REL || ev->type == EV_KEY));
+		bool assign_btn = ((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) && (ev->type == EV_REL || ev->type == EV_KEY));
+		assign_btn |= (input[dev].quirk == QUIRK_LIGHTGUN_MOUSE && ev->type == EV_KEY && ev->value == 1 && ev->code == BTN_MOUSE);
+
 		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1 && ev->code >= 256)
 		{
 			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_START; i++)
@@ -4896,6 +4902,18 @@ int input_test(int getchar)
                                                         input_lightgun_load(n);
                                                 }
 
+						//Retroshooter
+						if (input[n].vid == 0x0483 && input[n].pid >= 0x5750 && input[n].pid <= 0x5753)
+						{
+							input[n].quirk = QUIRK_LIGHTGUN_MOUSE;
+							input[n].lightgun = 1;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 767;
+							input[n].guncal[2] = 0;
+							input[n].guncal[3] = 1023;
+							input_lightgun_load(n);
+						}
+
 						//Madcatz Arcade Stick 360
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
 
@@ -5396,7 +5414,7 @@ int input_test(int getchar)
 									}
 								}
 
-								if (ev.type == EV_ABS && input[i].quirk == QUIRK_LIGHTGUN)
+								if (ev.type == EV_ABS && (input[i].quirk == QUIRK_LIGHTGUN || input[i].quirk == QUIRK_LIGHTGUN_MOUSE))
 								{
 									menu_lightgun_cb(i, ev.type, ev.code, ev.value);
 
@@ -5468,7 +5486,7 @@ int input_test(int getchar)
 
 								if (ev.type == EV_KEY && user_io_osd_is_visible())
 								{
-									if (input[i].quirk == QUIRK_WIIMOTE || input[i].quirk == QUIRK_LIGHTGUN_CRT || input[i].quirk == QUIRK_LIGHTGUN)
+									if (input[i].quirk == QUIRK_WIIMOTE || input[i].quirk == QUIRK_LIGHTGUN_CRT || input[i].quirk == QUIRK_LIGHTGUN || input[i].quirk == QUIRK_LIGHTGUN_MOUSE)
 									{
 										if (menu_lightgun_cb(i, ev.type, ev.code, ev.value)) continue;
 									}
