@@ -229,7 +229,7 @@ static int fpgamgr_program_init(void)
 #define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
 
 /* Write the RBF data to FPGA Manager */
-static void fpgamgr_program_write(const void *rbf_data, unsigned long rbf_size)
+static void fpgamgr_program_write(const void *rbf_data, size_t rbf_size)
 {
 	uint32_t src = (uint32_t)rbf_data;
 	uint32_t dst = (uint32_t)MAP_ADDR(SOCFPGA_FPGAMGRDATA_ADDRESS);
@@ -239,21 +239,23 @@ static void fpgamgr_program_write(const void *rbf_data, unsigned long rbf_size)
 	/* Number of loops for 4-byte long copying + trailing bytes */
 	uint32_t loops4 = DIV_ROUND_UP(rbf_size % 32, 4);
 
-	__asm volatile(
-		"1:	ldmia %0!,{r0-r7}   \n"
-		"	stmia %1!,{r0-r7}   \n"
-		"	sub	  %1, #32       \n"
-		"	subs  %2, #1        \n"
-		"	bne   1b            \n"
-		"	cmp   %3, #0        \n"
-		"	beq   3f            \n"
-		"2:	ldr	  %2, [%0], #4  \n"
-		"	str   %2, [%1]      \n"
-		"	subs  %3, #1        \n"
-		"	bne   2b            \n"
-		"3:	nop                 \n"
+	asm volatile(
+		"   cmp %2, #0\n"
+		"   beq 2f\n"
+		"1: ldmia %0!, {r4-r11}\n"
+		"   stmia %1!, {r4-r11}\n"
+		"   sub %1, #32\n"
+		"   subs %2, #1\n"
+		"   bne 1b\n"
+		"2: cmp %3, #0\n"
+		"   beq 4f\n"
+		"3: ldr %2, [%0], #4\n"
+		"   str %2, [%1]\n"
+		"   subs %3, #1\n"
+		"   bne 3b\n"
+		"4: nop\n"
 		: "+r"(src), "+r"(dst), "+r"(loops32), "+r"(loops4) :
-		: "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "cc");
+		: "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "cc");
 }
 
 /* Ensure the FPGA entering config done */

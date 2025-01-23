@@ -2513,6 +2513,7 @@ int hasAPI1_5()
 static bool get_video_info(bool force, VideoInfo *video_info)
 {
 	static uint16_t nres = 0;
+	static bool vi_seen = false;
 	bool res_changed = false;
 	bool fb_changed = false;
 
@@ -2520,8 +2521,10 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 	uint16_t res = spi_w(0);
 	if ((nres != res) || force)
 	{
+
 		res_changed = (nres != res);
 		nres = res;
+		if (res_changed) vi_seen = true;
 		video_info->width = spi_w(0) | (spi_w(0) << 16);
 		video_info->height = spi_w(0) | (spi_w(0) << 16);
 		video_info->htime = spi_w(0) | (spi_w(0) << 16);
@@ -2558,7 +2561,7 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 	}
 	DisableIO();
 
-	return res_changed || fb_changed;
+	return vi_seen && (res_changed || fb_changed);
 }
 
 static void video_core_description(const VideoInfo *vi, const vmode_custom_t */*vm*/, char *str, size_t len)
