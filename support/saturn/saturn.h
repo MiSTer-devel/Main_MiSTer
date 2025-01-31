@@ -77,6 +77,7 @@ private:
 	bool seek_ring2;
 	bool pause_pend;
 	bool read_toc;
+	int seek_delay;
 	uint8_t stat[12];
 	uint8_t comm[12];
 	uint8_t cd_buf[4096 + 2];
@@ -102,7 +103,7 @@ private:
 };
 
 extern satcdd_t satcdd;
-extern uint32_t frame_cnt;
+extern uint32_t saturn_frame_cnt;
 
 
 #define CD_DATA_IO_INDEX	0x8
