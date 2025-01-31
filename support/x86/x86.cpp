@@ -47,7 +47,6 @@
 #define CFG_VER     3
 
 #define SHMEM_ADDR  0x30000000
-#define BIOS_SIZE   0x10000
 
 #define IOWR(base, reg, value) x86_dma_set((base) + (reg), value)
 
@@ -310,17 +309,27 @@ static int mem_set(uint32_t offset, uint8_t fill_byte, uint32_t size)
 	return 1;
 }
 
-static int load_bios(const char* name, uint8_t index)
+static int load_rom(const char* name, uint32_t mem_offset)
 {
 	printf("BIOS: %s\n", name);
 
-	void *buf = shmem_map(SHMEM_ADDR + (index ? 0xC0000 : 0xF0000), BIOS_SIZE);
-	if (!buf) return 0;
+	fileTYPE f;
+	if (!FileOpen(&f, name)) return 0;
 
-	memset(buf, 0, BIOS_SIZE);
-	FileLoad(name, buf, BIOS_SIZE);
-	shmem_unmap(buf, BIOS_SIZE);
+	uint32_t size = f.size;
 
+	void *buf = shmem_map(SHMEM_ADDR + mem_offset, size);
+	if (!buf)
+	{
+		FileClose(&f);
+		return 0;
+	}
+
+	memset(buf, 0, size);
+	FileReadAdv(&f, buf, size);
+	shmem_unmap(buf, size);
+
+	FileClose(&f);
 	return 1;
 }
 
@@ -534,10 +543,11 @@ void x86_init()
 	{
 		// PC-DOS/MS-DOS/Win3.x/Win9x recognize 0xFF as free memory (UMA),
 		// otherwise it can be incorrectly interpreted as used by Option RAM (non-free).
-		mem_set(0x0, 0xFF, 0x100000); // up to 1Mb
-		mem_set(0xCE00, 0x00, 0x200); // mark shr_rgn as non-free
-		load_bios(user_io_make_filepath(home, "boot0.rom"), 0);
-		load_bios(user_io_make_filepath(home, "boot1.rom"), 1);
+		mem_set(0xA0000, 0xFF, 0x60000); // Fill UMA (640 kb - 1 Mb) with 0xFF
+		mem_set(0xA0000, 0x00, 0x20000); // Clear Video RAM
+		mem_set(0xCE000, 0x00, 0x2000);  // Clear shr_rgn
+		load_rom(user_io_make_filepath(home, "boot1.rom"), 0xC0000); // Video BIOS ROM
+		load_rom(user_io_make_filepath(home, "boot0.rom"), 0xF0000); // BIOS ROM
 	}
 
 	uint16_t cfg = ide_check();
