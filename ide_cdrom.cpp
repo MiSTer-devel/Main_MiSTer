@@ -1387,7 +1387,6 @@ void cdrom_handle_pkt(ide_config *ide)
 		break;
 
 	case 0x2B: // seek
-
 		dbg_printf("** Seek\n");
 		drv->playing = 0;
 		drv->paused = 0;
@@ -1425,6 +1424,13 @@ void cdrom_handle_pkt(ide_config *ide)
 			pkt_send(ide, ide_buf, read_toc(drv, cmdbuf));
 		} 
 		else cdrom_nodisk(ide);
+		break;
+	
+	case 0x4E: // stop play/scan
+		dbg_printf("** Stop Play/Scan\n");
+		drv->playing = 0;
+		drv->paused = 0;
+		cdrom_reply(ide, 0);
 		break;
 
 	case 0x12: // inquiry
