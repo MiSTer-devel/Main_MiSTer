@@ -49,6 +49,7 @@
 
 #define CD_ASC_CODE_COMMAND_SEQUENCE_ERR 0x2C
 #define CD_ASC_CODE_ILLEGAL_OPCODE 0x20
+#define CD_ASC_CODE_ILLEGAL_FIELD_CMD_PACKET 0x24
 
 
 typedef struct
@@ -1090,6 +1091,46 @@ void cdrom_read(ide_config *ide)
 	pkt_send(ide, ide_buf, cnt * 2048);
 }
 
+static int disc_info(drive_t *drv, uint16_t maxlen) 
+{
+	if (!maxlen) return 0;
+	if (maxlen > 34) maxlen = 34;
+
+	memset(ide_buf, 0, 34);
+	ide_buf[1] = 32;			/* 0-1: Data Length excluding itself */
+	ide_buf[2] = 0xe;			/* Complete Status, Complete Session */
+	ide_buf[3] = 1;				/* Number of first track on disc */
+	ide_buf[4] = 1; 			/* Number of Sessions */
+	ide_buf[5] = 1;				/* First Track Number in Last Session */
+	ide_buf[6] = drv->track_cnt;/* Last Track Number in Last Session */
+	ide_buf[7] = 0x20;  		/* Disc defined for unrestricted use */
+	ide_buf[8] = 0x00;  		/* CD-Rom Disk */
+
+	
+	memset(ide_buf+16, 0xFF, 4);	/* Lead-in Start Time for Last Session, all 0xFF if disc is complete*/
+	memset(ide_buf+20, 0xFF, 4);	/* Last Possible Start Time for Start Time of Lead-out, all 0xFF if disc is complete*/
+	
+	dbg_hexdump(ide_buf, maxlen, 0);
+	return maxlen;
+}
+
+static int track_info(drive_t *drv, uint8_t track_number, uint16_t maxlen)
+{
+	if (!maxlen) return 0;
+	if (maxlen > 24) maxlen = 24;
+
+	memset(ide_buf, 0, 24);
+	ide_buf[1] = 20;			/* 0-1: Data Length excluding itself */
+	ide_buf[2] = track_number;	/* Track Number*/
+	ide_buf[3] = 1;				/* Session Nuber (hardcoded to 1) */
+	ide_buf[5] = 0x01 & 0x0F;	/* 4 bit Subcode-Q Mode 1 Identifier */
+	ide_buf[6] = (drv->track[track_number].mode2 ? 0x02 : 0x01) & 0x0F; /* RT = Packet = FP = 0, 4 bit Data Mode */
+	ide_buf[8] = bswap_32(drv->track[track_number].start); 				/* 4 Byte Track Start Address */
+
+	dbg_hexdump(ide_buf, maxlen, 0);
+	return maxlen;
+}
+
 static int cd_inquiry(uint8_t maxlen)
 {
 	static const char vendor[] = "MiSTer  ";
@@ -1106,9 +1147,41 @@ static int cd_inquiry(uint8_t maxlen)
 	for (int i = 0; i < 16; i++) ide_buf[i + 16] = (unsigned char)product[i];
 	for (int i = 0; i < 4; i++) ide_buf[i + 32] = ' ';
 	for (int i = 0; i < 11; i++) ide_buf[i + 36] = ' ';
-
 	hexdump(ide_buf, maxlen);
 	return maxlen;
+}
+
+static void get_conf(ide_config *ide, uint8_t* cmdbuf, uint16_t maxlen) {
+	if (cmdbuf[2] == 0 && cmdbuf[3] == 0) {
+		if (maxlen == 0) {
+			cdrom_reply(ide,0);
+			return;
+		}
+		if (maxlen > 16) {
+			maxlen = 16;
+		}
+		
+		memset(ide_buf, 0, 16);		
+		ide_buf[3] = 0x0F;			// Length LSB (Word 0-3)
+									// Word 4 Reserved
+									// Word 5 Reserved
+		ide_buf[7] = 0x08; 			// Current Profile (CD-ROM) LSB (Word 6-7)
+		// Feature 0000h	 		// Feature Code: Profile List (Word 8-9)
+		ide_buf[10] = 0x02 | 0x01; 	// Persistent, Current (Word 10)
+		ide_buf[11] = 0x04;			// Additional Length: profile descriptors * 4 (Word 11)
+		ide_buf[13] = 0x08;			// CD-ROM Profile Descriptor (Word 12-13)
+		ide_buf[14] = 0x01;			// Current (Word 14)
+									// Word 15 reserved
+
+		dbg_hexdump(ide_buf, maxlen);
+		pkt_send(ide, ide_buf, maxlen);
+	}
+	else 
+	{
+		printf("(!) Error in packet command %02X\n", cmdbuf[0]);
+		hexdump(cmdbuf, 12, 0);
+		cdrom_reply(ide, CD_ERR_ILLEGAL_REQUEST, CD_ASC_CODE_ILLEGAL_FIELD_CMD_PACKET);
+	}
 }
 
 static void set_sense(uint8_t SK, uint8_t ASC = 0, uint8_t ASCQ = 0)
@@ -1314,7 +1387,6 @@ void cdrom_handle_pkt(ide_config *ide)
 		break;
 
 	case 0x2B: // seek
-
 		dbg_printf("** Seek\n");
 		drv->playing = 0;
 		drv->paused = 0;
@@ -1353,10 +1425,53 @@ void cdrom_handle_pkt(ide_config *ide)
 		} 
 		else cdrom_nodisk(ide);
 		break;
+	
+	case 0x4E: // stop play/scan
+		dbg_printf("** Stop Play/Scan\n");
+		drv->playing = 0;
+		drv->paused = 0;
+		cdrom_reply(ide, 0);
+		break;
 
 	case 0x12: // inquiry
 		dbg_printf("** Inquiry\n");
 		pkt_send(ide, ide_buf, cd_inquiry(cmdbuf[4]));
+		break;
+	
+	case 0x35: // synchronize cache
+		dbg_printf("** synchronize cache\n");
+		dbg_hexdump(cmdbuf, 10, 0);
+		cdrom_reply(ide,0);
+		break;
+	
+	case 0x46: // get configuration
+		dbg_printf("** get configuration\n");
+		get_conf(ide, cmdbuf, cmdbuf[7] << 8 | cmdbuf[8]);
+		break;
+	
+	case 0x51: // read disc information
+		dbg_printf("** read disc information\n");
+		dbg_hexdump(cmdbuf, 12, 0);
+		if ((cmdbuf[1] & 7) == 0) 
+		{
+			pkt_send(ide, ide_buf, disc_info(drv, cmdbuf[7] << 8 | cmdbuf[8]));
+		} 
+		else err = 1;
+		break;
+	
+	case 0x52: // read track information
+		dbg_printf("** read track information\n");	
+		dbg_hexdump(cmdbuf, 12, 0);
+		if (cmdbuf[1]==1)
+		{
+			if (cmdbuf[5] > drv->track_cnt || cmdbuf[5] == 0xFF)
+			{
+				err = 1;
+				break;
+			}
+			pkt_send(ide, ide_buf, track_info(drv, cmdbuf[5], cmdbuf[7] << 8 | cmdbuf[8]));
+		}
+		else err = 1;
 		break;
 
 	case 0x03: // mode sense
@@ -1467,6 +1582,22 @@ int cdrom_handle_cmd(ide_config *ide)
 		ide->regs.io_size = 0;
 		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DSC;
 		ide_set_regs(ide);
+		break;
+	
+		case 0xEF: // set features
+		switch(ide->regs.features)
+		{
+			case 0x03:
+			dbg_printf("Ignoring Set Features Transfer Mode: %02x\n", ide->regs.features);
+			ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
+			ide_set_regs(ide);
+			break;
+
+			default:
+			dbg_printf("Unsupported feature %02x", ide->regs.features);
+			dbg_print_regs(&ide->regs);
+			return 1;
+		}
 		break;
 
 	case 0x00: // nop

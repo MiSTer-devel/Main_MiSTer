@@ -3024,8 +3024,10 @@ void user_io_poll()
 				lba = spi_w(0);
 				lba = (lba & 0xFFFF) | (((uint32_t)spi_w(0)) << 16);
 				blks = ((c >> 9) & 0x3F) + 1;
-				if ((disk == 0 && is_cdi()) || (disk == 1 && is_psx()))
+				if (disk == 1 && is_psx())
 					blksz = 2352;
+				else if (disk == 0 && is_cdi())
+					blksz = (2352 + 24);
 				else
 					blksz = 128 << ((c >> 6) & 7);
 
@@ -3156,7 +3158,7 @@ void user_io_poll()
 					unsigned int psx_blksz = psx_chd_hunksize();
 					if (psx_blksz && psx_blksz <= sizeof(buffer[0])) buf_n = psx_blksz / blksz;
 				}
-				else if (is_cdi() && blksz == 2352)
+				else if (is_cdi() && blksz == (2352 + 24))
 				{
 					//returns 0 if the mounted disk is not a chd, otherwise returns the chd hunksize in bytes
 					unsigned int psx_blksz = cdi_chd_hunksize();
@@ -3177,7 +3179,7 @@ void user_io_poll()
 						done = 1;
 						buffer_lba[disk] = lba;
 					}
-					else if (blksz == 2352 && is_cdi())
+					else if (blksz == (2352 + 24) && is_cdi())
 					{
 						diskled_on();
 						cdi_read_cd(buffer[disk], lba, buf_n);
@@ -3261,7 +3263,7 @@ void user_io_poll()
 						psx_read_cd(buffer[disk], lba, buf_n);
 						buffer_lba[disk] = lba;
 					}
-					else if (blksz == 2352 && is_cdi())
+					else if (blksz == (2352 + 24) && is_cdi())
 					{
 						cdi_read_cd(buffer[disk], lba, buf_n);
 						buffer_lba[disk] = lba;

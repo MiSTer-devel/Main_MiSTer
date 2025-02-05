@@ -1301,8 +1301,8 @@ void HandleUI(void)
 					--menusub;
 				} while (menusub != 0 && (menumask & ((uint64_t)1 << menusub)) == 0);
 				if (menusub == 0 && (menumask & 1) == 0) { //If the first menu entry is disabled...
-					while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0) menusub++; 
-					//Go to to last item 
+					while ((menumask & ((uint64_t)(~0) << (menusub + 1))) != 0) menusub++;
+					//Go to to last item
 				}
 			} else {
 				do
@@ -2038,7 +2038,12 @@ void HandleUI(void)
 	case MENU_GENERIC_SAVE_WAIT:
 		menumask = 0;
 		parentstate = menustate;
-		if (menu_save_timer && CheckTimer(menu_save_timer))
+		if (menu)
+		{
+			menu_save_timer = 0;
+			menustate = MENU_NONE1;
+		}
+		else if (menu_save_timer && CheckTimer(menu_save_timer))
 		{
 			menu_save_timer = 0;
 			menustate = MENU_GENERIC_MAIN1;
@@ -7270,7 +7275,7 @@ int menu_lightgun_cb(int idx, uint16_t type, uint16_t code, int value)
 
 	if (type == EV_KEY)
 	{
-		if ((code == 0x130 || code == 0x131 || code == 0x120) && menustate == MENU_LGCAL1)
+		if ((code == 0x130 || code == 0x131 || code == 0x120 || code == 0x110) && menustate == MENU_LGCAL1)
 		{
 			gun_idx = idx;
 			if (value == 1) gun_ok = 1;
