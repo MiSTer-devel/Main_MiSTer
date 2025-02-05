@@ -4204,17 +4204,24 @@ void openfire_signal()
 			{
 				char mname[strlen(input[i].name)];
 				strcpy(mname, input[i].name);
+
+				// Cleanup mname to replace offending characters not used in device filepath.
 				char *p;
 				while ((p = strchr(mname, '/'))) *p = '_';
 				while ((p = strchr(mname, ' '))) *p = '_';
 				while ((p = strchr(mname, '*'))) *p = '_';
 				while ((p = strchr(mname, ':'))) *p = '_';
-				char cmd[31+strlen(mname)+strlen(strrchr(input[i].id, '/')+1)];
-				sprintf(cmd, "echo M0x9 > /dev/serial/by-id/usb-%s_%s-if00", mname, strrchr(input[i].id, '/')+1);
-				if(system(cmd) == 0) {
-					printf("%s (device no. %i) set to MiSTer-compatible mode.\n", input[i].name, i);
-				} else {
+
+				char devicePath[29+strlen(mname)+strlen(strrchr(input[i].id, '/')+1)];
+				sprintf(devicePath, "/dev/serial/by-id/usb-%s_%s-if00", mname, strrchr(input[i].id, '/')+1);
+
+				FILE *deviceFile = fopen(devicePath, "r+");
+				if(deviceFile == NULL) {
 					printf("Failed to send command to %s: device path doesn't exist?\n", input[i].name);
+				} else {
+					fprintf(deviceFile, "M0x9");
+					printf("%s (device no. %i) set to MiSTer-compatible mode.\n", input[i].name, i);
+					fclose(deviceFile);
 				}
 			}
 		}
