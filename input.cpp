@@ -4938,7 +4938,7 @@ int input_test(int getchar)
 							}
 						}
 
-                        //Blamcon Lightgun
+						//Blamcon Lightgun
 						if (input[n].vid == 0x3673 && ((input[n].pid >= 0x0100 && input[n].pid <= 0x0103) || (input[n].pid >= 0x0200 && input[n].pid <= 0x0203)))
 						{
 							input[n].quirk = QUIRK_LIGHTGUN;
