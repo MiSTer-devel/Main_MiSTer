@@ -12,7 +12,7 @@
 #include "saturn.h"
 
 static int need_reset = 0;
-uint32_t frame_cnt = 0;
+uint32_t saturn_frame_cnt = 0;
 uint8_t time_mode;
 
 static uint32_t CalcTimerOffset(uint8_t speed) {
@@ -73,7 +73,7 @@ void saturn_poll()
 		DisableIO();
 
 		satcdd.Update();
-		frame_cnt++;
+		saturn_frame_cnt++;
 
 #ifdef SATURN_DEBUG
 		unsigned long curr_timer = GetTimer(0);
