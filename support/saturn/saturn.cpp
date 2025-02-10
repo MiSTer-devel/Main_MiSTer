@@ -75,13 +75,19 @@ void saturn_poll()
 		satcdd.Update();
 		saturn_frame_cnt++;
 
-#ifdef SATURN_DEBUG
 		unsigned long curr_timer = GetTimer(0);
 		if (curr_timer >= poll_timer) {
+			poll_timer = curr_timer + CalcTimerOffset(time_mode);
+#ifdef SATURN_DEBUG
+			user_io_status_set("[63]", 1); 
 			printf("\x1b[32mSaturn: ");
 			printf("Time over: next = %lu, curr = %lu", poll_timer, curr_timer);
 			printf("\n\x1b[0m");
+#endif // SATURN_DEBUG
 		}
+#ifdef SATURN_DEBUG
+		else 
+			user_io_status_set("[63]", 0);
 #endif // SATURN_DEBUG
 	}
 }

@@ -586,7 +586,7 @@ void satcdd_t::CommandExec() {
 		//printf("Command = %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5], comm[6], comm[7], comm[8], comm[9], comm[10], comm[11]);
 		//printf("\n\x1b[0m");
 		printf("\x1b[32mSaturn: ");
-		printf("Command Read Data: tno = %u, idx = %u, start = %u, FAD = %u, track = %u, track_start = %u, speed = %u", cmd_tno, cmd_idx, cmd_fad, fad, this->track + 1, this->toc.tracks[this->track].start, this->speed);
+		printf("Command Read Data: tno = %u, idx = %u, FAD = %u, track = %u, track_start = %u", cmd_tno, cmd_idx, fad, this->track + 1, this->toc.tracks[this->track].start);
 		printf(" (%u)\n\x1b[0m", saturn_frame_cnt);
 #endif // SATURN_DEBUG 
 		break;
@@ -680,7 +680,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 
 		if (toc_pos < 0x100)
 		{
-			int lba_ = this->toc.tracks[toc_pos & 0xFF].start + 150;
+			int lba_ = this->toc.tracks[toc_pos].start + 150 + this->GetSectorOffsetByIndex(toc_pos + 1, 1);
 			LBAToMSF(lba_, &msf);
 			idx = BCD(toc_pos + 1);
 			q = this->toc.tracks[toc_pos & 0xFF].type ? 0x40 : 0x00;
