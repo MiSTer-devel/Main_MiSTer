@@ -4969,6 +4969,22 @@ int input_test(int getchar)
 							input_lightgun_load(n);
 						}
 
+						//Sinden Lightgun (two different PIDs, four different PIDs depending on gun color/config)                                                                                                   
+						if ((input[n].vid == 0x16c0 || input[n].vid == 0x16d0) && (                             
+            					input[n].pid == 0x0f01 ||                             
+            					input[n].pid == 0x0f02 ||                             
+            					input[n].pid == 0x0f38 ||                             
+            					input[n].pid == 0x0f39))                             
+						{                             
+    							input[n].quirk = QUIRK_LIGHTGUN;                             
+    							input[n].lightgun = 1;                             
+    							input[n].guncal[0] = 0;                             
+    							input[n].guncal[1] = 65535;                             
+    							input[n].guncal[2] = 0;                             
+    							input[n].guncal[3] = 65535;                             
+    							input_lightgun_load(n);                             
+						} 
+
 						//Madcatz Arcade Stick 360
 						if (input[n].vid == 0x0738 && input[n].pid == 0x4758) input[n].quirk = QUIRK_MADCATZ360;
 
