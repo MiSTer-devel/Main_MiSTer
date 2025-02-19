@@ -13,6 +13,8 @@
 #include "../../fpga_io.h"
 #include "../../lib/md5/md5.h"
 #include "../../shmem.h"
+#include "../../str_util.h"
+#include "../../cheats.h"
 
 #include "buffer.h"
 #include "mra_loader.h"
@@ -25,6 +27,7 @@ struct arc_struct {
 	char partname[kBigTextSize];
 	char romname[kBigTextSize];
 	char error_msg[kBigTextSize];
+	char cheatname[kBigTextSize];
 	int romindex;
 	int offset;
 	int length;
@@ -35,6 +38,7 @@ struct arc_struct {
 	int validrom0;
 	int insidesw;
 	int insideinterleave;
+	int insidecheats;
 	int ifrom;
 	int ito;
 	int imap;
@@ -51,7 +55,7 @@ static char mame_root[kBigTextSize];
 
 static bool is_vertical = false;
 
-static sw_struct switches[2] = {};
+static sw_struct switches = {};
 
 static int  nvram_idx  = 0;
 static int  nvram_size = 0;
@@ -76,7 +80,7 @@ void arcade_nvm_save()
 			user_io_set_upload(0);
 
 			FileSave(path, buf, nvram_size);
-			delete(buf);
+			delete [] buf;
 		}
 	}
 }
@@ -101,37 +105,35 @@ static void arcade_nvm_load()
 				user_io_set_download(0);
 			}
 
-			delete(buf);
+			delete [] buf;
 		}
 	}
 }
 
-sw_struct *arcade_sw(int n)
+sw_struct *arcade_sw()
 {
-	if (n > 1) n = 1;
-	if (n < 0) n = 0;
-	return &switches[n];
+	return &switches;
 }
 
-void arcade_sw_send(int n)
+void arcade_sw_send()
 {
-	sw_struct *sw = arcade_sw(n);
+	sw_struct *sw = arcade_sw();
 	if (sw->dip_num)
 	{
-		user_io_set_index(254 + n);
+		user_io_set_index(254);
 		user_io_set_download(1);
 		user_io_file_tx_data((uint8_t*)&sw->dip_cur, sizeof(sw->dip_cur));
 		user_io_set_download(0);
 	}
 }
 
-void arcade_sw_save(int n)
+void arcade_sw_save()
 {
-	sw_struct *sw = arcade_sw(n);
+	sw_struct *sw = arcade_sw();
 	if (sw->dip_num && sw->dip_saved != sw->dip_cur)
 	{
 		static char path[1024];
-		strcpy(path, (n) ? CONFIG_DIR"/cheats/" : CONFIG_DIR"/dips/");
+		strcpy(path, CONFIG_DIR"/dips/");
 		FileCreatePath(path);
 		strcat(path, sw->name);
 		if (FileSave(path, &sw->dip_cur, sizeof(sw->dip_cur)))
@@ -141,11 +143,11 @@ void arcade_sw_save(int n)
 	}
 }
 
-void arcade_sw_load(int n)
+void arcade_sw_load()
 {
-	sw_struct *sw = arcade_sw(n);
+	sw_struct *sw = arcade_sw();
 	static char path[1024];
-	strcpy(path, (n) ? "cheats/" : "dips/");
+	strcpy(path, "dips/");
 	strcat(path, sw->name);
 	FileLoadConfig(path, &sw->dip_cur, sizeof(sw->dip_cur));
 }
@@ -207,7 +209,7 @@ static int rom_checksz(int idx, int chunk)
 {
 	if ((romlen[idx] + chunk) > romblkl)
 	{
-	        if (romlen[idx] + chunk > romblkl + BLKL)
+		if (romlen[idx] + chunk > romblkl + BLKL)
 		  romblkl += (chunk + BLKL);
 		else
 		  romblkl += BLKL;
@@ -432,12 +434,16 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 	static char message[32];
 	struct arc_struct *arc_info = (struct arc_struct *)sd->user;
 
+	int cheat_size = 0;
+	int cheat_max = 0;
+
 	switch (evt)
 	{
 	case XML_EVENT_START_DOC:
 		message[0] = 0;
 		arc_info->insiderom = 0;
 		arc_info->insidesw = 0;
+		arc_info->insidecheats = 0;
 		break;
 
 	case XML_EVENT_START_NODE:
@@ -447,6 +453,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		buffer_destroy(arc_info->data);
 		arc_info->data = buffer_init(kBigTextSize);
 		arc_info->partname[0] = 0;
+		arc_info->cheatname[0] = 0;
 		arc_info->offset = 0;
 		arc_info->length = -1;
 		arc_info->repeat = 1;
@@ -472,20 +479,12 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		if (!strcasecmp(node->tag, "switches"))
 		{
 			arc_info->insidesw = 1;
-			switches[0].dip_cur = 0;
-			switches[0].dip_def = 0;
-			switches[0].dip_num = 0;
-			memset(&switches[0].dip, 0, sizeof(switches[0].dip));
+			switches.dip_cur = 0;
+			switches.dip_def = 0;
+			switches.dip_num = 0;
+			memset(&switches.dip, 0, sizeof(switches.dip));
 		}
 
-		if (!strcasecmp(node->tag, "cheats"))
-		{
-			arc_info->insidesw = 2;
-			switches[1].dip_cur = 0;
-			switches[1].dip_def = 0;
-			switches[1].dip_num = 0;
-			memset(&switches[1].dip, 0, sizeof(switches[1].dip));
-		}
 
 		if (!strcasecmp(node->tag, "interleave"))
 		{
@@ -602,8 +601,8 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			}
 			else if (arc_info->insidesw)
 			{
-				sw_struct* sw = &switches[arc_info->insidesw - 1];
-				if (!strcasecmp(node->tag, "switches") || !strcasecmp(node->tag, "cheats"))
+				sw_struct* sw = &switches;
+				if (!strcasecmp(node->tag, "switches"))
 				{
 					if (!strcasecmp(node->attributes[i].name, "default"))
 					{
@@ -682,6 +681,16 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 					}
 				}
 			}
+			else if (arc_info->insidecheats)
+			{
+				if (!strcasecmp(node->tag, "cheat"))
+				{
+					if (!strcasecmp(node->attributes[i].name, "name"))
+					{
+						strcpyz(arc_info->cheatname, node->attributes[i].value);
+					}
+				}
+			}
 			else
 			{
 				if (!strcasecmp(node->attributes[i].name, "index") && !strcasecmp(node->tag, "nvram"))
@@ -692,6 +701,18 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 				if (!strcasecmp(node->attributes[i].name, "size") && !strcasecmp(node->tag, "nvram"))
 				{
 					nvram_size = strtoul(node->attributes[i].value, NULL, 0);
+				}
+
+				if (!strcasecmp(node->tag, "cheats"))
+				{
+					if (!strcasecmp(node->attributes[i].name, "size"))
+					{
+						cheat_size = strtoul(node->attributes[i].value, NULL, 0);
+					}
+					if (!strcasecmp(node->attributes[i].name, "max"))
+					{
+						cheat_max = strtoul(node->attributes[i].value, NULL, 0);
+					}
 				}
 			}
 		}
@@ -710,6 +731,12 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			rom_start(arc_info->romindex);
 		}
 
+		if (!strcasecmp(node->tag, "cheats"))
+		{
+			arc_info->insidecheats = 1;
+			cheats_init_arcade(cheat_size, cheat_max);
+		}
+
 		if (arc_info->insiderom && !strcasecmp(node->tag, "interleave"))
 		{
 			int valid = 1;
@@ -718,7 +745,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			if (arc_info->ito < arc_info->ifrom) valid = 0;
 
 			unitlen = arc_info->ifrom ? arc_info->ito / arc_info->ifrom : 1;
-			if (unitlen < 0 && unitlen>8) valid = 0;
+			if (unitlen < 0 || unitlen>8) valid = 0;
 
 			if (!valid)
 			{
@@ -913,7 +940,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 
 		if (arc_info->insidesw && !strcasecmp(node->tag, "dip"))
 		{
-			sw_struct* sw = &switches[arc_info->insidesw - 1];
+			sw_struct* sw = &switches;
 
 			int n = sw->dip_num;
 			for (int i = 0; i < sw->dip[n].num; i++)
@@ -929,6 +956,20 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 		if (!strcasecmp(node->tag, "switches"))
 		{
 			arc_info->insidesw = 0;
+		}
+
+		if (arc_info->insidecheats && !strcasecmp(node->tag, "cheat"))
+		{
+			size_t len = 0;
+			unsigned char* binary = hexstr_to_char(arc_info->data->content, &len);
+			cheats_add_arcade(arc_info->cheatname, (char *)binary, len);
+			free(binary);
+		}
+
+		if (!strcasecmp(node->tag, "cheats"))
+		{
+			cheats_finalize_arcade();
+			arc_info->insidecheats = 0;
 		}
 
 		if (!strcasecmp(node->tag, "interleave"))
@@ -1056,10 +1097,9 @@ int arcade_send_rom(const char *xml)
 {
 	const char *p = strrchr(xml, '/');
 	p = p ? p + 1 : xml;
-	snprintf(switches[0].name, sizeof(switches[0].name), "%s", p);
-	char *ext = strcasestr(switches[0].name, ".mra");
+	snprintf(switches.name, sizeof(switches.name), "%s", p);
+	char *ext = strcasestr(switches.name, ".mra");
 	if (ext) strcpy(ext, ".dip");
-	memcpy(switches[1].name, switches[0].name, sizeof(switches[1].name));
 
 	snprintf(nvram_name, sizeof(nvram_name), p);
 	ext = strcasestr(nvram_name, ".mra");
@@ -1090,13 +1130,10 @@ int arcade_send_rom(const char *xml)
 	}
 	buffer_destroy(arc_info.data);
 
-	for (int n = 0; n < 2; n++)
-	{
-		switches[n].dip_cur = switches[n].dip_def;
-		arcade_sw_load(n);
-		switches[n].dip_saved = switches[n].dip_cur;
-		arcade_sw_send(n);
-	}
+	switches.dip_cur = switches.dip_def;
+	arcade_sw_load();
+	switches.dip_saved = switches.dip_cur;
+	arcade_sw_send();
 	return 0;
 }
 

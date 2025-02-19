@@ -55,10 +55,10 @@ struct mgl_struct
 	int  done;
 };
 
-sw_struct *arcade_sw(int n);
-void arcade_sw_send(int n);
-void arcade_sw_save(int n);
-void arcade_sw_load(int n);
+sw_struct *arcade_sw();
+void arcade_sw_send();
+void arcade_sw_save();
+void arcade_sw_load();
 
 // Read any mra info necessary for ini processing
 void arcade_pre_parse(const char *xml);
