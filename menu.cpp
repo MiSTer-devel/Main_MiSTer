@@ -975,7 +975,7 @@ void HandleUI(void)
 	static int has_fb_terminal = 0;
 	static unsigned long flash_timer = 0;
 	static int flash_state = 0;
-	static uint32_t dip_submenu, dip2_submenu, dipv;
+	static uint32_t dip_submenu;
 	static int need_reset = 0;
 	static int flat = 0;
 	static int menusub_parent = 0;
@@ -1702,7 +1702,6 @@ void HandleUI(void)
 			OsdSetTitle(page ? title : user_io_get_core_name());
 
 			dip_submenu = -1;
-			dip2_submenu = -1;
 
 			int last_space = 0;
 
@@ -1725,23 +1724,10 @@ void HandleUI(void)
 					else if (!strcmp(p, "DIP"))
 					{
 						h = page;
-						if (!h && arcade_sw(0)->dip_num)
+						if (!h && arcade_sw()->dip_num)
 						{
 							dip_submenu = selentry;
 							MenuWrite(entry, " DIP Switches              \x16", menusub == selentry, 0);
-							entry++;
-							selentry++;
-							menumask = (menumask << 1) | 1;
-						}
-						continue;
-					}
-					else if (!strcmp(p, "CHEAT"))
-					{
-						h = page;
-						if (!h && arcade_sw(1)->dip_num)
-						{
-							dip2_submenu = selentry;
-							MenuWrite(entry, " Cheats                    \x16", menusub == selentry, 0);
 							entry++;
 							selentry++;
 							menumask = (menumask << 1) | 1;
@@ -2094,9 +2080,8 @@ void HandleUI(void)
 				select = 1;
 			}
 
-			if ((dip_submenu == menusub || dip2_submenu == menusub) && select)
+			if (dip_submenu == menusub && select)
 			{
-				dipv = (dip_submenu == menusub) ? 0 : 1;
 				menustate = MENU_ARCADE_DIP1;
 				menusub = 0;
 			}
@@ -2119,8 +2104,7 @@ void HandleUI(void)
 					d = 0;
 					inpage = !page;
 
-					if (!strcmp(p, "DIP")) h = page || !arcade_sw(0)->dip_num;
-					else if (!strcmp(p, "CHEAT")) h = page || !arcade_sw(1)->dip_num;
+					if (!strcmp(p, "DIP")) h = page || !arcade_sw()->dip_num;
 					else if (strncmp(p, "DEFMRA,", 7))
 					{
 						//Hide or Disable flag
@@ -3115,7 +3099,7 @@ void HandleUI(void)
 	case MENU_ARCADE_DIP1:
 		helptext_idx = 0;
 		menumask = 0;
-		OsdSetTitle(dipv ? "Cheats" : "DIP Switches");
+		OsdSetTitle("DIP Switches");
 		menustate = MENU_ARCADE_DIP2;
 		parentstate = MENU_ARCADE_DIP1;
 
@@ -3128,7 +3112,7 @@ void HandleUI(void)
 			uint32_t selentry = 0;
 			menumask = 0;
 
-			sw_struct *sw = arcade_sw(dipv);
+			sw_struct *sw = arcade_sw();
 
 			int n = (sw->dip_num < OsdGetSize() - 1) ? (OsdGetSize() - 1 - sw->dip_num) / 2 : 0;
 			for (; entry < n; entry++) MenuWrite(entry);
@@ -3169,7 +3153,7 @@ void HandleUI(void)
 
 			for (; entry < OsdGetSize() - 1; entry++) MenuWrite(entry, "", 0, 0);
 
-			MenuWrite(entry, dipv ? STD_BACK : "       Reset to apply", menusub == selentry);
+			MenuWrite(entry, "       Reset to apply", menusub == selentry);
 			menusub_last = selentry;
 			menumask = (menumask << 1) | 1;
 
@@ -3182,30 +3166,22 @@ void HandleUI(void)
 		if (menu || left)
 		{
 			menustate = MENU_GENERIC_MAIN1;
-			menusub = dipv ? dip2_submenu : dip_submenu;
-			arcade_sw_save(0);
+			menusub = dip_submenu;
+			arcade_sw_save();
 		}
 
 		if (select)
 		{
 			if (menusub == menusub_last)
 			{
-				if (!dipv)
-				{
-					arcade_sw_save(dipv);
-					user_io_status_set("[0]", 1);
-					user_io_status_set("[0]", 0);
-					menustate = MENU_NONE1;
-				}
-				else
-				{
-					menusub = dip2_submenu;
-					menustate = MENU_GENERIC_MAIN1;
-				}
+				arcade_sw_save();
+				user_io_status_set("[0]", 1);
+				user_io_status_set("[0]", 0);
+				menustate = MENU_NONE1;
 			}
 			else
 			{
-				sw_struct *sw = arcade_sw(dipv);
+				sw_struct *sw = arcade_sw();
 				uint64_t status = sw->dip_cur & sw->dip[menusub].mask;
 				int m = 0;
 				for (int n = 0; n < sw->dip[menusub].num; n++)
@@ -3220,7 +3196,7 @@ void HandleUI(void)
 				m = (m + 1) % sw->dip[menusub].num;
 				sw->dip_cur = (sw->dip_cur & ~sw->dip[menusub].mask) | sw->dip[menusub].val[m];
 				menustate = MENU_ARCADE_DIP1;
-				arcade_sw_send(dipv);
+				arcade_sw_send();
 			}
 		}
 		break;
@@ -5415,16 +5391,13 @@ void HandleUI(void)
 				printf("Saving config to %s\n", filename);
 				user_io_status_save(filename);
 				menustate = MENU_GENERIC_MAIN1;
-				for (int n = 0; n < 2; n++)
+				if (arcade_sw()->dip_num)
 				{
-					if (arcade_sw(n)->dip_num)
-					{
-						arcade_sw(n)->dip_cur = arcade_sw(n)->dip_def;
-						arcade_sw_send(n);
-						user_io_status_set("[0]", 1);
-						user_io_status_set("[0]", 0);
-						arcade_sw_save(n);
-					}
+					arcade_sw()->dip_cur = arcade_sw()->dip_def;
+					arcade_sw_send();
+					user_io_status_set("[0]", 1);
+					user_io_status_set("[0]", 0);
+					arcade_sw_save();
 				}
 				menustate = MENU_NONE1;
 				menusub = 0;
