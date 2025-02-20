@@ -5828,29 +5828,32 @@ int input_poll(int getchar)
 	{
 		for (int i = 0; i < NUMPLAYERS; i++)
 		{
+			int send = 0;
 			if (af_delay[i] < AF_MIN) af_delay[i] = AF_MIN;
 
-			if (!time[i]) time[i] = GetTimer(af_delay[i]);
-			int send = 0;
-			int newdir = ((((uint32_t)(joy[i]) | (uint32_t)(joy[i] >> 32)) & 0xF) != (((uint32_t)(joy_prev[i]) | (uint32_t)(joy_prev[i] >> 32)) & 0xF));
-			
-			if (joy[i] != joy_prev[i])
+			/* Autofire handler */
+			if (joy[i] & autofire[i])
 			{
-				if ((joy[i] ^ joy_prev[i]) & autofire[i])
+				if (!time[i]) time[i] = GetTimer(af_delay[i]);
+				else if ((joy[i] ^ joy_prev[i]) & autofire[i])
 				{
 					time[i] = GetTimer(af_delay[i]);
 					af[i] = 0;
 				}
-
-				send = 1;
-				joy_prev[i] = joy[i];
+				else if (CheckTimer(time[i]))
+				{
+					time[i] = GetTimer(af_delay[i]);
+					af[i] = !af[i];
+					send = 1;
+				}
 			}
 
-			if (CheckTimer(time[i]))
+			int newdir = ((((uint32_t)(joy[i]) | (uint32_t)(joy[i] >> 32)) & 0xF) != (((uint32_t)(joy_prev[i]) | (uint32_t)(joy_prev[i] >> 32)) & 0xF));
+
+			if (joy[i] != joy_prev[i])
 			{
-				time[i] = GetTimer(af_delay[i]);
-				af[i] = !af[i];
-				if (joy[i] & autofire[i]) send = 1;
+				joy_prev[i] = joy[i];
+				send = 1;
 			}
 
 			if (send)
