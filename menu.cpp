@@ -6337,7 +6337,7 @@ void HandleUI(void)
 			FILE *f = fopen("/MiSTer.version", "r");
 			if (f)
 			{
-				if (fread(str, 6, 1, f)) sprintf(s, " MiSTer v%s,  OS v%s", version + 5, str);
+				if (fread(str, 6, 1, f)) sprintf(s, " MiSTer v%sZ, OS v%s", version + 5, str);
 				fclose(f);
 			}
 		}
