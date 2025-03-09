@@ -5746,6 +5746,10 @@ int input_test(int getchar)
 					{
 						menu_show_picker();
 					}
+					else if (!strncmp(cmd, "show_notice ", 12))
+					{
+						menu_show_notice(cmd + 12);
+					}
 				}
 			}
 

@@ -27,5 +27,6 @@ void StoreIdx_S(int idx, const char *path);
 int menu_present();
 
 void menu_show_picker();
+void menu_show_notice(const char *msg);
 
 #endif

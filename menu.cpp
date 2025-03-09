@@ -202,6 +202,7 @@ enum MENU
 
 	// External widgets
 	MENU_PICKER_SELECTED,
+	MENU_NOTICE,
 };
 
 #define MENU_PICKER_ITEMS_DIR "/tmp/PICKERITEMS"
@@ -7354,4 +7355,45 @@ void menu_show_picker()
 	// TODO: explicitly set the OSD size?
 	OsdEnable(DISABLE_KEYBOARD);
 	SelectFile(Selected_tmp, "TXT", SCANO_TXT, MENU_PICKER_SELECTED, MENU_NONE1);
+}
+
+// Displays a notice on the OSD (and opens the OSD if necessary) with the given
+// message. The notice will be displayed until the user interacts with the OSD
+// or main restarts/a core is launched.
+//
+// The notice is automatically wrapped to fit the OSD display or until a newline
+// character is encountered in the message. Any message length longer than the
+// current OSD display height will be truncated.
+void menu_show_notice(const char *msg)
+{
+	char line[30] = {0};
+	int linep = 0;
+	OsdSetTitle("Notice");
+	int n = 0;
+	int max_lines = OsdGetSize();
+	for (const char *c = msg; *c != '\0'; c++)
+	{
+		if (*c == '\n' || linep >= 29)
+		{
+			OsdWrite(n++, line);
+			if (n >= max_lines)
+				break;
+			linep = 0;
+			memset(line, '\0', sizeof(line));
+		}
+		if (*c != '\n')
+		{
+			line[linep++] = *c;
+		}
+	}
+	if (linep > 0 && n < max_lines)
+	{
+		OsdWrite(n++, line);
+	}
+	for (; n < max_lines; n++)
+	{
+		OsdWrite(n, "");
+	}
+	OsdUpdate();
+	OsdEnable(OSD_MSG);
 }

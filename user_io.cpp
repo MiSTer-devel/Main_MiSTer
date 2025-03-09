@@ -1101,7 +1101,7 @@ void SetUARTMode(int mode)
 	MakeFile("/tmp/CORENAME", user_io_get_core_name());
     MakeFile("/tmp/RBFNAME", user_io_get_core_name(1));
 
-	MakeFile("/tmp/MAINFEATURES", "PICKER");
+	MakeFile("/tmp/MAINFEATURES", "PICKER,NOTICE");
 
 	char data[20];
 	sprintf(data, "%d", baud);
