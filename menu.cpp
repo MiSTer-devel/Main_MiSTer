@@ -199,7 +199,13 @@ enum MENU
 	// MT32-pi
 	MENU_MT32PI_MAIN1,
 	MENU_MT32PI_MAIN2,
+
+	// External widgets
+	MENU_PICKER_SELECTED,
 };
+
+#define MENU_PICKER_ITEMS_DIR "/tmp/PICKERITEMS"
+#define MENU_PICKER_SELECTED_FILE "/tmp/PICKERSELECTED"
 
 static uint32_t menustate = MENU_NONE1;
 static uint32_t parentstate;
@@ -6885,6 +6891,12 @@ void HandleUI(void)
 		SelectFile("", 0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, cp_MenuCancel);
 		break;
 
+	case MENU_PICKER_SELECTED:
+		memcpy(Selected_tmp, selPath, sizeof(Selected_tmp));
+		MakeFile(MENU_PICKER_SELECTED_FILE, Selected_tmp);
+		OsdClear();
+		break;
+
 		/******************************************************************/
 		/* we should never come here                                      */
 		/******************************************************************/
@@ -7326,4 +7338,20 @@ void ProgressMessage(const char* title, const char* text, int current, int max)
 
 		InfoMessage(progress_buf, 2000, title);
 	}
+}
+
+// Displays a list picker on the OSD (and opens the OSD if necessary) based on
+// .txt files listed from the picker items directory at the time of execution.
+//
+// Once the user selects an item, the file path of the item is written to
+// picker selected file which can be monitored with inotify. The external
+// process is expected to create, manage and clean up the items directory.
+void menu_show_picker()
+{
+	FileCreatePath(MENU_PICKER_ITEMS_DIR);
+	// dunno how to temporarily set the root so we're using a relative path
+	snprintf(Selected_tmp, sizeof(Selected_tmp), "../..%s", MENU_PICKER_ITEMS_DIR);
+	// TODO: explicitly set the OSD size?
+	OsdEnable(DISABLE_KEYBOARD);
+	SelectFile(Selected_tmp, "TXT", SCANO_TXT, MENU_PICKER_SELECTED, MENU_NONE1);
 }

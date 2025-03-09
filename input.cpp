@@ -5742,6 +5742,10 @@ int input_test(int getchar)
 						else if (!strcmp(cmd + 7, "unmute")) set_volume(0x80);
 						else if (cmd[7] >= '0' && cmd[7] <= '7') set_volume(0x40 - 0x30 + cmd[7]);
 					}
+					else if (!strncmp(cmd, "show_picker", 11))
+					{
+						menu_show_picker();
+					}
 				}
 			}
 
