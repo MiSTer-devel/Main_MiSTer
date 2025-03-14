@@ -312,12 +312,21 @@ int satcdd_t::LoadCUE(const char* filename) {
 	return 0;
 }
 
+static bool wwf_hack = false;
 int satcdd_t::Load(const char *filename)
 {
 	//static char header[32];
 	//fileTYPE *fd_img;
 
 	Unload();
+
+	wwf_hack = false;
+	if (strcasestr(filename, "wwf wrestlemania") || strcasestr(filename, "wwf in your house")) wwf_hack = true;
+	if (wwf_hack) {
+#ifdef SATURN_DEBUG
+		printf("\x1b[32mSaturn: WWF games hack!!!\n\x1b[0m");
+#endif // SATURN_DEBUG
+	}
 
 	const char *ext = filename + strlen(filename) - 4;
 	if (!strncasecmp(".cue", ext, 4))
@@ -680,7 +689,8 @@ void satcdd_t::Process(uint8_t* time_mode) {
 
 		if (toc_pos < 0x100)
 		{
-			int lba_ = this->toc.tracks[toc_pos].start + 150 + this->GetSectorOffsetByIndex(toc_pos + 1, 1);
+			int lba_ = this->toc.tracks[toc_pos].start + 150;
+			if (wwf_hack) lba_ += this->GetSectorOffsetByIndex(toc_pos + 1, 1);
 			LBAToMSF(lba_, &msf);
 			idx = BCD(toc_pos + 1);
 			q = this->toc.tracks[toc_pos & 0xFF].type ? 0x40 : 0x00;
