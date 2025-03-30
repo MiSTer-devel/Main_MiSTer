@@ -99,6 +99,7 @@ typedef struct {
 	uint16_t osd_lock_time;
 	char debug;
 	char main[1024];
+	char vfilter_interlace_default[1023];
 } cfg_t;
 
 extern cfg_t cfg;
