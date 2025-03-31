@@ -1,13 +1,14 @@
 #ifndef VIDEO_H
 #define VIDEO_H
 
-#define VFILTER_HORZ 0
-#define VFILTER_VERT 1
-#define VFILTER_SCAN 2
+#define VFILTER_HORZ  0
+#define VFILTER_VERT  1
+#define VFILTER_SCAN  2
+#define VFILTER_ILACE 3
 
 struct VideoInfo
 {
-    uint32_t width;
+	uint32_t width;
 	uint32_t height;
 	uint32_t htime;
 	uint32_t vtime;
@@ -25,8 +26,8 @@ struct VideoInfo
 	uint32_t de_h;
 	uint32_t de_v;
 
-    bool interlaced;
-    bool rotated;
+	bool interlaced;
+	bool rotated;
 };
 
 void  video_init();
@@ -35,6 +36,8 @@ int   video_get_scaler_flt(int type);
 void  video_set_scaler_flt(int type, int n);
 char* video_get_scaler_coeff(int type, int only_name = 1);
 void  video_set_scaler_coeff(int type, const char *name);
+
+
 
 int   video_get_gamma_en();
 void  video_set_gamma_en(int n);

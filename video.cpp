@@ -305,7 +305,7 @@ struct ScalerFilter
 	char filename[1023];
 };
 
-static ScalerFilter scaler_flt[3];
+static ScalerFilter scaler_flt[4];
 
 struct FilterPhase
 {
@@ -331,7 +331,7 @@ struct VideoFilter
 	VideoFilterDigest digest;
 };
 
-static VideoFilter scaler_flt_data[3];
+static VideoFilter scaler_flt_data[4];
 
 static bool scale_phases(FilterPhase out_phases[N_PHASES], FilterPhase *in_phases, int in_count)
 {
@@ -534,6 +534,7 @@ static void set_vfilter(int force)
 {
 	PROFILE_FUNCTION();
 
+
 	static int last_flags = 0;
 
 	int flt_flags = spi_uio_cmd_cont(UIO_SET_FLTNUM);
@@ -550,7 +551,7 @@ static void set_vfilter(int force)
 	DisableIO();
 
 	int vert_flt;
-	if (current_video_info.interlaced) vert_flt = VFILTER_HORZ;
+	if (current_video_info.interlaced) vert_flt = scaler_flt[VFILTER_ILACE].mode ? VFILTER_ILACE : VFILTER_HORZ;
 	else if ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN].mode) vert_flt = VFILTER_SCAN;
 	else if (scaler_flt[VFILTER_VERT].mode) vert_flt = VFILTER_VERT;
 	else vert_flt = VFILTER_HORZ;
@@ -661,11 +662,18 @@ static void loadScalerCfg()
 			strcpy(scaler_flt[VFILTER_SCAN].filename, cfg.vfilter_scanlines_default);
 			scaler_flt[VFILTER_SCAN].mode = 1;
 		}
+
+		if (cfg.vfilter_interlace_default[0])
+		{
+			strcpy(scaler_flt[VFILTER_ILACE].filename, cfg.vfilter_interlace_default);
+			scaler_flt[VFILTER_ILACE].mode = 1;
+		}
 	}
 
 	if (!read_video_filter(VFILTER_HORZ, &scaler_flt_data[VFILTER_HORZ])) memset(&scaler_flt[VFILTER_HORZ], 0, sizeof(scaler_flt[VFILTER_HORZ]));
 	if (!read_video_filter(VFILTER_VERT, &scaler_flt_data[VFILTER_VERT])) memset(&scaler_flt[VFILTER_VERT], 0, sizeof(scaler_flt[VFILTER_VERT]));
 	if (!read_video_filter(VFILTER_SCAN, &scaler_flt_data[VFILTER_SCAN])) memset(&scaler_flt[VFILTER_SCAN], 0, sizeof(scaler_flt[VFILTER_SCAN]));
+	if (!read_video_filter(VFILTER_ILACE, &scaler_flt_data[VFILTER_ILACE])) memset(&scaler_flt[VFILTER_ILACE], 0, sizeof(scaler_flt[VFILTER_ILACE]));
 }
 
 static char active_gamma_cfg[1024] = { 0 };
@@ -1045,6 +1053,11 @@ void video_loadPreset(char *name, bool save)
 			else if (!strncasecmp(line, "sfilter=", 8))
 			{
 				load_flt_pres(line + 8, VFILTER_SCAN);
+				scaler_dirty = true;
+			}
+			else if (!strncasecmp(line, "ifilter=", 8))
+			{
+				load_flt_pres(line + 8, VFILTER_ILACE);
 				scaler_dirty = true;
 			}
 			else if (!strncasecmp(line, "mask=", 5))
