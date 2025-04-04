@@ -330,6 +330,7 @@ void pcecdd_t::Reset() {
 	CDDAStart = 0;
 	CDDAEnd = 0;
 	CDDAMode = PCECD_CDDAMODE_SILENT;
+	int_pend = false;
 
 	stat = 0x0000;
 
@@ -451,11 +452,13 @@ void pcecdd_t::Update() {
 				this->state = PCECD_STATE_IDLE;
 			}
 
-			if (this->CDDAMode == PCECD_CDDAMODE_INTERRUPT) {
+			if (this->int_pend) {
 				SendStatus(MAKE_STATUS(PCECD_STATUS_GOOD, 0));
 			}
 
-			printf("\x1b[32mPCECD: playback reached the end %d\n\x1b[0m", this->lba);
+			printf("\x1b[32mPCECD: playback reached the end %d, int mode = %i\n\x1b[0m", this->lba, this->int_pend);
+
+			this->int_pend = false;
 		}
 	}
 	else if (this->state == PCECD_STATE_PAUSE)
@@ -475,6 +478,8 @@ void pcecdd_t::CommandExec() {
 	uint32_t temp_latency;
 
 	memset(buf, 0, 32);
+
+	this->int_pend = false;
 
 	switch (comm[0]) {
 	case PCECD_COMM_TESTUNIT:
@@ -727,7 +732,10 @@ void pcecdd_t::CommandExec() {
 			this->state = PCECD_STATE_PLAY;
 		}
 
-		if (this->CDDAMode != PCECD_CDDAMODE_INTERRUPT) {
+		if (this->CDDAMode == PCECD_CDDAMODE_INTERRUPT) {
+			this->int_pend = true;
+		}
+		else {
 			SendStatus(MAKE_STATUS(PCECD_STATUS_GOOD, 0));
 		}
 
