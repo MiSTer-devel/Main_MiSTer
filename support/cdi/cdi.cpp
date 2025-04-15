@@ -4,6 +4,7 @@
 #include <string.h>
 #include <array>
 #include <inttypes.h>
+#include <memory>
 
 #include "../../file_io.h"
 #include "../../user_io.h"
@@ -15,6 +16,14 @@
 #include "../chd/mister_chd.h"
 #include <libchdr/chd.h>
 #include <arpa/inet.h>
+
+static constexpr auto SERVO_AUDIO_CD_OPT = "[12]";
+
+/// It is written, only on CD-i, this data can be found at timecode 00:02:16
+static const uint8_t mode2_bootheader[] = {
+	0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, // Sync words
+	0x00, 0x02, 0x16														// MSF
+};
 
 struct subcode
 {
@@ -42,7 +51,6 @@ struct toc_entry
 	uint8_t f;
 };
 
-static char buf[1024];
 #define CD_SECTOR_LEN 2352
 #define CDIC_BUFFER_SIZE (CD_SECTOR_LEN + sizeof(subcode))
 static std::array<struct toc_entry, 200> toc_buffer;
@@ -285,6 +293,7 @@ static int load_cue(const char *filename, toc_t *table)
 
 static int load_cd_image(const char *filename, toc_t *table)
 {
+	int result = 0;
 
 	const char *ext = strrchr(filename, '.');
 	if (!ext)
@@ -292,14 +301,28 @@ static int load_cd_image(const char *filename, toc_t *table)
 
 	if (!strncasecmp(".chd", ext, 4))
 	{
-		return load_chd(filename, table);
+		result = load_chd(filename, table);
 	}
 	else if (!strncasecmp(".cue", ext, 4))
 	{
-		return load_cue(filename, table);
+		result = load_cue(filename, table);
 	}
 
-	return 0;
+	// On a CDI 210/05 the SERVO has to provide the info
+	// on whether this is an Audio CD to the SLAVE,
+	// which then gives the info to the CDIC driver running on the main CPU.
+	// The real source and how this is calculated is yet unknown
+	// We use sector 00:02:16 as reference as it contains the boot block.
+	// If this is a suitable MODE2 header, we assume it is a CD-i disc
+	auto buffer = std::make_unique<uint8_t[]>(CDIC_BUFFER_SIZE);
+	if (buffer)
+	{
+		cdi_read_cd(buffer.get(), 166, 1);
+		bool is_audio_cd = memcmp(buffer.get(), mode2_bootheader, sizeof(mode2_bootheader));
+		printf("Is audio CD %d\n", is_audio_cd);
+		user_io_status_set(SERVO_AUDIO_CD_OPT, is_audio_cd ? 1 : 0);
+	}
+	return result;
 }
 
 static void prepare_toc_buffer(toc_t *toc)
@@ -356,6 +379,7 @@ static void cdi_mount_save(const char *filename)
 	user_io_set_index(1);
 	if (strlen(filename))
 	{
+		char buf[1000];
 		FileGenerateSavePath(filename, buf, 0);
 		user_io_file_mount(buf, 1, 1, TIMEKEEPER_SIZE);
 		StoreIdx_S(1, buf);
@@ -804,7 +828,7 @@ static void mount_cd(int size, int index)
 	spi32_w(0);
 	DisableIO();
 	spi_uio_cmd8(UIO_SET_SDSTAT, (1 << index) | 0x80);
-	user_io_bufferinvalidate(1);
+	user_io_bufferinvalidate(0);
 }
 
 void cdi_mount_cd(int s_index, const char *filename)
@@ -834,5 +858,4 @@ void cdi_mount_cd(int s_index, const char *filename)
 
 void cdi_poll()
 {
-	spi_uio_cmd(UIO_CD_GET);
 }
