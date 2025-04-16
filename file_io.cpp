@@ -904,9 +904,11 @@ void FileGenerateSavePath(const char *name, char* out_name, int ext_replace)
 
 void FileGenerateSavestatePath(const char *name, char* out_name, int sufx)
 {
-	create_path(SAVESTATE_DIR, CoreName2);
+	const char *subdir = is_arcade() ? "Arcade" : CoreName2;
 
-	sprintf(out_name, "%s/%s/", SAVESTATE_DIR, CoreName2);
+	create_path(SAVESTATE_DIR, subdir);
+
+	sprintf(out_name, "%s/%s/", SAVESTATE_DIR, subdir);
 	char *fname = out_name + strlen(out_name);
 
 	const char *p = strrchr(name, '/');

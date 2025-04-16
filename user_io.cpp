@@ -1478,6 +1478,7 @@ void user_io_init(const char *path, const char *xml)
 				if (xml && isXmlName(xml) == 1)
 				{
 					arcade_send_rom(xml);
+					if (ss_base) process_ss(xml);
 				}
 				else if (is_minimig())
 				{
