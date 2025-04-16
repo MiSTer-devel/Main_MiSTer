@@ -1,0 +1,59 @@
+---
+name: ci
+on:
+  merge_group:
+  push:
+    branches:
+    - master
+    paths-ignore:
+    - 'releases/*'
+  pull_request:
+    branches:
+    - "**"
+    paths-ignore:
+    - 'releases/*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: docker/setup-buildx-action@v3
+      id: buildx
+    - name: Run docker build for .devcontainer/Dockerfile
+      uses: docker/build-push-action@v6
+      env:
+        DOCKER_BUILD_SUMMARY: false
+      with:
+        builder: ${{ steps.buildx.outputs.name }}
+        file: .devcontainer/Dockerfile
+        tags: mister-devel/build:stable
+        load: true
+        cache-from: type=gha,scope=${{ github.workflow }}
+        cache-to: type=gha,scope=${{ github.workflow }},mode=max
+    - name: Run make MiSTer using devcontainer
+      run: |
+       docker run --name=build \
+          -v $PWD:/usr/src \
+          -w /usr/src \
+          mister-devel/build:stable \
+          make
+       FILENAME="MiSTer_$(date +'%Y%m%d')"
+       mv -vi MiSTer "releases/${FILENAME}"
+       echo "filename=$FILENAME" >>"$GITHUB_OUTPUT"
+      id: build
+    - name: "Upload ${{ steps.build.outputs.filename }} Artifact"
+      uses: actions/upload-artifact@v4
+      with:
+        name: "${{ steps.build.outputs.filename }}"
+        path: "releases/${{ steps.build.outputs.filename }}"
+        if-no-files-found: error
+        retention-days: 7
