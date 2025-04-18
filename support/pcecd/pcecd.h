@@ -98,7 +98,8 @@ private:
 	int CDDAStart;
 	int CDDAEnd;
 	int CDDAFirst;
-	int int_pend;
+	bool subq_pend;
+	bool int_pend;
 	uint8_t CDDAMode;
 	sense_t sense;
 	uint8_t region;

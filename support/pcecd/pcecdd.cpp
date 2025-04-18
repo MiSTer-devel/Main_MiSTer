@@ -11,6 +11,7 @@
 #include "pcecd.h"
 
 #define PCECD_DATA_IO_INDEX 2
+#define PCECD_CDDA_IO_INDEX 3
 
 float get_cd_seek_ms(int start_sector, int target_sector);
 
@@ -331,12 +332,34 @@ void pcecdd_t::Reset() {
 	CDDAEnd = 0;
 	CDDAMode = PCECD_CDDAMODE_SILENT;
 	int_pend = false;
+	subq_pend = false;
 
 	stat = 0x0000;
-
 }
 
 void pcecdd_t::Update() {
+	msf_t msf;
+	uint8_t buf[12];
+	buf[0] = 0x0A;
+	buf[1] = 0 | 0x80;
+	buf[2] = this->state == PCECD_STATE_PAUSE ? 2 : (this->state == PCECD_STATE_PLAY ? 0 : 3);
+	buf[3] = 0;
+	buf[4] = BCD(this->index + 1);
+	buf[5] = BCD(this->index);
+
+	int lba_rel = this->lba - this->toc.tracks[this->index].start;
+	LBAToMSF(lba_rel, &msf);
+	buf[6] = BCD(msf.m);
+	buf[7] = BCD(msf.s);
+	buf[8] = BCD(msf.f);
+
+	LBAToMSF(this->lba + 150, &msf);
+	buf[9] = BCD(msf.m);
+	buf[10] = BCD(msf.s);
+	buf[11] = BCD(msf.f);
+
+	bool subq_send = false;
+
 	if (this->state == PCECD_STATE_READ)
 	{
 		if (this->latency > 0)
@@ -408,13 +431,13 @@ void pcecdd_t::Update() {
 		if (this->latency > 0)
 		{
 			this->latency--;
-			return;
+			goto skip;
 		}
 
 		if (this->audiodelay > 0)
 		{
 			this->audiodelay--;
-			return;
+			goto skip;
 		}
 
 		this->index = GetTrackByLBA(this->lba, &this->toc);
@@ -434,7 +457,7 @@ void pcecdd_t::Update() {
 				ReadCDDA(sec_buf + 2);
 
 				if (SendData)
-					SendData(sec_buf, 2352 + 2, PCECD_DATA_IO_INDEX);
+					SendData(sec_buf, 2352 + 2, PCECD_CDDA_IO_INDEX);
 
 				//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
 			}
@@ -460,14 +483,36 @@ void pcecdd_t::Update() {
 
 			this->int_pend = false;
 		}
+
+	skip:
+		if (this->subq_pend) {
+			this->subq_pend = false;
+			subq_send = true;
+		}
 	}
 	else if (this->state == PCECD_STATE_PAUSE)
 	{
+		subq_send = this->subq_pend;
+		this->subq_pend = false;
+
 		if (this->latency > 0)
 		{
 			this->latency--;
-			return;
 		}
+	}
+	else 
+	{
+		subq_send = this->subq_pend;
+		this->subq_pend = false;
+	}
+
+	if (subq_send) {
+		subq_send = false;
+
+		if (SendData)
+			SendData(buf, 10 + 2, PCECD_DATA_IO_INDEX);
+
+		SendStatus(MAKE_STATUS(PCECD_STATUS_GOOD, 0));
 	}
 }
 
@@ -752,31 +797,9 @@ void pcecdd_t::CommandExec() {
 		break;
 
 	case PCECD_COMM_READSUBQ: {
-		int lba_rel = this->lba - this->toc.tracks[this->index].start;
+		this->subq_pend = true;
 
-		buf[0] = 0x0A;
-		buf[1] = 0 | 0x80;
-		buf[2] = this->state == PCECD_STATE_PAUSE ? 2 : (this->state == PCECD_STATE_PLAY ? 0 : 3);
-		buf[3] = 0;
-		buf[4] = BCD(this->index + 1);
-		buf[5] = BCD(this->index);
-
-		LBAToMSF(lba_rel, &msf);
-		buf[6] = BCD(msf.m);
-		buf[7] = BCD(msf.s);
-		buf[8] = BCD(msf.f);
-
-		LBAToMSF(this->lba+150, &msf);
-		buf[9] = BCD(msf.m);
-		buf[10] = BCD(msf.s);
-		buf[11] = BCD(msf.f);
-
-		if (SendData)
-			SendData(buf, 10 + 2, PCECD_DATA_IO_INDEX);
-
-		//printf("\x1b[32mPCECD: Command READSUBQ, [1] = %02X, track = %i, index = %i, lba_rel = %i, lba_abs = %i\n\x1b[0m", comm[1], this->index + 1, this->index, lba_rel, this->lba);
-
-		SendStatus(MAKE_STATUS(PCECD_STATUS_GOOD, 0));
+		printf("\x1b[32mPCECD: Command READSUBQ, [1] = %02X, track = %i, index = %i, lba_abs = %i\n\x1b[0m", comm[1], this->index + 1, this->index, this->lba);
 	}
 		break;
 
