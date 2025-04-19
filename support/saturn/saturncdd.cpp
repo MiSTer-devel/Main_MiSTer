@@ -249,7 +249,7 @@ int satcdd_t::LoadCUE(const char* filename) {
 				}
 			}
 			else if (idx == 1) {
-				this->toc.tracks[this->toc.last].offset += pregap * 2352;
+				this->toc.tracks[this->toc.last].offset += pregap * this->sectorSize;
 
 				if (!new_file)
 				{
@@ -265,7 +265,7 @@ int satcdd_t::LoadCUE(const char* filename) {
 				else
 				{
 					this->toc.tracks[this->toc.last].start = this->toc.end + pregap;
-					this->toc.tracks[this->toc.last].offset += this->toc.end * 2352;
+					this->toc.tracks[this->toc.last].offset += this->toc.end * this->sectorSize;
 
 					int sectorSize = 2352;
 					if (this->toc.tracks[this->toc.last].type) sectorSize = this->sectorSize;
