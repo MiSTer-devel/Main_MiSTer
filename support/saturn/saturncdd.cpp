@@ -620,7 +620,7 @@ void satcdd_t::CommandExec() {
 		this->index = this->toc.GetIndexByLBA(this->track, this->seek_lba);
 
 		this->seek_pend = true;
-		this->seek_delay = 5;
+		this->seek_delay = 7;
 		this->final_read = this->read_pend;
 		this->read_pend = false;
 		this->pause_pend = false;
