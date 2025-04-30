@@ -59,6 +59,8 @@ public:
 	int SetCommand(uint8_t* data);
 	int GetBootHeader(uint8_t *buf);
 
+	bool wwf_hack;
+
 private:
 	toc_t toc;
 	int lba;
@@ -90,6 +92,7 @@ private:
 
 	int LoadCUE(const char* filename);
 	void LBAToMSF(int lba, msf_t* msf);
+	int CalcSeekDelay(int lba_old, int lba_new);
 	int GetFAD(uint8_t* cmd);
 	int GetSectorOffsetByIndex(int tno, int idx);
 	void SetChecksum(uint8_t* stat);
