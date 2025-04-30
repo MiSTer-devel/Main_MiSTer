@@ -312,21 +312,12 @@ int satcdd_t::LoadCUE(const char* filename) {
 	return 0;
 }
 
-static bool wwf_hack = false;
 int satcdd_t::Load(const char *filename)
 {
 	//static char header[32];
 	//fileTYPE *fd_img;
 
 	Unload();
-
-	wwf_hack = false;
-	if (strcasestr(filename, "wwf wrestlemania") || strcasestr(filename, "wwf in your house")) wwf_hack = true;
-	if (wwf_hack) {
-#ifdef SATURN_DEBUG
-		printf("\x1b[32mSaturn: WWF games hack!!!\n\x1b[0m");
-#endif // SATURN_DEBUG
-	}
 
 	const char *ext = filename + strlen(filename) - 4;
 	if (!strncasecmp(".cue", ext, 4))
@@ -502,6 +493,12 @@ void satcdd_t::Reset() {
 #endif // SATURN_DEBUG
 }
 
+int satcdd_t::CalcSeekDelay(int lba_old, int lba_new)
+{
+	int diff = abs(lba_new - lba_old);
+	return diff / 2000;
+}
+
 int satcdd_t::GetSectorOffsetByIndex(int tno, int idx) {
 	int track = tno - 1;
 	if (track < 0) track = 0;
@@ -574,7 +571,9 @@ void satcdd_t::CommandExec() {
 #endif // SATURN_DEBUG
 		break;
 
-	case SATURN_COMM_READ: 
+	case SATURN_COMM_READ: {
+		int lba_old = this->lba;
+
 		this->seek_lba = fad - 150 - 4;
 		this->lba = fad - 150 - 4;
 		this->chd_audio_read_lba = this->lba;
@@ -583,12 +582,13 @@ void satcdd_t::CommandExec() {
 		this->index = this->toc.GetIndexByLBA(this->track, this->seek_lba);
 
 		this->read_pend = true;
-		//this->seek_pend = true;
-		this->seek_delay = 0;
+		this->seek_pend = !this->toc.tracks[this->track].type;
+		this->seek_delay = CalcSeekDelay(lba_old, this->lba);
 		this->pause_pend = false;
 		this->speed = comm[10] == 1 ? 1 : 2;
 
 		this->audioFirst = 1;
+	}
 
 #ifdef SATURN_DEBUG
 		//printf("\x1b[32mSaturn: ");
@@ -850,13 +850,13 @@ void satcdd_t::Process(uint8_t* time_mode) {
 
 		LBAToMSF(this->lba + 150, &amsf);
 		if (this->lba < 0)
-			LBAToMSF(-this->lba + 150, &msf);
+			LBAToMSF(-this->lba, &msf);
 		else
-			LBAToMSF(this->lba - this->toc.tracks[this->track].start + 150, &msf);
+			LBAToMSF(this->lba - this->toc.tracks[this->track].start, &msf);
 
 		stat[0] = SATURN_STAT_DATA;
 		stat[1] = q | 0x01;
-		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
+		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : BCD(this->toc.last);
 		stat[3] = this->lba < 0 ? 0x00 : BCD(this->index);
 		stat[4] = BCD(msf.m);
 		stat[5] = BCD(msf.s);

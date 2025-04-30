@@ -183,6 +183,7 @@ void saturn_set_image(int num, const char *filename)
 		}
 	}
 
+	satcdd.wwf_hack = false;
 	if (strlen(filename))
 	{
 		if (satcdd.Load(filename) > 0)
@@ -199,6 +200,18 @@ void saturn_set_image(int num, const char *filename)
 			if (satcdd.GetBootHeader((uint8_t*)buf) > 0)
 			{
 				saturn_send_data((uint8_t*)buf, 256, BOOT_IO_INDEX);
+
+				char *id = buf + 0x20;
+				if (!strncmp(id,"T-8126H",7) ||
+					!strncmp(id, "T-8120G", 7) ||
+					!strncmp(id, "T-8112H", 7) ||
+					!strncmp(id, "T-99901G", 8) ||
+					!strncmp(id, "T-8112G", 7)) satcdd.wwf_hack = true;
+				if (satcdd.wwf_hack) {
+#ifdef SATURN_DEBUG
+					printf("\x1b[32mSaturn: WWF games hack!!!\n\x1b[0m");
+#endif // SATURN_DEBUG
+				}
 			}
 		}
 	}
