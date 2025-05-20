@@ -1570,6 +1570,8 @@ static void spd_config(uint8_t *data)
 static void spd_config_dv()
 {
 	VideoInfo *vi = &current_video_info;
+	if (!vi->width)
+		return;
 
 	uint8_t data[32] = {
 		0x83, 0x01, 25, 0,
