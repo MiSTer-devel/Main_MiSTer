@@ -23,7 +23,7 @@ open $HOST
 user root 1
 passive
 binary
-put $(BUILDDIR)/MiSTer /media/fat/MiSTer
+put $BUILDDIR/MiSTer /media/fat/MiSTer
 EOF
 
 plink root@$HOST -pw 1 -batch 'sync;PATH=/media/fat:$PATH;MiSTer >/dev/ttyS0 2>/dev/ttyS0 </dev/null &'
