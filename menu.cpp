@@ -2578,11 +2578,6 @@ void HandleUI(void)
 					MenuWrite(n++, s, menusub == 10, !audio_filter_en() || !S_ISDIR(getFileType(AFILTER_DIR)));
 				}
 
-				// Adiciona opção de detecção de CD-ROM
-				MenuWrite(n++);
-				menumask |= 0x800;
-				MenuWrite(n++, " Detectar CD-ROM USB", menusub == 11);
-
 				if (!is_minimig() && !is_st())
 				{
 					menumask |= 0x6000;
@@ -2708,12 +2703,6 @@ void HandleUI(void)
 					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), AFILTER_DIR);
 					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_AFILTER_FILE_SELECTED, MENU_COMMON1);
 				}
-				break;
-
-			case 11:
-				// Chama a função de detecção de CD-ROM
-				isCDROMPresent();
-				menustate = MENU_COMMON1;
 				break;
 
 			case 13:
