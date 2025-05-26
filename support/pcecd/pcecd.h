@@ -73,6 +73,7 @@ public:
 	int has_status;
 	bool data_req;
 	bool can_read_next;
+	FILE * subcode_file;
 
 	pcecdd_t();
 	int Load(const char *filename);
@@ -110,12 +111,13 @@ private:
 	uint8_t comm[14];
 
 	uint8_t sec_buf[2352 + 2];
+	uint8_t subcd_buf[98 + 2];
 
 	int LoadCUE(const char* filename);
 	int SectorSend(uint8_t* header);
 	void ReadData(uint8_t *buf);
 	int ReadCDDA(uint8_t *buf);
-	void ReadSubcode(uint16_t* buf);
+	void ReadSubcode(int lba, uint8_t* buf);
 	void LBAToMSF(int lba, msf_t* msf);
 	void MSFToLBA(int* lba, msf_t* msf);
 	void MSFToLBA(int* lba, uint8_t m, uint8_t s, uint8_t f);
