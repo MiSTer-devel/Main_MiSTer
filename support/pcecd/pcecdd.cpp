@@ -12,6 +12,7 @@
 
 #define PCECD_DATA_IO_INDEX 2
 #define PCECD_CDDA_IO_INDEX 3
+#define PCECD_SUBCODE_IO_INDEX 4
 
 float get_cd_seek_ms(int start_sector, int target_sector);
 
@@ -36,6 +37,7 @@ pcecdd_t::pcecdd_t() {
 	CDDAEnd = 0;
 	CDDAMode = PCECD_CDDAMODE_SILENT;
 	region = 0;
+	subcode_file = NULL;
 
 	stat = 0x0000;
 
@@ -251,6 +253,8 @@ int pcecdd_t::LoadCUE(const char* filename) {
 
 int pcecdd_t::Load(const char *filename)
 {
+	char subcode_name[256];
+
 	Unload();
 
 	const char *ext = filename+strlen(filename)-4;
@@ -276,10 +280,19 @@ int pcecdd_t::Load(const char *filename)
 		this->toc.tracks[this->toc.last].start = this->toc.end;
 		this->loaded = 1;
 
-		//memcpy(&fname[strlen(fname) - 4], ".sub", 4);
-		//this->toc.sub = fopen(getFullPath(fname), "r");
+		memcpy(subcode_name, filename, strlen(filename));
+		subcode_name[strlen(filename)] = 0x00;
+		memcpy(&subcode_name[strlen(subcode_name) - 4], ".sub", 4);
+
+		this->subcode_file = fopen(getFullPath(subcode_name), "r");
 
 		printf("\x1b[32mPCECD: CD mounted , last track = %u\n\x1b[0m", this->toc.last);
+
+		if (this->subcode_file != NULL) {
+			printf("\x1b[32mPCECD: SUBCODE FILE located = %s\n\x1b[0m", subcode_name);
+		} else {
+			printf("\x1b[32mPCECD: No SUBCODE file located.  Searched for '%s'.\n\x1b[0m", subcode_name);
+		}
 		return 1;
 	}
 
@@ -307,7 +320,10 @@ void pcecdd_t::Unload()
 			}
 		}
 
-		//if (this->toc.sub) fclose(this->toc.sub);
+		if (this->subcode_file) {
+			fclose(this->subcode_file);
+			this->subcode_file = NULL;
+		}
 
 		this->loaded = 0;
 	}
@@ -460,6 +476,17 @@ void pcecdd_t::Update() {
 					SendData(sec_buf, 2352 + 2, PCECD_CDDA_IO_INDEX);
 
 				//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
+
+				if (this->subcode_file)
+				{
+					// fseek(this->subcode_file, (this->lba * 96), SEEK_SET);
+					sec_buf[0] = 0x62;
+					sec_buf[1] = 0x00;
+					ReadSubcode(this->lba, sec_buf + 2);
+					if (SendData)
+						SendData(sec_buf, 98 + 2, PCECD_SUBCODE_IO_INDEX);
+					// printf("\x1b[32mPCECD: Subcode sector send lba = %i\n\x1b[0m", this->lba);
+				}
 			}
 			this->lba++;
 		}
@@ -920,28 +947,29 @@ int pcecdd_t::ReadCDDA(uint8_t *buf)
 	return this->audioLength;
 }
 
-void pcecdd_t::ReadSubcode(uint16_t* buf)
+void pcecdd_t::ReadSubcode(int lba, uint8_t* buf)
 {
-	(void)buf;
-	/*
 	uint8_t subc[96];
-	int i, j, n;
+	int i, j;
 
-	fread(subc, 96, 1, this->toc.sub);
+	buf[0] = 0x00;	// synchronization word while playing
+	buf[1] = 0x80;
 
-	for (i = 0, n = 0; i < 96; i += 2, n++)
-	{
-		int code = 0;
-		for (j = 0; j < 8; j++)
+	if (this->subcode_file) {
+		fseek(this->subcode_file, (lba * 96), SEEK_SET);
+		fread(subc, 96, 1, this->subcode_file);
+
+		for (i = 0; i < 96; i++)
 		{
-			int bits = (subc[(j * 12) + (i / 8)] >> (6 - (i & 6))) & 3;
-			code |= ((bits & 1) << (7 - j));
-			code |= ((bits >> 1) << (15 - j));
+			int code = 0;
+			for (j = 0; j < 8; j++)	// subcode P = 0; subcode Q = 1, etc.
+			{
+				uint8_t bits = subc[(j * 12) + (i >> 3)] >> (7 - (i & 7));
+				code |= ((bits & 1) << (7 - j));
+			}
+			buf[i+2] = code;
 		}
-
-		buf[n] = code;
 	}
-	*/
 }
 
 int pcecdd_t::SectorSend(uint8_t* header)
