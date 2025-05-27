@@ -1124,37 +1124,6 @@ int isUSBMounted()
 	return 0;
 }
 
-// Verifica se existe um dispositivo CD-ROM USB conectado
-int isCDROMPresent()
-{
-    // Verifica dispositivos SCSI CD-ROM (sr0, sr1, etc)
-    for (int i = 0; i < 4; i++)
-    {
-        char path[32];
-        sprintf(path, "/dev/sr%d", i);
-        
-        struct stat st;
-        if (stat(path, &st) == 0)
-        {
-            // Verifica se é um dispositivo de bloco
-            if (S_ISBLK(st.st_mode))
-            {
-                char msg[64];
-                sprintf(msg, "CD-ROM detectado em %s", path);
-                OsdWrite(16, "", 1);
-                OsdWrite(17, msg, 1);
-                OsdWrite(18, "", 1);
-                return 1;
-            }
-        }
-    }
-    
-    OsdWrite(16, "", 1);
-    OsdWrite(17, "Nenhum CD-ROM detectado", 1);
-    OsdWrite(18, "", 1);
-    return 0;
-}
-
 void FindStorage(void)
 {
 	char str[128];
