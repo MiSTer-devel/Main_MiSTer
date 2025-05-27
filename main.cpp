@@ -33,6 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "scheduler.h"
 #include "osd.h"
 #include "offload.h"
+#include "cdrom_io.h"
 
 const char *version = "$VER:" VDATE;
 
@@ -69,6 +70,16 @@ int main(int argc, char *argv[])
 	}
 
 	FindStorage();
+	
+	// Iniciar monitoramento de CD-ROM
+	startCDROMMonitoring([](int index, bool present) {
+		char msg[64];
+		sprintf(msg, "CD-ROM %d %s", index, present ? "conectado" : "desconectado");
+		OsdWrite(16, "", 1);
+		OsdWrite(17, msg, 1);
+		OsdWrite(18, "", 1);
+	});
+
 	user_io_init((argc > 1) ? argv[1] : "",(argc > 2) ? argv[2] : NULL);
 
 #ifdef USE_SCHEDULER
@@ -88,5 +99,8 @@ int main(int argc, char *argv[])
 		OsdUpdate();
 	}
 #endif
+
+	// Parar monitoramento de CD-ROM antes de sair
+	stopCDROMMonitoring();
 	return 0;
 }
