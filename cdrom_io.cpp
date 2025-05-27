@@ -1,6 +1,7 @@
 #include "cdrom_io.h"
 #include "osd.h"
 #include <pthread.h>
+#include <unistd.h>
 
 // Variáveis globais
 static CDROMState cdrom_states[4] = {0};
