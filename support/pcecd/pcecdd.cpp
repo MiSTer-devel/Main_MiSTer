@@ -360,8 +360,8 @@ void pcecdd_t::Update() {
 	buf[1] = 0 | 0x80;
 	buf[2] = this->state == PCECD_STATE_PAUSE ? 2 : (this->state == PCECD_STATE_PLAY ? 0 : 3);
 	buf[3] = 0;
-	buf[4] = BCD(this->index + 1);
-	buf[5] = BCD(this->index);
+	buf[4] = BCD(this->index + 1);	// Track
+	buf[5] = 1;	// Pregap = index 0, TOC points to index 1; very few audio discs have more indexes
 
 	int lba_rel = this->lba - this->toc.tracks[this->index].start;
 	LBAToMSF(lba_rel, &msf);
@@ -477,16 +477,13 @@ void pcecdd_t::Update() {
 
 				//printf("\x1b[32mPCECD: Audio sector send = %i, track = %i, offset = %i\n\x1b[0m", this->lba, this->index, (this->lba * 2352) - this->toc.tracks[index].offset);
 
-				if (this->subcode_file)
-				{
-					// fseek(this->subcode_file, (this->lba * 96), SEEK_SET);
-					sec_buf[0] = 0x62;
-					sec_buf[1] = 0x00;
-					ReadSubcode(this->lba, sec_buf + 2);
-					if (SendData)
-						SendData(sec_buf, 98 + 2, PCECD_SUBCODE_IO_INDEX);
-					// printf("\x1b[32mPCECD: Subcode sector send lba = %i\n\x1b[0m", this->lba);
-				}
+				sec_buf[0] = 0x62;
+				sec_buf[1] = 0x00;
+				ReadSubcode(this->lba, sec_buf + 2);
+				if (SendData)
+					SendData(sec_buf, 98 + 2, PCECD_SUBCODE_IO_INDEX);
+
+				// printf("\x1b[32mPCECD: Subcode sector send lba = %i\n\x1b[0m", this->lba);
 			}
 			this->lba++;
 		}
@@ -521,6 +518,14 @@ void pcecdd_t::Update() {
 	{
 		subq_send = this->subq_pend;
 		this->subq_pend = false;
+
+		sec_buf[0] = 0x62;
+		sec_buf[1] = 0x00;
+		ReadSubcode(this->lba, sec_buf + 2);
+		if (SendData)
+			SendData(sec_buf, 98 + 2, PCECD_SUBCODE_IO_INDEX);
+
+		//printf("\x1b[32mPCECD: PAUSE - Subcode sector send lba = %i\n\x1b[0m", this->lba);
 
 		if (this->latency > 0)
 		{
@@ -826,7 +831,7 @@ void pcecdd_t::CommandExec() {
 	case PCECD_COMM_READSUBQ: {
 		this->subq_pend = true;
 
-		printf("\x1b[32mPCECD: Command READSUBQ, [1] = %02X, track = %i, index = %i, lba_abs = %i\n\x1b[0m", comm[1], this->index + 1, this->index, this->lba);
+		printf("\x1b[32mPCECD: Command READSUBQ, [1] = %02X, track = %i, index = %i, lba_abs = %i\n\x1b[0m", comm[1], this->index + 1, 1, this->lba);
 	}
 		break;
 
@@ -949,26 +954,63 @@ int pcecdd_t::ReadCDDA(uint8_t *buf)
 
 void pcecdd_t::ReadSubcode(int lba, uint8_t* buf)
 {
-	uint8_t subc[96];
+	static uint8_t subc[96];
+	static int last_lba = -1;
+	msf_t msf;
 	int i, j;
+	uint8_t msb, lsb, x;
 
 	buf[0] = 0x00;	// synchronization word while playing
 	buf[1] = 0x80;
 
-	if (this->subcode_file) {
-		fseek(this->subcode_file, (lba * 96), SEEK_SET);
-		fread(subc, 96, 1, this->subcode_file);
-
-		for (i = 0; i < 96; i++)
-		{
-			int code = 0;
-			for (j = 0; j < 8; j++)	// subcode P = 0; subcode Q = 1, etc.
-			{
-				uint8_t bits = subc[(j * 12) + (i >> 3)] >> (7 - (i & 7));
-				code |= ((bits & 1) << (7 - j));
-			}
-			buf[i+2] = code;
+	if (lba != last_lba) {
+		if (this->subcode_file) {			// read subcode data from file if it exists
+			fseek(this->subcode_file, (lba * 96), SEEK_SET);
+			fread(subc, 96, 1, this->subcode_file);
 		}
+		else						// else synthesize subcode Q data
+		{
+			memset((void*)subc, 0x00, 96);
+			subc[12] = 1;				// Timing Data
+			subc[13] = BCD(this->index + 1);	// Track
+			subc[14] = 1;				// Index (Pregap = index 0, Music = index 1; assume 1)
+
+			int lba_rel = this->lba - this->toc.tracks[this->index].start;
+			LBAToMSF(lba_rel, &msf);
+			subc[15] = BCD(msf.m);			// M:S:F offset from start of track
+			subc[16] = BCD(msf.s);
+			subc[17] = BCD(msf.f);
+
+			LBAToMSF(this->lba + 150, &msf);
+			subc[19] = BCD(msf.m);			// M:S:F offset from start of disc session
+			subc[20] = BCD(msf.s);
+			subc[21] = BCD(msf.f);
+
+			msb = 0;				// Calculate subcode-Q checksum data
+			lsb = 0;
+			for (i = 12; i < 22; i++) {
+				x = subc[i] ^ msb;
+				x = x ^ (x >> 4);
+				msb = lsb ^ (x >> 3) ^ (x << 4);
+				lsb = x ^ (x << 5);
+			}
+			subc[22] = msb ^ 0xff;
+			subc[23] = lsb ^ 0xff;
+
+			printf("\x1b[32mPCECD: SYNTH - Subcode sector lba = %i\n\x1b[0m", lba);
+		}
+	}
+	last_lba = lba;
+
+	for (i = 0; i < 96; i++)
+	{
+		int code = 0;
+		for (j = 0; j < 8; j++)	// subcode P = 0; subcode Q = 1, etc.
+		{
+			uint8_t bits = subc[(j * 12) + (i >> 3)] >> (7 - (i & 7));
+			code |= ((bits & 1) << (7 - j));
+		}
+		buf[i+2] = code;
 	}
 }
 
