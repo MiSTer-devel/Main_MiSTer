@@ -997,7 +997,7 @@ void pcecdd_t::ReadSubcode(int lba, uint8_t* buf)
 			subc[22] = msb ^ 0xff;
 			subc[23] = lsb ^ 0xff;
 
-			printf("\x1b[32mPCECD: SYNTH - Subcode sector lba = %i\n\x1b[0m", lba);
+			// printf("\x1b[32mPCECD: SYNTH - Subcode sector lba = %i\n\x1b[0m", lba);
 		}
 	}
 	last_lba = lba;
