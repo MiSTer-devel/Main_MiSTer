@@ -963,7 +963,7 @@ void pcecdd_t::ReadSubcode(int lba, uint8_t* buf)
 	buf[0] = 0x00;	// synchronization word while playing
 	buf[1] = 0x80;
 
-	if (lba != last_lba) {
+	if ((lba != last_lba) && (this->latency == 0)) {	// continue sending old subcode data until head arrives at new location
 		if (this->subcode_file) {			// read subcode data from file if it exists
 			fseek(this->subcode_file, (lba * 96), SEEK_SET);
 			fread(subc, 96, 1, this->subcode_file);
@@ -999,8 +999,11 @@ void pcecdd_t::ReadSubcode(int lba, uint8_t* buf)
 
 			// printf("\x1b[32mPCECD: SYNTH - Subcode sector lba = %i\n\x1b[0m", lba);
 		}
+
+		last_lba = lba;
 	}
-	last_lba = lba;
+
+	// printf("\x1b[32mPCECD: Subcode sector latency = %d, lba = %i, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n\x1b[0m", this->latency, lba, subc[12], subc[13], subc[14], subc[15], subc[16], subc[17], subc[18], subc[19], subc[20], subc[21], subc[22], subc[23]);
 
 	for (i = 0; i < 96; i++)
 	{
