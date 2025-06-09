@@ -119,7 +119,6 @@ char* loadLastcore()
 
 char *findCore(const char *name, char *coreName, int indent)
 {
-	char *spl;
 	DIR *dir;
 	struct dirent *entry;
 
@@ -144,16 +143,11 @@ char *findCore(const char *name, char *coreName, int indent)
 				return indir;
 			}
 		}
-		else {
+		else if (!strcmp(entry->d_name, coreName))
+		{
 			snprintf(path, 256, "%s/%s", name, entry->d_name);
-			if (strstr(path, coreName) != NULL) {
-				spl = strrchr(path, '.');
-				if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra") || !strcmp(spl, ".mgl")))
-				{
-					closedir(dir);
-					return path;
-				}
-			}
+			closedir(dir);
+			return path;
 		}
 	}
 	closedir(dir);
