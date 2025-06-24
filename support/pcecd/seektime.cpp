@@ -65,56 +65,64 @@ float get_cd_seek_ms(int start_sector, int target_sector)
 	float track_difference;
 	float milliseconds = 0;
 
-	// First, we identify which group the start and end are in
-	start_index = find_group(start_sector);
-	target_index = find_group(target_sector);
+	// 360000 = number of sectors in an 80-minute CD (which weren't available)
+	// 
+	if ((start_sector <= 360000) && (start_sector >= 0) && (target_sector <= 360000) && (target_sector >= 0))
+	{
 
-	// Now we find the track difference
-	//
-	// Note: except for the first and last sector groups, all groups are 1606.48 tracks per group.
-	//
-	if (target_index == start_index)
-	{
-		track_difference = (float)(abs(target_sector - start_sector) / sector_list[target_index].sec_per_revolution);
-	}
-	else if (target_index > start_index)
-	{
-		track_difference = (sector_list[start_index].sec_end - start_sector) / sector_list[start_index].sec_per_revolution;
-		track_difference += (target_sector - sector_list[target_index].sec_start) / sector_list[target_index].sec_per_revolution;
-		track_difference += (1606.48 * (target_index - start_index - 1));
-	}
-	else // start_index > target_index
-	{
-		track_difference = (start_sector - sector_list[start_index].sec_start) / sector_list[start_index].sec_per_revolution;
-		track_difference += (sector_list[target_index].sec_end - target_sector) / sector_list[target_index].sec_per_revolution;
-		track_difference += (1606.48 * (start_index - target_index - 1));
-	}
+		// First, we identify which group the start and end are in
+		start_index = find_group(start_sector);
+		target_index = find_group(target_sector);
 
-	// Now, we use the algorithm to determine how long to wait
-	if (abs(target_sector - start_sector) <= 3)
-	{
-		milliseconds = (2 * 1000 / 60);
-	}
-	else if (abs(target_sector - start_sector) < 7)
-	{
-		milliseconds = (9 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.75);
-	}
-	else if (track_difference <= 80)
-	{
-		milliseconds = (17 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.75);
-	}
-	else if (track_difference <= 160)
-	{
-		milliseconds = (22 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.75);
-	}
-	else if (track_difference <= 644)
-	{
-		milliseconds = (22 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.75) + (float)((track_difference - 161) * 16.66 / 80);
+		// Now we find the track difference
+		//
+		// Note: except for the first and last sector groups, all groups are 1606.48 tracks per group.
+		//
+		if (target_index == start_index)
+		{
+			track_difference = (float)(abs(target_sector - start_sector) / sector_list[target_index].sec_per_revolution);
+		}
+		else if (target_index > start_index)
+		{
+			track_difference = (sector_list[start_index].sec_end - start_sector) / sector_list[start_index].sec_per_revolution;
+			track_difference += (target_sector - sector_list[target_index].sec_start) / sector_list[target_index].sec_per_revolution;
+			track_difference += (1606.48 * (target_index - start_index - 1));
+		}
+		else // start_index > target_index
+		{
+			track_difference = (start_sector - sector_list[start_index].sec_start) / sector_list[start_index].sec_per_revolution;
+			track_difference += (sector_list[target_index].sec_end - target_sector) / sector_list[target_index].sec_per_revolution;
+			track_difference += (1606.48 * (start_index - target_index - 1));
+		}
+
+		// Now, we use the algorithm to determine how long to wait
+		if (abs(target_sector - start_sector) <= 3)
+		{
+			milliseconds = (2 * 1000 / 60);
+		}
+		else if (abs(target_sector - start_sector) < 7)
+		{
+			milliseconds = (9 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.75);
+		}
+		else if (track_difference <= 80)
+		{
+			milliseconds = (17 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.75);
+		}
+		else if (track_difference <= 160)
+		{
+			milliseconds = (22 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.75);
+		}
+		else if (track_difference <= 644)
+		{
+			milliseconds = (22 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.75) + (float)((track_difference - 161) * 16.66 / 80);
+		}
+		else
+		{
+			milliseconds = (36 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.5) + (float)((track_difference - 644) * 16.66 / 195);
+		}
 	}
 	else
-	{
-		milliseconds = (36 * 1000 / 60) + (float)(sector_list[target_index].rotation_ms * 0.5) + (float)((track_difference - 644) * 16.66 / 195);
-	}
+		milliseconds = 0;
 
 	printf("From sector %d to sector %d:\n", start_sector, target_sector);
 	printf("Time = %.2f milliseconds\n", milliseconds);
