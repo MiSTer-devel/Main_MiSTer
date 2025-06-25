@@ -682,7 +682,10 @@ void subcode_data(int lba, struct subcode &out)
 
 		int track = toc.GetTrackByLBA(lba + 150);
 
-		int track_lba = lba - toc.tracks[track].start;
+		int track_lba = 0;
+		if (track < (int)ARRAY_LENGTH(toc.tracks))
+			track_lba = lba - toc.tracks[track].start;
+
 		int index = 1;
 
 		if (track_lba < 0)
@@ -699,7 +702,8 @@ void subcode_data(int lba, struct subcode &out)
 		ts = track_lba / 75;
 		tf = track_lba % 75;
 
-		out.control = htons(toc.tracks[track].type ? 0x41 : 0x01);
+		if (track < (int)ARRAY_LENGTH(toc.tracks))
+			out.control = htons(toc.tracks[track].type ? 0x41 : 0x01);
 		out.track = htons(BCD(track + 1));
 		out.index = htons(BCD(index));
 		out.mode1_mins = htons(BCD(tm));
@@ -812,9 +816,7 @@ void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 			}
 		}
 
-		check_scramble(lba, buffer);
 		buffer += CD_SECTOR_LEN;
-		subcode_data(lba, *reinterpret_cast<struct subcode *>(buffer));
 		buffer += sizeof(struct subcode);
 		cnt--;
 		lba++;
