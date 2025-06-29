@@ -495,8 +495,10 @@ void satcdd_t::Reset() {
 
 int satcdd_t::CalcSeekDelay(int lba_old, int lba_new)
 {
-	int diff = abs(lba_new - lba_old);
-	return diff / 2000;
+	int diff = lba_new - lba_old;
+	int n = abs(diff) / 2000;
+	if (diff < 0) n += 2;
+	return n;
 }
 
 int satcdd_t::GetSectorOffsetByIndex(int tno, int idx) {
@@ -582,7 +584,7 @@ void satcdd_t::CommandExec() {
 		this->index = this->toc.GetIndexByLBA(this->track, this->seek_lba);
 
 		this->read_pend = true;
-		this->seek_pend = !this->toc.tracks[this->track].type;
+		this->seek_pend = true;
 		this->seek_delay = CalcSeekDelay(lba_old, this->lba);
 		this->pause_pend = false;
 		this->speed = comm[10] == 1 ? 1 : 2;
