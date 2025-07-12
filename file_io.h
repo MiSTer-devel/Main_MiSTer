@@ -63,6 +63,8 @@ char* flist_GetPrevNext(const char* base_path, const char* file, const char* ext
 #define SCANF_PREV_PAGE -2 // find previous 16 files in directory
 #define SCANF_SET_ITEM   3 // find exact item
 #define SCANF_END        4 // find last file in directory
+#define SCANF_NEXT_CHAR  5 // find next letter/number
+#define SCANF_PREV_CHAR -5 // find previous letter/number
 
 // options flags
 #define SCANO_DIR        0b000000001 // include subdirectories
