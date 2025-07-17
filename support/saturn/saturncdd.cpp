@@ -496,8 +496,12 @@ void satcdd_t::Reset() {
 int satcdd_t::CalcSeekDelay(int lba_old, int lba_new)
 {
 	int diff = lba_new - lba_old;
-	int n = abs(diff) / 2000;
+	int n = diff / 2000;
+	if (n <= 4) n = 4;
+	else if (n > 13) n = 13;
+
 	if (diff < 0) n += 2;
+
 	return n;
 }
 
