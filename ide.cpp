@@ -483,12 +483,12 @@ void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads, i
 		uint16_t identify[256] =
 		{
 			0x0040, 											//word 0
-			drive->cylinders,									//word 1
+			drive->cylinders,									//word 1 cylinders         (used by e.g. ao486)
 			0x0000,												//word 2 reserved
-			drive->heads,										//word 3
-			0x0000,												//word 4 obsolete
-			0x0000,												//word 5 obsolete
-			drive->spt,											//word 6
+			drive->heads,										//word 3 heads             (used by e.g. ao486)
+			(uint16_t)(512 * drive->spt),						//word 4 bytes per track
+			512,												//word 5 bytes per sector  (used by e.g. ao486)
+			drive->spt,											//word 6 sectors per track (used by e.g. ao486)
 			0x0000,												//word 7 vendor specific
 			0x0000,												//word 8 vendor specific
 			0x0000,												//word 9 vendor specific
