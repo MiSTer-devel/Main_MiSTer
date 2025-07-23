@@ -514,7 +514,7 @@ static uint32_t menu_key_get(void)
 		else if (CheckTimer(repeat))
 		{
 			repeat = GetTimer(REPEATRATE);
-			if (GetASCIIKey(c1) || ((menustate == MENU_COMMON2) && (menusub == 17)) || ((menustate == MENU_SYSTEM2) && (menusub == 5)))
+			if (GetASCIIKey(c1) || menustate == MENU_FILE_SELECT2 || ((menustate == MENU_COMMON2) && (menusub == 17)) || ((menustate == MENU_SYSTEM2) && (menusub == 5)))
 			{
 				c = c1;
 				hold_cnt++;
@@ -1240,7 +1240,7 @@ void HandleUI(void)
 		}
 	}
 
-	if (menu || select || up || down || left || right || (helptext_idx_old != helptext_idx))
+	if (menu || select || up || down || left || right || plus || minus || (helptext_idx_old != helptext_idx))
 	{
 		helptext_idx_old = helptext_idx;
 		if (helpstate) OsdWrite(OsdGetSize()-1, STD_EXIT, (menumask - ((1 << (menusub + 1)) - 1)) <= 0, 0); // Redraw the Exit line...
@@ -5087,6 +5087,12 @@ void HandleUI(void)
 			{
 				filter_typing_timer = 0;
 				ScanDirectory(selPath, SCANF_PREV, fs_pFileExt, fs_Options);
+				menustate = MENU_FILE_SELECT1;
+			}
+
+			if (plus || minus) 
+			{
+				ScanDirectory(selPath, plus ? SCANF_NEXT_CHAR : SCANF_PREV_CHAR, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
 			}
 
