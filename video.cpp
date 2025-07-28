@@ -1378,6 +1378,7 @@ static void hdmi_config_set_csc()
 static void hdmi_config_init()
 {
 	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
+	printf("HDMI config: ypbpr=%d (vga_mode_int=%d, direct_video=%d)\n", ypbpr, cfg.vga_mode_int, cfg.direct_video);
 
 	// address, value
 	uint8_t init_data[] = {
@@ -1847,6 +1848,159 @@ static int is_edid_valid()
 	return !memcmp(edid, magic, sizeof(magic));
 }
 
+// Decode 3-letter manufacturer ID from EDID bytes 8-9
+static void get_edid_manufacturer(char *mfg_id)
+{
+	uint16_t vendor = (edid[8] << 8) | edid[9];
+	mfg_id[0] = ((vendor >> 10) & 0x1F) + 'A' - 1;
+	mfg_id[1] = ((vendor >> 5) & 0x1F) + 'A' - 1;
+	mfg_id[2] = (vendor & 0x1F) + 'A' - 1;
+	mfg_id[3] = '\0';
+}
+
+// Get product code from EDID bytes 10-11
+static uint16_t get_edid_product_code()
+{
+	return edid[10] | (edid[11] << 8);
+}
+
+// Extract display name from EDID descriptors
+static bool get_edid_display_name(char *name, size_t max_len)
+{
+	// Check all 4 descriptor blocks (bytes 54-125)
+	for (int i = 54; i <= 108; i += 18) {
+		// Bounds check: ensure we don't read beyond EDID buffer
+		if (i + 17 >= (int)sizeof(edid)) break;
+		
+		if (edid[i] == 0x00 && edid[i+1] == 0x00 && 
+		    edid[i+2] == 0x00 && edid[i+3] == 0xFC) {
+			// Found display name descriptor
+			size_t len = 0;
+			for (int j = 5; j < 18 && len < max_len-1; j++) {
+				if (edid[i+j] == 0x0A || edid[i+j] == 0x00) break;
+				name[len++] = edid[i+j];
+			}
+			name[len] = '\0';
+			// Trim trailing spaces
+			while (len > 0 && name[len-1] == ' ') {
+				name[--len] = '\0';
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+// Known devices that work well with direct_video
+struct known_direct_video_device {
+	const char *mfg_id;
+	uint16_t product_code;  // 0xFFFF = any product code
+	const char *name_contains;  // NULL = don't check name
+	const char *description;
+	const char *internal_dac;  // NULL = unknown, e.g. "ADV7513", "CH7301C", etc.
+	int rgb_range;  // -1 = use default, 0 = full (0-255), 1 = limited (16-235), 2 = limited (16-255)
+};
+
+static const struct known_direct_video_device direct_video_devices[] = {
+	// Upscalers
+	{"PFX", 0x1A11, "PixelFX", "PixelFX Morph upscaler", NULL, 0},  // Full range (0-255)
+	{"RTK", 0x4206, "RetroTINK", "RetroTINK 4K upscaler", NULL, 0},  // Full range (0-255)
+	
+	// Known HDMI DACs (1024x768 resolution)
+	{"AGO", 0x0001, NULL, "HDMI DAC (1024x768)", "AG6200", 2},  // Limited range (16-255)
+	{"RGT", 0x1352, NULL, "HDMI DAC (1024x768)", "CS5213", 0},  // Full range (0-255)
+	
+	// Add more devices as discovered
+	// Example entries:
+	// {"XYZ", 0x1234, NULL, "HDMI to VGA DAC", "ADV7513", 0},  // Full range RGB
+	// {"ABC", 0x5678, NULL, "HDMI to Component", "CH7301C", 1}, // Limited range
+	
+	{NULL, 0, NULL, NULL, NULL, -1}  // Terminator
+};
+
+static int should_auto_enable_direct_video()
+{
+	if (!is_edid_valid()) return 0;
+	
+	// Get manufacturer and model info
+	char mfg_id[4];
+	get_edid_manufacturer(mfg_id);
+	uint16_t product_code = get_edid_product_code();
+	
+	char display_name[14];
+	bool has_name = get_edid_display_name(display_name, sizeof(display_name));
+	
+	// Check preferred resolution from EDID
+	uint8_t *x = edid + 0x36;
+	int pixclk_khz = (x[0] + (x[1] << 8)) * 10;
+	if (pixclk_khz < 10000) return 0;
+	
+	int hact = (x[2] + ((x[4] & 0xf0) << 4));
+	int vact = (x[5] + ((x[7] & 0xf0) << 4));
+	
+	printf("EDID: Manufacturer: %s, Product: 0x%04X", mfg_id, product_code);
+	if (has_name) printf(", Name: \"%s\"", display_name);
+	printf(", Resolution: %dx%d\n", hact, vact);
+	
+	// Check against known devices list
+	for (const struct known_direct_video_device *dev = direct_video_devices; dev->mfg_id != NULL; dev++) {
+		// Check manufacturer ID
+		if (strcmp(mfg_id, dev->mfg_id) != 0) continue;
+		
+		// Check product code if specified
+		if (dev->product_code != 0xFFFF && product_code != dev->product_code) continue;
+		
+		// Check display name if specified
+		if (dev->name_contains != NULL) {
+			if (!has_name || strstr(display_name, dev->name_contains) == NULL) continue;
+		}
+		
+		// Found a match!
+		printf("EDID: Detected %s", dev->description);
+		if (dev->internal_dac) {
+			printf(" [DAC: %s]", dev->internal_dac);
+		}
+		if (dev->rgb_range >= 0) {
+			// Apply RGB range setting if specified
+			cfg.hdmi_limited = dev->rgb_range;
+			const char *range_str = (dev->rgb_range == 0) ? "Full (0-255)" :
+			                       (dev->rgb_range == 1) ? "Limited (16-235)" : "Limited (16-255)";
+			printf(" [RGB: %s]", range_str);
+		}
+		printf(", auto-enabling direct video.\n");
+		return 1;
+	}
+	
+	// Common resolutions for HDMI DACs that benefit from direct video
+	if (hact == 1024 && vact == 768) {
+		printf("EDID: Detected 1024x768 - likely HDMI DAC, auto-enabling direct video.\n");
+		return 1;
+	}
+	
+	// Other non-standard HDMI resolutions that indicate analog converters
+	if ((hact == 800 && vact == 600) || 
+	    (hact == 1280 && vact == 1024) ||
+	    (hact == 1600 && vact == 1200)) {
+		printf("EDID: Detected %dx%d - non-standard HDMI resolution, auto-enabling direct video.\n", hact, vact);
+		return 1;
+	}
+	
+	return 0;
+}
+
+static int get_hpd_state()
+{
+	int fd = i2c_open(0x39, 0);
+	if (fd < 0) return -1;
+	
+	int hpd_state = i2c_smbus_read_byte_data(fd, 0x42);
+	i2c_close(fd);
+	
+	if (hpd_state < 0) return -1;
+	return (hpd_state & 0x20) ? 1 : 0;
+}
+
+
 static int get_active_edid()
 {
 	int fd = i2c_open(0x39, 0);
@@ -1963,6 +2117,18 @@ static int get_edid_vmode(vmode_custom_t *v)
 	double Fpix = pixclk_khz / 1000.f;
 	double frame_rate = Fpix * 1000000.f / ((hact + hfp + hbp + hsync)*(vact + vfp + vbp + vsync));
 	printf("EDID: preferred mode: %dx%d@%.1f, pixel clock: %.3fMHz\n", hact, vact, frame_rate, Fpix);
+	
+	// Display manufacturer and model info
+	char mfg_id[4];
+	get_edid_manufacturer(mfg_id);
+	uint16_t product_code = get_edid_product_code();
+	char display_name[14];
+	bool has_name = get_edid_display_name(display_name, sizeof(display_name));
+	
+	printf("EDID: Monitor ID: %s", mfg_id);
+	if (product_code) printf(" 0x%04X", product_code);
+	if (has_name) printf(" \"%s\"", display_name);
+	printf("\n");
 
 	if (hact >= 1920) support_FHD = 1;
 
@@ -2509,6 +2675,54 @@ void video_init()
 	fb_init();
 	hdmi_config_init();
 	hdmi_config_set_hdr();
+	
+	// Auto-detect and enable direct video BEFORE video_mode_load
+	// This ensures the correct mode is selected based on cfg.direct_video
+	// Note: cfg_parse() has already run, so all config values are available
+	if (cfg.direct_video >= 2 && cfg.direct_video <= 3) {
+		printf("Direct video auto-detection starting: mode=%d, vga_mode=%s(%d), csync=%d\n", 
+			cfg.direct_video, cfg.vga_mode, cfg.vga_mode_int, cfg.csync);
+			
+		// Only get EDID if not already valid
+		if (!is_edid_valid()) {
+			get_active_edid();
+		}
+		
+		if (should_auto_enable_direct_video()) {
+			printf("Auto-detected HDMI DAC, enabling direct video.\n");
+			Info("HDMI DAC detected - Direct video enabled", 2000);
+			
+			if (cfg.direct_video == 2) {
+				// Mode 2: Only set direct_video=1, preserve user's vga_mode and composite_sync
+				printf("Auto-enabled direct video (mode 2: direct video only).\n");
+				printf("  Preserving user settings: vga_mode=%s(%d), composite_sync=%d\n", 
+					cfg.vga_mode, cfg.vga_mode_int, cfg.csync);
+				// IMPORTANT: Mode 2 should NOT modify any settings except direct_video
+				cfg.direct_video = 1;
+			}
+			else if (cfg.direct_video == 3) {
+				// Mode 3: Full auto mode for 15kHz RGB with composite sync
+				printf("Auto-enabled direct video (mode 3: 240p/15kHz RGB with composite sync).\n");
+				Info("15kHz RGB mode auto-configured", 2000);
+				
+				cfg.direct_video = 1;
+				cfg.vga_mode_int = 0; // RGB mode
+				strcpy(cfg.vga_mode, "rgb");
+				cfg.csync = 1; // Enable composite sync
+				
+				printf("  Set: vga_mode=rgb, composite_sync=1\n");
+			}
+			
+			// Debug output of final settings
+			printf("Final settings: direct_video=%d, vga_mode=%s(%d), composite_sync=%d, forced_scandoubler=%d\n",
+				cfg.direct_video, cfg.vga_mode, cfg.vga_mode_int, cfg.csync, cfg.forced_scandoubler);
+			
+			// Re-initialize HDMI config now that direct_video and vga_mode are set
+			printf("Re-initializing HDMI config with updated settings...\n");
+			hdmi_config_init();
+		}
+	}
+	
 	video_mode_load();
 
 	has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
@@ -2518,6 +2732,117 @@ void video_init()
 	video_set_mode(&v_def, 0);
 }
 
+static void check_hdmi_hotplug_and_redetect()
+{
+	static int last_hpd_state = -1;
+	static int hpd_stable_count = 0;
+	
+	// Only check if auto-detection is enabled
+	if (cfg.direct_video < 2) return;
+	
+	int current_hpd = get_hpd_state();
+	if (current_hpd < 0) return; // Error reading HPD
+	
+	// Initialize on first run
+	if (last_hpd_state < 0) {
+		last_hpd_state = current_hpd;
+		return;
+	}
+	
+	// Check if HPD state changed
+	if (current_hpd != last_hpd_state) {
+		printf("HDMI HPD state changed: %d -> %d\n", last_hpd_state, current_hpd);
+		last_hpd_state = current_hpd;
+		hpd_stable_count = 0;
+		
+		// Clear EDID when disconnected
+		if (!current_hpd) {
+			bzero(edid, sizeof(edid));
+		}
+		return;
+	}
+	
+	// If connected and state has been stable, check if we need to re-detect
+	if (current_hpd && hpd_stable_count < 10) {
+		hpd_stable_count++;
+		
+		// After stable for ~1 second (assuming 10Hz polling), re-run detection
+		if (hpd_stable_count == 10) {
+			printf("HDMI connection stable, checking for EDID changes...\n");
+			
+			// Get new EDID
+			if (get_active_edid()) {
+				// Check if we should enable direct video
+				int was_direct = cfg.direct_video;
+				int old_vga_mode = cfg.vga_mode_int;
+				int old_csync = cfg.csync;
+				int old_scandoubler = cfg.forced_scandoubler;
+				
+				// Store the original auto-detection mode
+				int auto_mode = cfg.direct_video;
+				
+				// Reset direct_video to allow re-detection
+				cfg.direct_video = 0;
+				
+				if (should_auto_enable_direct_video()) {
+					cfg.direct_video = 1;
+					printf("HDMI hot-plug: Auto-detected HDMI DAC, enabling direct video.\n");
+					
+					if (auto_mode == 2) {
+						// Mode 2: Only set direct_video=1
+						printf("Direct video auto mode 2: Only enabling direct_video\n");
+					}
+					else if (auto_mode == 3) {
+						// Mode 3: 240p/15kHz RGB
+						cfg.vga_mode_int = 0; // RGB mode
+						strcpy(cfg.vga_mode, "rgb");
+						cfg.csync = 1; // Composite sync
+						printf("Direct video auto mode 3: 240p/15kHz RGB (composite sync)\n");
+					}
+					
+					// Re-initialize HDMI config if settings changed
+					if (was_direct != cfg.direct_video || 
+					    old_vga_mode != cfg.vga_mode_int ||
+					    old_csync != cfg.csync ||
+					    old_scandoubler != cfg.forced_scandoubler) {
+						printf("Re-initializing video system after hot-plug...\n");
+						
+						// Reinitialize video system components to match initial startup sequence
+						fb_init();                    // Re-initialize framebuffer
+						hdmi_config_init();          // Re-initialize HDMI configuration
+						hdmi_config_set_hdr();       // Re-set HDR configuration
+						video_mode_load();           // Reload video mode configuration
+						
+						// Check gamma support (like in video_init)
+						has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
+						
+						video_cfg_init();            // Re-load video configs (scaler, gamma, shadow mask)
+						video_set_mode(&v_def, 0);   // Set the video mode
+						
+						printf("Video system reinitialization completed\n");
+					}
+				}
+				else if (was_direct) {
+					// Was using direct video but new display doesn't need it
+					printf("HDMI hot-plug: Standard HDMI display detected, disabling direct video.\n");
+					cfg.direct_video = 0;
+					
+					// Full reinitialization for consistency
+					fb_init();                    // Re-initialize framebuffer
+					hdmi_config_init();          // Re-initialize HDMI configuration
+					hdmi_config_set_hdr();       // Re-set HDR configuration
+					video_mode_load();           // Reload video mode configuration
+					
+					// Check gamma support (like in video_init)
+					has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
+					
+					video_cfg_init();            // Re-load video configs (scaler, gamma, shadow mask)
+					video_set_mode(&v_def, 0);   // Set the video mode
+				}
+			}
+		}
+	}
+}
 
 static int api1_5 = 0;
 int hasAPI1_5()
@@ -2893,6 +3218,9 @@ void video_mode_adjust()
 {
 	static bool force = false;
 
+	// Check for HDMI hot-plug events and re-run auto-detection if needed
+	check_hdmi_hotplug_and_redetect();
+
 	VideoInfo video_info;
 
 	const bool vid_changed = get_video_info(force, &video_info);
@@ -3080,6 +3408,7 @@ int video_fb_state()
 	return fb_enabled;
 }
 
+static void video_menu_bg_invalidate();
 
 static void video_fb_config()
 {
@@ -3100,8 +3429,18 @@ static void video_fb_config()
 	const int fb_scale_x = fb_scale;
 	const int fb_scale_y = v_cur.param.pr == 0 ? fb_scale : fb_scale * 2;
 
-	fb_width = v_cur.item[1] / fb_scale_x;
-	fb_height = v_cur.item[5] / fb_scale_y;
+	int new_fb_width = v_cur.item[1] / fb_scale_x;
+	int new_fb_height = v_cur.item[5] / fb_scale_y;
+
+	// Check if framebuffer dimensions changed (e.g., due to HDMI hot-swap)
+	if (fb_width != new_fb_width || fb_height != new_fb_height) {
+		printf("Framebuffer dimensions changed: %dx%d -> %dx%d, invalidating menu background cache\n", 
+			fb_width, fb_height, new_fb_width, new_fb_height);
+		video_menu_bg_invalidate();
+	}
+
+	fb_width = new_fb_width;
+	fb_height = new_fb_height;
 
 	brd_x = cfg.vscale_border / fb_scale_x;
 	brd_y = cfg.vscale_border / fb_scale_y;
@@ -3109,6 +3448,15 @@ static void video_fb_config()
 	if (fb_enabled) video_fb_enable(1, fb_num);
 
 	fb_write_module_params();
+}
+
+static void video_menu_bg_invalidate()
+{
+	// This function is called to invalidate cached menu background images
+	// when framebuffer dimensions change (e.g., after HDMI hot-swap)
+	// The actual static variables are in video_menu_bg() and will be
+	// reset to 0 on next call, forcing recreation with new dimensions
+	menu_bg = 0; // Force menu background regeneration
 }
 
 static void draw_checkers()
@@ -3403,6 +3751,8 @@ static int bg_has_picture = 0;
 extern uint8_t  _binary_logo_png_start[], _binary_logo_png_end[];
 void video_menu_bg(int n, int idle)
 {
+	static Imlib_Image logo = 0;
+	
 	bg_has_picture = 0;
 	menu_bg = n;
 	if (n)
@@ -3411,7 +3761,6 @@ void video_menu_bg(int n, int idle)
 		//printf("n = %d\n", n);
 
 		Imlib_Load_Error error;
-		static Imlib_Image logo = 0;
 		if (!logo)
 		{
 			unlink("/tmp/logo.png");
@@ -3450,6 +3799,42 @@ void video_menu_bg(int n, int idle)
 
 		static Imlib_Image menubg = 0;
 		static Imlib_Image bg1 = 0, bg2 = 0;
+		static Imlib_Image curtain = 0;
+		static int cached_width = 0, cached_height = 0;
+
+		// Check if we need to invalidate cached images due to dimension changes
+		if (menu_bg == 0 || cached_width != fb_width || cached_height != fb_height) {
+			if (bg1) {
+				imlib_context_set_image(bg1);
+				imlib_free_image();
+				bg1 = 0;
+			}
+			if (bg2) {
+				imlib_context_set_image(bg2);
+				imlib_free_image();
+				bg2 = 0;
+			}
+			if (curtain) {
+				imlib_context_set_image(curtain);
+				imlib_free_image();
+				curtain = 0;
+			}
+			if (menubg) {
+				imlib_context_set_image(menubg);
+				imlib_free_image();
+				menubg = 0;
+			}
+			// Also invalidate logo which is cached below as a static variable
+			if (logo) {
+				imlib_context_set_image(logo);
+				imlib_free_image();
+				logo = 0;
+			}
+			cached_width = fb_width;
+			cached_height = fb_height;
+			printf("Menu background images invalidated and will be recreated with new dimensions %dx%d\n", fb_width, fb_height);
+		}
+
 		if (!bg1) bg1 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 1)));
 		if (!bg1) printf("Warning: bg1 is 0\n");
 		if (!bg2) bg2 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 2)));
@@ -3458,7 +3843,6 @@ void video_menu_bg(int n, int idle)
 		Imlib_Image *bg = (menu_bgn == 1) ? &bg1 : &bg2;
 		//printf("*bg = %p\n", *bg);
 
-		static Imlib_Image curtain = 0;
 		if (!curtain)
 		{
 			curtain = imlib_create_image(fb_width, fb_height);
