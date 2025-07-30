@@ -1758,8 +1758,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if(iSelectedEntry + 1 < flist_nDirEntries()) // scroll within visible items
 			{
 				iSelectedEntry++;
-				// Start scrolling when cursor is 3 positions from bottom
-				if (iSelectedEntry > iFirstEntry + OsdGetSize() - 4) iFirstEntry = iSelectedEntry - OsdGetSize() + 4;
+				// Start scrolling when cursor is cfg.lookahead positions from bottom
+				if (iSelectedEntry > iFirstEntry + OsdGetSize() - (cfg.lookahead + 1)) iFirstEntry = iSelectedEntry - OsdGetSize() + (cfg.lookahead + 1);
 			}
             else
             {
@@ -1774,8 +1774,8 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if (iSelectedEntry > 0) // scroll within visible items
 			{
 				iSelectedEntry--;
-				// Start scrolling when cursor is 3 positions from top
-				if (iSelectedEntry < iFirstEntry + 3) iFirstEntry = iSelectedEntry - 3;
+				// Start scrolling when cursor is cfg.lookahead positions from top
+				if (iSelectedEntry < iFirstEntry + cfg.lookahead) iFirstEntry = iSelectedEntry - cfg.lookahead;
 				if (iFirstEntry < 0) iFirstEntry = 0;
 			}
             return 0;
@@ -1807,20 +1807,20 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				}
 				else
 				{
-					// Special handling for top row - jump to 3rd from bottom
+					// Special handling for top row - jump to cfg.lookahead positions from bottom
 					if (cursor_offset == 0)
 					{
-						iSelectedEntry = iFirstEntry + OsdGetSize() - 4;
+						iSelectedEntry = iFirstEntry + OsdGetSize() - (cfg.lookahead + 1);
 					}
 					else
 					{
-						// Maintain relative cursor position, but respect 3-line buffer from bottom
+						// Maintain relative cursor position, but respect cfg.lookahead buffer from bottom
 						iSelectedEntry = iFirstEntry + cursor_offset;
 						
-						// If cursor would be on bottom 3 rows of page, keep it at 3rd from bottom
-						if (cursor_offset >= OsdGetSize() - 3)
+						// If cursor would be on bottom cfg.lookahead rows of page, keep it at cfg.lookahead from bottom
+						if (cursor_offset >= OsdGetSize() - cfg.lookahead)
 						{
-							iSelectedEntry = iFirstEntry + OsdGetSize() - 4;
+							iSelectedEntry = iFirstEntry + OsdGetSize() - (cfg.lookahead + 1);
 						}
 					}
 					
@@ -1851,20 +1851,20 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				iFirstEntry -= OsdGetSize();
 				if (iFirstEntry < 0) iFirstEntry = 0;
 				
-				// Special handling for bottom row - jump to 3rd from top
+				// Special handling for bottom row - jump to cfg.lookahead from top
 				if (cursor_offset == OsdGetSize() - 1)
 				{
-					iSelectedEntry = iFirstEntry + 3;
+					iSelectedEntry = iFirstEntry + cfg.lookahead;
 				}
 				else
 				{
-					// Maintain relative cursor position, but respect 3-line buffer from top
+					// Maintain relative cursor position, but respect cfg.lookahead buffer from top
 					iSelectedEntry = iFirstEntry + cursor_offset;
 					
-					// If cursor would be on top 3 rows of page, keep it at 3rd from top
-					if (cursor_offset <= 2)
+					// If cursor would be on top cfg.lookahead rows of page, keep it at cfg.lookahead from top
+					if (cursor_offset <= cfg.lookahead - 1)
 					{
-						iSelectedEntry = iFirstEntry + 3;
+						iSelectedEntry = iFirstEntry + cfg.lookahead;
 					}
 				}
 				
