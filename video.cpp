@@ -1971,17 +1971,9 @@ static int should_auto_enable_direct_video()
 		return 1;
 	}
 	
-	// Common resolutions for HDMI DACs that benefit from direct video
+	// Check for common HDMI DAC resolution
 	if (hact == 1024 && vact == 768) {
-		printf("EDID: Detected 1024x768 - likely HDMI DAC, auto-enabling direct video.\n");
-		return 1;
-	}
-	
-	// Other non-standard HDMI resolutions that indicate analog converters
-	if ((hact == 800 && vact == 600) || 
-	    (hact == 1280 && vact == 1024) ||
-	    (hact == 1600 && vact == 1200)) {
-		printf("EDID: Detected %dx%d - non-standard HDMI resolution, auto-enabling direct video.\n", hact, vact);
+		printf("EDID: Detected 1024x768 - HDMI DAC resolution, auto-enabling direct video.\n");
 		return 1;
 	}
 	
@@ -2676,14 +2668,9 @@ void video_init()
 	hdmi_config_init();
 	hdmi_config_set_hdr();
 	
-	// Auto-detect and enable direct video BEFORE video_mode_load
-	// This ensures the correct mode is selected based on cfg.direct_video
-	// Note: cfg_parse() has already run, so all config values are available
-	if (cfg.direct_video >= 2 && cfg.direct_video <= 3) {
-		printf("Direct video auto-detection starting: mode=%d, vga_mode=%s(%d), csync=%d\n", 
-			cfg.direct_video, cfg.vga_mode, cfg.vga_mode_int, cfg.csync);
-			
-		// Only get EDID if not already valid
+	// Auto-detect and enable direct video if configured
+	if (cfg.direct_video == 2) {
+		// Get EDID if not already valid
 		if (!is_edid_valid()) {
 			get_active_edid();
 		}
@@ -2692,33 +2679,8 @@ void video_init()
 			printf("Auto-detected HDMI DAC, enabling direct video.\n");
 			Info("HDMI DAC detected - Direct video enabled", 2000);
 			
-			if (cfg.direct_video == 2) {
-				// Mode 2: Only set direct_video=1, preserve user's vga_mode and composite_sync
-				printf("Auto-enabled direct video (mode 2: direct video only).\n");
-				printf("  Preserving user settings: vga_mode=%s(%d), composite_sync=%d\n", 
-					cfg.vga_mode, cfg.vga_mode_int, cfg.csync);
-				// IMPORTANT: Mode 2 should NOT modify any settings except direct_video
-				cfg.direct_video = 1;
-			}
-			else if (cfg.direct_video == 3) {
-				// Mode 3: Full auto mode for 15kHz RGB with composite sync
-				printf("Auto-enabled direct video (mode 3: 240p/15kHz RGB with composite sync).\n");
-				Info("15kHz RGB mode auto-configured", 2000);
-				
-				cfg.direct_video = 1;
-				cfg.vga_mode_int = 0; // RGB mode
-				strcpy(cfg.vga_mode, "rgb");
-				cfg.csync = 1; // Enable composite sync
-				
-				printf("  Set: vga_mode=rgb, composite_sync=1\n");
-			}
-			
-			// Debug output of final settings
-			printf("Final settings: direct_video=%d, vga_mode=%s(%d), composite_sync=%d, forced_scandoubler=%d\n",
-				cfg.direct_video, cfg.vga_mode, cfg.vga_mode_int, cfg.csync, cfg.forced_scandoubler);
-			
-			// Re-initialize HDMI config now that direct_video and vga_mode are set
-			printf("Re-initializing HDMI config with updated settings...\n");
+			// Enable direct video, preserve all other user settings
+			cfg.direct_video = 1;
 			hdmi_config_init();
 		}
 	}
@@ -2732,16 +2694,18 @@ void video_init()
 	video_set_mode(&v_def, 0);
 }
 
+
 static void check_hdmi_hotplug_and_redetect()
 {
 	static int last_hpd_state = -1;
 	static int hpd_stable_count = 0;
+	static const int HPD_STABLE_THRESHOLD = 10; // ~1 second at 10Hz polling
 	
 	// Only check if auto-detection is enabled
-	if (cfg.direct_video < 2) return;
+	if (cfg.direct_video != 2) return;
 	
 	int current_hpd = get_hpd_state();
-	if (current_hpd < 0) return; // Error reading HPD
+	if (current_hpd < 0) return;
 	
 	// Initialize on first run
 	if (last_hpd_state < 0) {
@@ -2763,81 +2727,28 @@ static void check_hdmi_hotplug_and_redetect()
 	}
 	
 	// If connected and state has been stable, check if we need to re-detect
-	if (current_hpd && hpd_stable_count < 10) {
+	if (current_hpd && hpd_stable_count < HPD_STABLE_THRESHOLD) {
 		hpd_stable_count++;
 		
-		// After stable for ~1 second (assuming 10Hz polling), re-run detection
-		if (hpd_stable_count == 10) {
-			printf("HDMI connection stable, checking for EDID changes...\n");
-			
+		// After connection is stable, re-run detection
+		if (hpd_stable_count == HPD_STABLE_THRESHOLD) {
 			// Get new EDID
 			if (get_active_edid()) {
 				// Check if we should enable direct video
 				int was_direct = cfg.direct_video;
-				int old_vga_mode = cfg.vga_mode_int;
-				int old_csync = cfg.csync;
-				int old_scandoubler = cfg.forced_scandoubler;
 				
-				// Store the original auto-detection mode
-				int auto_mode = cfg.direct_video;
-				
-				// Reset direct_video to allow re-detection
+				// Reset and re-detect
 				cfg.direct_video = 0;
-				
 				if (should_auto_enable_direct_video()) {
 					cfg.direct_video = 1;
 					printf("HDMI hot-plug: Auto-detected HDMI DAC, enabling direct video.\n");
-					
-					if (auto_mode == 2) {
-						// Mode 2: Only set direct_video=1
-						printf("Direct video auto mode 2: Only enabling direct_video\n");
-					}
-					else if (auto_mode == 3) {
-						// Mode 3: 240p/15kHz RGB
-						cfg.vga_mode_int = 0; // RGB mode
-						strcpy(cfg.vga_mode, "rgb");
-						cfg.csync = 1; // Composite sync
-						printf("Direct video auto mode 3: 240p/15kHz RGB (composite sync)\n");
-					}
-					
-					// Re-initialize HDMI config if settings changed
-					if (was_direct != cfg.direct_video || 
-					    old_vga_mode != cfg.vga_mode_int ||
-					    old_csync != cfg.csync ||
-					    old_scandoubler != cfg.forced_scandoubler) {
-						printf("Re-initializing video system after hot-plug...\n");
-						
-						// Reinitialize video system components to match initial startup sequence
-						fb_init();                    // Re-initialize framebuffer
-						hdmi_config_init();          // Re-initialize HDMI configuration
-						hdmi_config_set_hdr();       // Re-set HDR configuration
-						video_mode_load();           // Reload video mode configuration
-						
-						// Check gamma support (like in video_init)
-						has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
-						
-						video_cfg_init();            // Re-load video configs (scaler, gamma, shadow mask)
-						video_set_mode(&v_def, 0);   // Set the video mode
-						
-						printf("Video system reinitialization completed\n");
-					}
-				}
-				else if (was_direct) {
-					// Was using direct video but new display doesn't need it
+				} else if (was_direct) {
 					printf("HDMI hot-plug: Standard HDMI display detected, disabling direct video.\n");
-					cfg.direct_video = 0;
-					
-					// Full reinitialization for consistency
-					fb_init();                    // Re-initialize framebuffer
-					hdmi_config_init();          // Re-initialize HDMI configuration
-					hdmi_config_set_hdr();       // Re-set HDR configuration
-					video_mode_load();           // Reload video mode configuration
-					
-					// Check gamma support (like in video_init)
-					has_gamma = spi_uio_cmd(UIO_SET_GAMMA);
-					
-					video_cfg_init();            // Re-load video configs (scaler, gamma, shadow mask)
-					video_set_mode(&v_def, 0);   // Set the video mode
+				}
+				
+				// Reinitialize if direct video state changed
+				if (was_direct != cfg.direct_video) {
+					video_init();
 				}
 			}
 		}
