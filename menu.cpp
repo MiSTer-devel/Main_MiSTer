@@ -99,6 +99,7 @@ enum MENU
 	MENU_UNLOCK2,
 	MENU_UNLOCK3,
 
+	MENU_PROHIB_BTPAIR1,
 	MENU_JOYSYSMAP,
 	MENU_JOYDIGMAP,
 	MENU_JOYDIGMAP1,
@@ -118,6 +119,7 @@ enum MENU
 	MENU_LGCAL,
 	MENU_LGCAL1,
 	MENU_LGCAL2,
+	MENU_PROHIB_BTPAIR2,
 
 	MENU_SCRIPTS_PRE,
 	MENU_SCRIPTS_PRE1,
@@ -534,7 +536,7 @@ static uint32_t menu_key_get(void)
 		{
 			longpress_consumed = 1;
 			if (menustate == MENU_SCRIPTS1) c = KEY_BACKSPACE;
-			else menustate = MENU_BTPAIR;
+			else if(menustate < MENU_PROHIB_BTPAIR1 || menustate > MENU_PROHIB_BTPAIR2) menustate = MENU_BTPAIR;
 		}
 
 		if (!but && last_but && !longpress_consumed) c = KEY_F12;
@@ -2843,7 +2845,7 @@ void HandleUI(void)
 			strcat(s, " \x16 ");
 			MenuWrite(n++, s, menusub == 2, !video_get_scaler_flt(VFILTER_HORZ) || !S_ISDIR(getFileType(COEFF_DIR)));
 
-      
+
 			MenuWrite(n++);
 			sprintf(s, " Vert filter: %s", video_get_scaler_flt(VFILTER_VERT) ? "From file" : "Same as Horz");
 			MenuWrite(n++, s, menusub == 3, cfg.direct_video || !video_get_scaler_flt(VFILTER_HORZ));
@@ -5090,7 +5092,7 @@ void HandleUI(void)
 				menustate = MENU_FILE_SELECT1;
 			}
 
-			if (plus || minus) 
+			if (plus || minus)
 			{
 				ScanDirectory(selPath, plus ? SCANF_NEXT_CHAR : SCANF_PREV_CHAR, fs_pFileExt, fs_Options);
 				menustate = MENU_FILE_SELECT1;
