@@ -2842,7 +2842,8 @@ bool video_mode_select(uint32_t vtime, vmode_custom_t* out_mode)
 
 static void set_yc_mode()
 {
-	if (cfg.vga_mode_int >= 2)
+	// Enable YC for S-Video/CVBS modes, or subcarrier for CXA2075 encoders
+	if (cfg.vga_mode_int >= 2 || (cfg.subcarrier && cfg.vga_mode_int == 0 && cfg.csync && !cfg.forced_scandoubler))
 	{
 		float fps = current_video_info.vtime ? (100000000.f / current_video_info.vtime) : 0.f;
 		int pal = fps < 55.f;
@@ -2875,12 +2876,28 @@ static void set_yc_mode()
 		}
 
 		spi_uio_cmd_cont(UIO_SET_YC_PAR);
-		spi_w(((pal || cfg.ntsc_mode) ? 4 : 0) | ((cfg.vga_mode_int == 3) ? 3 : 1));
+		// For traditional S-Video/CVBS modes, enable YC processing
+		// For subcarrier-only modes (RGB+subcarrier or direct video), keep yc_en=0
+		bool is_subcarrier_only = (cfg.subcarrier && (cfg.direct_video || (cfg.vga_mode_int == 0 && cfg.csync && !cfg.forced_scandoubler)));
+		uint16_t yc_config;
+		if (is_subcarrier_only) {
+			// Subcarrier-only: RGB mode with just PAL flag, yc_en=0
+			yc_config = ((pal || cfg.ntsc_mode) ? 4 : 0);
+		} else {
+			// Traditional YC modes: enable YC processing
+			yc_config = ((pal || cfg.ntsc_mode) ? 4 : 0) | ((cfg.vga_mode_int == 3) ? 3 : 1);
+		}
+		printf("Sending YC config to FPGA: 0x%02X (pal_en=%d, cvbs=%d, yc_en=%d)\n", yc_config, (yc_config >> 2) & 1, (yc_config >> 1) & 1, yc_config & 1);
+		spi_w(yc_config);
 		spi_w(PHASE_INC);
 		spi_w(PHASE_INC >> 16);
 		spi_w(PHASE_INC >> 32);
 		spi_w(COLORBURST_RANGE);
 		spi_w(COLORBURST_RANGE >> 16);
+		// Case 6: Send subcarrier enable flag
+		uint16_t subcarrier_enable = (cfg.subcarrier && cfg.vga_mode_int == 0 && cfg.csync && !cfg.forced_scandoubler) ? 1 : 0;
+		printf("Sending subcarrier enable to FPGA: %d\n", subcarrier_enable);
+		spi_w(subcarrier_enable);
 		DisableIO();
 	}
 	else
