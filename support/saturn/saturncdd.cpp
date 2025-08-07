@@ -498,7 +498,7 @@ int satcdd_t::CalcSeekDelay(int lba_old, int lba_new)
 	int diff = lba_new - lba_old;
 	int n = diff / 2000;
 	if (n <= 4) n = 4;
-	else if (n > 13) n = 13;
+	else if (n > 30) n = 30;
 
 	if (diff < 0) n += 2;
 
