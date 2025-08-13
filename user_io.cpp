@@ -43,6 +43,11 @@ static char core_path[1024] = {};
 static char rbf_path[1024] = {};
 
 static fileTYPE sd_image[16] = {};
+
+#define  SD_TYPE_DEFAULT 0
+#define  SD_TYPE_C64 1
+#define  SD_TYPE_A2 2
+
 static int      sd_type[16] = {};
 static int      sd_image_cangrow[16] = {};
 static uint64_t buffer_lba[16] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
@@ -2007,15 +2012,9 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	int img_type = 0; // disk image type (for C128 core): bit 0=dual sided, 1=raw GCR supported, 2=raw MFM supported, 3=high density
 
 	sd_image_cangrow[index] = (pre != 0);
-	sd_type[index] = 0;
-
+	sd_type[index] = SD_TYPE_DEFAULT ;
 	if (len)
 	{
-		if (!strcasecmp(user_io_get_core_name(), "apple-ii"))
-		{
-			ret = dsk2nib(name, sd_image + index);
-		}
-
 		if (!ret)
 		{
 			if (x2trd_ext_supp(name))
@@ -2030,7 +2029,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				{
 					img_type = c64_openGCR(name, sd_image + index, index);
 					ret = img_type < 0 ? 0 : 1;
-					sd_type[index] = 1;
+					sd_type[index] = SD_TYPE_C64;
 					if (!ret) FileClose(&sd_image[index]);
 
 					if (ret && is_c128())
@@ -2052,12 +2051,17 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					{
 						img_type = c64_openGCR(name, sd_image + index, index);
 						ret = img_type < 0 ? 0 : 1;
-						sd_type[index] = 1;
+						sd_type[index] = SD_TYPE_C64;
 						if(!ret) FileClose(&sd_image[index]);
 					}
 					else if (!strcasecmp(name + len - 4, ".d81"))
 					{
 						img_type = G64_SUPPORT_HD | G64_SUPPORT_DS;
+					}
+					else if (!strcasecmp(name + len - 4, ".dsk") && ((!strcasecmp(user_io_get_core_name(), "apple-ii") || (!strcasecmp(user_io_get_core_name(), "TK2000") )) ))
+					{
+						printf("FOUND A2 DSK type\n");
+						sd_type[index] = SD_TYPE_A2;
 					}
 				}
 
@@ -3085,8 +3089,14 @@ void user_io_poll()
 				blks = 1;
 			}
 			DisableIO();
-
-			if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk])
+			if ( sd_type[disk] == SD_TYPE_A2)
+			{
+				//if (op) printf("A2 %x %llu on %d\n", op,lba, disk);
+				if (op == 2) a2_writeDSK(&sd_image[disk], lba, ack);
+				else if (op & 1) a2_readDSK(&sd_image[disk], lba, ack);
+				else break;
+			}
+			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
 			{
 				if (op == 2) c64_writeGCR(disk, lba, blks-1);
 				else if (op & 1) c64_readGCR(disk, lba, blks-1);

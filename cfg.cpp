@@ -131,6 +131,7 @@ static const ini_var_t ini_vars[] =
 	{ "OSD_LOCK", (void*)(&(cfg.osd_lock)), STRING, 0, sizeof(cfg.osd_lock) - 1 },
 	{ "OSD_LOCK_TIME", (void*)(&(cfg.osd_lock_time)), UINT16, 0, 60 },
 	{ "DEBUG", (void *)(&(cfg.debug)), UINT8, 0, 1 },
+	{ "LOOKAHEAD", (void *)(&(cfg.lookahead)), UINT8, 0, 3 },
 	{ "MAIN", (void*)(&(cfg.main)), STRING, 0, sizeof(cfg.main) - 1 },
 	{"VFILTER_INTERLACE_DEFAULT", (void*)(&(cfg.vfilter_interlace_default)), STRING, 0, sizeof(cfg.vfilter_interlace_default) - 1 },
 };
@@ -582,6 +583,7 @@ void cfg_parse()
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
 	cfg.subcarrier = 0;
+	cfg.lookahead = 2;
 	cfg.hdr = 0;
 	cfg.hdr_max_nits = 1000;
 	cfg.hdr_avg_nits = 250;
