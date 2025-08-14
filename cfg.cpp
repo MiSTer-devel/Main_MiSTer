@@ -48,6 +48,7 @@ static const ini_var_t ini_vars[] =
 	{ "VIDEO_MODE_NTSC", (void*)(cfg.video_conf_ntsc), STRING, 0, sizeof(cfg.video_conf_ntsc) - 1 },
 	{ "VIDEO_INFO", (void*)(&(cfg.video_info)), UINT8, 0, 10 },
 	{ "VSYNC_ADJUST", (void*)(&(cfg.vsync_adjust)), UINT8, 0, 2 },
+	{ "SUBCARRIER", (void*)(&(cfg.subcarrier)), UINT8, 0, 1 },
 	{ "HDMI_AUDIO_96K", (void*)(&(cfg.hdmi_audio_96k)), UINT8, 0, 1 },
 	{ "DVI_MODE", (void*)(&(cfg.dvi_mode)), UINT8, 0, 1 },
 	{ "HDMI_LIMITED", (void*)(&(cfg.hdmi_limited)), UINT8, 0, 2 },
@@ -581,6 +582,7 @@ void cfg_parse()
 	cfg.rumble = 1;
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
+	cfg.subcarrier = 0;
 	cfg.lookahead = 2;
 	cfg.hdr = 0;
 	cfg.hdr_max_nits = 1000;
