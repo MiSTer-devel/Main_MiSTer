@@ -130,6 +130,8 @@ enum MENU
 
 	MENU_DOC_FILE_SELECTED,
 	MENU_DOC_FILE_SELECTED_2,
+	MENU_DOC_NO_FBTERM,
+	MENU_DOC_NO_FBTERM2,
 
 	MENU_CHEATS1,
 	MENU_CHEATS2,
@@ -768,6 +770,7 @@ const char* get_rbf_name_bootcore(char *str)
 	}
 	return p + 1;
 }
+
 
 static void vga_nag()
 {
@@ -3081,7 +3084,10 @@ void HandleUI(void)
 				execl("/sbin/agetty", "/sbin/agetty", "-a", "root", "-l", "/tmp/script", "--nohostname", "-L", "tty2", "linux", NULL);
 				exit(0); //should never be reached
 			}
+		} else {
+			menustate = MENU_DOC_NO_FBTERM; 
 		}
+
 		break;
 
 	case MENU_DOC_FILE_SELECTED_2:
@@ -3106,6 +3112,34 @@ void HandleUI(void)
 			}
 		}
 		break;
+
+		case MENU_DOC_NO_FBTERM:
+			{
+				int n = 0;
+				menustate = MENU_DOC_NO_FBTERM2;
+				OsdSetSize(18);
+				OsdSetTitle("Help");
+				OsdWrite(n++, "");
+				OsdWrite(n++, "");
+				OsdWrite(n++, "");
+				OsdWrite(n++, "");
+				OsdWrite(n++, "");
+				OsdWrite(n++, "");
+				OsdWrite(n++,"        Help requires");
+				OsdWrite(n++,"        fb_terminal=1");
+				for (; n < OsdGetSize(); n++) OsdWrite(n);
+				MenuWrite(n, STD_EXIT, true, 0);
+			}
+		break;
+
+		case MENU_DOC_NO_FBTERM2:
+			if (select) 
+			{
+				menustate = MENU_NONE1;
+				menusub = 3;
+			}
+		break;
+
 
 	case MENU_ARCADE_DIP1:
 		helptext_idx = 0;
