@@ -977,6 +977,7 @@ void HandleUI(void)
 	static uint8_t card_cid[32];
 	static uint32_t hdmask = 0;
 	static pid_t ttypid = 0;
+	static int ttystatus = 0;
 	static int has_fb_terminal = 0;
 	static unsigned long flash_timer = 0;
 	static int flash_state = 0;
@@ -3065,24 +3066,30 @@ void HandleUI(void)
                         if (strlen(path) > 4) ext = path + strlen(path) - 4;
 			static char binary[1024*2];
 			printf("extension: [%s]\n",ext);
-			strcpy(binary,"/media/fat/linux/pdfviewer");
+			strcpy(binary,"/media/fat/linux/pdfviewer --cache_size=1");
 			if (!strcasecmp(ext,".pdf")) {
-				sprintf(binary,"/media/fat/linux/pdfviewer --zoom_to_fit \"%s\"",path);
+				sprintf(binary,"/media/fat/linux/pdfviewer --zoom_to_fit --cache_size=1 \"%s\"",path);
 			} else if (!strcasecmp(ext,".txt")) {
 				sprintf(binary,"less \"%s\"",path);
 			} else if (!strcasecmp(ext+1,".md")) {
 				sprintf(binary,"/media/fat/linux/glow --style dark  \"%s\" | less -R",path);
 			}
 
-			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\nexport LESSKEY=/media/fat/linux/lesskey\ncd $(dirname \"%s\")\n%s \necho \"Press any key to continue\"\n", path, binary  );
+			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\nexport LESSKEY=/media/fat/linux/lesskey\n cd $(dirname \"%s\")\n%s \nEXITSTATUS=$? \necho \"Press any key to continue\"\nexit $EXITSTATUS\n", path, binary  );
 			printf("CMD [%s]\n",cmd);
 			unlink("/tmp/script");
 			FileSave("/tmp/script", cmd, strlen(cmd));
 			ttypid = fork();
+			ttystatus = 0;
 			if (!ttypid)
 			{
-				execl("/sbin/agetty", "/sbin/agetty", "-a", "root", "-l", "/tmp/script", "--nohostname", "-L", "tty2", "linux", NULL);
-				exit(0); //should never be reached
+				cpu_set_t set;
+				CPU_ZERO(&set);
+				CPU_SET(0, &set);
+				sched_setaffinity(0, sizeof(set), &set);
+				setsid();
+				execl("/sbin/agetty", "/sbin/agetty",  "-a", "root", "-l", "/tmp/script", "--nohostname", "-L", "tty2", "linux", NULL);
+				exit(1); //should never be reached
 			}
 		} else {
 			menustate = MENU_DOC_NO_FBTERM; 
@@ -3093,7 +3100,7 @@ void HandleUI(void)
 	case MENU_DOC_FILE_SELECTED_2:
 		if (ttypid)
 		{
-			if (waitpid(ttypid, 0, WNOHANG) > 0)
+			if (waitpid(ttypid, &ttystatus, WNOHANG) > 0)
 			{
 				ttypid = 0;
 				user_io_osd_key_enable(1);
@@ -3101,7 +3108,7 @@ void HandleUI(void)
 		}
 		else
 		{
-			if (c & UPSTROKE)
+			if ((WIFEXITED(ttystatus) && !WEXITSTATUS(ttystatus)) || (c & UPSTROKE))
 			{
 				video_menu_bg(user_io_status_get("[3:1]"));
 				video_fb_enable(0);
@@ -6663,6 +6670,7 @@ void HandleUI(void)
 
 			unlink("/tmp/script");
 			FileSave("/tmp/script", cmd, strlen(cmd));
+			ttystatus = 0;
 			ttypid = fork();
 			if (!ttypid)
 			{
