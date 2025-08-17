@@ -54,6 +54,7 @@ static char arcade_root[kBigTextSize];
 static char mame_root[kBigTextSize];
 
 static bool is_vertical = false;
+static int rotation_info = 0;  // 0=horizontal, 1=90CCW, 2=90CW, 3=180
 
 static sw_struct switches = {};
 
@@ -1069,13 +1070,27 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		}
 		break;
 
-	case XML_EVENT_TEXT:
-		if(insetname) user_io_name_override(text, samedir);
-		if(inrotation)
-		{
-			is_vertical = strncasecmp(text, "vertical", 8) == 0;
-		}
-		break;
+		case XML_EVENT_TEXT:
+    if(insetname) user_io_name_override(text, samedir);
+    if(inrotation)
+    {
+        // Parse rotation information more comprehensively
+        if (strncasecmp(text, "vertical", 8) == 0) {
+            is_vertical = true;
+            // Check for rotation direction
+            if (strstr(text, "ccw") || strstr(text, "counter")) {
+                rotation_info = 1;  // 90 degrees CCW
+            } else if (strstr(text, "cw") && !strstr(text, "ccw")) {
+                rotation_info = 2;  // 90 degrees CW
+            } else {
+                rotation_info = 1;  // Default to CCW if not specified
+            }
+        } else {
+            is_vertical = false;
+            rotation_info = 0;  // Horizontal
+        }
+    }
+    break;
 
 	case XML_EVENT_END_NODE:
 		insetname = false;
@@ -1149,6 +1164,11 @@ void arcade_pre_parse(const char *xml)
 bool arcade_is_vertical()
 {
 	return is_vertical;
+}
+
+int arcade_get_rotation()
+{
+    return rotation_info;
 }
 
 void arcade_check_error()

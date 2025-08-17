@@ -23,6 +23,7 @@
 #include "input.h"
 #include "shmem.h"
 #include "smbus.h"
+#include "support/arcade/arcade.h"
 #include "str_util.h"
 #include "profiling.h"
 #include "offload.h"
@@ -1567,6 +1568,14 @@ static void spd_config(uint8_t *data)
 	}
 }
 
+static uint8_t get_rotation_bits()
+{
+    // Get rotation from arcade core if it's an arcade game
+    int rotation = arcade_get_rotation();
+    // Shift to bits 4-5 of the byte
+    return (rotation & 0x03) << 4;
+}
+
 static void spd_config_dv()
 {
 	VideoInfo *vi = &current_video_info;
@@ -1576,7 +1585,9 @@ static void spd_config_dv()
 	uint8_t data[32] = {
 		0x83, 0x01, 25, 0,
 		'D', 'V', '1' /* version */,
-		(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0)),
+		// Byte 8: Flags byte with rotation info
+		// Bit 0: interlaced, Bit 2: menu_present, Bits 4-5: rotation
+		(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0) | get_rotation_bits()),
 		(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
 		(uint8_t)vi->de_h,
 		(uint8_t)(vi->de_h >> 8),
@@ -3946,5 +3957,3 @@ int video_get_rotated()
 {
   return current_video_info.rotated;
 }
-
-
