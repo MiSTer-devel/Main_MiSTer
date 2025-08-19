@@ -100,7 +100,7 @@ private:
 	void ReadData(uint8_t *buf);
 	int ReadCDDA(uint8_t *buf, int first);
 	void MakeSecureRingData(uint8_t *buf);
-	uint32_t DataSectorCalcCRC(uint8_t* buf);
+	uint32_t DataSectorCalcCRC(uint8_t* buf, int len);
 	int DataSectorSend(uint8_t* header, int speed);
 	int AudioSectorSend(int first);
 	int RingDataSend(uint8_t* header, int speed);

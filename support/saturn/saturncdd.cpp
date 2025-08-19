@@ -608,6 +608,7 @@ void satcdd_t::CommandExec() {
 
 	case SATURN_COMM_PAUSE:
 		this->pause_pend = true;
+		this->seek_pend = false;
 		this->read_pend = false;
 
 #ifdef SATURN_DEBUG
@@ -1144,7 +1145,7 @@ void satcdd_t::MakeSecureRingData(uint8_t *buf) {
 	}
 }
 
-uint32_t satcdd_t::DataSectorCalcCRC(uint8_t* buf)
+uint32_t satcdd_t::DataSectorCalcCRC(uint8_t* buf, int len)
 {
 	static uint32_t crc_tab[256];
 	for (int i = 0; i < 256; i++)
@@ -1158,7 +1159,7 @@ uint32_t satcdd_t::DataSectorCalcCRC(uint8_t* buf)
 	}
 
 	uint32_t crc = 0;
-	for (int i = 0; i < 2064; i++)
+	for (int i = 0; i < len; i++)
 	{
 		crc ^= buf[i];
 		crc = (crc >> 8) ^ crc_tab[crc & 0xFF];
@@ -1259,14 +1260,22 @@ int satcdd_t::DataSectorSend(uint8_t* header, int speed)
 	if (header) {
 		memcpy(data_ptr, header, 16);
 	}
+	uint8_t sec_mode = data_ptr[15];
 
-	uint32_t crc = DataSectorCalcCRC(data_ptr);
-	data_ptr[2064] = crc >> 0;
-	data_ptr[2065] = crc >> 8;
-	data_ptr[2066] = crc >> 16;
-	data_ptr[2067] = crc >> 24;
-
-	memset(data_ptr + 2068, 0, 2352-2068);
+	uint32_t crc = DataSectorCalcCRC(data_ptr, (sec_mode == 2 ? 2348 : 2064));
+	if (sec_mode == 0x02) {
+		/*data_ptr[2348] = crc >> 0;
+		data_ptr[2349] = crc >> 8;
+		data_ptr[2350] = crc >> 16;
+		data_ptr[2351] = crc >> 24;*/
+	}
+	else {
+		data_ptr[2064] = crc >> 0;
+		data_ptr[2065] = crc >> 8;
+		data_ptr[2066] = crc >> 16;
+		data_ptr[2067] = crc >> 24;
+		memset(data_ptr + 2068, 0, 2352 - 2068);
+	}
 
 	int boot = (data_ptr[12] == 0x00 && data_ptr[13] == 0x02 && data_ptr[14] == 0x00 && data_ptr[15] == 0x01);
 	shmem_unmap(shmem_ptr, 4096 * 4);
