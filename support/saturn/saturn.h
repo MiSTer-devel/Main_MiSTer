@@ -60,6 +60,7 @@ public:
 	int GetBootHeader(uint8_t *buf);
 
 	bool wwf_hack;
+	bool roadrash_hack;
 
 private:
 	toc_t toc;
