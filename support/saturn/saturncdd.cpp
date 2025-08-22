@@ -495,13 +495,20 @@ void satcdd_t::Reset() {
 
 int satcdd_t::CalcSeekDelay(int lba_old, int lba_new)
 {
+	const int track_old = this->toc.GetTrackByLBA(lba_old);
+	const int track_new = this->toc.GetTrackByLBA(lba_new);
+	const int min = 4;
+	const int max = 13;
+
 	int diff = lba_new - lba_old;
 	int n = diff / 2000;
-	if (n <= 4) n = 4;
-	else if (n > 30) n = 30;
+	if (n <= min) n = min;
+	else if (n > max) n = max;
 
-	if (diff < 0 && abs(diff) > 8) n += 2;
+	if (track_old != track_new) n += 17;
 
+	if (diff < 0) n += 2;
+	 
 	return n;
 }
 
@@ -589,21 +596,21 @@ void satcdd_t::CommandExec() {
 
 		this->read_pend = true;
 		this->seek_pend = true;
-		this->seek_delay = CalcSeekDelay(lba_old, this->lba);
+		this->seek_delay = CalcSeekDelay(lba_old - 4, fad - 150);
 		this->pause_pend = false;
 		this->speed = comm[10] == 1 ? 1 : 2;
 
 		this->audioFirst = 1;
-	}
+
+		if (roadrash_hack) this->seek_pend = false;
 
 #ifdef SATURN_DEBUG
-		//printf("\x1b[32mSaturn: ");
-		//printf("Command = %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5], comm[6], comm[7], comm[8], comm[9], comm[10], comm[11]);
-		//printf("\n\x1b[0m");
 		printf("\x1b[32mSaturn: ");
-		printf("Command Read Data: tno = %u, idx = %u, FAD = %u, track = %u, track_start = %u", cmd_tno, cmd_idx, fad, this->track + 1, this->toc.tracks[this->track].start);
+		printf("Command Read Data: tno = %u, idx = %u, fad = %u, FAD = %u, track = %u, track_start = %u, seek_delay = %u", cmd_tno, cmd_idx, cmd_fad, fad, this->track + 1, this->toc.tracks[this->track].start, this->seek_delay);
+		printf("\nlba_old = %u, lba_new = %u, seek_delay = %u", lba_old - 4, fad - 150, this->seek_delay);
 		printf(" (%u)\n\x1b[0m", saturn_frame_cnt);
 #endif // SATURN_DEBUG 
+	}
 		break;
 
 	case SATURN_COMM_PAUSE:
@@ -772,10 +779,9 @@ void satcdd_t::Process(uint8_t* time_mode) {
 		stat[9] = BCD(amsf.s);
 		stat[10] = BCD(amsf.f);
 
-		if (this->seek_delay) {
-			this->seek_delay--;
-		}
-		else {
+		this->seek_delay--;
+		if (this->seek_delay <= 0) {
+			this->seek_delay = 0;
 			this->seek_pend = false;
 		}
 

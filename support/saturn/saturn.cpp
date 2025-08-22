@@ -184,6 +184,7 @@ void saturn_set_image(int num, const char *filename)
 	}
 
 	satcdd.wwf_hack = false;
+	satcdd.roadrash_hack = false;
 	if (strlen(filename))
 	{
 		if (satcdd.Load(filename) > 0)
@@ -210,6 +211,14 @@ void saturn_set_image(int num, const char *filename)
 				if (satcdd.wwf_hack) {
 #ifdef SATURN_DEBUG
 					printf("\x1b[32mSaturn: WWF games hack!!!\n\x1b[0m");
+#endif // SATURN_DEBUG
+				}
+
+				if (!strncmp(id, "T-5008H", 7) ||
+					!strncmp(id, "T-10609G", 8)) satcdd.roadrash_hack = true;
+				if (satcdd.roadrash_hack) {
+#ifdef SATURN_DEBUG
+					printf("\x1b[32mSaturn: Road Rash games hack!!!\n\x1b[0m");
 #endif // SATURN_DEBUG
 				}
 			}
