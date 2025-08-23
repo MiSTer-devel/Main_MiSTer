@@ -2221,8 +2221,9 @@ void HandleUI(void)
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
 						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
+						if (is_saturn() && (ioctl_index == 1)) fs_Options |= SCANO_SAVES;
 
-						if (is_saturn() || is_pce() || is_megacd() || is_x86() || is_cdi() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
+						if ((is_saturn() && !(fs_Options & SCANO_SAVES)) || is_pce() || is_megacd() || is_x86() || is_cdi() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo())
 						{
 							//look for CHD too
 							if (!strcasestr(ext, "CHD"))
@@ -2494,7 +2495,12 @@ void HandleUI(void)
 			}
 			else if (is_saturn())
 			{
-				saturn_set_image(ioctl_index, selPath);
+				if (!ioctl_index)
+				{
+					saturn_set_image(ioctl_index, selPath);
+				} else {
+					saturn_mount_save(selPath);
+				}
 			}
 			else if (is_neogeo())
 			{

@@ -2085,7 +2085,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 
 	buffer_lba[index] = -1;
-	if (!index || is_cdi()) use_save = pre;
+	if (!index || is_cdi() || (is_saturn() && index==1)) use_save = pre;
 
 	if (!ret)
 	{
