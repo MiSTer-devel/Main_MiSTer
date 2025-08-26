@@ -5368,6 +5368,16 @@ int input_test(int getchar)
 									}
 								}
 
+								// Volume controls for GRS Ultimate Deck for iiRcade + Viper KVM (XInput Mode)
+								// The KVM board exposes volume buttons as fake ABS axes.
+								if (input[dev].vid == 0x045e && input[dev].pid == 0x028e && ev.type == EV_ABS)
+								{
+									// Volume Down mapped to ABS code 2
+									if (ev.code == 2 && ev.value == 255) set_volume(-1);
+									// Volume Up mapped to ABS code 5
+									if (ev.code == 5 && ev.value == 255) set_volume(1);
+								}
+
 								if (is_menu() && !video_fb_state())
 								{
 									/*
