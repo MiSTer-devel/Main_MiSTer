@@ -2432,6 +2432,10 @@ void HandleUI(void)
 						if (!n64_rom_tx(selPath, idx, load_addr, n64_crc)) Info("failed to load ROM");
 						else if (user_io_use_cheats() && !store_name) cheats_init(selPath, n64_crc);
 					}
+					else if (is_c64() || is_c128())
+					{
+						c64_open_file(selPath, idx);
+					}
 					else
 					{
 						user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr);
@@ -3098,7 +3102,7 @@ void HandleUI(void)
 				exit(1); //should never be reached
 			}
 		} else {
-			menustate = MENU_DOC_NO_FBTERM; 
+			menustate = MENU_DOC_NO_FBTERM;
 		}
 
 		break;
@@ -3146,7 +3150,7 @@ void HandleUI(void)
 		break;
 
 		case MENU_DOC_NO_FBTERM2:
-			if (select) 
+			if (select)
 			{
 				menustate = MENU_NONE1;
 				menusub = 3;

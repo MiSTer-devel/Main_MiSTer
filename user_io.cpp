@@ -3582,6 +3582,11 @@ void user_io_poll()
 	if (is_psx()) psx_poll();
 	if (is_neogeo_cd()) neocd_poll();
 	if (is_n64()) n64_poll();
+	if (is_c64() || is_c128())
+	{
+		uint16_t save_req = spi_uio_cmd(UIO_CHK_UPLOAD);
+		if (save_req) c64_save_cart(save_req >> 8);
+	}
 	process_ss(0);
 }
 

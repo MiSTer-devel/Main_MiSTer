@@ -17,4 +17,7 @@ void c64_closeGCR(int idx);
 void c64_readGCR(int idx, uint64_t lba, uint32_t blks);
 void c64_writeGCR(int idx, uint64_t lba, uint32_t blks);
 
+void c64_open_file(const char* name, unsigned char index);
+void c64_save_cart(int open_menu);
+
 #endif
