@@ -2301,7 +2301,7 @@ static void update_num_hw(int dev, int num)
 			set_led(led_path, "::sony4", (num == 0 || num == 4 || num == 5 || num == 6));
 		}
 	}
-	else if (input[dev].quirk == QUIRK_WIIMOTE)
+	else if (input[dev].vid == 0x057e && (input[dev].pid == 0x0306 || input[dev].pid == 0x0330))
 	{
 		led_path = get_led_path(dev);
 		if (led_path)
@@ -4839,7 +4839,7 @@ int input_test(int getchar)
 								pool[n].fd = -1;
 								continue;
 							}
-							else
+							else if (!strcasestr(input[n].name, "Pro Controller"))
 							{
 								input[n].quirk = QUIRK_WIIMOTE;
 								input[n].guncal[0] = 0;
