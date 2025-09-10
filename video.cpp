@@ -2425,8 +2425,30 @@ static void fb_init()
 	spi_uio_cmd16(UIO_SET_FBUF, 0);
 }
 
+static int should_auto_enable_direct_video()
+{
+	// Check if display resolution is 1024x768
+	vmode_custom_t test_mode;
+	if (get_edid_vmode(&test_mode)) {
+		if (test_mode.param.hact == 1024 && test_mode.param.vact == 768) {
+			printf("Detected 1024x768 display resolution, auto-enabling direct video.\n");
+			return 1;
+		}
+	}
+	return 0;
+}
+
 static void video_mode_load()
 {
+	// Auto-detect and enable direct video if configured
+	if (cfg.direct_video == 2) {
+		if (should_auto_enable_direct_video()) {
+			printf("Auto-detected 1024x768 HDMI resolution, enabling direct video.\n");
+			// Enable direct video, preserve all other user settings
+			cfg.direct_video = 1;
+		}
+	}
+
 	if (cfg.direct_video && cfg.vsync_adjust)
 	{
 		printf("Disabling vsync_adjust because of enabled direct video.\n");
