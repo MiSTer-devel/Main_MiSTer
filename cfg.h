@@ -102,6 +102,10 @@ typedef struct {
 	uint8_t lookahead;
 	char main[1024];
 	char vfilter_interlace_default[1023];
+	uint16_t volume_abs_vid;
+	uint16_t volume_abs_pid;
+	uint8_t volume_abs_down;
+	uint8_t volume_abs_up;
 } cfg_t;
 
 extern cfg_t cfg;
