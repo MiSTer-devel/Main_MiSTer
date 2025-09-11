@@ -2432,6 +2432,24 @@ static int should_auto_enable_direct_video()
 	if (get_edid_vmode(&test_mode)) {
 		if (test_mode.param.hact == 1024 && test_mode.param.vact == 768) {
 			printf("Detected 1024x768 display resolution, auto-enabling direct video.\n");
+			
+			// Auto-detect hdmi_limited based on EDID manufacturer/model
+			// Check manufacturer ID (bytes 0x08-0x09)
+			uint16_t mfg_id = (edid[0x08] << 8) | edid[0x09];
+			
+			// Check against known DACs
+			if (mfg_id == 0x48F4) {  // Known full-range DAC (CS5213)
+				cfg.hdmi_limited = 0;
+				printf("EDID: Auto-setting hdmi_limited=0 (full range RGB for known DAC).\n");
+			} else if (mfg_id == 0x04EF) {  // Known limited-range DAC (AG6200)
+				cfg.hdmi_limited = 2;
+				printf("EDID: Auto-setting hdmi_limited=2 (limited range RGB for known DAC).\n");
+			} else {
+				// Default to full range for unknown 1024x768 displays
+				cfg.hdmi_limited = 0;
+				printf("EDID: Auto-setting hdmi_limited=0 (full range RGB by default).\n");
+			}
+			
 			return 1;
 		}
 	}
