@@ -2427,32 +2427,44 @@ static void fb_init()
 
 static int should_auto_enable_direct_video()
 {
-	// Check if display resolution is 1024x768
-	vmode_custom_t test_mode;
-	if (get_edid_vmode(&test_mode)) {
-		if (test_mode.param.hact == 1024 && test_mode.param.vact == 768) {
-			printf("Detected 1024x768 display resolution, auto-enabling direct video.\n");
-			
-			// Auto-detect hdmi_limited based on EDID manufacturer/model
-			// Check manufacturer ID (bytes 0x08-0x09)
-			uint16_t mfg_id = (edid[0x08] << 8) | edid[0x09];
-			
-			// Check against known DACs
-			if (mfg_id == 0x48F4) {  // Known full-range DAC (CS5213)
-				cfg.hdmi_limited = 0;
-				printf("EDID: Auto-setting hdmi_limited=0 (full range RGB for known DAC).\n");
-			} else if (mfg_id == 0x04EF) {  // Known limited-range DAC (AG6200)
-				cfg.hdmi_limited = 2;
-				printf("EDID: Auto-setting hdmi_limited=2 (limited range RGB for known DAC).\n");
-			} else {
-				// Default to full range for unknown 1024x768 displays
-				cfg.hdmi_limited = 0;
-				printf("EDID: Auto-setting hdmi_limited=0 (full range RGB by default).\n");
-			}
-			
-			return 1;
-		}
+	// Read EDID if not already valid
+	if (!is_edid_valid()) {
+		get_active_edid();
 	}
+	
+	if (!is_edid_valid()) return 0;
+	
+	// Check preferred resolution directly from EDID bytes
+	uint8_t *x = edid + 0x36;
+	int hact = ((x[4] >> 4) << 8) + x[2];
+	int vact = ((x[7] >> 4) << 8) + x[5];
+	
+	// Only enable direct video for 1024x768 DACs
+	if (hact == 1024 && vact == 768) {
+		printf("Detected 1024x768 display resolution, auto-enabling direct video.\n");
+		
+		// Auto-detect hdmi_limited based on EDID manufacturer/model
+		// Check manufacturer ID (bytes 0x08-0x09)
+		uint16_t mfg_id = (edid[0x08] << 8) | edid[0x09];
+		
+		// Check against known DACs
+		if (mfg_id == 0x48F4) {  // Known full-range DAC
+			cfg.hdmi_limited = 0;
+			printf("EDID: Auto-setting hdmi_limited=0 (full range RGB for known DAC).\n");
+		} else if (mfg_id == 0x04EF) {  // Known limited-range DAC
+			cfg.hdmi_limited = 2;
+			printf("EDID: Auto-setting hdmi_limited=2 (limited range RGB for known DAC).\n");
+		} else {
+			// Default to full range for unknown 1024x768 displays
+			cfg.hdmi_limited = 0;
+			printf("EDID: Auto-setting hdmi_limited=0 (full range RGB by default).\n");
+		}
+		
+		return 1;
+	}
+	
+	// Not 1024x768, don't enable direct video
+	printf("Detected %dx%d display resolution, not enabling direct video.\n", hact, vact);
 	return 0;
 }
 
@@ -2461,9 +2473,12 @@ static void video_mode_load()
 	// Auto-detect and enable direct video if configured
 	if (cfg.direct_video == 2) {
 		if (should_auto_enable_direct_video()) {
-			printf("Auto-detected 1024x768 HDMI resolution, enabling direct video.\n");
+			printf("Auto-enabling direct video for 1024x768 DAC.\n");
 			// Enable direct video, preserve all other user settings
 			cfg.direct_video = 1;
+		} else {
+			// Not a DAC, use normal HDMI mode
+			cfg.direct_video = 0;
 		}
 	}
 
