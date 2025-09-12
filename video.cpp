@@ -2425,8 +2425,116 @@ static void fb_init()
 	spi_uio_cmd16(UIO_SET_FBUF, 0);
 }
 
+// Structure to hold DAC configuration
+struct dac_config {
+	uint16_t mfg_id;
+	uint8_t hdmi_limited;
+	uint8_t hdmi_audio_96k;
+	int8_t composite_sync; // -1=use MiSTer.ini, 0=force off, 1=force on
+	char name[64];
+};
+
+static dac_config dac_configs[32];
+static int dac_config_count = 0;
+
+static void load_dac_file(const char *filename)
+{
+	fileTextReader reader;
+	const char *line;
+	
+	if (!FileOpenTextReader(&reader, filename)) {
+		return;
+	}
+	
+	printf("Loading DAC configuration from %s\n", filename);
+	
+	while ((line = FileReadLine(&reader)) && dac_config_count < 32) {
+		// Skip comments and empty lines
+		if (line[0] == '#' || line[0] == '\n' || line[0] == '\r' || line[0] == '\0') continue;
+		
+		// Parse format: mfg_id,hdmi_limited,hdmi_audio_96k,composite_sync,name
+		// Example: 0x48F4,0,0,,Full-range CS5213 DAC
+		unsigned int mfg, limited, audio_96k = 0;
+		char name[64] = {0};
+		char csync_str[16] = {0};
+		int8_t csync = -1; // Default to use MiSTer.ini setting
+		
+		// Parse with optional composite_sync field
+		int fields = sscanf(line, "%x,%u,%u,%15[^,],%63[^\n]", &mfg, &limited, &audio_96k, csync_str, name);
+		if (fields >= 2) {
+			// Parse composite sync field if present
+			if (fields >= 4 && strlen(csync_str) > 0) {
+				csync = (csync_str[0] == '1') ? 1 : 0;
+			}
+			// Check if this mfg_id already exists and update it
+			bool found = false;
+			for (int i = 0; i < dac_config_count; i++) {
+				if (dac_configs[i].mfg_id == mfg) {
+					dac_configs[i].hdmi_limited = limited;
+					dac_configs[i].hdmi_audio_96k = audio_96k;
+					dac_configs[i].composite_sync = csync;
+					strncpy(dac_configs[i].name, name, 63);
+					printf("  Updated DAC: mfg=0x%04X, hdmi_limited=%d, hdmi_audio_96k=%d, csync=%d, %s\n", 
+						mfg, limited, audio_96k, csync, name);
+					found = true;
+					break;
+				}
+			}
+			
+			if (!found) {
+				dac_configs[dac_config_count].mfg_id = mfg;
+				dac_configs[dac_config_count].hdmi_limited = limited;
+				dac_configs[dac_config_count].hdmi_audio_96k = audio_96k;
+				dac_configs[dac_config_count].composite_sync = csync;
+				strncpy(dac_configs[dac_config_count].name, name, 63);
+				printf("  DAC[%d]: mfg=0x%04X, hdmi_limited=%d, hdmi_audio_96k=%d, csync=%d, %s\n", 
+					dac_config_count, mfg, limited, audio_96k, csync, name);
+				dac_config_count++;
+			}
+		}
+	}
+}
+
+static void load_dac_config()
+{
+	dac_config_count = 0;
+	
+	// Try to load main DAC file
+	load_dac_file("dv_dac.txt");
+	
+	// Load user DAC file (overrides/adds to main file)
+	load_dac_file("dv_dac_user.txt");
+	
+	if (dac_config_count == 0) {
+		// If no files found, use built-in defaults
+		dac_configs[0].mfg_id = 0x48F4;
+		dac_configs[0].hdmi_limited = 0;
+		dac_configs[0].hdmi_audio_96k = 0;
+		dac_configs[0].composite_sync = -1;
+		strcpy(dac_configs[0].name, "Full-range DAC (built-in)");
+		
+		dac_configs[1].mfg_id = 0x04EF;
+		dac_configs[1].hdmi_limited = 2;
+		dac_configs[1].hdmi_audio_96k = 0;
+		dac_configs[1].composite_sync = -1;
+		strcpy(dac_configs[1].name, "Limited-range DAC (built-in)");
+		
+		dac_config_count = 2;
+		printf("No DAC config files found, using built-in defaults\n");
+	}
+	
+	printf("Total: %d DAC configurations loaded\n", dac_config_count);
+}
+
 static int should_auto_enable_direct_video()
 {
+	// Load DAC config on first call
+	static bool dac_config_loaded = false;
+	if (!dac_config_loaded) {
+		load_dac_config();
+		dac_config_loaded = true;
+	}
+	
 	// Read EDID if not already valid
 	if (!is_edid_valid()) {
 		get_active_edid();
@@ -2437,15 +2545,24 @@ static int should_auto_enable_direct_video()
 	// Check manufacturer ID (bytes 0x08-0x09)
 	uint16_t mfg_id = (edid[0x08] << 8) | edid[0x09];
 	
-	// Check against known DACs
-	if (mfg_id == 0x48F4) {  // Known full-range DAC
-		printf("EDID: Detected known full-range DAC, auto-enabling direct video.\n");
-		cfg.hdmi_limited = 0;
-		return 1;
-	} else if (mfg_id == 0x04EF) {  // Known limited-range DAC
-		printf("EDID: Detected known limited-range DAC, auto-enabling direct video.\n");
-		cfg.hdmi_limited = 2;
-		return 1;
+	// Check against known DACs from config
+	for (int i = 0; i < dac_config_count; i++) {
+		if (mfg_id == dac_configs[i].mfg_id) {
+			printf("EDID: Detected known DAC: %s\n", dac_configs[i].name);
+			printf("EDID: Auto-enabling direct video with hdmi_limited=%d, hdmi_audio_96k=%d\n", 
+				dac_configs[i].hdmi_limited, dac_configs[i].hdmi_audio_96k);
+			cfg.hdmi_limited = dac_configs[i].hdmi_limited;
+			cfg.hdmi_audio_96k = dac_configs[i].hdmi_audio_96k;
+			
+			// Set composite sync if specified
+			if (dac_configs[i].composite_sync >= 0) {
+				cfg.csync = dac_configs[i].composite_sync;
+				printf("EDID: Auto-setting composite_sync=%d\n", dac_configs[i].composite_sync);
+			} else {
+				printf("EDID: Composite sync setting deferred to MiSTer.ini\n");
+			}
+			return 1;
+		}
 	}
 	
 	// Not a known DAC, don't enable direct video

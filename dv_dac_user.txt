@@ -1,0 +1,31 @@
+# User Direct Video DAC Configuration File
+# This file allows users to add their own DAC configurations
+# or override settings from dv_dac.txt
+#
+# Format: mfg_id,hdmi_limited,hdmi_audio_96k,composite_sync,name
+# 
+# mfg_id: Manufacturer ID from EDID bytes 0x08-0x09 (hex, e.g. 0x48F4)
+#         This is the raw 16-bit value from EDID, NOT the decoded 3-letter code
+# hdmi_limited: 0=full range RGB (0-255)
+#               1=limited range RGB (16-235) 
+#               2=limited range RGB (16-255)
+# hdmi_audio_96k: 0=48kHz audio, 1=96kHz audio
+# composite_sync: 0=disable composite sync, 1=enable composite sync, blank=use MiSTer.ini setting
+# name: Description of the DAC (optional, for logging purposes)
+#
+# The mfg_id comes from EDID bytes:
+#   Byte 0x08: High byte of manufacturer ID
+#   Byte 0x09: Low byte of manufacturer ID
+#   Combined as: (byte_08 << 8) | byte_09
+#
+# Examples:
+# 0x40D8,0,1,,PixelFX Morph (full range, use MiSTer.ini csync setting)
+# 0x1234,1,1,1,Custom DAC (limited 16-235, force composite sync on)
+# 0x5678,2,0,0,Another DAC (limited 16-255, force composite sync off)
+#
+# Note: Entries in this file will override any matching mfg_id from dv_dac.txt
+#
+# Known video upscalers that support direct video
+# (remove "# " in front of device if you want to use automatic direct video mode):
+# 0x40D8,0,1,1,PixelFX Morph 4K
+# 0x4A8B,0,1,1,RetroTink 4K Pro
