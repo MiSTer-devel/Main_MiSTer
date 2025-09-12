@@ -2456,16 +2456,35 @@ static void load_dac_file(const char *filename)
 		// Example: 0x48F4,0,0,,Full-range CS5213 DAC
 		unsigned int mfg, limited, audio_96k = 0;
 		char name[64] = {0};
-		char csync_str[16] = {0};
 		int8_t csync = -1; // Default to use MiSTer.ini setting
 		
-		// Parse with optional composite_sync field
-		int fields = sscanf(line, "%x,%u,%u,%15[^,],%63[^\n]", &mfg, &limited, &audio_96k, csync_str, name);
-		if (fields >= 2) {
-			// Parse composite sync field if present
-			if (fields >= 4 && strlen(csync_str) > 0) {
-				csync = (csync_str[0] == '1') ? 1 : 0;
+		// Find commas to parse fields manually (to handle empty fields)
+		const char *comma1 = strchr(line, ',');
+		if (!comma1) continue;
+		const char *comma2 = strchr(comma1 + 1, ',');
+		if (!comma2) continue;
+		const char *comma3 = strchr(comma2 + 1, ',');
+		if (!comma3) continue;
+		const char *comma4 = strchr(comma3 + 1, ',');
+		if (!comma4) continue;
+		
+		// Parse mfg_id, hdmi_limited, hdmi_audio_96k
+		if (sscanf(line, "%x,%u,%u", &mfg, &limited, &audio_96k) >= 2) {
+			// Parse composite_sync field (between comma3 and comma4)
+			if (comma4 - comma3 > 1) {
+				char csync_char = comma3[1];
+				if (csync_char == '0' || csync_char == '1') {
+					csync = (csync_char == '1') ? 1 : 0;
+				}
 			}
+			
+			// Parse name (after comma4)
+			strncpy(name, comma4 + 1, 63);
+			// Remove newline if present
+			char *newline = strchr(name, '\n');
+			if (newline) *newline = '\0';
+			char *carriage = strchr(name, '\r');
+			if (carriage) *carriage = '\0';
 			// Check if this mfg_id already exists and update it
 			bool found = false;
 			for (int i = 0; i < dac_config_count; i++) {
