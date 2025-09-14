@@ -16,9 +16,9 @@
 #   Combined as: (byte_08 << 8) | byte_09
 #
 # Examples:
-# 0x48F4,0,0,,Full-range CS5213 DAC
-# 0x04EF,2,0,1,Limited-range AG6200 DAC
+# 0x48F4,0,0,,CS5213 DAC
+# 0x04EF,2,0,1,AG6200 DAC
 
 # Known DACs
-0x48F4,0,0,,Full-range CS5213 DAC
-0x04EF,2,0,,Limited-range AG6200 DAC
+0x48F4,0,0,,CS5213 DAC
+0x04EF,2,0,,AG6200 DAC
