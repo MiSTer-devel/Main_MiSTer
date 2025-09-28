@@ -1899,6 +1899,64 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				if (iFirstEntry < 0) iFirstEntry = 0;
 			}
 		}
+		else if (mode == SCANF_NEXT_CHAR)
+		{
+			//DirItem is sorted, so just advance until the first character changes.
+			//if we reach the end before that don't change anything.
+			//If we change d_type also consider that 'next'. This means next
+			//advances through directories, and then advances through files
+			//
+			int found = -1;
+			char curChar = toupper(DirItem[iSelectedEntry].altname[0]);
+			char curdType = DirItem[iSelectedEntry].de.d_type;
+			for (int i = iSelectedEntry+1; i < flist_nDirEntries(); i++)
+			{
+				if (toupper(DirItem[i].altname[0]) != curChar || DirItem[i].de.d_type != curdType)
+				{
+					found = i;
+					break;
+				}
+			}
+			if (found >= 0)
+			{
+				iSelectedEntry = found;
+				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
+				else iFirstEntry = iSelectedEntry - (OsdGetSize()/2) + 1;
+				if (iFirstEntry < 0) iFirstEntry = 0;
+			}
+		}
+		else if (mode == SCANF_PREV_CHAR)
+		{
+			//Previous seek seeks to the FIRST entry that starts with the previous letter
+			//Search backward until the first char changes, and then continue looking backward
+			//until it changes again. 
+
+
+			int found = -1;
+			bool sawChange = false;
+			char curChar = toupper(DirItem[iSelectedEntry].altname[0]);
+			char curdType = DirItem[iSelectedEntry].de.d_type;
+			for (int i = iSelectedEntry-1; i >= 0; i--)
+			{
+				if (toupper(DirItem[i].altname[0]) != curChar || DirItem[i].de.d_type != curdType)
+				{
+					if (sawChange)
+					{
+						found = i+1;
+						break;
+					}
+					sawChange = true;
+					curChar = toupper(DirItem[i].altname[0]);
+				}
+			}
+			if (found >= 0)
+			{
+				iSelectedEntry = found;
+				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
+				else iFirstEntry = iSelectedEntry - (OsdGetSize()/2) + 1;
+				if (iFirstEntry < 0) iFirstEntry = 0;
+			}
+		}
 		else
 		{
 			//printf("dir scan for key: %x/%c\n", mode, mode);

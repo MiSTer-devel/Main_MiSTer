@@ -114,22 +114,27 @@ static void saturn_get_save_without_disk(char *buf)
 	}
 }
 
-static void saturn_mount_save(const char *filename)
+void saturn_mount_save(const char *filename, bool is_auto)
 {
 	user_io_set_index(SAVE_IO_INDEX);
 	user_io_set_download(1);
 	if (strlen(filename))
 	{
-		FileGenerateSavePath(filename, buf);
-		saturn_get_save_without_disk(buf);
+		if (is_auto)
+		{
+			FileGenerateSavePath(filename, buf);
+			saturn_get_save_without_disk(buf);
+		} else {
+			strncpy(buf, filename, sizeof(buf));
+		}
 #ifdef SATURN_DEBUG
 		printf("Saturn save filename = %s\n", buf);
 #endif // SATURN_DEBUG
-		user_io_file_mount(buf, 0, 1);
+		user_io_file_mount(buf, 1, 1);
 	}
 	else
 	{
-		user_io_file_mount("");
+		user_io_file_mount("", 1);
 	}
 	user_io_set_download(0);
 }
@@ -164,7 +169,7 @@ void saturn_set_image(int num, const char *filename)
 
 	if (!same_game)
 	{
-		saturn_mount_save("");
+		saturn_mount_save("", true);
 
 		user_io_status_set("[0]", 1);
 		saturn_reset();
@@ -184,6 +189,7 @@ void saturn_set_image(int num, const char *filename)
 	}
 
 	satcdd.wwf_hack = false;
+	satcdd.roadrash_hack = false;
 	if (strlen(filename))
 	{
 		if (satcdd.Load(filename) > 0)
@@ -193,7 +199,7 @@ void saturn_set_image(int num, const char *filename)
 			if (!same_game)
 			{
 				//saturn_load_rom(filename, "cart.rom", 1);
-				saturn_mount_save(filename);
+				saturn_mount_save(filename, true);
 				//cheats_init(filename, 0);
 			}
 
@@ -210,6 +216,14 @@ void saturn_set_image(int num, const char *filename)
 				if (satcdd.wwf_hack) {
 #ifdef SATURN_DEBUG
 					printf("\x1b[32mSaturn: WWF games hack!!!\n\x1b[0m");
+#endif // SATURN_DEBUG
+				}
+
+				if (!strncmp(id, "T-5008H", 7) ||
+					!strncmp(id, "T-10609G", 8)) satcdd.roadrash_hack = true;
+				if (satcdd.roadrash_hack) {
+#ifdef SATURN_DEBUG
+					printf("\x1b[32mSaturn: Road Rash games hack!!!\n\x1b[0m");
 #endif // SATURN_DEBUG
 				}
 			}

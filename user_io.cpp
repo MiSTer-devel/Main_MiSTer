@@ -2085,7 +2085,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 
 	buffer_lba[index] = -1;
-	if (!index || is_cdi()) use_save = pre;
+	if (!index || is_cdi() || (is_saturn() && index==1)) use_save = pre;
 
 	if (!ret)
 	{
@@ -3582,6 +3582,11 @@ void user_io_poll()
 	if (is_psx()) psx_poll();
 	if (is_neogeo_cd()) neocd_poll();
 	if (is_n64()) n64_poll();
+	if (is_c64() || is_c128())
+	{
+		uint16_t save_req = spi_uio_cmd(UIO_CHK_UPLOAD);
+		if (save_req) c64_save_cart(save_req >> 8);
+	}
 	process_ss(0);
 }
 

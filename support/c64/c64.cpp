@@ -9,6 +9,8 @@
 #include "../../file_io.h"
 #include "../../user_io.h"
 #include "../../hardware.h"
+#include "../../menu.h"
+#include "../../input.h"
 
 #include "c64.h"
 
@@ -331,43 +333,43 @@ static uint8_t gcr_buf[G64_MAX_TRACK_LEN*2];
 static uint8_t track_count[4] = {35, 40, 42, 70};
 static int start_sectors[4][85] = {
 	{	// single sided, 35 tracks
-		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
-		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  683,  683,  683,  683,  683,  683,  
-		 683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  
+		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,
+		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  683,  683,  683,  683,  683,  683,
+		 683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,
 		 683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,  683,
 		 683
 	},
 	{	// single sided, 40 tracks
-		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
-		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  768,  
-		 768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  
+		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,
+		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  768,
+		 768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,
 		 768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,  768,
 		 768
 	},
 	{	// single sided, 42 tracks
-		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
-		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  785,  
-		 802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  
+		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,
+		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  785,
+		 802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,
 		 802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,  802,
 		 802,
 	},
 	{	// double sided, 35 tracks per side
-		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414, 
-		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  683,  683,  683,  683,  683,  683,  
-		 683,  704,  725,  746,  767,  788,  809,  830,  851,  872,  893,  914,  935,  956,  977,  998, 1019, 1040, 1059, 1078, 1097, 
-		1116, 1135, 1154, 1173, 1191, 1209, 1227, 1245, 1263, 1281, 1298, 1315, 1332, 1349, 1366, 1366, 1366, 1366, 1366, 1366, 1366, 
+		   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,
+		 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  683,  683,  683,  683,  683,  683,
+		 683,  704,  725,  746,  767,  788,  809,  830,  851,  872,  893,  914,  935,  956,  977,  998, 1019, 1040, 1059, 1078, 1097,
+		1116, 1135, 1154, 1173, 1191, 1209, 1227, 1245, 1263, 1281, 1298, 1315, 1332, 1349, 1366, 1366, 1366, 1366, 1366, 1366, 1366,
 		1366
 	}
 	// {   // double sided, 40 tracks per side
-	// 	   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
+	// 	   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,
 	// 	 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  768,
-	// 	 768,  789,  810,  831,  852,  873,  894,  915,  936,  957,  978,  999, 1020, 1041, 1062, 1083, 1104, 1125, 1144, 1163, 1182, 
+	// 	 768,  789,  810,  831,  852,  873,  894,  915,  936,  957,  978,  999, 1020, 1041, 1062, 1083, 1104, 1125, 1144, 1163, 1182,
 	// 	1201, 1220, 1239, 1258, 1276, 1294, 1312, 1330, 1348, 1366, 1383, 1400, 1417, 1434, 1451, 1468, 1485, 1502, 1519, 1536, 1536,
 	// 	1536
 	// },
 	// {   // double sided, 42 tracks per side
-	// 	   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,  
-	// 	 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  785,  
+	// 	   0,   21,   42,   63,   84,  105,  126,  147,  168,  189,  210,  231,  252,  273,  294,  315,  336,  357,  376,  395,  414,
+	// 	 433,  452,  471,  490,  508,  526,  544,  562,  580,  598,  615,  632,  649,  666,  683,  700,  717,  734,  751,  768,  785,
 	// 	 802,  823,  844,  865,  886,  907,  928,  949,  970,  991, 1012, 1033, 1054, 1075, 1096, 1117, 1138, 1159, 1178, 1197, 1216,
 	// 	1235, 1254, 1273, 1292, 1310, 1328, 1346, 1364, 1382, 1400, 1417, 1434, 1451, 1468, 1485, 1502, 1519, 1536, 1553, 1570, 1587,
 	// 	1587
@@ -501,7 +503,7 @@ void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 	uint8_t  track_f = track >> 1;
 
 	uint32_t track_size;
-	
+
 	if (!gcr_info[idx].type) return;
 
 	if (gcr_info[idx].type == 2)
@@ -589,11 +591,11 @@ void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 			buffer_size = 12502U;
 		}
 		else {
-#ifdef EXTEND_1541		
+#ifdef EXTEND_1541
 			track_size = (track_h < 18) ? 7692U : (track_h < 25) ? 7142U : (track_h < 31) ? 6666U : 6250U;
-#else		
+#else
 			track_size = 4096;
-#endif		
+#endif
 			buffer_size = track_size + 2;
 		}
 		memset(gcr_buf, 0, buffer_size);
@@ -642,7 +644,7 @@ uint32_t c64_get_track_speed(int idx, uint64_t lba, uint32_t track_size){
 		dbgprintf("Track %d%s: freq=%d (mfm)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
 	}
 	else if (lba & 0x400) {
-		freq = (lba & 0x300) >> 8; 
+		freq = (lba & 0x300) >> 8;
 		dbgprintf("Track %d%s: freq=%d (gcr, provided)\n", (track >> 1) + 1, (track & 1) ? ".5" : "", freq);
 	}
 	else {
@@ -679,7 +681,7 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 
 	if (gcr_info[idx].type == 2)
 	{
-		if (track >= gcr_info[idx].tracks) 
+		if (track >= gcr_info[idx].tracks)
 		{
 			dbgprintf("Ignore track %d%s: out of range\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
 			return;
@@ -712,10 +714,10 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 				return;
 			}
 
-			// TODO reclaim unused space 
+			// TODO reclaim unused space
 			if (track_space > 0) {
 				dbgprintf("Write Track %d%s: not enough space, relocating to end of file\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
-			} 
+			}
 			else {
 				dbgprintf("Write Track %d%s: new track, saving to end of file\n", (track >> 1) + 1, (track & 1) ? ".5" : "");
 			}
@@ -745,7 +747,7 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 
 			FileSeek(gcr_info[idx].f, 0, SEEK_END);
 			track_space = (
-				(track_size <= G64_TRACK_SPACE_GCR) ? G64_TRACK_SPACE_GCR 
+				(track_size <= G64_TRACK_SPACE_GCR) ? G64_TRACK_SPACE_GCR
 			  : (track_size <= G64_TRACK_SPACE_MFM) ? G64_TRACK_SPACE_MFM : track_size
 			) + 2;
 		}
@@ -777,7 +779,7 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 	//hexdump(gcr_buf, 8192);
 
 	int sec_cnt = track < 84 ? gcr_info[idx].sector_map[track + 1] - gcr_info[idx].sector_map[track] : 0;
-	if (sec_cnt == 0) 
+	if (sec_cnt == 0)
 	{
 		dbgprintf("Ignore track %d: invalid\n", track+1);
 		return;
@@ -872,4 +874,185 @@ void c64_writeGCR(int idx, uint64_t lba, uint32_t blks)
 
 	FileSeek(gcr_info[idx].f, gcr_info[idx].sector_map[track] * 256, SEEK_SET);
 	FileWriteAdv(gcr_info[idx].f, trk_buf, sec_cnt * 256);
+}
+
+static const int crt_bank_size = 8192 + 16;
+static const int ezfl_size = 64 + (128 * crt_bank_size);
+static char *ezfl_save_name = 0;
+static const uint8_t ezfl_shdr[16] = { 0x43, 0x48, 0x49, 0x50, 0x00, 0x00, 0x20, 0x10, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00 };
+
+static char ezfl_hdr[64];
+static char ezfl_buf[crt_bank_size];
+
+static void ezfl_format(uint8_t *buf)
+{
+	memset(buf, -1, ezfl_size);
+	memcpy(buf, ezfl_hdr, 64);
+
+	uint8_t bank = 0;
+	uint8_t addr = 0x80;
+	for (int off = 64; off < ezfl_size; off += crt_bank_size)
+	{
+		memcpy(buf + off, ezfl_shdr, 16);
+		buf[off + 11] = bank;
+		buf[off + 12] = addr;
+		addr ^= 0x20;
+		if (addr == 0x80) bank++;
+	}
+}
+
+static uint8_t* ezfl_load(const char* name)
+{
+	printf("Loading %s.\n", name);
+
+	uint8_t *buf = new uint8_t[ezfl_size];
+	if (buf)
+	{
+		fileTYPE f = {};
+		if (FileOpen(&f, name) && f.size >= 64)
+		{
+			if (FileReadAdv(&f, ezfl_hdr, 64))
+			{
+				ezfl_format(buf);
+				int sz;
+				while ((sz = FileReadAdv(&f, ezfl_buf, crt_bank_size)))
+				{
+					while (sz < crt_bank_size) ezfl_buf[sz++] = 0xFF;
+
+					uint8_t bank = ezfl_buf[11];
+					uint8_t addr = ezfl_buf[12];
+					int off = 64 + (((bank * 2) + ((addr <= 0x80) ? 0 : 1)) * crt_bank_size);
+					if ((off+ crt_bank_size) <= ezfl_size) memcpy(buf + off, ezfl_buf, crt_bank_size);
+					else printf("WARNING: invalid Easyflash bank header (%d, 0x%02X), skipping.\n", bank, addr);
+				}
+			}
+
+			int len = strlen(f.name);
+			char *p = strrchr(f.name, '.');
+			if (!p) p = f.name + len;
+			user_io_file_info(p);
+
+			FileClose(&f);
+			return buf;
+		}
+		FileClose(&f);
+		delete[] buf;
+	}
+
+	printf("ERROR: cannot load %s.\n", name);
+	return 0;
+}
+
+static void ezfl_save(const char* name, uint8_t *buf)
+{
+	printf("Saving easyflash to %s\n", name);
+
+	fileTYPE f = {};
+	if (FileOpenEx(&f, name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC | O_CLOEXEC))
+	{
+		FileWriteAdv(&f, buf, 64);
+
+		int off = 64;
+		while (off < ezfl_size)
+		{
+			uint8_t chk = 0xFF;
+			for (int i = 16; i < crt_bank_size; i++) chk &= buf[off + i];
+			if (chk != 0xFF) FileWriteAdv(&f, buf + off, crt_bank_size);
+			off += crt_bank_size;
+		}
+
+		FileClose(&f);
+	}
+	else
+	{
+		printf("ERROR: cannot creat file %s.\n", name);
+	}
+}
+
+void c64_open_file(const char* name, unsigned char index)
+{
+	int slen = strlen(name);
+	if (slen > 4 && !strcasecmp(name + slen - 4, ".crt"))
+	{
+		ezfl_save_name = 0;
+		static uint8_t buf[1024];
+		memset(buf, 0, sizeof(buf));
+		fileTYPE f = {};
+		if (FileOpen(&f, name))
+		{
+			FileReadAdv(&f, buf, 64);
+			FileClose(&f);
+
+			if (!buf[0x16] && (buf[0x17] == 32 || buf[0x17] == 33))
+			{
+				FileGenerateSavePath(name, (char*)buf);
+				ProgressMessage(0, 0, 0, 0);
+
+				int mod = get_key_mod();
+				printf("mod = %x\n", mod);
+
+				uint8_t *ezfl = ezfl_load((!(get_key_mod() & 0x2200) && FileExists((char*)buf)) ? (char*)buf : name);
+				if (ezfl)
+				{
+					user_io_set_index(index);
+					user_io_set_download(1);
+					int off = 0;
+					while (off < ezfl_size)
+					{
+						int chunk = ezfl_size - off;
+						if (chunk > 4096) chunk = 4096;
+
+						ProgressMessage("Loading", f.name, off, ezfl_size);
+						user_io_file_tx_data(ezfl + off, chunk);
+						off += chunk;
+					}
+					user_io_set_download(0);
+					ProgressMessage(0, 0, 0, 0);
+				}
+
+				delete[] ezfl;
+				FileGenerateSavePath(name, (char*)ezfl_buf);
+				ezfl_save_name = (char *)ezfl_buf;
+				return;
+			}
+		}
+	}
+
+	user_io_file_tx(name, index);
+}
+
+void c64_save_cart(int open_menu)
+{
+	if (ezfl_save_name)
+	{
+		uint8_t *ezfl = new uint8_t[ezfl_size];
+		if (ezfl)
+		{
+			ezfl_format(ezfl);
+			ProgressMessage(0, 0, 0, 0);
+
+			printf("Reading cartrridge from SDRAM...\n");
+
+			int off = 64 + 16;
+			user_io_set_index(99);
+			user_io_set_upload(1);
+			while (off < ezfl_size)
+			{
+				ProgressMessage("Saving", ezfl_save_name, off, ezfl_size);
+				user_io_file_rx_data(ezfl + off, 8192);
+				off += 8192 + 16;
+			}
+			user_io_set_upload(0);
+
+			ezfl_save(ezfl_save_name, ezfl);
+			ProgressMessage(0, 0, 0, 0);
+			delete[] ezfl;
+		}
+	}
+	else
+	{
+		printf("ERROR: missing easyflash dump!\n");
+	}
+
+	if (open_menu) menu_key_set(KEY_F12);
 }

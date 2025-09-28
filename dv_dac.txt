@@ -1,0 +1,24 @@
+# Direct Video DAC Configuration File
+# Format: mfg_id,hdmi_limited,hdmi_audio_96k,composite_sync,name
+# 
+# mfg_id: Manufacturer ID from EDID bytes 0x08-0x09 (hex, e.g. 0x48F4)
+#         This is the raw 16-bit value from EDID, NOT the decoded 3-letter code
+# hdmi_limited: 0=full range RGB (0-255)
+#               1=limited range RGB (16-235) 
+#               2=limited range RGB (16-255)
+# hdmi_audio_96k: 0=48kHz audio, 1=96kHz audio
+# composite_sync: 0=disable composite sync, 1=enable composite sync, blank=use MiSTer.ini setting
+# name: Description of the DAC (optional, for logging purposes)
+#
+# The mfg_id comes from EDID bytes:
+#   Byte 0x08: High byte of manufacturer ID
+#   Byte 0x09: Low byte of manufacturer ID
+#   Combined as: (byte_08 << 8) | byte_09
+#
+# Examples:
+# 0x48F4,0,0,,CS5213 DAC
+# 0x04EF,2,0,1,AG6200 DAC
+
+# Known DACs
+0x48F4,0,0,,CS5213 DAC
+0x04EF,2,0,,AG6200 DAC

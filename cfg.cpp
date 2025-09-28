@@ -65,7 +65,7 @@ static const ini_var_t ini_vars[] =
 	{ "FB_SIZE", (void*)(&(cfg.fb_size)), UINT8, 0, 4 },
 	{ "FB_TERMINAL", (void*)(&(cfg.fb_terminal)), UINT8, 0, 1 },
 	{ "OSD_TIMEOUT", (void*)(&(cfg.osd_timeout)), INT16, 0, 3600 },
-	{ "DIRECT_VIDEO", (void*)(&(cfg.direct_video)), UINT8, 0, 1 },
+	{ "DIRECT_VIDEO", (void*)(&(cfg.direct_video)), UINT8, 0, 2 },
 	{ "OSD_ROTATE", (void*)(&(cfg.osd_rotate)), UINT8, 0, 2 },
 	{ "DEADZONE", (void*)(&(cfg.controller_deadzone)), STRINGARR, sizeof(cfg.controller_deadzone) / sizeof(*cfg.controller_deadzone), sizeof(*cfg.controller_deadzone) },
 	{ "GAMEPAD_DEFAULTS", (void*)(&(cfg.gamepad_defaults)), UINT8, 0, 1 },
@@ -131,6 +131,7 @@ static const ini_var_t ini_vars[] =
 	{ "OSD_LOCK", (void*)(&(cfg.osd_lock)), STRING, 0, sizeof(cfg.osd_lock) - 1 },
 	{ "OSD_LOCK_TIME", (void*)(&(cfg.osd_lock_time)), UINT16, 0, 60 },
 	{ "DEBUG", (void *)(&(cfg.debug)), UINT8, 0, 1 },
+	{ "GAME_INFO", (void *)(&(cfg.game_info)), UINT8, 0, 1 },
 	{ "LOOKAHEAD", (void *)(&(cfg.lookahead)), UINT8, 0, 3 },
 	{ "MAIN", (void*)(&(cfg.main)), STRING, 0, sizeof(cfg.main) - 1 },
 	{"VFILTER_INTERLACE_DEFAULT", (void*)(&(cfg.vfilter_interlace_default)), STRING, 0, sizeof(cfg.vfilter_interlace_default) - 1 },
@@ -583,6 +584,7 @@ void cfg_parse()
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
 	cfg.subcarrier = 0;
+	cfg.game_info = 0;
 	cfg.lookahead = 2;
 	cfg.hdr = 0;
 	cfg.hdr_max_nits = 1000;
@@ -770,7 +772,7 @@ void yc_parse(yc_mode *yc_table, int max)
 	const char *corename = user_io_get_core_name(1);
 	int corename_len = strlen(corename);
 
-	const char *name = "yc.txt";
+	const char *name = cfg.subcarrier ? "subcarrier.txt" : "yc.txt";
 	if (!FileOpen(&ini_file, name))	return;
 
 	ini_parser_debugf("Opened file %s with size %llu bytes.", name, ini_file.size);

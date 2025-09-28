@@ -60,6 +60,7 @@ public:
 	int GetBootHeader(uint8_t *buf);
 
 	bool wwf_hack;
+	bool roadrash_hack;
 
 private:
 	toc_t toc;
@@ -100,6 +101,7 @@ private:
 	void ReadData(uint8_t *buf);
 	int ReadCDDA(uint8_t *buf, int first);
 	void MakeSecureRingData(uint8_t *buf);
+	uint32_t DataSectorCalcCRC(uint8_t* buf, int len);
 	int DataSectorSend(uint8_t* header, int speed);
 	int AudioSectorSend(int first);
 	int RingDataSend(uint8_t* header, int speed);
@@ -118,5 +120,6 @@ void saturn_set_image(int num, const char *filename);
 void saturn_reset();
 void saturn_fill_blanksave(uint8_t *buffer, uint32_t lba);
 int saturn_send_data(uint8_t* buf, int len, uint8_t index);
+void saturn_mount_save(const char *filename, bool is_auto = false);
 
 #endif

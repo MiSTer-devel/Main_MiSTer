@@ -8,6 +8,7 @@
 #include "../../menu.h"
 #include "../../shmem.h"
 #include "../../lib/md5/md5.h"
+#include "../../cfg.h"
 
 #include "miniz.h"
 #include "n64.h"
@@ -1734,7 +1735,7 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 	if (!(rom_settings_detected & 2)) {
 		sprintf(info + len, "\nROM missing from database.\nYou might not be able to save.");
 
-		Info(info, cfg.controller_info * 1000);
+		if (cfg.game_info) Info(info, cfg.controller_info * 1000);
 	}
 	else {
 		auto save_type = get_cart_save_type();
@@ -1752,7 +1753,7 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 		if (no_epak) len += sprintf(info + len, "\nDisable Exp. Pak \x96");
 		if (is_patched) sprintf(info + len, "\nPatched \x96");
 
-		Info(info, cfg.controller_info * 1000);
+		if (cfg.game_info) Info(info, cfg.controller_info * 1000);
 	}
 
 	return 1;

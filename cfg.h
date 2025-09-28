@@ -99,6 +99,7 @@ typedef struct {
 	char osd_lock[25];
 	uint16_t osd_lock_time;
 	char debug;
+	uint8_t game_info;
 	uint8_t lookahead;
 	char main[1024];
 	char vfilter_interlace_default[1023];

@@ -495,13 +495,20 @@ void satcdd_t::Reset() {
 
 int satcdd_t::CalcSeekDelay(int lba_old, int lba_new)
 {
+	const int track_old = this->toc.GetTrackByLBA(lba_old);
+	const int track_new = this->toc.GetTrackByLBA(lba_new);
+	const int min = 4;
+	const int max = 13;
+
 	int diff = lba_new - lba_old;
 	int n = diff / 2000;
-	if (n <= 4) n = 4;
-	else if (n > 30) n = 30;
+	if (n <= min) n = min;
+	else if (n > max) n = max;
+
+	if (track_old != track_new) n += 17;
 
 	if (diff < 0) n += 2;
-
+	 
 	return n;
 }
 
@@ -589,25 +596,26 @@ void satcdd_t::CommandExec() {
 
 		this->read_pend = true;
 		this->seek_pend = true;
-		this->seek_delay = CalcSeekDelay(lba_old, this->lba);
+		this->seek_delay = CalcSeekDelay(lba_old - 4, fad - 150);
 		this->pause_pend = false;
 		this->speed = comm[10] == 1 ? 1 : 2;
 
 		this->audioFirst = 1;
-	}
+
+		if (roadrash_hack) this->seek_pend = false;
 
 #ifdef SATURN_DEBUG
-		//printf("\x1b[32mSaturn: ");
-		//printf("Command = %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5], comm[6], comm[7], comm[8], comm[9], comm[10], comm[11]);
-		//printf("\n\x1b[0m");
 		printf("\x1b[32mSaturn: ");
-		printf("Command Read Data: tno = %u, idx = %u, FAD = %u, track = %u, track_start = %u", cmd_tno, cmd_idx, fad, this->track + 1, this->toc.tracks[this->track].start);
+		printf("Command Read Data: tno = %u, idx = %u, fad = %u, FAD = %u, track = %u, track_start = %u, seek_delay = %u", cmd_tno, cmd_idx, cmd_fad, fad, this->track + 1, this->toc.tracks[this->track].start, this->seek_delay);
+		printf("\nlba_old = %u, lba_new = %u, seek_delay = %u", lba_old - 4, fad - 150, this->seek_delay);
 		printf(" (%u)\n\x1b[0m", saturn_frame_cnt);
 #endif // SATURN_DEBUG 
+	}
 		break;
 
 	case SATURN_COMM_PAUSE:
 		this->pause_pend = true;
+		this->seek_pend = false;
 		this->read_pend = false;
 
 #ifdef SATURN_DEBUG
@@ -771,10 +779,9 @@ void satcdd_t::Process(uint8_t* time_mode) {
 		stat[9] = BCD(amsf.s);
 		stat[10] = BCD(amsf.f);
 
-		if (this->seek_delay) {
-			this->seek_delay--;
-		}
-		else {
+		this->seek_delay--;
+		if (this->seek_delay <= 0) {
+			this->seek_delay = 0;
 			this->seek_pend = false;
 		}
 
@@ -862,7 +869,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 
 		stat[0] = SATURN_STAT_DATA;
 		stat[1] = q | 0x01;
-		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : BCD(this->toc.last);
+		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
 		stat[3] = this->lba < 0 ? 0x00 : BCD(this->index);
 		stat[4] = BCD(msf.m);
 		stat[5] = BCD(msf.s);
@@ -1001,7 +1008,7 @@ void satcdd_t::Update() {
 		else if (this->toc.tracks[this->track].type)
 		{
 			// CD-ROM Data (Mode 1/2)
-			uint8_t header[4];
+			uint8_t header[16];
 
 #ifdef SATURN_DEBUG
 			//printf("\x1b[32mSaturn: ");
@@ -1010,10 +1017,22 @@ void satcdd_t::Update() {
 #endif // SATURN_DEBUG
 
 			if (this->sectorSize == 2048 || (this->lba - this->toc.tracks[this->track].start) < 0) {
-				header[0] = BCD(msf.m);
-				header[1] = BCD(msf.s);
-				header[2] = BCD(msf.f);
-				header[3] = (uint8_t)this->toc.tracks[this->track].type;
+				header[0] = 0x00;
+				header[1] = 0xFF;
+				header[2] = 0xFF;
+				header[3] = 0xFF;
+				header[4] = 0xFF;
+				header[5] = 0xFF;
+				header[6] = 0xFF;
+				header[7] = 0xFF;
+				header[8] = 0xFF;
+				header[9] = 0xFF;
+				header[10] = 0xFF;
+				header[11] = 0x00;
+				header[12] = BCD(msf.m);
+				header[13] = BCD(msf.s);
+				header[14] = BCD(msf.f);
+				header[15] = 0x01;
 				DataSectorSend(header, this->speed);
 			}
 			else {
@@ -1132,6 +1151,29 @@ void satcdd_t::MakeSecureRingData(uint8_t *buf) {
 	}
 }
 
+uint32_t satcdd_t::DataSectorCalcCRC(uint8_t* buf, int len)
+{
+	static uint32_t crc_tab[256];
+	for (int i = 0; i < 256; i++)
+	{
+		uint32_t c = i;
+
+		for (unsigned j = 0; j < 8; j++)
+			c = (c >> 1) ^ ((c & 0x1) ? 0xD8018001 : 0);
+
+		crc_tab[i] = c;
+	}
+
+	uint32_t crc = 0;
+	for (int i = 0; i < len; i++)
+	{
+		crc ^= buf[i];
+		crc = (crc >> 8) ^ crc_tab[crc & 0xFF];
+	}
+
+	return crc;
+}
+
 void satcdd_t::ReadData(uint8_t *buf)
 {
 	int offs = 0; 
@@ -1219,13 +1261,28 @@ int satcdd_t::DataSectorSend(uint8_t* header, int speed)
 
 	uint8_t *shmem_ptr = (uint8_t*)shmem_map(SHMEM_ADDR, 4096 * 4);
 	uint8_t *data_ptr = shmem_ptr + (buf_num_write * 4096);
+
+	ReadData(data_ptr);
 	if (header) {
-		ReadData(data_ptr);
-		memcpy(data_ptr + 12 , header, 4);
+		memcpy(data_ptr, header, 16);
+	}
+	uint8_t sec_mode = data_ptr[15];
+
+	uint32_t crc = DataSectorCalcCRC(data_ptr, (sec_mode == 2 ? 2348 : 2064));
+	if (sec_mode == 0x02) {
+		/*data_ptr[2348] = crc >> 0;
+		data_ptr[2349] = crc >> 8;
+		data_ptr[2350] = crc >> 16;
+		data_ptr[2351] = crc >> 24;*/
 	}
 	else {
-		ReadData(data_ptr);
+		data_ptr[2064] = crc >> 0;
+		data_ptr[2065] = crc >> 8;
+		data_ptr[2066] = crc >> 16;
+		data_ptr[2067] = crc >> 24;
+		memset(data_ptr + 2068, 0, 2352 - 2068);
 	}
+
 	int boot = (data_ptr[12] == 0x00 && data_ptr[13] == 0x02 && data_ptr[14] == 0x00 && data_ptr[15] == 0x01);
 	shmem_unmap(shmem_ptr, 4096 * 4);
 
@@ -1289,55 +1346,3 @@ int satcdd_t::AudioSectorSend(int first)
 
 	return 0;
 }
-
-//int satcdd_t::DataSectorSend(uint8_t* header, int speed)
-//{
-//	uint8_t* data_ptr = cd_buf + 2;
-//
-//	if (header) {
-//		ReadData(data_ptr);
-//		memcpy(data_ptr + 12, header, 4);
-//	}
-//	else {
-//		ReadData(data_ptr);
-//	}
-//	cd_buf[0] = cd_buf[1] = (speed == 2 ? 0x01 : 0x00);
-//
-//	if (SendData)
-//		return SendData(cd_buf, 2352 + 2, CD_DATA_IO_INDEX);
-//
-//	return 0;
-//}
-//
-//int satcdd_t::RingDataSend(uint8_t* header, int speed)
-//{
-//	uint8_t* data_ptr = cd_buf + 2;
-//
-//	if (header) {
-//		MakeSecureRingData(data_ptr);
-//		memcpy(data_ptr + 12, header, 12);
-//		memset(data_ptr + 2348, 0, 4);
-//	}
-//	cd_buf[0] = cd_buf[1] = (speed == 2 ? 1 : 0);
-//
-//	if (SendData)
-//		return SendData(cd_buf, 2352 + 2, CD_DATA_IO_INDEX);
-//
-//	return 0;
-//}
-//
-//int satcdd_t::AudioSectorSend(int first)
-//{
-//	int len;
-//	uint8_t* data_ptr = cd_buf + 2;
-//
-//	len = ReadCDDA(data_ptr, first);
-//	cd_buf[0] = cd_buf[1] = 0x02;
-//
-//	if (SendData)
-//		return SendData(cd_buf, len + 2, CD_DATA_IO_INDEX);
-//
-//	return 0;
-//}
-
-
