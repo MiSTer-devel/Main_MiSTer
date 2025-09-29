@@ -657,6 +657,8 @@ void subcode_data(int lba, struct subcode &out)
 		as = rem_lba / 75;
 		af = rem_lba % 75;
 
+		if (toc_entry_count == 0) // catch division by zero
+			return;
 		auto &toc_entry = toc_buffer[lba % toc_entry_count];
 
 		out.control = htons(toc_entry.control);
@@ -817,6 +819,7 @@ void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 		}
 
 		buffer += CD_SECTOR_LEN;
+		subcode_data(lba, *reinterpret_cast<struct subcode *>(buffer));
 		buffer += sizeof(struct subcode);
 		cnt--;
 		lba++;
