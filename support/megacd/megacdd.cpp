@@ -6,6 +6,7 @@
 #include <time.h>
 
 #include "megacd.h"
+#include "../../user_io.h"
 #include "../chd/mister_chd.h"
 
 cdd_t cdd;
@@ -302,6 +303,58 @@ int cdd_t::Load(const char *filename)
 		this->loaded = 1;
 
 		printf("\x1b[32mMCD: CD mounted , last track = %u\n\x1b[0m", this->toc.last);
+
+		// Extract MegaCD product code from disc header
+		char product_code[32] = {0};
+		if (this->toc.tracks[0].f.opened() && this->toc.tracks[0].type)
+		{
+			uint8_t sector[2352];
+			FileSeek(&this->toc.tracks[0].f, 0, SEEK_SET);
+			if (FileReadAdv(&this->toc.tracks[0].f, sector, 2352))
+			{
+				// Find Sega CD magic word
+				const char *magic_words[] = {"SEGADISCSYSTEM", "SEGABOOTDISC", "SEGADISC", "SEGADATADISC"};
+				int magic_ind = -1;
+
+				for (int m = 0; m < 4 && magic_ind < 0; m++)
+				{
+					int magic_len = strlen(magic_words[m]);
+					for (int i = 0; i < 0x300 - magic_len; i++)
+					{
+						if (memcmp(&sector[i], magic_words[m], magic_len) == 0)
+						{
+							magic_ind = i;
+							break;
+						}
+					}
+				}
+
+				if (magic_ind >= 0)
+				{
+					// Product code is at offset 0x180 from magic word, 16 bytes
+					const char *header_product = (const char*)&sector[magic_ind + 0x180];
+					int code_len = 0;
+					for (int i = 0; i < 16 && header_product[i] >= 0x20 && header_product[i] < 0x7F; i++)
+					{
+						if (header_product[i] != ' ' || code_len > 0)
+						{
+							product_code[code_len++] = header_product[i];
+						}
+					}
+					// Trim trailing spaces
+					while (code_len > 0 && product_code[code_len - 1] == ' ')
+					{
+						product_code[--code_len] = 0;
+					}
+				}
+			}
+		}
+
+		if (product_code[0])
+		{
+			printf("MegaCD Game ID: %s\n", product_code);
+		}
+		user_io_write_gamename(filename, product_code[0] ? product_code : NULL, 0);
 
 		return 1;
 	}
