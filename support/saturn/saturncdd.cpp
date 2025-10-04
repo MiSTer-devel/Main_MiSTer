@@ -532,6 +532,11 @@ void satcdd_t::CommandExec() {
 	int cmd_idx = comm[4];
 	int cmd_tno = comm[8];
 
+	if (cmd_idx > this->toc.tracks[cmd_tno - 1].index_num && cmd_tno - 1 < this->toc.last) {
+		cmd_idx -= this->toc.tracks[cmd_tno - 1].index_num;
+		cmd_tno += 1;
+		cmd_fad = this->toc.tracks[cmd_tno - 1].start + 150;
+	}
 	int fad = cmd_fad + this->GetSectorOffsetByIndex(cmd_tno, cmd_idx);
 
 	switch (comm[0]) {
