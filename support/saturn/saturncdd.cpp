@@ -387,54 +387,7 @@ int satcdd_t::Load(const char *filename)
 		printf("\x1b[32mSaturn: CD mounted, last track = %u\n\x1b[0m", this->toc.last);
 #endif // SATURN_DEBUG
 
-		// Extract Saturn product code from disc header
-		char product_code[32] = {0};
-		if (this->toc.tracks[0].f.opened() && this->toc.tracks[0].type)
-		{
-			uint8_t sector[2352];
-			FileSeek(&this->toc.tracks[0].f, 0, SEEK_SET);
-			if (FileReadAdv(&this->toc.tracks[0].f, sector, 2352))
-			{
-				// Find "SEGA SEGASATURN" magic word
-				const char *magic = "SEGA SEGASATURN";
-				int magic_len = 15;
-				int magic_ind = -1;
-				for (int i = 0; i < 2352 - magic_len; i++)
-				{
-					if (memcmp(&sector[i], magic, magic_len) == 0)
-					{
-						magic_ind = i;
-						break;
-					}
-				}
-
-				if (magic_ind >= 0)
-				{
-					// Product code is at offset 0x20 from magic word
-					const char *header_product = (const char*)&sector[magic_ind + 0x20];
-					int code_len = 0;
-					// Extract up to 10 bytes
-					for (int i = 0; i < 10 && header_product[i] >= 0x20 && header_product[i] < 0x7F; i++)
-					{
-						if (header_product[i] != ' ' || code_len > 0)
-						{
-							product_code[code_len++] = header_product[i];
-						}
-					}
-					// Trim trailing spaces
-					while (code_len > 0 && product_code[code_len - 1] == ' ')
-					{
-						product_code[--code_len] = 0;
-					}
-				}
-			}
-		}
-
-		if (product_code[0])
-		{
-			printf("Saturn Game ID: %s\n", product_code);
-		}
-		user_io_write_gamename(filename, product_code[0] ? product_code : NULL, 0);
+		user_io_write_gamename(filename, NULL, 0);
 
 		return 1;
 	}

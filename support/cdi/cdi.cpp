@@ -850,30 +850,7 @@ void cdi_mount_cd(int s_index, const char *filename)
 			mount_cd(toc.end * CD_SECTOR_LEN, s_index);
 			loaded = 1;
 
-			// Extract CD-i volume label (game title) from sector 16
-			char game_title[33] = {0};
-			if (toc.tracks[0].f.opened())
-			{
-				uint8_t sector[2352];
-				FileSeek(&toc.tracks[0].f, 16 * 2352, SEEK_SET);
-				if (FileReadAdv(&toc.tracks[0].f, sector, 2352))
-				{
-					// CD-i volume label is at offset 0x40, 32 bytes
-					memcpy(game_title, &sector[0x40], 32);
-					game_title[32] = 0;
-					// Trim trailing spaces
-					for (int i = 31; i >= 0 && (game_title[i] == ' ' || game_title[i] == 0); i--)
-					{
-						game_title[i] = 0;
-					}
-				}
-			}
-
-			if (game_title[0] && game_title[0] >= 0x20 && game_title[0] < 0x7F)
-			{
-				printf("CD-i Game ID: %s\n", game_title);
-			}
-			user_io_write_gamename(filename, (game_title[0] && game_title[0] >= 0x20 && game_title[0] < 0x7F) ? game_title : NULL, 0);
+			user_io_write_gamename(filename, NULL, 0);
 		}
 	}
 
