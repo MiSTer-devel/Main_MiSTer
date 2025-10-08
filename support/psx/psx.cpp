@@ -698,7 +698,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				region = game_info.region;
 			printf("Game ID: %s, region: %s\n", game_id, region_string(region));
 
-			user_io_write_gamename(filename, game_id[0] ? game_id : NULL, 0);
+			user_io_write_gamename(filename, 0);
 
 			int name_len = strlen(filename);
 

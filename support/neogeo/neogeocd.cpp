@@ -126,7 +126,7 @@ void neocd_set_image(char *filename)
 			cdd.SendData = neocd_send_data;
 			cdd.CanSendData = neocd_can_send_data;
 
-			user_io_write_gamename(filename, NULL, 0);
+			user_io_write_gamename(filename, 0);
 		}
 		else
 		{

@@ -207,7 +207,7 @@ void pcecd_set_image(int num, const char *filename)
 			pcecdd.latency = 10;
 			pcecdd.SendData = pcecd_send_data;
 
-			user_io_write_gamename(filename, NULL, 0);
+			user_io_write_gamename(filename, 0);
 
 			int sgx = 0;
 

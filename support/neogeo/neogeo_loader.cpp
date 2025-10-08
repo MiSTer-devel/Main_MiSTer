@@ -1285,8 +1285,8 @@ int neogeo_romset_tx(char* name, int cd_en)
 
 	if (!cd_en)
 	{
-		printf("Writing gamename: path=%s, game_id=%s\n", name, neo_game_name[0] ? neo_game_name : "NULL");
-		user_io_write_gamename(name, neo_game_name[0] ? neo_game_name : NULL, 0);
+		printf("Writing gamename: path=%s\n", name);
+		user_io_write_gamename(name, 0);
 	}
 
 	return 1;

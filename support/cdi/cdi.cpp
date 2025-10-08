@@ -850,7 +850,7 @@ void cdi_mount_cd(int s_index, const char *filename)
 			mount_cd(toc.end * CD_SECTOR_LEN, s_index);
 			loaded = 1;
 
-			user_io_write_gamename(filename, NULL, 0);
+			user_io_write_gamename(filename, 0);
 		}
 	}
 

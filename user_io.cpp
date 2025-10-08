@@ -2447,16 +2447,12 @@ uint32_t user_io_get_file_crc()
 	return file_crc;
 }
 
-void user_io_write_gamename(const char *path, const char *game_id, uint32_t crc32_val)
+void user_io_write_gamename(const char *path, uint32_t crc32_val)
 {
 	FILE *f = fopen("/tmp/GAMENAME", "w");
 	if (f)
 	{
 		fprintf(f, "%s\n", path);
-		if (game_id && game_id[0])
-		{
-			fprintf(f, "Game ID: %s\n", game_id);
-		}
 		if (crc32_val)
 		{
 			fprintf(f, "CRC32: %08X\n", crc32_val);
@@ -2779,7 +2775,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	printf("Done.\n");
 	printf("CRC32: %08X\n", file_crc);
 
-	user_io_write_gamename(name, NULL, file_crc);
+	user_io_write_gamename(name, file_crc);
 
 	FileClose(&f);
 

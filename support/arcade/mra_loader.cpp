@@ -1422,8 +1422,7 @@ mgl_struct* mgl_parse(const char *xml)
 	sax.all_event = scan_mgl;
 	XMLDoc_parse_file_SAX(xml, &sax, 0);
 
-	const char *game_id = arcade_get_gamename();
-	user_io_write_gamename(xml, game_id, 0);
+	user_io_write_gamename(xml, 0);
 
 	return &mgl;
 }

@@ -304,7 +304,7 @@ int cdd_t::Load(const char *filename)
 
 		printf("\x1b[32mMCD: CD mounted , last track = %u\n\x1b[0m", this->toc.last);
 
-		user_io_write_gamename(filename, NULL, 0);
+		user_io_write_gamename(filename, 0);
 
 		return 1;
 	}
