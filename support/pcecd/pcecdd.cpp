@@ -293,7 +293,6 @@ int pcecdd_t::Load(const char *filename)
 		} else {
 			printf("\x1b[32mPCECD: No SUBCODE file located.  Searched for '%s'.\n\x1b[0m", subcode_name);
 		}
-
 		return 1;
 	}
 
