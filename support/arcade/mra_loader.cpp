@@ -20,9 +20,6 @@
 #include "mra_loader.h"
 
 #define kBigTextSize 1024
-
-static char pending_arcade_gamename[256] = {0};
-
 struct arc_struct {
 	char md5[kBigTextSize];
 	char zipname[kBigTextSize];
@@ -1059,7 +1056,6 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		foundsetname = false;
 		foundrotation = false;
 		samedir = 0;
-		pending_arcade_gamename[0] = 0;  // Clear game name at start
 		break;
 
 	case XML_EVENT_START_NODE:
@@ -1081,13 +1077,7 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		break;
 
 	case XML_EVENT_TEXT:
-		if(insetname)
-		{
-			user_io_name_override(text, samedir);
-			// Store setname from XML for game identification
-			strncpy(pending_arcade_gamename, text, sizeof(pending_arcade_gamename) - 1);
-			pending_arcade_gamename[sizeof(pending_arcade_gamename) - 1] = 0;
-		}
+		if(insetname) user_io_name_override(text, samedir);
 		if(inrotation)
 		{
 			is_vertical = strncasecmp(text, "vertical", 8) == 0;
@@ -1151,9 +1141,6 @@ int arcade_send_rom(const char *xml)
 	arcade_sw_load();
 	switches.dip_saved = switches.dip_cur;
 	arcade_sw_send();
-
-	// pending_arcade_gamename is now set from the <setname> XML tag in xml_read_pre_parse
-
 	return 0;
 }
 
@@ -1179,16 +1166,6 @@ void arcade_check_error()
 		arcade_error_msg[0] = 0;
 		sleep(5+3);
 	}
-}
-
-const char* arcade_get_gamename()
-{
-	return pending_arcade_gamename[0] ? pending_arcade_gamename : NULL;
-}
-
-void arcade_clear_gamename()
-{
-	pending_arcade_gamename[0] = 0;
 }
 
 static const char *get_rbf_path(const char *rbfname)

@@ -4,8 +4,6 @@
 int arcade_send_rom(const char *xml);
 int xml_load(const char *xml);
 void arcade_check_error();
-const char* arcade_get_gamename();
-void arcade_clear_gamename();
 
 struct dip_struct
 {

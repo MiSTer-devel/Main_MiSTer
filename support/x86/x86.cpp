@@ -777,18 +777,6 @@ void x86_set_image(int num, char *filename)
 	strcpy(config.img_name[num], filename);
 	if (num < 2) fdd_set(num, filename);
 	else if (ide_is_placeholder(num - 2)) hdd_set(num - 2, filename);
-
-	if (filename[0])
-	{
-		FILE *gamename_file = fopen("/tmp/GAMENAME", "w");
-		if (gamename_file)
-		{
-			fprintf(gamename_file, "%s\n", filename);
-			fclose(gamename_file);
-			printf("Wrote current path to /tmp/GAMENAME\n");
-			fflush(stdout);
-		}
-	}
 }
 
 static char* get_config_name()

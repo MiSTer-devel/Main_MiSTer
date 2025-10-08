@@ -294,15 +294,6 @@ int pcecdd_t::Load(const char *filename)
 			printf("\x1b[32mPCECD: No SUBCODE file located.  Searched for '%s'.\n\x1b[0m", subcode_name);
 		}
 
-		FILE *gamename_file = fopen("/tmp/GAMENAME", "w");
-		if (gamename_file)
-		{
-			fprintf(gamename_file, "%s\n", filename);
-			fclose(gamename_file);
-			printf("Wrote current path to /tmp/GAMENAME\n");
-			fflush(stdout);
-		}
-
 		return 1;
 	}
 

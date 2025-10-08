@@ -1656,17 +1656,6 @@ void user_io_init(const char *path, const char *xml)
 	SetMidiLinkMode(midilink);
 	SetUARTMode(uartmode);
 
-	// Write arcade game info if we loaded an MRA file
-	const char *arcade_game = arcade_get_gamename();
-	if (arcade_game)
-	{
-		MakeFile("/tmp/CORENAME", "Arcade");
-		MakeFile("/tmp/GAMENAME", arcade_game);
-		arcade_clear_gamename();
-		printf("Wrote arcade game to /tmp/GAMENAME: %s\n", arcade_game);
-		fflush(stdout);
-	}
-
 	if (!mgl_get()->count || is_menu() || is_st() || is_archie() || user_io_core_type() == CORE_TYPE_SHARPMZ)
 	{
 		mgl_get()->done = 1;
