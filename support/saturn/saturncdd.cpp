@@ -6,7 +6,6 @@
 
 #include "saturn.h"
 #include "../../shmem.h"
-#include "../../user_io.h"
 #include "../chd/mister_chd.h"
 
 #define SHMEM_ADDR  0x31000000

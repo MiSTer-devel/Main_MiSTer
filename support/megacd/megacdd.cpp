@@ -6,7 +6,6 @@
 #include <time.h>
 
 #include "megacd.h"
-#include "../../user_io.h"
 #include "../chd/mister_chd.h"
 
 cdd_t cdd;
