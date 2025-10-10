@@ -1283,11 +1283,5 @@ int neogeo_romset_tx(char* name, int cd_en)
 
 	user_io_status_set("[0]", 0); // Release reset
 
-	if (!cd_en)
-	{
-		printf("Writing gamename: path=%s\n", name);
-		user_io_write_gamename(name, 0);
-	}
-
 	return 1;
 }

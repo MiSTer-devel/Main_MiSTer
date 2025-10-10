@@ -387,8 +387,6 @@ int satcdd_t::Load(const char *filename)
 		printf("\x1b[32mSaturn: CD mounted, last track = %u\n\x1b[0m", this->toc.last);
 #endif // SATURN_DEBUG
 
-		user_io_write_gamename(filename, 0);
-
 		return 1;
 	}
 

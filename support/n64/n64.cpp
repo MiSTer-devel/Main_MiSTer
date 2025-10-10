@@ -1688,7 +1688,11 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 	printf("CRC32: %08X\n", file_crc);
 	FileClose(&f);
 
-	user_io_write_gamename(name, file_crc);
+	// Write game ID if cart_id exists (BIOS check is handled in user_io_write_gameid)
+	if (cart_id[0])
+	{
+		user_io_write_gameid(name, file_crc, cart_id);
+	}
 
 	bool is_patched = false;
 

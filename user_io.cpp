@@ -1105,7 +1105,7 @@ void SetUARTMode(int mode)
 
 	MakeFile("/tmp/CORENAME", user_io_get_core_name());
     MakeFile("/tmp/RBFNAME", user_io_get_core_name(1));
-	unlink("/tmp/GAMENAME");
+	unlink("/tmp/GAMEID");
 
 	char data[20];
 	sprintf(data, "%d", baud);
@@ -2105,19 +2105,6 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	else
 	{
 		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", index);
-
-		// Write to /tmp/GAMENAME for computer cores (any disk index)
-		if (is_x86() || is_minimig() || is_archie() || is_st() || is_c64() || is_c128())
-		{
-			FILE *gamename_file = fopen("/tmp/GAMENAME", "w");
-			if (gamename_file)
-			{
-				fprintf(gamename_file, "%s\n", name);
-				fclose(gamename_file);
-				printf("Wrote current path to /tmp/GAMENAME\n");
-				fflush(stdout);
-			}
-		}
 	}
 
 	user_io_sd_set_config();
@@ -2436,23 +2423,39 @@ uint32_t user_io_get_file_crc()
 	return file_crc;
 }
 
-void user_io_write_gamename(const char *path, uint32_t crc32_val)
+void user_io_write_gameid(const char *filename, uint32_t crc32_val, const char *product_code)
 {
-	FILE *f = fopen("/tmp/GAMENAME", "w");
+	// Extract basename from filename
+	const char *fname = strrchr(filename, '/');
+	if (!fname) fname = filename;
+	else fname++;
+
+	// Skip BIOS files
+	if (strncasecmp(fname, "boot", 4) == 0 || strncasecmp(fname, "cd_bios", 7) == 0)
+	{
+		printf("Skipping BIOS file: %s\n", fname);
+		fflush(stdout);
+		return;
+	}
+
+	FILE *f = fopen("/tmp/GAMEID", "w");
 	if (f)
 	{
-		fprintf(f, "%s\n", path);
 		if (crc32_val)
 		{
 			fprintf(f, "CRC32: %08X\n", crc32_val);
 		}
+		if (product_code && product_code[0])
+		{
+			fprintf(f, "Product Code: %s\n", product_code);
+		}
 		fclose(f);
-		printf("Wrote current path to /tmp/GAMENAME\n");
+		printf("Wrote game ID to /tmp/GAMEID\n");
 		fflush(stdout);
 	}
 	else
 	{
-		printf("Failed to write /tmp/GAMENAME\n");
+		printf("Failed to write /tmp/GAMEID\n");
 		fflush(stdout);
 	}
 }
@@ -2764,7 +2767,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	printf("Done.\n");
 	printf("CRC32: %08X\n", file_crc);
 
-	user_io_write_gamename(name, file_crc);
+	user_io_write_gameid(name, file_crc);
 
 	FileClose(&f);
 
