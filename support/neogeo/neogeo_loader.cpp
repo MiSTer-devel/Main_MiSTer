@@ -1081,7 +1081,6 @@ void load_neo(char *path)
 			}
 
 			printf("ID=0x%X, PSize=%d, SSize=%d, MSize=%d, V1Size=%d, V2Size=%d, CSize=%d, Name=%s\n", hdr.NGH, hdr.PSize, hdr.SSize, hdr.MSize, hdr.V1Size, hdr.V2Size, hdr.CSize, hdr.Name);
-
 			char *p = strrchr(path, '/');
 			*p++ = 0;
 			uint32_t off = 4096;
