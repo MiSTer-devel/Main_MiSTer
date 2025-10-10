@@ -2425,6 +2425,8 @@ uint32_t user_io_get_file_crc()
 
 void user_io_write_gameid(const char *filename, uint32_t crc32_val, const char *product_code)
 {
+	if (!cfg.log_file_entry) return;
+
 	// Extract basename from filename
 	const char *fname = strrchr(filename, '/');
 	if (!fname) fname = filename;
@@ -2433,30 +2435,29 @@ void user_io_write_gameid(const char *filename, uint32_t crc32_val, const char *
 	// Skip BIOS files
 	if (strncasecmp(fname, "boot", 4) == 0 || strcasestr(fname, "bios"))
 	{
-		printf("Skipping BIOS file: %s\n", fname);
-		fflush(stdout);
 		return;
 	}
 
 	FILE *f = fopen("/tmp/GAMEID", "w");
 	if (f)
 	{
+		printf("Game ID: %s", fname);
 		if (crc32_val)
 		{
 			fprintf(f, "CRC32: %08X\n", crc32_val);
+			printf(" [CRC32: %08X]", crc32_val);
 		}
 		if (product_code && product_code[0])
 		{
-			fprintf(f, "Product Code: %s\n", product_code);
+			fprintf(f, "Serial: %s\n", product_code);
+			printf(" [%s]", product_code);
 		}
+		printf("\n");
 		fclose(f);
-		printf("Wrote game ID to /tmp/GAMEID\n");
-		fflush(stdout);
 	}
 	else
 	{
 		printf("Failed to write /tmp/GAMEID\n");
-		fflush(stdout);
 	}
 }
 
