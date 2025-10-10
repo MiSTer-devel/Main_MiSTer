@@ -1105,7 +1105,6 @@ void SetUARTMode(int mode)
 
 	MakeFile("/tmp/CORENAME", user_io_get_core_name());
     MakeFile("/tmp/RBFNAME", user_io_get_core_name(1));
-	unlink("/tmp/GAMEID");
 
 	char data[20];
 	sprintf(data, "%d", baud);
@@ -1325,6 +1324,9 @@ void user_io_init(const char *path, const char *xml)
 	static char mainpath[512];
 	core_name[0] = 0;
 	disable_osd = 0;
+
+	// Clean up old game ID when loading a new core
+	unlink("/tmp/GAMEID");
 
 	// we need to set the directory to where the XML file (MRA) is
 	// not the RBF. The RBF will be in arcade, which the user shouldn't
@@ -2423,7 +2425,7 @@ uint32_t user_io_get_file_crc()
 	return file_crc;
 }
 
-void user_io_write_gameid(const char *filename, uint32_t crc32_val, const char *product_code)
+void user_io_write_gameid(const char *filename, uint32_t crc32_val, const char *serial)
 {
 	if (!cfg.log_file_entry) return;
 
@@ -2439,26 +2441,37 @@ void user_io_write_gameid(const char *filename, uint32_t crc32_val, const char *
 	}
 
 	FILE *f = fopen("/tmp/GAMEID", "w");
-	if (f)
-	{
-		printf("Game ID: %s", fname);
-		if (crc32_val)
-		{
-			fprintf(f, "CRC32: %08X\n", crc32_val);
-			printf(" [CRC32: %08X]", crc32_val);
-		}
-		if (product_code && product_code[0])
-		{
-			fprintf(f, "Serial: %s\n", product_code);
-			printf(" [%s]", product_code);
-		}
-		printf("\n");
-		fclose(f);
-	}
-	else
+	if (!f)
 	{
 		printf("Failed to write /tmp/GAMEID\n");
+		return;
 	}
+
+	int wrote_something = 0;
+	printf("Game ID: %s", fname);
+
+	if (crc32_val)
+	{
+		fprintf(f, "CRC32: %08X\n", crc32_val);
+		printf(" [CRC32: %08X]", crc32_val);
+		wrote_something = 1;
+	}
+	if (serial && serial[0])
+	{
+		fprintf(f, "Serial: %s\n", serial);
+		printf(" [%s]", serial);
+		wrote_something = 1;
+	}
+
+	// Ensure we always write something to the file
+	if (!wrote_something)
+	{
+		fprintf(f, "# No game ID available\n");
+	}
+
+	printf("\n");
+	fflush(f);
+	fclose(f);
 }
 
 int user_io_use_cheats()
