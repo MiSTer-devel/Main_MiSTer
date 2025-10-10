@@ -2397,8 +2397,7 @@ void HandleUI(void)
 				if (cfg.log_file_entry)
 				{
 					const char *fname = strrchr(selPath, '/');
-					MakeFile("/tmp/STARTPATH", selPath);
-					MakeFile("/tmp/FULLPATH", selPath);
+						MakeFile("/tmp/FULLPATH", selPath);
 					MakeFile("/tmp/CURRENTPATH", fname ? fname + 1 : selPath);
 					MakeFile("/tmp/FILESELECT", "selected");
 				}
@@ -2471,10 +2470,9 @@ void HandleUI(void)
 				if (cfg.log_file_entry)
 				{
 					const char *fname = strrchr(selPath, '/');
-					MakeFile("/tmp/STARTPATH", selPath);
-					MakeFile("/tmp/FULLPATH", selPath);
+						MakeFile("/tmp/FULLPATH", selPath);
 					MakeFile("/tmp/CURRENTPATH", fname ? fname + 1 : selPath);
-					MakeFile("/tmp/FILESELECT", "mgl");
+					MakeFile("/tmp/FILESELECT", "selected");
 				}
 			}
 
@@ -5713,10 +5711,9 @@ void HandleUI(void)
 			if (cfg.log_file_entry)
 			{
 				const char *fname = strrchr(selPath, '/');
-				MakeFile("/tmp/STARTPATH", selPath);
 				MakeFile("/tmp/FULLPATH", selPath);
 				MakeFile("/tmp/CURRENTPATH", fname ? fname + 1 : selPath);
-				MakeFile("/tmp/FILESELECT", "mgl");
+				MakeFile("/tmp/FILESELECT", "selected");
 			}
 		}
 		memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
