@@ -2431,7 +2431,7 @@ void user_io_write_gameid(const char *filename, uint32_t crc32_val, const char *
 	else fname++;
 
 	// Skip BIOS files
-	if (strncasecmp(fname, "boot", 4) == 0 || strncasecmp(fname, "cd_bios", 7) == 0)
+	if (strncasecmp(fname, "boot", 4) == 0 || strcasestr(fname, "bios"))
 	{
 		printf("Skipping BIOS file: %s\n", fname);
 		fflush(stdout);
