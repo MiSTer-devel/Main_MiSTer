@@ -18,6 +18,7 @@
 static char buf[1024];
 static uint8_t *chd_hunkbuf = NULL;
 static int chd_hunknum;
+static int noreset = 0;
 
 static int sgets(char *out, int sz, char **in)
 {
@@ -710,12 +711,12 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 				if (!same_game)
 				{
-					reset = 1;
-					if (old_len)
+					if (!noreset && old_len)
 					{
 						strcat(last_dir, "/noreset.txt");
-						reset = !FileExists(last_dir);
+						noreset = FileExists(last_dir);
 					}
+					reset = !noreset;
 
 					strcpy(last_dir, filename);
 					char *p = strrchr(last_dir, '/');
@@ -797,4 +798,9 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 void psx_poll()
 {
 	spi_uio_cmd(UIO_CD_GET);
+}
+
+void psx_reset()
+{
+	noreset = 0;
 }
