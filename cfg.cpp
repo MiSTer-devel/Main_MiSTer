@@ -794,7 +794,7 @@ void yc_parse(yc_mode *yc_table, int max)
 	const char *corename = user_io_get_core_name(1);
 	int corename_len = strlen(corename);
 
-	const char *name = cfg.subcarrier ? "subcarrier.txt" : "yc.txt";
+	const char *name = "yc.txt";
 	if (!FileOpen(&ini_file, name))	return;
 
 	ini_parser_debugf("Opened file %s with size %llu bytes.", name, ini_file.size);
