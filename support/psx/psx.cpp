@@ -699,6 +699,12 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				region = game_info.region;
 			printf("Game ID: %s, region: %s\n", game_id, region_string(region));
 
+			// Write game ID if it's not empty (BIOS check is handled in user_io_write_gameid)
+			if (game_id && game_id[0] != '\0')
+			{
+				user_io_write_gameid(filename, 0, game_id);
+			}
+
 			int name_len = strlen(filename);
 
 			if (toc.tracks[0].type) // is first track a data?

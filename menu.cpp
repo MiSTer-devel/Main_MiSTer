@@ -2393,6 +2393,15 @@ void HandleUI(void)
 			{
 				if(mgl->item[mgl->current].path[0] == '/') snprintf(selPath, sizeof(selPath), "%s", mgl->item[mgl->current].path);
 				else snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
+
+				// Update /tmp/ files to reflect the actual file being loaded by MGL
+				if (cfg.log_file_entry)
+				{
+					const char *fname = strrchr(selPath, '/');
+						MakeFile("/tmp/FULLPATH", selPath);
+					MakeFile("/tmp/CURRENTPATH", fname ? fname + 1 : selPath);
+					MakeFile("/tmp/FILESELECT", "selected");
+				}
 			}
 
 			MenuHide();
@@ -2457,6 +2466,15 @@ void HandleUI(void)
 			{
 				if (mgl->item[mgl->current].path[0] == '/') snprintf(selPath, sizeof(selPath), "%s", mgl->item[mgl->current].path);
 				else snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(((is_pce() && !strncasecmp(fs_pFileExt, "CUE", 3)) ? PCECD_DIR : NULL)), mgl->item[mgl->current].path);
+
+				// Update /tmp/ files to reflect the actual image being loaded by MGL
+				if (cfg.log_file_entry)
+				{
+					const char *fname = strrchr(selPath, '/');
+						MakeFile("/tmp/FULLPATH", selPath);
+					MakeFile("/tmp/CURRENTPATH", fname ? fname + 1 : selPath);
+					MakeFile("/tmp/FILESELECT", "selected");
+				}
 			}
 
 			if (store_name)
@@ -5687,7 +5705,18 @@ void HandleUI(void)
 		break;
 
 	case MENU_MINIMIG_ADFFILE_SELECTED:
-		if (!mgl->done) snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
+		if (!mgl->done)
+		{
+			snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
+			// Update /tmp/ files to reflect the actual file being loaded by MGL
+			if (cfg.log_file_entry)
+			{
+				const char *fname = strrchr(selPath, '/');
+				MakeFile("/tmp/FULLPATH", selPath);
+				MakeFile("/tmp/CURRENTPATH", fname ? fname + 1 : selPath);
+				MakeFile("/tmp/FILESELECT", "selected");
+			}
+		}
 		memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
 		if (mgl->done) recent_update(SelectedDir, selPath, SelectedLabel, 0);
 		InsertFloppy(&df[menusub], selPath);
