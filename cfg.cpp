@@ -607,14 +607,31 @@ void cfg_parse()
 	if (strlen(cfg.vga_mode))
 	{
 		if (!strcasecmp(cfg.vga_mode, "rgb")) cfg.vga_mode_int = 0;
-		if (!strcasecmp(cfg.vga_mode, "ypbpr")) cfg.vga_mode_int = 1;
-		if (!strcasecmp(cfg.vga_mode, "svideo")) cfg.vga_mode_int = 2;
-		if (!strcasecmp(cfg.vga_mode, "cvbs")) cfg.vga_mode_int = 3;
+		if (!strcasecmp(cfg.vga_mode, "ypbpr"))
+		{
+			cfg.vga_mode_int = 1;
+			cfg.vga_sog=1;
+		}
+		if (!strcasecmp(cfg.vga_mode, "svideo"))
+		{
+			cfg.vga_mode_int = 2;
+			cfg.csync = 1;
+			cfg.forced_scandoubler = 0;
+			cfg.vga_scaler=0;
+		}	
+		if (!strcasecmp(cfg.vga_mode, "cvbs"))
+		{
+			cfg.vga_mode_int = 3;
+			cfg.csync = 1;
+			cfg.forced_scandoubler = 0;
+			cfg.vga_scaler=0;
+		}
 		if (!strcasecmp(cfg.vga_mode, "subcarrier"))
 		{
 			cfg.vga_mode_int = 4;
 			cfg.csync = 1;
 			cfg.forced_scandoubler = 0;
+			cfg.vga_scaler=0;
 		}
 	}
 }
