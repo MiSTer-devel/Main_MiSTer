@@ -7,5 +7,6 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt);
 int psx_chd_hunksize();
 const char* psx_get_game_id();
 void psx_poll();
+void psx_reset();
 
 #endif

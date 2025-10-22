@@ -573,6 +573,7 @@ const char* cfg_get_label(uint8_t alt)
 void cfg_parse()
 {
 	memset(&cfg, 0, sizeof(cfg));
+	cfg.csync = 1;
 	cfg.bootscreen = 1;
 	cfg.fb_terminal = 1;
 	cfg.controller_info = 6;
