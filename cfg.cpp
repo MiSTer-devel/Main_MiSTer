@@ -607,31 +607,32 @@ void cfg_parse()
 	if (strlen(cfg.vga_mode))
 	{
 		if (!strcasecmp(cfg.vga_mode, "rgb")) cfg.vga_mode_int = 0;
-		if (!strcasecmp(cfg.vga_mode, "ypbpr"))
+		if (!strcasecmp(cfg.vga_mode, "ypbpr")) // YPbPr: Sync-on-green, user can control scandoubler/scaler for 15kHz or 31kHz
 		{
 			cfg.vga_mode_int = 1;
-			cfg.vga_sog=1;
+			cfg.csync = 1;
+			cfg.vga_sog = 1;
 		}
-		if (!strcasecmp(cfg.vga_mode, "svideo"))
+		if (!strcasecmp(cfg.vga_mode, "svideo")) // S-Video: Always 15kHz composite sync
 		{
 			cfg.vga_mode_int = 2;
 			cfg.csync = 1;
 			cfg.forced_scandoubler = 0;
-			cfg.vga_scaler=0;
-		}	
-		if (!strcasecmp(cfg.vga_mode, "cvbs"))
+			cfg.vga_scaler = 0;
+		}
+		if (!strcasecmp(cfg.vga_mode, "cvbs")) // CVBS: Always 15kHz composite sync
 		{
 			cfg.vga_mode_int = 3;
 			cfg.csync = 1;
 			cfg.forced_scandoubler = 0;
-			cfg.vga_scaler=0;
+			cfg.vga_scaler = 0;
 		}
-		if (!strcasecmp(cfg.vga_mode, "subcarrier"))
+		if (!strcasecmp(cfg.vga_mode, "subcarrier")) // Subcarrier: 15kHz RGB with subcarrier injection and composite sync
 		{
 			cfg.vga_mode_int = 4;
 			cfg.csync = 1;
 			cfg.forced_scandoubler = 0;
-			cfg.vga_scaler=0;
+			cfg.vga_scaler = 0;
 		}
 	}
 }
