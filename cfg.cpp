@@ -133,6 +133,10 @@ static const ini_var_t ini_vars[] =
 	{ "LOOKAHEAD", (void *)(&(cfg.lookahead)), UINT8, 0, 3 },
 	{ "MAIN", (void*)(&(cfg.main)), STRING, 0, sizeof(cfg.main) - 1 },
 	{"VFILTER_INTERLACE_DEFAULT", (void*)(&(cfg.vfilter_interlace_default)), STRING, 0, sizeof(cfg.vfilter_interlace_default) - 1 },
+	{ "VOLUME_ABS_VID", (void*)(&(cfg.volume_abs_vid)), HEX16, 0, 0xFFFF },
+	{ "VOLUME_ABS_PID", (void*)(&(cfg.volume_abs_pid)), HEX16, 0, 0xFFFF },
+	{ "VOLUME_ABS_DOWN", (void*)(&(cfg.volume_abs_down)), UINT8, 0, 255 },
+	{ "VOLUME_ABS_UP", (void*)(&(cfg.volume_abs_up)), UINT8, 0, 255 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
