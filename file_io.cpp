@@ -1907,11 +1907,18 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			//advances through directories, and then advances through files
 			//
 			int found = -1;
-			char curChar = toupper(DirItem[iSelectedEntry].altname[0]);
+			char curChar = DirItem[iSelectedEntry].altname[0]; 
+			if (curChar == '_')
+				curChar = DirItem[iSelectedEntry].altname[1];
+			curChar = toupper(curChar);
+
 			char curdType = DirItem[iSelectedEntry].de.d_type;
 			for (int i = iSelectedEntry+1; i < flist_nDirEntries(); i++)
 			{
-				if (toupper(DirItem[i].altname[0]) != curChar || DirItem[i].de.d_type != curdType)
+				char tryChar = DirItem[i].altname[0];
+				if (tryChar == '_')
+					tryChar = DirItem[i].altname[1];
+				if (toupper(tryChar) != curChar || DirItem[i].de.d_type != curdType)
 				{
 					found = i;
 					break;
@@ -1934,11 +1941,17 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 
 			int found = -1;
 			bool sawChange = false;
-			char curChar = toupper(DirItem[iSelectedEntry].altname[0]);
+			char curChar = DirItem[iSelectedEntry].altname[0]; 
+			if (curChar == '_')
+				curChar = DirItem[iSelectedEntry].altname[1];
+			curChar = toupper(curChar);
 			char curdType = DirItem[iSelectedEntry].de.d_type;
 			for (int i = iSelectedEntry-1; i >= 0; i--)
 			{
-				if (toupper(DirItem[i].altname[0]) != curChar || DirItem[i].de.d_type != curdType)
+				char tryChar = DirItem[i].altname[0];
+				if (tryChar == '_')
+					tryChar = DirItem[i].altname[1];
+				if (toupper(tryChar) != curChar || DirItem[i].de.d_type != curdType)
 				{
 					if (sawChange)
 					{
@@ -1946,7 +1959,10 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 						break;
 					}
 					sawChange = true;
-					curChar = toupper(DirItem[i].altname[0]);
+					curChar = DirItem[i].altname[0];
+					if (curChar == '_')
+						curChar = DirItem[i].altname[1];
+					curChar = toupper(curChar);
 				}
 			}
 			if (found >= 0)
