@@ -505,7 +505,7 @@ int satcdd_t::CalcSeekDelay(int lba_old, int lba_new)
 	if (n <= min) n = min;
 	else if (n > max) n = max;
 
-	if (track_old != track_new) n += 17;
+	if (track_old != track_new) n += 27;
 
 	if (diff < 0) n += 2;
 	 
