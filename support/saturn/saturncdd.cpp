@@ -505,7 +505,7 @@ int satcdd_t::CalcSeekDelay(int lba_old, int lba_new)
 	if (n <= min) n = min;
 	else if (n > max) n = max;
 
-	if (track_old != track_new) n += 17;
+	if (track_old != track_new) n += 27;
 
 	if (diff < 0) n += 2;
 	 
@@ -774,7 +774,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 
 		stat[0] = SATURN_STAT_SEEK;
 		stat[1] = q | 0x01;
-		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
+		stat[2] = this->lba < this->toc.end + 150 ? BCD(this->track + 1) : 0xAA;
 		stat[3] = this->lba < 0 ? 0x00 : BCD(this->index);
 		stat[4] = BCD(msf.m);
 		stat[5] = BCD(msf.s);
@@ -874,7 +874,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 
 		stat[0] = SATURN_STAT_DATA;
 		stat[1] = q | 0x01;
-		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
+		stat[2] = this->lba < this->toc.end + 150 ? BCD(this->track + 1) : 0xAA;
 		stat[3] = this->lba < 0 ? 0x00 : BCD(this->index);
 		stat[4] = BCD(msf.m);
 		stat[5] = BCD(msf.s);
@@ -902,7 +902,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 
 		stat[0] = SATURN_STAT_IDLE;
 		stat[1] = q | 0x01;
-		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
+		stat[2] = this->lba < this->toc.end + 150 ? BCD(this->track + 1) : 0xAA;
 		stat[3] = this->lba < 0 ? 0x00 : BCD(this->index);
 		stat[4] = BCD(msf.m);
 		stat[5] = BCD(msf.s);
@@ -950,7 +950,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 
 		stat[0] = SATURN_STAT_IDLE;
 		stat[1] = q | 0x01;
-		stat[2] = this->lba < this->toc.end ? BCD(this->track + 1) : 0xAA;
+		stat[2] = this->lba < this->toc.end + 150 ? BCD(this->track + 1) : 0xAA;
 		stat[3] = this->lba < 0 ? 0x00 : BCD(this->index);
 		stat[4] = BCD(msf.m);
 		stat[5] = BCD(msf.s);
