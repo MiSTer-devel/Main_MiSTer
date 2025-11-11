@@ -840,11 +840,36 @@ void cdi_mount_cd(int s_index, const char *filename)
 {
 	int loaded = 0;
 
+	/// Last used directory for save file management
+	/// Must be static to keep the value between mount calls
+	static char last_dir[1024] = {};
+
 	if (strlen(filename))
 	{
 		if (load_cd_image(filename, &toc) && toc.last)
 		{
-			cdi_mount_save(filename);
+			const char *p = strrchr(filename, '/');
+			int cur_len = p ? p - filename : 0;
+			int old_len = strlen(last_dir);
+
+			int same_game = old_len && (cur_len == old_len) && !strncmp(last_dir, filename, old_len);
+
+			// Handle multi disc titles and avoid re-mounting the save file
+			// to avoid resets on the core
+			if (!same_game)
+			{
+				strncpy(last_dir, filename, sizeof(last_dir));
+				char *p = strrchr(last_dir, '/');
+				if (p)
+					*p = 0;
+				else
+					*last_dir = 0;
+
+				// FPGA side will be informed about the mount and perform a reset
+				// if configured to do so
+				cdi_mount_save(last_dir);
+			}
+
 			prepare_toc_buffer(&toc);
 			user_io_set_index(0);
 			mount_cd(toc.end * CD_SECTOR_LEN, s_index);
