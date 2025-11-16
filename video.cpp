@@ -59,6 +59,7 @@
 #define VRR_VESA     0x02
 
 static int     use_vrr = 0;
+static int     vrr_requested = 0;
 static uint8_t vrr_min_fr = 0;
 static uint8_t vrr_max_fr = 0;
 
@@ -2196,6 +2197,7 @@ static void set_vrr_mode()
 	last_vrr_rate = vrateh;
 	last_vrr_vfp = v_cur.param.vfp;
 
+	vrr_requested = use_vrr;
 	if (!supports_vrr() || cfg.vsync_adjust) use_vrr = 0;
 }
 
@@ -3095,7 +3097,7 @@ void video_mode_adjust()
 		show_video_info(&video_info, &v_cur);
 		set_yc_mode();
 		if (cfg.direct_video) spd_config_dv();
-		else if(use_vrr != VRR_FREESYNC) spd_config_hdmi();
+		else if(vrr_requested != VRR_FREESYNC) spd_config_hdmi();
 	}
 	force = false;
 
