@@ -1599,7 +1599,7 @@ static void spd_config_dv()
 	spd_config(data);
 }
 
-/*
+
 static void spd_config_hdmi()
 {
 	uint8_t data[32] = {
@@ -1619,7 +1619,7 @@ static void spd_config_hdmi()
 
 	spd_config(data);
 }
-*/
+
 
 static void hdmi_config_set_hdr()
 {
@@ -3095,7 +3095,7 @@ void video_mode_adjust()
 		show_video_info(&video_info, &v_cur);
 		set_yc_mode();
 		if (cfg.direct_video) spd_config_dv();
-		//else if(use_vrr != VRR_FREESYNC) spd_config_hdmi();
+		else if(use_vrr != VRR_FREESYNC) spd_config_hdmi();
 	}
 	force = false;
 
