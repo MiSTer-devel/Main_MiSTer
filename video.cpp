@@ -59,6 +59,7 @@
 #define VRR_VESA     0x02
 
 static int     use_vrr = 0;
+static int     use_freesync_spd = 0;
 static uint8_t vrr_min_fr = 0;
 static uint8_t vrr_max_fr = 0;
 
@@ -1108,30 +1109,13 @@ void video_loadPreset(char *name, bool save)
 	}
 }
 
-static void hdmi_config_set_spd(bool val)
+static void hdmi_packet_enable(uint8_t mask, bool enable)
 {
 	int fd = i2c_open(0x39, 0);
 	if (fd >= 0)
 	{
 		uint8_t packet_val = i2c_smbus_read_byte_data(fd, 0x40);
-		if (val)
-			packet_val |= 0x40;
-		else
-			packet_val &= ~0x40;
-		int res = i2c_smbus_write_byte_data(fd, 0x40, packet_val);
-		if (res < 0) printf("i2c: write error (%02X %02X): %d\n", 0x40, packet_val, res);
-		i2c_close(fd);
-	}
-}
-
-static void hdmi_config_set_spare(int packet, bool enabled)
-{
-	int fd = i2c_open(0x39, 0);
-	uint8_t mask = packet == 0 ? 0x01 : 0x02;
-	if (fd >= 0)
-	{
-		uint8_t packet_val = i2c_smbus_read_byte_data(fd, 0x40);
-		if (enabled)
+		if (enable)
 			packet_val |= mask;
 		else
 			packet_val &= ~mask;
@@ -1140,6 +1124,48 @@ static void hdmi_config_set_spare(int packet, bool enabled)
 		i2c_close(fd);
 	}
 }
+
+static void hdmi_packet_set_data(uint8_t mask, uint8_t offset, uint8_t *data, int size)
+{
+	if (!data)
+	{
+		hdmi_packet_enable(mask, 0);
+		return;
+	}
+
+	int fd = i2c_open(0x38, 0);
+	if (fd >= 0)
+	{
+		int res;
+		hdmi_packet_enable(mask, 1);
+
+		res = i2c_smbus_write_byte_data(fd, offset + 0x1F, 0x80);
+		if (res < 0)
+		{
+			printf("i2c: Couldn't update packet change register (0x%02X, 0x80) %d\n", offset + 0x1F, res);
+		}
+		else
+		{
+			for (int i = 0; i < size; i++)
+			{
+				res = i2c_smbus_write_byte_data(fd, offset + i, data[i]);
+				if (res < 0) printf("i2c: SPD register write error (%02X %02x): %d\n", offset + i, data[i], res);
+			}
+
+			res = i2c_smbus_write_byte_data(fd, offset + 0x1F, 0x00);
+			if (res < 0) printf("i2c: Couldn't update packet change register (0x%02X, 0x00) %d\n", offset + 0x1F, res);
+		}
+		i2c_close(fd);
+	}
+	else
+	{
+		hdmi_packet_enable(mask, 0);
+	}
+}
+
+#define hdmi_spd_config(data) hdmi_packet_set_data(0x40, 0x00, data, sizeof(data))
+
+#define hdmi_spare_config(packet, data) hdmi_packet_set_data(packet == 0 ? 0x01 : 0x02, packet == 0 ? 0xC0 : 0xE0, data, sizeof(data))
 
 static void hdmi_config_set_csc()
 {
@@ -1535,94 +1561,6 @@ static void hdmi_config_init()
 	hdmi_config_set_csc();
 }
 
-static void spd_config(uint8_t *data)
-{
-	int fd = i2c_open(0x38, 0);
-	if (fd >= 0)
-	{
-		int res;
-		hdmi_config_set_spd(1);
-
-		res = i2c_smbus_write_byte_data(fd, 0x1F, 0x80);
-		if (res < 0)
-		{
-			printf("i2c: Couldn't update SPD change register (0x1F, 0x80) %d\n", res);
-		}
-		else
-		{
-			for (int i = 0; i < 31; i++)
-			{
-				res = i2c_smbus_write_byte_data(fd, i, data[i]);
-				if (res < 0) printf("i2c: SPD register write error (%02X %02x): %d\n", i, data[i], res);
-			}
-
-			res = i2c_smbus_write_byte_data(fd, 0x1F, 0x00);
-			if (res < 0) printf("i2c: Couldn't update SPD change register (0x1F, 0x00), %d\n", res);
-		}
-		i2c_close(fd);
-	}
-	else
-	{
-		hdmi_config_set_spd(0);
-	}
-}
-
-static void spd_config_update()
-{
-	VideoInfo *vi = &current_video_info;
-	if (!vi->width)
-		return;
-
-	uint8_t data[32] = {
-		0x83, 0x01, 25, 0,
-		cfg.direct_video ? 'D' : 'V',
-		cfg.direct_video ? 'V' : 'I',
-		cfg.direct_video ? '1' : '1', // version
-		(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0) | (vi->rotated ? 8 : 0)),
-		(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
-		(uint8_t)vi->de_h,
-		(uint8_t)(vi->de_h >> 8),
-		(uint8_t)vi->de_v,
-		(uint8_t)(vi->de_v >> 8),
-		(uint8_t)vi->width,
-		(uint8_t)(vi->width >> 8),
-		(uint8_t)vi->height,
-		(uint8_t)(vi->height >> 8)
-	};
-
-	char *name = user_io_get_core_name2();
-	for (int i = 17; i < 32; i++)
-	{
-		if (!*name) break;
-		data[i] = (uint8_t)(*name);
-		name++;
-	}
-
-	spd_config(data);
-}
-
-/*
-static void spd_config_hdmi()
-{
-	uint8_t data[32] = {
-		0x83, 0x01, 25, 0,
-		'M', 'i', 'S', 'T', 'e', 'r', 0, 0,
-	};
-
-	char *name = user_io_get_core_name();
-	for (int i = 12; i < 27; i++)
-	{
-		if (!*name) break;
-		data[i] = (uint8_t)(*name);
-		name++;
-	}
-
-	data[27] = 8; // GAME
-
-	spd_config(data);
-}
-*/
-
 static void hdmi_config_set_hdr()
 {
 	// Grab desired nits values
@@ -1673,38 +1611,17 @@ static void hdmi_config_set_hdr()
 	};
 
 	// now we calculate the checksum for this packet (2s complement sum)
-	uint16_t checksum = 0;
-	for (uint i = 0; i < sizeof(hdr_data); i++)
-		checksum += hdr_data[i];
-
-	checksum = checksum & 0xFF;
-	checksum = ~checksum + 1;
-
-	hdr_data[3] = checksum;
+	uint8_t checksum = 0;
+	for (uint i = 0; i < sizeof(hdr_data); i++) checksum += hdr_data[i];
+	hdr_data[3] = ~checksum + 1;
 
 	if (cfg.hdr == 0)
 	{
-		hdmi_config_set_spare(1, false);
+		hdmi_spare_config(1, 0);
 	}
 	else
 	{
-		hdmi_config_set_spare(1, true);
-		int fd = i2c_open(0x38, 0);
-		int res = i2c_smbus_write_byte_data(fd, 0xFF, 0b10000000);
-		if (res < 0)
-		{
-			printf("i2c: hdr: Couldn't update Spare Packet change register (0xDF, 0x80) %d\n", res);
-		}
-
-		uint8_t addr = 0xe0;
-		for (uint i = 0; i < sizeof(hdr_data); i++)
-		{
-			res = i2c_smbus_write_byte_data(fd, addr, hdr_data[i]);
-			if (res < 0) printf("i2c: hdr register write error (%02X %02x): %d\n", addr, hdr_data[i], res);
-			addr += 1;
-		}
-		res = i2c_smbus_write_byte_data(fd, 0xfF, 0x00);
-		if (res < 0) printf("i2c: hdr: Couldn't update Spare Packet change register (0xDF, 0x00), %d\n", res);
+		hdmi_spare_config(1, hdr_data);
 	}
 }
 
@@ -2035,10 +1952,11 @@ static void set_vrr_mode()
 	{
 		if (last_vrr_mode != 0)
 		{
-			hdmi_config_set_spd(false);
-			hdmi_config_set_spare(0, false);
+			hdmi_spd_config(0);
+			hdmi_spare_config(0, 0);
 		}
 		last_vrr_mode = 0;
+		use_freesync_spd = 0;
 		return;
 	}
 
@@ -2111,89 +2029,44 @@ static void set_vrr_mode()
 
 	int16_t vrateh_i = (int16_t)vrateh;
 
-	//These are only sent in the case that freesync or vesa vrr is enabled
-	uint8_t freesync_data[] = {
-		//header
-		0x00, 0x83,
-		0x01, 0x01,
-		0x02, 0x08,
-		//data
-		0x04, 0x1A,
-		0x05, 0x00,
-		0x06, 0x00,
-		//0x07
-		//0x08
-		0x09, 0x07,
-		0x0A, vrr_min_fr,
-		0x0B, vrr_max_fr,
-	};
-
-	uint8_t vesa_data[] = {
-		0xC0, 0x7F,
-		0xC1, 0xC0,
-		0xC2, 0x00,
-
-		0xC3, 0x40,
-		0xC5, 0x01,
-		0xC6, 0x00,
-		0xC7, 0x01,
-		0xC8, 0x00,
-		0xC9, 0x04,
-
-		0xCA, 0x01,
-		0xCB, (uint8_t)v_cur.param.vfp,
-		0xCC, (uint8_t)((vrateh_i >> 8) & 0x03),
-		0xCD, (uint8_t)(vrateh_i & 0xFF),
-	};
-
-	int res = 0;
-	int fd = i2c_open(0x38, 0);
-	if (fd >= 0)
+	if (use_vrr == VRR_FREESYNC)
 	{
-		if (use_vrr == VRR_FREESYNC)
-		{
-			hdmi_config_set_spd(1);
-			res = i2c_smbus_write_byte_data(fd, 0x1F, 0b10000000);
-			if (res < 0)
-			{
-				printf("i2c: Vrr: Couldn't update SPD change register (0x1F, 0x80) %d\n", res);
-			}
-			for (uint i = 0; i < sizeof(freesync_data); i += 2)
-			{
-				res = i2c_smbus_write_byte_data(fd, freesync_data[i], freesync_data[i + 1]);
-				if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n", freesync_data[i], freesync_data[i + 1], res);
-			}
-			res = i2c_smbus_write_byte_data(fd, 0x1F, 0x00);
-			if (res < 0) printf("i2c: Vrr: Couldn't update SPD change register (0x1F, 0x00), %d\n", res);
-		}
-		else
-		{
-			hdmi_config_set_spd(0);
-		}
+		uint8_t freesync_data[] = {
+			//header
+			0x83, 0x01, 0x08, 0x00,
+			//data
+			0x1A, 0x00, 0x00, 0x00, 0x00, 0x07,
+			vrr_min_fr,
+			vrr_max_fr,
+		};
 
-		if (use_vrr == VRR_VESA)
-		{
-			hdmi_config_set_spare(0, true);
-			res = i2c_smbus_write_byte_data(fd, 0xDF, 0b10000000);
-			if (res < 0)
-			{
-				printf("i2c: Vrr: Couldn't update Spare Packet change register (0xDF, 0x80) %d\n", res);
-			}
-
-			for (uint i = 0; i < sizeof(vesa_data); i += 2)
-			{
-				res = i2c_smbus_write_byte_data(fd, vesa_data[i], vesa_data[i + 1]);
-				if (res < 0) printf("i2c: Vrr register write error (%02X %02x): %d\n", vesa_data[i], vesa_data[i + 1], res);
-			}
-			res = i2c_smbus_write_byte_data(fd, 0xDF, 0x00);
-			if (res < 0) printf("i2c: Vrr: Couldn't update Spare Packet change register (0xDF, 0x00), %d\n", res);
-		}
-		else
-		{
-			hdmi_config_set_spare(0, false);
-		}
-		i2c_close(fd);
+		use_freesync_spd = 1;
+		hdmi_spd_config(freesync_data);
 	}
+	else if(use_freesync_spd)
+	{
+		use_freesync_spd = 0;
+		hdmi_spd_config(0);
+	}
+
+	if (use_vrr == VRR_VESA)
+	{
+		uint8_t vesa_data[] = {
+			0x7F, 0xC0, 0x00,
+			0x40, 0x00, 0x01, 0x00, 0x01, 0x00, 0x04,
+			0x01,
+			(uint8_t)v_cur.param.vfp,
+			(uint8_t)((vrateh_i >> 8) & 0x03),
+			(uint8_t)(vrateh_i & 0xFF),
+		};
+
+		hdmi_spare_config(0, vesa_data);
+	}
+	else
+	{
+		hdmi_spare_config(0, 0);
+	}
+
 	last_vrr_mode = cfg.vrr_mode;
 	last_vrr_rate = vrateh;
 	last_vrr_vfp = v_cur.param.vfp;
@@ -3083,6 +2956,42 @@ static void set_yc_mode()
 	}
 }
 
+static void spd_config_update()
+{
+	if (use_freesync_spd) return;
+
+	VideoInfo *vi = &current_video_info;
+	if (!vi->width) return;
+
+	uint8_t data[31] =
+	{
+		0x83, 0x01, 25, 0,
+		cfg.direct_video ? 'D' : 'V',
+		cfg.direct_video ? 'V' : 'I',
+		cfg.direct_video ? '1' : '1', // version
+		(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0) | (vi->rotated ? 8 : 0)),
+		(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
+		(uint8_t)vi->de_h,
+		(uint8_t)(vi->de_h >> 8),
+		(uint8_t)vi->de_v,
+		(uint8_t)(vi->de_v >> 8),
+		(uint8_t)vi->width,
+		(uint8_t)(vi->width >> 8),
+		(uint8_t)vi->height,
+		(uint8_t)(vi->height >> 8)
+	};
+
+	char *name = user_io_get_core_name2();
+	for (int i = 17; i < 31; i++)
+	{
+		if (!*name) break;
+		data[i] = (uint8_t)(*name);
+		name++;
+	}
+
+	hdmi_spd_config(data);
+}
+
 void video_mode_adjust()
 {
 	static bool force = false;
@@ -3097,7 +3006,6 @@ void video_mode_adjust()
 		show_video_info(&video_info, &v_cur);
 		set_yc_mode();
 		spd_config_update();
-		//else if(use_vrr != VRR_FREESYNC) spd_config_hdmi();
 	}
 	force = false;
 
