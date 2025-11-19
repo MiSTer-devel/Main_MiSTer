@@ -1089,18 +1089,23 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		if(inrotation)
 		{
 			is_vertical = strncasecmp(text, "vertical", 8) == 0;
-			
+
 			rotation_dir = 0;
 			if (is_vertical)
 			{
-				if (strcasestr(text, "cw") || strcasestr(text, "clockwise"))
-				{
-					rotation_dir = 1;
-				}
-				else if (strcasestr(text, "ccw") || strcasestr(text, "counterclockwise") || strcasestr(text, "counter"))
+				// Check for CCW first (must check before CW since "ccw" contains "cw")
+				if (strstr(text, "ccw") || strstr(text, "CCW") ||
+				    strstr(text, "counterclockwise") || strstr(text, "counter-clockwise"))
 				{
 					rotation_dir = 2;
 				}
+				// Then check for CW
+				else if (strstr(text, "cw") || strstr(text, "CW") ||
+				         strstr(text, "clockwise"))
+				{
+					rotation_dir = 1;
+				}
+				// Default to CW if no direction specified
 				else
 				{
 					rotation_dir = 1; // Fallback to CW if no direction is declared
