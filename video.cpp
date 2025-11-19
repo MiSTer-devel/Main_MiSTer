@@ -28,6 +28,7 @@
 #include "offload.h"
 
 #include "support.h"
+#include "support/arcade/mra_loader.h"
 #include "lib/imlib2/Imlib2.h"
 #include "lib/md5/md5.h"
 
@@ -2969,7 +2970,7 @@ static void spd_config_update()
 		cfg.direct_video ? 'D' : 'V',
 		cfg.direct_video ? 'V' : 'I',
 		cfg.direct_video ? '1' : '1', // version
-		(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0) | (vi->rotated ? 8 : 0)),
+		(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0) | (vi->rotated ? 8 : 0) | (cfg.direct_video ? (arcade_get_direction() << 4) : 0)),
 		(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
 		(uint8_t)vi->de_h,
 		(uint8_t)(vi->de_h >> 8),

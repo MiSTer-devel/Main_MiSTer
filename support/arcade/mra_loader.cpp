@@ -55,6 +55,7 @@ static char mame_root[kBigTextSize];
 static char arcade_setname[kBigTextSize] = {};
 
 static bool is_vertical = false;
+static int rotation_dir = 0; // 0 = None, 1 = CW, 2 = CCW
 
 static sw_struct switches = {};
 
@@ -1057,6 +1058,7 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		foundsetname = false;
 		foundrotation = false;
 		samedir = 0;
+		rotation_dir = 0;
 		break;
 
 	case XML_EVENT_START_NODE:
@@ -1087,6 +1089,23 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		if(inrotation)
 		{
 			is_vertical = strncasecmp(text, "vertical", 8) == 0;
+			
+			rotation_dir = 0;
+			if (is_vertical)
+			{
+				if (strcasestr(text, "cw") || strcasestr(text, "clockwise"))
+				{
+					rotation_dir = 1;
+				}
+				else if (strcasestr(text, "ccw") || strcasestr(text, "counterclockwise") || strcasestr(text, "counter"))
+				{
+					rotation_dir = 2;
+				}
+				else
+				{
+					rotation_dir = 1; // Fallback to CW if no direction is declared
+				}
+			}
 		}
 		break;
 
@@ -1170,6 +1189,11 @@ void arcade_pre_parse(const char *xml)
 bool arcade_is_vertical()
 {
 	return is_vertical;
+}
+
+int arcade_get_direction()
+{
+	return rotation_dir;
 }
 
 void arcade_check_error()
