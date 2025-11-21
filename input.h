@@ -102,7 +102,7 @@ void input_notify_mode();
 int input_poll(int getchar);
 int is_key_pressed(int key);
 
-void start_map_setting(int cnt, int set = 0);
+void start_map_setting(int cnt, int set = 0, advancedButtonMap *code_store = NULL);
 int get_map_set();
 int get_map_button();
 int get_map_type();
@@ -112,6 +112,10 @@ int get_map_finish();
 void finish_map_setting(int dismiss);
 uint16_t get_map_vid();
 uint16_t get_map_pid();
+int get_map_dev();
+advancedButtonMap *get_map_code_store();
+int get_map_advance();
+int get_map_count();
 int has_default_map();
 void send_map_cmd(int key);
 void reset_players();
@@ -136,19 +140,12 @@ void parse_buttons();
 char *get_buttons(int type = 0);
 void set_ovr_buttons(char *s, int type);
 
-void start_code_capture(int dnum);
-void end_code_capture();
-uint16_t get_captured_code();
-int code_capture_osd_count();
-int get_last_input_dev();
-int get_dev_num(int dev);
 advancedButtonMap *get_advanced_map_defs(int devnum);
 void get_button_name_for_code(uint16_t btn_code, int devnum, char *bname, size_t bname_sz);
-bool device_is_keyboard(int devnum);
-void input_advanced_save(int player_num);
+void input_advanced_save(int dev_num, bool do_delete=false);
 void input_advanced_load(int dev_num);
-void input_advanced_check_save(int devnum, advancedButtonMap *abm);
-bool input_advanced_check_hotkeys(uint16_t *key_codes, size_t kc_size, int devnum);
-advancedButtonMap *input_advanced_find_match(uint16_t *input_codes, size_t code_count, advancedButtonMap *abm_start, size_t abm_count);
+void input_advanced_save_entry(advancedButtonMap *abm_entry, int devnum);
+void input_advanced_clear(int devnum);
+void input_advanced_delete(advancedButtonMap *todel, int devnum);
 
 #endif
