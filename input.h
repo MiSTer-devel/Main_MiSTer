@@ -71,6 +71,28 @@
 
 #define KEY_EMU (KEY_MAX+1)
 
+
+#define ADVANCED_MAP_MAX 32 
+
+
+typedef struct {
+        uint32_t button_mask;
+				uint16_t output_codes[4];
+        uint16_t input_codes[4];
+} advancedButtonMap;
+
+
+typedef struct {
+
+	uint8_t input_state;
+	uint32_t current_mask;
+	uint32_t input_btn_mask;
+	uint8_t pressed : 1;
+	uint8_t last_pressed : 1;
+	uint8_t autofire : 1;
+} advancedButtonState;
+
+
 void set_kbdled(int mask, int state);
 int  get_kbdled(int mask);
 int  toggle_kbdled(int mask);
@@ -113,5 +135,20 @@ extern uint8_t ps2_kbd_scan_set;
 void parse_buttons();
 char *get_buttons(int type = 0);
 void set_ovr_buttons(char *s, int type);
+
+void start_code_capture(int dnum);
+void end_code_capture();
+uint16_t get_captured_code();
+int code_capture_osd_count();
+int get_last_input_dev();
+int get_dev_num(int dev);
+advancedButtonMap *get_advanced_map_defs(int devnum);
+void get_button_name_for_code(uint16_t btn_code, int devnum, char *bname, size_t bname_sz);
+bool device_is_keyboard(int devnum);
+void input_advanced_save(int player_num);
+void input_advanced_load(int dev_num);
+void input_advanced_check_save(int devnum, advancedButtonMap *abm);
+bool input_advanced_check_hotkeys(uint16_t *key_codes, size_t kc_size, int devnum);
+advancedButtonMap *input_advanced_find_match(uint16_t *input_codes, size_t code_count, advancedButtonMap *abm_start, size_t abm_count);
 
 #endif
