@@ -2961,36 +2961,62 @@ static void spd_config_update()
 {
 	if (use_freesync_spd) return;
 
-	VideoInfo *vi = &current_video_info;
-	if (!vi->width) return;
-
-	uint8_t data[31] =
+	if (cfg.direct_video)
 	{
-		0x83, 0x01, 25, 0,
-		cfg.direct_video ? 'D' : 'V',
-		cfg.direct_video ? 'V' : 'I',
-		cfg.direct_video ? '1' : '1', // version
-		(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0) | (vi->rotated ? 8 : 0) | (cfg.direct_video ? (arcade_get_direction() << 4) : 0)),
-		(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
-		(uint8_t)vi->de_h,
-		(uint8_t)(vi->de_h >> 8),
-		(uint8_t)vi->de_v,
-		(uint8_t)(vi->de_v >> 8),
-		(uint8_t)vi->width,
-		(uint8_t)(vi->width >> 8),
-		(uint8_t)vi->height,
-		(uint8_t)(vi->height >> 8)
-	};
+		// Custom SPD IF for additional DV1 metadata
+		VideoInfo *vi = &current_video_info;
+		if (!vi->width) return;
 
-	char *name = user_io_get_core_name2();
-	for (int i = 17; i < 31; i++)
-	{
-		if (!*name) break;
-		data[i] = (uint8_t)(*name);
-		name++;
+		uint8_t data[31] = {
+			0x83, 0x01, 25, 0,
+			'D',
+			'V',
+			'1', // version
+			(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0) | (vi->rotated ? 8 : 0) | (arcade_get_direction() << 4)),
+			(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
+			(uint8_t)vi->de_h,
+			(uint8_t)(vi->de_h >> 8),
+			(uint8_t)vi->de_v,
+			(uint8_t)(vi->de_v >> 8),
+			(uint8_t)vi->width,
+			(uint8_t)(vi->width >> 8),
+			(uint8_t)vi->height,
+			(uint8_t)(vi->height >> 8)
+		};
+
+		char *name = user_io_get_core_name2();
+		for (int i = 17; i < 31; i++)
+		{
+			if (!*name) break;
+			data[i] = (uint8_t)(*name);
+			name++;
+		}
+
+		hdmi_spd_config(data);
 	}
+	else
+	{
+		// Standard SPD IF
+		uint8_t data[31] = {
+			0x83, 0x01, 25,                        // SPD IF header + length
+			0,                                    // Checksum, automatically calculated by ADV7513 if zero
+			'M', 'i', 'S', 'T', 'e', 'r', 0, 0, // Vendor Name (up to 8 characters)
+		};
 
-	hdmi_spd_config(data);
+		// Product Description (up to 16 characters)
+		char *name = user_io_get_core_name2();
+		for (int i = 12; i < 28; i++)
+		{
+			if (!*name) break;
+			data[i] = (uint8_t)(*name);
+			name++;
+		}
+
+		// Source Information (see ANSI/CTA-861-I, Table 35 - Source Product Description InfoFrame Data Byte 25)
+		data[28] = 0x08; // Type: Game
+
+		hdmi_spd_config(data);
+	}
 }
 
 void video_mode_adjust()
