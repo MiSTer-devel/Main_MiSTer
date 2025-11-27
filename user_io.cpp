@@ -389,8 +389,13 @@ void user_io_read_core_name()
 	is_gba_type = 0;
 	is_c64_type = 0;
 	is_c128_type = 0;
+	is_psx_type = 0;
+	is_cdi_type = 0;
 	is_st_type = 0;
 	is_pcxt_type = 0;
+	is_electron_type = 0;
+	is_saturn_type = 0;
+	is_n64_type = 0;
 	is_uneon_type = 0;
 	core_name[0] = 0;
 
