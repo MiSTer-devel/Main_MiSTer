@@ -3606,6 +3606,14 @@ void user_io_poll()
 			if (is_minimig()) minimig_adjust_vsize(0);
 			video_mode_adjust();
 		}
+
+		/*
+		uint32_t frcnt = spi_uio_cmd(UIO_GET_FR_CNT);
+		if (frcnt & 0x100)
+		{
+			printf("frames:%d\n", frcnt & 0xFF);
+		}
+		*/
 	}
 
 	static int prev_coldreset_req = 0;
