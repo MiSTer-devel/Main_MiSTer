@@ -1626,6 +1626,9 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 					if (!strcasecmp(de->d_name, "menu.rbf")) continue;
 					if (!strncasecmp(de->d_name, "menu_20", 7)) continue;
 					if (!strcasecmp(de->d_name, "boot.rom")) continue;
+					if (!strcasecmp(de->d_name, "boot0.rom")) continue;
+					if (!strcasecmp(de->d_name, "boot1.rom")) continue;
+					if (!strcasecmp(de->d_name, "boot2.rom")) continue;
 
 					//check the prefix if given
 					if (prefix && strncasecmp(prefix, de->d_name, strlen(prefix))) continue;
