@@ -1593,7 +1593,7 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 			md5_to_hex(md5, md5_hex);
 			printf("Header MD5 hash: %s\n", md5_hex);
 
-			trim(internal_name, 20, (char*)&buf[0x20]);
+			trim(internal_name, sizeof(internal_name), (char*)&buf[0x20]);
 			rom_settings_detected = detect_rom_settings_in_dbs_with_md5(md5_hex);
 			memcpy(controller_settings, &buf[0x34], sizeof(controller_settings));
 			calc_bootcode_checksums(bootcode_sums, buf);
