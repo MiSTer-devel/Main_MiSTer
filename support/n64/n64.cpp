@@ -532,7 +532,7 @@ static void trim(char* out, size_t max_len, const char* str)
 	}
 
 	// Trim trailing space
-	end = str + strnlen(str, max_len) - 1;
+	end = str + strnlen(str, out_size) - 1;
 	while (end > str && isspace(*end)) {
 		end--;
 	}
