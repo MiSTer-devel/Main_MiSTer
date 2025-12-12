@@ -370,6 +370,10 @@ struct N64SaveFile {
 		return (image = this->get_image()) && image->filp;
 	}
 
+	bool needs_byteswap() const {
+		return (this->type == MemoryType::CPAK || this->type == MemoryType::TPAK);
+	}
+
 	size_t get_size() const {
 		return is_mounted() ? (size_t)this->get_image()->size : get_save_size(this->type);
 	}
@@ -416,7 +420,8 @@ struct N64SaveFile {
 			if (read_file(old_path, save_file_buf, off, sz)) {
 				printf("Found old save data \"%s\", converting to %s.\n", old_path, stringify(type));
 				found_old_data = true;
-				if ((this->type == MemoryType::CPAK) || (this->type == MemoryType::TPAK)) {
+				// Normalize data to big-endian format, if needed
+				if (this->needs_byteswap()) {
 					normalize_data(save_file_buf, sz, ByteOrder::LITTLE_ENDIAN);
 				}
 			}
@@ -1163,113 +1168,143 @@ static void get_old_save_path(char* save_path) {
 	}
 }
 
-void n64_load_savedata(uint64_t lba, int ack, uint64_t& buffer_lba, uint8_t* buffer, uint32_t buffer_size, uint32_t blksz, uint32_t sz) {
-	int invalid = 0;
-	int done = 0;
-	unsigned char file_idx = 0;
-	int64_t pos = lba * blksz;
-	N64SaveFile* save_file;
+// Find the correct save file and offset for a given LBA
+static N64SaveFile* resolve_save_file(const uint64_t sector_index, const uint32_t sector_size, const uint32_t chunk_size,
+                                      uint8_t& out_file_index, uint64_t& out_file_offset) {
+	out_file_index = 0;
+	out_file_offset = 0;
 
-	do {
-		if ((file_idx >= mounted_save_files) || !(save_file = save_files[file_idx]) || !save_file->is_mounted()) {
-			buffer_lba = -1;
-			invalid = 1;
-			break;
-		}
-		if (pos < get_save_offset(file_idx + 1)) {
-			break;
-		}
-		file_idx++;
-	} while (1);
+	if (!chunk_size) return nullptr;
 
-	fileTYPE* image;
-	if (!invalid && (image = save_file->get_image()) && image->size) {
-		diskled_on();
-		pos -= get_save_offset(file_idx);
-		uint32_t read_sz;
-		if (FileSeek(image, pos, SEEK_SET) && (read_sz = FileReadAdv(image, buffer, sz))) {
-			if ((save_file->type == MemoryType::CPAK) || (save_file->type == MemoryType::TPAK)) {
-				normalize_data(buffer, read_sz, ByteOrder::LITTLE_ENDIAN);
-			}
-			if (read_sz < sz) {
-				// Pad block that wasn't filled completely
-				memset(buffer + read_sz, 0, sz - read_sz);
-			}
-			done = 1;
-			buffer_lba = lba;
+	int64_t absolute_pos = sector_index * sector_size;
+
+	for (; out_file_index < mounted_save_files; ++out_file_index) {
+		// This file ends where the next one begins.
+		uint32_t file_end = get_save_offset(out_file_index + 1);
+
+		// If our position is before this boundary, it belongs to this file slot.
+		if (absolute_pos < file_end) {
+			N64SaveFile* file = save_files[out_file_index];
+			if (!file || !file->is_mounted()) return nullptr;
+
+			// Calculate offset relative to the start of this specific file.
+			out_file_offset = absolute_pos - get_save_offset(out_file_index);
+			return file;
 		}
 	}
 
-	// Even after error we have to provide the block to the core
-	// Give an empty block.
-	if (!done || invalid) {
-		memset(buffer, 0, buffer_size);
-	}
+	return nullptr;
+}
 
-	// Data is now stored in buffer. Send it to fpga
+static void write_save_file(const uint64_t sector_index, const uint32_t sector_size, const int ack_flags,
+                            uint8_t* buffer, uint32_t chunk_size) {
+	uint64_t file_offset;
+	uint8_t file_index;
+
+	// Fetch sector data from FPGA.
 	EnableIO();
-	spi_w(UIO_SECTOR_RD | ack);
-	spi_block_write(buffer, user_io_get_width(), sz);
+	spi_w(UIO_SECTOR_WR | ack_flags);
+	spi_block_read(buffer, user_io_get_width(), chunk_size);
 	DisableIO();
 
-	if (done && ((pos + blksz) >= image->size)) {
-		printf("Loaded save data from \"%s\". (%lld bytes)\n", get_image_name(file_idx), image->size);
+	N64SaveFile* file = resolve_save_file(sector_index, sector_size, chunk_size, file_index, file_offset);
+	if (!file) return;
+
+	fileTYPE* img = file->get_image();
+	if (!img || ((uint64_t)img->size < file_offset)) return;
+
+	// Clamp write size to file bounds.
+	if ((file_offset + chunk_size) > (uint64_t)img->size) {
+		chunk_size = img->size - file_offset;
+	}
+
+	if (FileSeek(img, file_offset, SEEK_SET)) {
+		diskled_on();
+
+		if (file->needs_byteswap()) {
+			normalize_data(buffer, chunk_size, ByteOrder::LITTLE_ENDIAN);
+		}
+
+		// Only write save data if it's different from the old one.
+		uint8_t existing_data[chunk_size];
+		if ((chunk_size != (uint32_t)FileReadAdv(img, existing_data, chunk_size)) || memcmp(buffer, existing_data, chunk_size)) {
+			menu_process_save();
+			FileSeek(img, file_offset, SEEK_SET);
+			FileWriteAdv(img, buffer, chunk_size);
+		}
+
+		// Log success if we hit the end of the file.
+		if ((file_offset + sector_size) >= (uint64_t)img->size) {
+			printf("Wrote N64 save data to \"%s\". (%lld bytes)\n", get_image_name(file_index), img->size);
+		}
 	}
 }
 
-void n64_save_savedata(uint64_t lba, int ack, uint64_t& buffer_lba, uint8_t* buffer, uint32_t blksz, uint32_t sz) {
-	menu_process_save();
+static void read_save_file(const uint64_t sector_index, const uint32_t sector_size, const int ack_flags,
+                           uint64_t& confirmed_sector, uint8_t* buffer, const uint32_t buffer_capacity, uint32_t chunk_size) {
+	uint8_t file_index;
+	uint64_t file_offset;
 
-	buffer_lba = -1;
-	int invalid = 0;
-	int done = 0;
-	unsigned char file_idx = 0;
-	int64_t pos = lba * blksz;
-	N64SaveFile* save_file;
+	N64SaveFile* file = resolve_save_file(sector_index, sector_size, chunk_size, file_index, file_offset);
 
-	do {
-		if ((file_idx >= mounted_save_files) || !(save_file = save_files[file_idx]) || !save_file->is_mounted()) {
-			invalid = 1;
-			break;
+	if (file) {
+		fileTYPE* img = file->get_image();
+		if (img && img->size) {
+			diskled_on();
+
+			if (FileSeek(img, file_offset, SEEK_SET)) {
+				const uint32_t bytes_read = (uint32_t)FileReadAdv(img, buffer, chunk_size);
+
+				if (file->needs_byteswap()) {
+					normalize_data(buffer, bytes_read, ByteOrder::LITTLE_ENDIAN);
+				}
+
+				// Pad incomplete chunks with zeros.
+				if (bytes_read < chunk_size) {
+					memset(buffer + bytes_read, 0, chunk_size - bytes_read);
+				}
+
+				// Log success if we hit the end of the file.
+				if ((file_offset + sector_size) >= (uint64_t)img->size) {
+					printf("Read N64 save data from \"%s\". (%lld bytes)\n", get_image_name(file_index), img->size);
+				}
+
+				confirmed_sector = sector_index;
+			}
 		}
-		if (pos < get_save_offset(file_idx + 1)) {
-			break;
-		}
-		file_idx++;
-	} while (1);
+	}
 
-	// Fetch sector data from FPGA ...
+	// Handle failure case (file not found, unmounted, or read error).
+	if (confirmed_sector == -1LLU) {
+		printf("Couldn't Read N64 save data from \"%s\"!!\n", get_image_name(file_index));
+		memset(buffer, 0, buffer_capacity);
+	}
+
+	// Send sector data to FPGA.
 	EnableIO();
-	spi_w(UIO_SECTOR_WR | ack);
-	spi_block_read(buffer, user_io_get_width(), sz);
+	spi_w(UIO_SECTOR_RD | ack_flags);
+	spi_block_write(buffer, user_io_get_width(), chunk_size);
 	DisableIO();
+}
 
-	if (invalid) {
-		return;
+/* The N64 core handles all its save types by sending all of them concatenated together to/from the FPGA.
+   e.g. (EEPROM/SRAM/FLASH) (+ TPAK) (+ CPAK 1) (+ CPAK 2) (+ CPAK 3) (+ CPAK 4)
+   We need to split up the continuous data stream into files if we want to save.
+   We need to merge the files into a single continuous data stream if we want to load. */
+bool n64_process_save(const bool use_save, const int op, const uint64_t sector_index, const uint32_t sector_size, const int ack_flags,
+					  uint64_t& confirmed_sector, uint8_t* buffer, const uint32_t buffer_capacity, uint32_t chunk_size) {
+	if (!use_save || !(op & 3)) return false;
+
+	confirmed_sector = -1LLU; // Default to error state.
+
+	if (op == 2) {
+		write_save_file(sector_index, sector_size, ack_flags, buffer, chunk_size);
+	}
+	else {
+		read_save_file(sector_index, sector_size, ack_flags, confirmed_sector, buffer, buffer_capacity, chunk_size);
 	}
 
-	pos -= get_save_offset(file_idx);
-	fileTYPE* image;
-
-	if (!sz || !(image = save_file->get_image()) || (pos >= image->size)) {
-		return;
-	}
-
-	if (pos + sz > image->size) {
-		sz = image->size - pos;
-	}
-
-	diskled_on();
-	if (FileSeek(image, pos, SEEK_SET)) {
-		if ((save_file->type == MemoryType::CPAK) || (save_file->type == MemoryType::TPAK)) {
-			normalize_data(buffer, sz, ByteOrder::LITTLE_ENDIAN);
-		}
-		done = FileWriteAdv(image, buffer, sz, -1) >= 0;
-	}
-
-	if (done && ((pos + blksz) >= image->size)) {
-		printf("Saved save data to \"%s\". (%lld bytes)\n", get_image_name(file_idx), image->size);
-	}
+	return true;
 }
 
 static void mount_all_saves() {
@@ -1450,7 +1485,7 @@ void n64_poll() {
 	}
 }
 
-int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t& file_crc) {
+int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_addr, uint32_t& file_crc) {
 	static uint8_t buf[4096];
 	fileTYPE f;
 
