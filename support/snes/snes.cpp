@@ -127,6 +127,15 @@ static uint32_t find_header(const uint8_t *data, uint32_t size)
 	return score_ex ? 0x40ffc0 : 0;
 }
 
+const char snes_cc92_header[] = {
+	0x00, 0x08, 0x22, 0x02, 0x1C, 0x00, 0x10, 0x00, 0x08, 0x65, 0x80, 0x84, 0x20, 0x00, 0x22, 0x25, 
+	0x00, 0x83, 0x0C, 0x80, 0x10, 0x00, 0x00, 0xA0, 0x80, 0x01, 0x80, 0x80, 0x00, 0x01, 0x02, 0x2D
+};
+const char snes_pf94_header[] = {
+	0xC9, 0x80, 0x80, 0x44, 0x15, 0x00, 0x62, 0x09, 0x29, 0xA0, 0x52, 0x70, 0x50, 0x12, 0x05, 0x35,
+	0x31, 0x63, 0xC0, 0x22, 0x01, 0x80, 0xC2, 0x3A, 0x6C, 0xB0, 0xE8, 0x4A, 0x11, 0x20, 0xC0, 0xF8
+};
+
 uint8_t* snes_get_header(fileTYPE *f)
 {
 	memset(hdr, 0, sizeof(hdr));
@@ -172,6 +181,14 @@ uint8_t* snes_get_header(fileTYPE *f)
 				}
 			}
 
+			bool is_cc92 = false, is_pf94 = false;
+			if (!memcmp(buf + 0x7FC0, snes_cc92_header, 32)) {
+				is_cc92 = true;
+			}
+			if (!memcmp(buf + 0x7FC0, snes_pf94_header, 32)) {
+				is_pf94 = true;
+			}
+
 			if (addr)
 			{
 				uint8_t ramsz = buf[addr + RamSize];
@@ -206,6 +223,7 @@ uint8_t* snes_get_header(fileTYPE *f)
 				if (is_bsx_bios) {
 					hdr[1] = 0x30;
 				}
+				//Sufami Turbo type 2
 				else if (is_sufami_base) {
 					hdr[1] = 0x20 | (is_sufami_turbo ? 8 : 0) | (is_sufami_bios ? 4 : 0);
 					const uint8_t rom_sz_tbl[9] = { 0,7,8,9,9,10,10,10,10 };
@@ -213,9 +231,19 @@ uint8_t* snes_get_header(fileTYPE *f)
 					romsz = buf[addr + 0x36] >= 8 ? rom_sz_tbl[8] : rom_sz_tbl[buf[addr + 0x36] & 0x0F];
 					ramsz = buf[addr + 0x37] >= 4 ? ram_sz_tbl[4] : ram_sz_tbl[buf[addr + 0x37] & 0x07];
 				}
+				//Campus Challenge '92, type E (DSP1A)
+				else if (is_cc92) {
+					hdr[1] = 0xE4;
+					ramsz = 3;
+				}
+				//PowerFest '94, type F (DSP1A)
+				else if (is_pf94) {
+					hdr[1] = 0xF4;
+					ramsz = 3;
+				}
 				else {
 
-					//DSPn types 8..B
+					//DSPn types 8..B, OBC1 type C
 					if (buf[addr + Mapper] == 0x20 && buf[addr + RomType] == 0x03)
 					{	//DSP1
 						hdr[1] |= 0x84;
@@ -294,13 +322,13 @@ uint8_t* snes_get_header(fileTYPE *f)
 						hdr[1] |= 0x70;
 					}
 
-					//1,E..F - reserved for other mappers.
+					//1 - reserved for other mappers.
 				}
 
 				hdr[2] = 0;
 
 				//PAL Regions
-				if (((buf[addr + CartRegion] >= 0x02 && buf[addr + CartRegion] <= 0x0C) || buf[addr + CartRegion] == 0x11) && !is_sufami_base)
+				if (((buf[addr + CartRegion] >= 0x02 && buf[addr + CartRegion] <= 0x0C) || buf[addr + CartRegion] == 0x11) && !is_sufami_base && !is_cc92 && !is_pf94)
 				{
 					hdr[3] |= 1;
 				}
