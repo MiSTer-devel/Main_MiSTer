@@ -167,53 +167,92 @@ bool matchesCore_yyyyMMdd_rbf(const char *A, const char *B)
 	return true;
 }
 
-bool preciseMatchOrGenericCoreName(const char *A, const char *B)
+
+struct CoreMatch
 {
-	if (!A || !B)
-		return false;
+	char *path;
+	int date;
+	bool exact;
 
-	if (strcmp(A, B) == 0)
-		return true;
+	CoreMatch() : path(NULL), date(0), exact(false) {}
+};
 
-	return matchesCore_yyyyMMdd_rbf(A, B);
+static void update_core_best(CoreMatch &best, CoreMatch &candidate)
+{
+	if (!candidate.path)
+		return;
+
+	if (candidate.exact)
+	{
+		if (best.path)
+			delete[] best.path;
+		best = candidate;
+		return;
+	}
+
+	if (!best.exact && candidate.date > best.date)
+	{
+		if (best.path)
+			delete[] best.path;
+		best = candidate;
+		return;
+	}
+
+	delete[] candidate.path;
 }
 
-char *findCore(const char *name, char *coreName, int indent)
+static CoreMatch findCore(const char *name, const char *coreName)
 {
+	CoreMatch best;
 	DIR *dir;
 	struct dirent *entry;
 
 	if (!(dir = opendir(name)))
+		return best;
+
+	char path[256];
+
+	while ((entry = readdir(dir)) != NULL)
 	{
-		return NULL;
-	}
-
-
-	char *indir;
-	char* path = new char[256];
-	while ((entry = readdir(dir)) != NULL) {
-		if (entry->d_type == DT_DIR) {
+		if (entry->d_type == DT_DIR)
+		{
 			if (entry->d_name[0] != '_')
 				continue;
-			snprintf(path, 256, "%s/%s", name, entry->d_name);
-			indir = findCore(path, coreName, indent + 2);
-			if (indir != NULL)
+
+			snprintf(path, sizeof(path), "%s/%s", name, entry->d_name);
+			CoreMatch sub = findCore(path, coreName);
+			update_core_best(best, sub);
+			if (best.exact)
+				break;
+		}
+		else
+		{
+			// Exact filename match (any extension)
+			if (!strcmp(coreName, entry->d_name))
 			{
-				closedir(dir);
-				delete[] path;
-				return indir;
+				CoreMatch exact;
+				exact.exact = true;
+				exact.path = new char[256];
+				snprintf(exact.path, 256, "%s/%s", name, entry->d_name);
+				update_core_best(best, exact);
+				break;
+			}
+
+			// Dated generic match: <core>_YYYYMMDD.rbf
+			if (matchesCore_yyyyMMdd_rbf(coreName, entry->d_name))
+			{
+				CoreMatch dated;
+				dated.exact = false;
+				dated.date = atoi(entry->d_name + strlen(coreName) + 1);
+				dated.path = new char[256];
+				snprintf(dated.path, 256, "%s/%s", name, entry->d_name);
+				update_core_best(best, dated);
 			}
 		}
-		else if (preciseMatchOrGenericCoreName(coreName, entry->d_name))
-		{
-			snprintf(path, 256, "%s/%s", name, entry->d_name);
-			closedir(dir);
-			return path;
-		}
 	}
+
 	closedir(dir);
-	delete[] path;
-	return NULL;
+	return best;
 }
 
 void bootcore_init(const char *path)
@@ -244,7 +283,9 @@ void bootcore_init(const char *path)
 		strcpy(bootcoretype, isExactcoreName(cfg.bootcore) ? "exactcorename" : "corename");
 	}
 
-	auxpointer = findCore(rootdir, bootcore, 0);
+	CoreMatch best_core_match = findCore(rootdir, bootcore);
+	auxpointer = best_core_match.path;
+
 	if (auxpointer != NULL)
 	{
 		strcpy(bootcore, auxpointer);
