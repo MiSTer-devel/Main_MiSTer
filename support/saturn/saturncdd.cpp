@@ -502,12 +502,15 @@ int satcdd_t::CalcSeekDelay(int lba_old, int lba_new)
 
 	int diff = lba_new - lba_old;
 	int n = diff / 2000;
-	if (n <= min) n = min;
+
+	if (abs(diff) <= 4) n = 2;
+	else if (n <= min) n = min;
 	else if (n > max) n = max;
 
 	if (track_old != track_new) n += 27;
+	else if (abs(diff) > 10000) n += 20;
 
-	if (diff < 0) n += 2;
+	if (diff < -4) n += 2;
 	 
 	return n;
 }
@@ -631,7 +634,9 @@ void satcdd_t::CommandExec() {
 #endif // SATURN_DEBUG
 		break;
 
-	case SATURN_COMM_SEEK:
+	case SATURN_COMM_SEEK: {
+		int lba_old = this->lba;
+
 		this->seek_lba = fad - 150;
 		this->lba = fad - 150;
 
@@ -639,8 +644,7 @@ void satcdd_t::CommandExec() {
 		this->index = this->toc.GetIndexByLBA(this->track, this->seek_lba);
 
 		this->seek_pend = true;
-		this->seek_delay = 7;
-		this->final_read = this->read_pend;
+		this->seek_delay = CalcSeekDelay(lba_old - 4, fad - 150);
 		this->read_pend = false;
 		this->pause_pend = false;
 		this->speed = comm[10] == 1 ? 1 : 2;
@@ -654,6 +658,7 @@ void satcdd_t::CommandExec() {
 		//printf(", command = %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", comm[0], comm[1], comm[2], comm[3], comm[4], comm[5], comm[6], comm[7], comm[8], comm[9], comm[10], comm[11]);
 		printf(" (%u)\n\x1b[0m", saturn_frame_cnt);
 #endif // SATURN_DEBUG
+	}
 		break;
 
 	default:
@@ -764,7 +769,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 #endif // SATURN_DEBUG
 	}
 	else if (this->seek_pend) {
-		this->state = this->final_read ? Read : Seek;
+		this->state = Seek;
 
 		LBAToMSF(this->lba + 150, &amsf);
 		if (this->lba < 0)
