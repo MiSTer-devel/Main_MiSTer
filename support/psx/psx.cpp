@@ -782,10 +782,10 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				mask = libCryptMask(&sbi_file);
 			}
 
+			process_ss(filename, name_len != 0);
 			send_cue_and_metadata(&toc, mask, region, reset);
 
 			user_io_set_index(f_index);
-			process_ss(filename, name_len != 0);
 
 			mount_cd(toc.end*CD_SECTOR_LEN, s_index);
 			loaded = 1;
