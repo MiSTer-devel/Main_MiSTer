@@ -1682,13 +1682,7 @@ void HandleUI(void) {
       uint32_t selentry = 0;
       menumask = 0;
 
-      const char *core_title = page ? title : user_io_get_core_name();
-      char final_title[64];
-      strncpy(final_title, core_title, 63);
-      final_title[63] = 0;
-
-      // Effectively sets the title buffer
-      OsdSetTitle(final_title);
+      OsdSetTitle(page ? title : user_io_get_core_name());
 
       dip_submenu = -1;
 
@@ -6767,11 +6761,9 @@ void HandleUI(void) {
           str[n++] = 0x1c;
         if (hci_get_route(0) >= 0)
           str[n++] = 4;
-        // CD-ROM Icon (0x97)
         if (isCDROMPresent(0) || isCDROMPresent(1) || isCDROMPresent(2) ||
-            isCDROMPresent(3)) {
+            isCDROMPresent(3))
           str[n++] = 0x97;
-        }
         if (user_io_get_sdram_cfg() & 0x8000) {
           switch (user_io_get_sdram_cfg() & 7) {
           case 7:
