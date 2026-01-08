@@ -186,6 +186,10 @@ int satcdd_t::LoadCUE(const char* filename) {
 
 				//FileSeek(&this->toc.tracks[0].f, 0x10, SEEK_SET);
 			}
+			else {
+				this->sectorSize = 2352;
+			}
+			this->toc.tracks[this->toc.last].sector_size = this->sectorSize;
 
 			if (!this->toc.last)
 			{
@@ -267,9 +271,7 @@ int satcdd_t::LoadCUE(const char* filename) {
 					this->toc.tracks[this->toc.last].start = this->toc.end + pregap;
 					this->toc.tracks[this->toc.last].offset += this->toc.end * this->sectorSize;
 
-					int sectorSize = 2352;
-					if (this->toc.tracks[this->toc.last].type) sectorSize = this->sectorSize;
-					this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((file_size + sectorSize - 1) / sectorSize);
+					this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((file_size + this->sectorSize - 1) / this->sectorSize);
 
 					this->toc.end = this->toc.tracks[this->toc.last].end;
 #ifdef SATURN_DEBUG
@@ -372,7 +374,7 @@ int satcdd_t::Load(const char *filename)
 	}*/
 
 #ifdef SATURN_DEBUG
-	printf("\x1b[32mSaturn: Sector size = %u, Track 1 end = %u\n\x1b[0m", this->sectorSize, this->toc.tracks[0].end);
+	printf("\x1b[32mSaturn: Sector size = %u, Track 1 end = %u\n\x1b[0m", this->toc.tracks[0].sector_size, this->toc.tracks[0].end);
 #endif // SATURN_DEBUG
 
 	if (this->toc.last)
@@ -432,7 +434,7 @@ int satcdd_t::GetBootHeader(uint8_t *buf) {
 	if (this->toc.last < 0) return -1;
 	
 	int offset = 16;
-	if (this->sectorSize == 2048)
+	if (this->toc.tracks[0].sector_size == 2048)
 	{
 		offset = 0;
 	}
@@ -645,6 +647,7 @@ void satcdd_t::CommandExec() {
 
 		this->seek_pend = true;
 		this->seek_delay = CalcSeekDelay(lba_old - 4, fad - 150);
+		this->final_read = this->read_pend;
 		this->read_pend = false;
 		this->pause_pend = false;
 		this->speed = comm[10] == 1 ? 1 : 2;
@@ -769,7 +772,7 @@ void satcdd_t::Process(uint8_t* time_mode) {
 #endif // SATURN_DEBUG
 	}
 	else if (this->seek_pend) {
-		this->state = Seek;
+		this->state = this->final_read ? Read : Seek;
 
 		LBAToMSF(this->lba + 150, &amsf);
 		if (this->lba < 0)
@@ -1026,7 +1029,7 @@ void satcdd_t::Update() {
 			//printf("\n\x1b[0m");
 #endif // SATURN_DEBUG
 
-			if (this->sectorSize == 2048 || (this->lba - this->toc.tracks[this->track].start) < 0) {
+			if (this->toc.tracks[this->track].sector_size == 2048 || (this->lba - this->toc.tracks[this->track].start) < 0) {
 				header[0] = 0x00;
 				header[1] = 0xFF;
 				header[2] = 0xFF;
@@ -1194,15 +1197,15 @@ void satcdd_t::ReadData(uint8_t *buf)
 		if (this->toc.chd_f)
 		{
 			int read_offset = 0;
-			if (this->sectorSize == 2048)
+			if (this->toc.tracks[this->track].sector_size == 2048)
 			{
 				read_offset += 16;
 			}
 
-			mister_chd_read_sector(this->toc.chd_f, lba_ + this->toc.tracks[this->track].offset, read_offset, 0, this->sectorSize, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, lba_ + this->toc.tracks[this->track].offset, read_offset, 0, this->toc.tracks[this->track].sector_size, buf, this->chd_hunkbuf, &this->chd_hunknum);
 		}
 		else {
-			if (this->sectorSize == 2048)
+			if (this->toc.tracks[this->track].sector_size == 2048)
 			{
 				offs = (lba_ * 2048) - this->toc.tracks[this->track].offset;
 				FileSeek(&this->toc.tracks[this->track].f, offs, SEEK_SET);
