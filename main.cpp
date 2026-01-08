@@ -71,11 +71,11 @@ int main(int argc, char *argv[])
 
 	FindStorage();
 
-// Start CD-ROM monitoring
-startCDROMMonitoring([](int, bool) {
-extern void OsdUpdate();
-OsdUpdate(); // Force OSD update to show/hide icon immediately
-});
+	// Start CD-ROM monitoring
+	startCDROMMonitoring([](int, bool) {
+		extern void OsdUpdate();
+		OsdUpdate(); // Force OSD update to show/hide icon immediately
+	});
 
 	user_io_init((argc > 1) ? argv[1] : "",(argc > 2) ? argv[2] : NULL);
 
@@ -96,6 +96,6 @@ OsdUpdate(); // Force OSD update to show/hide icon immediately
 		OsdUpdate();
 	}
 #endif
-stopCDROMMonitoring();
+	stopCDROMMonitoring();
 	return 0;
 }

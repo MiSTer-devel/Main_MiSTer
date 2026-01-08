@@ -45,8 +45,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <hci.h>
 #include <hci_lib.h>
 
-#include "file_io.h"
 #include "cdrom_io.h"
+#include "file_io.h"
 #include "osd.h"
 #include "hardware.h"
 #include "menu.h"
@@ -6962,7 +6962,7 @@ void HandleUI(void)
 				if (getNet(2)) str[n++] = 0x1d;
 				if (getNet(1)) str[n++] = 0x1c;
 				if (hci_get_route(0) >= 0) str[n++] = 4;
-if (isCDROMPresent(0) || isCDROMPresent(1) || isCDROMPresent(2) || isCDROMPresent(3)) str[n++] = 0x97;
+				if (isCDROMPresent(0) || isCDROMPresent(1) || isCDROMPresent(2) || isCDROMPresent(3)) str[n++] = 0x97;
 				if (user_io_get_sdram_cfg() & 0x8000)
 				{
 					switch (user_io_get_sdram_cfg() & 7)
