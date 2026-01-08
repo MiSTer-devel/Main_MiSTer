@@ -101,10 +101,12 @@ int main(int argc, char *argv[]) {
     // Usar log para console, já que OSD pode não estar visível no SSH
     printf("[CD-CHANGE-CALLBACK] %s\n", msg);
 
-    // Tenta mandar pro OSD também
-    OsdWrite(16, "", 1);
-    OsdWrite(17, msg, 1);
-    OsdWrite(18, "", 1);
+    // Tenta mandar pro OSD também (DESATIVADO a pedido do usuário, apenas ícone
+    // agora) OsdWrite(16, "", 1); OsdWrite(17, msg, 1); OsdWrite(18, "", 1);
+
+    // Forçar atualização do OSD para mostrar o ícone imediatamente
+    extern void OsdUpdate();
+    OsdUpdate();
   });
 
   user_io_init((argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : NULL);

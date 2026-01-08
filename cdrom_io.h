@@ -1,19 +1,19 @@
 #ifndef CDROM_IO_H
 #define CDROM_IO_H
 
-#include <time.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 // Tipo de callback para notificação de mudanças
 typedef void (*CDROMStatusCallback)(int index, bool present);
 
 // Estrutura para armazenar o estado dos CD-ROMs
 struct CDROMState {
-    bool present;
-    char path[32];
-    time_t last_check;
+  bool present;
+  char path[32];
+  time_t last_check;
 };
 
 // Constantes
@@ -26,5 +26,6 @@ int isCDROMPresent();
 // Funções de monitoramento hot-plug
 void startCDROMMonitoring(CDROMStatusCallback callback);
 void stopCDROMMonitoring();
+bool isCDROMPresent(int index);
 
-#endif // CDROM_IO_H 
+#endif // CDROM_IO_H
