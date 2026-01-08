@@ -283,7 +283,16 @@ char is_archie()
 static int is_pcxt_type = 0;
 char is_pcxt()
 {
-	if (!is_pcxt_type) is_pcxt_type = strcasecmp(orig_name, "PCXT") ? 2 : 1;
+	if (!is_pcxt_type)
+	{
+		if (!strcasecmp(orig_name, "PCXT") ||
+		    !strcasecmp(orig_name, "Tandy1000") ||
+			!strcasecmp(orig_name, "PCjr")
+		   )
+			is_pcxt_type = 1;
+		else
+			is_pcxt_type = 2;
+	}
 	return (is_pcxt_type == 1);
 }
 
