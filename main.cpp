@@ -19,82 +19,83 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "cdrom_io.h"
-#include "fpga_io.h"
-#include "input.h"
-#include "menu.h"
-#include "offload.h"
-#include "osd.h"
-#include "scheduler.h"
-#include "user_io.h"
-#include <ctype.h>
-#include <inttypes.h>
-#include <sched.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <sched.h>
+#include <inttypes.h>
+#include <ctype.h>
+#include <string.h>
+#include "menu.h"
+#include "user_io.h"
+#include "input.h"
+#include "fpga_io.h"
+#include "scheduler.h"
+#include "osd.h"
+#include "offload.h"
+#include "cdrom_io.h"
 
 const char *version = "$VER:" VDATE;
 
-int main(int argc, char *argv[]) {
-  // Always pin main worker process to core #1 as core #0 is the
-  // hardware interrupt handler in Linux.  This reduces idle latency
-  // in the main loop by about 6-7x.
-  cpu_set_t set;
-  CPU_ZERO(&set);
-  CPU_SET(1, &set);
-  sched_setaffinity(0, sizeof(set), &set);
+int main(int argc, char *argv[])
+{
+	// Always pin main worker process to core #1 as core #0 is the
+	// hardware interrupt handler in Linux.  This reduces idle latency
+	// in the main loop by about 6-7x.
+	cpu_set_t set;
+	CPU_ZERO(&set);
+	CPU_SET(1, &set);
+	sched_setaffinity(0, sizeof(set), &set);
 
-  offload_start();
+	offload_start();
 
-  fpga_io_init();
+	fpga_io_init();
 
-  DISKLED_OFF;
+	DISKLED_OFF;
 
-  printf("\nMinimig by Dennis van Weeren");
-  printf("\nARM Controller by Jakub Bednarski");
-  printf("\nMiSTer code by Sorgelig\n\n");
+	printf("\nMinimig by Dennis van Weeren");
+	printf("\nARM Controller by Jakub Bednarski");
+	printf("\nMiSTer code by Sorgelig\n\n");
 
-  printf("Version %s\n\n", version + 5);
+	printf("Version %s\n\n", version + 5);
 
-  if (argc > 1)
-    printf("Core path: %s\n", argv[1]);
-  if (argc > 2)
-    printf("XML path: %s\n", argv[2]);
+	if (argc > 1) printf("Core path: %s\n", argv[1]);
+	if (argc > 2) printf("XML path: %s\n", argv[2]);
 
-  if (!is_fpga_ready(1)) {
-    printf(
-        "\nGPI[31]==1. FPGA is uninitialized or incompatible core loaded.\n");
-    printf("Quitting. Bye bye...\n");
-    exit(0);
-  }
+	if (!is_fpga_ready(1))
+	{
+		printf("\nGPI[31]==1. FPGA is uninitialized or incompatible core loaded.\n");
+		printf("Quitting. Bye bye...\n");
+		exit(0);
+	}
 
-  FindStorage();
+	FindStorage();
 
-  // Start CD-ROM monitoring
-  startCDROMMonitoring([](int, bool) {
-    extern void OsdUpdate();
-    OsdUpdate(); // Force OSD update to show/hide icon immediately
-  });
+// Start CD-ROM monitoring
+startCDROMMonitoring([](int, bool) {
+extern void OsdUpdate();
+OsdUpdate(); // Force OSD update to show/hide icon immediately
+});
 
-  user_io_init((argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : NULL);
+	user_io_init((argc > 1) ? argv[1] : "",(argc > 2) ? argv[2] : NULL);
 
 #ifdef USE_SCHEDULER
-  scheduler_init();
-  scheduler_run();
+	scheduler_init();
+	scheduler_run();
 #else
-  while (1) {
-    if (!is_fpga_ready(1)) {
-      fpga_wait_to_reset();
-    }
+	while (1)
+	{
+		if (!is_fpga_ready(1))
+		{
+			fpga_wait_to_reset();
+		}
 
-    user_io_poll();
-    input_poll(0);
-    HandleUI();
-    OsdUpdate();
-  }
+		user_io_poll();
+		input_poll(0);
+		HandleUI();
+		OsdUpdate();
+	}
 #endif
-  stopCDROMMonitoring();
-  return 0;
+stopCDROMMonitoring();
+	return 0;
 }
