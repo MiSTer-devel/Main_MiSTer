@@ -19,88 +19,113 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <sched.h>
-#include <inttypes.h>
-#include <ctype.h>
-#include <string.h>
-#include "menu.h"
-#include "user_io.h"
-#include "input.h"
-#include "fpga_io.h"
-#include "scheduler.h"
-#include "osd.h"
-#include "offload.h"
 #include "cdrom_io.h"
+#include "fpga_io.h"
+#include "input.h"
+#include "menu.h"
+#include "offload.h"
+#include "osd.h"
+#include "scheduler.h"
+#include "user_io.h"
+#include <ctype.h>
+#include <inttypes.h>
+#include <sched.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 const char *version = "$VER:" VDATE;
 
-int main(int argc, char *argv[])
-{
-	// Always pin main worker process to core #1 as core #0 is the
-	// hardware interrupt handler in Linux.  This reduces idle latency
-	// in the main loop by about 6-7x.
-	cpu_set_t set;
-	CPU_ZERO(&set);
-	CPU_SET(1, &set);
-	sched_setaffinity(0, sizeof(set), &set);
+int main(int argc, char *argv[]) {
+  // --- DEBUG: REDIRECT LOGS TO FILE ---
+  // Tenta abrir arquivo de log no SD card (/media/fat/mister_debug.log)
+  FILE *log_file = freopen("/media/fat/mister_debug.log", "a+", stdout);
+  if (log_file) {
+    setvbuf(stdout, NULL, _IONBF, 0);     // Sem buffer no stdout
+    dup2(fileno(stdout), fileno(stderr)); // Stderr também vai pro arquivo
+    setvbuf(stderr, NULL, _IONBF, 0);     // Sem buffer no stderr
 
-	offload_start();
+    printf("\n==========================================\n");
+    printf("[DEBUG] MiSTer Log Started at %s\n", VDATE);
+    printf("==========================================\n");
+  } else {
+    // Fallback: Tenta garantir que o console mostre algo se falhar abrir o
+    // arquivo
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+    fprintf(stderr,
+            "\n[DEBUG] Failed to open log file, using console. Built: %s\n",
+            VDATE);
+  }
+  // ------------------------------------
 
-	fpga_io_init();
+  // Always pin main worker process to core #1 as core #0 is the
+  // hardware interrupt handler in Linux.  This reduces idle latency
+  // in the main loop by about 6-7x.
+  cpu_set_t set;
+  CPU_ZERO(&set);
+  CPU_SET(1, &set);
+  sched_setaffinity(0, sizeof(set), &set);
 
-	DISKLED_OFF;
+  offload_start();
 
-	printf("\nMinimig by Dennis van Weeren");
-	printf("\nARM Controller by Jakub Bednarski");
-	printf("\nMiSTer code by Sorgelig\n\n");
+  fpga_io_init();
 
-	printf("Version %s\n\n", version + 5);
+  DISKLED_OFF;
 
-	if (argc > 1) printf("Core path: %s\n", argv[1]);
-	if (argc > 2) printf("XML path: %s\n", argv[2]);
+  printf("\nMinimig by Dennis van Weeren");
+  printf("\nARM Controller by Jakub Bednarski");
+  printf("\nMiSTer code by Sorgelig\n\n");
 
-	if (!is_fpga_ready(1))
-	{
-		printf("\nGPI[31]==1. FPGA is uninitialized or incompatible core loaded.\n");
-		printf("Quitting. Bye bye...\n");
-		exit(0);
-	}
+  printf("Version %s\n\n", version + 5);
 
-	FindStorage();
-	
-	// Iniciar monitoramento de CD-ROM
-	startCDROMMonitoring([](int index, bool present) {
-		char msg[64];
-		sprintf(msg, "CD-ROM %d %s", index, present ? "conectado" : "desconectado");
-		OsdWrite(16, "", 1);
-		OsdWrite(17, msg, 1);
-		OsdWrite(18, "", 1);
-	});
+  if (argc > 1)
+    printf("Core path: %s\n", argv[1]);
+  if (argc > 2)
+    printf("XML path: %s\n", argv[2]);
 
-	user_io_init((argc > 1) ? argv[1] : "",(argc > 2) ? argv[2] : NULL);
+  if (!is_fpga_ready(1)) {
+    printf(
+        "\nGPI[31]==1. FPGA is uninitialized or incompatible core loaded.\n");
+    printf("Quitting. Bye bye...\n");
+    exit(0);
+  }
+
+  FindStorage();
+
+  // Iniciar monitoramento de CD-ROM
+  startCDROMMonitoring([](int index, bool present) {
+    char msg[64];
+    sprintf(msg, "CD-ROM %d %s", index, present ? "conectado" : "desconectado");
+    // Usar log para console, já que OSD pode não estar visível no SSH
+    printf("[CD-CHANGE-CALLBACK] %s\n", msg);
+
+    // Tenta mandar pro OSD também
+    OsdWrite(16, "", 1);
+    OsdWrite(17, msg, 1);
+    OsdWrite(18, "", 1);
+  });
+
+  user_io_init((argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : NULL);
 
 #ifdef USE_SCHEDULER
-	scheduler_init();
-	scheduler_run();
+  scheduler_init();
+  scheduler_run();
 #else
-	while (1)
-	{
-		if (!is_fpga_ready(1))
-		{
-			fpga_wait_to_reset();
-		}
+  while (1) {
+    if (!is_fpga_ready(1)) {
+      fpga_wait_to_reset();
+    }
 
-		user_io_poll();
-		input_poll(0);
-		HandleUI();
-		OsdUpdate();
-	}
+    user_io_poll();
+    input_poll(0);
+    HandleUI();
+    OsdUpdate();
+  }
 #endif
 
-	// Parar monitoramento de CD-ROM antes de sair
-	stopCDROMMonitoring();
-	return 0;
+  // Parar monitoramento de CD-ROM antes de sair
+  stopCDROMMonitoring();
+  return 0;
 }

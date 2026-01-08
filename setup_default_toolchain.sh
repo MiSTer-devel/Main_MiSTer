@@ -15,7 +15,12 @@ if [ -z "${MISTER_GCC_VER}" ]; then
 	MISTER_GCC_VER=10.2-2020.11
 fi
 if [ -z "${MISTER_GCC_HOST_ARCH}" ]; then
-	MISTER_GCC_HOST_ARCH=x86_64
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "aarch64" ]; then
+        MISTER_GCC_HOST_ARCH=aarch64
+    else
+        MISTER_GCC_HOST_ARCH=x86_64
+    fi
 fi
 GCC_PACKAGE_NAME=gcc-arm-$MISTER_GCC_VER-$MISTER_GCC_HOST_ARCH-arm-none-linux-gnueabihf
 GCC_DIR=$MISTER_GCC_INSTALL_DIR/$GCC_PACKAGE_NAME
