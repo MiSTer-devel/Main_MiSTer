@@ -38,28 +38,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 const char *version = "$VER:" VDATE;
 
 int main(int argc, char *argv[]) {
-  // --- DEBUG: REDIRECT LOGS TO FILE ---
-  // Tenta abrir arquivo de log no SD card (/media/fat/mister_debug.log)
-  FILE *log_file = freopen("/media/fat/mister_debug.log", "a+", stdout);
-  if (log_file) {
-    setvbuf(stdout, NULL, _IONBF, 0);     // Sem buffer no stdout
-    dup2(fileno(stdout), fileno(stderr)); // Stderr também vai pro arquivo
-    setvbuf(stderr, NULL, _IONBF, 0);     // Sem buffer no stderr
-
-    printf("\n==========================================\n");
-    printf("[DEBUG] MiSTer Log Started at %s\n", VDATE);
-    printf("==========================================\n");
-  } else {
-    // Fallback: Tenta garantir que o console mostre algo se falhar abrir o
-    // arquivo
-    setvbuf(stdout, NULL, _IONBF, 0);
-    setvbuf(stderr, NULL, _IONBF, 0);
-    fprintf(stderr,
-            "\n[DEBUG] Failed to open log file, using console. Built: %s\n",
-            VDATE);
-  }
-  // ------------------------------------
-
   // Always pin main worker process to core #1 as core #0 is the
   // hardware interrupt handler in Linux.  This reduces idle latency
   // in the main loop by about 6-7x.
@@ -94,19 +72,10 @@ int main(int argc, char *argv[]) {
 
   FindStorage();
 
-  // Iniciar monitoramento de CD-ROM
-  startCDROMMonitoring([](int index, bool present) {
-    char msg[64];
-    sprintf(msg, "CD-ROM %d %s", index, present ? "conectado" : "desconectado");
-    // Usar log para console, já que OSD pode não estar visível no SSH
-    printf("[CD-CHANGE-CALLBACK] %s\n", msg);
-
-    // Tenta mandar pro OSD também (DESATIVADO a pedido do usuário, apenas ícone
-    // agora) OsdWrite(16, "", 1); OsdWrite(17, msg, 1); OsdWrite(18, "", 1);
-
-    // Forçar atualização do OSD para mostrar o ícone imediatamente
+  // Start CD-ROM monitoring
+  startCDROMMonitoring([](int, bool) {
     extern void OsdUpdate();
-    OsdUpdate();
+    OsdUpdate(); // Force OSD update to show/hide icon immediately
   });
 
   user_io_init((argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : NULL);
@@ -126,8 +95,6 @@ int main(int argc, char *argv[]) {
     OsdUpdate();
   }
 #endif
-
-  // Parar monitoramento de CD-ROM antes de sair
   stopCDROMMonitoring();
   return 0;
 }
