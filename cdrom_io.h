@@ -26,6 +26,17 @@ struct CDROMState {
   time_t last_check;
 };
 
+// Estrutura simplificada para TOC (limitada ao uso basico)
+struct CDROM_TOC {
+  int min, sec, frame;
+};
+
+struct CDROM_TrackInfo {
+  int start_lba;
+  int end_lba;
+  int type; // 0=audio, 1=data (simplificado)
+};
+
 // Constantes
 const int CHECK_INTERVAL = 2; // Intervalo em segundos entre verificações
 
@@ -39,5 +50,12 @@ int isCDROMPresent();
 void startCDROMMonitoring(CDROMStatusCallback callback);
 void stopCDROMMonitoring();
 bool isCDROMPresent(int index);
+
+// Função para ler setor do CD físico
+int read_cdrom_sector(int index, int lba, unsigned char *buffer,
+                      int sector_size);
+
+// Função para ler TOC do CD físico (retorna numero de tracks, preenche array)
+int read_cdrom_toc(int index, CDROM_TrackInfo *tracks, int max_tracks);
 
 #endif // CDROM_IO_H

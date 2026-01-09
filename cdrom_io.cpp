@@ -1,7 +1,13 @@
 #include "cdrom_io.h"
 #include "osd.h"
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/cdrom.h>
+#include <pthread.h>
+#include <stdarg.h>
+#include <string.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 #ifndef CDROM_DRIVE_STATUS
 #define CDROM_DRIVE_STATUS 0x5326
@@ -9,10 +15,6 @@
 #ifndef CDS_DISC_OK
 #define CDS_DISC_OK 4
 #endif
-#include <pthread.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
 
 // Variáveis globais
 static CDROMState cdrom_states[4] = {};
@@ -21,31 +23,48 @@ static pthread_t monitor_thread;
 static CDROMStatusCallback active_callback = nullptr;
 static pthread_mutex_t monitor_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// Logging Helper
+void log_debug(const char *fmt, ...) {
+  FILE *f = fopen("/media/fat/cdrom_debug.log", "a");
+  if (f) {
+    time_t now = time(NULL);
+    char tbuf[64];
+    strftime(tbuf, sizeof(tbuf), "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+    va_list args;
+    va_start(args, fmt);
+    fprintf(f, "[%s] ", tbuf);
+    vfprintf(f, fmt, args);
+    fprintf(f, "\n");
+    va_end(args);
+    fclose(f);
+  }
+  // Also print to console
+  va_list args2;
+  va_start(args2, fmt);
+  vprintf(fmt, args2);
+  printf("\n");
+  va_end(args2);
+}
+
 // Helper to identify disc type
 static DiscType identify_disc(int fd) {
   unsigned char buffer[2352]; // Buffer for one sector
   DiscType type = DISC_UNKNOWN;
 
   // 1. Check Sector 0 (LBA 0) for SEGA/SATURN/NEO-GEO
-  // Some systems (like Saturn) have header at LBA 0
   lseek(fd, 0, SEEK_SET);
   if (read(fd, buffer, 2048) > 0) {
     if (memcmp(buffer, "SEGADISCSYSTEM", 14) == 0)
       type = DISC_MEGACD;
     else if (memcmp(buffer, "SEGA SEGASATURN", 15) == 0)
       type = DISC_SATURN;
-    // NeoGeo CD check (simple heuristic, can be improved)
-    // Checks for "NEO-GEO" string which sometimes appears in header/boot files
-    // A more robust check might be needed if this fails.
-    // For now, let's check for "NEO-GEO" in the first sector (common in some
-    // dumps). else if (memmem(buffer, 2048, "NEO-GEO", 7)) type = DISC_NEOGEO;
   }
 
   if (type != DISC_UNKNOWN)
     return type;
 
   // 2. Check Sector 16 (LBA 16) - ISO9660 Header
-  // Sega CD often has "SEGADISCSYSTEM" here too.
   lseek(fd, 16 * 2048, SEEK_SET);
   if (read(fd, buffer, 2048) > 0) {
     if (memcmp(buffer + 1, "CD001", 5) == 0) { // ISO9660
@@ -60,14 +79,7 @@ static DiscType identify_disc(int fd) {
   if (type != DISC_UNKNOWN)
     return type;
 
-  // 3. Check PSX License at Sector 4 (LBA 4 ? or absolute 4)
-  // PSX license string is usually at the start of the 4th sector (LBA 4 if
-  // cooked, or ~sector 16 if absolute 154?) In psx.cpp, it reads
-  // "license_sector = 154" (which is 2 seconds pregap + 4 sectors). USB drives
-  // often expose LBA 0 as the start of data track. Let's try LBA 4 and LBA 16
-  // just in case.
-
-  // Try LBA 4 (Sector 4)
+  // 3. Check PSX License at Sector 4
   lseek(fd, 4 * 2048, SEEK_SET);
   if (read(fd, buffer, 2352) > 0) {
     if (memmem(buffer, 2048, "Sony Computer Entertainment", 27))
@@ -95,7 +107,6 @@ bool check_cdrom_state(int index) {
       if (status == CDS_DISC_OK) {
         current_media = true;
         if (!cdrom_states[index].media_present) {
-          // Media just inserted, identify it
           cdrom_states[index].disc_type = identify_disc(fd);
         }
       } else {
@@ -107,30 +118,11 @@ bool check_cdrom_state(int index) {
     cdrom_states[index].disc_type = DISC_UNKNOWN;
   }
 
-  // DEBUG: Logar estado no console para verificar o que está acontecendo
-  // printf("[CDROM] Check %s: stat=%d, is_block=%d, present=%d, media=%d\n",
-  // path, stat_res, is_block, currently_present, current_media);
-
-  // Se o estado mudou (presença ou mídia)
   if (currently_present != cdrom_states[index].present ||
       current_media != cdrom_states[index].media_present) {
     cdrom_states[index].present = currently_present;
     cdrom_states[index].media_present = current_media;
     strcpy(cdrom_states[index].path, path);
-
-    char msg[64];
-    if (currently_present) {
-      sprintf(msg, "CD-ROM CONNECTED: %s", path);
-    } else {
-      sprintf(msg, "CD-ROM REMOVED: %s", path);
-    }
-
-    // printf("[CDROM] OSD Message: %s\n", msg);
-    // OsdWrite(16, "                  ", 1); // Limpar linha
-    // OsdWrite(16, "DEBUG: CD CHANGE", 1);
-    // OsdWrite(17, msg, 1);
-    // OsdWrite(18, "", 1);
-
     return true;
   }
 
@@ -139,19 +131,13 @@ bool check_cdrom_state(int index) {
 
 // Thread de monitoramento
 static void *cdrom_monitor_thread(void *arg) {
-  (void)arg; // Unused parameter
+  (void)arg;
   printf("[CDROM] Monitor Thread Started\n");
-  // OsdWrite(15, "Debug: CD Thread ON", 1); // Aviso visual que a thread
-  // iniciou
 
   while (monitoring_active) {
-    // bool changes = false; // Unused variable removed
-
     for (int i = 0; i < 4; i++) {
       bool old_state = cdrom_states[i].present;
       if (check_cdrom_state(i)) {
-        // changes = true;
-        // Se houve mudança de estado, notificar callback
         if (old_state != cdrom_states[i].present) {
           pthread_mutex_lock(&monitor_mutex);
           if (active_callback) {
@@ -161,25 +147,19 @@ static void *cdrom_monitor_thread(void *arg) {
         }
       }
     }
-
-    // Dormir por CHECK_INTERVAL segundos
     sleep(CHECK_INTERVAL);
   }
   printf("[CDROM] Monitor Thread Stopped\n");
   return NULL;
 }
 
-// Iniciar monitoramento com callback
+// Iniciar monitoramento
 void startCDROMMonitoring(CDROMStatusCallback callback) {
-  printf("[CDROM] Requesting startCDROMMonitoring...\n");
   pthread_mutex_lock(&monitor_mutex);
   if (!monitoring_active) {
     active_callback = callback;
     monitoring_active = true;
     pthread_create(&monitor_thread, NULL, cdrom_monitor_thread, NULL);
-    printf("[CDROM] Thread created.\n");
-  } else {
-    printf("[CDROM] Thread already active.\n");
   }
   pthread_mutex_unlock(&monitor_mutex);
 }
@@ -197,7 +177,6 @@ void stopCDROMMonitoring() {
   pthread_mutex_unlock(&monitor_mutex);
 }
 
-// Verifica se existe um dispositivo CD-ROM USB conectado
 bool isCDROMPresent(int index) {
   if (index < 0 || index >= 4)
     return false;
@@ -214,4 +193,102 @@ DiscType getCDROMType(int index) {
   if (index < 0 || index >= 4)
     return DISC_UNKNOWN;
   return cdrom_states[index].disc_type;
+}
+
+// Read raw sector from CD-ROM
+int read_cdrom_sector(int index, int lba, unsigned char *buffer,
+                      int sector_size) {
+  if (index < 0 || index >= 4 || !cdrom_states[index].media_present)
+    return 0;
+
+  // log_debug("MCD: Read Sector LBA=%d Size=%d", lba, sector_size);
+
+  int fd = open(cdrom_states[index].path, O_RDONLY | O_NONBLOCK);
+  if (fd < 0) {
+    log_debug("MCD: Error opening device %s for read (LBA=%d): %s",
+              cdrom_states[index].path, lba, strerror(errno));
+    return 0;
+  }
+
+  lseek(fd, (off_t)lba * 2048, SEEK_SET);
+
+  int bytes_read = 0;
+  int retry = 10;
+  while (retry > 0) {
+    bytes_read = read(fd, buffer, sector_size > 2048 ? 2048 : sector_size);
+    if (bytes_read < 0) {
+      if (errno == EAGAIN || errno == EBUSY) {
+        usleep(1000); // 1ms
+        retry--;
+        continue;
+      }
+      log_debug("MCD: Read Error LBA=%d: %s", lba, strerror(errno));
+      break;
+    }
+    break;
+  }
+
+  close(fd);
+
+  if (bytes_read <= 0)
+    return 0;
+  return bytes_read;
+}
+
+// Read TOC from physical CD
+int read_cdrom_toc(int index, CDROM_TrackInfo *tracks, int max_tracks) {
+  if (index < 0 || index >= 4 || !cdrom_states[index].media_present)
+    return 0;
+
+  int fd = open(cdrom_states[index].path, O_RDONLY | O_NONBLOCK);
+  if (fd < 0)
+    return 0;
+
+  struct cdrom_tochdr input_header;
+  if (ioctl(fd, CDROMREADTOCHDR, &input_header) < 0) {
+    close(fd);
+    return 0;
+  }
+
+  int count = 0;
+  int start_track = input_header.cdth_trk0;
+  int end_track = input_header.cdth_trk1;
+
+  for (int i = start_track; i <= end_track && count < max_tracks; i++) {
+    struct cdrom_tocentry entry;
+    entry.cdte_track = i;
+    entry.cdte_format = CDROM_LBA;
+    if (ioctl(fd, CDROMREADTOCENTRY, &entry) < 0)
+      continue;
+
+    tracks[count].start_lba = entry.cdte_addr.lba;
+
+    // Type: 4=Data, others=Audio (Control field: bit 2 is data)
+    tracks[count].type = (entry.cdte_ctrl & CDROM_DATA_TRACK) ? 1 : 0;
+
+    // Determine end (start of next track)
+    if (i < end_track) {
+      struct cdrom_tocentry next;
+      next.cdte_track = i + 1;
+      next.cdte_format = CDROM_LBA;
+      if (ioctl(fd, CDROMREADTOCENTRY, &next) == 0) {
+        tracks[count].end_lba = next.cdte_addr.lba - 1;
+      } else {
+        tracks[count].end_lba = tracks[count].start_lba;
+      }
+    } else {
+      struct cdrom_tocentry leadout;
+      leadout.cdte_track = CDROM_LEADOUT;
+      leadout.cdte_format = CDROM_LBA;
+      if (ioctl(fd, CDROMREADTOCENTRY, &leadout) == 0) {
+        tracks[count].end_lba = leadout.cdte_addr.lba - 1;
+      }
+    }
+
+    count++;
+  }
+
+  log_debug("MCD: TOC Read. Tracks: %d", count);
+  close(fd);
+  return count;
 }

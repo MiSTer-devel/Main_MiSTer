@@ -6,6 +6,7 @@
 #include <time.h>
 
 #include "megacd.h"
+#include "../../cdrom_io.h"
 #include "../chd/mister_chd.h"
 
 cdd_t cdd;
@@ -17,7 +18,7 @@ cdd_t::cdd_t() {
 	lba = 0;
 	scanOffset = 0;
 	isData = 1;
-	status = CD_STAT_NO_DISC;
+#include "../../cdrom_io.h"
 	audioLength = 0;
 	audioOffset = 0;
 	chd_hunkbuf = NULL;
@@ -246,7 +247,25 @@ int cdd_t::Load(const char *filename)
 	Unload();
 
 	const char *ext = filename+strlen(filename)-4;
-	if (!strncasecmp(".cue", ext, 4))
+if ((getCDROMType(0) == DISC_MEGACD || getCDROMType(0) == DISC_UNKNOWN) && hasCDROMMedia(0) && !filename[0])
+{
+CDROM_TrackInfo tracks[100];
+int count = read_cdrom_toc(0, tracks, 99);
+if (count > 0) {
+this->toc.last = count;
+this->toc.end = tracks[count-1].end_lba + 1;
+for(int i=0; i<count; i++) {
+this->toc.tracks[i].start = tracks[i].start_lba;
+this->toc.tracks[i].end = tracks[i].end_lba;
+this->toc.tracks[i].type = tracks[i].type;
+printf("MCD: Physical Track %d: Start %d End %d Type %d\n", i+1, tracks[i].start_lba, tracks[i].end_lba, tracks[i].type);
+}
+printf("MCD: Physical CD Mounted via TOC. Last=%d End=%d\n", this->toc.last, this->toc.end);
+this->loaded = 1;
+return 1;
+}
+}
+if (!strncasecmp(".cue", ext, 4))
 	{
 		if (LoadCUE(filename)) {
 			return (-1);
@@ -917,8 +936,15 @@ void cdd_t::SeekToLBA(int lba, int play) {
 
 void cdd_t::ReadData(uint8_t *buf)
 {
-	if (this->toc.tracks[this->index].type && (this->lba >= 0))
-	{
+if (this->toc.tracks[this->index].type && (this->lba >= 0)) {
+
+DiscType cd_type = getCDROMType(0); // Assume drive 0 for now
+if (cd_type == DISC_MEGACD && hasCDROMMedia(0))
+{
+// Try reading from physical CD
+read_cdrom_sector(0, this->lba, buf, 2048);
+return;
+}
 
 		if (this->toc.chd_f)
 		{
@@ -953,6 +979,18 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 	{
 		return this->audioLength;
 	}
+
+DiscType cd_type = getCDROMType(0); // Assume drive 0
+if ((cd_type == DISC_MEGACD || cd_type == DISC_UNKNOWN) && hasCDROMMedia(0))
+{
+int read_len = read_cdrom_sector(0, this->chd_audio_read_lba, buf, this->audioLength);
+if (read_len > 0) {
+if ((this->audioLength / 2352) > 1) this->chd_audio_read_lba++;
+return this->audioLength;
+}
+memset(buf, 0, this->audioLength);
+return this->audioLength;
+}
 
 	if (this->toc.chd_f)
 	{
