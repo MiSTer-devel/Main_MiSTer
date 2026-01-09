@@ -10,6 +10,7 @@
 #define CDS_DISC_OK 4
 #endif
 #include <pthread.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -19,6 +20,62 @@ static bool monitoring_active = false;
 static pthread_t monitor_thread;
 static CDROMStatusCallback active_callback = nullptr;
 static pthread_mutex_t monitor_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Helper to identify disc type
+static DiscType identify_disc(int fd) {
+  unsigned char buffer[2352]; // Buffer for one sector
+  DiscType type = DISC_UNKNOWN;
+
+  // 1. Check Sector 0 (LBA 0) for SEGA/SATURN/NEO-GEO
+  // Some systems (like Saturn) have header at LBA 0
+  lseek(fd, 0, SEEK_SET);
+  if (read(fd, buffer, 2048) > 0) {
+    if (memcmp(buffer, "SEGADISCSYSTEM", 14) == 0)
+      type = DISC_MEGACD;
+    else if (memcmp(buffer, "SEGA SEGASATURN", 15) == 0)
+      type = DISC_SATURN;
+    // NeoGeo CD check (simple heuristic, can be improved)
+    // Checks for "NEO-GEO" string which sometimes appears in header/boot files
+    // A more robust check might be needed if this fails.
+    // For now, let's check for "NEO-GEO" in the first sector (common in some
+    // dumps). else if (memmem(buffer, 2048, "NEO-GEO", 7)) type = DISC_NEOGEO;
+  }
+
+  if (type != DISC_UNKNOWN)
+    return type;
+
+  // 2. Check Sector 16 (LBA 16) - ISO9660 Header
+  // Sega CD often has "SEGADISCSYSTEM" here too.
+  lseek(fd, 16 * 2048, SEEK_SET);
+  if (read(fd, buffer, 2048) > 0) {
+    if (memcmp(buffer + 1, "CD001", 5) == 0) { // ISO9660
+      // Check system identifier in ISO header (offset 8)
+      if (memcmp(buffer + 8, "SEGADISCSYSTEM", 14) == 0)
+        type = DISC_MEGACD;
+      else if (memcmp(buffer + 8, "SEGA SEGASATURN", 15) == 0)
+        type = DISC_SATURN;
+    }
+  }
+
+  if (type != DISC_UNKNOWN)
+    return type;
+
+  // 3. Check PSX License at Sector 4 (LBA 4 ? or absolute 4)
+  // PSX license string is usually at the start of the 4th sector (LBA 4 if
+  // cooked, or ~sector 16 if absolute 154?) In psx.cpp, it reads
+  // "license_sector = 154" (which is 2 seconds pregap + 4 sectors). USB drives
+  // often expose LBA 0 as the start of data track. Let's try LBA 4 and LBA 16
+  // just in case.
+
+  // Try LBA 4 (Sector 4)
+  lseek(fd, 4 * 2048, SEEK_SET);
+  if (read(fd, buffer, 2352) > 0) {
+    if (memmem(buffer, 2048, "Sony Computer Entertainment", 27))
+      return DISC_PSX;
+  }
+
+  return DISC_UNKNOWN;
+}
 
 // Verifica mudanças no estado de um CD-ROM específico
 bool check_cdrom_state(int index) {
@@ -37,9 +94,17 @@ bool check_cdrom_state(int index) {
       int status = ioctl(fd, CDROM_DRIVE_STATUS, 0);
       if (status == CDS_DISC_OK) {
         current_media = true;
+        if (!cdrom_states[index].media_present) {
+          // Media just inserted, identify it
+          cdrom_states[index].disc_type = identify_disc(fd);
+        }
+      } else {
+        cdrom_states[index].disc_type = DISC_UNKNOWN;
       }
       close(fd);
     }
+  } else {
+    cdrom_states[index].disc_type = DISC_UNKNOWN;
   }
 
   // DEBUG: Logar estado no console para verificar o que está acontecendo
@@ -143,4 +208,10 @@ bool hasCDROMMedia(int index) {
   if (index < 0 || index >= 4)
     return false;
   return cdrom_states[index].media_present;
+}
+
+DiscType getCDROMType(int index) {
+  if (index < 0 || index >= 4)
+    return DISC_UNKNOWN;
+  return cdrom_states[index].disc_type;
 }
