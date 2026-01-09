@@ -12,6 +12,7 @@ typedef void (*CDROMStatusCallback)(int index, bool present);
 // Estrutura para armazenar o estado dos CD-ROMs
 struct CDROMState {
   bool present;
+  bool media_present;
   char path[32];
   time_t last_check;
 };
@@ -21,6 +22,7 @@ const int CHECK_INTERVAL = 2; // Intervalo em segundos entre verificações
 
 // Funções
 bool check_cdrom_state(int index);
+bool hasCDROMMedia(int index);
 int isCDROMPresent();
 
 // Funções de monitoramento hot-plug

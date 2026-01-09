@@ -1,6 +1,16 @@
 #include "cdrom_io.h"
 #include "osd.h"
+#include <fcntl.h>
+#include <linux/cdrom.h>
+
+#ifndef CDROM_DRIVE_STATUS
+#define CDROM_DRIVE_STATUS 0x5326
+#endif
+#ifndef CDS_DISC_OK
+#define CDS_DISC_OK 4
+#endif
 #include <pthread.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 // Variáveis globais
@@ -19,15 +29,28 @@ bool check_cdrom_state(int index) {
   int stat_res = stat(path, &st);
   bool is_block = (stat_res == 0 && S_ISBLK(st.st_mode));
   bool currently_present = is_block;
+  bool current_media = false;
+
+  if (currently_present) {
+    int fd = open(path, O_RDONLY | O_NONBLOCK);
+    if (fd >= 0) {
+      int status = ioctl(fd, CDROM_DRIVE_STATUS, 0);
+      if (status == CDS_DISC_OK) {
+        current_media = true;
+      }
+      close(fd);
+    }
+  }
 
   // DEBUG: Logar estado no console para verificar o que está acontecendo
-  printf("[CDROM] Check %s: stat=%d, is_block=%d, present=%d (stored=%d)\n",
-         path, stat_res, is_block, currently_present,
-         cdrom_states[index].present);
+  // printf("[CDROM] Check %s: stat=%d, is_block=%d, present=%d, media=%d\n",
+  // path, stat_res, is_block, currently_present, current_media);
 
-  // Se o estado mudou
-  if (currently_present != cdrom_states[index].present) {
+  // Se o estado mudou (presença ou mídia)
+  if (currently_present != cdrom_states[index].present ||
+      current_media != cdrom_states[index].media_present) {
     cdrom_states[index].present = currently_present;
+    cdrom_states[index].media_present = current_media;
     strcpy(cdrom_states[index].path, path);
 
     char msg[64];
@@ -114,4 +137,10 @@ bool isCDROMPresent(int index) {
   if (index < 0 || index >= 4)
     return false;
   return cdrom_states[index].present;
+}
+
+bool hasCDROMMedia(int index) {
+  if (index < 0 || index >= 4)
+    return false;
+  return cdrom_states[index].media_present;
 }
