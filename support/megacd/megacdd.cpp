@@ -18,7 +18,7 @@ cdd_t::cdd_t() {
   lba = 0;
   scanOffset = 0;
   isData = 1;
-#include "../../cdrom_io.h"
+  status = CD_STAT_NO_DISC;
   audioLength = 0;
   audioOffset = 0;
   chd_hunkbuf = NULL;
@@ -237,6 +237,7 @@ int cdd_t::Load(const char *filename) {
   Unload();
 
   const char *ext = filename + strlen(filename) - 4;
+
   if ((getCDROMType(0) == DISC_MEGACD || getCDROMType(0) == DISC_UNKNOWN) &&
       hasCDROMMedia(0) && !filename[0]) {
     CDROM_TrackInfo tracks[100];
