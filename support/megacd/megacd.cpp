@@ -143,15 +143,23 @@ void mcd_set_image(int num, const char *filename) {
     mcd_reset();
 
     loaded = 0;
-    strcpy(buf, last_dir);
     char *p = strrchr(buf, '/');
     if (p) {
       strcpy(p + 1, "cd_bios.rom");
       loaded = user_io_file_tx(buf);
     } else {
-      // Fallback for physical CD/empty path
-      sprintf(buf, "/media/fat/games/MegaCD/cd_bios.rom");
-      loaded = user_io_file_tx(buf);
+      // Fallback for physical CD/empty path: Try known regions
+      const char *bios_paths[] = {"/media/fat/games/MegaCD/USA/cd_bios.rom",
+                                  "/media/fat/games/MegaCD/Europe/cd_bios.rom",
+                                  "/media/fat/games/MegaCD/Japan/cd_bios.rom",
+                                  "/media/fat/games/MegaCD/boot.rom"};
+
+      for (int i = 0; i < 4; i++) {
+        strcpy(buf, bios_paths[i]);
+        loaded = user_io_file_tx(buf);
+        if (loaded)
+          break;
+      }
     }
 
     if (!loaded) {
@@ -163,7 +171,7 @@ void mcd_set_image(int num, const char *filename) {
       Info("CD BIOS not found!", 4000);
   }
 
-  if (loaded && *filename) {
+  if (loaded && (*filename || hasCDROMMedia(0))) {
     if (cdd.Load(filename) > 0) {
       cdd.status = cdd.loaded ? CD_STAT_STOP : CD_STAT_NO_DISC;
       cdd.latency = 10;
