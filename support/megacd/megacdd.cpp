@@ -254,6 +254,14 @@ int cdd_t::Load(const char *filename)
 		int count = read_cdrom_toc(0, tracks, 99);
 		if (count > 0)
 		{
+			// Warm-Up Read
+			uint8_t temp_buf[2048];
+			if (read_cdrom_sector(0, 16, temp_buf, 2048) <= 0)
+			{
+				printf("MCD: Physical Mount - Drive not ready (Warm-up failed)\n");
+				return 0; 
+			}
+			
 			this->toc.last = count;
 			this->toc.end = tracks[count-1].end_lba + 1;
 			for(int i=0; i<count; i++)
@@ -358,6 +366,7 @@ void cdd_t::Unload()
 		if (this->toc.sub.opened()) FileClose(&this->toc.sub);
 
 		this->loaded = 0;
+		this->status = CD_STAT_NO_DISC;
 	}
 
 	memset(&this->toc, 0x00, sizeof(this->toc));

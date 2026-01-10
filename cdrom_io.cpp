@@ -233,7 +233,7 @@ int read_cdrom_sector(int index, int lba, unsigned char *buffer,
   lseek(fd, (off_t)lba * 2048, SEEK_SET);
 
   int bytes_read = 0;
-  int retry = 10;
+  int retry = 3000;
   while (retry > 0) {
     bytes_read = read(fd, buffer, sector_size > 2048 ? 2048 : sector_size);
     if (bytes_read < 0) {
