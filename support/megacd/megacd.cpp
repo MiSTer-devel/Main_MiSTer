@@ -11,6 +11,7 @@
 #include "../../menu.h"
 #include "../../spi.h"
 #include "../../user_io.h"
+#include "debug_log.h"
 #include "megacd.h"
 
 #define SAVE_IO_INDEX 5 // fake download to trigger save loading
@@ -28,6 +29,7 @@ void mcd_poll() {
   static bool load_attempted = false;
   static uint32_t mount_timer = 0;
   static uint32_t hw_poll_timer = 0;
+  static int mount_phase = 0; // Moved to function scope
 
   // Throttle hardware polling to every 500ms to prevent UI freeze
   if (!hw_poll_timer || CheckTimer(hw_poll_timer)) {
@@ -37,45 +39,78 @@ void mcd_poll() {
       if (cdd.loaded && load_attempted) {
         cdd.Unload();
         Info("CD Removed", 2000);
+      } else if (!cdd.loaded && cdd.status != CD_STAT_NO_DISC) {
+        // IDLE STATE FIX: If no media and not loaded, we MUST report NO_DISC.
+        // Otherwise, Reset() leaves us in STOP (Ready), confusing the BIOS on
+        // startup.
+        cdd.status = CD_STAT_NO_DISC;
       }
       load_attempted = false;
       mount_timer = 0;
-    } else if (!cdd.loaded && (getCDROMType(0) == DISC_MEGACD ||
-                               getCDROMType(0) == DISC_UNKNOWN)) {
-      // Physical CD inserted but not loaded
+      mount_phase = 0; // Reset phase on removal
+    } else if (mount_phase > 0 ||
+               (!cdd.loaded && (getCDROMType(0) == DISC_MEGACD ||
+                                getCDROMType(0) == DISC_UNKNOWN))) {
+      // Physical CD inserted logic.
+      // Condition allows entry if we are ALREADY mounting (mount_phase > 0)
+      // OR if we are detecting a new disc.
       if (!load_attempted) {
         if (!mount_timer) {
-          // Phase 1: Start Debounce (2s)
-          mount_timer = GetTimer(2000);
+          // Phase 0: Start Debounce (force NO_DISC to keep BIOS waiting)
+          cdd.status = CD_STAT_NO_DISC;
+          mount_phase = 0;
+          mount_timer = GetTimer(2000); // 2s spin-up
           Info("Disc Inserted...", 2000);
         } else if (CheckTimer(mount_timer)) {
-          // Phase 2: Force Tray Open signal to BIOS for 500ms
-          // We use a static state to track if we've done this phase
-          static bool tray_open_signaled = false;
-
-          if (!tray_open_signaled) {
-            cdd.status = CD_STAT_OPEN;   // Force open
-            mount_timer = GetTimer(500); // Wait 500ms in Open state
-            tray_open_signaled = true;
-            Info("Checking Disc...", 2000); // User sees "Checking"
-          } else {
-            // Phase 3: Attempt Mount
-            Info("Mounting Disc...", 2000);
-            usleep(50000); // Small paint delay
+          if (mount_phase == 0) {
+            // Phase 1: Force Tray Open (0x05)
+            // BIOS: "Close CD Door" / "Open"
+            cdd.status = CD_STAT_OPEN;
+            mount_timer = GetTimer(2000); // Increased to 2s for visibility
+            mount_phase = 1;
+            DebugLog("[MISTER] Phase 1: OPEN (Signal: Close Door)\n");
+            Info("Close CD Door", 2000);
+          } else if (mount_phase == 1) {
+            // Phase 2: Load Data (Hidden under OPEN status)
+            // BIOS sees OPEN while we block to read TOC.
+            DebugLog("[MISTER] Phase 2: Loading Image (Status: OPEN)\n");
+            usleep(50000);
             mcd_set_image(0, "");
 
             if (cdd.loaded) {
-              load_attempted = true;
-              mount_timer = 0;
-              tray_open_signaled = false; // Reset for next time
-              Info("Disc Ready", 2000);
+              // Load Success -> Signal Door Closed (NO DISC)
+              cdd.status = CD_STAT_NO_DISC;
+              cdd.latency = 0;
+              mount_timer =
+                  GetTimer(500); // Wait 500ms as "No Disc" / "Tray Closed"
+              DebugLog("[MISTER] Phase 2: Load Success -> Signal NO_DISC\n");
+              mount_phase = 2;
             } else {
-              // Load failed, retry debounce logic
-              mount_timer = GetTimer(2000);
-              tray_open_signaled =
-                  false; // Will signal open again on retry, which is good
-              Info("Mount Failed. Retrying...", 1000);
+              // Load Failed (Drive spinning up?) -> Retry (Stay in Phase 1)
+              mount_phase = 1;
+              DebugLog("[MISTER] Phase 2: Load Fail (Spinning up?) -> Retry\n");
+              // Wait 500ms before retrying, status remains OPEN
+              mount_timer = GetTimer(500);
             }
+          } else if (mount_phase == 2) {
+            // Phase 3: TOC (Checking Disc)
+            cdd.status = CD_STAT_TOC;
+            cdd.latency = 0;
+            DebugLog("[MISTER] Phase 3: TOC (Reading TOC)\n");
+            Info("Checking Disc...", 1500);
+            mount_timer = GetTimer(1500); // Hold TOC status for 1.5s
+            mount_phase = 3;
+          } else if (mount_phase == 3) {
+            // Phase 4: Ready/Stop
+            cdd.status = CD_STAT_STOP;
+            load_attempted = true;
+            DebugLog("[MISTER] Phase 4: STOP (Ready)\n");
+            mount_timer = 0;
+            mount_phase = 0;
+            mount_timer = 0;
+            mount_phase = 0;
+            // The Spy Log in ReadData will trigger shortly after this
+            Info("Press Start Button", 2000);
           }
         }
       }
@@ -103,9 +138,16 @@ void mcd_poll() {
 
       has_command = 0;
 
-      // printf("\x1b[32mMCD: Send status, status = %04X%04X%04X, frame =
-      // %u\n\x1b[0m", (uint16_t)((s >> 32) & 0x00FF), (uint16_t)((s >> 16) &
-      // 0xFFFF), (uint16_t)((s >> 0) & 0xFFFF), frame);
+      // Log Status Sent to Core
+      // Only log if status changed or periodically to avoid spam?
+      // For now, log everything to trace handshake "blink"
+      uint8_t status_byte =
+          (uint8_t)(s & 0xFF); // stat[1] (Report) | stat[0] (Mode/Status)
+      uint8_t stat0_mode = status_byte & 0xF;
+      uint8_t stat1_rep = (status_byte >> 4) & 0xF;
+      DebugLog(
+          "[CORE] < SEND STATUS_WORD: %04X (Mode: %X, Rep: %X, Full: %02X)\n",
+          (int)(s & 0xFFFF), stat0_mode, stat1_rep, status_byte);
     }
 
     cdd.Update();
@@ -125,12 +167,18 @@ void mcd_poll() {
 
     if (need_reset || data_in[0] == 0xFF) {
       printf("MCD: request to reset\n");
+      DebugLog("[CORE] > REQUEST RESET\n");
       need_reset = 0;
       cdd.Reset();
     }
 
     uint64_t c = *((uint64_t *)(data_in));
     cdd.SetCommand(c, 0);
+
+    // Log Command Received from Core
+    DebugLog("[CORE] > GET COMMAND: %02X (Arg: %02X)\n", (int)(c & 0xFF),
+             (int)((c >> 8) & 0xFF));
+
     cdd.CommandExec();
     has_command = 1;
 
