@@ -27,15 +27,56 @@ void mcd_poll()
 	static uint8_t last_req = 255;
 	static uint8_t adj = 0;
 	static bool load_attempted = false;
+	static uint32_t mount_timer = 0;
+	static uint32_t hw_poll_timer = 0;
 
-	if (!hasCDROMMedia(0))
+	// Throttle hardware polling to every 500ms to prevent UI freeze
+	if (!hw_poll_timer || CheckTimer(hw_poll_timer))
 	{
-		load_attempted = false;
-	}
-	else if (!cdd.loaded && !load_attempted && (getCDROMType(0) == DISC_MEGACD || getCDROMType(0) == DISC_UNKNOWN))
-	{
-		load_attempted = true;
-		mcd_set_image(0, "");
+		hw_poll_timer = GetTimer(500);
+
+		if (!hasCDROMMedia(0))
+		{
+			if (cdd.loaded && load_attempted)
+			{
+				cdd.Unload();
+				Info("CD Removed", 2000);
+			}
+			load_attempted = false;
+			mount_timer = 0;
+		}
+		else if (!cdd.loaded && (getCDROMType(0) == DISC_MEGACD || getCDROMType(0) == DISC_UNKNOWN))
+		{
+			// Physical CD inserted but not loaded
+			if (!load_attempted)
+			{
+				// First detection: start debounce timer
+				if (!mount_timer)
+				{
+					mount_timer = GetTimer(2000); // Wait 2s for drive spin-up
+					Info("Disc Inserted...", 2000);
+				}
+				else if (CheckTimer(mount_timer))
+				{
+					// Timer expired, attempt load
+					Info("Mounting Disc...", 2000);
+					mcd_set_image(0, "");
+				
+					if (cdd.loaded)
+					{
+						load_attempted = true;
+						mount_timer = 0;
+						Info("Disc Ready", 2000);
+					}
+					else
+					{
+						// Load failed (maybe drive not ready?), retry later
+						mount_timer = GetTimer(2000); // Retry in 2s
+						Info("Mount Failed. Retrying...", 1000);
+					}
+				}
+			}
+		}
 	}
 
 	if (!poll_timer || CheckTimer(poll_timer))
@@ -137,7 +178,7 @@ void mcd_set_image(int num, const char *filename)
 	cdd.Unload();
 	cdd.status = CD_STAT_OPEN;
 
-	int same_game = *filename && *last_dir && !strncmp(last_dir, filename, strlen(last_dir));
+	int same_game = (*filename && *last_dir && !strncmp(last_dir, filename, strlen(last_dir))) || (!*filename && !*last_dir);
 	strcpy(last_dir, filename);
 	char *p = strrchr(last_dir, '/');
 	if (p) *p = 0;
