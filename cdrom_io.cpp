@@ -210,6 +210,26 @@ int read_cdrom_sector(int index, int lba, unsigned char *buffer,
     return 0;
   }
 
+  // Check for Audio Read (multiples of 2352 bytes)
+  if (sector_size > 0 && (sector_size % 2352 == 0)) {
+    struct cdrom_read_audio ra;
+    ra.addr.lba = lba;
+    ra.addr_format = CDROM_LBA;
+    ra.nframes = sector_size / 2352;
+    ra.buf = buffer;
+
+    int res = ioctl(fd, CDROMREADAUDIO, &ra);
+    close(fd);
+
+    if (res < 0) {
+      log_debug("MCD: CDROMREADAUDIO Error LBA=%d Frames=%d: %s", lba,
+                ra.nframes, strerror(errno));
+      return 0; // Return 0 (silence) on error
+    }
+    return sector_size;
+  }
+
+  // Standard data read for now.
   lseek(fd, (off_t)lba * 2048, SEEK_SET);
 
   int bytes_read = 0;
