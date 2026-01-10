@@ -915,7 +915,6 @@ void cdd_t::SeekToLBA(int lba, int play) {
 
 void cdd_t::ReadData(uint8_t *buf) {
   if (this->toc.tracks[this->index].type && (this->lba >= 0)) {
-
     DiscType cd_type = getCDROMType(0); // Assume drive 0 for now
     if (cd_type == DISC_MEGACD && hasCDROMMedia(0)) {
       // Try reading from physical CD
