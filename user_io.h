@@ -74,6 +74,7 @@
 #define UIO_GET_FB_PAR  0x40
 #define UIO_SET_YC_PAR  0x41
 #define UIO_GET_FR_CNT  0x42  // get frame counter
+#define UIO_GET_F12_MOD 0x43  // get framework menu key modifier
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
