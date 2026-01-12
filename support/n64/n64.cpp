@@ -412,7 +412,7 @@ struct N64SaveFile {
 		}
 
 		auto sz = this->get_size();
-		memset(save_file_buf, 0, sz);
+		memset(save_file_buf, 0xFF, sz);
 		bool found_old_data = false;
 
 		if (sz && FileExists(old_path, 0)) {
