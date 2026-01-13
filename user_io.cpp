@@ -1095,6 +1095,12 @@ void MakeFile(const char *filename, const char *data)
 	fclose(file);
 }
 
+uint16_t f12_mod;
+char is_f12_mod_needed()
+{
+	return (is_x86() || is_pcxt() || is_archie() || (f12_mod != 0));
+}
+
 int GetUARTMode()
 {
 	struct stat filestat;
@@ -1671,6 +1677,8 @@ void user_io_init(const char *path, const char *xml)
 	if (uartmode < 3 || uartmode > 4) midilink = 0;
 	SetMidiLinkMode(midilink);
 	SetUARTMode(uartmode);
+
+	f12_mod = spi_uio_cmd(UIO_GET_F12_MOD);
 
 	if (!mgl_get()->count || is_menu() || is_st() || is_archie() || user_io_core_type() == CORE_TYPE_SHARPMZ)
 	{
@@ -4091,7 +4099,7 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
-				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && ((!is_x86() && !is_pcxt() && !is_archie()) || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
+				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && (!is_f12_mod_needed() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
 				{
 					block_F12 = 1;
 					if (press == 1) menu_key_set(KEY_F12);
