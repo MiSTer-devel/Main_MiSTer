@@ -12,6 +12,9 @@
 #ifndef CDROM_DRIVE_STATUS
 #define CDROM_DRIVE_STATUS 0x5326
 #endif
+#ifndef CDS_TRAY_OPEN
+#define CDS_TRAY_OPEN 2
+#endif
 #ifndef CDS_DISC_OK
 #define CDS_DISC_OK 4
 #endif
@@ -99,6 +102,7 @@ bool check_cdrom_state(int index) {
   bool is_block = (stat_res == 0 && S_ISBLK(st.st_mode));
   bool currently_present = is_block;
   bool current_media = false;
+  bool current_tray_open = false;
 
   if (currently_present) {
     int fd = open(path, O_RDONLY | O_NONBLOCK);
@@ -106,22 +110,38 @@ bool check_cdrom_state(int index) {
       int status = ioctl(fd, CDROM_DRIVE_STATUS, 0);
       if (status == CDS_DISC_OK) {
         current_media = true;
+        current_tray_open = false;
         if (!cdrom_states[index].media_present) {
           cdrom_states[index].disc_type = identify_disc(fd);
         }
+      } else if (status == CDS_TRAY_OPEN) {
+        current_media = false;
+        current_tray_open = true;
+        cdrom_states[index].disc_type = DISC_UNKNOWN;
       } else {
+        current_tray_open = false;
         cdrom_states[index].disc_type = DISC_UNKNOWN;
       }
       close(fd);
     }
   } else {
     cdrom_states[index].disc_type = DISC_UNKNOWN;
+    current_tray_open = false;
   }
 
   if (currently_present != cdrom_states[index].present ||
-      current_media != cdrom_states[index].media_present) {
+      current_media != cdrom_states[index].media_present ||
+      current_tray_open != cdrom_states[index].tray_open) {
+    // Re-eval change detection:
+    bool state_changed = (currently_present != cdrom_states[index].present) ||
+                         (current_media != cdrom_states[index].media_present);
+    // Note: We are not notifying on tray change yet in the callback
+    // specifically unless it affects media_present, but we are updating the
+    // state struct.
+
     cdrom_states[index].present = currently_present;
     cdrom_states[index].media_present = current_media;
+    cdrom_states[index].tray_open = current_tray_open;
     strcpy(cdrom_states[index].path, path);
     return true;
   }
@@ -175,6 +195,12 @@ void stopCDROMMonitoring() {
     active_callback = nullptr;
   }
   pthread_mutex_unlock(&monitor_mutex);
+}
+
+bool isCDROMTrayOpen(int index) {
+  if (index < 0 || index >= 4)
+    return false;
+  return cdrom_states[index].tray_open;
 }
 
 bool isCDROMPresent(int index) {

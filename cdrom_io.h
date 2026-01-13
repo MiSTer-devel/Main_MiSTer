@@ -21,6 +21,7 @@ enum DiscType {
 struct CDROMState {
   bool present;
   bool media_present;
+  bool tray_open;
   DiscType disc_type;
   char path[32];
   time_t last_check;
@@ -50,6 +51,7 @@ int isCDROMPresent();
 void startCDROMMonitoring(CDROMStatusCallback callback);
 void stopCDROMMonitoring();
 bool isCDROMPresent(int index);
+bool isCDROMTrayOpen(int index);
 
 // Função para ler setor do CD físico
 int read_cdrom_sector(int index, int lba, unsigned char *buffer,
