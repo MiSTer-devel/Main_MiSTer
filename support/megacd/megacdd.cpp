@@ -1025,6 +1025,20 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 		return this->audioLength;
 	}
 
+	DiscType cd_type = getCDROMType(0); // Assume drive 0
+	if ((cd_type == DISC_MEGACD || cd_type == DISC_UNKNOWN) && hasCDROMMedia(0))
+	{
+		int read_len = read_cdrom_sector(0, this->chd_audio_read_lba, buf, this->audioLength);
+		if (read_len > 0)
+		{
+			if ((this->audioLength / 2352) > 1)
+				this->chd_audio_read_lba++;
+			return this->audioLength;
+		}
+		memset(buf, 0, this->audioLength);
+		return this->audioLength;
+	}
+
 	if (this->toc.chd_f)
 	{
 		for(int i = 0; i < this->audioLength / 2352; i++)
