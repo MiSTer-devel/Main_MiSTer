@@ -58,6 +58,7 @@ public:
   void CommandExec();
   uint64_t GetStatus(uint8_t crc_start);
   int SetCommand(uint64_t c, uint8_t crc_start);
+  void ForceStatSync();
 
 private:
   toc_t toc;
@@ -85,8 +86,6 @@ private:
   void MSFToLBA(int *lba, uint8_t m, uint8_t s, uint8_t f);
   void SeekToLBA(int lba, int play);
 };
-
-#define BCD(v) ((uint8_t)((((v) / 10) << 4) | ((v) % 10)))
 
 #define CD_SCAN_SPEED 30
 

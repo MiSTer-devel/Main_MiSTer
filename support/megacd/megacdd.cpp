@@ -1118,5 +1118,3 @@ int cdd_t::SubcodeSend() {
 }
 
 void cdd_t::ForceStatSync() { stat[0] = status; }
-
-void cdd_t::ForceStatSync() { stat[0] = status; }

@@ -133,8 +133,7 @@ bool check_cdrom_state(int index) {
       current_media != cdrom_states[index].media_present ||
       current_tray_open != cdrom_states[index].tray_open) {
     // Re-eval change detection:
-    bool state_changed = (currently_present != cdrom_states[index].present) ||
-                         (current_media != cdrom_states[index].media_present);
+
     // Note: We are not notifying on tray change yet in the callback
     // specifically unless it affects media_present, but we are updating the
     // state struct.
