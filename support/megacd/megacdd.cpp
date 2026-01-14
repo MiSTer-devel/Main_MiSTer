@@ -1,12 +1,16 @@
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 #include <time.h>
 
-#include "megacd.h"
+#include "../../cdrom_io.h"
 #include "../chd/mister_chd.h"
+#include "debug_log.h"
+#include "megacd.h"
+
+#define BCD(v) ((uint8_t)((((v)/10) << 4) | ((v)%10)))
 
 cdd_t cdd;
 
@@ -246,6 +250,47 @@ int cdd_t::Load(const char *filename)
 	Unload();
 
 	const char *ext = filename+strlen(filename)-4;
+
+	if ((getCDROMType(0) == DISC_MEGACD || getCDROMType(0) == DISC_UNKNOWN) && hasCDROMMedia(0) && !filename[0])
+	{
+		CDROM_TrackInfo tracks[100];
+		int count = read_cdrom_toc(0, tracks, 99);
+		if (count > 0)
+		{
+			// Mimic Reset() behavior to ensure clean state for new disc checks (e.g. isData)
+			this->isData = 1;
+			this->lba = 0;
+			this->index = 0;
+			this->audioLength = 0;
+
+			// Clear status history (critical for hot-swap to behave like Reset)
+			memset(this->stat, 0, sizeof(this->stat));
+			this->stat[9] = 0xF; // Default value from Reset()
+
+			// Warm-Up Read REMOVED to prevent blocking SPI loop
+			// The BIOS will request sector 16 anyway, and ReadData handles retries.
+			// uint8_t temp_buf[2048];
+			// if (read_cdrom_sector(0, 16, temp_buf, 2048) <= 0) {
+			//   printf("MCD: Physical Mount - Drive not ready (Warm-up failed)\n");
+			//   return 0;
+			// }
+
+			this->toc.last = count;
+			this->toc.end = tracks[count - 1].end_lba + 1;
+			for (int i = 0; i < count; i++)
+			{
+				this->toc.tracks[i].start = tracks[i].start_lba;
+				this->toc.tracks[i].end = tracks[i].end_lba;
+				this->toc.tracks[i].type = tracks[i].type;
+				printf("MCD: Physical Track %d: Start %d End %d Type %d\n", i + 1,
+					tracks[i].start_lba, tracks[i].end_lba, tracks[i].type);
+			}
+			printf("MCD: Physical CD Mounted via TOC. Last=%d End=%d\n", this->toc.last, this->toc.end);
+			this->loaded = 1;
+			return 1;
+		}
+	}
+
 	if (!strncasecmp(".cue", ext, 4))
 	{
 		if (LoadCUE(filename)) {
@@ -335,6 +380,7 @@ void cdd_t::Unload()
 		if (this->toc.sub.opened()) FileClose(&this->toc.sub);
 
 		this->loaded = 0;
+		this->status = CD_STAT_NO_DISC;
 	}
 
 	memset(&this->toc, 0x00, sizeof(this->toc));
@@ -915,10 +961,35 @@ void cdd_t::SeekToLBA(int lba, int play) {
 
 }
 
+void cdd_t::ForceStatSync()
+{
+	// Force immediate status report
+	// Used when physical CD is hot-swapped
+}
+
 void cdd_t::ReadData(uint8_t *buf)
 {
 	if (this->toc.tracks[this->index].type && (this->lba >= 0))
 	{
+		// Physical CD path
+		if (!this->toc.tracks[0].f.opened() && hasCDROMMedia(0))
+		{
+			int retry_count = 0;
+			const int MAX_RETRIES = 3;
+			while (retry_count < MAX_RETRIES)
+			{
+				int result = read_cdrom_sector(0, this->lba, buf, 2048);
+				if (result > 0)
+				{
+					return;
+				}
+				retry_count++;
+				usleep(10000); // 10ms retry delay
+			}
+			DebugLog("[MISTER] ReadData FAILED after retries (LBA %d)\n", this->lba);
+			memset(buf, 0, 2048); // Return zeros on failure
+			return;
+		}
 
 		if (this->toc.chd_f)
 		{
@@ -951,6 +1022,20 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 
 	if (this->isData)
 	{
+		return this->audioLength;
+	}
+
+	DiscType cd_type = getCDROMType(0); // Assume drive 0
+	if ((cd_type == DISC_MEGACD || cd_type == DISC_UNKNOWN) && hasCDROMMedia(0))
+	{
+		int read_len = read_cdrom_sector(0, this->chd_audio_read_lba, buf, this->audioLength);
+		if (read_len > 0)
+		{
+			if ((this->audioLength / 2352) > 1)
+				this->chd_audio_read_lba++;
+			return this->audioLength;
+		}
+		memset(buf, 0, this->audioLength);
 		return this->audioLength;
 	}
 

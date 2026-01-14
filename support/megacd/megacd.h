@@ -1,7 +1,6 @@
 #ifndef MEGACD_H
 #define MEGACD_H
 
-
 // CDD status
 #define CD_STAT_STOP			0x00
 #define CD_STAT_PLAY			0x01
@@ -60,6 +59,7 @@ public:
 	void CommandExec();
 	uint64_t GetStatus(uint8_t crc_start);
 	int SetCommand(uint64_t c, uint8_t crc_start);
+	void ForceStatSync();
 
 private:
 	toc_t toc;
@@ -88,13 +88,10 @@ private:
 	void SeekToLBA(int lba, int play);
 };
 
-#define BCD(v)				 ((uint8_t)((((v)/10) << 4) | ((v)%10)))
-
 #define CD_SCAN_SPEED 30
 
 //cdd.cpp
 extern cdd_t cdd;
-
 
 void mcd_poll();
 void mcd_set_image(int num, const char *filename);
