@@ -28,3 +28,7 @@ host
 *.user
 .vs
 MiSTer
+
+# Antigravity artifacts
+*.json
+*.log
