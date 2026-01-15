@@ -393,7 +393,7 @@ void cdd_t::Reset() {
 	lba = 0;
 	scanOffset = 0;
 	isData = 1;
-	status = CD_STAT_STOP;
+	status = CD_STAT_STOP;  // Always STOP on reset (original behavior)
 	audioLength = 0;
 	audioOffset = 0;
 	chd_audio_read_lba = 0;
