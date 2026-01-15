@@ -22,88 +22,6 @@
 static int need_reset=0;
 static uint8_t has_command = 0;
 
-// Status testing mode - set to true to enable debug cycle through all status codes
-static bool MCD_TEST_STATUS_CYCLE = false;
-
-// Test function: cycles through all CDD status codes
-// Allows observing BIOS behavior for each status
-static void mcd_test_status_cycle()
-{
-	static const uint8_t test_status_list[] = {
-		CD_STAT_NO_DISC,    // 0x0B - No disc inserted
-		CD_STAT_OPEN,       // 0x05 - Tray open
-		CD_STAT_TOC,        // 0x09 - Reading TOC
-		CD_STAT_STOP,       // 0x00 - Ready/Stopped
-		CD_STAT_SEEK,       // 0x02 - Seeking
-		CD_STAT_PLAY,       // 0x01 - Playing
-		CD_STAT_PAUSE,      // 0x04 - Paused
-		CD_STAT_SCAN,       // 0x03 - Scanning (FF/RW)
-		CD_STAT_END,        // 0x0C - End of disc
-	};
-	
-	static const char* test_status_names[] = {
-		"NO_DISC (0x0B)",
-		"OPEN (0x05)",
-		"TOC (0x09)",
-		"STOP (0x00)",
-		"SEEK (0x02)",
-		"PLAY (0x01)",
-		"PAUSE (0x04)",
-		"SCAN (0x03)",
-		"END (0x0C)",
-	};
-	
-	static int test_index = 0;
-	static uint32_t test_timer = 0;
-	static uint32_t start_delay = 0;
-	static bool initialized = false;
-	
-	// Wait 3 seconds after boot before starting test (let BIOS initialize)
-	if (!start_delay)
-	{
-		start_delay = GetTimer(3000);
-		printf("\x1b[32m[MCD TEST] Waiting 3 seconds before starting...\x1b[0m\n");
-		return;
-	}
-	
-	if (!CheckTimer(start_delay))
-	{
-		return; // Still waiting
-	}
-	
-	// Initialize timer on first run (after delay)
-	if (!initialized)
-	{
-		initialized = true;
-		test_timer = GetTimer(2000);
-		printf("\x1b[32m[MCD TEST] ===== STATUS CYCLE STARTED =====\x1b[0m\n");
-		printf("\x1b[32m[MCD TEST] Will change every 2 seconds.\x1b[0m\n");
-		DebugLog("[TEST MODE] Status cycle started. Will change every 2 seconds.\n");
-		Info("TEST MODE ACTIVE", 3000);
-	}
-	
-	// Change status every 2 seconds
-	if (CheckTimer(test_timer))
-	{
-		test_timer = GetTimer(2000);
-		
-		// Update CDD status
-		cdd.status = test_status_list[test_index];
-		cdd.latency = 0; // Force immediate status report
-		
-		// Log to console with printf (always works)
-		printf("\x1b[33m[MCD TEST] >>> Status: %s (cdd.status = 0x%02X)\x1b[0m\n", 
-			test_status_names[test_index], cdd.status);
-		
-		// Also try OSD and DebugLog
-		DebugLog("[TEST] Status: %s\n", test_status_names[test_index]);
-		Info(test_status_names[test_index], 2000);
-		
-		// Cycle to next status
-		test_index = (test_index + 1) % 9;
-	}
-}
-
 // Physical CD state machine
 enum PhysicalCDState {
 	PCD_IDLE,       // No media detected
@@ -123,13 +41,6 @@ void mcd_poll()
 	static PhysicalCDState cd_state = PCD_IDLE;
 	static uint32_t load_timer = 0;
 	static bool load_attempted = false;
-
-	// TEST MODE: Cycle through status codes manually for BIOS behavior observation
-	if (MCD_TEST_STATUS_CYCLE)
-	{
-		mcd_test_status_cycle();
-		// Continue with normal polling to send status to core
-	}
 
 	// Throttle hardware polling to every 500ms to prevent UI freeze
 	if (!hw_poll_timer || CheckTimer(hw_poll_timer))
@@ -189,6 +100,7 @@ void mcd_poll()
 				// Attempt to load TOC
 				if (!cdd.loaded)
 				{
+					Info("Checking Disc...", 30000); // Long timeout, will be replaced
 					DebugLog("[MISTER] Loading TOC from physical CD...\n");
 					usleep(50000); // 50ms for drive stability
 					mcd_set_image(0, ""); // Empty string = physical CD
@@ -208,7 +120,7 @@ void mcd_poll()
 					printf("[MISTER] cdd.status = OPEN (0x%02X) - signaling door\n", cdd.status);
 					printf("[MISTER] cdd.loaded = %d\n", cdd.loaded);
 					DebugLog("[MISTER] TOC loaded. State: LOADING → OPENING\n");
-					Info("Closing CD Door...", 500);
+					// No OSD message here, will show "Ready" after OPENING
 				}
 				else
 				{
@@ -238,9 +150,9 @@ void mcd_poll()
 				
 				printf("[MISTER] State: OPENING → READY\n");
 				printf("[MISTER] cdd.status = STOP (0x%02X) - door closed\n", cdd.status);
+				Info("Ready", 10000); // Long timeout, will be cleared when BIOS requests TOC
 				printf("[MISTER] BIOS should now detect disc and request TOC\n");
 				DebugLog("[MISTER] State: OPENING → READY. Status = STOP. BIOS in control.\n");
-				Info("Press Start Button", 2000);
 			}
 			break;
 			
@@ -318,6 +230,18 @@ void mcd_poll()
 		// Log Command Received from Core
 		printf("[CORE] > RECV COMMAND: 0x%02X\n", (int)(c & 0xFF));
 		DebugLog("[CORE] > GET COMMAND: %02X (Arg: %02X)\n", (int)(c & 0xFF), (int)((c >> 8) & 0xFF));
+
+		// Clear "Ready" message when BIOS requests TOC (enters "Checking Disc" state)
+		uint8_t cmd = (uint8_t)(c & 0xFF);
+		static bool toc_requested = false;
+		if (cmd == 0x02 && !toc_requested) {  // CD_COMM_TOC
+			toc_requested = true;
+			Info("", 1);  // Clear OSD, BIOS shows "Checking Disc"
+			printf("[MISTER] BIOS requested TOC - clearing OSD, BIOS in control\n");
+		}
+		else if (cmd != 0x02 && toc_requested) {
+			toc_requested = false;  // Reset for next insertion
+		}
 
 		cdd.CommandExec();
 		has_command = 1;
