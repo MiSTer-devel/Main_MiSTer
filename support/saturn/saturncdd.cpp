@@ -170,19 +170,19 @@ int satcdd_t::LoadCUE(const char* filename) {
 			if (strstr(lptr, "MODE1/2048"))
 			{
 				this->sectorSize = 2048;
-				this->toc.tracks[this->toc.last].type = 1;
+				this->toc.tracks[this->toc.last].type = TT_MODE1;
 			}
 			else if (strstr(lptr, "MODE1/2352"))
 			{
 				this->sectorSize = 2352;
-				this->toc.tracks[this->toc.last].type = 1;
+				this->toc.tracks[this->toc.last].type = TT_MODE1;
 
 				//FileSeek(&this->toc.tracks[0].f, 0x10, SEEK_SET);
 			}
 			else if (strstr(lptr, "MODE2/2352"))
 			{
 				this->sectorSize = 2352;
-				this->toc.tracks[this->toc.last].type = 2;
+				this->toc.tracks[this->toc.last].type = TT_MODE2;
 
 				//FileSeek(&this->toc.tracks[0].f, 0x10, SEEK_SET);
 			}

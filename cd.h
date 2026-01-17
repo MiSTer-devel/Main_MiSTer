@@ -10,6 +10,20 @@ typedef enum
         SUBCODE_NONE = 0, SUBCODE_RW, SUBCODE_RW_RAW
 } cd_subcode_types_t;
 
+/// Values according to the raw value in TOC A0
+enum DiscType {
+	DT_CDDA = 0x00,
+	DT_CDROM = 0x00,
+	DT_CDI = 0x10,
+	DT_CDROMXA = 0x20,
+};
+
+enum TrackType {
+	TT_CDDA,
+	TT_MODE1,
+	TT_MODE2,
+};
+
 typedef struct
 {
 	fileTYPE f;
@@ -17,7 +31,7 @@ typedef struct
 	int pregap;
 	int start;
 	int end;
-	int type;
+	enum TrackType type;
 	int sector_size;
 	int indexes[100];
 	int index_num;

@@ -158,7 +158,7 @@ int cdd_t::LoadCUE(const char* filename) {
 
 				if (this->toc.tracks[0].sector_size)
 				{
-					this->toc.tracks[0].type = 1;
+					this->toc.tracks[0].type = TT_MODE1;
 
 					FileReadAdv(&this->toc.tracks[0].f, header, 0x210);
 					FileSeek(&this->toc.tracks[0].f, 0, SEEK_SET);

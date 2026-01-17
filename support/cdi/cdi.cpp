@@ -55,6 +55,7 @@ struct toc_entry
 #define CDIC_BUFFER_SIZE (CD_SECTOR_LEN + sizeof(subcode))
 static std::array<struct toc_entry, 200> toc_buffer;
 uint32_t toc_entry_count = 0;
+static enum DiscType disc_type = DT_CDDA;
 
 static uint8_t *chd_hunkbuf = NULL;
 static int chd_hunknum;
@@ -227,21 +228,21 @@ static int load_cue(const char *filename, toc_t *table)
 				printf("\x1b[32mCDI: missing tracks: %s\n\x1b[0m", fname);
 				return 0;
 			}
+			bool mode1{strstr(lptr, "MODE1/2352") != nullptr};
+			bool mode2{strstr(lptr, "MODE2/2352") != nullptr};
+			bool modecdi{strstr(lptr, "CDI/2352") != nullptr};
+			bool audio{strstr(lptr, "AUDIO") != nullptr};
 
-			if (strstr(lptr, "MODE1/2352") || strstr(lptr, "MODE2/2352") || strstr(lptr, "CDI/2352"))
-			{
-				table->tracks[table->last].sector_size = CD_SECTOR_LEN;
-				table->tracks[table->last].type = 1;
-				if (!table->last)
-					table->end = 150; // implicit 2 seconds pregap for track 1
-			}
-			else if (strstr(lptr, "AUDIO"))
-			{
-				table->tracks[table->last].sector_size = CD_SECTOR_LEN;
-				table->tracks[table->last].type = 0;
-				if (!table->last)
-					table->end = 150; // implicit 2 seconds pregap for track 1
-			}
+			table->tracks[table->last].sector_size = CD_SECTOR_LEN;
+			if (!table->last)
+				table->end = 150; // implicit 2 seconds pregap for track 1
+
+			if (mode1)
+				table->tracks[table->last].type = TT_MODE1;
+			else if (mode2 || modecdi)
+				table->tracks[table->last].type = TT_MODE2;
+			else if (audio)
+				table->tracks[table->last].type = TT_CDDA;
 			else
 			{
 				FileClose(&table->tracks[table->last].f);
@@ -322,6 +323,44 @@ static int load_cd_image(const char *filename, toc_t *table)
 		printf("Is audio CD %d\n", is_audio_cd);
 		user_io_status_set(SERVO_AUDIO_CD_OPT, is_audio_cd ? 1 : 0);
 	}
+
+	/*
+	 * The Disc Type in the TOC needs to be correct for some applications.
+	 * For calculation, we use the same algorithm, used by cdrdao
+	 * https://github.com/cdrdao/cdrdao/blob/87a1db17571162803d62fb058d911c17ba93e18e/trackdb/Cue2Toc.cc#L666C26-L666C48
+	 * CD_DA      only audio
+	 * CD_ROM     only mode1 with or without audio
+	 * CD_ROM_XA  only mode2 with or without audio
+	 * There is also the CDI disc type, though it seems that most burning software
+	 * doesn't support it. And - so far - all my discs worked on real hardware.
+	 * So we avoid using DT_CDI for now...
+	 */
+	bool audio{false};
+	bool mode1{false};
+	bool mode2{false};
+	for (int i = 0; i < table->last; i++)
+	{
+		switch (table->tracks[i].type)
+		{
+		case TT_CDDA:
+			audio = true;
+			break;
+		case TT_MODE1:
+			mode1 = true;
+			break;
+		case TT_MODE2:
+			mode2 = true;
+			break;
+		}
+	}
+
+	if (audio && !mode1 && !mode2)
+		disc_type = DT_CDDA;
+	else if ((audio && mode1 && !mode2) || (!audio && mode1 && !mode2))
+		disc_type = DT_CDROM;
+	else if ((audio && !mode1 && mode2) || (!audio && !mode1 && mode2))
+		disc_type = DT_CDROMXA;
+	// printf("Disc Type %d%d%d %x\n", audio, mode1, mode2, disc_type);
 	return result;
 }
 
@@ -358,7 +397,7 @@ static void prepare_toc_buffer(toc_t *toc)
 		add_entry((toc->tracks[i].type ? 0x41 : 0x01), BCD(i + 1), BCD(m), BCD(s), BCD(f));
 	}
 
-	add_entry(1, 0xA0, 1, 0, 0);
+	add_entry(1, 0xA0, 1, disc_type, 0);
 	add_entry(1, 0xA1, BCD(toc->last), 0, 0);
 
 	{
