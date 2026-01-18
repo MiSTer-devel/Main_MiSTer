@@ -77,6 +77,9 @@ static int menu_bgn = 0;
 
 static VideoInfo current_video_info;
 
+// expose video timings for autofire
+VideoInfo *pcurrent_video_info = &current_video_info;
+
 static int support_FHD = 0;
 
 yc_mode yc_modes[20];

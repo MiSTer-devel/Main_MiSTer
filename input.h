@@ -29,6 +29,8 @@
 
 #define UPSTROKE     0x400000
 
+#define NUMPLAYERS          6
+
 #define NUMBUTTONS         32
 #define BUTTON_DPAD_COUNT  12 // dpad + 8 buttons
 
