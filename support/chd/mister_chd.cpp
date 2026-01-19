@@ -118,27 +118,27 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 		if (!strcmp(track_type, "MODE1_RAW"))
 		{
 			cd_toc->tracks[cd_toc->last].sector_size = 2352;
-			cd_toc->tracks[cd_toc->last].type = 1;
+			cd_toc->tracks[cd_toc->last].type = TT_MODE1;
 		}
 		else if (!strcmp(track_type, "MODE2_RAW")) {
 			cd_toc->tracks[cd_toc->last].sector_size = 2352;
-			cd_toc->tracks[cd_toc->last].type = 2;
+			cd_toc->tracks[cd_toc->last].type = TT_MODE2;
 		}
 		else if (!strcmp(track_type, "MODE1")) {
 			cd_toc->tracks[cd_toc->last].sector_size = 2048;
-			cd_toc->tracks[cd_toc->last].type = 1;
+			cd_toc->tracks[cd_toc->last].type = TT_MODE1;
 		}
 		else if (!strcmp(track_type, "MODE2")) {
 			cd_toc->tracks[cd_toc->last].sector_size = 2336;
-			cd_toc->tracks[cd_toc->last].type = 2;
+			cd_toc->tracks[cd_toc->last].type = TT_MODE2;
 		}
 		else if (!strcmp(track_type, "AUDIO")) {
 			cd_toc->tracks[cd_toc->last].sector_size = 2352;
-			cd_toc->tracks[cd_toc->last].type = 0;
+			cd_toc->tracks[cd_toc->last].type = TT_CDDA;
 		}
 		else {
 			cd_toc->tracks[cd_toc->last].sector_size = 0;
-			cd_toc->tracks[cd_toc->last].type = 0;
+			cd_toc->tracks[cd_toc->last].type = TT_CDDA;
 		}
 
 		cd_toc->tracks[cd_toc->last].sbc_type = SUBCODE_NONE;
