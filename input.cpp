@@ -9,16 +9,17 @@
 #include <sys/sysinfo.h>
 #include <dirent.h>
 #include <errno.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <linux/input.h>
 #include <linux/uinput.h>
-#include <sys/time.h>
-#include <sys/types.h>
+#include <time.h>
 #include <stdarg.h>
 #include <math.h>
 
 #include "input.h"
+#include "autofire.h"
 #include "user_io.h"
 #include "menu.h"
 #include "hardware.h"
@@ -32,9 +33,9 @@
 #include "profiling.h"
 #include "gamecontroller_db.h"
 #include "str_util.h"
+#include "frame_timer.h"
 
 #define NUMDEV 30
-#define NUMPLAYERS 6
 #define UINPUT_NAME "MiSTer virtual input"
 
 char joy_bnames[NUMBUTTONS][32] = {};
@@ -1645,11 +1646,6 @@ static int keyrah_trans(int key, int press)
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev);
 
 static int kbd_toggle = 0;
-static uint64_t joy[NUMPLAYERS] = {};		// 0-31 primary mappings, 32-64 alternate
-static uint64_t autofire[NUMPLAYERS] = {};	// 0-31 primary mappings, 32-64 alternate
-static uint32_t autofirecodes[NUMPLAYERS][BTN_NUM] = {};
-static int af_delay[NUMPLAYERS] = {};
-
 static uint32_t crtgun_timeout[NUMDEV] = {};
 
 static unsigned char mouse_btn = 0; //emulated mouse
@@ -1668,10 +1664,6 @@ static uint32_t mouse_timer = 0;
 
 #define BTN_TGL 100
 #define BTN_OSD 101
-
-#define AF_MIN  16
-#define AF_MAX  512
-#define AF_STEP 8
 
 static int uinp_fd = -1;
 static int input_uinp_setup()
@@ -1841,97 +1833,157 @@ static void joy_apply_deadzone(int* x, int* y, const devInput* dev, const int st
 	joy_clamp(y, min_range, INT8_MAX);
 }
 
-static uint32_t osdbtn = 0;
-static void joy_digital(int jnum, uint64_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
+static bool osd_autofire_consumed[NUMPLAYERS] = {};
+
+// returns true if autofire was toggled which also means input was consumed.
+static bool handle_autofire_toggle(int num, uint32_t mask, uint32_t code, char press, int bnum, int dont_save)
 {
-	static char str[128];
 	static uint32_t lastcode[NUMPLAYERS];
-	static uint64_t lastmask[NUMPLAYERS];
-	int num = jnum - 1;
-	if (num < NUMPLAYERS)
+	static uint32_t lastmask[NUMPLAYERS];
+	static char str[512];
+
+	// if the button is not OSD or BTN_TGL we save it into lastmask/lastcode
+	if (bnum != BTN_OSD && bnum != BTN_TGL)
 	{
-		if (jnum)
+		if (!dont_save)
 		{
-			if (bnum != BTN_OSD && bnum != BTN_TGL)
+			if (press)
 			{
-				if (!dont_save)
-				{
-					if (press)
-					{
-						lastcode[num] = code;
-						lastmask[num] = mask;
-					}
-					else
-					{
-						lastcode[num] = 0;
-						lastmask[num] = 0;
-					}
+				if (lastcode[num] == code) { // build up mask if multiple buttons map to same code
+					lastmask[num] |= mask; 	 // this can't happen at present but if it ever does it will work correctly
+											
+				} else {
+					lastcode[num] = code;
+					lastmask[num] = mask;
 				}
 			}
 			else
 			{
-				if (!user_io_osd_is_visible() && press && !cfg.disable_autofire)
-				{
-					if (lastcode[num] && lastmask[num])
-					{
-						int found = 0;
-						int zero = -1;
-						for (uint i = 0; i < BTN_NUM; i++)
-						{
-							if (!autofirecodes[num][i]) zero = i;
-							if (autofirecodes[num][i] == lastcode[num])
-							{
-								found = 1;
-								autofirecodes[num][i] = 0;
-								break;
-							}
-						}
-
-						if (!found && zero >= 0) autofirecodes[num][zero] = lastcode[num];
-						
-						autofire[num] = !found ? autofire[num] | lastmask[num] : autofire[num] & ~lastmask[num];
-
-						if (hasAPI1_5())
-						{
-							if (!found) sprintf(str, "Auto fire: %dms (%uhz)", af_delay[num] * 2, 1000 / (af_delay[num] * 2));
-							else sprintf(str, "Auto fire: OFF");
-							Info(str);
-						}
-						else InfoMessage((!found) ? "\n\n          Auto fire\n             ON" :
-							"\n\n          Auto fire\n             OFF");
-
-						return;
-					}
-					else if (lastmask[num] & 0xF)
-					{
-						if (lastmask[num] & 9)
-						{
-							af_delay[num] += AF_STEP << ((lastmask[num] & 1) ? 1 : 0);
-							if (af_delay[num] > AF_MAX) af_delay[num] = AF_MAX;
-						}
-						else
-						{
-							af_delay[num] -= AF_STEP << ((lastmask[num] & 2) ? 1 : 0);
-							if (af_delay[num] < AF_MIN) af_delay[num] = AF_MIN;
-						}
-
-						static char str[256];
-
-						if (hasAPI1_5())
-						{
-							sprintf(str, "Auto fire period: %dms (%uhz)", af_delay[num] * 2, 1000 / (af_delay[num] * 2));
-							Info(str);
-						}
-						else
-						{
-							sprintf(str, "\n\n       Auto fire period\n            %dms(%uhz)", af_delay[num] * 2, 1000 / (af_delay[num] * 2));
-							InfoMessage(str);
-						}
-
-						return;
-					}
-				}
+				lastcode[num] = 0;
+				lastmask[num] = 0;
 			}
+		}
+		return false;
+	}
+
+	// we can only get here if the OSD or BTN_TGL keys were pressed
+	// in that event we see if lastmask/lastcode tells us we're holding a button
+	// and if we are, we toggle autofire for that button
+	if (!user_io_osd_is_visible() && press && !cfg.disable_autofire)
+	{
+		if ((lastcode[num] && lastmask[num] && (lastmask[num] & 0xF) == 0)) // don't allow enabling autofire on directions
+		{
+			char *strat = str;
+			inc_autofire_code(num, lastcode[num], lastmask[num]);
+			
+			// display autofire status for each button in the mask
+			FOR_EACH_SET_BIT(lastmask[num], btn) {
+				strat += sprintf(strat, "%s\n", joy_bnames[btn-4]);
+			}
+
+			const char *rate = get_autofire_rate_hz(num, lastcode[num]);
+
+			if (!strcmp(rate, "disabled")) {
+					strat += sprintf(strat, "Autofire disabled");
+			} else {
+					strat += sprintf(strat, "Autofire: %s", rate);
+			}
+
+			if (hasAPI1_5())
+				Info(str);
+			else
+				InfoMessage(str);
+			if (bnum == BTN_OSD && press) osd_autofire_consumed[num] = true;
+			return true;
+		}
+	}
+	return false;
+}
+
+static uint32_t osdbtn = 0;
+
+struct KeyStates {
+	uint32_t key[256];
+	uint32_t mask[256];
+	int count;
+};
+
+#define MAX_KEY_STATES 64
+
+KeyStates key_states[NUMPLAYERS] = {};
+
+static void set_key_state(int player, uint32_t key, bool press, uint32_t mask)
+{
+	for (int i = 0; i < key_states[player].count; i++)
+	{
+		if (key_states[player].key[i] == key)
+		{
+			if (press)
+			{
+				key_states[player].mask[i] |= mask;
+				return;
+			}
+			else
+			{
+				key_states[player].mask[i] &= ~mask;
+				// remove an entry if no bits are set.
+				if (!key_states[player].mask[i]) {
+					int last = key_states[player].count - 1;
+					if (i != last) {
+						key_states[player].key[i] = key_states[player].key[last];
+						key_states[player].mask[i] = key_states[player].mask[last];
+					}
+					key_states[player].key[last] = 0;
+					key_states[player].mask[last] = 0u;
+					key_states[player].count--;
+				}
+				return;
+			}
+		}
+	}
+	if (key_states[player].count < MAX_KEY_STATES)
+	{
+		if (press)
+		{
+			int idx = key_states[player].count++;
+			key_states[player].key[idx] = key;
+			key_states[player].mask[idx] = mask;
+		}
+		return;
+	}
+}
+
+uint32_t build_joy_mask(int player)
+{
+	uint32_t mask = 0u;
+	for (int i = 0; i < key_states[player].count; i++)
+	{
+		if (!is_autofire_enabled(player, key_states[player].key[i]))
+			mask |= key_states[player].mask[i];
+	}
+	return mask;
+}
+
+uint32_t build_autofire_mask(int player)
+{
+	uint32_t mask = 0u;
+	for (int i = 0; i < key_states[player].count; i++)
+	{
+		if (is_autofire_enabled(player, key_states[player].key[i]))
+			if (get_autofire_bit(player, key_states[player].key[i]))
+				mask |= key_states[player].mask[i];
+	}
+	return mask;
+}
+
+static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int bnum, int dont_save = 0)
+{
+	int num = jnum - 1;
+	if (num < NUMPLAYERS)
+	{
+		// autofire handler moved to helper function for clarity
+		if (handle_autofire_toggle(num, mask, code, press, bnum, dont_save)) {
+			return;
 		}
 
 		if (bnum == BTN_TGL)
@@ -1957,6 +2009,13 @@ static void joy_digital(int jnum, uint64_t mask, uint32_t code, char press, int 
 				else InfoMessage((mouse_emu & 2) ? "\n\n       Mouse mode lock\n             ON" :
 					"\n\n       Mouse mode lock\n             OFF");
 			}
+			return;
+		}
+
+		// toggling autofire via OSD button consumes the "press" event of OSD but not the release event
+		// this suppresses that so toggling autofire on a button doesn't immediately disable the button
+		if (bnum == BTN_OSD && !press && osd_autofire_consumed[num]) {
+			osd_autofire_consumed[num] = false;
 			return;
 		}
 
@@ -1998,13 +2057,13 @@ static void joy_digital(int jnum, uint64_t mask, uint32_t code, char press, int 
 				if((mask & JOY_BTN2) && !(old_osdbtn & JOY_BTN2)) mask = 0;
 			}
 
-			memset(joy, 0, sizeof(joy));
+			memset(key_states, 0, sizeof(key_states));
 			struct input_event ev;
 			ev.type = EV_KEY;
 			ev.value = press;
 
 			int cfg_switch = menu_allow_cfg_switch() && (osdbtn & JOY_BTN2) && press;
-
+			
 			switch (mask)
 			{
 			case JOY_RIGHT:
@@ -2128,17 +2187,7 @@ static void joy_digital(int jnum, uint64_t mask, uint32_t code, char press, int 
 		}
 		else if(jnum)
 		{
-			if (press) joy[num] |= mask;
-			else joy[num] &= ~mask;
-			
-			//user_io_digital_joystick(num, joy[num]);
-
-			if (code)
-			{
-				int found = 0;
-				for (uint i = 0; i < BTN_NUM; i++) if (autofirecodes[num][i] == code) found = 1;
-				if (found) autofire[num] = press ? autofire[num] | mask : autofire[num] & ~mask;
-			}
+			set_key_state(num, code, press, mask);
 		}
 	}
 }
@@ -2341,6 +2390,11 @@ void reset_players()
 		input[i].num = 0;
 		input[i].map_shown = 0;
 		update_num_hw(i, 0);
+	}
+
+	memset(key_states, 0, sizeof(key_states));
+	for (int i = 0; i < NUMPLAYERS; i++) {
+		clear_autofire(i);
 	}
 	memset(player_pad, 0, sizeof(player_pad));
 	memset(player_pdsp, 0, sizeof(player_pdsp));
@@ -3301,13 +3355,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					
 					for (uint i = 0; i < BTN_NUM; i++)
 					{
-						uint64_t mask = 0;
-						if (ev->code == (input[dev].map[i] & 0xFFFF)) mask = (uint64_t)1 << i;
-						else if (ev->code == (input[dev].map[i] >> 16)) mask = (uint64_t)1 << (i + 32); // 1 is uint32_t. i spent hours realizing this.
-						if (mask) {
-							if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
-							if (ev->value <=1) joy_digital(input[dev].num, mask, origcode, ev->value, i, (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1] || ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 2]));
-							// support 2 simultaneous functions for 1 button if defined in 2 sets. No return.
+						if (ev->code == (input[dev].map[i] & 0xFFFF) || ev->code == (input[dev].map[i] >> 16)) {
+							if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, origcode, ev->value, i, (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1] || ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 2]));
 						}
 					}
 
@@ -3359,11 +3408,15 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (ev->code == (uint16_t)input[dev].map[i])
 							{
-								if (i <= 3 && origcode == ev->code) origcode = 0; // prevent autofire for original dpad
 								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 1 : 2, 1 << i, origcode, ev->value, i);
 								return;
 							}
 						}
+						// if we move the return above to here, it should change behavior so that joy_digital() is called once for every
+						// button that is mapped to a given code. each call would have the same ev->code but a different mask and bnum.
+						// no time to test now though so leaving as note to anybody else who wants to try it. current system can't even
+						// generate an ev->code with multiple buttons
+						// return;
 					}
 
 					if (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL])
@@ -4699,6 +4752,12 @@ int input_test(int getchar)
 			pool[i].events = 0;
 		}
 
+		// clear button reference counts and key states
+		memset(key_states, 0, sizeof(key_states));
+		for (int i = 0; i < NUMPLAYERS; i++) {
+			clear_autofire(i);
+		}
+
 		memset(input, 0, sizeof(input));
 
 		int n = 0;
@@ -5787,10 +5846,15 @@ int input_test(int getchar)
 int input_poll(int getchar)
 {
 	PROFILE_FUNCTION();
-
-	static int af[NUMPLAYERS] = {};
-	static uint32_t time[NUMPLAYERS] = {};
-	static uint64_t joy_prev[NUMPLAYERS] = {};
+	static bool autofire_cfg_parsed = false;
+ 	if (!autofire_cfg_parsed) autofire_cfg_parsed = parse_autofire_cfg();
+	static uint32_t joy_mask_prev[NUMPLAYERS] = {};
+	
+	// FRAME_TICK compares against frame_timer's counter (updated elsewhere) and fires once per frame.
+	static uint32_t last_frame_count = 0;
+	if (FRAME_TICK(last_frame_count)) {
+			autofire_tick(); 	// advance all autofire patterns by 1
+	}
 
 	int ret = input_test(getchar);
 	if (getchar) return ret;
@@ -5824,41 +5888,23 @@ int input_poll(int getchar)
 
 	if (!mouse_emu_x && !mouse_emu_y) mouse_timer = 0;
 
+	uint32_t joy_mask[NUMPLAYERS];
+	uint32_t autofire_mask[NUMPLAYERS];
+
+	for (int i = 0; i < NUMPLAYERS; i++) {
+		joy_mask[i] = build_joy_mask(i);
+		autofire_mask[i] = build_autofire_mask(i);
+	}
+
 	if (grabbed)
 	{
-		for (int i = 0; i < NUMPLAYERS; i++)
-		{
-			int send = 0;
-			if (af_delay[i] < AF_MIN) af_delay[i] = AF_MIN;
-
-			/* Autofire handler */
-			if (joy[i] & autofire[i])
+		for (int i = 0; i < NUMPLAYERS; i++) {
+			joy_mask[i] = joy_mask[i] | autofire_mask[i];
+			int newdir = (joy_mask[i] & 0xF) | (joy_mask_prev[i] & 0xF);
+			if (joy_mask[i] != joy_mask_prev[i])
 			{
-				if (!time[i]) time[i] = GetTimer(af_delay[i]);
-				else if ((joy[i] ^ joy_prev[i]) & autofire[i])
-				{
-					time[i] = GetTimer(af_delay[i]);
-					af[i] = 0;
-				}
-				else if (CheckTimer(time[i]))
-				{
-					time[i] = GetTimer(af_delay[i]);
-					af[i] = !af[i];
-					send = 1;
-				}
-			}
-
-			int newdir = ((((uint32_t)(joy[i]) | (uint32_t)(joy[i] >> 32)) & 0xF) != (((uint32_t)(joy_prev[i]) | (uint32_t)(joy_prev[i] >> 32)) & 0xF));
-
-			if (joy[i] != joy_prev[i])
-			{
-				joy_prev[i] = joy[i];
-				send = 1;
-			}
-
-			if (send)
-			{
-				user_io_digital_joystick(i, af[i] ? joy[i] & ~autofire[i] : joy[i], newdir);
+				joy_mask_prev[i] = joy_mask[i];
+				user_io_digital_joystick(i, joy_mask[i], newdir);
 			}
 		}
 	}
@@ -5867,12 +5913,9 @@ int input_poll(int getchar)
 	{
 		for (int i = 0; i < NUMPLAYERS; i++)
 		{
-			if(joy[i]) user_io_digital_joystick(i, 0, 1);
-
-			joy[i] = 0;
-			af[i] = 0;
-			autofire[i] = 0;
+			if(joy_mask[i]) user_io_digital_joystick(i, 0, 1);
 		}
+		memset(key_states, 0, sizeof(key_states));
 	}
 
 	if (mouse_req)
@@ -5895,7 +5938,7 @@ int input_poll(int getchar)
 
 int is_key_pressed(int key)
 {
-	unsigned char bits[(KEY_MAX + 7) / 8];
+	unsigned char bits[(KEY_CNT + 7) / 8];
 	for (int i = 0; i < NUMDEV; i++)
 	{
 		if (pool[i].fd > 0)

@@ -29,6 +29,8 @@
 
 #define UPSTROKE     0x400000
 
+#define NUMPLAYERS          6
+
 #define NUMBUTTONS         32
 #define BUTTON_DPAD_COUNT  12 // dpad + 8 buttons
 
@@ -113,5 +115,9 @@ extern uint8_t ps2_kbd_scan_set;
 void parse_buttons();
 char *get_buttons(int type = 0);
 void set_ovr_buttons(char *s, int type);
+
+#define FOR_EACH_SET_BIT(mask, bit)                     \
+    for (uint32_t _m = (mask); _m; _m &= (_m - 1))      \
+        for (int bit = __builtin_ctz(_m), _once = 1; _once; _once = 0)
 
 #endif
