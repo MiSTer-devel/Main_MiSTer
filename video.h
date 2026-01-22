@@ -30,6 +30,9 @@ struct VideoInfo
 	bool rotated;
 };
 
+// expose video timings for timerfd-based frame timer
+extern VideoInfo current_video_info;
+
 void  video_init();
 
 int   video_get_scaler_flt(int type);

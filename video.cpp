@@ -75,7 +75,7 @@ static int brd_y = 0;
 static int menu_bg = 0;
 static int menu_bgn = 0;
 
-static VideoInfo current_video_info;
+VideoInfo current_video_info;
 
 static int support_FHD = 0;
 
