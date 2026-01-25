@@ -31,7 +31,7 @@
 
 #define NUMPLAYERS          6
 
-#define NUMBUTTONS         32
+#define NUMBUTTONS         36
 #define BUTTON_DPAD_COUNT  12 // dpad + 8 buttons
 
 #define SYS_BTN_RIGHT       0
@@ -70,6 +70,11 @@
 
 #define SPIN_LEFT          30
 #define SPIN_RIGHT         31
+
+#define SYS_AXIS_TL2       32
+#define SYS_AXIS_TR2       33
+#define SYS_AXIS_L2        34
+#define SYS_AXIS_R2        35
 
 #define KEY_EMU (KEY_MAX+1)
 

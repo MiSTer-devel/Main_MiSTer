@@ -75,6 +75,8 @@
 #define UIO_SET_YC_PAR  0x41
 #define UIO_GET_FR_CNT  0x42  // get frame counter
 #define UIO_GET_F12_MOD 0x43  // get framework menu key modifier
+#define UIO_ATRIGGER_L  0x44
+#define UIO_ATRIGGER_R  0x45
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
@@ -209,6 +211,8 @@ int user_io_get_joy_transl();
 void user_io_digital_joystick(unsigned char, uint32_t, int);
 void user_io_l_analog_joystick(unsigned char, char, char);
 void user_io_r_analog_joystick(unsigned char, char, char);
+void user_io_l_trigger_analog_joystick(unsigned char joystick, unsigned char value);
+void user_io_r_trigger_analog_joystick(unsigned char joystick, unsigned char value);
 void user_io_set_joyswap(int swap);
 int user_io_get_joyswap();
 char user_io_osd_is_visible();

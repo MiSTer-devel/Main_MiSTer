@@ -231,8 +231,8 @@ const char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE 
 const char *config_joystick_mode[] = { "Digital", "Analog", "CD32", "Analog" };
 const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
-const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "    Stick 1: Tilt RIGHT", "    Stick 1: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
-const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN" };
+const char *joy_button_map[] = {"RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "    Stick 1: Tilt RIGHT", "    Stick 1: Tilt DOWN", "   Left trigger: PRESS", "   Right trigger: PRESS", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN"};
+const char *joy_ana_map[] = {"    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN", "   Left trigger test: PRESS", "   Right trigger test: PRESS"};
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem"};
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
@@ -3896,7 +3896,7 @@ void HandleUI(void)
 			const char* p = 0;
 			if (get_map_button() < 0)
 			{
-				strcpy(s, joy_ana_map[get_map_button() + 6]);
+				strcpy(s, joy_ana_map[get_map_button() + 8]);
 				OsdWrite(7, "   Space/User \x16 Skip");
 			}
 			else if (get_map_button() < DPAD_NAMES)
@@ -6587,8 +6587,8 @@ void HandleUI(void)
 		strcpy(joy_bnames[SYS_BTN_OSD_KTGL - DPAD_NAMES], "Menu");
 		strcpy(joy_bnames[SYS_BTN_CNT_OK - DPAD_NAMES], "Menu: OK");
 		strcpy(joy_bnames[SYS_BTN_CNT_ESC - DPAD_NAMES], "Menu: Back");
-		joy_bcount = 20 + 1; //buttons + OSD/KTGL button
-		start_map_setting(joy_bcount + 6); // + dpad + Analog X/Y
+		joy_bcount = 20 + 2 + 1; //buttons + OSD/KTGL button
+		start_map_setting(joy_bcount + 6 + 2); // + dpad + Analog X/Y + 2 triggers
 		menustate = MENU_JOYDIGMAP;
 		menusub = 0;
 		break;

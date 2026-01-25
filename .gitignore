@@ -28,3 +28,5 @@ host
 *.user
 .vs
 MiSTer
+
+.DS_Store
