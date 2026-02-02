@@ -1902,16 +1902,38 @@ static bool handle_autofire_toggle(int num, uint32_t mask, uint32_t code, char p
 
 static uint32_t osdbtn = 0;
 
+// tracking of key states for handling inputs
+// we OR all of them together at the end of the input path to determine which
+// of the 32 virtual buttons should be pressed or released for a given player.
+
+#define MAX_KEY_STATES 128
+
+// we track a full mask per key because i wasn't sure how to get the full key->buttons mapping
+// after it's already been set.
 struct KeyStates {
-	uint32_t key[256];
-	uint32_t mask[256];
+	uint32_t key[MAX_KEY_STATES];
+	uint32_t mask[MAX_KEY_STATES];
+	uint32_t frames_held[MAX_KEY_STATES];
 	int count;
 };
 
-#define MAX_KEY_STATES 64
-
 KeyStates key_states[NUMPLAYERS] = {};
 
+// returns the bitmask representing all button states for a given ev->code (key)
+// returns 0 if the key is not found or if key has no buttons pressed.
+static uint32_t get_key_state(int player, uint32_t key)
+{
+	for (int i = 0; i < key_states[player].count; i++)
+	{
+		if (key_states[player].key[i] == key)
+		{
+			return key_states[player].mask[i];
+		}
+	}
+	return 0u;
+}
+
+// updates the bitmask representing all button states for a given ev->code (key)
 static void set_key_state(int player, uint32_t key, bool press, uint32_t mask)
 {
 	for (int i = 0; i < key_states[player].count; i++)
@@ -1926,17 +1948,6 @@ static void set_key_state(int player, uint32_t key, bool press, uint32_t mask)
 			else
 			{
 				key_states[player].mask[i] &= ~mask;
-				// remove an entry if no bits are set.
-				if (!key_states[player].mask[i]) {
-					int last = key_states[player].count - 1;
-					if (i != last) {
-						key_states[player].key[i] = key_states[player].key[last];
-						key_states[player].mask[i] = key_states[player].mask[last];
-					}
-					key_states[player].key[last] = 0;
-					key_states[player].mask[last] = 0u;
-					key_states[player].count--;
-				}
 				return;
 			}
 		}
@@ -1958,8 +1969,9 @@ uint32_t build_joy_mask(int player)
 	uint32_t mask = 0u;
 	for (int i = 0; i < key_states[player].count; i++)
 	{
+		uint32_t key = key_states[player].key[i];
 		if (!is_autofire_enabled(player, key_states[player].key[i]))
-			mask |= key_states[player].mask[i];
+			mask |= get_key_state(player, key);
 	}
 	return mask;
 }
@@ -1969,9 +1981,10 @@ uint32_t build_autofire_mask(int player)
 	uint32_t mask = 0u;
 	for (int i = 0; i < key_states[player].count; i++)
 	{
-		if (is_autofire_enabled(player, key_states[player].key[i]))
-			if (get_autofire_bit(player, key_states[player].key[i]))
-				mask |= key_states[player].mask[i];
+		uint32_t key = key_states[player].key[i];
+		uint32_t  frames_held = key_states[player].frames_held[i];
+		if (is_autofire_enabled(player, key) && get_autofire_bit(player, key, frames_held))
+				mask |= get_key_state(player, key);
 	}
 	return mask;
 }
@@ -5843,6 +5856,19 @@ int input_test(int getchar)
 	return 0;
 }
 
+void key_update_frames_held()
+{
+	for (int i = 0; i < NUMPLAYERS; i++) {
+		for (int k = 0; k < key_states[i].count; k++) {
+			if (key_states[i].mask[k] != 0) {
+				key_states[i].frames_held[k]++;
+			} else {
+				key_states[i].frames_held[k]= 0;
+			}
+		}
+	}
+}
+
 int input_poll(int getchar)
 {
 	PROFILE_FUNCTION();
@@ -5853,7 +5879,8 @@ int input_poll(int getchar)
 	// FRAME_TICK compares against frame_timer's counter (updated elsewhere) and fires once per frame.
 	static uint32_t last_frame_count = 0;
 	if (FRAME_TICK(last_frame_count)) {
-			autofire_tick(); 	// advance all autofire patterns by 1
+		key_update_frames_held();
+		//autofire_tick(); 	// advance all autofire patterns by 1
 	}
 
 	int ret = input_test(getchar);

@@ -13,7 +13,8 @@
     We take the desired autofire rate in hertz and convert that to a bitmask
     0 == button released
     1 == button pressed
-    We advance through a single bit of this mask every frame on the assumption that
+    Input tracks how many frames the button has been held for.
+	We use that frame count modulo the autofire cycle length to index into the bitmask.
     most games read their inputs every vsync (or is it vrefresh? once per frame.)
 
     We display autofire rates to the user as if the game is running at 60hz, but internally
@@ -32,8 +33,6 @@ struct AutofireData {
 	char name[AF_NAME_LEN];				// display name
 	uint64_t cycle_mask;				// bitmask representing the autofire cycle
 	int cycle_length;					// length of the cycle in frames
-	int bit;							// current bit in the cycle
-	int frame_count;					// current frame in the cycle
 };
 
 // per-player autofire table; index 0 means disabled.
@@ -103,21 +102,21 @@ void inc_autofire_code(int player, uint32_t code, uint32_t mask) {
 }
 
 // advance all autofire patterns (run once per frame)
-void autofire_tick() {
-    for (int i = 1; i < num_af_rates; i++)
-    {
-        autofiredata[i].bit = (autofiredata[i].cycle_mask >> autofiredata[i].frame_count) & 1u;
-        if (++(autofiredata[i].frame_count) >= autofiredata[i].cycle_length)
-            autofiredata[i].frame_count = 0;
-    }
-}
+//void autofire_tick() {
+//    for (int i = 1; i < num_af_rates; i++)
+//    {
+        //autofiredata[i].bit = (autofiredata[i].cycle_mask >> autofiredata[i].frame_count) & 1u;
+        //if (++(autofiredata[i].frame_count) >= autofiredata[i].cycle_length)
+        //    autofiredata[i].frame_count = 0;
+//    }
+//}
 
 // returns whether the buttons for this code should be held or released this frame.
 // (updated every time we call autofire_tick)
-bool get_autofire_bit(int player, uint32_t code) {
+bool get_autofire_bit(int player, uint32_t code, uint32_t frame_count) {
 	int rate_idx = get_autofire_code_idx(player, code);
 	if (rate_idx > 0) {
-		return autofiredata[rate_idx].bit;
+		return (autofiredata[rate_idx].cycle_mask >> frame_count % autofiredata[rate_idx].cycle_length) & 1u;
 	}
 	return false;
 }
@@ -151,8 +150,8 @@ bool is_autofire_enabled(int player, uint32_t code) {
 // some arcade shooters have pretty odd optimal autofire patterns to manage rank
 // let's hide them here for my shmup buddies
 static const struct AutofireData autofire_patterns[] = {
-	{ "GUNFRONTIER", 0b111100000ULL, 9, 0, 0 },
-	{ "GAREGGA", 0b1110000ULL, 7, 0, 0 },
+	{ "GUNFRONTIER", 0b111100000ULL, 9 },
+	{ "GAREGGA", 0b1110000ULL, 7 },
 };
 
 // helper for formatting binary literal patterns.
@@ -182,13 +181,11 @@ static void init_autofire_entry(struct AutofireData *data, uint64_t mask, int le
 	data->cycle_mask = mask;
 	if (data->cycle_length > 64) data->cycle_length = 64;
 	if (data->cycle_length < 1) data->cycle_length = 1;
-	data->frame_count = 0;
-	data->bit = (data->cycle_mask & 1ULL) ? 1 : 0;
 }
 
 static inline struct AutofireData mask_from_hertz(double hz_target)
 {
-    struct AutofireData p = {{0}, 0, 0, 0, 0};
+    struct AutofireData p = {{0}, 0, 0};
 
     if (hz_target <= 0.0) return p;
     if (hz_target > 30.0) hz_target = 30.0;
