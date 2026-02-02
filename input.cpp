@@ -1931,7 +1931,7 @@ static bool handle_autofire_toggle(int num, uint32_t mask, uint32_t code, char p
 				strat += sprintf(strat, "%s\n", joy_bnames[btn-4]);
 			}
 
-			const char *rate = get_autofire_rate_hz(num, lastcode[num]);
+			const char *rate = get_autofire_rate_hz_button(num, lastcode[num]);
 
 			if (!strcmp(rate, "disabled")) {
 					strat += sprintf(strat, "Autofire disabled");
@@ -2002,6 +2002,7 @@ static void set_key_state(int player, uint32_t key, bool press, uint32_t mask)
 			}
 		}
 	}
+
 	if (key_states[player].count < MAX_KEY_STATES)
 	{
 		if (press)
@@ -5936,6 +5937,7 @@ void key_update_frames_held()
 int input_poll(int getchar)
 {
 
+	static int poll_cnt = 0;
 	PROFILE_FUNCTION();
 	static bool autofire_cfg_parsed = false;
  	if (!autofire_cfg_parsed) autofire_cfg_parsed = parse_autofire_cfg();
@@ -6192,10 +6194,10 @@ uint32_t advanced_get_btn_mask_for_code(uint16_t evcode, int devnum)
 }
 
 //Only called when the pressed state changes for an entry
-static void process_abm_entry(advancedButtonMap *abm, advancedButtonState *abs, int devnum)
+static uint32_t process_abm_entry(advancedButtonMap *abm, advancedButtonState *abs, int devnum)
 {
-	if (abs->pressed)
-		abs->current_mask = abm->button_mask;;
+	uint32_t retmask = 0;
+  retmask = abm->button_mask;;
 	for (uint k = 0; k < sizeof(abm->output_codes)/sizeof(abm->output_codes[0]); k++)
 	{
 		if (abm->output_codes[k])
@@ -6206,11 +6208,12 @@ static void process_abm_entry(advancedButtonMap *abm, advancedButtonState *abs, 
 			{
 				user_io_kbd(ocode, abs->pressed);
 				input[devnum].advanced_last_pressed_keycode = abs->pressed ? ocode : 0;
-			} else if (abs->pressed) { //joypad
-				abs->current_mask |= omask; 
+			} else {
+				retmask |= omask; 
 			}
 		}
 	}
+	return retmask;
 }
 
 uint8_t advanced_entry_pressed_state(advancedButtonMap *abm, advancedButtonState *abs, uint16_t evcode, int evstate, int devnum)
@@ -6311,15 +6314,13 @@ bool update_advanced_state(int devnum, uint16_t evcode, int evstate)
 				}
 			}
 			allow_keysend = false;
-  		process_abm_entry(abm, abs, devnum);
+  		uint32_t usemask = process_abm_entry(abm, abs, devnum);
 			//Update joy_adv mask, store fake button code for autofire support
-			joy_digital(pnum, (uint64_t)(abs->current_mask), 0x8000 | i, abs->pressed, 0, false);
-		}
-
-		if (abs->pressed)
-		{
-			//Always re-assert mask for pressed entries, in case some other just-released overlapping chord unset them. 
-			joy_digital(pnum, (uint64_t)(abs->current_mask), 0x8000 | i, abs->pressed, 0, true);
+			joy_digital(pnum, usemask, 0x8000 | i, abs->pressed, 0, false);
+			if (abs->pressed && abm->autofire_idx)
+			{
+				set_autofire_code(pnum-1, 0x8000 | i, usemask, abm->autofire_idx, true);
+			}
 		}
 	}
 

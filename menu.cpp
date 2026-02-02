@@ -65,6 +65,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "ide.h"
 #include "profiling.h"
 #include "str_util.h"
+#include "autofire.h"
 
 /*menu states*/
 enum MENU
@@ -7228,6 +7229,12 @@ void HandleUI(void)
 					MenuWrite(n, s, menusub == n, 0);
 				  menumask |= 1 << n++; 
 
+					const char *af_label = get_autofire_rate_hz(abm_edit_ptr->autofire_idx);
+					snprintf(s, sizeof(s), " Autofire : %-20s\x16", af_label);
+					MenuWrite(n, s, menusub == n, 0);
+				  menumask |= 1 << n++; 
+				
+
 					MenuWrite(n, " Delete", menusub == n, 0);
 				  menumask |= 1 << n++; 
 					MenuWrite(n, " Done", menusub == n, 0);
@@ -7238,7 +7245,7 @@ void HandleUI(void)
 
 			case MENU_ADVANCED_MAP_EDIT2:
 				{
-					if (select || left || right)
+					if (select || left || right || plus || minus)
 					{
 						menustate = MENU_ADVANCED_MAP_EDIT1;
             char bname[32] = {0};
@@ -7282,6 +7289,18 @@ void HandleUI(void)
 									break;
 								
 							case 3:
+								if (select || plus)
+								{
+									abm_edit_ptr->autofire_idx++;
+							  } else if (minus) {
+									abm_edit_ptr->autofire_idx--;
+							  }
+								if (abm_edit_ptr->autofire_idx >= get_autofire_rate_count())
+									abm_edit_ptr->autofire_idx = 0;
+								if (abm_edit_ptr->autofire_idx < 0)
+									abm_edit_ptr->autofire_idx = get_autofire_rate_count()-1;
+								break;
+							case 4:
 									if (select)
 									{
 										menustate = MENU_ADVANCED_MAP_LIST1;
@@ -7292,7 +7311,7 @@ void HandleUI(void)
 							}
 					}
 
-					if (back || menu || (menusub == 4 && select))
+					if (back || menu || (menusub == 5 && select))
 					{
 						input_advanced_save_entry(abm_edit_ptr, abm_dev_num);
 						menustate = MENU_ADVANCED_MAP_LIST1;

@@ -81,17 +81,15 @@ typedef struct {
         uint32_t button_mask;
 				uint16_t output_codes[4];
         uint16_t input_codes[4];
+				int autofire_idx;
 } advancedButtonMap;
 
 
 typedef struct {
-
 	uint8_t input_state;
-	uint32_t current_mask;
 	uint32_t input_btn_mask;
 	uint8_t pressed : 1;
 	uint8_t last_pressed : 1;
-	uint8_t autofire : 1;
 } advancedButtonState;
 
 
