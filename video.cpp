@@ -2914,13 +2914,13 @@ static void set_yc_mode()
 		char yc_key_expand[64];
 		sprintf(yc_key, "%s_%.1f%s%s", user_io_get_core_name(1), fps, current_video_info.interlaced ? "i" : "", (pal || !cfg.ntsc_mode) ? "" : (cfg.ntsc_mode == 1) ? "s" : "m");
 		snprintf(yc_key_expand, sizeof(yc_key_expand), "%s_%.2f", yc_key, prate);
-		printf("Calculated YC parameters for '%s': %s PHASE_INC=%lld, COLORBURST_START=%d, COLORBURST_END=%d\n", yc_key, pal ? "PAL" : (cfg.ntsc_mode == 1) ? "PAL60" : (cfg.ntsc_mode == 2) ? "PAL-M" : "NTSC", PHASE_INC, COLORBURST_START, COLORBURST_END);
+		printf("Calculated %s parameters for '%s': %s PHASE_INC=%lld, COLORBURST_START=%d, COLORBURST_END=%d\n", (cfg.vga_mode_int == 4) ? "subcarrier" : "YC", yc_key, pal ? "PAL" : (cfg.ntsc_mode == 1) ? "PAL60" : (cfg.ntsc_mode == 2) ? "PAL-M" : "NTSC", PHASE_INC, COLORBURST_START, COLORBURST_END);
 
 		for (uint i = 0; i < sizeof(yc_modes) / sizeof(yc_modes[0]); i++)
 		{
 		if (!strcasecmp(yc_modes[i].key, yc_key) || !strcasecmp(yc_modes[i].key, yc_key_expand))
 			{
-				printf("Override YC PHASE_INC with value: %lld\n", yc_modes[i].phase_inc);
+				printf("Override %s PHASE_INC with value: %lld\n", (cfg.vga_mode_int == 4) ? "subcarrier" : "YC", yc_modes[i].phase_inc);
 				PHASE_INC = yc_modes[i].phase_inc;
 				break;
 			}
@@ -2938,7 +2938,7 @@ static void set_yc_mode()
 			// Traditional YC modes: enable YC processing
 			yc_config = ((pal || cfg.ntsc_mode) ? 4 : 0) | ((cfg.vga_mode_int == 3) ? 3 : 1);
 		}
-		printf("Sending YC config to FPGA: 0x%02X (pal_en=%d, cvbs=%d, yc_en=%d)\n", yc_config, (yc_config >> 2) & 1, (yc_config >> 1) & 1, yc_config & 1);
+		printf("Sending %s config to FPGA: 0x%02X (pal_en=%d, cvbs=%d, yc_en=%d)\n", (cfg.vga_mode_int == 4) ? "subcarrier" : "YC", yc_config, (yc_config >> 2) & 1, (yc_config >> 1) & 1, yc_config & 1);
 		spi_w(yc_config);
 		spi_w(PHASE_INC);
 		spi_w(PHASE_INC >> 16);

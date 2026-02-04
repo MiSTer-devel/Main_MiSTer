@@ -752,13 +752,13 @@ static int yc_parse_mode(char* buf, yc_mode *mode)
 
 	i++;
 	while (buf[i] == '=' || CHAR_IS_SPACE(buf[i])) i++;
-	ini_parser_debugf("Got yc_mode '%s' with VALUE %s", buf, buf + i);
+	ini_parser_debugf("Got %s '%s' with VALUE %s", (cfg.vga_mode_int == 4) ? "subcarrier_mode" : "yc_mode", buf, buf + i);
 
 	snprintf(mode->key, sizeof(mode->key), "%s", buf);
 	mode->phase_inc = strtoull(buf + i, 0, 0);
 	if (!mode->phase_inc)
 	{
-		printf("ERROR: cannot parse YC phase_inc: '%s'\n", buf + i);
+		printf("ERROR: cannot parse %s phase_inc: '%s'\n", (cfg.vga_mode_int == 4) ? "subcarrier" : "YC", buf + i);
 		return 0;
 	}
 
@@ -778,7 +778,7 @@ void yc_parse(yc_mode *yc_table, int max)
 	const char *corename = user_io_get_core_name(1);
 	int corename_len = strlen(corename);
 
-	const char *name = "yc.txt";
+	const char *name = (cfg.vga_mode_int == 4) ? "subcarrier.txt" : "yc.txt";
 	if (!FileOpen(&ini_file, name))	return;
 
 	ini_parser_debugf("Opened file %s with size %llu bytes.", name, ini_file.size);
