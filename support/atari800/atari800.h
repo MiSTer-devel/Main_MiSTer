@@ -13,6 +13,7 @@ void atari800_poll();
 void atari800_umount_cartridge(uint8_t stacked);
 int atari800_check_cartridge_file(const char* name, unsigned char index);
 void atari800_open_cartridge_file(const char* name, int match_index);
+void atari800_open_bios_file(const char* name, unsigned char index);
 
 // Cart modes from the original ZCPU firmware
 

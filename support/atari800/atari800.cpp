@@ -122,10 +122,11 @@ static const cart_def_t cart_def[] =
 	{ 0, "", 0, 0 }
 };
 
-#define STATUS1_MASK_SOFTBOOT   1
-#define STATUS1_MASK_COLDBOOT   2
-#define STATUS1_MASK_HALT       4
-#define STATUS1_MASK_MODE800    8
+#define STATUS1_MASK_SOFTBOOT   0x0001
+#define STATUS1_MASK_COLDBOOT   0x0002
+#define STATUS1_MASK_HALT       0x0004
+#define STATUS1_MASK_MODE800    0x0008
+#define STATUS1_MASK_BOOTX      0x0010
 
 static void set_a800_reg(uint8_t reg, uint8_t val)
 {
@@ -238,12 +239,21 @@ void atari800_init()
 	cart_matches_total = 0;
 	cart_match_car = 0;
 	// Try to load bootX.rom ? TODO - limit only to boot3? or require pbibios.rom name?
-        static char mainpath[512];
-	const char *home = HomeDir();
-	for (char i = 0; i < 3; i++) // TODO PBI BIOS (boot3.rom) currently hangs the Atari
+	if(get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_BOOTX)
 	{
-		sprintf(mainpath, "%s/boot%d.rom", home, i);
-		user_io_file_tx(mainpath, i << 6);
+		static char mainpath[512];
+		const char *home = HomeDir();
+		sprintf(mainpath, "%s/boot.rom", home);
+		user_io_file_tx(mainpath, 0 << 6);
+		sprintf(mainpath, "%s/boot1.rom", home);
+		user_io_file_tx(mainpath, 1 << 6);
+		sprintf(mainpath, "%s/boot2.rom", home);
+		user_io_file_tx(mainpath, 2 << 6);
+ // At the current state of development PBI rom hangs the Atari
+ #if 0
+		sprintf(mainpath, "%s/boot3.rom", home);
+		user_io_file_tx(mainpath, 3 << 6);
+#endif
 	}
 	atari800_reset();
 }
@@ -440,3 +450,10 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 	}
 }
 
+void atari800_open_bios_file(const char* name, unsigned char index)
+{
+	uint8_t bios_index = (index & 0x3F);
+	uint8_t mode800 = get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800;
+	user_io_file_tx(name, index);
+	if((mode800 && bios_index == 6) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot(1, 0);
+}

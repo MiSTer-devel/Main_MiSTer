@@ -2451,22 +2451,29 @@ void HandleUI(void)
 					{
 						c64_open_file(selPath, idx);
 					}
-					else if (is_atari800() && (ioctl_index == 8 || ioctl_index == 9))
+					else if (is_atari800())
 					{
-						int a800_cart_matches = atari800_check_cartridge_file(selPath, idx);
-						if(a800_cart_matches <= 1) MenuHide();
-						if(a800_cart_matches == 1)
+						if(ioctl_index == 8 || ioctl_index == 9)
 						{
-							atari800_open_cartridge_file(selPath, 0);
-						}
-						else if(a800_cart_matches > 1)
-						{
-							menustate = MENU_ATARI800_CART1;
-							menusub = 0;
+							int a800_cart_matches = atari800_check_cartridge_file(selPath, idx);
+							if(a800_cart_matches <= 1) MenuHide();
+							if(a800_cart_matches == 1)
+							{
+								atari800_open_cartridge_file(selPath, 0);
+							}
+							else if(a800_cart_matches > 1)
+							{
+								menustate = MENU_ATARI800_CART1;
+								menusub = 0;
+							}
+							else
+							{
+								Info("Unsupported cartridge type!", 2000);
+							}
 						}
 						else
 						{
-							Info("Unsupported cartridge type!", 2000);
+							atari800_open_bios_file(selPath, idx);
 						}
 					}
 					else
