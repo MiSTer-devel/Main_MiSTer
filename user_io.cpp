@@ -317,6 +317,13 @@ char is_c128()
 	return (is_c128_type == 1);
 }
 
+static int is_atari800_type = 0;
+char is_atari800()
+{
+	if (!is_atari800_type) is_atari800_type = strcasecmp(orig_name, "Atari800") ? 2 : 1;
+	return (is_atari800_type == 1);
+}
+
 static int is_psx_type = 0;
 char is_psx()
 {
@@ -398,6 +405,7 @@ void user_io_read_core_name()
 	is_gba_type = 0;
 	is_c64_type = 0;
 	is_c128_type = 0;
+	is_atari800_type = 0;
 	is_psx_type = 0;
 	is_cdi_type = 0;
 	is_st_type = 0;
@@ -1522,6 +1530,10 @@ void user_io_init(const char *path, const char *xml)
 				{
 					printf("Identified Archimedes core");
 					archie_init();
+				}
+				else if (is_atari800())
+				{
+					atari800_init();
 				}
 				else
 				{
@@ -3667,6 +3679,7 @@ void user_io_poll()
 		uint16_t save_req = spi_uio_cmd(UIO_CHK_UPLOAD);
 		if (save_req) c64_save_cart(save_req >> 8);
 	}
+	if (is_atari800()) atari800_poll();
 	process_ss(0);
 }
 
