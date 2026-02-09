@@ -1,9 +1,11 @@
 #ifndef __ATARI800_H__
 #define __ATARI800_H__
 
-// #include "../../file_io.h"
+#define A800_BUFFER_SIZE 8192
 
-#define LOAD_CHUNK_SIZE 4096 // 4096 is the minimum! TODO solve this better
+#if A800_BUFFER_SIZE < 8192
+#error A800_BUFFER_SIZE is too small!
+#endif
 
 int atari800_get_match_cart_count();
 const char *atari800_get_cart_match_name(int match_index);
@@ -14,6 +16,7 @@ void atari800_umount_cartridge(uint8_t stacked);
 int atari800_check_cartridge_file(const char* name, unsigned char index);
 void atari800_open_cartridge_file(const char* name, int match_index);
 void atari800_open_bios_file(const char* name, unsigned char index);
+void atari800_set_image(int ext_index, int file_index, const char *name);
 
 // Cart modes from the original ZCPU firmware
 

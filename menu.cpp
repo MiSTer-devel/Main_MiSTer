@@ -2564,6 +2564,10 @@ void HandleUI(void)
 				neocd_set_en(1);
 				neocd_set_image(selPath);
 			}
+			else if (is_atari800() && ioctl_index == 5)
+			{
+				atari800_set_image(user_io_ext_idx(selPath, fs_pFileExt), ioctl_index, selPath);
+			}
 			else
 			{
 				user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
