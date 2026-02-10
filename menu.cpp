@@ -2461,12 +2461,12 @@ void HandleUI(void)
 							{
 								atari800_open_cartridge_file(selPath, 0);
 							}
-							else if(a800_cart_matches > 1)
+							else if(a800_cart_matches > 1 && mgl->done)
 							{
 								menustate = MENU_ATARI800_CART1;
 								menusub = 0;
 							}
-							else
+							else if(mgl->done)
 							{
 								Info("Unsupported cartridge type!", 2000);
 							}

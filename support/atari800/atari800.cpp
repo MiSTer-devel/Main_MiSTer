@@ -10,6 +10,12 @@
 #include "../../fpga_io.h"
 #include "atari800.h"
 
+#define A800_SIO_TX_STAT  0x03
+#define A800_SIO_RX       0x04
+#define A800_SIO_RX_STAT  0x05
+#define A800_SIO_GETDIV   0x06
+#define A800_SIO_ERROR    0x07
+
 #define A800_GET_REGISTER 0x08
 #define A800_SET_REGISTER 0x09
 
@@ -19,6 +25,10 @@
 #define REG_PAUSE         0x04
 #define REG_FREEZER       0x05
 #define REG_RESET_RNMI    0x06
+#define REG_OPTION_FORCE  0x07
+#define REG_USER_LED      0x08
+#define REG_SIO_TX        0x09
+#define REG_SIO_SETDIV    0x0A
 
 #define REG_ATARI_STATUS1 0x01
 
@@ -412,9 +422,6 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 		user_io_set_index(cart_io_index);
 		user_io_set_download(1);
 	
-		//user_io_set_index(99);
-		//user_io_set_download(1, stacked ? 0x2900000 : 0x2800000);
-		
 		if(cart_type == 3 || cart_type == 45)
 		{
 			ProgressMessage("Loading", f.name, 0, 6);
