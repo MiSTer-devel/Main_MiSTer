@@ -147,8 +147,10 @@ static const cart_def_t cart_def[] =
 #define STATUS1_MASK_COLDBOOT   0x0002
 #define STATUS1_MASK_HALT       0x0004
 #define STATUS1_MASK_MODE800    0x0008
-#define STATUS1_MASK_BOOTX      0x0010
-#define STATUS1_MASK_XEXLOC     0x0020
+#define STATUS1_MASL_MODEPBI    0x0010
+#define STATUS1_MASK_BOOTX      0x0020
+#define STATUS1_MASK_XEXLOC     0x0040
+#define STATUS1_MASK_RDONLY     0x0080
 
 static uint8_t buffer[A800_BUFFER_SIZE];
 
@@ -175,6 +177,16 @@ static uint16_t get_a800_reg(uint8_t reg)
 	EnableIO();
 	spi8(A800_GET_REGISTER);
 	r = spi_w(reg << 8);
+	DisableIO();
+	return r;
+}
+
+static uint16_t get_a800_reg2(uint8_t reg)
+{
+	uint16_t r;
+	EnableIO();
+	spi8(reg);
+	r = spi_w(0);
 	DisableIO();
 	return r;
 }
@@ -260,6 +272,47 @@ static void reboot(uint8_t cold, uint8_t pause)
 		set_a800_reg(REG_FREEZER, 1);
 	}
 	set_a800_reg(REG_PAUSE, pause);
+}
+
+static void uart_init(uint8_t divisor)
+{
+	set_a800_reg(REG_SIO_SETDIV, (divisor << 1) + 1);
+}
+
+// TODO timeouts for the two?
+
+static void uart_send(uint8_t data)
+{
+	while(get_a800_reg2(A800_SIO_TX_STAT) & 0x200)
+	{
+		// TODO yield?
+	}
+	set_a800_reg(REG_SIO_TX, data);
+}
+
+static uint8_t uart_available()
+{
+	return !((get_a800_reg2(A800_SIO_RX_STAT) >> 8) & 0x1);
+}
+
+static uint16_t uart_receive()
+{
+	while(!uart_available())
+	{
+		// yield? timeout?
+	}
+	return get_a800_reg2(A800_SIO_RX);
+}
+
+static void uart_switch()
+{
+	// Working with this for a while now, I still have no clue what it does... :/
+	set_a800_reg(REG_SIO_SETDIV, (uint8_t)(get_a800_reg2(A800_SIO_GETDIV)-1));
+}
+
+static uint16_t uart_error()
+{
+	return get_a800_reg2(A800_SIO_ERROR);
 }
 
 static int cart_matches_total;
@@ -491,9 +544,249 @@ void atari800_open_bios_file(const char* name, unsigned char index)
 	if((mode800 && bios_index == 6) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot(1, 0);
 }
 
+#define MAX_DRIVES 15
+
+typedef struct {
+	fileTYPE *file;
+	uint8_t info;
+	uint8_t custom_loader;
+	uint32_t offset;
+	uint32_t meta_offset; // HDD only
+	uint16_t partition_id; // HDD only
+	uint32_t sector_count;
+	uint16_t sector_size;
+	uint8_t atari_sector_status;
+} drive_info_t;
+
+drive_info_t drive_infos[MAX_DRIVES+1];
+
+#define INFO_RO 0x40
+#define INFO_HDD 0x80
+#define INFO_META 0x20 // if the HDD uses the meta information sectors
+#define INFO_SS 0x10 // mark that the sector is smaller than the SD card image sector
+
+typedef struct {
+	uint16_t wMagic;
+	uint16_t wPars;
+	uint16_t wSecSize;
+	uint8_t btParsHigh;
+	uint32_t dwCRC;
+	uint32_t dwUNUSED;
+	uint8_t btFlags;
+} __attribute__((packed)) atr_header_t;
+
+#define XEX_SECTOR_SIZE 128
+#define ATARI_SECTOR_BUFFER_SIZE 512
+
+static uint8_t atari_sector_buffer[ATARI_SECTOR_BUFFER_SIZE];
+
+static uint8_t hdd_partition_scan(fileTYPE *file, uint8_t info)
+{
+	int offset = 0;
+	FileSeek(file, offset, SEEK_SET);
+	if(FileReadAdv(file, atari_sector_buffer, 256) != 256) return 0;
+
+	if(atari_sector_buffer[1] != 'A' || atari_sector_buffer[2] != 'P' || atari_sector_buffer[3] != 'T')
+	{
+		if(FileReadAdv(file, atari_sector_buffer, 256) != 256) return 0;
+		offset = 0xC2;
+		while(offset < 0x100)
+		{
+			if(atari_sector_buffer[offset] == 0x7F)
+			{
+				offset = ((atari_sector_buffer[offset+4]) |
+					((atari_sector_buffer[offset+5] << 8)) |
+					((atari_sector_buffer[offset+6] << 16)) |
+					((atari_sector_buffer[offset+7] << 24))) << 9;
+				FileSeek(file, offset, SEEK_SET);
+				if(FileReadAdv(file, atari_sector_buffer, 256) != 256 || atari_sector_buffer[1] != 'A' || atari_sector_buffer[2] != 'P' || atari_sector_buffer[3] != 'T') return 0;
+				break;
+			}
+			offset += 16;
+		}
+	}
+	if(atari_sector_buffer[0] == 0x10)
+	{
+		info |= INFO_META;
+	}
+	else if(atari_sector_buffer[0]) return 0;
+	info |= (atari_sector_buffer[4] & 0xF);
+	for(int pidx = 0; pidx < 15; pidx++)
+	{
+		int i = (pidx+1)*16;
+		if(!atari_sector_buffer[i])
+		{
+			// empty slot
+			if(drive_infos[pidx].file && (drive_infos[pidx].info & INFO_HDD))
+			{
+				drive_infos[pidx].file = NULL;
+			}
+		}
+		else
+		{
+			drive_infos[pidx].info = (info & 0xC0) | (atari_sector_buffer[i] & 0x40 ? INFO_META : 0) |
+				((atari_sector_buffer[i] & 0x30) || (atari_sector_buffer[i+12] & 0x80) ? INFO_RO : 0);
+			atari_sector_buffer[i] &= 0x8F;
+			if(atari_sector_buffer[i] > 3 || (atari_sector_buffer[i+1] != 0x00 && atari_sector_buffer[i+1] != 0x03) || !(atari_sector_buffer[i+12] & 0x40))
+			{
+				drive_infos[pidx].file = NULL;
+			}
+			else
+			{
+				drive_infos[pidx].sector_size = 128 << (atari_sector_buffer[i]-1);
+				if(drive_infos[pidx].sector_size != 512)
+				{
+					drive_infos[pidx].info |= INFO_SS;
+				}
+				drive_infos[pidx].offset =
+					( atari_sector_buffer[i+2] |
+					(atari_sector_buffer[i+3] << 8) |
+					(atari_sector_buffer[i+4] << 16) |
+					(atari_sector_buffer[i+5] << 24) ) << 9;
+				drive_infos[pidx].sector_count =
+					atari_sector_buffer[i+6] |
+					(atari_sector_buffer[i+7] << 8) |
+					(atari_sector_buffer[i+8] << 16) |
+					(atari_sector_buffer[i+9] << 24);
+				drive_infos[pidx].partition_id = atari_sector_buffer[i+10] | (atari_sector_buffer[i+11] << 8);
+				if(atari_sector_buffer[i+1] == 0x00) // DOS partition
+				{
+					uint16_t p_offset =
+						(atari_sector_buffer[i+14] | (atari_sector_buffer[i+15] << 8)) << 9;
+					drive_infos[pidx].meta_offset = drive_infos[pidx].offset - 512;
+					drive_infos[pidx].offset += p_offset;
+				}
+				else // External partition
+				{
+					drive_infos[pidx].meta_offset =
+						(atari_sector_buffer[i+13] |
+						(atari_sector_buffer[i+14] << 8) |
+						(atari_sector_buffer[i+15] << 16)) << 9;
+				}
+				drive_infos[pidx].custom_loader = 0;
+				drive_infos[pidx].atari_sector_status = 0xFF;
+				drive_infos[pidx].file = file;
+			}
+		}
+	}
+	return info;
+}
+
+static void set_drive_status(int drive_number, const char *name, uint8_t ext_index)
+{
+	uint8_t info = 0;
+	atr_header_t atr_header;
+	fileTYPE file = {};
+
+	if(!name[0])
+	{
+		// TODO we should remember where the HDD was mounted and check drive_number for that!!!
+		// TODO Or not! If we mount HDD from a separate slot!
+		// TODO What to do when trying to mount over an HDD partition??? (or the other way round)
+		// TODO Should HDD simply have priority
+		if(drive_number > 1 && drive_infos[MAX_DRIVES].file)
+		{
+			FileClose(drive_infos[MAX_DRIVES].file);
+			for(int i = 0; i <= MAX_DRIVES; i++)
+			{
+				if(drive_infos[i].info & INFO_HDD)
+				{
+					drive_infos[i].file = NULL;
+				}
+			}
+		}
+		else
+		{
+			if(drive_infos[drive_number].file) FileClose(drive_infos[drive_number].file);
+			drive_infos[drive_number].file = NULL;
+		}
+		return;
+	}
+
+	uint8_t read_only = (ext_index == 1) || (ext_index == 3 && drive_number < 2) ||
+		!FileCanWrite(name) || (get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_RDONLY);
+
+	if(!FileOpenEx(&file, name, read_only ? O_RDONLY : (O_RDWR | O_SYNC))) return;
+
+	// Slots 3 & 4 double as HDD image -> redirect to the last slot in the table
+	// remember where the drive was mounted?
+	if(drive_number > 1 && ext_index == 3) drive_number = MAX_DRIVES;
+
+	if(read_only) info |= INFO_RO;
+
+	if(ext_index == 0) // ATR only
+	{
+		if (FileReadAdv(&file, (uint8_t *)&atr_header, 16)  != 16)
+		{
+			FileClose(&file);
+			return;
+		}
+		//byteswap(&atr_header.wMagic);
+		//byteswap(&atr_header.wPars);
+		//byteswap(&atr_header.wSecSize);
+	}
+
+	drive_infos[drive_number].custom_loader = 0;
+	drive_infos[drive_number].atari_sector_status = 0xff;
+
+	if (ext_index == 2) // XDF
+	{
+		drive_infos[drive_number].offset = 0;
+		drive_infos[drive_number].sector_count = file.size / 0x80;
+		drive_infos[drive_number].sector_size = 0x80;
+	}
+	else if (ext_index == 3) // ATX or HDD image
+	{
+		if(drive_number < MAX_DRIVES)
+		{
+			drive_infos[drive_number].custom_loader = 2;
+			// TODO
+			//gAtxFile = &file;
+			//uint8_t atxType = loadAtxFile(drive_number);
+			//drive_infos[drive_number].sector_count = (atxType == 1) ? 1040 : 720;
+			//drive_infos[drive_number].sector_size = (atxType == 2) ? 256 : 128;
+		}
+		else
+		{
+			info |= INFO_HDD;
+			drive_infos[drive_number].sector_size = 512;
+			drive_infos[drive_number].sector_count = file.size / 0x200;
+			drive_infos[drive_number].atari_sector_status = 0;
+			drive_infos[drive_number].offset = 0;
+			info = hdd_partition_scan(&file, info);
+			if(!info)
+			{
+				FileClose(&file);
+				return;
+			}
+		}
+	}
+	else if (ext_index == 1) // XEX
+	{
+		drive_infos[drive_number].custom_loader = 1;
+		drive_infos[drive_number].sector_count = 0x173+(file.size+(XEX_SECTOR_SIZE-4))/(XEX_SECTOR_SIZE-3);
+		drive_infos[drive_number].sector_size = XEX_SECTOR_SIZE;
+		info |= INFO_RO;
+	}
+	else // ATR
+	{
+		drive_infos[drive_number].offset = 16;
+		if(atr_header.wSecSize == 512)
+		{
+			drive_infos[drive_number].sector_count = (atr_header.wPars | (atr_header.btParsHigh << 16)) / 32;
+		}
+		else
+		{
+			drive_infos[drive_number].sector_count = 3 + ((atr_header.wPars | (atr_header.btParsHigh << 16))*16 - 128*3) / atr_header.wSecSize;
+		}
+		drive_infos[drive_number].sector_size = atr_header.wSecSize;
+	}
+	drive_infos[drive_number].file = &file;
+	drive_infos[drive_number].info = info;
+}
+
 void atari800_set_image(int ext_index, int file_index, const char *name)
 {
-	(void)ext_index;
 	if(file_index == 5) // XEX file
 	{
 		if(name[0] && FileOpen(&xex_file, name))
@@ -546,6 +839,27 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			FileClose(&xex_file);
 		}		
 	}
+	else if(file_index == 6) // D1: disk image with automatic boot
+	{
+		if(name[0])
+		{
+			set_a800_reg(REG_PAUSE, 1);
+			set_a800_reg(REG_CART1_SELECT, 0);
+			set_a800_reg(REG_CART2_SELECT, 0);
+		}
+		set_drive_status(0, name, ext_index);
+		if(name[0])
+		{
+			reboot(1, 0);
+			set_a800_reg(REG_OPTION_FORCE, 1);
+			set_a800_reg(REG_OPTION_FORCE, 0);
+		}
+	}
+	else if(file_index < 4)
+	{
+		set_drive_status(file_index, name, ext_index);
+	}
+	// TODO separate entry for HDD mount
 }
 
 static void handle_xex()
