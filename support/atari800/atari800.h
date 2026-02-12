@@ -1,6 +1,8 @@
 #ifndef __ATARI800_H__
 #define __ATARI800_H__
 
+// TODO Defines here can be move to .cpp, they are local!
+
 #define A800_BUFFER_SIZE 8192
 
 #if A800_BUFFER_SIZE < 8192
