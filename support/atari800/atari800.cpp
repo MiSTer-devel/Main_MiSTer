@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-// #include <errno.h>
+#include <time.h>
 
 #include "../../hardware.h"
 #include "../../menu.h"
@@ -55,6 +55,108 @@ typedef struct {
 	uint8_t cart_mode;	// mode used in cartridge emulation
 	int size;		// image size in k
 } cart_def_t;
+
+// Cart modes from the original ZCPU firmware
+
+// 8k modes (0xA000-$BFFF)
+#define TC_MODE_OFF             0x00           // cart disabled
+#define TC_MODE_8K              0x01           // 8k banks at $A000
+#define TC_MODE_ATARIMAX1       0x02           // 8k using Atarimax 1MBit compatible banking
+#define TC_MODE_ATARIMAX8       0x03           // 8k using Atarimax 8MBit compatible banking
+#define TC_MODE_ATARIMAX8_2     0x10           // 8k using Atarimax 8MBit compatible banking (new type)
+#define TC_MODE_DCART           0x11           // 512K DCart
+#define TC_MODE_OSS_16          0x04           // 16k OSS cart, M091 banking
+#define TC_MODE_OSS_8           0x05           // 8k OSS cart, M091 banking
+#define TC_MODE_OSS_043M        0x06           // 16k OSS cart, 043M banking
+
+#define TC_MODE_SDX64           0x08           // SDX 64k cart, $D5Ex banking
+#define TC_MODE_SDX128          0x09           // SDX 128k cart, $D5Ex banking
+#define TC_MODE_DIAMOND64       0x0A           // Diamond GOS 64k cart, $D5Dx banking
+#define TC_MODE_EXPRESS64       0x0B           // Express 64k cart, $D57x banking
+
+#define TC_MODE_ATRAX128        0x0C           // Atrax 128k cart
+#define TC_MODE_WILLIAMS64      0x0D           // Williams 64k cart
+#define TC_MODE_WILLIAMS32      0x0E           // Williams 32k cart
+#define TC_MODE_WILLIAMS16      0x0F           // Williams 16k cart
+
+// 16k modes (0x8000-$BFFF)
+//#define TC_MODE_FLEXI           0x20           // flexi mode
+#define TC_MODE_16K             0x21           // 16k banks at $8000-$BFFF
+#define TC_MODE_MEGAMAX16       0x22           // MegaMax 16k mode (up to 2MB)
+#define TC_MODE_BLIZZARD        0x23           // Blizzard 16k
+#define TC_MODE_SIC_128         0x24           // Sic!Cart 128k
+#define TC_MODE_SIC_256         0x25           // Sic!Cart 256k
+#define TC_MODE_SIC_512         0x26           // Sic!Cart 512k
+#define TC_MODE_SIC_1024        0x27           // Sic!Cart+ 1024k
+
+#define TC_MODE_BLIZZARD_4      0x12           // Blizzard 4k
+#define TC_MODE_BLIZZARD_32     0x13           // Blizzard 32k
+#define TC_MODE_RIGHT_8K	0x14
+#define TC_MODE_RIGHT_4K	0x15
+#define TC_MODE_2K		0x16
+#define TC_MODE_4K		0x17
+
+// J(atari)Cart versions
+#define TC_MODE_JATARI_8	0x18
+#define TC_MODE_JATARI_16	0x19
+#define TC_MODE_JATARI_32	0x1A
+#define TC_MODE_JATARI_64	0x1B
+#define TC_MODE_JATARI_128	0x1C
+#define TC_MODE_JATARI_256	0x1D
+#define TC_MODE_JATARI_512	0x1E
+#define TC_MODE_JATARI_1024	0x1F
+
+#define TC_MODE_MEGA_16         0x28           // switchable MegaCarts
+#define TC_MODE_MEGA_32         0x29
+#define TC_MODE_MEGA_64         0x2A
+#define TC_MODE_MEGA_128        0x2B
+#define TC_MODE_MEGA_256        0x2C
+#define TC_MODE_MEGA_512        0x2D
+#define TC_MODE_MEGA_1024       0x2E
+#define TC_MODE_MEGA_2048       0x2F
+#define TC_MODE_MEGA_4096       0x20
+
+#define TC_MODE_XEGS_32         0x30           // non-switchable XEGS carts
+#define TC_MODE_XEGS_64         0x31
+#define TC_MODE_XEGS_128        0x32
+#define TC_MODE_XEGS_256        0x33
+#define TC_MODE_XEGS_512        0x34
+#define TC_MODE_XEGS_1024       0x35
+#define TC_MODE_XEGS_64_2       0x36
+
+#define TC_MODE_SXEGS_32        0x38           // switchable XEGS carts
+#define TC_MODE_SXEGS_64        0x39
+#define TC_MODE_SXEGS_128       0x3A
+#define TC_MODE_SXEGS_256       0x3B
+#define TC_MODE_SXEGS_512       0x3C
+#define TC_MODE_SXEGS_1024      0x3D
+
+// XE Multicart versions
+#define TC_MODE_XEMULTI_8	0x68
+#define TC_MODE_XEMULTI_16	0x69
+#define TC_MODE_XEMULTI_32	0x6A
+#define TC_MODE_XEMULTI_64	0x6B
+#define TC_MODE_XEMULTI_128	0x6C
+#define TC_MODE_XEMULTI_256	0x6D
+#define TC_MODE_XEMULTI_512	0x6E
+#define TC_MODE_XEMULTI_1024	0x6F
+
+#define TC_MODE_PHOENIX		0x40
+#define TC_MODE_AST_32		0x41
+#define TC_MODE_ATRAX_INT128	0x42
+#define TC_MODE_ATRAX_SDX64	0x43
+#define TC_MODE_ATRAX_SDX128	0x44
+#define TC_MODE_TSOFT_64	0x45
+#define TC_MODE_TSOFT_128	0x46
+#define TC_MODE_ULTRA_32	0x47
+#define TC_MODE_DAWLI_32	0x48
+#define TC_MODE_DAWLI_64	0x49
+#define TC_MODE_JRC_LIN_64	0x4A
+#define TC_MODE_JRC_INT_64	0x4B
+#define TC_MODE_SDX_SIDE2	0x4C
+#define TC_MODE_SDX_U1MB	0x4D
+#define TC_MODE_DB_32		0x70
+#define TC_MODE_BOUNTY_40	0x73
 
 static const cart_def_t cart_def[] = 
 {
@@ -161,7 +263,13 @@ static const cart_def_t cart_def[] =
 #define STATUS2_MASK_BOOTDRV    0x0700
 #define STATUS2_MASK_SPLASH     0x0800
 
-static uint8_t buffer[A800_BUFFER_SIZE];
+#define BUFFER_SIZE 8192
+
+#if BUFFER_SIZE < 8192
+#error BUFFER_SIZE is too small!
+#endif
+
+static uint8_t buffer[BUFFER_SIZE];
 
 #define XEX_LOADER_LOC          7 // XEX Loader is at $700 by default
 
@@ -219,8 +327,8 @@ static void atari800_dma_read(uint8_t *buf, uint32_t addr, uint32_t len)
 
 static void atari800_dma_zero(uint32_t addr, uint32_t len)
 {
-	memset(buffer, 0, A800_BUFFER_SIZE);
-	uint32_t to_write = len > A800_BUFFER_SIZE ? A800_BUFFER_SIZE : len;
+	memset(buffer, 0, BUFFER_SIZE);
+	uint32_t to_write = len > BUFFER_SIZE ? BUFFER_SIZE : len;
 	
 	user_io_set_index(99);
 	user_io_set_download(1, addr);
@@ -228,7 +336,7 @@ static void atari800_dma_zero(uint32_t addr, uint32_t len)
 	{
 		user_io_file_tx_data(buffer, to_write);
 		len -= to_write;
-		to_write = len > A800_BUFFER_SIZE ? A800_BUFFER_SIZE : len;
+		to_write = len > BUFFER_SIZE ? BUFFER_SIZE : len;
 	}
 	user_io_set_upload(0);
 }
@@ -242,14 +350,14 @@ static void reboot(uint8_t cold, uint8_t pause)
 	{
 		set_a800_reg(REG_FREEZER, 0);
 		// Initialize the first 64K of SDRAM with a pattern
-		for(i = 0; i < A800_BUFFER_SIZE; i += 2)
+		for(i = 0; i < BUFFER_SIZE; i += 2)
 		{
 			buffer[i] = 0xFF;
 			buffer[i+1] = 0x00;
 		}
 		user_io_set_index(99);
 		user_io_set_download(1, SDRAM_BASE);
-		for(i = 0; i < 0x10000 / A800_BUFFER_SIZE; i++) user_io_file_tx_data(buffer, A800_BUFFER_SIZE);
+		for(i = 0; i < 0x10000 / BUFFER_SIZE; i++) user_io_file_tx_data(buffer, BUFFER_SIZE);
 		user_io_set_upload(0);
 	}
 	else
@@ -289,8 +397,6 @@ static void uart_init(uint8_t divisor)
 	set_a800_reg(REG_SIO_SETDIV, (divisor << 1) + 1);
 }
 
-// TODO timeouts for the two?
-
 static uint8_t uart_full()
 {
 	uint16_t r = get_a800_reg2(A800_SIO_TX_STAT);
@@ -301,8 +407,9 @@ static void uart_send(uint8_t data)
 {
 	while(uart_full())
 	{
-		// TODO 
-		//scheduler_yield();
+//#ifdef USE_SCHEDULER // TODO ?
+//		scheduler_yield();
+//#endif
 	}
 	set_a800_reg(REG_SIO_TX, data);
 }
@@ -316,8 +423,9 @@ static uint16_t uart_receive()
 {
 	while(!uart_available())
 	{
-		// TODO
-		//scheduler_yield();
+//#ifdef USE_SCHEDULER // TODO ?
+//		scheduler_yield();
+//#endif
 	}
 	return get_a800_reg2(A800_SIO_RX);
 }
@@ -496,7 +604,7 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 			while (offset < f.size)
 			{
 				int to_read = f.size - offset;
-				if (to_read > A800_BUFFER_SIZE) to_read = A800_BUFFER_SIZE;
+				if (to_read > BUFFER_SIZE) to_read = BUFFER_SIZE;
 				ProgressMessage("Loading", f.name, offset, f.size);
 				FileReadAdv(&f, buffer, to_read);
 				user_io_file_tx_data(buffer, to_read);
@@ -575,6 +683,97 @@ typedef struct {
 	uint8_t *sector_buffer;
 } sio_action_t;
 
+typedef struct {
+	uint8_t signature[4];
+	uint16_t version;
+	uint16_t minVersion;
+	uint16_t creator;
+	uint16_t creatorVersion;
+	uint32_t flags;
+	uint16_t imageType;
+	uint8_t density;
+	uint8_t reserved0;
+	uint32_t imageId;
+	uint16_t imageVersion;
+	uint16_t reserved1;
+	uint32_t startData;
+	uint32_t endData;
+	uint8_t reserved2[12];
+} __attribute__((packed)) atxFileHeader;
+
+typedef struct {
+	uint32_t size;
+	uint16_t type;
+	uint16_t reserved0;
+	uint8_t trackNumber;
+	uint8_t reserved1;
+	uint16_t sectorCount;
+	uint16_t rate;
+	uint16_t reserved3;
+	uint32_t flags;
+	uint32_t headerSize;
+	uint8_t reserved4[8];
+} __attribute__((packed)) atxTrackHeader;
+
+typedef struct {
+	uint32_t next;
+	uint16_t type;
+	uint16_t pad0;
+} __attribute__((packed)) atxSectorListHeader;
+
+typedef struct {
+	uint8_t number;
+	uint8_t status;
+	uint16_t timev;
+	uint32_t data;
+} __attribute__((packed)) atxSectorHeader;
+
+typedef struct {
+	uint32_t size;
+	uint8_t type;
+	uint8_t sectorIndex;
+	uint16_t data;
+} __attribute__((packed)) atxTrackChunk;
+
+#define ATX_VERSION		0x01
+
+// number of angular units in a full disk rotation
+#define AU_FULL_ROTATION         26042
+
+#define US_CS_CALC_1050 270 // According to Altirra
+#define US_CS_CALC_810 5136 // According to Altirra
+
+#define US_TRACK_STEP_810 5300 // number of microseconds drive takes to step 1 track
+#define US_TRACK_STEP_1050 20120 // According to Avery / Altirra
+#define US_HEAD_SETTLE_1050 20000
+#define US_HEAD_SETTLE_810 10000
+
+#define US_3FAKE_ROT_810 1566000
+#define US_2FAKE_ROT_1050 942000
+
+// mask for checking FDC status "data lost" bit
+#define MASK_FDC_DLOST           0x04
+// mask for checking FDC status "missing" bit
+#define MASK_FDC_MISSING         0x10
+// mask for checking FDC status extended data bit
+#define MASK_EXTENDED_DATA       0x40
+
+#define MASK_FDC_BUSY            0x01
+#define MASK_FDC_DRQ             0x02
+#define MASK_FDC_CRC             0x08
+#define MASK_FDC_REC             0x20
+#define MASK_FDC_WP              0x40
+#define MASK_RESERVED            0x80
+
+#define MAX_RETRIES_1050         2
+#define MAX_RETRIES_810          4
+
+#define MAX_TRACK                42
+
+enum atx_density { atx_single, atx_medium, atx_double };
+
+#define NUM_ATX_DRIVES 4
+
 #define XEX_SECTOR_SIZE 128
 #define ATARI_SECTOR_BUFFER_SIZE 512
 
@@ -582,9 +781,373 @@ static uint8_t atari_sector_buffer[ATARI_SECTOR_BUFFER_SIZE];
 static uint32_t pre_ce_delay;
 static uint32_t pre_an_delay;
 
-#define DELAY_T2_MIN      100 /* 100 BiboDos needs at least 50us delay before ACK */
-#define DELAY_T5_MIN      600 /* 300 the QMEG OS needs at least 300usec delay between ACK and complete */
-#define DELAY_T3_PERIPH   150 /* 150 QMEG OS 3 needs a delay of 150usec between complete and data */
+#define DELAY_T2_MIN      100 /* BiboDos needs at least 50us delay before ACK */
+#define DELAY_T5_MIN      600 /* the QMEG OS needs at least 300usec delay between ACK and complete */
+#define DELAY_T3_PERIPH   150 /* QMEG OS 3 needs a delay of 150usec between complete and data */
+
+struct {
+	uint16_t bytesPerSector; // number of bytes per sector
+	uint8_t sectorsPerTrack; // number of sectors in each track
+	uint32_t trackOffset[MAX_TRACK]; // pre-calculated info for each track and drive
+	uint8_t currentHeadTrack;
+	uint8_t density;
+} atx_info[NUM_ATX_DRIVES];
+
+struct {
+	uint64_t stamp;
+	uint16_t angle;
+} headPosition;
+
+static uint64_t get_us(uint64_t offset)
+{
+	struct timespec tp;
+
+	clock_gettime(CLOCK_BOOTTIME, &tp);
+
+	uint64_t res;
+
+	res = tp.tv_sec;
+	res *= 1000000;
+	res += (tp.tv_nsec / 1000);
+
+	return (uint64_t)(res + offset);
+}
+
+static uint64_t check_us(uint64_t time)
+{
+	return (!time) || (get_us(0) >= time);
+}
+
+static void wait_us(uint64_t time)
+{
+	time = get_us(time);
+	while (!check_us(time));
+}
+
+static void getCurrentHeadPosition()
+{
+	uint64_t s = get_us(0);
+	headPosition.stamp = s;
+	headPosition.angle = (uint16_t)((s >> 3) % AU_FULL_ROTATION);
+}
+
+static void wait_from_stamp(uint32_t us_delay)
+{
+	uint32_t t = get_us(0) - headPosition.stamp;
+	t = us_delay - t;
+	// If, for whatever reason, we are already too late, just skip
+	if(t <= us_delay)
+	{
+		wait_us(t);
+	}
+}
+
+#define ATX_FILE_ACCESS_READ    1
+#define ATX_FILE_ACCESS_WRITE   2
+
+int atx_file_access(int drv_num, int type, int offset, int len)
+{
+	(void)type; // ATM we only support reading, but writing is potentially possible
+
+	FileSeek(&drive_infos[drv_num].file, offset, SEEK_SET);
+
+	return len == FileReadAdv(&drive_infos[drv_num].file, atari_sector_buffer, len);
+}
+
+static uint8_t loadAtxFile(int drv_num)
+{
+	atxFileHeader *fileHeader;
+	atxTrackHeader *trackHeader;
+	uint8_t r = 0;
+
+	if(!atx_file_access(drv_num, ATX_FILE_ACCESS_READ, 0, sizeof(atxFileHeader))) return r;
+
+	// validate the ATX file header
+	fileHeader = (atxFileHeader *) atari_sector_buffer;
+	if (fileHeader->signature[0] != 'A' || fileHeader->signature[1] != 'T' ||
+		fileHeader->signature[2] != '8' || fileHeader->signature[3] != 'X' ||
+		fileHeader->version != ATX_VERSION || fileHeader->minVersion != ATX_VERSION) return r;
+
+	r = fileHeader->density;
+
+	// enhanced density is 26 sectors per track, single and double density are 18
+	atx_info[drv_num].sectorsPerTrack = (r == atx_medium) ? 26 : 18;
+	// single and enhanced density are 128 bytes per sector, double density is 256
+	atx_info[drv_num].bytesPerSector = (r == atx_double) ? 256 : 128;
+	atx_info[drv_num].density = r;
+	atx_info[drv_num].currentHeadTrack = 0;
+
+	// calculate track offsets
+	uint32_t startOffset = fileHeader->startData;
+
+	for(int track = 0; track < MAX_TRACK ; track++) {
+		if (!atx_file_access(drv_num, ATX_FILE_ACCESS_READ, startOffset, sizeof(atxTrackHeader))) break;
+		trackHeader = (atxTrackHeader *) atari_sector_buffer;
+		atx_info[drv_num].trackOffset[track] = startOffset;
+		startOffset += trackHeader->size;
+	}
+
+	return r;
+}
+
+// Return 0 on full success, 1 on "Atari disk problem" (may have data)
+// -1 on internal storage problem (corrupt ATX) 
+static int loadAtxSector(int drv_num, uint16_t num, uint8_t *status)
+{
+
+	atxTrackHeader *trackHeader;
+	atxSectorListHeader *slHeader;
+	atxSectorHeader *sectorHeader;
+	atxTrackChunk *extSectorData;
+
+	int r = 1;
+	
+	uint8_t is1050 = get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_ATX1050 ? 1 : 0;
+
+	// calculate track and relative sector number from the absolute sector number
+	uint8_t tgtTrackNumber = (num - 1) / atx_info[drv_num].sectorsPerTrack;
+	uint8_t tgtSectorNumber = (num - 1) % atx_info[drv_num].sectorsPerTrack + 1;
+
+	// set initial status (in case the target sector is not found)
+	*status = MASK_FDC_MISSING;
+
+	uint16_t atxSectorSize = atx_info[drv_num].bytesPerSector;
+
+	// delay for track stepping if needed
+	int diff = tgtTrackNumber - atx_info[drv_num].currentHeadTrack;
+	if (diff)
+	{
+		if (diff > 0)
+		{
+			diff += (is1050 ? 1 : 0);
+		}
+		else
+		{
+			diff = -diff;
+		}
+		wait_us(is1050 ? (diff*US_TRACK_STEP_1050 + US_HEAD_SETTLE_1050) : (diff*US_TRACK_STEP_810 + US_HEAD_SETTLE_810));
+	}
+
+	getCurrentHeadPosition();
+
+	// set new head track position
+	atx_info[drv_num].currentHeadTrack = tgtTrackNumber;
+	uint16_t sectorCount = 0;
+	// read the track header
+	uint32_t currentFileOffset = atx_info[drv_num].trackOffset[tgtTrackNumber];
+	
+	if (currentFileOffset)
+	{
+		if(atx_file_access(drv_num, ATX_FILE_ACCESS_READ, currentFileOffset, sizeof(atxTrackHeader)))
+		{
+			trackHeader = (atxTrackHeader *) atari_sector_buffer;
+			sectorCount = trackHeader->sectorCount;
+		}
+		else
+		{
+			r = -1;
+		}
+	}
+
+	if (trackHeader->trackNumber != tgtTrackNumber || atx_info[drv_num].density != ((trackHeader->flags & 0x2) ? atx_medium : atx_single))
+	{
+		sectorCount = 0;
+	}
+
+	uint32_t trackHeaderSize = trackHeader->headerSize;
+
+	if (sectorCount)
+	{
+		currentFileOffset += trackHeaderSize;
+		if(atx_file_access(drv_num, ATX_FILE_ACCESS_READ, currentFileOffset, sizeof(atxSectorListHeader)))
+		{
+			slHeader = (atxSectorListHeader *) atari_sector_buffer;
+			// sector list header is variable length, so skip any extra header bytes that may be present
+			currentFileOffset += slHeader->next - sectorCount * sizeof(atxSectorHeader);
+		}
+		else
+		{
+			sectorCount = 0;
+			r = -1;
+		}
+	}
+
+	uint32_t tgtSectorOffset;        // the offset of the target sector data
+	int16_t weakOffset;
+
+	uint8_t retries = is1050 ? MAX_RETRIES_1050 : MAX_RETRIES_810;
+
+	uint32_t retryOffset = currentFileOffset;
+	uint16_t extSectorSize;
+
+	while (retries > 0)
+	{
+		retries--;
+		currentFileOffset = retryOffset;
+		int pTT;
+		uint16_t tgtSectorIndex = 0;         // the index of the target sector within the sector list
+		tgtSectorOffset = 0;
+		weakOffset = -1;
+		// iterate through all sector headers to find the target sector
+
+		if(sectorCount)
+		{
+			for (int i = 0; i < sectorCount; i++)
+			{
+				if(!atx_file_access(drv_num, ATX_FILE_ACCESS_READ, currentFileOffset, sizeof(atxSectorHeader)))
+				{
+					r = -1;
+					break;
+				}
+				sectorHeader = (atxSectorHeader *)atari_sector_buffer;
+
+				// if the sector is not flagged as missing and its number matches the one we're looking for...
+				if (sectorHeader->number == tgtSectorNumber)
+				{
+					if(sectorHeader->status & MASK_FDC_MISSING)
+					{
+						currentFileOffset += sizeof(atxSectorHeader);
+						continue;
+					}
+					// check if it's the next sector that the head would encounter angularly...
+					int tt = sectorHeader->timev - headPosition.angle;
+					if (!tgtSectorOffset || (tt > 0 && pTT <= 0) || (tt > 0 && pTT > 0 && tt < pTT) || (tt <= 0 && pTT <= 0 && tt < pTT))
+					{
+						pTT = tt;
+						*status = sectorHeader->status;
+						tgtSectorIndex = i;
+						tgtSectorOffset = sectorHeader->data;
+					}
+				}
+				currentFileOffset += sizeof(atxSectorHeader);
+			}
+		}
+	
+		uint16_t actSectorSize = atxSectorSize;
+		extSectorSize = 0;
+		// if an extended data record exists for this track, iterate through all track chunks to search
+		// for those records (note that we stop looking for chunks when we hit the 8-byte terminator; length == 0)
+		if (*status & MASK_EXTENDED_DATA)
+		{
+			currentFileOffset = atx_info[drv_num].trackOffset[tgtTrackNumber] + trackHeaderSize;
+			do {
+				if(!atx_file_access(drv_num, ATX_FILE_ACCESS_READ, currentFileOffset, sizeof(atxTrackChunk)))
+				{
+					r = -1;
+					break;
+				}
+				extSectorData = (atxTrackChunk *) atari_sector_buffer;
+				if (extSectorData->size)
+				{
+					// if the target sector has a weak data flag, grab the start weak offset within the sector data
+					if (extSectorData->sectorIndex == tgtSectorIndex)
+					{
+						if(extSectorData->type == 0x10)
+						{ // weak sector
+							weakOffset = extSectorData->data;
+						}
+						else if(extSectorData->type == 0x11)
+						{ // extended sector
+							extSectorSize = 128 << extSectorData->data;
+							// 1050 waits for long sectors, 810 does not
+							if(is1050 ? (extSectorSize > actSectorSize) : (extSectorSize < actSectorSize))
+							{
+								actSectorSize = extSectorSize;
+							}
+						}
+					}
+					currentFileOffset += extSectorData->size;
+				}
+			} while (extSectorData->size);
+		}
+
+		if (tgtSectorOffset)
+		{
+			if(!atx_file_access(drv_num, ATX_FILE_ACCESS_READ, atx_info[drv_num].trackOffset[tgtTrackNumber] + tgtSectorOffset, atxSectorSize))
+			{
+				r = -1;
+				tgtSectorOffset = 0;
+			}
+
+			uint16_t au_one_sector_read = (23+actSectorSize)*(atx_info[drv_num].density == atx_single ? 8 : 4)+2;
+			// We will need to circulate around the disk one more time if we are re-reading the just written sector	    
+			wait_from_stamp((au_one_sector_read + pTT + (pTT > 0 ? 0 : AU_FULL_ROTATION))*8);
+
+			if(*status)
+			{		    
+				// This is according to Altirra, but it breaks DjayBee's test J in 1050 mode?!
+				// wait_us(is1050 ? (US_TRACK_STEP_1050+US_HEAD_SETTLE_1050) : (AU_FULL_ROTATION*8));
+				// This is what seems to work:
+				wait_us(AU_FULL_ROTATION*8);
+			}
+		}
+		else
+		{
+			// No matching sector found at all or the track does not match the disk density
+			wait_from_stamp(is1050 ? US_2FAKE_ROT_1050 : US_3FAKE_ROT_810);
+			if(is1050 || retries == 2)
+			{
+				// Repositioning the head for the target track
+				if(!is1050)
+				{
+					wait_us((43+tgtTrackNumber)*US_TRACK_STEP_810+US_HEAD_SETTLE_810);
+				}
+				else if(tgtTrackNumber)
+				{
+					wait_us((2*tgtTrackNumber+1)*US_TRACK_STEP_1050+US_HEAD_SETTLE_1050);
+				}
+			}
+		}
+	
+		getCurrentHeadPosition();
+
+		if(!*status || r < 0) break;
+	}
+
+	*status &= ~(MASK_RESERVED | MASK_EXTENDED_DATA);
+
+	if (*status & MASK_FDC_DLOST)
+	{
+		if(is1050)
+		{
+			*status |= MASK_FDC_DRQ;
+		}
+		else
+		{
+			*status &= ~(MASK_FDC_DLOST | MASK_FDC_CRC);
+			*status |= MASK_FDC_BUSY;
+		}
+	}
+	if(!is1050 && (*status & MASK_FDC_REC))
+	{
+		*status |= MASK_FDC_WP;
+	}
+
+	if (tgtSectorOffset && !*status && r >= 0)
+	{
+		r = 0;
+	}
+
+	// if a weak offset is defined, randomize the appropriate data
+	if (weakOffset > -1)
+	{
+		for (int i = weakOffset; i < atxSectorSize; i++)
+		{
+			atari_sector_buffer[i] = rand();
+		}
+	}
+
+	wait_from_stamp(is1050 ? US_CS_CALC_1050 : US_CS_CALC_810);
+	// There is no file reading since last time stamp, so the alternative
+	// below is probably equally good
+	//wait_us(is1050 ? US_CS_CALC_1050 : US_CS_CALC_810);
+
+	// the Atari expects an inverted FDC status byte
+	*status = ~(*status);
+
+	// return the number of bytes read
+	return r;
+}
 
 static int speed_index = 0;
 static const uint8_t speeds[] = {0x28, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00};
@@ -611,9 +1174,9 @@ static void uart_send_buffer(uint8_t *buf, int len)
 
 static void uart_send_cmpl_and_atari_sector_buffer_and_check_sum(uint8_t *buf, int len, int success)
 {
-	usleep(pre_ce_delay);
+	wait_us(pre_ce_delay);
 	uart_send(success ? 'C' : 'E');
-	usleep(DELAY_T3_PERIPH);
+	wait_us(DELAY_T3_PERIPH);
 	uart_send_buffer(buf, len);
 	uart_send(get_checksum(buf, len));
 }
@@ -775,11 +1338,9 @@ static void set_drive_status(int drive_number, const char *name, uint8_t ext_ind
 		if(drive_number < MAX_DRIVES)
 		{
 			drive_infos[drive_number].custom_loader = 2;
-			// TODO
-			//gAtxFile = &file;
-			//uint8_t atxType = loadAtxFile(drive_number);
-			//drive_infos[drive_number].sector_count = (atxType == 1) ? 1040 : 720;
-			//drive_infos[drive_number].sector_size = (atxType == 2) ? 256 : 128;
+			uint8_t atxType = loadAtxFile(drive_number);
+			drive_infos[drive_number].sector_count = (atxType == atx_medium) ? 1040 : 720;
+			drive_infos[drive_number].sector_size = (atxType == atx_double) ? 256 : 128;
 		}
 		else
 		{
@@ -815,7 +1376,6 @@ static void set_drive_status(int drive_number, const char *name, uint8_t ext_ind
 		}
 		drive_infos[drive_number].sector_size = atr_header.wSecSize;
 	}
-	//drive_infos[drive_number].file = file;
 	drive_infos[drive_number].info = info;
 }
 
@@ -848,7 +1408,7 @@ static void handle_format(sio_command_t command, int drive_number, fileTYPE *fil
 	FileSeek(file, i, SEEK_SET);
 	for (; i != file->size; i += 128)
 	{
-		FileWriteAdv(file, action->sector_buffer, 128); // TODO check if 128 was written??
+		FileWriteAdv(file, action->sector_buffer, 128);
 	}
 	action->sector_buffer[0] = 0xff;
 	action->sector_buffer[1] = 0xff;
@@ -1000,7 +1560,7 @@ static void handle_write(sio_command_t command, int drive_number, fileTYPE *file
 		if(!pbi)
 		{
 			uart_send('A');
-			usleep(850); // TODO DELAY_T2_MIN 850
+			wait_us(850); // TODO DELAY_T2_MIN 850
 		}
 
 		FileSeek(file, location, SEEK_SET);
@@ -1042,7 +1602,7 @@ static void handle_write(sio_command_t command, int drive_number, fileTYPE *file
 		}
 		else
 		{
-			usleep(DELAY_T5_MIN);
+			wait_us(DELAY_T5_MIN);
 			uart_send(ok ? 'C' : 'E');
 		}
 	}
@@ -1051,8 +1611,6 @@ static void handle_write(sio_command_t command, int drive_number, fileTYPE *file
 		uart_send('N');
 	}
 }
-
-const uint8_t cfile_name[] = {'F','I','L','E','N','A','M','E','X','E','X'};
 
 void handle_read(sio_command_t command, int drive_number, fileTYPE *file, sio_action_t *action)
 {
@@ -1092,9 +1650,25 @@ void handle_read(sio_command_t command, int drive_number, fileTYPE *file, sio_ac
 		else if(sector == 0x169)
 		{
 			file_sectors = drive_infos[drive_number].sector_count - 0x173;
-
-			// TODO proper file name!!!
-			memcpy(&action->sector_buffer[5], cfile_name, 11);
+			{
+				memset(&action->sector_buffer[5], ' ', 8);
+				int si = 0;
+				for(int i = 0; i < 11; i++)
+				{
+					char c = drive_infos[drive_number].file.name[si];
+					if(c == '.')
+					{
+						i = 7;
+					}
+					else
+					{
+						if(c >= 'a' && c <= 'z') c -= 32;
+						else if(c < 'A' || c > 'Z') c = '@';
+						action->sector_buffer[5+i] = c;
+					}
+					si = i == 7 ? strlen(drive_infos[drive_number].file.name) - 3 : si + 1;
+				}
+			}
 			memset(&action->sector_buffer[16], 0, XEX_SECTOR_SIZE-16);
 
 			action->sector_buffer[0]=(file_sectors > 0x28F) ? 0x46 : 0x42;
@@ -1124,10 +1698,7 @@ set_number_of_sectors_to_buffer_1_2:
 	else if (drive_infos[drive_number].custom_loader == 2) // ATX
 	{
 		pre_ce_delay = 0; // Taken care of in loadAtxSector
-		// TODO !!!
-		// gAtxFile = file;
-		// int res = loadAtxSector(drive_number, sector, &drive_infos[drive_number].atari_sector_status);
-		int res = 0;
+		int res = loadAtxSector(drive_number, sector, &drive_infos[drive_number].atari_sector_status);
 		action->bytes = drive_infos[drive_number].sector_size;
 		action->success = (res == 0);
 	}
@@ -1264,7 +1835,7 @@ static void process_command()
 
 		CommandHandler handle_command = get_command_handler(command, 0);
 
-		usleep(pre_an_delay);
+		wait_us(pre_an_delay);
 
 		if (handle_command)
 		{
@@ -1362,6 +1933,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			set_a800_reg(REG_OPTION_FORCE, 0);
 		}
 	}
+	// TODO else if(file_index == 5) // HDD image
 	else if(file_index < 4)
 	{
 		set_drive_status(file_index, name, ext_index);
@@ -1405,7 +1977,7 @@ static void handle_xex()
 			read_len = (len_buf[0] | (len_buf[1] << 8)) + 1 - read_offset;
 			if(read_len < 1) goto xex_eof;
 			
-			to_read = read_len > A800_BUFFER_SIZE ? A800_BUFFER_SIZE : read_len;
+			to_read = read_len > BUFFER_SIZE ? BUFFER_SIZE : read_len;
 			
 			while(read_len)
 			{
@@ -1413,7 +1985,7 @@ static void handle_xex()
 				atari800_dma_write(buffer, ATARI_BASE + read_offset, to_read);
 				read_len -= to_read;
 				read_offset += to_read;
-				to_read = read_len > A800_BUFFER_SIZE ? A800_BUFFER_SIZE : read_len;
+				to_read = read_len > BUFFER_SIZE ? BUFFER_SIZE : read_len;
 			}
 
 			buffer[0] = 0x01;
