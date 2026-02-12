@@ -1277,45 +1277,33 @@ static void set_drive_status(int drive_number, const char *name, uint8_t ext_ind
 {
 	uint8_t info = 0;
 	atr_header_t atr_header;
+	
+	if(drive_number == 4) drive_number = MAX_DRIVES;
+
+	if(drive_number < MAX_DRIVES && (drive_infos[drive_number].info & INFO_HDD)) return;
 
 	if(!name[0])
 	{
-		// TODO we should remember where the HDD was mounted and check drive_number for that!!!
-		// TODO Or not! If we mount HDD from a separate slot!
-		// TODO What to do when trying to mount over an HDD partition??? (or the other way round)
-		// TODO Should HDD simply have priority
-		// TODO should HDD loading be limited by PBI mode ?
-		if(drive_number > 1 && drive_infos[MAX_DRIVES].file.opened())
+		FileClose(&drive_infos[drive_number].file);
+		if(drive_number == MAX_DRIVES)
 		{
-			FileClose(&drive_infos[MAX_DRIVES].file);
-			for(int i = 0; i <= MAX_DRIVES; i++)
+			for(int i = 0; i < MAX_DRIVES; i++)
 			{
-				if(drive_infos[i].info & INFO_HDD)
-				{
-					drive_infos[i].info = 0;
-				}
+				if(drive_infos[i].info & INFO_HDD) drive_infos[i].info = 0;
 			}
-		}
-		else
-		{
-			FileClose(&drive_infos[drive_number].file);
 		}
 		return;
 	}
 
-	uint8_t read_only = (ext_index == 1) || (ext_index == 3 && drive_number < 2) ||
+	uint8_t read_only = (ext_index == 1) || (ext_index == 3) ||
 		!FileCanWrite(name) || (get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_RDONLY);
 
-
-	// Slots 3 & 4 double as HDD image -> redirect to the last slot in the table
-	// remember where the drive was mounted?
-	if(drive_number > 1 && ext_index == 3) drive_number = MAX_DRIVES;
 
 	if(!FileOpenEx(&drive_infos[drive_number].file, name, read_only ? O_RDONLY : (O_RDWR | O_SYNC))) return;
 
 	if(read_only) info |= INFO_RO;
 
-	if(ext_index == 0) // ATR only
+	if(drive_number < MAX_DRIVES && ext_index == 0) // ATR only
 	{
 		if (FileReadAdv(&drive_infos[drive_number].file, (uint8_t *)&atr_header, 16) != 16)
 		{
@@ -1333,14 +1321,33 @@ static void set_drive_status(int drive_number, const char *name, uint8_t ext_ind
 		drive_infos[drive_number].sector_count = drive_infos[drive_number].file.size / 0x80;
 		drive_infos[drive_number].sector_size = 0x80;
 	}
-	else if (ext_index == 3) // ATX or HDD image
+	else if (ext_index == 3) // ATX
+	{
+		drive_infos[drive_number].custom_loader = 2;
+		uint8_t atxType = loadAtxFile(drive_number);
+		drive_infos[drive_number].sector_count = (atxType == atx_medium) ? 1040 : 720;
+		drive_infos[drive_number].sector_size = (atxType == atx_double) ? 256 : 128;
+	}
+	else if (ext_index == 1) // XEX
+	{
+		drive_infos[drive_number].custom_loader = 1;
+		drive_infos[drive_number].sector_count = 0x173+(drive_infos[drive_number].file.size+(XEX_SECTOR_SIZE-4))/(XEX_SECTOR_SIZE-3);
+		drive_infos[drive_number].sector_size = XEX_SECTOR_SIZE;
+	}
+	else // ATR or IMG
 	{
 		if(drive_number < MAX_DRIVES)
 		{
-			drive_infos[drive_number].custom_loader = 2;
-			uint8_t atxType = loadAtxFile(drive_number);
-			drive_infos[drive_number].sector_count = (atxType == atx_medium) ? 1040 : 720;
-			drive_infos[drive_number].sector_size = (atxType == atx_double) ? 256 : 128;
+			drive_infos[drive_number].offset = 16;
+			if(atr_header.wSecSize == 512)
+			{
+				drive_infos[drive_number].sector_count = (atr_header.wPars | (atr_header.btParsHigh << 16)) / 32;
+			}
+			else
+			{
+				drive_infos[drive_number].sector_count = 3 + ((atr_header.wPars | (atr_header.btParsHigh << 16))*16 - 128*3) / atr_header.wSecSize;
+			}
+			drive_infos[drive_number].sector_size = atr_header.wSecSize;
 		}
 		else
 		{
@@ -1356,25 +1363,6 @@ static void set_drive_status(int drive_number, const char *name, uint8_t ext_ind
 				return;
 			}
 		}
-	}
-	else if (ext_index == 1) // XEX
-	{
-		drive_infos[drive_number].custom_loader = 1;
-		drive_infos[drive_number].sector_count = 0x173+(drive_infos[drive_number].file.size+(XEX_SECTOR_SIZE-4))/(XEX_SECTOR_SIZE-3);
-		drive_infos[drive_number].sector_size = XEX_SECTOR_SIZE;
-	}
-	else // ATR
-	{
-		drive_infos[drive_number].offset = 16;
-		if(atr_header.wSecSize == 512)
-		{
-			drive_infos[drive_number].sector_count = (atr_header.wPars | (atr_header.btParsHigh << 16)) / 32;
-		}
-		else
-		{
-			drive_infos[drive_number].sector_count = 3 + ((atr_header.wPars | (atr_header.btParsHigh << 16))*16 - 128*3) / atr_header.wSecSize;
-		}
-		drive_infos[drive_number].sector_size = atr_header.wSecSize;
 	}
 	drive_infos[drive_number].info = info;
 }
@@ -1933,12 +1921,10 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			set_a800_reg(REG_OPTION_FORCE, 0);
 		}
 	}
-	// TODO else if(file_index == 5) // HDD image
-	else if(file_index < 4)
+	else if(file_index < 5)
 	{
 		set_drive_status(file_index, name, ext_index);
 	}
-	// TODO separate entry for HDD mount
 }
 
 static void handle_xex()
