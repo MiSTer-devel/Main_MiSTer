@@ -1882,7 +1882,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			atari800_dma_zero(SDRAM_BASE, 0x10000);
 			xex_reloc = (atari_status1 & STATUS1_MASK_XEXLOC) ? 1 : XEX_LOADER_LOC;
 			xex_loader_base = ATARI_BASE + xex_reloc * 0x100;
-			atari800_dma_write(xex_loader, ATARI_BASE + XEX_LOADER_LOC * 0x100, XEX_LOADER_SIZE);
+			atari800_dma_write(xex_loader, ATARI_BASE + XEX_LOADER_LOC * 0x100, (uint32_t)sizeof(xex_loader));
 			static uint8_t write_bytes[4];
 			if (xex_reloc != XEX_LOADER_LOC)
 			{
@@ -2175,12 +2175,14 @@ void atari800_init()
 	set_a800_reg(REG_PAUSE, 1);
 	cart_matches_total = 0;
 	cart_match_car = 0;
+
 	// Try to load bootX.rom ? TODO - limit only to boot3? or require pbibios.rom name?
 	// and rely on the OSD menus?
 	// In any case PBI boot rom should be attempted regardless of the option setting
 	// (there is no menu entry to load it)
 	static char mainpath[512];
 	const char *home = HomeDir();
+
 	if(get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_BOOTX)
 	{
 		sprintf(mainpath, "%s/boot.rom", home);
