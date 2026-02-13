@@ -2,7 +2,7 @@
 ; http://atariki.krap.pl/index.php/ROM_PBI
 
 #define VER_MAJOR 0
-#define VER_MINOR 8
+#define VER_MINOR 9
 
 warmst	= $008
 pdvmsk	= $247
@@ -84,12 +84,12 @@ display_text1
 	.byte 0,0
 	.byte 'A'-$20,'tari','8'-$20,'0'-$20,'0'-$20,0,'M'-$20,'i','S'-$20,'T'-$20,'er',0,'core',0 
 	.byte 'P'-$20,'B'-$20,'I'-$20,0,'B'-$20,'I'-$20,'O'-$20,'S'-$20,0
-	.byte 'v','0'-$20,'.'-$20,'8'-$20
+	.byte 'v',VER_MAJOR+$10,'.'-$20,VER_MINOR+$10
 display_text1_len = *-display_text1
 	.dsb 40-display_text1_len,0
 display_text2
 	.byte 0,0
-	.byte '('-$20,'C'-$20,')'-$20,0,'2'-$20,'0'-$20,'2'-$20,'5'-$20,0,'woj','@'-$20,'A'-$20,'tari','A'-$20,'ge'
+	.byte '('-$20,'C'-$20,')'-$20,0,'2'-$20,'0'-$20,'2'-$20,'6'-$20,0,'woj','@'-$20,'A'-$20,'tari','A'-$20,'ge'
 display_text2_len = *-display_text2
 	.dsb 40-display_text2_len,0
 display_text3 = $d110 
