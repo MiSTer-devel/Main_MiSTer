@@ -259,8 +259,6 @@ static const cart_def_t cart_def[] =
 #define STATUS1_MASK_MODEPBI    0x0080
 #define STATUS1_MASK_ATX1050    0x8000
 
-#define STATUS2_MASK_DRVCFG     0x00FF
-#define STATUS2_MASK_BOOTDRV    0x0700
 #define STATUS2_MASK_SPLASH     0x0800
 
 #define BUFFER_SIZE 8192
@@ -836,10 +834,7 @@ static void wait_from_stamp(uint32_t us_delay)
 	uint32_t t = get_us(0) - headPosition.stamp;
 	t = us_delay - t;
 	// If, for whatever reason, we are already too late, just skip
-	if(t <= us_delay)
-	{
-		wait_us(t);
-	}
+	if(t <= us_delay) wait_us(t);
 }
 
 #define ATX_FILE_ACCESS_READ    1
@@ -1118,15 +1113,9 @@ static int loadAtxSector(int drv_num, uint16_t num, uint8_t *status)
 			*status |= MASK_FDC_BUSY;
 		}
 	}
-	if(!is1050 && (*status & MASK_FDC_REC))
-	{
-		*status |= MASK_FDC_WP;
-	}
+	if(!is1050 && (*status & MASK_FDC_REC)) *status |= MASK_FDC_WP;
 
-	if (tgtSectorOffset && !*status && r >= 0)
-	{
-		r = 0;
-	}
+	if (tgtSectorOffset && !*status && r >= 0) r = 0;
 
 	// if a weak offset is defined, randomize the appropriate data
 	if (weakOffset > -1)
@@ -1169,7 +1158,7 @@ static uint8_t get_checksum(uint8_t* buf, int len)
 
 static void uart_send_buffer(uint8_t *buf, int len)
 {
-	while(len > 0) { uart_send(*buf++); len--; }
+	while(len-- > 0) uart_send(*buf++);
 }
 
 static void uart_send_cmpl_and_atari_sector_buffer_and_check_sum(uint8_t *buf, int len, int success)
@@ -1206,22 +1195,18 @@ static uint8_t hdd_partition_scan(fileTYPE *file, uint8_t info)
 			offset += 16;
 		}
 	}
-	if(atari_sector_buffer[0] == 0x10)
-	{
-		info |= INFO_META;
-	}
+
+	if(atari_sector_buffer[0] == 0x10) info |= INFO_META;
 	else if(atari_sector_buffer[0]) return 0;
+	
 	info |= (atari_sector_buffer[4] & 0xF);
 	for(int pidx = 0; pidx < 15; pidx++)
 	{
-		int i = (pidx+1)*16;
+		int i = (pidx + 1)*16;
 		if(!atari_sector_buffer[i])
 		{
 			// empty slot
-			if(drive_infos[pidx].info & INFO_HDD)
-			{
-				drive_infos[pidx].info = 0;
-			}
+			if(drive_infos[pidx].info & INFO_HDD) drive_infos[pidx].info = 0;
 		}
 		else
 		{
@@ -1230,7 +1215,7 @@ static uint8_t hdd_partition_scan(fileTYPE *file, uint8_t info)
 			atari_sector_buffer[i] &= 0x8F;
 			if(atari_sector_buffer[i] > 3 || (atari_sector_buffer[i+1] != 0x00 && atari_sector_buffer[i+1] != 0x03) || !(atari_sector_buffer[i+12] & 0x40))
 			{
-				drive_infos[pidx].info = 0; // TODO
+				drive_infos[pidx].info = 0; // TODO ?! Is this enough to fully disable the drive?
 			}
 			else
 			{
@@ -1266,7 +1251,6 @@ static uint8_t hdd_partition_scan(fileTYPE *file, uint8_t info)
 				}
 				drive_infos[pidx].custom_loader = 0;
 				drive_infos[pidx].atari_sector_status = 0xFF;
-				//drive_infos[pidx].file = file;
 			}
 		}
 	}
@@ -1450,15 +1434,47 @@ static void handle_force_media_change(sio_command_t command, int drive_number, f
 	}
 }
 
-// TODO device info
+static void handle_device_info(sio_command_t command, int drive_number, fileTYPE *file, sio_action_t *action)
+{
+	(void)command;
+	memset(action->sector_buffer, 0, action->bytes);
+	action->sector_buffer[0] = 1;
+	action->sector_buffer[2] = 1;
+	action->sector_buffer[6] = drive_infos[drive_number].sector_size;
+	action->sector_buffer[7] = drive_infos[drive_number].sector_size >> 8;
+	action->sector_buffer[8] = drive_infos[drive_number].sector_count;
+	action->sector_buffer[9] = drive_infos[drive_number].sector_count >> 8;
+	action->sector_buffer[10] = drive_infos[drive_number].sector_count >> 16;
+	action->sector_buffer[11] = drive_infos[drive_number].sector_count >> 24;
+	if(drive_number == MAX_DRIVES)
+	{
+		atari800_dma_read(buffer, ATARI_BASE + 0xDFA0, 0x60);
+		memcpy(&action->sector_buffer[0x10], &buffer[0x0F], buffer[0x0E]);
+		memcpy(&action->sector_buffer[0x38], &buffer[0x38], buffer[0x37]);
+	}
+	else
+	{
+		action->sector_buffer[3] = drive_infos[drive_number].partition_id;
+		action->sector_buffer[4] = drive_infos[drive_number].partition_id >> 8;
+		// TODO This made me realize that we are limited in the SD image size
+		action->sector_buffer[12] = drive_infos[drive_number].offset >> 9;
+		action->sector_buffer[13] = drive_infos[drive_number].offset >> 17;
+		action->sector_buffer[14] = drive_infos[drive_number].offset >> 25;
+		if(drive_infos[drive_number].info & INFO_META)
+		{
+			FileSeek(file, drive_infos[drive_number].meta_offset + 16, SEEK_SET);
+			if(FileReadAdv(file, &action->sector_buffer[0x10], 40) != 40) action->success = 0;
+		}
+	}
+}
 
-/*
+#if 0
 void handle_device_status(sio_command_t command, int drive_number, fileTYPE *file, sio_action_t *action)
 {
 	memset(action->sector_buffer, 0, action->bytes);
 	action->sector_buffer[0x0C] = 0x3F;
 }
-*/
+#endif
 
 static void handle_get_status(sio_command_t command, int drive_number, fileTYPE *file, sio_action_t *action)
 {
@@ -1487,9 +1503,14 @@ static void handle_get_status(sio_command_t command, int drive_number, fileTYPE 
 	action->sector_buffer[0] = status;
 	action->sector_buffer[1] = drive_infos[drive_number].atari_sector_status;
 	action->sector_buffer[2] = drive_number == MAX_DRIVES ? 0x10 : 0xe0; // What should be our ID?
-	// TODO this is PBI stuff
-	//action->sector_buffer[3] = drive_number == MAX_DRIVES ? ((unsigned volatile char *)(atari_regbase + 0xDFAD))[0] : 0x00; // version
-	action->sector_buffer[3] = 0;
+	if(drive_number == MAX_DRIVES)
+	{
+		atari800_dma_read(&action->sector_buffer[3], ATARI_BASE + 0xDFAD, 1);
+	}
+	else
+	{
+		action->sector_buffer[3] = 0;
+	}
 	action->bytes = 4;
 }
 
@@ -1548,7 +1569,7 @@ static void handle_write(sio_command_t command, int drive_number, fileTYPE *file
 		if(!pbi)
 		{
 			uart_send('A');
-			wait_us(850); // TODO DELAY_T2_MIN 850
+			wait_us(850); // was DELAY_T2_MIN
 		}
 
 		FileSeek(file, location, SEEK_SET);
@@ -1600,7 +1621,7 @@ static void handle_write(sio_command_t command, int drive_number, fileTYPE *file
 	}
 }
 
-void handle_read(sio_command_t command, int drive_number, fileTYPE *file, sio_action_t *action)
+static void handle_read(sio_command_t command, int drive_number, fileTYPE *file, sio_action_t *action)
 {
 	uint32_t sector = (command.auxab << 16) | command.aux1 | (command.aux2<<8);
 
@@ -1671,11 +1692,7 @@ set_number_of_sectors_to_buffer_1_2:
 		{
 			FileSeek(file, (sector - 0x171) * (XEX_SECTOR_SIZE - 3), SEEK_SET);
 			int read = FileReadAdv(file, action->sector_buffer, XEX_SECTOR_SIZE - 3);
-			if(read < (XEX_SECTOR_SIZE-3))
-				sector = 0;
-			else
-				sector++;
-
+			sector = (read < (XEX_SECTOR_SIZE - 3)) ? 0 : sector + 1;
 			action->sector_buffer[XEX_SECTOR_SIZE - 3] = (sector >> 8);
 			action->sector_buffer[XEX_SECTOR_SIZE - 2] = sector;
 			action->sector_buffer[XEX_SECTOR_SIZE - 1] = (uint8_t)read;
@@ -1756,18 +1773,17 @@ static CommandHandler get_command_handler(sio_command_t command, uint8_t dstats)
 			res = &handle_read;
 		}
 		break;
-/* TODO!!!
+
 	case 0x6E: // PBI device info
 		if(pbi && dstats == 0x40)
 			res = &handle_device_info;
 		break;
-*/
-/*
+#if 0
 	case 0xEC: // PBI device status
 		if(pbi && dstats == 0x40)
-			res = &handleDeviceStatus;
+			res = &handle_device_status;
 		break;
-*/
+#endif
 	}
 	return res;
 }
@@ -1921,9 +1937,155 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			set_a800_reg(REG_OPTION_FORCE, 0);
 		}
 	}
-	else if(file_index < 5)
+	else if(file_index < 5) // 5 is the HDD and requires slightly different handling
 	{
 		set_drive_status(file_index, name, ext_index);
+	}
+}
+
+static uint8_t process_command_pbi(const uint8_t *drives_config)
+{
+	// We are more or less guranteed to serve the correct device id and 
+	// drive unit number by now, no need to check here
+	// mark a bit (0x40) in deviceId to indicate this is PBI, this is not the same
+	// as the XDCB bit (0x80)
+
+	set_a800_reg(REG_DRIVE_LED, 1);
+
+	static uint8_t iocb[16];
+	atari800_dma_read(iocb, ATARI_BASE + 0x300, 16);
+
+	sio_command_t command;
+
+	uint8_t sd_device = (iocb[0] & 0x7F) == 0x20;
+	int drive = iocb[1] - 1;
+	command.deviceId = (iocb[0] + drive) | 0x40; // ddevic + dunit - 1 plus PBI marker
+
+	/*
+	  This piece of admitedely contrived logic takes care of diverting or not further processing
+	  to SIO routines. The procedure is not exactly the same as on, say, Ultimate 1MB PBI BIOS, nor 
+	  it is strictly according to the PBI API requirements, here we (safely?) assume there are no
+	  other PBI devices (and hence ROM BIOSes), so this allows us to take some shortcuts (which also
+	  speeds up things on the Atari / SDX side).
+	*/
+
+	uint8_t mode = (sd_device && !drive) ? 1 : ((!sd_device && drive < 4) ? drives_config[drive] : ((iocb[0] & 0x80) >> 7));
+
+	if(sd_device && !drive) drive = MAX_DRIVES;
+
+	fileTYPE *file = &drive_infos[drive < MAX_DRIVES && (drive_infos[drive].info & INFO_HDD) ? MAX_DRIVES : drive].file;
+	
+	if(file->opened())
+	{
+		if(drive_infos[drive].info & INFO_HDD) // The type should be then ATR
+		{
+			if(!sd_device) mode = 1;
+		}
+		else
+		{
+			if(drive_infos[drive].custom_loader == 2) mode = 0; // ATX -> Off
+			if(drive_infos[drive].custom_loader == 1) mode = 1; // XEX -> PBI
+		}
+	}
+
+	// HSIO does not handle 512-byte sector ATRs
+	if(!mode || (file->opened() && mode == 2 && drive_infos[drive].sector_size == 512))
+		return 0xFF;
+
+	mode--;
+	if (!file->opened() || mode == 1)
+	{
+		if(!mode) iocb[3] = 0x8A;
+	}
+	else
+	{
+		command.command = iocb[2];
+		command.aux1 = iocb[0xA];
+		command.aux2 = iocb[0xB];
+		command.auxab = (command.deviceId & 0x80) ? iocb[0xC] | (iocb[0xD] << 8) : 0;
+
+		CommandHandler handle_command = get_command_handler(command, iocb[3]);
+		if (handle_command)
+		{
+			sio_action_t action;
+			action.bytes = iocb[8] | (iocb[9] << 8);
+			action.success = 1;
+			action.respond = 1;
+			// Copy over 512 bytes from Atari to the buffer
+			if(action.bytes)
+			{
+				atari800_dma_read(atari_sector_buffer, ATARI_BASE + (iocb[4] | (iocb[5] << 8)), action.bytes);
+				action.sector_buffer = atari_sector_buffer;
+			}
+
+			handle_command(command, drive, file, &action);
+
+			if (action.respond)
+			{
+				iocb[8] = action.bytes & 0xFF;
+				iocb[9] = (action.bytes >> 8) & 0xFF;
+				atari800_dma_write(atari_sector_buffer, ATARI_BASE + (iocb[4] | (iocb[5] << 8)), action.bytes);
+				atari800_dma_write(&iocb[0x08], ATARI_BASE + 0x308, 2);
+			}
+			iocb[3] = action.success ? 0x01 : 0x90;
+		}
+		else
+		{
+			iocb[3] = 0x8B;
+		}		
+	}
+	atari800_dma_write(&iocb[0x03], ATARI_BASE + 0x303, 1);
+	set_a800_reg(REG_DRIVE_LED, 0);
+	return mode;
+}
+
+void handle_pbi()
+{
+	if(!(get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODEPBI)) return;
+	
+	static uint8_t pbi_ram_base[16];
+	static uint8_t pbi_drives_config[4];
+
+	atari800_dma_read(pbi_ram_base, ATARI_BASE + 0xD100, 16);
+
+	if(pbi_ram_base[0] == 0xa5 && pbi_ram_base[1] == 0xa5)
+	{
+		uint16_t atari_status2 = get_a800_reg(REG_ATARI_STATUS2);
+
+		if(pbi_ram_base[3] == 0x01)
+		{
+			pbi_drives_config[0] = (atari_status2 >> 0) & 0x3;
+			pbi_drives_config[1] = (atari_status2 >> 2) & 0x3;
+			pbi_drives_config[2] = (atari_status2 >> 4) & 0x3;
+			pbi_drives_config[3] = (atari_status2 >> 6) & 0x3;
+
+			memcpy(&pbi_ram_base[0x0C], pbi_drives_config, 4);
+			uint8_t boot_drv = (atari_status2 >> 8) & 0x07;
+
+			pbi_ram_base[0x0B] = boot_drv;
+			pbi_ram_base[0x0A] = 0x00;
+			if(boot_drv == 1 && drive_infos[MAX_DRIVES].file.opened())
+			{
+				// APT
+				pbi_ram_base[0x0A] = drive_infos[MAX_DRIVES].info & 0xF;
+			}
+			else if(boot_drv)
+			{
+				pbi_ram_base[0x0A] = boot_drv - 1;
+			}
+			atari800_dma_write(&pbi_ram_base[0x0A], ATARI_BASE + 0xD10A, 6);
+			pbi_ram_base[2] = atari_status2 & STATUS2_MASK_SPLASH ? 1 : 0;
+			// Important - this has to be alone and last!
+			pbi_ram_base[3] = 0;
+			atari800_dma_write(&pbi_ram_base[0x02], ATARI_BASE + 0xD102, 2);
+		}
+		else if(pbi_ram_base[5] == 0x01)
+		{
+			pbi_ram_base[4] = process_command_pbi(pbi_drives_config);
+			pbi_ram_base[5] = 0;
+			// Same here with the order
+			atari800_dma_write(&pbi_ram_base[0x04], ATARI_BASE + 0xD104, 2);
+		}
 	}
 }
 
@@ -1946,7 +2108,6 @@ static void handle_xex()
 			buffer[1] = xex_reloc;
 			atari800_dma_write(buffer, ATARI_INITAD, 2);
 			
-			// NOTE! purposely reusing the "mounted" variable
 			while(len_buf[0] == 0xFF && len_buf[1] == 0xFF)
 			{
 				if(FileReadAdv(&xex_file, len_buf, 2) != 2) goto xex_eof;
@@ -2005,7 +2166,7 @@ void atari800_poll()
 	}
 	
 	if(xex_file.opened()) handle_xex();
-
+	handle_pbi();
 	process_command();
 }
 
@@ -2015,22 +2176,22 @@ void atari800_init()
 	cart_matches_total = 0;
 	cart_match_car = 0;
 	// Try to load bootX.rom ? TODO - limit only to boot3? or require pbibios.rom name?
+	// and rely on the OSD menus?
+	// In any case PBI boot rom should be attempted regardless of the option setting
+	// (there is no menu entry to load it)
+	static char mainpath[512];
+	const char *home = HomeDir();
 	if(get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_BOOTX)
 	{
-		static char mainpath[512];
-		const char *home = HomeDir();
 		sprintf(mainpath, "%s/boot.rom", home);
 		user_io_file_tx(mainpath, 0 << 6);
 		sprintf(mainpath, "%s/boot1.rom", home);
 		user_io_file_tx(mainpath, 1 << 6);
 		sprintf(mainpath, "%s/boot2.rom", home);
 		user_io_file_tx(mainpath, 2 << 6);
-// At the current state of development PBI rom hangs the Atari
-#if 0
-		sprintf(mainpath, "%s/boot3.rom", home);
-		user_io_file_tx(mainpath, 3 << 6);
-#endif
 	}
+	sprintf(mainpath, "%s/boot3.rom", home);
+	user_io_file_tx(mainpath, 3 << 6);
 	atari800_reset();
 }
 
