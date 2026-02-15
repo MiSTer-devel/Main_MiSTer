@@ -81,6 +81,7 @@ void sysled_enable(int en);
 void input_notify_mode();
 int input_poll(int getchar);
 int is_key_pressed(int key);
+uint32_t input_activity_get_seq(void);
 
 void start_map_setting(int cnt, int set = 0);
 int get_map_set();
@@ -107,6 +108,7 @@ void input_lightgun_save(int idx, int32_t *cal);
 void input_switch(int grab);
 int input_state();
 void input_uinp_destroy();
+void input_cec_send_key(uint16_t key, bool pressed);
 
 extern char joy_bnames[NUMBUTTONS][32];
 extern int  joy_bcount;

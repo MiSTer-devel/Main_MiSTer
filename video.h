@@ -72,4 +72,8 @@ void video_core_description(char *str, size_t len);
 void video_scaler_description(char *str, size_t len);
 char* video_get_core_mode_name(int with_vrefresh = 1);
 
+// Global idle video blanking (screensaver). Uses input activity, not OSD state.
+void video_idle_blank_poll();
+bool video_idle_blank_active();
+
 #endif // VIDEO_H

@@ -60,6 +60,7 @@
     <ClCompile Include="fpga_io.cpp" />
     <ClCompile Include="gamecontroller_db.cpp" />
     <ClCompile Include="hardware.cpp" />
+    <ClCompile Include="hdmi_cec.cpp" />
     <ClCompile Include="ide.cpp" />
     <ClCompile Include="ide_cdrom.cpp" />
     <ClCompile Include="input.cpp" />
@@ -135,6 +136,7 @@
     <ClInclude Include="fpga_system_manager.h" />
     <ClInclude Include="gamecontroller_db.h" />
     <ClInclude Include="hardware.h" />
+    <ClInclude Include="hdmi_cec.h" />
     <ClInclude Include="ide.h" />
     <ClInclude Include="ide_cdrom.h" />
     <ClInclude Include="input.h" />

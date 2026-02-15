@@ -7,3 +7,5 @@ For the purposes of getting google to crawl the wiki, here's a link to the (not 
 If you're a human looking for the wiki, that's [here](https://github.com/MiSTer-devel/Wiki_MiSTer/wiki)
 
 To compile this application, read more about that [here](https://mister-devel.github.io/MkDocs_MiSTer/developer/mistercompile/#general-prerequisites-for-arm-cross-compiling)
+
+HDMI CEC behavior reference for this tree: [`HDMI_CEC.md`](HDMI_CEC.md)

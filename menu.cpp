@@ -1078,10 +1078,14 @@ void HandleUI(void)
 	{
 		static int menu_visible = 1;
 		static unsigned long timeout = 0;
-		static unsigned long off_timeout = 0;
 		if (!video_fb_state() && cfg.fb_terminal)
 		{
-			if (timeout && CheckTimer(timeout))
+			// Keep the Menu core's own idle visuals from fighting global idle blanking.
+			if (video_idle_blank_active())
+			{
+				timeout = 0;
+			}
+			else if (timeout && CheckTimer(timeout))
 			{
 				timeout = 0;
 				if (menu_visible > 0)
@@ -1094,14 +1098,7 @@ void HandleUI(void)
 				{
 					menu_visible--;
 					video_menu_bg(user_io_status_get("[3:1]"), 2);
-					off_timeout = cfg.video_off ? GetTimer(cfg.video_off * 1000) : 0;
 				}
-			}
-
-			if (off_timeout && CheckTimer(off_timeout) && menu_visible < 0)
-			{
-				off_timeout = 0;
-				video_menu_bg(user_io_status_get("[3:1]"), 3);
 			}
 
 			if (c || menustate != MENU_FILE_SELECT2)
