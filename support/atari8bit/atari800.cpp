@@ -354,8 +354,7 @@ static void uart_init(uint8_t divisor)
 
 static uint8_t uart_full()
 {
-	uint16_t r = get_a800_reg2(A800_SIO_TX_STAT);
-	return r & 0x200 ? 1 : 0;
+	return (get_a800_reg2(A800_SIO_TX_STAT) >> 9) & 0x1;
 }
 
 static void uart_send(uint8_t data)
@@ -365,6 +364,7 @@ static void uart_send(uint8_t data)
 //#ifdef USE_SCHEDULER // TODO ?
 //		scheduler_yield();
 //#endif
+		usleep(200);
 	}
 	set_a8bit_reg(REG_SIO_TX, data);
 }
@@ -737,7 +737,7 @@ static uint32_t pre_ce_delay;
 static uint32_t pre_an_delay;
 
 #define DELAY_T2_MIN      100 /* BiboDos needs at least 50us delay before ACK */
-#define DELAY_T5_MIN      600 /* the QMEG OS needs at least 300usec delay between ACK and complete */
+#define DELAY_T5_MIN      300 /* the QMEG OS needs at least 300usec delay between ACK and complete */
 #define DELAY_T3_PERIPH   150 /* QMEG OS 3 needs a delay of 150usec between complete and data */
 
 struct {
@@ -1525,8 +1525,8 @@ static void handle_write(sio_command_t command, int drive_number, fileTYPE *file
 	{
 		if(!pbi)
 		{
+			wait_us(850);
 			uart_send('A');
-			wait_us(850); // was DELAY_T2_MIN
 		}
 
 		FileSeek(file, location, SEEK_SET);
@@ -2142,12 +2142,11 @@ void atari800_init()
 
 	if(get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_BOOTX)
 	{
-		sprintf(mainpath, "%s/boot.rom", home);
-		user_io_file_tx(mainpath, 0 << 6);
-		sprintf(mainpath, "%s/boot1.rom", home);
-		user_io_file_tx(mainpath, 1 << 6);
-		sprintf(mainpath, "%s/boot2.rom", home);
-		user_io_file_tx(mainpath, 2 << 6);
+		for(int i = 0; i < 3; i++)
+		{
+			sprintf(mainpath, "%s/boot%d.rom", home, i);
+			user_io_file_tx(mainpath, i << 6);
+		}
 	}
 	sprintf(mainpath, "%s/boot3.rom", home);
 	user_io_file_tx(mainpath, 3 << 6);

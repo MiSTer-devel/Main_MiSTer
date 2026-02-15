@@ -270,7 +270,7 @@ void atari5200_init()
 	static char mainpath[512];
 	const char *home = HomeDir();
 
-	sprintf(mainpath, "%s/boot.rom", home);
+	sprintf(mainpath, "%s/boot0.rom", home);
 	user_io_file_tx(mainpath, 0);
 	atari5200_reset();
 }
