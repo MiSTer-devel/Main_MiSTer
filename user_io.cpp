@@ -324,6 +324,13 @@ char is_atari800()
 	return (is_atari800_type == 1);
 }
 
+static int is_atari5200_type = 0;
+char is_atari5200()
+{
+	if (!is_atari5200_type) is_atari5200_type = strcasecmp(orig_name, "Atari5200") ? 2 : 1;
+	return (is_atari5200_type == 1);
+}
+
 static int is_psx_type = 0;
 char is_psx()
 {
@@ -406,6 +413,7 @@ void user_io_read_core_name()
 	is_c64_type = 0;
 	is_c128_type = 0;
 	is_atari800_type = 0;
+	is_atari5200_type = 0;
 	is_psx_type = 0;
 	is_cdi_type = 0;
 	is_st_type = 0;
@@ -1534,6 +1542,10 @@ void user_io_init(const char *path, const char *xml)
 				else if (is_atari800())
 				{
 					atari800_init();
+				}
+				else if (is_atari5200())
+				{
+					atari5200_init();
 				}
 				else
 				{
@@ -3680,6 +3692,7 @@ void user_io_poll()
 		if (save_req) c64_save_cart(save_req >> 8);
 	}
 	if (is_atari800()) atari800_poll();
+	if (is_atari5200()) atari5200_poll();
 	process_ss(0);
 }
 

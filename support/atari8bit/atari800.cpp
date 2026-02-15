@@ -12,32 +12,7 @@
 // #include "../../scheduler.h"
 
 #include "atari800.h"
-
-#define A800_SIO_TX_STAT  0x03
-#define A800_SIO_RX       0x04
-#define A800_SIO_RX_STAT  0x05
-#define A800_SIO_GETDIV   0x06
-#define A800_SIO_ERROR    0x07
-
-#define A800_GET_REGISTER 0x08
-#define A800_SET_REGISTER 0x09
-
-#define REG_CART1_SELECT  0x01
-#define REG_CART2_SELECT  0x02
-#define REG_RESET         0x03
-#define REG_PAUSE         0x04
-#define REG_FREEZER       0x05
-#define REG_RESET_RNMI    0x06
-#define REG_OPTION_FORCE  0x07
-#define REG_DRIVE_LED     0x08
-#define REG_SIO_TX        0x09
-#define REG_SIO_SETDIV    0x0A
-
-#define REG_ATARI_STATUS1 0x01
-#define REG_ATARI_STATUS2 0x02
-
-#define SDRAM_BASE        0x2000000
-#define ATARI_BASE        0x0010000
+#include "atari8bit_defs.h"
 
 #define ATARI_COLDST      (ATARI_BASE + 0x244)
 #define ATARI_BASICF      (ATARI_BASE + 0x3F8)
@@ -249,25 +224,7 @@ static const cart_def_t cart_def[] =
 	{ 0, "", 0, 0 }
 };
 
-#define STATUS1_MASK_SOFTBOOT   0x0001
-#define STATUS1_MASK_COLDBOOT   0x0002
-#define STATUS1_MASK_HALT       0x0004
-#define STATUS1_MASK_MODE800    0x0008
-#define STATUS1_MASK_BOOTX      0x0010
-#define STATUS1_MASK_XEXLOC     0x0020
-#define STATUS1_MASK_RDONLY     0x0040
-#define STATUS1_MASK_MODEPBI    0x0080
-#define STATUS1_MASK_ATX1050    0x8000
-
-#define STATUS2_MASK_SPLASH     0x0800
-
-#define BUFFER_SIZE 8192
-
-#if BUFFER_SIZE < 8192
-#error BUFFER_SIZE is too small!
-#endif
-
-static uint8_t buffer[BUFFER_SIZE];
+uint8_t a8bit_buffer[BUFFER_SIZE];
 
 #define XEX_LOADER_LOC          7 // XEX Loader is at $700 by default
 
@@ -279,7 +236,7 @@ static uint8_t xex_file_first_block;
 static uint8_t xex_reloc;
 static uint32_t xex_loader_base;
 
-static void set_a800_reg(uint8_t reg, uint8_t val)
+void set_a8bit_reg(uint8_t reg, uint8_t val)
 {
 	EnableIO();
 	spi8(A800_SET_REGISTER);
@@ -287,7 +244,7 @@ static void set_a800_reg(uint8_t reg, uint8_t val)
 	DisableIO();
 }
 
-static uint16_t get_a800_reg(uint8_t reg)
+uint16_t get_a8bit_reg(uint8_t reg)
 {
 	uint16_t r;
 	EnableIO();
@@ -307,7 +264,7 @@ static uint16_t get_a800_reg2(uint8_t reg)
 	return r;
 }
 
-static void atari800_dma_write(const uint8_t *buf, uint32_t addr, uint32_t len)
+void atari8bit_dma_write(const uint8_t *buf, uint32_t addr, uint32_t len)
 {
 	user_io_set_index(99);
 	user_io_set_download(1, addr);
@@ -323,16 +280,16 @@ static void atari800_dma_read(uint8_t *buf, uint32_t addr, uint32_t len)
 	user_io_set_upload(0);
 }
 
-static void atari800_dma_zero(uint32_t addr, uint32_t len)
+void atari8bit_dma_zero(uint32_t addr, uint32_t len)
 {
-	memset(buffer, 0, BUFFER_SIZE);
+	memset(a8bit_buffer, 0, BUFFER_SIZE);
 	uint32_t to_write = len > BUFFER_SIZE ? BUFFER_SIZE : len;
 	
 	user_io_set_index(99);
 	user_io_set_download(1, addr);
 	while(len)
 	{
-		user_io_file_tx_data(buffer, to_write);
+		user_io_file_tx_data(a8bit_buffer, to_write);
 		len -= to_write;
 		to_write = len > BUFFER_SIZE ? BUFFER_SIZE : len;
 	}
@@ -343,19 +300,19 @@ static void reboot(uint8_t cold, uint8_t pause)
 {
 	int i;
 
-	set_a800_reg(REG_PAUSE, 1);
+	set_a8bit_reg(REG_PAUSE, 1);
 	if (cold)
 	{
-		set_a800_reg(REG_FREEZER, 0);
+		set_a8bit_reg(REG_FREEZER, 0);
 		// Initialize the first 64K of SDRAM with a pattern
 		for(i = 0; i < BUFFER_SIZE; i += 2)
 		{
-			buffer[i] = 0xFF;
-			buffer[i+1] = 0x00;
+			a8bit_buffer[i] = 0xFF;
+			a8bit_buffer[i+1] = 0x00;
 		}
 		user_io_set_index(99);
 		user_io_set_download(1, SDRAM_BASE);
-		for(i = 0; i < 0x10000 / BUFFER_SIZE; i++) user_io_file_tx_data(buffer, BUFFER_SIZE);
+		for(i = 0; i < 0x10000 / BUFFER_SIZE; i++) user_io_file_tx_data(a8bit_buffer, BUFFER_SIZE);
 		user_io_set_upload(0);
 	}
 	else
@@ -372,27 +329,27 @@ static void reboot(uint8_t cold, uint8_t pause)
 	// cycle does not allow to pre-init the OS to do a warm
 	// start, it will always be cold).
 
-	if((get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800) && (!cold || pause))
+	if((get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800) && (!cold || pause))
 	{
-		set_a800_reg(REG_RESET_RNMI, 1);
-		set_a800_reg(REG_RESET_RNMI, 0);
+		set_a8bit_reg(REG_RESET_RNMI, 1);
+		set_a8bit_reg(REG_RESET_RNMI, 0);
 	}
 	else
 	{
-		set_a800_reg(REG_RESET, 1);
-		set_a800_reg(REG_RESET, 0);
+		set_a8bit_reg(REG_RESET, 1);
+		set_a8bit_reg(REG_RESET, 0);
 	}
 
 	if(cold)
 	{
-		set_a800_reg(REG_FREEZER, 1);
+		set_a8bit_reg(REG_FREEZER, 1);
 	}
-	set_a800_reg(REG_PAUSE, pause);
+	set_a8bit_reg(REG_PAUSE, pause);
 }
 
 static void uart_init(uint8_t divisor)
 {
-	set_a800_reg(REG_SIO_SETDIV, (divisor << 1) + 1);
+	set_a8bit_reg(REG_SIO_SETDIV, (divisor << 1) + 1);
 }
 
 static uint8_t uart_full()
@@ -409,7 +366,7 @@ static void uart_send(uint8_t data)
 //		scheduler_yield();
 //#endif
 	}
-	set_a800_reg(REG_SIO_TX, data);
+	set_a8bit_reg(REG_SIO_TX, data);
 }
 
 static uint8_t uart_available()
@@ -431,7 +388,7 @@ static uint16_t uart_receive()
 static void uart_switch()
 {
 	// Working with this for a while now, I still have no clue what it does... :/
-	set_a800_reg(REG_SIO_SETDIV, (uint8_t)(get_a800_reg2(A800_SIO_GETDIV)-1));
+	set_a8bit_reg(REG_SIO_SETDIV, (uint8_t)(get_a800_reg2(A800_SIO_GETDIV)-1));
 }
 
 static uint16_t uart_error()
@@ -459,7 +416,7 @@ const char *atari800_get_cart_match_name(int match_index)
 void atari800_umount_cartridge(uint8_t stacked)
 {
 	// TODO Clever cart deselect 1 & 2 and reboot?
-	set_a800_reg(stacked ? REG_CART2_SELECT : REG_CART1_SELECT, 0);
+	set_a8bit_reg(stacked ? REG_CART2_SELECT : REG_CART1_SELECT, 0);
 	if(!stacked)
 	{
 		mounted_cart1_size = 0;
@@ -494,17 +451,17 @@ int atari800_check_cartridge_file(const char* name, unsigned char index)
 		{
 			to_read = f.size;
 		}
-		FileReadAdv(&f, buffer, to_read);
+		FileReadAdv(&f, a8bit_buffer, to_read);
 		FileClose(&f);
 		
 		if(cart_match_car)
 		{
 			// CAR file, presumably, let's check further
-			if (buffer[0] == 'C' && buffer[1] == 'A' && buffer[2] == 'R' && buffer[3] == 'T')
+			if (a8bit_buffer[0] == 'C' && a8bit_buffer[1] == 'A' && a8bit_buffer[2] == 'R' && a8bit_buffer[3] == 'T')
 			{
 				while (cart_def[idx].cart_type)
 				{
-					if(cart_def[idx].cart_type == buffer[7])
+					if(cart_def[idx].cart_type == a8bit_buffer[7])
 					{
 						cart_matches_idx[0] = idx;
 						cart_matches_mode[0] = cart_def[idx].cart_mode;
@@ -518,10 +475,10 @@ int atari800_check_cartridge_file(const char* name, unsigned char index)
 		else
 		{
 			// First check for Ultimate & SIDE2 SDX cartridges
-			if(to_read >= 0x2000 && buffer[0] == 'S' && buffer[1] == 'D' && buffer[2] == 'X' && (buffer[0x1FF3] == 0xE0 || buffer[0x1FF3] == 0xE1))
+			if(to_read >= 0x2000 && a8bit_buffer[0] == 'S' && a8bit_buffer[1] == 'D' && a8bit_buffer[2] == 'X' && (a8bit_buffer[0x1FF3] == 0xE0 || a8bit_buffer[0x1FF3] == 0xE1))
 			{
 				cart_matches_idx[0] = -1;
-				cart_matches_mode[0] = (buffer[0x1FF3] == 0xE1) ? TC_MODE_SDX_SIDE2 : TC_MODE_SDX_U1MB;
+				cart_matches_mode[0] = (a8bit_buffer[0x1FF3] == 0xE1) ? TC_MODE_SDX_SIDE2 : TC_MODE_SDX_U1MB;
 				cart_matches_total = 1;
 			}
 			else
@@ -546,17 +503,17 @@ int atari800_check_cartridge_file(const char* name, unsigned char index)
 void atari800_open_cartridge_file(const char* name, int match_index)
 {
 	uint8_t stacked = (cart_io_index & 0x3F) == 9;
-	uint8_t *buf = &buffer[0];
-	uint8_t *buf2 = &buffer[4096];
+	uint8_t *buf = &a8bit_buffer[0];
+	uint8_t *buf2 = &a8bit_buffer[4096];
 	fileTYPE f = {};
 	int offset = cart_match_car ? 16 : 0;
 	uint8_t cart_type = cart_def[cart_matches_idx[match_index]].cart_type;
 
 	if (FileOpen(&f, name))
 	{
-		set_a800_reg(REG_PAUSE, 1);
-		set_a800_reg(REG_CART2_SELECT, 0);
-		if(!stacked) set_a800_reg(REG_CART1_SELECT, 0);
+		set_a8bit_reg(REG_PAUSE, 1);
+		set_a8bit_reg(REG_CART2_SELECT, 0);
+		if(!stacked) set_a8bit_reg(REG_CART1_SELECT, 0);
 
 		ProgressMessage(0, 0, 0, 0);
 		FileSeek(&f, offset, SEEK_SET);
@@ -604,21 +561,21 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 				int to_read = f.size - offset;
 				if (to_read > BUFFER_SIZE) to_read = BUFFER_SIZE;
 				ProgressMessage("Loading", f.name, offset, f.size);
-				FileReadAdv(&f, buffer, to_read);
-				user_io_file_tx_data(buffer, to_read);
+				FileReadAdv(&f, a8bit_buffer, to_read);
+				user_io_file_tx_data(a8bit_buffer, to_read);
 				offset += to_read;
 			}
 		}
 		FileClose(&f);
 		user_io_set_download(0);
 		ProgressMessage(0, 0, 0, 0);
-		set_a800_reg(stacked ? REG_CART2_SELECT : REG_CART1_SELECT, cart_matches_mode[match_index]);
+		set_a8bit_reg(stacked ? REG_CART2_SELECT : REG_CART1_SELECT, cart_matches_mode[match_index]);
 		if(!stacked)
 		{
 			mounted_cart1_size = cart_match_car ? f.size - 16 : f.size;
 		}
 
-		if(!stacked || (get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800))
+		if(!stacked || (get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800))
 		{
 			reboot(1, 0);
 		}
@@ -628,7 +585,7 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 void atari800_open_bios_file(const char* name, unsigned char index)
 {
 	uint8_t bios_index = (index & 0x3F);
-	uint16_t mode800 = get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800;
+	uint16_t mode800 = get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800;
 	user_io_file_tx(name, index);
 	if((mode800 && bios_index == 6) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot(1, 0);
 }
@@ -897,7 +854,7 @@ static int loadAtxSector(int drv_num, uint16_t num, uint8_t *status)
 
 	int r = 1;
 	
-	uint8_t is1050 = get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_ATX1050 ? 1 : 0;
+	uint8_t is1050 = get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_ATX1050 ? 1 : 0;
 
 	// calculate track and relative sector number from the absolute sector number
 	uint8_t tgtTrackNumber = (num - 1) / atx_info[drv_num].sectorsPerTrack;
@@ -1141,7 +1098,7 @@ static int loadAtxSector(int drv_num, uint16_t num, uint8_t *status)
 static int speed_index = 0;
 static const uint8_t speeds[] = {0x28, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00};
 
-#define ui_speed_index ((get_a800_reg(REG_ATARI_STATUS1) >> 8) & 0x07)
+#define ui_speed_index ((get_a8bit_reg(REG_ATARI_STATUS1) >> 8) & 0x07)
 
 static uint8_t get_checksum(uint8_t* buf, int len)
 {
@@ -1280,7 +1237,7 @@ static void set_drive_status(int drive_number, const char *name, uint8_t ext_ind
 	}
 
 	uint8_t read_only = (ext_index == 1) || (ext_index == 3) ||
-		!FileCanWrite(name) || (get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_RDONLY);
+		!FileCanWrite(name) || (get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_RDONLY);
 
 
 	if(!FileOpenEx(&drive_infos[drive_number].file, name, read_only ? O_RDONLY : (O_RDWR | O_SYNC))) return;
@@ -1448,9 +1405,9 @@ static void handle_device_info(sio_command_t command, int drive_number, fileTYPE
 	action->sector_buffer[11] = drive_infos[drive_number].sector_count >> 24;
 	if(drive_number == MAX_DRIVES)
 	{
-		atari800_dma_read(buffer, ATARI_BASE + 0xDFA0, 0x60);
-		memcpy(&action->sector_buffer[0x10], &buffer[0x0F], buffer[0x0E]);
-		memcpy(&action->sector_buffer[0x38], &buffer[0x38], buffer[0x37]);
+		atari800_dma_read(a8bit_buffer, ATARI_BASE + 0xDFA0, 0x60);
+		memcpy(&action->sector_buffer[0x10], &a8bit_buffer[0x0F], a8bit_buffer[0x0E]);
+		memcpy(&action->sector_buffer[0x38], &a8bit_buffer[0x38], a8bit_buffer[0x37]);
 	}
 	else
 	{
@@ -1597,11 +1554,11 @@ static void handle_write(sio_command_t command, int drive_number, fileTYPE *file
 		if (command.command == 0x57)
 		{
 			FileSeek(file, location, SEEK_SET);
-			FileReadAdv(file, buffer, sector_size);
+			FileReadAdv(file, a8bit_buffer, sector_size);
 
 			for (int i = 0; i < sector_size; i++)
 			{
-				if (buffer[i] != action->sector_buffer[i]) ok = 0;
+				if (a8bit_buffer[i] != action->sector_buffer[i]) ok = 0;
 			}
 		}
 
@@ -1832,7 +1789,7 @@ static void process_command()
 	{
 		fileTYPE *file = &drive_infos[drive].file;
 		if (!file->opened()) return;
-		set_a800_reg(REG_DRIVE_LED, 1);
+		set_a8bit_reg(REG_DRIVE_LED, 1);
 
 		pre_ce_delay = DELAY_T5_MIN;
 		pre_an_delay = DELAY_T2_MIN;
@@ -1863,7 +1820,7 @@ static void process_command()
 		{
 			uart_send('N');
 		}
-		set_a800_reg(REG_DRIVE_LED, 0);
+		set_a8bit_reg(REG_DRIVE_LED, 0);
 	}
 }
 
@@ -1875,45 +1832,45 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 		{
 			xex_file_first_block = 1;
 			reboot(1, 1);
-			set_a800_reg(REG_CART1_SELECT, 0);
-			set_a800_reg(REG_CART2_SELECT, 0);
-			uint16_t atari_status1 = get_a800_reg(REG_ATARI_STATUS1);
+			set_a8bit_reg(REG_CART1_SELECT, 0);
+			set_a8bit_reg(REG_CART2_SELECT, 0);
+			uint16_t atari_status1 = get_a8bit_reg(REG_ATARI_STATUS1);
 
-			atari800_dma_zero(SDRAM_BASE, 0x10000);
+			atari8bit_dma_zero(SDRAM_BASE, 0x10000);
 			xex_reloc = (atari_status1 & STATUS1_MASK_XEXLOC) ? 1 : XEX_LOADER_LOC;
 			xex_loader_base = ATARI_BASE + xex_reloc * 0x100;
-			atari800_dma_write(xex_loader, ATARI_BASE + XEX_LOADER_LOC * 0x100, (uint32_t)sizeof(xex_loader));
+			atari8bit_dma_write(xex_loader, ATARI_BASE + XEX_LOADER_LOC * 0x100, (uint32_t)sizeof(xex_loader));
 			static uint8_t write_bytes[4];
 			if (xex_reloc != XEX_LOADER_LOC)
 			{
 				write_bytes[0] = xex_reloc;
-				atari800_dma_write(write_bytes, ATARI_BASE + XEX_LOADER_LOC * 0x100 + XEX_STACK_FLAG, 1);			
+				atari8bit_dma_write(write_bytes, ATARI_BASE + XEX_LOADER_LOC * 0x100 + XEX_STACK_FLAG, 1);			
 			}
 
 			
 			write_bytes[0] = 0;
-			atari800_dma_write(write_bytes, ATARI_COLDST, 1);			
-			atari800_dma_write(write_bytes, ATARI_GINTLK, 1);			
+			atari8bit_dma_write(write_bytes, ATARI_COLDST, 1);			
+			atari8bit_dma_write(write_bytes, ATARI_GINTLK, 1);			
 			write_bytes[0] = 1;
-			atari800_dma_write(write_bytes, ATARI_BASICF, 1);			
+			atari8bit_dma_write(write_bytes, ATARI_BASICF, 1);			
 			write_bytes[0] = 2;
-			atari800_dma_write(write_bytes, ATARI_BOOTFLAG, 1);
+			atari8bit_dma_write(write_bytes, ATARI_BOOTFLAG, 1);
 			write_bytes[0] = XEX_INIT1;
 			write_bytes[1] = 0x07;
-			atari800_dma_write(write_bytes, ATARI_CASINI, 2);
+			atari8bit_dma_write(write_bytes, ATARI_CASINI, 2);
 			write_bytes[0] = 0x71;
 			write_bytes[1] = 0xE4;
-			atari800_dma_write(write_bytes, ATARI_DOSVEC, 2);
+			atari8bit_dma_write(write_bytes, ATARI_DOSVEC, 2);
 
 			if(!(atari_status1 & STATUS1_MASK_MODE800))
 			{
 				write_bytes[0] = 0x5C;
 				write_bytes[1] = 0x93;
 				write_bytes[2] = 0x25;
-				atari800_dma_write(write_bytes, ATARI_PUPBT, 3);						
+				atari8bit_dma_write(write_bytes, ATARI_PUPBT, 3);						
 			}
 			
-			set_a800_reg(REG_PAUSE, 0);
+			set_a8bit_reg(REG_PAUSE, 0);
 
 		}
 		else
@@ -1925,16 +1882,16 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 	{
 		if(name[0])
 		{
-			set_a800_reg(REG_PAUSE, 1);
-			set_a800_reg(REG_CART1_SELECT, 0);
-			set_a800_reg(REG_CART2_SELECT, 0);
+			set_a8bit_reg(REG_PAUSE, 1);
+			set_a8bit_reg(REG_CART1_SELECT, 0);
+			set_a8bit_reg(REG_CART2_SELECT, 0);
 		}
 		set_drive_status(0, name, ext_index);
 		if(name[0])
 		{
 			reboot(1, 0);
-			set_a800_reg(REG_OPTION_FORCE, 1);
-			set_a800_reg(REG_OPTION_FORCE, 0);
+			set_a8bit_reg(REG_OPTION_FORCE, 1);
+			set_a8bit_reg(REG_OPTION_FORCE, 0);
 		}
 	}
 	else if(file_index < 5) // 5 is the HDD and requires slightly different handling
@@ -1950,7 +1907,7 @@ static uint8_t process_command_pbi(const uint8_t *drives_config)
 	// mark a bit (0x40) in deviceId to indicate this is PBI, this is not the same
 	// as the XDCB bit (0x80)
 
-	set_a800_reg(REG_DRIVE_LED, 1);
+	set_a8bit_reg(REG_DRIVE_LED, 1);
 
 	static uint8_t iocb[16];
 	atari800_dma_read(iocb, ATARI_BASE + 0x300, 16);
@@ -2024,8 +1981,8 @@ static uint8_t process_command_pbi(const uint8_t *drives_config)
 			{
 				iocb[8] = action.bytes & 0xFF;
 				iocb[9] = (action.bytes >> 8) & 0xFF;
-				atari800_dma_write(atari_sector_buffer, ATARI_BASE + (iocb[4] | (iocb[5] << 8)), action.bytes);
-				atari800_dma_write(&iocb[0x08], ATARI_BASE + 0x308, 2);
+				atari8bit_dma_write(atari_sector_buffer, ATARI_BASE + (iocb[4] | (iocb[5] << 8)), action.bytes);
+				atari8bit_dma_write(&iocb[0x08], ATARI_BASE + 0x308, 2);
 			}
 			iocb[3] = action.success ? 0x01 : 0x90;
 		}
@@ -2034,14 +1991,14 @@ static uint8_t process_command_pbi(const uint8_t *drives_config)
 			iocb[3] = 0x8B;
 		}		
 	}
-	atari800_dma_write(&iocb[0x03], ATARI_BASE + 0x303, 1);
-	set_a800_reg(REG_DRIVE_LED, 0);
+	atari8bit_dma_write(&iocb[0x03], ATARI_BASE + 0x303, 1);
+	set_a8bit_reg(REG_DRIVE_LED, 0);
 	return mode;
 }
 
 void handle_pbi()
 {
-	if(!(get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODEPBI)) return;
+	if(!(get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODEPBI)) return;
 	
 	static uint8_t pbi_ram_base[16];
 	static uint8_t pbi_drives_config[4];
@@ -2050,7 +2007,7 @@ void handle_pbi()
 
 	if(pbi_ram_base[0] == 0xa5 && pbi_ram_base[1] == 0xa5)
 	{
-		uint16_t atari_status2 = get_a800_reg(REG_ATARI_STATUS2);
+		uint16_t atari_status2 = get_a8bit_reg(REG_ATARI_STATUS2);
 
 		if(pbi_ram_base[3] == 0x01)
 		{
@@ -2073,29 +2030,29 @@ void handle_pbi()
 			{
 				pbi_ram_base[0x0A] = boot_drv - 1;
 			}
-			atari800_dma_write(&pbi_ram_base[0x0A], ATARI_BASE + 0xD10A, 6);
+			atari8bit_dma_write(&pbi_ram_base[0x0A], ATARI_BASE + 0xD10A, 6);
 			pbi_ram_base[2] = atari_status2 & STATUS2_MASK_SPLASH ? 1 : 0;
 			// Important - this has to be alone and last!
 			pbi_ram_base[3] = 0;
-			atari800_dma_write(&pbi_ram_base[0x02], ATARI_BASE + 0xD102, 2);
+			atari8bit_dma_write(&pbi_ram_base[0x02], ATARI_BASE + 0xD102, 2);
 		}
 		else if(pbi_ram_base[5] == 0x01)
 		{
 			pbi_ram_base[4] = process_command_pbi(pbi_drives_config);
 			pbi_ram_base[5] = 0;
 			// Same here with the order
-			atari800_dma_write(&pbi_ram_base[0x04], ATARI_BASE + 0xD104, 2);
+			atari8bit_dma_write(&pbi_ram_base[0x04], ATARI_BASE + 0xD104, 2);
 		}
 	}
 }
 
 static void handle_xex()
 {
-	atari800_dma_read(buffer, xex_loader_base, XEX_READ_STATUS+1);
+	atari800_dma_read(a8bit_buffer, xex_loader_base, XEX_READ_STATUS+1);
 	
-	if(buffer[0] == 0x60)
+	if(a8bit_buffer[0] == 0x60)
 	{
-		if(!buffer[XEX_READ_STATUS])
+		if(!a8bit_buffer[XEX_READ_STATUS])
 		{
 			uint8_t len_buf[2];
 			int read_offset, to_read, read_len;
@@ -2104,9 +2061,9 @@ static void handle_xex()
 			len_buf[1] = 0xFF;
 
 			// Point to rts
-			buffer[0] = 0x00;
-			buffer[1] = xex_reloc;
-			atari800_dma_write(buffer, ATARI_INITAD, 2);
+			a8bit_buffer[0] = 0x00;
+			a8bit_buffer[1] = xex_reloc;
+			atari8bit_dma_write(a8bit_buffer, ATARI_INITAD, 2);
 			
 			while(len_buf[0] == 0xFF && len_buf[1] == 0xFF)
 			{
@@ -2116,7 +2073,7 @@ static void handle_xex()
 			if(xex_file_first_block)
 			{
 				xex_file_first_block = 0;					
-				atari800_dma_write(len_buf, ATARI_RUNAD, 2);
+				atari8bit_dma_write(len_buf, ATARI_RUNAD, 2);
 			}
 			
 			if(FileReadAdv(&xex_file, len_buf, 2) != 2) goto xex_eof;
@@ -2128,23 +2085,23 @@ static void handle_xex()
 			
 			while(read_len)
 			{
-				if(FileReadAdv(&xex_file, buffer, to_read) != to_read) goto xex_eof;
-				atari800_dma_write(buffer, ATARI_BASE + read_offset, to_read);
+				if(FileReadAdv(&xex_file, a8bit_buffer, to_read) != to_read) goto xex_eof;
+				atari8bit_dma_write(a8bit_buffer, ATARI_BASE + read_offset, to_read);
 				read_len -= to_read;
 				read_offset += to_read;
 				to_read = read_len > BUFFER_SIZE ? BUFFER_SIZE : read_len;
 			}
 
-			buffer[0] = 0x01;
-			atari800_dma_write(buffer, xex_loader_base + XEX_READ_STATUS, 1);
+			a8bit_buffer[0] = 0x01;
+			atari8bit_dma_write(a8bit_buffer, xex_loader_base + XEX_READ_STATUS, 1);
 		}
 	}
 	// Is loader done?
-	else if(buffer[0] == 0x5F)
+	else if(a8bit_buffer[0] == 0x5F)
 xex_eof:
 	{
-		buffer[0] = 0xFF;
-		atari800_dma_write(buffer, xex_loader_base + XEX_READ_STATUS, 1);
+		a8bit_buffer[0] = 0xFF;
+		atari8bit_dma_write(a8bit_buffer, xex_loader_base + XEX_READ_STATUS, 1);
 		FileClose(&xex_file);
 	}
 
@@ -2152,9 +2109,9 @@ xex_eof:
 
 void atari800_poll()
 {
-	uint16_t atari_status1 = get_a800_reg(REG_ATARI_STATUS1);
+	uint16_t atari_status1 = get_a8bit_reg(REG_ATARI_STATUS1);
 
-	set_a800_reg(REG_PAUSE, atari_status1 & STATUS1_MASK_HALT);
+	set_a8bit_reg(REG_PAUSE, atari_status1 & STATUS1_MASK_HALT);
 
 	if (atari_status1 & STATUS1_MASK_SOFTBOOT)
 	{
@@ -2172,7 +2129,7 @@ void atari800_poll()
 
 void atari800_init()
 {
-	set_a800_reg(REG_PAUSE, 1);
+	set_a8bit_reg(REG_PAUSE, 1);
 	cart_matches_total = 0;
 	cart_match_car = 0;
 
@@ -2183,7 +2140,7 @@ void atari800_init()
 	static char mainpath[512];
 	const char *home = HomeDir();
 
-	if(get_a800_reg(REG_ATARI_STATUS1) & STATUS1_MASK_BOOTX)
+	if(get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_BOOTX)
 	{
 		sprintf(mainpath, "%s/boot.rom", home);
 		user_io_file_tx(mainpath, 0 << 6);
@@ -2199,11 +2156,11 @@ void atari800_init()
 
 void atari800_reset()
 {
-	set_a800_reg(REG_PAUSE, 1);
-	set_a800_reg(REG_CART1_SELECT, 0);
+	set_a8bit_reg(REG_PAUSE, 1);
+	set_a8bit_reg(REG_CART1_SELECT, 0);
 	mounted_cart1_size = 0;
-	set_a800_reg(REG_CART2_SELECT, 0);
-	set_a800_reg(REG_FREEZER, 0);
+	set_a8bit_reg(REG_CART2_SELECT, 0);
+	set_a8bit_reg(REG_FREEZER, 0);
 	for(int i=0; i <= MAX_DRIVES; i++)
 	{
 		FileClose(&drive_infos[i].file);

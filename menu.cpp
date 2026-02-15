@@ -2181,7 +2181,7 @@ void HandleUI(void)
 						if (is_gba() && FileExists(user_io_make_filepath(HomeDir(), "goomba.rom"))) strcat(ext, "GB GBC");
 						while (strlen(ext) % 3) strcat(ext, " ");
 
-						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0) | (store_name ? SCANO_CLEAR : 0) | (is_atari800() && (ioctl_index == 8 || ioctl_index == 9) ? SCANO_UMOUNT : 0);
+						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0) | (store_name ? SCANO_CLEAR : 0) | (is_atari5200() || (is_atari800() && (ioctl_index == 8 || ioctl_index == 9)) ? SCANO_UMOUNT : 0);
 						fs_MenuSelect = MENU_GENERIC_FILE_SELECTED;
 						fs_MenuCancel = MENU_GENERIC_MAIN1;
 						strcpy(fs_pFileExt, ext);
@@ -2355,6 +2355,7 @@ void HandleUI(void)
 									if (is_n64() && !bit) n64_reset();
 									if (is_psx() && !bit) psx_reset();
 									if (is_atari800() && !bit) atari800_reset();
+									if (is_atari5200() && !bit) atari5200_reset();
 
 									user_io_status_set(opt, 1, ex);
 									user_io_status_set(opt, 0, ex);
@@ -2409,7 +2410,7 @@ void HandleUI(void)
 				}
 			}
 
-			if(!(selPath[0] && is_atari800() && (ioctl_index == 8 || ioctl_index == 9))) MenuHide();
+			if(!(selPath[0] && (is_atari5200() || (is_atari800() && (ioctl_index == 8 || ioctl_index == 9))))) MenuHide();
 			printf("File selected: %s\n", selPath);
 			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
 
@@ -2488,6 +2489,10 @@ void HandleUI(void)
 			else if(is_atari800() && (ioctl_index == 8 || ioctl_index == 9))
 			{
 				atari800_umount_cartridge(ioctl_index == 9);
+			}
+			else if(is_atari5200())
+			{
+				atari5200_umount_cartridge();
 			}
 
 			mgl->state = 3;

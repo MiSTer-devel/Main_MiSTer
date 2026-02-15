@@ -168,7 +168,8 @@
     <ClInclude Include="support\arcade\mra_loader.h" />
     <ClInclude Include="support\archie\archie.h" />
     <ClInclude Include="support\c64\c64.h" />
-    <ClInclude Include="support\atari800\atari800.h" />
+    <ClInclude Include="support\atari8bit\atari800.h" />
+    <ClInclude Include="support\atari8bit\atari5200.h" />
     <ClInclude Include="support\chd\mister_chd.h" />
     <ClInclude Include="support\megacd\megacd.h" />
     <ClInclude Include="support\minimig\miminig_fs_messages.h" />

@@ -1,0 +1,43 @@
+#define STATUS1_MASK_SOFTBOOT   0x0001
+#define STATUS1_MASK_COLDBOOT   0x0002
+#define STATUS1_MASK_HALT       0x0004
+#define STATUS1_MASK_MODE800    0x0008
+#define STATUS1_MASK_BOOTX      0x0010
+#define STATUS1_MASK_XEXLOC     0x0020
+#define STATUS1_MASK_RDONLY     0x0040
+#define STATUS1_MASK_MODEPBI    0x0080
+#define STATUS1_MASK_ATX1050    0x8000
+
+#define STATUS2_MASK_SPLASH     0x0800
+
+#define BUFFER_SIZE 8192
+
+#if BUFFER_SIZE < 8192
+#error BUFFER_SIZE is too small!
+#endif
+
+#define A800_SIO_TX_STAT  0x03
+#define A800_SIO_RX       0x04
+#define A800_SIO_RX_STAT  0x05
+#define A800_SIO_GETDIV   0x06
+#define A800_SIO_ERROR    0x07
+
+#define A800_GET_REGISTER 0x08
+#define A800_SET_REGISTER 0x09
+
+#define REG_CART1_SELECT  0x01
+#define REG_CART2_SELECT  0x02
+#define REG_RESET         0x03
+#define REG_PAUSE         0x04
+#define REG_FREEZER       0x05
+#define REG_RESET_RNMI    0x06
+#define REG_OPTION_FORCE  0x07
+#define REG_DRIVE_LED     0x08
+#define REG_SIO_TX        0x09
+#define REG_SIO_SETDIV    0x0A
+
+#define REG_ATARI_STATUS1 0x01
+#define REG_ATARI_STATUS2 0x02
+
+#define SDRAM_BASE        0x2000000
+#define ATARI_BASE        0x0010000
