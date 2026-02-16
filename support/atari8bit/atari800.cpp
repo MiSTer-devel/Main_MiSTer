@@ -364,7 +364,7 @@ static void uart_send(uint8_t data)
 //#ifdef USE_SCHEDULER // TODO ?
 //		scheduler_yield();
 //#endif
-		usleep(200);
+		usleep(100);
 	}
 	set_a8bit_reg(REG_SIO_TX, data);
 }
@@ -737,7 +737,7 @@ static uint32_t pre_ce_delay;
 static uint32_t pre_an_delay;
 
 #define DELAY_T2_MIN      100 /* BiboDos needs at least 50us delay before ACK */
-#define DELAY_T5_MIN      300 /* the QMEG OS needs at least 300usec delay between ACK and complete */
+#define DELAY_T5_MIN      600 /* It seems DOS2.0S needs at least 600us delay to function properly  */
 #define DELAY_T3_PERIPH   150 /* QMEG OS 3 needs a delay of 150usec between complete and data */
 
 struct {
