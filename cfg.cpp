@@ -134,6 +134,7 @@ static const ini_var_t ini_vars[] =
 	{ "MAIN", (void*)(&(cfg.main)), STRING, 0, sizeof(cfg.main) - 1 },
 	{"VFILTER_INTERLACE_DEFAULT", (void*)(&(cfg.vfilter_interlace_default)), STRING, 0, sizeof(cfg.vfilter_interlace_default) - 1 },
 	{ "AUTOFIRE_RATES", (void *)(&(cfg.autofire_rates)), STRING, 0, sizeof(cfg.autofire_rates) - 1 },
+	{ "AUTOSAVE_INTERVAL", (void *)(&(cfg.autosave_interval)), UINT16, 0, 3600 },
 
 };
 
@@ -598,6 +599,7 @@ void cfg_parse()
 	using_video_section = false;
 	cfg_error_count = 0;
 	strcpy(cfg.autofire_rates, "10,15,30");
+	cfg.autosave_interval = 0;
 	ini_parse(altcfg(), video_get_core_mode_name(1));
 	if (has_video_sections && !using_video_section)
 	{
