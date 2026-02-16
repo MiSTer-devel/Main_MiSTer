@@ -9,7 +9,8 @@
 #include "../../debug.h"
 #include "../../user_io.h"
 #include "../../fpga_io.h"
-// #include "../../scheduler.h"
+#include "../../scheduler.h"
+#include "../../input.h"
 
 #include "atari800.h"
 #include "atari8bit_defs.h"
@@ -359,12 +360,21 @@ static uint8_t uart_full()
 
 static void uart_send(uint8_t data)
 {
+#ifdef USE_SCHEDULER
+	int counter = 0;
+#endif
 	while(uart_full())
 	{
-//#ifdef USE_SCHEDULER // TODO ?
-//		scheduler_yield();
-//#endif
 		usleep(100);
+#ifdef USE_SCHEDULER
+		counter++;
+		if(counter > 10)
+		{
+			counter = 0;
+			input_poll(0);
+			scheduler_yield();
+		}
+#endif
 	}
 	set_a8bit_reg(REG_SIO_TX, data);
 }
@@ -376,11 +386,21 @@ static uint8_t uart_available()
 
 static uint16_t uart_receive()
 {
+#ifdef USE_SCHEDULER
+	int counter = 0;
+#endif
 	while(!uart_available())
 	{
-//#ifdef USE_SCHEDULER // TODO ?
-//		scheduler_yield();
-//#endif
+		usleep(100);
+		counter++;
+#ifdef USE_SCHEDULER
+		if(counter > 10)
+		{
+			counter = 0;
+			input_poll(0);
+			scheduler_yield();
+		}
+#endif
 	}
 	return get_a800_reg2(A800_SIO_RX);
 }
@@ -768,9 +788,17 @@ static uint64_t get_us(uint64_t offset)
 	return (uint64_t)(res + offset);
 }
 
-static uint64_t check_us(uint64_t time)
+static uint8_t check_us(uint64_t time)
 {
-	return (!time) || (get_us(0) >= time);
+	long int remaining = time - get_us(0);
+#ifdef USE_SCHEDULER
+	if(remaining >= (long int)10000)
+	{
+		input_poll(0);
+		scheduler_yield();
+	}
+#endif
+	return remaining <= 0;
 }
 
 static void wait_us(uint64_t time)
