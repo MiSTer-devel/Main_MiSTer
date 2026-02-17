@@ -199,6 +199,7 @@ char has_menu();
 const char *get_image_name(int i);
 fileTYPE *get_image(int i);
 void user_io_mark_save_dirty(unsigned char index);
+int user_io_sqlite_sram_only();
 
 int user_io_get_kbdemu();
 uint32_t user_io_get_uart_mode();

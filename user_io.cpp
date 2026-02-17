@@ -160,6 +160,8 @@ static bool sram_snapshot_prepare_db(sqlite3 *db)
 	return true;
 }
 
+static void sram_snapshot_configure_slot(uint8_t slot, const char *save_path);
+
 static bool sram_snapshot_read_image(uint8_t slot, std::vector<uint8_t> &data)
 {
 	if (slot >= SRAM_SNAPSHOT_MAX_SLOTS) return false;
@@ -252,6 +254,153 @@ static bool sram_snapshot_insert(sqlite3 *db, const std::vector<uint8_t> &data)
 	return true;
 }
 
+static bool sram_snapshot_open_db(const char *db_path, sqlite3 **db)
+{
+	char full_db_path[2100] = {};
+	snprintf(full_db_path, sizeof(full_db_path), "%s", getFullPath(db_path));
+
+	sqlite3 *tmp_db = 0;
+	int rc = sqlite3_open_v2(full_db_path, &tmp_db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 0);
+	if (rc != SQLITE_OK)
+	{
+		printf("SRAM snapshot sqlite error: cannot open %s\n", full_db_path);
+		if (tmp_db) sqlite3_close(tmp_db);
+		return false;
+	}
+
+	sqlite3_busy_timeout(tmp_db, 10000);
+	if (!sram_snapshot_prepare_db(tmp_db))
+	{
+		sqlite3_close(tmp_db);
+		return false;
+	}
+
+	*db = tmp_db;
+	return true;
+}
+
+static bool sram_snapshot_load_latest(const char *db_path, std::vector<uint8_t> &data, bool *found)
+{
+	*found = false;
+	data.clear();
+
+	sqlite3 *db = 0;
+	if (!sram_snapshot_open_db(db_path, &db)) return false;
+
+	sqlite3_stmt *stmt = 0;
+	bool ok = true;
+	if (sqlite3_prepare_v2(db, "SELECT sram FROM snapshots ORDER BY id DESC LIMIT 1;", -1, &stmt, 0) != SQLITE_OK)
+	{
+		ok = false;
+	}
+	else
+	{
+		const int rc = sqlite3_step(stmt);
+		if (rc == SQLITE_ROW)
+		{
+			const int blob_size = sqlite3_column_bytes(stmt, 0);
+			const uint8_t *blob = (const uint8_t*)sqlite3_column_blob(stmt, 0);
+			if (blob_size > 0 && blob)
+			{
+				data.assign(blob, blob + blob_size);
+			}
+			*found = true;
+		}
+		else if (rc != SQLITE_DONE)
+		{
+			ok = false;
+		}
+		sqlite3_finalize(stmt);
+	}
+
+	sqlite3_close(db);
+	return ok;
+}
+
+static bool sram_snapshot_write_image(fileTYPE *img, const uint8_t *data, size_t size)
+{
+	if (!img || !img->filp) return false;
+	if (!FileSeek(img, 0, SEEK_SET)) return false;
+
+	if (size)
+	{
+		const int write_size = FileWriteAdv(img, (void*)data, (int)size, -1);
+		if (write_size != (int)size) return false;
+	}
+
+	return FileSeek(img, 0, SEEK_SET);
+}
+
+static bool sram_snapshot_mount_virtual(uint8_t slot, const char *save_path, int pre_size)
+{
+	if (slot >= SRAM_SNAPSHOT_MAX_SLOTS || !save_path || !save_path[0]) return false;
+
+	sram_snapshot_configure_slot(slot, save_path);
+
+	char tmp_path[64] = {};
+	snprintf(tmp_path, sizeof(tmp_path), "/tmp/mister_sram_slot_%u.bin", slot);
+
+	if (!FileOpenEx(&sd_image[slot], tmp_path, O_CREAT | O_RDWR | O_TRUNC | O_SYNC, 1, 0))
+	{
+		printf("SRAM snapshot error: failed to create temporary save image \"%s\".\n", tmp_path);
+		sram_snapshot_configure_slot(slot, 0);
+		return false;
+	}
+
+	std::vector<uint8_t> latest;
+	bool found = false;
+	if (!sram_snapshot_load_latest(sram_snapshot_slots[slot].db_path, latest, &found))
+	{
+		printf("SRAM snapshot warning: failed to load latest snapshot for \"%s\".\n", save_path);
+	}
+
+	if (found && !latest.empty())
+	{
+		if (!sram_snapshot_write_image(&sd_image[slot], latest.data(), latest.size()))
+		{
+			printf("SRAM snapshot error: failed to restore snapshot for \"%s\".\n", save_path);
+			FileClose(&sd_image[slot]);
+			sram_snapshot_configure_slot(slot, 0);
+			return false;
+		}
+		printf("SRAM snapshot loaded: %s (%d bytes)\n", save_path, (int)latest.size());
+	}
+	else if (pre_size > 0)
+	{
+		static uint8_t ff_buf[4096] = {};
+		static bool ff_init = false;
+		if (!ff_init)
+		{
+			memset(ff_buf, 0xFF, sizeof(ff_buf));
+			ff_init = true;
+		}
+
+		if (!FileSeek(&sd_image[slot], 0, SEEK_SET))
+		{
+			FileClose(&sd_image[slot]);
+			sram_snapshot_configure_slot(slot, 0);
+			return false;
+		}
+
+		int remaining = pre_size;
+		while (remaining > 0)
+		{
+			int chunk = (remaining > (int)sizeof(ff_buf)) ? (int)sizeof(ff_buf) : remaining;
+			if (FileWriteAdv(&sd_image[slot], ff_buf, chunk, -1) != chunk)
+			{
+				FileClose(&sd_image[slot]);
+				sram_snapshot_configure_slot(slot, 0);
+				return false;
+			}
+			remaining -= chunk;
+		}
+
+		FileSeek(&sd_image[slot], 0, SEEK_SET);
+	}
+
+	return true;
+}
+
 static void sram_snapshot_try_flush(uint8_t slot)
 {
 	if (slot >= SRAM_SNAPSHOT_MAX_SLOTS) return;
@@ -266,22 +415,13 @@ static void sram_snapshot_try_flush(uint8_t slot)
 		return;
 	}
 
-	char full_db_path[2100] = {};
-	snprintf(full_db_path, sizeof(full_db_path), "%s", getFullPath(state.db_path));
-
 	sqlite3 *db = 0;
-	int rc = sqlite3_open_v2(full_db_path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 0);
-	if (rc != SQLITE_OK)
+	if (!sram_snapshot_open_db(state.db_path, &db))
 	{
-		printf("SRAM snapshot sqlite error: cannot open %s\n", full_db_path);
-		if (db) sqlite3_close(db);
 		state.flush_timer = GetTimer(SRAM_SNAPSHOT_RETRY_MS);
 		return;
 	}
-
-	sqlite3_busy_timeout(db, 10000);
-
-	bool ok = sram_snapshot_prepare_db(db);
+	bool ok = true;
 	bool unchanged = false;
 
 	if (ok) ok = sram_snapshot_latest_matches(db, data, &unchanged);
@@ -369,6 +509,13 @@ static bool sram_snapshot_enabled(uint8_t slot)
 {
 	return (slot < SRAM_SNAPSHOT_MAX_SLOTS) && sram_snapshot_slots[slot].enabled;
 }
+
+static void sram_snapshot_flush_slot(uint8_t slot)
+{
+	if (slot >= SRAM_SNAPSHOT_MAX_SLOTS) return;
+	if (!sram_snapshot_slots[slot].enabled || !sram_snapshot_slots[slot].dirty) return;
+	sram_snapshot_try_flush(slot);
+}
 #else
 static bool sram_snapshot_has_write_delta(fileTYPE *, uint64_t, const uint8_t *, uint32_t)
 {
@@ -387,6 +534,15 @@ static bool sram_snapshot_enabled(uint8_t)
 {
 	return false;
 }
+
+static bool sram_snapshot_mount_virtual(uint8_t, const char *, int)
+{
+	return false;
+}
+
+static void sram_snapshot_flush_slot(uint8_t)
+{
+}
 #endif
 
 void user_io_mark_save_dirty(unsigned char index)
@@ -399,6 +555,15 @@ void user_io_mark_save_dirty(unsigned char index)
 	{
 		sram_snapshot_slots[index].flush_timer = GetTimer(SRAM_SNAPSHOT_INTERVAL_MS);
 	}
+}
+
+int user_io_sqlite_sram_only()
+{
+#if SQLITE_SRAM_SNAPSHOTS
+	return 1;
+#else
+	return 0;
+#endif
 }
 
 // mouse and keyboard emulation state
@@ -2373,16 +2538,29 @@ void user_io_file_info(const char *ext)
 
 int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_size)
 {
+	if (index >= 16)
+	{
+		printf("Invalid mount index: %u\n", index);
+		return 0;
+	}
+
 	int writable = 0;
 	int ret = 0;
 	int len = strlen(name);
 	int img_type = 0; // disk image type (for C128 core): bit 0=dual sided, 1=raw GCR supported, 2=raw MFM supported, 3=high density
 
+	sram_snapshot_flush_slot(index);
+
 	sd_image_cangrow[index] = (pre != 0);
 	sd_type[index] = SD_TYPE_DEFAULT ;
 	if (len)
 	{
-		if (!ret)
+		if (pre)
+		{
+			writable = 1;
+			ret = sram_snapshot_mount_virtual(index, name, pre_size);
+		}
+		else if (!ret)
 		{
 			if (x2trd_ext_supp(name))
 			{
@@ -2442,7 +2620,8 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 
 		if (!ret)
 		{
-			printf("Failed to open file %s\n", name);
+			if (pre) printf("Failed to mount SQLite-backed save for %s\n", name);
+			else printf("Failed to open file %s\n", name);
 		}
 	}
 	else
@@ -2454,8 +2633,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	buffer_lba[index] = -1;
 	if (!index || is_cdi() || (is_saturn() && index==1)) use_save = pre;
 
-	if (pre && len) sram_snapshot_configure_slot(index, name);
-	else sram_snapshot_configure_slot(index, 0);
+	if (!(pre && len && ret)) sram_snapshot_configure_slot(index, 0);
 
 	if (!ret)
 	{
@@ -2483,7 +2661,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	spi8(UIO_SET_SDINFO);
 
 	__off64_t size = sd_image[index].size;
-	if (!ret && pre)
+	if (!ret && pre && !user_io_sqlite_sram_only())
 	{
 		sd_image[index].type = 2;
 		strcpy(sd_image[index].path, name);

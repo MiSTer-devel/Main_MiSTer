@@ -26,6 +26,7 @@ INCLUDE += -I./lib/zstd/lib
 INCLUDE += -I./lib/libchdr/include
 INCLUDE += -I./lib/bluetooth
 INCLUDE += -I./lib/serial_server/library
+INCLUDE += -I./third_party/sqlite
 
 BUILDDIR = bin
 
@@ -34,9 +35,10 @@ C_SRC =   $(wildcard *.c) \
           $(wildcard ./lib/miniz/*.c) \
           $(wildcard ./lib/md5/*.c) \
           $(wildcard ./lib/lzma/*.c) \
-					$(wildcard ./lib/zstd/lib/common/*.c) \
-					$(wildcard ./lib/zstd/lib/decompress/*.c) \
+						$(wildcard ./lib/zstd/lib/common/*.c) \
+						$(wildcard ./lib/zstd/lib/decompress/*.c) \
           $(wildcard ./lib/libchdr/*.c) \
+          third_party/sqlite/sqlite3.c \
           lib/libco/arm.c
 
 CPP_SRC = $(wildcard *.cpp) \
@@ -54,32 +56,7 @@ DFLAGS	= $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DHAVE_LROUND -DHAVE_
 CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -Wno-stringop-overflow -Wno-stringop-truncation -Wno-format-truncation -Wno-psabi -Wno-restrict -c
 LFLAGS	= -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) -Llib/bluetooth -lbluetooth -lpthread
 
-SQLITE_SRAM_SNAPSHOTS ?= 1
-SQLITE_SRAM_STATIC ?= 0
-SQLITE_SRAM_INCLUDE ?=
-SQLITE_SRAM_LIB ?=
-
-ifeq ($(SQLITE_SRAM_SNAPSHOTS),1)
-	DFLAGS += -DSQLITE_SRAM_SNAPSHOTS=1
-
-	ifneq ($(strip $(SQLITE_SRAM_INCLUDE)),)
-		INCLUDE += -I$(SQLITE_SRAM_INCLUDE)
-	endif
-
-	ifeq ($(SQLITE_SRAM_STATIC),1)
-		ifneq ($(strip $(SQLITE_SRAM_LIB)),)
-			LFLAGS += -Wl,-Bstatic $(SQLITE_SRAM_LIB) -Wl,-Bdynamic
-		else
-			LFLAGS += -Wl,-Bstatic -lsqlite3 -Wl,-Bdynamic
-		endif
-	else
-		ifneq ($(strip $(SQLITE_SRAM_LIB)),)
-			LFLAGS += $(SQLITE_SRAM_LIB)
-		else
-			LFLAGS += -lsqlite3
-		endif
-	endif
-endif
+DFLAGS += -DSQLITE_SRAM_SNAPSHOTS=1
 
 OUTPUT_FILTER = sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 
