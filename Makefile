@@ -1,5 +1,6 @@
 # makefile to fail if any command in pipe is failed.
-SHELL = /bin/bash -o pipefail
+SHELL := /usr/bin/env bash
+.SHELLFLAGS := -o pipefail -c
 
 MAKEFLAGS += "-j $(shell nproc)"
 
@@ -52,6 +53,33 @@ DEP	= $(C_SRC:%.c=$(BUILDDIR)/%.c.d) $(CPP_SRC:%.cpp=$(BUILDDIR)/%.cpp.d)
 DFLAGS	= $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DHAVE_LROUND -DHAVE_STDINT_H -DHAVE_STDLIB_H -DHAVE_SYS_PARAM_H -DENABLE_64_BIT_WORDS=0 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
 CFLAGS	= $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -Wno-stringop-overflow -Wno-stringop-truncation -Wno-format-truncation -Wno-psabi -Wno-restrict -c
 LFLAGS	= -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) -Llib/bluetooth -lbluetooth -lpthread
+
+SQLITE_SRAM_SNAPSHOTS ?= 1
+SQLITE_SRAM_STATIC ?= 0
+SQLITE_SRAM_INCLUDE ?=
+SQLITE_SRAM_LIB ?=
+
+ifeq ($(SQLITE_SRAM_SNAPSHOTS),1)
+	DFLAGS += -DSQLITE_SRAM_SNAPSHOTS=1
+
+	ifneq ($(strip $(SQLITE_SRAM_INCLUDE)),)
+		INCLUDE += -I$(SQLITE_SRAM_INCLUDE)
+	endif
+
+	ifeq ($(SQLITE_SRAM_STATIC),1)
+		ifneq ($(strip $(SQLITE_SRAM_LIB)),)
+			LFLAGS += -Wl,-Bstatic $(SQLITE_SRAM_LIB) -Wl,-Bdynamic
+		else
+			LFLAGS += -Wl,-Bstatic -lsqlite3 -Wl,-Bdynamic
+		endif
+	else
+		ifneq ($(strip $(SQLITE_SRAM_LIB)),)
+			LFLAGS += $(SQLITE_SRAM_LIB)
+		else
+			LFLAGS += -lsqlite3
+		endif
+	endif
+endif
 
 OUTPUT_FILTER = sed -e 's/\(.[a-zA-Z]\+\):\([0-9]\+\):\([0-9]\+\):/\1(\2,\ \3):/g'
 

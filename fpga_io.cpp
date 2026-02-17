@@ -234,17 +234,17 @@ static void fpgamgr_program_write(const void *rbf_data, size_t rbf_size)
 	uint32_t src = (uint32_t)rbf_data;
 	uint32_t dst = (uint32_t)MAP_ADDR(SOCFPGA_FPGAMGRDATA_ADDRESS);
 
-	/* Number of loops for 32-byte long copying. */
-	uint32_t loops32 = rbf_size / 32;
+	/* Number of loops for 28-byte long copying (avoid clobbering r11/fp). */
+	uint32_t loops28 = rbf_size / 28;
 	/* Number of loops for 4-byte long copying + trailing bytes */
-	uint32_t loops4 = DIV_ROUND_UP(rbf_size % 32, 4);
+	uint32_t loops4 = DIV_ROUND_UP(rbf_size % 28, 4);
 
 	asm volatile(
 		"   cmp %2, #0\n"
 		"   beq 2f\n"
-		"1: ldmia %0!, {r4-r11}\n"
-		"   stmia %1!, {r4-r11}\n"
-		"   sub %1, #32\n"
+		"1: ldmia %0!, {r4-r10}\n"
+		"   stmia %1!, {r4-r10}\n"
+		"   sub %1, #28\n"
 		"   subs %2, #1\n"
 		"   bne 1b\n"
 		"2: cmp %3, #0\n"
@@ -254,8 +254,8 @@ static void fpgamgr_program_write(const void *rbf_data, size_t rbf_size)
 		"   subs %3, #1\n"
 		"   bne 3b\n"
 		"4: nop\n"
-		: "+r"(src), "+r"(dst), "+r"(loops32), "+r"(loops4) :
-		: "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "cc");
+		: "+r"(src), "+r"(dst), "+r"(loops28), "+r"(loops4) :
+		: "r4", "r5", "r6", "r7", "r8", "r9", "r10", "cc");
 }
 
 /* Ensure the FPGA entering config done */

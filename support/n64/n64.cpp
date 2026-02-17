@@ -1231,6 +1231,7 @@ static void write_save_file(const uint64_t sector_index, const uint32_t sector_s
 			menu_process_save();
 			FileSeek(img, file_offset, SEEK_SET);
 			FileWriteAdv(img, buffer, chunk_size);
+			user_io_mark_save_dirty(file_index);
 		}
 
 		// Log success if we hit the end of the file.
