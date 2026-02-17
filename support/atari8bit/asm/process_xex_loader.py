@@ -31,12 +31,9 @@ for ll in l:
 		read_status = ll[17:19]
 	elif ll[:5] == "init1":
 		init1 = ll[11:13]
-	elif ll[:10] == "stack_flag":
-		stack_flag = ll[16:18]
 
 s += f"#define XEX_READ_STATUS 0x{read_status}\n"
-s += f"#define XEX_INIT1 0x{init1}\n"
-s += f"#define XEX_STACK_FLAG 0x{stack_flag}\n\n"
+s += f"#define XEX_INIT1 0x{init1}\n\n"
 
 f = open("xex_loader.h", "wt")
 f.write(s)

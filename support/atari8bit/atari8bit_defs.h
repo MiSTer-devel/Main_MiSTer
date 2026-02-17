@@ -3,7 +3,6 @@
 #define STATUS1_MASK_HALT       0x0004
 #define STATUS1_MASK_MODE800    0x0008
 #define STATUS1_MASK_BOOTX      0x0010
-#define STATUS1_MASK_XEXLOC     0x0020
 #define STATUS1_MASK_RDONLY     0x0040
 #define STATUS1_MASK_MODEPBI    0x0080
 #define STATUS1_MASK_ATX1050    0x8000
@@ -33,8 +32,9 @@
 #define REG_RESET_RNMI    0x06
 #define REG_OPTION_FORCE  0x07
 #define REG_DRIVE_LED     0x08
-#define REG_SIO_TX        0x09
-#define REG_SIO_SETDIV    0x0A
+#define REG_XEX_LOADER    0x09
+#define REG_SIO_TX        0x0A
+#define REG_SIO_SETDIV    0x0B
 
 #define REG_ATARI_STATUS1 0x01
 #define REG_ATARI_STATUS2 0x02

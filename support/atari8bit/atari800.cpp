@@ -227,15 +227,11 @@ static const cart_def_t cart_def[] =
 
 uint8_t a8bit_buffer[BUFFER_SIZE];
 
-#define XEX_LOADER_LOC          7 // XEX Loader is at $700 by default
-
 #include "xex_loader.h"
 #include "boot_xex_loader.h"
 
 static fileTYPE xex_file = {};
 static uint8_t xex_file_first_block;
-static uint8_t xex_reloc;
-static uint32_t xex_loader_base;
 
 void set_a8bit_reg(uint8_t reg, uint8_t val)
 {
@@ -329,6 +325,8 @@ static void reboot(uint8_t cold, uint8_t pause)
 	// OS initialization. (In other words, on 800 a power
 	// cycle does not allow to pre-init the OS to do a warm
 	// start, it will always be cold).
+
+	set_a8bit_reg(REG_XEX_LOADER, 0);
 
 	if((get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800) && (!cold || pause))
 	{
@@ -1860,21 +1858,14 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 		{
 			xex_file_first_block = 1;
 			reboot(1, 1);
+			set_a8bit_reg(REG_XEX_LOADER, 1);
 			set_a8bit_reg(REG_CART1_SELECT, 0);
 			set_a8bit_reg(REG_CART2_SELECT, 0);
 			uint16_t atari_status1 = get_a8bit_reg(REG_ATARI_STATUS1);
 
 			atari8bit_dma_zero(SDRAM_BASE, 0x10000);
-			xex_reloc = (atari_status1 & STATUS1_MASK_XEXLOC) ? 1 : XEX_LOADER_LOC;
-			xex_loader_base = ATARI_BASE + xex_reloc * 0x100;
-			atari8bit_dma_write(xex_loader, ATARI_BASE + XEX_LOADER_LOC * 0x100, (uint32_t)sizeof(xex_loader));
+			atari8bit_dma_write(xex_loader, ATARI_BASE + 0xD100, (uint32_t)sizeof(xex_loader));
 			static uint8_t write_bytes[4];
-			if (xex_reloc != XEX_LOADER_LOC)
-			{
-				write_bytes[0] = xex_reloc;
-				atari8bit_dma_write(write_bytes, ATARI_BASE + XEX_LOADER_LOC * 0x100 + XEX_STACK_FLAG, 1);			
-			}
-
 			
 			write_bytes[0] = 0;
 			atari8bit_dma_write(write_bytes, ATARI_COLDST, 1);			
@@ -1884,7 +1875,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			write_bytes[0] = 2;
 			atari8bit_dma_write(write_bytes, ATARI_BOOTFLAG, 1);
 			write_bytes[0] = XEX_INIT1;
-			write_bytes[1] = 0x07;
+			write_bytes[1] = 0xD1;
 			atari8bit_dma_write(write_bytes, ATARI_CASINI, 2);
 			write_bytes[0] = 0x71;
 			write_bytes[1] = 0xE4;
@@ -2076,7 +2067,7 @@ void handle_pbi()
 
 static void handle_xex()
 {
-	atari800_dma_read(a8bit_buffer, xex_loader_base, XEX_READ_STATUS+1);
+	atari800_dma_read(a8bit_buffer, ATARI_BASE + 0xD100, XEX_READ_STATUS+1);
 	
 	if(a8bit_buffer[0] == 0x60)
 	{
@@ -2090,7 +2081,7 @@ static void handle_xex()
 
 			// Point to rts
 			a8bit_buffer[0] = 0x00;
-			a8bit_buffer[1] = xex_reloc;
+			a8bit_buffer[1] = 0xD1;
 			atari8bit_dma_write(a8bit_buffer, ATARI_INITAD, 2);
 			
 			while(len_buf[0] == 0xFF && len_buf[1] == 0xFF)
@@ -2121,7 +2112,7 @@ static void handle_xex()
 			}
 
 			a8bit_buffer[0] = 0x01;
-			atari8bit_dma_write(a8bit_buffer, xex_loader_base + XEX_READ_STATUS, 1);
+			atari8bit_dma_write(a8bit_buffer, ATARI_BASE + 0xD100 + XEX_READ_STATUS, 1);
 		}
 	}
 	// Is loader done?
@@ -2129,7 +2120,7 @@ static void handle_xex()
 xex_eof:
 	{
 		a8bit_buffer[0] = 0xFF;
-		atari8bit_dma_write(a8bit_buffer, xex_loader_base + XEX_READ_STATUS, 1);
+		atari8bit_dma_write(a8bit_buffer, ATARI_BASE + 0xD100 + XEX_READ_STATUS, 1);
 		FileClose(&xex_file);
 	}
 
