@@ -75,7 +75,7 @@
 #define UIO_SET_YC_PAR  0x41
 #define UIO_GET_FR_CNT  0x42  // get frame counter
 #define UIO_GET_F12_MOD 0x43  // get framework menu key modifier
-#define UIO_AUTOSAVE    0x44  // pulse to request core save write-back
+#define UIO_AUTOSAVE    0x44  // DDR3 autosave: read save metadata, then DMA from DDR3
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53

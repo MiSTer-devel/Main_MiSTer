@@ -3655,7 +3655,11 @@ void user_io_poll()
 		diskled_is_on = 0;
 	}
 
-	// Autosave interval: periodically pulse the core to trigger save write-back
+	// Autosave interval: periodically query the core for DDR3-backed save data.
+	// Sends UIO_AUTOSAVE and reads 5 response words containing status, DDR3 address,
+	// and size. If the core has new save data ready in DDR3, mmap and write it to
+	// the save file. The FPGA automatically starts a new copy cycle when the SPI
+	// transaction ends (io_enable goes low).
 	{
 		static unsigned long autosave_timer = 0;
 		uint16_t autosave_interval = cfg.autosave_interval;
@@ -3668,9 +3672,86 @@ void user_io_poll()
 			}
 			else if (CheckTimer(autosave_timer))
 			{
-				printf("Autosave: sending save pulse to core.\n");
-				diskled_on();
-				spi_uio_cmd(UIO_AUTOSAVE);
+				// Read 5 x 16-bit words from the core:
+				// Word 0: [15]=save_ready, [14]=save_busy, [13:0]=reserved
+				// Word 1: save_ddr_base[15:0]  (64-bit word address, low)
+				// Word 2: save_ddr_base[28:16] (64-bit word address, high)
+				// Word 3: save_ddr_size[15:0]  (byte count, low)
+				// Word 4: save_ddr_size[23:16] (byte count, high)
+				spi_uio_cmd_cont(UIO_AUTOSAVE);
+				uint16_t w0 = spi_w(0);
+				uint16_t w1 = spi_w(0);
+				uint16_t w2 = spi_w(0);
+				uint16_t w3 = spi_w(0);
+				uint16_t w4 = spi_w(0);
+				DisableIO();
+
+				int save_ready = (w0 >> 15) & 1;
+				int save_busy  = (w0 >> 14) & 1;
+				uint32_t save_ddr_base = ((uint32_t)(w2 & 0x1FFF) << 16) | w1;
+				uint32_t save_ddr_size = ((uint32_t)(w4 & 0xFF) << 16) | w3;
+
+				if (save_ready && !save_busy && save_ddr_base && save_ddr_size)
+				{
+					// Compute physical byte address in DDR3:
+					// save_ddr_base is a 64-bit word address, so shift left by 3
+					uint32_t phys_addr = 0x20000000 + (save_ddr_base << 3);
+
+					if (save_ddr_size > 0 && save_ddr_size <= (16 * 1024 * 1024)
+						&& phys_addr >= 0x20000000 && (phys_addr + save_ddr_size) <= 0x40000000)
+					{
+						void *ddr_mem = shmem_map(phys_addr, save_ddr_size);
+						if (ddr_mem)
+						{
+							printf("Autosave: DDR3 read 0x%X bytes @ phys 0x%08X\n", save_ddr_size, phys_addr);
+							diskled_on();
+
+							// Write DDR3 buffer to the save file (sd_image[0])
+							if (sd_image[0].size)
+							{
+								// Existing save file — seek to start and overwrite
+								FileSeek(&sd_image[0], 0, SEEK_SET);
+								FileWriteAdv(&sd_image[0], ddr_mem, save_ddr_size);
+							}
+							else if (sd_image[0].path[0])
+							{
+								// Save file not yet created — create and write
+								if (FileOpenEx(&sd_image[0], sd_image[0].path, O_CREAT | O_RDWR | O_SYNC))
+								{
+									FileWriteAdv(&sd_image[0], ddr_mem, save_ddr_size);
+									sd_image[0].size = save_ddr_size;
+								}
+								else
+								{
+									printf("Autosave: failed to create save file: %s\n", sd_image[0].path);
+								}
+							}
+							else
+							{
+								printf("Autosave: no save file mounted\n");
+							}
+
+							shmem_unmap(ddr_mem, save_ddr_size);
+						}
+						else
+						{
+							printf("Autosave: failed to mmap DDR3 (0x%08X, %u)\n", phys_addr, save_ddr_size);
+						}
+					}
+					else
+					{
+						printf("Autosave: failed to mmap DDR3 (0x%08X, %u)\n", phys_addr, save_ddr_size);
+					}
+				}
+				else if (!save_ddr_base && !save_ddr_size)
+				{
+					// Core doesn't support DDR autosave — skip silently
+				}
+				else if (save_busy)
+				{
+					printf("Autosave: core busy, skipping this interval\n");
+				}
+
 				autosave_timer = GetTimer((uint32_t)autosave_interval * 1000);
 			}
 		}
