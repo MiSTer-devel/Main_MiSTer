@@ -3658,18 +3658,20 @@ void user_io_poll()
 	// Autosave interval: periodically pulse the core to trigger save write-back
 	{
 		static unsigned long autosave_timer = 0;
-		if (cfg.autosave_interval && use_save)
+		uint16_t autosave_interval = cfg.autosave_interval;
+		if (autosave_interval && autosave_interval < 10) autosave_interval = 10;
+		if (autosave_interval && use_save)
 		{
 			if (!autosave_timer)
 			{
-				autosave_timer = GetTimer((uint32_t)cfg.autosave_interval * 1000);
+				autosave_timer = GetTimer((uint32_t)autosave_interval * 1000);
 			}
 			else if (CheckTimer(autosave_timer))
 			{
 				printf("Autosave: sending save pulse to core.\n");
 				diskled_on();
 				spi_uio_cmd(UIO_AUTOSAVE);
-				autosave_timer = GetTimer((uint32_t)cfg.autosave_interval * 1000);
+				autosave_timer = GetTimer((uint32_t)autosave_interval * 1000);
 			}
 		}
 		else
