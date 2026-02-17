@@ -3667,6 +3667,7 @@ void user_io_poll()
 			else if (CheckTimer(autosave_timer))
 			{
 				printf("Autosave: sending save pulse to core.\n");
+				diskled_on();
 				spi_uio_cmd(UIO_AUTOSAVE);
 				autosave_timer = GetTimer((uint32_t)cfg.autosave_interval * 1000);
 			}
