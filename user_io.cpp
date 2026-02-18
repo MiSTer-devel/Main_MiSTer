@@ -119,6 +119,21 @@ static bool sram_snapshot_exec(sqlite3 *db, const char *sql)
 	return true;
 }
 
+static uint32_t sram_snapshot_crc32(const uint8_t *data, size_t size)
+{
+	if (!data || !size) return 0;
+	return (uint32_t)mz_crc32(MZ_CRC32_INIT, data, size);
+}
+
+static bool sram_snapshot_schema_has_crc32(sqlite3 *db)
+{
+	sqlite3_stmt *stmt = 0;
+	int rc = sqlite3_prepare_v2(db, "SELECT id, ts_ms, crc32, sram FROM snapshots LIMIT 1;", -1, &stmt, 0);
+	if (rc != SQLITE_OK) return false;
+	sqlite3_finalize(stmt);
+	return true;
+}
+
 static bool sram_snapshot_prepare_db(sqlite3 *db)
 {
 	if (!sram_snapshot_exec(db, "PRAGMA journal_mode=PERSIST;")) return false;
@@ -127,7 +142,77 @@ static bool sram_snapshot_prepare_db(sqlite3 *db)
 	if (!sram_snapshot_exec(db, "PRAGMA temp_store=MEMORY;")) return false;
 	if (!sram_snapshot_exec(db, "PRAGMA journal_size_limit=1048576;")) return false;
 
-	if (!sram_snapshot_exec(db, "CREATE TABLE IF NOT EXISTS snapshots (id INTEGER PRIMARY KEY, ts_ms INTEGER NOT NULL, sram BLOB NOT NULL);")) return false;
+	if (!sram_snapshot_exec(db, "CREATE TABLE IF NOT EXISTS snapshots (id INTEGER PRIMARY KEY, ts_ms INTEGER NOT NULL, crc32 INTEGER NOT NULL, sram BLOB NOT NULL);")) return false;
+	if (!sram_snapshot_schema_has_crc32(db))
+	{
+		fprintf(stderr, "SRAM snapshot schema mismatch: recreating snapshots table with CRC32.\n");
+		if (!sram_snapshot_exec(db, "DROP TABLE IF EXISTS snapshots;")) return false;
+		if (!sram_snapshot_exec(db, "CREATE TABLE snapshots (id INTEGER PRIMARY KEY, ts_ms INTEGER NOT NULL, crc32 INTEGER NOT NULL, sram BLOB NOT NULL);")) return false;
+	}
+	return true;
+}
+
+static bool sram_snapshot_open_db(const char *db_path, sqlite3 **db);
+static bool sram_snapshot_insert(sqlite3 *db, const std::vector<uint8_t> &data);
+
+static bool sram_snapshot_migrate_legacy_save(const char *save_path, const char *db_path)
+{
+	if (!save_path || !save_path[0] || !db_path || !db_path[0]) return true;
+	if (FileExists(db_path, 0)) return true;
+	if (!FileExists(save_path, 0)) return true;
+
+	fileTYPE legacy_file = {};
+	if (!FileOpenEx(&legacy_file, save_path, O_RDONLY))
+	{
+		fprintf(stderr, "SRAM snapshot migration warning: failed to open legacy save %s\n", save_path);
+		return false;
+	}
+
+	if (legacy_file.size < 0 || legacy_file.size > INT_MAX)
+	{
+		fprintf(stderr, "SRAM snapshot migration warning: invalid legacy save size %lld for %s\n",
+			(long long)legacy_file.size, save_path);
+		FileClose(&legacy_file);
+		return false;
+	}
+
+	const int legacy_size = (int)legacy_file.size;
+	std::vector<uint8_t> legacy_data((size_t)legacy_size);
+	bool read_ok = true;
+
+	if (legacy_size > 0)
+	{
+		const int read_size = FileReadAdv(&legacy_file, legacy_data.data(), legacy_size, -1);
+		read_ok = (read_size == legacy_size);
+	}
+
+	FileClose(&legacy_file);
+	if (!read_ok)
+	{
+		fprintf(stderr, "SRAM snapshot migration warning: failed to read legacy save %s\n", save_path);
+		return false;
+	}
+
+	sqlite3 *db = 0;
+	if (!sram_snapshot_open_db(db_path, &db))
+	{
+		fprintf(stderr, "SRAM snapshot migration warning: failed to open sqlite DB %s\n", db_path);
+		return false;
+	}
+
+	bool ok = sram_snapshot_insert(db, legacy_data);
+	sqlite3_close(db);
+
+	if (!ok)
+	{
+		char full_db_path[2100] = {};
+		snprintf(full_db_path, sizeof(full_db_path), "%s", getFullPath(db_path));
+		remove(full_db_path);
+		fprintf(stderr, "SRAM snapshot migration warning: failed to import %s into %s\n", save_path, db_path);
+		return false;
+	}
+
+	fprintf(stderr, "SRAM snapshot migrated legacy save: %s -> %s (%d bytes)\n", save_path, db_path, legacy_size);
 	return true;
 }
 
@@ -331,9 +416,10 @@ static bool sram_snapshot_read_image(uint8_t slot, std::vector<uint8_t> &data)
 static bool sram_snapshot_latest_matches(sqlite3 *db, const std::vector<uint8_t> &data, bool *matches)
 {
 	*matches = false;
+	const uint32_t data_crc = sram_snapshot_crc32(data.data(), data.size());
 
 	sqlite3_stmt *stmt = 0;
-	if (sqlite3_prepare_v2(db, "SELECT sram FROM snapshots ORDER BY id DESC LIMIT 1;", -1, &stmt, 0) != SQLITE_OK)
+	if (sqlite3_prepare_v2(db, "SELECT crc32, sram FROM snapshots ORDER BY id DESC LIMIT 1;", -1, &stmt, 0) != SQLITE_OK)
 	{
 		return false;
 	}
@@ -341,9 +427,10 @@ static bool sram_snapshot_latest_matches(sqlite3 *db, const std::vector<uint8_t>
 	int rc = sqlite3_step(stmt);
 	if (rc == SQLITE_ROW)
 	{
-		const int blob_size = sqlite3_column_bytes(stmt, 0);
-		const void *blob = sqlite3_column_blob(stmt, 0);
-		if (blob_size == (int)data.size() && (!blob_size || !memcmp(blob, data.data(), blob_size)))
+		const uint32_t stored_crc = (uint32_t)sqlite3_column_int64(stmt, 0);
+		const int blob_size = sqlite3_column_bytes(stmt, 1);
+		const void *blob = sqlite3_column_blob(stmt, 1);
+		if (stored_crc == data_crc && blob_size == (int)data.size() && (!blob_size || (blob && !memcmp(blob, data.data(), blob_size))))
 		{
 			*matches = true;
 		}
@@ -361,17 +448,19 @@ static bool sram_snapshot_latest_matches(sqlite3 *db, const std::vector<uint8_t>
 static bool sram_snapshot_insert(sqlite3 *db, const std::vector<uint8_t> &data)
 {
 	if (!sram_snapshot_exec(db, "BEGIN IMMEDIATE;")) return false;
+	const uint32_t data_crc = sram_snapshot_crc32(data.data(), data.size());
 
 	bool ok = true;
 	sqlite3_stmt *stmt = 0;
-	if (sqlite3_prepare_v2(db, "INSERT INTO snapshots(ts_ms, sram) VALUES(?, ?);", -1, &stmt, 0) != SQLITE_OK)
+	if (sqlite3_prepare_v2(db, "INSERT INTO snapshots(ts_ms, crc32, sram) VALUES(?, ?, ?);", -1, &stmt, 0) != SQLITE_OK)
 	{
 		ok = false;
 	}
 	else
 	{
 		sqlite3_bind_int64(stmt, 1, sram_snapshot_timestamp_ms());
-		sqlite3_bind_blob(stmt, 2, data.data(), (int)data.size(), SQLITE_TRANSIENT);
+		sqlite3_bind_int64(stmt, 2, data_crc);
+		sqlite3_bind_blob(stmt, 3, data.data(), (int)data.size(), SQLITE_TRANSIENT);
 
 		const int rc = sqlite3_step(stmt);
 		ok = (rc == SQLITE_DONE);
@@ -451,31 +540,59 @@ static bool sram_snapshot_load_latest(const char *db_path, std::vector<uint8_t> 
 
 	sqlite3_stmt *stmt = 0;
 	bool ok = true;
-	if (sqlite3_prepare_v2(db, "SELECT sram FROM snapshots ORDER BY id DESC LIMIT 1;", -1, &stmt, 0) != SQLITE_OK)
+	if (sqlite3_prepare_v2(db, "SELECT id, sram, crc32 FROM snapshots ORDER BY id DESC;", -1, &stmt, 0) != SQLITE_OK)
 	{
 		ok = false;
 	}
 	else
 	{
-		const int rc = sqlite3_step(stmt);
-		if (rc == SQLITE_ROW)
+		while (1)
 		{
-			const int blob_size = sqlite3_column_bytes(stmt, 0);
-			const uint8_t *blob = (const uint8_t*)sqlite3_column_blob(stmt, 0);
-			if (blob_size > 0 && blob)
+			const int rc = sqlite3_step(stmt);
+			if (rc == SQLITE_DONE) break;
+			if (rc != SQLITE_ROW)
+			{
+				ok = false;
+				break;
+			}
+
+			const int64_t row_id = sqlite3_column_int64(stmt, 0);
+			const int blob_size = sqlite3_column_bytes(stmt, 1);
+			const uint8_t *blob = (const uint8_t*)sqlite3_column_blob(stmt, 1);
+			const uint32_t stored_crc = (uint32_t)sqlite3_column_int64(stmt, 2);
+
+			if (blob_size > 0 && !blob)
+			{
+				fprintf(stderr, "SRAM snapshot load skip: %s row=%lld (null blob)\n", db_path, (long long)row_id);
+				continue;
+			}
+
+			const uint32_t calc_crc = sram_snapshot_crc32(blob, blob_size > 0 ? (size_t)blob_size : 0);
+			if (calc_crc != stored_crc)
+			{
+				fprintf(stderr, "SRAM snapshot load skip: %s row=%lld crc mismatch stored=%08X calc=%08X\n",
+					db_path, (long long)row_id, stored_crc, calc_crc);
+				continue;
+			}
+
+			if (blob_size > 0)
 			{
 				data.assign(blob, blob + blob_size);
 			}
+			else
+			{
+				data.clear();
+			}
+
 			*found = true;
-			fprintf(stderr, "SRAM snapshot load row: %s (%d bytes)\n", db_path, blob_size);
+			fprintf(stderr, "SRAM snapshot load row: %s row=%lld (%d bytes, crc=%08X)\n",
+				db_path, (long long)row_id, blob_size, stored_crc);
+			break;
 		}
-		else if (rc != SQLITE_DONE)
+
+		if (ok && !*found)
 		{
-			ok = false;
-		}
-		else
-		{
-			fprintf(stderr, "SRAM snapshot load: no rows in %s\n", db_path);
+			fprintf(stderr, "SRAM snapshot load: no valid rows in %s\n", db_path);
 		}
 		sqlite3_finalize(stmt);
 	}
@@ -538,6 +655,11 @@ static bool sram_snapshot_mount_virtual(uint8_t slot, const char *save_path, int
 		return false;
 	}
 	snprintf(sd_image[slot].path, sizeof(sd_image[slot].path), "%s", tmp_path);
+
+	if (!sram_snapshot_migrate_legacy_save(save_path, sram_snapshot_slots[slot].db_path))
+	{
+		fprintf(stderr, "SRAM snapshot warning: legacy save migration failed for \"%s\".\n", save_path);
+	}
 
 	std::vector<uint8_t> latest;
 	bool found = false;
