@@ -131,6 +131,7 @@ static const ini_var_t ini_vars[] =
 	{ "OSD_LOCK_TIME", (void*)(&(cfg.osd_lock_time)), UINT16, 0, 60 },
 	{ "DEBUG", (void *)(&(cfg.debug)), UINT8, 0, 1 },
 	{ "LOOKAHEAD", (void *)(&(cfg.lookahead)), UINT8, 0, 3 },
+	{ "SRAM_AUTOSAVE_INTERVAL", (void *)(&(cfg.sram_autosave_interval)), UINT32, 1, 86400 },
 	{ "MAIN", (void*)(&(cfg.main)), STRING, 0, sizeof(cfg.main) - 1 },
 	{"VFILTER_INTERLACE_DEFAULT", (void*)(&(cfg.vfilter_interlace_default)), STRING, 0, sizeof(cfg.vfilter_interlace_default) - 1 },
 	{ "AUTOFIRE_RATES", (void *)(&(cfg.autofire_rates)), STRING, 0, sizeof(cfg.autofire_rates) - 1 },
@@ -592,6 +593,7 @@ void cfg_parse()
 	cfg.video_contrast = 50;
 	cfg.video_saturation = 100;
 	cfg.video_hue = 0;
+	cfg.sram_autosave_interval = 300;
 	strcpy(cfg.video_gain_offset, "1, 0, 1, 0, 1, 0");
 	strcpy(cfg.main, "MiSTer");
 	has_video_sections = false;

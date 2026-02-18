@@ -64,7 +64,6 @@ static int use_save = 0;
 
 #define SRAM_SNAPSHOT_MAX_SLOTS      16
 #define SRAM_SNAPSHOT_HISTORY_LIMIT  50
-#define SRAM_SNAPSHOT_INTERVAL_MS    (5 * 60 * 1000)
 #define SRAM_SNAPSHOT_RETRY_MS       60000
 
 struct sram_snapshot_slot_t
@@ -78,7 +77,27 @@ struct sram_snapshot_slot_t
 
 static sram_snapshot_slot_t sram_snapshot_slots[SRAM_SNAPSHOT_MAX_SLOTS] = {};
 
+struct sram_snapshot_autosave_t
+{
+	bool scanned = false;
+	bool found = false;
+	bool ex = false;
+	uint32_t timer = 0;
+	char opt[32] = {};
+	char label[96] = {};
+};
+
+static sram_snapshot_autosave_t sram_snapshot_autosave = {};
+
 #if SQLITE_SRAM_SNAPSHOTS
+static uint32_t sram_snapshot_interval_ms()
+{
+	uint32_t interval_sec = cfg.sram_autosave_interval;
+	if (!interval_sec) interval_sec = 300;
+	if (interval_sec > (UINT32_MAX / 1000)) interval_sec = UINT32_MAX / 1000;
+	return interval_sec * 1000;
+}
+
 static int64_t sram_snapshot_timestamp_ms()
 {
 	struct timespec ts = {};
@@ -113,6 +132,176 @@ static bool sram_snapshot_prepare_db(sqlite3 *db)
 }
 
 static void sram_snapshot_configure_slot(uint8_t slot, const char *save_path);
+static void sram_snapshot_reset_export_trigger();
+
+static bool sram_snapshot_any_slot_enabled()
+{
+	for (uint8_t i = 0; i < SRAM_SNAPSHOT_MAX_SLOTS; i++)
+	{
+		if (sram_snapshot_slots[i].enabled) return true;
+	}
+	return false;
+}
+
+static bool sram_snapshot_ci_contains(const char *text, const char *needle)
+{
+	if (!text || !needle || !needle[0]) return false;
+
+	for (size_t i = 0; text[i]; i++)
+	{
+		size_t j = 0;
+		while (needle[j] && text[i + j] &&
+		       (tolower((unsigned char)text[i + j]) == tolower((unsigned char)needle[j])))
+		{
+			j++;
+		}
+		if (!needle[j]) return true;
+	}
+
+	return false;
+}
+
+static int sram_snapshot_export_trigger_score(const char *label)
+{
+	if (!label || !label[0]) return -1000;
+
+	const bool has_load = sram_snapshot_ci_contains(label, "load") || sram_snapshot_ci_contains(label, "restore");
+	if (has_load) return -1000;
+
+	const bool has_save = sram_snapshot_ci_contains(label, "save");
+	const bool has_write = sram_snapshot_ci_contains(label, "write");
+	const bool has_sram = sram_snapshot_ci_contains(label, "sram");
+	const bool has_nvram = sram_snapshot_ci_contains(label, "nvram");
+	const bool has_backup_ram = sram_snapshot_ci_contains(label, "backup ram");
+	const bool has_memory_card = sram_snapshot_ci_contains(label, "memory card") || sram_snapshot_ci_contains(label, "memcard");
+	const bool has_save_ram = sram_snapshot_ci_contains(label, "save ram");
+	const bool has_storage = has_sram || has_nvram || has_backup_ram || has_memory_card || has_save_ram;
+
+	// Avoid ambiguous actions: require explicit persistence verb.
+	if (!(has_save || has_write)) return -1000;
+
+	// Ignore generic save actions not related to persistent game RAM.
+	if (!(has_storage || has_sram || has_nvram)) return -1000;
+
+	int score = 0;
+	if (has_save) score += 100;
+	if (has_write) score += 80;
+	if (has_sram) score += 30;
+	if (has_nvram) score += 30;
+	if (has_backup_ram) score += 30;
+	if (has_memory_card) score += 20;
+	if (has_save_ram) score += 20;
+
+	// De-prioritize unrelated UI actions.
+	if (sram_snapshot_ci_contains(label, "state")) score -= 80;
+	if (sram_snapshot_ci_contains(label, "setting")) score -= 80;
+	if (sram_snapshot_ci_contains(label, "config")) score -= 80;
+
+	return score;
+}
+
+static bool sram_snapshot_find_export_trigger(char *opt_out, size_t opt_size, bool *ex_out, char *label_out, size_t label_size)
+{
+	int best_score = -1000;
+	char best_opt[32] = {};
+	char best_label[96] = {};
+	bool best_ex = false;
+
+	for (int i = 2;; i++)
+	{
+		char *entry = user_io_get_confstr(i);
+		if (!entry) break;
+
+		while ((entry[0] == 'H' || entry[0] == 'D' || entry[0] == 'h' || entry[0] == 'd') && strlen(entry) > 2)
+		{
+			entry += 2;
+		}
+
+		if (entry[0] == 'P' && strlen(entry) > 2 && entry[2] != ',')
+		{
+			entry += 2;
+		}
+
+		if (!(entry[0] == 'T' || entry[0] == 't' || entry[0] == 'R' || entry[0] == 'r')) continue;
+
+		char label[256] = {};
+		substrcpy(label, entry, 1);
+		int score = sram_snapshot_export_trigger_score(label);
+		if (score <= -1000) continue;
+
+		bool ex = (entry[0] == 't') || (entry[0] == 'r');
+		char opt[32] = {};
+		substrcpy(opt, entry + 1, 0);
+		if (!opt[0]) continue;
+
+		fprintf(stderr, "SRAM snapshot autosave candidate: opt=%s ex=%d label=%s score=%d\n",
+			opt, ex ? 1 : 0, label, score);
+
+		if (score <= best_score) continue;
+		best_score = score;
+		best_ex = ex;
+		snprintf(best_opt, sizeof(best_opt), "%s", opt);
+		snprintf(best_label, sizeof(best_label), "%s", label);
+	}
+
+	if (best_score <= -1000) return false;
+
+	snprintf(opt_out, opt_size, "%s", best_opt);
+	*ex_out = best_ex;
+	snprintf(label_out, label_size, "%s", best_label);
+	return true;
+}
+
+static void sram_snapshot_poll_export_trigger()
+{
+	if (!sram_snapshot_any_slot_enabled())
+	{
+		sram_snapshot_autosave.timer = 0;
+		return;
+	}
+
+	if (!sram_snapshot_autosave.scanned)
+	{
+		sram_snapshot_autosave.scanned = true;
+		user_io_read_confstr();
+		sram_snapshot_autosave.found = sram_snapshot_find_export_trigger(
+			sram_snapshot_autosave.opt,
+			sizeof(sram_snapshot_autosave.opt),
+			&sram_snapshot_autosave.ex,
+			sram_snapshot_autosave.label,
+			sizeof(sram_snapshot_autosave.label));
+
+		if (sram_snapshot_autosave.found)
+		{
+			fprintf(stderr, "SRAM snapshot autosave trigger found: opt=%s ex=%d label=%s\n",
+				sram_snapshot_autosave.opt,
+				sram_snapshot_autosave.ex ? 1 : 0,
+				sram_snapshot_autosave.label);
+		}
+		else
+		{
+			fprintf(stderr, "SRAM snapshot autosave trigger not found in core config string.\n");
+		}
+	}
+
+	if (!sram_snapshot_autosave.found) return;
+
+	if (!sram_snapshot_autosave.timer)
+	{
+		sram_snapshot_autosave.timer = GetTimer(sram_snapshot_interval_ms());
+		return;
+	}
+
+	if (!CheckTimer(sram_snapshot_autosave.timer)) return;
+
+	sram_snapshot_autosave.timer = GetTimer(sram_snapshot_interval_ms());
+	user_io_status_set(sram_snapshot_autosave.opt, 1, sram_snapshot_autosave.ex);
+	user_io_status_set(sram_snapshot_autosave.opt, 0, sram_snapshot_autosave.ex);
+
+	fprintf(stderr, "SRAM snapshot autosave trigger fired: opt=%s label=%s\n",
+		sram_snapshot_autosave.opt,
+		sram_snapshot_autosave.label);
+}
 
 static bool sram_snapshot_read_image(uint8_t slot, std::vector<uint8_t> &data)
 {
@@ -484,6 +673,11 @@ static void sram_snapshot_configure_slot(uint8_t slot, const char *save_path)
 	snprintf(state.db_path, sizeof(state.db_path), "%s.sqlite3", save_path);
 }
 
+static void sram_snapshot_reset_export_trigger()
+{
+	memset(&sram_snapshot_autosave, 0, sizeof(sram_snapshot_autosave));
+}
+
 static void sram_snapshot_poll()
 {
 	for (uint8_t i = 0; i < SRAM_SNAPSHOT_MAX_SLOTS; i++)
@@ -529,6 +723,14 @@ static bool sram_snapshot_mount_virtual(uint8_t, const char *, int)
 static void sram_snapshot_flush_slot(uint8_t)
 {
 }
+
+static void sram_snapshot_poll_export_trigger()
+{
+}
+
+static void sram_snapshot_reset_export_trigger()
+{
+}
 #endif
 
 void user_io_mark_save_dirty(unsigned char index)
@@ -539,7 +741,7 @@ void user_io_mark_save_dirty(unsigned char index)
 	sram_snapshot_slots[index].dirty = true;
 	if (!sram_snapshot_slots[index].flush_timer)
 	{
-		sram_snapshot_slots[index].flush_timer = GetTimer(SRAM_SNAPSHOT_INTERVAL_MS);
+		sram_snapshot_slots[index].flush_timer = GetTimer(sram_snapshot_interval_ms());
 	}
 }
 
@@ -1892,6 +2094,7 @@ void user_io_init(const char *path, const char *xml)
 	}
 
 	user_io_read_confstr();
+	sram_snapshot_reset_export_trigger();
 	user_io_read_core_name();
 
 	if ((fpga_get_buttons() & BUTTON_OSD) && is_menu())
@@ -4207,6 +4410,7 @@ void user_io_poll()
 		if (save_req) c64_save_cart(save_req >> 8);
 	}
 	process_ss(0);
+	sram_snapshot_poll_export_trigger();
 	sram_snapshot_poll();
 }
 
