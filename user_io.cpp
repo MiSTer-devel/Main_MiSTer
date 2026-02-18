@@ -66,10 +66,6 @@ static int use_save = 0;
 #define SRAM_SNAPSHOT_HISTORY_LIMIT  50
 #define SRAM_SNAPSHOT_INTERVAL_MS    (5 * 60 * 1000)
 #define SRAM_SNAPSHOT_RETRY_MS       60000
-#define SRAM_SNAPSHOT_DB_MAX_BYTES   (50 * 1024 * 1024)
-#define SRAM_SNAPSHOT_PREALLOC_BYTES (48 * 1024 * 1024)
-#define SRAM_SNAPSHOT_DB_PAGE_SIZE   4096
-#define SRAM_SNAPSHOT_DB_MAX_PAGES   (SRAM_SNAPSHOT_DB_MAX_BYTES / SRAM_SNAPSHOT_DB_PAGE_SIZE)
 
 struct sram_snapshot_slot_t
 {
@@ -96,7 +92,7 @@ static bool sram_snapshot_exec(sqlite3 *db, const char *sql)
 	int rc = sqlite3_exec(db, sql, 0, 0, &err);
 	if (rc != SQLITE_OK)
 	{
-		printf("SRAM snapshot sqlite error: %s [%s]\n", err ? err : "(unknown)", sql);
+		fprintf(stderr, "SRAM snapshot sqlite error: %s [%s]\n", err ? err : "(unknown)", sql);
 		if (err) sqlite3_free(err);
 		return false;
 	}
@@ -109,54 +105,10 @@ static bool sram_snapshot_prepare_db(sqlite3 *db)
 	if (!sram_snapshot_exec(db, "PRAGMA journal_mode=PERSIST;")) return false;
 	if (!sram_snapshot_exec(db, "PRAGMA synchronous=FULL;")) return false;
 	if (!sram_snapshot_exec(db, "PRAGMA auto_vacuum=NONE;")) return false;
-	if (!sram_snapshot_exec(db, "PRAGMA page_size=4096;")) return false;
 	if (!sram_snapshot_exec(db, "PRAGMA temp_store=MEMORY;")) return false;
 	if (!sram_snapshot_exec(db, "PRAGMA journal_size_limit=1048576;")) return false;
 
-	char sql[128] = {};
-	snprintf(sql, sizeof(sql), "PRAGMA max_page_count=%d;", SRAM_SNAPSHOT_DB_MAX_PAGES);
-	if (!sram_snapshot_exec(db, sql)) return false;
-
 	if (!sram_snapshot_exec(db, "CREATE TABLE IF NOT EXISTS snapshots (id INTEGER PRIMARY KEY, ts_ms INTEGER NOT NULL, sram BLOB NOT NULL);")) return false;
-	if (!sram_snapshot_exec(db, "CREATE TABLE IF NOT EXISTS snapshot_reserve (id INTEGER PRIMARY KEY, payload BLOB NOT NULL);")) return false;
-
-	int user_version = 0;
-	sqlite3_stmt *stmt = 0;
-	if (sqlite3_prepare_v2(db, "PRAGMA user_version;", -1, &stmt, 0) != SQLITE_OK)
-	{
-		printf("SRAM snapshot sqlite error: failed to read user_version.\n");
-		return false;
-	}
-
-	int rc = sqlite3_step(stmt);
-	if (rc == SQLITE_ROW) user_version = sqlite3_column_int(stmt, 0);
-	sqlite3_finalize(stmt);
-	if (rc != SQLITE_ROW && rc != SQLITE_DONE) return false;
-
-	if (user_version >= 1) return true;
-
-	sqlite3_int64 size_hint = SRAM_SNAPSHOT_DB_MAX_BYTES;
-	sqlite3_file_control(db, "main", SQLITE_FCNTL_SIZE_HINT, &size_hint);
-
-	if (!sram_snapshot_exec(db, "BEGIN IMMEDIATE;")) return false;
-
-	bool ok = true;
-	snprintf(sql, sizeof(sql), "INSERT OR REPLACE INTO snapshot_reserve(id, payload) VALUES(1, zeroblob(%d));", SRAM_SNAPSHOT_PREALLOC_BYTES);
-	if (!sram_snapshot_exec(db, sql)) ok = false;
-	if (ok && !sram_snapshot_exec(db, "DELETE FROM snapshot_reserve WHERE id=1;")) ok = false;
-	if (ok && !sram_snapshot_exec(db, "PRAGMA user_version=1;")) ok = false;
-
-	if (ok)
-	{
-		if (!sram_snapshot_exec(db, "COMMIT;")) ok = false;
-	}
-
-	if (!ok)
-	{
-		sram_snapshot_exec(db, "ROLLBACK;");
-		return false;
-	}
-
 	return true;
 }
 
@@ -263,7 +215,7 @@ static bool sram_snapshot_open_db(const char *db_path, sqlite3 **db)
 	int rc = sqlite3_open_v2(full_db_path, &tmp_db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, 0);
 	if (rc != SQLITE_OK)
 	{
-		printf("SRAM snapshot sqlite error: cannot open %s\n", full_db_path);
+		fprintf(stderr, "SRAM snapshot sqlite error: cannot open %s\n", full_db_path);
 		if (tmp_db) sqlite3_close(tmp_db);
 		return false;
 	}
@@ -284,8 +236,29 @@ static bool sram_snapshot_load_latest(const char *db_path, std::vector<uint8_t> 
 	*found = false;
 	data.clear();
 
+	char full_db_path[2100] = {};
+	snprintf(full_db_path, sizeof(full_db_path), "%s", getFullPath(db_path));
+
+	struct stat st = {};
+	if (stat(full_db_path, &st) < 0)
+	{
+		return true;
+	}
+
 	sqlite3 *db = 0;
-	if (!sram_snapshot_open_db(db_path, &db)) return false;
+	int rc = sqlite3_open_v2(full_db_path, &db, SQLITE_OPEN_READONLY, 0);
+	if (rc != SQLITE_OK)
+	{
+		if (db) sqlite3_close(db);
+		db = 0;
+		rc = sqlite3_open_v2(full_db_path, &db, SQLITE_OPEN_READWRITE, 0);
+	}
+	if (rc != SQLITE_OK)
+	{
+		fprintf(stderr, "SRAM snapshot sqlite error: cannot open for load %s\n", full_db_path);
+		if (db) sqlite3_close(db);
+		return false;
+	}
 
 	sqlite3_stmt *stmt = 0;
 	bool ok = true;
@@ -305,10 +278,15 @@ static bool sram_snapshot_load_latest(const char *db_path, std::vector<uint8_t> 
 				data.assign(blob, blob + blob_size);
 			}
 			*found = true;
+			fprintf(stderr, "SRAM snapshot load row: %s (%d bytes)\n", db_path, blob_size);
 		}
 		else if (rc != SQLITE_DONE)
 		{
 			ok = false;
+		}
+		else
+		{
+			fprintf(stderr, "SRAM snapshot load: no rows in %s\n", db_path);
 		}
 		sqlite3_finalize(stmt);
 	}
@@ -331,6 +309,30 @@ static bool sram_snapshot_write_image(fileTYPE *img, const uint8_t *data, size_t
 	return FileSeek(img, 0, SEEK_SET);
 }
 
+static bool sram_snapshot_fill_ff(fileTYPE *img, int total_bytes)
+{
+	if (!img || !img->filp || total_bytes <= 0) return false;
+	if (!FileSeek(img, 0, SEEK_SET)) return false;
+
+	static uint8_t ff_buf[4096] = {};
+	static bool ff_init = false;
+	if (!ff_init)
+	{
+		memset(ff_buf, 0xFF, sizeof(ff_buf));
+		ff_init = true;
+	}
+
+	int remaining = total_bytes;
+	while (remaining > 0)
+	{
+		int chunk = (remaining > (int)sizeof(ff_buf)) ? (int)sizeof(ff_buf) : remaining;
+		if (FileWriteAdv(img, ff_buf, chunk, -1) != chunk) return false;
+		remaining -= chunk;
+	}
+
+	return FileSeek(img, 0, SEEK_SET);
+}
+
 static bool sram_snapshot_mount_virtual(uint8_t slot, const char *save_path, int pre_size)
 {
 	if (slot >= SRAM_SNAPSHOT_MAX_SLOTS || !save_path || !save_path[0]) return false;
@@ -342,60 +344,80 @@ static bool sram_snapshot_mount_virtual(uint8_t slot, const char *save_path, int
 
 	if (!FileOpenEx(&sd_image[slot], tmp_path, O_CREAT | O_RDWR | O_TRUNC | O_SYNC, 1, 0))
 	{
-		printf("SRAM snapshot error: failed to create temporary save image \"%s\".\n", tmp_path);
+		fprintf(stderr, "SRAM snapshot error: failed to create temporary save image \"%s\".\n", tmp_path);
 		sram_snapshot_configure_slot(slot, 0);
 		return false;
 	}
+	snprintf(sd_image[slot].path, sizeof(sd_image[slot].path), "%s", tmp_path);
 
 	std::vector<uint8_t> latest;
 	bool found = false;
 	if (!sram_snapshot_load_latest(sram_snapshot_slots[slot].db_path, latest, &found))
 	{
-		printf("SRAM snapshot warning: failed to load latest snapshot for \"%s\".\n", save_path);
+		fprintf(stderr, "SRAM snapshot warning: failed to load latest snapshot for \"%s\".\n", save_path);
 	}
+	const bool have_snapshot = found && !latest.empty();
 
-	if (found && !latest.empty())
+	if (have_snapshot)
 	{
 		if (!sram_snapshot_write_image(&sd_image[slot], latest.data(), latest.size()))
 		{
-			printf("SRAM snapshot error: failed to restore snapshot for \"%s\".\n", save_path);
-			FileClose(&sd_image[slot]);
-			sram_snapshot_configure_slot(slot, 0);
-			return false;
-		}
-		printf("SRAM snapshot loaded: %s (%d bytes)\n", save_path, (int)latest.size());
-	}
-	else if (pre_size > 0)
-	{
-		static uint8_t ff_buf[4096] = {};
-		static bool ff_init = false;
-		if (!ff_init)
-		{
-			memset(ff_buf, 0xFF, sizeof(ff_buf));
-			ff_init = true;
-		}
-
-		if (!FileSeek(&sd_image[slot], 0, SEEK_SET))
-		{
+			fprintf(stderr, "SRAM snapshot error: failed to restore snapshot for \"%s\".\n", save_path);
 			FileClose(&sd_image[slot]);
 			sram_snapshot_configure_slot(slot, 0);
 			return false;
 		}
 
-		int remaining = pre_size;
-		while (remaining > 0)
+		// Keep expected SRAM size for cores that rely on fixed geometry.
+		if (pre_size > (int)latest.size())
 		{
-			int chunk = (remaining > (int)sizeof(ff_buf)) ? (int)sizeof(ff_buf) : remaining;
-			if (FileWriteAdv(&sd_image[slot], ff_buf, chunk, -1) != chunk)
+			if (!FileSeek(&sd_image[slot], latest.size(), SEEK_SET))
 			{
 				FileClose(&sd_image[slot]);
 				sram_snapshot_configure_slot(slot, 0);
 				return false;
 			}
-			remaining -= chunk;
+
+			int remaining = pre_size - (int)latest.size();
+			static uint8_t ff_buf[4096] = {};
+			static bool ff_init = false;
+			if (!ff_init)
+			{
+				memset(ff_buf, 0xFF, sizeof(ff_buf));
+				ff_init = true;
+			}
+
+			while (remaining > 0)
+			{
+				int chunk = (remaining > (int)sizeof(ff_buf)) ? (int)sizeof(ff_buf) : remaining;
+				if (FileWriteAdv(&sd_image[slot], ff_buf, chunk, -1) != chunk)
+				{
+					FileClose(&sd_image[slot]);
+					sram_snapshot_configure_slot(slot, 0);
+					return false;
+				}
+				remaining -= chunk;
+			}
+
+			FileSeek(&sd_image[slot], 0, SEEK_SET);
 		}
 
-		FileSeek(&sd_image[slot], 0, SEEK_SET);
+		fprintf(stderr, "SRAM snapshot loaded: %s (%d bytes)\n", save_path, (int)latest.size());
+	}
+	else if (pre_size > 0)
+	{
+		if (!sram_snapshot_fill_ff(&sd_image[slot], pre_size))
+		{
+			FileClose(&sd_image[slot]);
+			sram_snapshot_configure_slot(slot, 0);
+			return false;
+		}
+	}
+	if (!have_snapshot && pre_size <= 0)
+	{
+		// Preserve legacy blank-save behavior for unknown save size.
+		// This keeps reads beyond current file size as erased bytes (0xFF).
+		sd_image[slot].type = 2;
 	}
 
 	return true;
@@ -440,43 +462,12 @@ static void sram_snapshot_try_flush(uint8_t slot)
 
 	if (!unchanged)
 	{
-		printf("SRAM snapshot saved: %s (%d bytes)\n", state.save_path, (int)data.size());
+		fprintf(stderr, "SRAM snapshot saved: %s (%d bytes)\n", state.save_path, (int)data.size());
 	}
-}
-
-static bool sram_snapshot_has_write_delta(fileTYPE *img, uint64_t file_offset, const uint8_t *new_data, uint32_t len)
-{
-	if (!img || !img->filp || !new_data) return true;
-	if (!len) return false;
-
-	const __off64_t old_offset = img->offset;
-	bool changed = true;
-	const uint64_t old_size = (img->size > 0) ? (uint64_t)img->size : 0;
-
-	if (file_offset < old_size)
+	else
 	{
-		uint64_t compare_len = old_size - file_offset;
-		if (compare_len > len) compare_len = len;
-
-		if (compare_len == len)
-		{
-			static std::vector<uint8_t> old_data;
-			old_data.resize(compare_len);
-
-			if (FileSeek(img, file_offset, SEEK_SET))
-			{
-				const int read_size = FileReadAdv(img, old_data.data(), (int)compare_len, -1);
-				if (read_size == (int)compare_len)
-				{
-					changed = !!memcmp(old_data.data(), new_data, compare_len);
-				}
-			}
-		}
+		fprintf(stderr, "SRAM snapshot unchanged: %s (%d bytes)\n", state.save_path, (int)data.size());
 	}
-
-	FileSeek(img, old_offset, SEEK_SET);
-
-	return changed;
 }
 
 static void sram_snapshot_configure_slot(uint8_t slot, const char *save_path)
@@ -517,11 +508,6 @@ static void sram_snapshot_flush_slot(uint8_t slot)
 	sram_snapshot_try_flush(slot);
 }
 #else
-static bool sram_snapshot_has_write_delta(fileTYPE *, uint64_t, const uint8_t *, uint32_t)
-{
-	return true;
-}
-
 static void sram_snapshot_configure_slot(uint8_t, const char *)
 {
 }
@@ -3216,16 +3202,16 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			FileSeek(&f, 256, SEEK_SET);
 			bytes2send = 64 * 1024;
 		}
-		else if (snes_file == SNES_FILE_ROM) {
-			printf("Load SNES ROM.\n");
-			uint8_t* buf = snes_get_header(&f);
-			hexdump(buf, 16, 0);
-			user_io_file_tx_data(buf, 512);
+			else if (snes_file == SNES_FILE_ROM) {
+				printf("Load SNES ROM.\n");
+				uint8_t* snes_hdr = snes_get_header(&f);
+				hexdump(snes_hdr, 16, 0);
+				user_io_file_tx_data(snes_hdr, 512);
 
-			//strip original SNES ROM header if present (not used)
-			if ((bytes2send % 1024) == 512)
-			{
-				bytes2send -= 512;
+				//strip original SNES ROM header if present (not used)
+				if ((bytes2send % 1024) == 512)
+				{
+					bytes2send -= 512;
 				FileReadSec(&f, buf);
 			}
 		}
@@ -3710,12 +3696,18 @@ void user_io_poll()
 				// If n64_process_save returns false (e.g. use_save is off, or unsupported op), 
 				// it will fall through to the generic handler below.
 			}
-			else if (op == 2)
-			{
-				//printf("SD WR %llu on %d\n", lba, disk);
-				bool wrote_save_data = false;
+				else if (op == 2)
+				{
+					//printf("SD WR %llu on %d\n", lba, disk);
+					bool wrote_save_data = false;
+					bool snapshot_slot = sram_snapshot_enabled(disk);
+					if (snapshot_slot)
+					{
+						fprintf(stderr, "SRAM snapshot write req: slot=%d lba=%llu sz=%u blksz=%u type=%d file_size=%lld\n",
+							disk, (unsigned long long)lba, sz, blksz, sd_image[disk].type, (long long)sd_image[disk].size);
+					}
 
-				buffer_lba[disk] = -1;
+					buffer_lba[disk] = -1;
 
 				// Fetch sector data from FPGA ...
 				EnableIO();
@@ -3723,18 +3715,18 @@ void user_io_poll()
 				spi_block_read(buffer[disk], fio_size, sz);
 				DisableIO();
 
-				if (sd_image[disk].type == 2 && !lba)
-				{
-					//Create the file
-					if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
+					if (sd_image[disk].type == 2 && !lba)
 					{
-						diskled_on();
-						if (FileWriteAdv(&sd_image[disk], buffer[disk], sz))
+						//Create the file
+						if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
 						{
-							sd_image[disk].size = sz;
-							wrote_save_data = true;
+							diskled_on();
+							if (FileWriteAdv(&sd_image[disk], buffer[disk], sz))
+							{
+								sd_image[disk].size = FileGetSize(&sd_image[disk]);
+								wrote_save_data = true;
+							}
 						}
-					}
 					else
 					{
 						printf("Error in creating file: %s\n", sd_image[disk].path);
@@ -3743,41 +3735,42 @@ void user_io_poll()
 				else
 				{
 					// ... and write it to disk
-					uint64_t size = sd_image[disk].size / blksz;
-					if (sz && lba <= size)
-					{
-						diskled_on();
-						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
+						uint64_t size = sd_image[disk].size / blksz;
+						if (sz && (lba <= size || sd_image_cangrow[disk]))
 						{
+							diskled_on();
+							if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
+							{
 							if (!sd_image_cangrow[disk])
 							{
 								__off64_t rem = sd_image[disk].size - sd_image[disk].offset;
 								sz = (rem >= sz) ? sz : (int)rem;
 							}
 
-							if (sz)
-							{
-								bool changed = true;
-								if (use_save && sram_snapshot_enabled(disk))
+								if (sz)
 								{
-									changed = sram_snapshot_has_write_delta(&sd_image[disk], lba * blksz, buffer[disk], sz);
-								}
-
-								if (changed && FileWriteAdv(&sd_image[disk], buffer[disk], sz))
-								{
-									wrote_save_data = true;
-								}
+									if (FileWriteAdv(&sd_image[disk], buffer[disk], sz))
+									{
+										wrote_save_data = true;
+									}
 							}
 						}
 					}
 				}
 
-				if (use_save && wrote_save_data)
-				{
-					menu_process_save();
-					user_io_mark_save_dirty(disk);
+					if (snapshot_slot)
+					{
+						// Some cores rewrite sectors with patterns we may classify as unchanged.
+						// Mark dirty on any save-slot write request and let flush deduplicate.
+						user_io_mark_save_dirty(disk);
+					}
+
+					if (wrote_save_data)
+					{
+						if (use_save) menu_process_save();
+						if (snapshot_slot) sram_snapshot_flush_slot(disk);
+					}
 				}
-			}
 			else if (op & 1)
 			{
 				uint32_t buf_n = sizeof(buffer[0]) / blksz;
