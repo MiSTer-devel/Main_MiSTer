@@ -933,19 +933,58 @@ static int process_request(void *reqres_buffer)
 			break;
 		}
 
-		if(strchr(path, '?') || strchr(path, '*'))
+		if(!strpbrk(path, "?*"))
+		{
+			res = FileDelete(path) ? 0 : 2;
+			break;
+		}
+
+		char *flt = strrchr(path, '/');
+		if (!*flt)
+		{
+			res = 0x12;
+			break;
+		}
+		*flt++ = 0;
+
+		const char *full_path = getFullPath(path);
+
+		DIR *d = opendir(full_path);
+		if (!d)
 		{
 			res = 2;
 			break;
 		}
-
-		if (!FileDelete(path))
-		{
-			res = 2;
-			break;
-		}
-
+		struct dirent64 *ent;
+		int found  = 0;
 		res = 0;
+		while ((ent = readdir64(d)))
+		{
+			if (!strcmp(ent->d_name, ".") ||
+			    !strcmp(ent->d_name, "..") ||
+			    !cmp_name(ent->d_name, flt))
+			{
+				dbg_print("skipped %s\n", ent->d_name);
+				continue;
+			}
+
+			char tmp[PATH_MAX];
+			if (snprintf(tmp, sizeof(tmp), "%s/%s", full_path, ent->d_name) >= (int)sizeof(tmp))
+			{
+				res = 2;
+				continue;
+			}
+			dbg_print("AL_DELETE: %s\n", tmp);
+			if (unlink(tmp) == -1)
+			{
+				res = 2;
+				continue;
+			}
+			found = 1;
+		}
+		if (!found) res = 2;
+		closedir(d);
+		break;
 	}
 	break;
 
