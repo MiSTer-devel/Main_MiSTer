@@ -3107,7 +3107,7 @@ void user_io_poll()
 			int disk = -1;
 			int ack = 0;
 			int op = 0;
-			static uint8_t buffer[16][16384];
+			static uint8_t buffer[16][UIO_BUFFER_SIZE];
 			uint64_t lba = 0;
 			uint32_t blksz, blks, sz;
 
@@ -3130,7 +3130,7 @@ void user_io_poll()
 				if (disk == 1 && is_psx())
 					blksz = 2352;
 				else if (disk == 0 && is_cdi())
-					blksz = (2352 + 24);
+					blksz = CDI_CDIC_BUFFER_SIZE;
 				else
 					blksz = 128 << ((c >> 6) & 7);
 
@@ -3265,11 +3265,11 @@ void user_io_poll()
 					unsigned int psx_blksz = psx_chd_hunksize();
 					if (psx_blksz && psx_blksz <= sizeof(buffer[0])) buf_n = psx_blksz / blksz;
 				}
-				else if (is_cdi() && blksz == (2352 + 24))
+				else if (is_cdi() && blksz == CDI_CDIC_BUFFER_SIZE)
 				{
 					//returns 0 if the mounted disk is not a chd, otherwise returns the chd hunksize in bytes
-					unsigned int psx_blksz = cdi_chd_hunksize();
-					if (psx_blksz && psx_blksz <= sizeof(buffer[0])) buf_n = psx_blksz / blksz;
+					unsigned int cdi_blksz = cdi_chd_hunksize();
+					if (cdi_blksz && cdi_blksz <= sizeof(buffer[0])) buf_n = cdi_blksz / blksz;
 				}
 				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, blksz, disk, fio_size);
 
