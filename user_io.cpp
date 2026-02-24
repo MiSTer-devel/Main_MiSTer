@@ -1552,6 +1552,7 @@ void user_io_init(const char *path, const char *xml)
 					const char *home = HomeDir();
 
 					if (is_uneon()) x86_ide_set();
+					if (is_cdi()) cdi_load_root_nvram();
 
 					if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 					{

@@ -877,13 +877,13 @@ static void mount_cd(int size, int index)
 	user_io_bufferinvalidate(0);
 }
 
+/// Last used directory for save file management
+/// Must be static to keep the value between mount calls
+static char last_dir[1024] = "";
+
 void cdi_mount_cd(int s_index, const char *filename)
 {
 	int loaded = 0;
-
-	/// Last used directory for save file management
-	/// Must be static to keep the value between mount calls
-	static char last_dir[1024] = {};
 
 	if (strlen(filename))
 	{
@@ -929,4 +929,10 @@ void cdi_mount_cd(int s_index, const char *filename)
 
 void cdi_poll()
 {
+}
+
+void cdi_load_root_nvram()
+{
+	strcpy(last_dir, "games/CD-i");
+	cdi_mount_save(last_dir);
 }
