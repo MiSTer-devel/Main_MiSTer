@@ -203,6 +203,10 @@ enum MENU
 	// MT32-pi
 	MENU_MT32PI_MAIN1,
 	MENU_MT32PI_MAIN2,
+
+	// Atari 8bit cartridge type selection
+	MENU_ATARI8BIT_CART1,
+	MENU_ATARI8BIT_CART2,
 };
 
 static uint32_t menustate = MENU_NONE1;
@@ -2177,7 +2181,7 @@ void HandleUI(void)
 						if (is_gba() && FileExists(user_io_make_filepath(HomeDir(), "goomba.rom"))) strcat(ext, "GB GBC");
 						while (strlen(ext) % 3) strcat(ext, " ");
 
-						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0) | (store_name ? SCANO_CLEAR : 0);
+						fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0) | (store_name ? SCANO_CLEAR : 0) | (is_atari5200() || (is_atari800() && (ioctl_index == 8 || ioctl_index == 9)) ? SCANO_UMOUNT : 0);
 						fs_MenuSelect = MENU_GENERIC_FILE_SELECTED;
 						fs_MenuCancel = MENU_GENERIC_MAIN1;
 						strcpy(fs_pFileExt, ext);
@@ -2350,6 +2354,8 @@ void HandleUI(void)
 									if (is_saturn() && !bit) saturn_reset();
 									if (is_n64() && !bit) n64_reset();
 									if (is_psx() && !bit) psx_reset();
+									if (is_atari800() && !bit) atari800_reset();
+									if (is_atari5200() && !bit) atari5200_reset();
 
 									user_io_status_set(opt, 1, ex);
 									user_io_status_set(opt, 0, ex);
@@ -2404,7 +2410,7 @@ void HandleUI(void)
 				}
 			}
 
-			MenuHide();
+			if(!(selPath[0] && (is_atari5200() || (is_atari800() && (ioctl_index == 8 || ioctl_index == 9))))) MenuHide();
 			printf("File selected: %s\n", selPath);
 			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
 
@@ -2446,6 +2452,38 @@ void HandleUI(void)
 					{
 						c64_open_file(selPath, idx);
 					}
+					else if (is_atari800() || is_atari5200())
+					{
+						if(is_atari800() && ioctl_index != 8 && ioctl_index != 9)
+						{
+							atari800_open_bios_file(selPath, idx);
+						}
+						else
+						{
+							int a8bit_cart_matches = is_atari5200() ? atari5200_check_cartridge_file(selPath, idx): atari800_check_cartridge_file(selPath, idx);
+							if(a8bit_cart_matches <= 1) MenuHide();
+							if(a8bit_cart_matches == 1)
+							{
+								if(is_atari5200())
+								{
+									atari5200_open_cartridge_file(selPath, 0);
+								}
+								else
+								{
+									atari800_open_cartridge_file(selPath, 0);
+								}
+							}
+							else if(a8bit_cart_matches > 1 && mgl->done)
+							{
+								menustate = MENU_ATARI8BIT_CART1;
+								menusub = 0;
+							}
+							else if(mgl->done)
+							{
+								Info("Unsupported cartridge type!", 2000);
+							}
+						}
+					}
 					else
 					{
 						user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr);
@@ -2454,6 +2492,14 @@ void HandleUI(void)
 				}
 
 				if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
+			}
+			else if(is_atari800() && (ioctl_index == 8 || ioctl_index == 9))
+			{
+				atari800_umount_cartridge(ioctl_index == 9);
+			}
+			else if(is_atari5200())
+			{
+				atari5200_umount_cartridge();
 			}
 
 			mgl->state = 3;
@@ -2529,6 +2575,10 @@ void HandleUI(void)
 			{
 				neocd_set_en(1);
 				neocd_set_image(selPath);
+			}
+			else if (is_atari800())
+			{
+				atari800_set_image(user_io_ext_idx(selPath, fs_pFileExt), ioctl_index, selPath);
 			}
 			else
 			{
@@ -6982,6 +7032,61 @@ void HandleUI(void)
 
 	case MENU_CORE_FILE_CANCELED:
 		SelectFile("", 0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, cp_MenuCancel);
+		break;
+
+	case MENU_ATARI8BIT_CART1:
+		helptext_idx = 0;
+		menumask = 0;
+		OsdSetSize(16);
+		OsdSetTitle("Cartridge Type");
+		menustate = MENU_ATARI8BIT_CART2;
+		parentstate = MENU_ATARI8BIT_CART1;
+
+		{
+			int entry = 0;
+			uint32_t selentry = 0;
+			int a8bit_match_count = is_atari5200() ? atari5200_get_match_cart_count() : atari800_get_match_cart_count();
+			for (int i = 0; i < a8bit_match_count; i++)
+			{
+				s[0] = ' ';
+				strcpy(s + 1, is_atari5200() ? atari5200_get_cart_match_name(i) : atari800_get_cart_match_name(i));
+				OsdWrite(entry, s, menusub == selentry);
+				menumask = (menumask << 1) | 1;
+				entry++;
+				selentry++;
+			}
+
+			while (entry < OsdGetSize() - 1) OsdWrite(entry++);
+
+			OsdWrite(entry, "           Cancel", menusub == selentry);
+			menusub_last = selentry;
+			menumask = (menumask << 1) | 1;
+		}
+		break;
+
+	case MENU_ATARI8BIT_CART2:
+		if (menu || left)
+		{
+			menustate = MENU_GENERIC_MAIN1;
+			menusub = ioctl_index - 2;
+		}
+		else if (select)
+		{
+			menustate = MENU_NONE1;
+			if (menusub != menusub_last)
+			{
+				int match_index = menusub;
+				HandleUI(); // What MenuHide() would do...
+				if(is_atari5200())
+				{
+					atari5200_open_cartridge_file(selPath, match_index);
+				}
+				else
+				{
+					atari800_open_cartridge_file(selPath, match_index);
+				}
+			}
+		}
 		break;
 
 		/******************************************************************/

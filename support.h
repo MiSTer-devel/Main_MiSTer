@@ -40,6 +40,10 @@
 // C64 support
 #include "support/c64/c64.h"
 
+// Atari 8bit support
+#include "support/atari8bit/atari800.h"
+#include "support/atari8bit/atari5200.h"
+
 // PCECD  support
 #include "support/pcecd/pcecd.h"
 

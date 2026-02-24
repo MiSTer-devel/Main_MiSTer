@@ -22,7 +22,7 @@ with help from the MiSTer contributors including Grabulosaure
 
 mister_scaler * mister_scaler_init()
 {
-    mister_scaler *ms =(mister_scaler *) calloc(sizeof(mister_scaler),1);
+    mister_scaler *ms = (mister_scaler *)calloc(1, sizeof(mister_scaler));
     int	 pagesize = sysconf(_SC_PAGE_SIZE);
     if (pagesize==0) pagesize=4096;
     int offset = MISTER_SCALER_BASEADDR;
