@@ -38,6 +38,8 @@
 #define NUMDEV 30
 #define UINPUT_NAME "MiSTer virtual input"
 
+bool update_advanced_state(int devnum, uint16_t evcode, int evstate);
+
 char joy_bnames[NUMBUTTONS][32] = {};
 int  joy_bcount = 0;
 static struct pollfd pool[NUMDEV + 3];
@@ -1083,6 +1085,7 @@ static int ev2archie[] =
 	NONE  //255 ???
 };
 
+
 uint8_t ps2_kbd_scan_set = 2;
 uint32_t get_ps2_code(uint16_t key)
 {
@@ -1151,8 +1154,6 @@ typedef struct
 
 	uint8_t  has_mmap;
 	uint32_t mmap[NUMBUTTONS];
-	uint8_t  has_jkmap;
-	uint16_t jkmap[1024];
 	int      stick_l[2];
 	int      stick_r[2];
 
@@ -1206,6 +1207,10 @@ typedef struct
 	float    max_range[2];
 
 	uint32_t deadzone;
+	advancedButtonMap advanced_map[ADVANCED_MAP_MAX];
+	advancedButtonState advanced_state[ADVANCED_MAP_MAX];
+	bool has_advanced_map;
+	uint16_t advanced_last_pressed_keycode;
 } devInput;
 
 static devInput input[NUMDEV] = {};
@@ -1399,15 +1404,20 @@ static int mapping_clear;
 static int mapping_finish;
 static int mapping_set;
 
+
 static int mapping_current_key = 0;
 static int mapping_current_dev = -1;
+static advancedButtonMap *mapping_store = NULL;
 
 static uint32_t tmp_axis[4];
 static int tmp_axis_n = 0;
 
 static int grabbed = 1;
 
-void start_map_setting(int cnt, int set)
+static uint32_t osd_timer = 0;
+static uint32_t map_advance_timer = 0;
+
+void start_map_setting(int cnt, int set, advancedButtonMap *abm_store)
 {
 	mapping_current_key = 0;
 	mapping_current_dev = -1;
@@ -1415,8 +1425,18 @@ void start_map_setting(int cnt, int set)
 	mapping_button = 0;
 	mapping = 1;
 	mapping_set = set;
-	if (!mapping_set)
+
+	if (abm_store)
 	{
+		mapping_type = 3;
+		mapping_store = abm_store;
+		mapping_dev = -1;
+		mapping_set = (cnt == 3) ? 1 : set;
+		if (cnt != 3)
+			memset((set == 1) ? abm_store->input_codes : abm_store->output_codes, 0, sizeof(abm_store->input_codes));
+		osd_timer = 0;
+		map_advance_timer = 0;
+	} else if (!mapping_set) {
 		mapping_dev = -1;
 		mapping_type = (cnt < 0) ? 3 : cnt ? 1 : 2;
 	}
@@ -1430,6 +1450,16 @@ void start_map_setting(int cnt, int set)
 
 	//un-stick the enter key
 	user_io_kbd(KEY_ENTER, 0);
+}
+
+advancedButtonMap *get_map_code_store()
+{
+	return mapping_store;
+}
+
+int get_map_count()
+{
+	return mapping_count;
 }
 
 int get_map_set()
@@ -1457,10 +1487,21 @@ int get_map_finish()
 	return mapping_finish;
 }
 
-static uint32_t osd_timer = 0;
+
+int get_map_dev()
+{
+	return mapping_dev;
+}
+
+
 int get_map_cancel()
 {
 	return (mapping && !is_menu() && osd_timer && CheckTimer(osd_timer));
+}
+
+int get_map_advance()
+{
+	return (mapping && !is_menu() && map_advance_timer && CheckTimer(map_advance_timer));
 }
 
 static char *get_unique_mapping(int dev, int force_unique = 0)
@@ -1514,16 +1555,24 @@ void finish_map_setting(int dismiss)
 	mapping = 0;
 	if (mapping_dev<0) return;
 
+	if (mapping_type == 3)
+	{
+		if (!dismiss) return;
+		if (mapping_count == 3) 
+		{
+			input_advanced_clear(mapping_dev);
+			if (mapping_store) memset(mapping_store, 0, sizeof(advancedButtonMap));
+		} else if (mapping_store) {
+			memset(mapping_set == 2 ? mapping_store->output_codes : mapping_store->input_codes, 0, sizeof(mapping_store->input_codes));
+		}
+		return;
+	}
+
 	if (mapping_type == 2)
 	{
 		input[mapping_dev].has_kbdmap = 0;
 		if (dismiss) FileDeleteConfig(get_kbdmap_name(mapping_dev));
 		else FileSaveConfig(get_kbdmap_name(mapping_dev), &input[mapping_dev].kbdmap, sizeof(input[mapping_dev].kbdmap));
-	}
-	else if (mapping_type == 3)
-	{
-		if (dismiss) memset(input[mapping_dev].jkmap, 0, sizeof(input[mapping_dev].jkmap));
-		save_map(get_jkmap_name(mapping_dev), &input[mapping_dev].jkmap, sizeof(input[mapping_dev].jkmap));
 	}
 	else
 	{
@@ -1643,9 +1692,10 @@ static int keyrah_trans(int key, int press)
 	return key;
 }
 
-static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev);
+static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev, bool menu_event = false);
 
 static int kbd_toggle = 0;
+
 static uint32_t crtgun_timeout[NUMDEV] = {};
 
 static unsigned char mouse_btn = 0; //emulated mouse
@@ -1881,7 +1931,7 @@ static bool handle_autofire_toggle(int num, uint32_t mask, uint32_t code, char p
 				strat += sprintf(strat, "%s\n", joy_bnames[btn-4]);
 			}
 
-			const char *rate = get_autofire_rate_hz(num, lastcode[num]);
+			const char *rate = get_autofire_rate_hz_button(num, lastcode[num]);
 
 			if (!strcmp(rate, "disabled")) {
 					strat += sprintf(strat, "Autofire disabled");
@@ -1952,6 +2002,7 @@ static void set_key_state(int player, uint32_t key, bool press, uint32_t mask)
 			}
 		}
 	}
+
 	if (key_states[player].count < MAX_KEY_STATES)
 	{
 		if (press)
@@ -2150,8 +2201,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 			default:
 				ev.code = (bnum == BTN_OSD) ? KEY_MENU : 0;
 			}
-
-			input_cb(&ev, 0, 0);
+			input_cb(&ev, 0, 0, true);
 		}
 		else if (video_fb_state())
 		{
@@ -2444,7 +2494,6 @@ static void restore_player(int dev)
 				input[input[dev].bind].map_shown = player[k].map_shown;
 			}
 
-			memcpy(input[dev].jkmap, player[k].jkmap, sizeof(input[dev].jkmap));
 			input[dev].lightgun = player[k].lightgun;
 			break;
 		}
@@ -2565,7 +2614,7 @@ static void assign_player(int dev, int num, int force = 0)
 	printf("Device %s %sassigned to player %d\n", input[dev].id, force ? "forcebly " : "", input[dev].num);
 }
 
-static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev)
+static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev, bool menu_event)
 {
 	if (ev->type != EV_KEY && ev->type != EV_ABS && ev->type != EV_REL) return;
 	if (ev->type == EV_KEY && (!ev->code || ev->code == KEY_UNKNOWN)) return;
@@ -2708,13 +2757,10 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		input[dev].has_map++;
 	}
 
-	if (!input[dev].has_jkmap)
+	if (!input[dev].has_advanced_map)
 	{
-		if (!load_map(get_jkmap_name(dev), &input[dev].jkmap, sizeof(input[dev].jkmap)))
-		{
-			memset(input[dev].jkmap, 0, sizeof(input[dev].jkmap));
-		}
-		input[dev].has_jkmap = 1;
+		input_advanced_load(dev);
+		input[dev].has_advanced_map = true;
 	}
 
 	if (!input[dev].num)
@@ -2828,7 +2874,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	if (old_combo != 3 && input[dev].osd_combo == 3)
 	{
 		osd_event = 1;
-		if (mapping && !is_menu()) osd_timer = GetTimer(1000);
+		if (mapping && !is_menu()) osd_timer = mapping_type == 3 ? ((mapping_count < 3 || mapping_set == 1) ? GetTimer(5000) : 0) : GetTimer(1000);
 	}
 	else if (old_combo == 3 && input[dev].osd_combo != 3)
 	{
@@ -2844,23 +2890,61 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			else
 			{
 				map_skip = 1;
-				ev->value = 1;
+				if (mapping_type != 3) ev->value = 1;
 			}
 		}
 		osd_timer = 0;
 	}
 
-	if (mapping && mapping_type == 3)
-	{
-		if (map_skip)
-		{
-			mapping_finish = 1;
-			ev->value = 0;
-		}
-		osd_event = 0;
-	}
 
 	//mapping
+	
+	if (mapping && mapping_type == 3 && ev->type == EV_KEY)
+	{
+		bool jkm_can_intr = mapping_count == 3 && mapping_button <= 1 && mapping_set == 1;
+		if (mapping_dev < 0) mapping_dev = dev;
+		if (ev->value == 1 && ev->code == KEY_ENTER) map_skip = 1;
+		if (map_skip && jkm_can_intr)
+			mapping_finish = 1;
+
+		if (jkm_can_intr
+			  && (ev->code == (input[mapping_dev].mmap[SYS_BTN_MENU_FUNC] & 0xFFFF) || ev->code == KEY_F12))
+					map_advance_timer = ev->value ? (ev->code == KEY_F12) ? 1 : GetTimer(5000) : 0;
+
+		if (ev->value == 1)
+		{
+			uint16_t *code_store = mapping_set ==  1 ? mapping_store->input_codes : mapping_store->output_codes; 
+			code_store[mapping_button++] = ev->code;
+			mapping_current_dev = mapping_dev;
+			if (mapping_button == sizeof(mapping_store->input_codes)/sizeof(mapping_store->input_codes[0])) //Don't overflow, just keep replacing the last entry
+				mapping_button--;
+			if (mapping_button > 1)
+				osd_timer = map_advance_timer = 0;
+		} else if (ev->value == 0 && mapping_button > 0) {
+			if (ev->code == KEY_ESC && (jkm_can_intr || (mapping_count < 3 && mapping_button <= 1)))
+			{
+				osd_timer = 1;
+				return;
+			}
+
+			if (mapping_count == 3)
+			{
+				mapping_set++;
+				mapping_button = 0;
+				if (mapping_set > 2)
+				{
+					mapping_set = 1;
+					input_advanced_save_entry(mapping_store, mapping_dev);
+					memset(mapping_store, 0, sizeof(advancedButtonMap));
+				}
+			} else {
+				mapping_finish = 1;
+			}
+			osd_timer = 0;
+		}
+		return;
+	}
+
 	if (mapping && (mapping_dev >= 0 || ev->value)
 		&& !((mapping_type < 2 || !mapping_button) && (cancel || enter))
 		&& input[dev].quirk != QUIRK_PDSP
@@ -2930,33 +3014,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mapping_button = 0;
 						}
 					}
-				}
-				return;
-			}
-			else if (mapping_type == 3) // button remap
-			{
-				if (input[dev].mmap[SYS_BTN_OSD_KTGL] == ev->code ||
-					input[dev].mmap[SYS_BTN_OSD_KTGL + 1] == ev->code ||
-					input[dev].mmap[SYS_BTN_OSD_KTGL + 2] == ev->code) return;
-
-				if (ev->value == 1 && !mapping_button)
-				{
-					if (mapping_dev < 0) mapping_dev = dev;
-					if (mapping_dev == dev && ev->code < 1024) mapping_button = ev->code;
-					mapping_current_dev = mapping_dev;
-				}
-
-				if (mapping_dev >= 0 && (ev->code < 256 || mapping_dev == dev) && mapping_button && mapping_button != ev->code)
-				{
-					if (ev->value == 1)
-					{
-						// Technically it's hard to map the key to button as keyboards
-						// are all the same while joysticks are personalized and numbered.
-						input[mapping_dev].jkmap[mapping_button] = ev->code;
-						mapping_current_dev = dev;
-					}
-
-					if (ev->value == 0) mapping_button = 0;
 				}
 				return;
 			}
@@ -3213,7 +3270,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		switch (ev->type)
 		{
 		case EV_KEY:
-			if (ev->code < 1024 && input[dev].jkmap[ev->code] && !user_io_osd_is_visible()) ev->code = input[dev].jkmap[ev->code];
 
 			//joystick buttons, digital directions
 			if (ev->code >= 256)
@@ -3373,6 +3429,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						}
 					}
 
+					if (!menu_event)
+						update_advanced_state(dev,  ev->code, ev->value);
+
 					if (ev->code == input[dev].mmap[SYS_MS_BTN_EMU] && (ev->value <= 1) && ((!(mouse_emu & 1)) ^ (!ev->value)))
 					{
 						mouse_emu = ev->value ? mouse_emu | 1 : mouse_emu & ~1;
@@ -3413,6 +3472,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (ev->code == 111) reset_m |= 0x100;
 				user_io_check_reset(reset_m, (keyrah && !cfg.reset_combo) ? 1 : cfg.reset_combo);
 
+				bool send_key = true;
+				if (!menu_event)
+				{
+				  send_key = update_advanced_state(dev,  ev->code, ev->value);
+				}
 				if(!user_io_osd_is_visible() && ((user_io_get_kbdemu() == EMU_JOY0) || (user_io_get_kbdemu() == EMU_JOY1)) && !video_fb_state())
 				{
 					if (!kbd_toggle)
@@ -3501,7 +3565,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				}
 
 				if (ev->code == KEY_HOMEPAGE) ev->code = KEY_MENU;
-				user_io_kbd(ev->code, ev->value);
+				if (send_key) user_io_kbd(ev->code, ev->value);
 				return;
 			}
 			break;
@@ -5183,6 +5247,7 @@ int input_test(int getchar)
 
 		while (1)
 		{
+			
 			if (cfg.rumble && !is_menu())
 			{
 				for (int i = 0; i < NUMDEV; i++)
@@ -5196,6 +5261,7 @@ int input_test(int getchar)
 					set_rumble(i, spi_uio_cmd(UIO_GET_RUMBLE | ((input[dev].num - 1) << 8)));
 				}
 			}
+
 
 			int return_value = poll(pool, NUMDEV + 3, timeout);
 			if (!return_value) break;
@@ -5221,7 +5287,6 @@ int input_test(int getchar)
 			for (int pos = 0; pos < NUMDEV; pos++)
 			{
 				int i = pos;
-
 
 				if ((pool[i].fd >= 0) && (pool[i].revents & POLLIN))
 				{
@@ -5871,6 +5936,8 @@ void key_update_frames_held()
 
 int input_poll(int getchar)
 {
+
+	static int poll_cnt = 0;
 	PROFILE_FUNCTION();
 	static bool autofire_cfg_parsed = false;
  	if (!autofire_cfg_parsed) autofire_cfg_parsed = parse_autofire_cfg();
@@ -6086,5 +6153,384 @@ void parse_buttons()
 		substrcpy(joy_bnames[n], str, n);
 		if (!joy_bnames[n][0]) break;
 		joy_bcount++;
+	}
+}
+
+
+static void advanced_convert_jkmap(int devnum)
+{
+
+  int abmidx = 0;
+
+  uint16_t jkmap[1024];
+  if (load_map(get_jkmap_name(devnum), jkmap, sizeof(jkmap)))
+	{
+	  for(size_t i = 0; i < sizeof(jkmap)/sizeof(jkmap[0]); i++)
+    {
+		  if (jkmap[i])
+		  {
+			  advancedButtonMap *abm = &input[devnum].advanced_map[abmidx++];
+		    memset(abm, 0, sizeof(advancedButtonMap));	
+			  abm->input_codes[0] = i;
+			  abm->output_codes[0] = jkmap[i];
+		  }
+	  }
+  }
+}
+
+
+uint32_t advanced_get_btn_mask_for_code(uint16_t evcode, int devnum)
+{
+	uint32_t mask = 0;
+
+
+	for (uint i = 0; i < BTN_NUM; i++)
+	{
+		if (evcode == (input[devnum].map[i] & 0xFFFF)) mask |= 1 << i;
+		else if (evcode == (input[devnum].map[i] >> 16)) mask |= 1 << i;
+	}
+
+	return mask;
+}
+
+//Only called when the pressed state changes for an entry
+static uint32_t process_abm_entry(advancedButtonMap *abm, advancedButtonState *abs, int devnum)
+{
+	uint32_t retmask = 0;
+  retmask = abm->button_mask;;
+	for (uint k = 0; k < sizeof(abm->output_codes)/sizeof(abm->output_codes[0]); k++)
+	{
+		if (abm->output_codes[k])
+		{
+			uint32_t ocode = abm->output_codes[k];
+			uint32_t omask = advanced_get_btn_mask_for_code(ocode, devnum);
+			if (!omask && ocode <= 256) //Keyboard
+			{
+				user_io_kbd(ocode, abs->pressed);
+				input[devnum].advanced_last_pressed_keycode = abs->pressed ? ocode : 0;
+			} else {
+				retmask |= omask; 
+			}
+		}
+	}
+	return retmask;
+}
+
+uint8_t advanced_entry_pressed_state(advancedButtonMap *abm, advancedButtonState *abs, uint16_t evcode, int evstate, int devnum)
+{
+	int code_cnt = 0;
+	int pressed_cnt = 0;
+	bool chord_has_osd = false;
+	bool is_pressed = true;
+	bool code_is_osd_btn = (evcode == input[devnum].mmap[SYS_BTN_OSD_KTGL+1] || evcode == input[devnum].mmap[SYS_BTN_OSD_KTGL+2]);
+
+	for (unsigned int i = 0; i < sizeof(abm->input_codes)/sizeof(abm->input_codes[0]); i++)
+	{
+		if (!abm->input_codes[i])
+			break;
+
+		if (abm->input_codes[i] == evcode)
+		{
+			if (evstate)
+				abs->input_state |= 1<<i;
+			else
+				abs->input_state &= ~(1<<i);
+		}
+		code_cnt++;
+		if (abs->input_state & 1<<i) pressed_cnt++; 
+		if (abm->input_codes[i] == input[devnum].mmap[SYS_BTN_OSD_KTGL+1] || abm->input_codes[i] == input[devnum].mmap[SYS_BTN_OSD_KTGL+2])
+			chord_has_osd = true;
+	}
+
+	if (code_cnt != pressed_cnt)
+		is_pressed = false;
+
+	//if a chord contains the OSD button(s) they have to be first, otherwise it might
+	//interfere with autofire chording. 
+	if (code_is_osd_btn && evstate && chord_has_osd && pressed_cnt > 1)
+		is_pressed = false;
+
+	return (is_pressed ? 1 : 0) | ((chord_has_osd ? 1 : 0) << 1);
+}
+
+bool update_advanced_state(int devnum, uint16_t evcode, int evstate)
+{
+
+	bool allow_keysend = true;
+
+
+	if (evstate == 2 && input[devnum].advanced_last_pressed_keycode)
+	{
+		user_io_kbd(input[devnum].advanced_last_pressed_keycode, evstate); 
+		return false;
+	}
+
+	int pnum = input[devnum].num;
+	if (!input[devnum].num) {
+		int kbd_emu = user_io_get_kbdemu();
+		if (kbd_emu == EMU_JOY0)
+			pnum = 1;
+		else if (kbd_emu == EMU_JOY1)
+			pnum = 2;
+	}
+
+	for (uint i = 0; i < ADVANCED_MAP_MAX; i++)
+	{
+		advancedButtonMap *abm = &input[devnum].advanced_map[i];
+		advancedButtonState *abs = &input[devnum].advanced_state[i];
+		if (!abm->input_codes[0]) break;
+
+		uint8_t pressed_state  = advanced_entry_pressed_state(abm, abs, evcode, evstate, devnum);
+		bool is_pressed = pressed_state & 1;
+		bool chord_has_osd = pressed_state & (1 << 1); 
+		abs->last_pressed = abs->pressed;
+		abs->pressed = is_pressed;
+
+		if (abs->last_pressed != abs->pressed)
+		{
+			if (abs->pressed && chord_has_osd && pnum > 0) osd_autofire_consumed[pnum-1] = true; //reuse autofire osd inhibit
+			if (!abs->pressed) abs->input_btn_mask = 0;
+			for(size_t cidx = 0; cidx < sizeof(abm->input_codes)/sizeof(abm->input_codes[0]); cidx++)
+			{
+				int icode = abm->input_codes[cidx];
+				if (!icode) break;
+
+				if (!abs->pressed && !(abs->input_state & 1<<cidx))
+					continue;
+
+				uint32_t imask = advanced_get_btn_mask_for_code(icode, devnum);
+				if (!imask && icode <= 256) //Keyboard
+				{
+
+					if (icode != evcode) user_io_kbd(icode, !abs->pressed);
+				} else {  //Joypad
+					if (abs->pressed)
+					{
+						joy_digital(pnum, imask, icode, 0, 0, true);
+						abs->input_btn_mask |= imask;
+					} else {
+						joy_digital(pnum, imask, icode, 1, 0, true);
+					}
+				}
+			}
+			allow_keysend = false;
+  		uint32_t usemask = process_abm_entry(abm, abs, devnum);
+			//Update joy_adv mask, store fake button code for autofire support
+			joy_digital(pnum, usemask, 0x8000 | i, abs->pressed, 0, false);
+			if (abs->pressed && abm->autofire_idx)
+			{
+				set_autofire_code(pnum-1, 0x8000 | i, usemask, abm->autofire_idx, true);
+			}
+		}
+	}
+
+	//If this return is true input_cb inhibits sending the keyboard event to the core. 
+	//Needed so the core doesn't see a keyboard event for the last key in a chord
+	//(or when a single key has been remapped)
+	return allow_keysend;
+}
+
+advancedButtonMap *get_advanced_map_defs(int devnum)
+{
+	if (devnum < 0 || devnum >= NUMDEV)
+	{
+		return NULL;
+	}
+	devnum = input[devnum].bind;
+	return input[devnum].advanced_map; 
+}
+
+void get_button_name_for_code(uint16_t btn_code, int devnum, char *bname, size_t bname_sz)
+{
+	static int last_devnum = -1;
+	static uint16_t btn_map[KEY_MAX - BTN_JOYSTICK] = {0};
+	static uint16_t abs_map[ABS_MAX] = {0};
+	if (devnum != last_devnum)
+	{
+		memset(btn_map, 0xFFFF, sizeof(btn_map));
+		memset(abs_map, 0xFFFF, sizeof(abs_map));
+		get_ctrl_index_maps(pool[devnum].fd, NULL, btn_map, abs_map);
+		last_devnum = devnum;
+	}
+
+  snprintf(bname, bname_sz, "??");
+  if (btn_code >= KEY_EMU) //hat/analog
+  {
+    bool is_max = btn_code & 0x1;
+    uint16_t axis_idx = (btn_code - KEY_EMU) >> 1;
+    if (axis_idx >= ABS_HAT0X && axis_idx <= ABS_HAT3Y)
+    {
+      uint8_t hat_num = (axis_idx - ABS_HAT0X)/2;
+      bool axis_is_y = (axis_idx - ABS_HAT0X)%2;
+      uint8_t hat_sub = 0;
+
+      if (axis_is_y) hat_sub = is_max ? 4 : 1;
+      else hat_sub = is_max ? 2 : 8;
+
+      if (hat_sub)
+        snprintf(bname,bname_sz, "h%d.%d", hat_num, hat_sub);
+    } else {
+      //Mister 'fake' analog digital inputs.
+      for(unsigned int j=0; j < sizeof(abs_map)/sizeof(uint16_t); j++)
+      {
+        if (abs_map[j] == axis_idx)
+        {
+          snprintf(bname, bname_sz, is_max ? "+a%d" : "-a%d", j);
+          break;
+        }
+      }
+    }
+  } else {
+    for(unsigned int j=0; j < sizeof(btn_map)/sizeof(uint16_t); j++)
+    {
+      if (btn_map[j] == 0xFFFF) break;
+      if (btn_map[j] == btn_code) {
+        snprintf(bname, bname_sz, "b%d", j);
+        break;
+      }
+    }
+  }
+}
+
+static void input_advanced_save_filename(char *fname, size_t pathlen, int dev_num, bool def=false)
+{
+  char *id = get_unique_mapping(dev_num);
+
+	if (def || is_menu()) snprintf(fname, pathlen, "advanced_input_%s%s_v1.map", id, input[dev_num].mod ? "_m" : "");
+	else snprintf(fname, pathlen, "%s_advanced_input_%s%s_v1.map", user_io_get_core_name(), id, input[dev_num].mod ? "_m" : "");
+}
+
+void input_advanced_save(int dev_num, bool do_delete)
+{
+	char path[256] = {JOYMAP_DIR};
+	char fname[256] = {};
+
+	if (dev_num >= 0)
+	{
+		dev_num = input[dev_num].bind;
+    int bufsize = sizeof(advancedButtonMap)*ADVANCED_MAP_MAX;
+		input_advanced_save_filename(fname, sizeof(fname), dev_num);
+
+		strncat(path, fname, sizeof(path)-1);
+		if (do_delete)
+			FileDeleteConfig(path);
+		else
+			FileSaveConfig(path, input[dev_num].advanced_map, bufsize); 
+	}
+}
+
+void input_advanced_load(int dev_num)
+{
+	char path[256] = {JOYMAP_DIR};
+  int bufsize = sizeof(advancedButtonMap)*ADVANCED_MAP_MAX;
+	uint8_t *buf = new uint8_t[bufsize];
+	if (buf)
+	{
+		dev_num = input[dev_num].bind;
+		memset(buf, 0, bufsize); 
+		char fname[256] = {};
+		input_advanced_save_filename(fname, sizeof(fname), dev_num, false); 
+		strncat(path, fname, sizeof(path)-1);
+		if (FileLoadConfig(path, buf, bufsize))
+		{
+			memcpy(input[dev_num].advanced_map, buf, bufsize); 
+			for(int i = 0; i < ADVANCED_MAP_MAX; i++)
+			{
+				advancedButtonMap *abm = &input[dev_num].advanced_map[i];
+				if (!abm->input_codes[0]) break;
+			}
+		} else {
+			advanced_convert_jkmap(dev_num);
+		}
+		delete[](buf);
+	}
+}
+
+//If we stored them sorted we could just use memcmp....
+advancedButtonMap *input_advanced_find_match(advancedButtonMap *newMap, int devnum)
+{
+  for (size_t i = 0; i < ADVANCED_MAP_MAX; i++)
+	{
+		int match_count = 0;
+		int jcnt = 0;
+		int kcnt = 0;
+		advancedButtonMap *abm = &input[devnum].advanced_map[i];
+		if (!abm->input_codes[0]) return NULL;
+		for(size_t j = 0; j < 4; j++)
+		{
+
+      uint16_t scode = newMap->input_codes[j];	
+			if (scode != 0) jcnt++;
+			kcnt = 0;
+			for(size_t k = 0; k < 4; k++)
+			{
+        uint16_t acode = abm->input_codes[k];
+				if (acode != 0) kcnt++;
+				if (acode && acode == scode) match_count++;
+			}
+		}
+		if ((jcnt == kcnt) && match_count == jcnt) return abm;
+	}
+	return NULL;
+}
+
+void input_advanced_clear(int devnum)
+{
+	if (devnum <0 || devnum >= NUMDEV) return;
+	memset(input[devnum].advanced_map, 0, sizeof(input[devnum].advanced_map));
+	input_advanced_save(devnum, true);
+}
+
+void input_advanced_delete(advancedButtonMap *todel, int devnum)
+{
+	if (devnum <0 || devnum >= NUMDEV) return;
+	if (todel < input[devnum].advanced_map || todel > &input[devnum].advanced_map[ADVANCED_MAP_MAX-1]) 
+	{
+		memset(todel, 0, sizeof(advancedButtonMap));
+		return;
+	}
+
+	//endptr is not a valid ABM, but it is a pointer to just after the last one
+	//only used for address calculation in memmove. 
+	advancedButtonMap *endptr = &input[devnum].advanced_map[ADVANCED_MAP_MAX];
+	memmove(todel, todel+1, (sizeof(advancedButtonMap)*(endptr-(todel+1))));
+	input_advanced_save(devnum);
+}
+
+
+void input_advanced_save_entry(advancedButtonMap *abm_entry, int devnum)
+{
+	if (devnum <0 || devnum >= NUMDEV || !abm_entry) return;
+
+	if (!abm_entry->input_codes[0] || (!abm_entry->output_codes[0] && !abm_entry->button_mask))
+	{
+		input_advanced_delete(abm_entry, devnum);
+		return;
+	}
+
+	if (abm_entry >= input[devnum].advanced_map && abm_entry <= &input[devnum].advanced_map[ADVANCED_MAP_MAX-1])
+	{
+		input_advanced_save(devnum);
+		return;
+	}
+
+	advancedButtonMap *abm = input_advanced_find_match(abm_entry, devnum);
+	if (!abm)
+	{
+		for (uint i = 0; i < ADVANCED_MAP_MAX; i++)
+		{
+			advancedButtonMap *check_abm = &input[devnum].advanced_map[i];
+			if (!check_abm->input_codes[0] && !check_abm->output_codes[0])
+			{
+				abm = check_abm;
+				break;
+			}
+		}
+	}
+	if (abm)
+	{
+		memcpy(abm, abm_entry, sizeof(advancedButtonMap));
+		input_advanced_save(devnum);
+		return;
 	}
 }

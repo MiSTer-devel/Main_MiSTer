@@ -195,14 +195,15 @@ static int find_linux_code_for_button(char *btn_name, uint16_t *btn_map, uint16_
 #define test_bit(bit, array)  (array [bit / 8] & (1 << (bit % 8)))
 
 
-static void get_ctrl_index_maps(int dev_fd, char *guid, uint16_t *btn_map, uint16_t *abs_map)
+void get_ctrl_index_maps(int dev_fd, char *guid, uint16_t *btn_map, uint16_t *abs_map)
 {
 	unsigned char keybits[(KEY_MAX+7) / 8];
 	unsigned char absbits[(ABS_MAX+7) / 8];
 	uint16_t btn_cnt = 0;
 	uint16_t abs_cnt = 0;
 
-	printf("Gamecontrollerdb: mapping buttons for %s ", guid);
+	if (guid)
+  	printf("Gamecontrollerdb: mapping buttons for %s ", guid);
 	if (ioctl(dev_fd, EVIOCGBIT(EV_KEY, sizeof(keybits)), keybits) >= 0)
 	{
 		for (int i = BTN_JOYSTICK; i < KEY_MAX; i++)
@@ -223,11 +224,13 @@ static void get_ctrl_index_maps(int dev_fd, char *guid, uint16_t *btn_map, uint1
 					btn_cnt++;
 				}
 		}
-		printf("\n");
+		if (guid)
+		  printf("\n");
 
 	}
 
-	printf("Gamecontrollerdb: mapping analog axes for %s ", guid);
+	if (guid)
+	  printf("Gamecontrollerdb: mapping analog axes for %s ", guid);
 	if (ioctl(dev_fd, EVIOCGBIT(EV_ABS, sizeof(absbits)), absbits) >= 0)
 	{
 		//The "correct" way is to test  all the way to ABS_MAX and skip any hats the device has.
@@ -253,7 +256,8 @@ static void get_ctrl_index_maps(int dev_fd, char *guid, uint16_t *btn_map, uint1
 				}
 		}
 	}
-	printf("\n");
+	if(guid)
+	  printf("\n");
 }
 
 void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version,int dev_fd, const char *name, uint32_t *cur_map)
