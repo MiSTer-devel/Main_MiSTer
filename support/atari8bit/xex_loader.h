@@ -1,3 +1,9 @@
+/** This file was generated from sources in the Atari800 core repository:
+
+       https://github.com/MiSTer-devel/Atari800_MiSTer/tree/master/asm
+
+    and any updates there should trigger regeneration and update of this file here. */
+
 const static uint8_t xex_loader[] =
 {
 	0x61,0xA2,0x00,0x86,0x09,0xCA,0x9A,0xCE,0x00,0xD1,0xCE,0x0E,0xD1,0xA9,0x01,0xF0,
