@@ -51,6 +51,12 @@ static const ini_var_t ini_vars[] =
 	{ "HDMI_AUDIO_96K", (void*)(&(cfg.hdmi_audio_96k)), UINT8, 0, 1 },
 	{ "DVI_MODE", (void*)(&(cfg.dvi_mode)), UINT8, 0, 1 },
 	{ "HDMI_LIMITED", (void*)(&(cfg.hdmi_limited)), UINT8, 0, 2 },
+	{ "HDMI_CEC", (void*)(&(cfg.hdmi_cec)), UINT8, 0, 1 },
+	{ "HDMI_CEC_SLEEP", (void*)(&(cfg.hdmi_cec_sleep)), UINT8, 0, 1 },
+	{ "HDMI_CEC_WAKE", (void*)(&(cfg.hdmi_cec_wake)), UINT8, 0, 1 },
+	{ "HDMI_CEC_INPUT_MODE", (void*)(&(cfg.hdmi_cec_input_mode)), UINT8, 0, 2 },
+	{ "HDMI_CEC_OSD_KEY", (void*)(cfg.hdmi_cec_osd_key), STRING, 0, sizeof(cfg.hdmi_cec_osd_key) - 1 },
+	{ "HDMI_CEC_NAME", (void*)(cfg.hdmi_cec_name), STRING, 0, sizeof(cfg.hdmi_cec_name) - 1 },
 	{ "KBD_NOMOUSE", (void*)(&(cfg.kbd_nomouse)), UINT8, 0, 1 },
 	{ "MOUSE_THROTTLE", (void*)(&(cfg.mouse_throttle)), UINT8, 1, 100 },
 	{ "BOOTSCREEN", (void*)(&(cfg.bootscreen)), UINT8, 0, 1 },
@@ -584,7 +590,12 @@ void cfg_parse()
 	cfg.rumble = 1;
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
+	cfg.hdmi_cec = 0;
+	cfg.hdmi_cec_sleep = 0;
+	cfg.hdmi_cec_wake = 0;
 	cfg.lookahead = 2;
+	cfg.hdmi_cec_input_mode = 1;
+	strcpy(cfg.hdmi_cec_osd_key, "back");
 	cfg.hdr = 0;
 	cfg.hdr_max_nits = 1000;
 	cfg.hdr_avg_nits = 250;
@@ -593,6 +604,7 @@ void cfg_parse()
 	cfg.video_saturation = 100;
 	cfg.video_hue = 0;
 	strcpy(cfg.video_gain_offset, "1, 0, 1, 0, 1, 0");
+	strcpy(cfg.hdmi_cec_name, "MiSTer");
 	strcpy(cfg.main, "MiSTer");
 	has_video_sections = false;
 	using_video_section = false;

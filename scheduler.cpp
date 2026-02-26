@@ -8,11 +8,16 @@
 #include "fpga_io.h"
 #include "osd.h"
 #include "profiling.h"
+#include "cfg.h"
+#include "hardware.h"
+#include "hdmi_cec.h"
+#include "video.h"
 
 static cothread_t co_scheduler = nullptr;
 static cothread_t co_poll = nullptr;
 static cothread_t co_ui = nullptr;
 static cothread_t co_last = nullptr;
+static unsigned long cec_retry = 0;
 
 static void scheduler_wait_fpga_ready(void)
 {
@@ -34,6 +39,33 @@ static void scheduler_co_poll(void)
 			frame_timer();
 			input_poll(0);
 		}
+
+		if (cfg.hdmi_cec)
+		{
+			if (!cec_is_enabled() && CheckTimer(cec_retry))
+			{
+				printf("CEC: init attempt\n");
+				if (!cec_init(true))
+				{
+					printf("CEC: init failed, retry in 3s\n");
+					cec_retry = GetTimer(3000);
+				}
+				else
+				{
+					printf("CEC: initialized\n");
+					cec_retry = 0;
+				}
+			}
+
+			if (cec_is_enabled()) cec_poll();
+		}
+		else
+		{
+			if (cec_is_enabled()) cec_deinit();
+			cec_retry = 0;
+		}
+
+		video_idle_blank_poll();
 
 		scheduler_yield();
 	}

@@ -42,6 +42,20 @@ char joy_bnames[NUMBUTTONS][32] = {};
 int  joy_bcount = 0;
 static struct pollfd pool[NUMDEV + 3];
 
+// Incremented on any observed user input activity. Used by other subsystems
+// (e.g. HDMI-CEC idle sleep/wake) to detect global inactivity across cores.
+static volatile uint32_t input_activity_seq = 0;
+
+static inline void input_mark_activity(void)
+{
+	input_activity_seq++;
+}
+
+uint32_t input_activity_get_seq(void)
+{
+	return input_activity_seq;
+}
+
 static int ev2amiga[] =
 {
 	NONE, //0   KEY_RESERVED
@@ -1707,6 +1721,15 @@ void input_uinp_destroy()
 		close(uinp_fd);
 		uinp_fd = -1;
 	}
+}
+
+static void uinp_send_key(uint16_t key, int press);
+
+void input_cec_send_key(uint16_t key, bool pressed)
+{
+	if (!key) return;
+	input_mark_activity();
+	user_io_kbd(key, pressed ? 1 : 0);
 }
 
 static unsigned long uinp_repeat = 0;
@@ -5240,6 +5263,8 @@ int input_test(int getchar)
 							}
 							else if (ev.type)
 							{
+								if (ev.type == EV_KEY || ev.type == EV_ABS || ev.type == EV_REL) input_mark_activity();
+
 								int dev = i;
 								if (!JOYCON_COMBINED(i) && input[dev].bind >= 0) dev = input[dev].bind;
 
@@ -5708,6 +5733,8 @@ int input_test(int getchar)
 						uint8_t data[4] = {};
 						if (read(pool[i].fd, data, sizeof(data)))
 						{
+							input_mark_activity();
+
 							int edev = i;
 							int dev = i;
 							if (input[i].bind >= 0) edev = input[i].bind; // mouse to event

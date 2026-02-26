@@ -70,6 +70,9 @@
     <ClCompile Include="hardware.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="hdmi_cec.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="input.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -295,6 +298,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="hardware.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hdmi_cec.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="input.h">
