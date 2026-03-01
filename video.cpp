@@ -1205,7 +1205,7 @@ static void hdmi_config_set_csc()
 
 	const float pi = float(M_PI);
 
-	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
 
 	// out-of-scope defines, not used with ypbpr
 	int16_t csc_int16[12];
@@ -1404,7 +1404,7 @@ static void hdmi_config_set_csc()
 
 static void hdmi_config_init()
 {
-	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
 
 	// address, value
 	uint8_t init_data[] = {
@@ -2476,6 +2476,9 @@ static void video_mode_load()
 			// Not a DAC, use normal HDMI mode
 			cfg.direct_video = 0;
 		}
+
+		// direct_video=2 resolves here, so refresh HDMI CSC with final mode.
+		hdmi_config_set_csc();
 	}
 
 	if (cfg.direct_video && cfg.vsync_adjust)

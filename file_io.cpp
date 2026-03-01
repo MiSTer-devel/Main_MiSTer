@@ -461,7 +461,19 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute, int use_zi
 			if(!mute) printf("FileOpenEx(open) File:%s, error: %s.\n", full_path, strerror(errno));
 			return 0;
 		}
-		const char *fmode = mode & O_RDWR ? "w+" : "r";
+		const char *fmode;
+
+		switch (mode & O_ACCMODE) {
+		case O_RDONLY:
+			fmode = "r";
+			break;
+		case O_WRONLY:
+			fmode = "w";
+			break;
+		default:
+			fmode = "w+";
+			break;
+		}
 		file->filp = fdopen(fd, fmode);
 		if (!file->filp)
 		{

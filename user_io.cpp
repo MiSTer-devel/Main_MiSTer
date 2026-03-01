@@ -317,6 +317,20 @@ char is_c128()
 	return (is_c128_type == 1);
 }
 
+static int is_atari800_type = 0;
+char is_atari800()
+{
+	if (!is_atari800_type) is_atari800_type = strcasecmp(orig_name, "Atari800") ? 2 : 1;
+	return (is_atari800_type == 1);
+}
+
+static int is_atari5200_type = 0;
+char is_atari5200()
+{
+	if (!is_atari5200_type) is_atari5200_type = strcasecmp(orig_name, "Atari5200") ? 2 : 1;
+	return (is_atari5200_type == 1);
+}
+
 static int is_psx_type = 0;
 char is_psx()
 {
@@ -398,6 +412,8 @@ void user_io_read_core_name()
 	is_gba_type = 0;
 	is_c64_type = 0;
 	is_c128_type = 0;
+	is_atari800_type = 0;
+	is_atari5200_type = 0;
 	is_psx_type = 0;
 	is_cdi_type = 0;
 	is_st_type = 0;
@@ -1523,11 +1539,20 @@ void user_io_init(const char *path, const char *xml)
 					printf("Identified Archimedes core");
 					archie_init();
 				}
+				else if (is_atari800())
+				{
+					atari800_init();
+				}
+				else if (is_atari5200())
+				{
+					atari5200_init();
+				}
 				else
 				{
 					const char *home = HomeDir();
 
 					if (is_uneon()) x86_ide_set();
+					if (is_cdi()) cdi_load_root_nvram();
 
 					if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 					{
@@ -3083,7 +3108,7 @@ void user_io_poll()
 			int disk = -1;
 			int ack = 0;
 			int op = 0;
-			static uint8_t buffer[16][16384];
+			static uint8_t buffer[16][UIO_BUFFER_SIZE];
 			uint64_t lba = 0;
 			uint32_t blksz, blks, sz;
 
@@ -3106,7 +3131,7 @@ void user_io_poll()
 				if (disk == 1 && is_psx())
 					blksz = 2352;
 				else if (disk == 0 && is_cdi())
-					blksz = (2352 + 24);
+					blksz = CDI_CDIC_BUFFER_SIZE;
 				else
 					blksz = 128 << ((c >> 6) & 7);
 
@@ -3241,11 +3266,11 @@ void user_io_poll()
 					unsigned int psx_blksz = psx_chd_hunksize();
 					if (psx_blksz && psx_blksz <= sizeof(buffer[0])) buf_n = psx_blksz / blksz;
 				}
-				else if (is_cdi() && blksz == (2352 + 24))
+				else if (is_cdi() && blksz == CDI_CDIC_BUFFER_SIZE)
 				{
 					//returns 0 if the mounted disk is not a chd, otherwise returns the chd hunksize in bytes
-					unsigned int psx_blksz = cdi_chd_hunksize();
-					if (psx_blksz && psx_blksz <= sizeof(buffer[0])) buf_n = psx_blksz / blksz;
+					unsigned int cdi_blksz = cdi_chd_hunksize();
+					if (cdi_blksz && cdi_blksz <= sizeof(buffer[0])) buf_n = cdi_blksz / blksz;
 				}
 				//printf("SD RD (%llu,%d) on %d, WIDE=%d\n", lba, blksz, disk, fio_size);
 
@@ -3667,6 +3692,8 @@ void user_io_poll()
 		uint16_t save_req = spi_uio_cmd(UIO_CHK_UPLOAD);
 		if (save_req) c64_save_cart(save_req >> 8);
 	}
+	if (is_atari800()) atari800_poll();
+	if (is_atari5200()) atari5200_poll();
 	process_ss(0);
 }
 
