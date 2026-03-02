@@ -3900,6 +3900,33 @@ void video_cmd(char *cmd)
 	}
 }
 
+void video_mode_cmd(char *cmd)
+{
+	vmode_custom_t v = {};
+	int ret = parse_custom_video_mode(cmd, &v);
+	if (ret != -2)
+	{
+		printf("video_mode_cmd: only custom modelines are supported, got \"%s\"\n", cmd);
+		return;
+	}
+
+	int htotal = v.param.hact + v.param.hfp + v.param.hs + v.param.hbp;
+	double hfreq = (v.Fpix * 1000000.f) / htotal;
+	// Safe hfreq range for 15kHz CRTs based on Switchres arcade_15ex preset (15625-16500 Hz)
+	// https://github.com/antonioginer/switchres/blob/master/monitor.cpp
+	if (hfreq < 15625 || hfreq > 16500)
+	{
+		printf("video_mode_cmd: BLOCKED. hfreq=%.0fHz is outside 15625-16500Hz safe range.\n", hfreq);
+		return;
+	}
+
+	v_def = v;
+	v_cur = v;
+	video_set_mode(&v, v.Fpix);
+	user_io_send_buttons(1);
+	printf("video_mode_cmd: applied mode \"%s\"\n", cmd);
+}
+
 static constexpr int CELL_GRAN_RND = 4;
 
 static int determine_vsync(int w, int h)

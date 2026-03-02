@@ -5864,6 +5864,7 @@ int input_test(int getchar)
 					cmd[len] = 0;
 					printf("MiSTer_cmd: %s\n", cmd);
 					if (!strncmp(cmd, "fb_cmd", 6)) video_cmd(cmd);
+					else if (!strncmp(cmd, "video_mode ", 11)) video_mode_cmd(cmd + 11);
 					else if (!strncmp(cmd, "load_core ", 10))
 					{
 						if(isXmlName(cmd)) xml_load(cmd + 10);
