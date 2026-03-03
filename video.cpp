@@ -3910,16 +3910,6 @@ void video_mode_cmd(char *cmd)
 		return;
 	}
 
-	int htotal = v.param.hact + v.param.hfp + v.param.hs + v.param.hbp;
-	double hfreq = (v.Fpix * 1000000.f) / htotal;
-	// Safe hfreq range for 15kHz CRTs based on Switchres arcade_15ex preset (15625-16500 Hz)
-	// https://github.com/antonioginer/switchres/blob/master/monitor.cpp
-	if (hfreq < 15625 || hfreq > 16500)
-	{
-		printf("video_mode_cmd: BLOCKED. hfreq=%.0fHz is outside 15625-16500Hz safe range.\n", hfreq);
-		return;
-	}
-
 	v_def = v;
 	v_cur = v;
 	video_set_mode(&v, v.Fpix);
