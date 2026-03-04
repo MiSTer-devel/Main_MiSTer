@@ -3900,6 +3900,23 @@ void video_cmd(char *cmd)
 	}
 }
 
+void video_mode_cmd(char *cmd)
+{
+	vmode_custom_t v = {};
+	int ret = parse_custom_video_mode(cmd, &v);
+	if (ret != -2)
+	{
+		printf("video_mode_cmd: only custom modelines are supported, got \"%s\"\n", cmd);
+		return;
+	}
+
+	v_def = v;
+	v_cur = v;
+	video_set_mode(&v, v.Fpix);
+	user_io_send_buttons(1);
+	printf("video_mode_cmd: applied mode \"%s\"\n", cmd);
+}
+
 static constexpr int CELL_GRAN_RND = 4;
 
 static int determine_vsync(int w, int h)
