@@ -484,7 +484,9 @@ static uint8_t GetASCIIKey(uint32_t keycode)
 	return keycode_table[get_amiga_code(keycode & 0xFFFF) & 0x7F];
 }
 
+static bool ignore_osd_release = false;
 static int select_ini = 0;
+
 void SelectINI()
 {
 	select_ini = 1;
@@ -591,7 +593,11 @@ static uint32_t menu_key_get(void)
 			else if(menustate < MENU_PROHIB_BTPAIR1 || menustate > MENU_PROHIB_BTPAIR2) menustate = MENU_BTPAIR;
 		}
 
-		if (!but && last_but && !longpress_consumed) c = KEY_F12;
+		if (!but && last_but && !longpress_consumed) 
+		{
+			c = (KEY_F12 | (user_io_osd_is_visible() ? 0 : UPSTROKE));
+			ignore_osd_release = false;
+		}
 
 		if (!but) longpress_consumed = 0;
 		last_but = but;
@@ -1124,7 +1130,6 @@ void HandleUI(void)
 	static int old_volume = 0;
 	static uint32_t lock_pass_timeout = 0;
 	static uint32_t menu_timeout = 0;
-	static bool ignore_osd_release = false;
 
 	static char	cp_MenuCancel;
 
