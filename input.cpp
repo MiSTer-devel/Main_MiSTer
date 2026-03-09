@@ -6207,7 +6207,10 @@ static uint32_t process_abm_entry(advancedButtonMap *abm, advancedButtonState *a
 			uint32_t omask = advanced_get_btn_mask_for_code(ocode, devnum);
 			if (!omask && ocode <= 256) //Keyboard
 			{
-				user_io_kbd(ocode, abs->pressed);
+				struct input_event ev;
+				ev.code = ocode;
+				ev.value = abs->pressed;
+				input_cb(&ev, NULL, devnum, true);
 				input[devnum].advanced_last_pressed_keycode = abs->pressed ? ocode : 0;
 			} else {
 				retmask |= omask; 
@@ -6262,7 +6265,10 @@ bool update_advanced_state(int devnum, uint16_t evcode, int evstate)
 
 	if (evstate == 2 && input[devnum].advanced_last_pressed_keycode)
 	{
-		user_io_kbd(input[devnum].advanced_last_pressed_keycode, evstate); 
+		struct input_event ev;
+		ev.code = input[devnum].advanced_last_pressed_keycode;
+		ev.value = evstate; 
+		input_cb(&ev, NULL, devnum, true);
 		return false;
 	}
 
@@ -6303,7 +6309,13 @@ bool update_advanced_state(int devnum, uint16_t evcode, int evstate)
 				if (!imask && icode <= 256) //Keyboard
 				{
 
-					if (icode != evcode) user_io_kbd(icode, !abs->pressed);
+					if (icode != evcode) 
+					{
+						struct input_event ev;
+						ev.code = icode; 
+						ev.value = !abs->pressed; 
+						input_cb(&ev, NULL, devnum, true);
+					}
 				} else {  //Joypad
 					if (abs->pressed)
 					{
