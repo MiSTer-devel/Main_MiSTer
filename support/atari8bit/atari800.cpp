@@ -1949,25 +1949,18 @@ static uint16_t cas_block_multiple;
 static uint8_t cas_fsk_bit;
 static uint8_t pwm_bit;
 static uint8_t pwm_bit_order;
+static int cas_block_pause;
 
 static uint32_t cas_read_forward(uint32_t offset) {
 
 	uint32_t bytes_read;
 
-	if(!FileSeek(&cas_file, offset, SEEK_SET))
-	{
-		offset = 0;
-		goto cas_read_forward_exit;
-	}
+	if(!FileSeek(&cas_file, offset, SEEK_SET)) return 0;
 
 	while(1)
 	{
 		bytes_read = FileReadAdv(&cas_file, (uint8_t *)&cas_header, sizeof(cas_header_t));
-		if(bytes_read != sizeof(cas_header_t))
-		{
-			offset = 0;
-			goto cas_read_forward_exit;
-		}
+		if(bytes_read != sizeof(cas_header_t)) return 0;
 		offset += bytes_read;
 		cas_block_index = 0;
 
@@ -1975,21 +1968,12 @@ static uint32_t cas_read_forward(uint32_t offset) {
 
 			case cas_header_FUJI:
 				offset += cas_header.chunk_length;
-				if(!FileSeek(&cas_file, offset, SEEK_SET))
-				{
-					offset = 0;
-					goto cas_read_forward_exit;
-				}
+				if(!FileSeek(&cas_file, offset, SEEK_SET)) return 0;
 				break;
 
 			case cas_header_baud:
-				if(cas_header.chunk_length)
-				{
-					offset = 0;
-					goto cas_read_forward_exit;
-				}
+				if(cas_header.chunk_length) return 0;
 				cas_sample_duration = (CORE_HZ + cas_header.aux.aux_w / 2) / cas_header.aux.aux_w;
-				cas_sample_duration += cas_sample_duration / 20;
 				break;
 
 			case cas_header_data:
@@ -1997,7 +1981,6 @@ static uint32_t cas_read_forward(uint32_t offset) {
 				cas_block_turbo = 0;
 				silence_duration = cas_header.aux.aux_w;
 				cas_block_multiple = 1;
-				atari800_tape_enqueue(1, 0x00000000);
 				goto cas_read_forward_exit;
 
 			case cas_header_fsk:
@@ -2006,7 +1989,6 @@ static uint32_t cas_read_forward(uint32_t offset) {
 				silence_duration = cas_header.aux.aux_w;
 				cas_block_multiple = 2;
 				cas_fsk_bit = 0;
-				atari800_tape_enqueue(1, 0x00000000);
 				goto cas_read_forward_exit;
 				
 			case cas_header_pwms:
@@ -2034,7 +2016,6 @@ static uint32_t cas_read_forward(uint32_t offset) {
 				}
 				offset += bytes_read;
 				pwm_sample_duration = (CORE_HZ + pwm_sample_duration / 2) / pwm_sample_duration;
-				pwm_sample_duration += pwm_sample_duration / 10;
 				break;
 
 			case cas_header_pwmc:
@@ -2042,14 +2023,12 @@ static uint32_t cas_read_forward(uint32_t offset) {
 				cas_block_turbo = 1;
 				silence_duration = cas_header.aux.aux_w;
 				cas_block_multiple = 3;
-				atari800_tape_enqueue(1, 0x00000001);
 				goto cas_read_forward_exit;
 
 			case cas_header_pwmd:
 				cas_block_turbo_prev = cas_block_turbo;
 				cas_block_turbo = 1;
 				cas_block_multiple = 1;
-				atari800_tape_enqueue(1, 0x00000001);
 				goto cas_read_forward_exit;
 
 			case cas_header_pwml:
@@ -2058,7 +2037,6 @@ static uint32_t cas_read_forward(uint32_t offset) {
 				silence_duration = cas_header.aux.aux_w;
 				cas_block_multiple = 2;
 				cas_fsk_bit = pwm_bit;
-				atari800_tape_enqueue(1, 0x00000001);
 				goto cas_read_forward_exit;
 
 			default:
@@ -2067,24 +2045,26 @@ static uint32_t cas_read_forward(uint32_t offset) {
 	}
 
 cas_read_forward_exit:
+	if(cas_block_turbo ^ cas_block_turbo_prev) atari800_tape_enqueue(1, cas_block_turbo ? 0x00000001 : 0x00000000);
 	return offset;
 }
 
 static void handle_cas()
 {
+
 	if(!(get_a8bit_reg(REG_ATARI_STATUS2) & STATUS2_MASK_TAPE_ACT)) return;
 
 	int to_read = (cas_block_turbo ? 128 : 256) * cas_block_multiple;
 	if(to_read >= cas_header.chunk_length - cas_block_index) to_read = cas_header.chunk_length - cas_block_index;
 
-	if(cas_offset >= cas_file.size || !FileSeek(&cas_file, cas_offset, SEEK_SET) || FileReadAdv(&cas_file, a8bit_buffer, to_read) != to_read)
+	if(!FileSeek(&cas_file, cas_offset, SEEK_SET) || FileReadAdv(&cas_file, a8bit_buffer, to_read) != to_read)
 	{
 		FileClose(&cas_file);
 		return;
 	}
 	cas_offset += to_read;
 
-	uint8_t silence_bit = (cas_block_turbo ? 0 : 1);
+	uint8_t silence_bit = (cas_block_turbo ? pwm_bit : 1);
 
 	while(silence_duration > 0) {
 		uint16_t silence_block_len = silence_duration;
@@ -2116,7 +2096,7 @@ static void handle_cas()
 			case cas_header_fsk:
 			case cas_header_pwml:
 				ld = a8bit_buffer[i] | (a8bit_buffer[i+1] << 8);
-				if(ld) atari800_tape_enqueue(cas_fsk_bit, (cas_block_turbo ? pwm_sample_duration : ((CORE_HZ + 5000)/10000) * ld));
+				if(ld) atari800_tape_enqueue(cas_fsk_bit, (cas_block_turbo ? pwm_sample_duration : ((CORE_HZ + 5000)/10000)) * ld);
 				cas_fsk_bit ^= 1;
 				break;
 
@@ -2149,18 +2129,25 @@ static void handle_cas()
 				break;
 		}
 	}
-	if(cas_block_index == cas_header.chunk_length && cas_offset < cas_file.size)
+	if(cas_offset == cas_file.size)
+	{
+		atari800_tape_enqueue(cas_block_turbo ? pwm_bit : 1, 16);
+		FileClose(&cas_file);
+		return;
+	}
+	else if(cas_block_index == cas_header.chunk_length && cas_offset < cas_file.size)
 	{
 		cas_offset = cas_read_forward(cas_offset);
 		if(!cas_offset)
 		{
 			FileClose(&cas_file);
+			return;
 		}
-		else if(cas_header.signature == cas_header_pwmc || cas_header.signature == cas_header_data || (cas_header.signature == cas_header_fsk && silence_duration) || cas_block_turbo_prev ^ cas_block_turbo)
+		else if(cas_header.signature == cas_header_pwmc || cas_header.signature == cas_header_data || silence_duration || cas_block_turbo ^ cas_block_turbo_prev)
 		{
-			//atari800_tape_enqueue(cas_block_turbo ? 0 : 1, 16);
+			atari800_tape_enqueue(cas_block_turbo ? pwm_bit : 1, 16);
 			atari800_tape_wait();
-			wait_us(20000);
+			wait_us(cas_block_pause);
 		}
 	}
 }
@@ -2170,15 +2157,14 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 	if(file_index == 7 || file_index == 8) // CAS file (8 with auto boot)
 	{
 		cas_offset = 0;
-		cas_block_turbo = 0;
-		cas_block_turbo_prev = 0;
+		cas_block_turbo = 0xFF;
+		cas_block_turbo_prev = 0xFF;
 		set_a8bit_reg(TAPE_RESET, 1);
 		set_a8bit_reg(TAPE_RESET, 0);
-	
+		cas_block_pause = (get_a8bit_reg(REG_ATARI_STATUS2) & STATUS2_MASK_TAPE_SLOW) ? 400000 : 20000;
 		if(name[0] && FileOpen(&cas_file, name))
 		{
 			cas_sample_duration = (CORE_HZ + 300) / 600;
-			cas_sample_duration += cas_sample_duration / 20;
 			if(FileReadAdv(&cas_file, (uint8_t *)&cas_header, sizeof(cas_header_t)) == sizeof(cas_header_t) && cas_header.signature == cas_header_FUJI)
 			{
 				cas_offset = cas_read_forward(cas_header.chunk_length + sizeof(cas_header_t));
