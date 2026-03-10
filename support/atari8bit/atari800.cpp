@@ -1951,6 +1951,23 @@ static uint8_t pwm_bit;
 static uint8_t pwm_bit_order;
 static int cas_block_pause;
 
+void atari800_check_osd_key(unsigned short key, int press)
+{
+	static uint8_t first = 1;
+	if(cas_file.opened())
+	{
+		if(key == KEY_F11 && press)
+		{
+			if(first)
+			{
+				first = 0;
+				ProgressMessage(0, 0, 0, 0);
+			}
+			ProgressMessage("CAS Tape", cas_file.name, cas_offset, cas_file.size);
+		}
+	}
+}
+
 static uint32_t cas_read_forward(uint32_t offset) {
 
 	uint32_t bytes_read;
