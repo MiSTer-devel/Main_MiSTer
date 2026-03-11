@@ -73,6 +73,26 @@
 
 #define KEY_EMU (KEY_MAX+1)
 
+
+#define ADVANCED_MAP_MAX 32 
+
+
+typedef struct {
+        uint32_t button_mask;
+				uint16_t output_codes[4];
+        uint16_t input_codes[4];
+				int autofire_idx;
+} advancedButtonMap;
+
+
+typedef struct {
+	uint8_t input_state;
+	uint32_t input_btn_mask;
+	uint8_t pressed : 1;
+	uint8_t last_pressed : 1;
+} advancedButtonState;
+
+
 void set_kbdled(int mask, int state);
 int  get_kbdled(int mask);
 int  toggle_kbdled(int mask);
@@ -82,7 +102,7 @@ void input_notify_mode();
 int input_poll(int getchar);
 int is_key_pressed(int key);
 
-void start_map_setting(int cnt, int set = 0);
+void start_map_setting(int cnt, int set = 0, advancedButtonMap *code_store = NULL);
 int get_map_set();
 int get_map_button();
 int get_map_type();
@@ -92,6 +112,10 @@ int get_map_finish();
 void finish_map_setting(int dismiss);
 uint16_t get_map_vid();
 uint16_t get_map_pid();
+int get_map_dev();
+advancedButtonMap *get_map_code_store();
+int get_map_advance();
+int get_map_count();
 int has_default_map();
 void send_map_cmd(int key);
 void reset_players();
@@ -119,5 +143,18 @@ void set_ovr_buttons(char *s, int type);
 #define FOR_EACH_SET_BIT(mask, bit)                     \
     for (uint32_t _m = (mask); _m; _m &= (_m - 1))      \
         for (int bit = __builtin_ctz(_m), _once = 1; _once; _once = 0)
+void start_code_capture(int dnum);
+void end_code_capture();
+uint16_t get_captured_code();
+int code_capture_osd_count();
+int get_last_input_dev();
+int get_dev_num(int dev);
+advancedButtonMap *get_advanced_map_defs(int devnum);
+void get_button_name_for_code(uint16_t btn_code, int devnum, char *bname, size_t bname_sz);
+void input_advanced_save(int dev_num, bool do_delete=false);
+void input_advanced_load(int dev_num);
+void input_advanced_save_entry(advancedButtonMap *abm_entry, int devnum);
+void input_advanced_clear(int devnum);
+void input_advanced_delete(advancedButtonMap *todel, int devnum);
 
 #endif

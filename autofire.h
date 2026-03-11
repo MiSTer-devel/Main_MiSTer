@@ -3,12 +3,15 @@
 
 #include <stdint.h>
 
-const char *get_autofire_rate_hz(int player, uint32_t code);
+const char *get_autofire_rate_hz_button(int player, uint32_t code);
+const char *get_autofire_rate_hz(int rate_idx);
+int get_autofire_rate_count();
 bool is_autofire_enabled(int player, uint32_t code);
 void clear_autofire(int player);
 void inc_autofire_code(int player, uint32_t code, uint32_t mask);
 //void autofire_tick();
 bool parse_autofire_cfg();
 bool get_autofire_bit(int player, uint32_t code, uint32_t frame_count);
+void set_autofire_code(int player, uint32_t code, uint32_t mask, int index, bool locked = false);
 
 #endif

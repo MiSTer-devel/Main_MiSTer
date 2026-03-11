@@ -39,8 +39,10 @@ struct AutofireData {
 struct AutofireTable {
 	int count; 								// number of entries
 	int index[MAX_AF_CODES];				// index of matching autofire rate in autofiredata[]
+	bool locked[MAX_AF_CODES];
 	uint32_t mask[MAX_AF_CODES];			// bitmask representing which buttons this code represents 
 	uint32_t autofirecodes[MAX_AF_CODES]; 	// codes that have autofire set (or codes that had it set, then disabled)
+	
 };
 
 static struct AutofireTable autofiretable[NUMPLAYERS]; // tracks autofire state per key per player
@@ -48,6 +50,13 @@ static struct AutofireData autofiredata[MAX_AF_RATES]; // global autofire rates/
 static struct AutofireData autofiredata_default[MAX_AF_RATES]; // hardcoded fallback rates/masks/etc.
 static int num_af_rates_default = 0;
 static int num_af_rates = 0;
+
+
+int get_autofire_rate_count()
+{
+	return num_af_rates;
+}
+
 
 static void set_autofire_name(struct AutofireData *data, const char *base_name) {
 	float hz = data->cycle_length > 0 ? (60.0f / data->cycle_length) : 0.0f;
@@ -68,17 +77,28 @@ int get_autofire_code_idx(int player, uint32_t code) {
 	return 0;
 }
 
+// returns the locked status for an autofire code
+bool get_autofire_locked(int player, uint32_t code)
+{
+	for (int i = 0; i != autofiretable[player].count; i++)
+	{
+		if (autofiretable[player].autofirecodes[i] == code)
+			return autofiretable[player].locked[i];
+	}
+	return false;
+}
 // autofire structs are private to this unit, so we offer a helper to clear them
 void clear_autofire(int player) {
 	memset(&autofiretable[player], 0, sizeof(AutofireTable));
 }
 
 // set autofire index for a code: >0 enable, 0 disable.
-void set_autofire_code(int player, uint32_t code, uint32_t mask, int index) {
+void set_autofire_code(int player, uint32_t code, uint32_t mask, int index, bool locked) {
 	for (int i = 0; i != autofiretable[player].count; i++) {
 		if (autofiretable[player].autofirecodes[i] == code) {
 			autofiretable[player].index[i] = index;
 			autofiretable[player].mask[i] = mask;
+			autofiretable[player].locked[i] = locked;
 			return;
 		}
 	}
@@ -90,11 +110,15 @@ void set_autofire_code(int player, uint32_t code, uint32_t mask, int index) {
 		autofiretable[player].autofirecodes[idx] = code;
 		autofiretable[player].index[idx] = index;
 		autofiretable[player].mask[idx] = mask;
+		autofiretable[player].locked[idx] = locked;
 	}
 }
 
+
 // step autofire rate; wrap to disabled at max.
 void inc_autofire_code(int player, uint32_t code, uint32_t mask) {
+	if (get_autofire_locked(player, code)) return;
+
 	int index = get_autofire_code_idx(player, code) + 1;
 	if (index <= 0) index = 1;
 	if (index >= num_af_rates || index < 0) index = 0;
@@ -122,8 +146,8 @@ bool get_autofire_bit(int player, uint32_t code, uint32_t frame_count) {
 }
 
 // display-only rate lookup for ui.
-const char *get_autofire_rate_hz(int player, uint32_t code) {
-	int rate_idx = get_autofire_code_idx(player, code);
+//
+const char *get_autofire_rate_hz(int rate_idx) {
 	if (rate_idx <= 0) {
 		return "disabled";
 	}
@@ -131,6 +155,11 @@ const char *get_autofire_rate_hz(int player, uint32_t code) {
 		return autofiredata[rate_idx].name;
 	}
 	return "disabled";
+}
+
+const char *get_autofire_rate_hz_button(int player, uint32_t code) {
+	int rate_idx = get_autofire_code_idx(player, code);
+	return get_autofire_rate_hz(rate_idx);
 }
 
 bool is_autofire_enabled(int player, uint32_t code) {
