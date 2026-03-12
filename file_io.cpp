@@ -1801,96 +1801,55 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 		else if (mode == SCANF_NEXT_PAGE)
 		{
-			// Calculate cursor position relative to current page
-			int cursor_offset = iSelectedEntry - iFirstEntry;
-			
-			// Check if we're already on the last page (less than a full page left)
-			int remaining_entries = flist_nDirEntries() - iFirstEntry;
-			if (remaining_entries <= OsdGetSize())
+			int last_visible = iFirstEntry + OsdGetSize() - 1;
+			if (last_visible >= flist_nDirEntries()) last_visible = flist_nDirEntries() - 1;
+			int page_stop = iFirstEntry + OsdGetSize() - (cfg.lookahead + 1);
+			if (page_stop > last_visible) page_stop = last_visible;
+			if (page_stop < iFirstEntry) page_stop = iFirstEntry;
+
+			if (iSelectedEntry < page_stop)
 			{
-				// On last page - allow cursor to go to actual last row
-				iSelectedEntry = flist_nDirEntries() - 1;
-				iFirstEntry = flist_nDirEntries() - OsdGetSize();
-				if (iFirstEntry < 0) iFirstEntry = 0;
+				iSelectedEntry = page_stop;
 			}
 			else
 			{
-				// Move to next page
 				iFirstEntry += OsdGetSize();
 				if (iFirstEntry >= flist_nDirEntries())
 				{
-					// At end, stay on last page
 					iFirstEntry = flist_nDirEntries() - OsdGetSize();
 					if (iFirstEntry < 0) iFirstEntry = 0;
-					iSelectedEntry = flist_nDirEntries() - 1;
 				}
-				else
-				{
-					// Special handling for top row - jump to cfg.lookahead positions from bottom
-					if (cursor_offset == 0)
-					{
-						iSelectedEntry = iFirstEntry + OsdGetSize() - (cfg.lookahead + 1);
-					}
-					else
-					{
-						// Maintain relative cursor position, but respect cfg.lookahead buffer from bottom
-						iSelectedEntry = iFirstEntry + cursor_offset;
-						
-						// If cursor would be on bottom cfg.lookahead rows of page, keep it at cfg.lookahead from bottom
-						if (cursor_offset >= OsdGetSize() - cfg.lookahead)
-						{
-							iSelectedEntry = iFirstEntry + OsdGetSize() - (cfg.lookahead + 1);
-						}
-					}
-					
-					// Ensure we don't go past the end
-					if (iSelectedEntry >= flist_nDirEntries())
-					{
-						iSelectedEntry = flist_nDirEntries() - 1;
-					}
-				}
+				iSelectedEntry = iFirstEntry + OsdGetSize() - (cfg.lookahead + 1);
+				if (iSelectedEntry < iFirstEntry) iSelectedEntry = iFirstEntry;
+				if (iSelectedEntry >= flist_nDirEntries()) iSelectedEntry = flist_nDirEntries() - 1;
 			}
 			return 0;
 		}
 		else if (mode == SCANF_PREV_PAGE)
 		{
-			// Calculate cursor position relative to current page
-			int cursor_offset = iSelectedEntry - iFirstEntry;
-			
-			// Check if we're already on the first page (less than a full page to go back)
-			if (iFirstEntry <= OsdGetSize())
+			int last_visible = iFirstEntry + OsdGetSize() - 1;
+			if (last_visible >= flist_nDirEntries()) last_visible = flist_nDirEntries() - 1;
+			int page_stop = iFirstEntry + cfg.lookahead;
+			if (page_stop > last_visible) page_stop = last_visible;
+
+			if (iSelectedEntry > page_stop)
 			{
-				// On first page - allow cursor to go to actual first row
-				iSelectedEntry = 0;
-				iFirstEntry = 0;
+				iSelectedEntry = page_stop;
 			}
 			else
 			{
-				// Move to previous page
-				iFirstEntry -= OsdGetSize();
-				if (iFirstEntry < 0) iFirstEntry = 0;
-				
-				// Special handling for bottom row - jump to cfg.lookahead from top
-				if (cursor_offset == OsdGetSize() - 1)
+				if (iFirstEntry > 0)
 				{
+					iFirstEntry -= OsdGetSize();
+					if (iFirstEntry < 0) iFirstEntry = 0;
 					iSelectedEntry = iFirstEntry + cfg.lookahead;
+					last_visible = iFirstEntry + OsdGetSize() - 1;
+					if (last_visible >= flist_nDirEntries()) last_visible = flist_nDirEntries() - 1;
+					if (iSelectedEntry > last_visible) iSelectedEntry = last_visible;
 				}
 				else
 				{
-					// Maintain relative cursor position, but respect cfg.lookahead buffer from top
-					iSelectedEntry = iFirstEntry + cursor_offset;
-					
-					// If cursor would be on top cfg.lookahead rows of page, keep it at cfg.lookahead from top
-					if (cursor_offset <= cfg.lookahead - 1)
-					{
-						iSelectedEntry = iFirstEntry + cfg.lookahead;
-					}
-				}
-				
-				// Ensure we don't go past the end
-				if (iSelectedEntry >= flist_nDirEntries())
-				{
-					iSelectedEntry = flist_nDirEntries() - 1;
+					iSelectedEntry = 0;
 				}
 			}
 		}
