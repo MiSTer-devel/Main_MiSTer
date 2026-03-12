@@ -2162,7 +2162,7 @@ static void handle_cas()
 		}
 		else if(cas_header.signature == cas_header_pwmc || cas_header.signature == cas_header_data || silence_duration || cas_block_turbo ^ cas_block_turbo_prev)
 		{
-			atari800_tape_enqueue(cas_block_turbo ? pwm_bit : 1, 16);
+			atari800_tape_enqueue((cas_block_turbo_prev != 0xFF ? cas_block_turbo_prev : cas_block_turbo) ? pwm_bit : 1, 16);
 			atari800_tape_wait();
 			wait_us(cas_block_pause);
 		}
@@ -2178,7 +2178,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 		cas_block_turbo_prev = 0xFF;
 		set_a8bit_reg(TAPE_RESET, 1);
 		set_a8bit_reg(TAPE_RESET, 0);
-		cas_block_pause = (get_a8bit_reg(REG_ATARI_STATUS2) & STATUS2_MASK_TAPE_SLOW) ? 400000 : 20000;
+		cas_block_pause = (get_a8bit_reg(REG_ATARI_STATUS2) & STATUS2_MASK_TAPE_SLOW) ? 400000 : 10000;
 		if(name[0] && FileOpen(&cas_file, name))
 		{
 			cas_sample_duration = (CORE_HZ + 300) / 600;
@@ -2258,6 +2258,9 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			set_a8bit_reg(REG_PAUSE, 1);
 			set_a8bit_reg(REG_CART1_SELECT, 0);
 			set_a8bit_reg(REG_CART2_SELECT, 0);
+			FileClose(&cas_file);
+			set_a8bit_reg(TAPE_RESET, 1);
+			set_a8bit_reg(TAPE_RESET, 0);
 		}
 		set_drive_status(0, name, ext_index);
 		if(name[0])
