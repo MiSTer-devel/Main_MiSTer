@@ -3806,6 +3806,11 @@ static void send_keycode(unsigned short key, int press)
 		return;
 	}
 
+	if (is_atari800())
+	{
+		atari800_check_osd_key(key, press);
+	}
+
 	if (core_type == CORE_TYPE_8BIT)
 	{
 		uint32_t code = get_ps2_code(key);
