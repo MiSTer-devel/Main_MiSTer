@@ -30,6 +30,9 @@ struct VideoInfo
 	bool rotated;
 };
 
+// expose video timings for timerfd-based frame timer
+extern VideoInfo current_video_info;
+
 void  video_init();
 
 int   video_get_scaler_flt(int type);
@@ -64,6 +67,8 @@ void video_menu_bg(int n, int idle = 0);
 int video_bg_has_picture();
 int video_chvt(int num);
 void video_cmd(char *cmd);
+void video_mode_cmd(char *cmd);
+void video_hdmi_power(int on);
 
 void video_core_description(char *str, size_t len);
 void video_scaler_description(char *str, size_t len);

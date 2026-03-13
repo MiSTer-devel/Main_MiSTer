@@ -64,6 +64,7 @@ void arcade_sw_load();
 void arcade_pre_parse(const char *xml);
 
 bool arcade_is_vertical();
+int arcade_get_direction();
 
 void arcade_nvm_save();
 

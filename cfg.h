@@ -25,7 +25,6 @@ typedef struct {
 	float refresh_max;
 	uint8_t controller_info;
 	uint8_t vsync_adjust;
-	uint8_t subcarrier;
 	uint8_t kbd_nomouse;
 	uint8_t mouse_throttle;
 	uint8_t bootscreen;
@@ -83,6 +82,7 @@ typedef struct {
 	uint8_t vrr_max_framerate;
 	uint8_t vrr_vesa_framerate;
 	uint16_t video_off;
+	uint8_t video_off_hdmi;
 	uint8_t disable_autofire;
 	uint8_t video_brightness;
 	uint8_t video_contrast;
@@ -102,6 +102,8 @@ typedef struct {
 	uint8_t lookahead;
 	char main[1024];
 	char vfilter_interlace_default[1023];
+	char autofire_rates[256];
+
 } cfg_t;
 
 extern cfg_t cfg;

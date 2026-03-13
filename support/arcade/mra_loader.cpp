@@ -52,8 +52,10 @@ struct arc_struct {
 static char arcade_error_msg[kBigTextSize] = {};
 static char arcade_root[kBigTextSize];
 static char mame_root[kBigTextSize];
+static char arcade_setname[kBigTextSize] = {};
 
 static bool is_vertical = false;
+static int rotation_dir = 0; // 0 = None, 1 = CW, 2 = CCW
 
 static sw_struct switches = {};
 
@@ -1056,6 +1058,7 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		foundsetname = false;
 		foundrotation = false;
 		samedir = 0;
+		rotation_dir = 0;
 		break;
 
 	case XML_EVENT_START_NODE:
@@ -1077,10 +1080,37 @@ static int xml_read_pre_parse(XMLEvent evt, const XMLNode* node, SXML_CHAR* text
 		break;
 
 	case XML_EVENT_TEXT:
-		if(insetname) user_io_name_override(text, samedir);
+		if(insetname)
+		{
+			user_io_name_override(text, samedir);
+			// Capture setname for game ID
+			snprintf(arcade_setname, sizeof(arcade_setname), "%s", text);
+		}
 		if(inrotation)
 		{
 			is_vertical = strncasecmp(text, "vertical", 8) == 0;
+
+			rotation_dir = 0;
+			if (is_vertical)
+			{
+				// Check for CCW first (must check before CW since "ccw" contains "cw")
+				if (strstr(text, "ccw") || strstr(text, "CCW") ||
+				    strstr(text, "counterclockwise") || strstr(text, "counter-clockwise"))
+				{
+					rotation_dir = 2;
+				}
+				// Then check for CW
+				else if (strstr(text, "cw") || strstr(text, "CW") ||
+				         strstr(text, "clockwise"))
+				{
+					rotation_dir = 1;
+				}
+				// Default to CW if no direction specified
+				else
+				{
+					rotation_dir = 1; // Fallback to CW if no direction is declared
+				}
+			}
 		}
 		break;
 
@@ -1137,6 +1167,14 @@ int arcade_send_rom(const char *xml)
 	}
 	buffer_destroy(arc_info.data);
 
+	// Write game ID using setname as serial
+	if (arcade_setname[0])
+	{
+		char mra_path[kBigTextSize];
+		snprintf(mra_path, sizeof(mra_path), "%s.mra", arcade_setname);
+		user_io_write_gameid(mra_path, 0, arcade_setname);
+	}
+
 	switches.dip_cur = switches.dip_def;
 	arcade_sw_load();
 	switches.dip_saved = switches.dip_cur;
@@ -1156,6 +1194,11 @@ void arcade_pre_parse(const char *xml)
 bool arcade_is_vertical()
 {
 	return is_vertical;
+}
+
+int arcade_get_direction()
+{
+	return rotation_dir;
 }
 
 void arcade_check_error()

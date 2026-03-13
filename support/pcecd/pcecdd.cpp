@@ -156,19 +156,19 @@ int pcecdd_t::LoadCUE(const char* filename) {
 				if (strstr(lptr, "MODE1/2048"))
 				{
 					this->toc.tracks[this->toc.last].sector_size = 2048;
-					this->toc.tracks[this->toc.last].type = 1;
+					this->toc.tracks[this->toc.last].type = TT_MODE1;
 				}
 				else if (strstr(lptr, "MODE1/2352"))
 				{
 					this->toc.tracks[this->toc.last].sector_size = 2352;
-					this->toc.tracks[this->toc.last].type = 1;
+					this->toc.tracks[this->toc.last].type = TT_MODE1;
 
 					FileSeek(&this->toc.tracks[this->toc.last].f, 0x10, SEEK_SET);
 				}
 				else if (strstr(lptr, "AUDIO"))
 				{
 					this->toc.tracks[this->toc.last].sector_size = 2352;
-					this->toc.tracks[this->toc.last].type = 0;
+					this->toc.tracks[this->toc.last].type = TT_CDDA;
 
 					FileSeek(&this->toc.tracks[this->toc.last].f, 0, SEEK_SET);
 				}

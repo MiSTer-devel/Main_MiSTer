@@ -1314,14 +1314,14 @@ void TDiskImage::readUDI(int hfile, bool ronly)
 	unsigned long rsize = read(hfile, ptr, fsize + 1024);
 	if (rsize < 16 + 4)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
 
 	if (memcmp(ptr, "UDI!", 4) != 0)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_FORMAT" UDI!");
 		return;
 	}
@@ -1330,13 +1330,13 @@ void TDiskImage::readUDI(int hfile, bool ronly)
 
 	if ((udi_hdr->Version != 0x00) || (udi_hdr->_zero != 0x00) || (udi_hdr->ExtHdrLength != 0))
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_FILEVER" UDI!");
 		return;
 	}
 	if (rsize != (udi_hdr->UnpackedLength + 4))
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
@@ -1356,7 +1356,7 @@ void TDiskImage::readUDI(int hfile, bool ronly)
 			unsigned char frmt = ptr[udiOFF++];
 			if (rsize < udiOFF + 4)
 			{
-				delete ptr;
+				delete[] ptr;
 				ShowError(ERR_CORRUPT);
 				return;
 			}
@@ -1373,7 +1373,7 @@ void TDiskImage::readUDI(int hfile, bool ronly)
 			udiOFF += 2;
 			if (rsize < udiOFF + 4)
 			{
-				delete ptr;
+				delete[] ptr;
 				ShowError(ERR_CORRUPT);
 				return;
 			}
@@ -1381,7 +1381,7 @@ void TDiskImage::readUDI(int hfile, bool ronly)
 			udiOFF += ccctlen / 8 + ((ccctlen - (ccctlen / 8) * 8) ? 1 : 0);
 			if (rsize < udiOFF + 4)
 			{
-				delete ptr;
+				delete[] ptr;
 				ShowError(ERR_CORRUPT);
 				return;
 			}
@@ -1452,7 +1452,7 @@ void TDiskImage::readUDI(int hfile, bool ronly)
 		if (*((long*)(ptr + udiOFF)) != CRC)
 			ShowError(ERR_FILECRC" UDI!");
 
-	delete ptr;
+	delete[] ptr;
 	ReadOnly = ronly;
 	FType = DIT_UDI;
 	DiskPresent = true;
@@ -1506,14 +1506,14 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 	unsigned long rsize = read(hfile, ptr, fsize);
 	if (rsize < 14)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
 
 	if (memcmp(ptr, "FDI", 3) != 0)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_FORMAT" FDI!");
 		return;
 	}
@@ -1530,13 +1530,13 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 
 	if ((fdiCylCount > 256) || (fdiCylCount == 0))
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_MANYCYLS);
 		return;
 	}
 	if ((fdiSideCount > 256) || (fdiSideCount == 0))
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_MANYSIDS);
 		return;
 	}
@@ -1546,7 +1546,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 
 	if (rsize < (0x0E + fdiSIZEext + (unsigned(MaxTrack) + 1)*(unsigned(MaxSide) + 1) * 7))
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
@@ -1574,7 +1574,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 			if (rsize < fdiOFF)
 			{
 				delete[] tracksinfo;
-				delete ptr;
+				delete[] ptr;
 				ShowError(ERR_CORRUPT);
 				return;
 			}
@@ -1585,7 +1585,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 			if (rsize < fdiOFFdata + tracksinfo[trk*(MaxSide + 1) + side].DataOffset)
 			{
 				delete[] tracksinfo;
-				delete ptr;
+				delete[] ptr;
 				ShowError(ERR_CORRUPT);
 				return;
 			}
@@ -1604,7 +1604,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 				if (rsize < fdiOFFdata + tracksinfo[trk*(MaxSide + 1) + side].DataOffset + tracksinfo[trk*(MaxSide + 1) + side].SectorsInfo[isec].SectorOffset)
 				{
 					delete[] tracksinfo;
-					delete ptr;
+					delete[] ptr;
 					ShowError(ERR_CORRUPT);
 					return;
 				}
@@ -1655,7 +1655,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 			if (trkdatalen + SecCount*(3 + 2) > 6250)    // 3x4E & 2x00 per sec checking
 			{
 				delete[] tracksinfo;
-				delete ptr;
+				delete[] ptr;
 				for (int t = 0; t < 256; t++)
 					for (int s = 0; s < 256; s++)
 					{
@@ -1820,7 +1820,7 @@ void TDiskImage::readFDI(int hfile, bool readonly)
 		}
 
 	delete[] tracksinfo;
-	delete ptr;
+	delete[] ptr;
 	ReadOnly = readonly;
 	FType = DIT_FDI;
 	DiskPresent = true;
@@ -1847,7 +1847,7 @@ void TDiskImage::readFDD(int hfile, bool readonly)
 	unsigned long rsize = read(hfile, ptr, fsize);
 	if (rsize < sizeof(FDD_MAIN_HEADER))
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
@@ -1859,7 +1859,7 @@ void TDiskImage::readFDD(int hfile, bool readonly)
 
 	if (MaxH > 2)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_MANYSIDS);
 		return;
 	}
@@ -1901,7 +1901,7 @@ void TDiskImage::readFDD(int hfile, bool readonly)
 
 			if ((fdd_hdr->DataOffset[trk*(MaxSide + 1) + side] + 2) > int(rsize))
 			{
-				delete ptr;
+				delete[] ptr;
 				for (int t = 0; t < 256; t++)
 					for (int s = 0; s < 256; s++)
 					{
@@ -1921,7 +1921,7 @@ void TDiskImage::readFDD(int hfile, bool readonly)
 
 			if ((2 + SecCount * 8 + fdd_hdr->DataOffset[trk*(MaxSide + 1) + side]) > rsize)
 			{
-				delete ptr;
+				delete[] ptr;
 				for (int t = 0; t < 256; t++)
 					for (int s = 0; s < 256; s++)
 					{
@@ -1936,7 +1936,7 @@ void TDiskImage::readFDD(int hfile, bool readonly)
 			}
 			else if (trackinfo->sect[SecCount - 1].SectPos > int(rsize))
 			{
-				delete ptr;
+				delete[] ptr;
 				for (int t = 0; t < 256; t++)
 					for (int s = 0; s < 256; s++)
 					{
@@ -1968,7 +1968,7 @@ void TDiskImage::readFDD(int hfile, bool readonly)
 
 			if (trkdatalen + SecCount*(3 + 2) > 6250)    // 3x4E & 2x00 per sec checking
 			{
-				delete ptr;
+				delete[] ptr;
 				for (int t = 0; t < 256; t++)
 					for (int s = 0; s < 256; s++)
 					{
@@ -2108,7 +2108,7 @@ void TDiskImage::readFDD(int hfile, bool readonly)
 			}
 		}
 
-	delete ptr;
+	delete[] ptr;
 	ReadOnly = readonly;
 	FType = DIT_FDD;
 	DiskPresent = true;
@@ -2134,19 +2134,19 @@ void TDiskImage::readSCL(int hfile, bool readonly)
 
 	if (!rsize)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
 	if (rsize < 9 + 4)      // header
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
 	if (memcmp(ptr, "SINCLAIR", 8) != 0)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_FORMAT" SCL!");
 		return;
 	}
@@ -2154,7 +2154,7 @@ void TDiskImage::readSCL(int hfile, bool readonly)
 	unsigned int FileCount = ptr[8];
 	if (rsize < 9 + 4 + FileCount * 14)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
@@ -2180,7 +2180,7 @@ void TDiskImage::readSCL(int hfile, bool readonly)
 		FilesTotalSecs += fileinfo[i]->SecLen;
 		if (rsize < sclOFF + 4 + SL)
 		{
-			delete ptr;
+			delete[] ptr;
 			ShowError(ERR_CORRUPT);
 			return;
 		}
@@ -2304,7 +2304,7 @@ void TDiskImage::readSCL(int hfile, bool readonly)
 		ApplySectorCRC(vgfs);
 	}
 
-	delete ptr;
+	delete[] ptr;
 	ReadOnly = readonly;
 }
 //-----------------------------------------------------------------------------
@@ -2326,13 +2326,13 @@ void TDiskImage::readHOB(int hfile)
 
 	if (!rsize)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
 	if (rsize < 17)      // header
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
@@ -2345,7 +2345,7 @@ void TDiskImage::readHOB(int hfile)
 
 	if (rsize < 17 + (DataLength & 0xFF00))
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
@@ -2374,7 +2374,7 @@ void TDiskImage::readHOB(int hfile)
 	dired.SecLen = ptr[0x0E];            // число секторов файла
 
 	VGFIND_SECTOR vgfs9;
-	if (!FindSector(0, 0, 9, &vgfs9)) { delete ptr; return; }
+	if (!FindSector(0, 0, 9, &vgfs9)) { delete[] ptr; return; }
 
 	dired.FirstSec = vgfs9.SectorPointer[0xE1];
 	dired.FirstTrk = vgfs9.SectorPointer[0xE2];
@@ -2388,7 +2388,7 @@ void TDiskImage::readHOB(int hfile)
 
 	if (TRK >= 160)       // disk full ?
 	{
-		delete ptr;
+		delete[] ptr;
 		return;
 	}
 
@@ -2449,44 +2449,44 @@ void TDiskImage::readTD0(int hfile, bool readonly)
 
 	if (!rsize)
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
 	if (rsize < 12)      // header
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_CORRUPT);
 		return;
 	}
 
 	if ((*(short*)ptr != WORD2('T', 'D')) && (*(short*)ptr != WORD2('t', 'd')))// non TD0
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_FORMAT" TD0!");
 		return;
 	}
 	if (TD0CRC(ptr, 10) != td0hdr->CRC) // CRC bad...
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_FILECRC" TD0!");
 		return;
 	}
 	if ((td0hdr->Ver > 21) || (td0hdr->Ver < 10))           // 1.0 <= version <= 2.1...
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_FILEVER" TD0!");
 		return;
 	}
 	if (td0hdr->DataDOS != 0)           // if DOS allocated sectors only...
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_TD0DOSALLOC);
 		return;
 	}
 	if (!unpack_td0(ptr, rsize))
 	{
-		delete ptr;
+		delete[] ptr;
 		ShowError(ERR_FORMAT" TD0!");
 		return;
 	}
@@ -2549,7 +2549,7 @@ void TDiskImage::readTD0(int hfile, bool readonly)
 		// проверка на возможность формата...
 		if (trkdatalen + SecCount*(3 + 2) > 6250)    // 3x4E & 2x00 per sec checking
 		{
-			delete ptr;
+			delete[] ptr;
 			for (int t = 0; t < 256; t++)
 				for (int s = 0; s < 256; s++)
 				{
@@ -2697,7 +2697,7 @@ void TDiskImage::readTD0(int hfile, bool readonly)
 		if (unsigned(MaxSide) < side) MaxSide = side;
 	}
 
-	delete ptr;
+	delete[] ptr;
 	ReadOnly = readonly;
 	FType = DIT_TD0;
 	DiskPresent = true;
@@ -2741,7 +2741,7 @@ bool unpack_td0(unsigned char *data, long &size)
 	{
 		if (snbuf[4] < 20)    // unsupported Old Advanced compression
 		{
-			delete snbuf;
+			delete[] snbuf;
 			return false;
 		}
 		unpack_lzh((unsigned char*)data + 12, size - 12, (unsigned char*)snbuf + 12), *(short*)snbuf = WORD2('T', 'D');
@@ -2756,7 +2756,7 @@ bool unpack_td0(unsigned char *data, long &size)
 
 		if (TD0CRC(snbuf + 12 + 2, 8 + *cs) != cs[-1])
 		{
-			delete snbuf;
+			delete[] snbuf;
 			return false;
 		}
 		td0_move(10);
@@ -2809,7 +2809,7 @@ bool unpack_td0(unsigned char *data, long &size)
 						for (; s; s--) *(unsigned short*)dst = data, dst += 2;
 						break;
 					default: shit:
-						delete snbuf;
+						delete[] snbuf;
 						return false;  // "bad TD0 file"
 					}
 				} while (td0_src < end_packed_data);
@@ -2822,7 +2822,7 @@ bool unpack_td0(unsigned char *data, long &size)
 		}
 	}
 	size = unsigned(td0_dst) - unsigned(data);
-	delete snbuf;
+	delete[] snbuf;
 	return true;
 }
 //----------------------------------------------------------------------------

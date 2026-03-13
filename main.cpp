@@ -29,6 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "menu.h"
 #include "user_io.h"
 #include "input.h"
+#include "frame_timer.h"
 #include "fpga_io.h"
 #include "scheduler.h"
 #include "osd.h"
@@ -83,6 +84,7 @@ int main(int argc, char *argv[])
 		}
 
 		user_io_poll();
+		frame_timer();
 		input_poll(0);
 		HandleUI();
 		OsdUpdate();

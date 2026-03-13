@@ -4,6 +4,7 @@
 #include "menu.h"
 #include "user_io.h"
 #include "input.h"
+#include "frame_timer.h"
 #include "fpga_io.h"
 #include "osd.h"
 #include "profiling.h"
@@ -30,6 +31,7 @@ static void scheduler_co_poll(void)
 		{
 			SPIKE_SCOPE("co_poll", 1000);
 			user_io_poll();
+			frame_timer();
 			input_poll(0);
 		}
 

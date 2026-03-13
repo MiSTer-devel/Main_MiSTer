@@ -18,6 +18,7 @@
 static char buf[1024];
 static uint8_t *chd_hunkbuf = NULL;
 static int chd_hunknum;
+static int noreset = 0;
 
 static int sgets(char *out, int sz, char **in)
 {
@@ -247,13 +248,13 @@ static int load_cue(const char* filename, toc_t *table)
 			if (strstr(lptr, "MODE1/2352") || strstr(lptr, "MODE2/2352"))
 			{
 				table->tracks[table->last].sector_size = 2352;
-				table->tracks[table->last].type = 1;
+				table->tracks[table->last].type = TT_MODE1;
 				if (!table->last) table->end = 150; // implicit 2 seconds pregap for track 1
 			}
 			else if (strstr(lptr, "AUDIO"))
 			{
 				table->tracks[table->last].sector_size = 2352;
-				table->tracks[table->last].type = 0;
+				table->tracks[table->last].type = TT_CDDA;
 			}
 			else
 			{
@@ -698,6 +699,12 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				region = game_info.region;
 			printf("Game ID: %s, region: %s\n", game_id, region_string(region));
 
+			// Write game ID if it's not empty (BIOS check is handled in user_io_write_gameid)
+			if (game_id && game_id[0] != '\0')
+			{
+				user_io_write_gameid(filename, 0, game_id);
+			}
+
 			int name_len = strlen(filename);
 
 			if (toc.tracks[0].type) // is first track a data?
@@ -710,12 +717,12 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 				if (!same_game)
 				{
-					reset = 1;
-					if (old_len)
+					if (!noreset && old_len)
 					{
 						strcat(last_dir, "/noreset.txt");
-						reset = !FileExists(last_dir);
+						noreset = FileExists(last_dir);
 					}
+					reset = !noreset;
 
 					strcpy(last_dir, filename);
 					char *p = strrchr(last_dir, '/');
@@ -775,10 +782,10 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 				mask = libCryptMask(&sbi_file);
 			}
 
+			process_ss(filename, name_len != 0);
 			send_cue_and_metadata(&toc, mask, region, reset);
 
 			user_io_set_index(f_index);
-			process_ss(filename, name_len != 0);
 
 			mount_cd(toc.end*CD_SECTOR_LEN, s_index);
 			loaded = 1;
@@ -797,4 +804,9 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 void psx_poll()
 {
 	spi_uio_cmd(UIO_CD_GET);
+}
+
+void psx_reset()
+{
+	noreset = 0;
 }
