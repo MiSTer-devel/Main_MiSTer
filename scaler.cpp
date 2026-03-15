@@ -16,9 +16,17 @@ with help from the MiSTer contributors including Grabulosaure
 #include <sys/types.h>
 #include <err.h>
 
+#if defined(__ARM_NEON)
+    #include <arm_neon.h>
+    const int VEC_WIDTH = 16;
+#endif
+
 #include "scaler.h"
 #include "shmem.h"
 
+#ifdef PROFILING
+    #include "profiling.h"
+#endif
 
 mister_scaler * mister_scaler_init()
 {
@@ -72,6 +80,7 @@ void mister_scaler_free(mister_scaler *ms)
    free(ms);
 }
 
+// this doesn't get called anywhere right now, maybe rewrite in simd later
 int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int lineU, unsigned char *bufU, int lineV, unsigned char *bufV)
 {
     unsigned char *buffer;
@@ -107,8 +116,102 @@ int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int 
     return 0;
 }
 
+// use NEON if available
+#if defined(__ARM_NEON)
+
+// simd versions of copying a bunch of pixels from the scaler's shared memory into a local buffer
+
+// mister_scaler_read never gets called as is but was practice for
+// the 32-bit (BGRA) version.
+// vld3q_u8 loads 16 bytes into each of 3 registers
+// vst3q_u8 stores that same data back into memory
+// uint8x16x3_t is a struct that holds 3 uint8x16_t vectors
+// which are themselves the data type a 128-bit register can hold
+// 16 uint8_t values which is a perfect match for 24-bit RGB
+int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf)
+{
+    #ifdef PROFILING
+        PROFILE_FUNCTION();
+    #endif
+
+    unsigned char *buffer = (unsigned char *)(ms->map + ms->map_off);
+
+    for (int y = 0; y < ms->height; y++) {
+        unsigned char *pixbuf = &buffer[ms->header + y * ms->line];
+        unsigned char *outbuf = &gbuf[y * (ms->width * 3)];
+
+        // we process a multiple of VEC_WIDTH to work with SIMD, then do the rest scalar
+        int limit = ms->width - (ms->width % VEC_WIDTH);
+
+        for (int x = 0; x < limit; x += VEC_WIDTH) {
+            uint8x16x3_t rgb = vld3q_u8(pixbuf + x * 3);
+            vst3q_u8(outbuf + x * 3, rgb);
+        }
+
+        // scalar tail
+        for (int x = limit; x < ms->width; x++) {
+            outbuf[x * 3 + 0] = pixbuf[x * 3 + 0];
+            outbuf[x * 3 + 1] = pixbuf[x * 3 + 1];
+            outbuf[x * 3 + 2] = pixbuf[x * 3 + 2];
+        }
+    }
+
+    return 0;
+}
+
+// similar to above, but vdupq_n_u8 is a "splat"
+// it loads a single byte into an entire register
+int mister_scaler_read_32(mister_scaler *ms, unsigned char *gbuf)
+{
+    #ifdef PROFILING
+        PROFILE_FUNCTION();
+    #endif
+
+    unsigned char *buffer = (unsigned char *)(ms->map + ms->map_off);
+    const uint8x16_t alpha = vdupq_n_u8(0xFF);
+
+    for (int y = 0; y < ms->height; y++) {
+        unsigned char *pixbuf = &buffer[ms->header + y * ms->line];
+        unsigned char *outbuf = &gbuf[y * (ms->width * 4)];
+
+        // we process a multiple of VEC_WIDTH to work with SIMD, then do the rest scalar
+        int limit = ms->width - (ms->width % VEC_WIDTH);
+        
+        // simd loop
+        for (int x = 0; x < limit; x += VEC_WIDTH) {
+            uint8x16x3_t rgb = vld3q_u8(pixbuf + x * 3);
+
+            // convert from rgb to bgra
+            // i hate bgra
+            uint8x16x4_t bgra;
+            bgra.val[0] = rgb.val[2];   
+            bgra.val[1] = rgb.val[1];   
+            bgra.val[2] = rgb.val[0];   
+            bgra.val[3] = alpha;        
+
+            vst4q_u8(outbuf + x * 4, bgra);
+        }
+
+        // scalar tail
+        for (int x = limit; x < ms->width; x++) {
+            outbuf[x * 4 + 2] = pixbuf[x * 3 + 0];
+            outbuf[x * 4 + 1] = pixbuf[x * 3 + 1];
+            outbuf[x * 4 + 0] = pixbuf[x * 3 + 2];
+            outbuf[x * 4 + 3] = 0xFF;
+        }
+    }
+
+    return 0;
+}
+
+#else
+
+// no NEON, original scalar versions
 int mister_scaler_read(mister_scaler *ms,unsigned char *gbuf)
 {
+    #ifdef PROFILING
+        PROFILE_FUNCTION();
+    #endif
     unsigned char *buffer;
     buffer = (unsigned char *)(ms->map+ms->map_off);
 
@@ -129,6 +232,9 @@ int mister_scaler_read(mister_scaler *ms,unsigned char *gbuf)
 }
 
 int mister_scaler_read_32(mister_scaler *ms, unsigned char *gbuf) {
+    #ifdef PROFILING
+        PROFILE_FUNCTION();
+    #endif
     unsigned char *buffer;
     buffer = (unsigned char *)(ms->map+ms->map_off);
 
@@ -149,3 +255,5 @@ int mister_scaler_read_32(mister_scaler *ms, unsigned char *gbuf) {
 
     return 0;
 }
+
+#endif
