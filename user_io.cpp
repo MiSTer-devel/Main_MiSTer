@@ -36,6 +36,7 @@
 #include "ide.h"
 #include "ide_cdrom.h"
 #include "profiling.h"
+#include "offload.h"
 
 #include "support.h"
 
@@ -4277,8 +4278,95 @@ static void print_imlib_load_error (Imlib_Load_Error err, const char *filepath) 
   return ;
 }
 
-bool user_io_screenshot(const char *pngname, int rescale)
+#include <stdio.h>
+#include <stdint.h>
+
+int write_raw_rgb(const char *filename, const uint8_t *rgb, int width, int height)
 {
+    PROFILE_FUNCTION();
+	printf("Saving raw RGB screenshot to %s\n", filename);
+	printf("Image dimensions: %dx%d\n", width, height);
+	printf("Expected file size: %zu bytes\n", (size_t)width * (size_t)height * 3);
+	if (!filename || !rgb || width <= 0 || height <= 0) {
+        return -1;
+    }
+
+    FILE *f = fopen(filename, "wb");
+    if (!f) {
+        return -1;
+    }
+
+    size_t bytes = (size_t)width * (size_t)height * 3;
+    size_t written = fwrite(rgb, 1, bytes, f);
+
+    fclose(f);
+
+    return (written == bytes) ? 0 : -1;
+}
+
+int write_bmp_24(const char *filename, const uint8_t *bgr, int width, int height)
+{
+    FILE *f = fopen(filename, "wb");
+    if (!f) return -1;
+	
+    uint32_t row_raw = width * 3;
+    uint32_t row_padded = (row_raw + 3) & ~3;
+    uint32_t image_size = row_padded * height;
+    uint32_t file_size = 54 + image_size;
+
+    uint8_t header[54] = {0};
+
+    // bitmap header (file)
+    header[0] = 'B';
+    header[1] = 'M';
+
+    header[2] = file_size;
+    header[3] = file_size >> 8;
+    header[4] = file_size >> 16;
+    header[5] = file_size >> 24;
+
+    header[10] = 54;  // pixel data offset
+
+    // dib header
+    header[14] = 40;  // header size
+
+    header[18] = width;
+    header[19] = width >> 8;
+    header[20] = width >> 16;
+    header[21] = width >> 24;
+
+    header[22] = height;
+    header[23] = height >> 8;
+    header[24] = height >> 16;
+    header[25] = height >> 24;
+
+    header[26] = 1;      // planes
+    header[28] = 24;     // bits per pixel
+
+    header[34] = image_size;
+    header[35] = image_size >> 8;
+    header[36] = image_size >> 16;
+    header[37] = image_size >> 24;
+
+    fwrite(header, 1, 54, f);
+
+    uint8_t padding[3] = {0};
+    uint32_t pad = row_padded - row_raw;
+
+	// BMP stores rows bottom-up
+	for (int y = height - 1; y >= 0; y--) {
+		const uint8_t *row = bgr + y * width * 3;
+		fwrite(row, 1, row_raw, f);
+		fwrite(padding, 1, pad, f);
+	}
+
+    fclose(f);
+    return 0;
+}
+
+bool user_io_screenshot(const char *filename, int rescale)
+{
+	PROFILE_FUNCTION();
 	mister_scaler *ms = mister_scaler_init();
 	if (ms == NULL)
 	{
@@ -4288,9 +4376,24 @@ bool user_io_screenshot(const char *pngname, int rescale)
 	}
 	else
 	{
-    int scwidth = ms->output_width;
-    int scheight = ms->output_height;
+		const char *basename = last_filename;
+		if( filename && *filename )
+			basename = filename;
+		static char filename[1024];
+		FileGenerateScreenshotName(basename, filename, 1024);
 
+		int scwidth = ms->width;
+		int scheight = ms->height;
+		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 3, 1);
+		mister_scaler_read(ms,outputbuf,BGR);
+		offload_add_work([=] {
+			write_bmp_24(filename, outputbuf, scwidth, scheight);
+		});
+		//offload_add_work([=] {
+		//	write_raw_rgb("/media/fat/screenshot.raw", outputbuf, scwidth, scheight);
+		//});
+		//free(outputbuf);
+	/*
     if (video_get_rotated())
     {
 
@@ -4304,16 +4407,19 @@ bool user_io_screenshot(const char *pngname, int rescale)
 			basename = pngname;
 		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 4, 1);
 		// read the image into the outpubuf - RGBA format
-		mister_scaler_read_32(ms,outputbuf);
+		mister_scaler_read(ms,outputbuf);
 		// using_data will keep a pointer and dispose of the outbuf
 		Imlib_Image im = imlib_create_image_using_data(ms->width,ms->height,(unsigned int *)outputbuf);
 		imlib_context_set_image(im);
-
+		imlib_image_set_format("bmp");
 		static char filename[1024];
 		FileGenerateScreenshotName(basename, filename, 1024);
-
-		/* do we want to save a rescaled image? */
-		if (rescale)
+	*/
+	
+	/* do we want to save a rescaled image? */
+	
+	/*
+	if (rescale)
 		{
 			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,scwidth,scheight);
 			imlib_free_image_and_decache();
@@ -4333,7 +4439,9 @@ bool user_io_screenshot(const char *pngname, int rescale)
 		char msg[1024];
 		snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
 		Info(msg);
+	*/
 	}
+	
 	return true;
 }
 

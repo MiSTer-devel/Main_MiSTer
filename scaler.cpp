@@ -119,16 +119,111 @@ int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int 
 // use NEON if available
 #if defined(__ARM_NEON)
 
-// simd versions of copying a bunch of pixels from the scaler's shared memory into a local buffer
-
-// mister_scaler_read never gets called as is but was practice for
-// the 32-bit (BGRA) version.
-// vld3q_u8 loads 16 bytes into each of 3 registers
-// vst3q_u8 stores that same data back into memory
-// uint8x16x3_t is a struct that holds 3 uint8x16_t vectors
-// which are themselves the data type a 128-bit register can hold
-// 16 uint8_t values which is a perfect match for 24-bit RGB
+// i feel dirty overloading a function call in C but it compiles!
+int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format);
 int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf)
+{
+    return mister_scaler_read(ms, gbuf, RGB);
+}
+
+// simd versions of copying a bunch of pixels from the scaler's shared memory into a local buffer
+int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format)
+{
+    #ifdef PROFILING
+        PROFILE_FUNCTION();
+    #endif
+
+    unsigned char *buffer = (unsigned char *)(ms->map + ms->map_off);
+
+    for (int y = 0; y < ms->height; y++) {
+        unsigned char *pixbuf = &buffer[ms->header + y * ms->line];
+        unsigned char *outbuf = &gbuf[y * (ms->width * 3)];
+
+        // we process a multiple of VEC_WIDTH to work with SIMD, then do the rest scalar
+        int limit = ms->width - (ms->width % VEC_WIDTH);
+        const uint8x16_t alpha = vdupq_n_u8(0xFF);
+        for (int x = 0; x < limit; x += VEC_WIDTH) {
+            uint8x16x3_t rgb = vld3q_u8(pixbuf + x * 3);
+
+            switch (format)
+            {
+                case RGB:
+                    vst3q_u8(outbuf + x * 3, rgb);
+                    break;
+                case BGR:
+                    uint8x16x3_t bgr;
+                    bgr.val[0] = rgb.val[2];   
+                    bgr.val[1] = rgb.val[1];   
+                    bgr.val[2] = rgb.val[0];   
+                    vst3q_u8(outbuf + x * 3, bgr);
+                    break;
+                case RGBA:
+                    uint8x16x4_t rgba;
+                    rgba.val[0] = rgb.val[0];   
+                    rgba.val[1] = rgb.val[1];   
+                    rgba.val[2] = rgb.val[2];   
+                    rgba.val[3] = alpha;        
+                    vst4q_u8(outbuf + x * 4, rgba);
+                    break;
+                case BGRA:
+                    uint8x16x4_t bgra;
+                    bgra.val[0] = rgb.val[2];   
+                    bgra.val[1] = rgb.val[1];   
+                    bgra.val[2] = rgb.val[0];   
+                    bgra.val[3] = alpha;        
+                    vst4q_u8(outbuf + x * 4, bgra);
+                    break;
+                case YUV:
+                    // not supported yet
+                default:
+                    break;
+            }
+        }
+
+        // scalar tail
+        switch (format)
+        {
+            case RGB:
+                for (int x = limit; x < ms->width; x++) {
+                    outbuf[x * 3 + 0] = pixbuf[x * 3 + 0];
+                    outbuf[x * 3 + 1] = pixbuf[x * 3 + 1];
+                    outbuf[x * 3 + 2] = pixbuf[x * 3 + 2];
+                }
+                break;
+            case BGR:
+                for (int x = limit; x < ms->width; x++) {
+                    outbuf[x * 3 + 2] = pixbuf[x * 3 + 0];
+                    outbuf[x * 3 + 1] = pixbuf[x * 3 + 1];
+                    outbuf[x * 3 + 0] = pixbuf[x * 3 + 2];
+                }
+                break;
+            case RGBA:
+                for (int x = limit; x < ms->width; x++) {
+                    outbuf[x * 4 + 0] = pixbuf[x * 3 + 0];
+                    outbuf[x * 4 + 1] = pixbuf[x * 3 + 1];
+                    outbuf[x * 4 + 2] = pixbuf[x * 3 + 2];
+                    outbuf[x * 4 + 3] = 0xFF;
+                }
+                break;
+            case BGRA:
+                for (int x = limit; x < ms->width; x++) {
+                    outbuf[x * 4 + 2] = pixbuf[x * 3 + 0];
+                    outbuf[x * 4 + 1] = pixbuf[x * 3 + 1];
+                    outbuf[x * 4 + 0] = pixbuf[x * 3 + 2];
+                    outbuf[x * 4 + 3] = 0xFF;
+                }
+                break;
+            case YUV:
+                // not supported yet
+            default:
+                break;
+        }
+    }
+
+    return 0;
+}
+
+int mister_scaler_read_bgr(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format)
 {
     #ifdef PROFILING
         PROFILE_FUNCTION();
@@ -145,7 +240,13 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf)
 
         for (int x = 0; x < limit; x += VEC_WIDTH) {
             uint8x16x3_t rgb = vld3q_u8(pixbuf + x * 3);
-            vst3q_u8(outbuf + x * 3, rgb);
+            uint8x16x3_t bgr;
+            
+            bgr.val[0] = rgb.val[2];   
+            bgr.val[1] = rgb.val[1];   
+            bgr.val[2] = rgb.val[0];   
+
+            vst3q_u8(outbuf + x * 3, bgr);
         }
 
         // scalar tail
@@ -161,7 +262,7 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf)
 
 // similar to above, but vdupq_n_u8 is a "splat"
 // it loads a single byte into an entire register
-int mister_scaler_read_32(mister_scaler *ms, unsigned char *gbuf)
+int mister_scaler_read_bgra(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format)
 {
     #ifdef PROFILING
         PROFILE_FUNCTION();
@@ -207,7 +308,7 @@ int mister_scaler_read_32(mister_scaler *ms, unsigned char *gbuf)
 #else
 
 // no NEON, original scalar versions
-int mister_scaler_read(mister_scaler *ms,unsigned char *gbuf)
+int mister_scaler_read_rgb(mister_scaler *ms,unsigned char *gbuf)
 {
     #ifdef PROFILING
         PROFILE_FUNCTION();
@@ -231,7 +332,7 @@ int mister_scaler_read(mister_scaler *ms,unsigned char *gbuf)
     return 0;
 }
 
-int mister_scaler_read_32(mister_scaler *ms, unsigned char *gbuf) {
+int mister_scaler_read_32(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format) {
     #ifdef PROFILING
         PROFILE_FUNCTION();
     #endif

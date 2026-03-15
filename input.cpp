@@ -4790,6 +4790,7 @@ static void setup_wheels()
 
 int input_test(int getchar)
 {
+	PROFILE_FUNCTION();
 	static char cur_leds = 0;
 	static int state = 0;
 	struct input_absinfo absinfo;

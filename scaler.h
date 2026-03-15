@@ -6,6 +6,14 @@ with help from the MiSTer contributors including Grabulosaure
 #ifndef SCALER_H
 #define SCALER_H
 
+typedef enum {
+    RGB,
+    BGR,
+    BGRA,
+    RGBA,
+    YUV,
+} mister_scaler_format_t;
+
 typedef struct {
    int header;
    int width;
@@ -23,12 +31,10 @@ typedef struct {
 #define MISTER_SCALER_BUFFERSIZE   2048*3*1024
 
 mister_scaler *mister_scaler_init();
-int mister_scaler_read(mister_scaler *,unsigned char *buffer);
-int mister_scaler_read_32(mister_scaler *ms, unsigned char *buffer);
-int mister_scaler_read_yuv(mister_scaler *ms,int,unsigned char *y,int, unsigned char *U,int, unsigned char *V);
+int mister_scaler_read(mister_scaler *,unsigned char *buffer, mister_scaler_format_t format);
+//int mister_scaler_read_bgr(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format);
+//int mister_scaler_read_32(mister_scaler *ms, unsigned char *buffer, mister_scaler_format_t format);
+//int mister_scaler_read_yuv(mister_scaler *ms,int,unsigned char *y,int, unsigned char *U,int, unsigned char *V);
 void mister_scaler_free(mister_scaler *);
-
-int mister_scaler_read_simd(mister_scaler *ms,unsigned char *gbuf);
-int mister_scaler_read_32_simd(mister_scaler *ms,unsigned char *gbuf);
 
 #endif
