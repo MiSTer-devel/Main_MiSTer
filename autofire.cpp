@@ -24,8 +24,8 @@
     actual_refresh / 60 * autofire_rate_hz == real_autofire_rate_hz
 */
 
-#define MAX_AF_CODES 16
-#define MAX_AF_RATES 6
+#define MAX_AF_CODES 32
+#define MAX_AF_RATES 32
 #define AF_NAME_LEN 32
 
 // global autofire cycle data.
@@ -51,12 +51,10 @@ static struct AutofireData autofiredata_default[MAX_AF_RATES]; // hardcoded fall
 static int num_af_rates_default = 0;
 static int num_af_rates = 0;
 
-
 int get_autofire_rate_count()
 {
 	return num_af_rates;
 }
-
 
 static void set_autofire_name(struct AutofireData *data, const char *base_name) {
 	float hz = data->cycle_length > 0 ? (60.0f / data->cycle_length) : 0.0f;
@@ -114,7 +112,6 @@ void set_autofire_code(int player, uint32_t code, uint32_t mask, int index, bool
 	}
 }
 
-
 // step autofire rate; wrap to disabled at max.
 void inc_autofire_code(int player, uint32_t code, uint32_t mask) {
 	if (get_autofire_locked(player, code)) return;
@@ -124,16 +121,6 @@ void inc_autofire_code(int player, uint32_t code, uint32_t mask) {
 	if (index >= num_af_rates || index < 0) index = 0;
 	set_autofire_code(player, code, mask, index);
 }
-
-// advance all autofire patterns (run once per frame)
-//void autofire_tick() {
-//    for (int i = 1; i < num_af_rates; i++)
-//    {
-        //autofiredata[i].bit = (autofiredata[i].cycle_mask >> autofiredata[i].frame_count) & 1u;
-        //if (++(autofiredata[i].frame_count) >= autofiredata[i].cycle_length)
-        //    autofiredata[i].frame_count = 0;
-//    }
-//}
 
 // returns whether the buttons for this code should be held or released this frame.
 // (updated every time we call autofire_tick)
@@ -179,8 +166,11 @@ bool is_autofire_enabled(int player, uint32_t code) {
 // some arcade shooters have pretty odd optimal autofire patterns to manage rank
 // let's hide them here for my shmup buddies
 static const struct AutofireData autofire_patterns[] = {
-	{ "GUNFRONTIER", 0b111100000ULL, 9 },
-	{ "GAREGGA", 0b1110000ULL, 7 },
+	{ "GUNFRONTIER", 0b000001111ULL, 9 }, // gun frontier raises rank really fast in response to autofire. this is the fastest
+										  // you can fire without it triggering a rate increase
+	{ "GAREGGA", 0b0000111ULL, 7 }, 	  // i trusted google that battle garegga likes this rate but i'm terrified of the game
+										  // so please let me know if i'm wrong
+
 };
 
 // helper for formatting binary literal patterns.
@@ -212,6 +202,10 @@ static void init_autofire_entry(struct AutofireData *data, uint64_t mask, int le
 	if (data->cycle_length < 1) data->cycle_length = 1;
 }
 
+// this will always result in an autofire rate that divides evenly into 60hz
+// could probably revisit and use a couple different algorithms to allow approximations
+// of non-divisible rates but the working theory was to keep this code easy to read
+// and if anybody needs something more complicated, fall back on a custom bitmask
 static inline struct AutofireData mask_from_hertz(double hz_target)
 {
     struct AutofireData p = {{0}, 0, 0};
