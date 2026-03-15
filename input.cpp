@@ -1915,20 +1915,25 @@ static bool handle_autofire_toggle(int num, uint32_t mask, uint32_t code, char p
 		}
 		return false;
 	}
+	const char *dir_bnames[] = { "Right", "Left", "Down", "Up" };
 
 	// we can only get here if the OSD or BTN_TGL keys were pressed
 	// in that event we see if lastmask/lastcode tells us we're holding a button
 	// and if we are, we toggle autofire for that button
 	if (!user_io_osd_is_visible() && press && !cfg.disable_autofire)
 	{
-		if ((lastcode[num] && lastmask[num] && (lastmask[num] & 0xF) == 0)) // don't allow enabling autofire on directions
+		if (lastcode[num] && lastmask[num] && (cfg.autofire_on_directions || (lastmask[num] & 0xF) == 0))
 		{
 			char *strat = str;
 			inc_autofire_code(num, lastcode[num], lastmask[num]);
 			
 			// display autofire status for each button in the mask
 			FOR_EACH_SET_BIT(lastmask[num], btn) {
-				strat += sprintf(strat, "%s\n", joy_bnames[btn-4]);
+				if (btn < 4) {
+					strat += sprintf(strat, "%s ", dir_bnames[btn]);
+				} else {
+					strat += sprintf(strat, "%s\n", joy_bnames[btn-4]);
+				}
 			}
 
 			const char *rate = get_autofire_rate_hz_button(num, lastcode[num]);
@@ -5948,7 +5953,6 @@ int input_poll(int getchar)
 	static uint32_t last_frame_count = 0;
 	if (FRAME_TICK(last_frame_count)) {
 		key_update_frames_held();
-		//autofire_tick(); 	// advance all autofire patterns by 1
 	}
 
 	int ret = input_test(getchar);
