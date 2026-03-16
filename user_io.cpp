@@ -35,8 +35,12 @@
 #include "shmem.h"
 #include "ide.h"
 #include "ide_cdrom.h"
-#include "profiling.h"
+#ifdef PROFILING
+	#include "profiling.h"
+#endif
 #include "offload.h"
+#include "frame_timer.h"
+#include "bitmap.h"
 
 #include "support.h"
 
@@ -82,6 +86,13 @@ static bool winkey_pressed = 0;
 static uint16_t sdram_cfg = 0;
 
 static char last_filename[1024] = {};
+
+// screenshot callback state
+static bool screenshot_pending = false;
+static bool screenshot_requested = false;
+static char *screenshot_cmd = NULL;
+static int screenshot_rescale = 0;
+
 void user_io_store_filename(char *filename)
 {
 	char *p = strrchr(filename, '/');
@@ -3046,8 +3057,15 @@ static uint32_t res_timer = 0;
 
 void user_io_poll()
 {
-	PROFILE_FUNCTION();
+	#ifdef PROFILING
+		PROFILE_FUNCTION();
+	#endif
 
+	// every frame, check if a screenshot has been requested.
+	// this is reduce risk of screenshot occurring while the scaler
+	// is being updated and getting a corrupted image.
+	add_frame_callback(screenshot_cb);
+	
 	if ((core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
 	{
@@ -4070,10 +4088,12 @@ void user_io_kbd(uint16_t key, int press)
 	if (key_WinPrnScr || key_AltWinScrLk)
 	{
 		int shift = (get_key_mod() & LSHIFT);
-		if (press == 1)
+		if (press == 1 && !screenshot_pending)
 		{
 			printf("print key pressed - do screen shot\n");
-			user_io_screenshot(nullptr,!shift);
+			screenshot_cmd = NULL;
+			screenshot_rescale = !shift;
+			screenshot_requested = true;
 		}
 	}
 	else
@@ -4248,6 +4268,7 @@ uint16_t user_io_get_sdram_cfg()
 	return sdram_cfg;
 }
 
+/*
 static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
   {"file '%s' does not exist", IMLIB_LOAD_ERROR_FILE_DOES_NOT_EXIST},
   {"file '%s' is a directory", IMLIB_LOAD_ERROR_FILE_IS_DIRECTORY},
@@ -4273,188 +4294,136 @@ static void print_imlib_load_error (Imlib_Load_Error err, const char *filepath) 
       return ;
     }
   }
-  /* Unrecognised error */
+  // Unrecognised error 
     printf("Screenshot Error (%d): unrecognized error accessing file '%s'\n",err,filepath);
   return ;
 }
+*/
 
-#include <stdio.h>
-#include <stdint.h>
-
-int write_raw_rgb(const char *filename, const uint8_t *rgb, int width, int height)
+bool user_io_screenshot(const char *bmpname)
 {
-    PROFILE_FUNCTION();
-	printf("Saving raw RGB screenshot to %s\n", filename);
-	printf("Image dimensions: %dx%d\n", width, height);
-	printf("Expected file size: %zu bytes\n", (size_t)width * (size_t)height * 3);
-	if (!filename || !rgb || width <= 0 || height <= 0) {
-        return -1;
-    }
-
-    FILE *f = fopen(filename, "wb");
-    if (!f) {
-        return -1;
-    }
-
-    size_t bytes = (size_t)width * (size_t)height * 3;
-    size_t written = fwrite(rgb, 1, bytes, f);
-
-    fclose(f);
-
-    return (written == bytes) ? 0 : -1;
-}
-
-int write_bmp_24(const char *filename, const uint8_t *bgr, int width, int height)
-{
-    FILE *f = fopen(filename, "wb");
-    if (!f) return -1;
-	
-    uint32_t row_raw = width * 3;
-    uint32_t row_padded = (row_raw + 3) & ~3;
-    uint32_t image_size = row_padded * height;
-    uint32_t file_size = 54 + image_size;
-
-    uint8_t header[54] = {0};
-
-    // bitmap header (file)
-    header[0] = 'B';
-    header[1] = 'M';
-
-    header[2] = file_size;
-    header[3] = file_size >> 8;
-    header[4] = file_size >> 16;
-    header[5] = file_size >> 24;
-
-    header[10] = 54;  // pixel data offset
-
-    // dib header
-    header[14] = 40;  // header size
-
-    header[18] = width;
-    header[19] = width >> 8;
-    header[20] = width >> 16;
-    header[21] = width >> 24;
-
-    header[22] = height;
-    header[23] = height >> 8;
-    header[24] = height >> 16;
-    header[25] = height >> 24;
-
-    header[26] = 1;      // planes
-    header[28] = 24;     // bits per pixel
-
-    header[34] = image_size;
-    header[35] = image_size >> 8;
-    header[36] = image_size >> 16;
-    header[37] = image_size >> 24;
-
-    fwrite(header, 1, 54, f);
-
-    uint8_t padding[3] = {0};
-    uint32_t pad = row_padded - row_raw;
-
-	// BMP stores rows bottom-up
-	for (int y = height - 1; y >= 0; y--) {
-		const uint8_t *row = bgr + y * width * 3;
-		fwrite(row, 1, row_raw, f);
-		fwrite(padding, 1, pad, f);
-	}
-
-    fclose(f);
-    return 0;
-}
-
-bool user_io_screenshot(const char *filename, int rescale)
-{
-	PROFILE_FUNCTION();
+	#ifdef PROFILING
+		PROFILE_FUNCTION();
+	#endif
+	screenshot_pending = true;
 	mister_scaler *ms = mister_scaler_init();
 	if (ms == NULL)
 	{
 		printf("problem with scaler, maybe not a new enough version\n");
 		Info("Scaler not compatible");
+		screenshot_pending = false;
 		return false;
 	}
-	else
-	{
-		const char *basename = last_filename;
-		if( filename && *filename )
-			basename = filename;
-		static char filename[1024];
-		FileGenerateScreenshotName(basename, filename, 1024);
-
-		int scwidth = ms->width;
-		int scheight = ms->height;
-		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 3, 1);
-		mister_scaler_read(ms,outputbuf,BGR);
-		offload_add_work([=] {
-			write_bmp_24(filename, outputbuf, scwidth, scheight);
-		});
-		//offload_add_work([=] {
-		//	write_raw_rgb("/media/fat/screenshot.raw", outputbuf, scwidth, scheight);
-		//});
-		//free(outputbuf);
-	/*
-    if (video_get_rotated())
-    {
-
-      //If the video is rotated, the scaled output resolution results in a squished image.
-      //Calculate the scaled output res using the original AR
-      scwidth = scheight * ((float)ms->width/ms->height);
-    }
-
-		const char *basename = last_filename;
-		if( pngname && *pngname )
-			basename = pngname;
-		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 4, 1);
-		// read the image into the outpubuf - RGBA format
-		mister_scaler_read(ms,outputbuf);
-		// using_data will keep a pointer and dispose of the outbuf
-		Imlib_Image im = imlib_create_image_using_data(ms->width,ms->height,(unsigned int *)outputbuf);
-		imlib_context_set_image(im);
-		imlib_image_set_format("bmp");
-		static char filename[1024];
-		FileGenerateScreenshotName(basename, filename, 1024);
-	*/
 	
-	/* do we want to save a rescaled image? */
+	const char *basename = last_filename;
+	if( bmpname && *bmpname )
+		basename = bmpname;
+
+	char filename[1024];
+
+	FileGenerateScreenshotName(basename, filename, 1024);
 	
-	/*
-	if (rescale)
-		{
-			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,scwidth,scheight);
-			imlib_free_image_and_decache();
-			imlib_context_set_image(im_scaled);
-		}
-		Imlib_Load_Error error;
-		imlib_save_image_with_error_return(getFullPath(filename),&error);
-		if (error != IMLIB_LOAD_ERROR_NONE)
-		{
-			print_imlib_load_error (error, filename);
-			Info("error in saving png");
-			return false;
-		}
-		imlib_free_image_and_decache();
+	free(screenshot_cmd);
+	screenshot_cmd = NULL;
+
+	int base_width = ms->width;
+	int base_height = ms->height;
+	int scaled_width = ms->output_width;
+	int scaled_height = ms->output_height;
+
+	unsigned char *outputbuf = (unsigned char *)calloc(base_width*base_height * 3, 1);
+	
+	if (!outputbuf) {
 		mister_scaler_free(ms);
+		screenshot_pending = false;
+		screenshot_rescale = 0;
+		return false;
+	}
+
+	mister_scaler_read(ms,outputbuf,BGR);
+	mister_scaler_free(ms);
+
+	if (video_get_rotated())
+	{
+		//If the video is rotated, the scaled output resolution results in a squished image.
+		//Calculate the scaled output res using the original AR
+		scaled_width = scaled_height * ((float)base_width/base_height);
+	}
+	int do_rescale = screenshot_rescale;
+	screenshot_rescale = 0;
+	
+	char *filename_copy = strdup(filename);
+	
+	if (!filename_copy) {
 		free(outputbuf);
-		char msg[1024];
-		snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
-		Info(msg);
-	*/
+		screenshot_pending = false;
+		return false;
 	}
 	
+	offload_add_work([=] {
+		if (do_rescale)
+		{
+			printf("rescaling screenshot from %dx%d to %dx%d\n", base_width, base_height, scaled_width, scaled_height);
+			write_bmp_24(filename_copy, outputbuf, base_width, base_height, scaled_width, scaled_height);
+		}
+		else
+		{
+			printf("saving screenshot at native resolution %dx%d\n", base_width, base_height);
+			write_bmp_24(filename_copy, outputbuf, base_width, base_height);
+		}
+		free(filename_copy);
+		free(outputbuf);
+
+		screenshot_pending = false;
+	});
+
+	// this is a lie. but Info isn't thread safe and i don't feel like writing
+	// more callbacks
+	char msg[1024];
+	snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
+	Info(msg);
+
 	return true;
 }
 
-void user_io_screenshot_cmd(const char *cmd)
+void user_io_screenshot_cmd(const char *cmd, int scaled)
 {
-	if( strncmp( cmd, "screenshot", 10 ))
+	if (screenshot_pending || screenshot_requested) {
+		return;
+	}
+	else if(!strncmp( cmd, "screenshot_scaled", 17))
+	{
+		cmd += 17;
+		scaled = 1;
+	}
+	else if(!strncmp( cmd, "screenshot", 10))
+	{
+		cmd += 10;
+	}
+	else
 	{
 		return;
 	}
 
-	cmd += 10;
 	while( *cmd != '\0' && ( *cmd == '\t' || *cmd == ' ' || *cmd == '\n' ) )
 		cmd++;
 
-	user_io_screenshot(cmd,0);
+	char *cmd_copy = strdup(cmd);
+	if (!cmd_copy) {
+		return;
+	}
+
+	free(screenshot_cmd);
+	screenshot_cmd = cmd_copy;
+	screenshot_rescale = scaled;
+	screenshot_requested = true;
+}
+
+void screenshot_cb(void)
+{
+	if (screenshot_requested && !screenshot_pending)
+	{
+		user_io_screenshot(screenshot_cmd);
+		screenshot_requested = false;
+	}
 }

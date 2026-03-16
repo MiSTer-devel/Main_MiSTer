@@ -236,7 +236,7 @@ void user_io_check_reset(unsigned short modifiers, char useKeys);
 
 void user_io_rtc_reset();
 
-void user_io_screenshot_cmd(const char *cmd);
+void user_io_screenshot_cmd(const char *cmd, int scaled = 0);
 bool user_io_screenshot(const char *filename, int rescale);
 
 const char* get_rbf_dir();
@@ -297,5 +297,7 @@ char is_atari5200();
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()
 #define CoreName2 user_io_get_core_name2()
+
+void screenshot_cb(void);
 
 #endif // USER_IO_H

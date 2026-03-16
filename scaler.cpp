@@ -119,15 +119,8 @@ int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int 
 // use NEON if available
 #if defined(__ARM_NEON)
 
-// i feel dirty overloading a function call in C but it compiles!
-int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format);
-int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf)
-{
-    return mister_scaler_read(ms, gbuf, RGB);
-}
-
-// simd versions of copying a bunch of pixels from the scaler's shared memory into a local buffer
-int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format)
+// simd optimized copy of scaler to buffer. performs interleaving for RGB->BGR or RGB->RGBA
+int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format = RGB)
 {
     #ifdef PROFILING
         PROFILE_FUNCTION();
@@ -217,88 +210,6 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_for
                 // not supported yet
             default:
                 break;
-        }
-    }
-
-    return 0;
-}
-
-int mister_scaler_read_bgr(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format)
-{
-    #ifdef PROFILING
-        PROFILE_FUNCTION();
-    #endif
-
-    unsigned char *buffer = (unsigned char *)(ms->map + ms->map_off);
-
-    for (int y = 0; y < ms->height; y++) {
-        unsigned char *pixbuf = &buffer[ms->header + y * ms->line];
-        unsigned char *outbuf = &gbuf[y * (ms->width * 3)];
-
-        // we process a multiple of VEC_WIDTH to work with SIMD, then do the rest scalar
-        int limit = ms->width - (ms->width % VEC_WIDTH);
-
-        for (int x = 0; x < limit; x += VEC_WIDTH) {
-            uint8x16x3_t rgb = vld3q_u8(pixbuf + x * 3);
-            uint8x16x3_t bgr;
-            
-            bgr.val[0] = rgb.val[2];   
-            bgr.val[1] = rgb.val[1];   
-            bgr.val[2] = rgb.val[0];   
-
-            vst3q_u8(outbuf + x * 3, bgr);
-        }
-
-        // scalar tail
-        for (int x = limit; x < ms->width; x++) {
-            outbuf[x * 3 + 0] = pixbuf[x * 3 + 0];
-            outbuf[x * 3 + 1] = pixbuf[x * 3 + 1];
-            outbuf[x * 3 + 2] = pixbuf[x * 3 + 2];
-        }
-    }
-
-    return 0;
-}
-
-// similar to above, but vdupq_n_u8 is a "splat"
-// it loads a single byte into an entire register
-int mister_scaler_read_bgra(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format)
-{
-    #ifdef PROFILING
-        PROFILE_FUNCTION();
-    #endif
-
-    unsigned char *buffer = (unsigned char *)(ms->map + ms->map_off);
-    const uint8x16_t alpha = vdupq_n_u8(0xFF);
-
-    for (int y = 0; y < ms->height; y++) {
-        unsigned char *pixbuf = &buffer[ms->header + y * ms->line];
-        unsigned char *outbuf = &gbuf[y * (ms->width * 4)];
-
-        // we process a multiple of VEC_WIDTH to work with SIMD, then do the rest scalar
-        int limit = ms->width - (ms->width % VEC_WIDTH);
-        
-        // simd loop
-        for (int x = 0; x < limit; x += VEC_WIDTH) {
-            uint8x16x3_t rgb = vld3q_u8(pixbuf + x * 3);
-
-            // convert from rgb to bgra
-            // i hate bgra
-            uint8x16x4_t bgra;
-            bgra.val[0] = rgb.val[2];   
-            bgra.val[1] = rgb.val[1];   
-            bgra.val[2] = rgb.val[0];   
-            bgra.val[3] = alpha;        
-
-            vst4q_u8(outbuf + x * 4, bgra);
-        }
-
-        // scalar tail
-        for (int x = limit; x < ms->width; x++) {
-            outbuf[x * 4 + 2] = pixbuf[x * 3 + 0];
-            outbuf[x * 4 + 1] = pixbuf[x * 3 + 1];
-            outbuf[x * 4 + 0] = pixbuf[x * 3 + 2];
-            outbuf[x * 4 + 3] = 0xFF;
         }
     }
 

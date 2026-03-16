@@ -5928,7 +5928,7 @@ int input_test(int getchar)
 	return 0;
 }
 
-void key_update_frames_held()
+void key_update_frames_held_cb(void)
 {
 	for (int i = 0; i < NUMPLAYERS; i++) {
 		for (int k = 0; k < key_states[i].count; k++) {
@@ -5950,11 +5950,13 @@ int input_poll(int getchar)
  	if (!autofire_cfg_parsed) autofire_cfg_parsed = parse_autofire_cfg();
 	static uint32_t joy_mask_prev[NUMPLAYERS] = {};
 	
+	add_frame_callback(key_update_frames_held_cb);
+
 	// FRAME_TICK compares against frame_timer's counter (updated elsewhere) and fires once per frame.
-	static uint32_t last_frame_count = 0;
-	if (FRAME_TICK(last_frame_count)) {
-		key_update_frames_held();
-	}
+	//static uint32_t last_frame_count = 0;
+	//if (FRAME_TICK(last_frame_count)) {
+	//	key_update_frames_held();
+	//}
 
 	int ret = input_test(getchar);
 	if (getchar) return ret;

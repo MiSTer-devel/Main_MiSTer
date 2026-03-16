@@ -157,4 +157,5 @@ void input_advanced_save_entry(advancedButtonMap *abm_entry, int devnum);
 void input_advanced_clear(int devnum);
 void input_advanced_delete(advancedButtonMap *todel, int devnum);
 
+void key_update_frames_held_cb(void);
 #endif
