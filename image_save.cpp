@@ -3,10 +3,44 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "bitmap.h"
+#include "image_save.h"
+#include "menu.h"
+#include "user_io.h"
+#include "lib/imlib2/Imlib2.h"
+
 #ifdef PROFILING
     #include "profiling.h"
 #endif
+
+static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
+  {"file '%s' does not exist", IMLIB_LOAD_ERROR_FILE_DOES_NOT_EXIST},
+  {"file '%s' is a directory", IMLIB_LOAD_ERROR_FILE_IS_DIRECTORY},
+  {"permission denied to read file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_READ},
+  {"no loader for the file format used in file '%s'", IMLIB_LOAD_ERROR_NO_LOADER_FOR_FILE_FORMAT},
+  {"path for file '%s' is too long", IMLIB_LOAD_ERROR_PATH_TOO_LONG},
+  {"a component of path '%s' does not exist", IMLIB_LOAD_ERROR_PATH_COMPONENT_NON_EXISTANT},
+  {"a component of path '%s' is not a directory", IMLIB_LOAD_ERROR_PATH_COMPONENT_NOT_DIRECTORY},
+  {"path '%s' has too many symbolic links", IMLIB_LOAD_ERROR_TOO_MANY_SYMBOLIC_LINKS},
+  {"ran out of file descriptors trying to access file '%s'", IMLIB_LOAD_ERROR_OUT_OF_FILE_DESCRIPTORS},
+  {"denied write permission for file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_WRITE},
+  {"out of disk space writing to file '%s'", IMLIB_LOAD_ERROR_OUT_OF_DISK_SPACE},
+  {(const char *)NULL, (Imlib_Load_Error) 0}
+};
+
+static void print_imlib_load_error (Imlib_Load_Error err, const char *filepath) {
+  int i;
+  for (i = 0; err_strings[i].fmtstr != NULL; i++) {
+    if (err == err_strings[i].errno) {
+	printf("Screenshot Error (%d): ",err);
+	printf(err_strings[i].fmtstr,filepath);
+	printf("\n");
+      return ;
+    }
+  }
+  /* Unrecognised error */
+    printf("Screenshot Error (%d): unrecognized error accessing file '%s'\n",err,filepath);
+  return ;
+}
 
 // upscale 24bpp image using nearest neighbor.
 int upscale_nearest_24(const uint8_t *src, int src_w, int src_h,int src_stride,   /* bytes per source row */
@@ -84,7 +118,37 @@ int upscale_nearest_32(const uint8_t *src, int src_w, int src_h, int src_stride,
     return 0;
 }
 
-// write 24bpp uncompressed BMP file.
+// use imlib2 to write a PNG file - expects BGRA
+int write_png_32(const char *filename, const uint8_t *bgra, int width, int height, int output_width, int output_height)
+{
+    if (output_width > 0 && output_height > 0) {
+        int row_bytes = (size_t)output_width * 4;
+        uint8_t *scaled = (uint8_t *)malloc((size_t)output_height * (size_t)row_bytes);
+        if (!scaled) {
+            return -1;
+        }
+
+        upscale_nearest_32(bgra, width, height, width * 4, scaled, output_width, output_height, row_bytes);
+        int result = write_png_32(filename, scaled, output_width, output_height, 0, 0);
+        return result;
+    }
+
+    Imlib_Image im = imlib_create_image_using_data(width, height, (unsigned int *)bgra);
+    imlib_context_set_image(im);
+    
+    Imlib_Load_Error error;
+    imlib_save_image_with_error_return(getFullPath(filename),&error);
+    if (error != IMLIB_LOAD_ERROR_NONE)
+    {
+        print_imlib_load_error (error, filename);
+        Info("error in saving png");
+        return false;
+    }
+    imlib_free_image_and_decache();
+    return 0;
+}
+
+// write 24bpp uncompressed BMP file - expects BGR
 int write_bmp_24(const char *filename, const uint8_t *bgr, int width, int height, int output_width, int output_height)
 {
     if (output_width > 0 && output_height > 0) {
@@ -158,6 +222,7 @@ int write_bmp_24(const char *filename, const uint8_t *bgr, int width, int height
     return 0;
 }
 
+// write raw RGB data to file - expects RGB
 int write_raw_rgb(const char *filename, const uint8_t *rgb, int width, int height, int output_width, int output_height)
 {
     if (output_width > 0 && output_height > 0) { 

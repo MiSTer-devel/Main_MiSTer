@@ -40,7 +40,7 @@
 #endif
 #include "offload.h"
 #include "frame_timer.h"
-#include "bitmap.h"
+#include "image_save.h"
 
 #include "support.h"
 
@@ -4268,7 +4268,7 @@ uint16_t user_io_get_sdram_cfg()
 	return sdram_cfg;
 }
 
-bool user_io_screenshot(const char *bmpname)
+bool user_io_screenshot(const char *imgname)
 {
 	#ifdef PROFILING
 		PROFILE_FUNCTION();
@@ -4284,8 +4284,8 @@ bool user_io_screenshot(const char *bmpname)
 	}
 	
 	const char *basename = last_filename;
-	if( bmpname && *bmpname )
-		basename = bmpname;
+	if( imgname && *imgname )
+		basename = imgname;
 
 	char filename[1024];
 
@@ -4299,7 +4299,7 @@ bool user_io_screenshot(const char *bmpname)
 	int scaled_width = ms->output_width;
 	int scaled_height = ms->output_height;
 
-	unsigned char *outputbuf = (unsigned char *)calloc(base_width*base_height * 3, 1);
+	unsigned char *outputbuf = (unsigned char *)calloc(base_width*base_height * 4, 1);
 	
 	if (!outputbuf) {
 		mister_scaler_free(ms);
@@ -4308,7 +4308,8 @@ bool user_io_screenshot(const char *bmpname)
 		return false;
 	}
 
-	mister_scaler_read(ms,outputbuf,BGR);
+	mister_scaler_read(ms, outputbuf, BGRA);
+	//mister_scaler_read(ms,outputbuf,BGR);
 	mister_scaler_free(ms);
 
 	if (video_get_rotated())
@@ -4338,15 +4339,19 @@ bool user_io_screenshot(const char *bmpname)
 		if (do_rescale)
 		{
 			printf("rescaling screenshot from %dx%d to %dx%d\n", base_width, base_height, scaled_width, scaled_height);
-			write_bmp_24(filename_copy, outputbuf, base_width, base_height, scaled_width, scaled_height);
+			//write_bmp_24(filename_copy, outputbuf, base_width, base_height, scaled_width, scaled_height);
+			write_png_32(filename_copy, outputbuf, base_width, base_height, scaled_width, scaled_height);
 		}
 		else
 		{
 			printf("saving screenshot at native resolution %dx%d\n", base_width, base_height);
-			write_bmp_24(filename_copy, outputbuf, base_width, base_height);
+			//write_bmp_24(filename_copy, outputbuf, base_width, base_height);
+			write_png_32(filename_copy, outputbuf, base_width, base_height);
 		}
+		printf("Here!\n");
 		free(filename_copy);
-		free(outputbuf);
+		//free(outputbuf);
+		printf("Here now!\n");
 
 		screenshot_pending = false;
 	});
