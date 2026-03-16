@@ -127,14 +127,20 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_for
     #endif
 
     unsigned char *buffer = (unsigned char *)(ms->map + ms->map_off);
+    
+    const uint8x16_t alpha = vdupq_n_u8(0xFF);
 
     for (int y = 0; y < ms->height; y++) {
         unsigned char *pixbuf = &buffer[ms->header + y * ms->line];
-        unsigned char *outbuf = &gbuf[y * (ms->width * 3)];
+        unsigned char *outbuf;
 
+        if (format == RGBA || format == BGRA)
+            outbuf = &gbuf[y * (ms->width * 4)];
+        else
+            outbuf = &gbuf[y * (ms->width * 3)];
+            
         // we process a multiple of VEC_WIDTH to work with SIMD, then do the rest scalar
         int limit = ms->width - (ms->width % VEC_WIDTH);
-        const uint8x16_t alpha = vdupq_n_u8(0xFF);
         for (int x = 0; x < limit; x += VEC_WIDTH) {
             uint8x16x3_t rgb = vld3q_u8(pixbuf + x * 3);
 
@@ -212,59 +218,68 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_for
                 break;
         }
     }
-
     return 0;
 }
 
 #else
 
-// no NEON, original scalar versions
-int mister_scaler_read_rgb(mister_scaler *ms,unsigned char *gbuf)
+// no NEON available, do scalar
+int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format = RGB)
 {
     #ifdef PROFILING
         PROFILE_FUNCTION();
     #endif
-    unsigned char *buffer;
-    buffer = (unsigned char *)(ms->map+ms->map_off);
 
-    // do this slow way for now..  - could use a memcpy?
-    unsigned char *pixbuf;
-    unsigned char *outbuf;
-    for (int  y=0; y< ms->height ; y++) {
-          pixbuf=&buffer[ms->header + y*ms->line];
-          outbuf=&gbuf[y*(ms->width*3)];
-          for (int x = 0; x < ms->width ; x++) {
-            *outbuf++ = *pixbuf++;
-            *outbuf++ = *pixbuf++;
-            *outbuf++ = *pixbuf++;
-          }
+    unsigned char *buffer = (unsigned char *)(ms->map + ms->map_off);
+
+    for (int y = 0; y < ms->height; y++) {
+        unsigned char *pixbuf = &buffer[ms->header + y * ms->line];
+        unsigned char *outbuf;
+
+        if (format == RGBA || format == BGRA)
+            outbuf = &gbuf[y * (ms->width * 4)];
+        else
+            outbuf = &gbuf[y * (ms->width * 3)];
+
+        // scalar version
+        switch (format)
+        {
+            case RGB:
+                for (int x = 0; x < ms->width; x++) {
+                    outbuf[x * 3 + 0] = pixbuf[x * 3 + 0];
+                    outbuf[x * 3 + 1] = pixbuf[x * 3 + 1];
+                    outbuf[x * 3 + 2] = pixbuf[x * 3 + 2];
+                }
+                break;
+            case BGR:
+                for (int x = 0; x < ms->width; x++) {
+                    outbuf[x * 3 + 2] = pixbuf[x * 3 + 0];
+                    outbuf[x * 3 + 1] = pixbuf[x * 3 + 1];
+                    outbuf[x * 3 + 0] = pixbuf[x * 3 + 2];
+                }
+                break;
+            case RGBA:
+                for (int x = 0; x < ms->width; x++) {
+                    outbuf[x * 4 + 0] = pixbuf[x * 3 + 0];
+                    outbuf[x * 4 + 1] = pixbuf[x * 3 + 1];
+                    outbuf[x * 4 + 2] = pixbuf[x * 3 + 2];
+                    outbuf[x * 4 + 3] = 0xFF;
+                }
+                break;
+            case BGRA:
+                for (int x = 0; x < ms->width; x++) {
+                    outbuf[x * 4 + 2] = pixbuf[x * 3 + 0];
+                    outbuf[x * 4 + 1] = pixbuf[x * 3 + 1];
+                    outbuf[x * 4 + 0] = pixbuf[x * 3 + 2];
+                    outbuf[x * 4 + 3] = 0xFF;
+                }
+                break;
+            case YUV:
+                // not supported yet
+            default:
+                break;
+        }
     }
-
-    return 0;
-}
-
-int mister_scaler_read_32(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format) {
-    #ifdef PROFILING
-        PROFILE_FUNCTION();
-    #endif
-    unsigned char *buffer;
-    buffer = (unsigned char *)(ms->map+ms->map_off);
-
-    // do this slow way for now..  - could use a memcpy?
-    unsigned char *pixbuf;
-    unsigned char *outbuf;
-    for (int  y=0; y< ms->height ; y++) {
-          pixbuf=&buffer[ms->header + y*ms->line];
-          outbuf=&gbuf[y*(ms->width*4)];
-          for (int x = 0; x < ms->width ; x++) {
-            outbuf[2] = *pixbuf++;
-            outbuf[1] = *pixbuf++;
-            outbuf[0] = *pixbuf++;
-            outbuf[3] = 0xFF;
-	    outbuf+=4;
-          }
-    }
-
     return 0;
 }
 

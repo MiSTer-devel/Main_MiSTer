@@ -4268,38 +4268,6 @@ uint16_t user_io_get_sdram_cfg()
 	return sdram_cfg;
 }
 
-/*
-static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
-  {"file '%s' does not exist", IMLIB_LOAD_ERROR_FILE_DOES_NOT_EXIST},
-  {"file '%s' is a directory", IMLIB_LOAD_ERROR_FILE_IS_DIRECTORY},
-  {"permission denied to read file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_READ},
-  {"no loader for the file format used in file '%s'", IMLIB_LOAD_ERROR_NO_LOADER_FOR_FILE_FORMAT},
-  {"path for file '%s' is too long", IMLIB_LOAD_ERROR_PATH_TOO_LONG},
-  {"a component of path '%s' does not exist", IMLIB_LOAD_ERROR_PATH_COMPONENT_NON_EXISTANT},
-  {"a component of path '%s' is not a directory", IMLIB_LOAD_ERROR_PATH_COMPONENT_NOT_DIRECTORY},
-  {"path '%s' has too many symbolic links", IMLIB_LOAD_ERROR_TOO_MANY_SYMBOLIC_LINKS},
-  {"ran out of file descriptors trying to access file '%s'", IMLIB_LOAD_ERROR_OUT_OF_FILE_DESCRIPTORS},
-  {"denied write permission for file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_WRITE},
-  {"out of disk space writing to file '%s'", IMLIB_LOAD_ERROR_OUT_OF_DISK_SPACE},
-  {(const char *)NULL, (Imlib_Load_Error) 0}
-};
-
-static void print_imlib_load_error (Imlib_Load_Error err, const char *filepath) {
-  int i;
-  for (i = 0; err_strings[i].fmtstr != NULL; i++) {
-    if (err == err_strings[i].errno) {
-	printf("Screenshot Error (%d): ",err);
-	printf(err_strings[i].fmtstr,filepath);
-	printf("\n");
-      return ;
-    }
-  }
-  // Unrecognised error 
-    printf("Screenshot Error (%d): unrecognized error accessing file '%s'\n",err,filepath);
-  return ;
-}
-*/
-
 bool user_io_screenshot(const char *bmpname)
 {
 	#ifdef PROFILING
@@ -4360,7 +4328,13 @@ bool user_io_screenshot(const char *bmpname)
 		return false;
 	}
 	
-	offload_add_work([=] {
+	offload_add_work([do_rescale,
+                  base_width,
+                  base_height,
+                  scaled_width,
+                  scaled_height,
+                  filename_copy,
+                  outputbuf] {
 		if (do_rescale)
 		{
 			printf("rescaling screenshot from %dx%d to %dx%d\n", base_width, base_height, scaled_width, scaled_height);
