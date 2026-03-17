@@ -595,17 +595,22 @@ void x86_init()
 		0x00, //0x0E: REG E - POST status
 		0x00, //0x0F: REG F - shutdown status
 
-		(uint8_t)((get_fdd_bios_type(floppy_type[0])<<4) | get_fdd_bios_type(floppy_type[1])),
+		(uint8_t)((get_fdd_bios_type(floppy_type[0])<<4) | get_fdd_bios_type(floppy_type[1])), //0x10: floppy disk drive types; Bits 7-4 = fdd 0 type, Bits 3-0 = fdd 1 type
 		0x00, //0x11: configuration bits; not used
-		0x00, //0x12: hard disk types; 0-none, 1:E-type, F-type 16+ (unused)
+		// Note: The Windows 9x IDE driver ESDI_506.PDR checks CMOS location 0x12.
+		//       For 32-bit protected-mode it is required that the hard disk drive type is non-zero.
+		//       If CMOS location 0x12 is zero then MS-DOS compatibility mode will be used.
+		(uint8_t)(((strlen(config.img_name[2]) ? 0xF : 0x0) << 4) | (strlen(config.img_name[3]) ? 0xF : 0x0)), //0x12: hard disk drive types; 0-none, 1:E-type, F-type 16+ (unused)
+		                                                                                                       //      bits 7-4 = hard disk drive 0 type (primary master)
+		                                                                                                       //      bits 3-0 = hard disk drive 1 type (primary slave)
 		0x00, //0x13: advanced configuration bits; not used
 		0x4D, //0x14: equipment bits
 		0x80, //0x15: base memory in 1k LSB
 		0x02, //0x16: base memory in 1k MSB
 		0x00, //0x17: memory size above 1m in 1k LSB
 		(uint8_t)(memcfg ? 0x3C : 0xFC), //0x18: memory size above 1m in 1k MSB
-		0x00, //0x19: extended hd types 1/2; type 47d (unused)
-		0x00, //0x1A: extended hd types 2/2 (unused)
+		(uint8_t)(strlen(config.img_name[2]) ? 0x2F : 0x00), //0x19: extended hd 0 type; type 47d (unused)
+		(uint8_t)(strlen(config.img_name[3]) ? 0x2F : 0x00), //0x1A: extended hd 1 type; type 47d (unused)
 
 		//these hd parameters aren't used anymore
 		0x00, //0x1B: hd 0 configuration 1/9; cylinders low
