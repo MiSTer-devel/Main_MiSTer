@@ -132,7 +132,6 @@ void do_screenshot(char* imgname)
 			printf("saving screenshot at native resolution %dx%d\n", base_width, base_height);
 			success = write_png_32(filename_copy, outputbuf, base_width, base_height);
 		}
-		free(filename_copy);
 		free(outputbuf);
 
         ScreenshotResult_atomic *result_data =
@@ -159,6 +158,9 @@ void request_screenshot(char *cmd, int scaled)
 {
     if (screenshot_pending_atomic || screenshot_requested_atomic)
         return;
+    
+    if (!cmd) // guard against NULL
+        cmd = (char *)"";
 
     while (*cmd != '\0' && (*cmd == ' ' || *cmd == '\t' || *cmd == '\n'))
         cmd++;
