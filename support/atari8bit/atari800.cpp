@@ -261,6 +261,10 @@ static uint16_t get_a800_reg2(uint8_t reg)
 	return r;
 }
 
+static uint8_t mounted_cart1_type;
+static uint8_t mounted_cart2_type;
+static int mounted_cart1_size;
+
 static void reboot(uint8_t cold, uint8_t pause)
 {
 	int i;
@@ -269,6 +273,8 @@ static void reboot(uint8_t cold, uint8_t pause)
 	if (cold)
 	{
 		set_a8bit_reg(REG_FREEZER, 0);
+		set_a8bit_reg(REG_CART1_SELECT, 0);
+		set_a8bit_reg(REG_CART2_SELECT, 0);
 		// Initialize the first 64K of SDRAM with a pattern
 		for(i = 0; i < BUFFER_SIZE; i += 2)
 		{
@@ -278,7 +284,16 @@ static void reboot(uint8_t cold, uint8_t pause)
 		user_io_set_index(99);
 		user_io_set_download(1, SDRAM_BASE);
 		for(i = 0; i < 0x10000 / BUFFER_SIZE; i++) user_io_file_tx_data(a8bit_buffer, BUFFER_SIZE);
-		user_io_set_upload(0);
+		user_io_set_download(0);
+		if(mounted_cart1_type)
+		{
+			set_a8bit_reg(REG_CART1_SELECT, mounted_cart1_type);
+		}
+		else
+		{
+			mounted_cart1_size = 0;
+		}
+		if(mounted_cart2_type) set_a8bit_reg(REG_CART2_SELECT, mounted_cart2_type);
 	}
 	else
 	{
@@ -480,7 +495,6 @@ static int cart_matches_total;
 static uint8_t cart_matches_mode[16]; // The are 15 supported 64K carts, this is the max ATM
 static int cart_matches_idx[16];
 static uint8_t cart_match_car;
-static int mounted_cart1_size; 
 static unsigned char cart_io_index;
 
 int atari800_get_match_cart_count()
@@ -495,12 +509,15 @@ const char *atari800_get_cart_match_name(int match_index)
 
 void atari800_umount_cartridge(uint8_t stacked)
 {
-	// TODO Clever cart deselect 1 & 2 and reboot?
-	set_a8bit_reg(stacked ? REG_CART2_SELECT : REG_CART1_SELECT, 0);
-	if(!stacked)
+	if(stacked)
 	{
-		mounted_cart1_size = 0;
-	}		
+		mounted_cart2_type = 0;
+	}
+	else
+	{
+		mounted_cart1_type = 0;
+	}
+	reboot(1, 0);
 }
 
 int atari800_check_cartridge_file(const char* name, unsigned char index)
@@ -592,8 +609,6 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 	if (FileOpen(&f, name))
 	{
 		set_a8bit_reg(REG_PAUSE, 1);
-		set_a8bit_reg(REG_CART2_SELECT, 0);
-		if(!stacked) set_a8bit_reg(REG_CART1_SELECT, 0);
 
 		ProgressMessage(0, 0, 0, 0);
 		FileSeek(&f, offset, SEEK_SET);
@@ -649,16 +664,17 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 		FileClose(&f);
 		user_io_set_download(0);
 		ProgressMessage(0, 0, 0, 0);
-		set_a8bit_reg(stacked ? REG_CART2_SELECT : REG_CART1_SELECT, cart_matches_mode[match_index]);
 		if(!stacked)
 		{
+			mounted_cart1_type = cart_matches_mode[match_index];
 			mounted_cart1_size = cart_match_car ? f.size - 16 : f.size;
 		}
-
-		if(!stacked || (get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800))
+		else
 		{
-			reboot(1, 0);
+			mounted_cart2_type = cart_matches_mode[match_index];
 		}
+
+		reboot(1, 0);
 	}
 }
 
@@ -2195,8 +2211,8 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 		else if(file_index == 8)
 		{
 			set_a8bit_reg(REG_PAUSE, 1);
-			set_a8bit_reg(REG_CART1_SELECT, 0);
-			set_a8bit_reg(REG_CART2_SELECT, 0);
+			mounted_cart1_type = 0;
+			mounted_cart2_type = 0;
 			reboot(1, 0);
 			set_a8bit_reg(REG_OPTION_FORCE, 1);
 			set_a8bit_reg(REG_START_FORCE, 1);
@@ -2211,10 +2227,10 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 		if(name[0] && FileOpen(&xex_file, name))
 		{
 			xex_file_first_block = 1;
+			mounted_cart1_type = 0;
+			mounted_cart2_type = 0;
 			reboot(1, 1);
 			set_a8bit_reg(REG_XEX_LOADER, 1);
-			set_a8bit_reg(REG_CART1_SELECT, 0);
-			set_a8bit_reg(REG_CART2_SELECT, 0);
 			uint16_t atari_status1 = get_a8bit_reg(REG_ATARI_STATUS1);
 
 			atari8bit_dma_zero(SDRAM_BASE, 0x10000);
@@ -2256,8 +2272,8 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 		if(name[0])
 		{
 			set_a8bit_reg(REG_PAUSE, 1);
-			set_a8bit_reg(REG_CART1_SELECT, 0);
-			set_a8bit_reg(REG_CART2_SELECT, 0);
+			mounted_cart1_type = 0;
+			mounted_cart2_type = 0;
 			FileClose(&cas_file);
 			set_a8bit_reg(TAPE_RESET, 1);
 			set_a8bit_reg(TAPE_RESET, 0);
@@ -2522,10 +2538,8 @@ void atari800_init()
 void atari800_reset()
 {
 	set_a8bit_reg(REG_PAUSE, 1);
-	set_a8bit_reg(REG_CART1_SELECT, 0);
-	mounted_cart1_size = 0;
-	set_a8bit_reg(REG_CART2_SELECT, 0);
-	set_a8bit_reg(REG_FREEZER, 0);
+	mounted_cart1_type = 0;
+	mounted_cart2_type = 0;
 	for(int i=0; i <= MAX_DRIVES; i++)
 	{
 		FileClose(&drive_infos[i].file);

@@ -5971,6 +5971,7 @@ int input_poll(int getchar)
 	
 	add_frame_callback(key_update_frames_held_cb);
 
+
 	int ret = input_test(getchar);
 	if (getchar) return ret;
 
