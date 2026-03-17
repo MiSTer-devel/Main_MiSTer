@@ -4,13 +4,19 @@
 #include <string.h>
 
 #include "image_save.h"
-#include "menu.h"
 #include "user_io.h"
 #include "lib/imlib2/Imlib2.h"
 
-#ifdef PROFILING
-    #include "profiling.h"
-#endif
+/*
+    image writing functions 
+    =======================
+    we only use write_png_32 to write PNG files for screenshots but i wrote the
+    BMP and raw RGB functions while figuring out how best to reduce the overhead of saving
+    screenshots and left them there in case they're useful for someone else.
+
+    imlib2 can also do the scaling for us, but since i wrote a nearest-neighbor scaling
+    function for bmp/rgb i went ahead and switched to using it for consistency.
+*/
 
 static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
   {"file '%s' does not exist", IMLIB_LOAD_ERROR_FILE_DOES_NOT_EXIST},
@@ -43,16 +49,16 @@ static void print_imlib_load_error (Imlib_Load_Error err, const char *filepath) 
 }
 
 // upscale 24bpp image using nearest neighbor.
-int upscale_nearest_24(const uint8_t *src, int src_w, int src_h,int src_stride,   /* bytes per source row */
+bool upscale_nearest_24(const uint8_t *src, int src_w, int src_h,int src_stride,   /* bytes per source row */
     uint8_t *dst, int dst_w, int dst_h, int dst_stride    /* bytes per destination row */)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) {
-        return -1;
+        return false;
     }
 
     int *xmap = (int *)malloc((size_t)dst_w * sizeof(int));
     if (!xmap) {
-        return -1;
+        return false;
     }
 
     // precompute
@@ -76,64 +82,81 @@ int upscale_nearest_24(const uint8_t *src, int src_w, int src_h,int src_stride, 
         }
     }
     free(xmap);
-    return 0;
+    return true;
 }
 
 // upscale 32bpp image using nearest neighbor. assumes last channel is alpha.
-int upscale_nearest_32(const uint8_t *src, int src_w, int src_h, int src_stride,   /* bytes per source row */
-    uint8_t *dst, int dst_w, int dst_h, int dst_stride    /* bytes per destination row */)
+bool upscale_nearest_32(const uint8_t *src, int src_w, int src_h, int src_stride,
+                       uint8_t *dst, int dst_w, int dst_h, int dst_stride)
 {
     if (!src || !dst || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0) {
-        return -1;
+        return false;
     }
 
     int *xmap = (int *)malloc((size_t)dst_w * sizeof(int));
     if (!xmap) {
-        return -1;
+        return false;
     }
 
-    // precompute
     for (int x = 0; x < dst_w; x++) {
         xmap[x] = (x * src_w) / dst_w;
     }
 
+    int prev_sy = -1;
+
     for (int y = 0; y < dst_h; y++) {
         int sy = (y * src_h) / dst_h;
 
-        const uint8_t *src_row = src + (size_t)sy * (size_t)src_stride;
-        uint8_t *dst_row = dst + (size_t)y * (size_t)dst_stride;
+        uint32_t *dst_row32 = (uint32_t *)(dst + (size_t)y * (size_t)dst_stride);
+
+        if (sy == prev_sy) {
+            memcpy(dst_row32,
+                   (uint8_t *)dst_row32 - dst_stride,
+                   (size_t)dst_w * sizeof(uint32_t));
+            continue;
+        }
+
+        const uint32_t *src_row32 = (const uint32_t *)(src + (size_t)sy * (size_t)src_stride);
 
         for (int x = 0; x < dst_w; x++) {
-            const uint8_t *sp = src_row + (size_t)xmap[x] * 4u;
-            uint8_t *dp = dst_row + (size_t)x * 4u;
-
-            dp[0] = sp[0];
-            dp[1] = sp[1];
-            dp[2] = sp[2];
-            dp[3] = sp[3];
+            dst_row32[x] = src_row32[xmap[x]];
         }
+
+        prev_sy = sy;
     }
 
     free(xmap);
-    return 0;
+    return true;
 }
 
 // use imlib2 to write a PNG file - expects BGRA
-int write_png_32(const char *filename, const uint8_t *bgra, int width, int height, int output_width, int output_height)
+bool write_png_32(const char *filename, const uint8_t *bgra, int width, int height, int output_width, int output_height)
 {
     if (output_width > 0 && output_height > 0) {
         int row_bytes = (size_t)output_width * 4;
         uint8_t *scaled = (uint8_t *)malloc((size_t)output_height * (size_t)row_bytes);
         if (!scaled) {
-            return -1;
+            return false;
         }
 
-        upscale_nearest_32(bgra, width, height, width * 4, scaled, output_width, output_height, row_bytes);
-        int result = write_png_32(filename, scaled, output_width, output_height, 0, 0);
+        bool result = false;
+        result = upscale_nearest_32(bgra, width, height, width * 4, scaled, output_width, output_height, row_bytes);
+        if (!result) {
+            printf("Failed to upscale screenshot for saving\n");
+            free(scaled);
+            return false;
+        }
+        result = write_png_32(filename, scaled, output_width, output_height, 0, 0);
+        free(scaled);
         return result;
     }
 
     Imlib_Image im = imlib_create_image_using_data(width, height, (unsigned int *)bgra);
+    if (!im) {
+        printf("Failed to create imlib image for screenshot\n");
+        return false;
+    }
+
     imlib_context_set_image(im);
     
     Imlib_Load_Error error;
@@ -141,31 +164,46 @@ int write_png_32(const char *filename, const uint8_t *bgra, int width, int heigh
     if (error != IMLIB_LOAD_ERROR_NONE)
     {
         print_imlib_load_error (error, filename);
-        Info("error in saving png");
+        imlib_free_image_and_decache();
         return false;
     }
     imlib_free_image_and_decache();
-    return 0;
+    return true;
 }
 
 // write 24bpp uncompressed BMP file - expects BGR
-int write_bmp_24(const char *filename, const uint8_t *bgr, int width, int height, int output_width, int output_height)
+// nobody wants .BMP files nowadays but they are *very* fast to write since they're
+// basically uncompressed data with a simple header.
+
+// don't get the bright idea that this will let you record video from the MiSTer.
+// you'll quickly run out of disk space saving uncompressed data and you don't have access
+// to the sound data anyways.
+
+// not that i tried or anything.
+bool write_bmp_24(const char *filename, const uint8_t *bgr, int width, int height, int output_width, int output_height)
 {
     if (output_width > 0 && output_height > 0) {
+        bool result = false;
+
         int row_bytes = (size_t)output_width * 3;
         uint8_t *scaled = (uint8_t *)malloc((size_t)output_height * (size_t)row_bytes);
         if (!scaled) {
-            return -1;
+            return false;
         }
 
-        upscale_nearest_24(bgr, width, height, width * 3, scaled, output_width, output_height, row_bytes);
-        int result = write_bmp_24(filename, scaled, output_width, output_height);
+        result = upscale_nearest_24(bgr, width, height, width * 3, scaled, output_width, output_height, row_bytes);
+        if (!result) {
+            printf("Failed to upscale screenshot for saving\n");
+            free(scaled);
+            return false;
+        }
+        result = write_bmp_24(filename, scaled, output_width, output_height);
         free(scaled);
         return result;
     }
 
-    FILE *f = fopen(filename, "wb");
-    if (!f) return -1;
+    FILE *f = fopen(getFullPath(filename), "wb");
+    if (!f) return false;
 	
     uint32_t row_raw = width * 3;
     uint32_t row_padded = (row_raw + 3) & ~3;
@@ -219,31 +257,39 @@ int write_bmp_24(const char *filename, const uint8_t *bgr, int width, int height
 	}
 
     fclose(f);
-    return 0;
+    return true;
 }
 
 // write raw RGB data to file - expects RGB
-int write_raw_rgb(const char *filename, const uint8_t *rgb, int width, int height, int output_width, int output_height)
+// these can be viewed using ffmpeg or other video software that supports raw input. for example:
+// ffplay -f rawvideo -pixel_format rgb24 -video_size 1280x720 screenshot.rgb
+bool write_raw_rgb(const char *filename, const uint8_t *rgb, int width, int height, int output_width, int output_height)
 {
     if (output_width > 0 && output_height > 0) { 
         int row_bytes = (size_t)output_width * 3;
         uint8_t *scaled = (uint8_t *)malloc((size_t)output_height * (size_t)row_bytes);
         if (!scaled) {
-            return -1;
+            return false;
         }
-        upscale_nearest_24(rgb, width, height, width * 3, scaled, output_width, output_height, row_bytes);
-        int result = write_raw_rgb(filename, scaled, output_width, output_height, 0, 0);
+        bool result = false;
+        result = upscale_nearest_24(rgb, width, height, width * 3, scaled, output_width, output_height, row_bytes);
+        if (!result) {
+            printf("Failed to upscale screenshot for saving\n");
+            free(scaled);
+            return false;
+        }
+        result = write_raw_rgb(filename, scaled, output_width, output_height, 0, 0);
         free(scaled);
         return result;
     }
 
     if (!filename || !rgb || width <= 0 || height <= 0) {
-        return -1;
+        return false;
     }
 
-    FILE *f = fopen(filename, "wb");
+    FILE *f = fopen(getFullPath(filename), "wb");
     if (!f) {
-        return -1;
+        return false;
     }
 
     size_t bytes = (size_t)width * (size_t)height * 3;
@@ -251,5 +297,5 @@ int write_raw_rgb(const char *filename, const uint8_t *rgb, int width, int heigh
 
     fclose(f);
 
-    return (written == bytes) ? 0 : -1;
+    return (written == bytes) ? true : false;
 }

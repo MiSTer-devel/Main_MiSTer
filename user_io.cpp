@@ -10,8 +10,6 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 
-#include "lib/imlib2/Imlib2.h"
-
 #include "hardware.h"
 #include "osd.h"
 #include "user_io.h"
@@ -36,11 +34,10 @@
 #include "ide.h"
 #include "ide_cdrom.h"
 #ifdef PROFILING
-	#include "profiling.h"
+#include "profiling.h"
 #endif
-#include "offload.h"
 #include "frame_timer.h"
-#include "image_save.h"
+#include "screenshot.h"
 
 #include "support.h"
 
@@ -85,13 +82,7 @@ static bool winkey_pressed = 0;
 
 static uint16_t sdram_cfg = 0;
 
-static char last_filename[1024] = {};
-
-// screenshot callback state
-static bool screenshot_pending = false;
-static bool screenshot_requested = false;
-static char *screenshot_cmd = NULL;
-static int screenshot_rescale = 0;
+char last_filename[1024] = {};
 
 void user_io_store_filename(char *filename)
 {
@@ -4088,12 +4079,10 @@ void user_io_kbd(uint16_t key, int press)
 	if (key_WinPrnScr || key_AltWinScrLk)
 	{
 		int shift = (get_key_mod() & LSHIFT);
-		if (press == 1 && !screenshot_pending)
+		if (press)
 		{
 			printf("print key pressed - do screen shot\n");
-			screenshot_cmd = NULL;
-			screenshot_rescale = !shift;
-			screenshot_requested = true;
+			request_screenshot(NULL, !shift);
 		}
 	}
 	else
@@ -4266,143 +4255,4 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 uint16_t user_io_get_sdram_cfg()
 {
 	return sdram_cfg;
-}
-
-bool user_io_screenshot(const char *imgname)
-{
-	#ifdef PROFILING
-		PROFILE_FUNCTION();
-	#endif
-	screenshot_pending = true;
-	mister_scaler *ms = mister_scaler_init();
-	if (ms == NULL)
-	{
-		printf("problem with scaler, maybe not a new enough version\n");
-		Info("Scaler not compatible");
-		screenshot_pending = false;
-		return false;
-	}
-	
-	const char *basename = last_filename;
-	if( imgname && *imgname )
-		basename = imgname;
-
-	char filename[1024];
-
-	FileGenerateScreenshotName(basename, filename, 1024);
-	
-	free(screenshot_cmd);
-	screenshot_cmd = NULL;
-
-	int base_width = ms->width;
-	int base_height = ms->height;
-	int scaled_width = ms->output_width;
-	int scaled_height = ms->output_height;
-
-	unsigned char *outputbuf = (unsigned char *)calloc(base_width*base_height * 4, 1);
-	
-	if (!outputbuf) {
-		mister_scaler_free(ms);
-		screenshot_pending = false;
-		screenshot_rescale = 0;
-		return false;
-	}
-
-	mister_scaler_read(ms, outputbuf, BGRA);
-	//mister_scaler_read(ms,outputbuf,BGR);
-	mister_scaler_free(ms);
-
-	if (video_get_rotated())
-	{
-		//If the video is rotated, the scaled output resolution results in a squished image.
-		//Calculate the scaled output res using the original AR
-		scaled_width = scaled_height * ((float)base_width/base_height);
-	}
-	int do_rescale = screenshot_rescale;
-	screenshot_rescale = 0;
-	
-	char *filename_copy = strdup(filename);
-	
-	if (!filename_copy) {
-		free(outputbuf);
-		screenshot_pending = false;
-		return false;
-	}
-	
-	offload_add_work([do_rescale,
-                  base_width,
-                  base_height,
-                  scaled_width,
-                  scaled_height,
-                  filename_copy,
-                  outputbuf] {
-		if (do_rescale)
-		{
-			printf("rescaling screenshot from %dx%d to %dx%d\n", base_width, base_height, scaled_width, scaled_height);
-			//write_bmp_24(filename_copy, outputbuf, base_width, base_height, scaled_width, scaled_height);
-			write_png_32(filename_copy, outputbuf, base_width, base_height, scaled_width, scaled_height);
-		}
-		else
-		{
-			printf("saving screenshot at native resolution %dx%d\n", base_width, base_height);
-			//write_bmp_24(filename_copy, outputbuf, base_width, base_height);
-			write_png_32(filename_copy, outputbuf, base_width, base_height);
-		}
-		printf("Here!\n");
-		free(filename_copy);
-		//free(outputbuf);
-		printf("Here now!\n");
-
-		screenshot_pending = false;
-	});
-
-	// this is a lie. but Info isn't thread safe and i don't feel like writing
-	// more callbacks
-	char msg[1024];
-	snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
-	Info(msg);
-
-	return true;
-}
-
-void user_io_screenshot_cmd(const char *cmd, int scaled)
-{
-	if (screenshot_pending || screenshot_requested) {
-		return;
-	}
-	else if(!strncmp( cmd, "screenshot_scaled", 17))
-	{
-		cmd += 17;
-		scaled = 1;
-	}
-	else if(!strncmp( cmd, "screenshot", 10))
-	{
-		cmd += 10;
-	}
-	else
-	{
-		return;
-	}
-
-	while( *cmd != '\0' && ( *cmd == '\t' || *cmd == ' ' || *cmd == '\n' ) )
-		cmd++;
-
-	char *cmd_copy = strdup(cmd);
-	if (!cmd_copy) {
-		return;
-	}
-
-	free(screenshot_cmd);
-	screenshot_cmd = cmd_copy;
-	screenshot_rescale = scaled;
-	screenshot_requested = true;
-}
-
-void screenshot_cb(void)
-{
-	if (screenshot_requested && !screenshot_pending)
-	{
-		user_io_screenshot(screenshot_cmd);
-		screenshot_requested = false;
-	}
 }

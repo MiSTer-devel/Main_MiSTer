@@ -16,16 +16,16 @@ with help from the MiSTer contributors including Grabulosaure
 #include <sys/types.h>
 #include <err.h>
 
-#if defined(__ARM_NEON)
-    #include <arm_neon.h>
-    const int VEC_WIDTH = 16;
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+const int VEC_WIDTH = 16;
 #endif
 
 #include "scaler.h"
 #include "shmem.h"
 
 #ifdef PROFILING
-    #include "profiling.h"
+#include "profiling.h"
 #endif
 
 mister_scaler * mister_scaler_init()
@@ -80,7 +80,8 @@ void mister_scaler_free(mister_scaler *ms)
    free(ms);
 }
 
-// this doesn't get called anywhere right now, maybe rewrite in simd later
+// not currently used - leaving in for reference in case we want to add YUV later
+/*
 int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int lineU, unsigned char *bufU, int lineV, unsigned char *bufV)
 {
     unsigned char *buffer;
@@ -115,11 +116,19 @@ int mister_scaler_read_yuv(mister_scaler *ms,int lineY,unsigned char *bufY, int 
 
     return 0;
 }
+*/
 
 // use NEON if available
 #if defined(__ARM_NEON)
 
-// simd optimized copy of scaler to buffer. performs interleaving for RGB->BGR or RGB->RGBA
+// simd optimized copy from scaler to buffer.
+// simd seems like overkill but it reduced the time it took to copy data from the scaler into
+// a buffer by an order of magnitude (~50-80ms down to ~3-5ms) which is huge when we perform
+// the copy on the main thread.
+
+// if you've not done simd stuff before this is a very straightforward use of it
+// so this might be a nice example.
+
 int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format = RGB)
 {
     #ifdef PROFILING
@@ -128,6 +137,7 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_for
 
     unsigned char *buffer = (unsigned char *)(ms->map + ms->map_off);
     
+    // this is a "splat" - prefilling a vector register with a single value
     const uint8x16_t alpha = vdupq_n_u8(0xFF);
 
     for (int y = 0; y < ms->height; y++) {
@@ -138,10 +148,18 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_for
             outbuf = &gbuf[y * (ms->width * 4)];
         else
             outbuf = &gbuf[y * (ms->width * 3)];
-            
-        // we process a multiple of VEC_WIDTH to work with SIMD, then do the rest scalar
+        
+        // VEC_WIDTH is the number of elements a vector register can hold.
+        // 24/32-bit image data is stored as pixels of 3 or 4 bytes (8 bits).
+        // our ARMv7 NEON registers are 128 bits / 8 bits = 16 bytes per register.
+        // any data left after doing 16-byte chunks falls back to our scalar code to be completed.
         int limit = ms->width - (ms->width % VEC_WIDTH);
         for (int x = 0; x < limit; x += VEC_WIDTH) {
+            
+            // load 16 pixels (48 bytes) from the scaler buffer into our vector registers.
+            // uint8x16x3_t is a struct of 3 uint8x16_t vectors, so it can hold 16 pixels of RGB data.
+            // behind the scenes we'll have three vector registers, each containing 16 bytes
+            // representing red, green, or blue values for that pixel.
             uint8x16x3_t rgb = vld3q_u8(pixbuf + x * 3);
 
             switch (format)
@@ -149,6 +167,8 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_for
                 case RGB:
                     vst3q_u8(outbuf + x * 3, rgb);
                     break;
+                // some image formats don't use RGB ordering, so we need to shuffle our data
+                // around. this is easy since uint8x16x3_t is a struct
                 case BGR:
                     uint8x16x3_t bgr;
                     bgr.val[0] = rgb.val[2];   
@@ -179,7 +199,8 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_for
             }
         }
 
-        // scalar tail
+        // scalar tail; this processes any remaining data that didn't fit into our vector
+        // registers. this is (basically) the same code we'd use if we weren't using simd at all.
         switch (format)
         {
             case RGB:
@@ -223,7 +244,7 @@ int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_for
 
 #else
 
-// no NEON available, do scalar
+// no NEON available, do all scalar
 int mister_scaler_read(mister_scaler *ms, unsigned char *gbuf, mister_scaler_format_t format = RGB)
 {
     #ifdef PROFILING

@@ -236,9 +236,6 @@ void user_io_check_reset(unsigned short modifiers, char useKeys);
 
 void user_io_rtc_reset();
 
-void user_io_screenshot_cmd(const char *cmd, int scaled = 0);
-bool user_io_screenshot(const char *filename, int rescale);
-
 const char* get_rbf_dir();
 const char* get_rbf_name();
 const char* get_rbf_path();

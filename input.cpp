@@ -34,6 +34,7 @@
 #include "gamecontroller_db.h"
 #include "str_util.h"
 #include "frame_timer.h"
+#include "screenshot.h"
 
 #define NUMDEV 30
 #define UINPUT_NAME "MiSTer virtual input"
@@ -5878,7 +5879,21 @@ int input_test(int getchar)
 					}
 					else if (!strncmp(cmd, "screenshot", 10))
 					{
-						user_io_screenshot_cmd(cmd);
+						char *p = cmd + 10;
+						int scaled = 0;
+
+						while (*p == ' ' || *p == '\t')
+							p++;
+
+						if (!strncmp(p, "scaled", 6) && (p[6] == '\0' || p[6] == ' ' || p[6] == '\t'))
+						{
+							scaled = 1;
+							p += 6;
+
+							while (*p == ' ' || *p == '\t')
+								p++;
+						}
+						request_screenshot(p, scaled);
 					}
 					else if (!strncmp(cmd, "volume ", 7))
 					{
@@ -5945,18 +5960,16 @@ int input_poll(int getchar)
 {
 
 	static int poll_cnt = 0;
-	PROFILE_FUNCTION();
+
+	#ifdef PROFILING
+		PROFILE_FUNCTION();
+	#endif
+
 	static bool autofire_cfg_parsed = false;
  	if (!autofire_cfg_parsed) autofire_cfg_parsed = parse_autofire_cfg();
 	static uint32_t joy_mask_prev[NUMPLAYERS] = {};
 	
 	add_frame_callback(key_update_frames_held_cb);
-
-	// FRAME_TICK compares against frame_timer's counter (updated elsewhere) and fires once per frame.
-	//static uint32_t last_frame_count = 0;
-	//if (FRAME_TICK(last_frame_count)) {
-	//	key_update_frames_held();
-	//}
 
 	int ret = input_test(getchar);
 	if (getchar) return ret;

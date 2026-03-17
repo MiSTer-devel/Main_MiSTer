@@ -1,14 +1,10 @@
-#ifndef BITMAP_H
-#define BITMAP_H
-
-#ifdef PROFILING
-    #include "profiling.h"
-#endif
+#ifndef IMAGE_SAVE_H
+#define IMAGE_SAVE_H
 
 #include <stdint.h>
 
-int write_png_32(const char *filename, const uint8_t *rgba, int width, int height, int output_width = 0, int output_height = 0);
-int write_bmp_24(const char *filename, const uint8_t *bgr, int width, int height, int output_width = 0, int output_height = 0);
-int write_raw_rgb(const char *filename, const uint8_t *rgb, int width, int height, int output_width = 0, int output_height = 0);
+bool write_png_32(const char *filename, const uint8_t *rgba, int width, int height, int output_width = 0, int output_height = 0);
+bool write_bmp_24(const char *filename, const uint8_t *bgr, int width, int height, int output_width = 0, int output_height = 0);
+bool write_raw_rgb(const char *filename, const uint8_t *rgb, int width, int height, int output_width = 0, int output_height = 0);
 
-#endif // BITMAP_H
+#endif // IMAGE_SAVE_H
