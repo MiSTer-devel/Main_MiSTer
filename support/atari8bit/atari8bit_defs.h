@@ -46,6 +46,7 @@
 
 #define REG_ATARI_STATUS1 0x01
 #define REG_ATARI_STATUS2 0x02
+#define REG_ATARI_FLASH   0x03
 
 #define SDRAM_BASE        0x2000000
 #define ATARI_BASE        0x0010000

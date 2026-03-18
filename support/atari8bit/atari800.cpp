@@ -2499,9 +2499,30 @@ xex_eof:
 
 }
 
+static void check_flash()
+{
+	static uint8_t flash_dirty = 0;
+	static FILE *fd = NULL;
+	if(!fd) fd = fopen("/tmp/atari800.log", "wt");
+
+	uint16_t r = get_a8bit_reg(REG_ATARI_FLASH);
+	if(!(r & 0x0001))
+	{
+		// TODO check for dirty bit and time
+		// write to file, reset dirty bit
+		return;
+	}
+
+	fprintf(fd, "Flash request: %04X\n", r); fflush(fd);
+
+	// TODO update timers
+	flash_dirty = 1;
+}
+
 void atari800_poll()
 {
 	check_reset_pause();
+	check_flash();
 	
 	if(xex_file.opened()) handle_xex();
 	if(cas_file.opened()) handle_cas();
