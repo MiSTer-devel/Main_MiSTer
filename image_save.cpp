@@ -5,6 +5,7 @@
 
 #include "image_save.h"
 #include "user_io.h"
+#include "scaler.h"
 #include "lib/imlib2/Imlib2.h"
 
 /*
@@ -17,6 +18,8 @@
     imlib2 can also do the scaling for us, but since i wrote a nearest-neighbor scaling
     function for bmp/rgb i went ahead and switched to using it for consistency.
 */
+
+static uint8_t scaled_buffer[2560 * 1440 * 4]; // max possible size after scaling from 24bpp to 32bpp
 
 static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
   {"file '%s' does not exist", IMLIB_LOAD_ERROR_FILE_DOES_NOT_EXIST},
@@ -134,20 +137,14 @@ bool write_png_32(const char *filename, const uint8_t *bgra, int width, int heig
 {
     if (output_width > 0 && output_height > 0) {
         int row_bytes = (size_t)output_width * 4;
-        uint8_t *scaled = (uint8_t *)malloc((size_t)output_height * (size_t)row_bytes);
-        if (!scaled) {
-            return false;
-        }
 
         bool result = false;
-        result = upscale_nearest_32(bgra, width, height, width * 4, scaled, output_width, output_height, row_bytes);
+        result = upscale_nearest_32(bgra, width, height, width * 4, scaled_buffer, output_width, output_height, row_bytes);
         if (!result) {
             printf("Failed to upscale screenshot for saving\n");
-            free(scaled);
             return false;
         }
-        result = write_png_32(filename, scaled, output_width, output_height, 0, 0);
-        free(scaled);
+        result = write_png_32(filename, scaled_buffer, output_width, output_height, 0, 0);
         return result;
     }
 
@@ -186,19 +183,13 @@ bool write_bmp_24(const char *filename, const uint8_t *bgr, int width, int heigh
         bool result = false;
 
         int row_bytes = (size_t)output_width * 3;
-        uint8_t *scaled = (uint8_t *)malloc((size_t)output_height * (size_t)row_bytes);
-        if (!scaled) {
-            return false;
-        }
 
-        result = upscale_nearest_24(bgr, width, height, width * 3, scaled, output_width, output_height, row_bytes);
+        result = upscale_nearest_24(bgr, width, height, width * 3, scaled_buffer, output_width, output_height, row_bytes);
         if (!result) {
             printf("Failed to upscale screenshot for saving\n");
-            free(scaled);
             return false;
         }
-        result = write_bmp_24(filename, scaled, output_width, output_height);
-        free(scaled);
+        result = write_bmp_24(filename, scaled_buffer, output_width, output_height);
         return result;
     }
 
@@ -267,19 +258,14 @@ bool write_raw_rgb(const char *filename, const uint8_t *rgb, int width, int heig
 {
     if (output_width > 0 && output_height > 0) { 
         int row_bytes = (size_t)output_width * 3;
-        uint8_t *scaled = (uint8_t *)malloc((size_t)output_height * (size_t)row_bytes);
-        if (!scaled) {
-            return false;
-        }
+
         bool result = false;
-        result = upscale_nearest_24(rgb, width, height, width * 3, scaled, output_width, output_height, row_bytes);
+        result = upscale_nearest_24(rgb, width, height, width * 3, scaled_buffer, output_width, output_height, row_bytes);
         if (!result) {
             printf("Failed to upscale screenshot for saving\n");
-            free(scaled);
             return false;
         }
-        result = write_raw_rgb(filename, scaled, output_width, output_height, 0, 0);
-        free(scaled);
+        result = write_raw_rgb(filename, scaled_buffer, output_width, output_height, 0, 0);
         return result;
     }
 
