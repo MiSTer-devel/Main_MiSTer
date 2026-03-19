@@ -4115,13 +4115,13 @@ void user_io_kbd(uint16_t key, int press)
 			{
 				if (is_menu() && !video_fb_state()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
+				menu_key_set(UPSTROKE | key);
 				if (key == KEY_MENU) key = KEY_F12;
 				if (key != KEY_F12 || !block_F12)
 				{
-					/*if (osd_is_visible)*/ menu_key_set(UPSTROKE | key);
 
 					// these modifiers should be passed to core even if OSD is open or they will get stuck!
-					if (!osd_is_visible || key == KEY_LEFTALT || key == KEY_RIGHTALT || key == KEY_LEFTMETA || key == KEY_RIGHTMETA) send_keycode(key, press);
+					if (!osd_is_visible || key == KEY_LEFTALT || key == KEY_RIGHTALT || key == KEY_LEFTMETA || key == KEY_RIGHTMETA) {send_keycode(key, press);}
 				}
 				if (key == KEY_F12) block_F12 = 0;
 			}
@@ -4131,8 +4131,8 @@ void user_io_kbd(uint16_t key, int press)
 				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
 				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && (!is_f12_mod_needed() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
 				{
-					//block_F12 = 1;
-					if (press == 1) menu_key_set(KEY_F12);
+				  if (press == 1) menu_key_set(KEY_F12);
+				  block_F12 = 1;
 				}
 				else if (osd_is_visible)
 				{

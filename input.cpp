@@ -6214,6 +6214,7 @@ static uint32_t process_abm_entry(advancedButtonMap *abm, advancedButtonState *a
 				struct input_event ev;
 				ev.code = ocode;
 				ev.value = abs->pressed;
+				ev.type = EV_KEY;
 				input_cb(&ev, NULL, devnum, true);
 				input[devnum].advanced_last_pressed_keycode = abs->pressed ? ocode : 0;
 			} else {
@@ -6272,6 +6273,7 @@ bool update_advanced_state(int devnum, uint16_t evcode, int evstate)
 		struct input_event ev;
 		ev.code = input[devnum].advanced_last_pressed_keycode;
 		ev.value = evstate; 
+		ev.type = EV_KEY;
 		input_cb(&ev, NULL, devnum, true);
 		return false;
 	}
@@ -6318,6 +6320,7 @@ bool update_advanced_state(int devnum, uint16_t evcode, int evstate)
 						struct input_event ev;
 						ev.code = icode; 
 						ev.value = !abs->pressed; 
+						ev.type = EV_KEY;
 						input_cb(&ev, NULL, devnum, true);
 					}
 				} else {  //Joypad
