@@ -385,6 +385,13 @@ char is_uneon()
 	return (is_uneon_type == 1);
 }
 
+static int is_3do_type = 0;
+char is_3do()
+{
+	if (!is_3do_type) is_3do_type = strcasecmp(orig_name, "3DO") ? 2 : 1;
+	return (is_3do_type == 1);
+}
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -2971,6 +2978,7 @@ void user_io_send_buttons(char force)
 			if (is_x86() || is_pcxt()) x86_init();
 			if (is_uneon()) x86_ide_set();
 			if (is_st()) tos_reset(0);
+			if (is_3do()) p3do_reset();
 			ResetUART();
 		}
 
@@ -3694,6 +3702,7 @@ void user_io_poll()
 	}
 	if (is_atari800()) atari800_poll();
 	if (is_atari5200()) atari5200_poll();
+	if (is_3do()) p3do_poll();
 	process_ss(0);
 }
 

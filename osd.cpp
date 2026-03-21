@@ -675,6 +675,7 @@ void OsdUpdate()
 			if (is_pce()) pcecd_poll();
 			if (is_saturn()) saturn_poll();
 			if (is_neogeo_cd()) neocd_poll();
+			if (is_3do()) p3do_poll();
 		}
 	}
 
