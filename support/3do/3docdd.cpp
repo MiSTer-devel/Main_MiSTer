@@ -148,19 +148,19 @@ int p3docdd_t::LoadCUE(const char* filename) {
 			if (strstr(lptr, "MODE1/2048"))
 			{
 				this->sectorSize = 2048;
-				this->toc.tracks[this->toc.last].type = 1;
+				this->toc.tracks[this->toc.last].type = TT_MODE1;
 			}
 			else if (strstr(lptr, "MODE1/2352"))
 			{
 				this->sectorSize = 2352;
-				this->toc.tracks[this->toc.last].type = 1;
+				this->toc.tracks[this->toc.last].type = TT_MODE1;
 
 				//FileSeek(&this->toc.tracks[0].f, 0x10, SEEK_SET);
 			}
 			else if (strstr(lptr, "MODE2/2352"))
 			{
 				this->sectorSize = 2352;
-				this->toc.tracks[this->toc.last].type = 2;
+				this->toc.tracks[this->toc.last].type = TT_MODE2;
 
 				//FileSeek(&this->toc.tracks[0].f, 0x10, SEEK_SET);
 			}
@@ -204,7 +204,7 @@ int p3docdd_t::LoadCUE(const char* filename) {
 			}
 
 #ifdef P3DO_DEBUG
-			printf("\x1b[32m3DO: track = %u, type = %u\n\x1b[0m", this->toc.last + 1, this->toc.tracks[this->toc.last].type);
+			printf("\x1b[32m3DO: track = %u, type = %u\n\x1b[0m", this->toc.last + 1, (int)this->toc.tracks[this->toc.last].type);
 #endif // P3DO_DEBUG
 		}
 
@@ -246,7 +246,7 @@ int p3docdd_t::LoadCUE(const char* filename) {
 					this->toc.tracks[this->toc.last].offset += this->toc.end * 2352;
 
 					int sectorSize = 2352;
-					if (this->toc.tracks[this->toc.last].type) sectorSize = this->sectorSize;
+					if (this->toc.tracks[this->toc.last].type != TT_CDDA) sectorSize = this->sectorSize;
 					this->toc.tracks[this->toc.last].end = this->toc.tracks[this->toc.last].start + ((file_size + sectorSize - 1) / sectorSize);
 
 					this->toc.end = this->toc.tracks[this->toc.last].end;
@@ -302,7 +302,7 @@ int p3docdd_t::LoadISO(const char* filename) {
 	this->toc.tracks[0].offset = 0;
 	this->toc.end = this->toc.tracks[0].end = file_size / 2048;
 	this->toc.sectorSize = this->toc.tracks[0].sector_size = 2048;
-	this->toc.tracks[0].type = 1;
+	this->toc.tracks[0].type = TT_MODE1;
 	this->toc.last = 1;
 
 #ifdef P3DO_DEBUG
@@ -445,7 +445,7 @@ int p3docdd_t::GetDiscInfo(uint8_t *buf) {
 		LBAToMSF(this->toc.tracks[i].start + 150, &msf);
 
 		buf[offs + 1] = 0;
-		buf[offs + 2] = this->toc.tracks[i].type ? 0x04 : 0x00;
+		buf[offs + 2] = this->toc.tracks[i].type == TT_CDDA ? 0x00 : 0x04;
 		buf[offs + 3] = i + 1;
 		buf[offs + 4] = 0;
 		buf[offs + 5] = msf.m;    //min
@@ -577,7 +577,7 @@ void p3docdd_t::Update() {
 	case P3DO_Read:
 		LBAToMSF(this->lba + 150, &msf);
 
-		if (this->toc.tracks[this->track].type)
+		if (this->toc.tracks[this->track].type == TT_MODE1)
 		{
 			// CD-ROM Data (Mode 1/2)
 			uint8_t header[16];
@@ -595,7 +595,7 @@ void p3docdd_t::Update() {
 				header[12] = BCD(msf.m);
 				header[13] = BCD(msf.s);
 				header[14] = BCD(msf.f);
-				header[15] = (uint8_t)this->toc.tracks[this->track].type;
+				header[15] = (uint8_t)(this->toc.tracks[this->track].type != TT_CDDA);
 				DataSectorSend(header);
 			}
 			else {
@@ -672,7 +672,7 @@ void p3docdd_t::ReadData(uint8_t *buf)
 {
 	int offs = 0; 
 	
-	if (this->toc.tracks[this->track].type)
+	if (this->toc.tracks[this->track].type == TT_MODE1)
 	{
 		int lba_ = this->lba >= 0 ? this->lba : 0;
 		if (this->toc.chd_f)
