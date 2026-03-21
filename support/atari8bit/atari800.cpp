@@ -521,17 +521,7 @@ void atari800_umount_cartridge(uint8_t stacked)
 		mounted_cart1_type = 0;
 		FileClose(&cart1_file);
 	}
-	switch((get_a8bit_reg(REG_ATARI_FLASH) >> 4) & 0x03)
-	{
-		case 0x00:
-			reboot(1, 0);
-			break;
-		case 0x01:
-			set_a8bit_reg(stacked ? REG_CART2_SELECT : REG_CART1_SELECT, 0);
-		case 0x02:
-		default:
-			break;
-	}
+	if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot(1, 0);
 }
 
 int atari800_check_cartridge_file(const char* name, unsigned char index)
@@ -624,7 +614,7 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 	
 	if (FileOpenEx(f, name, !FileCanWrite(name) || (get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_RDONLY) ? O_RDONLY : (O_RDWR | O_SYNC)))
 	{
-		set_a8bit_reg(REG_PAUSE, 1);
+		// set_a8bit_reg(REG_PAUSE, 1);
 
 		ProgressMessage(0, 0, 0, 0);
 		FileSeek(f, offset, SEEK_SET);
@@ -688,25 +678,7 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 		{
 			mounted_cart2_type = cart_matches_mode[match_index];
 		}
-		switch((get_a8bit_reg(REG_ATARI_FLASH) >> 4) & 0x03)
-		{
-			case 0x00:
-				reboot(1, 0);
-				break;
-			case 0x01:
-				set_a8bit_reg(stacked ? REG_CART2_SELECT : REG_CART1_SELECT, 0);
-				if(stacked)
-				{
-					set_a8bit_reg(REG_CART2_SELECT, mounted_cart2_type);
-				}
-				else
-				{
-					set_a8bit_reg(REG_CART1_SELECT, mounted_cart1_type);
-				}
-			case 0x02:
-			default:
-				break;
-		}
+		if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot(1, 0);
 	}
 }
 
