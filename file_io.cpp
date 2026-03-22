@@ -845,14 +845,14 @@ int FileCreatePath(const char *dir)
 	return res;
 }
 
-void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
+void FileGenerateScreenshotName(const char *name, char *out_name, const char* extension, int buflen)
 {
 	// If the name ends with target extension then don't modify it
-	char extension[5];
-	snprintf(extension, sizeof(extension), ".%s", cfg.screenshot_image_format);
-
-	if( !strcasecmp(name + strlen(name) - 4, extension) )
-	{
+	       
+	size_t name_len = strlen(name);
+	size_t ext_len = strlen(extension);
+	
+	if (name_len >= ext_len && !strcasecmp(name + name_len - ext_len, extension))	{
 		const char *p = strrchr(name, '/');
 		make_fullpath(SCREENSHOT_DIR);
 		if( p )

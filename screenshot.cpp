@@ -153,11 +153,6 @@ void do_screenshot(char* imgname)
 
 	char filename[1024];
 
-	FileGenerateScreenshotName(basename, filename, 1024);
-
-	free(imgname);
-	imgname = NULL;
-
 	int base_width = ms->width;
 	int base_height = ms->height;
 	int scaled_width = ms->output_width;
@@ -174,6 +169,8 @@ void do_screenshot(char* imgname)
 	
     ScreenshotFormat image_format;
 
+    const char *extension;
+
     if (!strcasecmp(cfg.screenshot_image_format, "png"))
         image_format = FORMAT_PNG;
     else if (!strcasecmp(cfg.screenshot_image_format, "bmp"))
@@ -188,19 +185,27 @@ void do_screenshot(char* imgname)
     switch (image_format) {
         case FORMAT_PNG:
             mister_scaler_read(ms, screenshot_outputbuf, BGRA);
+            extension = ".png";
             break;
         case FORMAT_BMP:
             mister_scaler_read(ms, screenshot_outputbuf, BGR);
+            extension = ".bmp";
             break;
         case FORMAT_RGB:
             mister_scaler_read(ms, screenshot_outputbuf, RGB);
+            extension = ".rgb";
             break;
         default:
             // should be unreachable
             break;
     }
     
-	mister_scaler_free(ms);
+    FileGenerateScreenshotName(basename, filename, extension, 1024);
+
+    free(imgname);
+	imgname = NULL;
+	
+    mister_scaler_free(ms);
 
 	if (video_get_rotated())
 	{
