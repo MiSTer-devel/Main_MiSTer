@@ -132,6 +132,8 @@ typedef struct {
 #define TC_MODE_SDX_SIDE2	0x4C
 #define TC_MODE_SDX_U1MB	0x4D
 #define TC_MODE_DB_32		0x70
+#define TC_MODE_CORINA_512      0x71
+#define TC_MODE_CORINA_1024     0x72
 #define TC_MODE_BOUNTY_40	0x73
 
 static const cart_def_t cart_def[] = 
@@ -204,6 +206,8 @@ static const cart_def_t cart_def[] =
 	{ 76, "Williams       ", TC_MODE_WILLIAMS16,     16 },
 	{ 80, "JRC-Linear     ", TC_MODE_JRC_LIN_64,     64 },
 	{ 83, "S.I.C.+        ", TC_MODE_SIC_1024,     1024 },
+	{ 84, "Corina w/EEPROM", TC_MODE_CORINA_1024,  1032 },
+	{ 85, "Corina w/EEPROM", TC_MODE_CORINA_512,    520 },
 	{ 86, "XE Multicart   ", TC_MODE_XEMULTI_8,       8 },
 	{ 87, "XE Multicart   ", TC_MODE_XEMULTI_16,     16 },
 	{ 88, "XE Multicart   ", TC_MODE_XEMULTI_32,     32 },
@@ -661,10 +665,17 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 			{
 				int to_read = f->size - offset;
 				if (to_read > BUFFER_SIZE) to_read = BUFFER_SIZE;
-				ProgressMessage("Loading", f->name, offset, f->size);
+				ProgressMessage("Loading", f->name, offset, f->size + (cart_type == 85 ? 0x80000 : 0));
 				FileReadAdv(f, a8bit_buffer, to_read);
 				user_io_file_tx_data(a8bit_buffer, to_read);
 				offset += to_read;
+			}
+			if(cart_type == 85)
+			{
+				atari800_dma_read(a8bit_buffer, SDRAM_BASE + 0x880000 + (stacked ? 0x100000 : 0), 8192);
+				atari8bit_dma_write(a8bit_buffer, SDRAM_BASE + 0x900000 + (stacked ? 0x100000 : 0), 8192);
+				ProgressMessage("Loading", f->name, offset, f->size);
+				atari8bit_dma_zero(SDRAM_BASE + 0x880000 + (stacked ? 0x100000 : 0), 0x80000);
 			}
 		}
 		user_io_set_download(0);
@@ -673,6 +684,7 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 		{
 			mounted_cart1_type = cart_matches_mode[match_index];
 			mounted_cart1_size = cart_match_car ? f->size - 16 : f->size;
+			if(cart_type == 85) mounted_cart1_size += 0x80000;
 		}
 		else
 		{
@@ -2521,6 +2533,7 @@ static void check_flash()
 	{
 		uint8_t stacked = flash_dirty & 0x02;
 		fileTYPE *f = stacked ? &cart2_file : &cart1_file;
+
 		if(!(f->mode & O_RDONLY))
 		{
 			uint8_t report_progress = r & 0x0008;
@@ -2529,6 +2542,12 @@ static void check_flash()
 			uint32_t check_sum = 0;
 			int offset = car_file_type ? 16 : 0;
 			if(stacked) mem_offset += 0x100000;
+			if(f->size - offset == 0x82000 || f->size - offset == 0x102000)
+			{
+				// Corina carts, need only the last 8K (EEPROM) to be saved
+				mem_offset += 0x100000;
+				offset = f->size - 0x2000;
+			}
 			FileSeek(f, offset, SEEK_SET);
 			if(report_progress) ProgressMessage(0, 0, 0, 0);
 			while (offset < f->size)
