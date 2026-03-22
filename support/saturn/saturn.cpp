@@ -159,6 +159,8 @@ void saturn_set_image(int num, const char *filename)
 
 	(void)num;
 
+	int reset_after_insert_disc = !user_io_status_get("[4]");
+
 	satcdd.Unload();
 	satcdd.Reset();
 
@@ -167,7 +169,7 @@ void saturn_set_image(int num, const char *filename)
 	char *p = strrchr(last_dir, '/');
 	if (p) *p = 0;
 
-	if (!same_game)
+	if (!same_game && reset_after_insert_disc)
 	{
 		saturn_mount_save("", true);
 
@@ -196,7 +198,7 @@ void saturn_set_image(int num, const char *filename)
 		{
 			satcdd.SendData = saturn_send_data;
 
-			if (!same_game)
+			if (!same_game && reset_after_insert_disc)
 			{
 				//saturn_load_rom(filename, "cart.rom", 1);
 				saturn_mount_save(filename, true);
