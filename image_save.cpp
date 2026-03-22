@@ -182,7 +182,7 @@ bool write_bmp_24(const char *filename, const uint8_t *bgr, int width, int heigh
     if (output_width > 0 && output_height > 0) {
         bool result = false;
 
-        int row_bytes = (size_t)output_width * 3;
+        int row_bytes = output_width * 3;
 
         result = upscale_nearest_24(bgr, width, height, width * 3, scaled_buffer, output_width, output_height, row_bytes);
         if (!result) {
@@ -222,10 +222,12 @@ bool write_bmp_24(const char *filename, const uint8_t *bgr, int width, int heigh
     header[20] = width >> 16;
     header[21] = width >> 24;
 
-    header[22] = height;
-    header[23] = height >> 8;
-    header[24] = height >> 16;
-    header[25] = height >> 24;
+    int32_t dib_height = -height;
+
+    header[22] = (uint8_t)(dib_height);
+    header[23] = (uint8_t)(dib_height >> 8);
+    header[24] = (uint8_t)(dib_height >> 16);
+    header[25] = (uint8_t)(dib_height >> 24);
 
     header[26] = 1;      // planes
     header[28] = 24;     // bits per pixel
@@ -240,12 +242,14 @@ bool write_bmp_24(const char *filename, const uint8_t *bgr, int width, int heigh
     uint8_t padding[3] = {0};
     uint32_t pad = row_padded - row_raw;
 
-	// BMP stores rows bottom-up
-	for (int y = height - 1; y >= 0; y--) {
-		const uint8_t *row = bgr + y * width * 3;
-		fwrite(row, 1, row_raw, f);
-		fwrite(padding, 1, pad, f);
-	}
+    // Negative BMP height means rows are stored top-down, so we can write forward.    
+    const uint8_t *row = bgr;
+
+    for (int y = 0; y < height; y++) {
+        fwrite(row, 1, row_raw, f);
+        fwrite(padding, 1, pad, f);
+        row += row_raw;
+    }
 
     fclose(f);
     return true;
