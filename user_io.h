@@ -294,6 +294,7 @@ char is_n64();
 char is_uneon();
 char is_atari800();
 char is_atari5200();
+char is_3do();
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()
