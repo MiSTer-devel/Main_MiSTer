@@ -385,6 +385,13 @@ char is_uneon()
 	return (is_uneon_type == 1);
 }
 
+static int is_3do_type = 0;
+char is_3do()
+{
+	if (!is_3do_type) is_3do_type = strcasecmp(orig_name, "3DO") ? 2 : 1;
+	return (is_3do_type == 1);
+}
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -2971,6 +2978,7 @@ void user_io_send_buttons(char force)
 			if (is_x86() || is_pcxt()) x86_init();
 			if (is_uneon()) x86_ide_set();
 			if (is_st()) tos_reset(0);
+			if (is_3do()) p3do_reset();
 			ResetUART();
 		}
 
@@ -3694,6 +3702,7 @@ void user_io_poll()
 	}
 	if (is_atari800()) atari800_poll();
 	if (is_atari5200()) atari5200_poll();
+	if (is_3do()) p3do_poll();
 	process_ss(0);
 }
 
@@ -4058,7 +4067,6 @@ void user_io_osd_key_enable(char on)
 
 void user_io_kbd(uint16_t key, int press)
 {
-	static int block_F12 = 0;
 
 	if(is_menu()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 
@@ -4111,33 +4119,32 @@ void user_io_kbd(uint16_t key, int press)
 		if (key)
 		{
 			uint32_t code = get_ps2_code(key);
+			bool is_menu_event = ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && (!is_f12_mod_needed() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU));
 			if (!press)
 			{
 				if (is_menu() && !video_fb_state()) printf("PS2 code(break)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 
-				menu_key_set(UPSTROKE | key);
 				if (key == KEY_MENU) key = KEY_F12;
-				if (key != KEY_F12 || !block_F12)
+				if (key != KEY_F12 || !is_menu_event)
 				{
 
+					if (osd_is_visible) menu_key_set(UPSTROKE | key);
 					// these modifiers should be passed to core even if OSD is open or they will get stuck!
 					if (!osd_is_visible || key == KEY_LEFTALT || key == KEY_RIGHTALT || key == KEY_LEFTMETA || key == KEY_RIGHTMETA) {send_keycode(key, press);}
 				}
-				if (key == KEY_F12) block_F12 = 0;
+				if (is_menu_event) menu_key_set(KEY_F12 | UPSTROKE);
 			}
 			else
 			{
 				if (is_menu() && !video_fb_state()) printf("PS2 code(make)%s for core: %d(0x%X)\n", (code & EXT) ? "(ext)" : "", code & 255, code & 255);
 				if (!osd_is_visible && !is_menu() && key == KEY_MENU && press == 3) open_joystick_setup();
-				else if ((has_menu() || osd_is_visible || (get_key_mod() & (LALT | RALT | RGUI | LGUI))) && (((key == KEY_F12) && (!is_f12_mod_needed() || (get_key_mod() & (RGUI | LGUI)))) || key == KEY_MENU))
+				else if (is_menu_event)
 				{
 				  if (press == 1) menu_key_set(KEY_F12);
-				  block_F12 = 1;
 				}
 				else if (osd_is_visible)
 				{
 					if (key == KEY_MENU) key = KEY_F12;
-					if (key == KEY_F12) block_F12 = 1;
 					if (press == 1) menu_key_set(key);
 				}
 				else
