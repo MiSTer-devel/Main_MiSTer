@@ -1280,16 +1280,12 @@ void HandleUI(void)
 			}
 			break;
 		case KEY_F12 | UPSTROKE:
-			if (!is_f12_mod_needed() || (get_key_mod() & (RGUI | LGUI)))
-			{
-					if (!user_io_osd_is_visible() && !ignore_osd_release)
-						menu = true;
-					ignore_osd_release = false;
-					if(video_fb_state()) video_menu_bg(user_io_status_get("[3:1]"));
-					video_fb_enable(0);
-			}
+			if (!user_io_osd_is_visible() && !ignore_osd_release)
+				menu = true;
+			ignore_osd_release = false;
+			if(video_fb_state()) video_menu_bg(user_io_status_get("[3:1]"));
+			video_fb_enable(0);
 			break;
-
 		case KEY_F1:
 			if (is_menu() && cfg.fb_terminal)
 			{
