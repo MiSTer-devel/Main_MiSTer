@@ -37,8 +37,7 @@
 #include "profiling.h"
 #endif
 #include "frame_timer.h"
-#include "screenshot.h"
-
+#include "scaler.h"
 #include "support.h"
 
 static char core_path[1024] = {};

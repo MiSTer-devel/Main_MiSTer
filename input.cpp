@@ -34,7 +34,7 @@
 #include "gamecontroller_db.h"
 #include "str_util.h"
 #include "frame_timer.h"
-#include "screenshot.h"
+#include "scaler.h"
 
 #define NUMDEV 30
 #define UINPUT_NAME "MiSTer virtual input"
