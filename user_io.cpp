@@ -10,8 +10,6 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 
-#include "lib/imlib2/Imlib2.h"
-
 #include "hardware.h"
 #include "osd.h"
 #include "user_io.h"
@@ -35,8 +33,11 @@
 #include "shmem.h"
 #include "ide.h"
 #include "ide_cdrom.h"
+#ifdef PROFILING
 #include "profiling.h"
-
+#endif
+#include "frame_timer.h"
+#include "scaler.h"
 #include "support.h"
 
 static char core_path[1024] = {};
@@ -80,7 +81,8 @@ static bool winkey_pressed = 0;
 
 static uint16_t sdram_cfg = 0;
 
-static char last_filename[1024] = {};
+char last_filename[1024] = {};
+
 void user_io_store_filename(char *filename)
 {
 	char *p = strrchr(filename, '/');
@@ -3053,8 +3055,15 @@ static uint32_t res_timer = 0;
 
 void user_io_poll()
 {
-	PROFILE_FUNCTION();
+	#ifdef PROFILING
+		PROFILE_FUNCTION();
+	#endif
 
+	// every frame, check if a screenshot has been requested.
+	// this is reduce risk of screenshot occurring while the scaler
+	// is being updated and getting a corrupted image.
+	add_frame_callback(screenshot_cb);
+	
 	if ((core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
 	{
@@ -4077,10 +4086,10 @@ void user_io_kbd(uint16_t key, int press)
 	if (key_WinPrnScr || key_AltWinScrLk)
 	{
 		int shift = (get_key_mod() & LSHIFT);
-		if (press == 1)
+		if (press)
 		{
 			printf("print key pressed - do screen shot\n");
-			user_io_screenshot(nullptr,!shift);
+			request_screenshot(NULL, !shift);
 		}
 	}
 	else
@@ -4252,108 +4261,4 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 uint16_t user_io_get_sdram_cfg()
 {
 	return sdram_cfg;
-}
-
-static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
-  {"file '%s' does not exist", IMLIB_LOAD_ERROR_FILE_DOES_NOT_EXIST},
-  {"file '%s' is a directory", IMLIB_LOAD_ERROR_FILE_IS_DIRECTORY},
-  {"permission denied to read file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_READ},
-  {"no loader for the file format used in file '%s'", IMLIB_LOAD_ERROR_NO_LOADER_FOR_FILE_FORMAT},
-  {"path for file '%s' is too long", IMLIB_LOAD_ERROR_PATH_TOO_LONG},
-  {"a component of path '%s' does not exist", IMLIB_LOAD_ERROR_PATH_COMPONENT_NON_EXISTANT},
-  {"a component of path '%s' is not a directory", IMLIB_LOAD_ERROR_PATH_COMPONENT_NOT_DIRECTORY},
-  {"path '%s' has too many symbolic links", IMLIB_LOAD_ERROR_TOO_MANY_SYMBOLIC_LINKS},
-  {"ran out of file descriptors trying to access file '%s'", IMLIB_LOAD_ERROR_OUT_OF_FILE_DESCRIPTORS},
-  {"denied write permission for file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_WRITE},
-  {"out of disk space writing to file '%s'", IMLIB_LOAD_ERROR_OUT_OF_DISK_SPACE},
-  {(const char *)NULL, (Imlib_Load_Error) 0}
-};
-
-static void print_imlib_load_error (Imlib_Load_Error err, const char *filepath) {
-  int i;
-  for (i = 0; err_strings[i].fmtstr != NULL; i++) {
-    if (err == err_strings[i].errno) {
-	printf("Screenshot Error (%d): ",err);
-	printf(err_strings[i].fmtstr,filepath);
-	printf("\n");
-      return ;
-    }
-  }
-  /* Unrecognised error */
-    printf("Screenshot Error (%d): unrecognized error accessing file '%s'\n",err,filepath);
-  return ;
-}
-
-bool user_io_screenshot(const char *pngname, int rescale)
-{
-	mister_scaler *ms = mister_scaler_init();
-	if (ms == NULL)
-	{
-		printf("problem with scaler, maybe not a new enough version\n");
-		Info("Scaler not compatible");
-		return false;
-	}
-	else
-	{
-    int scwidth = ms->output_width;
-    int scheight = ms->output_height;
-
-    if (video_get_rotated())
-    {
-
-      //If the video is rotated, the scaled output resolution results in a squished image.
-      //Calculate the scaled output res using the original AR
-      scwidth = scheight * ((float)ms->width/ms->height);
-    }
-
-		const char *basename = last_filename;
-		if( pngname && *pngname )
-			basename = pngname;
-		unsigned char *outputbuf = (unsigned char *)calloc(ms->width*ms->height * 4, 1);
-		// read the image into the outpubuf - RGBA format
-		mister_scaler_read_32(ms,outputbuf);
-		// using_data will keep a pointer and dispose of the outbuf
-		Imlib_Image im = imlib_create_image_using_data(ms->width,ms->height,(unsigned int *)outputbuf);
-		imlib_context_set_image(im);
-
-		static char filename[1024];
-		FileGenerateScreenshotName(basename, filename, 1024);
-
-		/* do we want to save a rescaled image? */
-		if (rescale)
-		{
-			Imlib_Image im_scaled=imlib_create_cropped_scaled_image(0,0,ms->width,ms->height,scwidth,scheight);
-			imlib_free_image_and_decache();
-			imlib_context_set_image(im_scaled);
-		}
-		Imlib_Load_Error error;
-		imlib_save_image_with_error_return(getFullPath(filename),&error);
-		if (error != IMLIB_LOAD_ERROR_NONE)
-		{
-			print_imlib_load_error (error, filename);
-			Info("error in saving png");
-			return false;
-		}
-		imlib_free_image_and_decache();
-		mister_scaler_free(ms);
-		free(outputbuf);
-		char msg[1024];
-		snprintf(msg, 1024, "Screen saved to\n%s", filename + strlen(SCREENSHOT_DIR"/"));
-		Info(msg);
-	}
-	return true;
-}
-
-void user_io_screenshot_cmd(const char *cmd)
-{
-	if( strncmp( cmd, "screenshot", 10 ))
-	{
-		return;
-	}
-
-	cmd += 10;
-	while( *cmd != '\0' && ( *cmd == '\t' || *cmd == ' ' || *cmd == '\n' ) )
-		cmd++;
-
-	user_io_screenshot(cmd,0);
 }

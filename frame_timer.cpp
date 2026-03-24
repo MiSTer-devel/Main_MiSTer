@@ -16,6 +16,10 @@
 #define FIFTYHERTZ 2000000       // lowest refresh rate we consider valid 50hz
 #define SEVENTYFIVEHERTZ 1326260 // highest refresh rate we consider valid 75.4hz
 
+// frame timer callbacks
+static frame_callback_t frame_callbacks[MAX_FRAME_CALLBACKS];
+static int frame_callback_count = 0;
+
 uint64_t global_frame_counter = 0;
 
 extern VideoInfo current_video_info; // from video.cpp
@@ -120,6 +124,8 @@ static bool check_vtimer() {
 // prefer core framecounter; fallback to timerfd with minor long-term drift risk.
 // call periodically (e.g., start of input_poll()).
 void frame_timer() {
+	static uint32_t last_frame_count = 0;
+	
 	// if core offers its own framecounter skip all the timerfd nonsense
 	uint32_t frcnt = spi_uio_cmd(UIO_GET_FR_CNT);
 	if (frcnt & 0x100) {
@@ -136,4 +142,26 @@ void frame_timer() {
 		if (timer_started && check_vtimer())
 			global_frame_counter++;
 	}
+
+	// call frame callbacks if frame has advanced
+	if (global_frame_counter != last_frame_count) {
+		last_frame_count = global_frame_counter;
+		for (int i = 0; i < frame_callback_count; i++) {
+			frame_callbacks[i]();
+		}
+	}
+}
+
+// frametimer callbacks. deprecating FRAME_TICK() macro in favor of these.
+int callback_already_registered(frame_callback_t cb) {
+    for (int i = 0; i < frame_callback_count; ++i) {
+        if (frame_callbacks[i] == cb) return 1;
+    }
+    return 0;
+}
+
+void add_frame_callback(frame_callback_t cb) {
+    if (!callback_already_registered(cb) && frame_callback_count < MAX_FRAME_CALLBACKS) {
+        frame_callbacks[frame_callback_count++] = cb;
+    }
 }

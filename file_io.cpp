@@ -845,11 +845,14 @@ int FileCreatePath(const char *dir)
 	return res;
 }
 
-void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
+void FileGenerateScreenshotName(const char *name, char *out_name, const char* extension, int buflen)
 {
-	// If the name ends with .png then don't modify it
-	if( !strcasecmp(name + strlen(name) - 4, ".png") )
-	{
+	// If the name ends with target extension then don't modify it
+	       
+	size_t name_len = strlen(name);
+	size_t ext_len = strlen(extension);
+	
+	if (name_len >= ext_len && !strcasecmp(name + name_len - ext_len, extension))	{
 		const char *p = strrchr(name, '/');
 		make_fullpath(SCREENSHOT_DIR);
 		if( p )
@@ -871,13 +874,13 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 		if (tm.tm_year >= 119) // 2019 or up considered valid time
 		{
 			strftime(datecode, 31, "%Y%m%d_%H%M%S", &tm);
-			snprintf(out_name, buflen, "%s/%s/%s-%s.png", SCREENSHOT_DIR, CoreName2, datecode, name[0] ? name : SCREENSHOT_DEFAULT);
+			snprintf(out_name, buflen, "%s/%s/%s-%s%s", SCREENSHOT_DIR, CoreName2, datecode, name[0] ? name : SCREENSHOT_DEFAULT, extension);
 		}
 		else
 		{
 			for (int i = 1; i < 10000; i++)
 			{
-				snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d.png", SCREENSHOT_DIR, CoreName2, name[0] ? name : SCREENSHOT_DEFAULT, i);
+				snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d%s", SCREENSHOT_DIR, CoreName2, name[0] ? name : SCREENSHOT_DEFAULT, i, extension);
 				if (!getFileType(out_name)) return;
 			}
 		}
