@@ -271,39 +271,43 @@ static int mounted_cart1_size;
 static fileTYPE cart1_file = {};
 static fileTYPE cart2_file = {};
 
-static void reboot(uint8_t cold, uint8_t pause)
+static void reboot_800(uint8_t cold, uint8_t pause, uint8_t phase = 3)
 {
 	int i;
 
-	set_a8bit_reg(REG_PAUSE, 1);
-	if (cold)
+	if(phase & 0x01)
 	{
-		set_a8bit_reg(REG_FREEZER, 0);
-		set_a8bit_reg(REG_CART1_SELECT, 0);
-		set_a8bit_reg(REG_CART2_SELECT, 0);
-		// Initialize the first 64K of SDRAM with a pattern
-		for(i = 0; i < BUFFER_SIZE; i += 2)
+		set_a8bit_reg(REG_PAUSE, 1);
+		if (cold)
 		{
-			a8bit_buffer[i] = 0xFF;
-			a8bit_buffer[i+1] = 0x00;
-		}
-		user_io_set_index(99);
-		user_io_set_download(1, SDRAM_BASE);
-		for(i = 0; i < 0x10000 / BUFFER_SIZE; i++) user_io_file_tx_data(a8bit_buffer, BUFFER_SIZE);
-		user_io_set_download(0);
-		if(mounted_cart1_type)
-		{
-			set_a8bit_reg(REG_CART1_SELECT, mounted_cart1_type);
+			set_a8bit_reg(REG_FREEZER, 0);
+			set_a8bit_reg(REG_CART1_SELECT, 0);
+			set_a8bit_reg(REG_CART2_SELECT, 0);
+			// Initialize the first 64K of SDRAM with a pattern
+			for(i = 0; i < BUFFER_SIZE; i += 2)
+			{
+				a8bit_buffer[i] = 0xFF;
+				a8bit_buffer[i+1] = 0x00;
+			}
+			user_io_set_index(99);
+			user_io_set_download(1, SDRAM_BASE);
+			for(i = 0; i < 0x10000 / BUFFER_SIZE; i++) user_io_file_tx_data(a8bit_buffer, BUFFER_SIZE);
+			user_io_set_download(0);
+			if(mounted_cart1_type)
+			{
+				set_a8bit_reg(REG_CART1_SELECT, mounted_cart1_type);
+			}
+			else
+			{
+				mounted_cart1_size = 0;
+			}
+			if(mounted_cart2_type) set_a8bit_reg(REG_CART2_SELECT, mounted_cart2_type);
 		}
 		else
 		{
-			mounted_cart1_size = 0;
+			FileClose(&xex_file);
 		}
-		if(mounted_cart2_type) set_a8bit_reg(REG_CART2_SELECT, mounted_cart2_type);
-	}
-	else
-	{
-		FileClose(&xex_file);
+		set_a8bit_reg(REG_XEX_LOADER, 0);
 	}
 	
 	// Both cold==1 and pause==1 is a special case when 
@@ -315,39 +319,52 @@ static void reboot(uint8_t cold, uint8_t pause)
 	// cycle does not allow to pre-init the OS to do a warm
 	// start, it will always be cold).
 
-	set_a8bit_reg(REG_XEX_LOADER, 0);
-
 	if((get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800) && (!cold || pause))
 	{
-		set_a8bit_reg(REG_RESET_RNMI, 1);
-		set_a8bit_reg(REG_RESET_RNMI, 0);
+		if(phase & 0x01) set_a8bit_reg(REG_RESET_RNMI, 1);
+		if(phase & 0x02) set_a8bit_reg(REG_RESET_RNMI, 0);
 	}
 	else
 	{
-		set_a8bit_reg(REG_RESET, 1);
-		set_a8bit_reg(REG_RESET, 0);
+		if(phase & 0x01) set_a8bit_reg(REG_RESET, 1);
+		if(phase & 0x02) set_a8bit_reg(REG_RESET, 0);
 	}
 
-	if(cold)
+	if(phase & 0x02)
 	{
-		set_a8bit_reg(REG_FREEZER, 1);
+		if(cold) set_a8bit_reg(REG_FREEZER, 1);
+		if(!pause) set_a8bit_reg(REG_PAUSE, 0);
 	}
-	set_a8bit_reg(REG_PAUSE, pause);
 }
 
 static void check_reset_pause()
 {
+	static uint8_t soft_reboot = 0;
+	static uint8_t cold_reboot = 0;
+
 	uint16_t atari_status1 = get_a8bit_reg(REG_ATARI_STATUS1);
 
-	set_a8bit_reg(REG_PAUSE, atari_status1 & STATUS1_MASK_HALT);
+	if(!(soft_reboot | cold_reboot)) set_a8bit_reg(REG_PAUSE, atari_status1 & STATUS1_MASK_HALT);
 
-	if (atari_status1 & STATUS1_MASK_SOFTBOOT)
+	if ((atari_status1 & STATUS1_MASK_SOFTBOOT) && !soft_reboot)
 	{
-		reboot(0, 0);
+		soft_reboot = 1;
+		reboot_800(0, 0, 1);
 	}
-	else if (atari_status1 & STATUS1_MASK_COLDBOOT)
+	else if(!(atari_status1 & STATUS1_MASK_SOFTBOOT) && soft_reboot)
 	{
-		reboot(1, 0);
+		soft_reboot = 0;
+		reboot_800(0, 0, 2);
+	}
+	else if ((atari_status1 & STATUS1_MASK_COLDBOOT) && !cold_reboot)
+	{
+		cold_reboot = 1;
+		reboot_800(1, 0, 1);
+	}
+	else if(!(atari_status1 & STATUS1_MASK_COLDBOOT) && cold_reboot)
+	{
+		cold_reboot = 0;
+		reboot_800(1, 0, 2);
 	}
 }
 
@@ -525,7 +542,7 @@ void atari800_umount_cartridge(uint8_t stacked)
 		mounted_cart1_type = 0;
 		FileClose(&cart1_file);
 	}
-	if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot(1, 0);
+	if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot_800(1, 0);
 }
 
 int atari800_check_cartridge_file(const char* name, unsigned char index)
@@ -690,7 +707,7 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 		{
 			mounted_cart2_type = cart_matches_mode[match_index];
 		}
-		if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot(1, 0);
+		if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot_800(1, 0);
 	}
 }
 
@@ -699,7 +716,7 @@ void atari800_open_bios_file(const char* name, unsigned char index)
 	uint8_t bios_index = (index & 0x3F);
 	uint16_t mode800 = get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800;
 	user_io_file_tx(name, index);
-	if((mode800 && bios_index == 6) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot(1, 0);
+	if((mode800 && bios_index == 6) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot_800(1, 0);
 }
 
 #define MAX_DRIVES 15
@@ -2226,10 +2243,10 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 		}
 		else if(file_index == 8)
 		{
-			set_a8bit_reg(REG_PAUSE, 1);
+			//set_a8bit_reg(REG_PAUSE, 1);
 			mounted_cart1_type = 0;
 			mounted_cart2_type = 0;
-			reboot(1, 0);
+			reboot_800(1, 0);
 			set_a8bit_reg(REG_OPTION_FORCE, 1);
 			set_a8bit_reg(REG_START_FORCE, 1);
 			set_a8bit_reg(REG_OPTION_FORCE, 0);
@@ -2245,7 +2262,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			xex_file_first_block = 1;
 			mounted_cart1_type = 0;
 			mounted_cart2_type = 0;
-			reboot(1, 1);
+			reboot_800(1, 1);
 			set_a8bit_reg(REG_XEX_LOADER, 1);
 			uint16_t atari_status1 = get_a8bit_reg(REG_ATARI_STATUS1);
 
@@ -2287,7 +2304,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 	{
 		if(name[0])
 		{
-			set_a8bit_reg(REG_PAUSE, 1);
+			//set_a8bit_reg(REG_PAUSE, 1);
 			mounted_cart1_type = 0;
 			mounted_cart2_type = 0;
 			FileClose(&cas_file);
@@ -2297,7 +2314,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 		set_drive_status(0, name, ext_index);
 		if(name[0])
 		{
-			reboot(1, 0);
+			reboot_800(1, 0);
 			set_a8bit_reg(REG_OPTION_FORCE, 1);
 			set_a8bit_reg(REG_OPTION_FORCE, 0);
 		}
@@ -2631,5 +2648,5 @@ void atari800_reset()
 	set_a8bit_reg(TAPE_RESET, 0);
 	speed_index = 0;
 	uart_init(speeds[speed_index] + 6);
-	reboot(1, 0);
+	reboot_800(1, 0);
 }
