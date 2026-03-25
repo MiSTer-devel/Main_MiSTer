@@ -151,7 +151,7 @@ void atari5200_open_cartridge_file(const char* name, int match_index)
 
 	if (FileOpen(&f, name))
 	{
-		set_a8bit_reg(REG_PAUSE, 1);
+		//set_a8bit_reg(REG_PAUSE, 1);
 		set_a8bit_reg(REG_CART1_SELECT, 0);
 
 		ProgressMessage(0, 0, 0, 0);
