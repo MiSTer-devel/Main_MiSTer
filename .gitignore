@@ -28,3 +28,4 @@ host
 *.user
 .vs
 MiSTer
+/bin
