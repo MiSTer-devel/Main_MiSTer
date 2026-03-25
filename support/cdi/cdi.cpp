@@ -115,7 +115,6 @@ static void unload_cue(toc_t *table)
 
 static int load_chd(const char *filename, toc_t *table)
 {
-
 	unload_chd(table);
 	chd_error err = mister_load_chd(filename, table);
 	if (err != CHDERR_NONE)
@@ -149,9 +148,8 @@ static int load_cue(const char *filename, toc_t *table)
 	static char toc[100 * 1024];
 
 	unload_cue(table);
-	printf("\x1b[32mCDI: Open CUE: %s\n\x1b[0m", fname);
-
 	strcpy(fname, filename);
+	printf("\x1b[32mCDI: Open CUE: %s\n\x1b[0m", fname);
 
 	memset(toc, 0, sizeof(toc));
 	if (!FileLoad(fname, toc, sizeof(toc) - 1))
@@ -263,6 +261,10 @@ static int load_cue(const char *filename, toc_t *table)
 
 			if (!table->tracks[table->last].f.opened())
 			{
+				// Catch absent INDEX0 (no pregap) to fix calculations afterwards
+				if (!index0)
+					index0 = index1;
+
 				table->tracks[table->last].start = index1 + 150;
 				table->tracks[table->last].pregap = index1 - index0;
 				// Subtract the fake 150 sector pregap used for the first data track
@@ -789,7 +791,7 @@ void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 	{
 		if (lba < 0 || !toc.last)
 		{
-			// Probably TOC area
+			// TOC area
 			memset(buffer, 0, CDI_SECTOR_LEN);
 			buffer += CDI_SECTOR_LEN;
 			subcode_data(lba, *reinterpret_cast<struct subcode *>(buffer));
@@ -860,8 +862,6 @@ void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 			}
 		}
 
-		buffer += CDI_SECTOR_LEN;
-		buffer += sizeof(struct subcode);
 		cnt--;
 		lba++;
 	}
