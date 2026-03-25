@@ -271,7 +271,7 @@ static int mounted_cart1_size;
 static fileTYPE cart1_file = {};
 static fileTYPE cart2_file = {};
 
-static void reboot(uint8_t cold, uint8_t pause, uint8_t phase = 3)
+static void reboot_800(uint8_t cold, uint8_t pause, uint8_t phase = 3)
 {
 	int i;
 
@@ -349,22 +349,22 @@ static void check_reset_pause()
 	if ((atari_status1 & STATUS1_MASK_SOFTBOOT) && !soft_reboot)
 	{
 		soft_reboot = 1;
-		reboot(0, 0, 1);
+		reboot_800(0, 0, 1);
 	}
 	else if(!(atari_status1 & STATUS1_MASK_SOFTBOOT) && soft_reboot)
 	{
 		soft_reboot = 0;
-		reboot(0, 0, 2);
+		reboot_800(0, 0, 2);
 	}
 	else if ((atari_status1 & STATUS1_MASK_COLDBOOT) && !cold_reboot)
 	{
 		cold_reboot = 1;
-		reboot(1, 0, 1);
+		reboot_800(1, 0, 1);
 	}
 	else if(!(atari_status1 & STATUS1_MASK_COLDBOOT) && cold_reboot)
 	{
 		cold_reboot = 0;
-		reboot(1, 0, 2);
+		reboot_800(1, 0, 2);
 	}
 }
 
@@ -542,7 +542,7 @@ void atari800_umount_cartridge(uint8_t stacked)
 		mounted_cart1_type = 0;
 		FileClose(&cart1_file);
 	}
-	if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot(1, 0);
+	if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot_800(1, 0);
 }
 
 int atari800_check_cartridge_file(const char* name, unsigned char index)
@@ -707,7 +707,7 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 		{
 			mounted_cart2_type = cart_matches_mode[match_index];
 		}
-		if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot(1, 0);
+		if(get_a8bit_reg(REG_ATARI_FLASH) & 0x10) reboot_800(1, 0);
 	}
 }
 
@@ -716,7 +716,7 @@ void atari800_open_bios_file(const char* name, unsigned char index)
 	uint8_t bios_index = (index & 0x3F);
 	uint16_t mode800 = get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800;
 	user_io_file_tx(name, index);
-	if((mode800 && bios_index == 6) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot(1, 0);
+	if((mode800 && bios_index == 6) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot_800(1, 0);
 }
 
 #define MAX_DRIVES 15
@@ -2246,7 +2246,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			//set_a8bit_reg(REG_PAUSE, 1);
 			mounted_cart1_type = 0;
 			mounted_cart2_type = 0;
-			reboot(1, 0);
+			reboot_800(1, 0);
 			set_a8bit_reg(REG_OPTION_FORCE, 1);
 			set_a8bit_reg(REG_START_FORCE, 1);
 			set_a8bit_reg(REG_OPTION_FORCE, 0);
@@ -2262,7 +2262,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			xex_file_first_block = 1;
 			mounted_cart1_type = 0;
 			mounted_cart2_type = 0;
-			reboot(1, 1);
+			reboot_800(1, 1);
 			set_a8bit_reg(REG_XEX_LOADER, 1);
 			uint16_t atari_status1 = get_a8bit_reg(REG_ATARI_STATUS1);
 
@@ -2314,7 +2314,7 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 		set_drive_status(0, name, ext_index);
 		if(name[0])
 		{
-			reboot(1, 0);
+			reboot_800(1, 0);
 			set_a8bit_reg(REG_OPTION_FORCE, 1);
 			set_a8bit_reg(REG_OPTION_FORCE, 0);
 		}
@@ -2648,5 +2648,5 @@ void atari800_reset()
 	set_a8bit_reg(TAPE_RESET, 0);
 	speed_index = 0;
 	uart_init(speeds[speed_index] + 6);
-	reboot(1, 0);
+	reboot_800(1, 0);
 }

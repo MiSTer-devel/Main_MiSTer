@@ -19,7 +19,7 @@ uint16_t get_a8bit_reg(uint8_t reg);
 void atari8bit_dma_write(const uint8_t *buf, uint32_t addr, uint32_t len);
 void atari8bit_dma_zero(uint32_t addr, uint32_t len);
 
-static void reboot(uint8_t phase = 3)
+static void reboot_5200(uint8_t phase = 3)
 {
 	if(phase & 0x01)
 	{
@@ -65,7 +65,7 @@ const char *atari5200_get_cart_match_name(int match_index)
 void atari5200_umount_cartridge()
 {
 	set_a8bit_reg(REG_CART1_SELECT, 0);
-	reboot();
+	reboot_5200();
 }
 
 int atari5200_check_cartridge_file(const char* name, unsigned char index)
@@ -254,7 +254,7 @@ void atari5200_open_cartridge_file(const char* name, int match_index)
 		user_io_set_download(0);
 		ProgressMessage(0, 0, 0, 0);
 		set_a8bit_reg(REG_CART1_SELECT, cart_type);
-		reboot();
+		reboot_5200();
 	}
 }
 
@@ -267,12 +267,12 @@ void atari5200_poll()
 	if ((atari_status1 & STATUS1_MASK_COLDBOOT) && !cold_reboot)
 	{
 		cold_reboot = 1;
-		reboot(1);
+		reboot_5200(1);
 	}
 	else if (!(atari_status1 & STATUS1_MASK_COLDBOOT) && cold_reboot)
 	{
 		cold_reboot = 0;
-		reboot(2);
+		reboot_5200(2);
 	}
 }
 
@@ -295,5 +295,5 @@ void atari5200_reset()
 	set_a8bit_reg(REG_PAUSE, 1);
 	set_a8bit_reg(REG_CART1_SELECT, 0);
 	atari8bit_dma_zero(SDRAM_BASE + 0x4000, 0x80000);
-	reboot();
+	reboot_5200();
 }
