@@ -321,7 +321,7 @@ uint8_t* snes_get_header(fileTYPE *f)
 					}
 
 					//GSU 7
-					if (buf[addr + Mapper] == 0x20 && (buf[addr + RomType] == 0x13 || buf[addr + RomType] == 0x14 || buf[addr + RomType] == 0x15 || buf[addr + RomType] == 0x1a))
+					if ((buf[addr + Mapper] == 0x20 || buf[addr + Mapper] == 0x21) && (buf[addr + RomType] == 0x13 || buf[addr + RomType] == 0x14 || buf[addr + RomType] == 0x15 || buf[addr + RomType] == 0x1a))
 					{
 						ramsz = buf[addr - 3];
 						if (ramsz == 0xFF) ramsz = 5; //StarFox
