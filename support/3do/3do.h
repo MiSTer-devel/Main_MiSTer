@@ -74,14 +74,14 @@ extern p3docdd_t p3docdd;
 extern uint32_t p3do_frame_cnt;
 
 
-#define CD_DATA_IO_INDEX	0x8
-#define CD_TOC_IO_INDEX	    0xC
 #define SAVE_IO_INDEX		0x4 // fake download to trigger save loading
+#define CD_DATA_IO_INDEX	0x8
+#define CD_INFO_IO_INDEX	0xC
 
 void p3do_poll();
 void p3do_set_image(int num, const char *filename);
 void p3do_reset();
-//void p3do_fill_blanksave(uint8_t *buffer, uint32_t lba);
+void p3do_fill_blanksave(uint8_t *buf, uint32_t lba);
 int p3do_send_data(uint8_t* buf, int len, uint8_t index);
 
 #endif
