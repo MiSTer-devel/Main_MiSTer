@@ -45,6 +45,10 @@ static const char *sdlname_to_mister_idx[] = {
 	"asysy",
 	NULL,
 	NULL,
+	"lefttrigger",
+	"righttrigger",
+	"leftstick",
+	"rightstick",
 };
 
 typedef struct {
@@ -281,8 +285,9 @@ void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid,
 	printf("Gamecontrollerdb for mapping: %s,%s,", guid_str, name);
 	for(int i=0; i < NUMBUTTONS; i++)
 	{
-			if (i > SYS_BTN_START && i < SYS_BTN_OSD_KTGL) continue; //Skip mouse buttons
+			if (i >= SYS_MS_RIGHT && i <= SYS_MS_BTN_EMU) continue; //Skip mouse buttons
 			if (i == SYS_BTN_OSD_KTGL+2 && (cur_map[i] == cur_map[i-1])) continue;
+			if (i >= (int)(sizeof(sdlname_to_mister_idx)/sizeof(char *))) continue;
 			const char *sdlname = sdlname_to_mister_idx[i];
 			if (!sdlname) continue;
 			if (cur_map[i])
@@ -403,7 +408,7 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 				{
 					map_parsed = true;
 					fill_map[m_button_num] =  m_button_high ? ((l_button_code << 16) | fill_map[m_button_num]) : ((l_button_code & 0xFFFF)  | fill_map[m_button_num]);
-					if (m_button_num >= SYS_AXIS1_X && m_button_num <= SYS_AXIS_MX)
+					if (m_button_num >= SYS_AXIS1_X && m_button_num <= SYS_AXIS_Y)
 					{
 						fill_map[m_button_num] = l_button_code | 0x20000;
 					}
