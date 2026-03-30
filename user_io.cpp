@@ -3350,6 +3350,10 @@ void user_io_poll()
 							{
 								saturn_fill_blanksave(buffer[disk], lba);
 							}
+							else if (is_3do())
+							{
+								p3do_fill_blanksave(buffer[disk], lba);
+							}
 							else
 							{
 								memset(buffer[disk], -1, sizeof(buffer[disk]));

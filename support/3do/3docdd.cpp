@@ -454,6 +454,10 @@ int p3docdd_t::GetDiscInfo(uint8_t *buf) {
 		buf[offs + 8] = 0;
 	}
 
+	this->lba = 0;
+	ReadData(cd_buf);
+	memcpy(buf+1024, cd_buf, 128);
+
 	return 1;
 }
 
