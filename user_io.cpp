@@ -2863,6 +2863,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		snes_msu_init(name);
 	}
 
+	mdplus_init(name); // MD+ CDDA init
+
 	return 1;
 }
 
@@ -3119,6 +3121,7 @@ void user_io_poll()
 	{
 		if (is_st()) tos_poll();
 		if (is_snes() || is_sgb()) snes_poll();
+		mdplus_poll(); // MD+ CDDA poll
 
 		for (int i = 0; i < 4; i++)
 		{
