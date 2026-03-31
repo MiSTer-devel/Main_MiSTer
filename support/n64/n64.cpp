@@ -1430,10 +1430,9 @@ void n64_poll() {
 	static uint8_t adj = 0;
 
 	if (!poll_timer || CheckTimer(poll_timer)) {
-
 		if (!(loaded && is_fpga_ready(0))) {
 			poll_timer = GetTimer(1000);
-			printf("Waiting for N64 game to be loaded...\n");
+			//printf("Waiting for N64 game to be loaded...\n");
 			return;
 		}
 
