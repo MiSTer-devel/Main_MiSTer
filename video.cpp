@@ -1147,10 +1147,10 @@ static void hdmi_packet_set_data(uint8_t mask, uint8_t offset, uint8_t *data, in
 		}
 		else
 		{
-			for (int i = 0; i < size; i++)
+			res = i2c_smbus_write_block_data(fd, offset, size, data);
+			if (res < 0)
 			{
-				res = i2c_smbus_write_byte_data(fd, offset + i, data[i]);
-				if (res < 0) printf("i2c: SPD register write error (%02X %02x): %d\n", offset + i, data[i], res);
+				printf("i2c: packet block write error (%02X len=%d): %d\n", offset, size, res);
 			}
 
 			res = i2c_smbus_write_byte_data(fd, offset + 0x1F, 0x00);
@@ -1351,7 +1351,7 @@ static void hdmi_config_set_csc()
 	uint16_t clipMax = (!ypbpr && hdmi_limited_1) ? 0xEB0 : 0xFFF;
 
 	// pass to HDMI, use 0xA0 to set a mode of [-2 .. 2] per ADV7513 programming guide
-	uint8_t csc_data[] = {
+	uint8_t csc_coeff_data[] = {
 		0x18, (uint8_t)(ypbpr ? 0x86 : (0b10100000 | (((csc_int16[0] >> 8) & 0b00011111)))),  // csc Coefficients, Channel A
 		0x19, (uint8_t)(ypbpr ? 0xDF : (csc_int16[0] & 0xff)),
 		0x1A, (uint8_t)(ypbpr ? 0x1A : (csc_int16[1] >> 8)),
@@ -1377,8 +1377,10 @@ static void hdmi_config_set_csc()
 		0x2C, (uint8_t)(ypbpr ? 0x06 : (csc_int16[10] >> 8)),
 		0x2D, (uint8_t)(ypbpr ? 0xDF : (csc_int16[10] & 0xff)),
 		0x2E, (uint8_t)(ypbpr ? 0x07 : (csc_int16[11] >> 8)),
-		0x2F, (uint8_t)(ypbpr ? 0xE7 : (csc_int16[11] & 0xff)),
+		0x2F, (uint8_t)(ypbpr ? 0xE7 : (csc_int16[11] & 0xff))
+	};
 
+	uint8_t csc_clamp_data[] = {
 		0xC0, (uint8_t)(clipMin >> 8), // HDMI limited clamps
 		0xC1, (uint8_t)(clipMin & 0xff),
 		0xC2, (uint8_t)(clipMax >> 8),
@@ -1388,17 +1390,25 @@ static void hdmi_config_set_csc()
 	int fd = i2c_open(0x39, 0);
 	if (fd >= 0)
 	{
-		for (uint i = 0; i < sizeof(csc_data); i += 2)
+		int res;
+
+		// CSC matrix coefficients (0x18–0x2F)
+		res = i2c_smbus_write_block_data(fd, 0x18, sizeof(csc_coeff_data), csc_coeff_data);
+		if (res < 0)
 		{
-			int res = i2c_smbus_write_byte_data(fd, csc_data[i], csc_data[i + 1]);
-			if (res < 0) printf("i2c: write error (%02X %02X): %d\n", csc_data[i], csc_data[i + 1], res);
+			printf("i2c: CSC coeff write error (0x18 len=%zu): %d\n",
+				sizeof(csc_coeff_data), res);
+		}
+
+		// CSC clamp values (0xC0–0xC3)
+		res = i2c_smbus_write_block_data(fd, 0xC0, sizeof(csc_clamp_data), csc_clamp_data);
+		if (res < 0)
+		{
+			printf("i2c: CSC clamp write error (0xC0 len=%zu): %d\n",
+				sizeof(csc_clamp_data), res);
 		}
 
 		i2c_close(fd);
-	}
-	else
-	{
-		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
 	}
 }
 
