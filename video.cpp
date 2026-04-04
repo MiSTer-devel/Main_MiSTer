@@ -1352,39 +1352,39 @@ static void hdmi_config_set_csc()
 
 	// pass to HDMI, use 0xA0 to set a mode of [-2 .. 2] per ADV7513 programming guide
 	uint8_t csc_coeff_data[] = {
-		0x18, (uint8_t)(ypbpr ? 0x86 : (0b10100000 | (((csc_int16[0] >> 8) & 0b00011111)))),  // csc Coefficients, Channel A
-		0x19, (uint8_t)(ypbpr ? 0xDF : (csc_int16[0] & 0xff)),
-		0x1A, (uint8_t)(ypbpr ? 0x1A : (csc_int16[1] >> 8)),
-		0x1B, (uint8_t)(ypbpr ? 0x3F : (csc_int16[1] & 0xff)),
-		0x1C, (uint8_t)(ypbpr ? 0x1E : (csc_int16[2] >> 8)),
-		0x1D, (uint8_t)(ypbpr ? 0xE2 : (csc_int16[2] & 0xff)),
-		0x1E, (uint8_t)(ypbpr ? 0x07 : (csc_int16[3] >> 8)),
-		0x1F, (uint8_t)(ypbpr ? 0xE7 : (csc_int16[3] & 0xff)),
+		(uint8_t)(ypbpr ? 0x86 : (0b10100000 | (((csc_int16[0] >> 8) & 0b00011111)))),  // csc Coefficients, Channel A
+		(uint8_t)(ypbpr ? 0xDF : (csc_int16[0] & 0xff)),
+		(uint8_t)(ypbpr ? 0x1A : (csc_int16[1] >> 8)),
+		(uint8_t)(ypbpr ? 0x3F : (csc_int16[1] & 0xff)),
+		(uint8_t)(ypbpr ? 0x1E : (csc_int16[2] >> 8)),
+		(uint8_t)(ypbpr ? 0xE2 : (csc_int16[2] & 0xff)),
+		(uint8_t)(ypbpr ? 0x07 : (csc_int16[3] >> 8)),
+		(uint8_t)(ypbpr ? 0xE7 : (csc_int16[3] & 0xff)),
 
-		0x20, (uint8_t)(ypbpr ? 0x04 : (csc_int16[4] >> 8)),  // csc Coefficients, Channel B
-		0x21, (uint8_t)(ypbpr ? 0x1C : (csc_int16[4] & 0xff)),
-		0x22, (uint8_t)(ypbpr ? 0x08 : (csc_int16[5] >> 8)),
-		0x23, (uint8_t)(ypbpr ? 0x11 : (csc_int16[5] & 0xff)),
-		0x24, (uint8_t)(ypbpr ? 0x01 : (csc_int16[6] >> 8)),
-		0x25, (uint8_t)(ypbpr ? 0x91 : (csc_int16[6] & 0xff)),
-		0x26, (uint8_t)(ypbpr ? 0x01 : (csc_int16[7] >> 8)),
-		0x27, (uint8_t)(ypbpr ? 0x00 : (csc_int16[7] & 0xff)),
+		(uint8_t)(ypbpr ? 0x04 : (csc_int16[4] >> 8)),  // csc Coefficients, Channel B
+		(uint8_t)(ypbpr ? 0x1C : (csc_int16[4] & 0xff)),
+		(uint8_t)(ypbpr ? 0x08 : (csc_int16[5] >> 8)),
+		(uint8_t)(ypbpr ? 0x11 : (csc_int16[5] & 0xff)),
+		(uint8_t)(ypbpr ? 0x01 : (csc_int16[6] >> 8)),
+		(uint8_t)(ypbpr ? 0x91 : (csc_int16[6] & 0xff)),
+		(uint8_t)(ypbpr ? 0x01 : (csc_int16[7] >> 8)),
+		(uint8_t)(ypbpr ? 0x00 : (csc_int16[7] & 0xff)),
 
-		0x28, (uint8_t)(ypbpr ? 0x1D : (csc_int16[8] >> 8)),  // csc Coefficients, Channel C
-		0x29, (uint8_t)(ypbpr ? 0xAE : (csc_int16[8] & 0xff)),
-		0x2A, (uint8_t)(ypbpr ? 0x1B : (csc_int16[9] >> 8)),
-		0x2B, (uint8_t)(ypbpr ? 0x73 : (csc_int16[9] & 0xff)),
-		0x2C, (uint8_t)(ypbpr ? 0x06 : (csc_int16[10] >> 8)),
-		0x2D, (uint8_t)(ypbpr ? 0xDF : (csc_int16[10] & 0xff)),
-		0x2E, (uint8_t)(ypbpr ? 0x07 : (csc_int16[11] >> 8)),
-		0x2F, (uint8_t)(ypbpr ? 0xE7 : (csc_int16[11] & 0xff))
+		(uint8_t)(ypbpr ? 0x1D : (csc_int16[8] >> 8)),  // csc Coefficients, Channel C
+		(uint8_t)(ypbpr ? 0xAE : (csc_int16[8] & 0xff)),
+		(uint8_t)(ypbpr ? 0x1B : (csc_int16[9] >> 8)),
+		(uint8_t)(ypbpr ? 0x73 : (csc_int16[9] & 0xff)),
+		(uint8_t)(ypbpr ? 0x06 : (csc_int16[10] >> 8)),
+		(uint8_t)(ypbpr ? 0xDF : (csc_int16[10] & 0xff)),
+		(uint8_t)(ypbpr ? 0x07 : (csc_int16[11] >> 8)),
+		(uint8_t)(ypbpr ? 0xE7 : (csc_int16[11] & 0xff))
 	};
 
 	uint8_t csc_clamp_data[] = {
-		0xC0, (uint8_t)(clipMin >> 8), // HDMI limited clamps
-		0xC1, (uint8_t)(clipMin & 0xff),
-		0xC2, (uint8_t)(clipMax >> 8),
-		0xC3, (uint8_t)(clipMax & 0xff)
+		(uint8_t)(clipMin >> 8), // HDMI limited clamps
+		(uint8_t)(clipMin & 0xff),
+		(uint8_t)(clipMax >> 8),
+		(uint8_t)(clipMax & 0xff)
 	};
 
 	int fd = i2c_open(0x39, 0);
