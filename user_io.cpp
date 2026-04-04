@@ -2731,12 +2731,22 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			hexdump(buf, 16, 0);
 			user_io_file_tx_data(buf, 512);
 
-			//strip original SNES ROM header if present (not used)
-			if ((bytes2send % 1024) == 512)
-			{
-				bytes2send -= 512;
-				FileReadSec(&f, buf);
+			uint32_t rom_size = 0;
+			uint8_t *rom = snes_get_mirrored_rom(&f, &rom_size);
+			if (rom) {
+				uint32_t remaining = rom_size;
+				uint32_t sent = 0;
+				const uint32_t chunk_size = 4096;
+				while (remaining) {
+					uint32_t chunk = (remaining > chunk_size) ? chunk_size : remaining;
+					ProgressMessage("Loading", f.name, sent, rom_size);
+					user_io_file_tx_data(rom + sent, chunk);
+					sent += chunk;
+					remaining -= chunk;
+				}
+				free(rom);
 			}
+			dosend = 0;
 		}
 	}
 
