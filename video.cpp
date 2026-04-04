@@ -2991,7 +2991,7 @@ static void spd_config_update()
 {
 	if (use_freesync_spd) return;
 
-	if (cfg.direct_video)
+	if (cfg.direct_video && cfg.dv1_enable)
 	{
 		// Custom SPD IF for additional DV1 metadata
 		VideoInfo *vi = &current_video_info;

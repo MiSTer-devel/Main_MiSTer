@@ -137,6 +137,7 @@ static const ini_var_t ini_vars[] =
 	{ "AUTOFIRE_RATES", (void *)(&(cfg.autofire_rates)), STRING, 0, sizeof(cfg.autofire_rates) - 1 },
 	{ "AUTOFIRE_ON_DIRECTIONS", (void *)(&(cfg.autofire_on_directions)), UINT8, 0, 1 },
 	{ "SCREENSHOT_IMAGE_FORMAT", (void *)(&(cfg.screenshot_image_format)), STRING, 0, sizeof(cfg.screenshot_image_format) - 1 },
+	{ "DV1_ENABLE", (void *)(&(cfg.dv1_enable)), UINT8, 0, 1 },
 
 };
 
@@ -602,6 +603,7 @@ void cfg_parse()
 	cfg_error_count = 0;
 	strcpy(cfg.autofire_rates, "10,15,30");
 	strcpy(cfg.screenshot_image_format, "png");
+	cfg.dv1_enable = 1;
 	
 	ini_parse(altcfg(), video_get_core_mode_name(1));
 	if (has_video_sections && !using_video_section)
