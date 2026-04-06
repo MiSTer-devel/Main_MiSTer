@@ -1130,7 +1130,7 @@ static void hdmi_packet_enable(uint8_t mask, bool enable)
 
 static void hdmi_packet_set_data(uint8_t mask, uint8_t offset, uint8_t *data, int size)
 {
-	if (!data)
+	if (!data || size <= 0)
 	{
 		hdmi_packet_enable(mask, 0);
 		return;
@@ -1149,10 +1149,19 @@ static void hdmi_packet_set_data(uint8_t mask, uint8_t offset, uint8_t *data, in
 		}
 		else
 		{
-			for (int i = 0; i < size; i++)
+			if (size == 1)
 			{
-				res = i2c_smbus_write_byte_data(fd, offset + i, data[i]);
-				if (res < 0) printf("i2c: SPD register write error (%02X %02x): %d\n", offset + i, data[i], res);
+				res = i2c_smbus_write_byte_data(fd, offset, data[0]);
+				if (res < 0) printf("i2c: SPD register write error (%02X %02x): %d\n", offset, data[0], res);
+			}
+			else
+			{
+				res = i2c_smbus_write_block_data(fd, offset, size, data);
+				if (res < 0)
+				{
+					printf("i2c: SPD register block write error (offset=%02X len=%d): %d\n", offset, size, res);
+					hexdump(data, size, 0);
+				}
 			}
 
 			res = i2c_smbus_write_byte_data(fd, offset + 0x1F, 0x00);
