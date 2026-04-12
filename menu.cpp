@@ -593,11 +593,7 @@ static uint32_t menu_key_get(void)
 			else if(menustate < MENU_PROHIB_BTPAIR1 || menustate > MENU_PROHIB_BTPAIR2) menustate = MENU_BTPAIR;
 		}
 
-		if (!but && last_but && !longpress_consumed) 
-		{
-			c = (KEY_F12 | (user_io_osd_is_visible() ? 0 : UPSTROKE));
-			ignore_osd_release = false;
-		}
+		if (!but && last_but && !longpress_consumed) c = KEY_F12 | UPSTROKE;
 
 		if (!but) longpress_consumed = 0;
 		last_but = but;
@@ -1280,7 +1276,7 @@ void HandleUI(void)
 			}
 			break;
 		case KEY_F12 | UPSTROKE:
-			if (!user_io_osd_is_visible() && !ignore_osd_release)
+			if (!ignore_osd_release)
 				menu = true;
 			ignore_osd_release = false;
 			if(video_fb_state()) video_menu_bg(user_io_status_get("[3:1]"));
