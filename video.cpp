@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <math.h>
+#include <time.h>
 
 #include "hardware.h"
 #include "user_io.h"
@@ -1128,14 +1129,25 @@ static void hdmi_packet_enable(uint8_t mask, bool enable)
 	}
 }
 
+static bool spd_dv_update_failed = false;
+
 static void hdmi_packet_set_data(uint8_t mask, uint8_t offset, uint8_t *data, int size)
 {
+	// certain qmtech boards have issues with i2c, causing excessive blocking
+	// if we see this happen once, we disable future spd updates.
+	struct timespec start_ts = {};
+	struct timespec end_ts = {};
+
+	bool timer_started = false;
+	
+	timer_started = (clock_gettime(CLOCK_MONOTONIC, &start_ts) == 0);
+
 	if (!data || size <= 0)
 	{
 		hdmi_packet_enable(mask, 0);
 		return;
 	}
-
+	
 	int fd = i2c_open(0x38, 0);
 	if (fd >= 0)
 	{
@@ -1172,6 +1184,19 @@ static void hdmi_packet_set_data(uint8_t mask, uint8_t offset, uint8_t *data, in
 	else
 	{
 		hdmi_packet_enable(mask, 0);
+	}
+	
+	// timer finish
+	if (timer_started)
+	{
+		clock_gettime(CLOCK_MONOTONIC, &end_ts);
+		int64_t elapsed_ms = (int64_t)(end_ts.tv_sec - start_ts.tv_sec) * 1000LL;
+		elapsed_ms += (end_ts.tv_nsec - start_ts.tv_nsec) / 1000000LL;
+		if (elapsed_ms >= 32) // never seen it go above 1ms when functioning, 32ms is probably way too generous
+		{
+			spd_dv_update_failed = true;
+			printf("i2c: Detected slow SPD update (elapsed time: %lld ms), disabling future updates to prevent blocking\n", elapsed_ms);
+		}
 	}
 }
 
@@ -3006,10 +3031,17 @@ static void set_yc_mode()
 
 static void spd_config_update()
 {
-	if (use_freesync_spd) return;
+	// non-dv spd only needs sent once
+	static bool non_dv_spd_initialized = false;
+
+	// spd_dv_update gets set if a SPD update takes excessively long - workaround for
+	// certain qmtech boards with potentially bad hardware
+	if (spd_dv_update_failed || use_freesync_spd) return;
 
 	if (cfg.direct_video)
 	{
+		static uint8_t last_spd_dv1_data[31] = {0};
+
 		// Custom SPD IF for additional DV1 metadata
 		VideoInfo *vi = &current_video_info;
 		if (!vi->width) return;
@@ -3039,9 +3071,19 @@ static void spd_config_update()
 			name++;
 		}
 
-		hdmi_spd_config(data);
+		// only send SPD update if changed
+		for (int i = 0; i < 31; i++)
+		{
+			if (data[i] != last_spd_dv1_data[i])
+			{
+				memcpy(last_spd_dv1_data, data, 31);
+				hdmi_spd_config(data);
+				break;
+			}
+		}
+		//hdmi_spd_config(data);
 	}
-	else
+	else if (!non_dv_spd_initialized)
 	{
 		// Standard SPD IF
 		uint8_t data[31] = {
@@ -3061,8 +3103,9 @@ static void spd_config_update()
 
 		// Source Information (see ANSI/CTA-861-I, Table 35 - Source Product Description InfoFrame Data Byte 25)
 		data[28] = 0x08; // Type: Game
-
+		
 		hdmi_spd_config(data);
+		non_dv_spd_initialized = true;
 	}
 }
 
