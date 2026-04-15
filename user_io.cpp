@@ -2659,6 +2659,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	user_io_set_download(1, load_addr ? bytes2send : 0);
 
 	int dosend = 1;
+	file_crc = 0;
 
 	int snes_file = SNES_FILE_RAW;
 	if (is_snes() && bytes2send && !load_addr)
@@ -2735,6 +2736,9 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			uint32_t rom_size = 0;
 			uint8_t *rom = snes_get_mirrored_rom(&f, &rom_size);
 			if (rom) {
+				uint32_t orig_size = (f.size & 512) ? f.size - 512 : f.size;
+				file_crc = crc32(0, rom, orig_size);
+
 				uint32_t remaining = rom_size;
 				uint32_t sent = 0;
 				const uint32_t chunk_size = 4096;
@@ -2751,7 +2755,6 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		}
 	}
 
-	file_crc = 0;
 	uint32_t skip = bytes2send & 0x3FF; // skip possible header up to 1023 bytes
 
 	int use_progress = 1; // (bytes2send > (1024 * 1024)) ? 1 : 0;
