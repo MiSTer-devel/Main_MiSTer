@@ -1516,6 +1516,7 @@ static void hdmi_config_init()
 
 		0xBB, 0x00,				// ADI required Write.
 		0xDE, 0x9C,				// ADI required Write.
+		0xE2, 0x01,				// Power down the CEC.
 		0xE4, 0x60,				// ADI required Write.
 		0xFA, 0x7D,				// Nbr of times to search for good phase
 
@@ -4110,5 +4111,4 @@ int video_get_rotated()
 {
   return current_video_info.rotated;
 }
-
 
