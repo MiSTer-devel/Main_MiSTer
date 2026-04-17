@@ -230,6 +230,18 @@ static uint32_t load_addr = 0;
 static int32_t  bt_timer = 0;
 static uint8_t joymap_confirm_armed = 0;
 
+enum
+{
+	MENU_SYSTEM_SUB_STORAGE = 0,
+	MENU_SYSTEM_SUB_KBDMAP,
+	MENU_SYSTEM_SUB_JOYPAD_MAP,
+	MENU_SYSTEM_SUB_MOUSE_MAP,
+	MENU_SYSTEM_SUB_SCRIPTS,
+	MENU_SYSTEM_SUB_HELP,
+	MENU_SYSTEM_SUB_REBOOT,
+	MENU_SYSTEM_SUB_EXIT
+};
+
 static bool osd_unlocked = 1;
 static char osd_code_entry[32];
 static uint32_t osd_lock_timer = 0;
@@ -6878,20 +6890,20 @@ void HandleUI(void)
 			}
 		}
 		OsdWrite(m++, "");
-		OsdWrite(m++, " Remap keyboard            \x16", menusub == 1);
-		OsdWrite(m++, " Define joypad buttons     \x16", menusub == 2);
-		OsdWrite(m++, " Define mouse buttons      \x16", menusub == 3);
-		OsdWrite(m++, " Scripts                   \x16", menusub == 4);
-		OsdWrite(m++, " Help                      \x16", menusub == 5);
+		OsdWrite(m++, " Remap keyboard            \x16", menusub == MENU_SYSTEM_SUB_KBDMAP);
+		OsdWrite(m++, " Define joypad buttons     \x16", menusub == MENU_SYSTEM_SUB_JOYPAD_MAP);
+		OsdWrite(m++, " Define mouse buttons      \x16", menusub == MENU_SYSTEM_SUB_MOUSE_MAP);
+		OsdWrite(m++, " Scripts                   \x16", menusub == MENU_SYSTEM_SUB_SCRIPTS);
+		OsdWrite(m++, " Help                      \x16", menusub == MENU_SYSTEM_SUB_HELP);
 		OsdWrite(m++, "");
 		cr = m;
-		OsdWrite(m++, " Reboot (hold \x16 cold reboot)", menusub == 6);
+		OsdWrite(m++, " Reboot (hold \x16 cold reboot)", menusub == MENU_SYSTEM_SUB_REBOOT);
 		sysinfo_timer = 0;
 
 		reboot_req = 0;
 
 		while(m < OsdGetSize()-1) OsdWrite(m++, "");
-		OsdWrite(15, STD_EXIT, menusub == 7);
+		OsdWrite(15, STD_EXIT, menusub == MENU_SYSTEM_SUB_EXIT);
 		menustate = MENU_SYSTEM2;
 		break;
 
@@ -6909,23 +6921,23 @@ void HandleUI(void)
 				if (getStorage(1) || isUSBMounted()) setStorage(!getStorage(1));
 				break;
 
-			case 1:
+			case MENU_SYSTEM_SUB_KBDMAP:
 				start_map_setting(0);
 				menustate = MENU_KBDMAP;
 				menusub = 0;
 				break;
 
-			case 2:
+			case MENU_SYSTEM_SUB_JOYPAD_MAP:
 				set_menu_mouse_map(0);
 				menustate = MENU_JOYSYSMAP;
 				break;
 
-			case 3:
+			case MENU_SYSTEM_SUB_MOUSE_MAP:
 				set_menu_mouse_map(1);
 				menustate = MENU_JOYSYSMAP;
 				break;
 
-			case 4:
+			case MENU_SYSTEM_SUB_SCRIPTS:
 				{
 					uint8_t confirm[32] = {};
 					int match = 0;
@@ -6952,13 +6964,13 @@ void HandleUI(void)
 				}
 				break;
 
-			case 5:
+			case MENU_SYSTEM_SUB_HELP:
 				strcpy(Selected_tmp, DOCS_DIR);
 				FileCreatePath(Selected_tmp);
 				SelectFile(Selected_tmp, "PDFTXTMD ", SCANO_DIR | SCANO_TXT, MENU_DOC_FILE_SELECTED, MENU_NONE1);
 				break;
 
-			case 6:
+			case MENU_SYSTEM_SUB_REBOOT:
 				{
 					reboot_req = 1;
 
@@ -7170,7 +7182,7 @@ void HandleUI(void)
 				video_menu_bg(user_io_status_get("[3:1]"));
 				video_fb_enable(0);
 				menustate = MENU_SYSTEM1;
-				menusub = 3;
+				menusub = MENU_SYSTEM_SUB_SCRIPTS;
 				OsdClear();
 				OsdEnable(DISABLE_KEYBOARD);
 			}
@@ -7295,7 +7307,7 @@ void HandleUI(void)
 				else
 				{
 					menustate = MENU_SYSTEM1;
-					menusub = 3;
+					menusub = MENU_SYSTEM_SUB_SCRIPTS;
 				}
 			}
 		}

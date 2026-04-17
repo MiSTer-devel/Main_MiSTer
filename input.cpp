@@ -1483,8 +1483,48 @@ static advancedButtonMap *mapping_store = NULL;
 
 static uint32_t tmp_axis[4];
 static int tmp_axis_n = 0;
+static uint8_t tmp_axis_stage_count[6] = {};
 static uint16_t mapping_last_axis = 0;
 static int mapping_key_mapped = 0;
+
+static int get_tmp_axis_stage_index(int pos)
+{
+	if (pos < -6 || pos > -1) return -1;
+	return pos + 6;
+}
+
+static void sync_menu_tmp_axes()
+{
+	if (!is_menu() || menu_mouse_map || mapping_dev < 0) return;
+
+	memcpy(&input[mapping_dev].mmap[SYS_AXIS1_X], tmp_axis, sizeof(tmp_axis));
+	memcpy(&input[mapping_dev].map[SYS_AXIS1_X], tmp_axis, sizeof(tmp_axis));
+	input[mapping_dev].mmap[SYS_AXIS_X] = (tmp_axis_n >= 2) ? tmp_axis[0] : 0;
+	input[mapping_dev].mmap[SYS_AXIS_Y] = (tmp_axis_n >= 2) ? tmp_axis[1] : 0;
+	input[mapping_dev].map[SYS_AXIS_X] = input[mapping_dev].mmap[SYS_AXIS_X];
+	input[mapping_dev].map[SYS_AXIS_Y] = input[mapping_dev].mmap[SYS_AXIS_Y];
+}
+
+static void record_menu_tmp_axis_stage()
+{
+	const int idx = get_tmp_axis_stage_index(mapping_button);
+	if (idx >= 0) tmp_axis_stage_count[idx] = tmp_axis_n;
+}
+
+static void restore_menu_tmp_axis_stage(int pos)
+{
+	const int idx = get_tmp_axis_stage_index(pos);
+	if (idx < 0) return;
+
+	tmp_axis_n = tmp_axis_stage_count[idx];
+	if (tmp_axis_n > (int)(sizeof(tmp_axis) / sizeof(tmp_axis[0]))) tmp_axis_n = sizeof(tmp_axis) / sizeof(tmp_axis[0]);
+	for (int i = tmp_axis_n; i < (int)(sizeof(tmp_axis) / sizeof(tmp_axis[0])); i++) tmp_axis[i] = 0;
+
+	// Re-enter the menu detector as a joypad path; keyboard selection will switch it back on input.
+	mapping_type = 1;
+	mapping_last_axis = 0;
+	sync_menu_tmp_axes();
+}
 
 static int grabbed = 1;
 
@@ -1670,17 +1710,20 @@ int step_back_map_setting()
 {
 	if (!mapping || mapping_type > 1 || mapping_dev < 0) return 0;
 
-	int min_pos = (is_menu() && menu_mouse_map) ? SYS_BTN_A : 0;
+	int min_pos = is_menu() ? (menu_mouse_map ? SYS_BTN_A : -6) : 0;
 	int pos = mapping_button;
 
 	if (pos >= mapping_count) pos = mapping_count - 1;
 	else pos--;
+
+	if (is_menu() && !menu_mouse_map && mapping_type == 0 && pos < 0) pos = -6;
 
 	while (pos >= min_pos && !is_menu() && pos >= SYS_BTN_A && !strcmp(joy_bnames[pos - SYS_BTN_A], "-")) pos--;
 	if (pos < min_pos) return 0;
 
 	clear_mapping_slot_for_pos(input[mapping_dev].map, pos);
 	mapping_button = pos;
+	if (is_menu() && !menu_mouse_map && pos < 0) restore_menu_tmp_axis_stage(pos);
 	clear_mapping_current_input();
 	mapping_clear = 0;
 	mapping_finish = 0;
@@ -1715,6 +1758,7 @@ void start_map_setting(int cnt, int set, advancedButtonMap *abm_store)
 	mapping_clear = 0;
 	mapping_finish = 0;
 	tmp_axis_n = 0;
+	memset(tmp_axis_stage_count, 0, sizeof(tmp_axis_stage_count));
 
 	if (mapping_type <= 1 && is_menu()) mapping_button = menu_mouse_map ? SYS_BTN_A : -6;
 	memset(tmp_axis, 0, sizeof(tmp_axis));
@@ -3717,12 +3761,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 		if (is_menu() && mapping_type <= 1 && mapping_dev >= 0 && !menu_mouse_map)
 		{
-			memcpy(&input[mapping_dev].mmap[SYS_AXIS1_X], tmp_axis, sizeof(tmp_axis));
-			memcpy(&input[mapping_dev].map[SYS_AXIS1_X], tmp_axis, sizeof(tmp_axis));
-			input[mapping_dev].mmap[SYS_AXIS_X] = (tmp_axis_n >= 2) ? tmp_axis[0] : 0;
-			input[mapping_dev].mmap[SYS_AXIS_Y] = (tmp_axis_n >= 2) ? tmp_axis[1] : 0;
-			input[mapping_dev].map[SYS_AXIS_X] = input[mapping_dev].mmap[SYS_AXIS_X];
-			input[mapping_dev].map[SYS_AXIS_Y] = input[mapping_dev].mmap[SYS_AXIS_Y];
+			if (mapping_button < 0) record_menu_tmp_axis_stage();
+			sync_menu_tmp_axes();
 		}
 	}
 	else
