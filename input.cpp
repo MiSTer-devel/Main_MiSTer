@@ -1642,7 +1642,7 @@ static const char *get_map_hold_feedback_text(int action)
 	switch (action)
 	{
 	case MAP_HOLD_SKIP:
-		return "Skipping";
+		return "Skip/Unmap";
 	case MAP_HOLD_BACK:
 		return "Previous";
 	case MAP_HOLD_SAVE:

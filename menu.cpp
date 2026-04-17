@@ -258,7 +258,7 @@ const char *config_autofire_msg[] = { "        AUTOFIRE OFF", "        AUTOFIRE 
 const char *config_joystick_mode[] = { "Digital", "Analog", "CD32", "Analog" };
 const char *config_button_turbo_msg[] = { "OFF", "FAST", "MEDIUM", "SLOW" };
 const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
-const char *joy_button_map[] = { "\x11", "\x10", "\x98", "\x97", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "Menu", "   Stick 1: Analog \x11", "    Stick 1: Analog \x98", "   Mouse emu X: Tilt \x11", "   Mouse emu Y: Tilt \x98" };
+const char *joy_button_map[] = { "\x11", "\x10", "\x98", "\x97", "A", "B", "X", "Y", "L", "R", "SELECT", "START", "KBD TOGGLE", "Menu", "   Stick 1: Analog \x11", "    Stick 1: Analog \x98", "   Mouse emu X: Tilt \x11", "   Mouse emu Y: Tilt \x98" };
 const char *joy_ana_map[] = { "DPAD test: Press \x11", "DPAD test: Press \x98", "Stick 1: Analog \x11", "Stick 1: Analog \x98", "Stick 2: Analog \x11", "Stick 2: Analog \x98" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem", "UDP", "SNI"};
@@ -1088,7 +1088,7 @@ void build_advanced_map_summary(advancedButtonMap *abm, char *dest_str, size_t d
 
 static int is_map_nav_hold_feedback(const char *feedback)
 {
-	return feedback && (!strcmp(feedback, "Skipping") || !strcmp(feedback, "Previous"));
+	return feedback && (!strcmp(feedback, "Skip/Unmap") || !strcmp(feedback, "Previous"));
 }
 
 static void build_map_shoulder_row(char *row, int left_top_fill, int left_bottom_fill, int right_top_fill, int right_bottom_fill)
@@ -1122,11 +1122,11 @@ static void build_map_shoulder_row(char *row, int left_top_fill, int left_bottom
 static void draw_map_gamepad(int button, int highlight)
 {
 	char line4[25];
+	char line6[25] = "      \x89  \x99         X  \x89";
+	char line7[25] = "      \x89 \x9A\x9B\x9C  \x9F \x9F  Y A \x89";
+	char line8[25] = "      \x89  \x9D         B  \x89";
 	int left_top_fill = 0, left_bottom_fill = 0, right_top_fill = 0, right_bottom_fill = 0;
 	const char *line5 = "      \x86\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x88";
-	const char *line6 = "      \x89  \x99         \x9E  \x89";
-	const char *line7 = "      \x89 \x9A\x9B\x9C  \x9F \x9F  \x9E \x9E \x89";
-	const char *line8 = "      \x89  \x9D         \x9E  \x89";
 	const char *line9 = "      \x8b\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x87\x8a";
 
 	if (highlight)
@@ -1137,16 +1137,16 @@ static void draw_map_gamepad(int button, int highlight)
 			case SYS_MAP_BTN_L2 + 1:      right_top_fill = 1; break;
 			case SYS_BTN_L:               left_bottom_fill = 1; break;
 			case SYS_BTN_R:               right_bottom_fill = 1; break;
-			case SYS_BTN_UP:              line6 = "      \x89  \xA2         \x9E  \x89"; break;
-			case SYS_BTN_X:               line6 = "      \x89  \x99         \xA0  \x89"; break;
-			case SYS_BTN_A:               line7 = "      \x89 \x9A\x9B\x9C  \x9F \x9F  \x9E \xA0 \x89"; break;
-			case SYS_BTN_Y:               line7 = "      \x89 \x9A\x9B\x9C  \x9F \x9F  \xA0 \x9E \x89"; break;
-			case SYS_BTN_LEFT:            line7 = "      \x89 \xA3\x9B\x9C  \x9F \x9F  \x9E \x9E \x89"; break;
-			case SYS_BTN_RIGHT:           line7 = "      \x89 \x9A\x9B\xA5  \x9F \x9F  \x9E \x9E \x89"; break;
-			case SYS_MAP_BTN_SELECT:      line7 = "      \x89 \x9A\x9B\x9C  \xA1 \x9F  \x9E \x9E \x89"; break;
-			case SYS_MAP_BTN_SELECT + 1:  line7 = "      \x89 \x9A\x9B\x9C  \x9F \xA1  \x9E \x9E \x89"; break;
-			case SYS_BTN_DOWN:            line8 = "      \x89  \xA6         \x9E  \x89"; break;
-			case SYS_BTN_B:               line8 = "      \x89  \x9D         \xA0  \x89"; break;
+			case SYS_BTN_UP:              line6[9] = 0xA2; break;
+			case SYS_BTN_X:               memcpy(line6 + 18, "(X)", 3); break;
+			case SYS_BTN_Y:               memcpy(line7 + 17, "(Y)", 3); break;
+			case SYS_BTN_A:               memcpy(line7 + 19, "(A)", 3); break;
+			case SYS_BTN_LEFT:            line7[8] = 0xA3; break;
+			case SYS_BTN_RIGHT:           line7[10] = 0xA5; break;
+			case SYS_MAP_BTN_SELECT:      line7[13] = 0xA1; break;
+			case SYS_MAP_BTN_SELECT + 1:  line7[15] = 0xA1; break;
+			case SYS_BTN_DOWN:            line8[9] = 0xA6; break;
+			case SYS_BTN_B:               memcpy(line8 + 18, "(B)", 3); break;
 		}
 	}
 
@@ -4223,6 +4223,7 @@ void HandleUI(void)
 	case MENU_JOYDIGMAP1:
 		{
 			int show_combo_hint = 0;
+			int combo_hint_below_prompt = 0;
 			int save_now = finish;
 			char id_line[64] = { 0 };
 			const char *subtitle = 0;
@@ -4301,16 +4302,16 @@ void HandleUI(void)
 				switch (get_map_button())
 				{
 					case SYS_BTN_A:
-						p = "SNES A";
+						p = "A";
 						break;
 					case SYS_BTN_B:
-						p = "SNES B";
+						p = "B";
 						break;
 					case SYS_BTN_X:
-						p = "SNES X";
+						p = "X";
 						break;
 					case SYS_BTN_Y:
-						p = "SNES Y";
+						p = "Y";
 						break;
 				}
 			}
@@ -4368,13 +4369,22 @@ void HandleUI(void)
 			else if (show_combo_hint)
 			{
 				strcpy(info_line, "   (can use 2-button combo)");
+				combo_hint_below_prompt = 1;
 			}
 
 			OsdWrite(1, id_line, 0, 0);
 			if (info_line[0])
 			{
-				OsdWrite(2, info_line, 0, 0);
-				OsdWrite(3, s, 0, 0);
+				if (combo_hint_below_prompt)
+				{
+					OsdWrite(2, s, 0, 0);
+					OsdWrite(3, info_line, 0, 0);
+				}
+				else
+				{
+					OsdWrite(2, info_line, 0, 0);
+					OsdWrite(3, s, 0, 0);
+				}
 			}
 			else
 			{
