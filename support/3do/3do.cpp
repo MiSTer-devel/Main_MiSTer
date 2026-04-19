@@ -40,7 +40,7 @@ void p3do_poll()
 			DisableIO();
 
 		p3docdd.Process(&p3do_time_mode);
-		poll_timer += 6;
+		poll_timer += 3;
 
 		uint16_t* s = (uint16_t*)p3docdd.GetStatus();
 		spi_uio_cmd_cont(UIO_CD_SET);
