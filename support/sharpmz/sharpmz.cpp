@@ -90,7 +90,7 @@ int sharpmz_file_write(fileTYPE *file, const char *fileName)
     char          fullPath[1024];
 
     strcpy(directoryPath,SHARPMZ_CORE_NAME);
-    findPrefixDir(directoryPath, sizeof(directoryPath));
+    findGamesDir(directoryPath, sizeof(directoryPath));
 
 
 
