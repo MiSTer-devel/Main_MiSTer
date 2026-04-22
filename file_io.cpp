@@ -967,7 +967,7 @@ static int findPrefixDir(const char *prefix, bool no_prefix_check, char *dir, si
 	//
 	// no_prefix_check enables the legacy layout where system folders lived
 	// directly at the storage root (e.g. /media/fat/SNES). That layout is
-	// no longer recommended; prefer <prefix>/<dir> for new folder types.
+	// no longer recommended; prefer <prefix>/<dir>.
 	static char temp_dir[1024];
 
 	// Usb<0..5>
