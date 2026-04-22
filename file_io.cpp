@@ -953,31 +953,35 @@ uint32_t getFileType(const char *name)
 	return st.st_mode;
 }
 
-int findPrefixDir(char *dir, size_t dir_len)
+static int findPrefixDir(const char *prefix, bool no_prefix_check, char *dir, size_t dir_len)
 {
 	// Searches for the core's folder in the following order:
-	// /media/usb<0..5>
-	// /media/usb<0..5>/games
-	// /media/network
-	// /media/network/games
-	// /media/fat/cifs
-	// /media/fat/cifs/games
-	// /media/fat
-	// /media/fat/games/
-	// if the core folder is not found anywhere,
-	// it will be created in /media/fat/games/<dir>
+	// /media/usb<0..5>/<dir>          (only if no_prefix_check)
+	// /media/usb<0..5>/<prefix>/<dir>
+	// /media/network/<dir>            (only if no_prefix_check)
+	// /media/network/<prefix>/<dir>
+	// /media/fat/cifs/<dir>           (only if no_prefix_check)
+	// /media/fat/cifs/<prefix>/<dir>
+	// /media/fat/<dir>                (only if no_prefix_check)
+	// /media/fat/<prefix>/<dir>
+	//
+	// no_prefix_check enables the legacy layout where system folders lived
+	// directly at the storage root (e.g. /media/fat/SNES). That layout is
+	// no longer recommended; prefer <prefix>/<dir>.
 	static char temp_dir[1024];
 
 	// Usb<0..5>
 	for (int x = 0; x < 6; x++) {
-		snprintf(temp_dir, 1024, "%s%d/%s", "../usb", x, dir);
-		if (isPathDirectory(temp_dir)) {
-			printf("Found USB dir: %s\n", temp_dir);
-			strncpy(dir, temp_dir, dir_len);
-			return 1;
+		if (no_prefix_check) {
+			snprintf(temp_dir, 1024, "%s%d/%s", "../usb", x, dir);
+			if (isPathDirectory(temp_dir)) {
+				printf("Found USB dir: %s\n", temp_dir);
+				strncpy(dir, temp_dir, dir_len);
+				return 1;
+			}
 		}
 
-		snprintf(temp_dir, 1024, "%s%d/%s/%s", "../usb", x, GAMES_DIR, dir);
+		snprintf(temp_dir, 1024, "%s%d/%s/%s", "../usb", x, prefix, dir);
 		if (isPathDirectory(temp_dir)) {
 			printf("Found USB dir: %s\n", temp_dir);
 			strncpy(dir, temp_dir, dir_len);
@@ -986,15 +990,17 @@ int findPrefixDir(char *dir, size_t dir_len)
 	}
 
 	// Network share in /media/network/
-	snprintf(temp_dir, 1024, "%s/%s", "../network", dir);
-	if (isPathDirectory(temp_dir)) {
-		printf("Found network dir: %s\n", temp_dir);
-		strncpy(dir, temp_dir, dir_len);
-		return 1;
+	if (no_prefix_check) {
+		snprintf(temp_dir, 1024, "%s/%s", "../network", dir);
+		if (isPathDirectory(temp_dir)) {
+			printf("Found network dir: %s\n", temp_dir);
+			strncpy(dir, temp_dir, dir_len);
+			return 1;
+		}
 	}
 
-	// Network share in /media/network/games
-	snprintf(temp_dir, 1024, "%s/%s/%s", "../network", GAMES_DIR, dir);
+	// Network share in /media/network/<prefix>
+	snprintf(temp_dir, 1024, "%s/%s/%s", "../network", prefix, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found network dir: %s\n", temp_dir);
 		strncpy(dir, temp_dir, dir_len);
@@ -1002,15 +1008,17 @@ int findPrefixDir(char *dir, size_t dir_len)
 	}
 
 	// CIFS_DIR directory in /media/fat/cifs
-	snprintf(temp_dir, 1024, "%s/%s", CIFS_DIR, dir);
-	if (isPathDirectory(temp_dir)) {
-		printf("Found CIFS dir: %s\n", temp_dir);
-		strncpy(dir, temp_dir, dir_len);
-		return 1;
+	if (no_prefix_check) {
+		snprintf(temp_dir, 1024, "%s/%s", CIFS_DIR, dir);
+		if (isPathDirectory(temp_dir)) {
+			printf("Found CIFS dir: %s\n", temp_dir);
+			strncpy(dir, temp_dir, dir_len);
+			return 1;
+		}
 	}
 
-	// CIFS_DIR/GAMES_DIR directory in /media/fat/cifs/games
-	snprintf(temp_dir, 1024, "%s/%s/%s", CIFS_DIR, GAMES_DIR, dir);
+	// CIFS_DIR/<prefix> directory in /media/fat/cifs/<prefix>
+	snprintf(temp_dir, 1024, "%s/%s/%s", CIFS_DIR, prefix, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found CIFS dir: %s\n", temp_dir);
 		strncpy(dir, temp_dir, dir_len);
@@ -1018,13 +1026,13 @@ int findPrefixDir(char *dir, size_t dir_len)
 	}
 
 	// media/fat
-	if (isPathDirectory(dir)) {
+	if (no_prefix_check && isPathDirectory(dir)) {
 		printf("Found existing: %s\n", dir);
 		return 1;
 	}
 
-	// media/fat/GAMES_DIR
-	snprintf(temp_dir, 1024, "%s/%s", GAMES_DIR, dir);
+	// media/fat/<prefix>
+	snprintf(temp_dir, 1024, "%s/%s", prefix, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found dir: %s\n", temp_dir);
 		strncpy(dir, temp_dir, dir_len);
@@ -1034,9 +1042,19 @@ int findPrefixDir(char *dir, size_t dir_len)
 	return 0;
 }
 
+int findGamesDir(char *dir, size_t dir_len)
+{
+	return findPrefixDir(GAMES_DIR, true, dir, dir_len);
+}
+
+int findDocsDir(char *dir, size_t dir_len)
+{
+	return findPrefixDir(DOCS_DIR, false, dir, dir_len);
+}
+
 void prefixGameDir(char *dir, size_t dir_len)
 {
-	if (!findPrefixDir(dir, dir_len))
+	if (!findGamesDir(dir, dir_len))
 	{
 		static char temp_dir[1024];
 
