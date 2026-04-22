@@ -955,7 +955,7 @@ uint32_t getFileType(const char *name)
 
 static int findPrefixDir(const char *prefix, bool no_prefix_check, char *dir, size_t dir_len)
 {
-	// Searches for dir in the following order per storage location:
+	// Searches for the core's folder in the following order:
 	// /media/usb<0..5>/<dir>          (only if no_prefix_check)
 	// /media/usb<0..5>/<prefix>/<dir>
 	// /media/network/<dir>            (only if no_prefix_check)
