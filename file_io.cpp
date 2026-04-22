@@ -2271,40 +2271,48 @@ int findGameAsset(char *path, size_t path_len, const char *rom_path, uint32_t ro
 		strcat(path, ext);
 	}
 
-	if (is_psx() && !validAsset(path, validator))
+	if (validAsset(path, validator)) {
+		return 1;
+	}
+	else if (is_psx())
 	{
 		if (!findPsxAsset(path, path_len, rom_path, ext, core_dir, validator))
 		{
 			return 0;
 		}
 	}
-	else if (!validAsset(path, validator))
+	else
 	{
-		if (!(pcecd_using_cd() || is_megacd()) || !findAssetInSameDir(path, path_len, rom_path, ext) || !validAsset(path, validator))
+		if (pcecd_using_cd() || is_megacd())
 		{
-			const char *rom_name = strrchr(rom_path, '/');
-			if (rom_name)
+			if (findAssetInSameDir(path, path_len, rom_path, ext) && validAsset(path, validator))
 			{
-				snprintf(path, path_len, "%s%s", pcecd_using_cd() ? pcecd_dir : core_dir, rom_name);
-				char *p = strrchr(path, '.');
-				if (p) *p = 0;
-				if (pcecd_using_cd() || is_megacd()) strcat(path, " []");
-				strcat(path, ext);
-
-				if (!validAsset(path, validator))
-				{
-					if (!findAssetByCrc(path, path_len, romcrc, ext, core_dir) || !validAsset(path, validator))
-					{
-						return 0;
-					}
-				}
+				return 1;
 			}
-			else
+		}
+
+		const char *rom_name = strrchr(rom_path, '/');
+		if (rom_name)
+		{
+			snprintf(path, path_len, "%s%s", pcecd_using_cd() ? pcecd_dir : core_dir, rom_name);
+			char *p = strrchr(path, '.');
+			if (p) *p = 0;
+			if (pcecd_using_cd() || is_megacd()) strcat(path, " []");
+			strcat(path, ext);
+
+			if (!validAsset(path, validator))
 			{
 				if (!findAssetByCrc(path, path_len, romcrc, ext, core_dir) || !validAsset(path, validator))
 				{
 					return 0;
 				}
+			}
+		}
+		else
+		{
+			if (!findAssetByCrc(path, path_len, romcrc, ext, core_dir) || !validAsset(path, validator))
+			{
+				return 0;
 			}
 		}
 	}
