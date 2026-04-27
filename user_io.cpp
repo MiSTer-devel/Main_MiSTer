@@ -28,6 +28,7 @@
 #include "scaler.h"
 #include "miniz.h"
 #include "cheats.h"
+#include "game_docs.h"
 #include "video.h"
 #include "audio.h"
 #include "shmem.h"
@@ -956,10 +957,12 @@ static void parse_config()
 					else if (is_megacd())
 					{
 						mcd_set_image(idx, str);
+						game_docs_init(str, 0);
 					}
 					else if (is_pce())
 					{
 						pcecd_set_image(idx, str);
+						game_docs_init(str, 0);
 						cheats_init(str, 0);
 					}
 					else
@@ -1595,7 +1598,8 @@ void user_io_init(const char *path, const char *xml)
 							}
 						}
 
-						// cheats for boot file
+						// cheats & game docs for boot file
+						game_docs_init("", user_io_get_file_crc());
 						if (user_io_use_cheats()) cheats_init("", user_io_get_file_crc());
 					}
 

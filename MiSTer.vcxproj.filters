@@ -121,6 +121,9 @@
     <ClCompile Include="cheats.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="game_docs.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="scaler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -346,6 +349,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="cheats.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="game_docs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="scaler.h">

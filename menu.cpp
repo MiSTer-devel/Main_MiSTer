@@ -56,6 +56,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "input.h"
 #include "battery.h"
 #include "cheats.h"
+#include "game_docs.h"
 #include "video.h"
 #include "audio.h"
 #include "joymapping.h"
@@ -1115,6 +1116,7 @@ void HandleUI(void)
 	static unsigned long flash_timer = 0;
 	static int flash_state = 0;
 	static uint32_t dip_submenu;
+	static uint32_t manual_submenu;
 	static int need_reset = 0;
 	static int flat = 0;
 	static int menusub_parent = 0;
@@ -1850,6 +1852,7 @@ void HandleUI(void)
 			OsdSetTitle(page ? title : user_io_get_core_name());
 
 			dip_submenu = -1;
+			manual_submenu = -1;
 
 			int last_space = 0;
 
@@ -2022,6 +2025,17 @@ void HandleUI(void)
 						// check for 'C'heats
 						if (p[0] == 'C')
 						{
+							if (game_docs_manual_available())
+							{
+								manual_submenu = selentry;
+								MenuWrite(entry, " Manual", menusub == selentry, 0);
+
+								// add bit in menu mask
+								menumask = (menumask << 1) | 1;
+								entry++;
+								selentry++;
+							}
+
 							substrcpy(s, p, 1);
 							if (strlen(s))
 							{
@@ -2228,7 +2242,15 @@ void HandleUI(void)
 				select = 1;
 			}
 
-			if (dip_submenu == menusub && select)
+			if (manual_submenu == menusub)
+			{
+				if (select)
+				{
+					snprintf(selPath, sizeof(selPath), "%s", game_docs_get_manual());
+					menustate = MENU_DOC_FILE_SELECTED;
+				}
+			}
+			else if (dip_submenu == menusub && select)
 			{
 				menustate = MENU_ARCADE_DIP1;
 				menusub = 0;
@@ -2285,6 +2307,12 @@ void HandleUI(void)
 					{
 						strcpy(addon, p);
 						continue;
+					}
+
+					if (p[0] == 'C' && game_docs_manual_available())
+					{
+						if (entry == menusub) break;
+						entry++;
 					}
 
 					if (entry == menusub) break;
@@ -2586,8 +2614,11 @@ void HandleUI(void)
 						uint32_t n64_crc;
 						if (!n64_rom_tx(selPath, idx, load_addr, n64_crc)) 
                 Info("failed to load ROM");
-						else if (user_io_use_cheats() && !store_name) 
-                cheats_init(selPath, n64_crc);
+						else if (!store_name)
+						{
+							game_docs_init(selPath, n64_crc);
+							if (user_io_use_cheats()) cheats_init(selPath, n64_crc);
+						}
 					}
 					else if (is_c64() || is_c128())
 					{
@@ -2628,7 +2659,11 @@ void HandleUI(void)
 					else
 					{
 						user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr);
-						if (user_io_use_cheats() && !store_name) cheats_init(selPath, user_io_get_file_crc());
+						if (!store_name)
+						{
+							game_docs_init(selPath, user_io_get_file_crc());
+							if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
+						}
 					}
 				}
 
@@ -2688,15 +2723,18 @@ void HandleUI(void)
 			else if (is_megacd())
 			{
 				mcd_set_image(ioctl_index, selPath);
+				game_docs_init(selPath, 0);
 			}
 			else if (is_pce())
 			{
 				pcecd_set_image(ioctl_index, selPath);
+				game_docs_init(selPath, 0);
 				cheats_init(selPath, 0);
 			}
 			else if (is_psx() && ioctl_index == 1)
 			{
 				psx_mount_cd(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1), ioctl_index, selPath);
+				game_docs_init(selPath, 0);
 				cheats_init(selPath, 0);
 			}
 			else if (is_cdi())
