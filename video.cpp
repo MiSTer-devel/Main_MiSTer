@@ -2050,8 +2050,8 @@ static void set_vrr_mode()
 	{
 		if (use_vrr != VRR_MISTER)
 		{
-			vrr_min_fr = cfg.vrr_min_framerate;
-			vrr_max_fr = cfg.vrr_max_framerate;
+			vrr_min_fr = cfg.refresh_min;
+			vrr_max_fr = cfg.refresh_max;
 		}
 
 		if (!vrr_min_fr) vrr_min_fr = vrr_modes[use_vrr].min_fr;
@@ -3067,6 +3067,8 @@ static void spd_config_update()
 	}
 }
 
+#define fr_constrain(fr) ((cfg.refresh_min && fr < cfg.refresh_min) ? cfg.refresh_min : (cfg.refresh_max && fr > cfg.refresh_max) ? cfg.refresh_max : fr)
+
 void video_mode_adjust()
 {
 	static bool force = false;
@@ -3144,8 +3146,9 @@ void video_mode_adjust()
 			int fr = 1000000000 / video_info.vtime;
 			int fr_min = (fr - 10) / 10;
 			int fr_max = (fr + 19) / 10;
-			vrr_modes[VRR_MISTER].min_fr = fr_min;
-			vrr_modes[VRR_MISTER].max_fr = fr_max;
+			vrr_modes[VRR_MISTER].min_fr = fr_constrain(fr_min);
+			vrr_modes[VRR_MISTER].max_fr = fr_constrain(fr_max);
+			printf("*** video_mode_adjust: fr=%d.%d, fr_min=%d, fr_max=%d\n", fr / 10, fr % 10, vrr_modes[VRR_MISTER].min_fr, vrr_modes[VRR_MISTER].max_fr);
 			video_set_mode(&v_def, 0);
 			user_io_send_buttons(1);
 			force = true;
