@@ -7726,9 +7726,9 @@ void PrintDirectory(int expand)
 	if (expand)
 	{
 		int k = flist_iFirstEntry() + OsdGetSize() - 1;
-		if (flist_nDirEntries() && k == flist_iSelectedEntry() && k <= flist_nDirEntries()
+		if (flist_nDirEntries() && k == flist_iSelectedEntry() && k < flist_nDirEntries()
 			&& strlen(flist_DirItem(k)->altname) > 28 && !(!cfg.rbf_hide_datecode && flist_DirItem(k)->datecode[0])
-			&& flist_DirItem(k)->de.d_type != DT_DIR)
+			&& flist_DirItem(k)->de.d_type != DT_DIR && k < flist_nDirEntries() - 1)
 		{
 			//make room for last expanded line
 			flist_iFirstEntryInc();
@@ -7831,7 +7831,7 @@ void PrintDirectory(int expand)
 		OsdWriteOffset(i, s, sel, 0, 0, leftchar);
 		i++;
 
-		if (sel && len2)
+		if (sel && len2 && i < OsdGetSize())
 		{
 			len = strlen(flist_DirItem(k)->altname);
 			strcpy(s+1, flist_DirItem(k)->altname + len - len2);
