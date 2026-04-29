@@ -3564,6 +3564,9 @@ static Imlib_Image load_bg()
 	return NULL;
 }
 
+static Imlib_Image *bg = 0;
+static Imlib_Image menubg = 0;
+
 static int bg_has_picture = 0;
 extern uint8_t  _binary_logo_png_start[], _binary_logo_png_end[];
 void video_menu_bg(int n, int idle)
@@ -3613,14 +3616,13 @@ void video_menu_bg(int n, int idle)
 
 		menu_bgn = (menu_bgn == 1) ? 2 : 1;
 
-		static Imlib_Image menubg = 0;
 		static Imlib_Image bg1 = 0, bg2 = 0;
 		if (!bg1) bg1 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 1)));
 		if (!bg1) printf("Warning: bg1 is 0\n");
 		if (!bg2) bg2 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 2)));
 		if (!bg2) printf("Warning: bg2 is 0\n");
 
-		Imlib_Image *bg = (menu_bgn == 1) ? &bg1 : &bg2;
+		bg = (menu_bgn == 1) ? &bg1 : &bg2;
 		//printf("*bg = %p\n", *bg);
 
 		static Imlib_Image curtain = 0;
@@ -3772,6 +3774,25 @@ void video_menu_bg(int n, int idle)
 	}
 
 	video_fb_enable(0);
+}
+
+void dbg_draw_cursor(int x, int y)
+{
+	static int c = 0;
+	if (menubg)
+	{
+		imlib_context_set_image(*bg);
+		int src_w = imlib_image_get_width();
+		int src_h = imlib_image_get_height();
+
+		x = (((src_w - 20)*x) / 255) + 10;
+		y = (((src_h - 20)*y) / 255) + 10;
+
+		c = (c + 1) % 3;
+
+		imlib_context_set_color(c == 0 ? 255 : 0, c == 1 ? 255 : 0, c == 2 ? 255 : 0, 255);
+		imlib_image_fill_ellipse(x, y, 10, 10);
+	}
 }
 
 int video_bg_has_picture()

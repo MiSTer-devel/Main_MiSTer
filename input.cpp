@@ -4797,6 +4797,7 @@ int input_test(int getchar)
 	struct input_absinfo absinfo;
 	struct input_event ev;
 	static uint32_t timeout = 0;
+	static int stick_debug = 0;
 
 	if (touch_rel && CheckTimer(touch_rel))
 	{
@@ -5372,6 +5373,15 @@ int input_test(int getchar)
 									if (ioctl(pool[i].fd, EVIOCGABS(ev.code), &absinfo) < 0) memset(&absinfo, 0, sizeof(absinfo));
 									else
 									{
+										if (stick_debug & 4)
+										{
+											static int x = 0, y = 0;
+											if (ev.code == 0 || ev.code == 3 || ev.code == 2) x = (255 * (ev.value - absinfo.minimum)) / (absinfo.maximum - absinfo.minimum);
+											if (ev.code == 1 || ev.code == 4 || ev.code == 5) y = (255 * (ev.value - absinfo.minimum)) / (absinfo.maximum - absinfo.minimum);
+											dbg_draw_cursor(x, y);
+											if (ev.code <= 5) return 0;
+										}
+
 										//DS4 specific: touchpad as lightgun
 										if (input[i].quirk == QUIRK_DS4TOUCH && ev.code <= 1)
 										{
@@ -5546,6 +5556,13 @@ int input_test(int getchar)
 										//keyboard, buttons
 									case EV_KEY:
 										printf("%04x:%04x:%02d P%d Input event: type=EV_KEY, code=%d(0x%x), value=%d\n", input[dev].vid, input[dev].pid, i, input[dev].num, ev.code, ev.code, ev.value);
+										if (ev.code == 0x13d || ev.code == 0x13e || ev.code == 0x138 || ev.code == 0x139)
+										{
+											int mask = 1 << (ev.code & 1);
+											if (!ev.value) stick_debug &= ~mask;
+											else stick_debug |= mask;
+											if ((stick_debug & 3) == 3) stick_debug ^= 4;
+										}
 										break;
 
 									case EV_REL:
