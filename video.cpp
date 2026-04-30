@@ -1980,7 +1980,7 @@ static void set_vrr_mode()
 
 	float vrateh = 100000000;
 
-	if (cfg.vrr_mode == 0)
+	if (cfg.vrr_mode == 0 || is_menu())
 	{
 		if (last_vrr_mode != 0)
 		{
