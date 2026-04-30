@@ -44,6 +44,7 @@ bool update_advanced_state(int devnum, uint16_t evcode, int evstate);
 char joy_bnames[NUMBUTTONS][32] = {};
 int  joy_bcount = 0;
 static struct pollfd pool[NUMDEV + 3];
+int  xbe2_shift = 0;
 
 static int ev2amiga[] =
 {
@@ -1086,6 +1087,266 @@ static int ev2archie[] =
 	NONE  //255 ???
 };
 
+static const int shifted[256] =
+{
+	0, //0   KEY_RESERVED
+	0, //1   KEY_ESC
+	KEY_F1, //2   KEY_1
+	KEY_F2, //3   KEY_2
+	KEY_F3, //4   KEY_3
+	KEY_F4, //5   KEY_4
+	KEY_F5, //6   KEY_5
+	KEY_F6, //7   KEY_6
+	KEY_F7, //8   KEY_7
+	KEY_F8, //9   KEY_8
+	KEY_F9, //10  KEY_9
+	KEY_F10, //11  KEY_0
+	0, //12  KEY_MINUS
+	0, //13  KEY_EQUAL
+	KEY_DELETE, //14  KEY_BACKSPACE
+	0, //15  KEY_TAB
+	KEY_HOME, //16  KEY_Q
+	KEY_UP, //17  KEY_W
+	KEY_END, //18  KEY_E
+	KEY_PAGEUP, //19  KEY_R
+	0, //20  KEY_T
+	0, //21  KEY_Y
+	0, //22  KEY_U
+	KEY_INSERT, //23  KEY_I
+	KEY_F11, //24  KEY_O
+	KEY_F12, //25  KEY_P
+	0, //26  KEY_LEFTBRACE
+	0, //27  KEY_RIGHTBRACE
+	KEY_ESC, //28  KEY_ENTER
+	0, //29  KEY_LEFTCTRL
+	KEY_LEFT, //30  KEY_A
+	KEY_DOWN, //31  KEY_S
+	KEY_RIGHT, //32  KEY_D
+	KEY_PAGEDOWN, //33  KEY_F
+	0, //34  KEY_G
+	0, //35  KEY_H
+	0, //36  KEY_J
+	0, //37  KEY_K
+	0, //38  KEY_L
+	0, //39  KEY_SEMICOLON  ;
+	0, //40  KEY_APOSTROPHE
+	0, //41  KEY_GRAVE
+	0, //42  KEY_LEFTSHIFT
+	0, //43  KEY_BACKSLASH
+	0, //44  KEY_Z
+	0, //45  KEY_X
+	0, //46  KEY_C
+	0, //47  KEY_V
+	0, //48  KEY_B
+	0, //49  KEY_N
+	0, //50  KEY_M
+	0, //51  KEY_COMMA
+	0, //52  KEY_DOT
+	0, //53  KEY_SLASH
+	0, //54  KEY_RIGHTSHIFT
+	0, //55  KEY_KPASTERISK
+	0, //56  KEY_LEFTALT
+	KEY_TAB, //57  KEY_SPACE
+	0, //58  KEY_CAPSLOCK
+	0, //59  KEY_F1
+	0, //60  KEY_F2
+	0, //61  KEY_F3
+	0, //62  KEY_F4
+	0, //63  KEY_F5
+	0, //64  KEY_F6
+	0, //65  KEY_F7
+	0, //66  KEY_F8
+	0, //67  KEY_F9
+	0, //68  KEY_F10
+	0, //69  KEY_NUMLOCK
+	0, //70  KEY_SCROLLLOCK
+	0, //71  KEY_KP7
+	0, //72  KEY_KP8
+	0, //73  KEY_KP9
+	0, //74  KEY_KPMINUS
+	0, //75  KEY_KP4
+	0, //76  KEY_KP5
+	0, //77  KEY_KP6
+	0, //78  KEY_KPPLUS
+	0, //79  KEY_KP1
+	0, //80  KEY_KP2
+	0, //81  KEY_KP3
+	0, //82  KEY_KP0
+	0, //83  KEY_KPDOT
+	0, //84  ???
+	0, //85  KEY_ZENKAKU
+	0, //86  KEY_102ND
+	0, //87  KEY_F11
+	0, //88  KEY_F12
+	0, //89  KEY_RO
+	0, //90  KEY_KATAKANA
+	0, //91  KEY_HIRAGANA
+	0, //92  KEY_HENKAN
+	0, //93  KEY_KATAKANA
+	0, //94  KEY_MUHENKAN
+	0, //95  KEY_KPJPCOMMA
+	0, //96  KEY_KPENTER
+	0, //97  KEY_RIGHTCTRL
+	0, //98  KEY_KPSLASH
+	0, //99  KEY_SYSRQ
+	0, //100 KEY_RIGHTALT
+	0, //101 KEY_LINEFEED
+	0, //102 KEY_HOME
+	KEY_PAGEUP, //103 KEY_UP
+	0, //104 KEY_PAGEUP
+	KEY_HOME, //105 KEY_LEFT
+	KEY_END, //106 KEY_RIGHT
+	0, //107 KEY_END
+	KEY_PAGEDOWN, //108 KEY_DOWN
+	0, //109 KEY_PAGEDOWN
+	0, //110 KEY_INSERT
+	0, //111 KEY_DELETE
+	0, //112 KEY_MACRO
+	0, //113 KEY_MUTE
+	0, //114 KEY_VOLUMEDOWN
+	0, //115 KEY_VOLUMEUP
+	0, //116 KEY_POWER
+	0, //117 KEY_KPEQUAL
+	0, //118 KEY_KPPLUSMINUS
+	0, //119 KEY_PAUSE
+	0, //120 KEY_SCALE
+	0, //121 KEY_KPCOMMA
+	0, //122 KEY_HANGEUL
+	0, //123 KEY_HANJA
+	0, //124 KEY_YEN
+	0, //125 KEY_LEFTMETA
+	0, //126 KEY_RIGHTMETA
+	0, //127 KEY_COMPOSE
+	0, //128 KEY_STOP
+	0, //129 KEY_AGAIN
+	0, //130 KEY_PROPS
+	0, //131 KEY_UNDO
+	0, //132 KEY_FRONT
+	0, //133 KEY_COPY
+	0, //134 KEY_OPEN
+	0, //135 KEY_PASTE
+	0, //136 KEY_FIND
+	0, //137 KEY_CUT
+	0, //138 KEY_HELP
+	0, //139 KEY_MENU
+	0, //140 KEY_CALC
+	0, //141 KEY_SETUP
+	0, //142 KEY_SLEEP
+	0, //143 KEY_WAKEUP
+	0, //144 KEY_FILE
+	0, //145 KEY_SENDFILE
+	0, //146 KEY_DELETEFILE
+	0, //147 KEY_XFER
+	0, //148 KEY_PROG1
+	0, //149 KEY_PROG2
+	0, //150 KEY_WWW
+	0, //151 KEY_MSDOS
+	0, //152 KEY_SCREENLOCK
+	0, //153 KEY_DIRECTION
+	0, //154 KEY_CYCLEWINDOWS
+	0, //155 KEY_MAIL
+	0, //156 KEY_BOOKMARKS
+	0, //157 KEY_COMPUTER
+	0, //158 KEY_BACK
+	0, //159 KEY_FORWARD
+	0, //160 KEY_CLOSECD
+	0, //161 KEY_EJECTCD
+	0, //162 KEY_EJECTCLOSECD
+	0, //163 KEY_NEXTSONG
+	0, //164 KEY_PLAYPAUSE
+	0, //165 KEY_PREVIOUSSONG
+	0, //166 KEY_STOPCD
+	0, //167 KEY_RECORD
+	0, //168 KEY_REWIND
+	0, //169 KEY_PHONE
+	0, //170 KEY_ISO
+	0, //171 KEY_CONFIG
+	0, //172 KEY_HOMEPAGE
+	0, //173 KEY_REFRESH
+	0, //174 KEY_EXIT
+	0, //175 KEY_MOVE
+	0, //176 KEY_EDIT
+	0, //177 KEY_SCROLLUP
+	0, //178 KEY_SCROLLDOWN
+	0, //179 KEY_KPLEFTPAREN
+	0, //180 KEY_KPRIGHTPAREN
+	0, //181 KEY_NEW
+	0, //182 KEY_REDO
+	0, //183 KEY_F13
+	0, //184 KEY_F14
+	0, //185 KEY_F15
+	0, //186 KEY_F16
+	0, //187 KEY_F17
+	0, //188 KEY_F18
+	0, //189 KEY_F19
+	0, //190 KEY_F20
+	0, //191 KEY_F21
+	0, //192 KEY_F22
+	0, //193 KEY_F23
+	0, //194 U-mlaut on DE mapped to backslash
+	0, //195 ???
+	0, //196 ???
+	0, //197 ???
+	0, //198 ???
+	0, //199 ???
+	0, //200 KEY_PLAYCD
+	0, //201 KEY_PAUSECD
+	0, //202 KEY_PROG3
+	0, //203 KEY_PROG4
+	0, //204 KEY_DASHBOARD
+	0, //205 KEY_SUSPEND
+	0, //206 KEY_CLOSE
+	0, //207 KEY_PLAY
+	0, //208 KEY_FASTFORWARD
+	0, //209 KEY_BASSBOOST
+	0, //210 KEY_PRINT
+	0, //211 KEY_HP
+	0, //212 KEY_CAMERA
+	0, //213 KEY_SOUND
+	0, //214 KEY_QUESTION
+	0, //215 KEY_EMAIL
+	0, //216 KEY_CHAT
+	0, //217 KEY_SEARCH
+	0, //218 KEY_CONNECT
+	0, //219 KEY_FINANCE
+	0, //220 KEY_SPORT
+	0, //221 KEY_SHOP
+	0, //222 KEY_ALTERASE
+	0, //223 KEY_CANCEL
+	0, //224 KEY_BRIGHT_DOWN
+	0, //225 KEY_BRIGHT_UP
+	0, //226 KEY_MEDIA
+	0, //227 KEY_SWITCHVIDEO
+	0, //228 KEY_DILLUMTOGGLE
+	0, //229 KEY_DILLUMDOWN
+	0, //230 KEY_DILLUMUP
+	0, //231 KEY_SEND
+	0, //232 KEY_REPLY
+	0, //233 KEY_FORWARDMAIL
+	0, //234 KEY_SAVE
+	0, //235 KEY_DOCUMENTS
+	0, //236 KEY_BATTERY
+	0, //237 KEY_BLUETOOTH
+	0, //238 KEY_WLAN
+	0, //239 KEY_UWB
+	0, //240 KEY_UNKNOWN
+	0, //241 KEY_VIDEO_NEXT
+	0, //242 KEY_VIDEO_PREV
+	0, //243 KEY_BRIGHT_CYCLE
+	0, //244 KEY_BRIGHT_AUTO
+	0, //245 KEY_DISPLAY_OFF
+	0, //246 KEY_WWAN
+	0, //247 KEY_RFKILL
+	0, //248 KEY_MICMUTE
+	0, //249 ???
+	0, //250 ???
+	0, //251 ???
+	0, //252 ???
+	0, //253 ???
+	0, //254 ???
+	0  //255 ???
+};
+
 
 uint8_t ps2_kbd_scan_set = 2;
 uint32_t get_ps2_code(uint16_t key)
@@ -1133,6 +1394,7 @@ enum QUIRK
 	QUIRK_LIGHTGUN,
 	QUIRK_LIGHTGUN_MOUSE,
 	QUIRK_WHEEL,
+	QUIRK_SHIFT,
 };
 
 typedef struct
@@ -5195,6 +5457,10 @@ int input_test(int getchar)
 							snprintf(input[n].idstr, sizeof(input[n].idstr), "%04x_%04x", input[n].vid, input[n].pid);
 						}
 
+						//XBox Elite 2 controller, use paddles as a special shift for chatpad accessory.
+						//Works only through cable or USB dongle.
+						if (input[n].vid == 0x045e && input[n].pid == 0x0b00) input[n].quirk = QUIRK_SHIFT;
+
 						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
 
 						n++;
@@ -5300,7 +5566,6 @@ int input_test(int getchar)
 				{
 					if (!input[i].mouse)
 					{
-
 						memset(&ev, 0, sizeof(ev));
 						if (read(pool[i].fd, &ev, sizeof(ev)) == sizeof(ev))
 						{
@@ -5463,6 +5728,10 @@ int input_test(int getchar)
 										else continue;
 									}
 								}
+
+								// Emulate keys absent on chatpad
+								if (input[dev].quirk == QUIRK_SHIFT && cfg.xbe2_shift && ev.code == cfg.xbe2_shift) xbe2_shift = ev.value;
+								if (xbe2_shift && ev.code <= 255 && shifted[ev.code]) ev.code = shifted[ev.code];
 
 								if (input[dev].quirk == QUIRK_VCS && !vcs_proc(i, &ev)) continue;
 
