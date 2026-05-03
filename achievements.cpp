@@ -192,6 +192,7 @@ static int g_show_progress_popups      = 1; // 1 = show progress indicator popup
 static int g_show_progress_name        = 1; // 1 = include achievement name in progress popup
 static int g_leaderboards_enabled      = 1; // 1 = handle leaderboard events and tracker popups
 static int g_hardcore                  = 0; // 1 = hardcore mode (disables cheats & save states)
+static int g_force_hardcore            = 0; // 1 = force hardcore mode even if core doesn't support it
 static int g_stall_recovery            = 0; // 1 = enable OptionC stall recovery (disabled by default)
 static int g_rtquery_enabled           = 1; // 1 = enable realtime queries for AddAddress resolution
 static int g_recollect_interval        = 600; // frames between address re-collections (PSX default 600, SNES 18000)
@@ -529,6 +530,8 @@ static int ra_load_credentials(void)
 				g_leaderboards_enabled = atoi(val);
 		} else if (!strcasecmp(key, "hardcore")) {
 			g_hardcore = atoi(val);
+		} else if (!strcasecmp(key, "force_hardcore")) {
+			g_force_hardcore = atoi(val);
 		} else if (!strcasecmp(key, "stall_recovery")) {
 			g_stall_recovery = atoi(val);
 		} else if (!strcasecmp(key, "rtquery_enabled") ||
@@ -553,10 +556,10 @@ static int ra_load_credentials(void)
 	}
 
 	RA_LOG("Credentials loaded: user=%s password=***(%zu chars)", g_ra_user, strlen(g_ra_password));
-	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d leaderboards_enabled=%d hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d debug=%d",
+	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d leaderboards_enabled=%d hardcore=%d force_hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d debug=%d",
                 g_show_challenge_show_popup, g_show_challenge_hide_popup,
                 g_show_progress_popups, g_show_progress_name, g_leaderboards_enabled,
-                g_hardcore, g_stall_recovery, g_rtquery_enabled, g_recollect_interval, g_smart_cache, g_n64_snapshot, g_ra_debug);
+                g_hardcore, g_force_hardcore, g_stall_recovery, g_rtquery_enabled, g_recollect_interval, g_smart_cache, g_n64_snapshot, g_ra_debug);
 	return 1;
 }
 
@@ -1147,7 +1150,7 @@ void achievements_init(void)
 	g_active_handler->init();
 
 	// Apply hardcore FPGA bits immediately so restrictions are active before any game loads
-	if (g_hardcore && g_active_handler->set_hardcore) {
+	if (achievements_hardcore_active() && g_active_handler->set_hardcore) {
 		g_active_handler->set_hardcore(1);
 		RA_LOG("Hardcore: FPGA bits applied at core init for %s", g_active_handler->name);
 	}
@@ -1192,9 +1195,9 @@ void achievements_init(void)
 
 	rc_client_enable_logging(g_client, RC_CLIENT_LOG_LEVEL_VERBOSE, ra_log_callback);
 	rc_client_set_event_handler(g_client, ra_event_handler);
-	int core_protected = g_active_handler && g_active_handler->hardcore_protected;
-	rc_client_set_hardcore_enabled(g_client, g_hardcore && core_protected ? 1 : 0);
-	RA_LOG("Hardcore mode: %s", (g_hardcore && core_protected) ? "ENABLED" : "disabled");
+	int hardcore_active = achievements_hardcore_active();
+	rc_client_set_hardcore_enabled(g_client, hardcore_active ? 1 : 0);
+	RA_LOG("Hardcore mode: %s", hardcore_active ? "ENABLED" : "disabled");
 
 	// Configure User-Agent: "MiSTer/1.0 rcheevos/x.y.z" (updated per-core in achievements_load_game)
 	{
@@ -1342,7 +1345,7 @@ void achievements_load_game(const char *rom_path, uint32_t crc32)
         RA_LOG("--- Game Load Complete, monitoring frames ---");
 
         // Hardcore mode: let handler set console-specific FPGA bits
-        if (g_hardcore && g_active_handler->set_hardcore) {
+        if (achievements_hardcore_active() && g_active_handler->set_hardcore) {
                 g_active_handler->set_hardcore(1);
                 RA_LOG("Hardcore: FPGA bits applied for %s", g_active_handler->name);
         }
@@ -1561,6 +1564,10 @@ void achievements_unload_game(void)
         g_active_handler->reset();
         ra_snes_addrlist_init();
 
+        // Disable FPGA query mailbox polling — no game loaded, no need to poll.
+        // FPGA will stop after next VBlank (reads RA_ARM_CONFIG_OFFSET once per cycle).
+        if (g_ra_map) ra_rtquery_disable(g_ra_map);
+
         // RetroAchievements safety: clear the DDRAM mirror data area so the next
         // game does not see stale bytes from the unloaded game. The header is
         // preserved; only the payload (offset 0x100+) is wiped.
@@ -1670,7 +1677,8 @@ int achievements_active(void)
 
 int achievements_hardcore_active(void)
 {
-	return g_hardcore;
+	if (g_force_hardcore) return 1;
+	return g_hardcore && g_active_handler && g_active_handler->hardcore_protected;
 }
 
 int achievements_stall_recovery_enabled(void)

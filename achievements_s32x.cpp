@@ -197,6 +197,6 @@ const console_handler_t g_console_s32x = {
 .set_hardcore = s32x_set_hardcore,
 .detect_protocol = s32x_detect_protocol,
 .console_id = 10,  // RC_CONSOLE_SEGA_32X
-.name = "S32X",
-.hardcore_protected = 1
+	.name = "S32X",
+	.hardcore_protected = 0
 };

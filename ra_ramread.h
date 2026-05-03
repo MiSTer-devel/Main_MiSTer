@@ -57,6 +57,12 @@ typedef struct __attribute__((packed)) {
 // Flag bits
 #define RA_FLAG_BUSY 0x01
 
+// ARM-written config flags at byte offset 0x40 from RA_DDRAM_PHYS_BASE.
+// The ARM sets these bits; the FPGA reads them once per VBlank to gate features.
+// The FPGA never writes this location, so ARM bits persist across VBlanks.
+#define RA_ARM_CONFIG_OFFSET  0x40   // Byte offset from RA_DDRAM_PHYS_BASE
+#define RA_ARM_CFG_RTQUERY    0x01   // Bit 0: FPGA should poll realtime query mailbox
+
 // Maximum regions supported
 #define RA_MAX_REGIONS 4
 
@@ -124,6 +130,7 @@ typedef struct __attribute__((packed)) {
 
 // Realtime query API — generic, works with any Option C core
 void     ra_rtquery_init(void *map);
+void     ra_rtquery_disable(void *map);  // clears RA_ARM_CFG_RTQUERY so FPGA stops polling
 uint32_t ra_rtquery_read(void *map, uint32_t address, uint32_t num_bytes);
 
 // Address request header at ADDRLIST_OFFSET (ARM writes)

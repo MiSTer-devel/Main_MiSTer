@@ -349,5 +349,5 @@ const console_handler_t g_console_genesis = {
 	.detect_protocol = genesis_detect_protocol,
 	.console_id = 1,  // RC_CONSOLE_MEGA_DRIVE
 	.name = "Genesis",
-	.hardcore_protected = 1
+	.hardcore_protected = 0
 };

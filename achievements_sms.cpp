@@ -182,5 +182,5 @@ const console_handler_t g_console_sms = {
 	.detect_protocol = sms_detect_protocol,
 	.console_id = 11,  // RC_CONSOLE_MASTER_SYSTEM (also handles Game Gear ID 15)
 	.name = "SMS",
-	.hardcore_protected = 1
+	.hardcore_protected = 0
 };
