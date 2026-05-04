@@ -3538,6 +3538,19 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 	return name;
 }
 
+static uint32_t get_random()
+{
+	uint32_t rnd;
+	int rndfd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+	if (rndfd >= 0)
+	{
+		read(rndfd, &rnd, sizeof(rnd));
+		close(rndfd);
+	}
+
+	return rnd;
+}
+
 static Imlib_Image load_bg()
 {
 	const char* fname = "menu.png";
@@ -3563,17 +3576,9 @@ static Imlib_Image load_bg()
 
 		if (PathIsDir(bgdir))
 		{
-			int rndfd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
-			if (rndfd >= 0)
-			{
-				uint32_t rnd;
-				read(rndfd, &rnd, sizeof(rnd));
-				close(rndfd);
-
-				int count = 0;
-				get_file_fromdir(bgdir, -1, &count);
-				if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
-			}
+			int count = 0;
+			get_file_fromdir(bgdir, -1, &count);
+			if (count > 0) fname = get_file_fromdir(bgdir, get_random() % count, &count);
 		}
 	}
 
@@ -3660,7 +3665,7 @@ void video_menu_bg(int n, int idle)
 			int sz = fb_width * fb_height;
 			for (int i = 0; i < sz; i++)
 			{
-				*data++ = 0x9F000000;
+				*data++ = 0x63000000;
 			}
 		}
 
@@ -3774,17 +3779,46 @@ void video_menu_bg(int n, int idle)
 			}
 		}
 
+		if (logo && idle == 4)
+		{
+			imlib_context_set_image(logo);
+
+			int src_w = imlib_image_get_width();
+			int src_h = imlib_image_get_height();
+
+			int dst_w = fb_width / 4;
+			int dst_h = src_h * dst_w / src_w;
+
+			int x = get_random() % (fb_width - dst_w);
+			int y = get_random() % (fb_height - dst_h);
+
+			if (*bg)
+			{
+				imlib_context_set_image(*bg);
+				imlib_blend_image_onto_image(logo, 1,
+					0, 0,             //int source_x, int source_y,
+					src_w, src_h,     //int source_width, int source_height,
+					x, y,             //int destination_x, int destination_y,
+					dst_w, dst_h      //int destination_width, int destination_height
+				);
+			}
+		}
+
 		if (curtain)
 		{
 			if (idle > 1 && *bg)
 			{
 				imlib_context_set_image(*bg);
-				imlib_blend_image_onto_image(curtain, 1,
-					0, 0,                //int source_x, int source_y,
-					fb_width, fb_height, //int source_width, int source_height,
-					0, 0,                //int destination_x, int destination_y,
-					fb_width, fb_height  //int destination_width, int destination_height
-				);
+				int k = (idle == 4) ? 4 : 2;
+				for (int i = 0; i < k; i++)
+				{
+					imlib_blend_image_onto_image(curtain, 1,
+						0, 0,                //int source_x, int source_y,
+						fb_width, fb_height, //int source_width, int source_height,
+						0, 0,                //int destination_x, int destination_y,
+						fb_width, fb_height  //int destination_width, int destination_height
+					);
+				}
 			}
 		}
 		else

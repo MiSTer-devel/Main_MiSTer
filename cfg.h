@@ -81,6 +81,7 @@ typedef struct {
 	uint8_t vrr_vesa_framerate;
 	uint16_t video_off;
 	uint8_t video_off_hdmi;
+	uint8_t video_off_logo;
 	uint8_t disable_autofire;
 	uint8_t video_brightness;
 	uint8_t video_contrast;
