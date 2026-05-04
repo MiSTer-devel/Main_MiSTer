@@ -3069,22 +3069,23 @@ static void spd_config_update()
 
 #define fr_constrain(fr) ((cfg.refresh_min && fr < cfg.refresh_min) ? cfg.refresh_min : (cfg.refresh_max && fr > cfg.refresh_max) ? cfg.refresh_max : fr)
 
-void video_mode_adjust()
+void video_mode_adjust(bool force)
 {
-	static bool force = false;
+	static bool rep_force = false;
+	if (force) rep_force = true;
 
 	VideoInfo video_info;
 
-	const bool vid_changed = get_video_info(force, &video_info);
+	const bool vid_changed = get_video_info(rep_force, &video_info);
+	current_video_info = video_info;
 
-	if (vid_changed || force)
+	if (vid_changed || rep_force)
 	{
-		current_video_info = video_info;
 		show_video_info(&video_info, &v_cur);
 		set_yc_mode();
 		spd_config_update();
 	}
-	force = false;
+	rep_force = false;
 
 	static int menu = 0;
 	int menu_now = menu_present();
@@ -3139,7 +3140,7 @@ void video_mode_adjust()
 
 			video_set_mode(v, Fpix);
 			user_io_send_buttons(1);
-			force = true;
+			rep_force = true;
 		}
 		else if (use_vrr == VRR_MISTER)
 		{
@@ -3151,13 +3152,13 @@ void video_mode_adjust()
 			printf("*** video_mode_adjust: fr=%d.%d, fr_min=%d, fr_max=%d\n", fr / 10, fr % 10, vrr_modes[VRR_MISTER].min_fr, vrr_modes[VRR_MISTER].max_fr);
 			video_set_mode(&v_def, 0);
 			user_io_send_buttons(1);
-			force = true;
+			rep_force = true;
 		}
 		else if (cfg_has_video_sections()) // if we have video sections but aren't updating the resolution for other reasons, then do it here
 		{
 			video_set_mode(&v_def, 0);
 			user_io_send_buttons(1);
-			force = true;
+			rep_force = true;
 		}
 		else
 		{

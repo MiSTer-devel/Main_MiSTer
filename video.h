@@ -57,7 +57,7 @@ int   video_get_rotated();
 
 void video_cfg_reset();
 
-void  video_mode_adjust();
+void  video_mode_adjust(bool force = false);
 
 int   hasAPI1_5();
 
