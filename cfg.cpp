@@ -137,6 +137,7 @@ static const ini_var_t ini_vars[] =
 	{ "AUTOFIRE_ON_DIRECTIONS", (void *)(&(cfg.autofire_on_directions)), UINT8, 0, 1 },
 	{ "SCREENSHOT_IMAGE_FORMAT", (void *)(&(cfg.screenshot_image_format)), STRING, 0, sizeof(cfg.screenshot_image_format) - 1 },
 	{ "XBE2_SHIFT", (void*)(&(cfg.xbe2_shift)), UINT16, 0, 0x22F },
+	{ "SPD_QUIRK", (void*)(&(cfg.spd_quirk)), UINT8, 0, 3 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));

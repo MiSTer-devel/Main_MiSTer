@@ -105,6 +105,7 @@ typedef struct {
 	uint8_t autofire_on_directions;
 	char screenshot_image_format[16];
 	uint16_t xbe2_shift;
+	uint8_t spd_quirk;
 } cfg_t;
 
 extern cfg_t cfg;
