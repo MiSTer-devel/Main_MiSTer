@@ -19,6 +19,10 @@ typedef struct {
 	uint8_t hdmi_audio_96k;
 	uint8_t dvi_mode;
 	uint8_t hdmi_limited;
+	uint8_t hdmi_cec;
+	uint8_t hdmi_cec_sleep;
+	uint8_t hdmi_cec_wake;
+	uint8_t hdmi_cec_input_mode;
 	uint8_t direct_video;
 	uint8_t video_info;
 	float refresh_min;
