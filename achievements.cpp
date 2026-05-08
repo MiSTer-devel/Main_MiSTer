@@ -190,7 +190,9 @@ static int g_show_challenge_show_popup = 1; // 1 = show popup on challenge SHOW 
 static int g_show_challenge_hide_popup = 1; // 1 = show popup on challenge HIDE event
 static int g_show_progress_popups      = 1; // 1 = show progress indicator popups
 static int g_show_progress_name        = 1; // 1 = include achievement name in progress popup
-static int g_leaderboards_enabled      = 1; // 1 = handle leaderboard events and tracker popups
+static int g_leaderboards_enabled      = 1; // [deprecated] fallback only when both new leaderboard popup flags are absent
+static int g_show_leaderboards_updates = 1; // 1 = show STARTED/FAILED/TRACKER SHOW/TRACKER UPDATE popups
+static int g_show_leaderboards_submission = 1; // 1 = show SUBMITTED/SCOREBOARD popups
 static int g_hardcore                  = 0; // 1 = hardcore mode (disables cheats & save states)
 static int g_force_hardcore            = 0; // 1 = force hardcore mode even if core doesn't support it
 static int g_stall_recovery            = 0; // 1 = enable OptionC stall recovery (disabled by default)
@@ -482,6 +484,9 @@ static int ra_load_credentials(void)
 {
 	g_ra_user[0] = '\0';
 	g_ra_password[0] = '\0';
+	int legacy_leaderboards_defined = 0;
+	int show_leaderboards_updates_defined = 0;
+	int show_leaderboards_submission_defined = 0;
 
 	FILE *f = fopen(RA_CFG_PATH, "r");
 	if (!f) {
@@ -524,10 +529,19 @@ static int ra_load_credentials(void)
 		} else if (!strcasecmp(key, "show_progress_popups")) {
 			g_show_progress_popups = atoi(val);
 		} else if (!strcasecmp(key, "show_progress_name")) {
-                        g_show_progress_name = atoi(val);
+			g_show_progress_name = atoi(val);
+		} else if (!strcasecmp(key, "show_leaderboards_updates") ||
+					   !strcasecmp(key, "show-leaderboards-updates")) {
+			g_show_leaderboards_updates = atoi(val);
+			show_leaderboards_updates_defined = 1;
+		} else if (!strcasecmp(key, "show_leaderboards_submission") ||
+					   !strcasecmp(key, "show-leaderboards-submission")) {
+			g_show_leaderboards_submission = atoi(val);
+			show_leaderboards_submission_defined = 1;
 		} else if (!strcasecmp(key, "leaderboards-enabled") ||
 					!strcasecmp(key, "leaderboards_enabled")) {
 				g_leaderboards_enabled = atoi(val);
+				legacy_leaderboards_defined = 1;
 		} else if (!strcasecmp(key, "hardcore")) {
 			g_hardcore = atoi(val);
 		} else if (!strcasecmp(key, "force_hardcore")) {
@@ -550,15 +564,22 @@ static int ra_load_credentials(void)
 	}
 	fclose(f);
 
+	/* Backward compatibility: transfer deprecated value only when both new keys are absent. */
+	if (!show_leaderboards_updates_defined && !show_leaderboards_submission_defined && legacy_leaderboards_defined) {
+		g_show_leaderboards_updates = g_leaderboards_enabled;
+		g_show_leaderboards_submission = g_leaderboards_enabled;
+	}
+
 	if (!g_ra_user[0] || !g_ra_password[0]) {
 		RA_LOG("Credentials incomplete (need both username and password)");
 		return 0;
 	}
 
 	RA_LOG("Credentials loaded: user=%s password=***(%zu chars)", g_ra_user, strlen(g_ra_password));
-	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d leaderboards_enabled=%d hardcore=%d force_hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d debug=%d",
+	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d show_leaderboards_updates=%d show_leaderboards_submission=%d leaderboards_enabled(deprecated)=%d hardcore=%d force_hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d debug=%d",
                 g_show_challenge_show_popup, g_show_challenge_hide_popup,
-                g_show_progress_popups, g_show_progress_name, g_leaderboards_enabled,
+                g_show_progress_popups, g_show_progress_name,
+		g_show_leaderboards_updates, g_show_leaderboards_submission, g_leaderboards_enabled,
                 g_hardcore, g_force_hardcore, g_stall_recovery, g_rtquery_enabled, g_recollect_interval, g_smart_cache, g_n64_snapshot, g_ra_debug);
 	return 1;
 }
@@ -786,7 +807,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 
         case RC_CLIENT_EVENT_LEADERBOARD_STARTED:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard)
+                        if (!g_show_leaderboards_updates || !event->leaderboard)
                                 break;
 
                         RA_LOG("LEADERBOARD STARTED: [%u] %s",
@@ -806,7 +827,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 
         case RC_CLIENT_EVENT_LEADERBOARD_FAILED:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard)
+                        if (!g_show_leaderboards_updates || !event->leaderboard)
                                 break;
 
                         RA_LOG("LEADERBOARD FAILED: [%u] %s",
@@ -825,8 +846,8 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
                 break;
 
         case RC_CLIENT_EVENT_LEADERBOARD_SUBMITTED:
-                {
-                        if (!g_leaderboards_enabled || !event->leaderboard)
+		{
+			if (!g_show_leaderboards_submission || !event->leaderboard)
                                 break;
 
                         RA_LOG("LEADERBOARD SUBMITTED: [%u] %s",
@@ -852,7 +873,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
         case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_SHOW:
         case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_UPDATE:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard_tracker)
+                        if (!g_show_leaderboards_updates || !event->leaderboard_tracker)
                                 break;
 
                         RA_LOG("LEADERBOARD TRACKER: id=%u value=%s",
@@ -869,7 +890,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 
         case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_HIDE:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard_tracker)
+                        if (!g_show_leaderboards_updates || !event->leaderboard_tracker)
                                 break;
 
                         RA_LOG("LEADERBOARD TRACKER HIDE: id=%u",
@@ -879,7 +900,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 
         case RC_CLIENT_EVENT_LEADERBOARD_SCOREBOARD:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard_scoreboard)
+                        if (!g_show_leaderboards_submission || !event->leaderboard_scoreboard)
                                 break;
 
                         RA_LOG("LEADERBOARD SCOREBOARD: id=%u submitted=%s best=%s rank=%u entries=%u",
