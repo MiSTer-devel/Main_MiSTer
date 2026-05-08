@@ -11,6 +11,7 @@
 #include "../../hardware.h"
 #include "../../menu.h"
 #include "../../input.h"
+#include "../../shmem.h"
 
 #include "c64.h"
 
@@ -376,6 +377,9 @@ static int start_sectors[4][85] = {
 	// }
 };
 
+static uint32_t c64_synthesize_gcr_track(int idx, uint8_t track_h, int size);
+static void c64_synthesize_g64_image(int idx, uint32_t phys_addr, uint32_t map_size);
+
 int c64_openGCR(const char *path, fileTYPE *f, int idx)
 {
 	// Return value:
@@ -414,6 +418,25 @@ int c64_openGCR(const char *path, fileTYPE *f, int idx)
 		FileReadAdv(f, gcr_info[idx].spd_map, gcr_info[idx].tracks*4);
 		printf("G64/G71 disk tracks=%d\n", gcr_info[idx].tracks);
 
+		// Map the DDR3 memory on the ARM side and copy full G64 image to ram.
+		// Enables C64 core to fetch track data directly without hps_io:
+		// - improves seek time accuracy
+		// - improves track change skew accuracy
+		// - allows background flush of tracks (via hps_io)
+		// - non blocking for both reads/writes
+		// - downward compatible to all previous C64 cores
+		// - no desync between C64/C1541 while reading/writing
+		//
+		// phys_addr = 0x30000000 (ARM) <=> 29'h06000000 (FPGA)
+		uint32_t phys_addr = 0x30000000 + ((idx & 1) * 0x200000);
+		void* ddram = shmem_map(phys_addr, f->size);
+		if (ddram)
+		{
+			printf("Direct loading G64 to DDR3: %s at 0x%X\n", path, phys_addr);
+			FileLoad(path, ddram, f->size);
+			shmem_unmap(ddram, f->size);
+		}
+
 		return G64_SUPPORT_GCR | G64_SUPPORT_MFM | (gcr_info[idx].tracks > 84 ? G64_SUPPORT_DS : 0);
 	}
 	else
@@ -429,6 +452,12 @@ int c64_openGCR(const char *path, fileTYPE *f, int idx)
 		gcr_info[idx].id[1] = 0;
 		FileReadAdv(f, gcr_info[idx].id, 2);
 		printf("D64/D71 disk id1=%02X, id2=%02X, tracks=%d, sectors=%d\n", gcr_info[idx].id[0], gcr_info[idx].id[1], gcr_info[idx].tracks, gcr_info[idx].sector_map[84]);
+
+		// Convert D64/D71 image to synthesized G64/G71 image in DDR3 Ram
+		// Parallel to hps_io functionality -> fully backwards compatible
+		uint32_t phys_addr = 0x30000000 + ((idx & 1) * 0x200000);
+		uint32_t map_size = 0x200000; // 2MB is enough for a synthesized G71
+		c64_synthesize_g64_image(idx, phys_addr, map_size);
 
 		return G64_SUPPORT_GCR | (gcr_info[idx].tracks > 42 ? G64_SUPPORT_DS : 0);
 	}
@@ -494,6 +523,116 @@ void gcr2bin(uint8_t *gcr, uint8_t *bin)
 	}
 }
 
+static uint32_t c64_synthesize_gcr_track(int idx, uint8_t track_h, int size)
+{
+	uint8_t sec = 0;
+	gcrptr = gcr_buf + 2;
+	for (int ptr = 0; ptr < size; ptr += 256)
+	{
+		gcrcnt = 0;
+		*gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF;
+		bin2gcr(0x08);
+		bin2gcr(sec ^ track_h ^ gcr_info[idx].id[0] ^ gcr_info[idx].id[1]);
+		bin2gcr(sec);
+		bin2gcr(track_h);
+		bin2gcr(gcr_info[idx].id[1]);
+		bin2gcr(gcr_info[idx].id[0]);
+		bin2gcr(0x0F);
+		bin2gcr(0x0F);
+		*gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55;
+		*gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55;
+
+		uint8_t cs = 0;
+		uint8_t bt;
+
+		*gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF;
+		bin2gcr(0x07);
+		for (int i = 0; i < 256; i++)
+		{
+			bt = trk_buf[ptr + i];
+			cs ^= bt;
+			bin2gcr(bt);
+		}
+		bin2gcr(cs);
+		bin2gcr(0);
+		bin2gcr(0);
+
+		int gap = (track_h < 18) ? 8 : (track_h < 25) ? 17 : (track_h < 31) ? 12 : 9;
+		while (gap--) *gcrptr++ = 0x55;
+		sec++;
+	}
+
+	return gcrptr - gcr_buf - 2;
+}
+
+static void c64_synthesize_g64_image(int idx, uint32_t phys_addr, uint32_t map_size)
+{
+	uint8_t* ddram = (uint8_t*)shmem_map(phys_addr, map_size);
+	if (ddram)
+	{
+		printf("Synthesizing D64/D71 to DDR3 G64 at 0x%X\n", phys_addr);
+
+		uint32_t num_tracks = (gcr_info[idx].tracks > 42) ? 168 : 84;
+		memset(ddram, 0, 12 + num_tracks * 8); // Clear header area
+		memcpy(ddram, "GCR-1541", 8);
+		ddram[8] = 0; // version
+		ddram[9] = num_tracks; // max tracks
+
+		uint32_t offset = 12 + num_tracks * 8;
+		for (uint32_t t = 0; t < num_tracks; t++) {
+			uint8_t track_f = t >> 1;
+			uint8_t track_h = ((track_f >= 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
+
+			int size = 0;
+			if ((t & 1) == 0 && track_f < 84) {
+				size = (gcr_info[idx].sector_map[track_f + 1] - gcr_info[idx].sector_map[track_f]) * 256;
+			}
+
+			if (size) {
+				FileSeek(gcr_info[idx].f, gcr_info[idx].sector_map[track_f] * 256, SEEK_SET);
+				FileReadAdv(gcr_info[idx].f, trk_buf, size);
+
+				uint32_t track_size = c64_synthesize_gcr_track(idx, track_h, size);
+
+				// Format requires the length at beginning of track data payload
+				gcr_buf[0] = (uint8_t)track_size;
+				gcr_buf[1] = (uint8_t)(track_size >> 8);
+
+				// Write track pointer into header offset map
+				ddram[0x0C + t*4] = offset & 0xFF;
+				ddram[0x0D + t*4] = (offset >> 8) & 0xFF;
+				ddram[0x0E + t*4] = (offset >> 16) & 0xFF;
+				ddram[0x0F + t*4] = (offset >> 24) & 0xFF;
+
+				// Write speed zone
+				uint32_t speed_offset = 12 + num_tracks * 4;
+				uint32_t speed = (track_h < 18) ? 3 : (track_h < 25) ? 2 : (track_h < 31) ? 1 : 0;
+				ddram[speed_offset + t*4] = speed & 0xFF;
+				ddram[speed_offset + 1 + t*4] = (speed >> 8) & 0xFF;
+				ddram[speed_offset + 2 + t*4] = (speed >> 16) & 0xFF;
+				ddram[speed_offset + 3 + t*4] = (speed >> 24) & 0xFF;
+
+				memcpy(ddram + offset, gcr_buf, track_size + 2);
+				offset += track_size + 2;
+			} else {
+				// Dummy track (empty)
+				ddram[0x0C + t*4] = 0;
+				ddram[0x0D + t*4] = 0;
+				ddram[0x0E + t*4] = 0;
+				ddram[0x0F + t*4] = 0;
+
+				uint32_t speed_offset = 12 + num_tracks * 4;
+				ddram[speed_offset + t*4] = 0;
+				ddram[speed_offset + 1 + t*4] = 0;
+				ddram[speed_offset + 2 + t*4] = 0;
+				ddram[speed_offset + 3 + t*4] = 0;
+			}
+		}
+
+		shmem_unmap(ddram, map_size);
+	}
+}
+
 void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 {
 	// dbgprintf("c64_readGCR: idx=%d, lba=%04llx, blks=%d\n", idx, lba, blks);
@@ -506,7 +645,7 @@ void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 
 	if (!gcr_info[idx].type) return;
 
-	if (gcr_info[idx].type == 2)
+	if (gcr_info[idx].type == 2) // G64 (also G71)
 	{
 		if (track >= gcr_info[idx].tracks || !gcr_info[idx].trk_map[track])
 		{
@@ -526,7 +665,7 @@ void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 		track_size = 0;
 		dbgprintf("\nBetween tracks %d <|> %d.\n", track_f, track_f+1);
 	}
-	else
+	else // D64, T64, D71 (C128)
 	{
 		uint8_t track_h = ((track_f >= 42) ? track_f%42 + gcr_info[idx].tracks/2 : track_f) + 1;
 		int size = track_f < 84 ? (gcr_info[idx].sector_map[track_f + 1] - gcr_info[idx].sector_map[track_f]) * 256 : 0;
@@ -536,44 +675,8 @@ void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 			FileSeek(gcr_info[idx].f, gcr_info[idx].sector_map[track_f] * 256, SEEK_SET);
 			FileReadAdv(gcr_info[idx].f, trk_buf, size);
 
-			uint8_t sec = 0;
-			gcrptr = gcr_buf + 2;
-			for (int ptr = 0; ptr < size; ptr += 256)
-			{
-				gcrcnt = 0;
-				*gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF;
-				bin2gcr(0x08);
-				bin2gcr(sec ^ track_h ^ gcr_info[idx].id[0] ^ gcr_info[idx].id[1]);
-				bin2gcr(sec);
-				bin2gcr(track_h);
-				bin2gcr(gcr_info[idx].id[1]);
-				bin2gcr(gcr_info[idx].id[0]);
-				bin2gcr(0x0F);
-				bin2gcr(0x0F);
-				*gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55;
-				*gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55; *gcrptr++ = 0x55;
+			track_size = c64_synthesize_gcr_track(idx, track_h, size);
 
-				uint8_t cs = 0;
-				uint8_t bt;
-
-				*gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF; *gcrptr++ = 0xFF;
-				bin2gcr(0x07);
-				for (int i = 0; i < 256; i++)
-				{
-					bt = trk_buf[ptr + i];
-					cs ^= bt;
-					bin2gcr(bt);
-				}
-				bin2gcr(cs);
-				bin2gcr(0);
-				bin2gcr(0);
-
-				int gap = (track_h < 18) ? 8 : (track_h < 25) ? 17 : (track_h < 31) ? 12 : 9;
-				while (gap--) *gcrptr++ = 0x55;
-				sec++;
-			}
-
-			track_size = gcrptr - gcr_buf - 2;
 			dbgprintf("Read GCR track %d: bin_size = %d, gcr_size = %d\n", track_f+1, size, track_size);
 		}
 		else {
