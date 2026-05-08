@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 static console_state_t g_gb_state = {};
+static int g_gb_rtquery = 0;
 
 // Value-change watchers for debugging
 typedef struct {
@@ -46,6 +47,7 @@ static gb_watcher_t g_gb_watchers[] = {
 static void gameboy_init(void)
 {
 	memset(&g_gb_state, 0, sizeof(g_gb_state));
+	g_gb_rtquery = 0;
 	for (unsigned int i = 0; i < GB_WATCHER_COUNT; i++) {
 		g_gb_watchers[i].initialized = 0;
 		g_gb_watchers[i].last_val = 0;
@@ -55,6 +57,7 @@ static void gameboy_init(void)
 static void gameboy_reset(void)
 {
 	memset(&g_gb_state, 0, sizeof(g_gb_state));
+	g_gb_rtquery = 0;
 	for (unsigned int i = 0; i < GB_WATCHER_COUNT; i++) {
 		g_gb_watchers[i].initialized = 0;
 		g_gb_watchers[i].last_val = 0;
@@ -69,8 +72,58 @@ static uint32_t gameboy_read_memory(void *map, uint32_t address, uint8_t *buffer
 				ra_snes_addrlist_add(address + i);
 		}
 		if (g_gb_state.cache_ready) {
+			if (achievements_smart_cache_enabled() && g_gb_rtquery) {
+				if (g_gb_state.cache_reindexing) {
+					if (num_bytes <= 4) {
+						uint32_t val = ra_rtquery_read(map, address, num_bytes);
+						for (uint32_t i = 0; i < num_bytes; i++)
+							buffer[i] = (uint8_t)(val >> (i * 8));
+						return num_bytes;
+					}
+					for (uint32_t i = 0; i < num_bytes; i++) {
+						uint32_t val = ra_rtquery_read(map, address + i, 1);
+						buffer[i] = (uint8_t)val;
+					}
+					return num_bytes;
+				}
+				int any_miss = 0;
+				for (uint32_t i = 0; i < num_bytes; i++) {
+					if (ra_snes_addrlist_contains(address + i) < 0) {
+						any_miss = 1; break;
+					}
+				}
+				if (!any_miss) {
+					for (uint32_t i = 0; i < num_bytes; i++)
+						buffer[i] = ra_snes_addrlist_read_cached(map, address + i);
+					return num_bytes;
+				}
+				if (num_bytes <= 4) {
+					uint32_t val = ra_rtquery_read(map, address, num_bytes);
+					for (uint32_t i = 0; i < num_bytes; i++) {
+						buffer[i] = (uint8_t)(val >> (i * 8));
+						ra_snes_addrlist_add_dynamic(address + i);
+					}
+					return num_bytes;
+				}
+				for (uint32_t i = 0; i < num_bytes; i++) {
+					if (ra_snes_addrlist_contains(address + i) >= 0) {
+						buffer[i] = ra_snes_addrlist_read_cached(map, address + i);
+					} else {
+						uint32_t val = ra_rtquery_read(map, address + i, 1);
+						buffer[i] = (uint8_t)val;
+						ra_snes_addrlist_add_dynamic(address + i);
+					}
+				}
+				return num_bytes;
+			}
 			for (uint32_t i = 0; i < num_bytes; i++)
 				buffer[i] = ra_snes_addrlist_read_cached(map, address + i);
+			return num_bytes;
+		}
+		if (g_gb_rtquery && achievements_rtquery_enabled() && !g_gb_state.collecting && num_bytes <= 4) {
+			uint32_t val = ra_rtquery_read(map, address, num_bytes);
+			for (uint32_t i = 0; i < num_bytes; i++)
+				buffer[i] = (uint8_t)(val >> (i * 8));
 			return num_bytes;
 		}
 		memset(buffer, 0, num_bytes);
@@ -85,6 +138,93 @@ static int gameboy_poll(void *map, void *client, int game_loaded)
 	if (!client || !game_loaded || !map || !g_gb_state.optionc) return 0;
 
 	rc_client_t *rc_client = (rc_client_t *)client;
+
+	// ===================================================================
+	// Smart Cache path (Tier 1)
+	// ===================================================================
+	if (achievements_smart_cache_enabled() && g_gb_rtquery) {
+
+		if (ra_snes_addrlist_count() == 0 && !g_gb_state.cache_ready) {
+			g_gb_state.collecting = 1;
+			ra_snes_addrlist_begin_collect();
+			rc_client_do_frame(rc_client);
+			g_gb_state.collecting = 0;
+			int changed = ra_snes_addrlist_end_collect(map);
+			if (changed)
+				ra_log_write("GB SmartCache: Bootstrap done, %d addrs\n", ra_snes_addrlist_count());
+			else
+				ra_log_write("GB SmartCache: No addresses collected\n");
+		} else if (!g_gb_state.cache_ready) {
+			if (ra_snes_addrlist_is_ready(map)) {
+				g_gb_state.cache_ready = 1;
+				g_gb_state.last_resp_frame = 0;
+				g_gb_state.game_frames = 0;
+				g_gb_state.poll_logged = 0;
+				clock_gettime(CLOCK_MONOTONIC, &g_gb_state.cache_time);
+				ra_log_write("GB SmartCache: Cache active! %d addrs\n", ra_snes_addrlist_count());
+			}
+		} else {
+			uint32_t resp_frame = ra_snes_addrlist_response_frame(map);
+
+			if (g_gb_state.cache_reindexing && ra_snes_addrlist_is_ready(map)) {
+				g_gb_state.cache_reindexing = 0;
+				ra_log_write("GB SmartCache: Reindex complete (%d addrs)\n", ra_snes_addrlist_count());
+			}
+
+			if (resp_frame > g_gb_state.last_resp_frame) {
+				g_gb_state.last_resp_frame = resp_frame;
+				g_gb_state.game_frames++;
+				ra_frame_processed(resp_frame);
+
+				if (g_gb_state.game_frames <= 5)
+					ra_log_write("GB SmartCache: GameFrame %u (resp_frame=%u, addrs=%d)\n",
+						g_gb_state.game_frames, resp_frame, ra_snes_addrlist_count());
+
+				int cleanup_frame = (g_gb_state.game_frames % 600 == 0)
+					&& (g_gb_state.game_frames > 0)
+					&& !g_gb_state.cache_reindexing;
+				if (cleanup_frame) {
+					g_gb_state.collecting = 1;
+					ra_snes_addrlist_begin_collect();
+				}
+
+				rc_client_do_frame(rc_client);
+
+				if (cleanup_frame) {
+					g_gb_state.collecting = 0;
+					int old_count = ra_snes_addrlist_count();
+					if (ra_snes_addrlist_end_collect(map)) {
+						int new_count = ra_snes_addrlist_count();
+						ra_log_write("GB SmartCache: Cleanup — pruned %d stale (%d -> %d)\n",
+							old_count - new_count, old_count, new_count);
+						g_gb_state.cache_reindexing = 1;
+					}
+				} else {
+					if (ra_snes_addrlist_has_pending())
+						ra_snes_addrlist_flush_dynamic(map);
+				}
+			}
+		}
+
+		uint32_t milestone = g_gb_state.game_frames / 300;
+		if (milestone > 0 && milestone != g_gb_state.poll_logged) {
+			g_gb_state.poll_logged = milestone;
+			struct timespec now;
+			clock_gettime(CLOCK_MONOTONIC, &now);
+			double elapsed = (now.tv_sec - g_gb_state.cache_time.tv_sec)
+				+ (now.tv_nsec - g_gb_state.cache_time.tv_nsec) / 1e9;
+			double ms_per_cycle = (g_gb_state.game_frames > 0) ?
+				(elapsed * 1000.0 / g_gb_state.game_frames) : 0.0;
+			ra_log_write("POLL(GB-SC): resp_frame=%u game_frames=%u elapsed=%.1fs ms/cycle=%.1f addrs=%d\n",
+				g_gb_state.last_resp_frame, g_gb_state.game_frames, elapsed, ms_per_cycle,
+				ra_snes_addrlist_count());
+		}
+		return 1;
+	}
+
+	// ===================================================================
+	// Legacy path
+	// ===================================================================
 
 	if (ra_snes_addrlist_count() == 0 && !g_gb_state.cache_ready) {
 		// Bootstrap: run one do_frame with zeros to discover needed addresses
@@ -197,9 +337,20 @@ static int gameboy_detect_protocol(void *map)
 		ra_log_write("Gameboy: FPGA mirror not detected -- RA support unavailable\n");
 		return 0;
 	}
-	// GameBoy always uses Option C
 	g_gb_state.optionc = 1;
 	ra_log_write("Gameboy FPGA protocol: Option C (selective address reading)\n");
+
+	if (ra_rtquery_supported(map) && achievements_rtquery_enabled()) {
+		g_gb_rtquery = 1;
+		ra_rtquery_init(map);
+		ra_log_write("Gameboy: Realtime queries supported and ENABLED\n");
+	} else if (ra_rtquery_supported(map)) {
+		g_gb_rtquery = 0;
+		ra_log_write("Gameboy: Realtime queries supported but DISABLED by config\n");
+	} else {
+		g_gb_rtquery = 0;
+		ra_log_write("Gameboy: Realtime queries NOT supported (FPGA v1)\n");
+	}
 	return 1;
 }
 

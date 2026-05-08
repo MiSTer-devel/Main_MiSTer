@@ -294,5 +294,5 @@ const console_handler_t g_console_gba = {
         .detect_protocol = gba_detect_protocol,
         .console_id = 5,  // RC_CONSOLE_GAME_BOY_ADVANCE
         .name = "GBA",
-        .hardcore_protected = 1
+        .hardcore_protected = 0
 };

@@ -217,7 +217,6 @@ uint8_t ra_ramread_atari7800_byte(const void *map, uint16_t addr)
 	    (addr >= 0x0040 && addr <= 0x00FF) ||
 	    (addr >= 0x0140 && addr <= 0x01FF)) {
 		uint16_t bram_idx = addr & 0x7FF;
-		if (bram_idx >= 0x80) bram_idx -= 8;
 		return ((const uint8_t *)map + 0x100)[bram_idx];
 	}
 	return 0;
@@ -590,7 +589,24 @@ void ra_rtquery_init(void *map)
         ra_query_ctrl_t *ctrl = (ra_query_ctrl_t *)(base + RA_QUERY_CTRL_OFFSET);
         memset(ctrl, 0, sizeof(*ctrl));
         __sync_synchronize();
+
+        // Signal FPGA that rtquery polling is now needed.
+        // The FPGA reads RA_ARM_CONFIG_OFFSET once per VBlank and starts polling
+        // the query mailbox only when this bit is set. This prevents ~107k unnecessary
+        // DDRAM reads per second on cores where rtquery is enabled but not actively used.
+        base[RA_ARM_CONFIG_OFFSET] |= RA_ARM_CFG_RTQUERY;
+        __sync_synchronize();
+
         RA_DBG("RTQuery: initialized (mailbox at offset 0x%X)", RA_QUERY_CTRL_OFFSET);
+}
+
+void ra_rtquery_disable(void *map)
+{
+        if (!map) return;
+        uint8_t *base = (uint8_t *)map;
+        base[RA_ARM_CONFIG_OFFSET] &= (uint8_t)(~RA_ARM_CFG_RTQUERY);
+        __sync_synchronize();
+        RA_DBG("RTQuery: disabled (FPGA will stop polling query mailbox after next VBlank)");
 }
 
 uint32_t ra_rtquery_read(void *map, uint32_t address, uint32_t num_bytes)

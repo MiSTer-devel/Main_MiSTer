@@ -19,7 +19,8 @@
 // ---------------------------------------------------------------------------
 
 static console_state_t g_neogeo_state = {};
-static int g_neogeo_is_cd = 0; // 1 = NeoGeoCD (no byte-swap), 0 = MVS (XOR addr^1)
+static int g_neogeo_is_cd = 0;
+static int g_neogeo_rtquery = 0;
 
 // ---------------------------------------------------------------------------
 // NeoGeo Implementation
@@ -29,12 +30,14 @@ static void neogeo_init(void)
 {
 	memset(&g_neogeo_state, 0, sizeof(g_neogeo_state));
 	g_neogeo_is_cd = 0;
+	g_neogeo_rtquery = 0;
 }
 
 static void neogeo_reset(void)
 {
 	memset(&g_neogeo_state, 0, sizeof(g_neogeo_state));
 	g_neogeo_is_cd = 0;
+	g_neogeo_rtquery = 0;
 }
 
 
@@ -43,20 +46,62 @@ static uint32_t neogeo_read_memory(void *map, uint32_t address, uint8_t *buffer,
 	if (g_neogeo_state.optionc) {
 		if (g_neogeo_state.collecting) {
 			for (uint32_t i = 0; i < num_bytes; i++) {
-				// MVS (FBNeo): XOR^1 to match FBNeo byte-swap convention.
-				// NeoGeoCD shadow RAM is sampled in native 68K byte order.
-				// Both MVS and CD use BIGENDIAN XOR (neocd_libretro sets RETRO_MEMDESC_BIGENDIAN;
-				// P1 shadow is in native 68K order, same convention as MVS WRAMU/WRAML).
 				uint32_t a = (address + i);
-                                if (!g_neogeo_is_cd) a ^= 1;
-                                ra_snes_addrlist_add(a);
+				if (!g_neogeo_is_cd) a ^= 1;
+				ra_snes_addrlist_add(a);
 			}
 		}
 		if (g_neogeo_state.cache_ready) {
+			if (achievements_smart_cache_enabled() && g_neogeo_rtquery) {
+				if (g_neogeo_state.cache_reindexing) {
+					for (uint32_t i = 0; i < num_bytes; i++) {
+						uint32_t a = (address + i);
+						if (!g_neogeo_is_cd) a ^= 1;
+						uint32_t val = ra_rtquery_read(map, a, 1);
+						buffer[i] = (uint8_t)val;
+					}
+					return num_bytes;
+				}
+				int any_miss = 0;
+				for (uint32_t i = 0; i < num_bytes; i++) {
+					uint32_t a = (address + i);
+					if (!g_neogeo_is_cd) a ^= 1;
+					if (ra_snes_addrlist_contains(a) < 0) { any_miss = 1; break; }
+				}
+				if (!any_miss) {
+					for (uint32_t i = 0; i < num_bytes; i++) {
+						uint32_t a = (address + i);
+						if (!g_neogeo_is_cd) a ^= 1;
+						buffer[i] = ra_snes_addrlist_read_cached(map, a);
+					}
+					return num_bytes;
+				}
+				for (uint32_t i = 0; i < num_bytes; i++) {
+					uint32_t a = (address + i);
+					if (!g_neogeo_is_cd) a ^= 1;
+					if (ra_snes_addrlist_contains(a) >= 0) {
+						buffer[i] = ra_snes_addrlist_read_cached(map, a);
+					} else {
+						uint32_t val = ra_rtquery_read(map, a, 1);
+						buffer[i] = (uint8_t)val;
+						ra_snes_addrlist_add_dynamic(a);
+					}
+				}
+				return num_bytes;
+			}
 			for (uint32_t i = 0; i < num_bytes; i++) {
 				uint32_t a = (address + i);
-                                if (!g_neogeo_is_cd) a ^= 1;
-                                buffer[i] = ra_snes_addrlist_read_cached(map, a);
+				if (!g_neogeo_is_cd) a ^= 1;
+				buffer[i] = ra_snes_addrlist_read_cached(map, a);
+			}
+			return num_bytes;
+		}
+		if (g_neogeo_rtquery && achievements_rtquery_enabled() && !g_neogeo_state.collecting && num_bytes <= 4) {
+			for (uint32_t i = 0; i < num_bytes; i++) {
+				uint32_t a = (address + i);
+				if (!g_neogeo_is_cd) a ^= 1;
+				uint32_t val = ra_rtquery_read(map, a, 1);
+				buffer[i] = (uint8_t)val;
 			}
 			return num_bytes;
 		}
@@ -72,6 +117,115 @@ static int neogeo_poll(void *map, void *client, int game_loaded)
 	if (!client || !game_loaded || !map || !g_neogeo_state.optionc) return 0;
 
 	rc_client_t *rc_client = (rc_client_t *)client;
+
+	// ===================================================================
+	// Smart Cache path (Tier 1)
+	// ===================================================================
+	if (achievements_smart_cache_enabled() && g_neogeo_rtquery) {
+
+		if (ra_snes_addrlist_count() == 0 && !g_neogeo_state.cache_ready) {
+			g_neogeo_state.collecting = 1;
+			ra_snes_addrlist_begin_collect();
+			rc_client_do_frame(rc_client);
+			g_neogeo_state.collecting = 0;
+			int changed = ra_snes_addrlist_end_collect(map);
+			if (changed) {
+				g_neogeo_state.needs_recollect = 1;
+				g_neogeo_state.resolve_pass = 0;
+				ra_log_write("NeoGeo SmartCache: Bootstrap done, %d addrs\n", ra_snes_addrlist_count());
+			} else {
+				ra_log_write("NeoGeo SmartCache: No addresses collected\n");
+			}
+		} else if (!g_neogeo_state.cache_ready) {
+			if (ra_snes_addrlist_is_ready(map)) {
+				g_neogeo_state.cache_ready = 1;
+				g_neogeo_state.last_resp_frame = 0;
+				g_neogeo_state.game_frames = 0;
+				g_neogeo_state.poll_logged = 0;
+				clock_gettime(CLOCK_MONOTONIC, &g_neogeo_state.cache_time);
+				if (g_neogeo_state.needs_recollect)
+					ra_log_write("NeoGeo SmartCache: Cache active (pre-resolve)\n");
+				else
+					ra_log_write("NeoGeo SmartCache: Cache active! %d addrs\n", ra_snes_addrlist_count());
+			}
+		} else if (g_neogeo_state.needs_recollect) {
+			g_neogeo_state.resolve_pass++;
+			g_neogeo_state.collecting = 1;
+			ra_snes_addrlist_begin_collect();
+			rc_client_do_frame(rc_client);
+			g_neogeo_state.collecting = 0;
+			int changed = ra_snes_addrlist_end_collect(map);
+			if (changed && g_neogeo_state.resolve_pass < 4) {
+				ra_log_write("NeoGeo SmartCache: Resolve pass %d, %d addrs\n",
+					g_neogeo_state.resolve_pass, ra_snes_addrlist_count());
+				g_neogeo_state.cache_ready = 0;
+			} else {
+				g_neogeo_state.needs_recollect = 0;
+				if (changed) g_neogeo_state.cache_ready = 0;
+				ra_log_write("NeoGeo SmartCache: Resolve done, %d addrs\n", ra_snes_addrlist_count());
+			}
+		} else {
+			uint32_t resp_frame = ra_snes_addrlist_response_frame(map);
+
+			if (g_neogeo_state.cache_reindexing && ra_snes_addrlist_is_ready(map)) {
+				g_neogeo_state.cache_reindexing = 0;
+				ra_log_write("NeoGeo SmartCache: Reindex complete (%d addrs)\n", ra_snes_addrlist_count());
+			}
+
+			if (resp_frame > g_neogeo_state.last_resp_frame) {
+				g_neogeo_state.last_resp_frame = resp_frame;
+				g_neogeo_state.game_frames++;
+				ra_frame_processed(resp_frame);
+
+				if (g_neogeo_state.game_frames <= 5)
+					ra_log_write("NeoGeo SmartCache: GameFrame %u (addrs=%d)\n",
+						g_neogeo_state.game_frames, ra_snes_addrlist_count());
+
+				int cleanup_frame = (g_neogeo_state.game_frames % 600 == 0)
+					&& (g_neogeo_state.game_frames > 0)
+					&& !g_neogeo_state.cache_reindexing;
+				if (cleanup_frame) {
+					g_neogeo_state.collecting = 1;
+					ra_snes_addrlist_begin_collect();
+				}
+
+				rc_client_do_frame(rc_client);
+
+				if (cleanup_frame) {
+					g_neogeo_state.collecting = 0;
+					int old_count = ra_snes_addrlist_count();
+					if (ra_snes_addrlist_end_collect(map)) {
+						int new_count = ra_snes_addrlist_count();
+						ra_log_write("NeoGeo SmartCache: Cleanup %d -> %d\n", old_count, new_count);
+						g_neogeo_state.cache_reindexing = 1;
+					}
+				} else {
+					if (ra_snes_addrlist_has_pending())
+						ra_snes_addrlist_flush_dynamic(map);
+				}
+			}
+		}
+
+		uint32_t milestone = g_neogeo_state.game_frames / 300;
+		if (milestone > 0 && milestone != g_neogeo_state.poll_logged) {
+			g_neogeo_state.poll_logged = milestone;
+			struct timespec now;
+			clock_gettime(CLOCK_MONOTONIC, &now);
+			double elapsed = (now.tv_sec - g_neogeo_state.cache_time.tv_sec)
+				+ (now.tv_nsec - g_neogeo_state.cache_time.tv_nsec) / 1e9;
+			double ms_per_cycle = (g_neogeo_state.game_frames > 0) ?
+				(elapsed * 1000.0 / g_neogeo_state.game_frames) : 0.0;
+			ra_log_write("POLL(NeoGeo%s-SC): resp_frame=%u game_frames=%u elapsed=%.1fs ms/cycle=%.1f addrs=%d\n",
+				g_neogeo_is_cd ? "CD" : "",
+				g_neogeo_state.last_resp_frame, g_neogeo_state.game_frames, elapsed, ms_per_cycle,
+				ra_snes_addrlist_count());
+		}
+		return 1;
+	}
+
+	// ===================================================================
+	// Legacy path
+	// ===================================================================
 
 	if (ra_snes_addrlist_count() == 0 && !g_neogeo_state.cache_ready) {
 		// Phase 1: Bootstrap — collect addresses with zeros
@@ -261,11 +415,22 @@ static int neogeo_detect_protocol(void *map)
 		ra_log_write("NeoGeo: FPGA mirror not detected -- RA support unavailable\n");
 		return 0;
 	}
-	// NeoGeo always uses Option C; detect CD vs MVS for byte-ordering
 	g_neogeo_state.optionc = 1;
 	g_neogeo_is_cd = is_neogeo_cd();
 	ra_log_write("%s FPGA protocol: Option C (selective address reading)\n",
 		g_neogeo_is_cd ? "NeoGeoCD" : "NeoGeo");
+
+	if (ra_rtquery_supported(map) && achievements_rtquery_enabled()) {
+		g_neogeo_rtquery = 1;
+		ra_rtquery_init(map);
+		ra_log_write("NeoGeo: Realtime queries supported and ENABLED\n");
+	} else if (ra_rtquery_supported(map)) {
+		g_neogeo_rtquery = 0;
+		ra_log_write("NeoGeo: Realtime queries supported but DISABLED by config\n");
+	} else {
+		g_neogeo_rtquery = 0;
+		ra_log_write("NeoGeo: Realtime queries NOT supported (FPGA v1)\n");
+	}
 	return 1;
 }
 

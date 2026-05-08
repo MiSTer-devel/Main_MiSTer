@@ -432,5 +432,5 @@ const console_handler_t g_console_psx = {
 	.detect_protocol = psx_detect_protocol,
 	.console_id = 12,  // RC_CONSOLE_PLAYSTATION
 	.name = "PSX",
-	.hardcore_protected = 1
+	.hardcore_protected = 0
 };

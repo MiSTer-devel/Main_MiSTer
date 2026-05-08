@@ -247,5 +247,5 @@ const console_handler_t g_console_n64 = {
 	.detect_protocol = n64_detect_protocol,
 	.console_id = 2,  // RC_CONSOLE_NINTENDO_64
 	.name = "N64",
-	.hardcore_protected = 1
+	.hardcore_protected = 0
 };

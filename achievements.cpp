@@ -190,8 +190,11 @@ static int g_show_challenge_show_popup = 1; // 1 = show popup on challenge SHOW 
 static int g_show_challenge_hide_popup = 1; // 1 = show popup on challenge HIDE event
 static int g_show_progress_popups      = 1; // 1 = show progress indicator popups
 static int g_show_progress_name        = 1; // 1 = include achievement name in progress popup
-static int g_leaderboards_enabled      = 1; // 1 = handle leaderboard events and tracker popups
+static int g_leaderboards_enabled      = 1; // [deprecated] fallback only when both new leaderboard popup flags are absent
+static int g_show_leaderboards_updates = 1; // 1 = show STARTED/FAILED/TRACKER SHOW/TRACKER UPDATE popups
+static int g_show_leaderboards_submission = 1; // 1 = show SUBMITTED/SCOREBOARD popups
 static int g_hardcore                  = 0; // 1 = hardcore mode (disables cheats & save states)
+static int g_force_hardcore            = 0; // 1 = force hardcore mode even if core doesn't support it
 static int g_stall_recovery            = 0; // 1 = enable OptionC stall recovery (disabled by default)
 static int g_rtquery_enabled           = 1; // 1 = enable realtime queries for AddAddress resolution
 static int g_recollect_interval        = 600; // frames between address re-collections (PSX default 600, SNES 18000)
@@ -481,6 +484,9 @@ static int ra_load_credentials(void)
 {
 	g_ra_user[0] = '\0';
 	g_ra_password[0] = '\0';
+	int legacy_leaderboards_defined = 0;
+	int show_leaderboards_updates_defined = 0;
+	int show_leaderboards_submission_defined = 0;
 
 	FILE *f = fopen(RA_CFG_PATH, "r");
 	if (!f) {
@@ -523,12 +529,23 @@ static int ra_load_credentials(void)
 		} else if (!strcasecmp(key, "show_progress_popups")) {
 			g_show_progress_popups = atoi(val);
 		} else if (!strcasecmp(key, "show_progress_name")) {
-                        g_show_progress_name = atoi(val);
+			g_show_progress_name = atoi(val);
+		} else if (!strcasecmp(key, "show_leaderboards_updates") ||
+					   !strcasecmp(key, "show-leaderboards-updates")) {
+			g_show_leaderboards_updates = atoi(val);
+			show_leaderboards_updates_defined = 1;
+		} else if (!strcasecmp(key, "show_leaderboards_submission") ||
+					   !strcasecmp(key, "show-leaderboards-submission")) {
+			g_show_leaderboards_submission = atoi(val);
+			show_leaderboards_submission_defined = 1;
 		} else if (!strcasecmp(key, "leaderboards-enabled") ||
 					!strcasecmp(key, "leaderboards_enabled")) {
 				g_leaderboards_enabled = atoi(val);
+				legacy_leaderboards_defined = 1;
 		} else if (!strcasecmp(key, "hardcore")) {
 			g_hardcore = atoi(val);
+		} else if (!strcasecmp(key, "force_hardcore")) {
+			g_force_hardcore = atoi(val);
 		} else if (!strcasecmp(key, "stall_recovery")) {
 			g_stall_recovery = atoi(val);
 		} else if (!strcasecmp(key, "rtquery_enabled") ||
@@ -547,16 +564,23 @@ static int ra_load_credentials(void)
 	}
 	fclose(f);
 
+	/* Backward compatibility: transfer deprecated value only when both new keys are absent. */
+	if (!show_leaderboards_updates_defined && !show_leaderboards_submission_defined && legacy_leaderboards_defined) {
+		g_show_leaderboards_updates = g_leaderboards_enabled;
+		g_show_leaderboards_submission = g_leaderboards_enabled;
+	}
+
 	if (!g_ra_user[0] || !g_ra_password[0]) {
 		RA_LOG("Credentials incomplete (need both username and password)");
 		return 0;
 	}
 
 	RA_LOG("Credentials loaded: user=%s password=***(%zu chars)", g_ra_user, strlen(g_ra_password));
-	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d leaderboards_enabled=%d hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d debug=%d",
+	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d show_leaderboards_updates=%d show_leaderboards_submission=%d leaderboards_enabled(deprecated)=%d hardcore=%d force_hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d debug=%d",
                 g_show_challenge_show_popup, g_show_challenge_hide_popup,
-                g_show_progress_popups, g_show_progress_name, g_leaderboards_enabled,
-                g_hardcore, g_stall_recovery, g_rtquery_enabled, g_recollect_interval, g_smart_cache, g_n64_snapshot, g_ra_debug);
+                g_show_progress_popups, g_show_progress_name,
+		g_show_leaderboards_updates, g_show_leaderboards_submission, g_leaderboards_enabled,
+                g_hardcore, g_force_hardcore, g_stall_recovery, g_rtquery_enabled, g_recollect_interval, g_smart_cache, g_n64_snapshot, g_ra_debug);
 	return 1;
 }
 
@@ -783,7 +807,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 
         case RC_CLIENT_EVENT_LEADERBOARD_STARTED:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard)
+                        if (!g_show_leaderboards_updates || !event->leaderboard)
                                 break;
 
                         RA_LOG("LEADERBOARD STARTED: [%u] %s",
@@ -803,7 +827,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 
         case RC_CLIENT_EVENT_LEADERBOARD_FAILED:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard)
+                        if (!g_show_leaderboards_updates || !event->leaderboard)
                                 break;
 
                         RA_LOG("LEADERBOARD FAILED: [%u] %s",
@@ -822,8 +846,8 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
                 break;
 
         case RC_CLIENT_EVENT_LEADERBOARD_SUBMITTED:
-                {
-                        if (!g_leaderboards_enabled || !event->leaderboard)
+		{
+			if (!g_show_leaderboards_submission || !event->leaderboard)
                                 break;
 
                         RA_LOG("LEADERBOARD SUBMITTED: [%u] %s",
@@ -849,7 +873,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
         case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_SHOW:
         case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_UPDATE:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard_tracker)
+                        if (!g_show_leaderboards_updates || !event->leaderboard_tracker)
                                 break;
 
                         RA_LOG("LEADERBOARD TRACKER: id=%u value=%s",
@@ -866,7 +890,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 
         case RC_CLIENT_EVENT_LEADERBOARD_TRACKER_HIDE:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard_tracker)
+                        if (!g_show_leaderboards_updates || !event->leaderboard_tracker)
                                 break;
 
                         RA_LOG("LEADERBOARD TRACKER HIDE: id=%u",
@@ -876,7 +900,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 
         case RC_CLIENT_EVENT_LEADERBOARD_SCOREBOARD:
                 {
-                        if (!g_leaderboards_enabled || !event->leaderboard_scoreboard)
+                        if (!g_show_leaderboards_submission || !event->leaderboard_scoreboard)
                                 break;
 
                         RA_LOG("LEADERBOARD SCOREBOARD: id=%u submitted=%s best=%s rank=%u entries=%u",
@@ -1147,7 +1171,7 @@ void achievements_init(void)
 	g_active_handler->init();
 
 	// Apply hardcore FPGA bits immediately so restrictions are active before any game loads
-	if (g_hardcore && g_active_handler->set_hardcore) {
+	if (achievements_hardcore_active() && g_active_handler->set_hardcore) {
 		g_active_handler->set_hardcore(1);
 		RA_LOG("Hardcore: FPGA bits applied at core init for %s", g_active_handler->name);
 	}
@@ -1192,9 +1216,9 @@ void achievements_init(void)
 
 	rc_client_enable_logging(g_client, RC_CLIENT_LOG_LEVEL_VERBOSE, ra_log_callback);
 	rc_client_set_event_handler(g_client, ra_event_handler);
-	int core_protected = g_active_handler && g_active_handler->hardcore_protected;
-	rc_client_set_hardcore_enabled(g_client, g_hardcore && core_protected ? 1 : 0);
-	RA_LOG("Hardcore mode: %s", (g_hardcore && core_protected) ? "ENABLED" : "disabled");
+	int hardcore_active = achievements_hardcore_active();
+	rc_client_set_hardcore_enabled(g_client, hardcore_active ? 1 : 0);
+	RA_LOG("Hardcore mode: %s", hardcore_active ? "ENABLED" : "disabled");
 
 	// Configure User-Agent: "MiSTer/1.0 rcheevos/x.y.z" (updated per-core in achievements_load_game)
 	{
@@ -1342,7 +1366,7 @@ void achievements_load_game(const char *rom_path, uint32_t crc32)
         RA_LOG("--- Game Load Complete, monitoring frames ---");
 
         // Hardcore mode: let handler set console-specific FPGA bits
-        if (g_hardcore && g_active_handler->set_hardcore) {
+        if (achievements_hardcore_active() && g_active_handler->set_hardcore) {
                 g_active_handler->set_hardcore(1);
                 RA_LOG("Hardcore: FPGA bits applied for %s", g_active_handler->name);
         }
@@ -1561,6 +1585,10 @@ void achievements_unload_game(void)
         g_active_handler->reset();
         ra_snes_addrlist_init();
 
+        // Disable FPGA query mailbox polling — no game loaded, no need to poll.
+        // FPGA will stop after next VBlank (reads RA_ARM_CONFIG_OFFSET once per cycle).
+        if (g_ra_map) ra_rtquery_disable(g_ra_map);
+
         // RetroAchievements safety: clear the DDRAM mirror data area so the next
         // game does not see stale bytes from the unloaded game. The header is
         // preserved; only the payload (offset 0x100+) is wiped.
@@ -1670,7 +1698,8 @@ int achievements_active(void)
 
 int achievements_hardcore_active(void)
 {
-	return g_hardcore;
+	if (g_force_hardcore) return 1;
+	return g_hardcore && g_active_handler && g_active_handler->hardcore_protected;
 }
 
 int achievements_stall_recovery_enabled(void)

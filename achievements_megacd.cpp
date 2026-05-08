@@ -236,5 +236,5 @@ const console_handler_t g_console_megacd = {
 	.detect_protocol = megacd_detect_protocol,
 	.console_id = 9,  // RC_CONSOLE_SEGA_CD
 	.name = "MegaCD",
-	.hardcore_protected = 1
+	.hardcore_protected = 0
 };
