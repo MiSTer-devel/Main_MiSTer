@@ -121,6 +121,9 @@
     <ClCompile Include="cheats.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="game_docs.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="scaler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -170,6 +173,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="support\c64\c64.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\atari8bit\atari800.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\atari8bit\atari5200.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
     <ClCompile Include="support\pcecd\pcecd.cpp">
@@ -340,6 +349,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="cheats.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="game_docs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="scaler.h">

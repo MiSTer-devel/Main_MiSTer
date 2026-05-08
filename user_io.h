@@ -163,6 +163,8 @@
 #define EMU_JOY0  2
 #define EMU_JOY1  3
 
+#define UIO_BUFFER_SIZE 16384
+
 void user_io_init(const char *path, const char *xml);
 unsigned char user_io_core_type();
 void user_io_read_core_name();
@@ -234,9 +236,6 @@ void user_io_check_reset(unsigned short modifiers, char useKeys);
 
 void user_io_rtc_reset();
 
-void user_io_screenshot_cmd(const char *cmd);
-bool user_io_screenshot(const char *pngname, int rescale);
-
 const char* get_rbf_dir();
 const char* get_rbf_name();
 const char* get_rbf_path();
@@ -263,6 +262,7 @@ int user_io_use_cheats();
 
 int process_ss(const char *rom_name, int enable = 1);
 
+char is_f12_mod_needed();
 void diskled_on();
 #define DISKLED_ON  diskled_on()
 #define DISKLED_OFF void()
@@ -289,9 +289,14 @@ char is_saturn();
 char is_pcxt();
 char is_n64();
 char is_uneon();
+char is_atari800();
+char is_atari5200();
+char is_3do();
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()
 #define CoreName2 user_io_get_core_name2()
+
+void screenshot_cb(void);
 
 #endif // USER_IO_H

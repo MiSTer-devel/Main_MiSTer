@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <array>
+#include <assert.h>
 #include <inttypes.h>
 #include <memory>
 
@@ -40,7 +41,7 @@ struct subcode
 	uint16_t mode1_crc0;
 	uint16_t mode1_crc1;
 };
-static_assert(sizeof(struct subcode) == 24);
+static_assert(sizeof(struct subcode) == CDI_SUBCHANNEL_LEN);
 
 struct toc_entry
 {
@@ -51,8 +52,6 @@ struct toc_entry
 	uint8_t f;
 };
 
-#define CD_SECTOR_LEN 2352
-#define CDIC_BUFFER_SIZE (CD_SECTOR_LEN + sizeof(subcode))
 static std::array<struct toc_entry, 200> toc_buffer;
 uint32_t toc_entry_count = 0;
 static enum DiscType disc_type = DT_CDDA;
@@ -116,7 +115,6 @@ static void unload_cue(toc_t *table)
 
 static int load_chd(const char *filename, toc_t *table)
 {
-
 	unload_chd(table);
 	chd_error err = mister_load_chd(filename, table);
 	if (err != CHDERR_NONE)
@@ -150,9 +148,8 @@ static int load_cue(const char *filename, toc_t *table)
 	static char toc[100 * 1024];
 
 	unload_cue(table);
-	printf("\x1b[32mCDI: Open CUE: %s\n\x1b[0m", fname);
-
 	strcpy(fname, filename);
+	printf("\x1b[32mCDI: Open CUE: %s\n\x1b[0m", fname);
 
 	memset(toc, 0, sizeof(toc));
 	if (!FileLoad(fname, toc, sizeof(toc) - 1))
@@ -233,7 +230,7 @@ static int load_cue(const char *filename, toc_t *table)
 			bool modecdi{strstr(lptr, "CDI/2352") != nullptr};
 			bool audio{strstr(lptr, "AUDIO") != nullptr};
 
-			table->tracks[table->last].sector_size = CD_SECTOR_LEN;
+			table->tracks[table->last].sector_size = CDI_SECTOR_LEN;
 			if (!table->last)
 				table->end = 150; // implicit 2 seconds pregap for track 1
 
@@ -264,6 +261,10 @@ static int load_cue(const char *filename, toc_t *table)
 
 			if (!table->tracks[table->last].f.opened())
 			{
+				// Catch absent INDEX0 (no pregap) to fix calculations afterwards
+				if (!index0)
+					index0 = index1;
+
 				table->tracks[table->last].start = index1 + 150;
 				table->tracks[table->last].pregap = index1 - index0;
 				// Subtract the fake 150 sector pregap used for the first data track
@@ -315,7 +316,7 @@ static int load_cd_image(const char *filename, toc_t *table)
 	// The real source and how this is calculated is yet unknown
 	// We use sector 00:02:16 as reference as it contains the boot block.
 	// If this is a suitable MODE2 header, we assume it is a CD-i disc
-	auto buffer = std::make_unique<uint8_t[]>(CDIC_BUFFER_SIZE);
+	auto buffer = std::make_unique<uint8_t[]>(CDI_CDIC_BUFFER_SIZE);
 	if (buffer)
 	{
 		cdi_read_cd(buffer.get(), 166, 1);
@@ -631,7 +632,7 @@ const uint8_t s_sector_scramble[] =
 
 void descramble_sector(uint8_t *buffer)
 {
-	for (uint32_t i = 12; i < CD_SECTOR_LEN; i++)
+	for (uint32_t i = 12; i < CDI_SECTOR_LEN; i++)
 	{
 		buffer[i] ^= s_sector_scramble[i - 12];
 	}
@@ -790,11 +791,15 @@ void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 	{
 		if (lba < 0 || !toc.last)
 		{
-			memset(buffer, 0, CD_SECTOR_LEN);
+			// TOC area
+			memset(buffer, 0, CDI_SECTOR_LEN);
+			buffer += CDI_SECTOR_LEN;
+			subcode_data(lba, *reinterpret_cast<struct subcode *>(buffer));
+			buffer += sizeof(struct subcode);
 		}
 		else
 		{
-			memset(buffer, 0xAA, CD_SECTOR_LEN);
+			memset(buffer, 0xAA, CDI_SECTOR_LEN);
 
 			for (int i = 0; i < toc.last; i++)
 			{
@@ -804,11 +809,11 @@ void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 					{
 						if (toc.tracks[i].offset)
 						{
-							FileSeek(&toc.tracks[0].f, toc.tracks[i].offset + ((lba - toc.tracks[i].start + toc.tracks[i].pregap) * CD_SECTOR_LEN), SEEK_SET);
+							FileSeek(&toc.tracks[0].f, toc.tracks[i].offset + ((lba - toc.tracks[i].start + toc.tracks[i].pregap) * CDI_SECTOR_LEN), SEEK_SET);
 						}
 						else
 						{
-							FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start + toc.tracks[i].pregap) * CD_SECTOR_LEN, SEEK_SET);
+							FileSeek(&toc.tracks[i].f, (lba - toc.tracks[i].start + toc.tracks[i].pregap) * CDI_SECTOR_LEN, SEEK_SET);
 						}
 					}
 
@@ -818,11 +823,11 @@ void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 						{
 							// The "fake" 150 sector pregap moves all the LBAs up by 150, so adjust here to read where the core actually wants data from
 							int read_lba = lba - 150;
-							if (mister_chd_read_sector(toc.chd_f, (read_lba + toc.tracks[i].offset), 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
+							if (mister_chd_read_sector(toc.chd_f, (read_lba + toc.tracks[i].offset), 0, 0, CDI_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
 							{
 								if (!toc.tracks[i].type) // CHD requires byteswap of audio data
 								{
-									for (int swapidx = 0; swapidx < CD_SECTOR_LEN; swapidx += 2)
+									for (int swapidx = 0; swapidx < CDI_SECTOR_LEN; swapidx += 2)
 									{
 										uint8_t temp = buffer[swapidx];
 										buffer[swapidx] = buffer[swapidx + 1];
@@ -838,15 +843,15 @@ void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 						else
 						{
 							if (toc.tracks[i].offset)
-								FileReadAdv(&toc.tracks[0].f, buffer, CD_SECTOR_LEN);
+								FileReadAdv(&toc.tracks[0].f, buffer, CDI_SECTOR_LEN);
 							else
-								FileReadAdv(&toc.tracks[i].f, buffer, CD_SECTOR_LEN);
+								FileReadAdv(&toc.tracks[i].f, buffer, CDI_SECTOR_LEN);
 						}
 						if ((lba + 1) > toc.tracks[i].end)
 							break;
 
 						check_scramble(lba, buffer);
-						buffer += CD_SECTOR_LEN;
+						buffer += CDI_SECTOR_LEN;
 						subcode_data(lba, *reinterpret_cast<struct subcode *>(buffer));
 						buffer += sizeof(struct subcode);
 						cnt--;
@@ -857,9 +862,6 @@ void cdi_read_cd(uint8_t *buffer, int lba, int cnt)
 			}
 		}
 
-		buffer += CD_SECTOR_LEN;
-		subcode_data(lba, *reinterpret_cast<struct subcode *>(buffer));
-		buffer += sizeof(struct subcode);
 		cnt--;
 		lba++;
 	}
@@ -875,13 +877,13 @@ static void mount_cd(int size, int index)
 	user_io_bufferinvalidate(0);
 }
 
+/// Last used directory for save file management
+/// Must be static to keep the value between mount calls
+static char last_dir[1024] = "";
+
 void cdi_mount_cd(int s_index, const char *filename)
 {
 	int loaded = 0;
-
-	/// Last used directory for save file management
-	/// Must be static to keep the value between mount calls
-	static char last_dir[1024] = {};
 
 	if (strlen(filename))
 	{
@@ -911,7 +913,7 @@ void cdi_mount_cd(int s_index, const char *filename)
 
 			prepare_toc_buffer(&toc);
 			user_io_set_index(0);
-			mount_cd(toc.end * CD_SECTOR_LEN, s_index);
+			mount_cd(toc.end * CDI_SECTOR_LEN, s_index);
 			loaded = 1;
 		}
 	}
@@ -927,4 +929,10 @@ void cdi_mount_cd(int s_index, const char *filename)
 
 void cdi_poll()
 {
+}
+
+void cdi_load_root_nvram()
+{
+	strcpy(last_dir, "games/CD-i");
+	cdi_mount_save(last_dir);
 }

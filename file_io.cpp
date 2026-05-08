@@ -28,6 +28,7 @@
 #include "user_io.h"
 #include "cfg.h"
 #include "input.h"
+#include "support.h"
 #include "miniz.h"
 #include "scheduler.h"
 #include "video.h"
@@ -65,6 +66,42 @@ static int iFirstEntry = 0;
 
 static char full_path[2100];
 uint8_t loadbuf[LOADBUF_SZ];
+
+static int flist_last_first_entry()
+{
+	int last = (int)DirItem.size() - OsdGetSize();
+	return last > 0 ? last : 0;
+}
+
+static void flist_center_selected()
+{
+	int count = (int)DirItem.size();
+	if (!count || OsdGetSize() <= 0)
+	{
+		iSelectedEntry = 0;
+		iFirstEntry = 0;
+		return;
+	}
+
+	if (iSelectedEntry < 0) iSelectedEntry = 0;
+	if (iSelectedEntry >= count) iSelectedEntry = count - 1;
+
+	if (cfg.lookahead)
+	{
+		iFirstEntry = iSelectedEntry - (OsdGetSize() / 2);
+	}
+	else if (iSelectedEntry < iFirstEntry)
+	{
+		iFirstEntry = iSelectedEntry;
+	}
+	else if (iSelectedEntry >= iFirstEntry + OsdGetSize())
+	{
+		iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
+	}
+
+	if (iFirstEntry < 0) iFirstEntry = 0;
+	if (iFirstEntry > flist_last_first_entry()) iFirstEntry = flist_last_first_entry();
+}
 
 fileTYPE::fileTYPE()
 {
@@ -461,7 +498,19 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute, int use_zi
 			if(!mute) printf("FileOpenEx(open) File:%s, error: %s.\n", full_path, strerror(errno));
 			return 0;
 		}
-		const char *fmode = mode & O_RDWR ? "w+" : "r";
+		const char *fmode;
+
+		switch (mode & O_ACCMODE) {
+		case O_RDONLY:
+			fmode = "r";
+			break;
+		case O_WRONLY:
+			fmode = "w";
+			break;
+		default:
+			fmode = "w+";
+			break;
+		}
 		file->filp = fdopen(fd, fmode);
 		if (!file->filp)
 		{
@@ -833,11 +882,14 @@ int FileCreatePath(const char *dir)
 	return res;
 }
 
-void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
+void FileGenerateScreenshotName(const char *name, char *out_name, const char* extension, int buflen)
 {
-	// If the name ends with .png then don't modify it
-	if( !strcasecmp(name + strlen(name) - 4, ".png") )
-	{
+	// If the name ends with target extension then don't modify it
+	       
+	size_t name_len = strlen(name);
+	size_t ext_len = strlen(extension);
+	
+	if (name_len >= ext_len && !strcasecmp(name + name_len - ext_len, extension))	{
 		const char *p = strrchr(name, '/');
 		make_fullpath(SCREENSHOT_DIR);
 		if( p )
@@ -859,13 +911,13 @@ void FileGenerateScreenshotName(const char *name, char *out_name, int buflen)
 		if (tm.tm_year >= 119) // 2019 or up considered valid time
 		{
 			strftime(datecode, 31, "%Y%m%d_%H%M%S", &tm);
-			snprintf(out_name, buflen, "%s/%s/%s-%s.png", SCREENSHOT_DIR, CoreName2, datecode, name[0] ? name : SCREENSHOT_DEFAULT);
+			snprintf(out_name, buflen, "%s/%s/%s-%s%s", SCREENSHOT_DIR, CoreName2, datecode, name[0] ? name : SCREENSHOT_DEFAULT, extension);
 		}
 		else
 		{
 			for (int i = 1; i < 10000; i++)
 			{
-				snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d.png", SCREENSHOT_DIR, CoreName2, name[0] ? name : SCREENSHOT_DEFAULT, i);
+				snprintf(out_name, buflen, "%s/%s/NODATE-%s_%04d%s", SCREENSHOT_DIR, CoreName2, name[0] ? name : SCREENSHOT_DEFAULT, i, extension);
 				if (!getFileType(out_name)) return;
 			}
 		}
@@ -938,31 +990,35 @@ uint32_t getFileType(const char *name)
 	return st.st_mode;
 }
 
-int findPrefixDir(char *dir, size_t dir_len)
+static int findPrefixDir(const char *prefix, bool no_prefix_check, char *dir, size_t dir_len)
 {
 	// Searches for the core's folder in the following order:
-	// /media/usb<0..5>
-	// /media/usb<0..5>/games
-	// /media/network
-	// /media/network/games
-	// /media/fat/cifs
-	// /media/fat/cifs/games
-	// /media/fat
-	// /media/fat/games/
-	// if the core folder is not found anywhere,
-	// it will be created in /media/fat/games/<dir>
+	// /media/usb<0..5>/<dir>          (only if no_prefix_check)
+	// /media/usb<0..5>/<prefix>/<dir>
+	// /media/network/<dir>            (only if no_prefix_check)
+	// /media/network/<prefix>/<dir>
+	// /media/fat/cifs/<dir>           (only if no_prefix_check)
+	// /media/fat/cifs/<prefix>/<dir>
+	// /media/fat/<dir>                (only if no_prefix_check)
+	// /media/fat/<prefix>/<dir>
+	//
+	// no_prefix_check enables the legacy layout where system folders lived
+	// directly at the storage root (e.g. /media/fat/SNES). That layout is
+	// no longer recommended; prefer <prefix>/<dir>.
 	static char temp_dir[1024];
 
 	// Usb<0..5>
 	for (int x = 0; x < 6; x++) {
-		snprintf(temp_dir, 1024, "%s%d/%s", "../usb", x, dir);
-		if (isPathDirectory(temp_dir)) {
-			printf("Found USB dir: %s\n", temp_dir);
-			strncpy(dir, temp_dir, dir_len);
-			return 1;
+		if (no_prefix_check) {
+			snprintf(temp_dir, 1024, "%s%d/%s", "../usb", x, dir);
+			if (isPathDirectory(temp_dir)) {
+				printf("Found USB dir: %s\n", temp_dir);
+				strncpy(dir, temp_dir, dir_len);
+				return 1;
+			}
 		}
 
-		snprintf(temp_dir, 1024, "%s%d/%s/%s", "../usb", x, GAMES_DIR, dir);
+		snprintf(temp_dir, 1024, "%s%d/%s/%s", "../usb", x, prefix, dir);
 		if (isPathDirectory(temp_dir)) {
 			printf("Found USB dir: %s\n", temp_dir);
 			strncpy(dir, temp_dir, dir_len);
@@ -971,15 +1027,17 @@ int findPrefixDir(char *dir, size_t dir_len)
 	}
 
 	// Network share in /media/network/
-	snprintf(temp_dir, 1024, "%s/%s", "../network", dir);
-	if (isPathDirectory(temp_dir)) {
-		printf("Found network dir: %s\n", temp_dir);
-		strncpy(dir, temp_dir, dir_len);
-		return 1;
+	if (no_prefix_check) {
+		snprintf(temp_dir, 1024, "%s/%s", "../network", dir);
+		if (isPathDirectory(temp_dir)) {
+			printf("Found network dir: %s\n", temp_dir);
+			strncpy(dir, temp_dir, dir_len);
+			return 1;
+		}
 	}
 
-	// Network share in /media/network/games
-	snprintf(temp_dir, 1024, "%s/%s/%s", "../network", GAMES_DIR, dir);
+	// Network share in /media/network/<prefix>
+	snprintf(temp_dir, 1024, "%s/%s/%s", "../network", prefix, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found network dir: %s\n", temp_dir);
 		strncpy(dir, temp_dir, dir_len);
@@ -987,15 +1045,17 @@ int findPrefixDir(char *dir, size_t dir_len)
 	}
 
 	// CIFS_DIR directory in /media/fat/cifs
-	snprintf(temp_dir, 1024, "%s/%s", CIFS_DIR, dir);
-	if (isPathDirectory(temp_dir)) {
-		printf("Found CIFS dir: %s\n", temp_dir);
-		strncpy(dir, temp_dir, dir_len);
-		return 1;
+	if (no_prefix_check) {
+		snprintf(temp_dir, 1024, "%s/%s", CIFS_DIR, dir);
+		if (isPathDirectory(temp_dir)) {
+			printf("Found CIFS dir: %s\n", temp_dir);
+			strncpy(dir, temp_dir, dir_len);
+			return 1;
+		}
 	}
 
-	// CIFS_DIR/GAMES_DIR directory in /media/fat/cifs/games
-	snprintf(temp_dir, 1024, "%s/%s/%s", CIFS_DIR, GAMES_DIR, dir);
+	// CIFS_DIR/<prefix> directory in /media/fat/cifs/<prefix>
+	snprintf(temp_dir, 1024, "%s/%s/%s", CIFS_DIR, prefix, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found CIFS dir: %s\n", temp_dir);
 		strncpy(dir, temp_dir, dir_len);
@@ -1003,13 +1063,13 @@ int findPrefixDir(char *dir, size_t dir_len)
 	}
 
 	// media/fat
-	if (isPathDirectory(dir)) {
+	if (no_prefix_check && isPathDirectory(dir)) {
 		printf("Found existing: %s\n", dir);
 		return 1;
 	}
 
-	// media/fat/GAMES_DIR
-	snprintf(temp_dir, 1024, "%s/%s", GAMES_DIR, dir);
+	// media/fat/<prefix>
+	snprintf(temp_dir, 1024, "%s/%s", prefix, dir);
 	if (isPathDirectory(temp_dir)) {
 		printf("Found dir: %s\n", temp_dir);
 		strncpy(dir, temp_dir, dir_len);
@@ -1019,9 +1079,19 @@ int findPrefixDir(char *dir, size_t dir_len)
 	return 0;
 }
 
+int findGamesDir(char *dir, size_t dir_len)
+{
+	return findPrefixDir(GAMES_DIR, true, dir, dir_len);
+}
+
+int findDocsDir(char *dir, size_t dir_len)
+{
+	return findPrefixDir(DOCS_DIR, false, dir, dir_len);
+}
+
 void prefixGameDir(char *dir, size_t dir_len)
 {
-	if (!findPrefixDir(dir, dir_len))
+	if (!findGamesDir(dir, dir_len))
 	{
 		static char temp_dir[1024];
 
@@ -1741,9 +1811,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if(pos>=0)
 			{
 				iSelectedEntry = pos;
-				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-				else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
-				if (iFirstEntry < 0) iFirstEntry = 0;
+				flist_center_selected();
 			}
 		}
 		return flist_nDirEntries();
@@ -1756,8 +1824,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		if (mode == SCANF_END || (mode == SCANF_PREV && iSelectedEntry <= 0))
 		{
 			iSelectedEntry = flist_nDirEntries() - 1;
-			iFirstEntry = iSelectedEntry - OsdGetSize() + 1;
-			if (iFirstEntry < 0) iFirstEntry = 0;
+			flist_center_selected();
 			return 0;
 		}
 		else if (mode == SCANF_NEXT)
@@ -1765,15 +1832,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if(iSelectedEntry + 1 < flist_nDirEntries()) // scroll within visible items
 			{
 				iSelectedEntry++;
-				// Start scrolling when cursor is cfg.lookahead positions from bottom
-				if (iSelectedEntry > iFirstEntry + OsdGetSize() - (cfg.lookahead + 1)) iFirstEntry = iSelectedEntry - OsdGetSize() + (cfg.lookahead + 1);
 			}
             else
             {
 				// jump to first visible item
-				iFirstEntry = 0;
 				iSelectedEntry = 0;
             }
+			flist_center_selected();
             return 0;
 		}
 		else if (mode == SCANF_PREV)
@@ -1781,106 +1846,20 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if (iSelectedEntry > 0) // scroll within visible items
 			{
 				iSelectedEntry--;
-				// Start scrolling when cursor is cfg.lookahead positions from top
-				if (iSelectedEntry < iFirstEntry + cfg.lookahead) iFirstEntry = iSelectedEntry - cfg.lookahead;
-				if (iFirstEntry < 0) iFirstEntry = 0;
+				flist_center_selected();
 			}
             return 0;
 		}
 		else if (mode == SCANF_NEXT_PAGE)
 		{
-			// Calculate cursor position relative to current page
-			int cursor_offset = iSelectedEntry - iFirstEntry;
-			
-			// Check if we're already on the last page (less than a full page left)
-			int remaining_entries = flist_nDirEntries() - iFirstEntry;
-			if (remaining_entries <= OsdGetSize())
-			{
-				// On last page - allow cursor to go to actual last row
-				iSelectedEntry = flist_nDirEntries() - 1;
-				iFirstEntry = flist_nDirEntries() - OsdGetSize();
-				if (iFirstEntry < 0) iFirstEntry = 0;
-			}
-			else
-			{
-				// Move to next page
-				iFirstEntry += OsdGetSize();
-				if (iFirstEntry >= flist_nDirEntries())
-				{
-					// At end, stay on last page
-					iFirstEntry = flist_nDirEntries() - OsdGetSize();
-					if (iFirstEntry < 0) iFirstEntry = 0;
-					iSelectedEntry = flist_nDirEntries() - 1;
-				}
-				else
-				{
-					// Special handling for top row - jump to cfg.lookahead positions from bottom
-					if (cursor_offset == 0)
-					{
-						iSelectedEntry = iFirstEntry + OsdGetSize() - (cfg.lookahead + 1);
-					}
-					else
-					{
-						// Maintain relative cursor position, but respect cfg.lookahead buffer from bottom
-						iSelectedEntry = iFirstEntry + cursor_offset;
-						
-						// If cursor would be on bottom cfg.lookahead rows of page, keep it at cfg.lookahead from bottom
-						if (cursor_offset >= OsdGetSize() - cfg.lookahead)
-						{
-							iSelectedEntry = iFirstEntry + OsdGetSize() - (cfg.lookahead + 1);
-						}
-					}
-					
-					// Ensure we don't go past the end
-					if (iSelectedEntry >= flist_nDirEntries())
-					{
-						iSelectedEntry = flist_nDirEntries() - 1;
-					}
-				}
-			}
+			iSelectedEntry += OsdGetSize();
+			flist_center_selected();
 			return 0;
 		}
 		else if (mode == SCANF_PREV_PAGE)
 		{
-			// Calculate cursor position relative to current page
-			int cursor_offset = iSelectedEntry - iFirstEntry;
-			
-			// Check if we're already on the first page (less than a full page to go back)
-			if (iFirstEntry <= OsdGetSize())
-			{
-				// On first page - allow cursor to go to actual first row
-				iSelectedEntry = 0;
-				iFirstEntry = 0;
-			}
-			else
-			{
-				// Move to previous page
-				iFirstEntry -= OsdGetSize();
-				if (iFirstEntry < 0) iFirstEntry = 0;
-				
-				// Special handling for bottom row - jump to cfg.lookahead from top
-				if (cursor_offset == OsdGetSize() - 1)
-				{
-					iSelectedEntry = iFirstEntry + cfg.lookahead;
-				}
-				else
-				{
-					// Maintain relative cursor position, but respect cfg.lookahead buffer from top
-					iSelectedEntry = iFirstEntry + cursor_offset;
-					
-					// If cursor would be on top cfg.lookahead rows of page, keep it at cfg.lookahead from top
-					if (cursor_offset <= cfg.lookahead - 1)
-					{
-						iSelectedEntry = iFirstEntry + cfg.lookahead;
-					}
-				}
-				
-				// Ensure we don't go past the end
-				if (iSelectedEntry >= flist_nDirEntries())
-				{
-					iSelectedEntry = flist_nDirEntries() - 1;
-				}
-			}
+			iSelectedEntry -= OsdGetSize();
+			flist_center_selected();
 		}
 		else if (mode == SCANF_SET_ITEM)
 		{
@@ -1901,9 +1880,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if(pos>=0)
 			{
 				iSelectedEntry = pos;
-				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-				else iFirstEntry = iSelectedEntry - (OsdGetSize() / 2) + 1;
-				if (iFirstEntry < 0) iFirstEntry = 0;
+				flist_center_selected();
 			}
 		}
 		else if (mode == SCANF_NEXT_CHAR)
@@ -1934,9 +1911,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if (found >= 0)
 			{
 				iSelectedEntry = found;
-				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-				else iFirstEntry = iSelectedEntry - (OsdGetSize()/2) + 1;
-				if (iFirstEntry < 0) iFirstEntry = 0;
+				flist_center_selected();
 			}
 		}
 		else if (mode == SCANF_PREV_CHAR)
@@ -1975,9 +1950,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			if (found >= 0)
 			{
 				iSelectedEntry = found;
-				if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-				else iFirstEntry = iSelectedEntry - (OsdGetSize()/2) + 1;
-				if (iFirstEntry < 0) iFirstEntry = 0;
+				flist_center_selected();
 			}
 		}
 		else
@@ -2011,9 +1984,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 				if (found >= 0)
 				{
 					iSelectedEntry = found;
-					if (iSelectedEntry + (OsdGetSize() / 2) >= flist_nDirEntries()) iFirstEntry = flist_nDirEntries() - OsdGetSize();
-					else iFirstEntry = iSelectedEntry - (OsdGetSize()/2) + 1;
-					if (iFirstEntry < 0) iFirstEntry = 0;
+					flist_center_selected();
 				}
 			}
 		}
@@ -2039,7 +2010,7 @@ int flist_iFirstEntry()
 
 void flist_iFirstEntryInc()
 {
-	iFirstEntry++;
+	if (iFirstEntry < flist_last_first_entry()) iFirstEntry++;
 }
 
 int flist_iSelectedEntry()
@@ -2152,4 +2123,177 @@ const char *FileReadLine(fileTextReader *reader)
 		}
 	}
 	return nullptr;
+}
+
+static int validAsset(const char *path, gameAssetValidator *validator)
+{
+	if (validator)
+	{
+		if (!validator->fn(path, validator->ctx)) return 0;
+	}
+	else if (!FileExists(path, 0))
+	{
+		return 0;
+	}
+
+	return 1;
+}
+
+static int findAssetByCrc(char *path, size_t path_len, uint32_t romcrc, const char *ext, const char *core_dir)
+{
+	if (!romcrc) return 0;
+
+	snprintf(path, path_len, "%s", core_dir);
+	DIR *d = opendir(path);
+	if (!d) {
+		printf("Couldn't open dir: %s\n", path);
+		return 0;
+	}
+
+	int ext_len = strlen(ext);
+	struct dirent *de;
+	while ((de = readdir(d)))
+	{
+		if (de->d_type == DT_REG) {
+			int len = strlen(de->d_name);
+			if (len < 10 + ext_len || strcasecmp(de->d_name + len - ext_len, ext)) continue;
+
+			int bracket_pos = len - 10 - ext_len;
+			if (de->d_name[bracket_pos] == '[' && de->d_name[len - ext_len - 1] == ']')
+			{
+				uint32_t crc = 0;
+				if (sscanf(de->d_name + bracket_pos + 1, "%8X", &crc) == 1)
+				{
+					if (crc == romcrc) {
+						strcat(path, "/");
+						strcat(path, de->d_name);
+						closedir(d);
+						return 1;
+					}
+				}
+			}
+		}
+	}
+
+	closedir(d);
+	return 0;
+}
+
+static int findAssetInSameDir(char *path, size_t path_len, const char *rom_path, const char *ext)
+{
+	snprintf(path, path_len, "%s", getFullPath(rom_path));
+	char *p = strrchr(path, '/'); // impossible to fail
+	*p = 0;
+
+	DIR *d = opendir(path);
+	if (!d)
+	{
+		printf("Couldn't open dir: %s\n", path);
+		return 0;
+	}
+
+	struct dirent *de;
+	while ((de = readdir(d)))
+	{
+		if (de->d_type == DT_REG)
+		{
+			int len = strlen(de->d_name);
+			if (len >= 4 && !strcasecmp(de->d_name + len - 4, ext))
+			{
+				strcat(path, "/");
+				strcat(path, de->d_name);
+				closedir(d);
+				return 1;
+			}
+		}
+	}
+
+	closedir(d);
+	return 0;
+}
+
+static bool findPsxAsset(char *path, size_t path_len, const char *rom_path, const char *ext, const char *core_dir, gameAssetValidator *validator)
+{
+	// lookup based on file name
+	const char *rom_name = strrchr(rom_path, '/');
+	if (rom_name)
+	{
+		snprintf(path, path_len, "%s%s", core_dir, rom_name);
+		char *p = strrchr(path, '.');
+		if (p) *p = 0;
+		strcat(path, ext);
+
+		if (validAsset(path, validator)) return true;
+	}
+
+	// lookup based on game ID
+	const char *game_id = psx_get_game_id();
+	if (game_id && game_id[0])
+	{
+		snprintf(path, path_len, "%s/%s%s", core_dir, game_id, ext);
+		if (validAsset(path, validator)) return true;
+	}
+
+	return false;
+}
+
+int findGameAsset(char *path, size_t path_len, const char *rom_path, uint32_t romcrc, const char *ext, const char *core_dir, const char *pcecd_dir, gameAssetValidator *validator)
+{
+	path[0] = 0;
+
+	if (!strcasestr(rom_path, ".zip"))
+	{
+		snprintf(path, path_len, "%s", getFullPath(rom_path));
+		char *p = strrchr(path, '.');
+		if (p) *p = 0;
+		strcat(path, ext);
+	}
+
+	if (validAsset(path, validator)) {
+		return 1;
+	}
+	else if (is_psx())
+	{
+		if (!findPsxAsset(path, path_len, rom_path, ext, core_dir, validator))
+		{
+			return 0;
+		}
+	}
+	else
+	{
+		if (pcecd_using_cd() || is_megacd())
+		{
+			if (findAssetInSameDir(path, path_len, rom_path, ext) && validAsset(path, validator))
+			{
+				return 1;
+			}
+		}
+
+		const char *rom_name = strrchr(rom_path, '/');
+		if (rom_name)
+		{
+			snprintf(path, path_len, "%s%s", pcecd_using_cd() ? pcecd_dir : core_dir, rom_name);
+			char *p = strrchr(path, '.');
+			if (p) *p = 0;
+			if (pcecd_using_cd() || is_megacd()) strcat(path, " []");
+			strcat(path, ext);
+
+			if (!validAsset(path, validator))
+			{
+				if (!findAssetByCrc(path, path_len, romcrc, ext, core_dir) || !validAsset(path, validator))
+				{
+					return 0;
+				}
+			}
+		}
+		else
+		{
+			if (!findAssetByCrc(path, path_len, romcrc, ext, core_dir) || !validAsset(path, validator))
+			{
+				return 0;
+			}
+		}
+	}
+
+	return 1;
 }

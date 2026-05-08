@@ -78,10 +78,10 @@ typedef struct {
 	uint16_t wheel_range;
 	uint8_t hdmi_game_mode;
 	uint8_t vrr_mode;
-	uint8_t vrr_min_framerate;
-	uint8_t vrr_max_framerate;
 	uint8_t vrr_vesa_framerate;
 	uint16_t video_off;
+	uint8_t video_off_hdmi;
+	uint8_t video_off_logo;
 	uint8_t disable_autofire;
 	uint8_t video_brightness;
 	uint8_t video_contrast;
@@ -101,8 +101,11 @@ typedef struct {
 	uint8_t lookahead;
 	char main[1024];
 	char vfilter_interlace_default[1023];
-	char autofire_rates[256];
-
+	char autofire_rates[3072];
+	uint8_t autofire_on_directions;
+	char screenshot_image_format[16];
+	uint16_t xbe2_shift;
+	uint8_t spd_quirk;
 } cfg_t;
 
 extern cfg_t cfg;

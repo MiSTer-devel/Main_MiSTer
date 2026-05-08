@@ -57,7 +57,7 @@ int   video_get_rotated();
 
 void video_cfg_reset();
 
-void  video_mode_adjust();
+void  video_mode_adjust(bool force = false);
 
 int   hasAPI1_5();
 
@@ -67,9 +67,13 @@ void video_menu_bg(int n, int idle = 0);
 int video_bg_has_picture();
 int video_chvt(int num);
 void video_cmd(char *cmd);
+void video_mode_cmd(char *cmd);
+void video_hdmi_power(int on);
 
 void video_core_description(char *str, size_t len);
 void video_scaler_description(char *str, size_t len);
 char* video_get_core_mode_name(int with_vrefresh = 1);
+
+void dbg_draw_cursor(int x, int y);
 
 #endif // VIDEO_H

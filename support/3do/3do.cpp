@@ -1,0 +1,207 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <inttypes.h>
+
+#include "../../file_io.h"
+#include "../../user_io.h"
+#include "../../spi.h"
+#include "../../hardware.h"
+#include "../../menu.h"
+#include "../../cheats.h"
+#include "3do.h"
+
+static int need_reset = 0;
+uint32_t p3do_frame_cnt = 0;
+uint8_t p3do_time_mode;
+
+void p3do_poll()
+{
+	static unsigned long poll_timer = 0;
+	static uint8_t last_req = 255;
+
+	if (!poll_timer || CheckTimer(poll_timer))
+	{
+		poll_timer = GetTimer(0);
+
+		uint16_t data_in[4];
+		uint8_t req = spi_uio_cmd_cont(UIO_CD_GET);
+		if (req != last_req)
+		{
+			last_req = req;
+
+			for (int i = 0; i < 4; i++) data_in[i] = spi_w(0);
+			DisableIO();
+
+			p3docdd.SetCommand((uint8_t*)data_in);
+			p3docdd.CommandExec();
+		}
+		else
+			DisableIO();
+
+		p3docdd.Process(&p3do_time_mode);
+		poll_timer += 3;
+
+		uint16_t* s = (uint16_t*)p3docdd.GetStatus();
+		spi_uio_cmd_cont(UIO_CD_SET);
+		for (int i = 0; i < 4; i++) spi_w(s[i]);
+		DisableIO();
+
+		p3docdd.Update();
+		p3do_frame_cnt++;
+	}
+}
+
+static char buf[1024];
+
+static void p3do_mount_save(const char *filename)
+{
+	user_io_set_index(SAVE_IO_INDEX);
+	user_io_set_download(1);
+	if (strlen(filename))
+	{
+		FileGenerateSavePath(filename, buf);
+#ifdef P3DO_DEBUG
+		printf("Saturn save filename = %s\n", buf);
+#endif // P3DO_DEBUG
+		user_io_file_mount(buf, 0, 1);
+	}
+	else
+	{
+		user_io_file_mount("");
+	}
+	user_io_set_download(0);
+}
+
+static int p3do_load_rom(const char *basename, const char *name, int index)
+{
+	strcpy(buf, basename);
+	char *p = strrchr(buf, '/');
+	if (p)
+	{
+		p++;
+		strcpy(p, name);
+		if (user_io_file_tx(buf, index)) return 1;
+	}
+
+	return 0;
+}
+
+void p3do_set_image(int num, const char *filename)
+{
+	static char last_dir[1024] = {};
+
+	(void)num;
+
+	p3docdd.Unload();
+	p3docdd.Reset();
+
+	int same_game = *filename && *last_dir && !strncmp(last_dir, filename, strlen(last_dir));
+	strcpy(last_dir, filename);
+	char *p = strrchr(last_dir, '/');
+	if (p) *p = 0;
+
+	if (!same_game)
+	{
+		p3do_mount_save("");
+
+		user_io_status_set("[0]", 1);
+		p3do_reset();
+
+		// load CD BIOS
+		int bios_loaded = 1;
+		if (!p3do_load_rom(filename, "cd_bios.rom", 0)) // from disk folder.
+		{
+			if (!p3do_load_rom(last_dir, "cd_bios.rom", 0)) // from parent folder.
+			{
+				sprintf(buf, "%s/boot.rom", HomeDir()); // from home folder.
+				if (!user_io_file_tx(buf))
+				{
+					bios_loaded = 0;
+					Info("CD BIOS not found!", 4000);
+				}
+				else {
+					
+				}
+			}
+		}
+
+		// load kanji rom
+		if (bios_loaded) {
+			if (!p3do_load_rom(filename, "kanji.rom", 3)) // from disk folder.
+			{
+				if (!p3do_load_rom(last_dir, "kanji.rom", 3)) // from parent folder.
+				{
+
+				}
+			}
+		}
+	}
+
+	if (strlen(filename))
+	{
+		if (p3docdd.Load(filename) > 0)
+		{
+			p3docdd.SendData = p3do_send_data;
+
+			if (!same_game)
+			{
+				p3do_mount_save(filename);
+			}
+
+			if (p3docdd.GetDiscInfo((uint8_t*)buf) > 0)
+			{
+				p3do_send_data((uint8_t*)buf, 2048, CD_INFO_IO_INDEX);
+			}
+		}
+	}
+
+	user_io_status_set("[0]", 0);
+}
+
+void p3do_reset() {
+	need_reset = 1;
+}
+
+int p3do_send_data(uint8_t* buf, int len, uint8_t index) {
+	// set index byte
+	user_io_set_index(index);
+
+	user_io_set_download(1);
+	user_io_file_tx_data(buf, len);
+	user_io_set_download(0);
+	return 1;
+}
+
+static char save_blank[] = {
+	0x01, 0x5A, 0x5A, 0x5A, 0x5A, 0x5A, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4E, 0x56, 0x52, 0x41, 0x4D, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x01,
+	0x00, 0x00, 0x80, 0x00, 0xFF, 0xFF, 0xFF, 0xFE, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x85, 0x5A, 0x02, 0xB6, 0x00, 0x00, 0x00, 0x98, 0x00, 0x00, 0x00, 0x98,
+	0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x14, 0x7A, 0xA5, 0x65, 0xBD, 0x00, 0x00, 0x00, 0x84,
+	0x00, 0x00, 0x00, 0x84, 0x00, 0x00, 0x7F, 0x68, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+void p3do_fill_blanksave(uint8_t *buf, uint32_t lba)
+{
+	if (lba == 0)
+	{
+		memcpy(buf, save_blank, 256);
+		memset(buf+256, 0, 256);
+	}
+	else
+	{
+		memset(buf, 0, 512);
+	}
+}
+

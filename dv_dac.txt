@@ -22,3 +22,5 @@
 # Known DACs
 0x48F4,0,0,,CS5213 DAC
 0x04EF,2,0,,AG6200 DAC
+0x48D8,0,0,0,Reflex Prism DAC
+0x2000,0,0,0,Analogue DAC

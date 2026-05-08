@@ -3,12 +3,12 @@
 
 #include <stdint.h>
 
-// macro to tell if a new vertical refresh has happened since the last time we checked
-// requires a local uint64_t to track frame counter
-#define FRAME_TICK(last) \
-    ((global_frame_counter != (last)) ? ((last) = global_frame_counter, 1) : 0)
+#define MAX_FRAME_CALLBACKS 16
+
+typedef void (*frame_callback_t)(void);
 
 void frame_timer();
+void add_frame_callback(frame_callback_t cb);
 
 // global
 extern uint64_t global_frame_counter; // used by FRAME_TICK()

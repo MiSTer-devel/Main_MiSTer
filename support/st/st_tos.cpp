@@ -428,7 +428,7 @@ void tos_load_cartridge(const char *name)
 			DisableFpga();
 
 			user_io_set_download(0);
-			delete buf;
+			delete[] buf;
 		}
 	}
 }

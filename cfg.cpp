@@ -104,11 +104,11 @@ static const ini_var_t ini_vars[] =
 	{ "WHEEL_FORCE", (void*)(&(cfg.wheel_force)), UINT8, 0, 100 },
 	{ "WHEEL_RANGE", (void*)(&(cfg.wheel_range)), UINT16, 0, 1000 },
 	{ "HDMI_GAME_MODE", (void *)(&(cfg.hdmi_game_mode)), UINT8, 0, 1 },
-	{ "VRR_MODE", (void *)(&(cfg.vrr_mode)), UINT8, 0, 3 },
-	{ "VRR_MIN_FRAMERATE", (void *)(&(cfg.vrr_min_framerate)), UINT8, 0, 255 },
-	{ "VRR_MAX_FRAMERATE", (void *)(&(cfg.vrr_max_framerate)), UINT8, 0, 255 },
+	{ "VRR_MODE", (void *)(&(cfg.vrr_mode)), UINT8, 0, 4 },
 	{ "VRR_VESA_FRAMERATE", (void *)(&(cfg.vrr_vesa_framerate)), UINT8, 0, 255 },
 	{ "VIDEO_OFF", (void*)(&(cfg.video_off)), INT16, 0, 3600 },
+	{ "VIDEO_OFF_HDMI", (void*)(&(cfg.video_off_hdmi)), UINT8, 0, 1 },
+	{ "VIDEO_OFF_LOGO", (void*)(&(cfg.video_off_logo)), UINT8, 0, 1 },
 	{ "PLAYER_1_CONTROLLER", (void*)(&(cfg.player_controller[0])), STRINGARR, sizeof(cfg.player_controller[0]) / sizeof(cfg.player_controller[0][0]), sizeof(cfg.player_controller[0][0]) },
 	{ "PLAYER_2_CONTROLLER", (void*)(&(cfg.player_controller[1])), STRINGARR, sizeof(cfg.player_controller[0]) / sizeof(cfg.player_controller[0][0]), sizeof(cfg.player_controller[0][0]) },
 	{ "PLAYER_3_CONTROLLER", (void*)(&(cfg.player_controller[2])), STRINGARR, sizeof(cfg.player_controller[0]) / sizeof(cfg.player_controller[0][0]), sizeof(cfg.player_controller[0][0]) },
@@ -130,11 +130,14 @@ static const ini_var_t ini_vars[] =
 	{ "OSD_LOCK", (void*)(&(cfg.osd_lock)), STRING, 0, sizeof(cfg.osd_lock) - 1 },
 	{ "OSD_LOCK_TIME", (void*)(&(cfg.osd_lock_time)), UINT16, 0, 60 },
 	{ "DEBUG", (void *)(&(cfg.debug)), UINT8, 0, 1 },
-	{ "LOOKAHEAD", (void *)(&(cfg.lookahead)), UINT8, 0, 3 },
+	{ "LOOKAHEAD", (void *)(&(cfg.lookahead)), UINT8, 0, 1 },
 	{ "MAIN", (void*)(&(cfg.main)), STRING, 0, sizeof(cfg.main) - 1 },
-	{"VFILTER_INTERLACE_DEFAULT", (void*)(&(cfg.vfilter_interlace_default)), STRING, 0, sizeof(cfg.vfilter_interlace_default) - 1 },
+	{ "VFILTER_INTERLACE_DEFAULT", (void*)(&(cfg.vfilter_interlace_default)), STRING, 0, sizeof(cfg.vfilter_interlace_default) - 1 },
 	{ "AUTOFIRE_RATES", (void *)(&(cfg.autofire_rates)), STRING, 0, sizeof(cfg.autofire_rates) - 1 },
-
+	{ "AUTOFIRE_ON_DIRECTIONS", (void *)(&(cfg.autofire_on_directions)), UINT8, 0, 1 },
+	{ "SCREENSHOT_IMAGE_FORMAT", (void *)(&(cfg.screenshot_image_format)), STRING, 0, sizeof(cfg.screenshot_image_format) - 1 },
+	{ "XBE2_SHIFT", (void*)(&(cfg.xbe2_shift)), UINT16, 0, 0x22F },
+	{ "SPD_QUIRK", (void*)(&(cfg.spd_quirk)), UINT8, 0, 3 },
 };
 
 static const int nvars = (int)(sizeof(ini_vars) / sizeof(ini_var_t));
@@ -584,7 +587,7 @@ void cfg_parse()
 	cfg.rumble = 1;
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
-	cfg.lookahead = 2;
+	cfg.lookahead = 1;
 	cfg.hdr = 0;
 	cfg.hdr_max_nits = 1000;
 	cfg.hdr_avg_nits = 250;
@@ -598,6 +601,8 @@ void cfg_parse()
 	using_video_section = false;
 	cfg_error_count = 0;
 	strcpy(cfg.autofire_rates, "10,15,30");
+	strcpy(cfg.screenshot_image_format, "png");
+
 	ini_parse(altcfg(), video_get_core_mode_name(1));
 	if (has_video_sections && !using_video_section)
 	{
@@ -618,6 +623,7 @@ void cfg_parse()
 			cfg.forced_scandoubler = 0;
 		}
 	}
+
 }
 
 bool cfg_has_video_sections()

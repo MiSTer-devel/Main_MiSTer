@@ -58,6 +58,7 @@
 #define VRR_NONE     0x00
 #define VRR_FREESYNC 0x01
 #define VRR_VESA     0x02
+#define VRR_MISTER   0x03
 
 static int     use_vrr = 0;
 static int     use_freesync_spd = 0;
@@ -90,16 +91,19 @@ struct vrr_cap_t
 	char description[128];
 };
 
-static vrr_cap_t vrr_modes[3] = {
+static vrr_cap_t vrr_modes[] = {
 	{0, 0, 0, 0, "None"},
 	{0, 0, 0, 0, "AMD Freesync"},
 	{0, 0, 0, 0, "Vesa Forum VRR"},
+	{0, 0, 0, 0, "MiSTer VRR"},
 };
 
 static uint8_t last_vrr_mode = 0xFF;
 static float last_vrr_rate = 0.0f;
 static uint32_t last_vrr_vfp = 0;
 static uint8_t edid[256] = {};
+static uint16_t raw_edid_mfg_id = 0;
+static bool raw_edid_mfg_id_valid = false;
 
 struct vmode_t
 {
@@ -1147,11 +1151,8 @@ static void hdmi_packet_set_data(uint8_t mask, uint8_t offset, uint8_t *data, in
 		}
 		else
 		{
-			for (int i = 0; i < size; i++)
-			{
-				res = i2c_smbus_write_byte_data(fd, offset + i, data[i]);
-				if (res < 0) printf("i2c: SPD register write error (%02X %02x): %d\n", offset + i, data[i], res);
-			}
+			res = i2c_smbus_write_block_data(fd, offset, size, data);
+			if (res < 0) printf("i2c: SPD data write error: %d\n", res);
 
 			res = i2c_smbus_write_byte_data(fd, offset + 0x1F, 0x00);
 			if (res < 0) printf("i2c: Couldn't update packet change register (0x%02X, 0x00) %d\n", offset + 0x1F, res);
@@ -1205,7 +1206,7 @@ static void hdmi_config_set_csc()
 
 	const float pi = float(M_PI);
 
-	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
 
 	// out-of-scope defines, not used with ypbpr
 	int16_t csc_int16[12];
@@ -1404,7 +1405,7 @@ static void hdmi_config_set_csc()
 
 static void hdmi_config_init()
 {
-	int ypbpr = (cfg.vga_mode_int == 1) && cfg.direct_video;
+	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
 
 	// address, value
 	uint8_t init_data[] = {
@@ -1514,6 +1515,7 @@ static void hdmi_config_init()
 
 		0xBB, 0x00,				// ADI required Write.
 		0xDE, 0x9C,				// ADI required Write.
+		0xE2, 0x01,				// Power down the CEC.
 		0xE4, 0x60,				// ADI required Write.
 		0xFA, 0x7D,				// Nbr of times to search for good phase
 
@@ -1560,6 +1562,23 @@ static void hdmi_config_init()
 	}
 
 	hdmi_config_set_csc();
+}
+
+void video_hdmi_power(int on)
+{
+	// ADV7513 power-down control. 0 = power on, 1 = power down.
+	int fd = i2c_open(0x39, 0);
+	if (fd >= 0)
+	{
+		uint8_t val = on ? 0x00 : 0x40;
+		int res = i2c_smbus_write_byte_data(fd, 0x41, val);
+		if (res < 0) printf("i2c: write error (41 %02X): %d\n", val, res);
+		i2c_close(fd);
+	}
+	else
+	{
+		printf("*** ADV7513 not found on i2c bus! HDMI won't be available!\n");
+	}
 }
 
 static void hdmi_config_set_hdr()
@@ -1767,11 +1786,18 @@ static int is_edid_valid()
 	return !memcmp(edid, magic, sizeof(magic));
 }
 
+static void cache_raw_edid_mfg_id()
+{
+	raw_edid_mfg_id = (edid[0x08] << 8) | edid[0x09];
+	raw_edid_mfg_id_valid = true;
+}
+
 static int get_active_edid()
 {
 	int fd = i2c_open(0x39, 0);
 	if (fd < 0)
 	{
+		raw_edid_mfg_id_valid = false;
 		printf("EDID: cannot find main i2c device\n");
 		return 0;
 	}
@@ -1781,6 +1807,7 @@ static int get_active_edid()
 	if (hpd_state < 0 || !(hpd_state & 0x20))
 	{
 		i2c_close(fd);
+		raw_edid_mfg_id_valid = false;
 		return 0;
 	}
 
@@ -1794,6 +1821,7 @@ static int get_active_edid()
 	fd = i2c_open(0x3f, 0);
 	if (fd < 0)
 	{
+		raw_edid_mfg_id_valid = false;
 		printf("EDID: cannot find i2c device.\n");
 		return 0;
 	}
@@ -1808,6 +1836,7 @@ static int get_active_edid()
 
 	i2c_close(fd);
 	printf("EDID:\n"); hexdump(edid, sizeof(edid), 0);
+	cache_raw_edid_mfg_id();
 
 	if (!is_edid_valid())
 	{
@@ -1946,10 +1975,9 @@ static void set_vrr_mode()
 {
 	PROFILE_FUNCTION();
 
-	use_vrr = 0;
 	float vrateh = 100000000;
 
-	if (cfg.vrr_mode == 0)
+	if (cfg.vrr_mode == 0 || is_menu())
 	{
 		if (last_vrr_mode != 0)
 		{
@@ -1958,6 +1986,7 @@ static void set_vrr_mode()
 		}
 		last_vrr_mode = 0;
 		use_freesync_spd = 0;
+		use_vrr = 0;
 		return;
 	}
 
@@ -1966,16 +1995,17 @@ static void set_vrr_mode()
 
 	if ((last_vrr_mode == cfg.vrr_mode) &&
 		(last_vrr_rate == vrateh) &&
-		(last_vrr_vfp == v_cur.param.vfp || cfg.vrr_mode != VRR_VESA)) return;
+		(last_vrr_vfp == v_cur.param.vfp || (cfg.vrr_mode != VRR_VESA && cfg.vrr_mode != VRR_MISTER))) return;
 
 	if (!is_edid_valid())
 	{
 		get_active_edid();
 	}
 
-	if (!is_edid_valid())
+	if (!is_edid_valid() && cfg.vrr_mode == 1)
 	{
 		printf("Set VRR: No valid edid, cannot set\n");
+		use_vrr = 0;
 		return;
 	}
 
@@ -2000,6 +2030,10 @@ static void set_vrr_mode()
 	{ //force Vesa Forum VRR
 		use_vrr = VRR_VESA;
 	}
+	else if (cfg.vrr_mode == 4)
+	{ //force MiSTer VRR
+		use_vrr = VRR_MISTER;
+	}
 	else
 	{
 		use_vrr = 0;
@@ -2011,8 +2045,11 @@ static void set_vrr_mode()
 	if (use_vrr == VRR_VESA && !vrateh) return;
 	if (use_vrr)
 	{
-		vrr_min_fr = cfg.vrr_min_framerate;
-		vrr_max_fr = cfg.vrr_max_framerate;
+		if (use_vrr != VRR_MISTER)
+		{
+			vrr_min_fr = cfg.refresh_min;
+			vrr_max_fr = cfg.refresh_max;
+		}
 
 		if (!vrr_min_fr) vrr_min_fr = vrr_modes[use_vrr].min_fr;
 		if (!vrr_max_fr) vrr_max_fr = vrr_modes[use_vrr].max_fr;
@@ -2102,7 +2139,7 @@ static void video_set_mode(vmode_custom_t *v, double Fpix)
 	}
 
 	if (Fpix) setPLL(Fpix, &v_cur);
-	if (use_vrr)
+	if (use_vrr && vrr_min_fr && vrr_max_fr)
 	{
 		printf("Requested variable refresh rate: min=%dHz, max=%dHz\n", vrr_min_fr, vrr_max_fr);
 		int horz = v_fix.param.hact + v_fix.param.hbp + v_fix.param.hfp + v_fix.param.hs;
@@ -2435,10 +2472,16 @@ static int should_auto_enable_direct_video()
 		get_active_edid();
 	}
 
-	if (!is_edid_valid()) return 0;
-
-	// Check manufacturer ID (bytes 0x08-0x09)
-	uint16_t mfg_id = (edid[0x08] << 8) | edid[0x09];
+	uint16_t mfg_id = 0;
+	if (is_edid_valid()) {
+		// Check manufacturer ID (bytes 0x08-0x09)
+		mfg_id = (edid[0x08] << 8) | edid[0x09];
+	} else if (raw_edid_mfg_id_valid) {
+		mfg_id = raw_edid_mfg_id;
+		printf("EDID: Invalid header, using raw manufacturer ID 0x%04X for DAC detection.\n", mfg_id);
+	} else {
+		return 0;
+	}
 
 	// Check against known DACs from config
 	for (int i = 0; i < dac_config_count; i++) {
@@ -2476,6 +2519,9 @@ static void video_mode_load()
 			// Not a DAC, use normal HDMI mode
 			cfg.direct_video = 0;
 		}
+
+		// direct_video=2 resolves here, so refresh HDMI CSC with final mode.
+		hdmi_config_set_csc();
 	}
 
 	if (cfg.direct_video && cfg.vsync_adjust)
@@ -2587,7 +2633,6 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 	uint16_t res = spi_w(0);
 	if ((nres != res) || force)
 	{
-
 		res_changed = (nres != res);
 		nres = res;
 		if (res_changed) vi_seen = true;
@@ -2961,7 +3006,7 @@ static void spd_config_update()
 {
 	if (use_freesync_spd) return;
 
-	if (cfg.direct_video)
+	if (cfg.direct_video && (cfg.spd_quirk < 3))
 	{
 		// Custom SPD IF for additional DV1 metadata
 		VideoInfo *vi = &current_video_info;
@@ -2972,7 +3017,7 @@ static void spd_config_update()
 			'D',
 			'V',
 			'1', // version
-			(uint8_t)((vi->interlaced ? 1 : 0) | (menu_present() ? 4 : 0) | (vi->rotated ? 8 : 0) | (arcade_get_direction() << 4)),
+			(uint8_t)((vi->interlaced ? 1 : 0) | ((menu_present() && (cfg.spd_quirk < 2)) ? 4 : 0) | (vi->rotated ? 8 : 0) | (arcade_get_direction() << 4)),
 			(uint8_t)(vi->pixrep ? vi->pixrep : (vi->ctime / vi->width)),
 			(uint8_t)vi->de_h,
 			(uint8_t)(vi->de_h >> 8),
@@ -2994,7 +3039,7 @@ static void spd_config_update()
 
 		hdmi_spd_config(data);
 	}
-	else
+	else if(!cfg.spd_quirk)
 	{
 		// Standard SPD IF
 		uint8_t data[31] = {
@@ -3019,26 +3064,29 @@ static void spd_config_update()
 	}
 }
 
-void video_mode_adjust()
+#define fr_constrain(fr) ((cfg.refresh_min && fr < cfg.refresh_min) ? cfg.refresh_min : (cfg.refresh_max && fr > cfg.refresh_max) ? cfg.refresh_max : fr)
+
+void video_mode_adjust(bool force)
 {
-	static bool force = false;
+	static bool rep_force = false;
+	if (force) rep_force = true;
 
 	VideoInfo video_info;
 
-	const bool vid_changed = get_video_info(force, &video_info);
+	const bool vid_changed = get_video_info(rep_force, &video_info);
+	current_video_info = video_info;
 
-	if (vid_changed || force)
+	if (vid_changed || rep_force)
 	{
-		current_video_info = video_info;
 		show_video_info(&video_info, &v_cur);
 		set_yc_mode();
 		spd_config_update();
 	}
-	force = false;
+	rep_force = false;
 
 	static int menu = 0;
 	int menu_now = menu_present();
-	if(menu != menu_now) spd_config_update();
+	if(menu != menu_now && cfg.spd_quirk < 2) spd_config_update();
 	menu = menu_now;
 
 	if (vid_changed && !is_menu())
@@ -3089,13 +3137,25 @@ void video_mode_adjust()
 
 			video_set_mode(v, Fpix);
 			user_io_send_buttons(1);
-			force = true;
+			rep_force = true;
+		}
+		else if (use_vrr == VRR_MISTER)
+		{
+			int fr = 1000000000 / video_info.vtime;
+			int fr_min = (fr - 10) / 10;
+			int fr_max = (fr + 19) / 10;
+			vrr_modes[VRR_MISTER].min_fr = fr_constrain(fr_min);
+			vrr_modes[VRR_MISTER].max_fr = fr_constrain(fr_max);
+			printf("*** video_mode_adjust: fr=%d.%d, fr_min=%d, fr_max=%d\n", fr / 10, fr % 10, vrr_modes[VRR_MISTER].min_fr, vrr_modes[VRR_MISTER].max_fr);
+			video_set_mode(&v_def, 0);
+			user_io_send_buttons(1);
+			rep_force = true;
 		}
 		else if (cfg_has_video_sections()) // if we have video sections but aren't updating the resolution for other reasons, then do it here
 		{
 			video_set_mode(&v_def, 0);
 			user_io_send_buttons(1);
-			force = true;
+			rep_force = true;
 		}
 		else
 		{
@@ -3475,6 +3535,19 @@ static char *get_file_fromdir(const char* dir, int num, int *count)
 	return name;
 }
 
+static uint32_t get_random()
+{
+	uint32_t rnd;
+	int rndfd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+	if (rndfd >= 0)
+	{
+		read(rndfd, &rnd, sizeof(rnd));
+		close(rndfd);
+	}
+
+	return rnd;
+}
+
 static Imlib_Image load_bg()
 {
 	const char* fname = "menu.png";
@@ -3500,17 +3573,9 @@ static Imlib_Image load_bg()
 
 		if (PathIsDir(bgdir))
 		{
-			int rndfd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
-			if (rndfd >= 0)
-			{
-				uint32_t rnd;
-				read(rndfd, &rnd, sizeof(rnd));
-				close(rndfd);
-
-				int count = 0;
-				get_file_fromdir(bgdir, -1, &count);
-				if (count > 0) fname = get_file_fromdir(bgdir, rnd % count, &count);
-			}
+			int count = 0;
+			get_file_fromdir(bgdir, -1, &count);
+			if (count > 0) fname = get_file_fromdir(bgdir, get_random() % count, &count);
 		}
 	}
 
@@ -3524,6 +3589,9 @@ static Imlib_Image load_bg()
 
 	return NULL;
 }
+
+static Imlib_Image *bg = 0;
+static Imlib_Image menubg = 0;
 
 static int bg_has_picture = 0;
 extern uint8_t  _binary_logo_png_start[], _binary_logo_png_end[];
@@ -3574,14 +3642,13 @@ void video_menu_bg(int n, int idle)
 
 		menu_bgn = (menu_bgn == 1) ? 2 : 1;
 
-		static Imlib_Image menubg = 0;
 		static Imlib_Image bg1 = 0, bg2 = 0;
 		if (!bg1) bg1 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 1)));
 		if (!bg1) printf("Warning: bg1 is 0\n");
 		if (!bg2) bg2 = imlib_create_image_using_data(fb_width, fb_height, (uint32_t*)(fb_base + (FB_SIZE * 2)));
 		if (!bg2) printf("Warning: bg2 is 0\n");
 
-		Imlib_Image *bg = (menu_bgn == 1) ? &bg1 : &bg2;
+		bg = (menu_bgn == 1) ? &bg1 : &bg2;
 		//printf("*bg = %p\n", *bg);
 
 		static Imlib_Image curtain = 0;
@@ -3595,7 +3662,7 @@ void video_menu_bg(int n, int idle)
 			int sz = fb_width * fb_height;
 			for (int i = 0; i < sz; i++)
 			{
-				*data++ = 0x9F000000;
+				*data++ = 0x63000000;
 			}
 		}
 
@@ -3709,17 +3776,46 @@ void video_menu_bg(int n, int idle)
 			}
 		}
 
+		if (logo && idle == 4)
+		{
+			imlib_context_set_image(logo);
+
+			int src_w = imlib_image_get_width();
+			int src_h = imlib_image_get_height();
+
+			int dst_w = fb_width / 4;
+			int dst_h = src_h * dst_w / src_w;
+
+			int x = get_random() % (fb_width - dst_w);
+			int y = get_random() % (fb_height - dst_h);
+
+			if (*bg)
+			{
+				imlib_context_set_image(*bg);
+				imlib_blend_image_onto_image(logo, 1,
+					0, 0,             //int source_x, int source_y,
+					src_w, src_h,     //int source_width, int source_height,
+					x, y,             //int destination_x, int destination_y,
+					dst_w, dst_h      //int destination_width, int destination_height
+				);
+			}
+		}
+
 		if (curtain)
 		{
 			if (idle > 1 && *bg)
 			{
 				imlib_context_set_image(*bg);
-				imlib_blend_image_onto_image(curtain, 1,
-					0, 0,                //int source_x, int source_y,
-					fb_width, fb_height, //int source_width, int source_height,
-					0, 0,                //int destination_x, int destination_y,
-					fb_width, fb_height  //int destination_width, int destination_height
-				);
+				int k = (idle == 4) ? 4 : 2;
+				for (int i = 0; i < k; i++)
+				{
+					imlib_blend_image_onto_image(curtain, 1,
+						0, 0,                //int source_x, int source_y,
+						fb_width, fb_height, //int source_width, int source_height,
+						0, 0,                //int destination_x, int destination_y,
+						fb_width, fb_height  //int destination_width, int destination_height
+					);
+				}
 			}
 		}
 		else
@@ -3733,6 +3829,25 @@ void video_menu_bg(int n, int idle)
 	}
 
 	video_fb_enable(0);
+}
+
+void dbg_draw_cursor(int x, int y)
+{
+	static int c = 0;
+	if (menubg)
+	{
+		imlib_context_set_image(*bg);
+		int src_w = imlib_image_get_width();
+		int src_h = imlib_image_get_height();
+
+		x = (((src_w - 20)*x) / 255) + 10;
+		y = (((src_h - 20)*y) / 255) + 10;
+
+		c = (c + 1) % 3;
+
+		imlib_context_set_color(c == 0 ? 255 : 0, c == 1 ? 255 : 0, c == 2 ? 255 : 0, 255);
+		imlib_image_fill_ellipse(x, y, 10, 10);
+	}
 }
 
 int video_bg_has_picture()
@@ -3897,6 +4012,23 @@ void video_cmd(char *cmd)
 	}
 }
 
+void video_mode_cmd(char *cmd)
+{
+	vmode_custom_t v = {};
+	int ret = parse_custom_video_mode(cmd, &v);
+	if (ret != -2)
+	{
+		printf("video_mode_cmd: only custom modelines are supported, got \"%s\"\n", cmd);
+		return;
+	}
+
+	v_def = v;
+	v_cur = v;
+	video_set_mode(&v, v.Fpix);
+	user_io_send_buttons(1);
+	printf("video_mode_cmd: applied mode \"%s\"\n", cmd);
+}
+
 static constexpr int CELL_GRAN_RND = 4;
 
 static int determine_vsync(int w, int h)
@@ -4055,5 +4187,4 @@ int video_get_rotated()
 {
   return current_video_info.rotated;
 }
-
 
