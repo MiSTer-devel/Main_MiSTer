@@ -82,6 +82,10 @@ const console_handler_t *get_console_handler_by_id(int console_id)
 	if (console_id == 76) {
 		return &g_console_tgfx16;
 	}
+	// Famicom Disk System (ID 81) uses NES handler
+	if (console_id == 81) {
+		return &g_console_nes;
+	}
 
 	return NULL;
 }

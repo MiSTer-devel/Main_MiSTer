@@ -439,7 +439,7 @@ const console_handler_t g_console_fds = {
 	.calculate_hash = nes_calculate_hash,
 	.set_hardcore = nes_set_hardcore,
 	.detect_protocol = nes_detect_protocol,
-	.console_id = 91,  // RC_CONSOLE_FAMICOM_DISK_SYSTEM
+	.console_id = 81,  // RC_CONSOLE_FAMICOM_DISK_SYSTEM
 	.name = "Famicom Disk System",
 	.hardcore_protected = 1
 };
