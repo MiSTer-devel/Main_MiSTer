@@ -1274,12 +1274,12 @@ void achievements_load_game(const char *rom_path, uint32_t crc32)
         snprintf(g_rom_path, sizeof(g_rom_path), "%s", rom_path);
 
         // Switch to FDS handler if we are NES and the ROM is an FDS file
-        if (g_active_handler && (g_active_handler->console_id == 7 || g_active_handler->console_id == 91)) {
+        if (g_active_handler && (g_active_handler->console_id == 7 || g_active_handler->console_id == 81)) {
                 size_t len = strlen(rom_path);
                 if (len >= 4 && strcasecmp(rom_path + len - 4, ".fds") == 0) {
                         extern const console_handler_t g_console_fds;
                         g_active_handler = &g_console_fds;
-                        RA_LOG("FDS ROM detected, switching handler to Famicom Disk System (ID 91)");
+                        RA_LOG("FDS ROM detected, switching handler to Famicom Disk System (ID 81)");
                 } else {
                         extern const console_handler_t g_console_nes;
                         g_active_handler = &g_console_nes;
