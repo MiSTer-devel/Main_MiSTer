@@ -3984,10 +3984,12 @@ void HandleUI(void)
 		{
 			strcpy(s, "     Core Volume: ");
 			if (audio_filter_en() >= 0) s[4] = 0x1b;
-			memset(s + strlen(s), 0, 10);
+			memset(s + strlen(s), 0, 11);
 			char *bar = s + strlen(s);
 			memset(bar, 0x8C, 8);
-			memset(bar, 0x7f, 8 - m);
+			memset(bar, 0x7f, 8 - (m & 7));
+			if (m & 0x60) bar[8] = '+';
+			if (m & 0x40) bar[9] = '+';
 		}
 		OsdWrite(12, s, menusub == 1);
 

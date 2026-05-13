@@ -1151,8 +1151,11 @@ static void hdmi_packet_set_data(uint8_t mask, uint8_t offset, uint8_t *data, in
 		}
 		else
 		{
-			res = i2c_smbus_write_block_data(fd, offset, size, data);
-			if (res < 0) printf("i2c: SPD data write error: %d\n", res);
+			for (int i = 0; i < size; i++)
+			{
+				res = i2c_smbus_write_byte_data(fd, offset + i, data[i]);
+				if (res < 0) printf("i2c: SPD register write error (%02X %02x): %d\n", offset + i, data[i], res);
+			}
 
 			res = i2c_smbus_write_byte_data(fd, offset + 0x1F, 0x00);
 			if (res < 0) printf("i2c: Couldn't update packet change register (0x%02X, 0x00) %d\n", offset + 0x1F, res);
