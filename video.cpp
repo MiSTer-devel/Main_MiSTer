@@ -2618,6 +2618,29 @@ void video_init()
 	video_set_mode(&v_def, 0);
 }
 
+bool video_has_valid_edid()
+{
+	return is_edid_valid();
+}
+
+bool video_reload_edid_mode()
+{
+	if (cfg.direct_video) return false;
+	if (cfg.video_conf[0] || cfg.video_conf_pal[0] || cfg.video_conf_ntsc[0]) return false;
+
+	bzero(edid, sizeof(edid));
+	raw_edid_mfg_id_valid = false;
+	support_FHD = 0;
+
+	video_mode_load();
+	if (!vmode_def && !is_edid_valid()) return false;
+
+	printf("EDID: applying refreshed HDMI mode.\n");
+	video_set_mode(&v_def, 0);
+	user_io_send_buttons(1);
+	return true;
+}
+
 
 static int api1_5 = 0;
 int hasAPI1_5()
