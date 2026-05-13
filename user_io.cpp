@@ -3231,7 +3231,7 @@ void user_io_poll()
 			if ( sd_type[disk] == SD_TYPE_A2)
 			{
 				//if (op) printf("A2 %x %llu on %d\n", op,lba, disk);
-				if (op == 2) a2_writeDSK(disk, &sd_image[disk], lba, ack);
+				if (op == 2) a2_writeDSK(&sd_image[disk], lba, ack);
 				else if (op & 1) a2_readDSK(&sd_image[disk], lba, ack);
 				else break;
 			}
