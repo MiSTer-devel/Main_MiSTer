@@ -2106,6 +2106,8 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				writable = FileCanWrite(name);
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 				if (ret && len > 4) {
+					const char *core_name = user_io_get_core_name();
+					const bool a2_dsk_core = !strcasecmp(core_name, "apple-ii") || !strcasecmp(core_name, "TK2000") || (!strcasecmp(core_name, "Oric") && index < 2);
 					if (!strcasecmp(name + len - 4, ".d64")
 						|| !strcasecmp(name + len - 4, ".g64")
 						|| !strcasecmp(name + len - 4, ".d71")
@@ -2120,7 +2122,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					{
 						img_type = G64_SUPPORT_HD | G64_SUPPORT_DS;
 					}
-					else if (!strcasecmp(name + len - 4, ".dsk") && ((!strcasecmp(user_io_get_core_name(), "apple-ii") || (!strcasecmp(user_io_get_core_name(), "TK2000") )) ))
+					else if (!strcasecmp(name + len - 4, ".dsk") && a2_dsk_core)
 					{
 						printf("FOUND A2 DSK type\n");
 						sd_type[index] = SD_TYPE_A2;
