@@ -2109,9 +2109,15 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 				if (ret && len > 4) {
 					const char *core_name = user_io_get_core_name();
+					const char *orig_core_name = user_io_get_core_name(1);
 					const unsigned char ext_idx = last_file_ext_idx;
 					const bool a2_core = !strcasecmp(core_name, "apple-ii") || !strcasecmp(core_name, "TK2000");
-					const bool oric_a2_slot = !strcasecmp(core_name, "Oric") && index < 2 && (ext_idx == 1 || ext_idx == 2);
+					const bool oric_core =
+						!strcasecmp(core_name, "Oric") ||
+						!strcasecmp(core_name, "Pravetz 8D") ||
+						!strcasecmp(orig_core_name, "Oric") ||
+						!strcasecmp(orig_core_name, "Pravetz 8D");
+					const bool oric_a2_slot = oric_core && index < 2 && (ext_idx == 1 || ext_idx == 2);
 					const bool dsk_ext = !strcasecmp(name + len - 4, ".dsk");
 					const bool do_ext = len > 3 && !strcasecmp(name + len - 3, ".do");
 					if (!strcasecmp(name + len - 4, ".d64")
