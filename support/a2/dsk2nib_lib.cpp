@@ -242,55 +242,59 @@ static uchar untranslate(uchar x) {
     return index;
 }
 
-// Parse a NIB sector from byte stream and extract DSK data
+// Parse a NIB sector from byte stream and extract DSK data.
+// Returns 1 only if the address-field and data-field checksums both verify.
 static int parse_nib_sector(uchar *nib_data, int data_len, uchar *dsk_sector, int *track, int *sector) {
     int pos = 0;
     int state = 0;
     uchar primary_buf[PRIMARY_BUF_LEN];
     uchar secondary_buf[SECONDARY_BUF_LEN];
     uchar checksum;
+    uchar volume = 0;
+    uchar addr_csum;
     int i;
-    
+
     // State machine to parse NIB sector
     while (pos < data_len) {
         uchar byte = nib_data[pos++];
-        
+
         switch (state) {
             case 0: // Looking for address prolog D5
                 if (byte == 0xd5) state = 1;
                 break;
-                
+
             case 1: // Looking for address prolog AA
                 if (byte == 0xaa) state = 2;
                 else state = 0;
                 break;
-                
+
             case 2: // Looking for address prolog 96
                 if (byte == 0x96) state = 3;
                 else state = 0;
                 break;
-                
-            case 3: // Read volume (first byte)
+
+            case 3: // Read volume
                 if (pos >= data_len) return 0;
-                odd_even_decode(byte, nib_data[pos++]); // Read volume but don't store
+                volume = odd_even_decode(byte, nib_data[pos++]);
                 state = 4;
                 break;
-                
-            case 4: // Read track (first byte)
+
+            case 4: // Read track
                 if (pos >= data_len) return 0;
                 *track = odd_even_decode(byte, nib_data[pos++]);
                 state = 5;
                 break;
-                
-            case 5: // Read sector (first byte)
+
+            case 5: // Read sector
                 if (pos >= data_len) return 0;
                 *sector = odd_even_decode(byte, nib_data[pos++]);
                 state = 6;
                 break;
-                
-            case 6: // Read checksum (first byte)
+
+            case 6: // Read address-field checksum and validate
                 if (pos >= data_len) return 0;
-                pos++; // Skip checksum, we don't validate it
+                addr_csum = odd_even_decode(byte, nib_data[pos++]);
+                if ((uchar)(volume ^ *track ^ *sector) != addr_csum) return 0;
                 state = 7;
                 break;
                 
@@ -336,10 +340,10 @@ static int parse_nib_sector(uchar *nib_data, int data_len, uchar *dsk_sector, in
                     primary_buf[i] = checksum;
                 }
                 
-                // Read and validate checksum
+                // Read and validate data-field checksum
                 if (pos >= data_len) return 0;
                 checksum ^= untranslate(nib_data[pos++]);
-                // Ignore checksum validation for now
+                if (checksum != 0) return 0;
                 
                 // Denibbilize - reconstruct the 256-byte sector
                 for (i = 0; i < PRIMARY_BUF_LEN; i++) {
@@ -375,93 +379,91 @@ static int parse_nib_sector(uchar *nib_data, int data_len, uchar *dsk_sector, in
     return 0; // Failed to parse
 }
 
-void a2_writeDSK(fileTYPE* idx, uint64_t lba, int ack) {
-   //printf("a2_writeDSK(lba:%lld ack:%d\n",lba,ack);
-	// Fetch sector data from FPGA ...
-        uchar chunk[512];
-	EnableIO();
-        spi_w(UIO_SECTOR_WR | ack);
-        spi_block_read(chunk, user_io_get_width(), 512);
-        DisableIO();
+// Per-disk write state. The Apple ][ dispatcher in user_io.cpp supports
+// 4 SD slots (disk 0..3), so we mirror that here. Without per-disk state,
+// writes to a second mounted .dsk would corrupt the first drive's buffer.
+typedef struct {
+    int      initialized;
+    int      current_track;
+    uint16_t sectors_flushed;   // bitmap of sectors already written this track
+    uchar    track_buffer[BYTES_PER_NIB_TRACK];
+} A2WriteState;
 
-	a2_writeNib2Dsk(idx, lba*512, chunk);
-}
-	
-void a2_readDSK(fileTYPE* idx, uint64_t lba, int ack) {
-   //printf("a2_readDSK(lba:%lld ack:%d\n",lba,ack);
-        uchar chunk[512];
-        
-	a2_readDsk2Nib(idx, lba*512, chunk);
+static A2WriteState write_states[4];
 
-	//printf("%x %x %x %x %x\n",chunk[0],chunk[1],chunk[2],chunk[3],chunk[4]);
+static void a2_writeNib2Dsk(int disk, fileTYPE *fd, uint64_t offset, uchar *byte) {
+    if (disk < 0 || disk >= (int)(sizeof(write_states)/sizeof(write_states[0]))) return;
+    A2WriteState *st = &write_states[disk];
 
-        EnableIO();
-        spi_w(UIO_SECTOR_RD | ack);
-        spi_block_write(chunk, user_io_get_width(), 512);
-        DisableIO();
-}
-
-
-void a2_writeNib2Dsk(fileTYPE*fd, uint64_t offset, uchar *byte) {
     int nib_track = offset / BYTES_PER_NIB_TRACK;
     uint64_t track_offset = offset % BYTES_PER_NIB_TRACK;
-    
-    // Bounds check
-    if (nib_track >= TRACKS_PER_DISK) {
-        return;
+
+    if (nib_track >= TRACKS_PER_DISK) return;
+
+    // On track change (or first use) reset the buffer and per-sector flush bitmap.
+    if (!st->initialized || st->current_track != nib_track) {
+        memset(st->track_buffer, 0, BYTES_PER_NIB_TRACK);
+        st->current_track = nib_track;
+        st->sectors_flushed = 0;
+        st->initialized = 1;
     }
-    
-    // We need to accumulate a full track's worth of NIB data to properly decode
-    // This is a simplified approach - we'll try to parse sectors from the given 512 bytes
-    static uchar track_buffer[BYTES_PER_NIB_TRACK];
-    static int current_track = -1;
-    static int bytes_accumulated = 0;
-    
-    // If this is a new track, reset the buffer
-    if (current_track != nib_track) {
-        current_track = nib_track;
-        bytes_accumulated = 0;
-        memset(track_buffer, 0, BYTES_PER_NIB_TRACK);
-    }
-    
-    // Copy the 512 bytes into our track buffer at the appropriate offset
+
     int copy_len = 512;
     if (track_offset + copy_len > BYTES_PER_NIB_TRACK) {
         copy_len = BYTES_PER_NIB_TRACK - track_offset;
     }
-    
     if (copy_len > 0) {
-        memcpy(track_buffer + track_offset, byte, copy_len);
-        bytes_accumulated += copy_len;
+        memcpy(st->track_buffer + track_offset, byte, copy_len);
     }
-    
-    // Try to parse and write any complete sectors we can find
-    // Look for sectors in the accumulated data
+
+    // Scan the full track buffer for checksum-valid sectors and flush each one
+    // the moment it parses cleanly. The bitmap suppresses redundant FileWrites
+    // when later LBAs re-expose the same sector in the scan.
     int pos = 0;
-    while (pos < bytes_accumulated - 400) { // Need at least 400 bytes for a sector
+    while (pos <= BYTES_PER_NIB_TRACK - BYTES_PER_NIB_SECTOR) {
         uchar dsk_sector[BYTES_PER_SECTOR];
         int track_num, sector_num;
-        
-        if (parse_nib_sector(track_buffer + pos, bytes_accumulated - pos, dsk_sector, &track_num, &sector_num)) {
-            // Successfully parsed a sector
-            if (track_num == nib_track && sector_num < SECTORS_PER_TRACK) {
-                // Map logical sector to soft sector using interleave
+
+        if (parse_nib_sector(st->track_buffer + pos, BYTES_PER_NIB_TRACK - pos,
+                             dsk_sector, &track_num, &sector_num)) {
+            if (track_num == nib_track
+                && sector_num < SECTORS_PER_TRACK
+                && !(st->sectors_flushed & (1 << sector_num)))
+            {
                 int soft_sector = soft_interleave[sector_num];
-                
-                // Calculate DSK file offset
-                off_t dsk_offset = (off_t)track_num * BYTES_PER_TRACK + (off_t)soft_sector * BYTES_PER_SECTOR;
-                
-                // Write sector to DSK file
-                //if (lseek(fd, dsk_offset, SEEK_SET) != -1) {
-                if (FileSeek(fd,dsk_offset, SEEK_SET))
-	//			if (lseek(fd, dsk_offset, SEEK_SET) != -1) {
-		    FileWriteAdv(fd, dsk_sector,BYTES_PER_SECTOR);
-                    //write(fd, dsk_sector, BYTES_PER_SECTOR);
-                //}
+                off_t dsk_offset = (off_t)nib_track * BYTES_PER_TRACK
+                                 + (off_t)soft_sector * BYTES_PER_SECTOR;
+
+                if (FileSeek(fd, dsk_offset, SEEK_SET)
+                    && FileWriteAdv(fd, dsk_sector, BYTES_PER_SECTOR))
+                {
+                    st->sectors_flushed |= (1 << sector_num);
+                }
             }
-            pos += BYTES_PER_NIB_SECTOR; // Move to next sector
+            pos += BYTES_PER_NIB_SECTOR;
         } else {
-            pos++; // Try next byte position
+            pos++;
         }
     }
+}
+
+void a2_writeDSK(int disk, fileTYPE* idx, uint64_t lba, int ack) {
+    uchar chunk[512];
+    EnableIO();
+    spi_w(UIO_SECTOR_WR | ack);
+    spi_block_read(chunk, user_io_get_width(), 512);
+    DisableIO();
+
+    a2_writeNib2Dsk(disk, idx, lba * 512, chunk);
+}
+
+void a2_readDSK(fileTYPE* idx, uint64_t lba, int ack) {
+    uchar chunk[512];
+
+    a2_readDsk2Nib(idx, lba * 512, chunk);
+
+    EnableIO();
+    spi_w(UIO_SECTOR_RD | ack);
+    spi_block_write(chunk, user_io_get_width(), 512);
+    DisableIO();
 }
