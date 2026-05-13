@@ -35,6 +35,7 @@
 #include "str_util.h"
 #include "frame_timer.h"
 #include "scaler.h"
+#include "file_io.h"
 
 #define NUMDEV 30
 #define UINPUT_NAME "MiSTer virtual input"
@@ -45,6 +46,61 @@ char joy_bnames[NUMBUTTONS][32] = {};
 int  joy_bcount = 0;
 static struct pollfd pool[NUMDEV + 3];
 int  xbe2_shift = 0;
+
+static bool gcdb_use_usb_bcd_device(uint16_t vid, uint16_t pid)
+{
+	return (vid == 0x16D0 && (pid == 0x127E || pid == 0x1460)) // Reflex Adapt
+		|| (vid == 0x1209 && pid == 0x595A); // RetroZord
+}
+
+static bool read_sysfs_line(const char *path, char *buf, size_t buf_sz)
+{
+	if (!path || !buf || buf_sz < 2) return false;
+	if (!FileExists(path, 0)) return false;
+
+	FILE *f = fopen(path, "r");
+	if (!f) return false;
+
+	bool ok = fgets(buf, buf_sz, f) != NULL;
+	fclose(f);
+	if (!ok) return false;
+
+	buf[strcspn(buf, "\r\n")] = 0;
+	return buf[0] != 0;
+}
+
+static uint16_t get_usb_bcd_device_version(const char *sysfs, uint16_t bustype, uint16_t fallback_version)
+{
+	if (!sysfs || !sysfs[0] || bustype != BUS_USB) return fallback_version;
+
+	static char path[1024];
+	snprintf(path, sizeof(path), "/sys%s", sysfs);
+
+	for (;;)
+	{
+		size_t len = strlen(path);
+		if (len + sizeof("/bcdDevice") < sizeof(path))
+		{
+			strcpy(path + len, "/bcdDevice");
+
+			char bcd_buf[32] = {};
+			if (read_sysfs_line(path, bcd_buf, sizeof(bcd_buf)))
+			{
+				char *end = NULL;
+				unsigned long val = strtoul(bcd_buf, &end, 16);
+				if (end != bcd_buf && val <= 0xFFFF) return (uint16_t)val;
+			}
+
+			path[len] = 0;
+		}
+
+		char *slash = strrchr(path, '/');
+		if (!slash || slash <= path + 4) break;
+		*slash = 0;
+	}
+
+	return fallback_version;
+}
 
 static int ev2amiga[] =
 {
@@ -1399,7 +1455,7 @@ enum QUIRK
 
 typedef struct
 {
-	uint16_t bustype, vid, pid, version;
+	uint16_t bustype, vid, pid, version, gcdb_version;
 	char     idstr[256];
 	char     mod;
 
@@ -2949,14 +3005,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			if (!load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 			{
-				if (!gcdb_map_for_controller(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].version, pool[sub_dev].fd, input[dev].mmap))
+				if (!gcdb_map_for_controller(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[dev].mmap))
 				{
 					memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
 					memcpy(input[dev].mmap, def_mmap, sizeof(def_mmap));
 					//input[dev].has_mmap++;
 				}
 			} else {
-				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap);
+				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap);
 			}
 			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
 
@@ -4153,6 +4209,7 @@ void mergedevs()
 				input[i].vid = input[j].vid;
 				input[i].pid = input[j].pid;
 				input[i].version = input[j].version;
+				input[i].gcdb_version = input[j].gcdb_version;
 				input[i].bustype = input[j].bustype;
 				input[i].quirk = input[j].quirk;
 				memcpy(input[i].name, input[j].name, sizeof(input[i].name));
@@ -5137,6 +5194,7 @@ int input_test(int getchar)
 							input[n].vid = id.vendor;
 							input[n].pid = id.product;
 							input[n].version = id.version;
+							input[n].gcdb_version = id.version;
 							input[n].bustype = id.bustype;
 
 							ioctl(pool[n].fd, EVIOCGUNIQ(sizeof(uniq)), uniq);
@@ -5472,6 +5530,19 @@ int input_test(int getchar)
 			closedir(d);
 
 			mergedevs();
+			for (int i = 0; i < n; i++)
+			{
+				input[i].gcdb_version = input[i].version;
+				if (gcdb_use_usb_bcd_device(input[i].vid, input[i].pid))
+				{
+					input[i].gcdb_version = get_usb_bcd_device_version(input[i].sysfs, input[i].bustype, input[i].version);
+					if (input[i].gcdb_version != input[i].version)
+					{
+						printf("Gamecontrollerdb: using USB bcdDevice %04x instead of input version %04x for %s\n",
+							input[i].gcdb_version, input[i].version, input[i].devname);
+					}
+				}
+			}
 			check_joycon();
 			openfire_signal();
 			setup_wheels();

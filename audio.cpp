@@ -22,6 +22,7 @@ static uint8_t vol_att = 0;
 static uint8_t corevol_att = 0;
 unsigned long vol_set_timeout = 0;
 static int has_filter = 0;
+static int has_boost = 0;
 
 static char filter_cfg_path[1024] = {};
 static char filter_cfg[1024] = {};
@@ -31,6 +32,8 @@ static void setFilter()
 	fileTYPE f = {};
 
 	has_filter = spi_uio_cmd(UIO_SET_AFILTER);
+	has_boost = (has_filter & 2) && !is_menu();
+	if (!has_boost) corevol_att &= 7;
 	if (!has_filter) return;
 
 	snprintf(filter_cfg_path, sizeof(filter_cfg_path), AFILTER_DIR"/%s", filter_cfg + 1);
@@ -140,8 +143,11 @@ int get_volume()
 
 int get_core_volume()
 {
+	int boost = corevol_att & 0x60;
+	if (boost > 0x40) boost = 0x40;
 	corevol_att &= 7;
 	if (corevol_att > 6) corevol_att = 6;
+	corevol_att |= boost;
 	return corevol_att;
 }
 
@@ -182,12 +188,42 @@ void set_core_volume(int cmd)
 {
 	vol_set_timeout = GetTimer(1000);
 
-	corevol_att &= 7;
-	if (cmd < 0 && corevol_att < 6) corevol_att += 1;
-	if (cmd > 0 && corevol_att > 0) corevol_att -= 1;
+	if (has_boost)
+	{
+		int boost = corevol_att & 0x60;
+		corevol_att &= 7;
+		if (cmd < 0)
+		{
+			if (boost)
+			{
+				corevol_att = 0;
+				boost -= 0x20;
+			}
+			else if (corevol_att < 6) corevol_att += 1;
+		}
 
-	if (has_filter) setFilter();
-	else send_volume();
+		if (cmd > 0)
+		{
+			if (boost || !corevol_att)
+			{
+				boost += 0x20;
+				if (boost > 0x40) boost = 0x40;
+			}
+			else if (corevol_att > 0) corevol_att -= 1;
+		}
+
+		corevol_att |= boost;
+		setFilter();
+	}
+	else
+	{
+		corevol_att &= 7;
+		if (cmd < 0 && corevol_att < 6) corevol_att += 1;
+		if (cmd > 0 && corevol_att > 0) corevol_att -= 1;
+
+		if (has_filter) setFilter();
+		else send_volume();
+	}
 }
 
 void save_volume()
