@@ -580,6 +580,11 @@ int fpga_get_io_type()
 	return (fpga_gpi_read() >> 28) & 1;
 }
 
+int fpga_get_hdmi_int()
+{
+	return (fpga_gpi_read() >> 20) & 1;
+}
+
 void reboot(int cold)
 {
 	sync();
