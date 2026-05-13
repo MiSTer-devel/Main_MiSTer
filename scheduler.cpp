@@ -18,6 +18,7 @@ static cothread_t co_ui = nullptr;
 static cothread_t co_last = nullptr;
 static unsigned long cec_retry = 0;
 static bool cec_init_failed_logged = false;
+static bool scheduler_ui_ran_once = false;
 
 static void scheduler_wait_fpga_ready(void)
 {
@@ -42,7 +43,7 @@ static void scheduler_co_poll(void)
 
 		if (cfg.hdmi_cec)
 		{
-			if (!cec_is_enabled() && CheckTimer(cec_retry))
+			if (scheduler_ui_ran_once && !cec_is_enabled() && CheckTimer(cec_retry))
 			{
 				if (!cec_init(true))
 				{
@@ -74,6 +75,8 @@ static void scheduler_co_ui(void)
 {
 	for (;;)
 	{
+		scheduler_ui_ran_once = true;
+
 		{
 			SPIKE_SCOPE("co_ui", 1000);
 			HandleUI();

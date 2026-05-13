@@ -8,6 +8,7 @@
 #include "hardware.h"
 #include "input.h"
 #include "smbus.h"
+#include "video.h"
 
 static const uint8_t ADV7513_MAIN_ADDR = 0x39;
 static const uint8_t ADV7513_CEC_ADDR = 0x3C;
@@ -22,6 +23,8 @@ static const uint8_t MAIN_REG_HDMI_CFG = 0xAF;
 static const uint8_t MAIN_REG_INT0_ENABLE = 0x94;
 static const uint8_t MAIN_REG_INT1_ENABLE = 0x95;
 static const uint8_t MAIN_REG_INT0_STATUS = 0x96;
+static const uint8_t MAIN_INT_EDID_READY = 1 << 2;
+static const uint8_t MAIN_REG_EDID_SEGMENT = 0xC4;
 static const uint8_t MAIN_REG_EDID_CTRL = 0xC9;
 
 static const uint8_t CEC_REG_TX_FRAME_HEADER = 0x00;
@@ -127,11 +130,25 @@ static const char *CEC_DEFAULT_OSD_NAME = "MiSTer";
 static const uint8_t CEC_INPUT_MODE_OFF = 0;
 static const uint8_t CEC_INPUT_MODE_ON = 1;
 
-static const uint16_t CEC_DEFAULT_PHYS_ADDR = 0x1000;
+static const uint16_t CEC_INVALID_PHYS_ADDR = 0xFFFF;
 static const unsigned long CEC_BUTTON_TIMEOUT_MS = 500;
 static const unsigned long CEC_MAIN_REFRESH_MS = 2000;
+static const unsigned long CEC_POLL_INTERVAL_MS = 20;
+static const unsigned long CEC_EDID_RETRY_INITIAL_MS = 15000;
+static const unsigned long CEC_EDID_RETRY_MAX_MS = 300000;
+static const unsigned long CEC_EDID_READY_TIMEOUT_MS = 500;
+static const unsigned long CEC_ADVERTISE_STEP_MS = 120;
+static const unsigned long CEC_EDID_AFTER_SWITCH_RETRY_MS = 1000;
+static const unsigned long CEC_POWER_ON_QUERY_WAIT_MS = 700;
+static const unsigned long CEC_POWER_ON_STEP_MS = 120;
+static const unsigned long CEC_POWER_ON_VERIFY_WAIT_MS = 700;
 static const unsigned long CEC_TX_TIMEOUT_MS = 220;
 static const unsigned long CEC_TX_TIMEOUT_RETRY_MS = 500;
+static const size_t CEC_EDID_BLOCK_SIZE = 128;
+static const size_t CEC_EDID_SEGMENT_SIZE = 256;
+static const size_t CEC_EDID_MAX_BLOCKS = 8;
+static const uint8_t CEC_ADVERTISE_STARTUP_ATTEMPTS = 1;
+static const uint8_t CEC_ADVERTISE_IDENTITY_STEPS = 2;
 
 typedef struct
 {
@@ -148,15 +165,31 @@ enum cec_tx_result_t
 	CEC_TX_RESULT_TIMEOUT
 };
 
+enum cec_power_on_state_t
+{
+	CEC_POWER_ON_DONE = 0,
+	CEC_POWER_ON_REQUEST_BEFORE,
+	CEC_POWER_ON_WAIT_BEFORE,
+	CEC_POWER_ON_IMAGE,
+	CEC_POWER_ON_TEXT,
+	CEC_POWER_ON_ACTIVE,
+	CEC_POWER_ON_REQUEST_VERIFY,
+	CEC_POWER_ON_WAIT_VERIFY
+};
+
 static bool cec_enabled = false;
 static int cec_main_fd = -1;
 static int cec_fd = -1;
 static uint8_t cec_logical_addr = CEC_LOG_ADDR_PLAYBACK1;
-static uint16_t cec_physical_addr = CEC_DEFAULT_PHYS_ADDR;
+static uint16_t cec_physical_addr = CEC_INVALID_PHYS_ADDR;
 static uint16_t cec_pressed_key = 0;
 static unsigned long cec_press_deadline = 0;
 static unsigned long cec_refresh_deadline = 0;
+static unsigned long cec_poll_deadline = 0;
+static unsigned long cec_edid_retry_deadline = 0;
+static unsigned long cec_edid_retry_delay_ms = 0;
 static bool cec_hpd_pulsed = false;
+static bool cec_physical_addr_from_edid = false;
 static unsigned long cec_reply_phys_deadline = 0;
 static unsigned long cec_reply_name_deadline = 0;
 static unsigned long cec_reply_version_deadline = 0;
@@ -167,19 +200,26 @@ static unsigned long cec_forced_clear_log_deadline = 0;
 static uint8_t cec_tx_fail_streak = 0;
 static unsigned long cec_tx_suppress_deadline = 0;
 static unsigned long cec_rx_fallback_stale_deadline = 0;
-static bool cec_boot_activate_pending = false;
-static unsigned long cec_boot_activate_deadline = 0;
+static unsigned long cec_advertise_deadline = 0;
+static uint8_t cec_advertise_step = 0;
+static uint8_t cec_advertise_attempts = 0;
+static bool cec_startup_actions_scheduled = false;
+static cec_power_on_state_t cec_power_on_state = CEC_POWER_ON_DONE;
+static unsigned long cec_power_on_deadline = 0;
+static bool cec_reload_video_after_edid = false;
 static uint16_t cec_active_physical_addr = 0xFFFF;
 static uint32_t cec_input_activity_seq = 0;
 static unsigned long cec_idle_deadline = 0;
 static bool cec_idle_engaged = false;
 
 static bool cec_send_message(const cec_message_t *msg, bool with_retry = true);
-static bool cec_send_image_view_on(void);
-static bool cec_send_text_view_on(void);
-static bool cec_send_active_source(void);
-static bool cec_send_report_physical_address(void);
-static bool cec_send_set_osd_name(const char *name);
+static bool cec_has_physical_address(void);
+static bool cec_send_image_view_on(bool with_retry = true);
+static bool cec_send_text_view_on(bool with_retry = true);
+static bool cec_send_active_source(bool with_retry = true);
+static bool cec_send_request_active_source(bool with_retry = true);
+static bool cec_send_report_physical_address(bool with_retry = true);
+static bool cec_send_set_osd_name(const char *name, bool with_retry = true);
 static bool cec_send_cec_version(uint8_t destination);
 static void cec_handle_message(const cec_message_t *msg);
 static bool cec_receive_message(cec_message_t *msg);
@@ -197,7 +237,7 @@ static uint8_t cec_get_input_mode(void)
 
 static bool cec_is_osd_trigger_button(uint8_t button_code)
 {
-	return button_code == CEC_USER_CONTROL_EXIT;
+	return button_code == CEC_USER_CONTROL_EXIT || button_code == CEC_USER_CONTROL_ROOT_MENU;
 }
 
 static bool cec_accept_button_input(uint8_t button_code)
@@ -272,7 +312,7 @@ static void cec_release_key(void)
 
 static uint16_t cec_button_to_key(uint8_t button_code)
 {
-	if (cec_is_osd_trigger_button(button_code)) return KEY_F12;
+	if (cec_is_osd_trigger_button(button_code)) return KEY_MENU;
 
 	switch (button_code)
 	{
@@ -557,14 +597,14 @@ static bool cec_setup_main_registers(void)
 	return ok;
 }
 
-static uint16_t cec_parse_physical_address(const uint8_t *edid, size_t size)
+static bool cec_parse_physical_address(const uint8_t *edid, size_t size, uint16_t *physical_addr)
 {
-	if (!edid || size < 256) return CEC_DEFAULT_PHYS_ADDR;
+	if (!edid || !physical_addr || size < 256) return false;
 
 	if (edid[0] != 0x00 || edid[1] != 0xFF || edid[2] != 0xFF || edid[3] != 0xFF ||
 		edid[4] != 0xFF || edid[5] != 0xFF || edid[6] != 0xFF || edid[7] != 0x00)
 	{
-		return CEC_DEFAULT_PHYS_ADDR;
+		return false;
 	}
 
 	uint8_t ext_count = edid[126];
@@ -591,7 +631,8 @@ static uint16_t cec_parse_physical_address(const uint8_t *edid, size_t size)
 			{
 				if (blk[pos + 1] == 0x03 && blk[pos + 2] == 0x0C && blk[pos + 3] == 0x00)
 				{
-					return (uint16_t)((blk[pos + 4] << 8) | blk[pos + 5]);
+					*physical_addr = (uint16_t)((blk[pos + 4] << 8) | blk[pos + 5]);
+					return true;
 				}
 			}
 
@@ -599,12 +640,12 @@ static uint16_t cec_parse_physical_address(const uint8_t *edid, size_t size)
 		}
 	}
 
-	return CEC_DEFAULT_PHYS_ADDR;
+	return false;
 }
 
-static uint16_t cec_parse_physical_address_loose(const uint8_t *edid, size_t size)
+static bool cec_parse_physical_address_loose(const uint8_t *edid, size_t size, uint16_t *physical_addr)
 {
-	if (!edid || size < 8) return CEC_DEFAULT_PHYS_ADDR;
+	if (!edid || !physical_addr || size < 8) return false;
 
 	for (size_t i = 0; i + 4 < size; i++)
 	{
@@ -613,35 +654,53 @@ static uint16_t cec_parse_physical_address_loose(const uint8_t *edid, size_t siz
 			uint16_t addr = (uint16_t)((edid[i + 3] << 8) | edid[i + 4]);
 			if (addr != 0x0000 && addr != 0xFFFF)
 			{
-				return addr;
+				*physical_addr = addr;
+				return true;
 			}
 		}
 	}
 
-	return CEC_DEFAULT_PHYS_ADDR;
+	return false;
 }
 
-static uint16_t cec_read_physical_address(void)
+static bool cec_edid_block_checksum_ok(const uint8_t *block)
 {
-	uint8_t edid[256] = {};
+	uint8_t sum = 0;
+	for (size_t i = 0; i < CEC_EDID_BLOCK_SIZE; i++) sum = (uint8_t)(sum + block[i]);
+	return sum == 0;
+}
 
-	if (cec_main_fd < 0) return CEC_DEFAULT_PHYS_ADDR;
+static bool cec_wait_edid_ready(void)
+{
+	unsigned long timeout = GetTimer(CEC_EDID_READY_TIMEOUT_MS);
+	while (!CheckTimer(timeout))
+	{
+		if (main_reg_read(MAIN_REG_INT0_STATUS) & MAIN_INT_EDID_READY) return true;
+		usleep(10000);
+	}
 
-	int edid_fd = i2c_open(ADV7513_EDID_ADDR, 0);
-	if (edid_fd < 0) return CEC_DEFAULT_PHYS_ADDR;
+	return (main_reg_read(MAIN_REG_INT0_STATUS) & MAIN_INT_EDID_READY) != 0;
+}
 
+static bool cec_read_edid_segment(int edid_fd, uint8_t segment, uint8_t *edid, int *read_errors)
+{
+	if (edid_fd < 0 || !edid) return false;
+
+	main_reg_write(MAIN_REG_EDID_SEGMENT, segment);
+	main_reg_write(MAIN_REG_INT0_STATUS, MAIN_INT_EDID_READY);
 	main_reg_write(MAIN_REG_EDID_CTRL, 0x03);
-	usleep(50000);
+	usleep(1000);
 	main_reg_write(MAIN_REG_EDID_CTRL, 0x13);
-	usleep(50000);
 
-	int read_errors = 0;
-	for (uint16_t i = 0; i < sizeof(edid); i++)
+	bool ready = cec_wait_edid_ready();
+	int errors = 0;
+
+	for (uint16_t i = 0; i < CEC_EDID_SEGMENT_SIZE; i++)
 	{
 		int value = i2c_smbus_read_byte_data(edid_fd, (uint8_t)i);
 		if (value < 0)
 		{
-			read_errors++;
+			errors++;
 			edid[i] = 0;
 			continue;
 		}
@@ -649,16 +708,71 @@ static uint16_t cec_read_physical_address(void)
 		edid[i] = (uint8_t)value;
 	}
 
+	if (read_errors) *read_errors += errors;
+	if (cec_debug_enabled() && (!ready || errors))
+	{
+		printf("CEC: EDID segment %u ready=%u read_errors=%d\n", segment, ready ? 1 : 0, errors);
+	}
+
+	return ready && errors == 0;
+}
+
+static bool cec_read_physical_address(uint16_t *physical_addr)
+{
+	uint8_t edid[CEC_EDID_BLOCK_SIZE * CEC_EDID_MAX_BLOCKS] = {};
+	uint16_t addr = CEC_INVALID_PHYS_ADDR;
+
+	if (physical_addr) *physical_addr = CEC_INVALID_PHYS_ADDR;
+	if (!physical_addr || cec_main_fd < 0) return false;
+
+	int edid_fd = i2c_open(ADV7513_EDID_ADDR, 0);
+	if (edid_fd < 0) return false;
+
+	int read_errors = 0;
+	size_t blocks_read = 0;
+	if (cec_read_edid_segment(edid_fd, 0, edid, &read_errors) &&
+		edid[0] == 0x00 && edid[1] == 0xFF && edid[2] == 0xFF && edid[3] == 0xFF &&
+		edid[4] == 0xFF && edid[5] == 0xFF && edid[6] == 0xFF && edid[7] == 0x00 &&
+		cec_edid_block_checksum_ok(edid))
+	{
+		size_t total_blocks = 1 + edid[126];
+		if (total_blocks > CEC_EDID_MAX_BLOCKS)
+		{
+			if (cec_debug_enabled())
+			{
+				printf("CEC: EDID has %u blocks, reading first %u\n", (unsigned)total_blocks, (unsigned)CEC_EDID_MAX_BLOCKS);
+			}
+			total_blocks = CEC_EDID_MAX_BLOCKS;
+		}
+
+		blocks_read = total_blocks;
+		for (uint8_t segment = 1; segment < (uint8_t)((total_blocks + 1) / 2); segment++)
+		{
+			if (!cec_read_edid_segment(edid_fd, segment, edid + (segment * CEC_EDID_SEGMENT_SIZE), &read_errors))
+			{
+				blocks_read = segment * 2;
+				break;
+			}
+		}
+
+		for (size_t block = 1; block < blocks_read; block++)
+		{
+			if (!cec_edid_block_checksum_ok(edid + (block * CEC_EDID_BLOCK_SIZE)))
+			{
+				if (cec_debug_enabled()) printf("CEC: EDID block %u checksum failed\n", (unsigned)block);
+				blocks_read = block;
+				break;
+			}
+		}
+	}
+
 	i2c_close(edid_fd);
 
-	uint16_t addr = cec_parse_physical_address(edid, sizeof(edid));
-	if (addr == CEC_DEFAULT_PHYS_ADDR)
+	size_t edid_size = blocks_read * CEC_EDID_BLOCK_SIZE;
+	bool found = cec_parse_physical_address(edid, edid_size, &addr);
+	if (!found)
 	{
-		uint16_t loose = cec_parse_physical_address_loose(edid, sizeof(edid));
-		if (loose != CEC_DEFAULT_PHYS_ADDR)
-		{
-			addr = loose;
-		}
+		found = cec_parse_physical_address_loose(edid, edid_size ? edid_size : CEC_EDID_SEGMENT_SIZE, &addr);
 	}
 
 	if (read_errors && cec_debug_enabled())
@@ -666,7 +780,8 @@ static uint16_t cec_read_physical_address(void)
 		printf("CEC: EDID read errors=%d\n", read_errors);
 	}
 
-	return addr;
+	if (found) *physical_addr = addr;
+	return found;
 }
 
 static const uint8_t cec_rx_hdr_regs[] = { CEC_REG_RX1_FRAME_HEADER, CEC_REG_RX2_FRAME_HEADER, CEC_REG_RX3_FRAME_HEADER };
@@ -777,35 +892,44 @@ static bool cec_receive_message(cec_message_t *msg)
 	return ok;
 }
 
-static bool cec_send_active_source(void)
+static bool cec_send_active_source(bool with_retry)
 {
+	if (!cec_has_physical_address()) return false;
+
 	cec_message_t msg = {};
 	msg.header = (cec_logical_addr << 4) | CEC_LOG_ADDR_BROADCAST;
 	msg.opcode = CEC_OPCODE_ACTIVE_SOURCE;
 	msg.data[0] = (uint8_t)(cec_physical_addr >> 8);
 	msg.data[1] = (uint8_t)(cec_physical_addr & 0xFF);
 	msg.length = 4;
-	bool ok = cec_send_message(&msg);
-	if (ok) cec_active_physical_addr = cec_physical_addr;
-	return ok;
+	return cec_send_message(&msg, with_retry);
 }
 
-static bool cec_send_image_view_on(void)
+static bool cec_send_request_active_source(bool with_retry)
+{
+	cec_message_t msg = {};
+	msg.header = (cec_logical_addr << 4) | CEC_LOG_ADDR_BROADCAST;
+	msg.opcode = CEC_OPCODE_REQUEST_ACTIVE_SOURCE;
+	msg.length = 2;
+	return cec_send_message(&msg, with_retry);
+}
+
+static bool cec_send_image_view_on(bool with_retry)
 {
 	cec_message_t msg = {};
 	msg.header = (cec_logical_addr << 4) | CEC_LOG_ADDR_TV;
 	msg.opcode = CEC_OPCODE_IMAGE_VIEW_ON;
 	msg.length = 2;
-	return cec_send_message(&msg);
+	return cec_send_message(&msg, with_retry);
 }
 
-static bool cec_send_text_view_on(void)
+static bool cec_send_text_view_on(bool with_retry)
 {
 	cec_message_t msg = {};
 	msg.header = (cec_logical_addr << 4) | CEC_LOG_ADDR_TV;
 	msg.opcode = CEC_OPCODE_TEXT_VIEW_ON;
 	msg.length = 2;
-	return cec_send_message(&msg);
+	return cec_send_message(&msg, with_retry);
 }
 
 bool cec_send_standby(void)
@@ -828,8 +952,10 @@ bool cec_send_wake(void)
 	return wake_ok && text_ok && active_ok;
 }
 
-static bool cec_send_report_physical_address(void)
+static bool cec_send_report_physical_address(bool with_retry)
 {
+	if (!cec_has_physical_address()) return false;
+
 	cec_message_t msg = {};
 	msg.header = (cec_logical_addr << 4) | CEC_LOG_ADDR_BROADCAST;
 	msg.opcode = CEC_OPCODE_REPORT_PHYSICAL_ADDRESS;
@@ -837,10 +963,10 @@ static bool cec_send_report_physical_address(void)
 	msg.data[1] = (uint8_t)(cec_physical_addr & 0xFF);
 	msg.data[2] = CEC_DEVICE_TYPE_PLAYBACK;
 	msg.length = 5;
-	return cec_send_message(&msg);
+	return cec_send_message(&msg, with_retry);
 }
 
-static bool cec_send_set_osd_name(const char *name)
+static bool cec_send_set_osd_name(const char *name, bool with_retry)
 {
 	if (!name) return false;
 
@@ -856,7 +982,7 @@ static bool cec_send_set_osd_name(const char *name)
 	}
 
 	msg.length = (uint8_t)(2 + len);
-	return cec_send_message(&msg);
+	return cec_send_message(&msg, with_retry);
 }
 
 static bool cec_send_cec_version(uint8_t destination)
@@ -877,6 +1003,195 @@ static bool cec_send_power_status(uint8_t destination)
 	msg.data[0] = CEC_POWER_STATUS_ON;
 	msg.length = 3;
 	return cec_send_message(&msg);
+}
+
+static void cec_set_physical_address(uint16_t physical_addr)
+{
+	cec_physical_addr = physical_addr;
+	cec_program_logical_address(cec_pick_logical_address_from_physical(cec_physical_addr));
+}
+
+static bool cec_has_physical_address(void)
+{
+	return cec_physical_addr_from_edid && cec_physical_addr != CEC_INVALID_PHYS_ADDR;
+}
+
+static bool cec_is_active_source(void)
+{
+	return cec_has_physical_address() && cec_active_physical_addr == cec_physical_addr;
+}
+
+static void cec_schedule_power_on_switch(unsigned long delay_ms)
+{
+	cec_power_on_state = CEC_POWER_ON_DONE;
+	cec_power_on_deadline = 0;
+
+	if (!cfg.hdmi_cec_power_on) return;
+
+	cec_power_on_state = CEC_POWER_ON_REQUEST_BEFORE;
+	cec_power_on_deadline = delay_ms ? GetTimer(delay_ms) : 0;
+}
+
+static void cec_schedule_edid_retry(unsigned long delay_ms)
+{
+	cec_edid_retry_delay_ms = delay_ms;
+	cec_edid_retry_deadline = delay_ms ? GetTimer(delay_ms) : 0;
+}
+
+static void cec_backoff_edid_retry(void)
+{
+	if (!cec_edid_retry_delay_ms) cec_edid_retry_delay_ms = CEC_EDID_RETRY_INITIAL_MS;
+	else if (cec_edid_retry_delay_ms < CEC_EDID_RETRY_MAX_MS)
+	{
+		cec_edid_retry_delay_ms *= 2;
+		if (cec_edid_retry_delay_ms > CEC_EDID_RETRY_MAX_MS) cec_edid_retry_delay_ms = CEC_EDID_RETRY_MAX_MS;
+	}
+
+	cec_edid_retry_deadline = GetTimer(cec_edid_retry_delay_ms);
+}
+
+static void cec_schedule_advertise(uint8_t attempts, unsigned long delay_ms)
+{
+	cec_advertise_step = 0;
+	cec_advertise_attempts = attempts;
+	cec_advertise_deadline = attempts ? (delay_ms ? GetTimer(delay_ms) : 0) : 0;
+}
+
+static void cec_schedule_startup_actions(void)
+{
+	cec_startup_actions_scheduled = true;
+	cec_schedule_advertise(CEC_ADVERTISE_STARTUP_ATTEMPTS, 0);
+	cec_schedule_power_on_switch(CEC_ADVERTISE_STEP_MS * CEC_ADVERTISE_IDENTITY_STEPS);
+}
+
+static void cec_schedule_post_switch_edid_retry(void)
+{
+	if (cec_physical_addr_from_edid) return;
+
+	cec_reload_video_after_edid = !video_has_valid_edid();
+	cec_schedule_edid_retry(CEC_EDID_AFTER_SWITCH_RETRY_MS);
+}
+
+static void cec_poll_edid_retry(void)
+{
+	if (cec_physical_addr_from_edid) return;
+	if (!cec_edid_retry_deadline || !CheckTimer(cec_edid_retry_deadline)) return;
+
+	uint16_t physical_addr = CEC_INVALID_PHYS_ADDR;
+	if (cec_read_physical_address(&physical_addr))
+	{
+		cec_physical_addr_from_edid = true;
+		cec_schedule_edid_retry(0);
+		cec_set_physical_address(physical_addr);
+		if (cec_startup_actions_scheduled) cec_schedule_advertise(CEC_ADVERTISE_STARTUP_ATTEMPTS, 0);
+		else cec_schedule_startup_actions();
+		if (cec_reload_video_after_edid)
+		{
+			cec_reload_video_after_edid = false;
+			video_reload_edid_mode();
+		}
+		return;
+	}
+
+	cec_backoff_edid_retry();
+}
+
+static void cec_poll_advertise(void)
+{
+	if (!cec_advertise_attempts) return;
+	if (!CheckTimer(cec_advertise_deadline)) return;
+
+	switch (cec_advertise_step)
+	{
+	case 0:
+		cec_send_report_physical_address(false);
+		break;
+
+	case 1:
+		cec_send_set_osd_name(cec_get_osd_name(), false);
+		break;
+	}
+
+	cec_advertise_step++;
+	if (cec_advertise_step >= CEC_ADVERTISE_IDENTITY_STEPS)
+	{
+		cec_advertise_step = 0;
+		cec_advertise_attempts--;
+		if (cec_advertise_attempts)
+		{
+			cec_advertise_deadline = GetTimer(CEC_ADVERTISE_STEP_MS);
+		}
+		else
+		{
+			cec_advertise_deadline = 0;
+		}
+	}
+	else
+	{
+		cec_advertise_deadline = GetTimer(CEC_ADVERTISE_STEP_MS);
+	}
+}
+
+static void cec_poll_power_on_switch(void)
+{
+	if (cec_power_on_state == CEC_POWER_ON_DONE) return;
+	if (!CheckTimer(cec_power_on_deadline)) return;
+
+	switch (cec_power_on_state)
+	{
+	case CEC_POWER_ON_REQUEST_BEFORE:
+		cec_active_physical_addr = 0xFFFF;
+		cec_send_request_active_source(false);
+		cec_power_on_state = CEC_POWER_ON_WAIT_BEFORE;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_QUERY_WAIT_MS);
+		break;
+
+	case CEC_POWER_ON_WAIT_BEFORE:
+		if (cec_is_active_source())
+		{
+			cec_schedule_post_switch_edid_retry();
+			cec_power_on_state = CEC_POWER_ON_DONE;
+			cec_power_on_deadline = 0;
+		}
+		else
+		{
+			cec_power_on_state = CEC_POWER_ON_IMAGE;
+			cec_power_on_deadline = 0;
+		}
+		break;
+
+	case CEC_POWER_ON_IMAGE:
+		cec_send_image_view_on(false);
+		cec_power_on_state = CEC_POWER_ON_TEXT;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_STEP_MS);
+		break;
+
+	case CEC_POWER_ON_TEXT:
+		cec_send_text_view_on(false);
+		cec_power_on_state = CEC_POWER_ON_ACTIVE;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_STEP_MS);
+		break;
+
+	case CEC_POWER_ON_ACTIVE:
+		cec_send_active_source(false);
+		cec_schedule_post_switch_edid_retry();
+		cec_power_on_state = CEC_POWER_ON_REQUEST_VERIFY;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_VERIFY_WAIT_MS);
+		break;
+
+	case CEC_POWER_ON_REQUEST_VERIFY:
+		cec_active_physical_addr = 0xFFFF;
+		cec_send_request_active_source(false);
+		cec_power_on_state = CEC_POWER_ON_WAIT_VERIFY;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_QUERY_WAIT_MS);
+		break;
+
+	case CEC_POWER_ON_WAIT_VERIFY:
+	default:
+		cec_power_on_state = CEC_POWER_ON_DONE;
+		cec_power_on_deadline = 0;
+		break;
+	}
 }
 
 static void cec_handle_message(const cec_message_t *msg)
@@ -903,7 +1218,7 @@ static void cec_handle_message(const cec_message_t *msg)
 	switch (msg->opcode)
 	{
 	case CEC_OPCODE_GIVE_PHYSICAL_ADDRESS:
-		if (cec_rate_limit(&cec_reply_phys_deadline, 2000)) cec_send_report_physical_address();
+		if (cec_has_physical_address() && cec_rate_limit(&cec_reply_phys_deadline, 2000)) cec_send_report_physical_address();
 		break;
 
 	case CEC_OPCODE_GIVE_OSD_NAME:
@@ -919,7 +1234,7 @@ static void cec_handle_message(const cec_message_t *msg)
 		break;
 
 	case CEC_OPCODE_REQUEST_ACTIVE_SOURCE:
-		if (cec_rate_limit(&cec_reply_active_deadline, 2000)) cec_send_active_source();
+		if (cec_is_active_source() && cec_rate_limit(&cec_reply_active_deadline, 2000)) cec_send_active_source();
 		break;
 
 	case CEC_OPCODE_ACTIVE_SOURCE:
@@ -1019,11 +1334,27 @@ bool cec_init(bool enable)
 	cec_tx_fail_streak = 0;
 	cec_tx_suppress_deadline = 0;
 	cec_rx_fallback_stale_deadline = 0;
-	cec_boot_activate_pending = false;
-	cec_boot_activate_deadline = 0;
-	cec_physical_addr = cec_read_physical_address();
-	cec_logical_addr = cec_pick_logical_address_from_physical(cec_physical_addr);
-	cec_program_logical_address(cec_logical_addr);
+	cec_advertise_deadline = 0;
+	cec_advertise_step = 0;
+	cec_advertise_attempts = 0;
+	cec_startup_actions_scheduled = false;
+	cec_power_on_state = CEC_POWER_ON_DONE;
+	cec_power_on_deadline = 0;
+	cec_reload_video_after_edid = false;
+	cec_poll_deadline = 0;
+	uint16_t physical_addr = CEC_INVALID_PHYS_ADDR;
+	cec_physical_addr = CEC_INVALID_PHYS_ADDR;
+	cec_program_logical_address(CEC_LOG_ADDR_PLAYBACK1);
+	if (cec_read_physical_address(&physical_addr))
+	{
+		cec_physical_addr_from_edid = true;
+		cec_set_physical_address(physical_addr);
+	}
+	else
+	{
+		cec_physical_addr_from_edid = false;
+	}
+	cec_schedule_edid_retry(cec_physical_addr_from_edid ? 0 : CEC_EDID_RETRY_INITIAL_MS);
 	cec_refresh_deadline = GetTimer(CEC_MAIN_REFRESH_MS);
 
 	if (cec_debug_enabled())
@@ -1036,15 +1367,7 @@ bool cec_init(bool enable)
 			cec_physical_addr & 0x0F);
 	}
 
-	const char *osd_name = cec_get_osd_name();
-	cec_send_report_physical_address(); usleep(20000);
-	(void)cec_send_set_osd_name(osd_name); usleep(20000);
-	cec_send_image_view_on(); usleep(20000);
-	cec_send_text_view_on(); usleep(20000);
-	cec_send_active_source(); usleep(20000);
-
-	cec_boot_activate_pending = true;
-	cec_boot_activate_deadline = GetTimer(1200);
+	if (cec_physical_addr_from_edid) cec_schedule_startup_actions();
 
 	cec_input_activity_seq = input_activity_get_seq();
 	unsigned long idle_ms = cec_idle_sleep_delay_ms();
@@ -1076,8 +1399,12 @@ void cec_deinit(void)
 	cec_main_fd = -1;
 	cec_enabled = false;
 	cec_logical_addr = CEC_LOG_ADDR_PLAYBACK1;
-	cec_physical_addr = CEC_DEFAULT_PHYS_ADDR;
+	cec_physical_addr = CEC_INVALID_PHYS_ADDR;
 	cec_refresh_deadline = 0;
+	cec_poll_deadline = 0;
+	cec_edid_retry_deadline = 0;
+	cec_edid_retry_delay_ms = 0;
+	cec_physical_addr_from_edid = false;
 	cec_reply_phys_deadline = 0;
 	cec_reply_name_deadline = 0;
 	cec_reply_version_deadline = 0;
@@ -1088,8 +1415,13 @@ void cec_deinit(void)
 	cec_tx_fail_streak = 0;
 	cec_tx_suppress_deadline = 0;
 	cec_rx_fallback_stale_deadline = 0;
-	cec_boot_activate_pending = false;
-	cec_boot_activate_deadline = 0;
+	cec_advertise_deadline = 0;
+	cec_advertise_step = 0;
+	cec_advertise_attempts = 0;
+	cec_startup_actions_scheduled = false;
+	cec_power_on_state = CEC_POWER_ON_DONE;
+	cec_power_on_deadline = 0;
+	cec_reload_video_after_edid = false;
 	cec_active_physical_addr = 0xFFFF;
 	cec_input_activity_seq = 0;
 	cec_idle_deadline = 0;
@@ -1099,6 +1431,8 @@ void cec_deinit(void)
 void cec_poll(void)
 {
 	if (!cec_enabled) return;
+	if (!CheckTimer(cec_poll_deadline)) return;
+	cec_poll_deadline = GetTimer(CEC_POLL_INTERVAL_MS);
 
 	if (CheckTimer(cec_refresh_deadline))
 	{
@@ -1106,13 +1440,8 @@ void cec_poll(void)
 		cec_refresh_deadline = GetTimer(CEC_MAIN_REFRESH_MS);
 	}
 
-	if (cec_boot_activate_pending && CheckTimer(cec_boot_activate_deadline))
-	{
-		cec_send_image_view_on();
-		cec_send_text_view_on();
-		cec_send_active_source();
-		cec_boot_activate_pending = false;
-	}
+	cec_poll_edid_retry();
+	cec_poll_advertise();
 
 	cec_message_t msg = {};
 	int max_msgs = 1;
@@ -1122,6 +1451,7 @@ void cec_poll(void)
 		cec_handle_message(&msg);
 	}
 
+	cec_poll_power_on_switch();
 	cec_poll_idle_sleep_wake();
 	cec_poll_key_timeout();
 }

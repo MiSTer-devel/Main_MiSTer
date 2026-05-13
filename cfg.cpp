@@ -55,6 +55,7 @@ static const ini_var_t ini_vars[] =
 	{ "HDMI_CEC_SLEEP", (void*)(&(cfg.hdmi_cec_sleep)), UINT8, 0, 1 },
 	{ "HDMI_CEC_WAKE", (void*)(&(cfg.hdmi_cec_wake)), UINT8, 0, 1 },
 	{ "HDMI_CEC_INPUT_MODE", (void*)(&(cfg.hdmi_cec_input_mode)), UINT8, 0, 1 },
+	{ "HDMI_CEC_POWER_ON", (void*)(&(cfg.hdmi_cec_power_on)), UINT8, 0, 1 },
 	{ "KBD_NOMOUSE", (void*)(&(cfg.kbd_nomouse)), UINT8, 0, 1 },
 	{ "MOUSE_THROTTLE", (void*)(&(cfg.mouse_throttle)), UINT8, 1, 100 },
 	{ "BOOTSCREEN", (void*)(&(cfg.bootscreen)), UINT8, 0, 1 },
@@ -591,11 +592,12 @@ void cfg_parse()
 	cfg.rumble = 1;
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
-	cfg.hdmi_cec = 1;
-	cfg.hdmi_cec_sleep = 1;
-	cfg.hdmi_cec_wake = 1;
+	cfg.hdmi_cec = 0;
+	cfg.hdmi_cec_sleep = 0;
+	cfg.hdmi_cec_wake = 0;
 	cfg.lookahead = 1;
 	cfg.hdmi_cec_input_mode = 1;
+	cfg.hdmi_cec_power_on = 1;
 	cfg.hdr = 0;
 	cfg.hdr_max_nits = 1000;
 	cfg.hdr_avg_nits = 250;
