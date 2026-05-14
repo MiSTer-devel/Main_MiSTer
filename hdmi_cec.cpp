@@ -5,6 +5,7 @@
 
 #include "hdmi_cec.h"
 #include "cfg.h"
+#include "fpga_io.h"
 #include "hardware.h"
 #include "input.h"
 #include "smbus.h"
@@ -23,6 +24,7 @@ static const uint8_t MAIN_REG_HDMI_CFG = 0xAF;
 static const uint8_t MAIN_REG_INT0_ENABLE = 0x94;
 static const uint8_t MAIN_REG_INT1_ENABLE = 0x95;
 static const uint8_t MAIN_REG_INT0_STATUS = 0x96;
+static const uint8_t MAIN_REG_INT1_STATUS = 0x97;
 static const uint8_t MAIN_INT_EDID_READY = 1 << 2;
 static const uint8_t MAIN_REG_EDID_SEGMENT = 0xC4;
 static const uint8_t MAIN_REG_EDID_CTRL = 0xC9;
@@ -39,9 +41,7 @@ static const uint8_t CEC_REG_RX1_FRAME_LENGTH = 0x25;
 static const uint8_t CEC_REG_RX2_FRAME_LENGTH = 0x37;
 static const uint8_t CEC_REG_RX3_FRAME_LENGTH = 0x48;
 static const uint8_t CEC_REG_RX_STATUS = 0x26;
-static const uint8_t CEC_REG_INT_ENABLE = 0x40;
-static const uint8_t CEC_REG_INT_STATUS = 0x41;
-static const uint8_t CEC_REG_INT_CLEAR = 0x42;
+static const uint8_t CEC_REG_RX_READY = 0x49;
 static const uint8_t CEC_REG_RX_BUFFERS = 0x4A;
 static const uint8_t CEC_REG_LOG_ADDR_MASK = 0x4B;
 static const uint8_t CEC_REG_LOG_ADDR_0_1 = 0x4C;
@@ -52,9 +52,11 @@ static const uint8_t CEC_REG_SOFT_RESET = 0x50;
 static const uint8_t CEC_INT_RX_RDY1 = 1 << 0;
 static const uint8_t CEC_INT_RX_RDY2 = 1 << 1;
 static const uint8_t CEC_INT_RX_RDY3 = 1 << 2;
+static const uint8_t CEC_INT_RX_RDY_MASK = CEC_INT_RX_RDY1 | CEC_INT_RX_RDY2 | CEC_INT_RX_RDY3;
 static const uint8_t CEC_INT_TX_RETRY_TIMEOUT = 1 << 3;
 static const uint8_t CEC_INT_TX_ARBITRATION = 1 << 4;
 static const uint8_t CEC_INT_TX_DONE = 1 << 5;
+static const uint8_t CEC_INT_TX_MASK = CEC_INT_TX_RETRY_TIMEOUT | CEC_INT_TX_ARBITRATION | CEC_INT_TX_DONE;
 
 static const uint8_t CEC_LOG_ADDR_TV = 0;
 static const uint8_t CEC_LOG_ADDR_PLAYBACK1 = 4;
@@ -196,10 +198,9 @@ static unsigned long cec_reply_version_deadline = 0;
 static unsigned long cec_reply_power_deadline = 0;
 static unsigned long cec_reply_menu_deadline = 0;
 static unsigned long cec_reply_active_deadline = 0;
-static unsigned long cec_forced_clear_log_deadline = 0;
+static unsigned long cec_reply_vendor_deadline = 0;
 static uint8_t cec_tx_fail_streak = 0;
 static unsigned long cec_tx_suppress_deadline = 0;
-static unsigned long cec_rx_fallback_stale_deadline = 0;
 static unsigned long cec_advertise_deadline = 0;
 static uint8_t cec_advertise_step = 0;
 static uint8_t cec_advertise_attempts = 0;
@@ -446,17 +447,19 @@ static cec_tx_result_t cec_wait_for_tx(unsigned long timeout_ms)
 
 	while (!CheckTimer(timeout))
 	{
-		uint8_t status = cec_reg_read(CEC_REG_INT_STATUS);
+		uint8_t status = main_reg_read(MAIN_REG_INT1_STATUS);
 
 		if (status & (CEC_INT_TX_RETRY_TIMEOUT | CEC_INT_TX_ARBITRATION))
 		{
-			cec_reg_write(CEC_REG_INT_CLEAR, status & (CEC_INT_TX_RETRY_TIMEOUT | CEC_INT_TX_ARBITRATION));
+			cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
+			main_reg_write(MAIN_REG_INT1_STATUS, status & CEC_INT_TX_MASK);
 			return CEC_TX_RESULT_NACK;
 		}
 
 		if (status & CEC_INT_TX_DONE)
 		{
-			cec_reg_write(CEC_REG_INT_CLEAR, CEC_INT_TX_DONE);
+			cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
+			main_reg_write(MAIN_REG_INT1_STATUS, CEC_INT_TX_DONE);
 			return CEC_TX_RESULT_OK;
 		}
 
@@ -479,6 +482,7 @@ static cec_tx_result_t cec_wait_for_tx(unsigned long timeout_ms)
 	}
 
 	cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
+	main_reg_write(MAIN_REG_INT1_STATUS, CEC_INT_TX_MASK);
 	return CEC_TX_RESULT_TIMEOUT;
 }
 
@@ -489,7 +493,7 @@ static bool cec_send_message(const cec_message_t *msg, bool with_retry)
 	if (!CheckTimer(cec_tx_suppress_deadline)) return false;
 
 	cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
-	cec_reg_write(CEC_REG_INT_CLEAR, CEC_INT_TX_RETRY_TIMEOUT | CEC_INT_TX_ARBITRATION | CEC_INT_TX_DONE);
+	main_reg_write(MAIN_REG_INT1_STATUS, CEC_INT_TX_MASK);
 
 	cec_reg_write(CEC_REG_TX_FRAME_HEADER, msg->header);
 	if (msg->length > 1)
@@ -548,10 +552,10 @@ static void cec_program_logical_address(uint8_t addr)
 static void cec_clear_rx_buffers(void)
 {
 	cec_reg_write(CEC_REG_RX_BUFFERS, 0x0F);
-	cec_reg_write(CEC_REG_RX_BUFFERS, 0x00);
+	cec_reg_write(CEC_REG_RX_BUFFERS, 0x08);
 }
 
-static bool cec_setup_main_registers(void)
+static bool cec_setup_main_registers(bool clear_status = false)
 {
 	if (cec_main_fd < 0) return false;
 
@@ -575,16 +579,21 @@ static bool cec_setup_main_registers(void)
 		ok &= main_reg_write(MAIN_REG_POWER2, 0xC0);
 	}
 
-	ok &= main_reg_write(MAIN_REG_MONITOR_SENSE, 0x40);
+	uint8_t reg_a1 = main_reg_read(MAIN_REG_MONITOR_SENSE);
+	ok &= main_reg_write(MAIN_REG_MONITOR_SENSE, reg_a1 & ~0x40);
 
 	uint8_t reg_af = main_reg_read(MAIN_REG_HDMI_CFG);
 	uint8_t reg_af_new = (uint8_t)((reg_af & 0x9C) | 0x06);
 	ok &= main_reg_write(MAIN_REG_HDMI_CFG, reg_af_new);
 
 	uint8_t reg_94 = main_reg_read(MAIN_REG_INT0_ENABLE);
-	ok &= main_reg_write(MAIN_REG_INT0_ENABLE, reg_94 | 0x80);
-	uint8_t reg_95 = main_reg_read(MAIN_REG_INT1_ENABLE);
-	ok &= main_reg_write(MAIN_REG_INT1_ENABLE, reg_95 | 0x20);
+	ok &= main_reg_write(MAIN_REG_INT0_ENABLE, reg_94 & ~0x80);
+	ok &= main_reg_write(MAIN_REG_INT1_ENABLE, CEC_INT_RX_RDY_MASK);
+	if (clear_status)
+	{
+		ok &= main_reg_write(MAIN_REG_INT0_STATUS, 0xFF);
+		ok &= main_reg_write(MAIN_REG_INT1_STATUS, 0xFF);
+	}
 
 	if (!ok)
 	{
@@ -807,33 +816,29 @@ static bool cec_read_rx_buffer(int index, cec_message_t *msg)
 
 	// Release the consumed RX buffer slot back to hardware.
 	uint8_t bit = 1 << index;
-	cec_reg_write(CEC_REG_RX_BUFFERS, bit);
+	cec_reg_write(CEC_REG_RX_BUFFERS, 0x08 | bit);
 	usleep(200);
-	cec_reg_write(CEC_REG_RX_BUFFERS, 0x00);
+	cec_reg_write(CEC_REG_RX_BUFFERS, 0x08);
 
 	return true;
+}
+
+static bool cec_hdmi_int_active(void)
+{
+	return fpga_get_hdmi_int() != 0;
 }
 
 static bool cec_receive_message(cec_message_t *msg)
 {
 	if (!cec_enabled || !msg) return false;
+	if (!cec_hdmi_int_active()) return false;
 
-	uint8_t int_status = cec_reg_read(CEC_REG_INT_STATUS);
-	uint8_t rx_bits = int_status & (CEC_INT_RX_RDY1 | CEC_INT_RX_RDY2 | CEC_INT_RX_RDY3);
-	bool used_fallback = false;
+	uint8_t rx_bits = cec_reg_read(CEC_REG_RX_READY) & CEC_INT_RX_RDY_MASK;
 	if (!rx_bits)
 	{
-		used_fallback = true;
-		// Some ADV7513 setups miss RX ready interrupts; fall back to polling RX length registers.
-		for (int i = 0; i < 3; i++)
-		{
-			uint8_t len = cec_reg_read(cec_rx_len_regs[i]) & 0x1F;
-			if (len >= 1 && len <= 16) rx_bits |= cec_rx_int_bits[i];
-		}
-
-		(void)int_status;
+		main_reg_write(MAIN_REG_INT1_STATUS, CEC_INT_RX_RDY_MASK);
+		return false;
 	}
-	if (!rx_bits) return false;
 
 	uint8_t rx_order = cec_reg_read(CEC_REG_RX_STATUS);
 	int selected = -1;
@@ -853,17 +858,6 @@ static bool cec_receive_message(cec_message_t *msg)
 
 	if (selected < 0)
 	{
-		if (used_fallback)
-		{
-			// Length-only fallback can read stale slots when RX order reports no queued frame.
-			if (CheckTimer(cec_rx_fallback_stale_deadline))
-			{
-				cec_rx_fallback_stale_deadline = GetTimer(2000);
-				cec_clear_rx_buffers();
-			}
-			return false;
-		}
-
 		for (int i = 0; i < 3; i++)
 		{
 			if (rx_bits & cec_rx_int_bits[i])
@@ -877,17 +871,7 @@ static bool cec_receive_message(cec_message_t *msg)
 	if (selected < 0) return false;
 
 	bool ok = cec_read_rx_buffer(selected, msg);
-	cec_reg_write(CEC_REG_INT_CLEAR, cec_rx_int_bits[selected]);
-	if (used_fallback)
-	{
-		uint8_t len_after = cec_reg_read(cec_rx_len_regs[selected]) & 0x1F;
-		if (len_after >= 1 && len_after <= 16)
-		{
-			// Sticky fallback reads can repeatedly expose the same frame; force drain.
-			cec_clear_rx_buffers();
-			if (CheckTimer(cec_forced_clear_log_deadline)) cec_forced_clear_log_deadline = GetTimer(5000);
-		}
-	}
+	main_reg_write(MAIN_REG_INT1_STATUS, cec_rx_int_bits[selected]);
 
 	return ok;
 }
@@ -982,6 +966,18 @@ static bool cec_send_set_osd_name(const char *name, bool with_retry)
 	}
 
 	msg.length = (uint8_t)(2 + len);
+	return cec_send_message(&msg, with_retry);
+}
+
+static bool cec_send_device_vendor_id(bool with_retry = true)
+{
+	cec_message_t msg = {};
+	msg.header = (cec_logical_addr << 4) | CEC_LOG_ADDR_BROADCAST;
+	msg.opcode = CEC_OPCODE_DEVICE_VENDOR_ID;
+	msg.data[0] = 0x00;
+	msg.data[1] = 0x00;
+	msg.data[2] = 0x00;
+	msg.length = 5;
 	return cec_send_message(&msg, with_retry);
 }
 
@@ -1225,6 +1221,10 @@ static void cec_handle_message(const cec_message_t *msg)
 		if (cec_rate_limit(&cec_reply_name_deadline, 2000)) cec_send_set_osd_name(cec_get_osd_name());
 		break;
 
+	case CEC_OPCODE_GIVE_DEVICE_VENDOR_ID:
+		if (cec_rate_limit(&cec_reply_vendor_deadline, 5000)) cec_send_device_vendor_id();
+		break;
+
 	case CEC_OPCODE_GET_CEC_VERSION:
 		if (cec_rate_limit(&cec_reply_version_deadline, 5000)) cec_send_cec_version(src);
 		break;
@@ -1298,7 +1298,7 @@ bool cec_init(bool enable)
 		return false;
 	}
 
-	if (!cec_setup_main_registers())
+	if (!cec_setup_main_registers(true))
 	{
 		cec_deinit();
 		return false;
@@ -1317,11 +1317,8 @@ bool cec_init(bool enable)
 
 	cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
 	cec_reg_write(CEC_REG_CLK_DIV, 0x3D);
-	cec_reg_write(CEC_REG_INT_ENABLE,
-		CEC_INT_RX_RDY1 | CEC_INT_RX_RDY2 | CEC_INT_RX_RDY3 |
-		CEC_INT_TX_RETRY_TIMEOUT | CEC_INT_TX_ARBITRATION | CEC_INT_TX_DONE);
-	cec_reg_write(CEC_REG_INT_CLEAR, 0x3F);
 	cec_clear_rx_buffers();
+	main_reg_write(MAIN_REG_INT1_STATUS, 0xFF);
 
 	cec_enabled = true;
 	cec_reply_phys_deadline = 0;
@@ -1330,10 +1327,9 @@ bool cec_init(bool enable)
 	cec_reply_power_deadline = 0;
 	cec_reply_menu_deadline = 0;
 	cec_reply_active_deadline = 0;
-	cec_forced_clear_log_deadline = 0;
+	cec_reply_vendor_deadline = 0;
 	cec_tx_fail_streak = 0;
 	cec_tx_suppress_deadline = 0;
-	cec_rx_fallback_stale_deadline = 0;
 	cec_advertise_deadline = 0;
 	cec_advertise_step = 0;
 	cec_advertise_attempts = 0;
@@ -1384,14 +1380,14 @@ void cec_deinit(void)
 	if (cec_fd >= 0)
 	{
 		cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
-		cec_reg_write(CEC_REG_INT_ENABLE, 0x00);
-		cec_reg_write(CEC_REG_INT_CLEAR, 0x3F);
 		cec_reg_write(CEC_REG_LOG_ADDR_MASK, 0x00);
 		i2c_close(cec_fd);
 	}
 
 	if (cec_main_fd >= 0)
 	{
+		main_reg_write(MAIN_REG_INT1_ENABLE, 0x00);
+		main_reg_write(MAIN_REG_INT1_STATUS, 0xFF);
 		i2c_close(cec_main_fd);
 	}
 
@@ -1411,10 +1407,9 @@ void cec_deinit(void)
 	cec_reply_power_deadline = 0;
 	cec_reply_menu_deadline = 0;
 	cec_reply_active_deadline = 0;
-	cec_forced_clear_log_deadline = 0;
+	cec_reply_vendor_deadline = 0;
 	cec_tx_fail_streak = 0;
 	cec_tx_suppress_deadline = 0;
-	cec_rx_fallback_stale_deadline = 0;
 	cec_advertise_deadline = 0;
 	cec_advertise_step = 0;
 	cec_advertise_attempts = 0;
