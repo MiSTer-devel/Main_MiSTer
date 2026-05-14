@@ -34,6 +34,8 @@ struct VideoInfo
 extern VideoInfo current_video_info;
 
 void  video_init();
+bool  video_has_valid_edid();
+bool  video_reload_edid_mode();
 
 int   video_get_scaler_flt(int type);
 void  video_set_scaler_flt(int type, int n);

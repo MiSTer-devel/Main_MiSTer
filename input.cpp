@@ -46,6 +46,17 @@ char joy_bnames[NUMBUTTONS][32] = {};
 int  joy_bcount = 0;
 static struct pollfd pool[NUMDEV + 3];
 int  xbe2_shift = 0;
+static volatile uint32_t input_activity_seq = 0;
+
+static inline void input_mark_activity(void)
+{
+	input_activity_seq++;
+}
+
+uint32_t input_activity_get_seq(void)
+{
+	return input_activity_seq;
+}
 
 static bool gcdb_use_usb_bcd_device(uint16_t vid, uint16_t pid)
 {
@@ -2076,6 +2087,13 @@ void input_uinp_destroy()
 		close(uinp_fd);
 		uinp_fd = -1;
 	}
+}
+
+void input_cec_send_key(uint16_t key, bool pressed)
+{
+	if (!key) return;
+	input_mark_activity();
+	user_io_kbd(key, pressed ? 1 : 0);
 }
 
 static unsigned long uinp_repeat = 0;
@@ -5641,6 +5659,8 @@ int input_test(int getchar)
 						memset(&ev, 0, sizeof(ev));
 						if (read(pool[i].fd, &ev, sizeof(ev)) == sizeof(ev))
 						{
+							if (ev.type == EV_KEY || ev.type == EV_ABS || ev.type == EV_REL) input_mark_activity();
+
 							if (getchar)
 							{
 								if (ev.type == EV_KEY && ev.value >= 1)
@@ -6138,6 +6158,8 @@ int input_test(int getchar)
 						uint8_t data[4] = {};
 						if (read(pool[i].fd, data, sizeof(data)))
 						{
+							input_mark_activity();
+
 							int edev = i;
 							int dev = i;
 							if (input[i].bind >= 0) edev = input[i].bind; // mouse to event
