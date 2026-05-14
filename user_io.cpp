@@ -84,6 +84,17 @@ static uint16_t sdram_cfg = 0;
 
 char last_filename[1024] = {};
 
+uint32_t input_seq = 0;
+void register_activity()
+{
+	input_seq++;
+}
+
+uint32_t user_io_get_activity_seq()
+{
+	return input_seq;
+}
+
 void user_io_store_filename(char *filename)
 {
 	char *p = strrchr(filename, '/');
@@ -1790,6 +1801,8 @@ void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
 	{
 		user_io_l_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
 	}
+
+	register_activity();
 }
 
 static uint8_t CSD[16] = { 0xf1, 0x40, 0x40, 0x0a, 0x80, 0x7f, 0xe5, 0xe9, 0x00, 0x00, 0x59, 0x5b, 0x32, 0x00, 0x0e, 0x40 };
@@ -3083,7 +3096,7 @@ void user_io_poll()
 	// this is reduce risk of screenshot occurring while the scaler
 	// is being updated and getting a corrupted image.
 	add_frame_callback(screenshot_cb);
-	
+
 	if ((core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
 	{
@@ -3242,7 +3255,7 @@ void user_io_poll()
 			else if (is_n64() && n64_process_save(use_save, op, lba, blksz, ack, buffer_lba[disk], buffer[disk], sizeof(*buffer), sz))
 			{
 				// Handled by N64 core logic.
-				// If n64_process_save returns false (e.g. use_save is off, or unsupported op), 
+				// If n64_process_save returns false (e.g. use_save is off, or unsupported op),
 				// it will fall through to the generic handler below.
 			}
 			else if (op == 2)
@@ -3738,6 +3751,32 @@ void user_io_poll()
 	if (is_atari5200()) atari5200_poll();
 	if (is_3do()) p3do_poll();
 	process_ss(0);
+
+	if (cfg.hdmi_off)
+	{
+		static uint32_t hdmi_timeout = 0;
+		static uint32_t seq = 0;
+		static int hdmi_on = 1;
+
+		if (!hdmi_timeout || seq != user_io_get_activity_seq() || !input_state())
+		{
+			seq = user_io_get_activity_seq();
+			hdmi_timeout = GetTimer(cfg.hdmi_off * 60000);
+			if (!hdmi_on)
+			{
+				printf("hdmi_on\n");
+				hdmi_on = 1;
+				video_hdmi_power(1);
+			}
+		}
+
+		if (CheckTimer(hdmi_timeout) && hdmi_on)
+		{
+			printf("hdmi_off\n");
+			hdmi_on = 0;
+			video_hdmi_power(0);
+		}
+	}
 }
 
 static void send_keycode(unsigned short key, int press)
@@ -3964,6 +4003,8 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 {
 	if (osd_is_visible && !is_menu()) return;
 
+	register_activity();
+
 	switch (core_type)
 	{
 	case CORE_TYPE_8BIT:
@@ -4101,6 +4142,7 @@ void user_io_osd_key_enable(char on)
 
 void user_io_kbd(uint16_t key, int press)
 {
+	register_activity();
 
 	if(is_menu()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 

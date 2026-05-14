@@ -1238,8 +1238,7 @@ void HandleUI(void)
 			{
 				off_timeout = 0;
 				video_menu_bg(user_io_status_get("[3:1]"), cfg.video_off_logo ? 4 : 3);
-				if (cfg.video_off_hdmi) video_hdmi_power(0);
-				else if (cfg.video_off_logo) off_timeout = GetTimer(10000);
+				if (cfg.video_off_logo) off_timeout = GetTimer(10000);
 			}
 
 			if (c || menustate != MENU_FILE_SELECT2)
@@ -1249,7 +1248,6 @@ void HandleUI(void)
 				{
 					c = 0;
 					menu_visible = 1;
-					if (cfg.video_off_hdmi) video_hdmi_power(1);
 					video_menu_bg(user_io_status_get("[3:1]"));
 					OsdMenuCtl(1);
 					off_timeout = 0;
