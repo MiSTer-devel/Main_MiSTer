@@ -224,11 +224,6 @@ static bool cec_send_cec_version(uint8_t destination);
 static void cec_handle_message(const cec_message_t *msg);
 static bool cec_receive_message(cec_message_t *msg);
 
-static bool cec_debug_enabled(void)
-{
-	return cfg.debug != 0;
-}
-
 static uint8_t cec_get_input_mode(void)
 {
 	if (cfg.hdmi_cec_input_mode <= CEC_INPUT_MODE_ON) return cfg.hdmi_cec_input_mode;
@@ -521,10 +516,7 @@ static bool cec_send_message(const cec_message_t *msg, bool with_retry)
 		{
 			cec_tx_suppress_deadline = GetTimer(15000);
 			cec_tx_fail_streak = 0;
-			if (cec_debug_enabled())
-			{
-				printf("CEC: TX suppressed for 15000ms after repeated failures\n");
-			}
+			printf("CEC: TX suppressed for 15000ms after repeated failures\n");
 		}
 	}
 
@@ -576,10 +568,7 @@ static bool cec_setup_main_registers(bool clear_status = false)
 
 	if (!ok)
 	{
-		if (cec_debug_enabled())
-		{
-			printf("CEC: main register setup failed\n");
-		}
+		printf("CEC: main register setup failed\n");
 	}
 
 	return ok;
@@ -784,7 +773,7 @@ static bool cec_read_edid_segment(int edid_fd, uint8_t segment, uint8_t *edid, i
 	}
 
 	if (read_errors) *read_errors += errors;
-	if (cec_debug_enabled() && (!ready || errors))
+	if (!ready || errors)
 	{
 		printf("CEC: EDID segment %u ready=%u read_errors=%d\n", segment, ready ? 1 : 0, errors);
 	}
@@ -813,10 +802,7 @@ static bool cec_read_physical_address(uint16_t *physical_addr)
 		size_t total_blocks = 1 + edid[126];
 		if (total_blocks > CEC_EDID_MAX_BLOCKS)
 		{
-			if (cec_debug_enabled())
-			{
-				printf("CEC: EDID has %u blocks, reading first %u\n", (unsigned)total_blocks, (unsigned)CEC_EDID_MAX_BLOCKS);
-			}
+			printf("CEC: EDID has %u blocks, reading first %u\n", (unsigned)total_blocks, (unsigned)CEC_EDID_MAX_BLOCKS);
 			total_blocks = CEC_EDID_MAX_BLOCKS;
 		}
 
@@ -834,7 +820,7 @@ static bool cec_read_physical_address(uint16_t *physical_addr)
 		{
 			if (!cec_edid_block_checksum_ok(edid + (block * CEC_EDID_BLOCK_SIZE)))
 			{
-				if (cec_debug_enabled()) printf("CEC: EDID block %u checksum failed\n", (unsigned)block);
+				printf("CEC: EDID block %u checksum failed\n", (unsigned)block);
 				blocks_read = block;
 				break;
 			}
@@ -850,7 +836,7 @@ static bool cec_read_physical_address(uint16_t *physical_addr)
 		found = cec_parse_physical_address_loose(edid, edid_size ? edid_size : CEC_EDID_SEGMENT_SIZE, &addr);
 	}
 
-	if (read_errors && cec_debug_enabled())
+	if (read_errors)
 	{
 		printf("CEC: EDID read errors=%d\n", read_errors);
 	}
@@ -1424,15 +1410,12 @@ bool cec_init(bool enable)
 	cec_schedule_edid_retry(cec_physical_addr_from_edid ? 0 : CEC_EDID_RETRY_INITIAL_MS);
 	cec_refresh_deadline = GetTimer(CEC_MAIN_REFRESH_MS);
 
-	if (cec_debug_enabled())
-	{
-		printf("CEC: logical=%u physical=%X.%X.%X.%X\n",
-			cec_logical_addr,
-			(cec_physical_addr >> 12) & 0x0F,
-			(cec_physical_addr >> 8) & 0x0F,
-			(cec_physical_addr >> 4) & 0x0F,
-			cec_physical_addr & 0x0F);
-	}
+	printf("CEC: logical=%u physical=%X.%X.%X.%X\n",
+		cec_logical_addr,
+		(cec_physical_addr >> 12) & 0x0F,
+		(cec_physical_addr >> 8) & 0x0F,
+		(cec_physical_addr >> 4) & 0x0F,
+		cec_physical_addr & 0x0F);
 
 	if (cec_physical_addr_from_edid) cec_schedule_startup_actions();
 
