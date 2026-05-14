@@ -190,7 +190,6 @@ static unsigned long cec_refresh_deadline = 0;
 static unsigned long cec_poll_deadline = 0;
 static unsigned long cec_edid_retry_deadline = 0;
 static unsigned long cec_edid_retry_delay_ms = 0;
-static bool cec_hpd_pulsed = false;
 static bool cec_physical_addr_from_edid = false;
 static unsigned long cec_reply_phys_deadline = 0;
 static unsigned long cec_reply_name_deadline = 0;
@@ -565,26 +564,6 @@ static bool cec_setup_main_registers(bool clear_status = false)
 	ok &= main_reg_write(MAIN_REG_CEC_POWER, 0x00);
 	uint8_t reg_e3 = main_reg_read(MAIN_REG_CEC_CTRL);
 	ok &= main_reg_write(MAIN_REG_CEC_CTRL, reg_e3 | 0x0E);
-
-	if (!cec_hpd_pulsed)
-	{
-		ok &= main_reg_write(MAIN_REG_POWER2, 0x00);
-		usleep(100000);
-		ok &= main_reg_write(MAIN_REG_POWER2, 0xC0);
-		usleep(100000);
-		cec_hpd_pulsed = true;
-	}
-	else
-	{
-		ok &= main_reg_write(MAIN_REG_POWER2, 0xC0);
-	}
-
-	uint8_t reg_a1 = main_reg_read(MAIN_REG_MONITOR_SENSE);
-	ok &= main_reg_write(MAIN_REG_MONITOR_SENSE, reg_a1 & ~0x40);
-
-	uint8_t reg_af = main_reg_read(MAIN_REG_HDMI_CFG);
-	uint8_t reg_af_new = (uint8_t)((reg_af & 0x9C) | 0x06);
-	ok &= main_reg_write(MAIN_REG_HDMI_CFG, reg_af_new);
 
 	uint8_t reg_94 = main_reg_read(MAIN_REG_INT0_ENABLE);
 	ok &= main_reg_write(MAIN_REG_INT0_ENABLE, reg_94 & ~0x80);
@@ -1290,7 +1269,6 @@ bool cec_init(bool enable)
 	if (cec_enabled) return true;
 
 	cec_deinit();
-	cec_hpd_pulsed = false;
 
 	cec_main_fd = i2c_open(ADV7513_MAIN_ADDR, 0);
 	if (cec_main_fd < 0)

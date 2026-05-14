@@ -175,12 +175,6 @@
     <ClCompile Include="support\c64\c64.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
-    <ClCompile Include="support\atari8bit\atari800.cpp">
-      <Filter>Source Files\support</Filter>
-    </ClCompile>
-    <ClCompile Include="support\atari8bit\atari5200.cpp">
-      <Filter>Source Files\support</Filter>
-    </ClCompile>
     <ClCompile Include="support\pcecd\pcecd.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
@@ -241,10 +235,10 @@
     <ClCompile Include="gamecontroller_db.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-	<ClCompile Include="support\n64\n64.cpp">
+    <ClCompile Include="support\n64\n64.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
-	<ClCompile Include="support\n64\n64_joy_emu.cpp">
+    <ClCompile Include="support\n64\n64_joy_emu.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
     <ClCompile Include="support\neogeo\neogeocd.cpp">
@@ -255,6 +249,12 @@
     </ClCompile>
     <ClCompile Include="support\saturn\saturncdd.cpp">
       <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\atari800\atari800.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="hdmi_cec.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -480,10 +480,10 @@
     <ClInclude Include="gamecontroller_db.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-	<ClInclude Include="support\n64\n64.h">
+    <ClInclude Include="support\n64\n64.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
-	<ClInclude Include="support\n64\n64_joy_emu.h">
+    <ClInclude Include="support\n64\n64_joy_emu.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
     <ClInclude Include="support\neogeo\neogeocd.h">
@@ -491,6 +491,21 @@
     </ClInclude>
     <ClInclude Include="support\saturn\saturn.h">
       <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="mat4x4.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\atari8bit\atari800.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\atari8bit\atari5200.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\n64\n64_cpak_header.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hdmi_cec.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
