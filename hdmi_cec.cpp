@@ -7,6 +7,7 @@
 #include "cfg.h"
 #include "fpga_io.h"
 #include "hardware.h"
+#include "user_io.h"
 #include "input.h"
 #include "smbus.h"
 #include "video.h"
@@ -300,7 +301,7 @@ static void cec_release_key(void)
 {
 	if (!cec_pressed_key) return;
 
-	input_cec_send_key(cec_pressed_key, false);
+	user_io_kbd(cec_pressed_key, 0);
 	cec_pressed_key = 0;
 	cec_press_deadline = 0;
 }
@@ -352,6 +353,8 @@ static uint16_t cec_button_to_key(uint8_t button_code)
 
 static void cec_handle_button(uint8_t button_code, bool pressed)
 {
+	if (is_menu()) printf("CEC button: 0x%02X, pressed=%d\n", button_code, pressed);
+
 	if (!pressed)
 	{
 		cec_release_key();
@@ -369,7 +372,7 @@ static void cec_handle_button(uint8_t button_code, bool pressed)
 
 	if (!cec_pressed_key)
 	{
-		input_cec_send_key(key, true);
+		user_io_kbd(key, 1);
 		cec_pressed_key = key;
 	}
 
@@ -395,18 +398,18 @@ static void cec_poll_idle_sleep_wake(void)
 	{
 		cec_idle_deadline = 0;
 		cec_idle_engaged = false;
-		cec_input_activity_seq = input_activity_get_seq();
+		cec_input_activity_seq = user_io_get_activity_seq();
 		return;
 	}
 
 	if (!cec_idle_deadline)
 	{
-		cec_input_activity_seq = input_activity_get_seq();
+		cec_input_activity_seq = user_io_get_activity_seq();
 		cec_idle_deadline = GetTimer(delay_ms);
 	}
 
-	uint32_t seq = input_activity_get_seq();
-	if (seq != cec_input_activity_seq)
+	uint32_t seq = user_io_get_activity_seq();
+	if (seq != cec_input_activity_seq || !input_state())
 	{
 		cec_input_activity_seq = seq;
 		cec_idle_deadline = GetTimer(delay_ms);
@@ -1419,7 +1422,7 @@ bool cec_init(bool enable)
 
 	if (cec_physical_addr_from_edid) cec_schedule_startup_actions();
 
-	cec_input_activity_seq = input_activity_get_seq();
+	cec_input_activity_seq = user_io_get_activity_seq();
 	unsigned long idle_ms = cec_idle_sleep_delay_ms();
 	cec_idle_deadline = idle_ms ? GetTimer(idle_ms) : 0;
 	cec_idle_engaged = false;
