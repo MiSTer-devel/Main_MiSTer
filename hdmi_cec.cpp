@@ -585,6 +585,93 @@ static bool cec_setup_main_registers(bool clear_status = false)
 	return ok;
 }
 
+static bool cec_reg_write16(uint8_t reg, uint16_t value)
+{
+	if (cec_fd < 0) return false;
+	printf("cec_reg_write16(0x%X, %d)\n", reg, value);
+	if (i2c_smbus_write_byte_data(cec_fd, reg, value >> 8) < 0) return false;
+	return i2c_smbus_write_byte_data(cec_fd, reg + 1, value) >= 0;
+}
+
+static bool cec_setup_clock()
+{
+	if (cec_fd < 0) return false;
+
+	if (cfg.hdmi_cec_clock && (cfg.hdmi_cec_clock < 3 || cfg.hdmi_cec_clock > 100))
+	{
+		printf("CEC: clock (%.2f MHz) is outside of supported range 3-100 MHz\n", cfg.hdmi_cec_clock);
+		return false;
+	}
+
+	int clock = !cfg.hdmi_cec_clock ? 12000 : (cfg.hdmi_cec_clock*1000);
+	int base = (cfg.hdmi_cec_clock < 45) ? 750 : (cfg.hdmi_cec_clock < 60) ? 1000 : 2000;
+
+	int clk_div = (clock / base) - 1;
+	double us = (1000.f * (clk_div + 1)) / (float)clock;
+
+	printf("cec_setup_clock: hdmi_cec_clock=%.2f clock=%d, base=%d, clk_div=%d, us=%.2f\n", cfg.hdmi_cec_clock, clock, base, clk_div, us);
+
+	cec_reg_write(CEC_REG_CLK_DIV, clk_div << 2);
+
+	//st_total 4.5ms
+	cec_reg_write16(0x51, 4500 / us);
+
+	//st_total_min 4.2ms
+	cec_reg_write16(0x53, 4200 / us);
+
+	//st_total_max 4.8ms
+	cec_reg_write16(0x55, 4800 / us);
+
+	//st_low 3.7ms
+	cec_reg_write16(0x57, 3700 / us);
+
+	//st_low_min 3.4ms
+	cec_reg_write16(0x59, 3400 / us);
+
+	//st_low_max 4.0ms
+	cec_reg_write16(0x5B, 4000 / us);
+
+	//bit_total 2.4ms
+	cec_reg_write16(0x5D, 2400 / us);
+
+	//bit_total_min 1.95ms
+	cec_reg_write16(0x5F, 1950 / us);
+
+	//bit_total_max 2.85ms
+	cec_reg_write16(0x61, 2850 / us);
+
+	//bit_low_one 0.6ms
+	cec_reg_write16(0x63, 600 / us);
+
+	//bit_low_zero 1.5ms
+	cec_reg_write16(0x65, 1500 / us);
+
+	//bit_low_max 1.8ms
+	cec_reg_write16(0x67, 1800 / us);
+
+	//sample_time 1.05ms
+	cec_reg_write16(0x69, 1050 / us);
+
+	//line_error_time 3.6ms
+	cec_reg_write16(0x6B, 3600 / us);
+
+	//rise_time 250us
+	cec_reg_write16(0x6E, 250 / us);
+
+	//bit_low_one_min 0.3ms
+	cec_reg_write16(0x71, 300 / us);
+
+	//bit_low_one_max 0.9ms
+	cec_reg_write16(0x73, 900 / us);
+
+	//bit_low_zero_min 1.2ms
+	cec_reg_write16(0x75, 1200 / us);
+
+	cec_reg_write(CEC_REG_CLK_DIV, (clk_div << 2) | 1);
+
+	return true;
+}
+
 static bool cec_parse_physical_address(const uint8_t *edid, size_t size, uint16_t *physical_addr)
 {
 	if (!edid || !physical_addr || size < 256) return false;
@@ -1290,11 +1377,17 @@ bool cec_init(bool enable)
 	}
 
 	cec_reg_write(CEC_REG_SOFT_RESET, 0x01);
+
+	if (!cec_setup_clock())
+	{
+		cec_deinit();
+		return false;
+	}
+
 	usleep(2000);
 	cec_reg_write(CEC_REG_SOFT_RESET, 0x00);
-
 	cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
-	cec_reg_write(CEC_REG_CLK_DIV, 0x3D);
+
 	cec_clear_rx_buffers();
 	main_reg_write(MAIN_REG_INT1_STATUS, 0xFF);
 
