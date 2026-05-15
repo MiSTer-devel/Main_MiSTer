@@ -593,8 +593,8 @@ void cfg_parse()
 	cfg.wheel_force = 50;
 	cfg.dvi_mode = 2;
 	cfg.hdmi_cec = 0;
-	cfg.hdmi_cec_sleep = 0;
-	cfg.hdmi_cec_wake = 0;
+	cfg.hdmi_cec_sleep = 1;
+	cfg.hdmi_cec_wake = 1;
 	cfg.lookahead = 1;
 	cfg.hdmi_cec_input_mode = 1;
 	cfg.hdmi_cec_power_on = 1;
