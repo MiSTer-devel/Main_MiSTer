@@ -86,7 +86,6 @@ typedef struct {
 	uint8_t vrr_mode;
 	uint8_t vrr_vesa_framerate;
 	uint16_t video_off;
-	uint8_t video_off_hdmi;
 	uint8_t video_off_logo;
 	uint8_t disable_autofire;
 	uint8_t video_brightness;
@@ -112,6 +111,7 @@ typedef struct {
 	char screenshot_image_format[16];
 	uint16_t xbe2_shift;
 	uint8_t spd_quirk;
+	uint16_t hdmi_off;
 } cfg_t;
 
 extern cfg_t cfg;

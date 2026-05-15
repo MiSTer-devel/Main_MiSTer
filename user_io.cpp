@@ -3751,6 +3751,32 @@ void user_io_poll()
 	if (is_atari5200()) atari5200_poll();
 	if (is_3do()) p3do_poll();
 	process_ss(0);
+
+	if (cfg.hdmi_off)
+	{
+		static uint32_t hdmi_timeout = 0;
+		static uint32_t seq = 0;
+		static int hdmi_on = 1;
+
+		if (!hdmi_timeout || seq != user_io_get_activity_seq() || !input_state())
+		{
+			seq = user_io_get_activity_seq();
+			hdmi_timeout = GetTimer(cfg.hdmi_off * 60000);
+			if (!hdmi_on)
+			{
+				printf("hdmi_on\n");
+				hdmi_on = 1;
+				video_hdmi_power(1);
+			}
+		}
+
+		if (CheckTimer(hdmi_timeout) && hdmi_on)
+		{
+			printf("hdmi_off\n");
+			hdmi_on = 0;
+			video_hdmi_power(0);
+		}
+	}
 }
 
 static void send_keycode(unsigned short key, int press)
