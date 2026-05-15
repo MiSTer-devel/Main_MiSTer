@@ -8,17 +8,12 @@
 #include "fpga_io.h"
 #include "osd.h"
 #include "profiling.h"
-#include "cfg.h"
-#include "hardware.h"
 #include "hdmi_cec.h"
 
 static cothread_t co_scheduler = nullptr;
 static cothread_t co_poll = nullptr;
 static cothread_t co_ui = nullptr;
 static cothread_t co_last = nullptr;
-static unsigned long cec_retry = 0;
-static bool cec_init_failed_logged = false;
-static bool scheduler_ui_ran_once = false;
 
 static void scheduler_wait_fpga_ready(void)
 {
@@ -39,32 +34,7 @@ static void scheduler_co_poll(void)
 			user_io_poll();
 			frame_timer();
 			input_poll(0);
-		}
-
-		if (cfg.hdmi_cec)
-		{
-			if (scheduler_ui_ran_once && !cec_is_enabled() && CheckTimer(cec_retry))
-			{
-				if (!cec_init(true))
-				{
-					if (cfg.debug && !cec_init_failed_logged) printf("CEC: init failed\n");
-					cec_init_failed_logged = true;
-					cec_retry = GetTimer(3000);
-				}
-				else
-				{
-					cec_init_failed_logged = false;
-					cec_retry = 0;
-				}
-			}
-
-			if (cec_is_enabled()) cec_poll();
-		}
-		else
-		{
-			if (cec_is_enabled()) cec_deinit();
-			cec_retry = 0;
-			cec_init_failed_logged = false;
+			cec_poll();
 		}
 
 		scheduler_yield();
@@ -75,8 +45,6 @@ static void scheduler_co_ui(void)
 {
 	for (;;)
 	{
-		scheduler_ui_ran_once = true;
-
 		{
 			SPIKE_SCOPE("co_ui", 1000);
 			HandleUI();

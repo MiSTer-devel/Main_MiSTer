@@ -225,6 +225,9 @@ static bool cec_send_cec_version(uint8_t destination);
 static void cec_handle_message(const cec_message_t *msg);
 static bool cec_receive_message(cec_message_t *msg);
 
+static unsigned long cec_retry = 0;
+static bool cec_init_failed_logged = false;
+
 static uint8_t cec_get_input_mode(void)
 {
 	if (cfg.hdmi_cec_input_mode <= CEC_INPUT_MODE_ON) return cfg.hdmi_cec_input_mode;
@@ -377,64 +380,6 @@ static void cec_handle_button(uint8_t button_code, bool pressed)
 	}
 
 	cec_press_deadline = GetTimer(CEC_BUTTON_TIMEOUT_MS);
-}
-
-static void cec_poll_key_timeout(void)
-{
-	if (cec_pressed_key && CheckTimer(cec_press_deadline))
-	{
-		cec_release_key();
-	}
-}
-
-static void cec_poll_idle_sleep_wake(void)
-{
-	// Global idle detector based on real input activity (not just OSD/menu navigation),
-	// tied to global idle blanking ("video_off") timing.
-	if (!cfg.hdmi_cec_sleep && !cfg.hdmi_cec_wake) return;
-
-	unsigned long delay_ms = cec_idle_sleep_delay_ms();
-	if (!delay_ms)
-	{
-		cec_idle_deadline = 0;
-		cec_idle_engaged = false;
-		cec_input_activity_seq = user_io_get_activity_seq();
-		return;
-	}
-
-	if (!cec_idle_deadline)
-	{
-		cec_input_activity_seq = user_io_get_activity_seq();
-		cec_idle_deadline = GetTimer(delay_ms);
-	}
-
-	uint32_t seq = user_io_get_activity_seq();
-	if (seq != cec_input_activity_seq || !input_state())
-	{
-		cec_input_activity_seq = seq;
-		cec_idle_deadline = GetTimer(delay_ms);
-
-		if (cec_idle_engaged)
-		{
-			cec_idle_engaged = false;
-			if (cfg.hdmi_cec_wake) cec_send_wake();
-		}
-
-		return;
-	}
-
-	if (!cec_idle_engaged && CheckTimer(cec_idle_deadline))
-	{
-		cec_idle_engaged = true;
-		if (cfg.hdmi_cec_sleep)
-		{
-			// Avoid powering off the display if MiSTer isn't the active source.
-			if (cec_active_physical_addr == cec_physical_addr)
-			{
-				cec_send_standby();
-			}
-		}
-	}
 }
 
 static cec_tx_result_t cec_wait_for_tx(unsigned long timeout_ms)
@@ -1183,68 +1128,6 @@ static void cec_poll_advertise(void)
 	}
 }
 
-static void cec_poll_power_on_switch(void)
-{
-	if (cec_power_on_state == CEC_POWER_ON_DONE) return;
-	if (!CheckTimer(cec_power_on_deadline)) return;
-
-	switch (cec_power_on_state)
-	{
-	case CEC_POWER_ON_REQUEST_BEFORE:
-		cec_active_physical_addr = 0xFFFF;
-		cec_send_request_active_source(false);
-		cec_power_on_state = CEC_POWER_ON_WAIT_BEFORE;
-		cec_power_on_deadline = GetTimer(CEC_POWER_ON_QUERY_WAIT_MS);
-		break;
-
-	case CEC_POWER_ON_WAIT_BEFORE:
-		if (cec_is_active_source())
-		{
-			cec_schedule_post_switch_edid_retry();
-			cec_power_on_state = CEC_POWER_ON_DONE;
-			cec_power_on_deadline = 0;
-		}
-		else
-		{
-			cec_power_on_state = CEC_POWER_ON_IMAGE;
-			cec_power_on_deadline = 0;
-		}
-		break;
-
-	case CEC_POWER_ON_IMAGE:
-		cec_send_image_view_on(false);
-		cec_power_on_state = CEC_POWER_ON_TEXT;
-		cec_power_on_deadline = GetTimer(CEC_POWER_ON_STEP_MS);
-		break;
-
-	case CEC_POWER_ON_TEXT:
-		cec_send_text_view_on(false);
-		cec_power_on_state = CEC_POWER_ON_ACTIVE;
-		cec_power_on_deadline = GetTimer(CEC_POWER_ON_STEP_MS);
-		break;
-
-	case CEC_POWER_ON_ACTIVE:
-		cec_send_active_source(false);
-		cec_schedule_post_switch_edid_retry();
-		cec_power_on_state = CEC_POWER_ON_REQUEST_VERIFY;
-		cec_power_on_deadline = GetTimer(CEC_POWER_ON_VERIFY_WAIT_MS);
-		break;
-
-	case CEC_POWER_ON_REQUEST_VERIFY:
-		cec_active_physical_addr = 0xFFFF;
-		cec_send_request_active_source(false);
-		cec_power_on_state = CEC_POWER_ON_WAIT_VERIFY;
-		cec_power_on_deadline = GetTimer(CEC_POWER_ON_QUERY_WAIT_MS);
-		break;
-
-	case CEC_POWER_ON_WAIT_VERIFY:
-	default:
-		cec_power_on_state = CEC_POWER_ON_DONE;
-		cec_power_on_deadline = 0;
-		break;
-	}
-}
-
 static void cec_handle_message(const cec_message_t *msg)
 {
 	if (!msg || msg->length < 2) return;
@@ -1332,6 +1215,56 @@ static void cec_handle_message(const cec_message_t *msg)
 	default:
 		break;
 	}
+}
+
+void cec_deinit(void)
+{
+	cec_release_key();
+
+	if (cec_fd >= 0)
+	{
+		cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
+		cec_reg_write(CEC_REG_LOG_ADDR_MASK, 0x00);
+		i2c_close(cec_fd);
+	}
+
+	if (cec_main_fd >= 0)
+	{
+		main_reg_write(MAIN_REG_INT1_ENABLE, 0x00);
+		main_reg_write(MAIN_REG_INT1_STATUS, 0xFF);
+		i2c_close(cec_main_fd);
+	}
+
+	cec_fd = -1;
+	cec_main_fd = -1;
+	cec_enabled = false;
+	cec_logical_addr = CEC_LOG_ADDR_PLAYBACK1;
+	cec_physical_addr = CEC_INVALID_PHYS_ADDR;
+	cec_refresh_deadline = 0;
+	cec_poll_deadline = 0;
+	cec_edid_retry_deadline = 0;
+	cec_edid_retry_delay_ms = 0;
+	cec_physical_addr_from_edid = false;
+	cec_reply_phys_deadline = 0;
+	cec_reply_name_deadline = 0;
+	cec_reply_version_deadline = 0;
+	cec_reply_power_deadline = 0;
+	cec_reply_menu_deadline = 0;
+	cec_reply_active_deadline = 0;
+	cec_reply_vendor_deadline = 0;
+	cec_tx_fail_streak = 0;
+	cec_tx_suppress_deadline = 0;
+	cec_advertise_deadline = 0;
+	cec_advertise_step = 0;
+	cec_advertise_attempts = 0;
+	cec_startup_actions_scheduled = false;
+	cec_power_on_state = CEC_POWER_ON_DONE;
+	cec_power_on_deadline = 0;
+	cec_reload_video_after_edid = false;
+	cec_active_physical_addr = 0xFFFF;
+	cec_input_activity_seq = 0;
+	cec_idle_deadline = 0;
+	cec_idle_engaged = false;
 }
 
 bool cec_init(bool enable)
@@ -1430,85 +1363,170 @@ bool cec_init(bool enable)
 	return true;
 }
 
-void cec_deinit(void)
+static void cec_poll_power_on_switch(void)
 {
-	cec_release_key();
+	if (cec_power_on_state == CEC_POWER_ON_DONE) return;
+	if (!CheckTimer(cec_power_on_deadline)) return;
 
-	if (cec_fd >= 0)
+	switch (cec_power_on_state)
 	{
-		cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
-		cec_reg_write(CEC_REG_LOG_ADDR_MASK, 0x00);
-		i2c_close(cec_fd);
+	case CEC_POWER_ON_REQUEST_BEFORE:
+		cec_active_physical_addr = 0xFFFF;
+		cec_send_request_active_source(false);
+		cec_power_on_state = CEC_POWER_ON_WAIT_BEFORE;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_QUERY_WAIT_MS);
+		break;
+
+	case CEC_POWER_ON_WAIT_BEFORE:
+		if (cec_is_active_source())
+		{
+			cec_schedule_post_switch_edid_retry();
+			cec_power_on_state = CEC_POWER_ON_DONE;
+			cec_power_on_deadline = 0;
+		}
+		else
+		{
+			cec_power_on_state = CEC_POWER_ON_IMAGE;
+			cec_power_on_deadline = 0;
+		}
+		break;
+
+	case CEC_POWER_ON_IMAGE:
+		cec_send_image_view_on(false);
+		cec_power_on_state = CEC_POWER_ON_TEXT;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_STEP_MS);
+		break;
+
+	case CEC_POWER_ON_TEXT:
+		cec_send_text_view_on(false);
+		cec_power_on_state = CEC_POWER_ON_ACTIVE;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_STEP_MS);
+		break;
+
+	case CEC_POWER_ON_ACTIVE:
+		cec_send_active_source(false);
+		cec_schedule_post_switch_edid_retry();
+		cec_power_on_state = CEC_POWER_ON_REQUEST_VERIFY;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_VERIFY_WAIT_MS);
+		break;
+
+	case CEC_POWER_ON_REQUEST_VERIFY:
+		cec_active_physical_addr = 0xFFFF;
+		cec_send_request_active_source(false);
+		cec_power_on_state = CEC_POWER_ON_WAIT_VERIFY;
+		cec_power_on_deadline = GetTimer(CEC_POWER_ON_QUERY_WAIT_MS);
+		break;
+
+	case CEC_POWER_ON_WAIT_VERIFY:
+	default:
+		cec_power_on_state = CEC_POWER_ON_DONE;
+		cec_power_on_deadline = 0;
+		break;
+	}
+}
+
+static void cec_poll_idle_sleep_wake(void)
+{
+	// Global idle detector based on real input activity (not just OSD/menu navigation),
+	// tied to global idle blanking ("video_off") timing.
+	if (!cfg.hdmi_cec_sleep && !cfg.hdmi_cec_wake) return;
+
+	unsigned long delay_ms = cec_idle_sleep_delay_ms();
+	if (!delay_ms)
+	{
+		cec_idle_deadline = 0;
+		cec_idle_engaged = false;
+		cec_input_activity_seq = user_io_get_activity_seq();
+		return;
 	}
 
-	if (cec_main_fd >= 0)
+	if (!cec_idle_deadline)
 	{
-		main_reg_write(MAIN_REG_INT1_ENABLE, 0x00);
-		main_reg_write(MAIN_REG_INT1_STATUS, 0xFF);
-		i2c_close(cec_main_fd);
+		cec_input_activity_seq = user_io_get_activity_seq();
+		cec_idle_deadline = GetTimer(delay_ms);
 	}
 
-	cec_fd = -1;
-	cec_main_fd = -1;
-	cec_enabled = false;
-	cec_logical_addr = CEC_LOG_ADDR_PLAYBACK1;
-	cec_physical_addr = CEC_INVALID_PHYS_ADDR;
-	cec_refresh_deadline = 0;
-	cec_poll_deadline = 0;
-	cec_edid_retry_deadline = 0;
-	cec_edid_retry_delay_ms = 0;
-	cec_physical_addr_from_edid = false;
-	cec_reply_phys_deadline = 0;
-	cec_reply_name_deadline = 0;
-	cec_reply_version_deadline = 0;
-	cec_reply_power_deadline = 0;
-	cec_reply_menu_deadline = 0;
-	cec_reply_active_deadline = 0;
-	cec_reply_vendor_deadline = 0;
-	cec_tx_fail_streak = 0;
-	cec_tx_suppress_deadline = 0;
-	cec_advertise_deadline = 0;
-	cec_advertise_step = 0;
-	cec_advertise_attempts = 0;
-	cec_startup_actions_scheduled = false;
-	cec_power_on_state = CEC_POWER_ON_DONE;
-	cec_power_on_deadline = 0;
-	cec_reload_video_after_edid = false;
-	cec_active_physical_addr = 0xFFFF;
-	cec_input_activity_seq = 0;
-	cec_idle_deadline = 0;
-	cec_idle_engaged = false;
+	uint32_t seq = user_io_get_activity_seq();
+	if (seq != cec_input_activity_seq || !input_state())
+	{
+		cec_input_activity_seq = seq;
+		cec_idle_deadline = GetTimer(delay_ms);
+
+		if (cec_idle_engaged)
+		{
+			cec_idle_engaged = false;
+			if (cfg.hdmi_cec_wake) cec_send_wake();
+		}
+
+		return;
+	}
+
+	if (!cec_idle_engaged && CheckTimer(cec_idle_deadline))
+	{
+		cec_idle_engaged = true;
+		if (cfg.hdmi_cec_sleep)
+		{
+			// Avoid powering off the display if MiSTer isn't the active source.
+			if (cec_active_physical_addr == cec_physical_addr)
+			{
+				cec_send_standby();
+			}
+		}
+	}
+}
+
+static void cec_poll_key_timeout(void)
+{
+	if (cec_pressed_key && CheckTimer(cec_press_deadline))
+	{
+		cec_release_key();
+	}
 }
 
 void cec_poll(void)
 {
-	if (!cec_enabled) return;
-	if (!CheckTimer(cec_poll_deadline)) return;
-	cec_poll_deadline = GetTimer(CEC_POLL_INTERVAL_MS);
-
-	if (CheckTimer(cec_refresh_deadline))
+	if (cfg.hdmi_cec)
 	{
-		cec_setup_main_registers();
-		cec_refresh_deadline = GetTimer(CEC_MAIN_REFRESH_MS);
+		if (!cec_enabled && CheckTimer(cec_retry))
+		{
+			if (!cec_init(true))
+			{
+				if (cfg.debug && !cec_init_failed_logged) printf("CEC: init failed\n");
+				cec_init_failed_logged = true;
+				cec_retry = GetTimer(3000);
+			}
+			else
+			{
+				cec_init_failed_logged = false;
+				cec_retry = 0;
+			}
+		}
+
+		if (cec_enabled)
+		{
+			if (!CheckTimer(cec_poll_deadline)) return;
+			cec_poll_deadline = GetTimer(CEC_POLL_INTERVAL_MS);
+
+			if (CheckTimer(cec_refresh_deadline))
+			{
+				cec_setup_main_registers();
+				cec_refresh_deadline = GetTimer(CEC_MAIN_REFRESH_MS);
+			}
+
+			cec_poll_edid_retry();
+			cec_poll_advertise();
+
+			cec_message_t msg = {};
+			int max_msgs = 1;
+			for (int i = 0; i < max_msgs; i++)
+			{
+				if (!cec_receive_message(&msg)) break;
+				cec_handle_message(&msg);
+			}
+
+			cec_poll_power_on_switch();
+			cec_poll_idle_sleep_wake();
+			cec_poll_key_timeout();
+		}
 	}
-
-	cec_poll_edid_retry();
-	cec_poll_advertise();
-
-	cec_message_t msg = {};
-	int max_msgs = 1;
-	for (int i = 0; i < max_msgs; i++)
-	{
-		if (!cec_receive_message(&msg)) break;
-		cec_handle_message(&msg);
-	}
-
-	cec_poll_power_on_switch();
-	cec_poll_idle_sleep_wake();
-	cec_poll_key_timeout();
-}
-
-bool cec_is_enabled(void)
-{
-	return cec_enabled;
 }
