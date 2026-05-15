@@ -223,6 +223,9 @@ static bool cec_send_cec_version(uint8_t destination);
 static void cec_handle_message(const cec_message_t *msg);
 static bool cec_receive_message(cec_message_t *msg);
 
+static bool cec_tv_handshake_done = false;
+static unsigned long cec_tv_handshake_deadline = 0;
+
 static uint8_t cec_get_input_mode(void)
 {
 	if (cfg.hdmi_cec_input_mode <= CEC_INPUT_MODE_ON) return cfg.hdmi_cec_input_mode;
@@ -1053,6 +1056,10 @@ static void cec_schedule_startup_actions(void)
 	cec_startup_actions_scheduled = true;
 	cec_schedule_advertise(CEC_ADVERTISE_STARTUP_ATTEMPTS, 0);
 	cec_schedule_power_on_switch(CEC_ADVERTISE_STEP_MS * CEC_ADVERTISE_IDENTITY_STEPS);
+
+	// start handshake timeout (e.g., 5 seconds)
+	cec_tv_handshake_done = false;
+	cec_tv_handshake_deadline = GetTimer(5000);
 }
 
 static void cec_schedule_post_switch_edid_retry(void)
@@ -1070,6 +1077,14 @@ static void cec_handle_message(const cec_message_t *msg)
 	uint8_t src = (msg->header >> 4) & 0x0F;
 	uint8_t dst = msg->header & 0x0F;
 	if (dst != cec_logical_addr && dst != CEC_LOG_ADDR_BROADCAST) return;
+
+	// If we receive any message from logical address 0 (TV), handshake is complete
+	if (!cec_tv_handshake_done && src == CEC_LOG_ADDR_TV)
+	{
+		printf("CEC: Handshake done - received message from TV\n");
+		cec_tv_handshake_done = true;
+		cec_tv_handshake_deadline = 0;
+	}
 
 	bool is_user_control = (msg->opcode == CEC_OPCODE_USER_CONTROL_PRESSED) ||
 		(msg->opcode == CEC_OPCODE_USER_CONTROL_RELEASED);
@@ -1458,6 +1473,14 @@ static void cec_poll_advertise(void)
 		else
 		{
 			cec_advertise_deadline = 0;
+
+			// if handshake not done after first attempt, schedule another round
+			if (!cec_tv_handshake_done && cec_has_physical_address())
+			{
+				printf("CEC: No response from TV, re-advertising in 2 seconds\n");
+				cec_advertise_attempts = 1;          // one more round
+				cec_advertise_deadline = GetTimer(2000);
+			}
 		}
 	}
 	else
@@ -1483,6 +1506,17 @@ static void cec_poll_messages()
 		if (!cec_receive_message(&msg)) break;
 		cec_handle_message(&msg);
 	}
+}
+
+static void cec_poll_handshake_timeout(void)
+{
+	if (cec_tv_handshake_done) return;
+	if (!cec_tv_handshake_deadline || !CheckTimer(cec_tv_handshake_deadline)) return;
+
+	// After 5 seconds of no TV message, re-advertise once more
+	printf("CEC: Handshake timeout, re-advertising\n");
+	cec_schedule_advertise(1, 0);
+	cec_tv_handshake_deadline = GetTimer(5000);
 }
 
 void cec_poll(void)
@@ -1524,6 +1558,7 @@ void cec_poll(void)
 			cec_poll_power_on_switch();
 			cec_poll_idle_sleep_wake();
 			cec_poll_key_timeout();
+			cec_poll_handshake_timeout();
 		}
 	}
 }
