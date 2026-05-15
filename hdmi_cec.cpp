@@ -187,8 +187,6 @@ static uint8_t cec_logical_addr = CEC_LOG_ADDR_PLAYBACK1;
 static uint16_t cec_physical_addr = CEC_INVALID_PHYS_ADDR;
 static uint16_t cec_pressed_key = 0;
 static unsigned long cec_press_deadline = 0;
-static unsigned long cec_refresh_deadline = 0;
-static unsigned long cec_poll_deadline = 0;
 static unsigned long cec_edid_retry_deadline = 0;
 static unsigned long cec_edid_retry_delay_ms = 0;
 static bool cec_physical_addr_from_edid = false;
@@ -224,9 +222,6 @@ static bool cec_send_set_osd_name(const char *name, bool with_retry = true);
 static bool cec_send_cec_version(uint8_t destination);
 static void cec_handle_message(const cec_message_t *msg);
 static bool cec_receive_message(cec_message_t *msg);
-
-static unsigned long cec_retry = 0;
-static bool cec_init_failed_logged = false;
 
 static uint8_t cec_get_input_mode(void)
 {
@@ -525,7 +520,7 @@ static bool cec_setup_main_registers(bool clear_status = false)
 static bool cec_reg_write16(uint8_t reg, uint16_t value)
 {
 	if (cec_fd < 0) return false;
-	printf("cec_reg_write16(0x%X, %d)\n", reg, value);
+	//printf("cec_reg_write16(0x%X, %d)\n", reg, value);
 	if (i2c_smbus_write_byte_data(cec_fd, reg, value >> 8) < 0) return false;
 	return i2c_smbus_write_byte_data(cec_fd, reg + 1, value) >= 0;
 }
@@ -1068,66 +1063,6 @@ static void cec_schedule_post_switch_edid_retry(void)
 	cec_schedule_edid_retry(CEC_EDID_AFTER_SWITCH_RETRY_MS);
 }
 
-static void cec_poll_edid_retry(void)
-{
-	if (cec_physical_addr_from_edid) return;
-	if (!cec_edid_retry_deadline || !CheckTimer(cec_edid_retry_deadline)) return;
-
-	uint16_t physical_addr = CEC_INVALID_PHYS_ADDR;
-	if (cec_read_physical_address(&physical_addr))
-	{
-		cec_physical_addr_from_edid = true;
-		cec_schedule_edid_retry(0);
-		cec_set_physical_address(physical_addr);
-		if (cec_startup_actions_scheduled) cec_schedule_advertise(CEC_ADVERTISE_STARTUP_ATTEMPTS, 0);
-		else cec_schedule_startup_actions();
-		if (cec_reload_video_after_edid)
-		{
-			cec_reload_video_after_edid = false;
-			video_reload_edid_mode();
-		}
-		return;
-	}
-
-	cec_backoff_edid_retry();
-}
-
-static void cec_poll_advertise(void)
-{
-	if (!cec_advertise_attempts) return;
-	if (!CheckTimer(cec_advertise_deadline)) return;
-
-	switch (cec_advertise_step)
-	{
-	case 0:
-		cec_send_report_physical_address(false);
-		break;
-
-	case 1:
-		cec_send_set_osd_name(cec_get_osd_name(), false);
-		break;
-	}
-
-	cec_advertise_step++;
-	if (cec_advertise_step >= CEC_ADVERTISE_IDENTITY_STEPS)
-	{
-		cec_advertise_step = 0;
-		cec_advertise_attempts--;
-		if (cec_advertise_attempts)
-		{
-			cec_advertise_deadline = GetTimer(CEC_ADVERTISE_STEP_MS);
-		}
-		else
-		{
-			cec_advertise_deadline = 0;
-		}
-	}
-	else
-	{
-		cec_advertise_deadline = GetTimer(CEC_ADVERTISE_STEP_MS);
-	}
-}
-
 static void cec_handle_message(const cec_message_t *msg)
 {
 	if (!msg || msg->length < 2) return;
@@ -1240,8 +1175,6 @@ void cec_deinit(void)
 	cec_enabled = false;
 	cec_logical_addr = CEC_LOG_ADDR_PLAYBACK1;
 	cec_physical_addr = CEC_INVALID_PHYS_ADDR;
-	cec_refresh_deadline = 0;
-	cec_poll_deadline = 0;
 	cec_edid_retry_deadline = 0;
 	cec_edid_retry_delay_ms = 0;
 	cec_physical_addr_from_edid = false;
@@ -1330,7 +1263,6 @@ bool cec_init(bool enable)
 	cec_power_on_state = CEC_POWER_ON_DONE;
 	cec_power_on_deadline = 0;
 	cec_reload_video_after_edid = false;
-	cec_poll_deadline = 0;
 	uint16_t physical_addr = CEC_INVALID_PHYS_ADDR;
 	cec_physical_addr = CEC_INVALID_PHYS_ADDR;
 	cec_program_logical_address(CEC_LOG_ADDR_PLAYBACK1);
@@ -1344,7 +1276,6 @@ bool cec_init(bool enable)
 		cec_physical_addr_from_edid = false;
 	}
 	cec_schedule_edid_retry(cec_physical_addr_from_edid ? 0 : CEC_EDID_RETRY_INITIAL_MS);
-	cec_refresh_deadline = GetTimer(CEC_MAIN_REFRESH_MS);
 
 	printf("CEC: logical=%u physical=%X.%X.%X.%X\n",
 		cec_logical_addr,
@@ -1475,6 +1406,66 @@ static void cec_poll_idle_sleep_wake(void)
 	}
 }
 
+static void cec_poll_edid_retry(void)
+{
+	if (cec_physical_addr_from_edid) return;
+	if (!cec_edid_retry_deadline || !CheckTimer(cec_edid_retry_deadline)) return;
+
+	uint16_t physical_addr = CEC_INVALID_PHYS_ADDR;
+	if (cec_read_physical_address(&physical_addr))
+	{
+		cec_physical_addr_from_edid = true;
+		cec_schedule_edid_retry(0);
+		cec_set_physical_address(physical_addr);
+		if (cec_startup_actions_scheduled) cec_schedule_advertise(CEC_ADVERTISE_STARTUP_ATTEMPTS, 0);
+		else cec_schedule_startup_actions();
+		if (cec_reload_video_after_edid)
+		{
+			cec_reload_video_after_edid = false;
+			video_reload_edid_mode();
+		}
+		return;
+	}
+
+	cec_backoff_edid_retry();
+}
+
+static void cec_poll_advertise(void)
+{
+	if (!cec_advertise_attempts) return;
+	if (!CheckTimer(cec_advertise_deadline)) return;
+
+	switch (cec_advertise_step)
+	{
+	case 0:
+		cec_send_report_physical_address(false);
+		break;
+
+	case 1:
+		cec_send_set_osd_name(cec_get_osd_name(), false);
+		break;
+	}
+
+	cec_advertise_step++;
+	if (cec_advertise_step >= CEC_ADVERTISE_IDENTITY_STEPS)
+	{
+		cec_advertise_step = 0;
+		cec_advertise_attempts--;
+		if (cec_advertise_attempts)
+		{
+			cec_advertise_deadline = GetTimer(CEC_ADVERTISE_STEP_MS);
+		}
+		else
+		{
+			cec_advertise_deadline = 0;
+		}
+	}
+	else
+	{
+		cec_advertise_deadline = GetTimer(CEC_ADVERTISE_STEP_MS);
+	}
+}
+
 static void cec_poll_key_timeout(void)
 {
 	if (cec_pressed_key && CheckTimer(cec_press_deadline))
@@ -1483,47 +1474,53 @@ static void cec_poll_key_timeout(void)
 	}
 }
 
+static void cec_poll_messages()
+{
+	cec_message_t msg = {};
+	int max_msgs = 1;
+	for (int i = 0; i < max_msgs; i++)
+	{
+		if (!cec_receive_message(&msg)) break;
+		cec_handle_message(&msg);
+	}
+}
+
 void cec_poll(void)
 {
+	static unsigned long cec_retry = 0;
+	static bool cec_init_failed_logged = false;
+	static bool cec_int_available = false;
+	static bool cec_int_checked = false;
+
 	if (cfg.hdmi_cec)
 	{
-		if (!cec_enabled && CheckTimer(cec_retry))
+		if (!cec_int_checked)
 		{
-			if (!cec_init(true))
-			{
-				if (cfg.debug && !cec_init_failed_logged) printf("CEC: init failed\n");
-				cec_init_failed_logged = true;
-				cec_retry = GetTimer(3000);
-			}
-			else
-			{
-				cec_init_failed_logged = false;
-				cec_retry = 0;
-			}
+			cec_int_available = spi_uio_cmd(UIO_HDMI_INT);
+			if (!cec_int_available) printf("CEC: HDMI interrupt pin is not available -> CEC disabled.\n");
+			cec_int_checked = true;
 		}
 
-		if (cec_enabled)
+		if (cec_int_available)
 		{
-			if (!CheckTimer(cec_poll_deadline)) return;
-			cec_poll_deadline = GetTimer(CEC_POLL_INTERVAL_MS);
-
-			if (CheckTimer(cec_refresh_deadline))
+			if (!cec_enabled && CheckTimer(cec_retry))
 			{
-				cec_setup_main_registers();
-				cec_refresh_deadline = GetTimer(CEC_MAIN_REFRESH_MS);
+				if (!cec_init(true))
+				{
+					if (cfg.debug && !cec_init_failed_logged) printf("CEC: init failed\n");
+					cec_init_failed_logged = true;
+					cec_retry = GetTimer(3000);
+				}
+				else
+				{
+					cec_init_failed_logged = false;
+					cec_retry = 0;
+				}
 			}
 
 			cec_poll_edid_retry();
 			cec_poll_advertise();
-
-			cec_message_t msg = {};
-			int max_msgs = 1;
-			for (int i = 0; i < max_msgs; i++)
-			{
-				if (!cec_receive_message(&msg)) break;
-				cec_handle_message(&msg);
-			}
-
+			cec_poll_messages();
 			cec_poll_power_on_switch();
 			cec_poll_idle_sleep_wake();
 			cec_poll_key_timeout();
