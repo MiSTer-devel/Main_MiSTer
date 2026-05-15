@@ -140,6 +140,8 @@ static const unsigned long CEC_EDID_RETRY_INITIAL_MS = 15000;
 static const unsigned long CEC_EDID_RETRY_MAX_MS = 300000;
 static const unsigned long CEC_EDID_READY_TIMEOUT_MS = 500;
 static const unsigned long CEC_ADVERTISE_STEP_MS = 120;
+static const unsigned long CEC_STARTUP_ADVERTISE_DELAY_MS = 5000;
+static const unsigned long CEC_STARTUP_ADVERTISE_REPEAT_MS = 30000;
 static const unsigned long CEC_EDID_AFTER_SWITCH_RETRY_MS = 1000;
 static const unsigned long CEC_POWER_ON_QUERY_WAIT_MS = 700;
 static const unsigned long CEC_POWER_ON_STEP_MS = 120;
@@ -149,7 +151,7 @@ static const unsigned long CEC_TX_TIMEOUT_RETRY_MS = 500;
 static const size_t CEC_EDID_BLOCK_SIZE = 128;
 static const size_t CEC_EDID_SEGMENT_SIZE = 256;
 static const size_t CEC_EDID_MAX_BLOCKS = 8;
-static const uint8_t CEC_ADVERTISE_STARTUP_ATTEMPTS = 1;
+static const uint8_t CEC_ADVERTISE_STARTUP_ATTEMPTS = 4;
 static const uint8_t CEC_ADVERTISE_IDENTITY_STEPS = 2;
 
 typedef struct
@@ -190,7 +192,6 @@ static unsigned long cec_refresh_deadline = 0;
 static unsigned long cec_poll_deadline = 0;
 static unsigned long cec_edid_retry_deadline = 0;
 static unsigned long cec_edid_retry_delay_ms = 0;
-static bool cec_hpd_pulsed = false;
 static bool cec_physical_addr_from_edid = false;
 static unsigned long cec_reply_phys_deadline = 0;
 static unsigned long cec_reply_name_deadline = 0;
@@ -202,6 +203,7 @@ static unsigned long cec_reply_vendor_deadline = 0;
 static uint8_t cec_tx_fail_streak = 0;
 static unsigned long cec_tx_suppress_deadline = 0;
 static unsigned long cec_advertise_deadline = 0;
+static unsigned long cec_advertise_repeat_ms = CEC_ADVERTISE_STEP_MS;
 static uint8_t cec_advertise_step = 0;
 static uint8_t cec_advertise_attempts = 0;
 static bool cec_startup_actions_scheduled = false;
@@ -566,18 +568,7 @@ static bool cec_setup_main_registers(bool clear_status = false)
 	uint8_t reg_e3 = main_reg_read(MAIN_REG_CEC_CTRL);
 	ok &= main_reg_write(MAIN_REG_CEC_CTRL, reg_e3 | 0x0E);
 
-	if (!cec_hpd_pulsed)
-	{
-		ok &= main_reg_write(MAIN_REG_POWER2, 0x00);
-		usleep(100000);
-		ok &= main_reg_write(MAIN_REG_POWER2, 0xC0);
-		usleep(100000);
-		cec_hpd_pulsed = true;
-	}
-	else
-	{
-		ok &= main_reg_write(MAIN_REG_POWER2, 0xC0);
-	}
+	ok &= main_reg_write(MAIN_REG_POWER2, 0xC0);
 
 	uint8_t reg_a1 = main_reg_read(MAIN_REG_MONITOR_SENSE);
 	ok &= main_reg_write(MAIN_REG_MONITOR_SENSE, reg_a1 & ~0x40);
@@ -1046,18 +1037,21 @@ static void cec_backoff_edid_retry(void)
 	cec_edid_retry_deadline = GetTimer(cec_edid_retry_delay_ms);
 }
 
-static void cec_schedule_advertise(uint8_t attempts, unsigned long delay_ms)
+static void cec_schedule_advertise(uint8_t attempts, unsigned long delay_ms, unsigned long repeat_ms = CEC_ADVERTISE_STEP_MS)
 {
 	cec_advertise_step = 0;
 	cec_advertise_attempts = attempts;
+	cec_advertise_repeat_ms = repeat_ms;
 	cec_advertise_deadline = attempts ? (delay_ms ? GetTimer(delay_ms) : 0) : 0;
 }
 
 static void cec_schedule_startup_actions(void)
 {
 	cec_startup_actions_scheduled = true;
-	cec_schedule_advertise(CEC_ADVERTISE_STARTUP_ATTEMPTS, 0);
-	cec_schedule_power_on_switch(CEC_ADVERTISE_STEP_MS * CEC_ADVERTISE_IDENTITY_STEPS);
+	cec_schedule_advertise(CEC_ADVERTISE_STARTUP_ATTEMPTS,
+		CEC_STARTUP_ADVERTISE_DELAY_MS,
+		CEC_STARTUP_ADVERTISE_REPEAT_MS);
+	cec_schedule_power_on_switch(CEC_STARTUP_ADVERTISE_DELAY_MS + CEC_ADVERTISE_STEP_MS * CEC_ADVERTISE_IDENTITY_STEPS);
 }
 
 static void cec_schedule_post_switch_edid_retry(void)
@@ -1079,7 +1073,12 @@ static void cec_poll_edid_retry(void)
 		cec_physical_addr_from_edid = true;
 		cec_schedule_edid_retry(0);
 		cec_set_physical_address(physical_addr);
-		if (cec_startup_actions_scheduled) cec_schedule_advertise(CEC_ADVERTISE_STARTUP_ATTEMPTS, 0);
+		if (cec_startup_actions_scheduled)
+		{
+			cec_schedule_advertise(CEC_ADVERTISE_STARTUP_ATTEMPTS,
+				CEC_STARTUP_ADVERTISE_DELAY_MS,
+				CEC_STARTUP_ADVERTISE_REPEAT_MS);
+		}
 		else cec_schedule_startup_actions();
 		if (cec_reload_video_after_edid)
 		{
@@ -1115,7 +1114,7 @@ static void cec_poll_advertise(void)
 		cec_advertise_attempts--;
 		if (cec_advertise_attempts)
 		{
-			cec_advertise_deadline = GetTimer(CEC_ADVERTISE_STEP_MS);
+			cec_advertise_deadline = GetTimer(cec_advertise_repeat_ms);
 		}
 		else
 		{
@@ -1290,7 +1289,6 @@ bool cec_init(bool enable)
 	if (cec_enabled) return true;
 
 	cec_deinit();
-	cec_hpd_pulsed = false;
 
 	cec_main_fd = i2c_open(ADV7513_MAIN_ADDR, 0);
 	if (cec_main_fd < 0)
@@ -1331,6 +1329,7 @@ bool cec_init(bool enable)
 	cec_tx_fail_streak = 0;
 	cec_tx_suppress_deadline = 0;
 	cec_advertise_deadline = 0;
+	cec_advertise_repeat_ms = CEC_ADVERTISE_STEP_MS;
 	cec_advertise_step = 0;
 	cec_advertise_attempts = 0;
 	cec_startup_actions_scheduled = false;
@@ -1411,6 +1410,7 @@ void cec_deinit(void)
 	cec_tx_fail_streak = 0;
 	cec_tx_suppress_deadline = 0;
 	cec_advertise_deadline = 0;
+	cec_advertise_repeat_ms = CEC_ADVERTISE_STEP_MS;
 	cec_advertise_step = 0;
 	cec_advertise_attempts = 0;
 	cec_startup_actions_scheduled = false;
