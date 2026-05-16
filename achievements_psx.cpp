@@ -20,6 +20,27 @@
 
 static console_state_t g_psx_state = {};
 static int g_psx_rtquery = 0; // 1 if FPGA supports realtime queries
+static uint32_t g_psx_rtquery_calls = 0;       // rtquery_read calls since last milestone
+static uint32_t g_psx_rtquery_reindex = 0;     // calls made while cache_reindexing
+static uint32_t g_psx_rtquery_miss = 0;        // calls made from cache-miss path
+// ARM-side activity counters (reset each milestone log).
+static uint32_t g_psx_flush_calls   = 0;       // ra_snes_addrlist_flush_dynamic calls (writes addrlist+request_id to DDR3)
+static uint32_t g_psx_collect_calls = 0;       // begin_collect/end_collect cycles (cleanup_frame or recollect)
+static uint32_t g_psx_list_changes  = 0;       // end_collect calls that detected list change
+static uint32_t g_psx_addmiss_total = 0;       // add_dynamic invocations (total bytes that missed cache)
+// rc_client_do_frame timing (ns) over current milestone window.
+static uint64_t g_psx_doframe_total_ns = 0;
+static uint64_t g_psx_doframe_max_ns   = 0;
+static uint32_t g_psx_doframe_count    = 0;
+// FPGA counters captured at previous milestone (to compute delta).
+static uint16_t g_psx_prev_bram_hits   = 0;
+static uint16_t g_psx_prev_bram_misses = 0;
+static uint16_t g_psx_prev_qry_polls   = 0;
+static uint16_t g_psx_prev_qry_serves  = 0;
+// Snapshot a 16-bit FPGA counter saturating-mod arithmetic: returns frames since prev.
+static uint16_t psx_dbg_delta_u16(uint16_t cur, uint16_t prev) {
+	return (uint16_t)(cur - prev);
+}
 
 
 // ---------------------------------------------------------------------------
@@ -59,12 +80,40 @@ static void psx_init(void)
 {
 	memset(&g_psx_state, 0, sizeof(g_psx_state));
 	g_psx_rtquery = 0;
+	g_psx_rtquery_calls = 0;
+	g_psx_rtquery_miss = 0;
+	g_psx_rtquery_reindex = 0;
+	g_psx_flush_calls = 0;
+	g_psx_collect_calls = 0;
+	g_psx_list_changes = 0;
+	g_psx_addmiss_total = 0;
+	g_psx_doframe_total_ns = 0;
+	g_psx_doframe_max_ns = 0;
+	g_psx_doframe_count = 0;
+	g_psx_prev_bram_hits = 0;
+	g_psx_prev_bram_misses = 0;
+	g_psx_prev_qry_polls = 0;
+	g_psx_prev_qry_serves = 0;
 }
 
 static void psx_reset(void)
 {
 	memset(&g_psx_state, 0, sizeof(g_psx_state));
 	g_psx_rtquery = 0;
+	g_psx_rtquery_calls = 0;
+	g_psx_rtquery_miss = 0;
+	g_psx_rtquery_reindex = 0;
+	g_psx_flush_calls = 0;
+	g_psx_collect_calls = 0;
+	g_psx_list_changes = 0;
+	g_psx_addmiss_total = 0;
+	g_psx_doframe_total_ns = 0;
+	g_psx_doframe_max_ns = 0;
+	g_psx_doframe_count = 0;
+	g_psx_prev_bram_hits = 0;
+	g_psx_prev_bram_misses = 0;
+	g_psx_prev_qry_polls = 0;
+	g_psx_prev_qry_serves = 0;
 }
 
 static uint32_t psx_read_memory(void *map, uint32_t address, uint8_t *buffer, uint32_t num_bytes)
@@ -80,47 +129,58 @@ static uint32_t psx_read_memory(void *map, uint32_t address, uint8_t *buffer, ui
 				// Use rtquery for all reads until FPGA responds with updated indices.
 				if (g_psx_state.cache_reindexing) {
 					if (num_bytes <= 4) {
+						g_psx_rtquery_calls++;
+						g_psx_rtquery_reindex++;
 						uint32_t val = ra_rtquery_read(map, address, num_bytes);
 						for (uint32_t i = 0; i < num_bytes; i++)
 							buffer[i] = (uint8_t)(val >> (i * 8));
 						return num_bytes;
 					}
 					for (uint32_t i = 0; i < num_bytes; i++) {
+						g_psx_rtquery_calls++;
+						g_psx_rtquery_reindex++;
 						uint32_t val = ra_rtquery_read(map, address + i, 1);
 						buffer[i] = (uint8_t)val;
 					}
 					return num_bytes;
 				}
-				// Smart Cache: check each byte, rtquery on miss
-				int any_miss = 0;
+				// Combined lookup: 1 binary search per byte returns both the cached
+				// value AND whether it was a hit. This costs ~50% of the original
+				// contains()+read_cached() approach which did 2 binary searches.
+				// Audio-glitch sensitive: PSX CD-ROM XA streaming was dropping samples
+				// when per-frame ARM CPU exceeded ~5ms (dofrm_avg). The combined
+				// lookup keeps dofrm_avg in safe range while preserving cache-miss
+				// detection for AddAddress pointer resolution.
+				uint8_t miss_mask = 0;  // bit i set = byte i missed cache
 				for (uint32_t i = 0; i < num_bytes; i++) {
-					if (ra_snes_addrlist_contains(address + i) < 0) {
-						any_miss = 1;
-						break;
-					}
+					int hit;
+					buffer[i] = ra_snes_addrlist_lookup_byte(map, address + i, &hit);
+					if (!hit) miss_mask |= (uint8_t)(1u << i);
 				}
-				if (!any_miss) {
-					// All bytes in cache — fast path
-					for (uint32_t i = 0; i < num_bytes; i++)
-						buffer[i] = ra_snes_addrlist_read_cached(map, address + i);
-					return num_bytes;
-				}
-				// Cache miss: use rtquery for immediate value
+				if (!miss_mask) return num_bytes;
+				// At least one miss: rtquery the missing bytes, schedule them for the
+				// next FPGA batch via add_dynamic.
 				if (num_bytes <= 4) {
+					g_psx_rtquery_calls++;
+					g_psx_rtquery_miss++;
 					uint32_t val = ra_rtquery_read(map, address, num_bytes);
 					for (uint32_t i = 0; i < num_bytes; i++) {
-						buffer[i] = (uint8_t)(val >> (i * 8));
-						ra_snes_addrlist_add_dynamic(address + i);
+						if (miss_mask & (1u << i)) {
+							buffer[i] = (uint8_t)(val >> (i * 8));
+							g_psx_addmiss_total++;
+							ra_snes_addrlist_add_dynamic(address + i);
+						}
 					}
 					return num_bytes;
 				}
-				// Multi-byte > 4: read byte by byte via rtquery
+				// num_bytes > 4: per-byte rtquery for the missing bytes only.
 				for (uint32_t i = 0; i < num_bytes; i++) {
-					if (ra_snes_addrlist_contains(address + i) >= 0) {
-						buffer[i] = ra_snes_addrlist_read_cached(map, address + i);
-					} else {
+					if (miss_mask & (1u << i)) {
+						g_psx_rtquery_calls++;
+						g_psx_rtquery_miss++;
 						uint32_t val = ra_rtquery_read(map, address + i, 1);
 						buffer[i] = (uint8_t)val;
+						g_psx_addmiss_total++;
 						ra_snes_addrlist_add_dynamic(address + i);
 					}
 				}
@@ -133,6 +193,7 @@ static uint32_t psx_read_memory(void *map, uint32_t address, uint8_t *buffer, ui
 		}
 		// Realtime query fallback for addresses not in batch cache
 		if (g_psx_rtquery && achievements_rtquery_enabled() && !g_psx_state.collecting && num_bytes <= 4) {
+			g_psx_rtquery_calls++;
 			uint32_t val = ra_rtquery_read(map, address, num_bytes);
 			for (uint32_t i = 0; i < num_bytes; i++)
 				buffer[i] = (uint8_t)(val >> (i * 8));
@@ -210,10 +271,21 @@ static int psx_poll(void *map, void *client, int game_loaded)
 				if (cleanup_frame) {
 					g_psx_state.collecting = 1;
 					ra_snes_addrlist_begin_collect();
+					g_psx_collect_calls++;
 				}
 
 				// Execute frame — cache misses resolved in psx_read_memory
-				rc_client_do_frame(rc_client);
+				{
+					struct timespec t0, t1;
+					clock_gettime(CLOCK_MONOTONIC, &t0);
+					rc_client_do_frame(rc_client);
+					clock_gettime(CLOCK_MONOTONIC, &t1);
+					uint64_t dt = (uint64_t)(t1.tv_sec - t0.tv_sec) * 1000000000ULL
+					            + (uint64_t)(t1.tv_nsec - t0.tv_nsec);
+					g_psx_doframe_total_ns += dt;
+					if (dt > g_psx_doframe_max_ns) g_psx_doframe_max_ns = dt;
+					g_psx_doframe_count++;
+				}
 
 				if (cleanup_frame) {
 					g_psx_state.collecting = 0;
@@ -221,6 +293,7 @@ static int psx_poll(void *map, void *client, int game_loaded)
 					if (ra_snes_addrlist_end_collect(map)) {
 						int new_count = ra_snes_addrlist_count();
 						int pruned = old_count - new_count;
+						g_psx_list_changes++;
 						ra_log_write("PSX SmartCache: Cleanup — pruned %d stale addrs (%d -> %d)\n",
 							pruned, old_count, new_count);
 						// FPGA cache indices are now stale — use rtquery until FPGA responds
@@ -229,6 +302,7 @@ static int psx_poll(void *map, void *client, int game_loaded)
 				} else {
 					// Normal frame: flush any new dynamic addresses
 					if (ra_snes_addrlist_has_pending()) {
+						g_psx_flush_calls++;
 						ra_snes_addrlist_flush_dynamic(map);
 					}
 				}
@@ -245,9 +319,42 @@ static int psx_poll(void *map, void *client, int game_loaded)
 				+ (now.tv_nsec - g_psx_state.cache_time.tv_nsec) / 1e9;
 			double ms_per_cycle = (g_psx_state.game_frames > 0) ?
 				(elapsed * 1000.0 / g_psx_state.game_frames) : 0.0;
-			ra_log_write("POLL(PSX-SC): resp_frame=%u game_frames=%u elapsed=%.1fs ms/cycle=%.1f addrs=%d reindexing=%d\n",
+			// Read FPGA counters at DDRAM offset 0x18 (DBG2) and 0x20 (DBG3).
+			const uint8_t *base = (const uint8_t *)map;
+			uint16_t fpga_bram_hits   = *(const uint16_t *)(base + 0x18 + 2);
+			uint16_t fpga_bram_misses = *(const uint16_t *)(base + 0x18 + 4);
+			uint16_t fpga_qry_polls   = *(const uint16_t *)(base + 0x20 + 0);
+			uint16_t fpga_qry_serves  = *(const uint16_t *)(base + 0x20 + 2);
+			uint16_t d_hits   = psx_dbg_delta_u16(fpga_bram_hits,   g_psx_prev_bram_hits);
+			uint16_t d_miss   = psx_dbg_delta_u16(fpga_bram_misses, g_psx_prev_bram_misses);
+			uint16_t d_polls  = psx_dbg_delta_u16(fpga_qry_polls,   g_psx_prev_qry_polls);
+			uint16_t d_serves = psx_dbg_delta_u16(fpga_qry_serves,  g_psx_prev_qry_serves);
+			g_psx_prev_bram_hits   = fpga_bram_hits;
+			g_psx_prev_bram_misses = fpga_bram_misses;
+			g_psx_prev_qry_polls   = fpga_qry_polls;
+			g_psx_prev_qry_serves  = fpga_qry_serves;
+
+			uint64_t avg_us = g_psx_doframe_count
+				? (g_psx_doframe_total_ns / g_psx_doframe_count) / 1000ULL
+				: 0;
+			uint64_t max_us = g_psx_doframe_max_ns / 1000ULL;
+			ra_log_write("POLL(PSX-SC): resp_frame=%u game_frames=%u elapsed=%.1fs ms/cycle=%.1f addrs=%d reindexing=%d rtq=%u(m=%u r=%u) ARM[flush=%u col=%u chg=%u miss=%u dofrm_avg=%lluus max=%lluus] FPGA[bram_hit=%u bram_miss=%u qry_poll=%u qry_serve=%u]\n",
 				g_psx_state.last_resp_frame, g_psx_state.game_frames, elapsed, ms_per_cycle,
-				ra_snes_addrlist_count(), g_psx_state.cache_reindexing);
+				ra_snes_addrlist_count(), g_psx_state.cache_reindexing,
+				g_psx_rtquery_calls, g_psx_rtquery_miss, g_psx_rtquery_reindex,
+				g_psx_flush_calls, g_psx_collect_calls, g_psx_list_changes, g_psx_addmiss_total,
+				(unsigned long long)avg_us, (unsigned long long)max_us,
+				d_hits, d_miss, d_polls, d_serves);
+			g_psx_rtquery_calls = 0;
+			g_psx_rtquery_miss = 0;
+			g_psx_rtquery_reindex = 0;
+			g_psx_flush_calls = 0;
+			g_psx_collect_calls = 0;
+			g_psx_list_changes = 0;
+			g_psx_addmiss_total = 0;
+			g_psx_doframe_total_ns = 0;
+			g_psx_doframe_max_ns = 0;
+			g_psx_doframe_count = 0;
 			if ((g_psx_state.game_frames % 1800) < 300)
 				psx_optionc_dump_valcache("periodic-sc", map);
 		}
@@ -328,13 +435,25 @@ static int psx_poll(void *map, void *client, int game_loaded)
 			if (re_collect) {
 				g_psx_state.collecting = 1;
 				ra_snes_addrlist_begin_collect();
+				g_psx_collect_calls++;
 			}
 
-			rc_client_do_frame(rc_client);
+			{
+				struct timespec t0, t1;
+				clock_gettime(CLOCK_MONOTONIC, &t0);
+				rc_client_do_frame(rc_client);
+				clock_gettime(CLOCK_MONOTONIC, &t1);
+				uint64_t dt = (uint64_t)(t1.tv_sec - t0.tv_sec) * 1000000000ULL
+				            + (uint64_t)(t1.tv_nsec - t0.tv_nsec);
+				g_psx_doframe_total_ns += dt;
+				if (dt > g_psx_doframe_max_ns) g_psx_doframe_max_ns = dt;
+				g_psx_doframe_count++;
+			}
 
 			if (re_collect) {
 				g_psx_state.collecting = 0;
 				if (ra_snes_addrlist_end_collect(map)) {
+					g_psx_list_changes++;
 					ra_log_write("PSX OptionC: Address list refreshed, %d addrs\n",
 						ra_snes_addrlist_count());
 					g_psx_state.cache_ready = 0;
@@ -354,9 +473,36 @@ static int psx_poll(void *map, void *client, int game_loaded)
 			+ (now.tv_nsec - g_psx_state.cache_time.tv_nsec) / 1e9;
 		double ms_per_cycle = (g_psx_state.game_frames > 0) ?
 			(elapsed * 1000.0 / g_psx_state.game_frames) : 0.0;
-		ra_log_write("POLL(PSX): resp_frame=%u game_frames=%u elapsed=%.1fs ms/cycle=%.1f addrs=%d\n",
+		// Read FPGA counters at DDRAM offset 0x18 (DBG2) and 0x20 (DBG3).
+		const uint8_t *base = (const uint8_t *)map;
+		uint16_t fpga_bram_hits   = *(const uint16_t *)(base + 0x18 + 2);
+		uint16_t fpga_bram_misses = *(const uint16_t *)(base + 0x18 + 4);
+		uint16_t fpga_qry_polls   = *(const uint16_t *)(base + 0x20 + 0);
+		uint16_t fpga_qry_serves  = *(const uint16_t *)(base + 0x20 + 2);
+		uint16_t d_hits   = psx_dbg_delta_u16(fpga_bram_hits,   g_psx_prev_bram_hits);
+		uint16_t d_miss   = psx_dbg_delta_u16(fpga_bram_misses, g_psx_prev_bram_misses);
+		uint16_t d_polls  = psx_dbg_delta_u16(fpga_qry_polls,   g_psx_prev_qry_polls);
+		uint16_t d_serves = psx_dbg_delta_u16(fpga_qry_serves,  g_psx_prev_qry_serves);
+		g_psx_prev_bram_hits   = fpga_bram_hits;
+		g_psx_prev_bram_misses = fpga_bram_misses;
+		g_psx_prev_qry_polls   = fpga_qry_polls;
+		g_psx_prev_qry_serves  = fpga_qry_serves;
+
+		uint64_t avg_us = g_psx_doframe_count
+			? (g_psx_doframe_total_ns / g_psx_doframe_count) / 1000ULL
+			: 0;
+		uint64_t max_us = g_psx_doframe_max_ns / 1000ULL;
+		ra_log_write("POLL(PSX): resp_frame=%u game_frames=%u elapsed=%.1fs ms/cycle=%.1f addrs=%d ARM[col=%u chg=%u dofrm_avg=%lluus max=%lluus] FPGA[bram_hit=%u bram_miss=%u qry_poll=%u qry_serve=%u]\n",
 			g_psx_state.last_resp_frame, g_psx_state.game_frames, elapsed, ms_per_cycle,
-			ra_snes_addrlist_count());
+			ra_snes_addrlist_count(),
+			g_psx_collect_calls, g_psx_list_changes,
+			(unsigned long long)avg_us, (unsigned long long)max_us,
+			d_hits, d_miss, d_polls, d_serves);
+		g_psx_collect_calls = 0;
+		g_psx_list_changes = 0;
+		g_psx_doframe_total_ns = 0;
+		g_psx_doframe_max_ns = 0;
+		g_psx_doframe_count = 0;
 		if ((g_psx_state.game_frames % 1800) < 300)
 			psx_optionc_dump_valcache("periodic", map);
 	}

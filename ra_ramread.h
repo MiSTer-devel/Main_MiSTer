@@ -213,6 +213,10 @@ void     ra_snes_addrlist_diag_dump(const void *map);
 // The address is inserted into the sorted list and flushed to DDRAM
 // after the frame, so the FPGA monitors it from the next VBlank onward.
 int      ra_snes_addrlist_contains(uint32_t addr);       // Returns index if found, -1 on miss
+// Combined lookup: returns the cached byte value, sets *hit to 1 if the address
+// is in the list (0 otherwise). One binary search returns both, ~50% cheaper
+// than calling contains() and read_cached() separately. *hit may be NULL.
+uint8_t  ra_snes_addrlist_lookup_byte(const void *map, uint32_t addr, int *hit);
 int      ra_snes_addrlist_add_dynamic(uint32_t addr);    // Insert in sorted position, returns 1 if added
 int      ra_snes_addrlist_has_pending(void);              // 1 if new dynamic addresses need flush
 int      ra_snes_addrlist_flush_dynamic(void *map);      // Write updated list to DDRAM, returns 1 if flushed

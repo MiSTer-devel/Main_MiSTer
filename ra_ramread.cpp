@@ -502,6 +502,31 @@ int ra_snes_addrlist_contains(uint32_t addr)
 	return -1;
 }
 
+// One binary search returns both index match flag and the cached value byte.
+// Replaces back-to-back contains()+read_cached() in PSX smart_cache hot path,
+// halving the per-read CPU cost (critical to keep ARM frame budget under the
+// threshold that starves CD-ROM XA streaming and causes audio glitches).
+uint8_t ra_snes_addrlist_lookup_byte(const void *map, uint32_t addr, int *hit)
+{
+	if (!map || s_snes_addr_count == 0) {
+		if (hit) *hit = 0;
+		return 0;
+	}
+	int lo = 0, hi = s_snes_addr_count - 1;
+	while (lo <= hi) {
+		int mid = (lo + hi) / 2;
+		if (s_snes_addrs[mid] == addr) {
+			const uint8_t *vals = (const uint8_t *)map + RA_SNES_VALCACHE_OFFSET + 8;
+			if (hit) *hit = 1;
+			return vals[mid];
+		}
+		if (s_snes_addrs[mid] < addr) lo = mid + 1;
+		else hi = mid - 1;
+	}
+	if (hit) *hit = 0;
+	return 0;
+}
+
 int ra_snes_addrlist_add_dynamic(uint32_t addr)
 {
 	// Check if already in the list
