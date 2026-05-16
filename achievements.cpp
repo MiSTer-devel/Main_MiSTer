@@ -300,6 +300,7 @@ static void ra_play_achievement_sound(void)
 struct ra_notif {
 	char text[NOTIF_TEXT_MAX];
 	int duration_ms;
+	int play_sound;
 };
 
 // Tier 1 — urgent queue
@@ -317,7 +318,7 @@ static int  s_instant_showing = 0;
 static unsigned long s_instant_timer = 0;
 
 // Add to urgent queue (never dropped by instant notifications)
-static void ra_notify_urgent(const char *text, int duration_ms = 4000)
+static void ra_notify_urgent(const char *text, int duration_ms = 4000, int play_sound = 0)
 {
 	int count = s_urgent_head - s_urgent_tail;
 	if (count >= NOTIF_QUEUE_CAP) {
@@ -327,6 +328,7 @@ static void ra_notify_urgent(const char *text, int duration_ms = 4000)
 	ra_notif *n = &s_urgent_queue[s_urgent_head % NOTIF_QUEUE_CAP];
 	snprintf(n->text, NOTIF_TEXT_MAX, "%s", text);
 	n->duration_ms = duration_ms;
+	n->play_sound  = play_sound;
 	s_urgent_head++;
 }
 
@@ -365,6 +367,7 @@ static void ra_osd_poll(void)
 		ra_notif *n = &s_urgent_queue[s_urgent_tail % NOTIF_QUEUE_CAP];
 		s_urgent_tail++;
 		Info(n->text, n->duration_ms + 500, 0, 0, 1);
+		if (n->play_sound) ra_play_achievement_sound();
 		s_urgent_timer    = GetTimer(n->duration_ms);
 		s_urgent_showing  = 1;
 		// Urgent takes over the display — discard any pending instant
@@ -717,6 +720,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 				RA_LOG("*** ACHIEVEMENT TRIGGERED: [%u] %s — %s ***",
 					event->achievement->id, event->achievement->title,
 					event->achievement->description);
+					gba_dump_trigger(event->achievement->id);
 				const int title_max = 28;
 				const int desc_max  = 60;
 				char title_buf[32];
@@ -731,8 +735,7 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 				snprintf(buf, sizeof(buf),
 					">> ACHIEVEMENT <<\n\n%s\n%s",
 					title_buf, desc_buf);
-				ra_notify_urgent(buf, 4000);
-				ra_play_achievement_sound();
+								ra_notify_urgent(buf, 4000, 1);
 			}
 		}
 		break;
