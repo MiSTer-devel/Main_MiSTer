@@ -4137,6 +4137,7 @@ void user_io_osd_key_enable(char on)
 {
 	//printf("OSD is now %s\n", on ? "visible" : "invisible");
 	osd_is_visible = on;
+	if (cfg.log_osd_visible) MakeFile("/tmp/OSD_VISIBLE", on ? "1" : "0");
 	input_switch(-1);
 }
 
