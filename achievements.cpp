@@ -197,6 +197,7 @@ static int g_hardcore                  = 0; // 1 = hardcore mode (disables cheat
 static int g_force_hardcore            = 0; // 1 = force hardcore mode even if core doesn't support it
 static int g_stall_recovery            = 0; // 1 = enable OptionC stall recovery (disabled by default)
 static int g_rtquery_enabled           = 1; // 1 = enable realtime queries for AddAddress resolution
+static int g_gba_reset_ram             = 1; // 1 = clear IWRAM+EWRAM on game load (retroachievements.cfg: gba_reset_ram)
 static int g_recollect_interval        = 600; // frames between address re-collections (PSX default 600, SNES 18000)
 static int g_smart_cache               = -1; // -1 = default per console, 1 = smart cache: rtquery on cache miss, no periodic recollect
 static int g_n64_snapshot              = 0;  // 1 = snapshot RDRAM at VBlank for consistent reads
@@ -563,6 +564,8 @@ static int ra_load_credentials(void)
 			g_ra_debug = atoi(val);
 		} else if (!strcasecmp(key, "n64_snapshot")) {
 			g_n64_snapshot = atoi(val);
+		} else if (!strcasecmp(key, "gba_reset_ram")) {
+			g_gba_reset_ram = atoi(val);
 		}
 	}
 	fclose(f);
@@ -579,11 +582,11 @@ static int ra_load_credentials(void)
 	}
 
 	RA_LOG("Credentials loaded: user=%s password=***(%zu chars)", g_ra_user, strlen(g_ra_password));
-	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d show_leaderboards_updates=%d show_leaderboards_submission=%d leaderboards_enabled(deprecated)=%d hardcore=%d force_hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d debug=%d",
+	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d show_leaderboards_updates=%d show_leaderboards_submission=%d leaderboards_enabled(deprecated)=%d hardcore=%d force_hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d gba_reset_ram=%d debug=%d",
                 g_show_challenge_show_popup, g_show_challenge_hide_popup,
                 g_show_progress_popups, g_show_progress_name,
 		g_show_leaderboards_updates, g_show_leaderboards_submission, g_leaderboards_enabled,
-                g_hardcore, g_force_hardcore, g_stall_recovery, g_rtquery_enabled, g_recollect_interval, g_smart_cache, g_n64_snapshot, g_ra_debug);
+                g_hardcore, g_force_hardcore, g_stall_recovery, g_rtquery_enabled, g_recollect_interval, g_smart_cache, g_n64_snapshot, g_gba_reset_ram, g_ra_debug);
 	return 1;
 }
 
@@ -1713,6 +1716,11 @@ int achievements_stall_recovery_enabled(void)
 int achievements_rtquery_enabled(void)
 {
 	return g_rtquery_enabled;
+}
+
+int achievements_gba_reset_ram(void)
+{
+	return g_gba_reset_ram;
 }
 
 int achievements_recollect_interval(void)

@@ -62,6 +62,7 @@ typedef struct __attribute__((packed)) {
 // The FPGA never writes this location, so ARM bits persist across VBlanks.
 #define RA_ARM_CONFIG_OFFSET  0x40   // Byte offset from RA_DDRAM_PHYS_BASE
 #define RA_ARM_CFG_RTQUERY    0x01   // Bit 0: FPGA should poll realtime query mailbox
+#define RA_ARM_CFG_CLEAR_EN   0x02   // Bit 1: FPGA clears IWRAM on ROM load (set by RA)
 
 // Maximum regions supported
 #define RA_MAX_REGIONS 4
@@ -131,6 +132,8 @@ typedef struct __attribute__((packed)) {
 // Realtime query API — generic, works with any Option C core
 void     ra_rtquery_init(void *map);
 void     ra_rtquery_disable(void *map);  // clears RA_ARM_CFG_RTQUERY so FPGA stops polling
+void     ra_clear_en_set(void *map);     // sets   RA_ARM_CFG_CLEAR_EN (FPGA clears IWRAM on game load)
+void     ra_clear_en_clear(void *map);   // clears RA_ARM_CFG_CLEAR_EN
 uint32_t ra_rtquery_read(void *map, uint32_t address, uint32_t num_bytes);
 
 // Address request header at ADDRLIST_OFFSET (ARM writes)

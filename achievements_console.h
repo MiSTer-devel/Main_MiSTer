@@ -94,4 +94,7 @@ void init_all_console_handlers(void);
 int optionc_check_stall_recovery(console_state_t *state, uint32_t resp_frame,
                                   const char *console_name);
 
+// GBA: dump valcache when an achievement triggers (call from event handler)
+void gba_dump_trigger(uint32_t ach_id);
+
 #endif // ACHIEVEMENTS_CONSOLE_H
