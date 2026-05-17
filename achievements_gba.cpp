@@ -20,6 +20,7 @@
 // ---------------------------------------------------------------------------
 
 static console_state_t g_gba_state = {};
+static void *g_gba_last_map = NULL;
 
 // ---------------------------------------------------------------------------
 // GBA Option C Diagnostics
@@ -109,6 +110,7 @@ static int gba_poll(void *map, void *client, int game_loaded)
         if (!client || !game_loaded || !map || !g_gba_state.optionc)
                 return 0;
 
+        g_gba_last_map = map;
         rc_client_t *rc_client = (rc_client_t *)client;
 
         if (ra_snes_addrlist_count() == 0 && !g_gba_state.cache_ready) {
@@ -198,6 +200,16 @@ static int gba_poll(void *map, void *client, int game_loaded)
 #endif
 }
 
+void gba_dump_trigger(uint32_t ach_id)
+{
+#ifdef HAS_RCHEEVOS
+        if (!g_gba_last_map) return;
+        char label[32];
+        snprintf(label, sizeof(label), "trigger-%u", ach_id);
+        gba_optionc_dump_valcache(label, g_gba_last_map);
+#endif
+}
+
 static int gba_calculate_hash(const char *rom_path, char *md5_hex_out)
 {
 #ifdef HAS_RCHEEVOS
@@ -276,6 +288,10 @@ static int gba_detect_protocol(void *map)
         // GBA always uses Option C
         g_gba_state.optionc = 1;
         gba_init_flash_ddram();
+        if (achievements_gba_reset_ram())
+                ra_clear_en_set(map);    // FPGA clears IWRAM+EWRAM on each game load
+        else
+                ra_clear_en_clear(map);  // gba_reset_ram=0 in retroachievements.cfg
         ra_log_write("GBA FPGA protocol: Option C (selective address reading)\n");
         return 1;
 }

@@ -634,6 +634,22 @@ void ra_rtquery_disable(void *map)
         RA_DBG("RTQuery: disabled (FPGA will stop polling query mailbox after next VBlank)");
 }
 
+void ra_clear_en_set(void *map)
+{
+        if (!map) return;
+        uint8_t *base = (uint8_t *)map;
+        base[RA_ARM_CONFIG_OFFSET] |= RA_ARM_CFG_CLEAR_EN;
+        __sync_synchronize();
+}
+
+void ra_clear_en_clear(void *map)
+{
+        if (!map) return;
+        uint8_t *base = (uint8_t *)map;
+        base[RA_ARM_CONFIG_OFFSET] &= (uint8_t)(~RA_ARM_CFG_CLEAR_EN);
+        __sync_synchronize();
+}
+
 uint32_t ra_rtquery_read(void *map, uint32_t address, uint32_t num_bytes)
 {
         if (!map || num_bytes == 0 || num_bytes > 4) return 0;
