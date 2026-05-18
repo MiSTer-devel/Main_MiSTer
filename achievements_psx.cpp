@@ -42,6 +42,104 @@ static uint16_t psx_dbg_delta_u16(uint16_t cur, uint16_t prev) {
 	return (uint16_t)(cur - prev);
 }
 
+// ---------------------------------------------------------------------------
+// Cleanup gating: skip periodic cleanup when it wouldn't help.
+//
+// Cleanup is only worth running when BOTH conditions are true:
+//   (a) something was added via add_dynamic since the last cleanup, and
+//   (b) the list has grown by more than PSX_CLEANUP_GROWTH_PCT % above the
+//       size right after bootstrap.
+//
+// Rationale: cleanup is the most expensive ARM-side op (qsort + memcmp +
+// DDR3 writes + cache_reindexing window). When the list is stable or only
+// grew a little, the cleanup work doesn't pay for itself.
+// ---------------------------------------------------------------------------
+#define PSX_CLEANUP_GROWTH_PCT 50  // run cleanup once count > initial * 1.5
+static uint32_t g_psx_initial_addr_count   = 0;
+static int      g_psx_changes_since_cleanup = 0;
+
+// ---------------------------------------------------------------------------
+// Flat-array RAM mirror (PSX-specific O(1) lookup).
+//
+// PSX Main RAM is 2 MB. We maintain an ARM-side mirror of the bytes the
+// FPGA is actively tracking. Lookup is O(1) via direct indexing, vs. the
+// O(log N) binary search used by the generic ra_snes_addrlist_lookup_byte.
+//
+// Memory: g_psx_ram_mirror (2 MB values) + g_psx_ram_monitored (2 MB flags)
+// = 4 MB of ARM RAM (trivial on a 1 GB system).
+//
+// The monitored flags were originally a 256 KB bitmap (1 bit per byte) but
+// became a 2 MB byte array for two reasons: (a) lookup is the hot path and
+// a byte load is ~4ns cheaper than the shift/mask/AND a bitmap requires;
+// (b) on a 1 GB platform there is no reason to pay code complexity to save
+// 1.75 MB. memset on cleanup is ~5x slower (2 MB vs 256 KB) but cleanup
+// runs at most once every ~30s, so the steady-state lookup savings dominate.
+//
+// Synced from the FPGA's valcache on every new resp_frame so the values
+// are at most one VBlank stale (same staleness as the existing valcache
+// reads). Cache miss is detected by the monitored flag, not by the value
+// (0 is a valid value, so we can't use it as a miss sentinel).
+// ---------------------------------------------------------------------------
+#define PSX_RAM_SIZE       (2u * 1024u * 1024u)
+static uint8_t g_psx_ram_mirror   [PSX_RAM_SIZE];
+static uint8_t g_psx_ram_monitored[PSX_RAM_SIZE];
+
+static inline void psx_mirror_mark_monitored(uint32_t addr)
+{
+	if (addr >= PSX_RAM_SIZE) return;
+	g_psx_ram_monitored[addr] = 1;
+}
+
+static inline uint8_t psx_mirror_lookup(uint32_t addr, int *hit)
+{
+	if (addr < PSX_RAM_SIZE && g_psx_ram_monitored[addr]) {
+		if (hit) *hit = 1;
+		return g_psx_ram_mirror[addr];
+	}
+	if (hit) *hit = 0;
+	return 0;
+}
+
+// Rebuild the monitored flags from the current sorted address list. Called
+// after bootstrap or cleanup-style end_collect, when the entire list may
+// have changed in one shot.
+static void psx_mirror_rebuild_flags(void)
+{
+	memset(g_psx_ram_monitored, 0, sizeof(g_psx_ram_monitored));
+	int count = ra_snes_addrlist_count();
+	const uint32_t *addrs = ra_snes_addrlist_addrs();
+	for (int i = 0; i < count; i++)
+		psx_mirror_mark_monitored(addrs[i]);
+}
+
+// Pull the freshest values from the FPGA's valcache (DDR3, memory-mapped)
+// into our local mirror. Called once per new VBlank from psx_poll.
+//
+// Gated on is_ready(map): if the FPGA hasn't yet processed our latest
+// request_id (after add_dynamic+flush or end_collect), the valcache still
+// reflects the OLD list ordering and copying it through our NEW s_snes_addrs[]
+// would corrupt the mirror. Skip the sync in that case and let the mirror
+// stay one frame stale until the FPGA catches up.
+static void psx_mirror_sync(const void *map)
+{
+	if (!map) return;
+	if (!ra_snes_addrlist_is_ready(map)) return;
+	const uint8_t *vals  = (const uint8_t *)map + RA_SNES_VALCACHE_OFFSET + 8;
+	int            count = ra_snes_addrlist_count();
+	const uint32_t *addrs = ra_snes_addrlist_addrs();
+	for (int i = 0; i < count; i++) {
+		uint32_t a = addrs[i];
+		if (a < PSX_RAM_SIZE) g_psx_ram_mirror[a] = vals[i];
+	}
+}
+
+static void psx_mirror_reset(void)
+{
+	memset(g_psx_ram_monitored, 0, sizeof(g_psx_ram_monitored));
+	// mirror values do not need clearing — the monitored flag gates access,
+	// so stale bytes are never returned for non-monitored addresses.
+}
+
 
 // ---------------------------------------------------------------------------
 // PSX Option C Diagnostics
@@ -94,6 +192,9 @@ static void psx_init(void)
 	g_psx_prev_bram_misses = 0;
 	g_psx_prev_qry_polls = 0;
 	g_psx_prev_qry_serves = 0;
+	g_psx_initial_addr_count   = 0;
+	g_psx_changes_since_cleanup = 0;
+	psx_mirror_reset();
 }
 
 static void psx_reset(void)
@@ -114,6 +215,9 @@ static void psx_reset(void)
 	g_psx_prev_bram_misses = 0;
 	g_psx_prev_qry_polls = 0;
 	g_psx_prev_qry_serves = 0;
+	g_psx_initial_addr_count   = 0;
+	g_psx_changes_since_cleanup = 0;
+	psx_mirror_reset();
 }
 
 static uint32_t psx_read_memory(void *map, uint32_t address, uint8_t *buffer, uint32_t num_bytes)
@@ -144,31 +248,35 @@ static uint32_t psx_read_memory(void *map, uint32_t address, uint8_t *buffer, ui
 					}
 					return num_bytes;
 				}
-				// Combined lookup: 1 binary search per byte returns both the cached
-				// value AND whether it was a hit. This costs ~50% of the original
-				// contains()+read_cached() approach which did 2 binary searches.
-				// Audio-glitch sensitive: PSX CD-ROM XA streaming was dropping samples
-				// when per-frame ARM CPU exceeded ~5ms (dofrm_avg). The combined
-				// lookup keeps dofrm_avg in safe range while preserving cache-miss
-				// detection for AddAddress pointer resolution.
+				// Flat-mirror lookup: O(1) per byte via psx_mirror_lookup
+				// (monitored-flag check + value load). Replaces the binary
+				// search of ra_snes_addrlist_lookup_byte. The mirror is kept
+				// in sync with the FPGA's valcache by psx_mirror_sync() once
+				// per VBlank.
 				uint8_t miss_mask = 0;  // bit i set = byte i missed cache
 				for (uint32_t i = 0; i < num_bytes; i++) {
 					int hit;
-					buffer[i] = ra_snes_addrlist_lookup_byte(map, address + i, &hit);
+					buffer[i] = psx_mirror_lookup(address + i, &hit);
 					if (!hit) miss_mask |= (uint8_t)(1u << i);
 				}
 				if (!miss_mask) return num_bytes;
-				// At least one miss: rtquery the missing bytes, schedule them for the
-				// next FPGA batch via add_dynamic.
+				// At least one miss: rtquery the missing bytes, mark them in the
+				// mirror so subsequent reads in this frame are cache hits, and
+				// schedule them for the next FPGA batch via add_dynamic.
 				if (num_bytes <= 4) {
 					g_psx_rtquery_calls++;
 					g_psx_rtquery_miss++;
 					uint32_t val = ra_rtquery_read(map, address, num_bytes);
 					for (uint32_t i = 0; i < num_bytes; i++) {
 						if (miss_mask & (1u << i)) {
-							buffer[i] = (uint8_t)(val >> (i * 8));
+							uint8_t b = (uint8_t)(val >> (i * 8));
+							buffer[i] = b;
 							g_psx_addmiss_total++;
 							ra_snes_addrlist_add_dynamic(address + i);
+							if ((address + i) < PSX_RAM_SIZE)
+								g_psx_ram_mirror[address + i] = b;
+							psx_mirror_mark_monitored(address + i);
+							g_psx_changes_since_cleanup++;
 						}
 					}
 					return num_bytes;
@@ -179,9 +287,14 @@ static uint32_t psx_read_memory(void *map, uint32_t address, uint8_t *buffer, ui
 						g_psx_rtquery_calls++;
 						g_psx_rtquery_miss++;
 						uint32_t val = ra_rtquery_read(map, address + i, 1);
-						buffer[i] = (uint8_t)val;
+						uint8_t b = (uint8_t)val;
+						buffer[i] = b;
 						g_psx_addmiss_total++;
 						ra_snes_addrlist_add_dynamic(address + i);
+						if ((address + i) < PSX_RAM_SIZE)
+							g_psx_ram_mirror[address + i] = b;
+						psx_mirror_mark_monitored(address + i);
+						g_psx_changes_since_cleanup++;
 					}
 				}
 				return num_bytes;
@@ -225,6 +338,8 @@ static int psx_poll(void *map, void *client, int game_loaded)
 			g_psx_state.collecting = 0;
 			int changed = ra_snes_addrlist_end_collect(map);
 			if (changed) {
+				// Initialize the flat mirror monitored flags from bootstrap list.
+				psx_mirror_rebuild_flags();
 				ra_log_write("PSX SmartCache: Bootstrap done, %d addrs written to DDRAM\n",
 					ra_snes_addrlist_count());
 			} else {
@@ -238,8 +353,15 @@ static int psx_poll(void *map, void *client, int game_loaded)
 				g_psx_state.game_frames = 0;
 				g_psx_state.poll_logged = 0;
 				clock_gettime(CLOCK_MONOTONIC, &g_psx_state.cache_time);
-				ra_log_write("PSX SmartCache: Cache active! %d addrs monitored\n",
-					ra_snes_addrlist_count());
+				// Capture the initial size as the baseline for the growth-pct
+				// cleanup gate. Bootstrap-captured addresses are the "static"
+				// set that should never trigger a cleanup.
+				g_psx_initial_addr_count = ra_snes_addrlist_count();
+				g_psx_changes_since_cleanup = 0;
+				// First-time mirror fill from the valcache the FPGA just wrote.
+				psx_mirror_sync(map);
+				ra_log_write("PSX SmartCache: Cache active! %d addrs monitored (initial=%u)\n",
+					ra_snes_addrlist_count(), g_psx_initial_addr_count);
 				psx_optionc_dump_valcache("smart-active", map);
 			}
 		} else {
@@ -258,16 +380,27 @@ static int psx_poll(void *map, void *client, int game_loaded)
 				g_psx_state.game_frames++;
 				ra_frame_processed(resp_frame);
 
+				// Pull the freshest valcache values into the local flat mirror
+				// so the upcoming rc_client_do_frame reads them via O(1) lookup.
+				psx_mirror_sync(map);
+
 				if (g_psx_state.game_frames <= 5) {
 					ra_log_write("PSX SmartCache: GameFrame %u (resp_frame=%u, addrs=%d)\n",
 						g_psx_state.game_frames, resp_frame, ra_snes_addrlist_count());
 				}
 
-				// Periodic cleanup: rebuild address list to prune stale entries
-				// Every ~10s (600 frames), collect what do_frame actually reads
+				// Periodic cleanup: rebuild address list to prune stale entries.
+				// Gated by: (a) some add_dynamic happened since last cleanup
+				// and (b) current count > initial * (1 + PSX_CLEANUP_GROWTH_PCT/100).
+				// Skips cleanup when the list is stable or hasn't grown enough
+				// for the qsort/memcmp/DDR3 work to be worth it.
+				uint32_t growth_threshold = (g_psx_initial_addr_count
+					* (uint32_t)(100 + PSX_CLEANUP_GROWTH_PCT)) / 100u;
 				int cleanup_frame = (g_psx_state.game_frames % 600 == 0)
 					&& (g_psx_state.game_frames > 0)
-					&& !g_psx_state.cache_reindexing;
+					&& !g_psx_state.cache_reindexing
+					&& (g_psx_changes_since_cleanup > 0)
+					&& ((uint32_t)ra_snes_addrlist_count() > growth_threshold);
 				if (cleanup_frame) {
 					g_psx_state.collecting = 1;
 					ra_snes_addrlist_begin_collect();
@@ -294,11 +427,18 @@ static int psx_poll(void *map, void *client, int game_loaded)
 						int new_count = ra_snes_addrlist_count();
 						int pruned = old_count - new_count;
 						g_psx_list_changes++;
+						// List was replaced wholesale — rebuild the mirror
+						// monitored flags from the new list (clears for pruned
+						// addresses, sets for any newly captured ones).
+						psx_mirror_rebuild_flags();
 						ra_log_write("PSX SmartCache: Cleanup — pruned %d stale addrs (%d -> %d)\n",
 							pruned, old_count, new_count);
 						// FPGA cache indices are now stale — use rtquery until FPGA responds
 						g_psx_state.cache_reindexing = 1;
 					}
+					// Reset the gate regardless of whether end_collect detected a
+					// change. A cleanup attempt counts as having reconciled.
+					g_psx_changes_since_cleanup = 0;
 				} else {
 					// Normal frame: flush any new dynamic addresses
 					if (ra_snes_addrlist_has_pending()) {
