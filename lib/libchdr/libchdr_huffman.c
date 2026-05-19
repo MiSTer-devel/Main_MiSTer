@@ -133,8 +133,8 @@ struct huffman_decoder* create_huffman_decoder(int numcodes, int maxbits)
 	decoder = (struct huffman_decoder*)malloc(sizeof(struct huffman_decoder));
 	decoder->numcodes = numcodes;
 	decoder->maxbits = maxbits;
-	decoder->lookup = (lookup_value*)malloc(sizeof(lookup_value) * (1 << maxbits));
-	decoder->huffnode = (struct node_t*)malloc(sizeof(struct node_t) * numcodes);
+	decoder->lookup = (lookup_value*)calloc((size_t)1 << maxbits, sizeof(lookup_value));
+	decoder->huffnode = (struct node_t*)calloc(numcodes, 2 * sizeof(struct node_t));
 	decoder->datahisto = NULL;
 	decoder->prevdata = 0;
 	decoder->rleremaining = 0;
@@ -391,7 +391,7 @@ int huffman_build_tree(struct huffman_decoder* decoder, uint32_t totaldata, uint
 	int listitems = 0;
 	int maxbits = 0;
 	/* make a list of all non-zero nodes */
-	struct node_t** list = (struct node_t**)malloc(sizeof(struct node_t*) * decoder->numcodes * 2);
+	struct node_t** list = (struct node_t**)calloc(decoder->numcodes, 2 * sizeof(struct node_t*));
 	memset(decoder->huffnode, 0, decoder->numcodes * sizeof(decoder->huffnode[0]));
 	for (curcode = 0; curcode < decoder->numcodes; curcode++)
 		if (decoder->datahisto[curcode] != 0)
