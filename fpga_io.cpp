@@ -629,10 +629,21 @@ void app_restart(const char *path, const char *xml, const char *exe)
 
 	const char *appname = exe ? exe : getappname();
 	printf("restarting to %s\n", appname);
-	execl(appname, appname, path, xml, NULL);
+
+	//a cleaner way to re-start
+	pid_t child = fork();
+	if (child > 0) _exit(0);
+	else if (child == 0)
+	{
+		setsid();
+		pid_t grandchild = fork();
+		if (grandchild > 0) _exit(0);
+		if (grandchild == 0) execl(appname, appname, path, xml, NULL);
+	}
 
 	printf("Something went wrong. Rebooting...\n");
 	reboot(1);
+	_exit(1);
 }
 
 void fpga_core_reset(int reset)
