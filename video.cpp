@@ -26,6 +26,7 @@
 #include "str_util.h"
 #include "profiling.h"
 #include "offload.h"
+#include "hdmi_cec.h"
 
 #include "support.h"
 #include "support/arcade/mra_loader.h"
@@ -1405,7 +1406,7 @@ int hdmi_has_int()
 	if (has_int < 0)
 	{
 		has_int = spi_uio_cmd(UIO_HDMI_INT);
-		if (!has_int) printf("HDMI interrupt pin is not available in this core.\n");
+		if (!has_int) printf("HDMI interrupt pin is not available in this core. Hotplug and CEC won't be available.\n");
 	}
 	return has_int;
 }
@@ -2659,6 +2660,8 @@ void video_reload_edid_mode()
 void video_poll()
 {
 	if (!hdmi_has_int()) return;
+
+	cec_poll();
 
 	if (fpga_get_hdmi_int())
 	{
