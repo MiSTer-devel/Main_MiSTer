@@ -18,6 +18,7 @@
 cfg_t cfg;
 static FILE *orig_stdout = NULL;
 static FILE *dev_null = NULL;
+static FILE *debug_file = NULL;
 
 typedef enum
 {
@@ -128,7 +129,7 @@ static const ini_var_t ini_vars[] =
 	{ "CONTROLLER_UNIQUE_MAPPING", (void *)(cfg.controller_unique_mapping), UINT32ARR, 0, 0xFFFFFFFF },
 	{ "OSD_LOCK", (void*)(&(cfg.osd_lock)), STRING, 0, sizeof(cfg.osd_lock) - 1 },
 	{ "OSD_LOCK_TIME", (void*)(&(cfg.osd_lock_time)), UINT16, 0, 60 },
-	{ "DEBUG", (void *)(&(cfg.debug)), UINT8, 0, 1 },
+	{ "DEBUG", (void *)(&(cfg.debug)), UINT8, 0, 2 },
 	{ "LOOKAHEAD", (void *)(&(cfg.lookahead)), UINT8, 0, 1 },
 	{ "MAIN", (void*)(&(cfg.main)), STRING, 0, sizeof(cfg.main) - 1 },
 	{ "VFILTER_INTERLACE_DEFAULT", (void*)(&(cfg.vfilter_interlace_default)), STRING, 0, sizeof(cfg.vfilter_interlace_default) - 1 },
@@ -426,7 +427,12 @@ static void ini_parse_var(char* buf)
 			ini_parse_numeric(var, &buf[i], var->var);
 			if (!strcasecmp(var->name, "DEBUG"))
 			{
-				stdout = cfg.debug ? orig_stdout : dev_null;
+				if (cfg.debug == 2 && !debug_file)
+				{
+					debug_file = fopen("/tmp/debug.txt", "w");
+					setvbuf(debug_file, NULL, _IONBF, 0);
+				}
+				stdout = (cfg.debug == 2) ? debug_file : cfg.debug ? orig_stdout : dev_null;
 			}
 			break;
 		}
