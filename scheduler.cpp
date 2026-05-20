@@ -8,6 +8,7 @@
 #include "fpga_io.h"
 #include "osd.h"
 #include "profiling.h"
+#include "video.h"
 
 static cothread_t co_scheduler = nullptr;
 static cothread_t co_poll = nullptr;
@@ -33,6 +34,7 @@ static void scheduler_co_poll(void)
 			user_io_poll();
 			frame_timer();
 			input_poll(0);
+			video_poll();
 		}
 
 		scheduler_yield();
