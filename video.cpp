@@ -2526,10 +2526,17 @@ static int should_auto_enable_direct_video()
 	return 0;
 }
 
-static void video_mode_load()
+static void video_mode_load(bool keep_direct_video_auto = false)
 {
+	static bool direct_video_auto = false;
+
+	if (cfg.direct_video == 2)
+		direct_video_auto = true;
+	else if (!keep_direct_video_auto)
+		direct_video_auto = false;
+
 	// Auto-detect and enable direct video if configured
-	if (cfg.direct_video == 2) {
+	if (direct_video_auto) {
 		if (should_auto_enable_direct_video()) {
 			printf("Auto-enabling direct video for known DAC.\n");
 			// Enable direct video, preserve all other user settings
@@ -2645,7 +2652,7 @@ void video_reinit()
 	hdmi_config_set_hdr();
 
 	support_FHD = 0;
-	video_mode_load();
+	video_mode_load(true);
 
 	video_cfg_init();
 	video_set_mode(&v_def, 0);
