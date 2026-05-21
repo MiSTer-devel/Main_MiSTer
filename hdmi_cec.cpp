@@ -33,138 +33,136 @@
 #include "video.h"
 #include "menu.h"
 
-static const uint8_t ADV7513_MAIN_ADDR = 0x39;
-static const uint8_t ADV7513_CEC_ADDR = 0x3C;
+#define ADV7513_MAIN_ADDR        0x39
+#define ADV7513_CEC_ADDR         0x3C
 
-static const uint8_t MAIN_REG_CEC_I2C_ADDR = 0xE1;
-static const uint8_t MAIN_REG_CEC_POWER = 0xE2;
-static const uint8_t MAIN_REG_CEC_CTRL = 0xE3;
-static const uint8_t MAIN_REG_INT1_ENABLE = 0x95;
-static const uint8_t MAIN_REG_INT1_STATUS = 0x97;
+#define MAIN_REG_CEC_I2C_ADDR    0xE1
+#define MAIN_REG_CEC_POWER       0xE2
+#define MAIN_REG_CEC_CTRL        0xE3
+#define MAIN_REG_INT1_ENABLE     0x95
+#define MAIN_REG_INT1_STATUS     0x97
 
-static const uint8_t CEC_REG_TX_FRAME_HEADER = 0x00;
-static const uint8_t CEC_REG_TX_FRAME_DATA0 = 0x01;
-static const uint8_t CEC_REG_TX_FRAME_LENGTH = 0x10;
-static const uint8_t CEC_REG_TX_ENABLE = 0x11;
-static const uint8_t CEC_REG_TX_RETRY = 0x12;
-static const uint8_t CEC_REG_TX_COUNTER = 0x14;
-static const uint8_t CEC_REG_RX1_FRAME_HEADER = 0x15;
-static const uint8_t CEC_REG_RX2_FRAME_HEADER = 0x27;
-static const uint8_t CEC_REG_RX3_FRAME_HEADER = 0x38;
-static const uint8_t CEC_REG_RX1_FRAME_LENGTH = 0x25;
-static const uint8_t CEC_REG_RX2_FRAME_LENGTH = 0x37;
-static const uint8_t CEC_REG_RX3_FRAME_LENGTH = 0x48;
-static const uint8_t CEC_REG_RX_STATUS = 0x26;
-static const uint8_t CEC_REG_RX_READY = 0x49;
-static const uint8_t CEC_REG_RX_BUFFERS = 0x4A;
-static const uint8_t CEC_REG_LOG_ADDR_MASK = 0x4B;
-static const uint8_t CEC_REG_LOG_ADDR_0_1 = 0x4C;
-static const uint8_t CEC_REG_LOG_ADDR_2 = 0x4D;
-static const uint8_t CEC_REG_CLK_DIV = 0x4E;
-static const uint8_t CEC_REG_SOFT_RESET = 0x50;
+#define CEC_REG_TX_FRAME_HEADER      0x00
+#define CEC_REG_TX_FRAME_DATA0       0x01
+#define CEC_REG_TX_FRAME_LENGTH      0x10
+#define CEC_REG_TX_ENABLE            0x11
+#define CEC_REG_TX_RETRY             0x12
+#define CEC_REG_TX_COUNTER           0x14
+#define CEC_REG_RX1_FRAME_HEADER     0x15
+#define CEC_REG_RX2_FRAME_HEADER     0x27
+#define CEC_REG_RX3_FRAME_HEADER     0x38
+#define CEC_REG_RX1_FRAME_LENGTH     0x25
+#define CEC_REG_RX2_FRAME_LENGTH     0x37
+#define CEC_REG_RX3_FRAME_LENGTH     0x48
+#define CEC_REG_RX_STATUS            0x26
+#define CEC_REG_RX_READY             0x49
+#define CEC_REG_RX_BUFFERS           0x4A
+#define CEC_REG_LOG_ADDR_MASK        0x4B
+#define CEC_REG_LOG_ADDR_0_1         0x4C
+#define CEC_REG_LOG_ADDR_2           0x4D
+#define CEC_REG_CLK_DIV              0x4E
+#define CEC_REG_SOFT_RESET           0x50
 
-static const uint8_t CEC_INT_RX_RDY1 = 1 << 0;
-static const uint8_t CEC_INT_RX_RDY2 = 1 << 1;
-static const uint8_t CEC_INT_RX_RDY3 = 1 << 2;
-static const uint8_t CEC_INT_RX_RDY_MASK = CEC_INT_RX_RDY1 | CEC_INT_RX_RDY2 | CEC_INT_RX_RDY3;
-static const uint8_t CEC_INT_TX_RETRY_TIMEOUT = 1 << 3;
-static const uint8_t CEC_INT_TX_ARBITRATION = 1 << 4;
-static const uint8_t CEC_INT_TX_DONE = 1 << 5;
-static const uint8_t CEC_INT_TX_MASK = CEC_INT_TX_RETRY_TIMEOUT | CEC_INT_TX_ARBITRATION | CEC_INT_TX_DONE;
+#define CEC_INT_RX_RDY1              (1 << 0)
+#define CEC_INT_RX_RDY2              (1 << 1)
+#define CEC_INT_RX_RDY3              (1 << 2)
+#define CEC_INT_RX_RDY_MASK          (CEC_INT_RX_RDY1 | CEC_INT_RX_RDY2 | CEC_INT_RX_RDY3)
+#define CEC_INT_TX_RETRY_TIMEOUT     (1 << 3)
+#define CEC_INT_TX_ARBITRATION       (1 << 4)
+#define CEC_INT_TX_DONE              (1 << 5)
+#define CEC_INT_TX_MASK              (CEC_INT_TX_RETRY_TIMEOUT | CEC_INT_TX_ARBITRATION | CEC_INT_TX_DONE)
 
-static const uint8_t CEC_LOG_ADDR_TV        = 0;
-static const uint8_t CEC_LOG_ADDR_PLAYBACK1 = 4;
-static const uint8_t CEC_LOG_ADDR_PLAYBACK2 = 8;
-static const uint8_t CEC_LOG_ADDR_PLAYBACK3 = 11;
-static const uint8_t CEC_LOG_ADDR_TUNER1    = 3;
-static const uint8_t CEC_LOG_ADDR_TUNER2    = 6;
-static const uint8_t CEC_LOG_ADDR_TUNER3    = 7;
-static const uint8_t CEC_LOG_ADDR_FREEUSE   = 14;
-static const uint8_t CEC_LOG_ADDR_BROADCAST = 15;
+#define CEC_OPCODE_IMAGE_VIEW_ON            0x04
+#define CEC_OPCODE_TEXT_VIEW_ON             0x0D
+#define CEC_OPCODE_STANDBY                  0x36
+#define CEC_OPCODE_USER_CONTROL_PRESSED     0x44
+#define CEC_OPCODE_USER_CONTROL_RELEASED    0x45
+#define CEC_OPCODE_GIVE_OSD_NAME            0x46
+#define CEC_OPCODE_SET_OSD_NAME             0x47
+#define CEC_OPCODE_ROUTING_CHANGE           0x80
+#define CEC_OPCODE_ACTIVE_SOURCE            0x82
+#define CEC_OPCODE_GIVE_PHYSICAL_ADDRESS    0x83
+#define CEC_OPCODE_REPORT_PHYSICAL_ADDRESS  0x84
+#define CEC_OPCODE_REQUEST_ACTIVE_SOURCE    0x85
+#define CEC_OPCODE_SET_STREAM_PATH          0x86
+#define CEC_OPCODE_DEVICE_VENDOR_ID         0x87
+#define CEC_OPCODE_GIVE_DEVICE_VENDOR_ID    0x8C
+#define CEC_OPCODE_MENU_REQUEST             0x8D
+#define CEC_OPCODE_MENU_STATUS              0x8E
+#define CEC_OPCODE_GIVE_DEVICE_POWER_STATUS 0x8F
+#define CEC_OPCODE_REPORT_POWER_STATUS      0x90
+#define CEC_OPCODE_CEC_VERSION              0x9E
+#define CEC_OPCODE_GET_CEC_VERSION          0x9F
 
-static const uint8_t CEC_OPCODE_IMAGE_VIEW_ON = 0x04;
-static const uint8_t CEC_OPCODE_TEXT_VIEW_ON = 0x0D;
-static const uint8_t CEC_OPCODE_STANDBY = 0x36;
-static const uint8_t CEC_OPCODE_USER_CONTROL_PRESSED = 0x44;
-static const uint8_t CEC_OPCODE_USER_CONTROL_RELEASED = 0x45;
-static const uint8_t CEC_OPCODE_GIVE_OSD_NAME = 0x46;
-static const uint8_t CEC_OPCODE_SET_OSD_NAME = 0x47;
-static const uint8_t CEC_OPCODE_ROUTING_CHANGE = 0x80;
-static const uint8_t CEC_OPCODE_ACTIVE_SOURCE = 0x82;
-static const uint8_t CEC_OPCODE_GIVE_PHYSICAL_ADDRESS = 0x83;
-static const uint8_t CEC_OPCODE_REPORT_PHYSICAL_ADDRESS = 0x84;
-static const uint8_t CEC_OPCODE_REQUEST_ACTIVE_SOURCE = 0x85;
-static const uint8_t CEC_OPCODE_SET_STREAM_PATH = 0x86;
-static const uint8_t CEC_OPCODE_DEVICE_VENDOR_ID = 0x87;
-static const uint8_t CEC_OPCODE_GIVE_DEVICE_VENDOR_ID = 0x8C;
-static const uint8_t CEC_OPCODE_MENU_REQUEST = 0x8D;
-static const uint8_t CEC_OPCODE_MENU_STATUS = 0x8E;
-static const uint8_t CEC_OPCODE_GIVE_DEVICE_POWER_STATUS = 0x8F;
-static const uint8_t CEC_OPCODE_REPORT_POWER_STATUS = 0x90;
-static const uint8_t CEC_OPCODE_CEC_VERSION = 0x9E;
-static const uint8_t CEC_OPCODE_GET_CEC_VERSION = 0x9F;
+#define CEC_USER_CONTROL_SELECT             0x00
+#define CEC_USER_CONTROL_UP                 0x01
+#define CEC_USER_CONTROL_DOWN               0x02
+#define CEC_USER_CONTROL_LEFT               0x03
+#define CEC_USER_CONTROL_RIGHT              0x04
+#define CEC_USER_CONTROL_ROOT_MENU          0x09
+#define CEC_USER_CONTROL_SETUP_MENU         0x0A
+#define CEC_USER_CONTROL_CONTENTS_MENU      0x0B
+#define CEC_USER_CONTROL_FAVORITE_MENU      0x0C
+#define CEC_USER_CONTROL_EXIT               0x0D
+#define CEC_USER_CONTROL_MEDIA_TOP_MENU     0x10
+#define CEC_USER_CONTROL_MEDIA_CONTEXT_MENU 0x11
+#define CEC_USER_CONTROL_NUMBER_0           0x20
+#define CEC_USER_CONTROL_NUMBER_1           0x21
+#define CEC_USER_CONTROL_NUMBER_2           0x22
+#define CEC_USER_CONTROL_NUMBER_3           0x23
+#define CEC_USER_CONTROL_NUMBER_4           0x24
+#define CEC_USER_CONTROL_NUMBER_5           0x25
+#define CEC_USER_CONTROL_NUMBER_6           0x26
+#define CEC_USER_CONTROL_NUMBER_7           0x27
+#define CEC_USER_CONTROL_NUMBER_8           0x28
+#define CEC_USER_CONTROL_NUMBER_9           0x29
+#define CEC_USER_CONTROL_PAGE_UP            0x30
+#define CEC_USER_CONTROL_PAGE_DN            0x31
+#define CEC_USER_CONTROL_INPUT_SELECT       0x34
+#define CEC_USER_CONTROL_DISPLAY_INFO       0x35
+#define CEC_USER_CONTROL_HELP               0x36
+#define CEC_USER_CONTROL_PLAY               0x44
+#define CEC_USER_CONTROL_STOP               0x45
+#define CEC_USER_CONTROL_PAUSE              0x46
+#define CEC_USER_CONTROL_REWIND             0x48
+#define CEC_USER_CONTROL_FF                 0x49
+#define CEC_USER_CONTROL_EPG                0x53
+#define CEC_USER_CONTROL_F1_BLUE            0x71
+#define CEC_USER_CONTROL_F2_RED             0x72
+#define CEC_USER_CONTROL_F3_GREEN           0x73
+#define CEC_USER_CONTROL_F4_YELLOW          0x74
 
-static const uint8_t CEC_USER_CONTROL_SELECT = 0x00;
-static const uint8_t CEC_USER_CONTROL_UP = 0x01;
-static const uint8_t CEC_USER_CONTROL_DOWN = 0x02;
-static const uint8_t CEC_USER_CONTROL_LEFT = 0x03;
-static const uint8_t CEC_USER_CONTROL_RIGHT = 0x04;
-static const uint8_t CEC_USER_CONTROL_ROOT_MENU = 0x09;
-static const uint8_t CEC_USER_CONTROL_SETUP_MENU = 0x0A;
-static const uint8_t CEC_USER_CONTROL_CONTENTS_MENU = 0x0B;
-static const uint8_t CEC_USER_CONTROL_FAVORITE_MENU = 0x0C;
-static const uint8_t CEC_USER_CONTROL_EXIT = 0x0D;
-static const uint8_t CEC_USER_CONTROL_MEDIA_TOP_MENU = 0x10;
-static const uint8_t CEC_USER_CONTROL_MEDIA_CONTEXT_MENU = 0x11;
-static const uint8_t CEC_USER_CONTROL_NUMBER_0 = 0x20;
-static const uint8_t CEC_USER_CONTROL_NUMBER_1 = 0x21;
-static const uint8_t CEC_USER_CONTROL_NUMBER_2 = 0x22;
-static const uint8_t CEC_USER_CONTROL_NUMBER_3 = 0x23;
-static const uint8_t CEC_USER_CONTROL_NUMBER_4 = 0x24;
-static const uint8_t CEC_USER_CONTROL_NUMBER_5 = 0x25;
-static const uint8_t CEC_USER_CONTROL_NUMBER_6 = 0x26;
-static const uint8_t CEC_USER_CONTROL_NUMBER_7 = 0x27;
-static const uint8_t CEC_USER_CONTROL_NUMBER_8 = 0x28;
-static const uint8_t CEC_USER_CONTROL_NUMBER_9 = 0x29;
-static const uint8_t CEC_USER_CONTROL_PAGE_UP = 0x30;
-static const uint8_t CEC_USER_CONTROL_PAGE_DN = 0x31;
-static const uint8_t CEC_USER_CONTROL_INPUT_SELECT = 0x34;
-static const uint8_t CEC_USER_CONTROL_DISPLAY_INFO = 0x35;
-static const uint8_t CEC_USER_CONTROL_HELP = 0x36;
-static const uint8_t CEC_USER_CONTROL_PLAY = 0x44;
-static const uint8_t CEC_USER_CONTROL_STOP = 0x45;
-static const uint8_t CEC_USER_CONTROL_PAUSE = 0x46;
-static const uint8_t CEC_USER_CONTROL_REWIND = 0x48;
-static const uint8_t CEC_USER_CONTROL_FAST_FORWARD = 0x49;
-static const uint8_t CEC_USER_CONTROL_EPG = 0x53;
-static const uint8_t CEC_USER_CONTROL_INITIAL_CONFIGURATION = 0x55;
-static const uint8_t CEC_USER_CONTROL_SELECT_MEDIA_FUNCTION = 0x68;
-static const uint8_t CEC_USER_CONTROL_SELECT_AV_INPUT_FUNCTION = 0x69;
-static const uint8_t CEC_USER_CONTROL_F1_BLUE = 0x71;
-static const uint8_t CEC_USER_CONTROL_F2_RED = 0x72;
-static const uint8_t CEC_USER_CONTROL_F3_GREEN = 0x73;
-static const uint8_t CEC_USER_CONTROL_F4_YELLOW = 0x74;
+#define CEC_LOG_ADDR_TV          0
+#define CEC_LOG_ADDR_PLAYBACK1   4
+#define CEC_LOG_ADDR_PLAYBACK2   8
+#define CEC_LOG_ADDR_PLAYBACK3   11
+#define CEC_LOG_ADDR_TUNER1      3
+#define CEC_LOG_ADDR_TUNER2      6
+#define CEC_LOG_ADDR_TUNER3      7
+#define CEC_LOG_ADDR_FREEUSE     14
+#define CEC_LOG_ADDR_BROADCAST   15
 
-static const uint8_t CEC_DEVICE_TYPE_TUNER = 3;
-static const uint8_t CEC_DEVICE_TYPE_PLAYBACK = 4;
-static const uint8_t CEC_POWER_STATUS_ON = 0x00;
-static const uint8_t CEC_VERSION_1_4 = 0x05;
-static const char *CEC_DEFAULT_OSD_NAME = "MiSTer";
+#define CEC_DEVICE_TYPE_PLAYBACK 4
+#define CEC_DEVICE_TYPE_TUNER    3
 
-static const uint8_t CEC_DEVICE_TYPE_MISTER = CEC_DEVICE_TYPE_PLAYBACK;
-static const uint8_t CEC_LOG_ADDR_MISTER1   = CEC_LOG_ADDR_PLAYBACK1;
-static const uint8_t CEC_LOG_ADDR_MISTER2   = CEC_LOG_ADDR_PLAYBACK2;
-static const uint8_t CEC_LOG_ADDR_MISTER3   = CEC_LOG_ADDR_PLAYBACK3;
+#define CEC_VERSION_1_4          5
 
-static const uint16_t CEC_INVALID_PHYS_ADDR = 0xFFFF;
-static const unsigned long CEC_BUTTON_TIMEOUT_MS = 500;
-static const unsigned long CEC_ADVERTISE_STEP_MS = 120;
-static const unsigned long CEC_POWER_ON_QUERY_WAIT_MS = 700;
-static const unsigned long CEC_POWER_ON_STEP_MS = 120;
-static const unsigned long CEC_TX_TIMEOUT_MS = 220;
-static const unsigned long CEC_TX_TIMEOUT_RETRY_MS = 500;
-static const uint8_t CEC_ADVERTISE_STARTUP_ATTEMPTS = 1;
-static const uint8_t CEC_ADVERTISE_IDENTITY_STEPS = 3;
+#define CEC_DEVICE_TYPE_MISTER   CEC_DEVICE_TYPE_PLAYBACK
+#define CEC_LOG_ADDR_MISTER1     CEC_LOG_ADDR_PLAYBACK1
+#define CEC_LOG_ADDR_MISTER2     CEC_LOG_ADDR_PLAYBACK2
+#define CEC_LOG_ADDR_MISTER3     CEC_LOG_ADDR_PLAYBACK3
+#define CEC_DEFAULT_OSD_NAME     "MiSTer"
+
+#define CEC_INVALID_PHYS_ADDR      0xFFFF
+#define CEC_BUTTON_TIMEOUT_MS      500
+#define CEC_ADVERTISE_STEP_MS      120
+#define CEC_POWER_ON_QUERY_WAIT_MS 700
+#define CEC_POWER_ON_STEP_MS       120
+#define CEC_TX_TIMEOUT_MS          220
+#define CEC_TX_TIMEOUT_RETRY_MS    500
+
+#define CEC_ADVERTISE_STARTUP_ATTEMPTS 1
+#define CEC_ADVERTISE_IDENTITY_STEPS   3
 
 typedef struct
 {
@@ -196,29 +194,30 @@ enum cec_tx_state_t {
 };
 
 static bool cec_enabled = false;
-static unsigned long cec_retry_deadline = 0;
 static int cec_main_fd = -1;
 static int cec_fd = -1;
 
-static uint8_t cec_logical_addr = CEC_LOG_ADDR_MISTER1;
+static uint8_t cec_logical_addr = CEC_LOG_ADDR_FREEUSE;
 static uint16_t cec_physical_addr = CEC_INVALID_PHYS_ADDR;
+static uint16_t cec_active_physical_addr = CEC_INVALID_PHYS_ADDR;
 static uint16_t cec_pressed_key = 0;
-static unsigned long cec_press_deadline = 0;
-static uint8_t cec_tx_fail_streak = 0;
-static unsigned long cec_advertise_deadline = 0;
 static uint8_t cec_advertise_step = 0;
 static uint8_t cec_advertise_attempts = 0;
-static cec_power_on_state_t cec_power_on_state = CEC_POWER_ON_DONE;
-static unsigned long cec_power_on_deadline = 0;
-static uint16_t cec_active_physical_addr = CEC_INVALID_PHYS_ADDR;
+static uint8_t cec_power_on_state = CEC_POWER_ON_DONE;
 static uint32_t cec_input_activity_seq = 0;
-static unsigned long cec_idle_deadline = 0;
 static bool cec_idle_engaged = false;
+static uint8_t cec_tx_fail_streak = 0;
+static uint8_t cec_current_tx_state = CEC_STATE_IDLE;
+static uint8_t cec_low_drv_start = 0;
 static int edid_version = -1;
 static bool cec_can_try = false;
-static uint8_t cec_current_tx_state = CEC_STATE_IDLE;
+
+static unsigned long cec_press_deadline = 0;
+static unsigned long cec_advertise_deadline = 0;
+static unsigned long cec_power_on_deadline = 0;
+static unsigned long cec_idle_deadline = 0;
 static unsigned long cec_tx_timeout_deadline = 0;
-static uint8_t cec_low_drv_start = 0;
+static unsigned long cec_retry_deadline = 0;
 
 static unsigned long cec_idle_sleep_delay_ms(void)
 {
@@ -262,56 +261,6 @@ static bool main_reg_write(uint8_t reg, uint8_t value)
 	return i2c_smbus_write_byte_data(cec_main_fd, reg, value) >= 0;
 }
 
-static uint16_t cec_button_to_key(uint8_t button_code)
-{
-	switch (button_code)
-	{
-	case CEC_USER_CONTROL_UP:       return KEY_UP;
-	case CEC_USER_CONTROL_DOWN:     return KEY_DOWN;
-	case CEC_USER_CONTROL_LEFT:     return KEY_LEFT;
-	case CEC_USER_CONTROL_RIGHT:    return KEY_RIGHT;
-	case CEC_USER_CONTROL_SELECT:   return KEY_ENTER;
-	case CEC_USER_CONTROL_ROOT_MENU:
-	case CEC_USER_CONTROL_EXIT:     return menu_present() ? KEY_BACK : KEY_MENU;
-
-	case CEC_USER_CONTROL_PLAY:
-	case CEC_USER_CONTROL_PAUSE:    return KEY_SPACE;
-	case CEC_USER_CONTROL_STOP:     return KEY_ESC;
-	case CEC_USER_CONTROL_REWIND:   return KEY_BACKSPACE;
-	case CEC_USER_CONTROL_FAST_FORWARD: return KEY_TAB;
-	case CEC_USER_CONTROL_NUMBER_0: return KEY_0;
-	case CEC_USER_CONTROL_NUMBER_1: return KEY_1;
-	case CEC_USER_CONTROL_NUMBER_2: return KEY_2;
-	case CEC_USER_CONTROL_NUMBER_3: return KEY_3;
-	case CEC_USER_CONTROL_NUMBER_4: return KEY_4;
-	case CEC_USER_CONTROL_NUMBER_5: return KEY_5;
-	case CEC_USER_CONTROL_NUMBER_6: return KEY_6;
-	case CEC_USER_CONTROL_NUMBER_7: return KEY_7;
-	case CEC_USER_CONTROL_NUMBER_8: return KEY_8;
-	case CEC_USER_CONTROL_NUMBER_9: return KEY_9;
-	case CEC_USER_CONTROL_F1_BLUE:  return menu_present() ? KEY_F11 : KEY_F1;
-	case CEC_USER_CONTROL_F2_RED:   return menu_present() ? KEY_MENU : KEY_F2;
-	case CEC_USER_CONTROL_F3_GREEN: return menu_present() ? KEY_MINUS : KEY_F3;
-	case CEC_USER_CONTROL_F4_YELLOW:return menu_present() ? KEY_EQUAL : KEY_F4;
-	case CEC_USER_CONTROL_PAGE_UP:  return menu_present() ? KEY_EQUAL : KEY_PAGEUP;
-	case CEC_USER_CONTROL_PAGE_DN:  return menu_present() ? KEY_MINUS : KEY_PAGEDOWN;
-
-	case CEC_USER_CONTROL_SETUP_MENU:
-	case CEC_USER_CONTROL_CONTENTS_MENU:
-	case CEC_USER_CONTROL_FAVORITE_MENU:
-	case CEC_USER_CONTROL_MEDIA_TOP_MENU:
-	case CEC_USER_CONTROL_MEDIA_CONTEXT_MENU:
-	case CEC_USER_CONTROL_INPUT_SELECT:
-	case CEC_USER_CONTROL_DISPLAY_INFO:
-	case CEC_USER_CONTROL_HELP:
-	case CEC_USER_CONTROL_EPG:
-	case CEC_USER_CONTROL_INITIAL_CONFIGURATION:
-	case CEC_USER_CONTROL_SELECT_MEDIA_FUNCTION:
-	case CEC_USER_CONTROL_SELECT_AV_INPUT_FUNCTION:
-	default: return 0;
-	}
-}
-
 static void cec_release_key(void)
 {
 	if (!cec_pressed_key) return;
@@ -332,8 +281,44 @@ static void cec_handle_button(uint8_t button_code, bool pressed)
 		return;
 	}
 
-	const uint16_t key = cec_button_to_key(button_code);
-	if (!key) return;
+	uint16_t key;
+
+	switch (button_code)
+	{
+		// main buttons
+		case CEC_USER_CONTROL_UP:        key = KEY_UP; break;
+		case CEC_USER_CONTROL_DOWN:      key = KEY_DOWN; break;
+		case CEC_USER_CONTROL_LEFT:      key = KEY_LEFT; break;
+		case CEC_USER_CONTROL_RIGHT:     key = KEY_RIGHT; break;
+		case CEC_USER_CONTROL_SELECT:    key = KEY_ENTER; break;
+		case CEC_USER_CONTROL_ROOT_MENU:
+		case CEC_USER_CONTROL_EXIT:      key = menu_present() ? KEY_BACK : KEY_MENU; break;
+
+		// additional buttons, may not present nor passed to CEC
+		case CEC_USER_CONTROL_PLAY:
+		case CEC_USER_CONTROL_PAUSE:     key = KEY_SPACE; break;
+		case CEC_USER_CONTROL_STOP:      key = KEY_ESC; break;
+		case CEC_USER_CONTROL_REWIND:    key = KEY_BACKSPACE; break;
+		case CEC_USER_CONTROL_FF:        key = KEY_TAB; break;
+		case CEC_USER_CONTROL_NUMBER_0:  key = KEY_0; break;
+		case CEC_USER_CONTROL_NUMBER_1:  key = KEY_1; break;
+		case CEC_USER_CONTROL_NUMBER_2:  key = KEY_2; break;
+		case CEC_USER_CONTROL_NUMBER_3:  key = KEY_3; break;
+		case CEC_USER_CONTROL_NUMBER_4:  key = KEY_4; break;
+		case CEC_USER_CONTROL_NUMBER_5:  key = KEY_5; break;
+		case CEC_USER_CONTROL_NUMBER_6:  key = KEY_6; break;
+		case CEC_USER_CONTROL_NUMBER_7:  key = KEY_7; break;
+		case CEC_USER_CONTROL_NUMBER_8:  key = KEY_8; break;
+		case CEC_USER_CONTROL_NUMBER_9:  key = KEY_9; break;
+		case CEC_USER_CONTROL_F1_BLUE:   key = menu_present() ? KEY_F11 : KEY_F1; break;
+		case CEC_USER_CONTROL_F2_RED:    key = menu_present() ? KEY_MENU : KEY_F2; break;
+		case CEC_USER_CONTROL_F3_GREEN:  key = menu_present() ? KEY_MINUS : KEY_F3; break;
+		case CEC_USER_CONTROL_F4_YELLOW: key = menu_present() ? KEY_EQUAL : KEY_F4; break;
+		case CEC_USER_CONTROL_PAGE_UP:   key = menu_present() ? KEY_EQUAL : KEY_PAGEUP; break;
+		case CEC_USER_CONTROL_PAGE_DN:   key = menu_present() ? KEY_MINUS : KEY_PAGEDOWN; break;
+
+		default: return;
+	}
 
 	if (cec_pressed_key && cec_pressed_key != key)
 	{
@@ -901,7 +886,7 @@ static bool cec_send_power_status(uint8_t destination)
 	cec_message_t msg = {};
 	msg.header = (cec_logical_addr << 4) | destination;
 	msg.opcode = CEC_OPCODE_REPORT_POWER_STATUS;
-	msg.data[0] = CEC_POWER_STATUS_ON;
+	msg.data[0] = 0;
 	msg.length = 3;
 	return cec_send_message(&msg);
 }
