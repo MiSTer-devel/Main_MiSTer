@@ -164,7 +164,7 @@ static const unsigned long CEC_POWER_ON_STEP_MS = 120;
 static const unsigned long CEC_TX_TIMEOUT_MS = 220;
 static const unsigned long CEC_TX_TIMEOUT_RETRY_MS = 500;
 static const uint8_t CEC_ADVERTISE_STARTUP_ATTEMPTS = 1;
-static const uint8_t CEC_ADVERTISE_IDENTITY_STEPS = 2;
+static const uint8_t CEC_ADVERTISE_IDENTITY_STEPS = 3;
 
 typedef struct
 {
@@ -205,7 +205,6 @@ static uint16_t cec_physical_addr = CEC_INVALID_PHYS_ADDR;
 static uint16_t cec_pressed_key = 0;
 static unsigned long cec_press_deadline = 0;
 static uint8_t cec_tx_fail_streak = 0;
-static unsigned long cec_tx_suppress_deadline = 0;
 static unsigned long cec_advertise_deadline = 0;
 static uint8_t cec_advertise_step = 0;
 static uint8_t cec_advertise_attempts = 0;
@@ -361,9 +360,8 @@ static void handle_tx_result(cec_tx_result_t tx_res)
 		if (cec_tx_fail_streak < 255) cec_tx_fail_streak++;
 		if (cec_tx_fail_streak >= 8)
 		{
-			cec_tx_suppress_deadline = GetTimer(15000);
 			cec_tx_fail_streak = 0;
-			printf("CEC: TX suppressed for 15000ms after repeated failures\n");
+			printf("CEC: TX suppressed after repeated failures\n");
 		}
 	}
 	cec_current_tx_state = CEC_STATE_IDLE; // Free the interface for next messages
@@ -420,7 +418,10 @@ static bool cec_send_message(const cec_message_t *msg, bool with_retry = true)
 	if (!cec_enabled || !msg) return false;
 	if (msg->length < 1 || msg->length > 16) return false;
 	if (cec_current_tx_state != CEC_STATE_IDLE) return false;
-	if (!CheckTimer(cec_tx_suppress_deadline)) return false;
+
+	uint8_t src = (msg->header >> 4) & 0x0F;
+	uint8_t dst = msg->header & 0x0F;
+	printf("CEC send: %lu message 0x%02X, src=%d, dst=%d\n", GetTimer(0), msg->opcode, src, dst);
 
 	cec_reg_write(CEC_REG_TX_ENABLE, 0x00);
 	main_reg_write(MAIN_REG_INT1_STATUS, CEC_INT_TX_MASK);
@@ -791,6 +792,15 @@ static bool cec_receive_message(cec_message_t *msg)
 
 static bool cec_is_active_source(void)
 {
+	if (cec_active_physical_addr == CEC_INVALID_PHYS_ADDR)
+	{
+		printf("CEC: cec_active_physical_addr=FFFF - assume no one is active, so we are active.\n");
+		return true;
+	}
+	else
+	{
+		printf("CEC: cec_active_physical_addr=%04X, cec_physical_addr=%04X\n", cec_active_physical_addr, cec_physical_addr);
+	}
 	return cec_active_physical_addr == cec_physical_addr;
 }
 
@@ -947,6 +957,7 @@ static void cec_handle_message(const cec_message_t *msg)
 		{
 			uint16_t path = (uint16_t)((msg->data[0] << 8) | msg->data[1]);
 			cec_active_physical_addr = path;
+			cec_is_active_source();
 		}
 		break;
 
@@ -955,7 +966,11 @@ static void cec_handle_message(const cec_message_t *msg)
 		{
 			uint16_t path = (uint16_t)((msg->data[2] << 8) | msg->data[3]);
 			cec_active_physical_addr = path;
-			if (cec_is_active_source()) cec_send_active_source();
+			if (cec_is_active_source())
+			{
+				cec_send_active_source();
+				user_io_kbd(KEY_RESERVED, 0);
+			}
 		}
 		break;
 
@@ -1051,7 +1066,6 @@ bool cec_init()
 	main_reg_write(MAIN_REG_INT1_STATUS, 0xFF);
 
 	cec_tx_fail_streak = 0;
-	cec_tx_suppress_deadline = 0;
 	cec_current_tx_state = CEC_STATE_IDLE;
 	cec_can_try = true;
 
@@ -1097,7 +1111,6 @@ static void cec_poll_power_on_switch(void)
 	switch (cec_power_on_state)
 	{
 	case CEC_POWER_ON_REQUEST_BEFORE:
-		cec_active_physical_addr = 0xFFFF;
 		cec_send_request_active_source(false);
 		cec_power_on_state = CEC_POWER_ON_WAIT_BEFORE;
 		cec_power_on_deadline = GetTimer(CEC_POWER_ON_QUERY_WAIT_MS);
@@ -1168,10 +1181,10 @@ static void cec_poll_idle_sleep_wake(void)
 		if (cec_idle_engaged)
 		{
 			cec_idle_engaged = false;
-			if (cfg.hdmi_cec_wake)
+			if (cfg.hdmi_cec_wake && cec_is_active_source())
 			{
 				cec_power_on_deadline = 0;
-				cec_power_on_state = CEC_POWER_ON_REQUEST_BEFORE;
+				cec_power_on_state = CEC_POWER_ON_IMAGE;
 			}
 		}
 
@@ -1183,7 +1196,7 @@ static void cec_poll_idle_sleep_wake(void)
 		cec_idle_engaged = true;
 		if (cfg.hdmi_cec_sleep)
 		{
-			// Avoid powering off the display if MiSTer isn't the active source.
+			// Avoid powering off the display if MiSTer is the active source.
 			if (cec_is_active_source()) cec_send_standby();
 		}
 	}
@@ -1203,6 +1216,10 @@ static void cec_poll_advertise(void)
 
 	case 1:
 		cec_send_device_name(CEC_LOG_ADDR_TV, false);
+		break;
+
+	case 2:
+		cec_send_request_active_source(false);
 		break;
 	}
 
