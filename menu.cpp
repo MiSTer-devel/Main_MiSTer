@@ -351,6 +351,20 @@ void StoreIdx_S(int idx, const char *path)
 
 static char selPath[1024] = {};
 
+static void ResolveExistingCorePath(char *path)
+{
+	while (path[0] && !FileExists(path) && !PathIsDir(path))
+	{
+		char *p = strrchr(path, '/');
+		if (!p)
+		{
+			path[0] = 0;
+			break;
+		}
+		*p = 0;
+	}
+}
+
 static int changeDir(char *dir)
 {
 	char curdir[128];
@@ -416,6 +430,7 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 			if(strlen(selPath)) strcat(selPath, "/");
 			strcat(selPath, get_rbf_name());
 		}
+		ResolveExistingCorePath(selPath);
 		pFileExt = "RBFMRAMGL";
 		home_dir = NULL;
 	}
