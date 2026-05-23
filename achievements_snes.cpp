@@ -458,5 +458,5 @@ const console_handler_t g_console_snes = {
 	.detect_protocol = snes_detect_protocol,
 	.console_id = 3,  // RC_CONSOLE_SUPER_NINTENDO
 	.name = "SNES",
-	.hardcore_protected = 0
+	.hardcore_protected = 1
 };
