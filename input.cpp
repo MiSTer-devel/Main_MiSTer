@@ -2071,6 +2071,38 @@ static void restore_menu_tmp_axis_stage(int pos)
 	sync_menu_tmp_axes();
 }
 
+static int tmp_axis_contains_axis(uint16_t axis)
+{
+	for (int i = 0; i < (int)(sizeof(tmp_axis) / sizeof(tmp_axis[0])); i++)
+	{
+		if ((tmp_axis[i] & MAP_FLAG_ANALOG) && map_axis_code(tmp_axis[i]) == axis) return 1;
+	}
+	return 0;
+}
+
+static int reserve_tmp_axis_slots_for_pos(int pos)
+{
+	int min_count = 0;
+	switch (pos)
+	{
+	case -3: min_count = 1; break; // left stick Y
+	case -2: min_count = 2; break; // right stick X
+	case -1: min_count = 3; break; // right stick Y
+	}
+
+	while (tmp_axis_n < min_count && tmp_axis_n < (int)(sizeof(tmp_axis) / sizeof(tmp_axis[0])))
+		tmp_axis[tmp_axis_n++] = 0;
+
+	return tmp_axis_n < (int)(sizeof(tmp_axis) / sizeof(tmp_axis[0]));
+}
+
+static int append_tmp_axis_for_pos(int pos, uint16_t axis)
+{
+	if (!reserve_tmp_axis_slots_for_pos(pos)) return 0;
+	tmp_axis[tmp_axis_n++] = axis | MAP_FLAG_ANALOG;
+	return 1;
+}
+
 static int grabbed = 1;
 
 static uint32_t osd_timer = 0;
@@ -2138,7 +2170,6 @@ static void advance_map_button()
 		return;
 
 	mapping_button++;
-	if (mapping_button < 0 && (mapping_button & 1)) mapping_button++;
 
 	while (mapping_type <= 1 && mapping_button < mapping_count)
 	{
@@ -3737,22 +3768,22 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			else
 			{
-				if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS1_X])
+				if ((input[dev].mmap[SYS_AXIS_X] & MAP_FLAG_ANALOG) && input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS1_X])
 				{
 					input[dev].stick_l[0] = SYS_AXIS1_X;
 					if (input[dev].mmap[SYS_AXIS2_X] & MAP_FLAG_ANALOG) input[dev].stick_r[0] = SYS_AXIS2_X;
 				}
-				if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS1_Y])
+				if ((input[dev].mmap[SYS_AXIS_Y] & MAP_FLAG_ANALOG) && input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS1_Y])
 				{
 					input[dev].stick_l[1] = SYS_AXIS1_Y;
 					if (input[dev].mmap[SYS_AXIS2_Y] & MAP_FLAG_ANALOG) input[dev].stick_r[1] = SYS_AXIS2_Y;
 				}
-				if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS2_X])
+				if ((input[dev].mmap[SYS_AXIS_X] & MAP_FLAG_ANALOG) && input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS2_X])
 				{
 					input[dev].stick_l[0] = SYS_AXIS2_X;
 					if (input[dev].mmap[SYS_AXIS1_X] & MAP_FLAG_ANALOG) input[dev].stick_r[0] = SYS_AXIS1_X;
 				}
-				if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS2_Y])
+				if ((input[dev].mmap[SYS_AXIS_Y] & MAP_FLAG_ANALOG) && input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS2_Y])
 				{
 					input[dev].stick_l[1] = SYS_AXIS2_Y;
 					if (input[dev].mmap[SYS_AXIS1_Y] & MAP_FLAG_ANALOG) input[dev].stick_r[1] = SYS_AXIS1_Y;
@@ -4321,12 +4352,9 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					{
 						if (mapping_button < 0)
 						{
-							int found = 0;
-							for (int i = 0; i < tmp_axis_n; i++) if (ev->code == (tmp_axis[i] & 0xFFFF)) found = 1;
-							if (!found)
+							if (!tmp_axis_contains_axis(ev->code) && append_tmp_axis_for_pos(mapping_button, ev->code))
 							{
 								mapping_type = 1;
-								tmp_axis[tmp_axis_n++] = ev->code | MAP_FLAG_ANALOG;
 								//if (min) tmp_axis[idx - AXIS1_X] |= 0x10000;
 								mapping_button++;
 								if (tmp_axis_n >= 4) mapping_button = 0;
