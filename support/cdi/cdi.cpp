@@ -176,17 +176,17 @@ static int load_chd(const char* filename, toc_t* table)
 
 static int load_cue(const char* filename, toc_t* table)
 {
-	static char fname[1024 + 10];
-	static char line[128];
+	char fname[1024 + 10];
+	char line[128];
 	char *ptr, *lptr;
-	static char cue[100 * 1024];
+	auto cue = std::make_unique<char[]>(CUE_BUFFER_SIZE);
 
 	unload_cue(table);
 	strcpy(fname, filename);
 	printf("\x1b[32mCDI: Open CUE: %s\n\x1b[0m", fname);
 
-	memset(cue, 0, sizeof(cue));
-	if (!FileLoad(fname, cue, sizeof(cue) - 1))
+	memset(cue.get(), 0, sizeof(cue));
+	if (!FileLoad(fname, cue.get(), CUE_BUFFER_SIZE - 1))
 	{
 		printf("\x1b[32mCDI: cannot load file: %s\n\x1b[0m", fname);
 		return 0;
@@ -213,7 +213,7 @@ static int load_cue(const char* filename, toc_t* table)
 	int index0 = 0;
 	int index1 = 0;
 
-	char* buf = cue;
+	char* buf = cue.get();
 	while (sgets(line, sizeof(line), &buf))
 	{
 		lptr = line;
