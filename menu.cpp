@@ -351,6 +351,20 @@ void StoreIdx_S(int idx, const char *path)
 
 static char selPath[1024] = {};
 
+static void ResolveExistingCorePath(char *path)
+{
+	while (path[0] && !FileExists(path) && !PathIsDir(path))
+	{
+		char *p = strrchr(path, '/');
+		if (!p)
+		{
+			path[0] = 0;
+			break;
+		}
+		*p = 0;
+	}
+}
+
 static int changeDir(char *dir)
 {
 	char curdir[128];
@@ -416,6 +430,7 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 			if(strlen(selPath)) strcat(selPath, "/");
 			strcat(selPath, get_rbf_name());
 		}
+		ResolveExistingCorePath(selPath);
 		pFileExt = "RBFMRAMGL";
 		home_dir = NULL;
 	}
@@ -1238,8 +1253,7 @@ void HandleUI(void)
 			{
 				off_timeout = 0;
 				video_menu_bg(user_io_status_get("[3:1]"), cfg.video_off_logo ? 4 : 3);
-				if (cfg.video_off_hdmi) video_hdmi_power(0);
-				else if (cfg.video_off_logo) off_timeout = GetTimer(10000);
+				if (cfg.video_off_logo) off_timeout = GetTimer(10000);
 			}
 
 			if (c || menustate != MENU_FILE_SELECT2)
@@ -1249,7 +1263,6 @@ void HandleUI(void)
 				{
 					c = 0;
 					menu_visible = 1;
-					if (cfg.video_off_hdmi) video_hdmi_power(1);
 					video_menu_bg(user_io_status_get("[3:1]"));
 					OsdMenuCtl(1);
 					off_timeout = 0;

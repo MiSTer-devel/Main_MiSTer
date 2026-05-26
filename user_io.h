@@ -205,6 +205,7 @@ fileTYPE *get_image(int i);
 int user_io_get_kbdemu();
 uint32_t user_io_get_uart_mode();
 
+uint32_t user_io_get_activity_seq();
 void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w);
 void user_io_kbd(uint16_t key, int press);
 char* user_io_create_config_name(int with_ver = 0);

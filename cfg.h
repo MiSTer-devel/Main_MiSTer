@@ -19,6 +19,12 @@ typedef struct {
 	uint8_t hdmi_audio_96k;
 	uint8_t dvi_mode;
 	uint8_t hdmi_limited;
+	uint8_t hdmi_cec;
+	uint8_t hdmi_cec_sleep;
+	uint8_t hdmi_cec_wake;
+	uint8_t hdmi_cec_input_mode;
+	uint8_t hdmi_cec_power_on;
+	float hdmi_cec_clock;
 	uint8_t direct_video;
 	uint8_t video_info;
 	float refresh_min;
@@ -80,7 +86,6 @@ typedef struct {
 	uint8_t vrr_mode;
 	uint8_t vrr_vesa_framerate;
 	uint16_t video_off;
-	uint8_t video_off_hdmi;
 	uint8_t video_off_logo;
 	uint8_t disable_autofire;
 	uint8_t video_brightness;
@@ -106,6 +111,7 @@ typedef struct {
 	char screenshot_image_format[16];
 	uint16_t xbe2_shift;
 	uint8_t spd_quirk;
+	uint16_t hdmi_off;
 } cfg_t;
 
 extern cfg_t cfg;
