@@ -1,0 +1,56 @@
+# Indentation
+UseTab: Always
+IndentWidth: 4
+TabWidth: 4
+ContinuationIndentWidth: 4
+
+# Line length
+ColumnLimit: 120
+
+# Braces
+BreakBeforeBraces: Allman
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortBlocksOnASingleLine: Never
+IndentCaseLabels: true
+
+
+# Pointer/reference style
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Spaces
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceInEmptyParentheses: false
+SpaceAfterCStyleCast: false
+
+# Includes
+SortIncludes: Never
+IncludeBlocks: Preserve
+
+# Alignment
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignTrailingComments: true
+
+# Wrapping
+BinPackArguments: false
+BinPackParameters: false
+
+# C/C++
+Standard: c++17
+
+# Switches/enums
+AllowShortCaseLabelsOnASingleLine: false
+
+# Empty lines
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 2
+
+# Misc
+IndentPPDirectives: None
+ReflowComments: false
+Cpp11BracedListStyle: true
