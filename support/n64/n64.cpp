@@ -6,6 +6,7 @@
 
 #include "../../hardware.h"
 #include "../../menu.h"
+#include "../serial_memcard/serial_memcard.h"
 #include "../../shmem.h"
 #include "../../lib/md5/md5.h"
 
@@ -313,6 +314,7 @@ static uint32_t get_save_offset(unsigned char idx) {
 static char full_path[1024];
 static uint8_t save_file_buf[0x20000]; // Largest save size
 static uint8_t mounted_save_files = 0;
+static uint8_t mounted_cpak_files = 0;
 
 static size_t create_file(const char* filename, const uint8_t* data, size_t sz) {
 	snprintf(full_path, sizeof(full_path), "%s/%s", getRootDir(), filename);
@@ -360,6 +362,7 @@ static N64SaveFile* save_files[8] = { nullptr };
 struct N64SaveFile {
 	int idx;
 	MemoryType type;
+	bool read_logged;
 
 	fileTYPE* get_image() const {
 		return ((this->idx >= 0) && (this->idx < (int)(sizeof(save_files) / sizeof(*save_files)))) ? (fileTYPE*)::get_image(this->idx) : nullptr;
@@ -446,6 +449,7 @@ struct N64SaveFile {
 		}
 		user_io_file_mount(path, idx, 1, pre_size);
 		this->idx = idx;
+		this->read_logged = false;
 		save_files[idx] = this;
 	}
 
@@ -463,6 +467,7 @@ struct N64SaveFile {
 	N64SaveFile(MemoryType type) {
 		this->idx = -1; // Unmounted
 		this->type = type;
+		this->read_logged = false;
 	}
 };
 
@@ -1046,6 +1051,14 @@ static void mount_save_core(const char* save_path, const MemoryType type, const 
 static void mount_save(const MemoryType type, const char* old_path) {
 	static char save_path[1024];
 	create_save_path(save_path, type);
+	if (type == MemoryType::CPAK) {
+		const uint8_t cpak_index = mounted_cpak_files;
+		if (!serial_memcard_prepare_n64_cpak(cpak_index, save_path, sizeof(save_path)) &&
+		    cpak_index == 0 && serial_memcard_enabled()) {
+			printf("Serial memcard: no N64 Controller Pak found; using local .cpk saves.\n");
+		}
+		mounted_cpak_files++;
+	}
 	mount_save_core(save_path, type, old_path);
 }
 
@@ -1058,6 +1071,7 @@ static void unmount_all_saves() {
 		}
 	}
 	mounted_save_files = 0;
+	mounted_cpak_files = 0;
 }
 
 static void mount_save_gb(const char* old_path) {
@@ -1079,6 +1093,7 @@ static void mount_save_gb(const char* old_path) {
 		return;
 	}
 
+	strcpy(core_name, "GAMEBOY");
 	if (strncmp(current_rom_path_gb, GAMES_DIR"/", games_path_len) ||
 		!(p = strchr(current_rom_path_gb + games_path_len, '/'))) {
 		printf("Unrecognized Game Boy game save path. Will use \"/" SAVE_DIR"/%s/\".\n", core_name);
@@ -1112,6 +1127,12 @@ static void mount_save_gb(const char* old_path) {
 	}
 	else {
 		strcat(fname, ext_gb_save);
+	}
+
+	char serial_save_path[1024] = {};
+	if (serial_memcard_prepare_n64_tpak_for_rom(current_rom_path_gb, serial_save_path, sizeof(serial_save_path))) {
+		mount_save_core(serial_save_path, MemoryType::TPAK, old_path);
+		return;
 	}
 
 	auto save_file = new N64SaveFile(MemoryType::TPAK);
@@ -1196,6 +1217,36 @@ static N64SaveFile* resolve_save_file(const uint64_t sector_index, const uint32_
 	return nullptr;
 }
 
+static bool range_in_optional_save_region(uint64_t start, uint64_t size, uint64_t region_start, uint64_t region_size) {
+	const uint64_t end = start + size;
+	const uint64_t region_end = region_start + region_size;
+	return start >= region_start && end <= region_end;
+}
+
+static bool is_missing_optional_save_region(const uint64_t sector_index, const uint32_t sector_size,
+                                            const uint32_t chunk_size) {
+	const uint64_t start = sector_index * sector_size;
+	const uint8_t cart_slots = (get_cart_save_type() == MemoryType::NONE) ? 0 : 1;
+	const uint8_t tpak_slots = user_io_status_get(TPAK_OPT) ? 1 : 0;
+
+	if (tpak_slots) {
+		const uint64_t tpak_start = get_save_offset(cart_slots);
+		if (range_in_optional_save_region(start, chunk_size, tpak_start, get_save_size(MemoryType::TPAK))) {
+			return true;
+		}
+	}
+
+	if (user_io_status_get(CPAK_OPT)) {
+		const uint64_t cpak_start = get_save_offset(cart_slots + tpak_slots);
+		const uint64_t cpak_size = get_save_size(MemoryType::CPAK) * 4;
+		if (range_in_optional_save_region(start, chunk_size, cpak_start, cpak_size)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void write_save_file(const uint64_t sector_index, const uint32_t sector_size, const int ack_flags,
                             uint8_t* buffer, uint32_t chunk_size) {
 	uint64_t file_offset;
@@ -1230,7 +1281,9 @@ static void write_save_file(const uint64_t sector_index, const uint32_t sector_s
 		if ((chunk_size != (uint32_t)FileReadAdv(img, existing_data, chunk_size)) || memcmp(buffer, existing_data, chunk_size)) {
 			menu_process_save();
 			FileSeek(img, file_offset, SEEK_SET);
-			FileWriteAdv(img, buffer, chunk_size);
+			if (FileWriteAdv(img, buffer, chunk_size)) {
+				serial_memcard_handle_write(file_index, file_offset, buffer, chunk_size);
+			}
 		}
 
 		// Log success if we hit the end of the file.
@@ -1242,10 +1295,11 @@ static void write_save_file(const uint64_t sector_index, const uint32_t sector_s
 
 static void read_save_file(const uint64_t sector_index, const uint32_t sector_size, const int ack_flags,
                            uint64_t& confirmed_sector, uint8_t* buffer, const uint32_t buffer_capacity, uint32_t chunk_size) {
-	uint8_t file_index;
+	uint8_t file_index = 0;
 	uint64_t file_offset;
 
 	N64SaveFile* file = resolve_save_file(sector_index, sector_size, chunk_size, file_index, file_offset);
+	bool mapped_file_read_failed = false;
 
 	if (file) {
 		fileTYPE* img = file->get_image();
@@ -1264,20 +1318,37 @@ static void read_save_file(const uint64_t sector_index, const uint32_t sector_si
 					memset(buffer + bytes_read, 0, chunk_size - bytes_read);
 				}
 
-				// Log success if we hit the end of the file.
-				if ((file_offset + sector_size) >= (uint64_t)img->size) {
+				// Log one successful full-image read per mount; the N64 core can
+				// poll Transfer Pak saves repeatedly while the image is active.
+				if (!file->read_logged && (file_offset + sector_size) >= (uint64_t)img->size) {
 					printf("Read N64 save data from \"%s\". (%lld bytes)\n", get_image_name(file_index), img->size);
+					file->read_logged = true;
 				}
 
 				confirmed_sector = sector_index;
 			}
+			else {
+				mapped_file_read_failed = true;
+			}
+		}
+		else {
+			mapped_file_read_failed = true;
 		}
 	}
 
-	// Handle failure case (file not found, unmounted, or read error).
-	if (confirmed_sector == -1LLU) {
-		printf("Couldn't Read N64 save data from \"%s\"!!\n", get_image_name(file_index));
+	if (confirmed_sector == -1LLU && mapped_file_read_failed) {
+		const char* image_name = get_image_name(file_index);
+		printf("Couldn't Read N64 save data from \"%s\"!!\n", image_name ? image_name : "(unmounted)");
+	}
+
+	// Missing optional accessory regions are valid: for example a game can
+	// expose Transfer Pak plus Controller Pak slots without all physical paks
+	// being mounted. Confirm only those bounded optional regions as zero-filled
+	// so genuine cart-save mapping errors still surface.
+	if (confirmed_sector == -1LLU && !mapped_file_read_failed &&
+	    is_missing_optional_save_region(sector_index, sector_size, chunk_size)) {
 		memset(buffer, 0, buffer_capacity);
+		confirmed_sector = sector_index;
 	}
 
 	// Send sector data to FPGA.
@@ -1308,6 +1379,7 @@ bool n64_process_save(const bool use_save, const int op, const uint64_t sector_i
 }
 
 static void mount_all_saves() {
+	serial_memcard_invalidate_scan_cache();
 	get_old_save_path(old_save_path);
 	auto cart_save_type = get_cart_save_type();
 
@@ -1414,6 +1486,13 @@ void n64_cheats_send(const void* buf_ptr, const uint32_t size) {
 }
 
 static unsigned long poll_timer = 0;
+static bool serial_cpak_prefetch_requested = false;
+static unsigned long serial_cpak_prefetch_timer = 0;
+
+void n64_core_loaded() {
+	serial_cpak_prefetch_requested = false;
+	serial_cpak_prefetch_timer = 0;
+}
 
 void n64_reset() {
 	printf("Resetting N64...\n");
@@ -1428,6 +1507,12 @@ void n64_reset() {
 
 void n64_poll() {
 	static uint8_t adj = 0;
+
+	if (!serial_cpak_prefetch_requested &&
+	    (!serial_cpak_prefetch_timer || CheckTimer(serial_cpak_prefetch_timer))) {
+		serial_cpak_prefetch_requested = serial_memcard_prefetch_n64_cpak();
+		if (!serial_cpak_prefetch_requested) serial_cpak_prefetch_timer = GetTimer(1000);
+	}
 
 	if (!poll_timer || CheckTimer(poll_timer)) {
 		if (!(loaded && is_fpga_ready(0))) {
@@ -1511,6 +1596,12 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 			strcpy(current_rom_path_gb, name);
 			if (*current_rom_path && user_io_status_get(TPAK_OPT)) {
 				mount_all_saves();
+				if (cfg.controller_info) {
+					char memcard_info[256] = {};
+					if (serial_memcard_take_mount_info_summary(memcard_info, sizeof(memcard_info))) {
+						Info(memcard_info, 2500);
+					}
+				}
 
 				// Force reload of backup RAM
 				user_io_status_set(RELOAD_SAVE_OPT, 1);
@@ -1746,6 +1837,13 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 
 	mount_all_saves();
 
+	char memcard_info[256] = {};
+	const bool combine_memcard_info = cfg.controller_info && is_auto();
+	const bool has_memcard_info = cfg.controller_info &&
+		(combine_memcard_info ?
+		 serial_memcard_take_mount_info_summary(memcard_info, sizeof(memcard_info)) :
+		 serial_memcard_take_mount_info(memcard_info, sizeof(memcard_info)));
+
 	// Signal end of transmission
 	user_io_set_download(0);
 	ProgressMessage();
@@ -1753,6 +1851,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 	loaded = 1;
 
 	if (!cfg.controller_info || !is_auto()) {
+		if (has_memcard_info) Info(memcard_info, 2500);
 		return 1;
 	}
 
@@ -1761,6 +1860,12 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 
 	char info[256];
 	size_t len = sprintf(info, "Auto-detect:");
+	auto append_memcard_info = [&]() {
+		if (!has_memcard_info || !memcard_info[0]) return;
+		const size_t cur = strlen(info);
+		if (cur >= sizeof(info) - 1) return;
+		snprintf(info + cur, sizeof(info) - cur, "\n%s", memcard_info);
+	};
 	if (*cart_id && ((cart_id[1] != 'E') || (cart_id[2] != 'D'))) len += sprintf(info + len, "\n[%.4s] v.%u.%u", cart_id, hex_to_dec(cart_id[4]) + 1, hex_to_dec(cart_id[5]));
 	if (*internal_name) len += sprintf(info + len, "\n\"%s\"", internal_name);
 	if (!(rom_settings_detected & 1)) {
@@ -1774,6 +1879,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 
 	if (!(rom_settings_detected & 2)) {
 		sprintf(info + len, "\nROM missing from database.\nYou might not be able to save.");
+		append_memcard_info();
 
 		Info(info, cfg.controller_info * 1000);
 	}
@@ -1792,6 +1898,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 		if (rtc) len += sprintf(info + len, "\nRTC \x96");
 		if (no_epak) len += sprintf(info + len, "\nDisable Exp. Pak \x96");
 		if (is_patched) sprintf(info + len, "\nPatched \x96");
+		append_memcard_info();
 
 		Info(info, cfg.controller_info * 1000);
 	}

@@ -40,6 +40,7 @@
 #include "frame_timer.h"
 #include "scaler.h"
 #include "support.h"
+#include "support/serial_memcard/serial_memcard.h"
 
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};
@@ -52,6 +53,7 @@ static fileTYPE sd_image[16] = {};
 
 static int      sd_type[16] = {};
 static unsigned char last_file_ext_idx = 0;
+static bool     file_tx_active = false;
 static int      sd_image_cangrow[16] = {};
 static uint64_t buffer_lba[16] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
 								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
@@ -318,6 +320,21 @@ char is_gba()
 	return (is_gba_type == 1);
 }
 
+static int is_gameboy_type = 0;
+char is_gameboy()
+{
+	if (!is_gameboy_type) {
+		if (!strcasecmp(orig_name, "GAMEBOY") ||
+		    !strcasecmp(orig_name, "GBC")) {
+			is_gameboy_type = 1;
+		}
+		else {
+			is_gameboy_type = 2;
+		}
+	}
+	return (is_gameboy_type == 1);
+}
+
 static int is_c64_type = 0;
 char is_c64()
 {
@@ -432,6 +449,7 @@ void user_io_read_core_name()
 	is_pce_type = 0;
 	is_archie_type = 0;
 	is_gba_type = 0;
+	is_gameboy_type = 0;
 	is_c64_type = 0;
 	is_c128_type = 0;
 	is_atari800_type = 0;
@@ -454,6 +472,7 @@ void user_io_read_core_name()
 	else if (orig_name[0]) strcpy(core_name, p);
 
 	printf("Core name is \"%s\"\n", core_name);
+	serial_memcard_invalidate_scan_cache();
 }
 
 int substrcpy(char *d, const char *s, char idx)
@@ -533,7 +552,8 @@ uint32_t user_io_status_get(const char *opt, int ex)
 	int size = user_io_status_bits(opt, &start, &end, ex);
 	if (!size) return 0;
 
-	uint32_t x = (cur_status[end / 8] << 8) | cur_status[start / 8];
+	uint32_t x = ((uint32_t)(uint8_t)cur_status[end / 8] << 8) |
+	             (uint8_t)cur_status[start / 8];
 	x >>= start % 8;
 	return x & ~(0xffffffff << size);
 }
@@ -562,7 +582,10 @@ void user_io_status_set(const char *opt, uint32_t value, int ex)
 
 	uint32_t mask = ~(0xffffffff << size);
 	mask <<= start % 8;
-	uint32_t x = (cur_status[e] << 8) | cur_status[s];
+	// Treat status storage as raw bytes. Signed-char promotion corrupts
+	// byte-crossing fields when bit 7 is set.
+	uint32_t x = ((uint32_t)(uint8_t)cur_status[e] << 8) |
+	             (uint8_t)cur_status[s];
 	x = (x & ~mask) | ((value << (start % 8)) & mask);
 
 	cur_status[s] = (char)x;
@@ -571,7 +594,10 @@ void user_io_status_set(const char *opt, uint32_t value, int ex)
 	if (!is_st())
 	{
 		spi_uio_cmd_cont(UIO_SET_STATUS2);
-		for (uint32_t i = 0; i < sizeof(cur_status); i += 2) spi_w((cur_status[i + 1] << 8) | cur_status[i]);
+		for (uint32_t i = 0; i < sizeof(cur_status); i += 2) {
+			spi_w(((uint16_t)(uint8_t)cur_status[i + 1] << 8) |
+			      (uint8_t)cur_status[i]);
+		}
 		DisableIO();
 	}
 }
@@ -1469,6 +1495,7 @@ void user_io_init(const char *path, const char *xml)
 	ide_reset(hotswap);
 
 	parse_config();
+	if (is_n64()) n64_core_loaded();
 	if (!xml && defmra[0] && FileExists(defmra))
 	{
 		// attn: FC option won't use name from defmra!
@@ -1614,6 +1641,8 @@ void user_io_init(const char *path, const char *xml)
 						game_docs_init("", user_io_get_file_crc());
 						if (user_io_use_cheats()) cheats_init("", user_io_get_file_crc());
 					}
+
+					if (is_psx()) psx_request_bios_save_mount();
 
 					if (is_cpc())
 					{
@@ -2088,6 +2117,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	int len = strlen(name);
 	int img_type = 0; // disk image type (for C128 core): bit 0=dual sided, 1=raw GCR supported, 2=raw MFM supported, 3=high density
 
+	serial_memcard_unmount(index);
 	sd_image_cangrow[index] = (pre != 0);
 	sd_type[index] = SD_TYPE_DEFAULT ;
 	if (len)
@@ -2192,7 +2222,16 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 	else
 	{
-		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", index);
+		const bool serial_mount = serial_memcard_attach_mount(name, index);
+		if (!serial_mount) {
+			printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", index);
+		}
+		if (!file_tx_active && cfg.controller_info && !is_n64()) {
+			char info[256] = {};
+			if (serial_memcard_take_mount_info(info, sizeof(info))) {
+				Info(info, 2500);
+			}
+		}
 	}
 
 	user_io_sd_set_config();
@@ -2688,6 +2727,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	// prepare transmission of new file
 	user_io_set_download(1, load_addr ? bytes2send : 0);
+	file_tx_active = true;
 
 	int dosend = 1;
 	file_crc = 0;
@@ -2886,8 +2926,14 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 	if (opensave)
 	{
-		FileGenerateSavePath(name, (char*)buf);
-		user_io_file_mount((char*)buf, 0, 1);
+		if (is_gameboy() &&
+		    serial_memcard_prepare_gb_save_for_rom(name, (char*)buf, sizeof(buf))) {
+			user_io_file_mount((char*)buf, 0, 1);
+		}
+		else {
+			FileGenerateSavePath(name, (char*)buf);
+			user_io_file_mount((char*)buf, 0, 1);
+		}
 	}
 
 	// signal end of transmission
@@ -2901,6 +2947,13 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	}
 
 	ProgressMessage(0, 0, 0, 0);
+	file_tx_active = false;
+	if (cfg.controller_info && !is_n64()) {
+		char info[256] = {};
+		if (serial_memcard_take_mount_info(info, sizeof(info))) {
+			Info(info, 2500);
+		}
+	}
 
 	if ((is_snes() || is_sgb()) && !load_addr)
 	{
@@ -3295,6 +3348,7 @@ void user_io_poll()
 						if (FileWriteAdv(&sd_image[disk], buffer[disk], sz))
 						{
 							sd_image[disk].size = sz;
+							serial_memcard_handle_write(disk, 0, buffer[disk], sz);
 						}
 					}
 					else
@@ -3317,7 +3371,9 @@ void user_io_poll()
 								sz = (rem >= sz) ? sz : (int)rem;
 							}
 
-							if (sz) FileWriteAdv(&sd_image[disk], buffer[disk], sz);
+							if (sz && FileWriteAdv(&sd_image[disk], buffer[disk], sz)) {
+								serial_memcard_handle_write(disk, lba * blksz, buffer[disk], sz);
+							}
 						}
 					}
 				}

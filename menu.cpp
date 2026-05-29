@@ -2097,6 +2097,15 @@ void HandleUI(void)
 							//option handled by HPS
 							if (p[1] == 'X') p++;
 							uint32_t x = user_io_status_get(p + 1, p[0] == 'o');
+							if (is_psx() && psx_is_memcard_source_option(p + 1))
+							{
+								uint32_t normalized = psx_memcard_source_normalize(p + 1, x);
+								if (normalized != x)
+								{
+									x = normalized;
+									user_io_status_set(p + 1, x, p[0] == 'o');
+								}
+							}
 
 							// get currently active option
 							substrcpy(s, p, 2 + x);
@@ -2473,6 +2482,15 @@ void HandleUI(void)
 							}
 
 							uint32_t x = user_io_status_get(p + 1, ex);
+							if (is_psx() && psx_is_memcard_source_option(p + 1))
+							{
+								x = psx_memcard_source_next(p + 1, x, minus);
+								user_io_status_set(p + 1, x, ex);
+								psx_memcard_source_changed();
+								menustate = MENU_GENERIC_MAIN1;
+								break;
+							}
+
 							x = minus ? (x - 1) : (x + 1);
 							uint32_t mask = user_io_status_mask(p + 1);
 							x &= mask;

@@ -9,6 +9,7 @@
 #include "../../spi.h"
 #include "../../hardware.h"
 #include "../../menu.h"
+#include "../serial_memcard/serial_memcard.h"
 #include "psx.h"
 #include "mcdheader.h"
 #include "../../cd.h"
@@ -428,20 +429,272 @@ static void send_cue_and_metadata(toc_t *table, uint16_t libcrypt_mask, enum reg
 
 #define MCD_SIZE (128*1024)
 
+static constexpr uint8_t kPsxMemcardIndex1 = 2;
+static constexpr uint8_t kPsxMemcardIndex2 = 3;
+static constexpr const char* kPsxMemcardSourceOpt1 = "[95:93]";
+static constexpr const char* kPsxMemcardSourceOpt2 = "[98:96]";
+
+enum PsxMemcardSource : uint8_t {
+	PsxMemcardAuto = 0,
+	PsxMemcardVirtual = 1,
+	PsxMemcardSerialA = 2,
+	PsxMemcardSerialB = 3,
+	PsxMemcardSerialC = 4,
+	PsxMemcardSerialD = 5,
+	PsxMemcardSnac = 6,
+};
+
+static bool serial_memcard_requested = false;
+static bool serial_memcard_done[2] = { true, true };
+static bool serial_memcard_virtual_fallback[2] = {};
+static uint8_t serial_memcard_pending_source[2] = {};
+static uint32_t serial_memcard_pending_token[2] = {};
+static char psx_save_dir[1024] = {};
+
+static void psx_mount_save(const char *filename);
+
+static bool psx_memcard_source_option_matches(const char* opt, const char* range)
+{
+	if (!opt || !range) return false;
+	size_t len = strlen(range);
+	return !strncmp(opt, range, len) && (!opt[len] || opt[len] == ',');
+}
+
+static bool psx_snac_memcard_available(const char* opt)
+{
+	if (psx_memcard_source_option_matches(opt, kPsxMemcardSourceOpt1)) return user_io_status_get("[48:45]") == 10;
+	if (psx_memcard_source_option_matches(opt, kPsxMemcardSourceOpt2)) return user_io_status_get("[52:49]") == 10;
+	return user_io_status_get("[48:45]") == 10 || user_io_status_get("[52:49]") == 10;
+}
+
+bool psx_is_memcard_source_option(const char* opt)
+{
+	return psx_memcard_source_option_matches(opt, kPsxMemcardSourceOpt1) ||
+	       psx_memcard_source_option_matches(opt, kPsxMemcardSourceOpt2);
+}
+
+static bool psx_memcard_source_available(const char* opt, uint32_t source)
+{
+	if (source == PsxMemcardAuto || source == PsxMemcardVirtual) return true;
+	if (source >= PsxMemcardSerialA && source <= PsxMemcardSerialD)
+	{
+		if (!serial_memcard_psx_slots_scanned()) return serial_memcard_enabled();
+		return serial_memcard_psx_slot_mask() & (1U << (source - PsxMemcardSerialA));
+	}
+	if (source == PsxMemcardSnac) return psx_snac_memcard_available(opt);
+	return false;
+}
+
+uint32_t psx_memcard_source_normalize(const char* opt, uint32_t source)
+{
+	if (!psx_is_memcard_source_option(opt)) return source;
+	return psx_memcard_source_available(opt, source) ? source : (uint32_t)PsxMemcardAuto;
+}
+
+uint32_t psx_memcard_source_next(const char* opt, uint32_t source, bool reverse)
+{
+	if (!psx_is_memcard_source_option(opt)) return source;
+
+	for (int i = 0; i < 8; ++i)
+	{
+		source = reverse ? ((source - 1) & 7) : ((source + 1) & 7);
+		if (psx_memcard_source_available(opt, source)) return source;
+	}
+	return PsxMemcardAuto;
+}
+
+static void psx_generate_virtual_save_path(const char *filename, uint8_t slot, char* out, size_t out_len)
+{
+	FileGenerateSavePath(filename, out, 0);
+	if (!slot) return;
+
+	char *ext = strrchr(out, '.');
+	if (!ext || strlen(out) + 2 >= out_len) return;
+	memmove(ext + 2, ext, strlen(ext) + 1);
+	memcpy(ext, "_2", 2);
+}
+
+static void psx_mount_empty_save(uint8_t index)
+{
+	serial_memcard_cancel_async_mount(index);
+	user_io_set_index(index);
+	user_io_file_mount("", index);
+	StoreIdx_S(index, "");
+}
+
+static void psx_mount_virtual_save(uint8_t index, uint8_t slot, const char *filename)
+{
+	char path[1024] = {};
+	serial_memcard_cancel_async_mount(index);
+	psx_generate_virtual_save_path(filename, slot, path, sizeof(path));
+	user_io_set_index(index);
+	user_io_file_mount(path, index, 1, MCD_SIZE);
+	StoreIdx_S(index, path);
+}
+
+static void psx_reset_serial_state()
+{
+	serial_memcard_requested = false;
+	serial_memcard_done[0] = true;
+	serial_memcard_done[1] = true;
+	serial_memcard_virtual_fallback[0] = false;
+	serial_memcard_virtual_fallback[1] = false;
+}
+
+static void psx_queue_serial_save(uint8_t slot, uint8_t index, uint8_t source, bool fallback_virtual)
+{
+	serial_memcard_requested = true;
+	serial_memcard_done[slot] = false;
+	serial_memcard_virtual_fallback[slot] = fallback_virtual;
+	serial_memcard_pending_source[slot] = source;
+	psx_mount_empty_save(index);
+
+	const uint8_t ordinal = (source == PsxMemcardAuto) ? slot : (source - PsxMemcardSerialA);
+	serial_memcard_pending_token[slot] = serial_memcard_prepare_psx_ordinal_async(ordinal, index);
+}
+
+static void psx_queue_serial_auto_saves(bool fallback_virtual)
+{
+	const uint8_t indexes[] = { kPsxMemcardIndex1, kPsxMemcardIndex2 };
+
+	serial_memcard_requested = true;
+	for (size_t slot = 0; slot < sizeof(indexes) / sizeof(indexes[0]); ++slot)
+	{
+		serial_memcard_done[slot] = false;
+		serial_memcard_virtual_fallback[slot] = fallback_virtual;
+		serial_memcard_pending_source[slot] = PsxMemcardAuto;
+		psx_mount_empty_save(indexes[slot]);
+	}
+
+	const uint32_t token = serial_memcard_prepare_psx_auto_async(indexes[0], indexes[1]);
+	for (size_t slot = 0; slot < sizeof(indexes) / sizeof(indexes[0]); ++slot)
+	{
+		serial_memcard_pending_token[slot] = token;
+	}
+}
+
+static void psx_apply_memcard_sources(const char* filename, bool fallback_virtual)
+{
+	serial_memcard_invalidate_scan_cache();
+
+	const uint8_t indexes[] = { kPsxMemcardIndex1, kPsxMemcardIndex2 };
+	uint8_t sources[] = { PsxMemcardAuto, PsxMemcardAuto };
+	bool snac_source = false;
+	const bool has_filename = filename && filename[0];
+	const bool serial_available = serial_memcard_enabled();
+	for (size_t slot = 0; slot < sizeof(indexes) / sizeof(indexes[0]); ++slot)
+	{
+		const char* opt = slot ? kPsxMemcardSourceOpt2 : kPsxMemcardSourceOpt1;
+		sources[slot] = (uint8_t)psx_memcard_source_normalize(opt, user_io_status_get(opt));
+		user_io_status_set(opt, sources[slot]);
+	}
+
+	if (sources[0] == PsxMemcardAuto && sources[1] == PsxMemcardAuto)
+	{
+		if (serial_available) {
+			psx_queue_serial_auto_saves(fallback_virtual);
+		}
+		else if (has_filename && fallback_virtual) {
+			psx_mount_virtual_save(indexes[0], 0, filename);
+			psx_mount_virtual_save(indexes[1], 1, filename);
+		}
+		user_io_status_set("[66]", 0);
+		return;
+	}
+
+	for (size_t slot = 0; slot < sizeof(indexes) / sizeof(indexes[0]); ++slot)
+	{
+		if (sources[slot] == PsxMemcardAuto)
+		{
+			if (serial_available) psx_queue_serial_save(slot, indexes[slot], sources[slot], fallback_virtual);
+			else if (has_filename && fallback_virtual) psx_mount_virtual_save(indexes[slot], slot, filename);
+		}
+		else if (sources[slot] == PsxMemcardVirtual)
+		{
+			if (has_filename) psx_mount_virtual_save(indexes[slot], slot, filename);
+		}
+		else if (sources[slot] >= PsxMemcardSerialA && sources[slot] <= PsxMemcardSerialD)
+		{
+			psx_queue_serial_save(slot, indexes[slot], sources[slot], false);
+		}
+		else if (sources[slot] == PsxMemcardSnac)
+		{
+			snac_source = true;
+			psx_mount_empty_save(indexes[slot]);
+		}
+	}
+	user_io_status_set("[66]", snac_source ? 1 : 0);
+}
+
+static void psx_request_serial_saves()
+{
+	if (user_io_status_get("[63]")) return;
+	if (serial_memcard_requested) return;
+
+	if (psx_save_dir[0])
+	{
+		psx_mount_save(psx_save_dir);
+		return;
+	}
+
+	psx_reset_serial_state();
+	psx_apply_memcard_sources(nullptr, false);
+}
+
+static void psx_poll_serial_saves()
+{
+	if (!serial_memcard_requested) return;
+
+	const uint8_t indexes[] = { kPsxMemcardIndex1, kPsxMemcardIndex2 };
+	for (size_t i = 0; i < sizeof(indexes) / sizeof(indexes[0]); ++i)
+	{
+		if (serial_memcard_done[i]) continue;
+
+		char path[1024] = {};
+		bool done = false;
+		if (serial_memcard_take_async_mount(indexes[i], serial_memcard_pending_token[i], path, sizeof(path), &done))
+		{
+			if (user_io_status_get(i ? kPsxMemcardSourceOpt2 : kPsxMemcardSourceOpt1) == serial_memcard_pending_source[i])
+			{
+				user_io_set_index(indexes[i]);
+				user_io_file_mount(path, indexes[i], 1, MCD_SIZE);
+				StoreIdx_S(indexes[i], path);
+			}
+		}
+		else if (done && serial_memcard_virtual_fallback[i] && psx_save_dir[0])
+		{
+			psx_mount_virtual_save(indexes[i], i, psx_save_dir);
+		}
+		if (done) serial_memcard_done[i] = true;
+	}
+}
+
 static void psx_mount_save(const char *filename)
 {
-	user_io_set_index(2);
 	if (strlen(filename))
 	{
-		FileGenerateSavePath(filename, buf, 0);
-		user_io_file_mount(buf, 2, 1, MCD_SIZE);
-		StoreIdx_S(2, buf);
+		snprintf(psx_save_dir, sizeof(psx_save_dir), "%s", filename);
+		psx_reset_serial_state();
+		psx_apply_memcard_sources(filename, true);
 	}
 	else
 	{
-		user_io_file_mount("", 2);
-		StoreIdx_S(2, "");
+		psx_save_dir[0] = 0;
+		psx_mount_empty_save(kPsxMemcardIndex1);
+		psx_mount_empty_save(kPsxMemcardIndex2);
+		user_io_status_set("[66]", 0);
+		psx_reset_serial_state();
 	}
+}
+
+void psx_memcard_source_changed()
+{
+	if (!user_io_status_get("[63]") && psx_save_dir[0]) psx_mount_save(psx_save_dir);
+}
+
+void psx_request_bios_save_mount()
+{
+	psx_request_serial_saves();
 }
 
 void psx_fill_blanksave(uint8_t *buffer, uint32_t lba, int cnt)
@@ -803,6 +1056,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 
 void psx_poll()
 {
+	psx_poll_serial_saves();
 	spi_uio_cmd(UIO_CD_GET);
 }
 

@@ -281,6 +281,7 @@ char is_megacd();
 char is_pce();
 char is_archie();
 char is_gba();
+char is_gameboy();
 char is_c64();
 char is_c128();
 char is_st();

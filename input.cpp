@@ -36,6 +36,7 @@
 #include "frame_timer.h"
 #include "scaler.h"
 #include "file_io.h"
+#include "support/serial_memcard/serial_memcard.h"
 
 #define NUMDEV 30
 #define UINPUT_NAME "MiSTer virtual input"
@@ -5620,6 +5621,7 @@ int input_test(int getchar)
 
 			if ((pool[NUMDEV].revents & POLLIN) && check_devs())
 			{
+				serial_memcard_rescan_async();
 				printf("Close all devices.\n");
 				for (int i = 0; i < NUMDEV; i++) if (pool[i].fd >= 0)
 				{
