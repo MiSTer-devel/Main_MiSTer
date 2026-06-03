@@ -874,13 +874,15 @@ void subcode_q_data(int lba, struct subcode& out)
 void cdi_read_cd(uint8_t* buffer, int lba, int cnt)
 {
 	int calc_lba = lba;
-	uint8_t am, as, af;
+	uint8_t am;
 	am = calc_lba / (60 * 75);
 	calc_lba -= am * (60 * 75);
+
+#if 0
+	uint8_t as, af;
 	as = calc_lba / 75;
 	af = calc_lba % 75;
 
-#if 0
 	printf("req lba=%d, cnt=%d   %02d:%02d:%02d   %d %d\n",
 		   lba,
 		   cnt,
