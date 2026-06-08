@@ -1405,8 +1405,16 @@ int hdmi_has_int()
 	static int has_int = -1;
 	if (has_int < 0)
 	{
-		has_int = spi_uio_cmd(UIO_HDMI_INT);
-		if (!has_int) printf("HDMI interrupt pin is not available in this core. Hotplug and CEC won't be available.\n");
+		if (!cfg.hdmi_int)
+		{
+			has_int = 0; // disabled by default; avoids false probe on clone boards
+			printf("HDMI interrupt handling disabled (HDMI_INT=0). Hotplug and CEC won't be available.\n");
+		}
+		else
+		{
+			has_int = spi_uio_cmd(UIO_HDMI_INT);
+			if (!has_int) printf("HDMI interrupt pin is not available in this core. Hotplug and CEC won't be available.\n");
+		}
 	}
 	return has_int;
 }
