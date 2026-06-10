@@ -1800,16 +1800,21 @@ static void read_edid_segment(uint8_t segment, uint8_t *buf)
 	usleep(1000);
 	i2c_smbus_write_byte_data(hdmi_main_fd, 0xC9, 0x13);
 
+	bool edid_ready = false;
 	unsigned long timeout = GetTimer(500);
 	while (!CheckTimer(timeout))
 	{
-		if (i2c_smbus_read_byte_data(hdmi_main_fd, 0x96) & 4)
+		int status = i2c_smbus_read_byte_data(hdmi_main_fd, 0x96);
+		if (status >= 0 && (status & 4))
 		{
 			i2c_smbus_write_byte_data(hdmi_main_fd, 0x96, 4);
+			edid_ready = true;
 			break;
 		}
 		usleep(10000);
 	}
+
+	if (!edid_ready) return;
 
 	for (uint16_t i = 0; i < 256; i++)
 	{
@@ -1836,6 +1841,12 @@ static int read_edid(bool force = false)
 	// waiting for valid EDID
 	for (int k = 0; k < 20; k++)
 	{
+		int current = i2c_smbus_read_byte_data(hdmi_main_fd, 0x42);
+		if (current < 0 || !(current & 0x20))
+		{
+			raw_edid_mfg_id_valid = false;
+			return 0;
+		}
 		read_edid_segment(0, edid);
 		if (is_edid_valid()) break;
 		usleep(100000);
