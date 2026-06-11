@@ -31,8 +31,8 @@
 
 #define NUMPLAYERS          6
 
-#define NUMBUTTONS         32
-#define BUTTON_DPAD_COUNT  12 // dpad + 8 buttons
+#define NUMBUTTONS         38
+#define BUTTON_DPAD_COUNT  16 // dpad + 12 buttons
 
 #define SYS_BTN_RIGHT       0
 #define SYS_BTN_LEFT        1
@@ -64,6 +64,25 @@
 #define SYS_AXIS_Y         29
 #define SYS_AXIS_MX        30
 #define SYS_AXIS_MY        31
+#define SYS_BTN_L2         32
+#define SYS_BTN_R2         33
+#define SYS_BTN_L3         34
+#define SYS_BTN_R3         35
+#define SYS_AXIS_L2        36
+#define SYS_AXIS_R2        37
+
+#define SYS_MAP_BTN_L2     10
+#define SYS_MAP_BTN_SELECT 14
+#define SYS_MAP_POS_OSD    16
+#define SYS_MAP_AXIS_X     19
+#define SYS_MAP_AXIS_Y     20
+
+#define MAP_AXIS_MASK       0x0000FFFF
+#define MAP_FLAG_INVERT     0x00010000
+#define MAP_FLAG_ANALOG     0x00020000
+#define MAP_FLAG_TRIGGER    0x00040000
+#define MAP_FLAG_CENTERED   0x00080000
+#define MAP_FLAG_NEGATIVE   0x00100000
 
 #define SYS_BTN_CNT_OK     21
 #define SYS_BTN_CNT_ESC    22
@@ -103,6 +122,9 @@ int input_poll(int getchar);
 int is_key_pressed(int key);
 
 void start_map_setting(int cnt, int set = 0, advancedButtonMap *code_store = NULL);
+void set_menu_mouse_map(int enable);
+int get_menu_mouse_map();
+int step_back_map_setting();
 int get_map_set();
 int get_map_button();
 int get_map_type();
@@ -115,9 +137,15 @@ uint16_t get_map_pid();
 int get_map_dev();
 advancedButtonMap *get_map_code_store();
 int get_map_advance();
+const char *get_map_feedback();
+const char *get_map_hold_feedback();
+void poll_map_feedback();
 int get_map_count();
 int has_default_map();
 void send_map_cmd(int key);
+void trigger_map_clear();
+int poll_map_hold_action();
+int get_map_active();
 void reset_players();
 
 uint32_t get_key_mod();
