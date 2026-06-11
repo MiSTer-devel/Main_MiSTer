@@ -775,17 +775,17 @@ static bool cec_receive_message(cec_message_t *msg)
 	return ok;
 }
 
-static bool cec_is_active_source(void)
+// assume_when_unknown: when no active source is known, assume it is us.
+// Pass false to require a confirmed match (e.g. before skipping a TV wake).
+static bool cec_is_active_source(bool assume_when_unknown = true)
 {
 	if (cec_active_physical_addr == CEC_INVALID_PHYS_ADDR)
 	{
-		printf("CEC: cec_active_physical_addr=FFFF - assume no one is active, so we are active.\n");
-		return true;
+		printf("CEC: cec_active_physical_addr=FFFF - no active source%s.\n",
+			assume_when_unknown ? ", assuming we are active" : "");
+		return assume_when_unknown;
 	}
-	else
-	{
-		printf("CEC: cec_active_physical_addr=%04X, cec_physical_addr=%04X\n", cec_active_physical_addr, cec_physical_addr);
-	}
+	printf("CEC: cec_active_physical_addr=%04X, cec_physical_addr=%04X\n", cec_active_physical_addr, cec_physical_addr);
 	return cec_active_physical_addr == cec_physical_addr;
 }
 
@@ -1102,7 +1102,9 @@ static void cec_poll_power_on_switch(void)
 		break;
 
 	case CEC_POWER_ON_WAIT_BEFORE:
-		if (cec_is_active_source())
+		// Unknown source (TV likely asleep) must still get the wake, so don't
+		// assume we are active here.
+		if (cec_is_active_source(false))
 		{
 			cec_power_on_state = CEC_POWER_ON_DONE;
 			cec_power_on_deadline = 0;
