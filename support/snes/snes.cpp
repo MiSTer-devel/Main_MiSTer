@@ -382,6 +382,90 @@ void snes_patch_bs_header(fileTYPE *f, uint8_t *buf)
 	}
 }
 
+static uint32_t snes_mirror(uint32_t addr, uint32_t size)
+{
+	if (!size) return 0;
+	uint32_t base = 0;
+	// Start mask at the highest power-of-2 >= size so it covers
+	// the full address range regardless of ROM size.
+	uint32_t mask = 1u;
+	while (mask < size) mask <<= 1;
+	while (addr >= size)
+	{
+		while (mask && !(addr & mask)) mask >>= 1;
+		if (!mask) return addr % size; // fallback: should not occur
+		addr -= mask;
+		if (size > mask)
+		{
+			size -= mask;
+			base += mask;
+		}
+	mask >>= 1;
+	}
+	return base + addr;
+}
+
+static uint32_t next_pow2(uint32_t v)
+{
+	if (!v) return 1;
+	v--;
+	v |= v >> 1;
+	v |= v >> 2;
+	v |= v >> 4;
+	v |= v >> 8;
+	v |= v >> 16;
+	return v + 1;
+}
+
+uint8_t* snes_get_mirrored_rom(fileTYPE *f, uint32_t *out_size)
+{
+	uint32_t size = f->size;
+	uint8_t *rom = (uint8_t*)malloc(size);
+	if (!rom) { printf("SNES: malloc(%u) failed\n", size); return NULL; }
+
+	FileSeekLBA(f, 0);
+	if (!FileReadAdv(f, rom, size)) {
+		printf("SNES: read failed\n");
+		free(rom);
+		return NULL;
+	}
+
+	// Detect and strip 512-byte copier header (same heuristic as snes_get_header)
+	bool has_header = (size & 512) != 0;
+	if (has_header) size -= 512;
+
+	uint32_t padded = next_pow2(size);
+	if (padded == size) {
+		printf("SNES: ROM size is a power of 2 (%u bytes), no mirroring\n", size);
+		if (has_header) memmove(rom, rom + 512, size);
+		if (out_size) *out_size = size;
+		return rom;
+	}
+
+	printf("SNES: mirroring %u (0x%X) -> %u (0x%X) bytes\n", size, size, padded, padded);
+	uint8_t *data = has_header ? rom + 512 : rom;
+	uint8_t *mirrored = (uint8_t*)malloc(padded);
+	if (!mirrored) {
+		printf("SNES: malloc(%u) for mirrored buffer failed\n", padded);
+		free(rom);
+		return NULL;
+	}
+
+	memcpy(mirrored, data, size);
+	uint32_t pos = size;
+	while (pos < padded) {
+		uint32_t src = snes_mirror(pos, size);
+		uint32_t run = size - src;
+		if (run > padded - pos) run = padded - pos;
+		memcpy(mirrored + pos, data + src, run);
+		pos += run;
+	}
+
+	free(rom);
+	if (out_size) *out_size = padded;
+	return mirrored;
+}
+
 ////////////// MSU /////////////
 
 #define MSU_CD_SET               1
