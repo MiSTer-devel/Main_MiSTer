@@ -1819,7 +1819,7 @@ static void cache_raw_edid_mfg_id()
 	raw_edid_mfg_id_valid = true;
 }
 
-static void read_edid_segment(uint8_t segment, uint8_t *buf)
+static bool read_edid_segment(uint8_t segment, uint8_t *buf)
 {
 	i2c_smbus_write_byte_data(hdmi_main_fd, 0xC4, segment);
 	i2c_smbus_write_byte_data(hdmi_main_fd, 0xC9, 0x03);
@@ -1829,19 +1829,21 @@ static void read_edid_segment(uint8_t segment, uint8_t *buf)
 	unsigned long timeout = GetTimer(500);
 	while (!CheckTimer(timeout))
 	{
-		if (i2c_smbus_read_byte_data(hdmi_main_fd, 0x96) & 4)
+		int status = i2c_smbus_read_byte_data(hdmi_main_fd, 0x96);
+		if (status >= 0 && (status & 4))
 		{
 			i2c_smbus_write_byte_data(hdmi_main_fd, 0x96, 4);
-			break;
+			for (uint16_t i = 0; i < 256; i++)
+			{
+				int value = i2c_smbus_read_byte_data(hdmi_edid_fd, (uint8_t)i);
+				buf[i] = (value < 0) ? 0 : (uint8_t)value;
+			}
+			return true;
 		}
 		usleep(10000);
 	}
 
-	for (uint16_t i = 0; i < 256; i++)
-	{
-		int value = i2c_smbus_read_byte_data(hdmi_edid_fd, (uint8_t)i);
-		buf[i] = (value < 0) ? 0 : (uint8_t)value;
-	}
+	return false;
 }
 
 static int read_edid(bool force = false)
@@ -1862,8 +1864,15 @@ static int read_edid(bool force = false)
 	// waiting for valid EDID
 	for (int k = 0; k < 20; k++)
 	{
-		read_edid_segment(0, edid);
+		int current = i2c_smbus_read_byte_data(hdmi_main_fd, 0x42);
+		if (current < 0 || !(current & 0x20))
+		{
+			raw_edid_mfg_id_valid = false;
+			return 0;
+		}
+		bool got_interrupt = read_edid_segment(0, edid);
 		if (is_edid_valid()) break;
+		if (!got_interrupt) break;  // no DDC response — display has no EDID, don't retry
 		usleep(100000);
 	}
 
