@@ -1461,6 +1461,7 @@ typedef struct
 
 	uint8_t  led;
 	uint8_t  mouse;
+	uint8_t  mouse_port; // dual-mouse: 2nd physical mouse -> COM3 serial mouse (port 2); 0 = unset (->PS/2)
 	uint8_t  axis_edge[256];
 	int8_t   axis_pos[256];
 
@@ -2023,6 +2024,12 @@ static int mouse_req = 0;
 static int mouse_x = 0;
 static int mouse_y = 0;
 static int mouse_w = 0;
+// second mouse (ao486 COM3 serial mouse) - dual-mouse support
+static unsigned char mice2_btn = 0;
+static int mouse2_req = 0;
+static int mouse2_x = 0;
+static int mouse2_y = 0;
+static int mouse2_w = 0;
 static int mouse_emu = 0;
 static int kbd_mouse_emu = 0;
 static int mouse_sniper = 0;
@@ -2127,9 +2134,17 @@ static void uinp_check_key()
 	}
 }
 
-static void mouse_cb(int16_t x = 0, int16_t y = 0, int16_t w = 0)
+static void mouse_cb(int16_t x = 0, int16_t y = 0, int16_t w = 0, int port = 0)
 {
-	if (grabbed)
+	if (!grabbed) return;
+	if (port >= 2) // dual-mouse: route to ao486 COM3 serial mouse (port 2)
+	{
+		mouse2_x += x;
+		mouse2_y += y;
+		mouse2_w += w;
+		mouse2_req |= 1;
+	}
+	else
 	{
 		mouse_x += x;
 		mouse_y += y;
@@ -2138,9 +2153,11 @@ static void mouse_cb(int16_t x = 0, int16_t y = 0, int16_t w = 0)
 	}
 }
 
-static void mouse_btn_req()
+static void mouse_btn_req(int port = 0)
 {
-	if (grabbed) mouse_req |= 2;
+	if (!grabbed) return;
+	if (port >= 2) mouse2_req |= 2;
+	else mouse_req |= 2;
 }
 
 static inline void joy_clamp(int* value, const int min, const int max)
@@ -2963,8 +2980,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			{
 				int mask = 1 << (ev->code - BTN_MOUSE);
 				if (input[dev].ds_mouse_emu && mask == 1) mask = 2;
-				mice_btn = (ev->value) ? (mice_btn | mask) : (mice_btn & ~mask);
-				mouse_btn_req();
+				if (input[dev].mouse_port >= 2) // dual-mouse: port 2 (COM3) buttons
+					mice2_btn = (ev->value) ? (mice2_btn | mask) : (mice2_btn & ~mask);
+				else
+					mice_btn = (ev->value) ? (mice_btn | mask) : (mice_btn & ~mask);
+				mouse_btn_req(input[dev].mouse_port);
 			}
 			return;
 		}
@@ -4241,6 +4261,23 @@ void mergedevs()
 			}
 		}
 	}
+
+	// dual-mouse: assign each physical pointer mouse a port by enumeration order
+	// (1st mouse -> PS/2/port 1, 2nd -> COM3 serial mouse/port 2). Pure USB mice
+	// never get a joystick player number, so we track the port separately on the
+	// bound base (eventN) device that motion/buttons resolve to. A single mouse
+	// stays port 1, preserving today's behavior.
+	int mouse_order = 0;
+	for (int i = 0; i < NUMDEV; i++) input[i].mouse_port = 0;
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (input[i].mouse && input[i].quirk != QUIRK_MSSP)
+		{
+			int base = (input[i].bind >= 0) ? input[i].bind : i;
+			if (!input[base].mouse_port)
+				input[base].mouse_port = (++mouse_order >= 2) ? 2 : 1;
+		}
+	}
 }
 
 // Jammasd/J-PAC/I-PAC have shifted keys: when 1P start is kept pressed, it acts as a shift key,
@@ -4379,7 +4416,7 @@ static void send_mouse_with_throttle(int dev, int xval, int yval, int8_t wval)
 	yval = input[i].accy / throttle;
 	input[i].accy -= yval * throttle;
 
-	mouse_cb(xval, yval, wval);
+	mouse_cb(xval, yval, wval, input[dev].mouse_port); // dual-mouse: split by assigned port
 }
 
 static uint32_t touch_rel = 0;
@@ -6401,6 +6438,23 @@ int input_poll(int getchar)
 			mouse_x = 0;
 			mouse_y = 0;
 			mouse_w = 0;
+		}
+	}
+
+	// dual-mouse: emit the 2nd mouse as a COM3 serial mouse (only set when a 2nd
+	// mouse is assigned; user_io_mouse2 is a no-op on non-ao486 cores)
+	if (mouse2_req)
+	{
+		static uint32_t old_time2 = 0;
+		uint32_t time = GetTimer(0);
+		if ((time - old_time2 > 15) || (mouse2_req & 2))
+		{
+			old_time2 = time;
+			user_io_mouse2(mice2_btn, mouse2_x, mouse2_y, mouse2_w);
+			mouse2_req = 0;
+			mouse2_x = 0;
+			mouse2_y = 0;
+			mouse2_w = 0;
 		}
 	}
 

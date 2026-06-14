@@ -4128,6 +4128,29 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 	}
 }
 
+// Second mouse for ao486, delivered to the core as a COM3 serial mouse
+// (UIO_MOUSE2 -> hps_io 0x07 -> serial_mouse generator -> UART3 RX). Only ao486
+// decodes this command; other cores ignore it. Emitted only when a 2nd physical
+// mouse is assigned to player 2 (see input.cpp mouse_port). Sends raw signed
+// deltas + buttons; the FPGA synthesizes the Microsoft 1200-baud serial frames.
+void user_io_mouse2(unsigned char b, int16_t x, int16_t y, int16_t w)
+{
+	(void)w;
+	if (osd_is_visible && !is_menu()) return;
+	if (!is_x86()) return;
+
+	register_activity();
+
+	int16_t cx = (x < -127) ? -127 : (x > 127) ? 127 : x;
+	int16_t cy = (y < -127) ? -127 : (y > 127) ? 127 : y;
+
+	spi_uio_cmd_cont(UIO_MOUSE2);
+	spi_w((uint8_t)cx);    // dx  -> hps_io byte_cnt 1 (io_din[7:0])
+	spi_w((uint8_t)cy);    // dy  -> hps_io byte_cnt 2
+	spi_w(b & 0x07);       // btn -> hps_io byte_cnt 3
+	DisableIO();
+}
+
 /* usb modifer bits:
 0     1     2    3    4     5     6    7
 LCTRL LSHIFT LALT LGUI RCTRL RSHIFT RALT RGUI
