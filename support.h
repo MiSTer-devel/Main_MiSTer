@@ -9,6 +9,8 @@
 
 // Apple 2 support
 #include "support/a2/dsk2nib_lib.h"
+// Apple IIgs disk integration
+#include "support/a2/iigs_disk.h"
 
 // Archie support
 #include "support/archie/archie.h"
