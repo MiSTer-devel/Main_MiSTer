@@ -2,7 +2,7 @@
 #define CDI_H
 
 #define CDI_SECTOR_LEN 2352
-#define CDI_SUBCHANNEL_LEN 24
+#define CDI_SUBCHANNEL_LEN ((12+96)*2)
 #define CDI_CDIC_BUFFER_SIZE (CDI_SECTOR_LEN + CDI_SUBCHANNEL_LEN)
 
 void cdi_mount_cd(int s_index, const char *filename);

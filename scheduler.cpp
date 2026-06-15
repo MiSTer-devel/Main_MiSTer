@@ -9,6 +9,7 @@
 #include "osd.h"
 #include "profiling.h"
 #include "achievements.h"
+#include "video.h"
 
 static cothread_t co_scheduler = nullptr;
 static cothread_t co_poll = nullptr;
@@ -35,6 +36,7 @@ static void scheduler_co_poll(void)
 			frame_timer();
 			input_poll(0);
 			achievements_poll();
+			video_poll();
 		}
 
 		scheduler_yield();

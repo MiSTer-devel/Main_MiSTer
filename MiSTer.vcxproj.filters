@@ -121,6 +121,9 @@
     <ClCompile Include="cheats.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="game_docs.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="scaler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -253,6 +256,9 @@
     <ClCompile Include="support\saturn\saturncdd.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
+    <ClCompile Include="hdmi_cec.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -346,6 +352,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="cheats.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="game_docs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="scaler.h">
@@ -485,6 +494,9 @@
     </ClInclude>
     <ClInclude Include="support\saturn\saturn.h">
       <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="hdmi_cec.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

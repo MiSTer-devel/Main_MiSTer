@@ -28,6 +28,7 @@
 #include "scaler.h"
 #include "miniz.h"
 #include "cheats.h"
+#include "game_docs.h"
 #include "video.h"
 #include "audio.h"
 #include "shmem.h"
@@ -51,6 +52,7 @@ static fileTYPE sd_image[16] = {};
 #define  SD_TYPE_A2 2
 
 static int      sd_type[16] = {};
+static unsigned char last_file_ext_idx = 0;
 static int      sd_image_cangrow[16] = {};
 static uint64_t buffer_lba[16] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
 								   ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
@@ -83,6 +85,17 @@ static bool winkey_pressed = 0;
 static uint16_t sdram_cfg = 0;
 
 char last_filename[1024] = {};
+
+uint32_t input_seq = 0;
+void register_activity()
+{
+	input_seq++;
+}
+
+uint32_t user_io_get_activity_seq()
+{
+	return input_seq;
+}
 
 void user_io_store_filename(char *filename)
 {
@@ -965,10 +978,12 @@ static void parse_config()
 					else if (is_megacd())
 					{
 						mcd_set_image(idx, str);
+						game_docs_init(str, 0);
 					}
 					else if (is_pce())
 					{
 						pcecd_set_image(idx, str);
+						game_docs_init(str, 0);
 						cheats_init(str, 0);
 					}
 					else
@@ -1603,7 +1618,8 @@ void user_io_init(const char *path, const char *xml)
 							}
 						}
 
-						// cheats for boot file
+						// cheats & game docs for boot file
+						game_docs_init("", user_io_get_file_crc());
 						if (user_io_use_cheats()) cheats_init("", user_io_get_file_crc());
 					}
 
@@ -1794,6 +1810,8 @@ void user_io_digital_joystick(unsigned char joystick, uint32_t map, int newdir)
 	{
 		user_io_l_analog_joystick(joystick, (map & 2) ? 128 : (map & 1) ? 127 : 0, (map & 8) ? 128 : (map & 4) ? 127 : 0);
 	}
+
+	register_activity();
 }
 
 static uint8_t CSD[16] = { 0xf1, 0x40, 0x40, 0x0a, 0x80, 0x7f, 0xe5, 0xe9, 0x00, 0x00, 0x59, 0x5b, 0x32, 0x00, 0x0e, 0x40 };
@@ -2001,6 +2019,7 @@ int process_ss(const char *rom_name, int enable)
 
 void user_io_set_index(unsigned char index)
 {
+	last_file_ext_idx = index >> 6;
 	EnableFpga();
 	spi8(FIO_FILE_INDEX);
 	spi8(index);
@@ -2110,6 +2129,18 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				writable = FileCanWrite(name);
 				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
 				if (ret && len > 4) {
+					const char *core_name = user_io_get_core_name();
+					const char *orig_core_name = user_io_get_core_name(1);
+					const unsigned char ext_idx = last_file_ext_idx;
+					const bool a2_core = !strcasecmp(core_name, "apple-ii") || !strcasecmp(core_name, "TK2000");
+					const bool oric_core =
+						!strcasecmp(core_name, "Oric") ||
+						!strcasecmp(core_name, "Pravetz 8D") ||
+						!strcasecmp(orig_core_name, "Oric") ||
+						!strcasecmp(orig_core_name, "Pravetz 8D");
+					const bool oric_a2_slot = oric_core && index < 2 && (ext_idx == 1 || ext_idx == 2);
+					const bool dsk_ext = !strcasecmp(name + len - 4, ".dsk");
+					const bool do_ext = len > 3 && !strcasecmp(name + len - 3, ".do");
 					if (!strcasecmp(name + len - 4, ".d64")
 						|| !strcasecmp(name + len - 4, ".g64")
 						|| !strcasecmp(name + len - 4, ".d71")
@@ -2124,9 +2155,9 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					{
 						img_type = G64_SUPPORT_HD | G64_SUPPORT_DS;
 					}
-					else if (!strcasecmp(name + len - 4, ".dsk") && ((!strcasecmp(user_io_get_core_name(), "apple-ii") || (!strcasecmp(user_io_get_core_name(), "TK2000") )) ))
+					else if ((dsk_ext && (a2_core || oric_a2_slot)) || (do_ext && oric_a2_slot))
 					{
-						printf("FOUND A2 DSK type\n");
+						printf("FOUND A2 DSK/DO type\n");
 						sd_type[index] = SD_TYPE_A2;
 					}
 				}
@@ -2667,6 +2698,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	user_io_set_download(1, load_addr ? bytes2send : 0);
 
 	int dosend = 1;
+	file_crc = 0;
 
 	int snes_file = SNES_FILE_RAW;
 	if (is_snes() && bytes2send && !load_addr)
@@ -2740,16 +2772,27 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			hexdump(buf, 16, 0);
 			user_io_file_tx_data(buf, 512);
 
-			//strip original SNES ROM header if present (not used)
-			if ((bytes2send % 1024) == 512)
-			{
-				bytes2send -= 512;
-				FileReadSec(&f, buf);
+			uint32_t rom_size = 0;
+			uint8_t *rom = snes_get_mirrored_rom(&f, &rom_size);
+			if (rom) {
+				uint32_t orig_size = (f.size & 512) ? f.size - 512 : f.size;
+				file_crc = crc32(0, rom, orig_size);
+
+				uint32_t remaining = rom_size;
+				uint32_t sent = 0;
+				const uint32_t chunk_size = 4096;
+				while (remaining) {
+					uint32_t chunk = (remaining > chunk_size) ? chunk_size : remaining;
+					ProgressMessage("Loading", f.name, sent, rom_size);
+					user_io_file_tx_data(rom + sent, chunk);
+					sent += chunk;
+					remaining -= chunk;
+				}
+				free(rom);
 			}
 		}
 	}
 
-	file_crc = 0;
 	uint32_t skip = bytes2send & 0x3FF; // skip possible header up to 1023 bytes
 
 	int use_progress = 1; // (bytes2send > (1024 * 1024)) ? 1 : 0;
@@ -3075,7 +3118,7 @@ void user_io_poll()
 	// this is reduce risk of screenshot occurring while the scaler
 	// is being updated and getting a corrupted image.
 	add_frame_callback(screenshot_cb);
-	
+
 	if ((core_type != CORE_TYPE_SHARPMZ) &&
 		(core_type != CORE_TYPE_8BIT))
 	{
@@ -3234,7 +3277,7 @@ void user_io_poll()
 			else if (is_n64() && n64_process_save(use_save, op, lba, blksz, ack, buffer_lba[disk], buffer[disk], sizeof(*buffer), sz))
 			{
 				// Handled by N64 core logic.
-				// If n64_process_save returns false (e.g. use_save is off, or unsupported op), 
+				// If n64_process_save returns false (e.g. use_save is off, or unsupported op),
 				// it will fall through to the generic handler below.
 			}
 			else if (op == 2)
@@ -3317,7 +3360,7 @@ void user_io_poll()
 						done = 1;
 						buffer_lba[disk] = lba;
 					}
-					else if (blksz == (2352 + 24) && is_cdi())
+					else if (blksz == CDI_CDIC_BUFFER_SIZE && is_cdi())
 					{
 						diskled_on();
 						cdi_read_cd(buffer[disk], lba, buf_n);
@@ -3405,7 +3448,7 @@ void user_io_poll()
 						psx_read_cd(buffer[disk], lba, buf_n);
 						buffer_lba[disk] = lba;
 					}
-					else if (blksz == (2352 + 24) && is_cdi())
+					else if (blksz == CDI_CDIC_BUFFER_SIZE && is_cdi())
 					{
 						cdi_read_cd(buffer[disk], lba, buf_n);
 						buffer_lba[disk] = lba;
@@ -3730,6 +3773,32 @@ void user_io_poll()
 	if (is_atari5200()) atari5200_poll();
 	if (is_3do()) p3do_poll();
 	process_ss(0);
+
+	if (cfg.hdmi_off)
+	{
+		static uint32_t hdmi_timeout = 0;
+		static uint32_t seq = 0;
+		static int hdmi_on = 1;
+
+		if (!hdmi_timeout || seq != user_io_get_activity_seq() || !input_state())
+		{
+			seq = user_io_get_activity_seq();
+			hdmi_timeout = GetTimer(cfg.hdmi_off * 60000);
+			if (!hdmi_on)
+			{
+				printf("hdmi_on\n");
+				hdmi_on = 1;
+				video_hdmi_power(1);
+			}
+		}
+
+		if (CheckTimer(hdmi_timeout) && hdmi_on)
+		{
+			printf("hdmi_off\n");
+			hdmi_on = 0;
+			video_hdmi_power(0);
+		}
+	}
 }
 
 static void send_keycode(unsigned short key, int press)
@@ -3956,6 +4025,8 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 {
 	if (osd_is_visible && !is_menu()) return;
 
+	register_activity();
+
 	switch (core_type)
 	{
 	case CORE_TYPE_8BIT:
@@ -4092,11 +4163,13 @@ void user_io_osd_key_enable(char on)
 {
 	//printf("OSD is now %s\n", on ? "visible" : "invisible");
 	osd_is_visible = on;
+	if (cfg.log_file_entry) MakeFile("/tmp/OSD_VISIBLE", on ? "1" : "0");
 	input_switch(-1);
 }
 
 void user_io_kbd(uint16_t key, int press)
 {
+	register_activity();
 
 	if(is_menu()) spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
 

@@ -129,7 +129,24 @@ void AdjustDirectory(char *path);
 int ScanDirectory(char* path, int mode, const char *extension, int options, const char *prefix = NULL, const char *filter = NULL);
 
 void prefixGameDir(char *dir, size_t dir_len);
-int findPrefixDir(char *dir, size_t dir_len);
+int findGamesDir(char *dir, size_t dir_len);
+int findDocsDir(char *dir, size_t dir_len);
+
+struct gameAssetValidator
+{
+	int (*fn)(const char *path, void *ctx);
+	void *ctx;
+};
+
+// If validator is NULL, candidates are accepted with FileExists(path, 0).
+int findGameAsset(char *path,
+	size_t path_len,
+	const char *rom_path,
+	uint32_t crc,
+	const char *ext,
+	const char *core_dir,
+	const char *pcecd_dir,
+	gameAssetValidator *validator);
 
 const char *getStorageDir(int dev);
 const char *getRootDir();

@@ -166,7 +166,7 @@ static void set_arcade_root(const char *path)
 	printf("arcade_root %s\n", arcade_root);
 
 	strcpy(mame_root, "mame");
-	if (findPrefixDir(mame_root, sizeof(mame_root)))
+	if (findGamesDir(mame_root, sizeof(mame_root)))
 	{
 		char *p = strrchr(mame_root, '/');
 		if (p) *p = 0;
