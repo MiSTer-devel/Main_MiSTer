@@ -1806,16 +1806,21 @@ static int find_edid_vrr_capability()
 
 }
 
-static int is_edid_valid()
+static int is_edid_valid_buf(const uint8_t *buf)
 {
 	static const uint8_t magic[] = { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00 };
 	if (sizeof(edid) < sizeof(magic)) return 0;
-	return !memcmp(edid, magic, sizeof(magic));
+	return !memcmp(buf, magic, sizeof(magic));
 }
 
-static void cache_raw_edid_mfg_id()
+static int is_edid_valid()
 {
-	raw_edid_mfg_id = (edid[0x08] << 8) | edid[0x09];
+	return is_edid_valid_buf(edid);
+}
+
+static void cache_raw_edid_mfg_id(const uint8_t *buf)
+{
+	raw_edid_mfg_id = (buf[0x08] << 8) | buf[0x09];
 	raw_edid_mfg_id_valid = true;
 }
 
@@ -1851,8 +1856,6 @@ static int read_edid(bool force = false)
 	if (hdmi_main_fd < 0 || hdmi_edid_fd < 0) return 0;
 	if (is_edid_valid() && !force) return 1;
 
-	memset(edid, 0, sizeof(edid));
-
 	//Test if adv7513 senses hdmi clock. If not, don't bother with the edid query
 	int hpd_state = i2c_smbus_read_byte_data(hdmi_main_fd, 0x42);
 	if (hpd_state < 0 || !(hpd_state & 0x20))
@@ -1860,6 +1863,10 @@ static int read_edid(bool force = false)
 		raw_edid_mfg_id_valid = false;
 		return 0;
 	}
+
+	// read into scratch; replace live edid[] only on a valid read, so a transient failure can't blank it
+	uint8_t buf[sizeof(edid)] = {};
+	bool ddc_responded = false;
 
 	// waiting for valid EDID
 	for (int k = 0; k < 20; k++)
@@ -1870,33 +1877,44 @@ static int read_edid(bool force = false)
 			raw_edid_mfg_id_valid = false;
 			return 0;
 		}
-		bool got_interrupt = read_edid_segment(0, edid);
-		if (is_edid_valid()) break;
+		bool got_interrupt = read_edid_segment(0, buf);
+		if (got_interrupt) ddc_responded = true;
+		if (is_edid_valid_buf(buf)) break;
 		if (!got_interrupt) break;  // no DDC response — display has no EDID, don't retry
 		usleep(100000);
 	}
 
-	if (is_edid_valid())
+	if (!is_edid_valid_buf(buf))
 	{
-		uint8_t max_blocks = sizeof(edid) / 256;
-		uint8_t blocks = (2 + edid[126]) / 2; // each block is 128 bytes
-		if (blocks > max_blocks) blocks = max_blocks;
-		for (uint8_t i = 1; i < blocks; i++) read_edid_segment(i, edid + (i * 256));
+		if (ddc_responded)
+		{
+			// header bad but DDC answered: still cache raw mfg id for non-conformant DAC EDIDs
+			cache_raw_edid_mfg_id(buf);
+			printf("Invalid EDID: incorrect header.\n");
+		}
+		else
+		{
+			printf("Invalid EDID: no DDC response.\n");
+		}
+		// stored edid[], not buf: only when a prior valid read is being kept
+		if (is_edid_valid()) printf("Invalid EDID: keeping last valid EDID.\n");
+
+		return 0;
 	}
+
+	uint8_t max_blocks = sizeof(edid) / 256;
+	uint8_t blocks = (2 + buf[126]) / 2; // each block is 128 bytes
+	if (blocks > max_blocks) blocks = max_blocks;
+	for (uint8_t i = 1; i < blocks; i++) read_edid_segment(i, buf + (i * 256));
+
+	memcpy(edid, buf, sizeof(edid));
 
 	printf("EDID:\n");
 	uint8_t n = edid[126] + 1;
 	if (n > sizeof(edid) / 128) n = sizeof(edid) / 128;
 	hexdump(edid, n*128, 0);
 
-	cache_raw_edid_mfg_id();
-
-	if (!is_edid_valid())
-	{
-		printf("Invalid EDID: incorrect header.\n");
-		bzero(edid, sizeof(edid));
-		return 0;
-	}
+	cache_raw_edid_mfg_id(edid);
 
 	edid_version++;
 	return 1;
@@ -2695,10 +2713,20 @@ void video_init()
 
 void video_reinit()
 {
+	int prev_ver = edid_version;
+	read_edid(true);
+
+	// re-read gave nothing new but a valid EDID is still held: the mode is unchanged,
+	// so don't bounce a working link (some clones can't re-lock mid-operation)
+	if (edid_version == prev_ver && is_edid_valid())
+	{
+		printf("*** Video re-init skipped: EDID unchanged.\n");
+		return;
+	}
+
 	printf("*** Video re-initialization.\n");
 
 	hdmi_config_init();
-	read_edid(true);
 	hdmi_config_set_hdr();
 
 	support_FHD = 0;
