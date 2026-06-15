@@ -40,6 +40,7 @@
 #include "frame_timer.h"
 #include "scaler.h"
 #include "support.h"
+#include "toolbox.h"
 
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};
@@ -49,6 +50,12 @@ static fileTYPE sd_image[16] = {};
 #define  SD_TYPE_DEFAULT 0
 #define  SD_TYPE_C64 1
 #define  SD_TYPE_A2 2
+// SD_TYPE_IIGS 3 lives in support/a2/iigs_disk.h
+#define  SD_TYPE_TOOLBOX 4   // BlueSCSI Toolbox shared-folder slot (MacLC)
+#define  TOOLBOX_SLOT    3   // MacLC VD_TOOLBOX (matches MacLC.sv)
+#define  SD_TYPE_MAC_CDROM   5   // Mac CD-ROM slot: CUE/CHD/raw-2352 -> 2048-byte virtual disc
+#define  SD_TYPE_CD_TOOLBOX 6 // Mac CD Changer control slot: BlueSCSI Toolbox 0xD7/D8/DA
+#define  CD_TOOLBOX_SLOT 5   // MacLC VD_CD_TOOLBOX (matches MacLC.sv)
 
 static int      sd_type[16] = {};
 static unsigned char last_file_ext_idx = 0;
@@ -189,6 +196,43 @@ char *user_io_get_core_name(int orig)
 char *user_io_get_core_name2()
 {
 	return (ovr_name[0] && ovr_samedir) ? orig_name : core_name;
+}
+
+// Cores sharing the MacLC scsi.v target and its HPS features (BlueSCSI
+// Toolbox, CD-ROM translation). Which slot each feature uses is per-core, below.
+char is_mac_scsi_family()
+{
+	return !strncasecmp(core_name, "maclc", 5)    || !strncasecmp(orig_name, "maclc", 5)
+	    || !strncasecmp(core_name, "lbmactwo", 8) || !strncasecmp(orig_name, "lbmactwo", 8)
+	    || !strncasecmp(core_name, "maciivi", 7)  || !strncasecmp(orig_name, "maciivi", 7);
+}
+
+static char is_core_named(const char *n, size_t len)
+{
+	return !strncasecmp(core_name, n, len) || !strncasecmp(orig_name, n, len);
+}
+
+// hps_io slots for the Mac SCSI family; -1 = the core has no such device.
+// A wrong slot types into another device's slot and corrupts its sector stream.
+int mac_toolbox_slot()
+{
+	if (!is_mac_scsi_family()) return -1;
+	if (is_core_named("lbmactwo", 8)) return -1;
+	return TOOLBOX_SLOT;
+}
+
+int mac_cdrom_slot()
+{
+	if (!is_mac_scsi_family()) return -1;
+	if (is_core_named("lbmactwo", 8)) return -1;
+	return MAC_CDROM_SLOT;
+}
+
+int mac_cd_toolbox_slot()
+{
+	if (!is_mac_scsi_family()) return -1;
+	if (is_core_named("lbmactwo", 8)) return -1;
+	return CD_TOOLBOX_SLOT;
 }
 
 char *user_io_get_core_path(const char *suffix, int recheck)
@@ -2177,6 +2221,23 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					}
 				}
 
+				// Mac CD slot: CUE/CHD/raw-2352 served as a flat 2048-byte-
+				// sector virtual disc; flat ISO/TOAST stays on the generic path.
+				if (ret && index == mac_cdrom_slot())
+				{
+					int r = mac_cdrom_mount(index, name);
+					if (r == MAC_CDROM_HANDLED)
+					{
+						sd_type[index] = SD_TYPE_MAC_CDROM;
+						writable = 0;   // read-only medium
+					}
+					else if (r == MAC_CDROM_REJECT)
+					{
+						FileClose(&sd_image[index]);
+						ret = 0;
+					}
+				}
+
 				if (ret && is_c128())
 				{
 					printf("Disk image type: %d\n", img_type);
@@ -2194,6 +2255,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	{
 		FileClose(&sd_image[index]);
 		c64_closeGCR(index);
+		mac_cdrom_unmount(index);
 	}
 
 	buffer_lba[index] = -1;
@@ -2225,6 +2287,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	spi8(UIO_SET_SDINFO);
 
 	__off64_t size = sd_image[index].size;
+	if (sd_type[index] == SD_TYPE_MAC_CDROM) size = mac_cdrom_size(index);
 	if (!ret && pre)
 	{
 		sd_image[index].type = 2;
@@ -3142,6 +3205,45 @@ void user_io_poll()
 
 	user_io_send_buttons(0);
 
+	// BlueSCSI Toolbox: once per core session, when the shared folder exists and
+	// the core has a slot, type the slot and pulse img_mounted (latches tb_ready).
+	{
+		static int tb_inited = 0;
+		int tb_slot = mac_toolbox_slot();
+		if (tb_slot >= 0 && (tb_inited || toolbox_shared_ready()))
+		{
+			if (!tb_inited)
+			{
+				sd_type[tb_slot] = SD_TYPE_TOOLBOX;
+				buffer_lba[tb_slot] = -1;
+				spi_uio_cmd8(UIO_SET_SDSTAT, (1 << tb_slot) | 0x80);
+				printf("BlueSCSI Toolbox: shared folder \"%s\" on slot %d\n", toolbox_shared_dir(), tb_slot);
+				tb_inited = 1;
+			}
+		}
+		else tb_inited = 0;
+	}
+
+	// BlueSCSI CD Changer: type the control slot once so cdtb_ready latches; the
+	// CD3 folder may appear later (LIST just returns empty until then).
+	{
+		static int cdc_inited = 0;
+		int cdc_slot = mac_cd_toolbox_slot();
+		if (cdc_slot >= 0)
+		{
+			if (!cdc_inited)
+			{
+				sd_type[cdc_slot] = SD_TYPE_CD_TOOLBOX;
+				buffer_lba[cdc_slot] = -1;
+				spi_uio_cmd8(UIO_SET_SDSTAT, (1 << cdc_slot) | 0x80);
+				printf("BlueSCSI CD Changer: control slot %d (folder \"%s\")\n", cdc_slot, cdchanger_dir());
+				cdc_inited = 1;
+			}
+			cdchanger_poll();   // perform any staged SET NEXT CD image remount
+			mac_cdrom_poll();    // one-shot boot repulse of the CD mount
+		}
+	}
+
 	if (is_minimig())
 	{
 		//HDD & FDD query
@@ -3221,6 +3323,11 @@ void user_io_poll()
 					blksz = 2352;
 				else if (disk == 0 && is_cdi())
 					blksz = CDI_CDIC_BUFFER_SIZE;
+				else if (disk == MAC_CDROM_SLOT && is_mac_scsi_family() &&
+				         lba >= MAC_CDROM_AUDIO_BLK && lba < MAC_CDROM_TOC_BLK)
+					// Mac CD-DA: one whole 2352-byte frame per transaction;
+					// five 512-byte round-trips per frame miss the frame budget.
+					blksz = 2352;
 				else
 					blksz = 128 << ((c >> 6) & 7);
 
@@ -3288,6 +3395,45 @@ void user_io_poll()
 			{
 				if (op == 2) iigs_write(disk, &sd_image[disk], lba, ack);
 				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, ack);
+				else break;
+			}
+			else if (sd_type[disk] == SD_TYPE_TOOLBOX || sd_type[disk] == SD_TYPE_CD_TOOLBOX)
+			{
+				// BlueSCSI Toolbox round-trip (file or CD-changer slot): op 2 =
+				// the CDB -> run the op; op 1 = status (lba 0) or DataIn (lba 1+k).
+				int cdc = (sd_type[disk] == SD_TYPE_CD_TOOLBOX);
+				if (op == 2)
+				{
+					EnableIO();
+					spi_w(UIO_SECTOR_WR | ack);
+					spi_block_read(buffer[disk], fio_size, sz);
+					DisableIO();
+					if (cdc) cdchanger_request(lba, buffer[disk], sz);
+					else     toolbox_request(lba, buffer[disk], sz);
+				}
+				else if (op & 1)
+				{
+					if (cdc) cdchanger_fill(lba, buffer[disk], sz);
+					else     toolbox_fill(lba, buffer[disk], sz);
+					EnableIO();
+					spi_w(UIO_SECTOR_RD | ack);
+					spi_block_write(buffer[disk], fio_size, sz);
+					DisableIO();
+				}
+				else break;
+			}
+			else if (sd_type[disk] == SD_TYPE_MAC_CDROM)
+			{
+				// Mac CD slot: read-only views of the translated virtual disc
+				// (the core ties sd_wr off, so only reads arrive).
+				if (op & 1)
+				{
+					mac_cdrom_fill(disk, lba, buffer[disk], sz);
+					EnableIO();
+					spi_w(UIO_SECTOR_RD | ack);
+					spi_block_write(buffer[disk], fio_size, sz);
+					DisableIO();
+				}
 				else break;
 			}
 			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
