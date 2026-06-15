@@ -1665,6 +1665,23 @@ static char has_led(int fd)
 	return test_bit(EV_LED, evtype_b) ? 1 : 0;
 }
 
+// True if the evdev node reports real keyboard keys. Some combo devices
+// (e.g. 8BitDo Retro Keyboard) also expose a phantom mouse interface with
+// REL_X/REL_Y + mouse buttons; that interface enumerates as /dev/input/mouseN
+// and would otherwise steal mouse port 1 from a real USB mouse. We use this to
+// skip such phantoms during dual-mouse port assignment.
+static char dev_is_keyboard(int fd)
+{
+	unsigned char keybit[(KEY_MAX + 7) / 8];
+	if (fd < 0) return 0;
+
+	memset(&keybit, 0, sizeof(keybit));
+	if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keybit)), keybit) < 0) return 0;
+
+	// alphabetic keys present == a genuine keyboard (a real mouse only has BTN_*)
+	return (test_bit(KEY_A, keybit) && test_bit(KEY_Z, keybit) && test_bit(KEY_SPACE, keybit)) ? 1 : 0;
+}
+
 static char leds_state = 0;
 void set_kbdled(int mask, int state)
 {
@@ -4274,6 +4291,11 @@ void mergedevs()
 		if (input[i].mouse && input[i].quirk != QUIRK_MSSP)
 		{
 			int base = (input[i].bind >= 0) ? input[i].bind : i;
+			// Skip phantom mice exposed by keyboards (e.g. 8BitDo Retro Keyboard):
+			// they enumerate before real USB mice and would steal port 1, forcing
+			// both real mice onto port 2 (the serial mouse). Leave them at port 0
+			// (-> PS/2) so the real mice split cleanly across ports 1 and 2.
+			if (dev_is_keyboard(pool[base].fd)) continue;
 			if (!input[base].mouse_port)
 				input[base].mouse_port = (++mouse_order >= 2) ? 2 : 1;
 		}
