@@ -2154,6 +2154,23 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					}
 				}
 
+				// Apple IIgs: classify/validate/convert the image for its slot.
+				if (ret && iigs_is_core())
+				{
+					int iigs_w = writable;
+					int r = iigs_mount(index, name, &sd_image[index], &iigs_w);
+					if (r == IIGS_REJECT)
+					{
+						FileClose(&sd_image[index]);
+						ret = 0;
+					}
+					else if (r == IIGS_HANDLED)
+					{
+						sd_type[index] = SD_TYPE_IIGS;
+						writable = iigs_w;
+					}
+				}
+
 				if (ret && is_c128())
 				{
 					printf("Disk image type: %d\n", img_type);
@@ -3258,6 +3275,12 @@ void user_io_poll()
 				//if (op) printf("A2 %x %llu on %d\n", op,lba, disk);
 				if (op == 2) a2_writeDSK(&sd_image[disk], lba, ack);
 				else if (op & 1) a2_readDSK(&sd_image[disk], lba, ack);
+				else break;
+			}
+			else if ( sd_type[disk] == SD_TYPE_IIGS)
+			{
+				if (op == 2) iigs_write(disk, &sd_image[disk], lba, ack);
+				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, ack);
 				else break;
 			}
 			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
