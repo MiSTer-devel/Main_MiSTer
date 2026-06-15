@@ -1444,7 +1444,8 @@ static void hdmi_config_init()
 
 	if (hdmi_main_fd < 0)
 	{
-		hdmi_main_fd = i2c_open(0x39, 0);
+		int adv_bus = -1;
+		hdmi_main_fd = i2c_open(0x39, 0, -1, &adv_bus);
 		if (hdmi_main_fd < 0)
 		{
 			printf("ADV7513 not found on i2c bus! HDMI won't be available!\n");
@@ -1452,15 +1453,18 @@ static void hdmi_config_init()
 		}
 		else
 		{
+			// EDID/SPD are sub-maps of the same chip: pin them to the main bus
+			// instead of rescanning, or a phantom that ACKs on another bus can
+			// capture the handle and wedge the i2c controller on a real transfer.
 			if (hdmi_edid_fd < 0)
 			{
-				hdmi_edid_fd = i2c_open(0x3f, 0);
+				hdmi_edid_fd = i2c_open(0x3f, 0, adv_bus);
 				if (hdmi_edid_fd < 0) printf("ADV7513: cannot find EDID registers.\n");
 			}
 
 			if (hdmi_spd_fd < 0)
 			{
-				hdmi_spd_fd = i2c_open(0x38, 0);
+				hdmi_spd_fd = i2c_open(0x38, 0, adv_bus);
 				if (hdmi_spd_fd < 0) printf("ADV7513: cannot find SPD registers.\n");
 			}
 		}
