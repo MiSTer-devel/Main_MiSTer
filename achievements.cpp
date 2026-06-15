@@ -201,6 +201,7 @@ static int g_gba_reset_ram             = 1; // 1 = clear IWRAM+EWRAM on game loa
 static int g_recollect_interval        = 600; // frames between address re-collections (PSX default 600, SNES 18000)
 static int g_smart_cache               = -1; // -1 = default per console, 1 = smart cache: rtquery on cache miss, no periodic recollect
 static int g_n64_snapshot              = 0;  // 1 = snapshot RDRAM at VBlank for consistent reads
+static int g_multiline_desc            = 0;  // 1 = wrap long text to extra lines instead of truncating with "..."
 static char g_ua_clause[64]            = ""; // rcheevos user-agent clause (e.g. "rcheevos/11.6")
 static char g_fpga_core_version[8]     = "0.1"; // version reported by FPGA in DDRAM header
 
@@ -566,6 +567,8 @@ static int ra_load_credentials(void)
 			g_n64_snapshot = atoi(val);
 		} else if (!strcasecmp(key, "gba_reset_ram")) {
 			g_gba_reset_ram = atoi(val);
+		} else if (!strcasecmp(key, "multiline_desc")) {
+			g_multiline_desc = atoi(val);
 		}
 	}
 	fclose(f);
@@ -582,14 +585,52 @@ static int ra_load_credentials(void)
 	}
 
 	RA_LOG("Credentials loaded: user=%s password=***(%zu chars)", g_ra_user, strlen(g_ra_password));
-	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d show_leaderboards_updates=%d show_leaderboards_submission=%d leaderboards_enabled(deprecated)=%d hardcore=%d force_hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d gba_reset_ram=%d debug=%d",
+	RA_LOG("Config: show_challenge_show=%d show_challenge_hide=%d show_progress=%d show_progress_name=%d show_leaderboards_updates=%d show_leaderboards_submission=%d leaderboards_enabled(deprecated)=%d hardcore=%d force_hardcore=%d stall_recovery=%d rtquery=%d recollect=%d smart_cache=%d n64_snapshot=%d gba_reset_ram=%d multiline_desc=%d debug=%d",
                 g_show_challenge_show_popup, g_show_challenge_hide_popup,
                 g_show_progress_popups, g_show_progress_name,
 		g_show_leaderboards_updates, g_show_leaderboards_submission, g_leaderboards_enabled,
-                g_hardcore, g_force_hardcore, g_stall_recovery, g_rtquery_enabled, g_recollect_interval, g_smart_cache, g_n64_snapshot, g_gba_reset_ram, g_ra_debug);
+                g_hardcore, g_force_hardcore, g_stall_recovery, g_rtquery_enabled, g_recollect_interval, g_smart_cache, g_n64_snapshot, g_gba_reset_ram, g_multiline_desc, g_ra_debug);
 	return 1;
 }
 
+
+// ---------------------------------------------------------------------------
+// Text formatting helper: truncate with "..." or wrap to multiple lines
+// ---------------------------------------------------------------------------
+
+static void ra_format_text(const char *text, char *out, size_t out_size, int trunc_width, int wrap_width, int max_lines)
+{
+	if (!text || !out || out_size == 0) return;
+	size_t len = strlen(text);
+	if (!g_multiline_desc) {
+		if (len <= (size_t)trunc_width) {
+			snprintf(out, out_size, "%s", text);
+			return;
+		}
+		size_t copy = (size_t)trunc_width < out_size - 1 ? (size_t)trunc_width : out_size - 1;
+		memcpy(out, text, copy);
+		out[copy] = '\0';
+		if (copy + 3 < out_size) strcat(out, "...");
+	} else {
+		if (len <= (size_t)wrap_width) {
+			snprintf(out, out_size, "%s", text);
+			return;
+		}
+		size_t pos = 0, written = 0;
+		for (int line = 0; line < max_lines && pos < len && written + 1 < out_size; line++) {
+			if (line > 0) { out[written++] = '\n'; out[written] = '\0'; }
+			size_t take = len - pos;
+			if (take > (size_t)wrap_width) take = (size_t)wrap_width;
+			size_t avail = out_size - written - 1;
+			if (take > avail) take = avail;
+			memcpy(out + written, text + pos, take);
+			written += take;
+			out[written] = '\0';
+			pos += take;
+		}
+		if (pos < len && written + 3 < out_size) strcat(out, "...");
+	}
+}
 
 // ---------------------------------------------------------------------------
 // rcheevos callbacks (compiled only if library is available)
@@ -724,20 +765,20 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 					event->achievement->id, event->achievement->title,
 					event->achievement->description);
 					gba_dump_trigger(event->achievement->id);
-				const int title_max = 28;
-				const int desc_max  = 60;
-				char title_buf[32];
-				char desc_buf[64];
-				snprintf(title_buf, title_max + 1, "%s", event->achievement->title);
-				if (strlen(event->achievement->title) > (size_t)title_max)
-					strcat(title_buf, "...");
-				snprintf(desc_buf, desc_max + 1, "%s", event->achievement->description);
-				if (strlen(event->achievement->description) > (size_t)desc_max)
-					strcat(desc_buf, "...");
+				char title_buf[96];
+				char desc_buf[192];
+				ra_format_text(event->achievement->title, title_buf, sizeof(title_buf), 28, 28, 2);
+				ra_format_text(event->achievement->description, desc_buf, sizeof(desc_buf), 28, 28, 3);
+				// In multiline mode, prefix desc with "\-> " so it reads as a sub-line of the title
+				char desc_display[200];
+				if (g_multiline_desc)
+					snprintf(desc_display, sizeof(desc_display), "\\-> %s", desc_buf);
+				else
+					snprintf(desc_display, sizeof(desc_display), "%s", desc_buf);
 				char buf[NOTIF_TEXT_MAX];
 				snprintf(buf, sizeof(buf),
 					">> ACHIEVEMENT <<\n\n%s\n%s",
-					title_buf, desc_buf);
+					title_buf, desc_display);
 								ra_notify_urgent(buf, 4000, 1);
 			}
 		}
@@ -749,11 +790,8 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 				event->achievement->id, event->achievement->title);
 			if (g_show_challenge_show_popup &&
 			    !ra_challenge_popup_suppressed(event->achievement->id)) {
-				const int title_max = 28;
-				char title_buf[32];
-				snprintf(title_buf, title_max + 1, "%s", event->achievement->title);
-				if (strlen(event->achievement->title) > (size_t)title_max)
-					strcat(title_buf, "...");
+				char title_buf[96];
+				ra_format_text(event->achievement->title, title_buf, sizeof(title_buf), 28, 28, 2);
 				char buf[NOTIF_TEXT_MAX];
 				snprintf(buf, sizeof(buf), "CHALLENGE ACTIVE\n\n%s", title_buf);
 				ra_notify(buf, 3000);
@@ -766,11 +804,8 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 			RA_LOG("CHALLENGE HIDE: [%u] %s",
 				event->achievement->id, event->achievement->title);
 			if (g_show_challenge_hide_popup) {
-				const int title_max = 28;
-				char title_buf[32];
-				snprintf(title_buf, title_max + 1, "%s", event->achievement->title);
-				if (strlen(event->achievement->title) > (size_t)title_max)
-					strcat(title_buf, "...");
+				char title_buf[96];
+				ra_format_text(event->achievement->title, title_buf, sizeof(title_buf), 28, 28, 2);
 				char buf[NOTIF_TEXT_MAX];
 				snprintf(buf, sizeof(buf), "CHALLENGE MISSED\n\n%s", title_buf);
 				ra_notify(buf, 3000);
@@ -795,11 +830,8 @@ static void ra_event_handler(const rc_client_event_t *event, rc_client_t *client
 			    !ra_progress_popup_suppressed(event->achievement->id, event->achievement->measured_progress)) {
 				char buf[NOTIF_TEXT_MAX];
 				if (g_show_progress_name) {
-					const int title_max = 28;
-					char title_buf[32]; // 28 chars + "..." + null
-					snprintf(title_buf, title_max + 1, "%s", event->achievement->title);
-					if (strlen(event->achievement->title) > (size_t)title_max)
-						strcat(title_buf, "...");
+					char title_buf[96];
+					ra_format_text(event->achievement->title, title_buf, sizeof(title_buf), 28, 28, 2);
 					snprintf(buf, sizeof(buf), "%s\nProgress: %s",
 						title_buf, event->achievement->measured_progress);
 				} else {
