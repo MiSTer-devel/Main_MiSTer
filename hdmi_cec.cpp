@@ -200,6 +200,7 @@ static int cec_fd = -1;
 static uint8_t cec_logical_addr = CEC_LOG_ADDR_FREEUSE;
 static uint16_t cec_physical_addr = CEC_INVALID_PHYS_ADDR;
 static uint16_t cec_active_physical_addr = CEC_INVALID_PHYS_ADDR;
+static bool     cec_addr_is_fallback = false; // inited without EDID to wake a standby TV
 static uint16_t cec_pressed_key = 0;
 static uint8_t cec_advertise_step = 0;
 static uint8_t cec_advertise_attempts = 0;
@@ -1008,6 +1009,7 @@ void cec_deinit(void)
 	cec_enabled = false;
 	cec_retry_deadline = 0;
 	cec_can_try = false;
+	cec_addr_is_fallback = false;
 }
 
 bool cec_init()
@@ -1057,10 +1059,24 @@ bool cec_init()
 	cec_physical_addr = cec_read_physical_address();
 	if (cec_physical_addr == CEC_INVALID_PHYS_ADDR)
 	{
-		return false;
+		// no EDID (TV in standby): wake it anyway if power-on is wanted
+		if (!cfg.hdmi_cec_power_on)
+		{
+			printf("CEC: no EDID and power-on disabled; skipping init.\n");
+			return false;
+		}
+		cec_addr_is_fallback = true;
+		printf("CEC: no EDID yet; fallback init to wake the TV, will re-init when EDID arrives.\n");
 	}
 
-	cec_program_logical_address(cec_pick_logical_address_from_physical(cec_physical_addr));
+	if (cec_addr_is_fallback)
+	{
+		cec_program_logical_address(CEC_LOG_ADDR_MISTER1);
+	}
+	else
+	{
+		cec_program_logical_address(cec_pick_logical_address_from_physical(cec_physical_addr));
+	}
 
 	cec_enabled = true;
 
@@ -1072,7 +1088,8 @@ bool cec_init()
 		cec_physical_addr & 0x0F);
 
 	cec_advertise_step = 0;
-	cec_advertise_attempts = CEC_ADVERTISE_STARTUP_ATTEMPTS;
+	// fallback has no real address: don't advertise one until the post-EDID re-init
+	cec_advertise_attempts = cec_addr_is_fallback ? 0 : CEC_ADVERTISE_STARTUP_ATTEMPTS;
 	cec_advertise_deadline = 0;
 
 	cec_power_on_state = CEC_POWER_ON_DONE;
@@ -1123,7 +1140,11 @@ static void cec_poll_power_on_switch(void)
 		break;
 
 	case CEC_POWER_ON_ACTIVE:
-		cec_send_active_source(false);
+		// fallback has no real address yet: wake only, skip the input switch (re-init handles it)
+		if (!cec_addr_is_fallback)
+		{
+			cec_send_active_source(false);
+		}
 		cec_power_on_state = CEC_POWER_ON_DONE;
 		cec_power_on_deadline = 0;
 		break;
