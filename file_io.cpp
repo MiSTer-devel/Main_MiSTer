@@ -2241,7 +2241,7 @@ int findGameAsset(char *path, size_t path_len, const char *rom_path, uint32_t ro
 {
 	path[0] = 0;
 
-	if (!strcasestr(rom_path, ".zip"))
+	if (!strcasestr(rom_path, ext))
 	{
 		snprintf(path, path_len, "%s", getFullPath(rom_path));
 		char *p = strrchr(path, '.');
