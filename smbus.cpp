@@ -209,10 +209,18 @@ int i2c_smbus_block_process_call(int file, uint8_t command, uint8_t length, uint
 	return data.block[0];
 }
 
-int i2c_open(int dev_address, int is_smbus)
+int i2c_open(int dev_address, int is_smbus, int force_bus, int *found_bus)
 {
 	char str[16];
-	for (int bus = 0; bus < 3; bus++)
+	// only /dev/i2c-0..2 exist; an out-of-range pin hint means "not found"
+	if (force_bus > 2)
+	{
+		printf("i2c_open: invalid bus %d for device 0x%X\n", force_bus, dev_address);
+		return -1;
+	}
+	int bus_first = (force_bus >= 0) ? force_bus : 0;
+	int bus_last  = (force_bus >= 0) ? force_bus : 2;
+	for (int bus = bus_first; bus <= bus_last; bus++)
 	{
 		int fd;
 		sprintf(str, "/dev/i2c-%d", bus);
@@ -250,6 +258,8 @@ int i2c_open(int dev_address, int is_smbus)
 		}
 
 		printf("Opened %s for device 0x%X\n", str, dev_address);
+		// report the matched bus so sibling chip addresses can be pinned to it
+		if (found_bus) *found_bus = bus;
 		return fd;
 	}
 

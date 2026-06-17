@@ -1018,7 +1018,8 @@ bool cec_init()
 
 	cec_deinit();
 
-	cec_main_fd = i2c_open(ADV7513_MAIN_ADDR, 0);
+	int adv_bus = -1;
+	cec_main_fd = i2c_open(ADV7513_MAIN_ADDR, 0, -1, &adv_bus);
 	if (cec_main_fd < 0)
 	{
 		return false;
@@ -1030,7 +1031,9 @@ bool cec_init()
 		return false;
 	}
 
-	cec_fd = i2c_open(ADV7513_CEC_ADDR, 0);
+	// CEC is a sub-map of the same chip: pin it to the main bus rather than
+	// rescanning, so a phantom on another bus can't capture the handle.
+	cec_fd = i2c_open(ADV7513_CEC_ADDR, 0, adv_bus);
 	if (cec_fd < 0)
 	{
 		cec_deinit();
