@@ -18,7 +18,7 @@
 #define UIO_MOUSE       0x04  // -"-
 #define UIO_KEYBOARD    0x05  // -"-
 #define UIO_KBD_OSD     0x06  // keycodes used by OSD only
-#define UIO_MOUSE2      0x07  // ao486: second mouse -> COM3 serial mouse (dual-mouse)
+#define UIO_MOUSE2      0x07  // second mouse (dual-mouse); any core decoding it
 
 // 0x08 - 0x0F - core specific
 
@@ -208,7 +208,7 @@ uint32_t user_io_get_uart_mode();
 
 uint32_t user_io_get_activity_seq();
 void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w);
-void user_io_mouse2(unsigned char b, int16_t x, int16_t y, int16_t w); // ao486 COM3 serial mouse (dual-mouse)
+void user_io_mouse2(unsigned char b, int16_t x, int16_t y, int16_t w); // 2nd mouse, UIO_MOUSE2 (dual-mouse)
 void user_io_kbd(uint16_t key, int press);
 char* user_io_create_config_name(int with_ver = 0);
 int user_io_get_joy_transl();

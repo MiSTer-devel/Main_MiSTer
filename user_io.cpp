@@ -4128,26 +4128,29 @@ void user_io_mouse(unsigned char b, int16_t x, int16_t y, int16_t w)
 	}
 }
 
-// Second mouse for ao486, delivered to the core as a COM3 serial mouse
-// (UIO_MOUSE2 -> hps_io 0x07 -> serial_mouse generator -> UART3 RX). Only ao486
-// decodes this command; other cores ignore it. Emitted only when a 2nd physical
-// mouse is assigned to player 2 (see input.cpp mouse_port). Sends raw signed
-// deltas + buttons; the FPGA synthesizes the Microsoft 1200-baud serial frames.
+// Second mouse, delivered to the core over UIO_MOUSE2 (0x07). This is a
+// core-agnostic facility: the wire layout mirrors user_io_mouse (dx, dy,
+// buttons, wheel as four signed bytes), and any core that decodes 0x07 in its
+// hps_io gets a second mouse with no further userspace changes. A core that
+// does NOT decode 0x07 simply ignores it (an unrecognised UIO command is a
+// no-op, exactly like mouse #1's UIO_MOUSE on a core that ignores it), so it is
+// safe to emit unconditionally. It is only emitted when a 2nd physical mouse is
+// actually assigned to player 2 (see input.cpp mouse_port).
+//
+// Current consumers: Minimig (real mouse on Amiga controller port 2) and ao486
+// (synthesized Microsoft serial mouse on a selectable COM port). Minimig uses
+// all four bytes; ao486 reads dx/dy/buttons and ignores the wheel byte.
 void user_io_mouse2(unsigned char b, int16_t x, int16_t y, int16_t w)
 {
-	(void)w;
 	if (osd_is_visible && !is_menu()) return;
-	if (!is_x86()) return;
 
 	register_activity();
 
-	int16_t cx = (x < -127) ? -127 : (x > 127) ? 127 : x;
-	int16_t cy = (y < -127) ? -127 : (y > 127) ? 127 : y;
-
 	spi_uio_cmd_cont(UIO_MOUSE2);
-	spi_w((uint8_t)cx);    // dx  -> hps_io byte_cnt 1 (io_din[7:0])
-	spi_w((uint8_t)cy);    // dy  -> hps_io byte_cnt 2
-	spi_w(b & 0x07);       // btn -> hps_io byte_cnt 3
+	spi8((x < -127) ? -127 : (x > 127) ? 127 : x); // dx     -> byte_cnt 1
+	spi8((y < -127) ? -127 : (y > 127) ? 127 : y); // dy     -> byte_cnt 2
+	spi8(b & 0x07);                                 // btns   -> byte_cnt 3
+	spi8((w < -127) ? -127 : (w > 127) ? 127 : w); // wheel  -> byte_cnt 4
 	DisableIO();
 }
 
