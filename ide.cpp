@@ -162,6 +162,13 @@ void ide_set_regs(ide_config *ide)
 {
 	if (!(ide->regs.status & (ATA_STATUS_BSY | ATA_STATUS_ERR))) ide->regs.status |= ATA_STATUS_DSC;
 
+	// For ATAPI (packet) devices, status bit 4 is the SERVICE bit, not DSC. We never run
+	// overlapped commands, so SERVICE must read 0. Force it low for CD drives, matching 86Box
+	// ide_status() which masks DSC out of every ATAPI status read (hdc_ide.c). Win9x ESDI_506
+	// otherwise reads the permanent bit-4 as "overlapped-command SERVICE pending", rejects the
+	// channel, and the device fails to start (Device Manager Code 10).
+	if (ide->drive[ide->regs.drv].cd) ide->regs.status &= ~ATA_STATUS_DSC;
+
 	uint8_t data[12] =
 	{
 		(uint8_t)((ide->drive[ide->regs.drv].cd) ? 0x80 : ide->regs.io_size),
