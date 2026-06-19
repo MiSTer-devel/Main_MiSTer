@@ -7924,7 +7924,7 @@ void MenuHide()
 
 int menu_present()
 {
-	return (menustate != MENU_NONE1) && (menustate != MENU_NONE2);
+	return (menustate != MENU_NONE1) && (menustate != MENU_NONE2) && (menustate != MENU_INFO);
 }
 
 void Info(const char *message, int timeout, int width, int height, int frame)
