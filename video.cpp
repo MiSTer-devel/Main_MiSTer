@@ -2732,33 +2732,13 @@ void video_reinit()
 
 	printf("*** Video re-initialization.\n");
 
-	// Snapshot the ADV7513-relevant config state before video_mode_load() has
-	// a chance to update it (dvi_mode auto-detect, direct_video auto-detect, etc.)
-	vmode_custom_t prev_def = v_def;
-	int prev_dvi    = cfg.dvi_mode;
-	int prev_direct = cfg.direct_video;
-	int prev_ltd    = cfg.hdmi_limited;
-	int prev_96k    = cfg.hdmi_audio_96k;
+	hdmi_config_init();
+	hdmi_config_set_hdr();
 
 	support_FHD = 0;
 	video_mode_load(true);
+
 	video_cfg_init();
-
-	// hdmi_config_init() writes a full register dump to the ADV7513 and causes
-	// a brief TMDS glitch that prevents a downstream scaler from re-locking.
-	// Skip it when the EDID change didn't alter any output-facing parameter —
-	// the common scaler profile-change case where timing and HDMI mode are
-	// identical but the scaler exposes a different EDID.
-	bool hw_changed = (cfg.dvi_mode     != prev_dvi)
-	               || (cfg.direct_video  != prev_direct)
-	               || (cfg.hdmi_limited  != prev_ltd)
-	               || (cfg.hdmi_audio_96k != prev_96k)
-	               || memcmp(v_def.item + 1, prev_def.item + 1, 8 * sizeof(uint32_t)) != 0;
-
-	if (hw_changed)
-		hdmi_config_init();
-
-	hdmi_config_set_hdr();
 	video_set_mode(&v_def, 0);
 	user_io_send_buttons(1);
 	video_mode_adjust(1);
