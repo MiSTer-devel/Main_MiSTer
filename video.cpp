@@ -1687,6 +1687,13 @@ static uint8_t last_sync_invert = 0xff;
 static uint8_t last_pr_flags = 0xff;
 static uint8_t last_vic_mode = 0xff;
 
+static void hdmi_invalidate_mode_cache()
+{
+	last_sync_invert = 0xff;
+	last_pr_flags = 0xff;
+	last_vic_mode = 0xff;
+}
+
 static void hdmi_config_set_mode(vmode_custom_t *vm)
 {
 	PROFILE_FUNCTION();
@@ -2731,6 +2738,8 @@ void video_reinit()
 	printf("*** Video re-initialization.\n");
 
 	hdmi_config_init();
+	// re-init resets 0x17/0x3B/0x3C - re-apply, or video stays black if any of them changed
+	hdmi_invalidate_mode_cache();
 	hdmi_config_set_hdr();
 
 	support_FHD = 0;
