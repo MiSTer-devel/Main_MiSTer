@@ -1579,11 +1579,14 @@ int cdrom_handle_cmd(ide_config *ide)
 		ide->regs.sector_count = 1;
 		ide->regs.cylinder = 0xEB14;
 		ide->regs.head = 0;
+		// ATAPI diagnostic code 01h after DEVICE RESET.
+		ide->regs.error = 1;
 		ide->regs.io_size = 0;
-		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DSC;
+		// Present status 0x00 (no DRDY/DSC), matching real ATAPI HW; routes OAKCDROM to signature detect.
+		ide->regs.status = 0;
 		ide_set_regs(ide);
 		break;
-	
+
 		case 0xEF: // set features
 		switch(ide->regs.features)
 		{
