@@ -1911,6 +1911,8 @@ static int read_edid(bool force = false)
 	if (blocks > max_blocks) blocks = max_blocks;
 	for (uint8_t i = 1; i < blocks; i++) read_edid_segment(i, buf + (i * 256));
 
+	bool content_changed = !is_edid_valid() || memcmp(edid, buf, sizeof(edid)) != 0;
+
 	memcpy(edid, buf, sizeof(edid));
 
 	printf("EDID:\n");
@@ -1920,7 +1922,7 @@ static int read_edid(bool force = false)
 
 	cache_raw_edid_mfg_id(edid);
 
-	edid_version++;
+	if (content_changed) edid_version++;
 	return 1;
 }
 
@@ -3968,9 +3970,9 @@ void video_menu_bg(int n, int idle)
 		n = menu_bg;
 		idle = cached_idle;
 
-		imlib_context_set_image(bg1); imlib_free_image(); bg1 = 0;
-		imlib_context_set_image(bg2); imlib_free_image(); bg2 = 0;
-		imlib_context_set_image(curtain); imlib_free_image(); curtain = 0;
+		if (bg1)      { imlib_context_set_image(bg1);      imlib_free_image(); bg1      = 0; }
+		if (bg2)      { imlib_context_set_image(bg2);      imlib_free_image(); bg2      = 0; }
+		if (curtain)  { imlib_context_set_image(curtain);  imlib_free_image(); curtain  = 0; }
 	}
 	else
 	{
