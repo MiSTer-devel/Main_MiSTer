@@ -52,7 +52,28 @@ void p3do_poll()
 	}
 }
 
-static char buf[1024];
+static char buf[2048];
+
+static void p3do_get_save_without_disk(char *path)
+{
+	char *p1, *p2;
+
+	if ((p1 = strstr(path, "disc")) != 0 || (p1 = strstr(path, "Disc")) != 0 || (p1 = strstr(path, "DISC")) != 0 ||
+		(p1 = strstr(path, "disk")) != 0 || (p1 = strstr(path, "Disk")) != 0 || (p1 = strstr(path, "DISK")) != 0)
+	{
+		p2 = p1 + 4;
+
+		if (p1 > path && *(--p1) == '(') p1--;
+		if (p1 > path && *(--p1) == ' ') p1--;
+		if (*p2 == ' ') p2++;
+		if ((*p2 >= '0' && *p2 <= '9') || (*p2 >= 'a' && *p2 <= 'f') || (*p2 >= 'A' && *p2 <= 'F')) {
+			p2++;
+			if (*p2 == ')') p2++;
+			p1++;
+			strcpy(p1, p2);
+		}
+	}
+}
 
 static void p3do_mount_save(const char *filename)
 {
@@ -61,6 +82,7 @@ static void p3do_mount_save(const char *filename)
 	if (strlen(filename))
 	{
 		FileGenerateSavePath(filename, buf);
+		p3do_get_save_without_disk(buf);
 #ifdef P3DO_DEBUG
 		printf("Saturn save filename = %s\n", buf);
 #endif // P3DO_DEBUG
@@ -96,7 +118,7 @@ void p3do_set_image(int num, const char *filename)
 	p3docdd.Unload();
 	p3docdd.Reset();
 
-	int same_game = *filename && *last_dir && !strncmp(last_dir, filename, strlen(last_dir));
+	int same_game = 0;//*filename && *last_dir && !strncmp(last_dir, filename, strlen(last_dir));
 	strcpy(last_dir, filename);
 	char *p = strrchr(last_dir, '/');
 	if (p) *p = 0;
