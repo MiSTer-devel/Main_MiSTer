@@ -404,9 +404,9 @@ static int nes_calculate_hash(const char *rom_path, char *md5_hex_out)
 static void nes_set_hardcore(int enabled)
 {
 	if (enabled) {
-		user_io_status_set("[70]", 1);  // Disable cheats
-		user_io_status_set("[20]", 1);  // Disable save states
-		ra_log_write("NES: Hardcore mode enabled (cheats/states disabled)\n");
+		user_io_status_set("[70]", 1);  // hardcore master: blocks restore-state (save-state stays enabled), disables cheats
+		user_io_status_set("[20]", 1);  // Cheats Enabled OSD toggle -> Off
+		ra_log_write("NES: Hardcore mode enabled (restore-state/cheats disabled, save-state still allowed)\n");
 	} else {
 		user_io_status_set("[70]", 0);
 		user_io_status_set("[20]", 0);

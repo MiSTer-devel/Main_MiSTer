@@ -1208,10 +1208,13 @@ void achievements_init(void)
 	// Call handler init — N64 sets DDRAM base here, must happen before ra_ramread_map()
 	g_active_handler->init();
 
-	// Apply hardcore FPGA bits immediately so restrictions are active before any game loads
-	if (achievements_hardcore_active() && g_active_handler->set_hardcore) {
-		g_active_handler->set_hardcore(1);
-		RA_LOG("Hardcore: FPGA bits applied at core init for %s", g_active_handler->name);
+	// Apply the correct hardcore FPGA bits at core init. Must be symmetric: when
+	// hardcore is inactive we clear the bits, otherwise stale restrictions (e.g. a
+	// status bit restored from the core config) keep restore-state blocked.
+	if (g_active_handler->set_hardcore) {
+		int hc = achievements_hardcore_active();
+		g_active_handler->set_hardcore(hc);
+		RA_LOG("Hardcore: FPGA bits %s at core init for %s", hc ? "applied" : "cleared", g_active_handler->name);
 	}
 
 #ifdef HAS_RCHEEVOS
@@ -1403,10 +1406,12 @@ void achievements_load_game(const char *rom_path, uint32_t crc32)
 
         RA_LOG("--- Game Load Complete, monitoring frames ---");
 
-        // Hardcore mode: let handler set console-specific FPGA bits
-        if (achievements_hardcore_active() && g_active_handler->set_hardcore) {
-                g_active_handler->set_hardcore(1);
-                RA_LOG("Hardcore: FPGA bits applied for %s", g_active_handler->name);
+        // Hardcore mode: let handler set console-specific FPGA bits (symmetric:
+        // clear them when hardcore is inactive so restore-state is re-enabled).
+        if (g_active_handler->set_hardcore) {
+                int hc = achievements_hardcore_active();
+                g_active_handler->set_hardcore(hc);
+                RA_LOG("Hardcore: FPGA bits %s for %s", hc ? "applied" : "cleared", g_active_handler->name);
         }
 }
 
