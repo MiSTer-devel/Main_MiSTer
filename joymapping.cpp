@@ -14,6 +14,7 @@ This file contains lookup information on known controllers
 #include "cfg.h"
 
 #define DPAD_COUNT 4
+#define CORE_BUTTON_COUNT (32 - DPAD_COUNT)
 
 /*****************************************************************************/
 static void trim(char * s)
@@ -51,7 +52,7 @@ static void read_buttons()
 	p = get_buttons(0);
 	if (p)
 	{
-		for (int n = 0; n < NUMBUTTONS - DPAD_COUNT; n++)
+		for (int n = 0; n < CORE_BUTTON_COUNT; n++)
 		{
 			substrcpy(joy_names[n], p, n);
 			if (!joy_names[n][0]) break;
@@ -114,6 +115,22 @@ static int is_fire(char* name)
 	return 0;
 }
 
+static int is_extended_button(char *name)
+{
+	return !strcasecmp(name, "L2")
+		|| !strcasecmp(name, "R2")
+		|| !strcasecmp(name, "L3")
+		|| !strcasecmp(name, "R3");
+}
+
+static void copy_core_button_name(char *dst, int index)
+{
+	strcpy(dst, joy_names[index]);
+	char *p = strchr(dst, '(');
+	if (p) *p = 0;
+	trim(dst);
+}
+
 void map_joystick(uint32_t *map, uint32_t *mmap)
 {
 	/*
@@ -152,6 +169,11 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		int idx = i+DPAD_COUNT;
 		char btn_name[32];
 		strcpy(btn_name, defaults ? joy_pnames[n] : joy_nnames[n]);
+		if (!btn_name[0])
+		{
+			copy_core_button_name(btn_name, i);
+			if (!is_extended_button(btn_name)) btn_name[0] = 0;
+		}
 
 		char *p = strchr(btn_name, '|');
 		if (p) *p = 0;
@@ -197,6 +219,26 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 			map[idx] = mmap[SYS_BTN_L];
 		}
 
+		else if(!strcasecmp(btn_name, "L2"))
+		{
+			map[idx] = mmap[SYS_BTN_L2];
+		}
+
+		else if(!strcasecmp(btn_name, "R2"))
+		{
+			map[idx] = mmap[SYS_BTN_R2];
+		}
+
+		else if(!strcasecmp(btn_name, "L3"))
+		{
+			map[idx] = mmap[SYS_BTN_L3];
+		}
+
+		else if(!strcasecmp(btn_name, "R3"))
+		{
+			map[idx] = mmap[SYS_BTN_R3];
+		}
+
 		else if(!strcasecmp(btn_name, "Select")
 		|| !strcasecmp(btn_name, "Mode")
 		|| !strcasecmp(btn_name, "Game Select")
@@ -240,6 +282,10 @@ static const char* get_std_name(uint16_t code, uint32_t *mmap)
 		if (code == mmap[SYS_BTN_Y]) return "[Y]";
 		if (code == mmap[SYS_BTN_L]) return "[L]";
 		if (code == mmap[SYS_BTN_R]) return "[R]";
+		if (code == mmap[SYS_BTN_L2]) return "[L2]";
+		if (code == mmap[SYS_BTN_R2]) return "[R2]";
+		if (code == mmap[SYS_BTN_L3]) return "[L3]";
+		if (code == mmap[SYS_BTN_R3]) return "[R3]";
 		if (code == mmap[SYS_BTN_SELECT]) return "[\x96]";
 		if (code == mmap[SYS_BTN_START]) return "[\x16]";
 		return "[ ]";

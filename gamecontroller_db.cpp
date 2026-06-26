@@ -45,6 +45,10 @@ static const char *sdlname_to_mister_idx[] = {
 	"asysy",
 	NULL,
 	NULL,
+	"lefttrigger",
+	"righttrigger",
+	"leftstick",
+	"rightstick",
 };
 
 typedef struct {
@@ -100,7 +104,7 @@ static bool cdb_entry_matches(char *db_str)
 static int find_mister_button_num(char *sdl_name, bool *idx_high)
 {
 	*idx_high = false;
-	for(size_t i = 0; i < sizeof(sdlname_to_mister_idx)/sizeof(char *); i++)
+	for(size_t i = 0; i < sizeof(sdlname_to_mister_idx)/sizeof(sdlname_to_mister_idx[0]); i++)
 	{
 		const char *map_str = sdlname_to_mister_idx[i];
 		if (map_str && !strcmp(map_str, sdl_name)) return i;
@@ -117,6 +121,78 @@ static int find_mister_button_num(char *sdl_name, bool *idx_high)
 		return SYS_BTN_MENU_FUNC;
 	}
 	return -1;
+}
+
+static bool is_axis_token(const char *btn_name)
+{
+	if (!btn_name || !btn_name[0]) return false;
+	if (btn_name[0] == 'a') return true;
+	return (btn_name[0] == '-' || btn_name[0] == '+') && btn_name[1] == 'a';
+}
+
+static uint16_t axis_from_mapped_code(int mapped_code)
+{
+	return (mapped_code >= KEY_EMU) ? ((mapped_code - KEY_EMU) >> 1) : (uint16_t)mapped_code;
+}
+
+static int trigger_axis_released_near_max(int dev_fd, uint16_t axis)
+{
+	if (dev_fd < 0 || axis > ABS_MAX) return 0;
+
+	input_absinfo absinfo = {};
+	if (ioctl(dev_fd, EVIOCGABS(axis), &absinfo) < 0) return 0;
+
+	const int range = absinfo.maximum - absinfo.minimum;
+	if (range <= 1) return 0;
+
+	const int edge_threshold = (range / 8) > 4 ? (range / 8) : 4;
+	return absinfo.value >= (absinfo.maximum - edge_threshold);
+}
+
+static uint32_t trigger_axis_map_from_token(const char *btn_name, int mapped_code, int dev_fd)
+{
+	if (!is_axis_token(btn_name)) return 0;
+
+	const uint16_t axis = axis_from_mapped_code(mapped_code);
+	if (axis > ABS_MAX) return 0;
+
+	uint32_t map = axis | MAP_FLAG_ANALOG | MAP_FLAG_TRIGGER;
+	if (btn_name[0] == '-' || btn_name[0] == '+')
+	{
+		map |= MAP_FLAG_CENTERED;
+		if (btn_name[0] == '-') map |= MAP_FLAG_NEGATIVE;
+	}
+	else if (trigger_axis_released_near_max(dev_fd, axis))
+	{
+		map |= MAP_FLAG_NEGATIVE;
+	}
+	return map;
+}
+
+static int trigger_button_code_from_axis_map(uint32_t axis_map)
+{
+	if (!axis_map) return -1;
+	return KEY_EMU + ((axis_map & MAP_AXIS_MASK) << 1) + ((axis_map & MAP_FLAG_NEGATIVE) ? 0 : 1);
+}
+
+static bool print_axis_mapping(const char *sdlname, uint32_t axis_map, uint16_t *abs_map)
+{
+	if (!axis_map) return false;
+
+	const uint16_t axis_idx = axis_map & MAP_AXIS_MASK;
+	for (unsigned int j = 0; j < ABS_MAX; j++)
+	{
+		if (abs_map[j] == axis_idx)
+		{
+			if (axis_map & MAP_FLAG_CENTERED)
+				printf("%s:%ca%d,", sdlname, (axis_map & MAP_FLAG_NEGATIVE) ? '-' : '+', j);
+			else
+				printf("%s:a%d,", sdlname, j);
+			return true;
+		}
+	}
+
+	return false;
 }
 
 
@@ -281,10 +357,17 @@ void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid,
 	printf("Gamecontrollerdb for mapping: %s,%s,", guid_str, name);
 	for(int i=0; i < NUMBUTTONS; i++)
 	{
-			if (i > SYS_BTN_START && i < SYS_BTN_OSD_KTGL) continue; //Skip mouse buttons
+			if (i >= SYS_MS_RIGHT && i <= SYS_MS_BTN_EMU) continue; //Skip mouse buttons
 			if (i == SYS_BTN_OSD_KTGL+2 && (cur_map[i] == cur_map[i-1])) continue;
+			if (i >= (int)(sizeof(sdlname_to_mister_idx)/sizeof(sdlname_to_mister_idx[0]))) continue;
 			const char *sdlname = sdlname_to_mister_idx[i];
 			if (!sdlname) continue;
+			if (i == SYS_BTN_L2 || i == SYS_BTN_R2)
+			{
+				const int trigger_axis_idx = SYS_AXIS_L2 + (i - SYS_BTN_L2);
+				if (print_axis_mapping(sdlname, cur_map[trigger_axis_idx], abs_map))
+					continue;
+			}
 			if (cur_map[i])
 			{
 				uint32_t i_code = cur_map[i] & 0xFFFF;
@@ -321,7 +404,7 @@ void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid,
 								}
 							}
 						}
-			 	} else if (cur_map[i] & 0x20000) { //Analog
+				} else if (cur_map[i] & MAP_FLAG_ANALOG) { //Analog
 					for(unsigned int j=0; j < sizeof(abs_map)/sizeof(uint16_t); j++)
 					{
 							if (abs_map[j] == i_code)
@@ -402,10 +485,20 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 				if (m_button_num != -1 && l_button_code != -1)
 				{
 					map_parsed = true;
-					fill_map[m_button_num] =  m_button_high ? ((l_button_code << 16) | fill_map[m_button_num]) : ((l_button_code & 0xFFFF)  | fill_map[m_button_num]);
-					if (m_button_num >= SYS_AXIS1_X && m_button_num <= SYS_AXIS_MX)
+					if ((m_button_num == SYS_BTN_L2 || m_button_num == SYS_BTN_R2) && is_axis_token(l_btn))
 					{
-						fill_map[m_button_num] = l_button_code | 0x20000;
+						const int trigger_axis_idx = SYS_AXIS_L2 + (m_button_num - SYS_BTN_L2);
+						fill_map[trigger_axis_idx] = trigger_axis_map_from_token(l_btn, l_button_code, dev_fd);
+						if (fill_map[trigger_axis_idx])
+							fill_map[m_button_num] = trigger_button_code_from_axis_map(fill_map[trigger_axis_idx]);
+					}
+					else
+					{
+						fill_map[m_button_num] =  m_button_high ? ((l_button_code << 16) | fill_map[m_button_num]) : ((l_button_code & 0xFFFF)  | fill_map[m_button_num]);
+					}
+					if (m_button_num >= SYS_AXIS1_X && m_button_num <= SYS_AXIS_Y)
+					{
+						fill_map[m_button_num] = l_button_code | MAP_FLAG_ANALOG;
 					}
 				}
 			}
@@ -454,13 +547,13 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
     if (!fill_map[SYS_AXIS1_X] && fill_map[SYS_BTN_RIGHT] > KEY_EMU)
     {
 						uint16_t axis_idx = (fill_map[SYS_BTN_RIGHT] - KEY_EMU) >> 1;
-            fill_map[SYS_AXIS1_X] = axis_idx | 0x20000;
+            fill_map[SYS_AXIS1_X] = axis_idx | MAP_FLAG_ANALOG;
     }
 
     if (!fill_map[SYS_AXIS1_Y] && fill_map[SYS_BTN_UP] > KEY_EMU)
     {
 						uint16_t axis_idx = (fill_map[SYS_BTN_UP] - KEY_EMU) >> 1;
-            fill_map[SYS_AXIS1_Y] = axis_idx | 0x20000;
+            fill_map[SYS_AXIS1_Y] = axis_idx | MAP_FLAG_ANALOG;
     }
 
 
