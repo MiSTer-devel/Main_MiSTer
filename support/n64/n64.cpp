@@ -1,7 +1,9 @@
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/stat.h>
 
 #include "../../hardware.h"
@@ -11,7 +13,6 @@
 
 #include "miniz.h"
 #include "n64.h"
-#include "n64_cpak_header.h"
 
 #pragma push_macro("NONE")
 #pragma push_macro("BIG_ENDIAN")
@@ -39,6 +40,20 @@ static constexpr auto AUTOPAK_OPT = "[81]";
 static constexpr auto PATCHES_OPT = "[90]";
 static constexpr auto CHEATS_OPT = "[103]";
 static constexpr const char* const CONTROLLER_OPTS[] = { "[51:49]", "[54:52]", "[57:55]", "[60:58]" };
+
+
+static constexpr size_t CPAK_PAGE_SIZE = 256; // N64 controller pak page size
+static constexpr size_t CPAK_ID_SECTOR_PAGE = 0;
+static constexpr size_t CPAK_FAT_PAGE = 1;
+static constexpr size_t CPAK_FAT_BACKUP_PAGE = 2;
+
+// Page 0 is divided into 8 slots of 32 bytes each.
+// The N64 hardware requires the ID info to be repeated in specific slots.
+static constexpr size_t CPAK_ID_ENTRY_SIZE = 32;
+static constexpr size_t CPAK_ID_ENTRY_1_OFFSET = CPAK_ID_ENTRY_SIZE * 1;
+static constexpr size_t CPAK_ID_ENTRY_2_OFFSET = CPAK_ID_ENTRY_SIZE * 3;
+static constexpr size_t CPAK_ID_ENTRY_3_OFFSET = CPAK_ID_ENTRY_SIZE * 4;
+static constexpr size_t CPAK_ID_ENTRY_4_OFFSET = CPAK_ID_ENTRY_SIZE * 6;
 
 // Simple hash function, see: https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
 // (Modified to make it case-insensitive)
@@ -310,6 +325,84 @@ static uint32_t get_save_offset(unsigned char idx) {
 	return offset;
 }
 
+// *** Controller PAK stuff, heavily influenced by Libdragon's "cpaktool" ***
+
+// Minimalistic CPAK formatter/initializer.
+static void cpak_calc_id_crc(uint8_t* id_block) {
+	uint16_t sum = 0;
+	// Sum first 14 half-words.
+	// The overflowing is done on purpose.
+	for (size_t i = 0; i < 14; i++) {
+		sum += (id_block[i << 1] << 8) | id_block[(i << 1) | 1];
+	}
+
+	id_block[0x1c] = sum >> 8;
+	id_block[0x1d] = sum & 0xff;
+
+	// Inverted checksum.
+	// The N64 expects (0xfff2 - sum), NOT (~sum). Weird.
+	const uint16_t inv_sum = 0xfff2 - sum;
+	id_block[0x1e] = inv_sum >> 8;
+	id_block[0x1f] = inv_sum & 0xff;
+}
+
+static uint8_t cpak_calc_fat_crc(const uint8_t* page_data) {
+	uint8_t sum = 0;
+	// The overflowing is done on purpose.
+	for (size_t i = 2; i < CPAK_PAGE_SIZE; i++) {
+		sum += page_data[i];
+	}
+	return sum;
+}
+
+static void cpak_format(uint8_t* data) {
+	// Initialize the seed() function.
+	uint32_t seed;
+	int32_t rndfd = open("/dev/urandom", O_RDONLY);
+	read(rndfd, &seed, sizeof(seed));
+	close(rndfd);
+	srand(seed);
+	
+	memset(data, 0, CPAK_SIZE);
+	uint8_t id_template[CPAK_ID_ENTRY_SIZE];
+	memset(id_template, 0, CPAK_ID_ENTRY_SIZE);
+
+	// (0x00-0x17) contains a serial number,
+	// unique for that controller pak.
+	// We fill (0x00-0x10) with random data.
+	for (size_t i = 0; i < 0x10; i++) {
+		id_template[i] = (uint8_t)(rand() & 0xff);
+	}
+
+	// The rest of the serial is some deterministic branding. :)
+	memcpy(&id_template[0x10], "MiSTer", 6);
+
+	id_template[0x19] = 0x81; // Device ID. (controller pak)
+	id_template[0x1a] = 0x01; // 1 bank
+
+	cpak_calc_id_crc(id_template);
+
+	// Write ID block to the 4 specified locations in page 0.
+	const size_t p0_base = CPAK_ID_SECTOR_PAGE * CPAK_PAGE_SIZE;
+	memcpy(data + p0_base + CPAK_ID_ENTRY_1_OFFSET, id_template, CPAK_ID_ENTRY_SIZE);
+	memcpy(data + p0_base + CPAK_ID_ENTRY_2_OFFSET, id_template, CPAK_ID_ENTRY_SIZE);
+	memcpy(data + p0_base + CPAK_ID_ENTRY_3_OFFSET, id_template, CPAK_ID_ENTRY_SIZE);
+	memcpy(data + p0_base + CPAK_ID_ENTRY_4_OFFSET, id_template, CPAK_ID_ENTRY_SIZE);
+
+	uint8_t fat_page[CPAK_PAGE_SIZE];
+	memset(fat_page, 0, CPAK_PAGE_SIZE);
+
+	// Init the user entries (index 5 to 127) to (0x00, 0x03), repeating.
+	for (size_t i = 5; i < (CPAK_PAGE_SIZE >> 1); i++) {
+		fat_page[(i << 1) | 1] = 0x03;
+	}
+
+	fat_page[1] = cpak_calc_fat_crc(fat_page);
+
+	memcpy(data + (CPAK_FAT_PAGE * CPAK_PAGE_SIZE), fat_page, CPAK_PAGE_SIZE);
+	memcpy(data + (CPAK_FAT_BACKUP_PAGE * CPAK_PAGE_SIZE), fat_page, CPAK_PAGE_SIZE);
+}
+
 static char full_path[1024];
 static uint8_t save_file_buf[0x20000]; // Largest save size
 static uint8_t mounted_save_files = 0;
@@ -427,8 +520,13 @@ struct N64SaveFile {
 			}
 		}
 
-		if (!found_old_data && (this->type == MemoryType::CPAK)) {
-			memcpy(save_file_buf, cpak_header[((this->idx < 0) ? mounted_save_files : idx) % (sizeof(cpak_header) / sizeof(*cpak_header))], sizeof(*cpak_header));
+		if (!found_old_data) {
+			if (this->type == MemoryType::CPAK) {
+				cpak_format(save_file_buf);
+			}
+			else {
+				memset(save_file_buf, 0, sz);
+			}
 		}
 
 		return create_file(path, save_file_buf, sz);
@@ -1432,7 +1530,7 @@ void n64_poll() {
 	if (!poll_timer || CheckTimer(poll_timer)) {
 		if (!(loaded && is_fpga_ready(0))) {
 			poll_timer = GetTimer(1000);
-			//printf("Waiting for N64 game to be loaded...\n");
+			printf("Waiting for N64 game to be loaded...\n");
 			return;
 		}
 
