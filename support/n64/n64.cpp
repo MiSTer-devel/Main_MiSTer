@@ -438,9 +438,19 @@ static size_t read_file(const char* filename, uint8_t* data, uint32_t offset, si
 	return sz;
 }
 
-static bool is_empty(uint8_t* arr, size_t sz) {
-	for (; sz-- > 0; arr++) {
-		if ((*arr != 0x00) && (*arr != 0xff)) return false;
+// Returns true if all elements in the given array is 0x00 or 0xff.
+static bool is_empty(const uint8_t* arr, size_t sz) {
+	if (!sz) {
+		return true;
+	}
+	const uint8_t head = *(arr++);
+	if ((head != 0x00) && (head != 0xff)) {
+		return false;
+	}
+	for (; --sz > 0; arr++) {
+		if (head != *arr) {
+			return false;
+		}
 	}
 
 	return true;
