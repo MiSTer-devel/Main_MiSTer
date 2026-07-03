@@ -451,7 +451,6 @@ static bool is_empty(const uint8_t* arr, size_t sz) {
 		if (head != *arr) {
 			return false;
 		}
-	}
 
 	return true;
 }
