@@ -41,7 +41,6 @@ static constexpr auto PATCHES_OPT = "[90]";
 static constexpr auto CHEATS_OPT = "[103]";
 static constexpr const char* const CONTROLLER_OPTS[] = { "[51:49]", "[54:52]", "[57:55]", "[60:58]" };
 
-
 static constexpr size_t CPAK_PAGE_SIZE = 256; // N64 controller pak page size
 static constexpr size_t CPAK_ID_SECTOR_PAGE = 0;
 static constexpr size_t CPAK_FAT_PAGE = 1;
@@ -363,7 +362,7 @@ static void cpak_format(uint8_t* data) {
 	close(rndfd);
 	srand(seed);
 	
-	memset(data, 0, CPAK_SIZE);
+	memset(data, 0, get_save_size(MemoryType::CPAK));
 	uint8_t id_template[CPAK_ID_ENTRY_SIZE];
 	memset(id_template, 0, CPAK_ID_ENTRY_SIZE);
 
@@ -441,7 +440,7 @@ static size_t read_file(const char* filename, uint8_t* data, uint32_t offset, si
 
 static bool is_empty(uint8_t* arr, size_t sz) {
 	for (; sz-- > 0; arr++) {
-		if (*arr) return false;
+		if ((*arr != 0x00) && (*arr != 0xff)) return false;
 	}
 
 	return true;
@@ -504,18 +503,20 @@ struct N64SaveFile {
 			return false;
 		}
 
-		auto sz = this->get_size();
-		memset(save_file_buf, 0xFF, sz);
+		size_t sz = this->get_size();
 		bool found_old_data = false;
 
 		if (sz && FileExists(old_path, 0)) {
 			uint32_t off = get_save_offset((this->idx < 0) ? mounted_save_files : this->idx);
-			if (read_file(old_path, save_file_buf, off, sz)) {
+			size_t read_bytes;
+			if ((read_bytes = read_file(old_path, save_file_buf, off, sz)) && !is_empty(save_file_buf, sz)) {
 				printf("Found old save data \"%s\", converting to %s.\n", old_path, stringify(type));
 				found_old_data = true;
-				// Normalize data to big-endian format, if needed
 				if (this->needs_byteswap()) {
-					normalize_data(save_file_buf, sz, ByteOrder::LITTLE_ENDIAN);
+					normalize_data(save_file_buf, read_bytes, ByteOrder::LITTLE_ENDIAN);
+				}
+				if (read_bytes < sz) {
+					memset(save_file_buf + read_bytes, 0xff, (sz - read_bytes));
 				}
 			}
 		}
@@ -525,7 +526,7 @@ struct N64SaveFile {
 				cpak_format(save_file_buf);
 			}
 			else {
-				memset(save_file_buf, 0, sz);
+				memset(save_file_buf, 0xff, sz);
 			}
 		}
 
