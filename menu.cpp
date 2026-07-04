@@ -1230,8 +1230,17 @@ void HandleUI(void)
 		static int menu_visible = 1;
 		static unsigned long timeout = 0;
 		static unsigned long off_timeout = 0;
+		static uint32_t wake_release = 0;
 		if (!video_fb_state() && cfg.fb_terminal)
 		{
+			if (wake_release)
+			{
+				uint32_t wr = wake_release;
+				wake_release = 0;
+				if (c == wr) c = 0;
+				else if (!c) wake_release = wr;
+			}
+
 			if (timeout && CheckTimer(timeout))
 			{
 				timeout = 0;
@@ -1261,6 +1270,10 @@ void HandleUI(void)
 				timeout = 0;
 				if (menu_visible <= 0)
 				{
+					// some keys (F12/ESC/Back) act on release, so swallow the
+					// wake-up key's release too, otherwise it flips the OSD
+					// to the system settings page
+					if (c && !(c & UPSTROKE)) wake_release = c | UPSTROKE;
 					c = 0;
 					menu_visible = 1;
 					video_menu_bg(user_io_status_get("[3:1]"));
