@@ -2731,6 +2731,8 @@ void atari800_init()
 	}
 	sprintf(mainpath, "%s/boot3.rom", home);
 	user_io_file_tx(mainpath, 3 << 6);
+	sprintf(mainpath, "%s/sid_data.bin", home);
+	user_io_file_tx(mainpath, 7);
 	atari800_reset();
 }
 
