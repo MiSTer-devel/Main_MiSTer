@@ -40,6 +40,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <pthread.h>
 #include <libgen.h>
 #include <bluetooth.h>
 #include <hci.h>
@@ -229,6 +230,8 @@ static uint32_t menu_timer = 0;
 static uint32_t menu_save_timer = 0;
 static uint32_t load_addr = 0;
 static int32_t  bt_timer = 0;
+static bool     bt_present = false;
+static bool     bt_pairing = false;
 
 static bool osd_unlocked = 1;
 static char osd_code_entry[32];
@@ -1079,6 +1082,12 @@ void build_advanced_map_summary(advancedButtonMap *abm, char *dest_str, size_t d
 	snprintf(dest_str, dest_size, "%s->%s", input_str, output_str);
 }
 
+static void *close_pipe_async(void *arg)
+{
+	pclose((FILE *)arg);
+	return NULL;
+}
+
 void HandleUI(void)
 {
 	PROFILE_FUNCTION();
@@ -1096,6 +1105,16 @@ void HandleUI(void)
 				printf("*** reset bt ***\n");
 				system("/bin/bluetoothd hcireset &");
 			}
+		}
+	}
+
+	{
+		static unsigned long bt_icon_timer = 0;
+		if (!bt_pairing && (!bt_icon_timer || CheckTimer(bt_icon_timer)))
+		{
+			bt_present = (hci_get_route(0) >= 0);
+			bt_icon_timer = GetTimer(3000);
+			if (!bt_icon_timer) bt_icon_timer = 1;
 		}
 	}
 
@@ -7077,6 +7096,7 @@ void HandleUI(void)
 		sched_setaffinity(0, sizeof(set), &set);
 		if (parentstate == MENU_BTPAIR)
 		{
+			bt_pairing = true;
 			OsdUpdate();
 			if(cfg.bt_reset_before_pair) system("hciconfig hci0 reset");
 			script_pipe = popen("/usr/sbin/btpair", "r");
@@ -7124,9 +7144,13 @@ void HandleUI(void)
 			if (!script_finished)
 			{
 				strcpy(script_command, "killall ");
-				strcat(script_command, (parentstate == MENU_BTPAIR) ? "-SIGINT btctl" : flist_SelectedItem()->de.d_name);
+				strcat(script_command, (parentstate == MENU_BTPAIR) ? "-SIGINT btpair btctl" : flist_SelectedItem()->de.d_name);
 				system(script_command);
-				pclose(script_pipe);
+				FILE *p = script_pipe;
+				script_pipe = NULL;
+				pthread_t tid;
+				if (!pthread_create(&tid, NULL, close_pipe_async, p)) pthread_detach(tid);
+				else { printf("close_pipe_async: pthread_create failed\n"); pclose(p); }
 				cpu_set_t set;
 				CPU_ZERO(&set);
 				CPU_SET(1, &set);
@@ -7146,6 +7170,7 @@ void HandleUI(void)
 			{
 				if (parentstate == MENU_BTPAIR)
 				{
+					bt_pairing = false;
 					menustate = MENU_NONE1;
 				}
 				else
@@ -7668,7 +7693,7 @@ void HandleUI(void)
 				int n = 8;
 				if (getNet(2)) str[n++] = 0x1d;
 				if (getNet(1)) str[n++] = 0x1c;
-				if (hci_get_route(0) >= 0) str[n++] = 4;
+				if (bt_present) str[n++] = 4;
 				if (user_io_get_sdram_cfg() & 0x8000)
 				{
 					switch (user_io_get_sdram_cfg() & 7)
