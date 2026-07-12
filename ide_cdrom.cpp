@@ -1390,7 +1390,7 @@ void cdrom_handle_pkt(ide_config *ide)
 		dbg_printf("** Seek\n");
 		drv->playing = 0;
 		drv->paused = 0;
-		cdrom_reply(ide, 0);
+		cdrom_reply(ide, 0, 0, 0, true, ATA_STATUS_DSC);
 		break;
 
 	case 0x1B: //START STOP UNIT
@@ -1618,7 +1618,7 @@ int cdrom_handle_cmd(ide_config *ide)
 
 
 //error is the atapi sense_key
-void cdrom_reply(ide_config *ide, uint8_t error, uint8_t asc_code, uint8_t ascq_code, bool unit_attention)
+void cdrom_reply(ide_config *ide, uint8_t error, uint8_t asc_code, uint8_t ascq_code, bool unit_attention, uint8_t extra_status)
 {
 	ide->state = IDE_STATE_IDLE;
 	ide->regs.sector_count = 3;
@@ -1629,7 +1629,7 @@ void cdrom_reply(ide_config *ide, uint8_t error, uint8_t asc_code, uint8_t ascq_
 	}
 	else
 	{
-		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ | (error ? ATA_STATUS_ERR : 0);
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ | (error ? ATA_STATUS_ERR : 0) | extra_status;
 		ide->regs.error = error << 4;
 		ide->drive[ide->regs.drv].atapi_sense_key = error;
 		ide->drive[ide->regs.drv].atapi_asc_code = asc_code;
