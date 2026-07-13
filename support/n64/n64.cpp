@@ -41,7 +41,7 @@ static constexpr auto PATCHES_OPT = "[90]";
 static constexpr auto CHEATS_OPT = "[103]";
 static constexpr const char* const CONTROLLER_OPTS[] = { "[51:49]", "[54:52]", "[57:55]", "[60:58]" };
 
-static constexpr size_t CPAK_PAGE_SIZE = 256; // N64 controller pak page size
+static constexpr size_t CPAK_PAGE_SIZE = 256;
 static constexpr size_t CPAK_ID_SECTOR_PAGE = 0;
 static constexpr size_t CPAK_FAT_PAGE = 1;
 static constexpr size_t CPAK_FAT_BACKUP_PAGE = 2;
@@ -324,82 +324,76 @@ static uint32_t get_save_offset(unsigned char idx) {
 	return offset;
 }
 
-// *** Controller PAK stuff, heavily influenced by Libdragon's "cpaktool" ***
+// Minimalistic Controller Pak initializer. 
+// Heavily influenced by Libdragon's "cpaktool".
+static uint8_t cpak_rand(uint8_t mask) {
+	static uint32_t seed = 0;
+	if (!seed) {
+		const int32_t fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+		if (fd >= 0) {
+			if (read(fd, &seed, sizeof(seed)) != sizeof(seed)) {
+				seed ^= (uint32_t)time(NULL);
+			}
 
-// Minimalistic CPAK formatter/initializer.
-static void cpak_calc_id_crc(uint8_t* id_block) {
-	uint16_t sum = 0;
-	// Sum first 14 half-words.
-	// The overflowing is done on purpose.
-	for (size_t i = 0; i < 14; i++) {
-		sum += (id_block[i << 1] << 8) | id_block[(i << 1) | 1];
+			close(fd);
+		}
+
+		srand(seed ? seed : (uint32_t)time(NULL));
+		seed = 1;
 	}
 
-	id_block[0x1c] = sum >> 8;
-	id_block[0x1d] = sum & 0xff;
-
-	// Inverted checksum.
-	// The N64 expects (0xfff2 - sum), NOT (~sum). Weird.
-	const uint16_t inv_sum = 0xfff2 - sum;
-	id_block[0x1e] = inv_sum >> 8;
-	id_block[0x1f] = inv_sum & 0xff;
+	return ((uint8_t)rand()) & mask;
 }
 
-static uint8_t cpak_calc_fat_crc(const uint8_t* page_data) {
-	uint8_t sum = 0;
-	// The overflowing is done on purpose.
-	for (size_t i = 2; i < CPAK_PAGE_SIZE; i++) {
-		sum += page_data[i];
+static void cpak_init(uint8_t* const data, const size_t sz) {
+	memset(data, 0x00, sz);
+
+	// Create an ID block template.
+	// (0x00-0x17) contains a unique serial number.
+	// It closely mimics the data found on a blank OEM pak.
+	// Source: https://rentry.co/mpk_serials
+	uint8_t id_template[CPAK_ID_ENTRY_SIZE] = { 0x00 };
+	id_template[0x01] = cpak_rand(0x3f);
+	id_template[0x05] = cpak_rand(0x07);
+	id_template[0x06] = cpak_rand(0xff);
+	id_template[0x07] = cpak_rand(0xff);
+	id_template[0x08] = cpak_rand(0x0f);
+	id_template[0x09] = cpak_rand(0xff);
+	id_template[0x0a] = cpak_rand(0xff);
+	id_template[0x0b] = cpak_rand(0xff);
+	id_template[0x19] = 0x01; // Device bit. LSB must be 1.
+	id_template[0x1a] = 0x01; // Bank size.
+
+	// Calculate the ID block CRC by summing the serial number.
+	// Byte 28-31 will contain the checksum itself.
+	uint16_t crc1 = 0;
+	for (size_t i = 0; i < 28; i += 2) {
+		crc1 += (id_template[i] << 8) | id_template[i + 1];
 	}
-	return sum;
-}
+	const uint16_t crc2 = 0xfff2 - crc1;
+	id_template[0x1c] = (uint8_t)(crc1 >> 8);
+	id_template[0x1d] = (uint8_t)(crc1 & 0xff);
+	id_template[0x1e] = (uint8_t)(crc2 >> 8);
+	id_template[0x1f] = (uint8_t)(crc2 & 0xff);
 
-static void cpak_format(uint8_t* data) {
-	// Initialize the seed() function.
-	uint32_t seed;
-	int32_t rndfd = open("/dev/urandom", O_RDONLY);
-	read(rndfd, &seed, sizeof(seed));
-	close(rndfd);
-	srand(seed);
-	
-	memset(data, 0, get_save_size(MemoryType::CPAK));
-	uint8_t id_template[CPAK_ID_ENTRY_SIZE];
-	memset(id_template, 0, CPAK_ID_ENTRY_SIZE);
+	// Write ID block template to the 4 specified locations in page 0.
+	uint8_t* const id = &data[CPAK_ID_SECTOR_PAGE * CPAK_PAGE_SIZE];
+	memcpy(&id[CPAK_ID_ENTRY_1_OFFSET], id_template, CPAK_ID_ENTRY_SIZE);
+	memcpy(&id[CPAK_ID_ENTRY_2_OFFSET], id_template, CPAK_ID_ENTRY_SIZE);
+	memcpy(&id[CPAK_ID_ENTRY_3_OFFSET], id_template, CPAK_ID_ENTRY_SIZE);
+	memcpy(&id[CPAK_ID_ENTRY_4_OFFSET], id_template, CPAK_ID_ENTRY_SIZE);
 
-	// (0x00-0x17) contains a serial number,
-	// unique for that controller pak.
-	// We fill (0x00-0x10) with random data.
-	for (size_t i = 0; i < 0x10; i++) {
-		id_template[i] = (uint8_t)(rand() & 0xff);
-	}
-
-	// The rest of the serial is some deterministic branding. :)
-	memcpy(&id_template[0x10], "MiSTer", 6);
-
-	id_template[0x19] = 0x81; // Device ID. (controller pak)
-	id_template[0x1a] = 0x01; // 1 bank
-
-	cpak_calc_id_crc(id_template);
-
-	// Write ID block to the 4 specified locations in page 0.
-	const size_t p0_base = CPAK_ID_SECTOR_PAGE * CPAK_PAGE_SIZE;
-	memcpy(data + p0_base + CPAK_ID_ENTRY_1_OFFSET, id_template, CPAK_ID_ENTRY_SIZE);
-	memcpy(data + p0_base + CPAK_ID_ENTRY_2_OFFSET, id_template, CPAK_ID_ENTRY_SIZE);
-	memcpy(data + p0_base + CPAK_ID_ENTRY_3_OFFSET, id_template, CPAK_ID_ENTRY_SIZE);
-	memcpy(data + p0_base + CPAK_ID_ENTRY_4_OFFSET, id_template, CPAK_ID_ENTRY_SIZE);
-
-	uint8_t fat_page[CPAK_PAGE_SIZE];
-	memset(fat_page, 0, CPAK_PAGE_SIZE);
-
-	// Init the user entries (index 5 to 127) to (0x00, 0x03), repeating.
-	for (size_t i = 5; i < (CPAK_PAGE_SIZE >> 1); i++) {
-		fat_page[(i << 1) | 1] = 0x03;
+	// Populate user pages and calculate CRC.
+	// A regular 32KiB Controller Pak has 123 pages.
+	// 0x0003 = Unallocated space.
+	uint8_t* const fat = &data[CPAK_FAT_PAGE * CPAK_PAGE_SIZE];
+	for (size_t i = CPAK_PAGE_SIZE - (123 << 1); i < CPAK_PAGE_SIZE; i += 2) {
+		fat[1] += (fat[i + 1] = 0x03);
 	}
 
-	fat_page[1] = cpak_calc_fat_crc(fat_page);
-
-	memcpy(data + (CPAK_FAT_PAGE * CPAK_PAGE_SIZE), fat_page, CPAK_PAGE_SIZE);
-	memcpy(data + (CPAK_FAT_BACKUP_PAGE * CPAK_PAGE_SIZE), fat_page, CPAK_PAGE_SIZE);
+	// Make a backup of the page.
+	uint8_t* const fat_backup = &data[CPAK_FAT_BACKUP_PAGE * CPAK_PAGE_SIZE];
+	memcpy(fat_backup, fat, CPAK_PAGE_SIZE);
 }
 
 static char full_path[1024];
@@ -532,7 +526,7 @@ struct N64SaveFile {
 
 		if (!found_old_data) {
 			if (this->type == MemoryType::CPAK) {
-				cpak_format(save_file_buf);
+				cpak_init(save_file_buf, sz);
 			}
 			else {
 				memset(save_file_buf, 0xff, sz);
