@@ -202,6 +202,7 @@ struct chd_prefetch
 	chd_file *chd_f;
 	uint8_t *buf;
 	uint32_t hunkbytes;
+	uint32_t hunkcount;   // total hunks in the file; N+1 past this is not scheduled
 	int num;              // hunk held in buf, or -1
 	int inflight;         // hunk being decompressed, or -1 when idle
 	chd_error result;
@@ -225,6 +226,8 @@ chd_prefetch *mister_chd_prefetch_create(chd_file *chd_f, uint32_t hunkbytes)
 
 	pf->chd_f = chd_f;
 	pf->hunkbytes = hunkbytes;
+	const chd_header *hdr = chd_get_header(chd_f);
+	pf->hunkcount = hdr ? hdr->totalhunks : 0;
 	pf->num = -1;
 	pf->inflight = -1;
 	pf->result = CHDERR_NONE;
@@ -255,6 +258,9 @@ void mister_chd_prefetch_destroy(chd_prefetch **pfp)
 static void chd_prefetch_schedule(chd_prefetch *pf, int num)
 {
 	if (num < 0) return;
+	// Do not prefetch past the last hunk: at end-of-disc N+1 does not exist, so
+	// scheduling it would burn an offload slot on a chd_read() that only fails.
+	if (pf->hunkcount && (uint32_t)num >= pf->hunkcount) return;
 
 	pthread_mutex_lock(&pf->lock);
 	if (pf->inflight >= 0 || pf->num == num)

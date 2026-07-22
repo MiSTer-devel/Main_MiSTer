@@ -106,7 +106,7 @@ bool offload_try_add_work(std::function<void()> handler)
 
 	pthread_mutex_lock(&s_queue_lock);
 
-	if ((s_queue_head - s_queue_tail) == QUEUE_SIZE)
+	if ((s_queue_head - s_queue_tail) >= QUEUE_SIZE)
 	{
 		pthread_mutex_unlock(&s_queue_lock);
 		return false;
