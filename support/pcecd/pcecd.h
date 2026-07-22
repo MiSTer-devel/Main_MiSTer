@@ -1,6 +1,8 @@
 #ifndef PCECD_H
 #define PCECD_H
 
+struct chd_prefetch;
+
 // CDD command
 #define PCECD_COMM_TESTUNIT			0x00
 #define PCECD_COMM_REQUESTSENSE		0x03
@@ -105,6 +107,7 @@ private:
 	sense_t sense;
 	uint8_t region;
 	uint8_t *chd_hunkbuf;
+	chd_prefetch *chd_pf;
 	int chd_hunknum;
 
 	uint16_t stat;

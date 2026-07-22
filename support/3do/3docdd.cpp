@@ -20,6 +20,7 @@ p3docdd_t::p3docdd_t() {
 	lba = 0;
 	speed = 0;
 	chd_hunkbuf = NULL;
+	chd_pf = NULL;
 	chd_hunknum = -1;
 	SendData = NULL;
 }
@@ -348,6 +349,7 @@ int p3docdd_t::Load(const char *filename)
 
 		this->chd_hunkbuf = (uint8_t *)malloc(this->toc.chd_hunksize);
 		this->chd_hunknum = -1;
+		this->chd_pf = mister_chd_prefetch_create(this->toc.chd_f, this->toc.chd_hunksize);
 		if (this->toc.tracks[0].sector_size)
 		{
 			this->sectorSize = this->toc.tracks[0].sector_size;
@@ -359,7 +361,7 @@ int p3docdd_t::Load(const char *filename)
 
 	/*if (this->toc.chd_f)
 	{
-		mister_chd_read_sector(this->toc.chd_f, 0, 0, 0, 0x10, (uint8_t *)header, this->chd_hunkbuf, &this->chd_hunknum);
+		mister_chd_read_sector(this->toc.chd_f, 0, 0, 0, 0x10, (uint8_t *)header, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 	}
 	else {
 		fd_img = &this->toc.tracks[0].f;
@@ -393,6 +395,9 @@ void p3docdd_t::Unload()
 {
 	if (this->loaded)
 	{
+		// Before chd_close(): the worker may still be inside chd_read() on it.
+		mister_chd_prefetch_destroy(&this->chd_pf);
+
 		if (this->toc.chd_f)
 		{
 			chd_close(this->toc.chd_f);
@@ -687,7 +692,7 @@ void p3docdd_t::ReadData(uint8_t *buf)
 				read_offset += 16;
 			}
 
-			mister_chd_read_sector(this->toc.chd_f, lba_ + this->toc.tracks[this->track].offset, read_offset, 0, this->sectorSize, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, lba_ + this->toc.tracks[this->track].offset, read_offset, 0, this->sectorSize, buf, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 		}
 		else {
 			if (this->sectorSize == 2048)

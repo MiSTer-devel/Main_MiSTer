@@ -1,6 +1,8 @@
 #ifndef MEGACD_H
 #define MEGACD_H
 
+struct chd_prefetch;
+
 
 // CDD status
 #define CD_STAT_STOP			0x00
@@ -71,6 +73,7 @@ private:
 	int audioOffset;
 	int chd_hunknum;
 	uint8_t *chd_hunkbuf;
+	chd_prefetch *chd_pf;
 	int chd_audio_read_lba;
 	uint8_t stat[10];
 	uint8_t comm[10];

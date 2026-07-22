@@ -1,6 +1,8 @@
 #ifndef SATURN_H
 #define SATURN_H
 
+struct chd_prefetch;
+
 #include "../../cd.h"
 
 //#define SATURN_DEBUG				1
@@ -88,6 +90,7 @@ private:
 	int audioFirst;
 	int chd_hunknum;
 	uint8_t *chd_hunkbuf;
+	chd_prefetch *chd_pf;
 	int chd_audio_read_lba;
 
 

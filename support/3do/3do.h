@@ -1,6 +1,8 @@
 #ifndef P3DO_H
 #define P3DO_H
 
+struct chd_prefetch;
+
 #include "../../cd.h"
 
 //#define P3DO_DEBUG				1
@@ -59,6 +61,7 @@ private:
 	uint8_t cd_buf[4096 + 2];
 	int chd_hunknum;
 	uint8_t *chd_hunkbuf;
+	chd_prefetch *chd_pf;
 
 	int LoadCUE(const char* filename);
 	int LoadISO(const char* filename);

@@ -21,6 +21,7 @@ cdd_t::cdd_t() {
 	audioLength = 0;
 	audioOffset = 0;
 	chd_hunkbuf = NULL;
+	chd_pf = NULL;
 	chd_hunknum = -1;
 	SendData = NULL;
 	CanSendData = NULL;
@@ -266,6 +267,7 @@ int cdd_t::Load(const char *filename)
 
 		this->chd_hunkbuf = (uint8_t *)malloc(this->toc.chd_hunksize);
 		this->chd_hunknum = -1;
+		this->chd_pf = mister_chd_prefetch_create(this->toc.chd_f, this->toc.chd_hunksize);
  	} else {
 		return (-1);
 
@@ -273,7 +275,7 @@ int cdd_t::Load(const char *filename)
 
 	if (this->toc.chd_f)
 	{
-		mister_chd_read_sector(this->toc.chd_f, 0, 0, 0, 0x10, (uint8_t *)header, this->chd_hunkbuf, &this->chd_hunknum);
+		mister_chd_read_sector(this->toc.chd_f, 0, 0, 0, 0x10, (uint8_t *)header, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 	} else {
 		fd_img = &this->toc.tracks[0].f;
 
@@ -313,6 +315,9 @@ void cdd_t::Unload()
 {
 	if (this->loaded)
 	{
+		// Before chd_close(): the worker may still be inside chd_read() on it.
+		mister_chd_prefetch_destroy(&this->chd_pf);
+
 		if (this->toc.chd_f)
 		{
 			chd_close(this->toc.chd_f);
@@ -928,7 +933,7 @@ void cdd_t::ReadData(uint8_t *buf)
 				read_offset += 16;
 			}
 
-			mister_chd_read_sector(this->toc.chd_f, this->lba + this->toc.tracks[0].offset, 0, read_offset, 2048, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, this->lba + this->toc.tracks[0].offset, 0, read_offset, 2048, buf, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 		} else {
 			if (this->sectorSize == 2048)
 			{
@@ -958,7 +963,7 @@ int cdd_t::ReadCDDA(uint8_t *buf)
 	{
 		for(int i = 0; i < this->audioLength / 2352; i++)
 		{
-			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 2352*i, 0, 2352, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 2352*i, 0, 2352, buf, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 		}
 
 		//CHD audio requires byteswap. There's probably a better way to do this...
@@ -1005,9 +1010,9 @@ int cdd_t::ReadSubcode(uint16_t* buf)
 	{
 		//Just use the read sector call with an offset, since we previously read that sector, it is already in the hunk cache
 		if (this->toc.tracks[this->index].sbc_type == SUBCODE_RW_RAW) {
-			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 0, CD_MAX_SECTOR_DATA, 96, (uint8_t *)buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 0, CD_MAX_SECTOR_DATA, 96, (uint8_t *)buf, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 		} else if (this->toc.tracks[this->index].sbc_type == SUBCODE_RW) {
-			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 0, CD_MAX_SECTOR_DATA, 96, subc, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->index].offset, 0, CD_MAX_SECTOR_DATA, 96, subc, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 			InterleaveSubcode(subc, buf);
 		} else {
 			err = -1;

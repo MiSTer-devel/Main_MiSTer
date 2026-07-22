@@ -108,6 +108,7 @@ struct drive_t
 	chd_file *chd_f;
 	int      chd_hunknum;
 	uint8_t	 *chd_hunkbuf;
+	chd_prefetch *chd_pf;
 	uint32_t  chd_total_size;
 	uint32_t  chd_last_partial_lba;
 

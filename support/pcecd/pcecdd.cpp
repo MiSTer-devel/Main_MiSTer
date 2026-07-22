@@ -19,6 +19,7 @@ float get_cd_seek_ms(int start_sector, int target_sector);
 pcecdd_t pcecdd;
 
 pcecdd_t::pcecdd_t() {
+	this->chd_pf = NULL;
 	latency = 0;
 	audiodelay = 0;
 	loaded = 0;
@@ -271,6 +272,7 @@ int pcecdd_t::Load(const char *filename)
 
 		this->chd_hunkbuf = (uint8_t *)malloc(this->toc.chd_hunksize);
 		this->chd_hunknum = -1;
+		this->chd_pf = mister_chd_prefetch_create(this->toc.chd_f, this->toc.chd_hunksize);
 	} else {
 		return -1;
 	}
@@ -303,6 +305,9 @@ void pcecdd_t::Unload()
 {
 	if (this->loaded)
 	{
+		// Before chd_close(): the worker may still be inside chd_read() on it.
+		mister_chd_prefetch_destroy(&this->chd_pf);
+
 		if (this->toc.chd_f)
 		{
 			chd_close(this->toc.chd_f);
@@ -917,7 +922,7 @@ void pcecdd_t::ReadData(uint8_t *buf)
 				s_offset += 16;
 			}
 
-			mister_chd_read_sector(this->toc.chd_f, this->lba + this->toc.tracks[this->index].offset, 0, s_offset, 2048, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, this->lba + this->toc.tracks[this->index].offset, 0, s_offset, 2048, buf, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 		} else {
 			if (this->toc.tracks[this->index].sector_size == 2048)
 			{
@@ -938,7 +943,7 @@ int pcecdd_t::ReadCDDA(uint8_t *buf)
 
 	if (this->toc.chd_f)
 	{
-		mister_chd_read_sector(this->toc.chd_f, this->lba + this->toc.tracks[this->index].offset, 0, 0, this->audioLength, buf, this->chd_hunkbuf, &this->chd_hunknum);
+		mister_chd_read_sector(this->toc.chd_f, this->lba + this->toc.tracks[this->index].offset, 0, 0, this->audioLength, buf, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 		for (int swapidx = 0; swapidx < this->audioLength; swapidx += 2)
 		{
 			uint8_t temp = buf[swapidx];

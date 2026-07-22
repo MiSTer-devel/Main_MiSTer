@@ -29,6 +29,7 @@ satcdd_t::satcdd_t() {
 	audioLength = 0;
 	audioFirst = 0;
 	chd_hunkbuf = NULL;
+	chd_pf = NULL;
 	chd_hunknum = -1;
 	SendData = NULL;
 
@@ -343,6 +344,7 @@ int satcdd_t::Load(const char *filename)
 
 		this->chd_hunkbuf = (uint8_t *)malloc(this->toc.chd_hunksize);
 		this->chd_hunknum = -1;
+		this->chd_pf = mister_chd_prefetch_create(this->toc.chd_f, this->toc.chd_hunksize);
 		if (this->toc.tracks[0].sector_size)
 		{
 			this->sectorSize = this->toc.tracks[0].sector_size;
@@ -355,7 +357,7 @@ int satcdd_t::Load(const char *filename)
 
 	/*if (this->toc.chd_f)
 	{
-		mister_chd_read_sector(this->toc.chd_f, 0, 0, 0, 0x10, (uint8_t *)header, this->chd_hunkbuf, &this->chd_hunknum);
+		mister_chd_read_sector(this->toc.chd_f, 0, 0, 0, 0x10, (uint8_t *)header, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 	}
 	else {
 		fd_img = &this->toc.tracks[0].f;
@@ -398,6 +400,9 @@ void satcdd_t::Unload()
 {
 	if (this->loaded)
 	{
+		// Before chd_close(): the worker may still be inside chd_read() on it.
+		mister_chd_prefetch_destroy(&this->chd_pf);
+
 		if (this->toc.chd_f)
 		{
 			chd_close(this->toc.chd_f);
@@ -441,7 +446,7 @@ int satcdd_t::GetBootHeader(uint8_t *buf) {
 
 	if (this->toc.chd_f)
 	{
-		mister_chd_read_sector(this->toc.chd_f, 0, 0, offset, 256, buf, this->chd_hunkbuf, &this->chd_hunknum);
+		mister_chd_read_sector(this->toc.chd_f, 0, 0, offset, 256, buf, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 	}
 	else 
 	{
@@ -1202,7 +1207,7 @@ void satcdd_t::ReadData(uint8_t *buf)
 				read_offset += 16;
 			}
 
-			mister_chd_read_sector(this->toc.chd_f, lba_ + this->toc.tracks[this->track].offset, read_offset, 0, this->toc.tracks[this->track].sector_size, buf, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, lba_ + this->toc.tracks[this->track].offset, read_offset, 0, this->toc.tracks[this->track].sector_size, buf, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 		}
 		else {
 			if (this->toc.tracks[this->track].sector_size == 2048)
@@ -1234,7 +1239,7 @@ int satcdd_t::ReadCDDA(uint8_t *buf, int first)
 	{
 		for (int i = sec_offs; i < 2; i++, dest += 4096)
 		{
-			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->track].offset + i, 0, 0, 2352, dest, this->chd_hunkbuf, &this->chd_hunknum);
+			mister_chd_read_sector(this->toc.chd_f, this->chd_audio_read_lba + this->toc.tracks[this->track].offset + i, 0, 0, 2352, dest, this->chd_hunkbuf, &this->chd_hunknum, this->chd_pf);
 
 			//CHD audio requires byteswap. There's probably a better way to do this...
 			for (int swapidx = 0; swapidx < 2352; swapidx += 2)

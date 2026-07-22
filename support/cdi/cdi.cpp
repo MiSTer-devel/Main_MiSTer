@@ -74,6 +74,7 @@ static enum DiscType disc_type = DT_CDDA;
 
 static uint8_t* chd_hunkbuf = NULL;
 static int chd_hunknum;
+static chd_prefetch *chd_pf = NULL;
 static toc_t toc = {};
 CdgUnpacker cdg_unpack;
 bool sub_loaded_from_cdg;
@@ -113,6 +114,8 @@ static int sgets(char* out, int sz, char** in)
 
 static void unload_chd(toc_t* table)
 {
+	// Before chd_close(): the worker may still be inside chd_read() on it.
+	mister_chd_prefetch_destroy(&chd_pf);
 	if (table->chd_f)
 	{
 		chd_close(table->chd_f);
@@ -170,6 +173,7 @@ static int load_chd(const char* filename, toc_t* table)
 
 	chd_hunkbuf = (uint8_t*)malloc(table->chd_hunksize);
 	chd_hunknum = -1;
+	chd_pf = mister_chd_prefetch_create(table->chd_f, table->chd_hunksize);
 
 	return 1;
 }
@@ -970,7 +974,7 @@ void cdi_read_cd(uint8_t* buffer, int lba, int cnt)
 													   CDI_SECTOR_LEN,
 													   buffer,
 													   chd_hunkbuf,
-													   &chd_hunknum) == CHDERR_NONE)
+													   &chd_hunknum, chd_pf) == CHDERR_NONE)
 							{
 								if (!toc.tracks[i].type) // CHD requires byteswap of audio data
 								{
@@ -997,7 +1001,7 @@ void cdi_read_cd(uint8_t* buffer, int lba, int cnt)
 														   subc.size(),
 														   subc.data(),
 														   chd_hunkbuf,
-														   &chd_hunknum) == CHDERR_NONE)
+														   &chd_hunknum, chd_pf) == CHDERR_NONE)
 								{
 									subc_filled = true;
 								}

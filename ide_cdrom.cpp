@@ -306,6 +306,7 @@ static const char* load_chd_file(drive_t *drv, const char *chdfile)
 	drv->chd_hunkbuf = (uint8_t *)malloc(tmpTOC.chd_hunksize);
 	drv->chd_hunknum = -1;
 	drv->chd_f = tmpTOC.chd_f;
+	drv->chd_pf = mister_chd_prefetch_create(drv->chd_f, tmpTOC.chd_hunksize);
 
 	//don't use add_track, just do it ourselves...
 	for (int i = 0; i < tmpTOC.last; i++)
@@ -1065,7 +1066,7 @@ void cdrom_read(ide_config *ide)
 		for (uint32_t i = 0; i < cnt; i++)
 		{
 
-			if (mister_chd_read_sector(drive->chd_f, drive->chd_last_partial_lba + drive->track[drive->data_num].chd_offset, d_offset, hdr, 2048, ide_buf, drive->chd_hunkbuf, &drive->chd_hunknum) != CHDERR_NONE)
+			if (mister_chd_read_sector(drive->chd_f, drive->chd_last_partial_lba + drive->track[drive->data_num].chd_offset, d_offset, hdr, 2048, ide_buf, drive->chd_hunkbuf, &drive->chd_hunknum, drive->chd_pf) != CHDERR_NONE)
 			{
 				//I don't think anything else uses this, but set it just in case.
 				ide->null = 1;
@@ -1653,6 +1654,9 @@ void cdrom_reply(ide_config *ide, uint8_t error, uint8_t asc_code, uint8_t ascq_
 void cdrom_close_chd(drive_t *drv)
 {
 
+	// Before chd_close(): the worker may still be inside chd_read() on it.
+	mister_chd_prefetch_destroy(&drv->chd_pf);
+
 	if (drv->chd_f)
 	{
 		chd_close(drv->chd_f);
@@ -1728,7 +1732,7 @@ void ide_cdda_send_sector()
 	{
 		if (drv->chd_f)
 		{
-			mister_chd_read_sector(drv->chd_f, drv->play_start_lba + drv->track[drv->data_num].chd_offset, 0, 0, BYTES_PER_RAW_REDBOOK_FRAME, cdda_buf, drv->chd_hunkbuf, &drv->chd_hunknum);
+			mister_chd_read_sector(drv->chd_f, drv->play_start_lba + drv->track[drv->data_num].chd_offset, 0, 0, BYTES_PER_RAW_REDBOOK_FRAME, cdda_buf, drv->chd_hunkbuf, &drv->chd_hunknum, drv->chd_pf);
 			needs_swap = true;
 		}
 		else
