@@ -2572,6 +2572,7 @@ void HandleUI(void)
 									if (is_3do() && !bit) p3do_reset();
 
 									user_io_status_set(opt, 1, ex);
+									if (is_n64() && !ex && !strcmp(opt, "[41]")) n64_save_dd_disk();
 									user_io_status_set(opt, 0, ex);
 
 									menustate = MENU_GENERIC_MAIN1;
