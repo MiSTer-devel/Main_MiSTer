@@ -1586,6 +1586,7 @@ void user_io_init(const char *path, const char *xml)
 							// check for multipart rom
 							for (char i = (boot0_loaded ? 1 : 0); i < 4; i++)
 							{
+								if (is_n64() && i == 3) continue; // 64DD IPLs are loaded when an NDD is mounted.
 								sprintf(mainpath, "%s/boot%d.rom", home, i);
 								user_io_file_tx(mainpath, i << 6);
 							}
