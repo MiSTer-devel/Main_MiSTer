@@ -315,7 +315,7 @@ uint8_t* snes_get_header(fileTYPE *f)
 					}
 
 					//SA1 6
-					if (buf[addr + Mapper] == 0x23 && (buf[addr + RomType] == 0x32 || buf[addr + RomType] == 0x34 || buf[addr + RomType] == 0x35))
+					if (buf[addr + Mapper] == 0x23 && (buf[addr + RomType] == 0x32 || buf[addr + RomType] == 0x33 || buf[addr + RomType] == 0x34 || buf[addr + RomType] == 0x35))
 					{
 						hdr[1] |= 0x60;
 					}
