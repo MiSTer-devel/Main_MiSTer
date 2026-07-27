@@ -3931,7 +3931,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1 && ev->code >= 256)
 		{
-			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_R3; i++)
+			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_START; i++)
+			{
+				if (ev->code == input[dev].mmap[i]) assign_btn = 1;
+			}
+
+			for (int i = SYS_BTN_L2; !assign_btn && i <= SYS_BTN_R3; i++)
 			{
 				if (ev->code == input[dev].mmap[i]) assign_btn = 1;
 			}
