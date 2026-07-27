@@ -2159,6 +2159,7 @@ static void do_map_clear()
 	if (!mapping || mapping_type > 1 || mapping_dev < 0)
 		return;
 
+	const int mouse_session = is_menu() && menu_mouse_map;
 	clear_mapping_current_input();
 	clear_mapping_combo_state();
 	clear_map_feedback();
@@ -2169,10 +2170,10 @@ static void do_map_clear()
 	osd_timer = 0;
 	mapping_finish = 0;
 
-	if (menu_mouse_map) clear_mouse_map_slots(input[mapping_dev].map);
+	if (mouse_session) clear_mouse_map_slots(input[mapping_dev].map);
 	else clear_joypad_map_slots(input[mapping_dev].map);
 
-	mapping_button = menu_mouse_map ? SYS_BTN_A : 0;
+	mapping_button = mouse_session ? SYS_BTN_A : 0;
 	mapping_clear = 1;
 }
 
