@@ -1885,9 +1885,68 @@ static void prepare_mapping_trigger_capture()
 	mapping_trigger_capture.valid = 1;
 }
 
+static int map_entry_uses_axis(uint32_t map, uint16_t axis)
+{
+	if (map & MAP_FLAG_ANALOG)
+		return map_axis_code(map) == axis;
+
+	const uint32_t last_axis_key = KEY_EMU + (ABS_MAX << 1) + 1;
+	return map >= KEY_EMU && map <= last_axis_key && ((map - KEY_EMU) >> 1) == axis;
+}
+
+static int trigger_axis_is_reserved(int dev, uint16_t axis)
+{
+	if (axis >= ABS_HAT0X && axis <= ABS_HAT3Y) return 1;
+	if ((axis == ABS_RUDDER || axis == ABS_WHEEL) && input[dev].quirk != QUIRK_WHEEL) return 1;
+
+	for (int i = 0; i < (int)(sizeof(tmp_axis) / sizeof(tmp_axis[0])); i++)
+	{
+		if (map_entry_uses_axis(tmp_axis[i], axis)) return 1;
+	}
+
+	for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_UP; i++)
+	{
+		if (map_entry_uses_axis(input[dev].map[i], axis)) return 1;
+	}
+
+	for (int i = SYS_AXIS1_X; i <= SYS_AXIS_Y; i++)
+	{
+		if (map_entry_uses_axis(input[dev].map[i], axis)) return 1;
+	}
+
+	for (int i = SYS_AXIS_MX; i <= SYS_AXIS_MY; i++)
+	{
+		if (map_entry_uses_axis(input[dev].map[i], axis)) return 1;
+	}
+
+	return 0;
+}
+
+static int trigger_axis_has_valid_baseline(int dev, uint16_t axis)
+{
+	if (!mapping_trigger_capture.valid ||
+		mapping_trigger_capture.dev != dev ||
+		mapping_trigger_capture.pos != mapping_button ||
+		axis > ABS_MAX ||
+		!mapping_trigger_capture.has_axis[axis])
+		return 0;
+
+	const input_absinfo *base = &mapping_trigger_capture.absinfo[axis];
+	const int range = base->maximum - base->minimum;
+	if (range <= 1) return 0;
+
+	const int threshold = (range / 8) > 4 ? (range / 8) : 4;
+	const int center = base->minimum + (range / 2);
+	return base->value <= base->minimum + threshold ||
+		base->value >= base->maximum - threshold ||
+		abs(base->value - center) <= threshold;
+}
+
 static uint32_t build_trigger_axis_map_for_axis(int dev, uint16_t axis, const input_absinfo *absinfo, int negative, int threshold_divisor)
 {
-	if (!absinfo || axis > ABS_MAX)
+	if (!absinfo || axis > ABS_MAX ||
+		trigger_axis_is_reserved(dev, axis) ||
+		!trigger_axis_has_valid_baseline(dev, axis))
 		return 0;
 
 	uint32_t map = axis | MAP_FLAG_ANALOG | MAP_FLAG_TRIGGER;
@@ -2018,16 +2077,15 @@ static void apply_menu_analog_trigger_map(int dev, uint32_t trigger_map)
 	input[dev].mmap[idx] = trigger_map;
 }
 
-static void map_menu_analog_trigger_axis(int dev, uint16_t axis, const input_absinfo *absinfo)
+static void update_menu_analog_trigger_axis(int dev)
 {
 	if (!is_menu_trigger_map_pos(mapping_button) ||
 		mapping_dev != dev ||
 		!mapping_key_mapped ||
-		mapping_key_mapped >= KEY_EMU ||
-		input[dev].map[SYS_AXIS_L2 + (mapping_button - SYS_MAP_BTN_L2)])
+		mapping_key_mapped >= KEY_EMU)
 		return;
 
-	apply_menu_analog_trigger_map(dev, build_trigger_axis_map_for_axis(dev, axis, absinfo, 0, 32));
+	apply_menu_analog_trigger_map(dev, detect_moved_trigger_axis_map(dev));
 }
 
 static void map_menu_analog_trigger(int dev, uint16_t keycode, const input_absinfo *absinfo)
@@ -4111,7 +4169,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 		if (map_skip) clear_mapping_current_input();
 		if (ev->type == EV_ABS && absinfo)
-			map_menu_analog_trigger_axis(dev, ev->code, absinfo);
+			update_menu_analog_trigger_axis(dev);
 
 		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
 		{
