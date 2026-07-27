@@ -1751,6 +1751,7 @@ static int joyswap = 0;
 void user_io_set_joyswap(int swap)
 {
 	joyswap = swap;
+	input_analog_triggers_resync(osd_is_visible);
 }
 
 int user_io_get_joyswap()
@@ -4192,8 +4193,11 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 
 void user_io_osd_key_enable(char on)
 {
+	on = !!on;
 	//printf("OSD is now %s\n", on ? "visible" : "invisible");
+	if (osd_is_visible != on) input_analog_triggers_resync(on);
 	osd_is_visible = on;
+
 	if (cfg.log_file_entry) MakeFile("/tmp/OSD_VISIBLE", on ? "1" : "0");
 	input_switch(-1);
 }

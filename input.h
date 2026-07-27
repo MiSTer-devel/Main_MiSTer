@@ -147,6 +147,7 @@ void trigger_map_clear();
 int poll_map_hold_action();
 int get_map_active();
 void reset_players();
+void input_analog_triggers_resync(int suppress);
 
 uint32_t get_key_mod();
 uint32_t get_ps2_code(uint16_t key);

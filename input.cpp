@@ -3299,6 +3299,25 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 static uint8_t analog_trigger_pos[NUMPLAYERS][2] = {};
 static uint8_t analog_trigger_last[NUMPLAYERS][2] = {};
 
+void input_analog_triggers_resync(int suppress)
+{
+	for (int num = 0; num < NUMPLAYERS; num++)
+	{
+		const uint8_t l2 = suppress ? 0 : analog_trigger_pos[num][0];
+		const uint8_t r2 = suppress ? 0 : analog_trigger_pos[num][1];
+
+		analog_trigger_last[num][0] = l2;
+		analog_trigger_last[num][1] = r2;
+		user_io_analog_triggers(num, l2, r2);
+	}
+}
+
+static void reset_analog_triggers()
+{
+	memset(analog_trigger_pos, 0, sizeof(analog_trigger_pos));
+	input_analog_triggers_resync(0);
+}
+
 static uint8_t normalize_analog_trigger(uint32_t map, int value, const input_absinfo *absinfo)
 {
 	if (!absinfo || absinfo->maximum == absinfo->minimum)
@@ -3349,7 +3368,7 @@ static int joy_analog_triggers(int dev, int axis, int value, const input_absinfo
 		handled = 1;
 	}
 
-	if (handled)
+	if (handled && !user_io_osd_is_visible())
 	{
 		if (analog_trigger_pos[num][0] != analog_trigger_last[num][0] ||
 			analog_trigger_pos[num][1] != analog_trigger_last[num][1])
@@ -3508,8 +3527,7 @@ void reset_players()
 	for (int i = 0; i < NUMPLAYERS; i++) {
 		clear_autofire(i);
 	}
-	memset(analog_trigger_pos, 0, sizeof(analog_trigger_pos));
-	memset(analog_trigger_last, 0, sizeof(analog_trigger_last));
+	reset_analog_triggers();
 	memset(player_pad, 0, sizeof(player_pad));
 	memset(player_pdsp, 0, sizeof(player_pdsp));
 }
@@ -4719,7 +4737,16 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 		//analog joystick
 		case EV_ABS:
-			if (!user_io_osd_is_visible())
+			if (user_io_osd_is_visible())
+			{
+				int value = ev->value;
+				if (ev->value < absinfo->minimum) value = absinfo->minimum;
+				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
+
+				joy_analog_triggers(dev, ev->code, value, absinfo);
+				break;
+			}
+
 			{
 				int value = ev->value;
 				if (ev->value < absinfo->minimum) value = absinfo->minimum;
@@ -5982,6 +6009,8 @@ int input_test(int getchar)
 			pool[i].fd = -1;
 			pool[i].events = 0;
 		}
+
+		reset_analog_triggers();
 
 		// clear button reference counts and key states
 		memset(key_states, 0, sizeof(key_states));
