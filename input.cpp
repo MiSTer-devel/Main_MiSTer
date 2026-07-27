@@ -6017,6 +6017,7 @@ int input_test(int getchar)
 			pool[i].events = 0;
 		}
 
+		gcdb_reset_axis_baselines();
 		reset_analog_triggers();
 
 		// clear button reference counts and key states
@@ -6385,6 +6386,7 @@ int input_test(int getchar)
 						// use specific keyboard(s) as a joystick
 						for (int i = 0; i < (int)cfg.keyboard_as_joystick[0]; i++) input[n].force_joy = (input[n].vid == (cfg.keyboard_as_joystick[i + 1] >> 16) && input[n].pid == (cfg.keyboard_as_joystick[i + 1] & 0xFFFF));
 
+						if (!input[n].mouse) gcdb_capture_axis_baseline(pool[n].fd);
 						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
 
 						n++;

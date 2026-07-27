@@ -52,6 +52,16 @@ static const char *sdlname_to_mister_idx[] = {
 };
 
 #define GCDB_MAP_FLAG_DETECT_TRIGGER_DIRECTION 0x80000000U
+#define MAX_GCDB_AXIS_BASELINES 32
+
+typedef struct {
+	int fd;
+	uint8_t valid[ABS_MAX + 1];
+	int32_t value[ABS_MAX + 1];
+} controller_axis_baseline;
+
+static controller_axis_baseline axis_baselines[MAX_GCDB_AXIS_BASELINES] = {};
+static int axis_baseline_count = 0;
 
 typedef struct {
 	uint16_t id[4]; //bustype, vid, pid, version
@@ -139,6 +149,51 @@ static uint16_t axis_from_mapped_code(int mapped_code)
 	return (mapped_code >= KEY_EMU) ? ((mapped_code - KEY_EMU) >> 1) : (uint16_t)mapped_code;
 }
 
+void gcdb_reset_axis_baselines()
+{
+	memset(axis_baselines, 0, sizeof(axis_baselines));
+	axis_baseline_count = 0;
+}
+
+void gcdb_capture_axis_baseline(int dev_fd)
+{
+	if (dev_fd < 0 || axis_baseline_count >= MAX_GCDB_AXIS_BASELINES) return;
+
+	controller_axis_baseline *baseline = &axis_baselines[axis_baseline_count++];
+	memset(baseline, 0, sizeof(*baseline));
+	baseline->fd = dev_fd;
+
+	unsigned char absbits[(ABS_MAX + 8) / 8] = {};
+	if (ioctl(dev_fd, EVIOCGBIT(EV_ABS, sizeof(absbits)), absbits) < 0) return;
+
+	for (int axis = 0; axis <= ABS_MAX; axis++)
+	{
+		if (!(absbits[axis / 8] & (1 << (axis % 8)))) continue;
+
+		input_absinfo absinfo = {};
+		if (ioctl(dev_fd, EVIOCGABS(axis), &absinfo) < 0) continue;
+
+		baseline->valid[axis] = 1;
+		baseline->value[axis] = absinfo.value;
+	}
+}
+
+static int gcdb_axis_baseline_value(int dev_fd, uint16_t axis, int32_t *value)
+{
+	if (axis > ABS_MAX || !value) return 0;
+
+	for (int i = 0; i < axis_baseline_count; i++)
+	{
+		if (axis_baselines[i].fd == dev_fd && axis_baselines[i].valid[axis])
+		{
+			*value = axis_baselines[i].value[axis];
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 static int trigger_axis_released_near_max(int dev_fd, uint16_t axis)
 {
 	if (dev_fd < 0 || axis > ABS_MAX) return 0;
@@ -150,7 +205,9 @@ static int trigger_axis_released_near_max(int dev_fd, uint16_t axis)
 	if (range <= 1) return 0;
 
 	const int edge_threshold = (range / 8) > 4 ? (range / 8) : 4;
-	return absinfo.value >= (absinfo.maximum - edge_threshold);
+	int32_t released_value = absinfo.value;
+	gcdb_axis_baseline_value(dev_fd, axis, &released_value);
+	return released_value >= (absinfo.maximum - edge_threshold);
 }
 
 static uint32_t trigger_axis_map_from_token(const char *btn_name, int mapped_code)
