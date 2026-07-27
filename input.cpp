@@ -7667,8 +7667,8 @@ advancedButtonMap *get_advanced_map_defs(int devnum)
 void get_button_name_for_code(uint16_t btn_code, int devnum, char *bname, size_t bname_sz)
 {
 	static int last_devnum = -1;
-	static uint16_t btn_map[KEY_MAX - BTN_JOYSTICK] = {0};
-	static uint16_t abs_map[ABS_MAX] = {0};
+	static uint16_t btn_map[GCDB_BUTTON_MAP_SIZE] = {};
+	static uint16_t abs_map[GCDB_AXIS_MAP_SIZE] = {};
 	if (devnum != last_devnum)
 	{
 		memset(btn_map, 0xFFFF, sizeof(btn_map));
