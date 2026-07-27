@@ -149,16 +149,24 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 
 	if (mmap[SYS_AXIS_X] && !is_psx())
 	{
-		uint32_t key = KEY_EMU + (((uint16_t)mmap[SYS_AXIS_X]) << 1);
-		map[SYS_BTN_LEFT] = (key << 16) | map[SYS_BTN_LEFT];
-		map[SYS_BTN_RIGHT] = ((key+1) << 16) | map[SYS_BTN_RIGHT];
+		const uint32_t min_key = KEY_EMU + ((mmap[SYS_AXIS_X] & MAP_AXIS_MASK) << 1);
+		const uint32_t max_key = min_key + 1;
+		const uint32_t left_key = (mmap[SYS_AXIS_X] & MAP_FLAG_INVERT) ? max_key : min_key;
+		const uint32_t right_key = (mmap[SYS_AXIS_X] & MAP_FLAG_INVERT) ? min_key : max_key;
+
+		map[SYS_BTN_LEFT] = (left_key << 16) | map[SYS_BTN_LEFT];
+		map[SYS_BTN_RIGHT] = (right_key << 16) | map[SYS_BTN_RIGHT];
 	}
 
 	if (mmap[SYS_AXIS_Y] && !is_psx())
 	{
-		uint32_t key = KEY_EMU + (((uint16_t)mmap[SYS_AXIS_Y]) << 1);
-		map[SYS_BTN_UP] = (key << 16) | map[SYS_BTN_UP];
-		map[SYS_BTN_DOWN] = ((key + 1) << 16) | map[SYS_BTN_DOWN];
+		const uint32_t min_key = KEY_EMU + ((mmap[SYS_AXIS_Y] & MAP_AXIS_MASK) << 1);
+		const uint32_t max_key = min_key + 1;
+		const uint32_t up_key = (mmap[SYS_AXIS_Y] & MAP_FLAG_INVERT) ? max_key : min_key;
+		const uint32_t down_key = (mmap[SYS_AXIS_Y] & MAP_FLAG_INVERT) ? min_key : max_key;
+
+		map[SYS_BTN_UP] = (up_key << 16) | map[SYS_BTN_UP];
+		map[SYS_BTN_DOWN] = (down_key << 16) | map[SYS_BTN_DOWN];
 	}
 
 	// loop through core requested buttons and construct result map
