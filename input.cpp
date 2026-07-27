@@ -1817,6 +1817,17 @@ static uint16_t mapping_last_axis = 0;
 static int mapping_key_mapped = 0;
 static triggerCaptureState mapping_trigger_capture = {};
 
+static void claim_mapping_device(int dev)
+{
+	if (mapping_dev >= 0) return;
+
+	mapping_dev = dev;
+	if (!is_menu()) return;
+
+	if (menu_mouse_map) clear_mouse_map_slots(input[dev].map);
+	else clear_joypad_map_slots(input[dev].map);
+}
+
 static inline uint16_t map_axis_code(uint32_t map)
 {
 	return (uint16_t)(map & MAP_AXIS_MASK);
@@ -4137,7 +4148,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				int clear = (ev->code == KEY_F12 || ev->code == KEY_MENU || ev->code == KEY_HOMEPAGE) && !is_menu();
 				if (ev->value == 1 && mapping_dev < 0 && !clear)
 				{
-					mapping_dev = dev;
+					claim_mapping_device(dev);
 					mapping_type = (ev->code >= 256 || input[dev].force_joy) ? 1 : 0;
 					mapping_key_mapped = 0;
 				}
@@ -4153,11 +4164,6 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 								(mapping_button < SYS_MAP_AXIS_X || mapping_button > SYS_MAP_AXIS_Y) &&
 								!(!mapping_button && mapping_last_axis && ((ev->code == mapping_last_axis) || (ev->code == mapping_last_axis + 1))))
 							{
-								if (!mapping_button)
-								{
-									if (menu_mouse_map) clear_mouse_map_slots(input[dev].map);
-									else clear_joypad_map_slots(input[dev].map);
-								}
 								input[dev].osd_combo = 0;
 
 								int found = 0;
@@ -4324,7 +4330,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					mapping_last_axis = 0;
 					if (ev->type == EV_ABS && max)
 					{
-						if (mapping_dev < 0) mapping_dev = dev;
+						claim_mapping_device(dev);
 						mapping_type = 1;
 
 						if (absinfo->maximum > 2)
@@ -4344,7 +4350,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (!map_skip)
 						{
 							mapping_button += 2;
-							if (mapping_dev < 0) mapping_dev = dev;
+							claim_mapping_device(dev);
 							if (ev->code < 256)
 							{
 								// keyboard, skip stick 1/2
@@ -4366,7 +4372,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				//Sticks
 				else if (ev->type == EV_ABS && idx)
 				{
-					if (mapping_dev < 0) mapping_dev = dev;
+					claim_mapping_device(dev);
 
 					if (idx && max && absinfo->maximum > 2)
 					{
