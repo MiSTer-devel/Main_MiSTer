@@ -144,6 +144,12 @@ static bool is_axis_token(const char *btn_name)
 	return (btn_name[0] == '-' || btn_name[0] == '+') && btn_name[1] == 'a';
 }
 
+static bool axis_token_is_inverted(const char *btn_name)
+{
+	const size_t len = btn_name ? strlen(btn_name) : 0;
+	return len && btn_name[len - 1] == '~';
+}
+
 static uint16_t axis_from_mapped_code(int mapped_code)
 {
 	return (mapped_code >= KEY_EMU) ? ((mapped_code - KEY_EMU) >> 1) : (uint16_t)mapped_code;
@@ -217,16 +223,19 @@ static uint32_t trigger_axis_map_from_token(const char *btn_name, int mapped_cod
 	const uint16_t axis = axis_from_mapped_code(mapped_code);
 	if (axis > ABS_MAX) return 0;
 
+	const bool inverted = axis_token_is_inverted(btn_name);
 	uint32_t map = axis | MAP_FLAG_ANALOG | MAP_FLAG_TRIGGER;
 	if (btn_name[0] == '-' || btn_name[0] == '+')
 	{
 		map |= MAP_FLAG_CENTERED;
-		if (btn_name[0] == '-') map |= MAP_FLAG_NEGATIVE;
+		if ((btn_name[0] == '-') != inverted) map |= MAP_FLAG_NEGATIVE;
 	}
-	else
+	else if (inverted)
 	{
-		map |= GCDB_MAP_FLAG_DETECT_TRIGGER_DIRECTION;
+		map |= MAP_FLAG_NEGATIVE;
 	}
+	else map |= GCDB_MAP_FLAG_DETECT_TRIGGER_DIRECTION;
+
 	return map;
 }
 
@@ -265,7 +274,7 @@ static bool print_axis_mapping(const char *sdlname, uint32_t axis_map, uint16_t 
 			if (axis_map & MAP_FLAG_CENTERED)
 				printf("%s:%ca%d,", sdlname, (axis_map & MAP_FLAG_NEGATIVE) ? '-' : '+', j);
 			else
-				printf("%s:a%d,", sdlname, j);
+				printf("%s:a%d%s,", sdlname, j, (axis_map & MAP_FLAG_NEGATIVE) ? "~" : "");
 			return true;
 		}
 	}
@@ -317,6 +326,7 @@ static int find_linux_code_for_button(const char *btn_name, uint16_t *btn_map, u
 				int abs_axis = abs_map[aidx];
 				if (a_edge)
 				{
+					if (*suffix) a_edge = 3 - a_edge;
 					return KEY_EMU + (abs_axis << 1) - 1 + a_edge;
 				}
 				return abs_axis;
@@ -500,7 +510,7 @@ void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid,
 					{
 							if (abs_map[j] == i_code)
 							{
-								printf("%s:a%d,", sdlname, j);
+								printf("%s:a%d%s,", sdlname, j, (cur_map[i] & MAP_FLAG_INVERT) ? "~" : "");
 								break;
 							}
 					}
@@ -590,7 +600,8 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 					}
 					if (m_button_num >= SYS_AXIS1_X && m_button_num <= SYS_AXIS_Y)
 					{
-						fill_map[m_button_num] = l_button_code | MAP_FLAG_ANALOG;
+						fill_map[m_button_num] = l_button_code | MAP_FLAG_ANALOG |
+							(axis_token_is_inverted(l_btn) ? MAP_FLAG_INVERT : 0);
 					}
 				}
 			}

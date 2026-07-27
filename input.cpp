@@ -1833,6 +1833,14 @@ static inline uint16_t map_axis_code(uint32_t map)
 	return (uint16_t)(map & MAP_AXIS_MASK);
 }
 
+static int map_axis_offset(uint32_t map, int offset)
+{
+	if (!(map & MAP_FLAG_INVERT)) return offset;
+
+	offset = -offset;
+	return (offset > 127) ? 127 : offset;
+}
+
 static int input_test_bit(int bit, const unsigned char *array)
 {
 	return array[bit / 8] & (1 << (bit % 8));
@@ -4918,21 +4926,21 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					else
 					{
 						int offset = (value < -1 || value > 1) ? value : 0;
-						if (input[dev].stick_l[0] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_l[0]])
+						if (input[dev].stick_l[0] && ev->code == map_axis_code(input[dev].mmap[input[dev].stick_l[0]]))
 						{
-							joy_analog(dev, 0, offset, 0);
+							joy_analog(dev, 0, map_axis_offset(input[dev].mmap[input[dev].stick_l[0]], offset), 0);
 						}
-						else if (input[dev].stick_l[1] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_l[1]])
+						else if (input[dev].stick_l[1] && ev->code == map_axis_code(input[dev].mmap[input[dev].stick_l[1]]))
 						{
-							joy_analog(dev, 1, offset, 0);
+							joy_analog(dev, 1, map_axis_offset(input[dev].mmap[input[dev].stick_l[1]], offset), 0);
 						}
-						else if (input[dev].stick_r[0] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_r[0]])
+						else if (input[dev].stick_r[0] && ev->code == map_axis_code(input[dev].mmap[input[dev].stick_r[0]]))
 						{
-							joy_analog(dev, 0, offset, 1);
+							joy_analog(dev, 0, map_axis_offset(input[dev].mmap[input[dev].stick_r[0]], offset), 1);
 						}
-						else if (input[dev].stick_r[1] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_r[1]])
+						else if (input[dev].stick_r[1] && ev->code == map_axis_code(input[dev].mmap[input[dev].stick_r[1]]))
 						{
-							joy_analog(dev, 1, offset, 1);
+							joy_analog(dev, 1, map_axis_offset(input[dev].mmap[input[dev].stick_r[1]], offset), 1);
 						}
 					}
 				}
