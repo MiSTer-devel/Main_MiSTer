@@ -51,8 +51,12 @@ static const char *sdlname_to_mister_idx[] = {
 	"rightstick",
 };
 
+#define GCDB_MAP_FLAG_DETECT_TRIGGER_DIRECTION 0x80000000U
+
 typedef struct {
 	uint16_t id[4]; //bustype, vid, pid, version
+	char core_name[32];
+	char orig_core_name[32];
 	uint32_t map[NUMBUTTONS];
 } controllerdb_entry;
 
@@ -149,7 +153,7 @@ static int trigger_axis_released_near_max(int dev_fd, uint16_t axis)
 	return absinfo.value >= (absinfo.maximum - edge_threshold);
 }
 
-static uint32_t trigger_axis_map_from_token(const char *btn_name, int mapped_code, int dev_fd)
+static uint32_t trigger_axis_map_from_token(const char *btn_name, int mapped_code)
 {
 	if (!is_axis_token(btn_name)) return 0;
 
@@ -162,9 +166,9 @@ static uint32_t trigger_axis_map_from_token(const char *btn_name, int mapped_cod
 		map |= MAP_FLAG_CENTERED;
 		if (btn_name[0] == '-') map |= MAP_FLAG_NEGATIVE;
 	}
-	else if (trigger_axis_released_near_max(dev_fd, axis))
+	else
 	{
-		map |= MAP_FLAG_NEGATIVE;
+		map |= GCDB_MAP_FLAG_DETECT_TRIGGER_DIRECTION;
 	}
 	return map;
 }
@@ -173,6 +177,23 @@ static int trigger_button_code_from_axis_map(uint32_t axis_map)
 {
 	if (!axis_map) return -1;
 	return KEY_EMU + ((axis_map & MAP_AXIS_MASK) << 1) + ((axis_map & MAP_FLAG_NEGATIVE) ? 0 : 1);
+}
+
+static void resolve_trigger_axis_directions(int dev_fd, uint32_t *map)
+{
+	for (int trigger = 0; trigger < 2; trigger++)
+	{
+		const int axis_idx = SYS_AXIS_L2 + trigger;
+		uint32_t axis_map = map[axis_idx];
+		if (!(axis_map & GCDB_MAP_FLAG_DETECT_TRIGGER_DIRECTION)) continue;
+
+		axis_map &= ~(GCDB_MAP_FLAG_DETECT_TRIGGER_DIRECTION | MAP_FLAG_NEGATIVE);
+		if (trigger_axis_released_near_max(dev_fd, axis_map & MAP_AXIS_MASK))
+			axis_map |= MAP_FLAG_NEGATIVE;
+
+		map[axis_idx] = axis_map;
+		map[SYS_BTN_L2 + trigger] = trigger_button_code_from_axis_map(axis_map);
+	}
 }
 
 static bool print_axis_mapping(const char *sdlname, uint32_t axis_map, uint16_t *abs_map)
@@ -488,7 +509,7 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 					if ((m_button_num == SYS_BTN_L2 || m_button_num == SYS_BTN_R2) && is_axis_token(l_btn))
 					{
 						const int trigger_axis_idx = SYS_AXIS_L2 + (m_button_num - SYS_BTN_L2);
-						fill_map[trigger_axis_idx] = trigger_axis_map_from_token(l_btn, l_button_code, dev_fd);
+						fill_map[trigger_axis_idx] = trigger_axis_map_from_token(l_btn, l_button_code);
 						if (fill_map[trigger_axis_idx])
 							fill_map[m_button_num] = trigger_button_code_from_axis_map(fill_map[trigger_axis_idx]);
 					}
@@ -610,7 +631,10 @@ static int gcdb_controller_idx(uint16_t bustype, uint16_t vid, uint16_t pid, uin
 {
 	for (int i=0; i < MAX_GCDB_ENTRIES; i++)
 	{
-		if (db_maps[i].id[0] == bustype && db_maps[i].id[1] == vid && db_maps[i].id[2] == pid && db_maps[i].id[3] == version)
+		if (db_maps[i].id[0] == bustype && db_maps[i].id[1] == vid &&
+			db_maps[i].id[2] == pid && db_maps[i].id[3] == version &&
+			!strcmp(db_maps[i].core_name, user_io_get_core_name()) &&
+			!strcmp(db_maps[i].orig_core_name, user_io_get_core_name(1)))
 		{
 			return i;
 		}
@@ -630,6 +654,8 @@ static void gcdb_cache_controller_map(uint16_t bustype, uint16_t vid, uint16_t p
 	db_maps[last_db_idx].id[1] = vid;
 	db_maps[last_db_idx].id[2] = pid;
 	db_maps[last_db_idx].id[3] = version;
+	snprintf(db_maps[last_db_idx].core_name, sizeof(db_maps[last_db_idx].core_name), "%s", user_io_get_core_name());
+	snprintf(db_maps[last_db_idx].orig_core_name, sizeof(db_maps[last_db_idx].orig_core_name), "%s", user_io_get_core_name(1));
 	memcpy(db_maps[last_db_idx].map, button_map, sizeof(uint32_t)*NUMBUTTONS);
 	last_db_idx = (last_db_idx +1) % MAX_GCDB_ENTRIES;
 }
@@ -642,6 +668,7 @@ bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint1
 		if (cache_idx != -1)
 		{
 			memcpy(fill_map, db_maps[cache_idx].map, sizeof(uint32_t)*NUMBUTTONS);
+			resolve_trigger_axis_directions(dev_fd, fill_map);
 
 			return true;
 		}
@@ -660,7 +687,9 @@ bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint1
 
 		if (found_entry)
 		{
+			// Cache unresolved maps so each physical device supplies its own trigger polarity.
 			gcdb_cache_controller_map(bustype, vid, pid, version, fill_map);
+			resolve_trigger_axis_directions(dev_fd, fill_map);
 			return true;
 		}
 		return false;
