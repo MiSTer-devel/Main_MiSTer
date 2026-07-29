@@ -348,6 +348,7 @@ static const char* load_chd_file(drive_t *drv, const char *chdfile)
 		if (drv->track[i].attr == 0x40)
 		{
 			drv->data_num = i;
+			break;
 		}
 	}
 
