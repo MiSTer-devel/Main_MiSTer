@@ -416,7 +416,7 @@ bool write_screenshot(const char *filename, const uint8_t *argb,
 static std::atomic<bool> screenshot_pending_atomic{false};
 static std::atomic<ScreenshotResult_atomic*> screenshot_result_data_atomic{nullptr};
 
-static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
+static struct { const char *fmtstr; Imlib_Load_Error err_code; } err_strings[] = {
   {"file '%s' does not exist", IMLIB_LOAD_ERROR_FILE_DOES_NOT_EXIST},
   {"file '%s' is a directory", IMLIB_LOAD_ERROR_FILE_IS_DIRECTORY},
   {"permission denied to read file '%s'", IMLIB_LOAD_ERROR_PERMISSION_DENIED_TO_READ},
@@ -434,7 +434,7 @@ static struct { const char *fmtstr; Imlib_Load_Error errno; } err_strings[] = {
 static void print_imlib_load_error (Imlib_Load_Error err, const char *filepath) {
   int i;
   for (i = 0; err_strings[i].fmtstr != NULL; i++) {
-    if (err == err_strings[i].errno) {
+    if (err == err_strings[i].err_code) {
 	printf("Screenshot Error (%d): ",err);
 	printf(err_strings[i].fmtstr,filepath);
 	printf("\n");
