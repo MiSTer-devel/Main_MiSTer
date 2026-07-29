@@ -21,6 +21,9 @@
 #include "file_io.h"
 #include "hardware.h"
 #include "ide.h"
+#include "ide_cdrom.h"
+#include "support/minimig/akiko_cd32.h"
+#include "support/minimig/cdtv_cd.h"
 
 #if 0
 	#define dbg_printf     printf
@@ -1116,7 +1119,11 @@ int ide_open(uint8_t unit, const char* filename)
 	static fileTYPE hdd_file[4] = {};
 	chs_t chs = {};
 
-	if (!is_minimig() || ((minimig_config.ide_cfg & 1) && minimig_config.hardfile[unit].cfg))
+	bool cdtv_cd_slot = (minimig_config.chipset & CONFIG_CDTV)
+	                 && minimig_config.hardfile[unit].cfg == 2;
+	if (!is_minimig()
+	    || ((minimig_config.ide_cfg & 1) && minimig_config.hardfile[unit].cfg)
+	    || cdtv_cd_slot)
 	{
 		printf("\nChecking HDD %d\n", unit);
 		if (filename[0] && FileOpenEx(&hdd_file[unit], filename, FileCanWrite(filename) ? O_RDWR : O_RDONLY))
@@ -1152,6 +1159,13 @@ int ide_open(uint8_t unit, const char* filename)
 	}
 
 	// close if opened earlier.
+	{
+		int port = (unit >> 1) & 1;
+		int drv  = unit & 1;
+		cdrom_close_chd(&ide_inst[port].drive[drv]);
+		if (unit == 0) akiko_cd32_set_cd_path("");
+		if (unit == 0) cdtv_cd_set_cd_path("");
+	}
 	ide_img_set(unit, 0, 0);
 	FileClose(&hdd_file[unit]);
 	return 0;
