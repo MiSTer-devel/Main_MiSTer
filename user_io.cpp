@@ -270,7 +270,8 @@ char is_neogeo_cd() {
 static int is_minimig_type = 0;
 char is_minimig()
 {
-	if (!is_minimig_type) is_minimig_type = strcasecmp(orig_name, "minimig") ? 2 : 1;
+	if (!is_minimig_type) is_minimig_type =
+		(!strcasecmp(orig_name, "minimig") || !strcasecmp(orig_name, "minimigcd")) ? 1 : 2;
 	return (is_minimig_type == 1);
 }
 
