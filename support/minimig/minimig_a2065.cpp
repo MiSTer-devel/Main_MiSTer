@@ -550,6 +550,26 @@ void a2065_stop(void)
 	printf("A2065: stopped\n");
 }
 
+static void a2065_ddr3_clear(void)
+{
+	volatile uint8_t *m = map;
+	bool borrowed = false;
+
+	if (!m)
+	{
+		m = (volatile uint8_t *)shmem_map(DDR3_FLAT_BASE, DDR3_FLAT_WINDOW_SIZE);
+		if (!m) return;
+		borrowed = true;
+	}
+
+	memset((void *)(m + DDR3_CMD_OFF), 0, 8);
+	memset((void *)(m + DDR3_CSR_OFF), 0, 8);
+	memset((void *)(m + DDR3_INT_OFF), 0, 8);
+	__sync_synchronize();
+
+	if (borrowed) shmem_unmap((void *)m, DDR3_FLAT_WINDOW_SIZE);
+}
+
 void a2065_start(void)
 {
 	// Already up: this is a Minimig reset, so put the LANCE back to its
@@ -561,6 +581,8 @@ void a2065_start(void)
 		update_int_state();
 		return;
 	}
+
+	a2065_ddr3_clear();
 
 	if (a2065_get_iface() == A2065_OFF) return;
 
