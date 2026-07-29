@@ -1102,7 +1102,104 @@ void cdrom_read(ide_config *ide)
 	pkt_send(ide, ide_buf, cnt * 2048);
 }
 
-static int disc_info(drive_t *drv, uint16_t maxlen) 
+int cdrom_read_raw_sector(drive_t *drive, uint32_t lba, uint8_t *buf)
+{
+	if (!drive || !buf) return -1;
+
+	bool is_index0 = false;
+	track_t *track = get_track_from_lba(drive, lba, is_index0);
+	if (!track) return -1;
+
+	if (drive->chd_f)
+	{
+		uint32_t chd_lba = lba + track->chd_offset;
+		uint16_t sz = track->sectorSize;
+
+		if (sz == BYTES_PER_RAW_REDBOOK_FRAME)
+		{
+			if (mister_chd_read_sector(drive->chd_f, chd_lba, 0, 0,
+			                           BYTES_PER_RAW_REDBOOK_FRAME, buf,
+			                           drive->chd_hunkbuf, &drive->chd_hunknum)
+			    != CHDERR_NONE) return -1;
+			return 0;
+		}
+
+		if (sz == 2336)
+		{
+			memset(buf, 0, BYTES_PER_RAW_REDBOOK_FRAME);
+			if (mister_chd_read_sector(drive->chd_f, chd_lba, 16, 0,
+			                           2336, buf,
+			                           drive->chd_hunkbuf, &drive->chd_hunknum)
+			    != CHDERR_NONE) return -1;
+			return 0;
+		}
+
+		if (sz == BYTES_PER_COOKED_REDBOOK_FRAME)
+		{
+			memset(buf, 0, BYTES_PER_RAW_REDBOOK_FRAME);
+			buf[0] = 0x00;
+			memset(buf + 1, 0xff, 10);
+			buf[11] = 0x00;
+			uint32_t f_lba = lba + REDBOOK_FRAME_PADDING;
+			uint8_t mm = (uint8_t)(f_lba / (REDBOOK_FRAMES_PER_SECOND * 60));
+			uint8_t ss = (uint8_t)((f_lba / REDBOOK_FRAMES_PER_SECOND) % 60);
+			uint8_t ff = (uint8_t)(f_lba % REDBOOK_FRAMES_PER_SECOND);
+			buf[12] = (uint8_t)(((mm / 10) << 4) | (mm % 10));
+			buf[13] = (uint8_t)(((ss / 10) << 4) | (ss % 10));
+			buf[14] = (uint8_t)(((ff / 10) << 4) | (ff % 10));
+			buf[15] = 0x01;
+			if (mister_chd_read_sector(drive->chd_f, chd_lba, 16, 0,
+			                           BYTES_PER_COOKED_REDBOOK_FRAME, buf,
+			                           drive->chd_hunkbuf, &drive->chd_hunknum)
+			    != CHDERR_NONE) return -1;
+			return 0;
+		}
+
+		return -1;
+	}
+
+	if (!track->f.opened()) return -1;
+
+	uint16_t sz = track->sectorSize;
+	uint32_t pos = track->skip + (lba - track->start) * sz;
+	if (FileSeek(&track->f, pos, SEEK_SET) < 0) return -1;
+
+	if (sz == BYTES_PER_RAW_REDBOOK_FRAME)
+	{
+		if (FileReadAdv(&track->f, buf, BYTES_PER_RAW_REDBOOK_FRAME, -1) <= 0)
+			return -1;
+		return 0;
+	}
+
+	if (sz == 2336)
+	{
+		memset(buf, 0, 16);
+		if (FileReadAdv(&track->f, buf + 16, 2336, -1) <= 0) return -1;
+		return 0;
+	}
+
+	if (sz == BYTES_PER_COOKED_REDBOOK_FRAME)
+	{
+		memset(buf, 0, BYTES_PER_RAW_REDBOOK_FRAME);
+		buf[0] = 0x00;
+		memset(buf + 1, 0xff, 10);
+		buf[11] = 0x00;
+		uint32_t f_lba = lba + REDBOOK_FRAME_PADDING;
+		uint8_t mm = (uint8_t)(f_lba / (REDBOOK_FRAMES_PER_SECOND * 60));
+		uint8_t ss = (uint8_t)((f_lba / REDBOOK_FRAMES_PER_SECOND) % 60);
+		uint8_t ff = (uint8_t)(f_lba % REDBOOK_FRAMES_PER_SECOND);
+		buf[12] = (uint8_t)(((mm / 10) << 4) | (mm % 10));
+		buf[13] = (uint8_t)(((ss / 10) << 4) | (ss % 10));
+		buf[14] = (uint8_t)(((ff / 10) << 4) | (ff % 10));
+		buf[15] = 0x01;
+		if (FileReadAdv(&track->f, buf + 16, 2048, -1) <= 0) return -1;
+		return 0;
+	}
+
+	return -1;
+}
+
+static int disc_info(drive_t *drv, uint16_t maxlen)
 {
 	if (!maxlen) return 0;
 	if (maxlen > 34) maxlen = 34;
@@ -1684,6 +1781,22 @@ const char* cdrom_parse(uint32_t num, const char *filename)
 	int drv = num & 1;
 	num >>= 1;
 
+	static char last_path[2][2][1024] = {};
+	const char *cmp_filename = filename ? filename : "";
+	bool same_path = filename && filename[0]
+	                 && !strcmp(last_path[num][drv], cmp_filename)
+	                 && ide_inst[num].drive[drv].chd_f != NULL;
+
+	if (same_path) {
+		const char *full = getFullPath(filename);
+		ide_inst[num].drive[drv].mcr_flag = true;
+		ide_inst[num].drive[drv].playing = 0;
+		ide_inst[num].drive[drv].paused = 0;
+		ide_inst[num].drive[drv].play_start_lba = 0;
+		ide_inst[num].drive[drv].play_end_lba = 0;
+		return full;
+	}
+
 	//always close files and reset state. empty filename == unmounted cd from OSD
 	cdrom_close_chd(&ide_inst[num].drive[drv]);
 	for (uint8_t i = 0; i < sizeof(ide_inst[num].drive[drv].track) / sizeof(track_t); i++)
@@ -1698,13 +1811,22 @@ const char* cdrom_parse(uint32_t num, const char *filename)
 	ide_inst[num].drive[drv].paused = 0;
 	ide_inst[num].drive[drv].play_start_lba = 0;
 	ide_inst[num].drive[drv].play_end_lba = 0;
+	const char *path = NULL;
 	if (strlen(filename))
 	{
-		const char *path = getFullPath(filename);
+		path = getFullPath(filename);
 		res = load_chd_file(&ide_inst[num].drive[drv], path);
 		if (!res) res = load_cue_file(&ide_inst[num].drive[drv], path);
 		if (!res) res = load_iso_file(&ide_inst[num].drive[drv], path);
 	}
+
+	if (filename && filename[0] && res) {
+		strncpy(last_path[num][drv], cmp_filename, sizeof(last_path[0][0]) - 1);
+		last_path[num][drv][sizeof(last_path[0][0]) - 1] = '\0';
+	} else {
+		last_path[num][drv][0] = '\0';
+	}
+
 	return res;
 }
 
