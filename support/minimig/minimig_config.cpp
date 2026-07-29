@@ -18,6 +18,9 @@
 #include "minimig_config.h"
 #include "minimig_share.h"
 #include "minimig_a2065.h"
+#include "akiko_cd32.h"
+#include "cdtv_cd.h"
+#include <unistd.h>
 
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M" };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
@@ -93,6 +96,86 @@ static void SendFileV2(fileTYPE* file, unsigned char* key, int keysize, int addr
 	printf("]\n");
 }
 
+
+const char* minimig_get_extrom()
+{
+	const size_t cap = sizeof(minimig_config.kickstart);
+	size_t kicklen = strnlen(minimig_config.kickstart, cap);
+	if (kicklen + 1 >= cap) return "";
+	return &minimig_config.kickstart[kicklen + 1];
+}
+
+static void SendBufferV2(const uint8_t *buf, int address, int size_bytes)
+{
+	int sectors = size_bytes / 512;
+	printf("Upload %dkB -> 0x%08x [", size_bytes >> 10, address);
+	for (int i = 0; i < sectors; i++)
+	{
+		if (!(i & 31)) printf("*");
+		EnableIO();
+		unsigned int adr = address + i * 512;
+		spi8(UIO_MM2_WR);
+		spi8(adr & 0xff); adr >>= 8;
+		spi8(adr & 0xff); adr >>= 8;
+		spi8(adr & 0xff); adr >>= 8;
+		spi8(adr & 0xff); adr >>= 8;
+		const uint8_t *p = buf + i * 512;
+		for (int j = 0; j < 512; j += 4)
+		{
+			spi8(p[j + 0]);
+			spi8(p[j + 1]);
+			spi8(p[j + 2]);
+			spi8(p[j + 3]);
+		}
+		DisableIO();
+	}
+	printf("]\n");
+}
+
+static bool LoadRomSlot(const char *path, uint8_t *dst512k)
+{
+	fileTYPE file = {};
+	if (!FileOpen(&file, path)) {
+		printf("Ext-ROM open failed: %s\n", path);
+		return false;
+	}
+	int sz = file.size;
+	if (sz == 0x80000) {
+		FileReadAdv(&file, dst512k, 0x80000);
+	} else if (sz == 0x40000) {
+		FileReadAdv(&file, dst512k, 0x40000);
+		memcpy(dst512k + 0x40000, dst512k, 0x40000);
+	} else {
+		printf("Unsupported ROM size %d for slot upload\n", sz);
+		FileClose(&file);
+		return false;
+	}
+	FileClose(&file);
+	return true;
+}
+
+static char UploadKickstartWithExtRom(const char *kick_path, const char *extrom_path)
+{
+	BootPrint("Loading Kickstart + Ext.ROM:");
+	BootPrint(kick_path);
+	BootPrint(extrom_path);
+
+	static uint8_t img[0x100000];
+	memset(img, 0, sizeof(img));
+
+	if (!LoadRomSlot(extrom_path, img)) return 0;
+	if (!LoadRomSlot(kick_path,   img + 0x80000)) return 0;
+
+	EnableIO();
+	spi8(UIO_MM2_WR);
+	for (int i = 0; i < 8; i++) spi8(0);
+	for (int i = 0; i < 4; i++) spi8(1);
+	DisableIO();
+
+	SendBufferV2(img,           0xe00000, 0x80000);
+	SendBufferV2(img + 0x80000, 0xf80000, 0x80000);
+	return 1;
+}
 
 static char UploadKickstart(char *name)
 {
@@ -378,7 +461,13 @@ static void ApplyConfiguration(char reloadkickstart)
 		printf("Reloading kickstart ...\n");
 		rstval |= (SPI_RST_CPU | SPI_CPU_HLT);
 		spi_uio_cmd8(UIO_MM2_RST, rstval);
-		if (!UploadKickstart(minimig_config.kickstart))
+		const char *extrom = minimig_get_extrom();
+		bool uploaded = false;
+		if (extrom[0])
+		{
+			uploaded = UploadKickstartWithExtRom(minimig_config.kickstart, extrom);
+		}
+		if (!uploaded && !UploadKickstart(minimig_config.kickstart))
 		{
 			snprintf(minimig_config.kickstart, sizeof(minimig_config.kickstart) - 1, "%s/%s", HomeDir(), "KICK.ROM");
 			if (!UploadKickstart(minimig_config.kickstart))
@@ -534,6 +623,8 @@ void minimig_reset()
 	user_io_rtc_reset();
 	minimig_share_reset();
 	a2065_start();
+	akiko_cd32_init();
+	cdtv_cd_init();
 }
 
 void minimig_set_kickstart(char *name)
@@ -541,7 +632,21 @@ void minimig_set_kickstart(char *name)
 	uint len = strlen(name);
 	if (len > (sizeof(minimig_config.kickstart) - 1)) len = sizeof(minimig_config.kickstart) - 1;
 	memcpy(minimig_config.kickstart, name, len);
-	minimig_config.kickstart[len] = 0;
+	memset(minimig_config.kickstart + len, 0, sizeof(minimig_config.kickstart) - len);
+	force_reload_kickstart = 1;
+}
+
+void minimig_set_extrom(char *name)
+{
+	const size_t cap = sizeof(minimig_config.kickstart);
+	size_t kicklen = strnlen(minimig_config.kickstart, cap);
+	if (kicklen + 1 >= cap) return;
+	size_t off = kicklen + 1;
+	size_t room = cap - off - 1;
+	size_t nlen = strlen(name);
+	if (nlen > room) nlen = room;
+	memcpy(minimig_config.kickstart + off, name, nlen);
+	memset(minimig_config.kickstart + off + nlen, 0, cap - off - nlen);
 	force_reload_kickstart = 1;
 }
 
@@ -723,7 +828,7 @@ void minimig_ConfigCPU(unsigned char cpu)
 
 void minimig_ConfigChipset(unsigned char chipset)
 {
-	spi_uio_cmd8(UIO_MM2_CHIP, chipset & 0x1f);
+	spi_uio_cmd8(UIO_MM2_CHIP, chipset & 0x3f);
 }
 
 void minimig_ConfigFloppy(unsigned char drives, unsigned char speed)
