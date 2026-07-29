@@ -20,6 +20,7 @@
 #include "hardware.h"
 #include "cd.h"
 #include "ide.h"
+#include "support/minimig/akiko_cd32.h"
 
 #if 0
 #define dbg_printf     printf
@@ -1794,6 +1795,7 @@ const char* cdrom_parse(uint32_t num, const char *filename)
 		ide_inst[num].drive[drv].paused = 0;
 		ide_inst[num].drive[drv].play_start_lba = 0;
 		ide_inst[num].drive[drv].play_end_lba = 0;
+		akiko_cd32_set_cd_path(full);
 		return full;
 	}
 
@@ -1819,6 +1821,8 @@ const char* cdrom_parse(uint32_t num, const char *filename)
 		if (!res) res = load_cue_file(&ide_inst[num].drive[drv], path);
 		if (!res) res = load_iso_file(&ide_inst[num].drive[drv], path);
 	}
+
+	akiko_cd32_set_cd_path((path && res) ? path : "");
 
 	if (filename && filename[0] && res) {
 		strncpy(last_path[num][drv], cmp_filename, sizeof(last_path[0][0]) - 1);
