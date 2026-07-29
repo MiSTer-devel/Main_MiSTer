@@ -465,7 +465,17 @@ static const char* load_cue_file(drive_t *drv, const char *cuefile)
 			canAddTrack = 0;
 
 			std::string filename;
-			std::getline(std::getline(line, filename, '"'), filename, '"');
+			std::string leading;
+			std::getline(line, leading, '"');
+			if (line.good())
+			{
+				std::getline(line, filename, '"');
+			}
+			else
+			{
+				std::istringstream toks(leading);
+				toks >> filename;
+			}
 
 			strcpy(track.filename, pathname.c_str());
 			strcat(track.filename, filename.c_str());
