@@ -946,7 +946,24 @@ static int handle_hdd(ide_config *ide)
 
 	case 0x40: // READ VERIFY
 		dbg_printf("Received read verify command. Not implemented but returning OK.\n");
-		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
+		ide->regs.error = 0;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DSC | ATA_STATUS_IRQ;
+		ide_set_regs(ide);
+		break;
+
+	case 0x70: // seek
+	case 0xE3: // standby immediate
+		// These no-data commands complete immediately for image-backed disks.
+		ide->regs.error = 0;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DSC | ATA_STATUS_IRQ;
+		ide_set_regs(ide);
+		break;
+
+	case 0x90: // execute device diagnostic
+		// Return the ATA drive-0-passed diagnostic code. Some system BIOSes
+		// require this command to succeed before registering the disk.
+		ide->regs.error = 0x01;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DSC | ATA_STATUS_IRQ;
 		ide_set_regs(ide);
 		break;
 
