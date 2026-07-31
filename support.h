@@ -14,7 +14,7 @@
 #include "support/a2/iigs_disk.h"
 
 // Mac
-#include "support/mac/mac_cdrom.h"
+#include "support/mac/mac.h"
 
 // Archie support
 #include "support/archie/archie.h"

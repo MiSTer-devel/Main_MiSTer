@@ -24,6 +24,9 @@ enum
 int mac_cdrom_mount(int index, const char *name);
 uint64_t mac_cdrom_size(int index);
 
+// True when translation is live on this index (mac_cdrom_fill serves it).
+int mac_cdrom_active(int index);
+
 // sz=512: data/TOC blocks (lba in 512-byte units); sz=2352: whole CD-DA frames.
 void mac_cdrom_fill(int index, uint64_t lba, uint8_t *buf, int sz);
 void mac_cdrom_unmount(int index);

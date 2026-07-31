@@ -1,5 +1,5 @@
 // BlueSCSI Toolbox — HPS-side handlers for the Mac SCSI family's two Toolbox
-// slots: file sharing and the CD changer (see toolbox.h).
+// slots: file sharing and the CD changer (see mac_toolbox.h).
 
 #include <stdint.h>
 #include <stdio.h>
@@ -13,10 +13,10 @@
 #include <vector>
 #include <set>
 
-#include "toolbox.h"
-#include "cfg.h"
-#include "user_io.h"
-#include "file_io.h"
+#include "../../cfg.h"
+#include "../../user_io.h"
+#include "../../file_io.h"
+#include "mac.h"
 
 #define TB_SIG        0xB5
 #define STATUS_GOOD   0x00

@@ -1,8 +1,8 @@
 // BlueSCSI Toolbox — HPS-side handlers for the Mac SCSI family's two Toolbox
 // slots: file sharing (0xD0-D5) and the CD changer (0xD7/D8/DA).
 
-#ifndef TOOLBOX_H
-#define TOOLBOX_H
+#ifndef MAC_TOOLBOX_H
+#define MAC_TOOLBOX_H
 
 #include <stdint.h>
 

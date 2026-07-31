@@ -9,7 +9,7 @@
 #include "../../user_io.h"
 #include "../../hardware.h"
 #include "../chd/mister_chd.h"
-#include "mac_cdrom.h"
+#include "mac.h"
 
 struct mac_cdrom_state
 {
@@ -60,8 +60,13 @@ void mac_cdrom_unmount(int index)
 
 uint64_t mac_cdrom_size(int index)
 {
-	if (index != mac_cdrom_slot() || !cd.active) return 0;
+	if (!mac_cdrom_active(index)) return 0;
 	return cd.sectors * 2048ULL;
+}
+
+int mac_cdrom_active(int index)
+{
+	return index == mac_cdrom_slot() && cd.active;
 }
 
 // ---- TOC blob ------------------

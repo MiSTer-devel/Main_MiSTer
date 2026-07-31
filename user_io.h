@@ -294,10 +294,6 @@ char is_uneon();
 char is_atari800();
 char is_atari5200();
 char is_3do();
-char is_mac_scsi_family();   // Mac cores sharing the BlueSCSI CD-ROM / Toolbox HPS path
-int  mac_toolbox_slot();   // hps_io slot of the BlueSCSI Toolbox device, -1 = none
-int  mac_cdrom_slot();        // hps_io slot of the CD-ROM image, -1 = none
-int  mac_cd_toolbox_slot();// hps_io slot of the BlueSCSI CD Changer control, -1 = none
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()
