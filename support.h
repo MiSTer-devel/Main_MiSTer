@@ -3,6 +3,7 @@
 #include "support/minimig/minimig_boot.h"
 #include "support/minimig/minimig_fdd.h"
 #include "support/minimig/minimig_share.h"
+#include "support/minimig/minimig_a2065.h"
 
 // SharpMz support
 #include "support/sharpmz/sharpmz.h"

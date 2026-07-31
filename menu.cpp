@@ -2580,6 +2580,7 @@ void HandleUI(void)
 									if (is_3do() && !bit) p3do_reset();
 
 									user_io_status_set(opt, 1, ex);
+									if (is_n64() && !ex && !strcmp(opt, "[41]")) n64_save_dd_disk();
 									user_io_status_set(opt, 0, ex);
 
 									menustate = MENU_GENERIC_MAIN1;
@@ -6199,7 +6200,7 @@ void HandleUI(void)
 
 	case MENU_MINIMIG_CHIPSET1:
 		helptext_idx = HELPTEXT_CHIPSET;
-		menumask = 0x3FF;
+		menumask = 0x7FF;
 		OsdSetTitle("System");
 		parentstate = menustate;
 
@@ -6245,8 +6246,13 @@ void HandleUI(void)
 		strcat(s, (minimig_config.memory & 0x40) ? "enabled " : "disabled");
 		OsdWrite(m++, s, menusub == 8, 0);
 
+		OsdWrite(m++, "", 0, 0);
+		strcpy(s, " Ethernet : ");
+		strcat(s, a2065_iface_msg(a2065_get_iface()));
+		OsdWrite(m++, s, menusub == 9, 0);
+
 		for (int i = m; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 9, 0);
+		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 10, 0);
 
 		menustate = MENU_MINIMIG_CHIPSET2;
 		break;
@@ -6377,6 +6383,22 @@ void HandleUI(void)
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
 			else if (menusub == 9)
+			{
+				// A2065 ethernet: OFF -> eth0 -> eth1 -> macvlan -> tap0,
+				// skipping anything this box cannot support (no second NIC,
+				// no tun driver, no macvlan). OFF and eth0 always qualify, so
+				// the walk always lands somewhere.
+				int m2 = a2065_get_iface();
+				for (int i = 0; i < A2065_MODES; i++)
+				{
+					m2 = minus ? (m2 + A2065_MODES - 1) % A2065_MODES
+					           : (m2 + 1) % A2065_MODES;
+					if (a2065_mode_available(m2)) break;
+				}
+				a2065_set_iface(m2);
+				menustate = MENU_MINIMIG_CHIPSET1;
+			}
+			else if (menusub == 10)
 			{
 				menustate = MENU_MINIMIG_MAIN1;
 				menusub = 6;

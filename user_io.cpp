@@ -1389,6 +1389,10 @@ void user_io_init(const char *path, const char *xml)
 	// Clean up old game ID when loading a new core
 	unlink("/tmp/GAMEID");
 
+	// Stop the A2065 threads left over from a previous core. The Minimig boot
+	// path below restarts them if the card is enabled.
+	a2065_stop();
+
 	// we need to set the directory to where the XML file (MRA) is
 	// not the RBF. The RBF will be in arcade, which the user shouldn't
 	// browse
@@ -1553,6 +1557,7 @@ void user_io_init(const char *path, const char *xml)
 				{
 					printf("Identified Minimig V2 core");
 					BootInit();
+					a2065_start();
 				}
 				else if (is_x86() || is_pcxt())
 				{
@@ -1586,6 +1591,7 @@ void user_io_init(const char *path, const char *xml)
 							// check for multipart rom
 							for (char i = (boot0_loaded ? 1 : 0); i < 4; i++)
 							{
+								if (is_n64() && i == 3) continue; // 64DD IPLs are loaded when an NDD is mounted.
 								sprintf(mainpath, "%s/boot%d.rom", home, i);
 								user_io_file_tx(mainpath, i << 6);
 							}
@@ -3168,6 +3174,7 @@ void user_io_poll()
 		}
 
 		minimig_share_poll();
+		a2065_poll();
 	}
 
 	if (core_type == CORE_TYPE_8BIT && !is_menu())

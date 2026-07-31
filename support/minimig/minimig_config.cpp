@@ -17,6 +17,7 @@
 #include "minimig_fdd.h"
 #include "minimig_config.h"
 #include "minimig_share.h"
+#include "minimig_a2065.h"
 
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M" };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
@@ -285,6 +286,10 @@ static char* GetConfigurationName(int num, int chk)
 
 int minimig_cfg_save(int num)
 {
+	// The A2065 interface selection rides in core status bits, which Minimig
+	// excludes from the generic status-word config load, so it is stored
+	// beside the config slot rather than inside the size-checked blob.
+	a2065_cfg_save(num);
 	return FileSaveConfig(GetConfigurationName(num, 0), &minimig_config, sizeof(minimig_config));
 }
 
@@ -487,6 +492,10 @@ int minimig_cfg_load(int num)
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
 
+	// Restore the A2065 interface selection for this slot (kept in core status
+	// bits, saved beside the config blob by minimig_cfg_save()).
+	a2065_cfg_load(num);
+
 	for (int i = 0; i < 4; i++)
 	{
 		df[i].status = 0;
@@ -524,6 +533,7 @@ void minimig_reset()
 	ApplyConfiguration(0);
 	user_io_rtc_reset();
 	minimig_share_reset();
+	a2065_start();
 }
 
 void minimig_set_kickstart(char *name)
