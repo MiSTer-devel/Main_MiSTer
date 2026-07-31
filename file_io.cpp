@@ -73,6 +73,30 @@ static int flist_last_first_entry()
 	return last > 0 ? last : 0;
 }
 
+static int flist_entry_is_expanded(int entry)
+{
+	if (!cfg.browse_expand || entry < 0 || entry >= (int)DirItem.size()) return 0;
+
+	direntext_t *item = &DirItem[entry];
+	return strlen(item->altname) > 28
+		&& item->de.d_type != DT_DIR
+		&& (cfg.rbf_hide_datecode || !item->datecode[0]);
+}
+
+static int flist_page_step(int direction)
+{
+	int step = OsdGetSize();
+	if (step > 1)
+	{
+		// Forward paging follows the current page. Reverse paging precedes
+		// the page whose selection may consume the extra display row.
+		int expanded_entry = direction > 0 ? iSelectedEntry : iSelectedEntry - step;
+		if (flist_entry_is_expanded(expanded_entry)) step--;
+	}
+
+	return step;
+}
+
 static void flist_center_selected()
 {
 	int count = (int)DirItem.size();
@@ -1852,13 +1876,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 		else if (mode == SCANF_NEXT_PAGE)
 		{
-			iSelectedEntry += OsdGetSize();
+			iSelectedEntry += flist_page_step(1);
 			flist_center_selected();
 			return 0;
 		}
 		else if (mode == SCANF_PREV_PAGE)
 		{
-			iSelectedEntry -= OsdGetSize();
+			iSelectedEntry -= flist_page_step(-1);
 			flist_center_selected();
 		}
 		else if (mode == SCANF_SET_ITEM)
