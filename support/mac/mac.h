@@ -19,7 +19,8 @@ int mac_cdrom_slot();
 int mac_cd_toolbox_slot();
 
 // user_io_file_mount hook: runs CD image translation on the CD slot. Returns
-// the new mount result (0 = fail the mount); may clear *writable.
+// the new mount result (0 = fail the mount); on a translated mount clears
+// *writable and sets f->size to the virtual disc size.
 int mac_mount_hook(int index, const char *name, fileTYPE *f, int *writable);
 
 // Once per user_io_poll: announce the Toolbox slots to the core and run the

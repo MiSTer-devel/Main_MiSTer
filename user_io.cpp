@@ -2229,7 +2229,6 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	spi8(UIO_SET_SDINFO);
 
 	__off64_t size = sd_image[index].size;
-	if (mac_cdrom_active(index)) size = mac_cdrom_size(index);
 	if (!ret && pre)
 	{
 		sd_image[index].type = 2;

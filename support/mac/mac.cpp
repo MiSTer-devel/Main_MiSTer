@@ -41,7 +41,11 @@ int mac_mount_hook(int index, const char *name, fileTYPE *f, int *writable)
 	if (index != mac_cdrom_slot()) return 1;
 
 	int r = mac_cdrom_mount(index, name);
-	if (r == MAC_CDROM_HANDLED) *writable = 0;
+	if (r == MAC_CDROM_HANDLED)
+	{
+		*writable = 0;
+		f->size = (int64_t)mac_cdrom_size(index);   // core sees the virtual disc
+	}
 	else if (r == MAC_CDROM_REJECT)
 	{
 		FileClose(f);
