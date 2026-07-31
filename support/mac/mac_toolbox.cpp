@@ -96,6 +96,18 @@ static std::string dir_entry_path(const char *dir, const std::string &name)
 // ============================== file sharing =================================
 
 static FILE *tb_file = NULL;   // open file for a GET/SEND sequence
+static int   tb_file_wr = 0;   // tb_file is an upload (buffered write) stream
+
+// Close tb_file, surfacing buffered-write errors. Returns nonzero on failure.
+static int tb_close(void)
+{
+	if (!tb_file) return 0;
+	int bad = tb_file_wr && (fflush(tb_file) != 0 || ferror(tb_file));
+	if (fclose(tb_file) != 0) bad = 1;
+	tb_file = NULL;
+	tb_file_wr = 0;
+	return bad;
+}
 
 // Shared folder: `shared_folder=` in the .ini (absolute or SD-root relative)
 // wins, else games/<core>/shared.
@@ -179,7 +191,7 @@ static void tb_get(const uint8_t *cdb)
 
 	if (offset == 0)
 	{
-		if (tb_file) { fclose(tb_file); tb_file = NULL; }
+		if (tb_close()) printf("Toolbox: dropped upload lost data on close\n");
 		std::vector<std::string> ents = sorted_entries();
 		if (index < ents.size())
 			tb_file = fopen(dir_entry_path(toolbox_shared_dir(), ents[index]).c_str(), "rb");
@@ -197,7 +209,7 @@ static void tb_get(const uint8_t *cdb)
 	tb_ch.resp.resize(want);
 	size_t got = fread(tb_ch.resp.data(), 1, want, tb_file);
 	tb_ch.resp.resize(got);                 // short read (incl. 0) signals EOF
-	if (got == 0) { fclose(tb_file); tb_file = NULL; }
+	if (got == 0) tb_close();
 	tb_ch.status = STATUS_GOOD;
 }
 
@@ -228,7 +240,7 @@ static bool tb_name_safe(const char *n)
 static void tb_send_prep(const uint8_t *buf)
 {
 	if (!toolbox_shared_ready()) { tb_ch.status = STATUS_CHECK; return; }
-	if (tb_file) { fclose(tb_file); tb_file = NULL; }   // implicit close of any open file
+	if (tb_close()) printf("Toolbox: dropped upload lost data on close\n");   // implicit close
 
 	char name[33];
 	int n = 0;
@@ -243,6 +255,14 @@ static void tb_send_prep(const uint8_t *buf)
 	if (!tb_name_safe(name)) { tb_ch.status = STATUS_CHECK; return; }
 	std::string path = std::string(toolbox_shared_dir()) + "/" + name;
 	tb_file = fopen(path.c_str(), "wb");
+	if (tb_file)
+	{
+		// /media/fat is mounted sync: batch the 512-byte chunks or every one
+		// costs a full synchronous card transaction (erase-cycle stalls incl.)
+		static char tb_wbuf[64 * 1024];
+		setvbuf(tb_file, tb_wbuf, _IOFBF, sizeof(tb_wbuf));
+		tb_file_wr = 1;
+	}
 	tb_ch.status = tb_file ? STATUS_GOOD : STATUS_CHECK;
 }
 
@@ -262,19 +282,24 @@ static void tb_send_data(const uint8_t *buf)
 	memcpy(chunk, buf + TB_PAYLOAD_OFF, head);
 	if (bytes > TB_PAYLOAD_MAX) memcpy(chunk + TB_PAYLOAD_MAX, tb_tail, bytes - TB_PAYLOAD_MAX);
 
-	if (fseeko(tb_file, (off_t)off * 512, SEEK_SET) != 0) { tb_ch.status = STATUS_CHECK; return; }
+	// seek only when needed: ftello doesn't flush, so sequential chunks stay
+	// buffered; an out-of-order offset seeks (= flushes), same as before
+	off_t want = (off_t)off * 512;
+	if (ftello(tb_file) != want && fseeko(tb_file, want, SEEK_SET) != 0)
+	{
+		tb_ch.status = STATUS_CHECK;
+		return;
+	}
 	size_t wrote = fwrite(chunk, 1, bytes, tb_file);
-	tb_ch.status = (wrote == bytes) ? STATUS_GOOD : STATUS_CHECK;
+	tb_ch.status = (wrote == bytes && !ferror(tb_file)) ? STATUS_GOOD : STATUS_CHECK;
 }
 
-// 0xD5 SEND FILE END: flush + close the upload (no data phase).
+// 0xD5 SEND FILE END: flush + close the upload (no data phase). Errors from
+// buffered writes surface here — a silently short file must not report GOOD.
 static void tb_send_end(void)
 {
 	if (!tb_file) { tb_ch.status = STATUS_CHECK; return; }
-	int rc = fflush(tb_file);
-	fclose(tb_file);
-	tb_file = NULL;
-	tb_ch.status = (rc == 0) ? STATUS_GOOD : STATUS_CHECK;
+	tb_ch.status = tb_close() ? STATUS_CHECK : STATUS_GOOD;
 }
 
 void toolbox_request(uint32_t lba, const uint8_t *buf, int sz)
