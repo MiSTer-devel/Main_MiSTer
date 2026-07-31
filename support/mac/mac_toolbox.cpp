@@ -214,17 +214,17 @@ static void tb_get(const uint8_t *cdb)
 }
 
 // ---- 0xD3/D4/D5 SEND FILE (upload, Mac -> host) ----------------------------
-// CDB at buf[0..9], DataOut payload at buf[16..]. A SEND DATA chunk is a full
-// 512-byte block, so its last 16 bytes do not fit under the CDB — the core
-// ships them as a separate request block at LBA 1 (tb_tail), written just
-// before the CDB block. Without that the tail was dropped and the file got a
-// 16-byte zero hole every 512 bytes (HW 2026-07-30).
+// CDB at buf[0..9], DataOut payload at buf[16..]. Payload beyond the first 496
+// bytes arrives as request blocks at LBA 1..TB_TAIL_BLKS, written BEFORE the
+// CDB block; tb_tail is their flat view, so payload byte P >= 496 sits at
+// tb_tail[P - 496]. A dropped tail leaves 16-byte holes every 512 bytes.
 // tb_file is shared with GET, per the spec.
 #define TB_PAYLOAD_OFF 16
 #define TB_PAYLOAD_MAX (512 - TB_PAYLOAD_OFF)   // 496 carried under the CDB
-#define TB_CHUNK_MAX   512                      // one SEND DATA chunk
+#define TB_CHUNK_MAX   4096                     // one SEND DATA chunk (= core tb buffer)
+#define TB_TAIL_BLKS   ((TB_CHUNK_MAX + TB_PAYLOAD_OFF - 1) / 512)   // 8
 
-static uint8_t tb_tail[512];   // LBA-1 request block: payload bytes 496..1007
+static uint8_t tb_tail[TB_TAIL_BLKS * 512];   // LBA 1..8 request blocks, flattened
 
 // Reject names that could escape the shared folder.
 static bool tb_name_safe(const char *n)
@@ -277,7 +277,7 @@ static void tb_send_data(const uint8_t *buf)
 	                        : (((uint32_t)buf[1] << 8) | buf[2]);                  // legacy byte count
 	if (bytes > TB_CHUNK_MAX) bytes = TB_CHUNK_MAX;
 
-	uint8_t  chunk[TB_CHUNK_MAX];
+	static uint8_t chunk[TB_CHUNK_MAX];   // off the coroutine stack
 	uint32_t head = (bytes < TB_PAYLOAD_MAX) ? bytes : TB_PAYLOAD_MAX;
 	memcpy(chunk, buf + TB_PAYLOAD_OFF, head);
 	if (bytes > TB_PAYLOAD_MAX) memcpy(chunk + TB_PAYLOAD_MAX, tb_tail, bytes - TB_PAYLOAD_MAX);
@@ -305,9 +305,12 @@ static void tb_send_end(void)
 void toolbox_request(uint32_t lba, const uint8_t *buf, int sz)
 {
 	(void)sz;
-	// SEND DATA tail block: the core writes it BEFORE the CDB block, so the
-	// handler below always has the whole 512-byte payload.
-	if (lba == 1) { memcpy(tb_tail, buf, sizeof(tb_tail)); return; }
+	// SEND DATA tail blocks arrive before the CDB block; flatten into tb_tail.
+	if (lba >= 1 && lba <= TB_TAIL_BLKS)
+	{
+		memcpy(tb_tail + (lba - 1) * 512, buf, (sz < 512) ? sz : 512);
+		return;
+	}
 	if (lba != 0) return;            // CDB + the first 496 payload bytes ride lba 0
 
 	tb_ch.resp.clear();
