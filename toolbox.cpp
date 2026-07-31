@@ -187,6 +187,11 @@ static void tb_get(const uint8_t *cdb)
 
 	if (!tb_file) { tb_ch.status = STATUS_CHECK; return; }
 
+	// Never stage more than the core's tb buffer holds (TB_ADDRW=11 -> 4 KB):
+	// it serves the length we report here, so an over-long response is served
+	// from wrapped words.
+	if (want > 4096) want = 4096;
+
 	if (fseeko(tb_file, (off_t)offset * BLOCK, SEEK_SET) != 0) { tb_ch.status = STATUS_CHECK; return; }
 
 	tb_ch.resp.resize(want);
@@ -197,10 +202,17 @@ static void tb_get(const uint8_t *cdb)
 }
 
 // ---- 0xD3/D4/D5 SEND FILE (upload, Mac -> host) ----------------------------
-// Single-block transport: CDB at buf[0..9], DataOut payload at buf[16..], so a
-// chunk caps at 496 bytes. tb_file is shared with GET, per the spec.
+// CDB at buf[0..9], DataOut payload at buf[16..]. A SEND DATA chunk is a full
+// 512-byte block, so its last 16 bytes do not fit under the CDB — the core
+// ships them as a separate request block at LBA 1 (tb_tail), written just
+// before the CDB block. Without that the tail was dropped and the file got a
+// 16-byte zero hole every 512 bytes (HW 2026-07-30).
+// tb_file is shared with GET, per the spec.
 #define TB_PAYLOAD_OFF 16
-#define TB_PAYLOAD_MAX (512 - TB_PAYLOAD_OFF)   // 496
+#define TB_PAYLOAD_MAX (512 - TB_PAYLOAD_OFF)   // 496 carried under the CDB
+#define TB_CHUNK_MAX   512                      // one SEND DATA chunk
+
+static uint8_t tb_tail[512];   // LBA-1 request block: payload bytes 496..1007
 
 // Reject names that could escape the shared folder.
 static bool tb_name_safe(const char *n)
@@ -235,15 +247,23 @@ static void tb_send_prep(const uint8_t *buf)
 }
 
 // 0xD4 SEND FILE DATA: write the payload chunk at the CDB offset (512-B units).
+// CDB[6] (512-blocks) or CDB[1..2] (legacy) says how many of the 512 transferred
+// bytes are VALID — the last chunk of a file is a full block with a short count.
 static void tb_send_data(const uint8_t *buf)
 {
 	if (!tb_file) { tb_ch.status = STATUS_CHECK; return; }
 	uint32_t off   = ((uint32_t)buf[3] << 16) | ((uint32_t)buf[4] << 8) | buf[5];  // 512-block offset
 	uint32_t bytes = buf[6] ? (uint32_t)buf[6] * 512
 	                        : (((uint32_t)buf[1] << 8) | buf[2]);                  // legacy byte count
-	if (bytes > TB_PAYLOAD_MAX) bytes = TB_PAYLOAD_MAX;   // single-block cap
+	if (bytes > TB_CHUNK_MAX) bytes = TB_CHUNK_MAX;
+
+	uint8_t  chunk[TB_CHUNK_MAX];
+	uint32_t head = (bytes < TB_PAYLOAD_MAX) ? bytes : TB_PAYLOAD_MAX;
+	memcpy(chunk, buf + TB_PAYLOAD_OFF, head);
+	if (bytes > TB_PAYLOAD_MAX) memcpy(chunk + TB_PAYLOAD_MAX, tb_tail, bytes - TB_PAYLOAD_MAX);
+
 	if (fseeko(tb_file, (off_t)off * 512, SEEK_SET) != 0) { tb_ch.status = STATUS_CHECK; return; }
-	size_t wrote = fwrite(buf + TB_PAYLOAD_OFF, 1, bytes, tb_file);
+	size_t wrote = fwrite(chunk, 1, bytes, tb_file);
 	tb_ch.status = (wrote == bytes) ? STATUS_GOOD : STATUS_CHECK;
 }
 
@@ -260,7 +280,10 @@ static void tb_send_end(void)
 void toolbox_request(uint32_t lba, const uint8_t *buf, int sz)
 {
 	(void)sz;
-	if (lba != 0) return;            // single-block: CDB + any payload ride lba 0
+	// SEND DATA tail block: the core writes it BEFORE the CDB block, so the
+	// handler below always has the whole 512-byte payload.
+	if (lba == 1) { memcpy(tb_tail, buf, sizeof(tb_tail)); return; }
+	if (lba != 0) return;            // CDB + the first 496 payload bytes ride lba 0
 
 	tb_ch.resp.clear();
 	tb_ch.status = STATUS_CHECK;
