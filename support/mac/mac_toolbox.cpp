@@ -67,11 +67,20 @@ static void tbx_fill(const tbx_channel &ch, uint32_t lba, uint8_t *buf, int sz)
 	memset(buf, 0, sz);
 	if (lba == 0)
 	{
-		uint16_t len = (ch.resp.size() > 0xFFFF) ? 0xFFFF : (uint16_t)ch.resp.size();
+		// 17-bit length: bytes 2..3 carry length[15:0], byte 4 bit 0 carries
+		// length[16]. A CDB[6]=16 GET stage is exactly 65536 bytes, which a
+		// BE16 field cannot express -- the old 0xFFFF clamp cost the last
+		// byte of every 64 KB chunk (the client zero-fills what it never
+		// receives). Byte 4 was reserved-zero. A core that predates the
+		// 17-bit decode reads length 0 for a full 65536 response and serves
+		// nothing -- deploy this only alongside or after a core that has it.
+		size_t   full = (ch.resp.size() > 0x1FFFF) ? 0x1FFFF : ch.resp.size();
+		uint16_t len  = (uint16_t)(full & 0xFFFF);
 		buf[0] = ch.status;
 		buf[1] = TB_SIG;
 		buf[2] = (len >> 8) & 0xFF;
 		buf[3] = len & 0xFF;
+		buf[4] = (uint8_t)((full >> 16) & 1);
 	}
 	else
 	{
