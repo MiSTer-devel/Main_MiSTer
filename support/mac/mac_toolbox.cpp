@@ -181,6 +181,8 @@ static void tb_list()
 
 // ---- 0xD1 GET FILE (host -> Mac) -------------------------------------------
 // CDB[1]=index, CDB[2..5]=offset BE (units of 4096), CDB[6]=#4K blocks (0 => 1).
+#define TB_GET_MAX 65536   // one GET response (official client asks CDB[6]=16)
+
 static void tb_get(const uint8_t *cdb)
 {
 	const uint32_t BLOCK = 4096;
@@ -199,10 +201,9 @@ static void tb_get(const uint8_t *cdb)
 
 	if (!tb_file) { tb_ch.status = STATUS_CHECK; return; }
 
-	// Never stage more than the core's tb buffer holds (TB_ADDRW=11 -> 4 KB):
-	// it serves the length we report here, so an over-long response is served
-	// from wrapped words.
-	if (want > 4096) want = 4096;
+	// Stage cap only — the core streams the serve, but a bad CDB could
+	// otherwise ask for 255*4096.
+	if (want > TB_GET_MAX) want = TB_GET_MAX;
 
 	if (fseeko(tb_file, (off_t)offset * BLOCK, SEEK_SET) != 0) { tb_ch.status = STATUS_CHECK; return; }
 
@@ -221,10 +222,10 @@ static void tb_get(const uint8_t *cdb)
 // tb_file is shared with GET, per the spec.
 #define TB_PAYLOAD_OFF 16
 #define TB_PAYLOAD_MAX (512 - TB_PAYLOAD_OFF)   // 496 carried under the CDB
-#define TB_CHUNK_MAX   4096                     // one SEND DATA chunk (= core tb buffer)
-#define TB_TAIL_BLKS   ((TB_CHUNK_MAX + TB_PAYLOAD_OFF - 1) / 512)   // 8
+#define TB_CHUNK_MAX   65536                    // one SEND DATA chunk (client max CDB[6]=127)
+#define TB_TAIL_BLKS   ((TB_CHUNK_MAX + TB_PAYLOAD_OFF - 1) / 512)   // 128
 
-static uint8_t tb_tail[TB_TAIL_BLKS * 512];   // LBA 1..8 request blocks, flattened
+static uint8_t tb_tail[TB_TAIL_BLKS * 512];   // LBA 1..128 request blocks, flattened
 
 // Reject names that could escape the shared folder.
 static bool tb_name_safe(const char *n)
