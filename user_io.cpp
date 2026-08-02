@@ -302,7 +302,8 @@ char is_pcxt()
 	{
 		if (!strcasecmp(orig_name, "PCXT") ||
 		    !strcasecmp(orig_name, "Tandy1000") ||
-			!strcasecmp(orig_name, "PCjr")
+			!strcasecmp(orig_name, "PCjr") ||
+			!strcasecmp(orig_name, "PCXT-EGA")
 		   )
 			is_pcxt_type = 1;
 		else
