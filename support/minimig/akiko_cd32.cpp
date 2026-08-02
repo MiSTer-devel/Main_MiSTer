@@ -196,6 +196,13 @@ static inline uint8_t bin_to_bcd(uint8_t v)
 	return (uint8_t)(((v / 10u) << 4) | (v % 10u));
 }
 
+static inline bool cd32_active(void)
+{
+	return (minimig_config.cpu & 0x03) == 3
+	    && ((minimig_config.chipset >> 2) & 7) == 6
+	    && minimig_config.hardfile[0].cfg == 2;
+}
+
 static bool cd_is_mounted(void)
 {
 	for (int p = 0; p < 2; p++) {
@@ -1355,6 +1362,8 @@ static void akiko_diag(const char *fmt, ...)
 
 void akiko_cd32_poll(void)
 {
+	if (!cd32_active()) return;
+
 	usleep(20);
 
 	bool mounted = cd_is_mounted();
