@@ -2795,6 +2795,8 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->pixrep = spi_w(0);
 		video_info->de_h = spi_w(0);
 		video_info->de_v = spi_w(0);
+		video_info->frame_clocks = spi_w(0);
+		video_info->frame_clocks |= (spi_w(0) & 0xFF) << 16;
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
@@ -3085,6 +3087,34 @@ bool video_mode_select(uint32_t vtime, vmode_custom_t* out_mode)
 	return adjustable;
 }
 
+static uint64_t div_round_u64(uint64_t numerator, uint64_t denominator)
+{
+	return (numerator + denominator / 2) / denominator;
+}
+
+static uint64_t calc_frame_locked_phase(uint64_t fsc_num, uint64_t fsc_den,
+	uint32_t frame_ticks, uint32_t frame_clocks)
+{
+	if(!frame_ticks || !frame_clocks) return 0;
+
+	// Nearest whole number of subcarrier rotations in one frame.
+	// These products fit in uint64_t for the 32-bit frame timer and
+	// the NTSC/PAL subcarrier ratios used here.
+	const uint64_t frame_cycles = div_round_u64(
+		fsc_num * (uint64_t)frame_ticks,
+		fsc_den * 100000000ULL
+	);
+
+	// Calculate round(frame_cycles * 2^40 / frame_clocks). 
+	// The whole-number quotient contributes only
+	// multiples of 2^40, which disappear under the 40-bit mask.
+	const uint64_t frame_remainder = frame_cycles % frame_clocks;
+	return div_round_u64(
+		frame_remainder * (1ULL << 40),
+		frame_clocks
+	) & 0xFFFFFFFFFFULL;
+}
+
 static void set_yc_mode()
 {
 	// Enable YC for S-Video/CVBS modes, or subcarrier for CXA2075 encoders
@@ -3093,12 +3123,68 @@ static void set_yc_mode()
 		float fps = current_video_info.vtime ? (100000000.f / current_video_info.vtime) : 0.f;
 		int pal = fps < 55.f;
 		double CLK_REF = (pal || (cfg.ntsc_mode == 1)) ? 4.43361875f : (cfg.ntsc_mode == 2) ? 3.575611f : 3.579545f;
-		double CLK_VIDEO = current_video_info.ctime * 100.f / current_video_info.ptime;
+		double CLK_VIDEO;
 
 		float prate = current_video_info.width * 100.f;
 		prate /= current_video_info.ptime;
 
-		int64_t PHASE_INC = ((int64_t)((CLK_REF / CLK_VIDEO) * 1099511627776LL)) & 0xFFFFFFFFFFLL;
+		int64_t PHASE_INC;
+		if(current_video_info.frame_clocks)
+		{
+			uint32_t frame_ticks = current_video_info.vtime;
+
+			/*
+			* vtime is the interval between VS boundaries.
+			* In an interlaced mode that is a field period, while
+			* frame_clocks was counted across both fields.
+			*/
+			if(current_video_info.interlaced)
+				frame_ticks *= 2;
+
+			CLK_VIDEO = current_video_info.frame_clocks * 100.0 /
+				frame_ticks;
+
+			uint64_t fsc_num =
+				(pal || (cfg.ntsc_mode == 1)) ? 17734475ULL :
+				(cfg.ntsc_mode == 2) ? 3575611ULL :
+				315000000ULL;
+
+			uint64_t fsc_den =
+				(pal || (cfg.ntsc_mode == 1)) ? 4ULL :
+				(cfg.ntsc_mode == 2) ? 1ULL :
+				88ULL;
+
+			/*
+			 * NES/SNES progressive NTSC use CLK_VIDEO = 12 * FSC.
+			 * Recognize the clock relationship instead of depending on
+			 * which member of the alternating frame pair vtime captured.
+			 */
+			const double fsc_ratio = CLK_VIDEO / CLK_REF;
+			if(!current_video_info.interlaced &&
+			   !pal && !cfg.ntsc_mode &&
+			   fabs(fsc_ratio - 12.0) < 0.001)
+			{
+				PHASE_INC = div_round_u64(1ULL << 40, 12ULL);
+				printf("YC exact clock ratio: CLK_VIDEO/FSC=12\n");
+			}
+			else
+			{
+				PHASE_INC = calc_frame_locked_phase(
+					fsc_num,
+					fsc_den,
+					frame_ticks,
+					current_video_info.frame_clocks
+				);
+			}
+		}
+		else
+		{
+			// Old framework and interlaced modes retain the existing path.
+			CLK_VIDEO = current_video_info.ctime * 100.f /
+				current_video_info.ptime;
+			PHASE_INC = ((int64_t)((CLK_REF / CLK_VIDEO) *
+				1099511627776LL)) & 0xFFFFFFFFFFLL;
+		}
 
 		int COLORBURST_START = (int)(3.7f * (CLK_VIDEO / CLK_REF));
 		int COLORBURST_END = (int)(9.0f * (CLK_VIDEO / CLK_REF)) + COLORBURST_START;
