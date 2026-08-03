@@ -348,6 +348,7 @@ static const char* load_chd_file(drive_t *drv, const char *chdfile)
 		if (drv->track[i].attr == 0x40)
 		{
 			drv->data_num = i;
+			break;
 		}
 	}
 
@@ -464,7 +465,17 @@ static const char* load_cue_file(drive_t *drv, const char *cuefile)
 			canAddTrack = 0;
 
 			std::string filename;
-			std::getline(std::getline(line, filename, '"'), filename, '"');
+			std::string leading;
+			std::getline(line, leading, '"');
+			if (line.good())
+			{
+				std::getline(line, filename, '"');
+			}
+			else
+			{
+				std::istringstream toks(leading);
+				toks >> filename;
+			}
 
 			strcpy(track.filename, pathname.c_str());
 			strcat(track.filename, filename.c_str());
@@ -994,8 +1005,7 @@ static void pkt_send(ide_config *ide, void *data, uint16_t size)
 
 static void read_cd_sectors(ide_config *ide, track_t *track, int cnt)
 {
-	drive_t *drv = &ide->drive[ide->regs.drv];
-	uint32_t sz = drv->track[drv->data_num].sectorSize;
+	uint32_t sz = track->sectorSize;
 
 	if (sz == 2048)
 	{
@@ -1004,7 +1014,7 @@ static void read_cd_sectors(ide_config *ide, track_t *track, int cnt)
 		return;
 	}
 
-	uint32_t pre = drv->track[drv->data_num].mode2 ? 24 : 16;
+	uint32_t pre = track->mode2 ? 24 : 16;
 	uint32_t post = sz - pre - 2048;
 	uint32_t off = 0;
 
@@ -1050,8 +1060,8 @@ void cdrom_read(ide_config *ide)
 
 	if (drive->chd_f) {
 
-		uint32_t hdr = drive->track[drive->data_num].mode2 ? 24 : 16;
-		if (drive->track[drive->data_num].sectorSize == 2048)
+		uint32_t hdr = track->mode2 ? 24 : 16;
+		if (track->sectorSize == 2048)
 		{
 			hdr = 0;
 		}
@@ -1065,7 +1075,7 @@ void cdrom_read(ide_config *ide)
 		for (uint32_t i = 0; i < cnt; i++)
 		{
 
-			if (mister_chd_read_sector(drive->chd_f, drive->chd_last_partial_lba + drive->track[drive->data_num].chd_offset, d_offset, hdr, 2048, ide_buf, drive->chd_hunkbuf, &drive->chd_hunknum) != CHDERR_NONE)
+			if (mister_chd_read_sector(drive->chd_f, drive->chd_last_partial_lba + track->chd_offset, d_offset, hdr, 2048, ide_buf, drive->chd_hunkbuf, &drive->chd_hunknum) != CHDERR_NONE)
 			{
 				//I don't think anything else uses this, but set it just in case.
 				ide->null = 1;
@@ -1728,7 +1738,7 @@ void ide_cdda_send_sector()
 	{
 		if (drv->chd_f)
 		{
-			mister_chd_read_sector(drv->chd_f, drv->play_start_lba + drv->track[drv->data_num].chd_offset, 0, 0, BYTES_PER_RAW_REDBOOK_FRAME, cdda_buf, drv->chd_hunkbuf, &drv->chd_hunknum);
+			mister_chd_read_sector(drv->chd_f, drv->play_start_lba + track->chd_offset, 0, 0, BYTES_PER_RAW_REDBOOK_FRAME, cdda_buf, drv->chd_hunkbuf, &drv->chd_hunknum);
 			needs_swap = true;
 		}
 		else
