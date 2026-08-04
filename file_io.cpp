@@ -339,8 +339,19 @@ static int isPathRegularFile(const char *path, int use_zip = 1)
 	return 0;
 }
 
-void FileClose(fileTYPE *file)
+static int file_write_failed = 0;
+
+int FileWriteFailed()
 {
+	int r = file_write_failed;
+	file_write_failed = 0;
+	return r;
+}
+
+int FileClose(fileTYPE *file)
+{
+	int err = 0;
+
 	if (file->zip)
 	{
 		if (file->zip->iter)
@@ -355,7 +366,12 @@ void FileClose(fileTYPE *file)
 	if (file->filp)
 	{
 		//printf("closing %p\n", file->filp);
-		fclose(file->filp);
+		if (fclose(file->filp))
+		{
+			err = -1;
+			file_write_failed = 1;
+			printf("FileClose error on %s (%s).\n", file->name, strerror(errno));
+		}
 		if (file->type == 1)
 		{
 			if (file->name[0] == '/')
@@ -369,6 +385,8 @@ void FileClose(fileTYPE *file)
 	file->zip = nullptr;
 	file->filp = nullptr;
 	file->size = 0;
+
+	return err;
 }
 
 static int zip_search_by_crc(mz_zip_archive *zipArchive, uint32_t crc32)
@@ -729,11 +747,11 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 	if (file->filp)
 	{
 		ret = fwrite(pBuffer, 1, length, file->filp);
-		fflush(file->filp);
 
-		if (ret < 0)
+		if (ret != length || fflush(file->filp))
 		{
-			printf("FileWriteAdv error(%d).\n", ret);
+			printf("FileWriteAdv error: wrote %d of %d bytes (%s).\n", ret, length, strerror(errno));
+			file_write_failed = 1;
 			return failres;
 		}
 
