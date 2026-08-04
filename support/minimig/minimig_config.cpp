@@ -519,6 +519,7 @@ int minimig_cfg_load(int num)
 		if (size == sizeof(minimig_config) || size == 5152 || size == 5216)
 		{
 			static mm_configTYPE tmpconf = {};
+			memset((void*)&tmpconf, 0, sizeof(tmpconf));
 			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
 			{
 				// check file id and version

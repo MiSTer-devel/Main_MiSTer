@@ -200,17 +200,25 @@ static inline bool cd32_active(void)
 {
 	return (minimig_config.cpu & 0x03) == 3
 	    && ((minimig_config.chipset >> 2) & 7) == 6
-	    && minimig_config.cd32_drive.cfg == 2;
-}
-
-static bool cd_is_mounted(void)
-{
-	return cd32_drive.cd && (cd32_drive.chd_f || cd32_drive.f);
+	    && (minimig_config.cd32_drive.cfg == 2 || minimig_config.hardfile[0].cfg == 2);
 }
 
 static drive_t *cd_find_drive(void)
 {
-	return cd_is_mounted() ? &cd32_drive : NULL;
+	if (cd32_drive.cd && (cd32_drive.chd_f || cd32_drive.f)) return &cd32_drive;
+
+	for (int p = 0; p < 2; p++) {
+		for (int d = 0; d < 2; d++) {
+			drive_t *drv = &ide_inst[p].drive[d];
+			if (drv->cd && (drv->chd_f || drv->f)) return drv;
+		}
+	}
+	return NULL;
+}
+
+static bool cd_is_mounted(void)
+{
+	return cd_find_drive() != NULL;
 }
 
 static uint16_t akiko_read_status(void)
