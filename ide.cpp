@@ -83,6 +83,28 @@ uint8_t ide_buf[ide_io_max_size * 512];
 
 ide_config ide_inst[2] = {};
 
+drive_t cd32_drive = {};
+drive_t cdtv_drive = {};
+
+int cd_drive_open(int slot, const char *filename)
+{
+	static fileTYPE cd_drive_file[2] = {};
+
+	drive_t *drv = slot ? &cdtv_drive : &cd32_drive;
+	drv->cd = 1;
+
+	const char *res = cd_drive_parse(drv, slot, filename);
+
+	int present = res ? ide_img_mount(&cd_drive_file[slot], res, 0) : 0;
+	drv->f = present ? &cd_drive_file[slot] : NULL;
+
+	const char *full = present ? res : "";
+	if (slot) cdtv_cd_set_cd_path(full);
+	else akiko_cd32_set_cd_path(full);
+
+	return present;
+}
+
 uint16_t ide_check()
 {
 	uint16_t res;
@@ -1119,11 +1141,8 @@ int ide_open(uint8_t unit, const char* filename)
 	static fileTYPE hdd_file[4] = {};
 	chs_t chs = {};
 
-	bool cdtv_cd_slot = (minimig_config.chipset & CONFIG_CDTV)
-	                 && minimig_config.hardfile[unit].cfg == 2;
 	if (!is_minimig()
-	    || ((minimig_config.ide_cfg & 1) && minimig_config.hardfile[unit].cfg)
-	    || cdtv_cd_slot)
+	    || ((minimig_config.ide_cfg & 1) && minimig_config.hardfile[unit].cfg))
 	{
 		printf("\nChecking HDD %d\n", unit);
 		if (filename[0] && FileOpenEx(&hdd_file[unit], filename, FileCanWrite(filename) ? O_RDWR : O_RDONLY))
@@ -1163,8 +1182,6 @@ int ide_open(uint8_t unit, const char* filename)
 		int port = (unit >> 1) & 1;
 		int drv  = unit & 1;
 		cdrom_close_chd(&ide_inst[port].drive[drv]);
-		if (unit == 0) akiko_cd32_set_cd_path("");
-		if (unit == 0) cdtv_cd_set_cd_path("");
 	}
 	ide_img_set(unit, 0, 0);
 	FileClose(&hdd_file[unit]);

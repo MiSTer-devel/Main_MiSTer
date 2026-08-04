@@ -1796,8 +1796,6 @@ const char* cdrom_parse(uint32_t num, const char *filename)
 		ide_inst[num].drive[drv].paused = 0;
 		ide_inst[num].drive[drv].play_start_lba = 0;
 		ide_inst[num].drive[drv].play_end_lba = 0;
-		akiko_cd32_set_cd_path(full);
-		cdtv_cd_set_cd_path(full);
 		return full;
 	}
 
@@ -1824,14 +1822,64 @@ const char* cdrom_parse(uint32_t num, const char *filename)
 		if (!res) res = load_iso_file(&ide_inst[num].drive[drv], path);
 	}
 
-	akiko_cd32_set_cd_path((path && res) ? path : "");
-	cdtv_cd_set_cd_path((path && res) ? path : "");
-
 	if (filename && filename[0] && res) {
 		strncpy(last_path[num][drv], cmp_filename, sizeof(last_path[0][0]) - 1);
 		last_path[num][drv][sizeof(last_path[0][0]) - 1] = '\0';
 	} else {
 		last_path[num][drv][0] = '\0';
+	}
+
+	return res;
+}
+
+const char* cd_drive_parse(drive_t *drv, int slot, const char *filename)
+{
+	const char *res = 0;
+
+	static char last_path[2][1024] = {};
+	const char *cmp_filename = filename ? filename : "";
+	bool same_path = filename && filename[0]
+	                 && !strcmp(last_path[slot], cmp_filename)
+	                 && drv->chd_f != NULL;
+
+	if (same_path) {
+		const char *full = getFullPath(filename);
+		drv->mcr_flag = true;
+		drv->playing = 0;
+		drv->paused = 0;
+		drv->play_start_lba = 0;
+		drv->play_end_lba = 0;
+		return full;
+	}
+
+	//always close files and reset state. empty filename == unmounted cd from OSD
+	cdrom_close_chd(drv);
+	for (uint8_t i = 0; i < sizeof(drv->track) / sizeof(track_t); i++)
+	{
+		if (drv->track[i].f.opened())
+		{
+			FileClose(&drv->track[i].f);
+		}
+	}
+	drv->mcr_flag = true;
+	drv->playing = 0;
+	drv->paused = 0;
+	drv->play_start_lba = 0;
+	drv->play_end_lba = 0;
+	const char *path = NULL;
+	if (strlen(filename))
+	{
+		path = getFullPath(filename);
+		res = load_chd_file(drv, path);
+		if (!res) res = load_cue_file(drv, path);
+		if (!res) res = load_iso_file(drv, path);
+	}
+
+	if (filename && filename[0] && res) {
+		strncpy(last_path[slot], cmp_filename, sizeof(last_path[0]) - 1);
+		last_path[slot][sizeof(last_path[0]) - 1] = '\0';
+	} else {
+		last_path[slot][0] = '\0';
 	}
 
 	return res;
