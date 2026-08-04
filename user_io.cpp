@@ -3137,7 +3137,7 @@ void user_io_poll()
 		PROFILE_FUNCTION();
 	#endif
 
-	if (FileWriteFailed()) Info("ERROR: File write failed!\nCheck storage", 6000);
+	if (!menu_present() && FileWriteFailed()) Info("ERROR: File write failed!\nCheck storage", 6000);
 
 	// every frame, check if a screenshot has been requested.
 	// this is reduce risk of screenshot occurring while the scaler
