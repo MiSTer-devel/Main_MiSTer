@@ -6626,17 +6626,18 @@ void HandleUI(void)
 			strcat(s, cd32_on ? "CD " : "Disabled");
 			OsdWrite(m++, s, menusub == 0, 0);
 
-			strcpy(s, " CD32 CD           : ");
+			OsdWrite(m++, " CD32 CD:", cd32_on ? (menusub == 1) : 0, !cd32_on);
 			if (minimig_config.cd32_drive.filename[0])
 			{
+				strcpy(s, "                                ");
 				char *path = HomeDir();
 				int len = strlen(path);
 				char *name = minimig_config.cd32_drive.filename;
 				if (!strncasecmp(name, path, len)) name += len + 1;
-				strncat(s, name, 25);
+				strncpy(&s[3], name, 25);
 			}
-			else strcat(s, "** not selected **");
-			OsdWrite(m++, s, cd32_on ? (menusub == 1) : 0, !cd32_on);
+			else strcpy(s, "   ** not selected **");
+			OsdWrite(m++, s, 0, !cd32_on);
 
 			OsdWrite(m++);
 
@@ -6648,17 +6649,18 @@ void HandleUI(void)
 			strcat(s, cdtv_cd_on ? "CD " : "Disabled");
 			OsdWrite(m++, s, menusub == 3, 0);
 
-			strcpy(s, " CDTV CD           : ");
+			OsdWrite(m++, " CDTV CD:", cdtv_cd_on ? (menusub == 4) : 0, !cdtv_cd_on);
 			if (minimig_config.cdtv_drive.filename[0])
 			{
+				strcpy(s, "                                ");
 				char *path = HomeDir();
 				int len = strlen(path);
 				char *name = minimig_config.cdtv_drive.filename;
 				if (!strncasecmp(name, path, len)) name += len + 1;
-				strncat(s, name, 25);
+				strncpy(&s[3], name, 25);
 			}
-			else strcat(s, "** not selected **");
-			OsdWrite(m++, s, cdtv_cd_on ? (menusub == 4) : 0, !cdtv_cd_on);
+			else strcpy(s, "   ** not selected **");
+			OsdWrite(m++, s, 0, !cdtv_cd_on);
 		}
 
 		for (int i = m; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
