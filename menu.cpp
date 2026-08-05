@@ -6462,13 +6462,13 @@ void HandleUI(void)
 		{
 			int ide_on  = (minimig_config.ide_cfg & 1) ? 1 : 0;
 
-			menumask = 0x1C01;
+			menumask = 0x1801;
 			if (ide_on)  menumask |= 0x002;
 			if (ide_on)  menumask |= 0x154;
-			OsdWrite(m++, "", 0, 0);
 
-			strcpy(s, " I/O controller    : ");
-			strcat(s, ide_on ? "IDE " : "OFF ");
+			OsdWrite(m++, "", 0, 0);
+			strcpy(s, " IDE A600/A1200    : ");
+			strcat(s, ide_on ? "On " : "Off ");
 			OsdWrite(m++, s, menusub == 0, 0);
 
 			strcpy(s, " Fast-IDE (68020)  : ");
@@ -6476,10 +6476,11 @@ void HandleUI(void)
 			OsdWrite(m++, s, menusub == 1, !ide_on || !(minimig_config.cpu & 2));
 			if (!(minimig_config.cpu & 2)) menumask &= ~2;
 
+			OsdWrite(m++, "", 0, 0);
 			uint n = 2, t = 8;
 			for (uint i = 0; i < 4; i++)
 			{
-				strcpy(s, (i & 2) ? " Sec. " : " Pri. ");
+				strcpy(s, (i & 2) ? " \x1bSec. " : " \x1bPri. ");
 				strcat(s, (i & 1) ? " Slave: " : "Master: ");
 				strcat(s, (minimig_config.hardfile[i].cfg == 2) ? "Removable/CD" : minimig_config.hardfile[i].cfg ? "Fixed/HDD" : "Disabled");
 				OsdWrite(m++, s, ide_on ? (menusub == n++) : 0, !ide_on);
@@ -6502,7 +6503,12 @@ void HandleUI(void)
 				t <<= 2;
 			}
 
-			OsdWrite(m++, " CD32 / CDTV drives        \x16", menusub == 10, 0);
+			OsdWrite(m++, "", 0, 0);
+			if (is_minimig() == 2)
+			{
+				OsdWrite(m++, " CD32 / CDTV drives        \x16", menusub == 10, 0);
+				menumask |= 0x400;
+			}
 		}
 
 		sprintf(s, " Floppy Disk Turbo : %s", minimig_config.floppy.speed ? "On" : "Off");
