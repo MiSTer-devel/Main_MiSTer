@@ -706,6 +706,19 @@ static uint8_t akiko_read_sec_counter(void)
 	return (uint8_t)(w & 0xff);
 }
 
+static void akiko_ext_block_write(uint16_t addr, const uint8_t *buf, int bytes)
+{
+	static uint16_t words[AKIKO_SECTOR_BYTES / 2];
+	memcpy(words, buf, bytes);
+
+	EnableIO();
+	fpga_spi_fast(UIO_DMA_WRITE);
+	fpga_spi_fast(addr);
+	fpga_spi_fast(0);
+	fpga_spi_fast_block_write(words, bytes / 2);
+	DisableIO();
+}
+
 static void akiko_nvram_dump(uint8_t *out_1024)
 {
 	EnableIO();
@@ -734,15 +747,25 @@ static bool akiko_nvram_load_from_path(const char *path)
 		return false;
 	}
 
-	int rc = user_io_file_mount(path, 0, 0, 0);
-	if (rc != 1) {
-		akiko_diag("[akiko] NVR mount FAIL: user_io_file_mount(%s, slot=0) rc=%d",
-		           path, rc);
+	uint8_t nvr[AKIKO_NVRAM_BYTES];
+	FILE *f = fopen(path, "rb");
+	if (!f) {
+		akiko_diag("[akiko] NVR load FAIL: fopen(%s) errno=%d", path, errno);
+		cd_save_load_failed = true;
+		return false;
+	}
+	size_t got = fread(nvr, 1, sizeof(nvr), f);
+	fclose(f);
+	if (got != sizeof(nvr)) {
+		akiko_diag("[akiko] NVR load FAIL: read %u of %d bytes from %s",
+		           (unsigned)got, AKIKO_NVRAM_BYTES, path);
 		cd_save_load_failed = true;
 		return false;
 	}
 
-	akiko_diag("[akiko] NVR mounted slot 0 (%d bytes from %s) — verify in 100 ms",
+	akiko_ext_block_write(AKIKO_NVRAM_ADDR, nvr, AKIKO_NVRAM_BYTES);
+
+	akiko_diag("[akiko] NVR loaded (%d bytes from %s) — verify in 100 ms",
 	           AKIKO_NVRAM_BYTES, path);
 	cd_save_load_failed = false;
 	strncpy(nvr_verify_path, path, sizeof(nvr_verify_path) - 1);
@@ -886,25 +909,9 @@ static bool akiko_nvram_save_to_disk(void)
 	return akiko_nvram_save_to_path(target);
 }
 
-#define AKIKO_SEC_SLOT 1
-static const bool g_akiko_fast_push = (getenv("AKIKO_SLOW_PUSH") == nullptr);
-
 static void akiko_push_sector(const uint8_t *buf)
 {
-	if (g_akiko_fast_push) {
-		EnableIO();
-		spi_w(UIO_SECTOR_RD | (AKIKO_SEC_SLOT << 8));
-		fpga_spi_fast_block_write_8(buf, AKIKO_SECTOR_BYTES);
-		DisableIO();
-	} else {
-		EnableIO();
-		spi8(UIO_DMA_WRITE);
-		spi32_w(AKIKO_SECTOR_ADDR);
-		for (int i = 0; i < AKIKO_SECTOR_BYTES; i++) {
-			spi_w(buf[i]);
-		}
-		DisableIO();
-	}
+	akiko_ext_block_write(AKIKO_SECTOR_ADDR, buf, AKIKO_SECTOR_BYTES);
 }
 
 static bool cd_read_audio_sector(drive_t *drv, uint32_t lba, uint8_t *buf2352)
