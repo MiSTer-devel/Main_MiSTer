@@ -700,6 +700,7 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 		if (ret != length && ferror(file->filp))
 		{
 			printf("FileReadAdv error: read %zd of %d bytes (%s).\n", ret, length, strerror(errno));
+			clearerr(file->filp);
 			return failres;
 		}
 	}
