@@ -6201,44 +6201,38 @@ void HandleUI(void)
 		parentstate = menustate;
 
 		m = 0;
-		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " CPU       : ");
+		strcpy(s, " CPU      : ");
 		strcat(s, config_cpu_msg[minimig_config.cpu & 0x03]);
 		OsdWrite(m++, s, menusub == 0, 0);
-		strcpy(s, " D-Cache   : ");
+		strcpy(s, " D-Cache  : ");
 		strcat(s, (minimig_config.cpu & 16) ? "ON" : "OFF");
 		OsdWrite(m++, s, menusub == 1, !(minimig_config.cpu & 0x2));
+
 		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " Chipset   : ");
+		strcpy(s, " Chipset  : ");
 		strcat(s, config_chipset_msg[(minimig_config.chipset >> 2) & 7]);
 		OsdWrite(m++, s, menusub == 2, 0);
-		strcpy(s, " ChipRAM   : ");
+		strcpy(s, " ChipRAM  : ");
 		strcat(s, config_memory_chip_msg[minimig_config.memory & 0x03]);
 		OsdWrite(m++, s, menusub == 3, 0);
-		strcpy(s, " FastRAM   : ");
+		strcpy(s, " FastRAM  : ");
 		strcat(s, config_memory_fast_msg[(minimig_config.cpu >> 1) & 1][((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5)]);
 		OsdWrite(m++, s, menusub == 4, 0);
-		strcpy(s, " SlowRAM   : ");
+		strcpy(s, " SlowRAM  : ");
 		strcat(s, config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03]);
 		OsdWrite(m++, s, menusub == 5, 0);
 
 		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " Joystick  : ");
-		strcat(s, config_joystick_mode[(minimig_config.autofire & 6) >> 1]);
-		OsdWrite(m++, s, menusub == 6, 0);
-
-		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " ROM    : ");
+		strcpy(s, " ROM      : ");
 		{
 			char *path = HomeDir();
 			int len = strlen(path);
 			char *name = minimig_config.kickstart;
 			if (!strncasecmp(name, path, len))  name += len + 1;
-			strncat(&s[3], name, 24);
+			strncat(s, name, 20);
 		}
-
-		OsdWrite(m++, s, menusub == 7, 0);
-		strcpy(s, " Ext.ROM: ");
+		OsdWrite(m++, s, menusub == 6, 0);
+		strcpy(s, " Ext.ROM  : ");
 		{
 			char *path = HomeDir();
 			int len = strlen(path);
@@ -6247,15 +6241,18 @@ void HandleUI(void)
 				strcat(s, "<none>");
 			} else {
 				if (!strncasecmp(name, path, len)) name += len + 1;
-				strncat(&s[3], name, 24);
+				strncat(s, name, 20);
 			}
 		}
+		OsdWrite(m++, s, menusub == 7, 0);
+		strcpy(s, " HRTmon   : ");
+		strcat(s, (minimig_config.memory & 0x40) ? "enabled" : "disabled");
 		OsdWrite(m++, s, menusub == 8, 0);
-		strcpy(s, " HRTmon : ");
-		strcat(s, (minimig_config.memory & 0x40) ? "enabled " : "disabled");
-		OsdWrite(m++, s, menusub == 9, 0);
 
 		OsdWrite(m++, "", 0, 0);
+		strcpy(s, " Joystick : ");
+		strcat(s, config_joystick_mode[(minimig_config.autofire & 6) >> 1]);
+		OsdWrite(m++, s, menusub == 9, 0);
 		strcpy(s, " Ethernet : ");
 		strcat(s, a2065_iface_msg(a2065_get_iface()));
 		OsdWrite(m++, s, menusub == 10, 0);
@@ -6363,7 +6360,7 @@ void HandleUI(void)
 				minimig_config.memory = ((minimig_config.memory + (minus ? -4 : 4)) & 0x0C) | (minimig_config.memory & ~0x0C);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 6)
+			else if (menusub == 9)
 			{
 				uint8_t x = (minimig_config.autofire & 6) >> 1;
 				if (minus)
@@ -6381,12 +6378,12 @@ void HandleUI(void)
 				menustate = MENU_MINIMIG_CHIPSET1;
 				minimig_ConfigAutofire(minimig_config.autofire, 6);
 			}
-			else if (menusub == 7 && select)
+			else if (menusub == 6 && select)
 			{
 				ioctl_index = 1;
 				SelectFile(Selected_F[4], "ROM", SCANO_DIR, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 			}
-			else if (menusub == 8)
+			else if (menusub == 7)
 			{
 				if (minus)
 				{
@@ -6399,7 +6396,7 @@ void HandleUI(void)
 					SelectFile(Selected_F[5], "ROM", SCANO_DIR | SCANO_UMOUNT, MENU_MINIMIG_EXTROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 				}
 			}
-			else if (menusub == 9)
+			else if (menusub == 8)
 			{
 				minimig_config.memory ^= 0x40;
 				menustate = MENU_MINIMIG_CHIPSET1;
