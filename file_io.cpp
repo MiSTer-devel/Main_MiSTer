@@ -697,9 +697,10 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 	if (file->filp)
 	{
 		ret = fread(pBuffer, 1, length, file->filp);
-		if (ret < 0)
+		if (ret != length && ferror(file->filp))
 		{
-			printf("FileReadAdv error(%d).\n", ret);
+			printf("FileReadAdv error: read %zd of %d bytes (%s).\n", ret, length, strerror(errno));
+			clearerr(file->filp);
 			return failres;
 		}
 	}
@@ -772,16 +773,27 @@ int FileSave(const char *name, void *pBuffer, int size)
 	int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0)
 	{
-		printf("FileSave(open) File:%s, error: %d.\n", full_path, fd);
+		printf("FileSave error: cannot open %s (%s).\n", full_path, strerror(errno));
 		return 0;
 	}
 
 	int ret = write(fd, pBuffer, size);
-	close(fd);
-
 	if (ret < 0)
 	{
-		printf("FileSave(write) File:%s, error: %d.\n", full_path, ret);
+		printf("FileSave error: write to %s failed (%s).\n", full_path, strerror(errno));
+		close(fd);
+		return 0;
+	}
+	if (ret != size)
+	{
+		printf("FileSave error: short write to %s, wrote %d of %d bytes.\n", full_path, ret, size);
+		close(fd);
+		return 0;
+	}
+
+	if (close(fd))
+	{
+		printf("FileSave error: close %s failed (%s).\n", full_path, strerror(errno));
 		return 0;
 	}
 
