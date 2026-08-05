@@ -58,6 +58,8 @@ typedef struct
 	unsigned char   cpu;
 	unsigned char   autofire;
 	char            info[64];
+	mm_hardfileTYPE cd32_drive;
+	mm_hardfileTYPE cdtv_drive;
 } mm_configTYPE;
 
 extern mm_configTYPE minimig_config;

@@ -200,33 +200,25 @@ static inline bool cd32_active(void)
 {
 	return (minimig_config.cpu & 0x03) == 3
 	    && ((minimig_config.chipset >> 2) & 7) == 6
-	    && minimig_config.hardfile[0].cfg == 2;
-}
-
-static bool cd_is_mounted(void)
-{
-	for (int p = 0; p < 2; p++) {
-		for (int d = 0; d < 2; d++) {
-			drive_t *drv = &ide_inst[p].drive[d];
-			if (drv->cd && (drv->chd_f || drv->f)) {
-				return true;
-			}
-		}
-	}
-	return false;
+	    && (minimig_config.cd32_drive.cfg == 2 || minimig_config.hardfile[0].cfg == 2);
 }
 
 static drive_t *cd_find_drive(void)
 {
+	if (cd32_drive.cd && (cd32_drive.chd_f || cd32_drive.f)) return &cd32_drive;
+
 	for (int p = 0; p < 2; p++) {
 		for (int d = 0; d < 2; d++) {
 			drive_t *drv = &ide_inst[p].drive[d];
-			if (drv->cd && (drv->chd_f || drv->f)) {
-				return drv;
-			}
+			if (drv->cd && (drv->chd_f || drv->f)) return drv;
 		}
 	}
 	return NULL;
+}
+
+static bool cd_is_mounted(void)
+{
+	return cd_find_drive() != NULL;
 }
 
 static uint16_t akiko_read_status(void)
@@ -1404,12 +1396,9 @@ void akiko_cd32_poll(void)
 	static int unmounted_dump_throttle = 0;
 	if (!mounted && (unmounted_dump_throttle++ % 60) == 0 && unmounted_dump_throttle < 5*60) {
 		akiko_diag(
-			"[akiko] ide_inst dump: "
-			"[0,0]p=%d/c=%d/chd=%p/f=%p  [0,1]p=%d/c=%d/chd=%p/f=%p",
-			ide_inst[0].drive[0].present, ide_inst[0].drive[0].cd,
-			(void*)ide_inst[0].drive[0].chd_f, (void*)ide_inst[0].drive[0].f,
-			ide_inst[0].drive[1].present, ide_inst[0].drive[1].cd,
-			(void*)ide_inst[0].drive[1].chd_f, (void*)ide_inst[0].drive[1].f
+			"[akiko] cd32_drive dump: p=%d/c=%d/chd=%p/f=%p",
+			cd32_drive.present, cd32_drive.cd,
+			(void*)cd32_drive.chd_f, (void*)cd32_drive.f
 		);
 	}
 #endif

@@ -140,6 +140,12 @@ extern ide_config ide_inst[2];
 extern const uint32_t ide_io_max_size;
 extern uint8_t ide_buf[];
 
+extern drive_t cd32_drive;
+extern drive_t cdtv_drive;
+
+// slot: 0 = cd32_drive, 1 = cdtv_drive
+int cd_drive_open(int slot, const char *filename);
+
 void ide_print_regs(regs_t *regs);
 void ide_get_regs(ide_config *ide);
 void ide_set_regs(ide_config *ide);

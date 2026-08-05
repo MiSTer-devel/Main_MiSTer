@@ -448,6 +448,9 @@ static void ApplyConfiguration(char reloadkickstart)
 		(hdd_open(2) ? 8 : 0) |
 		(hdd_open(3) ? 16 : 0));
 
+	cd_drive_open(0, minimig_config.cd32_drive.cfg ? minimig_config.cd32_drive.filename : "");
+	cd_drive_open(1, minimig_config.cdtv_drive.cfg ? minimig_config.cdtv_drive.filename : "");
+
 	minimig_ConfigMemory(memcfg);
 	minimig_ConfigCPU(minimig_config.cpu);
 
@@ -513,9 +516,10 @@ int minimig_cfg_load(int num)
 	{
 		BootPrint("Opened configuration file\n");
 		printf("Configuration file size: %s, %d\n", filename, size);
-		if (size == sizeof(minimig_config) || size == 5152)
+		if (size == sizeof(minimig_config) || size == 5152 || size == 5216)
 		{
 			static mm_configTYPE tmpconf = {};
+			memset((void*)&tmpconf, 0, sizeof(tmpconf));
 			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
 			{
 				// check file id and version
@@ -578,6 +582,10 @@ int minimig_cfg_load(int num)
 		minimig_config.hardfile[2].filename[0] = 0;
 		minimig_config.hardfile[3].cfg = 0;
 		minimig_config.hardfile[3].filename[0] = 0;
+		minimig_config.cd32_drive.cfg = 0;
+		minimig_config.cd32_drive.filename[0] = 0;
+		minimig_config.cdtv_drive.cfg = 0;
+		minimig_config.cdtv_drive.filename[0] = 0;
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
 

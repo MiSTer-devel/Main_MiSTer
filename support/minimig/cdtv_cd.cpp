@@ -100,12 +100,12 @@ static inline bool cdtv_active(void)
 
 static drive_t *cdtv_find_drive(void)
 {
+	if (cdtv_drive.cd && (cdtv_drive.chd_f || cdtv_drive.f)) return &cdtv_drive;
+
 	for (int p = 0; p < 2; p++) {
 		for (int d = 0; d < 2; d++) {
 			drive_t *drv = &ide_inst[p].drive[d];
-			if (drv->cd && (drv->chd_f || drv->f)) {
-				return drv;
-			}
+			if (drv->cd && (drv->chd_f || drv->f)) return drv;
 		}
 	}
 	return NULL;
