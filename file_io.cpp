@@ -339,15 +339,6 @@ static int isPathRegularFile(const char *path, int use_zip = 1)
 	return 0;
 }
 
-static int file_write_failed = 0;
-
-int FileWriteFailed()
-{
-	int r = file_write_failed;
-	file_write_failed = 0;
-	return r;
-}
-
 int FileClose(fileTYPE *file)
 {
 	int err = 0;
@@ -369,7 +360,6 @@ int FileClose(fileTYPE *file)
 		if (fclose(file->filp))
 		{
 			err = -1;
-			file_write_failed = 1;
 			printf("FileClose error on %s (%s).\n", file->name, strerror(errno));
 		}
 		if (file->type == 1)
@@ -751,7 +741,6 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 		if (ret != length || fflush(file->filp))
 		{
 			printf("FileWriteAdv error: wrote %d of %d bytes (%s).\n", ret, length, strerror(errno));
-			file_write_failed = 1;
 			return failres;
 		}
 

@@ -86,7 +86,6 @@ int  FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32);
 int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0, int use_zip = 1);
 int  FileOpen(fileTYPE *file, const char *name, char mute = 0);
 int FileClose(fileTYPE *file);
-int FileWriteFailed();
 
 __off64_t FileGetSize(fileTYPE *file);
 
