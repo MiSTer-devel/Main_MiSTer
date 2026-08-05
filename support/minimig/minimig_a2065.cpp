@@ -424,13 +424,6 @@ static int a2065_open(void)
 	default:            iface_name = "eth0";       parent_name = "eth0"; mode = MODE_BPF;     break;
 	}
 
-	map = (volatile uint8_t *)shmem_map(DDR3_FLAT_BASE, DDR3_FLAT_WINDOW_SIZE);
-	if (!map)
-	{
-		printf("A2065: cannot map DDR3 mailbox\n");
-		return 0;
-	}
-
 	boardram = map + DDR3_BRAM_OFF;
 
 	wr64(DDR3_CMD_OFF, 0);
@@ -552,6 +545,20 @@ void a2065_stop(void)
 
 void a2065_start(void)
 {
+	if(!map)
+	{
+		map = (volatile uint8_t *)shmem_map(DDR3_FLAT_BASE, DDR3_FLAT_WINDOW_SIZE);
+		if (!map)
+		{
+			printf("A2065: cannot map DDR3 mailbox\n");
+			return;
+		}
+	}
+
+	wr64(DDR3_CMD_OFF, 0);
+	wr64(DDR3_CSR_OFF, 0);
+	wr64(DDR3_INT_OFF, 0);
+
 	// Already up: this is a Minimig reset, so put the LANCE back to its
 	// power-on state rather than tearing the interface down and back up.
 	if (card_up)
