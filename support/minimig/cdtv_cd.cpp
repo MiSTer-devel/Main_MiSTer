@@ -126,7 +126,7 @@ static uint16_t cdtv_read_status(void)
 	uint16_t res;
 	EnableIO();
 	res = spi_w(CDTV_STATUS_CMD);
-	if (!res) res = (uint8_t)spi_w(0);
+	if (!res) res = spi_w(0);
 	DisableIO();
 	return res;
 }
@@ -222,19 +222,9 @@ static bool cdtv_read_audio_sector(drive_t *drv, uint32_t lba, uint8_t *buf2352)
 	return true;
 }
 
-static uint16_t cdtv_read_status_full(void)
-{
-	uint16_t hi;
-	EnableIO();
-	hi = spi_w(CDTV_STATUS_CMD);
-	if (!hi) hi = (uint16_t)spi_w(0);
-	DisableIO();
-	return hi;
-}
-
 static bool cdtv_audio_fifo_ready(void)
 {
-	return (cdtv_read_status_full() & CDTV_STATUS_CDDA_REQ) != 0;
+	return (cdtv_read_status() & CDTV_STATUS_CDDA_REQ) != 0;
 }
 
 static void cdtv_push_audio_sector(const uint8_t *buf2352)
@@ -1087,7 +1077,7 @@ void cdtv_cd_poll(void)
 
 	{
 		static int nvr_menu_was_present = 0;
-		const bool nvr_dirty_now = (cdtv_read_status_full() & CDTV_STATUS_NVR_DIRTY) != 0;
+		const bool nvr_dirty_now = (cdtv_read_status() & CDTV_STATUS_NVR_DIRTY) != 0;
 		const int  nvr_menu_now  = menu_present();
 		const bool osd_open_edge = nvr_menu_now && !nvr_menu_was_present;
 		nvr_menu_was_present     = nvr_menu_now;

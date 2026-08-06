@@ -224,7 +224,7 @@ static uint16_t akiko_read_status(void)
 	uint16_t res;
 	EnableIO();
 	res = spi_w(AKIKO_STATUS_CMD);
-	if (!res) res = (uint8_t)spi_w(0);
+	if (!res) res = spi_w(0);
 	DisableIO();
 	return res;
 }
