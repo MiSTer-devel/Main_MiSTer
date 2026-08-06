@@ -54,8 +54,6 @@ static void akiko_diag(const char *fmt, ...);
 #define AKIKO_NVRAM_FILE_LEGACY       "/media/fat/saves/Minimig/cd32.nvr"
 #define AKIKO_STATUS_NVR_DIRTY        (1u << 7)
 #define AKIKO_NVRAM_POLL_PERIOD_MS    1000
-#define AKIKO_NVRAM_DIRTY_DEBOUNCE_MS 30000
-#define AKIKO_NVRAM_MIN_SAVE_INTERVAL_MS 60000
 
 #define AKIKO_SECTOR_BYTES 2352
 
@@ -226,7 +224,7 @@ static uint16_t akiko_read_status(void)
 	uint16_t res;
 	EnableIO();
 	res = spi_w(AKIKO_STATUS_CMD);
-	if (!res) res = (uint8_t)spi_w(0);
+	if (!res) res = spi_w(0);
 	DisableIO();
 	return res;
 }
@@ -1494,9 +1492,7 @@ void akiko_cd32_poll(void)
 	}
 
 	{
-		static uint32_t nvr_dirty_seen_at    = 0;
-		static uint32_t nvr_last_save_at     = 0;
-		static int      nvr_menu_was_present = 0;
+		static int nvr_menu_was_present = 0;
 		const bool nvr_dirty_now  = (status & AKIKO_STATUS_NVR_DIRTY) != 0;
 		const int  nvr_menu_now   = menu_present();
 		const bool osd_open_edge  = nvr_menu_now && !nvr_menu_was_present;
@@ -1504,26 +1500,10 @@ void akiko_cd32_poll(void)
 
 		if (nvr_dirty_now) {
 			cd_save_dirty_observed = true;
-			uint32_t now_ms = (uint32_t)GetTimer(0);
-			if (!nvr_dirty_seen_at) {
-				nvr_dirty_seen_at = now_ms;
-				akiko_diag("[akiko] NVR dirty observed at t=%u", now_ms);
-			}
-			const bool throttle_expired = rx_idle &&
-				(now_ms - nvr_dirty_seen_at) >= AKIKO_NVRAM_DIRTY_DEBOUNCE_MS;
-			const bool fire = osd_open_edge || throttle_expired;
-			const bool cooldown_clear = !nvr_last_save_at ||
-				(now_ms - nvr_last_save_at) >= AKIKO_NVRAM_MIN_SAVE_INTERVAL_MS;
-			if (fire && cooldown_clear) {
-				if (osd_open_edge) {
-					akiko_diag("[akiko] NVR flush: OSD opened with dirty pending");
-				}
+			if (osd_open_edge) {
+				akiko_diag("[akiko] NVR flush: OSD opened with dirty pending");
 				akiko_nvram_save_to_disk();
-				nvr_dirty_seen_at = 0;
-				nvr_last_save_at  = now_ms;
 			}
-		} else {
-			nvr_dirty_seen_at = 0;
 		}
 	}
 
