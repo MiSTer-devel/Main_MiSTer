@@ -714,9 +714,11 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 void atari800_open_bios_file(const char* name, unsigned char index)
 {
 	uint8_t bios_index = (index & 0x3F);
-	uint16_t mode800 = get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800;
+	uint16_t mode800 = get_a8bit_reg(REG_ATARI_STATUS1);
+	uint16_t os_16k = mode800 & STATUS1_MASK_OS16K;
+	mode800 &= STATUS1_MASK_MODE800;
 	user_io_file_tx(name, index);
-	if((mode800 && bios_index == 6) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot_800(1, 0);
+	if((mode800 && (bios_index == (os_16k ? 4 : 6))) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot_800(1, 0);
 }
 
 #define MAX_DRIVES 15
