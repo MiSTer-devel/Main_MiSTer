@@ -5,7 +5,9 @@
 #include <string.h>
 #include <inttypes.h>
 #include <time.h>
+#include <pthread.h>
 #include "../../file_io.h"
+#include "../../offload.h"
 #include "../../cd.h"
 #include "mister_chd.h"
 
@@ -160,7 +162,122 @@ chd_error mister_load_chd(const char *filename, toc_t *cd_toc)
 	return CHDERR_NONE;
 }
 
-chd_error mister_chd_read_sector(chd_file *chd_f, int lba, uint32_t d_offset, uint32_t s_offset, int length, uint8_t *destbuf, uint8_t *hunkbuf, int *hunknum)
+
+// Decompress-ahead. mister_chd_read_sector() caches one hunk, so sequential
+// playback misses on the first sector of every hunk (every 8th with the usual
+// geometry) and pays a full chd_read() on the main thread. This decompresses
+// hunk N+1 on the offload worker while the core consumes hunk N.
+//
+// chd_file is not thread-safe: only the main thread schedules, and it always
+// waits for an in-flight prefetch before its own chd_read(), so the two never
+// overlap. Any failure falls back to the synchronous path.
+struct chd_prefetch
+{
+	chd_file *chd_f;
+	uint8_t *buf;
+	uint32_t hunkbytes;
+	uint32_t hunkcount;
+	int num;
+	int inflight;
+	pthread_mutex_t lock;
+	pthread_cond_t idle;
+};
+
+chd_prefetch *mister_chd_prefetch_create(chd_file *chd_f, uint32_t hunkbytes)
+{
+	if (!chd_f || !hunkbytes) return NULL;
+
+	chd_prefetch *pf = (chd_prefetch *)calloc(1, sizeof(chd_prefetch));
+	if (!pf) return NULL;
+
+	pf->buf = (uint8_t *)malloc(hunkbytes);
+	if (!pf->buf)
+	{
+		free(pf);
+		return NULL;
+	}
+
+	const chd_header *hdr = chd_get_header(chd_f);
+	pf->chd_f = chd_f;
+	pf->hunkbytes = hunkbytes;
+	pf->hunkcount = hdr ? hdr->totalhunks : 0;
+	pf->num = -1;
+	pf->inflight = -1;
+	pthread_mutex_init(&pf->lock, NULL);
+	pthread_cond_init(&pf->idle, NULL);
+	return pf;
+}
+
+// Must be called before chd_close(): the worker reads through chd_f.
+void mister_chd_prefetch_destroy(chd_prefetch **pfp)
+{
+	if (!pfp || !*pfp) return;
+	chd_prefetch *pf = *pfp;
+
+	pthread_mutex_lock(&pf->lock);
+	while (pf->inflight >= 0) pthread_cond_wait(&pf->idle, &pf->lock);
+	pthread_mutex_unlock(&pf->lock);
+
+	pthread_mutex_destroy(&pf->lock);
+	pthread_cond_destroy(&pf->idle);
+	free(pf->buf);
+	free(pf);
+	*pfp = NULL;
+}
+
+static void chd_prefetch_schedule(chd_prefetch *pf, int num)
+{
+	if (num < 0 || (pf->hunkcount && (uint32_t)num >= pf->hunkcount)) return;
+
+	pthread_mutex_lock(&pf->lock);
+	if (pf->inflight >= 0 || pf->num == num)
+	{
+		pthread_mutex_unlock(&pf->lock);
+		return;
+	}
+	pf->inflight = num;
+	pthread_mutex_unlock(&pf->lock);
+
+	// Non-blocking: offload_add_work() would wait on a full queue and stall the
+	// loop this is meant to keep moving.
+	if (!offload_try_add_work([pf, num]()
+		{
+			chd_error err = chd_read(pf->chd_f, num, pf->buf);
+
+			pthread_mutex_lock(&pf->lock);
+			pf->num = (err == CHDERR_NONE) ? num : -1;
+			pf->inflight = -1;
+			pthread_cond_broadcast(&pf->idle);
+			pthread_mutex_unlock(&pf->lock);
+		}))
+	{
+		pthread_mutex_lock(&pf->lock);
+		pf->inflight = -1;
+		pthread_cond_broadcast(&pf->idle);
+		pthread_mutex_unlock(&pf->lock);
+	}
+}
+
+// Leaves the context idle, so the caller may safely enter chd_read() after.
+static bool chd_prefetch_take(chd_prefetch *pf, int wanted, uint8_t *hunkbuf)
+{
+	bool hit = false;
+
+	pthread_mutex_lock(&pf->lock);
+	while (pf->inflight >= 0) pthread_cond_wait(&pf->idle, &pf->lock);
+
+	if (pf->num == wanted)
+	{
+		memcpy(hunkbuf, pf->buf, pf->hunkbytes);
+		pf->num = -1;
+		hit = true;
+	}
+	pthread_mutex_unlock(&pf->lock);
+
+	return hit;
+}
+
+chd_error mister_chd_read_sector(chd_file *chd_f, int lba, uint32_t d_offset, uint32_t s_offset, int length, uint8_t *destbuf, uint8_t *hunkbuf, int *hunknum, chd_prefetch *pf)
 {
 
 	int tmphnum = 0;
@@ -172,13 +289,19 @@ chd_error mister_chd_read_sector(chd_file *chd_f, int lba, uint32_t d_offset, ui
 	//mister_chd_log("READ LBA: %d, dest_offset: %d sector offset: %d length %d chd_f %p\n", lba, d_offset, s_offset, length, chd_f);
 	if (tmphnum != *hunknum)
 	{
-		chd_error err = chd_read(chd_f, tmphnum, hunkbuf);
-		if (err != CHDERR_NONE)
+		if (pf && pf->chd_f != chd_f) pf = NULL;
+		if (!pf || !chd_prefetch_take(pf, tmphnum, hunkbuf))
 		{
-			mister_chd_log("ERROR %s\n", chd_error_string(err));
-			return err;
+			chd_error err = chd_read(chd_f, tmphnum, hunkbuf);
+			if (err != CHDERR_NONE)
+			{
+				mister_chd_log("ERROR %s\n", chd_error_string(err));
+				return err;
+			}
 		}
 		*hunknum = tmphnum;
+
+		if (pf) chd_prefetch_schedule(pf, tmphnum + 1);
 	}
 	int sector_offset = hunkofs * CD_FRAME_SIZE;
 	memcpy(destbuf + d_offset, hunkbuf + sector_offset + s_offset, length);
