@@ -1699,7 +1699,7 @@ void user_io_init(const char *path, const char *xml)
 		if (xml && isXmlName(xml) == 1) arcade_check_error();
 
 		char cfg_errs[512];
-		if (cfg_check_errors(cfg_errs, sizeof(cfg_errs)))
+		if (cfg.sanity_check && cfg_check_errors(cfg_errs, sizeof(cfg_errs)))
 		{
 			Info(cfg_errs, 5000);
 			sleep(5);
