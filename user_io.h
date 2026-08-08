@@ -232,6 +232,7 @@ void user_io_file_tx_data(const uint8_t *addr, uint32_t len);
 void user_io_set_upload(unsigned char enable, int addr = 0);
 void user_io_file_rx_data(uint8_t *addr, uint32_t len);
 void user_io_file_info(const char *ext);
+void user_io_debug_progress(uint32_t sent, uint32_t total, int *last_percent);
 int user_io_get_width();
 
 void user_io_check_reset(unsigned short modifiers, char useKeys);

@@ -2066,6 +2066,23 @@ void user_io_file_tx_data(const uint8_t *addr, uint32_t len)
 	DisableFpga();
 }
 
+void user_io_debug_progress(uint32_t sent, uint32_t total, int *last_percent)
+{
+	static unsigned long start_time;
+
+	if (!total || !last_percent || *last_percent >= 100) return;
+	if (*last_percent < 0) start_time = GetTimer(0);
+	unsigned long elapsed = GetTimer(0) - start_time;
+
+	for (int percent = (*last_percent < 0) ? 0 : *last_percent + 10;
+	     percent <= 100 && (uint64_t)sent * 100 >= (uint64_t)total * percent; percent += 10)
+	{
+		printf("Loading ROM %3d%% (%lu ms)\n", percent, elapsed);
+		fflush(stdout);
+		*last_percent = percent;
+	}
+}
+
 void user_io_set_upload(unsigned char enable, int addr)
 {
 	EnableFpga();
@@ -2732,6 +2749,12 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int dosend = 1;
 	file_crc = 0;
 
+	const char *rom_name = strrchr(f.name, '/');
+	rom_name = rom_name ? rom_name + 1 : f.name;
+	char core_rom[64];
+	snprintf(core_rom, sizeof(core_rom), "%s.rom", user_io_get_core_name());
+	int debug_progress = (!strncasecmp(rom_name, "boot", 4) || strcasestr(rom_name, "bios") || !strcasecmp(rom_name, core_rom)) ? 100 : -1;
+
 	int snes_file = SNES_FILE_RAW;
 	if (is_snes() && bytes2send && !load_addr)
 	{
@@ -2813,12 +2836,14 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				uint32_t remaining = rom_size;
 				uint32_t sent = 0;
 				const uint32_t chunk_size = 4096;
+				user_io_debug_progress(0, rom_size, &debug_progress);
 				while (remaining) {
 					uint32_t chunk = (remaining > chunk_size) ? chunk_size : remaining;
 					ProgressMessage("Loading", f.name, sent, rom_size);
 					user_io_file_tx_data(rom + sent, chunk);
 					sent += chunk;
 					remaining -= chunk;
+					user_io_debug_progress(sent, rom_size, &debug_progress);
 				}
 				free(rom);
 			}
@@ -2875,6 +2900,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		uint8_t *mem = (uint8_t *)shmem_map(fpga_mem(load_addr), map_size);
 		if (mem)
 		{
+			user_io_debug_progress(0, size, &debug_progress);
 			while (bytes2send)
 			{
 				uint32_t gap = (is_snes() && (load_addr < 0x22000000) && (load_addr + size - bytes2send) >= 0x22000000) ? 0x800000 : 0;
@@ -2887,6 +2913,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 				if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
 				bytes2send -= chunk;
+				user_io_debug_progress(size - bytes2send, size, &debug_progress);
 			}
 
 			shmem_unmap(mem, map_size);
@@ -2894,6 +2921,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	}
 	else
 	{
+		if (dosend) user_io_debug_progress(0, size, &debug_progress);
 		while (dosend && bytes2send)
 		{
 			uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
@@ -2904,6 +2932,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 
 			if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
 			bytes2send -= chunk;
+			user_io_debug_progress(size - bytes2send, size, &debug_progress);
 
 			if (skip >= chunk) skip -= chunk;
 			else
