@@ -160,9 +160,13 @@ enum MENU
 	// Generic
 	MENU_GENERIC_MAIN1,
 	MENU_GENERIC_MAIN2,
+	MENU_GENERIC_MAIN3,
 	MENU_GENERIC_FILE_SELECTED,
 	MENU_GENERIC_IMAGE_SELECTED,
-	MENU_GENERIC_SAVE_WAIT,
+	MENU_CORES1,
+	MENU_CORES2,
+	MENU_SAVE_CHECK,
+	MENU_SAVE_WAIT,
 
 	// Arcade
 	MENU_ARCADE_DIP1,
@@ -1605,7 +1609,7 @@ void HandleUI(void)
 			menusub = 0;
 			if(!is_menu() && (get_key_mod() & (LALT | RALT))) //Alt+Menu
 			{
-				SelectFile("", 0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_NONE1);
+				menustate = MENU_CORES1;
 			}
 			else if (saved_menustate)
 			{
@@ -1889,7 +1893,13 @@ void HandleUI(void)
 		}
 		break;
 
-	case MENU_GENERIC_MAIN1: {
+	case MENU_GENERIC_MAIN1:
+	case MENU_CORES1:
+		parentstate = menustate;
+		menustate = MENU_SAVE_CHECK;
+		break;
+
+	case MENU_GENERIC_MAIN2: {
 		hdmask = spi_uio_cmd16(UIO_GET_OSDMASK, 0);
 		user_io_read_confstr();
 		uint32_t s_entry = 0;
@@ -2221,7 +2231,7 @@ void HandleUI(void)
 		}
 
 		parentstate = menustate;
-		menustate = MENU_GENERIC_MAIN2;
+		menustate = MENU_GENERIC_MAIN3;
 
 		// set helptext with core display on top of basic info
 		sprintf(helptext_custom, HELPTEXT_SPACER);
@@ -2237,9 +2247,30 @@ void HandleUI(void)
 
 	} break;
 
-	case MENU_GENERIC_SAVE_WAIT:
+	case MENU_CORES2:
+		SelectFile("", 0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_NONE1);
+		break;
+
+	case MENU_SAVE_CHECK:
 		menumask = 0;
-		parentstate = menustate;
+		if (is_arcade() && spi_uio_cmd(UIO_CHK_UPLOAD))
+		{
+			menu_save_timer = GetTimer(500);
+			arcade_nvm_save();
+		}
+
+		if (menu_save_timer && !CheckTimer(menu_save_timer))
+		{
+			for (int i = 0; i < 16; i++) OsdWrite(m++);
+			OsdWrite(8, "          Saving...");
+			menustate = MENU_SAVE_WAIT;
+			break;
+		}
+
+		menustate = parentstate+1;
+		break;
+
+	case MENU_SAVE_WAIT:
 		if (menu)
 		{
 			menu_save_timer = 0;
@@ -2248,11 +2279,11 @@ void HandleUI(void)
 		else if (menu_save_timer && CheckTimer(menu_save_timer))
 		{
 			menu_save_timer = 0;
-			menustate = MENU_GENERIC_MAIN1;
+			menustate = parentstate + 1;
 		}
 		break;
 
-	case MENU_GENERIC_MAIN2:
+	case MENU_GENERIC_MAIN3:
 		saved_menustate = MENU_GENERIC_MAIN1;
 
 		// F/S option not found -> deactivate mgl.
@@ -2262,18 +2293,7 @@ void HandleUI(void)
 			mgl->state = 3;
 		}
 
-		if (menu_save_timer && !CheckTimer(menu_save_timer))
-		{
-			for (int i = 0; i < 16; i++) OsdWrite(m++);
-			OsdWrite(8, "          Saving...");
-			menustate = MENU_GENERIC_SAVE_WAIT;
-		}
-		else if (is_arcade() && spi_uio_cmd(UIO_CHK_UPLOAD))
-		{
-			menu_save_timer = GetTimer(1000);
-			arcade_nvm_save();
-		}
-		else if (menu)
+		if (menu)
 		{
 			menustate = MENU_NONE1;
 		}
@@ -8264,7 +8284,7 @@ int menu_allow_cfg_switch()
 			if (is_menu() && (fs_Options & SCANO_CORES)) return 1;
 			break;
 
-		case MENU_GENERIC_MAIN2:
+		case MENU_GENERIC_MAIN3:
 			if (!page) return 1;
 			break;
 		}
