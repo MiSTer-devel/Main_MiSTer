@@ -73,6 +73,30 @@ static int flist_last_first_entry()
 	return last > 0 ? last : 0;
 }
 
+static int flist_entry_is_expanded(int entry)
+{
+	if (!cfg.browse_expand || entry < 0 || entry >= (int)DirItem.size()) return 0;
+
+	direntext_t *item = &DirItem[entry];
+	return strlen(item->altname) > 28
+		&& item->de.d_type != DT_DIR
+		&& (cfg.rbf_hide_datecode || !item->datecode[0]);
+}
+
+static int flist_page_step(int direction)
+{
+	int step = OsdGetSize();
+	if (step > 1)
+	{
+		// Forward paging follows the current page. Reverse paging precedes
+		// the page whose selection may consume the extra display row.
+		int expanded_entry = direction > 0 ? iSelectedEntry : iSelectedEntry - step;
+		if (flist_entry_is_expanded(expanded_entry)) step--;
+	}
+
+	return step;
+}
+
 static void flist_center_selected()
 {
 	int count = (int)DirItem.size();
@@ -315,8 +339,10 @@ static int isPathRegularFile(const char *path, int use_zip = 1)
 	return 0;
 }
 
-void FileClose(fileTYPE *file)
+int FileClose(fileTYPE *file)
 {
+	int err = 0;
+
 	if (file->zip)
 	{
 		if (file->zip->iter)
@@ -331,7 +357,11 @@ void FileClose(fileTYPE *file)
 	if (file->filp)
 	{
 		//printf("closing %p\n", file->filp);
-		fclose(file->filp);
+		if (fclose(file->filp))
+		{
+			err = -1;
+			printf("FileClose error on %s (%s).\n", file->name, strerror(errno));
+		}
 		if (file->type == 1)
 		{
 			if (file->name[0] == '/')
@@ -345,6 +375,8 @@ void FileClose(fileTYPE *file)
 	file->zip = nullptr;
 	file->filp = nullptr;
 	file->size = 0;
+
+	return err;
 }
 
 static int zip_search_by_crc(mz_zip_archive *zipArchive, uint32_t crc32)
@@ -665,9 +697,10 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 	if (file->filp)
 	{
 		ret = fread(pBuffer, 1, length, file->filp);
-		if (ret < 0)
+		if (ret != length && ferror(file->filp))
 		{
-			printf("FileReadAdv error(%d).\n", ret);
+			printf("FileReadAdv error: read %zd of %d bytes (%s).\n", ret, length, strerror(errno));
+			clearerr(file->filp);
 			return failres;
 		}
 	}
@@ -705,11 +738,10 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 	if (file->filp)
 	{
 		ret = fwrite(pBuffer, 1, length, file->filp);
-		fflush(file->filp);
 
-		if (ret < 0)
+		if (ret != length || fflush(file->filp))
 		{
-			printf("FileWriteAdv error(%d).\n", ret);
+			printf("FileWriteAdv error: wrote %d of %d bytes (%s).\n", ret, length, strerror(errno));
 			return failres;
 		}
 
@@ -741,16 +773,27 @@ int FileSave(const char *name, void *pBuffer, int size)
 	int fd = open(full_path, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0)
 	{
-		printf("FileSave(open) File:%s, error: %d.\n", full_path, fd);
+		printf("FileSave error: cannot open %s (%s).\n", full_path, strerror(errno));
 		return 0;
 	}
 
 	int ret = write(fd, pBuffer, size);
-	close(fd);
-
 	if (ret < 0)
 	{
-		printf("FileSave(write) File:%s, error: %d.\n", full_path, ret);
+		printf("FileSave error: write to %s failed (%s).\n", full_path, strerror(errno));
+		close(fd);
+		return 0;
+	}
+	if (ret != size)
+	{
+		printf("FileSave error: short write to %s, wrote %d of %d bytes.\n", full_path, ret, size);
+		close(fd);
+		return 0;
+	}
+
+	if (close(fd))
+	{
+		printf("FileSave error: close %s failed (%s).\n", full_path, strerror(errno));
 		return 0;
 	}
 
@@ -1852,13 +1895,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		}
 		else if (mode == SCANF_NEXT_PAGE)
 		{
-			iSelectedEntry += OsdGetSize();
+			iSelectedEntry += flist_page_step(1);
 			flist_center_selected();
 			return 0;
 		}
 		else if (mode == SCANF_PREV_PAGE)
 		{
-			iSelectedEntry -= OsdGetSize();
+			iSelectedEntry -= flist_page_step(-1);
 			flist_center_selected();
 		}
 		else if (mode == SCANF_SET_ITEM)

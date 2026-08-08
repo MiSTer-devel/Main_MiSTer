@@ -34,6 +34,8 @@
 #include "shmem.h"
 #include "ide.h"
 #include "ide_cdrom.h"
+#include "support/minimig/akiko_cd32.h"
+#include "support/minimig/cdtv_cd.h"
 #ifdef PROFILING
 #include "profiling.h"
 #endif
@@ -270,8 +272,18 @@ char is_neogeo_cd() {
 static int is_minimig_type = 0;
 char is_minimig()
 {
-	if (!is_minimig_type) is_minimig_type = strcasecmp(orig_name, "minimig") ? 2 : 1;
-	return (is_minimig_type == 1);
+	if (!is_minimig_type)
+	{
+		is_minimig_type = (!strcasecmp(orig_name, "minimig") || !strcasecmp(orig_name, "minimigcd")) ? 1 : 2;
+		if (is_minimig_type == 1)
+		{
+			uint16_t res = spi_uio_cmd(UIO_GET_VMODE);
+			if (res == 1) is_minimig_type = 3;
+		}
+
+	}
+
+	return (is_minimig_type == 1) ? 1 : (is_minimig_type == 3) ? 2 : 0;
 }
 
 static int is_megacd_type = 0;
@@ -302,7 +314,8 @@ char is_pcxt()
 	{
 		if (!strcasecmp(orig_name, "PCXT") ||
 		    !strcasecmp(orig_name, "Tandy1000") ||
-			!strcasecmp(orig_name, "PCjr")
+			!strcasecmp(orig_name, "PCjr") ||
+			!strcasecmp(orig_name, "PCXT-EGA")
 		   )
 			is_pcxt_type = 1;
 		else
@@ -2177,6 +2190,9 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					}
 				}
 
+				// Mac CD slot: CUE/CHD/raw image translation (support/mac)
+				if (ret) ret = mac_mount_hook(index, name, &sd_image[index], &writable);
+
 				if (ret && is_c128())
 				{
 					printf("Disk image type: %d\n", img_type);
@@ -2194,6 +2210,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	{
 		FileClose(&sd_image[index]);
 		c64_closeGCR(index);
+		mac_cdrom_unmount(index);
 	}
 
 	buffer_lba[index] = -1;
@@ -3143,6 +3160,8 @@ void user_io_poll()
 
 	user_io_send_buttons(0);
 
+	mac_poll();   // Mac SCSI family: Toolbox slot announce + deferred CD work
+
 	if (is_minimig())
 	{
 		//HDD & FDD query
@@ -3163,6 +3182,12 @@ void user_io_poll()
 		ide_io(1, (sd_req >> 3) & 7);
 		if (sd_req & 0x0100) ide_cdda_send_sector();
 		UpdateDriveStatus();
+
+		if (is_minimig() == 2)
+		{
+			akiko_cd32_poll();
+			cdtv_cd_poll();
+		}
 
 		kbd_fifo_poll();
 
@@ -3187,7 +3212,7 @@ void user_io_poll()
 	{
 		x86_poll(0);
 	}
-	else if ((core_type == CORE_TYPE_8BIT) && !is_menu() && !is_minimig())
+	else if ((core_type == CORE_TYPE_8BIT) && !is_menu())
 	{
 		if (is_st()) tos_poll();
 		if (is_snes() || is_sgb()) snes_poll();
@@ -3222,6 +3247,8 @@ void user_io_poll()
 					blksz = 2352;
 				else if (disk == 0 && is_cdi())
 					blksz = CDI_CDIC_BUFFER_SIZE;
+				else if (mac_cdda_window(disk, lba))
+					blksz = 2352;   // Mac CD-DA: one whole frame per transaction
 				else
 					blksz = 128 << ((c >> 6) & 7);
 
@@ -3290,6 +3317,11 @@ void user_io_poll()
 				if (op == 2) iigs_write(disk, &sd_image[disk], lba, ack);
 				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, ack);
 				else break;
+			}
+			else if (int macop = mac_sd_service(disk, op, lba, sz, ack))
+			{
+				// Mac Toolbox/CD slots (support/mac); SPI is done by the hook.
+				if (macop < 0) break;
 			}
 			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
 			{

@@ -13,6 +13,9 @@
 // Apple IIgs disk integration
 #include "support/a2/iigs_disk.h"
 
+// Mac
+#include "support/mac/mac.h"
+
 // Archie support
 #include "support/archie/archie.h"
 

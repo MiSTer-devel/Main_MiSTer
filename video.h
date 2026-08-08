@@ -15,6 +15,7 @@ struct VideoInfo
 	uint32_t ptime;
 	uint32_t ctime;
 	uint32_t vtimeh;
+	uint32_t frame_clocks;
 	uint32_t arx;
 	uint32_t ary;
 	uint32_t arxy;

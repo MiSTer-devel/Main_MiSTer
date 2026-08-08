@@ -178,8 +178,13 @@ enum MENU
 	MENU_MINIMIG_DISK1,
 	MENU_MINIMIG_DISK2,
 	MENU_MINIMIG_HDFFILE_SELECTED,
+	MENU_MINIMIG_CD32CDTV1,
+	MENU_MINIMIG_CD32CDTV2,
+	MENU_MINIMIG_CD32FILE_SELECTED,
+	MENU_MINIMIG_CDTVFILE_SELECTED,
 	MENU_MINIMIG_ADFFILE_SELECTED,
 	MENU_MINIMIG_ROMFILE_SELECTED,
+	MENU_MINIMIG_EXTROMFILE_SELECTED,
 	MENU_MINIMIG_LOADCONFIG1,
 	MENU_MINIMIG_LOADCONFIG2,
 	MENU_MINIMIG_SAVECONFIG1,
@@ -341,6 +346,8 @@ static char SelectedLabel[1024] = {};
 static char Selected_F[16][1024] = {};
 static char Selected_S[16][1024] = {};
 static char Selected_tmp[1024] = {};
+static char Selected_CD32[1024] = {};
+static char Selected_CDTV[1024] = {};
 
 void StoreIdx_F(int idx, const char *path)
 {
@@ -6021,7 +6028,10 @@ void HandleUI(void)
 	case MENU_MINIMIG_ADFFILE_SELECTED:
 		if (!mgl->done)
 		{
-			snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), mgl->item[mgl->current].path);
+			const char *p = mgl->item[mgl->current].path;
+			if (p[0] == '/') snprintf(selPath, sizeof(selPath), "%s", p);
+			else if (p[0] == '.' && p[1] == '.') snprintf(selPath, sizeof(selPath), "%s/%s", getRootDir(), p);
+			else snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), p);
 			// Update /tmp/ files to reflect the actual file being loaded by MGL
 			if (cfg.log_file_entry)
 			{
@@ -6200,18 +6210,18 @@ void HandleUI(void)
 
 	case MENU_MINIMIG_CHIPSET1:
 		helptext_idx = HELPTEXT_CHIPSET;
-		menumask = 0x7FF;
+		menumask = 0xFFF;
 		OsdSetTitle("System");
 		parentstate = menustate;
 
 		m = 0;
-		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " CPU      : ");
 		strcat(s, config_cpu_msg[minimig_config.cpu & 0x03]);
 		OsdWrite(m++, s, menusub == 0, 0);
 		strcpy(s, " D-Cache  : ");
 		strcat(s, (minimig_config.cpu & 16) ? "ON" : "OFF");
 		OsdWrite(m++, s, menusub == 1, !(minimig_config.cpu & 0x2));
+
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " Chipset  : ");
 		strcat(s, config_chipset_msg[(minimig_config.chipset >> 2) & 7]);
@@ -6227,32 +6237,42 @@ void HandleUI(void)
 		OsdWrite(m++, s, menusub == 5, 0);
 
 		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " Joystick : ");
-		strcat(s, config_joystick_mode[(minimig_config.autofire & 6) >> 1]);
-		OsdWrite(m++, s, menusub == 6, 0);
-
-		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " ROM    : ");
+		strcpy(s, " ROM      : ");
 		{
 			char *path = HomeDir();
 			int len = strlen(path);
 			char *name = minimig_config.kickstart;
 			if (!strncasecmp(name, path, len))  name += len + 1;
-			strncat(&s[3], name, 24);
+			strncat(s, name, 20);
 		}
-
+		OsdWrite(m++, s, menusub == 6, 0);
+		strcpy(s, " Ext.ROM  : ");
+		{
+			char *path = HomeDir();
+			int len = strlen(path);
+			const char *name = minimig_get_extrom();
+			if (!name[0]) {
+				strcat(s, "<none>");
+			} else {
+				if (!strncasecmp(name, path, len)) name += len + 1;
+				strncat(s, name, 20);
+			}
+		}
 		OsdWrite(m++, s, menusub == 7, 0);
-		strcpy(s, " HRTmon : ");
-		strcat(s, (minimig_config.memory & 0x40) ? "enabled " : "disabled");
+		strcpy(s, " HRTmon   : ");
+		strcat(s, (minimig_config.memory & 0x40) ? "enabled" : "disabled");
 		OsdWrite(m++, s, menusub == 8, 0);
 
 		OsdWrite(m++, "", 0, 0);
+		strcpy(s, " Joystick : ");
+		strcat(s, config_joystick_mode[(minimig_config.autofire & 6) >> 1]);
+		OsdWrite(m++, s, menusub == 9, 0);
 		strcpy(s, " Ethernet : ");
 		strcat(s, a2065_iface_msg(a2065_get_iface()));
-		OsdWrite(m++, s, menusub == 9, 0);
+		OsdWrite(m++, s, menusub == 10, 0);
 
 		for (int i = m; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 10, 0);
+		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 11, 0);
 
 		menustate = MENU_MINIMIG_CHIPSET2;
 		break;
@@ -6354,7 +6374,7 @@ void HandleUI(void)
 				minimig_config.memory = ((minimig_config.memory + (minus ? -4 : 4)) & 0x0C) | (minimig_config.memory & ~0x0C);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 6)
+			else if (menusub == 9)
 			{
 				uint8_t x = (minimig_config.autofire & 6) >> 1;
 				if (minus)
@@ -6372,17 +6392,30 @@ void HandleUI(void)
 				menustate = MENU_MINIMIG_CHIPSET1;
 				minimig_ConfigAutofire(minimig_config.autofire, 6);
 			}
-			else if (menusub == 7 && select)
+			else if (menusub == 6 && select)
 			{
 				ioctl_index = 1;
 				SelectFile(Selected_F[4], "ROM", SCANO_DIR, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
+			}
+			else if (menusub == 7)
+			{
+				if (minus)
+				{
+					minimig_set_extrom((char *)"");
+					menustate = MENU_MINIMIG_CHIPSET1;
+				}
+				else if (select)
+				{
+					ioctl_index = 1;
+					SelectFile(Selected_F[5], "ROM", SCANO_DIR | SCANO_UMOUNT, MENU_MINIMIG_EXTROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
+				}
 			}
 			else if (menusub == 8)
 			{
 				minimig_config.memory ^= 0x40;
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 9)
+			else if (menusub == 10)
 			{
 				// A2065 ethernet: OFF -> eth0 -> eth1 -> macvlan -> tap0,
 				// skipping anything this box cannot support (no second NIC,
@@ -6398,7 +6431,7 @@ void HandleUI(void)
 				a2065_set_iface(m2);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 10)
+			else if (menusub == 11)
 			{
 				menustate = MENU_MINIMIG_MAIN1;
 				menusub = 6;
@@ -6422,32 +6455,43 @@ void HandleUI(void)
 		menustate = MENU_MINIMIG_CHIPSET1;
 		break;
 
+	case MENU_MINIMIG_EXTROMFILE_SELECTED:
+		memcpy(Selected_F[5], selPath, sizeof(Selected_F[5]));
+		minimig_set_extrom(selPath);
+		menustate = MENU_MINIMIG_CHIPSET1;
+		break;
+
 	case MENU_MINIMIG_DISK1:
 		helptext_idx = HELPTEXT_HARDFILE;
 		OsdSetTitle("Drives");
 
 		m = 0;
 		parentstate = menustate;
-		menumask = 0xC01;
-		if (minimig_config.ide_cfg & 1) menumask |= 0x156;
-		OsdWrite(m++, "", 0, 0);
-		strcpy(s, " IDE A600/A1200    : ");
-		strcat(s, (minimig_config.ide_cfg & 1) ? "On " : "Off");
-		OsdWrite(m++, s, menusub == 0, 0);
-		strcpy(s, " Fast-IDE (68020)  : ");
-		strcat(s, (minimig_config.ide_cfg & 0x20) ? "Off" : "On");
-		OsdWrite(m++, s, menusub == 1,  !(minimig_config.ide_cfg & 1) || !(minimig_config.cpu & 2));
-		if (!(minimig_config.cpu & 2)) menumask &= ~2;
-		OsdWrite(m++);
-
 		{
+			int ide_on  = (minimig_config.ide_cfg & 1) ? 1 : 0;
+
+			menumask = 0x1801;
+			if (ide_on)  menumask |= 0x002;
+			if (ide_on)  menumask |= 0x154;
+
+			OsdWrite(m++, "", 0, 0);
+			strcpy(s, " IDE A600/A1200    : ");
+			strcat(s, ide_on ? "On " : "Off ");
+			OsdWrite(m++, s, menusub == 0, 0);
+
+			strcpy(s, " Fast-IDE (68020)  : ");
+			strcat(s, (minimig_config.ide_cfg & 0x20) ? "Off" : "On ");
+			OsdWrite(m++, s, menusub == 1, !ide_on || !(minimig_config.cpu & 2));
+			if (!(minimig_config.cpu & 2)) menumask &= ~2;
+
+			OsdWrite(m++, "", 0, 0);
 			uint n = 2, t = 8;
 			for (uint i = 0; i < 4; i++)
 			{
-				strcpy(s, (i & 2) ? " Sec. " : " Pri. ");
+				strcpy(s, (i & 2) ? " \x1bSec. " : " \x1bPri. ");
 				strcat(s, (i & 1) ? " Slave: " : "Master: ");
 				strcat(s, (minimig_config.hardfile[i].cfg == 2) ? "Removable/CD" : minimig_config.hardfile[i].cfg ? "Fixed/HDD" : "Disabled");
-				OsdWrite(m++, s, (minimig_config.ide_cfg & 1) ? (menusub == n++) : 0, !(minimig_config.ide_cfg & 1));
+				OsdWrite(m++, s, ide_on ? (menusub == n++) : 0, !ide_on);
 				if (minimig_config.hardfile[i].filename[0])
 				{
 					strcpy(s, "                                ");
@@ -6461,20 +6505,25 @@ void HandleUI(void)
 				{
 					strcpy(s, "   ** not selected **");
 				}
-				enable = (minimig_config.ide_cfg & 1) && minimig_config.hardfile[i].cfg;
+				enable = ide_on && minimig_config.hardfile[i].cfg;
 				if (enable) menumask |= t;	// Make hardfile selectable
 				OsdWrite(m++, s, menusub == n++, enable == 0);
 				t <<= 2;
-				if(i == 1) OsdWrite(m++);
+			}
+
+			OsdWrite(m++, "", 0, 0);
+			if (is_minimig() == 2)
+			{
+				OsdWrite(m++, " CD32 / CDTV drives        \x16", menusub == 10, 0);
+				menumask |= 0x400;
 			}
 		}
 
-		OsdWrite(m++);
 		sprintf(s, " Floppy Disk Turbo : %s", minimig_config.floppy.speed ? "On" : "Off");
-		OsdWrite(m++, s, menusub == 10, 0);
-		OsdWrite(m++);
+		OsdWrite(m++, s, menusub == 11, 0);
 
-		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 11, 0);
+		for (int i = m; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 12, 0);
 		menustate = MENU_MINIMIG_DISK2;
 		break;
 
@@ -6485,7 +6534,7 @@ void HandleUI(void)
 		{
 			if (menusub == 0)
 			{
-				if (select)
+				if (select || minus || plus)
 				{
 					minimig_config.ide_cfg ^= 1;
 					menustate = MENU_MINIMIG_DISK1;
@@ -6534,13 +6583,18 @@ void HandleUI(void)
 					else if (recent_init(500)) menustate = MENU_RECENT1;
 				}
 			}
-			else if (menusub == 10 && select) // return to previous menu
+			else if (menusub == 10 && select)
+			{
+				menusub = 0;
+				menustate = MENU_MINIMIG_CD32CDTV1;
+			}
+			else if (menusub == 11 && select) // return to previous menu
 			{
 				minimig_config.floppy.speed ^= 1;
 				minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 				menustate = MENU_MINIMIG_DISK1;
 			}
-			else if (menusub == 11 && select) // return to previous menu
+			else if (menusub == 12 && select) // return to previous menu
 			{
 				menustate = MENU_MINIMIG_MAIN1;
 				menusub = 5;
@@ -6551,10 +6605,159 @@ void HandleUI(void)
 		{
 			menustate = MENU_NONE1;
 		}
+		else if (right)
+		{
+			menustate = MENU_MINIMIG_CD32CDTV1;
+			menusub = 0;
+		}
 		else if (back || left)
 		{
 			menustate = MENU_MINIMIG_MAIN1;
 			menusub = 5;
+		}
+		break;
+
+	case MENU_MINIMIG_CD32CDTV1:
+		helptext_idx = HELPTEXT_HARDFILE;
+		OsdSetTitle("CD32 / CDTV");
+
+		m = 0;
+		parentstate = menustate;
+		{
+			int cd32_on = minimig_config.cd32_drive.cfg ? 1 : 0;
+			int cdtv_on = (minimig_config.chipset & CONFIG_CDTV) ? 1 : 0;
+			int cdtv_cd_on = minimig_config.cdtv_drive.cfg ? 1 : 0;
+
+			menumask = 0x2D;
+			if (cd32_on)   menumask |= 0x02;
+			if (cdtv_cd_on) menumask |= 0x10;
+			OsdWrite(m++, "", 0, 0);
+
+			strcpy(s, " CD32 drive        : ");
+			strcat(s, cd32_on ? "CD " : "Disabled");
+			OsdWrite(m++, s, menusub == 0, 0);
+
+			OsdWrite(m++, " CD32 CD:", cd32_on ? (menusub == 1) : 0, !cd32_on);
+			if (minimig_config.cd32_drive.filename[0])
+			{
+				strcpy(s, "                                ");
+				char *path = HomeDir();
+				int len = strlen(path);
+				char *name = minimig_config.cd32_drive.filename;
+				if (!strncasecmp(name, path, len)) name += len + 1;
+				strncpy(&s[3], name, 25);
+			}
+			else strcpy(s, "   ** not selected **");
+			OsdWrite(m++, s, 0, !cd32_on);
+
+			OsdWrite(m++);
+
+			strcpy(s, " CDTV mode         : ");
+			strcat(s, cdtv_on ? "On " : "Off");
+			OsdWrite(m++, s, menusub == 2, 0);
+
+			strcpy(s, " CDTV drive        : ");
+			strcat(s, cdtv_cd_on ? "CD " : "Disabled");
+			OsdWrite(m++, s, menusub == 3, 0);
+
+			OsdWrite(m++, " CDTV CD:", cdtv_cd_on ? (menusub == 4) : 0, !cdtv_cd_on);
+			if (minimig_config.cdtv_drive.filename[0])
+			{
+				strcpy(s, "                                ");
+				char *path = HomeDir();
+				int len = strlen(path);
+				char *name = minimig_config.cdtv_drive.filename;
+				if (!strncasecmp(name, path, len)) name += len + 1;
+				strncpy(&s[3], name, 25);
+			}
+			else strcpy(s, "   ** not selected **");
+			OsdWrite(m++, s, 0, !cdtv_cd_on);
+		}
+
+		for (int i = m; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
+		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 5, 0);
+		menustate = MENU_MINIMIG_CD32CDTV2;
+		break;
+
+	case MENU_MINIMIG_CD32CDTV2:
+		saved_menustate = MENU_MINIMIG_CD32CDTV1;
+
+		if (select || recent || minus || plus)
+		{
+			if (menusub == 0)
+			{
+				if (select || minus || plus)
+				{
+					minimig_config.cd32_drive.cfg = minimig_config.cd32_drive.cfg ? 0 : 2;
+					cd_drive_open(0, minimig_config.cd32_drive.cfg ? minimig_config.cd32_drive.filename : "");
+					menustate = MENU_MINIMIG_CD32CDTV1;
+				}
+			}
+			else if (menusub == 1 && minimig_config.cd32_drive.cfg)
+			{
+				if (select || recent)
+				{
+					fs_Options = SCANO_DIR | SCANO_UMOUNT;
+					fs_MenuSelect = MENU_MINIMIG_CD32FILE_SELECTED;
+					fs_MenuCancel = MENU_MINIMIG_CD32CDTV1;
+					strcpy(fs_pFileExt, "ISOCUECHDIMG");
+					if (select)
+					{
+						if (!Selected_CD32[0]) memcpy(Selected_CD32, minimig_config.cd32_drive.filename, sizeof(Selected_CD32));
+						SelectFile(Selected_CD32, fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
+					}
+					else if (recent_init(500)) menustate = MENU_RECENT1;
+				}
+			}
+			else if (menusub == 2)
+			{
+				if (select || minus || plus)
+				{
+					minimig_config.chipset ^= CONFIG_CDTV;
+					minimig_ConfigChipset(minimig_config.chipset);
+					menustate = MENU_MINIMIG_CD32CDTV1;
+				}
+			}
+			else if (menusub == 3)
+			{
+				if (select || minus || plus)
+				{
+					minimig_config.cdtv_drive.cfg = minimig_config.cdtv_drive.cfg ? 0 : 2;
+					cd_drive_open(1, minimig_config.cdtv_drive.cfg ? minimig_config.cdtv_drive.filename : "");
+					menustate = MENU_MINIMIG_CD32CDTV1;
+				}
+			}
+			else if (menusub == 4 && minimig_config.cdtv_drive.cfg)
+			{
+				if (select || recent)
+				{
+					fs_Options = SCANO_DIR | SCANO_UMOUNT;
+					fs_MenuSelect = MENU_MINIMIG_CDTVFILE_SELECTED;
+					fs_MenuCancel = MENU_MINIMIG_CD32CDTV1;
+					strcpy(fs_pFileExt, "ISOCUECHDIMG");
+					if (select)
+					{
+						if (!Selected_CDTV[0]) memcpy(Selected_CDTV, minimig_config.cdtv_drive.filename, sizeof(Selected_CDTV));
+						SelectFile(Selected_CDTV, fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
+					}
+					else if (recent_init(500)) menustate = MENU_RECENT1;
+				}
+			}
+			else if (menusub == 5 && select) // return to previous menu
+			{
+				menustate = MENU_MINIMIG_DISK1;
+				menusub = 10;
+			}
+		}
+
+		if (menu)
+		{
+			menustate = MENU_NONE1;
+		}
+		else if (back || left)
+		{
+			menustate = MENU_MINIMIG_DISK1;
+			menusub = 10;
 		}
 		break;
 
@@ -6574,6 +6777,36 @@ void HandleUI(void)
 			}
 
 			menustate = MENU_MINIMIG_DISK1;
+		}
+		break;
+
+	case MENU_MINIMIG_CD32FILE_SELECTED:
+		{
+			memcpy(Selected_CD32, selPath, sizeof(Selected_CD32));
+			recent_update(SelectedDir, selPath, SelectedLabel, 500);
+			uint len = strlen(selPath);
+			if (len > sizeof(minimig_config.cd32_drive.filename) - 1) len = sizeof(minimig_config.cd32_drive.filename) - 1;
+			if (len) memcpy(minimig_config.cd32_drive.filename, selPath, len);
+			minimig_config.cd32_drive.filename[len] = 0;
+
+			cd_drive_open(0, minimig_config.cd32_drive.filename);
+
+			menustate = MENU_MINIMIG_CD32CDTV1;
+		}
+		break;
+
+	case MENU_MINIMIG_CDTVFILE_SELECTED:
+		{
+			memcpy(Selected_CDTV, selPath, sizeof(Selected_CDTV));
+			recent_update(SelectedDir, selPath, SelectedLabel, 500);
+			uint len = strlen(selPath);
+			if (len > sizeof(minimig_config.cdtv_drive.filename) - 1) len = sizeof(minimig_config.cdtv_drive.filename) - 1;
+			if (len) memcpy(minimig_config.cdtv_drive.filename, selPath, len);
+			minimig_config.cdtv_drive.filename[len] = 0;
+
+			cd_drive_open(1, minimig_config.cdtv_drive.filename);
+
+			menustate = MENU_MINIMIG_CD32CDTV1;
 		}
 		break;
 
