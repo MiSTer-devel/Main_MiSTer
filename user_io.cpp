@@ -226,7 +226,15 @@ char is_menu()
 static int is_x86_type = 0;
 char is_x86()
 {
-	if (!is_x86_type) is_x86_type = strcasecmp(orig_name, "AO486") ? 2 : 1;
+	if (!is_x86_type)
+	{
+		if (!strcasecmp(orig_name, "AO486") ||
+		    !strcasecmp(orig_name, "PC110")
+		   )
+			is_x86_type = 1;
+		else
+			is_x86_type = 2;
+	}
 	return (is_x86_type == 1);
 }
 
