@@ -881,11 +881,9 @@ void minimig_cfg_set(int preset)
 		len = strlen(minimig_config.kickstart);
 		strcpy(minimig_config.kickstart+len+1, "Games/Amiga/CD32_ext.rom");
 		minimig_config.autofire = 2 << 1; // CD32 joystick
-		minimig_config.floppy.speed = 0;
 		minimig_config.cd32_drive.cfg = 1;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.ide_cfg = 0;
-		minimig_config.floppy.drives = 0;
 		break;
 
 	case CONFIG_PRESET_CDTV:
@@ -896,11 +894,9 @@ void minimig_cfg_set(int preset)
 		len = strlen(minimig_config.kickstart);
 		strcpy(minimig_config.kickstart + len + 1, "Games/Amiga/CDTV_ext.rom");
 		minimig_config.autofire = 0; // Digital joystick
-		minimig_config.floppy.speed = 0;
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 1;
 		minimig_config.ide_cfg = 0;
-		minimig_config.floppy.drives = 0;
 		break;
 	}
 

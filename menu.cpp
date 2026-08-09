@@ -5905,7 +5905,7 @@ void HandleUI(void)
 			}
 
 			strcpy(s,      " Joystick Swap:          ");
-			strcat(s, (minimig_config.autofire & 0x8) ? " ON" : "OFF");
+			strcat(s, (minimig_config.autofire & 0x8) ? " On" : "Off");
 			MenuWrite(m++, s, menusub == 6, 0);
 			MenuWrite(m++),
 
@@ -6007,8 +6007,8 @@ void HandleUI(void)
 					strcpy(fs_pFileExt, "ISOCUECHDIMG");
 					if (select)
 					{
-						if (!Selected_CD32[0]) memcpy(Selected_CDTV, minimig_config.cd32_drive.filename, sizeof(Selected_CD32));
-						SelectFile(Selected_CD32, fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
+						if (!Selected_CDTV[0]) memcpy(Selected_CDTV, minimig_config.cdtv_drive.filename, sizeof(Selected_CDTV));
+						SelectFile(Selected_CDTV, fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel);
 					}
 					else if (recent_init(502)) menustate = MENU_RECENT1;
 					break;
@@ -6453,6 +6453,7 @@ void HandleUI(void)
 			else if (menusub == 6 && select)
 			{
 				ioctl_index = 1;
+				strcpy(Selected_F[4], minimig_config.kickstart);
 				SelectFile(Selected_F[4], "ROM", SCANO_DIR, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 			}
 			else if (menusub == 7)
@@ -6465,6 +6466,7 @@ void HandleUI(void)
 				else if (select)
 				{
 					ioctl_index = 1;
+					strcpy(Selected_F[5], minimig_config.kickstart + strlen(minimig_config.kickstart) + 1);
 					SelectFile(Selected_F[5], "ROM", SCANO_DIR | SCANO_UMOUNT, MENU_MINIMIG_EXTROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 				}
 			}
