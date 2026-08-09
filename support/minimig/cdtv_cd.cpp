@@ -105,7 +105,7 @@ static bool           stch_wait_ack = false;
 
 static inline bool cdtv_active(void)
 {
-	return (minimig_config.chipset & CONFIG_CDTV) != 0;
+	return (minimig_config.cdtv_drive.cfg != 0);
 }
 
 static drive_t *cdtv_find_drive(void)

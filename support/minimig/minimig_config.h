@@ -81,7 +81,7 @@ void minimig_ConfigVideo(unsigned char scanlines);
 void minimig_ConfigAudio(unsigned char audio);
 void minimig_ConfigMemory(unsigned char memory);
 void minimig_ConfigCPU(unsigned char cpu);
-void minimig_ConfigChipset(unsigned char chipset);
+void minimig_ConfigChipset(mm_configTYPE *config);
 void minimig_ConfigFloppy(unsigned char drives, unsigned char speed);
 void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask);
 

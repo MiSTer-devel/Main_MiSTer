@@ -198,7 +198,7 @@ static inline bool cd32_active(void)
 {
 	return (minimig_config.cpu & 0x03) == 3
 	    && ((minimig_config.chipset >> 2) & 7) == 6
-	    && (minimig_config.cd32_drive.cfg == 2 || minimig_config.hardfile[0].cfg == 2);
+	    && (minimig_config.cd32_drive.cfg);
 }
 
 static drive_t *cd_find_drive(void)
