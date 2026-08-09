@@ -14,6 +14,9 @@
 #define CONFIG_FLOPPY1X  0
 #define CONFIG_FLOPPY2X  1
 
+#define CONFIG_PRESET_CD32  1
+#define CONFIG_PRESET_CDTV  2
+
 extern const char *config_memory_chip_msg[];
 extern const char *config_memory_slow_msg[];
 extern const char *config_memory_fast_msg[][8];
@@ -63,6 +66,8 @@ typedef struct
 } mm_configTYPE;
 
 extern mm_configTYPE minimig_config;
+
+void minimig_cfg_set(int preset);
 
 int minimig_cfg_load(int num);
 int minimig_cfg_save(int num);
