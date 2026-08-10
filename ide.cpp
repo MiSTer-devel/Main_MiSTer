@@ -22,8 +22,6 @@
 #include "hardware.h"
 #include "ide.h"
 #include "ide_cdrom.h"
-#include "support/minimig/akiko_cd32.h"
-#include "support/minimig/cdtv_cd.h"
 
 #if 0
 	#define dbg_printf     printf
@@ -82,28 +80,6 @@ const uint32_t ide_io_max_size = 32;
 uint8_t ide_buf[ide_io_max_size * 512];
 
 ide_config ide_inst[2] = {};
-
-drive_t cd32_drive = {};
-drive_t cdtv_drive = {};
-
-int cd_drive_open(int slot, const char *filename)
-{
-	static fileTYPE cd_drive_file[2] = {};
-
-	drive_t *drv = slot ? &cdtv_drive : &cd32_drive;
-	drv->cd = 1;
-
-	const char *res = cd_drive_parse(drv, slot, filename);
-
-	int present = res ? ide_img_mount(&cd_drive_file[slot], res, 0) : 0;
-	drv->f = present ? &cd_drive_file[slot] : NULL;
-
-	const char *full = present ? res : "";
-	if (slot) cdtv_cd_set_cd_path(full);
-	else akiko_cd32_set_cd_path(full);
-
-	return present;
-}
 
 uint16_t ide_check()
 {
@@ -498,7 +474,7 @@ void ide_img_set(uint32_t drvnum, fileTYPE *f, int cd, int sectors, int heads, i
 	{
 		if (drive->present)
 		{
-			if (!drive->chd_f) 
+			if (!drive->chd_f)
 			{
 				if (parse_vhd_config(drive)) ide_set_geometry(drive, sectors, heads);
 				else ide_set_geometry(drive, drive->spt, drive->heads);

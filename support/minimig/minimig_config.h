@@ -3,6 +3,7 @@
 #define __MINIMIG_CONFIG_H__
 
 #include "../../file_io.h"
+#include "../../ide.h"
 
 #define CONFIG_TURBO     1
 #define CONFIG_NTSC      2
@@ -92,5 +93,9 @@ void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask);
 
 void minimig_set_extcfg(unsigned int ext_cfg);
 unsigned int minimig_get_extcfg();
+
+// slot: 0 = cd32_drive, 1 = cdtv_drive
+int minimig_cd_drive_open(int slot, const char *filename);
+drive_t* minimig_cd_drive_get(int slot);
 
 #endif

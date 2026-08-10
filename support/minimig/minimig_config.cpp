@@ -448,8 +448,8 @@ static void ApplyConfiguration(char reloadkickstart)
 		(hdd_open(2) ? 8 : 0) |
 		(hdd_open(3) ? 16 : 0));
 
-	cd_drive_open(0, minimig_config.cd32_drive.cfg ? minimig_config.cd32_drive.filename : "");
-	cd_drive_open(1, minimig_config.cdtv_drive.cfg ? minimig_config.cdtv_drive.filename : "");
+	minimig_cd_drive_open(0, minimig_config.cd32_drive.cfg ? minimig_config.cd32_drive.filename : "");
+	minimig_cd_drive_open(1, minimig_config.cdtv_drive.cfg ? minimig_config.cdtv_drive.filename : "");
 
 	minimig_ConfigMemory(memcfg);
 	minimig_ConfigCPU(minimig_config.cpu);
@@ -901,4 +901,33 @@ void minimig_cfg_set(int preset)
 	}
 
 	force_reload_kickstart = 1;
+}
+
+static drive_t cd32_drive = {};
+static drive_t cdtv_drive = {};
+
+int minimig_cd_drive_open(int slot, const char *filename)
+{
+	static fileTYPE cd_drive_file[2] = {};
+
+	drive_t *drv = slot ? &cdtv_drive : &cd32_drive;
+	drv->cd = 1;
+
+	const char *res = cd_drive_parse(drv, slot, filename);
+
+	int present = res ? ide_img_mount(&cd_drive_file[slot], res, 0) : 0;
+	drv->f = present ? &cd_drive_file[slot] : NULL;
+
+	const char *full = present ? res : "";
+	if (slot) cdtv_cd_set_cd_path(full);
+	else akiko_cd32_set_cd_path(full);
+
+	return present;
+}
+
+drive_t* minimig_cd_drive_get(int slot)
+{
+	drive_t *drive = slot ? &cdtv_drive : &cd32_drive;
+	if (drive->cd && (drive->chd_f || drive->f)) return drive;
+	return NULL;
 }

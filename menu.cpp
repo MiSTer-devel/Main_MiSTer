@@ -6658,7 +6658,7 @@ void HandleUI(void)
 				if (select || minus || plus)
 				{
 					minimig_config.cd32_drive.cfg = minimig_config.cd32_drive.cfg ? 0 : 1;
-					cd_drive_open(0, minimig_config.cd32_drive.cfg ? minimig_config.cd32_drive.filename : "");
+					minimig_cd_drive_open(0, minimig_config.cd32_drive.cfg ? minimig_config.cd32_drive.filename : "");
 					menustate = MENU_MINIMIG_DISK1;
 				}
 			}
@@ -6683,7 +6683,7 @@ void HandleUI(void)
 				if (select || minus || plus)
 				{
 					minimig_config.cdtv_drive.cfg = minimig_config.cdtv_drive.cfg ? 0 : 1;
-					cd_drive_open(1, minimig_config.cdtv_drive.cfg ? minimig_config.cdtv_drive.filename : "");
+					minimig_cd_drive_open(1, minimig_config.cdtv_drive.cfg ? minimig_config.cdtv_drive.filename : "");
 					menustate = MENU_MINIMIG_DISK1;
 				}
 			}
@@ -6802,7 +6802,7 @@ void HandleUI(void)
 			if (len > sizeof(minimig_config.cd32_drive.filename) - 1) len = sizeof(minimig_config.cd32_drive.filename) - 1;
 			if (len) memcpy(minimig_config.cd32_drive.filename, selPath, len);
 			minimig_config.cd32_drive.filename[len] = 0;
-			cd_drive_open(0, minimig_config.cd32_drive.filename);
+			minimig_cd_drive_open(0, minimig_config.cd32_drive.filename);
 			menustate = MENU_MINIMIG_DISK1;
 		}
 		break;
@@ -6817,7 +6817,7 @@ void HandleUI(void)
 			if (len) memcpy(minimig_config.cd32_drive.filename, selPath, len);
 			minimig_config.cd32_drive.filename[len] = 0;
 			minimig_cfg_set(CONFIG_PRESET_CD32);
-			cd_drive_open(0, minimig_config.cd32_drive.filename);
+			minimig_cd_drive_open(0, minimig_config.cd32_drive.filename);
 			menustate = MENU_NONE1;
 			minimig_reset();
 		}
@@ -6832,7 +6832,7 @@ void HandleUI(void)
 			if (len > sizeof(minimig_config.cdtv_drive.filename) - 1) len = sizeof(minimig_config.cdtv_drive.filename) - 1;
 			if (len) memcpy(minimig_config.cdtv_drive.filename, selPath, len);
 			minimig_config.cdtv_drive.filename[len] = 0;
-			cd_drive_open(1, minimig_config.cdtv_drive.filename);
+			minimig_cd_drive_open(1, minimig_config.cdtv_drive.filename);
 			menustate = MENU_MINIMIG_DISK1;
 		}
 		break;
@@ -6847,7 +6847,7 @@ void HandleUI(void)
 			if (len) memcpy(minimig_config.cdtv_drive.filename, selPath, len);
 			minimig_config.cdtv_drive.filename[len] = 0;
 			minimig_cfg_set(CONFIG_PRESET_CDTV);
-			cd_drive_open(1, minimig_config.cdtv_drive.filename);
+			minimig_cd_drive_open(1, minimig_config.cdtv_drive.filename);
 			menustate = MENU_NONE1;
 			minimig_reset();
 		}
