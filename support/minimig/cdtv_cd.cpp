@@ -107,6 +107,8 @@ static bool           stch_wait_ack = false;
 #define STCH_PLAYEND_BUDGET    400
 #define STCH_PLAYEND_PERIOD_MS 60
 
+static bool           stch_playstart_pending = false;
+
 static inline bool cdtv_active(void)
 {
 	return (minimig_config.cdtv_drive.cfg != 0);
@@ -576,6 +578,7 @@ static int cmd_play(const uint8_t *cmd, uint8_t *out)
 
 	cd_playing = 1;
 	cd_motor   = 1;
+	stch_playstart_pending = true;
 	out[0] = 0x42;
 	return 1;
 }
@@ -1207,6 +1210,12 @@ void cdtv_cd_poll(void)
 			cdtv_dbg("CARD flush: OSD opened with dirty pending");
 			cdtv_card_save_to_path(card_save_path_active);
 		}
+	}
+
+	if (stch_playstart_pending) {
+		stch_playstart_pending = false;
+		cdtv_dbg("STCH play-start (playing=%d motor=%d)", cd_playing, cd_motor);
+		cdtv_inject_stch();
 	}
 
 	if (stch_retries > 0 && CheckTimer(stch_next_ms)) {
