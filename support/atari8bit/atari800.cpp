@@ -2406,7 +2406,9 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 				write_bytes[0] = 0x5C;
 				write_bytes[1] = 0x93;
 				write_bytes[2] = 0x25;
+				write_bytes[3] = 0x60;
 				atari8bit_dma_write(write_bytes, ATARI_PUPBT, 3);
+				atari8bit_dma_write(write_bytes + 3, 0x3ED, 1);
 			}
 			
 			set_a8bit_reg(REG_PAUSE, 0);
