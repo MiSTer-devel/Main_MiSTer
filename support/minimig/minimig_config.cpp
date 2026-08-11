@@ -503,6 +503,21 @@ static void ApplyConfiguration(char reloadkickstart)
 	minimig_set_extcfg(minimig_get_extcfg() & ~1);
 }
 
+static void migrate_legacy_cd_slot()
+{
+	if (minimig_config.hardfile[0].cfg != 2) return;
+	if (minimig_config.cd32_drive.cfg || minimig_config.cdtv_drive.cfg) return;
+
+	mm_hardfileTYPE *slot = 0;
+	if (minimig_config.chipset & CONFIG_CDTV) slot = &minimig_config.cdtv_drive;
+	else if ((minimig_config.cpu & 0x03) == 3 && ((minimig_config.chipset >> 2) & 7) == 6) slot = &minimig_config.cd32_drive;
+	if (!slot) return;
+
+	*slot = minimig_config.hardfile[0];
+	slot->cfg = 1;
+	printf("Legacy config: CD moved from hardfile[0] to the %s drive.\n", (slot == &minimig_config.cdtv_drive) ? "CDTV" : "CD32");
+}
+
 int minimig_cfg_load(int num)
 {
 	static const char config_id[] = "MNMGCFG0";
@@ -561,6 +576,8 @@ int minimig_cfg_load(int num)
 		}
 		else printf("Wrong configuration file size: %d (expected: %u)\n", size, sizeof(minimig_config));
 	}
+	if (result && size != (int)sizeof(minimig_config)) migrate_legacy_cd_slot();
+
 	if (!result) {
 		BootPrint("Can not open configuration file!\n");
 		BootPrint("Setting config defaults\n");
