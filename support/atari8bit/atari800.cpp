@@ -2389,12 +2389,24 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			write_bytes[1] = 0xE4;
 			atari8bit_dma_write(write_bytes, ATARI_DOSVEC, 2);
 
-			if(!(atari_status1 & STATUS1_MASK_MODE800))
+			// Identify Brian's OS that violates the standard layout somewhat
+			atari800_dma_read(write_bytes, 0xC006, 4);
+			if(write_bytes[0] == 0x42 && write_bytes[1] == 0x42 && write_bytes[2] == 0x00 && write_bytes[3] == 0x64)
 			{
 				write_bytes[0] = 0x5C;
 				write_bytes[1] = 0x93;
 				write_bytes[2] = 0x25;
-				atari8bit_dma_write(write_bytes, ATARI_PUPBT, 3);						
+				write_bytes[3] = 0x60;
+				atari8bit_dma_write(write_bytes, 0x245, 1);
+				atari8bit_dma_write(write_bytes + 1, ATARI_PUPBT + 1, 2);
+				atari8bit_dma_write(write_bytes + 3, 0x3ED, 1);
+			}
+			else if(!(atari_status1 & STATUS1_MASK_MODE800))
+			{
+				write_bytes[0] = 0x5C;
+				write_bytes[1] = 0x93;
+				write_bytes[2] = 0x25;
+				atari8bit_dma_write(write_bytes, ATARI_PUPBT, 3);
 			}
 			
 			set_a8bit_reg(REG_PAUSE, 0);
