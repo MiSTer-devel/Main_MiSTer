@@ -57,6 +57,9 @@ static void akiko_diag(const char *fmt, ...);
 
 #define AKIKO_SECTOR_BYTES 2352
 
+#define AKIKO_FILL_CHUNK_WORDS 64
+#define AKIKO_FILL_GAP_US      10
+
 static const int command_lengths[16] = {
 	1, 2, 1, 1, 12, 2, 1, 1, 4, 1, 2, -1, -1, -1, -1, -1
 };
@@ -696,11 +699,19 @@ static void akiko_ext_block_write(uint16_t addr, const uint8_t *buf, int bytes)
 	static uint16_t words[AKIKO_SECTOR_BYTES / 2];
 	memcpy(words, buf, bytes);
 
+	int total = bytes / 2;
+
 	EnableIO();
 	fpga_spi_fast(UIO_DMA_WRITE);
 	fpga_spi_fast(addr);
 	fpga_spi_fast(0);
-	fpga_spi_fast_block_write(words, bytes / 2);
+	int off = 0;
+	while (off < total) {
+		int n = total - off < AKIKO_FILL_CHUNK_WORDS ? total - off : AKIKO_FILL_CHUNK_WORDS;
+		fpga_spi_fast_block_write(words + off, n);
+		off += n;
+		if (off < total) usleep(AKIKO_FILL_GAP_US);
+	}
 	DisableIO();
 }
 
