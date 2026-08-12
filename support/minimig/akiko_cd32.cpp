@@ -57,9 +57,6 @@ static void akiko_diag(const char *fmt, ...);
 
 #define AKIKO_SECTOR_BYTES 2352
 
-#define AKIKO_FILL_CHUNK_WORDS 64
-#define AKIKO_FILL_GAP_US      10
-
 static const int command_lengths[16] = {
 	1, 2, 1, 1, 12, 2, 1, 1, 4, 1, 2, -1, -1, -1, -1, -1
 };
@@ -699,19 +696,11 @@ static void akiko_ext_block_write(uint16_t addr, const uint8_t *buf, int bytes)
 	static uint16_t words[AKIKO_SECTOR_BYTES / 2];
 	memcpy(words, buf, bytes);
 
-	int total = bytes / 2;
-
 	EnableIO();
 	fpga_spi_fast(UIO_DMA_WRITE);
 	fpga_spi_fast(addr);
 	fpga_spi_fast(0);
-	int off = 0;
-	while (off < total) {
-		int n = total - off < AKIKO_FILL_CHUNK_WORDS ? total - off : AKIKO_FILL_CHUNK_WORDS;
-		fpga_spi_fast_block_write(words + off, n);
-		off += n;
-		if (off < total) usleep(AKIKO_FILL_GAP_US);
-	}
+	fpga_spi_fast_block_write(words, bytes / 2);
 	DisableIO();
 }
 
@@ -905,8 +894,26 @@ static bool akiko_nvram_save_to_disk(void)
 	return akiko_nvram_save_to_path(target);
 }
 
+#define AKIKO_SECTOR_PERIOD_US 6666
+
 static void akiko_push_sector(const uint8_t *buf)
 {
+	static struct timespec prev;
+	static bool have_prev = false;
+	struct timespec now;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	if (have_prev) {
+		int64_t us = (int64_t)(now.tv_sec - prev.tv_sec) * 1000000
+		           + (now.tv_nsec - prev.tv_nsec) / 1000;
+		if (us >= 0 && us < AKIKO_SECTOR_PERIOD_US) {
+			usleep((useconds_t)(AKIKO_SECTOR_PERIOD_US - us));
+			clock_gettime(CLOCK_MONOTONIC, &now);
+		}
+	}
+	prev = now;
+	have_prev = true;
+
 	akiko_ext_block_write(AKIKO_SECTOR_ADDR, buf, AKIKO_SECTOR_BYTES);
 }
 
