@@ -714,9 +714,11 @@ void atari800_open_cartridge_file(const char* name, int match_index)
 void atari800_open_bios_file(const char* name, unsigned char index)
 {
 	uint8_t bios_index = (index & 0x3F);
-	uint16_t mode800 = get_a8bit_reg(REG_ATARI_STATUS1) & STATUS1_MASK_MODE800;
+	uint16_t mode800 = get_a8bit_reg(REG_ATARI_STATUS1);
+	uint16_t os_16k = mode800 & STATUS1_MASK_OS16K;
+	mode800 &= STATUS1_MASK_MODE800;
 	user_io_file_tx(name, index);
-	if((mode800 && bios_index == 6) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot_800(1, 0);
+	if((mode800 && (bios_index == (os_16k ? 4 : 6))) || (!mode800 && (bios_index == 4 || bios_index == 5))) reboot_800(1, 0);
 }
 
 #define MAX_DRIVES 15
@@ -2387,12 +2389,26 @@ void atari800_set_image(int ext_index, int file_index, const char *name)
 			write_bytes[1] = 0xE4;
 			atari8bit_dma_write(write_bytes, ATARI_DOSVEC, 2);
 
-			if(!(atari_status1 & STATUS1_MASK_MODE800))
+			// Identify Brian's OS that violates the standard layout somewhat
+			atari800_dma_read(write_bytes, 0xC006, 4);
+			if(write_bytes[0] == 0x42 && write_bytes[1] == 0x42 && write_bytes[2] == 0x00 && write_bytes[3] == 0x64)
 			{
 				write_bytes[0] = 0x5C;
 				write_bytes[1] = 0x93;
 				write_bytes[2] = 0x25;
-				atari8bit_dma_write(write_bytes, ATARI_PUPBT, 3);						
+				write_bytes[3] = 0x60;
+				atari8bit_dma_write(write_bytes, 0x245, 1);
+				atari8bit_dma_write(write_bytes + 1, ATARI_PUPBT + 1, 2);
+				atari8bit_dma_write(write_bytes + 3, 0x3ED, 1);
+			}
+			else if(!(atari_status1 & STATUS1_MASK_MODE800))
+			{
+				write_bytes[0] = 0x5C;
+				write_bytes[1] = 0x93;
+				write_bytes[2] = 0x25;
+				write_bytes[3] = 0x60;
+				atari8bit_dma_write(write_bytes, ATARI_PUPBT, 3);
+				atari8bit_dma_write(write_bytes + 3, 0x3ED, 1);
 			}
 			
 			set_a8bit_reg(REG_PAUSE, 0);
