@@ -144,11 +144,15 @@ static int32_t cd_cdda_lba_next = -1;
 static int32_t cd_cdda_lba_end  = -1;
 static drive_t *cd_cdda_drv     = NULL;
 
-static bool     cd_last_mounted     = false;
+typedef enum {
+	CD_MEDIA_UNKNOWN = -1,
+	CD_MEDIA_ABSENT  = 0,
+	CD_MEDIA_PRESENT = 1
+} cd_media_level_t;
 
-static bool     g_akiko_pending_minimig_reset = false;
-
-static uint8_t  cd_post_info_media_push_pending = 0;
+static cd_media_level_t cd_media_level = CD_MEDIA_UNKNOWN;
+static bool     cd_media_push_pending = false;
+static bool     cd_media_event        = false;
 
 #define AKIKO_TOC_REPEAT       3
 #define AKIKO_TOC_PUSH_PERIOD_MS 20
@@ -207,6 +211,11 @@ static inline bool cd32_active(void)
 static bool cd_is_mounted(void)
 {
 	return cd_find_drive() != NULL;
+}
+
+static inline bool cd_media_present(void)
+{
+	return cd_media_level == CD_MEDIA_PRESENT;
 }
 
 static uint16_t akiko_read_status(void)
@@ -387,6 +396,7 @@ static void cmd_info(const uint8_t *cmd)
 	memcpy(&r[2], AKIKO_FIRMWARE, 18);
 	akiko_send_response(r, 20);
 	cd_initialized = 2;
+	cd_media_push_pending = true;
 	akiko_dbg("INFO -> initialized=2\n");
 	akiko_build_toc();
 }
@@ -407,7 +417,7 @@ static void cmd_stop(const uint8_t *cmd)
 {
 	uint8_t r[2];
 	r[0] = cmd[0];
-	r[1] = cd_is_mounted() ? 0x00 : (CH_ERR_NODISK | cd_door);
+	r[1] = cd_media_present() ? 0x00 : (CH_ERR_NODISK | cd_door);
 	cd_playing = 0;
 	cd_paused = 0;
 	cd_data_lba_base = -1;
@@ -424,7 +434,7 @@ static void cmd_pause(const uint8_t *cmd)
 {
 	uint8_t r[2];
 	r[0] = cmd[0];
-	if (!cd_is_mounted()) {
+	if (!cd_media_present()) {
 		r[1] = CH_ERR_NODISK | cd_door;
 	} else {
 		r[1] = (cd_playing ? CDS_PLAYING : 0) | cd_door;
@@ -433,21 +443,21 @@ static void cmd_pause(const uint8_t *cmd)
 	toc_push_last_ms = 0;
 	cd_paused = 1;
 	akiko_send_response(r, 2);
-	akiko_dbg("PAUSE (playing=%d, mounted=%d)\n", cd_playing, cd_is_mounted());
+	akiko_dbg("PAUSE (playing=%d, present=%d)\n", cd_playing, cd_media_present());
 }
 
 static void cmd_unpause(const uint8_t *cmd)
 {
 	uint8_t r[2];
 	r[0] = cmd[0];
-	if (!cd_is_mounted()) {
+	if (!cd_media_present()) {
 		r[1] = CH_ERR_NODISK | cd_door;
 	} else {
 		r[1] = (cd_playing ? CDS_PLAYING : 0) | cd_door;
 	}
 	cd_paused = 0;
 	akiko_send_response(r, 2);
-	akiko_dbg("UNPAUSE (playing=%d, mounted=%d)\n", cd_playing, cd_is_mounted());
+	akiko_dbg("UNPAUSE (playing=%d, present=%d)\n", cd_playing, cd_media_present());
 }
 
 static int cdrom_speed = 1;
@@ -464,7 +474,7 @@ static void cmd_multi(const uint8_t *cmd)
 		cdrom_speed = new_speed;
 	}
 
-	if (!cd_is_mounted()) {
+	if (!cd_media_present()) {
 		r[1] = 0x01;
 		akiko_send_response(r, 2);
 		akiko_dbg("PLAY: no disk\n");
@@ -1269,6 +1279,8 @@ static void akiko_handle_sec_req(void)
 
 void akiko_cd32_set_cd_path(const char *path)
 {
+	cd_media_event = true;
+
 	char new_path[256] = {0};
 	if (path && *path) {
 		compute_save_path(path, new_path, sizeof(new_path));
@@ -1324,13 +1336,14 @@ void akiko_cd32_init(void)
 	cd_cdda_lba_next = -1;
 	cd_cdda_lba_end  = -1;
 	cd_cdda_drv      = NULL;
-	cd_last_mounted  = false;
+	cd_media_level   = CD_MEDIA_UNKNOWN;
+	cd_media_push_pending = false;
+	cd_media_event   = false;
 	toc_point_count  = 0;
 	toc_push_idx     = -1;
 	toc_push_last_ms = 0;
 
 	akiko_prefetch_invalidate();
-	cd_post_info_media_push_pending = 0;
 
 	cd_save_dirty_observed = false;
 	cd_save_load_failed = false;
@@ -1357,19 +1370,29 @@ static void akiko_diag(const char *fmt, ...)
 
 void akiko_cd32_poll(void)
 {
+	const bool mounted = cd32_active() && cd_is_mounted();
+	const cd_media_level_t level = mounted ? CD_MEDIA_PRESENT : CD_MEDIA_ABSENT;
+
+	if (level != cd_media_level || cd_media_event) {
+		cd_media_event   = false;
+		cd_data_lba_base = -1;
+		akiko_prefetch_invalidate();
+		cd_cdda_lba_next = -1;
+		cd_cdda_lba_end  = -1;
+		cd_cdda_drv      = NULL;
+		toc_point_count  = 0;
+		toc_push_idx     = -1;
+		cd_media_level   = level;
+		cd_media_push_pending = true;
+		if (level == CD_MEDIA_PRESENT) akiko_build_toc();
+		akiko_diag("[akiko] media level -> %s (cd_init=%u, announce pending)",
+		           (level == CD_MEDIA_PRESENT) ? "present" : "absent",
+		           cd_initialized);
+	}
+
 	if (!cd32_active()) return;
 
 	usleep(20);
-
-	bool mounted = cd_is_mounted();
-
-	if (g_akiko_pending_minimig_reset) {
-		g_akiko_pending_minimig_reset = false;
-		akiko_diag("[akiko] mediachange: BIOS was stuck on no-CD splash, "
-		           "triggering minimig_reset()");
-		minimig_reset();
-		return;
-	}
 
 	static bool first_poll = true;
 	if (first_poll) {
@@ -1406,39 +1429,6 @@ void akiko_cd32_poll(void)
 	}
 #endif
 
-	static bool media_absent_push_pending = false;
-	static bool mediachanged_push_pending = false;
-	static bool had_prior_unmount = false;
-	if (mounted != cd_last_mounted) {
-		cd_data_lba_base = -1;
-		akiko_prefetch_invalidate();
-		cd_cdda_lba_next = -1;
-		cd_cdda_lba_end  = -1;
-		cd_cdda_drv      = NULL;
-		toc_point_count  = 0;
-		toc_push_idx     = -1;
-		if (!mounted) {
-			media_absent_push_pending = true;
-			mediachanged_push_pending = false;
-			had_prior_unmount = true;
-		} else {
-			media_absent_push_pending = false;
-			akiko_build_toc();
-			if (cd_initialized >= 2) {
-				if (had_prior_unmount) {
-					mediachanged_push_pending = true;
-				} else {
-					g_akiko_pending_minimig_reset = true;
-					mediachanged_push_pending = false;
-				}
-			}
-		}
-		cd_last_mounted = mounted;
-		akiko_diag("[akiko] media change -> mounted=%d cd_init=%u (absent=%d, mediachanged=%d)",
-		           mounted, cd_initialized,
-		           media_absent_push_pending, mediachanged_push_pending);
-	}
-
 	uint16_t status = akiko_read_status();
 #if AKIKO_CD32_DEBUG
 	static uint16_t last_status = 0xffff;
@@ -1451,35 +1441,28 @@ void akiko_cd32_poll(void)
 #endif
 	const bool rx_idle = !(status & AKIKO_STATUS_RX_BUSY);
 
-	if (mounted && cd_initialized == 0 && rx_idle) {
-		uint8_t r[2];
-		r[0] = 0x0a;
-		r[1] = 0x01;
-		akiko_send_response(r, 2);
+	if (cd_initialized == 0 && rx_idle) {
+		if (cd_media_present()) {
+			uint8_t r[2];
+			r[0] = 0x0a;
+			r[1] = 0x01;
+			akiko_send_response(r, 2);
+			akiko_diag("[akiko] auto-init media-status push: opcode=0x0a status=0x01");
+		}
 		cd_initialized = 1;
-		akiko_diag("[akiko] auto-init media-status push: opcode=0x0a status=0x01 (cd_initialized=1)");
+		return;
 	}
 
-	if (mediachanged_push_pending && mounted && cd_initialized >= 2 && rx_idle) {
+	if (cd_media_push_pending && cd_initialized >= 2 && rx_idle) {
 		uint8_t r[2];
 		r[0] = 0x0a;
-		r[1] = 0x01;
+		r[1] = cd_media_present() ? 0x01 : 0x00;
 		akiko_send_response(r, 2);
-		mediachanged_push_pending = false;
+		cd_media_push_pending = false;
 		akiko_build_toc();
-		akiko_diag("[akiko] mediachange push: opcode=0x0a status=0x01 (TOC rebuilt 2x)");
+		akiko_diag("[akiko] media-status push: opcode=0x0a status=0x%02x", r[1]);
+		return;
 	}
-
-	if (media_absent_push_pending && !mounted && rx_idle) {
-		uint8_t r[2];
-		r[0] = 0x0a;
-		r[1] = 0x00;
-		akiko_send_response(r, 2);
-		media_absent_push_pending = false;
-		akiko_diag("[akiko] eject media-status push: opcode=0x0a status=0x00");
-	}
-
-	(void)cd_post_info_media_push_pending;
 
 	if (cd_initialized == 2 && toc_push_idx >= 0 && rx_idle) {
 		uint32_t now_ms = (uint32_t)GetTimer(0);
