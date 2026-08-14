@@ -153,6 +153,17 @@ typedef enum {
 static cd_media_level_t cd_media_level = CD_MEDIA_UNKNOWN;
 static bool     cd_media_push_pending = false;
 static bool     cd_media_event        = false;
+// Mounting a disc while one is already in swaps it with no removal in between,
+// which no physical drive can do - the tray has to open. A guest is told
+// present, then present again, and that is not a media change, so AmigaOS
+// keeps serving the old volume from cache and the new disc never appears.
+// Owe the guest the absent edge first.
+static bool     cd_media_swap_absent  = false;
+static uint32_t cd_media_swap_ready_ms = 0;
+// The tray cannot open and shut in the same instant, and the removal has to
+// reach CDFileSystem before the arrival lands or the two collapse back into
+// no change at all.
+#define AKIKO_SWAP_SETTLE_MS 700
 
 #define AKIKO_TOC_REPEAT       3
 #define AKIKO_TOC_PUSH_PERIOD_MS 20
@@ -1334,6 +1345,8 @@ void akiko_cd32_init(void)
 	cd_media_level   = CD_MEDIA_UNKNOWN;
 	cd_media_push_pending = false;
 	cd_media_event   = false;
+	cd_media_swap_absent   = false;
+	cd_media_swap_ready_ms = 0;
 	toc_point_count  = 0;
 	toc_push_idx     = -1;
 	toc_push_last_ms = 0;
@@ -1369,6 +1382,11 @@ void akiko_cd32_poll(void)
 	const cd_media_level_t level = mounted ? CD_MEDIA_PRESENT : CD_MEDIA_ABSENT;
 
 	if (level != cd_media_level || cd_media_event) {
+		// A disc arriving on top of a disc. The level does not move, so without
+		// this the announcement is present->present and the guest correctly
+		// treats it as nothing having happened.
+		const bool swap = cd_media_event && (level == CD_MEDIA_PRESENT)
+		                  && (cd_media_level == CD_MEDIA_PRESENT);
 		cd_media_event   = false;
 		cd_data_lba_base = -1;
 		akiko_prefetch_invalidate();
@@ -1379,6 +1397,7 @@ void akiko_cd32_poll(void)
 		toc_push_idx     = -1;
 		cd_media_level   = level;
 		cd_media_push_pending = true;
+		if (swap) cd_media_swap_absent = true;
 		if (level == CD_MEDIA_PRESENT) akiko_build_toc();
 		akiko_diag("[akiko] media level -> %s (cd_init=%u, announce pending)",
 		           (level == CD_MEDIA_PRESENT) ? "present" : "absent",
@@ -1448,7 +1467,23 @@ void akiko_cd32_poll(void)
 		return;
 	}
 
-	if (cd_media_push_pending && cd_initialized >= 2 && rx_idle) {
+	// The removal half of a swap, sent before the arrival even though a disc is
+	// mounted, so cd_media_present() is not the source of the status here.
+	if (cd_media_swap_absent && cd_initialized >= 2 && rx_idle) {
+		uint8_t r[2];
+		r[0] = 0x0a;
+		r[1] = 0x00;
+		akiko_send_response(r, 2);
+		cd_media_swap_absent   = false;
+		cd_media_swap_ready_ms = (uint32_t)GetTimer(AKIKO_SWAP_SETTLE_MS);
+		akiko_diag("[akiko] swap: media-status push opcode=0x0a status=0x00 "
+		           "(removal edge, arrival held %u ms)", AKIKO_SWAP_SETTLE_MS);
+		return;
+	}
+
+	if (cd_media_push_pending && cd_initialized >= 2 && rx_idle
+	    && (!cd_media_swap_ready_ms || CheckTimer(cd_media_swap_ready_ms))) {
+		cd_media_swap_ready_ms = 0;
 		uint8_t r[2];
 		r[0] = 0x0a;
 		r[1] = cd_media_present() ? 0x01 : 0x00;
