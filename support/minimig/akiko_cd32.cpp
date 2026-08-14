@@ -1140,7 +1140,7 @@ static int akiko_prefetch_get(drive_t *drv, uint32_t lba, uint8_t *out_buf)
 	return 0;
 }
 
-static void akiko_handle_sec_req(void)
+static bool akiko_handle_sec_req(void)
 {
 	struct timespec ts0, ts1, ts2, ts3;
 	static int64_t phase_a_us = 0, phase_b_us = 0, phase_c_us = 0;
@@ -1163,24 +1163,18 @@ static void akiko_handle_sec_req(void)
 
 	if (cd_data_lba_base == -1) {
 		akiko_dbg("sec_req but no data read armed (counter=%u)\n", counter);
-		memset(buf, 0, sizeof(buf));
-		akiko_push_sector(buf);
-		return;
+		return false;
 	}
 
 	drive_t *drv = cd_find_drive();
 	if (!drv) {
 		akiko_dbg("sec_req but no CD drive (counter=%u)\n", counter);
-		memset(buf, 0, sizeof(buf));
-		akiko_push_sector(buf);
-		return;
+		return false;
 	}
 
 	int32_t signed_lba = cd_data_lba_base + (int32_t)counter;
 	if (signed_lba < 0) {
-		memset(buf, 0, sizeof(buf));
-		akiko_push_sector(buf);
-		return;
+		return false;
 	}
 	uint32_t lba = (uint32_t)signed_lba;
 
@@ -1195,7 +1189,7 @@ static void akiko_handle_sec_req(void)
 		}
 		memset(buf, 0, sizeof(buf));
 		akiko_push_sector(buf);
-		return;
+		return true;
 	}
 
 	{
@@ -1226,7 +1220,7 @@ static void akiko_handle_sec_req(void)
 				held_audio_lba = UINT32_MAX;
 				held_count = 0;
 			}
-			return;
+			return false;
 		}
 	}
 
@@ -1240,12 +1234,12 @@ static void akiko_handle_sec_req(void)
 		akiko_diag("[akiko] sec_req lba=%u %s (retry %u/%u)", lba,
 		           (rc == -1) ? "prefetch FAIL" : "cached invalid",
 		           fail_count, MAX_FAIL_RETRIES);
-		if (fail_count < MAX_FAIL_RETRIES) return;
+		if (fail_count < MAX_FAIL_RETRIES) return false;
 		akiko_diag("[akiko] sec_req lba=%u retry cap reached — push silence, advance", lba);
 		fail_lba = UINT32_MAX;
 		memset(buf, 0, sizeof(buf));
 		akiko_push_sector(buf);
-		return;
+		return true;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &ts2);
 
@@ -1275,6 +1269,7 @@ static void akiko_handle_sec_req(void)
 		phase_a_us = phase_b_us = phase_c_us = 0;
 		bucket_count = 0;
 	}
+	return true;
 }
 
 void akiko_cd32_set_cd_path(const char *path)
@@ -1527,8 +1522,7 @@ void akiko_cd32_poll(void)
 	}
 
 	if (status & AKIKO_STATUS_SEC_REQ) {
-		akiko_handle_sec_req();
-		return;
+		if (akiko_handle_sec_req()) return;
 	}
 
 	if (!(status & AKIKO_STATUS_REQ)) return;
