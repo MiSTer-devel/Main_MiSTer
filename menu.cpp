@@ -6809,6 +6809,13 @@ void HandleUI(void)
 
 	case MENU_MINIMIG_CD32FILE_START:
 		{
+			if (!selPath[0])
+			{
+				minimig_config.cd32_drive.filename[0] = 0;
+				minimig_cd_drive_open(0, "");
+				menustate = MENU_MINIMIG_MAIN1;
+				break;
+			}
 			memcpy(Selected_CD32, selPath, sizeof(Selected_CD32));
 			recent_update(SelectedDir, selPath, SelectedLabel, 501);
 
@@ -6839,6 +6846,13 @@ void HandleUI(void)
 
 	case MENU_MINIMIG_CDTVFILE_START:
 		{
+			if (!selPath[0])
+			{
+				minimig_config.cdtv_drive.filename[0] = 0;
+				minimig_cd_drive_open(1, "");
+				menustate = MENU_MINIMIG_MAIN1;
+				break;
+			}
 			memcpy(Selected_CDTV, selPath, sizeof(Selected_CDTV));
 			recent_update(SelectedDir, selPath, SelectedLabel, 502);
 
