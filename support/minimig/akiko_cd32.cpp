@@ -1382,11 +1382,8 @@ void akiko_cd32_poll(void)
 	const cd_media_level_t level = mounted ? CD_MEDIA_PRESENT : CD_MEDIA_ABSENT;
 
 	if (level != cd_media_level || cd_media_event) {
-		// A disc arriving on top of a disc. The level does not move, so without
-		// this the announcement is present->present and the guest correctly
-		// treats it as nothing having happened.
 		const bool swap = cd_media_event && (level == CD_MEDIA_PRESENT)
-		                  && (cd_media_level == CD_MEDIA_PRESENT);
+		                  && (cd_initialized >= 2);
 		cd_media_event   = false;
 		cd_data_lba_base = -1;
 		akiko_prefetch_invalidate();
