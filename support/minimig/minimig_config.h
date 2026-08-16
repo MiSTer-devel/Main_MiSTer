@@ -17,6 +17,9 @@
 
 #define CONFIG_PRESET_CD32  1
 #define CONFIG_PRESET_CDTV  2
+#define CONFIG_PRESET_A500  3
+#define CONFIG_PRESET_A600  4
+#define CONFIG_PRESET_A1200 5
 
 extern const char *config_memory_chip_msg[];
 extern const char *config_memory_slow_msg[];
@@ -69,14 +72,15 @@ typedef struct
 extern mm_configTYPE minimig_config;
 
 void minimig_cfg_set(int preset);
+bool minimig_cfg_available(int preset);
 
 int minimig_cfg_load(int num);
 int minimig_cfg_save(int num);
 const char* minimig_get_cfg_info(int num, int label);
 
 void minimig_reset();
-void minimig_set_kickstart(char *name);
-void minimig_set_extrom(char *name);
+void minimig_set_kickstart(const char *name);
+void minimig_set_extrom(const char *name);
 const char* minimig_get_extrom();
 
 void minimig_set_adjust(char n);

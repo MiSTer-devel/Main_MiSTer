@@ -635,7 +635,7 @@ void minimig_reset()
 	cdtv_cd_init();
 }
 
-void minimig_set_kickstart(char *name)
+void minimig_set_kickstart(const char *name)
 {
 	uint len = strlen(name);
 	if (len > (sizeof(minimig_config.kickstart) - 1)) len = sizeof(minimig_config.kickstart) - 1;
@@ -644,17 +644,18 @@ void minimig_set_kickstart(char *name)
 	force_reload_kickstart = 1;
 }
 
-void minimig_set_extrom(char *name)
+void minimig_set_extrom(const char *name)
 {
-	const size_t cap = sizeof(minimig_config.kickstart);
-	size_t kicklen = strnlen(minimig_config.kickstart, cap);
-	if (kicklen + 1 >= cap) return;
-	size_t off = kicklen + 1;
-	size_t room = cap - off - 1;
-	size_t nlen = strlen(name);
+	int cap = sizeof(minimig_config.kickstart);
+	int kicklen = strnlen(minimig_config.kickstart, cap) + 1;
+	if (kicklen + 1 >= cap) return; // at least one additional byte for extrom is required (for NULL termination)
+	int room = cap - kicklen;
+	int nlen = strlen(name);
 	if (nlen > room) nlen = room;
-	memcpy(minimig_config.kickstart + off, name, nlen);
-	memset(minimig_config.kickstart + off + nlen, 0, cap - off - nlen);
+	memcpy(minimig_config.kickstart + kicklen, name, nlen);
+	room = cap - kicklen - nlen;
+	if(room > 0) memset(minimig_config.kickstart + kicklen + nlen, 0, room);
+	minimig_config.kickstart[cap - 1] = 0; // make sure NULL is at the end
 	force_reload_kickstart = 1;
 }
 
@@ -868,18 +869,24 @@ unsigned int minimig_get_extcfg()
 	return (minimig_config.ext_cfg2 << 16) | minimig_config.ext_cfg;
 }
 
+#define CD32_MAIN_ROM  "Games/Amiga/CD32.rom"
+#define CD32_EXT_ROM   "Games/Amiga/CD32_ext.rom"
+#define CDTV_MAIN_ROM  "Games/Amiga/CDTV.rom"
+#define CDTV_EXT_ROM   "Games/Amiga/CDTV_ext.rom"
+#define A500_MAIN_ROM  "Games/Amiga/a500.rom"
+#define A600_MAIN_ROM  "Games/Amiga/a600.rom"
+#define A1200_MAIN_ROM "Games/Amiga/a1200.rom"
+
 void minimig_cfg_set(int preset)
 {
-	int len;
 	switch (preset)
 	{
 	case CONFIG_PRESET_CD32:
 		minimig_config.cpu = 3; // 68020, d-cache off;
 		minimig_config.chipset = (6 << 2); // AGA
 		minimig_config.memory = 3; // ChipRAM 2MB, FastRAM 0MB
-		strcpy(minimig_config.kickstart, "Games/Amiga/CD32.rom");
-		len = strlen(minimig_config.kickstart);
-		strcpy(minimig_config.kickstart+len+1, "Games/Amiga/CD32_ext.rom");
+		minimig_set_kickstart(CD32_MAIN_ROM);
+		if(getFileSize(minimig_config.kickstart) < 1024 * 1024) minimig_set_extrom(CD32_EXT_ROM);
 		minimig_config.autofire = 2 << 1; // CD32 joystick
 		minimig_config.cd32_drive.cfg = 1;
 		minimig_config.cdtv_drive.cfg = 0;
@@ -890,17 +897,80 @@ void minimig_cfg_set(int preset)
 		minimig_config.cpu = 0; // 68000
 		minimig_config.chipset = (2 << 2); // ECS
 		minimig_config.memory = 1; // ChipRAM 1MB, FastRAM 0MB
-		strcpy(minimig_config.kickstart, "Games/Amiga/CDTV.rom");
-		len = strlen(minimig_config.kickstart);
-		strcpy(minimig_config.kickstart + len + 1, "Games/Amiga/CDTV_ext.rom");
+		minimig_set_kickstart(CDTV_MAIN_ROM);
+		if (getFileSize(minimig_config.kickstart) < 1024 * 1024) minimig_set_extrom(CDTV_EXT_ROM);
 		minimig_config.autofire = 0; // Digital joystick
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 1;
 		minimig_config.ide_cfg = 0;
 		break;
+
+	case CONFIG_PRESET_A500:
+		minimig_config.cpu = 0; // 68000
+		minimig_config.chipset = (0 << 2); // OCS
+		minimig_config.memory = 0; // ChipRAM 512KB, FastRAM 0MB
+		minimig_set_kickstart(A500_MAIN_ROM);
+		minimig_config.autofire = 0; // Digital joystick
+		minimig_config.cd32_drive.cfg = 0;
+		minimig_config.cdtv_drive.cfg = 0;
+		minimig_config.ide_cfg = 0;
+		break;
+
+	case CONFIG_PRESET_A600:
+		minimig_config.cpu = 0; // 68000
+		minimig_config.chipset = (2 << 2); // ECS
+		minimig_config.memory = 1; // ChipRAM 1MB, FastRAM 0MB
+		minimig_set_kickstart(A600_MAIN_ROM);
+		minimig_config.autofire = 0; // Digital joystick
+		minimig_config.cd32_drive.cfg = 0;
+		minimig_config.cdtv_drive.cfg = 0;
+		minimig_config.ide_cfg = 0;
+		break;
+
+	case CONFIG_PRESET_A1200:
+		minimig_config.cpu = 3; // 68020, d-cache off;
+		minimig_config.chipset = (6 << 2); // AGA
+		minimig_config.memory = 3; // ChipRAM 2MB, FastRAM 0MB
+		minimig_set_kickstart(A1200_MAIN_ROM);
+		minimig_config.autofire = 0; // Digital joystick
+		minimig_config.cd32_drive.cfg = 0;
+		minimig_config.cdtv_drive.cfg = 0;
+		minimig_config.ide_cfg = 0;
+		break;
+	}
+}
+
+bool minimig_cfg_available(int preset)
+{
+	switch (preset)
+	{
+	case CONFIG_PRESET_CD32:
+		if (is_minimig() == 2)
+		{
+			uint64_t sz = getFileSize(CD32_MAIN_ROM);
+			return (sz >= 1024 * 1024) || ((sz >= 512 * 1024) && getFileSize(CD32_EXT_ROM) >= 512 * 1024);
+		}
+		break;
+
+	case CONFIG_PRESET_CDTV:
+		if (is_minimig() == 2)
+		{
+			uint64_t sz = getFileSize(CDTV_MAIN_ROM);
+			return (sz >= 1024 * 1024) || ((sz >= 256 * 1024) && getFileSize(CDTV_EXT_ROM) >= 256 * 1024);
+		}
+		break;
+
+	case CONFIG_PRESET_A500:
+		return getFileSize(A500_MAIN_ROM) >= 256 * 1024;
+
+	case CONFIG_PRESET_A600:
+		return getFileSize(A600_MAIN_ROM) >= 512 * 1024;
+
+	case CONFIG_PRESET_A1200:
+		return getFileSize(A1200_MAIN_ROM) >= 512 * 1024;
 	}
 
-	force_reload_kickstart = 1;
+	return 0;
 }
 
 static drive_t cd32_drive = {};

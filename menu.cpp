@@ -193,6 +193,8 @@ enum MENU
 	MENU_MINIMIG_LOADCONFIG2,
 	MENU_MINIMIG_SAVECONFIG1,
 	MENU_MINIMIG_SAVECONFIG2,
+	MENU_MINIMIG_PRESET1,
+	MENU_MINIMIG_PRESET2,
 
 	// Atari ST
 	MENU_ST_MAIN1,
@@ -5835,7 +5837,7 @@ void HandleUI(void)
 		/* minimig main menu                                              */
 		/******************************************************************/
 	case MENU_MINIMIG_MAIN1:
-		menumask = 0x7BC0;
+		menumask = 0xFBC0;
 		OsdSetTitle("Minimig", OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 		helptext_idx = HELPTEXT_MAIN;
 
@@ -5898,9 +5900,11 @@ void HandleUI(void)
 			m = 4;
 			if (is_minimig() == 2)
 			{
-				menumask |= 0x30;
-				MenuWrite(m++, " Start CD32 Game", menusub == 4, 0);
-				MenuWrite(m++, " Start CDTV Game", menusub == 5, 0);
+				if (minimig_cfg_available(CONFIG_PRESET_CD32)) menumask |= 0x10;
+				if (minimig_cfg_available(CONFIG_PRESET_CDTV)) menumask |= 0x20;
+
+				MenuWrite(m++, " Start CD32 Game", menusub == 4, !(menumask & 0x10));
+				MenuWrite(m++, " Start CDTV Game", menusub == 5, !(menumask & 0x20));
 				MenuWrite(m++);
 			}
 
@@ -5909,7 +5913,7 @@ void HandleUI(void)
 			MenuWrite(m++, s, menusub == 6, 0);
 			MenuWrite(m++),
 
-			MenuWrite(m++, " Drives                    \x16", menusub == 7, 0);
+			MenuWrite(m++, " CD & HDD                  \x16", menusub == 7, 0);
 			MenuWrite(m++, " System                    \x16", menusub == 8, 0);
 			MenuWrite(m++, " Audio & Video             \x16", menusub == 9, 0);
 			if (spi_uio_cmd16(UIO_GET_OSDMASK, 0) & 1)
@@ -5921,10 +5925,11 @@ void HandleUI(void)
 			MenuWrite(m++);
 			MenuWrite(m++, " Save configuration        \x16", menusub == 11, 0);
 			MenuWrite(m++, " Load configuration        \x16", menusub == 12, 0);
+			MenuWrite(m++, " Load preset               \x16", menusub == 13, 0);
 
 			while (m < 14) MenuWrite(m++);
-			MenuWrite(m++, " Reset", menusub == 13, 0);
-			MenuWrite(m, STD_EXIT, menusub == 14, 0);
+			MenuWrite(m++, " Reset", menusub == 14, 0);
+			MenuWrite(m, STD_EXIT, menusub == 15, 0);
 
 			if (!adjvisible) break;
 			firstmenu += adjvisible;
@@ -5980,7 +5985,7 @@ void HandleUI(void)
 					else if (recent_init(0)) menustate = MENU_RECENT1;
 				}
 			}
-			else if (menusub == 4)
+			else if (menusub == 4 && (menumask & 0x10))
 			{
 				if (select || recent)
 				{
@@ -5997,7 +6002,7 @@ void HandleUI(void)
 					break;
 				}
 			}
-			else if (menusub == 5)
+			else if (menusub == 5 && (menumask & 0x20))
 			{
 				if (select || recent)
 				{
@@ -6055,10 +6060,15 @@ void HandleUI(void)
 				}
 				else if (menusub == 13)
 				{
+					menusub = 0;
+					menustate = MENU_MINIMIG_PRESET1;
+				}
+				else if (menusub == 14)
+				{
 					menustate = MENU_NONE1;
 					minimig_reset();
 				}
-				else if (menusub == 14)
+				else if (menusub == 15)
 				{
 					menustate = MENU_NONE1;
 				}
@@ -6261,6 +6271,76 @@ void HandleUI(void)
 		{
 			menustate = MENU_MINIMIG_MAIN1;
 			menusub = 11;
+		}
+		break;
+
+	case MENU_MINIMIG_PRESET1:
+		helptext_idx = 0;
+		menumask = 0x100;
+		parentstate = menustate;
+		OsdSetTitle("Load preset", 0);
+
+		if (minimig_cfg_available(CONFIG_PRESET_A500)) menumask |= 1;
+		if (minimig_cfg_available(CONFIG_PRESET_A600)) menumask |= 2;
+		if (minimig_cfg_available(CONFIG_PRESET_A1200)) menumask |= 4;
+		if (minimig_cfg_available(CONFIG_PRESET_CDTV)) menumask |= 8;
+		if (minimig_cfg_available(CONFIG_PRESET_CD32)) menumask |= 16;
+
+		m = 0;
+		OsdWrite(m++, "", 0, 0);
+		OsdWrite(m++, " A500  OCS ChipRAM 512KB", menusub == 0, !(menumask & 1));
+		OsdWrite(m++, " A600  ECS ChipRAM 1MB", menusub == 1, !(menumask & 2));
+		OsdWrite(m++, " A1200 AGA ChipRAM 2MB", menusub == 2, !(menumask & 4));
+		OsdWrite(m++, "", 0, 0);
+		OsdWrite(m++, " CDTV  ECS ChipRAM 1MB", menusub == 3, !(menumask & 8));
+		OsdWrite(m++, " CD32  AGA ChipRAM 2MB", menusub == 4, !(menumask & 16));
+
+		while (m < OsdGetSize() - 1) OsdWrite(m++);
+		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 8, 0);
+		menustate = MENU_MINIMIG_PRESET2;
+		break;
+
+	case MENU_MINIMIG_PRESET2:
+		if (select)
+		{
+			if (menusub < 8)
+			{
+				switch (menusub)
+				{
+				case 0:
+					minimig_cfg_set(CONFIG_PRESET_A500);
+					break;
+
+				case 1:
+					minimig_cfg_set(CONFIG_PRESET_A600);
+					break;
+
+				case 2:
+					minimig_cfg_set(CONFIG_PRESET_A1200);
+					break;
+
+				case 3:
+					minimig_cfg_set(CONFIG_PRESET_CDTV);
+					break;
+
+				case 4:
+					minimig_cfg_set(CONFIG_PRESET_CD32);
+					break;
+				}
+				minimig_reset();
+				menustate = MENU_MINIMIG_MAIN1;
+				menusub = 0;
+			}
+			else if (menusub == 8)
+			{
+				menustate = MENU_MINIMIG_MAIN1;
+				menusub = 13;
+			}
+		}
+		if (menu || left)
+		{
+			menustate = MENU_MINIMIG_MAIN1;
+			menusub = 13;
 		}
 		break;
 
