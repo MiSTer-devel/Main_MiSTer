@@ -21,16 +21,23 @@
 #define DDR3_BRAM_OFF           0x0000UL
 #define DDR3_BRAM_SIZE          0x8000UL
 
-/* ── CMD: FPGA→ARM doorbell (Avalon 0x1000) ──────────────────────── */
-#define DDR3_CMD_OFF            0x8000UL
-#define DDR3_CMD_PENDING_BIT    (1ULL << 0)
+/* ── CMD ring: FPGA→ARM doorbell (Phase 2 — ring buffer) ──────────
+ * The FPGA never blocks on ARM: each RDP write is pushed into a 256-entry
+ * ring at DDR3_CMD_RING_OFF, then the write index is republished at
+ * DDR3_CMD_WPTR_OFF (see a2065_ddr3_mailbox.v). ARM tracks its own read
+ * index locally and drains whatever is new each poll pass — there is no
+ * ack to write back. Entry format is bit-identical to the old single-slot
+ * doorbell word: bit0=valid (always 1; entries are only ever pushed once
+ * valid), bits[7:1]=RAP, bits[23:8]=RDP data. */
+#define DDR3_CMD_WPTR_OFF       0x8008UL   /* Avalon 0x1001 */
+#define DDR3_CMD_RING_OFF       0x8800UL   /* Avalon 0x1100 */
+#define DDR3_CMD_RING_ENTRIES   256UL
+#define DDR3_CMD_RING_MASK      (DDR3_CMD_RING_ENTRIES - 1)
+#define DDR3_CMD_RING_STRIDE    8UL        /* bytes per 64-bit entry */
 #define DDR3_CMD_RAP_SHIFT      1
 #define DDR3_CMD_RAP_MASK       0x7FULL
 #define DDR3_CMD_DATA_SHIFT     8
 #define DDR3_CMD_DATA_MASK      0xFFFFULL
-
-/* ── CMD_ACK: ARM→FPGA (write 0 to release, Avalon 0x1001) ──────── */
-#define DDR3_CMD_ACK_OFF        0x8008UL
 
 /* ── CSR_SHADOW: ARM→FPGA packed CSR0..CSR3 (Avalon 0x1002) ─────── */
 #define DDR3_CSR_OFF            0x8010UL
@@ -50,8 +57,8 @@
 #define DDR3_MAC_DATA_SHIFT     16
 
 /* ── Avalon equivalents ─────────────────────────────────────────── */
-#define AV_CMD          0x1000
-#define AV_CMD_ACK      0x1001
+#define AV_CMD_WPTR     0x1001
+#define AV_CMD_RING     0x1100
 #define AV_CSR          0x1002
 #define AV_INT          0x1003
 #define AV_RAP_MIRROR   0x1004
