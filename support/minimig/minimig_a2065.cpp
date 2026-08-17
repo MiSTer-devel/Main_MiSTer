@@ -87,6 +87,11 @@ static char *a2065_cfg_name(int num)
 static volatile uint8_t *map = NULL;
 static int card_up = 0;
 
+// Local read position in the FPGA's CMD ring (see minimig_a2065_ddr3.h). The
+// FPGA's write index only ever advances; comparing the two as unsigned
+// 32-bit counters is wrap-safe without needing to touch the ring itself.
+static uint32_t cmd_rd_idx = 0;
+
 static const char *iface_name = "eth0";
 static const char *parent_name = "eth0";
 static int mode = 0;
@@ -200,6 +205,26 @@ static uint64_t rd64(unsigned long off)
 static void wr64(unsigned long off, uint64_t val)
 {
 	memcpy((void *)(map + off), &val, 8);
+}
+
+// Current FPGA write index into the CMD ring. Free-running 32-bit counter,
+// only ever incremented by the FPGA — never wraps in practice.
+static uint32_t rd_wptr(void)
+{
+	return (uint32_t)rd64(DDR3_CMD_WPTR_OFF);
+}
+
+// One ring entry: bit0=valid, bits[7:1]=RAP, bits[23:8]=RDP data (see
+// minimig_a2065_ddr3.h). idx is masked to the ring size, not bounds-checked
+// against wptr — callers are responsible for only reading entries the FPGA
+// has actually published.
+static void ring_read_entry(uint32_t idx, uint8_t *rap_out, uint16_t *data_out)
+{
+	unsigned long off = DDR3_CMD_RING_OFF
+	                   + (unsigned long)(idx & DDR3_CMD_RING_MASK) * DDR3_CMD_RING_STRIDE;
+	uint64_t entry = rd64(off);
+	*rap_out  = (uint8_t)((entry >> DDR3_CMD_RAP_SHIFT) & DDR3_CMD_RAP_MASK);
+	*data_out = (uint16_t)((entry >> DDR3_CMD_DATA_SHIFT) & DDR3_CMD_DATA_MASK);
 }
 
 static void push_csr_shadow(void)
@@ -426,7 +451,9 @@ static int a2065_open(void)
 
 	boardram = map + DDR3_BRAM_OFF;
 
-	wr64(DDR3_CMD_OFF, 0);
+	// Start at the ring's current head — do not replay whatever the FPGA
+	// posted before the daemon was ready to read it.
+	cmd_rd_idx = rd_wptr();
 	wr64(DDR3_CSR_OFF, 0);
 	wr64(DDR3_INT_OFF, 0);
 
@@ -468,28 +495,49 @@ static int a2065_open(void)
 
 // One pass of the card's work, called from Main's poll loop.
 //
-// Two jobs: drain any register write the Amiga has posted through the doorbell,
-// and move received frames into its ring. Both are bounded and non-blocking, so
-// the cost per call stays small and predictable.
+// Two jobs: drain any register writes the Amiga has posted through the ring
+// doorbell, and move received frames into its ring. Both are bounded and
+// non-blocking, so the cost per call stays small and predictable.
 //
-// A register write is DTACK-stretched by the FPGA until the doorbell is
-// drained, so the Amiga is held off for as long as it takes to get back here.
-// That is the reason this must not sit behind anything slow.
+// The FPGA never blocks on Main for the doorbell itself (the ring push and
+// its DTACK release are self-contained on the FPGA side — see
+// a2065_ddr3_mailbox.v), but a queued register write only takes effect once
+// this drains it, so CSR state and IDON/interrupt timing still depend on
+// getting back here promptly.
+// One ring's worth per pass. The ring is 256 entries deep — comfortably
+// more than the 68k can post between two poll passes (see the sizing note
+// in a2065_ddr3_mailbox.v) — so this stays bounded without ever falling
+// permanently behind.
+#define CMD_DRAIN_MAX DDR3_CMD_RING_ENTRIES
+
 void a2065_poll(void)
 {
 	if (!card_up) return;
 
-	uint64_t cmd = rd64(DDR3_CMD_OFF);
-	if (cmd & DDR3_CMD_PENDING_BIT)
+	uint32_t wptr = rd_wptr();
+	uint32_t pending = wptr - cmd_rd_idx;   // unsigned subtraction, wrap-safe
+
+	if (pending)
 	{
-		uint8_t  rap_v = (cmd >> DDR3_CMD_RAP_SHIFT) & DDR3_CMD_RAP_MASK;
-		uint16_t data  = (cmd >> DDR3_CMD_DATA_SHIFT) & DDR3_CMD_DATA_MASK;
+		if (pending > CMD_DRAIN_MAX)
+		{
+			// Fell behind by more than the ring holds — the oldest entries
+			// are already overwritten on the FPGA side. Jump to the oldest
+			// one still valid rather than replay stale slots.
+			cmd_rd_idx = wptr - CMD_DRAIN_MAX;
+			pending = CMD_DRAIN_MAX;
+		}
 
-		chip_wput(A2065_RAP_OFF, rap_v);
-		chip_wput(A2065_RDP_OFF, data);
+		for (uint32_t n = 0; n < pending; n++)
+		{
+			uint8_t  rap_v;
+			uint16_t data;
+			ring_read_entry(cmd_rd_idx, &rap_v, &data);
+			cmd_rd_idx++;
 
-		wr64(DDR3_CMD_OFF, 0);
-		__sync_synchronize();
+			chip_wput(A2065_RAP_OFF, rap_v);
+			chip_wput(A2065_RDP_OFF, data);
+		}
 
 		push_csr_shadow();
 		update_int_state();
@@ -555,7 +603,10 @@ void a2065_start(void)
 		}
 	}
 
-	wr64(DDR3_CMD_OFF, 0);
+	// Resync to wherever the FPGA's ring head is right now — a core reset
+	// re-inits the mailbox on its side too, so an old rd_idx would either
+	// stall (behind a wptr that just reset to 0) or replay stale entries.
+	cmd_rd_idx = rd_wptr();
 	wr64(DDR3_CSR_OFF, 0);
 	wr64(DDR3_INT_OFF, 0);
 
