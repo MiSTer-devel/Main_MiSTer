@@ -148,7 +148,7 @@ const char *a2065_iface_msg(int mode)
 	case A2065_ETH1:    return "eth1";
 	case A2065_MACVLAN: return "macvlan";
 	case A2065_TAP:     return "tap0";
-	default:            return "OFF";
+	default:            return "Off";
 	}
 }
 

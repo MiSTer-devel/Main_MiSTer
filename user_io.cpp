@@ -226,7 +226,15 @@ char is_menu()
 static int is_x86_type = 0;
 char is_x86()
 {
-	if (!is_x86_type) is_x86_type = strcasecmp(orig_name, "AO486") ? 2 : 1;
+	if (!is_x86_type)
+	{
+		if (!strcasecmp(orig_name, "AO486") ||
+		    !strcasecmp(orig_name, "PC110")
+		   )
+			is_x86_type = 1;
+		else
+			is_x86_type = 2;
+	}
 	return (is_x86_type == 1);
 }
 
@@ -1699,7 +1707,7 @@ void user_io_init(const char *path, const char *xml)
 		if (xml && isXmlName(xml) == 1) arcade_check_error();
 
 		char cfg_errs[512];
-		if (cfg_check_errors(cfg_errs, sizeof(cfg_errs)))
+		if (cfg.sanity_check && cfg_check_errors(cfg_errs, sizeof(cfg_errs)))
 		{
 			Info(cfg_errs, 5000);
 			sleep(5);

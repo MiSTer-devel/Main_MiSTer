@@ -56,6 +56,10 @@ static void cdtv_diag(const char *fmt, ...)
 #define CDTV_NVRAM_FILE_BYTES 32768
 #define CDTV_NVRAM_DIR        "/media/fat/saves/Minimig"
 
+#define CDTV_CARD_ADDR        0xF8C0
+#define CDTV_CARD_BYTES       8192
+#define CDTV_STATUS_CARD_DIRTY (1u << 13)
+
 static int cr511_command_length(uint8_t op)
 {
 	switch (op) {
@@ -103,23 +107,14 @@ static bool           stch_wait_ack = false;
 #define STCH_PLAYEND_BUDGET    400
 #define STCH_PLAYEND_PERIOD_MS 60
 
+static bool           stch_playstart_pending = false;
+
 static inline bool cdtv_active(void)
 {
-	return (minimig_config.chipset & CONFIG_CDTV) != 0;
+	return (minimig_config.cdtv_drive.cfg != 0);
 }
 
-static drive_t *cdtv_find_drive(void)
-{
-	if (cdtv_drive.cd && (cdtv_drive.chd_f || cdtv_drive.f)) return &cdtv_drive;
-
-	for (int p = 0; p < 2; p++) {
-		for (int d = 0; d < 2; d++) {
-			drive_t *drv = &ide_inst[p].drive[d];
-			if (drv->cd && (drv->chd_f || drv->f)) return drv;
-		}
-	}
-	return NULL;
-}
+#define cdtv_find_drive() minimig_cd_drive_get(1)
 
 static uint16_t cdtv_read_status(void)
 {
@@ -572,6 +567,7 @@ static int cmd_play(const uint8_t *cmd, uint8_t *out)
 
 	cd_playing = 1;
 	cd_motor   = 1;
+	stch_playstart_pending = true;
 	out[0] = 0x42;
 	return 1;
 }
@@ -801,6 +797,9 @@ static bool cd_save_load_pending     = false;
 static bool cd_save_dirty_observed   = false;
 static bool cd_save_load_failed      = false;
 
+static char card_save_path_active[256] = {0};
+static bool card_save_dirty_observed   = false;
+
 static uint32_t nvr_verify_due_at_ms = 0;
 static char     nvr_verify_path[256] = {0};
 
@@ -819,6 +818,13 @@ static void cdtv_compute_save_path(const char *cd_path, char *out, size_t outsz)
 	const char *base = strrchr(cd_path, '/');
 	base = base ? base + 1 : cd_path;
 	snprintf(out, outsz, "%s/cdtv-%016" PRIx64 ".nvr", CDTV_NVRAM_DIR, fnv1a_64(base));
+}
+
+static void cdtv_compute_card_path(const char *cd_path, char *out, size_t outsz)
+{
+	const char *base = strrchr(cd_path, '/');
+	base = base ? base + 1 : cd_path;
+	snprintf(out, outsz, "%s/cdtv-%016" PRIx64 ".card", CDTV_NVRAM_DIR, fnv1a_64(base));
 }
 
 static void cdtv_nvram_dump(uint8_t *out)
@@ -979,6 +985,88 @@ static bool cdtv_nvram_save_to_path(const char *path)
 	return true;
 }
 
+static void cdtv_card_dump(uint8_t *out)
+{
+	EnableIO();
+	spi8(UIO_DMA_READ);
+	spi32_w(CDTV_CARD_ADDR);
+	for (int i = 0; i < CDTV_CARD_BYTES; i++) out[i] = (uint8_t)spi_w(0);
+	DisableIO();
+}
+
+static void cdtv_card_upload(const uint8_t *buf)
+{
+	static uint16_t words[CDTV_CARD_BYTES / 2];
+	memcpy(words, buf, CDTV_CARD_BYTES);
+
+	EnableIO();
+	fpga_spi_fast(UIO_DMA_WRITE);
+	fpga_spi_fast(CDTV_CARD_ADDR);
+	fpga_spi_fast(0);
+	fpga_spi_fast_block_write(words, CDTV_CARD_BYTES / 2);
+	DisableIO();
+}
+
+static void cdtv_card_load_from_path(const char *path)
+{
+	static uint8_t card[CDTV_CARD_BYTES];
+	memset(card, 0, sizeof(card));
+
+	FILE *f = path[0] ? fopen(path, "rb") : NULL;
+	if (f) {
+		size_t got = fread(card, 1, CDTV_CARD_BYTES, f);
+		fclose(f);
+		cdtv_dbg("CARD loaded %u/%d bytes from %s", (unsigned)got, CDTV_CARD_BYTES, path);
+	}
+	else {
+		cdtv_dbg("CARD blank (no file at %s)", path[0] ? path : "(none)");
+	}
+
+	cdtv_card_upload(card);
+}
+
+static bool cdtv_card_save_to_path(const char *path)
+{
+	static uint8_t buf[CDTV_CARD_BYTES];
+	cdtv_card_dump(buf);
+
+	if (FILE *cur = fopen(path, "rb")) {
+		static uint8_t disk_buf[CDTV_CARD_BYTES];
+		size_t n = fread(disk_buf, 1, CDTV_CARD_BYTES, cur);
+		fclose(cur);
+		if (n == CDTV_CARD_BYTES && !memcmp(disk_buf, buf, CDTV_CARD_BYTES)) {
+			card_save_dirty_observed = false;
+			return true;
+		}
+	}
+
+	if (mkdir(CDTV_NVRAM_DIR, 0755) != 0 && errno != EEXIST) {
+		cdtv_dbg("CARD mkdir(%s) failed: errno=%d", CDTV_NVRAM_DIR, errno);
+		return false;
+	}
+
+	FILE *f = fopen(path, "wb");
+	if (!f) {
+		cdtv_dbg("CARD fopen(%s) failed: errno=%d", path, errno);
+		return false;
+	}
+
+	size_t wrote = fwrite(buf, 1, CDTV_CARD_BYTES, f);
+	int flush = fflush(f);
+	int fsy   = fsync(fileno(f));
+	int cls   = fclose(f);
+
+	if (wrote != CDTV_CARD_BYTES || flush != 0 || fsy != 0 || cls != 0) {
+		cdtv_dbg("CARD save FAILED %s wrote=%u flush=%d fsync=%d close=%d errno=%d",
+		         path, (unsigned)wrote, flush, fsy, cls, errno);
+		return false;
+	}
+
+	card_save_dirty_observed = false;
+	cdtv_dbg("CARD saved %d bytes to %s", CDTV_CARD_BYTES, path);
+	return true;
+}
+
 static bool cdtv_nvram_save_to_disk(void)
 {
 	if (!cd_save_path_active[0]) return false;
@@ -1001,6 +1089,19 @@ void cdtv_cd_set_cd_path(const char *path)
 
 	char new_save[sizeof(cd_save_path_active)] = {0};
 	if (path[0]) cdtv_compute_save_path(path, new_save, sizeof(new_save));
+
+	char new_card[sizeof(card_save_path_active)] = {0};
+	if (path[0]) cdtv_compute_card_path(path, new_card, sizeof(new_card));
+
+	if (strcmp(new_card, card_save_path_active) != 0) {
+		if (card_save_path_active[0] && card_save_dirty_observed) {
+			cdtv_dbg("set_cd_path: flushing old card %s before swap", card_save_path_active);
+			cdtv_card_save_to_path(card_save_path_active);
+		}
+		strncpy(card_save_path_active, new_card, sizeof(card_save_path_active) - 1);
+		card_save_path_active[sizeof(card_save_path_active) - 1] = 0;
+		card_save_dirty_observed = false;
+	}
 
 	if (strcmp(new_save, cd_save_path_active) != 0) {
 		if (cd_save_path_active[0] && cd_save_dirty_observed) {
@@ -1057,8 +1158,9 @@ void cdtv_cd_init(void)
 		stch_next_ms = GetTimer(0);
 	}
 
-	cd_save_dirty_observed = false;
-	cd_save_load_failed    = false;
+	cd_save_dirty_observed   = false;
+	cd_save_load_failed      = false;
+	card_save_dirty_observed = false;
 	if (cd_save_path_active[0]) cd_save_load_pending = true;
 
 	cdtv_dbg("init media=%d isready=%d stch_retries=%d", cd_media, cd_isready, stch_retries);
@@ -1071,6 +1173,7 @@ void cdtv_cd_poll(void)
 	if (cd_save_load_pending) {
 		cd_save_load_pending = false;
 		if (cd_save_path_active[0]) cdtv_nvram_load_from_path(cd_save_path_active);
+		cdtv_card_load_from_path(card_save_path_active);
 	}
 
 	cdtv_nvram_verify_load_pending();
@@ -1084,10 +1187,24 @@ void cdtv_cd_poll(void)
 
 		if (nvr_dirty_now) cd_save_dirty_observed = true;
 
+		const bool card_dirty_now = (cdtv_read_status() & CDTV_STATUS_CARD_DIRTY) != 0;
+		if (card_dirty_now) card_save_dirty_observed = true;
+
 		if (osd_open_edge && cd_save_dirty_observed) {
 			cdtv_dbg("NVR flush: OSD opened with dirty pending");
 			cdtv_nvram_save_to_disk();
 		}
+
+		if (osd_open_edge && card_save_dirty_observed && card_save_path_active[0]) {
+			cdtv_dbg("CARD flush: OSD opened with dirty pending");
+			cdtv_card_save_to_path(card_save_path_active);
+		}
+	}
+
+	if (stch_playstart_pending) {
+		stch_playstart_pending = false;
+		cdtv_dbg("STCH play-start (playing=%d motor=%d)", cd_playing, cd_motor);
+		cdtv_inject_stch();
 	}
 
 	if (stch_retries > 0 && CheckTimer(stch_next_ms)) {

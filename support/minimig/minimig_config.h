@@ -3,6 +3,7 @@
 #define __MINIMIG_CONFIG_H__
 
 #include "../../file_io.h"
+#include "../../ide.h"
 
 #define CONFIG_TURBO     1
 #define CONFIG_NTSC      2
@@ -13,6 +14,12 @@
 
 #define CONFIG_FLOPPY1X  0
 #define CONFIG_FLOPPY2X  1
+
+#define CONFIG_PRESET_CD32  1
+#define CONFIG_PRESET_CDTV  2
+#define CONFIG_PRESET_A500  3
+#define CONFIG_PRESET_A600  4
+#define CONFIG_PRESET_A1200 5
 
 extern const char *config_memory_chip_msg[];
 extern const char *config_memory_slow_msg[];
@@ -64,13 +71,16 @@ typedef struct
 
 extern mm_configTYPE minimig_config;
 
+void minimig_cfg_set(int preset);
+bool minimig_cfg_available(int preset);
+
 int minimig_cfg_load(int num);
 int minimig_cfg_save(int num);
 const char* minimig_get_cfg_info(int num, int label);
 
 void minimig_reset();
-void minimig_set_kickstart(char *name);
-void minimig_set_extrom(char *name);
+void minimig_set_kickstart(const char *name);
+void minimig_set_extrom(const char *name);
 const char* minimig_get_extrom();
 
 void minimig_set_adjust(char n);
@@ -81,11 +91,15 @@ void minimig_ConfigVideo(unsigned char scanlines);
 void minimig_ConfigAudio(unsigned char audio);
 void minimig_ConfigMemory(unsigned char memory);
 void minimig_ConfigCPU(unsigned char cpu);
-void minimig_ConfigChipset(unsigned char chipset);
+void minimig_ConfigChipset(mm_configTYPE *config);
 void minimig_ConfigFloppy(unsigned char drives, unsigned char speed);
 void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask);
 
 void minimig_set_extcfg(unsigned int ext_cfg);
 unsigned int minimig_get_extcfg();
+
+// slot: 0 = cd32_drive, 1 = cdtv_drive
+int minimig_cd_drive_open(int slot, const char *filename);
+drive_t* minimig_cd_drive_get(int slot);
 
 #endif
