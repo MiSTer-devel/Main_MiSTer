@@ -639,8 +639,6 @@ void cfg_parse()
 		}
 	}
 
-	if (cfg.direct_video) cfg.fx_direct = 0; // mutually exclusive
-
 	if (cfg.fx_direct)
 	{
 		// Forced video options for FX Direct frame
@@ -648,6 +646,7 @@ void cfg_parse()
 		cfg.video_conf_pal[0] = 0;
 		cfg.video_conf_ntsc[0] = 0;
 		cfg.vsync_adjust = 2;
+		cfg.direct_video = 0;
 		cfg.vrr_mode = 0;
 		cfg.hdr = 0;
 	}
