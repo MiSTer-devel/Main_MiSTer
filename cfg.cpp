@@ -72,6 +72,7 @@ static const ini_var_t ini_vars[] =
 	{ "FB_TERMINAL", (void*)(&(cfg.fb_terminal)), UINT8, 0, 1 },
 	{ "OSD_TIMEOUT", (void*)(&(cfg.osd_timeout)), INT16, 0, 3600 },
 	{ "DIRECT_VIDEO", (void*)(&(cfg.direct_video)), UINT8, 0, 2 },
+	{ "FX_DIRECT", (void*)(&(cfg.fx_direct)), UINT8, 0, 1 },
 	{ "OSD_ROTATE", (void*)(&(cfg.osd_rotate)), UINT8, 0, 2 },
 	{ "DEADZONE", (void*)(&(cfg.controller_deadzone)), STRINGARR, sizeof(cfg.controller_deadzone) / sizeof(*cfg.controller_deadzone), sizeof(*cfg.controller_deadzone) },
 	{ "GAMEPAD_DEFAULTS", (void*)(&(cfg.gamepad_defaults)), UINT8, 0, 1 },
@@ -638,6 +639,15 @@ void cfg_parse()
 		}
 	}
 
+	if (cfg.direct_video) cfg.fx_direct = 0; // mutually exclusive
+
+	if (cfg.fx_direct)
+	{
+		// vrr owns HDMI spare packet 0; gamma, shadow mask and filters are
+		// forced off where they are applied instead.
+		cfg.vrr_mode = 0;
+		cfg.hdr = 0;
+	}
 }
 
 bool cfg_has_video_sections()

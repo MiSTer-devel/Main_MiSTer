@@ -198,6 +198,19 @@ static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
 
+// FX Direct 1080p frame
+static bool fx_direct_config_enabled()
+{
+	return cfg.fx_direct != 0;
+}
+
+static uint8_t fx_last_packet[31];
+
+static void fx_packet_reset()
+{
+	memset(fx_last_packet, 0, sizeof(fx_last_packet));
+}
+
 static bool supports_pr()
 {
 	static uint16_t video_version = 0xffff;
@@ -559,7 +572,7 @@ static void set_vfilter(int force)
 	last_flags = flt_flags;
 	printf("video_set_filter: flt_flags=%d\n", flt_flags);
 
-	spi8(scaler_flt[0].mode);
+	spi8(fx_direct_config_enabled() ? 0 : scaler_flt[0].mode);
 	DisableIO();
 
 	int vert_flt;
@@ -695,6 +708,8 @@ static char has_gamma = 0; // set in video_init
 static void setGamma()
 {
 	PROFILE_FUNCTION();
+
+	if (fx_direct_config_enabled()) return;
 
 	if (!memcmp(active_gamma_cfg, gamma_cfg, sizeof(gamma_cfg))) return;
 
@@ -834,7 +849,7 @@ static void setShadowMask()
 	}
 
 	has_shadow_mask = 1;
-	switch (video_get_shadow_mask_mode())
+	switch (fx_direct_config_enabled() ? SM_MODE_NONE : video_get_shadow_mask_mode())
 	{
 		default: spi_w(SM_FLAG(0)); break;
 		case SM_MODE_1X: spi_w(SM_FLAG(SM_FLAG_ENABLED)); break;
@@ -1413,6 +1428,8 @@ int hdmi_has_int()
 
 static void hdmi_config_init()
 {
+	fx_packet_reset(); // reg 0x40=0 below clears the packet enables
+
 	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
 	uint8_t int0 = hdmi_has_int() ? 0xC0 : 0x00; // HPD + SENSE
 
@@ -2591,7 +2608,13 @@ static void video_mode_load(bool keep_direct_video_auto = false)
 		hdmi_config_set_csc();
 	}
 
-	if (cfg.direct_video && cfg.vsync_adjust)
+	if (fx_direct_config_enabled())
+	{
+		// also selects the low latency single framebuffer path (lowlat -> ascal MODE[3])
+		if (cfg.vsync_adjust != 2) printf("FX-Direct: forcing vsync_adjust=2.\n");
+		cfg.vsync_adjust = 2;
+	}
+	else if (cfg.direct_video && cfg.vsync_adjust)
 	{
 		printf("Disabling vsync_adjust because of enabled direct video.\n");
 		cfg.vsync_adjust = 0;
@@ -2607,6 +2630,23 @@ static void video_mode_load(bool keep_direct_video_auto = false)
 		v_def.item[0] = mode;
 		for (int i = 0; i < 8; i++) v_def.item[i + 1] = tvmodes[mode].vpar[i];
 		setPLL(tvmodes[mode].Fpix, &v_def);
+
+		vmode_def = 1;
+		vmode_pal = 0;
+		vmode_ntsc = 0;
+	}
+	else if (fx_direct_config_enabled())
+	{
+		// The container is fixed: EDID or ini modes give the scaler an undecodable stream.
+		printf("FX-Direct: forcing HDMI video mode to 1920x1080p60.\n");
+		uint fxmode = 8;
+		memset(&v_def, 0, sizeof(v_def));
+		v_def.item[0] = fxmode;
+		for (int i = 0; i < 8; i++) v_def.item[i + 1] = vmodes[fxmode].vpar[i];
+		v_def.param.vic = vmodes[fxmode].vic_mode;
+		v_def.param.pr = vmodes[fxmode].pr;
+		v_def.param.rb = 1;
+		setPLL(vmodes[fxmode].Fpix, &v_def);
 
 		vmode_def = 1;
 		vmode_pal = 0;
@@ -2912,6 +2952,9 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 
 static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 {
+	// The transport is fixed; never recompute it from the source resolution.
+	if (fx_direct_config_enabled()) return;
+
 	if (cfg.vscale_mode < 4) return;
 
 	int w = vm->param.pr ? vm->param.hact * 2 : vm->param.hact;
@@ -2979,8 +3022,111 @@ static void video_resolution_adjust(const VideoInfo *vi, vmode_custom_t *vm)
 	setPLL(vm->Fpix, vm);
 }
 
+struct fx_layout_t
+{
+	uint16_t w, h;      // scaled window size
+	uint16_t x, y;      // window origin inside the output frame
+	uint8_t  scale;     // integer factor, identical for both axes
+};
+
+// Largest square integer scale of the source that still fits the output frame.
+static bool fx_get_layout(const VideoInfo *vi, const vmode_custom_t *vm, fx_layout_t *l)
+{
+	memset(l, 0, sizeof(*l));
+	if (!fx_direct_config_enabled() || !vi || !vm) return false;
+
+	const uint32_t sw = vi->fb_en ? vi->fb_width  : vi->rotated ? vi->height : vi->width;
+	const uint32_t sh = vi->fb_en ? vi->fb_height : vi->rotated ? vi->width  : vi->height;
+	const uint32_t ow = vm->item[1], oh = vm->item[5];
+	if (!sw || !sh || !ow || !oh) return false;
+
+	uint32_t k = ow / sw;
+	if ((oh / sh) < k) k = oh / sh;
+	if (k < 2 || k > 255) return false;
+
+	l->scale = (uint8_t)k;
+	l->w = (uint16_t)(sw * k);
+	l->h = (uint16_t)(sh * k);
+	// Must match the centering done in sys_top.v, which uses a truncating shift.
+	l->x = (uint16_t)((ow - l->w) >> 1);
+	l->y = (uint16_t)((oh - l->h) >> 1);
+	return true;
+}
+
+static void fx_put16(uint8_t *d, int idx, uint16_t v)
+{
+	d[idx] = (uint8_t)v;
+	d[idx + 1] = (uint8_t)(v >> 8);
+}
+
+// Vendor InfoFrame describing the window, on HDMI spare packet 0.
+static void fx_packet_update(const VideoInfo *vi, const fx_layout_t *l)
+{
+	uint8_t d[31] = { 0x81, 0x01, 0x1B, 0x00, 0x49, 0x31, 0xF4, 0x02 };
+
+	const bool have_ar = vi->arx && vi->ary;
+	// Interlaced (bit 0) stays clear: ascal has already deinterlaced, and claiming
+	// interlace without field control pixels is undefined for the sink.
+	d[8] = (uint8_t)((vi->rotated ? 0x02 : 0) | (have_ar ? 0x08 : 0));
+
+	fx_put16(d, 9, l->y);
+	fx_put16(d, 11, (uint16_t)(l->y + l->h));
+	fx_put16(d, 13, l->x);
+	fx_put16(d, 15, (uint16_t)(l->x + l->w));
+
+	d[17] = l->scale;
+	d[18] = l->scale;
+
+	fx_put16(d, 19, (uint16_t)(have_ar ? vi->arx : l->w));
+	fx_put16(d, 21, (uint16_t)(have_ar ? vi->ary : l->h));
+
+	uint8_t sum = 0;
+	for (int i = 0; i < (int)sizeof(d); i++) sum = (uint8_t)(sum + d[i]);
+	d[3] = (uint8_t)(-sum);
+
+	// Sending is 37 i2c transactions, and this is reached from a poll.
+	if (!memcmp(d, fx_last_packet, sizeof(d))) return;
+	memcpy(fx_last_packet, d, sizeof(d));
+	hdmi_spare_config(0, d);
+}
+
+// Full frame at 1:1, so the scaler stops cropping to a window that is no longer shown.
+static void fx_menu_packet_update(const vmode_custom_t *vm)
+{
+	if (!vm || !vm->item[1] || !vm->item[5]) return;
+
+	fx_layout_t l = {};
+	l.w = (uint16_t)vm->item[1];
+	l.h = (uint16_t)vm->item[5];
+	l.scale = 1;
+
+	VideoInfo mvi = {};
+	fx_packet_update(&mvi, &l);
+}
+
 static void video_scaling_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 {
+	if (fx_direct_config_enabled())
+	{
+		fx_layout_t l;
+		// The OSD is drawn after the scaler, so anything outside the window is cropped.
+		if (!menu_present() && fx_get_layout(vi, vm, &l))
+		{
+			printf("FX-Direct: %ux%u x%u window at %u,%u\n", l.w, l.h, l.scale, l.x, l.y);
+			spi_uio_cmd16(UIO_SETHEIGHT, l.h);
+			spi_uio_cmd16(UIO_SETWIDTH, 0x8000 | l.w); // bit 15 = FREESCALE
+			fx_packet_update(vi, &l);
+		}
+		else
+		{
+			spi_uio_cmd16(UIO_SETHEIGHT, 0);
+			spi_uio_cmd16(UIO_SETWIDTH, 0);
+			fx_menu_packet_update(vm);
+		}
+		minimig_set_adjust(2);
+		return;
+	}
+
 	if (cfg.vscale_mode >= 4)
 	{
 		spi_uio_cmd16(UIO_SETHEIGHT, 0);
@@ -3105,7 +3251,7 @@ static uint64_t calc_frame_locked_phase(uint64_t fsc_num, uint64_t fsc_den,
 		fsc_den * 100000000ULL
 	);
 
-	// Calculate round(frame_cycles * 2^40 / frame_clocks). 
+	// Calculate round(frame_cycles * 2^40 / frame_clocks).
 	// The whole-number quotient contributes only
 	// multiples of 2^40, which disappear under the 40-bit mask.
 	const uint64_t frame_remainder = frame_cycles % frame_clocks;
@@ -3322,6 +3468,10 @@ void video_mode_adjust(bool force)
 	static int menu = 0;
 	int menu_now = menu_present();
 	if(menu != menu_now && cfg.spd_quirk < 2) spd_config_update();
+	if(menu != menu_now && fx_direct_config_enabled() && !is_menu())
+	{
+		video_scaling_adjust(&current_video_info, &v_cur);
+	}
 	menu = menu_now;
 
 	if (vid_changed && !is_menu())
@@ -3357,13 +3507,13 @@ void video_mode_adjust(bool force)
 				}
 
 				float hz = 100000000.0f / vtime;
-				if (cfg.refresh_min && hz < cfg.refresh_min)
+				if (!fx_direct_config_enabled() && cfg.refresh_min && hz < cfg.refresh_min)
 				{
 					printf("Estimated frame rate (%f Hz) is less than REFRESH_MIN(%f Hz). Canceling auto-adjust.\n", hz, cfg.refresh_min);
 					Fpix = 0;
 				}
 
-				if (cfg.refresh_max && hz > cfg.refresh_max)
+				if (!fx_direct_config_enabled() && cfg.refresh_max && hz > cfg.refresh_max)
 				{
 					printf("Estimated frame rate (%f Hz) is more than REFRESH_MAX(%f Hz). Canceling auto-adjust.\n", hz, cfg.refresh_max);
 					Fpix = 0;
@@ -3403,6 +3553,8 @@ void video_mode_adjust(bool force)
 	{
 		set_vfilter(0); // update filters if flags have changed
 	}
+
+	if (fx_direct_config_enabled() && is_menu()) fx_menu_packet_update(&v_cur);
 }
 
 static void fb_write_module_params()
@@ -4439,4 +4591,3 @@ int video_get_rotated()
 {
   return current_video_info.rotated;
 }
-
