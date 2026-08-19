@@ -643,8 +643,11 @@ void cfg_parse()
 
 	if (cfg.fx_direct)
 	{
-		// vrr owns HDMI spare packet 0; gamma, shadow mask and filters are
-		// forced off where they are applied instead.
+		// Forced video options for FX Direct frame
+		strcpy(cfg.video_conf, "8");
+		cfg.video_conf_pal[0] = 0;
+		cfg.video_conf_ntsc[0] = 0;
+		cfg.vsync_adjust = 2;
 		cfg.vrr_mode = 0;
 		cfg.hdr = 0;
 	}

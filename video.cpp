@@ -2608,13 +2608,7 @@ static void video_mode_load(bool keep_direct_video_auto = false)
 		hdmi_config_set_csc();
 	}
 
-	if (fx_direct_config_enabled())
-	{
-		// also selects the low latency single framebuffer path (lowlat -> ascal MODE[3])
-		if (cfg.vsync_adjust != 2) printf("FX-Direct: forcing vsync_adjust=2.\n");
-		cfg.vsync_adjust = 2;
-	}
-	else if (cfg.direct_video && cfg.vsync_adjust)
+	if (cfg.direct_video && cfg.vsync_adjust)
 	{
 		printf("Disabling vsync_adjust because of enabled direct video.\n");
 		cfg.vsync_adjust = 0;
@@ -2630,23 +2624,6 @@ static void video_mode_load(bool keep_direct_video_auto = false)
 		v_def.item[0] = mode;
 		for (int i = 0; i < 8; i++) v_def.item[i + 1] = tvmodes[mode].vpar[i];
 		setPLL(tvmodes[mode].Fpix, &v_def);
-
-		vmode_def = 1;
-		vmode_pal = 0;
-		vmode_ntsc = 0;
-	}
-	else if (fx_direct_config_enabled())
-	{
-		// The container is fixed: EDID or ini modes give the scaler an undecodable stream.
-		printf("FX-Direct: forcing HDMI video mode to 1920x1080p60.\n");
-		uint fxmode = 8;
-		memset(&v_def, 0, sizeof(v_def));
-		v_def.item[0] = fxmode;
-		for (int i = 0; i < 8; i++) v_def.item[i + 1] = vmodes[fxmode].vpar[i];
-		v_def.param.vic = vmodes[fxmode].vic_mode;
-		v_def.param.pr = vmodes[fxmode].pr;
-		v_def.param.rb = 1;
-		setPLL(vmodes[fxmode].Fpix, &v_def);
 
 		vmode_def = 1;
 		vmode_pal = 0;
