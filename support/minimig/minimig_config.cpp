@@ -369,10 +369,7 @@ static char* GetConfigurationName(int num, int chk)
 
 int minimig_cfg_save(int num)
 {
-	// The A2065 interface selection rides in core status bits, which Minimig
-	// excludes from the generic status-word config load, so it is stored
-	// beside the config slot rather than inside the size-checked blob.
-	a2065_cfg_save(num);
+	minimig_config.a2065_mode = a2065_cfg_get();
 	return FileSaveConfig(GetConfigurationName(num, 0), &minimig_config, sizeof(minimig_config));
 }
 
@@ -516,26 +513,7 @@ int minimig_cfg_load(int num)
 	{
 		BootPrint("Opened configuration file\n");
 		printf("Configuration file size: %s, %d\n", filename, size);
-		if (size == sizeof(minimig_config) || size == 5152 || size == 5216)
-		{
-			static mm_configTYPE tmpconf = {};
-			memset((void*)&tmpconf, 0, sizeof(tmpconf));
-			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
-			{
-				// check file id and version
-				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
-					// A few more sanity checks...
-					if (tmpconf.floppy.drives <= 4) {
-						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(minimig_config));
-						result = 1; // We successfully loaded the config.
-					}
-					else BootPrint("Config file sanity check failed!\n");
-				}
-				else BootPrint("Wrong configuration file format!\n");
-			}
-			else printf("Cannot load configuration file\n");
-		}
-		else if (size == sizeof(configTYPE_old))
+		if (size == sizeof(configTYPE_old))
 		{
 			static configTYPE_old tmpconf;
 			printf("Old Configuration file.\n");
@@ -559,13 +537,33 @@ int minimig_cfg_load(int num)
 			}
 			else printf("Cannot load configuration file\n");
 		}
+		else if ((size_t)size <= sizeof(minimig_config))
+		{
+			static mm_configTYPE tmpconf = {};
+			memset((void*)&tmpconf, 0, sizeof(tmpconf));
+			if (FileLoadConfig(filename, &tmpconf, sizeof(tmpconf)))
+			{
+				// check file id and version
+				if (strncmp(tmpconf.id, config_id, sizeof(minimig_config.id)) == 0) {
+					// A few more sanity checks...
+					if (tmpconf.floppy.drives <= 4) {
+						memcpy((void*)&minimig_config, (void*)&tmpconf, sizeof(minimig_config));
+						result = 1; // We successfully loaded the config.
+					}
+					else BootPrint("Config file sanity check failed!\n");
+				}
+				else BootPrint("Wrong configuration file format!\n");
+			}
+			else printf("Cannot load configuration file\n");
+		}
 		else printf("Wrong configuration file size: %d (expected: %u)\n", size, sizeof(minimig_config));
 	}
+
 	if (!result) {
 		BootPrint("Can not open configuration file!\n");
 		BootPrint("Setting config defaults\n");
 		// set default configuration
-		memset((void*)&minimig_config, 0, sizeof(minimig_config));  // Finally found default config bug - params were reversed!
+		memset((void*)&minimig_config, 0, sizeof(minimig_config));
 		memcpy(minimig_config.id, config_id, sizeof(minimig_config.id));
 		snprintf(minimig_config.kickstart, sizeof(minimig_config.kickstart) - 1, "%s/%s", HomeDir(), "KICK.ROM");
 		minimig_config.memory = 0x11;
@@ -589,9 +587,7 @@ int minimig_cfg_load(int num)
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
 
-	// Restore the A2065 interface selection for this slot (kept in core status
-	// bits, saved beside the config blob by minimig_cfg_save()).
-	a2065_cfg_load(num);
+	a2065_cfg_set(minimig_config.a2065_mode);
 
 	for (int i = 0; i < 4; i++)
 	{

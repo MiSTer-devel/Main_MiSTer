@@ -171,22 +171,14 @@ int a2065_get_iface(void)
 	return mode;
 }
 
-void a2065_cfg_save(int num)
+uint8_t a2065_cfg_get()
 {
-	uint8_t mode = (uint8_t)a2065_get_iface();
-	FileSaveConfig(a2065_cfg_name(num), &mode, sizeof(mode));
+	return (uint8_t)a2065_get_iface();
 }
 
-void a2065_cfg_load(int num)
+void a2065_cfg_set(uint8_t mode)
 {
-	// No stored selection for this slot means the card has never been enabled
-	// here, so leave it off. Opting in is explicit: the card only comes up
-	// once a mode has been chosen in the OSD and the config slot saved.
-	uint8_t mode = A2065_OFF;
-
-	uint8_t saved;
-	if (FileLoadConfig(a2065_cfg_name(num), &saved, sizeof(saved)) && saved < A2065_MODES)
-		mode = saved;
+	if (mode >= A2065_MODES) mode = A2065_OFF;
 
 	// A stored mode this box can no longer support falls back to off rather
 	// than quietly moving the Amiga onto MiSTer's own NIC.

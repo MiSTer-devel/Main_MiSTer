@@ -103,6 +103,10 @@ static unsigned long  stch_next_ms  = 0;
 #define STCH_RETRY_BUDGET    40
 #define STCH_RETRY_PERIOD_MS 250
 
+static bool           cd_swap_pending   = false;
+static unsigned long  cd_swap_ready_ms  = 0;
+#define CDTV_SWAP_SETTLE_MS 700
+
 static bool           stch_wait_ack = false;
 #define STCH_PLAYEND_BUDGET    400
 #define STCH_PLAYEND_PERIOD_MS 60
@@ -1114,11 +1118,14 @@ void cdtv_cd_set_cd_path(const char *path)
 		cd_save_load_failed    = false;
 		cd_save_load_pending   = (cd_save_path_active[0] != 0);
 	}
+	bool has_path    = (path[0] != 0);
+	bool was_present = (cd_media != 0);
+	bool swap        = was_present && has_path && strcmp(cd_path_active, path) != 0;
+
 	strncpy(cd_path_active, path, sizeof(cd_path_active) - 1);
 	cd_path_active[sizeof(cd_path_active) - 1] = 0;
 
-	bool has_path = (path[0] != 0);
-	cd_media   = has_path ? 1 : 0;
+	cd_media   = swap ? 0 : (has_path ? 1 : 0);
 	cd_isready = 0;
 	cd_motor   = 0;
 	cd_playing = 0;
@@ -1130,10 +1137,19 @@ void cdtv_cd_set_cd_path(const char *path)
 	cdtv_play_drv      = NULL;
 	cd_finished = has_path ? 1 : 0;
 
-	stch_retries = has_path ? STCH_RETRY_BUDGET : 0;
+	stch_retries = STCH_RETRY_BUDGET;
 	stch_next_ms = GetTimer(0);
 
-	cdtv_dbg("set_cd_path: %s", has_path ? path : "(empty)");
+	if (swap) {
+		cd_swap_pending  = true;
+		cd_swap_ready_ms = GetTimer(CDTV_SWAP_SETTLE_MS);
+	} else {
+		cd_swap_pending  = false;
+		cd_swap_ready_ms = 0;
+	}
+
+	cdtv_dbg("set_cd_path: %s%s", has_path ? path : "(empty)",
+	         swap ? " (swap, removal edge synthesized)" : "");
 }
 
 void cdtv_cd_init(void)
@@ -1158,6 +1174,9 @@ void cdtv_cd_init(void)
 		stch_next_ms = GetTimer(0);
 	}
 
+	cd_swap_pending  = false;
+	cd_swap_ready_ms = 0;
+
 	cd_save_dirty_observed   = false;
 	cd_save_load_failed      = false;
 	card_save_dirty_observed = false;
@@ -1169,6 +1188,15 @@ void cdtv_cd_init(void)
 void cdtv_cd_poll(void)
 {
 	if (!cdtv_active()) return;
+
+	if (cd_swap_pending && CheckTimer(cd_swap_ready_ms)) {
+		cd_swap_pending = false;
+		cd_media    = 1;
+		cd_finished = 1;
+		stch_retries = STCH_RETRY_BUDGET;
+		stch_next_ms = GetTimer(0);
+		cdtv_dbg("swap: settle elapsed, new disc now present");
+	}
 
 	if (cd_save_load_pending) {
 		cd_save_load_pending = false;
