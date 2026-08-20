@@ -1130,7 +1130,7 @@ void cdtv_cd_set_cd_path(const char *path)
 	cdtv_play_drv      = NULL;
 	cd_finished = has_path ? 1 : 0;
 
-	stch_retries = has_path ? STCH_RETRY_BUDGET : 0;
+	stch_retries = STCH_RETRY_BUDGET;
 	stch_next_ms = GetTimer(0);
 
 	cdtv_dbg("set_cd_path: %s", has_path ? path : "(empty)");
