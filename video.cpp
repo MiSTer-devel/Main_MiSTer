@@ -87,6 +87,9 @@ static int support_FHD = 0;
 
 yc_mode yc_modes[20];
 
+static int hdmi_power = 1;
+static int hdmi_need_init = 0;
+
 struct vrr_cap_t
 {
 	uint8_t active;
@@ -1411,6 +1414,51 @@ int hdmi_has_int()
 	return has_int;
 }
 
+static void hdmi_config_audio()
+{
+	// address, value
+	uint8_t init_data[] = {
+
+		0xAF, (uint8_t)(0b00000100	// [7]=0 HDCP Disabled.
+								// [6:5] must be b00!
+								// [4]=0 Current frame is unencrypted
+								// [3:2] must be b01!
+			| ((cfg.dvi_mode == 1) ? 0b00 : 0b10)),	 //	[1]=1 HDMI Mode.
+								// [0] must be b0!
+
+		// (Audio stuff on Programming Guide, Page 66)...
+		0x0A, 0b00000000,		// [6:4] Audio Select. b000 = I2S.
+								// [3:2] Audio Mode. (HBR stuff, leave at 00!).
+
+		0x0B, 0b00001110,		//
+
+		0x0C, 0b00000100,		// [7] 0 = Use sampling rate from I2S stream.   1 = Use samp rate from I2C Register.
+								// [6] 0 = Use Channel Status bits from stream. 1 = Use Channel Status bits from I2C register.
+								// [2] 1 = I2S0 Enable.
+								// [1:0] I2S Format: 00 = Standard. 01 = Right Justified. 10 = Left Justified. 11 = AES.
+
+		0x0D, 0b00010000,		// [4:0] I2S Bit (Word) Width for Right-Justified.
+		0x14, 0b00000010,		// [3:0] Audio Word Length. b0010 = 16 bits.
+		0x15, (uint8_t)((cfg.hdmi_audio_96k ? 0x80 : 0x00) | 0b0100000),	// I2S Sampling Rate [7:4]. b0000 = (44.1KHz). b0010 = 48KHz.
+								// Input ID [3:1] b000 (0) = 24-bit RGB 444 or YCrCb 444 with Separate Syncs.
+
+		// Audio Clock Config
+		0x01, 0x00,				//
+		0x02, (uint8_t)(cfg.hdmi_audio_96k ? 0x30 : 0x18),	// Set N Value 12288/6144
+		0x03, 0x00,				//
+
+		0x07, 0x01,				//
+		0x08, 0x22,				// Set CTS Value 74250
+		0x09, 0x0A,				//
+	};
+
+	for (uint i = 0; i < sizeof(init_data); i += 2)
+	{
+		int res = i2c_smbus_write_byte_data(hdmi_main_fd, init_data[i], init_data[i + 1]);
+		if (res < 0) printf("i2c: write error (%02X %02X): %d\n", init_data[i], init_data[i + 1], res);
+	}
+}
+
 static void hdmi_config_init()
 {
 	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
@@ -1443,6 +1491,9 @@ static void hdmi_config_init()
 			}
 		}
 	}
+
+	hdmi_power = 1;
+	hdmi_need_init = 0;
 
 	// address, value
 	uint8_t init_data[] = {
@@ -1533,13 +1584,6 @@ static void hdmi_config_init()
 		0xAA, 0x00,				// ADI required Write.
 		0xAB, 0x40,				// ADI required Write.
 
-		0xAF, (uint8_t)(0b00000100	// [7]=0 HDCP Disabled.
-								// [6:5] must be b00!
-								// [4]=0 Current frame is unencrypted
-								// [3:2] must be b01!
-			| ((cfg.dvi_mode == 1) ? 0b00 : 0b10)),	 //	[1]=1 HDMI Mode.
-								// [0] must be b0!
-
 		0xB9, 0x00,				// ADI required Write.
 
 		0xBA, 0b01100000,		// [7:5] Input Clock delay...
@@ -1557,31 +1601,6 @@ static void hdmi_config_init()
 		0xE2, 0x01,				// Power down the CEC.
 		0xE4, 0x60,				// ADI required Write.
 		0xFA, 0x7D,				// Nbr of times to search for good phase
-
-		// (Audio stuff on Programming Guide, Page 66)...
-		0x0A, 0b00000000,		// [6:4] Audio Select. b000 = I2S.
-								// [3:2] Audio Mode. (HBR stuff, leave at 00!).
-
-		0x0B, 0b00001110,		//
-
-		0x0C, 0b00000100,		// [7] 0 = Use sampling rate from I2S stream.   1 = Use samp rate from I2C Register.
-								// [6] 0 = Use Channel Status bits from stream. 1 = Use Channel Status bits from I2C register.
-								// [2] 1 = I2S0 Enable.
-								// [1:0] I2S Format: 00 = Standard. 01 = Right Justified. 10 = Left Justified. 11 = AES.
-
-		0x0D, 0b00010000,		// [4:0] I2S Bit (Word) Width for Right-Justified.
-		0x14, 0b00000010,		// [3:0] Audio Word Length. b0010 = 16 bits.
-		0x15, (uint8_t)((cfg.hdmi_audio_96k ? 0x80 : 0x00) | 0b0100000),	// I2S Sampling Rate [7:4]. b0000 = (44.1KHz). b0010 = 48KHz.
-								// Input ID [3:1] b000 (0) = 24-bit RGB 444 or YCrCb 444 with Separate Syncs.
-
-		// Audio Clock Config
-		0x01, 0x00,				//
-		0x02, (uint8_t)(cfg.hdmi_audio_96k ? 0x30 : 0x18),	// Set N Value 12288/6144
-		0x03, 0x00,				//
-
-		0x07, 0x01,				//
-		0x08, 0x22,				// Set CTS Value 74250
-		0x09, 0x0A,				//
 	};
 
 	for (uint i = 0; i < sizeof(init_data); i += 2)
@@ -1590,6 +1609,7 @@ static void hdmi_config_init()
 		if (res < 0) printf("i2c: write error (%02X %02X): %d\n", init_data[i], init_data[i + 1], res);
 	}
 
+	hdmi_config_audio();
 	hdmi_config_set_csc();
 }
 
@@ -2712,10 +2732,9 @@ void video_reinit()
 	user_io_send_buttons(1);
 	video_mode_adjust(1);
 	video_menu_bg(-1);
-	return;
 }
 
-void video_hdmi_power(int on)
+void tmds_power(int on)
 {
 	// ADV7513 power-down control. 0 = power on, 1 = power down.
 	if (hdmi_main_fd >= 0)
@@ -2723,6 +2742,32 @@ void video_hdmi_power(int on)
 		uint8_t val = on ? 0x10 : 0x50;
 		int res = i2c_smbus_write_byte_data(hdmi_main_fd, 0x41, val);
 		if (res < 0) printf("i2c: write error (41 %02X): %d\n", val, res);
+	}
+}
+
+void video_hdmi_power(int on)
+{
+	// ADV7513 power-down control. 0 = power on, 1 = power down.
+	if (hdmi_main_fd >= 0)
+	{
+		hdmi_power = on ? 1 : 0;
+		tmds_power(on);
+
+		if (on)
+		{
+			if (hdmi_need_init)
+			{
+				uint8_t current_status = i2c_smbus_read_byte_data(hdmi_main_fd, 0x42);
+				bool hpd_high = (current_status & 0x40) != 0; // Bit 6: HPD pin level
+				bool MS_high = (current_status & 0x20) != 0; // Bit 5: Monitor Sense level
+				if (hpd_high && MS_high) video_reinit();
+			}
+			else
+			{
+				// Audio must be re-inited.
+				hdmi_config_audio();
+			}
+		}
 	}
 }
 
@@ -2751,15 +2796,21 @@ void video_poll()
 			// and internal display termination (Monitor Sense) are fully high and stable
 			if (hpd_high && MS_high)
 			{
-				printf("[HDMI] HPD and Monitor Sense Stable. Power up, re-initializing...\n");
-				video_hdmi_power(1);
-				usleep(150000);
-				video_reinit();
+				hdmi_need_init = 1;
+				if (hdmi_power)
+				{
+					printf("[HDMI] HPD and Monitor Sense Stable. Power up, re-initializing...\n");
+					video_hdmi_power(1);
+				}
+				else
+				{
+					printf("[HDMI] HPD and Monitor Sense Stable, but HDMI is powered down. Will re-init upon wakeup.\n");
+				}
 			}
 			else
 			{
 				printf("[HDMI] Link lost or re-routing (HPD=%d, MS=%d)\n", hpd_high, MS_high);
-				video_hdmi_power(0);
+				tmds_power(0);
 			}
 		}
 	}
@@ -3105,7 +3156,7 @@ static uint64_t calc_frame_locked_phase(uint64_t fsc_num, uint64_t fsc_den,
 		fsc_den * 100000000ULL
 	);
 
-	// Calculate round(frame_cycles * 2^40 / frame_clocks). 
+	// Calculate round(frame_cycles * 2^40 / frame_clocks).
 	// The whole-number quotient contributes only
 	// multiples of 2^40, which disappear under the 40-bit mask.
 	const uint64_t frame_remainder = frame_cycles % frame_clocks;
@@ -3843,9 +3894,9 @@ void video_menu_bg(int n, int idle)
 		n = menu_bg;
 		idle = cached_idle;
 
-		imlib_context_set_image(bg1); imlib_free_image(); bg1 = 0;
-		imlib_context_set_image(bg2); imlib_free_image(); bg2 = 0;
-		imlib_context_set_image(curtain); imlib_free_image(); curtain = 0;
+		if (bg1) { imlib_context_set_image(bg1); imlib_free_image(); bg1 = 0; }
+		if (bg2) { imlib_context_set_image(bg2); imlib_free_image(); bg2 = 0; }
+		if (curtain) { imlib_context_set_image(curtain); imlib_free_image(); curtain = 0; }
 	}
 	else
 	{
