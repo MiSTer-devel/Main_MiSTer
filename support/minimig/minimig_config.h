@@ -67,6 +67,7 @@ typedef struct
 	char            info[64];
 	mm_hardfileTYPE cd32_drive;
 	mm_hardfileTYPE cdtv_drive;
+	uint8_t         a2065_mode;
 } mm_configTYPE;
 
 extern mm_configTYPE minimig_config;
