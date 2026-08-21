@@ -18,6 +18,7 @@
 static char buf[1024];
 static uint8_t *chd_hunkbuf = NULL;
 static int chd_hunknum;
+static chd_prefetch *chd_pf = NULL;
 static int noreset = 0;
 
 static int sgets(char *out, int sz, char **in)
@@ -105,6 +106,7 @@ static uint16_t libCryptMask(fileTYPE* sbi_file)
 
 static void unload_chd(toc_t *table)
 {
+	mister_chd_prefetch_destroy(&chd_pf);
 	if (table->chd_f)
 	{
 		chd_close(table->chd_f);
@@ -157,6 +159,7 @@ static int load_chd(const char *filename, toc_t *table)
 
 	chd_hunkbuf = (uint8_t *)malloc(table->chd_hunksize);
 	chd_hunknum = -1;
+	chd_pf = mister_chd_prefetch_create(table->chd_f, table->chd_hunksize);
 
 	return 1;
 }
@@ -516,7 +519,7 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
 
 							// The "fake" 150 sector pregap moves all the LBAs up by 150, so adjust here to read where the core actually wants data from
 							int read_lba = lba - toc.tracks[0].indexes[1];
-							if (mister_chd_read_sector(toc.chd_f, (read_lba + toc.tracks[i].offset), 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum) == CHDERR_NONE)
+							if (mister_chd_read_sector(toc.chd_f, (read_lba + toc.tracks[i].offset), 0, 0, CD_SECTOR_LEN, buffer, chd_hunkbuf, &chd_hunknum, chd_pf) == CHDERR_NONE)
 							{
 								if (!toc.tracks[i].type) //CHD requires byteswap of audio data
 								{

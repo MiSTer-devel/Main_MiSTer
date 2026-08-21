@@ -100,6 +100,26 @@ void offload_stop()
 	printf("Done\n");
 }
 
+bool offload_try_add_work(std::function<void()> handler)
+{
+	PROFILE_FUNCTION();
+
+	pthread_mutex_lock(&s_queue_lock);
+
+	if ((s_queue_head - s_queue_tail) >= QUEUE_SIZE)
+	{
+		pthread_mutex_unlock(&s_queue_lock);
+		return false;
+	}
+
+	s_queue[s_queue_head % QUEUE_SIZE].handler = handler;
+	s_queue_head++;
+
+	pthread_cond_signal(&s_cond_work);
+	pthread_mutex_unlock(&s_queue_lock);
+	return true;
+}
+
 void offload_add_work(std::function<void()> handler)
 {
 	PROFILE_FUNCTION();
