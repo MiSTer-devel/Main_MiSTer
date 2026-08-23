@@ -196,7 +196,7 @@ static void cdtv_push_sector(const uint8_t *buf, int len)
 
 static bool cdtv_read_audio_sector(drive_t *drv, uint32_t lba, uint8_t *buf2352)
 {
-	if (!drv || !drv->chd_f || !buf2352) return false;
+	if (!drv || !buf2352) return false;
 
 	track_t *track = NULL;
 	int real_tracks = drv->track_cnt > 0 ? drv->track_cnt - 1 : 0;
@@ -211,12 +211,22 @@ static bool cdtv_read_audio_sector(drive_t *drv, uint32_t lba, uint8_t *buf2352)
 	if (track->attr & 0x40) return false;
 	if (track->sectorSize != CDTV_CDDA_BYTES) return false;
 
-	uint32_t chd_lba = lba + track->chd_offset;
-	if (mister_chd_read_sector(drv->chd_f, chd_lba, 0, 0,
-	                           CDTV_CDDA_BYTES, buf2352,
-	                           drv->chd_hunkbuf, &drv->chd_hunknum)
-	    != CHDERR_NONE) {
-		return false;
+	if (drv->chd_f) {
+		uint32_t chd_lba = lba + track->chd_offset;
+		if (mister_chd_read_sector(drv->chd_f, chd_lba, 0, 0,
+		                           CDTV_CDDA_BYTES, buf2352,
+		                           drv->chd_hunkbuf, &drv->chd_hunknum)
+		    != CHDERR_NONE) {
+			return false;
+		}
+		return true;
+	}
+
+	if (!cdrom_read_track_raw(track, lba, buf2352, CDTV_CDDA_BYTES)) return false;
+
+	int16_t *samples = (int16_t *)buf2352;
+	for (int i = 0; i < CDTV_CDDA_BYTES / 2; i++) {
+		samples[i] = (int16_t)bswap_16((uint16_t)samples[i]);
 	}
 	return true;
 }
@@ -618,8 +628,8 @@ static void cdtv_dispatch(void)
 			uint16_t nsec  = ((uint16_t)cmd_buf[4] <<  8) | cmd_buf[5];
 
 			drive_t *drv = cdtv_find_drive();
-			if (!drv || !drv->chd_f) {
-				cdtv_dbg("READ DATA lba=%u nsec=%u — no drive/chd", lba, nsec);
+			if (!drv) {
+				cdtv_dbg("READ DATA lba=%u nsec=%u — no drive", lba, nsec);
 				cd_error    = 1;
 				cd_finished = 1;
 				rlen        = 0;
