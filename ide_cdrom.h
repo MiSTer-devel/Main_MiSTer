@@ -9,6 +9,7 @@ void cdrom_mode_select(ide_config *ide);
 void ide_cdda_send_sector();
 
 int cdrom_read_raw_sector(struct drive_t *drive, uint32_t lba, uint8_t *buf);
+bool cdrom_read_track_raw(struct track_t *track, uint32_t lba, uint8_t *buf, int buflen);
 
 const char* cdrom_parse(uint32_t num, const char *filename);
 void cdrom_close_chd(drive_t *drv);

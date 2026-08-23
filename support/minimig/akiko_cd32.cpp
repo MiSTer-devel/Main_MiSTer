@@ -933,7 +933,7 @@ static void akiko_push_sector(const uint8_t *buf)
 
 static bool cd_read_audio_sector(drive_t *drv, uint32_t lba, uint8_t *buf2352)
 {
-	if (!drv || !drv->chd_f || !buf2352) return false;
+	if (!drv || !buf2352) return false;
 
 	bool index0 = false;
 	track_t *track = NULL;
@@ -951,18 +951,24 @@ static bool cd_read_audio_sector(drive_t *drv, uint32_t lba, uint8_t *buf2352)
 			break;
 		}
 	}
-	(void)index0;
 
 	if (!track) return false;
 	if (track->attr & 0x40) return false;
 	if (track->sectorSize != AKIKO_CDDA_BYTES) return false;
 
-	uint32_t chd_lba = lba + track->chd_offset;
-	if (mister_chd_read_sector(drv->chd_f, chd_lba, 0, 0,
-	                           AKIKO_CDDA_BYTES, buf2352,
-	                           drv->chd_hunkbuf, &drv->chd_hunknum)
-	    != CHDERR_NONE) {
-		return false;
+	if (drv->chd_f) {
+		return cdrom_read_raw_sector(drv, lba, buf2352) == 0;
+	}
+
+	track_t *read_track = track;
+	if (index0 && track->number > 1) {
+		read_track = &drv->track[track->number - 2];
+	}
+	if (!cdrom_read_track_raw(read_track, lba, buf2352, AKIKO_CDDA_BYTES)) return false;
+
+	int16_t *samples = (int16_t *)buf2352;
+	for (int i = 0; i < AKIKO_CDDA_BYTES / 2; i++) {
+		samples[i] = (int16_t)bswap_16((uint16_t)samples[i]);
 	}
 	return true;
 }
