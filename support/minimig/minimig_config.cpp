@@ -865,13 +865,20 @@ unsigned int minimig_get_extcfg()
 	return (minimig_config.ext_cfg2 << 16) | minimig_config.ext_cfg;
 }
 
-#define CD32_MAIN_ROM  "Games/Amiga/CD32.rom"
-#define CD32_EXT_ROM   "Games/Amiga/CD32_ext.rom"
-#define CDTV_MAIN_ROM  "Games/Amiga/CDTV.rom"
-#define CDTV_EXT_ROM   "Games/Amiga/CDTV_ext.rom"
-#define A500_MAIN_ROM  "Games/Amiga/a500.rom"
-#define A600_MAIN_ROM  "Games/Amiga/a600.rom"
-#define A1200_MAIN_ROM "Games/Amiga/a1200.rom"
+#define CD32_MAIN_ROM  "CD32.rom"
+#define CD32_EXT_ROM   "CD32_ext.rom"
+#define CDTV_MAIN_ROM  "CDTV.rom"
+#define CDTV_EXT_ROM   "CDTV_ext.rom"
+#define A500_MAIN_ROM  "a500.rom"
+#define A600_MAIN_ROM  "a600.rom"
+#define A1200_MAIN_ROM "a1200.rom"
+
+static const char *preset_rom_path(const char *name)
+{
+	static char path[1024];
+	snprintf(path, sizeof(path), "%s/%s", HomeDir(), name);
+	return path;
+}
 
 void minimig_cfg_set(int preset)
 {
@@ -881,8 +888,8 @@ void minimig_cfg_set(int preset)
 		minimig_config.cpu = 3; // 68020, d-cache off;
 		minimig_config.chipset = (6 << 2); // AGA
 		minimig_config.memory = 3; // ChipRAM 2MB, FastRAM 0MB
-		minimig_set_kickstart(CD32_MAIN_ROM);
-		if(getFileSize(minimig_config.kickstart) < 1024 * 1024) minimig_set_extrom(CD32_EXT_ROM);
+		minimig_set_kickstart(preset_rom_path(CD32_MAIN_ROM));
+		if(getFileSize(minimig_config.kickstart) < 1024 * 1024) minimig_set_extrom(preset_rom_path(CD32_EXT_ROM));
 		minimig_config.autofire = 2 << 1; // CD32 joystick
 		minimig_config.cd32_drive.cfg = 1;
 		minimig_config.cdtv_drive.cfg = 0;
@@ -893,8 +900,8 @@ void minimig_cfg_set(int preset)
 		minimig_config.cpu = 0; // 68000
 		minimig_config.chipset = (2 << 2); // ECS
 		minimig_config.memory = 1; // ChipRAM 1MB, FastRAM 0MB
-		minimig_set_kickstart(CDTV_MAIN_ROM);
-		if (getFileSize(minimig_config.kickstart) < 1024 * 1024) minimig_set_extrom(CDTV_EXT_ROM);
+		minimig_set_kickstart(preset_rom_path(CDTV_MAIN_ROM));
+		if (getFileSize(minimig_config.kickstart) < 1024 * 1024) minimig_set_extrom(preset_rom_path(CDTV_EXT_ROM));
 		minimig_config.autofire = 0; // Digital joystick
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 1;
@@ -905,7 +912,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cpu = 0; // 68000
 		minimig_config.chipset = (0 << 2); // OCS
 		minimig_config.memory = 0; // ChipRAM 512KB, FastRAM 0MB
-		minimig_set_kickstart(A500_MAIN_ROM);
+		minimig_set_kickstart(preset_rom_path(A500_MAIN_ROM));
 		minimig_config.autofire = 0; // Digital joystick
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 0;
@@ -916,7 +923,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cpu = 0; // 68000
 		minimig_config.chipset = (2 << 2); // ECS
 		minimig_config.memory = 1; // ChipRAM 1MB, FastRAM 0MB
-		minimig_set_kickstart(A600_MAIN_ROM);
+		minimig_set_kickstart(preset_rom_path(A600_MAIN_ROM));
 		minimig_config.autofire = 0; // Digital joystick
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 0;
@@ -927,7 +934,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cpu = 3; // 68020, d-cache off;
 		minimig_config.chipset = (6 << 2); // AGA
 		minimig_config.memory = 3; // ChipRAM 2MB, FastRAM 0MB
-		minimig_set_kickstart(A1200_MAIN_ROM);
+		minimig_set_kickstart(preset_rom_path(A1200_MAIN_ROM));
 		minimig_config.autofire = 0; // Digital joystick
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 0;
@@ -943,27 +950,27 @@ bool minimig_cfg_available(int preset)
 	case CONFIG_PRESET_CD32:
 		if (is_minimig() == 2)
 		{
-			uint64_t sz = getFileSize(CD32_MAIN_ROM);
-			return (sz >= 1024 * 1024) || ((sz >= 512 * 1024) && getFileSize(CD32_EXT_ROM) >= 512 * 1024);
+			uint64_t sz = getFileSize(preset_rom_path(CD32_MAIN_ROM));
+			return (sz >= 1024 * 1024) || ((sz >= 512 * 1024) && getFileSize(preset_rom_path(CD32_EXT_ROM)) >= 512 * 1024);
 		}
 		break;
 
 	case CONFIG_PRESET_CDTV:
 		if (is_minimig() == 2)
 		{
-			uint64_t sz = getFileSize(CDTV_MAIN_ROM);
-			return (sz >= 1024 * 1024) || ((sz >= 256 * 1024) && getFileSize(CDTV_EXT_ROM) >= 256 * 1024);
+			uint64_t sz = getFileSize(preset_rom_path(CDTV_MAIN_ROM));
+			return (sz >= 1024 * 1024) || ((sz >= 256 * 1024) && getFileSize(preset_rom_path(CDTV_EXT_ROM)) >= 256 * 1024);
 		}
 		break;
 
 	case CONFIG_PRESET_A500:
-		return getFileSize(A500_MAIN_ROM) >= 256 * 1024;
+		return getFileSize(preset_rom_path(A500_MAIN_ROM)) >= 256 * 1024;
 
 	case CONFIG_PRESET_A600:
-		return getFileSize(A600_MAIN_ROM) >= 512 * 1024;
+		return getFileSize(preset_rom_path(A600_MAIN_ROM)) >= 512 * 1024;
 
 	case CONFIG_PRESET_A1200:
-		return getFileSize(A1200_MAIN_ROM) >= 512 * 1024;
+		return getFileSize(preset_rom_path(A1200_MAIN_ROM)) >= 512 * 1024;
 	}
 
 	return 0;
