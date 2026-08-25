@@ -72,18 +72,6 @@ enum { MODE_DIRECT = 0, MODE_BPF = 1, MODE_MACVLAN = 2, MODE_TAP = 3 };
 // Name of the macvlan child created for MODE_MACVLAN.
 #define MACVLAN_NAME "ve-amiga"
 
-// The selection is kept in core status bits (A2065_STATUS_OPT). Minimig is
-// excluded from the generic status-word config load, and the mm_configTYPE
-// blob can't grow (its loader does an exact sizeof() check), so the field is
-// persisted next to the numbered Minimig config slots instead.
-static char *a2065_cfg_name(int num)
-{
-	static char name[128];
-	if (num) sprintf(name, "%s%d.a2065", user_io_get_core_name(), num);
-	else     sprintf(name, "%s.a2065",   user_io_get_core_name());
-	return name;
-}
-
 static volatile uint8_t *map = NULL;
 static int card_up = 0;
 
