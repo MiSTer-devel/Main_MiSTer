@@ -6357,7 +6357,8 @@ void HandleUI(void)
 		m = 0;
 		strcpy(s, " CPU      : ");
 		strcat(s, config_cpu_msg[minimig_config.cpu & 0x03]);
-		if ((minimig_config.cpu & 0x23) == 0x23) strcat(s, " 14MHz");
+		if ((minimig_config.cpu & 0x23) == 0x23) strcat(s, " ~14MHz");
+		if ((minimig_config.cpu & 0x23) == 0x03) strcat(s, " Fast");
 		OsdWrite(m++, s, menusub == 0, 0);
 		strcpy(s, " D-Cache  : ");
 		strcat(s, (minimig_config.cpu & 16) ? "On" : "Off");
