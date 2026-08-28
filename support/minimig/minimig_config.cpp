@@ -587,6 +587,8 @@ int minimig_cfg_load(int num)
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
 
+	if ((minimig_config.cpu & 0x03) == 0x02) minimig_config.cpu |= 0x01;
+
 	a2065_cfg_set(minimig_config.a2065_mode);
 
 	for (int i = 0; i < 4; i++)
