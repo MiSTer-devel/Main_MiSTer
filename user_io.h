@@ -270,6 +270,7 @@ void diskled_on();
 #define DISKLED_OFF void()
 
 char is_minimig();
+char is_next();
 char is_sharpmz();
 char is_menu();
 char is_x86();
