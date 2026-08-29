@@ -3150,6 +3150,7 @@ static void mouse_reply(char code)
 
 static uint8_t use_ps2ctl = 0;
 static unsigned long rtc_timer = 0;
+static unsigned long next_rtc_timer = 0;
 
 void user_io_rtc_reset()
 {
@@ -3222,6 +3223,17 @@ void user_io_poll()
 	}
 
 	next_enet_poll();
+
+	// The NeXT keeps a battery backed clock that the guest reads at
+	// boot; the one-shot update at core load is not enough if the core
+	// sits at the ROM monitor for a while, so refresh it every minute
+	// like the other cores that own a real time clock.  The core stops
+	// applying these once the guest sets its own time.
+	if (is_next() && (!next_rtc_timer || CheckTimer(next_rtc_timer)))
+	{
+		next_rtc_timer = GetTimer(60000);
+		send_rtc(1);
+	}
 
 	if (core_type == CORE_TYPE_8BIT && !is_menu())
 	{
