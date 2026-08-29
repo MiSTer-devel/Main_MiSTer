@@ -153,6 +153,7 @@ const char *getRootDir();
 const char *getFullPath(const char *name);
 
 uint32_t getFileType(const char *name);
+uint64_t getFileSize(const char *name);
 int isXmlName(const char *path); // 1 - MRA, 2 - MGL
 
 bool FileOpenTextReader(fileTextReader *reader, const char *path);

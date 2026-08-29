@@ -928,10 +928,10 @@ int FileCreatePath(const char *dir)
 void FileGenerateScreenshotName(const char *name, char *out_name, const char* extension, int buflen)
 {
 	// If the name ends with target extension then don't modify it
-	       
+
 	size_t name_len = strlen(name);
 	size_t ext_len = strlen(extension);
-	
+
 	if (name_len >= ext_len && !strcasecmp(name + name_len - ext_len, extension))	{
 		const char *p = strrchr(name, '/');
 		make_fullpath(SCREENSHOT_DIR);
@@ -1031,6 +1031,16 @@ uint32_t getFileType(const char *name)
 	if (stat64(full_path, &st)) return 0;
 
 	return st.st_mode;
+}
+
+uint64_t getFileSize(const char *name)
+{
+	make_fullpath(name);
+
+	struct stat64 st;
+	if (stat64(full_path, &st)) return 0;
+
+	return st.st_size;
 }
 
 static int findPrefixDir(const char *prefix, bool no_prefix_check, char *dir, size_t dir_len)
@@ -1935,7 +1945,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 			//
 			int found = -1;
 			char curdType = DirItem[iSelectedEntry].de.d_type;
-			char curChar = DirItem[iSelectedEntry].altname[0]; 
+			char curChar = DirItem[iSelectedEntry].altname[0];
 			if ((curChar == '_') && (curdType == DT_DIR) && (options & SCANO_CORES))
 				curChar = DirItem[iSelectedEntry].altname[1];
 			curChar = toupper(curChar);
@@ -1961,13 +1971,13 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 		{
 			//Previous seek seeks to the FIRST entry that starts with the previous letter
 			//Search backward until the first char changes, and then continue looking backward
-			//until it changes again. 
+			//until it changes again.
 
 
 			int found = -1;
 			char curdType = DirItem[iSelectedEntry].de.d_type;
 			bool sawChange = false;
-			char curChar = DirItem[iSelectedEntry].altname[0]; 
+			char curChar = DirItem[iSelectedEntry].altname[0];
 			if ((curChar == '_') && (curdType == DT_DIR) && (options & SCANO_CORES))
 				curChar = DirItem[iSelectedEntry].altname[1];
 			curChar = toupper(curChar);

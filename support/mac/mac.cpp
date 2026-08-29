@@ -19,20 +19,24 @@ static char is_core_named(const char *n)
 
 char is_mac_scsi_family()
 {
-	return is_core_named("maclc") || is_core_named("lbmactwo") || is_core_named("maciivi");
+	return is_core_named("maclc") || is_core_named("lbmactwo") || is_core_named("maciivi")
+	    || is_core_named("macplus");
 }
 
 #define MAC_TOOLBOX_SLOT    3   // MacLC.sv VD_TOOLBOX
 #define MAC_CD_TOOLBOX_SLOT 5   // MacLC.sv VD_CD_TOOLBOX
 
-static int mac_slots(void)
-{
-	return is_mac_scsi_family() && !is_core_named("lbmactwo");
-}
+// Slot availability is not uniform across the family, so the gates split rather
+// than sharing one predicate. A wrong slot corrupts another device's stream:
+//   LBMacTwo  — declares none of them.
+//   MacPlus   — has the CD-ROM slot but NOT the Toolbox slots. Its slot 3 is
+//               the second floppy, and it has no slot 5 at all (VDNUM = 5).
+static int mac_cd_ok(void)      { return is_mac_scsi_family() && !is_core_named("lbmactwo"); }
+static int mac_toolbox_ok(void) { return mac_cd_ok() && !is_core_named("macplus"); }
 
-int mac_toolbox_slot()    { return mac_slots() ? MAC_TOOLBOX_SLOT    : -1; }
-int mac_cdrom_slot()      { return mac_slots() ? MAC_CDROM_SLOT      : -1; }
-int mac_cd_toolbox_slot() { return mac_slots() ? MAC_CD_TOOLBOX_SLOT : -1; }
+int mac_toolbox_slot()    { return mac_toolbox_ok() ? MAC_TOOLBOX_SLOT    : -1; }
+int mac_cdrom_slot()      { return mac_cd_ok()      ? MAC_CDROM_SLOT      : -1; }
+int mac_cd_toolbox_slot() { return mac_toolbox_ok() ? MAC_CD_TOOLBOX_SLOT : -1; }
 
 // CD image translation on the CD-ROM slot: CUE/CHD/raw-2352 become a flat
 // 2048-byte-sector virtual disc; flat ISO/TOAST stays on the generic path.
@@ -88,9 +92,13 @@ void mac_poll()
 			cdc_inited = 1;
 		}
 		cdchanger_poll();   // perform any staged SET NEXT CD image remount
-		mac_cdrom_poll();   // one-shot boot repulse of the CD mount
 	}
 	else cdc_inited = 0;
+
+	// The boot repulse belongs to the CD-ROM drive, not to the CD changer: a
+	// core can have the drive without the Toolbox (MacPlus), and it still needs
+	// the repulse. Gate it on the drive's own slot.
+	if (mac_cdrom_slot() >= 0) mac_cdrom_poll();
 }
 
 int mac_cdda_window(int disk, uint32_t lba)

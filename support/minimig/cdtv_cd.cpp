@@ -103,6 +103,10 @@ static unsigned long  stch_next_ms  = 0;
 #define STCH_RETRY_BUDGET    40
 #define STCH_RETRY_PERIOD_MS 250
 
+static bool           cd_swap_pending   = false;
+static unsigned long  cd_swap_ready_ms  = 0;
+#define CDTV_SWAP_SETTLE_MS 700
+
 static bool           stch_wait_ack = false;
 #define STCH_PLAYEND_BUDGET    400
 #define STCH_PLAYEND_PERIOD_MS 60
@@ -192,7 +196,7 @@ static void cdtv_push_sector(const uint8_t *buf, int len)
 
 static bool cdtv_read_audio_sector(drive_t *drv, uint32_t lba, uint8_t *buf2352)
 {
-	if (!drv || !drv->chd_f || !buf2352) return false;
+	if (!drv || !buf2352) return false;
 
 	track_t *track = NULL;
 	int real_tracks = drv->track_cnt > 0 ? drv->track_cnt - 1 : 0;
@@ -207,12 +211,22 @@ static bool cdtv_read_audio_sector(drive_t *drv, uint32_t lba, uint8_t *buf2352)
 	if (track->attr & 0x40) return false;
 	if (track->sectorSize != CDTV_CDDA_BYTES) return false;
 
-	uint32_t chd_lba = lba + track->chd_offset;
-	if (mister_chd_read_sector(drv->chd_f, chd_lba, 0, 0,
-	                           CDTV_CDDA_BYTES, buf2352,
-	                           drv->chd_hunkbuf, &drv->chd_hunknum)
-	    != CHDERR_NONE) {
-		return false;
+	if (drv->chd_f) {
+		uint32_t chd_lba = lba + track->chd_offset;
+		if (mister_chd_read_sector(drv->chd_f, chd_lba, 0, 0,
+		                           CDTV_CDDA_BYTES, buf2352,
+		                           drv->chd_hunkbuf, &drv->chd_hunknum)
+		    != CHDERR_NONE) {
+			return false;
+		}
+		return true;
+	}
+
+	if (!cdrom_read_track_raw(track, lba, buf2352, CDTV_CDDA_BYTES)) return false;
+
+	int16_t *samples = (int16_t *)buf2352;
+	for (int i = 0; i < CDTV_CDDA_BYTES / 2; i++) {
+		samples[i] = (int16_t)bswap_16((uint16_t)samples[i]);
 	}
 	return true;
 }
@@ -614,8 +628,8 @@ static void cdtv_dispatch(void)
 			uint16_t nsec  = ((uint16_t)cmd_buf[4] <<  8) | cmd_buf[5];
 
 			drive_t *drv = cdtv_find_drive();
-			if (!drv || !drv->chd_f) {
-				cdtv_dbg("READ DATA lba=%u nsec=%u — no drive/chd", lba, nsec);
+			if (!drv) {
+				cdtv_dbg("READ DATA lba=%u nsec=%u — no drive", lba, nsec);
 				cd_error    = 1;
 				cd_finished = 1;
 				rlen        = 0;
@@ -1114,11 +1128,14 @@ void cdtv_cd_set_cd_path(const char *path)
 		cd_save_load_failed    = false;
 		cd_save_load_pending   = (cd_save_path_active[0] != 0);
 	}
+	bool has_path    = (path[0] != 0);
+	bool was_present = (cd_media != 0);
+	bool swap        = was_present && has_path && strcmp(cd_path_active, path) != 0;
+
 	strncpy(cd_path_active, path, sizeof(cd_path_active) - 1);
 	cd_path_active[sizeof(cd_path_active) - 1] = 0;
 
-	bool has_path = (path[0] != 0);
-	cd_media   = has_path ? 1 : 0;
+	cd_media   = swap ? 0 : (has_path ? 1 : 0);
 	cd_isready = 0;
 	cd_motor   = 0;
 	cd_playing = 0;
@@ -1130,10 +1147,19 @@ void cdtv_cd_set_cd_path(const char *path)
 	cdtv_play_drv      = NULL;
 	cd_finished = has_path ? 1 : 0;
 
-	stch_retries = has_path ? STCH_RETRY_BUDGET : 0;
+	stch_retries = STCH_RETRY_BUDGET;
 	stch_next_ms = GetTimer(0);
 
-	cdtv_dbg("set_cd_path: %s", has_path ? path : "(empty)");
+	if (swap) {
+		cd_swap_pending  = true;
+		cd_swap_ready_ms = GetTimer(CDTV_SWAP_SETTLE_MS);
+	} else {
+		cd_swap_pending  = false;
+		cd_swap_ready_ms = 0;
+	}
+
+	cdtv_dbg("set_cd_path: %s%s", has_path ? path : "(empty)",
+	         swap ? " (swap, removal edge synthesized)" : "");
 }
 
 void cdtv_cd_init(void)
@@ -1158,6 +1184,9 @@ void cdtv_cd_init(void)
 		stch_next_ms = GetTimer(0);
 	}
 
+	cd_swap_pending  = false;
+	cd_swap_ready_ms = 0;
+
 	cd_save_dirty_observed   = false;
 	cd_save_load_failed      = false;
 	card_save_dirty_observed = false;
@@ -1169,6 +1198,15 @@ void cdtv_cd_init(void)
 void cdtv_cd_poll(void)
 {
 	if (!cdtv_active()) return;
+
+	if (cd_swap_pending && CheckTimer(cd_swap_ready_ms)) {
+		cd_swap_pending = false;
+		cd_media    = 1;
+		cd_finished = 1;
+		stch_retries = STCH_RETRY_BUDGET;
+		stch_next_ms = GetTimer(0);
+		cdtv_dbg("swap: settle elapsed, new disc now present");
+	}
 
 	if (cd_save_load_pending) {
 		cd_save_load_pending = false;

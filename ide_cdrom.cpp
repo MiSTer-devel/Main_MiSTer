@@ -1199,6 +1199,16 @@ int cdrom_read_raw_sector(drive_t *drive, uint32_t lba, uint8_t *buf)
 	return -1;
 }
 
+bool cdrom_read_track_raw(track_t *track, uint32_t lba, uint8_t *buf, int buflen)
+{
+	if (!track || !buf) return false;
+	if (!track->f.opened()) return false;
+
+	uint32_t pos = track->skip + (lba - track->start) * track->sectorSize;
+	if (FileSeek(&track->f, pos, SEEK_SET) < 0) return false;
+	return FileReadAdv(&track->f, buf, buflen, -1) == buflen;
+}
+
 static int disc_info(drive_t *drv, uint16_t maxlen)
 {
 	if (!maxlen) return 0;
@@ -1930,11 +1940,8 @@ void ide_cdda_send_sector()
 				read_track = &drv->track[track->number-2];
 
 			}
-			uint32_t pos = read_track->skip + (drv->play_start_lba - read_track->start) * read_track->sectorSize;
-			if (FileSeek(&read_track->f, pos, SEEK_SET))
+			if (!cdrom_read_track_raw(read_track, drv->play_start_lba, cdda_buf, sizeof(cdda_buf)))
 			{
-				FileReadAdv(&read_track->f, cdda_buf, sizeof(cdda_buf), -1);
-			} else {
 				memset(cdda_buf, 0, sizeof(cdda_buf));
 			}
 		}
