@@ -1579,6 +1579,12 @@ void user_io_init(const char *path, const char *xml)
 			}
 			else
 			{
+				// The ethernet bridge is an addition to the NeXT core, not
+				// a replacement for its start-up: arming it must not claim
+				// a branch of the chain below, or the core skips the boot
+				// ROM load at its end and comes up with no ROM at all.
+				if (is_next()) next_enet_start();
+
 				if (xml && isXmlName(xml) == 1)
 				{
 					arcade_send_rom(xml);
@@ -1589,10 +1595,6 @@ void user_io_init(const char *path, const char *xml)
 					printf("Identified Minimig V2 core");
 					BootInit();
 					a2065_start();
-				}
-				else if (is_next())
-				{
-					next_enet_start();
 				}
 				else if (is_x86() || is_pcxt())
 				{
