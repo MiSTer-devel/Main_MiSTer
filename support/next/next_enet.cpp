@@ -127,6 +127,12 @@ static void open_link(int mode)
 	if (!ethernet_open(iface, promisc)) return;
 	link_open = 1;
 
+	// flush anything the kernel queued before the link came up
+	{
+		uint8_t scratch[MAX_FRAME];
+		while (ethernet_recv_nb(scratch, MAX_FRAME) > 0) ;
+	}
+
 	if (mode == NB_MODE_ETH0 && mac_known)
 		ethernet_set_mac_filter(guest_mac);
 
@@ -222,16 +228,22 @@ void next_enet_poll(void)
 		tx_rd++;
 	}
 
-	// deliver received frames while the FPGA ring has room
-	for (int budget = 0; budget < NB_RING; budget++)
+	// Deliver received frames while the FPGA ring has room, and drain
+	// the socket dry every pass: a NIC whose receiver is not keeping up
+	// drops frames on the wire, it does not queue them for later.  The
+	// kernel socket buffer would otherwise hold every LAN broadcast
+	// since bridge-up and flood the guest with stale traffic the moment
+	// it arms its receiver (which broke the boot ROM's ethernet
+	// self-test on a live network).
+	for (;;)
 	{
-		uint64_t rxw = rd64(NB_RXWPTR_OFF);
-		uint64_t rxr = rd64(NB_RXRPTR_OFF);
-		if (rxw - rxr >= NB_RING) break;   // ring full, FPGA still draining
-
 		int len = ethernet_recv_nb(frame, MAX_FRAME);
 		if (len <= 0) break;
 		if (len < 14) continue;
+
+		uint64_t rxw = rd64(NB_RXWPTR_OFF);
+		uint64_t rxr = rd64(NB_RXRPTR_OFF);
+		if (rxw - rxr >= NB_RING) continue;   // ring full: drop, keep draining
 
 		uint32_t slot = NB_RXSLOT_OFF + NB_SLOT_SIZE * (uint32_t)(rxw & (NB_RING - 1));
 		memcpy((void *)(mb + slot + 8), frame, len);
