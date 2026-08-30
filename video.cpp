@@ -198,6 +198,8 @@ static_assert(sizeof(vmode_custom_param_t) == sizeof(vmode_custom_t::item));
 static void video_fb_config();
 static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode);
 
+static constexpr int MIN_V_BPORCH = 6;
+
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
 
@@ -2282,7 +2284,7 @@ static void video_set_mode(vmode_custom_t *v, double Fpix)
 	for (int i = 9; i < 21; i++)
 	{
 		printf("0x%X, ", v_cur.item[i]);
-		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust == 2 && !is_menu()) ? 0x8000 : 0) | 0x4000);
+		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust >= 2 && !is_menu()) ? 0x8000 : 0) | 0x4000);
 		else
 		{
 			spi_w(v_cur.item[i]);
@@ -3399,6 +3401,41 @@ void video_mode_adjust(bool force)
 			double Fpix = 0;
 			if (adjust)
 			{
+				if (cfg.vsync_adjust == 3)
+				{
+					// Hold the modeline's horizontal scanrate constant and absorb the refresh
+					// difference in the vertical blanking, so displays that lock backlight
+					// strobing to scanrate keep it engaged across cores.
+					const int htotal = v->item[1] + v->item[2] + v->item[3] + v->item[4];
+					const double scanrate = (v->Fpix * 1000000.0) / htotal;
+					const int vtotal = lround(v->Fpix * vtime / (htotal * 100.0));
+					const int vblank = vtotal - (int)v->item[5] - (int)v->item[7];
+
+					int vfp = vblank - (int)v->item[8];
+					int vbp = v->item[8];
+					if (vfp < 1)
+					{
+						// front porch exhausted: borrow from the back porch down to the CVT floor
+						vfp = 1;
+						vbp = vblank - 1;
+					}
+
+					if (vfp >= 1 && vfp <= 4095 && vbp >= MIN_V_BPORCH)
+					{
+						v->item[6] = vfp;
+						v->item[8] = vbp;
+						const double actual = vtotal * (100000000.0 / vtime);
+						printf("Scanrate lock: vtotal=%d vfp=%d vbp=%d, scanrate %.1fHz (%+.0f ppm)\n",
+							vtotal, vfp, vbp, actual, (actual - scanrate) * 1000000.0 / scanrate);
+					}
+					else
+					{
+						printf("Scanrate lock: cannot hold %.1fHz scanrate at %.3fHz (max %.2fHz for this mode). Using default timing.\n",
+							scanrate, 100000000.0 / vtime,
+							scanrate / (v->item[5] + v->item[7] + MIN_V_BPORCH + 1));
+					}
+				}
+
 				Fpix = 100 * (v->item[1] + v->item[2] + v->item[3] + v->item[4]) * (v->item[5] + v->item[6] + v->item[7] + v->item[8]);
 				Fpix /= vtime;
 				if (Fpix < 2.f || Fpix > 300.f)
@@ -4357,7 +4394,6 @@ static void video_calculate_cvt_int(int h_pixels, int v_lines, float refresh_rat
 	// Based on xfree86 cvt.c and https://tomverbeure.github.io/video_timings_calculator
 
 	const float CLOCK_STEP = 0.25f;
-	const int MIN_V_BPORCH = 6;
 	const int V_FRONT_PORCH = 3;
 
 	const int h_pixels_rnd = (h_pixels / CELL_GRAN_RND) * CELL_GRAN_RND;
