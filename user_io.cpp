@@ -240,6 +240,14 @@ char is_x86()
 	return (is_x86_type == 1);
 }
 
+static int is_pdp2011_type = 0;
+char is_pdp2011()
+{
+	if (!is_pdp2011_type)
+		is_pdp2011_type = !strcasecmp(orig_name, "PDP2011") ? 1 : 2;
+	return (is_pdp2011_type == 1);
+}
+
 static int is_snes_type = 0;
 char is_snes()
 {
@@ -444,6 +452,7 @@ void user_io_read_core_name()
 {
 	is_menu_type = 0;
 	is_x86_type  = 0;
+	is_pdp2011_type = 0;
 	is_no_type   = 0;
 	is_snes_type = 0;
 	is_sgb_type = 0;

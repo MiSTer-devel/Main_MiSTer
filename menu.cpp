@@ -63,6 +63,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "joymapping.h"
 #include "recent.h"
 #include "support.h"
+#include "support/pdp2011/panel.h"
 #include "bootcore.h"
 #include "ide.h"
 #include "profiling.h"
@@ -1015,6 +1016,17 @@ static int gun_side = 0;
 static int gun_idx = 0;
 static int32_t gun_pos[4] = {};
 static int page = 0;
+
+static void pdp2011_front_panel_banner(int force)
+{
+	char lines[2][32];
+	if (!is_pdp2011() || page != 2)
+		return;
+	if (pdp2011_panel_banner(lines, force)) {
+		OsdWrite(OsdGetSize() - 3, lines[0], 0, 0);
+		OsdWrite(OsdGetSize() - 2, lines[1], 0, 0);
+	}
+}
 
 static void menu_button_name(int button, char *buf, size_t bsize)
 {
@@ -2237,6 +2249,7 @@ void HandleUI(void)
 
 		parentstate = menustate;
 		menustate = MENU_GENERIC_MAIN3;
+		pdp2011_front_panel_banner(1);
 
 		// set helptext with core display on top of basic info
 		sprintf(helptext_custom, HELPTEXT_SPACER);
@@ -2290,6 +2303,7 @@ void HandleUI(void)
 
 	case MENU_GENERIC_MAIN3:
 		saved_menustate = MENU_GENERIC_MAIN1;
+		pdp2011_front_panel_banner(0);
 
 		// F/S option not found -> deactivate mgl.
 		if (!mgl->done && mgl->item[mgl->current].submenu < 0)
