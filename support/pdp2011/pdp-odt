@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""SSH front-panel ODT. Talks to MiSTer_pdp2011 at /tmp/pdp2011.odt."""
+import os
+import socket
+import sys
+
+SOCK = "/tmp/pdp2011.odt"
+
+
+def talk(line):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        s.connect(SOCK)
+    except OSError as e:
+        sys.stderr.write("pdp-odt: %s (%s). Is MiSTer_pdp2011 running the PDP2011 core?\n" % (SOCK, e))
+        return 2
+    s.sendall((line.strip() + "\n").encode())
+    buf = b""
+    s.settimeout(8)
+    while True:
+        try:
+            chunk = s.recv(4096)
+        except socket.timeout:
+            sys.stderr.write("pdp-odt: timeout\n")
+            return 1
+        if not chunk:
+            break
+        buf += chunk
+        if b"\n.\n" in buf or buf.endswith(b".\n"):
+            break
+    s.close()
+    sys.stdout.write(buf.decode("ascii", "replace"))
+    return 0 if b"\nERR" not in b"\n" + buf else 1
+
+
+def repl():
+    sys.stdout.write("pdp-odt  (help, snap, halt, run, cont, peek <oct>, poke <oct> <oct>, r7 <oct>)\n")
+    while True:
+        try:
+            line = input("odt> ")
+        except (EOFError, KeyboardInterrupt):
+            sys.stdout.write("\n")
+            return 0
+        line = line.strip()
+        if not line:
+            line = "snap"
+        if line in ("q", "quit", "exit"):
+            return 0
+        talk(line)
+
+
+def main():
+    if len(sys.argv) == 1:
+        return repl()
+    return talk(" ".join(sys.argv[1:]))
+
+
+if __name__ == "__main__":
+    sys.exit(main())

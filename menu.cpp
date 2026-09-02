@@ -820,14 +820,15 @@ static void printSysInfo()
 
 static int  firstmenu = 0;
 static int  adjvisible;
+static int  menu_top_offset = 0;
 
 static void MenuWrite(unsigned char n, const char *s = "", unsigned char invert = 0, unsigned char stipple = 0, int arrow = 0)
 {
-	int row = n - firstmenu;
+	int row = n - firstmenu + menu_top_offset;
 
-	if (row < 0)
+	if (row < menu_top_offset)
 	{
-		if (invert) adjvisible = row;
+		if (invert) adjvisible = row - menu_top_offset;
 		return;
 	}
 
@@ -838,7 +839,7 @@ static void MenuWrite(unsigned char n, const char *s = "", unsigned char invert 
 	}
 
 	OsdSetArrow(arrow);
-	OsdWriteOffset(row, s, invert, stipple, 0, (row == 0 && firstmenu) ? 17 : (row == (OsdGetSize()-1) && !arrow) ? 16 : 0, 0);
+	OsdWriteOffset(row, s, invert, stipple, 0, (row == menu_top_offset && firstmenu) ? 17 : (row == (OsdGetSize()-1) && !arrow) ? 16 : 0, 0);
 }
 
 const char* get_rbf_name_bootcore(char *str)
@@ -1023,8 +1024,8 @@ static void pdp2011_front_panel_banner(int force)
 	if (!is_pdp2011() || page != 2)
 		return;
 	if (pdp2011_panel_banner(lines, force)) {
-		OsdWrite(OsdGetSize() - 3, lines[0], 0, 0);
-		OsdWrite(OsdGetSize() - 2, lines[1], 0, 0);
+		OsdWrite(0, lines[0], 0, 0);
+		OsdWrite(1, lines[1], 0, 0);
 	}
 }
 
@@ -1931,6 +1932,7 @@ void HandleUI(void)
 			menumask = 0;
 
 			OsdSetTitle(page ? title : user_io_get_core_name());
+			menu_top_offset = (is_pdp2011() && page == 2) ? 2 : 0;
 
 			dip_submenu = -1;
 			manual_submenu = -1;
@@ -2238,6 +2240,8 @@ void HandleUI(void)
 			if (!adjvisible) break;
 			firstmenu += adjvisible;
 		}
+
+		menu_top_offset = 0;
 
 		if (!entry)
 		{

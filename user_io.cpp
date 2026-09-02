@@ -42,6 +42,7 @@
 #include "frame_timer.h"
 #include "scaler.h"
 #include "support.h"
+#include "support/pdp2011/panel.h"
 
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};
@@ -3224,6 +3225,9 @@ void user_io_poll()
 	{
 		check_status_change();
 	}
+
+	if (is_pdp2011())
+		pdp2011_odt_poll();
 
 	// sd card emulation
 	if (is_x86() || is_pcxt())
