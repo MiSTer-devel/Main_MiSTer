@@ -1,4 +1,4 @@
-// MiSTer integration glue for the Apple IIgs core. See iigs_disk.h.
+// MiSTer integration glue for the Apple IIgs and Apple //e cores. See iigs_disk.h.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,21 +26,44 @@ static int        g_wb_kind[16]  = {};  // 1 = 3.5", 2 = 5.25"
 static int64_t    g_wb_off[16]   = {};  // header offset within the source file
 static int        g_wb_order[16] = {};  // 5.25 source order: 0 = DOS, 1 = ProDOS
 
-// IIgs slot kinds: 0,1 = hard disk; 2 = 3.5"; 3 = 5.25". -1 = not an IIgs slot.
-static int slot_kind(int index)
+static int eqi(const char *a, const char *b) { return a && b && !strcasecmp(a, b); }
+
+// Which Apple II family core is running: 0 = none, 1 = Apple IIgs, 2 = Apple //e.
+static int a2_core_kind(void)
 {
-	if (index == 0 || index == 1) return 0;  // HDD
-	if (index == 2) return 1;                 // 3.5"
-	if (index == 3) return 2;                 // 5.25"
-	return -1;
+	const char *n = user_io_get_core_name();
+	if (!n) return 0;
+	if (!strcasecmp(n, "Apple-IIgs")) return 1;
+	if (!strcasecmp(n, "Apple-II"))   return 2;
+	return 0;
 }
 
-static int eqi(const char *a, const char *b) { return a && b && !strcasecmp(a, b); }
+// Slot kinds: 0 = hard disk; 1 = 3.5"; 2 = 5.25". -1 = not a slot we handle.
+//   Apple IIgs (Apple-IIgs.sv, VDNUM=4): S0,S1 = hard disk; S2 = 3.5"; S3 = 5.25".
+//   Apple //e  (Apple-II.sv,   VDNUM=3): S0,S2 = 5.25" (Disk II drives 1/2); S1 = hard disk.
+// The //e core's Disk II is the same WOZ engine as the IIgs's, so its floppy
+// slots get the same treatment: native WOZ passed through, everything else
+// converted to WOZ in memory.
+static int slot_kind(int index)
+{
+	switch (a2_core_kind()) {
+	case 1:
+		if (index == 0 || index == 1) return 0;  // HDD
+		if (index == 2) return 1;                 // 3.5"
+		if (index == 3) return 2;                 // 5.25"
+		return -1;
+	case 2:
+		if (index == 1) return 0;                 // HDD (slot 7)
+		if (index == 0 || index == 2) return 2;   // 5.25" drive 1 / drive 2
+		return -1;
+	default:
+		return -1;
+	}
+}
 
 int iigs_is_core(void)
 {
-	const char *n = user_io_get_core_name();
-	return n && !strcasecmp(n, "Apple-IIgs");
+	return a2_core_kind() != 0;
 }
 
 static void reject(const char *msg)
