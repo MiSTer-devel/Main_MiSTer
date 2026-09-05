@@ -201,6 +201,9 @@ static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh
 // minimum vertical back porch when scanrate lock borrows blanking lines
 static constexpr int SCANLOCK_MIN_VBP = 6;
 
+// margin on the rotation writer's head start, in input lines
+static constexpr int SCANLOCK_ROT_MARGIN = 5;
+
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
 
@@ -2281,11 +2284,25 @@ static void video_set_mode(vmode_custom_t *v, double Fpix)
 
 	printf("%chsync, %cvsync\n", !!v_cur.param.hpol ? '+' : '-', !!v_cur.param.vpol ? '+' : '-');
 
+	// keep the buffered scaler when output blanking outlasts the rotation writer's head start
+	bool rot_2buf_unsafe = false;
+	if (cfg.vsync_adjust == 3 && video_get_rotated() && current_video_info.htime && current_video_info.vtime)
+	{
+		const int64_t vtotal = (int64_t)v_cur.param.vact + v_cur.param.vfp + v_cur.param.vs + v_cur.param.vbp;
+		const int64_t vblank = vtotal - v_cur.param.vact;
+		if (vtotal > 0)
+		{
+			rot_2buf_unsafe = (vblank * current_video_info.vtime / vtotal) >
+				((int64_t)current_video_info.de_v + SCANLOCK_ROT_MARGIN) * current_video_info.htime;
+			if (rot_2buf_unsafe) printf("Rotated core needs more output blanking than it can absorb, using buffered scaler.\n");
+		}
+	}
+
 	printf("PLL: ");
 	for (int i = 9; i < 21; i++)
 	{
 		printf("0x%X, ", v_cur.item[i]);
-		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust >= 2 && !is_menu()) ? 0x8000 : 0) | 0x4000);
+		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust >= 2 && !is_menu() && !rot_2buf_unsafe) ? 0x8000 : 0) | 0x4000);
 		else
 		{
 			spi_w(v_cur.item[i]);
