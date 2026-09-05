@@ -3404,30 +3404,33 @@ void video_mode_adjust(bool force)
 			{
 				// staged timing, applied below only if nothing cancels the adjustment
 				uint32_t cand_vfp = v->item[6], cand_vbp = v->item[8];
+				double scanrate = 0;
+				bool scanlock = false;
+
 				if (cfg.vsync_adjust == 3)
 				{
 					// keep the pixel clock and htotal, put the refresh difference in vblank
-					const int htotal = v->item[1] + v->item[2] + v->item[3] + v->item[4];
-					const double scanrate = (v->Fpix * 1000000.0) / htotal;
-					const int min_vbp = ((int)v->item[8] < SCANLOCK_MIN_VBP) ? (int)v->item[8] : SCANLOCK_MIN_VBP;
-					const int vt_min = (int)v->item[5] + (int)v->item[7] + min_vbp + 1;
+					const int64_t htotal = (int64_t)v->item[1] + v->item[2] + v->item[3] + v->item[4];
+					const int64_t min_vbp = ((int64_t)v->item[8] < SCANLOCK_MIN_VBP) ? (int64_t)v->item[8] : SCANLOCK_MIN_VBP;
+					const int64_t vt_min = (int64_t)v->item[5] + v->item[7] + min_vbp + 1;
+					const int64_t vtotal = llround(v->Fpix * vtime / (htotal * 100.0));
+					scanrate = (v->Fpix * 1000000.0) / htotal;
 
-					// vtotal is a 12-bit sum in the scaler
-					int vtotal = lround(v->Fpix * vtime / (htotal * 100.0));
-					const bool clamped = (vtotal < vt_min) || (vtotal > 4095);
-					if (vtotal < vt_min) vtotal = vt_min;
-					else if (vtotal > 4095) vtotal = 4095;
-
-					// take from the front porch first, then borrow from the back porch
-					const int vblank = vtotal - (int)v->item[5] - (int)v->item[7];
-					cand_vfp = (vblank - (int)v->item[8] < 1) ? 1 : vblank - (int)v->item[8];
-					cand_vbp = vblank - cand_vfp;
-
-					const double actual = vtotal * (100000000.0 / vtime);
-					printf("Scanrate lock: vtotal=%d vfp=%d vbp=%d, scanrate %.1fHz (%+.0f ppm)\n",
-						vtotal, (int)cand_vfp, (int)cand_vbp, actual, (actual - scanrate) * 1000000.0 / scanrate);
-					if (clamped) printf("Scanrate lock: %.3fHz is outside the lockable range (%.2f-%.2f Hz). Scanrate not held.\n",
-						100000000.0 / vtime, scanrate / 4095, scanrate / vt_min);
+					// vtotal reaches the scaler as a 12-bit sum
+					scanlock = (vt_min <= 4095) && (vtotal >= vt_min) && (vtotal <= 4095);
+					if (scanlock)
+					{
+						// take from the front porch first, then borrow from the back porch
+						const int64_t vblank = vtotal - (int64_t)v->item[5] - v->item[7];
+						const int64_t vfp = (vblank - (int64_t)v->item[8] < 1) ? 1 : vblank - (int64_t)v->item[8];
+						cand_vfp = (uint32_t)vfp;
+						cand_vbp = (uint32_t)(vblank - vfp);
+					}
+					else
+					{
+						printf("Scanrate lock: %.3fHz needs vtotal %lld, outside the usable range %lld-4095. Trying standard adjustment.\n",
+							100000000.0 / vtime, (long long)vtotal, (long long)vt_min);
+					}
 				}
 
 				Fpix = 100 * (v->item[1] + v->item[2] + v->item[3] + v->item[4]) * (v->item[5] + cand_vfp + v->item[7] + cand_vbp);
@@ -3451,11 +3454,19 @@ void video_mode_adjust(bool force)
 					Fpix = 0;
 				}
 
-				// apply staged timing
-				if (Fpix && cfg.vsync_adjust == 3)
+				// nothing canceled the adjustment, so the staged timing is safe to apply
+				if (Fpix && scanlock)
 				{
 					v->item[6] = cand_vfp;
 					v->item[8] = cand_vbp;
+					const int vtotal = v->item[5] + v->item[6] + v->item[7] + v->item[8];
+					const double actual = vtotal * (100000000.0 / vtime);
+					printf("Scanrate lock: vtotal=%d vfp=%d vbp=%d, scanrate %.1fHz (%+.0f ppm)\n",
+						vtotal, v->item[6], v->item[8], actual, (actual - scanrate) * 1000000.0 / scanrate);
+				}
+				else if (Fpix && cfg.vsync_adjust == 3)
+				{
+					printf("Scanrate lock: standard adjustment applied, scanrate not held.\n");
 				}
 			}
 
