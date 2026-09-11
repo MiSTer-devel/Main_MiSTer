@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <memory>
 
 #include "../../file_io.h"
 #include "../../user_io.h"
@@ -77,22 +78,22 @@ static int sgets(char *out, int sz, char **in)
 }
 
 int pcecdd_t::LoadCUE(const char* filename) {
-	static char fname[1024 + 10];
-	static char line[128];
+	char fname[1024 + 10];
+	char line[128];
 	char *ptr, *lptr;
-	static char toc[100 * 1024];
+	auto toc = std::make_unique<char[]>(CUE_BUFFER_SIZE);
 	int hdr = 0;
 
 	strcpy(fname, filename);
 
-	memset(toc, 0, sizeof(toc));
-	if (!FileLoad(fname, toc, sizeof(toc) - 1)) return 1;
+	memset(toc.get(), 0, CUE_BUFFER_SIZE);
+	if (!FileLoad(fname, toc.get(), CUE_BUFFER_SIZE - 1)) return 1;
 
 	printf("\x1b[32mPCECD: Open CUE: %s\n\x1b[0m", fname);
 
 	int mm, ss, bb, pregap = 0;
 
-	char *buf = toc;
+	char *buf = toc.get();
 	while (sgets(line, sizeof(line), &buf))
 	{
 		lptr = line;
