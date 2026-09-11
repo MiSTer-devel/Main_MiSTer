@@ -72,6 +72,7 @@ static const ini_var_t ini_vars[] =
 	{ "FB_TERMINAL", (void*)(&(cfg.fb_terminal)), UINT8, 0, 1 },
 	{ "OSD_TIMEOUT", (void*)(&(cfg.osd_timeout)), INT16, 0, 3600 },
 	{ "DIRECT_VIDEO", (void*)(&(cfg.direct_video)), UINT8, 0, 2 },
+	{ "FX_DIRECT", (void*)(&(cfg.fx_direct)), UINT8, 0, 1 },
 	{ "OSD_ROTATE", (void*)(&(cfg.osd_rotate)), UINT8, 0, 2 },
 	{ "DEADZONE", (void*)(&(cfg.controller_deadzone)), STRINGARR, sizeof(cfg.controller_deadzone) / sizeof(*cfg.controller_deadzone), sizeof(*cfg.controller_deadzone) },
 	{ "GAMEPAD_DEFAULTS", (void*)(&(cfg.gamepad_defaults)), UINT8, 0, 1 },
@@ -638,6 +639,17 @@ void cfg_parse()
 		}
 	}
 
+	if (cfg.fx_direct)
+	{
+		// Forced video options for FX Direct frame
+		strcpy(cfg.video_conf, "8");
+		cfg.video_conf_pal[0] = 0;
+		cfg.video_conf_ntsc[0] = 0;
+		cfg.vsync_adjust = 2;
+		cfg.direct_video = 0;
+		cfg.vrr_mode = 0;
+		cfg.hdr = 0;
+	}
 }
 
 bool cfg_has_video_sections()

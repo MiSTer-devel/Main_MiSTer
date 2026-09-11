@@ -26,6 +26,7 @@ typedef struct {
 	uint8_t hdmi_cec_power_on;
 	float hdmi_cec_clock;
 	uint8_t direct_video;
+	uint8_t fx_direct;
 	uint8_t video_info;
 	float refresh_min;
 	float refresh_max;
