@@ -247,6 +247,17 @@ char is_snes()
 	return (is_snes_type == 1);
 }
 
+// True if the running core is the Apple //e (confstr name "Apple-II").
+// Follows the is_snes() idiom; keyed on orig_name so name overrides do not
+// affect it. TK2000 ("TK2000") shares the a2 floppy flow but keeps its own
+// confstr name and savestate directory, so it is deliberately excluded.
+static int is_apple2_type = 0;
+char is_apple2()
+{
+	if (!is_apple2_type) is_apple2_type = strcasecmp(orig_name, "Apple-II") ? 2 : 1;
+	return (is_apple2_type == 1);
+}
+
 static int is_sgb_type = 0;
 char is_sgb()
 {
@@ -451,6 +462,7 @@ void user_io_read_core_name()
 	is_x86_type  = 0;
 	is_no_type   = 0;
 	is_snes_type = 0;
+	is_apple2_type = 0;
 	is_sgb_type = 0;
 	is_cpc_type = 0;
 	is_zx81_type = 0;
@@ -2258,6 +2270,13 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 	else
 	{
+		if (ss_base && is_apple2())
+		{
+			// Apple-II: mount the S-line .ss file set (zeroes the slots and
+			// reloads the <game>_1..4.ss files) so savestates persist on the
+			// SD card across reboots. No-op when the .ss directory is missing.
+			process_ss(name);
+		}
 		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", index);
 	}
 
