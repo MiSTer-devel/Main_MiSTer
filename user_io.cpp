@@ -2181,7 +2181,11 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					const unsigned char ext_idx = last_file_ext_idx;
 					// The Apple //e core now takes WOZ only (its floppies go through iigs_mount
 					// below, like the IIgs); only TK2000 still uses the on-the-fly nibblizer.
-					const bool a2_core = !strcasecmp(core_name, "TK2000");
+					// Apple-II keeps the on-the-fly nibblizer only when its confstr does not
+					// declare the WOZ floppy path; gated builds take iigs_mount below,
+					// like the IIgs.
+					const bool a2_core = !strcasecmp(core_name, "TK2000") ||
+						(!strcasecmp(core_name, "apple-ii") && !user_io_a2_woz_enabled());
 					const bool oric_core =
 						!strcasecmp(core_name, "Oric") ||
 						!strcasecmp(core_name, "Pravetz 8D") ||
@@ -3013,6 +3017,33 @@ void user_io_read_confstr()
 
 	cfgstr[j++] = 0;
 	DisableIO();
+}
+
+
+// Number of ;-separated fields in the confstr (0 if empty). The field count
+// grows with the core's OSD/media feature set, so it doubles as a version
+// flag: it cannot see the RBF build, but the confstr is delivered per core.
+int user_io_confstr_field_count()
+{
+	if (!cfgstr[0]) return 0;
+	int c = 0;
+	for (int i = 0; i < sizeof(cfgstr); i++)
+		if (cfgstr[i] == ';') c++;
+	return c + 1;
+}
+
+// Apple-II floppy version gate (user decision 2026-09-11: cutoff > 65).
+// The core's confstr declares more than A2_WOZ_MIN_FIELDS fields => its
+// Disk II consumes WOZ (the iigs_mount path from 74a35bc); otherwise the
+// legacy flux/nib flow applies (dsk2nib nibblizer for .dsk, raw .nib).
+// Measured ladder (2026-09-11): release 45; dev woz 68; dev standard 69 -
+// so both current dev builds take the WOZ path and the release generation
+// keeps the nibblizer. An interim build above the cutoff is accepted.
+#define A2_WOZ_MIN_FIELDS 65
+char user_io_a2_woz_enabled()
+{
+	const char *n = user_io_get_core_name();
+	return n && !strcasecmp(n, "Apple-II") && user_io_confstr_field_count() > A2_WOZ_MIN_FIELDS;
 }
 
 char *user_io_get_confstr(int index)
