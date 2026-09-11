@@ -3025,25 +3025,60 @@ void user_io_read_confstr()
 // flag: it cannot see the RBF build, but the confstr is delivered per core.
 int user_io_confstr_field_count()
 {
-	if (!cfgstr[0]) return 0;
 	int c = 0;
-	for (int i = 0; i < sizeof(cfgstr); i++)
+	// scan only up to the NUL: the 10 KiB buffer is zero-initialized once,
+	// so a short confstr loaded after a longer one (core switch) leaves
+	// stale bytes in the tail that must not be counted
+	for (int i = 0; cfgstr[i]; i++)
 		if (cfgstr[i] == ';') c++;
 	return c + 1;
 }
 
-// Apple-II floppy version gate (user decision 2026-09-11: cutoff > 65).
+// Build date (YYMM) from the confstr V field ("V,v<YYMMDD>" - the core's OSD
+// version string). BUILD_DATE is the COMPILE date: sys/build_id.tcl rewrites
+// build_id.v on every Quartus build, so it dates the RBF, not the source.
+// 0 if the field is absent (treated as old by the gate below).
+static int user_io_confstr_yymm()
+{
+	const char *p = cfgstr;
+	while (*p)
+	{
+		// fields are ;-separated; the type char is the field's first byte,
+		// so ";V," can only ever occur at a field boundary
+		if (p[0] == 'V' && p[1] == ',' && p[2] == 'v' &&
+		    p[3] >= '0' && p[3] <= '9' && p[4] >= '0' && p[4] <= '9' &&
+		    p[5] >= '0' && p[5] <= '9' && p[6] >= '0' && p[6] <= '9')
+		{
+			return (p[3]-'0')*1000 + (p[4]-'0')*100 + (p[5]-'0')*10 + (p[6]-'0');
+		}
+		p = strchr(p, ';');
+		if (!p) break;
+		p++;
+	}
+	return 0;
+}
+
+// Apple-II floppy version gate (user decision 2026-09-11: cutoff > 50, so
+// that Apple-II variant cores with reduced confstrs are covered too).
 // The core's confstr declares more than A2_WOZ_MIN_FIELDS fields => its
 // Disk II consumes WOZ (the iigs_mount path from 74a35bc); otherwise the
 // legacy flux/nib flow applies (dsk2nib nibblizer for .dsk, raw .nib).
-// Measured ladder (2026-09-11): release 45; dev woz 68; dev standard 69 -
-// so both current dev builds take the WOZ path and the release generation
-// keeps the nibblizer. An interim build above the cutoff is accepted.
-#define A2_WOZ_MIN_FIELDS 65
+// Measured ladder (2026-09-11, corrected): release 45; dev standard 69;
+// dev woz 69 (the woz confstr differs only in the S0/S2 drive-name lines,
+// +2 bytes). The release generation is frozen at 45, leaving a 5-field
+// margin below the cutoff. An interim build above the cutoff is accepted.
+#define A2_WOZ_MIN_FIELDS 50
+// Compile-date floor (user decision 2026-09-11): a core compiled in 2026-06 or
+// earlier (yymm < 2607) is unambiguously the flux-Disk II vintage - the
+// release RBF is 260603. 2606 itself must stay OLD (it is the release month),
+// so the floor is 2607.
+#define A2_WOZ_MIN_DATE 2607
 char user_io_a2_woz_enabled()
 {
 	const char *n = user_io_get_core_name();
-	return n && !strcasecmp(n, "Apple-II") && user_io_confstr_field_count() > A2_WOZ_MIN_FIELDS;
+	return n && !strcasecmp(n, "Apple-II") &&
+		user_io_confstr_field_count() > A2_WOZ_MIN_FIELDS &&
+		user_io_confstr_yymm() >= A2_WOZ_MIN_DATE;
 }
 
 char *user_io_get_confstr(int index)
