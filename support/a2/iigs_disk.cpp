@@ -34,7 +34,7 @@ static int a2_core_kind(void)
 	const char *n = user_io_get_core_name();
 	if (!n) return 0;
 	if (!strcasecmp(n, "Apple-IIgs")) return 1;
-	if (!strcasecmp(n, "Apple-II"))   return 2;
+	if (!strcasecmp(n, "Apple-II") && user_io_a2_woz_enabled()) return 2;  // field-count gate
 	return 0;
 }
 
