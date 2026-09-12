@@ -5319,7 +5319,7 @@ int input_test(int getchar)
 
 						if (input[n].vid == 0x057e)
 						{
-							if (strstr(input[n].name, " IMU"))
+							if (strstr(input[n].name, " IMU") || strstr(input[n].name, "(IMU)"))
 							{
 								// don't use Accelerometer
 								close(pool[n].fd);
