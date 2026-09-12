@@ -247,6 +247,17 @@ char is_snes()
 	return (is_snes_type == 1);
 }
 
+// True if the running core is the Apple //e (confstr name "Apple-II").
+// Follows the is_snes() idiom; keyed on orig_name so name overrides do not
+// affect it. TK2000 ("TK2000") shares the a2 floppy flow but keeps its own
+// confstr name and savestate directory, so it is deliberately excluded.
+static int is_apple2_type = 0;
+char is_apple2()
+{
+	if (!is_apple2_type) is_apple2_type = strcasecmp(orig_name, "Apple-II") ? 2 : 1;
+	return (is_apple2_type == 1);
+}
+
 static int is_sgb_type = 0;
 char is_sgb()
 {
@@ -451,6 +462,7 @@ void user_io_read_core_name()
 	is_x86_type  = 0;
 	is_no_type   = 0;
 	is_snes_type = 0;
+	is_apple2_type = 0;
 	is_sgb_type = 0;
 	is_cpc_type = 0;
 	is_zx81_type = 0;
@@ -1963,6 +1975,44 @@ int process_ss(const char *rom_name, int enable)
 		uint32_t map_addr = ss_base;
 		fileTYPE f = {};
 
+		// Apple-II: per-game savestates, keyed by the game disk.  The name is
+		// picked deterministically from the CURRENT mounts (S0 first, then S2,
+		// then the S1 HDD), never from the media of this mount event: keying
+		// by the last-mounted media made a floppy+HDD machine write every slot
+		// under the HDD's name, so the next boot with only the floppy found
+		// nothing and lost the state.  With no disk mounted the core name is
+		// used (states taken at the monitor).
+		//
+		// The name must contain a dot: the shared FileGenerateSavestatePath()
+		// truncates at the last dot and writes the "_N.ss" suffix there (a
+		// dotless name would crash it).  The core-name fallback therefore
+		// carries a trailing dot - that dot is the truncation point, giving
+		// "Apple-II_1.ss" / "Apple-II.ss" exactly as the core name intended.
+		const char *ss_media = rom_name;
+		if (is_apple2())
+		{
+			static char a2_ss_core[64];
+			snprintf(a2_ss_core, sizeof(a2_ss_core), "%s.", user_io_get_core_name());
+			ss_media = a2_ss_core;
+			static const int a2_ss_slot[3] = {0, 2, 1};
+			for (int p = 0; p < 3; p++)
+			{
+				if (sd_image[a2_ss_slot[p]].size)
+				{
+					const char *q = sd_image[a2_ss_slot[p]].path;
+					const char *slash = strrchr(q, '/');
+					const char *base = slash ? slash + 1 : q;
+					// dotted media name only; a dotless image would crash the
+					// shared path helper, so fall through to the core name
+					if (strchr(base, '.'))
+					{
+						ss_media = base;
+						break;
+					}
+				}
+			}
+		}
+
 		for (int i = 0; i < 4; i++)
 		{
 			if (!base[i]) base[i] = shmem_map(map_addr, len);
@@ -1977,13 +2027,13 @@ int process_ss(const char *rom_name, int enable)
 
 				if (!i)
 				{
-					FileGenerateSavestatePath(rom_name, ss_name, 1);
+					FileGenerateSavestatePath(ss_media, ss_name, 1);
 					printf("Base SavestatePath=%s\n", ss_name);
-					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
+					if (!FileExists(ss_name)) FileGenerateSavestatePath(ss_media, ss_name, 0);
 				}
 				else
 				{
-					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
+					FileGenerateSavestatePath(ss_media, ss_name, i + 1);
 				}
 
 				if (FileExists(ss_name))
@@ -2005,7 +2055,7 @@ int process_ss(const char *rom_name, int enable)
 			map_addr += len;
 		}
 
-		FileGenerateSavestatePath(rom_name, ss_name, 1);
+		FileGenerateSavestatePath(ss_media, ss_name, 1);
 		ss_sufx = ss_name + strlen(ss_name) - 4;
 		return 1;
 	}
@@ -2167,7 +2217,13 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					const char *core_name = user_io_get_core_name();
 					const char *orig_core_name = user_io_get_core_name(1);
 					const unsigned char ext_idx = last_file_ext_idx;
-					const bool a2_core = !strcasecmp(core_name, "apple-ii") || !strcasecmp(core_name, "TK2000");
+					// The Apple //e core now takes WOZ only (its floppies go through iigs_mount
+					// below, like the IIgs); only TK2000 still uses the on-the-fly nibblizer.
+					// Apple-II keeps the on-the-fly nibblizer only when its confstr does not
+					// declare the WOZ floppy path; gated builds take iigs_mount below,
+					// like the IIgs.
+					const bool a2_core = !strcasecmp(core_name, "TK2000") ||
+						(!strcasecmp(core_name, "apple-ii") && !user_io_a2_woz_enabled());
 					const bool oric_core =
 						!strcasecmp(core_name, "Oric") ||
 						!strcasecmp(core_name, "Pravetz 8D") ||
@@ -2256,6 +2312,13 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 	else
 	{
+		if (ss_base && is_apple2())
+		{
+			// Apple-II: mount the S-line .ss file set (zeroes the slots and
+			// reloads the <game>_1..4.ss files) so savestates persist on the
+			// SD card across reboots. No-op when the .ss directory is missing.
+			process_ss(name);
+		}
 		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", index);
 	}
 
@@ -2994,6 +3057,68 @@ void user_io_read_confstr()
 	DisableIO();
 }
 
+
+// Number of ;-separated fields in the confstr (0 if empty). The field count
+// grows with the core's OSD/media feature set, so it doubles as a version
+// flag: it cannot see the RBF build, but the confstr is delivered per core.
+int user_io_confstr_field_count()
+{
+	int c = 0;
+	// scan only up to the NUL: the 10 KiB buffer is zero-initialized once,
+	// so a short confstr loaded after a longer one (core switch) leaves
+	// stale bytes in the tail that must not be counted
+	for (int i = 0; cfgstr[i]; i++)
+		if (cfgstr[i] == ';') c++;
+	return c + 1;
+}
+
+// Build date (YYMM) from the confstr V field ("V,v<YYMMDD>" - the core's OSD
+// version string). BUILD_DATE is the COMPILE date: sys/build_id.tcl rewrites
+// build_id.v on every Quartus build, so it dates the RBF, not the source.
+// 0 if the field is absent (treated as old by the gate below).
+static int user_io_confstr_yymm()
+{
+	const char *p = cfgstr;
+	while (*p)
+	{
+		// fields are ;-separated; the type char is the field's first byte,
+		// so ";V," can only ever occur at a field boundary
+		if (p[0] == 'V' && p[1] == ',' && p[2] == 'v' &&
+		    p[3] >= '0' && p[3] <= '9' && p[4] >= '0' && p[4] <= '9' &&
+		    p[5] >= '0' && p[5] <= '9' && p[6] >= '0' && p[6] <= '9')
+		{
+			return (p[3]-'0')*1000 + (p[4]-'0')*100 + (p[5]-'0')*10 + (p[6]-'0');
+		}
+		p = strchr(p, ';');
+		if (!p) break;
+		p++;
+	}
+	return 0;
+}
+
+// Apple-II floppy version gate (user decision 2026-09-11: cutoff > 50, so
+// that Apple-II variant cores with reduced confstrs are covered too).
+// The core's confstr declares more than A2_WOZ_MIN_FIELDS fields => its
+// Disk II consumes WOZ (the iigs_mount path from 74a35bc); otherwise the
+// legacy flux/nib flow applies (dsk2nib nibblizer for .dsk, raw .nib).
+// Measured ladder (2026-09-11, corrected): release 45; dev standard 69;
+// dev woz 69 (the woz confstr differs only in the S0/S2 drive-name lines,
+// +2 bytes). The release generation is frozen at 45, leaving a 5-field
+// margin below the cutoff. An interim build above the cutoff is accepted.
+#define A2_WOZ_MIN_FIELDS 50
+// Compile-date floor (user decision 2026-09-11): a core compiled in 2026-06 or
+// earlier (yymm < 2607) is unambiguously the flux-Disk II vintage - the
+// release RBF is 260603. 2606 itself must stay OLD (it is the release month),
+// so the floor is 2607.
+#define A2_WOZ_MIN_DATE 2607
+char user_io_a2_woz_enabled()
+{
+	const char *n = user_io_get_core_name();
+	return n && !strcasecmp(n, "Apple-II") &&
+		user_io_confstr_field_count() > A2_WOZ_MIN_FIELDS &&
+		user_io_confstr_yymm() >= A2_WOZ_MIN_DATE;
+}
+
 char *user_io_get_confstr(int index)
 {
 	int lidx = 0;
@@ -3242,6 +3367,52 @@ void user_io_poll()
 	if (core_type == CORE_TYPE_8BIT && !is_menu())
 	{
 		check_status_change();
+
+		// Apple-II (incl. the WOZ build): the core latches the one-cycle
+		// img_mounted pulse into a level, so a core restart (FPGA reconfig)
+		// loses the mount forever - nothing re-fires the pulse (it is only
+		// sent on explicit user mount).  Re-assert the mount notification
+		// (image size, then the pulse) every couple of seconds for each
+		// mounted slot.  For a healthy core this is a no-op: the level
+		// stays unchanged, so no remount edge reaches the core.  Right
+		// after a core restart it re-latches the mount so the core can
+		// boot instead of spinning forever on a "no disk" state.
+		if (is_apple2())
+		{
+			static unsigned long a2_mount_timer = 0;
+			static uint16_t a2_rb = 0;
+			static int a2_refire_n = 0;
+			if (!a2_mount_timer || CheckTimer(a2_mount_timer))
+			{
+				a2_mount_timer = GetTimer(2000);
+				for (int i = 0; i < 3; i++)
+				{
+					if (!sd_image[i].size) continue; // slot not mounted
+					__off64_t size = sd_image[i].size;
+					int ro = !(sd_image[i].mode & O_RDWR);
+					// Same sequence as the tail of user_io_file_mount():
+					// size first (0x1d), then the mount pulse (0x1c+mask).
+					EnableIO();
+					spi8(UIO_SET_SDINFO);
+					if (io_ver) { spi32_w(size); spi32_w(size >> 32); }
+					else       { spi32_b(size); spi32_b(size >> 32); }
+					DisableIO();
+					spi_uio_cmd8(UIO_SET_SDSTAT, (1 << i) | (ro ? 0x80 : 0));
+				}
+				// Liveness probe: read the core's SD request status back over
+				// the same SPI8 channel the refire just wrote.  A live
+				// HPS->FPGA link returns {1'b1, sd_blk_cnt, BLKSZ, sdn,
+				// sd_wr, sd_rd}: for the WOZ core (BLKSZ=2, slot 0) that is
+				// 0x8040 (no request) or 0x8041 (core holding sd_rd).  A
+				// dead/stale link reads back 0x0000/0xFFFF.  Console only
+				// (serial), so it is safe to run every refire.
+				a2_rb = spi_uio_cmd_cont(UIO_GET_SDSTAT);
+				a2_refire_n++;
+				printf("A2 refire #%d: sdstat readback=0x%04X%s\n",
+				       a2_refire_n, a2_rb,
+				       (a2_rb & 0x8000) ? " (link OK)" : " (link DEAD)");
+			}
+		}
 	}
 
 	// sd card emulation

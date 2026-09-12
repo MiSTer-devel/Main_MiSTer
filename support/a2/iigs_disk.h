@@ -1,11 +1,12 @@
 // MiSTer integration glue for the Apple IIgs core disk handling.
 //
 // This is the bridge between the pure codec (iigs_fmt.{h,cpp}) and MiSTer's
-// SD-block plumbing in user_io.cpp. It is active ONLY for the "Apple-IIgs"
-// core; every other core (including the Apple II NIB flow via SD_TYPE_A2) is
-// left completely untouched.
+// SD-block plumbing in user_io.cpp. It is active for the "Apple-IIgs" and
+// "Apple-II" (//e) cores, whose Disk II / IWM engines take WOZ only; every
+// other core (including the TK2000 NIB flow via SD_TYPE_A2) is untouched.
 //
-// Slots (Apple-IIgs.sv, VDNUM=4): S0,S1 = hard disk; S2 = 3.5"; S3 = 5.25".
+// Slots: IIgs (Apple-IIgs.sv, VDNUM=4): S0,S1 = hard disk; S2 = 3.5"; S3 = 5.25".
+//        //e  (Apple-II.sv,   VDNUM=3): S0,S2 = 5.25" drives; S1 = hard disk.
 
 #ifndef IIGS_DISK_H
 #define IIGS_DISK_H
@@ -23,7 +24,7 @@
 #define IIGS_HANDLED   1   // set up for iigs_read/iigs_write; size/sd_type adjusted
 #define IIGS_REJECT   (-1) // wrong disk for this slot — caller aborts mount (OSD shown)
 
-// True if the running core is "Apple-IIgs".
+// True if the running core is "Apple-IIgs" or "Apple-II" (//e).
 int iigs_is_core(void);
 
 // Called from user_io_file_mount after the image is opened, for the IIgs core.
