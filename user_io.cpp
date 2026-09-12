@@ -3329,6 +3329,52 @@ void user_io_poll()
 	if (core_type == CORE_TYPE_8BIT && !is_menu())
 	{
 		check_status_change();
+
+		// Apple-II (incl. the WOZ build): the core latches the one-cycle
+		// img_mounted pulse into a level, so a core restart (FPGA reconfig)
+		// loses the mount forever - nothing re-fires the pulse (it is only
+		// sent on explicit user mount).  Re-assert the mount notification
+		// (image size, then the pulse) every couple of seconds for each
+		// mounted slot.  For a healthy core this is a no-op: the level
+		// stays unchanged, so no remount edge reaches the core.  Right
+		// after a core restart it re-latches the mount so the core can
+		// boot instead of spinning forever on a "no disk" state.
+		if (is_apple2())
+		{
+			static unsigned long a2_mount_timer = 0;
+			static uint16_t a2_rb = 0;
+			static int a2_refire_n = 0;
+			if (!a2_mount_timer || CheckTimer(a2_mount_timer))
+			{
+				a2_mount_timer = GetTimer(2000);
+				for (int i = 0; i < 3; i++)
+				{
+					if (!sd_image[i].size) continue; // slot not mounted
+					__off64_t size = sd_image[i].size;
+					int ro = !(sd_image[i].mode & O_RDWR);
+					// Same sequence as the tail of user_io_file_mount():
+					// size first (0x1d), then the mount pulse (0x1c+mask).
+					EnableIO();
+					spi8(UIO_SET_SDINFO);
+					if (io_ver) { spi32_w(size); spi32_w(size >> 32); }
+					else       { spi32_b(size); spi32_b(size >> 32); }
+					DisableIO();
+					spi_uio_cmd8(UIO_SET_SDSTAT, (1 << i) | (ro ? 0x80 : 0));
+				}
+				// Liveness probe: read the core's SD request status back over
+				// the same SPI8 channel the refire just wrote.  A live
+				// HPS->FPGA link returns {1'b1, sd_blk_cnt, BLKSZ, sdn,
+				// sd_wr, sd_rd}: for the WOZ core (BLKSZ=2, slot 0) that is
+				// 0x8040 (no request) or 0x8041 (core holding sd_rd).  A
+				// dead/stale link reads back 0x0000/0xFFFF.  Console only
+				// (serial), so it is safe to run every refire.
+				a2_rb = spi_uio_cmd_cont(UIO_GET_SDSTAT);
+				a2_refire_n++;
+				printf("A2 refire #%d: sdstat readback=0x%04X%s\n",
+				       a2_refire_n, a2_rb,
+				       (a2_rb & 0x8000) ? " (link OK)" : " (link DEAD)");
+			}
+		}
 	}
 
 	// sd card emulation
