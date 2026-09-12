@@ -42,6 +42,7 @@ struct arc_struct {
 	int ifrom;
 	int ito;
 	int imap;
+	int has_file_part;
 	int file_size;
 	uint32_t address;
 	uint32_t crc;
@@ -324,7 +325,7 @@ static int rom_patch(const uint8_t *buf, int offset, uint16_t len, int dataop)
 	return 1;
 }
 
-static void rom_finish(int send, uint32_t address, int index)
+static void rom_finish(int send, uint32_t address, int index, int show_debug_progress)
 {
 	if (romlen[0] && romdata)
 	{
@@ -339,9 +340,31 @@ static void rom_finish(int send, uint32_t address, int index)
 			// prepare transmission of new file
 			user_io_set_download(1, address ? len : 0);
 
+			int debug_progress = -1;
 			if (address)
 			{
-				shmem_put(fpga_mem(address), len, data);
+				void *shmem = shmem_map(fpga_mem(address), len);
+				if (shmem)
+				{
+					if (show_debug_progress)
+					{
+						uint32_t sent = 0;
+						uint32_t copy_size = ((uint32_t)len + 9) / 10;
+						user_io_debug_progress(0, len, &debug_progress);
+						while (sent < (uint32_t)len)
+						{
+							uint32_t chunk = ((uint32_t)len - sent > copy_size) ? copy_size : (uint32_t)len - sent;
+							memcpy((uint8_t *)shmem + sent, data + sent, chunk);
+							sent += chunk;
+							user_io_debug_progress(sent, len, &debug_progress);
+						}
+					}
+					else
+					{
+						memcpy(shmem, data, len);
+					}
+					shmem_unmap(shmem, len);
+				}
 			}
 			else
 			{
@@ -349,6 +372,7 @@ static void rom_finish(int send, uint32_t address, int index)
 				sprintf(str, "ROM #%d", index);
 
 				ProgressMessage(0, 0, 0, 0);
+				if (show_debug_progress) user_io_debug_progress(0, len, &debug_progress);
 				while (romlen[0] > 0)
 				{
 					ProgressMessage("Sending", str, len - romlen[0], len);
@@ -358,6 +382,7 @@ static void rom_finish(int send, uint32_t address, int index)
 
 					romlen[0] -= chunk;
 					data += chunk;
+					if (show_debug_progress) user_io_debug_progress(len - romlen[0], len, &debug_progress);
 				}
 				ProgressMessage(0, 0, 0, 0);
 			}
@@ -481,6 +506,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			arc_info->zipname[0] = 0;
 			arc_info->address = 0;
 			arc_info->insideinterleave = 0;
+			arc_info->has_file_part = 0;
 			MD5Init(&arc_info->context);
 			ProgressMessage(0, 0, 0, 0);
 		}
@@ -843,7 +869,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 
 				checksumsame |= no_checksum;
 
-				rom_finish(checksumsame, arc_info->address, arc_info->romindex);
+				rom_finish(checksumsame, arc_info->address, arc_info->romindex, arc_info->has_file_part);
 			}
 			arc_info->insiderom = 0;
 		}
@@ -877,6 +903,7 @@ static int xml_send_rom(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, cons
 			//user_io_file_tx_body_filepart(getFullPath(fname),0,0);
 			if (strlen(arc_info->partname))
 			{
+				arc_info->has_file_part = 1;
 				char zipnames_list[kBigTextSize];
 
 				if (strlen(arc_info->partzipname))

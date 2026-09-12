@@ -130,6 +130,13 @@ static const char *get_name(const char *path, const char *name)
 	return buf;
 }
 
+static struct
+{
+	uint32_t total;
+	uint32_t sent;
+	int percent;
+} neo_debug_progress;
+
 static uint32_t neogeo_file_tx(const char* path, const char* name, uint8_t neo_file_type, uint8_t index, uint32_t offset, uint32_t size)
 {
 	fileTYPE f = {};
@@ -306,7 +313,7 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 		if (partsz > LOADBUF_SZ) partsz = LOADBUF_SZ;
 
 		uint32_t partszf = remainf;
-		if (partszf > LOADBUF_SZ) partszf = LOADBUF_SZ;
+		if (partszf > partsz) partszf = partsz;
 
 		//printf("partsz=%d, map_addr=0x%X\n", partsz, map_addr);
 		void *base = shmem_map(map_addr, partsz);
@@ -336,8 +343,15 @@ static uint32_t load_rom_to_mem(const char* path, const char* name, uint8_t neo_
 		}
 
 		ProgressMessage("Loading", dispname, size - (remain - partsz), size);
+		if (neo_debug_progress.total)
+		{
+			neo_debug_progress.sent += partszf;
+			if (neo_debug_progress.sent < partszf || neo_debug_progress.sent > neo_debug_progress.total) neo_debug_progress.sent = neo_debug_progress.total;
+			user_io_debug_progress(neo_debug_progress.sent, neo_debug_progress.total, &neo_debug_progress.percent);
+		}
 
 		shmem_unmap(base, partsz);
+		remainf -= partszf;
 		remain -= partsz;
 		map_addr += partsz;
 	}
@@ -1083,6 +1097,8 @@ void load_neo(char *path)
 			printf("ID=0x%X, PSize=%d, SSize=%d, MSize=%d, V1Size=%d, V2Size=%d, CSize=%d, Name=%s\n", hdr.NGH, hdr.PSize, hdr.SSize, hdr.MSize, hdr.V1Size, hdr.V2Size, hdr.CSize, hdr.Name);
 			char *p = strrchr(path, '/');
 			*p++ = 0;
+			neo_debug_progress = {hdr.PSize + hdr.SSize + hdr.MSize + hdr.V1Size + hdr.V2Size + hdr.CSize, 0, -1};
+			user_io_debug_progress(0, neo_debug_progress.total, &neo_debug_progress.percent);
 			uint32_t off = 4096;
 			if (hdr.PSize) neogeo_tx(path, p, NEO_FILE_RAW, 4, off, hdr.PSize);
 			off += hdr.PSize;
@@ -1109,6 +1125,7 @@ void load_neo(char *path)
 			}
 
 			if (hdr.CSize) neogeo_tx(path, p, NEO_FILE_SPR, 15, off, hdr.CSize, 0, 1);
+			neo_debug_progress = {};
 
 			printf("Setting cart ms5p to %u\n", ms5p);
 			set_config((ms5p & 1) << 17, 1 << 17);
