@@ -1975,6 +1975,44 @@ int process_ss(const char *rom_name, int enable)
 		uint32_t map_addr = ss_base;
 		fileTYPE f = {};
 
+		// Apple-II: per-game savestates, keyed by the game disk.  The name is
+		// picked deterministically from the CURRENT mounts (S0 first, then S2,
+		// then the S1 HDD), never from the media of this mount event: keying
+		// by the last-mounted media made a floppy+HDD machine write every slot
+		// under the HDD's name, so the next boot with only the floppy found
+		// nothing and lost the state.  With no disk mounted the core name is
+		// used (states taken at the monitor).
+		//
+		// The name must contain a dot: the shared FileGenerateSavestatePath()
+		// truncates at the last dot and writes the "_N.ss" suffix there (a
+		// dotless name would crash it).  The core-name fallback therefore
+		// carries a trailing dot - that dot is the truncation point, giving
+		// "Apple-II_1.ss" / "Apple-II.ss" exactly as the core name intended.
+		const char *ss_media = rom_name;
+		if (is_apple2())
+		{
+			static char a2_ss_core[64];
+			snprintf(a2_ss_core, sizeof(a2_ss_core), "%s.", user_io_get_core_name());
+			ss_media = a2_ss_core;
+			static const int a2_ss_slot[3] = {0, 2, 1};
+			for (int p = 0; p < 3; p++)
+			{
+				if (sd_image[a2_ss_slot[p]].size)
+				{
+					const char *q = sd_image[a2_ss_slot[p]].path;
+					const char *slash = strrchr(q, '/');
+					const char *base = slash ? slash + 1 : q;
+					// dotted media name only; a dotless image would crash the
+					// shared path helper, so fall through to the core name
+					if (strchr(base, '.'))
+					{
+						ss_media = base;
+						break;
+					}
+				}
+			}
+		}
+
 		for (int i = 0; i < 4; i++)
 		{
 			if (!base[i]) base[i] = shmem_map(map_addr, len);
@@ -1989,13 +2027,13 @@ int process_ss(const char *rom_name, int enable)
 
 				if (!i)
 				{
-					FileGenerateSavestatePath(rom_name, ss_name, 1);
+					FileGenerateSavestatePath(ss_media, ss_name, 1);
 					printf("Base SavestatePath=%s\n", ss_name);
-					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
+					if (!FileExists(ss_name)) FileGenerateSavestatePath(ss_media, ss_name, 0);
 				}
 				else
 				{
-					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
+					FileGenerateSavestatePath(ss_media, ss_name, i + 1);
 				}
 
 				if (FileExists(ss_name))
@@ -2017,7 +2055,7 @@ int process_ss(const char *rom_name, int enable)
 			map_addr += len;
 		}
 
-		FileGenerateSavestatePath(rom_name, ss_name, 1);
+		FileGenerateSavestatePath(ss_media, ss_name, 1);
 		ss_sufx = ss_name + strlen(ss_name) - 4;
 		return 1;
 	}
