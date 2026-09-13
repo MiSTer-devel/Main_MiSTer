@@ -2167,7 +2167,9 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					const char *core_name = user_io_get_core_name();
 					const char *orig_core_name = user_io_get_core_name(1);
 					const unsigned char ext_idx = last_file_ext_idx;
-					const bool a2_core = !strcasecmp(core_name, "apple-ii") || !strcasecmp(core_name, "TK2000");
+					// The Apple //e core now takes WOZ only (its floppies go through iigs_mount
+					// below, like the IIgs); only TK2000 still uses the on-the-fly nibblizer.
+					const bool a2_core = !strcasecmp(core_name, "TK2000");
 					const bool oric_core =
 						!strcasecmp(core_name, "Oric") ||
 						!strcasecmp(core_name, "Pravetz 8D") ||
