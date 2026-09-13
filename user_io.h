@@ -259,7 +259,7 @@ const char* GetUARTbaud_label(int mode, int idx);
 int GetUARTbaud_idx(int mode);
 uint32_t ValidateUARTbaud(int mode, uint32_t baud);
 char * GetMidiLinkSoundfont();
-void user_io_store_filename(char *filename);
+void user_io_store_filename(const char *filename);
 int user_io_use_cheats();
 
 int process_ss(const char *rom_name, int enable = 1);

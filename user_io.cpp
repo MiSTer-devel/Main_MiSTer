@@ -98,14 +98,14 @@ uint32_t user_io_get_activity_seq()
 	return input_seq;
 }
 
-void user_io_store_filename(char *filename)
+void user_io_store_filename(const char *filename)
 {
-	char *p = strrchr(filename, '/');
+	const char *p = strrchr(filename, '/');
 	if (p) strcpy(last_filename, p + 1);
 	else strcpy(last_filename, filename);
 
-	p = strrchr(last_filename, '.');
-	if (p) *p = 0;
+	char *dot = strrchr(last_filename, '.');
+	if (dot) *dot = 0;
 }
 
 const char *get_image_name(int i)
@@ -2294,10 +2294,13 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 	else
 	{
-		if (ss_base && is_apple2())
+		if (is_apple2())
 		{
-			// Apple-II: mount .ss file set so savestates persist on SD card
-			process_ss(name);
+			if (ss_base)
+			{
+				process_ss(name); // mount .ss file to persist savestates on SD card
+			}
+			user_io_store_filename(name); // name screenshots after the loaded disk
 		}
 		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", index);
 	}
