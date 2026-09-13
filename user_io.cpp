@@ -1999,7 +1999,10 @@ int process_ss(const char *rom_name, int enable)
 			{
 				if (sd_image[a2_ss_slot[p]].size)
 				{
-					const char *q = sd_image[a2_ss_slot[p]].path;
+					// FileOpenEx fills .name (basename) on every open; .path is
+					// only set on the create-on-write branch, so keying on .path
+					// always fell through to the core-name fallback.
+					const char *q = sd_image[a2_ss_slot[p]].name;
 					const char *slash = strrchr(q, '/');
 					const char *base = slash ? slash + 1 : q;
 					// dotted media name only; a dotless image would crash the
