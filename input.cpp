@@ -6096,7 +6096,7 @@ int input_test(int getchar)
 										pai = &absinfo;
 										int range = absinfo.maximum - absinfo.minimum + 1;
 										int center = absinfo.minimum + (range / 2);
-										int treshold = range / 4;
+										int treshold = (range * cfg.dpad_threshold) / 200;
 
 										int only_max = 1;
 										for (int n = 0; n < 4; n++) if (input[dev].mmap[SYS_AXIS1_X + n] && ((input[dev].mmap[SYS_AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
