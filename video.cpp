@@ -198,6 +198,12 @@ static_assert(sizeof(vmode_custom_param_t) == sizeof(vmode_custom_t::item));
 static void video_fb_config();
 static void video_calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode);
 
+// minimum vertical back porch when scanrate lock borrows blanking lines
+static constexpr int SCANLOCK_MIN_VBP = 6;
+
+// margin on the rotation writer's head start, in input lines
+static constexpr int SCANLOCK_ROT_MARGIN = 5;
+
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
 
@@ -2278,11 +2284,25 @@ static void video_set_mode(vmode_custom_t *v, double Fpix)
 
 	printf("%chsync, %cvsync\n", !!v_cur.param.hpol ? '+' : '-', !!v_cur.param.vpol ? '+' : '-');
 
+	// keep the buffered scaler when output blanking outlasts the rotation writer's head start
+	bool rot_2buf_unsafe = false;
+	if (cfg.vsync_adjust == 3 && video_get_rotated() && current_video_info.htime && current_video_info.vtime)
+	{
+		const int64_t vtotal = (int64_t)v_cur.param.vact + v_cur.param.vfp + v_cur.param.vs + v_cur.param.vbp;
+		const int64_t vblank = vtotal - v_cur.param.vact;
+		if (vtotal > 0)
+		{
+			rot_2buf_unsafe = (vblank * current_video_info.vtime / vtotal) >
+				((int64_t)current_video_info.de_v + SCANLOCK_ROT_MARGIN) * current_video_info.htime;
+			if (rot_2buf_unsafe) printf("Rotated core needs more output blanking than it can absorb, using buffered scaler.\n");
+		}
+	}
+
 	printf("PLL: ");
 	for (int i = 9; i < 21; i++)
 	{
 		printf("0x%X, ", v_cur.item[i]);
-		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust == 2 && !is_menu()) ? 0x8000 : 0) | 0x4000);
+		if (i & 1) spi_w(v_cur.item[i] | ((i == 9 && Fpix && cfg.vsync_adjust >= 2 && !is_menu() && !rot_2buf_unsafe) ? 0x8000 : 0) | 0x4000);
 		else
 		{
 			spi_w(v_cur.item[i]);
@@ -3399,7 +3419,38 @@ void video_mode_adjust(bool force)
 			double Fpix = 0;
 			if (adjust)
 			{
-				Fpix = 100 * (v->item[1] + v->item[2] + v->item[3] + v->item[4]) * (v->item[5] + v->item[6] + v->item[7] + v->item[8]);
+				// staged timing, applied below only if nothing cancels the adjustment
+				uint32_t cand_vfp = v->item[6], cand_vbp = v->item[8];
+				double scanrate = 0;
+				bool scanlock = false;
+
+				if (cfg.vsync_adjust == 3)
+				{
+					// keep the pixel clock and htotal, put the refresh difference in vblank
+					const int64_t htotal = (int64_t)v->item[1] + v->item[2] + v->item[3] + v->item[4];
+					const int64_t min_vbp = ((int64_t)v->item[8] < SCANLOCK_MIN_VBP) ? (int64_t)v->item[8] : SCANLOCK_MIN_VBP;
+					const int64_t vt_min = (int64_t)v->item[5] + v->item[7] + min_vbp + 1;
+					const int64_t vtotal = llround(v->Fpix * vtime / (htotal * 100.0));
+					scanrate = (v->Fpix * 1000000.0) / htotal;
+
+					// vtotal reaches the scaler as a 12-bit sum
+					scanlock = (vt_min <= 4095) && (vtotal >= vt_min) && (vtotal <= 4095);
+					if (scanlock)
+					{
+						// take from the front porch first, then borrow from the back porch
+						const int64_t vblank = vtotal - (int64_t)v->item[5] - v->item[7];
+						const int64_t vfp = (vblank - (int64_t)v->item[8] < 1) ? 1 : vblank - (int64_t)v->item[8];
+						cand_vfp = (uint32_t)vfp;
+						cand_vbp = (uint32_t)(vblank - vfp);
+					}
+					else
+					{
+						printf("Scanrate lock: %.3fHz needs vtotal %lld, outside the usable range %lld-4095. Trying standard adjustment.\n",
+							100000000.0 / vtime, (long long)vtotal, (long long)vt_min);
+					}
+				}
+
+				Fpix = 100 * (v->item[1] + v->item[2] + v->item[3] + v->item[4]) * (v->item[5] + cand_vfp + v->item[7] + cand_vbp);
 				Fpix /= vtime;
 				if (Fpix < 2.f || Fpix > 300.f)
 				{
@@ -3418,6 +3469,21 @@ void video_mode_adjust(bool force)
 				{
 					printf("Estimated frame rate (%f Hz) is more than REFRESH_MAX(%f Hz). Canceling auto-adjust.\n", hz, cfg.refresh_max);
 					Fpix = 0;
+				}
+
+				// nothing canceled the adjustment, so the staged timing is safe to apply
+				if (Fpix && scanlock)
+				{
+					v->item[6] = cand_vfp;
+					v->item[8] = cand_vbp;
+					const int vtotal = v->item[5] + v->item[6] + v->item[7] + v->item[8];
+					const double actual = vtotal * (100000000.0 / vtime);
+					printf("Scanrate lock: vtotal=%d vfp=%d vbp=%d, scanrate %.1fHz (%+.0f ppm)\n",
+						vtotal, v->item[6], v->item[8], actual, (actual - scanrate) * 1000000.0 / scanrate);
+				}
+				else if (Fpix && cfg.vsync_adjust == 3)
+				{
+					printf("Scanrate lock: standard adjustment applied, scanrate not held.\n");
 				}
 			}
 
