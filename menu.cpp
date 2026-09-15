@@ -5885,7 +5885,7 @@ void HandleUI(void)
 							if (!(df[i].status & DSK_WRITABLE)) s[6 + len + 1] = '\x17'; // padlock icon for write-protected disks
 						}
 						else {
-							switch (minimig_config.userport == mmup_misterfloppy ? minimig_config.floppy.extDrives[i] : 0) {
+							switch (minimig_config.userport == mmup_misterfloppy ? minimig_config.externalfloppy.exDrives[i] : 0) {
 								case 1: 
 									strcat(s, "External Drive ");
 									if (osdMask & 64)
@@ -5998,15 +5998,15 @@ void HandleUI(void)
 		{
 			minimig_config.floppy.drives++;
 			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
-			minimig_ConfigFloppyExt(minimig_config.floppy.extDrives[0], minimig_config.floppy.extDrives[1], minimig_config.floppy.extDrives[2], minimig_config.floppy.extDrives[3]);
+			minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 			menustate = MENU_MINIMIG_MAIN1;
 		}
 		else if (minus && (minimig_config.floppy.drives > 0) && menusub < 4)
 		{
-			minimig_config.floppy.extDrives[minimig_config.floppy.drives] = 0;  // disable before remove
+			minimig_config.externalfloppy.exDrives[minimig_config.floppy.drives] = 0;  // disable before remove
 			minimig_config.floppy.drives--;
 			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
-			minimig_ConfigFloppyExt(minimig_config.floppy.extDrives[0], minimig_config.floppy.extDrives[1], minimig_config.floppy.extDrives[2], minimig_config.floppy.extDrives[3]);
+			minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 			menustate = MENU_MINIMIG_MAIN1;
 		}
 		else if (select || recent || minus || plus || ((left || right) && menusub < 4))
@@ -6033,35 +6033,35 @@ void HandleUI(void)
 
 					do {
 						if (right) 
-							minimig_config.floppy.extDrives[menusub] = (minimig_config.floppy.extDrives[menusub] + 1) % 5;
+							minimig_config.externalfloppy.exDrives[menusub] = (minimig_config.externalfloppy.exDrives[menusub] + 1) % 5;
 						else {
-							if (minimig_config.floppy.extDrives[menusub] == 0) minimig_config.floppy.extDrives[menusub] = 4; 
-								else minimig_config.floppy.extDrives[menusub]--;
+							if (minimig_config.externalfloppy.exDrives[menusub] == 0) minimig_config.externalfloppy.exDrives[menusub] = 4;
+								else minimig_config.externalfloppy.exDrives[menusub]--;
 						}
 						driveInUse = false;
 						// Prevent the same external drive being selected twice
-						if (minimig_config.floppy.extDrives[menusub]) {
-							if ((driveMask & 1 << (minimig_config.floppy.extDrives[menusub] - 1)) == 0)
+						if (minimig_config.externalfloppy.exDrives[menusub]) {
+							if ((driveMask & 1 << (minimig_config.externalfloppy.exDrives[menusub] - 1)) == 0)
 								driveInUse = true;
 							else
 								for (uint32_t drive = 0; drive < 4; drive++)
-									if ((drive != menusub) && (minimig_config.floppy.extDrives[drive] == minimig_config.floppy.extDrives[menusub]))
+									if ((drive != menusub) && (minimig_config.externalfloppy.exDrives[drive] == minimig_config.externalfloppy.exDrives[menusub]))
 										driveInUse = true;
 						}
 						loops++;
 					} while (driveInUse && (loops<=4));
 					if (driveInUse) {
-						minimig_config.floppy.extDrives[menusub] = 0;
+						minimig_config.externalfloppy.exDrives[menusub] = 0;
 					}					
 					df[menusub].status = 0;
 					minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
-					minimig_ConfigFloppyExt(minimig_config.floppy.extDrives[0], minimig_config.floppy.extDrives[1], minimig_config.floppy.extDrives[2], minimig_config.floppy.extDrives[3]);
+					minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 					menustate = MENU_MINIMIG_MAIN1;
 				} else {
 					ioctl_index = 0;
-					if (minimig_config.floppy.extDrives[menusub]) {
-						minimig_config.floppy.extDrives[menusub] = 0;
-						minimig_ConfigFloppyExt(minimig_config.floppy.extDrives[0], minimig_config.floppy.extDrives[1], minimig_config.floppy.extDrives[2], minimig_config.floppy.extDrives[3]);
+					if (minimig_config.externalfloppy.exDrives[menusub]) {
+						minimig_config.externalfloppy.exDrives[menusub] = 0;
+						minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 						df[menusub].status = 0;
 						menustate = MENU_MINIMIG_MAIN1;
 					} else

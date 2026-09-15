@@ -37,14 +37,17 @@ typedef struct
 {
 	unsigned char speed;
 	unsigned char drives;
-	unsigned char extDrives[4];
 } mm_floppyTYPE;
 
 typedef struct
 {
-	unsigned char speed;
-	unsigned char drives;
-} mm_floppyTYPEOld;
+	unsigned char exDrives[4];	
+} mm_floppyexTYPE;
+
+enum mm_userportMode {
+	mmup_mp32pi = 0,
+	mmup_misterfloppy = 1
+};
 
 typedef struct
 {
@@ -52,11 +55,6 @@ typedef struct
 	unsigned char reserved;
 	char filename[1024];
 } mm_hardfileTYPE;
-
-enum mm_userportMode {
-	mmup_mp32pi=0,
-	mmup_misterfloppy=1
-};
 
 typedef struct
 {
@@ -77,10 +75,12 @@ typedef struct
 	unsigned char   cpu;
 	unsigned char   autofire;
 	char            info[64];
-	mm_userportMode userport;
 	mm_hardfileTYPE cd32_drive;
 	mm_hardfileTYPE cdtv_drive;
 	uint8_t         a2065_mode;
+
+	mm_userportMode userport;
+	mm_floppyexTYPE externalfloppy;
 } mm_configTYPE;
 
 extern mm_configTYPE minimig_config;
