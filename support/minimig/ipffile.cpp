@@ -86,6 +86,9 @@ bool caps_init(void)
 	libHandle = LoadLibrary(L"CAPSImg.DLL");
 #else
 	libHandle = dlopen("/media/fat/linux/libcapsimg.so", RTLD_NOW);
+	// Possible alternative paths
+	if (!libHandle) libHandle = dlopen("/media/fat/libcapsimg.so", RTLD_NOW);
+	if (!libHandle) libHandle = dlopen("/media/fat/linux/CAPSIMG/libcapsimg.so", RTLD_NOW);
 #endif
 	if (!libHandle) {
 		fdd_debugf("Unable to load /media/fat/linux/libcapsimg.so error %s", dlerror());
