@@ -3,7 +3,7 @@
 #ifndef SMBUS_H
 #define SMBUS_H
 
-int i2c_open(int dev_address, int is_smbus);
+int i2c_open(int dev_address, int is_smbus, int force_bus = -1, int *found_bus = NULL);
 void i2c_close(int fd);
 
 int i2c_smbus_write_quick(int file, uint8_t value);

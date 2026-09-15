@@ -1,0 +1,32 @@
+* text=auto eol=lf
+
+*.sv   text eol=lf
+*.v    text eol=lf
+*.vh   text eol=lf
+*.vhd  text eol=lf
+*.qip  text eol=lf
+*.qsf  text eol=lf
+*.qpf  text eol=lf
+*.sdc  text eol=lf
+*.tcl  text eol=lf
+*.srf  text eol=lf
+*.mif  text eol=lf
+*.asm  text eol=lf
+*.cpp  text eol=lf
+*.c    text eol=lf
+*.h    text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.ini  text eol=lf
+Makefile text eol=lf
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.pdf  binary
+*.rbf  binary
+*.rom  binary
+*.xlsx binary

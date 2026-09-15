@@ -87,6 +87,9 @@ static int support_FHD = 0;
 
 yc_mode yc_modes[20];
 
+static int hdmi_power = 1;
+static int hdmi_need_init = 0;
+
 struct vrr_cap_t
 {
 	uint8_t active;
@@ -1411,6 +1414,51 @@ int hdmi_has_int()
 	return has_int;
 }
 
+static void hdmi_config_audio()
+{
+	// address, value
+	uint8_t init_data[] = {
+
+		0xAF, (uint8_t)(0b00000100	// [7]=0 HDCP Disabled.
+								// [6:5] must be b00!
+								// [4]=0 Current frame is unencrypted
+								// [3:2] must be b01!
+			| ((cfg.dvi_mode == 1) ? 0b00 : 0b10)),	 //	[1]=1 HDMI Mode.
+								// [0] must be b0!
+
+		// (Audio stuff on Programming Guide, Page 66)...
+		0x0A, 0b00000000,		// [6:4] Audio Select. b000 = I2S.
+								// [3:2] Audio Mode. (HBR stuff, leave at 00!).
+
+		0x0B, 0b00001110,		//
+
+		0x0C, 0b00000100,		// [7] 0 = Use sampling rate from I2S stream.   1 = Use samp rate from I2C Register.
+								// [6] 0 = Use Channel Status bits from stream. 1 = Use Channel Status bits from I2C register.
+								// [2] 1 = I2S0 Enable.
+								// [1:0] I2S Format: 00 = Standard. 01 = Right Justified. 10 = Left Justified. 11 = AES.
+
+		0x0D, 0b00010000,		// [4:0] I2S Bit (Word) Width for Right-Justified.
+		0x14, 0b00000010,		// [3:0] Audio Word Length. b0010 = 16 bits.
+		0x15, (uint8_t)((cfg.hdmi_audio_96k ? 0x80 : 0x00) | 0b0100000),	// I2S Sampling Rate [7:4]. b0000 = (44.1KHz). b0010 = 48KHz.
+								// Input ID [3:1] b000 (0) = 24-bit RGB 444 or YCrCb 444 with Separate Syncs.
+
+		// Audio Clock Config
+		0x01, 0x00,				//
+		0x02, (uint8_t)(cfg.hdmi_audio_96k ? 0x30 : 0x18),	// Set N Value 12288/6144
+		0x03, 0x00,				//
+
+		0x07, 0x01,				//
+		0x08, 0x22,				// Set CTS Value 74250
+		0x09, 0x0A,				//
+	};
+
+	for (uint i = 0; i < sizeof(init_data); i += 2)
+	{
+		int res = i2c_smbus_write_byte_data(hdmi_main_fd, init_data[i], init_data[i + 1]);
+		if (res < 0) printf("i2c: write error (%02X %02X): %d\n", init_data[i], init_data[i + 1], res);
+	}
+}
+
 static void hdmi_config_init()
 {
 	int ypbpr = (cfg.vga_mode_int == 1) && (cfg.direct_video == 1);
@@ -1418,7 +1466,8 @@ static void hdmi_config_init()
 
 	if (hdmi_main_fd < 0)
 	{
-		hdmi_main_fd = i2c_open(0x39, 0);
+		int adv_bus = -1;
+		hdmi_main_fd = i2c_open(0x39, 0, -1, &adv_bus);
 		if (hdmi_main_fd < 0)
 		{
 			printf("ADV7513 not found on i2c bus! HDMI won't be available!\n");
@@ -1426,19 +1475,25 @@ static void hdmi_config_init()
 		}
 		else
 		{
+			// EDID/SPD are sub-maps of the same chip: pin them to the main bus
+			// instead of rescanning, or a phantom that ACKs on another bus can
+			// capture the handle and wedge the i2c controller on a real transfer.
 			if (hdmi_edid_fd < 0)
 			{
-				hdmi_edid_fd = i2c_open(0x3f, 0);
+				hdmi_edid_fd = i2c_open(0x3f, 0, adv_bus);
 				if (hdmi_edid_fd < 0) printf("ADV7513: cannot find EDID registers.\n");
 			}
 
 			if (hdmi_spd_fd < 0)
 			{
-				hdmi_spd_fd = i2c_open(0x38, 0);
+				hdmi_spd_fd = i2c_open(0x38, 0, adv_bus);
 				if (hdmi_spd_fd < 0) printf("ADV7513: cannot find SPD registers.\n");
 			}
 		}
 	}
+
+	hdmi_power = 1;
+	hdmi_need_init = 0;
 
 	// address, value
 	uint8_t init_data[] = {
@@ -1529,13 +1584,6 @@ static void hdmi_config_init()
 		0xAA, 0x00,				// ADI required Write.
 		0xAB, 0x40,				// ADI required Write.
 
-		0xAF, (uint8_t)(0b00000100	// [7]=0 HDCP Disabled.
-								// [6:5] must be b00!
-								// [4]=0 Current frame is unencrypted
-								// [3:2] must be b01!
-			| ((cfg.dvi_mode == 1) ? 0b00 : 0b10)),	 //	[1]=1 HDMI Mode.
-								// [0] must be b0!
-
 		0xB9, 0x00,				// ADI required Write.
 
 		0xBA, 0b01100000,		// [7:5] Input Clock delay...
@@ -1553,31 +1601,6 @@ static void hdmi_config_init()
 		0xE2, 0x01,				// Power down the CEC.
 		0xE4, 0x60,				// ADI required Write.
 		0xFA, 0x7D,				// Nbr of times to search for good phase
-
-		// (Audio stuff on Programming Guide, Page 66)...
-		0x0A, 0b00000000,		// [6:4] Audio Select. b000 = I2S.
-								// [3:2] Audio Mode. (HBR stuff, leave at 00!).
-
-		0x0B, 0b00001110,		//
-
-		0x0C, 0b00000100,		// [7] 0 = Use sampling rate from I2S stream.   1 = Use samp rate from I2C Register.
-								// [6] 0 = Use Channel Status bits from stream. 1 = Use Channel Status bits from I2C register.
-								// [2] 1 = I2S0 Enable.
-								// [1:0] I2S Format: 00 = Standard. 01 = Right Justified. 10 = Left Justified. 11 = AES.
-
-		0x0D, 0b00010000,		// [4:0] I2S Bit (Word) Width for Right-Justified.
-		0x14, 0b00000010,		// [3:0] Audio Word Length. b0010 = 16 bits.
-		0x15, (uint8_t)((cfg.hdmi_audio_96k ? 0x80 : 0x00) | 0b0100000),	// I2S Sampling Rate [7:4]. b0000 = (44.1KHz). b0010 = 48KHz.
-								// Input ID [3:1] b000 (0) = 24-bit RGB 444 or YCrCb 444 with Separate Syncs.
-
-		// Audio Clock Config
-		0x01, 0x00,				//
-		0x02, (uint8_t)(cfg.hdmi_audio_96k ? 0x30 : 0x18),	// Set N Value 12288/6144
-		0x03, 0x00,				//
-
-		0x07, 0x01,				//
-		0x08, 0x22,				// Set CTS Value 74250
-		0x09, 0x0A,				//
 	};
 
 	for (uint i = 0; i < sizeof(init_data); i += 2)
@@ -1586,6 +1609,7 @@ static void hdmi_config_init()
 		if (res < 0) printf("i2c: write error (%02X %02X): %d\n", init_data[i], init_data[i + 1], res);
 	}
 
+	hdmi_config_audio();
 	hdmi_config_set_csc();
 }
 
@@ -1656,6 +1680,13 @@ static void hdmi_config_set_hdr()
 static uint8_t last_sync_invert = 0xff;
 static uint8_t last_pr_flags = 0xff;
 static uint8_t last_vic_mode = 0xff;
+
+static void hdmi_invalidate_mode_cache()
+{
+	last_sync_invert = 0xff;
+	last_pr_flags = 0xff;
+	last_vic_mode = 0xff;
+}
 
 static void hdmi_config_set_mode(vmode_custom_t *vm)
 {
@@ -1780,21 +1811,28 @@ static int find_edid_vrr_capability()
 
 }
 
-static int is_edid_valid()
+static int is_edid_valid_buf(const uint8_t *buf)
 {
 	static const uint8_t magic[] = { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00 };
 	if (sizeof(edid) < sizeof(magic)) return 0;
-	return !memcmp(edid, magic, sizeof(magic));
+	return !memcmp(buf, magic, sizeof(magic));
 }
 
-static void cache_raw_edid_mfg_id()
+static int is_edid_valid()
 {
-	raw_edid_mfg_id = (edid[0x08] << 8) | edid[0x09];
+	return is_edid_valid_buf(edid);
+}
+
+static void cache_raw_edid_mfg_id(const uint8_t *buf)
+{
+	raw_edid_mfg_id = (buf[0x08] << 8) | buf[0x09];
 	raw_edid_mfg_id_valid = true;
 }
 
-static void read_edid_segment(uint8_t segment, uint8_t *buf)
+static bool read_edid_segment(uint8_t segment, uint8_t *buf)
 {
+	i2c_smbus_write_byte_data(hdmi_main_fd, 0x96, 4); // clear possible pending EDID IRQ (auto EDID after HPD)
+
 	i2c_smbus_write_byte_data(hdmi_main_fd, 0xC4, segment);
 	i2c_smbus_write_byte_data(hdmi_main_fd, 0xC9, 0x03);
 	usleep(1000);
@@ -1803,19 +1841,25 @@ static void read_edid_segment(uint8_t segment, uint8_t *buf)
 	unsigned long timeout = GetTimer(500);
 	while (!CheckTimer(timeout))
 	{
-		if (i2c_smbus_read_byte_data(hdmi_main_fd, 0x96) & 4)
+		int status = i2c_smbus_read_byte_data(hdmi_main_fd, 0x96);
+		if (status >= 0 && (status & 4))
 		{
 			i2c_smbus_write_byte_data(hdmi_main_fd, 0x96, 4);
-			break;
+			for (uint16_t i = 0; i < 256; i++)
+			{
+				int value = i2c_smbus_read_byte_data(hdmi_edid_fd, (uint8_t)i);
+				buf[i] = (value < 0) ? 0 : (uint8_t)value;
+			}
+
+			i2c_smbus_write_byte_data(hdmi_main_fd, 0xC9, 0x03);
+			return true;
 		}
 		usleep(10000);
 	}
 
-	for (uint16_t i = 0; i < 256; i++)
-	{
-		int value = i2c_smbus_read_byte_data(hdmi_edid_fd, (uint8_t)i);
-		buf[i] = (value < 0) ? 0 : (uint8_t)value;
-	}
+	printf("EDID timeout.\n");
+	i2c_smbus_write_byte_data(hdmi_main_fd, 0xC9, 0x03);
+	return false;
 }
 
 static int read_edid(bool force = false)
@@ -1823,45 +1867,62 @@ static int read_edid(bool force = false)
 	if (hdmi_main_fd < 0 || hdmi_edid_fd < 0) return 0;
 	if (is_edid_valid() && !force) return 1;
 
-	memset(edid, 0, sizeof(edid));
-
-	//Test if adv7513 senses hdmi clock. If not, don't bother with the edid query
-	int hpd_state = i2c_smbus_read_byte_data(hdmi_main_fd, 0x42);
-	if (hpd_state < 0 || !(hpd_state & 0x20))
-	{
-		raw_edid_mfg_id_valid = false;
-		return 0;
-	}
+	// read into scratch; replace live edid[] only on a valid read, so a transient failure can't blank it
+	static uint8_t buf[sizeof(edid)];
+	memset(buf, 0, sizeof(buf));
+	bool ddc_responded = false;
 
 	// waiting for valid EDID
 	for (int k = 0; k < 20; k++)
 	{
-		read_edid_segment(0, edid);
-		if (is_edid_valid()) break;
+		//Test if adv7513 senses hdmi clock. If not, don't bother with the edid query
+		int hpd_state = i2c_smbus_read_byte_data(hdmi_main_fd, 0x42);
+		if (hpd_state < 0 || ((hpd_state & 0x60) != 0x60))
+		{
+			raw_edid_mfg_id_valid = false;
+			return 0;
+		}
+		bool got_interrupt = read_edid_segment(0, buf);
+		if (got_interrupt) ddc_responded = true;
+		if (is_edid_valid_buf(buf)) break;
+		if (!got_interrupt) break;  // no DDC response — display has no EDID, don't retry
+
+		printf("Invalid EDID: retry...\n");
 		usleep(100000);
 	}
 
-	if (is_edid_valid())
+	if (!is_edid_valid_buf(buf))
 	{
-		uint8_t max_blocks = sizeof(edid) / 256;
-		uint8_t blocks = (2 + edid[126]) / 2; // each block is 128 bytes
-		if (blocks > max_blocks) blocks = max_blocks;
-		for (uint8_t i = 1; i < blocks; i++) read_edid_segment(i, edid + (i * 256));
+		if (ddc_responded)
+		{
+			// header bad but DDC answered: still cache raw mfg id for non-conformant DAC EDIDs
+			cache_raw_edid_mfg_id(buf);
+			printf("Invalid EDID: incorrect header.\n");
+			hexdump(buf, 256, 0);
+		}
+		else
+		{
+			printf("Invalid EDID: no DDC response.\n");
+		}
+		// stored edid[], not buf: only when a prior valid read is being kept
+		if (is_edid_valid()) printf("Invalid EDID: keeping last valid EDID.\n");
+
+		return 0;
 	}
+
+	uint8_t max_blocks = sizeof(edid) / 256;
+	uint8_t blocks = (2 + buf[126]) / 2; // each block is 128 bytes
+	if (blocks > max_blocks) blocks = max_blocks;
+	for (uint8_t i = 1; i < blocks; i++) read_edid_segment(i, buf + (i * 256));
+
+	memcpy(edid, buf, sizeof(edid));
 
 	printf("EDID:\n");
 	uint8_t n = edid[126] + 1;
 	if (n > sizeof(edid) / 128) n = sizeof(edid) / 128;
 	hexdump(edid, n*128, 0);
 
-	cache_raw_edid_mfg_id();
-
-	if (!is_edid_valid())
-	{
-		printf("Invalid EDID: incorrect header.\n");
-		bzero(edid, sizeof(edid));
-		return 0;
-	}
+	cache_raw_edid_mfg_id(edid);
 
 	edid_version++;
 	return 1;
@@ -2645,10 +2706,22 @@ void video_init()
 
 void video_reinit()
 {
+	int prev_ver = edid_version;
+	read_edid(true);
+
+	// re-read gave nothing new but a valid EDID is still held: the mode is unchanged,
+	// so don't bounce a working link (some clones can't re-lock mid-operation)
+	if (edid_version == prev_ver && is_edid_valid())
+	{
+		printf("*** Video re-init skipped: EDID unchanged.\n");
+		return;
+	}
+
 	printf("*** Video re-initialization.\n");
 
 	hdmi_config_init();
-	read_edid(true);
+	// re-init resets 0x17/0x3B/0x3C - re-apply, or video stays black if any of them changed
+	hdmi_invalidate_mode_cache();
 	hdmi_config_set_hdr();
 
 	support_FHD = 0;
@@ -2659,7 +2732,17 @@ void video_reinit()
 	user_io_send_buttons(1);
 	video_mode_adjust(1);
 	video_menu_bg(-1);
-	return;
+}
+
+void tmds_power(int on)
+{
+	// ADV7513 power-down control. 0 = power on, 1 = power down.
+	if (hdmi_main_fd >= 0)
+	{
+		uint8_t val = on ? 0x10 : 0x50;
+		int res = i2c_smbus_write_byte_data(hdmi_main_fd, 0x41, val);
+		if (res < 0) printf("i2c: write error (41 %02X): %d\n", val, res);
+	}
 }
 
 void video_hdmi_power(int on)
@@ -2667,9 +2750,24 @@ void video_hdmi_power(int on)
 	// ADV7513 power-down control. 0 = power on, 1 = power down.
 	if (hdmi_main_fd >= 0)
 	{
-		uint8_t val = on ? 0x00 : 0x40;
-		int res = i2c_smbus_write_byte_data(hdmi_main_fd, 0x41, val);
-		if (res < 0) printf("i2c: write error (41 %02X): %d\n", val, res);
+		hdmi_power = on ? 1 : 0;
+		tmds_power(on);
+
+		if (on)
+		{
+			if (hdmi_need_init)
+			{
+				uint8_t current_status = i2c_smbus_read_byte_data(hdmi_main_fd, 0x42);
+				bool hpd_high = (current_status & 0x40) != 0; // Bit 6: HPD pin level
+				bool MS_high = (current_status & 0x20) != 0; // Bit 5: Monitor Sense level
+				if (hpd_high && MS_high) video_reinit();
+			}
+			else
+			{
+				// Audio must be re-inited.
+				hdmi_config_audio();
+			}
+		}
 	}
 }
 
@@ -2698,15 +2796,21 @@ void video_poll()
 			// and internal display termination (Monitor Sense) are fully high and stable
 			if (hpd_high && MS_high)
 			{
-				printf("[HDMI] HPD and Monitor Sense Stable. Power up, re-initializing...\n");
-				video_hdmi_power(1);
-				usleep(150000);
-				video_reinit();
+				hdmi_need_init = 1;
+				if (hdmi_power)
+				{
+					printf("[HDMI] HPD and Monitor Sense Stable. Power up, re-initializing...\n");
+					video_hdmi_power(1);
+				}
+				else
+				{
+					printf("[HDMI] HPD and Monitor Sense Stable, but HDMI is powered down. Will re-init upon wakeup.\n");
+				}
 			}
 			else
 			{
 				printf("[HDMI] Link lost or re-routing (HPD=%d, MS=%d)\n", hpd_high, MS_high);
-				video_hdmi_power(0);
+				tmds_power(0);
 			}
 		}
 	}
@@ -2742,6 +2846,8 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->pixrep = spi_w(0);
 		video_info->de_h = spi_w(0);
 		video_info->de_v = spi_w(0);
+		video_info->frame_clocks = spi_w(0);
+		video_info->frame_clocks |= (spi_w(0) & 0xFF) << 16;
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
@@ -3032,6 +3138,34 @@ bool video_mode_select(uint32_t vtime, vmode_custom_t* out_mode)
 	return adjustable;
 }
 
+static uint64_t div_round_u64(uint64_t numerator, uint64_t denominator)
+{
+	return (numerator + denominator / 2) / denominator;
+}
+
+static uint64_t calc_frame_locked_phase(uint64_t fsc_num, uint64_t fsc_den,
+	uint32_t frame_ticks, uint32_t frame_clocks)
+{
+	if(!frame_ticks || !frame_clocks) return 0;
+
+	// Nearest whole number of subcarrier rotations in one frame.
+	// These products fit in uint64_t for the 32-bit frame timer and
+	// the NTSC/PAL subcarrier ratios used here.
+	const uint64_t frame_cycles = div_round_u64(
+		fsc_num * (uint64_t)frame_ticks,
+		fsc_den * 100000000ULL
+	);
+
+	// Calculate round(frame_cycles * 2^40 / frame_clocks).
+	// The whole-number quotient contributes only
+	// multiples of 2^40, which disappear under the 40-bit mask.
+	const uint64_t frame_remainder = frame_cycles % frame_clocks;
+	return div_round_u64(
+		frame_remainder * (1ULL << 40),
+		frame_clocks
+	) & 0xFFFFFFFFFFULL;
+}
+
 static void set_yc_mode()
 {
 	// Enable YC for S-Video/CVBS modes, or subcarrier for CXA2075 encoders
@@ -3040,12 +3174,68 @@ static void set_yc_mode()
 		float fps = current_video_info.vtime ? (100000000.f / current_video_info.vtime) : 0.f;
 		int pal = fps < 55.f;
 		double CLK_REF = (pal || (cfg.ntsc_mode == 1)) ? 4.43361875f : (cfg.ntsc_mode == 2) ? 3.575611f : 3.579545f;
-		double CLK_VIDEO = current_video_info.ctime * 100.f / current_video_info.ptime;
+		double CLK_VIDEO;
 
 		float prate = current_video_info.width * 100.f;
 		prate /= current_video_info.ptime;
 
-		int64_t PHASE_INC = ((int64_t)((CLK_REF / CLK_VIDEO) * 1099511627776LL)) & 0xFFFFFFFFFFLL;
+		int64_t PHASE_INC;
+		if(current_video_info.frame_clocks)
+		{
+			uint32_t frame_ticks = current_video_info.vtime;
+
+			/*
+			* vtime is the interval between VS boundaries.
+			* In an interlaced mode that is a field period, while
+			* frame_clocks was counted across both fields.
+			*/
+			if(current_video_info.interlaced)
+				frame_ticks *= 2;
+
+			CLK_VIDEO = current_video_info.frame_clocks * 100.0 /
+				frame_ticks;
+
+			uint64_t fsc_num =
+				(pal || (cfg.ntsc_mode == 1)) ? 17734475ULL :
+				(cfg.ntsc_mode == 2) ? 3575611ULL :
+				315000000ULL;
+
+			uint64_t fsc_den =
+				(pal || (cfg.ntsc_mode == 1)) ? 4ULL :
+				(cfg.ntsc_mode == 2) ? 1ULL :
+				88ULL;
+
+			/*
+			 * NES/SNES progressive NTSC use CLK_VIDEO = 12 * FSC.
+			 * Recognize the clock relationship instead of depending on
+			 * which member of the alternating frame pair vtime captured.
+			 */
+			const double fsc_ratio = CLK_VIDEO / CLK_REF;
+			if(!current_video_info.interlaced &&
+			   !pal && !cfg.ntsc_mode &&
+			   fabs(fsc_ratio - 12.0) < 0.001)
+			{
+				PHASE_INC = div_round_u64(1ULL << 40, 12ULL);
+				printf("YC exact clock ratio: CLK_VIDEO/FSC=12\n");
+			}
+			else
+			{
+				PHASE_INC = calc_frame_locked_phase(
+					fsc_num,
+					fsc_den,
+					frame_ticks,
+					current_video_info.frame_clocks
+				);
+			}
+		}
+		else
+		{
+			// Old framework and interlaced modes retain the existing path.
+			CLK_VIDEO = current_video_info.ctime * 100.f /
+				current_video_info.ptime;
+			PHASE_INC = ((int64_t)((CLK_REF / CLK_VIDEO) *
+				1099511627776LL)) & 0xFFFFFFFFFFLL;
+		}
 
 		int COLORBURST_START = (int)(3.7f * (CLK_VIDEO / CLK_REF));
 		int COLORBURST_END = (int)(9.0f * (CLK_VIDEO / CLK_REF)) + COLORBURST_START;
@@ -3704,9 +3894,9 @@ void video_menu_bg(int n, int idle)
 		n = menu_bg;
 		idle = cached_idle;
 
-		imlib_context_set_image(bg1); imlib_free_image(); bg1 = 0;
-		imlib_context_set_image(bg2); imlib_free_image(); bg2 = 0;
-		imlib_context_set_image(curtain); imlib_free_image(); curtain = 0;
+		if (bg1) { imlib_context_set_image(bg1); imlib_free_image(); bg1 = 0; }
+		if (bg2) { imlib_context_set_image(bg2); imlib_free_image(); bg2 = 0; }
+		if (curtain) { imlib_context_set_image(curtain); imlib_free_image(); curtain = 0; }
 	}
 	else
 	{

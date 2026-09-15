@@ -175,12 +175,6 @@
     <ClCompile Include="support\c64\c64.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
-    <ClCompile Include="support\atari8bit\atari800.cpp">
-      <Filter>Source Files\support</Filter>
-    </ClCompile>
-    <ClCompile Include="support\atari8bit\atari5200.cpp">
-      <Filter>Source Files\support</Filter>
-    </ClCompile>
     <ClCompile Include="support\pcecd\pcecd.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
@@ -263,6 +257,33 @@
       <Filter>Source Files\support</Filter>
     </ClCompile>
     <ClCompile Include="support\minimig\scpfile.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\akiko_cd32.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\atari800\atari800.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\cdtv_cd.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_a2065.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_a2065_crc32.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_a2065_ethernet.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_a2065_mac.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_a2065_registers.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\minimig\minimig_a2065_rings.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
   </ItemGroup>
@@ -503,6 +524,36 @@
     </ClInclude>
     <ClInclude Include="hdmi_cec.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mat4x4.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\akiko_cd32.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\cdtv_cd.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_a2065.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_a2065_boardram.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_a2065_ddr3.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_a2065_debug.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\minimig\minimig_a2065_types.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\atari8bit\atari800.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\atari8bit\atari5200.h">
+      <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

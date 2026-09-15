@@ -12,6 +12,8 @@
 #include "../../file_io.h"
 #include "minimig_config.h"
 #include "minimig_fdd.h"
+#include "akiko_cd32.h"
+#include "cdtv_cd.h"
 #include "../../cfg.h"
 
 static uint8_t buffer[1024];
@@ -423,6 +425,9 @@ void BootInit()
 
 	minimig_config.kickstart[0] = 0;
 	minimig_cfg_load(0);
+
+	akiko_cd32_init();
+	cdtv_cd_init();
 }
 
 void BootPrintEx(const char * str)

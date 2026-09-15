@@ -79,6 +79,7 @@ typedef struct {
 	char preset_default[1023];
 	char player_controller[6][8][256];
 	char controller_deadzone[32][256];
+	uint8_t dpad_threshold;
 	uint8_t rumble;
 	uint8_t wheel_force;
 	uint16_t wheel_range;
@@ -112,6 +113,8 @@ typedef struct {
 	uint16_t xbe2_shift;
 	uint8_t spd_quirk;
 	uint16_t hdmi_off;
+	uint32_t keyboard_as_joystick[256];
+	uint8_t sanity_check;
 } cfg_t;
 
 extern cfg_t cfg;

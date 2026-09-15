@@ -3,7 +3,7 @@
 
 #include <inttypes.h>
 
-void SelectFile(const char* path, const char* pFileExt, int Options, unsigned char MenuSelect, unsigned char MenuCancel);
+void SelectFile(const char* path, const char* pFileExt, int Options, unsigned char MenuSelect, unsigned char MenuCancel, int recent_idx = -1);
 
 void HandleUI(void);
 void menu_key_set(unsigned int c);

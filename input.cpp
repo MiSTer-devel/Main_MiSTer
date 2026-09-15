@@ -1476,6 +1476,7 @@ typedef struct
 	int      stick_l[2];
 	int      stick_r[2];
 
+	uint8_t  force_joy;
 	uint8_t  has_kbdmap;
 	uint8_t  kbdmap[256];
 
@@ -2757,11 +2758,12 @@ static void update_num_hw(int dev, int num)
 			led_path = get_led_path(dev);
 			if (led_path)
 			{
-				set_led(led_path, ":home", num ? 1 : 15);
-				set_led(led_path, ":player1", (num == 0 || num == 1 || num == 5));
-				set_led(led_path, ":player2", (num == 0 || num == 2 || num == 6));
-				set_led(led_path, ":player3", (num == 0 || num == 3));
-				set_led(led_path, ":player4", (num == 0 || num == 4 || num == 5 || num == 6));
+				// 5.15 names first, then the mainline hid-nintendo names used by 6.18
+				if (!set_led(led_path, ":home", num ? 1 : 15)) set_led(led_path, ":blue:player-5", num ? 1 : 15);
+				if (!set_led(led_path, ":player1", (num == 0 || num == 1 || num == 5))) set_led(led_path, ":green:player-1", (num == 0 || num == 1 || num == 5));
+				if (!set_led(led_path, ":player2", (num == 0 || num == 2 || num == 6))) set_led(led_path, ":green:player-2", (num == 0 || num == 2 || num == 6));
+				if (!set_led(led_path, ":player3", (num == 0 || num == 3))) set_led(led_path, ":green:player-3", (num == 0 || num == 3));
+				if (!set_led(led_path, ":player4", (num == 0 || num == 4 || num == 5 || num == 6))) set_led(led_path, ":green:player-4", (num == 0 || num == 4 || num == 5 || num == 6));
 			}
 
 			if (repeat && JOYCON_COMBINED(dev)) dev = input[dev].bind; else break;
@@ -2970,7 +2972,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		}
 	}
 
-	if (ev->type == EV_KEY && ev->code < 256 && !(mapping && mapping_type == 2))
+	if (ev->type == EV_KEY && ev->code < 256 && !(mapping && mapping_type == 2) && !input[dev].force_joy)
 	{
 		if (!input[dev].has_kbdmap)
 		{
@@ -3091,6 +3093,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	{
 		bool assign_btn = ((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) && (ev->type == EV_REL || ev->type == EV_KEY));
 		assign_btn |= (input[dev].quirk == QUIRK_LIGHTGUN_MOUSE && ev->type == EV_KEY && ev->value == 1 && ev->code == BTN_MOUSE);
+		assign_btn |= input[dev].force_joy && !menu_event;
 
 		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1 && ev->code >= 256)
 		{
@@ -3314,7 +3317,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		{
 			if (mapping_type == 2) // keyboard remap
 			{
-				if (ev->code < 256)
+				if (ev->code < 256 && !input[dev].force_joy)
 				{
 					if (!mapping_button)
 					{
@@ -3347,7 +3350,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (ev->value == 1 && mapping_dev < 0 && !clear)
 				{
 					mapping_dev = dev;
-					mapping_type = (ev->code >= 256) ? 1 : 0;
+					mapping_type = (ev->code >= 256 || input[dev].force_joy) ? 1 : 0;
 					key_mapped = 0;
 					memset(input[mapping_dev].map, 0, sizeof(input[mapping_dev].map));
 				}
@@ -3596,7 +3599,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		case EV_KEY:
 
 			//joystick buttons, digital directions
-			if (ev->code >= 256)
+			if (ev->code >= 256 || (input[dev].force_joy && !menu_event))
 			{
 				if (input[dev].lightgun_req && !user_io_osd_is_visible())
 				{
@@ -5317,7 +5320,7 @@ int input_test(int getchar)
 
 						if (input[n].vid == 0x057e)
 						{
-							if (strstr(input[n].name, " IMU"))
+							if (strstr(input[n].name, " IMU") || strstr(input[n].name, "(IMU)"))
 							{
 								// don't use Accelerometer
 								close(pool[n].fd);
@@ -5519,6 +5522,9 @@ int input_test(int getchar)
 						//XBox Elite 2 controller, use paddles as a special shift for chatpad accessory.
 						//Works only through cable or USB dongle.
 						if (input[n].vid == 0x045e && input[n].pid == 0x0b00) input[n].quirk = QUIRK_SHIFT;
+
+						// use specific keyboard(s) as a joystick
+						for (int i = 0; i < (int)cfg.keyboard_as_joystick[0]; i++) input[n].force_joy = (input[n].vid == (cfg.keyboard_as_joystick[i + 1] >> 16) && input[n].pid == (cfg.keyboard_as_joystick[i + 1] & 0xFFFF));
 
 						ioctl(pool[n].fd, EVIOCGRAB, (grabbed | user_io_osd_is_visible()) ? 1 : 0);
 
@@ -6090,7 +6096,7 @@ int input_test(int getchar)
 										pai = &absinfo;
 										int range = absinfo.maximum - absinfo.minimum + 1;
 										int center = absinfo.minimum + (range / 2);
-										int treshold = range / 4;
+										int treshold = (range * cfg.dpad_threshold) / 200;
 
 										int only_max = 1;
 										for (int n = 0; n < 4; n++) if (input[dev].mmap[SYS_AXIS1_X + n] && ((input[dev].mmap[SYS_AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
