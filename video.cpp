@@ -19,6 +19,7 @@
 #include "file_io.h"
 #include "mat4x4.h"
 #include "menu.h"
+#include "osd.h"
 #include "video.h"
 #include "input.h"
 #include "shmem.h"
@@ -3931,10 +3932,11 @@ void video_menu_bg(int n, int idle)
 					vs_wait();
 				};
 
-				if (cfg.osd_rotate)
+				int rot = OsdGetRotation(true);
+				if (rot)
 				{
 					imlib_context_set_image(logo);
-					imlib_image_orientate(cfg.osd_rotate == 1 ? 3 : 1);
+					imlib_image_orientate(rot == 1 ? 3 : 1);
 				}
 			}
 			else
@@ -4038,11 +4040,12 @@ void video_menu_bg(int n, int idle)
 
 			int dst_w, dst_h;
 			int dst_x, dst_y;
-			if (cfg.osd_rotate)
+			int rot = OsdGetRotation(true);
+			if (rot)
 			{
 				dst_h = height / 2;
 				dst_w = src_w * dst_h / src_h;
-				if (cfg.osd_rotate == 1)
+				if (rot == 1)
 				{
 					dst_x = brd_x;
 					dst_y = height - dst_h;
