@@ -1,3 +1,6 @@
+// Notes on the CAPSAPI library: Nothing wrong with including it. Also, according to their licence, the compiled binary can be distributed freely as long as no money exchanges hands.
+// RobSmithDev
+
 #include "ipffile.h"
 #include "capsapi/Comtype.h"
 #include "capsapi/CapsAPI.h"

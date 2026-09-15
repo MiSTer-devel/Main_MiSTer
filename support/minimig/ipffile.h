@@ -11,6 +11,8 @@
 #include <vector>
 #include <unordered_map>
 
+// Notes on the CAPSAPI library: Nothing wrong with including it. Also, according to their licence, the compiled binary can be distributed freely as long as no money exchanges hands.
+// RobSmithDev
 
 class IPFFile : public FluxFile {
 private:
