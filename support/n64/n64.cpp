@@ -2652,6 +2652,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 
 	uint32_t data_size = f.size;
 	uint32_t data_left = data_size;
+	int debug_progress = -1;
 
 	printf("N64 file \"%s\" with %u bytes to send for index %02x.\n", name, data_size, idx);
 
@@ -2693,6 +2694,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 
 		user_io_set_download(1);
 		ProgressMessage();
+		user_io_debug_progress(0, data_size, &debug_progress);
 
 		while (data_left) {
 			uint32_t chunk = (data_left > sizeof(buf)) ? sizeof(buf) : data_left;
@@ -2702,6 +2704,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 
 			ProgressMessage("Loading", n64_leaf_name(f.name), data_size - data_left, data_size);
 			data_left -= chunk;
+			user_io_debug_progress(data_size - data_left, data_size, &debug_progress);
 		}
 
 		printf("Done loading Game Boy ROM.\n");
@@ -2770,6 +2773,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 	// prepare transmission of new file
 	user_io_set_download(1, load_addr ? data_size : 0);
 	ProgressMessage();
+	user_io_debug_progress(0, data_size, &debug_progress);
 
 	while (data_left) {
 		size_t chunk = (data_left > sizeof(buf)) ? sizeof(buf) : data_left;
@@ -2852,6 +2856,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 
 		ProgressMessage("Loading", n64_leaf_name(f.name), data_size - data_left, data_size);
 		data_left -= chunk;
+		user_io_debug_progress(data_size - data_left, data_size, &debug_progress);
 		is_first_chunk = false;
 
 		// CRC32 is used for cheat look-up. Cheat files from gamehacking.org use byte swapped CRC32 for some reason...
