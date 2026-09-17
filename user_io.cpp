@@ -98,14 +98,14 @@ uint32_t user_io_get_activity_seq()
 	return input_seq;
 }
 
-void user_io_store_filename(char *filename)
+void user_io_store_filename(const char *filename)
 {
-	char *p = strrchr(filename, '/');
+	const char *p = strrchr(filename, '/');
 	if (p) strcpy(last_filename, p + 1);
 	else strcpy(last_filename, filename);
 
-	p = strrchr(last_filename, '.');
-	if (p) *p = 0;
+	char *dot = strrchr(last_filename, '.');
+	if (dot) *dot = 0;
 }
 
 const char *get_image_name(int i)
@@ -245,6 +245,14 @@ char is_snes()
 {
 	if (!is_snes_type) is_snes_type = strcasecmp(orig_name, "SNES") ? 2 : 1;
 	return (is_snes_type == 1);
+}
+
+// True if the running core is the Apple //e (confstr name "Apple-II").
+static int is_apple2_type = 0;
+char is_apple2()
+{
+	if (!is_apple2_type) is_apple2_type = strcasecmp(orig_name, "Apple-II") ? 2 : 1;
+	return (is_apple2_type == 1);
 }
 
 static int is_sgb_type = 0;
@@ -451,6 +459,7 @@ void user_io_read_core_name()
 	is_x86_type  = 0;
 	is_no_type   = 0;
 	is_snes_type = 0;
+	is_apple2_type = 0;
 	is_sgb_type = 0;
 	is_cpc_type = 0;
 	is_zx81_type = 0;
@@ -1731,8 +1740,6 @@ void user_io_init(const char *path, const char *xml)
 		break;
 	}
 
-	OsdRotation((cfg.osd_rotate == 1) ? 3 : (cfg.osd_rotate == 2) ? 1 : 0);
-
 	uart_mode = spi_uio_cmd16(UIO_GETUARTFLG, 0) || uart_speeds[0];
 	uint32_t mode = 0;
 	if (uart_mode)
@@ -1963,6 +1970,32 @@ int process_ss(const char *rom_name, int enable)
 		uint32_t map_addr = ss_base;
 		fileTYPE f = {};
 
+		// Apple-II: per-game savestates, keyed by the game disk.
+		const char *ss_media = rom_name;
+		if (is_apple2())
+		{
+			static char a2_ss_core[64];
+			snprintf(a2_ss_core, sizeof(a2_ss_core), "%s.", user_io_get_core_name());
+			ss_media = a2_ss_core;
+			static const int a2_ss_slot[3] = {0, 2, 1};
+			for (int p = 0; p < 3; p++)
+			{
+				if (sd_image[a2_ss_slot[p]].size)
+				{
+					// use .name (basename) as it is updated on every open
+					const char *q = sd_image[a2_ss_slot[p]].name;
+					const char *slash = strrchr(q, '/');
+					const char *base = slash ? slash + 1 : q;
+					// media name must have a dot or the handler may crash
+					if (strchr(base, '.'))
+					{
+						ss_media = base;
+						break;
+					}
+				}
+			}
+		}
+
 		for (int i = 0; i < 4; i++)
 		{
 			if (!base[i]) base[i] = shmem_map(map_addr, len);
@@ -1977,13 +2010,13 @@ int process_ss(const char *rom_name, int enable)
 
 				if (!i)
 				{
-					FileGenerateSavestatePath(rom_name, ss_name, 1);
+					FileGenerateSavestatePath(ss_media, ss_name, 1);
 					printf("Base SavestatePath=%s\n", ss_name);
-					if (!FileExists(ss_name)) FileGenerateSavestatePath(rom_name, ss_name, 0);
+					if (!FileExists(ss_name)) FileGenerateSavestatePath(ss_media, ss_name, 0);
 				}
 				else
 				{
-					FileGenerateSavestatePath(rom_name, ss_name, i + 1);
+					FileGenerateSavestatePath(ss_media, ss_name, i + 1);
 				}
 
 				if (FileExists(ss_name))
@@ -2005,7 +2038,7 @@ int process_ss(const char *rom_name, int enable)
 			map_addr += len;
 		}
 
-		FileGenerateSavestatePath(rom_name, ss_name, 1);
+		FileGenerateSavestatePath(ss_media, ss_name, 1);
 		ss_sufx = ss_name + strlen(ss_name) - 4;
 		return 1;
 	}
@@ -2167,7 +2200,10 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					const char *core_name = user_io_get_core_name();
 					const char *orig_core_name = user_io_get_core_name(1);
 					const unsigned char ext_idx = last_file_ext_idx;
-					const bool a2_core = !strcasecmp(core_name, "apple-ii") || !strcasecmp(core_name, "TK2000");
+					// The Apple //e core now takes WOZ only (its floppies go through iigs_mount
+					// below, like the IIgs); only TK2000 still uses the on-the-fly nibblizer.
+					const bool a2_core = !strcasecmp(core_name, "TK2000") ||
+						(!strcasecmp(core_name, "apple-ii") && !user_io_a2_woz_enabled());
 					const bool oric_core =
 						!strcasecmp(core_name, "Oric") ||
 						!strcasecmp(core_name, "Pravetz 8D") ||
@@ -2256,6 +2292,14 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 	else
 	{
+		if (is_apple2())
+		{
+			if (ss_base)
+			{
+				process_ss(name); // mount .ss file to persist savestates on SD card
+			}
+			user_io_store_filename(name); // name screenshots after the loaded disk
+		}
 		printf("Mount %s as %s on %d slot\n", name, writable ? "read-write" : "read-only", index);
 	}
 
@@ -2992,6 +3036,49 @@ void user_io_read_confstr()
 
 	cfgstr[j++] = 0;
 	DisableIO();
+}
+
+
+// Number of ;-separated fields in the confstr (0 if empty).
+static int user_io_confstr_field_count()
+{
+	int c = 0;
+	for (int i = 0; cfgstr[i]; i++)
+		if (cfgstr[i] == ';') c++;
+	return c + 1;
+}
+
+// Build date (YYMM) from the confstr V field ("V,v<YYMMDD>")
+static int user_io_confstr_yymm()
+{
+	const char *p = cfgstr;
+	while (*p)
+	{
+		// fields are ;-separated; the type char is the field's first byte
+		if (p[0] == 'V' && p[1] == ',' && p[2] == 'v' &&
+		    p[3] >= '0' && p[3] <= '9' && p[4] >= '0' && p[4] <= '9' &&
+		    p[5] >= '0' && p[5] <= '9' && p[6] >= '0' && p[6] <= '9')
+		{
+			return (p[3]-'0')*1000 + (p[4]-'0')*100 + (p[5]-'0')*10 + (p[6]-'0');
+		}
+		p = strchr(p, ';');
+		if (!p) break;
+		p++;
+	}
+	return 0;
+}
+
+// Apple-II backward compatibility - allow using older builds of the core
+// checks number of fields (must be much more than existing cores)
+// and build date must be in the past
+#define A2_WOZ_MIN_FIELDS 50
+#define A2_WOZ_MIN_DATE 2607
+char user_io_a2_woz_enabled()
+{
+	const char *n = user_io_get_core_name();
+	return n && !strcasecmp(n, "Apple-II") &&
+		user_io_confstr_field_count() > A2_WOZ_MIN_FIELDS &&
+		user_io_confstr_yymm() >= A2_WOZ_MIN_DATE;
 }
 
 char *user_io_get_confstr(int index)

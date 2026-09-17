@@ -39,6 +39,7 @@ as rotated copies of the first 128 entries.  -- AMR
 #include <stdio.h>
 
 #include "osd.h"
+#include "cfg.h"
 #include "spi.h"
 
 #include "charrom.h"
@@ -497,34 +498,46 @@ void OsdClear(void)
 	memset(osdbuf, 0, 16 * 256);
 }
 
+int OsdGetRotation(bool scaled)
+{
+	if (cfg.osd_rotate != 3) return cfg.osd_rotate;
+	return (scaled || !is_arcade()) ? 0 : arcade_get_direction();
+}
+
+static void osd_enable(uint8_t cmd, uint16_t x, uint16_t y, uint16_t width, uint16_t height)
+{
+	const int target = OsdTarget();
+
+	for (int t = OSD_HDMI; t <= OSD_VGA; t <<= 1)
+	{
+		if (!(target & t)) continue;
+
+		int rot = OsdGetRotation(t == OSD_HDMI);
+		EnableOsd_on(t);
+		spi_osd_cmd_cont(cmd);
+		spi_w(x);
+		spi_w(y);
+		spi_w(width);
+		spi_w(height);
+		spi_w((rot == 1) ? 3 : (rot == 2) ? 1 : 0);
+		DisableOsd();
+	}
+
+	EnableOsd_on(target);
+}
+
 // enable displaying of OSD
 void OsdEnable(unsigned char mode)
 {
 	user_io_osd_key_enable(mode & DISABLE_KEYBOARD);
 	mode &= (DISABLE_KEYBOARD | OSD_MSG);
-	spi_osd_cmd(OSD_CMD_ENABLE | mode);
+	osd_enable(OSD_CMD_ENABLE | mode, 0, 0, 0, 0);
 }
 
 void InfoEnable(int x, int y, int width, int height)
 {
 	user_io_osd_key_enable(0);
-	spi_osd_cmd_cont(OSD_CMD_ENABLE | OSD_INFO);
-	spi_w(x);
-	spi_w(y);
-	spi_w(width);
-	spi_w(height);
-	DisableOsd();
-}
-
-void OsdRotation(uint8_t rotate)
-{
-	spi_osd_cmd_cont(OSD_CMD_DISABLE);
-	spi_w(0);
-	spi_w(0);
-	spi_w(0);
-	spi_w(0);
-	spi_w(rotate);
-	DisableOsd();
+	osd_enable(OSD_CMD_ENABLE | OSD_INFO, x, y, width, height);
 }
 
 // disable displaying of OSD

@@ -315,11 +315,13 @@ void a2_dsk_to_nib(uint8_t *nib, const uint8_t *dsk)
 }
 
 // Parse one NIB sector out of a byte stream. Returns 1 and fills sector/track
-// on success. State machine ported from dsk2nib_lib.cpp parse_nib_sector.
-static int parse_nib_sector(const uint8_t *d, int len, uint8_t *out256, int *track, int *sector)
+// and the number of bytes scanned/decoded on success.
+static int parse_nib_sector(const uint8_t *d, int len, uint8_t *out256,
+                            int *track, int *sector, int *consumed)
 {
 	int pos = 0, state = 0;
 	uint8_t primary[PRIMARY_BUF_LEN], secondary[SECONDARY_BUF_LEN], checksum;
+	*consumed = 0;
 
 	while (pos < len) {
 		uint8_t b = d[pos++];
@@ -362,6 +364,7 @@ static int parse_nib_sector(const uint8_t *d, int len, uint8_t *out256, int *tra
 				}
 				out256[i] = (primary[i] << 2) | (bit1 << 1) | bit0;
 			}
+			*consumed = pos;
 			return 1;
 		}
 		default: state = 0; break;
@@ -375,15 +378,21 @@ static int parse_nib_sector(const uint8_t *d, int len, uint8_t *out256, int *tra
 static int nib_track_to_dsk_track(const uint8_t *nt, uint8_t *dt)
 {
 	int got = 0, pos = 0;
-	while (pos < A2_NIB_TRACK_SIZE - 400) {
+	uint16_t seen = 0;
+	memset(dt, 0, A2_TRACK_SIZE);
+	while (pos < A2_NIB_TRACK_SIZE) {
 		uint8_t sec[A2_SECTOR_SIZE];
-		int tr, s;
-		if (parse_nib_sector(nt + pos, A2_NIB_TRACK_SIZE - pos, sec, &tr, &s)) {
+		int tr, s, consumed;
+		if (parse_nib_sector(nt + pos, A2_NIB_TRACK_SIZE - pos, sec, &tr, &s, &consumed)) {
 			if (s >= 0 && s < A2_SECTORS_PER_TRACK) {
-				memcpy(dt + soft_interleave[s] * A2_SECTOR_SIZE, sec, A2_SECTOR_SIZE);
-				got++;
+				uint16_t bit = (uint16_t)(1U << s);
+				if (!(seen & bit)) {
+					memcpy(dt + soft_interleave[s] * A2_SECTOR_SIZE, sec, A2_SECTOR_SIZE);
+					seen |= bit;
+					got++;
+				}
 			}
-			pos += BYTES_PER_NIB_SECTOR;
+			pos += consumed;
 		} else {
 			pos++;
 		}
