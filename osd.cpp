@@ -506,7 +506,7 @@ int OsdGetRotation(bool scaled)
 
 static void osd_enable(uint8_t cmd, uint16_t x, uint16_t y, uint16_t width, uint16_t height)
 {
-	const int target = GetOsdTarget();
+	const int target = OsdTarget();
 
 	for (int t = OSD_HDMI; t <= OSD_VGA; t <<= 1)
 	{

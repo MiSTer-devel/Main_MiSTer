@@ -26,7 +26,7 @@ void EnableOsd_on(int target)
 	osd_target = target;
 }
 
-int GetOsdTarget()
+int OsdTarget()
 {
 	return osd_target;
 }
