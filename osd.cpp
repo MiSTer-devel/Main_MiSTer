@@ -498,13 +498,11 @@ void OsdClear(void)
 	memset(osdbuf, 0, 16 * 256);
 }
 
-// osd_rotate=3 follows the video: rotate unless the scaler is already standing a vertical game upright.
+// osd_rotate=3 rotates only the native OSD, so analog follows the game while the scaler output is left alone.
 int OsdGetRotation(bool scaled)
 {
 	if (cfg.osd_rotate != 3) return cfg.osd_rotate;
-
-	int dir = is_arcade() ? arcade_get_direction() : 0;
-	return (dir && scaled && (spi_uio_cmd16(UIO_GET_VRES, 0) & 0x200)) ? 0 : dir;
+	return (scaled || !is_arcade()) ? 0 : arcade_get_direction();
 }
 
 // Native and scaled video can be rotated differently, so each OSD instance is enabled with its own rotation.
