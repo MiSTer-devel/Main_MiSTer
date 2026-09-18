@@ -406,6 +406,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	{
 		minimig_ConfigChipset(&minimig_config);
 		minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+		minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 	}
 
 	printf("CPU clock     : %s\n", minimig_config.chipset & 0x01 ? "turbo" : "normal");
@@ -417,6 +418,18 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	printf("Floppy drives : %u\n", minimig_config.floppy.drives + 1);
 	printf("Floppy speed  : %s\n", minimig_config.floppy.speed ? "fast" : "normal");
+	for (int drive = 0; drive <= minimig_config.floppy.drives; drive++) {
+		if (minimig_config.externalfloppy.exDrives[drive]) {
+	        printf("   Drive DF%u : External Drive ", drive);
+			switch (minimig_config.externalfloppy.exDrives[drive]) {
+				case 1: printf("0/A"); break;
+				case 2: printf("1/B"); break;
+				case 3: printf("2"); break;
+				case 4: printf("3"); break;
+			}
+			printf("\n");
+		}
+	}
 
 	printf("\n");
 
@@ -453,6 +466,7 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	minimig_ConfigChipset(&minimig_config);
 	minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+	minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 
 	if (minimig_config.memory & 0x40) UploadActionReplay();
 
@@ -497,19 +511,22 @@ static void ApplyConfiguration(char reloadkickstart)
 	minimig_ConfigVideo(minimig_config.scanlines);
 	minimig_ConfigAudio(minimig_config.audio);
 	minimig_ConfigAutofire(minimig_config.autofire, 0xC);
+	minimig_ConfigUserPort(minimig_config.userport);
 	minimig_set_extcfg(minimig_get_extcfg() & ~1);
 }
+
+
 
 int minimig_cfg_load(int num)
 {
 	static const char config_id[] = "MNMGCFG0";
 	int result = 0;
 
-	const char *filename = GetConfigurationName(num, 1);
+	const char* filename = GetConfigurationName(num, 1);
 
 	// load configuration data
 	int size;
-	if(filename && (size = FileLoadConfig(filename, 0, 0))>0)
+	if (filename && (size = FileLoadConfig(filename, 0, 0)) > 0)
 	{
 		BootPrint("Opened configuration file\n");
 		printf("Configuration file size: %s, %d\n", filename, size);
@@ -584,6 +601,12 @@ int minimig_cfg_load(int num)
 		minimig_config.cd32_drive.filename[0] = 0;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.cdtv_drive.filename[0] = 0;
+		minimig_config.externalfloppy.exDrives[0] = 0;
+		minimig_config.externalfloppy.exDrives[1] = 0;
+		minimig_config.externalfloppy.exDrives[2] = 0;
+		minimig_config.externalfloppy.exDrives[3] = 0;
+		minimig_config.userport = mm_userportMode::mmup_mp32pi;  // default as before
+
 		BootPrintEx(">>> No config found. Using defaults. <<<");
 	}
 
@@ -622,6 +645,8 @@ int minimig_cfg_load(int num)
 	ApplyConfiguration(1);
 	return(result);
 }
+
+
 
 void minimig_reset()
 {
@@ -842,6 +867,19 @@ void minimig_ConfigChipset(mm_configTYPE *config)
 void minimig_ConfigFloppy(unsigned char drives, unsigned char speed)
 {
 	spi_uio_cmd8(UIO_MM2_FLP, ((drives & 0x03) << 2) | (speed & 0x03));
+}
+
+void minimig_ConfigFloppyExt(unsigned char drive0, unsigned char drive1, unsigned char drive2, unsigned char drive3)
+{
+	printf("Floppy Ext 01: %x\n", drive0 | (drive1 << 3));
+	printf("Floppy Ext 23: %x\n", drive2 | (drive3 << 3));
+	spi_uio_cmd8(UIO_MM2_FLPEX01, drive0 | (drive1 << 3));
+	spi_uio_cmd8(UIO_MM2_FLPEX23, drive2 | (drive3 << 3));
+}
+
+void minimig_ConfigUserPort(mm_userportMode mode) {
+	printf("User Port: %s\n", mode == mm_userportMode::mmup_mp32pi ? "MT32pi":"MiSTer Floppy");
+	spi_uio_cmd8(UIO_MM2_USRPORT, mode == mm_userportMode::mmup_mp32pi ? 0 : 1);
 }
 
 void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask)

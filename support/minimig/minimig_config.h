@@ -41,6 +41,16 @@ typedef struct
 
 typedef struct
 {
+	unsigned char exDrives[4];	
+} mm_floppyexTYPE;
+
+enum mm_userportMode {
+	mmup_mp32pi = 0,
+	mmup_misterfloppy = 1
+};
+
+typedef struct
+{
 	unsigned char cfg;
 	unsigned char reserved;
 	char filename[1024];
@@ -68,6 +78,9 @@ typedef struct
 	mm_hardfileTYPE cd32_drive;
 	mm_hardfileTYPE cdtv_drive;
 	uint8_t         a2065_mode;
+
+	mm_userportMode userport;
+	mm_floppyexTYPE externalfloppy;
 } mm_configTYPE;
 
 extern mm_configTYPE minimig_config;
@@ -94,7 +107,9 @@ void minimig_ConfigMemory(unsigned char memory);
 void minimig_ConfigCPU(unsigned char cpu);
 void minimig_ConfigChipset(mm_configTYPE *config);
 void minimig_ConfigFloppy(unsigned char drives, unsigned char speed);
+void minimig_ConfigFloppyExt(unsigned char drive0, unsigned char drive1, unsigned char drive2, unsigned char drive3);
 void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask);
+void minimig_ConfigUserPort(mm_userportMode mode);
 
 void minimig_set_extcfg(unsigned int ext_cfg);
 unsigned int minimig_get_extcfg();
