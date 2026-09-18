@@ -15,7 +15,7 @@
 
 // Per-slot serving state (only used for SD_TYPE_IIGS slots).
 //   mode 0 = hard disk, raw blocks at hdr_off (2MG/DC42)
-//   mode 1 = converted floppy, served from the in-memory woz buffer (read-only)
+//   mode 1 = converted floppy, served from the in-memory WOZ buffer
 static int        g_mode[16]    = {};
 static int64_t    g_hdr_off[16]  = {};
 static uint8_t   *g_woz[16]      = {};
@@ -106,7 +106,8 @@ static uint8_t *read_all(fileTYPE *f, size_t *out_len)
 
 // Build a converted WOZ for a floppy slot. Returns malloc'd buffer + size, or
 // NULL on failure. kind: 1 = 3.5", 2 = 5.25".
-static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t raw_len, size_t *out_sz)
+static uint8_t *build_woz(int kind, A2SectorOrder order_525,
+						  const uint8_t *raw, size_t raw_len, size_t *out_sz)
 {
 	// Resolve the payload (strip 2MG/DC42 header) and its order.
 	const uint8_t *pay = raw;
@@ -126,9 +127,9 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t 
 		order_prodos = 1;
 	} else if (raw_len == A2_NIB_IMAGE_SIZE) {
 		order_nib = 1;
-	} else if (eqi(ext, "po")) {
-		order_prodos = 1;
-	} // else .do/.dsk => DOS order
+	} else if (raw_len == A2_525_IMAGE_SIZE) {
+		order_prodos = (order_525 == A2_ORDER_PRODOS);
+	}
 
 	if (kind == 1) {
 		// 3.5": need an 800K ProDOS image
@@ -146,12 +147,17 @@ static uint8_t *build_woz(int kind, const char *ext, const uint8_t *raw, size_t 
 	static uint8_t dsk[A2_525_IMAGE_SIZE];
 	if (order_nib) {
 		if (pay_len != A2_NIB_IMAGE_SIZE) return NULL;
-		if (!a2_nib_to_dsk(dsk, pay)) return NULL;
-	} else {
-		if (pay_len != A2_525_IMAGE_SIZE) return NULL;
-		if (order_prodos) a2_prodos_to_dos(dsk, pay);
-		else              memcpy(dsk, pay, A2_525_IMAGE_SIZE);
+		size_t cap = 512 * 1024;
+		uint8_t *woz = (uint8_t *)malloc(cap);
+		if (!woz) return NULL;
+		size_t n = a2_nib_to_woz525(woz, cap, pay);
+		if (!n) { free(woz); return NULL; }
+		*out_sz = n;
+		return woz;
 	}
+	if (pay_len != A2_525_IMAGE_SIZE) return NULL;
+	if (order_prodos) a2_prodos_to_dos(dsk, pay);
+	else              memcpy(dsk, pay, A2_525_IMAGE_SIZE);
 	size_t cap = 512 * 1024;
 	uint8_t *woz = (uint8_t *)malloc(cap);
 	if (!woz) return NULL;
@@ -178,7 +184,7 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
 
 	const char *dot = strrchr(name, '.');
 	const char *ext = dot ? dot + 1 : NULL;
-	int wt     = woz_disk_type(head, f->size);
+	int wt     = woz_disk_type(head, hn);
 	int is_nib = (f->size == A2_NIB_IMAGE_SIZE);
 	TwoMG m;
 	int is_2mg = twomg_parse(head, f->size, &m);
@@ -239,7 +245,7 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
 	}
 
 	// Need to convert. Validate geometry up front for a clear message.
-	DiskClass cls = iigs_classify(head, f->size, ext);
+	DiskClass cls = iigs_classify(head, hn, f->size, ext);
 	int want_cls = (kind == 1) ? DC_FLOPPY_35 : DC_FLOPPY_525;
 	if (cls != want_cls) {
 		reject(kind == 1 ? "3.5\" drive needs an 800K disk image."
@@ -253,24 +259,40 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
 
 	// Determine the write-back descriptor before consuming `raw`.
 	int wb_off = 0, wb_order = (kind == 1) ? 1 : 0, wb_ok = 0;
+	A2SectorOrder order_525 = A2_ORDER_UNKNOWN;
 	TwoMG mm;
 	if (twomg_parse(raw, raw_len, &mm)) {
 		wb_off = (int)mm.data_offset;
 		if (mm.format == 2)      wb_ok = 0;                       // NIB payload: read-only
-		else { wb_ok = 1; if (kind == 2) wb_order = (mm.format == 1); }
+		else {
+			wb_ok = 1;
+			if (kind == 2) {
+				order_525 = (mm.format == 1) ? A2_ORDER_PRODOS : A2_ORDER_DOS;
+				wb_order = order_525;
+			}
+		}
 	} else if (dc42_probe(raw, raw_len)) {
 		wb_ok = 0;                                                // DC42: read-only (stale checksum)
 	} else if (raw_len == A2_NIB_IMAGE_SIZE) {
 		wb_ok = 0;                                                // .nib: read-only (v1)
-	} else if (kind == 2 && eqi(ext, "po")) {
-		wb_ok = 1; wb_order = 1;                                  // ProDOS-order 140K
 	} else {
-		wb_ok = 1; if (kind == 2) wb_order = 0;                   // raw .po(800K) / .do / .dsk
+		wb_ok = 1;
+		if (kind == 2) {
+			order_525 = a2_resolve_525_order(raw, raw_len, ext);
+			if (order_525 == A2_ORDER_UNKNOWN) {
+				free(raw);
+				reject("5.25\" conversion needs a 140K .po, .do, or .dsk image.");
+				return IIGS_REJECT;
+			}
+			wb_order = order_525;
+			printf("IIgs: 140K source order: %s\n",
+			       order_525 == A2_ORDER_PRODOS ? "ProDOS" : "DOS");
+		}
 	}
 	if (!FileCanWrite(name)) wb_ok = 0;
 
 	size_t woz_sz = 0;
-	uint8_t *woz = build_woz(kind, ext, raw, raw_len, &woz_sz);
+	uint8_t *woz = build_woz(kind, order_525, raw, raw_len, &woz_sz);
 	free(raw);
 	if (!woz) { reject("Could not convert this disk to WOZ."); return IIGS_REJECT; }
 
@@ -339,14 +361,13 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
 				FileWriteAdv(f, po + (size_t)base * 512, (size_t)cnt * 512);
 		}
 	} else {
-		// 5.25": decode the DOS-order track; re-skew to ProDOS if the source is .po.
+		// 5.25": decode the DOS-order track and restore the detected source order.
 		static uint8_t dsk[A2_525_IMAGE_SIZE];
 		if (a2_woz525_decode_track(g_woz[disk], g_woz_sz[disk], t, dsk) > 0) {
-			static const int D2P[16] = { 0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15 };
 			uint8_t out[A2_TRACK_SIZE];
 			const uint8_t *src = dsk + (size_t)t * A2_TRACK_SIZE;
 			if (g_wb_order[disk] == 1)
-				for (int s = 0; s < 16; s++) memcpy(out + D2P[s] * 256, src + s * 256, 256);
+				a2_dos_track_to_prodos(out, src);
 			else
 				memcpy(out, src, A2_TRACK_SIZE);
 			if (FileSeek(f, g_wb_off[disk] + (int64_t)t * A2_TRACK_SIZE, SEEK_SET))
