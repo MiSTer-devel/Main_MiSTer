@@ -179,24 +179,135 @@ int woz_disk_type(const uint8_t *buf, size_t size)
 }
 
 // ===========================================================================
-// 140K sector order (DOS 3.3 <-> ProDOS)
+// 140K sector order (DOS 3.3 <-> ProDOS), with automated detection
+// ( these files are infamously inconsistent,
+//    .do/.po have no headers, and .dsk are sometimes renamed .do/.po files..! )
 // ===========================================================================
-// DOS logical sector -> ProDOS sector position within a track. Inverse pair.
-static const int DOS_TO_PRODOS[16] = { 0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15 };
-static const int PRODOS_TO_DOS[16] = { 0, 2, 4, 6, 8, 10, 12, 14, 1, 3, 5, 7, 9, 11, 13, 15 };
+// File sector index -> physical sector ID.
+static const uint8_t DOS_PHYSICAL[16] =
+    { 0x00, 0x07, 0x0E, 0x06, 0x0D, 0x05, 0x0C, 0x04,
+      0x0B, 0x03, 0x0A, 0x02, 0x09, 0x01, 0x08, 0x0F };
+static const uint8_t PRODOS_PHYSICAL[16] =
+    { 0x00, 0x08, 0x01, 0x09, 0x02, 0x0A, 0x03, 0x0B,
+      0x04, 0x0C, 0x05, 0x0D, 0x06, 0x0E, 0x07, 0x0F };
 
-static void reorder_140k(uint8_t *dst, const uint8_t *src, const int map[16])
+static int sector_for_physical(const uint8_t map[16], int physical)
+{
+	for (int i = 0; i < A2_SECTORS_PER_TRACK; i++)
+		if (map[i] == physical) return i;
+	return -1;
+}
+
+static void reorder_track(uint8_t *dst, const uint8_t *src,
+                          const uint8_t src_map[16], const uint8_t dst_map[16])
+{
+	for (int d = 0; d < A2_SECTORS_PER_TRACK; d++) {
+		int s = sector_for_physical(src_map, dst_map[d]);
+		memcpy(dst + d * A2_SECTOR_SIZE, src + s * A2_SECTOR_SIZE, A2_SECTOR_SIZE);
+	}
+}
+
+static void reorder_140k(uint8_t *dst, const uint8_t *src,
+                         const uint8_t src_map[16], const uint8_t dst_map[16])
 {
 	for (int t = 0; t < A2_TRACKS_525; t++) {
 		const uint8_t *st = src + (size_t)t * A2_TRACK_SIZE;
 		uint8_t *dt = dst + (size_t)t * A2_TRACK_SIZE;
-		for (int s = 0; s < A2_SECTORS_PER_TRACK; s++)
-			memcpy(dt + map[s] * A2_SECTOR_SIZE, st + s * A2_SECTOR_SIZE, A2_SECTOR_SIZE);
+		reorder_track(dt, st, src_map, dst_map);
 	}
 }
 
-void a2_dos_to_prodos(uint8_t *dst, const uint8_t *src) { reorder_140k(dst, src, DOS_TO_PRODOS); }
-void a2_prodos_to_dos(uint8_t *dst, const uint8_t *src) { reorder_140k(dst, src, PRODOS_TO_DOS); }
+void a2_dos_to_prodos(uint8_t *dst, const uint8_t *src)
+{
+	reorder_140k(dst, src, DOS_PHYSICAL, PRODOS_PHYSICAL);
+}
+
+void a2_prodos_to_dos(uint8_t *dst, const uint8_t *src)
+{
+	reorder_140k(dst, src, PRODOS_PHYSICAL, DOS_PHYSICAL);
+}
+
+void a2_dos_track_to_prodos(uint8_t *dst, const uint8_t *src)
+{
+	reorder_track(dst, src, DOS_PHYSICAL, PRODOS_PHYSICAL);
+}
+
+static void read_ordered_sector(uint8_t *dst, const uint8_t *image, int track,
+                                int target_sector, const uint8_t source_map[16],
+                                const uint8_t target_map[16])
+{
+	int source_sector = sector_for_physical(source_map, target_map[target_sector]);
+	const uint8_t *src = image + (size_t)track * A2_TRACK_SIZE +
+	                     (size_t)source_sector * A2_SECTOR_SIZE;
+	memcpy(dst, src, A2_SECTOR_SIZE);
+}
+
+static int prodos_volume_probe(const uint8_t *image, const uint8_t source_map[16])
+{
+	uint8_t block[512];
+	read_ordered_sector(block, image, 0, 4, source_map, PRODOS_PHYSICAL);
+	read_ordered_sector(block + 256, image, 0, 5, source_map, PRODOS_PHYSICAL);
+
+	const uint8_t *entry = block + 4;
+	int name_len = entry[0] & 0x0F;
+	if ((entry[0] & 0xF0) != 0xF0 || name_len < 1 || name_len > 15) return 0;
+	if (entry[1] < 'A' || entry[1] > 'Z') return 0;
+	for (int i = 1; i < name_len; i++) {
+		uint8_t c = entry[1 + i];
+		if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.')) return 0;
+	}
+	if (entry[0x1F] != 0x27 || entry[0x20] != 0x0D) return 0;
+	uint16_t bitmap = rd_le16(entry + 0x23);
+	uint16_t blocks = rd_le16(entry + 0x25);
+	return bitmap >= 3 && bitmap < blocks && blocks == (A2_525_IMAGE_SIZE / A2_BLOCK_SIZE);
+}
+
+static int dos_vtoc_probe(const uint8_t *image, const uint8_t source_map[16])
+{
+	uint8_t vtoc[A2_SECTOR_SIZE];
+	read_ordered_sector(vtoc, image, 17, 0, source_map, DOS_PHYSICAL);
+	return vtoc[1] == 17 && vtoc[2] < 16 && vtoc[3] == 3 &&
+	       vtoc[0x34] == A2_TRACKS_525 && vtoc[0x35] == A2_SECTORS_PER_TRACK &&
+	       rd_le16(vtoc + 0x36) == A2_SECTOR_SIZE;
+}
+
+A2SectorOrder a2_detect_525_order(const uint8_t *image, size_t size)
+{
+	if (!image || size != A2_525_IMAGE_SIZE) return A2_ORDER_UNKNOWN;
+
+	int po_direct = prodos_volume_probe(image, PRODOS_PHYSICAL);
+	int do_direct = dos_vtoc_probe(image, DOS_PHYSICAL);
+	if (po_direct) return A2_ORDER_PRODOS;
+	if (do_direct) return A2_ORDER_DOS;
+
+	if (prodos_volume_probe(image, DOS_PHYSICAL)) return A2_ORDER_DOS;
+	if (dos_vtoc_probe(image, PRODOS_PHYSICAL)) return A2_ORDER_PRODOS;
+	return A2_ORDER_UNKNOWN;
+}
+
+static int ext_is_ascii(const char *ext, const char *want)
+{
+	if (!ext || !want) return 0;
+	while (*ext && *want) {
+		char a = *ext++;
+		char b = *want++;
+		if (a >= 'A' && a <= 'Z') a = (char)(a + ('a' - 'A'));
+		if (b >= 'A' && b <= 'Z') b = (char)(b + ('a' - 'A'));
+		if (a != b) return 0;
+	}
+	return *ext == 0 && *want == 0;
+}
+
+A2SectorOrder a2_resolve_525_order(const uint8_t *image, size_t size, const char *ext)
+{
+	if (size != A2_525_IMAGE_SIZE ||
+	    !(ext_is_ascii(ext, "po") || ext_is_ascii(ext, "do") || ext_is_ascii(ext, "dsk")))
+		return A2_ORDER_UNKNOWN;
+
+	A2SectorOrder detected = a2_detect_525_order(image, size);
+	if (detected != A2_ORDER_UNKNOWN) return detected;
+	return ext_is_ascii(ext, "po") ? A2_ORDER_PRODOS : A2_ORDER_DOS;
+}
 
 // ===========================================================================
 // 5.25" 6-and-2 GCR (DSK <-> NIB), ported from dsk2nib_lib.cpp
@@ -214,11 +325,6 @@ static const uint8_t addr_prolog[] = { 0xd5, 0xaa, 0x96 };
 static const uint8_t addr_epilog[] = { 0xde, 0xaa, 0xeb };
 static const uint8_t data_prolog[] = { 0xd5, 0xaa, 0xad };
 static const uint8_t data_epilog[] = { 0xde, 0xaa, 0xeb };
-
-static const int soft_interleave[16] =
-    { 0, 7, 0xE, 6, 0xD, 5, 0xC, 4, 0xB, 3, 0xA, 2, 9, 1, 8, 0xF };
-static const int phys_interleave[16] =
-    { 0, 0xD, 0xB, 9, 7, 5, 3, 1, 0xE, 0xC, 0xA, 8, 6, 4, 2, 0xF };
 
 static const uint8_t gcr6_table[0x40] = {
 	0x96, 0x97, 0x9a, 0x9b, 0x9d, 0x9e, 0x9f, 0xa6,
@@ -277,16 +383,12 @@ static void nibbilize(const uint8_t *src, uint8_t *dest)
 // Build one full 6656-byte NIB track from a 4096-byte DOS-order track.
 static void nib_track_from_dsk(uint8_t *nibtrack, const uint8_t *dsktrack, int track)
 {
-	for (int phys = 0; phys < A2_SECTORS_PER_TRACK; phys++) {
-		// physical position -> logical sector
-		int logical = 0;
-		for (int i = 0; i < A2_SECTORS_PER_TRACK; i++)
-			if (phys_interleave[i] == phys) { logical = i; break; }
+	for (int position = 0; position < A2_SECTORS_PER_TRACK; position++) {
+		int sector = DOS_PHYSICAL[position];
+		int file_sector = DOS_PHYSICAL[sector];
+		const uint8_t *sec = dsktrack + file_sector * A2_SECTOR_SIZE;
 
-		int soft = soft_interleave[logical];
-		const uint8_t *sec = dsktrack + soft * A2_SECTOR_SIZE;
-
-		uint8_t *o = nibtrack + phys * BYTES_PER_NIB_SECTOR;
+		uint8_t *o = nibtrack + position * BYTES_PER_NIB_SECTOR;
 		memset(o, GAP_BYTE, GAP1_LEN);
 		o += GAP1_LEN;
 
@@ -294,8 +396,8 @@ static void nib_track_from_dsk(uint8_t *nibtrack, const uint8_t *dsktrack, int t
 		memcpy(o, addr_prolog, 3); o += 3;
 		odd_even_encode(o, DEFAULT_VOLUME); o += 2;
 		odd_even_encode(o, track);          o += 2;
-		odd_even_encode(o, logical);        o += 2;
-		odd_even_encode(o, DEFAULT_VOLUME ^ track ^ logical); o += 2;
+		odd_even_encode(o, sector);         o += 2;
+		odd_even_encode(o, DEFAULT_VOLUME ^ track ^ sector); o += 2;
 		memcpy(o, addr_epilog, 3); o += 3;
 
 		memset(o, GAP_BYTE, GAP2_LEN); o += GAP2_LEN;
@@ -387,7 +489,8 @@ static int nib_track_to_dsk_track(const uint8_t *nt, uint8_t *dt)
 			if (s >= 0 && s < A2_SECTORS_PER_TRACK) {
 				uint16_t bit = (uint16_t)(1U << s);
 				if (!(seen & bit)) {
-					memcpy(dt + soft_interleave[s] * A2_SECTOR_SIZE, sec, A2_SECTOR_SIZE);
+					int file_sector = DOS_PHYSICAL[s];
+					memcpy(dt + file_sector * A2_SECTOR_SIZE, sec, A2_SECTOR_SIZE);
 					seen |= bit;
 					got++;
 				}
@@ -411,6 +514,18 @@ int a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib)
 	return ok;
 }
 
+// Per-track versions of the above, for NIB write-back
+void a2_dsk_track_to_nib(uint8_t *nibtrack, const uint8_t *dsktrack, int track)
+{
+	if (track < 0 || track >= A2_TRACKS_525) return;
+	nib_track_from_dsk(nibtrack, dsktrack, track);
+}
+
+int a2_nib_track_to_dsk(const uint8_t *nibtrack, uint8_t *dsktrack)
+{
+	return nib_track_to_dsk_track(nibtrack, dsktrack);
+}
+
 // ===========================================================================
 // 5.25" "easy WOZ" (DOS-order DSK <-> WOZ2)
 // ===========================================================================
@@ -431,14 +546,10 @@ static void woz_put_chunk_hdr(uint8_t *p, const char *id, uint32_t size)
 	wr_le32(p + 4, size);
 }
 
-size_t a2_dsk_to_woz525(uint8_t *woz, size_t woz_cap, const uint8_t *dsk)
+size_t a2_nib_to_woz525(uint8_t *woz, size_t woz_cap, const uint8_t *nib)
 {
 	if (woz_cap < WOZ525_SIZE) return 0;
 	memset(woz, 0, WOZ525_SIZE);
-
-	// nibblize all tracks first
-	static uint8_t nib[A2_NIB_IMAGE_SIZE];
-	a2_dsk_to_nib(nib, dsk);
 
 	uint8_t *p = woz;
 	// File header (CRC filled in at the end)
@@ -497,6 +608,13 @@ size_t a2_dsk_to_woz525(uint8_t *woz, size_t woz_cap, const uint8_t *dsk)
 	uint32_t crc = woz_crc32(woz + 12, WOZ525_SIZE - 12);
 	wr_le32(woz + 8, crc);
 	return WOZ525_SIZE;
+}
+
+size_t a2_dsk_to_woz525(uint8_t *woz, size_t woz_cap, const uint8_t *dsk)
+{
+	static uint8_t nib[A2_NIB_IMAGE_SIZE];
+	a2_dsk_to_nib(nib, dsk);
+	return a2_nib_to_woz525(woz, woz_cap, nib);
 }
 
 // Locate a chunk by id; returns pointer to its data and fills *out_size, or NULL.
@@ -902,37 +1020,38 @@ int a2_woz35_to_po(uint8_t *po, const uint8_t *woz, size_t woz_size)
 // ===========================================================================
 // classification
 // ===========================================================================
-static int ext_is(const char *ext, const char *want)
-{
-	return ext && strcmp(ext, want) == 0;
-}
-
-DiskClass iigs_classify(const uint8_t *buf, size_t size, const char *ext)
+DiskClass iigs_classify(const uint8_t *buf, size_t buf_len, size_t image_size,
+                        const char *ext)
 {
 	// content probes first
-	int wt = woz_disk_type(buf, size);
+	int wt = woz_disk_type(buf, buf_len);
 	if (wt == 1) return DC_FLOPPY_525;
 	if (wt == 2) return DC_FLOPPY_35;
 
 	TwoMG m;
-	if (twomg_parse(buf, size, &m)) {
+	if (buf_len >= 64 && twomg_parse(buf, image_size, &m)) {
 		if (m.format == 2) return DC_FLOPPY_525;          // NIB payload
 		if (m.data_len == A2_525_IMAGE_SIZE) return DC_FLOPPY_525;
 		if (m.data_len == A2_35_IMAGE_SIZE)  return DC_FLOPPY_35;
 		return DC_HDD;
 	}
 
-	if (dc42_probe(buf, size)) {
+	if (buf_len >= 84 && dc42_probe(buf, image_size)) {
 		uint32_t ds = rd_be32(buf + 0x40);
 		if (ds == A2_35_IMAGE_SIZE || ds == 409600) return DC_FLOPPY_35;
 		return DC_HDD;
 	}
 
 	// bare images by size/extension
-	if (ext_is(ext, "nib") || size == A2_NIB_IMAGE_SIZE) return DC_FLOPPY_525;
-	if (size == A2_525_IMAGE_SIZE) return DC_FLOPPY_525;
-	if (size == A2_35_IMAGE_SIZE)  return DC_FLOPPY_35;   // §4 edge: 800K assumed floppy
-	if (ext_is(ext, "hdv") || ext_is(ext, "po")) return DC_HDD;
-	if (size > 0 && (size % A2_BLOCK_SIZE) == 0) return DC_HDD;
+	if (ext_is_ascii(ext, "nib") || image_size == A2_NIB_IMAGE_SIZE) return DC_FLOPPY_525;
+	if (buf_len >= image_size &&
+	    a2_resolve_525_order(buf, image_size, ext) != A2_ORDER_UNKNOWN)
+		return DC_FLOPPY_525;
+	if (image_size == A2_525_IMAGE_SIZE &&
+	    (ext_is_ascii(ext, "po") || ext_is_ascii(ext, "do") || ext_is_ascii(ext, "dsk")))
+		return DC_FLOPPY_525;
+	if (image_size == A2_35_IMAGE_SIZE)  return DC_FLOPPY_35;   // §4 edge: 800K assumed floppy
+	if (ext_is_ascii(ext, "hdv") || ext_is_ascii(ext, "po")) return DC_HDD;
+	if (image_size > 0 && (image_size % A2_BLOCK_SIZE) == 0) return DC_HDD;
 	return DC_UNKNOWN;
 }
