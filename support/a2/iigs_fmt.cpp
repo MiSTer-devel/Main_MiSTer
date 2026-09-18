@@ -514,6 +514,18 @@ int a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib)
 	return ok;
 }
 
+// Per-track versions of the above, for NIB write-back
+void a2_dsk_track_to_nib(uint8_t *nibtrack, const uint8_t *dsktrack, int track)
+{
+	if (track < 0 || track >= A2_TRACKS_525) return;
+	nib_track_from_dsk(nibtrack, dsktrack, track);
+}
+
+int a2_nib_track_to_dsk(const uint8_t *nibtrack, uint8_t *dsktrack)
+{
+	return nib_track_to_dsk_track(nibtrack, dsktrack);
+}
+
 // ===========================================================================
 // 5.25" "easy WOZ" (DOS-order DSK <-> WOZ2)
 // ===========================================================================

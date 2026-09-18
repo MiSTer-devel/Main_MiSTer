@@ -25,6 +25,7 @@ static int        g_wb_ok[16]    = {};  // write-back supported (and file writab
 static int        g_wb_kind[16]  = {};  // 1 = 3.5", 2 = 5.25"
 static int64_t    g_wb_off[16]   = {};  // header offset within the source file
 static int        g_wb_order[16] = {};  // 5.25 source order: 0 = DOS, 1 = ProDOS
+static int        g_wb_nib[16]   = {};  // 5.25 source is NIB (.nib / 2MG fmt 2): persist 6656B/track
 
 static int eqi(const char *a, const char *b) { return a && b && !strcasecmp(a, b); }
 
@@ -83,6 +84,7 @@ void iigs_unmount(int index)
 	g_wb_kind[index] = 0;
 	g_wb_off[index] = 0;
 	g_wb_order[index] = 0;
+	g_wb_nib[index] = 0;
 }
 
 // Read the entire open image into a freshly malloc'd buffer (caller frees).
@@ -258,12 +260,12 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
 	if (!raw) { reject("Could not read the disk image."); return IIGS_REJECT; }
 
 	// Determine the write-back descriptor before consuming `raw`.
-	int wb_off = 0, wb_order = (kind == 1) ? 1 : 0, wb_ok = 0;
+	int wb_off = 0, wb_order = (kind == 1) ? 1 : 0, wb_ok = 0, wb_nib = 0;
 	A2SectorOrder order_525 = A2_ORDER_UNKNOWN;
 	TwoMG mm;
 	if (twomg_parse(raw, raw_len, &mm)) {
 		wb_off = (int)mm.data_offset;
-		if (mm.format == 2)      wb_ok = 0;                       // NIB payload: read-only
+		if (mm.format == 2)      { wb_ok = 1; wb_nib = 1; }       // NIB payload: per-track re-nibblize
 		else {
 			wb_ok = 1;
 			if (kind == 2) {
@@ -274,7 +276,7 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
 	} else if (dc42_probe(raw, raw_len)) {
 		wb_ok = 0;                                                // DC42: read-only (stale checksum)
 	} else if (raw_len == A2_NIB_IMAGE_SIZE) {
-		wb_ok = 0;                                                // .nib: read-only (v1)
+		wb_ok = 1; wb_nib = 1;                                    // .nib: per-track re-nibblize
 	} else {
 		wb_ok = 1;
 		if (kind == 2) {
@@ -303,10 +305,13 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
 	g_wb_kind[index] = kind;
 	g_wb_off[index]  = wb_off;
 	g_wb_order[index] = wb_order;
+	g_wb_nib[index]  = wb_nib;
 	f->size = (int64_t)woz_sz;            // core sees the WOZ size
 	*out_writable = wb_ok;                // writable only if write-back is supported
 	printf("IIgs: floppy slot %d converted to WOZ (%zu bytes), %s\n",
-	       index, woz_sz, wb_ok ? "read-write (write-back)" : "read-only");
+	       index, woz_sz,
+	       wb_ok ? (wb_nib ? "read-write (nib write-back)" : "read-write (write-back)")
+                : "read-only");
 	return IIGS_HANDLED;
 }
 
@@ -363,7 +368,16 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
 	} else {
 		// 5.25": decode the DOS-order track and restore the detected source order.
 		static uint8_t dsk[A2_525_IMAGE_SIZE];
-		if (a2_woz525_decode_track(g_woz[disk], g_woz_sz[disk], t, dsk) > 0) {
+		int got = a2_woz525_decode_track(g_woz[disk], g_woz_sz[disk], t, dsk);
+		if (g_wb_nib[disk]) {
+			// re-nibblize the whole track and persist to disk
+			if (got == A2_SECTORS_PER_TRACK) {
+				static uint8_t nibtrk[A2_NIB_TRACK_SIZE];
+				a2_dsk_track_to_nib(nibtrk, dsk + (size_t)t * A2_TRACK_SIZE, t);
+				if (FileSeek(f, g_wb_off[disk] + (int64_t)t * A2_NIB_TRACK_SIZE, SEEK_SET))
+					FileWriteAdv(f, nibtrk, A2_NIB_TRACK_SIZE);
+			}
+		} else if (got > 0) {
 			uint8_t out[A2_TRACK_SIZE];
 			const uint8_t *src = dsk + (size_t)t * A2_TRACK_SIZE;
 			if (g_wb_order[disk] == 1)
