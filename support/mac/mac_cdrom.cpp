@@ -10,6 +10,8 @@
 #include "../../hardware.h"
 #include "../chd/mister_chd.h"
 #include "mac.h"
+#include "mac_cdrom_resp.h"
+#include "mac_cdrom_play.h"
 
 struct mac_cdrom_state
 {
@@ -17,6 +19,7 @@ struct mac_cdrom_state
 	int      is_chd;
 
 	toc_t    toc;          // full track table, disc-LBA space (no +150)
+	mac_cd_toc mtoc;
 	uint8_t *hunkbuf;      // chd hunk cache
 	int      hunknum;
 
@@ -33,6 +36,16 @@ struct mac_cdrom_state
 };
 
 static mac_cdrom_state cd = {};
+
+static mac_cd_play play;
+static int         play_inited;
+static uint32_t    last_sectors;
+
+static mac_cd_play *P(void)
+{
+	if (!play_inited) { mac_cd_play_init(&play); play_inited = 1; }
+	return &play;
+}
 
 static char     rp_path[1024];
 static uint32_t rp_timer;
@@ -56,6 +69,7 @@ void mac_cdrom_unmount(int index)
 	if (cd.hunkbuf) free(cd.hunkbuf);
 	memset(&cd, 0, sizeof(cd));
 	cd.aframe_lba = -1;
+	mac_cd_play_set_toc(P(), NULL);
 }
 
 uint64_t mac_cdrom_size(int index)
@@ -73,26 +87,23 @@ int mac_cdrom_active(int index)
 
 static void build_toc_blob(void)
 {
-	uint8_t *b = cd.tocblob;
-	memset(b, 0, sizeof(cd.tocblob));
-	memcpy(b, "MCDA", 4);
-	b[4] = 1;                                  // version
-	b[5] = 1;                                  // first track
-	b[6] = (uint8_t)cd.toc.last;               // last track
-	b[7] = (uint8_t)(cd.trk + 1);              // data track number (1-based)
-	uint32_t leadout = (uint32_t)cd.toc.end;
-	b[8]  = (uint8_t)leadout;       b[9]  = (uint8_t)(leadout >> 8);
-	b[10] = (uint8_t)(leadout >> 16); b[11] = (uint8_t)(leadout >> 24);
-	for (int i = 0; i < cd.toc.last && i < 99; i++)
+	mac_cd_toc *t = &cd.mtoc;
+	memset(t, 0, sizeof(*t));
+	t->n = (cd.toc.last > MAC_CD_MAX_TRACKS) ? MAC_CD_MAX_TRACKS : cd.toc.last;
+	for (int i = 0; i < t->n; i++)
 	{
-		uint8_t *e = b + 16 + 8 * i;
-		e[0] = (cd.toc.tracks[i].type == TT_CDDA) ? 0x10 : 0x14;  // ctrl/adr
-		uint32_t s = (uint32_t)cd.toc.tracks[i].start;
-		e[2] = (uint8_t)s; e[3] = (uint8_t)(s >> 8);
-		e[4] = (uint8_t)(s >> 16); e[5] = (uint8_t)(s >> 24);
-		uint32_t pg = (uint32_t)cd.toc.tracks[i].pregap;
-		if (pg > 0xffff) pg = 0xffff;
-		e[6] = (uint8_t)pg; e[7] = (uint8_t)(pg >> 8);
+		t->ctrl[i]   = (cd.toc.tracks[i].type == TT_CDDA) ? 0x10 : 0x14;  // ctrl/adr
+		t->start[i]  = (uint32_t)cd.toc.tracks[i].start;
+		t->pregap[i] = (uint32_t)cd.toc.tracks[i].pregap;
+	}
+	t->leadout  = (uint32_t)cd.toc.end;
+	t->data_trk = cd.trk;
+
+	mac_cd_build_blob(t, cd.tocblob);
+	if (!is_mac_scsi_optimized())
+	{
+		cd.tocblob[4]  = 1;
+		cd.tocblob[12] = 0;
 	}
 }
 
@@ -127,6 +138,8 @@ static int finish_mount(const char *src)
 	}
 	cd.aframe_lba = -1;
 	build_toc_blob();
+	last_sectors = (uint32_t)cd.sectors;
+	mac_cd_play_set_toc(P(), &cd.mtoc);
 	log_toc(src);
 	return MAC_CDROM_HANDLED;
 }
@@ -335,7 +348,8 @@ static int mount_raw(const char *name)
 		if (!memcmp(hdr, sync, sizeof(sync))) found = 1;
 	}
 
-	if (found <= 0)
+	if (found < 0) found = 0;
+	if (found == 0 && !is_mac_scsi_optimized())
 	{
 		// flat 2048: the generic sd_image path serves it byte-for-byte
 		FileClose(&k->f);
@@ -373,7 +387,7 @@ int mac_cdrom_mount(int index, const char *name)
 	// Arm the boot repulse for HANDLED mounts; its own remount must not re-arm.
 	if (!rp_firing)
 	{
-		if (r == MAC_CDROM_HANDLED && name && *name)
+		if (r == MAC_CDROM_HANDLED && name && *name && !is_mac_scsi_optimized())
 		{
 			strncpy(rp_path, name, sizeof(rp_path) - 1);
 			rp_path[sizeof(rp_path) - 1] = 0;
@@ -446,10 +460,7 @@ static int audio_frame(uint32_t disc_lba)
 void mac_cdrom_fill(int index, uint64_t lba, uint8_t *buf, int sz)
 {
 	memset(buf, 0, sz);
-	if (index != mac_cdrom_slot() || !cd.active || (sz != 512 && sz != 2352)) return;
-
-	// data-window reads = the guest genuinely reading (boot-repulse skip signal)
-	if (lba < MAC_CDROM_AUDIO_BLK) rp_data_reads++;
+	if (index != mac_cdrom_slot() || !cd.active) return;
 
 	// whole-frame CD-DA (user_io sets sz=2352): lba = MAC_CDROM_AUDIO_BLK + disc_lba
 	if (sz == 2352)
@@ -460,16 +471,20 @@ void mac_cdrom_fill(int index, uint64_t lba, uint8_t *buf, int sz)
 		return;
 	}
 
+	if (sz < 512 || (sz & 511) || sz > 4096) return;
+
 	// TOC blob window
 	if (lba >= MAC_CDROM_TOC_BLK && lba < MAC_CDROM_TOC_BLK + MAC_CDROM_TOC_BLKS)
 	{
+		if (sz != 512) return;
 		memcpy(buf, cd.tocblob + (lba - MAC_CDROM_TOC_BLK) * 512, 512);
 		return;
 	}
 
 	// raw audio window: 5 blocks per disc sector (2352 bytes + 208 pad)
-	if (lba >= MAC_CDROM_AUDIO_BLK && lba < MAC_CDROM_TOC_BLK)
+	if (lba >= MAC_CDROM_AUDIO_BLK && lba < MAC_CDROM_WIN_BASE)
 	{
+		if (sz != 512) return;
 		uint64_t rel  = lba - MAC_CDROM_AUDIO_BLK;
 		uint32_t dlba = (uint32_t)(rel / 5);
 		uint32_t part = (uint32_t)(rel % 5);
@@ -480,28 +495,118 @@ void mac_cdrom_fill(int index, uint64_t lba, uint8_t *buf, int sz)
 	}
 
 	// data window: de-headered 2048-byte sectors of the data track
-	uint64_t byte_pos = lba * 512ULL;
-	uint64_t cd_lba   = byte_pos >> 11;
-	uint32_t off      = byte_pos & 2047;   // 512-blocks never straddle a sector
-
-	if (cd_lba >= cd.sectors) return;      // past leadout: zeros
-
-	// Audio-only disc: no data track exists, so there is nothing to serve
-	if (cd.trk < 0) return;
-
-	cd_track_t *k = &cd.toc.tracks[cd.trk];
-	if (cd.is_chd)
+	if (is_mac_scsi_optimized())
 	{
-		int chd_lba = (int)cd_lba + k->start + k->offset;
-		if (mister_chd_read_sector(cd.toc.chd_f, chd_lba, 0, cd.data_soff + off,
-		                           sz, buf, cd.hunkbuf, &cd.hunknum) != CHDERR_NONE)
-			memset(buf, 0, sz);
+		if (lba < MAC_CDROM_AUDIO_BLK) mac_cd_play_stop(P());
+
+		if (lba < MAC_CDROM_AUDIO_BLK && !cd.is_chd && cd.trk >= 0 &&
+		    cd.toc.tracks[cd.trk].sector_size == 2048 && cd.data_soff == 0)
+		{
+			cd_track_t *k = &cd.toc.tracks[cd.trk];
+			uint64_t byte_pos = lba * 512ULL;
+			uint64_t end      = cd.sectors * 2048ULL;
+			if (byte_pos >= end) return;
+			int n = (end - byte_pos < (uint64_t)sz) ? (int)(end - byte_pos) : sz;
+			rp_data_reads += (uint32_t)(sz / 512);
+			diskled_on();
+			uint64_t src = (uint64_t)(k->start + k->offset) * 2048ULL + byte_pos;
+			if (FileSeek(&k->f, src, SEEK_SET)) FileReadAdv(&k->f, buf, n);
+			return;
+		}
 	}
-	else
+	for (int pos = 0; pos < sz; pos += 512, lba++)
 	{
-		diskled_on();
-		uint64_t src_frame = (uint64_t)((int)cd_lba + k->start + k->offset);
-		if (FileSeek(&k->f, src_frame * k->sector_size + cd.data_soff + off, SEEK_SET))
-			FileReadAdv(&k->f, buf, sz);
+		// data-window reads = the guest genuinely reading (boot-repulse skip signal)
+		if (lba < MAC_CDROM_AUDIO_BLK) rp_data_reads++;
+		else break;
+
+		uint64_t byte_pos = lba * 512ULL;
+		uint64_t cd_lba   = byte_pos >> 11;
+		uint32_t off      = byte_pos & 2047;   // 512-blocks never straddle a sector
+
+		if (cd_lba >= cd.sectors) break;      // past leadout: zeros
+
+		// Audio-only disc: no data track exists, so there is nothing to serve
+		if (cd.trk < 0) break;
+
+		cd_track_t *k = &cd.toc.tracks[cd.trk];
+		if (cd.is_chd)
+		{
+			int chd_lba = (int)cd_lba + k->start + k->offset;
+			if (mister_chd_read_sector(cd.toc.chd_f, chd_lba, 0, cd.data_soff + off,
+			                           512, buf + pos, cd.hunkbuf, &cd.hunknum) != CHDERR_NONE)
+				memset(buf + pos, 0, 512);
+		}
+		else
+		{
+			diskled_on();
+			uint64_t src_frame = (uint64_t)((int)cd_lba + k->start + k->offset);
+			if (FileSeek(&k->f, src_frame * k->sector_size + cd.data_soff + off, SEEK_SET))
+				FileReadAdv(&k->f, buf + pos, 512);
+		}
+	}
+}
+
+void mac_cdrom_window_fill(uint32_t lba, uint8_t *buf, int sz)
+{
+	memset(buf, 0, sz);
+	mac_cd_play *p = P();
+
+	if (lba >= MAC_CDROM_RESP_BLK && lba < MAC_CDROM_RESP_BLK + 0x01000000u)
+	{
+		if (sz < 512) return;
+		uint8_t op = (uint8_t)(lba >> 16), a = (uint8_t)(lba >> 8), b = (uint8_t)lba;
+		const mac_cd_toc *t = cd.active ? &cd.mtoc : NULL;
+		mac_cd_pos pos;
+		switch (op)
+		{
+		case 0x12: mac_cd_resp_inquiry(buf); break;
+		case 0x1A: mac_cd_resp_mode_sense(a & 0x3F, last_sectors - 1, p->ports, buf); break;
+		case 0x43: if (t) mac_cd_resp_toc_43(t, a, b, buf); break;
+		case 0xC1: if (t) mac_cd_resp_toc_c1(t, a, b, buf); break;
+		case 0x42: mac_cd_play_pos(p, &pos); mac_cd_resp_subch(&pos, a, b, buf); break;
+		case 0xC2: mac_cd_play_pos(p, &pos); mac_cd_resp_subq(&pos, buf); break;
+		case 0xCC: mac_cd_play_pos(p, &pos); mac_cd_resp_astat(&pos, a, buf); break;
+		default: break;
+		}
+		return;
+	}
+
+	if (lba == MAC_CDROM_FRAME_BLK)
+	{
+		if (sz < 2358) return;
+		uint32_t flba = 0;
+		int have = mac_cd_play_frame(p, &flba);
+		if (have && cd.active && audio_frame(flba))
+		{
+			memcpy(buf, cd.aframe, 2352);
+			mac_cd_play_scale(p, (int16_t *)buf, 588);
+		}
+		buf[2352] = mac_cd_play_ast(p);
+		buf[2353] = (uint8_t)have;
+		buf[2354] = (uint8_t)p->flush_gen;         buf[2355] = (uint8_t)(p->flush_gen >> 8);
+		buf[2356] = (uint8_t)(p->flush_gen >> 16); buf[2357] = (uint8_t)(p->flush_gen >> 24);
+	}
+}
+
+void mac_cdrom_command(uint32_t lba, const uint8_t *buf, int sz)
+{
+	if (sz < 512) return;
+	mac_cd_play *p = P();
+	uint8_t op = (uint8_t)(lba >> 16);
+	const uint8_t *cdb = buf + MAC_CDROM_CMD_CDB;
+	switch (op)
+	{
+	case 0xFF: mac_cd_play_init(p); break;
+	case 0xFE: mac_cd_play_stop(p); break;
+	case 0x1B: case 0xC0: mac_cd_play_stop(p); break;
+	case 0x15: mac_cd_play_command(p, cdb, buf, cdb[4]); break;
+	case 0x1E: case 0xBB: case 0xCE: break;
+	default:
+		mac_cd_play_command(p, cdb, NULL, 0);
+		printf("Mac CD: cmd %02X %02X %02X%02X%02X%02X %02X%02X%02X%02X -> st %d cur %u stop %u\n",
+		       cdb[0], cdb[1], cdb[2], cdb[3], cdb[4], cdb[5], cdb[6], cdb[7], cdb[8], cdb[9],
+		       p->state, p->cur, p->stop);
+		break;
 	}
 }
