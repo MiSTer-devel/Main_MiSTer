@@ -9,6 +9,7 @@
 #include "../../spi.h"
 #include "../../file_io.h"
 #include "mac.h"
+#include "mac_eth.h"
 
 static char is_core_named(const char *n)
 {
@@ -103,6 +104,7 @@ void mac_poll()
 	// the repulse. Gate it on the drive's own slot.
 	if (mac_cdrom_slot() >= 0) mac_cdrom_poll();
 
+	mac_eth_poll();
 }
 
 int mac_cdda_window(int disk, uint32_t lba)
