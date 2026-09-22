@@ -6121,6 +6121,10 @@ void HandleUI(void)
 				menustate = MENU_MINIMIG_CDTVFILE_START;
 				break;
 			}
+			else
+			{
+				mgl->state = 3;
+			}
 		}
 		break;
 
@@ -7103,7 +7107,7 @@ void HandleUI(void)
 				minimig_config.cd32_drive.filename[0] = 0;
 				minimig_cd_drive_open(0, "");
 				menustate = MENU_MINIMIG_MAIN1;
-				if (!mgl->done) mgl->state = 3;
+								   
 				break;
 			}
 			memcpy(Selected_CD32, selPath, sizeof(Selected_CD32));
@@ -7150,7 +7154,7 @@ void HandleUI(void)
 				minimig_config.cdtv_drive.filename[0] = 0;
 				minimig_cd_drive_open(1, "");
 				menustate = MENU_MINIMIG_MAIN1;
-				if (!mgl->done) mgl->state = 3;
+								   
 				break;
 			}
 			memcpy(Selected_CDTV, selPath, sizeof(Selected_CDTV));
