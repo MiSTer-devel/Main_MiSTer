@@ -6111,6 +6111,20 @@ void HandleUI(void)
 				menustate = MENU_MINIMIG_ADFFILE_SELECTED;
 				break;
 			}
+			else if (mgl->item[mgl->current].index == 4 && (menumask & 0x10))
+			{
+				menustate = MENU_MINIMIG_CD32FILE_START;
+				break;
+			}
+			else if (mgl->item[mgl->current].index == 5 && (menumask & 0x20))
+			{
+				menustate = MENU_MINIMIG_CDTVFILE_START;
+				break;
+			}
+			else
+			{
+				mgl->state = 3;
+			}
 		}
 		break;
 
@@ -7080,15 +7094,24 @@ void HandleUI(void)
 
 	case MENU_MINIMIG_CD32FILE_START:
 		{
+			if (!mgl->done)
+			{
+				const char *p = mgl->item[mgl->current].path;
+				if (p[0] == '/') snprintf(selPath, sizeof(selPath), "%s", p);
+				else if (p[0] == '.' && p[1] == '.') snprintf(selPath, sizeof(selPath), "%s/%s", getRootDir(), p);
+				else snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), p);
+			}
+
 			if (!selPath[0])
 			{
 				minimig_config.cd32_drive.filename[0] = 0;
 				minimig_cd_drive_open(0, "");
 				menustate = MENU_MINIMIG_MAIN1;
+								   
 				break;
 			}
 			memcpy(Selected_CD32, selPath, sizeof(Selected_CD32));
-			recent_update(SelectedDir, selPath, SelectedLabel, 501);
+			if (mgl->done) recent_update(SelectedDir, selPath, SelectedLabel, 501);
 
 			uint len = strlen(selPath);
 			if (len > sizeof(minimig_config.cd32_drive.filename) - 1) len = sizeof(minimig_config.cd32_drive.filename) - 1;
@@ -7097,6 +7120,7 @@ void HandleUI(void)
 			minimig_cfg_set(CONFIG_PRESET_CD32);
 			minimig_cd_drive_open(0, minimig_config.cd32_drive.filename);
 			menustate = MENU_NONE1;
+			if (!mgl->done) mgl->state = 3;
 			minimig_reset();
 		}
 		break;
@@ -7117,15 +7141,24 @@ void HandleUI(void)
 
 	case MENU_MINIMIG_CDTVFILE_START:
 		{
+			if (!mgl->done)
+			{
+				const char *p = mgl->item[mgl->current].path;
+				if (p[0] == '/') snprintf(selPath, sizeof(selPath), "%s", p);
+				else if (p[0] == '.' && p[1] == '.') snprintf(selPath, sizeof(selPath), "%s/%s", getRootDir(), p);
+				else snprintf(selPath, sizeof(selPath), "%s/%s", HomeDir(), p);
+			}
+
 			if (!selPath[0])
 			{
 				minimig_config.cdtv_drive.filename[0] = 0;
 				minimig_cd_drive_open(1, "");
 				menustate = MENU_MINIMIG_MAIN1;
+								   
 				break;
 			}
 			memcpy(Selected_CDTV, selPath, sizeof(Selected_CDTV));
-			recent_update(SelectedDir, selPath, SelectedLabel, 502);
+			if (mgl->done) recent_update(SelectedDir, selPath, SelectedLabel, 502);
 
 			uint len = strlen(selPath);
 			if (len > sizeof(minimig_config.cdtv_drive.filename) - 1) len = sizeof(minimig_config.cdtv_drive.filename) - 1;
@@ -7134,6 +7167,7 @@ void HandleUI(void)
 			minimig_cfg_set(CONFIG_PRESET_CDTV);
 			minimig_cd_drive_open(1, minimig_config.cdtv_drive.filename);
 			menustate = MENU_NONE1;
+			if (!mgl->done) mgl->state = 3;
 			minimig_reset();
 		}
 		break;
