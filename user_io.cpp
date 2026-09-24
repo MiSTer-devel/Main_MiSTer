@@ -1127,7 +1127,14 @@ static void send_rtc(int type)
 
 	if (type & 2)
 	{
-		if (is_mac_scsi_family())
+		if (is_next())
+		{
+			// NeXTSTEP is a UNIX: its kernel reads the battery clock as
+			// UTC and applies the guest's own time zone, so the NeXT core
+			// wants the plain epoch.  The local-time conversion below
+			// (which also drops DST) put the guest hours off.
+		}
+		else if (is_mac_scsi_family())
 		{
 			struct tm tm_utc;
 			gmtime_r(&t, &tm_utc);
