@@ -292,6 +292,13 @@ char is_next()
 	return !strcasecmp(orig_name, "NeXT");
 }
 
+// Guests that read the battery clock as UTC and apply their own time zone
+// (UNIX systems); every other guest gets the timestamp in local time.
+static char rtc_is_utc()
+{
+	return is_next();
+}
+
 static int is_minimig_type = 0;
 char is_minimig()
 {
@@ -1127,16 +1134,19 @@ static void send_rtc(int type)
 
 	if (type & 2)
 	{
-		if (is_mac_scsi_family())
+		if (!rtc_is_utc())
 		{
-			struct tm tm_utc;
-			gmtime_r(&t, &tm_utc);
-			tm_utc.tm_isdst = -1;
-			t += t - mktime(&tm_utc);
-		}
-		else
-		{
-			t += t - mktime(gmtime(&t));
+			if (is_mac_scsi_family())
+			{
+				struct tm tm_utc;
+				gmtime_r(&t, &tm_utc);
+				tm_utc.tm_isdst = -1;
+				t += t - mktime(&tm_utc);
+			}
+			else
+			{
+				t += t - mktime(gmtime(&t));
+			}
 		}
 
 		spi_uio_cmd_cont(UIO_TIMESTAMP);
@@ -2262,6 +2272,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 
 				// Mac CD slot: CUE/CHD/raw image translation (support/mac)
 				if (ret) ret = mac_mount_hook(index, name, &sd_image[index], &writable);
+			if (ret) ret = next_mount_hook(index, name, &sd_image[index], &writable);
 
 				if (ret && is_c128())
 				{
@@ -2281,6 +2292,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 		FileClose(&sd_image[index]);
 		c64_closeGCR(index);
 		mac_cdrom_unmount(index);
+		next_unmount(index);
 	}
 
 	buffer_lba[index] = -1;
@@ -3456,6 +3468,10 @@ void user_io_poll()
 			{
 				// Mac Toolbox/CD slots (support/mac); SPI is done by the hook.
 				if (macop < 0) break;
+			}
+			else if (int nxop = next_sd_service(disk, op, (uint32_t)lba, sz, ack))
+			{
+				if (nxop < 0) break;
 			}
 			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
 			{
