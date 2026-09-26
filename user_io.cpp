@@ -292,6 +292,13 @@ char is_next()
 	return !strcasecmp(orig_name, "NeXT");
 }
 
+// Guests that read the battery clock as UTC and apply their own time zone
+// (UNIX systems); every other guest gets the timestamp in local time.
+static char rtc_is_utc()
+{
+	return is_next();
+}
+
 static int is_minimig_type = 0;
 char is_minimig()
 {
@@ -1127,23 +1134,19 @@ static void send_rtc(int type)
 
 	if (type & 2)
 	{
-		if (is_next())
+		if (!rtc_is_utc())
 		{
-			// NeXTSTEP is a UNIX: its kernel reads the battery clock as
-			// UTC and applies the guest's own time zone, so the NeXT core
-			// wants the plain epoch.  The local-time conversion below
-			// (which also drops DST) put the guest hours off.
-		}
-		else if (is_mac_scsi_family())
-		{
-			struct tm tm_utc;
-			gmtime_r(&t, &tm_utc);
-			tm_utc.tm_isdst = -1;
-			t += t - mktime(&tm_utc);
-		}
-		else
-		{
-			t += t - mktime(gmtime(&t));
+			if (is_mac_scsi_family())
+			{
+				struct tm tm_utc;
+				gmtime_r(&t, &tm_utc);
+				tm_utc.tm_isdst = -1;
+				t += t - mktime(&tm_utc);
+			}
+			else
+			{
+				t += t - mktime(gmtime(&t));
+			}
 		}
 
 		spi_uio_cmd_cont(UIO_TIMESTAMP);
