@@ -1997,7 +1997,8 @@ int process_ss(const char *rom_name, int enable)
 			static char a2_ss_core[64];
 			snprintf(a2_ss_core, sizeof(a2_ss_core), "%s.", user_io_get_core_name());
 			ss_media = a2_ss_core;
-			static const int a2_ss_slot[3] = {0, 2, 1};
+			// HDV first when naming save states. Floppy-only boots fall through to D1/D2.
+			static const int a2_ss_slot[3] = {1, 0, 2};
 			for (int p = 0; p < 3; p++)
 			{
 				if (sd_image[a2_ss_slot[p]].size)
@@ -3530,7 +3531,11 @@ void user_io_poll()
 								sz = (rem >= sz) ? sz : (int)rem;
 							}
 
-							if (sz) FileWriteAdv(&sd_image[disk], buffer[disk], sz);
+							if (sz)
+							{
+								FileWriteAdv(&sd_image[disk], buffer[disk], sz);
+								iigs_woz_write_notify(disk);
+							}
 						}
 					}
 				}
@@ -3960,6 +3965,18 @@ void user_io_poll()
 	{
 		fpga_set_led(0);
 		diskled_is_on = 0;
+	}
+
+	// Refresh the stale file-level CRC32 ~1s after last core write
+	for (int slot = 0; slot < 16; slot++)
+	{
+		if (sd_image[slot].opened() && iigs_woz_crc_due(slot))
+		{
+			int r = a2_woz_fix_crc(&sd_image[slot]);
+			printf("WOZ CRC: slot %d %s\n", slot,
+			       r > 0 ? "refreshed" : (r == 0 ? "current" : "update failed"));
+			iigs_woz_crc_done(slot);
+		}
 	}
 
 	if (is_megacd()) mcd_poll();
