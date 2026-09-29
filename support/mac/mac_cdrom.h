@@ -14,6 +14,12 @@
 #define MAC_CDROM_TOC_BLKS   2u            // TOC blob length, 512-byte blocks
 #define MAC_CDROM_AUDIO_BLK  0x40000000u   // CD-DA frames: lba = base + disc_lba
 
+#define MAC_CDROM_FRAME_BLK  0x7C000000u
+#define MAC_CDROM_CMD_BLK    0x7D000000u
+#define MAC_CDROM_RESP_BLK   0x7E000000u
+#define MAC_CDROM_WIN_BASE   MAC_CDROM_FRAME_BLK
+#define MAC_CDROM_CMD_CDB    496
+
 enum
 {
 	MAC_CDROM_PASSTHRU = 0, // flat 2048-byte image: use the generic path
@@ -34,5 +40,8 @@ void mac_cdrom_unmount(int index);
 // One-shot boot repulse (from user_io_poll): re-fires the mount ~60 s after
 // attach unless the guest read the disc (AppleCD misses the early attach pulse).
 void mac_cdrom_poll(void);
+
+void mac_cdrom_window_fill(uint32_t lba, uint8_t *buf, int sz);
+void mac_cdrom_command(uint32_t lba, const uint8_t *buf, int sz);
 
 #endif

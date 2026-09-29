@@ -283,7 +283,7 @@ static ByteOrder detect_rom_endianness(const uint8_t* data) {
 	}
 }
 
-static void normalize_data(uint8_t* data, size_t size, ByteOrder endianness) {
+static void normalize_data(uint8_t* data, const size_t size, const ByteOrder endianness) {
 	static uint8_t temp0, temp1, temp2;
 	switch (endianness) {
 	case ByteOrder::BYTE_SWAPPED:
@@ -379,6 +379,7 @@ static void cpak_format(uint8_t* data) {
 	close(rndfd);
 	srand(seed);
 	
+
 	memset(data, 0, get_save_size(MemoryType::CPAK));
 	uint8_t id_template[CPAK_ID_ENTRY_SIZE];
 	memset(id_template, 0, CPAK_ID_ENTRY_SIZE);
@@ -636,7 +637,7 @@ static uint8_t hex_to_dec(const char x) {
 	return 0;
 }
 
-static void trim(char* out, size_t max_len, const char* str)
+static void trim(char* out, const size_t max_len, const char* str)
 {
 	if (!*str || !max_len) {
 		*out = '\0';
@@ -675,12 +676,13 @@ static void trim(char* out, size_t max_len, const char* str)
 	memcpy(out, str, out_size);
 	out[out_size] = '\0';
 
-	// Obfuscate illegal characters
+	// Truncate at first occurance of an illegal character
 	for (size_t i = 0; (i < out_size) && out[i]; i++) {
 		if ((out[i] >= 0x20) && (out[i] < 0xa0)) {
 			continue;
 		}
-		out[i] = '?';
+		out[i] = '\0';
+		break;
 	}
 }
 
@@ -923,6 +925,26 @@ static uint8_t detect_rom_settings_in_dbs_with_cartid(const char* lookup_id) {
 	return detected;
 }
 
+static void set_controller_system_settings(const uint8_t* controller_settings) {
+	// Rumble Pak
+	user_io_status_set(RPAK_OPT,
+		(controller_settings[0] == 0x01) ||
+		(controller_settings[1] == 0x01) ||
+		(controller_settings[2] == 0x01) ||
+		(controller_settings[3] == 0x01) ? 1 : 0);
+
+	// Controller Pak
+	user_io_status_set(CPAK_OPT,
+		(controller_settings[0] == 0x02) ||
+		(controller_settings[1] == 0x02) ||
+		(controller_settings[2] == 0x02) ||
+		(controller_settings[3] == 0x02) ? 1 : 0);
+
+	// Transfer Pak is P1 only
+	user_io_status_set(TPAK_OPT,
+		(controller_settings[0] == 0x03) ? 1 : 0);
+}
+
 // "Advanced" Homebrew ROM Header https://n64brew.dev/wiki/ROM_Header
 static bool detect_homebrew_header(const uint8_t* controller_settings, const char* cart_id) {
 	if ((cart_id[1] != 'E') || (cart_id[2] != 'D')) return false;
@@ -950,9 +972,6 @@ static bool detect_homebrew_header(const uint8_t* controller_settings, const cha
 	case 5:
 		set_cart_save_type(MemoryType::FLASH_128k);
 		break;
-		//case 6:
-		//	set_cart_save_type(MemoryType::SRAM_128k);
-		//	break;
 	default:
 		set_cart_save_type(MemoryType::NONE);
 		break;
@@ -961,20 +980,7 @@ static bool detect_homebrew_header(const uint8_t* controller_settings, const cha
 	printf("Auto-detect is ON, updating OSD settings.\n");
 
 	user_io_status_set(RTC_OPT, (uint32_t)(hex_to_dec(cart_id[5]) & 1)); // RTC
-
-	user_io_status_set(RPAK_OPT, (uint32_t)(
-		(controller_settings[0] == 0x01) ||
-		(controller_settings[1] == 0x01) ||
-		(controller_settings[2] == 0x01) ||
-		(controller_settings[3] == 0x01) ? 1 : 0)); // Rumble Pak
-
-	user_io_status_set(CPAK_OPT, (uint32_t)(
-		(controller_settings[0] == 0x02) ||
-		(controller_settings[1] == 0x02) ||
-		(controller_settings[2] == 0x02) ||
-		(controller_settings[3] == 0x02) ? 1 : 0)); // Controller Pak
-
-	user_io_status_set(TPAK_OPT, (uint32_t)(controller_settings[0] == 0x03 ? 1 : 0)); // Transfer Pak is P1 only
+	set_controller_system_settings(controller_settings);
 
 	if (!is_autopak()) return true;
 
@@ -999,7 +1005,7 @@ static bool detect_homebrew_header(const uint8_t* controller_settings, const cha
 	return true;
 }
 
-static bool detect_rom_settings_from_first_chunk(const char region_code, const uint64_t* signatures, size_t sig_len) {
+static bool detect_rom_settings_from_first_chunk(const char region_code, const uint32_t* signatures, size_t sig_len) {
 	SystemType system_type;
 	CIC cic = CIC::UNKNOWN;
 	bool is_known_signature = true;
@@ -1037,42 +1043,100 @@ static bool detect_rom_settings_from_first_chunk(const char region_code, const u
 				signatures++;
 				break;
 			}
-			printf("Unknown CIC signature: 0x%016llx, uses default.\n", *signatures);
+			printf("Unknown CIC signature: 0x%08x, uses default.\n", *signatures);
 			is_known_signature = false;
 			// Fall through
-		case UINT64_C(0x000000a316adc55a): // CIC-6102/7101 IPL3
-		case UINT64_C(0x000000a30dacd530): // NOP:ed out CRC check
-		case UINT64_C(0x000000039c981107): // hcs64's CIC-6102 IPL3 replacement
-		case UINT64_C(0x000000d2828281b0): // Unknown. Used in some homebrew
-		case UINT64_C(0x000000d2531456f6): // Unknown. Used in some homebrew
-		case UINT64_C(0x000000d28bc5f6ae): // Unknown. Used in some homebrew
-		case UINT64_C(0x000000d2be3c4486): // Xeno Crisis custom IPL3
-		case UINT64_C(0x0000009acc31e644): // HW1 IPL3 (Turok E3 prototype)
-		case UINT64_C(0x0000009474732e6b): // IPL3 re-assembled with the GNU assembler (iQue)
-			cic = (system_type != SystemType::PAL) ? CIC::CIC_NUS_6102 : CIC::CIC_NUS_7101; break;
-		case UINT64_C(0x000000a405397b05): // CIC-7102 IPL3
-		case UINT64_C(0x000000a3fc388adb): // NOP:ed out CRC check
-			system_type = SystemType::PAL; cic = CIC::CIC_NUS_7102; break;
-		case UINT64_C(0x000000a0f26f62fe): // CIC-6101 IPL3
-		case UINT64_C(0x000000a0e96e72d4): // NOP:ed out CRC check
-			system_type = SystemType::NTSC; cic = CIC::CIC_NUS_6101; break;
-		case UINT64_C(0x000000a9229d7c45): // CIC-x103 IPL3
-		case UINT64_C(0x000000a9199c8c1b): // NOP:ed out CRC check
-		case UINT64_C(0x000000271316d406): // All zeros bar font (iQue Paper Mario)
-			cic = (system_type != SystemType::PAL) ? CIC::CIC_NUS_6103 : CIC::CIC_NUS_7103; break;
-		case UINT64_C(0x000000f8b860ed00): // CIC-x105 IPL3
-		case UINT64_C(0x000000f8af5ffcd6): // NOP:ed out CRC check
-			cic = (system_type != SystemType::PAL) ? CIC::CIC_NUS_6105 : CIC::CIC_NUS_7105; break;
-		case UINT64_C(0x000000ba5ba4b8cd): // CIC-x106 IPL3
-			cic = (system_type != SystemType::PAL) ? CIC::CIC_NUS_6106 : CIC::CIC_NUS_7106; break;
-		case UINT64_C(0x0000012daafc8aab): cic = CIC::CIC_NUS_5167; break;
-		case UINT64_C(0x000000a9df4b39e1): cic = CIC::CIC_NUS_8303; break;
-		case UINT64_C(0x000000aa764e39e1): cic = CIC::CIC_NUS_8401; break;
-		case UINT64_C(0x000000abb0b739e1): cic = CIC::CIC_NUS_DDUS; break;
-		case UINT64_C(0x00000081ce470326): // CIC-5101 IPL3
-		case UINT64_C(0x000000827a47195a): // Kuru Kuru Fever
-		case UINT64_C(0x00000082551e4848): // Tower & Shaft
-			cic = CIC::CIC_NUS_5101; break;
+
+		case UINT32_C(0x90bb6cb5): // CIC-6102/7101 IPL3
+		case UINT32_C(0x51b6203c): // NOP:ed out CRC check
+		case UINT32_C(0xb98ced9a): // HW1 IPL3 (Mirror House, iQue)
+		case UINT32_C(0xcd19fef1): // IPL3 re-assembled with the GNU assembler (iQue)
+		case UINT32_C(0x65f63844): // hcs64's CIC-6102 IPL3 replacement
+		case UINT32_C(0xd47bcc94): // Libdragon ipl3_prod	r0
+		case UINT32_C(0x2e264bdf): // Libdragon ipl3_dev	r0
+		case UINT32_C(0x607478f4): // Libdragon ipl3_prod	r1
+		case UINT32_C(0x8cc97201): // Libdragon ipl3_prod	r2
+		case UINT32_C(0x1bf5705a): // Libdragon ipl3_prod	r3
+		case UINT32_C(0xb364bc58): // Libdragon ipl3_compat	r4
+		case UINT32_C(0x9a5bb9aa): // Libdragon ipl3_prod	r5
+		case UINT32_C(0x02cdea0e): // Libdragon ipl3_compat	r5
+		case UINT32_C(0xf332e111): // Libdragon ipl3_prod	r6
+		case UINT32_C(0xc36199c4): // Libdragon ipl3_compat	r6
+		case UINT32_C(0xb531bde6): // Libdragon ipl3_prod	r7
+		case UINT32_C(0xaabeb54e): // Libdragon ipl3_compat	r7
+		case UINT32_C(0x345e1229): // Libdragon ipl3_prod	r8
+		case UINT32_C(0x9dda2d36): // Libdragon ipl3_compat	r8
+		case UINT32_C(0xef76c372): // Libdragon ipl3_prod	r9
+		case UINT32_C(0x498b2f65): // Libdragon ipl3_compat	r9
+		case UINT32_C(0x86472013): // Libdragon ipl3_prod	r10
+		case UINT32_C(0x971e77d3): // Libdragon ipl3_dev	r10
+		case UINT32_C(0xe2d9b974): // Libdragon ipl3_compat	r10
+		case UINT32_C(0x6d089c64): // Homebrew / Hack
+		case UINT32_C(0xb3b8ab39): // Homebrew / Hack
+		case UINT32_C(0xb814477b): // Homebrew / Hack
+		case UINT32_C(0xcfb39b3c): // Homebrew / Hack
+		case UINT32_C(0xc59d2f67): // Homebrew / Hack
+			cic = (system_type != SystemType::PAL) 
+				? CIC::CIC_NUS_6102 
+				: CIC::CIC_NUS_7101;
+			break;
+
+		case UINT32_C(0x009e9ea3): // CIC-7102 IPL3 (Lylat Wars)
+		case UINT32_C(0x3c283826): // NOP:ed out CRC check
+			system_type = SystemType::PAL;
+			cic = CIC::CIC_NUS_7102;
+			break;
+
+		case UINT32_C(0x6170a4a1): // CIC-6101 IPL3 (Star Fox)
+		case UINT32_C(0x67ee130d): // NOP:ed out CRC check
+			system_type = SystemType::NTSC;
+			cic = CIC::CIC_NUS_6101;
+			break;
+
+		case UINT32_C(0x0b050ee0): // CIC-x103 IPL3
+		case UINT32_C(0x9ce7c6e5): // NOP:ed out CRC check
+		case UINT32_C(0xe71c2766): // All zeros bar font (iQue Paper Mario)
+			cic = (system_type != SystemType::PAL)
+				? CIC::CIC_NUS_6103
+				: CIC::CIC_NUS_7103;
+			break;
+
+		case UINT32_C(0x98bc2c86): // CIC-x105 IPL3
+		case UINT32_C(0x5f8df1aa): // NOP:ed out CRC check
+			cic = (system_type != SystemType::PAL)
+				? CIC::CIC_NUS_6105
+				: CIC::CIC_NUS_7105;
+			break;
+
+		case UINT32_C(0xacc8580a): // CIC-x106 IPL3
+			cic = (system_type != SystemType::PAL)
+				? CIC::CIC_NUS_6106
+				: CIC::CIC_NUS_7106;
+			break;
+
+		case UINT32_C(0x0e018159): // Zoinkity's 64DD hacks
+			cic = CIC::CIC_NUS_5167;
+			break;
+
+		case UINT32_C(0x0c965795): // NDDJ2: Retail 64DD v1.2
+		case UINT32_C(0xbc605d0a): // Beta 1.0
+		case UINT32_C(0x502c4466): // Beta 1.1
+			cic = CIC::CIC_NUS_8303;
+			break;
+
+		case UINT32_C(0x10c68b18): // NDXJ0: Dev 64DD
+			cic = CIC::CIC_NUS_8401;
+			break;
+
+		case UINT32_C(0x8feba21e): // NDDE0: Dev 64DD (USA, Prototype)
+			cic = CIC::CIC_NUS_DDUS;
+			break;
+
+		case UINT32_C(0x587bd543): // CIC-5101 IPL3
+		case UINT32_C(0xe351f733): // Kuru Kuru Fever etc.
+		case UINT32_C(0x3b46348c): // Tower & Shaft
+			cic = CIC::CIC_NUS_5101;
+			break;
 		}
 	} while (cic == CIC::UNKNOWN);
 
@@ -1097,21 +1161,11 @@ static void md5_to_hex(uint8_t* md5, char* out) {
 		sprintf(out, "%02x", *md5);
 }
 
-static void calc_bootcode_checksums(uint64_t bootcode_sums[2], const uint8_t* buf) {
-	size_t i;
-	uint64_t sum = 0;
-
-	// Calculate boot code checksum for bytes 0x40 - 0xc00 (Aleck64)
-	for (i = 0x40 / sizeof(uint32_t); i < 0xc00 / sizeof(uint32_t); i++) {
-		sum += ((uint32_t*)buf)[i];
-	}
-	bootcode_sums[1] = sum;
-
-	// Calculate boot code checksum for bytes 0x40 - 0x1000
-	for (; i < 0x1000 / sizeof(uint32_t); i++) {
-		sum += ((uint32_t*)buf)[i];
-	}
-	bootcode_sums[0] = sum;
+// What kinf of CIC that should be used is determined by comparing the
+// CRC32 of the IPL3 (bootcode) section the ROM against a list of known ones.
+static void calc_bootcode_checksums(uint32_t crc[2], const uint8_t* buf) {
+	const size_t OFFSET = 0x0040, SIZE = 0x1000 - OFFSET, SIZE_ALECK = 0x0c00 - OFFSET;
+	crc[0] = crc32(crc[1] = crc32(0, buf + OFFSET, SIZE_ALECK), buf + OFFSET + SIZE_ALECK, SIZE - SIZE_ALECK);
 }
 
 static void create_save_path(char* save_path, const MemoryType type) {
@@ -1142,10 +1196,10 @@ static void create_save_path(char* save_path, const MemoryType type) {
 		strcpy(ext, ".fla");
 		break;
 	case MemoryType::CPAK:
+		sprintf(ext, "_%u.cpk", mounted_save_files + ((get_cart_save_type() == MemoryType::NONE) ? 1 : 0));
+		break;
 	case MemoryType::TPAK:
-		sprintf(ext, "_%u%s",
-			(mounted_save_files + ((get_cart_save_type() == MemoryType::NONE) ? 1 : 0)),
-			((type == MemoryType::CPAK) ? ".cpk" : ".tpk"));
+		sprintf(ext, "_%u.tpk", mounted_save_files + ((get_cart_save_type() == MemoryType::NONE) ? 1 : 0));
 		break;
 	default:
 		strcpy(ext, ".sav");
@@ -1349,8 +1403,8 @@ static void write_save_file(const uint64_t sector_index, const uint32_t sector_s
 		}
 
 		// Only write save data if it's different from the old one.
-		uint8_t existing_data[chunk_size];
-		if ((chunk_size != (uint32_t)FileReadAdv(img, existing_data, chunk_size)) || memcmp(buffer, existing_data, chunk_size)) {
+		std::vector<uint8_t> existing_data(chunk_size);
+		if ((chunk_size != (uint32_t)FileReadAdv(img, existing_data.data(), chunk_size)) || memcmp(buffer, existing_data.data(), chunk_size)) {
 			menu_process_save();
 			FileSeek(img, file_offset, SEEK_SET);
 			FileWriteAdv(img, buffer, chunk_size);
@@ -1411,7 +1465,7 @@ static void read_save_file(const uint64_t sector_index, const uint32_t sector_si
 }
 
 /* The N64 core handles all its save types by sending all of them concatenated together to/from the FPGA.
-   e.g. (EEPROM/SRAM/FLASH) (+ TPAK) (+ CPAK 1) (+ CPAK 2) (+ CPAK 3) (+ CPAK 4)
+   e.g. (EEPROM/SRAM/FLASH) (+ TPAK / CPAK 1) (+ CPAK 2) (+ CPAK 3) (+ CPAK 4)
    We need to split up the continuous data stream into files if we want to save.
    We need to merge the files into a single continuous data stream if we want to load. */
 bool n64_process_save(const bool use_save, const int op, const uint64_t sector_index, const uint32_t sector_size, const int ack_flags,
@@ -1844,9 +1898,9 @@ static bool n64dd_copy_ipl_to_mem(fileTYPE* file, const char* name, uint8_t* ddi
 		}
 
 		if (is_first_chunk && boot_dest) {
-			uint64_t bootcode_sums[2] = { };
-			calc_bootcode_checksums(bootcode_sums, buf);
-			detect_rom_settings_from_first_chunk((char)buf[0x3e], bootcode_sums, sizeof(bootcode_sums) / sizeof(*bootcode_sums));
+			uint32_t bootcode_crc[2] = { };
+			calc_bootcode_checksums(bootcode_crc, buf);
+			detect_rom_settings_from_first_chunk((char)buf[0x3e], bootcode_crc, sizeof(bootcode_crc) / sizeof(*bootcode_crc));
 			if (is_auto()) set_cart_save_type(MemoryType::NONE);
 		}
 
@@ -2750,7 +2804,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 	ByteOrder rom_endianness;
 	uint8_t md5[MD5_LENGTH];
 	char md5_hex[MD5_LENGTH * 2 + 1];
-	uint64_t bootcode_sums[2] = { };
+	uint32_t bootcode_crc[2] = { };
 	uint8_t controller_settings[4] = { };
 	bool is_first_chunk = true;
 	char cart_id[CARTID_LENGTH + 1] = { };
@@ -2809,7 +2863,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 			trim(internal_name, sizeof(internal_name), (char*)&buf[0x20]);
 			rom_settings_detected = detect_rom_settings_in_dbs_with_md5(md5_hex);
 			memcpy(controller_settings, &buf[0x34], sizeof(controller_settings));
-			calc_bootcode_checksums(bootcode_sums, buf);
+			calc_bootcode_checksums(bootcode_crc, buf);
 
 			/* The first byte (starting at 0x3b) indicates the type of ROM
 				 'N' = Cartridge
@@ -2819,7 +2873,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 				 'Z' = Aleck64 cart
 			   The 2nd and 3rd byte form a 2-letter ID for the game
 			   The 4th byte indicates the region and language for the game
-			   The 5th byte indicates the revision of the game */
+			   The 5th and 6th byte indicates the revision of the game */
 
 			auto p_cid = (char*)&buf[0x3b];
 			for (auto i = 0; i < 4; i++, p_cid++) {
@@ -2878,12 +2932,10 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 				else {
 					printf("No ROM information found for Cart ID.\n");
 					if (is_auto()) {
-						// Defaulting misc. System Settings, everything OFF
+						// Defaulting misc. System Settings
 						user_io_status_set(NO_EPAK_OPT, 0); // Enable Expansion Pak
-						user_io_status_set(CPAK_OPT, 0); // Disable Controller Pak
-						user_io_status_set(RPAK_OPT, 0); // Disable Rumble Pak
-						user_io_status_set(TPAK_OPT, 0); // Disable Transfer Pak
 						user_io_status_set(RTC_OPT, 0); // Disable RTC
+						set_controller_system_settings(controller_settings); // Depending on Pak Type
 						set_cart_save_type(MemoryType::NONE); // Disable Save
 					}
 				}
@@ -2891,9 +2943,9 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 		}
 	}
 
+	// Try detect (partial) ROM settings by analyzing the ROM itself. (System region and CIC)
 	if (!(rom_settings_detected & 1) &&
-		detect_rom_settings_from_first_chunk(cart_id[3], bootcode_sums, sizeof(bootcode_sums) / sizeof(*bootcode_sums))) {
-		// Try detect (partial) ROM settings by analyzing the ROM itself. (System region and CIC)
+		detect_rom_settings_from_first_chunk(cart_id[3], bootcode_crc, sizeof(bootcode_crc) / sizeof(*bootcode_crc))) {
 		rom_settings_detected |= 1;
 	}
 
@@ -2951,28 +3003,26 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 		return 1;
 	}
 
-	auto system_type = SystemType::UNKNOWN;
-	auto cic = CIC::UNKNOWN;
-
 	char info[256];
 	size_t len = sprintf(info, "Auto-detect:");
-	if (*cart_id && ((cart_id[1] != 'E') || (cart_id[2] != 'D'))) len += sprintf(info + len, "\n[%.4s] v.%u.%u", cart_id, hex_to_dec(cart_id[4]) + 1, hex_to_dec(cart_id[5]));
-	if (*internal_name) len += sprintf(info + len, "\n\"%s\"", internal_name);
-	if (!(rom_settings_detected & 1)) {
-		len += sprintf(info + len, "\nUnknown Region/CIC");
+	if (*cart_id && 
+		!((cart_id[1] == 'E') && (cart_id[2] == 'D')) && 
+		!((cart_id[0] == '?') || (cart_id[1] == '?') || (cart_id[2] == '?') || (cart_id[3] == '?')))
+		len += sprintf(info + len, "\n[%.4s] v.%u.%u", cart_id, hex_to_dec(cart_id[4]) + 1, hex_to_dec(cart_id[5]));
+	if (*internal_name) 
+		len += sprintf(info + len, "\n\"%s\"", internal_name);
+	SystemType system_type = (SystemType)user_io_status_get(SYS_TYPE_OPT);
+	len += sprintf(info + len, "\nRegion: %s", stringify(system_type));
+	
+	if (rom_settings_detected & 1) {
+		CIC cic = (CIC)user_io_status_get(CIC_TYPE_OPT);
+		len += sprintf(info + len, " (%s)", stringify(cic));
 	}
 	else {
-		system_type = (SystemType)user_io_status_get(SYS_TYPE_OPT);
-		cic = (CIC)user_io_status_get(CIC_TYPE_OPT);
-		len += sprintf(info + len, "\nRegion: %s (%s)", stringify(system_type), stringify(cic));
+		len += sprintf(info + len, " (Unknown CIC)");
 	}
 
-	if (!(rom_settings_detected & 2)) {
-		sprintf(info + len, "\nROM missing from database.\nYou might not be able to save.");
-
-		Info(info, cfg.controller_info * 1000);
-	}
-	else {
+	if (rom_settings_detected & 2) {
 		auto save_type = get_cart_save_type();
 		auto no_epak = (bool)user_io_status_get(NO_EPAK_OPT);
 		auto tpak = (bool)user_io_status_get(TPAK_OPT);
@@ -2987,9 +3037,12 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 		if (rtc) len += sprintf(info + len, "\nRTC \x96");
 		if (no_epak) len += sprintf(info + len, "\nDisable Exp. Pak \x96");
 		if (is_patched) sprintf(info + len, "\nPatched \x96");
-
-		Info(info, cfg.controller_info * 1000);
 	}
+	else {
+		sprintf(info + len, "\nROM missing from database.\nYou might not be able to save.");
+	}
+
+	Info(info, cfg.controller_info * 1000);
 
 	return 1;
 }

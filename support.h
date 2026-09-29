@@ -5,6 +5,7 @@
 #include "support/minimig/minimig_share.h"
 #include "support/minimig/minimig_a2065.h"
 #include "support/next/next_enet.h"
+#include "support/next/next_scsi.h"
 
 // SharpMz support
 #include "support/sharpmz/sharpmz.h"

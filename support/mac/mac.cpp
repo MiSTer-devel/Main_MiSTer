@@ -9,6 +9,7 @@
 #include "../../spi.h"
 #include "../../file_io.h"
 #include "mac.h"
+#include "mac_eth.h"
 
 static char is_core_named(const char *n)
 {
@@ -19,8 +20,12 @@ static char is_core_named(const char *n)
 
 char is_mac_scsi_family()
 {
-	return is_core_named("maclc") || is_core_named("lbmactwo") || is_core_named("maciivi")
-	    || is_core_named("macplus");
+	return is_core_named("maclc") || is_core_named("macplus") || is_core_named("macquadra800");
+}
+
+char is_mac_scsi_optimized()
+{
+	return is_core_named("macquadra800");
 }
 
 #define MAC_TOOLBOX_SLOT    3   // MacLC.sv VD_TOOLBOX
@@ -28,10 +33,9 @@ char is_mac_scsi_family()
 
 // Slot availability is not uniform across the family, so the gates split rather
 // than sharing one predicate. A wrong slot corrupts another device's stream:
-//   LBMacTwo  — declares none of them.
 //   MacPlus   — has the CD-ROM slot but NOT the Toolbox slots. Its slot 3 is
 //               the second floppy, and it has no slot 5 at all (VDNUM = 5).
-static int mac_cd_ok(void)      { return is_mac_scsi_family() && !is_core_named("lbmactwo"); }
+static int mac_cd_ok(void)      { return is_mac_scsi_family(); }
 static int mac_toolbox_ok(void) { return mac_cd_ok() && !is_core_named("macplus"); }
 
 int mac_toolbox_slot()    { return mac_toolbox_ok() ? MAC_TOOLBOX_SLOT    : -1; }
@@ -99,12 +103,14 @@ void mac_poll()
 	// core can have the drive without the Toolbox (MacPlus), and it still needs
 	// the repulse. Gate it on the drive's own slot.
 	if (mac_cdrom_slot() >= 0) mac_cdrom_poll();
+
+	mac_eth_poll();
 }
 
 int mac_cdda_window(int disk, uint32_t lba)
 {
 	return disk == MAC_CDROM_SLOT && is_mac_scsi_family() &&
-	       lba >= MAC_CDROM_AUDIO_BLK && lba < MAC_CDROM_TOC_BLK;
+	       lba >= MAC_CDROM_AUDIO_BLK && lba < MAC_CDROM_WIN_BASE;
 }
 
 int mac_sd_service(int disk, int op, uint32_t lba, int sz, int ack)
@@ -128,6 +134,29 @@ int mac_sd_service(int disk, int op, uint32_t lba, int sz, int ack)
 		else if (op & 1)
 		{
 			cdc ? cdchanger_fill(lba, buf, sz) : toolbox_fill(lba, buf, sz);
+			EnableIO();
+			spi_w(UIO_SECTOR_RD | ack);
+			spi_block_write(buf, user_io_get_width(), sz);
+			DisableIO();
+		}
+		else return -1;
+		return 1;
+	}
+
+	if (disk == mac_cdrom_slot() && is_mac_scsi_optimized() &&
+	    lba >= MAC_CDROM_WIN_BASE && lba < MAC_CDROM_TOC_BLK)
+	{
+		if (op == 2)
+		{
+			EnableIO();
+			spi_w(UIO_SECTOR_WR | ack);
+			spi_block_read(buf, user_io_get_width(), sz);
+			DisableIO();
+			mac_cdrom_command(lba, buf, sz);
+		}
+		else if (op & 1)
+		{
+			mac_cdrom_window_fill(lba, buf, sz);
 			EnableIO();
 			spi_w(UIO_SECTOR_RD | ack);
 			spi_block_write(buf, user_io_get_width(), sz);
