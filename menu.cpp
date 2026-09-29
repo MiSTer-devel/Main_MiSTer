@@ -1215,9 +1215,7 @@ void HandleUI(void)
 		switch (mgl->state)
 		{
 		case 0:
-			// the timer is armed at the end of core init; a ROM transfer
-			// before that runs HandleUI and must not start the mount early
-			if (mgl->timer && CheckTimer(mgl->timer))
+			if (CheckTimer(mgl->timer))
 			{
 				mgl->state = (mgl->item[mgl->current].action == MGL_ACTION_LOAD) ? 1 : 4;
 			}
@@ -1933,7 +1931,6 @@ void HandleUI(void)
 
 			dip_submenu = -1;
 			manual_submenu = -1;
-			if (!mgl->done) mgl->item[mgl->current].submenu = -1;   // an entry with no visible line is skipped, not sent to line 0
 
 			int last_space = 0;
 
@@ -5204,20 +5201,20 @@ void HandleUI(void)
 	case MENU_MISTERFLOPPY_MAIN1:
 		{
 			parentstate = menustate;
-			OsdSetTitle("MiSTer Floppy");		
+			OsdSetTitle("MiSTer Floppy");
 			uint16_t osdMask = spi_uio_cmd16(UIO_GET_OSDMASK, 0);
 			menumask = 0x10;
 			strcpy(s, " Drive Type: ");
-			if (osdMask & 64) 
+			if (osdMask & 64)
 			{
-				if (osdMask & 128) 					
+				if (osdMask & 128)
 					strcat(s, "IBM/PC");
-				else 					
+				else
 					strcat(s, "SHUGART/Amiga");
 				// Useful for debugging but not required
-				// if (osdMask & 256) strcat(s, " (= cable)"); else strcat(s, " (X cable)");				
+				// if (osdMask & 256) strcat(s, " (= cable)"); else strcat(s, " (X cable)");
 			}
-			else 
+			else
 			{
 				strcat(s, " Not Detected!");
 			}
@@ -5269,7 +5266,7 @@ void HandleUI(void)
 			m = 7;
 			OsdWrite(m++);
 			OsdWrite(m++, " Select drive to toggle mode", 0, 1);
-			
+
 			while (m < 15) OsdWrite(m++);
 			OsdWrite(15, STD_BACK, menusub == 4, 0);
 
@@ -5303,14 +5300,14 @@ void HandleUI(void)
 			do {
 				if (plus || select)
 					minimig_config.externalfloppy.exDrives[menusub] = (minimig_config.externalfloppy.exDrives[menusub] + 1) % 5;
-				else 
+				else
 				{
 					if (minimig_config.externalfloppy.exDrives[menusub] == 0) minimig_config.externalfloppy.exDrives[menusub] = 4;
 					else minimig_config.externalfloppy.exDrives[menusub]--;
 				}
 				driveInUse = false;
 				// Prevent the same external drive being selected twice
-				if (minimig_config.externalfloppy.exDrives[menusub]) 
+				if (minimig_config.externalfloppy.exDrives[menusub])
 				{
 					if ((driveMask & 1 << (minimig_config.externalfloppy.exDrives[menusub] - 1)) == 0)
 						driveInUse = true;
@@ -5323,12 +5320,12 @@ void HandleUI(void)
 			} while (driveInUse && (loops <= 4));
 
 			if (driveInUse) minimig_config.externalfloppy.exDrives[menusub] = 0;
-			
+
 			df[menusub].status = 0;
 			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 			minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 			menustate = MENU_MISTERFLOPPY_MAIN1;
-		}		
+		}
 		break;
 
 
@@ -6031,18 +6028,18 @@ void HandleUI(void)
 							s[6 + len + 2] = 0;
 							if (!(df[i].status & DSK_WRITABLE)) s[6 + len + 1] = '\x17'; // padlock icon for write-protected disks
 						}
-						else 
+						else
 						{
-							switch (minimig_config.userport == mmup_misterfloppy ? minimig_config.externalfloppy.exDrives[i] : 0) 
+							switch (minimig_config.userport == mmup_misterfloppy ? minimig_config.externalfloppy.exDrives[i] : 0)
 							{
-								case 1: 
+								case 1:
 									strcat(s, "External Drive ");
 									if (osdMask & 64)
 										strcat(s, (osdMask & 128) ? "A" : "0");
 									else
 										strcat(s, "0/A");
 									break;
-								case 2: 
+								case 2:
 									strcat(s, "External Drive ");
 									if (osdMask & 64)
 										strcat(s, (osdMask & 128) ? "B" : "1");
@@ -6078,7 +6075,7 @@ void HandleUI(void)
 			}
 
 			strcpy(s,      " Joystick Swap:          ");
-			strcat(s, (minimig_config.autofire & 0x8) ? " ON" : "OFF");			
+			strcat(s, (minimig_config.autofire & 0x8) ? " ON" : "OFF");
 			MenuWrite(m++, s, menusub == 6, 0);
 			strcpy(s, " User Port:    ");
 			strcat(s, (minimig_config.userport == mmup_misterfloppy) ? "MiSTer Floppy" : "      MT32-Pi");
@@ -6090,7 +6087,7 @@ void HandleUI(void)
 			{
 				menumask |= 0x100;
 				MenuWrite(m++, "                 Configure \x16", menusub == 8);
-			} else 
+			} else
 			{
 				MenuWrite(m++, "                Not Detected", 0, 1);
 			}
@@ -6098,7 +6095,7 @@ void HandleUI(void)
 			MenuWrite(m++, " CD & HDD                  \x16", menusub == 9, 0);
 			MenuWrite(m++, " System                    \x16", menusub == 10, 0);
 			MenuWrite(m++, " Audio & Video             \x16", menusub == 11, 0);
-			
+
 			MenuWrite(m++);
 			MenuWrite(m++, " Load preset               \x16", menusub == 12, 0);
 			MenuWrite(m++, " Load configuration        \x16", menusub == 13, 0);
@@ -6161,7 +6158,7 @@ void HandleUI(void)
 		else if (select || recent || minus || plus)
 		{
 			if (menusub < 4)
-			{				
+			{
 				ioctl_index = 0;
 				if (minimig_config.externalfloppy.exDrives[menusub]) {
 					minimig_config.externalfloppy.exDrives[menusub] = 0;
@@ -6179,7 +6176,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					df[menusub].status = 0;						
+					df[menusub].status = 0;
 					fs_Options = SCANO_DIR;
 					fs_MenuSelect = MENU_MINIMIG_ADFFILE_SELECTED;
 					fs_MenuCancel = MENU_MINIMIG_MAIN1;
@@ -6255,12 +6252,12 @@ void HandleUI(void)
 					menusub = 0;
 				}
 				else if (menusub == 8)
-				{					
-					switch (minimig_config.userport) 
+				{
+					switch (minimig_config.userport)
 					{
 						case mmup_mp32pi: menustate = MENU_MT32PI_MAIN1; menusub = 0; break;
 						case mmup_misterfloppy: menustate = MENU_MISTERFLOPPY_MAIN1; menusub = 0; break;
-					}					
+					}
 				}
 				else if (menusub == 12)
 				{
@@ -7120,7 +7117,7 @@ void HandleUI(void)
 				minimig_config.cd32_drive.filename[0] = 0;
 				minimig_cd_drive_open(0, "");
 				menustate = MENU_MINIMIG_MAIN1;
-								   
+
 				break;
 			}
 			memcpy(Selected_CD32, selPath, sizeof(Selected_CD32));
@@ -7167,7 +7164,7 @@ void HandleUI(void)
 				minimig_config.cdtv_drive.filename[0] = 0;
 				minimig_cd_drive_open(1, "");
 				menustate = MENU_MINIMIG_MAIN1;
-								   
+
 				break;
 			}
 			memcpy(Selected_CDTV, selPath, sizeof(Selected_CDTV));
