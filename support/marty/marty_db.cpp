@@ -8,9 +8,6 @@
 
 #include "marty_db.h"
 
-// ---------------------------------------------------------------------------
-// Keys
-
 static uint64_t fnv1a(const uint8_t *p, size_t n, uint64_t h = 0xcbf29ce484222325ULL)
 {
 	while (n--)
@@ -28,7 +25,7 @@ static std::string hex_key(const char *kind, uint64_t h)
 	return buf;
 }
 
-// volume identifier, volume space size, creation date and time, as stored
+// volume id, size and creation date
 std::string mdb_cd_key(const uint8_t *pvd)
 {
 	if (pvd[0] != 1 || memcmp(pvd + 1, "CD001", 5)) return "";
@@ -38,8 +35,7 @@ std::string mdb_cd_key(const uint8_t *pvd)
 	return hex_key("cd", h);
 }
 
-// YYYYMMDDHHMMSScc at byte 813; Towns discs were made from 1989 on, and some
-// record zeros or a year like 2106
+// some discs record zeros or years like 2106
 int mdb_cd_year(const uint8_t *pvd)
 {
 	int y = 0;
@@ -59,7 +55,6 @@ std::string mdb_fd_key(const uint8_t *head, size_t len, uint64_t size)
 	return hex_key("fd", fnv1a(le, 8, fnv1a(head, len)));
 }
 
-// ASCII lower case, whitespace runs folded to one space, trimmed:
 // "After Burner  (Japan)" -> "x:after burner (japan)"
 std::string mdb_exact_key(const char *name)
 {
@@ -80,8 +75,6 @@ std::string mdb_exact_key(const char *name)
 	return s.empty() ? s : "x:" + s;
 }
 
-// Bracketed spans dropped, the words "the" and "and" dropped, Roman numerals
-// II-X as digits, letters and digits kept:
 // "The Legend of Kyrandia II (Japan)" -> "l:legendofkyrandia2"
 std::string mdb_loose_key(const char *name)
 {
@@ -121,8 +114,7 @@ std::string mdb_loose_key(const char *name)
 	return out.empty() ? out : "l:" + out;
 }
 
-// The characters from U+3000 up (kana, kanji, full-width forms) before the
-// first bracket, the ideographic space dropped:
+// kana and kanji before the first bracket:
 // "しせんしょう  Ver 1.5 (19xx)" -> "j:しせんしょう"
 std::string mdb_japanese_key(const char *name)
 {
@@ -139,13 +131,12 @@ std::string mdb_japanese_key(const char *name)
 	return out.empty() ? out : "j:" + out;
 }
 
-// ---------------------------------------------------------------------------
-// The file: tab separated records.
-//   D <ram> <speed> <pad1> <pad2> <machine> <fdd>     what "-" resolves to
-//   Y <year> <speed>      a title with no speed of its own, from this year on
+// Tab separated records:
+//   D <ram> <speed> <pad1> <pad2> <machine> <fdd>     defaults for "-"
+//   Y <year> <speed>      speed for titles without one, from this year on
 //   T <id> <ram> <speed> <pad1> <pad2> <machine> <fdd> <boot> <save> <title> [<year>]
 //   K <key> <id>
-// The user's file is read after the shipped one; its rows replace by id or key.
+// User file rows replace shipped ones by id or key.
 
 enum { F_RAM, F_SPEED, F_PAD1, F_PAD2, F_MACHINE, F_FDD, F_BOOT, F_SAVE, F_COUNT };
 static const uint8_t UNSET = 0xFF;
@@ -161,12 +152,12 @@ static std::vector<title_rec> titles;
 static std::unordered_map<std::string, int> title_of_id;
 static std::unordered_map<std::string, std::string> id_of_key;
 static uint8_t defaults[F_BOOT];
-static int date_year;             // 0: no date rule
+static int date_year;
 static uint8_t date_speed;
 static time_t loaded_mtime[2];
 static int loaded = 0;
 
-// a field's text as the OSD value it selects; "-" is UNSET, junk is -1
+// "-" is UNSET, junk is -1
 static int field_value(int f, const char *v)
 {
 	static const char *words[F_COUNT][8] = {
@@ -184,13 +175,13 @@ static int field_value(int f, const char *v)
 	return -1;
 }
 
-// a line or field starting with # is a comment to the end of the line
 static int parse_year(const char *s)
 {
 	int y = atoi(s);
 	return (strlen(s) == 4 && y >= 1980 && y <= 2099) ? y : 0;
 }
 
+// # starts a comment
 static int split(char *line, char **tok, int max)
 {
 	int n = 0;
@@ -279,7 +270,7 @@ int mdb_load(const char *path, const char *user_path)
 	titles.clear();
 	title_of_id.clear();
 	id_of_key.clear();
-	static const uint8_t stock[F_BOOT] = { 0, 1, 0, 0, 0, 0 };   // 2 MB, Plus, pads, FM Towns, one drive
+	static const uint8_t stock[F_BOOT] = { 0, 1, 0, 0, 0, 0 };
 	memcpy(defaults, stock, sizeof(defaults));
 	date_year = 0;
 	load_file(path);

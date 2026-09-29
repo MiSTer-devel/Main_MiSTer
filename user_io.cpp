@@ -3526,11 +3526,10 @@ void user_io_poll()
 				}
 				else if (is_marty() && sd_image[disk].type == 2)
 				{
-					// the image promised at mount is made at full size now
 					uint32_t blank_size;
 					const uint8_t *blank = marty_blank_image(disk, &blank_size);
 					if (FileSave(sd_image[disk].path, (void *)blank, blank_size)
-					 && FileOpenEx(&sd_image[disk], sd_image[disk].path, O_RDWR))
+					 && FileOpenEx(&sd_image[disk], sd_image[disk].path, O_RDWR | O_SYNC))
 					{
 						FileSeek(&sd_image[disk], lba * blksz, SEEK_SET);
 						FileWriteAdv(&sd_image[disk], buffer[disk], sz);
@@ -3728,7 +3727,7 @@ void user_io_poll()
 						marty_read_cd(buffer[disk], lba, buf_n);
 						buffer_lba[disk] = lba;
 					}
-					else if (is_marty() && (disk == MARTY_SLOT_FDD || disk == MARTY_SLOT_CMOS))
+					else if (is_marty() && (disk == MARTY_SLOT_FDD || disk == MARTY_SLOT_FDD2 || disk == MARTY_SLOT_CMOS))
 					{
 						buffer_lba[disk] = -1;
 					}

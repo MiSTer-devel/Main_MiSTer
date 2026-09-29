@@ -1,12 +1,8 @@
-// FM Towns Marty core support: CD-ROM as raw sectors, floppies as track
-// records, IC card / CMOS / SCSI disk as plain block images, blank image
-// creation from the OSD.
 #ifndef MARTY_H
 #define MARTY_H
 
 #include <stdint.h>
 
-// OSD slots as the core's CONF_STR orders them
 #define MARTY_SLOT_CD     0
 #define MARTY_SLOT_FDD    1
 #define MARTY_SLOT_CARD   2
@@ -17,7 +13,7 @@
 
 #define MARTY_CD_SECTOR   2352
 #define MARTY_CD_SUB      96
-#define MARTY_CD_BLOCK    (MARTY_CD_SECTOR + MARTY_CD_SUB)   // raw sector then its subcode
+#define MARTY_CD_BLOCK    (MARTY_CD_SECTOR + MARTY_CD_SUB)
 #define MARTY_TRACK_REC   16384
 #define MARTY_TOC_INDEX   250
 

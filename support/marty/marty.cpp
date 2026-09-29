@@ -23,38 +23,29 @@
 #define UIO_MARTY_GET_REQ 0x70
 #define UIO_MARTY_ACK_REQ 0x71
 
-// OSD options the module reads back
-#define OPT_CARD_AUTO   "[26]"     // 0 = automount an IC card named after the CD
-#define OPT_FDD_AUTO    "[52]"     // 0 = mount a floppy beside the CD that shares its name
-#define OPT_TWO_FDD     "[31]"     // 1 = the second drive is fitted
-#define OPT_SETTINGS_DB "[5]"      // 0 = set the machine up from the settings database
-#define OPT_CD_RESET    "[51]"     // 0 = a CD mounted while the core runs resets it
+#define OPT_CARD_AUTO   "[26]"
+#define OPT_FDD_AUTO    "[52]"
+#define OPT_TWO_FDD     "[31]"
+#define OPT_SETTINGS_DB "[5]"
+#define OPT_CD_RESET    "[51]"
 #define OPT_RAM         "[9:8]"
 #define OPT_SPEED       "[50:49]"
 #define OPT_PAD1        "[12:10]"
 #define OPT_PAD2        "[46:44]"
 #define OPT_MACHINE     "[27]"
 
-#define CARD_KB 4096               // every card is the largest TICMFMT formats
-// the two Towns system disks as 512-byte blocks: Fujitsu M2611SA (1334
-// cylinders x 2 heads x 34 sectors, sold as 40 MB) and M2612SA (4 heads,
-// sold as 80/90 MB)
+#define CARD_KB 4096
+// 40 MB and 80 MB disks: 1334 cylinders, 2 or 4 heads, 34 sectors
 static const uint32_t hdd_blocks[] = { 1334 * 2 * 34, 1334 * 4 * 34 };
 
-static char cd_name[256];         // CD image name without path or extension
+static char cd_name[256];         // without path or extension
 
-// Savestates belong to the media the machine runs from, not to the core, so
-// the .ss files are named after it: the CD when a disc is in, else the
-// floppy, else the hard disk. Kept per slot and re-evaluated on every mount
-// and eject, because ejecting a CD hands the machine back to the floppy or
-// the disk it was booted from.
-static char ss_media[3][1024];    // 0 CD, 1 floppy, 2 hard disk
-static int  cmos_chosen;          // a CMOS image came from the config or the OSD
+// Savestates are named after the CD, else the floppy, else the hard disk.
+static char ss_media[3][1024];
+static int  cmos_chosen;
 
-// The CMOS lives here as one 8 KB copy: the core saves it as sixteen
-// blocks every time the OSD opens, and sixteen synchronous card writes
-// would hold the menu for a second or two. Blocks land in the copy and
-// the file is written once, shortly after the last one.
+// The core writes CMOS in 16 blocks each time the OSD opens, so it's
+// cached here and saved once shortly after the last block.
 #define CMOS_SIZE 8192
 static uint8_t  cmos_ram[CMOS_SIZE];
 static char     cmos_path[1024];
@@ -63,11 +54,7 @@ static unsigned long cmos_flush_at;
 
 static void cmos_flush()
 {
-	fileTYPE f;
-	if (!FileOpenEx(&f, cmos_path, O_CREAT | O_RDWR)) { printf("Marty: cannot write %s\n", cmos_path); return; }
-	if (!FileWriteAdv(&f, cmos_ram, CMOS_SIZE)) printf("Marty: cannot write %s\n", cmos_path);
-	else if (f.filp) { fflush(f.filp); fsync(fileno(f.filp)); }
-	FileClose(&f);
+	if (!FileSave(cmos_path, cmos_ram, CMOS_SIZE)) printf("Marty: cannot write %s\n", cmos_path);
 	cmos_dirty = 0;
 }
 
@@ -88,8 +75,7 @@ void marty_write_cmos(const uint8_t *buf, uint32_t lba)
 	cmos_flush_at = GetTimer(300);
 }
 
-// show the image on the OSD line and keep it for the next start, the way
-// a selection in the file browser is kept
+// same as picking the file in the OSD
 static void remember(int index, const char *path)
 {
 	char cfg[64], buf[1024];
@@ -100,28 +86,26 @@ static void remember(int index, const char *path)
 	FileSaveConfig(cfg, buf, sizeof(buf));
 }
 
-// ---------------------------------------------------------------------------
-// CD-ROM: absolute LBA space (0 = 00:00:00, first track data at 150), raw
-// 2352-byte sectors from CUE/BIN, CHD or ISO.
+// CD LBAs are absolute: track 1 data starts at 150
 
 enum { TRK_AUDIO = 0, TRK_MODE1 = 1, TRK_MODE2 = 2 };
 
 struct cd_track
 {
-	int file;          // index into cd_files
-	int ss;            // bytes per sector in the file: 2352, 2336 or 2048
+	int file;
+	int ss;            // bytes per sector in the file
 	int type;
-	int idx0;          // absolute LBA where the pregap (index 0) starts
-	int start;         // absolute LBA of index 1
+	int idx0;          // index 0
+	int start;         // index 1
 	int end;           // exclusive
-	int gap;           // sectors before start that are not in the file (PREGAP)
-	int fbase;         // absolute LBA of the file's first sector as this track sees it
+	int gap;           // PREGAP, not in the file
+	int fbase;         // LBA of the file's first sector
 };
 
 struct cd_file
 {
 	fileTYPE f;
-	int base;          // absolute LBA of the file's first sector
+	int base;
 };
 
 static cd_track  cd_tracks[100];
@@ -131,7 +115,7 @@ static int       cd_present;
 static toc_t     chd_toc;
 static uint8_t  *chd_hunkbuf;
 static int       chd_hunknum = -1;
-static fileTYPE  cd_sub;           // CloneCD .sub beside a cue: 96 bytes per sector, P..W as 12-byte blocks
+static fileTYPE  cd_sub;           // CloneCD .sub
 
 static void cd_unload()
 {
@@ -147,7 +131,7 @@ static void cd_unload()
 	cd_present = 0;
 }
 
-// the .sub with the cue's name, else with the first track file's name
+// named after the cue, else the first track file
 static void cd_open_sub(const char *cue)
 {
 	char path[1024];
@@ -162,8 +146,7 @@ static void cd_open_sub(const char *cue)
 	}
 }
 
-// the drive hands subcode out one byte per frame with P in bit 7 down to
-// W in bit 0; dumps keep each channel as its own 12-byte block
+// .sub stores each channel as a 12-byte block; the core wants P..W per byte
 static void sub_interleave(const uint8_t *cooked, uint8_t *raw)
 {
 	for (int k = 0; k < MARTY_CD_SUB; k++)
@@ -186,7 +169,6 @@ static int cd_file_sectors(int fi, int ss)
 	return (int)(cd_files[fi].f.size / ss);
 }
 
-// close the track before a new file or the end of the cue
 static void cd_close_track(int t)
 {
 	if (t < 0) return;
@@ -207,7 +189,7 @@ static int cd_load_cue(const char *filename)
 	dir_end = dir_end ? dir_end + 1 : fname;
 	char *fname_end = fname + sizeof(fname) - 1;
 
-	int pos = 150;         // absolute LBA where the next file starts
+	int pos = 150;
 	int t = -1;
 	char *line = text;
 	while (line && *line)
@@ -253,7 +235,6 @@ static int cd_load_cue(const char *filename)
 		else if (t >= 0 && !strncasecmp(line, "PREGAP ", 7))
 		{
 			int g = msf_frames(line + 7);
-			// a gap shifts this and later tracks of the file, never the ones already mapped
 			if (g > 0) { cd_tracks[t].gap = g; cd_tracks[t].fbase += g; cd_files[cd_tracks[t].file].base += g; }
 		}
 		else if (t >= 0 && !strncasecmp(line, "INDEX ", 6))
@@ -312,8 +293,7 @@ static int cd_load_chd(const char *filename)
 		tr->type = (ct->type == TT_CDDA) ? TRK_AUDIO : (ct->type == TT_MODE2) ? TRK_MODE2 : TRK_MODE1;
 		tr->start = ct->start + 150;
 		tr->end = ct->end + 150;
-		// a pregap the CHD does not store was added to the previous track's
-		// end by the loader; it belongs to this track and reads as silence
+		// the loader adds unstored pregaps to the previous track
 		int prev_end = i ? chd_toc.tracks[i - 1].end : 0;
 		int stored = (ct->start - prev_end) == ct->indexes[1];
 		tr->gap = stored ? 0 : ct->indexes[1];
@@ -340,7 +320,7 @@ static int cd_load(const char *filename)
 	return 1;
 }
 
-// track starts at 4 + 4t, mode-2 bitmap at 408, pause (index 0) starts at 512 + 4t
+// track starts at 4 + 4t, mode 2 bitmap at 408, index 0 at 512 + 4t
 static void cd_send_toc()
 {
 	uint8_t rec[1024];
@@ -395,7 +375,7 @@ static void cd_read_one(uint8_t *buf, int lba)
 	for (t = 0; t < cd_ntracks; t++) if (lba >= cd_tracks[t].idx0 && lba < cd_tracks[t].end) break;
 	if (t == cd_ntracks) return;
 	cd_track *tr = &cd_tracks[t];
-	if (lba < tr->start && lba >= tr->start - tr->gap) return;   // pregap not in the image
+	if (lba < tr->start && lba >= tr->start - tr->gap) return;
 
 	int ok = 0;
 	int off = (tr->ss == 2048) ? 16 : (tr->ss == 2336) ? 16 : 0;
@@ -415,7 +395,7 @@ static void cd_read_one(uint8_t *buf, int lba)
 	if (!ok) { memset(buf, 0, MARTY_CD_SECTOR); return; }
 	if (tr->ss != 2352) cd_make_header(buf, lba, tr->type == TRK_MODE2 ? 2 : 1);
 
-	// the sector's subcode after it, when the image carries any
+	// subcode follows the sector
 	uint8_t cooked[MARTY_CD_SUB];
 	uint8_t *sub = buf + MARTY_CD_SECTOR;
 	if (chd_toc.chd_f)
@@ -440,30 +420,28 @@ void marty_read_cd(uint8_t *buf, int lba, int cnt)
 	for (int i = 0; i < cnt; i++) cd_read_one(buf + i * MARTY_CD_BLOCK, lba + i);
 }
 
-// ---------------------------------------------------------------------------
-// Floppy: D88/D77 held in memory, raw images read in place; both served as
-// 16 KB track records.
+// D88 images are held in memory, raw ones read in place
 
 #define D88_HDR      0x2B0
 #define D88_TRACKS   164
 #define REC_TABLE    4
 #define REC_DATA     256
 #define REC_MAX_SEC  32
-#define REC_SLOTS    0x3FC0   // 32 x 16-bit slot lengths, sent when the sectors overlap
+#define REC_SLOTS    0x3FC0
 
 struct fd_image
 {
 	int      present;
 	int      d88;
 	int      wp;
-	int      hd;             // 2HD data rate
-	uint8_t *buf;            // D88: the whole file
+	int      hd;
+	uint8_t *buf;            // D88 only
 	uint32_t size;
-	fileTYPE f;              // raw image
-	int      cyls, spt, n;   // raw geometry
+	fileTYPE f;
+	int      cyls, spt, n;   // raw only
 };
 
-static fd_image fds[2];   // drive 0 (S1) and drive 1 (S5)
+static fd_image fds[2];
 static fd_image *fd_of(int index) { return &fds[index == MARTY_SLOT_FDD2]; }
 
 static uint32_t rd32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
@@ -488,8 +466,7 @@ static int fd_raw_geometry(fd_image *fd, uint32_t size)
 	case 737280:  fd->cyls = 80; fd->spt = 9;  fd->n = 2; fd->hd = 0; return 1;   // 720 KB
 	case 655360:  fd->cyls = 80; fd->spt = 8;  fd->n = 2; fd->hd = 0; return 1;   // 640 KB
 	}
-	// 1232 KB dumps also come short (unused cylinders dropped) or with odd
-	// filler after the last cylinder; anything near that size is one
+	// 1232 KB dumps are often trimmed or padded
 	if (size >= 1000 * 1024 && size < 1300 * 1024) { fd->cyls = 77; fd->spt = 8; fd->n = 3; fd->hd = 1; return 1; }
 	return 0;
 }
@@ -508,7 +485,6 @@ static int fd_load(fd_image *fd, const char *filename)
 		fd->size = fd->f.size;
 		fd->buf = (uint8_t *)malloc(fd->size);
 		if (!fd->buf || !FileReadAdv(&fd->f, fd->buf, fd->size)) { fd_unload(fd); return 0; }
-		// only the first disk of a multi-disk file
 		uint32_t disk_size = rd32(fd->buf + 0x1C);
 		if (disk_size && disk_size < fd->size) fd->size = disk_size;
 		fd->d88 = 1;
@@ -532,7 +508,6 @@ static uint32_t d88_track_offset(const fd_image *fd, uint32_t trk)
 	return (off >= D88_HDR && off < fd->size) ? off : 0;
 }
 
-// byte length of the D88 track at off, walking its sector headers
 static uint32_t d88_track_len(const fd_image *fd, uint32_t off)
 {
 	if (!off) return 0;
@@ -546,12 +521,10 @@ static uint32_t d88_track_len(const fd_image *fd, uint32_t off)
 	return (p > fd->size ? fd->size : p) - off;
 }
 
-// Slot lengths for a track that does not fit at the drive's standard
-// pitch (62 + size + GAP3 per sector), which is how protected disks put
-// their extra sectors on a track: a sector whose data carries the next
-// sector's ID pattern overlaps it there; then the gaps shrink, then the
-// data slots of bad-CRC sectors, then everything. Returns 0 when the
-// standard pitch fits and no table is needed.
+// Protected disks cram extra sectors onto a track. When the standard
+// pitch doesn't fit, sectors whose data holds the next ID overlap it,
+// then gaps shrink, then bad CRC slots, then everything.
+// Returns 0 when no table is needed.
 static int rec_slot_table(const uint8_t *rec, int n, uint16_t *pitch)
 {
 	const uint32_t track_len = (rec[1] & 1) ? 10416 : 6250;
@@ -651,7 +624,6 @@ void marty_read_track(int index, uint8_t *rec, uint32_t lba)
 	rec[0] = count;
 }
 
-// rebuild one D88 track from a record and put it back in the file
 static void d88_write_track(fd_image *fd, const uint8_t *rec, uint32_t trk)
 {
 	if (trk >= D88_TRACKS) return;
@@ -689,7 +661,7 @@ static void d88_write_track(fd_image *fd, const uint8_t *rec, uint32_t trk)
 	}
 	else
 	{
-		// lay the disk out again in track order; the file shrinks or grows
+		// size changed, rebuild the whole image
 		uint32_t total = D88_HDR;
 		for (uint32_t t = 0; t < D88_TRACKS; t++)
 			total += (t == trk) ? new_len : d88_track_len(fd, d88_track_offset(fd, t));
@@ -726,7 +698,6 @@ void marty_write_track(int index, const uint8_t *rec, uint32_t lba)
 	if (!fd->present || fd->wp) return;
 	if (fd->d88) { d88_write_track(fd, rec, lba); return; }
 
-	// raw image: sectors land by their ID, nothing else can change
 	uint32_t cyl = lba >> 1, head = lba & 1;
 	if (cyl >= (uint32_t)fd->cyls) return;
 	uint32_t sz = 128u << fd->n;
@@ -743,10 +714,7 @@ void marty_write_track(int index, const uint8_t *rec, uint32_t lba)
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Blank images, formatted the way TOWNS OS FORMAT and TICMFMT leave them:
-// an "IPL4" boot sector whose entry returns to the ROM, the BPB, empty
-// FATs and root directory.
+// Blank images as TOWNS OS formats them
 
 struct fat_geom { int bps, spc, resv, fats, root, total, media, spf, spt, heads; };
 
@@ -767,7 +735,6 @@ static void fat_boot_sector(uint8_t *b, const fat_geom &g)
 	b[0x5E] = 0xCB;   // retf
 }
 
-// one formatted volume of g.bps * g.total bytes
 static void fat_volume(uint8_t *img, const fat_geom &g, int fat16)
 {
 	memset(img, 0, (size_t)g.bps * g.total);
@@ -780,11 +747,9 @@ static void fat_volume(uint8_t *img, const fat_geom &g, int fat16)
 	}
 }
 
-// the Towns floppy: 2HD 1232 KB as TOWNS OS formats it
 struct fd_format { uint32_t size; int cyls; fat_geom g; };
 static const fd_format fd_1232k = { 1261568, 77, { 1024, 1, 1, 2, 192, 1232, 0xFE, 2, 8, 2 } };
 
-// write the raw image as a D88 with one sector per header
 static int fd_save_d88(const char *path, const uint8_t *img, const fd_format *fmt)
 {
 	uint32_t ss = fmt->g.bps;
@@ -816,7 +781,6 @@ static int fd_save_d88(const char *path, const uint8_t *img, const fd_format *fm
 	return ok;
 }
 
-// IC card as TICMFMT formats it: FAT12, 512-byte sectors, 256 KB steps
 static std::vector<uint8_t> card_blank;
 static const std::vector<uint8_t> &card_image(uint32_t kb)
 {
@@ -829,14 +793,11 @@ static const std::vector<uint8_t> &card_image(uint32_t kb)
 	return card_blank;
 }
 
-// SCSI disk of the given block count: blank IPL block, the Fujitsu
-// partition table at block 1, one MS-DOS partition (2048-byte sectors,
-// FAT16) from block 3 to the end
+// partition table at block 1, one FAT16 partition from block 3
 static int hdd_save(const char *path, uint32_t total)
 {
 	uint32_t part_blocks = ((total - 3) / 4) * 4;
 	fat_geom g = { 2048, 2, 1, 2, 1024, (int)(part_blocks / 4), 0xFE, 0, 0, 0 };
-	// FAT sectors for the clusters the partition holds
 	int clusters = (g.total - g.resv - g.root * 32 / g.bps) / g.spc;
 	g.spf = ((clusters + 2) * 2 + g.bps - 1) / g.bps;
 	fileTYPE f;
@@ -845,7 +806,7 @@ static int hdd_save(const char *path, uint32_t total)
 	uint8_t head[3 * 512];
 	memset(head, 0, sizeof(head));
 	uint8_t *pt = head + 512;
-	memcpy(pt, "\x95\x78\x8E\x6D\x92\xCA", 6);   // the maker's name in Shift-JIS
+	memcpy(pt, "\x95\x78\x8E\x6D\x92\xCA", 6);   // "Fujitsu" in Shift-JIS
 	wr32(pt + 6, 3); wr32(pt + 10, total - 2); wr16(pt + 14, 512);
 	for (int i = 0; i < 10; i++) memset(pt + 32 + i * 48 + 16, ' ', 32);
 	pt[33] = 0x01;
@@ -853,7 +814,6 @@ static int hdd_save(const char *path, uint32_t total)
 	memcpy(pt + 48, "MS-DOS", 6); memcpy(pt + 64, "DATA", 4);
 	int ok = FileWriteAdv(&f, head, sizeof(head));
 
-	// the partition, then zeros to the end of the image
 	static uint8_t chunk[1 << 20];
 	uint32_t hdr = (g.resv + g.fats * g.spf) * g.bps + g.root * 32;
 	uint32_t left = (uint32_t)g.bps * g.total;
@@ -864,7 +824,6 @@ static int hdd_save(const char *path, uint32_t total)
 		memset(chunk, 0, n);
 		if (first)
 		{
-			// the header fits the first chunk: boot sector and FATs
 			std::vector<uint8_t> vol(hdr);
 			fat_boot_sector(vol.data(), g);
 			for (int k = 0; k < g.fats; k++)
@@ -889,9 +848,7 @@ static int hdd_save(const char *path, uint32_t total)
 	return ok;
 }
 
-// <dir>/<cd name or blank>[_n].<ext>, never an existing file. A floppy goes
-// beside the mounted CD, else into the games folder; a disk goes where the
-// slot's last image came from, else the games folder; cards stay in saves.
+// <dir>/<cd name or blank>[_n].<ext>, never an existing file
 static void new_image_path(char *out, size_t size, const char *ext, int slot)
 {
 	char dir[1024];
@@ -931,11 +888,9 @@ static void mount_card_for_cd()
 	StoreIdx_S(MARTY_SLOT_CARD, path);
 }
 
-// a floppy beside the CD with the CD's name, any of the floppy formats;
-// <name>_1 goes in the second drive when it is fitted
 static const char *fdd_exts[] = { "d88", "D88", "d77", "D77", "hdm", "HDM", "bin", "BIN" };
 
-// judged by size the way fd_load does, so a single-file cue's own .bin is skipped
+// skips the cue's own .bin
 static int fd_size_ok(const char *path)
 {
 	struct stat64 *st = getPathStat(path);
@@ -946,8 +901,8 @@ static int fd_size_ok(const char *path)
 	return fd_raw_geometry(&probe, (uint32_t)st->st_size);
 }
 
-// mounts <folder of cd_path>/<cd name>[_1].<ext> in the slot when there is one;
-// 1 mounted, 0 none there, -1 one there that did not load
+// mounts <cd dir>/<cd name>[_1].<ext>
+// 1 mounted, 0 none, -1 failed to load
 static int mount_cd_floppy(const char *cd_path, int slot)
 {
 	if (!cd_present || !cd_name[0]) return 0;
@@ -966,7 +921,6 @@ static int mount_cd_floppy(const char *cd_path, int slot)
 	return 0;
 }
 
-// cd_path is the image being mounted; the stored slot path can still be the last one
 static void mount_fdd_for_cd(const char *cd_path)
 {
 	if (user_io_status_get(OPT_FDD_AUTO)) return;
@@ -974,7 +928,6 @@ static void mount_fdd_for_cd(const char *cd_path)
 	if (user_io_status_get(OPT_TWO_FDD)) mount_cd_floppy(cd_path, MARTY_SLOT_FDD2);
 }
 
-// what a promised image reads as before its first write
 void marty_fill_blank(int index, uint8_t *buf, uint32_t lba, int cnt)
 {
 	memset(buf, 0, cnt * 512);
@@ -983,7 +936,6 @@ void marty_fill_blank(int index, uint8_t *buf, uint32_t lba, int cnt)
 	if (at < card_blank.size()) memcpy(buf, card_blank.data() + at, std::min(n, card_blank.size() - at));
 }
 
-// the same image, made whole on the first write
 const uint8_t *marty_blank_image(int index, uint32_t *size)
 {
 	if (index == MARTY_SLOT_CARD) { *size = card_blank.size(); return card_blank.data(); }
@@ -991,9 +943,6 @@ const uint8_t *marty_blank_image(int index, uint32_t *size)
 	return NULL;
 }
 
-// one request bit: 0 new floppy, 1 new card, 2 new disk, 3 eject CD,
-// 4 eject floppy, 5 eject disk, 6 eject floppy 2, 7 new floppy 2,
-// 8 eject disk 2, 9 new disk 2
 static int save_blank_floppy(const char *path)
 {
 	const fd_format *fmt = &fd_1232k;
@@ -1005,6 +954,8 @@ static int save_blank_floppy(const char *path)
 	return ok;
 }
 
+// 0 new floppy, 1 new card, 2 new disk, 3 eject CD, 4 eject floppy,
+// 5 eject disk, 6 eject floppy 2, 7 new floppy 2, 8 eject disk 2, 9 new disk 2
 static void create_image(int bit, int size_code)
 {
 	char path[1024], msg[1100];
@@ -1048,8 +999,6 @@ static void create_image(int bit, int size_code)
 	}
 }
 
-// ---------------------------------------------------------------------------
-
 int marty_block_size(int index, int wire_size)
 {
 	if (index == MARTY_SLOT_CD) return MARTY_CD_BLOCK;
@@ -1068,24 +1017,19 @@ static void ss_update_key()
 	if (name[0]) process_ss(name);
 }
 
-// ---------------------------------------------------------------------------
-// Settings database: a mounted CD, or a floppy with no CD, names a title and
-// the machine is set up for it. The pass at core start runs from marty_init,
-// once the saved options are in and reset is held. A machine change while
-// the core runs resets it; a disc the database does not know leaves a
-// running machine alone, as it may be the next disc of the game in it.
+// Settings database. An unknown disc leaves a running machine alone, since
+// it may be the next disc of the same game.
 
 static int  db_ready;
 static int  db_busy;
 static char db_notice[512];
 
-// the primary volume descriptor of the first data track, NULL when none
 static const uint8_t *db_cd_pvd()
 {
 	if (!cd_present || cd_tracks[0].type == TRK_AUDIO) return NULL;
 	static uint8_t buf[MARTY_CD_BLOCK];
 	cd_read_one(buf, cd_tracks[0].start + 16);
-	for (int off : { 16, 24 })   // mode 1 user data, mode 2 form 1
+	for (int off : { 16, 24 })   // mode 1, mode 2 form 1
 		if (!memcmp(buf + off, "\x01" "CD001", 6)) return buf + off;
 	return NULL;
 }
@@ -1102,8 +1046,7 @@ static std::string db_fd_key(const char *path)
 	return ok ? mdb_fd_key(head, n, size) : "";
 }
 
-// 2 when the media's own key names the title, 1 when its file name does,
-// 0 when nothing does, -1 with nothing mounted
+// 2 media match, 1 name match, 0 unknown, -1 nothing mounted
 static int db_lookup(const uint8_t *pvd, mdb_settings *s, std::string *title)
 {
 	const char *path = cd_present ? ss_media[0] : fds[0].present ? ss_media[1] : "";
@@ -1111,7 +1054,7 @@ static int db_lookup(const uint8_t *pvd, mdb_settings *s, std::string *title)
 	std::string key = cd_present ? (pvd ? mdb_cd_key(pvd) : "") : db_fd_key(path);
 	if (mdb_find(key, s, title)) return 2;
 
-	char name[512];
+	char name[1024];
 	const char *p = strrchr(path, '/');
 	snprintf(name, sizeof(name), "%s", p ? p + 1 : path);
 	char *dot = strrchr(name, '.');
@@ -1120,7 +1063,7 @@ static int db_lookup(const uint8_t *pvd, mdb_settings *s, std::string *title)
 	        mdb_find(mdb_japanese_key(name), s, title)) ? 1 : 0;
 }
 
-// a notice line holds 30 characters
+// wraps at the OSD's 30 columns
 static void db_say(std::string &out, int &col, const std::string &item)
 {
 	if (col && col + 2 + (int)item.size() > 30) { out += "\n"; col = 0; }
@@ -1129,24 +1072,23 @@ static void db_say(std::string &out, int &col, const std::string &item)
 	col += item.size();
 }
 
-// the save disk sits beside the CD under its name; an existing one is used
 static const char *db_save_disk()
 {
-	if (!cd_present || fds[0].present || !cd_name[0]) return 0;
+	if (!cd_present || fds[0].present || !cd_name[0]) return NULL;
 	int found = mount_cd_floppy(ss_media[0], MARTY_SLOT_FDD);
 	if (found) return found > 0 ? "Save disk mounted" : "Save disk did not load";
 	const char *cut = strrchr(ss_media[0], '/');
 	int dir = cut ? (int)(cut - ss_media[0]) : 0;
 	char path[1200];
 	snprintf(path, sizeof(path), "%.*s%s%s.d88", dir, ss_media[0], dir ? "/" : "", cd_name);
-	if (FileExists(path)) return "Save disk did not load";   // never over a disk
+	if (FileExists(path)) return "Save disk did not load";
 	if (!save_blank_floppy(path)) return "Save disk not created";
 	marty_set_image(MARTY_SLOT_FDD, path);
 	remember(MARTY_SLOT_FDD, path);
 	return "Save disk created";
 }
 
-// what the last lookup found, for db_disks; how is -2 when there is nothing to do
+// how is -2 when there is nothing to do
 static struct
 {
 	int how = -2, year = 0;
@@ -1154,10 +1096,8 @@ static struct
 	std::string title;
 } db_hit;
 
-// Sets the machine up for the mounted media, before the core hears of it.
-// Returns 1 when a setting that needs a reset changed while the core runs.
-// fresh: a reset is coming anyway, so unknown media gets stock settings as
-// it does at start.
+// Returns 1 when a change needs a reset. fresh means a reset is coming
+// anyway, so unknown media gets stock settings.
 static int db_settings(int fresh)
 {
 	db_hit.how = -2;
@@ -1177,12 +1117,11 @@ static int db_settings(int fresh)
 	if (how <= 0 && !starting && !fresh) return 0;
 	if (how <= 0) s = stock;
 
-	// the disc's own creation year, else the title's release year
 	int year = pvd ? mdb_cd_year(pvd) : 0;
 	if (!year) year = s.year;
 	if (!s.speed_given) mdb_date_speed(year, &s.speed);
 
-	// speed switches live, so it alone does not need a reset
+	// speed switches live
 	int machine = user_io_status_get(OPT_RAM) != s.ram || user_io_status_get(OPT_MACHINE) != s.machine ||
 	              user_io_status_get(OPT_TWO_FDD) != s.fdd;
 	user_io_status_set(OPT_PAD1, s.pad1);
@@ -1205,7 +1144,6 @@ static void core_reset()
 	user_io_status_set("[0]", 0);
 }
 
-// Mounts the floppy the title needs and leaves the notice, once the core has the media.
 static void db_disks(int reset)
 {
 	if (db_hit.how == -2) return;
@@ -1223,7 +1161,7 @@ static void db_disks(int reset)
 	if (how > 0)
 	{
 		msg.clear();
-		for (char c : title) if (!(c & 0x80) && msg.size() < 30) msg += c;   // the OSD font is ASCII
+		for (char c : title) if (!(c & 0x80) && msg.size() < 30) msg += c;
 	}
 	int col = 30;
 	if (s.ram != stock.ram) db_say(msg, col, ram[s.ram]);
@@ -1237,7 +1175,6 @@ static void db_disks(int reset)
 
 	if (s.boot)
 	{
-		// the CD's own floppy also replaces one left from another title
 		int found = mount_cd_floppy(ss_media[0], MARTY_SLOT_FDD);
 		if (found) msg += found > 0 ? "\nBoot floppy mounted" : "\nBoot floppy did not load";
 		else if (!fds[0].present) msg += "\nNeeds a boot floppy";
@@ -1280,7 +1217,7 @@ void marty_set_image(int index, const char *filename)
 		}
 		ss_remember(0, cd_present ? filename : "");
 
-		// a reset clears what the core was sent, so it goes first
+		// reset first, it clears what the core was sent
 		int reset = cd_present && !user_io_status_get("[0]") && !user_io_status_get(OPT_CD_RESET);
 		if (db_settings(reset)) reset = 1;
 		if (reset)
@@ -1310,13 +1247,12 @@ void marty_set_image(int index, const char *filename)
 		{
 			ss_remember(1, fd->present ? filename : "");
 			ss_update_key();
-			if (!cd_present) db_media_changed();   // with a CD in, the CD decides
+			if (!cd_present) db_media_changed();
 		}
 		break;
 	}
 
 	case MARTY_SLOT_CMOS:
-		// the copy follows the chosen file; a missing one starts blank
 		if (cmos_dirty) cmos_flush();
 		cmos_chosen = has;
 		memset(cmos_ram, 0, CMOS_SIZE);
@@ -1339,9 +1275,8 @@ void marty_set_image(int index, const char *filename)
 	}
 }
 
-// A CD named by an MGL goes in before the machine leaves reset, so the ROM
-// finds it at power-on. Mounted once the ROM is probing, it counts as a
-// disc inserted during the boot and the ROM does not boot from it.
+// The ROM won't boot from a disc inserted after power-on, so an MGL CD
+// is mounted while reset is still held.
 void marty_mgl_premount()
 {
 	mgl_struct *mgl = mgl_get();
@@ -1367,13 +1302,10 @@ void marty_mgl_premount()
 
 void marty_init()
 {
-	// the images the config remounted went in before the saved options did
 	db_ready = 1;
 	db_media_changed();
 
 	char path[1024];
-	// the mask ROMs from the core folder; the OSD entries stay for a
-	// core folder without them
 	sprintf(path, "%s/mrom.m36", HomeDir());
 	if (FileExists(path)) user_io_file_tx(path, 1);
 	sprintf(path, "%s/mrom.m37", HomeDir());
@@ -1381,7 +1313,6 @@ void marty_init()
 
 	sprintf(path, "%s/%s", SAVE_DIR, CoreName2);
 	FileCreatePath(path);
-	// the default CMOS image unless the config or the OSD named one
 	if (cmos_chosen) return;
 	sprintf(path, "%s/%s/cmos.sav", SAVE_DIR, CoreName2);
 	marty_set_image(MARTY_SLOT_CMOS, path);
@@ -1402,7 +1333,7 @@ void marty_poll()
 		db_notice[0] = 0;
 	}
 
-	// bits 9:0 requests, bit 15 the disk size code
+	// bits 9:0 requests, bit 15 disk size
 	uint16_t req = spi_uio_cmd(UIO_MARTY_GET_REQ);
 	if (!(req & 0x3FF)) return;
 
