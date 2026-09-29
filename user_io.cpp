@@ -287,9 +287,10 @@ char is_neogeo_cd() {
     return is_neogeo() && neocd_is_en();
 }
 
+// NeXTcube ("NeXT") & NeXTstation Turbo ("NeXT-Color") share HPS-side services
 char is_next()
 {
-	return !strcasecmp(orig_name, "NeXT");
+	return !strcasecmp(orig_name, "NeXT") || !strcasecmp(orig_name, "NeXT-Color");
 }
 
 // Guests that read the battery clock as UTC and apply their own time zone
