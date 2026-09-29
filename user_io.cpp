@@ -2274,6 +2274,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				// Mac CD slot: CUE/CHD/raw image translation (support/mac)
 				if (ret) ret = mac_mount_hook(index, name, &sd_image[index], &writable);
 			if (ret) ret = next_mount_hook(index, name, &sd_image[index], &writable);
+				if (ret) ret = a3_mount_hook(index, name, &sd_image[index], &writable);
 
 				if (ret && is_c128())
 				{
@@ -2294,6 +2295,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 		c64_closeGCR(index);
 		mac_cdrom_unmount(index);
 		next_unmount(index);
+		a3_unmount(index);
 	}
 
 	buffer_lba[index] = -1;
@@ -3473,6 +3475,10 @@ void user_io_poll()
 			else if (int nxop = next_sd_service(disk, op, (uint32_t)lba, sz, ack))
 			{
 				if (nxop < 0) break;
+			}
+			else if (int a3op = a3_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
+			{
+				if (a3op < 0) break;
 			}
 			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
 			{
