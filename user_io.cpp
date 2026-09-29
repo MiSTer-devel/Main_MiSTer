@@ -423,6 +423,13 @@ char is_electron()
 	return (is_electron_type == 1);
 }
 
+static int is_marty_type = 0;
+char is_marty()
+{
+	if (!is_marty_type) is_marty_type = strcasecmp(orig_name, "Marty") ? 2 : 1;
+	return (is_marty_type == 1);
+}
+
 static int is_saturn_type = 0;
 char is_saturn()
 {
@@ -487,6 +494,7 @@ void user_io_read_core_name()
 	is_pcxt_type = 0;
 	is_electron_type = 0;
 	is_saturn_type = 0;
+	is_marty_type = 0;
 	is_n64_type = 0;
 	is_uneon_type = 0;
 	core_name[0] = 0;
@@ -1021,6 +1029,10 @@ static void parse_config()
 						pcecd_set_image(idx, str);
 						game_docs_init(str, 0);
 						cheats_init(str, 0);
+					}
+					else if (is_marty())
+					{
+						marty_set_image(idx, str);
 					}
 					else
 					{
@@ -1650,6 +1662,7 @@ void user_io_init(const char *path, const char *xml)
 
 					if (is_uneon()) x86_ide_set();
 					if (is_cdi()) cdi_load_root_nvram();
+					if (is_marty()) marty_init();
 
 					if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 					{
@@ -1747,6 +1760,7 @@ void user_io_init(const char *path, const char *xml)
 		}
 
 		send_rtc(3);
+		if (is_marty() && xml && isXmlName(xml) == 2) marty_mgl_premount();
 
 		// release reset
 		if (!is_minimig() && !is_st()) user_io_status_set("[0]", 0);
@@ -3396,6 +3410,8 @@ void user_io_poll()
 					blksz = CDI_CDIC_BUFFER_SIZE;
 				else if (mac_cdda_window(disk, lba))
 					blksz = 2352;   // Mac CD-DA: one whole frame per transaction
+				else if (is_marty())
+					blksz = marty_block_size(disk, 128 << ((c >> 6) & 7));
 				else
 					blksz = 128 << ((c >> 6) & 7);
 
@@ -3500,7 +3516,30 @@ void user_io_poll()
 				spi_block_read(buffer[disk], fio_size, sz);
 				DisableIO();
 
-				if (sd_image[disk].type == 2 && !lba)
+				if (is_marty() && (disk == MARTY_SLOT_FDD || disk == MARTY_SLOT_FDD2))
+				{
+					marty_write_track(disk, buffer[disk], lba);
+				}
+				else if (is_marty() && disk == MARTY_SLOT_CMOS)
+				{
+					marty_write_cmos(buffer[disk], lba);
+				}
+				else if (is_marty() && sd_image[disk].type == 2)
+				{
+					uint32_t blank_size;
+					const uint8_t *blank = marty_blank_image(disk, &blank_size);
+					if (FileSave(sd_image[disk].path, (void *)blank, blank_size)
+					 && FileOpenEx(&sd_image[disk], sd_image[disk].path, O_RDWR | O_SYNC))
+					{
+						FileSeek(&sd_image[disk], lba * blksz, SEEK_SET);
+						FileWriteAdv(&sd_image[disk], buffer[disk], sz);
+					}
+					else
+					{
+						printf("Error in creating file: %s\n", sd_image[disk].path);
+					}
+				}
+				else if (sd_image[disk].type == 2 && !lba)
 				{
 					//Create the file
 					if (FileOpenEx(&sd_image[disk], sd_image[disk].path, O_CREAT | O_RDWR | O_SYNC))
@@ -3573,6 +3612,26 @@ void user_io_poll()
 						done = 1;
 						buffer_lba[disk] = lba;
 					}
+					else if (is_marty() && disk == MARTY_SLOT_CD)
+					{
+						diskled_on();
+						marty_read_cd(buffer[disk], lba, buf_n);
+						done = 1;
+						buffer_lba[disk] = lba;
+					}
+					else if (is_marty() && (disk == MARTY_SLOT_FDD || disk == MARTY_SLOT_FDD2))
+					{
+						diskled_on();
+						marty_read_track(disk, buffer[disk], lba);
+						done = 1;
+						buffer_lba[disk] = lba;
+					}
+					else if (is_marty() && disk == MARTY_SLOT_CMOS)
+					{
+						marty_read_cmos(buffer[disk], lba, buf_n);
+						done = 1;
+						buffer_lba[disk] = lba;
+					}
 					else if (sd_image[disk].size)
 					{
 						diskled_on();
@@ -3616,6 +3675,10 @@ void user_io_poll()
 							{
 								p3do_fill_blanksave(buffer[disk], lba);
 							}
+							else if (is_marty())
+							{
+								marty_fill_blank(disk, buffer[disk], lba, blks);
+							}
 							else
 							{
 								memset(buffer[disk], -1, sizeof(buffer[disk]));
@@ -3658,6 +3721,15 @@ void user_io_poll()
 					{
 						cdi_read_cd(buffer[disk], lba, buf_n);
 						buffer_lba[disk] = lba;
+					}
+					else if (is_marty() && disk == MARTY_SLOT_CD)
+					{
+						marty_read_cd(buffer[disk], lba, buf_n);
+						buffer_lba[disk] = lba;
+					}
+					else if (is_marty() && (disk == MARTY_SLOT_FDD || disk == MARTY_SLOT_FDD2 || disk == MARTY_SLOT_CMOS))
+					{
+						buffer_lba[disk] = -1;
 					}
 					else if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET) &&
 						FileReadAdv(&sd_image[disk], buffer[disk], sizeof(buffer[disk])))
@@ -3966,6 +4038,7 @@ void user_io_poll()
 	if (is_megacd()) mcd_poll();
 	if (is_pce()) pcecd_poll();
 	if (is_saturn()) saturn_poll();
+	if (is_marty()) marty_poll();
 	if (is_cdi()) cdi_poll();
 	if (is_psx()) psx_poll();
 	if (is_neogeo_cd()) neocd_poll();

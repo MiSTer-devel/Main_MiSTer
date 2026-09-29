@@ -23,6 +23,7 @@ int menu_lightgun_cb(int idx, uint16_t type, uint16_t code, int value);
 int menu_allow_cfg_switch();
 void StoreIdx_F(int idx, const char *path);
 void StoreIdx_S(int idx, const char *path);
+const char *GetIdx_S(int idx);
 
 int menu_present();
 
