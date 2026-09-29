@@ -30,6 +30,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "../../hardware.h"
 #include "../../file_io.h"
 #include "minimig_fdd.h"
+#include "floppy_config_command.h"
 #include "minimig_config.h"
 #include "../../debug.h"
 #include "../../user_io.h"
@@ -38,6 +39,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "ipffile.h"
 
 unsigned char drives = 0; // number of active drives reported by FPGA (may change only during reset)
+unsigned char floppy_zero_supported = 0;
+unsigned char floppy_zero_active = 0;
 adfTYPE *pdfx;            // drive select pointer
 adfTYPE df[4] = {};       // drive information structure
 
@@ -670,10 +673,28 @@ void UpdateDriveStatus(void)
 	DisableFpga();
 }
 
+static void UpdateFloppyPopulation(unsigned char c1)
+{
+	drives = (c1 >> 4) & 0x03;
+	floppy_zero_supported = minimig_floppy_zero_supported(c1);
+	floppy_zero_active = minimig_floppy_zero_active(c1);
+}
+
+void RefreshFloppyPopulation(void)
+{
+	EnableFpga();
+	uint16_t status = spi_w(0);
+	spi_w(0);
+	spi_w(0);
+	DisableFpga();
+	UpdateFloppyPopulation(status >> 8);
+}
+
 void HandleFDD(unsigned char c1, unsigned char c2)
 {
 	unsigned char sel;
-	drives = (c1 >> 4) & 0x03; // number of active floppy drives
+	UpdateFloppyPopulation(c1);
+	if (floppy_zero_active) return;
 
 	if (c1 & CMD_RDTRK)
 	{

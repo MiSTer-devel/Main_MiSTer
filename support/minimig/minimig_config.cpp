@@ -15,6 +15,7 @@
 #include "../../ide.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
+#include "floppy_config_command.h"
 #include "minimig_config.h"
 #include "minimig_share.h"
 #include "minimig_a2065.h"
@@ -416,9 +417,9 @@ static void ApplyConfiguration(char reloadkickstart)
 	printf("Slow RAM size : %s\n", config_memory_slow_msg[memcfg >> 2 & 0x03]);
 	printf("Fast RAM size : %s\n", config_memory_fast_msg[(minimig_config.cpu >> 1) & 1][((memcfg >> 4) & 0x03) | ((memcfg & 0x80) >> 5)]);
 
-	printf("Floppy drives : %u\n", minimig_config.floppy.drives + 1);
+	printf("Floppy drives : %u\n", minimig_floppy_requested_count(minimig_config.floppy.drives));
 	printf("Floppy speed  : %s\n", minimig_config.floppy.speed ? "fast" : "normal");
-	for (int drive = 0; drive <= minimig_config.floppy.drives; drive++) {
+	for (int drive = 0; drive < minimig_floppy_requested_count(minimig_config.floppy.drives); drive++) {
 		if (minimig_config.externalfloppy.exDrives[drive]) {
 	        printf("   Drive DF%u : External Drive ", drive);
 			switch (minimig_config.externalfloppy.exDrives[drive]) {
@@ -611,6 +612,12 @@ int minimig_cfg_load(int num)
 	}
 
 	if ((minimig_config.cpu & 0x03) == 0x02) minimig_config.cpu |= 0x01;
+	RefreshFloppyPopulation();
+	if (minimig_config.floppy.drives == 4 && !floppy_zero_supported)
+	{
+		BootPrintEx("Zero floppy drives unsupported by this core; using DF0.");
+		minimig_config.floppy.drives = 0;
+	}
 
 	a2065_cfg_set(minimig_config.a2065_mode);
 
@@ -866,7 +873,12 @@ void minimig_ConfigChipset(mm_configTYPE *config)
 
 void minimig_ConfigFloppy(unsigned char drives, unsigned char speed)
 {
-	spi_uio_cmd8(UIO_MM2_FLP, ((drives & 0x03) << 2) | (speed & 0x03));
+	if (drives == 4 && !floppy_zero_supported)
+	{
+		printf("Zero floppy drives unsupported by this core; using DF0.\n");
+		drives = 0;
+	}
+	spi_uio_cmd8(UIO_MM2_FLP, minimig_floppy_config_command(drives, speed));
 }
 
 void minimig_ConfigFloppyExt(unsigned char drive0, unsigned char drive1, unsigned char drive2, unsigned char drive3)
