@@ -946,6 +946,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 1;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.ide_cfg = 0;
+		if (floppy_zero_supported) minimig_config.floppy.drives = 4;
 		break;
 
 	case CONFIG_PRESET_CDTV:
@@ -958,6 +959,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 1;
 		minimig_config.ide_cfg = 0;
+		if (minimig_config.floppy.drives == 4) minimig_config.floppy.drives = 0;
 		break;
 
 	case CONFIG_PRESET_A500:
@@ -969,6 +971,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.ide_cfg = 0;
+		if (minimig_config.floppy.drives == 4) minimig_config.floppy.drives = 0;
 		break;
 
 	case CONFIG_PRESET_A600:
@@ -980,6 +983,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.ide_cfg = 0;
+		if (minimig_config.floppy.drives == 4) minimig_config.floppy.drives = 0;
 		break;
 
 	case CONFIG_PRESET_A1200:
@@ -991,6 +995,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.ide_cfg = 0;
+		if (minimig_config.floppy.drives == 4) minimig_config.floppy.drives = 0;
 		break;
 	}
 }
