@@ -2190,6 +2190,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	int len = strlen(name);
 	int img_type = 0; // disk image type (for C128 core): bit 0=dual sided, 1=raw GCR supported, 2=raw MFM supported, 3=high density
 
+	mac_disk_flush(index);
 	sd_image_cangrow[index] = (pre != 0);
 	sd_type[index] = SD_TYPE_DEFAULT ;
 	if (len)
@@ -3372,6 +3373,7 @@ void user_io_poll()
 		if (is_snes() || is_sgb()) snes_poll();
 		mdplus_poll(); // MD+ CDDA poll
 
+		mac_disk_poll();
 		for (int i = 0; i < 4; i++)
 		{
 			int disk = -1;
@@ -3540,7 +3542,8 @@ void user_io_poll()
 					if (sz && lba <= size)
 					{
 						diskled_on();
-						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
+						if (!mac_disk_write(disk, &sd_image[disk], sd_image_cangrow[disk], lba * blksz, buffer[disk], sz) &&
+							FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
 						{
 							if (!sd_image_cangrow[disk])
 							{
@@ -3572,6 +3575,7 @@ void user_io_poll()
 
 				int done = 0;
 				uint32_t offset;
+				mac_disk_before_read(disk, lba * blksz, 2ULL * sizeof(buffer[disk]) + sz);
 
 				if ((buffer_lba[disk] == -1LLU) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
 				{

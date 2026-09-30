@@ -16,6 +16,7 @@
 #include "menu.h"
 #include "shmem.h"
 #include "offload.h"
+#include "support/mac/mac_disk.h"
 
 #include "fpga_base_addr_ac5.h"
 #include "fpga_manager.h"
@@ -619,6 +620,7 @@ char *getappname()
 
 void app_restart(const char *path, const char *xml, const char *exe)
 {
+	mac_disk_flush_all();
 	sync();
 	fpga_core_reset(1);
 
