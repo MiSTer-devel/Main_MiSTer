@@ -1455,6 +1455,7 @@ void user_io_init(const char *path, const char *xml)
 	static char mainpath[512];
 	core_name[0] = 0;
 	disable_osd = 0;
+	mac_disk_init();
 
 	// Clean up old game ID when loading a new core
 	unlink("/tmp/GAMEID");
@@ -3374,8 +3375,11 @@ void user_io_poll()
 		mdplus_poll(); // MD+ CDDA poll
 
 		mac_disk_poll();
-		for (int i = 0; i < 4; i++)
+		int again = 0;
+		for (int i = 0; i < 4 || again; i++)
 		{
+			if (again && !mac_disk_wait_next()) break;
+			again = 0;
 			int disk = -1;
 			int ack = 0;
 			int op = 0;
@@ -3693,6 +3697,8 @@ void user_io_poll()
 				}
 			}
 			else break;
+
+			if (op) again = mac_disk_served(disk);
 		}
 	}
 

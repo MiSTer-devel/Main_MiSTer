@@ -8,11 +8,13 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #include "../../file_io.h"
 #include "../../user_io.h"
+#include "../../spi.h"
 #include "mac.h"
 #include "mac_disk.h"
 
@@ -133,6 +135,23 @@ void mac_disk_flush_all()
 	for (int d = 0; d < SLOTS; d++) mac_disk_flush(d);
 }
 
+// Tight service loop. With the core's SCSI cache off every 512-byte sector is
+// its own request, raised ~110 us after the guest drained the previous one, so
+// each sector used to wait a whole Main pass. Spin on SDSTAT for up to spin_us
+// after each request, for at most budget_us per pass.
+
+static uint32_t spin_us = 250;
+static uint32_t budget_us = 2000;
+static uint64_t pass_start;
+
+void mac_disk_init()
+{
+	if (const char *e = getenv("MAC_SD_SPIN_US")) spin_us = strtoul(e, 0, 0);
+	if (const char *e = getenv("MAC_SD_BUDGET_US")) budget_us = strtoul(e, 0, 0);
+	if (getenv("MAC_SD_SPIN_US") || getenv("MAC_SD_BUDGET_US"))
+		printf("mac_disk: spin %u us, budget %u us\n", spin_us, budget_us);
+}
+
 void mac_disk_poll()
 {
 	uint64_t now = 0;
@@ -143,5 +162,27 @@ void mac_disk_poll()
 		if (!any) continue;
 		if (!now) now = now_us();
 		if (now - last_write[d] >= IDLE_US) mac_disk_flush(d);
+	}
+	pass_start = 0;
+}
+
+int mac_disk_served(int disk)
+{
+	if (!spin_us || (disk != 0 && disk != 1) || !is_mac_scsi_optimized()) return 0;
+	if (disk == mac_cdrom_slot() || disk == mac_toolbox_slot() || disk == mac_cd_toolbox_slot()) return 0;
+	if (!pass_start) pass_start = now_us();
+	return 1;
+}
+
+// one-word SDSTAT read has no side effect (round-robin advances on the 2nd word)
+int mac_disk_wait_next()
+{
+	uint64_t t0 = now_us();
+	if (t0 - pass_start >= budget_us) return 0;
+	for (;;)
+	{
+		uint16_t c = spi_uio_cmd(UIO_GET_SDSTAT);
+		if ((c & 0x8000) && (c & 3)) return 1;
+		if (now_us() - t0 >= spin_us) return 0;
 	}
 }
