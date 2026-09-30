@@ -1,10 +1,6 @@
 // Mac SCSI family hard disks: write buffer.
-//
-// /media/fat is sync mounted, so every write() costs ~4 ms on the card no matter
-// the size. The Mac cores flush single sectors in LBA order and a Finder copy spent
-// 11 of 12 s in write(). Gather writes into runs, ack at once, write a run out when
-// it fills, when all runs are busy, before a read that overlaps it, after 20 ms idle,
-// on remount and before a restart. Runs never overlap each other.
+// /media/fat is sync-mounted (~4 ms/write), so buffer sector writes into runs, ack at once, and flush
+// when full, before overlapping reads, after 20 ms idle, on remount, and before restart.
 
 #include <stdint.h>
 #include <stdio.h>
@@ -135,10 +131,8 @@ void mac_disk_flush_all()
 	for (int d = 0; d < SLOTS; d++) mac_disk_flush(d);
 }
 
-// Tight service loop. With the core's SCSI cache off every 512-byte sector is
-// its own request, raised ~110 us after the guest drained the previous one, so
-// each sector used to wait a whole Main pass. Spin on SDSTAT for up to spin_us
-// after each request, for at most budget_us per pass.
+// Tight service loop: with the SCSI cache off, each 512-byte sector is a separate request (~110 us apart),
+// so spin on SDSTAT up to spin_us after each request (max budget_us per pass) instead of waiting a Main pass.
 
 static uint32_t spin_us = 250;
 static uint32_t budget_us = 2000;
@@ -174,7 +168,6 @@ int mac_disk_served(int disk)
 	return 1;
 }
 
-// one-word SDSTAT read has no side effect (round-robin advances on the 2nd word)
 int mac_disk_wait_next()
 {
 	uint64_t t0 = now_us();
