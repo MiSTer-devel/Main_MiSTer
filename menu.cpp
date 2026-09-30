@@ -63,7 +63,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "joymapping.h"
 #include "recent.h"
 #include "support.h"
-#include "support/minimig/floppy_config_command.h"
 #include "bootcore.h"
 #include "ide.h"
 #include "profiling.h"
@@ -5227,7 +5226,7 @@ void HandleUI(void)
 			{
 				strcpy(s, " dfx: ");
 				s[3] = i + '0';
-				if (i <= drives && !floppy_zero_active)
+				if (i < minimig_floppy_active_count())
 				{
 					menumask |= (1 << i);	// Make drives selectable
 					if ((df[i].status & DSK_INSERTED) || (minimig_config.externalfloppy.exDrives[i] == 0))
@@ -5281,7 +5280,7 @@ void HandleUI(void)
 			menustate = MENU_MINIMIG_MAIN1;
 			menusub = 8;
 		}
-		else if ((select || plus || minus) && (menusub <= drives))
+		else if ((select || plus || minus) && (menusub < minimig_floppy_active_count()))
 		{
 			uint16_t osdMask = spi_uio_cmd16(UIO_GET_OSDMASK, 0);
 			uint8_t driveMask = 0x0F;  // all four are available by default
@@ -5995,24 +5994,24 @@ void HandleUI(void)
 			adjvisible = 0;
 			uint16_t osdMask = spi_uio_cmd16(UIO_GET_OSDMASK, 0);
 			int requested_floppy_count = minimig_floppy_requested_count(minimig_config.floppy.drives);
-			int active_floppy_count = floppy_zero_active ? 0 : drives + 1;
+			m = 0;
 			// floppy drive info
 			// We display a line for each drive that's active
 			// in the config file, but grey out any that the FPGA doesn't think are active.
 			// We also print a help text in place of the last drive if it's inactive.
 			for (int i = 0; i < 4; i++)
 			{
-				if (!requested_floppy_count && !i)
+				if (i == requested_floppy_count)
 				{
+					MenuWrite(m++, " KP +/- to add/remove drives", (menusub == (uint32_t)i) && !requested_floppy_count, 1);
 					menumask |= 1;
-					MenuWrite(i, active_floppy_count ? " Floppy drives: 0 (reset)" : " Floppy drives: 0  KP +", menusub == 0, 0);
+					break;
 				}
-				else if (i == requested_floppy_count) MenuWrite(i, " KP +/- to add/remove drives", 0, 1);
 				else
 				{
 					strcpy(s, " dfx: ");
 					s[3] = i + '0';
-					if (i < active_floppy_count && i < requested_floppy_count)
+					if (i < minimig_floppy_active_count() && i < requested_floppy_count)
 					{
 						menumask |= (1 << i);	// Make enabled drives selectable
 
@@ -6064,21 +6063,12 @@ void HandleUI(void)
 					{
 						strcat(s, "* active after reset *");
 					}
-					else if (i < active_floppy_count)
-					{
-						strcat(s, "* disabled after reset *");
-					}
-					else
-					{
-						strcpy(s, "");
-					}
-					bool count_only_row = !active_floppy_count && !i && floppy_zero_supported && requested_floppy_count;
-					if (count_only_row) menumask |= 1;
-					MenuWrite(i, s, menusub == (uint32_t)i,
-					          ((i >= active_floppy_count) || (i >= requested_floppy_count)) && !count_only_row);
+
+					MenuWrite(m++, s, menusub == (uint32_t)i, ((i >= minimig_floppy_active_count()) || (i >= requested_floppy_count)));
 				}
 			}
-			m = 4;
+
+			MenuWrite(m++);
 			if (is_minimig() == 2)
 			{
 				if (minimig_cfg_available(CONFIG_PRESET_CD32)) menumask |= 0x10;
@@ -6156,29 +6146,26 @@ void HandleUI(void)
 	case MENU_MINIMIG_MAIN2:
 		if (menu) menustate = MENU_NONE1;
 		else if (plus && menusub < 4 &&
-		         minimig_floppy_step_drives(minimig_config.floppy.drives, 1, floppy_zero_supported) != minimig_config.floppy.drives)
+		         minimig_floppy_step_drives(minimig_config.floppy.drives, 1) != minimig_config.floppy.drives)
 		{
-			minimig_config.floppy.drives = minimig_floppy_step_drives(minimig_config.floppy.drives, 1, floppy_zero_supported);
+			minimig_config.floppy.drives = minimig_floppy_step_drives(minimig_config.floppy.drives, 1);
 			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 			minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 			menustate = MENU_MINIMIG_MAIN1;
 		}
 		else if (minus && menusub < 4 &&
-		         minimig_floppy_step_drives(minimig_config.floppy.drives, -1, floppy_zero_supported) != minimig_config.floppy.drives)
+		         minimig_floppy_step_drives(minimig_config.floppy.drives, -1) != minimig_config.floppy.drives)
 		{
 			minimig_config.externalfloppy.exDrives[minimig_config.floppy.drives] = 0;  // disable before remove
-			minimig_config.floppy.drives = minimig_floppy_step_drives(minimig_config.floppy.drives, -1, floppy_zero_supported);
+			minimig_config.floppy.drives = minimig_floppy_step_drives(minimig_config.floppy.drives, -1);
 			minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 			minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 			menustate = MENU_MINIMIG_MAIN1;
+			menusub = 0;
 		}
-		else if (select || recent || minus || plus)
+		else if (select || recent)
 		{
-			if (menusub < 4 && minimig_config.floppy.drives == 4)
-			{
-				menustate = MENU_MINIMIG_MAIN1;
-			}
-			else if (menusub < 4)
+			if (menusub < 4 && minimig_config.floppy.drives < 4)
 			{				
 				ioctl_index = 0;
 				if (minimig_config.externalfloppy.exDrives[menusub]) {
@@ -6308,7 +6295,8 @@ void HandleUI(void)
 		}
 		else if (c == KEY_BACKSPACE) // eject all floppies
 		{
-			for (int i = 0; i <= drives; i++) {
+			for (int i = 0; i < minimig_floppy_active_count(); i++)
+			{
 				df[i].status = 0;
 				FileClose(&df[i].file);
 				// We dont delete it, due to race conditions
@@ -6357,7 +6345,6 @@ void HandleUI(void)
 		memcpy(Selected_F[menusub], selPath, sizeof(Selected_F[menusub]));
 		if (mgl->done) recent_update(SelectedDir, selPath, SelectedLabel, 0);
 		InsertFloppy(&df[menusub], selPath);
-		if (menusub < drives) menusub++;
 		menustate = MENU_MINIMIG_MAIN1;
 		if (!mgl->done)
 		{

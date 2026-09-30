@@ -30,7 +30,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "../../hardware.h"
 #include "../../file_io.h"
 #include "minimig_fdd.h"
-#include "floppy_config_command.h"
 #include "minimig_config.h"
 #include "../../debug.h"
 #include "../../user_io.h"
@@ -46,9 +45,9 @@ adfTYPE df[4] = {};       // drive information structure
 
 struct mfm_data_block {
 	uint8_t sector_buffer[512];
-	uint8_t extra_bufferA[512];    // these three are just to make the flux data transfer more efficient 
+	uint8_t extra_bufferA[512];    // these three are just to make the flux data transfer more efficient
 	uint8_t extra_bufferB[512];    // The core can only buffer upto 2048 words (4k), and this is 1024 in total
-	uint8_t extra_bufferC[512];    // The code only writes to the core if rhere are LESS than 1024 words in the fifo	
+	uint8_t extra_bufferC[512];    // The code only writes to the core if rhere are LESS than 1024 words in the fifo
 };
 
 static mfm_data_block mfm_data;
@@ -81,7 +80,7 @@ uint16_t ADDCLOCKBITS(uint16_t value, uint16_t* previous) {
 	// Return original value with the clock bits added
 	value |= cBits;
 	*previous = value;
-	
+
 	return value;
 }
 
@@ -188,7 +187,7 @@ void SendSector(unsigned char* pData, unsigned char sector, unsigned char track,
 }
 
 void SendRawFlux(const uint16_t* buffer, uint32_t numWords) {
-	// This can fill the fifo (with 2048 words) in around 820uSec! 
+	// This can fill the fifo (with 2048 words) in around 820uSec!
 	fpga_spi_fast_block_write(buffer, numWords);
 }
 
@@ -218,7 +217,7 @@ void ReadTrack(adfTYPE* drive)
 
 	const bool fluxMode = drive->fluxFile && drive->fluxFile->fluxReady();
 
-	if (fluxMode) {		
+	if (fluxMode) {
 		drive->fluxFile->selectTrack(drive->track);
 		sector = 0;
 	}
@@ -248,8 +247,8 @@ void ReadTrack(adfTYPE* drive)
 	spi_w(0); // mfm words to transfer
 	DisableFpga();
 
-	if (track >= drive->tracks) track = drive->tracks - 1;	
-	
+	if (track >= drive->tracks) track = drive->tracks - 1;
+
 	// Its possible for flux to be needed at such a high rate that the menu freezes. This allows a small amount of breathing
 	int fluxModeCounter = 0;
 	while (fluxModeCounter < 32)
@@ -262,7 +261,7 @@ void ReadTrack(adfTYPE* drive)
 		} else {
 			FileReadSec(&drive->file, mfm_data.sector_buffer);
 		}
-		
+
 		EnableFpga();
 
 		// check if FPGA is still asking for data
@@ -676,8 +675,8 @@ void UpdateDriveStatus(void)
 static void UpdateFloppyPopulation(unsigned char c1)
 {
 	drives = (c1 >> 4) & 0x03;
-	floppy_zero_supported = minimig_floppy_zero_supported(c1);
-	floppy_zero_active = minimig_floppy_zero_active(c1);
+	floppy_zero_supported = c1 & 8;
+	floppy_zero_active = floppy_zero_supported && (c1 & 4);
 }
 
 void RefreshFloppyPopulation(void)
@@ -724,7 +723,7 @@ void InsertFloppy(adfTYPE* drive, char* path)
 	if (fext) {
 		fext++;
 		char tmp[4] = { 0 };
-		for (uint16_t i = 0; i < 3; i++) 
+		for (uint16_t i = 0; i < 3; i++)
 			if (fext[i]) tmp[i] = tolower(fext[i]); else break;
 
 		if (strcmp(tmp, "scp") == 0) {
@@ -737,20 +736,20 @@ void InsertFloppy(adfTYPE* drive, char* path)
 			menu_debugf("IPF file: \"%s\"\n", path);
 		}
 	}
-	
+
 	if (tmpFlux) {
 		drive->status = 0;
 		if (!tmpFlux->openFile(path)) {
 			delete tmpFlux;
 			return;
-		}		
+		}
 		menu_debugf("Inserting floppy: \"%s\"\n", path);
 		menu_debugf("file writable: %d\n", 0);
 		menu_debugf("file size: %lu (%lu KB)\n", drive->file.size, drive->file.size >> 10);
 		menu_debugf("drive tracks: %u\n", drive->tracks);
 		menu_debugf("drive status: 0x%02X\n", drive->status);
 
-		drive->tracks = tmpFlux->lastTrack() - tmpFlux->firstTrack();		
+		drive->tracks = tmpFlux->lastTrack() - tmpFlux->firstTrack();
 		drive->sector_offset = 0;
 		drive->lastBit = 0xAAAA;
 		drive->track = 0;
@@ -853,4 +852,29 @@ void FluxFile::closeFile() {
 	_closeFile();
 	if (strlen(tmpFilename)) unlink(tmpFilename);
 	tmpFilename[0] = '\0';
+}
+
+uint8_t minimig_floppy_requested_count(uint8_t num)
+{
+	return num == 4 ? 0 : num + 1;
+}
+
+uint8_t minimig_floppy_active_count()
+{
+	return floppy_zero_active ? 0 : drives + 1;
+}
+
+uint8_t minimig_floppy_step_drives(uint8_t num, int direction)
+{
+	if (direction > 0)
+	{
+		if (num == 4) return floppy_zero_supported ? 0 : 4;
+		return num < 3 ? num + 1 : num;
+	}
+	if (direction < 0)
+	{
+		if (!num) return floppy_zero_supported ? 4 : 0;
+		return num <= 3 ? num - 1 : num;
+	}
+	return num;
 }
