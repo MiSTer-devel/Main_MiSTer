@@ -423,6 +423,13 @@ char is_electron()
 	return (is_electron_type == 1);
 }
 
+static int is_marty_type = 0;
+char is_marty()
+{
+	if (!is_marty_type) is_marty_type = strcasecmp(orig_name, "Marty") ? 2 : 1;
+	return (is_marty_type == 1);
+}
+
 static int is_saturn_type = 0;
 char is_saturn()
 {
@@ -487,6 +494,7 @@ void user_io_read_core_name()
 	is_pcxt_type = 0;
 	is_electron_type = 0;
 	is_saturn_type = 0;
+	is_marty_type = 0;
 	is_n64_type = 0;
 	is_uneon_type = 0;
 	core_name[0] = 0;
@@ -1021,6 +1029,10 @@ static void parse_config()
 						pcecd_set_image(idx, str);
 						game_docs_init(str, 0);
 						cheats_init(str, 0);
+					}
+					else if (is_marty())
+					{
+						marty_set_image(idx, str);
 					}
 					else
 					{
@@ -1650,6 +1662,7 @@ void user_io_init(const char *path, const char *xml)
 
 					if (is_uneon()) x86_ide_set();
 					if (is_cdi()) cdi_load_root_nvram();
+					if (is_marty()) marty_init();
 
 					if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 					{
@@ -1747,6 +1760,7 @@ void user_io_init(const char *path, const char *xml)
 		}
 
 		send_rtc(3);
+		if (is_marty() && xml && isXmlName(xml) == 2) marty_mgl_premount();
 
 		// release reset
 		if (!is_minimig() && !is_st()) user_io_status_set("[0]", 0);
@@ -3398,6 +3412,8 @@ void user_io_poll()
 					blksz = CDI_CDIC_BUFFER_SIZE;
 				else if (mac_cdda_window(disk, lba))
 					blksz = 2352;   // Mac CD-DA: one whole frame per transaction
+				else if (is_marty())
+					blksz = marty_block_size(disk, 128 << ((c >> 6) & 7));
 				else
 					blksz = 128 << ((c >> 6) & 7);
 
@@ -3476,6 +3492,10 @@ void user_io_poll()
 			{
 				if (nxop < 0) break;
 			}
+			else if (int mop = marty_sd_service(disk, op, (uint32_t)lba, sz, ack))
+			{
+				if (mop < 0) break;
+      }
 			else if (int a3op = a3_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
 				if (a3op < 0) break;
@@ -3972,6 +3992,7 @@ void user_io_poll()
 	if (is_megacd()) mcd_poll();
 	if (is_pce()) pcecd_poll();
 	if (is_saturn()) saturn_poll();
+	if (is_marty()) marty_poll();
 	if (is_cdi()) cdi_poll();
 	if (is_psx()) psx_poll();
 	if (is_neogeo_cd()) neocd_poll();
