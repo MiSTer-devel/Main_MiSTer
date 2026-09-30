@@ -21,13 +21,7 @@ void marty_init();
 void marty_mgl_premount();
 void marty_poll();
 void marty_set_image(int index, const char *filename);
-void marty_read_cd(uint8_t *buf, int lba, int cnt);
-void marty_read_track(int index, uint8_t *buf, uint32_t lba);
-void marty_read_cmos(uint8_t *buf, uint32_t lba, int cnt);
-void marty_write_cmos(const uint8_t *buf, uint32_t lba);
-void marty_write_track(int index, const uint8_t *buf, uint32_t lba);
-void marty_fill_blank(int index, uint8_t *buf, uint32_t lba, int cnt);
 int  marty_block_size(int index, int wire_size);
-const uint8_t *marty_blank_image(int index, uint32_t *size);
+int  marty_sd_service(int disk, int op, uint32_t lba, int sz, int ack);
 
 #endif

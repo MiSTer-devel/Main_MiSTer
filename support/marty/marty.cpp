@@ -58,7 +58,7 @@ static void cmos_flush()
 	cmos_dirty = 0;
 }
 
-void marty_read_cmos(uint8_t *buf, uint32_t lba, int cnt)
+static void cmos_read(uint8_t *buf, uint32_t lba, int cnt)
 {
 	for (int i = 0; i < cnt; i++, lba++)
 	{
@@ -67,10 +67,9 @@ void marty_read_cmos(uint8_t *buf, uint32_t lba, int cnt)
 	}
 }
 
-void marty_write_cmos(const uint8_t *buf, uint32_t lba)
+static void cmos_write(const uint8_t *buf, uint32_t lba, int cnt)
 {
-	if (lba >= CMOS_SIZE / 512) return;
-	memcpy(cmos_ram + lba * 512, buf, 512);
+	for (int i = 0; i < cnt && lba + i < CMOS_SIZE / 512; i++) memcpy(cmos_ram + (lba + i) * 512, buf + i * 512, 512);
 	cmos_dirty = 1;
 	cmos_flush_at = GetTimer(300);
 }
@@ -117,6 +116,10 @@ static uint8_t  *chd_hunkbuf;
 static int       chd_hunknum = -1;
 static fileTYPE  cd_sub;           // CloneCD .sub
 
+#define CD_CACHE_N 6
+static uint8_t   cd_cache[CD_CACHE_N * MARTY_CD_BLOCK];
+static int       cd_cache_lba = -1;
+
 static void cd_unload()
 {
 	for (int i = 0; i < cd_nfiles; i++) FileClose(&cd_files[i].f);
@@ -129,6 +132,7 @@ static void cd_unload()
 	chd_hunknum = -1;
 	cd_ntracks = cd_nfiles = 0;
 	cd_present = 0;
+	cd_cache_lba = -1;
 }
 
 // named after the cue, else the first track file
@@ -415,9 +419,16 @@ static void cd_read_one(uint8_t *buf, int lba)
 	}
 }
 
-void marty_read_cd(uint8_t *buf, int lba, int cnt)
+static void cd_cache_fill(int lba)
 {
-	for (int i = 0; i < cnt; i++) cd_read_one(buf + i * MARTY_CD_BLOCK, lba + i);
+	for (int i = 0; i < CD_CACHE_N; i++) cd_read_one(cd_cache + i * MARTY_CD_BLOCK, lba + i);
+	cd_cache_lba = lba;
+}
+
+static void cd_read(uint8_t *buf, int lba, int cnt)
+{
+	if (cd_cache_lba < 0 || lba < cd_cache_lba || lba + cnt > cd_cache_lba + CD_CACHE_N) cd_cache_fill(lba);
+	memcpy(buf, cd_cache + (lba - cd_cache_lba) * MARTY_CD_BLOCK, cnt * MARTY_CD_BLOCK);
 }
 
 // D88 images are held in memory, raw ones read in place
@@ -566,7 +577,7 @@ static int rec_slot_table(const uint8_t *rec, int n, uint16_t *pitch)
 	return 1;
 }
 
-void marty_read_track(int index, uint8_t *rec, uint32_t lba)
+static void fd_read_track(int index, uint8_t *rec, uint32_t lba)
 {
 	fd_image *fd = fd_of(index);
 	memset(rec, 0, MARTY_TRACK_REC);
@@ -692,7 +703,7 @@ static void d88_write_track(fd_image *fd, const uint8_t *rec, uint32_t trk)
 	free(trk_buf);
 }
 
-void marty_write_track(int index, const uint8_t *rec, uint32_t lba)
+static void fd_write_track(int index, const uint8_t *rec, uint32_t lba)
 {
 	fd_image *fd = fd_of(index);
 	if (!fd->present || fd->wp) return;
@@ -928,19 +939,22 @@ static void mount_fdd_for_cd(const char *cd_path)
 	if (user_io_status_get(OPT_TWO_FDD)) mount_cd_floppy(cd_path, MARTY_SLOT_FDD2);
 }
 
-void marty_fill_blank(int index, uint8_t *buf, uint32_t lba, int cnt)
+// An automounted card only exists on disk once the game writes to it.
+static void card_blank_read(uint8_t *buf, uint32_t lba, int sz)
 {
-	memset(buf, 0, cnt * 512);
-	if (index != MARTY_SLOT_CARD) return;
-	size_t at = (size_t)lba * 512, n = (size_t)cnt * 512;
-	if (at < card_blank.size()) memcpy(buf, card_blank.data() + at, std::min(n, card_blank.size() - at));
+	memset(buf, 0, sz);
+	size_t at = (size_t)lba * 512;
+	if (at < card_blank.size()) memcpy(buf, card_blank.data() + at, std::min((size_t)sz, card_blank.size() - at));
 }
 
-const uint8_t *marty_blank_image(int index, uint32_t *size)
+static void card_create(fileTYPE *img, const uint8_t *buf, uint32_t lba, int sz)
 {
-	if (index == MARTY_SLOT_CARD) { *size = card_blank.size(); return card_blank.data(); }
-	*size = 0;
-	return NULL;
+	if (FileSave(img->path, card_blank.data(), card_blank.size()) && FileOpenEx(img, img->path, O_RDWR | O_SYNC))
+	{
+		FileSeek(img, (__off64_t)lba * 512, SEEK_SET);
+		FileWriteAdv(img, (void *)buf, sz);
+	}
+	else printf("Marty: cannot create %s\n", img->path);
 }
 
 static int save_blank_floppy(const char *path)
@@ -1004,6 +1018,49 @@ int marty_block_size(int index, int wire_size)
 	if (index == MARTY_SLOT_CD) return MARTY_CD_BLOCK;
 	if (index == MARTY_SLOT_FDD || index == MARTY_SLOT_FDD2) return MARTY_TRACK_REC;
 	return wire_size;
+}
+
+// CD, floppies, CMOS and a card not yet on disk are served here; other
+// slots are plain images. Returns 0 for those, -1 on a bad op.
+int marty_sd_service(int disk, int op, uint32_t lba, int sz, int ack)
+{
+	if (!is_marty()) return 0;
+	fileTYPE *img = get_image(disk);
+	int fdd = disk == MARTY_SLOT_FDD || disk == MARTY_SLOT_FDD2;
+	int card = disk == MARTY_SLOT_CARD && img->type == 2;
+	if (disk != MARTY_SLOT_CD && disk != MARTY_SLOT_CMOS && !fdd && !card) return 0;
+
+	static uint8_t buf[UIO_BUFFER_SIZE];
+	if (op == 2)
+	{
+		EnableIO();
+		spi_w(UIO_SECTOR_WR | ack);
+		spi_block_read(buf, user_io_get_width(), sz);
+		DisableIO();
+
+		if (fdd) fd_write_track(disk, buf, lba);
+		else if (card) card_create(img, buf, lba, sz);
+		else if (disk == MARTY_SLOT_CMOS) cmos_write(buf, lba, sz / 512);
+	}
+	else if (op & 1)
+	{
+		if (disk != MARTY_SLOT_CMOS) diskled_on();
+		if (fdd) fd_read_track(disk, buf, lba);
+		else if (card) card_blank_read(buf, lba, sz);
+		else if (disk == MARTY_SLOT_CMOS) cmos_read(buf, lba, sz / 512);
+		else cd_read(buf, lba, sz / MARTY_CD_BLOCK);
+
+		EnableIO();
+		spi_w(UIO_SECTOR_RD | ack);
+		spi_block_write(buf, user_io_get_width(), sz);
+		DisableIO();
+
+		// read ahead once the cache is used up, so the next request is ready
+		int next = lba + sz / MARTY_CD_BLOCK;
+		if (disk == MARTY_SLOT_CD && next == cd_cache_lba + CD_CACHE_N) cd_cache_fill(next);
+	}
+	else return -1;
+	return 1;
 }
 
 static void ss_remember(int which, const char *filename)
