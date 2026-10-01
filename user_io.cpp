@@ -2084,7 +2084,6 @@ int process_ss(const char *rom_name, int enable)
 	if (ss_timer && !CheckTimer(ss_timer)) return 0;
 	ss_timer = GetTimer(1000);
 
-	fileTYPE f = {};
 	for (int i = 0; i < 4; i++)
 	{
 		if (base[i])
@@ -2102,16 +2101,8 @@ int process_ss(const char *rom_name, int enable)
 					Info("Saving the state", 500);
 
 					*ss_sufx = i + '1';
-					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
-					{
-						int ret = FileWriteAdv(&f, base[i], size);
-						FileClose(&f);
-						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
-					}
-					else
-					{
-						printf("Unable to create file: %s\n", ss_name);
-					}
+					int ret = FileSave(ss_name, base[i], size);
+					if (ret) printf("Wrote %d bytes to file: %s\n", ret, ss_name);
 				}
 			}
 		}
