@@ -3539,7 +3539,7 @@ void video_fb_enable(int enable, int n)
 
 		DisableIO();
 		if (cfg.direct_video) set_vga_fb(enable);
-		if (is_menu()) user_io_status_set("[8:5]", (fb_enabled && !fb_num) ? 0x160 : 0);
+		if (is_menu()) user_io_status_set("[8:5]", (fb_enabled && !fb_num) ? 0xB : 0);
 	}
 }
 
