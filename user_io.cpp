@@ -300,6 +300,11 @@ static char rtc_is_utc()
 	return is_next();
 }
 
+char is_falcon()
+{
+	return !strcasecmp(orig_name, "Falcon");
+}
+
 static int is_minimig_type = 0;
 char is_minimig()
 {
@@ -2281,6 +2286,9 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 			if (ret) ret = next_mount_hook(index, name, &sd_image[index], &writable);
 				if (ret) ret = a3_mount_hook(index, name, &sd_image[index], &writable);
 
+				// Falcon SCSI slots: image registration, CD cue/bin translation (support/falcon)
+				if (ret) ret = falcon_scsi_mount_hook(index, name, &sd_image[index], &writable);
+
 				if (ret && is_c128())
 				{
 					printf("Disk image type: %d\n", img_type);
@@ -2301,6 +2309,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 		mac_cdrom_unmount(index);
 		next_unmount(index);
 		a3_unmount(index);
+		falcon_scsi_unmount(index);
 	}
 
 	buffer_lba[index] = -1;
@@ -3490,6 +3499,11 @@ void user_io_poll()
 			else if (int a3op = a3_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
 				if (a3op < 0) break;
+			}
+			else if (int falop = falcon_sd_service(disk, op, lba, sz, ack))
+			{
+				// Falcon SCSI response windows / translated CD (support/falcon); SPI is done by the hook.
+				if (falop < 0) break;
 			}
 			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
 			{
