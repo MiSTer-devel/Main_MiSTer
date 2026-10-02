@@ -574,3 +574,77 @@ void snes_poll(void)
 		DisableIO();
 	}
 }
+
+// bsnes v115 Emulator::Random: PCG32 XSH-RR, sequence 0, two steps per 64-bit draw.
+static uint32_t pcg_step(uint64_t *state)
+{
+	uint64_t x = *state;
+	*state = x * 6364136223846793005ULL + 1;
+	uint32_t xs = (uint32_t)(((x >> 18) ^ x) >> 27);
+	uint32_t r = (uint32_t)(x >> 59);
+	return (xs >> r) | (xs << ((32 - r) & 31));
+}
+
+static uint64_t pcg_draw(uint64_t *state)
+{
+	uint64_t hi = pcg_step(state);
+	return (hi << 32) | pcg_step(state);
+}
+
+// Power-on WRAM (128K) then ARAM (64K), as an emulator fills them (MiSTer.ini snes_ram_init):
+// 1 - bsnes v087/libsnes: a CRC32-polynomial Galois LFSR from seed 0 over both; the SMP then zeroes ARAM $F4-$F7.
+// 2 - BizHawk BSNESv115+: Random::array (Entropy Low) from BizHawk's fixed clock seed; ARAM 00.
+// 3 - WRAM 55, ARAM 00 (lsnes).
+void snes_send_ram_image(int index, int kind)
+{
+	static uint8_t buf[4096];
+	const uint32_t wram_size = 0x20000, total = 0x30000;
+	uint32_t iter = 0;
+	uint64_t pcg = 0;
+	uint32_t lobit = 0, hibit = 0;
+	uint8_t lovalue = 0, hivalue = 0;
+
+	if (kind == 2)
+	{
+		pcg_step(&pcg);
+		pcg += (uint32_t)(1495889068ULL * 1000000ULL);
+		pcg_step(&pcg);
+		lobit = pcg_draw(&pcg) & 3;
+		hibit = (lobit + 8 + (pcg_draw(&pcg) & 3)) & 15;
+		lovalue = pcg_draw(&pcg) & 255;
+		hivalue = pcg_draw(&pcg) & 255;
+		if (!(pcg_draw(&pcg) & 3)) lovalue = 0;
+		if (!(pcg_draw(&pcg) & 1)) hivalue = ~lovalue;
+	}
+
+	printf("Send power-on RAM image (kind %d) to index %d.\n", kind, index);
+	user_io_set_index(index);
+	user_io_set_download(1);
+	for (uint32_t pos = 0; pos < total; pos += sizeof(buf))
+	{
+		for (uint32_t i = 0; i < sizeof(buf); i++)
+		{
+			uint32_t addr = pos + i;
+			if (kind == 1)
+			{
+				iter = (iter >> 1) ^ (((iter & 1) - 1) & 0xEDB88320);
+				buf[i] = (uint8_t)iter;
+			}
+			else if (kind == 2 && addr < wram_size)
+			{
+				uint8_t v = (addr & (1 << lobit)) ? lovalue : hivalue;
+				if (addr & (1 << hibit)) v = ~v;
+				if (!(pcg_draw(&pcg) & 511)) v ^= 1 << (pcg_draw(&pcg) & 7);
+				if (!(pcg_draw(&pcg) & 2047)) v ^= 1 << (pcg_draw(&pcg) & 7);
+				buf[i] = v;
+			}
+			else
+			{
+				buf[i] = (kind == 3 && addr < wram_size) ? 0x55 : 0x00;
+			}
+		}
+		if (kind == 1 && pos == wram_size) memset(buf + 0xF4, 0, 4);
+		user_io_file_tx_data(buf, sizeof(buf));
+	}
+	user_io_set_download(0);
+}
