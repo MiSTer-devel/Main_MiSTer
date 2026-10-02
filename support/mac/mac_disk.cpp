@@ -1,106 +1,170 @@
 // Mac SCSI family hard disks: write buffer.
-// /media/fat is sync-mounted (~4 ms/write), so buffer sector writes into runs, ack at once, and flush
-// when full, before overlapping reads, after 20 ms idle, on remount, and before restart.
+// The image is opened O_SYNC on the sync-mounted card, so every write() costs
+// about 4 ms whatever its size, and the Mac cores write one 512-byte sector per
+// request: a Finder copy runs at ~250 KB/s. Gather the sectors into runs in RAM,
+// ack at once, and write a run out as one write() when it fills, when all runs
+// are in use, before a read that could see it, after 20 ms without writes,
+// 500 ms after it was started, and on remount. Copies on the Quadra 800 reach
+// ~1 MB/s.
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
+#include "../../hardware.h"
 #include "../../file_io.h"
 #include "../../user_io.h"
 #include "../../spi.h"
 #include "mac.h"
 #include "mac_disk.h"
 
+#define BLKSZ    512           // hps_io BLKSZ 2 on the family's disk slots
+#define SLOTS    2             // slots 0/1: the SCSI hard disks
 #define RUN_MAX  (64 * 1024)
-#define RUNS     8      // a copy interleaves data with catalog/bitmap writes; one run per stream
-#define IDLE_US  20000
-#define SLOTS    4
+#define RUNS     8             // a copy interleaves data with catalog/bitmap writes; one run per stream
+#define IDLE_MS  20
+#define AGE_MS   500
 
-struct run { uint64_t off; uint32_t len; uint64_t last; uint8_t data[RUN_MAX]; };
+struct run { uint64_t off; uint32_t len; unsigned long born, last; uint8_t data[RUN_MAX]; };
 
-static run       runs[SLOTS][RUNS];
-static uint64_t  last_write[SLOTS];
-static fileTYPE *slot_file[SLOTS];
-
-static uint64_t now_us()
+struct slot
 {
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return (uint64_t)ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000;
-}
+	run           *runs;       // allocated on the first buffered write
+	int            pending;    // runs holding data
+	unsigned long  last;
+	fileTYPE      *f;
+	dev_t          dev;        // the image the data belongs to
+	ino_t          ino;
+	char           path[1024];
+};
 
-static int eligible(int disk, fileTYPE *f, int cangrow)
-{
-	return disk >= 0 && disk < SLOTS && is_mac_scsi_family() &&
-		disk != mac_cdrom_slot() && disk != mac_toolbox_slot() && disk != mac_cd_toolbox_slot() &&
-		f->type != 2 && !cangrow && f->size;
-}
+static slot slots[SLOTS];
+static int  pending;
 
 static void flush_run(int disk, run *r)
 {
+	slot *s = &slots[disk];
 	uint32_t len = r->len;
 	if (!len) return;
 	r->len = 0;
+	s->pending--;
+	pending--;
 	diskled_on();
-	if (!FileSeek(slot_file[disk], r->off, SEEK_SET) || !FileWriteAdv(slot_file[disk], r->data, len))
-		printf("mac_disk: write %u @ %llu slot %d failed\n", len, (unsigned long long)r->off, disk);
+
+	int ok;
+	struct stat64 st;
+	if (s->f->filp && !fstat64(fileno(s->f->filp), &st) && st.st_dev == s->dev && st.st_ino == s->ino)
+	{
+		ok = FileSeek(s->f, r->off, SEEK_SET) && FileWriteAdv(s->f, r->data, len) == (int)len;
+	}
+	else
+	{
+		// the slot was ejected or remounted: the data belongs to the previous image
+		int fd = open(s->path, O_WRONLY | O_SYNC | O_CLOEXEC);
+		ok = fd >= 0 && pwrite64(fd, r->data, len, r->off) == (ssize_t)len;
+		if (fd >= 0) close(fd);
+	}
+	if (!ok) printf("mac_disk: write %u @ %llu to %s failed\n", len, (unsigned long long)r->off, s->path);
+}
+
+static void flush_overlap(int disk, uint64_t off, uint64_t len, run *keep)
+{
+	if (!slots[disk].pending) return;
+	for (int i = 0; i < RUNS; i++)
+	{
+		run *r = &slots[disk].runs[i];
+		if (r != keep && r->len && off < r->off + r->len && r->off < off + len) flush_run(disk, r);
+	}
 }
 
 // all runs of a slot, lowest offset first
 void mac_disk_flush(int disk)
 {
 	if (disk < 0 || disk >= SLOTS) return;
-	for (;;)
+	while (slots[disk].pending)
 	{
 		run *lo = 0;
 		for (int i = 0; i < RUNS; i++)
-			if (runs[disk][i].len && (!lo || runs[disk][i].off < lo->off)) lo = &runs[disk][i];
-		if (!lo) return;
+		{
+			run *r = &slots[disk].runs[i];
+			if (r->len && (!lo || r->off < lo->off)) lo = r;
+		}
 		flush_run(disk, lo);
 	}
 }
 
-static void flush_overlap(int disk, uint64_t off, uint64_t len, run *keep)
+void mac_disk_poll()
 {
-	for (int i = 0; i < RUNS; i++)
+	if (!pending) return;
+
+	unsigned long now = GetTimer(0);
+	for (int d = 0; d < SLOTS; d++)
 	{
-		run *r = &runs[disk][i];
-		if (r != keep && r->len && off < r->off + r->len && r->off < off + len) flush_run(disk, r);
+		slot *s = &slots[d];
+		if (!s->pending) continue;
+		if (now - s->last >= IDLE_MS)
+		{
+			mac_disk_flush(d);
+			continue;
+		}
+		for (int i = 0; i < RUNS; i++)
+			if (s->runs[i].len && now - s->runs[i].born >= AGE_MS) flush_run(d, &s->runs[i]);
 	}
 }
 
-int mac_disk_write(int disk, fileTYPE *f, int cangrow, uint64_t off, const uint8_t *data, uint32_t sz)
+static int can_buffer(int disk, fileTYPE *f, uint64_t off, int sz)
 {
-	if (!eligible(disk, f, cangrow) || !sz || sz > RUN_MAX || off + sz > (uint64_t)f->size)
-	{
-		mac_disk_flush(disk);
-		return 0;
-	}
+	slot *s = &slots[disk];
+	if (!f->filp || f->type == 2 || (f->mode & O_ACCMODE) == O_RDONLY) return 0;
+	if (sz <= 0 || sz > RUN_MAX || off + sz > (uint64_t)f->size) return 0;
 
-	slot_file[disk] = f;
-	uint64_t now = now_us();
+	if (!s->runs && !(s->runs = (run*)calloc(RUNS, sizeof(run)))) return 0;
+
+	if (!s->pending)
+	{
+		struct stat64 st;
+		if (fstat64(fileno(f->filp), &st)) return 0;
+		s->f = f;
+		s->dev = st.st_dev;
+		s->ino = st.st_ino;
+		snprintf(s->path, sizeof(s->path), "%s", f->path);
+	}
+	return 1;
+}
+
+static void stage(int disk, uint64_t off, const uint8_t *data, uint32_t sz)
+{
+	slot *s = &slots[disk];
+	unsigned long now = GetTimer(0);
 	run *free_r = 0, *lru = 0;
+
+	s->last = now;
 	for (int i = 0; i < RUNS; i++)
 	{
-		run *r = &runs[disk][i];
-		if (!r->len) { if (!free_r) free_r = r; continue; }
+		run *r = &s->runs[i];
+		if (!r->len)
+		{
+			if (!free_r) free_r = r;
+			continue;
+		}
 		if (off >= r->off && off + sz <= r->off + r->len)      // rewrite inside a run
 		{
 			memcpy(r->data + (off - r->off), data, sz);
-			r->last = last_write[disk] = now;
-			return 1;
+			r->last = now;
+			return;
 		}
 		if (off == r->off + r->len && r->len + sz <= RUN_MAX)  // extends a run
 		{
 			flush_overlap(disk, off, sz, r);
 			memcpy(r->data + r->len, data, sz);
 			r->len += sz;
-			r->last = last_write[disk] = now;
+			r->last = now;
 			if (r->len == RUN_MAX) flush_run(disk, r);
-			return 1;
+			return;
 		}
 		if (!lru || r->last < lru->last) lru = r;
 	}
@@ -109,73 +173,45 @@ int mac_disk_write(int disk, fileTYPE *f, int cangrow, uint64_t off, const uint8
 	flush_overlap(disk, off, sz, 0);
 	if (!free_r)
 	{
-		for (int i = 0; i < RUNS; i++) if (!runs[disk][i].len) { free_r = &runs[disk][i]; break; }
+		for (int i = 0; i < RUNS; i++) if (!s->runs[i].len) { free_r = &s->runs[i]; break; }
 		if (!free_r) { flush_run(disk, lru); free_r = lru; }
 	}
 	free_r->off = off;
 	free_r->len = sz;
+	free_r->born = free_r->last = now;
 	memcpy(free_r->data, data, sz);
-	free_r->last = last_write[disk] = now;
+	s->pending++;
+	pending++;
 	if (free_r->len == RUN_MAX) flush_run(disk, free_r);
-	return 1;
 }
 
-void mac_disk_before_read(int disk, uint64_t off, uint64_t len)
+int mac_disk_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack)
 {
-	if (disk < 0 || disk >= SLOTS) return;
-	flush_overlap(disk, off, len, 0);
-}
+	static uint8_t buf[UIO_BUFFER_SIZE];
 
-void mac_disk_flush_all()
-{
-	for (int d = 0; d < SLOTS; d++) mac_disk_flush(d);
-}
+	if (disk < 0 || disk >= SLOTS || !op || !is_mac_scsi_family()) return 0;
 
-// Tight service loop: with the SCSI cache off, each 512-byte sector is a separate request (~110 us apart),
-// so spin on SDSTAT up to spin_us after each request (max budget_us per pass) instead of waiting a Main pass.
-
-static uint32_t spin_us = 250;
-static uint32_t budget_us = 2000;
-static uint64_t pass_start;
-
-void mac_disk_init()
-{
-	if (const char *e = getenv("MAC_SD_SPIN_US")) spin_us = strtoul(e, 0, 0);
-	if (const char *e = getenv("MAC_SD_BUDGET_US")) budget_us = strtoul(e, 0, 0);
-	if (getenv("MAC_SD_SPIN_US") || getenv("MAC_SD_BUDGET_US"))
-		printf("mac_disk: spin %u us, budget %u us\n", spin_us, budget_us);
-}
-
-void mac_disk_poll()
-{
-	uint64_t now = 0;
-	for (int d = 0; d < SLOTS; d++)
+	uint64_t off = lba * BLKSZ;
+	if (op != 2)
 	{
-		int any = 0;
-		for (int i = 0; i < RUNS; i++) any |= (runs[d][i].len != 0);
-		if (!any) continue;
-		if (!now) now = now_us();
-		if (now - last_write[d] >= IDLE_US) mac_disk_flush(d);
+		// the generic read fills UIO_BUFFER_SIZE from here and may read the next one ahead
+		flush_overlap(disk, off, sz + 2ULL * UIO_BUFFER_SIZE, 0);
+		return 0;
 	}
-	pass_start = 0;
-}
 
-int mac_disk_served(int disk)
-{
-	if (!spin_us || (disk != 0 && disk != 1) || !is_mac_scsi_optimized()) return 0;
-	if (disk == mac_cdrom_slot() || disk == mac_toolbox_slot() || disk == mac_cd_toolbox_slot()) return 0;
-	if (!pass_start) pass_start = now_us();
-	return 1;
-}
-
-int mac_disk_wait_next()
-{
-	uint64_t t0 = now_us();
-	if (t0 - pass_start >= budget_us) return 0;
-	for (;;)
+	if (sz > (int)sizeof(buf) || !can_buffer(disk, f, off, sz))
 	{
-		uint16_t c = spi_uio_cmd(UIO_GET_SDSTAT);
-		if ((c & 0x8000) && (c & 3)) return 1;
-		if (now_us() - t0 >= spin_us) return 0;
+		mac_disk_flush(disk);
+		return 0;
 	}
+
+	EnableIO();
+	spi_w(UIO_SECTOR_WR | ack);
+	spi_block_read(buf, user_io_get_width(), sz);
+	DisableIO();
+
+	diskled_on();
+	user_io_bufferinvalidate(disk);
+	stage(disk, off, buf, sz);
+	return 1;
 }

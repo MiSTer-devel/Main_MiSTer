@@ -1455,7 +1455,6 @@ void user_io_init(const char *path, const char *xml)
 	static char mainpath[512];
 	core_name[0] = 0;
 	disable_osd = 0;
-	mac_disk_init();
 
 	// Clean up old game ID when loading a new core
 	unlink("/tmp/GAMEID");
@@ -2191,7 +2190,6 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	int len = strlen(name);
 	int img_type = 0; // disk image type (for C128 core): bit 0=dual sided, 1=raw GCR supported, 2=raw MFM supported, 3=high density
 
-	mac_disk_flush(index);
 	sd_image_cangrow[index] = (pre != 0);
 	sd_type[index] = SD_TYPE_DEFAULT ;
 	if (len)
@@ -3374,12 +3372,8 @@ void user_io_poll()
 		if (is_snes() || is_sgb()) snes_poll();
 		mdplus_poll(); // MD+ CDDA poll
 
-		mac_disk_poll();
-		int again = 0;
-		for (int i = 0; i < 4 || again; i++)
+		for (int i = 0; i < 4; i++)
 		{
-			if (again && !mac_disk_wait_next()) break;
-			again = 0;
 			int disk = -1;
 			int ack = 0;
 			int op = 0;
@@ -3480,9 +3474,9 @@ void user_io_poll()
 				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, ack);
 				else break;
 			}
-			else if (int macop = mac_sd_service(disk, op, lba, sz, ack))
+			else if (int macop = mac_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
-				// Mac Toolbox/CD slots (support/mac); SPI is done by the hook.
+				// Mac Toolbox/CD slots, hard-disk writes (support/mac); SPI is done by the hook.
 				if (macop < 0) break;
 			}
 			else if (int nxop = next_sd_service(disk, op, (uint32_t)lba, sz, ack))
@@ -3546,8 +3540,7 @@ void user_io_poll()
 					if (sz && lba <= size)
 					{
 						diskled_on();
-						if (!mac_disk_write(disk, &sd_image[disk], sd_image_cangrow[disk], lba * blksz, buffer[disk], sz) &&
-							FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
+						if (FileSeek(&sd_image[disk], lba * blksz, SEEK_SET))
 						{
 							if (!sd_image_cangrow[disk])
 							{
@@ -3579,7 +3572,6 @@ void user_io_poll()
 
 				int done = 0;
 				uint32_t offset;
-				mac_disk_before_read(disk, lba * blksz, 2ULL * sizeof(buffer[disk]) + sz);
 
 				if ((buffer_lba[disk] == -1LLU) || lba < buffer_lba[disk] || (lba + blks - buffer_lba[disk]) > buf_n)
 				{
@@ -3697,8 +3689,6 @@ void user_io_poll()
 				}
 			}
 			else break;
-
-			if (op) again = mac_disk_served(disk);
 		}
 	}
 

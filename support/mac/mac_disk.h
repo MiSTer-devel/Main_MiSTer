@@ -1,4 +1,5 @@
-// Mac SCSI family hard disks: RAM write buffer in front of the sync-mounted card.
+// Mac SCSI family hard disks (slots 0/1): RAM write buffer in front of the
+// O_SYNC image on the sync-mounted card. Reached only through the mac.cpp hooks.
 
 #ifndef MAC_DISK_H
 #define MAC_DISK_H
@@ -6,16 +7,15 @@
 #include <stdint.h>
 #include "../../file_io.h"
 
-int mac_disk_write(int disk, fileTYPE *f, int cangrow, uint64_t off, const uint8_t *data, uint32_t sz);
+// mac_sd_service() for the hard-disk slots: takes a write (SPI included) into
+// the buffer and returns 1, or returns 0 and leaves the request to the generic
+// path (reads, after writing out any buffered data they could see).
+int  mac_disk_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
 
-void mac_disk_before_read(int disk, uint64_t off, uint64_t len);
+// mac_poll(): write out idle or old data.
+void mac_disk_poll();
 
-void mac_disk_flush(int disk);  
-void mac_disk_flush_all();      
-void mac_disk_poll();            
-
-void mac_disk_init();            
-int  mac_disk_served(int disk);
-int  mac_disk_wait_next();       
+// mac_mount_hook(): write out what the slot holds for the previous image.
+void mac_disk_flush(int disk);
 
 #endif

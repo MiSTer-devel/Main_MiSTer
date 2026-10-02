@@ -19,7 +19,6 @@
 
 // Mac
 #include "support/mac/mac.h"
-#include "support/mac/mac_disk.h"
 
 // Archie support
 #include "support/archie/archie.h"
