@@ -1,11 +1,5 @@
 // Mac SCSI family hard disks: write buffer.
-// The image is opened O_SYNC on the sync-mounted card, so every write() costs
-// about 4 ms whatever its size, and the Mac cores write one 512-byte sector per
-// request: a Finder copy runs at ~250 KB/s. Gather the sectors into runs in RAM,
-// ack at once, and write a run out as one write() when it fills, when all runs
-// are in use, before a read that could see it, after 20 ms without writes,
-// 500 ms after it was started, and on remount. Copies on the Quadra 800 reach
-// ~1 MB/s.
+// Each O_SYNC write costs ~4 ms, so gather sectors into runs and write them out together.
 
 #include <stdint.h>
 #include <stdio.h>
@@ -22,10 +16,10 @@
 #include "mac.h"
 #include "mac_disk.h"
 
-#define BLKSZ    512           // hps_io BLKSZ 2 on the family's disk slots
-#define SLOTS    2             // slots 0/1: the SCSI hard disks
+#define BLKSZ    512
+#define SLOTS    2
 #define RUN_MAX  (64 * 1024)
-#define RUNS     8             // a copy interleaves data with catalog/bitmap writes; one run per stream
+#define RUNS     8
 #define IDLE_MS  20
 #define AGE_MS   500
 
@@ -33,11 +27,11 @@ struct run { uint64_t off; uint32_t len; unsigned long born, last; uint8_t data[
 
 struct slot
 {
-	run           *runs;       // allocated on the first buffered write
-	int            pending;    // runs holding data
+	run           *runs;
+	int            pending;
 	unsigned long  last;
 	fileTYPE      *f;
-	dev_t          dev;        // the image the data belongs to
+	dev_t          dev;
 	ino_t          ino;
 	char           path[1024];
 };
@@ -63,7 +57,7 @@ static void flush_run(int disk, run *r)
 	}
 	else
 	{
-		// the slot was ejected or remounted: the data belongs to the previous image
+		// slot was remounted: write to the previous image
 		int fd = open(s->path, O_WRONLY | O_SYNC | O_CLOEXEC);
 		ok = fd >= 0 && pwrite64(fd, r->data, len, r->off) == (ssize_t)len;
 		if (fd >= 0) close(fd);
@@ -81,7 +75,6 @@ static void flush_overlap(int disk, uint64_t off, uint64_t len, run *keep)
 	}
 }
 
-// all runs of a slot, lowest offset first
 void mac_disk_flush(int disk)
 {
 	if (disk < 0 || disk >= SLOTS) return;
@@ -151,13 +144,13 @@ static void stage(int disk, uint64_t off, const uint8_t *data, uint32_t sz)
 			if (!free_r) free_r = r;
 			continue;
 		}
-		if (off >= r->off && off + sz <= r->off + r->len)      // rewrite inside a run
+		if (off >= r->off && off + sz <= r->off + r->len)
 		{
 			memcpy(r->data + (off - r->off), data, sz);
 			r->last = now;
 			return;
 		}
-		if (off == r->off + r->len && r->len + sz <= RUN_MAX)  // extends a run
+		if (off == r->off + r->len && r->len + sz <= RUN_MAX)
 		{
 			flush_overlap(disk, off, sz, r);
 			memcpy(r->data + r->len, data, sz);
@@ -169,7 +162,6 @@ static void stage(int disk, uint64_t off, const uint8_t *data, uint32_t sz)
 		if (!lru || r->last < lru->last) lru = r;
 	}
 
-	// new run
 	flush_overlap(disk, off, sz, 0);
 	if (!free_r)
 	{
@@ -194,7 +186,7 @@ int mac_disk_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ac
 	uint64_t off = lba * BLKSZ;
 	if (op != 2)
 	{
-		// the generic read fills UIO_BUFFER_SIZE from here and may read the next one ahead
+		// covers the generic read buffer and its read-ahead
 		flush_overlap(disk, off, sz + 2ULL * UIO_BUFFER_SIZE, 0);
 		return 0;
 	}

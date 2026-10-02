@@ -26,12 +26,10 @@ int mac_cd_toolbox_slot();
 int mac_mount_hook(int index, const char *name, fileTYPE *f, int *writable);
 
 // Once per user_io_poll: announce the Toolbox slots to the core and run the
-// deferred CD work (SET NEXT CD remount, boot repulse), write out idle buffered
-// hard-disk data. No-op for other cores.
+// deferred CD work (SET NEXT CD remount, boot repulse). No-op for other cores.
 void mac_poll();
 
-// Slot service for the mac devices, SPI transfer included: the Toolbox and CD
-// slots, and hard-disk writes (write buffer). f is the slot's image.
+// Slot service for the mac devices, SPI transfer included.
 // Returns 0 = not ours (generic path serves it), 1 = serviced, -1 = ours but
 // unsupported op (caller breaks the sector-service loop).
 int mac_sd_service(int disk, fileTYPE *f, int op, uint32_t lba, int sz, int ack);

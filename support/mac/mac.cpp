@@ -47,7 +47,7 @@ int mac_cd_toolbox_slot() { return mac_toolbox_ok() ? MAC_CD_TOOLBOX_SLOT : -1; 
 // 2048-byte-sector virtual disc; flat ISO/TOAST stays on the generic path.
 int mac_mount_hook(int index, const char *name, fileTYPE *f, int *writable)
 {
-	mac_disk_flush(index);   // buffered writes belong to the previous image
+	mac_disk_flush(index);
 	if (index != mac_cdrom_slot()) return 1;
 
 	int r = mac_cdrom_mount(index, name);
@@ -118,7 +118,6 @@ int mac_cdda_window(int disk, uint32_t lba)
 
 int mac_sd_service(int disk, fileTYPE *f, int op, uint32_t lba, int sz, int ack)
 {
-	// Hard disks: writes go to the RAM write buffer (support/mac/mac_disk.cpp).
 	if (mac_disk_service(disk, f, op, lba, sz, ack)) return 1;
 
 	static uint8_t buf[4096];

@@ -3476,7 +3476,7 @@ void user_io_poll()
 			}
 			else if (int macop = mac_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
-				// Mac Toolbox/CD slots, hard-disk writes (support/mac); SPI is done by the hook.
+				// Mac Toolbox/CD slots (support/mac); SPI is done by the hook.
 				if (macop < 0) break;
 			}
 			else if (int nxop = next_sd_service(disk, op, (uint32_t)lba, sz, ack))
