@@ -124,6 +124,7 @@ fileTYPE *get_image(int i)
 }
 
 static uint32_t uart_mode;
+static int initram_index = -1;
 uint32_t user_io_get_uart_mode()
 {
 	return uart_mode;
@@ -779,6 +780,14 @@ static void parse_config()
 						ss_base = 0;
 						printf("Invalid base!\n");
 					}
+				}
+
+				if (!strncasecmp(p, "INITRAM", 7))
+				{
+					char *end = 0;
+					uint32_t idx = strtoul(p + 7, &end, 16);
+					if (end == p + 9 && (!*end || *end == ',')) initram_index = idx;
+					printf("Got INITRAM index: %d\n", initram_index);
 				}
 
 				if (!strncasecmp(p, "UART", 4))
@@ -2807,6 +2816,12 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		bytes2send -= off;
 
 		FileSeek(&f, off, SEEK_SET);
+	}
+
+	if (is_snes() && (index & 0x3F) <= 1 && bytes2send && !load_addr && cfg.snes_ram_init && initram_index >= 0)
+	{
+		const char *ext = strrchr(f.name, '.');
+		if (!ext || strcasecmp(ext, ".SPC")) snes_send_ram_image(initram_index, cfg.snes_ram_init);
 	}
 
 	/* transmit the entire file using one transfer */
