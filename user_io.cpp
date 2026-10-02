@@ -3474,7 +3474,7 @@ void user_io_poll()
 				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, ack);
 				else break;
 			}
-			else if (int macop = mac_sd_service(disk, op, lba, sz, ack))
+			else if (int macop = mac_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
 				// Mac Toolbox/CD slots (support/mac); SPI is done by the hook.
 				if (macop < 0) break;
