@@ -786,8 +786,12 @@ static void parse_config()
 				{
 					char *end = 0;
 					uint32_t idx = strtoul(p + 7, &end, 16);
-					if (end == p + 9 && (!*end || *end == ',')) initram_index = idx;
-					printf("Got INITRAM index: %d\n", initram_index);
+					if (end == p + 9 && (!*end || *end == ',') && isxdigit(p[7]) && idx > 1 && idx < 0x40)
+					{
+						initram_index = idx;
+						printf("Got INITRAM index: %d\n", initram_index);
+					}
+					else printf("Invalid INITRAM\n");
 				}
 
 				if (!strncasecmp(p, "UART", 4))
@@ -2818,11 +2822,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		FileSeek(&f, off, SEEK_SET);
 	}
 
-	if (is_snes() && (index & 0x3F) <= 1 && bytes2send && !load_addr && cfg.snes_ram_init && initram_index >= 0)
-	{
-		const char *ext = strrchr(f.name, '.');
-		if (!ext || strcasecmp(ext, ".SPC")) snes_send_ram_image(initram_index, cfg.snes_ram_init);
-	}
+	if (is_snes() && (index == 0 || (index & 0x3F) == 1) && bytes2send && !load_addr && initram_index >= 0)
+		snes_send_ram_image(initram_index);
 
 	/* transmit the entire file using one transfer */
 	printf("Selected file %s with %u bytes to send for index %d.%d\n", name, bytes2send, index & 0x3F, index >> 6);

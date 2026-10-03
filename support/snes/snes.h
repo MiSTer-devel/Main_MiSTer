@@ -10,7 +10,7 @@ uint8_t* snes_get_header(fileTYPE *f);
 void snes_patch_bs_header(fileTYPE *f, uint8_t *buf);
 void snes_msu_init(const char* name);
 void snes_poll(void);
-void snes_send_ram_image(int index, int kind);
+void snes_send_ram_image(int index);
 // Returns a malloc'd buffer of *out_size bytes; caller must free(). Returns NULL on failure.
 uint8_t* snes_get_mirrored_rom(fileTYPE *f, uint32_t *out_size);
 
