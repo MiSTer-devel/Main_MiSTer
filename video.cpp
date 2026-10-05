@@ -76,6 +76,9 @@ static int fb_enabled = 0;
 static int fb_width = 0;
 static int fb_height = 0;
 static int fb_num = 0;
+static int con_width = 0;
+static int con_height = 0;
+static int con_crt = 0;
 static int brd_x = 0;
 static int brd_y = 0;
 
@@ -3459,8 +3462,10 @@ void video_mode_adjust(bool force)
 
 static void fb_write_module_params()
 {
-	int width = fb_width;
-	int height = fb_height;
+	int width = con_width;
+	int height = con_height;
+	int font = !con_crt ? 0 : (height < 400) ? 8 : 16;
+
 	offload_add_work([=]
 	{
 		FILE *fp = fopen("/sys/module/MiSTer_fb/parameters/mode", "wt");
@@ -3468,6 +3473,13 @@ static void fb_write_module_params()
 		{
 			fprintf(fp, "%d %d %d %d %d\n", 8888, 1, width, height, width * 4);
 			fclose(fp);
+		}
+
+		for (int i = 1; font && i <= 2; i++)
+		{
+			char cmd[128];
+			snprintf(cmd, sizeof(cmd), "setfont -C /dev/tty%d /usr/share/consolefonts/lat1-%02d.psfu.gz", i, font);
+			system(cmd);
 		}
 	});
 }
@@ -3503,13 +3515,13 @@ void video_fb_enable(int enable, int n)
 				spi_w((uint16_t)(FB_EN | FB_FMT_RxB | FB_FMT_8888)); // format, enable flag
 				spi_w((uint16_t)fb_addr); // base address low word
 				spi_w(fb_addr >> 16);     // base address high word
-				spi_w(fb_width);          // frame width
-				spi_w(fb_height);         // frame height
+				spi_w(n ? fb_width : con_width);   // frame width
+				spi_w(n ? fb_height : con_height); // frame height
 				spi_w(xoff);                 // scaled left
 				spi_w(xoff + v_cur.item[1] - 1); // scaled right
 				spi_w(yoff);                 // scaled top
 				spi_w(yoff + v_cur.item[5] - 1); // scaled bottom
-				spi_w(fb_width * 4);      // stride
+				spi_w((n ? fb_width : con_width) * 4); // stride
 
 				//printf("Linux frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_width * 4);
 				if (!fb_num)
@@ -3575,6 +3587,15 @@ static void video_fb_config()
 
 	fb_width = v_cur.item[1] / fb_scale_x;
 	fb_height = v_cur.item[5] / fb_scale_y;
+
+	con_width = fb_width;
+	con_height = fb_height;
+	con_crt = (cfg.fb_terminal == 2 && !cfg.vga_scaler && !cfg.direct_video);
+	if (con_crt)
+	{
+		con_width = 640;
+		con_height = (cfg.menu_pal ? 288 : 240) * (cfg.forced_scandoubler ? 2 : 1);
+	}
 
 	brd_x = cfg.vscale_border / fb_scale_x;
 	brd_y = cfg.vscale_border / fb_scale_y;

@@ -870,7 +870,7 @@ const char* get_rbf_name_bootcore(char *str)
 
 static void vga_nag()
 {
-	if (video_fb_state())
+	if (video_fb_state() && !(cfg.fb_terminal == 2 && !cfg.vga_scaler && !cfg.direct_video))
 	{
 		EnableOsd_on(OSD_VGA);
 		OsdSetSize(16);
@@ -886,7 +886,10 @@ static void vga_nag()
 		OsdWrite(n++, " Either disable framebuffer:");
 		OsdWrite(n++, "       fb_terminal=0");
 		OsdWrite(n++);
-		OsdWrite(n++, "  or enable scaler on VGA:");
+		OsdWrite(n++, " or size it for CRT/VGA:");
+		OsdWrite(n++, "       fb_terminal=2");
+		OsdWrite(n++);
+		OsdWrite(n++, " or enable scaler on VGA:");
 		OsdWrite(n++, "       vga_scaler=1");
 		for (; n < OsdGetSize(); n++) OsdWrite(n);
 		OsdUpdate();
