@@ -274,6 +274,7 @@ void diskled_on();
 
 char is_minimig();
 char is_next();
+char is_falcon();
 char is_sharpmz();
 char is_menu();
 char is_x86();
