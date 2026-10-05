@@ -1646,7 +1646,7 @@ void HandleUI(void)
 				}
 				else
 				{
-					if ((get_key_mod() & (LGUI | RGUI)) && !is_x86() && !is_pcxt() && has_menu()) //Win+Menu
+					if ((get_key_mod() & (LGUI | RGUI)) && !is_f12_mod_needed() && has_menu()) //Win+Menu
 					{
 						menustate = MENU_COMMON1;
 					}
