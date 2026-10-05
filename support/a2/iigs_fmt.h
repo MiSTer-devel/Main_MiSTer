@@ -38,10 +38,9 @@ typedef enum {
 	DC_FLOPPY_35,    // 800K logical / 3.5" WOZ
 } DiskClass;
 
-// Classify a disk image from its leading bytes + size (+ optional extension,
-// lowercase, no dot, may be NULL). Probes content first (WOZ/2MG/DC42 magic),
-// falls back to size/extension for bare images. See IIGS_DISK_SUPPORT.md §4.
-DiskClass iigs_classify(const uint8_t *buf, size_t size, const char *ext);
+// Classify a disk image from its leading bytes + size (+ optional extension)
+DiskClass iigs_classify(const uint8_t *buf, size_t buf_len, size_t image_size,
+						const char *ext);
 
 // ---- 2MG / 2IMG ----
 typedef struct {
@@ -89,9 +88,20 @@ int woz_disk_type(const uint8_t *buf, size_t size);
 uint32_t woz_crc32(const uint8_t *data, size_t len);
 
 // ---- 140K sector order (DOS 3.3 <-> ProDOS) ----
+typedef enum {
+	A2_ORDER_UNKNOWN = -1,
+	A2_ORDER_DOS = 0,
+	A2_ORDER_PRODOS = 1,
+} A2SectorOrder;
+
+// Detect disk sector order from a ProDOS volume header or DOS 3.3 VTOC (.po, .do, .dsk)
+A2SectorOrder a2_detect_525_order(const uint8_t *image, size_t size);
+A2SectorOrder a2_resolve_525_order(const uint8_t *image, size_t size, const char *ext);
+
 // dst and src are 143360-byte 5.25" images; in-place safe only if dst!=src.
 void a2_dos_to_prodos(uint8_t *dst, const uint8_t *src);
 void a2_prodos_to_dos(uint8_t *dst, const uint8_t *src);
+void a2_dos_track_to_prodos(uint8_t *dst, const uint8_t *src);
 
 // ---- 5.25" 6-and-2 GCR (DSK <-> NIB) ----
 // dsk is 143360 bytes in DOS order; nib is 232960 bytes. Ported from the live
@@ -99,9 +109,15 @@ void a2_prodos_to_dos(uint8_t *dst, const uint8_t *src);
 void a2_dsk_to_nib(uint8_t *nib, const uint8_t *dsk);
 int  a2_nib_to_dsk(uint8_t *dsk, const uint8_t *nib);   // 1 if all tracks parsed
 
+// ---- 5.25" per-track nibble encode/decode (NIB write-back) ----
+// Re-encode a DOS-order track as canonical NIB; unchanged tracks remain byte-stable.
+void a2_dsk_track_to_nib(uint8_t *nibtrack, const uint8_t *dsktrack, int track);
+int  a2_nib_track_to_dsk(const uint8_t *nibtrack, uint8_t *dsktrack);
+
 // ---- 5.25" "easy WOZ" (DOS-order DSK <-> WOZ2) ----
 // Builds a fully-allocated standard-layout WOZ2 (all 35 tracks present) so the
 // core can read and write it; trivially reversible. Returns bytes written / 0.
+size_t a2_nib_to_woz525(uint8_t *woz, size_t woz_cap, const uint8_t *nib);
 size_t a2_dsk_to_woz525(uint8_t *woz, size_t woz_cap, const uint8_t *dsk);
 int    a2_woz525_to_dsk(uint8_t *dsk, const uint8_t *woz, size_t woz_size);
 

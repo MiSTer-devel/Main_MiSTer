@@ -406,6 +406,7 @@ static void ApplyConfiguration(char reloadkickstart)
 	{
 		minimig_ConfigChipset(&minimig_config);
 		minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+		minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 	}
 
 	printf("CPU clock     : %s\n", minimig_config.chipset & 0x01 ? "turbo" : "normal");
@@ -415,8 +416,20 @@ static void ApplyConfiguration(char reloadkickstart)
 	printf("Slow RAM size : %s\n", config_memory_slow_msg[memcfg >> 2 & 0x03]);
 	printf("Fast RAM size : %s\n", config_memory_fast_msg[(minimig_config.cpu >> 1) & 1][((memcfg >> 4) & 0x03) | ((memcfg & 0x80) >> 5)]);
 
-	printf("Floppy drives : %u\n", minimig_config.floppy.drives + 1);
+	printf("Floppy drives : %u\n", minimig_floppy_requested_count(minimig_config.floppy.drives));
 	printf("Floppy speed  : %s\n", minimig_config.floppy.speed ? "fast" : "normal");
+	for (int drive = 0; drive < minimig_floppy_requested_count(minimig_config.floppy.drives); drive++) {
+		if (minimig_config.externalfloppy.exDrives[drive]) {
+	        printf("   Drive DF%u : External Drive ", drive);
+			switch (minimig_config.externalfloppy.exDrives[drive]) {
+				case 1: printf("0/A"); break;
+				case 2: printf("1/B"); break;
+				case 3: printf("2"); break;
+				case 4: printf("3"); break;
+			}
+			printf("\n");
+		}
+	}
 
 	printf("\n");
 
@@ -453,6 +466,7 @@ static void ApplyConfiguration(char reloadkickstart)
 
 	minimig_ConfigChipset(&minimig_config);
 	minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
+	minimig_ConfigFloppyExt(minimig_config.externalfloppy.exDrives[0], minimig_config.externalfloppy.exDrives[1], minimig_config.externalfloppy.exDrives[2], minimig_config.externalfloppy.exDrives[3]);
 
 	if (minimig_config.memory & 0x40) UploadActionReplay();
 
@@ -497,19 +511,22 @@ static void ApplyConfiguration(char reloadkickstart)
 	minimig_ConfigVideo(minimig_config.scanlines);
 	minimig_ConfigAudio(minimig_config.audio);
 	minimig_ConfigAutofire(minimig_config.autofire, 0xC);
+	minimig_ConfigUserPort(minimig_config.userport);
 	minimig_set_extcfg(minimig_get_extcfg() & ~1);
 }
+
+
 
 int minimig_cfg_load(int num)
 {
 	static const char config_id[] = "MNMGCFG0";
 	int result = 0;
 
-	const char *filename = GetConfigurationName(num, 1);
+	const char* filename = GetConfigurationName(num, 1);
 
 	// load configuration data
 	int size;
-	if(filename && (size = FileLoadConfig(filename, 0, 0))>0)
+	if (filename && (size = FileLoadConfig(filename, 0, 0)) > 0)
 	{
 		BootPrint("Opened configuration file\n");
 		printf("Configuration file size: %s, %d\n", filename, size);
@@ -584,7 +601,21 @@ int minimig_cfg_load(int num)
 		minimig_config.cd32_drive.filename[0] = 0;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.cdtv_drive.filename[0] = 0;
+		minimig_config.externalfloppy.exDrives[0] = 0;
+		minimig_config.externalfloppy.exDrives[1] = 0;
+		minimig_config.externalfloppy.exDrives[2] = 0;
+		minimig_config.externalfloppy.exDrives[3] = 0;
+		minimig_config.userport = mm_userportMode::mmup_mp32pi;  // default as before
+
 		BootPrintEx(">>> No config found. Using defaults. <<<");
+	}
+
+	if ((minimig_config.cpu & 0x03) == 0x02) minimig_config.cpu |= 0x01;
+	RefreshFloppyPopulation();
+	if (minimig_config.floppy.drives == 4 && !floppy_zero_supported)
+	{
+		BootPrintEx("Zero floppy drives unsupported by this core; using DF0.");
+		minimig_config.floppy.drives = 0;
 	}
 
 	a2065_cfg_set(minimig_config.a2065_mode);
@@ -620,6 +651,8 @@ int minimig_cfg_load(int num)
 	ApplyConfiguration(1);
 	return(result);
 }
+
+
 
 void minimig_reset()
 {
@@ -828,7 +861,7 @@ void minimig_ConfigMemory(unsigned char memory)
 
 void minimig_ConfigCPU(unsigned char cpu)
 {
-	spi_uio_cmd8(UIO_MM2_CPU, cpu & 0x1f);
+	spi_uio_cmd8(UIO_MM2_CPU, cpu & 0x3f);
 }
 
 void minimig_ConfigChipset(mm_configTYPE *config)
@@ -839,7 +872,25 @@ void minimig_ConfigChipset(mm_configTYPE *config)
 
 void minimig_ConfigFloppy(unsigned char drives, unsigned char speed)
 {
-	spi_uio_cmd8(UIO_MM2_FLP, ((drives & 0x03) << 2) | (speed & 0x03));
+	if (drives == 4 && !floppy_zero_supported)
+	{
+		printf("Zero floppy drives unsupported by this core; using DF0.\n");
+		drives = 0;
+	}
+	spi_uio_cmd8(UIO_MM2_FLP, ((drives & 7) << 2) | (speed & 3));
+}
+
+void minimig_ConfigFloppyExt(unsigned char drive0, unsigned char drive1, unsigned char drive2, unsigned char drive3)
+{
+	printf("Floppy Ext 01: %x\n", drive0 | (drive1 << 3));
+	printf("Floppy Ext 23: %x\n", drive2 | (drive3 << 3));
+	spi_uio_cmd8(UIO_MM2_FLPEX01, drive0 | (drive1 << 3));
+	spi_uio_cmd8(UIO_MM2_FLPEX23, drive2 | (drive3 << 3));
+}
+
+void minimig_ConfigUserPort(mm_userportMode mode) {
+	printf("User Port: %s\n", mode == mm_userportMode::mmup_mp32pi ? "MT32pi":"MiSTer Floppy");
+	spi_uio_cmd8(UIO_MM2_USRPORT, mode == mm_userportMode::mmup_mp32pi ? 0 : 1);
 }
 
 void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask)
@@ -885,7 +936,7 @@ void minimig_cfg_set(int preset)
 	switch (preset)
 	{
 	case CONFIG_PRESET_CD32:
-		minimig_config.cpu = 3; // 68020, d-cache off;
+		minimig_config.cpu = 0x23; // 68020 14MHz, d-cache off;
 		minimig_config.chipset = (6 << 2); // AGA
 		minimig_config.memory = 3; // ChipRAM 2MB, FastRAM 0MB
 		minimig_set_kickstart(preset_rom_path(CD32_MAIN_ROM));
@@ -894,6 +945,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 1;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.ide_cfg = 0;
+		if (floppy_zero_supported) minimig_config.floppy.drives = 4;
 		break;
 
 	case CONFIG_PRESET_CDTV:
@@ -906,6 +958,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 1;
 		minimig_config.ide_cfg = 0;
+		if (minimig_config.floppy.drives == 4) minimig_config.floppy.drives = 0;
 		break;
 
 	case CONFIG_PRESET_A500:
@@ -917,6 +970,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.ide_cfg = 0;
+		if (minimig_config.floppy.drives == 4) minimig_config.floppy.drives = 0;
 		break;
 
 	case CONFIG_PRESET_A600:
@@ -928,10 +982,11 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.ide_cfg = 0;
+		if (minimig_config.floppy.drives == 4) minimig_config.floppy.drives = 0;
 		break;
 
 	case CONFIG_PRESET_A1200:
-		minimig_config.cpu = 3; // 68020, d-cache off;
+		minimig_config.cpu = 0x23; // 68020 14MHz, d-cache off;
 		minimig_config.chipset = (6 << 2); // AGA
 		minimig_config.memory = 3; // ChipRAM 2MB, FastRAM 0MB
 		minimig_set_kickstart(preset_rom_path(A1200_MAIN_ROM));
@@ -939,6 +994,7 @@ void minimig_cfg_set(int preset)
 		minimig_config.cd32_drive.cfg = 0;
 		minimig_config.cdtv_drive.cfg = 0;
 		minimig_config.ide_cfg = 0;
+		if (minimig_config.floppy.drives == 4) minimig_config.floppy.drives = 0;
 		break;
 	}
 }

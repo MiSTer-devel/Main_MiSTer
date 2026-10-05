@@ -1,4 +1,4 @@
-// Mac SCSI family (MacLC/MacLCII, MacIIvi, LBMacTwo) — glue between the
+// Mac SCSI family (MacLC/MacLCII, MacPlus, MacQuadra800) — glue between the
 // common code and the mac support modules. All hooks self-gate on the family.
 
 #ifndef MAC_H
@@ -12,8 +12,10 @@
 // Cores sharing the MacLC scsi.v target and its HPS features.
 char is_mac_scsi_family();
 
-// hps_io slots; -1 = the core lacks the device. One shared family layout
-// (LBMacTwo: none). A wrong slot corrupts another device's sector stream.
+char is_mac_scsi_optimized();
+
+// hps_io slots; -1 = the core lacks the device. One shared family layout.
+// A wrong slot corrupts another device's sector stream.
 int mac_toolbox_slot();
 int mac_cdrom_slot();
 int mac_cd_toolbox_slot();
@@ -30,7 +32,7 @@ void mac_poll();
 // Slot service for the mac devices, SPI transfer included.
 // Returns 0 = not ours (generic path serves it), 1 = serviced, -1 = ours but
 // unsupported op (caller breaks the sector-service loop).
-int mac_sd_service(int disk, int op, uint32_t lba, int sz, int ack);
+int mac_sd_service(int disk, fileTYPE *f, int op, uint32_t lba, int sz, int ack);
 
 // True when lba sits in the CD slot's raw CD-DA window (blksz 2352).
 int mac_cdda_window(int disk, uint32_t lba);

@@ -26,6 +26,11 @@ void EnableOsd_on(int target)
 	osd_target = target;
 }
 
+int OsdTarget()
+{
+	return osd_target;
+}
+
 void EnableOsd()
 {
 	if (!(osd_target & OSD_ALL)) osd_target = OSD_ALL;

@@ -46,6 +46,7 @@ void spi_block_write(const uint8_t *addr, int wide, int sz = 512);
 
 /* OSD related SPI functions */
 void EnableOsd_on(int target);
+int  OsdTarget();
 void spi_osd_cmd_cont(uint8_t cmd);
 void spi_osd_cmd(uint8_t cmd);
 void spi_osd_cmd8_cont(uint8_t cmd, uint8_t parm);

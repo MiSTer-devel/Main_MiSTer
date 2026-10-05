@@ -19,6 +19,7 @@
 #include "file_io.h"
 #include "mat4x4.h"
 #include "menu.h"
+#include "osd.h"
 #include "video.h"
 #include "input.h"
 #include "shmem.h"
@@ -75,6 +76,9 @@ static int fb_enabled = 0;
 static int fb_width = 0;
 static int fb_height = 0;
 static int fb_num = 0;
+static int con_width = 0;
+static int con_height = 0;
+static int con_crt = 0;
 static int brd_x = 0;
 static int brd_y = 0;
 
@@ -1745,21 +1749,24 @@ static void hdmi_config_set_mode(vmode_custom_t *vm)
 
 static void edid_parse_cea_ext(uint8_t *cea)
 {
+	if (cea[2] < 4 || cea[2] > 127) return;
+
 	uint8_t *data_block_end = cea + cea[2];
 	uint8_t *cur_blk_start = cea + 4;
 	uint8_t *cur_blk_data = cur_blk_start;
-	while (cur_blk_start != data_block_end)
+	while (cur_blk_start < data_block_end)
 	{
 		cur_blk_data = cur_blk_start;
 		uint8_t blk_tag = (*cur_blk_data & 0xe0) >> 5;
 		uint8_t blk_size = *cur_blk_data & 0x1f;
 		uint8_t blk_data_size = blk_size; //size of actual data in the block, it might be adjusted if the first byte is extended tag
+		if (cur_blk_start + blk_size + 1 > data_block_end) break;
 		cur_blk_data++;
 		//vendor specific block might be the only one?
 
 		uint8_t is_vendor_specific = 0;
 		if (blk_tag == 0x03) is_vendor_specific = 1;
-		if (blk_tag == 0x07)
+		if (blk_tag == 0x07 && blk_size)
 		{
 			if (*cur_blk_data == 0x01) is_vendor_specific = 1;
 			cur_blk_data++; //The extended tag uses the next byte for the type. We may not need it?
@@ -1771,7 +1778,7 @@ static void edid_parse_cea_ext(uint8_t *cea)
 			int oui = cur_blk_data[0] | cur_blk_data[1] << 8 | cur_blk_data[2] << 16;
 			cur_blk_data += 3;
 			blk_data_size -= 3;
-			if (oui == 0x00001a) //AMD block
+			if (oui == 0x00001a && blk_data_size >= 4) //AMD block
 			{
 				uint8_t min_fr = cur_blk_data[2];
 
@@ -1808,6 +1815,7 @@ static int find_edid_vrr_capability()
 {
 	uint8_t *cur_ext = NULL;
 	uint8_t ext_cnt = edid[126];
+	if (ext_cnt > 15) ext_cnt = 15;
 
 	//Probably only one extension, but just in case...
 	for (int i = 0; i < ext_cnt; i++)
@@ -1935,9 +1943,9 @@ static int read_edid(bool force = false)
 	memcpy(edid, buf, sizeof(edid));
 
 	printf("EDID:\n");
-	uint8_t n = edid[126] + 1;
-	if (n > sizeof(edid) / 128) n = sizeof(edid) / 128;
-	hexdump(edid, n*128, 0);
+	uint8_t n = edid[126];
+	if (n > 15) n = 15;
+	hexdump(edid, (n + 1)*128, 0);
 
 	cache_raw_edid_mfg_id(edid);
 
@@ -2108,7 +2116,7 @@ static void set_vrr_mode()
 		return;
 	}
 
-	find_edid_vrr_capability();
+	if (is_edid_valid()) find_edid_vrr_capability();
 
 	if (cfg.vrr_mode == 1) //autodetect
 	{
@@ -3587,8 +3595,10 @@ void video_mode_adjust(bool force)
 
 static void fb_write_module_params()
 {
-	int width = fb_width;
-	int height = fb_height;
+	int width = con_width;
+	int height = con_height;
+	int font = !con_crt ? 0 : (height < 400) ? 8 : 16;
+
 	offload_add_work([=]
 	{
 		FILE *fp = fopen("/sys/module/MiSTer_fb/parameters/mode", "wt");
@@ -3596,6 +3606,13 @@ static void fb_write_module_params()
 		{
 			fprintf(fp, "%d %d %d %d %d\n", 8888, 1, width, height, width * 4);
 			fclose(fp);
+		}
+
+		for (int i = 1; font && i <= 2; i++)
+		{
+			char cmd[128];
+			snprintf(cmd, sizeof(cmd), "setfont -C /dev/tty%d /usr/share/consolefonts/lat1-%02d.psfu.gz", i, font);
+			system(cmd);
 		}
 	});
 }
@@ -3631,13 +3648,13 @@ void video_fb_enable(int enable, int n)
 				spi_w((uint16_t)(FB_EN | FB_FMT_RxB | FB_FMT_8888)); // format, enable flag
 				spi_w((uint16_t)fb_addr); // base address low word
 				spi_w(fb_addr >> 16);     // base address high word
-				spi_w(fb_width);          // frame width
-				spi_w(fb_height);         // frame height
+				spi_w(n ? fb_width : con_width);   // frame width
+				spi_w(n ? fb_height : con_height); // frame height
 				spi_w(xoff);                 // scaled left
 				spi_w(xoff + v_cur.item[1] - 1); // scaled right
 				spi_w(yoff);                 // scaled top
 				spi_w(yoff + v_cur.item[5] - 1); // scaled bottom
-				spi_w(fb_width * 4);      // stride
+				spi_w((n ? fb_width : con_width) * 4); // stride
 
 				//printf("Linux frame buffer: %dx%d, stride = %d bytes\n", fb_width, fb_height, fb_width * 4);
 				if (!fb_num)
@@ -3667,7 +3684,7 @@ void video_fb_enable(int enable, int n)
 
 		DisableIO();
 		if (cfg.direct_video) set_vga_fb(enable);
-		if (is_menu()) user_io_status_set("[8:5]", (fb_enabled && !fb_num) ? 0x160 : 0);
+		if (is_menu()) user_io_status_set("[8:5]", (fb_enabled && !fb_num) ? 0xB : 0);
 	}
 }
 
@@ -3703,6 +3720,15 @@ static void video_fb_config()
 
 	fb_width = v_cur.item[1] / fb_scale_x;
 	fb_height = v_cur.item[5] / fb_scale_y;
+
+	con_width = fb_width;
+	con_height = fb_height;
+	con_crt = (cfg.fb_terminal == 2 && !cfg.vga_scaler && !cfg.direct_video);
+	if (con_crt)
+	{
+		con_width = 640;
+		con_height = (cfg.menu_pal ? 288 : 240) * (cfg.forced_scandoubler ? 2 : 1);
+	}
 
 	brd_x = cfg.vscale_border / fb_scale_x;
 	brd_y = cfg.vscale_border / fb_scale_y;
@@ -4060,10 +4086,11 @@ void video_menu_bg(int n, int idle)
 					vs_wait();
 				};
 
-				if (cfg.osd_rotate)
+				int rot = OsdGetRotation(true);
+				if (rot)
 				{
 					imlib_context_set_image(logo);
-					imlib_image_orientate(cfg.osd_rotate == 1 ? 3 : 1);
+					imlib_image_orientate(rot == 1 ? 3 : 1);
 				}
 			}
 			else
@@ -4167,11 +4194,12 @@ void video_menu_bg(int n, int idle)
 
 			int dst_w, dst_h;
 			int dst_x, dst_y;
-			if (cfg.osd_rotate)
+			int rot = OsdGetRotation(true);
+			if (rot)
 			{
 				dst_h = height / 2;
 				dst_w = src_w * dst_h / src_h;
-				if (cfg.osd_rotate == 1)
+				if (rot == 1)
 				{
 					dst_x = brd_x;
 					dst_y = height - dst_h;

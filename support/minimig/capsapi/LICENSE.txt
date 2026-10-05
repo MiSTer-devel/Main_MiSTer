@@ -1,0 +1,52 @@
+C.A.P.S. - The Classic Amiga Preservation Society
+Access API, Open License Agreement
+
+
+PREAMBLE
+
+This distribution (the package collectively referred to as the C.A.P.S.
+"Access API") is to enable "plugin" support for C.A.P.S. media images,
+where the actual C.A.P.S. library (which has its own license, and is
+available separately from the website) may or may not be present.
+
+It is intended for commercial (for-profit) applications, or those
+applications that have a commerical version (for ease of transition)
+that are not allowed to distribute the actual C.A.P.S. library as
+defined by the license that comes with the C.A.P.S. library. For
+freeware applications, it is better to use the C.A.P.S. API directly
+and those applications can ignore this distribution entirely.
+
+LICENSE
+
+This distribution, the C.A.P.S. media "Access API" can be statically
+linked to any program. No actual functionality is provided however.
+For functionality, users need to download the complete distribution
+from the C.A.P.S. website, and that distribution is bound by its own
+license.
+
+Commerical distributions of software products should make users aware
+that they can enable C.A.P.S. media support by downloading and
+installing the offical distribution from the website where appropriate.
+
+The source code in this distribution should not be modified for obvious
+reasons, however, this "Access API" package can used however
+appropriate and this license need not be included with distributions
+of the software product.
+
+The most current version of this license is kept on the C.A.P.S.
+web site. Due notice shall be given if ever the license changes,
+then all versions of the Technology will be constrained by the
+newer license.
+    
+
+Copyright and Trademark Notices:
+--------------------------------
+The Access API is Copyright (c) C.A.P.S. 2004. All rights reserved.
+The documentation and all computer files are also Copyright
+(c) C.A.P.S. 2004. All rights reserved. All other trademarks are the
+property of their respective owners.
+
+
+C.A.P.S.
+The Classic Amiga Preservation Society
+http://www.caps-project.org

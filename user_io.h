@@ -99,6 +99,9 @@
 #define UIO_MM2_FLP     0xF7 //0x44
 #define UIO_MM2_HDD     0xF8 //0x54
 #define UIO_MM2_JOY     0xF9 //0x64
+#define UIO_MM2_FLPEX01 0xFA 
+#define UIO_MM2_FLPEX23 0xFB 
+#define UIO_MM2_USRPORT 0xFC
 
 #define JOY_RIGHT       0x01
 #define JOY_LEFT        0x02
@@ -259,7 +262,7 @@ const char* GetUARTbaud_label(int mode, int idx);
 int GetUARTbaud_idx(int mode);
 uint32_t ValidateUARTbaud(int mode, uint32_t baud);
 char * GetMidiLinkSoundfont();
-void user_io_store_filename(char *filename);
+void user_io_store_filename(const char *filename);
 int user_io_use_cheats();
 
 int process_ss(const char *rom_name, int enable = 1);
@@ -270,11 +273,15 @@ void diskled_on();
 #define DISKLED_OFF void()
 
 char is_minimig();
+char is_next();
+char is_falcon();
 char is_sharpmz();
 char is_menu();
 char is_x86();
 char is_snes();
 char is_sgb();
+char is_apple2();
+char user_io_a2_woz_enabled();
 char is_neogeo();
 char is_neogeo_cd();
 char is_megacd();
@@ -294,6 +301,7 @@ char is_uneon();
 char is_atari800();
 char is_atari5200();
 char is_3do();
+char is_marty();
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()

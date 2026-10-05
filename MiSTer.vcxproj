@@ -94,6 +94,7 @@
     <ClCompile Include="support\chd\mister_chd.cpp" />
     <ClCompile Include="support\megacd\megacd.cpp" />
     <ClCompile Include="support\megacd\megacdd.cpp" />
+    <ClCompile Include="support\minimig\ipffile.cpp" />
     <ClCompile Include="support\minimig\akiko_cd32.cpp" />
     <ClCompile Include="support\minimig\cdtv_cd.cpp" />
     <ClCompile Include="support\minimig\minimig_a2065.cpp" />
@@ -106,6 +107,7 @@
     <ClCompile Include="support\minimig\minimig_config.cpp" />
     <ClCompile Include="support\minimig\minimig_fdd.cpp" />
     <ClCompile Include="support\minimig\minimig_share.cpp" />
+    <ClCompile Include="support\minimig\scpfile.cpp" />
     <ClCompile Include="support\n64\n64.cpp" />
     <ClCompile Include="support\n64\n64_joy_emu.cpp" />
     <ClCompile Include="support\neogeo\neogeocd.cpp" />
