@@ -2162,6 +2162,7 @@ bool FileOpenTextReader( fileTextReader *reader, const char *filename )
 				reader->pos = reader->buffer;
 				return true;
 			}
+			free(buf);
 		}
 	}
 	return false;

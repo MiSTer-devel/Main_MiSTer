@@ -1729,21 +1729,24 @@ static void hdmi_config_set_mode(vmode_custom_t *vm)
 
 static void edid_parse_cea_ext(uint8_t *cea)
 {
+	if (cea[2] < 4 || cea[2] > 127) return;
+
 	uint8_t *data_block_end = cea + cea[2];
 	uint8_t *cur_blk_start = cea + 4;
 	uint8_t *cur_blk_data = cur_blk_start;
-	while (cur_blk_start != data_block_end)
+	while (cur_blk_start < data_block_end)
 	{
 		cur_blk_data = cur_blk_start;
 		uint8_t blk_tag = (*cur_blk_data & 0xe0) >> 5;
 		uint8_t blk_size = *cur_blk_data & 0x1f;
 		uint8_t blk_data_size = blk_size; //size of actual data in the block, it might be adjusted if the first byte is extended tag
+		if (cur_blk_start + blk_size + 1 > data_block_end) break;
 		cur_blk_data++;
 		//vendor specific block might be the only one?
 
 		uint8_t is_vendor_specific = 0;
 		if (blk_tag == 0x03) is_vendor_specific = 1;
-		if (blk_tag == 0x07)
+		if (blk_tag == 0x07 && blk_size)
 		{
 			if (*cur_blk_data == 0x01) is_vendor_specific = 1;
 			cur_blk_data++; //The extended tag uses the next byte for the type. We may not need it?
@@ -1755,7 +1758,7 @@ static void edid_parse_cea_ext(uint8_t *cea)
 			int oui = cur_blk_data[0] | cur_blk_data[1] << 8 | cur_blk_data[2] << 16;
 			cur_blk_data += 3;
 			blk_data_size -= 3;
-			if (oui == 0x00001a) //AMD block
+			if (oui == 0x00001a && blk_data_size >= 4) //AMD block
 			{
 				uint8_t min_fr = cur_blk_data[2];
 
@@ -1792,6 +1795,7 @@ static int find_edid_vrr_capability()
 {
 	uint8_t *cur_ext = NULL;
 	uint8_t ext_cnt = edid[126];
+	if (ext_cnt > 15) ext_cnt = 15;
 
 	//Probably only one extension, but just in case...
 	for (int i = 0; i < ext_cnt; i++)
@@ -1919,9 +1923,9 @@ static int read_edid(bool force = false)
 	memcpy(edid, buf, sizeof(edid));
 
 	printf("EDID:\n");
-	uint8_t n = edid[126] + 1;
-	if (n > sizeof(edid) / 128) n = sizeof(edid) / 128;
-	hexdump(edid, n*128, 0);
+	uint8_t n = edid[126];
+	if (n > 15) n = 15;
+	hexdump(edid, (n + 1)*128, 0);
 
 	cache_raw_edid_mfg_id(edid);
 
@@ -2092,7 +2096,7 @@ static void set_vrr_mode()
 		return;
 	}
 
-	find_edid_vrr_capability();
+	if (is_edid_valid()) find_edid_vrr_capability();
 
 	if (cfg.vrr_mode == 1) //autodetect
 	{
