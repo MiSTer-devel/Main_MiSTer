@@ -3723,7 +3723,7 @@ static void video_fb_config()
 
 	con_width = fb_width;
 	con_height = fb_height;
-	con_crt = (cfg.fb_terminal == 2 && !cfg.vga_scaler && !cfg.direct_video);
+	con_crt = (cfg.fb_terminal == 2 && !cfg.vga_scaler && !cfg.direct_video && !cfg.fx_direct);
 	if (con_crt)
 	{
 		con_width = 640;
