@@ -1470,6 +1470,7 @@ void user_io_init(const char *path, const char *xml)
 
 	// Same for the NeXT ethernet bridge.
 	next_enet_stop();
+	sun_enet_stop();
 
 	// we need to set the directory to where the XML file (MRA) is
 	// not the RBF. The RBF will be in arcade, which the user shouldn't
@@ -1631,6 +1632,8 @@ void user_io_init(const char *path, const char *xml)
 				// a branch of the chain below, or the core skips the boot
 				// ROM load at its end and comes up with no ROM at all.
 				if (is_next()) next_enet_start();
+				// before the boot ROMs: the Sun-2's ID PROM goes in while it is held in reset
+				if (is_sun_family()) sun_enet_start();
 
 				if (xml && isXmlName(xml) == 1)
 				{
@@ -2283,6 +2286,8 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 
 				// Mac CD slot: CUE/CHD/raw image translation (support/mac)
 				if (ret) ret = mac_mount_hook(index, name, &sd_image[index], &writable);
+				// Sun CD slot: CUE/CHD/raw image translation (support/sun)
+				if (ret) ret = sun_mount_hook(index, name, &sd_image[index], &writable);
 			if (ret) ret = next_mount_hook(index, name, &sd_image[index], &writable);
 				if (ret) ret = a3_mount_hook(index, name, &sd_image[index], &writable);
 
@@ -2307,6 +2312,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 		FileClose(&sd_image[index]);
 		c64_closeGCR(index);
 		mac_cdrom_unmount(index);
+		sun_unmount(index);
 		next_unmount(index);
 		a3_unmount(index);
 		falcon_scsi_unmount(index);
@@ -3311,6 +3317,7 @@ void user_io_poll()
 	user_io_send_buttons(0);
 
 	mac_poll();   // Mac SCSI family: Toolbox slot announce + deferred CD work
+	sun_poll();   // Sun SCSI family: write-buffer flushes
 
 	if (is_minimig())
 	{
@@ -3353,6 +3360,7 @@ void user_io_poll()
 	}
 
 	next_enet_poll();
+	sun_enet_poll();
 
 	// The NeXT keeps a battery backed clock that the guest reads at
 	// boot; the one-shot update at core load is not enough if the core
@@ -3491,6 +3499,11 @@ void user_io_poll()
 			else if (int nxop = next_sd_service(disk, op, (uint32_t)lba, sz, ack))
 			{
 				if (nxop < 0) break;
+			}
+			else if (int sunop = sun_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
+			{
+				// Sun disk write buffer and CD slot (support/sun); SPI is done by the hook.
+				if (sunop < 0) break;
 			}
 			else if (int mop = marty_sd_service(disk, op, (uint32_t)lba, sz, ack))
 			{

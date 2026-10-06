@@ -22,6 +22,9 @@
 
 // Atari Falcon SCSI support
 #include "support/falcon/falcon_scsi.h"
+// Sun family support
+#include "support/sun/sun.h"
+#include "support/sun/sun_enet.h"
 
 // Archie support
 #include "support/archie/archie.h"
