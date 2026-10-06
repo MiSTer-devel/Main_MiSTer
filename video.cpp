@@ -260,6 +260,25 @@ static int findPLLpar(double Fout, uint32_t *pc, uint32_t *pm, double *pko, bool
 	return 0;
 }
 
+#define PLL_INT_GUARD_PPM 10.0
+
+static bool pll_request_on_integer(double Fout)
+{
+	uint32_t c, m;
+	double ko;
+
+	if (!findPLLpar(Fout, &c, &m, &ko, true))
+	{
+		// Match setPLL's fallback divider.
+		c = 1;
+		while ((Fout*c) < 400) c++;
+	}
+	else if (ko) return false;
+
+	double mk = (Fout*c) / 50;
+	return fabs(mk - round(mk)) < (mk * PLL_INT_GUARD_PPM / 1000000.0);
+}
+
 static void setPLL(double Fout, vmode_custom_t *v)
 {
 	PROFILE_FUNCTION();
@@ -3422,25 +3441,22 @@ void video_mode_adjust(bool force)
 				}
 			}
 
-			if (cfg.vsync_adjust == 2 && Fpix && !cfg.direct_video)
+			if (cfg.vsync_adjust == 2 && Fpix && !cfg.direct_video && pll_request_on_integer(Fpix))
 			{
 				uint32_t c, m;
 				double ko;
-				if (!findPLLpar(Fpix, &c, &m, &ko, true))
+				const uint32_t horz = v->param.hact + v->param.hfp + v->param.hs + v->param.hbp;
+				const uint32_t vert = v->param.vact + v->param.vfp + v->param.vs + v->param.vbp;
+				for (uint32_t lines = 1; lines <= 8 && vert + lines <= 4095; lines++)
 				{
-					const uint32_t horz = v->param.hact + v->param.hfp + v->param.hs + v->param.hbp;
-					const uint32_t vert = v->param.vact + v->param.vfp + v->param.vs + v->param.vbp;
-					for (uint32_t lines = 1; lines <= 8 && vert + lines <= 4095; lines++)
+					double candidate = 100.0 * horz * (vert + lines) / vtime;
+					if (candidate > 300.f) break;
+					if (findPLLpar(candidate, &c, &m, &ko, true) && ko && candidate * c <= 1500.f)
 					{
-						double candidate = 100.0 * horz * (vert + lines) / vtime;
-						if (candidate > 300.f) break;
-						if (findPLLpar(candidate, &c, &m, &ko, true) && candidate * c <= 1500.f)
-						{
-							v->param.vfp += lines;
-							printf("PLL dead zone: adding %u VFP lines, Fpix %.6f -> %.6f MHz\n", lines, Fpix, candidate);
-							Fpix = candidate;
-							break;
-						}
+						v->param.vfp += lines;
+						printf("PLL integer boundary: adding %u VFP lines, Fpix %.6f -> %.6f MHz\n", lines, Fpix, candidate);
+						Fpix = candidate;
+						break;
 					}
 				}
 			}
