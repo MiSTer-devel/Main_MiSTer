@@ -31,8 +31,7 @@ struct sun_cdrom_state
 
 static sun_cdrom_state cd = {};
 
-// A flat ISO on the generic path: one data track of this many 2048-byte
-// sectors, for the TOC window (0: no disc)
+// sectors of a flat ISO on the generic path, for the TOC window (0: none)
 static uint32_t flat_sectors = 0;
 
 static uint32_t layout_data_off(int is_mode2, uint32_t sec_size)
@@ -294,7 +293,7 @@ static int mount_raw(const char *name)
 
 	if (found <= 0)
 	{
-		// flat 2048: the generic path serves it (the TOC window answers for it)
+		// flat 2048: the generic path serves it
 		uint32_t n = (uint32_t)(k->f.size / 2048);
 		FileClose(&k->f);
 		memset(&cd, 0, sizeof(cd));
@@ -330,7 +329,7 @@ int sun_cdrom_mount(int index, const char *name)
 	return r;
 }
 
-// ---- the TOC and audio windows -----------------------------------------------
+// the TOC and audio windows
 
 static void toc_entry(uint8_t *e, int ctl, int trk, uint32_t lba)
 {
@@ -439,8 +438,6 @@ int sun_cdrom_window(int index, uint64_t lba, uint8_t *buf, int sz)
 	return 1;
 }
 
-// The data window: de-headered 2048-byte sectors of the data track, served a
-// sector (or the part of one the request covers) at a time.
 void sun_cdrom_fill(int index, uint64_t lba, uint8_t *buf, int sz)
 {
 	memset(buf, 0, sz);

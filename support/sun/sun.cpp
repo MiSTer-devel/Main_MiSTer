@@ -118,9 +118,7 @@ int sun_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack)
 	if (!op || !is_sun_family()) return 0;
 	if (sun_disk_service(disk, f, op, lba, sz, ack)) return 1;
 
-	// translated CD: read-only, the core ties sd_wr off. A flat image stays
-	// on the generic path, but for the TOC and audio windows above the data
-	// (the SunSparcStation's CD audio).
+	// translated CD, or the CD-audio windows of any CD: read-only, the core ties sd_wr off
 	if (sun_cdrom_active(disk) || (disk == sun_cdrom_slot() && lba >= SUN_CDROM_AUDIO_BLK))
 	{
 		static uint8_t buf[UIO_BUFFER_SIZE];
