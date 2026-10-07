@@ -240,7 +240,7 @@ static uint32_t getPLLdiv(uint32_t div)
 	return ((div / 2) << 8) | (div / 2);
 }
 
-static int findPLLpar(double Fout, uint32_t *pc, uint32_t *pm, double *pko)
+static int findPLLpar(double Fout, uint32_t *pc, uint32_t *pm, double *pko, bool quiet = false)
 {
 	uint32_t c = 1;
 	while ((Fout*c) < 400) c++;
@@ -256,13 +256,13 @@ static int findPLLpar(double Fout, uint32_t *pc, uint32_t *pm, double *pko)
 
 		if (ko && (ko <= 0.05f || ko >= 0.95f))
 		{
-			printf("Fvco=%f, C=%d, M=%d, K=%f ", fvco, c, m, ko);
+			if (!quiet) printf("Fvco=%f, C=%d, M=%d, K=%f ", fvco, c, m, ko);
 			if (fvco > 1500.f)
 			{
-				printf("-> No exact parameters found\n");
+				if (!quiet) printf("-> No exact parameters found\n");
 				return 0;
 			}
-			printf("-> K is outside allowed range\n");
+			if (!quiet) printf("-> K is outside allowed range\n");
 			c++;
 		}
 		else
@@ -276,6 +276,25 @@ static int findPLLpar(double Fout, uint32_t *pc, uint32_t *pm, double *pko)
 
 	//will never reach here
 	return 0;
+}
+
+#define PLL_INT_GUARD_PPM 10.0
+
+static bool pll_request_on_integer(double Fout)
+{
+	uint32_t c, m;
+	double ko;
+
+	if (!findPLLpar(Fout, &c, &m, &ko, true))
+	{
+		// Match setPLL's fallback divider.
+		c = 1;
+		while ((Fout*c) < 400) c++;
+	}
+	else if (ko) return false;
+
+	double mk = (Fout*c) / 50;
+	return fabs(mk - round(mk)) < (mk * PLL_INT_GUARD_PPM / 1000000.0);
 }
 
 static void setPLL(double Fout, vmode_custom_t *v)
@@ -3590,6 +3609,26 @@ void video_mode_adjust(bool force)
 				{
 					printf("Estimated frame rate (%f Hz) is more than REFRESH_MAX(%f Hz). Canceling auto-adjust.\n", hz, cfg.refresh_max);
 					Fpix = 0;
+				}
+			}
+
+			if (cfg.vsync_adjust == 2 && Fpix && !cfg.direct_video && pll_request_on_integer(Fpix))
+			{
+				uint32_t c, m;
+				double ko;
+				const uint32_t horz = v->param.hact + v->param.hfp + v->param.hs + v->param.hbp;
+				const uint32_t vert = v->param.vact + v->param.vfp + v->param.vs + v->param.vbp;
+				for (uint32_t lines = 1; lines <= 8 && vert + lines <= 4095; lines++)
+				{
+					double candidate = 100.0 * horz * (vert + lines) / vtime;
+					if (candidate > 300.f) break;
+					if (findPLLpar(candidate, &c, &m, &ko, true) && ko && candidate * c <= 1500.f)
+					{
+						v->param.vfp += lines;
+						printf("PLL integer boundary: adding %u VFP lines, Fpix %.6f -> %.6f MHz\n", lines, Fpix, candidate);
+						Fpix = candidate;
+						break;
+					}
 				}
 			}
 
