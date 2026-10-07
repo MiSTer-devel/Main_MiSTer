@@ -212,10 +212,12 @@ static bool fx_direct_config_enabled()
 }
 
 static uint8_t fx_last_packet[31];
+static bool fx_republish = false;
 
 static void fx_packet_reset()
 {
 	memset(fx_last_packet, 0, sizeof(fx_last_packet));
+	fx_republish = true;
 }
 
 static bool supports_pr()
@@ -716,7 +718,16 @@ static void setGamma()
 {
 	PROFILE_FUNCTION();
 
-	if (fx_direct_config_enabled()) return;
+	if (fx_direct_config_enabled())
+	{
+		// Clear gamma_en latch
+		if (has_gamma && active_gamma_cfg[0])
+		{
+			spi_uio_cmd8(UIO_SET_GAMMA, 0);
+			memset(active_gamma_cfg, 0, sizeof(active_gamma_cfg));
+		}
+		return;
+	}
 
 	if (!memcmp(active_gamma_cfg, gamma_cfg, sizeof(gamma_cfg))) return;
 
@@ -3100,10 +3111,12 @@ static void fx_packet_update(const VideoInfo *vi, const fx_layout_t *l)
 {
 	uint8_t d[31] = { 0x81, 0x01, 0x1B, 0x00, 0x49, 0x31, 0xF4, 0x02 };
 
-	const bool have_ar = vi->arx && vi->ary;
+	// Only the Linux framebuffer (fb_fmt bit 7) replaces the core as the picture source.
+	const bool core_src = !(vi->fb_fmt & 0x80);
+	const bool have_ar = core_src && vi->arx && vi->ary;
 	// Interlaced (bit 0) stays clear: ascal has already deinterlaced, and claiming
 	// interlace without field control pixels is undefined for the sink.
-	d[8] = (uint8_t)((vi->rotated ? 0x02 : 0) | (have_ar ? 0x08 : 0));
+	d[8] = (uint8_t)(((core_src && vi->rotated) ? 0x02 : 0) | (have_ar ? 0x08 : 0));
 
 	fx_put16(d, 9, l->y);
 	fx_put16(d, 11, (uint16_t)(l->y + l->h));
@@ -3148,7 +3161,11 @@ static void video_scaling_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 		// The OSD is drawn after the scaler, so anything outside the window is cropped.
 		if (!menu_present() && fx_get_layout(vi, vm, &l))
 		{
-			printf("FX-Direct: %ux%u x%u window at %u,%u\n", l.w, l.h, l.scale, l.x, l.y);
+			printf("FX-Direct: src %ux%u%s -> %ux%u x%u at %u,%u, ar %u:%u%s%s\n",
+				l.w / l.scale, l.h / l.scale, vi->rotated ? " rot" : "",
+				l.w, l.h, l.scale, l.x, l.y,
+				vi->arx, vi->ary, vi->arxy ? " abs" : "",
+				(vi->fb_fmt & 0x80) ? " lfb" : vi->fb_en ? " fb" : "");
 			spi_uio_cmd16(UIO_SETHEIGHT, l.h);
 			spi_uio_cmd16(UIO_SETWIDTH, 0x8000 | l.w); // bit 15 = FREESCALE
 			fx_packet_update(vi, &l);
@@ -3215,6 +3232,26 @@ static void video_scaling_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 	}
 
 	minimig_set_adjust(2);
+}
+
+// Takes and releases HDMI spare packet 0, and republishes after any cache reset.
+static void fx_lifecycle(const VideoInfo *vi, const vmode_custom_t *vm)
+{
+	static bool was_on = false;
+	const bool on = fx_direct_config_enabled();
+
+	if (on != was_on)
+	{
+		was_on = on;
+		fx_packet_reset();
+		if (!on) hdmi_spare_config(0, 0);
+	}
+
+	if (on && fx_republish)
+	{
+		fx_republish = false;
+		video_scaling_adjust(vi, vm);
+	}
 }
 
 bool video_mode_select(uint32_t vtime, vmode_custom_t* out_mode)
@@ -3589,6 +3626,8 @@ void video_mode_adjust(bool force)
 	{
 		set_vfilter(0); // update filters if flags have changed
 	}
+
+	fx_lifecycle(&current_video_info, &v_cur);
 
 	if (fx_direct_config_enabled() && is_menu()) fx_menu_packet_update(&v_cur);
 }
