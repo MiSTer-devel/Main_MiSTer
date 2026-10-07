@@ -24,9 +24,15 @@ struct sun_cdrom_state
 	int      trk;          // the data track, or -1
 	uint32_t data_soff;    // user data offset in its raw sector
 	uint64_t sectors;
+
+	int64_t  aframe_lba;   // the audio frame in aframe (-1: none)
+	uint8_t  aframe[2352];
 };
 
 static sun_cdrom_state cd = {};
+
+// sectors of a flat ISO on the generic path, for the TOC window (0: none)
+static uint32_t flat_sectors = 0;
 
 static uint32_t layout_data_off(int is_mode2, uint32_t sec_size)
 {
@@ -38,6 +44,7 @@ static uint32_t layout_data_off(int is_mode2, uint32_t sec_size)
 void sun_cdrom_unmount(int index)
 {
 	if (index != sun_cdrom_slot()) return;
+	flat_sectors = 0;
 	if (cd.is_chd && cd.toc.chd_f) chd_close(cd.toc.chd_f);
 	for (int i = 0; i < cd.toc.last; i++)
 		if (cd.toc.tracks[i].f.opened()) FileClose(&cd.toc.tracks[i].f);
@@ -286,7 +293,11 @@ static int mount_raw(const char *name)
 
 	if (found <= 0)
 	{
+		// flat 2048: the generic path serves it
+		uint32_t n = (uint32_t)(k->f.size / 2048);
 		FileClose(&k->f);
+		memset(&cd, 0, sizeof(cd));
+		flat_sectors = n;
 		return SUN_CDROM_PASSTHRU;
 	}
 
@@ -313,9 +324,118 @@ int sun_cdrom_mount(int index, const char *name)
 	else if (len > 4 && !strcasecmp(name + len - 4, ".cue")) r = mount_cue(name);
 	else                                                     r = mount_raw(name);
 
-	if (r == SUN_CDROM_HANDLED) cd.active = 1;
-	else sun_cdrom_unmount(index);
+	if (r == SUN_CDROM_HANDLED) { cd.active = 1; cd.aframe_lba = -1; }
+	else if (r != SUN_CDROM_PASSTHRU) sun_cdrom_unmount(index);
 	return r;
+}
+
+// the TOC and audio windows
+
+static void toc_entry(uint8_t *e, int ctl, int trk, uint32_t lba)
+{
+	uint32_t a = lba + 150;
+	e[0] = (uint8_t)ctl;
+	e[1] = (uint8_t)trk;
+	e[2] = (uint8_t)(a / 4500);
+	e[3] = (uint8_t)(a / 75 % 60);
+	e[4] = (uint8_t)(a % 75);
+	e[5] = (uint8_t)(lba >> 16);
+	e[6] = (uint8_t)(lba >> 8);
+	e[7] = (uint8_t)lba;
+}
+
+static void fill_toc(uint8_t *buf, int sz)
+{
+	if (sz < 1024) return;
+	int n = 0;
+	if (cd.active)
+	{
+		for (int i = 0; i < cd.toc.last && i < 99; i++, n++)
+			toc_entry(buf + 8 + 8 * n, cd.toc.tracks[i].type == TT_CDDA ? 0x10 : 0x14,
+			          i + 1, (uint32_t)cd.toc.tracks[i].start);
+		if (n == 0) return;
+		toc_entry(buf + 8 + 8 * n,
+		          cd.toc.tracks[n - 1].type == TT_CDDA ? 0x10 : 0x14, 0xAA,
+		          (uint32_t)cd.toc.end);
+	}
+	else if (flat_sectors)
+	{
+		toc_entry(buf + 8, 0x14, 1, 0);
+		toc_entry(buf + 16, 0x14, 0xAA, flat_sectors);
+		n = 1;
+	}
+	else return;
+	buf[0] = 1;
+	buf[1] = (uint8_t)n;
+	buf[2] = (uint8_t)(n + 1);
+	buf[3] = 1;
+}
+
+static int audio_frame(uint32_t disc_lba)
+{
+	if (cd.aframe_lba == (int64_t)disc_lba) return 1;
+
+	int ti = -1;
+	for (int i = 0; i < cd.toc.last; i++)
+	{
+		if (cd.toc.tracks[i].type == TT_CDDA &&
+		    (int)disc_lba >= cd.toc.tracks[i].start && (int)disc_lba < cd.toc.tracks[i].end)
+			{ ti = i; break; }
+	}
+	if (ti < 0) return 0;
+	cd_track_t *k = &cd.toc.tracks[ti];
+
+	if (cd.is_chd)
+	{
+		if (mister_chd_read_sector(cd.toc.chd_f, (int)disc_lba + k->offset, 0, 0,
+		                           2352, cd.aframe, cd.hunkbuf, &cd.hunknum) != CHDERR_NONE)
+			return 0;
+		// CHD stores CD-DA byteswapped; the window has the bin's byte order
+		for (int i = 0; i < 2352; i += 2)
+		{
+			uint8_t x = cd.aframe[i];
+			cd.aframe[i] = cd.aframe[i + 1];
+			cd.aframe[i + 1] = x;
+		}
+	}
+	else
+	{
+		diskled_on();
+		if (!FileSeek(&k->f, (uint64_t)((int)disc_lba + k->offset) * k->sector_size, SEEK_SET))
+			return 0;
+		if (FileReadAdv(&k->f, cd.aframe, 2352) != 2352) return 0;
+	}
+	cd.aframe_lba = disc_lba;
+	return 1;
+}
+
+int sun_cdrom_window(int index, uint64_t lba, uint8_t *buf, int sz)
+{
+	if (index != sun_cdrom_slot() || lba < SUN_CDROM_AUDIO_BLK) return 0;
+	memset(buf, 0, sz);
+	if (lba >= SUN_CDROM_TOC_BLK)
+	{
+		if (lba == SUN_CDROM_TOC_BLK) fill_toc(buf, sz);
+		return 1;
+	}
+	// the audio window: frame f at block 5f, 2560 bytes each
+	uint64_t off = (lba - SUN_CDROM_AUDIO_BLK) * 512;
+	for (int pos = 0; pos < sz; )
+	{
+		uint32_t f = (uint32_t)(off / 2560);
+		uint32_t fo = (uint32_t)(off % 2560);
+		int n = 2560 - fo;
+		if (n > sz - pos) n = sz - pos;
+		if (fo < 2352 && cd.active && audio_frame(f))
+		{
+			int m = 2352 - fo;
+			if (m > n) m = n;
+			memcpy(buf + pos, cd.aframe + fo, m);
+		}
+		pos += n;
+		off += n;
+	}
+	return 1;
 }
 
 void sun_cdrom_fill(int index, uint64_t lba, uint8_t *buf, int sz)
