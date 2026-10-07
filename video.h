@@ -34,6 +34,8 @@ struct VideoInfo
 // expose video timings for timerfd-based frame timer
 extern VideoInfo current_video_info;
 
+bool  video_is_direct();
+
 void  video_init();
 void  video_poll();
 
