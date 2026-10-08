@@ -5383,6 +5383,18 @@ int input_test(int getchar)
 							input_lightgun_load(n);
 						}
 
+						//X-Gunner Lightgun
+						if (input[n].vid == 0x1209 && input[n].pid >= 0x0001 && input[n].pid <= 0x0004)
+						{
+							input[n].quirk = QUIRK_LIGHTGUN_MOUSE;
+							input[n].lightgun = 1;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 32767;
+							input[n].guncal[2] = 0;
+							input[n].guncal[3] = 32767;
+							input_lightgun_load(n);
+						}
+
 						//GUN4IR Lightgun
 						if (input[n].vid == 0x2341 && input[n].pid >= 0x8042 && input[n].pid <= 0x8049)
 						{
