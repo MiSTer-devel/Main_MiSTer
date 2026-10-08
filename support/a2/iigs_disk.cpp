@@ -23,6 +23,11 @@ static size_t     g_woz_sz[16]   = {};
 // Converted-floppy write-back descriptor (mode 1):
 static int        g_wb_ok[16]    = {};  // write-back supported (and file writable)
 static int        g_wb_kind[16]  = {};  // 1 = 3.5", 2 = 5.25"
+// Native-WOZ passthrough: the file's header CRC32 (bytes 8..11) goes stale
+// after in-place track writes, refresh it after ~1s
+static int        g_wb_crc_track[16] = {};   // slot serves a writable native WOZ
+static int        g_wb_crc_dirty[16] = {};   // written since the last refresh
+static unsigned long g_wb_crc_timer[16] = {};
 static int64_t    g_wb_off[16]   = {};  // header offset within the source file
 static int        g_wb_order[16] = {};  // 5.25 source order: 0 = DOS, 1 = ProDOS
 static int        g_wb_nib[16]   = {};  // 5.25 source is NIB (.nib / 2MG fmt 2): persist 6656B/track
@@ -85,6 +90,52 @@ void iigs_unmount(int index)
 	g_wb_off[index] = 0;
 	g_wb_order[index] = 0;
 	g_wb_nib[index] = 0;
+	g_wb_crc_track[index] = 0;
+	g_wb_crc_dirty[index] = 0;
+}
+
+void iigs_woz_write_notify(int slot)
+{
+	if (slot < 0 || slot >= 16 || !g_wb_crc_track[slot]) return;
+	g_wb_crc_dirty[slot] = 1;
+	g_wb_crc_timer[slot] = GetTimer(1000);   // 1 s debounce: refresh after the burst
+}
+
+int iigs_woz_crc_due(int slot)
+{
+	if (slot < 0 || slot >= 16) return 0;
+	return g_wb_crc_track[slot] && g_wb_crc_dirty[slot] &&
+	       CheckTimer(g_wb_crc_timer[slot]);
+}
+
+void iigs_woz_crc_done(int slot)
+{
+	if (slot < 0 || slot >= 16) return;
+	g_wb_crc_dirty[slot] = 0;
+}
+
+// Recompute + patch the file-level CRC32 of an open WOZ file. 
+int a2_woz_fix_crc(fileTYPE *f)
+{
+	static const size_t kMax = 4 * 1024 * 1024;
+	if (!f || !f->filp) return -1;
+	size_t sz = (size_t)f->size;
+	if (sz < 12 || sz > kMax) return -1;
+	uint8_t *buf = (uint8_t *)malloc(sz);
+	if (!buf) return -1;
+	if (!FileSeek(f, 0, SEEK_SET) ||
+	    (size_t)FileReadAdv(f, buf, (int)sz) != sz) {
+		free(buf);
+		return -1;
+	}
+	int changed = a2_woz_fix_crc_buf(buf, sz);
+	if (changed &&
+	    (!FileSeek(f, 8, SEEK_SET) || FileWriteAdv(f, buf + 8, 4) != 4)) {
+		free(buf);
+		return -1;
+	}
+	free(buf);
+	return changed ? 1 : 0;
 }
 
 // Read the entire open image into a freshly malloc'd buffer (caller frees).
@@ -243,6 +294,8 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
 			return IIGS_HANDLED;
 		}
 
+		if (FileCanWrite(name))
+			g_wb_crc_track[index] = 1;   // refresh the file CRC after core writes
 		return IIGS_PASSTHRU;   // native WOZ on a real file: serve directly
 	}
 
