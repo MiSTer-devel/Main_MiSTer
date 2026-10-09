@@ -14,6 +14,7 @@
 #include "../../cd.h"
 #include "../chd/mister_chd.h"
 #include <libchdr/chd.h>
+#include <memory>
 
 static char buf[1024];
 static uint8_t *chd_hunkbuf = NULL;
@@ -163,18 +164,18 @@ static int load_chd(const char *filename, toc_t *table)
 
 static int load_cue(const char* filename, toc_t *table)
 {
-	static char fname[1024 + 10];
-	static char line[128];
+	char fname[1024 + 10];
+	char line[128];
 	char *ptr, *lptr;
-	static char toc[100 * 1024];
+	auto toc = std::make_unique<char[]>(CUE_BUFFER_SIZE);
 
 	unload_cue(table);
 	printf("\x1b[32mPSX: Open CUE: %s\n\x1b[0m", fname);
 
 	strcpy(fname, filename);
 
-	memset(toc, 0, sizeof(toc));
-	if (!FileLoad(fname, toc, sizeof(toc) - 1))
+	memset(toc.get(), 0, sizeof(toc));
+	if (!FileLoad(fname, toc.get(), CUE_BUFFER_SIZE - 1))
 	{
 		printf("\x1b[32mPSX: cannot load file: %s\n\x1b[0m", fname);
 		return 0;
@@ -183,7 +184,7 @@ static int load_cue(const char* filename, toc_t *table)
 	int mm, ss, bb;
 	int pregap = 0;
 
-	char *buf = toc;
+	char *buf = toc.get();
 	while (sgets(line, sizeof(line), &buf))
 	{
 		lptr = line;
