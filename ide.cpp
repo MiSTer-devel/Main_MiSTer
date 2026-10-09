@@ -16,6 +16,7 @@
 #include "support/vhd/vhdcfg.h"
 #include "support/minimig/minimig_hdd.h"
 #include "support/minimig/minimig_config.h"
+#include "support/minimig/minimig_a2065.h"
 #include "spi.h"
 #include "user_io.h"
 #include "file_io.h"
@@ -89,6 +90,21 @@ uint16_t ide_check()
 	if (!res) res = (uint8_t)spi_w(0);
 	DisableIO();
 	return res;
+}
+
+// Wait for the core to take or supply the next block of a transfer. The
+// Amiga can be held in the A2065 interrupt server meanwhile: it acknowledges
+// CSR0 and loops until the bits clear, which needs a2065_poll() to apply the
+// write. Without it here neither side ever proceeds.
+static uint16_t ide_wait_req(ide_config *ide)
+{
+	uint16_t req = 0;
+	while (!req)
+	{
+		req = (ide_check() >> ide->bitoff) & 7;
+		if (!req) a2065_poll();
+	}
+	return req;
 }
 
 int ide_img_mount(fileTYPE *f, const char *name, int rw)
@@ -815,8 +831,7 @@ static void process_read(ide_config *ide, int multi)
 		if (!ide->null) ide->null = (readhdd(&ide->drive[ide->regs.drv], lba, cnt) <= 0);
 		if (ide->null) memset(ide_buf, 0, cnt * 512);
 
-		ide_req = 0;
-		while (!ide_req) ide_req = (ide_check() >> ide->bitoff) & 7;
+		ide_req = ide_wait_req(ide);
 
 		if (ide_req != 5)
 		{
@@ -846,8 +861,7 @@ static void process_write(ide_config *ide, int multi)
 		ide->regs.io_size = cnt;
 		ide_set_regs(ide);
 
-		ide_req = 0;
-		while (!ide_req) ide_req = (ide_check() >> ide->bitoff) & 7;
+		ide_req = ide_wait_req(ide);
 
 		if (ide_req != 5)
 		{
