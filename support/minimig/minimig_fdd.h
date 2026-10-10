@@ -80,7 +80,6 @@ typedef struct
 	FluxFile*     fluxFile;  /* flux reader class */
 } adfTYPE;
 
-extern unsigned char drives;
 extern unsigned char floppy_zero_supported;
 extern unsigned char floppy_zero_active;
 extern adfTYPE df[4];
@@ -89,6 +88,10 @@ void RefreshFloppyPopulation(void);
 void UpdateDriveStatus(void);
 void HandleFDD(unsigned char c1, unsigned char c2);
 void InsertFloppy(adfTYPE *drive, char* path);
+
+uint8_t minimig_floppy_active_count();
+uint8_t minimig_floppy_requested_count(uint8_t num);
+uint8_t minimig_floppy_step_drives(uint8_t num, int direction);
 
 #endif
 

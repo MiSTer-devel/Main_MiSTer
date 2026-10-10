@@ -599,8 +599,86 @@ static int core_has_card(void)
 	return FileExists(user_io_make_filepath(HomeDir(), DECLROM_NAME));
 }
 
+#define RING_BASE    0x30400000UL
+#define RING_SIZE    0x9000UL
+#define RING_MAGIC   0x50504345u
+#define RING_OPT_ETH "[19:17]"
+
+static void ring_poll(void)
+{
+	static volatile uint64_t *w;
+	static int up;
+	static unsigned long retry;
+	static uint32_t epoch = 0x100, tx_rd, rx_wr;
+
+	unsigned opt = user_io_status_get(RING_OPT_ETH) & 7;
+	if (!opt || opt > 4)
+	{
+		if (up) mac_eth_iface_close();
+		up = 0;
+		return;
+	}
+	if (!w && !(w = (volatile uint64_t *)shmem_map(RING_BASE, RING_SIZE))) return;
+	if (!up)
+	{
+		if (!CheckTimer(retry)) return;
+		retry = GetTimer(1000);
+		snprintf(ifname, sizeof ifname, "%s", q8_iface_names[opt - 1]);
+		if (mac_eth_iface_open(ifname) < 0) return;
+		uint8_t hw[6] = {}, m[8] = {};
+		mac_eth_iface_hwaddr(ifname, hw);
+		m[0] = MAC_OUI_0; m[1] = MAC_OUI_1; m[2] = MAC_OUI_2;
+		m[3] = hw[3]; m[4] = hw[4]; m[5] = hw[5]; m[7] = 0x80;
+		uint64_t v;
+		memcpy(&v, m, 8);
+		w[5] = v;
+		up = 1;
+		printf("mac_eth: %s on %s, %02x:%02x:%02x:%02x:%02x:%02x\n", user_io_get_core_name(), ifname, m[0], m[1], m[2], m[3], m[4], m[5]);
+	}
+
+	uint64_t magic = w[0];
+	if ((uint32_t)(magic >> 32) != RING_MAGIC) return;
+	if ((magic & 0xFF) != epoch)
+	{
+		epoch = magic & 0xFF;
+		tx_rd = rx_wr = 0;
+	}
+
+	uint8_t f[2048];
+	for (uint32_t tx_wr = (uint32_t)w[1]; tx_rd != tx_wr; tx_rd++)
+	{
+		volatile uint64_t *s = w + 0x200 + (tx_rd & 7) * 0x100;
+		uint32_t len = (uint32_t)s[0];
+		if (len && len <= 1536)
+		{
+			memcpy(f, (const void *)(s + 1), len);
+			mac_eth_iface_send(f, len);
+		}
+	}
+	w[2] = tx_rd;
+
+	uint32_t rx_rd = (uint32_t)w[4];
+	while (rx_wr - rx_rd < 8)
+	{
+		int n = mac_eth_iface_recv(f, sizeof f);
+		if (n <= 0) break;
+		if (n > 1536) continue;
+		volatile uint64_t *s = w + 0xA00 + (rx_wr & 7) * 0x100;
+		memcpy((void *)(s + 1), f, n);
+		s[0] = n;
+		__sync_synchronize();
+		w[3] = ++rx_wr;
+	}
+}
+
 void mac_eth_poll(void)
 {
+	if (is_mac_ring_eth())
+	{
+		ring_poll();
+		return;
+	}
+
 	static unsigned long pace_timer, name_timer;
 	static int mapped;
 

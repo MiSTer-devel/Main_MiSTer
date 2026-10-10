@@ -3031,6 +3031,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			else
 			{
+				// "Stick 1: Tilt RIGHT/DOWN" skipped while defining the buttons: fall back to stick 1
+				// (as gamecontroller_db.cpp does), otherwise 0 == 0 matches the unmapped stick 2 slots
+				// and the Y axis ends up on the right stick.
+				if (!input[dev].mmap[SYS_AXIS_X]) input[dev].mmap[SYS_AXIS_X] = input[dev].mmap[SYS_AXIS1_X];
+				if (!input[dev].mmap[SYS_AXIS_Y]) input[dev].mmap[SYS_AXIS_Y] = input[dev].mmap[SYS_AXIS1_Y];
+
 				if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS1_X])
 				{
 					input[dev].stick_l[0] = SYS_AXIS1_X;
@@ -5379,6 +5385,18 @@ int input_test(int getchar)
 							input[n].guncal[0] = -32768;
 							input[n].guncal[1] = 32767;
 							input[n].guncal[2] = -32768;
+							input[n].guncal[3] = 32767;
+							input_lightgun_load(n);
+						}
+
+						//X-Gunner Lightgun
+						if (input[n].vid == 0x1209 && input[n].pid >= 0x0001 && input[n].pid <= 0x0004)
+						{
+							input[n].quirk = QUIRK_LIGHTGUN_MOUSE;
+							input[n].lightgun = 1;
+							input[n].guncal[0] = 0;
+							input[n].guncal[1] = 32767;
+							input[n].guncal[2] = 0;
 							input[n].guncal[3] = 32767;
 							input_lightgun_load(n);
 						}

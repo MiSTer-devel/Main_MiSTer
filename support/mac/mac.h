@@ -14,6 +14,8 @@ char is_mac_scsi_family();
 
 char is_mac_scsi_optimized();
 
+char is_mac_ring_eth();
+
 // hps_io slots; -1 = the core lacks the device. One shared family layout.
 // A wrong slot corrupts another device's sector stream.
 int mac_toolbox_slot();
@@ -32,7 +34,7 @@ void mac_poll();
 // Slot service for the mac devices, SPI transfer included.
 // Returns 0 = not ours (generic path serves it), 1 = serviced, -1 = ours but
 // unsupported op (caller breaks the sector-service loop).
-int mac_sd_service(int disk, int op, uint32_t lba, int sz, int ack);
+int mac_sd_service(int disk, fileTYPE *f, int op, uint32_t lba, int sz, int ack);
 
 // True when lba sits in the CD slot's raw CD-DA window (blksz 2352).
 int mac_cdda_window(int disk, uint32_t lba);

@@ -300,6 +300,11 @@ static char rtc_is_utc()
 	return is_next();
 }
 
+char is_falcon()
+{
+	return !strcasecmp(orig_name, "Falcon");
+}
+
 static int is_minimig_type = 0;
 char is_minimig()
 {
@@ -1465,6 +1470,7 @@ void user_io_init(const char *path, const char *xml)
 
 	// Same for the NeXT ethernet bridge.
 	next_enet_stop();
+	sun_enet_stop();
 
 	// we need to set the directory to where the XML file (MRA) is
 	// not the RBF. The RBF will be in arcade, which the user shouldn't
@@ -1626,6 +1632,8 @@ void user_io_init(const char *path, const char *xml)
 				// a branch of the chain below, or the core skips the boot
 				// ROM load at its end and comes up with no ROM at all.
 				if (is_next()) next_enet_start();
+				// before the boot ROMs: the Sun-2's ID PROM goes in while it is held in reset
+				if (is_sun_family()) sun_enet_start();
 
 				if (xml && isXmlName(xml) == 1)
 				{
@@ -2084,7 +2092,6 @@ int process_ss(const char *rom_name, int enable)
 	if (ss_timer && !CheckTimer(ss_timer)) return 0;
 	ss_timer = GetTimer(1000);
 
-	fileTYPE f = {};
 	for (int i = 0; i < 4; i++)
 	{
 		if (base[i])
@@ -2102,16 +2109,8 @@ int process_ss(const char *rom_name, int enable)
 					Info("Saving the state", 500);
 
 					*ss_sufx = i + '1';
-					if (FileOpenEx(&f, ss_name, O_CREAT | O_TRUNC | O_RDWR | O_SYNC))
-					{
-						int ret = FileWriteAdv(&f, base[i], size);
-						FileClose(&f);
-						printf("Wrote %d bytes to file: %s\n", ret, ss_name);
-					}
-					else
-					{
-						printf("Unable to create file: %s\n", ss_name);
-					}
+					int ret = FileSave(ss_name, base[i], size);
+					if (ret) printf("Wrote %d bytes to file: %s\n", ret, ss_name);
 				}
 			}
 		}
@@ -2287,8 +2286,13 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 
 				// Mac CD slot: CUE/CHD/raw image translation (support/mac)
 				if (ret) ret = mac_mount_hook(index, name, &sd_image[index], &writable);
+				// Sun CD slot: CUE/CHD/raw image translation (support/sun)
+				if (ret) ret = sun_mount_hook(index, name, &sd_image[index], &writable);
 			if (ret) ret = next_mount_hook(index, name, &sd_image[index], &writable);
 				if (ret) ret = a3_mount_hook(index, name, &sd_image[index], &writable);
+
+				// Falcon SCSI slots: image registration, CD cue/bin translation (support/falcon)
+				if (ret) ret = falcon_scsi_mount_hook(index, name, &sd_image[index], &writable);
 
 				if (ret && is_c128())
 				{
@@ -2308,8 +2312,10 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 		FileClose(&sd_image[index]);
 		c64_closeGCR(index);
 		mac_cdrom_unmount(index);
+		sun_unmount(index);
 		next_unmount(index);
 		a3_unmount(index);
+		falcon_scsi_unmount(index);
 	}
 
 	buffer_lba[index] = -1;
@@ -3190,8 +3196,8 @@ void user_io_send_buttons(char force)
 	if (cfg.dvi_mode == 1) map |= CONF_DVI;
 	if (cfg.hdmi_limited & 1) map |= CONF_HDMI_LIMITED1;
 	if (cfg.hdmi_limited & 2) map |= CONF_HDMI_LIMITED2;
-	if (cfg.direct_video) map |= CONF_DIRECT_VIDEO;
-	if (cfg.direct_video == 2) map |= CONF_DIRECT_VIDEO2;
+	if (video_is_direct()) map |= CONF_DIRECT_VIDEO;
+	if (video_is_direct() && cfg.direct_video == 2) map |= CONF_DIRECT_VIDEO2;
 	if (vga_fb) map |= CONF_VGA_FB;
 
 	if ((map != key_map) || force)
@@ -3311,6 +3317,7 @@ void user_io_poll()
 	user_io_send_buttons(0);
 
 	mac_poll();   // Mac SCSI family: Toolbox slot announce + deferred CD work
+	sun_poll();   // Sun SCSI family: write-buffer flushes
 
 	if (is_minimig())
 	{
@@ -3353,6 +3360,7 @@ void user_io_poll()
 	}
 
 	next_enet_poll();
+	sun_enet_poll();
 
 	// The NeXT keeps a battery backed clock that the guest reads at
 	// boot; the one-shot update at core load is not enough if the core
@@ -3483,7 +3491,7 @@ void user_io_poll()
 				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, ack);
 				else break;
 			}
-			else if (int macop = mac_sd_service(disk, op, lba, sz, ack))
+			else if (int macop = mac_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
 				// Mac Toolbox/CD slots (support/mac); SPI is done by the hook.
 				if (macop < 0) break;
@@ -3492,6 +3500,11 @@ void user_io_poll()
 			{
 				if (nxop < 0) break;
 			}
+			else if (int sunop = sun_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
+			{
+				// Sun disk write buffer and CD slot (support/sun); SPI is done by the hook.
+				if (sunop < 0) break;
+			}
 			else if (int mop = marty_sd_service(disk, op, (uint32_t)lba, sz, ack))
 			{
 				if (mop < 0) break;
@@ -3499,6 +3512,11 @@ void user_io_poll()
 			else if (int a3op = a3_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
 				if (a3op < 0) break;
+			}
+			else if (int falop = falcon_sd_service(disk, op, lba, sz, ack))
+			{
+				// Falcon SCSI response windows / translated CD (support/falcon); SPI is done by the hook.
+				if (falop < 0) break;
 			}
 			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
 			{

@@ -15,7 +15,6 @@
 #include "../../ide.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
-#include "floppy_config_command.h"
 #include "minimig_config.h"
 #include "minimig_share.h"
 #include "minimig_a2065.h"
@@ -878,7 +877,7 @@ void minimig_ConfigFloppy(unsigned char drives, unsigned char speed)
 		printf("Zero floppy drives unsupported by this core; using DF0.\n");
 		drives = 0;
 	}
-	spi_uio_cmd8(UIO_MM2_FLP, minimig_floppy_config_command(drives, speed));
+	spi_uio_cmd8(UIO_MM2_FLP, ((drives & 7) << 2) | (speed & 3));
 }
 
 void minimig_ConfigFloppyExt(unsigned char drive0, unsigned char drive1, unsigned char drive2, unsigned char drive3)

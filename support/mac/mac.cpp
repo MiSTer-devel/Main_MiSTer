@@ -10,6 +10,7 @@
 #include "../../file_io.h"
 #include "mac.h"
 #include "mac_eth.h"
+#include "mac_disk.h"
 
 static char is_core_named(const char *n)
 {
@@ -20,12 +21,18 @@ static char is_core_named(const char *n)
 
 char is_mac_scsi_family()
 {
-	return is_core_named("maclc") || is_core_named("macplus") || is_core_named("macquadra800");
+	return is_core_named("maclc") || is_core_named("macplus") || is_core_named("macquadra800")
+	    || is_core_named("macppc7300");
 }
 
 char is_mac_scsi_optimized()
 {
-	return is_core_named("macquadra800");
+	return is_core_named("macquadra800") || is_core_named("macppc7300");
+}
+
+char is_mac_ring_eth()
+{
+	return is_core_named("macppc7300");
 }
 
 #define MAC_TOOLBOX_SLOT    3   // MacLC.sv VD_TOOLBOX
@@ -46,6 +53,7 @@ int mac_cd_toolbox_slot() { return mac_toolbox_ok() ? MAC_CD_TOOLBOX_SLOT : -1; 
 // 2048-byte-sector virtual disc; flat ISO/TOAST stays on the generic path.
 int mac_mount_hook(int index, const char *name, fileTYPE *f, int *writable)
 {
+	mac_disk_flush(index);
 	if (index != mac_cdrom_slot()) return 1;
 
 	int r = mac_cdrom_mount(index, name);
@@ -105,6 +113,7 @@ void mac_poll()
 	if (mac_cdrom_slot() >= 0) mac_cdrom_poll();
 
 	mac_eth_poll();
+	mac_disk_poll();
 }
 
 int mac_cdda_window(int disk, uint32_t lba)
@@ -113,8 +122,10 @@ int mac_cdda_window(int disk, uint32_t lba)
 	       lba >= MAC_CDROM_AUDIO_BLK && lba < MAC_CDROM_WIN_BASE;
 }
 
-int mac_sd_service(int disk, int op, uint32_t lba, int sz, int ack)
+int mac_sd_service(int disk, fileTYPE *f, int op, uint32_t lba, int sz, int ack)
 {
+	if (mac_disk_service(disk, f, op, lba, sz, ack)) return 1;
+
 	static uint8_t buf[4096];
 	if (sz > (int)sizeof(buf)) return 0;
 
