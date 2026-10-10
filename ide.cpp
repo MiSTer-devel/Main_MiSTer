@@ -96,13 +96,17 @@ uint16_t ide_check()
 // Amiga can be held in the A2065 interrupt server meanwhile: it acknowledges
 // CSR0 and loops until the bits clear, which needs a2065_poll() to apply the
 // write. Without it here neither side ever proceeds.
+// a2065_poll() costs an uncached DDR3 read and a recv() each call, so it runs
+// on every 16th miss only: the core usually answers within a few checks, and
+// the handshake latency of every block would otherwise pay for it.
 static uint16_t ide_wait_req(ide_config *ide)
 {
 	uint16_t req = 0;
+	uint32_t spins = 0;
 	while (!req)
 	{
 		req = (ide_check() >> ide->bitoff) & 7;
-		if (!req) a2065_poll();
+		if (!req && !(++spins & 15)) a2065_poll();
 	}
 	return req;
 }

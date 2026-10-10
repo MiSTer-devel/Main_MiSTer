@@ -49,7 +49,8 @@
 #define DDR3_INT_ASSERT_BIT     (1ULL << 0)
 /* Bits 63:32 carry the CMD ring read index, valid with bit 1 set: the FPGA
  * applies a CSR0 acknowledge to its shadow at once and keeps those bits
- * clear until this index has passed the command. */
+ * clear until this index has passed the command. The host must write
+ * CSR_SHADOW before INT_STATE; the FPGA reads them in the opposite order. */
 #define DDR3_INT_RDIDX_BIT      (1ULL << 1)
 #define DDR3_INT_RDIDX_SHIFT    32
 
