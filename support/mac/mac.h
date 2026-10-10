@@ -14,6 +14,8 @@ char is_mac_scsi_family();
 
 char is_mac_scsi_optimized();
 
+char is_mac_ring_eth();
+
 // hps_io slots; -1 = the core lacks the device. One shared family layout.
 // A wrong slot corrupts another device's sector stream.
 int mac_toolbox_slot();

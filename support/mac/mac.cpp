@@ -21,12 +21,18 @@ static char is_core_named(const char *n)
 
 char is_mac_scsi_family()
 {
-	return is_core_named("maclc") || is_core_named("macplus") || is_core_named("macquadra800");
+	return is_core_named("maclc") || is_core_named("macplus") || is_core_named("macquadra800")
+	    || is_core_named("macppc7300");
 }
 
 char is_mac_scsi_optimized()
 {
-	return is_core_named("macquadra800");
+	return is_core_named("macquadra800") || is_core_named("macppc7300");
+}
+
+char is_mac_ring_eth()
+{
+	return is_core_named("macppc7300");
 }
 
 #define MAC_TOOLBOX_SLOT    3   // MacLC.sv VD_TOOLBOX
