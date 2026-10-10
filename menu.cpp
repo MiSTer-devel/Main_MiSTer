@@ -1175,6 +1175,108 @@ void HandleUI(void)
 	static pid_t ttypid = 0;
 	static int ttystatus = 0;
 	static int has_fb_terminal = 0;
+	static unsigned long gui_next_try = 0;
+	static bool gui_first = true;
+	static bool gui_missing = false;
+	static bool gui_disabled = false;
+	static bool gui_failed = false;
+	static unsigned long gui_exit_at = 0;
+
+	if (FileExists("/tmp/mister-gui-exited"))
+	{
+		gui_disabled = true;
+		unlink("/tmp/mister-gui-exited");
+	}
+	if (FileExists("/tmp/mister-gui-failed"))
+	{
+		gui_failed = true;
+		unlink("/tmp/mister-gui-failed");
+	}
+
+	// Releasing the menu key closes the OSD and disables the framebuffer. Restore it while
+	// the configured GUI is running so it remains visible behind the OSD.
+	if (cfg.gui[0] && ttypid && !user_io_osd_is_visible() && !video_fb_state())
+	{
+		video_fb_enable(1);
+	}
+
+	// A held menu key returns from a running core to the menu core, where the GUI can start
+	// again. Keep the default MiSTer behavior when no GUI is configured.
+	if (cfg.gui[0] && !is_menu())
+	{
+		gui_disabled = false;
+		gui_failed = false;
+		const bool menu_held = menu_key && !(menu_key & UPSTROKE) &&
+		                       (menu_key & 0xFFFF) == KEY_MENU;
+		if (!menu_held)
+		{
+			gui_exit_at = 0;
+		}
+		else if (!gui_exit_at)
+		{
+			gui_exit_at = GetTimer(1500);
+		}
+		else if (CheckTimer(gui_exit_at))
+		{
+			gui_exit_at = 0;
+			printf("Menu key held, returning to the menu core\n");
+			fpga_load_rbf("menu.rbf");
+		}
+	}
+
+	// Start the configured frontend only in the menu core. A clean exit pauses relaunches
+	// until a core is left; a failure is reported and also pauses relaunches, avoiding a loop.
+	if (cfg.gui[0] && is_menu() && cfg.fb_terminal && !ttypid && !gui_missing &&
+	    !gui_disabled && !gui_failed && (gui_first || CheckTimer(gui_next_try)))
+	{
+		const char *gui_path = getFullPath(cfg.gui);
+		if (!FileExists(gui_path))
+		{
+			gui_missing = true;
+			printf("GUI not found: %s\n", gui_path);
+		}
+		else
+		{
+			gui_first = false;
+			gui_next_try = GetTimer(5000);
+			printf("Starting GUI: %s\n", gui_path);
+			unlink("/tmp/mister-gui-exited");
+			unlink("/tmp/mister-gui-failed");
+
+			static char gui_cmd[3072];
+			snprintf(gui_cmd, sizeof(gui_cmd),
+			         "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\n"
+			         "\"%s\" 2> /tmp/mister-gui-stderr\nGUI_STATUS=$?\n"
+			         "if [ \"$GUI_STATUS\" -eq 0 ]; then\n"
+			         "  : > /tmp/mister-gui-exited\n"
+			         "else\n"
+			         "  : > /tmp/mister-gui-failed\n"
+			         "  { printf 'GUI exit status %%s\\n' \"$GUI_STATUS\"; head -c 64000 /tmp/mister-gui-stderr; } > /tmp/mister-gui.log\n"
+			         "  cat /tmp/mister-gui.log\n"
+			         "  printf 'GUI failed; automatic restart is paused until another core is exited.\\n'\n"
+			         "fi\n",
+			         gui_path);
+
+			video_chvt(2);
+			video_fb_enable(1);
+			vga_nag();
+			unlink("/tmp/script");
+			FileSave("/tmp/script", gui_cmd, strlen(gui_cmd));
+			ttystatus = 0;
+			ttypid = fork();
+			if (!ttypid)
+			{
+				execl("/sbin/agetty", "/sbin/agetty", "-a", "root", "-l", "/tmp/script",
+				      "--nohostname", "-L", "tty2", "linux", NULL);
+				exit(1);
+			}
+			menustate = MENU_SCRIPTS_FB2;
+		}
+	}
+	else if (cfg.gui[0] && !is_menu())
+	{
+		gui_exit_at = 0;
+	}
 	static unsigned long flash_timer = 0;
 	static int flash_state = 0;
 	static uint32_t dip_submenu;
