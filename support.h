@@ -7,8 +7,6 @@
 #include "support/next/next_enet.h"
 #include "support/next/next_scsi.h"
 
-// SharpMz support
-#include "support/sharpmz/sharpmz.h"
 
 // Apple 2 support
 #include "support/a2/dsk2nib_lib.h"

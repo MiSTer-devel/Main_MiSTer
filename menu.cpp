@@ -1146,7 +1146,6 @@ void HandleUI(void)
 	switch (user_io_core_type())
 	{
 	case CORE_TYPE_8BIT:
-	case CORE_TYPE_SHARPMZ:
 		break;
 
 	default:
@@ -1535,19 +1534,6 @@ void HandleUI(void)
 			menustate = parentstate;
 		}
 	}
-
-    // SHARPMZ Series Menu - This has been located within the sharpmz.cpp code base in order to keep updates to common code
-    // base to a minimum and shrink its size. The UI is called with the basic state data and it handles everything internally,
-    // only updating values in this function as necessary.
-    //
-	if (user_io_core_type() == CORE_TYPE_SHARPMZ)
-        sharpmz_ui(MENU_NONE1, MENU_NONE2, MENU_COMMON1, MENU_FILE_SELECT1,
-			       &parentstate, &menustate, &menusub, &menusub_last,
-			       &menumask, /*Selected_F[0]*/ selPath, &helptext_idx, helptext_custom,
-			       &fs_ExtLen, &fs_Options, &fs_MenuSelect, &fs_MenuCancel,
-			       fs_pFileExt,
-			       menu, select, up, down,
-			       left, right, plus, minus);
 
 	// Ensure we clear out the file-selector-visible file on select or cancel
 	if (cfg.log_file_entry)
@@ -2970,18 +2956,9 @@ void HandleUI(void)
 
 	case MENU_COMMON2:
 		if (menu)
-        {
-			switch (user_io_core_type())
-			{
-			    case CORE_TYPE_SHARPMZ:
-				    menusub   = menusub_last;
-				    menustate = sharpmz_default_ui_state();
-                    break;
-                default:
-                    menustate = MENU_NONE1;
-                    break;
-            };
-        }
+		{
+			menustate = MENU_NONE1;
+		}
 
 		if (recent && menusub == 0)
 		{
@@ -3073,11 +3050,6 @@ void HandleUI(void)
 					menustate = MENU_RESET1;
 					menusub = 1;
 				}
-				else if (user_io_core_type() == CORE_TYPE_SHARPMZ)
-				{
-					menustate = sharpmz_reset_config(1);
-                    menusub   = 0;
-				}
 				break;
 
 			case 14:
@@ -3089,10 +3061,6 @@ void HandleUI(void)
 				{
 					archie_save_config();
 					menustate = MENU_ARCHIE_MAIN1;
-				}
-				else if (user_io_core_type() == CORE_TYPE_SHARPMZ)
-				{
-					menustate = sharpmz_save_config();
 				}
 				else
 				{
@@ -3163,10 +3131,6 @@ void HandleUI(void)
 					menusub = 0;
 					menustate = MENU_GENERIC_MAIN1;
 				}
-				break;
-			case CORE_TYPE_SHARPMZ:
-				menusub   = menusub_last;
-				menustate = sharpmz_default_ui_state();
 				break;
 			}
 		}
@@ -4164,10 +4128,6 @@ void HandleUI(void)
 					menusub = 0;
 					menustate = MENU_GENERIC_MAIN1;
 				}
-				break;
-			case CORE_TYPE_SHARPMZ:
-				menusub = menusub_last;
-				menustate = sharpmz_default_ui_state();
 				break;
 			}
 		}
@@ -5940,7 +5900,6 @@ void HandleUI(void)
 	case MENU_RESET2:
 		m = 0;
 		if (is_minimig()) m = 1;
-		if (user_io_core_type() == CORE_TYPE_SHARPMZ)  m = 2;
 
 		if (select && menusub == 0)
 		{
@@ -5949,11 +5908,6 @@ void HandleUI(void)
 				menustate = MENU_NONE1;
 				minimig_reset();
 			}
-            else if(m == 2)
-            {
-				menustate = MENU_COMMON1;
-                sharpmz_reset_config(1);
-            }
 			else
 			{
 				user_io_status_reset();
