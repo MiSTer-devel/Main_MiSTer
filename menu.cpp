@@ -2062,6 +2062,13 @@ void HandleUI(void)
 									strcpy(pos, GetExt(pos));
 								}
 							}
+							else if (is_pc88() && (p[0] == 'S') && get_image_name(num))
+							{
+								strcpy(s, " ");
+								substrcpy(s + 1, p, 2);
+								strcat(s, " ");
+								strncat(s, get_image_name(num), sizeof(s) - strlen(s) - 1);
+							}
 							else
 							{
 								if (strlen(s))

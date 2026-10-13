@@ -18,6 +18,9 @@
 // Mac
 #include "support/mac/mac.h"
 
+// PC-8801
+#include "support/pc88/pc88.h"
+
 // Atari Falcon SCSI support
 #include "support/falcon/falcon_scsi.h"
 // Sun family support
