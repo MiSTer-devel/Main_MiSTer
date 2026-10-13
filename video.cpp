@@ -3149,7 +3149,9 @@ static void fx_packet_update(const VideoInfo *vi, const fx_layout_t *l)
 	const bool have_ar = core_src && vi->arx && vi->ary;
 	// Interlaced (bit 0) stays clear: ascal has already deinterlaced, and claiming
 	// interlace without field control pixels is undefined for the sink.
-	d[8] = (uint8_t)(((core_src && vi->rotated) ? 0x02 : 0) | (have_ar ? 0x08 : 0));
+	// M (bit 2) tells the sink to drop prescales but keep the DE crop.
+	d[8] = (uint8_t)(((is_menu() || menu_present()) ? 0x04 : 0) |
+		((core_src && vi->rotated) ? 0x02 : 0) | (have_ar ? 0x08 : 0));
 
 	fx_put16(d, 9, l->y);
 	fx_put16(d, 11, (uint16_t)(l->y + l->h));
@@ -3212,8 +3214,7 @@ static void video_scaling_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 		{
 			spi_uio_cmd16(UIO_SETHEIGHT, 0);
 			spi_uio_cmd16(UIO_SETWIDTH, 0);
-			if (is_menu()) fx_packet_off();
-			else fx_menu_packet_update(vm);
+			fx_menu_packet_update(vm);
 		}
 		minimig_set_adjust(2);
 		return;
@@ -3605,7 +3606,18 @@ void video_mode_adjust(bool force)
 	}
 	menu = menu_now;
 
-	if ((vid_changed || output_changed) && !is_menu())
+	// A core re-reporting its aspect after an HSET/VSET change is not a new mode.
+	static uint32_t src_w, src_h, src_vt;
+	static bool src_i;
+	const bool src_same = fx_direct_config_enabled() && video_info.width == src_w &&
+		video_info.height == src_h && video_info.vtime == src_vt && video_info.interlaced == src_i;
+	src_w = video_info.width; src_h = video_info.height; src_vt = video_info.vtime; src_i = video_info.interlaced;
+
+	if (vid_changed && !output_changed && src_same && !is_menu())
+	{
+		video_scaling_adjust(&video_info, &v_cur);
+	}
+	else if ((vid_changed || output_changed) && !is_menu())
 	{
 		if (cfg_has_video_sections())
 		{
@@ -3722,7 +3734,7 @@ void video_mode_adjust(bool force)
 
 	fx_lifecycle(&current_video_info, &v_cur);
 
-	if (fx_direct_config_enabled() && is_menu()) fx_packet_off();
+	if (fx_direct_config_enabled() && is_menu()) fx_menu_packet_update(&v_cur);
 }
 
 static void fb_write_module_params()
