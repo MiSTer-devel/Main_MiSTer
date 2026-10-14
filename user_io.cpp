@@ -2303,6 +2303,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 
 	buffer_lba[index] = -1;
+	pc88_mount(index);
 	if (!index || is_cdi() || (is_saturn() && index==1)) use_save = pre;
 
 	if (!ret)
@@ -3495,6 +3496,10 @@ void user_io_poll()
 			else if (int a3op = a3_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
 				if (a3op < 0) break;
+			}
+			else if (int pc88op = pc88_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
+			{
+				if (pc88op < 0) break;
 			}
 			else if (int falop = falcon_sd_service(disk, op, lba, sz, ack))
 			{
