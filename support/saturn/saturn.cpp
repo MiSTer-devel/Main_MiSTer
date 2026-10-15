@@ -10,8 +10,8 @@
 #include "../../menu.h"
 #include "../../cheats.h"
 #include "saturn.h"
+#include "saturn_ramcart.h"
 
-static int need_reset = 0;
 uint32_t saturn_frame_cnt = 0;
 uint8_t time_mode;
 
@@ -93,6 +93,8 @@ void saturn_poll()
 }
 
 static char buf[1024];
+static char mounted_uuid[32] = {};
+static char last_uuid[32] = {};
 
 static void saturn_get_save_without_disk(char *buf)
 {
@@ -153,28 +155,82 @@ static int saturn_load_rom(const char *basename, const char *name, int sub_index
 	return 0;
 }
 
+static int saturn_lookup_ram_cart(const char *uuid, uint32_t *cart_type)
+{
+	const char *databases[] = { SATURN_RAM_CART_USER_DB_PATH, SATURN_RAM_CART_DB_PATH };
+
+	for (const char *database : databases)
+	{
+		const char *db_path = user_io_make_filepath(HomeDir(), database);
+		if (!FileExists(db_path, 0)) continue;
+
+		fileTextReader reader = {};
+		if (!FileOpenTextReader(&reader, db_path))
+		{
+			printf("Saturn: RAM cart lookup failed, database could not be read: %s\n", db_path);
+			continue;
+		}
+
+		while (const char *line = FileReadLine(&reader))
+		{
+			if (!saturn_ramcart_parse_db_line(line, uuid, cart_type)) continue;
+
+			printf("Saturn: RAM cart lookup %s -> %s (%s)\n", uuid, saturn_ramcart_type_name(*cart_type), db_path);
+			return 1;
+		}
+	}
+
+	printf("Saturn: RAM cart lookup failed for UUID %s\n", uuid);
+	return 0;
+}
+
+static void saturn_send_boot_header(const uint8_t *header, const char *uuid)
+{
+	uint32_t cart_type = SATURN_RAM_CART_NONE;
+	if (*uuid) saturn_lookup_ram_cart(uuid, &cart_type);
+	uint8_t boot_data[SATURN_RAM_CART_BOOT_OFFSET + 2] = {};
+	if (header) memcpy(boot_data, header, SATURN_RAM_CART_BOOT_OFFSET);
+	boot_data[SATURN_RAM_CART_BOOT_OFFSET] = cart_type;
+	boot_data[SATURN_RAM_CART_BOOT_OFFSET + 1] = SATURN_RAM_CART_BOOT_TAG;
+	user_io_set_index(BOOT_IO_INDEX);
+	user_io_set_download(1, header ? 0 : SATURN_RAM_CART_BOOT_OFFSET);
+	user_io_file_tx_data(header ? boot_data : boot_data + SATURN_RAM_CART_BOOT_OFFSET,
+		header ? sizeof(boot_data) : 2);
+	user_io_set_download(0);
+	printf("Saturn: RAM cart detected -> %s\n", saturn_ramcart_type_name(cart_type));
+}
+
 void saturn_set_image(int num, const char *filename)
 {
-	static char last_dir[1024] = {};
-
 	(void)num;
-
-	int reset_after_insert_disc = !user_io_status_get("[4]");
 
 	satcdd.Unload();
 	satcdd.Reset();
 
-	int same_game = *filename && *last_dir && !strncmp(last_dir, filename, strlen(last_dir));
-	strcpy(last_dir, filename);
-	char *p = strrchr(last_dir, '/');
-	if (p) *p = 0;
+	uint8_t boot_header[256] = {};
+	char uuid[32] = {};
+	int loaded = *filename && satcdd.Load(filename) > 0;
+	int have_header = loaded && satcdd.GetBootHeader(boot_header) > 0;
+	if (have_header && !saturn_ramcart_make_uuid(boot_header, uuid, sizeof(uuid)))
+	{
+		uuid[0] = 0;
+		printf("Saturn: RAM cart lookup failed, invalid boot header\n");
+	}
 
-	if (!same_game && reset_after_insert_disc)
+	strcpy(mounted_uuid, uuid);
+	int same_game = *uuid && !strcmp(last_uuid, uuid);
+	int reset_after_insert_disc = user_io_status_get("[0]") || (!same_game && !user_io_status_get("[4]"));
+
+	if (reset_after_insert_disc)
 	{
 		saturn_mount_save("", true);
 
 		user_io_status_set("[0]", 1);
-		saturn_reset();
+
+		char last_dir[1024];
+		strcpy(last_dir, filename);
+		char *p = strrchr(last_dir, '/');
+		if (p) *p = 0;
 
 		// load CD BIOS
 		if (!saturn_load_rom(filename, "cd_bios.rom", 0)) // from disk folder.
@@ -192,51 +248,56 @@ void saturn_set_image(int num, const char *filename)
 
 	satcdd.wwf_hack = false;
 	satcdd.roadrash_hack = false;
-	if (strlen(filename))
+	if (loaded)
 	{
-		if (satcdd.Load(filename) > 0)
-		{
-			satcdd.SendData = saturn_send_data;
+		satcdd.SendData = saturn_send_data;
 
-			if (!same_game && reset_after_insert_disc)
-			{
-				//saturn_load_rom(filename, "cart.rom", 1);
-				saturn_mount_save(filename, true);
-				//cheats_init(filename, 0);
+		if (reset_after_insert_disc)
+		{
+			//saturn_load_rom(filename, "cart.rom", 1);
+			saturn_mount_save(filename, true);
+			//cheats_init(filename, 0);
+		}
+
+		if (have_header)
+		{
+			if (*uuid) user_io_write_gameid(filename, 0, uuid);
+
+			char *id = (char*)boot_header + 0x20;
+			if (!strncmp(id,"T-8126H",7) ||
+				!strncmp(id, "T-8120G", 7) ||
+				!strncmp(id, "T-8112H", 7) ||
+				!strncmp(id, "T-99901G", 8) ||
+				!strncmp(id, "T-8112G", 7)) satcdd.wwf_hack = true;
+			if (satcdd.wwf_hack) {
+#ifdef SATURN_DEBUG
+				printf("\x1b[32mSaturn: WWF games hack!!!\n\x1b[0m");
+#endif // SATURN_DEBUG
 			}
 
-			if (satcdd.GetBootHeader((uint8_t*)buf) > 0)
-			{
-				saturn_send_data((uint8_t*)buf, 256, BOOT_IO_INDEX);
-
-				char *id = buf + 0x20;
-				if (!strncmp(id,"T-8126H",7) ||
-					!strncmp(id, "T-8120G", 7) ||
-					!strncmp(id, "T-8112H", 7) ||
-					!strncmp(id, "T-99901G", 8) ||
-					!strncmp(id, "T-8112G", 7)) satcdd.wwf_hack = true;
-				if (satcdd.wwf_hack) {
+			if (!strncmp(id, "T-5008H", 7) ||
+				!strncmp(id, "T-10609G", 8)) satcdd.roadrash_hack = true;
+			if (satcdd.roadrash_hack) {
 #ifdef SATURN_DEBUG
-					printf("\x1b[32mSaturn: WWF games hack!!!\n\x1b[0m");
+				printf("\x1b[32mSaturn: Road Rash games hack!!!\n\x1b[0m");
 #endif // SATURN_DEBUG
-				}
-
-				if (!strncmp(id, "T-5008H", 7) ||
-					!strncmp(id, "T-10609G", 8)) satcdd.roadrash_hack = true;
-				if (satcdd.roadrash_hack) {
-#ifdef SATURN_DEBUG
-					printf("\x1b[32mSaturn: Road Rash games hack!!!\n\x1b[0m");
-#endif // SATURN_DEBUG
-				}
 			}
 		}
 	}
+
+	saturn_send_boot_header(have_header ? boot_header : NULL, uuid);
+	if (reset_after_insert_disc) strcpy(last_uuid, uuid);
+	else printf("Saturn: RAM cart unchanged, disc inserted without a reset\n");
 
 	user_io_status_set("[0]", 0);
 }
 
 void saturn_reset() {
-	need_reset = 1;
+	uint32_t reset = user_io_status_get("[0]");
+	user_io_status_set("[0]", 1);
+	saturn_send_boot_header(NULL, mounted_uuid);
+	if (strcmp(last_uuid, mounted_uuid)) last_uuid[0] = 0;
+	user_io_status_set("[0]", reset);
 }
 
 int saturn_send_data(uint8_t* buf, int len, uint8_t index) {

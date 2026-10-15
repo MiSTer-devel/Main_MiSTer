@@ -441,15 +441,13 @@ int satcdd_t::GetBootHeader(uint8_t *buf) {
 
 	if (this->toc.chd_f)
 	{
-		mister_chd_read_sector(this->toc.chd_f, 0, 0, offset, 256, buf, this->chd_hunkbuf, &this->chd_hunknum);
+		if (mister_chd_read_sector(this->toc.chd_f, 0, 0, offset, 256, buf, this->chd_hunkbuf, &this->chd_hunknum) != CHDERR_NONE) return -1;
 	}
 	else 
 	{
-		if (this->toc.tracks[0].f.opened())
-		{
-			FileSeek(&this->toc.tracks[0].f, offset, SEEK_SET);
-			FileReadAdv(&this->toc.tracks[0].f, buf, 256);
-		}
+		if (!this->toc.tracks[0].f.opened() ||
+			!FileSeek(&this->toc.tracks[0].f, offset, SEEK_SET) ||
+			FileReadAdv(&this->toc.tracks[0].f, buf, 256) != 256) return -1;
 	}
 
 	return 1;
