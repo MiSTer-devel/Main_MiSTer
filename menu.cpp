@@ -145,6 +145,8 @@ enum MENU
 	MENU_UART4,
 	MENU_BAUD1,
 	MENU_BAUD2,
+	MENU_WGLINK1,
+	MENU_WGLINK2,
 
 	MENU_SFONT_FILE_SELECTED,
 
@@ -267,7 +269,7 @@ const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "    Stick 1: Tilt RIGHT", "    Stick 1: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
 const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
-const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem", "UDP", "SNI"};
+const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem", "UDP", "SNI", "WonderGate"};
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
 const char *config_smask_msg[] = { "None", "1x", "2x", "1x Rotated", "2x Rotated" };
@@ -529,6 +531,79 @@ static uint8_t GetASCIIKey(uint32_t keycode)
 
 static bool ignore_osd_release = false;
 static int select_ini = 0;
+
+// WonderGate (UART mode 7) account link: the 8-character code from the server's account page, picked
+// with up/down and left/right (a controller is enough) or typed, then handed to Swan Revival Link.
+static const char wg_code_chars[] = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // the codes' letters: no 0/O, 1/I/L
+static char wg_code[9];
+static int wg_pos;
+static char wg_result[3][32];
+
+// "Linked as mio", "Linked" or "Not linked", from Swan Revival Link's link.json
+static void wg_account(char *out, size_t n)
+{
+	char buf[1024] = {};
+	FILE *f = fopen(SWAN_LINK_JSON, "r");
+	if (f)
+	{
+		if (!fread(buf, 1, sizeof(buf) - 1, f)) buf[0] = 0;
+		fclose(f);
+	}
+
+	// "handle": "mio" (or null, for an account without a name)
+	const char *v = strstr(buf, "\"handle\"");
+	if (v && (v = strchr(v + 8, ':'))) v += 1 + strspn(v + 1, " \t");
+	const char *e = (v && *v == '"') ? strchr(v + 1, '"') : NULL;
+
+	if (!strstr(buf, "\"token\"")) snprintf(out, n, "Not linked");
+	else if (e && e > v + 1) snprintf(out, n, "Linked as %.*s", (int)(e - v - 1), v + 1);
+	else snprintf(out, n, "Linked");
+}
+
+// Swaps the code for a link (blocking: a moment, or up to the program's network timeout)
+static void wg_link()
+{
+	char cmd[128], line[128] = {};
+
+	OsdWrite(12, "         Linking...");
+	OsdUpdate();
+	snprintf(cmd, sizeof(cmd), "%s --mister --link %s 2>&1", SWAN_LINK_PATH, wg_code);
+	FILE *p = popen(cmd, "r");
+	if (p)
+	{
+		if (!fgets(line, sizeof(line), p)) line[0] = 0;
+		pclose(p);
+	}
+	line[strcspn(line, "\r\n")] = 0;
+
+	// "Linked as mio. Scores you post from here will show your name." or "Couldn't link: <reason>"
+	if (!strncmp(line, "Linked as ", 10))
+	{
+		char *dot = strrchr(line, '.');
+		if (dot && dot > line + 10 && strstr(line, ". Scores")) *strstr(line, ". Scores") = 0;
+		snprintf(wg_result[0], sizeof(wg_result[0]), " %s", line);
+		snprintf(wg_result[1], sizeof(wg_result[1]), " Your scores show it.");
+		wg_result[2][0] = 0;
+		// The running Link picks up the new link when it starts again (the UART mode loop restarts it)
+		system("killall -q swan-link");
+	}
+	else
+	{
+		const char *why = strncmp(line, "Couldn't link: ", 15) ? line : line + 15;
+		if (!why[0]) why = "no answer";
+		snprintf(wg_result[0], sizeof(wg_result[0]), " Couldn't link:");
+
+		// the reason on two lines, broken between words
+		for (int l = 1; l < 3; l++)
+		{
+			int cut = strlen(why) <= 27 ? (int)strlen(why) : 27;
+			if (why[cut]) for (int i = cut; i > 10; i--) if (why[i] == ' ') { cut = i; break; }
+			snprintf(wg_result[l], sizeof(wg_result[l]), " %.*s", cut, why);
+			why += cut;
+			while (*why == ' ') why++;
+		}
+	}
+}
 
 void SelectINI()
 {
@@ -3599,6 +3674,17 @@ void HandleUI(void)
 			OsdWrite(m++, s, menusub == 0, 0);
 
 			OsdWrite(m++);
+			if (mode == UART_MODE_WONDERGATE)
+			{
+				char acct[64];
+				wg_account(acct, sizeof(acct));
+				snprintf(s, 30, " %s", acct);
+				OsdWrite(m++, s);
+				OsdWrite(m++, " Link account              \x16", menusub == 1);
+				OsdWrite(m++);
+				menumask |= 2;
+			}
+
 			if (mode == 4)
 			{
 				sprintf(s, " Link:            %s", (midilink == 6) ? "USB Serial" : (midilink == 5) ? "       UDP" : "       TCP");
@@ -3663,6 +3749,18 @@ void HandleUI(void)
 				break;
 
 			case 1:
+				if (GetUARTMode() == UART_MODE_WONDERGATE)
+				{
+					if (select)
+					{
+						memset(wg_code, '-', 8);
+						wg_code[8] = 0;
+						wg_pos = 0;
+						wg_result[0][0] = wg_result[1][0] = wg_result[2][0] = 0;
+						menustate = MENU_WGLINK1;
+					}
+					break;
+				}
 				{
 					int mode = GetUARTMode();
 					int midilink = GetMidiLinkMode();
@@ -3793,13 +3891,15 @@ void HandleUI(void)
 			bool udp_enabled = mode == 5;
 			// SNI is only selectable if playing SNES and snid is present
 			bool sni_enabled = (mode == 6) || (is_snes() && FileExists("/media/fat/snid"));
+			// WonderGate only with the WonderSwan core and Swan Revival Link installed
+			bool wg_enabled = (mode == UART_MODE_WONDERGATE) || (is_wonderswan() && FileExists(SWAN_LINK_PATH, 0));
 
-			uint32_t skipped = !udp_enabled + !sni_enabled;;
+			uint32_t skipped = !udp_enabled + !sni_enabled + !wg_enabled;
 
             for (uint32_t i = 0; i < 15; i++)
             {
 				// Skip drawing unselectable entries
-				while ((!udp_enabled && m == 5) || (!sni_enabled && m == 6))
+				while ((!udp_enabled && m == 5) || (!sni_enabled && m == 6) || (!wg_enabled && m == UART_MODE_WONDERGATE))
 				{
 					m++;
 				}
@@ -3894,6 +3994,75 @@ void HandleUI(void)
 			m++;
 			menumask |= 1 << m;
 			OsdWrite(15, STD_EXIT, menusub == m);
+		}
+		break;
+
+	case MENU_WGLINK1:
+		{
+			helptext_idx = 0;
+			menumask = 0;
+			OsdSetTitle("Link Account");
+			menustate = MENU_WGLINK2;
+			parentstate = MENU_WGLINK1;
+
+			m = 0;
+			OsdWrite(m++);
+			OsdWrite(m++, " Make a link code on your");
+			OsdWrite(m++, " account page and enter it:");
+			OsdWrite(m++, " swanrevival.com/account/");
+			OsdWrite(m++);
+			char *p = s + sprintf(s, "  ");
+			for (int i = 0; i < 8; i++) p += sprintf(p, (i == wg_pos) ? "[%c]" : " %c ", wg_code[i]);
+			OsdWrite(m++, s);
+			OsdWrite(m++);
+			OsdWrite(m++, " Up/Down: change a letter");
+			OsdWrite(m++, " Left/Right: move");
+			OsdWrite(m++, " Or type it on a keyboard");
+			OsdWrite(m++, " Then press OK to link");
+			OsdWrite(m++);
+			OsdWrite(m++, wg_result[0]);
+			OsdWrite(m++, wg_result[1]);
+			OsdWrite(m++, wg_result[2]);
+			while (m < 15) OsdWrite(m++);
+			OsdWrite(15, STD_BACK);
+		}
+		break;
+
+	case MENU_WGLINK2:
+		{
+			if (menu)
+			{
+				menustate = MENU_UART1;
+				menusub = 1;
+				break;
+			}
+
+			const int n = sizeof(wg_code_chars) - 1;
+			const char *at = strchr(wg_code_chars, wg_code[wg_pos]);
+			char typed = GetASCIIKey(c);
+			bool changed = true;
+
+			if (up) wg_code[wg_pos] = wg_code_chars[at ? (at - wg_code_chars + 1) % n : 0];
+			else if (down) wg_code[wg_pos] = wg_code_chars[at ? (at - wg_code_chars + n - 1) % n : n - 1];
+			else if (left) wg_pos = (wg_pos + 7) % 8;
+			else if (right) wg_pos = (wg_pos + 1) % 8;
+			else if (typed > 1 && strchr(wg_code_chars, typed))
+			{
+				wg_code[wg_pos] = typed;
+				if (wg_pos < 7) wg_pos++;
+			}
+			else if (select)
+			{
+				if (strchr(wg_code, '-'))
+				{
+					snprintf(wg_result[0], sizeof(wg_result[0]), " The code has 8 letters.");
+					wg_result[1][0] = wg_result[2][0] = 0;
+				}
+				else wg_link();
+			}
+			else changed = false;
+
+			if (changed) menustate = MENU_WGLINK1;
 		}
 		break;
 

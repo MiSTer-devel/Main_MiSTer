@@ -249,6 +249,13 @@ int user_io_is_dualsdr();
 uint16_t altcfg(int alt = -1);
 
 void MakeFile(const char * filename, const char * data);
+// UART connection 7: Swan Revival Link plays the WonderSwan's WonderGate mobile adapter on the core's
+// UART and carries its connections to an online server (swanrevival.com). Only offered with the
+// WonderSwan core and the program installed, like SNI and snid.
+#define UART_MODE_WONDERGATE 7
+#define SWAN_LINK_PATH "/media/fat/swan-link/swan-link"
+#define SWAN_LINK_JSON "/media/fat/swan-link/link.json"
+
 int GetUARTMode();
 void SetUARTMode(int mode);
 int GetMidiLinkMode();
@@ -300,6 +307,7 @@ char is_atari800();
 char is_atari5200();
 char is_3do();
 char is_marty();
+char is_wonderswan();
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()

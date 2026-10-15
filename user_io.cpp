@@ -458,6 +458,13 @@ char is_3do()
 	return (is_3do_type == 1);
 }
 
+static int is_wonderswan_type = 0;
+char is_wonderswan()
+{
+	if (!is_wonderswan_type) is_wonderswan_type = strcasecmp(orig_name, "WonderSwan") ? 2 : 1;
+	return (is_wonderswan_type == 1);
+}
+
 static int is_no_type = 0;
 static int disable_osd = 0;
 char has_menu()
@@ -1221,12 +1228,31 @@ int GetUARTMode()
 	if (!stat("/tmp/uartmode4", &filestat)) return 4;
 	if (!stat("/tmp/uartmode5", &filestat)) return 5;
 	if (!stat("/tmp/uartmode6", &filestat)) return 6;
+	if (!stat("/tmp/uartmode7", &filestat)) return UART_MODE_WONDERGATE;
 	return 0;
+}
+
+// The uartmode script doesn't know WonderGate (it only stops the other modes when given 7), so it is
+// started here, in a loop that brings it back if it stops. The flag file holds a token: a loop from an
+// earlier start sees the token change, or the file go when uartmode stops every mode, and ends, so
+// turning WonderGate off and on quickly never leaves two running.
+static void wondergate_start()
+{
+	static unsigned int starts = 0;
+	char token[32], cmd[512];
+
+	snprintf(token, sizeof(token), "%d.%u", (int)getpid(), ++starts);
+	MakeFile("/tmp/uartmode7", token);
+	snprintf(cmd, sizeof(cmd),
+		"(while [ \"$(cat /tmp/uartmode7 2>/dev/null)\" = \"%s\" ]; do taskset 1 %s --mister; sleep 1; done)"
+		" </dev/null >/dev/null 2>&1 &", token, SWAN_LINK_PATH);
+	system(cmd);
 }
 
 void SetUARTMode(int mode)
 {
 	mode &= 0xF;
+	if (mode == UART_MODE_WONDERGATE && !FileExists(SWAN_LINK_PATH, 0)) mode = 0;
 	uint32_t baud = GetUARTbaud(mode);
 
 	spi_uio_cmd_cont(UIO_SET_UART);
@@ -1245,35 +1271,43 @@ void SetUARTMode(int mode)
 	char cmd[32];
 	sprintf(cmd, "uartmode %d", mode);
 	system(cmd);
+
+	if (mode == UART_MODE_WONDERGATE) wondergate_start();
 }
 
 static int uart_speed_idx = 0;
 static int midi_speed_idx = 0;
 static int mlink_speed_idx = 0;
 
+// Modem, UDP and SNI pick from MidiLink's speeds; WonderGate, like PPP and Console, from the core's.
+static int mlink_bauds(int mode)
+{
+	return mode > 3 && mode != UART_MODE_WONDERGATE;
+}
+
 const uint32_t* GetUARTbauds(int mode)
 {
-	return (mode == 3) ? midi_speeds : (mode > 3) ? mlink_speeds : uart_speeds;
+	return (mode == 3) ? midi_speeds : mlink_bauds(mode) ? mlink_speeds : uart_speeds;
 }
 
 uint32_t GetUARTbaud(int mode)
 {
-	return (mode == 3) ? midi_speeds[midi_speed_idx] : (mode > 3) ? mlink_speeds[mlink_speed_idx] : uart_speeds[uart_speed_idx];
+	return (mode == 3) ? midi_speeds[midi_speed_idx] : mlink_bauds(mode) ? mlink_speeds[mlink_speed_idx] : uart_speeds[uart_speed_idx];
 }
 
 const char* GetUARTbaud_label(int mode)
 {
-	return (mode == 3) ? midi_speed_labels[midi_speed_idx] : (mode > 3) ? mlink_speed_labels[mlink_speed_idx] : uart_speed_labels[uart_speed_idx];
+	return (mode == 3) ? midi_speed_labels[midi_speed_idx] : mlink_bauds(mode) ? mlink_speed_labels[mlink_speed_idx] : uart_speed_labels[uart_speed_idx];
 }
 
 const char* GetUARTbaud_label(int mode, int idx)
 {
-	return (mode == 3) ? midi_speed_labels[idx] : (mode > 3) ? mlink_speed_labels[idx] : uart_speed_labels[idx];
+	return (mode == 3) ? midi_speed_labels[idx] : mlink_bauds(mode) ? mlink_speed_labels[idx] : uart_speed_labels[idx];
 }
 
 int GetUARTbaud_idx(int mode)
 {
-	return (mode == 3) ? midi_speed_idx : (mode > 3) ? mlink_speed_idx : uart_speed_idx;
+	return (mode == 3) ? midi_speed_idx : mlink_bauds(mode) ? mlink_speed_idx : uart_speed_idx;
 }
 
 char * GetMidiLinkSoundfont()
@@ -1313,7 +1347,7 @@ uint32_t ValidateUARTbaud(int mode, uint32_t baud)
 	}
 
 	if (mode == 3) midi_speed_idx = idx;
-	else if (mode > 3) mlink_speed_idx = idx;
+	else if (mlink_bauds(mode)) mlink_speed_idx = idx;
 	else uart_speed_idx = idx;
 
 	return bauds[idx];
