@@ -623,7 +623,7 @@ void user_io_status_set(const char *opt, uint32_t value, int ex)
 
 	if (!is_st())
 	{
-		uint32_t ext = minimig_get_extcfg();
+		uint32_t ext = minimig_core_extcfg();
 		spi_uio_cmd_cont(UIO_SET_STATUS2);
 		for (uint32_t i = 0; i < sizeof(cur_status); i += 2) spi_w((is_minimig() && (i >> 2) == 1) ? (uint16_t)(ext >> ((i & 2) << 3)) : (cur_status[i + 1] << 8) | cur_status[i]);
 		DisableIO();
