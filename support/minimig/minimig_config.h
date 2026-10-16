@@ -25,7 +25,6 @@ extern const char *config_memory_chip_msg[];
 extern const char *config_memory_slow_msg[];
 extern const char *config_memory_fast_msg[][8];
 extern const char *config_cpu_msg[];
-extern const char *config_cpu030_msg[];
 extern const char *config_chipset_msg[];
 
 typedef struct

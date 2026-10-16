@@ -27,10 +27,8 @@
 const char *config_memory_chip_msg[] = { "512K", "1M",   "1.5M", "2M" };
 const char *config_memory_slow_msg[] = { "none", "512K", "1M",   "1.5M" };
 const char *config_memory_fast_msg[][8] = { { "none", "2M", "4M", "8M", "8M",    "8M",    "8M",   "8M" } ,
-											{ "none", "2M", "4M", "8M", "256M", "384M", "128M", "64M" } };
-
+											{ "none", "2M", "4M", "8M", "256M", "384M", "256M", "256M" } };
 const char *config_cpu_msg[] = { "68000", "68010", "68030", "68020" };
-const char *config_cpu030_msg[] = { " 25MHz", " 40MHz", " 50MHz", " 56.7MHz", " 33MHz" };
 const char *config_chipset_msg[] = { "OCS-A500", "OCS-A1000", "ECS", "---", "---", "---", "AGA", "---" };
 
 typedef struct
@@ -581,7 +579,10 @@ int minimig_cfg_load(int num)
 	}
 
 	if (result && (minimig_config.cpu & 0x23) == 0x03)
-		minimig_config.cpu = (minimig_config.cpu & 0x1c) | 0xc2;
+		minimig_config.cpu = (minimig_config.cpu & 0x1c) | 0x22;
+
+	if (result && (minimig_config.memory & 0xa0) == 0xa0)
+		minimig_config.memory &= ~0x30;
 
 	if (!result) {
 		BootPrint("Can not open configuration file!\n");
