@@ -360,6 +360,19 @@ char is_pcxt()
 	return (is_pcxt_type == 1);
 }
 
+static int is_pcat286_type = 0;
+char is_pcat286()
+{
+	if (!is_pcat286_type)
+	{
+		if (!strcasecmp(orig_name, "PCAT-286"))
+			is_pcat286_type = 1;
+		else
+			is_pcat286_type = 2;
+	}
+	return (is_pcat286_type == 1);
+}
+
 static int is_gba_type = 0;
 char is_gba()
 {
@@ -1024,7 +1037,7 @@ static void parse_config()
 				{
 					int idx = p[2] - '0';
 					StoreIdx_S(idx, str);
-					if (is_x86() || is_pcxt() || (is_uneon() && idx >= 2))
+					if (is_x86() || is_pcxt() || is_pcat286() || (is_uneon() && idx >= 2))
 					{
 						x86_set_image(idx, str);
 					}
@@ -1221,7 +1234,7 @@ void MakeFile(const char *filename, const char *data)
 uint16_t f12_mod;
 char is_f12_mod_needed()
 {
-	return (is_x86() || is_pcxt() || is_archie() || (f12_mod != 0));
+	return (is_x86() || is_pcxt() || is_pcat286() || is_archie() || (f12_mod != 0));
 }
 
 int GetUARTMode()
@@ -1642,10 +1655,10 @@ void user_io_init(const char *path, const char *xml)
 					BootInit();
 					a2065_start();
 				}
-				else if (is_x86() || is_pcxt())
+				else if (is_x86() || is_pcxt() || is_pcat286())
 				{
 					x86_config_load();
-					x86_init();
+					x86_init(1);
 				}
 				else if (is_archie())
 				{
@@ -3219,7 +3232,7 @@ void user_io_send_buttons(char force)
 			if (is_neogeo_cd()) neocd_reset();
 			if (is_pce()) pcecd_reset();
 			if (is_saturn()) saturn_reset();
-			if (is_x86() || is_pcxt()) x86_init();
+			if (is_x86() || is_pcxt() || is_pcat286()) x86_init();
 			if (is_uneon()) x86_ide_set();
 			if (is_st()) tos_reset(0);
 			if (is_3do()) p3do_reset();
@@ -3377,7 +3390,7 @@ void user_io_poll()
 	}
 
 	// sd card emulation
-	if (is_x86() || is_pcxt())
+	if (is_x86() || is_pcxt() || is_pcat286())
 	{
 		x86_poll(0);
 	}

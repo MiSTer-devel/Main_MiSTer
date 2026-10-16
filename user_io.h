@@ -294,6 +294,7 @@ char is_cdi();
 char is_arcade();
 char is_saturn();
 char is_pcxt();
+char is_pcat286();
 char is_n64();
 char is_uneon();
 char is_atari800();

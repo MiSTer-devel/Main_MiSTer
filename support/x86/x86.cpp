@@ -488,7 +488,7 @@ static void hdd_set(int num, char* filename)
 	}
 
 	if(!present && vhd) present = ide_img_mount(&ide_image[num], filename, 1);
-	if (!cd && is_pcxt())
+	if (!cd && (is_pcxt() || is_pcat286()))
 	{
 		FILE* fd;
 		uint64_t size;
@@ -528,13 +528,99 @@ static uint8_t bin2bcd(unsigned val)
 	return ((val / 10) << 4) + (val % 10);
 }
 
+#define CMOS_SIZE 128
+
+static uint8_t cmos_nvram_saved[CMOS_SIZE];
+static bool cmos_nvram_saved_valid = false;
+
+static bool x86_cmos_nvram_supported()
+{
+	return is_pcat286();
+}
+
+static char* x86_cmos_nvram_name()
+{
+	return user_io_make_filepath(HomeDir(), "cmos.dat");
+}
+
+static void x86_cmos_normalize(uint8_t *cmos)
+{
+	// Clock registers are set by the host, don't keep them in the file
+	memset(cmos, 0, 0x10);
+}
+
+static bool x86_cmos_load_nvram(uint8_t *cmos)
+{
+	uint8_t saved[CMOS_SIZE];
+	if (FileLoad(x86_cmos_nvram_name(), saved, sizeof(saved)) != (int)sizeof(saved))
+	{
+		cmos_nvram_saved_valid = false;
+		return false;
+	}
+
+	// Only the config area is restored, not the clock
+	memcpy(cmos + 0x10, saved + 0x10, CMOS_SIZE - 0x10);
+
+	x86_cmos_normalize(saved);
+	memcpy(cmos_nvram_saved, saved, sizeof(saved));
+	cmos_nvram_saved_valid = true;
+	return true;
+}
+
+static bool x86_cmos_read(uint8_t *cmos)
+{
+	uint8_t readback[CMOS_SIZE];
+	// length is in dwords
+	x86_dma_recvbuf(RTC_BASE, CMOS_SIZE / 4, (uint32_t*)readback);
+	memcpy(cmos, readback, sizeof(readback));
+
+	// Sanity check, so an older core without readback can't overwrite the file with zeros
+	const uint16_t extended_kib = cmos[0x17] | (cmos[0x18] << 8);
+	const uint16_t extended_kib_duplicate = cmos[0x30] | (cmos[0x31] << 8);
+	if (cmos[0x15] != 0x80 || cmos[0x16] != 0x02 ||
+	    extended_kib != extended_kib_duplicate)
+		return false;
+
+	switch (extended_kib)
+	{
+		case 384:   // 1 MiB installed RAM
+		case 1408:  // 2 MiB installed RAM
+		case 3456:  // 4 MiB installed RAM
+		case 7552:  // 8 MiB installed RAM
+		case 15232: // 16 MiB installed RAM
+		case 15356: // 16 MiB, first RAM map
+			return true;
+		default:
+			return false;
+	}
+}
+
+static void x86_cmos_capture()
+{
+	uint8_t cmos[CMOS_SIZE];
+	if (!x86_cmos_read(cmos)) return;
+
+	x86_cmos_normalize(cmos);
+	if (cmos_nvram_saved_valid && !memcmp(cmos_nvram_saved, cmos, sizeof(cmos))) return;
+
+	if (FileSave(x86_cmos_nvram_name(), cmos, sizeof(cmos)) == (int)sizeof(cmos))
+	{
+		memcpy(cmos_nvram_saved, cmos, sizeof(cmos));
+		cmos_nvram_saved_valid = true;
+	}
+}
+
 void x86_ide_set()
 {
 	for (int i = 0; i < 4; i++) hdd_set(i, config.img_name[i + 2]);
 }
 
-void x86_init()
+void x86_init(int core_start)
 {
+	const bool persist_cmos = x86_cmos_nvram_supported();
+	// save BIOS changes before the reset wipes the RTC (nothing to save on core start)
+	if (persist_cmos && !core_start) x86_cmos_capture();
+
 	user_io_status_set("[0]", 1);
 
 	const char *home = HomeDir();
@@ -667,6 +753,8 @@ void x86_init()
 		0, 0, 0, 0, 0, 0, 0, 0,	0, 0, 0, 0, 0, 0, 0, 0
 	};
 
+	if (persist_cmos) x86_cmos_load_nvram(cmos);
+
 	//count checksum
 	unsigned short sum = 0;
 	for (int i = 0x10; i <= 0x2D; i++) sum += cmos[i];
@@ -674,6 +762,7 @@ void x86_init()
 	cmos[0x2E] = sum >> 8;
 	cmos[0x2F] = sum & 0xFF;
 	for (unsigned int i = 0; i < sizeof(cmos) / sizeof(cmos[0]); i++) IOWR(RTC_BASE, i, cmos[i]);
+	if (persist_cmos) x86_cmos_capture();
 
 	x86_share_reset();
 	user_io_status_set("[0]", 0);
@@ -761,6 +850,17 @@ static void fdd_io(uint8_t read)
 void x86_poll(int only_ide)
 {
 	if(!only_ide) x86_share_poll();
+
+	if (!only_ide && x86_cmos_nvram_supported())
+	{
+		static time_t cmos_poll_time = 0;
+		time_t now = time(NULL);
+		if (now != cmos_poll_time)
+		{
+			cmos_poll_time = now;
+			x86_cmos_capture();
+		}
+	}
 
 	uint16_t sd_req = ide_check();
 	if (sd_req)
