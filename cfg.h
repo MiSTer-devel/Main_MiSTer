@@ -110,6 +110,7 @@ typedef struct {
 	char autofire_rates[3072];
 	uint8_t autofire_on_directions;
 	char screenshot_image_format[16];
+	uint8_t screenshot_info;
 	uint16_t xbe2_shift;
 	uint8_t spd_quirk;
 	uint16_t hdmi_off;
