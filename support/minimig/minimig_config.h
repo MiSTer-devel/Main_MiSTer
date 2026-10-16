@@ -25,6 +25,7 @@ extern const char *config_memory_chip_msg[];
 extern const char *config_memory_slow_msg[];
 extern const char *config_memory_fast_msg[][8];
 extern const char *config_cpu_msg[];
+extern const char *config_cpu030_msg[];
 extern const char *config_chipset_msg[];
 
 typedef struct
@@ -113,6 +114,9 @@ void minimig_ConfigUserPort(mm_userportMode mode);
 
 void minimig_set_extcfg(unsigned int ext_cfg);
 unsigned int minimig_get_extcfg();
+unsigned int minimig_core_extcfg();
+void minimig_dsnd_load();
+int minimig_dsnd_loaded();
 
 // slot: 0 = cd32_drive, 1 = cdtv_drive
 int minimig_cd_drive_open(int slot, const char *filename);
