@@ -2474,8 +2474,9 @@ void HandleUI(void)
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 						if (is_saturn() && (ioctl_index == 1)) fs_Options |= SCANO_SAVES;
 						if (is_marty() && (ioctl_index == MARTY_SLOT_CARD)) fs_Options |= SCANO_SAVES;
+						if (is_pcfx() && (ioctl_index != PCFX_SLOT_CD)) fs_Options |= SCANO_SAVES;
 
-						if ((is_saturn() && !(fs_Options & SCANO_SAVES)) || is_pce() || is_megacd() || is_3do() || is_x86() || is_cdi() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo() || (is_marty() && ioctl_index == MARTY_SLOT_CD))
+						if ((is_saturn() && !(fs_Options & SCANO_SAVES)) || is_pce() || is_megacd() || is_3do() || is_x86() || is_cdi() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo() || (is_marty() && ioctl_index == MARTY_SLOT_CD) || (is_pcfx() && ioctl_index == PCFX_SLOT_CD))
 						{
 							//look for CHD too
 							if (!strcasestr(ext, "CHD"))
@@ -2605,6 +2606,8 @@ void HandleUI(void)
 									if (is_atari800() && !bit) atari800_reset();
 									if (is_atari5200() && !bit) atari5200_reset();
 									if (is_3do() && !bit) p3do_reset();
+									if (is_pcfx() && !ex && bit == PCFX_BIT_NEW_CARD) pcfx_new_card();
+									if (is_pcfx() && !ex && bit == PCFX_BIT_EJECT_CARD) pcfx_eject_card();
 
 									user_io_status_set(opt, 1, ex);
 									if (is_n64() && !ex && !strcmp(opt, "[41]")) n64_save_dd_disk();
@@ -2849,6 +2852,10 @@ void HandleUI(void)
 			else if (is_marty())
 			{
 				marty_set_image(ioctl_index, selPath);
+			}
+			else if (is_pcfx())
+			{
+				pcfx_set_image(ioctl_index, selPath);
 			}
 			else
 			{
@@ -5653,7 +5660,7 @@ void HandleUI(void)
 				char type = flist_SelectedItem()->de.d_type;
 				memcpy(name, flist_SelectedItem()->de.d_name, sizeof(name));
 
-				if ((fs_Options & SCANO_UMOUNT) && (is_megacd() || is_pce() || is_cdi() || is_neogeo() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_saturn() || is_3do() || (is_marty() && ioctl_index == MARTY_SLOT_CD)) && type == DT_DIR && strcmp(flist_SelectedItem()->de.d_name, ".."))
+				if ((fs_Options & SCANO_UMOUNT) && (is_megacd() || is_pce() || is_cdi() || is_neogeo() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_saturn() || is_3do() || (is_marty() && ioctl_index == MARTY_SLOT_CD) || (is_pcfx() && ioctl_index == PCFX_SLOT_CD)) && type == DT_DIR && strcmp(flist_SelectedItem()->de.d_name, ".."))
 				{
 					int len = strlen(selPath);
 					strcat(selPath, "/");

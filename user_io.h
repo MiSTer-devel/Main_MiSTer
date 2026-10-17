@@ -300,6 +300,7 @@ char is_atari800();
 char is_atari5200();
 char is_3do();
 char is_marty();
+char is_pcfx();
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()

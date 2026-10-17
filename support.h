@@ -88,3 +88,6 @@
 
 // FM Towns Marty support
 #include "support/marty/marty.h"
+
+// NEC PC-FX support
+#include "support/pcfx/pcfx.h"
