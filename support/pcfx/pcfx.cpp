@@ -13,13 +13,10 @@
 #define BACKUP_SIZE (32 * 1024)
 #define FXBMP_SIZE  (128 * 1024)
 
-// The running game: its folder, or the disc itself when it sits loose in the
-// games folder. Its backup is saves/PCFX/<game_name>.sav; its own FX-BMP card,
-// if it has one, sits beside the disc as <game_name>.bmp.
+// The running game is its folder, or the disc itself when loose in games.
 static char game[1024];
 static char game_name[256];
-static char game_card[1024];
-static char disc_title[256];   // the disc's name without extension or "(Disc N)"
+static int disc_mounted;
 static char notice[1100];
 
 // Another game and card changes wait until slots 1 and 2 have been quiet for
@@ -35,15 +32,6 @@ static unsigned long quiet_at;
 static void save_path(char *out, size_t size, const char *name, const char *ext)
 {
 	snprintf(out, size, "%s/%s/%s%s", SAVE_DIR, CoreName2, name, ext);
-}
-
-// Copies an older save file to a new path. Old files stay.
-static int seed(const char *path, const char *from, int size)
-{
-	if (FileExists(path) || !FileExists(from) || FileLoad(from, 0, 0) != size) return 0;
-
-	static uint8_t buf[FXBMP_SIZE];
-	return FileLoad(from, buf, size) == size && FileSave(path, buf, size);
 }
 
 // An empty internal backup as the BIOS formats it: boot record (jump bytes,
@@ -117,20 +105,10 @@ void pcfx_mgl_premount()
 	mgl->count = kept;
 }
 
-// Old card names used the disc name without the extension or a "(Disc 2)" style suffix.
-static void title_of(const char *path, char *out, size_t size)
-{
-	const char *name = strrchr(path, '/');
-	snprintf(out, size, "%s", name ? name + 1 : path);
-	char *cut = strcasestr(out, " (Disc");
-	if (!cut) cut = strrchr(out, '.');
-	if (cut) *cut = 0;
-}
-
 // Paths are made absolute first, as MGL and the OSD name the same disc differently.
-// games/PCFX/Zenki/Disc 1.chd -> key /media/fat/games/PCFX/Zenki, name Zenki, card <key>/Zenki.bmp
-// games/PCFX/Zenki.chd         -> key /media/fat/games/PCFX/Zenki, name Zenki, card <key>.bmp
-static void game_of(const char *path, char *key, char *name, char *card)
+// games/PCFX/Zenki/Disc 1.chd -> key /media/fat/games/PCFX/Zenki, name Zenki
+// games/PCFX/Zenki.chd        -> key /media/fat/games/PCFX/Zenki, name Zenki
+static void game_of(const char *path, char *key, char *name)
 {
 	const char *home = strrchr(HomeDir(), '/');
 	home = home ? home + 1 : HomeDir();
@@ -145,7 +123,6 @@ static void game_of(const char *path, char *key, char *name, char *card)
 		if (strcasecmp(dir, home))
 		{
 			snprintf(name, sizeof(game_name), "%s", dir);
-			snprintf(card, sizeof(game_card), "%s/%s.bmp", key, name);
 			return;
 		}
 		*file = '/';
@@ -154,31 +131,28 @@ static void game_of(const char *path, char *key, char *name, char *card)
 	char *ext = strrchr(key, '.');
 	if (ext && (!file || ext > file)) *ext = 0;
 	snprintf(name, sizeof(game_name), "%s", file ? file + 1 : key);
-	snprintf(card, sizeof(game_card), "%s.bmp", key);
 }
 
 static void mount_disc(const char *filename)
 {
 	pcfx_cd_unload();
 	int ok = filename[0] && pcfx_cd_load(filename);
+	disc_mounted = ok;
 	user_io_set_index(PCFX_SLOT_CD);
 	user_io_file_mount(ok ? filename : "", PCFX_SLOT_CD);
 	pcfx_cd_send_toc(PCFX_TOC_INDEX);
 	if (ok) process_ss(filename);
 }
 
-// Reset is held while the disc, backup and the game's own card (if it has one)
-// go in, as if they were in at power-on; the core keeps the board held until
-// the backup is loaded. Without its own card the card in the slot stays.
+// Reset covers the disc and backup mounts; the core holds the board until
+// the backup is loaded. An explicit card pick can join the same hold.
 static void switch_game(const char *filename)
 {
 	int held = user_io_status_get("[0]");
 	if (!held) user_io_status_set("[0]", 1);
 	mount_disc(filename);
-	game_of(filename, game, game_name, game_card);
-	title_of(filename, disc_title, sizeof(disc_title));
+	game_of(filename, game, game_name);
 	mount_backup();
-	if (FileExists(game_card) && strcmp(game_card, getFullPath(GetIdx_S(PCFX_SLOT_FXBMP)))) insert_card(game_card);
 	if (card_pending)
 	{
 		insert_card(card_next);
@@ -211,8 +185,8 @@ void pcfx_set_image(int index, const char *filename)
 		return;
 	}
 
-	char key[1024] = {}, name[256] = {}, card[1024] = {};
-	if (has) game_of(filename, key, name, card);
+	char key[1024] = {}, name[256] = {};
+	if (has) game_of(filename, key, name);
 	if (!has || !strcmp(key, game)) mount_disc(has ? filename : "");
 	else if (held) switch_game(filename);
 	else
@@ -229,45 +203,28 @@ void pcfx_eject_card()
 	pcfx_set_image(PCFX_SLOT_FXBMP, "");
 }
 
-// OSD "Create new FX-BMP card": the game's own card beside its disc, started
-// from an older card of the game if there is one, else unformatted.
+// Blank cards are formatted by the game or BIOS.
 void pcfx_new_card()
 {
-	if (!game[0])
+	const char *base = disc_mounted ? game_name : "PCFX";
+	char path[1024];
+	save_path(path, sizeof(path), base, ".bmp");
+	for (int n = 2; FileExists(path); n++)
 	{
-		snprintf(notice, sizeof(notice), "Load a disc first:\nthe FX-BMP card goes in its folder");
-		return;
-	}
-	if (FileExists(game_card))
-	{
-		snprintf(notice, sizeof(notice), "FX-BMP card already there:\n%s", game_card);
-		pcfx_set_image(PCFX_SLOT_FXBMP, game_card);
-		return;
+		char name[300];
+		snprintf(name, sizeof(name), "%s_%d", base, n);
+		save_path(path, sizeof(path), name, ".bmp");
 	}
 
-	char from[4][1024], old[300];
-	save_path(from[0], sizeof(from[0]), game_name, ".bmp");
-	snprintf(old, sizeof(old), "fxbmp_%s", game_name);
-	save_path(from[1], sizeof(from[1]), old, ".bmp");
-	snprintf(old, sizeof(old), "fxbmp_%s", disc_title);
-	save_path(from[2], sizeof(from[2]), old, ".sav");
-	save_path(from[3], sizeof(from[3]), "fxbmp", ".sav");
-
-	int ok = 0;
-	for (int i = 0; i < 4 && !ok; i++) ok = seed(game_card, from[i], FXBMP_SIZE);
-	if (!ok && !FileExists(game_card))
-	{
-		static uint8_t blank[FXBMP_SIZE];
-		ok = FileSave(game_card, blank, sizeof(blank));
-	}
-	if (!ok)
+	static uint8_t blank[FXBMP_SIZE];
+	if (!FileSave(path, blank, sizeof(blank)))
 	{
 		snprintf(notice, sizeof(notice), "FX-BMP card not created");
 		return;
 	}
 
-	pcfx_set_image(PCFX_SLOT_FXBMP, game_card);
-	snprintf(notice, sizeof(notice), "New FX-BMP card mounted:\n%s", game_card);
+	pcfx_set_image(PCFX_SLOT_FXBMP, path);
+	snprintf(notice, sizeof(notice), "New FX-BMP card mounted:\n%s", path);
 }
 
 // Messages wait for the OSD to close.
