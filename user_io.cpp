@@ -416,11 +416,6 @@ char is_st()
 	return (is_st_type == 1);
 }
 
-char is_sharpmz()
-{
-	return(core_type == CORE_TYPE_SHARPMZ);
-}
-
 static int is_electron_type = 0;
 char is_electron()
 {
@@ -433,6 +428,13 @@ char is_marty()
 {
 	if (!is_marty_type) is_marty_type = strcasecmp(orig_name, "Marty") ? 2 : 1;
 	return (is_marty_type == 1);
+}
+
+static int is_pcfx_type = 0;
+char is_pcfx()
+{
+	if (!is_pcfx_type) is_pcfx_type = strcasecmp(orig_name, "PCFX") ? 2 : 1;
+	return (is_pcfx_type == 1);
 }
 
 static int is_saturn_type = 0;
@@ -500,6 +502,7 @@ void user_io_read_core_name()
 	is_electron_type = 0;
 	is_saturn_type = 0;
 	is_marty_type = 0;
+	is_pcfx_type = 0;
 	is_n64_type = 0;
 	is_uneon_type = 0;
 	core_name[0] = 0;
@@ -628,8 +631,9 @@ void user_io_status_set(const char *opt, uint32_t value, int ex)
 
 	if (!is_st())
 	{
+		uint32_t ext = minimig_core_extcfg();
 		spi_uio_cmd_cont(UIO_SET_STATUS2);
-		for (uint32_t i = 0; i < sizeof(cur_status); i += 2) spi_w((cur_status[i + 1] << 8) | cur_status[i]);
+		for (uint32_t i = 0; i < sizeof(cur_status); i += 2) spi_w((is_minimig() && (i >> 2) == 1) ? (uint16_t)(ext >> ((i & 2) << 3)) : (cur_status[i + 1] << 8) | cur_status[i]);
 		DisableIO();
 	}
 }
@@ -1038,6 +1042,10 @@ static void parse_config()
 					else if (is_marty())
 					{
 						marty_set_image(idx, str);
+					}
+					else if (is_pcfx())
+					{
+						pcfx_set_image(idx, str);
 					}
 					else
 					{
@@ -1491,8 +1499,7 @@ void user_io_init(const char *path, const char *xml)
 		core_type = CORE_TYPE_8BIT;
 	}
 
-	if ((core_type != CORE_TYPE_8BIT) &&
-		(core_type != CORE_TYPE_SHARPMZ))
+	if (core_type != CORE_TYPE_8BIT)
 	{
 		core_type = CORE_TYPE_UNKNOWN;
 		fio_size = 0;
@@ -1514,10 +1521,6 @@ void user_io_init(const char *path, const char *xml)
 
 		// send a reset
 		user_io_status_set("[0]", 1);
-	}
-	else if (core_type == CORE_TYPE_SHARPMZ)
-	{
-		user_io_set_core_name("sharpmz");
 	}
 
 	user_io_read_confstr();
@@ -1582,13 +1585,6 @@ void user_io_init(const char *path, const char *xml)
 	{
 	case CORE_TYPE_UNKNOWN:
 		printf("Unable to identify core (%x)!\n", core_type);
-		break;
-
-	case CORE_TYPE_SHARPMZ:
-		printf("Identified Sharp MZ Series core");
-		user_io_set_core_name("sharpmz");
-		sharpmz_init();
-		parse_buttons();
 		break;
 
 	case CORE_TYPE_8BIT:
@@ -1671,6 +1667,7 @@ void user_io_init(const char *path, const char *xml)
 					if (is_uneon()) x86_ide_set();
 					if (is_cdi()) cdi_load_root_nvram();
 					if (is_marty()) marty_init();
+					if (is_pcfx()) pcfx_init();
 
 					if (!strlen(path) || !user_io_file_tx(path, 0, 0, 0, 1))
 					{
@@ -1769,6 +1766,7 @@ void user_io_init(const char *path, const char *xml)
 
 		send_rtc(3);
 		if (is_marty() && xml && isXmlName(xml) == 2) marty_mgl_premount();
+		if (is_pcfx() && xml && isXmlName(xml) == 2) pcfx_mgl_premount();
 
 		// release reset
 		if (!is_minimig() && !is_st()) user_io_status_set("[0]", 0);
@@ -1824,7 +1822,7 @@ void user_io_init(const char *path, const char *xml)
 
 	f12_mod = spi_uio_cmd(UIO_GET_F12_MOD);
 
-	if (!mgl_get()->count || is_menu() || is_st() || is_archie() || user_io_core_type() == CORE_TYPE_SHARPMZ)
+	if (!mgl_get()->count || is_menu() || is_st() || is_archie())
 	{
 		mgl_get()->done = 1;
 	}
@@ -2319,6 +2317,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 
 	buffer_lba[index] = -1;
+	pc88_mount(index);
 	if (!index || is_cdi() || (is_saturn() && index==1)) use_save = pre;
 
 	if (!ret)
@@ -3308,8 +3307,7 @@ void user_io_poll()
 	// is being updated and getting a corrupted image.
 	add_frame_callback(screenshot_cb);
 
-	if ((core_type != CORE_TYPE_SHARPMZ) &&
-		(core_type != CORE_TYPE_8BIT))
+	if (core_type != CORE_TYPE_8BIT)
 	{
 		return;  // no user io for the installed core
 	}
@@ -3422,6 +3420,8 @@ void user_io_poll()
 					blksz = 2352;   // Mac CD-DA: one whole frame per transaction
 				else if (is_marty())
 					blksz = marty_block_size(disk, 128 << ((c >> 6) & 7));
+				else if (is_pcfx() && disk == PCFX_SLOT_CD)
+					blksz = PCFX_CD_BLOCK;
 				else
 					blksz = 128 << ((c >> 6) & 7);
 
@@ -3509,9 +3509,17 @@ void user_io_poll()
 			{
 				if (mop < 0) break;
       }
+			else if (int pop = pcfx_sd_service(disk, op, (uint32_t)lba, sz, ack))
+			{
+				if (pop < 0) break;
+			}
 			else if (int a3op = a3_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
 				if (a3op < 0) break;
+			}
+			else if (int pc88op = pc88_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
+			{
+				if (pc88op < 0) break;
 			}
 			else if (int falop = falcon_sd_service(disk, op, lba, sz, ack))
 			{
@@ -3727,7 +3735,6 @@ void user_io_poll()
 	}
 
 	if (is_archie()) archie_poll();
-	if (core_type == CORE_TYPE_SHARPMZ) sharpmz_poll();
 
 	static uint8_t leds = 0;
 
@@ -4011,6 +4018,7 @@ void user_io_poll()
 	if (is_pce()) pcecd_poll();
 	if (is_saturn()) saturn_poll();
 	if (is_marty()) marty_poll();
+	if (is_pcfx()) pcfx_poll();
 	if (is_cdi()) cdi_poll();
 	if (is_psx()) psx_poll();
 	if (is_neogeo_cd()) neocd_poll();
@@ -4241,29 +4249,6 @@ static void send_keycode(unsigned short key, int press)
                     else
                         spi8(0xf0);
             }
-			// send code itself
-			spi8(code & 0xff);
-
-			DisableIO();
-		}
-	}
-
-	if (core_type == CORE_TYPE_SHARPMZ)
-	{
-		uint32_t code = get_ps2_code(key);
-		if (code == NONE) return;
-
-		{
-			if (press > 1 && !use_ps2ctl) return;
-
-			spi_uio_cmd_cont(UIO_KEYBOARD);
-
-			// prepend extended code flag if required
-			if (code & EXT) spi8(0xe0);
-
-			// prepend break code if required
-			if (!press) spi8(0xf0);
-
 			// send code itself
 			spi8(code & 0xff);
 

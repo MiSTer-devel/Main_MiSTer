@@ -225,7 +225,13 @@ static void update_int_state(void)
 {
 	uint16_t csr0 = registers_csr0();
 
-	wr64(DDR3_INT_OFF, ((csr0 & CSR0_INTR) && (csr0 & CSR0_INEA)) ? 1 : 0);
+	// Written after the CSR shadow, so a read index here covers that CSR value.
+	// The core reads INT_STATE first and CSR_SHADOW second and relies on this
+	// order; keep the two stores from being reordered.
+	__sync_synchronize();
+	wr64(DDR3_INT_OFF, (((csr0 & CSR0_INTR) && (csr0 & CSR0_INEA)) ? DDR3_INT_ASSERT_BIT : 0)
+	                 | DDR3_INT_RDIDX_BIT
+	                 | ((uint64_t)cmd_rd_idx << DDR3_INT_RDIDX_SHIFT));
 }
 
 static void on_interrupt_cb(void)

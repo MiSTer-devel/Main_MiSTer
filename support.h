@@ -7,8 +7,6 @@
 #include "support/next/next_enet.h"
 #include "support/next/next_scsi.h"
 
-// SharpMz support
-#include "support/sharpmz/sharpmz.h"
 
 // Apple 2 support
 #include "support/a2/dsk2nib_lib.h"
@@ -19,6 +17,9 @@
 
 // Mac
 #include "support/mac/mac.h"
+
+// PC-8801
+#include "support/pc88/pc88.h"
 
 // Atari Falcon SCSI support
 #include "support/falcon/falcon_scsi.h"
@@ -87,3 +88,6 @@
 
 // FM Towns Marty support
 #include "support/marty/marty.h"
+
+// NEC PC-FX support
+#include "support/pcfx/pcfx.h"

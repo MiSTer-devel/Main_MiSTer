@@ -47,6 +47,12 @@
 /* ── INT_STATE: ARM→FPGA interrupt line (Avalon 0x1003) ─────────── */
 #define DDR3_INT_OFF            0x8018UL
 #define DDR3_INT_ASSERT_BIT     (1ULL << 0)
+/* Bits 63:32 carry the CMD ring read index, valid with bit 1 set: the FPGA
+ * applies a CSR0 acknowledge to its shadow at once and keeps those bits
+ * clear until this index has passed the command. The host must write
+ * CSR_SHADOW before INT_STATE; the FPGA reads them in the opposite order. */
+#define DDR3_INT_RDIDX_BIT      (1ULL << 1)
+#define DDR3_INT_RDIDX_SHIFT    32
 
 /* ── RAP_MIRROR: FPGA→ARM current RAP (Avalon 0x1004) ───────────── */
 #define DDR3_RAP_MIRROR_OFF     0x8020UL
