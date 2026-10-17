@@ -36,6 +36,17 @@ uint32_t woz_crc32(const uint8_t *data, size_t len)
 	return crc ^ 0xFFFFFFFFu;
 }
 
+int a2_woz_fix_crc_buf(uint8_t *buf, size_t sz)
+{
+	if (!buf || sz < 12) return 0;
+	if (memcmp(buf, "WOZ1", 4) && memcmp(buf, "WOZ2", 4)) return 0;
+	uint32_t stored = rd_le32(buf + 8);
+	uint32_t calc   = woz_crc32(buf + 12, sz - 12);
+	if (calc == stored) return 0;
+	wr_le32(buf + 8, calc);
+	return 1;
+}
+
 // ===========================================================================
 // 2MG / 2IMG
 // ===========================================================================
