@@ -45,6 +45,16 @@ struct mgl_item_struct
 	int  action;
 };
 
+// <option name="..." value="..." [page="..."] [default="1"]/>: set an OSD option by its label and value label.
+#define MGL_MAX_OPTIONS 16
+struct mgl_option_struct
+{
+	char name[64];
+	char page[64];
+	char value[64];
+	int  is_default;
+};
+
 struct mgl_struct
 {
 	int  count;
@@ -53,6 +63,8 @@ struct mgl_struct
 	uint32_t timer;
 	int  state;
 	int  done;
+	int  opt_count;
+	mgl_option_struct opt[MGL_MAX_OPTIONS];
 };
 
 sw_struct *arcade_sw();
@@ -70,5 +82,7 @@ void arcade_nvm_save();
 
 mgl_struct* mgl_parse(const char *xml);
 mgl_struct* mgl_get();
+void mgl_apply_options(int config_found);
+void mgl_poll_message();
 
 #endif
