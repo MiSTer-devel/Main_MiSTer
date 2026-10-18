@@ -15,7 +15,6 @@
 #include "../../shmem.h"
 #include "../../str_util.h"
 #include "../../cheats.h"
-#include "../../hardware.h"
 
 #include "buffer.h"
 #include "mra_loader.h"
@@ -1360,7 +1359,7 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 				if (o->name[0] && o->value[0]) mgl.opt_count++;
 			}
 		}
-		else if (inside_mgl && mgl.count < (int)(sizeof(mgl.item) / sizeof(mgl.item[0])))
+		else if (inside_mgl && mgl.count < (int)(sizeof(mgl.item) / sizeof(mgl.item[0])) - 1)
 		{
 			if (!strcasecmp(node->tag, "file"))
 			{
@@ -1471,8 +1470,7 @@ mgl_struct* mgl_get()
 
 // ---- MGL options ---------------------------------------------------------------------------------------------
 
-static char mgl_msg[512] = {};
-static uint32_t mgl_msg_timer = 0;
+static char mgl_msg[512];
 
 static void mgl_option_error(const char *fmt, const char *a, const char *b)
 {
@@ -1485,8 +1483,6 @@ static void mgl_option_error(const char *fmt, const char *a, const char *b)
 		strcat(mgl_msg, "\n");
 		strcat(mgl_msg, line);
 	}
-	// shown once the core's video has had time to come up
-	mgl_msg_timer = GetTimer(5000);
 }
 
 // Copy field n (0 = the first) of a comma separated CONF_STR item, without leading/trailing spaces.
@@ -1538,6 +1534,7 @@ void mgl_apply_options(int config_found)
 {
 	char titles[10][64] = {};
 	char s[256], spec[16], title[64];
+	mgl_msg[0] = 0;
 
 	for (int i = 2; ; i++)                         // page titles first: a page may be defined after its options
 	{
@@ -1589,13 +1586,15 @@ void mgl_apply_options(int config_found)
 			user_io_status_set(spec, value, ex);
 		}
 	}
-}
 
-void mgl_poll_message()
-{
-	if (mgl_msg[0] && CheckTimer(mgl_msg_timer))
+	// the errors are shown by the MGL sequence, after its loads and resets, once the core's video is up
+	if (mgl_msg[0])
 	{
-		Info(mgl_msg, 6000);
-		mgl_msg[0] = 0;
+		mgl_item_struct *it = &mgl.item[mgl.count++];
+		memset(it, 0, sizeof(*it));
+		it->action = MGL_ACTION_INFO;
+		it->delay = 2;
+		it->valid = 1;
+		snprintf(it->path, sizeof(it->path), "%s", mgl_msg);
 	}
 }

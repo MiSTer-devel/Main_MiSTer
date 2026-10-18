@@ -29,6 +29,7 @@ struct sw_struct
 
 #define MGL_ACTION_LOAD  0
 #define MGL_ACTION_RESET 1
+#define MGL_ACTION_INFO  2   // added by mgl_apply_options: show path (the option errors) in an OSD message
 
 struct mgl_item_struct
 {
@@ -59,7 +60,7 @@ struct mgl_struct
 {
 	int  count;
 	int  current;
-	mgl_item_struct item[6];
+	mgl_item_struct item[6 + 1];   // 6 from the MGL, + the option error message
 	uint32_t timer;
 	int  state;
 	int  done;
@@ -83,6 +84,5 @@ void arcade_nvm_save();
 mgl_struct* mgl_parse(const char *xml);
 mgl_struct* mgl_get();
 void mgl_apply_options(int config_found);
-void mgl_poll_message();
 
 #endif

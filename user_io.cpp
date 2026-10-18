@@ -3317,7 +3317,6 @@ static uint32_t res_timer = 0;
 
 void user_io_poll()
 {
-	mgl_poll_message();
 	#ifdef PROFILING
 		PROFILE_FUNCTION();
 	#endif

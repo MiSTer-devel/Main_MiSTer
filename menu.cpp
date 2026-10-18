@@ -1217,7 +1217,8 @@ void HandleUI(void)
 		case 0:
 			if (CheckTimer(mgl->timer))
 			{
-				if (mgl->item[mgl->current].action != MGL_ACTION_LOAD) mgl->state = 4;
+				if (mgl->item[mgl->current].action == MGL_ACTION_INFO) mgl->state = 8;
+				else if (mgl->item[mgl->current].action != MGL_ACTION_LOAD) mgl->state = 4;
 				// The Atari ST uses its own menu and never reaches
 				// MENU_GENERIC_MAIN, so there is no OSD entry for states 1/2 to
 				// select. Its items are applied directly in state 6 instead.
@@ -1271,6 +1272,11 @@ void HandleUI(void)
 				user_io_send_buttons(1);
 				mgl->state = 3;
 			}
+			break;
+
+		case 8:
+			Info(mgl->item[mgl->current].path, 5000);
+			mgl->state = 3;
 			break;
 		}
 	}
