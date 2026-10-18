@@ -311,6 +311,45 @@ int ethernet_set_mac_filter(const uint8_t *mac)
     return 1;
 }
 
+/* As ethernet_set_mac_filter, but passes every group address: for NICs that filter multicast themselves. */
+int ethernet_set_mac_filter_mcast(const uint8_t *mac)
+{
+    if (sock_fd < 0 || is_tap) return 0;
+
+    uint32_t macword = ((uint32_t)mac[0] << 24) | ((uint32_t)mac[1] << 16)
+                     | ((uint32_t)mac[2] << 8)  |  (uint32_t)mac[3];
+    uint32_t machalf = ((uint32_t)mac[4] << 8)  |  (uint32_t)mac[5];
+
+    struct sock_filter code[] = {
+        /* 0: drop frames the host itself transmitted */
+        BPF_STMT(BPF_LD  | BPF_B   | BPF_ABS, (uint32_t)(SKF_AD_OFF + SKF_AD_PKTTYPE)),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   PACKET_OUTGOING, 7, 0),
+        /* 2: group bit of dst[0] -> accept */
+        BPF_STMT(BPF_LD  | BPF_B   | BPF_ABS, 0),
+        BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K,  0x01, 4, 0),
+        /* 4: dst == mac -> accept, else drop */
+        BPF_STMT(BPF_LD  | BPF_W   | BPF_ABS, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   macword, 0, 3),
+        BPF_STMT(BPF_LD  | BPF_H   | BPF_ABS, 4),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   machalf, 0, 1),
+        /* 8: accept, 9: drop */
+        BPF_STMT(BPF_RET | BPF_K,             0xFFFFFFFFu),
+        BPF_STMT(BPF_RET | BPF_K,             0),
+    };
+
+    struct sock_fprog prog;
+    prog.len    = sizeof code / sizeof code[0];
+    prog.filter = code;
+
+    if (setsockopt(sock_fd, SOL_SOCKET, SO_ATTACH_FILTER, &prog, sizeof prog) < 0) {
+        perror("[a2065] SO_ATTACH_FILTER");
+        return 0;
+    }
+    LOG("[a2065] BPF filter attached: dst=%02X:%02X:%02X:%02X:%02X:%02X + all group addresses\n",
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return 1;
+}
+
 void ethernet_clear_filter(void)
 {
     if (sock_fd < 0 || is_tap) return;
@@ -517,6 +556,7 @@ int ethernet_read_iface_mac(const char *iface, uint8_t *out)
 }
 
 int ethernet_set_mac_filter(const uint8_t *mac) { (void)mac; return 1; }
+int ethernet_set_mac_filter_mcast(const uint8_t *mac) { (void)mac; return 1; }
 
 void ethernet_clear_filter(void) {}
 
