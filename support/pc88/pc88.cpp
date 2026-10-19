@@ -23,6 +23,7 @@ struct d88_slot
 	ino_t ino;
 	int rw;
 	int ro;
+	char label[32];
 };
 
 static uint8_t buf[UIO_BUFFER_SIZE];
@@ -132,7 +133,12 @@ void pc88_mount(int index, fileTYPE *f, const char *name, int image, int *writab
 	if (!f || !is_pc88()) return;
 
 	if (image > 0 && name && is_d88(name) && scan(f, image, &s->start, &s->size) >= image)
+	{
+		uint8_t raw[17];
 		s->image = image;
+		if (!file_read(f, s->start, raw, sizeof(raw))) raw[0] = 0;
+		make_name(raw, image, s->label, sizeof(s->label));
+	}
 
 	// Any plain file can be the same file under another name; a zip is never written.
 	struct stat st;
@@ -154,6 +160,16 @@ void pc88_mount(int index, fileTYPE *f, const char *name, int image, int *writab
 
 	if (s->image && !*writable) s->ro = 1;
 	s->rw = *writable;
+}
+
+// The mounted disk goes first so that it stays visible when the line is cut.
+const char *pc88_slot_label(int index, const char *file)
+{
+	static char str[300];
+	if (index < 0 || index > 1 || !slots[index].image) return file;
+
+	snprintf(str, sizeof(str), "%s  %s", slots[index].label, file);
+	return str;
 }
 
 uint64_t pc88_size(int index, uint64_t size)

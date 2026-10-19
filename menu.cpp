@@ -2163,7 +2163,7 @@ void HandleUI(void)
 							else if ((p[0] == 'S') && get_image_name(num))
 							{
 								strcpy(s, "\x16");
-								strncat(s, get_image_name(num), sizeof(s) - strlen(s) - 1);
+								strncat(s, pc88_slot_label(num, get_image_name(num)), sizeof(s) - strlen(s) - 1);
 							}
 							else
 							{
