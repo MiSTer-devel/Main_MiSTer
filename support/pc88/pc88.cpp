@@ -51,9 +51,28 @@ static int file_read(fileTYPE *f, uint64_t off, void *p, int len)
 	return f->zip && FileSeek(f, off, SEEK_SET) && FileReadAdv(f, p, len) == len;
 }
 
+// Disk names drop Shift-JIS and keep printable ASCII; a disk without one is named by its number.
+static void make_name(const uint8_t *raw, int image, char *out, int len)
+{
+	char name[18];
+	int n = 0;
+
+	for (int i = 0; i < 17 && raw[i]; i++)
+	{
+		uint8_t c = raw[i];
+		if ((c >= 0x81 && c <= 0x9F) || c >= 0xE0) i++;  // Shift-JIS pair
+		else if (c >= 0x20 && c < 0x7F && (n || c != ' ')) name[n++] = c;
+	}
+	while (n && name[n - 1] == ' ') n--;
+	name[n] = 0;
+
+	if (n) snprintf(out, len, "%d %s", image, name);
+	else snprintf(out, len, "Disk %d", image);
+}
+
 // Number of disks when their size fields fill the file exactly, otherwise 0.
 // One pass forward, so a zip is read through only once.
-static int scan(fileTYPE *f, int image, uint64_t *start, uint64_t *size)
+static int scan(fileTYPE *f, int image, uint64_t *start, uint64_t *size, char (*names)[32] = NULL)
 {
 	uint64_t off = 0;
 	int n = 0;
@@ -71,10 +90,35 @@ static int scan(fileTYPE *f, int image, uint64_t *start, uint64_t *size)
 			*start = off;
 			*size = sz;
 		}
+		if (names) make_name(h, n, names[n - 1], sizeof(names[0]));
 		off += sz;
 	}
 
 	return (n > 1) ? n : 0;
+}
+
+static char names[D88_DISKS][32];
+static int names_n;
+
+// Counts the disks and keeps their names for pc88_disk_name().
+int pc88_disk_count(int index, const char *path)
+{
+	names_n = 0;
+	if (index < 0 || index > 1 || !is_pc88() || !is_d88(path)) return 0;
+
+	fileTYPE f;
+	if (!FileOpen(&f, path, 1)) return 0;
+
+	uint64_t start, size;
+	names_n = scan(&f, 0, &start, &size, names);
+	FileClose(&f);
+	return names_n;
+}
+
+// Name of a disk of the file last given to pc88_disk_count().
+const char *pc88_disk_name(int image)
+{
+	return (image > 0 && image <= names_n) ? names[image - 1] : "";
 }
 
 // Image 0 (MGL and other mounts without a choice) mounts the whole file as before.
