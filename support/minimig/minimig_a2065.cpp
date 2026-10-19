@@ -39,6 +39,9 @@ extern void chip_wput(uint8_t reg_offset, uint16_t v);
 extern int  do_transmit(void);
 extern void gotfunc(const uint8_t *data, int len);
 extern int  rings_rx_has_space(void);
+extern int  rings_rx_unserviced(void);
+extern void registers_csr0_set(uint16_t v);
+extern void rethink(void);
 extern void mac_set_addresses(const uint8_t *fake, const uint8_t *real);
 extern int  ethernet_open(const char *iface, int promiscuous);
 extern void ethernet_close(void);
@@ -550,6 +553,16 @@ void a2065_poll(void)
 				prom_active = want_prom;
 			}
 		}
+	}
+
+	// A late acknowledge may have cleared the RINT for frames the Amiga has
+	// not taken yet (see rings_rx_unserviced()); raise it again.
+	if ((registers_csr0() & (CSR0_RXON | CSR0_RINT)) == CSR0_RXON && rings_rx_unserviced())
+	{
+		registers_csr0_set(CSR0_RINT);
+		rethink();
+		push_csr_shadow();
+		update_int_state();
 	}
 
 	a2065_drain_rx();

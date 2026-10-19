@@ -96,8 +96,10 @@ void     registers_get_fakemac(uint8_t *out) { memcpy(out, fakemac, 6); }
 /* ── Boardram helpers (see boardram_access.h) ─ */
 
 /* ── Initialization ─────────────────────────────────────────────────── */
+extern void rings_rx_forget_handed(void);
 static void chip_init_mask(void)
 {
+    rings_rx_forget_handed();
     am_rdr_rdra &= RAM_MASK;
     am_tdr_tdra &= RAM_MASK;
     tdr_offset = rdr_offset = 0;
