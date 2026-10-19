@@ -685,3 +685,45 @@ const char* tos_get_cfg_string(int num)
 
 	return "< empty slot >";
 }
+
+// MGL slot map for the Atari ST.
+//
+// The ST core brings its own menu, so it never enters MENU_GENERIC_MAIN and the
+// generic MGL path -- which matches an item's type/index against the entries of
+// CONF_STR and then drives the OSD -- cannot serve it. These slots are applied
+// directly instead. The numbers are not invented freely:
+//
+//   s0 / s1  floppy A / B   core    user_io_file_mount(), hps_io VDNUM(2)
+//   s2 / s3  ACSI 0 / 1     derived tos_insert_disk() already numbers them so
+//   f2       cartridge      core    user_io_set_index(2), tos_load_cartridge()
+//   f0       TOS image      assigned no fixed index of its own: tos_reset()
+//                                   picks ioctl 0 or 1 by image size
+//
+// Returns 0 when no slot claims the item, so the caller can report it.
+int tos_mgl_load(char type, int index, const char *path)
+{
+	if (type == 'S' && index >= 0 && index <= 3)
+	{
+		// 0/1 go to the floppy drives, 2/3 to the ACSI hard disks.
+		tos_insert_disk(index, path);
+		return 1;
+	}
+
+	if (type == 'F' && index == 2)
+	{
+		// Same as selecting a cartridge in the menu: it is uploaded on the
+		// next reset, so the MGL should end with <reset>.
+		tos_load_cartridge(path);
+		return 1;
+	}
+
+	if (type == 'F' && index == 0)
+	{
+		// Same as selecting a TOS image in the menu: implies a cold reset,
+		// so a TOS item belongs first in an MGL.
+		tos_upload(path);
+		return 1;
+	}
+
+	return 0;
+}

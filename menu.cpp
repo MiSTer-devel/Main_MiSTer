@@ -1217,8 +1217,37 @@ void HandleUI(void)
 		case 0:
 			if (CheckTimer(mgl->timer))
 			{
-				mgl->state = (mgl->item[mgl->current].action == MGL_ACTION_LOAD) ? 1 : 4;
+				if (mgl->item[mgl->current].action != MGL_ACTION_LOAD) mgl->state = 4;
+				// The Atari ST uses its own menu and never reaches
+				// MENU_GENERIC_MAIN, so there is no OSD entry for states 1/2 to
+				// select. Its items are applied directly in state 6 instead.
+				else mgl->state = is_st() ? 6 : 1;
 			}
+			break;
+
+		case 6:
+			{
+				mgl_item_struct *item = &mgl->item[mgl->current];
+				char path[2048];
+
+				if (item->path[0] == '/') snprintf(path, sizeof(path), "%s", item->path);
+				else snprintf(path, sizeof(path), "%s/%s", HomeDir(), item->path);
+
+				printf("MGL: Atari ST load type=%c index=%d path=%s\n", item->type, item->index, path);
+
+				// Loading a TOS image shows a progress message, which calls
+				// HandleUI() again. State 7 keeps that nested call from
+				// starting the same item a second time.
+				mgl->state = 7;
+				if (!tos_mgl_load(item->type, item->index, path))
+				{
+					printf("MGL: Atari ST has no slot for type=%c index=%d\n", item->type, item->index);
+				}
+				mgl->state = 3;
+			}
+			break;
+
+		case 7:
 			break;
 
 		case 3:
