@@ -1,6 +1,7 @@
 // config.c
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <sys/stat.h>
@@ -13,6 +14,7 @@
 #include "../../input.h"
 #include "../../cfg.h"
 #include "../../ide.h"
+#include "../../shmem.h"
 #include "minimig_boot.h"
 #include "minimig_fdd.h"
 #include "minimig_config.h"
@@ -907,13 +909,70 @@ void minimig_set_extcfg(unsigned int ext_cfg)
 
 	spi_uio_cmd_cont(UIO_SET_STATUS2);
 	spi32_w(0);
-	spi32_w(ext_cfg);
+	spi32_w(minimig_core_extcfg());
 	DisableIO();
 }
 
 unsigned int minimig_get_extcfg()
 {
 	return (minimig_config.ext_cfg2 << 16) | minimig_config.ext_cfg;
+}
+
+#define DSND_ADDR 0x27800000
+#define DSND_SLOT 0x40000
+
+static int dsnd_ok = 0;
+
+int minimig_dsnd_loaded()
+{
+	return dsnd_ok;
+}
+
+unsigned int minimig_core_extcfg()
+{
+	return dsnd_ok ? minimig_get_extcfg() : (minimig_get_extcfg() & ~0x180000);
+}
+
+void minimig_dsnd_load()
+{
+	fileTYPE f = {};
+	dsnd_ok = 0;
+	if (!FileOpen(&f, user_io_make_filepath(HomeDir(), "drivesounds.bin"), 1)) return;
+
+	uint32_t size = (uint32_t)f.size;
+	uint8_t *b = (size > 16 && size <= 16 * DSND_SLOT + 0x1000) ? (uint8_t*)malloc(size) : NULL;
+	uint16_t *mem = b ? (uint16_t*)shmem_map(DSND_ADDR, 16 * DSND_SLOT) : NULL;
+	if (mem && FileReadAdv(&f, b, size) == (int)size && !memcmp(b, "DRIVESND", 8))
+	{
+		for (int n = 0; n < 16; n++) mem[n * (DSND_SLOT / 2)] = 0x8000;
+		for (uint32_t o = 8; o + 8 <= size;)
+		{
+			uint32_t n = (b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3];
+			uint32_t len = (b[o + 4] << 24) | (b[o + 5] << 16) | (b[o + 6] << 8) | b[o + 7];
+			o += 8;
+			if (!len) break;
+			if (n < 16)
+			{
+				uint32_t k = len / 2;
+				if (k > (size - o) / 2) k = (size - o) / 2;
+				if (k > DSND_SLOT / 2 - 1) k = DSND_SLOT / 2 - 1;
+				uint16_t *d = mem + n * (DSND_SLOT / 2);
+				for (uint32_t i = 0; i < k; i++)
+				{
+					uint16_t x = (b[o + 2 * i] << 8) | b[o + 2 * i + 1];
+					d[i] = (x == 0x8000) ? 0x8001 : x;
+				}
+				d[k] = 0x8000;
+			}
+			if (len > size - o) break;
+			o += len;
+		}
+		dsnd_ok = 1;
+	}
+	if (mem) shmem_unmap(mem, 16 * DSND_SLOT);
+	free(b);
+	FileClose(&f);
+	printf("Drive sounds: %s\n", dsnd_ok ? "loaded" : "bad file");
 }
 
 #define CD32_MAIN_ROM  "CD32.rom"

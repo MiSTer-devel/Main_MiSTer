@@ -267,6 +267,7 @@ const char *config_button_turbo_choice_msg[] = { "A only", "B only", "A & B" };
 const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUTTON B", "BUTTON X", "BUTTON Y", "BUTTON L", "BUTTON R", "SELECT", "START", "KBD TOGGLE", "MENU", "    Stick 1: Tilt RIGHT", "    Stick 1: Tilt DOWN", "   Mouse emu X: Tilt RIGHT", "   Mouse emu Y: Tilt DOWN" };
 const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
+const char *config_dsnd_msg[] = { "Off", "Quiet", "Normal", "Loud" };
 const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem", "UDP", "SNI"};
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
@@ -7198,7 +7199,7 @@ void HandleUI(void)
 		break;
 
 	case MENU_MINIMIG_VIDEO1:
-		menumask = 0x1fff;
+		menumask = 0x3fff;
 		parentstate = menustate;
 		helptext_idx = 0; // helptexts[HELPTEXT_VIDEO];
 
@@ -7241,11 +7242,13 @@ void HandleUI(void)
 		strcpy(s, " Paula Output  : ");
 		strcat(s, (minimig_get_extcfg() & 0x40000) ? "PWM" : "Normal");
 		OsdWrite(m++, s, menusub == 10, 0);
+		strcpy(s, " Drive Sounds  : ");
+		strcat(s, minimig_dsnd_loaded() ? config_dsnd_msg[(minimig_get_extcfg() >> 19) & 3] : "No file");
+		OsdWrite(m++, s, menusub == 11, 0);
 
-		OsdWrite(m++);
-		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 11, 0);
+		OsdWrite(m++, minimig_get_adjust() ? " Finish screen adjustment" : " Adjust screen position", menusub == 12, 0);
 		for (; m < OsdGetSize() - 1; m++) OsdWrite(m);
-		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 12, 0);
+		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 13, 0);
 
 		menustate = MENU_MINIMIG_VIDEO2;
 		break;
@@ -7331,6 +7334,15 @@ void HandleUI(void)
 				break;
 
 			case 11:
+				if (minimig_dsnd_loaded())
+				{
+					int mode = (minimig_get_extcfg() >> 19) & 3;
+					mode = (mode + (minus ? 3 : 1)) & 3;
+					minimig_set_extcfg((minimig_get_extcfg() & ~0x180000) | (mode << 19));
+				}
+				break;
+
+			case 12:
 				if (select)
 				{
 					menustate = MENU_NONE1;
@@ -7338,7 +7350,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 12:
+			case 13:
 				if (select)
 				{
 					menustate = MENU_MINIMIG_MAIN1;
