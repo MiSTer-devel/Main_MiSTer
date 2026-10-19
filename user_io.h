@@ -192,7 +192,7 @@ void user_io_status_reset();
 
 uint32_t user_io_get_file_crc();
 void user_io_write_gameid(const char *filename, uint32_t crc32_val = 0, const char *product_code = NULL);
-int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0, int pre_size = 0);
+int  user_io_file_mount(const char *name, unsigned char index = 0, char pre = 0, int pre_size = 0, int image = 0);
 void user_io_bufferinvalidate(unsigned char index);
 char *user_io_make_filepath(const char *path, const char *filename);
 char *user_io_get_core_name(int orig = 0);
