@@ -207,6 +207,14 @@ static void ring_read_entry(uint32_t idx, uint8_t *rap_out, uint16_t *data_out)
 	*data_out = (uint16_t)((entry >> DDR3_CMD_DATA_SHIFT) & DDR3_CMD_DATA_MASK);
 }
 
+// For acknowledge ordering (minimig_a2065_registers.cpp): the CMD ring index
+// of the entry being applied, or the write index now when none is.
+static uint32_t cmd_applying = 0;
+static int      cmd_applying_valid = 0;
+uint32_t a2065_event_index(void) { return map ? rd_wptr() : 0; }
+uint32_t a2065_ack_index(void)   { return cmd_applying_valid ? cmd_applying : a2065_event_index(); }
+extern void registers_forget_events(void);
+
 static void push_csr_shadow(void)
 {
 	uint16_t c0 = registers_csr0();
@@ -519,10 +527,13 @@ void a2065_poll(void)
 			uint8_t  rap_v;
 			uint16_t data;
 			ring_read_entry(cmd_rd_idx, &rap_v, &data);
+			cmd_applying = cmd_rd_idx;
+			cmd_applying_valid = 1;
 			cmd_rd_idx++;
 
 			chip_wput(A2065_RAP_OFF, rap_v);
 			chip_wput(A2065_RDP_OFF, data);
+			cmd_applying_valid = 0;
 		}
 
 		push_csr_shadow();
@@ -593,6 +604,7 @@ void a2065_start(void)
 	// re-inits the mailbox on its side too, so an old rd_idx would either
 	// stall (behind a wptr that just reset to 0) or replay stale entries.
 	cmd_rd_idx = rd_wptr();
+	registers_forget_events();
 	wr64(DDR3_CSR_OFF, 0);
 	wr64(DDR3_INT_OFF, 0);
 
