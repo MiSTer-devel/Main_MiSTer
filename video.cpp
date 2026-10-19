@@ -2095,13 +2095,11 @@ static int get_edid_vmode(vmode_custom_t *v)
 	return 1;
 }
 
-static void set_vrr_mode()
+static void set_vrr_infoframes()
 {
-	PROFILE_FUNCTION();
-
 	float vrateh = 100000000;
 
-	if (cfg.vrr_mode == 0 || is_menu() || video_is_direct() || minimig_rtg_hdmi)
+	if (cfg.vrr_mode == 0 || video_is_direct() || minimig_rtg_hdmi)
 	{
 		if (last_vrr_mode != 0)
 		{
@@ -2231,6 +2229,14 @@ static void set_vrr_mode()
 	last_vrr_vfp = v_cur.param.vfp;
 
 	if (!supports_vrr() || video_vsync_adjust()) use_vrr = 0;
+}
+
+static void set_vrr_mode()
+{
+	PROFILE_FUNCTION();
+
+	set_vrr_infoframes();
+	if (is_menu()) use_vrr = 0;
 }
 
 static void video_set_mode(vmode_custom_t *v, double Fpix)
