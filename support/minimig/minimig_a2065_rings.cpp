@@ -199,6 +199,24 @@ int do_transmit(void)
     return 1;
 }
 
+/* ── rings_tx_ready ─────────────────────────────────────────────────────
+ * Does the transmit ring hold a frame for us (a descriptor with OWN and STP)?
+ * A real LANCE polls the ring by itself; do_transmit() only runs on TDMD. */
+int rings_tx_ready(void)
+{
+    if (!(registers_csr0() & CSR0_TXON)) return 0;
+    uint32_t tdr_tlen = registers_tdr_tlen();
+    uint32_t tdr_tdra = registers_tdr_tdra();
+    if (!tdr_tlen || tdr_tlen > 512) return 0;
+    if (tdr_tdra + (tdr_tlen - 1) * 8 > RAM_MASK) return 0;
+    for (uint32_t i = 0; i < tdr_tlen; i++)
+    {
+        uint16_t tmd1 = get_ram_word(tdr_tdra + i * 8 + 2);
+        if ((tmd1 & TX_OWN) && (tmd1 & TX_STP)) return 1;
+    }
+    return 0;
+}
+
 /* ── gotfunc (RX) ───────────────────────────────────────────────────── */
 static int loopback_iter = 0;
 void rings_reset_loopback_count(void) { loopback_iter = 0; }

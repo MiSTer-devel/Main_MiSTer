@@ -18,6 +18,7 @@
 
 #include "../../shmem.h"
 #include "../../user_io.h"
+#include "../../hardware.h"
 #include "../../file_io.h"
 
 #include "minimig_a2065.h"
@@ -34,9 +35,11 @@ extern void registers_set_on_interrupt(void (*fn)(void));
 extern void registers_set_on_transmit(int (*fn)(void));
 extern uint16_t registers_csr0(void);
 extern uint16_t registers_csr(int n);
+extern int  registers_am_initialized(void);
 extern uint16_t registers_mode(void);
 extern void chip_wput(uint8_t reg_offset, uint16_t v);
 extern int  do_transmit(void);
+extern int  rings_tx_ready(void);
 extern void gotfunc(const uint8_t *data, int len);
 extern int  rings_rx_has_space(void);
 extern void mac_set_addresses(const uint8_t *fake, const uint8_t *real);
@@ -241,9 +244,12 @@ static void on_interrupt_cb(void)
 	update_int_state();
 }
 
+// do_transmit() sends one frame. A real LANCE keeps going while the ring holds
+// frames, so a TDMD announcing one frame also sends any queued behind it.
 static int on_transmit_cb(void)
 {
-	int r = do_transmit();
+	int r = 0;
+	for (int n = 0; n < 64 && do_transmit(); n++) r = 1;
 	push_csr_shadow();
 	update_int_state();
 	return r;
@@ -553,6 +559,18 @@ void a2065_poll(void)
 	}
 
 	a2065_drain_rx();
+
+	// Poll the transmit ring like the LANCE does: a frame whose OWN bit reached
+	// boardram after the TDMD that announced it is sent on the next poll
+	// instead of waiting for the next TDMD.
+	{
+		static unsigned long tx_poll = 0;
+		if (!tx_poll || CheckTimer(tx_poll))
+		{
+			tx_poll = GetTimer(2);
+			if (registers_am_initialized() && rings_tx_ready()) on_transmit_cb();
+		}
+	}
 }
 
 void a2065_stop(void)
