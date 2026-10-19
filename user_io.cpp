@@ -1824,7 +1824,7 @@ void user_io_init(const char *path, const char *xml)
 
 	f12_mod = spi_uio_cmd(UIO_GET_F12_MOD);
 
-	if (!mgl_get()->count || is_menu() || is_st() || is_archie())
+	if (!mgl_get()->count || is_menu() || is_archie())
 	{
 		mgl_get()->done = 1;
 	}
