@@ -1610,7 +1610,8 @@ void user_io_init(const char *path, const char *xml)
 			{
 				printf("Loading config %s\n", name);
 				memset(cur_status, 0, sizeof(cur_status));
-				if (FileLoadConfig(name, cur_status, sizeof(cur_status)))
+				int config_found = FileLoadConfig(name, cur_status, sizeof(cur_status));
+				if (config_found)
 				{
 					printf("Found config:\n");
 					hexdump(cur_status, sizeof(cur_status));
@@ -1620,6 +1621,7 @@ void user_io_init(const char *path, const char *xml)
 					memset(cur_status, 0, sizeof(cur_status));
 				}
 
+				if (xml && isXmlName(xml) == 2) mgl_apply_options(config_found);
 				user_io_status_set("[0]", 1);
 			}
 
