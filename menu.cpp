@@ -301,7 +301,7 @@ static const char *helptexts[] =
 	helptext_custom,
 	"                                Welcome to MiSTer! Use the cursor keys to navigate the menus. Use space bar or enter to select an item. Press Esc or F12 to exit the menus. Joystick emulation on the numeric keypad can be toggled with the numlock or scrlock key, while pressing Ctrl-Alt-0 (numeric keypad) toggles autofire mode.",
 	"                                Minimig can emulate an A600/A1200 IDE harddisk interface. The emulation can make use of Minimig-style hardfiles (complete disk images) or UAE-style hardfiles (filesystem images with no partition table).",
-	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600) or 68020 (maximum performance) processor with transparent cache.",
+	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600), a 68EC020 at A1200 speed, or a 68020 (maximum performance) processor with transparent cache.",
 	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 384 megabytes of Fast RAM (8MB max for 68000 mode). To use the HRTmon feature you will need a file on the SD card named hrtmon.rom.",
 	"                                Backspace key (or B-hold + A on gamepad) to unmount",
 	"                                Backspace key (or B-hold + A on gamepad) to clear stored option. You have to reload the core to be able to use default value.",
@@ -6480,7 +6480,7 @@ void HandleUI(void)
 					minimig_config.hardfile[3].cfg)) ? "/HD" : "",
 				config_memory_chip_msg[minimig_config.memory & 0x03],
 				fastcfg ? "+" : "",
-				fastcfg ? config_memory_fast_msg[(minimig_config.cpu>>1) & 1][fastcfg] : "",
+				fastcfg ? config_memory_fast_msg[((minimig_config.cpu & 0x23) != 0x23 && (minimig_config.cpu & 2)) ? 1 : 0][fastcfg] : "",
 				((minimig_config.memory >> 2) & 0x03) ? "+" : "",
 				((minimig_config.memory >> 2) & 0x03) ? config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03] : "",
 				(minimig_config.memory & 0x40) ? " HRT" : ""
@@ -6577,33 +6577,29 @@ void HandleUI(void)
 
 	case MENU_MINIMIG_CHIPSET1:
 		helptext_idx = HELPTEXT_CHIPSET;
-		menumask = 0x1FFF;
+		menumask = 0xFFF;
 		OsdSetTitle("System");
 		parentstate = menustate;
 
 		m = 0;
 		strcpy(s, " CPU      : ");
-		strcat(s, config_cpu_msg[minimig_config.cpu & 0x03]);
-		if ((minimig_config.cpu & 0x23) == 0x23) strcat(s, " ~14MHz");
+		strcat(s, ((minimig_config.cpu & 0x23) == 0x23) ? "68EC020" : config_cpu_msg[minimig_config.cpu & 0x03]);
 		if ((minimig_config.cpu & 0x23) == 0x03) strcat(s, " Fast");
 		OsdWrite(m++, s, menusub == 0, 0);
-		strcpy(s, " D-Cache  : ");
-		strcat(s, (minimig_config.cpu & 16) ? "On" : "Off");
-		OsdWrite(m++, s, menusub == 1, !(minimig_config.cpu & 0x2));
 
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " Chipset  : ");
 		strcat(s, config_chipset_msg[(minimig_config.chipset >> 2) & 7]);
-		OsdWrite(m++, s, menusub == 2, 0);
+		OsdWrite(m++, s, menusub == 1, 0);
 		strcpy(s, " ChipRAM  : ");
 		strcat(s, config_memory_chip_msg[minimig_config.memory & 0x03]);
-		OsdWrite(m++, s, menusub == 3, 0);
+		OsdWrite(m++, s, menusub == 2, 0);
 		strcpy(s, " FastRAM  : ");
-		strcat(s, config_memory_fast_msg[(minimig_config.cpu >> 1) & 1][((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5)]);
-		OsdWrite(m++, s, menusub == 4, 0);
+		strcat(s, config_memory_fast_msg[((minimig_config.cpu & 0x23) != 0x23 && (minimig_config.cpu & 2)) ? 1 : 0][((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5)]);
+		OsdWrite(m++, s, menusub == 3, 0);
 		strcpy(s, " SlowRAM  : ");
 		strcat(s, config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03]);
-		OsdWrite(m++, s, menusub == 5, 0);
+		OsdWrite(m++, s, menusub == 4, 0);
 
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " ROM      : ");
@@ -6614,7 +6610,7 @@ void HandleUI(void)
 			if (!strncasecmp(name, path, len))  name += len + 1;
 			strncat(s, name, 20);
 		}
-		OsdWrite(m++, s, menusub == 6, 0);
+		OsdWrite(m++, s, menusub == 5, 0);
 		strcpy(s, " Ext.ROM  : ");
 		{
 			char *path = HomeDir();
@@ -6627,23 +6623,23 @@ void HandleUI(void)
 				strncat(s, name, 20);
 			}
 		}
-		OsdWrite(m++, s, menusub == 7, 0);
+		OsdWrite(m++, s, menusub == 6, 0);
 		strcpy(s, " HRTmon   : ");
 		strcat(s, (minimig_config.memory & 0x40) ? "Enabled" : "Disabled");
-		OsdWrite(m++, s, menusub == 8, 0);
+		OsdWrite(m++, s, menusub == 7, 0);
 
 		OsdWrite(m++, "", 0, 0);
 		strcpy(s, " Joystick : ");
 		strcat(s, config_joystick_mode[(minimig_config.autofire & 6) >> 1]);
-		OsdWrite(m++, s, menusub == 9, 0);
+		OsdWrite(m++, s, menusub == 8, 0);
 		strcpy(s, " Ethernet : ");
 		strcat(s, a2065_iface_msg(a2065_get_iface()));
-		OsdWrite(m++, s, menusub == 10, 0);
+		OsdWrite(m++, s, menusub == 9, 0);
 		sprintf(s, " FDD Turbo: %s", minimig_config.floppy.speed ? "On" : "Off");
-		MenuWrite(m++, s, menusub == 11, 0);
+		MenuWrite(m++, s, menusub == 10, 0);
 
 		for (int i = m; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 12, 0);
+		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 11, 0);
 
 		menustate = MENU_MINIMIG_CHIPSET2;
 		break;
@@ -6666,13 +6662,7 @@ void HandleUI(void)
 				minimig_config.cpu = (minimig_config.cpu & 0xdc) | cpu_steps[step];
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
-			else if (menusub == 1 && (minimig_config.cpu & 0x2))
-			{
-				menustate = MENU_MINIMIG_CHIPSET1;
-				minimig_config.cpu ^= 16;
-				minimig_ConfigCPU(minimig_config.cpu);
-			}
-			else if (menusub == 2)
+			else if (menusub == 1)
 			{
 				if (minus)
 				{
@@ -6714,35 +6704,35 @@ void HandleUI(void)
 				minimig_ConfigChipset(&minimig_config);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 3)
+			else if (menusub == 2)
 			{
 				minimig_config.memory = ((minimig_config.memory + (minus ? -1 : 1)) & 0x03) | (minimig_config.memory & ~0x03);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 4)
+			else if (menusub == 3)
 			{
 				int c = (((minimig_config.memory >> 4) & 0x03) | ((minimig_config.memory & 0x80) >> 5));
 				if (minus)
 				{
 					c--;
 					if (c < 0) c = 5;
-					if (!(minimig_config.cpu & 2) && c > 3) c = 3;
+					if (!((minimig_config.cpu & 0x23) != 0x23 && (minimig_config.cpu & 2)) && c > 3) c = 3;
 				}
 				else
 				{
 					c++;
 					if (c > 5) c = 0;
-					if (!(minimig_config.cpu & 2) && c > 3) c = 0;
+					if (!((minimig_config.cpu & 0x23) != 0x23 && (minimig_config.cpu & 2)) && c > 3) c = 0;
 				}
 				minimig_config.memory = ((c << 4) & 0x30) | ((c << 5) & 0x80) | (minimig_config.memory & ~0xB0);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 5)
+			else if (menusub == 4)
 			{
 				minimig_config.memory = ((minimig_config.memory + (minus ? -4 : 4)) & 0x0C) | (minimig_config.memory & ~0x0C);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 9)
+			else if (menusub == 8)
 			{
 				uint8_t x = (minimig_config.autofire & 6) >> 1;
 				if (minus)
@@ -6760,13 +6750,13 @@ void HandleUI(void)
 				menustate = MENU_MINIMIG_CHIPSET1;
 				minimig_ConfigAutofire(minimig_config.autofire, 6);
 			}
-			else if (menusub == 6 && select)
+			else if (menusub == 5 && select)
 			{
 				ioctl_index = 1;
 				strcpy(Selected_F[4], minimig_config.kickstart);
 				SelectFile(Selected_F[4], "ROM", SCANO_DIR, MENU_MINIMIG_ROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 			}
-			else if (menusub == 7)
+			else if (menusub == 6)
 			{
 				if (minus)
 				{
@@ -6780,12 +6770,12 @@ void HandleUI(void)
 					SelectFile(Selected_F[5], "ROM", SCANO_DIR | SCANO_UMOUNT, MENU_MINIMIG_EXTROMFILE_SELECTED, MENU_MINIMIG_CHIPSET1);
 				}
 			}
-			else if (menusub == 8)
+			else if (menusub == 7)
 			{
 				minimig_config.memory ^= 0x40;
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 10)
+			else if (menusub == 9)
 			{
 				// A2065 ethernet: OFF -> eth0 -> eth1 -> macvlan -> tap0,
 				// skipping anything this box cannot support (no second NIC,
@@ -6801,13 +6791,13 @@ void HandleUI(void)
 				a2065_set_iface(m2);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 11 && select)
+			else if (menusub == 10 && select)
 			{
 				minimig_config.floppy.speed ^= 1;
 				minimig_ConfigFloppy(minimig_config.floppy.drives, minimig_config.floppy.speed);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
-			else if (menusub == 12)
+			else if (menusub == 11)
 			{
 				menustate = MENU_MINIMIG_MAIN1;
 				menusub = 10;
