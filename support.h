@@ -26,6 +26,9 @@
 // Sun family support
 #include "support/sun/sun.h"
 #include "support/sun/sun_enet.h"
+// HP 9000 family support
+#include "support/hp9k/hp9k.h"
+#include "support/hp9k/hp9k_enet.h"
 
 // Archie support
 #include "support/archie/archie.h"
