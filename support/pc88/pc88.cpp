@@ -123,17 +123,24 @@ const char *pc88_disk_name(int image)
 }
 
 // Image 0 (MGL and other mounts without a choice) mounts the whole file as before.
-void pc88_mount(int index, fileTYPE *f, const char *name, int image, int *writable)
+// Returns 0 when the chosen disk is no longer in the file, so nothing is mounted.
+int pc88_mount(int index, fileTYPE *f, const char *name, int image, int *writable)
 {
-	if (index < 0 || index > 1) return;
+	if (index < 0 || index > 1) return 1;
 	grow_to[index] = 0;
 
 	d88_slot *s = &slots[index];
 	memset(s, 0, sizeof(*s));
-	if (!f || !is_pc88()) return;
+	if (!f || !is_pc88()) return 1;
 
-	if (image > 0 && name && is_d88(name) && scan(f, image, &s->start, &s->size) >= image)
+	if (image > 0)
 	{
+		if (!name || !is_d88(name) || scan(f, image, &s->start, &s->size) < image)
+		{
+			printf("pc88: disk %d not found\n", image);
+			return 0;
+		}
+
 		uint8_t raw[17];
 		s->image = image;
 		if (!file_read(f, s->start, raw, sizeof(raw))) raw[0] = 0;
@@ -160,6 +167,7 @@ void pc88_mount(int index, fileTYPE *f, const char *name, int image, int *writab
 
 	if (s->image && !*writable) s->ro = 1;
 	s->rw = *writable;
+	return 1;
 }
 
 // The mounted disk goes first so that it stays visible when the line is cut.

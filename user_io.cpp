@@ -2336,7 +2336,11 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	}
 
 	buffer_lba[index] = -1;
-	pc88_mount(index, ret ? &sd_image[index] : NULL, name, image, &writable);
+	if (!pc88_mount(index, ret ? &sd_image[index] : NULL, name, image, &writable))
+	{
+		FileClose(&sd_image[index]);
+		ret = 0;
+	}
 	if (!index || is_cdi() || (is_saturn() && index==1)) use_save = pre;
 
 	if (!ret)
