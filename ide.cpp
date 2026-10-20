@@ -1083,8 +1083,8 @@ void ide_io(int num, int req)
 
 		ide_get_regs(ide);
 		ide->regs.head = 0;
-		// ATAPI posts diagnostic code 01h after a bus reset; an ATA HDD posts 0.
-		ide->regs.error = ide->drive[ide->regs.drv].cd ? 1 : 0;
+		// ATAPI and the PCAT-286 BIOS expect code 01h after a reset
+		ide->regs.error = (ide->drive[ide->regs.drv].cd || is_pcat286()) ? 1 : 0;
 		ide->regs.sector = 1;
 		ide->regs.sector_count = 1;
 		ide->regs.cylinder = (!ide->drive[ide->regs.drv].present) ? 0xFFFF : ide->drive[ide->regs.drv].cd ? 0xEB14 : 0x0000;

@@ -199,6 +199,24 @@ int do_transmit(void)
     return 1;
 }
 
+/* ── rings_tx_ready ─────────────────────────────────────────────────────
+ * Does the transmit ring hold a frame for us (a descriptor with OWN and STP)?
+ * A real LANCE polls the ring by itself; do_transmit() only runs on TDMD. */
+int rings_tx_ready(void)
+{
+    if (!(registers_csr0() & CSR0_TXON)) return 0;
+    uint32_t tdr_tlen = registers_tdr_tlen();
+    uint32_t tdr_tdra = registers_tdr_tdra();
+    if (!tdr_tlen || tdr_tlen > 512) return 0;
+    if (tdr_tdra + (tdr_tlen - 1) * 8 > RAM_MASK) return 0;
+    for (uint32_t i = 0; i < tdr_tlen; i++)
+    {
+        uint16_t tmd1 = get_ram_word(tdr_tdra + i * 8 + 2);
+        if ((tmd1 & TX_OWN) && (tmd1 & TX_STP)) return 1;
+    }
+    return 0;
+}
+
 /* ── gotfunc (RX) ───────────────────────────────────────────────────── */
 static int loopback_iter = 0;
 void rings_reset_loopback_count(void) { loopback_iter = 0; }
@@ -207,6 +225,12 @@ void rings_reset_loopback_count(void) { loopback_iter = 0; }
 static unsigned long rx_drop_rxoff = 0;   /* RXON off (incl. after an OFLO) */
 static unsigned long rx_drop_ringfull = 0;/* no OWN descriptor */
 static unsigned long rx_delivered = 0;    /* written into the ring */
+
+/* RX descriptors handed to the Amiga (RX_OWN cleared here) and not yet seen
+ * back with RX_OWN set. See rings_rx_unserviced(). */
+static uint8_t  rx_handed[512];
+static uint32_t rx_handed_n = 0;
+void rings_rx_forget_handed(void) { memset(rx_handed, 0, sizeof rx_handed); rx_handed_n = 0; }
 void rings_get_rx_stats(unsigned long *deliv, unsigned long *rxoff, unsigned long *ringfull)
 { *deliv = rx_delivered; *rxoff = rx_drop_rxoff; *ringfull = rx_drop_ringfull; }
 
@@ -230,6 +254,34 @@ int rings_rx_has_space(void)
     uint32_t off = rdr_rdra + (uint32_t)((*rdr_offset) % rdr_rlen) * 8;
     uint16_t rmd1 = get_ram_word(off + 2);
     return (rmd1 & RX_OWN) ? 1 : 0;
+}
+
+/* ── rings_rx_unserviced ─────────────────────────────────────────────────
+ * Received frames the Amiga has not taken yet: descriptors handed over that
+ * still have RX_OWN clear.
+ *
+ * The level 2 server reads CSR0, acknowledges it and then scans the ring. Its
+ * acknowledge reaches us through the CMD ring, after any frames delivered
+ * while it was scanning, so applying it can clear the RINT raised for frames
+ * the scan never saw. Once those frames fill the ring nothing raises RINT
+ * again and receive stops for good (a fast 68040/68060 core scans while a
+ * batch is still being written and hits this within a few seconds). The
+ * caller raises RINT again while this is non-zero. */
+int rings_rx_unserviced(void)
+{
+    if (!rx_handed_n) return 0;
+    uint32_t rdr_rlen = registers_rdr_rlen();
+    if (!rdr_rlen || rdr_rlen > 512) return 0;
+    uint32_t rdr_rdra = registers_rdr_rdra();
+    if (rdr_rdra + (rdr_rlen - 1) * 8 > RAM_MASK) return 0;
+    int n = 0;
+    for (uint32_t i = 0; i < rdr_rlen; i++)
+    {
+        if (!rx_handed[i]) continue;
+        if (get_ram_word(rdr_rdra + i * 8 + 2) & RX_OWN) { rx_handed[i] = 0; rx_handed_n--; }
+        else n++;
+    }
+    return n;
 }
 
 void gotfunc(const uint8_t *databuf, int len)
@@ -337,6 +389,7 @@ void gotfunc(const uint8_t *databuf, int len)
         }
 
         rmd1 &= ~RX_OWN;
+        if (!rx_handed[*rdr_offset]) { rx_handed[*rdr_offset] = 1; rx_handed_n++; }
         (*rdr_offset)++;
 
         if (first) { rmd1 |= RX_STP; first = 0; }

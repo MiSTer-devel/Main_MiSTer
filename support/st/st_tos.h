@@ -102,4 +102,7 @@ void tos_set_ar(int ar);
 uint32_t tos_get_extctrl();
 void tos_set_extctrl(uint32_t ext_ctrl);
 
+// Applies one MGL <file> item. Returns 0 if no ST slot claims it.
+int tos_mgl_load(char type, int index, const char *path);
+
 #endif

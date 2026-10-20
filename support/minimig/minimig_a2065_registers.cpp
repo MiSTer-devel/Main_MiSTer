@@ -68,6 +68,36 @@ static uint8_t  fakemac[6];
 /* boardram pointer — the flat DDR3 window, set by registers_set_boardram() */
 volatile uint8_t *boardram = NULL;
 
+/* Acknowledge ordering. The 68k's CSR0 writes reach us through the CMD ring,
+ * possibly after events raised here later (a received batch, a completed
+ * transmit). On a real LANCE a write-1-to-clear only ever clears what was set
+ * before it, so here too: ev_idx[] holds, per W1C bit, the CMD ring write index
+ * when the bit was last raised, and an acknowledge clears the bit only if its
+ * ring entry was written at or after that point. */
+extern uint32_t a2065_ack_index(void);     /* ring entry being applied */
+extern uint32_t a2065_event_index(void);   /* ring write index now */
+#define CSR0_W1C (CSR0_BABL | CSR0_CERR | CSR0_MISS | CSR0_MERR | CSR0_RINT | CSR0_TINT | CSR0_IDON)
+static uint32_t ev_idx[16];
+static void mark_events(uint16_t bits, uint32_t idx)
+{
+    for (int b = 8; b < 15; b++)
+        if (bits & (1u << b)) ev_idx[b] = idx;
+}
+static uint16_t ack_mask(uint16_t ack)
+{
+    uint32_t ai = a2065_ack_index();
+    for (int b = 8; b < 15; b++)
+    {
+        if (!(ack & (1u << b))) continue;
+        int32_t d = (int32_t)(ai - ev_idx[b]);
+        /* written before the event: leave the bit set (a mark far ahead is
+         * stale, from before a ring resync, and is ignored) */
+        if (d < 0 && d > -4096) ack &= ~(1u << b);
+    }
+    return ack;
+}
+void registers_forget_events(void) { memset(ev_idx, 0, sizeof ev_idx); }
+
 /* Callbacks into main.cpp */
 static void (*on_interrupt)(void) = NULL;
 static int (*on_transmit)(void)  = NULL;
@@ -86,7 +116,11 @@ int *    registers_tdr_offset(void)  { return &tdr_offset; }
 int *    registers_rdr_offset(void)  { return &rdr_offset; }
 uint16_t registers_csr0(void)        { return csr[0]; }
 uint16_t registers_csr(int n)        { return (n >= 0 && n < RAP_SIZE) ? csr[n] : 0; }
-void     registers_csr0_set(uint16_t v) { csr[0] |= v; }
+void     registers_csr0_set(uint16_t v)
+{
+    if (v & CSR0_W1C) mark_events(v & CSR0_W1C, a2065_event_index());
+    csr[0] |= v;
+}
 void     registers_csr0_clr(uint16_t v) { csr[0] &= ~v; }
 uint16_t registers_mode(void)        { return am_mode; }
 uint64_t registers_ladrf(void)       { return am_ladrf; }
@@ -96,8 +130,10 @@ void     registers_get_fakemac(uint8_t *out) { memcpy(out, fakemac, 6); }
 /* ── Boardram helpers (see boardram_access.h) ─ */
 
 /* ── Initialization ─────────────────────────────────────────────────── */
+extern void rings_rx_forget_handed(void);
 static void chip_init_mask(void)
 {
+    rings_rx_forget_handed();
     am_rdr_rdra &= RAM_MASK;
     am_tdr_tdra &= RAM_MASK;
     tdr_offset = rdr_offset = 0;
@@ -192,8 +228,7 @@ void chip_wput(uint8_t reg_offset, uint16_t v)
     case 0: {
         csr[0] &= ~CSR0_INEA; csr[0] |= v & CSR0_INEA;
         csr[0] |= v & (CSR0_INIT | CSR0_STRT | CSR0_STOP | CSR0_TDMD);
-        csr[0] &= ~(v & (CSR0_IDON | CSR0_TINT | CSR0_RINT |
-                         CSR0_MERR | CSR0_MISS | CSR0_CERR | CSR0_BABL));
+        csr[0] &= ~ack_mask(v & CSR0_W1C);
         csr[0] &= ~CSR0_ERR;
 
         if ((csr[0] & CSR0_STOP) && !(oreg & CSR0_STOP)) {
@@ -207,14 +242,14 @@ void chip_wput(uint8_t reg_offset, uint16_t v)
             if (!(am_mode & MODE_DRX)) csr[0] |= CSR0_RXON;
             if ((csr[0] & CSR0_INIT) && !(oreg & CSR0_INIT)) {
                 chip_init();
-                csr[0] |= CSR0_IDON;
+                csr[0] |= CSR0_IDON; mark_events(CSR0_IDON, a2065_ack_index() + 1);
                 am_initialized = 1;
             }
             DBG("[a2065] START csr0=%04X\n", csr[0]);
         } else if ((csr[0] & CSR0_INIT) && !(oreg & CSR0_INIT) &&
                    (oreg & CSR0_STOP)) {
             chip_init();
-            csr[0] |= CSR0_IDON;
+            csr[0] |= CSR0_IDON; mark_events(CSR0_IDON, a2065_ack_index() + 1);
             csr[0] &= ~(CSR0_RXON | CSR0_TXON | CSR0_STOP);
             am_initialized = 1;
             csr[3] = 0;
@@ -276,6 +311,7 @@ void chip_wput(uint8_t reg_offset, uint16_t v)
 void registers_reset(void)
 {
     memset((void*)csr, 0, sizeof csr);
+    registers_forget_events();
     csr[0] = CSR0_STOP;
     csr[4] = 0x0115;
     rap = 0;

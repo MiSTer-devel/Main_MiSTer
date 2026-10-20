@@ -302,7 +302,7 @@ static const char *helptexts[] =
 	helptext_custom,
 	"                                Welcome to MiSTer! Use the cursor keys to navigate the menus. Use space bar or enter to select an item. Press Esc or F12 to exit the menus. Joystick emulation on the numeric keypad can be toggled with the numlock or scrlock key, while pressing Ctrl-Alt-0 (numeric keypad) toggles autofire mode.",
 	"                                Minimig can emulate an A600/A1200 IDE harddisk interface. The emulation can make use of Minimig-style hardfiles (complete disk images) or UAE-style hardfiles (filesystem images with no partition table).",
-	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600), a 68EC020 at A1200 speed, or a 68030 with or without MMU (maximum performance), all with transparent cache. The 68030 has no FPU, and needs a core that offers it.",
+	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600), a 68EC020 at A1200 speed, or a 68020 (maximum performance) processor with transparent cache.",
 	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 384 megabytes of Fast RAM (8MB max for 68000 mode). To use the HRTmon feature you will need a file on the SD card named hrtmon.rom.",
 	"                                Backspace key (or B-hold + A on gamepad) to unmount",
 	"                                Backspace key (or B-hold + A on gamepad) to clear stored option. You have to reload the core to be able to use default value.",
@@ -1218,8 +1218,38 @@ void HandleUI(void)
 		case 0:
 			if (CheckTimer(mgl->timer))
 			{
-				mgl->state = (mgl->item[mgl->current].action == MGL_ACTION_LOAD) ? 1 : 4;
+				if (mgl->item[mgl->current].action == MGL_ACTION_INFO) mgl->state = 8;
+				else if (mgl->item[mgl->current].action != MGL_ACTION_LOAD) mgl->state = 4;
+				// The Atari ST uses its own menu and never reaches
+				// MENU_GENERIC_MAIN, so there is no OSD entry for states 1/2 to
+				// select. Its items are applied directly in state 6 instead.
+				else mgl->state = is_st() ? 6 : 1;
 			}
+			break;
+
+		case 6:
+			{
+				mgl_item_struct *item = &mgl->item[mgl->current];
+				char path[2048];
+
+				if (item->path[0] == '/') snprintf(path, sizeof(path), "%s", item->path);
+				else snprintf(path, sizeof(path), "%s/%s", HomeDir(), item->path);
+
+				printf("MGL: Atari ST load type=%c index=%d path=%s\n", item->type, item->index, path);
+
+				// Loading a TOS image shows a progress message, which calls
+				// HandleUI() again. State 7 keeps that nested call from
+				// starting the same item a second time.
+				mgl->state = 7;
+				if (!tos_mgl_load(item->type, item->index, path))
+				{
+					printf("MGL: Atari ST has no slot for type=%c index=%d\n", item->type, item->index);
+				}
+				mgl->state = 3;
+			}
+			break;
+
+		case 7:
 			break;
 
 		case 3:
@@ -1243,6 +1273,11 @@ void HandleUI(void)
 				user_io_send_buttons(1);
 				mgl->state = 3;
 			}
+			break;
+
+		case 8:
+			Info(mgl->item[mgl->current].path, 5000);
+			mgl->state = 3;
 			break;
 		}
 	}
@@ -2030,7 +2065,8 @@ void HandleUI(void)
 							int num = (p[idx] >= '0' && p[idx] <= '9') ? p[idx] - '0' : 0;
 							if (!mgl->done && num == mgl->item[mgl->current].index && (p[0] == mgl->item[mgl->current].type)) mgl->item[mgl->current].submenu = selentry;
 
-							if (is_x86() && x86_get_image_name(num))
+							if ((is_x86() || (is_pcat286() && p[0] == 'S')) &&
+								x86_get_image_name(num))
 							{
 								strcpy(s, " ");
 								substrcpy(s + 1, p, 2);
@@ -2044,7 +2080,7 @@ void HandleUI(void)
 								strcat(s, " ");
 								strcat(s, x86_get_image_name(num));
 							}
-							else if (is_pcxt() && (p[0] == 'F'))
+							else if ((is_pcxt() || is_pcat286()) && (p[0] == 'F'))
 							{
 								strcpy(s, " ");
 								substrcpy(s + 1, p, 2);
@@ -2460,7 +2496,7 @@ void HandleUI(void)
 						}
 
 						ioctl_index = 0;
-						if ((p[idx] >= '0' && p[idx] <= '9') || is_x86() || is_pcxt()) ioctl_index = p[idx] - '0';
+						if ((p[idx] >= '0' && p[idx] <= '9') || is_x86() || is_pcxt() || is_pcat286()) ioctl_index = p[idx] - '0';
 						substrcpy(ext, p, 1);
 						while (strlen(ext) % 3) strcat(ext, " ");
 
@@ -2470,13 +2506,13 @@ void HandleUI(void)
 						strcpy(fs_pFileExt, ext);
 
 						memcpy(Selected_tmp, Selected_S[(int)ioctl_index], sizeof(Selected_tmp));
-						if (is_x86() || is_pcxt()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
+						if (is_x86() || is_pcxt() || is_pcat286()) strcpy(Selected_tmp, x86_get_image_path(ioctl_index));
 						if (is_psx() && (ioctl_index == 2 || ioctl_index == 3)) fs_Options |= SCANO_SAVES;
 						if (is_saturn() && (ioctl_index == 1)) fs_Options |= SCANO_SAVES;
 						if (is_marty() && (ioctl_index == MARTY_SLOT_CARD)) fs_Options |= SCANO_SAVES;
 						if (is_pcfx() && (ioctl_index != PCFX_SLOT_CD)) fs_Options |= SCANO_SAVES;
 
-						if ((is_saturn() && !(fs_Options & SCANO_SAVES)) || is_pce() || is_megacd() || is_3do() || is_x86() || is_cdi() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo() || (is_marty() && ioctl_index == MARTY_SLOT_CD) || (is_pcfx() && ioctl_index == PCFX_SLOT_CD))
+						if ((is_saturn() && !(fs_Options & SCANO_SAVES)) || is_pce() || is_megacd() || is_3do() || is_x86() || is_pcat286() || is_cdi() || (is_psx() && !(fs_Options & SCANO_SAVES)) || is_neogeo() || (is_marty() && ioctl_index == MARTY_SLOT_CD) || (is_pcfx() && ioctl_index == PCFX_SLOT_CD))
 						{
 							//look for CHD too
 							if (!strcasestr(ext, "CHD"))
@@ -2575,7 +2611,7 @@ void HandleUI(void)
 							if (user_io_status_bits(p + 1, &bit, 0, ex) == 1)
 							{
 								const char *opt = p + 1;
-								if (!bit && (is_x86() || is_pcxt()))
+								if (!bit && (is_x86() || is_pcxt() || is_pcat286()))
 								{
 									x86_init();
 									ResetUART();
@@ -2793,7 +2829,7 @@ void HandleUI(void)
 			}
 
 			menustate = MENU_GENERIC_MAIN1;
-			if (selPath[0] && !is_x86() && !is_pcxt()) MenuHide();
+			if (selPath[0] && !is_x86() && !is_pcxt() && !is_pcat286()) MenuHide();
 
 			printf("Image selected: %s\n", selPath);
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
@@ -2802,7 +2838,7 @@ void HandleUI(void)
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
-			else if (is_x86() || is_pcxt() || (is_uneon() && idx >= 2))
+			else if (is_x86() || is_pcxt() || is_pcat286() || (is_uneon() && idx >= 2))
 			{
 				x86_set_image(ioctl_index, selPath);
 			}
@@ -3080,7 +3116,7 @@ void HandleUI(void)
 					char *filename = user_io_create_config_name(1);
 					printf("Saving config to %s\n", filename);
 					user_io_status_save(filename);
-					if (is_x86() || is_pcxt()) x86_config_save();
+					if (is_x86() || is_pcxt() || is_pcat286()) x86_config_save();
 					if (is_arcade()) arcade_nvm_save();
 				}
 				break;
@@ -6555,7 +6591,7 @@ void HandleUI(void)
 		m = 0;
 		strcpy(s, " CPU      : ");
 		strcat(s, ((minimig_config.cpu & 0x23) == 0x23) ? "68EC020" : config_cpu_msg[minimig_config.cpu & 0x03]);
-		if ((minimig_config.cpu & 0x23) == 0x22) strcat(s, " no MMU");
+		if ((minimig_config.cpu & 0x23) == 0x03) strcat(s, " Fast");
 		OsdWrite(m++, s, menusub == 0, 0);
 
 		OsdWrite(m++, "", 0, 0);
@@ -6622,16 +6658,15 @@ void HandleUI(void)
 		{
 			if (menusub == 0)
 			{
-				static const unsigned char cpu_steps[5] = { 0, 1, 0x23, 0x02, 0x22 };
+				static const unsigned char cpu_steps[4] = { 0, 1, 3, 0x23 };
 				int step = ((minimig_config.cpu & 3) == 0) ? 0 :
 				           ((minimig_config.cpu & 3) == 1) ? 1 :
-				           ((minimig_config.cpu & 3) == 3) ? 2 :
-				           (minimig_config.cpu & 0x20) ? 4 : 3;
+				           (minimig_config.cpu & 0x20) ? 3 : 2;
 
-				step = (step + (minus ? 4 : 1)) % 5;
+				step = (step + (minus ? 3 : 1)) & 3;
 
 				menustate = MENU_MINIMIG_CHIPSET1;
-				minimig_config.cpu = (minimig_config.cpu & 0x1c) | cpu_steps[step];
+				minimig_config.cpu = (minimig_config.cpu & 0xdc) | cpu_steps[step];
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
 			else if (menusub == 1)

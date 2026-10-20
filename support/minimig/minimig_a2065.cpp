@@ -18,6 +18,7 @@
 
 #include "../../shmem.h"
 #include "../../user_io.h"
+#include "../../hardware.h"
 #include "../../file_io.h"
 
 #include "minimig_a2065.h"
@@ -34,11 +35,16 @@ extern void registers_set_on_interrupt(void (*fn)(void));
 extern void registers_set_on_transmit(int (*fn)(void));
 extern uint16_t registers_csr0(void);
 extern uint16_t registers_csr(int n);
+extern int  registers_am_initialized(void);
 extern uint16_t registers_mode(void);
 extern void chip_wput(uint8_t reg_offset, uint16_t v);
 extern int  do_transmit(void);
+extern int  rings_tx_ready(void);
 extern void gotfunc(const uint8_t *data, int len);
 extern int  rings_rx_has_space(void);
+extern int  rings_rx_unserviced(void);
+extern void registers_csr0_set(uint16_t v);
+extern void rethink(void);
 extern void mac_set_addresses(const uint8_t *fake, const uint8_t *real);
 extern int  ethernet_open(const char *iface, int promiscuous);
 extern void ethernet_close(void);
@@ -207,6 +213,14 @@ static void ring_read_entry(uint32_t idx, uint8_t *rap_out, uint16_t *data_out)
 	*data_out = (uint16_t)((entry >> DDR3_CMD_DATA_SHIFT) & DDR3_CMD_DATA_MASK);
 }
 
+// For acknowledge ordering (minimig_a2065_registers.cpp): the CMD ring index
+// of the entry being applied, or the write index now when none is.
+static uint32_t cmd_applying = 0;
+static int      cmd_applying_valid = 0;
+uint32_t a2065_event_index(void) { return map ? rd_wptr() : 0; }
+uint32_t a2065_ack_index(void)   { return cmd_applying_valid ? cmd_applying : a2065_event_index(); }
+extern void registers_forget_events(void);
+
 static void push_csr_shadow(void)
 {
 	uint16_t c0 = registers_csr0();
@@ -241,9 +255,12 @@ static void on_interrupt_cb(void)
 	update_int_state();
 }
 
+// do_transmit() sends one frame. A real LANCE keeps going while the ring holds
+// frames, so a TDMD announcing one frame also sends any queued behind it.
 static int on_transmit_cb(void)
 {
-	int r = do_transmit();
+	int r = 0;
+	for (int n = 0; n < 64 && do_transmit(); n++) r = 1;
 	push_csr_shadow();
 	update_int_state();
 	return r;
@@ -519,10 +536,13 @@ void a2065_poll(void)
 			uint8_t  rap_v;
 			uint16_t data;
 			ring_read_entry(cmd_rd_idx, &rap_v, &data);
+			cmd_applying = cmd_rd_idx;
+			cmd_applying_valid = 1;
 			cmd_rd_idx++;
 
 			chip_wput(A2065_RAP_OFF, rap_v);
 			chip_wput(A2065_RDP_OFF, data);
+			cmd_applying_valid = 0;
 		}
 
 		push_csr_shadow();
@@ -552,7 +572,29 @@ void a2065_poll(void)
 		}
 	}
 
+	// A late acknowledge may have cleared the RINT for frames the Amiga has
+	// not taken yet (see rings_rx_unserviced()); raise it again.
+	if ((registers_csr0() & (CSR0_RXON | CSR0_RINT)) == CSR0_RXON && rings_rx_unserviced())
+	{
+		registers_csr0_set(CSR0_RINT);
+		rethink();
+		push_csr_shadow();
+		update_int_state();
+	}
+
 	a2065_drain_rx();
+
+	// Poll the transmit ring like the LANCE does: a frame whose OWN bit reached
+	// boardram after the TDMD that announced it is sent on the next poll
+	// instead of waiting for the next TDMD.
+	{
+		static unsigned long tx_poll = 0;
+		if (!tx_poll || CheckTimer(tx_poll))
+		{
+			tx_poll = GetTimer(2);
+			if (registers_am_initialized() && rings_tx_ready()) on_transmit_cb();
+		}
+	}
 }
 
 void a2065_stop(void)
@@ -593,6 +635,7 @@ void a2065_start(void)
 	// re-inits the mailbox on its side too, so an old rd_idx would either
 	// stall (behind a wptr that just reset to 0) or replay stale entries.
 	cmd_rd_idx = rd_wptr();
+	registers_forget_events();
 	wr64(DDR3_CSR_OFF, 0);
 	wr64(DDR3_INT_OFF, 0);
 
