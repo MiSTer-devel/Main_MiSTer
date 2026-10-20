@@ -2243,8 +2243,9 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 			}
 			else
 			{
-				writable = FileCanWrite(name);
-				ret = FileOpenEx(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+				writable = (len > 4 && !strcasecmp(name + len - 4, ".chd")) || FileCanWrite(name);
+				ret = FileOpenDisk(&sd_image[index], name, writable ? (O_RDWR | O_SYNC) : O_RDONLY);
+				if (ret) writable = (sd_image[index].mode & O_ACCMODE) != O_RDONLY;
 				if (ret && len > 4) {
 					const char *core_name = user_io_get_core_name();
 					const char *orig_core_name = user_io_get_core_name(1);
