@@ -3166,6 +3166,8 @@ void HandleUI(void)
 			}
 
 			folder_loading = 0;
+			folder_cache.path.clear();
+			folder_cache.list.clear();
 			mgl->state = 3;
 		}
 		break;
