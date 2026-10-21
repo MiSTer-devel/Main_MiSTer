@@ -78,6 +78,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="menu.cpp" />
     <ClCompile Include="offload.cpp" />
+    <ClCompile Include="folder_step.cpp" />
     <ClCompile Include="osd.cpp" />
     <ClCompile Include="profiling.cpp" />
     <ClCompile Include="recent.cpp" />
@@ -170,6 +171,7 @@
     <ClInclude Include="logo.h" />
     <ClInclude Include="menu.h" />
     <ClInclude Include="offload.h" />
+    <ClInclude Include="folder_step.h" />
     <ClInclude Include="osd.h" />
     <ClInclude Include="profiling.h" />
     <ClInclude Include="recent.h" />

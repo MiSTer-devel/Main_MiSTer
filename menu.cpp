@@ -69,6 +69,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "str_util.h"
 #include "autofire.h"
 #include "joymap_pad.h"
+#include "folder_step.h"
 
 static void progress_boxes(char *out, int boxes, int value, int max);
 
@@ -1214,6 +1215,146 @@ static void joymap_system_return(int system_sub, int core_sub)
 	menusub = is_menu() ? system_sub : core_sub;
 }
 
+// Folder as playlist: a core asks (UIO_GET_FILEREQ) for the next, previous,
+// random or first file in the folder of a file it loaded into its playlist slot.
+// Main loads it with the same index as the OSD file menu would and reports the
+// position back (UIO_SET_FILEPOS). The list is a private ScanDirectory() copy
+// with the extensions of the F line; the OSD file menu rescans on every open,
+// so it stays usable.
+struct folder_target
+{
+	char path[1024];
+	char ext[13];
+	int index;
+	char opensave;
+	int store_name;
+	uint32_t load_addr;
+};
+
+// The folder scanned for the request in progress, so that reporting the position
+// after the load does not scan it a second time.
+static struct
+{
+	std::string path;
+	std::string dir;
+	std::string label;
+	std::vector<std::string> list;
+} folder_cache;
+
+static int folder_list(const char *dir, const char *ext, std::vector<std::string> &list, std::vector<std::string> *labels = NULL)
+{
+	char path[1024];
+	snprintf(path, sizeof(path), "%s", dir);
+	if (!ScanDirectory(path, SCANF_INIT, ext, 0)) return 0;
+
+	for (int i = 0; i < flist_nDirEntries(); i++)
+	{
+		direntext_t *d = flist_DirItem(i);
+		if (d->de.d_type == DT_DIR) continue;
+		list.push_back(d->de.d_name);
+		if (labels) labels->push_back(d->altname);
+	}
+	return !list.empty();
+}
+
+// The F line of the core with the given (explicit) file index.
+static int folder_fline(int index, folder_target *t)
+{
+	char s[256], e[256];
+	for (int i = 2;; i++)
+	{
+		char *p = user_io_get_confstr(i);
+		if (!p) return 0;
+
+		while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2) p += 2;
+		if (p[0] == 'P' && p[2] != ',') p += 2;
+		if (p[0] != 'F') continue;
+
+		int k = 1;
+		t->opensave = 0;
+		t->store_name = 0;
+		if (p[k] == 'S')
+		{
+			t->opensave = 1;
+			k++;
+		}
+
+		if (p[k] == 'C')
+		{
+			t->store_name = 1;
+			k++;
+		}
+
+		if (p[k] < '0' || p[k] > '9' || p[k] - '0' != index) continue;
+
+		substrcpy(e, p, 1);
+		while (strlen(e) % 3) strcat(e, " ");
+		snprintf(t->ext, sizeof(t->ext), "%s", e);
+		t->index = index;
+
+		t->load_addr = 0;
+		if (substrcpy(s, p, 3))
+		{
+			t->load_addr = strtoul(s, NULL, 16);
+			if (t->load_addr < 0x20000000 || t->load_addr >= 0x40000000) t->load_addr = 0;
+		}
+		return 1;
+	}
+}
+
+// Which file does the request lead to? Returns 0 if there is none.
+static int folder_next_file(int code, folder_target *t)
+{
+	int index = folder_slot() ? folder_slot() : user_io_last_tx_index();
+	const char *last = user_io_last_tx_name(index);
+	if (!last[0] || !folder_fline(index, t)) return 0;
+
+	char dir[1024];
+	snprintf(dir, sizeof(dir), "%s", last);
+	char *name = strrchr(dir, '/');
+	if (!name) return 0;
+	*name++ = 0;
+
+	std::vector<std::string> list, labels;
+	if (!folder_list(dir, t->ext, list, &labels)) return 0;
+
+	int target = folder_step(list, folder_find(list, name), code, (unsigned)rand() ^ (unsigned)GetTimer(0));
+	if (target < 0) return 0;
+
+	snprintf(t->path, sizeof(t->path), "%s/%s", dir, list[target].c_str());
+	folder_cache.path = t->path;
+	folder_cache.dir = dir;
+	folder_cache.label = labels[target];
+	folder_cache.list = list;
+	return 1;
+}
+
+// After every load into the core's playlist slot: tell the core where the file
+// is in its folder. Nothing is sent if the file is not in the list.
+static void folder_report(const char *file, const char *ext, int index)
+{
+	if (!folder_core_active() || (folder_slot() && folder_slot() != index)) return;
+
+	std::vector<std::string> list;
+	const char *name = strrchr(file, '/');
+	if (!name) return;
+	name++;
+
+	if (folder_cache.path == file) list.swap(folder_cache.list);
+	else
+	{
+		char dir[1024];
+		snprintf(dir, sizeof(dir), "%s", file);
+		*strrchr(dir, '/') = 0;
+		if (!folder_list(dir, ext, list)) return;
+	}
+	folder_cache.path.clear();
+	folder_cache.list.clear();
+
+	int pos = folder_find(list, name);
+	if (pos >= 0) user_io_send_filepos(pos + 1, (int)list.size());
+}
+
 void HandleUI(void)
 {
 	PROFILE_FUNCTION();
@@ -1295,6 +1436,7 @@ void HandleUI(void)
 	static char addon[1024];
 	static int d88_image, d88_page, d88_back, d88_n;
 	static int store_name;
+	static int folder_loading = 0;
 	static int vfilter_type;
 	static int old_volume = 0;
 	static uint32_t lock_pass_timeout = 0;
@@ -1744,6 +1886,8 @@ void HandleUI(void)
 		break;
 
 	default:
+		// a file request from the core must not unlock the OSD
+		if (folder_loading) break;
 		osd_unlocked = 1;
 		osd_lock_timer = GetTimer(cfg.osd_lock_time * 1000);
 		break;
@@ -1769,6 +1913,33 @@ void HandleUI(void)
 		// fall through
 
 	case MENU_NONE2:
+		// A file request from the core runs only with the OSD closed and no message
+		// showing (menustate is still MENU_INFO when coming from above). The request
+		// is taken before loading: the progress bar calls HandleUI() again.
+		if (menustate == MENU_NONE2 && mgl->done && !menu)
+		{
+			folder_target t;
+			int code = folder_request_take();
+			if (code && folder_next_file(code, &t))
+			{
+				snprintf(selPath, sizeof(selPath), "%s", t.path);
+				snprintf(SelectedDir, sizeof(SelectedDir), "%s", folder_cache.dir.c_str());
+				snprintf(SelectedLabel, sizeof(SelectedLabel), "%s", folder_cache.label.c_str());
+				ioctl_index = t.index;
+				opensave = t.opensave;
+				store_name = t.store_name;
+				load_addr = t.load_addr;
+				addon[0] = 0;
+				strcpy(fs_pFileExt, t.ext);
+				fs_Options = SCANO_DIR | (is_neogeo() ? SCANO_NEOGEO | SCANO_NOENTER : 0) | (store_name ? SCANO_CLEAR : 0);
+				fs_MenuSelect = MENU_GENERIC_FILE_SELECTED;
+				fs_MenuCancel = MENU_GENERIC_MAIN1;
+				folder_loading = 1;
+				menustate = MENU_GENERIC_FILE_SELECTED;
+				break;
+			}
+		}
+
 		if (menu && !osd_unlocked)
 		{
 			menustate = MENU_UNLOCK1;
@@ -2974,7 +3145,7 @@ void HandleUI(void)
 					}
 					else
 					{
-						user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr);
+						if (user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr)) folder_report(selPath, fs_pFileExt, ioctl_index);
 						if (!store_name)
 						{
 							game_docs_init(selPath, user_io_get_file_crc());
@@ -2994,6 +3165,7 @@ void HandleUI(void)
 				atari5200_umount_cartridge();
 			}
 
+			folder_loading = 0;
 			mgl->state = 3;
 		}
 		break;

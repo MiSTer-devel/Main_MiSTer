@@ -79,6 +79,9 @@
     <ClCompile Include="menu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="folder_step.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="osd.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -337,6 +340,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="menu.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="folder_step.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="osd.h">
