@@ -578,10 +578,10 @@ int minimig_cfg_load(int num)
 		else printf("Wrong configuration file size: %d (expected: %u)\n", size, sizeof(minimig_config));
 	}
 
-	if (result && ((minimig_config.cpu & 0x23) == 0x03 || (minimig_config.cpu & 0x23) == 0x22))
+	if (result && (minimig_config.cpu & 0x23) == 0x03)
 		minimig_config.cpu = (minimig_config.cpu & 0xdc) | 0x02;
 
-	if (result && (minimig_config.cpu & 0xe3) != 0x42 && (minimig_config.cpu & 0xe3) != 0x82)
+	if (result && (minimig_config.cpu & 0xe3) != 0x42 && (minimig_config.cpu & 0xe3) != 0x82 && (minimig_config.cpu & 0xe3) != 0x62 && (minimig_config.cpu & 0xe3) != 0xa2)
 		minimig_config.cpu &= ~0xc0;
 
 	if (result && (minimig_config.memory & 0xa0) == 0xa0)
