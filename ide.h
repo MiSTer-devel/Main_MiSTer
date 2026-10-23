@@ -92,7 +92,7 @@ struct drive_t
 	uint8_t  last_load_state;
 	uint8_t  track_cnt;
 	uint8_t  data_num;
-	track_t  track[50];
+	track_t  track[100];
 
 	uint8_t  playing;
 	uint8_t  paused;
