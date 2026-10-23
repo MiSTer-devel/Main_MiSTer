@@ -509,7 +509,7 @@ void mac_cdrom_fill(int index, uint64_t lba, uint8_t *buf, int sz)
 	// data window: de-headered 2048-byte sectors of the data track
 	if (is_mac_scsi_optimized())
 	{
-		if (lba < MAC_CDROM_AUDIO_BLK) mac_cd_play_stop(P());
+		if (lba < MAC_CDROM_AUDIO_BLK && !mac_cd_read_keeps_audio()) mac_cd_play_stop(P());
 
 		if (lba < MAC_CDROM_AUDIO_BLK && !cd.is_chd && cd.trk >= 0 &&
 		    cd.toc.tracks[cd.trk].sector_size == 2048 && cd.data_soff == 0)
