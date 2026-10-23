@@ -1647,6 +1647,8 @@ void user_io_init(const char *path, const char *xml)
 				// before the boot ROMs: the Sun-2's ID PROM goes in while it is held in reset
 				if (is_sun_family()) sun_enet_start();
 				if (is_hp9k_family()) hp9k_enet_start();
+				// before the boot ROMs: the Indy's Ethernet address, which the core puts in its NVRAM
+				if (is_sgi_family()) sgi_enet_start();
 
 				if (xml && isXmlName(xml) == 1)
 				{
