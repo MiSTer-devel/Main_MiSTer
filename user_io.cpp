@@ -2304,6 +2304,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				// Sun CD slot: CUE/CHD/raw image translation (support/sun)
 				if (ret) ret = sun_mount_hook(index, name, &sd_image[index], &writable);
 				if (ret) ret = hp9k_mount_hook(index, name, &sd_image[index], &writable);
+				if (ret) ret = sgi_mount_hook(index, name, &sd_image[index], &writable);
 			if (ret) ret = next_mount_hook(index, name, &sd_image[index], &writable);
 				if (ret) ret = a3_mount_hook(index, name, &sd_image[index], &writable);
 
@@ -2330,6 +2331,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 		mac_cdrom_unmount(index);
 		sun_unmount(index);
 		hp9k_unmount(index);
+		sgi_unmount(index);
 		next_unmount(index);
 		a3_unmount(index);
 		falcon_scsi_unmount(index);
@@ -3336,6 +3338,7 @@ void user_io_poll()
 	mac_poll();   // Mac SCSI family: Toolbox slot announce + deferred CD work
 	sun_poll();   // Sun SCSI family: write-buffer flushes
 	hp9k_poll();
+	sgi_poll();    // SGI Indy: write-buffer flushes
 
 	if (is_minimig())
 	{
@@ -3529,6 +3532,11 @@ void user_io_poll()
 			else if (int hpop = hp9k_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
 				if (hpop < 0) break;
+			}
+			else if (int sgop = sgi_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
+			{
+				// SGI Indy disk write buffer (support/sgi); SPI is done by the hook.
+				if (sgop < 0) break;
 			}
 			else if (int mop = marty_sd_service(disk, op, (uint32_t)lba, sz, ack))
 			{
