@@ -1,4 +1,4 @@
-// SGI Indy: the user_io hooks.
+// SGI Indy: user_io hooks.
 
 #include <stdint.h>
 #include <strings.h>
@@ -8,7 +8,6 @@
 #include "sgi.h"
 #include "sgi_disk.h"
 
-// slots 1 and 2: the disks at SCSI IDs 1 and 2
 #define SGI_DISK_WBUF 0x6
 
 char is_sgi_family()

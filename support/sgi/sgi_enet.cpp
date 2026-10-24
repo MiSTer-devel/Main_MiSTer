@@ -1,4 +1,4 @@
-// SGI Indy Ethernet: the SEEQ 80C03 and HPC3's two Ethernet DMA channels, walking the descriptor rings in guest RAM.
+// SGI Indy Ethernet: the SEEQ 80C03 and HPC3's Ethernet DMA, on the core's register window (UIO 0x70).
 
 #include <stdio.h>
 #include <string.h>
@@ -25,8 +25,6 @@ extern void ethernet_offload_on(const char *iface);
 
 #define MAC_INDEX     64
 
-// the core's register window, UIO command 0x70 on EXT_BUS:
-// read idx n -> n x (lo, hi); write idx seq lo hi, dropped if the guest moved that channel since seq
 #define UIO_SGI_ENET  0x70
 #define OP_READ       1
 #define OP_WRITE      2
@@ -34,14 +32,14 @@ extern void ethernet_offload_on(const char *iface);
 
 #define IX_TX_NBDP    0x17
 #define IX_CRBDP      0x18
-#define IX_CPFXBDP    0x1A    // PPFXBDP follows
-#define IX_SEEQ       0x40    // station address, regs 0-5
-#define IX_STATE      0x100   // [7:0] RX count, [15:8] TX count, [23:21] SEEQ count, [31:24] 0xEC
+#define IX_CPFXBDP    0x1A
+#define IX_SEEQ       0x40
+#define IX_STATE      0x100
 #define IX_RX_STAT    0x101
 #define IX_TX_STAT    0x102
-#define IX_STOP       0x103   // bit 0 RX, bit 1 TX
-#define IX_MISC       0x104   // bit 0 XIE interrupt, bit 1 no carrier
-#define IX_LIVE       0x105   // RX status, TX status, RX command, TX command
+#define IX_STOP       0x103
+#define IX_MISC       0x104
+#define IX_LIVE       0x105
 
 #define ST_RX_ACTIVE  (1u << 16)
 #define ST_TX_ACTIVE  (1u << 17)
@@ -59,7 +57,6 @@ extern void ethernet_offload_on(const char *iface);
 #define RX_GOOD_END   0x30
 #define TX_SUCCESS    0x08
 
-// guest RAM; the core stores each 64-bit word big-endian
 #define RAM_PHYS      0x08000000u
 #define RAM_ARM       0x38000000u
 #define RAM_LEN       0x08000000u
@@ -120,7 +117,6 @@ static void win_misc(int irq)
 	win_write(IX_MISC, 0, (irq ? 1 : 0) | (link_open ? 0 : 2));
 }
 
-// empties the core's prefetch buffers after Main has written guest RAM
 static void win_inval(void)
 {
 	__sync_synchronize();
@@ -167,7 +163,6 @@ static void rxq_push(const uint8_t *frame, int len)
 	rxq_len[t] = len;
 }
 
-// 08:00:69 (IRIX attaches ec0 only to an SGI address) plus the low three bytes of eth0
 static void send_mac(void)
 {
 	static const uint8_t def[6] = { 0x08, 0x00, 0x69, 0x12, 0x34, 0x56 };
@@ -234,7 +229,6 @@ static void open_link(int mode)
 		return;
 	}
 
-	// GRO and friends would hand the guest frames larger than its NIC takes
 	if (mode != MODE_TAP)
 	{
 		offload_iface = (mode == MODE_ETH1) ? "eth1" : "eth0";
@@ -252,7 +246,6 @@ static void open_link(int mode)
 
 static int mode_from_status(void)
 {
-	// OSD value 0 is eth0 and 1 is None; the rest equal their MODE_ value
 	int v = (int)user_io_status_get(NET_STATUS);
 	int mode = (v == 0) ? MODE_ETH0 : (v == 1) ? MODE_OFF : v;
 	if (mode < 0 || mode > MODE_TAP) mode = MODE_OFF;
@@ -263,17 +256,12 @@ static int mode_from_status(void)
 static int rx_match(const uint8_t *f)
 {
 	static const uint8_t bcast[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-	switch (rx_cmd & 0xC0)
-	{
-	case 0x00: return 0;
-	case 0x40: return 1;
-	case 0xC0: if (f[0] & 1) return 1;
-	           /* fall through */
-	default:   return !memcmp(f, bcast, 6) || !memcmp(f, sta, 6);
-	}
+	int mode = rx_cmd & 0xC0;
+	if (!mode) return 0;
+	if (mode == 0x40 || (mode == 0xC0 && (f[0] & 1))) return 1;
+	return !memcmp(f, bcast, 6) || !memcmp(f, sta, 6);
 }
 
-// from CPFXBDP to EOX: send each packet, mark its first descriptor TXD, move the first-descriptor pair on
 static void tx_run(uint16_t seq, int loopback)
 {
 	static uint8_t frame[MAX_FRAME];
@@ -343,7 +331,6 @@ static void tx_run(uint16_t seq, int loopback)
 	if (xie) win_misc(1);
 }
 
-// from CRBDP: [2 pad][frame][status] into each buffer, the count left written back over word 1 (clearing OWN)
 static void rx_run(uint16_t seq)
 {
 	static uint8_t img[MAX_FRAME + 3];
@@ -361,7 +348,7 @@ static void rx_run(uint16_t seq)
 			stop = 1;
 			break;
 		}
-		// OWN before the buffer address: the driver re-posts a descriptor by setting OWN last
+		// OWN before the buffer address: the driver sets OWN last
 		uint32_t w1 = g_rd32(pd + 4);
 		if (!(w1 & D_ROWN))
 		{

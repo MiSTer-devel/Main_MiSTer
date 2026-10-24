@@ -1,4 +1,4 @@
-// SGI Indy hard disks: write buffer.
+// SGI Indy hard disk write buffer.
 
 #ifndef SGI_DISK_H
 #define SGI_DISK_H
