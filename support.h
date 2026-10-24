@@ -29,6 +29,8 @@
 // HP 9000 family support
 #include "support/hp9k/hp9k.h"
 #include "support/hp9k/hp9k_enet.h"
+#include "support/sgi/sgi.h"
+#include "support/sgi/sgi_enet.h"
 
 // Archie support
 #include "support/archie/archie.h"
