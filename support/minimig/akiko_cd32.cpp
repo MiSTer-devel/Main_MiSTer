@@ -167,7 +167,7 @@ static uint32_t cd_media_swap_ready_ms = 0;
 
 #define AKIKO_TOC_REPEAT       3
 #define AKIKO_TOC_PUSH_PERIOD_MS 20
-#define AKIKO_TOC_MAX_POINTS   32
+#define AKIKO_TOC_MAX_POINTS   102
 static uint8_t  toc_buffer[AKIKO_TOC_MAX_POINTS * 13];
 static uint8_t  toc_point_count     = 0;
 static int16_t  toc_push_idx        = -1;
