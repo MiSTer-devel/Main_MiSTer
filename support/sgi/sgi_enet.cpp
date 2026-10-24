@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 
 #include "../../user_io.h"
 #include "../../file_io.h"
@@ -48,7 +49,8 @@ extern void ethernet_offload_on(const char *iface);
 #define IX_CPFXBDP    0x1A    // PPFXBDP is 0x1B
 #define IX_SEEQ       0x40    // + bank * 8 + reg: the guest's writes to regs 0-5
 // live registers
-#define IX_STATE      0x100   // [7:0] RX's write count, [15:8] TX's, the ST_ bits, [31:24] 0xEC
+#define IX_STATE      0x100   // [7:0] RX's write count, [15:8] TX's, the ST_ bits,
+                              // [23:21] the SEEQ's write count, [31:24] 0xEC
 #define IX_RX_STAT    0x101   // write, always: the SEEQ's RX status byte
 #define IX_TX_STAT    0x102   // write, always: its TX status byte
 #define IX_STOP       0x103   // write: bit 0 stops RX, bit 1 stops TX
@@ -99,9 +101,25 @@ static uint8_t  mac[6];             // what this module sent at core load
 static uint8_t  rxq[RXQ_LEN][MAX_FRAME];
 static int      rxq_len[RXQ_LEN];
 static int      rxq_head = 0, rxq_n = 0;
-static int      seeq_seq = -1;      // the guest's SEEQ set-up, as read at this seq
+static int      seeq_seq = -1;      // the guest's SEEQ set-up, as read at this SEEQ count
 static uint32_t rx_cmd;
 static uint8_t  sta[6];
+
+// ---- timing: with SGI_ENET_STATS 1, every 2 s while frames move, how often
+// the window was polled, the longest gap, and frames and time per direction.
+// It is how the receive-ring stall under transmit was found (rx_run called
+// ~25,000 times per 2 s for ~200 frames); off by default.
+#define SGI_ENET_STATS 0
+static uint64_t now_us(void)
+{
+	struct timespec t;
+	clock_gettime(CLOCK_MONOTONIC, &t);
+	return (uint64_t)t.tv_sec * 1000000ULL + t.tv_nsec / 1000;
+}
+static struct
+{
+	uint64_t t0, last, polls, gap_max, tx_frames, tx_runs, tx_us, rx_frames, rx_runs, rx_us;
+} stx;
 
 static void win_read(uint16_t idx, int n, uint32_t *out)
 {
@@ -376,6 +394,7 @@ static void tx_run(uint16_t seq, int loopback)
 			}
 			g_wr16(phys(first) + 6, D_TXD);
 			packets++;
+			stx.tx_frames++;
 		}
 		if (eox) break;
 
@@ -456,6 +475,7 @@ static void rx_run(uint16_t seq)
 		g_copy_in(buf, img, len + 3);
 		wb_addr[nwb] = pd + 6;
 		wb_val[nwb++] = (uint16_t)(cap - (len + 3));
+		stx.rx_frames++;
 		if (w1 & D_XIE) xie = 1;
 
 		if (w1 & D_EOX)
@@ -517,6 +537,25 @@ void sgi_enet_poll(void)
 
 	if (!running) return;
 
+	uint64_t tnow = now_us();
+	if (stx.last && tnow - stx.last > stx.gap_max) stx.gap_max = tnow - stx.last;
+	stx.last = tnow;
+	stx.polls++;
+	if (!stx.t0) stx.t0 = tnow;
+	if (tnow - stx.t0 >= 2000000)
+	{
+		if (SGI_ENET_STATS && (stx.tx_frames || stx.rx_frames))
+		{
+			printf("[sgi-enet] 2s: %llu polls (gap max %llu us); tx %llu frames in %llu runs, %llu us; rx %llu frames in %llu runs, %llu us\n",
+			       (unsigned long long)stx.polls, (unsigned long long)stx.gap_max,
+			       (unsigned long long)stx.tx_frames, (unsigned long long)stx.tx_runs, (unsigned long long)stx.tx_us,
+			       (unsigned long long)stx.rx_frames, (unsigned long long)stx.rx_runs, (unsigned long long)stx.rx_us);
+			fflush(stdout);
+		}
+		memset(&stx, 0, sizeof(stx));
+		stx.t0 = stx.last = tnow;
+	}
+
 	uint32_t st;
 	win_read(IX_STATE, 1, &st);
 	if (!ST_PRESENT(st))
@@ -541,11 +580,18 @@ void sgi_enet_poll(void)
 		return;
 	}
 
-	if (st & ST_TX_ACTIVE) tx_run(seq, (st & ST_LOOPBACK) != 0);
+	if (st & ST_TX_ACTIVE)
+	{
+		uint64_t a = now_us();
+		tx_run(seq, (st & ST_LOOPBACK) != 0);
+		stx.tx_us += now_us() - a;
+		stx.tx_runs++;
+	}
 
 	if (link_open && !(st & ST_LOOPBACK))
 	{
-		if (seeq_seq != seq)
+		int sc = (st >> 21) & 7;      // the SEEQ's own write count
+		if (seeq_seq != sc)
 		{
 			// the station address: six byte registers, one store word each
 			uint32_t w[6];
@@ -553,7 +599,7 @@ void sgi_enet_poll(void)
 			rx_cmd = (w[0] >> 16) & 0xFF;
 			win_read(IX_SEEQ, 6, w);
 			for (int i = 0; i < 6; i++) sta[i] = w[i] & 0xFF;
-			seeq_seq = seq;
+			seeq_seq = sc;
 		}
 		for (;;)
 		{
@@ -572,5 +618,11 @@ void sgi_enet_poll(void)
 		}
 	}
 
-	if ((st & ST_RX_ACTIVE) && rxq_n) rx_run(seq);
+	if ((st & ST_RX_ACTIVE) && rxq_n)
+	{
+		uint64_t a = now_us();
+		rx_run(seq);
+		stx.rx_us += now_us() - a;
+		stx.rx_runs++;
+	}
 }
