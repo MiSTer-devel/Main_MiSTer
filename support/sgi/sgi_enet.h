@@ -7,4 +7,9 @@
 // NVRAM, where the PROM makes `eaddr` of it.
 void sgi_enet_start(void);
 
+// The SEEQ and HPC3's Ethernet channels: open the host side the OSD names, move
+// frames between it and the descriptor rings in guest RAM.
+void sgi_enet_poll(void);
+void sgi_enet_stop(void);
+
 #endif
