@@ -41,4 +41,15 @@ void iigs_unmount(int index);
 void iigs_read(int disk, fileTYPE *f, uint64_t lba, int ack);
 void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack);
 
+// ---- WOZ file-level CRC32 refresh ----
+// Core never checks the field, but external tools do (AppleWin, WOZtools)
+// Clean ejects are not guaranteed, so the CRC is refreshed ~1s after last core write.
+void iigs_woz_write_notify(int slot);  // after each successful core block write
+int  iigs_woz_crc_due(int slot);       // 1 if a CRC refresh is due now
+void iigs_woz_crc_done(int slot);      // call after attempting the refresh
+// Recompute + patch the CRC of an open WOZ file (one whole-file read +
+// 4-byte write). Returns 1 if patched, 0 if already correct or not a WOZ,
+// -1 on error.
+int  a2_woz_fix_crc(fileTYPE *f);
+
 #endif // IIGS_DISK_H
