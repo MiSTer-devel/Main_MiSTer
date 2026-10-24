@@ -536,9 +536,66 @@ int a2_nib_track_to_dsk(const uint8_t *nibtrack, uint8_t *dsktrack)
 #define WOZ_TRK_DIR    (160 * 8)         // 1280
 #define WOZ525_BLOCKS_PER_TRACK 13
 #define WOZ525_FIRST_BLOCK 3
-#define WOZ525_BITS    (WOZ525_BLOCKS_PER_TRACK * A2_BLOCK_SIZE * 8)  // 53248
 
 #define WOZ525_SIZE    (1536 + A2_TRACKS_525 * WOZ525_BLOCKS_PER_TRACK * A2_BLOCK_SIZE)
+
+// Frame a track's WOZ BITS into disk bytes (simple self-sync framer).
+static int frame_track(const uint8_t *bits, uint32_t bit_count, uint8_t *out, int out_cap)
+{
+	int n = 0;
+	uint8_t reg = 0;
+	for (uint32_t i = 0; i < bit_count; i++) {
+		int bit = (bits[i >> 3] >> (7 - (i & 7))) & 1;
+		reg = (uint8_t)((reg << 1) | bit);
+		if (reg & 0x80) {
+			if (n < out_cap) out[n++] = reg;
+			reg = 0;
+		}
+	}
+	return n;
+}
+
+// Lay one NIB track out as WOZ bits. A run of 0xFF bytes that ends on a D5
+// prologue is a gap: it becomes 10-bit self-sync bytes, four for every five
+// bytes so the track keeps its length, and the drive's sequencer can lock on
+// to the field that follows. Every other byte is written as 8 bits.
+static uint32_t nib_track_to_bits(uint8_t *bits, const uint8_t *nib)
+{
+	uint32_t bit = 0;
+	int i = 0;
+	while (i < A2_NIB_TRACK_SIZE) {
+		int run = 0;
+		while (i + run < A2_NIB_TRACK_SIZE && nib[i + run] == 0xFF) run++;
+		int gap = run && (i + run == A2_NIB_TRACK_SIZE || nib[i + run] == 0xD5);
+		int count = gap ? run * 4 / 5 : (run ? run : 1);
+		int width = gap ? 10 : 8;
+		for (int k = 0; k < count; k++) {
+			uint8_t v = run ? 0xFF : nib[i];
+			for (int b = 7; b >= 0; b--, bit++)
+				if (v & (1 << b)) bits[bit >> 3] |= 0x80 >> (bit & 7);
+			bit += width - 8;
+		}
+		i += run ? run : 1;
+	}
+	return bit;
+}
+
+// Frame one 5.25" WOZ track back into a NIB track. Returns 0 if it is missing.
+static int woz525_track_to_nib(const uint8_t *woz, size_t woz_size, const uint8_t *trks,
+                               int track, uint8_t *nibtrack)
+{
+	const uint8_t *e = trks + track * 8;
+	uint16_t start_block = rd_le16(e + 0);
+	uint16_t block_cnt   = rd_le16(e + 2);
+	uint32_t bit_count   = rd_le32(e + 4);
+	if (block_cnt == 0 || bit_count == 0) return 0;
+	size_t off = (size_t)start_block * A2_BLOCK_SIZE;
+	if (off + (size_t)block_cnt * A2_BLOCK_SIZE > woz_size ||
+	    bit_count > (uint32_t)block_cnt * A2_BLOCK_SIZE * 8) return 0;
+	memset(nibtrack, 0, A2_NIB_TRACK_SIZE);
+	frame_track(woz + off, bit_count, nibtrack, A2_NIB_TRACK_SIZE);
+	return 1;
+}
 
 static void woz_put_chunk_hdr(uint8_t *p, const char *id, uint32_t size)
 {
@@ -597,10 +654,8 @@ size_t a2_nib_to_woz525(uint8_t *woz, size_t woz_cap, const uint8_t *nib)
 		uint8_t *e = trk_dir + t * 8;
 		wr_le16(e + 0, (uint16_t)block);                 // starting block
 		wr_le16(e + 2, WOZ525_BLOCKS_PER_TRACK);          // block count
-		wr_le32(e + 4, WOZ525_BITS);                      // bit count
-		// BITS = the 6656-byte NIB track, byte-aligned (each nibble byte = 8 bits)
-		memcpy(bits + (size_t)t * WOZ525_BLOCKS_PER_TRACK * A2_BLOCK_SIZE,
-		       nib + (size_t)t * A2_NIB_TRACK_SIZE, A2_NIB_TRACK_SIZE);
+		wr_le32(e + 4, nib_track_to_bits(bits + (size_t)t * WOZ525_BLOCKS_PER_TRACK * A2_BLOCK_SIZE,
+		                                 nib + (size_t)t * A2_NIB_TRACK_SIZE));   // bit count
 		block += WOZ525_BLOCKS_PER_TRACK;
 	}
 
@@ -642,15 +697,8 @@ int a2_woz525_to_dsk(uint8_t *dsk, const uint8_t *woz, size_t woz_size)
 	static uint8_t nib[A2_NIB_IMAGE_SIZE];
 	memset(nib, 0, sizeof(nib));
 
-	for (int t = 0; t < A2_TRACKS_525; t++) {
-		const uint8_t *e = trks + t * 8;
-		uint16_t start_block = rd_le16(e + 0);
-		uint16_t block_cnt   = rd_le16(e + 2);
-		if (block_cnt == 0) continue;
-		size_t off = (size_t)start_block * A2_BLOCK_SIZE;
-		if (off + A2_NIB_TRACK_SIZE > woz_size) return 0;
-		memcpy(nib + (size_t)t * A2_NIB_TRACK_SIZE, woz + off, A2_NIB_TRACK_SIZE);
-	}
+	for (int t = 0; t < A2_TRACKS_525; t++)
+		woz525_track_to_nib(woz, woz_size, trks, t, nib + (size_t)t * A2_NIB_TRACK_SIZE);
 	return a2_nib_to_dsk(dsk, nib);
 }
 
@@ -660,13 +708,9 @@ int a2_woz525_decode_track(const uint8_t *woz, size_t woz_size, int track, uint8
 	if (woz_disk_type(woz, woz_size) != 1) return 0;
 	const uint8_t *trks = woz_find_chunk(woz, woz_size, "TRKS", NULL);
 	if (!trks || track < 0 || track >= A2_TRACKS_525) return 0;
-	const uint8_t *e = trks + track * 8;
-	uint16_t start_block = rd_le16(e + 0);
-	uint16_t block_cnt   = rd_le16(e + 2);
-	if (block_cnt == 0) return 0;
-	size_t off = (size_t)start_block * A2_BLOCK_SIZE;
-	if (off + A2_NIB_TRACK_SIZE > woz_size) return 0;
-	return nib_track_to_dsk_track(woz + off, dsk + (size_t)track * A2_TRACK_SIZE);
+	static uint8_t nibtrack[A2_NIB_TRACK_SIZE];
+	if (!woz525_track_to_nib(woz, woz_size, trks, track, nibtrack)) return 0;
+	return nib_track_to_dsk_track(nibtrack, dsk + (size_t)track * A2_TRACK_SIZE);
 }
 
 // Map a WOZ file LBA (512-block index) to its track index, or -1 (header/unmapped).
@@ -943,22 +987,6 @@ size_t a2_po_to_woz35(uint8_t *woz, size_t woz_cap, const uint8_t *po)
 	uint32_t crc = woz_crc32(woz + 12, total - 12);
 	wr_le32(woz + 8, crc);
 	return total;
-}
-
-// Frame a track's WOZ BITS into disk bytes (simple self-sync framer).
-static int frame_track(const uint8_t *bits, uint32_t bit_count, uint8_t *out, int out_cap)
-{
-	int n = 0;
-	uint8_t reg = 0;
-	for (uint32_t i = 0; i < bit_count; i++) {
-		int bit = (bits[i >> 3] >> (7 - (i & 7))) & 1;
-		reg = (uint8_t)((reg << 1) | bit);
-		if (reg & 0x80) {
-			if (n < out_cap) out[n++] = reg;
-			reg = 0;
-		}
-	}
-	return n;
 }
 
 // Decode a single 3.5" track nt into po (819200). Reports the ProDOS block range
