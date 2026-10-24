@@ -1,5 +1,4 @@
 // SGI Indy hard disk write buffer: sectors gathered into runs (each O_SYNC write costs ~4 ms).
-// A copy of support/hp9k/hp9k_disk.cpp, as hp9k_disk.cpp and sun_disk.cpp are of support/mac/mac_disk.cpp.
 
 #include <stdint.h>
 #include <stdio.h>

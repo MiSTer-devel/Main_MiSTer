@@ -1,14 +1,8 @@
-// SGI Indy Ethernet: the SEEQ 80C03 and HPC3's two Ethernet DMA channels, on
-// the ARM (SGIIndy_MiSTer docs/design/ethernet-plan.md). The core keeps a
-// register window - ACTIVE, the TX first-descriptor pointers, the SEEQ's
-// commands and status, the interrupt - and this walks the descriptor rings in
-// guest RAM. Descriptor handling follows IRIS's hpc3.rs (channels 10 and 11)
-// and seeq8003.rs, which IRIX 5.3's if_ec2 runs on.
+// SGI Indy Ethernet: the SEEQ 80C03 and HPC3's two Ethernet DMA channels, walking the descriptor rings in guest RAM.
 
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#include <time.h>
 
 #include "../../user_io.h"
 #include "../../file_io.h"
@@ -29,33 +23,25 @@ extern int  a2065_mode_available(int mode);
 extern void ethernet_offload_off(const char *iface);
 extern void ethernet_offload_on(const char *iface);
 
-#define MAC_INDEX 64
+#define MAC_INDEX     64
 
-// ---- the core's window: UIO command 0x70 on hps_io's EXT_BUS --------------
-// READ  idx n          -> n x (low word, high word)
-// WRITE idx seq lo hi  dropped if the guest has written that channel's
-//                      registers since `seq` was read (IX_STATE: one count per
-//                      channel), except where marked "always"
-// INVAL                empties ram_arb's prefetch buffers
+// the core's register window, UIO command 0x70 on EXT_BUS:
+// read idx n -> n x (lo, hi); write idx seq lo hi, dropped if the guest moved that channel since seq
 #define UIO_SGI_ENET  0x70
 #define OP_READ       1
 #define OP_WRITE      2
 #define OP_INVAL      3
 
-// sgi_hpc3's register store, by its own index
-#define IX_RX_NBDP    0x15
 #define IX_TX_NBDP    0x17
 #define IX_CRBDP      0x18
-#define IX_CPFXBDP    0x1A    // PPFXBDP is 0x1B
-#define IX_SEEQ       0x40    // + bank * 8 + reg: the guest's writes to regs 0-5
-// live registers
-#define IX_STATE      0x100   // [7:0] RX's write count, [15:8] TX's, the ST_ bits,
-                              // [23:21] the SEEQ's write count, [31:24] 0xEC
-#define IX_RX_STAT    0x101   // write, always: the SEEQ's RX status byte
-#define IX_TX_STAT    0x102   // write, always: its TX status byte
-#define IX_STOP       0x103   // write: bit 0 stops RX, bit 1 stops TX
-#define IX_MISC       0x104   // write, always: bit 0 DMA interrupt (XIE), bit 1 no carrier
-#define IX_LIVE       0x105   // read: RX status, TX status, RX command, TX command (bytes 0..3)
+#define IX_CPFXBDP    0x1A    // PPFXBDP follows
+#define IX_SEEQ       0x40    // station address, regs 0-5
+#define IX_STATE      0x100   // [7:0] RX count, [15:8] TX count, [23:21] SEEQ count, [31:24] 0xEC
+#define IX_RX_STAT    0x101
+#define IX_TX_STAT    0x102
+#define IX_STOP       0x103   // bit 0 RX, bit 1 TX
+#define IX_MISC       0x104   // bit 0 XIE interrupt, bit 1 no carrier
+#define IX_LIVE       0x105   // RX status, TX status, RX command, TX command
 
 #define ST_RX_ACTIVE  (1u << 16)
 #define ST_TX_ACTIVE  (1u << 17)
@@ -63,7 +49,6 @@ extern void ethernet_offload_on(const char *iface);
 #define ST_RESET      (1u << 20)
 #define ST_PRESENT(s) (((s) >> 24) == 0xEC)
 
-// descriptor word 1
 #define D_EOX         0x80000000u
 #define D_EOXP        0x40000000u
 #define D_XIE         0x20000000u
@@ -71,11 +56,10 @@ extern void ethernet_offload_on(const char *iface);
 #define D_ROWN        0x00004000u
 #define D_COUNT       0x00003FFFu
 
-#define RX_GOOD_END   0x30    // SEEQ RX status: GOOD | END
+#define RX_GOOD_END   0x30
 #define TX_SUCCESS    0x08
 
-// ---- guest RAM: physical 0x08000000 is ARM 0x38000000, and the core keeps
-// each 64-bit word big-endian, so the ARM sees every 8-byte group reversed
+// guest RAM; the core stores each 64-bit word big-endian
 #define RAM_PHYS      0x08000000u
 #define RAM_ARM       0x38000000u
 #define RAM_LEN       0x08000000u
@@ -97,29 +81,13 @@ static int      link_open = 0;
 static int      cur_mode = -1;
 static int      made_macvlan = 0;
 static const char *offload_iface = 0;
-static uint8_t  mac[6];             // what this module sent at core load
+static uint8_t  mac[6];
 static uint8_t  rxq[RXQ_LEN][MAX_FRAME];
 static int      rxq_len[RXQ_LEN];
 static int      rxq_head = 0, rxq_n = 0;
-static int      seeq_seq = -1;      // the guest's SEEQ set-up, as read at this SEEQ count
+static int      seeq_cnt = -1;
 static uint32_t rx_cmd;
 static uint8_t  sta[6];
-
-// ---- timing: with SGI_ENET_STATS 1, every 2 s while frames move, how often
-// the window was polled, the longest gap, and frames and time per direction.
-// It is how the receive-ring stall under transmit was found (rx_run called
-// ~25,000 times per 2 s for ~200 frames); off by default.
-#define SGI_ENET_STATS 0
-static uint64_t now_us(void)
-{
-	struct timespec t;
-	clock_gettime(CLOCK_MONOTONIC, &t);
-	return (uint64_t)t.tv_sec * 1000000ULL + t.tv_nsec / 1000;
-}
-static struct
-{
-	uint64_t t0, last, polls, gap_max, tx_frames, tx_runs, tx_us, rx_frames, rx_runs, rx_us;
-} stx;
 
 static void win_read(uint16_t idx, int n, uint32_t *out)
 {
@@ -147,12 +115,12 @@ static void win_write(uint16_t idx, uint16_t seq, uint32_t v)
 	DisableIO();
 }
 
-// bit 0 raises the DMA (XIE) interrupt; the no-carrier level rides on every write
-static void win_misc(int dma_irq)
+static void win_misc(int irq)
 {
-	win_write(IX_MISC, 0, (dma_irq ? 1 : 0) | (link_open ? 0 : 2));
+	win_write(IX_MISC, 0, (irq ? 1 : 0) | (link_open ? 0 : 2));
 }
 
+// empties the core's prefetch buffers after Main has written guest RAM
 static void win_inval(void)
 {
 	__sync_synchronize();
@@ -161,19 +129,13 @@ static void win_inval(void)
 	DisableIO();
 }
 
-static inline int in_ram(uint32_t pa, uint32_t n)
-{
-	return pa >= RAM_PHYS && pa - RAM_PHYS <= RAM_LEN - n;
-}
+static inline int in_ram(uint32_t pa, uint32_t n) { return pa >= RAM_PHYS && pa - RAM_PHYS <= RAM_LEN - n; }
+static inline uint32_t phys(uint32_t a) { return a & 0x1FFFFFFF; }
 static inline uint32_t g_rd32(uint32_t pa) { return *(volatile uint32_t *)(ram + ((pa - RAM_PHYS) ^ 4)); }
 static inline void g_wr16(uint32_t pa, uint16_t v) { *(volatile uint16_t *)(ram + ((pa - RAM_PHYS) ^ 6)) = v; }
 static inline uint8_t g_rd8(uint32_t pa) { return ram[(pa - RAM_PHYS) ^ 7]; }
 static inline void g_wr8(uint32_t pa, uint8_t v) { ram[(pa - RAM_PHYS) ^ 7] = v; }
 
-// Whole 8-byte groups in one access each: a group read as a native 64-bit
-// word is the guest's bytes in reverse, so a byte swap is the whole
-// conversion. Frames go in and out in ~200 accesses instead of ~1,500, which
-// also keeps the time Main spends inside a guest buffer short.
 static void g_copy_in(uint32_t pa, const uint8_t *src, int n)
 {
 	while (n && (pa & 7)) { g_wr8(pa++, *src++); n--; }
@@ -197,51 +159,32 @@ static void g_copy_out(uint8_t *dst, uint32_t pa, int n)
 	while (n--) *dst++ = g_rd8(pa++);
 }
 
-// descriptors hold physical addresses; a KSEG0/1 one is stripped the same way
-static inline uint32_t phys(uint32_t a) { return a & 0x1FFFFFFF; }
-
-// ---- the address -----------------------------------------------------------
-
-// IRIX attaches ec0 only to an address in SGI's 08:00:69 (or 00:00:1d)
-static int make_mac(uint8_t *p)
+static void rxq_push(const uint8_t *frame, int len)
 {
-	uint8_t hw[6];
-	if (!ethernet_read_iface_mac("eth0", hw) && !ethernet_read_iface_mac("wlan0", hw))
-		return 0;
-
-	p[0] = 0x08; p[1] = 0x00; p[2] = 0x69;
-	p[3] = hw[3]; p[4] = hw[4]; p[5] = hw[5];
-	return 1;
+	if (rxq_n == RXQ_LEN) return;
+	int t = (rxq_head + rxq_n++) % RXQ_LEN;
+	memcpy(rxq[t], frame, len);
+	rxq_len[t] = len;
 }
 
+// 08:00:69 (IRIX attaches ec0 only to an SGI address) plus the low three bytes of eth0
 static void send_mac(void)
 {
-	const char *src;
+	static const uint8_t def[6] = { 0x08, 0x00, 0x69, 0x12, 0x34, 0x56 };
+	uint8_t hw[6];
 
+	memcpy(mac, def, 6);
 	char *path = user_io_make_filepath(HomeDir(), "boot1.rom");
-	if (FileLoad(path, 0, 0) >= 6)
-	{
-		FileLoad(path, mac, sizeof(mac));
-		src = "boot1.rom";
-	}
-	else if (make_mac(mac)) src = "this MiSTer's Ethernet address";
-	else
-	{
-		static const uint8_t def[6] = { 0x08, 0x00, 0x69, 0x12, 0x34, 0x56 };
-		memcpy(mac, def, 6);
-		printf("[sgi-enet] no boot1.rom and no host address: the core keeps 08:00:69:12:34:56\n");
-		return;
-	}
+	if (FileLoad(path, 0, 0) >= 6) FileLoad(path, mac, sizeof(mac));
+	else if (ethernet_read_iface_mac("eth0", hw) || ethernet_read_iface_mac("wlan0", hw)) memcpy(mac + 3, hw + 3, 3);
+	else return;
 
 	user_io_set_index(MAC_INDEX);
 	user_io_set_download(1);
 	user_io_file_tx_data(mac, sizeof(mac));
 	user_io_set_download(0);
-	printf("[sgi-enet] address from %s: %02X:%02X:%02X:%02X:%02X:%02X\n", src,
-	       mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	printf("[sgi-enet] MAC %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
-
-// ---- the host side ---------------------------------------------------------
 
 static void close_link(void)
 {
@@ -273,7 +216,7 @@ static void open_link(int mode)
 	{
 	case MODE_ETH0:
 		iface = "eth0";
-		promisc = 1;   // BPF-filtered on the guest's MAC
+		promisc = 1;
 		break;
 	case MODE_ETH1:
 		iface = "eth1";
@@ -304,7 +247,7 @@ static void open_link(int mode)
 	uint8_t scratch[MAX_FRAME];
 	while (ethernet_recv_nb(scratch, MAX_FRAME) > 0) ;
 	if (mode == MODE_ETH0 || mode == MODE_ETH1) ethernet_set_mac_filter_mcast(mac);
-	printf("[sgi-enet] link up on %s (mode %d)\n", iface, mode);
+	printf("[sgi-enet] link up on %s\n", iface);
 }
 
 static int mode_from_status(void)
@@ -317,24 +260,20 @@ static int mode_from_status(void)
 	return mode;
 }
 
-// The SEEQ's match modes, on the station address the guest programmed
-static int rx_match(const uint8_t *f, uint32_t rx_cmd, const uint8_t *sta)
+static int rx_match(const uint8_t *f)
 {
 	static const uint8_t bcast[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 	switch (rx_cmd & 0xC0)
 	{
-	case 0x00: return 0;                                             // receiver off
-	case 0x40: return 1;                                             // promiscuous
-	case 0xC0: if (f[0] & 1) return 1;                               // + multicast
+	case 0x00: return 0;
+	case 0x40: return 1;
+	case 0xC0: if (f[0] & 1) return 1;
 	           /* fall through */
-	default:   return !memcmp(f, bcast, 6) || !memcmp(f, sta, 6);    // station + broadcast
+	default:   return !memcmp(f, bcast, 6) || !memcmp(f, sta, 6);
 	}
 }
 
-// ---- TX: channel 11 --------------------------------------------------------
-// From CPFXBDP (the core set it to NBDP on the start write) to EOX: gather
-// each packet, send it, mark its first descriptor TXD and move the
-// first-descriptor pair on, as HPC3's fetch does at a packet boundary.
+// from CPFXBDP to EOX: send each packet, mark its first descriptor TXD, move the first-descriptor pair on
 static void tx_run(uint16_t seq, int loopback)
 {
 	static uint8_t frame[MAX_FRAME];
@@ -347,24 +286,22 @@ static void tx_run(uint16_t seq, int loopback)
 	for (int guard = 0; guard < 256 && !eox; guard++)
 	{
 		uint32_t first = d;
-		int len = 0, eop = 0, sent_before = 0;
+		int len = 0, sent = 0;
 
 		for (int k = 0; k < 64; k++)
 		{
 			uint32_t pd = phys(d);
 			if (!in_ram(pd, 16))
 			{
-				printf("[sgi-enet] TX descriptor %08X is not in RAM: stopping TX\n", d);
 				win_write(IX_STOP, seq, 2);
 				return;
 			}
-			// word 1 first: the driver writes it last
 			uint32_t w1 = g_rd32(pd + 4);
 			__sync_synchronize();
 			uint32_t buf = phys(g_rd32(pd));
 			next = g_rd32(pd + 8);
 			int n = w1 & D_COUNT;
-			if (d == first && (w1 & D_TXD)) sent_before = 1;
+			if (d == first && (w1 & D_TXD)) sent = 1;
 			if (w1 & D_XIE) xie = 1;
 			if (n && len + n <= MAX_FRAME && in_ram(buf, n))
 			{
@@ -372,33 +309,22 @@ static void tx_run(uint16_t seq, int loopback)
 				len += n;
 			}
 			eox = (w1 & D_EOX) != 0;
-			eop = n && (w1 & D_EOXP);
-			if (eox || eop) break;
-			d = next;           // more of this packet, or a 0-byte link
+			if (eox || (n && (w1 & D_EOXP))) break;
+			d = next;
 		}
 
 		if (len)
 		{
-			if (!sent_before && len >= 14)
+			if (!sent && len >= 14)
 			{
-				if (loopback)
-				{
-					if (rxq_n < RXQ_LEN)
-					{
-						int t = (rxq_head + rxq_n++) % RXQ_LEN;
-						memcpy(rxq[t], frame, len);
-						rxq_len[t] = len;
-					}
-				}
+				if (loopback) rxq_push(frame, len);
 				else if (link_open) ethernet_send(frame, len);
 			}
 			g_wr16(phys(first) + 6, D_TXD);
 			packets++;
-			stx.tx_frames++;
 		}
 		if (eox) break;
 
-		// the next packet's first descriptor
 		d = next;
 		ppfx = cpfx;
 		cpfx = d;
@@ -417,65 +343,49 @@ static void tx_run(uint16_t seq, int loopback)
 	if (xie) win_misc(1);
 }
 
-// ---- RX: channel 10 --------------------------------------------------------
-// Into the descriptor at CRBDP and on: [2 pad bytes][frame][status], the
-// count left written back over word 1's low half (which clears ROWN). A
-// descriptor the host still owns stops the channel if it ends the ring, as
-// HPC3 does - CRBDP stays on it, which is where if_ec2 expects it.
+// from CRBDP: [2 pad][frame][status] into each buffer, the count left written back over word 1 (clearing OWN)
 static void rx_run(uint16_t seq)
 {
+	static uint8_t img[MAX_FRAME + 3];
 	uint32_t wb_addr[RXQ_LEN];
 	uint16_t wb_val[RXQ_LEN];
 	int nwb = 0, xie = 0, stop = 0;
+	uint32_t d, st;
 
-	uint32_t d;
 	win_read(IX_CRBDP, 1, &d);
-
 	while (rxq_n)
 	{
 		uint32_t pd = phys(d);
 		if (!in_ram(pd, 16))
 		{
-			printf("[sgi-enet] RX descriptor %08X is not in RAM: stopping RX\n", d);
 			stop = 1;
 			break;
 		}
-		// OWN before the buffer address. The driver re-posts a descriptor by
-		// writing the new buffer and then setting OWN; read the other way
-		// round, a re-post landing between the two reads paired OWN with the
-		// buffer it had just freed, and the frame went into the free list
-		// (IRIX panicked in lf_get under an FTP transfer, build 53).
+		// OWN before the buffer address: the driver re-posts a descriptor by setting OWN last
 		uint32_t w1 = g_rd32(pd + 4);
 		if (!(w1 & D_ROWN))
 		{
-			if (w1 & D_EOX) stop = 1;   // ring exhausted
-			break;                      // else wait for the guest to hand it back
+			if (w1 & D_EOX) stop = 1;
+			break;
 		}
 		__sync_synchronize();
 		uint32_t buf = phys(g_rd32(pd)), next = g_rd32(pd + 8);
 
-		// And nothing goes into a buffer once the guest has touched the
-		// window (a RESET or a restart is followed by freeing the ring).
-		uint32_t st;
 		win_read(IX_STATE, 1, &st);
 		if (((st ^ seq) & 0xFF) || !(st & ST_RX_ACTIVE) || (st & ST_RESET)) return;
 
-		const uint8_t *f = rxq[rxq_head];
 		int len = rxq_len[rxq_head];
 		int cap = w1 & D_COUNT;
+		memcpy(img + 2, rxq[rxq_head], len);
 		rxq_head = (rxq_head + 1) % RXQ_LEN;
 		rxq_n--;
-		if (len + 3 > cap || !in_ram(buf, len + 3)) continue;   // does not fit: dropped
+		if (len + 3 > cap || !in_ram(buf, len + 3)) continue;
 
-		static uint8_t img[MAX_FRAME + 3];
-		img[0] = 0;
-		img[1] = 0;
-		memcpy(img + 2, f, len);
+		img[0] = img[1] = 0;
 		img[2 + len] = RX_GOOD_END;
 		g_copy_in(buf, img, len + 3);
 		wb_addr[nwb] = pd + 6;
 		wb_val[nwb++] = (uint16_t)(cap - (len + 3));
-		stx.rx_frames++;
 		if (w1 & D_XIE) xie = 1;
 
 		if (w1 & D_EOX)
@@ -489,10 +399,9 @@ static void rx_run(uint16_t seq)
 	if (!nwb && !stop) return;
 	if (nwb)
 	{
-		uint32_t st;
 		win_read(IX_STATE, 1, &st);
 		if (((st ^ seq) & 0xFF) || (st & ST_RESET)) return;
-		win_inval();               // the frames, before the guest can see them done
+		win_inval();
 		for (int i = 0; i < nwb; i++) g_wr16(wb_addr[i], wb_val[i]);
 		win_inval();
 	}
@@ -502,24 +411,14 @@ static void rx_run(uint16_t seq)
 	if (xie) win_misc(1);
 }
 
-// ---- hooks -----------------------------------------------------------------
-
 void sgi_enet_start(void)
 {
 	send_mac();
 
-	if (!ram)
-	{
-		ram = (volatile uint8_t *)shmem_map(RAM_ARM, RAM_LEN);
-		if (!ram)
-		{
-			printf("[sgi-enet] shmem_map failed: no Ethernet\n");
-			return;
-		}
-	}
+	if (!ram && !(ram = (volatile uint8_t *)shmem_map(RAM_ARM, RAM_LEN))) return;
 	running = 1;
 	cur_mode = -1;
-	seeq_seq = -1;
+	seeq_cnt = -1;
 	rxq_n = 0;
 }
 
@@ -528,41 +427,21 @@ void sgi_enet_stop(void)
 	if (!running) return;
 	running = 0;
 	close_link();
-	printf("[sgi-enet] stopped\n");
 }
 
 void sgi_enet_poll(void)
 {
 	static uint8_t frame[MAX_FRAME];
+	uint32_t st;
 
 	if (!running) return;
 
-	uint64_t tnow = now_us();
-	if (stx.last && tnow - stx.last > stx.gap_max) stx.gap_max = tnow - stx.last;
-	stx.last = tnow;
-	stx.polls++;
-	if (!stx.t0) stx.t0 = tnow;
-	if (tnow - stx.t0 >= 2000000)
-	{
-		if (SGI_ENET_STATS && (stx.tx_frames || stx.rx_frames))
-		{
-			printf("[sgi-enet] 2s: %llu polls (gap max %llu us); tx %llu frames in %llu runs, %llu us; rx %llu frames in %llu runs, %llu us\n",
-			       (unsigned long long)stx.polls, (unsigned long long)stx.gap_max,
-			       (unsigned long long)stx.tx_frames, (unsigned long long)stx.tx_runs, (unsigned long long)stx.tx_us,
-			       (unsigned long long)stx.rx_frames, (unsigned long long)stx.rx_runs, (unsigned long long)stx.rx_us);
-			fflush(stdout);
-		}
-		memset(&stx, 0, sizeof(stx));
-		stx.t0 = stx.last = tnow;
-	}
-
-	uint32_t st;
 	win_read(IX_STATE, 1, &st);
 	if (!ST_PRESENT(st))
 	{
 		if (link_open) close_link();
 		cur_mode = -1;
-		return;                       // a core build without the Ethernet window
+		return;
 	}
 	uint16_t seq = st & 0xFFFF;
 
@@ -580,49 +459,33 @@ void sgi_enet_poll(void)
 		return;
 	}
 
-	if (st & ST_TX_ACTIVE)
-	{
-		uint64_t a = now_us();
-		tx_run(seq, (st & ST_LOOPBACK) != 0);
-		stx.tx_us += now_us() - a;
-		stx.tx_runs++;
-	}
+	if (st & ST_TX_ACTIVE) tx_run(seq, (st & ST_LOOPBACK) != 0);
 
 	if (link_open && !(st & ST_LOOPBACK))
 	{
-		int sc = (st >> 21) & 7;      // the SEEQ's own write count
-		if (seeq_seq != sc)
+		int sc = (st >> 21) & 7;
+		if (seeq_cnt != sc)
 		{
-			// the station address: six byte registers, one store word each
 			uint32_t w[6];
 			win_read(IX_LIVE, 1, w);
 			rx_cmd = (w[0] >> 16) & 0xFF;
 			win_read(IX_SEEQ, 6, w);
 			for (int i = 0; i < 6; i++) sta[i] = w[i] & 0xFF;
-			seeq_seq = sc;
+			seeq_cnt = sc;
 		}
-		for (;;)
+
+		int len;
+		while ((len = ethernet_recv_nb(frame, MAX_FRAME)) > 0)
 		{
-			int len = ethernet_recv_nb(frame, MAX_FRAME);
-			if (len <= 0) break;
-			if (len < 14 || !(st & ST_RX_ACTIVE) || !rx_match(frame, rx_cmd, sta)) continue;
+			if (len < 14 || !(st & ST_RX_ACTIVE) || !rx_match(frame)) continue;
 			if (len < 60)
 			{
 				memset(frame + len, 0, 60 - len);
 				len = 60;
 			}
-			if (rxq_n == RXQ_LEN) continue;   // full: dropped, as an overrun
-			int t = (rxq_head + rxq_n++) % RXQ_LEN;
-			memcpy(rxq[t], frame, len);
-			rxq_len[t] = len;
+			rxq_push(frame, len);
 		}
 	}
 
-	if ((st & ST_RX_ACTIVE) && rxq_n)
-	{
-		uint64_t a = now_us();
-		rx_run(seq);
-		stx.rx_us += now_us() - a;
-		stx.rx_runs++;
-	}
+	if ((st & ST_RX_ACTIVE) && rxq_n) rx_run(seq);
 }

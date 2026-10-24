@@ -1648,7 +1648,6 @@ void user_io_init(const char *path, const char *xml)
 				// before the boot ROMs: the Sun-2's ID PROM goes in while it is held in reset
 				if (is_sun_family()) sun_enet_start();
 				if (is_hp9k_family()) hp9k_enet_start();
-				// before the boot ROMs: the Indy's Ethernet address, which the core puts in its NVRAM
 				if (is_sgi_family()) sgi_enet_start();
 
 				if (xml && isXmlName(xml) == 1)
@@ -3341,7 +3340,7 @@ void user_io_poll()
 	mac_poll();   // Mac SCSI family: Toolbox slot announce + deferred CD work
 	sun_poll();   // Sun SCSI family: write-buffer flushes
 	hp9k_poll();
-	sgi_poll();    // SGI Indy: write-buffer flushes
+	sgi_poll();
 
 	if (is_minimig())
 	{
@@ -3539,7 +3538,6 @@ void user_io_poll()
 			}
 			else if (int sgop = sgi_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
-				// SGI Indy disk write buffer (support/sgi); SPI is done by the hook.
 				if (sgop < 0) break;
 			}
 			else if (int mop = marty_sd_service(disk, op, (uint32_t)lba, sz, ack))
