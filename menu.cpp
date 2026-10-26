@@ -268,6 +268,7 @@ const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUT
 const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_dsnd_msg[] = { "Off", "Quiet", "Normal", "Loud" };
+const char *config_cdspeed_msg[] = { "1x", "2x", "4x", "8x" };
 const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem", "UDP", "SNI"};
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
@@ -6849,7 +6850,7 @@ void HandleUI(void)
 			m = 0;
 			if (!menusub) firstmenu = 0;
 			adjvisible = 0;
-			menumask = 0x4010;
+			menumask = 0x8020;
 
 			MenuWrite(m++, "", 0, 0);
 
@@ -6859,10 +6860,10 @@ void HandleUI(void)
 				int cdtv_on = minimig_config.cdtv_drive.cfg ? 1 : 0;
 
 				menumask |= 1;
-				if (cd32_on) menumask |= 2;
+				if (cd32_on) menumask |= 6;
 
-				menumask |= 4;
-				if (cdtv_on) menumask |= 8;
+				menumask |= 8;
+				if (cdtv_on) menumask |= 0x10;
 
 				strcpy(s, " CD32 drive       : ");
 				strcat(s, cd32_on ? "Enabled" : "Disabled");
@@ -6880,12 +6881,15 @@ void HandleUI(void)
 					}
 					else strcpy(s, "   ** not selected **");
 					MenuWrite(m++, s, cd32_on ? (menusub == 1) : 0, !cd32_on);
+					strcpy(s, " CD read speed    : ");
+					strcat(s, config_cdspeed_msg[(minimig_get_extcfg() >> 21) & 3]);
+					MenuWrite(m++, s, menusub == 2, 0);
 					MenuWrite(m++);
 				}
 
 				strcpy(s, " CDTV drive       : ");
 				strcat(s, cdtv_on ? "Enabled" : "Disabled");
-				MenuWrite(m++, s, menusub == 2, 0);
+				MenuWrite(m++, s, menusub == 3, 0);
 
 				if (cdtv_on)
 				{
@@ -6899,31 +6903,31 @@ void HandleUI(void)
 						strncpy(&s[3], name, 25);
 					}
 					else strcpy(s, "   ** not selected **");
-					MenuWrite(m++, s, cdtv_on ? (menusub == 3) : 0, !cdtv_on);
+					MenuWrite(m++, s, cdtv_on ? (menusub == 4) : 0, !cdtv_on);
 				}
 
 				MenuWrite(m++);
 			}
 			else
 			{
-				if (!menusub) menusub = 4;
+				if (!menusub) menusub = 5;
 			}
 
 			int ide_on = (minimig_config.ide_cfg & 1) ? 1 : 0;
-			if (ide_on)  menumask |= 0x1560;
+			if (ide_on)  menumask |= 0x2AC0;
 
 			strcpy(s, " IDE A600/A1200   : ");
 			strcat(s, ide_on ? "Enabled" : "Disabled");
-			MenuWrite(m++, s, menusub == 4, 0);
+			MenuWrite(m++, s, menusub == 5, 0);
 
 			if (ide_on)
 			{
 				strcpy(s, " Fast-IDE (68020) : ");
 				strcat(s, (minimig_config.ide_cfg & 0x20) ? "Off" : "On ");
-				MenuWrite(m++, s, menusub == 5, !ide_on || !(minimig_config.cpu & 2));
-				if (!(minimig_config.cpu & 2)) menumask &= ~0x20;
+				MenuWrite(m++, s, menusub == 6, !ide_on || !(minimig_config.cpu & 2));
+				if (!(minimig_config.cpu & 2)) menumask &= ~0x40;
 
-				uint n = 6, t = 0x80;
+				uint n = 7, t = 0x100;
 				for (uint i = 0; i < 4; i++)
 				{
 					strcpy(s, (i & 2) ? " \x1bSec. " : " \x1bPri. ");
@@ -6951,7 +6955,7 @@ void HandleUI(void)
 			}
 
 			while (m - firstmenu < OsdGetSize() - 1) MenuWrite(m++);
-			MenuWrite(m++, STD_BACK, menusub == 14, 0);
+			MenuWrite(m++, STD_BACK, menusub == 15, 0);
 
 			menustate = MENU_MINIMIG_DISK2;
 
@@ -6990,7 +6994,18 @@ void HandleUI(void)
 					else if (recent_init(501)) menustate = MENU_RECENT1;
 				}
 			}
-			else if (menusub == 2)
+			else if (menusub == 2 && minimig_config.cd32_drive.cfg)
+			{
+				if (select || minus || plus)
+				{
+					int mode = (minimig_get_extcfg() >> 21) & 3;
+					if (minus) mode = (mode <= 0) ? 2 : (mode - 1);
+					else mode = (mode >= 2) ? 0 : (mode + 1);
+					minimig_set_extcfg((minimig_get_extcfg() & ~0x600000) | (mode << 21));
+					menustate = MENU_MINIMIG_DISK1;
+				}
+			}
+			else if (menusub == 3)
 			{
 				if (select || minus || plus)
 				{
@@ -6999,7 +7014,7 @@ void HandleUI(void)
 					menustate = MENU_MINIMIG_DISK1;
 				}
 			}
-			else if (menusub == 3 && minimig_config.cdtv_drive.cfg)
+			else if (menusub == 4 && minimig_config.cdtv_drive.cfg)
 			{
 				if (select || recent)
 				{
@@ -7015,7 +7030,7 @@ void HandleUI(void)
 					else if (recent_init(502)) menustate = MENU_RECENT1;
 				}
 			}
-			else if (menusub == 4)
+			else if (menusub == 5)
 			{
 				if (select || minus || plus)
 				{
@@ -7023,7 +7038,7 @@ void HandleUI(void)
 					menustate = MENU_MINIMIG_DISK1;
 				}
 			}
-			else if (menusub == 5)
+			else if (menusub == 6)
 			{
 				if (select)
 				{
@@ -7031,13 +7046,13 @@ void HandleUI(void)
 					menustate = MENU_MINIMIG_DISK1;
 				}
 			}
-			else if (menusub < 14)
+			else if (menusub < 15)
 			{
-				if (!(menusub & 1))
+				if (menusub & 1)
 				{
 					if (select || minus || plus)
 					{
-						int idx = (menusub - 6) / 2;
+						int idx = (menusub - 7) / 2;
 						if (minus)
 						{
 							if (!minimig_config.hardfile[idx].cfg) minimig_config.hardfile[idx].cfg = 2;
@@ -7056,7 +7071,7 @@ void HandleUI(void)
 					fs_Options = SCANO_DIR | SCANO_UMOUNT;
 					fs_MenuSelect = MENU_MINIMIG_HDFFILE_SELECTED;
 					fs_MenuCancel = MENU_MINIMIG_DISK1;
-					int idx = (menusub - 7) / 2;
+					int idx = (menusub - 8) / 2;
 					strcpy(fs_pFileExt, (minimig_config.hardfile[idx].cfg == 2) ? "ISOCUECHDIMG" : "HDFVHDIMGDSK");
 					if (select)
 					{
@@ -7066,7 +7081,7 @@ void HandleUI(void)
 					else if (recent_init(500)) menustate = MENU_RECENT1;
 				}
 			}
-			else if (menusub == 14 && select) // return to previous menu
+			else if (menusub == 15 && select) // return to previous menu
 			{
 				firstmenu = 0;
 				menustate = MENU_MINIMIG_MAIN1;
@@ -7088,9 +7103,9 @@ void HandleUI(void)
 
 	case MENU_MINIMIG_HDFFILE_SELECTED:
 		{
-			memcpy(Selected_S[(menusub - 7) / 2], selPath, sizeof(Selected_S[(menusub - 2) / 2]));
+			memcpy(Selected_S[(menusub - 8) / 2], selPath, sizeof(Selected_S[(menusub - 2) / 2]));
 			recent_update(SelectedDir, selPath, SelectedLabel, 500);
-			int num = (menusub - 7) / 2;
+			int num = (menusub - 8) / 2;
 			uint len = strlen(selPath);
 			if (len > sizeof(minimig_config.hardfile[num].filename) - 1) len = sizeof(minimig_config.hardfile[num].filename) - 1;
 			if(len) memcpy(minimig_config.hardfile[num].filename, selPath, len);

@@ -85,6 +85,8 @@ static uint32_t cd_play_start_lba   = 0;
 static uint32_t cd_play_end_lba     = 0;
 
 static int32_t  cd_data_lba_base    = -1;
+static int32_t  cd_data_lba_last    = -1;
+static uint32_t cd_seek_ready_ms    = 0;
 
 #define AKIKO_PREFETCH_SECTORS 128
 #define AKIKO_PREFETCH_WINDOWS 4
@@ -539,6 +541,9 @@ static void cmd_multi(const uint8_t *cmd)
 			cd_data_lba_base = (int32_t)s_lba;
 			cd_paused = 0;
 			r[1] = 0x02;
+			int32_t seek = abs(cd_data_lba_last - (int32_t)s_lba);
+			seek = (seek < 100) ? 1 : (seek / 1000 + 10 > 100) ? 100 : seek / 1000 + 10;
+			cd_seek_ready_ms = (uint32_t)GetTimer(seek * 1000 / ((75 * cdrom_speed) << ((minimig_get_extcfg() >> 21) & 3)));
 			akiko_diag("[akiko] PLAY DATA arm: start_lba=%d (cmd7=0x%02x)", (int32_t)s_lba, cmd[7]);
 		}
 	} else if (seek_negative) {
@@ -1260,6 +1265,8 @@ static bool akiko_handle_sec_req(void)
 	}
 	clock_gettime(CLOCK_MONOTONIC, &ts2);
 
+	if (!CheckTimer(cd_seek_ready_ms)) return false;
+	cd_data_lba_last = (int32_t)lba;
 	akiko_push_sector(buf);
 	clock_gettime(CLOCK_MONOTONIC, &ts3);
 
@@ -1343,6 +1350,8 @@ void akiko_cd32_init(void)
 	cd_play_start_lba = 0;
 	cd_play_end_lba   = 0;
 	cd_data_lba_base = -1;
+	cd_data_lba_last = -1;
+	cd_seek_ready_ms = 0;
 	cd_audio_timeout = 0;
 	cd_audio_play_until_ms = 0;
 	cd_cdda_lba_next = -1;
