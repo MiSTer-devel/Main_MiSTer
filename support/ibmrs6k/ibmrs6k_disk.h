@@ -1,4 +1,4 @@
-// IBM RS/6000 43P 7248 hard disks: write buffer.
+// IBM RS/6000 43P 7248 hard disk write buffer.
 
 #ifndef IBMRS6K_DISK_H
 #define IBMRS6K_DISK_H

@@ -1,4 +1,4 @@
-// IBM RS/6000 43P 7248 CD-ROM slot: CUE/CHD/raw-sector images served as a flat disc of 2048-byte sectors.
+// IBM RS/6000 43P 7248 CD-ROM: CUE/BIN, CHD and the CD-audio windows.
 
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +17,7 @@ struct ibmrs6k_cdrom_state
 	int      active;
 	int      is_chd;
 
-	toc_t    toc;          // disc LBAs, no +150
+	toc_t    toc;
 	uint8_t *hunkbuf;
 	int      hunknum;
 
@@ -31,14 +31,13 @@ struct ibmrs6k_cdrom_state
 
 static ibmrs6k_cdrom_state cd = {};
 
-// sectors of a flat ISO on the generic path, for the TOC window (0: none)
 static uint32_t flat_sectors = 0;
 
 static uint32_t layout_data_off(int is_mode2, uint32_t sec_size)
 {
 	if (sec_size == 2048) return 0;
-	if (sec_size == 2336) return 8;              // MODE2 form 1, no sync/header
-	return is_mode2 ? 24 : 16;                   // raw: sync, header (, subheader)
+	if (sec_size == 2336) return 8;
+	return is_mode2 ? 24 : 16;
 }
 
 void ibmrs6k_cdrom_unmount(int index)
@@ -81,7 +80,6 @@ static int finish_mount(const char *src)
 		if (cd.toc.tracks[i].type != TT_CDDA) { cd.trk = i; break; }
 	if (cd.trk < 0)
 	{
-		// audio-only: reads return zeros, but a non-zero capacity keeps the disc visible
 		cd.data_soff = 0;
 		cd.sectors   = (uint64_t)cd.toc.end;
 	}
@@ -131,7 +129,7 @@ static int mount_cue(const char *name)
 	toc_t *t = &cd.toc;
 	char fpath[1024] = {};
 	uint64_t fsize = 0;
-	uint32_t file_base = 0;       // disc LBA of the current FILE's frame 0
+	uint32_t file_base = 0;
 	uint32_t synth = 0;
 	uint32_t pending_pregap = 0;
 	int      cur_type = -1;
@@ -208,14 +206,13 @@ static int mount_cue(const char *name)
 				k->type        = (TrackType)cur_type;
 				k->sector_size = (int)cur_ss;
 				k->start       = (int)(file_base + synth + index1);
-				k->offset      = (int)index1 - k->start;   // file frame = disc LBA + offset
+				k->offset      = (int)index1 - k->start;
 				k->pregap      = (int)((index0 >= 0 ? index1 - (uint32_t)index0 : 0) + pending_pregap);
 				k->indexes[0]  = (index0 >= 0) ? index0 : (int)index1;
 				k->indexes[1]  = (int)index1;
 				k->index_num   = 2;
 				pending_pregap = 0;
 
-				// previous track in the same FILE ends where this one's gap begins
 				if (prev_in_file >= 0)
 				{
 					cd_track_t *p = &t->tracks[prev_in_file];
@@ -266,10 +263,10 @@ static int mount_raw(const char *name)
 	if (!FileOpen(&k->f, name)) return IBMRS6K_CDROM_REJECT;
 
 	static const struct { uint32_t ss, off; int m2; } cand[] = {
-		{ 2048,  0, 0 },   // flat
-		{ 2352, 16, 0 },   // MODE1 raw
-		{ 2336,  8, 1 },   // MODE2 form 1
-		{ 2352, 24, 1 },   // MODE2 raw
+		{ 2048,  0, 0 },
+		{ 2352, 16, 0 },
+		{ 2336,  8, 1 },
+		{ 2352, 24, 1 },
 	};
 	int found = -1;
 	for (unsigned i = 0; i < sizeof(cand) / sizeof(cand[0]); i++)
@@ -279,7 +276,6 @@ static int mount_raw(const char *name)
 
 	if (found < 0)
 	{
-		// no PVD (a UFS-only disc): raw 2352 if it starts with a sync pattern, else flat
 		static const uint8_t sync[12] =
 			{ 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0 };
 		uint8_t hdr[12] = {};
@@ -384,7 +380,6 @@ static int audio_frame(uint32_t disc_lba)
 		if (mister_chd_read_sector(cd.toc.chd_f, (int)disc_lba + k->offset, 0, 0,
 		                           2352, cd.aframe, cd.hunkbuf, &cd.hunknum) != CHDERR_NONE)
 			return 0;
-		// CHD stores CD-DA byteswapped; the window has the bin's byte order
 		for (int i = 0; i < 2352; i += 2)
 		{
 			uint8_t x = cd.aframe[i];

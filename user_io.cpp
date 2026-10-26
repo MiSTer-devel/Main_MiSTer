@@ -3544,7 +3544,6 @@ void user_io_poll()
 			}
 			else if (int rsop = ibmrs6k_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
 			{
-				// IBMRS6K7248 disk write buffer and CD slot (support/ibmrs6k); SPI is done by the hook.
 				if (rsop < 0) break;
 			}
 			else if (int sgop = sgi_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
