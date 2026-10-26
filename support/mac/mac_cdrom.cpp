@@ -158,6 +158,13 @@ static int mount_chd(const char *name)
 	if (!cd.hunkbuf) return MAC_CDROM_REJECT;
 	cd.hunknum = -1;
 	cd.is_chd  = 1;
+	for (int i = 0; i < cd.toc.last; i++)
+	{
+		int pg = cd.toc.tracks[i].indexes[1];
+		if (i > 0 && pg > 0 && cd.toc.tracks[i - 1].end == cd.toc.tracks[i].start)
+			cd.toc.tracks[i - 1].end -= pg;
+		cd.toc.tracks[i].pregap = pg;
+	}
 	return finish_mount("chd");
 }
 
@@ -497,7 +504,7 @@ void mac_cdrom_fill(int index, uint64_t lba, uint8_t *buf, int sz)
 	// data window: de-headered 2048-byte sectors of the data track
 	if (is_mac_scsi_optimized())
 	{
-		if (lba < MAC_CDROM_AUDIO_BLK) mac_cd_play_stop(P());
+		if (lba < MAC_CDROM_AUDIO_BLK && !mac_cd_read_keeps_audio()) mac_cd_play_stop(P());
 
 		if (lba < MAC_CDROM_AUDIO_BLK && !cd.is_chd && cd.trk >= 0 &&
 		    cd.toc.tracks[cd.trk].sector_size == 2048 && cd.data_soff == 0)

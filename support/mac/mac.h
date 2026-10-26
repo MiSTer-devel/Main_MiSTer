@@ -13,6 +13,7 @@
 char is_mac_scsi_family();
 
 char is_mac_scsi_optimized();
+char mac_cd_read_keeps_audio();
 
 char is_mac_ring_eth();
 
