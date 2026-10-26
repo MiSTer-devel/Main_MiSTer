@@ -1327,6 +1327,7 @@ int xml_load(const char *xml)
 }
 
 static mgl_struct mgl = {};
+static int mgl_from_mra = 0;   // parsing an MRA: only <file type="s"> (image mounts) is taken
 
 static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
@@ -1336,12 +1337,12 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 	switch (evt)
 	{
 	case XML_EVENT_START_DOC:
-		inside_mgl = 0;
+		inside_mgl = mgl_from_mra;   // an MRA has no <mistergamedescription>: the whole file counts
 		break;
 
 	case XML_EVENT_START_NODE:
 		if (!strcasecmp(node->tag, "mistergamedescription")) inside_mgl = 1;
-		else if (inside_mgl && !strcasecmp(node->tag, "option"))
+		else if (inside_mgl && !mgl_from_mra && !strcasecmp(node->tag, "option"))
 		{
 			if (mgl.opt_count < MGL_MAX_OPTIONS)
 			{
@@ -1399,7 +1400,7 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 
 				printf("  action=load\n  delay=%d\n  type=%c\n  index=%d\n  path=%s\n  valid=%X\n\n", mgl.item[mgl.count].delay, mgl.item[mgl.count].type, mgl.item[mgl.count].index, mgl.item[mgl.count].path, mgl.item[mgl.count].valid);
 
-				if (mgl.item[mgl.count].valid == 0xF)
+				if (mgl.item[mgl.count].valid == 0xF && (!mgl_from_mra || mgl.item[mgl.count].type == 'S'))
 				{
 					mgl.item[mgl.count].valid = 1;
 					mgl.count++;
@@ -1409,7 +1410,7 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 					mgl.item[mgl.count].valid = 0;
 				}
 			}
-			else if (!strcasecmp(node->tag, "reset"))
+			else if (!mgl_from_mra && !strcasecmp(node->tag, "reset"))
 			{
 				mgl.item[mgl.count].action = MGL_ACTION_RESET;
 
@@ -1452,6 +1453,7 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 mgl_struct* mgl_parse(const char *xml)
 {
 	memset(&mgl, 0, sizeof(mgl));
+	mgl_from_mra = (isXmlName(xml) == 1);
 
 	printf("MGL %s\n", xml);
 
