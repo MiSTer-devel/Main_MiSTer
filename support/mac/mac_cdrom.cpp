@@ -158,11 +158,6 @@ static int mount_chd(const char *name)
 	if (!cd.hunkbuf) return MAC_CDROM_REJECT;
 	cd.hunknum = -1;
 	cd.is_chd  = 1;
-	// mister_load_chd (shared with the other CD cores) folds a pregap the CHD does
-	// not store (a CUE's PREGAP) into the previous track's end, and keeps every
-	// pregap in indexes[1] only. As mount_cue has them: the previous track ends
-	// where the gap begins (a data track would otherwise grow by the gap), and the
-	// TOC blob carries each track's pregap.
 	for (int i = 0; i < cd.toc.last; i++)
 	{
 		int pg = cd.toc.tracks[i].indexes[1];

@@ -30,9 +30,6 @@ char is_mac_scsi_optimized()
 	return is_core_named("macquadra800") || is_core_named("macppc7300") || is_core_named("pippin");
 }
 
-// A data READ during PLAY AUDIO leaves the audio playing (the Pippin): Mac OS's
-// CD driver reads block 0 right after a game starts its music (Racing Days's
-// menu), and the music must go on; the other cores' drives stop on a read.
 char mac_cd_read_keeps_audio()
 {
 	return is_core_named("pippin");
