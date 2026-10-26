@@ -1594,7 +1594,7 @@ void user_io_init(const char *path, const char *xml)
 	load_volume();
 
 	user_io_send_buttons(1);
-	if (xml && isXmlName(xml)) mgl_parse(xml);   // MGL: every item; MRA: image mounts only
+	if (xml && isXmlName(xml)) mgl_parse(xml);
 
 	switch (core_type)
 	{

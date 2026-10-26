@@ -1327,7 +1327,7 @@ int xml_load(const char *xml)
 }
 
 static mgl_struct mgl = {};
-static int mgl_from_mra = 0;   // parsing an MRA: only <file type="s"> (image mounts) is taken
+static int mgl_from_mra = 0;
 
 static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
@@ -1337,7 +1337,7 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 	switch (evt)
 	{
 	case XML_EVENT_START_DOC:
-		inside_mgl = mgl_from_mra;   // an MRA has no <mistergamedescription>: the whole file counts
+		inside_mgl = mgl_from_mra;
 		break;
 
 	case XML_EVENT_START_NODE:
