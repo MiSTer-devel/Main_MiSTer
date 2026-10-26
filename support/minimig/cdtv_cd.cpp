@@ -104,6 +104,7 @@ static uint16_t       cdtv_rd_cnt   = 0;
 static uint16_t       cdtv_rd_left  = 0;
 static unsigned long  cdtv_rd_start = 0;
 static unsigned long  cdtv_rd_next  = 0;
+static unsigned long  cdtv_seek_end = 0;
 
 static int            stch_retries  = 0;
 static unsigned long  stch_next_ms  = 0;
@@ -666,6 +667,7 @@ static void cdtv_dispatch(void)
 
 		case 0x01:
 			cd_finished = 1;
+			cdtv_seek_end = GetTimer(500 >> ((minimig_get_extcfg() >> 21) & 3));
 			rlen = 0;
 			break;
 
@@ -1174,6 +1176,7 @@ void cdtv_cd_set_cd_path(const char *path)
 	cdtv_play_lba_end  = -1;
 	cdtv_play_drv      = NULL;
 	cdtv_rd_left       = 0;
+	cdtv_seek_end      = 0;
 	cd_finished = has_path ? 1 : 0;
 
 	stch_retries = STCH_RETRY_BUDGET;
@@ -1206,6 +1209,7 @@ void cdtv_cd_init(void)
 	cdtv_play_lba_end  = -1;
 	cdtv_play_drv      = NULL;
 	cdtv_rd_left       = 0;
+	cdtv_seek_end      = 0;
 	cd_finished   = cd_media ? 1 : 0;
 	cd_error      = 0;
 	cd_sectorsize = 2048;
@@ -1285,13 +1289,18 @@ void cdtv_cd_poll(void)
 	cdtv_cdda_pump();
 	cdtv_read_pump();
 
+	if (cdtv_seek_end && CheckTimer(cdtv_seek_end)) {
+		cdtv_seek_end = 0;
+		cdtv_inject_stch();
+	}
+
 	if (stch_wait_ack && cdtv_stch_acked()) {
 		stch_wait_ack = false;
 		stch_retries  = 0;
 		cdtv_dbg("STCH play-end ACKed — retry stopped");
 	}
 
-	for (int guard = 0; guard < 32 && !cdtv_rd_left; guard++) {
+	for (int guard = 0; guard < 32 && !cdtv_rd_left && !cdtv_seek_end; guard++) {
 		uint16_t status = cdtv_read_status();
 		if (!(status & CDTV_STATUS_REQ)) break;
 
