@@ -302,7 +302,7 @@ static const char *helptexts[] =
 	helptext_custom,
 	"                                Welcome to MiSTer! Use the cursor keys to navigate the menus. Use space bar or enter to select an item. Press Esc or F12 to exit the menus. Joystick emulation on the numeric keypad can be toggled with the numlock or scrlock key, while pressing Ctrl-Alt-0 (numeric keypad) toggles autofire mode.",
 	"                                Minimig can emulate an A600/A1200 IDE harddisk interface. The emulation can make use of Minimig-style hardfiles (complete disk images) or UAE-style hardfiles (filesystem images with no partition table).",
-	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600), a 68EC020 at A1200 speed, or a 68020 (maximum performance) processor with transparent cache.",
+	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600), a 68EC020 at A1200 speed, or a 68EC030 or 68030 with MMU at 40MHz or 50MHz, as fast as a real card, or Fast, all with transparent cache. The 68030 has no FPU, and needs a core that offers it.",
 	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 384 megabytes of Fast RAM (8MB max for 68000 mode). To use the HRTmon feature you will need a file on the SD card named hrtmon.rom.",
 	"                                Backspace key (or B-hold + A on gamepad) to unmount",
 	"                                Backspace key (or B-hold + A on gamepad) to clear stored option. You have to reload the core to be able to use default value.",
@@ -6590,8 +6590,8 @@ void HandleUI(void)
 
 		m = 0;
 		strcpy(s, " CPU      : ");
-		strcat(s, ((minimig_config.cpu & 0x23) == 0x23) ? "68EC020" : config_cpu_msg[minimig_config.cpu & 0x03]);
-		if ((minimig_config.cpu & 0x23) == 0x03) strcat(s, " Fast");
+		strcat(s, ((minimig_config.cpu & 0x23) == 0x23) ? "68EC020" : ((minimig_config.cpu & 0x23) == 0x22) ? "68EC030" : config_cpu_msg[minimig_config.cpu & 0x03]);
+		if ((minimig_config.cpu & 0x03) == 0x02) strcat(s, ((minimig_config.cpu & 0xc0) == 0x40) ? " 40MHz" : ((minimig_config.cpu & 0xc0) == 0x80) ? " 50MHz" : " Fast");
 		OsdWrite(m++, s, menusub == 0, 0);
 
 		OsdWrite(m++, "", 0, 0);
@@ -6643,7 +6643,7 @@ void HandleUI(void)
 		strcat(s, a2065_iface_msg(a2065_get_iface()));
 		OsdWrite(m++, s, menusub == 9, 0);
 		sprintf(s, " FDD Turbo: %s", minimig_config.floppy.speed ? "On" : "Off");
-		MenuWrite(m++, s, menusub == 10, 0);
+		OsdWrite(m++, s, menusub == 10, 0);
 
 		for (int i = m; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
 		OsdWrite(OsdGetSize() - 1, STD_BACK, menusub == 11, 0);
@@ -6658,15 +6658,20 @@ void HandleUI(void)
 		{
 			if (menusub == 0)
 			{
-				static const unsigned char cpu_steps[4] = { 0, 1, 3, 0x23 };
+				static const unsigned char cpu_steps[9] = { 0, 1, 0x23, 0x62, 0xa2, 0x22, 0x42, 0x82, 0x02 };
 				int step = ((minimig_config.cpu & 3) == 0) ? 0 :
 				           ((minimig_config.cpu & 3) == 1) ? 1 :
-				           (minimig_config.cpu & 0x20) ? 3 : 2;
+				           ((minimig_config.cpu & 3) == 3) ? 2 :
+				           ((minimig_config.cpu & 0xe3) == 0x62) ? 3 :
+				           ((minimig_config.cpu & 0xe3) == 0xa2) ? 4 :
+				           ((minimig_config.cpu & 0x23) == 0x22) ? 5 :
+				           ((minimig_config.cpu & 0xc0) == 0x40) ? 6 :
+				           ((minimig_config.cpu & 0xc0) == 0x80) ? 7 : 8;
 
-				step = (step + (minus ? 3 : 1)) & 3;
+				step = (step + (minus ? 8 : 1)) % 9;
 
 				menustate = MENU_MINIMIG_CHIPSET1;
-				minimig_config.cpu = (minimig_config.cpu & 0xdc) | cpu_steps[step];
+				minimig_config.cpu = (minimig_config.cpu & 0x1c) | cpu_steps[step];
 				minimig_ConfigCPU(minimig_config.cpu);
 			}
 			else if (menusub == 1)
