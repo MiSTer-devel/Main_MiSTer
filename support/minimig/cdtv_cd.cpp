@@ -688,6 +688,17 @@ static void cdtv_dispatch(void)
 
 			cdtv_dbg("READ DATA lba=%u nsec=%u sec_sz=%u", lba, nsec, cd_sectorsize);
 
+			if (cd_playing) {
+				cdtv_play_lba_next = -1;
+				cdtv_play_lba_end  = -1;
+				cdtv_play_drv      = NULL;
+				cd_playing  = 0;
+				cd_paused   = 0;
+				cd_finished = 1;
+			}
+			cd_motor = 1;
+			cd_audio_status = 0x00;
+
 			cdtv_rd_drv   = drv;
 			cdtv_rd_lba   = lba;
 			cdtv_rd_cnt   = 0;
