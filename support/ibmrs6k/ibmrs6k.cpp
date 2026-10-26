@@ -1,6 +1,4 @@
-// IBM RS/6000 43P 7248 (IBMRS6K7248): the user_io hooks. The CD-ROM (ISO, CUE/BIN, CHD; the track
-// table and CD-audio windows the core's SCSI target reads) and the hard-disk write buffer are the
-// HP 9000 family's layers (support/hp9k), copied; the Ethernet bridge is ibmrs6k_enet.
+// IBM RS/6000 43P 7248: user_io hooks.
 
 #include <stdint.h>
 #include <string.h>
@@ -15,7 +13,6 @@
 
 char is_ibmrs6k()
 {
-	// the RBF name, not the CONF_STR override; it only changes with a new core
 	return !strcasecmp(user_io_get_core_name(1), "IBMRS6K7248");
 }
 
@@ -67,7 +64,6 @@ int ibmrs6k_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int 
 	if (!op || !is_ibmrs6k()) return 0;
 	if (ibmrs6k_disk_service(disk, f, op, lba, sz, ack)) return 1;
 
-	// translated CD, or the CD-audio windows of any CD (read-only)
 	if (ibmrs6k_cdrom_active(disk) || (disk == ibmrs6k_cdrom_slot() && lba >= IBMRS6K_CDROM_AUDIO_BLK))
 	{
 		static uint8_t buf[UIO_BUFFER_SIZE];

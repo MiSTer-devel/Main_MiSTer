@@ -1,4 +1,4 @@
-// IBM RS/6000 43P 7248 hard disk write buffer: sectors gathered into runs (each O_SYNC write costs ~4 ms).
+// IBM RS/6000 43P 7248 hard disk write buffer.
 
 #include <stdint.h>
 #include <stdio.h>
@@ -56,7 +56,6 @@ static void flush_run(int disk, run *r)
 	}
 	else
 	{
-		// slot was remounted: write to the previous image
 		int fd = open(s->path, O_WRONLY | O_SYNC | O_CLOEXEC);
 		ok = fd >= 0 && pwrite64(fd, r->data, len, r->off) == (ssize_t)len;
 		if (fd >= 0) close(fd);
@@ -185,7 +184,6 @@ int ibmrs6k_disk_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, in
 	uint64_t off = lba * BLKSZ;
 	if (op != 2)
 	{
-		// covers the generic read buffer and its read-ahead
 		flush_overlap(disk, off, sz + 2ULL * UIO_BUFFER_SIZE, 0);
 		return 0;
 	}

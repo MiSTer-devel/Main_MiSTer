@@ -1,6 +1,4 @@
-// IBM RS/6000 43P 7248 Ethernet bridge (the planar's Am79C970 PCnet, in the FPGA): frames cross a DDR3
-// mailbox of 64-bit little-endian words. A copy of support/hp9k/hp9k_enet.cpp with this core's magic, its
-// OSD bits, and one addition: the MAC for the PCnet's address PROM (+0x38), made from eth0's.
+// IBM RS/6000 43P 7248 Ethernet: the PCnet in the FPGA, Main is the wire.
 
 #include <stdio.h>
 #include <string.h>
@@ -22,23 +20,23 @@ extern int  a2065_mode_available(int mode);
 extern void ethernet_offload_off(const char *iface);
 extern void ethernet_offload_on(const char *iface);
 
-#define SB_BASE       0x1FF00000UL   // shared with the A2065, NeXT and Sun bridges
+#define SB_BASE       0x1FF00000UL
 #define SB_SIZE       0x10000UL
 
-#define SB_MAGIC_OFF  0x0000   // FPGA, written last; names the RX ring depth
-#define SB_GEN_OFF    0x0008   // FPGA, new at every start-up
-#define SB_TXW_OFF    0x0010   // FPGA: frames posted
-#define SB_TXR_OFF    0x0018   // ours: frames taken
-#define SB_RXW_OFF    0x0020   // ours: frames posted
-#define SB_RXR_OFF    0x0028   // FPGA: frames taken
-#define SB_MAC_OFF    0x0030   // FPGA: bit 63 valid, bits 47:40 the first byte
-#define SB_TX_OFF     0x1000   // slot header bits 10:0 = length
-#define SB_RX_OFF     0x5000   // slot header bits 10:0 = length with FCS, 21:16 = LADRF index
+#define SB_MAGIC_OFF  0x0000
+#define SB_GEN_OFF    0x0008
+#define SB_TXW_OFF    0x0010
+#define SB_TXR_OFF    0x0018
+#define SB_RXW_OFF    0x0020
+#define SB_RXR_OFF    0x0028
+#define SB_MAC_OFF    0x0030
+#define SB_TX_OFF     0x1000
+#define SB_RX_OFF     0x5000
 #define SB_SLOT       0x800
 #define SB_TX_RING    8
 
-#define SB_MAGIC_RS6  0x5253364554483031ULL   // RS6ETH01 (IBMRS6K7248)
-#define SB_PMAC_OFF   0x0038   // ours: bit 63 valid, the MAC for the PCnet's address PROM
+#define SB_MAGIC_RS6  0x5253364554483031ULL
+#define SB_PMAC_OFF   0x0038
 
 static uint32_t rx_ring_slots(uint64_t magic)
 {
@@ -58,15 +56,11 @@ static uint32_t rx_ring_slots(uint64_t magic)
 #define MACVLAN_NAME  "rs6k0"
 #define MAX_FRAME     (SB_SLOT - 8)
 
-// the OSD's Network interface row (IBMRS6K7248.sv: "O[8:6],Network interface,eth0,None,eth1,macvlan,tap0")
 static const char *ibmrs6k_net_status()
 {
-	// the RBF name, not the CONF_STR override; it only changes with a new core
 	return !strcasecmp(user_io_get_core_name(1), "IBMRS6K7248") ? "[8:6]" : 0;
 }
 
-// the PCnet's own MAC: IBM's OUI (08:00:5A) and the last three bytes of this board's eth0, so it is the
-// same at every start and differs between boards
 static uint64_t prom_mac(void)
 {
 	uint8_t m[6] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x01};
@@ -95,7 +89,6 @@ static uint32_t crc_tab[256];
 static inline uint64_t rd64(uint32_t off) { return *(volatile uint64_t *)(mb + off); }
 static inline void wr64(uint32_t off, uint64_t v) { *(volatile uint64_t *)(mb + off) = v; }
 
-// IEEE 802.3 CRC-32, bit-reversed (as on the wire)
 static uint32_t crc32_le(const uint8_t *p, int n)
 {
 	uint32_t c = 0xFFFFFFFF;
@@ -140,7 +133,7 @@ static void open_link(int mode)
 	{
 	case MODE_ETH0:
 		iface = "eth0";
-		promisc = 1;   // BPF-filtered on the guest's MAC
+		promisc = 1;
 		break;
 	case MODE_ETH1:
 		iface = "eth1";
@@ -159,7 +152,6 @@ static void open_link(int mode)
 		return;
 	}
 
-	// GRO and friends would hand the guest frames larger than its NIC takes
 	if (mode != MODE_TAP)
 	{
 		offload_iface = (mode == MODE_ETH1) ? "eth1" : "eth0";
@@ -187,7 +179,6 @@ void ibmrs6k_enet_start(void)
 			printf("[ibmrs6k-enet] shmem_map failed\n");
 			return;
 		}
-		// a stale magic must not look alive
 		wr64(SB_MAGIC_OFF, 0);
 	}
 	for (uint32_t i = 0; i < 256; i++)
@@ -213,7 +204,6 @@ void ibmrs6k_enet_stop(void)
 
 static int mode_from_status(void)
 {
-	// OSD value 0 is eth0 and 1 is Off; the rest equal their MODE_ value
 	const char *opt = ibmrs6k_net_status();
 	if (!opt) return MODE_OFF;
 	int v = (int)user_io_status_get(opt);
@@ -232,7 +222,6 @@ void ibmrs6k_enet_poll(void)
 	uint32_t rx_ring = rx_ring_slots(rd64(SB_MAGIC_OFF));
 	if (!rx_ring) return;
 
-	// new FPGA start-up: its pointers are zero again
 	uint64_t g = rd64(SB_GEN_OFF);
 	if (g != gen)
 	{
@@ -268,7 +257,7 @@ void ibmrs6k_enet_poll(void)
 
 	uint64_t txw = rd64(SB_TXW_OFF);
 	uint64_t txr = rd64(SB_TXR_OFF);
-	if (txw - txr > SB_TX_RING) txr = txw;           // out of step: resync
+	if (txw - txr > SB_TX_RING) txr = txw;
 	while (txr != txw)
 	{
 		uint32_t slot = SB_TX_OFF + SB_SLOT * (uint32_t)(txr % SB_TX_RING);
@@ -293,7 +282,7 @@ void ibmrs6k_enet_poll(void)
 
 		uint64_t rxw = rd64(SB_RXW_OFF);
 		uint64_t rxr = rd64(SB_RXR_OFF);
-		if (rxw - rxr >= rx_ring) continue;          // full: drop, keep draining
+		if (rxw - rxr >= rx_ring) continue;
 
 		if (len < 60)
 		{
