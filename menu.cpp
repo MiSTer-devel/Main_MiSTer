@@ -268,7 +268,7 @@ const char *joy_button_map[] = { "RIGHT", "LEFT", "DOWN", "UP", "BUTTON A", "BUT
 const char *joy_ana_map[] = { "    DPAD test: Press RIGHT", "    DPAD test: Press DOWN", "   Stick 1 Test: Tilt RIGHT", "   Stick 1 Test: Tilt DOWN", "   Stick 2 Test: Tilt RIGHT", "   Stick 2 Test: Tilt DOWN" };
 const char *config_stereo_msg[] = { "0%", "25%", "50%", "100%" };
 const char *config_dsnd_msg[] = { "Off", "Quiet", "Normal", "Loud" };
-const char *config_cdspeed_msg[] = { "1x", "2x", "4x", "8x" };
+const char *config_cdspeed_msg[] = { "Original", "2x", "4x", "8x" };
 const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "      MIDI", "     Modem", "UDP", "SNI"};
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
@@ -6860,10 +6860,12 @@ void HandleUI(void)
 				int cdtv_on = minimig_config.cdtv_drive.cfg ? 1 : 0;
 
 				menumask |= 1;
-				if (cd32_on) menumask |= 6;
+				if (cd32_on) menumask |= 2;
 
-				menumask |= 8;
-				if (cdtv_on) menumask |= 0x10;
+				menumask |= 4;
+				if (cdtv_on) menumask |= 8;
+
+				if (cd32_on || cdtv_on) menumask |= 0x10;
 
 				strcpy(s, " CD32 drive       : ");
 				strcat(s, cd32_on ? "Enabled" : "Disabled");
@@ -6881,15 +6883,12 @@ void HandleUI(void)
 					}
 					else strcpy(s, "   ** not selected **");
 					MenuWrite(m++, s, cd32_on ? (menusub == 1) : 0, !cd32_on);
-					strcpy(s, " CD read speed    : ");
-					strcat(s, config_cdspeed_msg[(minimig_get_extcfg() >> 21) & 3]);
-					MenuWrite(m++, s, menusub == 2, 0);
 					MenuWrite(m++);
 				}
 
 				strcpy(s, " CDTV drive       : ");
 				strcat(s, cdtv_on ? "Enabled" : "Disabled");
-				MenuWrite(m++, s, menusub == 3, 0);
+				MenuWrite(m++, s, menusub == 2, 0);
 
 				if (cdtv_on)
 				{
@@ -6903,7 +6902,15 @@ void HandleUI(void)
 						strncpy(&s[3], name, 25);
 					}
 					else strcpy(s, "   ** not selected **");
-					MenuWrite(m++, s, cdtv_on ? (menusub == 4) : 0, !cdtv_on);
+					MenuWrite(m++, s, cdtv_on ? (menusub == 3) : 0, !cdtv_on);
+				}
+
+				if (cd32_on || cdtv_on)
+				{
+					MenuWrite(m++);
+					strcpy(s, " CD read speed    : ");
+					strcat(s, config_cdspeed_msg[(minimig_get_extcfg() >> 21) & 3]);
+					MenuWrite(m++, s, menusub == 4, 0);
 				}
 
 				MenuWrite(m++);
@@ -6994,18 +7001,7 @@ void HandleUI(void)
 					else if (recent_init(501)) menustate = MENU_RECENT1;
 				}
 			}
-			else if (menusub == 2 && minimig_config.cd32_drive.cfg)
-			{
-				if (select || minus || plus)
-				{
-					int mode = (minimig_get_extcfg() >> 21) & 3;
-					if (minus) mode = (mode <= 0) ? 2 : (mode - 1);
-					else mode = (mode >= 2) ? 0 : (mode + 1);
-					minimig_set_extcfg((minimig_get_extcfg() & ~0x600000) | (mode << 21));
-					menustate = MENU_MINIMIG_DISK1;
-				}
-			}
-			else if (menusub == 3)
+			else if (menusub == 2)
 			{
 				if (select || minus || plus)
 				{
@@ -7014,7 +7010,7 @@ void HandleUI(void)
 					menustate = MENU_MINIMIG_DISK1;
 				}
 			}
-			else if (menusub == 4 && minimig_config.cdtv_drive.cfg)
+			else if (menusub == 3 && minimig_config.cdtv_drive.cfg)
 			{
 				if (select || recent)
 				{
@@ -7028,6 +7024,17 @@ void HandleUI(void)
 						SelectFile(Selected_CDTV, fs_pFileExt, fs_Options, fs_MenuSelect, fs_MenuCancel, 502);
 					}
 					else if (recent_init(502)) menustate = MENU_RECENT1;
+				}
+			}
+			else if (menusub == 4 && (minimig_config.cd32_drive.cfg || minimig_config.cdtv_drive.cfg))
+			{
+				if (select || minus || plus)
+				{
+					int mode = (minimig_get_extcfg() >> 21) & 3;
+					if (minus) mode = (mode <= 0) ? 2 : (mode - 1);
+					else mode = (mode >= 2) ? 0 : (mode + 1);
+					minimig_set_extcfg((minimig_get_extcfg() & ~0x600000) | (mode << 21));
+					menustate = MENU_MINIMIG_DISK1;
 				}
 			}
 			else if (menusub == 5)
