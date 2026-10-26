@@ -239,7 +239,7 @@ static uint16_t akiko_read_status(void)
 	return res;
 }
 
-static uint8_t akiko_read_sec_counter(void);
+static uint16_t akiko_read_sec_counter(void);
 
 static bool akiko_wait_status_bit(uint16_t mask, bool want_set, int max_iters)
 {
@@ -705,14 +705,14 @@ static void cmd_bad(const uint8_t *cmd, uint8_t err_code)
 	akiko_dbg("BAD cmd=%02x err=%02x\n", cmd[0], err_code);
 }
 
-static uint8_t akiko_read_sec_counter(void)
+static uint16_t akiko_read_sec_counter(void)
 {
 	EnableIO();
 	spi8(UIO_DMA_READ);
 	spi32_w(AKIKO_SECTOR_ADDR);
 	uint16_t w = spi_w(0);
 	DisableIO();
-	return (uint8_t)(w & 0xff);
+	return w;
 }
 
 static void akiko_ext_block_write(uint16_t addr, const uint8_t *buf, int bytes)
@@ -1173,7 +1173,7 @@ static bool akiko_handle_sec_req(void)
 	last_sec_req_ms = now_ms;
 
 	clock_gettime(CLOCK_MONOTONIC, &ts0);
-	uint8_t counter = akiko_read_sec_counter();
+	uint16_t counter = akiko_read_sec_counter();
 	clock_gettime(CLOCK_MONOTONIC, &ts1);
 
 	uint8_t buf[AKIKO_SECTOR_BYTES];
