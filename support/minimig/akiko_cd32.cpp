@@ -85,6 +85,8 @@ static uint32_t cd_play_start_lba   = 0;
 static uint32_t cd_play_end_lba     = 0;
 
 static int32_t  cd_data_lba_base    = -1;
+static int32_t  cd_data_lba_last    = -1;
+static uint32_t cd_seek_ready_ms    = 0;
 
 #define AKIKO_PREFETCH_SECTORS 128
 #define AKIKO_PREFETCH_WINDOWS 4
@@ -239,7 +241,7 @@ static uint16_t akiko_read_status(void)
 	return res;
 }
 
-static uint8_t akiko_read_sec_counter(void);
+static uint16_t akiko_read_sec_counter(void);
 
 static bool akiko_wait_status_bit(uint16_t mask, bool want_set, int max_iters)
 {
@@ -539,6 +541,9 @@ static void cmd_multi(const uint8_t *cmd)
 			cd_data_lba_base = (int32_t)s_lba;
 			cd_paused = 0;
 			r[1] = 0x02;
+			int32_t seek = abs(cd_data_lba_last - (int32_t)s_lba);
+			seek = (seek < 100) ? 1 : (seek / 1000 + 10 > 100) ? 100 : seek / 1000 + 10;
+			cd_seek_ready_ms = (uint32_t)GetTimer(seek * 1000 / ((75 * cdrom_speed) << ((minimig_get_extcfg() >> 21) & 3)));
 			akiko_diag("[akiko] PLAY DATA arm: start_lba=%d (cmd7=0x%02x)", (int32_t)s_lba, cmd[7]);
 		}
 	} else if (seek_negative) {
@@ -705,14 +710,14 @@ static void cmd_bad(const uint8_t *cmd, uint8_t err_code)
 	akiko_dbg("BAD cmd=%02x err=%02x\n", cmd[0], err_code);
 }
 
-static uint8_t akiko_read_sec_counter(void)
+static uint16_t akiko_read_sec_counter(void)
 {
 	EnableIO();
 	spi8(UIO_DMA_READ);
 	spi32_w(AKIKO_SECTOR_ADDR);
 	uint16_t w = spi_w(0);
 	DisableIO();
-	return (uint8_t)(w & 0xff);
+	return w;
 }
 
 static void akiko_ext_block_write(uint16_t addr, const uint8_t *buf, int bytes)
@@ -1173,7 +1178,7 @@ static bool akiko_handle_sec_req(void)
 	last_sec_req_ms = now_ms;
 
 	clock_gettime(CLOCK_MONOTONIC, &ts0);
-	uint8_t counter = akiko_read_sec_counter();
+	uint16_t counter = akiko_read_sec_counter();
 	clock_gettime(CLOCK_MONOTONIC, &ts1);
 
 	uint8_t buf[AKIKO_SECTOR_BYTES];
@@ -1260,6 +1265,8 @@ static bool akiko_handle_sec_req(void)
 	}
 	clock_gettime(CLOCK_MONOTONIC, &ts2);
 
+	if (!CheckTimer(cd_seek_ready_ms)) return false;
+	cd_data_lba_last = (int32_t)lba;
 	akiko_push_sector(buf);
 	clock_gettime(CLOCK_MONOTONIC, &ts3);
 
@@ -1343,6 +1350,8 @@ void akiko_cd32_init(void)
 	cd_play_start_lba = 0;
 	cd_play_end_lba   = 0;
 	cd_data_lba_base = -1;
+	cd_data_lba_last = -1;
+	cd_seek_ready_ms = 0;
 	cd_audio_timeout = 0;
 	cd_audio_play_until_ms = 0;
 	cd_cdda_lba_next = -1;
