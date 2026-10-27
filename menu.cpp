@@ -163,6 +163,8 @@ enum MENU
 	MENU_GENERIC_MAIN3,
 	MENU_GENERIC_FILE_SELECTED,
 	MENU_GENERIC_IMAGE_SELECTED,
+	MENU_D88_DISK1,
+	MENU_D88_DISK2,
 	MENU_CORES1,
 	MENU_CORES2,
 	MENU_SAVE_CHECK,
@@ -1183,6 +1185,7 @@ void HandleUI(void)
 	static char title[32] = {};
 	static uint32_t saved_menustate = 0;
 	static char addon[1024];
+	static int d88_image, d88_page, d88_back, d88_n;
 	static int store_name;
 	static int vfilter_type;
 	static int old_volume = 0;
@@ -1930,6 +1933,64 @@ void HandleUI(void)
 		}
 		break;
 
+	case MENU_D88_DISK1:
+		{
+			int n = d88_n;
+			int rows = OsdGetSize() - 1;
+			if (rows > 63) rows = 63;
+			int pages = (n + rows - 1) / rows;
+			if (pages > 1) sprintf(s, "Disk %d/%d", d88_page + 1, pages);
+			else strcpy(s, "Disk");
+			OsdSetTitle(s, 0);
+			helptext_idx = 0;
+			menustate = MENU_D88_DISK2;
+			parentstate = MENU_D88_DISK1;
+
+			menumask = 0;
+			int k = 0;
+			for (; k < rows && d88_page * rows + k < n; k++)
+			{
+				snprintf(s, sizeof(s), " %s", pc88_disk_name(d88_page * rows + k + 1));
+				OsdWrite(k, s, (int)menusub == k);
+				menumask |= (uint64_t)1 << k;
+			}
+			while (k < rows) OsdWrite(k++);
+			menumask |= (uint64_t)1 << rows;
+			OsdWrite(rows, STD_EXIT, (int)menusub == rows);
+		}
+		break;
+
+	case MENU_D88_DISK2:
+		{
+			int n = d88_n;
+			int rows = OsdGetSize() - 1;
+			if (rows > 63) rows = 63;
+			int pages = (n + rows - 1) / rows;
+			if (menu)
+			{
+				menusub = d88_back;
+				menustate = MENU_GENERIC_MAIN1;
+			}
+			else if ((left || right) && pages > 1)
+			{
+				d88_page = (d88_page + (right ? 1 : pages - 1)) % pages;
+				menusub = 0;
+				menustate = MENU_D88_DISK1;
+			}
+			else if (select)
+			{
+				int image = d88_page * rows + (int)menusub + 1;
+				menustate = MENU_GENERIC_MAIN1;
+				if ((int)menusub < rows && image <= n)
+				{
+					d88_image = image;
+					menustate = MENU_GENERIC_IMAGE_SELECTED;
+				}
+				menusub = d88_back;
+			}
+		}
+		break;
+
 	case MENU_GENERIC_MAIN1:
 	case MENU_CORES1:
 		parentstate = menustate;
@@ -2102,7 +2163,7 @@ void HandleUI(void)
 							else if ((p[0] == 'S') && get_image_name(num))
 							{
 								strcpy(s, "\x16");
-								strncat(s, get_image_name(num), sizeof(s) - strlen(s) - 1);
+								strncat(s, pc88_slot_label(num, get_image_name(num)), sizeof(s) - strlen(s) - 1);
 							}
 							else
 							{
@@ -2821,6 +2882,18 @@ void HandleUI(void)
 				}
 			}
 
+			// A D88 with several disks: pick one before anything is stored or mounted.
+			if (!d88_image && mgl->done && !(addon[0] == 'f' && addon[1] != '1') && (d88_n = pc88_disk_count(ioctl_index, selPath)))
+			{
+				d88_back = menusub;
+				d88_page = 0;
+				menusub = 0;
+				menustate = MENU_D88_DISK1;
+				break;
+			}
+			int image = d88_image;
+			d88_image = 0;
+
 			if (store_name)
 			{
 				char str[64];
@@ -2896,7 +2969,7 @@ void HandleUI(void)
 			else
 			{
 				user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
-				user_io_file_mount(selPath, ioctl_index);
+				user_io_file_mount(selPath, ioctl_index, 0, 0, image);
 			}
 
 			if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
