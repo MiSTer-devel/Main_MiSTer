@@ -543,7 +543,8 @@ static void cmd_multi(const uint8_t *cmd)
 			r[1] = 0x02;
 			int32_t seek = abs(cd_data_lba_last - (int32_t)s_lba);
 			seek = (seek < 100) ? 1 : (seek / 1000 + 10 > 100) ? 100 : seek / 1000 + 10;
-			cd_seek_ready_ms = (uint32_t)GetTimer(seek * 1000 / ((75 * cdrom_speed) << ((minimig_get_extcfg() >> 21) & 3)));
+			int speed = (minimig_get_extcfg() >> 21) & 3;
+			cd_seek_ready_ms = (speed == 3) ? 0 : (uint32_t)GetTimer(seek * 1000 / ((75 * cdrom_speed) << speed));
 			akiko_diag("[akiko] PLAY DATA arm: start_lba=%d (cmd7=0x%02x)", (int32_t)s_lba, cmd[7]);
 		}
 	} else if (seek_negative) {
