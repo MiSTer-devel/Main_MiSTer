@@ -98,6 +98,14 @@ static uint8_t  cd_audio_status    = 0x15;
 
 static int32_t  cdtv_last_lba      = 0;
 
+static drive_t       *cdtv_rd_drv   = NULL;
+static uint32_t       cdtv_rd_lba   = 0;
+static uint16_t       cdtv_rd_cnt   = 0;
+static uint16_t       cdtv_rd_left  = 0;
+static unsigned long  cdtv_rd_start = 0;
+static unsigned long  cdtv_rd_next  = 0;
+static unsigned long  cdtv_seek_end = 0;
+
 static int            stch_retries  = 0;
 static unsigned long  stch_next_ms  = 0;
 #define STCH_RETRY_BUDGET    40
@@ -306,6 +314,47 @@ static bool cdtv_cdda_pump(void)
 		stch_next_ms  = GetTimer(STCH_PLAYEND_PERIOD_MS);
 	}
 	return true;
+}
+
+static unsigned long cdtv_read_due(uint16_t n)
+{
+	return cdtv_rd_start + (unsigned long)n * 1000 / (75 << ((minimig_get_extcfg() >> 21) & 3));
+}
+
+static void cdtv_read_pump(void)
+{
+	if (!cdtv_rd_left || !CheckTimer(cdtv_rd_next)) return;
+
+	uint8_t raw[2352];
+	if (cdrom_read_raw_sector(cdtv_rd_drv, cdtv_rd_lba + cdtv_rd_cnt, raw) != 0) {
+		cdtv_dbg("READ DATA chd_read failed at lba=%u", cdtv_rd_lba + cdtv_rd_cnt);
+		cdtv_rd_left = 0;
+		cd_error     = 1;
+		cd_finished  = 1;
+		return;
+	}
+
+	const uint8_t *src;
+	uint16_t       len;
+	switch (cd_sectorsize) {
+		case 2048: src = raw + 16; len = 2048; break;
+		case 2052: src = raw + 16; len = 2052; break;
+		case 2336: src = raw + 16; len = 2336; break;
+		case 2340: src = raw + 12; len = 2340; break;
+		case 2352: src = raw;      len = 2352; break;
+		default:   src = raw + 16; len = cd_sectorsize; break;
+	}
+
+	cdtv_push_sector(src, len);
+	cdtv_rd_cnt++;
+
+	if (!--cdtv_rd_left) {
+		cd_finished = 1;
+		return;
+	}
+
+	unsigned long next = cdtv_read_due(cdtv_rd_cnt + 1);
+	cdtv_rd_next = (next > GetTimer(2)) ? next : GetTimer(2);
 }
 
 static uint32_t cdtv_msf_to_lba(uint32_t msf)
@@ -618,6 +667,7 @@ static void cdtv_dispatch(void)
 
 		case 0x01:
 			cd_finished = 1;
+			cdtv_seek_end = GetTimer(500 >> ((minimig_get_extcfg() >> 21) & 3));
 			rlen = 0;
 			break;
 
@@ -638,33 +688,24 @@ static void cdtv_dispatch(void)
 
 			cdtv_dbg("READ DATA lba=%u nsec=%u sec_sz=%u", lba, nsec, cd_sectorsize);
 
-			uint8_t raw[2352];
-			bool    failed = false;
-			for (uint16_t s = 0; s < nsec; s++) {
-				if (cdrom_read_raw_sector(drv, lba + s, raw) != 0) {
-					cdtv_dbg("READ DATA chd_read failed at lba=%u", lba + s);
-					failed = true;
-					break;
-				}
-
-				const uint8_t *src;
-				uint16_t       len;
-				switch (cd_sectorsize) {
-					case 2048: src = raw + 16; len = 2048; break;
-					case 2052: src = raw + 16; len = 2052; break;
-					case 2336: src = raw + 16; len = 2336; break;
-					case 2340: src = raw + 12; len = 2340; break;
-					case 2352: src = raw;      len = 2352; break;
-					default:   src = raw + 16; len = cd_sectorsize; break;
-				}
-
-				cdtv_push_sector(src, len);
-
-				if (s + 1 < nsec) usleep(1000);
+			if (cd_playing) {
+				cdtv_play_lba_next = -1;
+				cdtv_play_lba_end  = -1;
+				cdtv_play_drv      = NULL;
+				cd_playing  = 0;
+				cd_paused   = 0;
+				cd_finished = 1;
 			}
+			cd_motor = 1;
+			cd_audio_status = 0x00;
 
-			if (failed) cd_error = 1;
-			cd_finished = 1;
+			cdtv_rd_drv   = drv;
+			cdtv_rd_lba   = lba;
+			cdtv_rd_cnt   = 0;
+			cdtv_rd_left  = nsec;
+			cdtv_rd_start = GetTimer(0);
+			cdtv_rd_next  = cdtv_read_due(1);
+			if (!nsec) cd_finished = 1;
 			rlen = 0;
 			break;
 		}
@@ -1145,6 +1186,8 @@ void cdtv_cd_set_cd_path(const char *path)
 	cdtv_play_lba_next = -1;
 	cdtv_play_lba_end  = -1;
 	cdtv_play_drv      = NULL;
+	cdtv_rd_left       = 0;
+	cdtv_seek_end      = 0;
 	cd_finished = has_path ? 1 : 0;
 
 	stch_retries = STCH_RETRY_BUDGET;
@@ -1176,6 +1219,8 @@ void cdtv_cd_init(void)
 	cdtv_play_lba_next = -1;
 	cdtv_play_lba_end  = -1;
 	cdtv_play_drv      = NULL;
+	cdtv_rd_left       = 0;
+	cdtv_seek_end      = 0;
 	cd_finished   = cd_media ? 1 : 0;
 	cd_error      = 0;
 	cd_sectorsize = 2048;
@@ -1253,6 +1298,12 @@ void cdtv_cd_poll(void)
 	}
 
 	cdtv_cdda_pump();
+	cdtv_read_pump();
+
+	if (cdtv_seek_end && CheckTimer(cdtv_seek_end)) {
+		cdtv_seek_end = 0;
+		cdtv_inject_stch();
+	}
 
 	if (stch_wait_ack && cdtv_stch_acked()) {
 		stch_wait_ack = false;
@@ -1260,7 +1311,7 @@ void cdtv_cd_poll(void)
 		cdtv_dbg("STCH play-end ACKed — retry stopped");
 	}
 
-	for (int guard = 0; guard < 32; guard++) {
+	for (int guard = 0; guard < 32 && !cdtv_rd_left && !cdtv_seek_end; guard++) {
 		uint16_t status = cdtv_read_status();
 		if (!(status & CDTV_STATUS_REQ)) break;
 

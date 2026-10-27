@@ -5105,6 +5105,23 @@ static void setup_wheels()
 				}
 			}
 
+			// HORI Wheels
+			else if (input[i].vid == 0x0f0d)
+			{
+				switch (input[i].pid)
+				{
+				case 0x015d: // FFB Racing Wheel (PC mode)
+					input[i].wh_steer = 0;
+					input[i].wh_accel = 1;
+					input[i].wh_brake = 2;
+					input[i].wh_clutch = 5;
+					// pedals go from minimum (released) to maximum (pressed)
+					input[i].wh_pedal_invert = 1;
+					input[i].quirk = QUIRK_WHEEL;
+					break;
+				}
+			}
+
 			//Namco NeGcon via Arduino, RetroZord or Reflex Adapt
 			else if (((input[i].vid == 0x2341 || (input[i].vid == 0x1209 && input[i].pid == 0x595A)) && strstr(input[i].name, "RZordPsWheel")) ||
 					 (input[i].vid == 0x16D0 && input[i].pid == 0x127E && strstr(input[i].name, "ReflexPSWheel")))
@@ -6116,8 +6133,13 @@ int input_test(int getchar)
 										int center = absinfo.minimum + (range / 2);
 										int treshold = (range * cfg.dpad_threshold) / 200;
 
+										// Wheel axes (steering, pedals) give only the 'max' direction. Their stick slots
+										// are cleared when the map loads, but the stick tests of the joystick setup put
+										// them back for the rest of that setup: a released pedal then rests on its 'min'
+										// edge and holds a key that locks out every button and d-pad prompt.
 										int only_max = 1;
-										for (int n = 0; n < 4; n++) if (input[dev].mmap[SYS_AXIS1_X + n] && ((input[dev].mmap[SYS_AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
+										if (input[dev].quirk != QUIRK_WHEEL)
+											for (int n = 0; n < 4; n++) if (input[dev].mmap[SYS_AXIS1_X + n] && ((input[dev].mmap[SYS_AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
 
 										if (ev.value < center - treshold && !only_max) axis_edge = 1;
 										if (ev.value > center + treshold) axis_edge = 2;

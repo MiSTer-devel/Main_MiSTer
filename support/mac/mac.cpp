@@ -22,12 +22,17 @@ static char is_core_named(const char *n)
 char is_mac_scsi_family()
 {
 	return is_core_named("maclc") || is_core_named("macplus") || is_core_named("macquadra800")
-	    || is_core_named("macppc7300");
+	    || is_core_named("macppc7300") || is_core_named("pippin");
 }
 
 char is_mac_scsi_optimized()
 {
-	return is_core_named("macquadra800") || is_core_named("macppc7300");
+	return is_core_named("macquadra800") || is_core_named("macppc7300") || is_core_named("pippin");
+}
+
+char mac_cd_read_keeps_audio()
+{
+	return is_core_named("pippin");
 }
 
 char is_mac_ring_eth()

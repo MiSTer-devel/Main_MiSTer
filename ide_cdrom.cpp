@@ -178,7 +178,7 @@ static track_t *get_track_from_lba(drive_t *drive, uint32_t lba, bool &index0)
 		uint32_t start_lba = i ? drive->track[i-1].start + drive->track[i-1].length : 0;
 		uint32_t end_lba = drive->track[i].start + drive->track[i].length;
 
-		if (lba >= start_lba && lba <= end_lba)
+		if (lba >= start_lba && lba < end_lba)
 		{
 			ret = &drive->track[i];
 			//In the "pregap" section
@@ -187,6 +187,32 @@ static track_t *get_track_from_lba(drive_t *drive, uint32_t lba, bool &index0)
 		}
 	}
 	return ret;
+}
+
+static uint32_t wav_data(const char *name, uint32_t *size)
+{
+	uint32_t ofs = 0;
+	uint8_t h[12];
+	fileTYPE f;
+	if (!name[0] || !FileOpenEx(&f, name, O_RDONLY)) return 0;
+	if (FileReadAdv(&f, h, 12) == 12 && !memcmp(h, "RIFF", 4) && !memcmp(h + 8, "WAVE", 4))
+	{
+		uint32_t pos = 12;
+		for (int i = 0; i < 16 && FileSeek(&f, pos, SEEK_SET) && FileReadAdv(&f, h, 8) == 8; i++)
+		{
+			uint32_t len = h[4] | (h[5] << 8) | (h[6] << 16) | ((uint32_t)h[7] << 24);
+			if (!memcmp(h, "data", 4))
+			{
+				ofs = pos + 8;
+				if (size) *size = len;
+				break;
+			}
+			if (len > f.size) break;
+			pos += 8 + len + (len & 1);
+		}
+	}
+	FileClose(&f);
+	return ofs;
 }
 
 static int add_track(drive_t *drv, track_t *curr, uint32_t &shift, const int32_t prestart, uint32_t &totalPregap, uint32_t currPregap)
@@ -213,7 +239,7 @@ static int add_track(drive_t *drv, track_t *curr, uint32_t &shift, const int32_t
 	if (!drv->track_cnt)
 	{
 		//assertm(curr.number == 1, "The first track must be labelled number 1 [BUG!]");
-		curr->skip = skip * curr->sectorSize;
+		curr->skip = wav_data(curr->filename, 0) + skip * curr->sectorSize;
 		curr->start += currPregap;
 		totalPregap = currPregap;
 
@@ -242,14 +268,16 @@ static int add_track(drive_t *drv, track_t *curr, uint32_t &shift, const int32_t
 	}
 	else
 	{
+		uint32_t data = 0, ofs = wav_data(prev->filename, &data);
 		uint32_t size = FileLoad(prev->filename, 0, 0);
+		if (ofs && data < size - ofs) size = ofs + data;
 		const uint32_t tmp = size - prev->skip;
 		prev->length = tmp / prev->sectorSize;
 
 		if (tmp % prev->sectorSize != 0) prev->length++; // padding
 
 		curr->start += prev->start + prev->length + currPregap;
-		curr->skip = skip * curr->sectorSize;
+		curr->skip = wav_data(curr->filename, 0) + skip * curr->sectorSize;
 		shift += prev->start + prev->length;
 		totalPregap = currPregap;
 	}
@@ -1058,7 +1086,12 @@ void cdrom_read(ide_config *ide)
 	}
 
 
-	if (drive->chd_f) {
+	if (!track)
+	{
+		ide->null = 1;
+		memset(ide_buf, 0, cnt * 2048);
+	}
+	else if (drive->chd_f) {
 
 		uint32_t hdr = track->mode2 ? 24 : 16;
 		if (track->sectorSize == 2048)
@@ -1919,7 +1952,7 @@ void ide_cdda_send_sector()
 	bool needs_swap = false;
 	track_t *track = get_track_from_lba(drv, drv->play_start_lba, is_index0);
 
-	if (!track->attr)
+	if (track && !track->attr)
 	{
 		if (drv->chd_f)
 		{
