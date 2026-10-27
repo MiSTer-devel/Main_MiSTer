@@ -1594,7 +1594,7 @@ void user_io_init(const char *path, const char *xml)
 	load_volume();
 
 	user_io_send_buttons(1);
-	if (xml && isXmlName(xml) == 2) mgl_parse(xml);
+	if (xml && isXmlName(xml)) mgl_parse(xml);
 
 	switch (core_type)
 	{
