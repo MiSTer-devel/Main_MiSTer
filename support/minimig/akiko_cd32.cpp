@@ -504,6 +504,14 @@ static void cmd_multi(const uint8_t *cmd)
 	cd_play_end_lba   = e_lba;
 
 	bool data_read = (cmd[7] & 0x80) != 0;
+	if (data_read || seek_negative) {
+		cd_playing = 0;
+		cd_cdda_lba_next = -1;
+		cd_cdda_lba_end  = -1;
+		cd_cdda_drv      = NULL;
+		cd_audio_timeout = 0;
+		cd_audio_play_until_ms = 0;
+	}
 	if (data_read) {
 		drive_t *drv2 = cd_find_drive();
 		bool start_is_audio = false;
