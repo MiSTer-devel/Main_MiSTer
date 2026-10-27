@@ -1179,6 +1179,7 @@ int arcade_send_rom(const char *xml)
 	arcade_sw_load();
 	switches.dip_saved = switches.dip_cur;
 	arcade_sw_send();
+	ProgressMessage(0, 0, 0, 0);
 	return 0;
 }
 
