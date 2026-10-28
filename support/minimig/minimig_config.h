@@ -12,6 +12,10 @@
 #define CONFIG_AGA       16
 #define CONFIG_CDTV      32
 
+// the cartridge (memory bit 6) is the Action Replay (AR5.ROM, the DeMoN v2
+// build at $A80000), not HRTmon: the core's status bit 55
+#define MINIMIG_EXTCFG_AR 0x800000
+
 #define CONFIG_FLOPPY1X  0
 #define CONFIG_FLOPPY2X  1
 
