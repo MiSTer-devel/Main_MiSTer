@@ -1537,6 +1537,10 @@ typedef struct
 	int8_t   wh_combo;
 	int8_t   wh_pedal_invert;
 
+	uint64_t trig_axes; // analog_triggers: axes that rest at their minimum
+	uint64_t trig_up;   // ...of those, on a stick and pressed is up
+	uint64_t trig_down; // ...of those, on a stick and pressed is down
+
 	int      timeout;
 	char     mac[64];
 
@@ -2664,6 +2668,83 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 	}
 }
 
+// Analog triggers (analog_triggers in MiSTer.ini).
+//
+// A trigger mapped to a stick axis normally spans the whole axis, so released
+// it holds the stick fully over. With the setting on it rests at centre and
+// goes fully up or down when pressed, chosen per stick:
+//   1 - both up, 2 - both down, 3 - left up, right down, 4 - left down, right up
+// Any trigger gives only its pressed direction as a button, so a released one
+// holds no key. The triggers are found when the device opens, at rest; their
+// directions when the map loads.
+
+#define TRIG_DEADZONE  3 // of 127, a trigger's noise at rest
+#define TRIG_MIN_RANGE 3 // fewer steps is a button or a hat, not a trigger
+#define TRIG_REST      4 // a trigger rests in the bottom 1/4 of its range, a stick at centre
+
+static void trig_scan(int dev)
+{
+	unsigned char absbits[(ABS_MAX + 7) / 8] = {};
+	if (ioctl(pool[dev].fd, EVIOCGBIT(EV_ABS, sizeof(absbits)), absbits) < 0) return;
+
+	// the left stick's own axes are never triggers
+	for (int code = ABS_Y + 1; code < ABS_MISC; code++)
+	{
+		struct input_absinfo ai;
+		if (!test_bit(code, absbits) || ioctl(pool[dev].fd, EVIOCGABS(code), &ai) < 0) continue;
+
+		int range = ai.maximum - ai.minimum;
+		if (range >= TRIG_MIN_RANGE && ai.value - ai.minimum <= range / TRIG_REST) input[dev].trig_axes |= 1ULL << code;
+	}
+}
+
+static void trig_setup(int dev)
+{
+	input[dev].trig_up = input[dev].trig_down = 0;
+	for (int n = 0; n < 4; n++)
+	{
+		int right = n >> 1;
+		int slot = right ? input[dev].stick_r[n & 1] : input[dev].stick_l[n & 1];
+		uint32_t code = slot ? (input[dev].mmap[slot] & 0xFFFF) : 0;
+		if (code >= 64 || !((input[dev].trig_axes >> code) & 1)) continue;
+
+		int down = cfg.analog_triggers == 2 || cfg.analog_triggers == (right ? 3 : 4);
+		if (down) input[dev].trig_down |= 1ULL << code;
+		else input[dev].trig_up |= 1ULL << code;
+	}
+
+	printf("Analog triggers on %s: axes %llx, up %llx, down %llx\n", input[dev].devname, (unsigned long long)input[dev].trig_axes,
+		(unsigned long long)input[dev].trig_up, (unsigned long long)input[dev].trig_down);
+}
+
+static int trig_is(int dev, int code)
+{
+	return code < 64 && ((input[dev].trig_axes >> code) & 1);
+}
+
+// -1: a trigger on a stick, pressed is up, 1: pressed is down, 0: neither
+static int trig_dir(int dev, int code)
+{
+	if (code >= 64) return 0;
+	return ((input[dev].trig_up >> code) & 1) ? -1 : ((input[dev].trig_down >> code) & 1) ? 1 : 0;
+}
+
+// released 0, fully pressed 127 in its direction
+static int trig_value(int dev, int code, int raw, const input_absinfo *ai)
+{
+	int range = ai->maximum - ai->minimum;
+	int val = (range > 0) ? (int)(((int64_t)raw - ai->minimum) * 127 / range) : 0;
+	if (val < TRIG_DEADZONE) val = 0;
+	else if (val > 127) val = 127;
+	return val * trig_dir(dev, code);
+}
+
+// the key of the pressed direction only: 1 - up/left, 2 - down/right
+static int trig_edge(int dev, int code, int pressed)
+{
+	return pressed ? ((trig_dir(dev, code) < 0) ? 1 : 2) : 0;
+}
+
 static char* get_led_path(int dev, int add_id = 1)
 {
 	static char path[1024];
@@ -3082,6 +3163,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					input[dev].stick_l[1] = SYS_AXIS2_Y;
 					if ((input[dev].mmap[SYS_AXIS1_Y] >> 16) == 2) input[dev].stick_r[1] = SYS_AXIS1_Y;
 				}
+
+				if (cfg.analog_triggers) trig_setup(dev);
 			}
 		}
 		input[dev].has_mmap++;
@@ -3958,6 +4041,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				// final check to eliminate additive error
 				if (value < -range) value = -range;
 				else if (value > 127) value = 127;
+
+				if (cfg.analog_triggers && trig_dir(dev, ev->code)) value = trig_value(dev, ev->code, ev->value, absinfo);
 
 				if (input[sub_dev].axis_pos[ev->code & 0xFF] == (int8_t)value) break;
 				input[sub_dev].axis_pos[ev->code & 0xFF] = (int8_t)value;
@@ -5525,6 +5610,7 @@ int input_test(int getchar)
 						}
 
 						input[n].bind = -1;
+						if (cfg.analog_triggers) trig_scan(n);
 
 						int effects;
 						input[n].has_rumble = false;
@@ -6443,6 +6529,7 @@ int input_test(int getchar)
 
 										if (ev.value < center - treshold && !only_max) axis_edge = 1;
 										if (ev.value > center + treshold) axis_edge = 2;
+										if (cfg.analog_triggers && trig_is(dev, ev.code)) axis_edge = trig_edge(dev, ev.code, ev.value > center + treshold);
 									}
 
 									uint8_t last_state = input[dev].axis_edge[ev.code & 255];

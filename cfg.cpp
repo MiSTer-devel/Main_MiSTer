@@ -111,6 +111,7 @@ static const ini_var_t ini_vars[] =
 	{ "RUMBLE", (void *)(&(cfg.rumble)), UINT8, 0, 1 },
 	{ "WHEEL_FORCE", (void*)(&(cfg.wheel_force)), UINT8, 0, 100 },
 	{ "WHEEL_RANGE", (void*)(&(cfg.wheel_range)), UINT16, 0, 1000 },
+	{ "ANALOG_TRIGGERS", (void*)(&(cfg.analog_triggers)), UINT8, 0, 4 },
 	{ "HDMI_GAME_MODE", (void *)(&(cfg.hdmi_game_mode)), UINT8, 0, 1 },
 	{ "VRR_MODE", (void *)(&(cfg.vrr_mode)), UINT8, 0, 4 },
 	{ "VRR_VESA_FRAMERATE", (void *)(&(cfg.vrr_vesa_framerate)), UINT8, 0, 255 },
