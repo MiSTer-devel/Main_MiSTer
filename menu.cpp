@@ -306,7 +306,7 @@ static const char *helptexts[] =
 	"                                Welcome to MiSTer! Use the cursor keys to navigate the menus. Use space bar or enter to select an item. Press Esc or F12 to exit the menus. Joystick emulation on the numeric keypad can be toggled with the numlock or scrlock key, while pressing Ctrl-Alt-0 (numeric keypad) toggles autofire mode.",
 	"                                Minimig can emulate an A600/A1200 IDE harddisk interface. The emulation can make use of Minimig-style hardfiles (complete disk images) or UAE-style hardfiles (filesystem images with no partition table).",
 	"                                Minimig's processor core can emulate a 68000 (cycle accuracy as A500/A600), a 68EC020 at A1200 speed, or a 68EC030 or 68030 with MMU at 40MHz or 50MHz, as fast as a real card, or Fast, all with transparent cache. The 68030 has no FPU, and needs a core that offers it.",
-	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 384 megabytes of Fast RAM (8MB max for 68000 mode). To use the HRTmon feature you will need a file on the SD card named hrtmon.rom.",
+	"                                Minimig can make use of up to 2 megabytes of Chip RAM, up to 1.5 megabytes of Slow RAM (A500 Trapdoor RAM), and up to 384 megabytes of Fast RAM (8MB max for 68000 mode). To use the HRTmon feature you will need a file on the SD card named hrtmon.rom; for the Action Replay, AR5.ROM (the DeMoN v2 build).",
 	"                                Backspace key (or B-hold + A on gamepad) to unmount",
 	"                                Backspace key (or B-hold + A on gamepad) to clear stored option. You have to reload the core to be able to use default value.",
 };
@@ -6564,7 +6564,7 @@ void HandleUI(void)
 				fastcfg ? config_memory_fast_msg[((minimig_config.cpu & 0x23) != 0x23 && (minimig_config.cpu & 2)) ? 1 : 0][fastcfg] : "",
 				((minimig_config.memory >> 2) & 0x03) ? "+" : "",
 				((minimig_config.memory >> 2) & 0x03) ? config_memory_slow_msg[(minimig_config.memory >> 2) & 0x03] : "",
-				(minimig_config.memory & 0x40) ? " HRT" : ""
+				(minimig_config.memory & 0x40) ? ((minimig_get_extcfg() & MINIMIG_EXTCFG_AR) ? " AR" : " HRT") : ""
 			);
 
 			char *p = strrchr(minimig_config.kickstart, '/');
@@ -6705,8 +6705,10 @@ void HandleUI(void)
 			}
 		}
 		OsdWrite(m++, s, menusub == 6, 0);
-		strcpy(s, " HRTmon   : ");
-		strcat(s, (minimig_config.memory & 0x40) ? "Enabled" : "Disabled");
+		// the cartridge: HRTmon or the Action Replay (AR5, DeMoN v2)
+		strcpy(s, " Cartridge: ");
+		strcat(s, !(minimig_config.memory & 0x40) ? "Off" :
+			(minimig_get_extcfg() & MINIMIG_EXTCFG_AR) ? "Action Replay" : "HRTmon");
 		OsdWrite(m++, s, menusub == 7, 0);
 
 		OsdWrite(m++, "", 0, 0);
@@ -6858,7 +6860,13 @@ void HandleUI(void)
 			}
 			else if (menusub == 7)
 			{
-				minimig_config.memory ^= 0x40;
+				// Off -> HRTmon -> Action Replay -> Off; kept in the config and
+				// sent to the core at the next reset, with the cartridge's image
+				int c = !(minimig_config.memory & 0x40) ? 0 : (minimig_get_extcfg() & MINIMIG_EXTCFG_AR) ? 2 : 1;
+				c = (c + (minus ? 2 : 1)) % 3;
+				minimig_config.memory = (minimig_config.memory & ~0x40) | (c ? 0x40 : 0);
+				if (c == 2) minimig_config.ext_cfg2 |= MINIMIG_EXTCFG_AR >> 16;
+				else minimig_config.ext_cfg2 &= ~(MINIMIG_EXTCFG_AR >> 16);
 				menustate = MENU_MINIMIG_CHIPSET1;
 			}
 			else if (menusub == 9)
