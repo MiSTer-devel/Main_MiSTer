@@ -857,9 +857,17 @@ static int read_send_block(ide_config *ide)
 	return 1;
 }
 
+#define IDE_XFER_BUDGET_US 4000
+
+static inline bool ide_xfer_budget_left(uint64_t start)
+{
+	return (ide_time_us() - start) < IDE_XFER_BUDGET_US;
+}
+
 static void read_continue(ide_config *ide)
 {
-	while (read_send_block(ide) && ide_wait_req(ide) == 5) {}
+	uint64_t start = ide_time_us();
+	while (read_send_block(ide) && ide_xfer_budget_left(start) && ide_wait_req(ide) == 5) {}
 }
 
 static void process_read(ide_config *ide, int multi)
@@ -932,9 +940,9 @@ static int write_recv_block(ide_config *ide)
 	return 1;
 }
 
-static void write_continue(ide_config *ide)
+static void write_continue(ide_config *ide, uint64_t start)
 {
-	while (ide_wait_req(ide) == 5 && write_recv_block(ide)) {}
+	while (ide_xfer_budget_left(start) && ide_wait_req(ide) == 5 && write_recv_block(ide)) {}
 }
 
 static void process_write(ide_config *ide, int multi)
@@ -948,7 +956,7 @@ static void process_write(ide_config *ide, int multi)
 	ide->xfer_irq = 0;
 
 	write_request_block(ide);
-	write_continue(ide);
+	write_continue(ide, ide_time_us());
 }
 
 static int handle_hdd(ide_config *ide)
@@ -1096,7 +1104,8 @@ void ide_io(int num, int req)
 		}
 		else if (ide->state == IDE_STATE_WAIT_WR)
 		{
-			if (write_recv_block(ide)) write_continue(ide);
+			uint64_t start = ide_time_us();
+			if (write_recv_block(ide)) write_continue(ide, start);
 		}
 		else if (ide->state == IDE_STATE_WAIT_PKT_CMD)
 		{
