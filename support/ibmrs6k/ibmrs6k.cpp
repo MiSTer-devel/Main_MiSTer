@@ -13,7 +13,8 @@
 
 char is_ibmrs6k()
 {
-	return !strcasecmp(user_io_get_core_name(1), "IBMRS6K7248");
+	const char *n = user_io_get_core_name(1);
+	return !strcasecmp(n, "IBMRS6K7248") || !strcasecmp(n, "IBMPS850");
 }
 
 int ibmrs6k_cdrom_slot()

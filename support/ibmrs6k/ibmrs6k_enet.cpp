@@ -8,6 +8,7 @@
 #include "../../user_io.h"
 #include "../../shmem.h"
 #include "ibmrs6k_enet.h"
+#include "ibmrs6k.h"
 
 extern int  ethernet_open(const char *iface, int promiscuous);
 extern void ethernet_close(void);
@@ -58,7 +59,7 @@ static uint32_t rx_ring_slots(uint64_t magic)
 
 static const char *ibmrs6k_net_status()
 {
-	return !strcasecmp(user_io_get_core_name(1), "IBMRS6K7248") ? "[8:6]" : 0;
+	return is_ibmrs6k() ? "[8:6]" : 0;
 }
 
 static uint64_t prom_mac(void)
