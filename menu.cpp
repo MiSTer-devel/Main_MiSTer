@@ -1117,6 +1117,19 @@ static void *close_pipe_async(void *arg)
 	return NULL;
 }
 
+static bool mra_pending_target(const char *p)
+{
+	mgl_struct *mgl = mgl_get();
+	if (mgl->done || !mgl->from_mra || p[0] != 'S') return false;
+
+	int idx = 1;
+	if (p[idx] == 'S') idx++;
+	if (p[idx] == 'C') idx++;
+
+	int num = (p[idx] >= '0' && p[idx] <= '9') ? p[idx] - '0' : 0;
+	return num == mgl->item[mgl->current].index;
+}
+
 void HandleUI(void)
 {
 	PROFILE_FUNCTION();
@@ -2082,7 +2095,7 @@ void HandleUI(void)
 
 					last_space = 0;
 
-					if (!h && inpage)
+					if ((!h || mra_pending_target(p)) && inpage)
 					{
 						if (p[0] == 'P')
 						{
@@ -2479,7 +2492,7 @@ void HandleUI(void)
 						}
 					}
 
-					if (!inpage || h || p[0] < 'A') continue;
+					if (!inpage || (h && !mra_pending_target(p)) || p[0] < 'A') continue;
 
 					// supplement files
 					if (p[0] == 'f')
