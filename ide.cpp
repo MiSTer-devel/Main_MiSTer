@@ -92,6 +92,20 @@ uint16_t ide_check()
 	return res;
 }
 
+static uint8_t ide_rd_buf[2][ide_io_max_size * 512];
+
+static inline uint8_t *ide_xfer_buf(ide_config *ide)
+{
+	return ide_rd_buf[(ide == &ide_inst[1]) ? 1 : 0];
+}
+
+static uint64_t ide_time_us()
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000;
+}
+
 // Wait for the core to take or supply the next block of a transfer. The
 // Amiga can be held in the A2065 interrupt server meanwhile: it acknowledges
 // CSR0 and loops until the bits clear, which needs a2065_poll() to apply the
@@ -99,16 +113,27 @@ uint16_t ide_check()
 // a2065_poll() costs an uncached DDR3 read and a recv() each call, so it runs
 // on every 16th miss only: the core usually answers within a few checks, and
 // the handshake latency of every block would otherwise pay for it.
+#define IDE_WAIT_REQ_US 1000
+
 static uint16_t ide_wait_req(ide_config *ide)
 {
-	uint16_t req = 0;
 	uint32_t spins = 0;
-	while (!req)
+	uint64_t start = ide_time_us();
+	uint32_t other_bitoff = ide->bitoff ? 0 : 3;
+
+	while (1)
 	{
-		req = (ide_check() >> ide->bitoff) & 7;
-		if (!req && !(++spins & 15)) a2065_poll();
+		uint16_t all = ide_check();
+		uint16_t req = (all >> ide->bitoff) & 7;
+		if (req) return req;
+		if ((all >> other_bitoff) & 7) return 0;
+
+		if (!(++spins & 15))
+		{
+			a2065_poll();
+			if ((ide_time_us() - start) >= IDE_WAIT_REQ_US) return 0;
+		}
 	}
-	return req;
 }
 
 int ide_img_mount(fileTYPE *f, const char *name, int rw)
@@ -347,12 +372,12 @@ static uint32_t checksum_rdb(uint32_t *p, int set)
 	return 0;
 }
 
-static void fill_fake_rdb(drive_t *drive, uint32_t sector, int cnt)
+static void fill_fake_rdb(drive_t *drive, uint32_t sector, int cnt, uint8_t *buf)
 {
 	printf("fill_fake_rdb(%u,%d)\n", sector, cnt);
 
-	uint8_t *buff = ide_buf;
-	memset(ide_buf, 0, sizeof(ide_buf));
+	uint8_t *buff = buf;
+	memset(buf, 0, ide_io_max_size * 512);
 
 	while (cnt)
 	{
@@ -776,131 +801,162 @@ inline uint16_t get_cnt(ide_config *ide)
 	return cnt;
 }
 
-inline int readhdd(drive_t *drive, uint32_t lba, int cnt)
+inline int readhdd(drive_t *drive, uint32_t lba, int cnt, uint8_t *buf)
 {
 	if (lba < drive->offset)
 	{
-		if (!drive->type) fill_fake_rdb(drive, lba, cnt);
-		else memset(ide_buf, 0, sizeof(ide_buf));
+		if (!drive->type) fill_fake_rdb(drive, lba, cnt, buf);
+		else memset(buf, 0, ide_io_max_size * 512);
 		return 1;
 	}
 	else
 	{
-		return FileReadAdv(drive->f, ide_buf, cnt * 512, -1);
+		return FileReadAdv(drive->f, buf, cnt * 512, -1);
 	}
+}
+
+static int read_send_block(ide_config *ide)
+{
+	uint8_t *buf = ide_xfer_buf(ide);
+	uint32_t cnt = ide->xfer_cnt;
+
+	ide->xfer_lba += cnt;
+	ide->regs.sector_count -= cnt;
+	put_lba(ide, ide->xfer_lba);
+
+	ide->regs.io_size = cnt;
+	ide->regs.status = ATA_STATUS_RDP | ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
+	if (!ide->regs.sector_count) ide->regs.status |= ATA_STATUS_END;
+
+	if (ide->regs.io_fast)
+	{
+		ide_set_regs(ide);
+		ide_send_data(buf, cnt * 256);
+	}
+	else
+	{
+		ide_send_data(buf, cnt * 256);
+		ide->regs.status &= ~ATA_STATUS_RDP;
+		ide_set_regs(ide);
+	}
+
+	if (!ide->regs.sector_count)
+	{
+		//ATA_STATUS_END will set ATA_STATUS_RDY at the end
+		ide->state = IDE_STATE_IDLE;
+		dbg2_printf("  finish\n");
+		return 0;
+	}
+
+	cnt = ide->xfer_multi ? get_cnt(ide) : 1;
+	ide->xfer_cnt = cnt;
+	if (!ide->null) ide->null = (readhdd(&ide->drive[ide->regs.drv], ide->xfer_lba, cnt, buf) <= 0);
+	if (ide->null) memset(buf, 0, cnt * 512);
+
+	ide->state = IDE_STATE_WAIT_RD;
+	return 1;
+}
+
+#define IDE_XFER_BUDGET_US 4000
+
+static inline bool ide_xfer_budget_left(uint64_t start)
+{
+	return (ide_time_us() - start) < IDE_XFER_BUDGET_US;
+}
+
+static void read_continue(ide_config *ide)
+{
+	uint64_t start = ide_time_us();
+	while (read_send_block(ide) && ide_xfer_budget_left(start) && ide_wait_req(ide) == 5) {}
 }
 
 static void process_read(ide_config *ide, int multi)
 {
+	uint8_t *buf = ide_xfer_buf(ide);
 	uint32_t lba = get_lba(ide);
-	uint16_t ide_req = 0;
 
 	dbg2_printf("  sector_count: %d\n", ide->regs.sector_count);
 
 	uint32_t cnt = multi ? get_cnt(ide) : 1;
 	ide->null = !FileSeekLBA(ide->drive[ide->regs.drv].f, (lba <= ide->drive[ide->regs.drv].offset) ? 0 : (lba - ide->drive[ide->regs.drv].offset));
-	if (!ide->null) ide->null = (readhdd(&ide->drive[ide->regs.drv], lba, cnt) <= 0);
-	if (ide->null) memset(ide_buf, 0, cnt * 512);
+	if (!ide->null) ide->null = (readhdd(&ide->drive[ide->regs.drv], lba, cnt, buf) <= 0);
+	if (ide->null) memset(buf, 0, cnt * 512);
 
-	while (1)
+	ide->xfer_lba = lba;
+	ide->xfer_cnt = cnt;
+	ide->xfer_multi = multi;
+
+	read_continue(ide);
+}
+
+static void write_request_block(ide_config *ide)
+{
+	uint32_t cnt = ide->xfer_multi ? get_cnt(ide) : 1;
+	ide->xfer_cnt = cnt;
+
+	ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | ide->xfer_irq;
+	ide->xfer_irq = ATA_STATUS_IRQ;
+
+	ide->regs.io_size = cnt;
+	ide_set_regs(ide);
+	ide->state = IDE_STATE_WAIT_WR;
+}
+
+static int write_recv_block(ide_config *ide)
+{
+	uint32_t cnt = ide->xfer_cnt;
+
+	ide_recv_data(ide_buf, cnt * 256);
+
+	if (ide->regs.cmd == 0xFA)
 	{
+		ide->regs.sector_count = 0;
+		char* filename = user_io_make_filepath(HomeDir(), (char*)ide_buf);
+		int drvnum = (ide->regs.head == 1) ? 0 : (ide->regs.head == 2) ? 1 : (ide->drive[ide->regs.drv].drvnum + 2);
+
+		static const char* names[6] = { "fdd0", "fdd1", "ide00", "ide01", "ide10", "ide11" };
+		printf("Request for new image for drive %s: %s\n", names[drvnum], filename);
+		if(is_x86()) x86_set_image(drvnum, filename);
+	}
+	else
+	{
+		uint32_t lba = ide->xfer_lba;
+		if (!ide->null) ide->null = (lba < ide->drive[ide->regs.drv].offset) ? 0 : (FileWriteAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
 		lba += cnt;
+		ide->xfer_lba = lba;
 		ide->regs.sector_count -= cnt;
 		put_lba(ide, lba);
-
-		ide->regs.io_size = cnt;
-		ide->regs.status = ATA_STATUS_RDP | ATA_STATUS_RDY | ATA_STATUS_DRQ | ATA_STATUS_IRQ;
-		if (!ide->regs.sector_count) ide->regs.status |= ATA_STATUS_END;
-
-		if (ide->regs.io_fast)
-		{
-			ide_set_regs(ide);
-			ide_send_data(ide_buf, cnt * 256);
-		}
-		else
-		{
-			ide_send_data(ide_buf, cnt * 256);
-			ide->regs.status &= ~ATA_STATUS_RDP;
-			ide_set_regs(ide);
-		}
-
-		if (!ide->regs.sector_count)
-		{
-			//ATA_STATUS_END will set ATA_STATUS_RDY at the end
-			ide->state = IDE_STATE_IDLE;
-			break;
-		}
-
-		cnt = multi ? get_cnt(ide) : 1;
-		if (!ide->null) ide->null = (readhdd(&ide->drive[ide->regs.drv], lba, cnt) <= 0);
-		if (ide->null) memset(ide_buf, 0, cnt * 512);
-
-		ide_req = ide_wait_req(ide);
-
-		if (ide_req != 5)
-		{
-			ide->state = IDE_STATE_IDLE;
-			break;
-		}
 	}
 
-	dbg2_printf("  finish\n");
+	if (!ide->regs.sector_count)
+	{
+		ide->state = IDE_STATE_IDLE;
+		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
+		ide_set_regs(ide);
+		return 0;
+	}
+
+	write_request_block(ide);
+	return 1;
+}
+
+static void write_continue(ide_config *ide, uint64_t start)
+{
+	while (ide_xfer_budget_left(start) && ide_wait_req(ide) == 5 && write_recv_block(ide)) {}
 }
 
 static void process_write(ide_config *ide, int multi)
 {
 	uint32_t lba = get_lba(ide);
-	uint32_t cnt = 1;
-	uint16_t ide_req;
 
 	ide->null = (ide->regs.cmd != 0xFA) ? !FileSeekLBA(ide->drive[ide->regs.drv].f, (lba <= ide->drive[ide->regs.drv].offset) ? 0 : (lba - ide->drive[ide->regs.drv].offset)) : 1;
-	uint8_t irq = 0;
 
-	while (1)
-	{
-		cnt = multi ? get_cnt(ide) : 1;
-		ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_DRQ | irq;
-		irq = ATA_STATUS_IRQ;
+	ide->xfer_lba = lba;
+	ide->xfer_multi = multi;
+	ide->xfer_irq = 0;
 
-		ide->regs.io_size = cnt;
-		ide_set_regs(ide);
-
-		ide_req = ide_wait_req(ide);
-
-		if (ide_req != 5)
-		{
-			ide->state = IDE_STATE_IDLE;
-			break;
-		}
-
-		ide_recv_data(ide_buf, cnt * 256);
-
-		if (ide->regs.cmd == 0xFA)
-		{
-			ide->regs.sector_count = 0;
-			char* filename = user_io_make_filepath(HomeDir(), (char*)ide_buf);
-			int drvnum = (ide->regs.head == 1) ? 0 : (ide->regs.head == 2) ? 1 : (ide->drive[ide->regs.drv].drvnum + 2);
-
-			static const char* names[6] = { "fdd0", "fdd1", "ide00", "ide01", "ide10", "ide11" };
-			printf("Request for new image for drive %s: %s\n", names[drvnum], filename);
-			if(is_x86()) x86_set_image(drvnum, filename);
-		}
-		else
-		{
-			if (!ide->null) ide->null = (lba < ide->drive[ide->regs.drv].offset) ? 0 : (FileWriteAdv(ide->drive[ide->regs.drv].f, ide_buf, cnt * 512, -1) <= 0);
-			lba += cnt;
-			ide->regs.sector_count -= cnt;
-			put_lba(ide, lba);
-		}
-
-		if (!ide->regs.sector_count)
-		{
-			ide->state = IDE_STATE_IDLE;
-			ide->regs.status = ATA_STATUS_RDY | ATA_STATUS_IRQ;
-			ide_set_regs(ide);
-			break;
-		}
-	}
+	write_request_block(ide);
+	write_continue(ide, ide_time_us());
 }
 
 static int handle_hdd(ide_config *ide)
@@ -1042,7 +1098,16 @@ void ide_io(int num, int req)
 	else if (req == 5) // data request
 	{
 		dbg2_printf("IDE data request (on %d)\n", ide->regs.drv);
-		if (ide->state == IDE_STATE_WAIT_PKT_CMD)
+		if (ide->state == IDE_STATE_WAIT_RD)
+		{
+			read_continue(ide);
+		}
+		else if (ide->state == IDE_STATE_WAIT_WR)
+		{
+			uint64_t start = ide_time_us();
+			if (write_recv_block(ide)) write_continue(ide, start);
+		}
+		else if (ide->state == IDE_STATE_WAIT_PKT_CMD)
 		{
 			cdrom_handle_pkt(ide);
 		}

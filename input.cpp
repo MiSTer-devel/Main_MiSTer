@@ -1453,6 +1453,19 @@ enum QUIRK
 	QUIRK_SHIFT,
 };
 
+// core-driven force feedback effect slots
+enum
+{
+	FFB_CONST = 0,
+	FFB_SPRING,
+	FFB_DAMPER,
+	FFB_FRICTION,
+	FFB_VIB,
+	FFB_NUM
+};
+
+#define FFB_CAP_AUTOC 0x80
+
 typedef struct
 {
 	uint16_t bustype, vid, pid, version, gcdb_version;
@@ -1504,6 +1517,18 @@ typedef struct
 	int      rumble_en;
 	uint16_t last_rumble;
 	ff_effect rumble_effect;
+
+	int      has_ffb;
+	uint8_t  ffb_caps;
+	uint8_t  ffb_loaded;
+	uint8_t  ffb_playing;
+	uint8_t  ffb_on;
+	uint8_t  ffb_flags;
+	int32_t  ffb_autoc;
+	int32_t  ffb_val[FFB_NUM];
+	ff_effect ffb_effect[FFB_NUM];
+	int8_t   wh_centre;
+	int16_t  wh_spring_id;
 
 	int8_t   wh_steer;
 	int8_t   wh_accel;
@@ -4961,6 +4986,9 @@ static void setup_wheels()
 			input[i].wh_combo = -1;
 			// invert pedal values range (if >0)
 			input[i].wh_pedal_invert = -1;
+			// default centring set up here: 0 - none, 1 - FF_AUTOCENTER, 2 - FF_SPRING effect
+			input[i].wh_centre = 0;
+			input[i].wh_spring_id = -1;
 
 			// Logitech Wheels
 			if (input[i].vid == 0x046d)
@@ -5004,6 +5032,7 @@ static void setup_wheels()
 					ie.code = FF_AUTOCENTER;
 					ie.value = 0xFFFFUL * cfg.wheel_force / 100;
 					write(pool[i].fd, &ie, sizeof(ie));
+					input[i].wh_centre = 1;
 
 					set_wheel_range(i, cfg.wheel_range);
 				}
@@ -5051,6 +5080,8 @@ static void setup_wheels()
 						play_ev.code = fef.id;
 						play_ev.value = 1;
 						write(pool[i].fd, (const void *)&play_ev, sizeof(play_ev));
+						input[i].wh_centre = 2;
+						input[i].wh_spring_id = fef.id;
 					}
 
 					set_wheel_range(i, cfg.wheel_range);
@@ -5078,6 +5109,7 @@ static void setup_wheels()
 					ie.code = FF_AUTOCENTER;
 					ie.value = 0xFFFFUL * cfg.wheel_force / 100;
 					write(pool[i].fd, &ie, sizeof(ie));
+					input[i].wh_centre = 1;
 
 					set_wheel_range(i, cfg.wheel_range);
 				}
@@ -5132,6 +5164,261 @@ static void setup_wheels()
 				input[i].quirk = QUIRK_WHEEL;
 			}
 		}
+	}
+}
+
+// Core-driven force feedback.
+//
+// UIO_GET_FFB | (player << 8) answers with a header word, then three data words:
+//   hdr: [15:8] 0xFB - present; any other value means the core has no FFB channel
+//        [7:0]  flags: bit 0 - active, bit 1 - core provides the centring spring
+//   w1:  signed constant force, -32768..32767, positive pushes the wheel right
+//   w2:  [15:8] spring, [7:0] damper     (0..255)
+//   w3:  [15:8] friction, [7:0] vibration (0..255)
+//
+// A core without the channel (or with it inactive) leaves the device exactly as
+// setup_wheels() left it. All strengths are scaled by wheel_force.
+//
+// Main asks a few times after the core starts whether it has the channel, and
+// polls only a core that answered, so other cores cost nothing.
+
+#define FFB_MAGIC      0xFB
+#define FFB_F_ACTIVE   0x01
+#define FFB_F_CENTRE   0x02
+#define FFB_INTERVAL   8      // ms between reads, so at most 125 updates/s per effect
+#define FFB_VIB_PERIOD 50     // ms, sine period of the vibration effect
+#define FFB_DIR_RIGHT  0xC000 // with a positive level this pushes the wheel right
+
+struct ffb_req
+{
+	uint8_t flags;
+	int16_t constant;
+	uint8_t spring, damper, friction, vib;
+};
+
+static int ffb_read(int player, ffb_req *req)
+{
+	uint16_t hdr = spi_uio_cmd_cont(UIO_GET_FFB | (player << 8));
+	if ((hdr >> 8) != FFB_MAGIC)
+	{
+		DisableIO();
+		return 0;
+	}
+
+	req->flags = (uint8_t)hdr;
+	req->constant = (int16_t)spi_w(0);
+	uint16_t w = spi_w(0);
+	req->spring = w >> 8;
+	req->damper = (uint8_t)w;
+	w = spi_w(0);
+	req->friction = w >> 8;
+	req->vib = (uint8_t)w;
+	DisableIO();
+	return 1;
+}
+
+static void ffb_autocentre(int dev, int value)
+{
+	struct input_event ie = {};
+	ie.type = EV_FF;
+	ie.code = FF_AUTOCENTER;
+	ie.value = value;
+	write(pool[dev].fd, &ie, sizeof(ie));
+}
+
+static void ffb_play(int dev, int id, int on)
+{
+	struct input_event ie = {};
+	ie.type = EV_FF;
+	ie.code = id;
+	ie.value = on;
+	write(pool[dev].fd, &ie, sizeof(ie));
+}
+
+// switch the centring that setup_wheels() applied
+static void ffb_default_centre(int dev, int on)
+{
+	if (input[dev].wh_centre == 1) ffb_autocentre(dev, on ? 0xFFFFUL * cfg.wheel_force / 100 : 0);
+	else if (input[dev].wh_centre == 2 && input[dev].wh_spring_id >= 0) ffb_play(dev, input[dev].wh_spring_id, on);
+}
+
+// val: constant level (signed) for FFB_CONST, otherwise 0..0x7FFF strength
+static void ffb_update(int dev, int slot, int32_t val)
+{
+	uint8_t bit = 1 << slot;
+	if (!(input[dev].ffb_caps & bit)) return;
+	if (val == input[dev].ffb_val[slot]) return;
+	input[dev].ffb_val[slot] = val;
+
+	if (!val)
+	{
+		if (input[dev].ffb_playing & bit) ffb_play(dev, input[dev].ffb_effect[slot].id, 0);
+		input[dev].ffb_playing &= ~bit;
+		return;
+	}
+
+	ff_effect *e = &input[dev].ffb_effect[slot];
+	if (!(input[dev].ffb_loaded & bit))
+	{
+		memset(e, 0, sizeof(*e));
+		e->id = -1;
+	}
+
+	e->direction = FFB_DIR_RIGHT;
+	e->replay.length = 0; // infinite, until stopped
+	e->replay.delay = 0;
+
+	switch (slot)
+	{
+	case FFB_CONST:
+		e->type = FF_CONSTANT;
+		e->u.constant.level = (int16_t)val;
+		break;
+
+	case FFB_VIB:
+		e->type = FF_PERIODIC;
+		e->u.periodic.waveform = FF_SINE;
+		e->u.periodic.period = FFB_VIB_PERIOD;
+		e->u.periodic.magnitude = (int16_t)val;
+		break;
+
+	default:
+		e->type = (slot == FFB_SPRING) ? FF_SPRING : (slot == FFB_DAMPER) ? FF_DAMPER : FF_FRICTION;
+		// The spring pulls with its full strength a short way off centre, as arcade
+		// drive boards do: steepest slope, the strength as the limit.
+		for (int k = 0; k < 2; k++)
+		{
+			int16_t coeff = (slot == FFB_SPRING) ? 0x7FFF : (int16_t)val;
+			e->u.condition[k].right_coeff = coeff;
+			e->u.condition[k].left_coeff = coeff;
+			e->u.condition[k].right_saturation = (uint16_t)(val * 2);
+			e->u.condition[k].left_saturation = (uint16_t)(val * 2);
+			e->u.condition[k].deadband = 0;
+			e->u.condition[k].center = 0;
+		}
+		break;
+	}
+
+	if (ioctl(pool[dev].fd, EVIOCSFF, e) < 0)
+	{
+		printf("FFB: upload of effect %d failed on %s: %s\n", slot, input[dev].devname, strerror(errno));
+		if (!(input[dev].ffb_loaded & bit)) input[dev].ffb_caps &= ~bit; // don't retry an effect the device refuses
+		return;
+	}
+
+	input[dev].ffb_loaded |= bit;
+	if (!(input[dev].ffb_playing & bit))
+	{
+		ffb_play(dev, e->id, 1);
+		input[dev].ffb_playing |= bit;
+	}
+}
+
+static void ffb_release(int dev)
+{
+	for (int slot = 0; slot < FFB_NUM; slot++)
+	{
+		if (input[dev].ffb_loaded & (1 << slot)) ioctl(pool[dev].fd, EVIOCRMFF, input[dev].ffb_effect[slot].id);
+		input[dev].ffb_val[slot] = 0;
+	}
+	input[dev].ffb_loaded = 0;
+	input[dev].ffb_playing = 0;
+
+	if (input[dev].ffb_autoc >= 0 && input[dev].wh_centre != 1) ffb_autocentre(dev, 0);
+	input[dev].ffb_autoc = -1;
+	if (input[dev].ffb_flags & FFB_F_CENTRE) ffb_default_centre(dev, 1);
+
+	input[dev].ffb_flags = 0;
+	input[dev].ffb_on = 0;
+	printf("FFB: released %s\n", input[dev].devname);
+}
+
+static void ffb_apply(int dev, const ffb_req *req)
+{
+	if (!req || !(req->flags & FFB_F_ACTIVE))
+	{
+		if (input[dev].ffb_on) ffb_release(dev);
+		return;
+	}
+
+	if (!input[dev].ffb_on)
+	{
+		input[dev].ffb_on = 1;
+		input[dev].ffb_flags = 0;
+		printf("FFB: core drives %s\n", input[dev].devname);
+	}
+
+	int centre = req->flags & FFB_F_CENTRE;
+	if (centre != (input[dev].ffb_flags & FFB_F_CENTRE))
+	{
+		ffb_default_centre(dev, !centre);
+		if (!centre)
+		{
+			ffb_update(dev, FFB_SPRING, 0);
+			if (input[dev].ffb_autoc >= 0 && input[dev].wh_centre != 1) ffb_autocentre(dev, 0);
+			input[dev].ffb_autoc = -1;
+		}
+	}
+	input[dev].ffb_flags = req->flags;
+
+	int32_t force = cfg.wheel_force;
+	if (force > 100) force = 100;
+
+	ffb_update(dev, FFB_CONST, (int32_t)req->constant * force / 100);
+
+	if (centre)
+	{
+		int32_t spring = (int32_t)req->spring * 0x7FFF / 255 * force / 100;
+		if (input[dev].ffb_caps & (1 << FFB_SPRING)) ffb_update(dev, FFB_SPRING, spring);
+		else if ((input[dev].ffb_caps & FFB_CAP_AUTOC) && input[dev].ffb_autoc != spring * 2)
+		{
+			// no spring effect on this device: use its built-in autocentre instead
+			input[dev].ffb_autoc = spring * 2;
+			ffb_autocentre(dev, spring * 2);
+		}
+	}
+
+	ffb_update(dev, FFB_DAMPER, (int32_t)req->damper * 0x7FFF / 255 * force / 100);
+	ffb_update(dev, FFB_FRICTION, (int32_t)req->friction * 0x7FFF / 255 * force / 100);
+	ffb_update(dev, FFB_VIB, (int32_t)req->vib * 0x7FFF / 255 * force / 100);
+}
+
+// asked once per core: hps_io with FFB=1 answers from the first request
+static int ffb_present()
+{
+	static int present = -1;
+	if (present < 0) present = (spi_uio_cmd(UIO_GET_FFB) >> 8) == FFB_MAGIC;
+	return present;
+}
+
+static void ffb_poll()
+{
+	if (!ffb_present()) return;
+
+	static uint32_t timer = 0;
+	if (timer && !CheckTimer(timer)) return;
+	timer = GetTimer(FFB_INTERVAL);
+
+	ffb_req req[NUMPLAYERS];
+	int8_t state[NUMPLAYERS];
+	memset(state, -1, sizeof(state));
+
+	for (int i = 0; i < NUMDEV; i++)
+	{
+		if (!input[i].has_ffb || pool[i].fd < 0) continue;
+
+		int dev = i;
+		if (input[i].bind >= 0) dev = input[i].bind;
+		int player = input[dev].num - 1;
+
+		if (player < 0 || player >= NUMPLAYERS)
+		{
+			ffb_apply(i, NULL);
+			continue;
+		}
+
+		if (state[player] < 0) state[player] = ffb_read(player, &req[player]);
+		ffb_apply(i, state[player] ? &req[player] : NULL);
 	}
 }
 
@@ -5252,6 +5539,17 @@ int input_test(int getchar)
 									if (test_bit(FF_RUMBLE, ff_features)) {
 										input[n].rumble_effect.id = -1;
 										input[n].has_rumble = true;
+									}
+
+									if (test_bit(FF_CONSTANT, ff_features)) {
+										input[n].has_ffb = true;
+										input[n].ffb_autoc = -1;
+										input[n].ffb_caps = 1 << FFB_CONST;
+										if (test_bit(FF_SPRING, ff_features)) input[n].ffb_caps |= 1 << FFB_SPRING;
+										if (test_bit(FF_DAMPER, ff_features)) input[n].ffb_caps |= 1 << FFB_DAMPER;
+										if (test_bit(FF_FRICTION, ff_features)) input[n].ffb_caps |= 1 << FFB_FRICTION;
+										if (test_bit(FF_PERIODIC, ff_features) && test_bit(FF_SINE, ff_features)) input[n].ffb_caps |= 1 << FFB_VIB;
+										if (test_bit(FF_AUTOCENTER, ff_features)) input[n].ffb_caps |= FFB_CAP_AUTOC;
 									}
 								}
 							}
@@ -5648,6 +5946,8 @@ int input_test(int getchar)
 					set_rumble(i, spi_uio_cmd(UIO_GET_RUMBLE | ((input[dev].num - 1) << 8)));
 				}
 			}
+
+			if (cfg.rumble && !is_menu()) ffb_poll();
 
 
 			int return_value = poll(pool, NUMDEV + 3, timeout);

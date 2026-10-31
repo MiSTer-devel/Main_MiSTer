@@ -64,6 +64,7 @@ struct mgl_struct
 	uint32_t timer;
 	int  state;
 	int  done;
+	int  from_mra;
 	int  opt_count;
 	mgl_option_struct opt[MGL_MAX_OPTIONS];
 };

@@ -316,9 +316,14 @@ static bool cdtv_cdda_pump(void)
 	return true;
 }
 
+static int cdtv_speed(void)
+{
+	return (minimig_get_extcfg() >> 21) & 3;
+}
+
 static unsigned long cdtv_read_due(uint16_t n)
 {
-	return cdtv_rd_start + (unsigned long)n * 1000 / (75 << ((minimig_get_extcfg() >> 21) & 3));
+	return (cdtv_speed() == 3) ? 0 : cdtv_rd_start + (unsigned long)n * 1000 / (75 << cdtv_speed());
 }
 
 static void cdtv_read_pump(void)
@@ -354,7 +359,8 @@ static void cdtv_read_pump(void)
 	}
 
 	unsigned long next = cdtv_read_due(cdtv_rd_cnt + 1);
-	cdtv_rd_next = (next > GetTimer(2)) ? next : GetTimer(2);
+	if (next) cdtv_rd_next = (next > GetTimer(2)) ? next : GetTimer(2);
+	else usleep(1000);
 }
 
 static uint32_t cdtv_msf_to_lba(uint32_t msf)
@@ -667,7 +673,7 @@ static void cdtv_dispatch(void)
 
 		case 0x01:
 			cd_finished = 1;
-			cdtv_seek_end = GetTimer(500 >> ((minimig_get_extcfg() >> 21) & 3));
+			cdtv_seek_end = GetTimer((cdtv_speed() == 3) ? 0 : 500 >> cdtv_speed());
 			rlen = 0;
 			break;
 

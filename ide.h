@@ -31,6 +31,8 @@
 #define IDE_STATE_WAIT_PKT_RD   4
 #define IDE_STATE_WAIT_PKT_END  5
 #define IDE_STATE_WAIT_PKT_MODE 6
+#define IDE_STATE_WAIT_RD       7
+#define IDE_STATE_WAIT_WR       8
 
 struct regs_t
 {
@@ -122,6 +124,11 @@ struct ide_config
 	uint32_t null;
 	uint32_t prepcnt;
 	regs_t   regs;
+
+	uint32_t xfer_lba;
+	uint16_t xfer_cnt;
+	uint8_t  xfer_multi;
+	uint8_t  xfer_irq;
 
 	drive_t drive[2];
 };
