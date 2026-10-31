@@ -468,6 +468,18 @@ VirtualBoy_50.0=121869868823
 VirtualBoy_60.1=98394143302
 Kyugo_59.7=80072607071
 CAPTAVEN_57.4=40160264500
+MisterZine Plex Core_59.9=48589522835
+MisterZine Plex Core_59.9i=48589522835
+MisterZine Plex Core_60.0=48589522835
+MisterZine Plex Core_60.0i=48589522835
+MisterZine Plex Core_50.0=60182905787
+MisterZine Plex Core_50.0i=60182905787
+MisterZine Jellyfin_59.9=48589522835
+MisterZine Jellyfin_59.9i=48589522835
+MisterZine Jellyfin_60.0=48589522835
+MisterZine Jellyfin_60.0i=48589522835
+MisterZine Jellyfin_50.0=60182905787
+MisterZine Jellyfin_50.0i=60182905787
 ;
 ; PAL-60 / PAL-M Section (CORE_FPSs=PHASEINC for PAL-60, CORE_FPSm=PHASEINC for PAL-M)
 ;
@@ -490,4 +502,20 @@ WONDERSWAN_60.0s=132237830098
 PSX_59.8s=90790223688
 PSX_59.9is=90790223688
 APPLE-IIGS_59.9s=170231865683
+MisterZine Plex Core_59.9s=60182905787
+MisterZine Plex Core_59.9is=60182905787
+MisterZine Plex Core_60.0s=60182905787
+MisterZine Plex Core_60.0is=60182905787
+MisterZine Plex Core_59.9m=48536121863
+MisterZine Plex Core_59.9im=48536121863
+MisterZine Plex Core_60.0m=48536121863
+MisterZine Plex Core_60.0im=48536121863
+MisterZine Jellyfin_59.9s=60182905787
+MisterZine Jellyfin_59.9is=60182905787
+MisterZine Jellyfin_60.0s=60182905787
+MisterZine Jellyfin_60.0is=60182905787
+MisterZine Jellyfin_59.9m=48536121863
+MisterZine Jellyfin_59.9im=48536121863
+MisterZine Jellyfin_60.0m=48536121863
+MisterZine Jellyfin_60.0im=48536121863
 
