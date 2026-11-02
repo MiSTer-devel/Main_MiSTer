@@ -34,6 +34,7 @@ static void akiko_diag(const char *fmt, ...);
 #define AKIKO_BRIDGE_ADDR  0xF400
 
 #define AKIKO_CDDA_ADDR        0xF200
+#define AKIKO_CDDA_FLUSH_ADDR  0xF300
 #define AKIKO_CDDA_BYTES       2352
 #define AKIKO_STATUS_CDDA_REQ  (1u << 8)
 
@@ -41,6 +42,7 @@ static void akiko_diag(const char *fmt, ...);
 #define AKIKO_STATUS_REQ             (1u << 11)
 #define AKIKO_STATUS_SEC_REQ         (1u << 10)
 #define AKIKO_STATUS_RX_BUSY (1u << 9)
+#define AKIKO_STATUS_RST_SHIFT       14
 
 #define AKIKO_SECTOR_ADDR  0xF500
 
@@ -85,8 +87,13 @@ static uint32_t cd_play_start_lba   = 0;
 static uint32_t cd_play_end_lba     = 0;
 
 static int32_t  cd_data_lba_base    = -1;
+static int32_t  cd_data_lba_end     = -1;
 static int32_t  cd_data_lba_last    = -1;
+static int32_t  cd_head_lba         = -1;
 static uint32_t cd_seek_ready_ms    = 0;
+static uint16_t cd_sec_cnt_last     = 0;
+static uint32_t cd_sec_cnt_high     = 0;
+static int      cd_rst_seen         = -1;
 
 #define AKIKO_PREFETCH_SECTORS 128
 #define AKIKO_PREFETCH_WINDOWS 4
@@ -94,6 +101,7 @@ static uint32_t cd_seek_ready_ms    = 0;
 typedef struct {
 	int32_t  base_lba;
 	uint32_t lru_tick;
+	int      ra_fill;
 	uint8_t  valid[AKIKO_PREFETCH_SECTORS];
 	uint8_t  buf[AKIKO_PREFETCH_SECTORS * AKIKO_SECTOR_BYTES];
 } prefetch_window_t;
@@ -137,6 +145,8 @@ static int akiko_prefetch_pick_evict(void)
 }
 
 static int8_t   cd_audio_timeout    = 0;
+static uint64_t cd_audio_notify_us  = 0;
+#define AKIKO_PLAY_NOTIFY_US 640
 
 static uint32_t cd_audio_play_until_ms = 0;
 
@@ -168,12 +178,21 @@ static uint32_t cd_media_swap_ready_ms = 0;
 #define AKIKO_SWAP_SETTLE_MS 700
 
 #define AKIKO_TOC_REPEAT       3
-#define AKIKO_TOC_PUSH_PERIOD_MS 20
+#define AKIKO_TOC_PUSH_PERIOD_US 1667
 #define AKIKO_TOC_MAX_POINTS   102
+#define AKIKO_CMD_TURNAROUND_US 1000
 static uint8_t  toc_buffer[AKIKO_TOC_MAX_POINTS * 13];
 static uint8_t  toc_point_count     = 0;
 static int16_t  toc_push_idx        = -1;
-static uint32_t toc_push_last_ms    = 0;
+static uint64_t toc_push_last_us    = 0;
+static bool     toc_dump_tail       = false;
+static uint64_t cmd_hold_until_us   = 0;
+
+#define AKIKO_SPIN_UP_COLD_US 8800000
+#define AKIKO_SPIN_UP_WARM_US 3500000
+static uint64_t cd_spin_disc        = 0;
+static uint32_t cd_spin_owed_us     = 0;
+static uint64_t cd_spin_ready_us    = 0;
 
 static char cd_save_path_active[256] = {0};
 static bool cd_save_load_pending     = false;
@@ -243,6 +262,58 @@ static uint16_t akiko_read_status(void)
 
 static uint16_t akiko_read_sec_counter(void);
 
+static uint64_t akiko_now_us(void)
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
+}
+
+static void akiko_spin_up(uint64_t now_us)
+{
+	if (!cd_spin_owed_us) return;
+	cd_spin_ready_us = now_us + cd_spin_owed_us;
+	cd_spin_owed_us  = 0;
+	akiko_diag("[akiko] spin-up: lead-in readable in %u ms", (unsigned)((cd_spin_ready_us - now_us) / 1000));
+}
+
+static bool akiko_spinning(uint64_t now_us)
+{
+	return now_us < cd_spin_ready_us && !((minimig_get_extcfg() >> 21) & 3);
+}
+
+static void akiko_cdda_flush(void)
+{
+	EnableIO();
+	spi8(UIO_DMA_WRITE);
+	spi32_w(AKIKO_CDDA_FLUSH_ADDR);
+	DisableIO();
+}
+
+static bool cd_sector_is_audio(drive_t *drv, uint32_t lba)
+{
+	int real_tracks = drv->track_cnt > 0 ? drv->track_cnt - 1 : 0;
+	if (!real_tracks) return false;
+	if (lba < drv->track[0].start) return !(drv->track[0].attr & 0x40);
+	for (int i = 0; i < real_tracks; i++) {
+		if (lba < drv->track[i].start || lba >= drv->track[i + 1].start) continue;
+		bool gap = (i + 1 < real_tracks) && lba >= drv->track[i].start + drv->track[i].length;
+		return !(drv->track[gap ? i + 1 : i].attr & 0x40);
+	}
+	return false;
+}
+
+static bool cd_sector_is_data(drive_t *drv, uint32_t lba)
+{
+	int real_tracks = drv->track_cnt > 0 ? drv->track_cnt - 1 : 0;
+	for (int i = 0; i < real_tracks; i++) {
+		if (!(drv->track[i].attr & 0x40)) continue;
+		uint32_t end = drv->track[i + 1].start;
+		if (lba >= drv->track[i].start && lba < end) return true;
+	}
+	return false;
+}
+
 static bool akiko_wait_status_bit(uint16_t mask, bool want_set, int max_iters)
 {
 	for (int i = 0; i < max_iters; i++) {
@@ -297,6 +368,7 @@ static void akiko_send_response(const uint8_t *payload, int len)
 
 	int total = len + 1;
 
+
 	EnableIO();
 	spi8(UIO_DMA_WRITE);
 	spi32_w(AKIKO_BRIDGE_ADDR);
@@ -339,6 +411,7 @@ static void akiko_build_toc(void)
 {
 	toc_point_count = 0;
 	toc_push_idx    = -1;
+	toc_dump_tail   = false;
 
 	drive_t *drv = cd_find_drive();
 	if (!drv || drv->track_cnt < 2) {
@@ -369,36 +442,44 @@ static void akiko_build_toc(void)
 		toc_pack_entry(drv->track[i].number, ctrl, drv->track[i].start);
 	}
 
-	toc_push_last_ms = 0;
+	toc_push_last_us = 0;
 	akiko_diag("[akiko] TOC built: %u points (%d real tracks, lead-out lba=%u)",
 	           toc_point_count, real_tracks, drv->track[real_tracks].start);
 }
 
-static bool akiko_push_toc_entry(void)
+static void akiko_push_toc_entry(void)
 {
-	if (toc_push_idx < 0) return false;
-	int point_idx = toc_push_idx / AKIKO_TOC_REPEAT;
-	if (point_idx >= toc_point_count) {
-		toc_push_idx = -1;
-		akiko_diag("[akiko] TOC drip complete (%u points * %d repeat = %d frames)",
-		           toc_point_count, AKIKO_TOC_REPEAT,
-		           toc_point_count * AKIKO_TOC_REPEAT);
-		return false;
-	}
 	uint8_t r[15];
 	memset(r, 0, sizeof(r));
 	r[0] = 0x06;
+	if (!toc_point_count) {
+		r[1] = CDS_ERROR | cd_door;
+		akiko_send_response(r, 15);
+		toc_push_idx  = -1;
+		toc_dump_tail = true;
+		akiko_diag("[akiko] TOC push: no TOC, error packet");
+		return;
+	}
+	int point_idx = toc_push_idx / AKIKO_TOC_REPEAT;
+	int tracks = toc_point_count - 3;
+	int idx = (point_idx < tracks) ? point_idx + 3 : point_idx - tracks;
 	r[1] = 0x0a;
-	memcpy(r + 2, &toc_buffer[point_idx * 13], 13);
+	memcpy(r + 2, &toc_buffer[idx * 13], 13);
 	int counter = toc_push_idx;
 	r[6] = bin_to_bcd(99);
 	r[7] = bin_to_bcd((uint8_t)(24u + (uint32_t)counter / 75u));
 	r[8] = bin_to_bcd((uint8_t)((uint32_t)counter % 75u));
 	akiko_send_response(r, 15);
 	akiko_diag("[akiko] TOC push idx=%d point_idx=%d point=0x%02x ctrl=0x%02x msf=%02x:%02x:%02x",
-	           toc_push_idx, point_idx, r[5], (r[3] >> 4) & 0x0f, r[10], r[11], r[12]);
+	           toc_push_idx, idx, r[5], (r[3] >> 4) & 0x0f, r[10], r[11], r[12]);
 	toc_push_idx++;
-	return true;
+	if (toc_push_idx / AKIKO_TOC_REPEAT >= toc_point_count) {
+		toc_push_idx  = -1;
+		toc_dump_tail = true;
+		akiko_diag("[akiko] TOC drip complete (%u points * %d repeat = %d frames)",
+		           toc_point_count, AKIKO_TOC_REPEAT,
+		           toc_point_count * AKIKO_TOC_REPEAT);
+	}
 }
 
 static void cmd_info(const uint8_t *cmd)
@@ -409,9 +490,7 @@ static void cmd_info(const uint8_t *cmd)
 	memcpy(&r[2], AKIKO_FIRMWARE, 18);
 	akiko_send_response(r, 20);
 	cd_initialized = 2;
-	cd_media_push_pending = true;
 	akiko_dbg("INFO -> initialized=2\n");
-	akiko_build_toc();
 }
 
 static void emit_playend_notify(int status)
@@ -431,13 +510,15 @@ static void cmd_stop(const uint8_t *cmd)
 	uint8_t r[2];
 	r[0] = cmd[0];
 	r[1] = cd_media_present() ? 0x00 : (CH_ERR_NODISK | cd_door);
+	if (cd_media_present()) akiko_cdda_flush();
 	cd_playing = 0;
 	cd_paused = 0;
 	cd_data_lba_base = -1;
+	cd_data_lba_end  = -1;
 	cd_cdda_lba_next = -1;
 	cd_cdda_lba_end  = -1;
 	cd_cdda_drv      = NULL;
-	if (cd_audio_timeout > 0) cd_audio_timeout = 0;
+	cd_audio_timeout = 0;
 	cd_audio_play_until_ms = 0;
 	akiko_send_response(r, 2);
 	akiko_dbg("STOP\n");
@@ -451,10 +532,12 @@ static void cmd_pause(const uint8_t *cmd)
 		r[1] = CH_ERR_NODISK | cd_door;
 	} else {
 		r[1] = (cd_playing ? CDS_PLAYING : 0) | cd_door;
+		cd_paused = 1;
 	}
 	toc_push_idx     = -1;
-	toc_push_last_ms = 0;
-	cd_paused = 1;
+	toc_push_last_us = 0;
+	toc_dump_tail    = false;
+	cd_audio_timeout = 0;
 	akiko_send_response(r, 2);
 	akiko_dbg("PAUSE (playing=%d, present=%d)\n", cd_playing, cd_media_present());
 }
@@ -467,18 +550,58 @@ static void cmd_unpause(const uint8_t *cmd)
 		r[1] = CH_ERR_NODISK | cd_door;
 	} else {
 		r[1] = (cd_playing ? CDS_PLAYING : 0) | cd_door;
+		cd_paused = 0;
 	}
-	cd_paused = 0;
 	akiko_send_response(r, 2);
 	akiko_dbg("UNPAUSE (playing=%d, present=%d)\n", cd_playing, cd_media_present());
 }
 
 static int cdrom_speed = 1;
 
+#define AKIKO_FAST_SEEK_DIV 16
+
+static uint32_t cd_drive_seek_ms(int32_t seek)
+{
+	static const int32_t d[] = { 0, 1000, 10000, 100000, 200000 }, f[] = { 19, 26, 44, 77, 102 };
+	int i = 1;
+	while (i < 4 && seek > d[i]) i++;
+	return ((seek > d[4]) ? f[4] : f[i - 1] + (f[i] - f[i - 1]) * (seek - d[i - 1]) / (d[i] - d[i - 1])) * 1000 / 75;
+}
+
+static uint32_t cd_seek_ms(int32_t lba, int speed)
+{
+	int32_t head_seek = abs(cd_head_lba - lba);
+	if (!speed) {
+		if (head_seek <= 2) return 1000 / (75 * cdrom_speed);
+		return cd_drive_seek_ms(head_seek);
+	}
+
+	uint32_t ms = 0;
+	if (speed < 3) {
+		int32_t seek = abs(cd_data_lba_last - lba);
+		ms = ((seek < 100) ? 1 : (seek / 1000 + 10 > 100) ? 100 : seek / 1000 + 10) * 1000 / ((75 * cdrom_speed) << speed);
+	}
+	if (head_seek > 2) {
+		uint32_t floor_ms = cd_drive_seek_ms(head_seek) / AKIKO_FAST_SEEK_DIV;
+		if (floor_ms > ms) ms = floor_ms;
+	}
+	return ms;
+}
+
 static void cmd_multi(const uint8_t *cmd)
 {
 	uint8_t r[2];
 	r[0] = cmd[0];
+
+	if (cd_playing) {
+		cd_playing       = 0;
+		cd_cdda_lba_next = -1;
+		cd_cdda_lba_end  = -1;
+		cd_cdda_drv      = NULL;
+		cd_audio_play_until_ms = 0;
+		akiko_cdda_flush();
+	}
+	cd_paused = 0;
 
 	int new_speed = (cmd[8] & 0x40) ? 2 : 1;
 	if (new_speed != cdrom_speed) {
@@ -499,6 +622,7 @@ static void cmd_multi(const uint8_t *cmd)
 	bool seek_negative = (s_msf_total < 150u);
 	uint32_t s_lba = s_msf_total - 150u;
 	uint32_t e_lba = msf_to_lba(bcd_to_bin(cmd[4]), bcd_to_bin(cmd[5]), bcd_to_bin(cmd[6]));
+	int32_t  e_pos = (int32_t)e_lba;
 
 	cd_play_start_lba = s_lba;
 	cd_play_end_lba   = e_lba;
@@ -513,109 +637,55 @@ static void cmd_multi(const uint8_t *cmd)
 		cd_audio_play_until_ms = 0;
 	}
 	if (data_read) {
-		drive_t *drv2 = cd_find_drive();
-		bool start_is_audio = false;
-		bool start_is_oob   = false;
-		if (!seek_negative && drv2) {
-			int real_tracks2 = drv2->track_cnt > 0 ? drv2->track_cnt - 1 : 0;
-			uint32_t lead_out2 = (real_tracks2 > 0) ? drv2->track[real_tracks2].start : 0;
-			if (lead_out2 && s_lba >= lead_out2) {
-				start_is_oob = true;
-			}
-			for (int i = 0; i < real_tracks2 && !start_is_oob; i++) {
-				uint32_t body_end = drv2->track[i].start + drv2->track[i].length;
-				if (s_lba >= drv2->track[i].start && s_lba < body_end) {
-					start_is_audio = !(drv2->track[i].attr & 0x40);
-					break;
-				}
-				if (i + 1 < real_tracks2 &&
-				    s_lba >= body_end && s_lba < drv2->track[i + 1].start) {
-					start_is_audio = !(drv2->track[i + 1].attr & 0x40);
-					break;
-				}
-			}
-		}
-		if (start_is_audio) {
-			cd_data_lba_base = -1;
-			r[1] = CDS_PLAYEND | cd_door;
-			akiko_diag("[akiko] PLAY DATA REFUSED audio start_lba=%u (cmd7=0x%02x)",
-			           s_lba, cmd[7]);
-		} else if (start_is_oob) {
-			cd_data_lba_base = -1;
-			r[1] = 0x02;
-			akiko_diag("[akiko] PLAY DATA REFUSED oob start_lba=%u (cmd7=0x%02x) — silent (no PBX, no playend)",
-			           s_lba, cmd[7]);
-		} else {
-			cd_data_lba_base = (int32_t)s_lba;
-			cd_paused = 0;
-			r[1] = 0x02;
-			int32_t seek = abs(cd_data_lba_last - (int32_t)s_lba);
-			seek = (seek < 100) ? 1 : (seek / 1000 + 10 > 100) ? 100 : seek / 1000 + 10;
-			int speed = (minimig_get_extcfg() >> 21) & 3;
-			cd_seek_ready_ms = (speed == 3) ? 0 : (uint32_t)GetTimer(seek * 1000 / ((75 * cdrom_speed) << speed));
-			akiko_diag("[akiko] PLAY DATA arm: start_lba=%d (cmd7=0x%02x)", (int32_t)s_lba, cmd[7]);
-		}
+		cd_data_lba_base = seek_negative ? -1 : (int32_t)s_lba;
+		cd_data_lba_end  = e_pos;
+		cd_sec_cnt_last  = 0;
+		cd_sec_cnt_high  = 0;
+		r[1] = 0x02;
+		int speed = (minimig_get_extcfg() >> 21) & 3;
+		cd_seek_ready_ms = (uint32_t)GetTimer(cd_seek_ms((int32_t)s_lba, speed));
+		akiko_diag("[akiko] PLAY DATA arm: start_lba=%d end_lba=%d (cmd7=0x%02x)", (int32_t)s_lba, e_pos, cmd[7]);
 	} else if (seek_negative) {
 		cd_data_lba_base = -1;
-		cd_playing = 0;
-		cd_paused = 0;
-		toc_push_idx = (toc_point_count > 0) ? 0 : -1;
-		toc_push_last_ms = 0;
+		toc_push_idx     = 0;
+		toc_push_last_us = 0;
+		toc_dump_tail    = false;
 		r[1] = 0x00;
 		akiko_diag("[akiko] MULTI scan-TOC trigger (points=%u)", toc_point_count);
 	} else {
 		cd_data_lba_base = -1;
-		cd_playing = 1;
-		cd_paused = 0;
+		toc_push_idx     = -1;
+		toc_dump_tail    = false;
 		r[1] = 0x42;
-		cd_audio_timeout = 2;
 
 		drive_t *drv = cd_find_drive();
-		bool valid = false;
-		if (drv && e_lba > s_lba) {
-			int real_tracks = drv->track_cnt > 0 ? drv->track_cnt - 1 : 0;
-			for (int i = 0; i < real_tracks; i++) {
-				uint32_t end = drv->track[i].start + drv->track[i].length;
-				if (s_lba >= drv->track[i].start && s_lba < end) {
-					if (!(drv->track[i].attr & 0x40)) valid = true;
-					break;
-				}
-			}
-		}
-
-		if (valid) {
-			bool same_range_inflight =
-				(cd_cdda_drv == drv) &&
-				(cd_cdda_lba_end == (int32_t)e_lba) &&
-				(cd_cdda_lba_next >= (int32_t)s_lba) &&
-				(cd_cdda_lba_next <  (int32_t)e_lba);
+		if (drv && cd_sector_is_audio(drv, s_lba)) {
+			cd_playing       = 1;
 			cd_cdda_drv      = drv;
-			if (!same_range_inflight) {
-				cd_cdda_lba_next = (int32_t)s_lba;
-				cd_cdda_lba_end  = (int32_t)e_lba;
-				cd_cdda_q_pos    = (int32_t)s_lba;
-			}
-			cd_cdda_q_end = (int32_t)e_lba;
+			cd_cdda_lba_next = (int32_t)s_lba;
+			cd_cdda_lba_end  = e_pos;
+			cd_cdda_q_pos    = (int32_t)s_lba;
+			cd_cdda_q_end    = e_pos;
+			cd_head_lba      = (int32_t)s_lba;
 			cd_audio_play_until_ms = 0;
-			if (same_range_inflight) {
-				akiko_dbg("CDDA re-PLAY same range s=%u e=%u next=%d kept\n",
-				          s_lba, e_lba, cd_cdda_lba_next);
-				akiko_diag("[akiko] CDDA re-PLAY same range s_lba=%u e_lba=%u next=%d (position kept)",
-				           s_lba, e_lba, cd_cdda_lba_next);
+			if (e_pos <= (int32_t)s_lba) {
+				cd_cdda_lba_next = -1;
+				cd_cdda_lba_end  = -1;
+				cd_cdda_drv      = NULL;
+				cd_audio_timeout = -1;
 			} else {
-				akiko_dbg("CDDA arm s=%u e=%u\n", s_lba, e_lba);
-				akiko_diag("[akiko] CDDA arm: s_lba=%u e_lba=%u (drv=%p)",
-				           s_lba, e_lba, (void*)drv);
+				cd_audio_timeout   = 1;
+				cd_audio_notify_us = akiko_now_us() + AKIKO_PLAY_NOTIFY_US;
 			}
+			akiko_diag("[akiko] CDDA arm: s_lba=%u e_lba=%d (drv=%p)", s_lba, e_pos, (void*)drv);
 		} else {
 			cd_cdda_drv      = NULL;
 			cd_cdda_lba_next = -1;
 			cd_cdda_lba_end  = -1;
 			cd_audio_timeout = -3;
 			cd_audio_play_until_ms = 0;
-			cd_playing       = 0;
-			akiko_diag("[akiko] CDDA arm INVALID: drv=%p s_lba=%u e_lba=%u",
-			           (void*)drv, s_lba, e_lba);
+			akiko_diag("[akiko] CDDA arm INVALID: drv=%p s_lba=%u e_lba=%d",
+			           (void*)drv, s_lba, e_pos);
 		}
 	}
 
@@ -638,6 +708,51 @@ static void cmd_led(const uint8_t *cmd)
 	akiko_dbg("LED cmd1=%02x state=%d\n", cmd[1], cd_led_state);
 }
 
+static void akiko_q_position(drive_t *drv, uint32_t lba, uint8_t q[12])
+{
+	memset(q, 0, 12);
+	int real_tracks = drv->track_cnt > 0 ? drv->track_cnt - 1 : 0;
+	if (!real_tracks) return;
+
+	int i = real_tracks - 1;
+	while (i >= 0 && lba < drv->track[i].start) i--;
+	const track_t *t;
+	uint8_t index = 1;
+	uint32_t rel;
+	if (i < 0) {
+		t = &drv->track[0];
+		index = 0;
+		rel = t->start - lba;
+	} else if (i + 1 < real_tracks && lba >= drv->track[i].start + drv->track[i].length) {
+		t = &drv->track[i + 1];
+		index = 0;
+		rel = t->start - lba;
+	} else {
+		t = &drv->track[i];
+		rel = lba - t->start;
+	}
+
+	uint32_t ab = lba + 150u;
+	q[0] = (uint8_t)((t->attr & 0xf0) | 0x01);
+	q[1] = bin_to_bcd((uint8_t)t->number);
+	q[2] = bin_to_bcd(index);
+	q[3] = bin_to_bcd((uint8_t)((rel / 75u) / 60u));
+	q[4] = bin_to_bcd((uint8_t)((rel / 75u) % 60u));
+	q[5] = bin_to_bcd((uint8_t)(rel % 75u));
+	q[7] = bin_to_bcd((uint8_t)((ab / 75u) / 60u));
+	q[8] = bin_to_bcd((uint8_t)((ab / 75u) % 60u));
+	q[9] = bin_to_bcd((uint8_t)(ab % 75u));
+
+	uint16_t crc = 0;
+	for (int k = 0; k < 10; k++) {
+		crc ^= (uint16_t)(q[k] << 8);
+		for (int b = 0; b < 8; b++) crc = (crc & 0x8000) ? (uint16_t)((crc << 1) ^ 0x1021) : (uint16_t)(crc << 1);
+	}
+	crc = (uint16_t)~crc;
+	q[10] = (uint8_t)(crc >> 8);
+	q[11] = (uint8_t)crc;
+}
+
 static void cmd_subq(const uint8_t *cmd)
 {
 	uint8_t r[15];
@@ -645,69 +760,20 @@ static void cmd_subq(const uint8_t *cmd)
 	r[0] = cmd[0];
 
 	drive_t *drv = cd_find_drive();
-	uint32_t cur_lba = 0;
-	bool valid = false;
-
-	if (drv) {
-		if (cd_data_lba_base >= 0) {
-			cur_lba = (uint32_t)cd_data_lba_base + akiko_read_sec_counter();
-			valid = true;
-		} else if (cd_playing && cd_cdda_q_pos >= 0) {
-			cur_lba = (uint32_t)cd_cdda_q_pos;
-			if (cd_cdda_q_end > 0 && (cd_cdda_q_end - (int32_t)cur_lba) < 10)
-				cur_lba = (uint32_t)cd_cdda_q_end;
-			valid = true;
-		} else if (cd_playing && cd_play_start_lba > 0) {
-			cur_lba = cd_play_start_lba;
-			valid = true;
-		}
+	if (drv && cd_playing) {
+		int32_t pos = (cd_cdda_lba_next >= 0) ? cd_cdda_lba_next :
+		              (cd_cdda_q_pos >= 0) ? cd_cdda_q_pos : (int32_t)cd_play_start_lba;
+		uint8_t q[12];
+		akiko_q_position(drv, (uint32_t)pos, q);
+		r[3] = q[0];
+		r[4] = q[1];
+		r[5] = q[2];
+		memcpy(&r[6], &q[3], 3);
+		memcpy(&r[10], &q[7], 3);
 	}
-
-	if (!valid) {
-		r[2 + 2] = 0x80;
-		akiko_send_response(r, 15);
-		return;
-	}
-
-	int trk_idx = 0;
-	int real_tracks = drv->track_cnt > 0 ? drv->track_cnt - 1 : 0;
-	for (int i = 0; i < real_tracks; i++) {
-		uint32_t end = (i + 1 < drv->track_cnt) ? drv->track[i + 1].start
-		                                        : drv->track[i].start + drv->track[i].length;
-		if (cur_lba >= drv->track[i].start && cur_lba < end) {
-			trk_idx = i;
-			break;
-		}
-	}
-
-	const track_t &t = drv->track[trk_idx];
-	uint8_t ctl_adr = (uint8_t)((t.attr & 0xf0) | 0x01);
-
-	uint32_t trk_lsn  = (cur_lba >= t.start) ? (cur_lba - t.start) + 150u : 150u;
-	uint32_t disk_lsn = cur_lba + 150u;
-
-	uint32_t tm = (trk_lsn / 75u) / 60u;
-	uint32_t ts = (trk_lsn / 75u) % 60u;
-	uint32_t tf =  trk_lsn % 75u;
-	uint32_t dm = (disk_lsn / 75u) / 60u;
-	uint32_t ds = (disk_lsn / 75u) % 60u;
-	uint32_t df =  disk_lsn % 75u;
-
-	r[2 + 0] = 0;
-	r[2 + 1] = ctl_adr;
-	r[2 + 2] = bin_to_bcd((uint8_t)t.number);
-	r[2 + 3] = bin_to_bcd(1);
-	r[2 + 4] = bin_to_bcd((uint8_t)tm);
-	r[2 + 5] = bin_to_bcd((uint8_t)ts);
-	r[2 + 6] = bin_to_bcd((uint8_t)tf);
-	r[2 + 7] = 0;
-	r[2 + 8] = bin_to_bcd((uint8_t)dm);
-	r[2 + 9] = bin_to_bcd((uint8_t)ds);
-	r[2 + 10] = bin_to_bcd((uint8_t)df);
 
 	akiko_send_response(r, 15);
-	akiko_dbg("SUBQ trk=%u lba=%u tpos=%u:%u:%u dpos=%u:%u:%u\n",
-	          t.number, cur_lba, tm, ts, tf, dm, ds, df);
+	akiko_dbg("SUBQ playing=%d\n", cd_playing);
 }
 
 static void cmd_bad(const uint8_t *cmd, uint8_t err_code)
@@ -1013,31 +1079,7 @@ static void build_subcode_deint(drive_t *drv, uint32_t lba, uint8_t out[AKIKO_SU
 {
 	memset(out, 0, AKIKO_SUB_BYTES);
 	if (!drv) return;
-
-	int trk_idx = 0;
-	int real_tracks = drv->track_cnt > 0 ? drv->track_cnt - 1 : 0;
-	for (int i = 0; i < real_tracks; i++) {
-		uint32_t end = (i + 1 < drv->track_cnt) ? drv->track[i + 1].start
-		                                        : drv->track[i].start + drv->track[i].length;
-		if (lba >= drv->track[i].start && lba < end) { trk_idx = i; break; }
-	}
-	const track_t &t = drv->track[trk_idx];
-
-	uint8_t *q = out + AKIKO_SUB_ENTRY;
-	q[0] = (uint8_t)((t.attr & 0xf0) | 0x01);
-	q[1] = bin_to_bcd((uint8_t)t.number);
-	q[2] = bin_to_bcd(1);
-
-	uint32_t rel = (lba >= t.start) ? (lba - t.start) : 0u;
-	q[3] = bin_to_bcd((uint8_t)((rel / 75u) / 60u));
-	q[4] = bin_to_bcd((uint8_t)((rel / 75u) % 60u));
-	q[5] = bin_to_bcd((uint8_t)( rel % 75u));
-	q[6] = 0;
-
-	uint32_t ab = lba + 150u;
-	q[7] = bin_to_bcd((uint8_t)((ab / 75u) / 60u));
-	q[8] = bin_to_bcd((uint8_t)((ab / 75u) % 60u));
-	q[9] = bin_to_bcd((uint8_t)( ab % 75u));
+	akiko_q_position(drv, lba, out + AKIKO_SUB_ENTRY);
 }
 
 static void sub_to_interleaved(const uint8_t *s, uint8_t *d)
@@ -1077,20 +1119,23 @@ static bool akiko_cdda_pump(void)
 
 	uint8_t buf[AKIKO_CDDA_BYTES];
 	uint32_t lba = (uint32_t)cd_cdda_lba_next;
-	if (!cd_read_audio_sector(cd_cdda_drv, lba, buf)) {
-		akiko_diag("[akiko] CDDA pump read FAIL at lba=%u, aborting", lba);
-		memset(buf, 0, sizeof(buf));
-		akiko_push_audio_sector(buf);
+	int real_tracks = cd_cdda_drv->track_cnt > 0 ? cd_cdda_drv->track_cnt - 1 : 0;
+	uint32_t lead_out = real_tracks ? cd_cdda_drv->track[real_tracks].start : 0;
+	if (lba >= lead_out) {
+		akiko_diag("[akiko] CDDA pump reached the lead-out at lba=%u", lba);
+		cd_cdda_q_pos    = (int32_t)lba;
 		cd_cdda_lba_next = -1;
 		cd_cdda_lba_end  = -1;
 		cd_cdda_drv      = NULL;
-		cd_audio_timeout = -3;
-		return true;
+		cd_audio_play_until_ms = 0;
+		cd_audio_timeout = -1;
+		return false;
 	}
+	if (!cd_read_audio_sector(cd_cdda_drv, lba, buf)) memset(buf, 0, sizeof(buf));
 
 	akiko_push_audio_sector(buf);
 	cd_cdda_lba_next++;
-	cd_cdda_q_pos = (int32_t)lba;
+	cd_cdda_q_pos = cd_head_lba = (int32_t)lba;
 
 	{
 		uint8_t sub_deint[AKIKO_SUB_BYTES];
@@ -1119,12 +1164,18 @@ static bool akiko_cdda_pump(void)
 	return true;
 }
 
-static int akiko_prefetch_fill(drive_t *drv, int win_idx, uint32_t base_lba)
+#define AKIKO_FIRST_FILL_SECTORS 8
+
+static int akiko_prefetch_fill(drive_t *drv, int win_idx, uint32_t base_lba, int first)
 {
 	prefetch_window_t *w = &cd_prefetch_windows[win_idx];
 	w->base_lba = (int32_t)base_lba;
+	memset(w->valid, 0, sizeof(w->valid));
+	int last = first + AKIKO_FIRST_FILL_SECTORS;
+	if (last > AKIKO_PREFETCH_SECTORS) last = AKIKO_PREFETCH_SECTORS;
+	w->ra_fill = last;
 	int filled = 0;
-	for (int i = 0; i < AKIKO_PREFETCH_SECTORS; i++) {
+	for (int i = first; i < last; i++) {
 		uint32_t lba = base_lba + i;
 		uint8_t *slot = &w->buf[i * AKIKO_SECTOR_BYTES];
 		if (cdrom_read_raw_sector(drv, lba, slot) == 0) {
@@ -1138,14 +1189,49 @@ static int akiko_prefetch_fill(drive_t *drv, int win_idx, uint32_t base_lba)
 	return filled;
 }
 
+#define AKIKO_READAHEAD_STEP 3
+
+static void akiko_prefetch_extend(drive_t *drv, prefetch_window_t *w)
+{
+	for (int n = 0; n < AKIKO_READAHEAD_STEP && w->ra_fill < AKIKO_PREFETCH_SECTORS; n++, w->ra_fill++) {
+		uint8_t *slot = &w->buf[w->ra_fill * AKIKO_SECTOR_BYTES];
+		w->valid[w->ra_fill] = (cdrom_read_raw_sector(drv, (uint32_t)w->base_lba + w->ra_fill, slot) == 0);
+	}
+}
+
+static void akiko_prefetch_readahead(drive_t *drv, int cur)
+{
+	const uint32_t next_base = (uint32_t)cd_prefetch_windows[cur].base_lba + AKIKO_PREFETCH_SECTORS;
+	int nw = akiko_prefetch_find(next_base);
+	if (nw < 0) {
+		int pick = -1;
+		for (int i = 0; i < AKIKO_PREFETCH_WINDOWS; i++) {
+			if (i == cur) continue;
+			if (cd_prefetch_windows[i].base_lba < 0) { pick = i; break; }
+			if (pick < 0 || cd_prefetch_windows[i].lru_tick < cd_prefetch_windows[pick].lru_tick) pick = i;
+		}
+		if (pick < 0) return;
+		prefetch_window_t *w = &cd_prefetch_windows[pick];
+		w->base_lba = (int32_t)next_base;
+		w->ra_fill = 0;
+		w->lru_tick = cd_prefetch_windows[cur].lru_tick;
+		memset(w->valid, 0, sizeof(w->valid));
+		nw = pick;
+	}
+	akiko_prefetch_extend(drv, &cd_prefetch_windows[nw]);
+}
+
 static int akiko_prefetch_get(drive_t *drv, uint32_t lba, uint8_t *out_buf)
 {
+	static uint32_t last_lba = 0xFFFFFFFFu;
+	const bool sequential = (lba == last_lba + 1);
+	last_lba = lba;
 	int win = akiko_prefetch_find(lba);
 	if (win < 0) {
 		cd_prefetch_misses++;
 		win = akiko_prefetch_pick_evict();
 		uint32_t base = (lba / AKIKO_PREFETCH_SECTORS) * AKIKO_PREFETCH_SECTORS;
-		if (akiko_prefetch_fill(drv, win, base) == 0) {
+		if (akiko_prefetch_fill(drv, win, base, (int)(lba - base)) == 0) {
 			akiko_diag("[akiko] prefetch fill TOTAL FAIL win=%d base=%u (req lba=%u)",
 			           win, base, lba);
 			return -1;
@@ -1168,7 +1254,17 @@ static int akiko_prefetch_get(drive_t *drv, uint32_t lba, uint8_t *out_buf)
 		}
 	}
 	memcpy(out_buf, &w->buf[idx * AKIKO_SECTOR_BYTES], AKIKO_SECTOR_BYTES);
+	if (w->ra_fill < AKIKO_PREFETCH_SECTORS) akiko_prefetch_extend(drv, w);
+	else if (sequential) akiko_prefetch_readahead(drv, win);
 	return 0;
+}
+
+static uint32_t akiko_sector_count(uint16_t counter)
+{
+	if (counter < cd_sec_cnt_last)
+		cd_sec_cnt_high = (cd_sec_cnt_last == 0xffff && !counter) ? cd_sec_cnt_high + 0x10000 : 0;
+	cd_sec_cnt_last = counter;
+	return cd_sec_cnt_high + counter;
 }
 
 static bool akiko_handle_sec_req(void)
@@ -1203,80 +1299,57 @@ static bool akiko_handle_sec_req(void)
 		return false;
 	}
 
-	int32_t signed_lba = cd_data_lba_base + (int32_t)counter;
-	if (signed_lba < 0) {
+	int64_t signed_lba = (int64_t)cd_data_lba_base + akiko_sector_count(counter);
+	if (cd_data_lba_end >= 0 && signed_lba > cd_data_lba_end) {
+		akiko_diag("[akiko] sec_req lba=%lld past the end %d: stream ended", (long long)signed_lba, cd_data_lba_end);
+		cd_data_lba_base = -1;
+		cd_data_lba_end  = -1;
 		return false;
 	}
-	uint32_t lba = (uint32_t)signed_lba;
-
-	int real_tracks = drv->track_cnt > 0 ? drv->track_cnt - 1 : 0;
-	uint32_t lead_out = (real_tracks > 0) ? drv->track[real_tracks].start : 0;
-	if (!lead_out || lba >= lead_out) {
-		static uint32_t last_oob_lba = 0;
-		if (lba != last_oob_lba) {
-			akiko_diag("[akiko] sec_req lba=%u %s lead_out=%u — push silence, advance",
-			           lba, lead_out ? ">=" : "(no track table)", lead_out);
-			last_oob_lba = lba;
+	bool at_end = (cd_data_lba_end >= 0 && signed_lba == cd_data_lba_end);
+	int64_t read_lba = at_end ? signed_lba - 1 : signed_lba;
+	if (read_lba < 0 || !cd_sector_is_data(drv, (uint32_t)read_lba)) {
+		static int64_t last_hold_lba = -1;
+		if (read_lba != last_hold_lba) {
+			akiko_diag("[akiko] sec_req lba=%lld outside the data tracks: nothing delivered", (long long)read_lba);
+			last_hold_lba = read_lba;
 		}
-		memset(buf, 0, sizeof(buf));
-		akiko_push_sector(buf);
-		return true;
+		if (at_end) {
+			cd_data_lba_base = -1;
+			cd_data_lba_end  = -1;
+		}
+		return false;
 	}
-
-	{
-		track_t *track = NULL;
-		for (int i = 0; i < real_tracks; i++) {
-			uint32_t end = drv->track[i].start + drv->track[i].length;
-			if (lba >= drv->track[i].start && lba < end) {
-				track = &drv->track[i];
-				break;
-			}
-		}
-		if (track && !(track->attr & 0x40)) {
-			static uint32_t held_audio_lba = UINT32_MAX;
-			static uint32_t held_count = 0;
-			const uint32_t HOLD_MAX = 50;
-			if (lba != held_audio_lba) {
-				held_audio_lba = lba;
-				held_count = 0;
-				akiko_diag("[akiko] sec_req lba=%u in audio track (attr=0x%02x) — hold",
-				           lba, track->attr);
-			}
-			held_count++;
-			if (held_count >= HOLD_MAX) {
-				akiko_diag("[akiko] audio-hold cap reached at lba=%u — emit playend_notify, disarm",
-				           lba);
-				cd_data_lba_base = -1;
-				emit_playend_notify(1);
-				held_audio_lba = UINT32_MAX;
-				held_count = 0;
-			}
-			return false;
-		}
-	}
+	uint32_t lba = (uint32_t)read_lba;
 
 	int rc = akiko_prefetch_get(drv, lba, buf);
 	if (rc != 0) {
-		static const unsigned MAX_FAIL_RETRIES = 8;
 		static uint32_t fail_lba = UINT32_MAX;
-		static unsigned fail_count = 0;
-		if (lba != fail_lba) { fail_lba = lba; fail_count = 0; }
-		fail_count++;
-		akiko_diag("[akiko] sec_req lba=%u %s (retry %u/%u)", lba,
-		           (rc == -1) ? "prefetch FAIL" : "cached invalid",
-		           fail_count, MAX_FAIL_RETRIES);
-		if (fail_count < MAX_FAIL_RETRIES) return false;
-		akiko_diag("[akiko] sec_req lba=%u retry cap reached — push silence, advance", lba);
-		fail_lba = UINT32_MAX;
-		memset(buf, 0, sizeof(buf));
-		akiko_push_sector(buf);
-		return true;
+		if (lba != fail_lba) {
+			fail_lba = lba;
+			akiko_diag("[akiko] sec_req lba=%u %s: nothing delivered", lba,
+			           (rc == -1) ? "prefetch FAIL" : "cached invalid");
+		}
+		return false;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &ts2);
 
 	if (!CheckTimer(cd_seek_ready_ms)) return false;
-	cd_data_lba_last = (int32_t)lba;
+	if (akiko_read_sec_counter() != counter) return false;
+	cd_data_lba_last = cd_head_lba = (int32_t)lba;
 	akiko_push_sector(buf);
+	{
+		uint8_t sub_deint[AKIKO_SUB_BYTES];
+		uint8_t sub_intlv[AKIKO_SUB_BYTES];
+		build_subcode_deint(drv, lba, sub_deint);
+		sub_to_interleaved(sub_deint, sub_intlv);
+		akiko_push_subcode(sub_intlv);
+	}
+	if (at_end) {
+		akiko_diag("[akiko] sec_req end %d reached: last sector re-presented, stream ended", cd_data_lba_end);
+		cd_data_lba_base = -1;
+		cd_data_lba_end  = -1;
+	}
 	clock_gettime(CLOCK_MONOTONIC, &ts3);
 
 	#define TS_DELTA_US(a, b) \
@@ -1308,6 +1381,13 @@ static bool akiko_handle_sec_req(void)
 void akiko_cd32_set_cd_path(const char *path)
 {
 	cd_media_event = true;
+
+	const uint64_t disc = (path && *path) ? fnv1a_64(path) : 0;
+	if (disc != cd_spin_disc) {
+		cd_spin_disc     = disc;
+		cd_spin_owed_us  = !disc ? 0 : (cd_initialized < 2) ? AKIKO_SPIN_UP_COLD_US : AKIKO_SPIN_UP_WARM_US;
+		cd_spin_ready_us = 0;
+	}
 
 	char new_path[256] = {0};
 	if (path && *path) {
@@ -1349,6 +1429,32 @@ void akiko_cd32_set_cd_path(const char *path)
 	           path, cd_save_path_active);
 }
 
+static void akiko_guest_reset(void)
+{
+	cd_initialized   = 0;
+	cd_paused        = 0;
+	cd_playing       = 0;
+	cd_led_state     = 0;
+	cd_data_lba_base = -1;
+	cd_data_lba_end  = -1;
+	cd_audio_timeout = 0;
+	cd_audio_play_until_ms = 0;
+	cd_cdda_lba_next = -1;
+	cd_cdda_lba_end  = -1;
+	cd_cdda_drv      = NULL;
+	cd_media_push_pending  = false;
+	cd_media_swap_absent   = false;
+	cd_media_swap_ready_ms = 0;
+	toc_push_idx      = -1;
+	toc_dump_tail     = false;
+	cmd_hold_until_us = 0;
+	cdrom_speed       = 1;
+	cd_sec_cnt_last   = 0;
+	cd_sec_cnt_high   = 0;
+	akiko_cdda_flush();
+	akiko_diag("[akiko] guest reset: drive protocol state cleared, disc kept");
+}
+
 void akiko_cd32_init(void)
 {
 	cd_initialized   = 0;
@@ -1359,8 +1465,14 @@ void akiko_cd32_init(void)
 	cd_play_start_lba = 0;
 	cd_play_end_lba   = 0;
 	cd_data_lba_base = -1;
+	cd_data_lba_end  = -1;
 	cd_data_lba_last = -1;
+	cd_head_lba      = -1;
 	cd_seek_ready_ms = 0;
+	cd_sec_cnt_last  = 0;
+	cd_sec_cnt_high  = 0;
+	cd_rst_seen      = -1;
+	cdrom_speed      = 1;
 	cd_audio_timeout = 0;
 	cd_audio_play_until_ms = 0;
 	cd_cdda_lba_next = -1;
@@ -1373,7 +1485,9 @@ void akiko_cd32_init(void)
 	cd_media_swap_ready_ms = 0;
 	toc_point_count  = 0;
 	toc_push_idx     = -1;
-	toc_push_last_ms = 0;
+	toc_push_last_us = 0;
+	toc_dump_tail    = false;
+	cmd_hold_until_us = 0;
 
 	akiko_prefetch_invalidate();
 
@@ -1407,19 +1521,28 @@ void akiko_cd32_poll(void)
 
 	if (level != cd_media_level || cd_media_event) {
 		const bool swap = cd_media_event && (level == CD_MEDIA_PRESENT)
-		                  && (cd_initialized >= 2);
+		                  && (cd_initialized >= 1);
 		cd_media_event   = false;
 		cd_data_lba_base = -1;
+		cd_data_lba_end  = -1;
+		cd_head_lba      = -1;
 		akiko_prefetch_invalidate();
 		cd_cdda_lba_next = -1;
 		cd_cdda_lba_end  = -1;
 		cd_cdda_drv      = NULL;
+		cd_playing       = 0;
+		cd_paused        = 0;
+		cd_audio_timeout = 0;
+		cd_audio_play_until_ms = 0;
 		toc_point_count  = 0;
 		toc_push_idx     = -1;
+		toc_dump_tail    = false;
+		if (cd32_active()) akiko_cdda_flush();
 		cd_media_level   = level;
 		cd_media_push_pending = true;
 		if (swap) cd_media_swap_absent = true;
 		if (level == CD_MEDIA_PRESENT) akiko_build_toc();
+		if (level == CD_MEDIA_PRESENT && !swap) akiko_spin_up(akiko_now_us());
 		akiko_diag("[akiko] media level -> %s (cd_init=%u, announce pending)",
 		           (level == CD_MEDIA_PRESENT) ? "present" : "absent",
 		           cd_initialized);
@@ -1474,23 +1597,37 @@ void akiko_cd32_poll(void)
 		status_log_count++;
 	}
 #endif
+	const int rst = (status >> AKIKO_STATUS_RST_SHIFT) & 3;
+	if (rst != cd_rst_seen) {
+		if (cd_rst_seen >= 0) akiko_guest_reset();
+		cd_rst_seen = rst;
+		return;
+	}
+
 	const bool rx_idle = !(status & AKIKO_STATUS_RX_BUSY);
+	const uint64_t now_us = akiko_now_us();
+
+	if (toc_dump_tail && rx_idle) {
+		toc_dump_tail = false;
+		cmd_hold_until_us = now_us + AKIKO_CMD_TURNAROUND_US;
+	}
 
 	if (cd_initialized == 0 && rx_idle) {
 		if (cd_media_present()) {
 			uint8_t r[2];
 			r[0] = 0x0a;
-			r[1] = 0x01;
+			r[1] = 0x83;
 			akiko_send_response(r, 2);
-			akiko_diag("[akiko] auto-init media-status push: opcode=0x0a status=0x01");
+			akiko_diag("[akiko] auto-init media-status push: opcode=0x0a status=0x83");
 		}
+		cd_media_push_pending = false;
 		cd_initialized = 1;
 		return;
 	}
 
 	// The removal half of a swap, sent before the arrival even though a disc is
 	// mounted, so cd_media_present() is not the source of the status here.
-	if (cd_media_swap_absent && cd_initialized >= 2 && rx_idle) {
+	if (cd_media_swap_absent && cd_initialized >= 1 && rx_idle) {
 		uint8_t r[2];
 		r[0] = 0x0a;
 		r[1] = 0x00;
@@ -1502,25 +1639,18 @@ void akiko_cd32_poll(void)
 		return;
 	}
 
-	if (cd_media_push_pending && cd_initialized >= 2 && rx_idle
+	if (cd_media_push_pending && cd_initialized >= 1 && rx_idle
 	    && (!cd_media_swap_ready_ms || CheckTimer(cd_media_swap_ready_ms))) {
 		cd_media_swap_ready_ms = 0;
 		uint8_t r[2];
 		r[0] = 0x0a;
-		r[1] = cd_media_present() ? 0x01 : 0x00;
+		r[1] = cd_media_present() ? 0x83 : 0x00;
 		akiko_send_response(r, 2);
 		cd_media_push_pending = false;
 		akiko_build_toc();
+		if (cd_media_present()) akiko_spin_up(now_us);
 		akiko_diag("[akiko] media-status push: opcode=0x0a status=0x%02x", r[1]);
 		return;
-	}
-
-	if (cd_initialized == 2 && toc_push_idx >= 0 && rx_idle) {
-		uint32_t now_ms = (uint32_t)GetTimer(0);
-		if ((now_ms - toc_push_last_ms) >= AKIKO_TOC_PUSH_PERIOD_MS) {
-			toc_push_last_ms = now_ms;
-			akiko_push_toc_entry();
-		}
 	}
 
 	{
@@ -1539,12 +1669,13 @@ void akiko_cd32_poll(void)
 		}
 	}
 
-	if (cd_audio_timeout != 0 && rx_idle) {
-		if (cd_audio_timeout > 1) {
-			cd_audio_timeout--;
-		} else if (cd_audio_timeout == 1) {
-			emit_playend_notify(0);
-			cd_audio_timeout = 0;
+	if (cd_audio_timeout != 0 && rx_idle && cd_initialized >= 2) {
+		if (cd_audio_timeout == 1) {
+			if (now_us >= cd_audio_notify_us) {
+				emit_playend_notify(0);
+				cd_audio_timeout = 0;
+				return;
+			}
 		} else if (cd_audio_timeout == -1) {
 			cd_audio_timeout = -2;
 		} else if (cd_audio_timeout == -2) {
@@ -1552,17 +1683,18 @@ void akiko_cd32_poll(void)
 			cd_playing = 0;
 			cd_audio_timeout = 0;
 			cd_audio_play_until_ms = 0;
+			return;
 		} else if (cd_audio_timeout == -3) {
 			emit_playend_notify(-1);
 			cd_playing = 0;
 			cd_audio_timeout = 0;
 			cd_audio_play_until_ms = 0;
+			return;
 		}
-		return;
 	}
 
 	if (cd_audio_play_until_ms != 0 && cd_playing && rx_idle &&
-	    cd_audio_timeout == 0) {
+	    cd_audio_timeout == 0 && cd_initialized >= 2) {
 		uint32_t now_ms = (uint32_t)GetTimer(0);
 		if ((int32_t)(now_ms - cd_audio_play_until_ms) >= 0) {
 			emit_playend_notify(1);
@@ -1571,6 +1703,13 @@ void akiko_cd32_poll(void)
 			akiko_diag("[akiko] PLAY AUDIO natural end at t=%u", now_ms);
 			return;
 		}
+	}
+
+	if (cd_initialized == 2 && toc_push_idx >= 0 && rx_idle && !akiko_spinning(now_us)
+	    && (now_us - toc_push_last_us) >= AKIKO_TOC_PUSH_PERIOD_US) {
+		toc_push_last_us = now_us;
+		akiko_push_toc_entry();
+		return;
 	}
 
 	if (akiko_cdda_pump()) {
@@ -1582,6 +1721,7 @@ void akiko_cd32_poll(void)
 	}
 
 	if (!(status & AKIKO_STATUS_REQ)) return;
+	if (toc_push_idx >= 0 || toc_dump_tail || now_us < cmd_hold_until_us) return;
 
 	uint8_t cmd[AKIKO_CMD_MAX];
 	int     n = akiko_drain_command(cmd);

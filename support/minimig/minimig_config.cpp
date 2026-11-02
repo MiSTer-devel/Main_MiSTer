@@ -918,8 +918,12 @@ void minimig_ConfigFloppyExt(unsigned char drive0, unsigned char drive1, unsigne
 }
 
 void minimig_ConfigUserPort(mm_userportMode mode) {
-	printf("User Port: %s\n", mode == mm_userportMode::mmup_mp32pi ? "MT32pi":"MiSTer Floppy");
-	spi_uio_cmd8(UIO_MM2_USRPORT, mode == mm_userportMode::mmup_mp32pi ? 0 : 1);
+	static const char *names[] = { "MT32pi", "MiSTer Floppy", "SNAC joystick 1", "SNAC joystick 2" };
+	printf("User Port: %s\n", names[mode & 3]);
+	if (mode == mm_userportMode::mmup_snac1 || mode == mm_userportMode::mmup_snac2)
+		spi_uio_cmd8(UIO_MM2_USRPORT, ((mode - 1) << 1) | ((minimig_config.snac_autofire % 3) << 3));
+	else
+		spi_uio_cmd8(UIO_MM2_USRPORT, mode == mm_userportMode::mmup_mp32pi ? 0 : 1);
 }
 
 void minimig_ConfigAutofire(unsigned char autofire, unsigned char mask)

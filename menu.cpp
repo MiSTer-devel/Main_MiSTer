@@ -6174,11 +6174,21 @@ void HandleUI(void)
 			strcat(s, (minimig_config.autofire & 0x8) ? " ON" : "OFF");
 			MenuWrite(m++, s, menusub == 6, 0);
 			strcpy(s, " User Port:    ");
-			strcat(s, (minimig_config.userport == mmup_misterfloppy) ? "MiSTer Floppy" : "      MT32-Pi");
+			strcat(s, (minimig_config.userport == mmup_misterfloppy) ? "MiSTer Floppy" :
+			          (minimig_config.userport == mmup_snac1) ? "   SNAC Joy 1" :
+			          (minimig_config.userport == mmup_snac2) ? "   SNAC Joy 2" : "      MT32-Pi");
 			MenuWrite(m++, s, menusub == 7, 0);
 
+			if (minimig_config.userport == mmup_snac1 || minimig_config.userport == mmup_snac2)
+			{
+				strcpy(s, " SNAC Autofire:");
+				strcat(s, (minimig_config.snac_autofire % 3 == 2) ? "         Fast" :
+				          (minimig_config.snac_autofire % 3 == 1) ? "         Slow" : "          Off");
+				menumask |= 0x100;
+				MenuWrite(m++, s, menusub == 8, 0);
+			}
 			// Configure for MT32-Pi or MiSTer Floppy if detected
-			if ( ((minimig_config.userport == mmup_misterfloppy) && (osdMask & 64)) ||
+			else if ( ((minimig_config.userport == mmup_misterfloppy) && (osdMask & 64)) ||
 				 ((minimig_config.userport == mmup_mp32pi) && (osdMask & 1)))
 			{
 				menumask |= 0x100;
@@ -6327,7 +6337,7 @@ void HandleUI(void)
 			} else if (menusub == 7)
 			{
 				// Toggle
-				minimig_config.userport = minimig_config.userport==mmup_mp32pi ? mmup_misterfloppy : mmup_mp32pi;
+				minimig_config.userport = (mm_userportMode)((minimig_config.userport + 1) & 3);
 				menustate = MENU_MINIMIG_CHIPSET1;
 				minimig_ConfigUserPort(minimig_config.userport);
 				usleep(300000);  // wait so it can be detected
@@ -6356,6 +6366,12 @@ void HandleUI(void)
 					{
 						case mmup_mp32pi: menustate = MENU_MT32PI_MAIN1; menusub = 0; break;
 						case mmup_misterfloppy: menustate = MENU_MISTERFLOPPY_MAIN1; menusub = 0; break;
+						case mmup_snac1:
+						case mmup_snac2:
+							minimig_config.snac_autofire = (minimig_config.snac_autofire + 1) % 3;
+							minimig_ConfigUserPort(minimig_config.userport);
+							menustate = MENU_MINIMIG_MAIN1;
+							break;
 					}
 				}
 				else if (menusub == 12)
