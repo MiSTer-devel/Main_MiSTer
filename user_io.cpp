@@ -1907,8 +1907,7 @@ void user_io_analog_triggers(unsigned char joystick, uint8_t l2, uint8_t r2)
 		sent[joy][0] = l2;
 		sent[joy][1] = r2;
 		spi_uio_cmd8_cont(UIO_ATRIG, joy);
-		spi8(l2);
-		spi8(r2);
+		spi_w((r2 << 8) | l2);
 		DisableIO();
 	}
 }
