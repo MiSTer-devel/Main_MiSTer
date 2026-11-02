@@ -5823,7 +5823,7 @@ void HandleUI(void)
 		if (menu || back || left || (select && menusub == 4))
 		{
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 8;
+			menusub = 9;
 		}
 		else if ((select || plus || minus) && (menusub < minimig_floppy_active_count()))
 		{
@@ -5990,7 +5990,7 @@ void HandleUI(void)
 			if (is_minimig())
 			{
 				menustate = MENU_MINIMIG_MAIN1;
-				menusub = 8;
+				menusub = 9;
 			}
 			else
 			{
@@ -6523,7 +6523,7 @@ void HandleUI(void)
 		/* minimig main menu                                              */
 		/******************************************************************/
 	case MENU_MINIMIG_MAIN1:
-		menumask = 0x1FEC0;
+		menumask = 0x3FDC0;
 		OsdSetTitle("Minimig", OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
 		helptext_idx = HELPTEXT_MAIN;
 
@@ -6621,44 +6621,48 @@ void HandleUI(void)
 			strcpy(s,      " Joystick Swap:          ");
 			strcat(s, (minimig_config.autofire & 0x8) ? " ON" : "OFF");
 			MenuWrite(m++, s, menusub == 6, 0);
+			strcpy(s,      " Joystick Emulation:   ");
+			strcat(s, (user_io_get_kbdemu() == EMU_JOY0) ? "Joy 1" :
+			          (user_io_get_kbdemu() == EMU_JOY1) ? "Joy 2" : "  OFF");
+			MenuWrite(m++, s, menusub == 7, 0);
 			strcpy(s, " User Port:    ");
 			strcat(s, (minimig_config.userport == mmup_misterfloppy) ? "MiSTer Floppy" :
 			          (minimig_config.userport == mmup_snac1) ? "   SNAC Joy 1" :
 			          (minimig_config.userport == mmup_snac2) ? "   SNAC Joy 2" : "      MT32-Pi");
-			MenuWrite(m++, s, menusub == 7, 0);
+			MenuWrite(m++, s, menusub == 8, 0);
 
 			if (minimig_config.userport == mmup_snac1 || minimig_config.userport == mmup_snac2)
 			{
 				strcpy(s, " SNAC Autofire:");
 				strcat(s, (minimig_config.snac_autofire % 3 == 2) ? "         Fast" :
 				          (minimig_config.snac_autofire % 3 == 1) ? "         Slow" : "          Off");
-				menumask |= 0x100;
-				MenuWrite(m++, s, menusub == 8, 0);
+				menumask |= 0x200;
+				MenuWrite(m++, s, menusub == 9, 0);
 			}
 			// Configure for MT32-Pi or MiSTer Floppy if detected
 			else if ( ((minimig_config.userport == mmup_misterfloppy) && (osdMask & 64)) ||
 				 ((minimig_config.userport == mmup_mp32pi) && (osdMask & 1)))
 			{
-				menumask |= 0x100;
-				MenuWrite(m++, "                 Configure \x16", menusub == 8);
+				menumask |= 0x200;
+				MenuWrite(m++, "                 Configure \x16", menusub == 9);
 			} else
 			{
 				MenuWrite(m++, "                Not Detected", 0, 1);
 			}
 
-			MenuWrite(m++, " CD & HDD                  \x16", menusub == 9, 0);
-			MenuWrite(m++, " System                    \x16", menusub == 10, 0);
-			MenuWrite(m++, " Audio & Video             \x16", menusub == 11, 0);
+			MenuWrite(m++, " CD & HDD                  \x16", menusub == 10, 0);
+			MenuWrite(m++, " System                    \x16", menusub == 11, 0);
+			MenuWrite(m++, " Audio & Video             \x16", menusub == 12, 0);
 
 			MenuWrite(m++);
-			MenuWrite(m++, " Load preset               \x16", menusub == 12, 0);
-			MenuWrite(m++, " Load configuration        \x16", menusub == 13, 0);
-			MenuWrite(m++, " Save configuration        \x16", menusub == 14, 0);
+			MenuWrite(m++, " Load preset               \x16", menusub == 13, 0);
+			MenuWrite(m++, " Load configuration        \x16", menusub == 14, 0);
+			MenuWrite(m++, " Save configuration        \x16", menusub == 15, 0);
 			MenuWrite(m++);
 
 			while (m < 15) MenuWrite(m++);
-			MenuWrite(m++, " Reset", menusub == 15, 0);
-			MenuWrite(m, STD_EXIT, menusub == 16, 0);
+			MenuWrite(m++, " Reset", menusub == 16, 0);
+			MenuWrite(m, STD_EXIT, menusub == 17, 0);
 
 			if (!adjvisible) break;
 			firstmenu += adjvisible;
@@ -6784,6 +6788,11 @@ void HandleUI(void)
 				menustate = MENU_MINIMIG_MAIN1;
 			} else if (menusub == 7)
 			{
+				int kbdemu = user_io_get_kbdemu();
+				user_io_set_kbdemu((kbdemu == EMU_JOY0) ? EMU_JOY1 : (kbdemu == EMU_JOY1) ? EMU_NONE : EMU_JOY0);
+				menustate = MENU_MINIMIG_MAIN1;
+			} else if (menusub == 8)
+			{
 				// Toggle
 				minimig_config.userport = (mm_userportMode)((minimig_config.userport + 1) & 3);
 				menustate = MENU_MINIMIG_CHIPSET1;
@@ -6793,22 +6802,22 @@ void HandleUI(void)
 			}
 			else if (select)
 			{
-				if (menusub == 9)
+				if (menusub == 10)
 				{
 					menustate = MENU_MINIMIG_DISK1;
 					menusub = 0;
 				}
-				else if (menusub == 10)
+				else if (menusub == 11)
 				{
 					menustate = MENU_MINIMIG_CHIPSET1;
 					menusub = 0;
 				}
-				else if (menusub == 11)
+				else if (menusub == 12)
 				{
 					menustate = MENU_MINIMIG_VIDEO1;
 					menusub = 0;
 				}
-				else if (menusub == 8)
+				else if (menusub == 9)
 				{
 					switch (minimig_config.userport)
 					{
@@ -6822,27 +6831,27 @@ void HandleUI(void)
 							break;
 					}
 				}
-				else if (menusub == 12)
+				else if (menusub == 13)
 				{
 					menusub = 0;
 					menustate = MENU_MINIMIG_PRESET1;
 				}
-				else if (menusub == 13)
+				else if (menusub == 14)
 				{
 					menusub = 0;
 					menustate = MENU_MINIMIG_LOADCONFIG1;
 				}
-				else if (menusub == 14)
+				else if (menusub == 15)
 				{
 					menusub = 0;
 					menustate = MENU_MINIMIG_SAVECONFIG1;
 				}
-				else if (menusub == 15)
+				else if (menusub == 16)
 				{
 					menustate = MENU_NONE1;
 					minimig_reset();
 				}
-				else if (menusub == 16)
+				else if (menusub == 17)
 				{
 					menustate = MENU_NONE1;
 				}
@@ -6969,13 +6978,13 @@ void HandleUI(void)
 			else
 			{
 				menustate = MENU_MINIMIG_MAIN1;
-				menusub = 13;
+				menusub = 14;
 			}
 		}
 		if (menu || left)
 		{
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 13;
+			menusub = 14;
 		}
 		break;
 
@@ -7053,13 +7062,13 @@ void HandleUI(void)
 
 			if (menusub<10) minimig_cfg_save(menusub);
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 14;
+			menusub = 15;
 		}
 		else
 		if (menu || left) // exit menu
 		{
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 14;
+			menusub = 15;
 		}
 		break;
 
@@ -7123,13 +7132,13 @@ void HandleUI(void)
 			else if (menusub == 8)
 			{
 				menustate = MENU_MINIMIG_MAIN1;
-				menusub = 12;
+				menusub = 13;
 			}
 		}
 		if (menu || left)
 		{
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 12;
+			menusub = 13;
 		}
 		break;
 
@@ -7371,7 +7380,7 @@ void HandleUI(void)
 			else if (menusub == 11)
 			{
 				menustate = MENU_MINIMIG_MAIN1;
-				menusub = 10;
+				menusub = 11;
 			}
 		}
 
@@ -7382,7 +7391,7 @@ void HandleUI(void)
 		else if (back || left)
 		{
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 10;
+			menusub = 11;
 		}
 		break;
 
@@ -7650,7 +7659,7 @@ void HandleUI(void)
 			{
 				firstmenu = 0;
 				menustate = MENU_MINIMIG_MAIN1;
-				menusub = 9;
+				menusub = 10;
 			}
 		}
 
@@ -7662,7 +7671,7 @@ void HandleUI(void)
 		{
 			firstmenu = 0;
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 9;
+			menusub = 10;
 		}
 		break;
 
@@ -7935,7 +7944,7 @@ void HandleUI(void)
 				if (select)
 				{
 					menustate = MENU_MINIMIG_MAIN1;
-					menusub = 11;
+					menusub = 12;
 				}
 				break;
 			}
@@ -7947,7 +7956,7 @@ void HandleUI(void)
 		else if (back || left)
 		{
 			menustate = MENU_MINIMIG_MAIN1;
-			menusub = 11;
+			menusub = 12;
 		}
 		break;
 

@@ -207,6 +207,7 @@ const char *get_image_name(int i);
 fileTYPE *get_image(int i);
 
 int user_io_get_kbdemu();
+void user_io_set_kbdemu(int mode);
 uint32_t user_io_get_uart_mode();
 
 uint32_t user_io_get_activity_seq();

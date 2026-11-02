@@ -723,6 +723,11 @@ int user_io_get_kbdemu()
 	return emu_mode;
 }
 
+void user_io_set_kbdemu(int mode)
+{
+	set_emu_mode(mode);
+}
+
 static int joy_force = 0;
 
 // Analog/Digital Joystick translation
