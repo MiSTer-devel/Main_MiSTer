@@ -391,7 +391,10 @@ static char* GetConfigurationName(int num, int chk)
 
 int minimig_cfg_save(int num)
 {
+	int kbdemu = user_io_get_kbdemu();
+
 	minimig_config.a2065_mode = a2065_cfg_get();
+	minimig_config.kbd_emu = (kbdemu == EMU_JOY0 || kbdemu == EMU_JOY1) ? kbdemu : EMU_NONE;
 	return FileSaveConfig(GetConfigurationName(num, 0), &minimig_config, sizeof(minimig_config));
 }
 
@@ -648,6 +651,7 @@ int minimig_cfg_load(int num)
 	}
 
 	a2065_cfg_set(minimig_config.a2065_mode);
+	user_io_set_kbdemu(minimig_config.kbd_emu);
 
 	for (int i = 0; i < 4; i++)
 	{

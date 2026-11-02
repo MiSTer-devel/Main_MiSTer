@@ -725,7 +725,7 @@ int user_io_get_kbdemu()
 
 void user_io_set_kbdemu(int mode)
 {
-	set_emu_mode(mode);
+	if (mode != emu_mode) set_emu_mode(mode);
 }
 
 static int joy_force = 0;

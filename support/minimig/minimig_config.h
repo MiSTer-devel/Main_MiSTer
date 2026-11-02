@@ -88,6 +88,7 @@ typedef struct
 	mm_userportMode userport;
 	mm_floppyexTYPE externalfloppy;
 	unsigned char   snac_autofire;
+	unsigned char   kbd_emu;
 } mm_configTYPE;
 
 extern mm_configTYPE minimig_config;
