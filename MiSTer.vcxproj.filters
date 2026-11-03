@@ -133,6 +133,9 @@
     <ClCompile Include="joymapping.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="joymap_pad.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="lib\md5\md5.c">
       <Filter>Source Files\md5</Filter>
     </ClCompile>
@@ -388,6 +391,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="joymapping.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="joymap_pad.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="joymap_pads.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="lib\md5\md5.h">

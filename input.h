@@ -3,6 +3,7 @@
 #define EVINPUT_H
 
 #include <linux/input.h>
+#include <stdint.h>
 
 #define HID_LED_NUM_LOCK    1
 #define HID_LED_CAPS_LOCK   2
@@ -31,8 +32,8 @@
 
 #define NUMPLAYERS          6
 
-#define NUMBUTTONS         32
-#define BUTTON_DPAD_COUNT  12 // dpad + 8 buttons
+#define NUMBUTTONS         38
+#define BUTTON_DPAD_COUNT  16 // dpad + 12 buttons
 
 #define SYS_BTN_RIGHT       0
 #define SYS_BTN_LEFT        1
@@ -64,9 +65,54 @@
 #define SYS_AXIS_Y         29
 #define SYS_AXIS_MX        30
 #define SYS_AXIS_MY        31
+#define SYS_BTN_L2         32
+#define SYS_BTN_R2         33
+#define SYS_BTN_L3         34
+#define SYS_BTN_R3         35
+#define SYS_AXIS_L2        36
+#define SYS_AXIS_R2        37
 
-#define SYS_BTN_CNT_OK     21
-#define SYS_BTN_CNT_ESC    22
+#define MAP_AXIS_MASK       0x0000FFFF
+#define MAP_FLAG_INVERT     0x00010000
+#define MAP_FLAG_ANALOG     0x00020000
+#define MAP_FLAG_TRIGGER    0x00040000
+#define MAP_FLAG_CENTERED   0x00080000
+#define MAP_FLAG_NEGATIVE   0x00100000
+
+#define SYS_BTN_OSD_1      (SYS_BTN_OSD_KTGL + 1)
+#define SYS_BTN_OSD_2      (SYS_BTN_OSD_KTGL + 2)
+#define OSD_HOLD_MARKER     0xFFFF
+#define OSD_HOLD_DEFAULT_MS 1000
+
+static inline int osd_map_is_hold(const uint32_t *map)
+{
+	return (map[SYS_BTN_OSD_1] & 0xFFFF) == OSD_HOLD_MARKER;
+}
+
+static inline uint32_t osd_map_hold_ms(const uint32_t *map)
+{
+	const uint32_t tenths = map[SYS_BTN_OSD_1] >> 16;
+	return tenths ? tenths * 100 : OSD_HOLD_DEFAULT_MS;
+}
+
+static inline int osd_map_has_code(const uint32_t *map, uint32_t code)
+{
+	return code == map[SYS_BTN_OSD_2] || (code == map[SYS_BTN_OSD_1] && !osd_map_is_hold(map));
+}
+
+static inline void osd_map_fill_second(uint32_t *map)
+{
+	if (!map[SYS_BTN_OSD_2] && !osd_map_is_hold(map)) map[SYS_BTN_OSD_2] = map[SYS_BTN_OSD_1];
+}
+
+static inline int osd_map_second_is_separate(const uint32_t *map)
+{
+	return map[SYS_BTN_OSD_2] != map[SYS_BTN_OSD_1];
+}
+
+#define SYS_MAP_BTN_L2     10
+#define SYS_MAP_BTN_SELECT 14
+#define SYS_MAP_POS_OSD    16
 
 #define SPIN_LEFT          30
 #define SPIN_RIGHT         31
@@ -103,6 +149,9 @@ int input_poll(int getchar);
 int is_key_pressed(int key);
 
 void start_map_setting(int cnt, int set = 0, advancedButtonMap *code_store = NULL);
+void set_menu_mouse_map(int enable);
+int get_menu_mouse_map();
+int step_back_map_setting();
 int get_map_set();
 int get_map_button();
 int get_map_type();
@@ -110,15 +159,34 @@ int get_map_clear();
 int get_map_cancel();
 int get_map_finish();
 void finish_map_setting(int dismiss);
+void pause_map_setting(int pause);
+void pause_map_for_prompt();
+void confirm_map_setting();
+int get_map_confirm();
+int pause_map_for_existing_map();
+void map_menu_buttons_only();
 uint16_t get_map_vid();
 uint16_t get_map_pid();
+const char *get_map_gcdb_name();
 int get_map_dev();
 advancedButtonMap *get_map_code_store();
 int get_map_advance();
+const char *get_map_hold_feedback();
+int get_map_hold_progress();
+const uint32_t *get_map_values();
 int get_map_count();
 int has_default_map();
+int has_saved_map();
 void send_map_cmd(int key);
+int poll_map_hold_action();
+int get_map_active();
+int get_map_paused();
+int get_map_invalidated();
+int get_map_trigger_level();
+int get_map_osd_hold();
+void get_map_osd_positions(int *first, int *second);
 void reset_players();
+void input_analog_triggers_resync(int suppress);
 
 uint32_t get_key_mod();
 uint32_t get_ps2_code(uint16_t key);

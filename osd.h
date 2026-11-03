@@ -27,6 +27,7 @@ void OsdMenuCtl(int en);
 void OsdUpdate();
 void OSD_PrintInfo(const char *message, int *width, int *height, int frame = 0);
 void OsdDrawLogo(int row);
+void OsdDrawBitmapRow(unsigned char n, const unsigned char *cols, int width);
 void ScrollText(char n, const char *str, int off, int len, int max_len, unsigned char invert, int idx = 0);
 void ScrollReset(int idx = 0);
 void StarsInit();
