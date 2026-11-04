@@ -2904,6 +2904,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		input[dev].osd_hold_timer = 0;
 		input[dev].gcdb_mmap = 0;
 		memset(input[dev].right_directions, 0, sizeof(input[dev].right_directions));
+		input[dev].misc1 = 0;
 		if (input[dev].quirk == QUIRK_TOUCHGUN)
 		{
 			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
@@ -2924,12 +2925,20 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			if (saved_size)
 			{
 				memcpy(input[dev].mmap, saved_map.map, sizeof(input[dev].mmap));
-				if (file_size == sizeof(saved_map) && saved_size == sizeof(saved_map) && saved_map.magic == RIGHT_DIRECTIONS_MAGIC)
+				const bool directions_only = saved_map.magic == RIGHT_DIRECTIONS_MAGIC &&
+					file_size == sizeof(saved_map) - sizeof(saved_map.misc1);
+				const bool has_misc1 = saved_map.magic == MISC1_MAGIC && file_size == sizeof(saved_map);
+				if (saved_size == file_size && (directions_only || has_misc1))
 				{
 					bool valid = true;
 					for (int direction = 0; direction < 4; direction++)
 						if (saved_map.directions[direction] > KEY_MAX) valid = false;
-					if (valid) memcpy(input[dev].right_directions, saved_map.directions, sizeof(saved_map.directions));
+					if (has_misc1 && saved_map.misc1 > KEY_MAX) valid = false;
+					if (valid)
+					{
+						memcpy(input[dev].right_directions, saved_map.directions, sizeof(saved_map.directions));
+						if (has_misc1) input[dev].misc1 = saved_map.misc1;
+					}
 				}
 				loaded_saved_map = 1;
 			}
@@ -2940,7 +2949,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					loaded_saved_map = 1;
 					default_v3_stick(dev, pool[sub_dev].fd, input[dev].mmap);
 				}
-				else if (gcdb_map_for_controller(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[dev].mmap, input[dev].right_directions))
+				else if (gcdb_map_for_controller(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[dev].mmap, input[dev].right_directions, &input[dev].misc1))
 				{
 					input[dev].gcdb_mmap = 1;
 				}
@@ -2954,7 +2963,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			osd_map_fill_second(input[dev].mmap);
 			if (loaded_saved_map)
 			{
-				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap, input[dev].right_directions);
+				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap, input[dev].right_directions, input[dev].misc1);
 			}
 
 			apply_joycon_orientation(dev, input[dev].mmap, loaded_saved_map);
@@ -3030,7 +3039,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (input[dev].has_mmap == 1)
 						{
 							// not defined try to guess the mapping
-							map_joystick(input[dev].map, input[dev].mmap, input[dev].right_directions);
+							map_joystick(input[dev].map, input[dev].mmap, input[dev].right_directions, input[dev].misc1);
 						}
 						else
 						{
@@ -3050,11 +3059,13 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		input[dev].has_advanced_map = true;
 	}
 
+	const bool misc1_event = ev->type == EV_KEY && input[dev].misc1 && ev->code == input[dev].misc1;
 	if (!input[dev].num)
 	{
 		bool assign_btn = ((input[dev].quirk == QUIRK_PDSP || input[dev].quirk == QUIRK_MSSP) && (ev->type == EV_REL || ev->type == EV_KEY));
 		assign_btn |= (input[dev].quirk == QUIRK_LIGHTGUN_MOUSE && ev->type == EV_KEY && ev->value == 1 && ev->code == BTN_MOUSE);
 		assign_btn |= input[dev].force_joy && !menu_event;
+		assign_btn |= misc1_event && ev->value >= 1;
 
 		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1 && ev->code >= 256)
 		{
@@ -3212,7 +3223,8 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		case EV_KEY:
 
 			//joystick buttons, digital directions
-			if (ev->code >= 256 || (input[dev].force_joy && !menu_event))
+			if (ev->code >= 256 || (!(mapping && cancel) && input[dev].misc1 && ev->code == input[dev].misc1) ||
+				(input[dev].force_joy && !menu_event))
 			{
 				if (input[dev].lightgun_req && !user_io_osd_is_visible())
 				{

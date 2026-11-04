@@ -137,6 +137,7 @@ static int is_extended_button(char *name)
 		|| !strcasecmp(name, "R2")
 		|| !strcasecmp(name, "L3")
 		|| !strcasecmp(name, "R3")
+		|| !strcasecmp(name, "Misc1")
 		|| !strcasecmp(name, "RightX-") || !strcasecmp(name, "RightX+")
 		|| !strcasecmp(name, "RightY-") || !strcasecmp(name, "RightY+");
 }
@@ -149,7 +150,7 @@ static void copy_core_button_name(char *dst, size_t size, int index)
 	trim(dst);
 }
 
-void map_joystick(uint32_t *map, uint32_t *mmap, const uint32_t *right_directions)
+void map_joystick(uint32_t *map, uint32_t *mmap, const uint32_t *right_directions, uint32_t misc1)
 {
 	/*
 	attemps to centrally defined core joy mapping to the joystick declaredy by a core config string
@@ -263,6 +264,11 @@ void map_joystick(uint32_t *map, uint32_t *mmap, const uint32_t *right_direction
 		else if(!strcasecmp(btn_name, "R3"))
 		{
 			map[idx] = mmap[SYS_BTN_R3];
+		}
+
+		else if(!strcasecmp(btn_name, "Misc1"))
+		{
+			map[idx] = misc1;
 		}
 
 		else if (!strcasecmp(btn_name, "RightX-") || !strcasecmp(btn_name, "RightX+") ||
@@ -1539,10 +1545,12 @@ void finish_map_setting(int dismiss)
 				system_map_file saved = {};
 				memcpy(saved.map, input[mapping_dev].map, sizeof(saved.map));
 				memcpy(saved.directions, input[mapping_dev].right_directions, sizeof(saved.directions));
-				if (saved.directions[0] || saved.directions[1] || saved.directions[2] || saved.directions[3])
+				saved.misc1 = input[mapping_dev].misc1;
+				if (saved.misc1 || saved.directions[0] || saved.directions[1] || saved.directions[2] || saved.directions[3])
 				{
-					saved.magic = RIGHT_DIRECTIONS_MAGIC;
-					save_map(get_map_name(mapping_dev, 0), &saved, sizeof(saved));
+					saved.magic = saved.misc1 ? MISC1_MAGIC : RIGHT_DIRECTIONS_MAGIC;
+					const int size = saved.misc1 ? sizeof(saved) : sizeof(saved) - sizeof(saved.misc1);
+					save_map(get_map_name(mapping_dev, 0), &saved, size);
 				}
 				else save_map(get_map_name(mapping_dev, 0), saved.map, sizeof(saved.map));
 			}

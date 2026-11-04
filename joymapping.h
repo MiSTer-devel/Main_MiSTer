@@ -9,18 +9,20 @@
 #include <sys/poll.h>
 #include "input.h"
 
-void map_joystick(uint32_t *map, uint32_t *mmap, const uint32_t *right_directions);
+void map_joystick(uint32_t *map, uint32_t *mmap, const uint32_t *right_directions, uint32_t misc1);
 void map_joystick_show(uint32_t *map, uint32_t *mmap, int num);
 int map_paddle_btn();
 
 #define RIGHT_DIRECTIONS_MAGIC 0x31584452u
+#define MISC1_MAGIC 0x32584452u
 typedef struct
 {
 	uint32_t map[NUMBUTTONS];
 	uint32_t magic;
 	uint32_t directions[4];
+	uint32_t misc1;
 } system_map_file;
-static_assert(sizeof(system_map_file) == NUMBUTTONS * sizeof(uint32_t) + 20, "system map trailer layout changed");
+static_assert(sizeof(system_map_file) == NUMBUTTONS * sizeof(uint32_t) + 24, "system map trailer layout changed");
 
 #define NUMDEV 30
 #define JOYMAP_DIR  "inputs/"
@@ -84,6 +86,7 @@ typedef struct
 	uint8_t  gcdb_mmap;
 	uint32_t mmap[NUMBUTTONS];
 	uint32_t right_directions[4];
+	uint32_t misc1;
 	int      stick_l[2];
 	int      stick_r[2];
 
