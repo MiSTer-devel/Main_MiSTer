@@ -38,7 +38,7 @@ int  iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable);
 void iigs_unmount(int index);
 
 // Block dispatch, called from user_io.cpp like a2_readDSK/a2_writeDSK.
-void iigs_read(int disk, fileTYPE *f, uint64_t lba, int ack);
+void iigs_read(int disk, fileTYPE *f, uint64_t lba, uint32_t blks, int ack);
 void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack);
 
 #endif // IIGS_DISK_H
