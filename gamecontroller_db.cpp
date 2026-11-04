@@ -56,6 +56,7 @@ typedef struct {
 	char core_name[32];
 	char orig_core_name[32];
 	uint32_t map[NUMBUTTONS];
+	uint32_t right_directions[4];
 } controllerdb_entry;
 
 
@@ -351,7 +352,7 @@ bool get_ctrl_index_maps(int dev_fd, const char *guid, uint16_t *btn_map, uint16
 	return read;
 }
 
-void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version,int dev_fd, const char *name, uint32_t *cur_map)
+void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version,int dev_fd, const char *name, uint32_t *cur_map, const uint32_t *right_directions)
 {
 	static char map_guid[GUID_LEN] = {0};
 	static uint16_t btn_map[GCDB_BUTTON_MAP_SIZE] = {0xFFFF};
@@ -461,10 +462,20 @@ void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid,
 				}
 			}
 	}
+	const char *direction_names[] = {"rightx-", "rightx+", "righty-", "righty+"};
+	if (right_directions)
+		for (int direction = 0; direction < 4; direction++)
+			if (right_directions[direction])
+				for (unsigned int j = 0; j < GCDB_BUTTON_MAP_SIZE; j++)
+					if (btn_map[j] == right_directions[direction])
+					{
+						printf("%s:b%u,", direction_names[direction], j);
+						break;
+					}
 	printf("platform:MiSTer,\n");
 }
 
-static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t *fill_map)
+static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t *fill_map, uint32_t *right_directions)
 {
 
 	static char map_guid[GUID_LEN] = {0};
@@ -508,6 +519,15 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 				bool m_button_high = false;
 				int m_button_num = find_mister_button_num(m_btn, &m_button_high);
 				int l_button_code = find_linux_code_for_button(l_btn, btn_map, abs_map);
+				const char *direction_names[] = {"rightx-", "rightx+", "righty-", "righty+"};
+				for (int direction = 0; direction < 4; direction++)
+				{
+					if (!strcmp(m_btn, direction_names[direction]) && l_button_code >= 0 && l_btn[0] == 'b')
+					{
+						right_directions[direction] = l_button_code;
+						map_parsed = true;
+					}
+				}
 				if (m_button_num != -1 && l_button_code != -1)
 				{
 					map_parsed = true;
@@ -634,7 +654,7 @@ static bool parse_mapping_string(char *map_str, char *guid, int dev_fd, uint32_t
 #define GCDB_DIR  "/media/fat/linux/gamecontrollerdb/"
 
 
-bool read_controller_map_from_file(char *fname, char *guid, int dev_fd, uint32_t *fill_map)
+bool read_controller_map_from_file(char *fname, char *guid, int dev_fd, uint32_t *fill_map, uint32_t *right_directions)
 {
 	if (!fname || !guid || strlen(guid) != GUID_LEN - 1 || !fill_map) return false;
 
@@ -667,7 +687,7 @@ bool read_controller_map_from_file(char *fname, char *guid, int dev_fd, uint32_t
 	if (matched[0] != 0)
 	{
 		printf("Gamecontrollerdb: found match, using config %s\n", matched);
-		return parse_mapping_string(matched, guid, dev_fd, fill_map);
+		return parse_mapping_string(matched, guid, dev_fd, fill_map, right_directions);
 	}
 
 	return false;
@@ -727,7 +747,7 @@ static int gcdb_controller_idx(uint16_t bustype, uint16_t vid, uint16_t pid, uin
 	return -1;
 }
 
-static void gcdb_cache_controller_map(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version, uint32_t *button_map)
+static void gcdb_cache_controller_map(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version, uint32_t *button_map, const uint32_t *right_directions)
 {
 	if (gcdb_controller_idx(bustype, vid, pid, version) > -1)
 	{
@@ -742,10 +762,11 @@ static void gcdb_cache_controller_map(uint16_t bustype, uint16_t vid, uint16_t p
 	snprintf(db_maps[last_db_idx].core_name, sizeof(db_maps[last_db_idx].core_name), "%s", user_io_get_core_name());
 	snprintf(db_maps[last_db_idx].orig_core_name, sizeof(db_maps[last_db_idx].orig_core_name), "%s", user_io_get_core_name(1));
 	memcpy(db_maps[last_db_idx].map, button_map, sizeof(uint32_t)*NUMBUTTONS);
+	memcpy(db_maps[last_db_idx].right_directions, right_directions, sizeof(db_maps[last_db_idx].right_directions));
 	last_db_idx = (last_db_idx +1) % MAX_GCDB_ENTRIES;
 }
 
-bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version, int dev_fd, uint32_t *fill_map)
+bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version, int dev_fd, uint32_t *fill_map, uint32_t *right_directions)
 {
 		PROFILE_FUNCTION();
 		char guid_str[GUID_LEN] = {};
@@ -753,6 +774,7 @@ bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint1
 		if (cache_idx != -1)
 		{
 			memcpy(fill_map, db_maps[cache_idx].map, sizeof(uint32_t)*NUMBUTTONS);
+			memcpy(right_directions, db_maps[cache_idx].right_directions, sizeof(db_maps[cache_idx].right_directions));
 			return true;
 		}
 		sprintf(guid_str, "%04x0000%04x0000%04x0000%04x0000", (uint16_t)(bustype << 8 | bustype >> 8), (uint16_t)( vid << 8 |  vid >> 8), (uint16_t)(pid << 8 | pid >> 8), (uint16_t)(version << 8 | version >> 8));
@@ -760,17 +782,17 @@ bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint1
 		char path[256] = {GCDB_DIR};
 		strcat(path, "gamecontrollerdb_user.txt");
 		bool found_entry = false;
-		if (!(found_entry = read_controller_map_from_file(path, guid_str, dev_fd, fill_map)))
+		if (!(found_entry = read_controller_map_from_file(path, guid_str, dev_fd, fill_map, right_directions)))
 		{
 			strcpy(path, GCDB_DIR);
 			strcat(path, "gamecontrollerdb.txt");
-			found_entry = read_controller_map_from_file(path, guid_str, dev_fd, fill_map);
+			found_entry = read_controller_map_from_file(path, guid_str, dev_fd, fill_map, right_directions);
 		}
 
 
 		if (found_entry)
 		{
-			gcdb_cache_controller_map(bustype, vid, pid, version, fill_map);
+			gcdb_cache_controller_map(bustype, vid, pid, version, fill_map, right_directions);
 			return true;
 		}
 		return false;

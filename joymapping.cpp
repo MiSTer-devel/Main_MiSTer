@@ -136,7 +136,9 @@ static int is_extended_button(char *name)
 	return !strcasecmp(name, "L2")
 		|| !strcasecmp(name, "R2")
 		|| !strcasecmp(name, "L3")
-		|| !strcasecmp(name, "R3");
+		|| !strcasecmp(name, "R3")
+		|| !strcasecmp(name, "RightX-") || !strcasecmp(name, "RightX+")
+		|| !strcasecmp(name, "RightY-") || !strcasecmp(name, "RightY+");
 }
 
 static void copy_core_button_name(char *dst, size_t size, int index)
@@ -147,7 +149,7 @@ static void copy_core_button_name(char *dst, size_t size, int index)
 	trim(dst);
 }
 
-void map_joystick(uint32_t *map, uint32_t *mmap)
+void map_joystick(uint32_t *map, uint32_t *mmap, const uint32_t *right_directions)
 {
 	/*
 	attemps to centrally defined core joy mapping to the joystick declaredy by a core config string
@@ -261,6 +263,21 @@ void map_joystick(uint32_t *map, uint32_t *mmap)
 		else if(!strcasecmp(btn_name, "R3"))
 		{
 			map[idx] = mmap[SYS_BTN_R3];
+		}
+
+		else if (!strcasecmp(btn_name, "RightX-") || !strcasecmp(btn_name, "RightX+") ||
+		         !strcasecmp(btn_name, "RightY-") || !strcasecmp(btn_name, "RightY+"))
+		{
+			map[idx] = 0;
+			const int direction = (btn_name[5] == 'Y' || btn_name[5] == 'y' ? 2 : 0) + (btn_name[6] == '+');
+			const int component = direction / 2;
+			const uint32_t primary = mmap[SYS_AXIS_X + component];
+			const uint32_t stick2 = mmap[SYS_AXIS2_X + component];
+			const uint32_t axis = (primary & MAP_FLAG_ANALOG) && primary == stick2
+				? mmap[SYS_AXIS1_X + component] : stick2;
+			if (right_directions && right_directions[direction]) map[idx] = right_directions[direction];
+			else if (axis != UINT32_MAX && (axis & MAP_FLAG_ANALOG))
+				map[idx] = KEY_EMU + ((axis & MAP_AXIS_MASK) << 1) + ((direction & 1) ^ !!(axis & MAP_FLAG_INVERT));
 		}
 
 		else if(!strcasecmp(btn_name, "Select")
@@ -1515,7 +1532,22 @@ void finish_map_setting(int dismiss)
 		}
 		build_map_name(legacy_name, mapping_dev, 0, 3);
 
-		if (!dismiss) save_map(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+		if (!dismiss)
+		{
+			if (is_menu() && (menu_mouse_map || mapping_menu_only))
+			{
+				system_map_file saved = {};
+				memcpy(saved.map, input[mapping_dev].map, sizeof(saved.map));
+				memcpy(saved.directions, input[mapping_dev].right_directions, sizeof(saved.directions));
+				if (saved.directions[0] || saved.directions[1] || saved.directions[2] || saved.directions[3])
+				{
+					saved.magic = RIGHT_DIRECTIONS_MAGIC;
+					save_map(get_map_name(mapping_dev, 0), &saved, sizeof(saved));
+				}
+				else save_map(get_map_name(mapping_dev, 0), saved.map, sizeof(saved.map));
+			}
+			else save_map(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
+		}
 		if (dismiss == 2)
 		{
 			delete_map(get_map_name(mapping_dev, 0));

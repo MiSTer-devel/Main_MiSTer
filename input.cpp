@@ -2903,6 +2903,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	{
 		input[dev].osd_hold_timer = 0;
 		input[dev].gcdb_mmap = 0;
+		memset(input[dev].right_directions, 0, sizeof(input[dev].right_directions));
 		if (input[dev].quirk == QUIRK_TOUCHGUN)
 		{
 			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
@@ -2917,8 +2918,19 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			int loaded_saved_map = 0;
 			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
 			build_map_name(legacy_name, dev, 1, 3);
-			if (load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
+			system_map_file saved_map = {};
+			const int file_size = load_map(get_map_name(dev, 1), NULL, 0);
+			const int saved_size = load_map(get_map_name(dev, 1), &saved_map, sizeof(saved_map));
+			if (saved_size)
 			{
+				memcpy(input[dev].mmap, saved_map.map, sizeof(input[dev].mmap));
+				if (file_size == sizeof(saved_map) && saved_size == sizeof(saved_map) && saved_map.magic == RIGHT_DIRECTIONS_MAGIC)
+				{
+					bool valid = true;
+					for (int direction = 0; direction < 4; direction++)
+						if (saved_map.directions[direction] > KEY_MAX) valid = false;
+					if (valid) memcpy(input[dev].right_directions, saved_map.directions, sizeof(saved_map.directions));
+				}
 				loaded_saved_map = 1;
 			}
 			else
@@ -2928,7 +2940,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					loaded_saved_map = 1;
 					default_v3_stick(dev, pool[sub_dev].fd, input[dev].mmap);
 				}
-				else if (gcdb_map_for_controller(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[dev].mmap))
+				else if (gcdb_map_for_controller(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[dev].mmap, input[dev].right_directions))
 				{
 					input[dev].gcdb_mmap = 1;
 				}
@@ -2942,7 +2954,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			osd_map_fill_second(input[dev].mmap);
 			if (loaded_saved_map)
 			{
-				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap);
+				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap, input[dev].right_directions);
 			}
 
 			apply_joycon_orientation(dev, input[dev].mmap, loaded_saved_map);
@@ -3018,7 +3030,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						if (input[dev].has_mmap == 1)
 						{
 							// not defined try to guess the mapping
-							map_joystick(input[dev].map, input[dev].mmap);
+							map_joystick(input[dev].map, input[dev].mmap, input[dev].right_directions);
 						}
 						else
 						{
@@ -3054,6 +3066,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			for (int i = SYS_BTN_L2; !assign_btn && i <= SYS_BTN_R3; i++)
 			{
 				if (ev->code == input[dev].mmap[i]) assign_btn = 1;
+			}
+
+			for (int i = 0; !assign_btn && i < 4; i++)
+			{
+				if (ev->code == input[dev].right_directions[i]) assign_btn = 1;
 			}
 		}
 
