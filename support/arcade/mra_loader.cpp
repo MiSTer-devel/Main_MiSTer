@@ -1330,6 +1330,16 @@ int xml_load(const char *xml)
 static mgl_struct mgl = {};
 static int mgl_from_mra = 0;
 
+static void mgl_games_path(char *path, size_t len)
+{
+	char dir[1024], rest[1024] = {};
+	snprintf(dir, sizeof(dir), "%s", path + strspn(path, "/"));
+	char *p = strchr(dir, '/');
+	if (p) { strcpy(rest, p); *p = 0; }
+	prefixGameDir(dir, sizeof(dir));
+	snprintf(path, len, "%s%s", getFullPath(dir), rest);
+}
+
 static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const int n, SAX_Data* sd)
 {
 	(void)sd;
@@ -1366,6 +1376,7 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 			if (!strcasecmp(node->tag, "file"))
 			{
 				mgl.item[mgl.count].action = MGL_ACTION_LOAD;
+				int root = 0;
 
 				for (int i = 0; i < node->n_attributes; i++)
 				{
@@ -1397,7 +1408,14 @@ static int scan_mgl(XMLEvent evt, const XMLNode* node, SXML_CHAR* text, const in
 						snprintf(mgl.item[mgl.count].path, sizeof(mgl.item[mgl.count].path), "%s", node->attributes[i].value);
 						mgl.item[mgl.count].valid |= 0x8;
 					}
+					else if (!strcasecmp(node->attributes[i].name, "root"))
+					{
+						root = strcasecmp(node->attributes[i].value, "games") ? -1 : 1;
+					}
 				}
+
+				if (root < 0) mgl.item[mgl.count].valid &= ~0x8;
+				else if (root) mgl_games_path(mgl.item[mgl.count].path, sizeof(mgl.item[mgl.count].path));
 
 				printf("  action=load\n  delay=%d\n  type=%c\n  index=%d\n  path=%s\n  valid=%X\n\n", mgl.item[mgl.count].delay, mgl.item[mgl.count].type, mgl.item[mgl.count].index, mgl.item[mgl.count].path, mgl.item[mgl.count].valid);
 

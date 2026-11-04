@@ -66,6 +66,7 @@
     <ClCompile Include="ide_cdrom.cpp" />
     <ClCompile Include="input.cpp" />
     <ClCompile Include="joymapping.cpp" />
+    <ClCompile Include="joymap_pad.cpp" />
     <ClCompile Include="lib\libco\arm.c" />
     <ClCompile Include="lib\libco\libco.c" />
     <ClCompile Include="lib\lodepng\lodepng.cpp" />
@@ -153,6 +154,8 @@
     <ClInclude Include="ide_cdrom.h" />
     <ClInclude Include="input.h" />
     <ClInclude Include="joymapping.h" />
+    <ClInclude Include="joymap_pad.h" />
+    <ClInclude Include="joymap_pads.h" />
     <ClInclude Include="mat4x4.h" />
     <ClInclude Include="lib\imlib2\Imlib2.h" />
     <ClInclude Include="lib\libco\libco.h" />

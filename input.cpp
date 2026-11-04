@@ -37,14 +37,13 @@
 #include "scaler.h"
 #include "file_io.h"
 
-#define NUMDEV 30
 #define UINPUT_NAME "MiSTer virtual input"
 
 bool update_advanced_state(int devnum, uint16_t evcode, int evstate);
 
 char joy_bnames[NUMBUTTONS][32] = {};
 int  joy_bcount = 0;
-static struct pollfd pool[NUMDEV + 3];
+struct pollfd pool[NUMDEV + 3];
 int  xbe2_shift = 0;
 
 static bool gcdb_use_usb_bcd_device(uint16_t vid, uint16_t pid)
@@ -1430,135 +1429,9 @@ uint32_t get_key_mod()
 	return modifier & MODMASK;
 }
 
-enum QUIRK
-{
-	QUIRK_NONE = 0,
-	QUIRK_WIIMOTE,
-	QUIRK_DS3,
-	QUIRK_DS4,
-	QUIRK_DS4TOUCH,
-	QUIRK_MADCATZ360,
-	QUIRK_PDSP,
-	QUIRK_PDSP_ARCADE,
-	QUIRK_JAMMA,
-	QUIRK_JAMMA2,
-	QUIRK_MSSP,
-	QUIRK_TOUCHGUN,
-	QUIRK_VCS,
-	QUIRK_JOYCON,
-	QUIRK_LIGHTGUN_CRT,
-	QUIRK_LIGHTGUN,
-	QUIRK_LIGHTGUN_MOUSE,
-	QUIRK_WHEEL,
-	QUIRK_SHIFT,
-};
-
-// core-driven force feedback effect slots
-enum
-{
-	FFB_CONST = 0,
-	FFB_SPRING,
-	FFB_DAMPER,
-	FFB_FRICTION,
-	FFB_VIB,
-	FFB_NUM
-};
-
 #define FFB_CAP_AUTOC 0x80
 
-typedef struct
-{
-	uint16_t bustype, vid, pid, version, gcdb_version;
-	char     idstr[256];
-	char     mod;
-
-	uint8_t  led;
-	uint8_t  mouse;
-	uint8_t  axis_edge[256];
-	int8_t   axis_pos[256];
-
-	uint8_t  num;
-	uint8_t  has_map;
-	uint32_t map[NUMBUTTONS];
-	int      map_shown;
-
-	uint8_t  osd_combo;
-
-	uint8_t  has_mmap;
-	uint32_t mmap[NUMBUTTONS];
-	int      stick_l[2];
-	int      stick_r[2];
-
-	uint8_t  force_joy;
-	uint8_t  has_kbdmap;
-	uint8_t  kbdmap[256];
-
-	int32_t  guncal[4];
-
-	int      accx, accy;
-	int      startx, starty;
-	int      lastx, lasty;
-	int      quirk;
-
-	int      misc_flags;
-	int      paddle_val;
-	int      spinner_prev;
-	int      spinner_acc;
-	int      spinner_prediv;
-	int      spinner_dir;
-	int      spinner_accept;
-	int      old_btn;
-	int      ds_mouse_emu;
-
-	int      lightgun_req;
-	int      lightgun;
-
-	int      has_rumble;
-	int      rumble_en;
-	uint16_t last_rumble;
-	ff_effect rumble_effect;
-
-	int      has_ffb;
-	uint8_t  ffb_caps;
-	uint8_t  ffb_loaded;
-	uint8_t  ffb_playing;
-	uint8_t  ffb_on;
-	uint8_t  ffb_flags;
-	int32_t  ffb_autoc;
-	int32_t  ffb_val[FFB_NUM];
-	ff_effect ffb_effect[FFB_NUM];
-	int8_t   wh_centre;
-	int16_t  wh_spring_id;
-
-	int8_t   wh_steer;
-	int8_t   wh_accel;
-	int8_t   wh_brake;
-	int8_t   wh_clutch;
-	int8_t   wh_combo;
-	int8_t   wh_pedal_invert;
-
-	int      timeout;
-	char     mac[64];
-
-	int      bind;
-	uint32_t unique_hash;
-	char     devname[32];
-	char     id[80];
-	char     name[128];
-	char     sysfs[512];
-
-	int      ss_range[2];
-	int 	 max_cardinal[2];
-	float    max_range[2];
-
-	uint32_t deadzone;
-	advancedButtonMap advanced_map[ADVANCED_MAP_MAX];
-	advancedButtonState advanced_state[ADVANCED_MAP_MAX];
-	bool has_advanced_map;
-	uint16_t advanced_last_pressed_keycode;
-} devInput;
-
-static devInput input[NUMDEV] = {};
+devInput input[NUMDEV] = {};
 static devInput player_pad[NUMPLAYERS] = {};
 static devInput player_pdsp[NUMPLAYERS] = {};
 
@@ -1672,7 +1545,6 @@ static void INThandler(int code)
 	exit(0);
 }
 
-#define test_bit(bit, array)  (array [bit / 8] & (1 << (bit % 8)))
 
 
 static char has_led(int fd)
@@ -1714,223 +1586,7 @@ void sysled_enable(int en)
 	sysled_is_enabled = en;
 }
 
-#define JOYMAP_DIR  "inputs/"
-static int load_map(const char *name, void *pBuffer, int size)
-{
-	char path[256] = { JOYMAP_DIR };
-	strcat(path, name);
-	int ret = FileLoadConfig(path, pBuffer, size);
-	if (!ret) return FileLoadConfig(name, pBuffer, size);
-	return ret;
-}
-
-static void delete_map(const char *name)
-{
-	char path[256] = { JOYMAP_DIR };
-	strcat(path, name);
-	FileDeleteConfig(name);
-	FileDeleteConfig(path);
-}
-
-static int save_map(const char *name, void *pBuffer, int size)
-{
-	char path[256] = { JOYMAP_DIR };
-	strcat(path, name);
-	FileDeleteConfig(name);
-	return FileSaveConfig(path, pBuffer, size);
-}
-
-static int mapping = 0;
-static int mapping_button;
-static int mapping_dev = -1;
-static int mapping_type;
-static int mapping_count;
-static int mapping_clear;
-static int mapping_finish;
-static int mapping_set;
-
-
-static int mapping_current_key = 0;
-static int mapping_current_dev = -1;
-static advancedButtonMap *mapping_store = NULL;
-
-static uint32_t tmp_axis[4];
-static int tmp_axis_n = 0;
-
 static int grabbed = 1;
-
-static uint32_t osd_timer = 0;
-static uint32_t map_advance_timer = 0;
-
-void start_map_setting(int cnt, int set, advancedButtonMap *abm_store)
-{
-	mapping_current_key = 0;
-	mapping_current_dev = -1;
-
-	mapping_button = 0;
-	mapping = 1;
-	mapping_set = set;
-
-	if (abm_store)
-	{
-		mapping_type = 3;
-		mapping_store = abm_store;
-		mapping_dev = -1;
-		mapping_set = (cnt == 3) ? 1 : set;
-		if (cnt != 3)
-			memset((set == 1) ? abm_store->input_codes : abm_store->output_codes, 0, sizeof(abm_store->input_codes));
-		osd_timer = 0;
-		map_advance_timer = 0;
-	} else if (!mapping_set) {
-		mapping_dev = -1;
-		mapping_type = (cnt < 0) ? 3 : cnt ? 1 : 2;
-	}
-	mapping_count = cnt;
-	mapping_clear = 0;
-	mapping_finish = 0;
-	tmp_axis_n = 0;
-
-	if (mapping_type <= 1 && is_menu()) mapping_button = -6;
-	memset(tmp_axis, 0, sizeof(tmp_axis));
-
-	//un-stick the enter key
-	user_io_kbd(KEY_ENTER, 0);
-}
-
-advancedButtonMap *get_map_code_store()
-{
-	return mapping_store;
-}
-
-int get_map_count()
-{
-	return mapping_count;
-}
-
-int get_map_set()
-{
-	return mapping_set;
-}
-
-int get_map_button()
-{
-	return mapping_button;
-}
-
-int get_map_type()
-{
-	return mapping_type;
-}
-
-int get_map_clear()
-{
-	return mapping_clear;
-}
-
-int get_map_finish()
-{
-	return mapping_finish;
-}
-
-
-int get_map_dev()
-{
-	return mapping_dev;
-}
-
-
-int get_map_cancel()
-{
-	return (mapping && !is_menu() && osd_timer && CheckTimer(osd_timer));
-}
-
-int get_map_advance()
-{
-	return (mapping && !is_menu() && map_advance_timer && CheckTimer(map_advance_timer));
-}
-
-static char *get_unique_mapping(int dev, int force_unique = 0)
-{
-	uint32_t vidpid = (input[dev].vid << 16) | input[dev].pid;
-	static char str[128];
-
-	for (uint i = 0; i < cfg.controller_unique_mapping[0]; i++)
-	{
-		if (!cfg.controller_unique_mapping[i + 1]) break;
-		if (force_unique || cfg.controller_unique_mapping[i + 1] == 1 || cfg.controller_unique_mapping[i + 1] == vidpid)
-		{
-			sprintfz(str, "%s_%08x", input[dev].idstr, input[dev].unique_hash);
-			return str;
-		}
-	}
-
-	sprintfz(str, "%s", input[dev].idstr);
-	return str;
-}
-
-static char *get_map_name(int dev, int def)
-{
-	static char name[1024];
-	char *id = get_unique_mapping(dev);
-
-	if (def || is_menu()) sprintfz(name, "input_%s%s_v3.map", id, input[dev].mod ? "_m" : "");
-	else sprintfz(name, "%s_input_%s%s_v3.map", user_io_get_core_name(), id, input[dev].mod ? "_m" : "");
-	return name;
-}
-
-static char *get_jkmap_name(int dev)
-{
-	static char name[1024];
-	char *id = get_unique_mapping(dev);
-	sprintfz(name, "%s_input_%s_jk.map", user_io_get_core_name(), id);
-	return name;
-}
-
-static char *get_kbdmap_name(int dev)
-{
-	static char name[128];
-	char *id = get_unique_mapping(dev);
-
-	sprintfz(name, "kbd_%s.map", id);
-	return name;
-}
-
-void finish_map_setting(int dismiss)
-{
-	mapping = 0;
-	if (mapping_dev<0) return;
-
-	if (mapping_type == 3)
-	{
-		if (!dismiss) return;
-		if (mapping_count == 3)
-		{
-			input_advanced_clear(mapping_dev);
-			if (mapping_store) memset(mapping_store, 0, sizeof(advancedButtonMap));
-		} else if (mapping_store) {
-			memset(mapping_set == 2 ? mapping_store->output_codes : mapping_store->input_codes, 0, sizeof(mapping_store->input_codes));
-		}
-		return;
-	}
-
-	if (mapping_type == 2)
-	{
-		input[mapping_dev].has_kbdmap = 0;
-		if (dismiss) FileDeleteConfig(get_kbdmap_name(mapping_dev));
-		else FileSaveConfig(get_kbdmap_name(mapping_dev), &input[mapping_dev].kbdmap, sizeof(input[mapping_dev].kbdmap));
-	}
-	else
-	{
-		for (int i = 0; i < NUMDEV; i++)
-		{
-			input[i].has_map = 0;
-			input[i].has_mmap = 0;
-		}
-
-		if (!dismiss) save_map(get_map_name(mapping_dev, 0), &input[mapping_dev].map, sizeof(input[mapping_dev].map));
-		if (dismiss == 2) delete_map(get_map_name(mapping_dev, 0));
-	}
-}
 
 void input_lightgun_save(int idx, int32_t *cal)
 {
@@ -1958,21 +1614,6 @@ int input_has_lightgun()
 		if (input[i].quirk == QUIRK_LIGHTGUN_MOUSE) return 1;
 	}
 	return 0;
-}
-
-uint16_t get_map_vid()
-{
-	return (mapping && mapping_dev >= 0) ? input[mapping_dev].vid : 0;
-}
-
-uint16_t get_map_pid()
-{
-	return (mapping && mapping_dev >= 0) ? input[mapping_dev].pid : 0;
-}
-
-int has_default_map()
-{
-	return (mapping_dev >= 0) ? (input[mapping_dev].has_mmap == 1) : 0;
 }
 
 static char kr_fn_table[] =
@@ -2396,7 +2037,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 	if (num < NUMPLAYERS)
 	{
 		// autofire handler moved to helper function for clarity
-		if (handle_autofire_toggle(num, mask, code, press, bnum, dont_save)) {
+		if (num >= 0 && handle_autofire_toggle(num, mask, code, press, bnum, dont_save)) {
 			return;
 		}
 
@@ -2428,7 +2069,7 @@ static void joy_digital(int jnum, uint32_t mask, uint32_t code, char press, int 
 
 		// toggling autofire via OSD button consumes the "press" event of OSD but not the release event
 		// this suppresses that so toggling autofire on a button doesn't immediately disable the button
-		if (bnum == BTN_OSD && !press && osd_autofire_consumed[num]) {
+		if (bnum == BTN_OSD && !press && num >= 0 && osd_autofire_consumed[num]) {
 			osd_autofire_consumed[num] = false;
 			return;
 		}
@@ -2664,6 +2305,153 @@ static void joy_analog(int dev, int axis, int offset, int stick = 0)
 	}
 }
 
+static uint8_t analog_trigger_pos[NUMPLAYERS][2] = {};
+
+static int analog_triggers_resync_req = 0;
+
+void input_analog_triggers_resync(int suppress)
+{
+	if (!grabbed) suppress = 1;
+
+	for (int num = 0; num < NUMPLAYERS; num++)
+	{
+		const uint8_t l2 = suppress ? 0 : analog_trigger_pos[num][0];
+		const uint8_t r2 = suppress ? 0 : analog_trigger_pos[num][1];
+
+		user_io_analog_triggers(num, l2, r2);
+	}
+}
+
+static void reset_analog_triggers()
+{
+	memset(analog_trigger_pos, 0, sizeof(analog_trigger_pos));
+	input_analog_triggers_resync(0);
+}
+
+uint8_t normalize_analog_trigger(uint32_t map, int value, const input_absinfo *absinfo)
+{
+	if (!absinfo || absinfo->maximum <= absinfo->minimum)
+		return 0;
+
+	if (value < absinfo->minimum) value = absinfo->minimum;
+	if (value > absinfo->maximum) value = absinfo->maximum;
+
+	int64_t released = absinfo->minimum;
+	int64_t pressed = absinfo->maximum;
+
+	if (map & MAP_FLAG_CENTERED)
+	{
+		released = (released + pressed) / 2;
+		pressed = (map & MAP_FLAG_NEGATIVE) ? absinfo->minimum : absinfo->maximum;
+		if ((map & MAP_FLAG_NEGATIVE) ? value > released : value < released) return 0;
+		if (map & MAP_FLAG_INVERT)
+		{
+			const int64_t center = released;
+			released = pressed;
+			pressed = center;
+		}
+	}
+	else if (map & MAP_FLAG_NEGATIVE)
+	{
+		released = absinfo->maximum;
+		pressed = absinfo->minimum;
+	}
+
+	const int64_t denom = pressed - released;
+	if (!denom)
+		return 0;
+
+	const int64_t span = llabs(denom);
+	int64_t deadzone = span / 50;
+	if (deadzone < 5) deadzone = 5;
+	if (deadzone * 4 > span) deadzone = span / 4;
+
+	const int64_t travel = (value - released) * ((denom > 0) ? 1 : -1) - deadzone;
+	int64_t out = (travel * 255) / (span - 2 * deadzone);
+	if (out < 0) out = 0;
+	if (out > 255) out = 255;
+	return (uint8_t)out;
+}
+
+#define TRIGGER_PRESS_LEVEL   77
+#define TRIGGER_RELEASE_LEVEL 51
+
+static int is_8bitdo_menu_axis(int dev, uint16_t axis)
+{
+	return axis == 9 && input[dev].vid == 0x2dc8 && (input[dev].pid == 0x3100 || input[dev].pid == 0x3104);
+}
+
+static int axis_has_negative_binding(int dev, uint16_t axis)
+{
+	// Wheel axes (steering, pedals) give only the 'max' direction. Their stick slots
+	// are cleared when the map loads, but the stick tests of the joystick setup put
+	// them back for the rest of that setup: a released pedal then rests on its 'min'
+	// edge and holds a key that locks out every button and d-pad prompt.
+	if (input[dev].quirk == QUIRK_WHEEL) return 0;
+
+	for (int n = SYS_AXIS1_X; n <= SYS_AXIS2_Y; n++)
+		if (input[dev].mmap[n] && map_axis_code(input[dev].mmap[n]) == axis) return 1;
+
+	if (is_8bitdo_menu_axis(dev, axis)) return 0;
+
+	const uint32_t key = KEY_EMU + (axis << 1);
+	for (int n = 0; n < NUMBUTTONS; n++)
+	{
+		const uint32_t codes[] = { input[dev].map[n], input[dev].mmap[n] };
+		for (uint32_t code : codes)
+			if ((code & 0xFFFF) == key || (code >> 16) == key) return 1;
+	}
+	return 0;
+}
+
+static int trigger_axis_edge(int dev, uint16_t axis, int value, const input_absinfo *absinfo, uint8_t last_edge, uint8_t *edge)
+{
+	int is_trigger = 0;
+	*edge = 0;
+
+	for (int trigger = 0; trigger < 2; trigger++)
+	{
+		const uint32_t map = input[dev].mmap[SYS_AXIS_L2 + trigger];
+		if (!(map & MAP_FLAG_TRIGGER) || map_axis_code(map) != axis)
+			continue;
+
+		is_trigger = 1;
+		const uint16_t button = input[dev].mmap[SYS_BTN_L2 + trigger] & 0xFFFF;
+		const uint16_t key_min = KEY_EMU + (axis << 1);
+		const uint8_t pressed_edge = (button == key_min) ? 1 : (button == key_min + 1) ? 2 :
+			((map & MAP_FLAG_NEGATIVE) ? 1 : 2);
+		const uint8_t level = normalize_analog_trigger(map, value, absinfo);
+		if (level >= ((last_edge & pressed_edge) ? TRIGGER_RELEASE_LEVEL : TRIGGER_PRESS_LEVEL))
+			*edge |= pressed_edge;
+	}
+
+	return is_trigger;
+}
+
+static int joy_analog_triggers(int dev, int axis, int value, const input_absinfo *absinfo)
+{
+	if (!input[dev].num || input[dev].num > NUMPLAYERS)
+		return 0;
+
+	const int num = input[dev].num - 1;
+	int handled = 0;
+
+	for (int trigger = 0; trigger < 2; trigger++)
+	{
+		const uint32_t map = input[dev].mmap[SYS_AXIS_L2 + trigger];
+		if (!(map & MAP_FLAG_TRIGGER) || map_axis_code(map) != axis)
+			continue;
+
+		analog_trigger_pos[num][trigger] = normalize_analog_trigger(map, value, absinfo);
+		handled = 1;
+	}
+
+	if (handled && grabbed && !user_io_osd_is_visible())
+		user_io_analog_triggers(num, analog_trigger_pos[num][0], analog_trigger_pos[num][1]);
+
+	return handled;
+}
+
 static char* get_led_path(int dev, int add_id = 1)
 {
 	static char path[1024];
@@ -2810,6 +2598,7 @@ void reset_players()
 	for (int i = 0; i < NUMPLAYERS; i++) {
 		clear_autofire(i);
 	}
+	reset_analog_triggers();
 	memset(player_pad, 0, sizeof(player_pad));
 	memset(player_pdsp, 0, sizeof(player_pdsp));
 }
@@ -2954,8 +2743,15 @@ static uint16_t def_mmap[] = {
 	0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
 	0x0000, 0x0000, 0x013C, 0x0000, 0x013C, 0x0000, 0x0131, 0x0130,
 	0x0000, 0x0002, 0x0001, 0x0002, 0x0003, 0x0002, 0x0004, 0x0002,
-	0x0000, 0x0002, 0x0001, 0x0002, 0x0000, 0x0000, 0x0000, 0x0000
+	0x0000, 0x0002, 0x0001, 0x0002, 0x0000, 0x0000, 0x0000, 0x0000,
+	0x0000, 0x0000, 0x0000, 0x0000
 };
+
+static void apply_joycon_orientation(int dev, uint32_t *map, int loaded_saved_map)
+{
+	if (loaded_saved_map || input[dev].quirk != QUIRK_JOYCON) return;
+	for (int i = SYS_AXIS1_X; i <= SYS_AXIS_Y; i++) map[i] &= ~MAP_FLAG_INVERT;
+}
 
 static void assign_player(int dev, int num, int force = 0)
 {
@@ -2965,17 +2761,101 @@ static void assign_player(int dev, int num, int force = 0)
 	printf("Device %s %sassigned to player %d\n", input[dev].id, force ? "forcebly " : "", input[dev].num);
 }
 
+static int osd_combo_event(int dev, const input_event *ev, bool menu_event)
+{
+	const int old_combo = input[dev].osd_combo;
+	const uint32_t *mmap = input[dev].mmap;
+
+	if (ev->type == EV_KEY && osd_map_is_hold(mmap))
+	{
+		if (ev->code == mmap[SYS_BTN_OSD_2] && ev->value <= 1)
+		{
+			if (!ev->value && old_combo == 2 && input[dev].num && input[dev].num <= NUMPLAYERS)
+				osd_autofire_consumed[input[dev].num - 1] = false;
+			input[dev].osd_hold_timer = ev->value ? GetTimer(osd_map_hold_ms(mmap)) : 0;
+			input[dev].osd_combo = ev->value ? 2 : 0;
+		}
+		else if (ev->value == 1 && !menu_event)
+		{
+			input[dev].osd_hold_timer = 0;
+		}
+	}
+	else if (ev->type == EV_KEY)
+	{
+		if (ev->code == mmap[SYS_BTN_OSD_2])
+		{
+			if (ev->value) input[dev].osd_combo |= 2;
+			else input[dev].osd_combo &= ~2;
+		}
+
+		if (ev->code == mmap[SYS_BTN_OSD_1])
+		{
+			if (ev->value) input[dev].osd_combo |= 1;
+			else input[dev].osd_combo &= ~1;
+		}
+	}
+
+	if (old_combo != 3 && input[dev].osd_combo == 3) return 1;
+	if (old_combo == 3 && input[dev].osd_combo != 3) return 2;
+	return 0;
+}
+
+static int osd_hold_expired(int dev)
+{
+	if (!input[dev].osd_hold_timer || !CheckTimer(input[dev].osd_hold_timer)) return 0;
+	input[dev].osd_hold_timer = 0;
+	if (input[dev].osd_combo != 2 || !osd_map_is_hold(input[dev].mmap)) return 0;
+	input[dev].osd_combo = 3;
+	return 1;
+}
+
+#define OSD_HOLD_CLICK_MS 100
+
+static void osd_hold_poll()
+{
+	map_osd_hold_poll();
+	for (int dev = 0; dev < NUMDEV; dev++)
+	{
+		if (input[dev].osd_hold_release_at && CheckTimer(input[dev].osd_hold_release_at))
+		{
+			input[dev].osd_hold_release_at = 0;
+			joy_digital(input[dev].num, 0, 0, 0, BTN_OSD);
+		}
+
+		if (!osd_hold_expired(dev)) continue;
+
+		if (mapping)
+		{
+			mapping_osd_owned = 1;
+			if (!is_menu() && !(dev == mapping_dev && map_hold_action_for_key(dev, input[dev].mmap[SYS_BTN_OSD_2])))
+				osd_timer = mapping_type == 3 ? ((mapping_count < 3 || mapping_set == 1) ? GetTimer(5000) : 0) : 1;
+			continue;
+		}
+
+		input[dev].osd_combo = 0;
+		if (input[dev].lightgun_req && !user_io_osd_is_visible())
+		{
+			input[dev].lightgun = !input[dev].lightgun;
+			Info(input[dev].lightgun ? "Light Gun mode is ON" : "Light Gun mode is OFF");
+		}
+		else
+		{
+			joy_digital(input[dev].num, 0, 0, 1, BTN_OSD);
+			input[dev].osd_hold_release_at = GetTimer(OSD_HOLD_CLICK_MS);
+		}
+	}
+}
+
 static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int dev, bool menu_event)
 {
 	if (ev->type != EV_KEY && ev->type != EV_ABS && ev->type != EV_REL) return;
 	if (ev->type == EV_KEY && (!ev->code || ev->code == KEY_UNKNOWN)) return;
 
-	static uint16_t last_axis = 0;
-
 	int sub_dev = dev;
 
 	//check if device is a part of multifunctional device
 	if (!JOYCON_COMBINED(dev) && input[dev].bind >= 0) dev = input[dev].bind;
+	if (mapping && mapping_dev < 0) mapping_node = sub_dev;
 
 	if (ev->type == EV_KEY)
 	{
@@ -3011,15 +2891,18 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		if (input[dev].kbdmap[ev->code]) ev->code = input[dev].kbdmap[ev->code];
 	}
 
-	static int key_mapped = 0;
-
-	int map_skip = (ev->type == EV_KEY && mapping && ((ev->code == KEY_SPACE && mapping_type == 1) || ev->code == KEY_ALTERASE) && (mapping_dev >= 0 || mapping_button<0));
+	int map_skip = (ev->type == EV_KEY && mapping && ((ev->code == KEY_SPACE && mapping_type == 1) || ev->code == KEY_ALTERASE) && (mapping_dev >= 0 || mapping_button<0 || mapping_type <= 1));
 	int cancel   = (ev->type == EV_KEY && ev->code == KEY_ESC && !(mapping && mapping_type == 3 && mapping_button));
 	int enter    = (ev->type == EV_KEY && ev->code == KEY_ENTER && !(mapping && mapping_type == 3 && mapping_button));
+	int map_back = (ev->type == EV_KEY && ev->code == KEY_BACKSPACE && mapping && mapping_type == 1);
 	int origcode = ev->code;
+
+	if (map_confirm_event(dev, ev, menu_event)) return;
 
 	if (!input[dev].has_mmap)
 	{
+		input[dev].osd_hold_timer = 0;
+		input[dev].gcdb_mmap = 0;
 		if (input[dev].quirk == QUIRK_TOUCHGUN)
 		{
 			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
@@ -3030,18 +2913,39 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		}
 		else if (input[dev].quirk != QUIRK_PDSP && input[dev].quirk != QUIRK_MSSP)
 		{
-			if (!load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
+			char legacy_name[1024];
+			int loaded_saved_map = 0;
+			memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
+			build_map_name(legacy_name, dev, 1, 3);
+			if (load_map(get_map_name(dev, 1), &input[dev].mmap, sizeof(input[dev].mmap)))
 			{
-				if (!gcdb_map_for_controller(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[dev].mmap))
+				loaded_saved_map = 1;
+			}
+			else
+			{
+				if (load_map(legacy_name, &input[dev].mmap, sizeof(input[dev].mmap)))
+				{
+					loaded_saved_map = 1;
+					default_v3_stick(dev, pool[sub_dev].fd, input[dev].mmap);
+				}
+				else if (gcdb_map_for_controller(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[dev].mmap))
+				{
+					input[dev].gcdb_mmap = 1;
+				}
+				else
 				{
 					memset(input[dev].mmap, 0, sizeof(input[dev].mmap));
 					memcpy(input[dev].mmap, def_mmap, sizeof(def_mmap));
 					//input[dev].has_mmap++;
 				}
-			} else {
+			}
+			osd_map_fill_second(input[dev].mmap);
+			if (loaded_saved_map)
+			{
 				gcdb_show_string_for_ctrl_map(input[sub_dev].bustype, input[sub_dev].vid, input[sub_dev].pid, input[sub_dev].gcdb_version, pool[sub_dev].fd, input[sub_dev].name, input[dev].mmap);
 			}
-			if (!input[dev].mmap[SYS_BTN_OSD_KTGL + 2]) input[dev].mmap[SYS_BTN_OSD_KTGL + 2] = input[dev].mmap[SYS_BTN_OSD_KTGL + 1];
+
+			apply_joycon_orientation(dev, input[dev].mmap, loaded_saved_map);
 
 			if (input[dev].quirk == QUIRK_WHEEL)
 			{
@@ -3053,6 +2957,12 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				input[dev].mmap[SYS_AXIS1_Y] = -1;
 				input[dev].mmap[SYS_AXIS2_X] = -1;
 				input[dev].mmap[SYS_AXIS2_Y] = -1;
+				const int8_t wheel_axes[] = { input[dev].wh_steer, input[dev].wh_accel, input[dev].wh_brake, input[dev].wh_clutch, input[dev].wh_combo };
+				for (int i = SYS_BTN_L2; i <= SYS_BTN_R2; i++)
+					for (int n = 0; n < (int)sizeof(wheel_axes); n++)
+						if (wheel_axes[n] >= 0 && map_entry_uses_axis(input[dev].mmap[i], wheel_axes[n])) input[dev].mmap[i] = 0;
+				input[dev].mmap[SYS_AXIS_L2] = 0;
+				input[dev].mmap[SYS_AXIS_R2] = 0;
 			}
 			else
 			{
@@ -3062,25 +2972,25 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (!input[dev].mmap[SYS_AXIS_X]) input[dev].mmap[SYS_AXIS_X] = input[dev].mmap[SYS_AXIS1_X];
 				if (!input[dev].mmap[SYS_AXIS_Y]) input[dev].mmap[SYS_AXIS_Y] = input[dev].mmap[SYS_AXIS1_Y];
 
-				if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS1_X])
+				if ((input[dev].mmap[SYS_AXIS_X] & MAP_FLAG_ANALOG) && input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS1_X])
 				{
 					input[dev].stick_l[0] = SYS_AXIS1_X;
-					if ((input[dev].mmap[SYS_AXIS2_X] >> 16) == 2) input[dev].stick_r[0] = SYS_AXIS2_X;
+					if (input[dev].mmap[SYS_AXIS2_X] & MAP_FLAG_ANALOG) input[dev].stick_r[0] = SYS_AXIS2_X;
 				}
-				if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS1_Y])
+				if ((input[dev].mmap[SYS_AXIS_Y] & MAP_FLAG_ANALOG) && input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS1_Y])
 				{
 					input[dev].stick_l[1] = SYS_AXIS1_Y;
-					if ((input[dev].mmap[SYS_AXIS2_Y] >> 16) == 2) input[dev].stick_r[1] = SYS_AXIS2_Y;
+					if (input[dev].mmap[SYS_AXIS2_Y] & MAP_FLAG_ANALOG) input[dev].stick_r[1] = SYS_AXIS2_Y;
 				}
-				if (input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS2_X])
+				if ((input[dev].mmap[SYS_AXIS_X] & MAP_FLAG_ANALOG) && input[dev].mmap[SYS_AXIS_X] == input[dev].mmap[SYS_AXIS2_X])
 				{
 					input[dev].stick_l[0] = SYS_AXIS2_X;
-					if ((input[dev].mmap[SYS_AXIS1_X] >> 16) == 2) input[dev].stick_r[0] = SYS_AXIS1_X;
+					if (input[dev].mmap[SYS_AXIS1_X] & MAP_FLAG_ANALOG) input[dev].stick_r[0] = SYS_AXIS1_X;
 				}
-				if (input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS2_Y])
+				if ((input[dev].mmap[SYS_AXIS_Y] & MAP_FLAG_ANALOG) && input[dev].mmap[SYS_AXIS_Y] == input[dev].mmap[SYS_AXIS2_Y])
 				{
 					input[dev].stick_l[1] = SYS_AXIS2_Y;
-					if ((input[dev].mmap[SYS_AXIS1_Y] >> 16) == 2) input[dev].stick_r[1] = SYS_AXIS1_Y;
+					if (input[dev].mmap[SYS_AXIS1_Y] & MAP_FLAG_ANALOG) input[dev].stick_r[1] = SYS_AXIS1_Y;
 				}
 			}
 		}
@@ -3094,22 +3004,30 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			memset(input[dev].map, 0, sizeof(input[dev].map));
 			input[dev].map[map_paddle_btn()] = 0x120;
 		}
-		else if (!load_map(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
+		else
 		{
+			char legacy_name[1024];
 			memset(input[dev].map, 0, sizeof(input[dev].map));
-			if (!is_menu())
+			build_map_name(legacy_name, dev, 0, 3);
+			if (!load_map(get_map_name(dev, 0), &input[dev].map, sizeof(input[dev].map)))
 			{
-				if (input[dev].has_mmap == 1)
+				if (!load_map(legacy_name, &input[dev].map, sizeof(input[dev].map)))
 				{
-					// not defined try to guess the mapping
-					map_joystick(input[dev].map, input[dev].mmap);
-				}
-				else
-				{
+					if (!is_menu())
+					{
+						if (input[dev].has_mmap == 1)
+						{
+							// not defined try to guess the mapping
+							map_joystick(input[dev].map, input[dev].mmap);
+						}
+						else
+						{
+							input[dev].has_map++;
+						}
+					}
 					input[dev].has_map++;
 				}
 			}
-			input[dev].has_map++;
 		}
 		input[dev].has_map++;
 	}
@@ -3129,6 +3047,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		if (!assign_btn && ev->type == EV_KEY && ev->value >= 1 && ev->code >= 256)
 		{
 			for (int i = SYS_BTN_RIGHT; i <= SYS_BTN_START; i++)
+			{
+				if (ev->code == input[dev].mmap[i]) assign_btn = 1;
+			}
+
+			for (int i = SYS_BTN_L2; !assign_btn && i <= SYS_BTN_R3; i++)
 			{
 				if (ev->code == input[dev].mmap[i]) assign_btn = 1;
 			}
@@ -3211,32 +3134,23 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		}
 	}
 
-	int old_combo = input[dev].osd_combo;
-
-	if (ev->type == EV_KEY)
+	int osd_event = osd_combo_event(dev, ev, menu_event);
+	if (osd_event == 1)
 	{
-		if (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 2])
+		if (mapping && !is_menu())
 		{
-			if (ev->value) input[dev].osd_combo |= 2;
-			else input[dev].osd_combo &= ~2;
-		}
-
-		if (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1])
-		{
-			if (ev->value) input[dev].osd_combo |= 1;
-			else input[dev].osd_combo &= ~1;
+			osd_timer = mapping_type == 3 ? ((mapping_count < 3 || mapping_set == 1) ? GetTimer(5000) : 0) : GetTimer(1000);
+			mapping_osd_owned = 1;
 		}
 	}
+	else if (osd_event == 2)
+	{
+		if (mapping && !is_menu() && !mapping_osd_owned && mapping_type < 2)
+		{
+			joy_digital(input[dev].num, 0, 0, 0, BTN_OSD);
+			return;
+		}
 
-	int osd_event = 0;
-	if (old_combo != 3 && input[dev].osd_combo == 3)
-	{
-		osd_event = 1;
-		if (mapping && !is_menu()) osd_timer = mapping_type == 3 ? ((mapping_count < 3 || mapping_set == 1) ? GetTimer(5000) : 0) : GetTimer(1000);
-	}
-	else if (old_combo == 3 && input[dev].osd_combo != 3)
-	{
-		osd_event = 2;
 		if (mapping && !is_menu())
 		{
 			if (CheckTimer(osd_timer))
@@ -3252,6 +3166,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 		}
 		osd_timer = 0;
+		mapping_osd_owned = 0;
 	}
 
 
@@ -3259,372 +3174,22 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 	if (mapping && mapping_type == 3 && ev->type == EV_KEY)
 	{
-		bool jkm_can_intr = mapping_count == 3 && mapping_button <= 1 && mapping_set == 1;
-		if (mapping_dev < 0) mapping_dev = dev;
-		if (ev->value == 1 && ev->code == KEY_ENTER) map_skip = 1;
-		if (map_skip && jkm_can_intr)
-			mapping_finish = 1;
-
-		if (jkm_can_intr
-			  && (ev->code == (input[mapping_dev].mmap[SYS_BTN_MENU_FUNC] & 0xFFFF) || ev->code == KEY_F12))
-					map_advance_timer = ev->value ? (ev->code == KEY_F12) ? 1 : GetTimer(5000) : 0;
-
-		if (ev->value == 1)
-		{
-			uint16_t *code_store = mapping_set ==  1 ? mapping_store->input_codes : mapping_store->output_codes;
-			code_store[mapping_button++] = ev->code;
-			mapping_current_dev = mapping_dev;
-			if (mapping_button == sizeof(mapping_store->input_codes)/sizeof(mapping_store->input_codes[0])) //Don't overflow, just keep replacing the last entry
-				mapping_button--;
-			if (mapping_button > 1)
-				osd_timer = map_advance_timer = 0;
-		} else if (ev->value == 0 && mapping_button > 0) {
-			if (ev->code == KEY_ESC && (jkm_can_intr || (mapping_count < 3 && mapping_button <= 1)))
-			{
-				osd_timer = 1;
-				return;
-			}
-
-			if (mapping_count == 3)
-			{
-				mapping_set++;
-				mapping_button = 0;
-				if (mapping_set > 2)
-				{
-					mapping_set = 1;
-					input_advanced_save_entry(mapping_store, mapping_dev);
-					memset(mapping_store, 0, sizeof(advancedButtonMap));
-				}
-			} else {
-				mapping_finish = 1;
-			}
-			osd_timer = 0;
-		}
+		map_advanced_key(ev, dev, map_skip);
 		return;
 	}
 
-	if (mapping && (mapping_dev >= 0 || ev->value)
+	if (mapping && !menu_event && (mapping_dev >= 0 || ev->value)
 		&& !((mapping_type < 2 || !mapping_button) && (cancel || enter))
+		&& !map_back
 		&& input[dev].quirk != QUIRK_PDSP
 		&& input[dev].quirk != QUIRK_MSSP)
 	{
-		int idx = 0;
 		osdbtn = 0;
-
-		if (is_menu())
-		{
-			spi_uio_cmd(UIO_KEYBOARD); //ping the Menu core to wakeup
-			osd_event = 0;
-		}
-
-		// paddle axis - skip from mapping
-		if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8) && input[dev].quirk != QUIRK_WHEEL) return;
-
-		// protection against joysticks generating 2 codes per button
-		if (ev->type == EV_KEY && !(is_menu() && mapping < 2 && mapping_button == SYS_BTN_OSD_KTGL) && !map_skip)
-		{
-			if (!mapping_current_key)
-			{
-				if (ev->value == 1)
-				{
-					mapping_current_key = ev->code;
-					mapping_current_dev = dev;
-				}
-				else return;
-			}
-			else
-			{
-				if (ev->value == 0 && mapping_current_key == ev->code && mapping_current_dev == dev)
-				{
-					mapping_current_key = 0;
-				}
-				else return;
-			}
-		}
-
-		if (map_skip) mapping_current_key = 0;
-
-		if (ev->type == EV_KEY && mapping_button>=0 && !osd_event)
-		{
-			if (mapping_type == 2) // keyboard remap
-			{
-				if (ev->code < 256 && !input[dev].force_joy)
-				{
-					if (!mapping_button)
-					{
-						if (ev->value == 1)
-						{
-							if (mapping_dev < 0)
-							{
-								mapping_dev = dev;
-								mapping_button = 0;
-							}
-
-							if (!mapping_button) mapping_button = ev->code;
-							mapping_current_dev = mapping_dev;
-						}
-					}
-					else
-					{
-						if (ev->value == 0 && mapping_dev >= 0 && mapping_button != ev->code)
-						{
-							input[mapping_dev].kbdmap[mapping_button] = ev->code;
-							mapping_button = 0;
-						}
-					}
-				}
-				return;
-			}
-			else
-			{
-				int clear = (ev->code == KEY_F12 || ev->code == KEY_MENU || ev->code == KEY_HOMEPAGE) && !is_menu();
-				if (ev->value == 1 && mapping_dev < 0 && !clear)
-				{
-					mapping_dev = dev;
-					mapping_type = (ev->code >= 256 || input[dev].force_joy) ? 1 : 0;
-					key_mapped = 0;
-					memset(input[mapping_dev].map, 0, sizeof(input[mapping_dev].map));
-				}
-
-				mapping_clear = 0;
-				if (mapping_dev >= 0 && !map_skip && (mapping_dev == dev || clear) && mapping_button < (is_menu() ? (mapping_type ? SYS_BTN_CNT_ESC + 1 : SYS_BTN_OSD_KTGL + 1) : mapping_count))
-				{
-					if (ev->value == 1 && !key_mapped)
-					{
-						if (is_menu())
-						{
-							if (mapping_dev == dev && !(!mapping_button && last_axis && ((ev->code == last_axis) || (ev->code == last_axis + 1))))
-							{
-								if (!mapping_button) memset(input[dev].map, 0, sizeof(input[dev].map));
-								input[dev].osd_combo = 0;
-
-								int found = 0;
-								if (mapping_button < SYS_BTN_CNT_OK)
-								{
-									for (int i = (mapping_button >= BUTTON_DPAD_COUNT) ? BUTTON_DPAD_COUNT : 0; i < mapping_button; i++) if (input[dev].map[i] == ev->code) found = 1;
-								}
-
-								if (!found || (mapping_button == SYS_BTN_OSD_KTGL && mapping_type))
-								{
-									if (mapping_button == SYS_BTN_CNT_OK) input[dev].map[SYS_BTN_MENU_FUNC] = ev->code & 0xFFFF;
-									else if (mapping_button == SYS_BTN_CNT_ESC) input[dev].map[SYS_BTN_MENU_FUNC] = (ev->code << 16) | input[dev].map[SYS_BTN_MENU_FUNC];
-									else if (mapping_button == SYS_BTN_OSD_KTGL)
-									{
-										input[dev].map[SYS_BTN_OSD_KTGL + mapping_type] = ev->code;
-										input[dev].map[SYS_BTN_OSD_KTGL + 2] = input[dev].map[SYS_BTN_OSD_KTGL + 1];
-										mapping_current_key = 0; // allow 2 buttons to be pressed
-									}
-									else input[dev].map[mapping_button] = ev->code;
-
-									key_mapped = ev->code;
-
-									//check if analog stick has been used for mouse
-									if (mapping_button == BUTTON_DPAD_COUNT + 1 || mapping_button == BUTTON_DPAD_COUNT + 3)
-									{
-										if (input[dev].map[mapping_button] >= KEY_EMU &&
-											input[dev].map[mapping_button - 1] >= KEY_EMU &&
-											(input[dev].map[mapping_button - 1] - input[dev].map[mapping_button] == 1) && // same axis
-											absinfo)
-										{
-											input[dev].map[SYS_AXIS_MX + (mapping_button - (BUTTON_DPAD_COUNT + 1)) / 2] = ((input[dev].map[mapping_button] - KEY_EMU) / 2) | 0x20000;
-										}
-									}
-								}
-							}
-						}
-						else
-						{
-							if (clear)
-							{
-								memset(input[mapping_dev].map, 0, sizeof(input[mapping_dev].map));
-								mapping_button = 0;
-								mapping_clear = 1;
-							}
-							else
-							{
-								if (!mapping_button)
-								{
-									for (uint i = 0; i < sizeof(input[0].map) / sizeof(input[0].map[0]); i++)
-									{
-										input[dev].map[i] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
-									}
-								}
-
-								int found = 0;
-								for (int i = 0; i < mapping_button; i++)
-								{
-									if (mapping_set && (input[dev].map[i] >> 16) == ev->code) found = 1;
-									if (!mapping_set && (input[dev].map[i] & 0xFFFF) == ev->code) found = 1;
-								}
-
-								if (!found)
-								{
-									if (mapping_set) input[dev].map[mapping_button] = (input[dev].map[mapping_button] & 0xFFFF) | (ev->code << 16);
-									else input[dev].map[mapping_button] = (input[dev].map[mapping_button] & 0xFFFF0000) | ev->code;
-									key_mapped = ev->code;
-								}
-							}
-						}
-					}
-					//combo for osd button
-					if (ev->value == 1 && key_mapped && key_mapped != ev->code && is_menu() && mapping_button == SYS_BTN_OSD_KTGL && mapping_type)
-					{
-						input[dev].map[SYS_BTN_OSD_KTGL + 2] = ev->code;
-						printf("Set combo: %x + %x\n", input[dev].map[SYS_BTN_OSD_KTGL + 1], input[dev].map[SYS_BTN_OSD_KTGL + 2]);
-					}
-					else if(mapping_dev == dev && ev->value == 0 && key_mapped == ev->code)
-					{
-						mapping_button++;
-						key_mapped = 0;
-					}
-
-					if(!ev->value && mapping_dev == dev && ((ev->code == last_axis) || (ev->code == last_axis+1)))
-					{
-						last_axis = 0;
-					}
-				}
-			}
-		}
-		else if (is_menu())
-		{
-			//Define min-0-max analogs
-			switch (mapping_button)
-			{
-				case 23: idx = SYS_AXIS_X;  break;
-				case 24: idx = SYS_AXIS_Y;  break;
-				case -4: idx = SYS_AXIS1_X; break;
-				case -3: idx = SYS_AXIS1_Y; break;
-				case -2: idx = SYS_AXIS2_X; break;
-				case -1: idx = SYS_AXIS2_Y; break;
-			}
-
-			if (mapping_dev == dev || (mapping_dev < 0 && mapping_button < 0))
-			{
-				int max = 0; // , min = 0;
-
-				if (ev->type == EV_ABS)
-				{
-					int threshold = (absinfo->maximum - absinfo->minimum) / 5;
-
-					max = (ev->value >= (absinfo->maximum - threshold));
-					//min = (ev->value <= (absinfo->minimum + threshold));
-					//printf("threshold=%d, min=%d, max=%d\n", threshold, min, max);
-				}
-
-				//check DPAD horz
-				if (mapping_button == -6)
-				{
-					last_axis = 0;
-					if (ev->type == EV_ABS && max)
-					{
-						if (mapping_dev < 0) mapping_dev = dev;
-						mapping_type = 1;
-
-						if (absinfo->maximum > 2)
-						{
-							tmp_axis[tmp_axis_n++] = ev->code | 0x20000;
-							mapping_button++;
-						}
-						else
-						{
-							//Standard DPAD event
-							mapping_button += 2;
-						}
-					}
-					else if (ev->type == EV_KEY && ev->value == 1)
-					{
-						//DPAD uses simple button events
-						if (!map_skip)
-						{
-							mapping_button += 2;
-							if (mapping_dev < 0) mapping_dev = dev;
-							if (ev->code < 256)
-							{
-								// keyboard, skip stick 1/2
-								mapping_button += 4;
-								mapping_type = 0;
-							}
-						}
-					}
-				}
-				//check DPAD vert
-				else if (mapping_button == -5)
-				{
-					if (ev->type == EV_ABS && max && absinfo->maximum > 1 && ev->code != (tmp_axis[0] & 0xFFFF))
-					{
-						tmp_axis[tmp_axis_n++] = ev->code | 0x20000;
-						mapping_button++;
-					}
-				}
-				//Sticks
-				else if (ev->type == EV_ABS && idx)
-				{
-					if (mapping_dev < 0) mapping_dev = dev;
-
-					if (idx && max && absinfo->maximum > 2)
-					{
-						if (mapping_button < 0)
-						{
-							int found = 0;
-							for (int i = 0; i < tmp_axis_n; i++) if (ev->code == (tmp_axis[i] & 0xFFFF)) found = 1;
-							if (!found)
-							{
-								mapping_type = 1;
-								tmp_axis[tmp_axis_n++] = ev->code | 0x20000;
-								//if (min) tmp_axis[idx - AXIS1_X] |= 0x10000;
-								mapping_button++;
-								if (tmp_axis_n >= 4) mapping_button = 0;
-								last_axis = KEY_EMU + (ev->code << 1);
-							}
-						}
-						else
-						{
-							if (idx == SYS_AXIS_X || ev->code != (input[dev].map[idx - 1] & 0xFFFF))
-							{
-								input[dev].map[idx] = ev->code | 0x20000;
-								//if (min) input[dev].map[idx] |= 0x10000;
-								mapping_button++;
-							}
-						}
-					}
-				}
-			}
-		}
-
-		while (mapping_type <= 1 && mapping_button < mapping_count)
-		{
-			if (map_skip)
-			{
-				if (map_skip == 2 || ev->value == 1)
-				{
-					if (mapping_dev >= 0)
-					{
-						if (idx) input[mapping_dev].map[idx] = 0;
-						else if (mapping_button > 0)
-						{
-							if (!is_menu()) input[mapping_dev].map[mapping_button] &= mapping_set ? 0x0000FFFF : 0xFFFF0000;
-						}
-					}
-					last_axis = 0;
-					mapping_button++;
-					if (mapping_button < 0 && (mapping_button & 1)) mapping_button++;
-				}
-			}
-
-			map_skip = 0;
-			if (mapping_button >= 4 && !is_menu() && !strcmp(joy_bnames[mapping_button - 4], "-")) map_skip = 2;
-			if (!map_skip) break;
-		}
-
-		if (is_menu() && mapping_type <= 1 && mapping_dev >= 0)
-		{
-			memcpy(&input[mapping_dev].mmap[SYS_AXIS1_X], tmp_axis, sizeof(tmp_axis));
-			memcpy(&input[mapping_dev].map[SYS_AXIS1_X], tmp_axis, sizeof(tmp_axis));
-		}
+		map_input_event(ev, absinfo, dev, map_skip, osd_event);
 	}
 	else
 	{
-		key_mapped = 0;
+		mapping_key_mapped = 0;
 		switch (ev->type)
 		{
 		case EV_KEY:
@@ -3725,16 +3290,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						{
 							if (input[dev].mmap[SYS_AXIS_X])
 							{
-								uint16_t key = KEY_EMU + ((uint16_t)input[dev].mmap[SYS_AXIS_X] * 2);
-								if (ev->code == (key + 1)) joy_digital(0, 1 << 0, 0, ev->value, 0);
-								if (ev->code == key) joy_digital(0, 1 << 1, 0, ev->value, 1);
+								const int direction = menu_axis_direction(input[dev].mmap[SYS_AXIS_X], ev->code);
+								if (direction >= 0) joy_digital(0, 1 << direction, 0, ev->value, direction);
 							}
 
 							if (input[dev].mmap[SYS_AXIS_Y])
 							{
-								uint16_t key = KEY_EMU + ((uint16_t)input[dev].mmap[SYS_AXIS_Y] * 2);
-								if (ev->code == (key + 1)) joy_digital(0, 1 << 2, 0, ev->value, 2);
-								if (ev->code == key) joy_digital(0, 1 << 3, 0, ev->value, 3);
+								const int direction = menu_axis_direction(input[dev].mmap[SYS_AXIS_Y], ev->code);
+								if (direction >= 0) joy_digital(0, 1 << (direction + 2), 0, ev->value, direction + 2);
 							}
 						}
 					}
@@ -3780,10 +3343,10 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 						input[dev].has_map = 1;
 					}
 
-					for (uint i = 0; i < BTN_NUM; i++)
+					for (uint i = 0; i < BTN_NUM && i < 32; i++)
 					{
 						if (ev->code == (input[dev].map[i] & 0xFFFF) || ev->code == (input[dev].map[i] >> 16)) {
-							if (ev->value <= 1) joy_digital(input[dev].num, 1 << i, origcode, ev->value, i, (ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 1] || ev->code == input[dev].mmap[SYS_BTN_OSD_KTGL + 2]));
+							if (ev->value <= 1) joy_digital(input[dev].num, 1u << i, origcode, ev->value, i, osd_map_has_code(input[dev].mmap, ev->code));
 						}
 					}
 
@@ -3839,11 +3402,11 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				{
 					if (!kbd_toggle)
 					{
-						for (uint i = 0; i < BTN_NUM; i++)
+						for (uint i = 0; i < BTN_NUM && i < 32; i++)
 						{
 							if (ev->code == (uint16_t)input[dev].map[i])
 							{
-								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 1 : 2, 1 << i, origcode, ev->value, i);
+								if (ev->value <= 1) joy_digital((user_io_get_kbdemu() == EMU_JOY0) ? 1 : 2, 1u << i, origcode, ev->value, i);
 								return;
 							}
 						}
@@ -3930,30 +3493,41 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 		//analog joystick
 		case EV_ABS:
-			if (!user_io_osd_is_visible())
+			if (user_io_osd_is_visible())
 			{
 				int value = ev->value;
 				if (ev->value < absinfo->minimum) value = absinfo->minimum;
 				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
 
+				joy_analog_triggers(dev, ev->code, value, absinfo);
+				break;
+			}
+
+			{
+				int value = ev->value;
+				if (ev->value < absinfo->minimum) value = absinfo->minimum;
+				else if (ev->value > absinfo->maximum) value = absinfo->maximum;
+
+				if (joy_analog_triggers(dev, ev->code, value, absinfo))
+					break;
+
 				if (ev->code == 8 && input[dev].quirk != QUIRK_WHEEL)
 				{
 					if (input[dev].num && input[dev].num <= NUMPLAYERS)
 					{
-						value -= absinfo->minimum;
-						value = (value * 255) / (absinfo->maximum - absinfo->minimum);
+						value = (int)((((int64_t)value - absinfo->minimum) * 255) / ((int64_t)absinfo->maximum - absinfo->minimum));
 						user_io_l_analog_joystick(((input[dev].num - 1) << 4) | 0xF, value, 0);
 					}
 					break;
 				}
 
-				int hrange = (absinfo->maximum - absinfo->minimum) / 2;
+				const int64_t hrange = ((int64_t)absinfo->maximum - absinfo->minimum) / 2;
 
 				// normalize to -range/2...+range/2
-				value -= (absinfo->minimum + absinfo->maximum) / 2;
+				const int64_t centred = value - ((int64_t)absinfo->minimum + absinfo->maximum) / 2;
 
 				int range = is_psx() ? 128 : 127;
-				value = (value * range) / hrange;
+				value = (int)((centred * range) / hrange);
 
 				// final check to eliminate additive error
 				if (value < -range) value = -range;
@@ -3965,14 +3539,14 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 				if (ev->code == (input[dev].mmap[SYS_AXIS_MX] & 0xFFFF) && mouse_emu)
 				{
 					mouse_emu_x = 0;
-					if (value < -1 || value > 1) mouse_emu_x = value;
+					if (value < -1 || value > 1) mouse_emu_x = map_axis_offset(input[dev].mmap[SYS_AXIS_MX], value);
 					mouse_emu_x /= 12;
 					return;
 				}
 				else if (ev->code == (input[dev].mmap[SYS_AXIS_MY] & 0xFFFF) && mouse_emu)
 				{
 					mouse_emu_y = 0;
-					if (value < -1 || value > 1) mouse_emu_y = value;
+					if (value < -1 || value > 1) mouse_emu_y = map_axis_offset(input[dev].mmap[SYS_AXIS_MY], value);
 					mouse_emu_y /= 12;
 					return;
 				}
@@ -3983,7 +3557,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 
 					if (input[dev].quirk == QUIRK_WHEEL)
 					{
-						int wh_value = ((127 * (ev->value - absinfo->minimum)) / (absinfo->maximum - absinfo->minimum)) - 127;
+						int wh_value = (int)((127 * ((int64_t)ev->value - absinfo->minimum)) / ((int64_t)absinfo->maximum - absinfo->minimum)) - 127;
 						if (input[dev].wh_pedal_invert > 0) {
 							// invert pedal values range for wheel setups that require it
 							wh_value = ~(wh_value + 127);
@@ -4029,21 +3603,21 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 					else
 					{
 						int offset = (value < -1 || value > 1) ? value : 0;
-						if (input[dev].stick_l[0] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_l[0]])
+						if (input[dev].stick_l[0] && ev->code == map_axis_code(input[dev].mmap[input[dev].stick_l[0]]))
 						{
-							joy_analog(dev, 0, offset, 0);
+							joy_analog(dev, 0, map_axis_offset(input[dev].mmap[input[dev].stick_l[0]], offset), 0);
 						}
-						else if (input[dev].stick_l[1] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_l[1]])
+						else if (input[dev].stick_l[1] && ev->code == map_axis_code(input[dev].mmap[input[dev].stick_l[1]]))
 						{
-							joy_analog(dev, 1, offset, 0);
+							joy_analog(dev, 1, map_axis_offset(input[dev].mmap[input[dev].stick_l[1]], offset), 0);
 						}
-						else if (input[dev].stick_r[0] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_r[0]])
+						else if (input[dev].stick_r[0] && ev->code == map_axis_code(input[dev].mmap[input[dev].stick_r[0]]))
 						{
-							joy_analog(dev, 0, offset, 1);
+							joy_analog(dev, 0, map_axis_offset(input[dev].mmap[input[dev].stick_r[0]], offset), 1);
 						}
-						else if (input[dev].stick_r[1] && ev->code == (uint16_t)input[dev].mmap[input[dev].stick_r[1]])
+						else if (input[dev].stick_r[1] && ev->code == map_axis_code(input[dev].mmap[input[dev].stick_r[1]]))
 						{
-							joy_analog(dev, 1, offset, 1);
+							joy_analog(dev, 1, map_axis_offset(input[dev].mmap[input[dev].stick_r[1]], offset), 1);
 						}
 					}
 				}
@@ -4077,6 +3651,12 @@ void send_map_cmd(int key)
 		ev.code = key;
 		ev.value = 1;
 		input_cb(&ev, 0, mapping_dev);
+	}
+	else if (mapping && key == KEY_ALTERASE && mapping_type <= 1 && mapping_button < mapping_count)
+	{
+		advance_map_button();
+		prepare_mapping_trigger_capture();
+		if (is_menu() && !menu_mouse_map && mapping_button < 0) record_menu_tmp_axis_stage();
 	}
 }
 
@@ -5462,6 +5042,7 @@ int input_test(int getchar)
 
 	if (state == 1)
 	{
+		invalidate_map_setting();
 		timeout = 0;
 		printf("Open up to %d input devices.\n", NUMDEV);
 		for (int i = 0; i < NUMDEV; i++)
@@ -5470,6 +5051,8 @@ int input_test(int getchar)
 			pool[i].events = 0;
 		}
 
+		reset_analog_triggers();
+
 		// clear button reference counts and key states
 		memset(key_states, 0, sizeof(key_states));
 		for (int i = 0; i < NUMPLAYERS; i++) {
@@ -5477,6 +5060,10 @@ int input_test(int getchar)
 		}
 
 		memset(input, 0, sizeof(input));
+
+		clear_mapping_current_input();
+		clear_mapping_osd_hold_capture();
+		clear_mapping_trigger_capture();
 
 		int n = 0;
 		DIR *d = opendir("/dev/input");
@@ -5961,6 +5548,7 @@ int input_test(int getchar)
 
 			if ((pool[NUMDEV].revents & POLLIN) && check_devs())
 			{
+				invalidate_map_setting();
 				printf("Close all devices.\n");
 				for (int i = 0; i < NUMDEV; i++) if (pool[i].fd >= 0)
 				{
@@ -6054,8 +5642,9 @@ int input_test(int getchar)
 										if (stick_debug & 4)
 										{
 											static int x = 0, y = 0;
-											if (ev.code == 0 || ev.code == 3 || ev.code == 2) x = (255 * (ev.value - absinfo.minimum)) / (absinfo.maximum - absinfo.minimum);
-											if (ev.code == 1 || ev.code == 4 || ev.code == 5) y = (255 * (ev.value - absinfo.minimum)) / (absinfo.maximum - absinfo.minimum);
+											const int64_t span = (int64_t)absinfo.maximum - absinfo.minimum;
+											if (ev.code == 0 || ev.code == 3 || ev.code == 2) x = (int)((255 * ((int64_t)ev.value - absinfo.minimum)) / span);
+											if (ev.code == 1 || ev.code == 4 || ev.code == 5) y = (int)((255 * ((int64_t)ev.value - absinfo.minimum)) / span);
 											dbg_draw_cursor(x, y);
 											if (ev.code <= 5) return 0;
 										}
@@ -6414,10 +6003,11 @@ int input_test(int getchar)
 									dev = i;
 								}
 
+								const int dpad_test = mapping && mapping_type <= 1 && mapping_button < -4;
 								if (!noabs) input_cb(&ev, &absinfo, i);
 
 								// simulate digital directions from analog
-								if (ev.type == EV_ABS && !(mapping && mapping_type <= 1 && mapping_button < -4) && !(ev.code <= 1 && input[dev].lightgun) && input[dev].quirk != QUIRK_PDSP && input[dev].quirk != QUIRK_MSSP)
+								if (ev.type == EV_ABS && !dpad_test && !(ev.code <= 1 && input[dev].lightgun) && input[dev].quirk != QUIRK_PDSP && input[dev].quirk != QUIRK_MSSP)
 								{
 									input_absinfo *pai = 0;
 									uint8_t axis_edge = 0;
@@ -6429,20 +6019,15 @@ int input_test(int getchar)
 									else
 									{
 										pai = &absinfo;
-										int range = absinfo.maximum - absinfo.minimum + 1;
-										int center = absinfo.minimum + (range / 2);
-										int treshold = (range * cfg.dpad_threshold) / 200;
+										const int64_t range = (int64_t)absinfo.maximum - absinfo.minimum + 1;
+										const int64_t center = absinfo.minimum + (range / 2);
+										const int64_t treshold = (range * cfg.dpad_threshold) / 200;
 
-										// Wheel axes (steering, pedals) give only the 'max' direction. Their stick slots
-										// are cleared when the map loads, but the stick tests of the joystick setup put
-										// them back for the rest of that setup: a released pedal then rests on its 'min'
-										// edge and holds a key that locks out every button and d-pad prompt.
-										int only_max = 1;
-										if (input[dev].quirk != QUIRK_WHEEL)
-											for (int n = 0; n < 4; n++) if (input[dev].mmap[SYS_AXIS1_X + n] && ((input[dev].mmap[SYS_AXIS1_X + n] & 0xFFFF) == ev.code)) only_max = 0;
-
-										if (ev.value < center - treshold && !only_max) axis_edge = 1;
-										if (ev.value > center + treshold) axis_edge = 2;
+										if (!trigger_axis_edge(dev, ev.code, ev.value, &absinfo, input[dev].axis_edge[ev.code & 255], &axis_edge))
+										{
+											if (ev.value < center - treshold && axis_has_negative_binding(dev, ev.code)) axis_edge = 1;
+											if (ev.value > center + treshold) axis_edge = 2;
+										}
 									}
 
 									uint8_t last_state = input[dev].axis_edge[ev.code & 255];
@@ -6453,23 +6038,18 @@ int input_test(int getchar)
 									{
 										uint16_t ecode = KEY_EMU + (ev.code << 1) - 1;
 										ev.type = EV_KEY;
-										if (last_state)
-										{
-											ev.value = 0;
-											ev.code = ecode + last_state;
-											input_cb(&ev, pai, i);
-										}
-
-										if (axis_edge)
-										{
-											ev.value = 1;
-											ev.code = ecode + axis_edge;
-											input_cb(&ev, pai, i);
-										}
+										for (int pressed = 0; pressed <= 1; pressed++)
+											for (int edge = 1; edge <= 2; edge++)
+												if (((last_state ^ axis_edge) & edge) && (!!(axis_edge & edge) == pressed))
+												{
+													ev.value = pressed;
+													ev.code = ecode + edge;
+													input_cb(&ev, pai, i);
+												}
 									}
 
 									// Menu button on 8BitDo Receiver in D-Input mode
-									if (ev.code == 9 && input[dev].vid == 0x2dc8 && (input[dev].pid == 0x3100 || input[dev].pid == 0x3104))
+									if (is_8bitdo_menu_axis(dev, ev.code))
 									{
 										ev.type = EV_KEY;
 										ev.code = KEY_EMU + (ev.code << 1);
@@ -6676,6 +6256,14 @@ int input_poll(int getchar)
 	int ret = input_test(getchar);
 	if (getchar) return ret;
 
+	osd_hold_poll();
+
+	if (analog_triggers_resync_req)
+	{
+		analog_triggers_resync_req = 0;
+		input_analog_triggers_resync(user_io_osd_is_visible());
+	}
+
 	uinp_check_key();
 
 	static int prev_dx = 0;
@@ -6796,7 +6384,11 @@ void input_notify_mode()
 
 void input_switch(int grab)
 {
-	if (grab >= 0) grabbed = grab;
+	if (grab >= 0 && grab != grabbed)
+	{
+		grabbed = grab;
+		analog_triggers_resync_req = 1;
+	}
 	//printf("input_switch(%d), grabbed = %d\n", grab, grabbed);
 
 	for (int i = 0; i < NUMDEV; i++)
@@ -6909,8 +6501,9 @@ uint32_t advanced_get_btn_mask_for_code(uint16_t evcode, int devnum)
 
 	for (uint i = 0; i < BTN_NUM; i++)
 	{
-		if (evcode == (input[devnum].map[i] & 0xFFFF)) mask |= 1 << i;
-		else if (evcode == (input[devnum].map[i] >> 16)) mask |= 1 << i;
+		if (i >= 32) break;
+		if (evcode == (input[devnum].map[i] & 0xFFFF)) mask |= 1u << i;
+		else if (evcode == (input[devnum].map[i] >> 16)) mask |= 1u << i;
 	}
 
 	return mask;
@@ -6949,7 +6542,7 @@ uint8_t advanced_entry_pressed_state(advancedButtonMap *abm, advancedButtonState
 	int pressed_cnt = 0;
 	bool chord_has_osd = false;
 	bool is_pressed = true;
-	bool code_is_osd_btn = (evcode == input[devnum].mmap[SYS_BTN_OSD_KTGL+1] || evcode == input[devnum].mmap[SYS_BTN_OSD_KTGL+2]);
+	bool code_is_osd_btn = osd_map_has_code(input[devnum].mmap, evcode);
 
 	for (unsigned int i = 0; i < sizeof(abm->input_codes)/sizeof(abm->input_codes[0]); i++)
 	{
@@ -6965,7 +6558,7 @@ uint8_t advanced_entry_pressed_state(advancedButtonMap *abm, advancedButtonState
 		}
 		code_cnt++;
 		if (abs->input_state & 1<<i) pressed_cnt++;
-		if (abm->input_codes[i] == input[devnum].mmap[SYS_BTN_OSD_KTGL+1] || abm->input_codes[i] == input[devnum].mmap[SYS_BTN_OSD_KTGL+2])
+		if (osd_map_has_code(input[devnum].mmap, abm->input_codes[i]))
 			chord_has_osd = true;
 	}
 
@@ -7081,8 +6674,8 @@ advancedButtonMap *get_advanced_map_defs(int devnum)
 void get_button_name_for_code(uint16_t btn_code, int devnum, char *bname, size_t bname_sz)
 {
 	static int last_devnum = -1;
-	static uint16_t btn_map[KEY_MAX - BTN_JOYSTICK] = {0};
-	static uint16_t abs_map[ABS_MAX] = {0};
+	static uint16_t btn_map[GCDB_BUTTON_MAP_SIZE] = {};
+	static uint16_t abs_map[GCDB_AXIS_MAP_SIZE] = {};
 	if (devnum != last_devnum)
 	{
 		memset(btn_map, 0xFFFF, sizeof(btn_map));

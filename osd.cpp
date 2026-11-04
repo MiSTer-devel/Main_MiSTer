@@ -420,6 +420,27 @@ void OsdDrawLogo(int row)
 	}
 }
 
+void OsdDrawBitmapRow(unsigned char n, const unsigned char *cols, int width)
+{
+	osd_start(n);
+	if (n < osd_size)
+	{
+		draw_title(&titlebuffer[(osd_size - 1 - n) * 8]);
+	}
+	else
+	{
+		memset(&osdbuf[osdbufpos], 0, 22);
+		osdbufpos += 22;
+	}
+
+	const int area = OSDLINELEN - 22;
+	const int left = (area - width) / 2;
+	for (int x = 0; x < area; x++)
+	{
+		osdbuf[osdbufpos++] = (x >= left && x < left + width) ? cols[x - left] : 0;
+	}
+}
+
 #define INFO_MAXW 32
 #define INFO_MAXH 16
 

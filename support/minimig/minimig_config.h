@@ -50,7 +50,9 @@ typedef struct
 
 enum mm_userportMode {
 	mmup_mp32pi = 0,
-	mmup_misterfloppy = 1
+	mmup_misterfloppy = 1,
+	mmup_snac1 = 2,
+	mmup_snac2 = 3
 };
 
 typedef struct
@@ -85,6 +87,7 @@ typedef struct
 
 	mm_userportMode userport;
 	mm_floppyexTYPE externalfloppy;
+	unsigned char   snac_autofire;
 } mm_configTYPE;
 
 extern mm_configTYPE minimig_config;

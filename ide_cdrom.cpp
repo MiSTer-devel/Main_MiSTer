@@ -1135,6 +1135,57 @@ void cdrom_read(ide_config *ide)
 	pkt_send(ide, ide_buf, cnt * 2048);
 }
 
+static void cdrom_mode1_edc_ecc(uint8_t *s)
+{
+	static uint32_t edc_lut[256];
+	static uint8_t ecc_f_lut[256], ecc_b_lut[256];
+	if (!edc_lut[1])
+	{
+		for (uint32_t i = 0; i < 256; i++)
+		{
+			uint32_t j = (i << 1) ^ ((i & 0x80) ? 0x11D : 0);
+			ecc_f_lut[i] = (uint8_t)j;
+			ecc_b_lut[i ^ j] = (uint8_t)i;
+			uint32_t edc = i;
+			for (int k = 0; k < 8; k++) edc = (edc >> 1) ^ ((edc & 1) ? 0xD8018001 : 0);
+			edc_lut[i] = edc;
+		}
+	}
+
+	uint32_t edc = 0;
+	for (int i = 0; i < 0x810; i++) edc = (edc >> 8) ^ edc_lut[(edc ^ s[i]) & 0xFF];
+	s[0x810] = (uint8_t)edc;
+	s[0x811] = (uint8_t)(edc >> 8);
+	s[0x812] = (uint8_t)(edc >> 16);
+	s[0x813] = (uint8_t)(edc >> 24);
+	memset(s + 0x814, 0, 8);
+
+	for (int pq = 0; pq < 2; pq++)
+	{
+		uint32_t major_count = pq ? 52 : 86, minor_count = pq ? 43 : 24;
+		uint32_t major_mult = pq ? 86 : 2, minor_inc = pq ? 88 : 86;
+		uint32_t size = major_count * minor_count;
+		uint8_t *dest = s + (pq ? 0x8C8 : 0x81C);
+		for (uint32_t major = 0; major < major_count; major++)
+		{
+			uint32_t index = (major >> 1) * major_mult + (major & 1);
+			uint8_t a = 0, b = 0;
+			for (uint32_t minor = 0; minor < minor_count; minor++)
+			{
+				uint8_t t = s[0xC + index];
+				index += minor_inc;
+				if (index >= size) index -= size;
+				a ^= t;
+				b ^= t;
+				a = ecc_f_lut[a];
+			}
+			a = ecc_b_lut[ecc_f_lut[a] ^ b];
+			dest[major] = a;
+			dest[major + major_count] = a ^ b;
+		}
+	}
+}
+
 int cdrom_read_raw_sector(drive_t *drive, uint32_t lba, uint8_t *buf)
 {
 	if (!drive || !buf) return -1;
@@ -1185,6 +1236,7 @@ int cdrom_read_raw_sector(drive_t *drive, uint32_t lba, uint8_t *buf)
 			                           BYTES_PER_COOKED_REDBOOK_FRAME, buf,
 			                           drive->chd_hunkbuf, &drive->chd_hunknum)
 			    != CHDERR_NONE) return -1;
+			cdrom_mode1_edc_ecc(buf);
 			return 0;
 		}
 
@@ -1226,6 +1278,7 @@ int cdrom_read_raw_sector(drive_t *drive, uint32_t lba, uint8_t *buf)
 		buf[14] = (uint8_t)(((ff / 10) << 4) | (ff % 10));
 		buf[15] = 0x01;
 		if (FileReadAdv(&track->f, buf + 16, 2048, -1) <= 0) return -1;
+		cdrom_mode1_edc_ecc(buf);
 		return 0;
 	}
 

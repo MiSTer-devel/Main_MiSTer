@@ -1855,6 +1855,7 @@ static int joyswap = 0;
 void user_io_set_joyswap(int swap)
 {
 	joyswap = swap;
+	input_analog_triggers_resync(osd_is_visible);
 }
 
 int user_io_get_joyswap()
@@ -1892,6 +1893,21 @@ void user_io_r_analog_joystick(unsigned char joystick, char valueX, char valueY)
 			spi8(valueX);
 			spi8(valueY);
 		}
+		DisableIO();
+	}
+}
+
+void user_io_analog_triggers(unsigned char joystick, uint8_t l2, uint8_t r2)
+{
+	static uint8_t sent[NUMPLAYERS][2] = {};
+	uint8_t joy = (joystick > 1 || !joyswap) ? joystick : joystick ^ 1;
+
+	if (core_type == CORE_TYPE_8BIT && joy < NUMPLAYERS && (sent[joy][0] != l2 || sent[joy][1] != r2))
+	{
+		sent[joy][0] = l2;
+		sent[joy][1] = r2;
+		spi_uio_cmd8_cont(UIO_ATRIG, joy);
+		spi_w((r2 << 8) | l2);
 		DisableIO();
 	}
 }
@@ -4432,8 +4448,11 @@ void user_io_check_reset(unsigned short modifiers, char useKeys)
 
 void user_io_osd_key_enable(char on)
 {
+	on = !!on;
 	//printf("OSD is now %s\n", on ? "visible" : "invisible");
+	if (osd_is_visible != on) input_analog_triggers_resync(on);
 	osd_is_visible = on;
+
 	if (cfg.log_file_entry) MakeFile("/tmp/OSD_VISIBLE", on ? "1" : "0");
 	input_switch(-1);
 }
