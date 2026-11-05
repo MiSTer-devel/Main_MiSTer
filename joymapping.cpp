@@ -853,6 +853,15 @@ static int tmp_axis_contains_axis(uint16_t axis)
 	return 0;
 }
 
+static int is_menu_stick2_axis(uint16_t axis)
+{
+	const int stage = get_tmp_axis_stage_index(-2);
+	if (!(tmp_axis_stage_seen & (1 << stage))) return 0;
+	for (int i = tmp_axis_stage_count[stage]; i < tmp_axis_n; i++)
+		if ((tmp_axis[i] & MAP_FLAG_ANALOG) && map_axis_code(tmp_axis[i]) == axis) return 1;
+	return 0;
+}
+
 static int reserve_tmp_axis_slots_for_pos(int pos)
 {
 	int min_count = 0;
@@ -1752,6 +1761,9 @@ void map_input_event(struct input_event *ev, struct input_absinfo *absinfo, int 
 	// paddle axis - skip from mapping
 	if ((ev->type == EV_ABS || ev->type == EV_REL) && (ev->code == 7 || ev->code == 8) && input[dev].quirk != QUIRK_WHEEL) return;
 
+	if (ev->type == EV_KEY && absinfo && ev->code >= KEY_EMU && is_menu() && mapping_type == 1 && !menu_mouse_map &&
+		mapping_dev == dev && is_menu_stick2_axis((ev->code - KEY_EMU) >> 1)) return;
+
 	if (ev->type == EV_KEY && !ev->value && mapping_dev == dev &&
 		((mapping_ignore_release_key && mapping_ignore_release_key == ev->code) ||
 		 (mapping_ignore_release_key2 && mapping_ignore_release_key2 == ev->code)))
@@ -2005,6 +2017,7 @@ void map_input_event(struct input_event *ev, struct input_absinfo *absinfo, int 
 							mapping_button++;
 							if (tmp_axis_n >= 4) mapping_button = 0;
 							mapping_last_axis = KEY_EMU + (ev->code << 1);
+							if ((mapping_current_key & ~1) == mapping_last_axis) clear_mapping_current_input();
 						}
 					}
 				}
