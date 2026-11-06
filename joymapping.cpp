@@ -131,6 +131,19 @@ static int is_fire(char* name)
 	return 0;
 }
 
+static int right_stick_direction(const char *name)
+{
+	static const char *const names[][2] = {
+		{ "RX_LEFT", "RightX-" },
+		{ "RX_RIGHT", "RightX+" },
+		{ "RY_UP", "RightY-" },
+		{ "RY_DOWN", "RightY+" }
+	};
+	for (int direction = 0; direction < 4; direction++)
+		if (!strcasecmp(name, names[direction][0]) || !strcasecmp(name, names[direction][1])) return direction;
+	return -1;
+}
+
 static int is_extended_button(char *name)
 {
 	return !strcasecmp(name, "L2")
@@ -138,8 +151,7 @@ static int is_extended_button(char *name)
 		|| !strcasecmp(name, "L3")
 		|| !strcasecmp(name, "R3")
 		|| !strcasecmp(name, "Misc1")
-		|| !strcasecmp(name, "RightX-") || !strcasecmp(name, "RightX+")
-		|| !strcasecmp(name, "RightY-") || !strcasecmp(name, "RightY+");
+		|| right_stick_direction(name) >= 0;
 }
 
 static void copy_core_button_name(char *dst, size_t size, int index)
@@ -204,6 +216,7 @@ void map_joystick(uint32_t *map, uint32_t *mmap, const uint32_t *right_direction
 
 		char *p = strchr(btn_name, '|');
 		if (p) *p = 0;
+		const int direction = right_stick_direction(btn_name);
 
 		if(!strcasecmp(btn_name, "A")
 		|| !strcasecmp(btn_name, "Jump")
@@ -271,11 +284,9 @@ void map_joystick(uint32_t *map, uint32_t *mmap, const uint32_t *right_direction
 			map[idx] = misc1;
 		}
 
-		else if (!strcasecmp(btn_name, "RightX-") || !strcasecmp(btn_name, "RightX+") ||
-		         !strcasecmp(btn_name, "RightY-") || !strcasecmp(btn_name, "RightY+"))
+		else if (direction >= 0)
 		{
 			map[idx] = 0;
-			const int direction = (btn_name[5] == 'Y' || btn_name[5] == 'y' ? 2 : 0) + (btn_name[6] == '+');
 			const int component = direction / 2;
 			const uint32_t primary = mmap[SYS_AXIS_X + component];
 			const uint32_t stick2 = mmap[SYS_AXIS2_X + component];
