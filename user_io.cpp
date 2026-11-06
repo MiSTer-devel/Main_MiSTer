@@ -1492,6 +1492,7 @@ void user_io_init(const char *path, const char *xml)
 	// Same for the NeXT ethernet bridge.
 	next_enet_stop();
 	sun_enet_stop();
+	b3_eth_stop();
 	hp9k_enet_stop();
 	sgi_enet_stop();
 
@@ -1648,6 +1649,7 @@ void user_io_init(const char *path, const char *xml)
 				// before the boot ROMs: the Sun-2's ID PROM goes in while it is held in reset
 				if (is_sun_family()) sun_enet_start();
 				if (is_hp9k_family()) hp9k_enet_start();
+				if (is_3b1()) b3_eth_start();
 				if (is_sgi_family()) sgi_enet_start();
 
 				if (xml && isXmlName(xml) == 1)
@@ -3405,6 +3407,7 @@ void user_io_poll()
 	next_enet_poll();
 	sun_enet_poll();
 	hp9k_enet_poll();
+	b3_eth_poll();
 	sgi_enet_poll();
 
 	// The NeXT keeps a battery backed clock that the guest reads at
