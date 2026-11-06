@@ -3535,7 +3535,7 @@ void user_io_poll()
 			else if ( sd_type[disk] == SD_TYPE_IIGS)
 			{
 				if (op == 2) iigs_write(disk, &sd_image[disk], lba, ack);
-				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, ack);
+				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, blks, ack);
 				else break;
 			}
 			else if (int macop = mac_sd_service(disk, &sd_image[disk], op, lba, sz, ack))

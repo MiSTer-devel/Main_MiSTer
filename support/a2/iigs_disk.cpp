@@ -315,21 +315,33 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
 	return IIGS_HANDLED;
 }
 
-void iigs_read(int disk, fileTYPE *f, uint64_t lba, int ack)
+void iigs_read(int disk, fileTYPE *f, uint64_t lba, uint32_t blks, int ack)
 {
-	uint8_t chunk[512];
+	// Serve the whole request, as the generic SD path does: the IIgs WOZ
+	// controller asks for up to 32 blocks per track read. Blocks past the end
+	// of the image are zero; a final partial block keeps the bytes it has
+	// (WOZ1 images, e.g. Karateka, end with track data in a partial block).
+	static uint8_t buf[UIO_BUFFER_SIZE];
+	if (blks < 1) blks = 1;
+	if (blks > sizeof(buf) / 512) blks = sizeof(buf) / 512;
+	uint32_t sz = blks * 512;
+	memset(buf, 0, sz);
+
 	if (g_mode[disk] == 1) {
 		uint64_t off = lba * 512;
-		if (g_woz[disk] && off + 512 <= g_woz_sz[disk]) memcpy(chunk, g_woz[disk] + off, 512);
-		else memset(chunk, 0, 512);
+		if (g_woz[disk] && off < g_woz_sz[disk]) {
+			uint64_t n = g_woz_sz[disk] - off;
+			memcpy(buf, g_woz[disk] + off, n < sz ? (size_t)n : sz);
+		}
 	} else {
-		if (!(FileSeek(f, (int64_t)(lba * 512 + g_hdr_off[disk]), SEEK_SET) &&
-		      FileReadAdv(f, chunk, 512) > 0))
-			memset(chunk, 0, 512);
+		if (FileSeek(f, (int64_t)(lba * 512 + g_hdr_off[disk]), SEEK_SET)) {
+			int r = FileReadAdv(f, buf, sz);
+			if (r < 0) memset(buf, 0, sz);
+		}
 	}
 	EnableIO();
 	spi_w(UIO_SECTOR_RD | ack);
-	spi_block_write(chunk, user_io_get_width(), 512);
+	spi_block_write(buf, user_io_get_width(), sz);
 	DisableIO();
 }
 
