@@ -2897,6 +2897,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 	int map_back = (ev->type == EV_KEY && ev->code == KEY_BACKSPACE && mapping && mapping_type == 1);
 	int origcode = ev->code;
 
+	if (!menu_event && !(map_skip && ev->code == KEY_ALTERASE) && filter_mapping_event(ev, dev)) return;
 	if (map_confirm_event(dev, ev, menu_event)) return;
 
 	if (!input[dev].has_mmap)
@@ -3161,8 +3162,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 			}
 			else
 			{
-				map_skip = 1;
-				if (mapping_type != 3) ev->value = 1;
+				map_skip = mapping_type == 3 ? 1 : 2;
 			}
 		}
 		osd_timer = 0;
@@ -3178,7 +3178,7 @@ static void input_cb(struct input_event *ev, struct input_absinfo *absinfo, int 
 		return;
 	}
 
-	if (mapping && !menu_event && (mapping_dev >= 0 || ev->value)
+	if (mapping && !menu_event && (mapping_dev >= 0 || ev->value || map_skip == 2)
 		&& !((mapping_type < 2 || !mapping_button) && (cancel || enter))
 		&& !map_back
 		&& input[dev].quirk != QUIRK_PDSP
