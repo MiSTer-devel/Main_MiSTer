@@ -3,6 +3,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <time.h>
+#include <memory>
 
 #include "saturn.h"
 #include "../../shmem.h"
@@ -79,17 +80,18 @@ static int sgets(char *out, int sz, char **in)
 }
 
 int satcdd_t::LoadCUE(const char* filename) {
-	static char fname[1024 + 10];
-	static char line[128];
+	char fname[1024 + 10];
+	char line[128];
 	char *ptr, *lptr;
-	static char cue[100 * 1024];
+	auto cue = std::make_unique<char[]>(CUE_BUFFER_SIZE);
+
 	int new_file = 0;
 	int file_size = 0;
 
 	strcpy(fname, filename);
 
-	memset(cue, 0, sizeof(cue));
-	if (!FileLoad(fname, cue, sizeof(cue) - 1)) return 1;
+	memset(cue.get(), 0, CUE_BUFFER_SIZE);
+	if (!FileLoad(fname, cue.get(), CUE_BUFFER_SIZE - 1)) return 1;
 
 #ifdef SATURN_DEBUG
 	printf("\x1b[32mSaturn: Open CUE: %s\n\x1b[0m", fname);
@@ -98,7 +100,7 @@ int satcdd_t::LoadCUE(const char* filename) {
 	this->toc.last = -1;
 	int idx, mm, ss, bb, pregap = 0;
 
-	char *buf = cue;
+	char *buf = cue.get();
 	while (sgets(line, sizeof(line), &buf))
 	{
 		lptr = line;
