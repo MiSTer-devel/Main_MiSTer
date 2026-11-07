@@ -10,6 +10,7 @@
 
 // Apple 2 support
 #include "support/a2/dsk2nib_lib.h"
+#include "support/a2/a2_nib_codec.h"
 // Apple IIgs disk integration
 #include "support/a2/iigs_disk.h"
 // Apple III
