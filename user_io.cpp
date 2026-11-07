@@ -3403,6 +3403,7 @@ void user_io_poll()
 	}
 
 	next_enet_poll();
+	iigs_uthernet2_poll();
 	sun_enet_poll();
 	hp9k_enet_poll();
 	sgi_enet_poll();
