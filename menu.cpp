@@ -2836,6 +2836,7 @@ void HandleUI(void)
 									if (is_atari5200() && !bit) atari5200_reset();
 									if (is_3do() && !bit) p3do_reset();
 									if (is_pcfx() && !ex && bit == PCFX_BIT_NEW_CARD) pcfx_new_card();
+									if (is_videobrain() && !ex && (bit == VIDEOBRAIN_BIT_NEW_TAPE || bit == VIDEOBRAIN_BIT_NEW_PRINTER)) videobrain_new_image(bit);
 									if (is_pcfx() && !ex && bit == PCFX_BIT_EJECT_CARD) pcfx_eject_card();
 
 									user_io_status_set(opt, 1, ex);
