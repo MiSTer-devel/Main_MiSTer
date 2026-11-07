@@ -34,16 +34,16 @@
 static int      g_order[A2_SLOTS];
 static int      g_wb_track[A2_SLOTS] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 static uint32_t g_wb_mask[A2_SLOTS];
-static uint8_t  g_wb_nib[A2_SLOTS][A2_NIB_TRACK_SIZE];
+static uint8_t  g_wb_nib[A2_SLOTS][A2NIB_TRACK_SIZE];
 
 // read-side cache: the core fetches a track as 13 consecutive blocks
 static int      g_rd_index = -1, g_rd_track = -1;
-static uint8_t  g_rd_nib[A2_NIB_TRACK_SIZE];
+static uint8_t  g_rd_nib[A2NIB_TRACK_SIZE];
 
 void a2_set_image(int index, int prodos_order)
 {
 	if (index < 0 || index >= A2_SLOTS) return;
-	g_order[index] = prodos_order ? A2_ORDER_PRODOS : A2_ORDER_DOS;
+	g_order[index] = prodos_order ? A2NIB_ORDER_PRODOS : A2NIB_ORDER_DOS;
 	g_wb_track[index] = -1;
 	g_wb_mask[index] = 0;
 	if (g_rd_index == index) g_rd_index = g_rd_track = -1;
@@ -51,24 +51,24 @@ void a2_set_image(int index, int prodos_order)
 
 static void read_dsk_track(fileTYPE *fd, int track, uint8_t *dsk)
 {
-	memset(dsk, 0, A2_DSK_TRACK_SIZE);
-	if (FileSeek(fd, (off_t)track * A2_DSK_TRACK_SIZE, SEEK_SET))
-		FileReadAdv(fd, dsk, A2_DSK_TRACK_SIZE);
+	memset(dsk, 0, A2NIB_DSK_TRACK_SIZE);
+	if (FileSeek(fd, (off_t)track * A2NIB_DSK_TRACK_SIZE, SEEK_SET))
+		FileReadAdv(fd, dsk, A2NIB_DSK_TRACK_SIZE);
 }
 
 static void build_nib_track(fileTYPE *fd, int index, int track, uint8_t *nib)
 {
-	static uint8_t dsk[A2_DSK_TRACK_SIZE];
+	static uint8_t dsk[A2NIB_DSK_TRACK_SIZE];
 	read_dsk_track(fd, track, dsk);
-	a2_nibblize_track(dsk, track, A2_DEFAULT_VOLUME, g_order[index], nib);
+	a2_nibblize_track(dsk, track, A2NIB_DEFAULT_VOLUME, g_order[index], nib);
 }
 
 static void a2_readDsk2Nib(fileTYPE *fd, int index, uint64_t offset, uchar *byte)
 {
-	int track = offset / A2_NIB_TRACK_SIZE;
-	int toff = offset % A2_NIB_TRACK_SIZE;
+	int track = offset / A2NIB_TRACK_SIZE;
+	int toff = offset % A2NIB_TRACK_SIZE;
 	memset(byte, 0, 512);
-	if (track >= A2_TRACKS) return;
+	if (track >= A2NIB_TRACKS) return;
 
 	// a pending (partially received) write-back of this track wins
 	const uint8_t *src;
@@ -81,16 +81,16 @@ static void a2_readDsk2Nib(fileTYPE *fd, int index, uint64_t offset, uchar *byte
 		}
 		src = g_rd_nib;
 	}
-	int n = A2_NIB_TRACK_SIZE - toff;
+	int n = A2NIB_TRACK_SIZE - toff;
 	if (n > 512) n = 512;
 	memcpy(byte, src + toff, n);
 }
 
 static void a2_writeNib2Dsk(fileTYPE *fd, int index, uint64_t offset, const uchar *byte)
 {
-	int track = offset / A2_NIB_TRACK_SIZE;
-	int blk = (offset % A2_NIB_TRACK_SIZE) / 512;
-	if (track >= A2_TRACKS) return;
+	int track = offset / A2NIB_TRACK_SIZE;
+	int blk = (offset % A2NIB_TRACK_SIZE) / 512;
+	if (track >= A2NIB_TRACKS) return;
 
 	if (g_wb_track[index] != track) {
 		// seed with the current contents so a partial save still decodes
@@ -98,18 +98,18 @@ static void a2_writeNib2Dsk(fileTYPE *fd, int index, uint64_t offset, const ucha
 		g_wb_track[index] = track;
 		g_wb_mask[index] = 0;
 	}
-	int n = A2_NIB_TRACK_SIZE - blk * 512;
+	int n = A2NIB_TRACK_SIZE - blk * 512;
 	if (n > 512) n = 512;
 	memcpy(g_wb_nib[index] + blk * 512, byte, n);
 	g_wb_mask[index] |= 1u << blk;
 
-	if (g_wb_mask[index] == (1u << A2_NIB_BLOCKS) - 1) {
-		static uint8_t dsk[A2_DSK_TRACK_SIZE];
+	if (g_wb_mask[index] == (1u << A2NIB_BLOCKS) - 1) {
+		static uint8_t dsk[A2NIB_DSK_TRACK_SIZE];
 		read_dsk_track(fd, track, dsk);
 		uint32_t got = a2_denibblize_track(g_wb_nib[index], track, g_order[index], dsk);
 		if (got) {
-			if (FileSeek(fd, (off_t)track * A2_DSK_TRACK_SIZE, SEEK_SET))
-				FileWriteAdv(fd, dsk, A2_DSK_TRACK_SIZE);
+			if (FileSeek(fd, (off_t)track * A2NIB_DSK_TRACK_SIZE, SEEK_SET))
+				FileWriteAdv(fd, dsk, A2NIB_DSK_TRACK_SIZE);
 		}
 		if (got != 0xFFFF)
 			printf("a2: drive %d track %d: only sectors %04X decoded, others kept\n", index, track, got);

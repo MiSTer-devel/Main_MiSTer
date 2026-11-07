@@ -2282,7 +2282,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					// .po only on the floppy slots: the Apple-II core also mounts .po as a hard disk.
 					const bool po_ext = index < 2 && len > 3 && !strcasecmp(name + len - 3, ".po");
 					// A .dsk/.do/.po that is really a 35-track NIB is passed through as-is.
-					const bool nib_sized = sd_image[index].size == A2_NIB_IMAGE_SIZE;
+					const bool nib_sized = sd_image[index].size == A2NIB_IMAGE_SIZE;
 					if (!strcasecmp(name + len - 4, ".d64")
 						|| !strcasecmp(name + len - 4, ".g64")
 						|| !strcasecmp(name + len - 4, ".d71")

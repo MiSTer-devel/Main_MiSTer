@@ -35,7 +35,7 @@ static const uint8_t gcr62[64] = {
 int a2_file_sector(int phys, int order)
 {
 	phys &= 15;
-	return order == A2_ORDER_PRODOS ? prodos_order[phys] : dos_order[phys];
+	return order == A2NIB_ORDER_PRODOS ? prodos_order[phys] : dos_order[phys];
 }
 
 static void put44(uint8_t *p, int v)
@@ -80,7 +80,7 @@ void a2_nibblize_track(const uint8_t *dsk_track, int track, int volume, int orde
 		*p++ = 0xde; *p++ = 0xaa; *p++ = 0xeb;
 		memset(p, 0xff, GAP2_LEN); p += GAP2_LEN;
 		*p++ = 0xd5; *p++ = 0xaa; *p++ = 0xad;
-		encode62(dsk_track + a2_file_sector(s, order) * A2_SECTOR_SIZE, p); p += 343;
+		encode62(dsk_track + a2_file_sector(s, order) * A2NIB_SECTOR_SIZE, p); p += 343;
 		*p++ = 0xde; *p++ = 0xaa; *p++ = 0xeb;
 	}
 }
@@ -96,14 +96,14 @@ static void init_ungcr(void)
 	ungcr_ready = 1;
 }
 
-#define NB(k) nib[((unsigned)(k)) % A2_NIB_TRACK_SIZE]
+#define NB(k) nib[((unsigned)(k)) % A2NIB_TRACK_SIZE]
 
 uint32_t a2_denibblize_track(const uint8_t *nib, int track, int order, uint8_t *dsk_track)
 {
 	init_ungcr();
 	uint32_t done = 0;
 
-	for (int p = 0; p < A2_NIB_TRACK_SIZE; p++) {
+	for (int p = 0; p < A2NIB_TRACK_SIZE; p++) {
 		if (NB(p) != 0xd5 || NB(p + 1) != 0xaa || NB(p + 2) != 0x96) continue;
 		int vol = get44(NB(p + 3), NB(p + 4));
 		int trk = get44(NB(p + 5), NB(p + 6));
@@ -135,7 +135,7 @@ uint32_t a2_denibblize_track(const uint8_t *nib, int track, int order, uint8_t *
 		for (int i = 0; i < 342; i++) { x ^= v[i]; dec[i] = x; }
 		if (x != v[342]) continue;   // data checksum
 
-		uint8_t *out = dsk_track + a2_file_sector(sec, order) * A2_SECTOR_SIZE;
+		uint8_t *out = dsk_track + a2_file_sector(sec, order) * A2NIB_SECTOR_SIZE;
 		for (int i = 0; i < 256; i++) {
 			int pr = (dec[i % 86] >> ((i / 86) * 2)) & 3;
 			out[i] = (uint8_t)((dec[86 + i] << 2) | ((pr & 1) << 1) | ((pr & 2) >> 1));

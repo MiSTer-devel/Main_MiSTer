@@ -10,45 +10,19 @@
 
 #include <stdint.h>
 
-#ifndef A2_TRACKS
-#define A2_TRACKS            35
-#endif
-#ifndef A2_SECTORS
-#define A2_SECTORS           16
-#endif
-#ifndef A2_SECTOR_SIZE
-#define A2_SECTOR_SIZE       256
-#endif
-#ifndef A2_DSK_TRACK_SIZE
-#define A2_DSK_TRACK_SIZE    (A2_SECTORS * A2_SECTOR_SIZE)      // 4096
-#endif
-#ifndef A2_DSK_IMAGE_SIZE
-#define A2_DSK_IMAGE_SIZE    (A2_TRACKS * A2_DSK_TRACK_SIZE)    // 143360
-#endif
-#ifndef A2_NIB_TRACK_SIZE
-#define A2_NIB_TRACK_SIZE    6656
-#endif
-#ifndef A2_NIB_IMAGE_SIZE
-#define A2_NIB_IMAGE_SIZE    (A2_TRACKS * A2_NIB_TRACK_SIZE)    // 232960
-#endif
-#ifndef A2_NIB_BLOCKS
-#define A2_NIB_BLOCKS        13                                 // 512-byte blocks per NIB track
-#endif
-#ifndef A2_DEFAULT_VOLUME
-#define A2_DEFAULT_VOLUME    254
-#endif
+#define A2NIB_TRACKS          35
+#define A2NIB_SECTORS         16
+#define A2NIB_SECTOR_SIZE     256
+#define A2NIB_DSK_TRACK_SIZE  (A2NIB_SECTORS * A2NIB_SECTOR_SIZE)   // 4096
+#define A2NIB_DSK_IMAGE_SIZE  (A2NIB_TRACKS * A2NIB_DSK_TRACK_SIZE)   // 143360
+#define A2NIB_TRACK_SIZE      6656
+#define A2NIB_IMAGE_SIZE      (A2NIB_TRACKS * A2NIB_TRACK_SIZE)   // 232960
+#define A2NIB_BLOCKS          13                            // 512-byte blocks per NIB track
+#define A2NIB_DEFAULT_VOLUME  254
 
 // Sector order of the source image.
-#ifndef A2_ORDER_DOS
-#define A2_ORDER_DOS     0   // .dsk / .do
-#endif
-#ifndef A2_ORDER_PRODOS
-#define A2_ORDER_PRODOS  1   // .po
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define A2NIB_ORDER_DOS       0                             // .dsk / .do
+#define A2NIB_ORDER_PRODOS    1                             // .po
 
 // Image-file sector (0..15 within the track) that holds the data for the
 // sector whose address field carries sector number 'phys'.
@@ -63,9 +37,5 @@ void a2_nibblize_track(const uint8_t *dsk_track, int track, int volume, int orde
 // bitmask of the image-file sectors that were written. The track is treated as
 // circular, so a sector that straddles the end of the buffer is still found.
 uint32_t a2_denibblize_track(const uint8_t *nib, int track, int order, uint8_t *dsk_track);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif
