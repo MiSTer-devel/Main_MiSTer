@@ -87,6 +87,14 @@ int woz_disk_type(const uint8_t *buf, size_t size);
 // zlib-compatible CRC32 (poly 0xEDB88320), init 0.
 uint32_t woz_crc32(const uint8_t *data, size_t len);
 
+// Recompute the WOZ file-level CRC32 of a fully-read buffer and patch header
+// bytes 8..11 (LE) in place. The CRC covers bytes 12..end — the convention
+// used by standard WOZ tools and AppleWin (verified against reference files).
+// The core itself ignores this field; it is refreshed because in-place track
+// writes leave the stored value stale. Returns 1 if the stored CRC was stale
+// and has been patched, 0 if already correct or not a WOZ header.
+int  a2_woz_fix_crc_buf(uint8_t *buf, size_t sz);
+
 // ---- 140K sector order (DOS 3.3 <-> ProDOS) ----
 typedef enum {
 	A2_ORDER_UNKNOWN = -1,
