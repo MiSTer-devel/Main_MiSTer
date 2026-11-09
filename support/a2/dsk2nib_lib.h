@@ -5,15 +5,13 @@
 
 typedef unsigned char uchar;
 
-// Library function for on-demand DSK to NIB conversion
-void a2_readDsk2Nib(fileTYPE*fd, uint64_t offset, uchar *byte);
+// On-the-fly 16-sector image (.dsk/.do/.po) <-> NIB track service for cores
+// that read 6656-byte NIB tracks as 13 x 512-byte SD blocks (TK2000, legacy
+// Apple-II floppy path, Oric/Pravetz A2 slots). 'index' is the SD slot,
+// 'prodos_order' is 1 for .po images.
+void a2_set_image(int index, int prodos_order);
 
-// Library function for writing NIB data back to DSK format
-void a2_writeNib2Dsk(fileTYPE*fd, uint64_t offset, uchar *byte);
-
-
-void a2_writeDSK(fileTYPE* idx, uint64_t lba, int ack);
-void a2_readDSK(fileTYPE* idx, uint64_t lba, int ack);
-
+void a2_writeDSK(fileTYPE* idx, uint64_t lba, int ack, int index);
+void a2_readDSK(fileTYPE* idx, uint64_t lba, int ack, int index);
 
 #endif

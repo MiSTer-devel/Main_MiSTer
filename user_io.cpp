@@ -2279,6 +2279,10 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					const bool oric_a2_slot = oric_core && index < 2 && (ext_idx == 1 || ext_idx == 2);
 					const bool dsk_ext = !strcasecmp(name + len - 4, ".dsk");
 					const bool do_ext = len > 3 && !strcasecmp(name + len - 3, ".do");
+					// .po only on the floppy slots: the Apple-II core also mounts .po as a hard disk.
+					const bool po_ext = index < 2 && len > 3 && !strcasecmp(name + len - 3, ".po");
+					// A .dsk/.do/.po that is really a 35-track NIB is passed through as-is.
+					const bool nib_sized = sd_image[index].size == A2NIB_IMAGE_SIZE;
 					if (!strcasecmp(name + len - 4, ".d64")
 						|| !strcasecmp(name + len - 4, ".g64")
 						|| !strcasecmp(name + len - 4, ".d71")
@@ -2293,10 +2297,11 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					{
 						img_type = G64_SUPPORT_HD | G64_SUPPORT_DS;
 					}
-					else if ((dsk_ext && (a2_core || oric_a2_slot)) || (do_ext && oric_a2_slot))
+					else if (!nib_sized && (((dsk_ext || do_ext || po_ext) && a2_core) || ((dsk_ext || do_ext) && oric_a2_slot)))
 					{
-						printf("FOUND A2 DSK/DO type\n");
+						printf("FOUND A2 %s type (nibblized on the fly)\n", po_ext ? "PO" : "DSK/DO");
 						sd_type[index] = SD_TYPE_A2;
+						a2_set_image(index, po_ext);
 					}
 				}
 
@@ -3528,8 +3533,8 @@ void user_io_poll()
 			if ( sd_type[disk] == SD_TYPE_A2)
 			{
 				//if (op) printf("A2 %x %llu on %d\n", op,lba, disk);
-				if (op == 2) a2_writeDSK(&sd_image[disk], lba, ack);
-				else if (op & 1) a2_readDSK(&sd_image[disk], lba, ack);
+				if (op == 2) a2_writeDSK(&sd_image[disk], lba, ack, disk);
+				else if (op & 1) a2_readDSK(&sd_image[disk], lba, ack, disk);
 				else break;
 			}
 			else if ( sd_type[disk] == SD_TYPE_IIGS)
