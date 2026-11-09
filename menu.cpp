@@ -7143,7 +7143,7 @@ void HandleUI(void)
 		m = 0;
 		strcpy(s, " CPU      : ");
 		strcat(s, ((minimig_config.cpu & 0x23) == 0x23) ? "68EC020" : ((minimig_config.cpu & 0x23) == 0x22) ? "68EC030" : config_cpu_msg[minimig_config.cpu & 0x03]);
-		if ((minimig_config.cpu & 0x03) == 0x02) strcat(s, ((minimig_config.cpu & 0xc0) == 0x40) ? " 40MHz" : ((minimig_config.cpu & 0xc0) == 0x80) ? " 50MHz" : " Fast");
+		if ((minimig_config.cpu & 0x03) == 0x02 || (minimig_config.cpu & 0x23) == 0x03) strcat(s, ((minimig_config.cpu & 0xc0) == 0x40) ? " 40MHz" : ((minimig_config.cpu & 0xc0) == 0x80) ? " 50MHz" : " Max");
 		OsdWrite(m++, s, menusub == 0, 0);
 
 		OsdWrite(m++, "", 0, 0);
@@ -7212,17 +7212,18 @@ void HandleUI(void)
 		{
 			if (menusub == 0)
 			{
-				static const unsigned char cpu_steps[9] = { 0, 1, 0x23, 0x62, 0xa2, 0x22, 0x42, 0x82, 0x02 };
-				int step = ((minimig_config.cpu & 3) == 0) ? 0 :
-				           ((minimig_config.cpu & 3) == 1) ? 1 :
-				           ((minimig_config.cpu & 3) == 3) ? 2 :
-				           ((minimig_config.cpu & 0xe3) == 0x62) ? 3 :
-				           ((minimig_config.cpu & 0xe3) == 0xa2) ? 4 :
-				           ((minimig_config.cpu & 0x23) == 0x22) ? 5 :
-				           ((minimig_config.cpu & 0xc0) == 0x40) ? 6 :
-				           ((minimig_config.cpu & 0xc0) == 0x80) ? 7 : 8;
+				static const unsigned char cpu_steps[10] = { 0, 1, 0x23, 3, 0x62, 0xa2, 0x22, 0x42, 0x82, 0x02 };
+				int step = ((minimig_config.cpu & 3) == 0)       ? 0 :
+				           ((minimig_config.cpu & 3) == 1)       ? 1 :
+				           ((minimig_config.cpu & 0x23) == 0x23) ? 2 :
+				           ((minimig_config.cpu & 0x23) == 3)    ? 3 :
+				           ((minimig_config.cpu & 0xe3) == 0x62) ? 4 :
+				           ((minimig_config.cpu & 0xe3) == 0xa2) ? 5 :
+				           ((minimig_config.cpu & 0x23) == 0x22) ? 6 :
+				           ((minimig_config.cpu & 0xc0) == 0x40) ? 7 :
+				           ((minimig_config.cpu & 0xc0) == 0x80) ? 8 : 9;
 
-				step = (step + (minus ? 8 : 1)) % 9;
+				step = (step + (minus ? 9 : 1)) % 10;
 
 				menustate = MENU_MINIMIG_CHIPSET1;
 				minimig_config.cpu = (minimig_config.cpu & 0x1c) | cpu_steps[step];
