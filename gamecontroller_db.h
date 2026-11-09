@@ -11,8 +11,8 @@
 #define GCDB_BUTTON_MAP_SIZE (KEY_MAX + 1)
 #define GCDB_AXIS_MAP_SIZE   (ABS_MAX + 1)
 
-bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version, int dev_fd, uint32_t *fill_map);
-void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version,int dev_fd, const char *name, uint32_t *cur_map);
+bool gcdb_map_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version, int dev_fd, uint32_t *fill_map, uint32_t *right_directions, uint32_t *misc1);
+void gcdb_show_string_for_ctrl_map(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version,int dev_fd, const char *name, uint32_t *cur_map, const uint32_t *right_directions, uint32_t misc1);
 bool get_ctrl_index_maps(int dev_fd, const char *guid, uint16_t *btn_map, uint16_t *abs_map);
 bool gcdb_name_for_controller(uint16_t bustype, uint16_t vid, uint16_t pid, uint16_t version, char *name, size_t len);
 #endif
