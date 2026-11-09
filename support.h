@@ -97,3 +97,6 @@
 
 // NEC PC-FX support
 #include "support/pcfx/pcfx.h"
+
+// VideoBrain support
+#include "support/videobrain/videobrain.h"
