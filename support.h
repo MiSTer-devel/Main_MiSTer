@@ -37,6 +37,7 @@
 
 // ST (Atari) support
 #include "support/st/st_tos.h"
+#include "support/st/st_fdd.h"
 
 // X86  support
 #include "support/x86/x86.h"

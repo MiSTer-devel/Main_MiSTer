@@ -5257,8 +5257,8 @@ void HandleUI(void)
 				fs_Options = SCANO_DIR;
 				fs_MenuSelect = MENU_ST_FDD_FILE_SELECTED;
 				fs_MenuCancel = MENU_ST_MAIN1;
-				strcpy(fs_pFileExt, "ST");
-				if (select) SelectFile(Selected_F[menusub], "ST", fs_Options, fs_MenuSelect, fs_MenuCancel, menusub);
+				strcpy(fs_pFileExt, "ST STXSCPIPF");
+				if (select) SelectFile(Selected_F[menusub], "ST STXSCPIPF", fs_Options, fs_MenuSelect, fs_MenuCancel, menusub);
 				else if (recent_init(menusub)) menustate = MENU_RECENT1;
 			}
 		}
