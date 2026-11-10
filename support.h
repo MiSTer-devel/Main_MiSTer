@@ -32,6 +32,8 @@
 #include "support/hp9k/hp9k.h"
 #include "support/hp9k/hp9k_enet.h"
 #include "support/3b1/3b1_eth.h"
+#include "support/ibmrs6k/ibmrs6k.h"
+#include "support/ibmrs6k/ibmrs6k_enet.h"
 #include "support/sgi/sgi.h"
 #include "support/sgi/sgi_enet.h"
 
