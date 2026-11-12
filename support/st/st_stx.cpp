@@ -280,11 +280,51 @@ static bool is_garbled_sync(uint8_t v)
 	return v == 0xA1 || v == 0x14 || v == 0xC2 || v == 0x0A || v == 0xE1 || v == 0xCE;
 }
 
-static void unshift_image_gaps(TrackBuilder &tb)
+// A sync run that does not lead to a standard address mark. Custom formats that are
+// read with Read Track (one long block per track, no sector headers) start with 00
+// bytes, three A1 sync marks and a mark byte of their own. In a track image the 00
+// bytes read as 00 or FF until the FDC is in step and the first A1 is garbled, so
+// look for: <run of 00 or FF> <up to 2 odd bytes> <garbled A1> A1 A1.
+// i is the position of the first (garbled) sync byte.
+static bool custom_sync_at(const uint8_t *im, int n, int i)
+{
+	if (i < 8 || i + 2 >= n) return false;
+	if (im[i + 1] != 0xA1 || im[i + 2] != 0xA1) return false;
+	for (int skip = 0; skip <= 2; skip++)
+	{
+		int e = i - 1 - skip;
+		uint8_t v = im[e];
+		if (v != 0x00 && v != 0xFF) continue;
+		int run = 1;
+		while (run < 6 && e - run >= 0 && im[e - run] == v) run++;
+		if (run >= 6) return true;
+	}
+	return false;
+}
+
+static int first_custom_sync(const uint8_t *im, int n)
+{
+	for (int i = 8; i + 2 < n; i++) if (custom_sync_at(im, n, i)) return i;
+	return -1;
+}
+
+static void mark_custom_syncs(const StxTrack &t, TrackBuilder &tb)
+{
+	for (int i = 8; i + 2 < t.image_size; i++)
+	{
+		if (!custom_sync_at(t.image, t.image_size, i)) continue;
+		if (is_garbled_sync(t.image[i])) tb.put(i, 0xA1, 0, TrackBuilder::MARK_A1);
+		tb.put(i + 1, 0xA1, 0, TrackBuilder::MARK_A1);
+		tb.put(i + 2, 0xA1, 0, TrackBuilder::MARK_A1);
+		i += 2;
+	}
+}
+
+static void unshift_image_gaps(TrackBuilder &tb, int limit)
 {
 	static const uint8_t rot4e[] = { 0x4e, 0x21, 0x9c, 0x42, 0x39, 0x84, 0x72, 0x09,
 	                                 0xe4, 0x12, 0xc9, 0x24, 0x93, 0x48, 0x27, 0x90 };
-	int n = tb.size();
+	int n = std::min(tb.size(), limit);
 	for (int i = 0; i < n;)
 	{
 		uint8_t v = tb.at(i).value;
@@ -805,11 +845,14 @@ static bool build_track(const StxImage &img, int cyl, int head, TrackBuilder &tb
 	const StxTrack *t = img.find(cyl, head);
 
 	bool noise_image = false;
+	int custom_sync = -1;
 	if (t && t->image && t->sectors.empty())
 	{
 		noise_image = true;
 		for (int i = 0; i + 2 < t->image_size && noise_image; i++)
 			if (t->image[i] == 0xA1 && t->image[i + 1] == 0xA1 && t->image[i + 2] >= 0xF8) noise_image = false;
+		custom_sync = first_custom_sync(t->image, t->image_size);
+		if (custom_sync >= 0) noise_image = false;
 	}
 
 	if (!t || (t->sectors.empty() && !t->image) || noise_image)
@@ -860,8 +903,11 @@ static bool build_track(const StxImage &img, int cyl, int head, TrackBuilder &tb
 	if (use_image)
 	{
 		for (int i = 0; i < n; i++) tb.put(i, t->image[i], 0);
-		unshift_image_gaps(tb);
+		// With no sector blocks the image is the only copy of the data: everything
+		// from the first sync on was read in step and must stay as it is.
+		unshift_image_gaps(tb, custom_sync >= 0 ? custom_sync : n);
 		mark_image_syncs(tb);
+		if (custom_sync >= 0) mark_custom_syncs(*t, tb);
 		for (int s = 0; s < ns; s++)
 		{
 			if (!in_image[s])
