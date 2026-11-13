@@ -4,6 +4,7 @@
 #include <libchdr/chd.h>
 #include "file_io.h"
 
+#define CUE_BUFFER_SIZE (100 * 1024)
 
 typedef enum
 {
