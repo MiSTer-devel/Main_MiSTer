@@ -36,6 +36,8 @@
 #include "support/ibmrs6k/ibmrs6k_enet.h"
 #include "support/sgi/sgi.h"
 #include "support/sgi/sgi_enet.h"
+#include "support/decalpha/decalpha.h"
+#include "support/decalpha/decalpha_enet.h"
 
 // Archie support
 #include "support/archie/archie.h"
