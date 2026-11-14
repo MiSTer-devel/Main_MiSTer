@@ -1,6 +1,7 @@
 // Konami Firebeat arcade core: CD-ROM CHDs in the image slots, served as their raw .bin followed by
 // a TOC block (the core's rtl/board/fb_cd_slot.sv reads it); a DVD CHD (Pop'n Music's data DVD) as
-// its 2048-byte sectors back to back (rtl/spu/fb_dvd_slot.sv).
+// its 2048-byte sectors back to back (rtl/spu/fb_dvd_slot.sv); a hard disk CHD (Beatmania III's)
+// as its 512-byte sectors back to back, then a geometry block (rtl/spu/fb_atahdd.sv reads it).
 
 #include <stdio.h>
 #include <string.h>
@@ -16,11 +17,13 @@
 #define FB_SLOTS     4
 #define FB_FRAME     2352
 #define FB_DVD_TAG   CHD_MAKE_TAG('D','V','D',' ')   // chdman createdvd's metadata
+#define FB_HDD_TAG   CHD_MAKE_TAG('G','D','D','D')   // chdman createhd's geometry
 
 struct fb_chd
 {
 	int       active;
-	int       dvd;            // a DVD: data_bytes of sectors, no TOC block
+	int       dvd;            // a DVD or hard disk: data_bytes of sectors, read by hunk
+	int       hdd;            // a hard disk: then 512 bytes of tocblk, the geometry block
 	toc_t     toc;
 	uint8_t  *hunkbuf;
 	int       hunknum;
@@ -82,6 +85,31 @@ int firebeat_mount_hook(int index, const char *name, fileTYPE *f, int *writable)
 		*writable = 0;
 		f->size = (int64_t)s->data_bytes;
 		printf("Firebeat: %s in slot %d, a DVD of %llu bytes\n", name, index, (unsigned long long)s->data_bytes);
+		return 1;
+	}
+
+	// A hard disk: "FBHD", version 1, then cylinders, heads, sectors per track and bytes per
+	// sector, each 32 bits little-endian, from the CHD's GDDD metadata (MAME's IDENTIFY uses them).
+	char gddd[256] = {};
+	unsigned cyls, heads, secs, bps;
+	if (s->toc.last == 0 &&
+	    chd_get_metadata(s->toc.chd_f, FB_HDD_TAG, 0, gddd, sizeof(gddd) - 1, NULL, NULL, NULL) == CHDERR_NONE &&
+	    sscanf(gddd, "CYLS:%u,HEADS:%u,SECS:%u,BPS:%u", &cyls, &heads, &secs, &bps) == 4 && bps == 512)
+	{
+		s->dvd = 1;
+		s->hdd = 1;
+		s->data_bytes = chd_get_header(s->toc.chd_f)->logicalbytes;
+		memset(s->tocblk, 0, sizeof(s->tocblk));
+		memcpy(s->tocblk, "FBHD", 4);
+		s->tocblk[4] = 1;
+		uint32_t g[4] = { cyls, heads, secs, bps };
+		for (int i = 0; i < 4; i++)
+			for (int b = 0; b < 4; b++) s->tocblk[8 + 4 * i + b] = (uint8_t)(g[i] >> (8 * b));
+		s->active = 1;
+		*writable = 0;
+		f->size = (int64_t)(s->data_bytes + 512);
+		printf("Firebeat: %s in slot %d, a hard disk of %llu bytes, %u/%u/%u\n", name, index,
+		       (unsigned long long)s->data_bytes, cyls, heads, secs);
 		return 1;
 	}
 
@@ -188,7 +216,11 @@ int firebeat_sd_service(int disk, fileTYPE *, int op, uint64_t lba, int sz, int 
 		uint32_t off = (uint32_t)(pos % hb);
 		int n = (int)(hb - off);
 		if (n > sz - done) n = sz - done;
-		if (pos >= s->data_bytes) memset(buf + done, 0, n);
+		if (pos >= s->data_bytes)
+		{
+			uint64_t o = pos - s->data_bytes;
+			for (int i = 0; i < n; i++) buf[done + i] = (s->hdd && o + i < 512) ? s->tocblk[o + i] : 0;
+		}
 		else if (h != s->hunknum && chd_read(s->toc.chd_f, h, s->hunkbuf) != CHDERR_NONE) memset(buf + done, 0, n);
 		else { s->hunknum = h; memcpy(buf + done, s->hunkbuf + off, n); }
 		done += n;
