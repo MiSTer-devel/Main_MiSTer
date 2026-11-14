@@ -32,6 +32,7 @@
 #include "miniz.h"
 #include "scheduler.h"
 #include "video.h"
+#include "support/chd/mister_chd.h"
 #include "support.h"
 
 #define MIN(a,b) (((a)<(b)) ? (a) : (b))
@@ -133,6 +134,7 @@ fileTYPE::fileTYPE()
 	mode = 0;
 	type = 0;
 	zip = 0;
+	chd = 0;
 	size = 0;
 	offset = 0;
 }
@@ -342,6 +344,8 @@ static int isPathRegularFile(const char *path, int use_zip = 1)
 int FileClose(fileTYPE *file)
 {
 	int err = 0;
+	mister_chd_hdd_close(file->chd);
+	file->chd = nullptr;
 
 	if (file->zip)
 	{
@@ -594,6 +598,7 @@ int FileOpenEx(fileTYPE *file, const char *name, int mode, char mute, int use_zi
 
 __off64_t FileGetSize(fileTYPE *file)
 {
+	if (file->chd) return file->size;
 	if (file->filp)
 	{
 		struct stat64 st;
@@ -621,9 +626,49 @@ int FileOpen(fileTYPE *file, const char *name, char mute)
 	return FileOpenEx(file, name, O_RDONLY, mute);
 }
 
+int FileOpenDisk(fileTYPE *file, const char *name, int mode)
+{
+	size_t len = strlen(name);
+	if (len <= 4 || strcasecmp(name + len - 4, ".chd"))
+		return FileOpenEx(file, name, mode);
+
+	if (!FileOpenEx(file, name, O_RDONLY)) return 0;
+	uint64_t size;
+	chd_error err = file->filp ? mister_chd_hdd_open(file->filp, full_path, (mode & O_ACCMODE) != O_RDONLY,
+		&file->chd, &size) : CHDERR_UNSUPPORTED_FORMAT;
+	if (err == CHDERR_METADATA_NOT_FOUND)
+	{
+		if (FileSeek(file, 0, SEEK_SET)) return 1;
+		err = CHDERR_READ_ERROR;
+	}
+	if (err != CHDERR_NONE)
+	{
+		printf("FileOpenDisk CHD error: %s (%s).\n", name, chd_error_string(err));
+		FileClose(file);
+		return 0;
+	}
+	file->size = size;
+	file->offset = 0;
+	file->mode = mister_chd_hdd_writable(file->chd) ? O_RDWR : O_RDONLY;
+	return 1;
+}
+
 int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 {
-	if (file->filp)
+	if (file->chd)
+	{
+		__off64_t base;
+		switch (origin)
+		{
+		case SEEK_SET: base = 0; break;
+		case SEEK_CUR: base = file->offset; break;
+		case SEEK_END: base = file->size; break;
+		default: return 0;
+		}
+		if (offset < -base || offset > INT64_MAX - base) return 0;
+		offset += base;
+	}
+	else if (file->filp)
 	{
 		__off64_t res = fseeko64(file->filp, offset, origin);
 		if (res < 0)
@@ -694,7 +739,21 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 {
 	ssize_t ret = 0;
 
-	if (file->filp)
+	if (file->chd)
+	{
+		if (length < 0) return failres;
+		memset(pBuffer, 0, length);
+		if (file->offset >= file->size) return 0;
+		ret = MIN((__off64_t)length, file->size - file->offset);
+		chd_error err = mister_chd_hdd_read(file->chd, file->offset, pBuffer, ret);
+		if (err != CHDERR_NONE)
+		{
+			printf("FileReadAdv CHD error: %s (%s).\n", file->name, chd_error_string(err));
+			memset(pBuffer, 0, length);
+			return failres;
+		}
+	}
+	else if (file->filp)
 	{
 		ret = fread(pBuffer, 1, length, file->filp);
 		if (ret != length && ferror(file->filp))
@@ -734,6 +793,19 @@ int FileReadSec(fileTYPE *file, void *pBuffer)
 int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 {
 	int ret;
+
+	if (file->chd)
+	{
+		if (length < 0) return failres;
+		if (!length) return 0;
+		if (mister_chd_hdd_write(file->chd, file->offset, pBuffer, length) != CHDERR_NONE)
+		{
+			printf("FileWriteAdv CHD overlay error: %s (%s).\n", file->name, strerror(errno));
+			return failres;
+		}
+		file->offset += length;
+		return length;
+	}
 
 	if (file->filp)
 	{
