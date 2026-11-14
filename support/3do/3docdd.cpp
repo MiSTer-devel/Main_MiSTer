@@ -6,6 +6,7 @@
 
 #include "3do.h"
 #include "../chd/mister_chd.h"
+#include "../../hardware.h"
 
 p3docdd_t p3docdd;
 
@@ -15,10 +16,15 @@ p3docdd_t::p3docdd_t() {
 	lid_open = false;
 	stop_pend = false;
 	read_pend = false;
+	da_clock = false;
 	read_toc = false;
 	track = 0;
 	lba = 0;
 	speed = 0;
+	read_fmt = P3DO_FMT_DATA;
+	read_sub = false;
+	memset(audio_le, 0, sizeof(audio_le));
+	memset(track_flags, 0, sizeof(track_flags));
 	chd_hunkbuf = NULL;
 	chd_hunknum = -1;
 	SendData = NULL;
@@ -75,6 +81,7 @@ int p3docdd_t::LoadCUE(const char* filename) {
 
 	this->toc.last = -1;
 	int idx, mm, ss, bb, pregap = 0;
+	bool file_le = true;
 
 	char *buf = cue;
 	while (sgets(line, sizeof(line), &buf))
@@ -128,6 +135,7 @@ int p3docdd_t::LoadCUE(const char* filename) {
 
 				return -1;
 			}
+			file_le = !strstr(lptr, "MOTOROLA");
 		}
 
 		/* decode TRACK commands */
@@ -135,7 +143,8 @@ int p3docdd_t::LoadCUE(const char* filename) {
 		{
 			if (this->toc.last == 99) break;
 			this->toc.last++;
-			
+			this->audio_le[this->toc.last] = file_le;
+
 			if (bb != (this->toc.last + 1))
 			{
 				FileClose(&this->toc.tracks[this->toc.last].f);
@@ -206,6 +215,19 @@ int p3docdd_t::LoadCUE(const char* filename) {
 #ifdef P3DO_DEBUG
 			printf("\x1b[32m3DO: track = %u, type = %u\n\x1b[0m", this->toc.last + 1, (int)this->toc.tracks[this->toc.last].type);
 #endif // P3DO_DEBUG
+		}
+
+		/* decode FLAGS commands (track control bits) */
+		else if (!memcmp(lptr, "FLAGS", 5))
+		{
+			if (this->toc.last >= 0)
+			{
+				uint8_t fl = 0;
+				if (strstr(lptr, "PRE")) fl |= 0x01;
+				if (strstr(lptr, "DCP")) fl |= 0x02;
+				if (strstr(lptr, "4CH")) fl |= 0x08;
+				this->track_flags[this->toc.last] = fl;
+			}
 		}
 
 		/* decode PREGAP commands */
@@ -416,6 +438,8 @@ void p3docdd_t::Unload()
 	}
 
 	memset(&this->toc, 0x00, sizeof(this->toc));
+	memset(this->audio_le, 0, sizeof(this->audio_le));
+	memset(this->track_flags, 0, sizeof(this->track_flags));
 	this->sectorSize = 0;
 
 #ifdef P3DO_DEBUG
@@ -445,7 +469,7 @@ int p3docdd_t::GetDiscInfo(uint8_t *buf) {
 		LBAToMSF(this->toc.tracks[i].start + 150, &msf);
 
 		buf[offs + 1] = 0;
-		buf[offs + 2] = this->toc.tracks[i].type == TT_CDDA ? 0x00 : 0x04;
+		buf[offs + 2] = 0x10 | TrackControl(i);	// ADR 1 (position) in the high nibble, control bits in the low one
 		buf[offs + 3] = i + 1;
 		buf[offs + 4] = 0;
 		buf[offs + 5] = msf.m;    //min
@@ -466,6 +490,7 @@ void p3docdd_t::Reset() {
 	lid_open = false;
 	stop_pend = false;
 	read_pend = false;
+	da_clock = false;
 	read_toc = false;
 	track = 0;
 	lba = 0;
@@ -500,7 +525,24 @@ void p3docdd_t::CommandExec() {
 		this->read_pend = true;
 		this->block_reads = cmd_blocks;
 		this->block_count = 0;
-		this->speed = comm[7] == 1 ? 1 : 2;
+		this->speed = 2;
+		this->read_fmt = comm[7] & 3;
+		this->read_sub = (comm[7] & 4) != 0;
+
+		// A drive reads CD-DA at the speed of the disc (75 sectors per second at single speed), a
+		// little ahead of it at most: the 3DO CD player depends on it. A READ that starts where the
+		// previous one ended continues the same clock.
+		if (this->toc.tracks[this->track].type == TT_CDDA && this->read_fmt != P3DO_FMT_DATA) {
+			if (!this->da_clock || this->lba != this->da_next_lba) {
+				this->da_base_lba = this->lba;
+				this->da_base_ms = GetTimer(0);
+				this->da_clock = true;
+			}
+			this->da_next_lba = this->lba + cmd_blocks;
+		}
+		else {
+			this->da_clock = false;
+		}
 
 #ifdef P3DO_DEBUG
 		//printf("\x1b[32m3DO: ");
@@ -524,6 +566,7 @@ void p3docdd_t::CommandExec() {
 
 	default:
 		this->read_pend = false;
+		this->da_clock = false;
 
 #ifdef P3DO_DEBUG
 		printf("\x1b[32m3DO: ");
@@ -545,6 +588,14 @@ void p3docdd_t::Process(uint8_t* time_mode) {
 		printf("Lid open");
 		printf(" (%u)\n\x1b[0m", p3do_frame_cnt);
 #endif // P3DO_DEBUG
+	}
+	else if (this->read_pend && this->da_clock &&
+	         this->lba >= this->da_base_lba + P3DO_DA_READ_AHEAD +
+	                      (int)((GetTimer(0) - this->da_base_ms) * P3DO_DA_SECTORS_PER_S / 1000)) {
+		// next audio sector not due yet: it is sent by a later poll (read_pend kept)
+		this->state = P3DO_Idle;
+
+		*time_mode = 1;
 	}
 	else if (this->read_pend) {
 		this->state = P3DO_Read;
@@ -581,7 +632,12 @@ void p3docdd_t::Update() {
 	case P3DO_Read:
 		LBAToMSF(this->lba + 150, &msf);
 
-		if (this->toc.tracks[this->track].type == TT_MODE1)
+		if (this->read_fmt != P3DO_FMT_DATA || this->read_sub || this->toc.tracks[this->track].type != TT_MODE1)
+		{
+			// Raw blocks (CD-DA, 2352/2336/2340 bytes), subcode, or user data of a Mode 2 track
+			RawSectorSend();
+		}
+		else if (this->toc.tracks[this->track].type == TT_MODE1)
 		{
 			// CD-ROM Data (Mode 1/2)
 			uint8_t header[16];
@@ -605,10 +661,6 @@ void p3docdd_t::Update() {
 			else {
 				DataSectorSend(0);
 			}
-		}
-		else
-		{
-			//AudioSectorSend(this->audioFirst);
 		}
 
 #ifdef P3DO_DEBUG
@@ -641,16 +693,9 @@ int p3docdd_t::MSFToLBA(msf_t* msf) {
 	return (int)(msf->m) * 60 * 75 + (int)(msf->s) * 75 + (int)(msf->f);
 }
 
+// READ DATA (MKE drive, as sent by the Portfolio CD-ROM driver): bytes 1-3 = start MSF,
+// bytes 4-6 = block count. Byte 4 is the top byte of the count, not an address mode flag.
 int p3docdd_t::GetLBAFromCommand(uint8_t* cmd) {
-	int lba = 0;
-	lba |= cmd[3] << 0;
-	lba |= cmd[2] << 8;
-	lba |= cmd[1] << 16;
-
-	if (cmd[4]) {
-		return lba;
-	}
-
 	msf_t msf = { cmd[1],cmd[2],cmd[3] };
 	return MSFToLBA(&msf);
 }
@@ -659,6 +704,7 @@ int p3docdd_t::GetBlocksFromCommand(uint8_t* cmd) {
 	int num = 0;
 	num |= cmd[6] << 0;
 	num |= cmd[5] << 8;
+	num |= cmd[4] << 16;
 
 	return num;
 }
@@ -730,6 +776,164 @@ int p3docdd_t::DataSectorSend(uint8_t* header)
 
 	if (SendData)
 		return SendData(cd_buf + 16, 2048 + 2, CD_DATA_IO_INDEX);
+
+	return 0;
+}
+
+static void p3do_swap_samples(uint8_t *buf)
+{
+	for (int i = 0; i < 2352; i += 2)
+	{
+		uint8_t t = buf[i];
+		buf[i] = buf[i + 1];
+		buf[i + 1] = t;
+	}
+}
+
+// The raw 2352-byte sector at this->lba, as the drive returns it in raw or digital audio mode.
+// CD-DA samples go to the 3DO in disc order (little-endian), as the drive returns them: the BIOS
+// audio CD player swaps the bytes itself (fixedstereo16swap.dsp). BIN/WAVE tracks are sent as they
+// are; MOTOROLA tracks and CHD audio (stored big-endian) are byte-swapped. Sectors of 2048/2336-byte
+// images get a sync pattern and a header, with zero EDC/ECC. Gaps and the lead-out read as silence.
+void p3docdd_t::ReadRawSector(uint8_t *buf)
+{
+	cd_track_t *trk = &this->toc.tracks[this->track];
+	int lba = this->lba;
+
+	memset(buf, 0, 2352);
+	if (this->track >= this->toc.last || lba < trk->start || lba >= trk->end) return;
+
+	int size = (trk->type == TT_CDDA) ? 2352 : (trk->sector_size ? trk->sector_size : this->sectorSize);
+	int offs = 0;
+	if (trk->type != TT_CDDA && size != 2352)
+	{
+		msf_t msf;
+		LBAToMSF(lba + 150, &msf);
+		memset(buf + 1, 0xFF, 10);
+		buf[12] = BCD(msf.m);
+		buf[13] = BCD(msf.s);
+		buf[14] = BCD(msf.f);
+		buf[15] = (trk->type == TT_MODE2) ? 2 : 1;
+		offs = 16;
+	}
+	if (size <= 0 || size + offs > 2352) size = 2352 - offs;
+
+	if (this->toc.chd_f)
+	{
+		mister_chd_read_sector(this->toc.chd_f, lba + trk->offset, offs, 0, size, buf, this->chd_hunkbuf, &this->chd_hunknum);
+		if (trk->type == TT_CDDA) p3do_swap_samples(buf);
+	}
+	else
+	{
+		int pos = (size == 2048) ? (lba * 2048) - trk->offset : (lba * 2352) - trk->offset;
+		FileSeek(&trk->f, pos, SEEK_SET);
+		FileReadAdv(&trk->f, buf + offs, size);
+
+		if (trk->type == TT_CDDA && !this->audio_le[this->track]) p3do_swap_samples(buf);
+	}
+}
+
+// Control bits of a track (Q channel CONTROL field): 0x04 data, plus the CUE FLAGS (pre-emphasis,
+// copy permitted, 4 channels). The lead-out (track = last) takes those of the last track.
+uint8_t p3docdd_t::TrackControl(int track)
+{
+	if (track >= this->toc.last) track = this->toc.last - 1;
+	if (track < 0) return 0;
+	return ((this->toc.tracks[track].type == TT_CDDA) ? 0x00 : 0x04) | (this->track_flags[track] & 0x0B);
+}
+
+// CRC of the Q subchannel: CCITT polynomial x^16 + x^12 + x^5 + 1, initial value 0, inverted
+static uint16_t p3do_subq_crc(const uint8_t *q, int len)
+{
+	uint16_t crc = 0;
+	for (int i = 0; i < len; i++)
+	{
+		crc ^= (uint16_t)q[i] << 8;
+		for (int b = 0; b < 8; b++) crc = (crc & 0x8000) ? (uint16_t)((crc << 1) ^ 0x1021) : (uint16_t)(crc << 1);
+	}
+	return (uint16_t)~crc;
+}
+
+// The 96 subcode bytes of this->lba, as the 3DO drive returns them after CD-DA blocks of 2448/2449
+// bytes: one byte per symbol, P (bit 7) masked, the Q channel in bit 6, R-W (bits 5-0) not stored.
+// Q is mode 1 (position): control/ADR, track and index (BCD), relative and absolute MSF (BCD), CRC.
+void p3docdd_t::MakeSubcode(uint8_t *sub)
+{
+	uint8_t q[12];
+	int t = this->track;
+	bool lead_out = t >= this->toc.last;
+	int rel;
+	uint8_t idx = 1;
+
+	if (lead_out)
+		rel = this->lba - this->toc.end;
+	else if (this->lba < this->toc.tracks[t].start)
+	{
+		rel = this->toc.tracks[t].start - this->lba;	// pregap: counts down to the track start
+		idx = 0;
+	}
+	else
+		rel = this->lba - this->toc.tracks[t].start;
+	if (rel < 0) rel = 0;
+
+	msf_t r, a;
+	LBAToMSF(rel, &r);
+	LBAToMSF(this->lba + 150, &a);
+
+	q[0] = (uint8_t)((TrackControl(t) << 4) | 0x01);
+	q[1] = lead_out ? 0xAA : BCD(t + 1);
+	q[2] = BCD(idx);
+	q[3] = BCD(r.m); q[4] = BCD(r.s); q[5] = BCD(r.f);
+	q[6] = 0;
+	q[7] = BCD(a.m); q[8] = BCD(a.s); q[9] = BCD(a.f);
+	uint16_t crc = p3do_subq_crc(q, 10);
+	q[10] = crc >> 8;
+	q[11] = crc & 0xFF;
+
+	for (int i = 0; i < 96; i++)
+	{
+		sub[i] = ((q[i >> 3] >> (7 - (i & 7))) & 1) << 6;
+	}
+}
+
+// One block in the format the core asked for (P3DO_FMT_*), the subcode if asked, then the 16-bit byte sum
+int p3docdd_t::RawSectorSend()
+{
+	static const int fmt_len[4] = { 2048, 2352, 2336, 2340 };
+	static const int fmt_skip[4] = { 16, 0, 16, 12 };
+
+	int fmt = this->read_fmt & 3;
+	enum TrackType type = this->toc.tracks[this->track].type;
+	int len = fmt_len[fmt];
+	int skip = fmt_skip[fmt];
+	if (fmt == P3DO_FMT_DATA)
+	{
+		// user data: Mode 2 Form 1 data follows the 8-byte subheader; CD-DA as it is
+		skip = (type == TT_MODE2) ? 24 : (type == TT_CDDA) ? 0 : 16;
+	}
+
+	ReadRawSector(cd_buf);
+
+	uint8_t *p = cd_buf + skip;
+	if (this->read_sub)
+	{
+		MakeSubcode(p + len);
+		len += 96;
+	}
+	uint16_t crc = 0;
+	for (int i = 0; i < len; i++)
+	{
+		crc += p[i];
+	}
+	p[len + 0] = crc & 0xFF;
+	p[len + 1] = crc >> 8;
+
+#ifdef P3DO_DEBUG
+	printf("\x1b[32m3DO: raw block lba = %d, track = %d, type = %d, format = %d\n\x1b[0m", this->lba, this->track + 1, (int)type, fmt);
+#endif // P3DO_DEBUG
+
+	if (SendData)
+		return SendData(p, len + 2, CD_DATA_IO_INDEX);
 
 	return 0;
 }
