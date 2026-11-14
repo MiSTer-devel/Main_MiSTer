@@ -40,6 +40,7 @@
 #include "profiling.h"
 #endif
 #include "frame_timer.h"
+#include "folder_step.h"
 #include "scaler.h"
 #include "support.h"
 
@@ -96,6 +97,31 @@ void register_activity()
 uint32_t user_io_get_activity_seq()
 {
 	return input_seq;
+}
+
+// last file sent to the core per file index (0..15) and the index of the last one
+static char last_tx_name[16][1024] = {};
+static int last_tx_idx = 0;
+
+const char *user_io_last_tx_name(int index)
+{
+	return (index >= 0 && index < 16) ? last_tx_name[index] : "";
+}
+
+int user_io_last_tx_index()
+{
+	return last_tx_idx;
+}
+
+void user_io_send_filepos(int pos, int count)
+{
+	if (pos > 0xFFFF) pos = 0xFFFF;
+	if (count > 0xFFFF) count = 0xFFFF;
+	spi_uio_cmd_cont(UIO_SET_FILEPOS);
+	spi_w(pos);
+	spi_w(count);
+	spi_w(0);
+	DisableIO();
 }
 
 void user_io_store_filename(const char *filename)
@@ -1489,6 +1515,8 @@ void user_io_init(const char *path, const char *xml)
 	static char mainpath[512];
 	core_name[0] = 0;
 	disable_osd = 0;
+	folder_reset();
+	memset(last_tx_name, 0, sizeof(last_tx_name));
 
 	// Clean up old game ID when loading a new core
 	unlink("/tmp/GAMEID");
@@ -2807,6 +2835,23 @@ static void check_status_change()
 	}
 }
 
+// A core that answers UIO_GET_FILEREQ asks for another file in the folder of a
+// loaded one; HandleUI() runs the request when the OSD is closed.
+static uint16_t file_request_word()
+{
+	return spi_w(0);
+}
+
+static void check_file_request()
+{
+	static unsigned long poll_timer = 0;
+	if (poll_timer && !CheckTimer(poll_timer)) return;
+	poll_timer = GetTimer(20);
+
+	folder_poll(spi_uio_cmd_cont(UIO_GET_FILEREQ), file_request_word);
+	DisableIO();
+}
+
 static void show_core_info(int info_n)
 {
 	int i = 2;
@@ -2877,6 +2922,9 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	static uint8_t buf[4096];
 
 	if (!FileOpen(&f, name, mute)) return 0;
+
+	last_tx_idx = index & 0x3F;
+	if (last_tx_idx < 16) snprintf(last_tx_name[last_tx_idx], sizeof(last_tx_name[0]), "%s", name);
 
 	uint32_t bytes2send = f.size;
 
@@ -3450,6 +3498,7 @@ void user_io_poll()
 	if (core_type == CORE_TYPE_8BIT && !is_menu())
 	{
 		check_status_change();
+		check_file_request();
 	}
 
 	// sd card emulation

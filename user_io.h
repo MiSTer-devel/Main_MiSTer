@@ -78,6 +78,8 @@
 #define UIO_HDMI_INT    0x44
 #define UIO_GET_FFB     0x45  // get force feedback request from core (player in bits 15:8)
 #define UIO_ATRIG       0x46
+#define UIO_GET_FILEREQ 0x47  // core asks for the next/previous/random/first file in the folder of a loaded file
+#define UIO_SET_FILEPOS 0x48  // position and count of a loaded file in its folder
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
@@ -265,6 +267,9 @@ int GetUARTbaud_idx(int mode);
 uint32_t ValidateUARTbaud(int mode, uint32_t baud);
 char * GetMidiLinkSoundfont();
 void user_io_store_filename(const char *filename);
+const char *user_io_last_tx_name(int index);
+int user_io_last_tx_index();
+void user_io_send_filepos(int pos, int count);
 int user_io_use_cheats();
 
 int process_ss(const char *rom_name, int enable = 1);
