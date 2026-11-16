@@ -10,6 +10,7 @@ typedef unsigned char uchar;
 // Apple-II floppy path, Oric/Pravetz A2 slots). 'index' is the SD slot,
 // 'prodos_order' is 1 for .po images.
 void a2_set_image(int index, int prodos_order);
+int a2_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
 
 void a2_writeDSK(fileTYPE* idx, uint64_t lba, int ack, int index);
 void a2_readDSK(fileTYPE* idx, uint64_t lba, int ack, int index);

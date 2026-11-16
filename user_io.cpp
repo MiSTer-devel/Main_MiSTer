@@ -56,6 +56,7 @@ static fileTYPE sd_image[16] = {};
 #define  SD_TYPE_A2 2
 
 static int      sd_type[16] = {};
+static sd_service_t sd_image_service[16] = {};
 static unsigned char last_file_ext_idx = 0;
 static int      sd_image_cangrow[16] = {};
 static uint64_t buffer_lba[16] = { ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,ULLONG_MAX,
@@ -2300,6 +2301,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 
 	sd_image_cangrow[index] = (pre != 0);
 	sd_type[index] = SD_TYPE_DEFAULT ;
+	sd_image_service[index] = nullptr;
 	st_fdd_unmount(index);
 	if (len)
 	{
@@ -2369,6 +2371,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					{
 						printf("FOUND A2 %s type (nibblized on the fly)\n", po_ext ? "PO" : "DSK/DO");
 						sd_type[index] = SD_TYPE_A2;
+						sd_image_service[index] = a2_sd_service;
 						a2_set_image(index, po_ext);
 					}
 				}
@@ -2386,6 +2389,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					else if (r == IIGS_HANDLED)
 					{
 						sd_type[index] = SD_TYPE_IIGS;
+						sd_image_service[index] = iigs_sd_service;
 						writable = iigs_w;
 					}
 				}
@@ -3538,20 +3542,8 @@ void user_io_poll()
 				blks = 1;
 			}
 			DisableIO();
-			if ( sd_type[disk] == SD_TYPE_A2)
-			{
-				//if (op) printf("A2 %x %llu on %d\n", op,lba, disk);
-				if (op == 2) a2_writeDSK(&sd_image[disk], lba, ack, disk);
-				else if (op & 1) a2_readDSK(&sd_image[disk], lba, ack, disk);
-				else break;
-			}
-			else if ( sd_type[disk] == SD_TYPE_IIGS)
-			{
-				if (op == 2) iigs_write(disk, &sd_image[disk], lba, ack);
-				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, blks, ack);
-				else break;
-			}
-			else if (int result = sd_service ? sd_service(disk, &sd_image[disk], op, lba, sz, ack) : 0)
+			sd_service_t service = sd_image_service[disk] ? sd_image_service[disk] : sd_service;
+			if (int result = service ? service(disk, &sd_image[disk], op, lba, sz, ack) : 0)
 			{
 				if (result < 0) break;
 			}

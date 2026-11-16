@@ -118,6 +118,14 @@ static void a2_writeNib2Dsk(fileTYPE *fd, int index, uint64_t offset, const ucha
 	}
 }
 
+int a2_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int, int ack)
+{
+	if (op == 2) a2_writeDSK(f, lba, ack, disk);
+	else if (op & 1) a2_readDSK(f, lba, ack, disk);
+	else return -1;
+	return 1;
+}
+
 void a2_writeDSK(fileTYPE* idx, uint64_t lba, int ack, int index)
 {
 	uchar chunk[512];

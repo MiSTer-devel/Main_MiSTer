@@ -315,6 +315,14 @@ int iigs_mount(int index, const char *name, fileTYPE *f, int *out_writable)
 	return IIGS_HANDLED;
 }
 
+int iigs_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack)
+{
+	if (op == 2) iigs_write(disk, f, lba, ack);
+	else if (op & 1) iigs_read(disk, f, lba, sz / 512, ack);
+	else return -1;
+	return 1;
+}
+
 void iigs_read(int disk, fileTYPE *f, uint64_t lba, uint32_t blks, int ack)
 {
 	// Serve the whole request, as the generic SD path does: the IIgs WOZ
