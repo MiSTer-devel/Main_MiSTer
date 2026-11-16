@@ -8,6 +8,7 @@
 #include "../../spi.h"
 #include "../../file_io.h"
 #include "sun.h"
+#include "sun_enet.h"
 #include "sun_disk.h"
 #include "sun_cdrom.h"
 
@@ -29,7 +30,17 @@ sun_model_t sun_model()
 
 char is_sun_family()
 {
-	return sun_model() != SUN_NONE;
+	static int type = 0;
+	if (!type)
+	{
+		type = (sun_model() != SUN_NONE) ? 1 : 2;
+		if (type == 1)
+		{
+			sd_service = sun_sd_service;
+			core_poll = sun_poll;
+		}
+	}
+	return type == 1;
 }
 
 const char *sun_net_status()
@@ -111,6 +122,7 @@ void sun_unmount(int index)
 void sun_poll()
 {
 	sun_disk_poll();
+	sun_enet_poll();
 }
 
 int sun_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack)

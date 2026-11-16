@@ -30,9 +30,15 @@ static uint8_t buf[UIO_BUFFER_SIZE];
 static uint32_t grow_to[2];
 static d88_slot slots[2];
 
-static char is_pc88()
+char is_pc88()
 {
-	return !strcasecmp(user_io_get_core_name(1), "PC8801");
+	static int type = 0;
+	if (!type)
+	{
+		type = !strcasecmp(user_io_get_core_name(1), "PC8801") ? 1 : 2;
+		if (type == 1) sd_service = pc88_sd_service;
+	}
+	return type == 1;
 }
 
 static uint32_t le32(const uint8_t *p)

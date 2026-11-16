@@ -72,7 +72,13 @@ static int is_core_named(const char *n)
 
 char is_3b1()
 {
-	return is_core_named("3B1");
+	static int type = 0;
+	if (!type)
+	{
+		type = is_core_named("3B1") ? 1 : 2;
+		if (type == 1) core_poll = b3_eth_poll;
+	}
+	return type == 1;
 }
 
 static void close_link(void)

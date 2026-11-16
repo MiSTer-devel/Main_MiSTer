@@ -5,6 +5,7 @@
 
 struct fileTYPE;
 
+char is_pc88();
 int pc88_disk_count(int index, const char *path);
 const char *pc88_disk_name(int image);
 

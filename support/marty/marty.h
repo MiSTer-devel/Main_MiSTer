@@ -22,6 +22,7 @@ void marty_mgl_premount();
 void marty_poll();
 void marty_set_image(int index, const char *filename);
 int  marty_block_size(int index, int wire_size);
-int  marty_sd_service(int disk, int op, uint32_t lba, int sz, int ack);
+struct fileTYPE;
+int  marty_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
 
 #endif

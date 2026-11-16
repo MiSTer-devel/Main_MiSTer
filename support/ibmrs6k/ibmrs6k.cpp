@@ -8,13 +8,24 @@
 #include "../../spi.h"
 #include "../../file_io.h"
 #include "ibmrs6k.h"
+#include "ibmrs6k_enet.h"
 #include "ibmrs6k_cdrom.h"
 #include "ibmrs6k_disk.h"
 
 char is_ibmrs6k()
 {
-	const char *n = user_io_get_core_name(1);
-	return !strcasecmp(n, "IBMRS6K7248") || !strcasecmp(n, "IBMPS850");
+	static int type = 0;
+	if (!type)
+	{
+		const char *n = user_io_get_core_name(1);
+		type = (!strcasecmp(n, "IBMRS6K7248") || !strcasecmp(n, "IBMPS850")) ? 1 : 2;
+		if (type == 1)
+		{
+			sd_service = ibmrs6k_sd_service;
+			core_poll = ibmrs6k_poll;
+		}
+	}
+	return type == 1;
 }
 
 int ibmrs6k_cdrom_slot()
@@ -58,6 +69,7 @@ void ibmrs6k_unmount(int index)
 void ibmrs6k_poll()
 {
 	ibmrs6k_disk_poll();
+	ibmrs6k_enet_poll();
 }
 
 int ibmrs6k_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack)

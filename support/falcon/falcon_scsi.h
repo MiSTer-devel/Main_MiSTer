@@ -53,7 +53,7 @@ void falcon_scsi_unmount(int index);
 // Sector service hook (user_io sd request loop), SPI transfer included.
 // Returns 0 = not ours (generic path), 1 = serviced, -1 = ours but an
 // unsupported operation.
-int falcon_sd_service(int disk, int op, uint32_t lba, int sz, int ack);
+int falcon_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
 
 // The pieces without SPI (also used by the simulation):
 // build the 512-byte response block of a window LBA (returns the length)

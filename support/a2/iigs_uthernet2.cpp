@@ -157,10 +157,21 @@ static void open_link(int mode, const uint8_t *mac)
 	       iface, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
+char is_iigs()
+{
+	static int type = 0;
+	if (!type)
+	{
+		const char *core = user_io_get_core_name();
+		type = (core && !strcasecmp(core, "Apple-IIgs")) ? 1 : 2;
+		if (type == 1) core_poll = iigs_uthernet2_poll;
+	}
+	return type == 1;
+}
+
 void iigs_uthernet2_poll(void)
 {
-	const char *core = user_io_get_core_name();
-	int slot = (core && !strcasecmp(core, "Apple-IIgs")) ? (int)(user_io_status_get(OPT_SLOT) & 3) : 0;
+	int slot = is_iigs() ? (int)(user_io_status_get(OPT_SLOT) & 3) : 0;
 	if (!slot)
 	{
 		if (card_up)

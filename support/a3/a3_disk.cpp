@@ -37,10 +37,16 @@ static int eqi(const char *a, const char *b)
 	return a && b && !strcasecmp(a, b);
 }
 
-static char is_apple3()
+char is_apple3()
 {
-	return !strcasecmp(user_io_get_core_name(0), "Apple-III") ||
-		!strcasecmp(user_io_get_core_name(1), "Apple-III");
+	static int type = 0;
+	if (!type)
+	{
+		type = (!strcasecmp(user_io_get_core_name(0), "Apple-III") ||
+		        !strcasecmp(user_io_get_core_name(1), "Apple-III")) ? 1 : 2;
+		if (type == 1) sd_service = a3_sd_service;
+	}
+	return type == 1;
 }
 
 void a3_unmount(int index)

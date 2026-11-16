@@ -21,23 +21,45 @@ static char is_core_named(const char *n)
 
 char is_mac_scsi_family()
 {
-	return is_core_named("maclc") || is_core_named("macplus") || is_core_named("macquadra800")
-	    || is_core_named("macppc7300") || is_core_named("pippin");
+	static int type = 0;
+	if (!type)
+	{
+		type = (is_core_named("maclc") || is_core_named("macplus") || is_core_named("macquadra800")
+	    || is_core_named("macppc7300") || is_core_named("pippin")) ? 1 : 2;
+		if (type == 1)
+		{
+			sd_service = mac_sd_service;
+			core_poll = mac_poll;
+		}
+	}
+	return type == 1;
 }
 
 char is_mac_scsi_optimized()
 {
-	return is_core_named("macquadra800") || is_core_named("macppc7300") || is_core_named("pippin");
+	static int type = 0;
+	if (!type)
+	{
+		type = (is_core_named("macquadra800") || is_core_named("macppc7300") || is_core_named("pippin")) ? 1 : 2;
+	}
+	return type == 1;
 }
 
 char mac_cd_read_keeps_audio()
 {
-	return is_core_named("pippin");
+	static int type = 0;
+	if (!type) type = is_core_named("pippin") ? 1 : 2;
+	return type == 1;
 }
 
 char is_mac_ring_eth()
 {
-	return is_core_named("macppc7300");
+	static int type = 0;
+	if (!type)
+	{
+		type = (is_core_named("macppc7300")) ? 1 : 2;
+	}
+	return type == 1;
 }
 
 #define MAC_TOOLBOX_SLOT    3   // MacLC.sv VD_TOOLBOX
@@ -48,7 +70,7 @@ char is_mac_ring_eth()
 //   MacPlus   — has the CD-ROM slot but NOT the Toolbox slots. Its slot 3 is
 //               the second floppy, and it has no slot 5 at all (VDNUM = 5).
 static int mac_cd_ok(void)      { return is_mac_scsi_family(); }
-static int mac_toolbox_ok(void) { return mac_cd_ok() && !is_core_named("macplus"); }
+static int mac_toolbox_ok(void) { static int macplus = -1; if (macplus < 0) macplus = is_core_named("macplus"); return mac_cd_ok() && !macplus; }
 
 int mac_toolbox_slot()    { return mac_toolbox_ok() ? MAC_TOOLBOX_SLOT    : -1; }
 int mac_cdrom_slot()      { return mac_cd_ok()      ? MAC_CDROM_SLOT      : -1; }
@@ -127,8 +149,9 @@ int mac_cdda_window(int disk, uint32_t lba)
 	       lba >= MAC_CDROM_AUDIO_BLK && lba < MAC_CDROM_WIN_BASE;
 }
 
-int mac_sd_service(int disk, fileTYPE *f, int op, uint32_t lba, int sz, int ack)
+int mac_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack)
 {
+	lba = (uint32_t)lba;
 	if (mac_disk_service(disk, f, op, lba, sz, ack)) return 1;
 
 	static uint8_t buf[4096];

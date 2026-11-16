@@ -170,6 +170,10 @@
 
 #define UIO_BUFFER_SIZE 16384
 
+typedef int (*sd_service_t)(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
+extern sd_service_t sd_service;
+extern void (*core_poll)();
+
 void user_io_init(const char *path, const char *xml);
 unsigned char user_io_core_type();
 void user_io_read_core_name();

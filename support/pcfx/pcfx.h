@@ -14,7 +14,8 @@
 void pcfx_init();
 void pcfx_mgl_premount();
 void pcfx_set_image(int index, const char *filename);
-int  pcfx_sd_service(int disk, int op, uint32_t lba, int sz, int ack);
+struct fileTYPE;
+int  pcfx_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
 void pcfx_new_card();
 void pcfx_eject_card();
 void pcfx_poll();

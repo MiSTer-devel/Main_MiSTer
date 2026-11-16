@@ -158,7 +158,7 @@ static const StFddTrack &build(StFddSlot &s, int cyl, int head)
 	return t;
 }
 
-int st_fdd_sd_service(int disk, int op, uint64_t lba, int sz, int ack)
+int st_fdd_sd_service(int disk, fileTYPE *, int op, uint64_t lba, int sz, int ack)
 {
 	if (!is_st() || disk < 0 || disk >= ST_FDD_SLOTS || !slots[disk].stx) return 0;
 	StFddSlot &s = slots[disk];

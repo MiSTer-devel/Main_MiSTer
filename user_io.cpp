@@ -43,6 +43,9 @@
 #include "scaler.h"
 #include "support.h"
 
+sd_service_t sd_service = nullptr;
+void (*core_poll)() = nullptr;
+
 static char core_path[1024] = {};
 static char rbf_path[1024] = {};
 
@@ -279,7 +282,11 @@ char is_zx81()
 static int is_neogeo_type = 0;
 char is_neogeo()
 {
-	if (!is_neogeo_type) is_neogeo_type = strcasecmp(orig_name, "neogeo") ? 2 : 1;
+	if (!is_neogeo_type)
+	{
+		is_neogeo_type = strcasecmp(orig_name, "neogeo") ? 2 : 1;
+		if (is_neogeo_type == 1) core_poll = neocd_poll;
+	}
 	return (is_neogeo_type == 1);
 }
 
@@ -290,7 +297,17 @@ char is_neogeo_cd() {
 // NeXTcube ("NeXT") & NeXTstation Turbo ("NeXT-Color") share HPS-side services
 char is_next()
 {
-	return !strcasecmp(orig_name, "NeXT") || !strcasecmp(orig_name, "NeXT-Color");
+	static int type = 0;
+	if (!type)
+	{
+		type = (!strcasecmp(orig_name, "NeXT") || !strcasecmp(orig_name, "NeXT-Color")) ? 1 : 2;
+		if (type == 1)
+		{
+			sd_service = next_sd_service;
+			core_poll = next_enet_poll;
+		}
+	}
+	return type == 1;
 }
 
 // Guests that read the battery clock as UTC and apply their own time zone
@@ -302,7 +319,13 @@ static char rtc_is_utc()
 
 char is_falcon()
 {
-	return !strcasecmp(orig_name, "Falcon");
+	static int type = 0;
+	if (!type)
+	{
+		type = !strcasecmp(orig_name, "Falcon") ? 1 : 2;
+		if (type == 1) sd_service = falcon_sd_service;
+	}
+	return type == 1;
 }
 
 static int is_minimig_type = 0;
@@ -325,14 +348,22 @@ char is_minimig()
 static int is_megacd_type = 0;
 char is_megacd()
 {
-	if (!is_megacd_type) is_megacd_type = strcasecmp(orig_name, "MEGACD") ? 2 : 1;
+	if (!is_megacd_type)
+	{
+		is_megacd_type = strcasecmp(orig_name, "MEGACD") ? 2 : 1;
+		if (is_megacd_type == 1) core_poll = mcd_poll;
+	}
 	return (is_megacd_type == 1);
 }
 
 static int is_pce_type = 0;
 char is_pce()
 {
-	if (!is_pce_type) is_pce_type = strcasecmp(orig_name, "TGFX16") ? 2 : 1;
+	if (!is_pce_type)
+	{
+		is_pce_type = strcasecmp(orig_name, "TGFX16") ? 2 : 1;
+		if (is_pce_type == 1) core_poll = pcecd_poll;
+	}
 	return (is_pce_type == 1);
 }
 
@@ -397,35 +428,55 @@ char is_c128()
 static int is_atari800_type = 0;
 char is_atari800()
 {
-	if (!is_atari800_type) is_atari800_type = strcasecmp(orig_name, "Atari800") ? 2 : 1;
+	if (!is_atari800_type)
+	{
+		is_atari800_type = strcasecmp(orig_name, "Atari800") ? 2 : 1;
+		if (is_atari800_type == 1) core_poll = atari800_poll;
+	}
 	return (is_atari800_type == 1);
 }
 
 static int is_atari5200_type = 0;
 char is_atari5200()
 {
-	if (!is_atari5200_type) is_atari5200_type = strcasecmp(orig_name, "Atari5200") ? 2 : 1;
+	if (!is_atari5200_type)
+	{
+		is_atari5200_type = strcasecmp(orig_name, "Atari5200") ? 2 : 1;
+		if (is_atari5200_type == 1) core_poll = atari5200_poll;
+	}
 	return (is_atari5200_type == 1);
 }
 
 static int is_psx_type = 0;
 char is_psx()
 {
-	if (!is_psx_type) is_psx_type = strcasecmp(orig_name, "PSX") ? 2 : 1;
+	if (!is_psx_type)
+	{
+		is_psx_type = strcasecmp(orig_name, "PSX") ? 2 : 1;
+		if (is_psx_type == 1) core_poll = psx_poll;
+	}
 	return (is_psx_type == 1);
 }
 
 static int is_cdi_type = 0;
 char is_cdi()
 {
-	if (!is_cdi_type) is_cdi_type = strcasecmp(orig_name, "CD-i") ? 2 : 1;
+	if (!is_cdi_type)
+	{
+		is_cdi_type = strcasecmp(orig_name, "CD-i") ? 2 : 1;
+		if (is_cdi_type == 1) core_poll = cdi_poll;
+	}
 	return (is_cdi_type == 1);
 }
 
 static int is_st_type = 0;
 char is_st()
 {
-	if (!is_st_type) is_st_type = strcasecmp(orig_name, "AtariST") ? 2 : 1;
+	if (!is_st_type)
+	{
+		is_st_type = strcasecmp(orig_name, "AtariST") ? 2 : 1;
+		if (is_st_type == 1) sd_service = st_fdd_sd_service;
+	}
 	return (is_st_type == 1);
 }
 
@@ -439,35 +490,63 @@ char is_electron()
 static int is_marty_type = 0;
 char is_marty()
 {
-	if (!is_marty_type) is_marty_type = strcasecmp(orig_name, "Marty") ? 2 : 1;
+	if (!is_marty_type)
+	{
+		is_marty_type = strcasecmp(orig_name, "Marty") ? 2 : 1;
+		if (is_marty_type == 1)
+		{
+			sd_service = marty_sd_service;
+			core_poll = marty_poll;
+		}
+	}
 	return (is_marty_type == 1);
 }
 
 static int is_videobrain_type = 0;
 char is_videobrain()
 {
-	if (!is_videobrain_type) is_videobrain_type = strcasecmp(orig_name, "VideoBrain") ? 2 : 1;
+	if (!is_videobrain_type)
+	{
+		is_videobrain_type = strcasecmp(orig_name, "VideoBrain") ? 2 : 1;
+		if (is_videobrain_type == 1) core_poll = videobrain_poll;
+	}
 	return (is_videobrain_type == 1);
 }
 
 static int is_pcfx_type = 0;
 char is_pcfx()
 {
-	if (!is_pcfx_type) is_pcfx_type = strcasecmp(orig_name, "PCFX") ? 2 : 1;
+	if (!is_pcfx_type)
+	{
+		is_pcfx_type = strcasecmp(orig_name, "PCFX") ? 2 : 1;
+		if (is_pcfx_type == 1)
+		{
+			sd_service = pcfx_sd_service;
+			core_poll = pcfx_poll;
+		}
+	}
 	return (is_pcfx_type == 1);
 }
 
 static int is_saturn_type = 0;
 char is_saturn()
 {
-	if (!is_saturn_type) is_saturn_type = strcasecmp(orig_name, "Saturn") ? 2 : 1;
+	if (!is_saturn_type)
+	{
+		is_saturn_type = strcasecmp(orig_name, "Saturn") ? 2 : 1;
+		if (is_saturn_type == 1) core_poll = saturn_poll;
+	}
 	return (is_saturn_type == 1);
 }
 
 static int is_n64_type = 0;
 char is_n64()
 {
-	if (!is_n64_type) is_n64_type = strcasecmp(orig_name, "N64") ? 2 : 1;
+	if (!is_n64_type)
+	{
+		is_n64_type = strcasecmp(orig_name, "N64") ? 2 : 1;
+		if (is_n64_type == 1) core_poll = n64_poll;
+	}
 	return (is_n64_type == 1);
 }
 
@@ -481,7 +560,11 @@ char is_uneon()
 static int is_3do_type = 0;
 char is_3do()
 {
-	if (!is_3do_type) is_3do_type = strcasecmp(orig_name, "3DO") ? 2 : 1;
+	if (!is_3do_type)
+	{
+		is_3do_type = strcasecmp(orig_name, "3DO") ? 2 : 1;
+		if (is_3do_type == 1) core_poll = p3do_poll;
+	}
 	return (is_3do_type == 1);
 }
 
@@ -1592,6 +1675,33 @@ void user_io_init(const char *path, const char *xml)
 		user_io_read_core_name();
 		printf("Using default MRA: %s\n", xml);
 	}
+
+	is_mac_scsi_family();
+	is_next();
+	is_sun_family();
+	is_hp9k_family();
+	is_ibmrs6k();
+	is_sgi_family();
+	is_decalpha();
+	is_marty();
+	is_pcfx();
+	is_apple3();
+	is_pc88();
+	is_st();
+	is_falcon();
+	is_3b1();
+	is_iigs();
+	is_neogeo();
+	is_megacd();
+	is_pce();
+	is_saturn();
+	is_videobrain();
+	is_cdi();
+	is_psx();
+	is_n64();
+	is_atari800();
+	is_atari5200();
+	is_3do();
 
 	if (cfg.log_file_entry) MakeFile("/tmp/STARTPATH", core_path);
 
@@ -3386,12 +3496,7 @@ void user_io_poll()
 
 	user_io_send_buttons(0);
 
-	mac_poll();   // Mac SCSI family: Toolbox slot announce + deferred CD work
-	sun_poll();   // Sun SCSI family: write-buffer flushes
-	hp9k_poll();
-	ibmrs6k_poll();
-	sgi_poll();
-	decalpha_poll();
+	if (core_poll) core_poll();
 
 	if (is_minimig())
 	{
@@ -3433,14 +3538,6 @@ void user_io_poll()
 		a2065_poll();
 	}
 
-	next_enet_poll();
-	iigs_uthernet2_poll();
-	sun_enet_poll();
-	hp9k_enet_poll();
-	b3_eth_poll();
-	ibmrs6k_enet_poll();
-	sgi_enet_poll();
-	decalpha_enet_poll();
 
 	// The NeXT keeps a battery backed clock that the guest reads at
 	// boot; the one-shot update at core load is not enough if the core
@@ -3573,60 +3670,9 @@ void user_io_poll()
 				else if (op & 1) iigs_read(disk, &sd_image[disk], lba, blks, ack);
 				else break;
 			}
-			else if (int macop = mac_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
+			else if (int result = sd_service ? sd_service(disk, &sd_image[disk], op, lba, sz, ack) : 0)
 			{
-				// Mac Toolbox/CD slots (support/mac); SPI is done by the hook.
-				if (macop < 0) break;
-			}
-			else if (int nxop = next_sd_service(disk, op, (uint32_t)lba, sz, ack))
-			{
-				if (nxop < 0) break;
-			}
-			else if (int sunop = sun_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
-			{
-				// Sun disk write buffer and CD slot (support/sun); SPI is done by the hook.
-				if (sunop < 0) break;
-			}
-			else if (int hpop = hp9k_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
-			{
-				if (hpop < 0) break;
-			}
-			else if (int rsop = ibmrs6k_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
-			{
-				if (rsop < 0) break;
-			}
-			else if (int sgop = sgi_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
-			{
-				if (sgop < 0) break;
-			}
-			else if (int daop = decalpha_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
-			{
-				if (daop < 0) break;
-			}
-			else if (int mop = marty_sd_service(disk, op, (uint32_t)lba, sz, ack))
-			{
-				if (mop < 0) break;
-      }
-			else if (int pop = pcfx_sd_service(disk, op, (uint32_t)lba, sz, ack))
-			{
-				if (pop < 0) break;
-			}
-			else if (int a3op = a3_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
-			{
-				if (a3op < 0) break;
-			}
-			else if (int pc88op = pc88_sd_service(disk, &sd_image[disk], op, lba, sz, ack))
-			{
-				if (pc88op < 0) break;
-			}
-			else if (int stop = st_fdd_sd_service(disk, op, lba, sz, ack))
-			{
-				if (stop < 0) break;
-			}
-			else if (int falop = falcon_sd_service(disk, op, lba, sz, ack))
-			{
-				// Falcon SCSI response windows / translated CD (support/falcon); SPI is done by the hook.
-				if (falop < 0) break;
+				if (result < 0) break;
 			}
 			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
 			{
@@ -4116,24 +4162,11 @@ void user_io_poll()
 		diskled_is_on = 0;
 	}
 
-	if (is_megacd()) mcd_poll();
-	if (is_pce()) pcecd_poll();
-	if (is_saturn()) saturn_poll();
-	if (is_marty()) marty_poll();
-	if (is_videobrain()) videobrain_poll();
-	if (is_pcfx()) pcfx_poll();
-	if (is_cdi()) cdi_poll();
-	if (is_psx()) psx_poll();
-	if (is_neogeo_cd()) neocd_poll();
-	if (is_n64()) n64_poll();
 	if (is_c64() || is_c128())
 	{
 		uint16_t save_req = spi_uio_cmd(UIO_CHK_UPLOAD);
 		if (save_req) c64_save_cart(save_req >> 8);
 	}
-	if (is_atari800()) atari800_poll();
-	if (is_atari5200()) atari5200_poll();
-	if (is_3do()) p3do_poll();
 	process_ss(0);
 
 	if (cfg.hdmi_off)

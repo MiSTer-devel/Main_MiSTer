@@ -27,6 +27,7 @@ static uint8_t cd_speed = 0;
 
 void neocd_poll()
 {
+	if (!neo_cd_en) return;
 	static uint8_t last_req = 255;
 
 	if (!poll_timer || CheckTimer(poll_timer))

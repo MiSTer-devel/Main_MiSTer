@@ -6,12 +6,23 @@
 #include "../../spi.h"
 #include "../../file_io.h"
 #include "decalpha.h"
+#include "decalpha_enet.h"
 #include "decalpha_cdrom.h"
 #include "decalpha_disk.h"
 
 char is_decalpha()
 {
-	return !strcasecmp(user_io_get_core_name(1), "DECAlphaStation200");
+	static int type = 0;
+	if (!type)
+	{
+		type = !strcasecmp(user_io_get_core_name(1), "DECAlphaStation200") ? 1 : 2;
+		if (type == 1)
+		{
+			sd_service = decalpha_sd_service;
+			core_poll = decalpha_poll;
+		}
+	}
+	return type == 1;
 }
 
 int decalpha_cdrom_slot()
@@ -57,6 +68,7 @@ void decalpha_poll()
 {
 	if (!is_decalpha()) return;
 	decalpha_disk_poll();
+	decalpha_enet_poll();
 }
 
 int decalpha_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack)
