@@ -633,6 +633,16 @@ static void c64_synthesize_g64_image(int idx, uint32_t phys_addr, uint32_t map_s
 	}
 }
 
+int c64_sd_service(int disk, fileTYPE *, int op, uint64_t lba, int sz, int)
+{
+	if (sz != (G64_BLOCK_COUNT_1541 + 1) * 256 && sz != (G64_BLOCK_COUNT_1571 + 1) * 256) return 0;
+	uint32_t blks = sz / 256 - 1;
+	if (op == 2) c64_writeGCR(disk, lba, blks);
+	else if (op & 1) c64_readGCR(disk, lba, blks);
+	else return -1;
+	return 1;
+}
+
 void c64_readGCR(int idx, uint64_t lba, uint32_t blks)
 {
 	// dbgprintf("c64_readGCR: idx=%d, lba=%04llx, blks=%d\n", idx, lba, blks);

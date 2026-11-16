@@ -51,11 +51,6 @@ static char rbf_path[1024] = {};
 
 static fileTYPE sd_image[16] = {};
 
-#define  SD_TYPE_DEFAULT 0
-#define  SD_TYPE_C64 1
-#define  SD_TYPE_A2 2
-
-static int      sd_type[16] = {};
 static sd_service_t sd_image_service[16] = {};
 static unsigned char last_file_ext_idx = 0;
 static int      sd_image_cangrow[16] = {};
@@ -2300,7 +2295,6 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 	int img_type = 0; // disk image type (for C128 core): bit 0=dual sided, 1=raw GCR supported, 2=raw MFM supported, 3=high density
 
 	sd_image_cangrow[index] = (pre != 0);
-	sd_type[index] = SD_TYPE_DEFAULT ;
 	sd_image_service[index] = nullptr;
 	st_fdd_unmount(index);
 	if (len)
@@ -2319,7 +2313,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				{
 					img_type = c64_openGCR(name, sd_image + index, index);
 					ret = img_type < 0 ? 0 : 1;
-					sd_type[index] = SD_TYPE_C64;
+					if (ret) sd_image_service[index] = c64_sd_service;
 					if (!ret) FileClose(&sd_image[index]);
 
 					if (ret && is_c128())
@@ -2360,7 +2354,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					{
 						img_type = c64_openGCR(name, sd_image + index, index);
 						ret = img_type < 0 ? 0 : 1;
-						sd_type[index] = SD_TYPE_C64;
+						if (ret) sd_image_service[index] = c64_sd_service;
 						if(!ret) FileClose(&sd_image[index]);
 					}
 					else if (!strcasecmp(name + len - 4, ".d81"))
@@ -2370,7 +2364,6 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					else if (!nib_sized && (((dsk_ext || do_ext || po_ext) && a2_core) || ((dsk_ext || do_ext) && oric_a2_slot)))
 					{
 						printf("FOUND A2 %s type (nibblized on the fly)\n", po_ext ? "PO" : "DSK/DO");
-						sd_type[index] = SD_TYPE_A2;
 						sd_image_service[index] = a2_sd_service;
 						a2_set_image(index, po_ext);
 					}
@@ -2388,7 +2381,6 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 					}
 					else if (r == IIGS_HANDLED)
 					{
-						sd_type[index] = SD_TYPE_IIGS;
 						sd_image_service[index] = iigs_sd_service;
 						writable = iigs_w;
 					}
@@ -3546,12 +3538,6 @@ void user_io_poll()
 			if (int result = service ? service(disk, &sd_image[disk], op, lba, sz, ack) : 0)
 			{
 				if (result < 0) break;
-			}
-			else if ((blks == G64_BLOCK_COUNT_1541+1 || blks == G64_BLOCK_COUNT_1571+1) && sd_type[disk]==SD_TYPE_C64)
-			{
-				if (op == 2) c64_writeGCR(disk, lba, blks-1);
-				else if (op & 1) c64_readGCR(disk, lba, blks-1);
-				else break;
 			}
 			else if (is_n64() && n64_process_save(use_save, op, lba, blksz, ack, buffer_lba[disk], buffer[disk], sizeof(*buffer), sz))
 			{
