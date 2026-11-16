@@ -281,7 +281,7 @@ static int load_cue(const char* filename, toc_t *table)
 		{
 			if (!table->tracks[table->last].f.opened())
 			{
-        table->tracks[table->last].start = bb+ss*75+mm*60*75; 
+        table->tracks[table->last].start = bb+ss*75+mm*60*75;
         if (table->tracks[table->last].pregap)
           table->tracks[table->last].start += pregap;
         //Subtract the fake 150 sector pregap used for the first data track
@@ -504,10 +504,10 @@ void psx_read_cd(uint8_t *buffer, int lba, int cnt)
             {
               //The TOC is setup so that pregap sectors are actually part of the
               //PREVIOUS track. If the pregap field is set the file doesn't contain
-              //this data, so we have to fake it. 
+              //this data, so we have to fake it.
               //Check the next track's pregap and indexes[1] values to determine
               //if we're reading pregap sectors
-              
+
 
               memset(buffer, 0x0, CD_SECTOR_LEN);
             }
@@ -814,7 +814,7 @@ void psx_reset()
 char is_psx()
 {
 	static int is_psx_type = 0;
-	if (!is_psx_type)
+	if (!is_psx_type && user_io_get_core_name(1)[0])
 	{
 		is_psx_type = strcasecmp(user_io_get_core_name(1), "PSX") ? 2 : 1;
 		if (is_psx_type == 1) core_poll = psx_poll;

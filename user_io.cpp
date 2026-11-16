@@ -222,7 +222,7 @@ char is_arcade()
 static int is_menu_type = 0;
 char is_menu()
 {
-	if (!is_menu_type) is_menu_type = strcasecmp(orig_name, "MENU") ? 2 : 1;
+	if (!is_menu_type && orig_name[0]) is_menu_type = strcasecmp(orig_name, "MENU") ? 2 : 1;
 	return (is_menu_type == 1);
 }
 
@@ -3086,15 +3086,8 @@ void user_io_poll()
 		check_status_change();
 	}
 
-	// sd card emulation
-	if (is_x86() || is_pcxt() || is_pcat286())
+	if (!is_x86() && !is_pcxt() && !is_pcat286() && (core_type == CORE_TYPE_8BIT) && !is_menu())
 	{
-		x86_poll(0);
-	}
-	else if ((core_type == CORE_TYPE_8BIT) && !is_menu())
-	{
-		if (is_st()) tos_poll();
-		if (is_snes() || is_sgb()) snes_poll();
 		mdplus_poll(); // MD+ CDDA poll
 
 		for (int i = 0; i < 4; i++)
@@ -3108,7 +3101,7 @@ void user_io_poll()
 
 			if (is_uneon() && i == 3)
 			{
-				x86_poll(1);
+				x86_ide_poll();
 				break;
 			}
 
@@ -3651,11 +3644,6 @@ void user_io_poll()
 		diskled_is_on = 0;
 	}
 
-	if (is_c64() || is_c128())
-	{
-		uint16_t save_req = spi_uio_cmd(UIO_CHK_UPLOAD);
-		if (save_req) c64_save_cart(save_req >> 8);
-	}
 	process_ss(0);
 
 	if (cfg.hdmi_off)

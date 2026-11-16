@@ -23,6 +23,7 @@
 #include "st_ipf.h"
 #include "st_mfmt.h"
 #include "st_stx.h"
+#include "st_tos.h"
 
 #define ST_FDD_SLOTS     2
 #define ST_FDD_MAX_FILE  (4 * 1024 * 1024)
@@ -160,6 +161,8 @@ static const StFddTrack &build(StFddSlot &s, int cyl, int head)
 
 int st_fdd_sd_service(int disk, fileTYPE *, int op, uint64_t lba, int sz, int ack)
 {
+	tos_poll();
+
 	if (!is_st() || disk < 0 || disk >= ST_FDD_SLOTS || !slots[disk].stx) return 0;
 	StFddSlot &s = slots[disk];
 

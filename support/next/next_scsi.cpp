@@ -246,7 +246,7 @@ int next_sd_service(int disk, fileTYPE *, int op, uint64_t lba, int sz, int ack)
 char is_next()
 {
 	static int type = 0;
-	if (!type)
+	if (!type && user_io_get_core_name(1)[0])
 	{
 		type = (!strcasecmp(user_io_get_core_name(1), "NeXT") || !strcasecmp(user_io_get_core_name(1), "NeXT-Color")) ? 1 : 2;
 		if (type == 1)

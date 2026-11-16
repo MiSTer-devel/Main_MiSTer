@@ -76,9 +76,9 @@ int atari5200_check_cartridge_file(const char* name, unsigned char index)
 	cart_match_car = 0;
 	cart_matches_total = 0;
 	cart_io_index = index;
-	
+
 	int ext_index = index >> 6; // CAR is index 0
-	
+
 	if (FileOpen(&f, name))
 	{
 		file_size = f.size;
@@ -159,7 +159,7 @@ void atari5200_open_cartridge_file(const char* name, int match_index)
 
 		user_io_set_index(cart_io_index);
 		user_io_set_download(1, SDRAM_BASE + 0x4000);
-	
+
 		if(cart_type == 0x06)
 		{
 			for(int i = 0; i < 4; i++)
@@ -208,9 +208,9 @@ void atari5200_open_cartridge_file(const char* name, int match_index)
 			FileSeek(&f, 0, SEEK_SET);
 			FileReadAdv(&f, a8bit_buffer, 512);
 			uint8_t bb_type1 = (a8bit_buffer[offset] == 0x2F);
-			
+
 			FileSeek(&f, offset + (bb_type1 ? 0 : 0x2000), SEEK_SET);
-			
+
 			ProgressMessage("Loading", f.name, 0, 0xC000);
 			FileReadAdv(&f, a8bit_buffer, 0x2000);
 			user_io_file_tx_data(a8bit_buffer, 0x2000);
@@ -301,7 +301,7 @@ void atari5200_reset()
 char is_atari5200()
 {
 	static int is_atari5200_type = 0;
-	if (!is_atari5200_type)
+	if (!is_atari5200_type && user_io_get_core_name(1)[0])
 	{
 		is_atari5200_type = strcasecmp(user_io_get_core_name(1), "Atari5200") ? 2 : 1;
 		if (is_atari5200_type == 1) core_poll = atari5200_poll;

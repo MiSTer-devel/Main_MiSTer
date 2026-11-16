@@ -2784,7 +2784,7 @@ void atari800_reset()
 char is_atari800()
 {
 	static int is_atari800_type = 0;
-	if (!is_atari800_type)
+	if (!is_atari800_type && user_io_get_core_name(1)[0])
 	{
 		is_atari800_type = strcasecmp(user_io_get_core_name(1), "Atari800") ? 2 : 1;
 		if (is_atari800_type == 1) core_poll = atari800_poll;

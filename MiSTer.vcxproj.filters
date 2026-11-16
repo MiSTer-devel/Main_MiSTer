@@ -316,6 +316,18 @@
     <ClCompile Include="support\atari8bit\atari5200.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
+    <ClCompile Include="support\st\st_fdd.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\st\st_ipf.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\st\st_stx.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\st\st_trackbuild.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="battery.h">
@@ -622,6 +634,21 @@
       <Filter>Header Files\support</Filter>
     </ClInclude>
     <ClInclude Include="support\atari8bit\xex_loader.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_fdd.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_ipf.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_mfmt.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_stx.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\st\st_trackbuild.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>

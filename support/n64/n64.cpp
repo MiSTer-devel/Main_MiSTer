@@ -379,7 +379,7 @@ static void cpak_format(uint8_t* data) {
 	read(rndfd, &seed, sizeof(seed));
 	close(rndfd);
 	srand(seed);
-	
+
 
 	memset(data, 0, get_save_size(MemoryType::CPAK));
 	uint8_t id_template[CPAK_ID_ENTRY_SIZE];
@@ -1077,8 +1077,8 @@ static bool detect_rom_settings_from_first_chunk(const char region_code, const u
 		case UINT32_C(0xb814477b): // Homebrew / Hack
 		case UINT32_C(0xcfb39b3c): // Homebrew / Hack
 		case UINT32_C(0xc59d2f67): // Homebrew / Hack
-			cic = (system_type != SystemType::PAL) 
-				? CIC::CIC_NUS_6102 
+			cic = (system_type != SystemType::PAL)
+				? CIC::CIC_NUS_6102
 				: CIC::CIC_NUS_7101;
 			break;
 
@@ -3006,15 +3006,15 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 
 	char info[256];
 	size_t len = sprintf(info, "Auto-detect:");
-	if (*cart_id && 
-		!((cart_id[1] == 'E') && (cart_id[2] == 'D')) && 
+	if (*cart_id &&
+		!((cart_id[1] == 'E') && (cart_id[2] == 'D')) &&
 		!((cart_id[0] == '?') || (cart_id[1] == '?') || (cart_id[2] == '?') || (cart_id[3] == '?')))
 		len += sprintf(info + len, "\n[%.4s] v.%u.%u", cart_id, hex_to_dec(cart_id[4]) + 1, hex_to_dec(cart_id[5]));
-	if (*internal_name) 
+	if (*internal_name)
 		len += sprintf(info + len, "\n\"%s\"", internal_name);
 	SystemType system_type = (SystemType)user_io_status_get(SYS_TYPE_OPT);
 	len += sprintf(info + len, "\nRegion: %s", stringify(system_type));
-	
+
 	if (rom_settings_detected & 1) {
 		CIC cic = (CIC)user_io_status_get(CIC_TYPE_OPT);
 		len += sprintf(info + len, " (%s)", stringify(cic));
@@ -3055,7 +3055,7 @@ int n64_rom_tx(const char* name, const unsigned char idx, const uint32_t load_ad
 char is_n64()
 {
 	static int is_n64_type = 0;
-	if (!is_n64_type)
+	if (!is_n64_type && user_io_get_core_name(1)[0])
 	{
 		is_n64_type = strcasecmp(user_io_get_core_name(1), "N64") ? 2 : 1;
 		if (is_n64_type == 1) core_poll = n64_poll;

@@ -2,8 +2,9 @@
 #define X86_H
 
 void x86_init(int core_start = 0);
-void x86_poll(int only_ide);
+
 void x86_ide_set();
+uint16_t x86_ide_poll();
 
 void x86_set_image(int num, char *filename);
 const char* x86_get_image_name(int num);

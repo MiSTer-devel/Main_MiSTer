@@ -299,7 +299,7 @@ int mcd_can_send_data(uint8_t type) {
 char is_megacd()
 {
 	static int is_megacd_type = 0;
-	if (!is_megacd_type)
+	if (!is_megacd_type && user_io_get_core_name(1)[0])
 	{
 		is_megacd_type = strcasecmp(user_io_get_core_name(1), "MEGACD") ? 2 : 1;
 		if (is_megacd_type == 1) core_poll = mcd_poll;

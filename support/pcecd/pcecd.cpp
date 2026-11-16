@@ -257,7 +257,7 @@ int pcecd_send_data(uint8_t* buf, int len, uint8_t index) {
 char is_pce()
 {
 	static int is_pce_type = 0;
-	if (!is_pce_type)
+	if (!is_pce_type && user_io_get_core_name(1)[0])
 	{
 		is_pce_type = strcasecmp(user_io_get_core_name(1), "TGFX16") ? 2 : 1;
 		if (is_pce_type == 1) core_poll = pcecd_poll;

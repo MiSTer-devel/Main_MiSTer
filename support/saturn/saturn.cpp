@@ -79,14 +79,14 @@ void saturn_poll()
 		if (curr_timer >= poll_timer) {
 			poll_timer = curr_timer + CalcTimerOffset(time_mode);
 #ifdef SATURN_DEBUG
-			user_io_status_set("[63]", 1); 
+			user_io_status_set("[63]", 1);
 			printf("\x1b[32mSaturn: ");
 			printf("Time over: next = %lu, curr = %lu", poll_timer, curr_timer);
 			printf("\n\x1b[0m");
 #endif // SATURN_DEBUG
 		}
 #ifdef SATURN_DEBUG
-		else 
+		else
 			user_io_status_set("[63]", 0);
 #endif // SATURN_DEBUG
 	}
@@ -360,7 +360,7 @@ void saturn_fill_blanksave(uint8_t *buffer, uint32_t lba)
 char is_saturn()
 {
 	static int is_saturn_type = 0;
-	if (!is_saturn_type)
+	if (!is_saturn_type && user_io_get_core_name(1)[0])
 	{
 		is_saturn_type = strcasecmp(user_io_get_core_name(1), "Saturn") ? 2 : 1;
 		if (is_saturn_type == 1) core_poll = saturn_poll;

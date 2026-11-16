@@ -848,21 +848,8 @@ static void fdd_io(uint8_t read)
 	}
 }
 
-void x86_poll(int only_ide)
+uint16_t x86_ide_poll()
 {
-	if(!only_ide) x86_share_poll();
-
-	if (!only_ide && x86_cmos_nvram_supported())
-	{
-		static time_t cmos_poll_time = 0;
-		time_t now = time(NULL);
-		if (now != cmos_poll_time)
-		{
-			cmos_poll_time = now;
-			x86_cmos_capture();
-		}
-	}
-
 	uint16_t sd_req = ide_check();
 	if (sd_req)
 	{
@@ -873,8 +860,27 @@ void x86_poll(int only_ide)
 		ide_io(1, sd_req & 7);
 
 		sd_req >>= 3;
-		if (!only_ide && (sd_req & 3)) fdd_io(sd_req & 1);
 	}
+	return sd_req;
+}
+
+static void x86_poll()
+{
+	x86_share_poll();
+
+	if (x86_cmos_nvram_supported())
+	{
+		static time_t cmos_poll_time = 0;
+		time_t now = time(NULL);
+		if (now != cmos_poll_time)
+		{
+			cmos_poll_time = now;
+			x86_cmos_capture();
+		}
+	}
+
+	uint16_t sd_req = x86_ide_poll();
+	if (sd_req & 3) fdd_io(sd_req & 1);
 }
 
 void x86_set_image(int num, char *filename)
@@ -943,7 +949,7 @@ const char* x86_get_image_path(int num)
 char is_x86()
 {
 	static int is_x86_type = 0;
-	if (!is_x86_type)
+	if (!is_x86_type && user_io_get_core_name(1)[0])
 	{
 		if (!strcasecmp(user_io_get_core_name(1), "AO486") ||
 		    !strcasecmp(user_io_get_core_name(1), "PC110") ||
@@ -954,13 +960,15 @@ char is_x86()
 		else
 			is_x86_type = 2;
 	}
+
+	if (is_x86_type == 1) core_poll = x86_poll;
 	return (is_x86_type == 1);
 }
 
 char is_pcxt()
 {
 	static int is_pcxt_type = 0;
-	if (!is_pcxt_type)
+	if (!is_pcxt_type && user_io_get_core_name(1)[0])
 	{
 		if (!strcasecmp(user_io_get_core_name(1), "PCXT") ||
 		    !strcasecmp(user_io_get_core_name(1), "Tandy1000") ||
@@ -971,18 +979,22 @@ char is_pcxt()
 		else
 			is_pcxt_type = 2;
 	}
+
+	if (is_pcxt_type == 1) core_poll = x86_poll;
 	return (is_pcxt_type == 1);
 }
 
 char is_pcat286()
 {
 	static int is_pcat286_type = 0;
-	if (!is_pcat286_type)
+	if (!is_pcat286_type && user_io_get_core_name(1)[0])
 	{
 		if (!strcasecmp(user_io_get_core_name(1), "PCAT-286"))
 			is_pcat286_type = 1;
 		else
 			is_pcat286_type = 2;
 	}
+
+	if (is_pcat286_type == 1) core_poll = x86_poll;
 	return (is_pcat286_type == 1);
 }
