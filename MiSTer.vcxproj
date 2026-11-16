@@ -98,6 +98,7 @@
     <ClCompile Include="support\minimig\ipffile.cpp" />
     <ClCompile Include="support\minimig\akiko_cd32.cpp" />
     <ClCompile Include="support\minimig\cdtv_cd.cpp" />
+    <ClCompile Include="support\minimig\minimig.cpp" />
     <ClCompile Include="support\minimig\minimig_a2065.cpp" />
     <ClCompile Include="support\minimig\minimig_a2065_crc32.cpp" />
     <ClCompile Include="support\minimig\minimig_a2065_ethernet.cpp" />
@@ -113,6 +114,13 @@
     <ClCompile Include="support\n64\n64_joy_emu.cpp" />
     <ClCompile Include="support\neogeo\neogeocd.cpp" />
     <ClCompile Include="support\neogeo\neogeo_loader.cpp" />
+    <ClCompile Include="support\next\next_cdrom.cpp" />
+    <ClCompile Include="support\next\next_cdrom_play.cpp" />
+    <ClCompile Include="support\next\next_cdrom_resp.cpp" />
+    <ClCompile Include="support\next\next_enet.cpp" />
+    <ClCompile Include="support\next\next_mo.cpp" />
+    <ClCompile Include="support\next\next_rs.cpp" />
+    <ClCompile Include="support\next\next_scsi.cpp" />
     <ClCompile Include="support\pcecd\pcecd.cpp" />
     <ClCompile Include="support\pcecd\pcecdd.cpp" />
     <ClCompile Include="support\pcecd\seektime.cpp" />
@@ -191,6 +199,7 @@
     <ClInclude Include="support\minimig\akiko_cd32.h" />
     <ClInclude Include="support\minimig\cdtv_cd.h" />
     <ClInclude Include="support\minimig\miminig_fs_messages.h" />
+    <ClInclude Include="support\minimig\minimig.h" />
     <ClInclude Include="support\minimig\minimig_a2065.h" />
     <ClInclude Include="support\minimig\minimig_a2065_boardram.h" />
     <ClInclude Include="support\minimig\minimig_a2065_ddr3.h" />
@@ -205,6 +214,13 @@
     <ClInclude Include="support\n64\n64_joy_emu.h" />
     <ClInclude Include="support\neogeo\neogeocd.h" />
     <ClInclude Include="support\neogeo\neogeo_loader.h" />
+    <ClInclude Include="support\next\next_cdrom.h" />
+    <ClInclude Include="support\next\next_cdrom_play.h" />
+    <ClInclude Include="support\next\next_cdrom_resp.h" />
+    <ClInclude Include="support\next\next_enet.h" />
+    <ClInclude Include="support\next\next_mo.h" />
+    <ClInclude Include="support\next\next_rs.h" />
+    <ClInclude Include="support\next\next_scsi.h" />
     <ClInclude Include="support\pcecd\pcecd.h" />
     <ClInclude Include="support\psx\mcdheader.h" />
     <ClInclude Include="support\psx\psx.h" />

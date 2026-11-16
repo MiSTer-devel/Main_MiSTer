@@ -15,11 +15,7 @@
 #include "../../cfg.h"
 #include "../../ide.h"
 #include "../../shmem.h"
-#include "minimig_boot.h"
-#include "minimig_fdd.h"
-#include "minimig_config.h"
-#include "minimig_share.h"
-#include "minimig_a2065.h"
+#include "minimig.h"
 #include "akiko_cd32.h"
 #include "cdtv_cd.h"
 #include <unistd.h>
@@ -681,12 +677,10 @@ int minimig_cfg_load(int num)
 	return(result);
 }
 
-
-
 void minimig_reset()
 {
 	ApplyConfiguration(0);
-	user_io_rtc_reset();
+	minimig_rtc_reset();
 	minimig_share_reset();
 	a2065_start();
 	akiko_cd32_init();

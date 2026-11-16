@@ -75,9 +75,6 @@ static unsigned char dual_sdr = 0;
 static int fio_size = 0;
 static int io_ver = 0;
 
-// keep state of caps lock
-static char caps_lock_toggle = 0;
-
 #define LED_FREQ 100   // 100 ms
 static unsigned long led_timer;
 static char keyboard_leds = 0;
@@ -328,23 +325,6 @@ char is_falcon()
 	return type == 1;
 }
 
-static int is_minimig_type = 0;
-char is_minimig()
-{
-	if (!is_minimig_type)
-	{
-		is_minimig_type = (!strcasecmp(orig_name, "minimig") || !strcasecmp(orig_name, "minimigcd")) ? 1 : 2;
-		if (is_minimig_type == 1)
-		{
-			uint16_t res = spi_uio_cmd(UIO_GET_VMODE);
-			if (res == 1) is_minimig_type = 3;
-		}
-
-	}
-
-	return (is_minimig_type == 1) ? 1 : (is_minimig_type == 3) ? 2 : 0;
-}
-
 static int is_megacd_type = 0;
 char is_megacd()
 {
@@ -371,6 +351,7 @@ static int is_archie_type = 0;
 char is_archie()
 {
 	if (!is_archie_type) is_archie_type = strcasecmp(orig_name, "ARCHIE") ? 2 : 1;
+	if (is_archie_type == 1) core_poll = archie_poll;
 	return (is_archie_type == 1);
 }
 
@@ -589,7 +570,6 @@ void user_io_read_core_name()
 	is_cpc_type = 0;
 	is_zx81_type = 0;
 	is_neogeo_type = 0;
-	is_minimig_type = 0;
 	is_megacd_type = 0;
 	is_pce_type = 0;
 	is_archie_type = 0;
@@ -753,7 +733,7 @@ void user_io_status_reset()
 	user_io_status_set("[0]", 0);
 }
 
-static void set_kbd_led(int led, int state)
+void user_io_set_kbd_led(int led, int state)
 {
 	if (led & HID_LED_CAPS_LOCK)
 	{
@@ -783,25 +763,25 @@ static void set_emu_mode(int mode)
 	{
 	case EMU_JOY0:
 		emu_led = 0x20;
-		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_NUM_LOCK);
+		user_io_set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_NUM_LOCK);
 		Info("Kbd mode: Joystick 1", 1000);
 		break;
 
 	case EMU_JOY1:
 		emu_led = 0x40;
-		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_SCROLL_LOCK);
+		user_io_set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_SCROLL_LOCK);
 		Info("Kbd mode: Joystick 2", 1000);
 		break;
 
 	case EMU_MOUSE:
 		emu_led = 0x60;
-		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK);
+		user_io_set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK);
 		Info("Kbd mode: Mouse", 1000);
 		break;
 
 	default:
 		emu_led = 0;
-		set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, 0);
+		user_io_set_kbd_led(HID_LED_NUM_LOCK | HID_LED_SCROLL_LOCK, 0);
 		Info("Kbd mode: Normal", 1000);
 	}
 
@@ -1233,7 +1213,7 @@ static void parse_config()
 }
 
 //MSM6242B layout
-static void send_rtc(int type)
+void user_io_send_rtc(int type)
 {
 	//printf("Update RTC\n");
 
@@ -1676,6 +1656,7 @@ void user_io_init(const char *path, const char *xml)
 		printf("Using default MRA: %s\n", xml);
 	}
 
+	is_minimig();
 	is_mac_scsi_family();
 	is_next();
 	is_sun_family();
@@ -1908,7 +1889,7 @@ void user_io_init(const char *path, const char *xml)
 			parse_buttons();
 		}
 
-		send_rtc(3);
+		user_io_send_rtc(3);
 		if (is_marty() && xml && isXmlName(xml) == 2) marty_mgl_premount();
 		if (is_pcfx() && xml && isXmlName(xml) == 2) pcfx_mgl_premount();
 
@@ -2111,45 +2092,6 @@ uint8_t user_io_ps2_ctl(uint8_t *kbd_ctl, uint8_t *mouse_ctl)
 
 	DisableIO();
 	return res;
-}
-
-// 16 byte fifo for amiga key codes to limit max key rate sent into the core
-#define KBD_FIFO_SIZE  16   // must be power of 2
-static unsigned short kbd_fifo[KBD_FIFO_SIZE];
-static unsigned char kbd_fifo_r = 0, kbd_fifo_w = 0;
-static long kbd_timer = 0;
-
-static void kbd_fifo_minimig_send(uint32_t code)
-{
-	spi_uio_cmd8((code&OSD) ? UIO_KBD_OSD : UIO_KEYBOARD, code & 0xff);
-	kbd_timer = GetTimer(10);  // next key after 10ms earliest
-}
-
-static void kbd_fifo_enqueue(unsigned short code)
-{
-	// if fifo full just drop the value. This should never happen
-	if (((kbd_fifo_w + 1)&(KBD_FIFO_SIZE - 1)) == kbd_fifo_r)
-		return;
-
-	// store in queue
-	kbd_fifo[kbd_fifo_w] = code;
-	kbd_fifo_w = (kbd_fifo_w + 1)&(KBD_FIFO_SIZE - 1);
-}
-
-// send pending bytes if timer has run up
-static void kbd_fifo_poll()
-{
-	// timer enabled and runnig?
-	if (kbd_timer && !CheckTimer(kbd_timer))
-		return;
-
-	kbd_timer = 0;  // timer == 0 means timer is not running anymore
-
-	if (kbd_fifo_w == kbd_fifo_r)
-		return;
-
-	kbd_fifo_minimig_send(kbd_fifo[kbd_fifo_r]);
-	kbd_fifo_r = (kbd_fifo_r + 1)&(KBD_FIFO_SIZE - 1);
 }
 
 int process_ss(const char *rom_name, int enable)
@@ -3467,16 +3409,8 @@ static void mouse_reply(char code)
 
 static uint8_t use_ps2ctl = 0;
 static unsigned long rtc_timer = 0;
-static unsigned long next_rtc_timer = 0;
-
-void user_io_rtc_reset()
-{
-	rtc_timer = 0;
-}
 
 static int coldreset_req = 0;
-
-static uint32_t res_timer = 0;
 
 void user_io_poll()
 {
@@ -3495,60 +3429,7 @@ void user_io_poll()
 	}
 
 	user_io_send_buttons(0);
-
 	if (core_poll) core_poll();
-
-	if (is_minimig())
-	{
-		//HDD & FDD query
-		unsigned char  c1, c2;
-		EnableFpga();
-		uint16_t tmp = spi_w(0);
-		c1 = (uint8_t)(tmp >> 8); // cmd request and drive number
-		c2 = (uint8_t)tmp;      // track number
-		spi_w(0);
-		spi_w(0);
-		DisableFpga();
-		sysled_enable(0);
-		HandleFDD(c1, c2);
-		sysled_enable(1);
-
-		uint16_t sd_req = ide_check();
-		ide_io(0, sd_req & 7);
-		ide_io(1, (sd_req >> 3) & 7);
-		if (sd_req & 0x0100) ide_cdda_send_sector();
-		UpdateDriveStatus();
-
-		if (is_minimig() == 2)
-		{
-			akiko_cd32_poll();
-			cdtv_cd_poll();
-		}
-
-		kbd_fifo_poll();
-
-		if (!rtc_timer || CheckTimer(rtc_timer))
-		{
-			// Update once per minute should be enough
-			rtc_timer = GetTimer(60000);
-			send_rtc(1);
-		}
-
-		minimig_share_poll();
-		a2065_poll();
-	}
-
-
-	// The NeXT keeps a battery backed clock that the guest reads at
-	// boot; the one-shot update at core load is not enough if the core
-	// sits at the ROM monitor for a while, so refresh it every minute
-	// like the other cores that own a real time clock.  The core stops
-	// applying these once the guest sets its own time.
-	if (is_next() && (!next_rtc_timer || CheckTimer(next_rtc_timer)))
-	{
-		next_rtc_timer = GetTimer(60000);
-		send_rtc(1);
-	}
 
 	if (core_type == CORE_TYPE_8BIT && !is_menu())
 	{
@@ -3879,10 +3760,8 @@ void user_io_poll()
 	{
 		// Update once per minute should be enough
 		rtc_timer = GetTimer(60000);
-		send_rtc(1);
+		user_io_send_rtc(1);
 	}
-
-	if (is_archie()) archie_poll();
 
 	static uint8_t leds = 0;
 
@@ -4083,57 +3962,35 @@ void user_io_poll()
 		if (info_n) show_core_info(info_n);
 	}
 
-	if (!res_timer)
+	static uint32_t sdr_timer = 0;
+	static int got_cfg = 0;
+	if (!got_cfg && is_menu() && (!sdr_timer || CheckTimer(sdr_timer)))
 	{
-		res_timer = GetTimer(1000);
-	}
-	else if (CheckTimer(res_timer))
-	{
-		if (is_menu())
-		{
-			static int got_cfg = 0;
-			if (!got_cfg)
-			{
-				spi_uio_cmd_cont(UIO_GET_OSDMASK);
-				sdram_cfg = spi_w(0);
-				DisableIO();
+		spi_uio_cmd_cont(UIO_GET_OSDMASK);
+		sdram_cfg = spi_w(0);
+		DisableIO();
 
-				if (sdram_cfg & 0x8000)
-				{
-					got_cfg = 1;
-					printf("*** Got SDRAM module type: %d\n", sdram_cfg & 7);
-					switch (user_io_get_sdram_cfg() & 7)
-					{
-					case 7:
-						sdram_sz(3);
-						break;
-					case 3:
-						sdram_sz(2);
-						break;
-					case 1:
-						sdram_sz(1);
-						break;
-					default:
-						sdram_sz(0);
-					}
-				}
+		if (sdram_cfg & 0x8000)
+		{
+			got_cfg = 1;
+			printf("*** Got SDRAM module type: %d\n", sdram_cfg & 7);
+			switch (user_io_get_sdram_cfg() & 7)
+			{
+			case 7:
+				sdram_sz(3);
+				break;
+			case 3:
+				sdram_sz(2);
+				break;
+			case 1:
+				sdram_sz(1);
+				break;
+			default:
+				sdram_sz(0);
 			}
 		}
 
-		res_timer = GetTimer(500);
-		if (!minimig_get_adjust())
-		{
-			if (is_minimig()) minimig_adjust_vsize(0);
-			video_mode_adjust();
-		}
-
-		/*
-		uint32_t frcnt = spi_uio_cmd(UIO_GET_FR_CNT);
-		if (frcnt & 0x100)
-		{
-			printf("frames:%d\n", frcnt & 0xFF);
-		}
-		*/
+		sdr_timer = GetTimer(500);
 	}
 
 	static int prev_coldreset_req = 0;
@@ -4211,62 +4068,10 @@ static void send_keycode(unsigned short key, int press)
 			return;
 		}
 	}
+
 	if (is_minimig())
 	{
-		if (press > 1) return;
-
-		uint32_t code = get_amiga_code(key);
-		if (code == NONE) return;
-
-		if (code & CAPS_TOGGLE)
-		{
-			if (press)
-			{
-				// send alternating make and break codes for caps lock
-				if(caps_lock_toggle) code |= 0x80;
-				caps_lock_toggle ^= HID_LED_CAPS_LOCK;
-				set_kbd_led(HID_LED_CAPS_LOCK, caps_lock_toggle);
-			}
-			else
-			{
-				return;
-			}
-		}
-		else
-		{
-			// amiga has "break" marker in msb
-			if (!press) code |= 0x80;
-		}
-
-		code &= 0xff;
-		if (minimig_get_adjust())
-		{
-			if (code == 0x44)
-			{
-				minimig_set_adjust(0);
-				res_timer = 0;
-				return;
-			}
-
-			if (code == 0x45)
-			{
-				Info("Canceled");
-				res_timer = 0;
-				minimig_set_adjust(2);
-				return;
-			}
-			code |= OSD;
-		}
-
-		// send immediately if possible
-		if (CheckTimer(kbd_timer) && (kbd_fifo_w == kbd_fifo_r))
-		{
-			kbd_fifo_minimig_send(code);
-		}
-		else
-		{
-			kbd_fifo_enqueue(code);
-		}
+		minimig_send_keycode(key, press);
 		return;
 	}
 

@@ -101,8 +101,8 @@
 #define UIO_MM2_FLP     0xF7 //0x44
 #define UIO_MM2_HDD     0xF8 //0x54
 #define UIO_MM2_JOY     0xF9 //0x64
-#define UIO_MM2_FLPEX01 0xFA 
-#define UIO_MM2_FLPEX23 0xFB 
+#define UIO_MM2_FLPEX01 0xFA
+#define UIO_MM2_FLPEX23 0xFB
 #define UIO_MM2_USRPORT 0xFC
 
 #define JOY_RIGHT       0x01
@@ -183,6 +183,7 @@ char user_io_user_button();
 void user_io_osd_key_enable(char);
 int user_io_get_kbd_reset();
 void user_io_set_kbd_reset(int reset);
+void user_io_set_kbd_led(int led, int state);
 
 int substrcpy(char *d, const char *s, char idx);
 
@@ -245,7 +246,7 @@ int user_io_get_width();
 
 void user_io_check_reset(unsigned short modifiers, char useKeys);
 
-void user_io_rtc_reset();
+void user_io_send_rtc(int type);
 
 const char* get_rbf_dir();
 const char* get_rbf_name();

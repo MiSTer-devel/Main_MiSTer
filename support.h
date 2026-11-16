@@ -1,12 +1,9 @@
 // Minimig support
-#include "support/minimig/minimig_config.h"
-#include "support/minimig/minimig_boot.h"
-#include "support/minimig/minimig_fdd.h"
-#include "support/minimig/minimig_share.h"
-#include "support/minimig/minimig_a2065.h"
+#include "support/minimig/minimig.h"
+
+// NeXT
 #include "support/next/next_enet.h"
 #include "support/next/next_scsi.h"
-
 
 // Apple 2 support
 #include "support/a2/dsk2nib_lib.h"

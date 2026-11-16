@@ -18,6 +18,7 @@
 #include "../../user_io.h"
 #include "../../shmem.h"
 #include "../../menu.h"
+#include "../../hardware.h"
 #include "next_enet.h"
 
 // shared host-network layer from the A2065 module
@@ -175,6 +176,14 @@ static int mode_from_status(void)
 
 void next_enet_poll(void)
 {
+	static unsigned long next_rtc_timer = 0;
+
+	if (!next_rtc_timer || CheckTimer(next_rtc_timer))
+	{
+		next_rtc_timer = GetTimer(60000);
+		user_io_send_rtc(1);
+	}
+
 	static uint8_t frame[MAX_FRAME];
 
 	if (!running || !mb) return;
