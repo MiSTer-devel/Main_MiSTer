@@ -743,3 +743,14 @@ int falcon_sd_service(int disk, fileTYPE *, int op, uint64_t lba, int sz, int ac
 	}
 	return 0;
 }
+
+char is_falcon()
+{
+	static int type = 0;
+	if (!type)
+	{
+		type = !strcasecmp(user_io_get_core_name(1), "Falcon") ? 1 : 2;
+		if (type == 1) sd_service = falcon_sd_service;
+	}
+	return type == 1;
+}

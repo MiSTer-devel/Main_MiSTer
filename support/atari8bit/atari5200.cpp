@@ -297,3 +297,14 @@ void atari5200_reset()
 	atari8bit_dma_zero(SDRAM_BASE + 0x4000, 0x80000);
 	reboot_5200();
 }
+
+char is_atari5200()
+{
+	static int is_atari5200_type = 0;
+	if (!is_atari5200_type)
+	{
+		is_atari5200_type = strcasecmp(user_io_get_core_name(1), "Atari5200") ? 2 : 1;
+		if (is_atari5200_type == 1) core_poll = atari5200_poll;
+	}
+	return (is_atari5200_type == 1);
+}

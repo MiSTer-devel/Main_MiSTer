@@ -14,9 +14,8 @@
 
 #include "support/x86/x86.h"
 #include "support/vhd/vhdcfg.h"
+#include "support/minimig/minimig.h"
 #include "support/minimig/minimig_hdd.h"
-#include "support/minimig/minimig_config.h"
-#include "support/minimig/minimig_a2065.h"
 #include "spi.h"
 #include "user_io.h"
 #include "file_io.h"

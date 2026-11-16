@@ -409,3 +409,10 @@ void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack)
 		}
 	}
 }
+
+char is_apple2()
+{
+	static int is_apple2_type = 0;
+	if (!is_apple2_type) is_apple2_type = strcasecmp(user_io_get_core_name(1), "Apple-II") ? 2 : 1;
+	return (is_apple2_type == 1);
+}

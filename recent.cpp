@@ -11,6 +11,7 @@
 #include "osd.h"
 #include "cfg.h"
 #include "recent.h"
+#include "support.h"
 
 #define RECENT_MAX 16
 

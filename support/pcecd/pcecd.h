@@ -144,4 +144,7 @@ int pcecd_using_cd();
 
 #define PCECD_DIR "TGFX16-CD"
 
+char is_pce();
+
+
 #endif

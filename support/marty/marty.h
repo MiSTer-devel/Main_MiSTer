@@ -25,4 +25,7 @@ int  marty_block_size(int index, int wire_size);
 struct fileTYPE;
 int  marty_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
 
+char is_marty();
+
+
 #endif

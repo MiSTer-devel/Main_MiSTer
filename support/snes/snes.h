@@ -13,4 +13,8 @@ void snes_poll(void);
 // Returns a malloc'd buffer of *out_size bytes; caller must free(). Returns NULL on failure.
 uint8_t* snes_get_mirrored_rom(fileTYPE *f, uint32_t *out_size);
 
+char is_snes();
+char is_sgb();
+
+
 #endif

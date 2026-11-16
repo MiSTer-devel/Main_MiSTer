@@ -168,3 +168,19 @@ int neocd_can_send_data(uint8_t type) {
 
 	return (data == 1);
 }
+
+char is_neogeo()
+{
+	static int is_neogeo_type = 0;
+	if (!is_neogeo_type)
+	{
+		is_neogeo_type = strcasecmp(user_io_get_core_name(1), "neogeo") ? 2 : 1;
+		if (is_neogeo_type == 1) core_poll = neocd_poll;
+	}
+	return (is_neogeo_type == 1);
+}
+
+char is_neogeo_cd()
+{
+    return is_neogeo() && neocd_is_en();
+}

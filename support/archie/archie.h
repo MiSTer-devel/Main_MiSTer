@@ -27,4 +27,7 @@ int  archie_get_scale();
 const char *archie_get_hdd_name(int i);
 void archie_hdd_mount(char *filename, int idx);
 
+char is_archie();
+
+
 #endif // ARCHIE_H

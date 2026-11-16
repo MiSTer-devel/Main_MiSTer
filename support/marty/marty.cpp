@@ -1399,3 +1399,18 @@ void marty_poll()
 		if (req & (1 << bit)) create_image(bit, req >> 15);
 	spi_uio_cmd16(UIO_MARTY_ACK_REQ, req & 0x3FF);
 }
+
+char is_marty()
+{
+	static int is_marty_type = 0;
+	if (!is_marty_type)
+	{
+		is_marty_type = strcasecmp(user_io_get_core_name(1), "Marty") ? 2 : 1;
+		if (is_marty_type == 1)
+		{
+			sd_service = marty_sd_service;
+			core_poll = marty_poll;
+		}
+	}
+	return (is_marty_type == 1);
+}

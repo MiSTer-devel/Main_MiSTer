@@ -172,6 +172,9 @@
     <ClCompile Include="recent.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="support\core\core_ids.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
     <ClCompile Include="support\c64\c64.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
@@ -262,9 +265,6 @@
     <ClCompile Include="support\minimig\akiko_cd32.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
-    <ClCompile Include="support\atari800\atari800.cpp">
-      <Filter>Source Files\support</Filter>
-    </ClCompile>
     <ClCompile Include="support\minimig\cdtv_cd.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
@@ -308,6 +308,12 @@
       <Filter>Source Files\support</Filter>
     </ClCompile>
     <ClCompile Include="support\next\next_scsi.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\atari8bit\atari800.cpp">
+      <Filter>Source Files\support</Filter>
+    </ClCompile>
+    <ClCompile Include="support\atari8bit\atari5200.cpp">
       <Filter>Source Files\support</Filter>
     </ClCompile>
   </ItemGroup>
@@ -468,6 +474,9 @@
     <ClInclude Include="recent.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="support\core\core_ids.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
     <ClInclude Include="support\c64\c64.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
@@ -604,6 +613,15 @@
       <Filter>Header Files\support</Filter>
     </ClInclude>
     <ClInclude Include="support\next\next_scsi.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\atari8bit\atari8bit_defs.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\atari8bit\boot_xex_loader.h">
+      <Filter>Header Files\support</Filter>
+    </ClInclude>
+    <ClInclude Include="support\atari8bit\xex_loader.h">
       <Filter>Header Files\support</Filter>
     </ClInclude>
   </ItemGroup>

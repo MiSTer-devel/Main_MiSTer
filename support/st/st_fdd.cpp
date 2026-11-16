@@ -200,3 +200,14 @@ int st_fdd_sd_service(int disk, fileTYPE *, int op, uint64_t lba, int sz, int ac
 	DisableIO();
 	return 1;
 }
+
+char is_st()
+{
+	static int is_st_type = 0;
+	if (!is_st_type)
+	{
+		is_st_type = strcasecmp(user_io_get_core_name(1), "AtariST") ? 2 : 1;
+		if (is_st_type == 1) sd_service = st_fdd_sd_service;
+	}
+	return (is_st_type == 1);
+}

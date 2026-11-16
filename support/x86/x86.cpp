@@ -39,6 +39,7 @@
 #include "../../shmem.h"
 #include "../../ide.h"
 #include "x86_share.h"
+#include "x86.h"
 
 #define FDD0_BASE   0xF200
 #define FDD1_BASE   0xF300
@@ -937,4 +938,51 @@ const char* x86_get_image_name(int num)
 const char* x86_get_image_path(int num)
 {
 	return config.img_name[num];
+}
+
+char is_x86()
+{
+	static int is_x86_type = 0;
+	if (!is_x86_type)
+	{
+		if (!strcasecmp(user_io_get_core_name(1), "AO486") ||
+		    !strcasecmp(user_io_get_core_name(1), "PC110") ||
+		    !strcasecmp(user_io_get_core_name(1), "Z486") ||
+		    !strcasecmp(user_io_get_core_name(1), "Z386")
+		   )
+			is_x86_type = 1;
+		else
+			is_x86_type = 2;
+	}
+	return (is_x86_type == 1);
+}
+
+char is_pcxt()
+{
+	static int is_pcxt_type = 0;
+	if (!is_pcxt_type)
+	{
+		if (!strcasecmp(user_io_get_core_name(1), "PCXT") ||
+		    !strcasecmp(user_io_get_core_name(1), "Tandy1000") ||
+			!strcasecmp(user_io_get_core_name(1), "PCjr") ||
+			!strcasecmp(user_io_get_core_name(1), "PCXT-EGA")
+		   )
+			is_pcxt_type = 1;
+		else
+			is_pcxt_type = 2;
+	}
+	return (is_pcxt_type == 1);
+}
+
+char is_pcat286()
+{
+	static int is_pcat286_type = 0;
+	if (!is_pcat286_type)
+	{
+		if (!strcasecmp(user_io_get_core_name(1), "PCAT-286"))
+			is_pcat286_type = 1;
+		else
+			is_pcat286_type = 2;
+	}
+	return (is_pcat286_type == 1);
 }

@@ -13,4 +13,7 @@ const char* cdi_get_game_id();
 void cdi_poll();
 void cdi_load_root_nvram();
 
+char is_cdi();
+
+
 #endif

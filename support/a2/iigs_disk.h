@@ -15,10 +15,6 @@
 // Relies on fileTYPE being defined already (file_io.h), matching dsk2nib_lib.h:
 // this header is reached via support.h, which is included after file_io.h.
 
-// sd_type value used to route IIgs slots into iigs_read/iigs_write. Continues
-// the series after SD_TYPE_A2 (=2) defined in user_io.cpp.
-#define SD_TYPE_IIGS 3
-
 // iigs_mount return codes.
 #define IIGS_PASSTHRU  0   // not handled — serve normally (raw .po/.hdv/native .woz)
 #define IIGS_HANDLED   1   // set up for iigs_read/iigs_write; size/sd_type adjusted
@@ -41,5 +37,8 @@ void iigs_unmount(int index);
 int iigs_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
 void iigs_read(int disk, fileTYPE *f, uint64_t lba, uint32_t blks, int ack);
 void iigs_write(int disk, fileTYPE *f, uint64_t lba, int ack);
+
+char is_apple2();
+
 
 #endif // IIGS_DISK_H

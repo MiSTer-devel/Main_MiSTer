@@ -253,3 +253,14 @@ int pcecd_send_data(uint8_t* buf, int len, uint8_t index) {
 	user_io_set_download(0);
 	return 1;
 }
+
+char is_pce()
+{
+	static int is_pce_type = 0;
+	if (!is_pce_type)
+	{
+		is_pce_type = strcasecmp(user_io_get_core_name(1), "TGFX16") ? 2 : 1;
+		if (is_pce_type == 1) core_poll = pcecd_poll;
+	}
+	return (is_pce_type == 1);
+}

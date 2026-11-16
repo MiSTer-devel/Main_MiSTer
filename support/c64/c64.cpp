@@ -1169,3 +1169,17 @@ void c64_save_cart(int open_menu)
 
 	if (open_menu) menu_key_set(KEY_F12);
 }
+
+char is_c64()
+{
+	static int is_c64_type = 0;
+	if (!is_c64_type) is_c64_type = strcasecmp(user_io_get_core_name(1), "C64") ? 2 : 1;
+	return (is_c64_type == 1);
+}
+
+char is_c128()
+{
+	static int is_c128_type = 0;
+	if (!is_c128_type) is_c128_type = strcasecmp(user_io_get_core_name(1), "C128") ? 2 : 1;
+	return (is_c128_type == 1);
+}

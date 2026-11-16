@@ -104,3 +104,6 @@
 
 // VideoBrain support
 #include "support/videobrain/videobrain.h"
+
+// cores without consolidated support code
+#include "support/core/core_ids.h"

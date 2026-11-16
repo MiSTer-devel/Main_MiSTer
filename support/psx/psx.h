@@ -9,4 +9,7 @@ const char* psx_get_game_id();
 void psx_poll();
 void psx_reset();
 
+char is_psx();
+
+
 #endif

@@ -17,6 +17,7 @@ This file contains lookup information on known controllers
 #include "file_io.h"
 #include "osd.h"
 #include "gamecontroller_db.h"
+#include "support.h"
 
 #define DPAD_COUNT 4
 #define CORE_BUTTON_COUNT (32 - DPAD_COUNT)

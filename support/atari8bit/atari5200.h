@@ -11,4 +11,7 @@ void atari5200_umount_cartridge();
 int atari5200_check_cartridge_file(const char* name, unsigned char index);
 void atari5200_open_cartridge_file(const char* name, int match_index);
 
+char is_atari5200();
+
+
 #endif

@@ -279,38 +279,9 @@ void diskled_on();
 #define DISKLED_ON  diskled_on()
 #define DISKLED_OFF void()
 
-char is_minimig();
-char is_next();
-char is_falcon();
 char is_menu();
-char is_x86();
-char is_snes();
-char is_sgb();
-char is_apple2();
-char user_io_a2_woz_enabled();
-char is_neogeo();
-char is_neogeo_cd();
-char is_megacd();
-char is_pce();
-char is_archie();
-char is_gba();
-char is_c64();
-char is_c128();
-char is_st();
-char is_psx();
-char is_cdi();
 char is_arcade();
-char is_saturn();
-char is_pcxt();
-char is_pcat286();
-char is_n64();
-char is_uneon();
-char is_atari800();
-char is_atari5200();
-char is_3do();
-char is_marty();
-char is_videobrain();
-char is_pcfx();
+char user_io_a2_woz_enabled();
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()

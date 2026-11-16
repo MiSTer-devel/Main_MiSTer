@@ -13,4 +13,7 @@ void atari800_open_bios_file(const char* name, unsigned char index);
 void atari800_set_image(int ext_index, int file_index, const char *name);
 void atari800_check_osd_key(unsigned short key, int press);
 
+char is_atari800();
+
+
 #endif

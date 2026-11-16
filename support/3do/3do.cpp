@@ -252,3 +252,14 @@ void p3do_fill_blanksave(uint8_t *buf, uint32_t lba)
 	}
 }
 
+
+char is_3do()
+{
+	static int is_3do_type = 0;
+	if (!is_3do_type)
+	{
+		is_3do_type = strcasecmp(user_io_get_core_name(1), "3DO") ? 2 : 1;
+		if (is_3do_type == 1) core_poll = p3do_poll;
+	}
+	return (is_3do_type == 1);
+}

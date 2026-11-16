@@ -9,6 +9,7 @@
 #include "../../file_io.h"
 #include "../../user_io.h"
 #include "../../spi.h"
+#include "snes.h"
 
 static uint8_t hdr[512];
 
@@ -573,4 +574,18 @@ void snes_poll(void)
 	{
 		DisableIO();
 	}
+}
+
+char is_snes()
+{
+	static int is_snes_type = 0;
+	if (!is_snes_type) is_snes_type = strcasecmp(user_io_get_core_name(1), "SNES") ? 2 : 1;
+	return (is_snes_type == 1);
+}
+
+char is_sgb()
+{
+	static int is_sgb_type = 0;
+	if (!is_sgb_type) is_sgb_type = strcasecmp(user_io_get_core_name(1), "SGB") ? 2 : 1;
+	return (is_sgb_type == 1);
 }

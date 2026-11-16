@@ -8,4 +8,7 @@ void videobrain_init();
 void videobrain_new_image(int bit);
 void videobrain_poll();
 
+char is_videobrain();
+
+
 #endif

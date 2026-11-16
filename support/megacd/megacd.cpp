@@ -295,3 +295,14 @@ int mcd_can_send_data(uint8_t type) {
 
 	return (data == 1);
 }
+
+char is_megacd()
+{
+	static int is_megacd_type = 0;
+	if (!is_megacd_type)
+	{
+		is_megacd_type = strcasecmp(user_io_get_core_name(1), "MEGACD") ? 2 : 1;
+		if (is_megacd_type == 1) core_poll = mcd_poll;
+	}
+	return (is_megacd_type == 1);
+}

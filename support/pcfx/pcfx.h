@@ -20,4 +20,7 @@ void pcfx_new_card();
 void pcfx_eject_card();
 void pcfx_poll();
 
+char is_pcfx();
+
+
 #endif

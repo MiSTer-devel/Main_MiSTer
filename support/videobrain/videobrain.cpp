@@ -106,3 +106,14 @@ void videobrain_poll()
 		notice[0] = 0;
 	}
 }
+
+char is_videobrain()
+{
+	static int is_videobrain_type = 0;
+	if (!is_videobrain_type)
+	{
+		is_videobrain_type = strcasecmp(user_io_get_core_name(1), "VideoBrain") ? 2 : 1;
+		if (is_videobrain_type == 1) core_poll = videobrain_poll;
+	}
+	return (is_videobrain_type == 1);
+}

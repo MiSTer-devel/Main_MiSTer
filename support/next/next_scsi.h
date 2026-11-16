@@ -13,4 +13,7 @@ void next_unmount(int index);
 int  next_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
 void next_scsi_window_fill(uint32_t lba, uint8_t *buf, int sz);
 
+char is_next();
+
+
 #endif

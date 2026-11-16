@@ -21,4 +21,8 @@ int c64_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack)
 void c64_open_file(const char* name, unsigned char index);
 void c64_save_cart(int open_menu);
 
+char is_c64();
+char is_c128();
+
+
 #endif

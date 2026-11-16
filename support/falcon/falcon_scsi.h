@@ -75,4 +75,7 @@ struct falcon_cd_audio
 };
 const falcon_cd_audio *falcon_scsi_audio(int unit);
 
+char is_falcon();
+
+
 #endif

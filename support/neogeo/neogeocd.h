@@ -13,4 +13,8 @@ void set_poll_timer();
 
 #define NEOCD_DIR "NeoGeo-CD"
 
+char is_neogeo();
+char is_neogeo_cd();
+
+
 #endif

@@ -14,4 +14,7 @@ uint64_t st_fdd_size(int index, uint64_t size);
 
 int  st_fdd_sd_service(int disk, fileTYPE *f, int op, uint64_t lba, int sz, int ack);
 
+char is_st();
+
+
 #endif

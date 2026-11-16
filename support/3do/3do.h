@@ -84,4 +84,7 @@ void p3do_reset();
 void p3do_fill_blanksave(uint8_t *buf, uint32_t lba);
 int p3do_send_data(uint8_t* buf, int len, uint8_t index);
 
+char is_3do();
+
+
 #endif

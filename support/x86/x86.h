@@ -13,4 +13,9 @@ void x86_config_load();
 void x86_config_save();
 void x86_set_fdd_boot(uint32_t boot);
 
+char is_x86();
+char is_pcxt();
+char is_pcat286();
+
+
 #endif
