@@ -9,6 +9,7 @@
 #include "../../hardware.h"
 #include "../../menu.h"
 #include "../../cheats.h"
+#include "../arcade/mra_loader.h"
 #include "3do.h"
 
 static int need_reset = 0;
@@ -157,7 +158,12 @@ void p3do_set_image(int num, const char *filename)
 
 		// load CD BIOS
 		int bios_loaded = 1;
-		if (!p3do_load_rom(filename, "cd_bios.rom", 0)) // from disk folder.
+		const mgl_struct *mgl = mgl_get();
+		if (!mgl->done && mgl->from_mra) // the MRA mounting this disc has already sent its BIOS.
+		{
+			printf("3DO: Keeping BIOS loaded by MRA\n");
+		}
+		else if (!p3do_load_rom(filename, "cd_bios.rom", 0)) // from disk folder.
 		{
 			if (!p3do_load_rom(last_dir, "cd_bios.rom", 0)) // from parent folder.
 			{
