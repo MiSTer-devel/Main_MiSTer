@@ -574,6 +574,8 @@ static uint8_t GetASCIIKey(uint32_t keycode)
 
 static bool ignore_osd_release = false;
 static int select_ini = 0;
+static int ini_sel = 0;
+static int ini_first = 0;
 
 void SelectINI()
 {
@@ -1275,7 +1277,6 @@ void HandleUI(void)
 	static int helptext_idx = 0;
 	static int helptext_idx_old = 0;
 	static char helpstate = 0;
-	static char flag;
 	static int cr = 0;
 	static uint32_t cheatsub = 0;
 	static uint8_t card_cid[32];
@@ -4265,31 +4266,45 @@ void HandleUI(void)
 		if (parentstate != MENU_MISC1)
 		{
 			for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-			flag = 1;
-			for (int i = 1; i < 4; i++) if (FileExists(cfg_get_name(i))) flag |= 1 << i;
-			flag |= altcfg() << 4;
+			ini_sel = altcfg();
 			menusub = 3;
 		}
 		parentstate = MENU_MISC1;
 
 		OsdWrite(1, "         Information");
 
-		if (menusub != 0) flag = (flag & 0xF) | (altcfg() << 4);
-		strcpy(s, " Config:");
-		m = 0;
-		for (int i = 0; i < 4; i++)
 		{
-			int en = flag & (1 << i);
-			if (i == (flag >> 4) && en) strcat(s, "\xc");
+			int ini_cnt = cfg_get_count();
+			if (menusub != 0) ini_sel = altcfg();
+			if (ini_sel >= ini_cnt) ini_sel = 0;
+
+			if (ini_cnt <= 4) ini_first = 0;
+			else
+			{
+				if (ini_sel < ini_first) ini_first = ini_sel;
+				if (ini_sel > ini_first + 3) ini_first = ini_sel - 3;
+				if (ini_first > ini_cnt - 4) ini_first = ini_cnt - 4;
+			}
+
+			if (ini_cnt <= 4) strcpy(s, " Config:");
+			else strcpy(s, ini_first ? "Config\x10" : "Config:");
+
+			m = 0;
+			for (int i = ini_first; i < ini_first + 4; i++)
+			{
+				int en = i < ini_cnt;
+				if (i == ini_sel) strcat(s, "\xc");
+				strcat(s, " ");
+				if (m) strcat(s, "\xc ");
+				m = (i == ini_sel);
+				if (!en) strcat(s, "\xb");
+				strcat(s, cfg_get_label(i));
+				if (!en) strcat(s, "\xb");
+			}
 			strcat(s, " ");
-			if (m) strcat(s, "\xc ");
-			m = (i == (flag >> 4) && en);
-			if (!en) strcat(s, "\xb");
-			strcat(s, cfg_get_label(i));
-			if (!en) strcat(s, "\xb");
+			if (m) strcat(s, "\xc");
+			if (ini_first + 4 < ini_cnt) strcat(s, "\x11");
 		}
-		strcat(s, " ");
-		if (m) strcat(s, "\xc");
 		OsdWrite(10, s, menusub == 0);
 
 		m = get_core_volume();
@@ -4333,20 +4348,15 @@ void HandleUI(void)
 		}
 		else if (menusub == 0 && (right || left || minus || plus || select))
 		{
-			uint8_t i = flag >> 4;
 			if (select)
 			{
-				user_io_set_ini(i);
+				user_io_set_ini(ini_sel);
 			}
 			else
 			{
-				do
-				{
-					if (right || plus) i = (i + 1) & 3;
-					else i = (i - 1) & 3;
-				} while (!(flag & (1 << i)));
-
-				flag = (flag & 0xF) | (i << 4);
+				int ini_cnt = cfg_get_count();
+				if (right || plus) ini_sel = (ini_sel + 1) % ini_cnt;
+				else ini_sel = (ini_sel + ini_cnt - 1) % ini_cnt;
 			}
 			menustate = MENU_MISC1;
 		}
