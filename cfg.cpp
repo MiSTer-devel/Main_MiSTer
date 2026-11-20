@@ -559,6 +559,7 @@ static void cfg_scan_names()
 	done = 1;
 
 	cfg_scan_dir("", 1, 3);
+	cfg_alt_num = 3;
 	cfg_scan_dir(CFG_INI_DIR, 0, CFG_ALT_MAX - cfg_alt_num);
 }
 
