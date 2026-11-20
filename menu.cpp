@@ -1214,6 +1214,16 @@ static void joymap_system_return(int system_sub, int core_sub)
 	menusub = is_menu() ? system_sub : core_sub;
 }
 
+// Whether image slot `index` holds the disc a CD system plays its game from.
+static bool is_game_disc_slot(int index)
+{
+	return is_megacd() || is_pce() || is_cdi() || is_neogeo() || is_3do() ||
+		(is_psx() && index == 1) ||
+		(is_saturn() && !index) ||
+		(is_marty() && index == MARTY_SLOT_CD) ||
+		(is_pcfx() && index == PCFX_SLOT_CD);
+}
+
 void HandleUI(void)
 {
 	PROFILE_FUNCTION();
@@ -2914,6 +2924,8 @@ void HandleUI(void)
 
 				if (fs_Options & SCANO_NEOGEO)
 				{
+					// Store the filename after the set.
+					if (!store_name) user_io_store_filename(selPath);
 					neocd_set_en(0);
 					neogeo_romset_tx(selPath, 0);
 				}
@@ -3040,6 +3052,11 @@ void HandleUI(void)
 			printf("Image selected: %s\n", selPath);
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
 			if (mgl->done) recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
+
+			// The disc a CD system plays names its screenshots, as a cartridge's ROM
+			// does when it loads (MENU_GENERIC_FILE_SELECTED). Nothing else mounted
+			// beside it does, so this is safe.
+			if (is_game_disc_slot(ioctl_index)) user_io_store_filename(selPath);
 
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
