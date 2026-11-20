@@ -85,6 +85,8 @@ enum MENU
 	MENU_COMMON2,
 	MENU_MISC1,
 	MENU_MISC2,
+	MENU_INI_LIST1,
+	MENU_INI_LIST2,
 
 	MENU_SELECT_INI1,
 	MENU_SELECT_INI2,
@@ -574,6 +576,64 @@ static uint8_t GetASCIIKey(uint32_t keycode)
 
 static bool ignore_osd_release = false;
 static int select_ini = 0;
+static int ini_keep_sub = 0;
+static int ini_list[CFG_ALT_MAX + 1];
+static int ini_list_num = 0;
+static int ini_list_sel = 0;
+static int ini_list_first = 0;
+
+static const char *ini_display_name(int alt)
+{
+	if (!alt) return "Main";
+	const char *name = cfg_get_short_name(alt);
+	return (name[0] == '_') ? name + 1 : name;
+}
+
+static void ini_list_init()
+{
+	int act = altcfg();
+	ini_list_num = 0;
+	ini_list_sel = 0;
+	for (int i = 0; i < cfg_get_count(); i++)
+	{
+		if (!cfg_get_name(i)[0]) continue;
+		if (i == act) ini_list_sel = ini_list_num;
+		ini_list[ini_list_num++] = i;
+	}
+
+	ini_list_first = ini_list_sel - OsdGetSize() + 1;
+	if (ini_list_first < 0) ini_list_first = 0;
+}
+
+static void ini_list_move(int step)
+{
+	int size = OsdGetSize();
+	ini_list_sel += step;
+	if (ini_list_sel < 0) ini_list_sel = (step == -1) ? ini_list_num - 1 : 0;
+	if (ini_list_sel >= ini_list_num) ini_list_sel = (step == 1) ? 0 : ini_list_num - 1;
+	if (ini_list_sel < ini_list_first) ini_list_first = ini_list_sel;
+	if (ini_list_sel > ini_list_first + size - 1) ini_list_first = ini_list_sel - size + 1;
+}
+
+static void ini_list_print()
+{
+	static char s[64];
+	int size = OsdGetSize();
+	for (int i = 0; i < size; i++)
+	{
+		int k = ini_list_first + i;
+		char leftchar = 0;
+		if (k < ini_list_num)
+		{
+			snprintf(s, 30, " %s", ini_display_name(ini_list[k]));
+			if (!i && k) leftchar = 17;
+			if (i == size - 1 && k < ini_list_num - 1) leftchar = 16;
+		}
+		else s[0] = 0;
+
+		OsdWriteOffset(i, s, k == ini_list_sel, 0, 0, leftchar);
+	}
+}
 
 void SelectINI()
 {
@@ -1275,7 +1335,6 @@ void HandleUI(void)
 	static int helptext_idx = 0;
 	static int helptext_idx_old = 0;
 	static char helpstate = 0;
-	static char flag;
 	static int cr = 0;
 	static uint32_t cheatsub = 0;
 	static uint8_t card_cid[32];
@@ -4265,31 +4324,17 @@ void HandleUI(void)
 		if (parentstate != MENU_MISC1)
 		{
 			for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-			flag = 1;
-			for (int i = 1; i < 4; i++) if (FileExists(cfg_get_name(i))) flag |= 1 << i;
-			flag |= altcfg() << 4;
-			menusub = 3;
+			menusub = ini_keep_sub ? 0 : 3;
+			ini_keep_sub = 0;
 		}
 		parentstate = MENU_MISC1;
 
 		OsdWrite(1, "         Information");
 
-		if (menusub != 0) flag = (flag & 0xF) | (altcfg() << 4);
-		strcpy(s, " Config:");
-		m = 0;
-		for (int i = 0; i < 4; i++)
-		{
-			int en = flag & (1 << i);
-			if (i == (flag >> 4) && en) strcat(s, "\xc");
-			strcat(s, " ");
-			if (m) strcat(s, "\xc ");
-			m = (i == (flag >> 4) && en);
-			if (!en) strcat(s, "\xb");
-			strcat(s, cfg_get_label(i));
-			if (!en) strcat(s, "\xb");
-		}
-		strcat(s, " ");
-		if (m) strcat(s, "\xc");
+		snprintf(s, 28, " Config: %s", ini_display_name(altcfg()));
+		for (int i = strlen(s); i < 27; i++) s[i] = ' ';
+		s[27] = 0x16;
+		s[28] = 0;
 		OsdWrite(10, s, menusub == 0);
 
 		m = get_core_volume();
@@ -4324,6 +4369,40 @@ void HandleUI(void)
 		OsdWrite(15, STD_EXIT, menusub == 3, 0, OSD_ARROW_RIGHT);
 		break;
 
+	case MENU_INI_LIST1:
+		helptext_idx = 0;
+		menumask = 0;
+		OsdSetTitle("Config");
+		ini_list_print();
+		menustate = MENU_INI_LIST2;
+		parentstate = menustate;
+		break;
+
+	case MENU_INI_LIST2:
+		if (menu)
+		{
+			ini_keep_sub = 1;
+			menustate = MENU_MISC1;
+			break;
+		}
+
+		if (select)
+		{
+			if (ini_list_num) user_io_set_ini(ini_list[ini_list_sel]);
+			break;
+		}
+
+		if (up) ini_list_move(-1);
+		else if (down) ini_list_move(1);
+		else if (c == KEY_PAGEUP || left) ini_list_move(-OsdGetSize());
+		else if (c == KEY_PAGEDOWN || right) ini_list_move(OsdGetSize());
+		else if (c == KEY_HOME) ini_list_move(-ini_list_num);
+		else if (c == KEY_END) ini_list_move(ini_list_num);
+		else break;
+
+		menustate = MENU_INI_LIST1;
+		break;
+
 	case MENU_MISC2:
 		printSysInfo();
 		if ((select && menusub == 3) || menu)
@@ -4331,24 +4410,10 @@ void HandleUI(void)
 			menustate = MENU_NONE1;
 			break;
 		}
-		else if (menusub == 0 && (right || left || minus || plus || select))
+		else if (menusub == 0 && select)
 		{
-			uint8_t i = flag >> 4;
-			if (select)
-			{
-				user_io_set_ini(i);
-			}
-			else
-			{
-				do
-				{
-					if (right || plus) i = (i + 1) & 3;
-					else i = (i - 1) & 3;
-				} while (!(flag & (1 << i)));
-
-				flag = (flag & 0xF) | (i << 4);
-			}
-			menustate = MENU_MISC1;
+			ini_list_init();
+			menustate = MENU_INI_LIST1;
 		}
 		else if(menusub == 1 && (right || left || minus || plus))
 		{

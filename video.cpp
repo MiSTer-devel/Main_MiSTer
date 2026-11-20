@@ -3970,11 +3970,10 @@ static Imlib_Image load_bg()
 		int alt = altcfg();
 
 		const char* cfg_name = cfg_get_name(alt);
-		snprintf(label, sizeof(label), "%s", cfg_name + 6);
-		char *p = strrchr(label, '.');
-		if (p) *p = 0;
+		const char* sname = cfg_get_short_name(alt);
+		snprintf(label, sizeof(label), "%s%s", (sname[0] == '_') ? "" : "_", sname);
 
-		sprintf(bgdir, "wallpapers%s", label);
+		snprintf(bgdir, sizeof(bgdir), "wallpapers%s", label);
 		if (alt <= 0 || !cfg_name[0] || !PathIsDir(bgdir)) strcpy(bgdir, "wallpapers");
 
 		if (PathIsDir(bgdir))
