@@ -5,6 +5,5 @@ char is_cpc();
 char is_zx81();
 char is_gba();
 char is_electron();
-char is_uneon();
 
 #endif

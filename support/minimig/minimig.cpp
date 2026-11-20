@@ -54,7 +54,6 @@ static void kbd_fifo_poll()
 	kbd_fifo_r = (kbd_fifo_r + 1)&(KBD_FIFO_SIZE - 1);
 }
 
-static uint32_t res_timer = 0;
 static char caps_lock_toggle = 0; // keep state of caps lock
 
 void minimig_send_keycode(unsigned short key, int press)
@@ -90,14 +89,14 @@ void minimig_send_keycode(unsigned short key, int press)
 		if (code == 0x44)
 		{
 			minimig_set_adjust(0);
-			res_timer = 0;
+			user_io_reset_res_timer();
 			return;
 		}
 
 		if (code == 0x45)
 		{
 			Info("Canceled");
-			res_timer = 0;
+			user_io_reset_res_timer();
 			minimig_set_adjust(2);
 			return;
 		}
@@ -160,16 +159,6 @@ static void minimig_poll()
 
 	minimig_share_poll();
 	a2065_poll();
-
-	if (!res_timer || CheckTimer(res_timer))
-	{
-		res_timer = GetTimer(500);
-		if (!minimig_get_adjust())
-		{
-			if (is_minimig()) minimig_adjust_vsize(0);
-			video_mode_adjust();
-		}
-	}
 }
 
 char is_minimig()

@@ -30,10 +30,3 @@ char is_electron()
 	if (!is_electron_type && user_io_get_core_name(1)[0]) is_electron_type = strcasecmp(user_io_get_core_name(1), "AcornElectron") ? 2 : 1;
 	return (is_electron_type == 1);
 }
-
-char is_uneon()
-{
-	static int is_uneon_type = 0;
-	if (!is_uneon_type && user_io_get_core_name(1)[0]) is_uneon_type = strcasecmp(user_io_get_core_name(1), "Uneon") ? 2 : 1;
-	return (is_uneon_type == 1);
-}
