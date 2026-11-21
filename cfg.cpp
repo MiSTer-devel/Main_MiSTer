@@ -77,6 +77,7 @@ static const ini_var_t ini_vars[] =
 	{ "DPAD_THRESHOLD", (void*)(&(cfg.dpad_threshold)), UINT8, 5, 95 },
 	{ "GAMEPAD_DEFAULTS", (void*)(&(cfg.gamepad_defaults)), UINT8, 0, 1 },
 	{ "RECENTS", (void*)(&(cfg.recents)), UINT8, 0, 1 },
+	{ "MENU_START_DIR", (void*)(&(cfg.menu_start_dir)), STRING, 0, sizeof(cfg.menu_start_dir) - 1 },
 	{ "CONTROLLER_INFO", (void*)(&(cfg.controller_info)), UINT8, 0, 10 },
 	{ "REFRESH_MIN", (void*)(&(cfg.refresh_min)), FLOAT, 0, 150 },
 	{ "REFRESH_MAX", (void*)(&(cfg.refresh_max)), FLOAT, 0, 150 },
