@@ -1214,14 +1214,14 @@ static void joymap_system_return(int system_sub, int core_sub)
 	menusub = is_menu() ? system_sub : core_sub;
 }
 
-// Whether image slot `index` holds the disc a CD system plays its game from.
-static bool is_game_disc_slot(int index)
+// Whether a mounted image should name screenshots, as a loaded ROM does.
+static bool image_names_screenshots(const char *path, int remembered)
 {
-	return is_megacd() || is_pce() || is_cdi() || is_neogeo() || is_3do() ||
-		(is_psx() && index == 1) ||
-		(is_saturn() && !index) ||
-		(is_marty() && index == MARTY_SLOT_CD) ||
-		(is_pcfx() && index == PCFX_SLOT_CD);
+	// If it ends with a CD image name, it's true. This doesn't cover archives.
+	const char *ext = strrchr(path, '.');
+	if (ext && (!strcasecmp(ext, ".cue") || !strcasecmp(ext, ".chd") || !strcasecmp(ext, ".iso"))) return true;
+
+	return !remembered && !user_io_has_stored_filename();
 }
 
 void HandleUI(void)
@@ -3053,10 +3053,7 @@ void HandleUI(void)
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
 			if (mgl->done) recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
 
-			// The disc a CD system plays names its screenshots, as a cartridge's ROM
-			// does when it loads (MENU_GENERIC_FILE_SELECTED). Nothing else mounted
-			// beside it does, so this is safe.
-			if (is_game_disc_slot(ioctl_index)) user_io_store_filename(selPath);
+			if (selPath[0] && image_names_screenshots(selPath, store_name)) user_io_store_filename(selPath);
 
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
