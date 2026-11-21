@@ -104,11 +104,6 @@ void user_io_store_filename(const char *filename)
 	if (dot) *dot = 0;
 }
 
-bool user_io_has_stored_filename()
-{
-	return last_filename[0] != 0;
-}
-
 const char *get_image_name(int i)
 {
 	if (!sd_image[i].size)  return NULL;

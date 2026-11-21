@@ -1214,16 +1214,6 @@ static void joymap_system_return(int system_sub, int core_sub)
 	menusub = is_menu() ? system_sub : core_sub;
 }
 
-// Whether a mounted image should name screenshots, as a loaded ROM does.
-static bool image_names_screenshots(const char *path, int remembered)
-{
-	// If it ends with a CD image name, it's true. This doesn't cover archives.
-	const char *ext = strrchr(path, '.');
-	if (ext && (!strcasecmp(ext, ".cue") || !strcasecmp(ext, ".chd") || !strcasecmp(ext, ".iso"))) return true;
-
-	return !remembered && !user_io_has_stored_filename();
-}
-
 void HandleUI(void)
 {
 	PROFILE_FUNCTION();
@@ -3053,7 +3043,8 @@ void HandleUI(void)
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
 			if (mgl->done) recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
 
-			if (selPath[0] && image_names_screenshots(selPath, store_name)) user_io_store_filename(selPath);
+			// The last image mounted names screenshots, except for saves files or SC/FC slots.
+			if (selPath[0] && !store_name && !(fs_Options & SCANO_SAVES)) user_io_store_filename(selPath);
 
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
