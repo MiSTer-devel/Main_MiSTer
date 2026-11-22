@@ -23,7 +23,7 @@ struct hp9k_model_info
 
 static const hp9k_model_info models[] =
 {
-	{ "HP9K715", HP9K_715, 3, "[14:12]", 0x0 },
+	{ "HP9K715", HP9K_715, 3, "[14:12]", 0x5 },   // disks on slots 0 and 2
 	{ "HP9K385", HP9K_385, 2, "[14:12]", 0x3 },
 };
 
