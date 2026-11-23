@@ -2043,6 +2043,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 				if (ret) ret = mac_mount_hook(index, name, &sd_image[index], &writable);
 				// Sun CD slot: CUE/CHD/raw image translation (support/sun)
 				if (ret) ret = sun_mount_hook(index, name, &sd_image[index], &writable);
+				if (ret) ret = firebeat_mount_hook(index, name, &sd_image[index], &writable);
 				if (ret) ret = hp9k_mount_hook(index, name, &sd_image[index], &writable);
 				if (ret) ret = ibmrs6k_mount_hook(index, name, &sd_image[index], &writable);
 				if (ret) ret = sgi_mount_hook(index, name, &sd_image[index], &writable);
@@ -2074,6 +2075,7 @@ int user_io_file_mount(const char *name, unsigned char index, char pre, int pre_
 		c64_closeGCR(index);
 		mac_cdrom_unmount(index);
 		sun_unmount(index);
+		firebeat_unmount(index);
 		hp9k_unmount(index);
 		ibmrs6k_unmount(index);
 		sgi_unmount(index);

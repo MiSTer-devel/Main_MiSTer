@@ -24,6 +24,7 @@
 #include "support/falcon/falcon_scsi.h"
 // Sun family support
 #include "support/sun/sun.h"
+#include "support/firebeat/firebeat.h"
 #include "support/sun/sun_enet.h"
 // HP 9000 family support
 #include "support/hp9k/hp9k.h"
