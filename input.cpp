@@ -2502,7 +2502,7 @@ static int get_led(char *base, const char *led)
 	return 0;
 }
 
-static void set_lightbar(int dev, char *led_path, int r, int g, int b)
+static void set_lightbar(char *led_path, int r, int g, int b)
 {
 	static char path[1024];
 	snprintf(path, sizeof(path), "%s:red/brightness", led_path);
@@ -2514,12 +2514,13 @@ static void set_lightbar(int dev, char *led_path, int r, int g, int b)
 		return;
 	}
 
-	// mainline hid-playstation (6.18) names the lightbar after the input device:
+	// mainline hid-playstation (as in the 6.18 kernel) names the lightbar after the input device:
 	// "inputN:rgb:indicator" (DualSense, multicolor) or "inputN:red/green/blue" (DualShock 4)
 	char dir[1024];
-	led_path = get_led_path(dev, 0);
-	if (!led_path) return;
 	snprintf(dir, sizeof(dir), "%s", led_path);
+	char *slash = strrchr(dir, '/');
+	if (!slash) return;
+	*slash = 0;
 
 	DIR *d = opendir(dir);
 	if (!d) return;
@@ -2541,7 +2542,7 @@ static void set_lightbar(int dev, char *led_path, int r, int g, int b)
 				fprintf(f, "%d %d %d", r, g, b);
 				fclose(f);
 			}
-			set_led(base, ":rgb:indicator", 255);
+			set_led(base, ":rgb:indicator", (r || g || b) ? 255 : 0);
 			break;
 		}
 
@@ -2569,7 +2570,7 @@ static void update_num_hw(int dev, int num)
 			if (set_led(led_path, ":player_id", (num > 5) ? 0 : num))
 			{
 				//duslsense
-				set_lightbar(dev, led_path, (num == 0) ? 128 : 0, (num == 0) ? 128 : 64, (num == 0) ? 128 : 64);
+				set_lightbar(led_path, (num == 0) ? 128 : 0, (num == 0) ? 128 : 64, (num == 0) ? 128 : 64);
 			}
 			else
 			{
@@ -2586,7 +2587,7 @@ static void update_num_hw(int dev, int num)
 					{ 0x00, 0x00, 0x00 }  // none
 				};
 
-				set_lightbar(dev, led_path, color_code[num][0], color_code[num][1], color_code[num][2]);
+				set_lightbar(led_path, color_code[num][0], color_code[num][1], color_code[num][2]);
 			}
 		}
 	}
