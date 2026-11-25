@@ -2967,6 +2967,8 @@ void HandleUI(void)
 
 				if (fs_Options & SCANO_NEOGEO)
 				{
+					// Store the filename after the set.
+					if (!store_name) user_io_store_filename(selPath);
 					neocd_set_en(0);
 					neogeo_romset_tx(selPath, 0);
 				}
@@ -3093,6 +3095,9 @@ void HandleUI(void)
 			printf("Image selected: %s\n", selPath);
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
 			if (mgl->done) recent_update(SelectedDir, Selected_S[(int)ioctl_index], SelectedLabel, ioctl_index + 500);
+
+			// The last image mounted names screenshots, except for saves files or SC/FC slots.
+			if (selPath[0] && !store_name && !(fs_Options & SCANO_SAVES)) user_io_store_filename(selPath);
 
 			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
