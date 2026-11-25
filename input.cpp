@@ -2502,6 +2502,60 @@ static int get_led(char *base, const char *led)
 	return 0;
 }
 
+static void set_lightbar(int dev, char *led_path, int r, int g, int b)
+{
+	static char path[1024];
+	snprintf(path, sizeof(path), "%s:red/brightness", led_path);
+	if (!access(path, F_OK))
+	{
+		set_led(led_path, ":blue", b);
+		set_led(led_path, ":green", g);
+		set_led(led_path, ":red", r);
+		return;
+	}
+
+	// mainline hid-playstation (6.18) names the lightbar after the input device:
+	// "inputN:rgb:indicator" (DualSense, multicolor) or "inputN:red/green/blue" (DualShock 4)
+	char dir[1024];
+	led_path = get_led_path(dev, 0);
+	if (!led_path) return;
+	snprintf(dir, sizeof(dir), "%s", led_path);
+
+	DIR *d = opendir(dir);
+	if (!d) return;
+
+	struct dirent *de;
+	while ((de = readdir(d)))
+	{
+		char *suffix = strchr(de->d_name, ':');
+		if (!suffix) continue;
+
+		char base[1024];
+		snprintf(base, sizeof(base), "%s/%.*s", dir, (int)(suffix - de->d_name), de->d_name);
+		if (!strcmp(suffix, ":rgb:indicator"))
+		{
+			snprintf(path, sizeof(path), "%s/%s/multi_intensity", dir, de->d_name);
+			FILE* f = fopen(path, "w");
+			if (f)
+			{
+				fprintf(f, "%d %d %d", r, g, b);
+				fclose(f);
+			}
+			set_led(base, ":rgb:indicator", 255);
+			break;
+		}
+
+		if (!strcmp(suffix, ":red"))
+		{
+			set_led(base, ":blue", b);
+			set_led(base, ":green", g);
+			set_led(base, ":red", r);
+			break;
+		}
+	}
+	closedir(d);
+}
+
 static void update_num_hw(int dev, int num)
 {
 	char *led_path;
@@ -2515,9 +2569,7 @@ static void update_num_hw(int dev, int num)
 			if (set_led(led_path, ":player_id", (num > 5) ? 0 : num))
 			{
 				//duslsense
-				set_led(led_path, ":blue", (num == 0) ? 128 : 64);
-				set_led(led_path, ":green", (num == 0) ? 128 : 64);
-				set_led(led_path, ":red", (num == 0) ? 128 : 0);
+				set_lightbar(dev, led_path, (num == 0) ? 128 : 0, (num == 0) ? 128 : 64, (num == 0) ? 128 : 64);
 			}
 			else
 			{
@@ -2534,9 +2586,7 @@ static void update_num_hw(int dev, int num)
 					{ 0x00, 0x00, 0x00 }  // none
 				};
 
-				set_led(led_path, ":blue", color_code[num][2]);
-				set_led(led_path, ":green", color_code[num][1]);
-				set_led(led_path, ":red", color_code[num][0]);
+				set_lightbar(dev, led_path, color_code[num][0], color_code[num][1], color_code[num][2]);
 			}
 		}
 	}
