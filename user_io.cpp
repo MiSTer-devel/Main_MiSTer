@@ -1105,6 +1105,93 @@ void SetMidiLinkMode(int mode)
 	}
 }
 
+// A missing profile must not change the external synthesizer.
+uint8_t mt32pi_usb_synth = 0xFF;
+bool mt32pi_usb_enabled = false;
+static bool mt32pi_usb_pending = false;
+static decltype(GetTimer(0)) mt32pi_usb_deadline;
+static decltype(GetTimer(0)) mt32pi_usb_retry;
+
+void mt32pi_usb_set_enabled(bool enabled)
+{
+	mt32pi_usb_enabled = enabled;
+	if (!enabled) mt32pi_usb_pending = false;
+}
+
+static bool mt32pi_usb_mode()
+{
+	return GetUARTMode() == 3 && GetMidiLinkMode() == 2;
+}
+
+static bool mt32pi_usb_send_synth(unsigned int synth)
+{
+	if (!mt32pi_usb_enabled || !mt32pi_usb_mode() || synth >= 4 ||
+	    access("/tmp/ML_CONTROL", F_OK) != 0)
+		return false;
+
+	char command[96];
+	snprintf(command, sizeof(command),
+	         "/sbin/mlinkutil SYSEX F0 7D 03 %02X F7", synth);
+	return system(command) == 0;
+}
+
+void mt32pi_usb_select_synth(bool previous)
+{
+	mt32pi_usb_pending = false;
+	unsigned int next = mt32pi_usb_synth < 4
+	    ? (mt32pi_usb_synth + (previous ? 3 : 1)) & 3
+	    : (previous ? 3 : 0);
+	if (mt32pi_usb_send_synth(next))
+		mt32pi_usb_synth = next;
+}
+
+void mt32pi_usb_save_synth()
+{
+	if (!mt32pi_usb_mode()) return;
+	char name[256];
+	snprintf(name, sizeof(name), "mt32pimode.%s", user_io_get_core_name());
+	uint8_t profile[] = { mt32pi_usb_synth, uint8_t(mt32pi_usb_enabled) };
+	FileSaveConfig(name, profile, sizeof(profile));
+}
+
+static void mt32pi_usb_load_synth()
+{
+	mt32pi_usb_set_enabled(false);
+	mt32pi_usb_synth = 0xFF;
+	if (!mt32pi_usb_mode()) return;
+
+	char name[256];
+	uint8_t profile[] = { 0xFF, 0 };
+	snprintf(name, sizeof(name), "mt32pimode.%s", user_io_get_core_name());
+	const int size = FileLoadConfig(name, 0, 0);
+	if (size != 1 && size != 2) return;
+	if (!FileLoadConfig(name, profile, size)) return;
+
+	if (profile[0] < 4) mt32pi_usb_synth = profile[0];
+	mt32pi_usb_set_enabled(size == 2 && profile[1] == 1);
+	if (!mt32pi_usb_enabled || mt32pi_usb_synth >= 4) return;
+	mt32pi_usb_pending = true;
+	mt32pi_usb_deadline = GetTimer(5000);
+	mt32pi_usb_retry = GetTimer(125);
+}
+
+static void mt32pi_usb_poll_synth()
+{
+	if (!mt32pi_usb_pending) return;
+	if (!mt32pi_usb_mode() || CheckTimer(mt32pi_usb_deadline))
+	{
+		mt32pi_usb_pending = false;
+		return;
+	}
+	if (!CheckTimer(mt32pi_usb_retry)) return;
+
+	mt32pi_usb_retry = GetTimer(100);
+	if (mt32pi_usb_send_synth(mt32pi_usb_synth))
+	{
+		mt32pi_usb_pending = false;
+	}
+}
+
 void ResetUART()
 {
 	if (uart_mode)
@@ -1593,6 +1680,7 @@ void user_io_init(const char *path, const char *xml)
 	if (uartmode < 3 || uartmode > 4) midilink = 0;
 	SetMidiLinkMode(midilink);
 	SetUARTMode(uartmode);
+	mt32pi_usb_load_synth();
 
 	f12_mod = spi_uio_cmd(UIO_GET_F12_MOD);
 
@@ -3070,6 +3158,7 @@ void user_io_reset_res_timer()
 
 void user_io_poll()
 {
+	mt32pi_usb_poll_synth();
 	#ifdef PROFILING
 		PROFILE_FUNCTION();
 	#endif
