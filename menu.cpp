@@ -5234,7 +5234,7 @@ void HandleUI(void)
 				osd_unlocked = 1;
 				osd_lock_timer = GetTimer(cfg.osd_lock_time * 1000);
 				menustate = MENU_NONE2;
-				menu_key_set(KEY_F12);
+				menu_key_set(KEY_F12 | UPSTROKE); // a release: the next OSD press still reads as one
 			}
 			else
 			{
