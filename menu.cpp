@@ -161,6 +161,8 @@ enum MENU
 	MENU_UART2,
 	MENU_UART3,
 	MENU_UART4,
+	MENU_MT32PI_CTRL1,
+	MENU_MT32PI_CTRL2,
 	MENU_BAUD1,
 	MENU_BAUD2,
 
@@ -257,6 +259,11 @@ enum MENU
 };
 
 static uint32_t menustate = MENU_NONE1;
+
+static uint8_t mt32pi_rom = 0;
+static uint8_t mt32pi_soundfont = 0;
+static uint8_t mt32pi_reversed_stereo = 0;
+
 static uint32_t parentstate;
 static uint32_t menusub = 0;
 static uint32_t menusub_last = 0; //for when we allocate it dynamically and need to know last row
@@ -3927,7 +3934,12 @@ void HandleUI(void)
 				sprintf(s, " MidiLink:             %s", config_midilink_mode[midilink]);
 				OsdWrite(m++, s, menusub == 2);
 
-				if (midilink < 2)
+				if (midilink == 2)
+				{
+					OsdWrite(m++, " mt32-pi Control          \x16", menusub == 3);
+					menumask |= 0x08;
+				}
+				else if (midilink < 2)
 				{
 					sprintf(s, " Type:                %s", midilink ? "  MUNT" : "FSYNTH");
 					OsdWrite(m++, s, menusub == 3);
@@ -4036,10 +4048,19 @@ void HandleUI(void)
 				{
 					int mode = GetUARTMode();
 					int midilink = GetMidiLinkMode();
-					SetUARTMode(0);
-					SetMidiLinkMode(midilink ? 0 : 1);
-					SetUARTMode(mode);
-					menustate = MENU_UART1;
+
+					if (mode == 3 && midilink == 2)
+					{
+						menusub = 0;
+						menustate = MENU_MT32PI_CTRL1;
+					}
+					else
+					{
+						SetUARTMode(0);
+						SetMidiLinkMode(midilink ? 0 : 1);
+						SetUARTMode(mode);
+						menustate = MENU_UART1;
+					}
 				}
 				break;
 
@@ -4080,6 +4101,7 @@ void HandleUI(void)
 					speeds[2] = GetUARTbaud(4);
 					sprintf(s, "uartspeed.%s", user_io_get_core_name());
 					FileSaveConfig(s, speeds, sizeof(speeds));
+					mt32pi_usb_save_synth();
 					menustate = MENU_COMMON1;
 					menusub = 6;
 				}
@@ -4087,6 +4109,162 @@ void HandleUI(void)
 
 			default:
 				menustate = MENU_NONE1;
+				break;
+			}
+		}
+		break;
+
+
+	case MENU_MT32PI_CTRL1:
+		{
+			static const char *synth_names[] =
+			{
+				"Munt",
+				"FluidSynth",
+				"Nuked-SC55",
+				"Nuked-MT32"
+			};
+
+			static const char *rom_names[] =
+			{
+				"MT-32 Old",
+				"MT-32 New",
+				"CM-32L"
+			};
+
+			helptext_idx = 0;
+
+			menumask = 0x41; // USB Control and Back
+			if (mt32pi_usb_enabled)
+			{
+				menumask |= 0x32; // Synth, stereo and reboot
+				if (mt32pi_usb_synth == 0) menumask |= 0x04;
+				if (mt32pi_usb_synth == 1) menumask |= 0x08;
+			}
+
+			OsdSetTitle("mt32-pi Control");
+			menustate = MENU_MT32PI_CTRL2;
+			parentstate = MENU_MT32PI_CTRL1;
+
+			m = 0;
+			OsdWrite(m++);
+
+			sprintf(s, " USB Control:         %s", mt32pi_usb_enabled ? "On" : "Off");
+			OsdWrite(m++, s, menusub == 0);
+
+			sprintf(s, " Synthesizer:   %s",
+				mt32pi_usb_synth < 4 ? synth_names[mt32pi_usb_synth] : "Not set");
+			OsdWrite(m++, s, menusub == 1, !mt32pi_usb_enabled);
+
+			sprintf(s, " Munt ROM:      %s",
+				rom_names[mt32pi_rom]);
+			OsdWrite(m++, s, menusub == 2,
+				!mt32pi_usb_enabled || mt32pi_usb_synth != 0);
+
+			sprintf(s, " SoundFont:          %02X",
+				mt32pi_soundfont);
+			OsdWrite(m++, s, menusub == 3,
+				!mt32pi_usb_enabled || mt32pi_usb_synth != 1);
+
+			sprintf(s, " Reversed Stereo:    %s",
+				mt32pi_reversed_stereo ? "On" : "Off");
+			OsdWrite(m++, s, menusub == 4, !mt32pi_usb_enabled);
+
+			OsdWrite(m++);
+			OsdWrite(m++, " Reboot mt32-pi", menusub == 5, !mt32pi_usb_enabled);
+
+			while (m < 15) OsdWrite(m++);
+			OsdWrite(15, STD_BACK, menusub == 6);
+		}
+		break;
+
+	case MENU_MT32PI_CTRL2:
+		if (menu || back || (select && menusub == 6))
+		{
+			menusub = 3;
+			menustate = MENU_UART1;
+		}
+		else if (select && menusub == 0)
+		{
+			mt32pi_usb_set_enabled(!mt32pi_usb_enabled);
+			menustate = MENU_MT32PI_CTRL1;
+		}
+		else if (mt32pi_usb_enabled && GetUARTMode() == 3 &&
+		         GetMidiLinkMode() == 2 && (select || plus || minus))
+		{
+			switch (menusub)
+			{
+			case 1:
+				mt32pi_usb_select_synth(minus);
+
+
+				menustate = MENU_MT32PI_CTRL1;
+				break;
+
+			case 2:
+				if (mt32pi_usb_synth == 0)
+				{
+					if (minus)
+					{
+						mt32pi_rom =
+							mt32pi_rom ?
+							mt32pi_rom - 1 : 2;
+					}
+					else
+					{
+						mt32pi_rom =
+							(mt32pi_rom + 1) % 3;
+					}
+
+					snprintf(s, sizeof(s),
+						"/sbin/mlinkutil SYSEX "
+						"F0 7D 01 %02X F7",
+						mt32pi_rom);
+					system(s);
+				}
+
+				menustate = MENU_MT32PI_CTRL1;
+				break;
+
+			case 3:
+				if (mt32pi_usb_synth == 1)
+				{
+					if (minus)
+						mt32pi_soundfont--;
+					else
+						mt32pi_soundfont++;
+
+					snprintf(s, sizeof(s),
+						"/sbin/mlinkutil SYSEX "
+						"F0 7D 02 %02X F7",
+						mt32pi_soundfont);
+					system(s);
+				}
+
+				menustate = MENU_MT32PI_CTRL1;
+				break;
+
+			case 4:
+				mt32pi_reversed_stereo ^= 1;
+
+				snprintf(s, sizeof(s),
+					"/sbin/mlinkutil SYSEX "
+					"F0 7D 04 %02X F7",
+					mt32pi_reversed_stereo);
+				system(s);
+
+				menustate = MENU_MT32PI_CTRL1;
+				break;
+
+			case 5:
+				if (select)
+				{
+					system("/sbin/mlinkutil "
+						"SYSEX F0 7D 00 F7");
+
+					menusub = 3;
+					menustate = MENU_UART1;
+				}
 				break;
 			}
 		}
