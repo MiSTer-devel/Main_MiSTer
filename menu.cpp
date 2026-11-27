@@ -511,6 +511,18 @@ void SelectFile(const char* path, const char* pFileExt, int Options, unsigned ch
 			strcat(selPath, get_rbf_name());
 		}
 		ResolveExistingCorePath(selPath);
+
+		// menu_start_dir: when the current core sits in the SD root (the menu itself, e.g. after
+		// boot), open the core list in the configured folder instead of the root. While a core
+		// from a subfolder is loaded, the list still opens next to that core, as before.
+		if (cfg.menu_start_dir[0] && !get_rbf_dir()[0])
+		{
+			char start_dir[sizeof(cfg.menu_start_dir)];
+			strcpy(start_dir, cfg.menu_start_dir);
+			for (int len = strlen(start_dir); len && start_dir[len - 1] == '/'; len--) start_dir[len - 1] = 0;
+			if (start_dir[0] && PathIsDir(start_dir)) strcpy(selPath, start_dir);
+		}
+
 		pFileExt = "RBFMRAMGL";
 		home_dir = NULL;
 	}

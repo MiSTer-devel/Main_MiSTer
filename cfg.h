@@ -64,6 +64,7 @@ typedef struct {
 	int bt_auto_disconnect;
 	int bt_reset_before_pair;
 	char bootcore[256];
+	char menu_start_dir[256];
 	char video_conf[1024];
 	char video_conf_pal[1024];
 	char video_conf_ntsc[1024];
