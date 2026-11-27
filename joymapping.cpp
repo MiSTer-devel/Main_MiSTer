@@ -486,6 +486,7 @@ enum
 
 #define MAP_HOLD_ACTION_MS 1000
 #define MAP_HOLD_FEEDBACK_DELAY_MS 333
+#define MAP_DEBOUNCE_MS 100
 static int mapping_current_key = 0;
 static int mapping_current_dev = -1;
 static int mapping_hold_key = 0;
@@ -497,6 +498,11 @@ static int mapping_hold_action = MAP_HOLD_NONE;
 static int mapping_pending_hold_action = MAP_HOLD_NONE;
 static int mapping_combo_second_key = 0;
 static uint8_t mapping_combo_release_mask = 0;
+static struct
+{
+	uint32_t release_timer;
+	bool ignored_press;
+} mapping_debounce[NUMDEV][KEY_EMU + (ABS_MAX + 1) * 2] = {};
 static uint32_t mapping_osd_hold_timer = 0;
 static uint8_t mapping_osd_hold_latched = 0;
 static advancedButtonMap *mapping_store = NULL;
@@ -959,6 +965,41 @@ static void set_mapping_ignore_release_keys(int key1, int key2 = 0)
 	mapping_ignore_release_key2 = key2;
 }
 
+static bool consume_mapping_ignored_release(const input_event *ev, int dev)
+{
+	if (ev->type != EV_KEY || ev->value || !ev->code || mapping_dev != dev) return false;
+
+	const bool ignored = ev->code == mapping_ignore_release_key || ev->code == mapping_ignore_release_key2;
+	if (ev->code == mapping_ignore_release_key) mapping_ignore_release_key = 0;
+	if (ev->code == mapping_ignore_release_key2) mapping_ignore_release_key2 = 0;
+	return ignored;
+}
+
+static void clear_mapping_debounce()
+{
+	memset(mapping_debounce, 0, sizeof(mapping_debounce));
+}
+
+bool filter_mapping_event(const input_event *ev, int dev)
+{
+	if ((!mapping && !mapping_paused) || mapping_type > 1 || ev->type != EV_KEY ||
+		ev->code >= sizeof(mapping_debounce[0]) / sizeof(mapping_debounce[0][0])) return false;
+
+	auto &key = mapping_debounce[dev][ev->code];
+	if (ev->value > 1) return key.ignored_press;
+	if (ev->value)
+	{
+		key.ignored_press = key.ignored_press || (key.release_timer && !CheckTimer(key.release_timer));
+		return key.ignored_press;
+	}
+
+	key.release_timer = GetTimer(MAP_DEBOUNCE_MS);
+	const bool ignored = key.ignored_press;
+	key.ignored_press = false;
+	if (ignored || mapping_paused) consume_mapping_ignored_release(ev, dev);
+	return ignored;
+}
+
 static void drop_mapping_menu_press()
 {
 	mapping_osd_owned = 0;
@@ -983,6 +1024,7 @@ void invalidate_map_setting()
 	clear_mapping_combo_state();
 	clear_mapping_trigger_capture();
 	set_mapping_ignore_release_keys(0);
+	clear_mapping_debounce();
 }
 
 static void do_map_clear()
@@ -1225,6 +1267,7 @@ void start_map_setting(int cnt, int set, advancedButtonMap *abm_store)
 	clear_mapping_current_input();
 	clear_mapping_combo_state();
 	set_mapping_ignore_release_keys(0);
+	clear_mapping_debounce();
 	mapping_pending_hold_action = MAP_HOLD_NONE;
 
 	mapping_button = 0;
@@ -1816,14 +1859,7 @@ void map_input_event(struct input_event *ev, struct input_absinfo *absinfo, int 
 	if (ev->type == EV_KEY && absinfo && ev->code >= KEY_EMU && is_menu() && mapping_type == 1 && !menu_mouse_map &&
 		mapping_dev == dev && is_menu_stick2_axis((ev->code - KEY_EMU) >> 1)) return;
 
-	if (ev->type == EV_KEY && !ev->value && mapping_dev == dev &&
-		((mapping_ignore_release_key && mapping_ignore_release_key == ev->code) ||
-		 (mapping_ignore_release_key2 && mapping_ignore_release_key2 == ev->code)))
-	{
-		if (mapping_ignore_release_key == ev->code) mapping_ignore_release_key = 0;
-		if (mapping_ignore_release_key2 == ev->code) mapping_ignore_release_key2 = 0;
-		return;
-	}
+	if (consume_mapping_ignored_release(ev, dev) && map_skip != 2) return;
 
 	// protection against joysticks generating 2 codes per button
 	if (ev->type == EV_KEY && !(is_menu() && mapping < 2 && mapping_button == SYS_MAP_POS_OSD) && !map_skip &&
@@ -2089,6 +2125,7 @@ void map_input_event(struct input_event *ev, struct input_absinfo *absinfo, int 
 					else if (mapping_button >= 0) clear_mapping_slot_for_pos(input[mapping_dev].map, mapping_button);
 				}
 				set_mapping_ignore_release_keys(mapping_key_mapped, mapping_combo_second_key);
+				consume_mapping_ignored_release(ev, dev);
 				mapping_key_mapped = 0;
 				clear_mapping_combo_state();
 				mapping_last_axis = 0;

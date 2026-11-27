@@ -215,6 +215,7 @@ void advance_map_button();
 int map_hold_action_for_key(int dev, uint16_t code);
 int map_osd_hold_poll();
 int map_confirm_event(int dev, const struct input_event *ev, bool menu_event);
+bool filter_mapping_event(const struct input_event *ev, int dev);
 void map_advanced_key(struct input_event *ev, int dev, int map_skip);
 void map_input_event(struct input_event *ev, struct input_absinfo *absinfo, int dev, int map_skip, int osd_event);
 
