@@ -429,7 +429,7 @@ static int cmd_subq(const uint8_t *cmd, uint8_t *out)
 static int cmd_read_toc(const uint8_t *cmd, uint8_t *out)
 {
 	drive_t *drv = cdtv_find_drive();
-	if (!drv || drv->track_cnt < 1) {
+	if (!drv || drv->track_cnt < 2) {
 		cd_error = 1;
 		return -1;
 	}
@@ -437,11 +437,19 @@ static int cmd_read_toc(const uint8_t *cmd, uint8_t *out)
 	uint8_t want = cmd[2];
 	bool msf = (cmd[1] & 0x02) != 0;
 	int real_tracks = drv->track_cnt - 1;
-	if (real_tracks < 1) real_tracks = 1;
 
 	uint32_t lba;
 	uint8_t  control = 0x04;
 	uint8_t  point   = want;
+
+	// Lead-in/lead-out entries describe the disc, not an individual track.
+	// A disc containing audio must not be advertised as data-only.
+	for (int i = 0; i < real_tracks; i++) {
+		if (!(drv->track[i].attr & 0x40)) {
+			control = 0x00;
+			break;
+		}
+	}
 
 	if (want == 0xa0) {
 		lba = drv->track[0].number;
@@ -460,7 +468,8 @@ static int cmd_read_toc(const uint8_t *cmd, uint8_t *out)
 	} else if (want >= 1 && want <= 99 && want <= real_tracks) {
 		int idx = want - 1;
 		lba = drv->track[idx].start;
-		if (drv->track[idx].attr & 0x01) control = 0x00;
+		// track_t stores the data flag in bit 6; the CR-511 uses bit 2.
+		control = (drv->track[idx].attr & 0x40) ? 0x04 : 0x00;
 	} else {
 		return -1;
 	}
